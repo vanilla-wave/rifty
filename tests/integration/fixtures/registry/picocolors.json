@@ -1,0 +1,12 @@
+{
+  "name": "picocolors",
+  "version": "1.0.0",
+  "dist": {
+    "tarball": "tarball:picocolors-1.0.0",
+    "integrity": "sha256-YGLsK6QG6hXl+RpNowDwfu9lBbDnevOukt1HHNkV84M=",
+    "upstreamTarball": "https://registry.npmjs.org/picocolors/-/picocolors-1.0.0.tgz",
+    "upstreamIntegrity": "sha512-1fygroTLlHu66zi26VoTDv8yRgm0Fccecssto+MhsZ0D/DGW2sm8E8AjW7NU5VVTRt5GxbeZ5qBuJr+HyLYkjQ=="
+  },
+  "dependencies": {},
+  "main": "./picocolors.js"
+}
