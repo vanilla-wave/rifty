@@ -53,10 +53,15 @@ export interface LockfileEntry {
   dependencies?: Record<string, string>;
 }
 
+/**
+ * Build a v3 lockfile from the resolved package set. Each non-root entry
+ * carries the `resolved` tarball URL and `integrity` hash so subsequent
+ * installs can hit the tarball cache (ADR-0023) without re-resolving.
+ */
 export function buildLockfile(
   rootName: string,
   rootVersion: string,
-  packages: readonly ResolvedPackage[],
+  packages: readonly (ResolvedPackage & { resolved?: string; integrity?: string })[],
 ): Lockfile {
   const lf: Lockfile = {
     name: rootName,
@@ -71,10 +76,13 @@ export function buildLockfile(
     },
   };
   for (const p of packages) {
-    lf.packages[`node_modules/${p.name}`] = {
+    const entry: LockfileEntry = {
       version: p.version,
       dependencies: p.dependencies,
     };
+    if (p.resolved) entry.resolved = p.resolved;
+    if (p.integrity) entry.integrity = p.integrity;
+    lf.packages[`node_modules/${p.name}`] = entry;
   }
   return lf;
 }
