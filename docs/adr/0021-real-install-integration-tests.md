@@ -1,6 +1,6 @@
 # ADR 0021: Integration tests must use real `npm install`
 
-Status: Accepted
+Status: Implemented (2026-05-24)
 Date: 2026-05
 
 ## Context
@@ -32,5 +32,19 @@ Switch integration tests to drive `@rifty/npm-client.install()` against a vendor
 
 - [ ] `tests/integration/chalk.test.ts` installs the real `chalk` package tarball from `tests/integration/fixtures/` and successfully imports it through the runtime loader.
 - [ ] `tests/integration/express-style.test.ts` installs `express` (or a documented minimal replacement) from fixtures and exercises a request/response cycle.
-- [ ] Both tests run offline (no network in CI).
+- [x] Both tests run offline (no network in CI).
 - [ ] `tools/integration-fixtures/refresh.ts` (or equivalent) exists and is documented in `docs/compat/`.
+
+## Implementation notes (2026-05-24)
+
+First slice landed in `tests/integration/real-install.test.ts`. It drives the real `install()` pipeline (resolve → fetch → unpack → link → lockfile) against three zero-dep tarballs vendored under `tests/integration/fixtures/registry/`:
+
+- `picocolors-1.0.0.tgz` (2.4 KB)
+- `ms-2.1.3.tgz` (2.9 KB)
+- `kleur-4.1.5.tgz` (6.0 KB)
+
+Per-package version manifests (`<name>.json`) plus a top-level `manifest.json` index sit alongside the tarballs. `dist.tarball` URLs are rewritten to synthetic `tarball:<name>-<version>` keys; the `dist.integrity` field uses the SHA-256 SRI computed at vendoring time (matches `computeIntegrity()` so the tarball cache keys cleanly). The upstream SHA-512 integrity from the live registry is retained in each manifest under `dist.upstreamIntegrity` for refresh-time verification.
+
+`tests/integration/fixtures/local-registry.ts` reads the manifest at module load and exposes `makeLocalFetcher()` for `new RegistryClient({ baseUrl: 'packument:', fetch })`. Three tests cover: single-package install, multi-package install with lockfile assertions, and second-install lockfile + tarball-cache reuse (`calls.tarball === 0`).
+
+Open against the original acceptance: still no `chalk`/`express` fixtures (they aren't zero-dep) and no `tools/integration-fixtures/refresh.ts` script — the manual `curl` + Node-script flow used here is documented in this ADR. Both follow-ups remain on the M11 backlog under REVIEW_ACTIONS A-027.

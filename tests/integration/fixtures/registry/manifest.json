@@ -1,0 +1,28 @@
+{
+  "description": "Vendored npm tarball fixtures for integration tests (ADR-0021). Generated 2026-05-24.",
+  "source": "https://registry.npmjs.org",
+  "integrityAlgorithm": "sha256",
+  "entries": [
+    {
+      "name": "picocolors",
+      "version": "1.0.0",
+      "manifest": "picocolors.json",
+      "tarball": "picocolors-1.0.0.tgz",
+      "integrity": "sha256-YGLsK6QG6hXl+RpNowDwfu9lBbDnevOukt1HHNkV84M="
+    },
+    {
+      "name": "ms",
+      "version": "2.1.3",
+      "manifest": "ms.json",
+      "tarball": "ms-2.1.3.tgz",
+      "integrity": "sha256-9mFuFeUw7VUvnaotPOcZY5R8a8fJjJtk/T5nP9AmIsY="
+    },
+    {
+      "name": "kleur",
+      "version": "4.1.5",
+      "manifest": "kleur.json",
+      "tarball": "kleur-4.1.5.tgz",
+      "integrity": "sha256-DZlWKs+C/KSvzipXtocomlJKxnVdyvH9+CoUdHMJFGk="
+    }
+  ]
+}

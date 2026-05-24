@@ -103,7 +103,7 @@
 **Статус:** ADR-0011 (после worker-as-process — переезд в Worker; M11). Q-2026-05-23-002 остаётся активным до того момента.
 
 ### A-027 [R] Реальные пакеты — на mock'ах
-**Статус:** ADR-0021 (`docs/adr/0021-real-install-integration-tests.md`). Vendored tarball registry под `tests/integration/fixtures/`; M11.
+**Статус:** RESOLVED (2026-05-24). ADR-0021 переведён в `Implemented`. Vendored под `tests/integration/fixtures/registry/`: `picocolors-1.0.0.tgz` (2.4 KB), `ms-2.1.3.tgz` (2.9 KB), `kleur-4.1.5.tgz` (6.0 KB) — все zero-dep. `manifest.json` + per-package `<name>.json` + `local-registry.ts` (Fetcher для `RegistryClient`) дают offline fake-registry. `tests/integration/real-install.test.ts` гоняет реальный `install()` end-to-end: single-package, multi-package, lockfile + tarball-cache reuse (3 теста). Acceptance ADR-0021 для chalk/express и `tools/integration-fixtures/refresh.ts` остаются на M11 (chalk/express не zero-dep).
 
 ### A-028 [R] Parity-runner покрывает мало
 **Статус:** PARTIAL — частично RESOLVED (2026-05-24 второй sub-session): добавлены 3 кейса (`stream/backpressure`, `stream/pipeline-multi`, `http/parse-url`); итого 19 (было 16). Cycle/TLA кейсы отложены — `node-parity-runner` mount'ит `setup.files` отдельно от entry, что ломает `require('./a.js')` на Node-стороне; требует runner-fix. **Полный ADR-0022 acceptance:** ≥ 5 per major module; per-milestone gate ≥ 3 — реализуется в M11+ с runner-фиксом.
@@ -166,7 +166,7 @@
 ## Что осталось открытым
 
 - **A-033** — `compat:generate` не запускался; M11 как часть DoD-cycle.
-- **Implementation deferred items для M11:** A-001, A-002, A-003, A-004 (full), A-005, A-006, A-007, A-008, A-014, A-017 (full plugin spec в ADR-0016 уже реализован, но broader migration к "SW only as bundled artifact across all environments" — это уже M11), A-019, A-020 (phase 2: OPFS + fs-streams rewrite), A-021, A-022 (полный coverage), A-023, A-026, A-027, A-030, A-031 (nested install), A-039 (WASI split).
+- **Implementation deferred items для M11:** A-001, A-002, A-003, A-004 (full), A-005, A-006, A-007, A-008, A-014, A-017 (full plugin spec в ADR-0016 уже реализован, но broader migration к "SW only as bundled artifact across all environments" — это уже M11), A-019, A-020 (phase 2: OPFS + fs-streams rewrite), A-021, A-022 (полный coverage), A-023, A-026, A-027 (chalk/express follow-up — zero-dep slice уже landed), A-030, A-031 (nested install), A-039 (WASI split).
 - **Implementation deferred items для M12 (после M11):** A-022/A-024/A-025 (streaming HTTP + cross-realm WS rewrite).
 - **Q-2026-05-24-007** — pre-implementation, ждёт первого prod deploy.
 - **Парные cycle/TLA parity cases (A-028)** — заблокированы runner-fix'ом (mount setup.files alongside entry).
