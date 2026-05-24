@@ -35,7 +35,7 @@
 **Статус:** ADR-0014 (`docs/adr/0014-shared-vfs-backing-tree.md`). Async `Vfs` и sync `FsSync` теперь общий backend; реализация M11.
 
 ### A-007 [I] D-005 shadow-registry символический
-**Статус:** ADR-0015 (`docs/adr/0015-shadow-registry-consolidation.md`). `tools/shadow-registry/` будет домом всех overrides + shims; `unenv` отложен до концретного триггера. Реализация M11.
+**Статус:** RESOLVED — ADR-0015 имплементирован (2026-05-24). `tools/shadow-registry/` — новый workspace-пакет `@rifty/shadow-registry` с `bakedOverrides`, `esbuildShimFiles`, `rollupShimFiles`. `packages/npm-client/src/overrides.ts` и `apps/playground/src/adapters/esbuild-shim.ts` теперь тонкие адаптеры/re-exports. `unenv` остаётся отложенным до концретного триггера (см. ADR-0015 §Decision).
 
 ### A-008 [I] esbuild-shim — passthrough, M10 финал — фейк
 **Статус:** ADR-0011 (зависит от worker-as-process для запуска `esbuild.wasm` через WASI). Acceptance включает «esbuild.wasm runs through WASI runner».

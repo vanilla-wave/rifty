@@ -4,12 +4,12 @@
  * Source of truth is user `package.json` `overrides`. We layer a few baked-in
  * substitutions on top of that — popular native packages get redirected to
  * known WASM/JS alternatives so they don't fail with `.node` loading errors.
+ *
+ * Per ADR 0015, the baked-in table lives in `@rifty/shadow-registry`; this
+ * file is the thin consumer-side adapter that owns the lookup function and
+ * target-string parsing.
  */
-
-const BUILT_IN_OVERRIDES: Record<string, string> = {
-  // bcrypt's native bindings don't load in the browser; bcryptjs is a drop-in.
-  bcrypt: 'bcryptjs',
-};
+import { bakedOverrides } from '@rifty/shadow-registry';
 
 export interface OverrideMap {
   /** Map from package name (or `parent>child`) to replacement target. */
@@ -24,7 +24,7 @@ export function resolveOverride(
   const key = parent ? `${parent}>${name}` : name;
   const userMatch = userOverrides[key] ?? userOverrides[name];
   if (userMatch) return parseTarget(userMatch);
-  const builtin = BUILT_IN_OVERRIDES[name];
+  const builtin = bakedOverrides[name];
   if (builtin) return parseTarget(builtin);
   return null;
 }

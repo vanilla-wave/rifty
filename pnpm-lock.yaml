@@ -47,6 +47,9 @@ importers:
       '@rifty/service-worker':
         specifier: workspace:*
         version: link:../../packages/service-worker
+      '@rifty/shadow-registry':
+        specifier: workspace:*
+        version: link:../../tools/shadow-registry
       '@rifty/shell':
         specifier: workspace:*
         version: link:../../packages/shell
@@ -101,6 +104,9 @@ importers:
 
   packages/npm-client:
     dependencies:
+      '@rifty/shadow-registry':
+        specifier: workspace:*
+        version: link:../../tools/shadow-registry
       '@rifty/vfs':
         specifier: workspace:*
         version: link:../vfs
@@ -180,6 +186,8 @@ importers:
       '@rifty/vfs':
         specifier: workspace:*
         version: link:../../packages/vfs
+
+  tools/shadow-registry: {}
 
 packages:
 
