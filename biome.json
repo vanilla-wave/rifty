@@ -18,7 +18,8 @@
       "**/.tsbuildinfo",
       "**/pnpm-lock.yaml",
       "**/examples/npm-pkg-fixtures/**/node_modules/**",
-      "apps/playground/public/sw.js"
+      "apps/playground/public/sw.js",
+      ".claude/**"
     ]
   },
   "formatter": {

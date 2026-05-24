@@ -13,5 +13,6 @@ test-results/
 .env.local
 .vite/
 .playwright-mcp/
+.claude/
 /vite-iframe-*.png
 /vite-running-in-browser.png
