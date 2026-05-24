@@ -144,9 +144,18 @@ export class OpfsVfs implements Vfs {
 
   async openReadable(
     path: string,
-    _opts?: { chunkSize?: number; start?: number; end?: number },
+    opts?: { chunkSize?: number; start?: number; end?: number },
   ): Promise<ReadableStream<Uint8Array>> {
-    // ADR 0020 phase 2 (M11): wrap File.stream() from FileSystemFileHandle.
-    throw new VfsError('EPERM', path, 'OpfsVfs.openReadable not implemented yet (M11)');
+    // ADR-0020 phase 2: wrap `File.stream()` from `FileSystemFileHandle`.
+    // `start`/`end` are honoured via `File.slice(start, end)`; `chunkSize`
+    // is informational — the underlying browser stream picks its own chunk
+    // boundaries (typically 64 KiB), which already satisfies the "no whole-
+    // file buffering" goal for `createReadStream` on big files.
+    const handle = await this.getFileHandle(path);
+    const file = await handle.getFile();
+    const start = opts?.start ?? 0;
+    const end = opts?.end ?? file.size;
+    const slice = start === 0 && end === file.size ? file : file.slice(start, end);
+    return slice.stream() as ReadableStream<Uint8Array>;
   }
 }

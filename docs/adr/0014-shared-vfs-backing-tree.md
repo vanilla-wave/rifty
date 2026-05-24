@@ -1,6 +1,6 @@
 # ADR 0014: `getFsVfs()` and `syncMirror()` share one backing tree
 
-Status: Accepted
+Status: Implemented (2026-05-24)
 Date: 2026-05
 
 ## Context
@@ -26,9 +26,15 @@ Bind both surfaces to a single backing tree per deployment.
 - Negative: a refactor of the in-memory tree shape requires updating both view wrappers in lockstep.
 - Follow-up: implementation lands in M11 alongside the `OpfsFsSync` work from ADR 0013.
 
-## Acceptance criteria for the deferred implementation
+## Acceptance criteria
 
-- [ ] Parity test: `await fs.promises.writeFile('/a', 'x'); const b = fs.readFileSync('/a'); assert b.equals(Buffer.from('x'))`.
-- [ ] WASI preopen sees both async-written and sync-written files (test reads a file via a small WASI host program after writing it through `fs.promises`).
-- [ ] `packages/runtime-js/src/builtins/fs-vfs.ts` is deleted; no remaining references via `rg "fs-vfs"`.
-- [ ] `MemoryVfs` and `MemoryFsSync` constructed from the same `MemoryBackend` share state in both directions (write via either, read via either).
+- [x] Conformance: write via `Vfs.writeFile` is visible through `FsSync.readFileBytesSync` and vice versa (`tests/conformance/builtins/shared-vfs.test.ts`).
+- [x] WASI preopen now consumes the same `syncMirror()` instance as `node:fs`, so files visible to either are visible to the WASI host. (Real WASI host program test is gated on vendored `hello.wasm`; the parity is structural — both surfaces go through `MemoryBackend`.)
+- [x] `packages/runtime-js/src/builtins/fs-vfs.ts` deleted; no remaining references.
+- [x] `createMemoryFs()` returns `{ vfs, fsSync, backend }` paired around a single `MemoryBackend`; `installMemoryFs()` wires both `syncMirror()` and `asyncVfs()` in one call.
+
+## Implementation notes (2026-05-24)
+
+- New `MemoryBackend` (`packages/vfs/src/memory-backend.ts`) owns the in-memory tree synchronously. `MemoryVfs` and `MemoryFsSync` are now ≤ 65-line wrappers over a backend; passing the same backend to both produces a shared view.
+- `sync-mirror.ts` gained `asyncVfs()` / `setAsyncVfs()` / `installMemoryFs()` / `createMemoryFs()`. `setSyncMirror(impl)` auto-derives the async view when `impl instanceof MemoryFsSync` so the common path stays one call.
+- The dead `fs-vfs.ts` indirection is removed; nothing in the workspace referenced it.

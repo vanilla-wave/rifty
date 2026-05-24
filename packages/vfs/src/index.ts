@@ -15,6 +15,11 @@ export {
   syncMirror,
   resetSyncMirror,
   setSyncMirror,
+  setAsyncVfs,
+  asyncVfs,
+  installMemoryFs,
+  createMemoryFs,
   MemoryFsSync,
 } from './sync-mirror.ts';
 export type { FsSync } from './sync-mirror.ts';
+export { MemoryBackend } from './memory-backend.ts';

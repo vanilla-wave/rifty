@@ -18,11 +18,7 @@ import { type Lockfile, type ResolvedPackage, buildLockfile, link } from './link
 import { type OverrideMap, resolveOverride } from './overrides.ts';
 import type { Packument, RegistryClient } from './registry.ts';
 import { matchesRange, pickBestVersion } from './semver.ts';
-import {
-  type TarballCache,
-  VfsTarballCache,
-  computeIntegrity,
-} from './tarball-cache.ts';
+import { type TarballCache, VfsTarballCache, computeIntegrity } from './tarball-cache.ts';
 import { extractTarGz } from './unpacker.ts';
 
 export interface InstallOptions {

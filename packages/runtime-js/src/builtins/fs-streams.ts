@@ -2,10 +2,14 @@
  * Minimal Node-style `fs.createReadStream` / `fs.createWriteStream`.
  *
  * Built on top of the EventEmitter we already ship — the M5 streams package
- * adds a full Readable/Writable hierarchy. Goal for M4: `createReadStream(...)
- * .pipe(createWriteStream(...))` works for files in the active sync mirror.
+ * adds a full Readable/Writable hierarchy. Per ADR-0020 phase 2 the read
+ * path now uses `Vfs.openReadable` for true streaming when an async VFS is
+ * installed (default in the Worker runtime); otherwise it falls back to the
+ * sync mirror's whole-file read, chunked via `queueMicrotask`. Both paths
+ * preserve the existing event order (`open` → `data*` → `end` → `close`).
  */
 
+import { asyncVfs } from '@rifty/vfs';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -35,12 +39,59 @@ class FileReadStream extends EventEmitter {
   }
 
   private start(): void {
+    const hwm = this.opts.highWaterMark ?? 64 * 1024;
+    const emitChunkBytes = (bytes: Uint8Array): void => {
+      const chunk = this.opts.encoding
+        ? (Buffer.from(bytes) as Uint8Array & { toString(e?: string): string }).toString(
+            this.opts.encoding,
+          )
+        : Buffer.from(bytes);
+      this.emit('data', chunk);
+    };
+
+    const vfs = asyncVfs();
+    if (vfs) {
+      // ADR-0020 phase 2: true incremental streaming via Vfs.openReadable.
+      vfs
+        .openReadable(this.path, {
+          chunkSize: hwm,
+          start: this.opts.start,
+          end: this.opts.end,
+        })
+        .then(async (stream) => {
+          if (this.destroyed) {
+            await stream.cancel().catch(() => {});
+            return;
+          }
+          this.emit('open', 0);
+          const reader = stream.getReader();
+          try {
+            while (true) {
+              if (this.destroyed) {
+                await reader.cancel().catch(() => {});
+                return;
+              }
+              const { value, done } = await reader.read();
+              if (done) break;
+              if (value && value.byteLength > 0) emitChunkBytes(value);
+            }
+            this.emit('end');
+            this.emit('close');
+          } catch (err) {
+            this.emit('error', err);
+          }
+        })
+        .catch((err) => this.emit('error', err));
+      return;
+    }
+
+    // Fallback: sync mirror only. Loads the whole file but still chunks
+    // emission across microtasks so the event loop is not starved.
     try {
       const data = syncMirror().readFileBytesSync(this.path);
       if (this.destroyed) return;
       const start = this.opts.start ?? 0;
       const end = Math.min(this.opts.end ?? data.length, data.length);
-      const hwm = this.opts.highWaterMark ?? 64 * 1024;
       let i = start;
       const emitChunk = (): void => {
         if (this.destroyed) return;
@@ -51,12 +102,7 @@ class FileReadStream extends EventEmitter {
         }
         const slice = data.subarray(i, Math.min(i + hwm, end));
         i += slice.length;
-        const chunk = this.opts.encoding
-          ? (Buffer.from(slice) as Uint8Array & { toString(e?: string): string }).toString(
-              this.opts.encoding,
-            )
-          : Buffer.from(slice);
-        this.emit('data', chunk);
+        emitChunkBytes(slice);
         queueMicrotask(emitChunk);
       };
       this.emit('open', 0);

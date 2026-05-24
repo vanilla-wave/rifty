@@ -23,7 +23,7 @@ export async function computeIntegrity(bytes: Uint8Array): Promise<string> {
 }
 
 function cachePathFor(name: string, version: string, integrity: string): string {
-  const prefix = integrity.includes('-') ? integrity.split('-')[1]?.slice(0, 2) ?? '00' : '00';
+  const prefix = integrity.includes('-') ? (integrity.split('-')[1]?.slice(0, 2) ?? '00') : '00';
   // Slashes in scoped names would otherwise create extra path segments under
   // the prefix; escape them so each entry is a single file.
   const safeName = name.replace(/\//g, '__');
@@ -52,12 +52,7 @@ export class VfsTarballCache implements TarballCache {
     return bytes;
   }
 
-  async put(
-    name: string,
-    version: string,
-    integrity: string,
-    bytes: Uint8Array,
-  ): Promise<string> {
+  async put(name: string, version: string, integrity: string, bytes: Uint8Array): Promise<string> {
     const path = cachePathFor(name, version, integrity);
     const dir = path.slice(0, path.lastIndexOf('/'));
     await this.vfs.mkdir(dir, { recursive: true });
