@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+.next/
+.cache/
+.DS_Store
+*.log
+*.tsbuildinfo
+coverage/
+playwright-report/
+test-results/
+.env
+.env.local
+.vite/
+.playwright-mcp/
+/vite-iframe-*.png
+/vite-running-in-browser.png

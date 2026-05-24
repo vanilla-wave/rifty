@@ -1,0 +1,28 @@
+{
+  "name": "@rifty/playground",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@rifty/net": "workspace:*",
+    "@rifty/npm-client": "workspace:*",
+    "@rifty/runtime-js": "workspace:*",
+    "@rifty/service-worker": "workspace:*",
+    "@rifty/shell": "workspace:*",
+    "@rifty/terminal": "workspace:*",
+    "@rifty/vfs": "workspace:*",
+    "@rifty-examples/vite-like-dev": "workspace:*",
+    "monaco-editor": "^0.52.0",
+    "solid-js": "^1.9.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0",
+    "vite-plugin-solid": "^2.11.0"
+  }
+}

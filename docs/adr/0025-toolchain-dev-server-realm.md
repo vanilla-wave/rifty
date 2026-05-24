@@ -1,0 +1,35 @@
+# ADR 0025: Toolchain dev servers run on the playground main thread
+
+Status: Accepted (promoted from Q-2026-05-23-002)
+Date: 2026-05
+
+## Context
+
+The M10 "Dev Mode" and "Real Vite" adapters (`apps/playground/src/adapters/devMode.ts`, `apps/playground/src/adapters/realVite.ts`) host a Node-shape dev server in the playground page realm rather than in a dedicated Worker. This was originally a provisional choice, marked `TODO(ADR): Q-2026-05-23-002`.
+
+The driver is the M7 contract: `@rifty/net.dispatchToPort` and the Service Worker preview-bridge live in the page realm; the SW posts back to the first window client, which expects to call into a `@rifty/net` port registry local to its realm. Running the dev server in a Worker would require a cross-realm bridge for that registry — a non-trivial design touching request streaming and `Request`/`Response` transfer (already listed as an M10 follow-up).
+
+## Options considered
+
+- **A — Main thread (chosen).** Zero bridge work; reuses the M7 SW↔window contract end-to-end. Cost: `installProcessGlobals()` and the `Promise.prototype.then` nextTick patch run on the page realm and are observable by other main-thread code (Solid render, Monaco). UI can stutter under heavy Vite work.
+- **B — Dedicated Worker + cross-realm bridge.** Isolates Node-compat globals and CPU from the UI. Cost: design a port-registry bridge spanning Worker↔Window.
+- **C — Run inside the existing REPL Worker.** Globals are already installed there. Cost: same registry-bridge problem; mixes user REPL code with a dev-server fixture.
+
+## Decision
+
+Run toolchain dev servers (M10 Dev Mode, Real Vite) on the playground main thread, guarded by a one-shot `globalsInstalled` flag so `Promise.prototype.then` is never double-patched.
+
+A future move to Option B remains the right long-term answer and is tracked as an M10 follow-up; the migration path is local — replace `realVite.ts` with a worker-spawning version plus a registry bridge in `@rifty/net`.
+
+## Consequences
+
+- The two adapter files (`devMode.ts`, `realVite.ts`) intentionally install Node globals on the page realm. The one-shot guard is mandatory whenever a new toolchain adapter joins this set.
+- UI components (Solid, Monaco) share the page event loop with Vite's CPU-heavy passes. Visible jank under load is expected; this is the explicit trade-off, not a defect.
+- Subsequent toolchain adapters (e.g. swc, esbuild as a dev pipeline) follow the same realm choice. Picking a different realm requires superseding this ADR.
+- Adopting Option B later is bounded work: rewrite the adapter(s) and add a cross-realm port-registry bridge in `@rifty/net`. No consumer-side change.
+
+## Acceptance criteria
+
+- [ ] No `TODO(ADR): Q-2026-05-23-002` markers remain in the repo (`pnpm todo:adr` clean for this Q-ID).
+- [ ] `installProcessGlobals()` (or equivalent) is invoked at most once per page session — second invocation is a no-op.
+- [ ] OPEN_QUESTIONS.md moves Q-2026-05-23-002 to the "Promoted" section with this ADR as the resolution.

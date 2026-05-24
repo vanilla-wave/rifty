@@ -1,0 +1,47 @@
+{
+  "name": "rifty",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Browser-based Node-compatible runtime + WASI runner (pet project).",
+  "type": "module",
+  "packageManager": "pnpm@11.0.8",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @rifty/playground dev",
+    "build": "pnpm -r --filter=!@rifty/playground build && pnpm --filter @rifty/playground build",
+    "preview": "pnpm --filter @rifty/playground preview",
+    "typecheck": "pnpm -r --parallel typecheck",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "check:deps": "madge --circular --extensions ts,tsx packages/ apps/ tools/",
+    "check:isolation": "node tools/checks/no-solid-outside-playground.mjs",
+    "check:budget": "node tools/checks/file-budget.mjs",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:parity": "tsx tools/node-parity-runner/src/cli.ts",
+    "test:conformance": "vitest run --project conformance",
+    "test:integration": "vitest run --project integration",
+    "test:e2e": "playwright test --project=chromium",
+    "test:e2e:all": "playwright test",
+    "test:e2e:firefox": "playwright test --project=firefox",
+    "test:e2e:webkit": "playwright test --project=webkit",
+    "test:all": "pnpm test:run && pnpm test:parity && pnpm test:e2e",
+    "compat:generate": "node tools/compat-matrix-generator/cli.js",
+    "adr:new": "node tools/adr/new.mjs",
+    "adr:promote": "node tools/adr/promote.mjs",
+    "todo:adr": "node tools/adr/todo-report.mjs",
+    "postinstall": "playwright install --with-deps chromium firefox webkit || true"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^22.10.0",
+    "madge": "^8.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}

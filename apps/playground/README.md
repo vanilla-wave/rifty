@@ -1,0 +1,16 @@
+# @rifty/playground
+
+The browser-side playground for rifty. SolidJS + Monaco + xterm.js.
+
+## Layout
+
+- `src/App.tsx` — the only Solid component the user sees. Splits into editor (left) + terminal (right).
+- `src/adapters/useRuntime.ts` — thin Solid adapter over `@rifty/runtime-js`'s framework-agnostic controller.
+- `src/workers/worker-entry.ts` — module Worker entry; re-exports `@rifty/runtime-js/worker`.
+- `public/sw.js` — Service Worker (static for M0; rebuilds from `@rifty/service-worker` arrive in M7).
+- `vite.config.ts` — sets COOP/COEP headers required for cross-origin isolation (D-001) and proxies `/npm-registry` to npmjs.org (D-004).
+
+## Constraints
+
+- `solid-js` is a hard-isolated dep: no other package in `packages/` may import it (D-002, enforced by Biome).
+- No external CDN deps — everything must come from the same origin for `COEP: credentialless` to keep working.

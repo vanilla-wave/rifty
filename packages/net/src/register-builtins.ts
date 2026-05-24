@@ -1,0 +1,16 @@
+/**
+ * Side-effect module: registers `node:net`, `node:http`, `node:https` shapes
+ * with runtime-js's builtin loader. Import this from a higher layer (e.g.
+ * `apps/playground` bootstrap or test setup) to enable `require('http')`
+ * inside the runtime. Keeping registration here, rather than in runtime-js,
+ * preserves the top-down layering rule (runtime-* must not depend on net).
+ */
+import { registerBuiltin } from '@rifty/runtime-js';
+import http from './http.ts';
+import https from './https.ts';
+import net from './net.ts';
+
+registerBuiltin('net', () => net as unknown as Record<string, unknown>);
+registerBuiltin('http', () => http as unknown as Record<string, unknown>);
+// `https` is a loud-throw stub — see ADR 0010. Imports succeed; calls throw.
+registerBuiltin('https', () => https as unknown as Record<string, unknown>);

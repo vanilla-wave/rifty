@@ -1,0 +1,39 @@
+# Compatibility matrix — M10 Tooling
+
+Status of M10 foundations: `fs.watch`, WebSocket, dev-server, shell, preview bridge.
+
+| Feature | Status | Notes |
+|---|---|---|
+| `fs.watch(path, opts, cb)` (file) | ⚠️ | Polling-based, default 250 ms; emits `'rename'` / `'change'` |
+| `fs.watch(path, opts, cb)` (directory) | ⚠️ | Polling; reports added/removed/modified children by filename |
+| `fs.watch` with `AbortSignal` | ✅ | Aborting closes the watcher |
+| `fs.watchFile(path, opts, listener)` | ⚠️ | Polling; listener receives `curr` / `prev` `Stats`-shaped objects |
+| `fs.unwatchFile(path, listener?)` | ✅ | Removes specific listener or all listeners |
+| `WebSocket` (browser-shape, in-process) | ⚠️ | Same-realm pairing with `WebSocketServer`; real-TCP `WebSocket` is a follow-up |
+| `WebSocketServer` (Node `ws`-shape) | ⚠️ | In-process; `broadcast`; `'connection'` / `'message'` / `'close'` events |
+| Service Worker `/preview/<port>/*` interceptor | ✅ | Posts to window client over MessageChannel; window resolves via port registry |
+| Dev-server (`examples/vite-like-dev`) — HTML+JS serving | ✅ | From VFS; injects HMR client into `<body>` |
+| Dev-server — fs.watch-driven HMR broadcast | ✅ | Watches root + `src/`; emits `{ type: 'update', path }` |
+| Dev-server — TS/JSX transformation via esbuild.wasm | ❌ | Pending — needs M8 esbuild.wasm vendor |
+| Dev-server — ESM rewriting for bare specifiers | ❌ | Pending |
+| Real upstream Vite (`npm install vite && npm run dev`) | ❌ | Many transitive deps + esbuild.wasm dependency |
+| Shell tokenizer (quotes, env-assignments, `>`/`>>`) | ✅ | |
+| Shell built-ins (`pwd`/`cd`/`ls`/`cat`/`echo`/`mkdir`/`rm`/`env`/`touch`) | ✅ | |
+| Shell pipes (`a \| b`) | ❌ | Pending |
+| Shell variable expansion (`$VAR`) | ❌ | Pending |
+| Editor → VFS sync (`RuntimeController.writeFile`) | ✅ | Push from playground main thread into in-Worker VFS |
+
+## Known limitations (M10)
+
+- `fs.watch` is polling-only; default interval is 250 ms (override via options).
+  Native event sources don't exist in our environment (in-memory VFS, OPFS without
+  notification API).
+- WebSocket is in-process only. The API surface matches the browser `WebSocket`
+  and Node `ws` so the day we wire it to a real socket — likely through a
+  Service-Worker-mediated `fetch` upgrade or a `BroadcastChannel`-based main
+  thread bridge — user code doesn't change.
+- Service-Worker route interception is wired but cross-context HMR (iframe
+  fetching `ws://localhost:N/__hmr` against a Worker-side server) requires the
+  dev server to run in the main-thread realm, since native `WebSocket` can't
+  reach a Worker without a network hop. The playground's Dev Mode currently
+  runs the dev server in the main-thread realm for this reason.

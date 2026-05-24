@@ -1,0 +1,13 @@
+{
+  "name": "@rifty/tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@rifty/net": "workspace:*",
+    "@rifty/npm-client": "workspace:*",
+    "@rifty/runtime-js": "workspace:*",
+    "@rifty/runtime-wasi": "workspace:*",
+    "@rifty/vfs": "workspace:*"
+  }
+}

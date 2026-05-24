@@ -1,0 +1,29 @@
+{
+  "name": "@rifty/runtime-js",
+  "version": "0.0.0",
+  "// TODO(ADR)": "Q-2026-05-23-005 — subpath exports `./builtins/*` are part of the public surface; promoted in ADR 0018",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./worker": "./src/worker-entry.ts",
+    "./loader": "./src/module-loader/index.ts",
+    "./env/capabilities": "./src/env/capabilities.ts",
+    "./builtins": "./src/builtins/public.ts",
+    "./builtins/fs-watch": "./src/builtins/fs-watch.ts",
+    "./builtins/process": "./src/builtins/process.ts",
+    "./builtins/timers": "./src/builtins/timers.ts",
+    "./builtins/buffer": "./src/builtins/buffer.ts",
+    "./builtins/module": "./src/builtins/module.ts"
+  },
+  "scripts": { "typecheck": "tsc -p tsconfig.json --noEmit" },
+  "dependencies": {
+    "@rifty/io": "workspace:*",
+    "@rifty/vfs": "workspace:*",
+    "acorn": "^8.14.0",
+    "acorn-walk": "^8.3.4"
+  }
+}

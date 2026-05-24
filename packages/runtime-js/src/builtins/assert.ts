@@ -1,0 +1,223 @@
+/**
+ * Node-compatible `node:assert`. The two modes (`assert` and `assert/strict`)
+ * differ in the default comparison: classic uses `==` / loose deep, strict uses
+ * `===` / strict deep. Both throw `AssertionError` on failure.
+ */
+
+export class AssertionError extends Error {
+  actual: unknown;
+  expected: unknown;
+  operator: string;
+  code = 'ERR_ASSERTION';
+
+  constructor(opts: { message?: string; actual?: unknown; expected?: unknown; operator?: string }) {
+    const msg =
+      opts.message ??
+      `${stringify(opts.actual)} ${opts.operator ?? '!='} ${stringify(opts.expected)}`;
+    super(msg);
+    this.name = 'AssertionError';
+    this.actual = opts.actual;
+    this.expected = opts.expected;
+    this.operator = opts.operator ?? '';
+  }
+}
+
+function stringify(v: unknown): string {
+  try {
+    return typeof v === 'string' ? `'${v}'` : JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+}
+
+function ok(value: unknown, message?: string): void {
+  if (!value) {
+    throw new AssertionError({
+      message: message ?? `Expected truthy, got ${stringify(value)}`,
+      actual: value,
+      expected: true,
+      operator: '==',
+    });
+  }
+}
+
+function equal(actual: unknown, expected: unknown, message?: string): void {
+  // eslint-disable-next-line eqeqeq
+  if (actual !== expected) {
+    throw new AssertionError({ message, actual, expected, operator: '==' });
+  }
+}
+
+function strictEqual(actual: unknown, expected: unknown, message?: string): void {
+  if (!Object.is(actual, expected)) {
+    throw new AssertionError({ message, actual, expected, operator: '===' });
+  }
+}
+
+function notEqual(actual: unknown, expected: unknown, message?: string): void {
+  // eslint-disable-next-line eqeqeq
+  if (actual === expected) {
+    throw new AssertionError({ message, actual, expected, operator: '!=' });
+  }
+}
+
+function notStrictEqual(actual: unknown, expected: unknown, message?: string): void {
+  if (Object.is(actual, expected)) {
+    throw new AssertionError({ message, actual, expected, operator: '!==' });
+  }
+}
+
+function deepEqualImpl(
+  a: unknown,
+  b: unknown,
+  strict: boolean,
+  seen: WeakMap<object, object>,
+): boolean {
+  if (strict ? Object.is(a, b) : a === b) return true;
+  if (a === null || b === null) return false;
+  if (typeof a !== 'object' || typeof b !== 'object') return false;
+  const sa = seen.get(a as object);
+  if (sa === b) return true;
+  seen.set(a as object, b as object);
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!deepEqualImpl(a[i], b[i], strict, seen)) return false;
+    }
+    return true;
+  }
+  const ka = Object.keys(a as object);
+  const kb = Object.keys(b as object);
+  if (ka.length !== kb.length) return false;
+  for (const k of ka) {
+    if (!Object.hasOwn(b as object, k)) return false;
+    if (
+      !deepEqualImpl(
+        (a as Record<string, unknown>)[k],
+        (b as Record<string, unknown>)[k],
+        strict,
+        seen,
+      )
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function deepEqual(actual: unknown, expected: unknown, message?: string): void {
+  if (!deepEqualImpl(actual, expected, false, new WeakMap())) {
+    throw new AssertionError({ message, actual, expected, operator: 'deepEqual' });
+  }
+}
+
+function deepStrictEqual(actual: unknown, expected: unknown, message?: string): void {
+  if (!deepEqualImpl(actual, expected, true, new WeakMap())) {
+    throw new AssertionError({ message, actual, expected, operator: 'deepStrictEqual' });
+  }
+}
+
+function notDeepEqual(actual: unknown, expected: unknown, message?: string): void {
+  if (deepEqualImpl(actual, expected, false, new WeakMap())) {
+    throw new AssertionError({ message, actual, expected, operator: 'notDeepEqual' });
+  }
+}
+
+function notDeepStrictEqual(actual: unknown, expected: unknown, message?: string): void {
+  if (deepEqualImpl(actual, expected, true, new WeakMap())) {
+    throw new AssertionError({ message, actual, expected, operator: 'notDeepStrictEqual' });
+  }
+}
+
+function fail(message?: string): never {
+  throw new AssertionError({ message: message ?? 'Failed' });
+}
+
+function throws(fn: () => unknown, expected?: unknown, message?: string): void {
+  try {
+    fn();
+  } catch (err) {
+    if (expected === undefined) return;
+    if (expected instanceof RegExp) {
+      if (!expected.test(err instanceof Error ? err.message : String(err))) {
+        throw new AssertionError({ message, actual: err, expected, operator: 'throws' });
+      }
+      return;
+    }
+    if (typeof expected === 'function') {
+      if (!(err instanceof (expected as new () => Error))) {
+        throw new AssertionError({ message, actual: err, expected, operator: 'throws' });
+      }
+      return;
+    }
+    return;
+  }
+  throw new AssertionError({
+    message: message ?? 'Missing expected exception',
+    operator: 'throws',
+  });
+}
+
+function doesNotThrow(fn: () => unknown, message?: string): void {
+  try {
+    fn();
+  } catch (err) {
+    throw new AssertionError({ message, actual: err, operator: 'doesNotThrow' });
+  }
+}
+
+const assert = Object.assign(
+  function assert(value: unknown, message?: string): void {
+    ok(value, message);
+  },
+  {
+    ok,
+    equal,
+    strictEqual,
+    notEqual,
+    notStrictEqual,
+    deepEqual,
+    deepStrictEqual,
+    notDeepEqual,
+    notDeepStrictEqual,
+    fail,
+    throws,
+    doesNotThrow,
+    AssertionError,
+  },
+);
+
+export const strict = Object.assign((value: unknown, message?: string) => ok(value, message), {
+  ok,
+  equal: strictEqual,
+  notEqual: notStrictEqual,
+  strictEqual,
+  notStrictEqual,
+  deepEqual: deepStrictEqual,
+  notDeepEqual: notDeepStrictEqual,
+  deepStrictEqual,
+  notDeepStrictEqual,
+  fail,
+  throws,
+  doesNotThrow,
+  AssertionError,
+});
+
+const assertWithStrict = Object.assign(assert, { strict });
+
+export {
+  ok,
+  equal,
+  strictEqual,
+  notEqual,
+  notStrictEqual,
+  deepEqual,
+  deepStrictEqual,
+  notDeepEqual,
+  notDeepStrictEqual,
+  fail,
+  throws,
+  doesNotThrow,
+};
+export default assertWithStrict;
