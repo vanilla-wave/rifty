@@ -23,6 +23,8 @@ jobs:
       - run: pnpm check:deps
       - run: pnpm check:isolation
       - run: pnpm check:budget
+      - run: pnpm check:parity-coverage
+      - run: pnpm check:e2e-coverage
 
   unit-and-conformance:
     runs-on: ubuntu-latest
