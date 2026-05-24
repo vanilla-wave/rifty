@@ -11,6 +11,7 @@
  *
  * Console is replaced for the duration of the case, then restored.
  */
+import { setProcessCwd } from '@rifty/runtime-js/builtins/process';
 import { MemorySyncVfs, createModuleLoader } from '@rifty/runtime-js/loader';
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@rifty/vfs';
 import { formatArgs } from '../../../packages/runtime-js/src/repl/inspect.ts';
@@ -44,9 +45,9 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
 
   // Mirror Node's view: process.cwd() = '/'. Important so `fs.readFileSync('a.txt')`
   // resolves against the same anchor as the Node child running with cwd=tmpdir.
-  const proc = (globalThis as { process?: { cwd?: () => string } }).process;
-  const origCwd = proc?.cwd;
-  if (proc) proc.cwd = () => '/';
+  // Use the runtime's per-Worker cwd cell rather than monkey-patching the
+  // `process` object (ADR-0019).
+  setProcessCwd('/');
 
   const loader = createModuleLoader(vfs, { cwd: '/work' });
 
@@ -86,7 +87,7 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
     console.warn = original.warn;
     console.error = original.error;
     resetSyncMirror();
-    if (proc && origCwd) proc.cwd = origCwd;
+    setProcessCwd('/workspace');
   }
   return captured.join('');
 }

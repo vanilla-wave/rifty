@@ -13,10 +13,22 @@
  *     boot) will bypass the drain. Acceptable for M3; revisit if a real
  *     package breaks.
  */
+import { isAbsolute, joinPath, normalizePath } from '@rifty/vfs';
 import { EventEmitter } from './events.ts';
+import { syncMirror } from './fs-sync-mirror.ts';
 
 const nextTickQueue: Array<{ fn: (...args: unknown[]) => void; args: unknown[] }> = [];
 let promisePatched = false;
+
+/**
+ * Per-Worker cwd cell (ADR-0019). Conceptually a snapshot of the active
+ * `ProcessRecord.cwd` — once ADR-0011's worker-as-process model lands, this
+ * cell becomes a SharedArrayBuffer-mirrored slot tied to the kernel-side
+ * record. Today the Worker hosts a single process realm; the cell suffices.
+ *
+ * The default `/workspace` matches the runtime VFS bootstrap convention.
+ */
+let currentCwd = '/workspace';
 
 function drainNextTicks(): void {
   while (nextTickQueue.length > 0) {
@@ -90,10 +102,34 @@ class RiftyProcess extends EventEmitter {
   };
 
   cwd(): string {
-    return '/';
+    return currentCwd;
   }
-  chdir(_dir: string): void {
-    // No-op for now; M4 will wire to VFS cwd.
+  chdir(dir: string): void {
+    if (typeof dir !== 'string') {
+      throw Object.assign(new TypeError('chdir: path must be a string'), {
+        code: 'ERR_INVALID_ARG_TYPE',
+      });
+    }
+    const target = normalizePath(isAbsolute(dir) ? dir : joinPath(currentCwd, dir));
+    let stat: { isDirectory: boolean };
+    try {
+      stat = syncMirror().statSync(target);
+    } catch (err) {
+      throw Object.assign(new Error(`ENOENT: no such file or directory, chdir '${dir}'`), {
+        code: 'ENOENT',
+        syscall: 'chdir',
+        path: target,
+        cause: err,
+      });
+    }
+    if (!stat.isDirectory) {
+      throw Object.assign(new Error(`ENOTDIR: not a directory, chdir '${dir}'`), {
+        code: 'ENOTDIR',
+        syscall: 'chdir',
+        path: target,
+      });
+    }
+    currentCwd = target;
   }
   hrtime(time?: [number, number]): [number, number] {
     const ms = performance.now();
@@ -133,6 +169,22 @@ Object.assign(riftyProcess.stdin as object, {
 export function installProcessGlobals(): void {
   patchPromiseForNextTick();
   (globalThis as unknown as { process: RiftyProcess }).process = riftyProcess;
+}
+
+/**
+ * Test/host helper: override the per-Worker cwd cell without going through
+ * `chdir`'s VFS validation. Used by the parity-runner so cases that exercise
+ * `process.cwd()` see a stable anchor matching the Node child's `--cwd`.
+ *
+ * Not part of Node's API — production code should call `riftyProcess.chdir`.
+ */
+export function setProcessCwd(next: string): void {
+  currentCwd = next;
+}
+
+/** Internal cwd accessor for sibling builtins (e.g. `fs.resolvePath`). */
+export function getProcessCwd(): string {
+  return currentCwd;
 }
 
 export default riftyProcess;

@@ -1,2 +1,2 @@
-export { ProcessManager, globalProcessManager } from './process-manager.ts';
-export type { ProcessHandle, ProcessIO } from './process-manager.ts';
+export { DEFAULT_CWD, ProcessManager, globalProcessManager } from './process-manager.ts';
+export type { ProcessHandle, ProcessIO, SpawnOptions } from './process-manager.ts';

@@ -13,6 +13,7 @@
 import { isAbsolute, joinPath, normalizePath } from '@rifty/vfs';
 import { Buffer, type Encoding } from './buffer.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+import { getProcessCwd } from './process.ts';
 
 /**
  * Resolve a user-facing fs path: bare/relative names are anchored at the
@@ -37,9 +38,7 @@ function resolvePath(p: string | URL | Buffer | Uint8Array): string {
     throw new TypeError('fs path must be string, Buffer, or URL');
   }
   if (isAbsolute(str)) return normalizePath(str);
-  const proc = (globalThis as { process?: { cwd?: () => string } }).process;
-  const cwd = proc?.cwd?.() ?? '/';
-  return normalizePath(joinPath(cwd, str));
+  return normalizePath(joinPath(getProcessCwd(), str));
 }
 
 type Callback<T> = (err: NodeJS.ErrnoException | null, value?: T) => void;

@@ -1,6 +1,6 @@
 # ADR 0024: File-size budget
 
-Status: Enforcement implemented (2026-05-24) — `tools/checks/file-budget.mjs`, wired into `pnpm check:budget` + CI lint job. WASI decomposition deferred to M11.
+Status: Enforcement implemented (2026-05-24) — `tools/checks/file-budget.mjs`, wired into `pnpm check:budget` + CI lint job. WASI decomposition landed (2026-05-24).
 Date: 2026-05
 
 ## Context
@@ -32,8 +32,8 @@ Adopt a graduated enforcement policy.
 
 ## Acceptance criteria for the deferred implementation
 
-- [ ] WASI split lands as `packages/runtime-wasi/src/syscalls/{fd_*,path_*,proc_*}.ts` with `wasi.ts` reduced to orchestration (< 200 lines).
-- [ ] WASI test coverage gains at least one parity case per syscall family before the split begins.
+- [x] WASI split lands as `packages/runtime-wasi/src/syscalls/{env,fd,path,proc,clock,shared}.ts` with `wasi.ts` reduced to orchestration (129 lines).
+- [ ] WASI test coverage gains at least one parity case per syscall family — followup; existing 7 conformance tests still cover env/fd/path/proc end-to-end via real `_start` and hand-crafted wasm.
 - [x] Biome configuration is checked; v1.9.4 has no file-line cap, so enforcement lives in `tools/checks/file-budget.mjs` (LIMIT = 300; offenders must be in the allow-list there + documented below).
 - [ ] The exception list in this ADR is updated when entries leave it (file shrinks naturally) or join it (new exception accepted by reviewer).
 
@@ -46,7 +46,6 @@ authoritative allow-list is `EXCEPTIONS` in `tools/checks/file-budget.mjs`.
 
 Originally enumerated in this ADR:
 
-- `packages/runtime-wasi/src/wasi.ts` — 369 lines. **Deferred to M11 split** into `syscalls/{fd_*,path_*,proc_*}.ts`; blocks on better per-syscall test coverage first.
 - `packages/runtime-js/src/module-loader/resolver.ts` — 443 lines. Single Node-style resolver algorithm; further splitting fragments the traversal logic across files.
 - `packages/runtime-js/src/module-loader/esm-ast-walker.ts` — 408 lines. Single scope-aware AST-walker pass; the alternative is two passes over the same tree.
 - `packages/runtime-js/src/builtins/stream.ts` — 448 lines. `Readable`/`Writable`/`Duplex`/`Transform`/`PassThrough` are intertwined per Node semantics; splitting mid-class hurts more than it helps.

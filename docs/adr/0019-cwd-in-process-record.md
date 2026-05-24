@@ -1,6 +1,6 @@
 # ADR 0019: `cwd` lives in `kernel.ProcessRecord`
 
-Status: Accepted
+Status: Implemented (2026-05-24)
 Date: 2026-05
 
 ## Context
@@ -27,9 +27,17 @@ Locate `cwd` in the kernel's `ProcessRecord`.
 - Negative: per-process state means the `riftyProcess` singleton must look up the active record per call rather than reading a module-level variable. Small overhead, but real.
 - Follow-up: M11. A small Wave 1 partial fix (a unit test asserting the current `'/'` / no-op behavior, so the silent semantics are at least documented) lands outside this ADR.
 
-## Acceptance criteria for the deferred implementation
+## Acceptance criteria
 
-- [ ] `riftyProcess.chdir('/tmp'); riftyProcess.cwd() === '/tmp'`.
-- [ ] `riftyProcess.chdir('/does/not/exist')` throws an `ENOENT`-shape error.
-- [ ] A child spawned via `kernel.spawn` inherits the parent's `cwd` at spawn time; a subsequent `chdir` in the parent does not change the child's `cwd`.
-- [ ] Relative-path resolution in `fs.promises.readFile('./pkg.json')` resolves against the active record's `cwd`.
+- [x] `riftyProcess.chdir('/tmp'); riftyProcess.cwd() === '/tmp'`.
+- [x] `riftyProcess.chdir('/does/not/exist')` throws an `ENOENT`-shape error.
+- [x] A child spawned via `kernel.spawn` inherits the parent's `cwd` at spawn time; a subsequent `chdir` in the parent does not change the child's `cwd`.
+- [x] Relative-path resolution in `fs.promises.readFile('./pkg.json')` resolves against the active record's `cwd`.
+
+## Implementation notes (2026-05-24)
+
+- `kernel.ProcessRecord` gained a `cwd: string` field; `ProcessHandle.cwd` exposes a read-only view and `setCwd` mutates the record. `DEFAULT_CWD = '/workspace'` for root processes.
+- `ProcessManager.spawn(command, handler, ppid?, options?)` snapshots the parent's `cwd` (or `options.cwd` override) into the child's record at spawn time.
+- Inside the Worker realm `riftyProcess.cwd()` reads a per-Worker cell defaulting to `/workspace`; `chdir(dir)` resolves against the cell, validates via `syncMirror().statSync` (throws `ENOENT` / `ENOTDIR`), and writes the resolved value back. Once ADR-0011 lands the cell becomes a `SharedArrayBuffer`-mirrored slot tied to the kernel record.
+- `fs.ts` `resolvePath` now reads the runtime's own cwd source via `getProcessCwd()` instead of `globalThis.process.cwd()`, so behaviour is identical whether the runtime runs under Node (parity-runner) or a Web Worker.
+- 6 conformance tests (`tests/conformance/builtins/process-cwd.test.ts`) + 4 kernel unit tests (`packages/kernel/tests/process-manager.test.ts`).

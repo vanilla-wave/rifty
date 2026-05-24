@@ -23,7 +23,6 @@ const EXCEPTIONS = new Set([
   'packages/runtime-js/src/module-loader/resolver.ts',
   'packages/runtime-js/src/module-loader/esm-ast-walker.ts',
   'packages/runtime-js/src/builtins/stream.ts',
-  'packages/runtime-wasi/src/wasi.ts', // deferred to M11 split per ADR 0024
   // Additional pre-existing drift discovered when the budget check was
   // rolled out (2026-05-24). Each is documented in ADR 0024; reviewers
   // should challenge any growth and split when practical.
