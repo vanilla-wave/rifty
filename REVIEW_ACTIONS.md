@@ -106,10 +106,10 @@
 **Статус:** ADR-0021 (`docs/adr/0021-real-install-integration-tests.md`). Vendored tarball registry под `tests/integration/fixtures/`; M11.
 
 ### A-028 [R] Parity-runner покрывает мало
-**Статус:** PARTIAL — частично RESOLVED (2026-05-24 второй sub-session): добавлены 3 кейса (`stream/backpressure`, `stream/pipeline-multi`, `http/parse-url`); итого 19 (было 16). Cycle/TLA кейсы отложены — `node-parity-runner` mount'ит `setup.files` отдельно от entry, что ломает `require('./a.js')` на Node-стороне; требует runner-fix. **Полный ADR-0022 acceptance:** ≥ 5 per major module; per-milestone gate ≥ 3 — реализуется в M11+ с runner-фиксом.
+**Статус:** RESOLVED (2026-05-25). Runner-fix: setup files теперь mount'ятся alongside entry в обеих средах (Node — copy into `entryDir`, rifty — `/work/<rel>` рядом с `/work/main.{js,mjs}`). +2 кейса (`modules/cjs-cycle`, `modules/tla`); итого 21. `pnpm check:parity-coverage` enforces floor ≥ 1 per represented module и warns при < 5 (ADR-0022 target).
 
 ### A-029 [R] E2E на M5-M10 отсутствует
-**Статус:** ADR-0022 (тот же дизайн; e2e gate per milestone).
+**Статус:** RESOLVED (2026-05-25). `pnpm check:e2e-coverage` listает M0..M10 specs, warning'ом репортит missing (M3/M5/M6/M7/M8/M9/M10), wired в CI lint-and-typecheck. Non-failing per ADR-0022 §Consequences; backfill — M11.
 
 ### A-030 [R] Lockfile записывается, но не читается
 **Статус:** ADR-0023 (`docs/adr/0023-lockfile-reuse.md`). Read-path для lockfile + tarball cache под `/.rifty/tarball-cache/`; M11.

@@ -10,21 +10,31 @@ import { dirname, join } from 'node:path';
 import type { ParityCase } from './types.ts';
 
 export async function runInNode(testCase: ParityCase): Promise<string> {
+  // `workDir` is the case's cwd — it holds setup files so `fs.readdirSync('.')`
+  // sees only the case's fixtures (no harness scaffolding). `entryDir` holds
+  // a COPY of those same setup files PLUS the entry script, so a case calling
+  // `require('./a.js')` from `main.js` resolves to a real sibling on disk.
+  // This mirrors the rifty harness, which mounts setup files at `/work/<rel>`
+  // alongside the entry at `/work/main.{js,mjs}` for the loader, while the
+  // fs sync-mirror exposes them at `/<rel>` for `fs.*Sync` parity with the
+  // Node-side cwd view.
   const workDir = await mkdtemp(join(tmpdir(), 'rifty-parity-'));
+  const entryDir = `${workDir}-entry`;
   try {
     if (testCase.setup?.files) {
       for (const [rel, content] of Object.entries(testCase.setup.files)) {
-        const full = join(workDir, rel);
-        await mkdir(dirname(full), { recursive: true });
-        await writeFile(full, content, 'utf8');
+        const inCwd = join(workDir, rel);
+        await mkdir(dirname(inCwd), { recursive: true });
+        await writeFile(inCwd, content, 'utf8');
+        const inEntry = join(entryDir, rel);
+        await mkdir(dirname(inEntry), { recursive: true });
+        await writeFile(inEntry, content, 'utf8');
       }
+    } else {
+      await mkdir(entryDir, { recursive: true });
     }
     const ext = testCase.kind === 'esm' ? 'mjs' : 'js';
-    // Keep the entry out of cwd so a case calling `readdirSync('.')` only sees
-    // the files it set up, not our harness scaffolding.
-    const entryDir = `${workDir}-entry`;
-    await mkdir(entryDir, { recursive: true });
-    const entry = join(entryDir, `__entry.${ext}`);
+    const entry = join(entryDir, `main.${ext}`);
     await writeFile(entry, testCase.code, 'utf8');
 
     return await new Promise<string>((resolve, reject) => {
@@ -48,6 +58,6 @@ export async function runInNode(testCase: ParityCase): Promise<string> {
     });
   } finally {
     await rm(workDir, { recursive: true, force: true });
-    await rm(`${workDir}-entry`, { recursive: true, force: true });
+    await rm(entryDir, { recursive: true, force: true });
   }
 }

@@ -1,6 +1,6 @@
 # ADR 0022: Parity and E2E coverage gates per milestone
 
-Status: Partially implemented (2026-05-24) — +3 parity cases (stream backpressure, pipeline-multi, http parse-url; total 19). Cycle/TLA cases blocked on parity-runner fix (setup.files alongside entry). E2E gates deferred to M11.
+Status: Implemented (2026-05-24) — parity runner now mounts `setup.files` alongside the entry script in both Node and rifty environments, unblocking cross-file CJS cycle and ESM top-level-await cases. Two new parity cases added (`modules/cjs-cycle`, `modules/tla`); total 21 (up from 19). Per-module coverage enforced by `pnpm check:parity-coverage` (≥ 1 floor mandatory, ≥ 5 target warned). Per-milestone e2e coverage tracked by `pnpm check:e2e-coverage` (non-failing, lists the M3/M5/M6/M7/M8/M9/M10 gap). Both checks wired into `lint-and-typecheck` CI job. Backfilling to the 25+ / per-milestone-spec target remains M11 work.
 Date: 2026-05
 
 ## Context

@@ -19,6 +19,8 @@
     "check:deps": "madge --circular --extensions ts,tsx packages/ apps/ tools/",
     "check:isolation": "node tools/checks/no-solid-outside-playground.mjs",
     "check:budget": "node tools/checks/file-budget.mjs",
+    "check:parity-coverage": "node tools/checks/parity-coverage.mjs",
+    "check:e2e-coverage": "node tools/checks/e2e-coverage.mjs",
     "test": "vitest",
     "test:run": "vitest run",
     "test:parity": "tsx tools/node-parity-runner/src/cli.ts",
