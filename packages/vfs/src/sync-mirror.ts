@@ -12,20 +12,15 @@
  * the seam that lets us swap implementations behind the same interface.
  */
 
+import type { FsSync } from './fs-sync.ts';
 import { MemoryBackend } from './memory-backend.ts';
 import { MemoryVfs } from './memory.ts';
+import { OpfsFsSync } from './opfs-sync.ts';
+import { OpfsVfs } from './opfs.ts';
 import { joinPath } from './path.ts';
 import type { Vfs } from './types.ts';
 
-export interface FsSync {
-  existsSync(path: string): boolean;
-  readFileBytesSync(path: string): Uint8Array;
-  writeFileSync(path: string, data: Uint8Array): void;
-  readdirSync(path: string): readonly string[];
-  mkdirSync(path: string, options: { recursive?: boolean }): void;
-  rmSync(path: string, options: { recursive?: boolean; force?: boolean }): void;
-  statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number };
-}
+export type { FsSync };
 
 export class MemoryFsSync implements FsSync {
   readonly backend: MemoryBackend;
@@ -105,6 +100,26 @@ export function installMemoryFs(): MemoryBackend {
   activeSync = fsSync;
   activeAsync = vfs;
   return backend;
+}
+
+/**
+ * Install OPFS as both the async {@link Vfs} surface and the sync
+ * {@link FsSync} surface (ADR-0013). Must be called from a Worker realm
+ * where `FileSystemSyncAccessHandle` is available. After this call,
+ * `syncMirror()` returns an `OpfsFsSync` and `asyncVfs()` returns the
+ * paired `OpfsVfs`.
+ *
+ * Note: `setSyncMirror` with a non-`MemoryFsSync` clears the auto-paired
+ * async view, so this helper explicitly calls `setAsyncVfs` to wire the
+ * OPFS async side.
+ */
+export async function installOpfsFs(): Promise<{ vfs: OpfsVfs; fsSync: OpfsFsSync }> {
+  const vfs = new OpfsVfs();
+  await vfs.init();
+  const fsSync = await OpfsFsSync.init();
+  setSyncMirror(fsSync);
+  setAsyncVfs(vfs);
+  return { vfs, fsSync };
 }
 
 export function resetSyncMirror(): void {

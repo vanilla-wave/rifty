@@ -26,10 +26,10 @@
 **Статус:** ADR-0012 (`docs/adr/0012-io-and-kernel-promotion.md`). Решение: путь 1 из ревью — primitives (EventEmitter, Buffer, Readable*) переезжают в `@rifty/io`, `ProcessManager` становится бэкендом `child_process`. Реализация — M11 (вместе с A-002).
 
 ### A-004 [R] OPFS не используется — persistence не работает
-**Статус:** ADR-0013 (`docs/adr/0013-opfs-vfs-deployment.md`). Реализация (включая bootstrap-детект `OpfsVfs.isSupported() && crossOriginIsolated` и e2e reload) отложена до M11.
+**Статус:** ADR-0013 (`docs/adr/0013-opfs-vfs-deployment.md`). **Update 2026-05-24 (M11):** code path landed — `packages/vfs/src/boot.ts` exposes `detectVfsBackend()` (returns `'opfs'` iff `crossOriginIsolated && OpfsVfs.isSupported()`) and `initBackend()` which calls `installOpfsFs()` when applicable. Playground bootstrap wiring + e2e reload assertion still deferred (M11 follow-up).
 
 ### A-005 [I] Sync через `FileSystemSyncAccessHandle` не реализован
-**Статус:** ADR-0013 (`OpfsFsSync` в `packages/vfs/src/`; deferred to M11). Main-realm sync calls должны бросать `NotImplementedError('fs.readFileSync', 'sync fs only available in Worker')`.
+**Статус:** ADR-0013 (`OpfsFsSync` в `packages/vfs/src/`; deferred to M11). Main-realm sync calls должны бросать `NotImplementedError('fs.readFileSync', 'sync fs only available in Worker')`. **Update 2026-05-24 (M11):** DONE for file ops. `packages/vfs/src/opfs-sync.ts` implements `existsSync`, `readFileBytesSync`, `writeFileSync`, `statSync` via `FileSystemSyncAccessHandle`. Directory ops throw `NotImplementedError('OpfsFsSync.<method>', 'directory ops require an async bootstrap; use OpfsVfs for those')` — the sync OPFS API has no directory variant; callers route those through the paired `OpfsVfs`. Constructor refuses non-Worker realms with `NotImplementedError('OpfsFsSync', 'sync OPFS only available inside a Web Worker realm')`. Browser e2e round-trip deferred to M11 follow-up (see A-004).
 
 ### A-006 [I] Две VFS параллельно — нет «одного источника истины»
 **Статус:** ADR-0014 (`docs/adr/0014-shared-vfs-backing-tree.md`). Async `Vfs` и sync `FsSync` теперь общий backend; реализация M11.
