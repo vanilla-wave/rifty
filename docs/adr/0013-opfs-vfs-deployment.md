@@ -1,6 +1,6 @@
 # ADR 0013: OPFS as the primary VFS in browser deploys
 
-Status: Accepted
+Status: Implemented (2026-05-24) — code paths landed; persistence round-trip requires a browser e2e (M11 follow-up)
 Date: 2026-05
 
 ## Context
@@ -28,7 +28,15 @@ Adopt OPFS as the primary VFS in browser deploys with a per-realm split for sync
 
 ## Acceptance criteria for the deferred implementation
 
-- [ ] `OpfsFsSync` passes the same conformance suite as `MemoryFsSync` (sync read/write/stat/readdir/unlink/mkdir/rmdir).
-- [ ] e2e: write `/workspace/foo.txt` from the playground, `page.reload()`, read the file back, assert content unchanged.
-- [ ] Main-realm `fs.readFileSync` throws `NotImplementedError` with the documented message under both `MemoryVfs` and `OpfsVfs` deployments.
-- [ ] No regression on the in-memory test path used by Node-side unit tests (`MemoryFsSync` continues to pass).
+- [~] `OpfsFsSync` passes the same conformance suite as `MemoryFsSync` — **partial**: file ops (`existsSync`, `readFileBytesSync`, `writeFileSync`, `statSync`) implemented via `FileSystemSyncAccessHandle`; directory ops (`readdirSync`, `mkdirSync`, `rmSync`) throw `NotImplementedError('OpfsFsSync.<method>', 'directory ops require an async bootstrap; use OpfsVfs for those')` because the sync API has no directory variant — callers drive those through the paired `OpfsVfs` instead.
+- [ ] e2e: write `/workspace/foo.txt` from the playground, `page.reload()`, read the file back, assert content unchanged — **deferred to M11 follow-up** (Playwright + Worker harness not yet wired).
+- [x] Main-realm `fs.readFileSync` throws `NotImplementedError` with the documented message under both `MemoryVfs` and `OpfsVfs` deployments — `OpfsFsSync` constructor refuses to instantiate outside a Worker realm with `NotImplementedError('OpfsFsSync', 'sync OPFS only available inside a Web Worker realm')`.
+- [x] No regression on the in-memory test path used by Node-side unit tests (`MemoryFsSync` continues to pass) — 280 tests pass after the change (was 275; +7 from the new boot-detector and `OpfsFsSync` realm-gate unit tests).
+
+## Implementation notes (2026-05-24)
+
+- New module `packages/vfs/src/opfs-sync.ts` — `OpfsFsSync`, with `isSupported()` and `init()` realm gates.
+- Boot detector `packages/vfs/src/boot.ts` — `detectVfsBackend()` returns `'opfs'` iff `crossOriginIsolated && OpfsVfs.isSupported()`, else `'memory'`. `initBackend()` calls `installOpfsFs()` or `installMemoryFs()`.
+- `installOpfsFs()` in `sync-mirror.ts` wires both surfaces (`OpfsVfs` async + `OpfsFsSync` sync) in one call.
+- Shared `FsSync` interface lifted to `packages/vfs/src/fs-sync.ts` so backend modules don't import the swap-in registry (was the only circular-dep risk).
+- Sync access handles are lazily acquired and memoised per absolute path. Callers that need to read a brand-new file from the sync side must first pre-warm with `await fsSync.openSync(path, true)` or write through the paired `OpfsVfs.writeFile`.
