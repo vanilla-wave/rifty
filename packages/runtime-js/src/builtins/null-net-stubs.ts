@@ -81,10 +81,10 @@ export const https = {
 
 export const readline = {
   createInterface: notImpl('readline.createInterface'),
-  cursorTo: () => {},
-  clearLine: () => {},
-  clearScreenDown: () => {},
-  emitKeypressEvents: () => {},
+  cursorTo: notImpl('readline.cursorTo'),
+  clearLine: notImpl('readline.clearLine'),
+  clearScreenDown: notImpl('readline.clearScreenDown'),
+  emitKeypressEvents: notImpl('readline.emitKeypressEvents'),
 };
 
 class ZlibUnsupported {
