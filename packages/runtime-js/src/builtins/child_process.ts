@@ -28,10 +28,24 @@ import {
   getKernelWorkerUrl,
   globalProcessManager,
   isSabIpcSupported,
+  setExecSyncScriptResolver,
 } from '@rifty/kernel';
 import { execScript } from './child_process-exec.ts';
+import { execSync } from './child_process-sync.ts';
 import { spawnWorkerChild } from './child_process-worker.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+
+// ADR-0011 phase 3: thread the runtime-js sync mirror into the kernel's
+// default `execSync` handler. The kernel itself has no VFS dependency
+// (vfs → kernel layering allows it, but we avoid coupling the kernel to
+// a specific filesystem); the runtime-js layer is the natural place to
+// own that wiring. Resolver returns `null` for missing scripts so the
+// handler can surface a proper `ENOENT`.
+setExecSyncScriptResolver((path) => {
+  const mirror = syncMirror();
+  if (!mirror.existsSync(path)) return null;
+  return mirror.readFileBytesSync(path);
+});
 
 interface SpawnOptions {
   cwd?: string;
@@ -246,33 +260,11 @@ export function fork(
   return spawn('node', [modulePath, ...args], { ...opts, __fork: true });
 }
 
-/**
- * `execSync` actually runs the script synchronously since our spawn is
- * basically a function call. Returns stdout as a Buffer.
- *
- * No ProcessManager.spawn here — the kernel's `spawn` is async (it schedules
- * the handler on a microtask). The synchronous case stays as a direct
- * function call. The real SAB-Atomics path is ADR-0011's scope.
- */
-export function execSync(cmd: string, _opts?: ExecOptions): Uint8Array {
-  const tokens = cmd.split(/\s+/).filter(Boolean);
-  if (tokens[0] !== 'node' || tokens.length < 2) {
-    throw Object.assign(new Error(`execSync only supports 'node <script>': got ${cmd}`), {
-      code: 'EUNSUPPORTED',
-    });
-  }
-  const scriptPath = tokens[1]!;
-  let stdout = '';
-  const source = syncMirror().readFileBytesSync(scriptPath);
-  const fn = new Function(
-    '__stdout_write',
-    `${Buffer.from(source).toString()}\n//# sourceURL=${scriptPath}`,
-  ) as (w: (c: string) => void) => unknown;
-  fn((c) => {
-    stdout += c;
-  });
-  return Buffer.from(stdout);
-}
+// `execSync` lives in `./child_process-sync.ts` so the SAB-vs-fallback
+// branch can stay together with its helpers without pushing this module
+// over the 300-line budget. Re-export here so the public `child_process`
+// surface still exposes it.
+export { execSync };
 
 export const ChildProcess_ = ChildProcess;
 

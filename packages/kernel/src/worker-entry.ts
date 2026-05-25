@@ -30,6 +30,7 @@
  */
 
 import { SabRing } from './ipc/sab-ring.ts';
+import { SyncRpcClient } from './ipc/sync-client.ts';
 
 /** Stdio channels passed to the worker. Each is a transferred MessagePort. */
 export interface WorkerStdioPorts {
@@ -152,9 +153,32 @@ function installProcessShim(spec: WorkerSpawnSpec, ports: WorkerStdioPorts): Pro
  */
 export const KERNEL_SAB_RING_KEY = '__riftyKernelSyncRing__';
 
+/**
+ * Hook key for the in-Worker sync call shim installed in phase 3. Higher
+ * layers (e.g. `runtime-js/builtins/child_process.execSync`) reach for
+ * `globalThis[KERNEL_SYNC_CALL_KEY](method, payload)` to delegate
+ * synchronous syscalls to the parent realm. Returns whatever the
+ * dispatcher's handler returned (or throws when the handler did).
+ */
+export const KERNEL_SYNC_CALL_KEY = '__riftyKernelSyncCall' as const;
+
+/** Type of the in-Worker sync call shim. Narrow so callers stay `any`-free. */
+export type KernelSyncCall = (method: string, payload: unknown) => unknown;
+
 function publishSyncRing(ring: SabRing): void {
   Object.defineProperty(globalThis, KERNEL_SAB_RING_KEY, {
     value: ring,
+    writable: false,
+    configurable: true,
+    enumerable: false,
+  });
+}
+
+function publishSyncCallShim(ring: SabRing): void {
+  const client = new SyncRpcClient(ring);
+  const shim: KernelSyncCall = (method, payload) => client.call(method, payload);
+  Object.defineProperty(globalThis, KERNEL_SYNC_CALL_KEY, {
+    value: shim,
     writable: false,
     configurable: true,
     enumerable: false,
@@ -217,6 +241,12 @@ export function installWorkerEntry(
     const spec = msg.spec;
     const ring = SabRing.attach(spec.syncRing);
     publishSyncRing(ring);
+    // Phase 3: expose `__riftyKernelSyncCall(method, payload)` so the
+    // runtime-js layer can route `execSync`, `readFileSync`, etc. through
+    // the parent dispatcher without each builtin re-implementing the
+    // SAB ring framing. The shim itself is a thin wrapper around a
+    // `SyncRpcClient` bound to this realm's ring.
+    publishSyncCallShim(ring);
     installProcessShim(spec, spec.stdio);
 
     let code = 0;

@@ -16,10 +16,17 @@
 ## P0 — фундаментные продолбы
 
 ### A-001 [I] execSync через SAB+Atomics не реализован
-**Статус:** ADR-0011 (sync IPC via SharedArrayBuffer+Atomics; deferred to M11).
-**Что сделано в этой сессии:** ADR `docs/adr/0011-sync-ipc-sab-atomics.md` фиксирует дизайн kernel `worker-entry.ts` + Atomics-coordinated request/reply, acceptance-критерии для M11.
-**Update 2026-05-25:** ADR-0011 phase 1 landed — `packages/kernel/src/ipc/sab-ring.ts` (SAB ring + `RingTimeoutError`/`RingPayloadTooLargeError`), `packages/kernel/src/ipc/capabilities.ts` (`isSabIpcSupported`/`getIpcMode`), `packages/kernel/src/worker-entry.ts` (kernel-side Worker bootstrap + `process` shim + sync-ring hook). Covered by 12 unit tests + 2 conformance tests (`tests/conformance/kernel/sab-ring.test.ts` exercises a real Node `Worker` round-trip via `Atomics.wait`).
-**Update 2026-05-25 (phase 2):** Phase 2 landed — `kernel.spawnWorker` + `setKernelWorkerUrl` allocator wired through `child_process.spawn` / `fork` / `worker_threads.Worker` (см. A-002). `execSync` (phase 3) остаётся: всё ещё in-realm fallback, без `Atomics.wait` блокировки main-потока.
+**Статус:** RESOLVED (2026-05-25, ADR-0011 phase 3). ADR `docs/adr/0011-sync-ipc-sab-atomics.md` теперь полностью имплементирован: phase 1 (SAB ring), phase 2 (worker-per-process), phase 3 (sync `execSync` через `Atomics.wait`).
+
+Phase 3 surface:
+- `packages/kernel/src/ipc/sync-rpc.ts` — JSON-over-UTF-8 RPC framing (`SyncRpcRequest`/`SyncRpcReply` + `encode*`/`decode*`).
+- `packages/kernel/src/ipc/sync-dispatch.ts` — `SyncRpcDispatcher` (parent-side polling, attach/detach per ring, in-flight guard).
+- `packages/kernel/src/ipc/sync-client.ts` — `SyncRpcClient` (in-Worker `Atomics.wait` blocking call); throws `NotImplementedError` если вызвать из main realm.
+- `packages/kernel/src/ipc/default-handlers.ts` + `recursive-runner.ts` + `script-resolver.ts` — kernel default `execSync` handler рекурсивно спавнит new Worker, capture'ит stdout, возвращает строку.
+- `packages/kernel/src/worker-entry.ts` — публикует `__riftyKernelSyncCall(method, payload)` (key: `KERNEL_SYNC_CALL_KEY`) для runtime-js слоя.
+- `packages/runtime-js/src/builtins/child_process-sync.ts` — `execSync` бранчит: SAB hook когда `isSabIpcSupported() && getKernelWorkerUrl() && globalThis[KERNEL_SYNC_CALL_KEY]`; иначе fallback на in-realm `new Function`.
+
+2 conformance тестa: `tests/conformance/kernel/sync-rpc.test.ts` (real Node Worker round-trip — echo + ERPCNOHANDLER); `tests/conformance/builtins/exec-sync-worker.test.ts` (skips в Node без isolation, документирует контракт для browser e2e).
 
 ### A-002 [I] «Процесс = Web Worker» не реализован
 **Статус:** RESOLVED (2026-05-25, ADR-0011 phase 2). `kernel.spawnWorker(spec)` создаёт реальный `new Worker(kernelWorkerUrl, { type: 'module' })` под уникальный PID с SAB-ring + 3 stdio `MessageChannel`s; exit отслеживается через `{type:'exit', code}` сообщение worker'а. `setKernelWorkerUrl` / `getKernelWorkerUrl` дают хосту (playground) передать Vite-резолвленный URL без хардкода путей в `@rifty/kernel`. `child_process.spawn` / `fork` и `worker_threads.Worker` бранчат на `isSabIpcSupported() && getKernelWorkerUrl()`; иначе fallback на in-realm путь (per ADR-0011). 2 conformance-теста под `tests/conformance/builtins/child_process-worker.test.ts` (skip в Node без COOP/COEP).
@@ -40,7 +47,7 @@
 **Статус:** RESOLVED — ADR-0015 имплементирован (2026-05-24). `tools/shadow-registry/` — новый workspace-пакет `@rifty/shadow-registry` с `bakedOverrides`, `esbuildShimFiles`, `rollupShimFiles`. `packages/npm-client/src/overrides.ts` и `apps/playground/src/adapters/esbuild-shim.ts` теперь тонкие адаптеры/re-exports. `unenv` остаётся отложенным до концретного триггера (см. ADR-0015 §Decision).
 
 ### A-008 [I] esbuild-shim — passthrough, M10 финал — фейк
-**Статус:** ADR-0011 (зависит от worker-as-process для запуска `esbuild.wasm` через WASI). Acceptance включает «esbuild.wasm runs through WASI runner».
+**Статус:** ADR-0011 (зависит от worker-as-process для запуска `esbuild.wasm` через WASI). Acceptance включает «esbuild.wasm runs through WASI runner». **Update 2026-05-25:** инфраструктура для worker-as-process + sync IPC теперь есть (ADR-0011 phases 1–3 implemented — см. A-001/A-002). Открыто: vendored `esbuild.wasm` и WASI-связка для его preopen'ов. Будет адресовано отдельным заходом.
 
 ---
 
@@ -87,7 +94,7 @@
 **Статус:** PARTIAL — phase 1 RESOLVED (2026-05-24 второй sub-session), phase 2 ADR-0020 M11. Phase 1: добавлен `openReadable(path, opts?): Promise<ReadableStream<Uint8Array>>` в `Vfs` interface (`packages/vfs/src/types.ts`), реализован в `MemoryVfs` (default chunkSize 64 KiB, start/end byte offsets), стабы в `OpfsVfs` + `SyncMirrorVfs` (бросают с pointer'ом на M11). 5 conformance-тестов pass. **Phase 2 (M11):** OpfsVfs реальная реализация через `File.stream()` + переписывание `createReadStream` поверх `openReadable` — заблокировано ADR-0014 (split VFS backend сейчас сломает источник истины).
 
 ### A-021 [R] Pipes между процессами — строковая шина
-**Статус:** ADR-0011 (binary stdio over MessagePort при переходе на worker-as-process; M11).
+**Статус:** PARTIAL — ADR-0011 phase 3 implemented JSON-over-UTF-8 framing для sync RPC (см. A-001). Binary stdio over MessagePort с backpressure — отдельный follow-up: framing в phase 3 это JSON, не raw bytes. Будет адресовано отдельным заходом.
 
 ### A-022 [I] Chunked transfer encoding и streaming response отсутствуют
 **Статус:** ADR-0017 (`docs/adr/0017-net-scope-and-streaming-rewrite.md`). Streaming `SerializedResponse` (body как `ReadableStream` Transferable); M12.

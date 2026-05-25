@@ -29,3 +29,46 @@
   `NotImplementedError('kernel.spawnWorker', …)`.
 - Subpath export `@rifty/kernel/worker-entry` so bundler entries can
   `import '@rifty/kernel/worker-entry'` to install the auto-bootstrap.
+- ADR-0011 phase 3: `ipc/sync-rpc.ts` — JSON-over-UTF-8 framing
+  (`SyncRpcRequest` / `SyncRpcReply` + `encodeRequest` / `decodeReply` /
+  `decodeRequest` / `encodeReply`). Binary frames remain a follow-up
+  (A-021).
+- ADR-0011 phase 3: `ipc/sync-dispatch.ts` — `SyncRpcDispatcher` runs on
+  the parent realm, polls each attached `SabRing` at 1 ms intervals,
+  dispatches incoming JSON frames to registered handlers (sync or
+  thenable), and writes the reply. Per-ring in-flight guard makes the
+  dispatcher recursive-safe (an async handler can spawn a nested
+  `execSync` without the polling timer double-dispatching the original).
+  Timer is `unref`'d so it never holds Node alive on its own.
+- ADR-0011 phase 3: `ipc/sync-client.ts` — `SyncRpcClient(ring)` runs
+  inside a kernel-spawned Worker. `call<T>(method, payload, timeoutMs?)`
+  encodes the request, `Atomics.wait`s on the reply slot, decodes the
+  JSON, and rethrows server-side errors with `name` / `message` / `code`
+  preserved. Constructor throws
+  `NotImplementedError('SyncRpcClient', 'called from main realm — only
+  valid inside a kernel-spawned Worker')` on non-Worker realms — keeps
+  the "blocks the UI" failure mode loud.
+- ADR-0011 phase 3: `ipc/default-handlers.ts` +
+  `ipc/recursive-runner.ts` + `ipc/script-resolver.ts` — kernel default
+  `execSync` handler. The handler parses `{cmd, opts}`, looks up the
+  script via the injected `ScriptResolver` (set by the runtime-js layer
+  through `setExecSyncScriptResolver` so the kernel stays
+  filesystem-agnostic), and spawns a fresh kernel Worker via the
+  `RecursiveWorkerRunner` (which the spawn-worker module wires to its
+  own `spawnKernelWorker`). Recursive workers use PIDs from a dedicated
+  counter (0xC0000000+) so they don't collide with `ProcessManager`'s
+  public PID space.
+- ADR-0011 phase 3: `worker-entry.ts` — exposes
+  `__riftyKernelSyncCall(method, payload)` (key:
+  `KERNEL_SYNC_CALL_KEY`) as a non-enumerable global. Backed by a
+  `SyncRpcClient` bound to this realm's SAB ring. Higher layers
+  (`runtime-js/builtins/child_process.execSync`) reach for this to
+  delegate sync syscalls.
+- `spawnKernelWorker` now returns the parent-side `dispatcher` and
+  `ring` so higher layers can `dispatcher.register(...)` additional RPC
+  methods. Default `execSync` handler is pre-registered.
+- Re-exports: `setExecSyncScriptResolver`, `SyncRpcDispatcher`,
+  `SyncRpcClient`, `KERNEL_SYNC_CALL_KEY`, `KernelSyncCall`,
+  `registerDefaultHandlers`, `ScriptResolver`, `RecursiveWorkerRunner`,
+  `ExecSyncPayload`, `SyncRpcRequest`, `SyncRpcReply`, encode/decode
+  helpers.
