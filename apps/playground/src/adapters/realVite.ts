@@ -219,12 +219,15 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
       init.body = copy;
     }
     const response = await dispatchToPort(req.port, new Request(req.url, init));
-    const body = new Uint8Array(await response.arrayBuffer());
+    // ADR-0017: hand the streaming body straight to the bridge. It picks the
+    // transferable-ReadableStream path when supported, falling back to a
+    // buffered Uint8Array otherwise. `response.body` may be `null` for
+    // intentionally empty responses (e.g. 204).
     return {
       status: response.status,
       statusText: response.statusText,
       headers: Object.fromEntries(response.headers),
-      body,
+      body: response.body,
     };
   });
 

@@ -12,7 +12,11 @@
  * both ends, and the URL routes to the right server.
  */
 import { describe, expect, it } from 'vitest';
-import { WebSocket, WebSocketServer } from '../../../packages/net/src/ws.ts';
+import {
+  WebSocket,
+  WebSocketServer,
+  createCrossRealmBridge,
+} from '../../../packages/net/src/ws.ts';
 
 describe('WebSocketServer', () => {
   it('accepts a connecting client and exchanges text messages', async () => {
@@ -100,5 +104,74 @@ describe('WebSocketServer', () => {
     a.close();
     b.close();
     server.close();
+  });
+});
+
+describe('cross-realm WebSocket bridge (ADR-0017 phase 1)', () => {
+  /**
+   * The bridge is BroadcastChannel-backed and intentionally has no shared
+   * in-process registry — the connection is established purely through the
+   * named channel. These tests verify that plumbing works without falling
+   * back to the same-realm shim.
+   */
+  it('exchanges messages over BroadcastChannel with no shared registry', async () => {
+    const { WebSocket: BWS, WebSocketServer: BWSS } = createCrossRealmBridge();
+    const server = new BWSS('ws://playground/hmr');
+    const serverSeen: string[] = [];
+    server.on('connection', (sock) => {
+      sock.on('message', (data: unknown) => serverSeen.push(String(data)));
+      sock.send('server-hello');
+    });
+
+    const ws = new BWS('ws://playground/hmr');
+    const clientSeen: string[] = [];
+    ws.addEventListener('message', (e) => clientSeen.push(String((e as MessageEvent).data)));
+    await new Promise<void>((r) => ws.addEventListener('open', () => r(), { once: true }));
+    ws.send('client-hello');
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(serverSeen).toEqual(['client-hello']);
+    expect(clientSeen).toEqual(['server-hello']);
+
+    ws.close();
+    server.close();
+  });
+
+  it('propagates close across the bridge in both directions', async () => {
+    const { WebSocket: BWS, WebSocketServer: BWSS } = createCrossRealmBridge();
+    // Direction 1: client closes → server connection sees 'close'.
+    const server1 = new BWSS('ws://playground/close-1');
+    let server1Saw = false;
+    server1.on('connection', (sock) => {
+      sock.on('close', () => {
+        server1Saw = true;
+      });
+    });
+    const c1 = new BWS('ws://playground/close-1');
+    await new Promise<void>((r) => c1.addEventListener('open', () => r(), { once: true }));
+    let c1Saw = false;
+    c1.addEventListener('close', () => {
+      c1Saw = true;
+    });
+    c1.close(1000, 'bye-from-client');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(c1Saw).toBe(true);
+    expect(server1Saw).toBe(true);
+    server1.close();
+
+    // Direction 2: server closes connection → client sees 'close'.
+    const server2 = new BWSS('ws://playground/close-2');
+    server2.on('connection', (sock) => {
+      // Close from the server side a moment after accept.
+      setTimeout(() => sock.close(1001, 'bye-from-server'), 5);
+    });
+    const c2 = new BWS('ws://playground/close-2');
+    await new Promise<void>((r) => c2.addEventListener('open', () => r(), { once: true }));
+    const closeEvent = await new Promise<CloseEvent>((r) =>
+      c2.addEventListener('close', (e) => r(e as CloseEvent), { once: true }),
+    );
+    expect(closeEvent.code).toBe(1001);
+    expect(closeEvent.reason).toBe('bye-from-server');
+    server2.close();
   });
 });

@@ -21,4 +21,12 @@ export {
   onRegistryChange,
 } from './registry.ts';
 export type { PortHandler } from './registry.ts';
-export { WebSocket, WebSocketServer, WebSocketConnection } from './ws.ts';
+export {
+  WebSocket,
+  WebSocketServer,
+  WebSocketConnection,
+  BridgedWebSocket,
+  BridgedWebSocketServer,
+  BridgedWebSocketConnection,
+  createCrossRealmBridge,
+} from './ws.ts';
