@@ -27,6 +27,13 @@ export interface VfsDirent {
  *
  * All paths are POSIX-style absolute paths starting with `/`. Backends
  * normalise paths internally — callers can pass either `/a/b/` or `/a/b`.
+ *
+ * **Normalisation invariant** — every public method normalises its `path`
+ * argument on entry: trailing slashes are stripped, `.`/`..` segments are
+ * collapsed, and relative inputs are coerced to absolute (so
+ * `./foo/../bar.txt` and `/bar.txt` reach the backend as the same path).
+ * Backend implementations MAY assume normalised input from this interface
+ * but should still tolerate external sources passing un-normalised paths.
  */
 export interface Vfs {
   readFile(path: string): Promise<Uint8Array>;

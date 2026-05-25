@@ -78,3 +78,20 @@ export function segments(p: string): string[] {
   const stripped = normalized.startsWith('/') ? normalized.slice(1) : normalized;
   return stripped.split('/');
 }
+
+/**
+ * Normalise `p` and coerce to an absolute POSIX path. Relative inputs like
+ * `'foo/bar'` or `'./foo/../bar.txt'` become `'/foo/bar'` and `'/bar.txt'`
+ * respectively. Backends rely on this to keep their manual path-slicing
+ * (parent + child name) honest even when callers pass relative paths.
+ *
+ * This is the documented invariant for `Vfs` / `FsSync` entry points: every
+ * public method normalises its `path` argument before forwarding to the
+ * backend.
+ */
+export function normalizeAbsolute(p: string): string {
+  const normalized = normalizePath(p);
+  if (normalized.startsWith('/')) return normalized;
+  if (normalized === '.') return '/';
+  return `/${normalized}`;
+}

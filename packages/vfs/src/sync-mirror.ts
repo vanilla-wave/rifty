@@ -17,7 +17,7 @@ import { MemoryBackend } from './memory-backend.ts';
 import { MemoryVfs } from './memory.ts';
 import { OpfsFsSync } from './opfs-sync.ts';
 import { OpfsVfs } from './opfs.ts';
-import { joinPath } from './path.ts';
+import { joinPath, normalizeAbsolute } from './path.ts';
 import type { Vfs } from './types.ts';
 
 export type { FsSync };
@@ -30,35 +30,35 @@ export class MemoryFsSync implements FsSync {
   }
 
   existsSync(path: string): boolean {
-    return this.backend.exists(path);
+    return this.backend.exists(normalizeAbsolute(path));
   }
 
   readFileBytesSync(path: string): Uint8Array {
-    return this.backend.readFile(path);
+    return this.backend.readFile(normalizeAbsolute(path));
   }
 
   writeFileSync(path: string, data: Uint8Array): void {
-    this.backend.writeFile(path, data);
+    this.backend.writeFile(normalizeAbsolute(path), data);
   }
 
   readdirSync(path: string): readonly string[] {
-    return this.backend.readdir(path);
+    return this.backend.readdir(normalizeAbsolute(path));
   }
 
   mkdirSync(path: string, options: { recursive?: boolean }): void {
-    this.backend.mkdir(path, options);
+    this.backend.mkdir(normalizeAbsolute(path), options);
   }
 
   rmSync(path: string, options: { recursive?: boolean; force?: boolean }): void {
-    this.backend.rm(path, options);
+    this.backend.rm(normalizeAbsolute(path), options);
   }
 
-  statSync(path: string) {
-    return this.backend.stat(path);
+  statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number } {
+    return this.backend.stat(normalizeAbsolute(path));
   }
 
   utimes(path: string, atimeMs: number, mtimeMs: number): void {
-    this.backend.utimes(path, atimeMs, mtimeMs);
+    this.backend.utimes(normalizeAbsolute(path), atimeMs, mtimeMs);
   }
 
   loadFixture(files: Readonly<Record<string, string>>): void {

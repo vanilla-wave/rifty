@@ -74,6 +74,15 @@ describe('MemoryVfs', () => {
     await expect(fs.rm('/nope', { force: true })).resolves.toBeUndefined();
   });
 
+  it('normalises relative paths at entry — write to ./foo/../bar.txt reads as /bar.txt', async () => {
+    const fs = new MemoryVfs();
+    await fs.writeFile('./foo/../bar.txt', 'normalised');
+    expect(await fs.readFileText('/bar.txt')).toBe('normalised');
+    expect(await fs.exists('/bar.txt')).toBe(true);
+    expect(await fs.exists('bar.txt')).toBe(true);
+    expect(await fs.exists('/foo/../bar.txt')).toBe(true);
+  });
+
   describe('openReadable', () => {
     async function collect(stream: ReadableStream<Uint8Array>): Promise<Uint8Array[]> {
       const reader = stream.getReader();

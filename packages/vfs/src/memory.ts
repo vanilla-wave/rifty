@@ -2,8 +2,12 @@
  * Async {@link Vfs} view over a {@link MemoryBackend}. By default each
  * `MemoryVfs` owns a fresh backend; pair it with a sibling `MemoryFsSync`
  * via {@link createMemoryFs} to share state across both surfaces (ADR-0014).
+ *
+ * Per the {@link Vfs} normalisation invariant, every public method normalises
+ * its `path` argument before forwarding to the backend.
  */
 import { MemoryBackend } from './memory-backend.ts';
+import { normalizeAbsolute } from './path.ts';
 import type { Vfs, VfsDirent, VfsStat } from './types.ts';
 
 const decoder = new TextDecoder('utf-8');
@@ -16,42 +20,42 @@ export class MemoryVfs implements Vfs {
   }
 
   async readFile(path: string): Promise<Uint8Array> {
-    return this.backend.readFile(path);
+    return this.backend.readFile(normalizeAbsolute(path));
   }
 
   async readFileText(path: string, _encoding: 'utf8' = 'utf8'): Promise<string> {
-    return decoder.decode(this.backend.readFile(path));
+    return decoder.decode(this.backend.readFile(normalizeAbsolute(path)));
   }
 
   async writeFile(path: string, data: Uint8Array | string): Promise<void> {
-    this.backend.writeFile(path, data);
+    this.backend.writeFile(normalizeAbsolute(path), data);
   }
 
   async readdir(path: string): Promise<readonly VfsDirent[]> {
-    return this.backend.readdirEntries(path);
+    return this.backend.readdirEntries(normalizeAbsolute(path));
   }
 
   async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
-    this.backend.mkdir(path, options);
+    this.backend.mkdir(normalizeAbsolute(path), options);
   }
 
   async rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
-    this.backend.rm(path, options);
+    this.backend.rm(normalizeAbsolute(path), options);
   }
 
   async stat(path: string): Promise<VfsStat> {
-    return this.backend.stat(path);
+    return this.backend.stat(normalizeAbsolute(path));
   }
 
   async exists(path: string): Promise<boolean> {
-    return this.backend.exists(path);
+    return this.backend.exists(normalizeAbsolute(path));
   }
 
   async openReadable(
     path: string,
     opts?: { chunkSize?: number; start?: number; end?: number },
   ): Promise<ReadableStream<Uint8Array>> {
-    const data = this.backend.readFile(path);
+    const data = this.backend.readFile(normalizeAbsolute(path));
     const start = opts?.start ?? 0;
     const end = Math.min(opts?.end ?? data.byteLength, data.byteLength);
     const chunkSize = opts?.chunkSize ?? 64 * 1024;

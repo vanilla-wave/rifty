@@ -7,6 +7,12 @@
  *
  * Kept in its own module so backend implementations and the swap-in
  * registry (`sync-mirror.ts`) don't import each other.
+ *
+ * **Normalisation invariant** — every public method normalises its `path`
+ * argument on entry: trailing slashes are stripped, `.`/`..` segments are
+ * collapsed, and relative inputs are coerced to absolute. Backend
+ * implementations MAY assume normalised input from this interface but
+ * should still tolerate external sources passing un-normalised paths.
  */
 export interface FsSync {
   existsSync(path: string): boolean;

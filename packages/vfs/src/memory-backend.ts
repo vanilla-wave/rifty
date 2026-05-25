@@ -10,7 +10,7 @@
  * to await. The async view just wraps them in `Promise.resolve()`.
  */
 import { VfsError } from './errors.ts';
-import { dirname, normalizePath, segments } from './path.ts';
+import { dirname, normalizeAbsolute, segments } from './path.ts';
 
 type FileNode = { kind: 'file'; data: Uint8Array; mtime: number; atime: number };
 type DirNode = { kind: 'dir'; children: Map<string, Node>; mtime: number; atime: number };
@@ -62,7 +62,7 @@ export class MemoryBackend {
   }
 
   writeFile(path: string, data: Uint8Array | string): void {
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     const parent = dirname(normalized);
     const parentNode = this.resolve(parent);
     if (!parentNode) throw new VfsError('ENOENT', parent);
@@ -129,7 +129,7 @@ export class MemoryBackend {
   rm(path: string, options: { recursive?: boolean; force?: boolean } = {}): void {
     const recursive = options.recursive ?? false;
     const force = options.force ?? false;
-    const normalized = normalizePath(path);
+    const normalized = normalizeAbsolute(path);
     if (normalized === '/') {
       if (recursive) {
         this.root.children.clear();
