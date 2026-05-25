@@ -1,4 +1,6 @@
-import { resetSyncMirror } from '@rifty/vfs';
+import { NotImplementedError } from '@rifty/io';
+import { syncMirror } from '@rifty/vfs';
+import { resetSyncMirror } from '@rifty/vfs/internal';
 /**
  * Unit tests for `@rifty/shell` — tokenizer, builtins, dispatch.
  *
@@ -115,5 +117,103 @@ describe('Shell — custom command registration', () => {
     });
     await sh.run('where');
     expect(seenCwd).toBe('/workdir');
+  });
+});
+
+describe('tokenize — single vs double quotes', () => {
+  it('single quotes are literal — $VAR is NOT expanded inside', () => {
+    expect(tokenize("echo '$HOME'", { HOME: '/root' })).toEqual(['echo', '$HOME']);
+  });
+
+  it("single quotes don't honour backslash escapes", () => {
+    // POSIX: inside `'…'` even \\ stays literal. The only character that
+    // terminates the run is a closing `'`.
+    expect(tokenize(String.raw`echo 'a\nb'`)).toEqual(['echo', String.raw`a\nb`]);
+  });
+
+  it('double quotes expand $VAR', () => {
+    expect(tokenize('echo "$HOME"', { HOME: '/root' })).toEqual(['echo', '/root']);
+  });
+
+  it('double quotes expand ${VAR}', () => {
+    expect(tokenize('echo "${USER}"', { USER: 'alice' })).toEqual(['echo', 'alice']);
+  });
+
+  it('double quotes preserve whitespace as one token even after expansion', () => {
+    expect(tokenize('echo "$X end"', { X: 'a b c' })).toEqual(['echo', 'a b c end']);
+  });
+
+  it('double quotes honour limited backslash escapes', () => {
+    expect(tokenize('echo "a\\$b"', { b: 'IGNORED' })).toEqual(['echo', 'a$b']);
+    expect(tokenize('echo "a\\\\b"')).toEqual(['echo', 'a\\b']);
+    expect(tokenize('echo "a\\"b"')).toEqual(['echo', 'a"b']);
+  });
+
+  it('unknown variables expand to empty string', () => {
+    expect(tokenize('echo "[$NOPE]"')).toEqual(['echo', '[]']);
+    expect(tokenize('echo $NOPE end')).toEqual(['echo', '', 'end']);
+  });
+
+  it('unquoted $VAR expands but stays one token (no IFS splitting)', () => {
+    expect(tokenize('echo $X', { X: 'a b' })).toEqual(['echo', 'a b']);
+  });
+
+  it('adjacent quoted/unquoted segments concatenate into one token', () => {
+    expect(tokenize('echo a"b"c')).toEqual(['echo', 'abc']);
+    expect(tokenize("echo a'b'c")).toEqual(['echo', 'abc']);
+  });
+
+  it('${VAR:-default} and similar forms throw — unsupported, not silent', () => {
+    expect(() => tokenize('echo ${X:-y}', { X: '' })).toThrow(/unsupported variable expansion/);
+  });
+});
+
+describe('Shell — input redirect is loud', () => {
+  it('throws NotImplementedError when < appears in a command line', async () => {
+    const sh = new Shell();
+    await expect(sh.run('cat < /etc/hostname')).rejects.toBeInstanceOf(NotImplementedError);
+  });
+
+  it('the NotImplementedError carries the documented feature name', async () => {
+    const sh = new Shell();
+    await expect(sh.run('cat < /etc/hostname')).rejects.toMatchObject({
+      feature: 'shell.input-redirect',
+    });
+  });
+});
+
+describe('Shell — env expansion in run()', () => {
+  it('$VAR in arguments expands from the shell env', async () => {
+    const sh = new Shell({ env: { GREETING: 'hello there' } });
+    const r = await sh.run('echo "$GREETING"');
+    expect(r.stdout).toBe('hello there\n');
+  });
+});
+
+describe('touch — mtime is updated for existing files', () => {
+  it('bumps mtime on each subsequent touch', async () => {
+    const sh = new Shell({ cwd: '/' });
+    const create = await sh.run('touch /file.txt');
+    expect(create.exitCode).toBe(0);
+    const first = syncMirror().statSync('/file.txt').mtime!;
+
+    // Second touch — mtime must move strictly forward, regardless of whether
+    // Date.now() ticks between calls.
+    const second = await sh.run('touch /file.txt');
+    expect(second.exitCode).toBe(0);
+    const afterSecond = syncMirror().statSync('/file.txt').mtime!;
+    expect(afterSecond).toBeGreaterThan(first);
+
+    const third = await sh.run('touch /file.txt');
+    expect(third.exitCode).toBe(0);
+    const afterThird = syncMirror().statSync('/file.txt').mtime!;
+    expect(afterThird).toBeGreaterThan(afterSecond);
+  });
+
+  it('touch still creates a new file when path does not exist', async () => {
+    const sh = new Shell({ cwd: '/' });
+    const r = await sh.run('touch /new-file');
+    expect(r.exitCode).toBe(0);
+    expect(syncMirror().existsSync('/new-file')).toBe(true);
   });
 });

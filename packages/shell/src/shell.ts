@@ -2,18 +2,22 @@
  * `Shell` — minimal command dispatcher.
  *
  * Steps for `run(line)`:
- *   1. Tokenize (see `tokenize.ts`)
- *   2. Detect a trailing `> path` or `>> path` redirection; if present,
+ *   1. Tokenize (see `tokenize.ts`) — single/double quotes, `$VAR` expansion
+ *      against the shell env merged with any inline `KEY=value` overrides.
+ *   2. Reject unsupported redirections (`<`, see ADR follow-up M12) loudly via
+ *      `NotImplementedError('shell.input-redirect')`.
+ *   3. Detect a trailing `> path` or `>> path` redirection; if present,
  *      stdout is buffered to a file instead of returned in the result.
- *   3. Pop env assignments off the front (FOO=bar baz → set FOO before baz).
- *   4. Look up the command in the registry; if absent, exit 127.
- *   5. Run the command, capture its stdout/stderr, return.
+ *   4. Pop env assignments off the front (FOO=bar baz → set FOO before baz).
+ *   5. Look up the command in the registry; if absent, exit 127.
+ *   6. Run the command, capture its stdout/stderr, return.
  *
  * The shell holds a mutable `cwd` and `env`; commands can mutate cwd through
  * the closure passed to built-in `cd`. Custom commands cannot — they only see
  * a snapshot via the context.
  */
 
+import { NotImplementedError } from '@rifty/io';
 import { isAbsolute, joinPath, normalizePath, syncMirror } from '@rifty/vfs';
 import { builtinCommands } from './builtins.ts';
 import { tokenize } from './tokenize.ts';
@@ -59,8 +63,19 @@ export class Shell {
   }
 
   async run(line: string): Promise<RunResult> {
-    const tokens = tokenize(line);
+    // Tokenise with the shell's current env so `$VAR` expands. Inline env
+    // overrides (e.g. `FOO=bar cmd $FOO`) follow bash semantics: the override
+    // applies to the command being run, NOT to expansion in the same line.
+    // That matches POSIX (`FOO=bar echo $FOO` prints the OUTER FOO).
+    const tokens = tokenize(line, this.env);
     if (tokens.length === 0) return { exitCode: 0, stdout: '', stderr: '' };
+
+    if (tokens.includes('<')) {
+      throw new NotImplementedError(
+        'shell.input-redirect',
+        'use bash via wasi for < input redirect — M12 work item',
+      );
+    }
 
     // Pop env assignments (KEY=value) off the front.
     let i = 0;

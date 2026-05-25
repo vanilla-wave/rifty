@@ -27,7 +27,67 @@ When a question is reviewed:
 
 ## Active
 
-*No active questions.*
+## Q-2026-05-25-touch-utimes: Where should `utimes` live on the sync VFS surface?
+
+**Status:** 🟢 Active
+**Encountered in:** PR fixing 1.6 (shell silent stubs) of `docs/review/2026-05-25-stubs-and-adr-violations.md`
+**Milestone:** M10
+**Author (agent session):** 2026-05-25
+
+### Context
+
+`packages/shell/src/builtins.ts` `touch` needs to update mtime on an existing
+file. The `FsSync` interface (`packages/vfs/src/fs-sync.ts`) does not expose
+`utimes`/`setMtime`. Reaching backend mtime mutability touches the VFS public
+API — adding a new method on `FsSync` is irreversible per the checklist (point
+1). For now we backend-sniff: if `syncMirror()` is a `MemoryFsSync` we mutate
+`backend.<node>.mtime` directly; otherwise we throw `NotImplementedError`. The
+in-memory case is the only one that runs in the current playground / tests, so
+the throw path has no live callers — but as soon as OPFS becomes the default
+sync mirror, `touch` on an existing file fails loudly until this is wired
+through `FsSync.utimes`.
+
+### Options considered
+
+- **Option A:** Add `utimes(path, atime, mtime)` to the `FsSync` interface.
+  `MemoryFsSync` implements via direct backend mutation; `OpfsFsSync` uses the
+  closest analogue (recreating the file is not free, but mtime-only update is
+  not supported by `FileSystemSyncAccessHandle` — would need a metadata
+  side-table on top).
+  - Pro: clean interface, no backend sniffing in higher layers.
+  - Con: irreversible (public API of `vfs` package, touches every `FsSync`
+    backend including OPFS which has no native utimes).
+- **Option B:** Keep backend-sniffing in shell (current code). `touch` is the
+  only consumer; if a second consumer appears (`node:fs.utimesSync` from
+  `runtime-js/builtins/fs.ts`) escalate to Option A.
+  - Pro: zero VFS API changes; throws loudly for unsupported backends.
+  - Con: leaks "I know my backend is `MemoryFsSync`" into a higher layer.
+
+### Decision taken (provisional)
+
+**Chose:** B
+
+**Why:** `touch` is the only caller today; Option A demands a real OPFS-side
+strategy for mtime that isn't free, and the shell already lives in a higher
+layer that's allowed to know about installed backends. Promote to A when a
+second caller appears.
+
+### Code markers
+
+- `packages/shell/src/builtins.ts` — `bumpMtime()` with the `TODO(ADR)` marker
+- `packages/shell/src/builtins.ts` — `touch` calls `bumpMtime`
+
+### Reversibility justification
+
+- Public APIs affected: none. Internal to `packages/shell/`.
+- Cost to revert: <30 lines, 1 file.
+- External dependencies: none.
+
+### Needs human review by
+
+End of milestone M10.
+
+
 
 ---
 

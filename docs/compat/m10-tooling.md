@@ -18,9 +18,15 @@ Status of M10 foundations: `fs.watch`, WebSocket, dev-server, shell, preview bri
 | Dev-server — ESM rewriting for bare specifiers | ❌ | Pending |
 | Real upstream Vite (`npm install vite && npm run dev`) | ❌ | Many transitive deps + esbuild.wasm dependency |
 | Shell tokenizer (quotes, env-assignments, `>`/`>>`) | ✅ | |
-| Shell built-ins (`pwd`/`cd`/`ls`/`cat`/`echo`/`mkdir`/`rm`/`env`/`touch`) | ✅ | |
+| Shell single vs double quote semantics (`'…'` literal, `"…"` expanding) | ✅ | `'$X'` stays literal; `"$X"` expands; limited `\$`/`\"`/`\\`/`` \` `` escapes |
+| Shell variable expansion (`$VAR`, `${VAR}`) | ✅ | Unknown vars expand to empty string (POSIX); no word splitting after expansion |
+| Shell `${VAR:-default}` / `${#VAR}` / `${VAR%suf}` etc. | ❌ | Throws from tokenizer — loud, not silent |
+| Shell built-ins (`pwd`/`cd`/`ls`/`cat`/`echo`/`mkdir`/`rm`/`env`/`touch`) | ✅ | `touch` updates mtime on existing files (in-memory backend only) |
+| Shell `touch` mtime on non-`MemoryFsSync` backends | ❌ | Throws `NotImplementedError('shell.touch.utimes')` — TODO(ADR): Q-2026-05-25-touch-utimes |
 | Shell pipes (`a \| b`) | ❌ | Pending |
-| Shell variable expansion (`$VAR`) | ❌ | Pending |
+| Shell input redirect (`cmd < file`) | ❌ | Throws `NotImplementedError('shell.input-redirect')` — M12 work item, use bash via wasi |
+| Shell command substitution `$(…)` / `` `…` `` | ❌ | Not parsed; the tokenizer emits literal characters |
+| Shell glob expansion (`*`, `?`, `[abc]`) | ❌ | Not parsed |
 | Editor → VFS sync (`RuntimeController.writeFile`) | ✅ | Push from playground main thread into in-Worker VFS |
 
 ## Known limitations (M10)
