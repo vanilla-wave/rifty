@@ -1,40 +1,46 @@
 /**
- * Kernel-side `spawnWorker` (ADR-0011 phase 2).
+ * Kernel-side `spawnWorker` (ADR-0011 phase 2 + phase 3 review fix).
  *
- * Allocates a Web Worker per spawned process. The kernel:
- *   1. Picks a PID via the same monotonic counter `ProcessManager.spawn` uses
- *      so PID space stays unified.
- *   2. Creates a {@link SabRing} for sync IPC and three `MessageChannel`s for
- *      stdio (stdout / stderr / stdin).
- *   3. Constructs `new Worker(kernelWorkerUrl, { type: 'module' })` — the URL
- *      is supplied by the host via {@link setKernelWorkerUrl} so this package
- *      stays bundler-agnostic.
- *   4. Posts the {@link WorkerInitMessage} with all transferables on the
- *      transfer list (SAB is not transferred, ports are).
- *   5. Listens for the worker's `{type:'exit', code}` message, marks the
- *      record's `exitCode`, emits `exit` / `close` on the handle, and calls
- *      `worker.terminate()`.
+ * For each spawned process: allocates the PID, builds a {@link SabRing} for
+ * sync IPC, three stdio `MessageChannel`s, constructs
+ * `new Worker(kernelWorkerUrl, { type: 'module' })` via {@link makeKernelWorker}
+ * (test-stubbable), posts {@link WorkerInitMessage} with transferables, then
+ * surfaces the worker's lifecycle (`exit`, `error`, `messageerror`) on the
+ * returned {@link SpawnWorkerResult}.
  *
- * The host is expected to call {@link setKernelWorkerUrl} once at boot,
- * passing a URL that resolves to a module containing
- * `import '@rifty/kernel/src/worker-entry.ts';` (typical Vite pattern:
- * `new URL('./workers/kernel-worker-entry.ts', import.meta.url)` with the
- * `?worker&url` import attribute). When the URL is not set, `spawnWorker`
- * throws {@link NotImplementedError} so the failure is loud, not silent.
+ * `kernelWorkerUrl` is host-supplied via {@link setKernelWorkerUrl}; the
+ * kernel never hardcodes a path. When unset, `spawnKernelWorker` throws
+ * {@link NotImplementedError} so missing wiring is loud.
+ *
+ * Review fix (ADR-0011 phase 3 review §2.11): all spawns share the singleton
+ * {@link SyncRpcDispatcher} from `./ipc/kernel-dispatcher.ts`. Previously a
+ * fresh dispatcher per child meant N `setInterval(1ms)` timers for N workers.
+ *
+ * Review fix (review §1.10): `messageerror` is now observed alongside
+ * `error`. Deserialisation failures (structured-clone errors) surface on
+ * {@link SpawnWorkerResult.onMessageError} instead of vanishing.
  */
 
 import { NotImplementedError } from '@rifty/io';
-import { type ScriptResolver, registerDefaultHandlers } from './ipc/default-handlers.ts';
-import { makeRecursiveRunner } from './ipc/recursive-runner.ts';
+import { getKernelDispatcher, setKernelRecursiveSpawn } from './ipc/kernel-dispatcher.ts';
 import { type SabRing, createSabRing } from './ipc/sab-ring.ts';
-import { getExecSyncScriptResolver } from './ipc/script-resolver.ts';
-import { SyncRpcDispatcher } from './ipc/sync-dispatch.ts';
+import type { SyncRpcDispatcher } from './ipc/sync-dispatch.ts';
 import type {
   WorkerEntryDescriptor,
   WorkerInitMessage,
   WorkerSpawnSpec,
   WorkerStdioPorts,
 } from './worker-entry.ts';
+import { type WorkerLike, makeKernelWorker } from './worker-like.ts';
+
+// Re-export so existing tests (`packages/kernel/tests/*`) keep their
+// single-import deep path. Public surface trimming is out of scope.
+export { clearKernelDispatcher, getKernelDispatcher } from './ipc/kernel-dispatcher.ts';
+export {
+  type WorkerLike,
+  clearWorkerFactoryForTests,
+  setWorkerFactoryForTests,
+} from './worker-like.ts';
 
 /**
  * Caller-supplied subset of {@link WorkerSpawnSpec}. The kernel fills in
@@ -83,30 +89,24 @@ export interface SpawnWorkerIdentity {
   ppid: number;
 }
 
-/** Outcome of the spawn: handle is the host-facing object; cleanup runs on
- * `kill` and on the worker's natural exit. */
+/** Outcome of the spawn. Cleanup runs on `kill` and on natural exit. */
 export interface SpawnWorkerResult {
   readonly pid: number;
   readonly ppid: number;
-  readonly worker: Worker;
+  readonly worker: WorkerLike;
   readonly ports: WorkerStdioPorts;
   readonly spec: WorkerSpawnSpec;
-  /**
-   * Parent-side dispatcher attached to the child's SAB ring. Pre-populated
-   * with the kernel's default sync syscall handlers (currently
-   * `'execSync'`); higher layers may register additional methods via
-   * `result.dispatcher.register(...)`.
-   */
+  /** Singleton parent-side dispatcher; default handlers (`'execSync'`)
+   * already registered. Higher layers can add methods via `.register(...)`. */
   readonly dispatcher: SyncRpcDispatcher;
   /** The SAB ring the dispatcher is attached to (parent-side view). */
   readonly ring: SabRing;
-  /**
-   * Subscribe to the worker's exit message. Returns an `unsubscribe`. The
-   * caller drives `ProcessHandle.emit('exit', ...)` etc. — this module
-   * deliberately stays pure of the handle plumbing so `process-manager.ts`
-   * keeps a single source of truth for that.
-   */
+  /** Subscribe to the worker's exit message. Returns an `unsubscribe`. */
   onExit(cb: (code: number) => void): () => void;
+  /** Subscribe to `messageerror` (structured-clone failures during
+   * `postMessage`). Listeners receive the raw event; the worker is NOT
+   * terminated (matches browser semantics). Review fix §1.10. */
+  onMessageError(cb: (ev: MessageEvent) => void): () => void;
   /** Forcibly terminate the worker. Idempotent. */
   terminate(): void;
 }
@@ -164,22 +164,12 @@ export function spawnKernelWorker(
     ppid,
   };
 
-  const worker = new Worker(url, { type: 'module' });
+  const worker: WorkerLike = makeKernelWorker(url);
 
-  // ADR-0011 phase 3: stand up the parent-side sync RPC dispatcher and
-  // register the kernel's default handlers (currently just `execSync`).
-  // Higher layers can attach more handlers via `result.dispatcher.register`.
-  const dispatcher = new SyncRpcDispatcher();
-  const runner = makeRecursiveRunner(spawnKernelWorker);
-  const resolver: ScriptResolver = (path) => {
-    const r = getExecSyncScriptResolver();
-    return r === null ? null : r(path);
-  };
-  registerDefaultHandlers(dispatcher, {
-    callerPid: pid,
-    resolveScript: resolver,
-    runWorker: runner,
-  });
+  // ADR-0011 phase 3 (review fix): share the single module-level
+  // dispatcher across every spawn. `attach(ring)` is idempotent and
+  // reuses the global polling timer.
+  const dispatcher = getKernelDispatcher();
   dispatcher.attach(ring);
 
   const init: WorkerInitMessage = { type: 'init', spec: fullSpec };
@@ -187,11 +177,16 @@ export function spawnKernelWorker(
 
   let terminated = false;
   const exitListeners: ((code: number) => void)[] = [];
+  const messageErrorListeners: ((ev: MessageEvent) => void)[] = [];
 
   const dispatchExit = (code: number): void => {
     // Snapshot listeners so a handler that unsubscribes itself doesn't
     // skip a peer.
     for (const cb of [...exitListeners]) cb(code);
+  };
+
+  const dispatchMessageError = (ev: MessageEvent): void => {
+    for (const cb of [...messageErrorListeners]) cb(ev);
   };
 
   worker.addEventListener('message', (ev: MessageEvent) => {
@@ -213,7 +208,9 @@ export function spawnKernelWorker(
     }
   });
 
-  worker.addEventListener('error', (ev: ErrorEvent) => {
+  // `ErrorEvent` is DOM-only; in the structurally-typed listener signature
+  // it arrives as a `MessageEvent`. We only need to know an error fired.
+  worker.addEventListener('error', (ev: MessageEvent) => {
     // Convert uncaught worker errors into a code-1 exit. The worker-entry
     // already maps top-level throws to exit-1; this is the safety net for
     // truly catastrophic errors (e.g. module parse failure).
@@ -231,6 +228,21 @@ export function spawnKernelWorker(
     dispatchExit(1);
   });
 
+  // Review fix §1.10 — `messageerror` fires when the browser fails to
+  // structured-clone an incoming message (un-cloneable values such as
+  // functions, Symbols, native handles). Without this listener those
+  // failures dropped silently. We log a warning so the failure is visible
+  // even when no listener subscribes, and emit on the result so callers
+  // can attach their own handler. Unlike `'error'`, this is non-fatal:
+  // the worker keeps running, matching the browser's own behaviour.
+  worker.addEventListener('messageerror', (ev: MessageEvent) => {
+    // eslint-disable-next-line no-console -- explicit logging contract per review fix
+    console.warn(
+      `[kernel.spawnKernelWorker] worker (pid=${pid}) reported messageerror; a posted message could not be deserialised`,
+    );
+    dispatchMessageError(ev);
+  });
+
   return {
     pid,
     ppid,
@@ -246,6 +258,13 @@ export function spawnKernelWorker(
         if (idx !== -1) exitListeners.splice(idx, 1);
       };
     },
+    onMessageError(cb) {
+      messageErrorListeners.push(cb);
+      return () => {
+        const idx = messageErrorListeners.indexOf(cb);
+        if (idx !== -1) messageErrorListeners.splice(idx, 1);
+      };
+    },
     terminate() {
       if (terminated) return;
       terminated = true;
@@ -258,6 +277,13 @@ export function spawnKernelWorker(
     },
   };
 }
+
+// Wire the recursive-spawn reference into the dispatcher singleton at
+// module load. This is the one-shot handshake that avoids a static
+// cycle (`ipc/kernel-dispatcher.ts` → `spawn-worker.ts` → ...). It must
+// run after `spawnKernelWorker` is declared so the function value is
+// captured, not hoisted as `undefined`.
+setKernelRecursiveSpawn(spawnKernelWorker);
 
 // Re-export the ring type so consumers (e.g. tests) can type-annotate
 // `result.ring` without reaching into the ipc subfolder.

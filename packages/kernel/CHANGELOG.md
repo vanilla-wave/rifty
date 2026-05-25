@@ -2,6 +2,38 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Review fix (no silent stubs):** `WorkerHandle.send()` for Worker-backed
+  children now throws `NotImplementedError('kernel.WorkerHandle.send',
+  'ChildProcess.stdin/fork IPC pending M6 phase 2 — see ADR-0011')` instead
+  of silently returning `false`. The previous return value matched Node's
+  "no IPC channel" idiom but masked the real status: the kernel has no IPC
+  bus for Worker-backed children yet. A new test in
+  `tests/worker-handle-send.test.ts` pins the throw.
+- **Review fix (ADR-0011 §2.11):** `SyncRpcDispatcher` is now a true
+  singleton — the new `ipc/kernel-dispatcher.ts` module holds the
+  module-level instance, `spawn-worker.ts` re-exports
+  `getKernelDispatcher` / `clearKernelDispatcher`. The dispatcher itself
+  drops the per-ring timer in favour of one global `setInterval` that
+  iterates every attached ring; introspection helpers
+  `getAttachmentCount()` and `getActiveTimerCount()` expose the invariants.
+  Stress test in `tests/spawn-worker-singleton.test.ts` confirms 10 mock
+  workers share exactly one dispatcher + one timer.
+- **Review fix (review §1.10):** `spawnKernelWorker` now subscribes to
+  `messageerror` alongside `error`. Deserialisation failures
+  (structured-clone errors during `postMessage`) surface via
+  `SpawnWorkerResult.onMessageError` and as a `'messageerror'` event on
+  the `ProcessHandle` — they were silently dropped before. The worker is
+  NOT terminated on messageerror (matches browser semantics).
+
+### Added
+
+- `WorkerLike` structural interface + `setWorkerFactoryForTests` /
+  `clearWorkerFactoryForTests` test hooks (in the new `worker-like.ts`
+  helper) so unit tests can substitute a stub for `new Worker(url)` and
+  exercise the kernel-worker lifecycle in Node-only environments.
+
 ### Added
 
 - Package skeleton. Implementation deferred to M6 (Processes).

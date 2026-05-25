@@ -12,6 +12,7 @@
  * manager; tests exercise the manager directly.
  */
 
+import { NotImplementedError } from '@rifty/io';
 import { EventEmitter } from './internal/event-emitter.ts';
 import { type SpawnWorkerSpec, spawnKernelWorker } from './spawn-worker.ts';
 import type { WorkerStdioPorts } from './worker-entry.ts';
@@ -227,11 +228,18 @@ export class ProcessManager {
         record.cwd = next;
       }
       send(_message: unknown): boolean {
-        // IPC-over-MessagePort is layered above in runtime-js when the
-        // fork shim wires its own MessageChannel. The kernel handle does
-        // not own a generic message bus — return false to mirror Node's
-        // "no IPC channel" return value.
-        return false;
+        // ADR-0011 phase 2 follow-up (TASKS.md M6 "Open acceptance" +
+        // review item §1.10): IPC-over-MessagePort for Worker-backed
+        // children is not implemented yet. The previous `return false`
+        // was a silent stub (violates CLAUDE.md "no silent stubs") — the
+        // ChildProcess wrapper in runtime-js does not call into this
+        // path today (it emits on its own `inboundIpc` bus), but a
+        // future caller that did would silently lose every message.
+        // Throw loudly until the real IPC channel lands.
+        throw new NotImplementedError(
+          'kernel.WorkerHandle.send',
+          'ChildProcess.stdin/fork IPC pending M6 phase 2 — see ADR-0011',
+        );
       }
       kill(signal = 'SIGTERM'): boolean {
         if (this.exitCode !== null) return false;
@@ -254,6 +262,14 @@ export class ProcessManager {
       handle.exitCode = code;
       handle.emit('exit', code, null);
       handle.emit('close', code, null);
+    });
+
+    // Review fix §1.10 — surface worker `messageerror` events on the
+    // public handle so callers can attach a listener without reaching
+    // into the kernel-internal `SpawnWorkerResult`. The spawn-worker
+    // module also `console.warn`s as a fallback.
+    spawnResult.onMessageError((ev) => {
+      handle.emit('messageerror', ev);
     });
 
     return handle;

@@ -15,10 +15,13 @@
  * scheduler granularity — for a synthetic `execSync` benchmark this adds
  * sub-millisecond latency on top of the child's own runtime.
  *
- * The dispatcher is recursive-safe: the handler for `'execSync'` may itself
- * call {@link ProcessManager.spawnWorker} which creates a new ring and
- * attaches a fresh dispatcher. Each dispatcher has its own polling loop;
- * they don't share state.
+ * A single shared dispatcher instance serves every kernel-spawned Worker
+ * (see `spawn-worker.ts` lazy singleton). Its one global timer iterates
+ * over all attached rings, so the timer count is O(1) regardless of how
+ * many children are alive. The dispatcher is recursive-safe: the handler
+ * for `'execSync'` may itself spawn another worker, which attaches its
+ * ring to the same dispatcher — the in-flight per-ring guard prevents the
+ * already-in-progress request from being re-dispatched.
  */
 
 import type { SabRing } from './sab-ring.ts';
@@ -48,11 +51,18 @@ export interface SyncRpcDispatcherOptions {
  *
  * The same dispatcher instance can serve many rings — useful when the
  * kernel spawns several children that share the parent's handler table.
+ *
+ * One global poll timer drives every attached ring (review fix for
+ * ADR-0011 phase 3): a per-ring `setInterval(1ms)` would mean N busy-poll
+ * timers for N spawned children on the main realm. With a single shared
+ * dispatcher + single timer, the cost stays O(1) regardless of how many
+ * workers are alive at once.
  */
 export class SyncRpcDispatcher {
   private readonly handlers = new Map<string, SyncRpcHandler>();
   private readonly pollIntervalMs: number;
-  private readonly attachments = new Map<SabRing, ReturnType<typeof setInterval>>();
+  private readonly attachments = new Set<SabRing>();
+  private timer: ReturnType<typeof setInterval> | null = null;
   /**
    * Per-ring guard: when a handler is awaiting an async result we must not
    * read another request from the same ring (and we can't anyway — the
@@ -79,6 +89,19 @@ export class SyncRpcDispatcher {
     this.handlers.delete(method);
   }
 
+  /** Test-only / introspection helper: how many rings are attached. */
+  getAttachmentCount(): number {
+    return this.attachments.size;
+  }
+
+  /**
+   * Test-only / introspection helper: how many polling timers are alive.
+   * Always 0 or 1 — a single global timer drives every attached ring.
+   */
+  getActiveTimerCount(): number {
+    return this.timer === null ? 0 : 1;
+  }
+
   /**
    * Start polling `ring`'s request slot. Safe to call multiple times for
    * the same ring (idempotent — only the first call installs the timer).
@@ -87,31 +110,44 @@ export class SyncRpcDispatcher {
    */
   attach(ring: SabRing): void {
     if (this.attachments.has(ring)) return;
+    this.attachments.add(ring);
+    this.ensureTimer();
+  }
+
+  /** Stop polling `ring`. Safe to call when not attached (no-op). */
+  detach(ring: SabRing): void {
+    if (!this.attachments.delete(ring)) return;
+    this.inFlight.delete(ring);
+    if (this.attachments.size === 0) this.stopTimer();
+  }
+
+  /** Detach every ring. Useful for shutdown / test cleanup. */
+  detachAll(): void {
+    for (const ring of [...this.attachments]) this.inFlight.delete(ring);
+    this.attachments.clear();
+    this.stopTimer();
+  }
+
+  private ensureTimer(): void {
+    if (this.timer !== null) return;
     const timer = setInterval(() => {
-      this.pumpOnce(ring);
+      // Snapshot so a handler that detaches its own ring doesn't trip the
+      // iterator. The cost is small (handful of refs) and bounded by the
+      // worker count.
+      for (const ring of [...this.attachments]) this.pumpOnce(ring);
     }, this.pollIntervalMs);
     // Don't keep Node alive purely for the dispatcher; the kernel's exit
     // path is the source of truth. `unref` is Node-only — the browser
     // `setInterval` return type doesn't expose it, so we feature-detect.
     const maybeUnref = (timer as unknown as { unref?: () => void }).unref;
     if (typeof maybeUnref === 'function') maybeUnref.call(timer);
-    this.attachments.set(ring, timer);
+    this.timer = timer;
   }
 
-  /** Stop polling `ring`. Safe to call when not attached (no-op). */
-  detach(ring: SabRing): void {
-    const timer = this.attachments.get(ring);
-    if (timer === undefined) return;
-    clearInterval(timer);
-    this.attachments.delete(ring);
-  }
-
-  /** Detach every ring. Useful for shutdown / test cleanup. */
-  detachAll(): void {
-    for (const [ring, timer] of this.attachments) {
-      clearInterval(timer);
-      this.attachments.delete(ring);
-    }
+  private stopTimer(): void {
+    if (this.timer === null) return;
+    clearInterval(this.timer);
+    this.timer = null;
   }
 
   /**
