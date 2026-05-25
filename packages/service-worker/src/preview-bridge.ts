@@ -13,9 +13,12 @@
  *
  *   client→sw  : { type: 'rifty:preview:ready',   version }
  *   client→sw  : { type: 'rifty:preview:goodbye', version }     // teardown
- *   sw→client  : { type: 'rifty:preview:request', version,
- *                  port, url, method, headers, body?: Uint8Array,
- *                  requestId, replyPort: MessagePort }
+ *   sw→client  : { type: 'rifty:preview:request', version, requestId,
+ *                  request: { port, url, method, headers, body?: Uint8Array } }
+ *                  with `replyPort: MessagePort` in the transfer list. The
+ *                  `version` field is mandatory on every data frame
+ *                  (ADR-0031) — receivers validate it at decode time and
+ *                  reject mismatched peers with a structured error.
  *   client→sw  : { status, statusText, headers, version,
  *                  body: ReadableStream<Uint8Array> | Uint8Array | null }
  *                  via replyPort — the stream is *transferred* in the
@@ -35,7 +38,7 @@
  * natively.
  */
 
-import { type SerializedResponse, packSerializedResponse } from './body-transport.ts';
+import { packSerializedResponse } from './body-transport.ts';
 import {
   SW_ERROR_PROTOCOL_VERSION_MISMATCH,
   SW_PREVIEW_GOODBYE,
@@ -43,14 +46,14 @@ import {
   SW_PREVIEW_REQUEST,
   SW_PROTOCOL_VERSION,
   type SerializedRequest,
+  type SerializedResponse,
   type SwProtocolVersionMismatchError,
 } from './protocol.ts';
 import { createReadyClientsRegistry } from './ready-clients.ts';
 import { routePreview } from './route-preview.ts';
 
-export type { SerializedResponse } from './body-transport.ts';
 export { canTransferReadableStream, packSerializedResponse } from './body-transport.ts';
-export type { SerializedRequest } from './protocol.ts';
+export type { SerializedRequest, SerializedResponse } from './protocol.ts';
 
 export type PreviewHandler = (req: SerializedRequest) => Promise<SerializedResponse>;
 

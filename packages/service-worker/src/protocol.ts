@@ -66,6 +66,24 @@ export interface SerializedRequest {
 }
 
 /**
+ * client→SW response frame payload, sent over the reply `MessagePort`
+ * attached to the request. `body` can be a transferable `ReadableStream`
+ * (zero-copy on browsers that support it), a `Uint8Array` (drained-into-
+ * memory fallback for older Safari / Workers), or `null` for empty bodies.
+ *
+ * Lives here alongside {@link SerializedRequest} because the request/response
+ * pair forms one wire contract; `body-transport.ts` re-exports it through
+ * {@link preview-bridge.ts} so the bundling-time `version` stamping can stay
+ * with the transport helpers.
+ */
+export interface SerializedResponse {
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  body?: ReadableStream<Uint8Array> | Uint8Array | null;
+}
+
+/**
  * Discriminator for the protocol-version-mismatch error posted from the main
  * thread back to the SW when it receives a {@link SW_PREVIEW_REQUEST} frame
  * whose `version` does not match {@link SW_PROTOCOL_VERSION}. The SW maps this

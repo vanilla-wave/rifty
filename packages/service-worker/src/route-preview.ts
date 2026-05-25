@@ -13,12 +13,12 @@
  * via `console.warn` so the misroute case is visible in production.
  */
 
-import type { SerializedResponse } from './body-transport.ts';
 import {
   SW_ERROR_PROTOCOL_VERSION_MISMATCH,
   SW_PREVIEW_REQUEST,
   SW_PROTOCOL_VERSION,
   type SerializedRequest,
+  type SerializedResponse,
   type SwProtocolVersionMismatchError,
 } from './protocol.ts';
 import type { ReadyClientsRegistry } from './ready-clients.ts';

@@ -7,14 +7,9 @@
  * ADR-0016.
  */
 
-import { SW_PROTOCOL_VERSION } from './protocol.ts';
+import { SW_PROTOCOL_VERSION, type SerializedResponse } from './protocol.ts';
 
-export interface SerializedResponse {
-  status: number;
-  statusText: string;
-  headers: Record<string, string>;
-  body?: ReadableStream<Uint8Array> | Uint8Array | null;
-}
+export type { SerializedResponse };
 
 /**
  * Probe whether the host realm can transfer `ReadableStream` over
