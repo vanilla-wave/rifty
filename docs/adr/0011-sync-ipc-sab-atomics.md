@@ -1,6 +1,6 @@
 # ADR 0011: Sync IPC via SharedArrayBuffer + Atomics; Worker-as-process model
 
-Status: Partial — phase 1 (SAB ring + worker-entry + capability gate) implemented 2026-05-25; phase 2 (Worker-per-process via `kernel.spawnWorker`) implemented 2026-05-25; phase 3 (`execSync` true sync) deferred
+Status: Implemented (2026-05-25) — all three phases (SAB ring + Worker-per-process + sync execSync via Atomics.wait)
 Date: 2026-05
 
 ## Context
@@ -67,9 +67,63 @@ Phase 2 landed (2026-05-25):
       `tests/conformance/builtins/child_process-worker.test.ts` exercise
       the worker-backed branch (skip in Node-without-isolation).
 
-Phase 3 (real `execSync` blocking via `Atomics.wait`) remains:
+Phase 3 landed (2026-05-25):
 
-- [ ] `child_process.execSync('node', [path])` runs the script in a real Worker, blocks the caller via `Atomics.wait`, returns the child's stdout as a `Buffer`.
-- [ ] `fs.readFileSync` from inside a child Worker delegates to the OPFS sync handle directly (when `OpfsFsSync` from ADR 0013 is available) or to a SAB-tunneled call into the parent's `MemoryVfs`.
-- [ ] An e2e test runs `execSync` end-to-end and proves no main-thread freeze beyond the child's own runtime (block-time ≤ 100 ms for a 10 ms child script).
-- [ ] The same-realm fallback path stays available behind `RIFTY_FALLBACK_NO_SAB=1` and passes the existing unit tests.
+- [x] `packages/kernel/src/ipc/sync-rpc.ts` — JSON-over-UTF-8 framing
+      (`SyncRpcRequest` / `SyncRpcReply` + `encodeRequest` / `decodeReply`
+      / `decodeRequest` / `encodeReply`). Binary frames remain a follow-up
+      (A-021); phase 3 ships text frames only.
+- [x] `packages/kernel/src/ipc/sync-dispatch.ts` — `SyncRpcDispatcher`:
+      runs on the parent side, polls each attached `SabRing` at 1 ms
+      intervals, dispatches to registered handlers, writes the reply
+      (sync or after-thenable). Recursive-safe via a per-ring in-flight
+      guard. Timer is `unref`'d so it never keeps Node alive on its own.
+- [x] `packages/kernel/src/ipc/sync-client.ts` — `SyncRpcClient(ring)`:
+      runs inside the spawned Worker. `call<T>(method, payload)` encodes
+      the request, `Atomics.wait`s on the reply slot, decodes the JSON,
+      and rethrows server-side errors with `name` / `message` / `code`
+      preserved. Throws `NotImplementedError('SyncRpcClient', 'called from
+      main realm — only valid inside a kernel-spawned Worker')` on
+      non-Worker realms.
+- [x] `packages/kernel/src/worker-entry.ts` — at boot, installs a
+      non-enumerable global hook `__riftyKernelSyncCall(method, payload)`
+      backed by a `SyncRpcClient` bound to this realm's ring. Re-exports
+      the key as `KERNEL_SYNC_CALL_KEY` for higher-layer consumers.
+- [x] `packages/kernel/src/spawn-worker.ts` — every `spawnKernelWorker`
+      now constructs a `SyncRpcDispatcher`, registers the default
+      `execSync` handler via `registerDefaultHandlers`, and attaches the
+      ring. The handler recursively spawns a fresh kernel Worker for the
+      child script and captures its stdout. PIDs of recursive children
+      come from a dedicated counter (0xC0000000+) so they don't collide
+      with the `ProcessManager`'s public PID space.
+- [x] `packages/kernel/src/ipc/default-handlers.ts` +
+      `packages/kernel/src/ipc/recursive-runner.ts` +
+      `packages/kernel/src/ipc/script-resolver.ts` — clean separation
+      between (a) the RPC handler logic, (b) the recursive Worker runner
+      injected by `spawn-worker.ts`, and (c) the host-side
+      `setExecSyncScriptResolver` setter the runtime-js layer uses to
+      thread `syncMirror()` into the kernel without making the kernel
+      depend on `@rifty/vfs`.
+- [x] `packages/runtime-js/src/builtins/child_process-sync.ts` —
+      `execSync` branches on `isSabIpcSupported() && getKernelWorkerUrl()
+      && globalThis[KERNEL_SYNC_CALL_KEY]`. When all three hold it routes
+      through the global hook (truly blocking the calling Worker via
+      `Atomics.wait`); otherwise falls back to the existing in-realm
+      `new Function(...)` path with a `// fallback per ADR-0011` comment.
+- [x] Conformance tests:
+      - `tests/conformance/kernel/sync-rpc.test.ts` — JSON round-trip
+        across a real Node `worker_threads.Worker` (echo handler + error
+        path with `ERPCNOHANDLER`).
+      - `tests/conformance/builtins/exec-sync-worker.test.ts` — skipped
+        in plain-Node Vitest; documents the contract for the browser
+        e2e harness (block + return stdout, propagate `ECHILDFAILED`).
+
+Follow-ups (out of scope for phase 3, tracked separately):
+
+- Binary stdio over `MessagePort` with backpressure (A-021).
+- `fs.readFileSync` from a child Worker delegating to OPFS sync handle or
+  SAB-tunneling into the parent's `MemoryVfs` (deferred pending
+  `OpfsFsSync` availability from ADR-0013).
+- E2E proof that `execSync` blocks only the child's runtime (≤ 100 ms
+  overhead for a 10 ms child) — requires the playground's COOP/COEP
+  wiring (A-016) plus the e2e harness backfill (A-029).

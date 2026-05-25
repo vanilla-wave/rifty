@@ -24,7 +24,11 @@
  */
 
 import { NotImplementedError } from '@rifty/io';
-import { createSabRing } from './ipc/sab-ring.ts';
+import { type ScriptResolver, registerDefaultHandlers } from './ipc/default-handlers.ts';
+import { makeRecursiveRunner } from './ipc/recursive-runner.ts';
+import { type SabRing, createSabRing } from './ipc/sab-ring.ts';
+import { getExecSyncScriptResolver } from './ipc/script-resolver.ts';
+import { SyncRpcDispatcher } from './ipc/sync-dispatch.ts';
 import type {
   WorkerEntryDescriptor,
   WorkerInitMessage,
@@ -88,6 +92,15 @@ export interface SpawnWorkerResult {
   readonly ports: WorkerStdioPorts;
   readonly spec: WorkerSpawnSpec;
   /**
+   * Parent-side dispatcher attached to the child's SAB ring. Pre-populated
+   * with the kernel's default sync syscall handlers (currently
+   * `'execSync'`); higher layers may register additional methods via
+   * `result.dispatcher.register(...)`.
+   */
+  readonly dispatcher: SyncRpcDispatcher;
+  /** The SAB ring the dispatcher is attached to (parent-side view). */
+  readonly ring: SabRing;
+  /**
    * Subscribe to the worker's exit message. Returns an `unsubscribe`. The
    * caller drives `ProcessHandle.emit('exit', ...)` etc. — this module
    * deliberately stays pure of the handle plumbing so `process-manager.ts`
@@ -120,7 +133,7 @@ export function spawnKernelWorker(
 
   // SAB ring (sync IPC, ADR-0011 phase 1). The Int32 header is shared, so
   // SAB itself is NOT in the transfer list — both peers map it.
-  const { sab } = createSabRing();
+  const { sab, ring } = createSabRing();
 
   // Three MessageChannels for stdio. We give the kernel-side the `port1`s
   // and ship `port2`s to the worker.
@@ -153,6 +166,22 @@ export function spawnKernelWorker(
 
   const worker = new Worker(url, { type: 'module' });
 
+  // ADR-0011 phase 3: stand up the parent-side sync RPC dispatcher and
+  // register the kernel's default handlers (currently just `execSync`).
+  // Higher layers can attach more handlers via `result.dispatcher.register`.
+  const dispatcher = new SyncRpcDispatcher();
+  const runner = makeRecursiveRunner(spawnKernelWorker);
+  const resolver: ScriptResolver = (path) => {
+    const r = getExecSyncScriptResolver();
+    return r === null ? null : r(path);
+  };
+  registerDefaultHandlers(dispatcher, {
+    callerPid: pid,
+    resolveScript: resolver,
+    runWorker: runner,
+  });
+  dispatcher.attach(ring);
+
   const init: WorkerInitMessage = { type: 'init', spec: fullSpec };
   worker.postMessage(init, [childPorts.stdout, childPorts.stderr, childPorts.stdin]);
 
@@ -173,6 +202,7 @@ export function spawnKernelWorker(
       // `terminate()` is mostly a safety net. Idempotent either way.
       if (!terminated) {
         terminated = true;
+        dispatcher.detach(ring);
         try {
           worker.terminate();
         } catch {
@@ -189,6 +219,7 @@ export function spawnKernelWorker(
     // truly catastrophic errors (e.g. module parse failure).
     if (terminated) return;
     terminated = true;
+    dispatcher.detach(ring);
     try {
       worker.terminate();
     } catch {
@@ -206,6 +237,8 @@ export function spawnKernelWorker(
     worker,
     ports,
     spec: fullSpec,
+    dispatcher,
+    ring,
     onExit(cb) {
       exitListeners.push(cb);
       return () => {
@@ -216,6 +249,7 @@ export function spawnKernelWorker(
     terminate() {
       if (terminated) return;
       terminated = true;
+      dispatcher.detach(ring);
       try {
         worker.terminate();
       } catch {
@@ -224,3 +258,7 @@ export function spawnKernelWorker(
     },
   };
 }
+
+// Re-export the ring type so consumers (e.g. tests) can type-annotate
+// `result.ring` without reaching into the ipc subfolder.
+export type { SabRing };
