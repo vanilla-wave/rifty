@@ -38,12 +38,30 @@ export class ServerResponse extends EventEmitter {
   private readonly body: ReadableStream<Uint8Array>;
   private resolveResp!: (res: Response) => void;
   private readonly responsePromise: Promise<Response>;
+  /**
+   * FIFO of waiters parked because `controller.desiredSize <= 0` at write time.
+   * Each entry resolves on the next `pull()` invocation, in order. See `write`.
+   */
+  private readonly pendingPulls: Array<() => void> = [];
 
   constructor() {
     super();
     this.body = new ReadableStream<Uint8Array>({
       start: (controller) => {
         this.controller = controller;
+      },
+      pull: () => {
+        // The consumer signalled it wants more — the queue has room again.
+        // Writes that parked here have already enqueued their chunks during
+        // their `write()` call, so the only thing left is to unblock the
+        // callers' awaits. Drain the entire FIFO on a single pull: otherwise
+        // back-to-back backpressured writes would deadlock, because the
+        // stream's `pull` is only invoked once per "queue empty" event when
+        // no further enqueues happen inside the handler.
+        while (this.pendingPulls.length > 0) {
+          const next = this.pendingPulls.shift();
+          next?.();
+        }
       },
     });
     this.responsePromise = new Promise<Response>((r) => {
@@ -125,17 +143,41 @@ export class ServerResponse extends EventEmitter {
     );
   }
 
-  write(chunk: Chunk): boolean {
+  /**
+   * Enqueue a chunk into the streaming body.
+   *
+   * Returns `true` synchronously when the controller's `desiredSize` indicates
+   * there is still room in the queue (or when `desiredSize` is `null`, meaning
+   * the stream gives no backpressure signal). When `desiredSize <= 0`, the
+   * chunk is enqueued but a `Promise<true>` is returned, resolving only after
+   * the next `pull()` is invoked by the consumer. Waiters are drained in FIFO
+   * order so multiple back-to-back writes preserve their delivery order.
+   *
+   * This widening of the Node `Writable.write()` return type to
+   * `boolean | Promise<boolean>` is intentional — callers that ignore the
+   * return continue to work, callers that `await` it get true backpressure.
+   */
+  write(chunk: Chunk): boolean | Promise<boolean> {
     if (this._finished) {
       this.emit('error', new Error('write after end'));
       return false;
     }
     if (!this._headersSent) this.flushHeaders();
     const buf = normalise(chunk);
-    if (buf.byteLength > 0) {
-      // controller is set during ReadableStream start callback (synchronous in
-      // the spec). flushHeaders cannot run before that, so this is safe.
-      this.controller?.enqueue(buf);
+    if (buf.byteLength === 0) return true;
+    // controller is set during ReadableStream start callback (synchronous in
+    // the spec). flushHeaders cannot run before that, so this is safe.
+    const ctrl = this.controller;
+    if (ctrl === null) return true;
+    // Snapshot desiredSize BEFORE the enqueue so the very first write (when
+    // the queue is empty at HWM=1 and ds=1) returns true synchronously. The
+    // post-enqueue state would falsely flag that case as backpressured.
+    const dsBefore = ctrl.desiredSize;
+    ctrl.enqueue(buf);
+    if (dsBefore !== null && dsBefore <= 0) {
+      return new Promise<boolean>((resolve) => {
+        this.pendingPulls.push(() => resolve(true));
+      });
     }
     return true;
   }
@@ -167,6 +209,13 @@ export class ServerResponse extends EventEmitter {
     }
     this._finished = true;
     this.controller?.close();
+    // Drain any waiters parked on backpressure — the stream is closing, no
+    // more `pull()` will ever fire. Resolve them so dependent code doesn't
+    // hang on an awaited `write()` promise.
+    while (this.pendingPulls.length > 0) {
+      const next = this.pendingPulls.shift();
+      next?.();
+    }
     queueMicrotask(() => this.emit('finish'));
     return this;
   }

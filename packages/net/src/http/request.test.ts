@@ -1,0 +1,117 @@
+/**
+ * Tests for `IncomingMessage` and `IncomingMessageFromFetch`.
+ *
+ * Covers:
+ *   - Minimal `req.socket` shape (Item 1 from 2026-05-25 review).
+ *   - Streaming body delivery from `request.body` ReadableStream
+ *     (Item 4 from 2026-05-25 review / ADR-0017 phase 1 reader-side finish).
+ */
+
+import { describe, expect, it } from 'vitest';
+import { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
+
+describe('IncomingMessage.socket — minimal Node-compatible shape', () => {
+  it('exposes remoteAddress, localAddress, remotePort, localPort, and destroy()', () => {
+    const req = new IncomingMessage(new Request('http://localhost/x'));
+    expect(req.socket).toBeDefined();
+    expect(req.socket.remoteAddress).toBe('127.0.0.1');
+    expect(req.socket.localAddress).toBe('127.0.0.1');
+    expect(req.socket.remotePort).toBe(0);
+    expect(req.socket.localPort).toBe(0);
+    expect(typeof req.socket.destroy).toBe('function');
+    // destroy() is a no-op for non-TCP — should not throw.
+    expect(() => req.socket.destroy()).not.toThrow();
+  });
+});
+
+describe('IncomingMessage — streaming body (ADR-0017 phase 1 reader-side)', () => {
+  it('delivers a single buffered body chunk to data listeners (existing buffered path)', async () => {
+    const req = new IncomingMessage(
+      new Request('http://localhost/x', { method: 'POST', body: 'hello' }),
+    );
+    const chunks: string[] = [];
+    const dec = new TextDecoder();
+    await new Promise<void>((resolve, reject) => {
+      req.on('data', (c) => {
+        chunks.push(dec.decode(c as Uint8Array));
+      });
+      req.on('end', () => resolve());
+      req.on('error', reject);
+    });
+    expect(chunks.join('')).toBe('hello');
+  });
+
+  it('delivers a streaming ReadableStream body chunk-by-chunk', async () => {
+    // Build a stream that yields 3 chunks across separate microtasks. Each
+    // `data` listener invocation should see exactly one chunk — the body must
+    // NOT be drained to an ArrayBuffer first and pushed as a single piece.
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        controller.enqueue(new TextEncoder().encode('chunk-1'));
+        await new Promise<void>((r) => setTimeout(r, 5));
+        controller.enqueue(new TextEncoder().encode('chunk-2'));
+        await new Promise<void>((r) => setTimeout(r, 5));
+        controller.enqueue(new TextEncoder().encode('chunk-3'));
+        controller.close();
+      },
+    });
+    const request = new Request('http://localhost/upload', {
+      method: 'POST',
+      body: stream,
+      // Required for Fetch API streaming uploads in Node.
+      // @ts-expect-error — Node fetch accepts `duplex`; not yet in lib.d.ts.
+      duplex: 'half',
+    });
+    const req = new IncomingMessage(request);
+    const chunks: string[] = [];
+    const dec = new TextDecoder();
+    await new Promise<void>((resolve, reject) => {
+      req.on('data', (c) => {
+        chunks.push(dec.decode(c as Uint8Array));
+      });
+      req.on('end', () => resolve());
+      req.on('error', reject);
+    });
+    expect(chunks).toEqual(['chunk-1', 'chunk-2', 'chunk-3']);
+  });
+
+  it('zero-body request fires end with no data', async () => {
+    const req = new IncomingMessage(new Request('http://localhost/x'));
+    const chunks: Uint8Array[] = [];
+    await new Promise<void>((resolve) => {
+      req.on('data', (c) => chunks.push(c as Uint8Array));
+      req.on('end', () => resolve());
+    });
+    expect(chunks.length).toBe(0);
+  });
+});
+
+describe('IncomingMessageFromFetch — streaming response (ADR-0017 phase 1)', () => {
+  it('delivers a streaming response body chunk-by-chunk', async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        controller.enqueue(new TextEncoder().encode('resp-1'));
+        await new Promise<void>((r) => setTimeout(r, 5));
+        controller.enqueue(new TextEncoder().encode('resp-2'));
+        await new Promise<void>((r) => setTimeout(r, 5));
+        controller.enqueue(new TextEncoder().encode('resp-3'));
+        controller.close();
+      },
+    });
+    const response = new Response(stream, {
+      status: 200,
+      headers: { 'content-type': 'text/plain' },
+    });
+    const msg = new IncomingMessageFromFetch(response);
+    const chunks: string[] = [];
+    const dec = new TextDecoder();
+    await new Promise<void>((resolve, reject) => {
+      msg.on('data', (c) => {
+        chunks.push(dec.decode(c as Uint8Array));
+      });
+      msg.on('end', () => resolve());
+      msg.on('error', reject);
+    });
+    expect(chunks).toEqual(['resp-1', 'resp-2', 'resp-3']);
+  });
+});

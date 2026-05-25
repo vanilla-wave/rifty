@@ -12,7 +12,10 @@
     "./register-builtins": "./src/register-builtins.ts",
     "./https": "./src/https.ts"
   },
-  "scripts": { "typecheck": "tsc -p tsconfig.json --noEmit" },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:run": "cd ../.. && vitest run --project unit packages/net"
+  },
   "dependencies": {
     "@rifty/io": "workspace:*",
     "@rifty/runtime-js": "workspace:*"

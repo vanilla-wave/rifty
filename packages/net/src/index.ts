@@ -2,6 +2,7 @@ export {
   default as net,
   createServer as createNetServer,
   Server as NetServer,
+  HttpFramedSocket,
   Socket,
 } from './net.ts';
 export {

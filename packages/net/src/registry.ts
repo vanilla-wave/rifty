@@ -33,7 +33,10 @@ export function listPorts(): number[] {
 export async function dispatchToPort(port: number, request: Request): Promise<Response> {
   const handler = handlers.get(port);
   if (!handler) {
-    return new Response(`Port ${port} is not listening`, { status: 502 });
+    return new Response(JSON.stringify({ error: 'no_listener', port }), {
+      status: 502,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
   return handler(request);
 }

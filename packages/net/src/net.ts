@@ -1,17 +1,27 @@
 /**
  * `node:net` over the port registry.
  *
- * The full TCP model doesn't fit a browser. We expose just enough for the
- * common case: HTTP-style request/response. `Socket` is a thin EventEmitter
- * that delivers parsed request data to the connection handler.
+ * The full TCP model doesn't fit a browser. What this module actually exposes
+ * is an **HTTP-framed** socket: the connection handler receives the request
+ * serialised as HTTP/1.1 wire bytes and the writes back are parsed as an
+ * HTTP/1.1 response. This is NOT a general raw TCP socket. Per ADR-0017, the
+ * class is named `HttpFramedSocket` to make the framing assumption obvious at
+ * the type level — `net.Socket` remains as a deprecated alias that emits a
+ * one-shot `console.warn` on instantiation.
+ *
+ * Calling `.connect()` (which only makes sense for a TCP socket) throws
+ * `NotImplementedError` — raw byte streaming over TCP is deferred to ADR-0017
+ * phase 2 / M12.
  */
 
-import { EventEmitter } from '@rifty/io';
+import { EventEmitter, NotImplementedError } from '@rifty/io';
 import { registerPort, unregisterPort } from './registry.ts';
 
-export class Socket extends EventEmitter {
+export class HttpFramedSocket extends EventEmitter {
   remoteAddress = '127.0.0.1';
+  localAddress = '127.0.0.1';
   remotePort = 0;
+  localPort = 0;
   writableEnded = false;
   private chunks: Uint8Array[] = [];
 
@@ -32,6 +42,22 @@ export class Socket extends EventEmitter {
     this.emit('end');
   }
 
+  /**
+   * Raw TCP connect is not supported — the port registry routes via HTTP
+   * `Request`/`Response`, not byte streams. Use `fetch()` for client traffic.
+   */
+  connect(_port: number, _host?: string): never {
+    throw new NotImplementedError(
+      'net.Socket.connect',
+      'rifty net.Socket only supports HTTP framing — use fetch()',
+    );
+  }
+
+  destroy(): void {
+    this.writableEnded = true;
+    this.emit('close');
+  }
+
   collected(): Uint8Array {
     let total = 0;
     for (const c of this.chunks) total += c.length;
@@ -45,11 +71,34 @@ export class Socket extends EventEmitter {
   }
 }
 
+/**
+ * Deprecated alias for `HttpFramedSocket`. The name `net.Socket` is misleading
+ * because the implementation carries HTTP frames, not raw TCP. Emits a
+ * one-shot warning on first instantiation (not on import).
+ *
+ * @deprecated Use `HttpFramedSocket` to make the framing explicit, or `fetch()`
+ *   for client traffic.
+ */
+let socketDeprecationWarned = false;
+export class Socket extends HttpFramedSocket {
+  constructor() {
+    super();
+    if (!socketDeprecationWarned) {
+      socketDeprecationWarned = true;
+      console.warn(
+        '[rifty/net] `net.Socket` is a deprecated alias for `HttpFramedSocket`. ' +
+          'The class carries HTTP/1.1-framed bytes, not raw TCP. ' +
+          'Update imports to `HttpFramedSocket` or use `fetch()` for client traffic.',
+      );
+    }
+  }
+}
+
 export class Server extends EventEmitter {
   private listenedPort: number | null = null;
-  private readonly connectionHandler?: (socket: Socket) => void;
+  private readonly connectionHandler?: (socket: HttpFramedSocket) => void;
 
-  constructor(connectionHandler?: (socket: Socket) => void) {
+  constructor(connectionHandler?: (socket: HttpFramedSocket) => void) {
     super();
     this.connectionHandler = connectionHandler;
   }
@@ -60,11 +109,11 @@ export class Server extends EventEmitter {
       | undefined;
     this.listenedPort = port;
     registerPort(port, async (request) => {
-      // Build a Socket per request; the connection handler may write Response data.
-      const socket = new Socket();
+      // Build a socket per request; the connection handler may write Response data.
+      const socket = new HttpFramedSocket();
       this.emit('connection', socket);
       this.connectionHandler?.(socket);
-      // Send the raw request bytes through socket so HTTP server can parse.
+      // Send the raw request bytes through the socket so the HTTP server can parse.
       const headers: string[] = [];
       for (const [k, v] of request.headers) headers.push(`${k}: ${v}`);
       const body = new Uint8Array(await request.arrayBuffer());
@@ -139,9 +188,9 @@ function concat(bufs: Uint8Array[]): Uint8Array {
   return out;
 }
 
-export function createServer(handler?: (socket: Socket) => void): Server {
+export function createServer(handler?: (socket: HttpFramedSocket) => void): Server {
   return new Server(handler);
 }
 
-const net = { createServer, Server, Socket };
+const net = { createServer, Server, Socket, HttpFramedSocket };
 export default net;
