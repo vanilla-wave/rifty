@@ -1,10 +1,9 @@
 import { detectCapabilities } from '@rifty/runtime-js/env/capabilities';
-import { registerServiceWorker } from '@rifty/service-worker';
-import { Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { Show, createSignal, onCleanup } from 'solid-js';
 import { type DevModeHandle, startDevMode } from './adapters/devMode.ts';
 import { type RealViteHandle, startRealVite } from './adapters/realVite.ts';
 import { useRuntime } from './adapters/useRuntime.ts';
-import { type VfsBootDescriptor, backendLabel, reasonOf, swErrorBannerMessage } from './boot.ts';
+import { type BootResult, backendLabel, swErrorBannerMessage } from './boot.ts';
 import { CapabilitiesPanel } from './components/CapabilitiesPanel.tsx';
 import { EditorPanel } from './components/EditorPanel.tsx';
 import { PreviewPanel } from './components/PreviewPanel.tsx';
@@ -28,8 +27,12 @@ document.body.style.fontFamily = 'system-ui, sans-serif';
 `;
 
 export interface AppProps {
-  /** VFS backend descriptor resolved by `bootstrap()` before render (ADR-0013). */
-  readonly vfsBoot: VfsBootDescriptor;
+  /**
+   * Single bundle from `bootstrapPlayground()`. Carries the VFS backend
+   * descriptor (ADR-0013) plus an optional SW-registration error captured by
+   * the bootstrap pipeline. App never re-registers the SW itself.
+   */
+  readonly boot: BootResult;
 }
 
 export function App(props: AppProps) {
@@ -39,19 +42,16 @@ export function App(props: AppProps) {
   const [devHandle, setDevHandle] = createSignal<DevModeHandle | null>(null);
   const [realViteHandle, setRealViteHandle] = createSignal<RealViteHandle | null>(null);
   const [realVitePort, setRealVitePort] = createSignal(5174);
-  const [swError, setSwError] = createSignal<string | null>(null);
   const [swBannerDismissed, setSwBannerDismissed] = createSignal(false);
   const runtime = useRuntime();
 
-  onMount(async () => {
-    try {
-      await registerServiceWorker('/sw.js');
-    } catch (err) {
-      const reason = reasonOf(err);
-      runtime.write(`SW registration failed: ${reason}\n`, 'stderr');
-      setSwError(reason);
-    }
-  });
+  // SW errors come from the consolidated bootstrap (boot.ts), no longer from
+  // an `onMount` race here. If `boot.swError` is present, the bootstrap
+  // pipeline already logged it; mirror it into the terminal so users see it
+  // alongside the banner.
+  if (props.boot.swError) {
+    runtime.write(`SW registration failed: ${props.boot.swError}\n`, 'stderr');
+  }
 
   onCleanup(() => {
     void devHandle()?.close();
@@ -128,7 +128,7 @@ export function App(props: AppProps) {
 
   return (
     <div style={{ display: 'grid', 'grid-template-rows': 'auto auto 1fr', height: '100vh' }}>
-      <Show when={swError() !== null && !swBannerDismissed()}>
+      <Show when={props.boot.swError && !swBannerDismissed()}>
         <div
           role="alert"
           data-banner="sw-error"
@@ -143,7 +143,7 @@ export function App(props: AppProps) {
             'font-size': '13px',
           }}
         >
-          <span style={{ flex: '1 1 auto' }}>{swErrorBannerMessage(swError() ?? '')}</span>
+          <span style={{ flex: '1 1 auto' }}>{swErrorBannerMessage(props.boot.swError ?? '')}</span>
           <button
             type="button"
             onClick={() => setSwBannerDismissed(true)}
@@ -184,17 +184,17 @@ export function App(props: AppProps) {
         </span>
         <span
           data-storage-badge
-          title={props.vfsBoot.reason ?? ''}
+          title={props.boot.vfsBoot.reason ?? ''}
           style={{
-            color: props.vfsBoot.backend === 'opfs' ? '#a5d6a7' : '#fbbf24',
-            background: props.vfsBoot.backend === 'opfs' ? '#1a2e1f' : '#3a2f10',
-            border: `1px solid ${props.vfsBoot.backend === 'opfs' ? '#2a4a32' : '#5a4a18'}`,
+            color: props.boot.vfsBoot.backend === 'opfs' ? '#a5d6a7' : '#fbbf24',
+            background: props.boot.vfsBoot.backend === 'opfs' ? '#1a2e1f' : '#3a2f10',
+            border: `1px solid ${props.boot.vfsBoot.backend === 'opfs' ? '#2a4a32' : '#5a4a18'}`,
             padding: '2px 8px',
             'border-radius': '4px',
             'font-size': '11px',
           }}
         >
-          {backendLabel(props.vfsBoot)}
+          {backendLabel(props.boot.vfsBoot)}
         </span>
         <button
           type="button"

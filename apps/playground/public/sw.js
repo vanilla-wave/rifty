@@ -6,6 +6,7 @@ var SW_PONG = "__rifty_sw_pong__";
 var SW_PREVIEW_READY = "rifty:preview:ready";
 var SW_PREVIEW_GOODBYE = "rifty:preview:goodbye";
 var SW_PREVIEW_REQUEST = "rifty:preview:request";
+var SW_ERROR_PROTOCOL_VERSION_MISMATCH = "PROTOCOL_VERSION_MISMATCH";
 
 // ../../packages/service-worker/src/ready-clients.ts
 var defaultLogger = {
@@ -103,54 +104,29 @@ function createReadyClientsRegistry(logger = defaultLogger) {
   };
 }
 
-// ../../packages/service-worker/src/preview-bridge.ts
-var PREVIEW_PREFIX_RE = /^\/preview\/(\d+)(\/.*)?$/;
-function matchPreviewUrl(pathname) {
-  const m = PREVIEW_PREFIX_RE.exec(pathname);
-  if (!m) return null;
-  const port = Number.parseInt(m[1], 10);
-  const suffix = m[2] ?? "/";
-  return { port, path: suffix };
-}
+// ../../packages/service-worker/src/route-preview.ts
 var nextRequestId = 1;
-var DEFAULT_READY_TIMEOUT_MS = 3e3;
-function createPreviewInterceptor(scope, hooks = {}) {
-  const timeoutMs = hooks.timeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
-  const registry = createReadyClientsRegistry();
-  const messageHandler = (event) => {
-    const data = event.data;
-    if (!data || typeof data !== "object" || typeof data.type !== "string") return;
-    if (data.type !== SW_PREVIEW_READY && data.type !== SW_PREVIEW_GOODBYE) return;
-    const source = event.source;
-    const clientId = source && "id" in source ? source.id : null;
-    if (!clientId) return;
-    registry.handleMessage(clientId, data);
-  };
-  const fetchHandler = (event) => {
-    const url2 = new URL(event.request.url);
-    const match = matchPreviewUrl(url2.pathname);
-    if (!match) return;
-    event.respondWith(routePreview(scope, event.request, match, registry, timeoutMs));
-  };
-  scope.addEventListener("fetch", fetchHandler);
-  scope.addEventListener("message", messageHandler);
-  return {
-    teardown() {
-      scope.removeEventListener("fetch", fetchHandler);
-      scope.removeEventListener("message", messageHandler);
-    }
-  };
+var fallbackWarned = /* @__PURE__ */ new WeakSet();
+async function resolveOwningClient(scope, clientId) {
+  if (clientId) {
+    const direct = await scope.clients.get(clientId);
+    if (direct) return direct;
+  }
+  const all = await scope.clients.matchAll({ type: "window", includeUncontrolled: false });
+  if (all.length === 0) return null;
+  if (!fallbackWarned.has(scope)) {
+    fallbackWarned.add(scope);
+    console.warn(
+      "[rifty/service-worker] preview fetch had no clientId; falling back to first controlled window"
+    );
+  }
+  return all[0] ?? null;
 }
-function installPreviewInterceptor(scope) {
-  const handle = createPreviewInterceptor(scope);
-  return () => handle.teardown();
-}
-async function routePreview(scope, request, match, registry, timeoutMs) {
-  const clients = await scope.clients.matchAll({ type: "window", includeUncontrolled: false });
-  if (clients.length === 0) {
+async function routePreview(scope, request, match, registry, timeoutMs, clientId) {
+  const client = await resolveOwningClient(scope, clientId);
+  if (!client) {
     return new Response(`No client to serve preview port ${match.port}`, { status: 503 });
   }
-  const client = clients[0];
   if (registry.isMismatched(client.id)) {
     return new Response("protocol version mismatch", { status: 503 });
   }
@@ -169,7 +145,7 @@ async function routePreview(scope, request, match, registry, timeoutMs) {
   const requestId = nextRequestId++;
   const serialised = {
     port: match.port,
-    url: `http://preview.local${match.path}${url(request).search}`,
+    url: `http://preview.local${match.path}${new URL(request.url).search}`,
     method: request.method,
     headers: Object.fromEntries(request.headers),
     body: bodyBytes
@@ -178,7 +154,12 @@ async function routePreview(scope, request, match, registry, timeoutMs) {
     channel.port1.onmessage = (e) => {
       const data = e.data;
       if ("error" in data) {
-        resolve(new Response(data.error, { status: 502 }));
+        const err = data.error;
+        if (typeof err === "object" && err.kind === SW_ERROR_PROTOCOL_VERSION_MISMATCH) {
+          resolve(new Response(err.message, { status: 503 }));
+          return;
+        }
+        resolve(new Response(typeof err === "string" ? err : err.message, { status: 502 }));
         return;
       }
       const headers = new Headers(data.headers);
@@ -212,8 +193,48 @@ async function routePreview(scope, request, match, registry, timeoutMs) {
     );
   });
 }
-function url(request) {
-  return new URL(request.url);
+
+// ../../packages/service-worker/src/preview-bridge.ts
+var PREVIEW_PREFIX_RE = /^\/preview\/(\d+)(\/.*)?$/;
+function matchPreviewUrl(pathname) {
+  const m = PREVIEW_PREFIX_RE.exec(pathname);
+  if (!m) return null;
+  const port = Number.parseInt(m[1], 10);
+  const suffix = m[2] ?? "/";
+  return { port, path: suffix };
+}
+var DEFAULT_READY_TIMEOUT_MS = 3e3;
+function createPreviewInterceptor(scope, hooks = {}) {
+  const timeoutMs = hooks.timeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
+  const registry = createReadyClientsRegistry();
+  const messageHandler = (event) => {
+    const data = event.data;
+    if (!data || typeof data !== "object" || typeof data.type !== "string") return;
+    if (data.type !== SW_PREVIEW_READY && data.type !== SW_PREVIEW_GOODBYE) return;
+    const source = event.source;
+    const clientId = source && "id" in source ? source.id : null;
+    if (!clientId) return;
+    registry.handleMessage(clientId, data);
+  };
+  const fetchHandler = (event) => {
+    const url = new URL(event.request.url);
+    const match = matchPreviewUrl(url.pathname);
+    if (!match) return;
+    const clientId = event.resultingClientId || event.clientId || null;
+    event.respondWith(routePreview(scope, event.request, match, registry, timeoutMs, clientId));
+  };
+  scope.addEventListener("fetch", fetchHandler);
+  scope.addEventListener("message", messageHandler);
+  return {
+    teardown() {
+      scope.removeEventListener("fetch", fetchHandler);
+      scope.removeEventListener("message", messageHandler);
+    }
+  };
+}
+function installPreviewInterceptor(scope) {
+  const handle = createPreviewInterceptor(scope);
+  return () => handle.teardown();
 }
 
 // ../../packages/service-worker/src/sw.ts

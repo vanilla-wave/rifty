@@ -13,7 +13,15 @@
  * resolves synchronously to a default.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { backendLabel, bootstrap, reasonOf, swErrorBannerMessage } from './boot.ts';
+import {
+  COI_FATAL_MESSAGE,
+  assertCrossOriginIsolated,
+  backendLabel,
+  bootstrap,
+  bootstrapPlayground,
+  reasonOf,
+  swErrorBannerMessage,
+} from './boot.ts';
 
 describe('bootstrap', () => {
   it('awaits initBackend before resolving', async () => {
@@ -107,11 +115,12 @@ describe('swErrorBannerMessage', () => {
   });
 
   it('is the exact string the banner template renders for a rejected registration', async () => {
-    // Mirror the flow App.onMount runs: registerServiceWorker rejects, the
-    // catch arm pulls a reason out via reasonOf, and the banner template
-    // calls swErrorBannerMessage with that reason. A test for the banner
-    // _state_ rather than the rendered DOM (jsdom is not available here),
-    // but locks in that the message users see equals what tests assert.
+    // Mirror the flow `bootstrapPlayground` runs: registerServiceWorker
+    // rejects, the catch arm pulls a reason out via reasonOf, and the banner
+    // template calls swErrorBannerMessage with that reason. A test for the
+    // banner _state_ rather than the rendered DOM (jsdom is not available
+    // here), but locks in that the message users see equals what tests
+    // assert.
     const registerServiceWorker = vi.fn(async () => {
       throw new Error('sw script unreachable');
     });
@@ -125,5 +134,118 @@ describe('swErrorBannerMessage', () => {
     expect(swErrorBannerMessage(swError ?? '')).toBe(
       'Preview unavailable — service worker registration failed: sw script unreachable. Reload to retry.',
     );
+  });
+});
+
+describe('assertCrossOriginIsolated', () => {
+  it('is a no-op when the realm is isolated', () => {
+    const renderFatal = vi.fn();
+    const logger = { error: vi.fn() };
+    expect(() =>
+      assertCrossOriginIsolated({ check: () => true, renderFatal, logger }),
+    ).not.toThrow();
+    expect(renderFatal).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('throws, paints the DOM, and logs when the realm is NOT isolated', () => {
+    const renderFatal = vi.fn();
+    const logger = { error: vi.fn() };
+    expect(() =>
+      assertCrossOriginIsolated({ check: () => false, renderFatal, logger }),
+    ).toThrowError(COI_FATAL_MESSAGE);
+    expect(renderFatal).toHaveBeenCalledTimes(1);
+    expect(renderFatal.mock.calls[0]?.[0]).toBe(COI_FATAL_MESSAGE);
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logger.error.mock.calls[0]?.[0]).toBe(COI_FATAL_MESSAGE);
+  });
+
+  it('produces an actionable message that mentions COOP and COEP', () => {
+    // The user-facing copy must point at the headers — that's the actionable
+    // remediation. Locking it in so a refactor that strips the headers from
+    // the message body trips this test.
+    expect(COI_FATAL_MESSAGE).toMatch(/Cross-Origin-Opener-Policy/);
+    expect(COI_FATAL_MESSAGE).toMatch(/Cross-Origin-Embedder-Policy/);
+    expect(COI_FATAL_MESSAGE).toMatch(/SharedArrayBuffer/);
+  });
+});
+
+describe('bootstrapPlayground', () => {
+  it('asserts COI, initialises the VFS, registers the SW, then resolves', async () => {
+    const order: string[] = [];
+    const assertCoi = vi.fn(() => {
+      order.push('coi');
+    });
+    const initVfs = vi.fn(async () => {
+      order.push('vfs');
+      return 'opfs' as const;
+    });
+    const registerSw = vi.fn(async (url: string) => {
+      order.push(`sw:${url}`);
+      return { registration: {}, active: {} };
+    });
+
+    const result = await bootstrapPlayground({
+      assertCoi,
+      initVfs,
+      registerSw,
+      logger: { warn: () => {}, error: () => {} },
+    });
+
+    expect(order).toEqual(['coi', 'vfs', 'sw:/sw.js']);
+    expect(assertCoi).toHaveBeenCalledTimes(1);
+    expect(initVfs).toHaveBeenCalledTimes(1);
+    expect(registerSw).toHaveBeenCalledWith('/sw.js');
+    expect(result).toEqual({ vfsBoot: { backend: 'opfs' } });
+  });
+
+  it('propagates a COI failure without touching VFS or SW', async () => {
+    const initVfs = vi.fn();
+    const registerSw = vi.fn();
+    const assertCoi = vi.fn(() => {
+      throw new Error(COI_FATAL_MESSAGE);
+    });
+    await expect(
+      bootstrapPlayground({
+        assertCoi,
+        initVfs,
+        registerSw,
+        logger: { warn: () => {}, error: () => {} },
+      }),
+    ).rejects.toThrowError(COI_FATAL_MESSAGE);
+    expect(initVfs).not.toHaveBeenCalled();
+    expect(registerSw).not.toHaveBeenCalled();
+  });
+
+  it('captures SW failures into swError without failing the bootstrap', async () => {
+    const warn = vi.fn();
+    const result = await bootstrapPlayground({
+      assertCoi: () => {},
+      initVfs: async () => 'memory' as const,
+      registerSw: async () => {
+        throw new Error('sw 404');
+      },
+      logger: { warn, error: () => {} },
+    });
+    expect(result.vfsBoot).toEqual({ backend: 'memory' });
+    expect(result.swError).toBe('sw 404');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toMatch(/sw 404/);
+  });
+
+  it('VFS failure degrades to memory but still registers the SW', async () => {
+    const warn = vi.fn();
+    const registerSw = vi.fn(async () => ({ registration: {}, active: {} }));
+    const result = await bootstrapPlayground({
+      assertCoi: () => {},
+      initVfs: async () => {
+        throw new Error('OPFS denied');
+      },
+      registerSw,
+      logger: { warn, error: () => {} },
+    });
+    expect(result.vfsBoot).toEqual({ backend: 'memory', reason: 'OPFS denied' });
+    expect(registerSw).toHaveBeenCalledWith('/sw.js');
+    expect(result.swError).toBeUndefined();
   });
 });
