@@ -23,3 +23,7 @@ export type {
   WorkerSpawnSpec,
   WorkerStdioPorts,
 } from './worker-entry.ts';
+
+// ADR-0011 phase 2 — kernel.spawnWorker allocator + host-side URL setter.
+export { getKernelWorkerUrl, setKernelWorkerUrl } from './spawn-worker.ts';
+export type { SpawnWorkerSpec } from './spawn-worker.ts';

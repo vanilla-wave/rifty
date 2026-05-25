@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@rifty/kernel": "workspace:*",
     "@rifty/net": "workspace:*",
     "@rifty/npm-client": "workspace:*",
     "@rifty/runtime-js": "workspace:*",

@@ -13,6 +13,8 @@
  */
 
 import { EventEmitter } from './internal/event-emitter.ts';
+import { type SpawnWorkerSpec, spawnKernelWorker } from './spawn-worker.ts';
+import type { WorkerStdioPorts } from './worker-entry.ts';
 
 export interface ProcessIO {
   write(stream: 'stdout' | 'stderr', chunk: string): void;
@@ -37,6 +39,12 @@ export interface ProcessHandle extends EventEmitter {
   /** Send a message into the child (for `fork`-style IPC). */
   send(message: unknown): boolean;
   kill(signal?: string): boolean;
+  /**
+   * For Worker-backed children (ADR-0011 phase 2): the parent-side stdio
+   * `MessagePort`s. Undefined for same-realm fallback children — callers
+   * should branch on `handle.ports !== undefined` rather than assume.
+   */
+  readonly ports?: WorkerStdioPorts;
 }
 
 interface ProcessRecord {
@@ -159,6 +167,93 @@ export class ProcessManager {
       record.handle.exitCode = exitCode;
       record.handle.emit('exit', exitCode, null);
       record.handle.emit('close', exitCode, null);
+    });
+
+    return handle;
+  }
+
+  /**
+   * Spawn a child in its own Web Worker realm (ADR-0011 phase 2). The kernel
+   * allocates the PID, creates a {@link SabRing}, three stdio
+   * `MessageChannel`s, posts the init message, and tracks exit via the
+   * worker's `{type:'exit', code}` message.
+   *
+   * Throws if {@link setKernelWorkerUrl} hasn't been called by the host.
+   * Same-realm callers stay on {@link spawn} until they're ready to migrate
+   * (or stay forever for in-realm-only use cases).
+   */
+  spawnWorker(
+    command: string,
+    spec: SpawnWorkerSpec,
+    ppid = 1,
+    options: SpawnOptions = {},
+  ): ProcessHandle {
+    const parentRecord = this.table.get(ppid);
+    const initialCwd = options.cwd ?? spec.cwd ?? parentRecord?.cwd ?? DEFAULT_CWD;
+
+    // Allocate PID from the same counter `spawn` uses so the PID space
+    // stays unified across same-realm and Worker-backed children.
+    const pid = this.nextPid++;
+
+    const spawnResult = spawnKernelWorker({ ...spec, cwd: initialCwd }, { pid, ppid });
+
+    const abortController = new AbortController();
+    const ports = spawnResult.ports;
+
+    const record: ProcessRecord = {
+      pid,
+      ppid,
+      command,
+      cwd: initialCwd,
+      exitCode: null,
+      signalCode: null,
+      parentToChild: new EventEmitter(),
+      handle: undefined as unknown as ProcessHandle,
+      abortController,
+    };
+
+    class WorkerHandle extends EventEmitter implements ProcessHandle {
+      readonly pid = pid;
+      readonly ppid = ppid;
+      readonly command = command;
+      exitCode: number | null = null;
+      signalCode: string | null = null;
+      readonly ports = ports;
+
+      get cwd(): string {
+        return record.cwd;
+      }
+      setCwd(next: string): void {
+        record.cwd = next;
+      }
+      send(_message: unknown): boolean {
+        // IPC-over-MessagePort is layered above in runtime-js when the
+        // fork shim wires its own MessageChannel. The kernel handle does
+        // not own a generic message bus — return false to mirror Node's
+        // "no IPC channel" return value.
+        return false;
+      }
+      kill(signal = 'SIGTERM'): boolean {
+        if (this.exitCode !== null) return false;
+        abortController.abort();
+        spawnResult.terminate();
+        this.signalCode = signal;
+        this.exitCode = null;
+        this.emit('exit', null, signal);
+        this.emit('close', null, signal);
+        return true;
+      }
+    }
+
+    const handle = new WorkerHandle();
+    record.handle = handle;
+    this.table.set(pid, record);
+
+    spawnResult.onExit((code) => {
+      if (handle.exitCode !== null || handle.signalCode !== null) return;
+      handle.exitCode = code;
+      handle.emit('exit', code, null);
+      handle.emit('close', code, null);
     });
 
     return handle;

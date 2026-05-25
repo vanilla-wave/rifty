@@ -35,6 +35,9 @@ importers:
       '@rifty-examples/vite-like-dev':
         specifier: workspace:*
         version: link:../../examples/vite-like-dev
+      '@rifty/kernel':
+        specifier: workspace:*
+        version: link:../../packages/kernel
       '@rifty/net':
         specifier: workspace:*
         version: link:../../packages/net
