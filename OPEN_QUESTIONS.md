@@ -27,67 +27,7 @@ When a question is reviewed:
 
 ## Active
 
-## Q-2026-05-25-touch-utimes: Where should `utimes` live on the sync VFS surface?
-
-**Status:** 🟢 Active
-**Encountered in:** PR fixing 1.6 (shell silent stubs) of `docs/review/2026-05-25-stubs-and-adr-violations.md`
-**Milestone:** M10
-**Author (agent session):** 2026-05-25
-
-### Context
-
-`packages/shell/src/builtins.ts` `touch` needs to update mtime on an existing
-file. The `FsSync` interface (`packages/vfs/src/fs-sync.ts`) does not expose
-`utimes`/`setMtime`. Reaching backend mtime mutability touches the VFS public
-API — adding a new method on `FsSync` is irreversible per the checklist (point
-1). For now we backend-sniff: if `syncMirror()` is a `MemoryFsSync` we mutate
-`backend.<node>.mtime` directly; otherwise we throw `NotImplementedError`. The
-in-memory case is the only one that runs in the current playground / tests, so
-the throw path has no live callers — but as soon as OPFS becomes the default
-sync mirror, `touch` on an existing file fails loudly until this is wired
-through `FsSync.utimes`.
-
-### Options considered
-
-- **Option A:** Add `utimes(path, atime, mtime)` to the `FsSync` interface.
-  `MemoryFsSync` implements via direct backend mutation; `OpfsFsSync` uses the
-  closest analogue (recreating the file is not free, but mtime-only update is
-  not supported by `FileSystemSyncAccessHandle` — would need a metadata
-  side-table on top).
-  - Pro: clean interface, no backend sniffing in higher layers.
-  - Con: irreversible (public API of `vfs` package, touches every `FsSync`
-    backend including OPFS which has no native utimes).
-- **Option B:** Keep backend-sniffing in shell (current code). `touch` is the
-  only consumer; if a second consumer appears (`node:fs.utimesSync` from
-  `runtime-js/builtins/fs.ts`) escalate to Option A.
-  - Pro: zero VFS API changes; throws loudly for unsupported backends.
-  - Con: leaks "I know my backend is `MemoryFsSync`" into a higher layer.
-
-### Decision taken (provisional)
-
-**Chose:** B
-
-**Why:** `touch` is the only caller today; Option A demands a real OPFS-side
-strategy for mtime that isn't free, and the shell already lives in a higher
-layer that's allowed to know about installed backends. Promote to A when a
-second caller appears.
-
-### Code markers
-
-- `packages/shell/src/builtins.ts` — `bumpMtime()` with the `TODO(ADR)` marker
-- `packages/shell/src/builtins.ts` — `touch` calls `bumpMtime`
-
-### Reversibility justification
-
-- Public APIs affected: none. Internal to `packages/shell/`.
-- Cost to revert: <30 lines, 1 file.
-- External dependencies: none.
-
-### Needs human review by
-
-End of milestone M10.
-
-
+_(none — see "Promoted" below for the historical entry on `utimes`.)_
 
 ---
 
@@ -151,6 +91,7 @@ End of milestone M<N>.
 - **Q-2026-05-23-004** — *File-level shim overlay vs full-package shadow* — promoted to **ADR 0027** (`docs/adr/0027-file-level-shim-overlay.md`). Per-file overlay in the consuming adapter kept until a third shim site appears, at which point the pattern moves into `@rifty/npm-client/shims/`.
 - **Q-2026-05-23-005** — *Expanded `@rifty/runtime-js` public surface via `./builtins/*` subpath exports* — promoted to **ADR 0018** (`docs/adr/0018-runtime-js-subpath-exports.md`). Retroactive accept; consolidation to a `./host` entry remains an option for the next public-API review.
 - **Q-2026-05-24-007** — *Prod proxy for npm registry* — promoted to **ADR 0028** (`docs/adr/0028-prod-proxy-for-npm-registry.md`). Vercel Edge Function chosen as the prod proxy, falling back to Cloudflare Worker by config change; closes PROJECT_PLAN.md Q4'.
+- **Q-2026-05-25-touch-utimes** — *Where should `utimes` live on the sync VFS surface?* — promoted to **ADR 0029** (`docs/adr/0029-utimes-on-fs-sync.md`). The trigger condition fired: a second caller (`node:fs.utimesSync` in `runtime-js`) appeared, so the provisional Option B (backend-sniffing in `shell`) was escalated to Option A — `FsSync.utimes` lives on the interface, `MemoryFsSync` mutates the shared backend, `OpfsFsSync` records into an in-memory side-table (`FileSystemSyncAccessHandle` has no mtime mutation). `shell/src/builtins.ts` drops its `@rifty/vfs/internal` import.
 
 ---
 

@@ -16,4 +16,12 @@ export interface FsSync {
   mkdirSync(path: string, options: { recursive?: boolean }): void;
   rmSync(path: string, options: { recursive?: boolean; force?: boolean }): void;
   statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number };
+  /**
+   * Update the access and modification timestamps (in ms) on `path`. Mirrors
+   * `node:fs.utimesSync` semantics (ADR-0029). `MemoryFsSync` writes through
+   * to the shared backend; `OpfsFsSync` keeps an in-memory side-table because
+   * `FileSystemSyncAccessHandle` exposes no mtime mutation primitive.
+   * Throws `VfsError('ENOENT')` if `path` does not exist.
+   */
+  utimes(path: string, atimeMs: number, mtimeMs: number): void;
 }

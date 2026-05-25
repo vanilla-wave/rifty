@@ -258,3 +258,39 @@ describe('OpfsFsSync warm index — existsSync / statSync', () => {
     }
   });
 });
+
+describe('OpfsFsSync.utimes (ADR-0029)', () => {
+  beforeEach(() => vi.spyOn(OpfsFsSync, 'isSupported').mockReturnValue(true));
+  afterEach(() => vi.restoreAllMocks());
+
+  it('utimes(path, atime, mtime) makes statSync(path).mtime === mtime', async () => {
+    const root = buildFakeRoot({
+      files: new Map([['/file.txt', { bytes: new Uint8Array([1, 2]) }]]),
+      dirs: new Set(['/']),
+    });
+    const fs = new OpfsFsSync(root);
+    await fs.refreshIndex();
+    fs.utimes('/file.txt', 100, 2000);
+    expect(fs.statSync('/file.txt').mtime).toBe(2000);
+  });
+
+  it('utimes throws VfsError ENOENT for unknown paths', async () => {
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root);
+    await fs.refreshIndex();
+    expect(() => fs.utimes('/missing', 1, 2)).toThrow(VfsError);
+    try {
+      fs.utimes('/missing', 1, 2);
+    } catch (err) {
+      expect((err as VfsError).code).toBe('ENOENT');
+    }
+  });
+
+  it('utimes also updates mtime on directories via the side-table', async () => {
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/', '/d']) });
+    const fs = new OpfsFsSync(root);
+    await fs.refreshIndex();
+    fs.utimes('/d', 10, 42);
+    expect(fs.statSync('/d').mtime).toBe(42);
+  });
+});

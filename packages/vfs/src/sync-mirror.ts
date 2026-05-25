@@ -57,6 +57,10 @@ export class MemoryFsSync implements FsSync {
     return this.backend.stat(path);
   }
 
+  utimes(path: string, atimeMs: number, mtimeMs: number): void {
+    this.backend.utimes(path, atimeMs, mtimeMs);
+  }
+
   loadFixture(files: Readonly<Record<string, string>>): void {
     const enc = new TextEncoder();
     for (const [path, content] of Object.entries(files)) {

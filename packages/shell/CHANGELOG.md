@@ -13,9 +13,10 @@
   escapes. Unquoted `$VAR` also expands. Unknown variables expand to the
   empty string (POSIX). Unsupported expansion forms (`${VAR:-default}` etc.)
   throw rather than silently dropping characters.
-- `touch` on an existing file now bumps its mtime (in-memory backend only).
-  Non-`MemoryFsSync` backends throw `NotImplementedError('shell.touch.utimes')`
-  pending Q-2026-05-25-touch-utimes.
+- `touch` on an existing file now bumps its mtime through `FsSync.utimes`
+  (ADR-0029); works on every backend, including OPFS. Dropped the
+  `@rifty/vfs/internal` backend-sniffing import and the
+  `NotImplementedError('shell.touch.utimes')` escape hatch.
 
 ### Changed
 
@@ -27,8 +28,6 @@
 - `<` input redirect now throws `NotImplementedError('shell.input-redirect')`
   with the M12 work-item hint, instead of being silently dropped by the
   dispatch step.
-- `touch` mtime on non-`MemoryFsSync` backends throws
-  `NotImplementedError('shell.touch.utimes')`.
 
 ### Dependencies
 

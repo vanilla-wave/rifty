@@ -1,38 +1,27 @@
 /// <reference lib="webworker" />
 /**
  * `OpfsFsSync` — synchronous {@link FsSync} backed by OPFS via
- * `FileSystemSyncAccessHandle` (ADR-0013).
+ * `FileSystemSyncAccessHandle` (ADR-0013). Worker realm only; main-thread
+ * construction throws `NotImplementedError`.
  *
- * Realm constraint: `FileSystemSyncAccessHandle` only exists inside a Worker
- * realm. Main-realm code that tries to construct an `OpfsFsSync` gets a
- * `NotImplementedError` with the canonical message — it's not a stub, it's
- * an intrinsic platform constraint.
+ * Scope (M11): file ops (`existsSync`, `readFileBytesSync`, `writeFileSync`,
+ * `statSync`) work. Mutating directory ops (`mkdirSync`, `rmSync`,
+ * `readdirSync`) need async `FileSystemDirectoryHandle` calls and throw
+ * `NotImplementedError` with the "use OpfsVfs" hint — drive them through
+ * the paired {@link OpfsVfs} surface.
  *
- * Scope (M11): **file ops** (`existsSync`, `readFileBytesSync`,
- * `writeFileSync`, `statSync` on files and directories) are wired through
- * the OPFS sync surface. **Mutating directory ops** (`mkdirSync`, `rmSync`,
- * `readdirSync`) require the async `FileSystemDirectoryHandle` API and
- * therefore can't run from a sync method. They throw
- * `NotImplementedError('OpfsFsSync.<method>', 'directory ops require an
- * async bootstrap; use OpfsVfs for those')`. Callers that need both
- * surfaces should drive directory ops through {@link OpfsVfs} on the
- * paired async side.
+ * Warm index (ADR-0014): {@link init} walks the OPFS tree and caches
+ * `{ kind, size }` so `existsSync`/`statSync` see entries created via the
+ * async sibling. `writeFileSync` mutates the cache in place; async writes
+ * make it stale until {@link refreshIndex} is called.
  *
- * Warm index (ADR-0014 acceptance): at {@link init} time the implementation
- * walks the OPFS tree and caches `{ kind, size }` for every entry. Sync ops
- * consult this index so `existsSync('/foo')` and `statSync('/foo')` return
- * truthful answers for files that were created through the paired
- * {@link OpfsVfs} surface without a separate `openSync` pre-warm step. The
- * index is mutated in place by `writeFileSync` to stay in sync with sync
- * writes. Async writes through the paired `OpfsVfs` make the index stale —
- * callers can refresh it by re-invoking {@link OpfsFsSync.init}.
+ * Handle lifecycle: a `Map<path, FileSystemSyncAccessHandle>` opens lazily
+ * on first read/write and is reused (browsers serialise handle access).
+ * No cross-instance eviction — Worker owns its filesystem view for life.
  *
- * Handle lifecycle: a separate `Map<string, FileSystemSyncAccessHandle>`
- * keyed by absolute path holds open sync access handles, acquired lazily on
- * the first read/write against that path. Browsers serialise access on a
- * single handle — keeping one per path avoids re-creating it on every call.
- * There is no cross-instance eviction; the assumption is that the Worker
- * realm owns its filesystem view for its lifetime.
+ * atime/mtime side-table (ADR-0029): `FileSystemSyncAccessHandle` exposes
+ * no mtime mutation; `utimes` records into an in-memory map and `statSync`
+ * prefers it over the default `0`. Not persisted across page reloads.
  */
 
 import { NotImplementedError } from '@rifty/io';
@@ -90,6 +79,8 @@ export async function walkOpfsTree(
 export class OpfsFsSync implements FsSync {
   private readonly handles = new Map<string, FileSystemSyncAccessHandle>();
   private readonly index = new Map<string, IndexEntry>();
+  /** atime/mtime side-table — see file header (ADR-0029). */
+  private readonly times = new Map<string, { atime: number; mtime: number }>();
   private readonly root: FileSystemDirectoryHandle;
 
   /**
@@ -264,16 +255,25 @@ export class OpfsFsSync implements FsSync {
     const normalized = normalizePath(path);
     const entry = this.index.get(normalized);
     if (!entry) throw new VfsError('ENOENT', path);
+    // mtime: prefer the user-supplied value from the side-table (set by
+    // `utimes`); fall back to 0 because OPFS doesn't expose a native mtime
+    // to the sync surface (ADR-0029).
+    const mtime = this.times.get(normalized)?.mtime ?? 0;
     if (entry.kind === 'dir') {
-      // OPFS does not expose directory mtime; mtime=0 is documented.
-      return { isFile: false, isDirectory: true, size: 0, mtime: 0 };
+      return { isFile: false, isDirectory: true, size: 0, mtime };
     }
     // File: prefer a live size from the open sync access handle when we
     // have one; otherwise fall back to the cached size from the last
-    // walk / write. mtime is not exposed by OPFS sync handles.
+    // walk / write.
     const handle = this.handles.get(normalized);
     const size = handle ? handle.getSize() : entry.size;
-    return { isFile: true, isDirectory: false, size, mtime: 0 };
+    return { isFile: true, isDirectory: false, size, mtime };
+  }
+
+  utimes(path: string, atimeMs: number, mtimeMs: number): void {
+    const normalized = normalizePath(path);
+    if (!this.index.has(normalized)) throw new VfsError('ENOENT', path);
+    this.times.set(normalized, { atime: atimeMs, mtime: mtimeMs });
   }
 
   readdirSync(_path: string): readonly string[] {

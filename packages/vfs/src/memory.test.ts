@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { VfsError } from './errors.ts';
 import { MemoryVfs } from './memory.ts';
+import { MemoryFsSync, createMemoryFs } from './sync-mirror.ts';
 
 describe('MemoryVfs', () => {
   it('writes and reads files', async () => {
@@ -148,5 +149,38 @@ describe('MemoryVfs', () => {
         code: 'EISDIR',
       });
     });
+  });
+});
+
+describe('MemoryFsSync.utimes (ADR-0029)', () => {
+  it('updates stat.mtime to the supplied mtime in ms', () => {
+    const { fsSync } = createMemoryFs();
+    fsSync.writeFileSync('/a', new Uint8Array([1]));
+    fsSync.utimes('/a', 1000, 2000);
+    expect(fsSync.statSync('/a').mtime).toBe(2000);
+  });
+
+  it('updates mtime independently of atime', () => {
+    const { fsSync } = createMemoryFs();
+    fsSync.writeFileSync('/a', new Uint8Array([1]));
+    fsSync.utimes('/a', 5000, 9999);
+    expect(fsSync.statSync('/a').mtime).toBe(9999);
+  });
+
+  it('throws VfsError ENOENT for non-existent paths', () => {
+    const fsSync = new MemoryFsSync();
+    expect(() => fsSync.utimes('/missing', 1, 2)).toThrow(VfsError);
+    try {
+      fsSync.utimes('/missing', 1, 2);
+    } catch (err) {
+      expect((err as VfsError).code).toBe('ENOENT');
+    }
+  });
+
+  it('works on directories too', () => {
+    const fsSync = new MemoryFsSync();
+    fsSync.mkdirSync('/d', { recursive: true });
+    fsSync.utimes('/d', 100, 200);
+    expect(fsSync.statSync('/d').mtime).toBe(200);
   });
 });

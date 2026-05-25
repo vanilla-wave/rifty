@@ -12,18 +12,20 @@
 import { VfsError } from './errors.ts';
 import { dirname, normalizePath, segments } from './path.ts';
 
-type FileNode = { kind: 'file'; data: Uint8Array; mtime: number };
-type DirNode = { kind: 'dir'; children: Map<string, Node>; mtime: number };
+type FileNode = { kind: 'file'; data: Uint8Array; mtime: number; atime: number };
+type DirNode = { kind: 'dir'; children: Map<string, Node>; mtime: number; atime: number };
 export type Node = FileNode | DirNode;
 
 const encoder = new TextEncoder();
 
 function makeDir(): DirNode {
-  return { kind: 'dir', children: new Map(), mtime: Date.now() };
+  const now = Date.now();
+  return { kind: 'dir', children: new Map(), mtime: now, atime: now };
 }
 
 function makeFile(data: Uint8Array): FileNode {
-  return { kind: 'file', data, mtime: Date.now() };
+  const now = Date.now();
+  return { kind: 'file', data, mtime: now, atime: now };
 }
 
 export interface MemoryStat {
@@ -166,5 +168,12 @@ export class MemoryBackend {
       };
     }
     return { isFile: false, isDirectory: true, size: 0, mtime: node.mtime };
+  }
+
+  utimes(path: string, atimeMs: number, mtimeMs: number): void {
+    const node = this.resolve(path);
+    if (!node) throw new VfsError('ENOENT', path);
+    node.atime = atimeMs;
+    node.mtime = mtimeMs;
   }
 }

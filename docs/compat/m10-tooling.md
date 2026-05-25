@@ -21,8 +21,8 @@ Status of M10 foundations: `fs.watch`, WebSocket, dev-server, shell, preview bri
 | Shell single vs double quote semantics (`'…'` literal, `"…"` expanding) | ✅ | `'$X'` stays literal; `"$X"` expands; limited `\$`/`\"`/`\\`/`` \` `` escapes |
 | Shell variable expansion (`$VAR`, `${VAR}`) | ✅ | Unknown vars expand to empty string (POSIX); no word splitting after expansion |
 | Shell `${VAR:-default}` / `${#VAR}` / `${VAR%suf}` etc. | ❌ | Throws from tokenizer — loud, not silent |
-| Shell built-ins (`pwd`/`cd`/`ls`/`cat`/`echo`/`mkdir`/`rm`/`env`/`touch`) | ✅ | `touch` updates mtime on existing files (in-memory backend only) |
-| Shell `touch` mtime on non-`MemoryFsSync` backends | ❌ | Throws `NotImplementedError('shell.touch.utimes')` — TODO(ADR): Q-2026-05-25-touch-utimes |
+| Shell built-ins (`pwd`/`cd`/`ls`/`cat`/`echo`/`mkdir`/`rm`/`env`/`touch`) | ✅ | `touch` updates mtime through `FsSync.utimes` (ADR-0029); works on every backend |
+| `node:fs.utimesSync` / `fs.promises.utimes` | ✅ | Routes through `FsSync.utimes` (ADR-0029); OPFS uses an in-memory side-table |
 | Shell pipes (`a \| b`) | ❌ | Pending |
 | Shell input redirect (`cmd < file`) | ❌ | Throws `NotImplementedError('shell.input-redirect')` — M12 work item, use bash via wasi |
 | Shell command substitution `$(…)` / `` `…` `` | ❌ | Not parsed; the tokenizer emits literal characters |

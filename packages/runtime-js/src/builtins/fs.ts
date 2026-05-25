@@ -259,6 +259,21 @@ export function copyFileSync(src: string, dst: string): void {
   syncMirror().writeFileSync(resolvePath(dst), data);
 }
 
+/**
+ * `node:fs.utimesSync(path, atime, mtime)` — accepts numeric seconds (Node
+ * semantics) or `Date`. The VFS sync surface stores ms, so we convert.
+ * (ADR-0029)
+ */
+function toMs(t: number | Date): number {
+  if (t instanceof Date) return t.getTime();
+  // Node treats numeric args as seconds since the epoch.
+  return Math.floor(t * 1000);
+}
+
+export function utimesSync(p: string, atime: number | Date, mtime: number | Date): void {
+  syncMirror().utimes(resolvePath(p), toMs(atime), toMs(mtime));
+}
+
 // ─── promise API (wraps sync — same backing store) ────────────────────────
 
 export const promises = {
@@ -319,6 +334,9 @@ export const promises = {
   },
   async rename(src: string, dst: string): Promise<void> {
     renameSync(src, dst);
+  },
+  async utimes(p: string, atime: number | Date, mtime: number | Date): Promise<void> {
+    utimesSync(p, atime, mtime);
   },
 };
 
@@ -417,6 +435,7 @@ const fs = {
   rmdirSync,
   renameSync,
   copyFileSync,
+  utimesSync,
   lstatSync,
   readlinkSync,
   realpathSync,
