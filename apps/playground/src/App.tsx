@@ -4,6 +4,7 @@ import { Show, createSignal, onCleanup, onMount } from 'solid-js';
 import { type DevModeHandle, startDevMode } from './adapters/devMode.ts';
 import { type RealViteHandle, startRealVite } from './adapters/realVite.ts';
 import { useRuntime } from './adapters/useRuntime.ts';
+import { type VfsBootDescriptor, backendLabel, reasonOf, swErrorBannerMessage } from './boot.ts';
 import { CapabilitiesPanel } from './components/CapabilitiesPanel.tsx';
 import { EditorPanel } from './components/EditorPanel.tsx';
 import { PreviewPanel } from './components/PreviewPanel.tsx';
@@ -26,20 +27,29 @@ document.body.style.color = '#e6e6e6';
 document.body.style.fontFamily = 'system-ui, sans-serif';
 `;
 
-export function App() {
+export interface AppProps {
+  /** VFS backend descriptor resolved by `bootstrap()` before render (ADR-0013). */
+  readonly vfsBoot: VfsBootDescriptor;
+}
+
+export function App(props: AppProps) {
   const capabilities = detectCapabilities();
   const [mode, setMode] = createSignal<'repl' | 'dev' | 'real-vite'>('repl');
   const [source, setSource] = createSignal(replSource);
   const [devHandle, setDevHandle] = createSignal<DevModeHandle | null>(null);
   const [realViteHandle, setRealViteHandle] = createSignal<RealViteHandle | null>(null);
   const [realVitePort, setRealVitePort] = createSignal(5174);
+  const [swError, setSwError] = createSignal<string | null>(null);
+  const [swBannerDismissed, setSwBannerDismissed] = createSignal(false);
   const runtime = useRuntime();
 
   onMount(async () => {
     try {
       await registerServiceWorker('/sw.js');
     } catch (err) {
-      runtime.write(`SW registration failed: ${(err as Error).message}\n`, 'stderr');
+      const reason = reasonOf(err);
+      runtime.write(`SW registration failed: ${reason}\n`, 'stderr');
+      setSwError(reason);
     }
   });
 
@@ -117,7 +127,43 @@ export function App() {
   }
 
   return (
-    <div style={{ display: 'grid', 'grid-template-rows': 'auto 1fr', height: '100vh' }}>
+    <div style={{ display: 'grid', 'grid-template-rows': 'auto auto 1fr', height: '100vh' }}>
+      <Show when={swError() !== null && !swBannerDismissed()}>
+        <div
+          role="alert"
+          data-banner="sw-error"
+          style={{
+            display: 'flex',
+            'align-items': 'center',
+            gap: '12px',
+            padding: '8px 16px',
+            background: '#3b1f1f',
+            color: '#fecaca',
+            'border-bottom': '1px solid #5b2a2a',
+            'font-size': '13px',
+          }}
+        >
+          <span style={{ flex: '1 1 auto' }}>{swErrorBannerMessage(swError() ?? '')}</span>
+          <button
+            type="button"
+            onClick={() => setSwBannerDismissed(true)}
+            data-action="dismiss-sw-banner"
+            style={{
+              background: 'transparent',
+              color: '#fecaca',
+              border: '1px solid #7f3a3a',
+              padding: '2px 10px',
+              'border-radius': '4px',
+              cursor: 'pointer',
+              'font-family': 'inherit',
+              'font-size': '12px',
+            }}
+            aria-label="Dismiss"
+          >
+            Dismiss
+          </button>
+        </div>
+      </Show>
       <header
         style={{
           display: 'flex',
@@ -135,6 +181,20 @@ export function App() {
             : mode() === 'real-vite'
               ? `M10 — Real Vite (port ${realVitePort()})`
               : 'M0..M9 — REPL'}
+        </span>
+        <span
+          data-storage-badge
+          title={props.vfsBoot.reason ?? ''}
+          style={{
+            color: props.vfsBoot.backend === 'opfs' ? '#a5d6a7' : '#fbbf24',
+            background: props.vfsBoot.backend === 'opfs' ? '#1a2e1f' : '#3a2f10',
+            border: `1px solid ${props.vfsBoot.backend === 'opfs' ? '#2a4a32' : '#5a4a18'}`,
+            padding: '2px 8px',
+            'border-radius': '4px',
+            'font-size': '11px',
+          }}
+        >
+          {backendLabel(props.vfsBoot)}
         </span>
         <button
           type="button"
