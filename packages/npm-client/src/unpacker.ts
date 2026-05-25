@@ -1,9 +1,24 @@
 /**
  * gzip + tar extractor. We don't bring in pako/tar-stream — the input shape is
- * narrow (npm tarballs are well-behaved) and a minimal extractor is ~120 lines.
+ * narrow (npm tarballs are well-behaved) and a minimal extractor is ~150 lines.
  *
  * Uses the host's `DecompressionStream('gzip')` when available (browser, Node 18+).
+ *
+ * Type-flags handled:
+ *   - `'0'` / `''` — regular file.
+ *   - `'5'` — directory (skipped at extract time).
+ *   - `'2'` — symlink — throws {@link NotImplementedError} (`npm-client.tar.symlink`).
+ *     M9 doesn't support symlinks in the VFS; we'd rather break loudly with the
+ *     offending package name in the trace than silently lose links.
+ *   - `'L'` — GNU long-name marker: the body of this entry is the long filename
+ *     (NUL-terminated) for the NEXT entry. Required for npm tarballs with paths
+ *     longer than the 100-byte `name` field.
+ *   - `'K'` — GNU long-linkname marker: same idea but for `linkname`. Since we
+ *     reject symlinks anyway, we only need to skip the metadata entry cleanly.
+ *
+ * Anything else maps to `'other'` and is filtered out of the file map.
  */
+import { NotImplementedError } from '@rifty/io';
 
 interface TarEntry {
   name: string;
@@ -26,23 +41,48 @@ function parseTar(bytes: Uint8Array): TarEntry[] {
   const dec = new TextDecoder('utf-8');
   const out: TarEntry[] = [];
   let offset = 0;
+  // Pending GNU long-name override applied to the next normal entry.
+  let pendingLongName: string | null = null;
   while (offset + 512 <= bytes.length) {
     const header = bytes.subarray(offset, offset + 512);
     // End of archive: two consecutive zero blocks.
     if (header.every((b) => b === 0)) break;
-    const name = readString(header, 0, 100, dec).replace(/\/$/, '');
+    const headerName = readString(header, 0, 100, dec).replace(/\/$/, '');
     const typeFlag = String.fromCharCode(header[156] ?? 0);
     const size = parseOctal(header, 124, 12);
     let prefix = readString(header, 345, 155, dec);
     if (prefix) prefix = `${prefix}/`;
-    const fullName = `${prefix}${name}`;
     const dataStart = offset + 512;
     const data = bytes.subarray(dataStart, dataStart + size);
+    const nextOffset = dataStart + Math.ceil(size / 512) * 512;
+
+    if (typeFlag === 'L') {
+      // GNU long path: body is the NUL-terminated long name for the next entry.
+      pendingLongName = dec.decode(data).replace(/\0+$/, '');
+      offset = nextOffset;
+      continue;
+    }
+    if (typeFlag === 'K') {
+      // GNU long linkname: not interesting once we reject symlinks. Drop the
+      // metadata entry without surfacing it as a file.
+      offset = nextOffset;
+      continue;
+    }
+    if (typeFlag === '2') {
+      // We deliberately bail loudly so the user knows exactly which package
+      // tripped the missing feature. See file-level doc comment.
+      throw new NotImplementedError(
+        'npm-client.tar.symlink',
+        `tar symlinks not supported until M12 (entry: ${pendingLongName ?? `${prefix}${headerName}`})`,
+      );
+    }
+
+    const fullName = pendingLongName ?? `${prefix}${headerName}`;
+    pendingLongName = null;
     const type: TarEntry['type'] =
       typeFlag === '5' ? 'dir' : typeFlag === '0' || typeFlag === '' ? 'file' : 'other';
     out.push({ name: fullName, type, data });
-    // Round up to next 512-byte block.
-    offset = dataStart + Math.ceil(size / 512) * 512;
+    offset = nextOffset;
   }
   return out;
 }

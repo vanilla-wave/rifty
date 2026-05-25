@@ -33,7 +33,44 @@ export function compare(a: string, b: string): number {
   if (pa.pre === pb.pre) return 0;
   if (pa.pre === '') return 1; // release > prerelease
   if (pb.pre === '') return -1;
-  return pa.pre < pb.pre ? -1 : 1;
+  return comparePreRelease(pa.pre, pb.pre);
+}
+
+/**
+ * Compare pre-release identifiers per semver §11.4:
+ *   - identifiers are dot-separated;
+ *   - numeric identifiers compare numerically;
+ *   - non-numeric identifiers compare lexicographically (ASCII);
+ *   - numeric identifiers always have lower precedence than non-numeric;
+ *   - a larger set of identifiers has higher precedence than a smaller set
+ *     when all preceding identifiers are equal.
+ *
+ * E.g. `1.0.0-alpha.2 < 1.0.0-alpha.10` (numeric, lexicographic would put 10 first),
+ * `1.0.0-1 < 1.0.0-alpha` (numeric always < non-numeric).
+ */
+function comparePreRelease(a: string, b: string): number {
+  const as = a.split('.');
+  const bs = b.split('.');
+  const len = Math.min(as.length, bs.length);
+  for (let i = 0; i < len; i++) {
+    const ai = as[i];
+    const bi = bs[i];
+    if (ai === undefined || bi === undefined) break;
+    if (ai === bi) continue;
+    const aIsNum = /^\d+$/.test(ai);
+    const bIsNum = /^\d+$/.test(bi);
+    if (aIsNum && bIsNum) {
+      const an = Number.parseInt(ai, 10);
+      const bn = Number.parseInt(bi, 10);
+      if (an !== bn) return an < bn ? -1 : 1;
+      continue;
+    }
+    if (aIsNum) return -1; // numeric < non-numeric
+    if (bIsNum) return 1;
+    return ai < bi ? -1 : 1;
+  }
+  if (as.length === bs.length) return 0;
+  return as.length < bs.length ? -1 : 1;
 }
 
 /**

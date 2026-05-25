@@ -14,10 +14,15 @@
  */
 
 import { type Vfs, joinPath } from '@rifty/vfs';
+import {
+  lockfileCovers,
+  lockfileSubgraph,
+  readExistingLockfile,
+} from './installer-lockfile-reader.ts';
 import { type Lockfile, type ResolvedPackage, buildLockfile, link } from './linker.ts';
 import { type OverrideMap, resolveOverride } from './overrides.ts';
 import type { Packument, RegistryClient } from './registry.ts';
-import { matchesRange, pickBestVersion } from './semver.ts';
+import { pickBestVersion } from './semver.ts';
 import { type TarballCache, VfsTarballCache, computeIntegrity } from './tarball-cache.ts';
 import { extractTarGz } from './unpacker.ts';
 
@@ -36,8 +41,14 @@ export interface InstallOptions {
   tarballCache?: TarballCache;
 }
 
-/** ResolvedPackage extended with provenance for the lockfile. */
-type PinnedPackage = ResolvedPackage & { resolved?: string; integrity?: string };
+/** ResolvedPackage extended with provenance for the lockfile and peer-dep
+ * metadata for the post-resolve warn pass. Peer/optional sets are not stored
+ * in the v3 lockfile shape, so they live only on the in-memory record. */
+type PinnedPackage = ResolvedPackage & {
+  resolved?: string;
+  integrity?: string;
+  peerDependencies?: Record<string, string>;
+};
 
 export interface InstallResult {
   packages: ResolvedPackage[];
@@ -45,65 +56,6 @@ export interface InstallResult {
   // Retained for shape compatibility; always empty since A-031 made conflicts
   // throw EVERSIONCONFLICT instead of being collected (nested install lands in M11; see ADR 0023).
   conflicts: { name: string; firstVersion: string; secondVersion: string }[];
-}
-
-async function readExistingLockfile(vfs: Vfs, cwd: string): Promise<Lockfile | null> {
-  const path = joinPath(cwd, 'package-lock.json');
-  if (!(await vfs.exists(path))) return null;
-  try {
-    const text = await vfs.readFileText(path);
-    const parsed = JSON.parse(text) as Lockfile;
-    if (parsed.lockfileVersion !== 3 || !parsed.packages) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function pinnedVersionFor(lockfile: Lockfile, name: string): string | undefined {
-  return lockfile.packages[`node_modules/${name}`]?.version;
-}
-
-/**
- * Walk the lockfile graph starting from `roots`, returning the set of
- * package names that participate in this subgraph. Used to decide which deps
- * can be served from the lockfile vs. need a live re-resolve.
- */
-function lockfileSubgraph(lockfile: Lockfile, roots: string[]): Set<string> {
-  const visited = new Set<string>();
-  const queue = [...roots];
-  while (queue.length > 0) {
-    const name = queue.shift();
-    if (!name || visited.has(name)) continue;
-    const entry = lockfile.packages[`node_modules/${name}`];
-    if (!entry) continue;
-    visited.add(name);
-    for (const dep of Object.keys(entry.dependencies ?? {})) {
-      queue.push(dep);
-    }
-  }
-  return visited;
-}
-
-/**
- * Decide whether the lockfile alone can satisfy the requested top-level
- * dependencies. Returns the names that can be served from the lockfile (with
- * their pinned versions still matching the requested range), or null when
- * any range no longer matches — falling back to a full re-resolve in that
- * case is simpler than per-subgraph partial reuse.
- */
-function lockfileCovers(
-  lockfile: Lockfile,
-  request: Record<string, string>,
-): Map<string, string> | null {
-  const pinned = new Map<string, string>();
-  for (const [name, range] of Object.entries(request)) {
-    const version = pinnedVersionFor(lockfile, name);
-    if (!version) return null;
-    if (!matchesRange(version, range)) return null;
-    pinned.set(name, version);
-  }
-  return pinned;
 }
 
 export async function install(
@@ -248,10 +200,27 @@ export async function install(
       resolved: manifest.dist.tarball,
       integrity,
     };
+    if (manifest.peerDependencies && Object.keys(manifest.peerDependencies).length > 0) {
+      pkg.peerDependencies = manifest.peerDependencies;
+    }
     resolved.set(effectiveName, pkg);
 
     for (const [depName, depRange] of Object.entries(manifest.dependencies ?? {})) {
       await resolveDep(depName, depRange, effectiveName);
+    }
+
+    // Optional deps: try to resolve, warn on failure, never abort the install.
+    // npm's contract is that a missing optional dep is non-fatal — typical use
+    // case is platform-specific native helpers (fsevents on macOS only, etc).
+    for (const [depName, depRange] of Object.entries(manifest.optionalDependencies ?? {})) {
+      try {
+        await resolveDep(depName, depRange, effectiveName);
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        console.warn(
+          `optional dependency ${depName}@${depRange} of ${effectiveName} could not be installed: ${reason}`,
+        );
+      }
     }
   }
 
@@ -260,6 +229,7 @@ export async function install(
   }
 
   const packages = [...resolved.values()];
+  warnUnsatisfiedPeers(packages);
   await link(opts.vfs, opts.cwd, packages);
   const lockfile = buildLockfile(rootName, rootVersion, packages);
   await opts.vfs.writeFile(
@@ -267,4 +237,26 @@ export async function install(
     JSON.stringify(lockfile, null, 2),
   );
   return { packages, lockfile, conflicts: [] };
+}
+
+/**
+ * Walk every resolved package's `peerDependencies` and emit a one-line
+ * `console.warn` for each missing peer. Already-satisfied peers are silent.
+ *
+ * We intentionally do not check whether the installed peer version satisfies
+ * the requested range: per the spec scope, we warn only on a missing entry.
+ * Range-level peer-resolution lands with full peer-dep resolution (its own
+ * milestone).
+ */
+function warnUnsatisfiedPeers(packages: readonly PinnedPackage[]): void {
+  const installed = new Set(packages.map((p) => p.name));
+  for (const pkg of packages) {
+    if (!pkg.peerDependencies) continue;
+    for (const [peerName, peerRange] of Object.entries(pkg.peerDependencies)) {
+      if (installed.has(peerName)) continue;
+      console.warn(
+        `peer dependency ${peerName}@${peerRange} required by ${pkg.name} but not installed`,
+      );
+    }
+  }
 }
