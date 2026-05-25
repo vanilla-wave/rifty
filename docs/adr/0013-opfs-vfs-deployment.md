@@ -3,6 +3,8 @@
 Status: Implemented (2026-05-24) — code paths landed; persistence round-trip requires a browser e2e (M11 follow-up)
 Date: 2026-05
 
+**Decision (2026-05-26):** Directory ops on the sync OPFS surface (`OpfsFsSync.readdirSync`/`mkdirSync`/`rmSync`) throw `NotImplementedError` permanently — this is the final scope, not a deferred slot. The `FileSystemSyncAccessHandle` platform API has no directory variant by design, so callers route directory work through the paired async `OpfsVfs`. A-005 is therefore **Closed — scope fixed, not deferred**.
+
 ## Context
 
 `@rifty/vfs` ships an `OpfsVfs` implementation but the playground bootstrap never wires it in: `getFsVfs()` always returns `MemoryVfs`. The sync mirror (`setSyncMirror(...)` used by `fs.readFileSync` and WASI) is also memory-backed. Files written through `fs.promises` evaporate on reload; persistent storage — a stated M4 deliverable — is not actually wired.

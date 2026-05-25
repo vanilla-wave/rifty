@@ -3,6 +3,14 @@
 Status: Accepted
 Date: 2026-05
 
+**Decision (2026-05-26):** A-022 (chunked transfer + streaming response), A-024 (raw TCP `net.Socket`), A-025 (cross-realm WebSocket) are confirmed deferred to **M12 (target = end of August 2026)**. Scope of the M12 rewrite:
+
+- `SerializedResponse` body becomes `ReadableStream<Uint8Array>`, marked Transferable across realms via the cross-realm bridge from ADR-0011.
+- Cross-realm WebSocket bridge is built on a dedicated `MessagePort` per connection rather than the current `BroadcastChannel` (which has no per-connection isolation and no backpressure).
+- `net.Socket` gains a full TCP-shape surface (raw byte streaming, `_write`/`_read` honour `chunk` not HTTP frames). Where TCP semantics can't be faithfully emulated in a browser (e.g. `localAddress` selection), the TSDoc declares the limitation as final.
+
+M12 starts only after M11 ships ADR-0011's worker-as-process — the bridge is the load-bearing primitive.
+
 ## Context
 
 `@rifty/net` today provides `node:http` over a buffered `Response`-shape RPC, with the response body fully materialised before delivery. `node:net.Socket` is implemented in terms of the HTTP layer (it carries HTTP-shape frames, not raw bytes). `node:ws` works only when client and server are in the same realm. Three REVIEW_ACTIONS entries — A-022 (chunked transfer encoding), A-024 (raw TCP via `net.Socket`), A-025 (cross-realm WebSocket) — each describe one symptom of the same buffered-RPC constraint.

@@ -8,7 +8,7 @@
 - `applyAnsi`/`writeWithStream` helpers to colour stdout (default) and stderr (red).
 - `RiftyTerminalOptions.onSignal('SIGINT')` callback so the host can route Ctrl+C to a kernel `processHandle.kill('SIGINT')` capability. The terminal still local-echoes `^C\r\n` itself before invoking the callback, matching kernel-TTY behaviour.
 - `classifyKey(data)` helper in `keys.ts` exposing the byte→event mapping as a pure function — driven by unit tests for every key form (Enter, Backspace, Tab, arrows, Ctrl+C, multi-line paste, CSI-injection guard).
-- `RiftyTerminal.handleInput(data)` is now public (still the same code path xterm `onData` routes through) so unit tests can drive it without a DOM.
+- `RiftyTerminal.handleInput(data)` is currently `public` (still the same code path xterm `onData` routes through) so unit tests can drive it without a DOM. Privatisation deferred — see A-041 (REVIEW_ACTIONS.md): swap to `private handleInput` + `onHandleInput?` option requires rewriting `terminal.test.ts`'s ~30 direct-call sites to await a callback, which is out of scope for the current "don't break the test suite" pass. Tracked for a dedicated test-rewrite session.
 
 ### Fixed
 

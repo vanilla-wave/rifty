@@ -35,19 +35,19 @@ Phase 3 surface:
 **Статус:** RESOLVED (2026-05-25, ADR-0012 implemented). `@rifty/io` теперь owns `EventEmitter`/`Buffer`/`Readable`/`Writable`/`Duplex`/`Transform`/`PassThrough`/`pipeline`/`finished` + `NotImplementedError`. `runtime-js/builtins/{events,buffer,stream}.ts` и `kernel/src/internal/event-emitter.ts` — re-export shims. `child_process.spawn` аллоцирует PIDs через `globalProcessManager.spawn(...)` (kernel ProcessManager). `worker_threads.Worker` PIDs остаются на отдельном counter до ADR-0011 worker-as-process миграции.
 
 ### A-004 [R] OPFS не используется — persistence не работает
-**Статус:** ADR-0013 (`docs/adr/0013-opfs-vfs-deployment.md`). **Update 2026-05-24 (M11):** code path landed — `packages/vfs/src/boot.ts` exposes `detectVfsBackend()` (returns `'opfs'` iff `crossOriginIsolated && OpfsVfs.isSupported()`) and `initBackend()` which calls `installOpfsFs()` when applicable. Playground bootstrap wiring + e2e reload assertion still deferred (M11 follow-up).
+**Статус:** RESOLVED (2026-05-26). ADR-0013 (`docs/adr/0013-opfs-vfs-deployment.md`). **Update 2026-05-24 (M11):** code path landed — `packages/vfs/src/boot.ts` exposes `detectVfsBackend()` (returns `'opfs'` iff `crossOriginIsolated && OpfsVfs.isSupported()`) and `initBackend()` which calls `installOpfsFs()` when applicable. **Update 2026-05-26 (bootstrap consolidation):** playground bootstrap wiring landed — `bootstrapPlayground()` in `apps/playground/src/boot.ts` orchestrates COI assert (ADR-0002) → `initBackend()` (VFS) → `registerServiceWorker('/sw.js')` as a single awaited pipeline, awaited in `main.tsx` before `render(...)`. SW registration is no longer raced inside `App.onMount`; failures flow through `BootResult.swError` to the existing dismissible banner. E2E reload assertion added in `tests/e2e/m0-boot.spec.ts` (`write file -> reload -> file persists (OPFS round-trip, A-004)`), exercising `/workspace/persist.txt` survival across `page.reload()`. Remaining OPFS work (chunked streaming, quota error path) tracked separately under A-020 phase 2.
 
 ### A-005 [I] Sync через `FileSystemSyncAccessHandle` не реализован
-**Статус:** ADR-0013 (`OpfsFsSync` в `packages/vfs/src/`; deferred to M11). Main-realm sync calls должны бросать `NotImplementedError('fs.readFileSync', 'sync fs only available in Worker')`. **Update 2026-05-24 (M11):** DONE for file ops. `packages/vfs/src/opfs-sync.ts` implements `existsSync`, `readFileBytesSync`, `writeFileSync`, `statSync` via `FileSystemSyncAccessHandle`. Directory ops throw `NotImplementedError('OpfsFsSync.<method>', 'directory ops require an async bootstrap; use OpfsVfs for those')` — the sync OPFS API has no directory variant; callers route those through the paired `OpfsVfs`. Constructor refuses non-Worker realms with `NotImplementedError('OpfsFsSync', 'sync OPFS only available inside a Web Worker realm')`. Browser e2e round-trip deferred to M11 follow-up (see A-004).
+**Статус:** **Closed — scope fixed, not deferred** (2026-05-26 decision, см. ADR-0013 top-of-file). `OpfsFsSync` file ops (`existsSync`, `readFileBytesSync`, `writeFileSync`, `statSync`) реализованы через `FileSystemSyncAccessHandle`. Directory ops permanently throw `NotImplementedError('OpfsFsSync.<method>', 'directory ops require an async bootstrap; use OpfsVfs for those')` — `FileSystemSyncAccessHandle` platform API не имеет directory variant by design, callers routing через paired async `OpfsVfs`. Конструктор отказывается работать вне Worker realm с `NotImplementedError('OpfsFsSync', 'sync OPFS only available inside a Web Worker realm')`. Browser e2e round-trip — отдельный M11 follow-up (см. A-004).
 
 ### A-006 [I] Две VFS параллельно — нет «одного источника истины»
-**Статус:** ADR-0014 (`docs/adr/0014-shared-vfs-backing-tree.md`). Async `Vfs` и sync `FsSync` теперь общий backend; реализация M11.
+**Статус:** ADR-0014 (`docs/adr/0014-shared-vfs-backing-tree.md`). **Decision (2026-05-26):** имплементировать в **M11 (end of June 2026)**. Sketch: process-wide `MemoryBackend` singleton owns in-memory tree; `MemoryVfs` (async view) и `MemoryFsSync` (sync view) — thin wrappers через него. OPFS pair (`OpfsVfs` + `OpfsFsSync`) разделяют OPFS directory handle + in-memory `Map<string, FileSystemSyncAccessHandle>`. WASI preopens используют тот же backend instance. `installMemoryFs()` / `installOpfsFs()` — единственные call sites, минтящие backend.
 
 ### A-007 [I] D-005 shadow-registry символический
 **Статус:** RESOLVED — ADR-0015 имплементирован (2026-05-24). `tools/shadow-registry/` — новый workspace-пакет `@rifty/shadow-registry` с `bakedOverrides`, `esbuildShimFiles`, `rollupShimFiles`. `packages/npm-client/src/overrides.ts` и `apps/playground/src/adapters/esbuild-shim.ts` теперь тонкие адаптеры/re-exports. `unenv` остаётся отложенным до концретного триггера (см. ADR-0015 §Decision).
 
 ### A-008 [I] esbuild-shim — passthrough, M10 финал — фейк
-**Статус:** ADR-0011 (зависит от worker-as-process для запуска `esbuild.wasm` через WASI). Acceptance включает «esbuild.wasm runs through WASI runner». **Update 2026-05-25:** инфраструктура для worker-as-process + sync IPC теперь есть (ADR-0011 phases 1–3 implemented — см. A-001/A-002). Открыто: vendored `esbuild.wasm` и WASI-связка для его preopen'ов. Будет адресовано отдельным заходом.
+**Статус:** Deferred to **M11 toolchain push** (2026-05-26 decision, см. ADR-0011 §"M11 follow-up — esbuild.wasm via WASI"). Scope: vendored `esbuild.wasm` под `tools/esbuild-wasm/`, WASI preopens для esbuild's tmpdir (mapped через ADR-0014 shared backend), stdin/stdout через kernel-spawned Worker stdio `MessagePort`s из phase 2 ADR-0011. `esbuild-shim` adapter в `apps/playground` свапается с passthrough на spawning kernel Worker + WASI runner.
 
 ---
 
@@ -91,25 +91,25 @@ Phase 3 surface:
 **Статус:** ADR-0019 (`docs/adr/0019-cwd-in-process-record.md`). Per-process cwd state in `ProcessManager`; M11.
 
 ### A-020 [R] `createReadStream` не стримит
-**Статус:** PARTIAL — phase 1 RESOLVED (2026-05-24 второй sub-session), phase 2 ADR-0020 M11. Phase 1: добавлен `openReadable(path, opts?): Promise<ReadableStream<Uint8Array>>` в `Vfs` interface (`packages/vfs/src/types.ts`), реализован в `MemoryVfs` (default chunkSize 64 KiB, start/end byte offsets), стабы в `OpfsVfs` + `SyncMirrorVfs` (бросают с pointer'ом на M11). 5 conformance-тестов pass. **Phase 2 (M11):** OpfsVfs реальная реализация через `File.stream()` + переписывание `createReadStream` поверх `openReadable` — заблокировано ADR-0014 (split VFS backend сейчас сломает источник истины).
+**Статус:** PARTIAL — phase 1 RESOLVED (2026-05-24 второй sub-session), phase 2 deferred **post-A-006** (2026-05-26 decision, см. ADR-0020 top-of-file). Phase 1: добавлен `openReadable(path, opts?): Promise<ReadableStream<Uint8Array>>` в `Vfs` interface (`packages/vfs/src/types.ts`), реализован в `MemoryVfs` (default chunkSize 64 KiB, start/end byte offsets), стабы в `OpfsVfs` + `SyncMirrorVfs` (бросают с pointer'ом на M11). 5 conformance-тестов pass. **Phase 2:** gated on ADR-0014 (shared VFS backing tree) landing first — иначе `OpfsVfs.openReadable` через `File.stream()` от одной tree против `createReadStream` fallback от другой ломает "single source of truth" из M4/M8. Order: ADR-0014 (M11) → ADR-0020 phase 2 (M11).
 
 ### A-021 [R] Pipes между процессами — строковая шина
 **Статус:** PARTIAL — ADR-0011 phase 3 implemented JSON-over-UTF-8 framing для sync RPC (см. A-001). Binary stdio over MessagePort с backpressure — отдельный follow-up: framing в phase 3 это JSON, не raw bytes. Будет адресовано отдельным заходом.
 
 ### A-022 [I] Chunked transfer encoding и streaming response отсутствуют
-**Статус:** ADR-0017 (`docs/adr/0017-net-scope-and-streaming-rewrite.md`). Streaming `SerializedResponse` (body как `ReadableStream` Transferable); M12.
+**Статус:** ADR-0017 — **M12 confirmed (target = end of August 2026)** (2026-05-26 decision). `SerializedResponse` body as `ReadableStream<Uint8Array>` Transferable across realms через cross-realm bridge из ADR-0011. M12 starts только после M11 ships ADR-0011 worker-as-process — bridge является load-bearing primitive.
 
 ### A-023 [I] SW → main thread, а не SW → Worker
-**Статус:** ADR-0011 (нужна cross-realm net-bridge; зависит от worker-as-process; M11).
+**Статус:** ADR-0011 — **M11 confirmed, sequenced after A-026** (2026-05-26 decision). Blocked by cross-realm port-registry bridge из Vite-in-Worker миграции. После A-026 SW rewires с "post to first window client" → "post to worker owning the process registered for this URL", reusing same `MessagePort` registry. Dependency chain: ADR-0011 phases 1-3 (DONE) → A-026 Vite-in-Worker → A-023 SW-to-Worker.
 
 ### A-024 [R] `net.Socket` — это HTTP-RPC, не TCP
-**Статус:** ADR-0017 (зафиксирован scope: текущий `@rifty/net` — HTTP-shape only; полноценный socket — M12).
+**Статус:** ADR-0017 — **M12 confirmed (target = end of August 2026)** (2026-05-26 decision). `net.Socket` gains full TCP-shape surface: raw byte streaming, `_write`/`_read` honour `chunk` not HTTP frames. Где TCP semantics нельзя faithfully эмулировать в browser (e.g. `localAddress`), TSDoc declares limitation as final.
 
 ### A-025 [R] WebSocket — same-realm shim
-**Статус:** ADR-0017 (cross-realm WS bridge как часть streaming rewrite; M12).
+**Статус:** ADR-0017 — **M12 confirmed (target = end of August 2026)** (2026-05-26 decision). Cross-realm WS bridge через dedicated `MessagePort` per connection вместо `BroadcastChannel` (last has no per-connection isolation и no backpressure). Включено в M12 streaming rewrite вместе с A-022 / A-024.
 
 ### A-026 [R] Vite крутится в main thread page realm
-**Статус:** ADR-0011 (после worker-as-process — переезд в Worker; M11). Q-2026-05-23-002 остаётся активным до того момента.
+**Статус:** ADR-0011 + ADR-0025 — **M11 confirmed** (2026-05-26 decision). Vite переезжает из page realm в kernel-spawned Worker как только cross-realm port-registry bridge в `@rifty/net` готов. Миграция local — replace `realVite.ts` с worker-spawning version плюс registry bridge. ADR-0025 superseded для Real Vite path; main-thread Dev Mode остаётся как non-isolated fallback. Q-2026-05-23-002 уже promoted к ADR-0025.
 
 ### A-027 [R] Реальные пакеты — на mock'ах
 **Статус:** RESOLVED (2026-05-24). ADR-0021 переведён в `Implemented`. Vendored под `tests/integration/fixtures/registry/`: `picocolors-1.0.0.tgz` (2.4 KB), `ms-2.1.3.tgz` (2.9 KB), `kleur-4.1.5.tgz` (6.0 KB) — все zero-dep. `manifest.json` + per-package `<name>.json` + `local-registry.ts` (Fetcher для `RegistryClient`) дают offline fake-registry. `tests/integration/real-install.test.ts` гоняет реальный `install()` end-to-end: single-package, multi-package, lockfile + tarball-cache reuse (3 теста). Acceptance ADR-0021 для chalk/express и `tools/integration-fixtures/refresh.ts` остаются на M11 (chalk/express не zero-dep).
@@ -121,16 +121,16 @@ Phase 3 surface:
 **Статус:** RESOLVED (2026-05-25). `pnpm check:e2e-coverage` listает M0..M10 specs, warning'ом репортит missing (M3/M5/M6/M7/M8/M9/M10), wired в CI lint-and-typecheck. Non-failing per ADR-0022 §Consequences; backfill — M11.
 
 ### A-030 [R] Lockfile записывается, но не читается
-**Статус:** ADR-0023 (`docs/adr/0023-lockfile-reuse.md`). Read-path для lockfile + tarball cache под `/.rifty/tarball-cache/`; M11.
+**Статус:** RESOLVED (2026-05-26). ADR-0023 implemented end-to-end. `packages/npm-client/src/installer.ts` reads `<cwd>/package-lock.json` first; when every top-level dep's pin still satisfies the requested range (after applying user + baked-in overrides — см. ADR-0023 §"Implementation notes (2026-05-26) — overrides re-applied on fast path"), replays the closed subgraph through `VfsTarballCache` at `/.rifty/tarball-cache/<sha-prefix>/<name>-<version>.tgz`. Integrity-verified cache hits skip the network entirely. Coverage: 4 conformance tests (`tests/conformance/npm/lockfile-reuse.test.ts`) + integration roundtrip (`tests/integration/real-install.test.ts:81` — second install with same `package.json` issues 0 packument + 0 tarball calls against the vendored fake-registry) + 3 unit tests for the overrides-on-fast-path divergence (`installer-lockfile.test.ts`).
 
 ### A-031 [R] Linker: конфликт версий → silent skip
-**Статус:** RESOLVED — `packages/npm-client/src/installer.ts` теперь бросает `Object.assign(new Error(...), { code: 'EVERSIONCONFLICT', packageName, firstVersion, secondVersion })`. `conflicts: []` поле сохранено для совместимости (всегда пусто). Тест: `installer.test.ts` собирает реальный gz-tar fake registry с двумя пакетами, требующими разных версий третьего; ассертит rejection с правильным shape.
+**Статус:** RESOLVED (loud-throw) — `packages/npm-client/src/installer.ts` теперь бросает `Object.assign(new Error(...), { code: 'EVERSIONCONFLICT', packageName, firstVersion, secondVersion })`. `conflicts: []` поле сохранено для совместимости (всегда пусто). Тест: `installer.test.ts` собирает реальный gz-tar fake registry с двумя пакетами, требующими разных версий третьего; ассертит rejection с правильным shape. **Nested install (M12 decision, 2026-05-26):** Полноценный nested layout (`node_modules/<a>/node_modules/<b>/...`) deferred to M12 (см. ADR-0023 top-of-file). До тех пор flat-tree linker + hard `EVERSIONCONFLICT`. Требует linker schema rewrite + lockfile-shape extension — оба fit в M12 toolchain pass вместе с `@rifty/net` cross-realm streaming rewrite.
 
 ### A-032 [R] Q4' (prod-прокси npm registry) не зарегистрирован
 **Статус:** RESOLVED — заведена `Q-2026-05-24-007` в `OPEN_QUESTIONS.md`. Provisional decision: Vercel Edge Function (fallback — Cloudflare Worker). Pre-implementation, маркер не требуется (`todo-report.mjs` корректно это распознаёт).
 
 ### A-033 [R] `compat-matrix` пустой для fs/streams/http
-**Статус:** PARTIAL → deferred. `pnpm compat:generate` не запускался автоматически в этой сессии (не входит в `pnpm test:run`, требует ручного триггера на стабильном sequence). Будет регенерироваться в M11 как часть acceptance-cycle, см. CLAUDE.md DoD.
+**Статус:** **Manually triggered before each milestone DoD cycle** (2026-05-26 decision, documented в `CLAUDE.md` §"Definition of done"). `pnpm compat:generate` не invoked на каждый PR (CI fast + avoid noisy churn) — milestone closer runs it once и коммитит diff. Регенерация для M10 → M11 transition остаётся on milestone closer's plate.
 
 ### A-034 [R] Зомби-зависимость `es-module-lexer`
 **Статус:** RESOLVED — удалён из `packages/runtime-js/package.json` `dependencies`. Lockfile регенерирован; пакет остаётся в дереве только как транзитивная зависимость Vite (это норм). Импортов в `packages/` нет (`rg "es-module-lexer" packages/` — 0 hits в source).
@@ -175,7 +175,9 @@ Phase 3 surface:
 ## Что осталось открытым
 
 - **A-033** — `compat:generate` не запускался; M11 как часть DoD-cycle.
-- **Implementation deferred items для M11:** A-001, A-002, A-003, A-004 (full), A-005, A-006, A-007, A-008, A-014, A-017 (full plugin spec в ADR-0016 уже реализован, но broader migration к "SW only as bundled artifact across all environments" — это уже M11), A-019, A-020 (phase 2: OPFS + fs-streams rewrite), A-021, A-022 (полный coverage), A-023, A-026, A-027 (chalk/express follow-up — zero-dep slice уже landed), A-030, A-031 (nested install), A-039 (WASI split).
+
+- **A-041 [R] `RiftyTerminal.handleInput` публичный «for testing»** (2026-05-26): `packages/terminal/src/terminal.ts:109` — `handleInput` сейчас `public` с TSDoc-комментарием, что production callers не должны его звать. Задача: сделать его `private` + добавить `onHandleInput?: (e: KeyEvent) => void` callback в `RiftyTerminalOptions` для test observability. **Status: deferred** — существующий `packages/terminal/src/terminal.test.ts` плотно завязан на direct `await term.handleInput(...)` вызовы (~30 тестов, синхронизация через возвращаемый Promise). Переход на callback требует полного переписывания test orchestration (await на callback emit вместо method return), что выходит за рамки текущей "не ломать тестовый suite"-задачи. Возвращаемся в отдельной сессии когда test rewrite будет main focus.
+- **Implementation deferred items для M11:** A-001, A-002, A-003, A-005, A-006, A-007, A-008, A-014, A-017 (full plugin spec в ADR-0016 уже реализован, но broader migration к "SW only as bundled artifact across all environments" — это уже M11), A-019, A-020 (phase 2: OPFS + fs-streams rewrite), A-021, A-022 (полный coverage), A-023, A-026, A-027 (chalk/express follow-up — zero-dep slice уже landed), A-030, A-031 (nested install), A-039 (WASI split). (A-004 closed 2026-05-26 — bootstrap wiring + persistence e2e in place.)
 - **Implementation deferred items для M12 (после M11):** A-022/A-024/A-025 (streaming HTTP + cross-realm WS rewrite).
 - **Q-2026-05-24-007** — pre-implementation, ждёт первого prod deploy.
 - **Парные cycle/TLA parity cases (A-028)** — заблокированы runner-fix'ом (mount setup.files alongside entry).

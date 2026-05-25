@@ -1,7 +1,9 @@
 # ADR 0020: `Vfs.openReadable()` for true `createReadStream`
 
-Status: Implemented (2026-05-24) — phase 1 + phase 2 land together with ADR-0014. `OpfsVfs.openReadable` wraps `File.stream()` (with optional `slice` for start/end); `createReadStream` consumes `asyncVfs().openReadable(...)` for true incremental streaming, with a sync-mirror fallback when no async view is installed.
+Status: Phase 1 Implemented (2026-05-24). Phase 2 deferred to **post-A-006** (after ADR-0014 shared backing tree lands in M11).
 Date: 2026-05
+
+**Decision (2026-05-26):** Phase 2 (`OpfsVfs.openReadable` real implementation wrapping `File.stream()` with optional `slice` for byte ranges, plus rewriting `createReadStream` on top of `asyncVfs().openReadable(...)`) is **gated on ADR-0014 (shared VFS backing tree) landing first**. Reason: until both `Vfs` and `FsSync` views point at the same backend, an `OpfsVfs.openReadable` that returns a `ReadableStream` from one tree while `createReadStream`'s fallback path uses the other tree would manifest as a "single source of truth" violation in `M4`/`M8` acceptance. Order: ADR-0014 first → then ADR-0020 phase 2. Both land in M11.
 
 ## Context
 

@@ -1,7 +1,9 @@
 # ADR 0025: Toolchain dev servers run on the playground main thread
 
-Status: Accepted (promoted from Q-2026-05-23-002)
+Status: Accepted (promoted from Q-2026-05-23-002). Superseded by ADR-0011's M11 Vite-in-Worker migration for the Real Vite path; main-thread Dev Mode retained as non-isolated fallback.
 Date: 2026-05
+
+**Decision (2026-05-26):** A-026 (Vite in Worker) confirmed for **M11**. Real Vite migrates out of the page realm into a kernel-spawned Worker once the cross-realm port-registry bridge in `@rifty/net` lands (sequenced before A-023 SW→Worker). This ADR's main-thread choice remains the documented fallback for non-isolated environments.
 
 ## Context
 

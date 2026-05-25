@@ -3,6 +3,12 @@
 Status: Implemented (2026-05-25) — all three phases (SAB ring + Worker-per-process + sync execSync via Atomics.wait)
 Date: 2026-05
 
+**Decision (2026-05-26):** A-008 (vendored `esbuild.wasm` + WASI bindings) defers to the **M11 toolchain push**. Required: vendored `esbuild.wasm` binary in the repo, WASI preopens for esbuild's tmpdir, and stdin/stdout wiring through the spawned-Worker stdio `MessagePort`s established in this ADR's phase 2. See "M11 follow-up — esbuild.wasm via WASI" below.
+
+**Decision (2026-05-26) — A-023 (SW → Worker process registry):** Confirmed **M11**, sequenced **after A-026 (Vite-in-Worker)**. A-023 is blocked by the cross-realm port-registry bridge that the Vite-in-Worker migration introduces. Once Vite runs in its own Worker (A-026), the Service Worker rewires from "post to first window client" to "post to the worker that owns the process registered for this URL", reusing the same `MessagePort` registry. Dependency chain: phases 1-3 of this ADR (DONE) → A-026 Vite-in-Worker → A-023 SW-to-Worker.
+
+**Decision (2026-05-26) — A-026 (Vite in Worker):** Confirmed **M11**. Vite moves from the playground main-thread realm (per ADR-0025's provisional Option A) to a dedicated kernel-spawned Worker as soon as the cross-realm port-registry bridge in `@rifty/net` is ready. Migration is local — replace `realVite.ts` with a worker-spawning adapter plus the registry bridge. ADR-0025 is then superseded for the Real Vite case; main-thread Dev Mode stays as the non-isolated fallback.
+
 ## Context
 
 The architecture diagram in `PROJECT_PLAN.md` §2 assigns each Node "process" its own Worker realm, with synchronous Node APIs (`execSync`, `readFileSync` when called from a child, `worker_threads` host calls) bridged through `SharedArrayBuffer` + `Atomics.wait`/`notify`. The current implementation does none of this: `child_process` runs the child as `new Function(...)` inside the caller's realm, `worker_threads.Worker` is a thin polyfill, and `fork`/`execSync` either throw or fake completion.
@@ -127,3 +133,27 @@ Follow-ups (out of scope for phase 3, tracked separately):
 - E2E proof that `execSync` blocks only the child's runtime (≤ 100 ms
   overhead for a 10 ms child) — requires the playground's COOP/COEP
   wiring (A-016) plus the e2e harness backfill (A-029).
+
+## M11 follow-up — `esbuild.wasm` via WASI
+
+A-008 (esbuild as a real toolchain binary) lands in M11 on top of the
+worker-as-process model from this ADR. Scope:
+
+- Vendor `esbuild.wasm` under `tools/esbuild-wasm/` (pinned version checked
+  into the repo, not fetched at runtime).
+- WASI runner (`@rifty/runtime-wasi`) gains preopens for esbuild's
+  temporary directory (`/tmp` mapped into the shared backend from
+  ADR-0014) so esbuild's intermediate write-then-read pattern works.
+- stdin/stdout/stderr are wired through the spawned-Worker stdio
+  `MessagePort`s established in phase 2 above. The `esbuild-shim` adapter
+  in `apps/playground` swaps from passthrough to spawning a kernel Worker
+  that boots the WASI runner with `esbuild.wasm` as the entry.
+- Conformance: a parity test bundles a 2-file project and diff'ing the
+  bundle output against the host-installed `esbuild` (skip when host
+  esbuild is absent, like the existing `tools/node-parity-runner`
+  toolchain checks).
+
+This work is deliberately split from this ADR's three phases because the
+WASI host program test is gated on the vendored binary and the shared
+VFS backing tree from ADR-0014, neither of which exists at the time
+phase 3 lands.
