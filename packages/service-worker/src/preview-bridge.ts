@@ -9,7 +9,7 @@
  * `PreviewHandler` and returns a `SerializedResponse`.
  *
  * Wire format (ADR-0017 phase 1 streaming, plus the ADR-0016
- * `SW_PROTOCOL_VERSION` echo on every frame):
+ * `SW_PROTOCOL_VERSION` echo on every frame, ADR-0031 receive-side validation):
  *
  *   client→sw  : { type: 'rifty:preview:ready',   version }
  *   client→sw  : { type: 'rifty:preview:goodbye', version }     // teardown
@@ -37,23 +37,20 @@
 
 import { type SerializedResponse, packSerializedResponse } from './body-transport.ts';
 import {
+  SW_ERROR_PROTOCOL_VERSION_MISMATCH,
   SW_PREVIEW_GOODBYE,
   SW_PREVIEW_READY,
   SW_PREVIEW_REQUEST,
   SW_PROTOCOL_VERSION,
+  type SerializedRequest,
+  type SwProtocolVersionMismatchError,
 } from './protocol.ts';
-import { type ReadyClientsRegistry, createReadyClientsRegistry } from './ready-clients.ts';
+import { createReadyClientsRegistry } from './ready-clients.ts';
+import { routePreview } from './route-preview.ts';
 
 export type { SerializedResponse } from './body-transport.ts';
 export { canTransferReadableStream, packSerializedResponse } from './body-transport.ts';
-
-export interface SerializedRequest {
-  port: number;
-  url: string;
-  method: string;
-  headers: Record<string, string>;
-  body?: Uint8Array | null;
-}
+export type { SerializedRequest } from './protocol.ts';
 
 export type PreviewHandler = (req: SerializedRequest) => Promise<SerializedResponse>;
 
@@ -71,8 +68,6 @@ export function matchPreviewUrl(pathname: string): { port: number; path: string 
   const suffix = m[2] ?? '/';
   return { port, path: suffix };
 }
-
-let nextRequestId = 1;
 
 /**
  * Default timeout (ms) for the `rifty:preview:ready` handshake. If the main
@@ -122,7 +117,11 @@ export function createPreviewInterceptor(
     const url = new URL(event.request.url);
     const match = matchPreviewUrl(url.pathname);
     if (!match) return;
-    event.respondWith(routePreview(scope, event.request, match, registry, timeoutMs));
+    // ADR-0031 — prefer `event.resultingClientId` (for navigations that create
+    // a new client) then `event.clientId`, so multi-window pages route to the
+    // correct owner instead of always picking the first match.
+    const clientId = event.resultingClientId || event.clientId || null;
+    event.respondWith(routePreview(scope, event.request, match, registry, timeoutMs, clientId));
   };
 
   scope.addEventListener('fetch', fetchHandler);
@@ -147,97 +146,6 @@ export function installPreviewInterceptor(scope: ServiceWorkerGlobalScope): () =
   return () => handle.teardown();
 }
 
-async function routePreview(
-  scope: ServiceWorkerGlobalScope,
-  request: Request,
-  match: { port: number; path: string },
-  registry: ReadyClientsRegistry,
-  timeoutMs: number,
-): Promise<Response> {
-  const clients = await scope.clients.matchAll({ type: 'window', includeUncontrolled: false });
-  if (clients.length === 0) {
-    return new Response(`No client to serve preview port ${match.port}`, { status: 503 });
-  }
-  const client = clients[0]!;
-  if (registry.isMismatched(client.id)) {
-    return new Response('protocol version mismatch', { status: 503 });
-  }
-  const outcome = await registry.waitForReady(client.id, timeoutMs);
-  if (outcome === 'mismatch') {
-    return new Response('protocol version mismatch', { status: 503 });
-  }
-  if (outcome === 'timeout') {
-    if (registry.isMismatched(client.id)) {
-      return new Response('protocol version mismatch', { status: 503 });
-    }
-    return new Response(`preview-bridge not ready within ${timeoutMs}ms`, { status: 503 });
-  }
-
-  const channel = new MessageChannel();
-  const bodyBytes =
-    request.method === 'GET' || request.method === 'HEAD'
-      ? null
-      : new Uint8Array(await request.arrayBuffer());
-  const requestId = nextRequestId++;
-  const serialised: SerializedRequest = {
-    port: match.port,
-    url: `http://preview.local${match.path}${url(request).search}`,
-    method: request.method,
-    headers: Object.fromEntries(request.headers),
-    body: bodyBytes,
-  };
-
-  return new Promise<Response>((resolve) => {
-    channel.port1.onmessage = (e): void => {
-      const data = e.data as SerializedResponse | { error: string };
-      if ('error' in data) {
-        resolve(new Response(data.error, { status: 502 }));
-        return;
-      }
-      const headers = new Headers(data.headers);
-      // The playground page is cross-origin-isolated (COOP same-origin + COEP
-      // credentialless — D-001). Iframe-loaded preview responses need their
-      // own CORP + COEP or the browser blocks them. Set defaults that match
-      // the page; explicit handler-supplied values win because Headers.set
-      // here would overwrite — only set if absent.
-      if (!headers.has('Cross-Origin-Resource-Policy')) {
-        headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
-      }
-      if (!headers.has('Cross-Origin-Embedder-Policy')) {
-        headers.set('Cross-Origin-Embedder-Policy', 'credentialless');
-      }
-      let body: BodyInit | null = null;
-      const raw = data.body;
-      if (raw instanceof ReadableStream) {
-        body = raw;
-      } else if (raw instanceof Uint8Array) {
-        const copy = new ArrayBuffer(raw.byteLength);
-        new Uint8Array(copy).set(raw);
-        body = copy;
-      } else if (raw != null) {
-        // Defensive: handle plain ArrayBuffer too. `data` is structured-cloned
-        // on the wire, so a Uint8Array view becomes a Uint8Array again, and
-        // an ArrayBuffer stays an ArrayBuffer.
-        body = raw as ArrayBuffer;
-      }
-      resolve(new Response(body, { status: data.status, statusText: data.statusText, headers }));
-    };
-    client.postMessage(
-      {
-        type: SW_PREVIEW_REQUEST,
-        requestId,
-        version: SW_PROTOCOL_VERSION,
-        request: serialised,
-      },
-      [channel.port2],
-    );
-  });
-}
-
-function url(request: Request): URL {
-  return new URL(request.url);
-}
-
 /**
  * Main-thread side. Listens for `rifty:preview:request` messages from the SW
  * and dispatches each to the given handler. Posts the
@@ -256,6 +164,21 @@ export function setupPreviewBridge(handler: PreviewHandler): () => void {
     if (data?.type !== SW_PREVIEW_REQUEST || !data.request) return;
     const replyPort = event.ports[0];
     if (!replyPort) return;
+    // ADR-0031 — every data frame carries `version`; receivers validate at
+    // decode time. On mismatch we reply with a structured error and do NOT
+    // invoke the user handler so cross-version drift cannot trigger
+    // side effects.
+    if (data.version !== SW_PROTOCOL_VERSION) {
+      const got = typeof data.version === 'string' ? data.version : String(data.version);
+      const mismatch: SwProtocolVersionMismatchError = {
+        kind: SW_ERROR_PROTOCOL_VERSION_MISMATCH,
+        expected: SW_PROTOCOL_VERSION,
+        got,
+        message: `preview request protocol version mismatch: got ${got}, want ${SW_PROTOCOL_VERSION}`,
+      };
+      replyPort.postMessage({ error: mismatch });
+      return;
+    }
     try {
       const resp = await handler(data.request);
       const { message, transfer } = await packSerializedResponse(resp);

@@ -20,6 +20,7 @@ export type {
   SerializedResponse,
 } from './preview-bridge.ts';
 export {
+  SW_ERROR_PROTOCOL_VERSION_MISMATCH,
   SW_PING,
   SW_PONG,
   SW_PREVIEW_GOODBYE,
@@ -33,4 +34,5 @@ export type {
   SwPreviewGoodbyeFrame,
   SwPreviewReadyFrame,
   SwPreviewRequestType,
+  SwProtocolVersionMismatchError,
 } from './protocol.ts';

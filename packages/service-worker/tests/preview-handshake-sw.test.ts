@@ -17,11 +17,11 @@ interface MockClient {
 }
 
 interface MockScope {
-  clients: { matchAll: ReturnType<typeof vi.fn> };
+  clients: { matchAll: ReturnType<typeof vi.fn>; get: ReturnType<typeof vi.fn> };
   listeners: Record<string, ((event: unknown) => void)[]>;
   addEventListener: (type: string, fn: (event: unknown) => void) => void;
   removeEventListener: (type: string, fn: (event: unknown) => void) => void;
-  fetch: (url: string, init?: RequestInit) => Promise<Response>;
+  fetch: (url: string, init?: RequestInit & { clientId?: string }) => Promise<Response>;
   postMessage: (data: unknown, source: MockClient) => void;
 }
 
@@ -35,7 +35,10 @@ function makeMockClient(id: string): MockClient {
 function makeMockScope(clients: MockClient[]): MockScope {
   const listeners: Record<string, ((event: unknown) => void)[]> = {};
   return {
-    clients: { matchAll: vi.fn(async () => clients) },
+    clients: {
+      matchAll: vi.fn(async () => clients),
+      get: vi.fn(async (id: string) => clients.find((c) => c.id === id)),
+    },
     listeners,
     addEventListener(type, fn): void {
       const arr = listeners[type] ?? [];
@@ -51,8 +54,11 @@ function makeMockScope(clients: MockClient[]): MockScope {
     async fetch(url, init): Promise<Response> {
       const fetchListeners = listeners.fetch ?? [];
       let response: Promise<Response> | undefined;
+      const { clientId, ...requestInit } = init ?? {};
       const event = {
-        request: new Request(url, init),
+        request: new Request(url, requestInit),
+        clientId: clientId ?? '',
+        resultingClientId: '',
         respondWith(p: Promise<Response>): void {
           response = p;
         },
@@ -85,7 +91,7 @@ describe('SW-side handshake state machine', () => {
       scope as unknown as ServiceWorkerGlobalScope,
       hooks,
     );
-    const responsePromise = scope.fetch('http://x/preview/3000/path');
+    const responsePromise = scope.fetch('http://x/preview/3000/path', { clientId: 'client-A' });
     await Promise.resolve();
     // Before the ready handshake the SW must NOT dispatch.
     expect(client.postMessage).not.toHaveBeenCalled();
@@ -107,7 +113,7 @@ describe('SW-side handshake state machine', () => {
     const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
       timeoutMs: 3_000,
     });
-    const responsePromise = scope.fetch('http://x/preview/3000/path');
+    const responsePromise = scope.fetch('http://x/preview/3000/path', { clientId: 'client-A' });
     await vi.advanceTimersByTimeAsync(3_001);
     const response = await responsePromise;
     expect(response.status).toBe(503);
@@ -124,7 +130,7 @@ describe('SW-side handshake state machine', () => {
     });
     scope.postMessage({ type: SW_PREVIEW_READY, version: SW_PROTOCOL_VERSION }, client);
     scope.postMessage({ type: SW_PREVIEW_GOODBYE, version: SW_PROTOCOL_VERSION }, client);
-    const responsePromise = scope.fetch('http://x/preview/3000/path');
+    const responsePromise = scope.fetch('http://x/preview/3000/path', { clientId: 'client-A' });
     await vi.advanceTimersByTimeAsync(3_001);
     const response = await responsePromise;
     expect(response.status).toBe(503);
@@ -139,17 +145,43 @@ describe('SW-side handshake state machine', () => {
       timeoutMs: 3_000,
     });
     scope.postMessage({ type: SW_PREVIEW_READY, version: '999' }, client);
-    const responsePromise = scope.fetch('http://x/preview/3000/path');
+    const responsePromise = scope.fetch('http://x/preview/3000/path', { clientId: 'client-A' });
     const response = await responsePromise;
     expect(response.status).toBe(503);
     expect(await response.text()).toBe('protocol version mismatch');
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    const r2 = await scope.fetch('http://x/preview/3000/path');
+    const r2 = await scope.fetch('http://x/preview/3000/path', { clientId: 'client-A' });
     expect(r2.status).toBe(503);
     // A second mismatched ready frame from the same client should not re-warn.
     scope.postMessage({ type: SW_PREVIEW_READY, version: '999' }, client);
     expect(warnSpy).toHaveBeenCalledTimes(1);
     warnSpy.mockRestore();
+    interceptor.teardown();
+  });
+
+  it('routes a fetch with event.clientId to that client, not matchAll()[0]', async () => {
+    // Two ready clients. matchAll() returns A first; the fetch event names B.
+    // The SW must route to B — picking matchAll()[0] would misroute. ADR-0031.
+    const clientA = makeMockClient('client-A');
+    const clientB = makeMockClient('client-B');
+    const scope = makeMockScope([clientA, clientB]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage({ type: SW_PREVIEW_READY, version: SW_PROTOCOL_VERSION }, clientA);
+    scope.postMessage({ type: SW_PREVIEW_READY, version: SW_PROTOCOL_VERSION }, clientB);
+    const responsePromise = scope.fetch('http://x/preview/3000/path', { clientId: 'client-B' });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(clientA.postMessage).not.toHaveBeenCalled();
+    expect(clientB.postMessage).toHaveBeenCalledTimes(1);
+    const [, transfer] = clientB.postMessage.mock.calls[0]!;
+    const replyPort = (transfer as MessagePort[])[0]!;
+    replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
+    const response = await responsePromise;
+    expect(response.status).toBe(200);
     interceptor.teardown();
   });
 });

@@ -116,4 +116,48 @@ describe('main-thread setupPreviewBridge handshake', () => {
       env.restore();
     }
   });
+
+  it('rejects a SW_PREVIEW_REQUEST with mismatched version without calling the handler', async () => {
+    const env = installNavigator();
+    try {
+      let received: unknown = null;
+      const channel = new MessageChannel();
+      channel.port1.onmessage = (e): void => {
+        received = e.data;
+      };
+      const handler = vi.fn(async () => ({
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        body: null,
+      }));
+      const teardown = setupPreviewBridge(handler);
+      const messageFn = env.listeners.message?.[0];
+      expect(messageFn).toBeDefined();
+      messageFn!({
+        data: {
+          type: SW_PREVIEW_REQUEST,
+          requestId: 1,
+          version: '999',
+          request: { port: 3000, url: 'http://preview.local/', method: 'GET', headers: {} },
+        },
+        ports: [channel.port2],
+      });
+      await new Promise((r) => setTimeout(r, 5));
+      expect(handler).not.toHaveBeenCalled();
+      expect(received).toBeTruthy();
+      const r = received as {
+        error?: { kind?: string; expected?: string; got?: string };
+      };
+      expect(r.error).toBeDefined();
+      expect(r.error?.kind).toBe('PROTOCOL_VERSION_MISMATCH');
+      expect(r.error?.expected).toBe(SW_PROTOCOL_VERSION);
+      expect(r.error?.got).toBe('999');
+      channel.port1.close();
+      channel.port2.close();
+      teardown();
+    } finally {
+      env.restore();
+    }
+  });
 });

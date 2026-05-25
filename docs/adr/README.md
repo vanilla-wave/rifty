@@ -32,6 +32,7 @@ ADRs are immutable after merge. New decisions get new ADRs; supersedence is expl
 | 0026 | `process.platform` / `process.arch` report honest values | — |
 | 0027 | Per-file shim overlays live in the consuming adapter | — |
 | 0028 | Vercel Edge Function proxies npm registry in production | closes Q4' |
+| 0031 | Every SW↔main wire frame carries `version`; receivers validate at decode (extends ADR-0016) | — |
 | 0032 | SyncRpc protocol-version field in the SAB header | — |
 
 For the broad rationale and trade-offs, read PROJECT_PLAN.md §8 first; ADRs are the durable spec.

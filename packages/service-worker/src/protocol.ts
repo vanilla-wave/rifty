@@ -52,3 +52,39 @@ export interface SwPreviewGoodbyeFrame {
   type: typeof SW_PREVIEW_GOODBYE;
   version: string;
 }
+
+/**
+ * SW→client request frame payload (the actual HTTP-ish request data, sibling
+ * of the wire-envelope fields like `type`/`version`/`requestId`).
+ */
+export interface SerializedRequest {
+  port: number;
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  body?: Uint8Array | null;
+}
+
+/**
+ * Discriminator for the protocol-version-mismatch error posted from the main
+ * thread back to the SW when it receives a {@link SW_PREVIEW_REQUEST} frame
+ * whose `version` does not match {@link SW_PROTOCOL_VERSION}. The SW maps this
+ * to a 503 response (ADR-0031).
+ */
+export const SW_ERROR_PROTOCOL_VERSION_MISMATCH = 'PROTOCOL_VERSION_MISMATCH';
+
+/**
+ * Structured error returned by the main-thread bridge when a peer frame
+ * carries a `version` that does not match {@link SW_PROTOCOL_VERSION}.
+ * Receivers should map this to a 503 ("protocol version mismatch") response.
+ *
+ * ADR-0031 — every wire frame between the SW and the main thread carries a
+ * `version` field; the receiver validates at decode time and refuses to act
+ * on a mismatched peer.
+ */
+export interface SwProtocolVersionMismatchError {
+  kind: typeof SW_ERROR_PROTOCOL_VERSION_MISMATCH;
+  expected: string;
+  got: string;
+  message: string;
+}
