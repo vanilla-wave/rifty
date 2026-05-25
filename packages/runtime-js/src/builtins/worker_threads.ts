@@ -58,7 +58,12 @@ export class Worker extends EventEmitter {
       this.startViaKernel();
       return;
     }
-    // fallback per ADR-0011 — in-realm polyfill (single-threaded).
+    // Fallback per ADR-0011 — in-realm polyfill (single-threaded). The
+    // fallback violates worker_threads' core promise (separate event loop),
+    // so emit a loud one-shot warning per module import. Stays loud-but-not-
+    // throwing because conformance + several integration paths still rely on
+    // the same-realm behaviour (workerData/parentPort propagation works).
+    warnSameRealmFallbackOnce();
     this.startSameRealm();
   }
 
@@ -142,6 +147,30 @@ export class Worker extends EventEmitter {
 }
 
 let nextThreadId = 2;
+
+/** One-shot guard so the same-realm warning fires exactly once per module
+ * import. Exported via {@link _resetFallbackWarnState} for tests only. */
+let fallbackWarnFired = false;
+
+function warnSameRealmFallbackOnce(): void {
+  if (fallbackWarnFired) return;
+  fallbackWarnFired = true;
+  console.warn(
+    '[rifty:worker_threads] Falling back to same-realm execution: ' +
+      'kernel.spawnWorker capability not available ' +
+      '(SAB IPC unsupported or kernelWorkerUrl not configured). ' +
+      'workerData and parentPort still propagate, but this Worker shares ' +
+      'the parent event loop — no real parallelism. ' +
+      'To enable real Workers: ensure cross-origin isolation (SharedArrayBuffer) ' +
+      'and call kernel.setKernelWorkerUrl(...) at host boot (ADR-0011 phase 2).',
+  );
+}
+
+/** Test-only: reset the one-shot warn guard so a follow-up assertion can
+ * verify the warning fires again. Not part of the package's public API. */
+export function _resetFallbackWarnState(): void {
+  fallbackWarnFired = false;
+}
 
 export const isMainThread = true;
 export const parentPort: EventEmitter | null = null;

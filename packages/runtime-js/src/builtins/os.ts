@@ -21,12 +21,16 @@ export function hostname(): string {
   return 'rifty';
 }
 
+// ADR-0026 — `os.platform()` / `os.arch()` mirror `process.platform` /
+// `process.arch` exactly. `process.platform === 'rifty'` and
+// `process.arch === 'wasm'` are public ABI; any code doing
+// `os.platform() === process.platform` must keep working.
 export function platform(): string {
-  return 'linux';
+  return 'rifty';
 }
 
 export function arch(): string {
-  return 'wasm32';
+  return 'wasm';
 }
 
 export function type(): string {

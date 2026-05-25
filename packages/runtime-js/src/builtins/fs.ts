@@ -10,6 +10,7 @@
  * (Buffer-tagged); passing `'utf8'` returns a string. Matches Node.
  */
 
+import { NotImplementedError } from '@rifty/io';
 import { isAbsolute, joinPath, normalizePath } from '@rifty/vfs';
 import { Buffer, type Encoding } from './buffer.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -226,10 +227,13 @@ export function renameSync(src: string, dst: string): void {
   syncMirror().rmSync(resolvePath(src), {});
 }
 
-// VFS has no symlinks: lstat == stat, readlink throws, realpath returns the
-// path normalized. Vite + most tooling tolerate this — they only path-check.
-export function lstatSync(p: string): Stats {
-  return statSync(p);
+// VFS has no symlinks (M9 acceptance: in-memory + OPFS, no symlink layer).
+// Hard rule "no silent stubs": rather than letting `lstatSync = statSync` and
+// `realpathSync = normalize`, we throw `NotImplementedError` so callers see
+// the gap. Symlinks land in M12 — until then, code paths that branch on these
+// will fail loudly and be visible in the compat matrix.
+export function lstatSync(_p: string): Stats {
+  throw new NotImplementedError('fs.lstatSync', 'symlinks not supported until M12');
 }
 
 export function readlinkSync(p: string): string {
@@ -240,17 +244,13 @@ export function readlinkSync(p: string): string {
   throw Object.assign(new Error(`EINVAL: ${p}`), { code: 'EINVAL', path: p });
 }
 
-function _realpathSyncImpl(p: string): string {
-  const np = resolvePath(p);
-  if (!syncMirror().existsSync(np)) {
-    throw Object.assign(new Error(`ENOENT: ${p}`), { code: 'ENOENT', path: p });
-  }
-  return np;
+function _realpathSyncImpl(_p: string): string {
+  throw new NotImplementedError('fs.realpathSync', 'symlinks not supported until M12');
 }
 
 // `realpathSync` doubles as a function with a `.native` alias — Node's
 // `fs.realpathSync.native` is a separate (C++-backed) implementation; here
-// they're the same.
+// both throw the same `NotImplementedError` (no silent stub).
 export const realpathSync: ((p: string) => string) & { native: (p: string) => string } =
   Object.assign(_realpathSyncImpl, { native: _realpathSyncImpl });
 
