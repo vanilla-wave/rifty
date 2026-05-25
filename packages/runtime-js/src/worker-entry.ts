@@ -13,7 +13,7 @@
 
 import { Buffer } from './builtins/buffer.ts';
 import { __setCreateRequireImpl } from './builtins/module.ts';
-import { installProcessGlobals } from './builtins/process.ts';
+import { installProcessGlobals, setProcessCwd } from './builtins/process.ts';
 import { installTimerGlobals } from './builtins/timers.ts';
 import { createModuleLoader } from './module-loader/index.ts';
 import { MemorySyncVfs } from './module-loader/memory-sync-vfs.ts';
@@ -63,6 +63,14 @@ const sink = {
 installConsole(sink);
 
 async function handleEval(req: EvalRequest): Promise<EvalResult> {
+  // ADR-0019 — when the host attaches `cwd` to the eval request (e.g. the
+  // kernel propagating a `ProcessRecord.cwd` snapshot at spawn time), seed
+  // the per-Worker cwd cell before running user code. `setProcessCwd`
+  // bypasses VFS validation: the host is trusted to pass a path that's
+  // already been resolved against the active record.
+  if (req.cwd !== undefined) {
+    setProcessCwd(req.cwd);
+  }
   try {
     const value = await evalInRepl(req.code);
     if (value !== undefined) {

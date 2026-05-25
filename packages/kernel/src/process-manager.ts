@@ -30,7 +30,19 @@ export interface ProcessIO {
   signal: AbortSignal;
 }
 
-export interface ProcessHandle extends EventEmitter {
+/**
+ * Discriminator tagging which spawn path produced the handle. Callers MUST
+ * branch on this field rather than reaching for `handle.ports`:
+ *
+ *   - `'same-realm'` — produced by `ProcessManager.spawn(...)`. Runs the
+ *     supplied handler in the parent realm; `ports` is always `undefined`.
+ *   - `'worker'` — produced by `ProcessManager.spawnWorker(...)`. Backed by
+ *     a real `kernel.spawnWorker` Worker realm (ADR-0011 phase 2); `ports`
+ *     carries the parent-side stdio `MessagePort`s.
+ */
+export type ProcessHandleKind = 'same-realm' | 'worker';
+
+interface ProcessHandleBase extends EventEmitter {
   readonly pid: number;
   readonly ppid: number;
   readonly command: string;
@@ -43,13 +55,25 @@ export interface ProcessHandle extends EventEmitter {
   /** Send a message into the child (for `fork`-style IPC). */
   send(message: unknown): boolean;
   kill(signal?: string): boolean;
-  /**
-   * For Worker-backed children (ADR-0011 phase 2): the parent-side stdio
-   * `MessagePort`s. Undefined for same-realm fallback children — callers
-   * should branch on `handle.ports !== undefined` rather than assume.
-   */
-  readonly ports?: WorkerStdioPorts;
 }
+
+/** Same-realm `spawn(...)` handle — `ports` is `undefined` by construction. */
+export interface SameRealmProcessHandle extends ProcessHandleBase {
+  readonly kind: 'same-realm';
+  readonly ports?: undefined;
+}
+
+/** Worker-backed `spawnWorker(...)` handle — `ports` is always present. */
+export interface WorkerProcessHandle extends ProcessHandleBase {
+  readonly kind: 'worker';
+  readonly ports: WorkerStdioPorts;
+}
+
+/**
+ * Public handle. Sealed discriminated union of {@link SameRealmProcessHandle}
+ * and {@link WorkerProcessHandle}. Branch on `handle.kind` for type narrowing.
+ */
+export type ProcessHandle = SameRealmProcessHandle | WorkerProcessHandle;
 
 interface ProcessRecord {
   readonly pid: number;
@@ -107,12 +131,14 @@ export class ProcessManager {
       abortController,
     };
 
-    class Handle extends EventEmitter implements ProcessHandle {
+    class Handle extends EventEmitter implements SameRealmProcessHandle {
+      readonly kind = 'same-realm' as const;
       readonly pid = pid;
       readonly ppid = ppid;
       readonly command = command;
       exitCode: number | null = null;
       signalCode: string | null = null;
+      readonly ports = undefined;
 
       get cwd(): string {
         return record.cwd;
@@ -228,7 +254,8 @@ export class ProcessManager {
     // Captured by `WorkerHandle.kill` and the exit callback for sweeping.
     const manager = this;
 
-    class WorkerHandle extends EventEmitter implements ProcessHandle {
+    class WorkerHandle extends EventEmitter implements WorkerProcessHandle {
+      readonly kind = 'worker' as const;
       readonly pid = pid;
       readonly ppid = ppid;
       readonly command = command;

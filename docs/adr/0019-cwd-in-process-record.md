@@ -1,6 +1,6 @@
 # ADR 0019: `cwd` lives in `kernel.ProcessRecord`
 
-Status: Implemented (2026-05-24)
+Status: Implemented (2026-05-26)
 Date: 2026-05
 
 ## Context
@@ -41,3 +41,9 @@ Locate `cwd` in the kernel's `ProcessRecord`.
 - Inside the Worker realm `riftyProcess.cwd()` reads a per-Worker cell defaulting to `/workspace`; `chdir(dir)` resolves against the cell, validates via `syncMirror().statSync` (throws `ENOENT` / `ENOTDIR`), and writes the resolved value back. Once ADR-0011 lands the cell becomes a `SharedArrayBuffer`-mirrored slot tied to the kernel record.
 - `fs.ts` `resolvePath` now reads the runtime's own cwd source via `getProcessCwd()` instead of `globalThis.process.cwd()`, so behaviour is identical whether the runtime runs under Node (parity-runner) or a Web Worker.
 - 6 conformance tests (`tests/conformance/builtins/process-cwd.test.ts`) + 4 kernel unit tests (`packages/kernel/tests/process-manager.test.ts`).
+
+## Implementation notes (2026-05-26 — host eval wiring)
+
+- `EvalRequest.cwd?: string` (declared in `runtime-js/src/protocol.ts`) is now consumed: `runtime-js/src/worker-entry.ts:handleEval` reads `req.cwd` and seeds the per-Worker cwd cell via `setProcessCwd(req.cwd)` before running user code.
+- `RuntimeController.eval(code, { cwd })` lets the host pass a cwd through to the worker. The kernel-spawned Worker path threads the parent `ProcessRecord.cwd` snapshot via `WorkerSpawnSpec.cwd` (handled in `kernel.worker-entry.ts:installProcessShim` — no change needed; that's been in place since the original ADR-0019 landing).
+- `tests/conformance/builtins/process-cwd.test.ts` covers cell mutation; `packages/runtime-js/tests/host-eval-cwd.test.ts` covers the host → worker propagation through the protocol.

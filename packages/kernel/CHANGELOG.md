@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Typed cross-realm globals (P1 review fix).** New `shared-globals.ts` module exports `KernelSyncApi`, `KernelSabRing`, `publishKernelSyncApi` / `readKernelSyncApi`, and `publishKernelSabRing` / `readKernelSabRing`. Consumers (runtime-js `child_process-sync.ts`) now go through the typed read API instead of indexing `globalThis[KERNEL_SYNC_CALL_KEY]`. The string hook keys remain implementation detail but are re-exported for the rare test that needs to assert against them.
+- **`ProcessHandle` discriminator (P1 review fix).** `ProcessHandle` is now a sealed `SameRealmProcessHandle | WorkerProcessHandle` union tagged by `kind: 'same-realm' | 'worker'`. Callers branch on `handle.kind` instead of probing for `handle.ports`; the worker-backed variant's `ports` is statically known to be present.
 - **ADR-0032: SyncRpc protocol-version field.** Every SAB frame now carries
   a `u32` protocol version at offset 0 of the header. New exports:
   `SYNC_RPC_PROTOCOL_VERSION` (value `1`) and `SyncRpcProtocolMismatchError`

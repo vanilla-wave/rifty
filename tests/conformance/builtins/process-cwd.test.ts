@@ -70,4 +70,19 @@ describe('process.cwd() / chdir() — ADR-0019', () => {
       expect.objectContaining({ code: 'ERR_INVALID_ARG_TYPE' }),
     );
   });
+
+  it('inherited cwd (seeded by host via setProcessCwd) is reflected by riftyProcess.cwd()', () => {
+    // Models the kernel/host path: when a child Worker is spawned (or the
+    // host issues an eval with `request.cwd`), the Worker's bootstrap
+    // calls `setProcessCwd` to seed the per-Worker cell from the parent's
+    // `ProcessRecord.cwd` snapshot. `cwd()` then returns the inherited
+    // value, and a subsequent `chdir` mutates it locally without
+    // affecting the host's view.
+    fs.mkdirSync('/inherited', { recursive: true });
+    fs.mkdirSync('/inherited/nested', { recursive: true });
+    setProcessCwd('/inherited');
+    expect(riftyProcess.cwd()).toBe('/inherited');
+    riftyProcess.chdir('nested');
+    expect(riftyProcess.cwd()).toBe('/inherited/nested');
+  });
 });

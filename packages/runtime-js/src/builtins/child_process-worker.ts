@@ -88,10 +88,10 @@ export function spawnWorkerChild(args: SpawnWorkerArgs): ProcessHandle {
  * push `null` to signal EOF.
  */
 export function wireWorkerStdio(handle: ProcessHandle, stdout: Readable, stderr: Readable): void {
-  const ports = handle.ports;
-  if (!ports) {
-    throw new Error('wireWorkerStdio: handle has no ports (not a Worker-backed child)');
+  if (handle.kind !== 'worker') {
+    throw new Error(`wireWorkerStdio: handle is not Worker-backed (kind=${handle.kind})`);
   }
+  const ports = handle.ports;
   ports.stdout.onmessage = (ev: MessageEvent) => {
     const data = ev.data;
     if (data instanceof Uint8Array) stdout.push(data);

@@ -7,12 +7,7 @@
  */
 
 import { Buffer } from '@rifty/io';
-import {
-  KERNEL_SYNC_CALL_KEY,
-  type KernelSyncCall,
-  getKernelWorkerUrl,
-  isSabIpcSupported,
-} from '@rifty/kernel';
+import { getKernelWorkerUrl, isSabIpcSupported, readKernelSyncApi } from '@rifty/kernel';
 import { syncMirror } from './fs-sync-mirror.ts';
 
 export interface ExecSyncOptions {
@@ -26,8 +21,9 @@ export interface ExecSyncOptions {
  * `execSync` — Node-compatible synchronous child execution.
  *
  * Branching:
- *   - If we are inside a kernel-spawned Worker (the `KERNEL_SYNC_CALL_KEY`
- *     global is installed), route through the sync RPC hook. The parent
+ *   - If we are inside a kernel-spawned Worker (the kernel sync API is
+ *     published — see `@rifty/kernel.readKernelSyncApi`), route through
+ *     the sync RPC hook. The parent
  *     dispatcher spawns a fresh Worker for the child script and uses
  *     `Atomics.wait` to block this realm until the child's stdout is
  *     captured. This is the only path that truly blocks the caller — see
@@ -39,9 +35,9 @@ export interface ExecSyncOptions {
  *     marked as a fallback per ADR-0011 phases 2/3.
  */
 export function execSync(cmd: string, opts?: ExecSyncOptions): Uint8Array {
-  const hook = getKernelSyncCall();
-  if (hook !== undefined && isSabIpcSupported() && getKernelWorkerUrl() !== null) {
-    const stdout = hook('execSync', { cmd, opts: opts ?? {} });
+  const api = readKernelSyncApi();
+  if (api !== null && isSabIpcSupported() && getKernelWorkerUrl() !== null) {
+    const stdout = api.call('execSync', { cmd, opts: opts ?? {} });
     if (typeof stdout !== 'string') {
       throw new TypeError(
         `execSync: kernel returned non-string stdout (${typeof stdout}); JSON framing should always produce a string`,
@@ -71,14 +67,4 @@ export function execSync(cmd: string, opts?: ExecSyncOptions): Uint8Array {
     stdout += c;
   });
   return Buffer.from(stdout);
-}
-
-/**
- * Narrow accessor for the in-Worker sync call shim installed by
- * `worker-entry.ts`. Reads `globalThis[KERNEL_SYNC_CALL_KEY]` through a
- * shape-typed cast so no `any` leaks into the surrounding code.
- */
-function getKernelSyncCall(): KernelSyncCall | undefined {
-  const g = globalThis as { [KERNEL_SYNC_CALL_KEY]?: KernelSyncCall };
-  return g[KERNEL_SYNC_CALL_KEY];
 }

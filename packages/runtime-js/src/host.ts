@@ -14,9 +14,21 @@ export type RuntimeEvent =
   | { readonly type: 'result'; readonly result: EvalResult }
   | { readonly type: 'exit'; readonly reason: 'reset' | 'error' };
 
+/**
+ * Per-call options for {@link RuntimeController.eval}. Optional today —
+ * existing callers that pass a bare `code` string keep working.
+ *
+ * ADR-0019: `cwd` lets the host seed the per-Worker cwd cell before the
+ * eval runs. When omitted the worker keeps whatever `process.cwd()`
+ * already pointed to (default `/workspace`).
+ */
+export interface EvalOptions {
+  readonly cwd?: string;
+}
+
 export interface RuntimeController {
   /** Send an eval request; resolves with the result message. */
-  eval(code: string): Promise<EvalResult>;
+  eval(code: string, options?: EvalOptions): Promise<EvalResult>;
   /** Terminate and respawn the worker. */
   reset(): Promise<void>;
   dispose(): void;
@@ -113,12 +125,13 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
   start();
 
   return {
-    eval(code) {
+    eval(code, options) {
       const id = nextId++;
       const promise = new Promise<EvalResult>((resolve, reject) => {
         pending.set(id, { resolve, reject });
       });
-      send({ type: 'eval', request: { id, code } });
+      const request = options?.cwd !== undefined ? { id, code, cwd: options.cwd } : { id, code };
+      send({ type: 'eval', request });
       return promise;
     },
     async reset() {

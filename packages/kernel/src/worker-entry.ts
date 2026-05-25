@@ -31,6 +31,20 @@
 
 import { SabRing } from './ipc/sab-ring.ts';
 import { SyncRpcClient } from './ipc/sync-client.ts';
+import {
+  KERNEL_SAB_RING_KEY,
+  KERNEL_SYNC_CALL_KEY,
+  type KernelSyncCall,
+  publishKernelSabRing,
+  publishKernelSyncApi,
+} from './shared-globals.ts';
+
+// Re-export the global-hook keys + sync-call type. Historical consumers
+// (runtime-js, tests) imported these from `worker-entry.ts`; the canonical
+// home is now `shared-globals.ts` but the legacy re-exports stay for the
+// transition period. New code SHOULD prefer `@rifty/kernel`'s shared-globals
+// publish/read helpers.
+export { KERNEL_SAB_RING_KEY, KERNEL_SYNC_CALL_KEY, type KernelSyncCall };
 
 /** Stdio channels passed to the worker. Each is a transferred MessagePort. */
 export interface WorkerStdioPorts {
@@ -146,43 +160,18 @@ function installProcessShim(spec: WorkerSpawnSpec, ports: WorkerStdioPorts): Pro
   return shim;
 }
 
-/**
- * Internal hook key used to publish the {@link SabRing} for the spawned
- * realm. Phase 2 (sync syscalls inside runtime-js) reads this to thread the
- * ring through to `execSync`, `readFileSync`, etc.
- */
-export const KERNEL_SAB_RING_KEY = '__riftyKernelSyncRing__';
-
-/**
- * Hook key for the in-Worker sync call shim installed in phase 3. Higher
- * layers (e.g. `runtime-js/builtins/child_process.execSync`) reach for
- * `globalThis[KERNEL_SYNC_CALL_KEY](method, payload)` to delegate
- * synchronous syscalls to the parent realm. Returns whatever the
- * dispatcher's handler returned (or throws when the handler did).
- */
-export const KERNEL_SYNC_CALL_KEY = '__riftyKernelSyncCall' as const;
-
-/** Type of the in-Worker sync call shim. Narrow so callers stay `any`-free. */
-export type KernelSyncCall = (method: string, payload: unknown) => unknown;
-
 function publishSyncRing(ring: SabRing): void {
-  Object.defineProperty(globalThis, KERNEL_SAB_RING_KEY, {
-    value: ring,
-    writable: false,
-    configurable: true,
-    enumerable: false,
-  });
+  // The runtime-side `KernelSabRing` view is a structural subset of the
+  // concrete `SabRing` — pass the live instance through unchanged so
+  // higher layers can still cast back to the concrete class when they
+  // need its full API surface.
+  publishKernelSabRing(ring);
 }
 
 function publishSyncCallShim(ring: SabRing): void {
   const client = new SyncRpcClient(ring);
   const shim: KernelSyncCall = (method, payload) => client.call(method, payload);
-  Object.defineProperty(globalThis, KERNEL_SYNC_CALL_KEY, {
-    value: shim,
-    writable: false,
-    configurable: true,
-    enumerable: false,
-  });
+  publishKernelSyncApi({ call: shim });
 }
 
 async function runEntry(entry: WorkerEntryDescriptor): Promise<void> {

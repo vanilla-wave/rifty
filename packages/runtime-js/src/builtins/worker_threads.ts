@@ -82,8 +82,8 @@ export class Worker extends EventEmitter {
       // `worker.on('message', ...)` etc. once phase 3 wires worker-side
       // `parentPort`. Until then, the binary stdio is best-effort surfaced
       // as `'stdout'`/`'stderr'` events for debug visibility.
-      const ports = handle.ports;
-      if (ports) {
+      if (handle.kind === 'worker') {
+        const ports = handle.ports;
         ports.stdout.onmessage = (ev) => this.emit('stdout', ev.data);
         ports.stderr.onmessage = (ev) => this.emit('stderr', ev.data);
         ports.stdout.start();
