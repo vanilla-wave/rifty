@@ -65,6 +65,58 @@ describe('EventEmitter.removeListener with once() wrapper', () => {
   });
 });
 
+describe("EventEmitter 'newListener' meta-event", () => {
+  it('fires for plain addListener (on)', () => {
+    const ee = new EventEmitter();
+    const seen: [string | symbol, unknown][] = [];
+    ee.on('newListener', (...args) => {
+      seen.push([args[0] as string, args[1]]);
+    });
+    const handler = (): void => {};
+    ee.on('foo', handler);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.[0]).toBe('foo');
+    expect(seen[0]?.[1]).toBe(handler);
+  });
+
+  it('fires for prependListener', () => {
+    const ee = new EventEmitter();
+    const seen: [string | symbol, unknown][] = [];
+    ee.on('newListener', (...args) => {
+      seen.push([args[0] as string, args[1]]);
+    });
+    const handler = (): void => {};
+    ee.prependListener('foo', handler);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.[0]).toBe('foo');
+    expect(seen[0]?.[1]).toBe(handler);
+  });
+
+  it('fires for prependOnceListener', () => {
+    const ee = new EventEmitter();
+    const seen: [string | symbol, unknown][] = [];
+    ee.on('newListener', (...args) => {
+      seen.push([args[0] as string, args[1]]);
+    });
+    const handler = (): void => {};
+    ee.prependOnceListener('foo', handler);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.[0]).toBe('foo');
+    // The wrapper is registered, but it carries `.listener` pointing at the
+    // original handler — same shape Node passes to the newListener hook.
+    expect((seen[0]?.[1] as { listener?: typeof handler }).listener).toBe(handler);
+  });
+
+  it('does not re-emit when adding a `newListener` handler itself', () => {
+    const ee = new EventEmitter();
+    let count = 0;
+    ee.on('newListener', () => {
+      count++;
+    });
+    expect(count).toBe(0);
+  });
+});
+
 describe('once() promise helper cleanup', () => {
   it('removes both listeners on resolve path', () => {
     const ee = new EventEmitter();

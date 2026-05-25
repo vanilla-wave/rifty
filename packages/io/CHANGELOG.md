@@ -20,6 +20,12 @@
 
 ### Fixed
 
+- `EventEmitter.prependListener` and `prependOnceListener` now emit the
+  `'newListener'` meta-event before adding the listener, matching Node's
+  contract (previously only `addListener`/`on`/`once` emitted it; the prepend
+  variants silently skipped the hook). The pre-emit logic was extracted into a
+  private `emitNewListener` helper so both insertion paths produce identical
+  semantics. New unit cases under `event-emitter.test.ts` pin the behaviour.
 - `Writable` no longer emits `'drain'` after every write that drops below
   `highWaterMark`. Per Node's protocol, `'drain'` fires only when a prior
   `write()` returned `false` (HWM tripped). A new internal `needDrain` flag
@@ -59,6 +65,19 @@
 - New compat doc: `docs/compat/buffer.md`.
 - New unit tests under `packages/io/src/` for both Buffer and EventEmitter
   behaviours. New parity cases under `tools/node-parity-runner/cases/`.
+- Stream primitives now have a dedicated unit-test suite under
+  `packages/io/src/streams/`:
+  - `pipeline.test.ts` — Readable -> Transform -> Writable happy path,
+    `pipeline()` error propagation from source and sink, `finished()` resolve
+    on `end` and reject on `error`.
+  - `backpressure.test.ts` — `Writable.write()` returns `false` past HWM and
+    emits `'drain'` once; no `'drain'` for sub-HWM writes; `Readable`
+    `pause`/`resume` and `push(null)` termination.
+  - `transform.test.ts` — subclass with `transform` passed to `super()`
+    correctly maps chunks; pinned test guards against future regressions in
+    Transform's instance-field `write`/`end` rebinding (Finding #2 from the
+    streams review); `Duplex.write` routes to the writable side without
+    echoing to the readable side.
 
 ### Fixed
 

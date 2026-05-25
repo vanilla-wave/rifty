@@ -28,14 +28,7 @@ export class EventEmitter {
   }
 
   addListener(event: string | symbol, listener: Listener): this {
-    // Node emits `newListener` BEFORE the listener is added (so handlers can
-    // see the previous count). Don't re-emit for the meta-event itself.
-    if (event !== 'newListener') {
-      const meta = this.listenersMap.get('newListener');
-      if (meta && meta.length > 0) {
-        for (const m of meta.slice()) m.call(this, event, listener);
-      }
-    }
+    this.emitNewListener(event, listener);
     const arr = this.listenersMap.get(event);
     if (arr) {
       arr.push(listener);
@@ -47,6 +40,7 @@ export class EventEmitter {
   }
 
   prependListener(event: string | symbol, listener: Listener): this {
+    this.emitNewListener(event, listener);
     const arr = this.listenersMap.get(event);
     if (arr) {
       arr.unshift(listener);
@@ -54,6 +48,19 @@ export class EventEmitter {
       this.listenersMap.set(event, [listener]);
     }
     return this;
+  }
+
+  /**
+   * Emit `newListener` BEFORE the target listener is added (so handlers can
+   * see the previous count). Don't re-emit for the meta-event itself.
+   * Shared between {@link addListener} and {@link prependListener} so that
+   * both insertion paths produce the same `newListener` semantics as Node.
+   */
+  private emitNewListener(event: string | symbol, listener: Listener): void {
+    if (event === 'newListener') return;
+    const meta = this.listenersMap.get('newListener');
+    if (!meta || meta.length === 0) return;
+    for (const m of meta.slice()) m.call(this, event, listener);
   }
 
   off(event: string | symbol, listener: Listener): this {
