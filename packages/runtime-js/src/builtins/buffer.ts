@@ -6,5 +6,5 @@
 
 import { Buffer } from '@rifty/io';
 
-export { Buffer, type BufferLike, type BufferMethods, type Encoding } from '@rifty/io';
+export { Buffer, type BufferLike, type Encoding } from '@rifty/io';
 export default { Buffer };

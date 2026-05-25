@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EventEmitter } from './event-emitter.ts';
+import { EventEmitter, once } from './event-emitter.ts';
 
 describe('EventEmitter.listeners vs rawListeners', () => {
   it('listeners() returns unwrapped originals for once()', () => {
@@ -62,5 +62,39 @@ describe('EventEmitter.removeListener with once() wrapper', () => {
     if (wrapper === undefined) throw new Error('wrapper missing');
     ee.removeListener('a', wrapper);
     expect(ee.listenerCount('a')).toBe(0);
+  });
+});
+
+describe('once() promise helper cleanup', () => {
+  it('removes both listeners on resolve path', () => {
+    const ee = new EventEmitter();
+    const p = once(ee, 'x');
+    expect(ee.listenerCount('x')).toBe(1);
+    expect(ee.listenerCount('error')).toBe(1);
+    ee.emit('x', 1, 2);
+    return p.then((args) => {
+      expect(args).toEqual([1, 2]);
+      expect(ee.listenerCount('x')).toBe(0);
+      expect(ee.listenerCount('error')).toBe(0);
+    });
+  });
+
+  it('removes both listeners on reject path (error)', async () => {
+    const ee = new EventEmitter();
+    const p = once(ee, 'x');
+    expect(ee.listenerCount('x')).toBe(1);
+    expect(ee.listenerCount('error')).toBe(1);
+    const err = new Error('boom');
+    ee.emit('error', err);
+    await p.then(
+      () => {
+        throw new Error('expected reject');
+      },
+      (received) => {
+        expect(received).toBe(err);
+      },
+    );
+    expect(ee.listenerCount('x')).toBe(0);
+    expect(ee.listenerCount('error')).toBe(0);
   });
 });

@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **ADR-0030:** `Buffer` is now a real subclass of `Uint8Array`. Prototype
+  methods (toString, equals, write, swap, compare, copy, fill, indexOf,
+  read/write{Int,UInt,Float,Double,BigInt}*) moved from per-instance
+  `Object.defineProperty` stamping to `Buffer.prototype`. `Symbol.species`
+  returns `Buffer`, so `buf.subarray()` and `buf.slice()` preserve the brand
+  and `Buffer.isBuffer(buf.subarray())` is now `true` (matched Node).
+  `Buffer.isBuffer(v)` collapses to `v instanceof Buffer`. The
+  `buffer-methods{,-int,-extra}.ts` files were replaced by
+  `buffer-prototype-{core,int,extra}.ts` (each declaration-merges the method
+  shape onto the class).
+- `BufferMethods` type alias removed from the public API — the method surface
+  now lives directly on the `Buffer` class shape. Consumers that imported
+  `BufferMethods` should import `Buffer` (the class) instead.
+
+### Fixed
+
+- `Writable` no longer emits `'drain'` after every write that drops below
+  `highWaterMark`. Per Node's protocol, `'drain'` fires only when a prior
+  `write()` returned `false` (HWM tripped). A new internal `needDrain` flag
+  gates the emit; small writes under HWM never raise `'drain'`. Parity case
+  `stream/writable-drain.case.ts` covers both branches.
+- `once(emitter, name)` now defensively removes both listeners on both
+  resolve and reject paths (was relying on the auto-removing `once()`
+  registration plus a single-direction `off`; defensive removal in both
+  directions is hygiene against future drift). New unit tests in
+  `event-emitter.test.ts` assert `listenerCount === 0` after each path.
+
 ### Added
 
 - `NotImplementedError` helper exported for cross-package use.

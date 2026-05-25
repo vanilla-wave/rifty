@@ -16,7 +16,7 @@
 export { NotImplementedError } from './errors.ts';
 export { EventEmitter, once } from './event-emitter.ts';
 export { Buffer } from './buffer.ts';
-export type { Buffer as BufferType, BufferLike, BufferMethods, Encoding } from './buffer.ts';
+export type { Buffer as BufferType, BufferLike, Encoding } from './buffer.ts';
 export {
   Readable,
   Writable,

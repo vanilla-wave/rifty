@@ -170,12 +170,20 @@ export class EventEmitter {
 
 export function once(emitter: EventEmitter, event: string | symbol): Promise<unknown[]> {
   return new Promise((resolve, reject) => {
-    const onEvent = (...args: unknown[]) => {
-      emitter.off('error', onError);
+    // Defensive cleanup: remove BOTH listeners on BOTH resolve and reject
+    // paths. The `emitter.once` wrappers will auto-remove the firing listener,
+    // but explicitly removing both ensures correctness even if the emitter's
+    // semantics drift (e.g., a custom `once` that doesn't auto-remove).
+    const cleanup = (): void => {
+      emitter.off(event, onEvent);
+      if (event !== 'error') emitter.off('error', onError);
+    };
+    const onEvent = (...args: unknown[]): void => {
+      cleanup();
       resolve(args);
     };
-    const onError = (err: unknown) => {
-      emitter.off(event, onEvent);
+    const onError = (err: unknown): void => {
+      cleanup();
       reject(err);
     };
     emitter.once(event, onEvent);

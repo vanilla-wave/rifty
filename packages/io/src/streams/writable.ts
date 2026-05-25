@@ -36,6 +36,13 @@ export class Writable extends EventEmitter {
   private writing = false;
   private ending = false;
   private finished = false;
+  /**
+   * Node's `'drain'` event fires only after a prior `write()` returned `false`
+   * (buffer reached HWM). Plain consumption below HWM after a write that
+   * already returned `true` must NOT emit `'drain'`. This flag tracks whether
+   * we owe the consumer a `'drain'`.
+   */
+  private needDrain = false;
 
   constructor(opts: WritableOptions = {}) {
     super();
@@ -55,7 +62,12 @@ export class Writable extends EventEmitter {
     this.buffered.push({ chunk, encoding, cb: cbFinal });
     this.bufferLength += this.writableObjectMode ? 1 : chunkSize(chunk);
     queueMicrotask(() => this.drainBuffer());
-    return this.bufferLength < this.writableHighWaterMark;
+    const okToContinue = this.bufferLength < this.writableHighWaterMark;
+    // If we hit the HWM, set the needDrain flag so the next time the buffer
+    // falls below HWM we emit `'drain'`. Don't clear the flag if it's already
+    // set — `'drain'` is owed until it fires.
+    if (!okToContinue) this.needDrain = true;
+    return okToContinue;
   }
 
   private drainBuffer(): void {
@@ -75,7 +87,13 @@ export class Writable extends EventEmitter {
         return;
       }
       next.cb();
-      if (this.bufferLength < this.writableHighWaterMark) this.emit('drain');
+      // Only emit 'drain' if we previously told the consumer write() returned
+      // false (HWM tripped). Match Node's protocol: don't fire on every dip
+      // below HWM.
+      if (this.needDrain && this.bufferLength < this.writableHighWaterMark) {
+        this.needDrain = false;
+        this.emit('drain');
+      }
       queueMicrotask(() => this.drainBuffer());
     };
     if (this.writeImpl) this.writeImpl.call(this, next.chunk, next.encoding, done);

@@ -35,8 +35,8 @@ implemented (throws `NotImplementedError` or `TypeError`).
 | `buf.readFloat{BE,LE}` / `buf.writeFloat{BE,LE}` | ✅ | |
 | `buf.readDouble{BE,LE}` / `buf.writeDouble{BE,LE}` | ✅ | |
 | `buf.swap16/32/64` | ✅ | |
-| `buf.subarray(start?, end?)` | ⚠️ | Inherited from `Uint8Array`; result not re-tagged as Buffer |
-| `buf.copyWithin(...)` | ⚠️ | Inherited from `Uint8Array` |
+| `buf.subarray(start?, end?)` | ✅ | Returns a `Buffer` via `Symbol.species` (ADR-0030) |
+| `buf.copyWithin(...)` | ✅ | Inherited from `Uint8Array`; operates on the Buffer in place |
 | `Buffer.poolSize`, `Buffer.constants` | ❌ | Pending — no real consumer hit yet |
 | `Buffer.transcode(buffer, fromEnc, toEnc)` | ❌ | Pending |
 | `kStringMaxLength` / `kMaxLength` | ❌ | Pending |
@@ -62,12 +62,10 @@ implemented (throws `NotImplementedError` or `TypeError`).
   - `tools/node-parity-runner/cases/buffer/from-and-encodings.case.ts`
   - `tools/node-parity-runner/cases/buffer/readwrite.case.ts`
   - `tools/node-parity-runner/cases/buffer/concat-equals.case.ts`
+  - `tools/node-parity-runner/cases/buffer/extends-uint8array.case.ts`
 
 ## Known limitations
 
-- `subarray` / `copyWithin` are inherited from `Uint8Array` and don't re-apply
-  Buffer-tagged methods to the returned view. Callers that depend on chaining
-  Buffer methods through `subarray` should use `Buffer.from(b.subarray(...))`.
-- `Buffer.allocUnsafe` zero-initialises (we go through `new Uint8Array(size)`);
-  Node leaves memory uninitialised for speed. No semantic difference for code
-  that reads back what it wrote.
+- `Buffer.allocUnsafe` zero-initialises (we go through `new Buffer(size)` →
+  `new Uint8Array(size)`); Node leaves memory uninitialised for speed. No
+  semantic difference for code that reads back what it wrote.
