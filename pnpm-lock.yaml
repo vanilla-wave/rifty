@@ -88,7 +88,14 @@ importers:
         specifier: workspace:*
         version: link:../../packages/vfs
 
-  packages/io: {}
+  packages/io:
+    devDependencies:
+      typescript:
+        specifier: '*'
+        version: 5.9.3
+      vitest:
+        specifier: '*'
+        version: 2.1.9(@types/node@22.19.19)
 
   packages/kernel:
     dependencies:
@@ -107,6 +114,9 @@ importers:
 
   packages/npm-client:
     dependencies:
+      '@rifty/io':
+        specifier: workspace:*
+        version: link:../io
       '@rifty/shadow-registry':
         specifier: workspace:*
         version: link:../../tools/shadow-registry
@@ -142,6 +152,9 @@ importers:
 
   packages/shell:
     dependencies:
+      '@rifty/io':
+        specifier: workspace:*
+        version: link:../io
       '@rifty/vfs':
         specifier: workspace:*
         version: link:../vfs
