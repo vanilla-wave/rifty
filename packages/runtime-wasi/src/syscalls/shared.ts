@@ -6,10 +6,40 @@
 
 // preview1 errno subset
 export const E_SUCCESS = 0;
+export const E_ACCES = 2;
 export const E_BADF = 8;
-export const E_NOENT = 44;
+export const E_EXIST = 20;
+export const E_INVAL = 28;
+export const E_ISDIR = 31;
 export const E_NAMETOOLONG = 37;
+export const E_NOENT = 44;
 export const E_NOSYS = 52;
+export const E_NOTDIR = 54;
+export const E_PERM = 63;
+
+// path_open oflags (preview1)
+export const OFLAGS_CREAT = 1 << 0;
+export const OFLAGS_DIRECTORY = 1 << 1;
+export const OFLAGS_EXCL = 1 << 2;
+export const OFLAGS_TRUNC = 1 << 3;
+
+// fdflags (preview1, fs_flags in fdstat)
+export const FDFLAGS_APPEND = 1 << 0;
+export const FDFLAGS_DSYNC = 1 << 1;
+export const FDFLAGS_NONBLOCK = 1 << 2;
+export const FDFLAGS_RSYNC = 1 << 3;
+export const FDFLAGS_SYNC = 1 << 4;
+
+// clock ids (preview1)
+export const CLOCKID_REALTIME = 0;
+export const CLOCKID_MONOTONIC = 1;
+export const CLOCKID_PROCESS_CPUTIME_ID = 2;
+export const CLOCKID_THREAD_CPUTIME_ID = 3;
+
+// whence (preview1)
+export const WHENCE_SET = 0;
+export const WHENCE_CUR = 1;
+export const WHENCE_END = 2;
 
 // preview1 filetype subset
 export const FILETYPE_UNKNOWN = 0;
@@ -25,6 +55,11 @@ export interface FileDescriptor {
   cursor?: number;
   isPreopen?: boolean;
   preopenName?: string;
+  /**
+   * preview1 `fdflags` bitset (FDFLAGS_APPEND etc). Set by `path_open`.
+   * Defaults to 0 for stdio/preopens and when unset.
+   */
+  fdflags?: number;
 }
 
 export interface WasiCtx {

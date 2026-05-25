@@ -3,12 +3,28 @@
  * `performance.now()` and `crypto.getRandomValues` — both available in both
  * the browser and Node runtimes.
  */
-import { E_SUCCESS, type WasiCtx } from './shared.ts';
+import { CLOCKID_MONOTONIC, CLOCKID_REALTIME, E_INVAL, E_SUCCESS, type WasiCtx } from './shared.ts';
 
 export function clockSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
   return {
-    clock_time_get: (_id: number, _precision: bigint, outPtr: number) => {
-      const ns = BigInt(Math.floor(performance.now() * 1e6));
+    clock_time_get: (id: number, _precision: bigint, outPtr: number) => {
+      let ns: bigint;
+      if (id === CLOCKID_REALTIME) {
+        // Wall-clock since unix epoch, in nanoseconds. `Date.now()` is ms.
+        ns = BigInt(Date.now()) * 1_000_000n;
+      } else if (id === CLOCKID_MONOTONIC) {
+        // Monotonic process uptime in nanoseconds. `performance.now()` is ms
+        // with sub-millisecond resolution. Floor before scaling so we stay
+        // within u64 even after `* 1e6`.
+        ns = BigInt(Math.floor(performance.now() * 1e6));
+      } else {
+        // CLOCKID_PROCESS_CPUTIME_ID (2) and CLOCKID_THREAD_CPUTIME_ID (3)
+        // have no portable browser/Node equivalent that's both cheap and
+        // honest. We refuse instead of silently aliasing to monotonic — a
+        // benchmark that relied on CPU time would otherwise get wall time
+        // and silently mislead.
+        return E_INVAL;
+      }
       ctx.view().setBigUint64(outPtr, ns, true);
       return E_SUCCESS;
     },

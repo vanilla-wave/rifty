@@ -5,7 +5,87 @@
  * `syncMirror()`.
  */
 import { syncMirror } from '@rifty/vfs';
-import { E_BADF, E_NAMETOOLONG, E_SUCCESS, type WasiCtx, dec, enc } from './shared.ts';
+import {
+  E_BADF,
+  E_INVAL,
+  E_NAMETOOLONG,
+  E_SUCCESS,
+  FILETYPE_DIRECTORY,
+  FILETYPE_REGULAR_FILE,
+  FILETYPE_UNKNOWN,
+  type FileDescriptor,
+  WHENCE_CUR,
+  WHENCE_END,
+  WHENCE_SET,
+  type WasiCtx,
+  dec,
+  enc,
+} from './shared.ts';
+
+/**
+ * preview1 `rights` bitset values relevant for files and directories. We grant
+ * a generous default set on opened fds so guests don't hit `ENOTCAPABLE` —
+ * the real-capability story is tracked separately. See WASI preview1 spec
+ * `rights` table.
+ */
+const RIGHTS_FILE_BASE =
+  /* fd_datasync */ (1n << 0n) |
+  /* fd_read */ (1n << 1n) |
+  /* fd_seek */ (1n << 2n) |
+  /* fd_fdstat_set_flags */ (1n << 3n) |
+  /* fd_sync */ (1n << 4n) |
+  /* fd_tell */ (1n << 5n) |
+  /* fd_write */ (1n << 6n) |
+  /* fd_advise */ (1n << 7n) |
+  /* fd_allocate */ (1n << 8n) |
+  /* fd_filestat_get */ (1n << 21n) |
+  /* fd_filestat_set_size */ (1n << 22n) |
+  /* fd_filestat_set_times */ (1n << 23n);
+
+const RIGHTS_DIR_BASE =
+  /* fd_fdstat_set_flags */ (1n << 3n) |
+  /* fd_sync */ (1n << 4n) |
+  /* path_create_directory */ (1n << 9n) |
+  /* path_create_file */ (1n << 10n) |
+  /* path_link_source */ (1n << 11n) |
+  /* path_link_target */ (1n << 12n) |
+  /* path_open */ (1n << 13n) |
+  /* fd_readdir */ (1n << 14n) |
+  /* path_readlink */ (1n << 15n) |
+  /* path_rename_source */ (1n << 16n) |
+  /* path_rename_target */ (1n << 17n) |
+  /* path_filestat_get */ (1n << 18n) |
+  /* path_filestat_set_size */ (1n << 19n) |
+  /* path_filestat_set_times */ (1n << 20n) |
+  /* fd_filestat_get */ (1n << 21n) |
+  /* path_remove_directory */ (1n << 28n) |
+  /* path_unlink_file */ (1n << 29n);
+
+function filetypeFor(entry: FileDescriptor): number {
+  switch (entry.type) {
+    case 'file':
+      return FILETYPE_REGULAR_FILE;
+    case 'dir':
+      return FILETYPE_DIRECTORY;
+    default:
+      // stdin/stdout/stderr appear as character devices in real WASI; we
+      // don't have a constant for FILETYPE_CHARACTER_DEVICE in the
+      // truncated shared.ts set, so report unknown. Guests rarely
+      // inspect stdio filetypes.
+      return FILETYPE_UNKNOWN;
+  }
+}
+
+function rightsFor(entry: FileDescriptor): { base: bigint; inheriting: bigint } {
+  if (entry.type === 'dir') {
+    return { base: RIGHTS_DIR_BASE, inheriting: RIGHTS_DIR_BASE | RIGHTS_FILE_BASE };
+  }
+  if (entry.type === 'file') {
+    return { base: RIGHTS_FILE_BASE, inheriting: 0n };
+  }
+  // stdio
+  return { base: RIGHTS_FILE_BASE, inheriting: 0n };
+}
 
 export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
   return {
@@ -39,11 +119,16 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
     },
     fd_read: (fd: number, iovs: number, iovsLen: number, nread: number) => {
       const fdEntry = ctx.fds.get(fd);
-      if (!fdEntry || fdEntry.type !== 'file') {
-        // stdin: nothing
+      // Unknown fd → bad descriptor. WASI guests rely on E_BADF here to detect
+      // mis-tracked fds; silently returning E_SUCCESS + 0 bytes masked bugs.
+      if (!fdEntry) return E_BADF;
+      // Stdin: not yet wired in, but it IS a valid fd, so return EOF.
+      if (fdEntry.type === 'stdin') {
         ctx.view().setUint32(nread, 0, true);
         return E_SUCCESS;
       }
+      // stdout/stderr are write-only.
+      if (fdEntry.type !== 'file') return E_BADF;
       const view = ctx.view();
       const bytes = ctx.bytes();
       let readTotal = 0;
@@ -72,18 +157,46 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
     fd_seek: (fd: number, offset: bigint, whence: number, newOffset: number) => {
       const fdEntry = ctx.fds.get(fd);
       if (!fdEntry || fdEntry.type !== 'file') return E_BADF;
+      if (whence !== WHENCE_SET && whence !== WHENCE_CUR && whence !== WHENCE_END) {
+        return E_INVAL;
+      }
       const cur = fdEntry.cursor ?? 0;
       const size = (fdEntry.data ?? new Uint8Array(0)).length;
+      const offsetNum = Number(offset);
       let next: number;
-      if (whence === 0) next = Number(offset);
-      else if (whence === 1) next = cur + Number(offset);
-      else next = size + Number(offset);
+      if (whence === WHENCE_SET) {
+        if (offsetNum < 0) return E_INVAL;
+        next = offsetNum;
+      } else if (whence === WHENCE_CUR) {
+        next = cur + offsetNum;
+        if (next < 0) return E_INVAL;
+      } else {
+        next = size + offsetNum;
+        if (next < 0) return E_INVAL;
+      }
       fdEntry.cursor = next;
       ctx.view().setBigUint64(newOffset, BigInt(next), true);
       return E_SUCCESS;
     },
-    fd_fdstat_get: (fd: number, _outPtr: number) => {
-      return ctx.fds.has(fd) ? E_SUCCESS : E_BADF;
+    fd_fdstat_get: (fd: number, outPtr: number) => {
+      const entry = ctx.fds.get(fd);
+      if (!entry) return E_BADF;
+      const view = ctx.view();
+      // preview1 fdstat layout (24 bytes total):
+      //   0: fs_filetype (u8)
+      //   1: padding (1 byte)
+      //   2: fs_flags (u16)
+      //   4: padding (4 bytes)
+      //   8: fs_rights_base (u64)
+      //  16: fs_rights_inheriting (u64)
+      view.setUint8(outPtr, filetypeFor(entry));
+      view.setUint8(outPtr + 1, 0);
+      view.setUint16(outPtr + 2, entry.fdflags ?? 0, true);
+      view.setUint32(outPtr + 4, 0, true);
+      const { base, inheriting } = rightsFor(entry);
+      view.setBigUint64(outPtr + 8, base, true);
+      view.setBigUint64(outPtr + 16, inheriting, true);
+      return E_SUCCESS;
     },
     fd_prestat_get: (fd: number, outPtr: number) => {
       const entry = ctx.fds.get(fd);
