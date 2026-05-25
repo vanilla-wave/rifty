@@ -1,6 +1,6 @@
 # ADR 0011: Sync IPC via SharedArrayBuffer + Atomics; Worker-as-process model
 
-Status: Partial — phase 1 (SAB ring + worker-entry + capability gate) implemented 2026-05-25; phases 2 (Worker-per-process) and 3 (execSync) deferred to separate PRs
+Status: Partial — phase 1 (SAB ring + worker-entry + capability gate) implemented 2026-05-25; phase 2 (Worker-per-process via `kernel.spawnWorker`) implemented 2026-05-25; phase 3 (`execSync` true sync) deferred
 Date: 2026-05
 
 ## Context
@@ -45,12 +45,31 @@ Phase 1 landed (2026-05-25):
       `getIpcMode()` gating SAB vs. same-realm fallback (also reads the
       `RIFTY_FALLBACK_NO_SAB` env override).
 
-Phase 2 (`kernel.spawn` + Worker-per-process; `child_process.spawn` /
-`worker_threads.Worker` / `fork` all delegate to one allocator) and phase 3
-(real `execSync` blocking via `Atomics.wait`) remain:
+Phase 2 landed (2026-05-25):
+
+- [x] `kernel.spawnWorker(spec)` allocates a PID off the same counter as
+      `kernel.spawn`, creates a `SabRing`, three stdio `MessageChannel`s,
+      constructs `new Worker(kernelWorkerUrl, { type: 'module' })`, and posts
+      the init message. Exit is observed via the worker's
+      `{type:'exit', code}` and surfaced as `exit` + `close` on the
+      `ProcessHandle`.
+- [x] `setKernelWorkerUrl(url)` / `getKernelWorkerUrl()` allow the host
+      (e.g. playground via Vite's `new URL('...', import.meta.url)`) to
+      supply the bundled worker chunk URL; the kernel never hardcodes a
+      path. Missing URL → loud `NotImplementedError('kernel.spawnWorker',
+      …)`.
+- [x] `child_process.spawn`, `child_process.fork`, and
+      `worker_threads.Worker` all branch on
+      `isSabIpcSupported() && getKernelWorkerUrl()` and route through
+      `spawnWorker` when both hold; otherwise fall through to the
+      in-realm path with a `// fallback per ADR-0011` comment.
+- [x] Two conformance tests under
+      `tests/conformance/builtins/child_process-worker.test.ts` exercise
+      the worker-backed branch (skip in Node-without-isolation).
+
+Phase 3 (real `execSync` blocking via `Atomics.wait`) remains:
 
 - [ ] `child_process.execSync('node', [path])` runs the script in a real Worker, blocks the caller via `Atomics.wait`, returns the child's stdout as a `Buffer`.
-- [ ] `worker_threads.Worker` and `child_process.fork` both delegate to a single `kernel.spawn` implementation; PIDs come from one allocator.
 - [ ] `fs.readFileSync` from inside a child Worker delegates to the OPFS sync handle directly (when `OpfsFsSync` from ADR 0013 is available) or to a SAB-tunneled call into the parent's `MemoryVfs`.
 - [ ] An e2e test runs `execSync` end-to-end and proves no main-thread freeze beyond the child's own runtime (block-time ≤ 100 ms for a 10 ms child script).
 - [ ] The same-realm fallback path stays available behind `RIFTY_FALLBACK_NO_SAB=1` and passes the existing unit tests.

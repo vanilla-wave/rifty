@@ -22,8 +22,15 @@
  */
 
 import { Buffer, EventEmitter, NotImplementedError, Readable } from '@rifty/io';
-import { type ProcessHandle, type ProcessIO, globalProcessManager } from '@rifty/kernel';
+import {
+  type ProcessHandle,
+  type ProcessIO,
+  getKernelWorkerUrl,
+  globalProcessManager,
+  isSabIpcSupported,
+} from '@rifty/kernel';
 import { execScript } from './child_process-exec.ts';
+import { spawnWorkerChild } from './child_process-worker.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 
 interface SpawnOptions {
@@ -51,13 +58,20 @@ class ChildProcess extends EventEmitter {
    * by the parent. Exposed to the spawner via `internalIpc()`. */
   readonly inboundIpc: EventEmitter = new EventEmitter();
 
-  constructor(handle: ProcessHandle, ipcEnabled: boolean) {
+  constructor(
+    handle: ProcessHandle,
+    ipcEnabled: boolean,
+    /** Optional pre-allocated stdio streams (used by the Worker-backed path
+     * which writes into them itself so the parent can listen before the
+     * worker's first `postMessage` lands). */
+    streams?: { stdout?: Readable; stderr?: Readable },
+  ) {
     super();
     this.handle = handle;
     this.pid = handle.pid;
     this.ipcEnabled = ipcEnabled;
-    this.stdout = new Readable({ objectMode: false });
-    this.stderr = new Readable({ objectMode: false });
+    this.stdout = streams?.stdout ?? new Readable({ objectMode: false });
+    this.stderr = streams?.stderr ?? new Readable({ objectMode: false });
     this.stdin = {
       write: (_chunk: unknown) => {
         throw new NotImplementedError(
@@ -120,11 +134,52 @@ class ChildProcess extends EventEmitter {
  * sets `exitCode` if it's still `null` at handler completion.
  */
 export function spawn(command: string, args: string[] = [], opts: SpawnOptions = {}): ChildProcess {
-  // The handler needs the kernel `ProcessHandle` and our `ChildProcess`
-  // wrapper, both constructed AFTER the handler is registered. We pass them
-  // through a mutable container so the handler reads them when it runs on
-  // the next microtask — no extra `await` boundaries, which would delay the
-  // script body past what existing IPC tests rely on.
+  // ADR-0011 phase 2: when SAB IPC is supported AND the host has wired
+  // `setKernelWorkerUrl`, run the child in a real Worker realm. We restrict
+  // the SAB path to `node <script>` — non-`node` commands (ENOENT case) and
+  // `node` invocations without a script stay on the in-realm fallback so
+  // their existing error semantics are preserved (the worker can't model
+  // "command not found").
+  if (
+    command === 'node' &&
+    args[0] !== undefined &&
+    isSabIpcSupported() &&
+    getKernelWorkerUrl() !== null
+  ) {
+    return spawnViaWorker(command, args, opts);
+  }
+  // fallback per ADR-0011 — kernel ProcessManager.spawn with same-realm
+  // handler. Stays available behind the capability gate for non-isolated
+  // test environments and for non-`node` commands that need ENOENT.
+  return spawnViaSameRealm(command, args, opts);
+}
+
+function spawnViaWorker(command: string, args: string[], opts: SpawnOptions): ChildProcess {
+  const stdout = new Readable({ objectMode: false });
+  const stderr = new Readable({ objectMode: false });
+  // Use placeholder buses; spawnWorkerChild ignores them for now and
+  // phase 3 will wire fork-mode IPC into worker-entry.
+  const outbound = new EventEmitter();
+  const inboundIpc = new EventEmitter();
+  const handle = spawnWorkerChild({
+    command,
+    args,
+    opts,
+    stdout,
+    stderr,
+    outboundMessages: outbound,
+    inboundIpc,
+  });
+  return new ChildProcess(handle, opts.__fork ?? false, { stdout, stderr });
+}
+
+function spawnViaSameRealm(command: string, args: string[], opts: SpawnOptions): ChildProcess {
+  // fallback per ADR-0011 — the handler needs the kernel `ProcessHandle`
+  // and our `ChildProcess` wrapper, both constructed AFTER the handler is
+  // registered. We pass them through a mutable container so the handler
+  // reads them when it runs on the next microtask — no extra `await`
+  // boundaries, which would delay the script body past what existing IPC
+  // tests rely on.
   const wiring: { handle?: ProcessHandle; child?: ChildProcess } = {};
 
   const handle = globalProcessManager.spawn(
