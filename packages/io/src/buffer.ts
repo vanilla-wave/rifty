@@ -10,17 +10,14 @@
  *
  * Per-instance methods live on the class prototype. Their runtime
  * implementations are installed by `installCoreMethods` / `installIntMethods`
- * / `installExtraMethods` from sibling files (one file per group) so this
- * file stays under the ADR-0024 line budget. The type signatures live here
- * (using `declare` on the class body) so the prototype-installer files do
- * not need to import the `Buffer` type back from this file — avoiding a
- * runtime circular dependency that `pnpm check:deps` would flag.
+ * / `installExtraMethods` from `buffer-prototype.ts`. The type signatures
+ * live here (using `declare` on the class body) so the prototype-installer
+ * functions do not need to import the `Buffer` type back from this file —
+ * avoiding a runtime circular dependency that `pnpm check:deps` would flag.
  */
 
 import { type Encoding, compareSlices, encode } from './buffer-codec.ts';
-import { installCoreMethods } from './buffer-prototype-core.ts';
-import { installExtraMethods } from './buffer-prototype-extra.ts';
-import { installIntMethods } from './buffer-prototype-int.ts';
+import { installCoreMethods, installExtraMethods, installIntMethods } from './buffer-prototype.ts';
 
 export type { Encoding };
 
@@ -218,7 +215,7 @@ export class Buffer extends Uint8Array {
 }
 
 // Install per-instance method implementations onto `Buffer.prototype`. The
-// helper files take the class as an opaque constructor (no type-back imports)
+// installers take the class as an opaque constructor (no type-back imports)
 // so madge sees no circular reference between this file and the helpers.
 installCoreMethods(Buffer);
 installIntMethods(Buffer);

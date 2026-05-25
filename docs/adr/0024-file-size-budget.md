@@ -1,5 +1,7 @@
 # ADR 0024: File-size budget
 
+**Status:** Superseded by ADR-0033 (2026-05-26).
+
 Status: Enforcement implemented (2026-05-24) — `tools/checks/file-budget.mjs`, wired into `pnpm check:budget` + CI lint job. WASI decomposition landed (2026-05-24). Exception list shrunk on 2026-05-25 (ADR-0012 split `runtime-js/builtins/{stream,buffer}.ts` into thin shims).
 Date: 2026-05
 

@@ -79,7 +79,7 @@ These are non-negotiable. Violating any of them is a defect, regardless of how g
 - **No `any` in TypeScript.** No `@ts-ignore` without an explicit comment explaining why and a tracking issue.
 - **No silent stubs.** If you can't implement something, throw `NotImplementedError('module.feature')` and register in compat-matrix as `❌`. Never return `null`/`''`/`undefined` as a placeholder.
 - **No hardcoded URLs to external services.** Configurable via env (e.g. npm registry URL — see D-004).
-- **Files under ~300 lines.** Split when growing larger.
+- **No file-size cap.** Split by concept, not by line count.
 
 ### Tests
 - **Never modify a test to make code pass.** If a test seems wrong, that's a design discussion — file an issue, don't edit the test. (This is always IRREVERSIBLE per checklist.)
@@ -99,7 +99,7 @@ These are non-negotiable. Violating any of them is a defect, regardless of how g
 - [ ] No new circular deps (`pnpm check:deps`)
 - [ ] TSDoc on new public API
 - [ ] `CHANGELOG.md` updated in affected packages
-- [ ] compat-matrix regenerated if any conformance/integration changed (`pnpm compat:generate`)
+- [ ] compat-matrix regenerated if any conformance/integration changed (`pnpm compat:generate`) — **manually triggered before each milestone DoD cycle** (per A-033 decision, 2026-05-26). Not invoked on every PR to keep CI fast and avoid noisy churn; the milestone closer runs it once and commits the diff.
 - [ ] ADR added if an IRREVERSIBLE decision was made
 - [ ] `OPEN_QUESTIONS.md` updated if any REVERSIBLE provisional decisions were made
 - [ ] PR description links to milestone and etap

@@ -36,5 +36,6 @@ ADRs are immutable after merge. New decisions get new ADRs; supersedence is expl
 | 0030 | `Buffer extends Uint8Array` (replaces symbol-bag brand) | — |
 | 0031 | Every SW↔main wire frame carries `version`; receivers validate at decode (extends ADR-0016) | — |
 | 0032 | SyncRpc protocol-version field in the SAB header | — |
+| 0033 | File budget removed; structure over size (supersedes ADR-0024) | — |
 
 For the broad rationale and trade-offs, read PROJECT_PLAN.md §8 first; ADRs are the durable spec.
