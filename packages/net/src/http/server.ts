@@ -1,0 +1,130 @@
+/**
+ * HTTP `Server` + `request()` client over the port registry.
+ *
+ * Server: registers a handler that builds `IncomingMessage` + streaming
+ * `ServerResponse` for each request and returns the response (a fetch
+ * `Response` whose body is the streaming `ReadableStream` written by user
+ * code).
+ *
+ * Client: `http.request()` issues through the host `fetch`. The returned
+ * emitter carries `'response'` with an `IncomingMessageFromFetch`.
+ */
+
+import { EventEmitter } from '@rifty/runtime-js/builtins';
+import { registerPort, unregisterPort } from '../registry.ts';
+import { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
+import { ServerResponse } from './response.ts';
+
+export class HttpServer extends EventEmitter {
+  private port: number | null = null;
+  private readonly handler: (req: IncomingMessage, res: ServerResponse) => void;
+
+  constructor(handler: (req: IncomingMessage, res: ServerResponse) => void = () => {}) {
+    super();
+    this.handler = handler;
+  }
+
+  listen(port: number, hostnameOrCb?: string | (() => void), cb?: () => void): this {
+    const callback = (typeof hostnameOrCb === 'function' ? hostnameOrCb : cb) as
+      | (() => void)
+      | undefined;
+    this.port = port;
+    registerPort(port, (request) => {
+      const req = new IncomingMessage(request);
+      const res = new ServerResponse();
+      this.handler(req, res);
+      this.emit('request', req, res);
+      return res.toResponse();
+    });
+    queueMicrotask(() => {
+      this.emit('listening');
+      callback?.();
+    });
+    return this;
+  }
+
+  address(): { port: number } | null {
+    return this.port === null ? null : { port: this.port };
+  }
+
+  close(cb?: () => void): this {
+    if (this.port !== null) {
+      unregisterPort(this.port);
+      this.port = null;
+    }
+    queueMicrotask(() => {
+      this.emit('close');
+      cb?.();
+    });
+    return this;
+  }
+}
+
+export function createServer(
+  handler?: (req: IncomingMessage, res: ServerResponse) => void,
+): HttpServer {
+  return new HttpServer(handler);
+}
+
+interface RequestOptions {
+  method?: string;
+  hostname?: string;
+  port?: number;
+  path?: string;
+  headers?: Record<string, string>;
+  protocol?: string;
+}
+
+/**
+ * `http.request(opts, cb)` — issued through the host's `fetch`. The callback
+ * receives an `IncomingMessage` once the response arrives. Outgoing body is
+ * sent via `req.write()` / `req.end()`.
+ */
+export function request(
+  opts: string | RequestOptions,
+  cb?: (res: IncomingMessage) => void,
+): EventEmitter & {
+  write(chunk: Uint8Array | string): void;
+  end(chunk?: Uint8Array | string): void;
+} {
+  const url =
+    typeof opts === 'string'
+      ? opts
+      : `${opts.protocol ?? 'http:'}//${opts.hostname ?? 'localhost'}:${opts.port ?? 80}${opts.path ?? '/'}`;
+  const method = typeof opts === 'string' ? 'GET' : (opts.method ?? 'GET');
+  const headers = typeof opts === 'string' ? {} : (opts.headers ?? {});
+
+  const emitter = new EventEmitter();
+  const bodyChunks: (Uint8Array | string)[] = [];
+
+  const req = Object.assign(emitter, {
+    write(chunk: Uint8Array | string) {
+      bodyChunks.push(chunk);
+    },
+    end(chunk?: Uint8Array | string) {
+      if (chunk !== undefined) bodyChunks.push(chunk);
+      void (async () => {
+        try {
+          const body =
+            bodyChunks.length === 0
+              ? undefined
+              : bodyChunks.map((c) => (typeof c === 'string' ? new TextEncoder().encode(c) : c));
+          const response = await fetch(url, {
+            method,
+            headers,
+            body: body ? new Blob(body as unknown as BlobPart[]) : undefined,
+          });
+          const incoming = new IncomingMessageFromFetch(response);
+          cb?.(incoming as unknown as IncomingMessage);
+          emitter.emit('response', incoming);
+        } catch (err) {
+          emitter.emit('error', err);
+        }
+      })();
+    },
+  });
+  return req;
+}
+
+const http = { createServer, request, Server: HttpServer, IncomingMessage, ServerResponse };
+export default http;

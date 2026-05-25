@@ -1,0 +1,248 @@
+/**
+ * Cross-realm WebSocket bridge over `BroadcastChannel` (ADR-0017 phase 1).
+ *
+ * The default same-realm WebSocket layer (`./in-process.ts`) only works when
+ * client and server live in the same JS realm because it uses a private
+ * URL-keyed listener table. Iframe-loaded preview HMR clients live in a
+ * different realm from the playground main thread that owns the
+ * `WebSocketServer`, so they need a transport that crosses realms.
+ *
+ * `BroadcastChannel` is the simplest browser primitive that does this: any
+ * realm same-origin to the playground can open the same-named channel and
+ * see each other's messages. We assign one channel per WS URL — derived from
+ * `host:port:path` — so multiple servers on the same page don't cross-talk.
+ *
+ * The bridge speaks a tiny wire protocol:
+ *   { type: 'open',  cid }
+ *   { type: 'open-ack', cid }
+ *   { type: 'msg',   cid, data }
+ *   { type: 'close', cid, code, reason, from: 'client' | 'server' }
+ *
+ * Real TCP WebSocket is **not** in scope — ADR-0017 explicitly defers it
+ * to a future milestone after worker-as-process (ADR-0011) lands.
+ */
+
+import { EventEmitter } from '@rifty/runtime-js/builtins';
+import { State, type WsMessage } from './in-process.ts';
+
+interface BridgeFrame {
+  type: 'open' | 'open-ack' | 'msg' | 'close';
+  cid: string;
+  data?: WsMessage;
+  code?: number;
+  reason?: string;
+  from?: 'client' | 'server';
+}
+
+const CHANNEL_PREFIX = 'rifty:ws:';
+function channelNameFor(url: string): string {
+  // Normalise: strip query/fragment so client and server agree.
+  const u = new URL(url);
+  return `${CHANNEL_PREFIX}${u.host}${u.pathname}`;
+}
+
+let connectionCounter = 0;
+function nextCid(): string {
+  return `c${++connectionCounter}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export interface CrossRealmBridge {
+  /** Tear down the bridge — both client and server stop listening. */
+  close(): void;
+}
+
+/**
+ * Bridged server endpoint, EventEmitter-shape (`message`, `close`, `error`).
+ * One instance per accepted connection. Created by `BridgedWebSocketServer`.
+ */
+export class BridgedWebSocketConnection extends EventEmitter {
+  state: State = State.OPEN;
+  get readyState(): number {
+    return this.state;
+  }
+  /** @internal */
+  _send: (frame: BridgeFrame) => void;
+  /** @internal */
+  _cid: string;
+
+  constructor(cid: string, send: (frame: BridgeFrame) => void) {
+    super();
+    this._cid = cid;
+    this._send = send;
+  }
+
+  send(data: WsMessage): void {
+    if (this.state !== State.OPEN) return;
+    this._send({ type: 'msg', cid: this._cid, data });
+  }
+
+  close(code = 1000, reason = ''): void {
+    if (this.state === State.CLOSED || this.state === State.CLOSING) return;
+    this.state = State.CLOSING;
+    this._send({ type: 'close', cid: this._cid, code, reason, from: 'server' });
+    this.state = State.CLOSED;
+    queueMicrotask(() => this.emit('close', code, reason));
+  }
+
+  /** @internal — peer closed first. */
+  _peerClosed(code: number, reason: string): void {
+    if (this.state === State.CLOSED) return;
+    this.state = State.CLOSED;
+    this.emit('close', code, reason);
+  }
+}
+
+/**
+ * Cross-realm `WebSocketServer` that listens on a `BroadcastChannel` derived
+ * from `url`. Accepts connections from `BridgedWebSocket` clients in any
+ * same-origin realm. Mirrors the same-realm `WebSocketServer` event surface.
+ */
+export class BridgedWebSocketServer extends EventEmitter {
+  private readonly channel: BroadcastChannel;
+  private readonly clients: Map<string, BridgedWebSocketConnection> = new Map();
+  private closed = false;
+
+  constructor(public readonly url: string) {
+    super();
+    this.channel = new BroadcastChannel(channelNameFor(url));
+    this.channel.addEventListener('message', this.onMessage);
+  }
+
+  private onMessage = (e: MessageEvent): void => {
+    const frame = e.data as BridgeFrame;
+    if (frame.type === 'open') {
+      const conn = new BridgedWebSocketConnection(frame.cid, (f) => this.channel.postMessage(f));
+      this.clients.set(frame.cid, conn);
+      this.channel.postMessage({ type: 'open-ack', cid: frame.cid });
+      queueMicrotask(() => this.emit('connection', conn));
+      return;
+    }
+    if (frame.type === 'msg') {
+      const conn = this.clients.get(frame.cid);
+      if (conn && frame.data !== undefined) conn.emit('message', frame.data);
+      return;
+    }
+    if (frame.type === 'close' && frame.from === 'client') {
+      const conn = this.clients.get(frame.cid);
+      if (conn) {
+        this.clients.delete(frame.cid);
+        conn._peerClosed(frame.code ?? 1000, frame.reason ?? '');
+      }
+    }
+  };
+
+  broadcast(data: WsMessage): void {
+    for (const c of this.clients.values()) c.send(data);
+  }
+
+  close(cb?: () => void): void {
+    if (this.closed) return;
+    this.closed = true;
+    for (const c of [...this.clients.values()]) c.close();
+    this.clients.clear();
+    this.channel.removeEventListener('message', this.onMessage);
+    this.channel.close();
+    queueMicrotask(() => {
+      this.emit('close');
+      cb?.();
+    });
+  }
+}
+
+/**
+ * Cross-realm `WebSocket` client. Connects to whichever
+ * `BridgedWebSocketServer` is listening on the matching `BroadcastChannel`.
+ * Mirrors the browser `WebSocket` event surface.
+ *
+ * Connection negotiation is asynchronous — the client posts `{type:'open'}`
+ * and waits for `{type:'open-ack'}` before firing `open`. If no ack arrives
+ * within `connectTimeoutMs` (default 1000 ms) the client fires `error` and
+ * `close` with code 1006 (matches `WebSocket` "connection refused" semantics).
+ */
+export class BridgedWebSocket extends EventTarget {
+  static readonly CONNECTING = State.CONNECTING;
+  static readonly OPEN = State.OPEN;
+  static readonly CLOSING = State.CLOSING;
+  static readonly CLOSED = State.CLOSED;
+
+  readyState: number = State.CONNECTING;
+  private readonly channel: BroadcastChannel;
+  private readonly cid: string;
+  private readonly connectTimeout: ReturnType<typeof setTimeout>;
+
+  constructor(
+    public readonly url: string,
+    options: { connectTimeoutMs?: number } = {},
+  ) {
+    super();
+    this.cid = nextCid();
+    this.channel = new BroadcastChannel(channelNameFor(url));
+    this.channel.addEventListener('message', this.onMessage);
+    this.channel.postMessage({ type: 'open', cid: this.cid });
+    this.connectTimeout = setTimeout(() => {
+      if (this.readyState !== State.CONNECTING) return;
+      this.readyState = State.CLOSED;
+      this.dispatchEvent(new Event('error'));
+      this.dispatchEvent(new CloseEvent('close', { code: 1006, reason: 'connection refused' }));
+      this.cleanup();
+    }, options.connectTimeoutMs ?? 1000);
+  }
+
+  private onMessage = (e: MessageEvent): void => {
+    const frame = e.data as BridgeFrame;
+    if (frame.cid !== this.cid) return;
+    if (frame.type === 'open-ack' && this.readyState === State.CONNECTING) {
+      clearTimeout(this.connectTimeout);
+      this.readyState = State.OPEN;
+      this.dispatchEvent(new Event('open'));
+      return;
+    }
+    if (frame.type === 'msg' && this.readyState === State.OPEN && frame.data !== undefined) {
+      this.dispatchEvent(new MessageEvent('message', { data: frame.data }));
+      return;
+    }
+    if (frame.type === 'close' && frame.from === 'server') {
+      if (this.readyState === State.CLOSED) return;
+      this.readyState = State.CLOSED;
+      this.dispatchEvent(
+        new CloseEvent('close', { code: frame.code ?? 1000, reason: frame.reason ?? '' }),
+      );
+      this.cleanup();
+    }
+  };
+
+  send(data: WsMessage): void {
+    if (this.readyState !== State.OPEN) return;
+    this.channel.postMessage({ type: 'msg', cid: this.cid, data });
+  }
+
+  close(code = 1000, reason = ''): void {
+    if (this.readyState === State.CLOSED || this.readyState === State.CLOSING) return;
+    this.readyState = State.CLOSING;
+    this.channel.postMessage({ type: 'close', cid: this.cid, code, reason, from: 'client' });
+    this.readyState = State.CLOSED;
+    this.dispatchEvent(new CloseEvent('close', { code, reason }));
+    this.cleanup();
+  }
+
+  private cleanup(): void {
+    clearTimeout(this.connectTimeout);
+    this.channel.removeEventListener('message', this.onMessage);
+    this.channel.close();
+  }
+}
+
+/**
+ * Opt-in entry point: returns the cross-realm `WebSocket` / `WebSocketServer`
+ * pair backed by `BroadcastChannel`. Use these when the client and server
+ * live in different realms (iframe HMR client ↔ playground dev-server).
+ *
+ * The default same-realm shim in `./in-process.ts` remains the export of
+ * `@rifty/net` for the legacy code paths (tests, in-process dev-server).
+ */
+export function createCrossRealmBridge(): {
+  WebSocket: typeof BridgedWebSocket;
+  WebSocketServer: typeof BridgedWebSocketServer;
+} {
+  return { WebSocket: BridgedWebSocket, WebSocketServer: BridgedWebSocketServer };
+}

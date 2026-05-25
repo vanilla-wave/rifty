@@ -4,6 +4,8 @@ export {
   setupPreviewBridge,
   matchPreviewUrl,
   installPreviewInterceptor,
+  canTransferReadableStream,
+  packSerializedResponse,
 } from './preview-bridge.ts';
 export type {
   PreviewHandler,

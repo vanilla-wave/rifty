@@ -73,12 +73,13 @@ export async function startDevMode(options: DevModeOptions = {}): Promise<DevMod
       init.body = copy;
     }
     const response = await dispatchToPort(req.port, new Request(req.url, init));
-    const body = new Uint8Array(await response.arrayBuffer());
+    // ADR-0017: pass the ReadableStream through to the bridge; the bridge
+    // transfers it when supported, falls back to buffering on older Safari.
     return {
       status: response.status,
       statusText: response.statusText,
       headers: Object.fromEntries(response.headers),
-      body,
+      body: response.body,
     };
   });
 

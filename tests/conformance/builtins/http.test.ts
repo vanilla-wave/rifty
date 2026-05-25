@@ -52,3 +52,94 @@ describe('node:http server via port registry', () => {
     expect(response.status).toBe(502);
   });
 });
+
+describe('node:http streaming responses (ADR-0017 phase 1)', () => {
+  it('streams SSE-style chunks with Transfer-Encoding: chunked', async () => {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      res.write('data: a\n\n');
+      res.write('data: b\n\n');
+      res.end('data: c\n\n');
+    });
+    server.listen(3100);
+    const response = await dispatchToPort(3100, new Request('http://x/events'));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('text/event-stream');
+    expect(response.headers.get('transfer-encoding')).toBe('chunked');
+    const body = response.body;
+    if (!body) throw new Error('expected streaming body');
+    const reader = body.getReader();
+    const chunks: string[] = [];
+    const dec = new TextDecoder();
+    // The 3 writes plus an end() with payload may coalesce in transport, but
+    // the underlying ReadableStream queues each write as its own chunk —
+    // assert we read at least 3 distinct chunks for the SSE frames.
+    let frames: string[] = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        const piece = dec.decode(value);
+        chunks.push(piece);
+        frames = frames.concat(piece.split('\n\n').filter((s) => s.length > 0));
+      }
+    }
+    expect(frames).toEqual(['data: a', 'data: b', 'data: c']);
+    // Underlying ReadableStream queue preserved one chunk per write call.
+    expect(chunks.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('long-poll: write fires after setTimeout, reader sees chunk after the delay', async () => {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      setTimeout(() => {
+        res.end('late');
+      }, 50);
+    });
+    server.listen(3101);
+    const t0 = Date.now();
+    const response = await dispatchToPort(3101, new Request('http://x/poll'));
+    const body = response.body;
+    if (!body) throw new Error('expected streaming body');
+    const reader = body.getReader();
+    const dec = new TextDecoder();
+    const first = await reader.read();
+    const t1 = Date.now();
+    expect(first.done).toBe(false);
+    expect(dec.decode(first.value)).toBe('late');
+    // The headers flush sync on writeHead; the body chunk arrives only after
+    // the setTimeout — so the read should not resolve before ~50 ms.
+    expect(t1 - t0).toBeGreaterThanOrEqual(40);
+    const tail = await reader.read();
+    expect(tail.done).toBe(true);
+  });
+
+  it('queues one stream chunk per write() call (backpressure surface)', async () => {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      // Five distinct writes — each should remain its own chunk in the
+      // ReadableStream's internal queue (the consumer hasn't started reading
+      // yet when these enqueue; backpressure here means the queue holds
+      // them, not that we silently coalesce or drop).
+      for (let i = 0; i < 5; i++) res.write(`x${i}`);
+      res.end();
+    });
+    server.listen(3102);
+    const response = await dispatchToPort(3102, new Request('http://x/bp'));
+    const body = response.body;
+    if (!body) throw new Error('expected streaming body');
+    const reader = body.getReader();
+    const dec = new TextDecoder();
+    const seen: string[] = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) seen.push(dec.decode(value));
+    }
+    // Each write is its own queued chunk; total chunk count >= 5 (and
+    // strictly more than 1 — proves we are not coalescing into one string
+    // buffer the way the pre-ADR-0017 implementation did).
+    expect(seen.length).toBeGreaterThanOrEqual(5);
+    expect(seen.join('')).toBe('x0x1x2x3x4');
+  });
+});
