@@ -10,7 +10,7 @@
  */
 
 import { isAbsolute, joinPath, normalizePath, syncMirror } from '@rifty/vfs';
-import type { CommandContext, ShellCommand } from './types.ts';
+import type { ShellCommand } from './types.ts';
 
 function resolve(cwd: string, p: string): string {
   return normalizePath(isAbsolute(p) ? p : joinPath(cwd, p));
@@ -175,5 +175,3 @@ export function builtinCommands(setCwd: (p: string) => void): Record<string, She
     touch,
   };
 }
-
-export type { CommandContext, ShellCommand };

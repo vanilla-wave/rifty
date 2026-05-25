@@ -10,6 +10,9 @@
  *   - `>` and `>>` produce their own redirection tokens.
  *   - `<` produces its own token; the shell decides whether it is supported
  *     (currently `NotImplementedError('shell.input-redirect')`).
+ *   - `|` produces its own token; the shell decides whether it is supported
+ *     (currently `NotImplementedError('shell.pipe')`). Without this, a line
+ *     like `cat f | grep x` would silently bury the pipe inside an argument.
  *
  * Deliberately NOT supported (kept loud — if a token signals these, the caller
  * is expected to error):
@@ -77,7 +80,7 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
       i++;
       continue;
     }
-    if (ch === '>' || ch === '<') {
+    if (ch === '>' || ch === '<' || ch === '|') {
       let op = ch;
       if (ch === '>' && line[i + 1] === '>') {
         op = '>>';
@@ -91,7 +94,14 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
     // Build one token: a run of single-quoted, double-quoted, and unquoted
     // segments concatenated together. POSIX behaviour: `a"b"c` is one token.
     let buf = '';
-    while (i < n && line[i] !== ' ' && line[i] !== '\t' && line[i] !== '>' && line[i] !== '<') {
+    while (
+      i < n &&
+      line[i] !== ' ' &&
+      line[i] !== '\t' &&
+      line[i] !== '>' &&
+      line[i] !== '<' &&
+      line[i] !== '|'
+    ) {
       const c = line[i]!;
       if (c === "'") {
         // Single-quoted: literal, no expansion.

@@ -28,6 +28,27 @@
 - `<` input redirect now throws `NotImplementedError('shell.input-redirect')`
   with the M12 work-item hint, instead of being silently dropped by the
   dispatch step.
+- `|` (pipe) operator now tokenises as its own `'|'` token (previously it
+  could get buried inside an argument, e.g. `cat f | grep x` silently
+  losing the pipe). The dispatcher throws
+  `NotImplementedError('shell.pipe')` when a pipe token is encountered,
+  matching the `<` pattern.
+
+### Fixed
+
+- Redirect write failures (`> path`, `>> path`) no longer silently dump the
+  buffered output onto stdout. When the underlying `writeFileSync` throws,
+  the shell now: clears stdout (the data was intended for a file, not the
+  console), populates stderr with a `redirect write failed: <path>: <msg>
+  [EREDIRECT]` line, and returns a non-zero exit code so callers can detect
+  the failure unambiguously.
+
+### Internal
+
+- Removed an unused public `CommandContext` / `ShellCommand` type re-export
+  from `builtins.ts`. The single canonical source of these types is
+  `./types.ts`; the public package surface (`./index.ts`) already exports
+  them from there.
 
 ### Dependencies
 

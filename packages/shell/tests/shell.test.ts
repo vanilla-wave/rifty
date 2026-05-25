@@ -1,6 +1,7 @@
 import { NotImplementedError } from '@rifty/io';
+import type { FsSync } from '@rifty/vfs';
 import { syncMirror } from '@rifty/vfs';
-import { resetSyncMirror } from '@rifty/vfs/internal';
+import { resetSyncMirror, setSyncMirror } from '@rifty/vfs/internal';
 /**
  * Unit tests for `@rifty/shell` — tokenizer, builtins, dispatch.
  *
@@ -179,6 +180,61 @@ describe('Shell — input redirect is loud', () => {
     await expect(sh.run('cat < /etc/hostname')).rejects.toMatchObject({
       feature: 'shell.input-redirect',
     });
+  });
+});
+
+describe('Shell — pipe is loud', () => {
+  it('tokenises | as its own token (not glued to an argument)', () => {
+    // Without dedicated tokenisation `cat a | grep b` would silently become
+    // ['cat', 'a', '|', 'grep', 'b'] only by accident if whitespace is right;
+    // glued forms like `a|b` would otherwise be one token.
+    expect(tokenize('cat a | grep b')).toEqual(['cat', 'a', '|', 'grep', 'b']);
+    expect(tokenize('cat a|grep b')).toEqual(['cat', 'a', '|', 'grep', 'b']);
+  });
+
+  it('throws NotImplementedError when | appears in a command line', async () => {
+    const sh = new Shell();
+    await expect(sh.run('cat a | grep b')).rejects.toBeInstanceOf(NotImplementedError);
+  });
+
+  it('the NotImplementedError for pipe carries the documented feature name', async () => {
+    const sh = new Shell();
+    await expect(sh.run('cat a | grep b')).rejects.toMatchObject({
+      feature: 'shell.pipe',
+    });
+  });
+});
+
+describe('Shell — redirect write failure surfaces loudly', () => {
+  it('returns exitCode != 0 with EREDIRECT-tagged stderr when the write fails', async () => {
+    // Install a sync mirror whose writeFileSync throws — simulates a backend
+    // that cannot persist (e.g. quota exceeded, read-only handle, …). The
+    // shell must surface this as a non-zero exit + clear stderr line, not
+    // silently swallow it.
+    const failing: FsSync = {
+      existsSync: () => false,
+      readFileBytesSync: () => {
+        throw new Error('no read');
+      },
+      writeFileSync: () => {
+        throw new Error('boom: backend refused write');
+      },
+      readdirSync: () => [],
+      mkdirSync: () => undefined,
+      rmSync: () => undefined,
+      statSync: () => ({ isFile: false, isDirectory: false }),
+      utimes: () => undefined,
+    };
+    setSyncMirror(failing);
+    const sh = new Shell({ cwd: '/' });
+    const r = await sh.run('echo hello > /tmp/out.txt');
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stderr).toMatch(/redirect write failed/);
+    expect(r.stderr).toMatch(/EREDIRECT/);
+    expect(r.stderr).toMatch(/boom: backend refused write/);
+    // The buffered stdout must NOT be dumped onto stdout — it was meant for
+    // a file, not the console.
+    expect(r.stdout).toBe('');
   });
 });
 

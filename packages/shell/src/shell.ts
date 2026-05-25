@@ -77,6 +77,13 @@ export class Shell {
       );
     }
 
+    if (tokens.includes('|')) {
+      throw new NotImplementedError(
+        'shell.pipe',
+        'pipe operator not yet supported — M12 work item',
+      );
+    }
+
     // Pop env assignments (KEY=value) off the front.
     let i = 0;
     const overrides: Record<string, string> = {};
@@ -156,7 +163,12 @@ export class Shell {
         }
         stdout = '';
       } catch (err) {
-        stderr += `${cmd}: redirect: ${(err as Error).message}\n`;
+        // Loud failure: do NOT silently drop the redirected payload onto
+        // stdout (callers expected it in a file). Surface as exit code 1
+        // with an EREDIRECT-tagged stderr line so a caller scanning logs
+        // can detect "redirect write failed" unambiguously.
+        stderr += `${cmd}: redirect write failed: ${redirectTo.path}: ${(err as Error).message} [EREDIRECT]\n`;
+        stdout = '';
         exitCode = 1;
       }
     }
