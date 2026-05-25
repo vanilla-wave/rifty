@@ -1,8 +1,16 @@
 /**
- * Shared types and constants for WASI preview1 syscalls. The syscall factory
- * modules ({@link ./env}, {@link ./fd}, etc.) consume a {@link WasiCtx} that
- * owns the mutable runtime state and the memory accessors.
+ * Shared types, constants, and small helpers for WASI preview1 syscalls. The
+ * syscall factory modules ({@link ./fd.ts}, {@link ./path.ts}, {@link ./proc.ts})
+ * consume a {@link WasiCtx} that owns the mutable runtime state and the memory
+ * accessors.
+ *
+ * This file also owns the canonical preview1 rights bitsets
+ * ({@link RIGHTS_FILE_BASE}, {@link RIGHTS_DIR_BASE}) and the host-error → WASI
+ * errno mapping helper ({@link errToWasiErrno}) — both are consumed by `fd.ts`
+ * and `path.ts`, keeping the definitions in one place.
  */
+
+import { joinPath, normalizePath } from '@rifty/vfs';
 
 // preview1 errno subset
 export const E_SUCCESS = 0;
@@ -36,6 +44,50 @@ export const FDFLAGS_SYNC = 1 << 4;
 // `fd_write` to enforce that the open token actually had write capability.
 export const RIGHTS_FD_READ = 1n << 1n;
 export const RIGHTS_FD_WRITE = 1n << 6n;
+
+/**
+ * Default `fs_rights_base` granted to a newly-opened file fd when the caller
+ * passes `0n` (WASI spec: "do not restrict"). Mirrors what `fd_fdstat_get`
+ * reports back for file fds and what `path_open` clamps requested rights
+ * against when a child fd inherits from a parent dir fd.
+ */
+export const RIGHTS_FILE_BASE =
+  /* fd_datasync */ (1n << 0n) |
+  /* fd_read */ (1n << 1n) |
+  /* fd_seek */ (1n << 2n) |
+  /* fd_fdstat_set_flags */ (1n << 3n) |
+  /* fd_sync */ (1n << 4n) |
+  /* fd_tell */ (1n << 5n) |
+  /* fd_write */ (1n << 6n) |
+  /* fd_advise */ (1n << 7n) |
+  /* fd_allocate */ (1n << 8n) |
+  /* fd_filestat_get */ (1n << 21n) |
+  /* fd_filestat_set_size */ (1n << 22n) |
+  /* fd_filestat_set_times */ (1n << 23n);
+
+/**
+ * Default `fs_rights_base` granted to a directory fd. `fd_fdstat_get` reports
+ * this, and `path_open` uses it as the upper bound when a guest passes 0n
+ * (no restriction) so child fds inherit only what the parent could do.
+ */
+export const RIGHTS_DIR_BASE =
+  /* fd_fdstat_set_flags */ (1n << 3n) |
+  /* fd_sync */ (1n << 4n) |
+  /* path_create_directory */ (1n << 9n) |
+  /* path_create_file */ (1n << 10n) |
+  /* path_link_source */ (1n << 11n) |
+  /* path_link_target */ (1n << 12n) |
+  /* path_open */ (1n << 13n) |
+  /* fd_readdir */ (1n << 14n) |
+  /* path_readlink */ (1n << 15n) |
+  /* path_rename_source */ (1n << 16n) |
+  /* path_rename_target */ (1n << 17n) |
+  /* path_filestat_get */ (1n << 18n) |
+  /* path_filestat_set_size */ (1n << 19n) |
+  /* path_filestat_set_times */ (1n << 20n) |
+  /* fd_filestat_get */ (1n << 21n) |
+  /* path_remove_directory */ (1n << 28n) |
+  /* path_unlink_file */ (1n << 29n);
 
 // clock ids (preview1)
 export const CLOCKID_REALTIME = 0;
@@ -75,6 +127,13 @@ export interface FileDescriptor {
    * spec). `fd_write` checks `RIGHTS_FD_WRITE` and returns `E_PERM` if absent.
    */
   rights?: bigint;
+  /**
+   * preview1 `rights_inheriting` bitset — the upper bound for rights granted
+   * to fds opened *through* this fd via `path_open`. Stored on directory fds
+   * so that child fds can be clamped against this set. `undefined` means
+   * "default-permissive" (stdio, preopens).
+   */
+  rightsInheriting?: bigint;
 }
 
 export interface WasiCtx {
@@ -103,4 +162,57 @@ export class WasiExit extends Error {
     this.name = 'WasiExit';
     this.exitCode = code;
   }
+}
+
+/**
+ * Map a caught error from the sync VFS mirror to a WASI preview1 errno.
+ *
+ * The VFS layer raises `VfsError` instances with a `code` field; native fs
+ * shims (Node) and bare `Error` callers may also pass a `code` like
+ * `'ENOENT'` / `'EEXIST'`. Anything we don't recognise falls back to
+ * `E_INVAL` — `E_NOENT` was the previous default but it lied to guests
+ * (they assumed the parent dir was missing and emitted misleading
+ * messages). EINVAL ("Invalid argument") is the honest catch-all.
+ */
+export function errToWasiErrno(err: unknown): number {
+  if (err && typeof err === 'object' && 'code' in err) {
+    switch ((err as { code: unknown }).code) {
+      case 'ENOENT':
+        return E_NOENT;
+      case 'EEXIST':
+        return E_EXIST;
+      case 'EISDIR':
+        return E_ISDIR;
+      case 'ENOTDIR':
+        return E_NOTDIR;
+      case 'EACCES':
+        return E_ACCES;
+      case 'EPERM':
+        return E_PERM;
+      case 'EINVAL':
+        return E_INVAL;
+      case 'ENOTEMPTY':
+        return E_NOTEMPTY;
+    }
+  }
+  return E_INVAL;
+}
+
+/** Read a NUL-free UTF-8 path from guest memory, resolved against `basePath`. */
+export function resolveRel(ctx: WasiCtx, basePath: string, ptr: number, len: number): string {
+  const relative = dec.decode(ctx.bytes().subarray(ptr, ptr + len));
+  return normalizePath(joinPath(basePath, relative));
+}
+
+/**
+ * Resolve a directory-fd to its VFS path, or signal `E_BADF` if it isn't a
+ * directory. Compact helper so each call doesn't repeat the same guard.
+ */
+export function dirBase(
+  ctx: WasiCtx,
+  fd: number,
+): { ok: true; path: string } | { ok: false; rc: number } {
+  const base = ctx.fds.get(fd);
+  if (!base || base.type !== 'dir' || !base.path) return { ok: false, rc: E_BADF };
+  return { ok: true, path: base.path };
 }

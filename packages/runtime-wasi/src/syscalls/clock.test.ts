@@ -2,9 +2,12 @@
  * Unit tests for clock-related WASI preview1 syscalls.
  *
  * We don't need a VFS — just a memory buffer to receive the u64 timestamp.
+ * `clock_time_get` now lives in {@link ./proc.ts} (process-level concerns
+ * grouped together); these tests pull just the clock surface out of that
+ * factory.
  */
 import { describe, expect, it } from 'vitest';
-import { clockSyscalls } from './clock.ts';
+import { procSyscalls } from './proc.ts';
 import {
   CLOCKID_MONOTONIC,
   CLOCKID_PROCESS_CPUTIME_ID,
@@ -40,7 +43,7 @@ function setupCtx(): {
     bytes: () => new Uint8Array(memory.buffer),
   };
   // Bridge from string-keyed ModuleImports to a typed view for tests.
-  const ns = clockSyscalls(ctx) as unknown as ClockNs;
+  const ns = procSyscalls(ctx) as unknown as ClockNs;
   return { ctx, ns, memory };
 }
 

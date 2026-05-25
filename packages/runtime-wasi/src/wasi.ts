@@ -7,8 +7,6 @@
  * silently return success.
  */
 
-import { clockSyscalls } from './syscalls/clock.ts';
-import { envSyscalls } from './syscalls/env.ts';
 import { fdSyscalls } from './syscalls/fd.ts';
 import { pathSyscalls } from './syscalls/path.ts';
 import { procSyscalls } from './syscalls/proc.ts';
@@ -72,11 +70,9 @@ export class Wasi {
 
     this.imports = {
       wasi_snapshot_preview1: {
-        ...envSyscalls(ctx),
         ...fdSyscalls(ctx),
         ...pathSyscalls(ctx),
         ...procSyscalls(ctx),
-        ...clockSyscalls(ctx),
       },
     };
   }

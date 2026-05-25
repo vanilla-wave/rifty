@@ -17,6 +17,7 @@ import {
   OFLAGS_EXCL,
   OFLAGS_TRUNC,
   RIGHTS_FD_READ,
+  RIGHTS_FD_WRITE,
 } from './shared.ts';
 
 describe('path_open', () => {
@@ -119,5 +120,59 @@ describe('path_open — fs_rights_base', () => {
     // The exact granted bitmask is RIGHTS_FILE_BASE; we just check that the
     // fd is open for write (rights are present and include FD_WRITE).
     expect(entry?.rights).toBeDefined();
+  });
+});
+
+describe('path_open — capability inheritance from parent dir fd', () => {
+  // Regression: previously `path_open` ignored both the parent fd's rights
+  // bag AND the `fs_rights_inheriting` parameter, so a guest could ask for
+  // (and receive) MORE rights than the parent dir fd legally held. WASI
+  // preview1 requires capability handoff to be downgrade-only — a child fd's
+  // rights MUST be a subset of the parent dir fd's rights, and the
+  // inheriting set MUST be a subset of the parent's inheriting set.
+  beforeEach(() => {
+    const mirror = new MemoryFsSync();
+    mirror.loadFixture({ '/work/file.txt': 'data' });
+    setSyncMirror(mirror);
+  });
+  afterEach(() => resetSyncMirror());
+
+  it('clamps requested rights against parent dir fd rights (downgrade only)', () => {
+    const t = setupPathCtx();
+    // Restrict the parent preopen to read-only (no FD_WRITE).
+    const parent = t.fds.get(3);
+    if (!parent) throw new Error('preopen missing');
+    parent.rights = RIGHTS_FD_READ; // dir fd: only allows read-class ops
+    parent.rightsInheriting = RIGHTS_FD_READ; // children may only inherit read
+    const len = t.writePath(100, 'file.txt');
+    // Guest asks for read + write. After clamping it must hold only read.
+    const requested = RIGHTS_FD_READ | RIGHTS_FD_WRITE;
+    const rc = t.ns.path_open(3, 0, 100, len, 0, requested, 0n, 0, 200);
+    expect(rc).toBe(E_SUCCESS);
+    const newFd = t.readU32(200);
+    const entry = t.fds.get(newFd);
+    expect(entry?.rights).toBe(RIGHTS_FD_READ);
+    // Critical: FD_WRITE must NOT be granted because the parent could not
+    // inherit it. This is the bug the consolidation fix addresses.
+    expect((entry?.rights ?? 0n) & RIGHTS_FD_WRITE).toBe(0n);
+  });
+
+  it('clamps fs_rights_inheriting against parent inheriting set', () => {
+    const t = setupPathCtx();
+    const parent = t.fds.get(3);
+    if (!parent) throw new Error('preopen missing');
+    parent.rights = RIGHTS_FD_READ | RIGHTS_FD_WRITE;
+    // Parent only allows read to be inherited further (so e.g. a sub-open
+    // through a child dir fd would inherit only read).
+    parent.rightsInheriting = RIGHTS_FD_READ;
+    const len = t.writePath(100, 'file.txt');
+    // Guest asks for full inheriting rights — must be clamped to READ.
+    const requestedInheriting = RIGHTS_FD_READ | RIGHTS_FD_WRITE;
+    const rc = t.ns.path_open(3, 0, 100, len, 0, 0n, requestedInheriting, 0, 200);
+    expect(rc).toBe(E_SUCCESS);
+    const newFd = t.readU32(200);
+    const entry = t.fds.get(newFd);
+    expect(entry?.rightsInheriting).toBe(RIGHTS_FD_READ);
+    expect((entry?.rightsInheriting ?? 0n) & RIGHTS_FD_WRITE).toBe(0n);
   });
 });

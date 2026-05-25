@@ -47,3 +47,8 @@
   the test files split symmetrically.
 - **2026-05-25** — `syscalls/fd.ts` split: auxiliary calls moved to
   `fd-extra.ts`; test setup factored into `fd-test-fixture.ts`.
+- **2026-05-26** — `syscalls/` consolidated into 3 semantic buckets (`fd`,
+  `path`, `proc`) after ADR-0024 retirement; rights bitsets and `errToWasiErrno`
+  moved into `shared.ts`. `path_open` now clamps `fs_rights_base` and
+  `fs_rights_inheriting` against the parent dir fd's inheriting set
+  (downgrade-only capability handoff, per WASI preview1 spec).

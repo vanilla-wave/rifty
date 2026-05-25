@@ -44,7 +44,7 @@ implemented — call returns `E_NOSYS` and behaviour is documented.
 | `path_filestat_get` | ✅ | Reports filetype + size; atime/ctime/nlink = 0 |
 | `path_filestat_set_times` | ❌ | `E_NOSYS` |
 | `path_link` | ❌ | `E_NOSYS` — hard links not modelled by VFS |
-| `path_open` | ⚠️ | Honours `oflags` (CREAT/EXCL/TRUNC) + `fs_rights_base` (zero = spec default-permissive; non-zero is stored and enforced by `fd_write`). `dirflags`, `fs_rights_inheriting` are stored but not enforced. |
+| `path_open` | ⚠️ | Honours `oflags` (CREAT/EXCL/TRUNC) + `fs_rights_base` (zero = spec default-permissive; non-zero is stored and enforced by `fd_write` — `E_PERM` if `RIGHTS_FD_WRITE` absent). `fs_rights_inheriting` is stored on the new fd and intersected with the parent dir fd's inheriting set, so capability handoff is downgrade-only. `dirflags` is currently not enforced. |
 | `path_readlink` | ❌ | `E_NOSYS` — VFS has no symlink layer (M12) |
 | `path_remove_directory` | ✅ | `ENOTEMPTY` for non-empty dirs |
 | `path_rename` | ⚠️ | Read-then-write-then-delete (non-atomic); same-dir or cross-preopen both work |
