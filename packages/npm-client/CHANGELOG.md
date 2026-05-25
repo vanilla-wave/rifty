@@ -44,6 +44,17 @@
   `Error('lockfile corrupt at <path>: <message>', { cause })` instead of being
   silently treated as missing. The previous behaviour quietly re-resolved and
   overwrote the corrupted file.
+- `readExistingLockfile` now throws
+  `NotImplementedError('npm-client.lockfile.v{1,2}')` when it encounters
+  npm 5/6/7-era lockfiles (`lockfileVersion: 1` or `2`) instead of silently
+  returning `null`. The previous fallthrough caused `install` to do a full
+  fresh resolve and overwrite the user's lockfile with a v3 — data loss
+  disguised as caching. Callers see the gap loudly.
+- `install` no longer rewrites `package-lock.json` when the serialized
+  content is byte-identical to what's already on disk. Both the cache-hit
+  fast path and the live-resolve path now go through
+  `writeLockfileIfChanged`, which honours the ADR-0023 promise of a stable
+  user-visible mtime when the install was a functional no-op.
 
 ### Dependencies
 

@@ -117,6 +117,68 @@ async function makeEntry(
   };
 }
 
+describe('install — idempotent lockfile write', () => {
+  it('does not rewrite package-lock.json byte-for-byte across two installs (mtime stable)', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('a', new Map([['1.0.0', await makeEntry('a', '1.0.0')]]));
+
+    const registry = new FakeRegistry(db);
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    // First install: writes lockfile from scratch.
+    await install('root', '1.0.0', { a: '1.0.0' }, { vfs, cwd: '/proj', registry });
+    const lockfilePath = '/proj/package-lock.json';
+    const firstBytes = await vfs.readFile(lockfilePath);
+    const firstStat = await vfs.stat(lockfilePath);
+
+    // Force a measurable mtime delta between writes so any rewrite is visible.
+    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+
+    // Second install: same inputs. The fast path should detect cache-hit and
+    // avoid rewriting. Even if it goes through the live-resolve branch, the
+    // diff-before-write guard must skip the writeFile.
+    await install('root', '1.0.0', { a: '1.0.0' }, { vfs, cwd: '/proj', registry });
+    const secondBytes = await vfs.readFile(lockfilePath);
+    const secondStat = await vfs.stat(lockfilePath);
+
+    expect(secondBytes).toEqual(firstBytes);
+    expect(secondStat.mtime).toBe(firstStat.mtime);
+  });
+
+  it('does not bump mtime when the lockfile already matches what live-resolve would produce', async () => {
+    // Pre-seed a project with the canonical lockfile (computed by running
+    // install once on a separate vfs). The target vfs has no tarball cache,
+    // so the fast path's `allCached` is false and falls through to a rewrite.
+    // After diff-before-write, that rewrite is skipped because bytes match.
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('a', new Map([['1.0.0', await makeEntry('a', '1.0.0')]]));
+
+    const registry = new FakeRegistry(db);
+    const seedVfs = new MemoryVfs();
+    await seedVfs.mkdir('/proj', { recursive: true });
+    await install('root', '1.0.0', { a: '1.0.0' }, { vfs: seedVfs, cwd: '/proj', registry });
+    const canonical = await seedVfs.readFile('/proj/package-lock.json');
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const lockfilePath = '/proj/package-lock.json';
+    await vfs.writeFile(lockfilePath, canonical);
+    const beforeStat = await vfs.stat(lockfilePath);
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+
+    await install('root', '1.0.0', { a: '1.0.0' }, { vfs, cwd: '/proj', registry });
+
+    const afterBytes = await vfs.readFile(lockfilePath);
+    const afterStat = await vfs.stat(lockfilePath);
+    // Bytes unchanged.
+    expect(afterBytes).toEqual(canonical);
+    // And mtime stable — diff-before-write skipped the rewrite.
+    expect(afterStat.mtime).toBe(beforeStat.mtime);
+  });
+});
+
 describe('install — version conflict', () => {
   it('throws EVERSIONCONFLICT when two deps require incompatible versions of the same transitive package', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();

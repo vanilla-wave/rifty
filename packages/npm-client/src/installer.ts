@@ -13,11 +13,12 @@
  * already-seen tarballs once the cache is warm.
  */
 
-import { type Vfs, joinPath } from '@rifty/vfs';
+import type { Vfs } from '@rifty/vfs';
 import {
   lockfileCovers,
   lockfileSubgraph,
   readExistingLockfile,
+  writeLockfileIfChanged,
 } from './installer-lockfile-reader.ts';
 import { type Lockfile, type ResolvedPackage, buildLockfile, link } from './linker.ts';
 import { type OverrideMap, resolveOverride } from './overrides.ts';
@@ -77,11 +78,9 @@ export async function install(
       // pin through the cache. Any cache miss falls through to a fetch but
       // still avoids the packument round-trip.
       const subgraph = lockfileSubgraph(existingLockfile, [...topLevelPins.keys()]);
-      let allCached = true;
       for (const name of subgraph) {
         const entry = existingLockfile.packages[`node_modules/${name}`];
         if (!entry || !entry.resolved || !entry.integrity) {
-          allCached = false;
           break;
         }
         let bytes = await tarballCache.get(name, entry.version, entry.integrity);
@@ -97,7 +96,6 @@ export async function install(
             );
           }
           await tarballCache.put(name, entry.version, entry.integrity, bytes);
-          allCached = false;
         }
         const files = await extractTarGz(bytes);
         resolved.set(name, {
@@ -113,15 +111,10 @@ export async function install(
       const packages = [...resolved.values()];
       await link(opts.vfs, opts.cwd, packages);
       const lockfile = buildLockfile(rootName, rootVersion, packages);
-      // Only rewrite the lockfile if a new entry was pulled (cache-miss path).
-      // Cache-only restores leave the on-disk lockfile byte-identical so the
-      // user-visible mtime stays stable.
-      if (!allCached) {
-        await opts.vfs.writeFile(
-          joinPath(opts.cwd, 'package-lock.json'),
-          JSON.stringify(lockfile, null, 2),
-        );
-      }
+      // Diff-before-write preserves user-visible mtime when the install was a
+      // functional no-op (ADR-0023). `writeLockfileIfChanged` skips the write
+      // entirely if the serialized bytes match.
+      await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
       return { packages, lockfile, conflicts: [] };
     }
   }
@@ -232,10 +225,9 @@ export async function install(
   warnUnsatisfiedPeers(packages);
   await link(opts.vfs, opts.cwd, packages);
   const lockfile = buildLockfile(rootName, rootVersion, packages);
-  await opts.vfs.writeFile(
-    joinPath(opts.cwd, 'package-lock.json'),
-    JSON.stringify(lockfile, null, 2),
-  );
+  // Diff-before-write preserves mtime when live-resolve happens to produce
+  // the same lockfile as what's already on disk (ADR-0023).
+  await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
   return { packages, lockfile, conflicts: [] };
 }
 
