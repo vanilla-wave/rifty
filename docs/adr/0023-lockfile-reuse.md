@@ -1,7 +1,9 @@
 # ADR 0023: Lockfile reuse on subsequent `install()`
 
-Status: Implemented (2026-05-24)
+Status: Implemented (2026-05-26)
 Date: 2026-05
+
+**Decision (2026-05-26) — A-031 nested install:** Deferred to **M12**. Until then, the installer keeps its current flat-tree linker schema: a single `node_modules/<name>/` directory per package and a hard `EVERSIONCONFLICT` (already implemented per A-031 resolution; see `packages/npm-client/src/installer.ts`) on any version disagreement. Nested install (`node_modules/<a>/node_modules/<b>/...`) requires the linker schema rewrite plus a corresponding lockfile-shape extension — both fit naturally in the M12 toolchain pass that also rewires `@rifty/net` for cross-realm streaming. Until then, real packages with conflicting transitive deps fail loudly rather than silently picking a winner.
 
 ## Context
 
@@ -43,6 +45,30 @@ Read and honour `package-lock.json` on subsequent installs.
 - `VfsTarballCache` lives under `/.rifty/tarball-cache/<sha-prefix>/<name>-<version>.tgz` where `<sha-prefix>` is the first two hex chars of the integrity hash. `get()` re-verifies integrity on read; mismatch returns `null` so the caller refetches and rewrites.
 - The live-resolve path also consults the cache: it looks up integrity from the existing lockfile when the manifest doesn't carry one, so a partial re-resolve (e.g. one range bump) still avoids network for unchanged transitive deps.
 - Coverage: 4 conformance tests in `tests/conformance/npm/lockfile-reuse.test.ts`.
+
+## Implementation notes (2026-05-26) — overrides re-applied on fast path
+
+P1 semantic-divergence fix: the original fast-path replayed lockfile pins
+verbatim, ignoring `package.json#overrides`. Adding an override (user or
+baked-in) after the lockfile was already on disk silently no-op'd until
+something forced a full live resolve.
+
+The fast path now walks every top-level request through `resolveOverride()`
+before consulting `lockfileCovers`, and every transitive name in the closed
+subgraph through `resolveOverride(name, undefined, …)` to detect any
+redirection. If an override would change a name (or would tighten a range
+past what the locked pin satisfies), the fast path falls through to live
+resolve — treated as a cache miss.
+
+The transitive check uses the global (no-parent) form of `resolveOverride`
+because the v3 flat lockfile loses parent context. That's slightly more
+aggressive than strictly necessary, but the cost is one extra live-resolve
+and the win is never silently ignoring an override.
+
+Coverage: 3 new unit tests in `packages/npm-client/src/installer-lockfile.test.ts`
+(`falls through to live-resolve when a user override redirects a locked dep to
+a new name`, `falls through when an override changes the locked range`,
+`still hits the fast path when no override touches the locked subgraph`).
 
 ## Follow-ups
 

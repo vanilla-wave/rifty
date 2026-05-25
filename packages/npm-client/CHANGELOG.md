@@ -55,6 +55,17 @@
   fast path and the live-resolve path now go through
   `writeLockfileIfChanged`, which honours the ADR-0023 promise of a stable
   user-visible mtime when the install was a functional no-op.
+- Lockfile fast path now re-applies overrides (user + baked-in) before
+  replaying pins (P1 semantic divergence fix, ADR-0023 §"Implementation
+  notes (2026-05-26)"). Previously, adding an `overrides` entry that
+  redirected a locked package to a different name silently no-op'd until
+  something forced a full live resolve — the fast path replayed the
+  original pin and ignored the override. Now each top-level request and
+  every transitive subgraph entry is walked through `resolveOverride()`;
+  any redirection (different name, or a tighter range that the locked
+  version no longer satisfies) triggers a fallthrough to live-resolve,
+  treated as a cache miss. Coverage: 3 unit tests in
+  `installer-lockfile.test.ts`.
 
 ### Dependencies
 

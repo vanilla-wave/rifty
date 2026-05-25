@@ -23,7 +23,7 @@ import {
 import { type Lockfile, type ResolvedPackage, buildLockfile, link } from './linker.ts';
 import { type OverrideMap, resolveOverride } from './overrides.ts';
 import type { Packument, RegistryClient } from './registry.ts';
-import { pickBestVersion } from './semver.ts';
+import { matchesRange, pickBestVersion } from './semver.ts';
 import { type TarballCache, VfsTarballCache, computeIntegrity } from './tarball-cache.ts';
 import { extractTarGz } from './unpacker.ts';
 
@@ -72,8 +72,20 @@ export async function install(
   // --- Lockfile fast path (ADR-0023) ---
   const existingLockfile = await readExistingLockfile(opts.vfs, opts.cwd);
   if (existingLockfile) {
-    const topLevelPins = lockfileCovers(existingLockfile, dependencies);
-    if (topLevelPins) {
+    // Apply overrides (user + baked-in) to the top-level request before
+    // checking lockfile coverage. Without this, the fast path would happily
+    // replay a `bcrypt` pin from the lockfile even when an override redirects
+    // it to `bcryptjs` — a silent semantic divergence between the cached and
+    // live-resolve paths. Resolution: compute the effective request, and if
+    // anything in the closed subgraph would also be redirected to a name
+    // that's not pinned in the lockfile, bail out and let live-resolve take
+    // over (treated as a cache miss).
+    const effectiveRequest = applyOverridesToRequest(dependencies, rootName, opts.overrides);
+    const topLevelPins = lockfileCovers(existingLockfile, effectiveRequest);
+    if (
+      topLevelPins &&
+      subgraphFreeOfOverrideDivergence(existingLockfile, topLevelPins, opts.overrides)
+    ) {
       // Build the closed subgraph from the requested roots and replay every
       // pin through the cache. Any cache miss falls through to a fetch but
       // still avoids the packument round-trip.
@@ -229,6 +241,80 @@ export async function install(
   // the same lockfile as what's already on disk (ADR-0023).
   await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
   return { packages, lockfile, conflicts: [] };
+}
+
+/**
+ * Apply overrides (user + baked-in) to the top-level request. The returned
+ * map keys are the *effective* package names that will actually be installed;
+ * values are the effective ranges. When no override matches a name, the
+ * original (name, range) is kept verbatim.
+ *
+ * The fast path uses this so the lockfile is queried for the names that
+ * would actually end up installed — not the raw names from `package.json`.
+ * Without this, adding `"overrides": { "bcrypt": "bcryptjs" }` after the
+ * lockfile was written would silently no-op until something forced a full
+ * resolve, because the fast path would replay the original `bcrypt` pin.
+ */
+function applyOverridesToRequest(
+  request: Record<string, string>,
+  parent: string,
+  overrides: OverrideMap | undefined,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, range] of Object.entries(request)) {
+    const override = resolveOverride(name, parent, overrides);
+    if (override) {
+      // null range means "latest" — there is no single range we can pin
+      // against the lockfile, so encode it as `*` (which `matchesRange`
+      // treats as satisfied by anything). The lockfile fast path will then
+      // accept any pinned version of the override target; if the operator
+      // wants a specific range, they should write it explicitly in the
+      // override target (`"bcrypt": "bcryptjs@2.x"`).
+      out[override.name] = override.range ?? range;
+    } else {
+      out[name] = range;
+    }
+  }
+  return out;
+}
+
+/**
+ * Walk the closed lockfile subgraph reachable from the top-level pins and
+ * check that none of the locked package names would be redirected by an
+ * override to a name that is *not* pinned in the lockfile.
+ *
+ * Returning `false` here means "the lockfile no longer reflects what live
+ * resolve would produce" — the caller must fall through to live-resolve as
+ * if the lockfile didn't cover at all.
+ *
+ * We deliberately use the global (no-parent) form of `resolveOverride` for
+ * transitive entries because the v3 flat lockfile loses parent context.
+ * That's slightly more aggressive than strictly necessary (a `parent>child`
+ * override that doesn't apply to the actual parent will still trigger
+ * fallthrough), but the cost is one extra live-resolve and the win is
+ * never silently ignoring an override.
+ */
+function subgraphFreeOfOverrideDivergence(
+  lockfile: Lockfile,
+  topLevelPins: Map<string, string>,
+  overrides: OverrideMap | undefined,
+): boolean {
+  const subgraph = lockfileSubgraph(lockfile, [...topLevelPins.keys()]);
+  for (const name of subgraph) {
+    const override = resolveOverride(name, undefined, overrides);
+    if (!override) continue;
+    // If the override redirects to a different name, the lockfile would need
+    // to have that name pinned instead. Anything else is a divergence.
+    if (override.name !== name) return false;
+    // Same name but different effective range — if the locked version no
+    // longer satisfies the override's range, the fast path's replayed pin
+    // would silently differ from what live-resolve would have produced.
+    if (override.range) {
+      const entry = lockfile.packages[`node_modules/${name}`];
+      if (!entry || !matchesRange(entry.version, override.range)) return false;
+    }
+  }
+  return true;
 }
 
 /**
