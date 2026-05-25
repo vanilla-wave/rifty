@@ -1,6 +1,6 @@
 # ADR 0011: Sync IPC via SharedArrayBuffer + Atomics; Worker-as-process model
 
-Status: Accepted
+Status: Partial — phase 1 (SAB ring + worker-entry + capability gate) implemented 2026-05-25; phases 2 (Worker-per-process) and 3 (execSync) deferred to separate PRs
 Date: 2026-05
 
 ## Context
@@ -30,6 +30,24 @@ Adopt a single process model. Each Node-style "process" runs in its own Worker r
 - Follow-up: implementation lands in M11.
 
 ## Acceptance criteria for the deferred implementation
+
+Phase 1 landed (2026-05-25):
+
+- [x] `packages/kernel/src/ipc/sab-ring.ts` — SAB-backed single-in-flight
+      request/reply ring with `Atomics.wait` (caller) / `Atomics.waitAsync`
+      (test driver) / `Atomics.notify` (responder). Covered by 12 unit tests
+      and a real-Worker conformance test.
+- [x] `packages/kernel/src/worker-entry.ts` — kernel-side Worker bootstrap
+      that accepts a `WorkerSpawnSpec`, installs a minimal `process` shim,
+      publishes the `SabRing` on the realm's globalThis under a documented
+      hook key, runs the entry, and posts an `exit` message.
+- [x] `packages/kernel/src/ipc/capabilities.ts` — `isSabIpcSupported()` and
+      `getIpcMode()` gating SAB vs. same-realm fallback (also reads the
+      `RIFTY_FALLBACK_NO_SAB` env override).
+
+Phase 2 (`kernel.spawn` + Worker-per-process; `child_process.spawn` /
+`worker_threads.Worker` / `fork` all delegate to one allocator) and phase 3
+(real `execSync` blocking via `Atomics.wait`) remain:
 
 - [ ] `child_process.execSync('node', [path])` runs the script in a real Worker, blocks the caller via `Atomics.wait`, returns the child's stdout as a `Buffer`.
 - [ ] `worker_threads.Worker` and `child_process.fork` both delegate to a single `kernel.spawn` implementation; PIDs come from one allocator.

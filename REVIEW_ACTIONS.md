@@ -18,6 +18,7 @@
 ### A-001 [I] execSync через SAB+Atomics не реализован
 **Статус:** ADR-0011 (sync IPC via SharedArrayBuffer+Atomics; deferred to M11).
 **Что сделано в этой сессии:** ADR `docs/adr/0011-sync-ipc-sab-atomics.md` фиксирует дизайн kernel `worker-entry.ts` + Atomics-coordinated request/reply, acceptance-критерии для M11.
+**Update 2026-05-25:** ADR-0011 phase 1 landed — `packages/kernel/src/ipc/sab-ring.ts` (SAB ring + `RingTimeoutError`/`RingPayloadTooLargeError`), `packages/kernel/src/ipc/capabilities.ts` (`isSabIpcSupported`/`getIpcMode`), `packages/kernel/src/worker-entry.ts` (kernel-side Worker bootstrap + `process` shim + sync-ring hook). Covered by 12 unit tests + 2 conformance tests (`tests/conformance/kernel/sab-ring.test.ts` exercises a real Node `Worker` round-trip via `Atomics.wait`). Phases 2 (`kernel.spawn` + real Worker-per-process) and 3 (`execSync` blocking the main thread) remain — see ADR-0011 acceptance section.
 
 ### A-002 [I] «Процесс = Web Worker» не реализован
 **Статус:** ADR-0011 (тот же дизайн).
