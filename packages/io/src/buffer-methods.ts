@@ -7,6 +7,8 @@
  */
 
 import { type Encoding, compareSlices, decode, encode } from './buffer-codec.ts';
+import { tagExtra } from './buffer-methods-extra.ts';
+import { tagInt } from './buffer-methods-int.ts';
 
 const TAG = Symbol.for('nodejs.Buffer');
 
@@ -17,7 +19,9 @@ export interface BufferMethods {
   toString(encoding?: Encoding, start?: number, end?: number): string;
   slice(start?: number, end?: number): Buffer;
   equals(other: Uint8Array): boolean;
-  write(string: string, offset?: number, length?: number, encoding?: Encoding): number;
+  write(string: string, encoding?: Encoding): number;
+  write(string: string, offset: number, encoding?: Encoding): number;
+  write(string: string, offset: number, length: number, encoding?: Encoding): number;
   readUInt8(offset?: number): number;
   readUInt16BE(offset?: number): number;
   readUInt16LE(offset?: number): number;
@@ -56,13 +60,39 @@ export interface BufferMethods {
     sourceStart?: number,
     sourceEnd?: number,
   ): -1 | 0 | 1;
+  readFloatBE(offset?: number): number;
+  readFloatLE(offset?: number): number;
+  readDoubleBE(offset?: number): number;
+  readDoubleLE(offset?: number): number;
+  writeFloatBE(value: number, offset?: number): number;
+  writeFloatLE(value: number, offset?: number): number;
+  writeDoubleBE(value: number, offset?: number): number;
+  writeDoubleLE(value: number, offset?: number): number;
+  indexOf(
+    value: number | string | Uint8Array,
+    byteOffsetOrEncoding?: number | Encoding,
+    encoding?: Encoding,
+  ): number;
+  lastIndexOf(
+    value: number | string | Uint8Array,
+    byteOffsetOrEncoding?: number | Encoding,
+    encoding?: Encoding,
+  ): number;
+  includes(
+    value: number | string | Uint8Array,
+    byteOffsetOrEncoding?: number | Encoding,
+    encoding?: Encoding,
+  ): boolean;
+  fill(
+    value: number | string | Uint8Array,
+    offsetOrEncoding?: number | Encoding,
+    endOrEncoding?: number | Encoding,
+    encoding?: Encoding,
+  ): Buffer;
+  copy(target: Uint8Array, targetStart?: number, sourceStart?: number, sourceEnd?: number): number;
 }
 
 export type Buffer = Uint8Array & BufferMethods;
-
-function viewOf(u8: Uint8Array, offset: number, byteLen: number): DataView {
-  return new DataView(u8.buffer, u8.byteOffset + offset, byteLen);
-}
 
 function defineMethod(u8: Uint8Array, name: string, value: (...args: never[]) => unknown): void {
   Object.defineProperty(u8, name, { configurable: true, writable: true, value });
@@ -90,117 +120,53 @@ export function tag(u8: Uint8Array): Buffer {
   defineMethod(u8, 'write', function (
     this: Uint8Array,
     s: string,
-    offset = 0,
-    _length?: number,
-    _encoding: Encoding = 'utf8',
+    offsetOrEncoding?: number | Encoding,
+    lengthOrEncoding?: number | Encoding,
+    encodingArg?: Encoding,
   ) {
-    const bytes = encode(s, 'utf8');
-    const n = Math.min(bytes.length, this.length - offset);
+    // Node overloads: write(s) / write(s, encoding) / write(s, offset, encoding)
+    // / write(s, offset, length, encoding). Resolve to (offset, length, encoding).
+    let offset: number;
+    let length: number | undefined;
+    let encoding: Encoding;
+
+    if (typeof offsetOrEncoding === 'string') {
+      // write(s, encoding)
+      offset = 0;
+      length = undefined;
+      encoding = offsetOrEncoding;
+    } else {
+      offset = offsetOrEncoding ?? 0;
+      if (typeof lengthOrEncoding === 'string') {
+        // write(s, offset, encoding)
+        length = undefined;
+        encoding = lengthOrEncoding;
+      } else {
+        length = lengthOrEncoding;
+        encoding = encodingArg ?? 'utf8';
+      }
+    }
+
+    if (offset < 0 || offset > this.length) {
+      throw new RangeError(
+        `The value of "offset" is out of range. It must be >= 0 && <= ${this.length}. Received ${offset}`,
+      );
+    }
+    if (length === undefined) length = this.length - offset;
+    if (length < 0 || length > this.length) {
+      throw new RangeError(
+        `The value of "length" is out of range. It must be >= 0 && <= ${this.length}. Received ${length}`,
+      );
+    }
+
+    const bytes = encode(s, encoding);
+    const n = Math.min(bytes.length, length, this.length - offset);
     this.set(bytes.subarray(0, n), offset);
     return n;
   } as (...args: never[]) => unknown);
 
-  // ---- Integer readers ----
-  defineMethod(u8, 'readUInt8', function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 1).getUint8(0);
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'readUInt16BE', function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 2).getUint16(0, false);
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'readUInt16LE', function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 2).getUint16(0, true);
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'readUInt32BE', function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 4).getUint32(0, false);
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'readUInt32LE', function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 4).getUint32(0, true);
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'readInt8', function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 1).getInt8(0);
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'readInt16BE', function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 2).getInt16(0, false);
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'readInt16LE', function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 2).getInt16(0, true);
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'readInt32BE', function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 4).getInt32(0, false);
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'readInt32LE', function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 4).getInt32(0, true);
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'readBigUInt64BE', function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 8).getBigUint64(0, false);
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'readBigUInt64LE', function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 8).getBigUint64(0, true);
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'readBigInt64BE', function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 8).getBigInt64(0, false);
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'readBigInt64LE', function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 8).getBigInt64(0, true);
-  } as (...args: never[]) => unknown);
-
-  // ---- Integer writers (return the post-write offset, matching Node) ----
-  defineMethod(u8, 'writeUInt8', function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 1).setUint8(0, value);
-    return offset + 1;
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'writeUInt16BE', function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 2).setUint16(0, value, false);
-    return offset + 2;
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'writeUInt16LE', function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 2).setUint16(0, value, true);
-    return offset + 2;
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'writeUInt32BE', function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 4).setUint32(0, value, false);
-    return offset + 4;
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'writeUInt32LE', function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 4).setUint32(0, value, true);
-    return offset + 4;
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'writeInt8', function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 1).setInt8(0, value);
-    return offset + 1;
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'writeInt16BE', function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 2).setInt16(0, value, false);
-    return offset + 2;
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'writeInt16LE', function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 2).setInt16(0, value, true);
-    return offset + 2;
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'writeInt32BE', function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 4).setInt32(0, value, false);
-    return offset + 4;
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'writeInt32LE', function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 4).setInt32(0, value, true);
-    return offset + 4;
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'writeBigUInt64BE', function (this: Uint8Array, value: bigint, offset = 0) {
-    viewOf(this, offset, 8).setBigUint64(0, value, false);
-    return offset + 8;
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'writeBigUInt64LE', function (this: Uint8Array, value: bigint, offset = 0) {
-    viewOf(this, offset, 8).setBigUint64(0, value, true);
-    return offset + 8;
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'writeBigInt64BE', function (this: Uint8Array, value: bigint, offset = 0) {
-    viewOf(this, offset, 8).setBigInt64(0, value, false);
-    return offset + 8;
-  } as (...args: never[]) => unknown);
-  defineMethod(u8, 'writeBigInt64LE', function (this: Uint8Array, value: bigint, offset = 0) {
-    viewOf(this, offset, 8).setBigInt64(0, value, true);
-    return offset + 8;
-  } as (...args: never[]) => unknown);
+  // Integer/BigInt readers + writers live in `buffer-methods-int.ts`.
+  tagInt(u8);
 
   // ---- Byte-swap (in place; returns self) ----
   defineMethod(u8, 'swap16', function (this: Uint8Array) {
@@ -256,5 +222,9 @@ export function tag(u8: Uint8Array): Buffer {
       other.subarray(targetStart, targetEnd),
     );
   } as (...args: never[]) => unknown);
+
+  // Float/Double/indexOf/fill/copy live in `buffer-methods-extra.ts` to keep
+  // both files under the ADR-0024 line budget.
+  tagExtra(u8);
   return u8 as Buffer;
 }

@@ -6,6 +6,10 @@
 export type Encoding =
   | 'utf8'
   | 'utf-8'
+  | 'utf16le'
+  | 'utf-16le'
+  | 'ucs2'
+  | 'ucs-2'
   | 'hex'
   | 'base64'
   | 'base64url'
@@ -13,8 +17,23 @@ export type Encoding =
   | 'latin1'
   | 'binary';
 
+function isUtf16(enc: Encoding): boolean {
+  return enc === 'utf16le' || enc === 'utf-16le' || enc === 'ucs2' || enc === 'ucs-2';
+}
+
 export function encode(s: string, enc: Encoding): Uint8Array {
   if (enc === 'utf8' || enc === 'utf-8') return new TextEncoder().encode(s);
+  if (isUtf16(enc)) {
+    // Node's `utf16le` is UTF-16 LE without BOM; surrogate pairs preserved as-is
+    // (no normalisation). Two bytes per JS char-code unit.
+    const out = new Uint8Array(s.length * 2);
+    for (let i = 0; i < s.length; i++) {
+      const code = s.charCodeAt(i);
+      out[i * 2] = code & 0xff;
+      out[i * 2 + 1] = (code >> 8) & 0xff;
+    }
+    return out;
+  }
   if (enc === 'ascii' || enc === 'latin1' || enc === 'binary') {
     const out = new Uint8Array(s.length);
     for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i) & 0xff;
@@ -38,6 +57,18 @@ export function encode(s: string, enc: Encoding): Uint8Array {
 
 export function decode(view: Uint8Array, enc: Encoding): string {
   if (enc === 'utf8' || enc === 'utf-8') return new TextDecoder('utf-8').decode(view);
+  if (isUtf16(enc)) {
+    // Pair bytes LE → 16-bit code units → string. Trailing odd byte ignored
+    // (matches Node's `buffer.write` truncation behavior).
+    const units = view.length >>> 1;
+    let s = '';
+    for (let i = 0; i < units; i++) {
+      const lo = view[i * 2] ?? 0;
+      const hi = view[i * 2 + 1] ?? 0;
+      s += String.fromCharCode(lo | (hi << 8));
+    }
+    return s;
+  }
   if (enc === 'ascii' || enc === 'latin1' || enc === 'binary') {
     let s = '';
     for (let i = 0; i < view.length; i++) s += String.fromCharCode(view[i] ?? 0);

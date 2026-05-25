@@ -5,16 +5,16 @@
  * Node's Buffer extends Uint8Array. We use a static factory pattern (`Buffer.from`,
  * `Buffer.alloc`) and return Uint8Array instances tagged with Buffer-style helpers
  * via prototype patching. Per-instance method definitions live in
- * `./buffer-methods.ts`; encoding helpers in `./buffer-codec.ts`.
+ * `./buffer-methods.ts` (+ `./buffer-methods-extra.ts`); encoding helpers in
+ * `./buffer-codec.ts`.
  *
  * What we cover: from(string/array/ArrayBuffer/Uint8Array), alloc, concat,
- * byteLength, toString('utf8'|'hex'|'base64'), isBuffer, equals, write,
+ * byteLength, toString('utf8'|'utf16le'|'hex'|'base64'|'ascii'|'latin1'),
+ * isBuffer, equals, write (honors length + encoding),
  * read/write{Int,UInt}{8,16,32}{BE,LE}, read/write{Big}{Int,UInt}64{BE,LE},
- * swap{16,32,64}, compare (instance + static).
- *
- * Not covered yet (add when a real package needs them):
- * read/writeFloat{BE,LE}, read/writeDouble{BE,LE}, indexOf/includes, fill,
- * copy, copyWithin overloads.
+ * read/writeFloat{BE,LE}, read/writeDouble{BE,LE},
+ * swap{16,32,64}, compare (instance + static), copy, fill, indexOf,
+ * lastIndexOf, includes.
  */
 
 import { type Encoding, compareSlices, encode } from './buffer-codec.ts';
@@ -25,11 +25,24 @@ export type { BufferMethods, Encoding };
 export type Buffer = Uint8Array & BufferMethods;
 export type BufferLike = Buffer;
 
-function alloc(size: number, fill?: number | string, _encoding?: Encoding): Buffer {
+function alloc(size: number, fill?: number | string, encoding?: Encoding): Buffer {
   const u8 = new Uint8Array(size);
   if (fill !== undefined) {
-    if (typeof fill === 'number') u8.fill(fill);
-    else u8.set(encode(fill, 'utf8'));
+    if (typeof fill === 'number') {
+      u8.fill(fill);
+    } else {
+      // Node tiles the encoded `fill` bytes across `size`. The last copy
+      // truncates if it doesn't fit. Empty fill string is a no-op.
+      const bytes = encode(fill, encoding ?? 'utf8');
+      if (bytes.length > 0) {
+        let pos = 0;
+        while (pos < size) {
+          const take = Math.min(bytes.length, size - pos);
+          u8.set(bytes.subarray(0, take), pos);
+          pos += take;
+        }
+      }
+    }
   }
   return tag(u8);
 }

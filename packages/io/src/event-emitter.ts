@@ -20,7 +20,7 @@ export class EventEmitter {
   static defaultMaxListeners = DEFAULT_MAX_LISTENERS;
   static captureRejectionSymbol = captureRejectionSymbol;
 
-  private listeners: Map<string | symbol, Listener[]> = new Map();
+  private listenersMap: Map<string | symbol, Listener[]> = new Map();
   private maxListeners: number = DEFAULT_MAX_LISTENERS;
 
   on(event: string | symbol, listener: Listener): this {
@@ -31,27 +31,27 @@ export class EventEmitter {
     // Node emits `newListener` BEFORE the listener is added (so handlers can
     // see the previous count). Don't re-emit for the meta-event itself.
     if (event !== 'newListener') {
-      const meta = this.listeners.get('newListener');
+      const meta = this.listenersMap.get('newListener');
       if (meta && meta.length > 0) {
         for (const m of meta.slice()) m.call(this, event, listener);
       }
     }
-    const arr = this.listeners.get(event);
+    const arr = this.listenersMap.get(event);
     if (arr) {
       arr.push(listener);
     } else {
-      this.listeners.set(event, [listener]);
+      this.listenersMap.set(event, [listener]);
     }
     this.emitNew(event, listener);
     return this;
   }
 
   prependListener(event: string | symbol, listener: Listener): this {
-    const arr = this.listeners.get(event);
+    const arr = this.listenersMap.get(event);
     if (arr) {
       arr.unshift(listener);
     } else {
-      this.listeners.set(event, [listener]);
+      this.listenersMap.set(event, [listener]);
     }
     return this;
   }
@@ -61,17 +61,26 @@ export class EventEmitter {
   }
 
   removeListener(event: string | symbol, listener: Listener): this {
-    const arr = this.listeners.get(event);
+    const arr = this.listenersMap.get(event);
     if (!arr) return this;
-    const idx = arr.indexOf(listener);
+    // Match by reference first, then by `.listener` (the original passed to
+    // `once`). Node removes the last-added match, scanning from the back.
+    let idx = -1;
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const entry = arr[i];
+      if (entry === listener || (entry as { listener?: Listener }).listener === listener) {
+        idx = i;
+        break;
+      }
+    }
     if (idx !== -1) arr.splice(idx, 1);
-    if (arr.length === 0) this.listeners.delete(event);
+    if (arr.length === 0) this.listenersMap.delete(event);
     return this;
   }
 
   removeAllListeners(event?: string | symbol): this {
-    if (event === undefined) this.listeners.clear();
-    else this.listeners.delete(event);
+    if (event === undefined) this.listenersMap.clear();
+    else this.listenersMap.delete(event);
     return this;
   }
 
@@ -96,7 +105,7 @@ export class EventEmitter {
   }
 
   emit(event: string | symbol, ...args: unknown[]): boolean {
-    const arr = this.listeners.get(event);
+    const arr = this.listenersMap.get(event);
     if (!arr || arr.length === 0) {
       if (event === 'error') {
         const err = args[0];
@@ -112,20 +121,30 @@ export class EventEmitter {
   }
 
   listenerCount(event: string | symbol): number {
-    return this.listeners.get(event)?.length ?? 0;
+    return this.listenersMap.get(event)?.length ?? 0;
   }
 
-  listeners_(event: string | symbol): Listener[] {
-    return this.listeners.get(event)?.slice() ?? [];
+  /**
+   * Node's `listeners(name)`: returns the unwrapped listeners — i.e. for a
+   * `once(name, fn)` registration, returns `fn`, not the internal wrapper.
+   */
+  listeners(event: string | symbol): Listener[] {
+    const arr = this.listenersMap.get(event);
+    if (!arr) return [];
+    return arr.map((l) => (l as { listener?: Listener }).listener ?? l);
   }
 
-  // Node's name for the above; renamed because TS clashed.
+  /**
+   * Node's `rawListeners(name)`: returns the stored entries verbatim. For
+   * a `once()` registration, that's the wrapper function (which has its
+   * `.listener` property set to the original).
+   */
   rawListeners(event: string | symbol): Listener[] {
-    return this.listeners.get(event)?.slice() ?? [];
+    return this.listenersMap.get(event)?.slice() ?? [];
   }
 
   eventNames(): (string | symbol)[] {
-    return [...this.listeners.keys()];
+    return [...this.listenersMap.keys()];
   }
 
   setMaxListeners(n: number): this {
@@ -148,17 +167,6 @@ export class EventEmitter {
     }
   }
 }
-
-// Re-export `listeners` under the Node name. (TS doesn't let us name a method
-// `listeners` when there's a field with the same name; expose a static helper.)
-EventEmitter.prototype.constructor === EventEmitter;
-Object.defineProperty(EventEmitter.prototype, 'listeners', {
-  configurable: true,
-  writable: true,
-  value: function listeners(this: EventEmitter, event: string | symbol) {
-    return (this as unknown as { listeners_(e: string | symbol): Listener[] }).listeners_(event);
-  },
-});
 
 export function once(emitter: EventEmitter, event: string | symbol): Promise<unknown[]> {
   return new Promise((resolve, reject) => {
