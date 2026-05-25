@@ -7,6 +7,17 @@ import { CLOCKID_MONOTONIC, CLOCKID_REALTIME, E_INVAL, E_SUCCESS, type WasiCtx }
 
 export function clockSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
   return {
+    clock_res_get: (id: number, outPtr: number) => {
+      // Report 1 µs (1000 ns) for both REALTIME and MONOTONIC — `Date.now()`
+      // is ms, `performance.now()` is sub-millisecond. Higher-precision
+      // claims would be dishonest; CPU-time clocks are not supported here
+      // (see `clock_time_get` rationale).
+      if (id === CLOCKID_REALTIME || id === CLOCKID_MONOTONIC) {
+        ctx.view().setBigUint64(outPtr, 1000n, true);
+        return E_SUCCESS;
+      }
+      return E_INVAL;
+    },
     clock_time_get: (id: number, _precision: bigint, outPtr: number) => {
       let ns: bigint;
       if (id === CLOCKID_REALTIME) {

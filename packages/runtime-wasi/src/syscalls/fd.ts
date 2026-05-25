@@ -3,17 +3,24 @@
  * `fd_fdstat_get`, `fd_prestat_get`, `fd_prestat_dir_name`. Mutates the fd
  * table and (for `fd_write` on file fds) writes through to the shared VFS via
  * `syncMirror()`.
+ *
+ * Auxiliary fd calls (`fd_filestat_get`, `fd_readdir`, `fd_renumber`, and
+ * the family of E_NOSYS / no-op stubs) live in {@link ./fd-extra.ts} —
+ * split for the ADR-0024 line budget.
  */
 import { syncMirror } from '@rifty/vfs';
+import { fdExtraSyscalls } from './fd-extra.ts';
 import {
   E_BADF,
   E_INVAL,
   E_NAMETOOLONG,
+  E_PERM,
   E_SUCCESS,
   FILETYPE_DIRECTORY,
   FILETYPE_REGULAR_FILE,
   FILETYPE_UNKNOWN,
   type FileDescriptor,
+  RIGHTS_FD_WRITE,
   WHENCE_CUR,
   WHENCE_END,
   WHENCE_SET,
@@ -92,6 +99,12 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
     fd_write: (fd: number, iovs: number, iovsLen: number, nwritten: number) => {
       const fdEntry = ctx.fds.get(fd);
       if (!fdEntry) return E_BADF;
+      // Rights check: if the fd was opened with an explicit rights bag (i.e.
+      // `path_open` saved one), require RIGHTS_FD_WRITE before writing. stdio
+      // and preopens leave `rights` undefined → default-permissive.
+      if (fdEntry.type === 'file' && fdEntry.rights !== undefined) {
+        if ((fdEntry.rights & RIGHTS_FD_WRITE) === 0n) return E_PERM;
+      }
       const view = ctx.view();
       const bytes = ctx.bytes();
       let written = 0;
@@ -214,5 +227,6 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       ctx.bytes().set(name, ptr);
       return E_SUCCESS;
     },
+    ...fdExtraSyscalls(ctx),
   };
 }

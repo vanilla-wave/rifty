@@ -15,6 +15,7 @@ export const E_NAMETOOLONG = 37;
 export const E_NOENT = 44;
 export const E_NOSYS = 52;
 export const E_NOTDIR = 54;
+export const E_NOTEMPTY = 55;
 export const E_PERM = 63;
 
 // path_open oflags (preview1)
@@ -29,6 +30,12 @@ export const FDFLAGS_DSYNC = 1 << 1;
 export const FDFLAGS_NONBLOCK = 1 << 2;
 export const FDFLAGS_RSYNC = 1 << 3;
 export const FDFLAGS_SYNC = 1 << 4;
+
+// preview1 rights subset — bits we explicitly check (see WASI spec rights table).
+// Used by `path_open` to derive the granted rights set on a new fd and by
+// `fd_write` to enforce that the open token actually had write capability.
+export const RIGHTS_FD_READ = 1n << 1n;
+export const RIGHTS_FD_WRITE = 1n << 6n;
 
 // clock ids (preview1)
 export const CLOCKID_REALTIME = 0;
@@ -60,6 +67,14 @@ export interface FileDescriptor {
    * Defaults to 0 for stdio/preopens and when unset.
    */
   fdflags?: number;
+  /**
+   * preview1 `rights` bitset granted at open time. When undefined, the fd is
+   * treated as default-permissive (used for stdio and preopens — guests don't
+   * open these and so never negotiate rights). `path_open` sets this from
+   * `fs_rights_base` (default-permissive when caller passed 0n, per WASI
+   * spec). `fd_write` checks `RIGHTS_FD_WRITE` and returns `E_PERM` if absent.
+   */
+  rights?: bigint;
 }
 
 export interface WasiCtx {

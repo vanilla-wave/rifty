@@ -11,6 +11,6 @@ const { instance } = await WebAssembly.instantiate(wasmBytes, wasi.imports);
 wasi.start(instance);
 ```
 
-The shim implements the most common preview1 syscalls: `args_get`, `args_sizes_get`, `environ_get`, `environ_sizes_get`, `fd_read`, `fd_write`, `fd_close`, `fd_seek`, `fd_fdstat_get`, `path_open`, `path_filestat_get`, `proc_exit`, `clock_time_get`, `random_get`. Missing calls return `ENOSYS`.
+The shim exposes ALL canonical preview1 syscalls in `wasi_snapshot_preview1` — partly so toolchains like esbuild/tsc don't fail at `WebAssembly.instantiate` with a `LinkError`, partly because honest `E_NOSYS` is better than a missing symbol. The full per-syscall status table lives in [`docs/compat/wasi.md`](../../docs/compat/wasi.md).
 
-VFS access is mediated through `@rifty/runtime-js`'s sync filesystem mirror — what works in `fs` works in WASI.
+VFS access is mediated through `@rifty/vfs`'s sync filesystem mirror (`syncMirror()`, ADR-0014) — what works in `fs` works in WASI.

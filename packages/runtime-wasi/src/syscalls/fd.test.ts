@@ -1,66 +1,28 @@
 /**
- * Unit tests for file-descriptor WASI preview1 syscalls.
+ * Unit tests for file-descriptor WASI preview1 syscalls (`fd_read`,
+ * `fd_seek`, `fd_fdstat_get`, `fd_write` rights). Stat/readdir tests live
+ * in {@link ./fd-stat-readdir.test.ts}.
  *
  * The shim is exercised through synthetic `WasiCtx` instances with a real
  * `WebAssembly.Memory` so we can read back the bytes the syscall wrote.
  */
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@rifty/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { fdSyscalls } from './fd.ts';
+import { setupFdCtx } from './fd-test-fixture.ts';
 import {
   E_BADF,
   E_INVAL,
+  E_PERM,
   E_SUCCESS,
   FDFLAGS_APPEND,
   FILETYPE_DIRECTORY,
   FILETYPE_REGULAR_FILE,
-  type FileDescriptor,
+  RIGHTS_FD_READ,
+  RIGHTS_FD_WRITE,
   WHENCE_CUR,
   WHENCE_END,
   WHENCE_SET,
-  type WasiCtx,
 } from './shared.ts';
-
-type FdReadFn = (fd: number, iovs: number, iovsLen: number, nread: number) => number;
-type FdSeekFn = (fd: number, offset: bigint, whence: number, newOffset: number) => number;
-type FdFdstatGetFn = (fd: number, outPtr: number) => number;
-
-interface FdNs {
-  fd_read: FdReadFn;
-  fd_seek: FdSeekFn;
-  fd_fdstat_get: FdFdstatGetFn;
-}
-
-interface Ctx {
-  ctx: WasiCtx;
-  ns: FdNs;
-  memory: WebAssembly.Memory;
-  fds: Map<number, FileDescriptor>;
-}
-
-function setupCtx(): Ctx {
-  const memory = new WebAssembly.Memory({ initial: 1 });
-  const fds = new Map<number, FileDescriptor>();
-  fds.set(0, { type: 'stdin' });
-  fds.set(1, { type: 'stdout' });
-  fds.set(2, { type: 'stderr' });
-  const ctx: WasiCtx = {
-    args: [],
-    env: {},
-    fds,
-    nextFd: { value: 3 },
-    exited: { value: false },
-    exitCode: { value: 0 },
-    onStdout: () => {},
-    onStderr: () => {},
-    view: () => new DataView(memory.buffer),
-    bytes: () => new Uint8Array(memory.buffer),
-  };
-  // The factory returns `WebAssembly.ModuleImports` (string-keyed dict). We
-  // bridge to a typed view for tests; the shape is stable per `fdSyscalls`.
-  const ns = fdSyscalls(ctx) as unknown as FdNs;
-  return { ctx, ns, memory, fds };
-}
 
 describe('fd_read', () => {
   beforeEach(() => {
@@ -69,7 +31,7 @@ describe('fd_read', () => {
   afterEach(() => resetSyncMirror());
 
   it('returns E_BADF for an unknown fd (not silent success)', () => {
-    const t = setupCtx();
+    const t = setupFdCtx();
     const view = new DataView(t.memory.buffer);
     // Set up iovec at offset 0: ptr=200, len=10
     view.setUint32(0, 200, true);
@@ -79,7 +41,7 @@ describe('fd_read', () => {
   });
 
   it('returns E_BADF for non-file fds like stdout', () => {
-    const t = setupCtx();
+    const t = setupFdCtx();
     const view = new DataView(t.memory.buffer);
     view.setUint32(0, 200, true);
     view.setUint32(4, 10, true);
@@ -88,7 +50,7 @@ describe('fd_read', () => {
   });
 
   it('returns E_SUCCESS with 0 bytes at EOF for a valid file fd', () => {
-    const t = setupCtx();
+    const t = setupFdCtx();
     t.fds.set(5, {
       type: 'file',
       path: '/x',
@@ -104,7 +66,7 @@ describe('fd_read', () => {
   });
 
   it('reads data from a file fd into guest memory', () => {
-    const t = setupCtx();
+    const t = setupFdCtx();
     t.fds.set(5, {
       type: 'file',
       path: '/x',
@@ -129,7 +91,7 @@ describe('fd_seek', () => {
   afterEach(() => resetSyncMirror());
 
   it('returns E_INVAL for an unknown whence', () => {
-    const t = setupCtx();
+    const t = setupFdCtx();
     t.fds.set(5, {
       type: 'file',
       path: '/x',
@@ -141,7 +103,7 @@ describe('fd_seek', () => {
   });
 
   it('returns E_INVAL for negative absolute offset (whence=SET)', () => {
-    const t = setupCtx();
+    const t = setupFdCtx();
     t.fds.set(5, {
       type: 'file',
       path: '/x',
@@ -153,7 +115,7 @@ describe('fd_seek', () => {
   });
 
   it('returns E_INVAL for relative seek that lands below 0 (whence=CUR)', () => {
-    const t = setupCtx();
+    const t = setupFdCtx();
     t.fds.set(5, {
       type: 'file',
       path: '/x',
@@ -165,7 +127,7 @@ describe('fd_seek', () => {
   });
 
   it('returns E_INVAL for seek-from-end that lands below 0', () => {
-    const t = setupCtx();
+    const t = setupFdCtx();
     t.fds.set(5, {
       type: 'file',
       path: '/x',
@@ -177,7 +139,7 @@ describe('fd_seek', () => {
   });
 
   it('seeks to absolute position with whence=SET', () => {
-    const t = setupCtx();
+    const t = setupFdCtx();
     t.fds.set(5, {
       type: 'file',
       path: '/x',
@@ -192,7 +154,7 @@ describe('fd_seek', () => {
   });
 
   it('seeks relative with whence=CUR', () => {
-    const t = setupCtx();
+    const t = setupFdCtx();
     t.fds.set(5, {
       type: 'file',
       path: '/x',
@@ -207,7 +169,7 @@ describe('fd_seek', () => {
   });
 
   it('seeks from end with whence=END', () => {
-    const t = setupCtx();
+    const t = setupFdCtx();
     t.fds.set(5, {
       type: 'file',
       path: '/x',
@@ -229,13 +191,13 @@ describe('fd_fdstat_get', () => {
   afterEach(() => resetSyncMirror());
 
   it('returns E_BADF for an unknown fd', () => {
-    const t = setupCtx();
+    const t = setupFdCtx();
     const rc = t.ns.fd_fdstat_get(99, 100);
     expect(rc).toBe(E_BADF);
   });
 
   it('writes a 24-byte fdstat struct for a regular file', () => {
-    const t = setupCtx();
+    const t = setupFdCtx();
     t.fds.set(5, {
       type: 'file',
       path: '/x',
@@ -263,11 +225,75 @@ describe('fd_fdstat_get', () => {
   });
 
   it('writes filetype=DIRECTORY for a directory fd', () => {
-    const t = setupCtx();
+    const t = setupFdCtx();
     t.fds.set(5, { type: 'dir', path: '/d' });
     const view = new DataView(t.memory.buffer);
     const rc = t.ns.fd_fdstat_get(5, 100);
     expect(rc).toBe(E_SUCCESS);
     expect(view.getUint8(100)).toBe(FILETYPE_DIRECTORY);
+  });
+});
+
+describe('fd_write — rights enforcement', () => {
+  beforeEach(() => {
+    setSyncMirror(new MemoryFsSync());
+  });
+  afterEach(() => resetSyncMirror());
+
+  it('returns E_PERM when the open fd lacks RIGHTS_FD_WRITE', () => {
+    const t = setupFdCtx();
+    t.fds.set(5, {
+      type: 'file',
+      path: '/ro.txt',
+      data: new Uint8Array(0),
+      cursor: 0,
+      // explicitly granted READ only — write must be rejected.
+      rights: RIGHTS_FD_READ,
+    });
+    const view = new DataView(t.memory.buffer);
+    const payload = new TextEncoder().encode('nope');
+    new Uint8Array(t.memory.buffer).set(payload, 200);
+    view.setUint32(0, 200, true); // iov.ptr
+    view.setUint32(4, payload.length, true); // iov.len
+    const rc = t.ns.fd_write(5, 0, 1, 300);
+    expect(rc).toBe(E_PERM);
+  });
+
+  it('allows write when the open fd has RIGHTS_FD_WRITE', () => {
+    const t = setupFdCtx();
+    t.fds.set(5, {
+      type: 'file',
+      path: '/rw.txt',
+      data: new Uint8Array(0),
+      cursor: 0,
+      rights: RIGHTS_FD_WRITE,
+    });
+    const view = new DataView(t.memory.buffer);
+    const payload = new TextEncoder().encode('ok');
+    new Uint8Array(t.memory.buffer).set(payload, 200);
+    view.setUint32(0, 200, true);
+    view.setUint32(4, payload.length, true);
+    const rc = t.ns.fd_write(5, 0, 1, 300);
+    expect(rc).toBe(E_SUCCESS);
+  });
+
+  it('allows write when rights are undefined (default-permissive — stdio, preopens)', () => {
+    // The fd was opened without explicit rights restriction (e.g. stdio,
+    // preopens, default-permissive path_open). Writing must be permitted.
+    const t = setupFdCtx();
+    t.fds.set(5, {
+      type: 'file',
+      path: '/rw.txt',
+      data: new Uint8Array(0),
+      cursor: 0,
+      // rights omitted on purpose
+    });
+    const view = new DataView(t.memory.buffer);
+    const payload = new TextEncoder().encode('hello');
+    new Uint8Array(t.memory.buffer).set(payload, 200);
+    view.setUint32(0, 200, true);
+    view.setUint32(4, payload.length, true);
+    const rc = t.ns.fd_write(5, 0, 1, 300);
+    expect(rc).toBe(E_SUCCESS);
   });
 });

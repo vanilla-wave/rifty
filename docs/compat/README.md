@@ -5,6 +5,7 @@ Each markdown here mirrors the test results in `tests/conformance/` and `tests/i
 - [modules.md](./modules.md) — M2 (Modules)
 - [buffer.md](./buffer.md) — `Buffer` polyfill (`@rifty/io`)
 - [m10-tooling.md](./m10-tooling.md) — M10 foundations
+- [wasi.md](./wasi.md) — WASI preview1 syscall surface (`@rifty/runtime-wasi`)
 - (browsers.md — coming with first cross-browser CI run)
 
 Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not implemented (throws `NotImplementedError` or `UNSUPPORTED_PROTOCOL`).
