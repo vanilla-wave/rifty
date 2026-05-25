@@ -116,6 +116,9 @@ importers:
       '@rifty/io':
         specifier: workspace:*
         version: link:../io
+      '@rifty/kernel':
+        specifier: workspace:*
+        version: link:../kernel
       '@rifty/vfs':
         specifier: workspace:*
         version: link:../vfs

@@ -23,7 +23,7 @@
 **Статус:** ADR-0011 (тот же дизайн).
 
 ### A-003 [R] `packages/io` и `packages/kernel` — мёртвый каркас
-**Статус:** ADR-0012 (`docs/adr/0012-io-and-kernel-promotion.md`). Решение: путь 1 из ревью — primitives (EventEmitter, Buffer, Readable*) переезжают в `@rifty/io`, `ProcessManager` становится бэкендом `child_process`. Реализация — M11 (вместе с A-002).
+**Статус:** RESOLVED (2026-05-25, ADR-0012 implemented). `@rifty/io` теперь owns `EventEmitter`/`Buffer`/`Readable`/`Writable`/`Duplex`/`Transform`/`PassThrough`/`pipeline`/`finished` + `NotImplementedError`. `runtime-js/builtins/{events,buffer,stream}.ts` и `kernel/src/internal/event-emitter.ts` — re-export shims. `child_process.spawn` аллоцирует PIDs через `globalProcessManager.spawn(...)` (kernel ProcessManager). `worker_threads.Worker` PIDs остаются на отдельном counter до ADR-0011 worker-as-process миграции.
 
 ### A-004 [R] OPFS не используется — persistence не работает
 **Статус:** ADR-0013 (`docs/adr/0013-opfs-vfs-deployment.md`). **Update 2026-05-24 (M11):** code path landed — `packages/vfs/src/boot.ts` exposes `detectVfsBackend()` (returns `'opfs'` iff `crossOriginIsolated && OpfsVfs.isSupported()`) and `initBackend()` which calls `installOpfsFs()` when applicable. Playground bootstrap wiring + e2e reload assertion still deferred (M11 follow-up).
@@ -60,7 +60,7 @@
 **Статус:** RESOLVED — реестр (registerBuiltin/listBuiltins/loadBuiltin/isBuiltinSpecifier + cache + factories) вынесен в новый модуль `packages/runtime-js/src/builtins/registry.ts`. `index.ts` и `module.ts` оба импортят из registry; цикл устранён. `pnpm check:deps` показывает `0 circular`.
 
 ### A-014 [I] Слойная инверсия `net → runtime-js`
-**Статус:** ADR-0012 (резолвится автоматически после переезда primitives в `@rifty/io`; M11).
+**Статус:** RESOLVED (2026-05-25, ADR-0012 implemented). `packages/net/src/{http,net,ws}.ts` теперь импортят `EventEmitter`/`Buffer`/`Readable` из `@rifty/io` напрямую. `grep -r '@rifty/runtime-js' packages/net/src` показывает единственный hit — `register-builtins.ts` импортит `registerBuiltin` из runtime-js, но это forward-direction side-effect entrypoint (`apps/playground` загружает его чтобы плагнуть net в runtime-js loader registry), не reverse import of primitives.
 
 ### A-015 [R] TODO(ADR)-маркеры расходятся с OPEN_QUESTIONS.md
 **Статус:** RESOLVED. (1) Q-005 markers добавлены: в `packages/runtime-js/package.json` (top-level `"// TODO(ADR)"` ключ) и в `apps/playground/src/adapters/realVite.ts:26-27`. (2) `tools/adr/todo-report.mjs` усилён: парсит `## Active` секцию `OPEN_QUESTIONS.md`, грепает каждый Q-id, exit 1 если нет хотя бы одного маркера. Pre-implementation Q's (с `(none — …)` под `### Code markers`) корректно пропускаются.

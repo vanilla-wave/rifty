@@ -14,7 +14,7 @@
  * `BroadcastChannel`-backed bridge on top of this; see `wsBroadcastBridge`.
  */
 
-import { EventEmitter } from '@rifty/runtime-js/builtins';
+import { EventEmitter } from '@rifty/io';
 
 type WsMessage = string | ArrayBufferView | ArrayBuffer;
 

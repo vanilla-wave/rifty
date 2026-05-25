@@ -1,6 +1,6 @@
 # ADR 0012: `@rifty/io` owns shared primitives; `@rifty/kernel` owns processes
 
-Status: Accepted
+Status: Implemented (2026-05-25)
 Date: 2026-05
 
 ## Context
@@ -30,7 +30,14 @@ Promote `@rifty/io` to the shared primitives layer and commit `@rifty/kernel` to
 
 ## Acceptance criteria for the deferred implementation
 
-- [ ] `pnpm check:deps` shows `net → io` and `runtime-js → io` with no path from `io` or `kernel` back to `runtime-js`.
-- [ ] `@rifty/runtime-js` no longer exports `EventEmitter` as the source of truth from any subpath; only the re-exporting `node:events` adapter remains.
-- [ ] `child_process.spawn` and `worker_threads.Worker` allocate PIDs from a single `ProcessManager` counter.
-- [ ] No package outside `apps/playground/**` imports `solid-js` (re-check unchanged from D-002).
+- [x] `pnpm check:deps` shows `net → io` and `runtime-js → io` with no path from `io` or `kernel` back to `runtime-js`. (`packages/kernel/src` and `packages/io/src` contain zero `@rifty/runtime-js` imports.)
+- [x] `@rifty/runtime-js` no longer exports `EventEmitter` as the source of truth from any subpath; only the re-exporting `node:events` adapter remains. (`builtins/events.ts`, `builtins/buffer.ts`, `builtins/stream.ts` are now ~10-line re-exports over `@rifty/io`.)
+- [~] `child_process.spawn` and `worker_threads.Worker` allocate PIDs from a single `ProcessManager` counter. **`child_process.spawn` is wired** — `ChildProcess.pid`, `exitCode`, `signalCode`, and `cwd` come from `globalProcessManager.spawn(...)`. `worker_threads.Worker` still uses its own counter pending the ADR-0011 worker-as-process migration that consolidates Worker allocation through the same path.
+- [x] No package outside `apps/playground/**` imports `solid-js` (re-check unchanged from D-002). (`pnpm check:isolation` clean.)
+
+### Implementation notes (2026-05-25)
+
+- The stream classes split across `packages/io/src/streams/{readable,writable,duplex,transform,pass-through,pipeline,index}.ts` to stay under the ADR-0024 line budget; the EXCEPTIONS entry for `packages/runtime-js/src/builtins/stream.ts` (now a shim) is removed.
+- `packages/runtime-js/src/builtins/buffer.ts` also drops from the EXCEPTIONS list; the Buffer implementation now lives in `packages/io/src/buffer{,-codec,-methods}.ts`, each ≤ 260 lines.
+- `packages/net/src/{http,net,ws}.ts` import primitives from `@rifty/io` directly. `packages/net/src/register-builtins.ts` still imports `registerBuiltin` from `@rifty/runtime-js` — that's a forward-direction wiring call from a higher-layer side-effect entrypoint (consumed by `apps/playground` to plug `net` into runtime-js's loader registry), not a reverse import of primitives.
+- `child_process` synchronous fallback (`execSync`) keeps the legacy in-realm `new Function` path; the proper SAB-Atomics route is ADR-0011's scope.

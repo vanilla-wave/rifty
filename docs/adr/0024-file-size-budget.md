@@ -1,6 +1,6 @@
 # ADR 0024: File-size budget
 
-Status: Enforcement implemented (2026-05-24) — `tools/checks/file-budget.mjs`, wired into `pnpm check:budget` + CI lint job. WASI decomposition landed (2026-05-24).
+Status: Enforcement implemented (2026-05-24) — `tools/checks/file-budget.mjs`, wired into `pnpm check:budget` + CI lint job. WASI decomposition landed (2026-05-24). Exception list shrunk on 2026-05-25 (ADR-0012 split `runtime-js/builtins/{stream,buffer}.ts` into thin shims).
 Date: 2026-05
 
 ## Context
@@ -48,11 +48,11 @@ Originally enumerated in this ADR:
 
 - `packages/runtime-js/src/module-loader/resolver.ts` — 443 lines. Single Node-style resolver algorithm; further splitting fragments the traversal logic across files.
 - `packages/runtime-js/src/module-loader/esm-ast-walker.ts` — 408 lines. Single scope-aware AST-walker pass; the alternative is two passes over the same tree.
-- `packages/runtime-js/src/builtins/stream.ts` — 448 lines. `Readable`/`Writable`/`Duplex`/`Transform`/`PassThrough` are intertwined per Node semantics; splitting mid-class hurts more than it helps.
+- ~~`packages/runtime-js/src/builtins/stream.ts`~~ — **removed 2026-05-25.** ADR-0012 moved the stream classes into `@rifty/io/src/streams/{readable,writable,duplex,transform,pass-through,pipeline}.ts`; the runtime-js file is now a ~30-line re-export shim.
 
 Additional drift discovered when the budget check was wired up (2026-05-24):
 
-- `packages/runtime-js/src/builtins/buffer.ts` — 413 lines. Single `Buffer` polyfill; method set is large but the type cannot be cleanly split without a private base.
+- ~~`packages/runtime-js/src/builtins/buffer.ts`~~ — **removed 2026-05-25.** ADR-0012 moved Buffer into `@rifty/io/src/buffer{,-codec,-methods}.ts` (≤ 260 lines each); the runtime-js file is now a ~10-line re-export shim.
 - `packages/runtime-js/src/builtins/crypto.ts` — 534 lines. Pulls together `createHash`, `randomBytes`, and the Web Crypto bridges; revisit after M10 once we know which surfaces real packages actually exercise.
 - `packages/runtime-js/src/builtins/fs.ts` — 445 lines. Mirrors Node's flat `fs` module; splitting into `fs/sync.ts` + `fs/promises.ts` is a candidate refactor when the file grows further.
 - `packages/runtime-js/src/module-loader/esm-ast.ts` — 303 lines. One line over the limit; will likely fall out of the list with the next small change.

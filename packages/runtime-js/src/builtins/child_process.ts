@@ -1,27 +1,30 @@
 /**
  * Node-compatible `node:child_process` (subset).
  *
- * Backed by the kernel `ProcessManager`. We don't actually spawn an OS process
- * — the playground runs in a browser. Instead, "spawning a node script" runs
- * the script's source through our own loader inside a logical child process
- * tracked by the manager.
+ * Backed by the kernel `ProcessManager` per ADR-0012 — `pid`, `exitCode`,
+ * `signalCode`, and the per-process `cwd` are owned by the `ProcessHandle`
+ * returned from `globalProcessManager.spawn(...)`. We don't actually spawn an
+ * OS process (this is a browser runtime); "spawning a node script" runs the
+ * script's source through our loader inside a logical child process tracked
+ * by the manager. The script-eval helper lives in `./child_process-exec.ts`.
+ *
+ * The synchronous behavior (`execSync`) stays in-realm; actual SAB-Atomics
+ * sync IPC is ADR-0011's scope.
  *
  * Acceptance pieces for M6:
  *   - `spawn(cmd, args)` returns a ChildProcess with stdout/stderr/exit events.
  *   - `exec(cmd, cb)` buffers stdout/stderr.
  *   - `fork(modulePath)` adds IPC via `send`/`message`.
- *   - `execSync` synchronously runs and returns stdout. (Implemented via the
- *     synchronous path: child handler runs synchronously in our model.)
+ *   - `execSync` synchronously runs and returns stdout.
  *
  * The runtime intentionally does not implement `spawn('bash', …)` — there is
  * no shell. `spawn('node', [script])` runs `script` through our loader.
  */
 
-import { NotImplementedError } from '@rifty/io';
-import { Buffer } from './buffer.ts';
-import { EventEmitter } from './events.ts';
+import { Buffer, EventEmitter, NotImplementedError, Readable } from '@rifty/io';
+import { type ProcessHandle, type ProcessIO, globalProcessManager } from '@rifty/kernel';
+import { execScript } from './child_process-exec.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
-import { Readable } from './stream.ts';
 
 interface SpawnOptions {
   cwd?: string;
@@ -36,21 +39,22 @@ interface ExecOptions extends SpawnOptions {
 }
 
 class ChildProcess extends EventEmitter {
+  /** Allocated by `ProcessManager` so PID space is unified across the runtime. */
   readonly pid: number;
   readonly stdout: Readable;
   readonly stderr: Readable;
   readonly stdin: { write(chunk: unknown): never; end(): never };
-  exitCode: number | null = null;
-  signalCode: string | null = null;
   killed = false;
   private readonly ipcEnabled: boolean;
+  private readonly handle: ProcessHandle;
   /** Bus the child's script subscribes to for `'childMessage'` events sent
    * by the parent. Exposed to the spawner via `internalIpc()`. */
   readonly inboundIpc: EventEmitter = new EventEmitter();
 
-  constructor(pid: number, ipcEnabled: boolean) {
+  constructor(handle: ProcessHandle, ipcEnabled: boolean) {
     super();
-    this.pid = pid;
+    this.handle = handle;
+    this.pid = handle.pid;
     this.ipcEnabled = ipcEnabled;
     this.stdout = new Readable({ objectMode: false });
     this.stderr = new Readable({ objectMode: false });
@@ -68,6 +72,25 @@ class ChildProcess extends EventEmitter {
         );
       },
     };
+    // Surface kernel-tracked exit/close on the ChildProcess so existing
+    // consumers (which `.on('close', …)`) keep working.
+    handle.on('exit', (code, signal) => {
+      this.emit('exit', code, signal);
+    });
+    handle.on('close', (code, signal) => {
+      this.emit('close', code, signal);
+    });
+  }
+
+  get exitCode(): number | null {
+    return this.handle.exitCode;
+  }
+  get signalCode(): string | null {
+    return this.handle.signalCode;
+  }
+  /** Per-ADR-0019: cwd is owned by the kernel record. */
+  get cwd(): string {
+    return this.handle.cwd;
   }
 
   /** Send IPC message to the child. */
@@ -78,137 +101,59 @@ class ChildProcess extends EventEmitter {
   }
 
   kill(signal = 'SIGTERM'): boolean {
-    if (this.exitCode !== null) return false;
-    this.signalCode = signal;
+    if (this.handle.exitCode !== null) return false;
     this.killed = true;
-    this.exitCode = null;
-    queueMicrotask(() => {
-      this.emit('exit', null, signal);
-      this.emit('close', null, signal);
-    });
-    return true;
-  }
-
-  /** Internal: called by the spawner to wire up the child's IO. */
-  _wireChild(onStdout: Readable, onStderr: Readable, inbound: EventEmitter): void {
-    onStdout.on('data', (chunk) => this.stdout.push(chunk));
-    onStderr.on('data', (chunk) => this.stderr.push(chunk));
-    onStdout.on('end', () => this.stdout.push(null));
-    onStderr.on('end', () => this.stderr.push(null));
-    if (this.ipcEnabled) {
-      inbound.on('childMessage', (msg) => this.inboundIpc.emit('message', msg));
-    }
-  }
-
-  _exit(code: number | null, signal: string | null = null): void {
-    if (this.exitCode !== null) return;
-    this.exitCode = code;
-    this.signalCode = signal;
-    this.emit('exit', code, signal);
-    this.emit('close', code, signal);
+    return this.handle.kill(signal);
   }
 }
-
-let nextPid = 1000;
 
 /**
  * `spawn` runs a JS source file through our module loader as a "child".
  * Recognised command: `'node'` with `args[0]` being a script path in the VFS.
  * Any other command emits an error after the next tick (matches Node's
  * behaviour for missing executables).
+ *
+ * The kernel allocates the PID and tracks lifecycle; we drive script eval
+ * inside the spawn handler via `execScript`. To honour non-{0,1} exit codes
+ * (ENOENT-127, `process.exit(N)`), the helper mutates the handle's
+ * `exitCode` field directly before returning — the `ProcessManager` only
+ * sets `exitCode` if it's still `null` at handler completion.
  */
 export function spawn(command: string, args: string[] = [], opts: SpawnOptions = {}): ChildProcess {
-  const child = new ChildProcess(nextPid++, opts.__fork ?? false);
+  // The handler needs the kernel `ProcessHandle` and our `ChildProcess`
+  // wrapper, both constructed AFTER the handler is registered. We pass them
+  // through a mutable container so the handler reads them when it runs on
+  // the next microtask — no extra `await` boundaries, which would delay the
+  // script body past what existing IPC tests rely on.
+  const wiring: { handle?: ProcessHandle; child?: ChildProcess } = {};
 
-  queueMicrotask(() => {
-    if (command !== 'node') {
-      child.stderr.push(`spawn ${command} ENOENT\n`);
-      child._exit(127, null);
-      return;
-    }
-    const scriptPath = args[0];
-    if (!scriptPath) {
-      child.stderr.push('node: missing script\n');
-      child._exit(1, null);
-      return;
-    }
-    try {
-      const source = syncMirror().readFileBytesSync(scriptPath);
-      const code = Buffer.from(source).toString();
-      // Run script in a fresh-ish scope with our own console replacements.
-      const fn = new Function(
-        '__stdout_write',
-        '__stderr_write',
-        '__process',
-        `${code}\n//# sourceURL=${scriptPath}`,
-      ) as (
-        write: (chunk: string) => void,
-        ewrite: (chunk: string) => void,
-        proc: unknown,
-      ) => unknown;
-      const childProcess: {
-        argv: string[];
-        env: Record<string, string>;
-        stdout: { write(c: string): void };
-        stderr: { write(c: string): void };
-        send?: (msg: unknown) => boolean;
-        on?: (event: string, cb: (msg: unknown) => void) => void;
-        onMessage?: (cb: (msg: unknown) => void) => () => void;
-        exit?: (code: number) => never;
-      } = {
-        argv: ['rifty', scriptPath, ...args.slice(1)],
-        env: opts.env ?? {},
-        stdout: { write: (c: string) => child.stdout.push(c) },
-        stderr: { write: (c: string) => child.stderr.push(c) },
-      };
-      if (opts.__fork) {
-        // Wire fork IPC: child.send goes to parent via the Worker handle's
-        // 'message' event; parent → child arrives on `__process.on('message',…)`.
-        const inboundIpc = child.inboundIpc;
-        childProcess.send = (msg) => {
-          child.emit('message', msg);
-          return true;
-        };
-        const onMessage = (cb: (msg: unknown) => void) => {
-          const wrapped = (m: unknown) => cb(m);
-          inboundIpc.on('childMessage', wrapped);
-          return () => inboundIpc.off('childMessage', wrapped);
-        };
-        childProcess.onMessage = onMessage;
-        childProcess.on = (event, cb) => {
-          if (event === 'message') onMessage(cb);
-        };
-        childProcess.exit = (code) => {
-          child.stdout.push(null);
-          child.stderr.push(null);
-          child._exit(code, null);
-          throw Object.assign(new Error('__process.exit'), { code: 'RIFTY_PROCESS_EXIT' });
-        };
+  const handle = globalProcessManager.spawn(
+    command,
+    async (io: ProcessIO) => {
+      const ownHandle = wiring.handle;
+      const child = wiring.child;
+      if (!ownHandle || !child) {
+        throw new Error('child_process.spawn: wiring not populated before handler ran');
       }
-      const result = fn(
-        (c) => child.stdout.push(c),
-        (c) => child.stderr.push(c),
-        childProcess,
-      );
-      Promise.resolve(result).then(
-        () => {
-          child.stdout.push(null);
-          child.stderr.push(null);
-          child._exit(0, null);
-        },
-        (err) => {
-          child.stderr.push(err instanceof Error ? `${err.stack ?? err.message}\n` : String(err));
-          child.stdout.push(null);
-          child.stderr.push(null);
-          child._exit(1, null);
-        },
-      );
-    } catch (err) {
-      child.stderr.push(err instanceof Error ? `${err.stack ?? err.message}\n` : String(err));
-      child._exit(1, null);
-    }
-  });
+      await execScript({
+        command,
+        args,
+        opts,
+        io,
+        ownHandle,
+        inboundIpc: child.inboundIpc,
+        stdoutPush: (c) => child.stdout.push(c),
+        stderrPush: (c) => child.stderr.push(c),
+        outboundMessages: child,
+      });
+    },
+    /* ppid */ 1,
+    { cwd: opts.cwd },
+  );
 
+  wiring.handle = handle;
+  const child = new ChildProcess(handle, opts.__fork ?? false);
+  wiring.child = child;
   return child;
 }
 
@@ -249,6 +194,10 @@ export function fork(
 /**
  * `execSync` actually runs the script synchronously since our spawn is
  * basically a function call. Returns stdout as a Buffer.
+ *
+ * No ProcessManager.spawn here — the kernel's `spawn` is async (it schedules
+ * the handler on a microtask). The synchronous case stays as a direct
+ * function call. The real SAB-Atomics path is ADR-0011's scope.
  */
 export function execSync(cmd: string, _opts?: ExecOptions): Uint8Array {
   const tokens = cmd.split(/\s+/).filter(Boolean);

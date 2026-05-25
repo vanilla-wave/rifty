@@ -22,11 +22,13 @@ const EXCEPTIONS = new Set([
   // Originally enumerated in ADR 0024.
   'packages/runtime-js/src/module-loader/resolver.ts',
   'packages/runtime-js/src/module-loader/esm-ast-walker.ts',
-  'packages/runtime-js/src/builtins/stream.ts',
+  // Note: `runtime-js/src/builtins/stream.ts` and `.../buffer.ts` were
+  // EXCEPTIONS until ADR-0012 promoted the primitives into `@rifty/io` —
+  // both became thin re-export shims and dropped under 300 lines.
+  //
   // Additional pre-existing drift discovered when the budget check was
   // rolled out (2026-05-24). Each is documented in ADR 0024; reviewers
   // should challenge any growth and split when practical.
-  'packages/runtime-js/src/builtins/buffer.ts',
   'packages/runtime-js/src/builtins/crypto.ts',
   'packages/runtime-js/src/builtins/fs.ts',
   'packages/runtime-js/src/module-loader/esm-ast.ts',

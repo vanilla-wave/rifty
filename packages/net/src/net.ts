@@ -6,7 +6,7 @@
  * that delivers parsed request data to the connection handler.
  */
 
-import { EventEmitter } from '@rifty/runtime-js/builtins';
+import { EventEmitter } from '@rifty/io';
 import { registerPort, unregisterPort } from './registry.ts';
 
 export class Socket extends EventEmitter {
