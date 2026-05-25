@@ -7,7 +7,7 @@
  * directly from the `Request`.
  */
 
-import { Buffer, EventEmitter, Readable } from '@rifty/runtime-js/builtins';
+import { Buffer, EventEmitter, Readable } from '@rifty/io';
 import { registerPort, unregisterPort } from './registry.ts';
 
 export class IncomingMessage extends Readable {
