@@ -25,7 +25,13 @@
  */
 
 import type { SabRing } from './sab-ring.ts';
-import { type SyncRpcReply, type SyncRpcRequest, decodeRequest, encodeReply } from './sync-rpc.ts';
+import {
+  SyncRpcProtocolMismatchError,
+  type SyncRpcReply,
+  type SyncRpcRequest,
+  decodeRequest,
+  encodeReply,
+} from './sync-rpc.ts';
 
 /**
  * Handler signature for a registered RPC method. Returning a thenable
@@ -157,7 +163,20 @@ export class SyncRpcDispatcher {
    */
   pumpOnce(ring: SabRing): void {
     if (this.inFlight.has(ring)) return;
-    const bytes = ring.readRequest();
+    let bytes: Uint8Array | null;
+    try {
+      bytes = ring.readRequest();
+    } catch (err) {
+      // ADR-0032: a version-mismatched request must NOT be decoded. Echo
+      // the caller's version back in the reply so the caller can still
+      // parse the error frame. State is already cleared inside readRequest.
+      if (err instanceof SyncRpcProtocolMismatchError) {
+        this.inFlight.add(ring);
+        this.writeVersionedError(ring, err.got, err);
+        return;
+      }
+      throw err;
+    }
     if (bytes === null) return;
     this.inFlight.add(ring);
     let req: SyncRpcRequest;
@@ -216,6 +235,19 @@ export class SyncRpcDispatcher {
       // If even the error reply can't be written (e.g. ring already has a
       // pending reply), there's nothing useful to do — drop it. The caller
       // will time out on `waitReply` and surface that as a `RingTimeoutError`.
+    } finally {
+      this.inFlight.delete(ring);
+    }
+  }
+
+  /** ADR-0032: write an error reply with an explicit version stamp so a
+   * mismatched caller can still decode the failure frame. */
+  private writeVersionedError(ring: SabRing, callerVersion: number, err: unknown): void {
+    const reply: SyncRpcReply = { ok: false, error: errorToShape(err) };
+    try {
+      ring.writeReplyWithVersion(encodeReply(reply), callerVersion);
+    } catch {
+      /* see writeError */
     } finally {
       this.inFlight.delete(ring);
     }

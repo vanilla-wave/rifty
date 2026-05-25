@@ -30,6 +30,7 @@ export type { SpawnWorkerSpec } from './spawn-worker.ts';
 export { setExecSyncScriptResolver } from './ipc/script-resolver.ts';
 
 // ADR-0011 phase 3 — sync RPC framing, dispatcher, in-Worker client.
+// ADR-0032 — protocol-version constant + typed mismatch error.
 export {
   type SyncRpcRequest,
   type SyncRpcReply,
@@ -37,6 +38,8 @@ export {
   decodeReply,
   decodeRequest,
   encodeReply,
+  SYNC_RPC_PROTOCOL_VERSION,
+  SyncRpcProtocolMismatchError,
 } from './ipc/sync-rpc.ts';
 export {
   SyncRpcDispatcher,

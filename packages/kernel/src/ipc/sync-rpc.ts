@@ -1,21 +1,60 @@
 /**
- * Sync RPC framing (ADR-0011 phase 3).
+ * Sync RPC framing (ADR-0011 phase 3, version field per ADR-0032).
  *
  * Tiny JSON-over-UTF-8 wire format layered on top of the {@link SabRing}.
  * The protocol carries a single RPC method name + JSON-serialisable payload
  * in each request, and a JSON-serialisable result (or structured error)
  * in each reply.
  *
+ * Every frame additionally carries a `u32` protocol version stamped into
+ * the SAB header by `SabRing.writeRequest` / `SabRing.writeReply` (ADR-0032).
+ * The version is validated on EVERY frame — readers reject mismatched
+ * frames before decoding the payload so a future binary-frame extension
+ * (A-021) cannot silently corrupt a v1 reader. Pattern mirrors
+ * `service-worker/src/protocol.ts` `SW_PROTOCOL_VERSION` (ADR-0016).
+ *
+ * Bump on any wire change. There is no cross-version compatibility — a
+ * mismatch surfaces as {@link SyncRpcProtocolMismatchError} (`code:
+ * 'EPROTOVERSION'`) on the consumer side; the dispatcher responds to a
+ * mismatched request with a versioned error reply that echoes the caller's
+ * version so the caller can still decode the failure.
+ *
  * Binary frames (e.g. raw stdout bytes piggy-backed on the reply) are a
  * deliberate follow-up — phase 3 keeps the wire format JSON-only so the
  * protocol stays easy to inspect. The follow-up will be tracked under
  * A-021 (binary pipes over MessagePort with backpressure) and ship its own
- * frame discriminator.
+ * frame discriminator + a protocol version bump.
  *
  * Errors are mapped to a plain `{name, message, code?}` triple to keep the
  * over-the-wire shape JSON-serialisable; the receiver reconstructs an
  * `Error` instance (with the original `code` preserved when present).
  */
+
+/**
+ * Wire-format protocol version stamped into the SAB header on every frame
+ * (ADR-0032). Bump on any change to the SAB header layout, the JSON frame
+ * shape, or the error contract. Readers refuse to decode frames whose
+ * version differs from their own.
+ */
+export const SYNC_RPC_PROTOCOL_VERSION = 1 as const;
+
+/**
+ * Thrown when a SAB frame's version field doesn't match the reader's
+ * {@link SYNC_RPC_PROTOCOL_VERSION}. Carries both the expected and the
+ * actually-seen version so the dispatcher can echo the caller's version
+ * back in a versioned error reply (allowing the caller to still decode
+ * the failure).
+ */
+export class SyncRpcProtocolMismatchError extends Error {
+  readonly code = 'EPROTOVERSION' as const;
+  constructor(
+    readonly expected: number,
+    readonly got: number,
+  ) {
+    super(`SyncRpc protocol version mismatch: expected ${expected}, got ${got}`);
+    this.name = 'SyncRpcProtocolMismatchError';
+  }
+}
 
 /**
  * Request frame written by {@link SyncRpcClient}, read by

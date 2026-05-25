@@ -18,6 +18,7 @@ import { Worker } from 'node:worker_threads';
 import { describe, expect, it } from 'vitest';
 import { createSabRing } from '../../../packages/kernel/src/ipc/sab-ring.ts';
 import { SyncRpcDispatcher } from '../../../packages/kernel/src/ipc/sync-dispatch.ts';
+import { SYNC_RPC_PROTOCOL_VERSION } from '../../../packages/kernel/src/ipc/sync-rpc.ts';
 
 const hasSab =
   typeof SharedArrayBuffer === 'function' &&
@@ -48,6 +49,7 @@ describe.skipIf(!hasSab)('SyncRpc — real Worker round-trip (ADR-0011 phase 3)'
         method: 'echo',
         payload: { hello: 'world', n: 42 },
         timeoutMs: 2000,
+        protocolVersion: SYNC_RPC_PROTOCOL_VERSION,
       },
     });
 
@@ -78,6 +80,7 @@ describe.skipIf(!hasSab)('SyncRpc — real Worker round-trip (ADR-0011 phase 3)'
         method: 'doesNotExist',
         payload: null,
         timeoutMs: 2000,
+        protocolVersion: SYNC_RPC_PROTOCOL_VERSION,
       },
     });
 

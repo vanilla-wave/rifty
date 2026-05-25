@@ -14,18 +14,23 @@
  *      exit.
  *
  * Plain JS so it loads directly into a Node Worker URL — no transpile.
+ *
+ * Layout (ADR-0011 + ADR-0032): 20-byte header. VERSION at index 0 is
+ * stamped on every write; the production reader validates and the
+ * dispatcher rejects mismatched frames with a typed error reply.
  */
 import { parentPort, workerData } from 'node:worker_threads';
 
 if (!parentPort) throw new Error('sync-rpc-echo: must run inside a Worker');
 
-const { sab, payloadCapacity, method, payload, timeoutMs } = workerData;
+const { sab, payloadCapacity, method, payload, timeoutMs, protocolVersion } = workerData;
 
-const HEADER_BYTES = 16;
-const REQ_STATE_INDEX = 0;
-const REP_STATE_INDEX = 1;
-const REQ_LEN_INDEX = 2;
-const REP_LEN_INDEX = 3;
+const HEADER_BYTES = 20;
+const VERSION_INDEX = 0;
+const REQ_STATE_INDEX = 1;
+const REP_STATE_INDEX = 2;
+const REQ_LEN_INDEX = 3;
+const REP_LEN_INDEX = 4;
 
 const i32 = new Int32Array(sab, 0, HEADER_BYTES >> 2);
 const bytes = new Uint8Array(sab);
@@ -43,9 +48,10 @@ if (reqBytes.byteLength > payloadCapacity) {
   );
 }
 
-// Phase 1: writeRequest equivalent.
+// Phase 1: writeRequest equivalent. VERSION stamped before STATE flips (ADR-0032).
 bytes.set(reqBytes, reqPayloadOffset);
 Atomics.store(i32, REQ_LEN_INDEX, reqBytes.byteLength);
+Atomics.store(i32, VERSION_INDEX, protocolVersion);
 Atomics.store(i32, REQ_STATE_INDEX, 1);
 Atomics.notify(i32, REQ_STATE_INDEX);
 
@@ -56,12 +62,21 @@ if (waitResult === 'timed-out') {
   process.exit(1);
 }
 
-// Phase 3: consumeReply equivalent.
+// Phase 3: consumeReply equivalent. Validate VERSION before payload (ADR-0032).
+const repVersion = Atomics.load(i32, VERSION_INDEX);
 const repLen = Atomics.load(i32, REP_LEN_INDEX);
 const replyBytes = new Uint8Array(repLen);
 replyBytes.set(bytes.subarray(repPayloadOffset, repPayloadOffset + repLen));
 Atomics.store(i32, REP_LEN_INDEX, 0);
 Atomics.store(i32, REP_STATE_INDEX, 0);
+
+if (repVersion !== protocolVersion) {
+  parentPort.postMessage({
+    type: 'error',
+    message: `protocol version mismatch: expected ${protocolVersion}, got ${repVersion}`,
+  });
+  process.exit(1);
+}
 
 let reply;
 try {

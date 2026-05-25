@@ -20,6 +20,7 @@ import {
   SabRing,
   createSabRing,
 } from '../../../packages/kernel/src/ipc/sab-ring.ts';
+import { SYNC_RPC_PROTOCOL_VERSION } from '../../../packages/kernel/src/ipc/sync-rpc.ts';
 
 const hasSab =
   typeof SharedArrayBuffer === 'function' &&
@@ -35,7 +36,7 @@ describe.skipIf(!hasSab)('SabRing — real Worker round-trip (ADR-0011 phase 1)'
     expect(sab.byteLength).toBe(SAB_RING_HEADER_BYTES + payloadCapacity * 2);
 
     const worker = new Worker(fileURLToPath(fixtureUrl), {
-      workerData: { sab, payloadCapacity },
+      workerData: { sab, payloadCapacity, protocolVersion: SYNC_RPC_PROTOCOL_VERSION },
     });
 
     // Wait for the fixture to signal it's installed and looping.

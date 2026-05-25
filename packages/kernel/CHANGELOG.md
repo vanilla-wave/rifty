@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- **ADR-0032: SyncRpc protocol-version field.** Every SAB frame now carries
+  a `u32` protocol version at offset 0 of the header. New exports:
+  `SYNC_RPC_PROTOCOL_VERSION` (value `1`) and `SyncRpcProtocolMismatchError`
+  (`code: 'EPROTOVERSION'`). `SabRing.writeRequest` / `writeReply` stamp the
+  version before flipping the state slot; `readRequest` / `consumeReply`
+  validate and throw on mismatch (state is cleared first so a forged peer
+  cannot wedge the ring). `SyncRpcDispatcher` catches the throw and writes
+  a versioned error reply at the caller's version so the caller can still
+  decode the failure. Header grows from 16 to 20 bytes; the conformance
+  fixtures (`tests/conformance/kernel/fixtures/{sab-ring-echo,sync-rpc-echo}.js`)
+  were updated to match. Unit tests in
+  `packages/kernel/src/ipc/sync-rpc.test.ts`. Pattern mirrors
+  `service-worker/src/protocol.ts` `SW_PROTOCOL_VERSION` (ADR-0016).
+
 ### Changed
 
 - **Review fix (no silent stubs):** `WorkerHandle.send()` for Worker-backed
