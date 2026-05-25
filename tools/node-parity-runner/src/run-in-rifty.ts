@@ -13,7 +13,7 @@
  */
 import { setProcessCwd } from '@rifty/runtime-js/builtins/process';
 import { MemorySyncVfs, createModuleLoader } from '@rifty/runtime-js/loader';
-import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@rifty/vfs';
+import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@rifty/vfs/internal';
 import { formatArgs } from '../../../packages/runtime-js/src/repl/inspect.ts';
 import type { ParityCase } from './types.ts';
 

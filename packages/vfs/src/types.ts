@@ -1,4 +1,13 @@
-export type VfsErrorCode = 'ENOENT' | 'EEXIST' | 'EISDIR' | 'ENOTDIR' | 'EPERM' | 'EINVAL';
+export type VfsErrorCode =
+  | 'ENOENT'
+  | 'EEXIST'
+  | 'EISDIR'
+  | 'ENOTDIR'
+  | 'EPERM'
+  | 'EINVAL'
+  | 'EACCES'
+  | 'EDQUOT'
+  | 'EIO';
 
 export interface VfsStat {
   readonly isFile: boolean;

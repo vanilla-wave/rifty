@@ -5,7 +5,8 @@
  * support, so `detectVfsBackend()` must return `'memory'` and
  * `initBackend()` must wire the in-memory pair as both surfaces.
  */
-import { asyncVfs, detectVfsBackend, initBackend, resetSyncMirror, syncMirror } from '@rifty/vfs';
+import { asyncVfs, detectVfsBackend, initBackend, syncMirror } from '@rifty/vfs';
+import { resetSyncMirror } from '@rifty/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 describe('vfs/boot — backend detection (ADR-0013)', () => {

@@ -12,7 +12,11 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { riftyProcess, setProcessCwd } from '../../../packages/runtime-js/src/builtins/process.ts';
-import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '../../../packages/vfs/src/index.ts';
+import {
+  MemoryFsSync,
+  resetSyncMirror,
+  setSyncMirror,
+} from '../../../packages/vfs/src/internal/index.ts';
 
 describe('process.cwd() / chdir() — ADR-0019', () => {
   let fs: MemoryFsSync;
