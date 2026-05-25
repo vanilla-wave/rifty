@@ -1,24 +1,15 @@
 /**
- * Kernel-side `spawnWorker` (ADR-0011 phase 2 + phase 3 review fix).
+ * Kernel-side `spawnWorker` (ADR-0011 phase 2 + phase 3).
  *
- * For each spawned process: allocates the PID, builds a {@link SabRing} for
- * sync IPC, three stdio `MessageChannel`s, constructs
- * `new Worker(kernelWorkerUrl, { type: 'module' })` via {@link makeKernelWorker}
- * (test-stubbable), posts {@link WorkerInitMessage} with transferables, then
- * surfaces the worker's lifecycle (`exit`, `error`, `messageerror`) on the
- * returned {@link SpawnWorkerResult}.
+ * Builds the SAB ring + stdio MessageChannels, constructs the Worker via
+ * {@link makeKernelWorker} (test-stubbable), posts the init message, and
+ * surfaces the worker's `exit` / `error` / `messageerror` events on the
+ * returned {@link SpawnWorkerResult}. Throws if {@link setKernelWorkerUrl}
+ * hasn't been called by the host.
  *
- * `kernelWorkerUrl` is host-supplied via {@link setKernelWorkerUrl}; the
- * kernel never hardcodes a path. When unset, `spawnKernelWorker` throws
- * {@link NotImplementedError} so missing wiring is loud.
- *
- * Review fix (ADR-0011 phase 3 review §2.11): all spawns share the singleton
- * {@link SyncRpcDispatcher} from `./ipc/kernel-dispatcher.ts`. Previously a
- * fresh dispatcher per child meant N `setInterval(1ms)` timers for N workers.
- *
- * Review fix (review §1.10): `messageerror` is now observed alongside
- * `error`. Deserialisation failures (structured-clone errors) surface on
- * {@link SpawnWorkerResult.onMessageError} instead of vanishing.
+ * All spawns share the singleton {@link SyncRpcDispatcher} (review §2.11
+ * fix). On exit/terminate the kernel-side `removeEventListener`s mirror
+ * the `addEventListener`s, so the `WorkerLike` is GC-eligible.
  */
 
 import { NotImplementedError } from '@rifty/io';
@@ -189,59 +180,69 @@ export function spawnKernelWorker(
     for (const cb of [...messageErrorListeners]) cb(ev);
   };
 
-  worker.addEventListener('message', (ev: MessageEvent) => {
-    const msg = ev.data as { type?: string; code?: number } | undefined;
-    if (msg?.type === 'exit' && typeof msg.code === 'number') {
-      const code = msg.code;
-      // The worker's bootstrap calls `self.close()` after posting exit, so
-      // `terminate()` is mostly a safety net. Idempotent either way.
-      if (!terminated) {
-        terminated = true;
-        dispatcher.detach(ring);
-        try {
-          worker.terminate();
-        } catch {
-          /* the realm may already be gone */
-        }
-      }
-      dispatchExit(code);
-    }
-  });
-
-  // `ErrorEvent` is DOM-only; in the structurally-typed listener signature
-  // it arrives as a `MessageEvent`. We only need to know an error fired.
-  worker.addEventListener('error', (ev: MessageEvent) => {
-    // Convert uncaught worker errors into a code-1 exit. The worker-entry
-    // already maps top-level throws to exit-1; this is the safety net for
-    // truly catastrophic errors (e.g. module parse failure).
+  /**
+   * Shared teardown for the worker side: detach the dispatcher, terminate
+   * the worker, and `removeEventListener` for every listener the kernel
+   * installed. Idempotent. Subscriber arrays are cleared by callers AFTER
+   * the final dispatch so waiters still receive their event.
+   */
+  function tearDownWorker(): void {
     if (terminated) return;
     terminated = true;
     dispatcher.detach(ring);
     try {
       worker.terminate();
     } catch {
-      /* already gone */
+      /* the realm may already be gone */
     }
-    // Surface the error to anyone subscribed via the exit cb — keep the
-    // shape simple (code 1) so child_process consumers don't special-case.
+    worker.removeEventListener('message', onMessage);
+    worker.removeEventListener('error', onError);
+    worker.removeEventListener('messageerror', onMessageError);
+  }
+
+  function clearSubscribers(): void {
+    exitListeners.length = 0;
+    messageErrorListeners.length = 0;
+  }
+
+  // Named handlers so `tearDownWorker`'s `removeEventListener`s can find
+  // them. Anonymous closures here would leak per spawn forever.
+  const onMessage = (ev: MessageEvent): void => {
+    const msg = ev.data as { type?: string; code?: number } | undefined;
+    if (msg?.type === 'exit' && typeof msg.code === 'number') {
+      const code = msg.code;
+      tearDownWorker();
+      dispatchExit(code);
+      clearSubscribers();
+    }
+  };
+
+  // `ErrorEvent` is DOM-only; structurally it arrives as `MessageEvent`.
+  // Map uncaught worker errors to a code-1 exit (worker-entry already
+  // maps top-level throws to exit-1; this catches module parse failures).
+  const onError = (ev: MessageEvent): void => {
+    if (terminated) return;
+    tearDownWorker();
     void ev;
     dispatchExit(1);
-  });
+    clearSubscribers();
+  };
 
   // Review fix §1.10 — `messageerror` fires when the browser fails to
-  // structured-clone an incoming message (un-cloneable values such as
-  // functions, Symbols, native handles). Without this listener those
-  // failures dropped silently. We log a warning so the failure is visible
-  // even when no listener subscribes, and emit on the result so callers
-  // can attach their own handler. Unlike `'error'`, this is non-fatal:
-  // the worker keeps running, matching the browser's own behaviour.
-  worker.addEventListener('messageerror', (ev: MessageEvent) => {
+  // structured-clone an incoming message (functions, Symbols, etc.).
+  // Non-fatal (matches browser semantics) — we log and surface, but do
+  // NOT tear down.
+  const onMessageError = (ev: MessageEvent): void => {
     // eslint-disable-next-line no-console -- explicit logging contract per review fix
     console.warn(
       `[kernel.spawnKernelWorker] worker (pid=${pid}) reported messageerror; a posted message could not be deserialised`,
     );
     dispatchMessageError(ev);
-  });
+  };
+
+  worker.addEventListener('message', onMessage);
+  worker.addEventListener('error', onError);
+  worker.addEventListener('messageerror', onMessageError);
 
   return {
     pid,
@@ -266,14 +267,8 @@ export function spawnKernelWorker(
       };
     },
     terminate() {
-      if (terminated) return;
-      terminated = true;
-      dispatcher.detach(ring);
-      try {
-        worker.terminate();
-      } catch {
-        /* already gone */
-      }
+      tearDownWorker();
+      clearSubscribers();
     },
   };
 }

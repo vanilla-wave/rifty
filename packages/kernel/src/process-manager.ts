@@ -1,12 +1,15 @@
 /**
  * Minimal process manager: per-PID table, parent/child links, dispatch.
  *
- * Spawn semantics for M6:
- *   - `spawn(handler, options)` allocates a PID, calls the handler with an
- *     `IO` object exposing stdout/stderr/stdin/send/once, and tracks exit.
- *   - Handlers are JS functions (we don't actually spawn OS processes — Workers
- *     are the real isolation in the browser; this layer abstracts that).
- *   - `kill(pid, signal)` emits an `exit` event with the signal.
+ * `spawn` allocates a PID and runs a JS handler with an `IO` object
+ * (stdout/stderr/stdin/send/once); `spawnWorker` spawns into its own Web
+ * Worker realm (ADR-0011). `kill(pid, signal)` emits `exit`/`close`.
+ *
+ * Per-PID records are removed from the manager's `table` after the `exit`
+ * event has fired, and the internal stdio/IPC emitters are stripped of
+ * listeners — so a long-lived host (the playground) doesn't accumulate
+ * deceased records or per-spawn listener stacks. The handle object
+ * itself survives so callers can still inspect `handle.exitCode`.
  *
  * The runtime-js `child_process` builtin wires Node's API surface to this
  * manager; tests exercise the manager directly.
@@ -86,8 +89,9 @@ export class ProcessManager {
     const childToParent = new EventEmitter();
     const abortController = new AbortController();
 
-    // Inherit parent's cwd snapshot. Subsequent chdir in parent does not
-    // propagate to the child (and vice versa) — see ADR-0019.
+    // Inherit parent's cwd snapshot (ADR-0019). A `ppid` that names an
+    // already-exited process falls through to `DEFAULT_CWD` because the
+    // sweep on exit removes the record from `table`.
     const parentRecord = this.table.get(ppid);
     const initialCwd = options.cwd ?? parentRecord?.cwd ?? DEFAULT_CWD;
 
@@ -127,6 +131,7 @@ export class ProcessManager {
         this.exitCode = null;
         this.emit('exit', null, signal);
         this.emit('close', null, signal);
+        manager.finalize(pid, this, [parentToChild, childToParent]);
         return true;
       }
     }
@@ -153,6 +158,9 @@ export class ProcessManager {
       signal: abortController.signal,
     };
 
+    // Captured by `Handle.kill` and the exit microtask for table sweeping.
+    const manager = this;
+
     queueMicrotask(async () => {
       let exitCode = 0;
       try {
@@ -168,21 +176,25 @@ export class ProcessManager {
       record.handle.exitCode = exitCode;
       record.handle.emit('exit', exitCode, null);
       record.handle.emit('close', exitCode, null);
+      manager.finalize(pid, record.handle, [parentToChild, childToParent]);
     });
 
     return handle;
   }
 
   /**
-   * Spawn a child in its own Web Worker realm (ADR-0011 phase 2). The kernel
-   * allocates the PID, creates a {@link SabRing}, three stdio
-   * `MessageChannel`s, posts the init message, and tracks exit via the
-   * worker's `{type:'exit', code}` message.
-   *
-   * Throws if {@link setKernelWorkerUrl} hasn't been called by the host.
-   * Same-realm callers stay on {@link spawn} until they're ready to migrate
-   * (or stay forever for in-realm-only use cases).
+   * Drop the per-PID record and clear listeners on `emitters` + `handle`.
+   * Called from both spawn paths (kill + natural exit). The handle object
+   * survives so callers can read `exitCode`. Idempotent.
    */
+  private finalize(pid: number, handle: ProcessHandle, emitters: EventEmitter[]): void {
+    if (!this.table.has(pid)) return;
+    this.table.delete(pid);
+    for (const e of emitters) e.removeAllListeners();
+    handle.removeAllListeners();
+  }
+
+  /** Spawn into its own Worker realm (ADR-0011). See `spawnKernelWorker`. */
   spawnWorker(
     command: string,
     spec: SpawnWorkerSpec,
@@ -213,6 +225,9 @@ export class ProcessManager {
       abortController,
     };
 
+    // Captured by `WorkerHandle.kill` and the exit callback for sweeping.
+    const manager = this;
+
     class WorkerHandle extends EventEmitter implements ProcessHandle {
       readonly pid = pid;
       readonly ppid = ppid;
@@ -228,14 +243,10 @@ export class ProcessManager {
         record.cwd = next;
       }
       send(_message: unknown): boolean {
-        // ADR-0011 phase 2 follow-up (TASKS.md M6 "Open acceptance" +
-        // review item §1.10): IPC-over-MessagePort for Worker-backed
-        // children is not implemented yet. The previous `return false`
-        // was a silent stub (violates CLAUDE.md "no silent stubs") — the
-        // ChildProcess wrapper in runtime-js does not call into this
-        // path today (it emits on its own `inboundIpc` bus), but a
-        // future caller that did would silently lose every message.
-        // Throw loudly until the real IPC channel lands.
+        // IPC-over-MessagePort for Worker-backed children is not yet
+        // wired (ADR-0011 phase 2 follow-up). The previous silent
+        // `return false` would mask the missing channel; throw instead
+        // until the real wiring lands. See TASKS.md M6 + review §1.10.
         throw new NotImplementedError(
           'kernel.WorkerHandle.send',
           'ChildProcess.stdin/fork IPC pending M6 phase 2 — see ADR-0011',
@@ -249,6 +260,7 @@ export class ProcessManager {
         this.exitCode = null;
         this.emit('exit', null, signal);
         this.emit('close', null, signal);
+        manager.finalize(pid, this, [record.parentToChild]);
         return true;
       }
     }
@@ -262,12 +274,11 @@ export class ProcessManager {
       handle.exitCode = code;
       handle.emit('exit', code, null);
       handle.emit('close', code, null);
+      manager.finalize(pid, handle, [record.parentToChild]);
     });
 
-    // Review fix §1.10 — surface worker `messageerror` events on the
-    // public handle so callers can attach a listener without reaching
-    // into the kernel-internal `SpawnWorkerResult`. The spawn-worker
-    // module also `console.warn`s as a fallback.
+    // Surface `messageerror` events on the handle so callers don't have
+    // to reach into `SpawnWorkerResult` (review §1.10).
     spawnResult.onMessageError((ev) => {
       handle.emit('messageerror', ev);
     });

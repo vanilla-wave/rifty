@@ -20,6 +20,20 @@
 
 ### Changed
 
+- **`ProcessManager` no longer leaks per-PID records or listeners.** Both
+  `spawn` and `spawnWorker` now call `this.table.delete(pid)` AFTER the
+  `exit`/`close` events have fired (the handle survives so callers can
+  still read `handle.exitCode`); `parentToChild` / `childToParent`
+  `EventEmitter`s and the public handle's listener map are stripped via
+  `removeAllListeners()`. As a side-effect, a `spawn(..., ppid)` that
+  names an already-exited parent now falls back to `DEFAULT_CWD` instead
+  of inheriting the deceased parent's last `cwd`. `spawn-worker.ts`
+  gained the symmetric `removeEventListener('message'|'error'|'messageerror', …)`
+  for the kernel-side listeners it installs, plus a `clearSubscribers()`
+  pass on the `onExit` / `onMessageError` arrays. New stress test in
+  `tests/process-manager.test.ts` confirms 10 same-realm + 10
+  Worker-backed children all return the table to empty and zero
+  listener counts on the underlying `WorkerLike`.
 - **Review fix (no silent stubs):** `WorkerHandle.send()` for Worker-backed
   children now throws `NotImplementedError('kernel.WorkerHandle.send',
   'ChildProcess.stdin/fork IPC pending M6 phase 2 — see ADR-0011')` instead
