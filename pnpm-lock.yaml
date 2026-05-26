@@ -141,6 +141,9 @@ importers:
 
   packages/runtime-wasi:
     dependencies:
+      '@rifty/kernel':
+        specifier: workspace:*
+        version: link:../kernel
       '@rifty/vfs':
         specifier: workspace:*
         version: link:../vfs

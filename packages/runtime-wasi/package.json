@@ -12,6 +12,7 @@
     "test:run": "vitest run --dir src"
   },
   "dependencies": {
+    "@rifty/kernel": "workspace:*",
     "@rifty/vfs": "workspace:*"
   }
 }

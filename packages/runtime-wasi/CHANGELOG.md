@@ -4,6 +4,19 @@
 
 ### Added
 
+- **2026-05-26** — `createWasiProcess(opts)` (ADR 0038): kernel-level
+  adapter that turns a WASI run into a `ProcessHandle`. Spawns the guest
+  via `@rifty/kernel.globalProcessManager.spawnWorker(...)` so a WASI
+  guest gets the same PID space, binary stdio `MessagePort`s, and exit
+  lifecycle as a `node`-backed worker child. Companion module
+  `worker-entry.ts` exports `runWasiInWorker(process)` — the side-effect
+  that runs inside the kernel-spawned Worker, fetching the WASM from
+  `process.env.__RIFTY_WASI_WASM_URL` and piping the guest's stdout /
+  stderr through the kernel's `process.stdout.write` / `stderr.write`
+  shim. Existing `Wasi` / `runWasi` API unchanged — they stay as the
+  same-realm syscall-test surface.
+- **2026-05-26** — New dependency `@rifty/kernel` (downward edge per
+  CLAUDE.md layer order: vfs → kernel → runtime-* → …).
 - WASI preview1 shim (`Wasi` class). Implements: args_*, environ_*, fd_read, fd_write, fd_close, fd_seek, fd_fdstat_get, path_open, path_filestat_get, path_create_directory, proc_exit, clock_time_get, random_get. Missing calls return `ENOSYS` instead of silently no-oping.
 - `runWasi(bytes, opts)` convenience helper that instantiates a module and runs `_start`.
 - Preopens are routed to `@rifty/vfs`'s `syncMirror()` (ADR-0014) — `fs` sees what WASI writes.
