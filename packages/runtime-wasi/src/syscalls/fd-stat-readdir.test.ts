@@ -98,4 +98,76 @@ describe('fd_readdir', () => {
     }
     expect(names).toEqual(['a.txt', 'b.txt', 'sub']);
   });
+
+  it('honours the cookie across paginated calls (no duplicates, no skips)', () => {
+    // Reproduces the silent-stub bug: with N=5 entries and a buffer big
+    // enough for only 2 per call, two successive `fd_readdir` calls should
+    // return [0,1] then [2,3,4] — every entry exactly once. The first call
+    // uses cookie=0, the second uses the cookie reported by the first.
+    const t = setupFdCtx();
+    const mirror = new MemoryFsSync();
+    mirror.loadFixture({
+      '/work/d/a.txt': 'a',
+      '/work/d/b.txt': 'b',
+      '/work/d/c.txt': 'c',
+      '/work/d/d.txt': 'd',
+      '/work/d/e.txt': 'e',
+    });
+    setSyncMirror(mirror);
+    t.fds.set(5, { type: 'dir', path: '/work/d' });
+
+    const view = new DataView(t.memory.buffer);
+    const dec = new TextDecoder();
+
+    // Each name is 5 bytes (`a.txt`), each dirent header is 21 bytes,
+    // so each record is 26 bytes. Two records ≈ 52 bytes; sizing the
+    // buffer at 60 leaves room for two complete records but cuts off the
+    // third's header (21 bytes > 60 - 52 = 8).
+    const bufA = 100;
+    const lenA = 60;
+    const usedPtrA = 400;
+    const rcA = t.ns.fd_readdir(5, bufA, lenA, 0n, usedPtrA);
+    expect(rcA).toBe(E_SUCCESS);
+    const usedA = view.getUint32(usedPtrA, true);
+
+    const namesA: string[] = [];
+    let nextCookie = 0n;
+    {
+      let off = bufA;
+      const end = bufA + usedA;
+      while (off + 21 <= end) {
+        const d_next = view.getBigUint64(off, true);
+        const namlen = view.getUint32(off + 16, true);
+        const headerEnd = off + 21;
+        if (headerEnd + namlen > end) break;
+        namesA.push(dec.decode(new Uint8Array(t.memory.buffer, headerEnd, namlen)));
+        nextCookie = d_next;
+        off = headerEnd + namlen;
+      }
+    }
+    expect(namesA).toEqual(['a.txt', 'b.txt']);
+    expect(nextCookie).toBe(2n);
+
+    // Second call with the reported cookie. Bigger buffer so the rest fits.
+    const bufB = 1024;
+    const lenB = 512;
+    const usedPtrB = 1600;
+    const rcB = t.ns.fd_readdir(5, bufB, lenB, nextCookie, usedPtrB);
+    expect(rcB).toBe(E_SUCCESS);
+    const usedB = view.getUint32(usedPtrB, true);
+
+    const namesB: string[] = [];
+    {
+      let off = bufB;
+      const end = bufB + usedB;
+      while (off + 21 <= end) {
+        const namlen = view.getUint32(off + 16, true);
+        const headerEnd = off + 21;
+        if (headerEnd + namlen > end) break;
+        namesB.push(dec.decode(new Uint8Array(t.memory.buffer, headerEnd, namlen)));
+        off = headerEnd + namlen;
+      }
+    }
+    expect(namesB).toEqual(['c.txt', 'd.txt', 'e.txt']);
+  });
 });

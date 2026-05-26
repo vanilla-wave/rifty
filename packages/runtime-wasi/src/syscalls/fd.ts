@@ -253,11 +253,21 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
     },
     fd_filestat_set_size: () => E_NOSYS,
     fd_filestat_set_times: () => E_NOSYS,
-    fd_readdir: (fd: number, bufPtr: number, bufLen: number, _cookie: bigint, bufUsed: number) => {
+    fd_readdir: (fd: number, bufPtr: number, bufLen: number, cookie: bigint, bufUsed: number) => {
       const entry = ctx.fds.get(fd);
       if (!entry) return E_BADF;
       if (entry.type !== 'dir' || !entry.path) return E_BADF;
       const mirror = syncMirror();
+      // Ordering contract: we trust `readdirSync` to return entries in a
+      // stable order between calls for the same directory (no concurrent
+      // mutation; same VFS backend). MemoryFsSync iterates an ES Map's
+      // insertion-ordered children, which is deterministic. OpfsFsSync's
+      // ordering comes from the underlying FileSystemDirectoryHandle async
+      // iterator and is also stable for a fixed tree. WASI preview1's
+      // cookie semantics rely on this — if a future backend returns
+      // entries in a different order between calls, paginating guests
+      // will skip or duplicate. Re-stat / sort-by-name is a possible
+      // future hardening if that turns out to matter.
       let names: readonly string[];
       try {
         names = mirror.readdirSync(entry.path);
@@ -270,7 +280,14 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       const end = bufPtr + bufLen;
       // preview1 dirent layout (21 bytes tightly packed):
       //   0: d_next (u64), 8: d_ino (u64), 16: d_namlen (u32), 20: d_type (u8)
+      //
+      // Cookie semantics (preview1): each entry emits `d_next = index + 1`
+      // (so cookie 0 is the canonical "start from the beginning" value).
+      // The guest re-invokes with the cookie of the last entry it kept;
+      // we must skip every entry whose index satisfies `index < cookie`,
+      // i.e. `index >= cookie` is the "still to emit" predicate.
       for (let i = 0; i < names.length; i++) {
+        if (BigInt(i) < cookie) continue;
         const name = names[i] ?? '';
         const nameBytes = enc.encode(name);
         const headerSize = 21;

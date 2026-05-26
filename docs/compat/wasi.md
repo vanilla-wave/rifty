@@ -34,7 +34,7 @@ implemented — call returns `E_NOSYS` and behaviour is documented.
 | `fd_prestat_dir_name` | ✅ | Copies preopen name into guest memory |
 | `fd_pwrite` | ❌ | `E_NOSYS` — positional write not modelled |
 | `fd_read` | ⚠️ | Reads from fd's in-memory data buffer; stdin returns EOF (not wired) |
-| `fd_readdir` | ⚠️ | Enumerates VFS dir entries; `d_type` = `UNKNOWN` (would need per-entry stat); cookie is ignored — full re-emit on each call (guests that paginate large dirs will see duplicates) |
+| `fd_readdir` | ⚠️ | Enumerates VFS dir entries; `d_type` = `UNKNOWN` (would need per-entry stat); cookie semantics implemented per preview1 — each entry emits `d_next = index + 1`, the call skips entries with `index < cookie`, so paginating guests get every entry exactly once (no duplicates, no skips). Stable ordering assumes the VFS backend's `readdirSync` is deterministic for a fixed tree (MemoryFsSync + OpfsFsSync satisfy this today) |
 | `fd_renumber` | ✅ | Moves fd entry to a new id |
 | `fd_seek` | ✅ | All three `whence` modes; negative result → `E_INVAL` |
 | `fd_sync` | ⚠️ | `E_SUCCESS` — in-memory writes are immediately visible |

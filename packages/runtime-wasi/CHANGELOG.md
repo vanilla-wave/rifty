@@ -28,6 +28,14 @@
   which returns `E_PERM` if `RIGHTS_FD_WRITE` is absent.
 - **2026-05-25** — new WASI compat matrix at `docs/compat/wasi.md`.
 
+### Fixed
+
+- `fd_readdir` honours the `cookie` argument per WASI preview1 — each entry
+  emits `d_next = index + 1`, the call skips entries with `index < cookie`,
+  so paginating guests see every entry exactly once instead of re-receiving
+  the prefix on every call. Stable ordering of `readdirSync` is the implicit
+  contract; today's backends (`MemoryFsSync`, `OpfsFsSync`) honour it.
+
 ### Changed
 
 - **2026-05-25** — `errToWasiErrno` default now `E_INVAL` (was `E_NOENT`).
