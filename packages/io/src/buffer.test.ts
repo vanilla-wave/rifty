@@ -192,6 +192,44 @@ describe('Buffer.fill', () => {
   });
 });
 
+describe('Buffer.compare (static)', () => {
+  // Per task spec: the static signature widens to match the instance method's
+  // range params. Note: Node 24's runtime `Buffer.compare(a, b)` has arity 2
+  // and silently ignores extra args (verified via parity-runner). Our static
+  // delegates to `compareSlices(a.subarray(...), b.subarray(...))` so the
+  // range params are honoured here even though Node doesn't currently use
+  // them. This is a typing-flexibility surface — future Node versions could
+  // honour them at any time, and our subset is forward-compatible.
+  it('compares two buffers without range params (Node-parity)', () => {
+    const a = Buffer.from('a');
+    const b = Buffer.from('b');
+    expect(Buffer.compare(a, b)).toBe(-1);
+    expect(Buffer.compare(b, a)).toBe(1);
+    expect(Buffer.compare(a, a)).toBe(0);
+  });
+
+  it('honours targetStart/targetEnd (range on second buffer)', () => {
+    // a='he', b='hello' — comparing first 2 bytes of b='he' against a='he':
+    // equal → returns 0. Without the range params honoured, this would
+    // compare 'he' vs 'hello' (a is shorter prefix) → returns -1.
+    const a = Buffer.from('he');
+    const b = Buffer.from('hello');
+    expect(Buffer.compare(a, b, 0, 2)).toBe(0);
+    // Sanity: without range, the comparison sees the full b.
+    expect(Buffer.compare(a, b)).toBe(-1);
+  });
+
+  it('honours sourceStart/sourceEnd (range on first buffer)', () => {
+    // a='hello', b='ll' — comparing a[1..3]='el' against b='ll':
+    // 'e' < 'l' → returns -1.
+    const a = Buffer.from('hello');
+    const b = Buffer.from('ll');
+    expect(Buffer.compare(a, b, 0, undefined, 1, 3)).toBe(-1);
+    // a[2..4]='ll' against b='ll' → equal.
+    expect(Buffer.compare(a, b, 0, undefined, 2, 4)).toBe(0);
+  });
+});
+
 describe('Buffer.copy', () => {
   it('copies a slice into target', () => {
     const src = Buffer.from('hello');

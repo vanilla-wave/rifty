@@ -19,6 +19,16 @@
   imports the symbol directly; subclasses written outside the package
   cannot reach it, so the type wall between "public option bag" and
   "internal subclass hook" is real and not just a naming convention.
+- `Buffer.compare(a, b)` static now accepts the same four optional range
+  parameters as the instance method
+  (`targetStart?`, `targetEnd?`, `sourceStart?`, `sourceEnd?`). When
+  omitted the behaviour matches Node's two-arg form; when supplied,
+  comparison is delegated to `compareSlices(a.subarray(...),
+  b.subarray(...))`. Note: Node 24's runtime `Buffer.compare` has
+  `length === 2` and silently ignores any extras (verified via the
+  parity runner). Our widened signature is forward-compatible — callers
+  can pass ranges symmetrically and we honour them; no parity-runner
+  case is added because Node would diverge here.
 - `BuiltinFactory` is now parameterised over its return type
   (`BuiltinFactory<T = unknown> = () => T`) and `registerBuiltin<T>(name,
   factory)` is generic. Registration sites now preserve each builtin's

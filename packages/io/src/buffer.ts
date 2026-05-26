@@ -209,8 +209,24 @@ export class Buffer extends Uint8Array {
     return v instanceof Buffer;
   }
 
-  static compare(a: Uint8Array, b: Uint8Array): -1 | 0 | 1 {
-    return compareSlices(a, b);
+  /**
+   * Static comparator. Node's runtime currently honours only the first two
+   * args (verified via parity-runner; `Buffer.compare.length === 2`), but the
+   * docs leave room for range-paramed comparison and the instance method
+   * already supports it. We widen the signature here so callers can pass the
+   * four optional range params symmetrically — extras are honoured via
+   * `subarray(...)` slicing. Future Node versions can adopt this surface
+   * without forcing a typing churn on our side.
+   */
+  static compare(
+    a: Uint8Array,
+    b: Uint8Array,
+    targetStart = 0,
+    targetEnd: number = b.length,
+    sourceStart = 0,
+    sourceEnd: number = a.length,
+  ): -1 | 0 | 1 {
+    return compareSlices(a.subarray(sourceStart, sourceEnd), b.subarray(targetStart, targetEnd));
   }
 }
 
