@@ -11,13 +11,13 @@
  * `setImmediate`/`clearImmediate`) so user code that expects them just works.
  */
 
+import { createMemoryFs, setSyncMirror } from '@rifty/vfs/internal';
 import { Buffer } from './builtins/buffer.ts';
 import { __setCreateRequireImpl } from './builtins/module.ts';
 import { installProcessGlobals, setProcessCwd } from './builtins/process.ts';
 import { installTimerGlobals } from './builtins/timers.ts';
 import { publishRuntimeGlobal } from './internal/worker-globals.ts';
 import { createModuleLoader } from './module-loader/index.ts';
-import { MemorySyncVfs } from './module-loader/memory-sync-vfs.ts';
 import type { EvalRequest, EvalResult, HostMessage, WorkerMessage } from './protocol.ts';
 import { installConsole } from './repl/console.ts';
 import { evalInRepl } from './repl/eval.ts';
@@ -29,7 +29,13 @@ installProcessGlobals();
 installTimerGlobals();
 (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
 
-const vfs = new MemorySyncVfs();
+// Single in-memory tree (ADR-0014 + ADR-0037): the same `MemoryFsSync` view
+// answers `fs.readFileSync` (via `syncMirror()`), the module loader
+// (resolver + executor), and the WASI preopens. `load-fixture` writes flow
+// into the shared `MemoryBackend`, so a file dropped in by the host is
+// visible to every consumer in this Worker realm.
+const { fsSync: vfs } = createMemoryFs();
+setSyncMirror(vfs);
 const loader = createModuleLoader(vfs, { cwd: '/' });
 
 // Install REPL bindings once: the loader is now long-lived (see ADR follow-up

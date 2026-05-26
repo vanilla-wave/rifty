@@ -1,3 +1,4 @@
+import type { FsSync } from '@rifty/vfs';
 import { loadBuiltin } from '../builtins/index.ts';
 import { executeCjs } from './cjs.ts';
 import { ModuleLoadError } from './errors.ts';
@@ -6,7 +7,6 @@ import { wrapCjsAsEsmNamespace } from './interop.ts';
 import { ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
 import { type Resolver, createResolver } from './resolver.ts';
-import type { SyncVfs } from './vfs-sync.ts';
 
 export interface ModuleLoaderOptions {
   /** Working directory used when the caller passes a relative `entry` to `import`/`require`. */
@@ -35,7 +35,7 @@ export interface ModuleLoader {
 
 const STUB_FROM_FILE_DEFAULT = '/__entry__';
 
-export function createModuleLoader(vfs: SyncVfs, opts: ModuleLoaderOptions = {}): ModuleLoader {
+export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}): ModuleLoader {
   const registry = new ModuleRegistry();
   const resolver = createResolver(vfs);
   const cwd = opts.cwd ?? STUB_FROM_FILE_DEFAULT;

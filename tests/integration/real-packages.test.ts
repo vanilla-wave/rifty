@@ -1,4 +1,5 @@
-import { MemorySyncVfs, createModuleLoader } from '@rifty/runtime-js/loader';
+import { createModuleLoader } from '@rifty/runtime-js/loader';
+import { MemoryFsSync } from '@rifty/vfs/internal';
 /**
  * Integration smoke: simulate a real CJS-shaped package (lodash-style) and an
  * ESM-shaped package (nanoid-style) loaded through the rifty module loader.
@@ -11,7 +12,7 @@ import { MemorySyncVfs, createModuleLoader } from '@rifty/runtime-js/loader';
 import { describe, expect, it } from 'vitest';
 
 function loader(files: Record<string, string>) {
-  const vfs = new MemorySyncVfs();
+  const vfs = new MemoryFsSync();
   vfs.loadFixture(files);
   return createModuleLoader(vfs);
 }

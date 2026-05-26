@@ -1,4 +1,5 @@
-import { MemorySyncVfs, createModuleLoader } from '@rifty/runtime-js/loader';
+import { createModuleLoader } from '@rifty/runtime-js/loader';
+import { MemoryFsSync } from '@rifty/vfs/internal';
 /**
  * Real-package integration smoke: chalk-style ANSI helper through the loader.
  *
@@ -9,7 +10,7 @@ import { MemorySyncVfs, createModuleLoader } from '@rifty/runtime-js/loader';
 import { describe, expect, it } from 'vitest';
 
 function setup() {
-  const vfs = new MemorySyncVfs();
+  const vfs = new MemoryFsSync();
   vfs.loadFixture({
     '/app/node_modules/chalk/package.json':
       '{"name":"chalk","version":"5.0.0","type":"module","exports":{".":"./source/index.js"}}',

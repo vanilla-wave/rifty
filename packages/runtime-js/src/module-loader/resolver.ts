@@ -1,7 +1,9 @@
+import type { FsSync } from '@rifty/vfs';
 import { dirname, isAbsolute, joinPath, normalizePath } from '@rifty/vfs';
 import { isBuiltinSpecifier } from '../builtins/index.ts';
 import { ModuleLoadError } from './errors.ts';
-import type { SyncVfs } from './vfs-sync.ts';
+
+const utf8 = new TextDecoder('utf-8');
 
 export type ModuleKind = 'cjs' | 'esm' | 'json' | 'builtin';
 
@@ -27,7 +29,7 @@ export interface Resolver {
   resolve(specifier: string, opts: ResolveOptions): ResolvedModule;
 }
 
-export function createResolver(vfs: SyncVfs): Resolver {
+export function createResolver(vfs: FsSync): Resolver {
   return {
     resolve(specifier, opts) {
       const fromDir =
@@ -84,7 +86,7 @@ export function createResolver(vfs: SyncVfs): Resolver {
 }
 
 function resolveSpecifierToFile(
-  vfs: SyncVfs,
+  vfs: FsSync,
   specifier: string,
   fromDir: string,
   esm: boolean,
@@ -104,7 +106,7 @@ function resolveSpecifierToFile(
   return resolveBareSpecifier(vfs, specifier, fromDir, esm);
 }
 
-function resolveAsFileOrDir(vfs: SyncVfs, base: string): string | null {
+function resolveAsFileOrDir(vfs: FsSync, base: string): string | null {
   if (vfs.existsSync(base)) {
     const st = vfs.statSync(base);
     if (st.isFile) return base;
@@ -117,7 +119,7 @@ function resolveAsFileOrDir(vfs: SyncVfs, base: string): string | null {
   return null;
 }
 
-function resolveAsDirectory(vfs: SyncVfs, dir: string): string | null {
+function resolveAsDirectory(vfs: FsSync, dir: string): string | null {
   const pkgPath = joinPath(dir, 'package.json');
   if (vfs.existsSync(pkgPath)) {
     const pkg = readPackageJson(vfs, pkgPath);
@@ -135,7 +137,7 @@ function resolveAsDirectory(vfs: SyncVfs, dir: string): string | null {
 }
 
 function resolveBareSpecifier(
-  vfs: SyncVfs,
+  vfs: FsSync,
   specifier: string,
   fromDir: string,
   esm: boolean,
@@ -175,7 +177,7 @@ function parseBareSpecifier(specifier: string): ParsedBareSpecifier {
 }
 
 function resolveInsidePackage(
-  vfs: SyncVfs,
+  vfs: FsSync,
   pkgDir: string,
   subpath: string,
   esm: boolean,
@@ -242,7 +244,7 @@ function activeConditions(esm: boolean): readonly Condition[] {
  * Returns the absolute resolved file path, or `null` if no match.
  */
 function resolveImportsSpecifier(
-  vfs: SyncVfs,
+  vfs: FsSync,
   specifier: string,
   fromDir: string,
   esm: boolean,
@@ -377,9 +379,9 @@ function substituteStar(node: ExportsField, star: string): ExportsField {
   return out;
 }
 
-function readPackageJson(vfs: SyncVfs, path: string): PackageJson {
+function readPackageJson(vfs: FsSync, path: string): PackageJson {
   try {
-    return JSON.parse(vfs.readFileSync(path)) as PackageJson;
+    return JSON.parse(utf8.decode(vfs.readFileBytesSync(path))) as PackageJson;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new ModuleLoadError('SYNTAX_ERROR', path, `Failed to parse ${path}: ${message}`);
@@ -397,7 +399,7 @@ function pickMainEntry(pkg: PackageJson): string | null {
  * via the `type` field). Walks up from the file's directory.
  */
 export function findPackageScope(
-  vfs: SyncVfs,
+  vfs: FsSync,
   filePath: string,
 ): { dir: string; pkg: PackageJson } | null {
   let dir = dirname(filePath);
@@ -405,7 +407,10 @@ export function findPackageScope(
     const candidate = joinPath(dir, 'package.json');
     if (vfs.existsSync(candidate) && vfs.statSync(candidate).isFile) {
       try {
-        return { dir, pkg: JSON.parse(vfs.readFileSync(candidate)) as PackageJson };
+        return {
+          dir,
+          pkg: JSON.parse(utf8.decode(vfs.readFileBytesSync(candidate))) as PackageJson,
+        };
       } catch {
         return { dir, pkg: {} };
       }
@@ -417,8 +422,8 @@ export function findPackageScope(
   }
 }
 
-function readResolved(vfs: SyncVfs, filePath: string, _esm: boolean): ResolvedModule {
-  const source = vfs.readFileSync(filePath);
+function readResolved(vfs: FsSync, filePath: string, _esm: boolean): ResolvedModule {
+  const source = utf8.decode(vfs.readFileBytesSync(filePath));
   const kind = detectKind(vfs, filePath);
   const scope = findPackageScope(vfs, filePath);
   return {
@@ -429,7 +434,7 @@ function readResolved(vfs: SyncVfs, filePath: string, _esm: boolean): ResolvedMo
   };
 }
 
-function detectKind(vfs: SyncVfs, filePath: string): ModuleKind {
+function detectKind(vfs: FsSync, filePath: string): ModuleKind {
   if (filePath.endsWith('.json')) return 'json';
   if (filePath.endsWith('.mjs')) return 'esm';
   if (filePath.endsWith('.cjs')) return 'cjs';

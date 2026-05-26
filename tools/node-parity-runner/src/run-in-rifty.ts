@@ -12,13 +12,13 @@
  * Console is replaced for the duration of the case, then restored.
  */
 import { setProcessCwd } from '@rifty/runtime-js/builtins/process';
-import { MemorySyncVfs, createModuleLoader } from '@rifty/runtime-js/loader';
+import { createModuleLoader } from '@rifty/runtime-js/loader';
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@rifty/vfs/internal';
 import { formatArgs } from '../../../packages/runtime-js/src/repl/inspect.ts';
 import type { ParityCase } from './types.ts';
 
 export async function runInRifty(testCase: ParityCase): Promise<string> {
-  const vfs = new MemorySyncVfs();
+  const vfs = new MemoryFsSync();
   const files: Record<string, string> = {};
   if (testCase.setup?.files) {
     for (const [rel, content] of Object.entries(testCase.setup.files)) {

@@ -12,13 +12,13 @@
  *  - targeted invalidate re-runs only the named module's body
  *  - re-execution observes the new source, not the cached exports
  */
+import { MemoryFsSync } from '@rifty/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { createModuleLoader } from './loader.ts';
-import { MemorySyncVfs } from './memory-sync-vfs.ts';
 
 describe('ModuleLoader.invalidate(id?)', () => {
   it('full invalidate forces every module to re-execute on next require()', () => {
-    const vfs = new MemorySyncVfs();
+    const vfs = new MemoryFsSync();
     vfs.loadFixture({
       '/a.js': "globalThis.__count_a = (globalThis.__count_a ?? 0) + 1; module.exports = 'A';",
       '/b.js': "globalThis.__count_b = (globalThis.__count_b ?? 0) + 1; module.exports = 'B';",
@@ -48,7 +48,7 @@ describe('ModuleLoader.invalidate(id?)', () => {
   });
 
   it('targeted invalidate re-runs only the named module; siblings stay cached', () => {
-    const vfs = new MemorySyncVfs();
+    const vfs = new MemoryFsSync();
     vfs.loadFixture({
       '/a.js': "globalThis.__hit_a = (globalThis.__hit_a ?? 0) + 1; module.exports = 'A';",
       '/b.js': "globalThis.__hit_b = (globalThis.__hit_b ?? 0) + 1; module.exports = 'B';",
@@ -73,14 +73,14 @@ describe('ModuleLoader.invalidate(id?)', () => {
   });
 
   it('re-execution after invalidate observes the new source, not the cached exports', () => {
-    const vfs = new MemorySyncVfs();
-    vfs.setFile('/m.js', "module.exports = 'v1';");
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({ '/m.js': "module.exports = 'v1';" });
     const loader = createModuleLoader(vfs);
 
     expect(loader.require('./m.js', '/entry.js')).toBe('v1');
 
     // Update the file and invalidate — next require should see v2.
-    vfs.setFile('/m.js', "module.exports = 'v2';");
+    vfs.loadFixture({ '/m.js': "module.exports = 'v2';" });
     expect(loader.require('./m.js', '/entry.js')).toBe('v1'); // still cached
 
     loader.invalidate('/m.js');

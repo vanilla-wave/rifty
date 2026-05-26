@@ -1,9 +1,9 @@
-import { MemorySyncVfs } from '@rifty/runtime-js/loader';
 import { createModuleLoader } from '@rifty/runtime-js/loader';
+import { MemoryFsSync } from '@rifty/vfs/internal';
 import { describe, expect, it } from 'vitest';
 
 function setup(files: Record<string, string>): ReturnType<typeof createModuleLoader> {
-  const vfs = new MemorySyncVfs();
+  const vfs = new MemoryFsSync();
   vfs.loadFixture(files);
   return createModuleLoader(vfs);
 }

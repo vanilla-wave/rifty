@@ -29,7 +29,6 @@ import { __setCreateRequireImpl } from '@rifty/runtime-js/builtins/module';
 import { installProcessGlobals } from '@rifty/runtime-js/builtins/process';
 import { installTimerGlobals } from '@rifty/runtime-js/builtins/timers';
 import { createModuleLoader } from '@rifty/runtime-js/loader';
-import type { SyncVfs } from '@rifty/runtime-js/loader';
 import { dirname, normalizePath, syncMirror } from '@rifty/vfs';
 import { esbuildShimFiles, rollupShimFiles } from './esbuild-shim.ts';
 import { type HmrBridgeHandle, createHmrBridgeVitePlugin, setupHmrBridge } from './hmr-bridge.ts';
@@ -51,7 +50,6 @@ export interface RealViteOptions {
 }
 
 const enc = new TextEncoder();
-const dec = new TextDecoder();
 
 const INITIAL_INDEX_HTML = `<!doctype html>
 <html>
@@ -88,20 +86,6 @@ function installRuntimeGlobalsOnce(): void {
   installProcessGlobals();
   installTimerGlobals();
   (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
-}
-
-function makeSyncVfs(): SyncVfs {
-  const m = syncMirror();
-  return {
-    existsSync: (p: string) => m.existsSync(p),
-    readFileSync: (p: string) => dec.decode(m.readFileBytesSync(p)),
-    readFileBytesSync: (p: string) => m.readFileBytesSync(p),
-    statSync: (p: string) => {
-      const st = m.statSync(p);
-      return { isFile: st.isFile, isDirectory: st.isDirectory };
-    },
-    readdirSync: (p: string) => m.readdirSync(p),
-  };
 }
 
 function seedProject(root: string, entryPath: string): void {
@@ -160,8 +144,9 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
   log('[real-vite] esbuild + rollup-native shims overlaid\n');
 
   // Build a module loader rooted at /workspace, hook node:module to it.
-  const syncVfs = makeSyncVfs();
-  const loader = createModuleLoader(syncVfs, { cwd: root });
+  // The module loader consumes `@rifty/vfs:FsSync` directly (ADR-0037), so
+  // the shared `syncMirror()` is the right thing to pass — no adapter layer.
+  const loader = createModuleLoader(syncMirror(), { cwd: root });
   __setCreateRequireImpl((from: string) => {
     // Callers may pass either a plain VFS path or a `file://…` URL string
     // (e.g. `import.meta.url` round-tripped through `pathToFileURL`).

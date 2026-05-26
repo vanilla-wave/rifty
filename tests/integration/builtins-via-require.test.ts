@@ -1,4 +1,5 @@
-import { MemorySyncVfs, createModuleLoader } from '@rifty/runtime-js/loader';
+import { createModuleLoader } from '@rifty/runtime-js/loader';
+import { MemoryFsSync } from '@rifty/vfs/internal';
 /**
  * End-to-end through the loader: code uses `require('node:path')`/`import`
  * to access built-ins. This is the actual user surface — the unit tests
@@ -7,7 +8,7 @@ import { MemorySyncVfs, createModuleLoader } from '@rifty/runtime-js/loader';
 import { describe, expect, it } from 'vitest';
 
 function loader(files: Record<string, string>) {
-  const vfs = new MemorySyncVfs();
+  const vfs = new MemoryFsSync();
   vfs.loadFixture(files);
   return createModuleLoader(vfs);
 }
