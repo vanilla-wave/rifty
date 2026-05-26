@@ -1,5 +1,87 @@
 # @rifty/service-worker
 
-Service Worker that will eventually intercept `fetch` and route requests to listening Worker processes (M7).
+Service Worker source + main-thread registration helpers + the wire protocol
+that ties the two sides together.
 
-For M0 it just registers itself and serves a `pong` ping endpoint so the host can verify it's alive.
+The SW source-of-truth lives here in TypeScript (ADR-0016) and is bundled into
+`apps/playground/public/sw.js` by `apps/playground/build/sw-plugin.ts` at dev
+and build time; the package itself never publishes the generated JS.
+
+## What lives here
+
+### Preview routing — `/preview/<port>/...`
+
+The SW intercepts `/preview/<port>/...` fetches in the controlled page and
+forwards them to whichever realm owns the registered `@rifty/net` listener on
+that port. Today the owner is the first controlled window client; once the
+M11 worker-as-process model lands (ADR-0011) the resolver swaps to a
+Worker-aware variant that consults the cross-realm port registry.
+
+- URL convention + `preview.local` synthetic host: `@rifty/io/preview-protocol`,
+  ADR-0036.
+- SW-side wiring: `installPreviewInterceptor(self)` in `sw.ts` /
+  `preview-bridge.ts`.
+- Main-side wiring: `setupPreviewBridge(handler)` posts the
+  `rifty:preview:ready` frame on init and `goodbye` on teardown.
+- Cross-realm scope statement: ADR-0017.
+
+### Body-transport / streaming carrier
+
+`packSerializedResponse` decides per-response whether to transfer the
+`ReadableStream` body across `postMessage` (Chromium ≥ 89, Firefox ≥ 103,
+Safari ≥ 16.4) or drain it into a `Uint8Array` first (older Safari, some
+Workers). `canTransferReadableStream()` is the runtime probe; the result is
+cached after the first call. The protocol-version stamp is added to the
+packed message envelope.
+
+### Owner resolver
+
+`PreviewOwnerResolver` is the strategy that names the realm an intercepted
+preview fetch should be forwarded to. `FirstWindowOwnerResolver` is the
+default — prefers `FetchEvent.clientId` then falls back to the first
+controlled window with a one-shot `console.warn`. M11's `WorkerOwnerResolver`
+will replace the default once A-023 (SW → Worker port registry rewire) and
+A-026 (Vite-in-Worker) land. See `owner-resolver.ts` for the seam and
+ADR-0031 for the rationale.
+
+### Ready-clients registry / handshake
+
+`createReadyClientsRegistry` maintains the per-`clientId` ready/mismatched
+state machine used to gate preview fetches. A fetch for a not-yet-ready
+client waits in `waitForReady(id, timeoutMs)` until the client posts
+`rifty:preview:ready`, the client posts `rifty:preview:goodbye`, the wait
+times out, or the client posts a mismatched protocol version (failed
+`mark` waiters resolve with `'mismatch'`/`'timeout'`). Default ready timeout
+is `DEFAULT_READY_TIMEOUT_MS = 3_000`; on timeout the SW returns
+`503 preview-bridge not ready within Nms`.
+
+### `SW_PROTOCOL_VERSION` on every wire frame
+
+Every frame across `postMessage` between the SW and the controlling page
+carries a `version: string` field set to `SW_PROTOCOL_VERSION`. Receivers
+MUST validate at decode time before any side effect; mismatch → 503
+("protocol version mismatch") and a one-shot `console.warn` per peer.
+ADR-0031 is the source-of-truth for the per-frame contract; ADR-0016
+covers the broader "TS source-of-truth + bundled `sw.js`" decision.
+
+Bump `SW_PROTOCOL_VERSION` in `protocol.ts` on any wire change. The
+protocol does not attempt cross-version compatibility — version skew
+between an old page and a fresh SW (or vice-versa) refuses both ways.
+
+### Registration helper
+
+`registerServiceWorker(scriptUrl, options)` wraps `navigator.serviceWorker
+.register` with `statechange` logging, a configurable activation timeout
+(default 30 s), and proper rejection on the `redundant` transition.
+
+## See also
+
+- ADR-0011 — kernel + worker-as-process model (M11 prerequisite for the
+  Worker-aware owner resolver).
+- ADR-0016 — SW source-of-truth in TypeScript.
+- ADR-0017 — `@rifty/net` cross-realm scope and the streaming rewrite that
+  unblocks the body-transport upgrades scheduled for M12.
+- ADR-0031 — per-frame `version` validation.
+- ADR-0036 — preview-protocol addressing primitives live in `@rifty/io`.
+- `REVIEW_ACTIONS.md` A-023 / A-026 — the M11 path that swaps the default
+  owner resolver.
