@@ -2,16 +2,14 @@
  * Typed bridge for the cross-realm globals the kernel installs inside a
  * spawned Worker.
  *
- * Three pieces of state need to leak across module boundaries (kernel worker
+ * Two pieces of state need to leak across module boundaries (kernel worker
  * bootstrap → runtime-js / runtime-wasi builtins inside the same realm):
  *
- *   1. The {@link KernelSabRing} (review §1 P1) — the SAB ring used by
- *      runtime-js sync syscalls to talk to the parent dispatcher.
- *   2. The {@link KernelSyncApi} — a thin `call(method, payload)` shim
+ *   1. The {@link KernelSyncApi} — a thin `call(method, payload)` shim
  *      backed by a {@link SyncRpcClient}. Higher layers (e.g.
  *      `child_process.execSync`) reach for this to delegate sync syscalls
  *      to the parent without re-implementing the SAB framing.
- *   3. The {@link KernelProcessSpec} (ADR-0039) — a typed snapshot of the
+ *   2. The {@link KernelProcessSpec} (ADR-0039) — a typed snapshot of the
  *      kernel-owned identity (pid/ppid/argv/env/cwd/stdio) the higher
  *      runtime layer needs to build its own `process` object. The kernel
  *      itself never installs a Node-shaped `globalThis.process`; that
@@ -35,20 +33,6 @@ export type KernelSyncCall = (method: string, payload: unknown) => unknown;
 export interface KernelSyncApi {
   /** Send a sync request to the parent dispatcher and return its reply. */
   call: KernelSyncCall;
-}
-
-/**
- * Public surface of the kernel-side SAB ring as exposed inside the Worker.
- * `unknown` here intentionally — `@rifty/kernel/ipc/sab-ring` owns the
- * concrete class but we want this module dependency-free so it can be
- * imported from runtime-js without circular references.
- *
- * Callers that need the structural ring methods cast through the concrete
- * `SabRing` import from `@rifty/kernel`.
- */
-export interface KernelSabRing {
-  readonly payloadCapacity: number;
-  readonly expectedVersion: number;
 }
 
 /**
@@ -87,12 +71,10 @@ export interface KernelProcessSpec {
  * conformance tests can assert the publish path. Production code goes
  * through {@link publishKernelSyncApi} / {@link readKernelSyncApi} etc.
  */
-export const KERNEL_SAB_RING_KEY = '__riftyKernelSyncRing__' as const;
 export const KERNEL_SYNC_CALL_KEY = '__riftyKernelSyncCall' as const;
 export const KERNEL_PROCESS_SPEC_KEY = '__riftyProcessSpec__' as const;
 
 interface GlobalWithKernelHooks {
-  [KERNEL_SAB_RING_KEY]?: KernelSabRing;
   [KERNEL_SYNC_CALL_KEY]?: KernelSyncCall;
   [KERNEL_PROCESS_SPEC_KEY]?: KernelProcessSpec;
 }
@@ -102,31 +84,9 @@ function asGlobal(): GlobalWithKernelHooks {
 }
 
 /**
- * Install the SAB ring on this realm's globalThis as a non-enumerable
- * value. Idempotent — re-publishing on the same realm overwrites the
- * previous value (configurable: true).
- */
-export function publishKernelSabRing(ring: KernelSabRing): void {
-  Object.defineProperty(globalThis, KERNEL_SAB_RING_KEY, {
-    value: ring,
-    writable: false,
-    configurable: true,
-    enumerable: false,
-  });
-}
-
-/**
- * Read the SAB ring previously published in this realm. Returns `null`
- * when the kernel bootstrap hasn't run (e.g. the main realm or a Worker
- * created outside `kernel.spawnWorker`).
- */
-export function readKernelSabRing(): KernelSabRing | null {
-  return asGlobal()[KERNEL_SAB_RING_KEY] ?? null;
-}
-
-/**
  * Install the sync-call shim on this realm's globalThis as a
- * non-enumerable value. Idempotent — see {@link publishKernelSabRing}.
+ * non-enumerable value. Idempotent — re-publishing on the same realm
+ * overwrites the previous value (configurable: true).
  *
  * The published shape today stores the `call` function under the key for
  * historical compatibility (older runtime-js builds expected the raw

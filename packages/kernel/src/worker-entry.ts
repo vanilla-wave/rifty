@@ -7,9 +7,8 @@
  * call via a bundler `?worker&url` import). For each spawned child, the
  * bootstrap:
  *   1. Waits for a single `init` message carrying {@link WorkerSpawnSpec}.
- *   2. Constructs a {@link SabRing} over `spec.syncRing` and publishes it on
- *      `globalThis` via {@link publishKernelSabRing} for the higher runtime
- *      layer.
+ *   2. Constructs a {@link SabRing} over `spec.syncRing` and uses it to back
+ *      a {@link SyncRpcClient} for the parent-bound sync-call shim.
  *   3. Publishes the parent-bound sync-call shim via
  *      {@link publishKernelSyncApi}.
  *   4. Publishes a typed {@link KernelProcessSpec} via
@@ -42,21 +41,19 @@
 import { SabRing } from './ipc/sab-ring.ts';
 import { SyncRpcClient } from './ipc/sync-client.ts';
 import {
-  KERNEL_SAB_RING_KEY,
   KERNEL_SYNC_CALL_KEY,
   type KernelProcessSpec,
   type KernelSyncCall,
   publishKernelProcessSpec,
-  publishKernelSabRing,
   publishKernelSyncApi,
 } from './shared-globals.ts';
 
-// Re-export the global-hook keys + sync-call type. Historical consumers
+// Re-export the global-hook key + sync-call type. Historical consumers
 // (runtime-js, tests) imported these from `worker-entry.ts`; the canonical
 // home is now `shared-globals.ts` but the legacy re-exports stay for the
 // transition period. New code SHOULD prefer `@rifty/kernel`'s shared-globals
 // publish/read helpers.
-export { KERNEL_SAB_RING_KEY, KERNEL_SYNC_CALL_KEY, type KernelSyncCall };
+export { KERNEL_SYNC_CALL_KEY, type KernelSyncCall };
 
 /** Stdio channels passed to the worker. Each is a transferred MessagePort. */
 export interface WorkerStdioPorts {
@@ -150,14 +147,6 @@ function isRiftyProcessExit(err: unknown): err is RiftyProcessExitShape {
 
 const STDIO_ENCODER = new TextEncoder();
 
-function publishSyncRing(ring: SabRing): void {
-  // The runtime-side `KernelSabRing` view is a structural subset of the
-  // concrete `SabRing` — pass the live instance through unchanged so
-  // higher layers can still cast back to the concrete class when they
-  // need its full API surface.
-  publishKernelSabRing(ring);
-}
-
 function publishSyncCallShim(ring: SabRing): void {
   const client = new SyncRpcClient(ring);
   const shim: KernelSyncCall = (method, payload) => client.call(method, payload);
@@ -232,7 +221,6 @@ export function installWorkerEntry(
 
     const spec = msg.spec;
     const ring = SabRing.attach(spec.syncRing);
-    publishSyncRing(ring);
     // Phase 3: expose `__riftyKernelSyncCall(method, payload)` so the
     // runtime-js layer can route `execSync`, `readFileSync`, etc. through
     // the parent dispatcher without each builtin re-implementing the
