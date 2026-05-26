@@ -43,6 +43,11 @@ describe('mapOpfsError', () => {
     expect(e.code).toBe('ENOTDIR');
   });
 
+  it('maps InvalidModificationError → ENOTEMPTY (Node parity for rm)', () => {
+    const e = mapOpfsError(new FakeDomException('InvalidModificationError'), '/dir', 'dir');
+    expect(e.code).toBe('ENOTEMPTY');
+  });
+
   it('maps unknown error → EIO with original as cause', () => {
     const raw = new FakeDomException('SomeWeirdError', 'boom');
     const e = mapOpfsError(raw, '/x', 'file');

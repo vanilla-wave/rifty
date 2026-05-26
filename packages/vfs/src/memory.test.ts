@@ -62,11 +62,14 @@ describe('MemoryVfs', () => {
     expect(await fs.exists('/a')).toBe(false);
   });
 
-  it('rm non-recursive on non-empty dir throws', async () => {
+  it('rm non-recursive on non-empty dir throws ENOTEMPTY (Node parity)', async () => {
     const fs = new MemoryVfs();
     await fs.mkdir('/a', { recursive: true });
     await fs.writeFile('/a/x', 'x');
-    await expect(fs.rm('/a')).rejects.toThrow(VfsError);
+    await expect(fs.rm('/a')).rejects.toMatchObject({
+      name: 'VfsError',
+      code: 'ENOTEMPTY',
+    });
   });
 
   it('rm force ignores missing', async () => {

@@ -25,7 +25,6 @@ import {
   E_NOENT,
   E_NOSYS,
   E_NOTDIR,
-  E_NOTEMPTY,
   E_SUCCESS,
   FILETYPE_DIRECTORY,
   FILETYPE_REGULAR_FILE,
@@ -203,11 +202,9 @@ export function pathSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
         if (!mirror.existsSync(fullPath)) return E_NOENT;
         const st = mirror.statSync(fullPath);
         if (!st.isDirectory) return E_NOTDIR;
-        // Reject non-empty dirs with ENOTEMPTY rather than letting `rm` raise
-        // a backend-specific EPERM (see MemoryBackend.rm which throws EPERM
-        // when recursive=false on a non-empty dir).
-        const entries = mirror.readdirSync(fullPath);
-        if (entries.length > 0) return E_NOTEMPTY;
+        // Non-empty dirs raise `VfsError('ENOTEMPTY')` from the backend
+        // (Node parity, ADR-0037 follow-up); `errToWasiErrno` maps that to
+        // `E_NOTEMPTY` automatically — no hand-rolled probe needed.
         mirror.rmSync(fullPath, {});
         return E_SUCCESS;
       } catch (err) {

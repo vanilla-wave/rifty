@@ -3,6 +3,8 @@ export type VfsErrorCode =
   | 'EEXIST'
   | 'EISDIR'
   | 'ENOTDIR'
+  /** Directory removal attempted without `recursive: true` on a non-empty dir (Node parity). */
+  | 'ENOTEMPTY'
   | 'EPERM'
   | 'EINVAL'
   | 'EACCES'

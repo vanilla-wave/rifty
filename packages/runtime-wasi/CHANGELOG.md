@@ -44,6 +44,11 @@
   for unmapped errors from the host VFS layer.
 - **2026-05-25** — `path_remove_directory` now returns `E_NOTEMPTY` for
   non-empty directories (previously surfaced backend-specific `E_PERM`).
+- `path_remove_directory` drops the manual `readdirSync` probe-for-empty
+  workaround. The VFS backend (`MemoryBackend.rm`) now raises
+  `VfsError('ENOTEMPTY')` directly, which `errToWasiErrno` maps to
+  `E_NOTEMPTY` — one source of truth for the error code, no
+  backend-specific patch in the syscall handler.
 - **2026-05-25** — README corrected: VFS mirror lives in `@rifty/vfs`
   (per ADR-0014), not `@rifty/runtime-js` as previously claimed.
 

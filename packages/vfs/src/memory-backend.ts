@@ -150,7 +150,11 @@ export class MemoryBackend {
       throw new VfsError('ENOENT', path);
     }
     if (target.kind === 'dir' && target.children.size > 0 && !recursive) {
-      throw new VfsError('EPERM', path);
+      // Node's fs.rmSync throws `ENOTEMPTY: directory not empty, rmdir '...'`
+      // here. Match that code so callers (WASI path_remove_directory, fs.rm
+      // error-handling, npm-client install rollback) can branch on it
+      // instead of hand-rolling backend-specific workarounds.
+      throw new VfsError('ENOTEMPTY', path, `ENOTEMPTY: directory not empty, rmdir '${path}'`);
     }
     parentNode.children.delete(name);
     parentNode.mtime = Date.now();

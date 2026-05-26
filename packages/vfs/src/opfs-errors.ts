@@ -5,11 +5,12 @@
  * Browser OPFS surfaces errors as `DOMException` instances whose `name` is
  * one of:
  *
- *   - `NotAllowedError`      — permission/lock denied              → EACCES
- *   - `QuotaExceededError`   — storage quota exhausted             → EDQUOT
- *   - `TypeMismatchError`    — kind mismatch (file vs directory)   → EISDIR / ENOTDIR
- *   - `NotFoundError`        — path missing                        → ENOENT
- *   - (anything else)        — unknown failure                     → EIO (with `.cause`)
+ *   - `NotAllowedError`         — permission/lock denied              → EACCES
+ *   - `QuotaExceededError`      — storage quota exhausted             → EDQUOT
+ *   - `TypeMismatchError`       — kind mismatch (file vs directory)   → EISDIR / ENOTDIR
+ *   - `InvalidModificationError`— rm on non-empty dir without recurse → ENOTEMPTY
+ *   - `NotFoundError`           — path missing                        → ENOENT
+ *   - (anything else)           — unknown failure                     → EIO (with `.cause`)
  *
  * The `context` argument disambiguates `TypeMismatchError`: when the caller
  * was asking for a file but found a directory, the right code is `EISDIR`;
@@ -58,6 +59,12 @@ export function mapOpfsError(err: unknown, path: string, context: OpfsErrorConte
       //   - file op on a directory      → EISDIR
       //   - directory op on a file path → ENOTDIR
       return new VfsError(context === 'file' ? 'EISDIR' : 'ENOTDIR', path, message);
+    case 'InvalidModificationError':
+      // Browsers throw this when `removeEntry` is asked to drop a non-empty
+      // directory without `recursive: true`. Node's `fs.rmSync` raises
+      // `ENOTEMPTY` for the same situation — mirror that so consumers can
+      // branch on a single code regardless of backend.
+      return new VfsError('ENOTEMPTY', path, message);
     default:
       return new VfsError('EIO', path, message || `OPFS error on ${path}`, { cause: err });
   }
