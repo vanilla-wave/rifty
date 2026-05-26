@@ -134,6 +134,7 @@ Per-milestone task tracking with acceptance review. See `PROJECT_PLAN.md` for th
 - [x] `http.request` (outgoing) backed by `fetch()`.
 - [x] Port registry with `dispatchToPort` — consumed by Service Worker for `/preview/<port>/...` routing.
 - [x] **4 http conformance tests** + 2 Express-style integration tests.
+- [x] **E2E SW round-trip:** `tests/e2e/m7-preview-sw.spec.ts` — `fetch('/preview/3000/')` from the playground page reaches a main-thread `http.createServer().listen(3000)` through `installPreviewInterceptor` + `setupPreviewBridge` + `packSerializedResponse` and returns the registered handler's HTML body. Closes the audit gap where `tests/integration/express-style.test.ts` bypassed the SW path via direct `dispatchToPort`.
 
 ### Open acceptance
 

@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- **M7 acceptance coverage:** `tests/e2e/m7-preview-sw.spec.ts` exercises
+  the full `installPreviewInterceptor` → resolved-client `postMessage` →
+  bridge handler reply → `packSerializedResponse` carrier path in a real
+  browser. The playground page boots, the SW takes control, "Dev Mode"
+  starts an `@rifty/net` HTTP server on port 3000, and a
+  `fetch('/preview/3000/')` is asserted to round-trip with the registered
+  handler's HTML body. Closes the e2e gap that the unit tests in
+  `tests/preview-handshake-sw.test.ts` and the integration smoke in
+  `tests/integration/express-style.test.ts` cannot reach (the former
+  mocks `MessageChannel`; the latter bypasses the bridge entirely).
+
 ### Changed
 
 - **ADR-0036:** preview-protocol addressing (`/preview/<port>/...` URL

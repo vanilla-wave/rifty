@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- **M7 acceptance coverage:** `tests/e2e/m7-preview-sw.spec.ts` proves an
+  HTTP request rounds through the Service Worker preview path end-to-end —
+  the playground's main-thread `http.createServer().listen(3000)` (via
+  `@rifty/net`) is reached by a `fetch('/preview/3000/')` that crosses the
+  SW interceptor + cross-realm `MessageChannel` + `packSerializedResponse`
+  carrier and returns the registered handler's bytes. Closes the gap
+  flagged by the 2026-05-26 architecture audit: `tests/integration/express-style.test.ts`
+  calls `dispatchToPort(port, request)` directly and bypasses the SW path,
+  so before this spec the PROJECT_PLAN.md M7 acceptance line
+  ("Express 'hello world' → see page in browser") was not test-covered.
+
 ### Changed
 
 - **ADR-0036:** the `/preview/<port>/...` URL scheme and `preview.local`
