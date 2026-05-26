@@ -162,9 +162,29 @@ function takeAll(state: ReadableState): unknown {
   return out;
 }
 
+/**
+ * Minimal shape the destination must satisfy for `pipe()`. We avoid importing
+ * `Writable` here to keep the inheritance direction one-way (Writable extends
+ * the EventEmitter from this layer; depending on Writable from inside
+ * readable.ts would invert the dep). The duck-type matches Node's pipe API.
+ */
+interface PipeableWritable extends EventEmitter {
+  write(chunk: unknown): boolean;
+  end(): unknown;
+  emit: EventEmitter['emit'];
+}
+
 export class Readable extends EventEmitter implements AsyncIterable<unknown> {
   readonly _readableState: ReadableState;
   private readImpl?: (this: Readable, size: number) => void;
+  /**
+   * Per-dest pipe cleanup. The key is the destination; the value tears down
+   * every listener `pipe(dest)` attached on both ends. A `Map` (not array)
+   * means `unpipe(dest)` removes all wirings to that dest in one call, even
+   * when `pipe(dest)` was called multiple times — subsequent calls overwrite
+   * the previous entry after running its cleanup.
+   */
+  private pipeCleanups: Map<PipeableWritable, () => void> = new Map();
 
   constructor(opts: ReadableOptions = {}) {
     super();
@@ -444,36 +464,88 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     return this;
   }
 
-  pipe<
-    W extends {
-      write(chunk: unknown): boolean;
-      end(): unknown;
-      emit: EventEmitter['emit'];
-    } & EventEmitter,
-  >(dest: W, opts: { end?: boolean } = {}): W {
+  /**
+   * Connect a source `Readable` to a destination `Writable`.
+   *
+   * Symmetric wiring (improves on the pre-fix shape that left dangling
+   * listeners on either side after an error):
+   *   - source `'data'` → `dest.write()` (pause on backpressure);
+   *   - source `'end'`  → `dest.end()` (unless `opts.end === false`);
+   *   - source `'error'`→ propagate to dest then cleanup the wiring;
+   *   - dest   `'drain'`→ resume source;
+   *   - dest   `'error'`→ cleanup the wiring on both ends;
+   *   - dest   `'close'`→ cleanup the wiring on both ends.
+   *
+   * Multiple `pipe(dest, …)` calls to the same destination overwrite the
+   * previous wiring (the old cleanup runs first). This keeps the Map-per-dest
+   * contract — `unpipe(dest)` removes all of this readable's wirings to that
+   * destination in one call.
+   *
+   * @param dest Writable-like sink (anything matching {@link PipeableWritable}).
+   * @param opts `{end?: boolean}` — when `false`, source's `end` does NOT call
+   *   `dest.end()`. Default `true`, matching Node.
+   */
+  pipe<W extends PipeableWritable>(dest: W, opts: { end?: boolean } = {}): W {
+    // If we're already piping to this dest, clean up first so the listener
+    // count returns to its pre-pipe baseline; the new wiring replaces it.
+    const existing = this.pipeCleanups.get(dest);
+    if (existing) existing();
+
     const endOnFinish = opts.end ?? true;
-    const onData = (chunk: unknown) => {
+    const onData = (chunk: unknown): void => {
       if (!dest.write(chunk)) this.pause();
     };
-    const onDrain = () => this.resume();
-    const onEnd = () => {
+    const onDrain = (): void => {
+      this.resume();
+    };
+    const onEnd = (): void => {
       if (endOnFinish) dest.end();
     };
-    const onError = (err: unknown) => {
+    const onSourceError = (err: unknown): void => {
       dest.emit('error', err);
       cleanup();
     };
+    const onDestError = (_err: unknown): void => {
+      cleanup();
+    };
+    const onDestClose = (): void => {
+      cleanup();
+    };
     const cleanup = (): void => {
+      // Idempotent: only run once per pipe instance.
+      if (this.pipeCleanups.get(dest) !== cleanup) return;
+      this.pipeCleanups.delete(dest);
       this.off('data', onData);
       this.off('end', onEnd);
-      this.off('error', onError);
+      this.off('error', onSourceError);
       dest.off('drain', onDrain);
+      dest.off('error', onDestError);
+      dest.off('close', onDestClose);
     };
     this.on('data', onData);
     this.on('end', onEnd);
-    this.on('error', onError);
+    this.on('error', onSourceError);
     dest.on('drain', onDrain);
+    dest.on('error', onDestError);
+    dest.on('close', onDestClose);
+    this.pipeCleanups.set(dest, cleanup);
     return dest;
+  }
+
+  /**
+   * Detach the wiring installed by `pipe(dest)`. With no argument, detach
+   * every active wiring. With a destination, detach just that one. Mirrors
+   * Node's `Readable.unpipe(dest?)`.
+   */
+  unpipe<W extends PipeableWritable>(dest?: W): this {
+    if (dest === undefined) {
+      // Iterate over a snapshot — each cleanup mutates pipeCleanups.
+      for (const cleanup of [...this.pipeCleanups.values()]) cleanup();
+      return this;
+    }
+    const cleanup = this.pipeCleanups.get(dest);
+    if (cleanup) cleanup();
+    return this;
   }
 
   destroy(err?: Error): this {

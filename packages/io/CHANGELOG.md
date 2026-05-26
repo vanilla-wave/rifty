@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Added
+
+- `Readable.unpipe(dest?)` — detach a single `pipe(dest)` wiring or all of
+  them. Mirrors Node's `Readable.prototype.unpipe`. `pipe(dest)` now also
+  installs symmetric error wiring (source-error tears down the dest hooks,
+  dest-error / dest-close tears down the source hooks) and tracks per-dest
+  cleanup in a `Map<PipeableWritable, () => void>`, so listener counts
+  return cleanly to zero on every termination path. The `opts.end` option
+  is honoured: `pipe(dest, {end:false})` no longer calls `dest.end()` on
+  source `end`. Subsequent `pipe(dest, …)` calls to the same destination
+  replace the existing wiring (the old cleanup runs first), so
+  `unpipe(dest)` removes all of this Readable's wirings to that destination
+  in one call. New unit suite `readable.pipe.test.ts` plus parity case
+  `stream/pipe-unpipe.case.ts`.
+
 ### Fixed
 
 - `Readable[Symbol.asyncIterator]` now removes the `data`/`end`/`error`
