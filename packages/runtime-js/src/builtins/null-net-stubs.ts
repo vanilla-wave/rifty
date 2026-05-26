@@ -1,9 +1,9 @@
 /**
- * Loud stubs for `node:dns`, `node:tls`, `node:https`, `node:readline`,
- * `node:zlib`. They exist so that `import` succeeds (Vite static-imports all
- * of them at top level); every actual method call throws NotImplementedError
- * so we never silently corrupt behaviour. `https` is special: it re-exports
- * `node:http` so HTTPS-only call sites at least see the same shape.
+ * Loud stubs for `node:dns`, `node:tls`, `node:readline`, `node:zlib`. They
+ * exist so that `import` succeeds (Vite static-imports all of them at top
+ * level); every actual method call throws NotImplementedError so we never
+ * silently corrupt behaviour. `node:https` lives in `@rifty/net/https.ts`
+ * and is registered there (ADR-0010 loud-throw stub).
  */
 import { NotImplementedError } from '@rifty/io';
 
@@ -63,20 +63,6 @@ export const tls = {
   connect: notImpl('tls.connect'),
   Server: TlsThrow,
   TLSSocket: TlsThrow,
-};
-
-// `https` is registered by @rifty/net once its http shim has loaded, since
-// runtime-js cannot import from the layer above. Until then, importing
-// `node:https` from inside the runtime would fail — net registers it as an
-// alias of http on package init.
-export const https = {
-  createServer: notImpl('https.createServer'),
-  request: notImpl('https.request'),
-  Agent: class {
-    constructor() {
-      throw new NotImplementedError('https.Agent');
-    }
-  },
 };
 
 export const readline = {
