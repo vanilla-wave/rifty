@@ -51,6 +51,17 @@
 
 ### Changed
 
+- Install pipeline unified — single traversal driver (`walkAndPin`) with two
+  pluggable `ResolutionSource` implementations (`createLockfileSource` /
+  `createRegistrySource`). The lockfile-fast-path and live-resolve pipelines
+  no longer carry two copies of the traversal loop, the `Pinned =
+  (lockfileEntry | manifest) → PinnedPackage` adapter, or the peer-deps
+  hydration check; one `pinToPackage` adapter is reached from a single
+  place. `install()` is now ~30 lines orchestrating four collaborators
+  (`chooseSource` → `walkAndPin` → `link` → `writeLockfileIfChanged`).
+  Public API (`install`, `InstallOptions`, `InstallResult`) is unchanged.
+  Closes the P0 finding from the 2026-05-26 npm-client audit. No new
+  external dependencies and no new files.
 - Built-in override table moved out of `src/overrides.ts` into the new
   `@rifty/shadow-registry` workspace package (ADR 0015). Public API
   (`resolveOverride`, `OverrideMap`) is unchanged.
