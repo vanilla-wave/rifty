@@ -1,5 +1,5 @@
 import { registerBuiltin } from '@rifty/io';
-import assertModule, { AssertionError, strict as assertStrict } from './assert.ts';
+import assertModule, { strict as assertStrict } from './assert.ts';
 import bufferModule, { Buffer } from './buffer.ts';
 import childProcessModule from './child_process.ts';
 import cryptoModule from './crypto.ts';
@@ -74,12 +74,7 @@ registerBuiltin('buffer', () => {
   return exports;
 });
 registerBuiltin('process', () => riftyProcess as unknown as Record<string, unknown>);
-registerBuiltin('timers', () => {
-  const exports = timersModule as unknown as Record<string, unknown>;
-  exports.AssertionError = AssertionError; // suppress unused warning; harmless
-  exports.AssertionError = undefined;
-  return exports;
-});
+registerBuiltin('timers', () => timersModule as unknown as Record<string, unknown>);
 registerBuiltin('fs', () => fsModule as unknown as Record<string, unknown>);
 registerBuiltin('fs/promises', () => fsPromises as unknown as Record<string, unknown>);
 registerBuiltin('stream', () => streamModule as unknown as Record<string, unknown>);
