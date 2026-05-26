@@ -4,6 +4,26 @@
 
 ### Added
 
+- `fetchAndUnpackToCache(spec, ctx)` — single source of truth for the
+  `cache → fetch → integrity-check → write` trio used by both the lockfile
+  fast path and the live-resolve path. Lives in `src/fetch-and-unpack.ts`;
+  exported as an internal helper (not part of the public API, no
+  `src/index.ts` re-export — these call sites are intra-package). Closes
+  D-F from the 2026-05-26 architecture review: previously the two pipelines
+  had been copy-pasted (`installer.ts:96-121` vs `:189-211`) and had
+  already drifted. See `### Fixed` below for the behavior unification.
+- `LockfileEntry.peerDependencies` (optional). Persisted on each
+  non-root entry so the lockfile fast path can run the same
+  missing-peer warn pass as the live-resolve path without re-fetching
+  every packument. Backward-compatible: pre-existing v3 readers (including
+  npm itself, which has stored this field on `lockfileVersion: 3` entries
+  since npm 7) ignore unknown fields; consumers that don't care simply
+  skip the warn pass. **Peer-warning strategy choice (D-F):** we picked
+  *persist on lockfile entry* over *recompute from packument*. Recomputing
+  on every fast-path install would have required a packument round-trip per
+  package, defeating the ADR-0023 cache benefit and re-introducing exactly
+  the latency the lockfile reuse exists to avoid. Persisting in the lockfile
+  is O(1), backward-compatible, and what npm itself does.
 - Semver matcher (`matchesRange`, `pickBestVersion`) supporting exact, `x`-ranges, caret/tilde, comparator sets.
 - `RegistryClient` with pluggable fetcher; `getPackument(name)` and `getTarball(name, version)`.
 - gzip + tar unpacker (`extractTarGz(bytes) → Record<path, bytes>`).
@@ -66,6 +86,30 @@
   version no longer satisfies) triggers a fallthrough to live-resolve,
   treated as a cache miss. Coverage: 3 unit tests in
   `installer-lockfile.test.ts`.
+- **Live-resolve path now verifies fetched-tarball integrity** against the
+  pinned hash (manifest's `dist.integrity` or, on a partial re-resolve,
+  the lockfile entry's `integrity`). Previously the live path's silent
+  acceptance of any bytes the registry returned was a "no silent stubs"
+  violation — a registry returning the wrong tarball for a (name, version)
+  pair would propagate unnoticed into `node_modules`. Throws
+  `EINTEGRITY` (matching the fast path's behavior) on mismatch. This is
+  the network-side half of the D-F drift; the cache-side half (existing
+  ADR-0023 "tampered cache → refetch" corruption guard) is preserved
+  verbatim — `VfsTarballCache.get` still returns `null` on integrity
+  mismatch so that operationally common disk corruption stays
+  self-healing instead of being a hard failure. The trade-off (loud-throw
+  on network bytes vs self-heal on cache bytes) is documented inline at
+  the top of `fetch-and-unpack.ts`. Coverage: 5 unit tests in
+  `fetch-and-unpack.test.ts` + 2 pipeline tests in
+  `installer-pipeline.test.ts`.
+- **Lockfile fast path now emits the missing-peer warning pass.**
+  `peerDependencies` is hydrated from the lockfile entry into the
+  in-memory `PinnedPackage` record before `warnUnsatisfiedPeers()` runs.
+  Previously the fast path silently skipped the warn pass because v3
+  lockfile entries did not carry `peerDependencies`; user-observable
+  behavior thus diverged between an install that hit the cache and one
+  that didn't. Both paths now produce the same `console.warn` output for
+  the same input. Coverage: 1 pipeline test in `installer-pipeline.test.ts`.
 
 ### Dependencies
 

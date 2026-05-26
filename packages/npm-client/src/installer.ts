@@ -14,6 +14,7 @@
  */
 
 import type { Vfs } from '@rifty/vfs';
+import { fetchAndUnpackToCache } from './fetch-and-unpack.ts';
 import {
   lockfileCovers,
   lockfileSubgraph,
@@ -24,7 +25,7 @@ import { type Lockfile, type ResolvedPackage, buildLockfile, link } from './link
 import { type OverrideMap, resolveOverride } from './overrides.ts';
 import type { Packument, RegistryClient } from './registry.ts';
 import { matchesRange, pickBestVersion } from './semver.ts';
-import { type TarballCache, VfsTarballCache, computeIntegrity } from './tarball-cache.ts';
+import { type TarballCache, VfsTarballCache } from './tarball-cache.ts';
 import { extractTarGz } from './unpacker.ts';
 
 export interface InstallOptions {
@@ -43,8 +44,11 @@ export interface InstallOptions {
 }
 
 /** ResolvedPackage extended with provenance for the lockfile and peer-dep
- * metadata for the post-resolve warn pass. Peer/optional sets are not stored
- * in the v3 lockfile shape, so they live only on the in-memory record. */
+ * metadata for the post-resolve warn pass. Since the D-F unification
+ * (2026-05-26) `peerDependencies` is also persisted on the lockfile entry
+ * so the fast path can hydrate it back and run the same warn pass that
+ * live-resolve does — see `LockfileEntry.peerDependencies` in `linker.ts`.
+ */
 type PinnedPackage = ResolvedPackage & {
   resolved?: string;
   integrity?: string;
@@ -87,40 +91,54 @@ export async function install(
       subgraphFreeOfOverrideDivergence(existingLockfile, topLevelPins, opts.overrides)
     ) {
       // Build the closed subgraph from the requested roots and replay every
-      // pin through the cache. Any cache miss falls through to a fetch but
-      // still avoids the packument round-trip.
+      // pin through the shared {@link fetchAndUnpackToCache} pipeline. Any
+      // cache miss falls through to a network fetch but still avoids the
+      // packument round-trip; the helper re-verifies integrity on network
+      // bytes so the fast path can never silently install tampered data.
       const subgraph = lockfileSubgraph(existingLockfile, [...topLevelPins.keys()]);
+      const fetchCtx = {
+        cache: tarballCache,
+        getTarball: (url: string) => opts.registry.getTarball(url),
+      };
       for (const name of subgraph) {
         const entry = existingLockfile.packages[`node_modules/${name}`];
         if (!entry || !entry.resolved || !entry.integrity) {
           break;
         }
-        let bytes = await tarballCache.get(name, entry.version, entry.integrity);
-        if (!bytes) {
-          bytes = await opts.registry.getTarball(entry.resolved);
-          const actual = await computeIntegrity(bytes);
-          if (actual !== entry.integrity) {
-            throw Object.assign(
-              new Error(
-                `Integrity mismatch for ${name}@${entry.version}: expected ${entry.integrity}, got ${actual}`,
-              ),
-              { code: 'EINTEGRITY', packageName: name, version: entry.version },
-            );
-          }
-          await tarballCache.put(name, entry.version, entry.integrity, bytes);
-        }
+        const { bytes } = await fetchAndUnpackToCache(
+          {
+            name,
+            version: entry.version,
+            resolved: entry.resolved,
+            integrity: entry.integrity,
+          },
+          fetchCtx,
+        );
         const files = await extractTarGz(bytes);
-        resolved.set(name, {
+        const pkg: PinnedPackage = {
           name,
           version: entry.version,
           files,
           dependencies: entry.dependencies ?? {},
           resolved: entry.resolved,
           integrity: entry.integrity,
-        });
+        };
+        // Lockfile v3 now persists `peerDependencies` (D-F): hydrating it
+        // here lets the post-install warn pass see what the live-resolve
+        // path would have seen, instead of silently skipping every peer
+        // declaration on the fast path.
+        if (entry.peerDependencies && Object.keys(entry.peerDependencies).length > 0) {
+          pkg.peerDependencies = entry.peerDependencies;
+        }
+        resolved.set(name, pkg);
       }
 
       const packages = [...resolved.values()];
+      // Peer-warning pass runs on both paths now (D-F, 2026-05-26): the
+      // lockfile entries carry `peerDependencies` since this PR, so the
+      // observable warn output is the same regardless of whether the
+      // install hit the fast path or the live-resolve path.
+      warnUnsatisfiedPeers(packages);
       await link(opts.vfs, opts.cwd, packages);
       const lockfile = buildLockfile(rootName, rootVersion, packages);
       // Diff-before-write preserves user-visible mtime when the install was a
@@ -175,27 +193,28 @@ export async function install(
     const manifest = packument.versions[pick];
     if (!manifest) throw new Error(`Packument missing version manifest ${effectiveName}@${pick}`);
 
-    // Try cache first. Prefer the manifest's integrity; fall back to the
-    // lockfile pin's integrity for the same (name, version) so that a
-    // partial re-resolve (e.g. one range bumped) still serves unchanged
-    // transitive deps from the cache.
-    let cacheIntegrity = manifest.dist.integrity;
-    if (!cacheIntegrity && existingLockfile) {
+    // Resolve the integrity to verify against. Prefer the manifest's pin;
+    // fall back to the lockfile entry's pin for the same (name, version) so
+    // that a partial re-resolve (e.g. one range bumped) still serves
+    // unchanged transitive deps from the cache. When neither source supplies
+    // an integrity, the helper computes one from the fetched bytes and
+    // returns it for us to persist on the lockfile entry.
+    let expectedIntegrity = manifest.dist.integrity;
+    if (!expectedIntegrity && existingLockfile) {
       const pinned = existingLockfile.packages[`node_modules/${effectiveName}`];
       if (pinned && pinned.version === pick && pinned.integrity) {
-        cacheIntegrity = pinned.integrity;
+        expectedIntegrity = pinned.integrity;
       }
     }
-    let tarball: Uint8Array | null = null;
-    if (cacheIntegrity) {
-      tarball = await tarballCache.get(effectiveName, pick, cacheIntegrity);
-    }
-    let integrity = cacheIntegrity;
-    if (!tarball) {
-      tarball = await opts.registry.getTarball(manifest.dist.tarball);
-      integrity = integrity ?? (await computeIntegrity(tarball));
-      await tarballCache.put(effectiveName, pick, integrity, tarball);
-    }
+    const { bytes: tarball, integrity } = await fetchAndUnpackToCache(
+      {
+        name: effectiveName,
+        version: pick,
+        resolved: manifest.dist.tarball,
+        integrity: expectedIntegrity,
+      },
+      { cache: tarballCache, getTarball: (url) => opts.registry.getTarball(url) },
+    );
     const files = await extractTarGz(tarball);
     const pkg: PinnedPackage = {
       name: effectiveName,

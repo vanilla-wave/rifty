@@ -51,17 +51,33 @@ export interface LockfileEntry {
   resolved?: string;
   integrity?: string;
   dependencies?: Record<string, string>;
+  /**
+   * Peer dependencies declared by this package. Persisted in the lockfile
+   * so the fast path can run the post-install missing-peer warn pass
+   * without re-fetching every packument. npm itself stores `peerDependencies`
+   * on lockfile entries since v7 (`lockfileVersion: 3`), so this is
+   * backward-compatible with their tooling — readers ignore unknown fields
+   * and consumers that don't care simply skip the warn pass.
+   */
+  peerDependencies?: Record<string, string>;
 }
 
 /**
  * Build a v3 lockfile from the resolved package set. Each non-root entry
  * carries the `resolved` tarball URL and `integrity` hash so subsequent
  * installs can hit the tarball cache (ADR-0023) without re-resolving.
+ * `peerDependencies` is persisted on each entry so the lockfile fast path
+ * can run the same post-install missing-peer warn pass that the
+ * live-resolve path already runs (closes the D-F drift, 2026-05-26).
  */
 export function buildLockfile(
   rootName: string,
   rootVersion: string,
-  packages: readonly (ResolvedPackage & { resolved?: string; integrity?: string })[],
+  packages: readonly (ResolvedPackage & {
+    resolved?: string;
+    integrity?: string;
+    peerDependencies?: Record<string, string>;
+  })[],
 ): Lockfile {
   const lf: Lockfile = {
     name: rootName,
@@ -82,6 +98,9 @@ export function buildLockfile(
     };
     if (p.resolved) entry.resolved = p.resolved;
     if (p.integrity) entry.integrity = p.integrity;
+    if (p.peerDependencies && Object.keys(p.peerDependencies).length > 0) {
+      entry.peerDependencies = p.peerDependencies;
+    }
     lf.packages[`node_modules/${p.name}`] = entry;
   }
   return lf;
