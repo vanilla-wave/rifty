@@ -73,15 +73,29 @@ export class EventEmitter {
     // Match by reference first, then by `.listener` (the original passed to
     // `once`). Node removes the last-added match, scanning from the back.
     let idx = -1;
+    let removed: Listener | undefined;
     for (let i = arr.length - 1; i >= 0; i--) {
       const entry = arr[i];
       if (entry === listener || (entry as { listener?: Listener }).listener === listener) {
         idx = i;
+        removed = entry;
         break;
       }
     }
-    if (idx !== -1) arr.splice(idx, 1);
+    if (idx === -1) return this;
+    arr.splice(idx, 1);
     if (arr.length === 0) this.listenersMap.delete(event);
+    // Node emits a synchronous `'removeListener'` meta-event AFTER the listener
+    // has been detached (so a handler that inspects `listenerCount()` sees the
+    // post-removal count). Suppress the emit when the removed event IS
+    // `removeListener` itself — otherwise `removeListener('removeListener', ...)`
+    // would recurse infinitely.
+    if (event !== 'removeListener' && removed !== undefined) {
+      const meta = this.listenersMap.get('removeListener');
+      if (meta && meta.length > 0) {
+        for (const m of meta.slice()) m.call(this, event, removed);
+      }
+    }
     return this;
   }
 

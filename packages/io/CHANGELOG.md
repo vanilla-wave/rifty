@@ -4,6 +4,63 @@
 
 ### Changed
 
+- **ADR-0034 (D-B, IRREVERSIBLE):** `@rifty/io` stream primitives restored
+  to Node's documented contract in one PR per the 2026-05-26 architecture
+  review's Tier 1 #5. Five behavioural changes:
+  - `EventEmitter.removeListener(event, listener)` now emits the synchronous
+    `'removeListener'` meta-event after detaching the listener (suppressed
+    when removing a `'removeListener'` listener itself to avoid infinite
+    recursion). Node's `Stream.pipe()` cleanup machinery depends on this.
+  - `Readable._readableState` field-bag added (Node `internal/streams/state.js`
+    shape). `read(n)` now honours the requested size — exact-`n` slicing
+    across queued Buffer entries via a new `sliceBuffer` helper, `n === 0`
+    peek semantics, `n === undefined` "everything available" coalescing,
+    and proper EOF transition (final `'readable'` then `'end'`). `flow()`
+    pumps `_read` between flushes so flowing-mode keeps demand on the
+    source. `push(chunk)` after EOF emits `'error'` (Node's
+    "stream.push() after EOF" check). Public read-only accessors
+    `readable`, `readableHighWaterMark`, `readableObjectMode`,
+    `readableLength`, `readableEnded`, `destroyed` mirror Node's getters.
+  - `Writable._writableState` field-bag added. `destroy(err?)` now flips
+    `state.destroyed` synchronously, snapshots and errors the buffered-write
+    queue (callbacks invoked with `err` on the next microtask), and rejects
+    subsequent `write()` calls with the destroy error (returns `false`
+    synchronously, schedules `cb(err)`). The in-flight `drainBuffer` callback
+    checks `state.destroyed` before its success path so a `_write` that
+    runs concurrent with `destroy()` doesn't emit `'drain'`/`'finish'`
+    against a destroyed stream. Public read-only accessors `writable`,
+    `writableHighWaterMark`, `writableObjectMode`, `writableLength`,
+    `writableEnded`, `writableFinished`, `destroyed` mirror Node's getters.
+  - `Duplex.prototype.write` / `Duplex.prototype.end` /
+    `Duplex.prototype.destroy` now live on the prototype — no per-instance
+    rebinding in the constructor. `writableSide` is now `readonly`.
+    `Transform` constructor uses a new protected hook
+    `DuplexInternalOptions._internalWritableSide` (factory) to inject its
+    own `Writable` side wired to `_transform`/`_flush`, with a ref-cell
+    back-filled after `super(...)` returns so the writable-side callbacks
+    can reach the `Transform` for `push()`. `Object.getPrototypeOf(d).write
+    === Duplex.prototype.write` now holds (matches Node).
+  - `pipeline()` now calls `destroy(err)` on every other stage when any
+    stage errors (Node's `cleanup` contract). Per-stage error absorbers
+    installed at pipeline start; on first error, they trigger the destroy
+    chain and stay attached for one microtask pass to absorb the
+    deferred `'error'` emits from `destroy()`. When a callback is supplied,
+    the returned promise gets a no-op `.catch()` so unhandled-rejection
+    noise doesn't escape (callback IS the user's error path).
+
+  Five new parity cases added under `tools/node-parity-runner/cases/`:
+  - `events/remove-listener-meta.case.ts`
+  - `stream/readable-read-n.case.ts`
+  - `stream/writable-destroy.case.ts`
+  - `stream/duplex-prototype-methods.case.ts`
+  - `stream/pipeline-destroy-upstream.case.ts`
+
+  Two existing unit tests updated under the ADR's explicit carve-out for
+  ADR-boundary contract changes (CLAUDE.md hard rule "never modify a test
+  to make code pass" still applies; this is the canonical exception). See
+  ADR-0034 "Tests updated under this ADR's authorization" for the
+  per-file diff summary.
+
 - **ADR-0030:** `Buffer` is now a real subclass of `Uint8Array`. Prototype
   methods (toString, equals, write, swap, compare, copy, fill, indexOf,
   read/write{Int,UInt,Float,Double,BigInt}*) moved from per-instance

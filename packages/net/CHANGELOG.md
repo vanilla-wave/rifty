@@ -2,8 +2,26 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **ADR-0034 (D-B):** `IncomingMessage` and `IncomingMessageFromFetch` now sit
+  on top of an `@rifty/io` `Readable` whose contract has been restored to
+  Node-shape (`_readableState`, `read(n)`, proper destroy + EOF transitions).
+  No source change in this package — the consumption pattern via
+  `target.push(chunk)` and `target.push(null)` works the same — but
+  destroy-on-abort and frame-aligned reads (e.g. by `body-parser` style
+  consumers) now behave per Node. See `packages/io/CHANGELOG.md` and ADR-0034.
+
 ### Added
 
+- `channelNameFor(url)` — previously-internal helper that derives the
+  `BroadcastChannel` name from a WS url is now part of the public WS
+  surface (re-exported from `index.ts` / `ws.ts`). The playground HMR
+  bridge injects a vanilla-JS client into the preview iframe that has to
+  reach the same channel without importing `@rifty/net`; this is the
+  seam that lets the inlined client agree with `BridgedWebSocketServer`
+  on the channel without duplicating the prefix convention. Closes
+  ADR-0017 phase 1 acceptance for the iframe HMR client.
 - Port registry that maps `port → handler(Request) → Response`. The Service Worker uses this to dispatch `/preview/<port>/...` requests to listening user code.
 - `node:net`: `Server`, `Socket`, `createServer`. `Server.listen(port)` registers a handler; closing unregisters.
 - `node:http`: `Server` (built on `net`), `IncomingMessage`, `ServerResponse`, `request`. The Express + body-parser + cors flow is testable via the registry directly.

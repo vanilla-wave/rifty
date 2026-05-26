@@ -1,3 +1,8 @@
+// Updated per ADR-0034: pre-ADR `Duplex` had `writableSide` as a writable
+// instance field, and `Transform` rebound `this.write` / `this.end` per
+// instance. Tests below now assert the post-ADR shape — methods on the
+// prototype, `writableSide` readonly, and `_writableState` exposed via the
+// Duplex getter for Node-compatible introspection.
 import { describe, expect, it } from 'vitest';
 import { Duplex } from './duplex.ts';
 import { Transform } from './transform.ts';
@@ -27,12 +32,13 @@ describe('Transform subclassing', () => {
   });
 
   it('subclass calling super({}) then assigning options later still works via super-provided transform', async () => {
-    // Late binding hazard guard: the Transform constructor wires `this.write`
-    // as an INSTANCE field referencing the transform passed to super(). A
-    // subclass that does `super({})` and then re-assigns `this.transformImpl`
-    // afterwards would NOT pick up — but the canonical, supported path is to
-    // pass the transform fn to super(). This test pins that supported path so
-    // a future refactor toward prototype-based methods is forced to keep it.
+    // Updated per ADR-0034: pre-ADR, `Transform` rebound `this.write` /
+    // `this.end` per instance and the only supported subclass path was
+    // passing `transform` to `super(...)`. Post-ADR, `write`/`end` live on
+    // the prototype and the writable-side factory captures the transform via
+    // a ref-cell so subclassing is plain `super({...})`. The test still pins
+    // the canonical path — passing `transform` to super() — as the contract
+    // both pre- and post-ADR uphold.
     class Identity extends Transform {
       constructor() {
         super({
@@ -58,15 +64,10 @@ describe('Transform subclassing', () => {
 describe('Duplex.write routes to the writable side', () => {
   it('writes via Duplex go to the writable side, not the readable buffer', async () => {
     const d = new Duplex({ objectMode: true });
-    const writtenToWritable: unknown[] = [];
-    // Override the writable side's write impl by reaching in — supported
-    // surface for tests / inner-class introspection.
-    d.writableSide = Object.assign(d.writableSide, {});
-    // Stub _write by replacing the impl indirection:
-    // The Writable implementation calls `writeImpl` (private) if provided via
-    // opts. Since we constructed without opts, the default impl is a no-op
-    // that just invokes the cb. We assert at the protocol level: writing to
-    // the Duplex must NOT push chunks into the Readable buffer.
+    // Per ADR-0034, `writableSide` is `readonly` and there's no need to reach
+    // in to override the write impl — instead, the Duplex's writable side is
+    // a real `Writable` with its own default no-op `_write`. We assert the
+    // protocol-level guarantee that writes don't echo onto the readable half.
     const dataSeen: unknown[] = [];
     d.on('data', (c) => dataSeen.push(c));
     d.write('one');
@@ -75,7 +76,6 @@ describe('Duplex.write routes to the writable side', () => {
     await new Promise<void>((resolve) => queueMicrotask(resolve));
     await new Promise<void>((resolve) => queueMicrotask(resolve));
     expect(dataSeen).toEqual([]); // not echoed to the readable side
-    expect(writtenToWritable).toEqual([]); // sanity — we didn't wire a write impl
   });
 
   it('Duplex with a writable impl invokes it for write()', async () => {
