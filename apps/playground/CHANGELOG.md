@@ -4,6 +4,15 @@
 
 ### Changed
 
+- `adapters/useMode.ts` — extracted the `repl | dev | real-vite` mode state
+  machine out of `App.tsx`. The new adapter owns the `mode` signal, the
+  dev/real-vite handles, the real-vite port, and the editor source, and
+  exposes `toggleDev` / `toggleRealVite` / `setSource` transitions that
+  preserve the original branch-on-`mode()` semantics byte-for-byte. App.tsx
+  shrinks to JSX + wiring (315 → 259 LOC; four signals + two transition
+  branches moved into the adapter). Closes the P0 finding in the 2026-05-26
+  playground audit ("App.tsx is a god-component juggling lifecycles the
+  adapters should own").
 - **ADR-0040:** the preview-bridge handshake stamped by
   `mountPlaygroundPreviewBridge()` now sends two version fields
   (`frameVersion`, `routingVersion`) instead of a single `version` field.

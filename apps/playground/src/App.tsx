@@ -1,8 +1,7 @@
 import { detectCapabilities } from '@rifty/runtime-js/env/capabilities';
 import { Show, createSignal, onCleanup } from 'solid-js';
-import { type DevModeHandle, startDevMode } from './adapters/devMode.ts';
-import { type RealViteHandle, startRealVite } from './adapters/realVite.ts';
 import { useShellSession } from './adapters/shell-adapter.ts';
+import { useMode } from './adapters/useMode.ts';
 import { useRuntime } from './adapters/useRuntime.ts';
 import { type BootResult, backendLabel, swErrorBannerMessage } from './boot.ts';
 import { CapabilitiesPanel } from './components/CapabilitiesPanel.tsx';
@@ -38,11 +37,6 @@ export interface AppProps {
 
 export function App(props: AppProps) {
   const capabilities = detectCapabilities();
-  const [mode, setMode] = createSignal<'repl' | 'dev' | 'real-vite'>('repl');
-  const [source, setSource] = createSignal(replSource);
-  const [devHandle, setDevHandle] = createSignal<DevModeHandle | null>(null);
-  const [realViteHandle, setRealViteHandle] = createSignal<RealViteHandle | null>(null);
-  const [realVitePort, setRealVitePort] = createSignal(5174);
   const [swBannerDismissed, setSwBannerDismissed] = createSignal(false);
   const runtime = useRuntime();
   // Long-lived shell session — drives the terminal in `dev` / `real-vite`
@@ -50,6 +44,13 @@ export function App(props: AppProps) {
   // streams via `onChunk` so progress bars / live logs reach the terminal in
   // real time. REPL mode keeps using `runtime.handleLine` to eval JS code.
   const shell = useShellSession({ cwd: '/workspace' });
+  // Mode state machine — owns `repl | dev | real-vite`, the inner dev /
+  // real-vite handles, and the editor source. App.tsx only renders JSX and
+  // wires terminals; transitions live in the adapter.
+  const machine = useMode({
+    sources: { repl: replSource, dev: devSource },
+    log: (chunk, stream) => runtime.write(chunk, stream),
+  });
 
   // SW errors come from the consolidated bootstrap (boot.ts), no longer from
   // an `onMount` race here. If `boot.swError` is present, the bootstrap
@@ -60,77 +61,18 @@ export function App(props: AppProps) {
   }
 
   onCleanup(() => {
-    void devHandle()?.close();
-    void realViteHandle()?.close();
     runtime.dispose();
     shell.dispose();
   });
 
   function onRun(): void {
     runtime.write(`\n> [Run] ${new Date().toLocaleTimeString()}\n`);
-    void runtime.evaluate(source());
+    void runtime.evaluate(machine.source());
   }
 
   function onReset(): void {
     runtime.write('\n[worker reset]\n', 'stderr');
     void runtime.reset();
-  }
-
-  async function onToggleMode(): Promise<void> {
-    if (mode() === 'repl') {
-      runtime.write('\n[entering dev mode — starting dev server on port 3000]\n');
-      try {
-        const handle = await startDevMode({ port: 3000 });
-        setDevHandle(handle);
-        setMode('dev');
-        setSource(devSource);
-        handle.updateEntry(devSource);
-      } catch (err) {
-        runtime.write(`dev mode failed: ${(err as Error).message}\n`, 'stderr');
-      }
-    } else {
-      const handle = devHandle();
-      if (handle) await handle.close();
-      setDevHandle(null);
-      setMode('repl');
-      setSource(replSource);
-      runtime.write('\n[left dev mode]\n');
-    }
-  }
-
-  function onEditorChange(next: string): void {
-    setSource(next);
-    if (mode() === 'dev') devHandle()?.updateEntry(next);
-    if (mode() === 'real-vite') realViteHandle()?.updateEntry(next);
-  }
-
-  async function onToggleRealVite(): Promise<void> {
-    if (mode() === 'real-vite') {
-      const h = realViteHandle();
-      if (h) await h.close();
-      setRealViteHandle(null);
-      setMode('repl');
-      setSource(replSource);
-      runtime.write('\n[left real-vite mode]\n');
-      return;
-    }
-    runtime.write('\n[starting real Vite — installing from npm, this may take ~20s]\n');
-    try {
-      const handle = await startRealVite({
-        port: realVitePort(),
-        onLog: (line) => runtime.write(line),
-      });
-      setRealViteHandle(handle);
-      setRealVitePort(handle.port);
-      setMode('real-vite');
-      setSource(devSource);
-      handle.updateEntry(devSource);
-    } catch (err) {
-      runtime.write(
-        `real-vite failed: ${(err as Error).stack ?? (err as Error).message}\n`,
-        'stderr',
-      );
-    }
   }
 
   return (
@@ -183,10 +125,10 @@ export function App(props: AppProps) {
       >
         <strong>rifty</strong>
         <span style={{ color: '#8a93a3', 'font-size': '12px' }}>
-          {mode() === 'dev'
+          {machine.mode() === 'dev'
             ? 'M10 — Dev Mode (port 3000)'
-            : mode() === 'real-vite'
-              ? `M10 — Real Vite (port ${realVitePort()})`
+            : machine.mode() === 'real-vite'
+              ? `M10 — Real Vite (port ${machine.realVitePort()})`
               : 'M0..M9 — REPL'}
         </span>
         <span
@@ -205,11 +147,11 @@ export function App(props: AppProps) {
         </span>
         <button
           type="button"
-          onClick={() => void onToggleRealVite()}
+          onClick={() => void machine.toggleRealVite()}
           style={{
             'margin-left': 'auto',
-            background: mode() === 'real-vite' ? '#f59e0b' : '#1f2533',
-            color: mode() === 'real-vite' ? '#0f1115' : '#e6e6e6',
+            background: machine.mode() === 'real-vite' ? '#f59e0b' : '#1f2533',
+            color: machine.mode() === 'real-vite' ? '#0f1115' : '#e6e6e6',
             border: '1px solid #2a3142',
             padding: '6px 14px',
             'border-radius': '4px',
@@ -218,14 +160,14 @@ export function App(props: AppProps) {
           }}
           data-action="real-vite"
         >
-          {mode() === 'real-vite' ? '● Real Vite' : 'Real Vite'}
+          {machine.mode() === 'real-vite' ? '● Real Vite' : 'Real Vite'}
         </button>
         <button
           type="button"
-          onClick={() => void onToggleMode()}
+          onClick={() => void machine.toggleDev()}
           style={{
-            background: mode() === 'dev' ? '#10b981' : '#1f2533',
-            color: mode() === 'dev' ? '#0f1115' : '#e6e6e6',
+            background: machine.mode() === 'dev' ? '#10b981' : '#1f2533',
+            color: machine.mode() === 'dev' ? '#0f1115' : '#e6e6e6',
             border: '1px solid #2a3142',
             padding: '6px 14px',
             'border-radius': '4px',
@@ -234,9 +176,9 @@ export function App(props: AppProps) {
           }}
           data-action="dev-mode"
         >
-          {mode() === 'dev' ? '● Dev Mode' : 'Dev Mode'}
+          {machine.mode() === 'dev' ? '● Dev Mode' : 'Dev Mode'}
         </button>
-        <Show when={mode() === 'repl'}>
+        <Show when={machine.mode() === 'repl'}>
           <button
             type="button"
             onClick={onRun}
@@ -277,11 +219,13 @@ export function App(props: AppProps) {
           style={{
             display: 'grid',
             'grid-template-columns':
-              mode() === 'dev' || mode() === 'real-vite' ? '1fr 1fr 1fr' : '1fr 1fr',
+              machine.mode() === 'dev' || machine.mode() === 'real-vite'
+                ? '1fr 1fr 1fr'
+                : '1fr 1fr',
             height: '100%',
           }}
         >
-          <EditorPanel value={source()} onChange={onEditorChange} />
+          <EditorPanel value={machine.source()} onChange={(next) => machine.setSource(next)} />
           <TerminalPanel
             attach={(write) => {
               // Both sessions share the same terminal writer. Runtime emits
@@ -295,18 +239,18 @@ export function App(props: AppProps) {
             onLine={(line) => {
               // Dev / real-vite modes drive the shell (M10 Tier 0 wiring).
               // REPL mode keeps the worker-eval behaviour unchanged.
-              if (mode() === 'dev' || mode() === 'real-vite') {
+              if (machine.mode() === 'dev' || machine.mode() === 'real-vite') {
                 void shell.runLine(line);
                 return;
               }
               return runtime.handleLine(line);
             }}
           />
-          <Show when={mode() === 'dev'}>
+          <Show when={machine.mode() === 'dev'}>
             <PreviewPanel initialPort={3000} />
           </Show>
-          <Show when={mode() === 'real-vite'}>
-            <PreviewPanel initialPort={realVitePort()} />
+          <Show when={machine.mode() === 'real-vite'}>
+            <PreviewPanel initialPort={machine.realVitePort()} />
           </Show>
         </div>
       </Show>
