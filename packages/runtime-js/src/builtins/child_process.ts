@@ -25,23 +25,25 @@ import { Buffer, EventEmitter, NotImplementedError, Readable } from '@rifty/io';
 import {
   type ProcessHandle,
   type ProcessIO,
+  getKernelDispatcher,
   getKernelWorkerUrl,
   globalProcessManager,
   isSabIpcSupported,
-  setExecSyncScriptResolver,
 } from '@rifty/kernel';
+import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
 import { execScript } from './child_process-exec.ts';
 import { execSync } from './child_process-sync.ts';
 import { spawnWorkerChild } from './child_process-worker.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 
-// ADR-0011 phase 3: thread the runtime-js sync mirror into the kernel's
-// default `execSync` handler. The kernel itself has no VFS dependency
-// (vfs → kernel layering allows it, but we avoid coupling the kernel to
-// a specific filesystem); the runtime-js layer is the natural place to
-// own that wiring. Resolver returns `null` for missing scripts so the
-// handler can surface a proper `ENOENT`.
-setExecSyncScriptResolver((path) => {
+// ADR-0011 phase 3 / ADR-0039: register the runtime-js `'execSync'` handler
+// on the kernel dispatcher at module load. The kernel itself ships no
+// default handlers after ADR-0039 — execSync is Node-API knowledge and
+// lives here. Resolver reads bytes from the runtime-js VFS sync mirror so
+// the SAB path and the in-realm fallback see the same source of truth;
+// returning `null` for missing scripts lets the handler surface a proper
+// `ENOENT`.
+installRuntimeJsExecSyncHandler(getKernelDispatcher(), (path) => {
   const mirror = syncMirror();
   if (!mirror.existsSync(path)) return null;
   return mirror.readFileBytesSync(path);

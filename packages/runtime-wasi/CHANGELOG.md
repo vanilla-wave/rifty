@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **ADR-0039 — worker-entry reads `KernelProcessSpec`, not `globalThis.process`.**
+  The kernel-side worker bootstrap no longer installs a Node-shape `process`
+  global. `worker-entry.ts` now builds its own minimal `WasiProcess`
+  (argv/env/cwd/stdout/stderr/exit) from the kernel-published
+  `KernelProcessSpec` via `readKernelProcessSpec()`. Same WASI behaviour
+  end-to-end — the underlying stdio `MessagePort`s and the
+  `RIFTY_PROCESS_EXIT` exit-code propagation are unchanged. No effect on
+  `Wasi` / `runWasi` / `createWasiProcess` / `runWasiInWorker` public APIs;
+  the `runWasiInWorker(proc)` test surface still takes a structural
+  `WasiProcess` shim so unit tests are unaffected.
+
 ### Added
 
 - **2026-05-26** — `createWasiProcess(opts)` (ADR 0038): kernel-level

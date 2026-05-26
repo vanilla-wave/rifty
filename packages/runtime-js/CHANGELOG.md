@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+### Added
+
+- **ADR-0039 — Node-API knowledge moved here from `@rifty/kernel`.** Three
+  new modules under `src/ipc/`:
+  - `install-process.ts` — `installNodeProcessShim(spec)` builds the
+    Node-shape `process` global from the kernel's `KernelProcessSpec`
+    (pid/ppid/argv/env/cwd/stdout/stderr/exit). Module-load side-effect
+    registers itself as the kernel's pre-entry hook (via
+    `setKernelPreEntryHook`), so host chunks that import this module
+    before `@rifty/kernel/worker-entry` get the wiring for free. Exposed
+    via the new `@rifty/runtime-js/install-process` subpath export.
+  - `handlers.ts` — `installRuntimeJsExecSyncHandler(dispatcher, resolveScript)`
+    registers the `'execSync'` handler on the kernel dispatcher: parses
+    `node <script>` command lines, resolves bytes from the runtime-js VFS
+    sync mirror, dispatches to the recursive runner, decodes stdout.
+    Exports `ExecSyncPayload`, `ScriptResolver`, and
+    `InstallRuntimeJsExecSyncOptions`. 7 new unit tests in
+    `handlers.test.ts` cover EUNSUPPORTED / ENOENT / happy path / child
+    failure / cwd+env propagation / payload coercion.
+  - `recursive-runner.ts` — `makeRecursiveRunner()` returns a runner that
+    spawns a fresh kernel Worker per `execSync` invocation, captures its
+    stdout, and resolves once the child exits. Statically imports
+    `spawnKernelWorker` from `@rifty/kernel` (top-down, no late binding —
+    closes the previous module-load handshake the kernel needed for
+    `setKernelRecursiveSpawn`).
+- **`builtins/child_process.ts` boot wiring.** Module-load side-effect
+  now reads `getKernelDispatcher()` and calls
+  `installRuntimeJsExecSyncHandler(...)` with a VFS-backed resolver. The
+  previous `setExecSyncScriptResolver(...)` call is gone (and the helper
+  itself was deleted from the kernel — see ADR-0039).
+
 ### Changed
 
 - **ADR-0035: builtin registry sourced from `@rifty/io`.** The

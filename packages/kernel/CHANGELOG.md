@@ -2,8 +2,49 @@
 
 ## [Unreleased]
 
+### Removed
+
+- **ADR-0039 — Node-API surface lifted to `@rifty/runtime-js`.** The kernel
+  no longer ships Node-shaped knowledge:
+  - `installProcessShim` (Node-shape `process` global) and the internal
+    `ProcessShim` interface have been deleted from `worker-entry.ts`. The
+    kernel-spawned Worker no longer installs `globalThis.process` itself.
+  - The `'execSync'` default handler in `ipc/default-handlers.ts`, the
+    `ipc/script-resolver.ts` registration module, and the
+    `ipc/recursive-runner.ts` Worker runner have moved to
+    `packages/runtime-js/src/ipc/`. The kernel files are gone.
+  - `setKernelRecursiveSpawn` (and the `RecursiveSpawnFn` type) are gone.
+    The recursive runner now lives in runtime-js and statically imports
+    `spawnKernelWorker` from `@rifty/kernel`, closing the late-binding
+    cycle that the original split worked around.
+  - The kernel index no longer exports `registerDefaultHandlers`,
+    `setExecSyncScriptResolver`, `ScriptResolver`, `RecursiveWorkerRunner`,
+    `DefaultHandlerOptions`, or `ExecSyncPayload`. Callers import from
+    `@rifty/runtime-js/install-process` and `@rifty/runtime-js`'s
+    `ipc/handlers.ts` instead.
+  - `getKernelDispatcher()` ships with **no** pre-registered handlers.
+    Higher layers register methods explicitly at boot.
+
 ### Added
 
+- **ADR-0039 — `KernelProcessSpec` published on Worker boot.** New
+  `shared-globals.ts` exports `KernelProcessSpec`, `KernelProcessStdioPorts`,
+  `KERNEL_PROCESS_SPEC_KEY`, `publishKernelProcessSpec`, and
+  `readKernelProcessSpec`. The kernel-side worker bootstrap publishes a
+  typed `{pid, ppid, argv, env, cwd, stdio}` snapshot on each spawn so the
+  higher runtime layer can build its own `process` object (Node-shape in
+  runtime-js, WASI-shape in runtime-wasi). The kernel itself never touches
+  `globalThis.process`.
+- **ADR-0039 — pre-entry hook on `worker-entry.ts`.** New
+  `setKernelPreEntryHook(fn)` / `getKernelPreEntryHook()` exports let the
+  host register a function the kernel calls between publishing the
+  `KernelProcessSpec` and running the user entry. Runtime-js uses this
+  hook to install its `installNodeProcessShim` for kind:'source' entries.
+  Pass `null` to unregister.
+- **`spawnKernelWorker` exported from the package root.** Previously
+  reachable only via the deep `./src/spawn-worker.ts` path; now part of the
+  `@rifty/kernel` public surface so runtime-js's recursive runner can
+  statically import it.
 - **Typed cross-realm globals (P1 review fix).** New `shared-globals.ts` module exports `KernelSyncApi`, `KernelSabRing`, `publishKernelSyncApi` / `readKernelSyncApi`, and `publishKernelSabRing` / `readKernelSabRing`. Consumers (runtime-js `child_process-sync.ts`) now go through the typed read API instead of indexing `globalThis[KERNEL_SYNC_CALL_KEY]`. The string hook keys remain implementation detail but are re-exported for the rare test that needs to assert against them.
 - **`ProcessHandle` discriminator (P1 review fix).** `ProcessHandle` is now a sealed `SameRealmProcessHandle | WorkerProcessHandle` union tagged by `kind: 'same-realm' | 'worker'`. Callers branch on `handle.kind` instead of probing for `handle.ports`; the worker-backed variant's `ports` is statically known to be present.
 - **ADR-0032: SyncRpc protocol-version field.** Every SAB frame now carries

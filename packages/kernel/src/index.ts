@@ -31,10 +31,27 @@ export type {
   WorkerStdioPorts,
 } from './worker-entry.ts';
 
+// ADR-0039 — pre-entry hook (runtime-js installs the Node `process` global
+// via this hook). The hook itself is registered by higher layers; the kernel
+// just exposes the setter and calls it after publishing `KernelProcessSpec`.
+export {
+  type KernelPreEntryHook,
+  getKernelPreEntryHook,
+  setKernelPreEntryHook,
+} from './worker-entry.ts';
+
 // ADR-0011 phase 2 — kernel.spawnWorker allocator + host-side URL setter.
-export { getKernelWorkerUrl, setKernelWorkerUrl } from './spawn-worker.ts';
-export type { SpawnWorkerSpec } from './spawn-worker.ts';
-export { setExecSyncScriptResolver } from './ipc/script-resolver.ts';
+export {
+  getKernelWorkerUrl,
+  setKernelWorkerUrl,
+  spawnKernelWorker,
+} from './spawn-worker.ts';
+export type {
+  SpawnWorkerIdentity,
+  SpawnWorkerResult,
+  SpawnWorkerSpec,
+} from './spawn-worker.ts';
+export { clearKernelDispatcher, getKernelDispatcher } from './ipc/kernel-dispatcher.ts';
 
 // ADR-0011 phase 3 — sync RPC framing, dispatcher, in-Worker client.
 // ADR-0032 — protocol-version constant + typed mismatch error.
@@ -57,21 +74,21 @@ export { SyncRpcClient, type SyncRpcClientOptions } from './ipc/sync-client.ts';
 // ADR-0019/P1 follow-up — typed publish/read for the cross-realm globals
 // the kernel installs inside a spawned Worker. Higher layers (runtime-js)
 // MUST go through these helpers instead of reaching into `globalThis[...]`.
+// ADR-0039 — `KernelProcessSpec` is the typed bootstrap descriptor the
+// higher runtime layer reads to build its own `process` object.
 export {
+  KERNEL_PROCESS_SPEC_KEY,
   KERNEL_SAB_RING_KEY,
   KERNEL_SYNC_CALL_KEY,
+  type KernelProcessSpec,
+  type KernelProcessStdioPorts,
   type KernelSabRing,
   type KernelSyncApi,
   type KernelSyncCall,
+  publishKernelProcessSpec,
   publishKernelSabRing,
   publishKernelSyncApi,
+  readKernelProcessSpec,
   readKernelSabRing,
   readKernelSyncApi,
 } from './shared-globals.ts';
-export {
-  registerDefaultHandlers,
-  type DefaultHandlerOptions,
-  type ScriptResolver,
-  type RecursiveWorkerRunner,
-  type ExecSyncPayload,
-} from './ipc/default-handlers.ts';

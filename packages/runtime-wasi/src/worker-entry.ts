@@ -1,18 +1,19 @@
 /// <reference lib="webworker" />
 
 /**
- * Runtime-side worker entry for {@link createWasiProcess} (ADR 0038).
+ * Runtime-side worker entry for {@link createWasiProcess} (ADR 0038, ADR 0039).
  *
  * Loaded by the kernel-side bootstrap (`@rifty/kernel/worker-entry`) via
  * the `WorkerEntryDescriptor.kind === 'url'` path: the kernel spawns a
  * Worker at `kernelWorkerUrl` (host-registered via `setKernelWorkerUrl`),
- * that Worker's `'init'` handler installs the `process` shim plus stdio
- * ports, then `await import(spec.entry.url)` evaluates THIS module. The
- * entry-URL bundle MUST be different from the kernel-worker boot bundle —
- * the module's auto-install side-effect uses `globalThis.process` and
- * would crash if loaded before the kernel installs the shim. The host
- * registers the wasi-entry chunk via {@link setWasiWorkerUrl}; the
- * adapter ({@link createWasiProcess}) puts that URL in `spec.entry.url`.
+ * that Worker's `'init'` handler publishes a typed {@link KernelProcessSpec}
+ * on `globalThis` (ADR-0039 — the kernel itself no longer installs a Node-
+ * shape `process` global), then `await import(spec.entry.url)` evaluates
+ * THIS module. The entry-URL bundle MUST be different from the kernel-worker
+ * boot bundle — the module's top-level await reads the published
+ * `KernelProcessSpec` and would crash if loaded before the kernel publishes
+ * it. The host registers the wasi-entry chunk via {@link setWasiWorkerUrl};
+ * the adapter ({@link createWasiProcess}) puts that URL in `spec.entry.url`.
  *
  * The module's top-level `await` blocks until the WASM guest has
  * finished, so the kernel observes "entry script done" and posts the
@@ -20,33 +21,35 @@
  * wire protocol.
  *
  * Inputs travel through the kernel's existing init surface:
- *   - `process.env.__RIFTY_WASI_WASM_URL` — fetchable URL of the WASM
+ *   - `processSpec.env.__RIFTY_WASI_WASM_URL` — fetchable URL of the WASM
  *     module. For `createWasiProcess({ wasm: ArrayBuffer })` callers,
  *     the adapter turns the bytes into a `blob:` URL with
  *     `URL.createObjectURL`. For `createWasiProcess({ wasm: URL })`,
  *     the URL is passed through verbatim.
- *   - `process.env.__RIFTY_WASI_PREOPENS` — JSON-encoded preopens map
+ *   - `processSpec.env.__RIFTY_WASI_PREOPENS` — JSON-encoded preopens map
  *     (`Record<guestPath, hostPath>`), forwarded to `Wasi`'s constructor.
- *   - `process.argv` — `['wasi-guest', ...userArgs]`. WASI's `args_get`
+ *   - `processSpec.argv` — `['wasi-guest', ...userArgs]`. WASI's `args_get`
  *     consumes this directly via the {@link Wasi} ctor's `args` option.
- *   - `process.env` — full env minus the two `__RIFTY_WASI_*` channel
+ *   - `processSpec.env` — full env minus the two `__RIFTY_WASI_*` channel
  *     keys, forwarded to the guest.
  *
- * Stdout / stderr from the guest go through `process.stdout.write` /
- * `process.stderr.write` — the kernel's `installProcessShim` already
- * pipes those into the parent's stdio `MessagePort`s as binary
- * `Uint8Array`s.
+ * Stdout / stderr from the guest are piped into
+ * `processSpec.stdio.stdout.postMessage` / `processSpec.stdio.stderr.postMessage`
+ * as binary `Uint8Array`s. The kernel-side parent listens on these
+ * `MessagePort`s and forwards to the host's `ChildProcess.stdout` / stderr
+ * streams.
  *
  * Exit semantics:
  *   - guest calls `proc_exit(N)` → `Wasi.start()` returns `N` → if
- *     `N !== 0`, we call `process.exit(N)` so the kernel reports the
- *     right code; if `N === 0`, we let the module finish and the kernel
- *     reports 0.
+ *     `N !== 0`, we throw a `RIFTY_PROCESS_EXIT`-shaped error so the
+ *     kernel reports the right code; if `N === 0`, we let the module
+ *     finish and the kernel reports 0.
  *   - guest throws an unrelated error → re-thrown at module top level;
  *     the kernel catches and writes the stack to stderr, then reports
  *     exit 1.
  */
 
+import { readKernelProcessSpec } from '@rifty/kernel';
 import { Wasi, WasiExit } from './wasi.ts';
 
 /** Env-key carrying the URL of the WASM module to fetch. */
@@ -60,10 +63,10 @@ export const WASI_WASM_URL_ENV = '__RIFTY_WASI_WASM_URL' as const;
 export const WASI_PREOPENS_ENV = '__RIFTY_WASI_PREOPENS' as const;
 
 /**
- * Subset of the kernel-installed `process` shim we read inside the worker.
- * Mirrors the structural contract from `@rifty/kernel/src/worker-entry.ts`'s
- * `installProcessShim`; we redeclare the shape here so this module doesn't
- * have to reach back into the kernel for a type.
+ * Minimal process surface the WASI runner reads inside the worker.
+ * Constructed locally from the kernel's published {@link KernelProcessSpec}
+ * (ADR-0039) — the kernel itself no longer installs a Node-shape `process`
+ * global, so runtime-wasi builds its own narrow proxy here.
  */
 interface WasiProcess {
   argv: readonly string[];
@@ -72,6 +75,58 @@ interface WasiProcess {
   stdout: { write(chunk: string | Uint8Array): boolean };
   stderr: { write(chunk: string | Uint8Array): boolean };
   exit(code?: number): never;
+}
+
+const STDIO_ENCODER = new TextEncoder();
+
+function makeStdioWriter(port: MessagePort): { write(chunk: string | Uint8Array): boolean } {
+  return {
+    write(chunk) {
+      const bytes = typeof chunk === 'string' ? STDIO_ENCODER.encode(chunk) : chunk;
+      // Transfer the buffer when we own it (i.e. created by TextEncoder).
+      // Pre-existing Uint8Arrays may share their backing buffer with the
+      // caller, so transferring is unsafe — copy in that case.
+      if (typeof chunk === 'string') {
+        port.postMessage(bytes, [bytes.buffer]);
+      } else {
+        const copy = new Uint8Array(bytes);
+        port.postMessage(copy, [copy.buffer]);
+      }
+      return true;
+    },
+  };
+}
+
+/**
+ * Build the worker-local {@link WasiProcess} from the kernel-published
+ * {@link KernelProcessSpec}. `exit(N)` throws a `RIFTY_PROCESS_EXIT`-shaped
+ * error so the kernel's worker bootstrap maps it to the worker exit code
+ * (see `@rifty/kernel/src/worker-entry.ts`).
+ */
+function buildWasiProcess(): WasiProcess {
+  const spec = readKernelProcessSpec();
+  if (spec === null) {
+    throw new Error(
+      'runtime-wasi/worker-entry: KernelProcessSpec is missing — this module must be loaded by the kernel-side worker bootstrap (which publishes the spec on init).',
+    );
+  }
+  // The spec keeps `env` as a `Readonly<Record<string, string>>`. The WASI
+  // run takes a mutable `Record<string, string>`; copy to detach from the
+  // kernel's snapshot.
+  const env: Record<string, string> = { ...spec.env };
+  return {
+    argv: spec.argv,
+    env,
+    cwd: () => spec.cwd,
+    stdout: makeStdioWriter(spec.stdio.stdout),
+    stderr: makeStdioWriter(spec.stdio.stderr),
+    exit: (code = 0): never => {
+      throw Object.assign(new Error(`process.exit(${code})`), {
+        code: 'RIFTY_PROCESS_EXIT',
+        exitCode: code,
+      });
+    },
+  };
 }
 
 /**
@@ -165,9 +220,9 @@ function stripChannelKeys(env: Record<string, string>): Record<string, string> {
 /**
  * Detection: are we in a `DedicatedWorkerGlobalScope`? Mirrors the heuristic
  * from `@rifty/kernel/src/worker-entry.ts`. When true, the kernel bootstrap
- * has already installed `globalThis.process` by the time this module's
- * top-level evaluation runs (the kernel does `installProcessShim(...)`
- * before `await import(entry.url)`).
+ * has already published {@link KernelProcessSpec} on `globalThis` by the
+ * time this module's top-level evaluation runs (the kernel publishes the
+ * spec before `await import(entry.url)`).
  */
 declare const WorkerGlobalScope: { prototype: object } | undefined;
 const isWorkerRealm =
@@ -182,12 +237,6 @@ const isWorkerRealm =
 // non-worker realm (tests), we skip the side-effect; callers exercise
 // `runWasiInWorker` directly.
 if (isWorkerRealm) {
-  const proc = (globalThis as unknown as { process?: WasiProcess }).process;
-  if (proc === undefined) {
-    throw new Error(
-      'runtime-wasi/worker-entry: globalThis.process is missing — this module must be loaded ' +
-        'by the kernel-side worker bootstrap (which installs the process shim).',
-    );
-  }
+  const proc = buildWasiProcess();
   await runWasiInWorker(proc);
 }

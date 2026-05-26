@@ -1,32 +1,42 @@
 /// <reference lib="webworker" />
 
 /**
- * Kernel-side Worker bootstrap (ADR-0011 phase 1).
+ * Kernel-side Worker bootstrap (ADR-0011 phase 1, ADR-0039).
  *
  * Loaded by `kernel.spawn` (phase 2 — wires this entry into a `new Worker(...)`
  * call via a bundler `?worker&url` import). For each spawned child, the
  * bootstrap:
  *   1. Waits for a single `init` message carrying {@link WorkerSpawnSpec}.
- *   2. Installs a minimal Node-style `process` shim on `globalThis` (pid,
- *      ppid, argv, env, cwd(), stdout/stderr.write, exit).
- *   3. Constructs a {@link SabRing} over `spec.syncRing` and exposes it via
- *      a non-enumerable global hook for the runtime layer (phase 2 reads
- *      this when implementing sync syscalls).
- *   4. Executes the entry (either eval'd source or a dynamic `import(url)`).
- *   5. Posts `{ type: 'exit', code }` back to the parent and closes the
+ *   2. Constructs a {@link SabRing} over `spec.syncRing` and publishes it on
+ *      `globalThis` via {@link publishKernelSabRing} for the higher runtime
+ *      layer.
+ *   3. Publishes the parent-bound sync-call shim via
+ *      {@link publishKernelSyncApi}.
+ *   4. Publishes a typed {@link KernelProcessSpec} via
+ *      {@link publishKernelProcessSpec} (ADR-0039) — a runtime-agnostic
+ *      snapshot of `{pid, ppid, argv, env, cwd, stdio}`. The kernel does
+ *      NOT install a Node-shape `globalThis.process`; that Node-API
+ *      knowledge lives in `@rifty/runtime-js`.
+ *   5. Invokes the optional pre-entry hook registered by the host via
+ *      {@link setKernelPreEntryHook}. Hosts that spawn Node-style children
+ *      use the hook to install the Node `process` global from runtime-js
+ *      before user code runs.
+ *   6. Executes the entry (either eval'd source or a dynamic `import(url)`).
+ *   7. Posts `{ type: 'exit', code }` back to the parent and closes the
  *      stdio ports.
  *
  * The exit code follows Node:
  *   - normal completion / promise resolution → 0
  *   - any throw / unhandled rejection → 1
- *   - `process.exit(N)` → N
+ *   - higher layer signals exit (by throwing an `Error` with
+ *     `code === 'RIFTY_PROCESS_EXIT'` and a numeric `exitCode`) → that code.
  *
- * Out of scope for phase 1:
- *   - Wiring `runtime-js`'s module loader (the entry runs the script as a
- *     standalone unit; CommonJS / built-in resolution lands when phase 2
- *     pulls runtime-js into the entry).
- *   - Sync syscall servicing — phase 2/3 install handlers around `syncRing`.
- *   - Stdin support — `spec.stdio.stdin` is reserved for phase 2.
+ * Out of scope:
+ *   - Node-API installation — runtime-js owns it (ADR-0039).
+ *   - Sync syscall servicing — registered by higher layers via
+ *     `dispatcher.register('method', handler)`.
+ *   - Stdin support — `spec.stdio.stdin` is reserved for ADR-0011 phase 2
+ *     follow-ups.
  */
 
 import { SabRing } from './ipc/sab-ring.ts';
@@ -34,7 +44,9 @@ import { SyncRpcClient } from './ipc/sync-client.ts';
 import {
   KERNEL_SAB_RING_KEY,
   KERNEL_SYNC_CALL_KEY,
+  type KernelProcessSpec,
   type KernelSyncCall,
+  publishKernelProcessSpec,
   publishKernelSabRing,
   publishKernelSyncApi,
 } from './shared-globals.ts';
@@ -86,79 +98,57 @@ export interface WorkerExitMessage {
   readonly code: number;
 }
 
-/** Internal: the `process` shim we install on the Worker's globalThis. */
-interface ProcessShim {
-  pid: number;
-  ppid: number;
-  argv: readonly string[];
-  env: Readonly<Record<string, string>>;
-  cwd(): string;
-  stdout: { write(chunk: string | Uint8Array): boolean };
-  stderr: { write(chunk: string | Uint8Array): boolean };
-  exit(code?: number): never;
+/**
+ * Optional pre-entry hook signature. The kernel calls the hook (when
+ * registered) right after publishing the {@link KernelProcessSpec} and
+ * right before running the user's entry. Hosts that spawn Node-style
+ * children register `installNodeProcessShim` from `@rifty/runtime-js` so
+ * the user script sees a fully-shaped `globalThis.process`.
+ *
+ * The hook MAY throw — a throw is treated like any other entry failure:
+ * the worker exits with code 1 and the stack lands on stderr.
+ */
+export type KernelPreEntryHook = (spec: WorkerSpawnSpec) => void;
+
+let preEntryHook: KernelPreEntryHook | null = null;
+
+/**
+ * Register the pre-entry hook (ADR-0039). Idempotent — re-registering
+ * replaces the previous hook. Pass `null` to unregister (test teardown).
+ *
+ * The hook MUST be registered before the `'init'` message arrives;
+ * runtime-js's `install-process` module side-effects this at module load,
+ * and the host's kernel-worker chunk imports `install-process` before
+ * `@rifty/kernel/worker-entry`.
+ */
+export function setKernelPreEntryHook(hook: KernelPreEntryHook | null): void {
+  preEntryHook = hook;
+}
+
+/** Test-only accessor — current pre-entry hook value. */
+export function getKernelPreEntryHook(): KernelPreEntryHook | null {
+  return preEntryHook;
 }
 
 /**
- * Thrown internally by `process.exit(N)` to unwind back to the bootstrap
- * loop. Carries the requested exit code.
+ * Higher-layer exit signal: a thrown `Error` with `code === 'RIFTY_PROCESS_EXIT'`
+ * and a numeric `exitCode` field maps to the worker's exit code. This is how
+ * `runtime-js`'s `installNodeProcessShim` makes `process.exit(N)` propagate
+ * out of the entry function — kernel itself stays Node-API-agnostic and
+ * just looks for the shape.
  */
-class ProcessExitError extends Error {
-  readonly code: number;
-  constructor(code: number) {
-    super(`process.exit(${code})`);
-    this.name = 'ProcessExitError';
-    this.code = code;
-  }
+const RIFTY_PROCESS_EXIT_CODE = 'RIFTY_PROCESS_EXIT';
+interface RiftyProcessExitShape {
+  code: typeof RIFTY_PROCESS_EXIT_CODE;
+  exitCode: number;
+}
+function isRiftyProcessExit(err: unknown): err is RiftyProcessExitShape {
+  if (typeof err !== 'object' || err === null) return false;
+  const candidate = err as { code?: unknown; exitCode?: unknown };
+  return candidate.code === RIFTY_PROCESS_EXIT_CODE && typeof candidate.exitCode === 'number';
 }
 
 const STDIO_ENCODER = new TextEncoder();
-
-function encodeChunk(chunk: string | Uint8Array): Uint8Array {
-  return typeof chunk === 'string' ? STDIO_ENCODER.encode(chunk) : chunk;
-}
-
-function makeStdioWriter(port: MessagePort): { write(chunk: string | Uint8Array): boolean } {
-  return {
-    write(chunk) {
-      const bytes = encodeChunk(chunk);
-      // Transfer the buffer when we own it (i.e. created by TextEncoder).
-      // Pre-existing Uint8Arrays may share their backing buffer with the
-      // caller, so transferring is unsafe — copy in that case.
-      if (typeof chunk === 'string') {
-        port.postMessage(bytes, [bytes.buffer]);
-      } else {
-        const copy = new Uint8Array(bytes);
-        port.postMessage(copy, [copy.buffer]);
-      }
-      return true;
-    },
-  };
-}
-
-function installProcessShim(spec: WorkerSpawnSpec, ports: WorkerStdioPorts): ProcessShim {
-  const shim: ProcessShim = {
-    pid: spec.pid,
-    ppid: spec.ppid,
-    argv: spec.argv,
-    env: spec.env,
-    cwd: () => spec.cwd,
-    stdout: makeStdioWriter(ports.stdout),
-    stderr: makeStdioWriter(ports.stderr),
-    exit: (code = 0): never => {
-      throw new ProcessExitError(code);
-    },
-  };
-  // Non-enumerable so the entry script can still create its own `process`
-  // shadow if it wants — but `globalThis.process` is what most code reaches
-  // for. Phase 2's runtime-js layer will replace this with the full builtin.
-  Object.defineProperty(globalThis, 'process', {
-    value: shim,
-    writable: true,
-    configurable: true,
-    enumerable: false,
-  });
-  return shim;
-}
 
 function publishSyncRing(ring: SabRing): void {
   // The runtime-side `KernelSabRing` view is a structural subset of the
@@ -174,6 +164,18 @@ function publishSyncCallShim(ring: SabRing): void {
   publishKernelSyncApi({ call: shim });
 }
 
+function publishProcessSpec(spec: WorkerSpawnSpec): void {
+  const out: KernelProcessSpec = {
+    pid: spec.pid,
+    ppid: spec.ppid,
+    argv: spec.argv,
+    env: spec.env,
+    cwd: spec.cwd,
+    stdio: spec.stdio,
+  };
+  publishKernelProcessSpec(out);
+}
+
 async function runEntry(entry: WorkerEntryDescriptor): Promise<void> {
   if (entry.kind === 'url') {
     await import(/* @vite-ignore */ entry.url);
@@ -181,8 +183,9 @@ async function runEntry(entry: WorkerEntryDescriptor): Promise<void> {
   }
   // Source kind: compile via `new AsyncFunction(code)` so top-level await
   // works, and append a sourceURL pragma so dev-tools and stack traces
-  // show the right file. We deliberately do NOT thread runtime-js's
-  // require/module here — that's phase 2's job.
+  // show the right file. The kernel does NOT thread runtime-js's
+  // require/module here — that's the higher layer's responsibility via the
+  // pre-entry hook (ADR-0039).
   const AsyncFunction = Object.getPrototypeOf(async function noop() {}).constructor as new (
     body: string,
   ) => () => Promise<void>;
@@ -236,14 +239,19 @@ export function installWorkerEntry(
     // SAB ring framing. The shim itself is a thin wrapper around a
     // `SyncRpcClient` bound to this realm's ring.
     publishSyncCallShim(ring);
-    installProcessShim(spec, spec.stdio);
+    // ADR-0039: publish the typed process spec (no Node-shape shim). The
+    // pre-entry hook below — when the host registered one — reads the
+    // spec to install whatever process surface its runtime needs.
+    publishProcessSpec(spec);
 
     let code = 0;
     try {
+      const hook = preEntryHook;
+      if (hook !== null) hook(spec);
       await runEntry(spec.entry);
     } catch (err) {
-      if (err instanceof ProcessExitError) {
-        code = err.code;
+      if (isRiftyProcessExit(err)) {
+        code = err.exitCode;
       } else {
         code = 1;
         const message = err instanceof Error ? `${err.stack ?? err.message}\n` : `${String(err)}\n`;

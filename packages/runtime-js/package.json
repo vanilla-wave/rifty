@@ -10,6 +10,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./worker": "./src/worker-entry.ts",
+    "./install-process": "./src/ipc/install-process.ts",
     "./loader": "./src/module-loader/index.ts",
     "./env/capabilities": "./src/env/capabilities.ts",
     "./builtins": "./src/builtins/public.ts",

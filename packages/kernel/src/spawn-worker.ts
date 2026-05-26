@@ -13,7 +13,7 @@
  */
 
 import { NotImplementedError } from '@rifty/io';
-import { getKernelDispatcher, setKernelRecursiveSpawn } from './ipc/kernel-dispatcher.ts';
+import { getKernelDispatcher } from './ipc/kernel-dispatcher.ts';
 import { type SabRing, createSabRing } from './ipc/sab-ring.ts';
 import type { SyncRpcDispatcher } from './ipc/sync-dispatch.ts';
 import type {
@@ -87,8 +87,8 @@ export interface SpawnWorkerResult {
   readonly worker: WorkerLike;
   readonly ports: WorkerStdioPorts;
   readonly spec: WorkerSpawnSpec;
-  /** Singleton parent-side dispatcher; default handlers (`'execSync'`)
-   * already registered. Higher layers can add methods via `.register(...)`. */
+  /** Singleton parent-side dispatcher. Empty by default (ADR-0039) — higher
+   * layers register methods via `.register(...)` at boot. */
   readonly dispatcher: SyncRpcDispatcher;
   /** The SAB ring the dispatcher is attached to (parent-side view). */
   readonly ring: SabRing;
@@ -273,12 +273,10 @@ export function spawnKernelWorker(
   };
 }
 
-// Wire the recursive-spawn reference into the dispatcher singleton at
-// module load. This is the one-shot handshake that avoids a static
-// cycle (`ipc/kernel-dispatcher.ts` → `spawn-worker.ts` → ...). It must
-// run after `spawnKernelWorker` is declared so the function value is
-// captured, not hoisted as `undefined`.
-setKernelRecursiveSpawn(spawnKernelWorker);
+// ADR-0039: no more `setKernelRecursiveSpawn(spawnKernelWorker)` at module
+// load. The recursive-spawn handshake belonged to the Node `'execSync'`
+// handler, which now lives in `@rifty/runtime-js` and imports
+// `spawnKernelWorker` from this module directly (top-down).
 
 // Re-export the ring type so consumers (e.g. tests) can type-annotate
 // `result.ring` without reaching into the ipc subfolder.
