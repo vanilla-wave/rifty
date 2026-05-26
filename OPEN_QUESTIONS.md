@@ -27,7 +27,73 @@ When a question is reviewed:
 
 ## Active
 
-_(none — see "Promoted" below for the historical entry on `utimes`.)_
+## Q-2026-05-27-001: `process.versions.node = '22.0.0'` vs ADR-0026 honesty
+
+**Status:** 🟢 Active  
+**Encountered in:** 2026-05-26 architecture audit follow-up (runtime-js P1-4), while landing audit cleanups  
+**Milestone:** M10  
+**Author (agent session):** 2026-05-27
+
+### Context
+
+ADR-0026 ratified `process.platform = 'rifty'` and `process.arch = 'wasm'`
+as the honest values — they are the de-facto rifty ABI and per-package
+shims are accepted as the migration cost. The same `RiftyProcess` class
+nevertheless reports `version = 'v22.0.0'` and `versions = { node:
+'22.0.0', v8: '12.0.0', rifty: '0.0.0' }`. This is plausibly intentional
+(many ecosystem packages branch on `process.versions.node` to enable
+Node-specific code paths), but it directly contradicts the ADR-0026
+honesty principle. The audit flagged the inconsistency as P1-4 with no
+TODO marker or open question on file.
+
+### Options considered
+
+- **Option A — Keep impersonation, amend ADR-0026 to carve out
+  `versions.node`.**
+  - Pro: Zero compat breakage. Existing packages that gate on
+    `process.versions.node >= '14'` keep working.
+  - Con: Splits the honesty principle into "platform/arch honest, version
+    lies"; future ADR readers must hold both rules in mind.
+- **Option B — Honest values everywhere.** Drop `versions.node`, expose
+  `versions.rifty = '0.0.0'`, shim per-package as needed.
+  - Pro: One consistent rule. Easy to explain.
+  - Con: Doubles the per-package shim cost ADR-0026 already accepted,
+    measured against the ~10-package budget that triggers a re-think.
+    Many packages will silently take the "no Node" branch and exhibit
+    confusing behaviour rather than failing loudly.
+- **Option C — Keep impersonation, add a runtime warning when accessed
+  via `process.version` direct (not `process.versions.node`).**
+  - Pro: Surfaces the lie in noisy environments (REPL, tests) while
+    keeping the compat shape for programmatic consumers.
+  - Con: Noisy in legitimate paths (many packages read both). The
+    warning channel risks crying wolf.
+
+### Decision taken (provisional)
+
+**Chose:** A — keep the current impersonation.
+
+**Why:** Same trade-off ADR-0026 accepted for compat values; reverting
+would amplify the shim cost beyond the ~10-package budget the ADR set,
+and packages that branch on `versions.node` would mis-detect the runtime
+without obvious failure. The honest carve-out belongs in an ADR
+amendment rather than silent code drift.
+
+### Code markers
+
+- `packages/runtime-js/src/builtins/process.ts:90` (`version`)
+- `packages/runtime-js/src/builtins/process.ts:91` (`versions`)
+
+### Reversibility justification
+
+- Public APIs affected: `process.version` / `process.versions` shape,
+  which is read-only and already public — but the proposed reversal is a
+  value change, not a structural one, so reverts are a two-line edit.
+- Rough cost to revert: 2 lines, 1 file.
+- External dependencies involved: None.
+
+### Needs human review by
+
+End of milestone M11.
 
 ---
 
