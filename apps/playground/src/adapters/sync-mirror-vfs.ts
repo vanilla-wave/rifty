@@ -8,7 +8,7 @@
  * `fs.readFileSync` sees them.
  */
 import type { Vfs, VfsDirent, VfsStat } from '@rifty/vfs';
-import { dirname, normalizePath, syncMirror } from '@rifty/vfs';
+import { NotImplementedError, dirname, normalizePath, syncMirror } from '@rifty/vfs';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -57,7 +57,9 @@ export class SyncMirrorVfs implements Vfs {
   ): Promise<ReadableStream<Uint8Array>> {
     // ADR 0020 phase 2 (M11): blocked on ADR 0014 split-VFS fix. The sync
     // mirror cannot stream incrementally until the shared-backend issue is
-    // resolved; an interim "load-then-chunk" would defeat the purpose.
-    throw new Error(`SyncMirrorVfs.openReadable not implemented yet (M11): ${path}`);
+    // resolved; an interim "load-then-chunk" would defeat the purpose. The
+    // gap surfaces as a loud `NotImplementedError` (no-silent-stubs) and the
+    // hint carries the offending path for diagnostics.
+    throw new NotImplementedError('SyncMirrorVfs.openReadable', path);
   }
 }
