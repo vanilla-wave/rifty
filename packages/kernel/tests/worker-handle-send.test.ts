@@ -1,13 +1,15 @@
-import { NotImplementedError } from '@rifty/io';
 /**
- * Verifies that the Worker-backed `ProcessHandle.send()` is a loud stub
- * rather than a silent `return false` (per CLAUDE.md "no silent stubs").
+ * Verifies — at the type level — that the Worker-backed `ProcessHandle`
+ * variant does NOT expose `.send()`. The sealed-union refactor moved `send`
+ * off the {@link ProcessHandleBase} and onto {@link SameRealmProcessHandle}
+ * only; the throwing stub that used to live on {@link WorkerProcessHandle}
+ * is gone. Callers narrow on `handle.kind` before reaching for `send`.
  *
- * The fork-mode IPC channel for Worker-backed children is still pending —
- * see ADR-0011 phase 2 follow-ups and the M6 "Open acceptance" entry in
- * TASKS.md ("ChildProcess.stdin IPC ... currently a loud-throw stub").
- * Until the IPC plumbing lands, calling `.send()` must throw so callers
- * can't accidentally rely on a fake `false` return value.
+ * Fork-mode IPC for Worker-backed children is still pending — see ADR-0011
+ * phase 2 follow-ups and the M6 "Open acceptance" entry in TASKS.md. When
+ * that lands, `send` is added to {@link WorkerProcessHandle} additively;
+ * the `@ts-expect-error` here becomes the trigger that flips the test from
+ * "negative-type guard" to "send is required on both branches".
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ProcessManager } from '../src/process-manager.ts';
@@ -26,7 +28,7 @@ class StubWorker implements WorkerLike {
   removeEventListener(): void {}
 }
 
-describe('ProcessHandle.send (Worker-backed) — ADR-0011 phase 2 follow-up', () => {
+describe('ProcessHandle.send (Worker-backed) — sealed-union split', () => {
   beforeEach(() => {
     setKernelWorkerUrl('https://example.invalid/kernel-worker.js');
     setWorkerFactoryForTests(() => new StubWorker());
@@ -38,7 +40,7 @@ describe('ProcessHandle.send (Worker-backed) — ADR-0011 phase 2 follow-up', ()
     clearKernelDispatcher();
   });
 
-  it('throws NotImplementedError (no silent stub)', () => {
+  it('does not expose .send on WorkerProcessHandle (type-level)', () => {
     const pm = new ProcessManager();
     const handle = pm.spawnWorker('node', {
       entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/x.js' },
@@ -46,8 +48,12 @@ describe('ProcessHandle.send (Worker-backed) — ADR-0011 phase 2 follow-up', ()
       env: {},
       cwd: '/workspace',
     });
-    expect(() => handle.send({ hello: 'world' })).toThrow(NotImplementedError);
-    expect(() => handle.send({ hello: 'world' })).toThrow(/kernel\.WorkerHandle\.send/);
+    // Type-narrowing: the Worker branch carries `ports`, no `send`.
+    if (handle.kind === 'worker') {
+      expect(handle.ports).toBeDefined();
+      // @ts-expect-error — `send` is intentionally absent from WorkerProcessHandle.
+      handle.send;
+    }
     handle.kill('SIGTERM');
   });
 });

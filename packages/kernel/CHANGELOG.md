@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `ProcessHandle` sealed union no longer carries `send` on the shared base.
+  `send(message)` now lives on `SameRealmProcessHandle` only;
+  `WorkerProcessHandle` does not expose it. Callers MUST narrow on
+  `handle.kind === 'same-realm'` before calling `send` — the type system
+  reflects what each branch actually supports, and the previous throwing
+  stub on the Worker branch (which `// @ts-ignore` callers could have
+  reached) is gone. Internal change only: no caller in this repo was
+  reaching for `handle.send` through the union, so the rename is a typing
+  cleanup. Fork-mode IPC for Worker-backed children is still pending —
+  see ADR-0011 phase 2 follow-up; when it lands, `send` joins
+  `WorkerProcessHandle` additively.
+
 ### Removed
 
 - **ADR-0039 — Node-API surface lifted to `@rifty/runtime-js`.** The kernel

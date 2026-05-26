@@ -15,7 +15,6 @@
  * manager; tests exercise the manager directly.
  */
 
-import { NotImplementedError } from '@rifty/io';
 import { EventEmitter } from './internal/event-emitter.ts';
 import { type SpawnWorkerSpec, spawnKernelWorker } from './spawn-worker.ts';
 import type { WorkerStdioPorts } from './worker-entry.ts';
@@ -42,6 +41,14 @@ export interface ProcessIO {
  */
 export type ProcessHandleKind = 'same-realm' | 'worker';
 
+/**
+ * Fields common to both spawn branches. `send` is intentionally NOT here —
+ * fork-mode IPC is a {@link SameRealmProcessHandle}-only contract today
+ * (ADR-0011 phase 2 — Worker-backed IPC is still pending). Putting `send` on
+ * a sealed base used to force {@link WorkerProcessHandle} to ship a throwing
+ * stub; callers now branch on `handle.kind` and the type system reflects
+ * what each branch actually supports.
+ */
 interface ProcessHandleBase extends EventEmitter {
   readonly pid: number;
   readonly ppid: number;
@@ -52,18 +59,27 @@ interface ProcessHandleBase extends EventEmitter {
   setCwd(next: string): void;
   exitCode: number | null;
   signalCode: string | null;
-  /** Send a message into the child (for `fork`-style IPC). */
-  send(message: unknown): boolean;
   kill(signal?: string): boolean;
 }
 
-/** Same-realm `spawn(...)` handle — `ports` is `undefined` by construction. */
+/**
+ * Same-realm `spawn(...)` handle — `ports` is `undefined` by construction.
+ * Carries `send()` for fork-mode IPC; callers MUST narrow on
+ * `handle.kind === 'same-realm'` before reaching for it.
+ */
 export interface SameRealmProcessHandle extends ProcessHandleBase {
   readonly kind: 'same-realm';
   readonly ports?: undefined;
+  /** Send a message into the child (for `fork`-style IPC). */
+  send(message: unknown): boolean;
 }
 
-/** Worker-backed `spawnWorker(...)` handle — `ports` is always present. */
+/**
+ * Worker-backed `spawnWorker(...)` handle — `ports` is always present.
+ * Does NOT carry `send`: fork-mode IPC for Worker-backed children is pending
+ * ADR-0011 phase 2 follow-up. When that lands, `send` joins this interface
+ * (additive change, no migration of callers needed).
+ */
 export interface WorkerProcessHandle extends ProcessHandleBase {
   readonly kind: 'worker';
   readonly ports: WorkerStdioPorts;
@@ -268,16 +284,6 @@ export class ProcessManager {
       }
       setCwd(next: string): void {
         record.cwd = next;
-      }
-      send(_message: unknown): boolean {
-        // IPC-over-MessagePort for Worker-backed children is not yet
-        // wired (ADR-0011 phase 2 follow-up). The previous silent
-        // `return false` would mask the missing channel; throw instead
-        // until the real wiring lands. See TASKS.md M6 + review §1.10.
-        throw new NotImplementedError(
-          'kernel.WorkerHandle.send',
-          'ChildProcess.stdin/fork IPC pending M6 phase 2 — see ADR-0011',
-        );
       }
       kill(signal = 'SIGTERM'): boolean {
         if (this.exitCode !== null) return false;
