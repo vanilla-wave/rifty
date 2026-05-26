@@ -4,6 +4,13 @@
 
 ### Changed
 
+- `pipeline()` validates each argument is a stream-shaped object (an
+  `EventEmitter` with `on(...)`) BEFORE wiring `pipe()` calls. Passing a
+  plain object now throws `TypeError` synchronously with the offending
+  argument's index (`"pipeline: argument must be a stream (index N
+  received a non-stream value)"`), where previously the call would reach
+  the pipe loop and crash later with a cryptic `dest.write is not a
+  function`. Real stream subclasses are unaffected.
 - `BuiltinFactory` is now parameterised over its return type
   (`BuiltinFactory<T = unknown> = () => T`) and `registerBuiltin<T>(name,
   factory)` is generic. Registration sites now preserve each builtin's

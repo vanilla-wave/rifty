@@ -58,6 +58,41 @@ describe('pipeline()', () => {
     sink.on('error', () => {}); // belt-and-braces
     await expect(pipeline(src, sink)).rejects.toThrow(/sink-fail/);
   });
+
+  it('throws TypeError synchronously when an argument is not a stream', () => {
+    const src = Readable.from(['x']);
+    const notAStream: unknown = {};
+    // pipeline must reject the bad argument BEFORE any pipe wiring runs, so
+    // callers don't get a cryptic `dest.write is not a function` later. The
+    // error names the offending argument's position.
+    expect(() => pipeline(src, notAStream)).toThrow(TypeError);
+    expect(() => pipeline(src, notAStream)).toThrow(/stream/i);
+    expect(() => pipeline(src, notAStream)).toThrow(/index 1/);
+  });
+
+  it('throws TypeError when the first argument is not a stream', () => {
+    const sink = new Writable({
+      objectMode: true,
+      write(_chunk, _enc, cb) {
+        cb();
+      },
+    });
+    expect(() => pipeline('not-a-stream' as unknown, sink)).toThrow(TypeError);
+    expect(() => pipeline('not-a-stream' as unknown, sink)).toThrow(/index 0/);
+  });
+
+  it('accepts a trailing callback (does not treat it as a stream)', async () => {
+    const src = Readable.from(['x']);
+    const sink = new Writable({
+      objectMode: true,
+      write(_chunk, _enc, cb) {
+        cb();
+      },
+    });
+    await new Promise<void>((resolve, reject) => {
+      pipeline(src, sink, (err?: Error | null) => (err ? reject(err) : resolve()));
+    });
+  });
 });
 
 describe('finished()', () => {

@@ -26,9 +26,33 @@ import type { Writable } from './writable.ts';
  * `error`/`end`/`finish` and can be `destroy()`'d. Readable/Writable/Duplex
  * all satisfy this; the type is intentionally loose so future Node-shape
  * streams plug in without touching this file.
+ *
+ * `pipe` / `write` are present on intermediate / sink stages respectively
+ * (Node uses a similar duck-shape) — both are optional here so a sink-only
+ * stage need not pretend to expose `pipe`.
  */
 interface PipelineStage extends EventEmitter {
   destroy?(err?: Error): unknown;
+  pipe?(dest: PipelineStage): unknown;
+  write?(chunk: unknown, ...rest: unknown[]): unknown;
+}
+
+/**
+ * Reject anything that isn't a stream-shaped object BEFORE `pipe()` wiring
+ * runs. Without this, `pipeline(readable, {})` reached the pipe loop and
+ * eventually called `dest.write(...)` on a plain object → `dest.write is not
+ * a function`, with no hint that the bad argument was `{}` at position 1.
+ *
+ * The required shape is intentionally minimal: an `on(event, handler)` method
+ * so the pipeline can attach its error absorber and terminus listener. Real
+ * pipe wiring happens only if `pipe` exists on the upstream stage, so the
+ * absence of `pipe`/`write` on a leaf stage stays valid; the validator just
+ * guarantees the EventEmitter surface is real.
+ */
+function isPipelineStreamShape(v: unknown): v is PipelineStage {
+  if (v === null || typeof v !== 'object') return false;
+  const candidate = v as { on?: unknown };
+  return typeof candidate.on === 'function';
 }
 
 export function pipeline(...streams: unknown[]): Promise<void> {
@@ -36,6 +60,13 @@ export function pipeline(...streams: unknown[]): Promise<void> {
     typeof streams[streams.length - 1] === 'function'
       ? (streams.pop() as (err?: Error | null) => void)
       : undefined;
+  for (let i = 0; i < streams.length; i++) {
+    if (!isPipelineStreamShape(streams[i])) {
+      throw new TypeError(
+        `pipeline: argument must be a stream (index ${i} received a non-stream value)`,
+      );
+    }
+  }
   const chain = streams as (Readable | Writable)[];
   const p = new Promise<void>((resolve, reject) => {
     let settled = false;
