@@ -10,6 +10,11 @@
  * For OPFS in a Worker the `FileSystemSyncAccessHandle` API gives true sync
  * semantics; that backend lives in `OpfsFsSync` (ADR-0013). This module is
  * the seam that lets us swap implementations behind the same interface.
+ *
+ * The wrapper classes (`MemoryVfs`, `MemoryFsSync`) keep their backend
+ * private — pairing across surfaces flows through `createMemoryFs()` or via
+ * `setSyncMirror(impl, { async })`; nothing here reaches into a class
+ * instance to find a backend.
  */
 
 import type { FsSync } from './fs-sync.ts';
@@ -23,50 +28,50 @@ import type { Vfs } from './types.ts';
 export type { FsSync };
 
 export class MemoryFsSync implements FsSync {
-  readonly backend: MemoryBackend;
+  readonly #backend: MemoryBackend;
 
   constructor(backend?: MemoryBackend) {
-    this.backend = backend ?? new MemoryBackend();
+    this.#backend = backend ?? new MemoryBackend();
   }
 
   existsSync(path: string): boolean {
-    return this.backend.exists(normalizeAbsolute(path));
+    return this.#backend.exists(normalizeAbsolute(path));
   }
 
   readFileBytesSync(path: string): Uint8Array {
-    return this.backend.readFile(normalizeAbsolute(path));
+    return this.#backend.readFile(normalizeAbsolute(path));
   }
 
   writeFileSync(path: string, data: Uint8Array): void {
-    this.backend.writeFile(normalizeAbsolute(path), data);
+    this.#backend.writeFile(normalizeAbsolute(path), data);
   }
 
   readdirSync(path: string): readonly string[] {
-    return this.backend.readdir(normalizeAbsolute(path));
+    return this.#backend.readdir(normalizeAbsolute(path));
   }
 
   mkdirSync(path: string, options: { recursive?: boolean }): void {
-    this.backend.mkdir(normalizeAbsolute(path), options);
+    this.#backend.mkdir(normalizeAbsolute(path), options);
   }
 
   rmSync(path: string, options: { recursive?: boolean; force?: boolean }): void {
-    this.backend.rm(normalizeAbsolute(path), options);
+    this.#backend.rm(normalizeAbsolute(path), options);
   }
 
   statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number } {
-    return this.backend.stat(normalizeAbsolute(path));
+    return this.#backend.stat(normalizeAbsolute(path));
   }
 
   utimes(path: string, atimeMs: number, mtimeMs: number): void {
-    this.backend.utimes(normalizeAbsolute(path), atimeMs, mtimeMs);
+    this.#backend.utimes(normalizeAbsolute(path), atimeMs, mtimeMs);
   }
 
   loadFixture(files: Readonly<Record<string, string>>): void {
     const enc = new TextEncoder();
     for (const [path, content] of Object.entries(files)) {
       const dir = path.slice(0, path.lastIndexOf('/')) || '/';
-      this.backend.mkdir(dir, { recursive: true });
-      this.backend.writeFile(path, enc.encode(content));
+      this.#backend.mkdir(dir, { recursive: true });
+      this.#backend.writeFile(path, enc.encode(content));
     }
   }
 }
@@ -101,8 +106,7 @@ export function asyncVfs(): Vfs | null {
 /** Install a paired set in one call (ADR-0014). */
 export function installMemoryFs(): MemoryBackend {
   const { vfs, fsSync, backend } = createMemoryFs();
-  activeSync = fsSync;
-  activeAsync = vfs;
+  setSyncMirror(fsSync, { async: vfs });
   return backend;
 }
 
@@ -112,36 +116,34 @@ export function installMemoryFs(): MemoryBackend {
  * where `FileSystemSyncAccessHandle` is available. After this call,
  * `syncMirror()` returns an `OpfsFsSync` and `asyncVfs()` returns the
  * paired `OpfsVfs`.
- *
- * Note: `setSyncMirror` with a non-`MemoryFsSync` clears the auto-paired
- * async view, so this helper explicitly calls `setAsyncVfs` to wire the
- * OPFS async side.
  */
 export async function installOpfsFs(): Promise<{ vfs: OpfsVfs; fsSync: OpfsFsSync }> {
   const vfs = new OpfsVfs();
   await vfs.init();
   const fsSync = await OpfsFsSync.init();
-  setSyncMirror(fsSync);
-  setAsyncVfs(vfs);
+  setSyncMirror(fsSync, { async: vfs });
   return { vfs, fsSync };
 }
 
 export function resetSyncMirror(): void {
-  const fresh = new MemoryFsSync();
-  activeSync = fresh;
-  activeAsync = new MemoryVfs(fresh.backend);
+  const { vfs, fsSync } = createMemoryFs();
+  setSyncMirror(fsSync, { async: vfs });
 }
 
-export function setSyncMirror(impl: FsSync): void {
+/**
+ * Install `impl` as the active sync mirror. The paired async surface is
+ * explicit — callers wire both at the same call site rather than letting the
+ * registry sniff at the implementation. Omitting `options.async` clears the
+ * async surface; pass `{ async }` to install the matching async view in the
+ * same step.
+ *
+ * The `instanceof MemoryFsSync` branch that this replaced was the only
+ * back-channel that needed a public `.backend` field on the wrapper; with
+ * pairing made explicit at the call site the field is gone.
+ */
+export function setSyncMirror(impl: FsSync, options: { async?: Vfs } = {}): void {
   activeSync = impl;
-  // If the new sync impl is a MemoryFsSync we can pair its backend
-  // automatically; otherwise the caller may set the async view via
-  // setAsyncVfs separately.
-  if (impl instanceof MemoryFsSync) {
-    activeAsync = new MemoryVfs(impl.backend);
-  } else {
-    activeAsync = null;
-  }
+  activeAsync = options.async ?? null;
 }
 
 export function setAsyncVfs(vfs: Vfs): void {

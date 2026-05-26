@@ -34,8 +34,8 @@ installTimerGlobals();
 // (resolver + executor), and the WASI preopens. `load-fixture` writes flow
 // into the shared `MemoryBackend`, so a file dropped in by the host is
 // visible to every consumer in this Worker realm.
-const { fsSync: vfs } = createMemoryFs();
-setSyncMirror(vfs);
+const { vfs: asyncView, fsSync: vfs } = createMemoryFs();
+setSyncMirror(vfs, { async: asyncView });
 const loader = createModuleLoader(vfs, { cwd: '/' });
 
 // Install REPL bindings once: the loader is now long-lived (see ADR follow-up

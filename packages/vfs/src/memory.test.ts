@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { VfsError } from './errors.ts';
 import { MemoryVfs } from './memory.ts';
-import { MemoryFsSync, createMemoryFs } from './sync-mirror.ts';
+import {
+  MemoryFsSync,
+  asyncVfs,
+  createMemoryFs,
+  resetSyncMirror,
+  setSyncMirror,
+  syncMirror,
+} from './sync-mirror.ts';
 
 describe('MemoryVfs', () => {
   it('writes and reads files', async () => {
@@ -161,6 +168,44 @@ describe('MemoryVfs', () => {
         code: 'EISDIR',
       });
     });
+  });
+});
+
+describe('setSyncMirror pairs the async view explicitly (F6)', () => {
+  it('installs the async view when passed via options', () => {
+    const { vfs, fsSync } = createMemoryFs();
+    setSyncMirror(fsSync, { async: vfs });
+    expect(syncMirror()).toBe(fsSync);
+    expect(asyncVfs()).toBe(vfs);
+    resetSyncMirror();
+  });
+
+  it('leaves the async view null when no async option is supplied', () => {
+    const fsSync = new MemoryFsSync();
+    setSyncMirror(fsSync);
+    expect(syncMirror()).toBe(fsSync);
+    expect(asyncVfs()).toBeNull();
+    resetSyncMirror();
+  });
+});
+
+describe('MemoryBackend is private to its wrappers (F6)', () => {
+  it('does not expose `.backend` on MemoryVfs', () => {
+    const vfs = new MemoryVfs();
+    // `backend` was previously a public `readonly` field; F6 of the
+    // 2026-05-26 architecture audit moved it to a private slot. The cast
+    // below is the only way a runtime check can probe the absence of the
+    // field; the @ts-expect-error one line above is the compile-time test.
+    // @ts-expect-error — .backend must not exist on the public type
+    const leaked = vfs.backend;
+    expect(leaked).toBeUndefined();
+  });
+
+  it('does not expose `.backend` on MemoryFsSync', () => {
+    const fsSync = new MemoryFsSync();
+    // @ts-expect-error — .backend must not exist on the public type
+    const leaked = fsSync.backend;
+    expect(leaked).toBeUndefined();
   });
 });
 
