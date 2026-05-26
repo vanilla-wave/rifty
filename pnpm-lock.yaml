@@ -169,10 +169,6 @@ importers:
         version: 5.5.0
 
   packages/vfs:
-    dependencies:
-      '@rifty/io':
-        specifier: workspace:*
-        version: link:../io
     devDependencies:
       typescript:
         specifier: '*'

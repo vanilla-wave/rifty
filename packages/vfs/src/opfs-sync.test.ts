@@ -1,4 +1,3 @@
-import { NotImplementedError } from '@rifty/io';
 /**
  * Unit tests for `OpfsFsSync` (ADR-0013, ADR-0014).
  *
@@ -19,7 +18,7 @@ import { NotImplementedError } from '@rifty/io';
  * reason.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { VfsError } from './errors.ts';
+import { NotImplementedError, VfsError } from './errors.ts';
 import { OpfsFsSync, walkOpfsTree } from './opfs-sync.ts';
 
 describe('OpfsFsSync (Node test env)', () => {

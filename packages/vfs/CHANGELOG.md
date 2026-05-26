@@ -12,5 +12,6 @@
 
 ### Changed
 
+- **Layer hygiene (D-A):** `NotImplementedError` is now defined locally in `errors.ts` instead of imported from `@rifty/io`. Removed `@rifty/io` from `dependencies` — vfs is below io in the layer diagram, so the upward edge was a hard-rule violation. Class shape and message format match the io copy verbatim (only identity differs).
 - **Normalisation invariant:** `Vfs` and `FsSync` interfaces now document that every public method normalises its `path` argument on entry. `MemoryVfs` and `MemoryFsSync` apply `normalizeAbsolute` at each entry; `MemoryBackend.writeFile`/`rm` switched to `normalizeAbsolute` so relative inputs (`./foo/../bar.txt`) no longer corrupt parent/name slicing. Backends MAY assume normalised input from this interface but should still tolerate external sources.
 - `MemoryFsSync.statSync` return type now matches `FsSync.statSync` — `{ isFile, isDirectory, size?, mtime? }` — instead of inferring the wider `MemoryStat` shape with always-present fields. The `MemoryStat` shape is a subtype, so consumers that depended on always-present fields are unaffected at runtime, only the declared surface narrows.

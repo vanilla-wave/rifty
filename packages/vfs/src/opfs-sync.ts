@@ -24,8 +24,7 @@
  * prefers it over the default `0`. Not persisted across page reloads.
  */
 
-import { NotImplementedError } from '@rifty/io';
-import { VfsError } from './errors.ts';
+import { NotImplementedError, VfsError } from './errors.ts';
 import type { FsSync } from './fs-sync.ts';
 import { basename, dirname, normalizePath, segments } from './path.ts';
 
