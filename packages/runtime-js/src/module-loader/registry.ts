@@ -51,4 +51,28 @@ export class ModuleRegistry {
   clear(): void {
     this.records.clear();
   }
+
+  /**
+   * Drop module records so they will be re-resolved + re-executed on next
+   * `require`/`import`. Called with no `id` it wipes the whole registry —
+   * equivalent to constructing a fresh `ModuleRegistry`, used by the
+   * `load-fixture` hot path so the worker entry can keep its `ModuleLoader`
+   * instance (and its `Resolver`) alive across editor saves. Called with a
+   * specific absolute id it removes only that record, leaving siblings cached
+   * — the future hook for editor-driven HMR / file-update messages. A missing
+   * id is a no-op (matches `Map.delete` semantics; not an error).
+   *
+   * NOTE: this is a single-entry drop. Parent modules that already imported
+   * the invalidated id keep their resolved namespace until they themselves are
+   * invalidated. Dependency-graph propagation is HMR-grade work and is
+   * intentionally left to the downstream layer (see 2026-05-26 architecture
+   * review, Tier 1 #4 / D-E).
+   */
+  invalidate(id?: string): void {
+    if (id === undefined) {
+      this.records.clear();
+      return;
+    }
+    this.records.delete(id);
+  }
 }

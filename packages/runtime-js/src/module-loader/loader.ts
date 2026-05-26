@@ -20,6 +20,15 @@ export interface ModuleLoader {
   import(specifier: string, from?: string): Promise<Record<string, unknown>>;
   /** Direct id-based loader (used by REPL and tests). */
   loadById(id: string, esm?: boolean): Promise<Record<string, unknown>>;
+  /**
+   * Drop module records. With no `id` wipes the whole cache (the `load-fixture`
+   * hot path uses this so the loader instance and its resolver stay alive
+   * across editor saves). With an absolute `id` removes only that entry —
+   * future hook for HMR / per-file editor updates. Thin delegate to
+   * {@link ModuleRegistry.invalidate}; see the longer note there for the
+   * single-entry-vs-dependency-graph contract.
+   */
+  invalidate(id?: string): void;
   readonly registry: ModuleRegistry;
   readonly resolver: Resolver;
 }
@@ -125,6 +134,9 @@ export function createModuleLoader(vfs: SyncVfs, opts: ModuleLoaderOptions = {})
     loadById(id, esm = false) {
       const resolved = resolver.resolve(id, { fromFile: id, esm });
       return deps.loadAsync(resolved.id);
+    },
+    invalidate(id) {
+      registry.invalidate(id);
     },
     registry,
     resolver,

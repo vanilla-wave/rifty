@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **ADR-0034 (D-B):** the re-exported `node:stream` surface from `@rifty/io`
+  (via `src/builtins/stream.ts` shim) now matches Node's documented
+  contract — `_readableState`/`_writableState` containers, `Readable.read(n)`
+  honours `n`, `Writable.destroy` cancels in-flight queue, `Duplex`/`Transform`
+  methods on the prototype (no per-instance rebinding), `pipeline()` destroys
+  upstream on error. No source change in this package — the shim re-exports
+  unchanged. Listed here so consumers of `@rifty/runtime-js/builtins/stream`
+  can find the breaking-contract-restoration note from their own changelog.
+  See `packages/io/CHANGELOG.md` and ADR-0034 for details.
+
+### Added
+
+- **Worker-globals owner table.** New internal module `src/internal/worker-globals.ts` consolidates the ad-hoc `globalThis` / `self` writes (`__riftyEsmStash`, `__riftyLastEsmBody`, `__riftyLastEsmFile`, plus the `__setCreateRequireImpl` closure, plus `require`/`__riftyImport` on `self`) under one typed publish/read/unpublish API rooted at `globalThis.__rifty.*`. Mirrors kernel's `shared-globals.ts` pattern; sub-namespace keeps the M11 A-026 multi-realm story collision-free against the kernel-owned flat `__riftyKernel*` keys. Closes the "Ungoverned globals" Tier 2 #10 finding from the 2026-05-26 architecture review. 17 unit tests cover publish/read roundtrip per documented key, unpublish cleanup, and isolation from kernel-owned flat keys.
+- **D-E granular module invalidation.** `ModuleRegistry.invalidate(id?)` and `ModuleLoader.invalidate(id?)` — full reset with no `id`, single-entry drop with an absolute id (future HMR hook). `worker-entry`'s `load-fixture` handler now calls `loader.invalidate()` instead of rebuilding the loader, so the resolver and REPL bindings survive editor saves (was Tier 1 #4 in the 2026-05-26 architecture review).
+
 ### Fixed
 
 - `readline.cursorTo` / `clearLine` / `clearScreenDown` / `emitKeypressEvents` now throw `NotImplementedError` instead of silently no-op'ing (no-silent-stubs).

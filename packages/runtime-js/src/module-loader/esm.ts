@@ -1,4 +1,5 @@
 import { dirname } from '@rifty/vfs';
+import { publishRuntimeGlobal, readRuntimeGlobal } from '../internal/worker-globals.ts';
 import { ModuleLoadError } from './errors.ts';
 import { transformEsm } from './esm-ast.ts';
 import type { ModuleRecord, ModuleRegistry } from './registry.ts';
@@ -36,10 +37,12 @@ export async function executeEsm(
   }
 
   const transformed = transformEsm(resolved.source, resolved.id);
-  // Stash by file path so multiple modules don't overwrite each other.
-  const store = globalThis as unknown as { __riftyEsmStash?: Record<string, string> };
-  store.__riftyEsmStash ??= {};
-  store.__riftyEsmStash[resolved.id] = transformed.body;
+  // Stash by file path so multiple modules don't overwrite each other. The
+  // stash lives on the typed owner table at `__rifty.esmStash` — see
+  // `internal/worker-globals.ts`.
+  const stash: Record<string, string> = readRuntimeGlobal('esmStash') ?? {};
+  stash[resolved.id] = transformed.body;
+  publishRuntimeGlobal('esmStash', stash);
   // Eagerly resolve all static imports before executing the body. This both
   // satisfies cycles (the dep's record is registered before our body runs) and
   // gives us deterministic load order.
@@ -86,14 +89,15 @@ export async function executeEsm(
   } catch (err) {
     const msg = (err as Error).message ?? String(err);
     // Stash the body globally so we can pull it out of Playwright while
-    // diagnosing transformer issues.
-    (globalThis as unknown as Record<string, unknown>).__riftyLastEsmBody = transformed.body;
-    (globalThis as unknown as Record<string, unknown>).__riftyLastEsmFile = resolved.id;
+    // diagnosing transformer issues. Lives on the owner table — see
+    // `internal/worker-globals.ts`.
+    publishRuntimeGlobal('esmLastBody', transformed.body);
+    publishRuntimeGlobal('esmLastFile', resolved.id);
     const stack = (err as Error).stack ?? '';
     const m = /<anonymous>:(\d+):(\d+)/.exec(stack);
     const around = m
       ? snippetForBody(transformed.body, Number(m[1]), Number(m[2]))
-      : `\n(no offset in stack; body length=${transformed.body.length}, stashed at globalThis.__riftyLastEsmBody)`;
+      : `\n(no offset in stack; body length=${transformed.body.length}, stashed at globalThis.__rifty.esmLastBody)`;
     throw new ModuleLoadError(
       'SYNTAX_ERROR',
       resolved.id,

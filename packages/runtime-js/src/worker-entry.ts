@@ -15,6 +15,7 @@ import { Buffer } from './builtins/buffer.ts';
 import { __setCreateRequireImpl } from './builtins/module.ts';
 import { installProcessGlobals, setProcessCwd } from './builtins/process.ts';
 import { installTimerGlobals } from './builtins/timers.ts';
+import { publishRuntimeGlobal } from './internal/worker-globals.ts';
 import { createModuleLoader } from './module-loader/index.ts';
 import { MemorySyncVfs } from './module-loader/memory-sync-vfs.ts';
 import type { EvalRequest, EvalResult, HostMessage, WorkerMessage } from './protocol.ts';
@@ -29,24 +30,36 @@ installTimerGlobals();
 (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
 
 const vfs = new MemorySyncVfs();
-let loader = createModuleLoader(vfs, { cwd: '/' });
+const loader = createModuleLoader(vfs, { cwd: '/' });
 
-function rebindReplBindings(): void {
-  (self as unknown as { require: (s: string) => unknown }).require = (specifier: string) =>
-    loader.require(specifier, '/__repl__.js');
-  (self as unknown as { __riftyImport: (s: string) => Promise<unknown> }).__riftyImport = (
-    specifier: string,
-  ) => loader.import(specifier, '/__repl__.js');
-  // Hook node:module's createRequire to the live loader.
-  __setCreateRequireImpl((from: string) => {
-    const req = (id: string) => loader.require(id, from);
-    return req as ((id: string) => unknown) & {
-      resolve?: (id: string) => string;
-      cache?: Record<string, unknown>;
-    };
-  });
-}
-rebindReplBindings();
+// Install REPL bindings once: the loader is now long-lived (see ADR follow-up
+// for D-E in `docs/review/2026-05-26-architecture-review.md`). Past versions
+// rebuilt the loader on every `load-fixture`, which forced this rebind because
+// the old closure captured a stale reference. With `loader.invalidate()`
+// keeping the same instance, one bind at boot is enough.
+//
+// Storage is governed by the owner table (`internal/worker-globals.ts`,
+// closes the "Ungoverned globals" Tier 2 #10 finding from the 2026-05-26
+// architecture review). The canonical home is `__rifty.require` /
+// `__rifty.import`; we additionally mirror the values onto `self.require`
+// and `self.__riftyImport` so user code typed at the REPL keeps the
+// existing Node-style `require(...)` / `__riftyImport(...)` ergonomics
+// (covered by the existing M2 e2e cases).
+const replRequire = (specifier: string): unknown => loader.require(specifier, '/__repl__.js');
+const replImport = (specifier: string): Promise<unknown> =>
+  loader.import(specifier, '/__repl__.js');
+publishRuntimeGlobal('require', replRequire);
+publishRuntimeGlobal('import', replImport);
+(self as unknown as { require: typeof replRequire }).require = replRequire;
+(self as unknown as { __riftyImport: typeof replImport }).__riftyImport = replImport;
+// Hook node:module's createRequire to the live loader.
+__setCreateRequireImpl((from: string) => {
+  const req = (id: string) => loader.require(id, from);
+  return req as ((id: string) => unknown) & {
+    resolve?: (id: string) => string;
+    cache?: Record<string, unknown>;
+  };
+});
 
 function post(msg: WorkerMessage): void {
   self.postMessage(msg);
@@ -100,9 +113,15 @@ self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
       post({ type: 'pong' });
       break;
     case 'load-fixture':
+      // Per the 2026-05-26 architecture review (Tier 1 #4 / D-E): keep the
+      // loader instance alive across editor saves and only drop the module
+      // cache. The resolver and REPL bindings survive, which is invisible at
+      // M2 but a prerequisite for HMR-style hot paths in M10/M11. Granular
+      // single-file invalidation is available via `loader.invalidate(id)` —
+      // not used from here today; the message protocol still posts the full
+      // fixture, so full reset matches what the host actually communicates.
       vfs.loadFixture(msg.files);
-      loader = createModuleLoader(vfs, { cwd: '/' });
-      rebindReplBindings();
+      loader.invalidate();
       break;
     case 'eval': {
       const result = await handleEval(msg.request);

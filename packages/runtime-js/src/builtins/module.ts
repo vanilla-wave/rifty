@@ -3,14 +3,16 @@
  *
  * `createRequire` is what most tooling actually needs: it gives back a
  * require() function bound to a base URL/path. The runtime-js loader hands
- * out the require closure via a thread-local set by the worker bootstrap;
- * this module reads from that.
+ * out the require closure via the typed owner table
+ * ({@link publishRuntimeGlobal} / {@link readRuntimeGlobal} under the
+ * `__rifty` root); this module reads from that.
  *
  * `builtinModules` reflects whatever has been registered with the loader at
  * the time of the call (so net's `node:http` shows up once @rifty/net has
  * registered itself).
  */
 import { NotImplementedError } from '@rifty/io';
+import { publishRuntimeGlobal, readRuntimeGlobal } from '../internal/worker-globals.ts';
 import { listBuiltins } from './registry.ts';
 
 interface RequireFn {
@@ -19,22 +21,27 @@ interface RequireFn {
   cache?: Record<string, unknown>;
 }
 
-let createRequireImpl: ((from: string) => RequireFn) | null = null;
-
-/** Wired up by the worker bootstrap so this module can delegate. */
+/**
+ * Wired up by the worker bootstrap (and the playground's `realVite.ts`
+ * adapter) so this module can delegate. The implementation lives under
+ * `__rifty.createRequireImpl` in the owner table — see
+ * `internal/worker-globals.ts` for the owner-table rationale (Tier 2 #10
+ * of the 2026-05-26 architecture review).
+ */
 export function __setCreateRequireImpl(impl: (from: string) => RequireFn): void {
-  createRequireImpl = impl;
+  publishRuntimeGlobal('createRequireImpl', impl);
 }
 
 export function createRequire(from: string | URL): RequireFn {
-  if (!createRequireImpl) {
+  const impl = readRuntimeGlobal('createRequireImpl');
+  if (!impl) {
     throw new NotImplementedError(
       'module.createRequire',
       'no loader registered — runtime-js worker bootstrap missing',
     );
   }
   const fromPath = typeof from === 'string' ? from : urlToPath(from);
-  return createRequireImpl(fromPath);
+  return impl(fromPath) as RequireFn;
 }
 
 function urlToPath(url: URL): string {
