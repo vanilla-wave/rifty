@@ -26,6 +26,7 @@ export {
   WebSocket,
   WebSocketServer,
   WebSocketConnection,
+  State,
   BridgedWebSocket,
   BridgedWebSocketServer,
   BridgedWebSocketConnection,
