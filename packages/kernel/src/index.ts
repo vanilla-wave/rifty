@@ -22,7 +22,7 @@ export type {
   CreateSabRingResult,
   SabRingHeader,
 } from './ipc/sab-ring.ts';
-export { getIpcMode, isSabIpcSupported } from './ipc/capabilities.ts';
+export { getIpcMode, isSabIpcSupported, type IpcModeOptions } from './ipc/capabilities.ts';
 export type {
   WorkerEntryDescriptor,
   WorkerExitMessage,
