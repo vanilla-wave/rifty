@@ -490,48 +490,112 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     return this;
   }
 
-  async *[Symbol.asyncIterator](): AsyncIterator<unknown> {
+  /**
+   * Per Node's `Readable[Symbol.asyncIterator]` contract:
+   *   - listeners attached for the iteration are torn down on completion
+   *     (natural end, error, consumer throw, or early `break`/`return`);
+   *   - on early termination (break/return/throw before EOF) the source is
+   *     destroyed — signalling the producer that the consumer is done. This
+   *     mirrors Node's behaviour where the iterator's `return()` calls
+   *     `destroy()` on the stream so generators/HTTP responses don't keep
+   *     pumping into a dead consumer.
+   *
+   * We hand-roll the iterator (rather than `async function*`) so we can
+   * implement `return()` and `throw()` to run the same cleanup path.
+   */
+  [Symbol.asyncIterator](): AsyncIterableIterator<unknown> {
     let resolveNext: ((v: IteratorResult<unknown>) => void) | null = null;
+    let rejectNext: ((err: unknown) => void) | null = null;
     const pending: unknown[] = [];
     let done = false;
     let error: unknown = null;
-    const push = (chunk: unknown): void => {
+    let cleanedUp = false;
+
+    const onData = (chunk: unknown): void => {
       if (resolveNext) {
         const r = resolveNext;
         resolveNext = null;
+        rejectNext = null;
         r({ value: chunk, done: false });
       } else {
         pending.push(chunk);
       }
     };
-    this.on('data', push);
-    this.on('end', () => {
+    const onEnd = (): void => {
       done = true;
       if (resolveNext) {
         const r = resolveNext;
         resolveNext = null;
+        rejectNext = null;
         r({ value: undefined, done: true });
       }
-    });
-    this.on('error', (err) => {
+    };
+    const onError = (err: unknown): void => {
       error = err;
-      if (resolveNext) {
-        const r = resolveNext;
+      if (rejectNext) {
+        const rj = rejectNext;
         resolveNext = null;
-        r({ value: undefined, done: true });
+        rejectNext = null;
+        rj(err);
       }
-    });
-    while (true) {
-      if (error) throw error;
-      if (pending.length > 0) {
-        yield pending.shift();
-        continue;
-      }
-      if (done) return;
-      yield await new Promise<unknown>((resolve) => {
-        resolveNext = (r) => resolve(r.value);
-      });
-    }
+    };
+
+    const cleanup = (): void => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      this.off('data', onData);
+      this.off('end', onEnd);
+      this.off('error', onError);
+      // Pause the source so it stops emitting; if iteration ended before EOF
+      // we additionally destroy the stream — Node's iterator return() does
+      // this so producers learn the consumer is gone.
+      this.pause();
+      if (!done && !error && !this._readableState.destroyed) this.destroy();
+    };
+
+    this.on('data', onData);
+    this.on('end', onEnd);
+    this.on('error', onError);
+
+    const iter: AsyncIterableIterator<unknown> = {
+      next: (): Promise<IteratorResult<unknown>> => {
+        if (error) {
+          const err = error;
+          error = null;
+          cleanup();
+          return Promise.reject(err);
+        }
+        if (pending.length > 0) {
+          return Promise.resolve({ value: pending.shift(), done: false });
+        }
+        if (done) {
+          cleanup();
+          return Promise.resolve({ value: undefined, done: true });
+        }
+        return new Promise<IteratorResult<unknown>>((resolve, reject) => {
+          resolveNext = (r) => {
+            if (r.done) cleanup();
+            resolve(r);
+          };
+          rejectNext = (err) => {
+            cleanup();
+            reject(err);
+          };
+        });
+      },
+      return: (value?: unknown): Promise<IteratorResult<unknown>> => {
+        cleanup();
+        return Promise.resolve({ value, done: true });
+      },
+      throw: (err?: unknown): Promise<IteratorResult<unknown>> => {
+        cleanup();
+        return Promise.reject(err);
+      },
+      [Symbol.asyncIterator](): AsyncIterableIterator<unknown> {
+        return iter;
+      },
+    };
+    return iter;
   }
 
   static from(iter: Iterable<unknown> | AsyncIterable<unknown>): Readable {

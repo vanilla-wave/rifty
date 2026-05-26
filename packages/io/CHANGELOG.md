@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `Readable[Symbol.asyncIterator]` now removes the `data`/`end`/`error`
+  listeners it attaches on every termination path — natural EOF, consumer
+  `break`/`return`, or consumer `throw`. The iterator is hand-rolled (rather
+  than `async function*`) so its `return()` and `throw()` hooks run the same
+  cleanup. On early termination (before EOF) the source is `pause()`d and
+  `destroy()`ed, matching Node's iterator semantics so producers learn the
+  consumer is gone. Previously `for await` left listeners attached after the
+  loop; repeated iteration and early `break` both leaked. New unit suite
+  `readable.async-iterator.test.ts` plus parity case
+  `stream/async-iterator-cleanup.case.ts`.
+
 ### Changed
 
 - **ADR-0034 (D-B, IRREVERSIBLE):** `@rifty/io` stream primitives restored
