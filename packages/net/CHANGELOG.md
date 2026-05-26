@@ -17,6 +17,11 @@
 
 ### Changed
 
+- `src/register-builtins.ts` drops the `as unknown as Record<string, unknown>`
+  cast from each `registerBuiltin('net' | 'http' | 'https', () => ...)` call
+  (3 sites) now that `BuiltinFactory` in `@rifty/io` is generic. No behaviour
+  change.
+
 - **ADR-0036:** the `/preview/<port>/...` URL scheme and `preview.local`
   synthetic host are now documented in `@rifty/io/preview-protocol`
   rather than as a hand-written prose comment in `src/registry.ts`. The

@@ -56,55 +56,51 @@ export {
   type BuiltinFactory,
 } from '@rifty/io';
 
-registerBuiltin('path', () => pathModule as unknown as Record<string, unknown>);
+registerBuiltin('path', () => pathModule);
 registerBuiltin('events', () => {
   const exports = EventEmitter as unknown as Record<string, unknown>;
   exports.EventEmitter = EventEmitter;
   exports.once = eventsOnce;
   return exports;
 });
-registerBuiltin('util', () => utilModule as unknown as Record<string, unknown>);
-registerBuiltin('querystring', () => querystringModule as unknown as Record<string, unknown>);
-registerBuiltin('url', () => urlModule as unknown as Record<string, unknown>);
-registerBuiltin('assert', () => assertModule as unknown as Record<string, unknown>);
-registerBuiltin('assert/strict', () => assertStrict as unknown as Record<string, unknown>);
+registerBuiltin('util', () => utilModule);
+registerBuiltin('querystring', () => querystringModule);
+registerBuiltin('url', () => urlModule);
+registerBuiltin('assert', () => assertModule);
+registerBuiltin('assert/strict', () => assertStrict);
 registerBuiltin('buffer', () => {
   const exports = { Buffer } as Record<string, unknown>;
   Object.assign(exports, bufferModule);
   return exports;
 });
-registerBuiltin('process', () => riftyProcess as unknown as Record<string, unknown>);
-registerBuiltin('timers', () => timersModule as unknown as Record<string, unknown>);
-registerBuiltin('fs', () => fsModule as unknown as Record<string, unknown>);
-registerBuiltin('fs/promises', () => fsPromises as unknown as Record<string, unknown>);
-registerBuiltin('stream', () => streamModule as unknown as Record<string, unknown>);
-registerBuiltin(
-  'stream/promises',
-  () =>
-    ({
-      pipeline: streamModule.pipeline,
-      finished: streamModule.finished,
-    }) as Record<string, unknown>,
-);
-registerBuiltin('child_process', () => childProcessModule as unknown as Record<string, unknown>);
-registerBuiltin('worker_threads', () => workerThreadsModule as unknown as Record<string, unknown>);
-registerBuiltin('os', () => osModule as unknown as Record<string, unknown>);
-registerBuiltin('crypto', () => cryptoModule as unknown as Record<string, unknown>);
-registerBuiltin('module', () => moduleModule as unknown as Record<string, unknown>);
-registerBuiltin('perf_hooks', () => perfHooksModule as unknown as Record<string, unknown>);
-registerBuiltin('tty', () => ttyModule as unknown as Record<string, unknown>);
-registerBuiltin('string_decoder', () => stringDecoderModule as unknown as Record<string, unknown>);
-registerBuiltin('dns', () => dns as unknown as Record<string, unknown>);
-registerBuiltin('dns/promises', () => dns.promises as unknown as Record<string, unknown>);
-registerBuiltin('tls', () => tls as unknown as Record<string, unknown>);
-registerBuiltin('zlib', () => zlib as unknown as Record<string, unknown>);
-registerBuiltin('readline', () => readline as unknown as Record<string, unknown>);
-registerBuiltin('v8', () => v8 as unknown as Record<string, unknown>);
-registerBuiltin('vm', () => vm as unknown as Record<string, unknown>);
-registerBuiltin('async_hooks', () => async_hooks as unknown as Record<string, unknown>);
-registerBuiltin('inspector', () => inspector as unknown as Record<string, unknown>);
-registerBuiltin('repl', () => repl as unknown as Record<string, unknown>);
-registerBuiltin('constants', () => nodeConstants as unknown as Record<string, unknown>);
-registerBuiltin('punycode', () => punycode as unknown as Record<string, unknown>);
-registerBuiltin('sys', () => sys as unknown as Record<string, unknown>);
-registerBuiltin('cluster', () => cluster as unknown as Record<string, unknown>);
+registerBuiltin('process', () => riftyProcess);
+registerBuiltin('timers', () => timersModule);
+registerBuiltin('fs', () => fsModule);
+registerBuiltin('fs/promises', () => fsPromises);
+registerBuiltin('stream', () => streamModule);
+registerBuiltin('stream/promises', () => ({
+  pipeline: streamModule.pipeline,
+  finished: streamModule.finished,
+}));
+registerBuiltin('child_process', () => childProcessModule);
+registerBuiltin('worker_threads', () => workerThreadsModule);
+registerBuiltin('os', () => osModule);
+registerBuiltin('crypto', () => cryptoModule);
+registerBuiltin('module', () => moduleModule);
+registerBuiltin('perf_hooks', () => perfHooksModule);
+registerBuiltin('tty', () => ttyModule);
+registerBuiltin('string_decoder', () => stringDecoderModule);
+registerBuiltin('dns', () => dns);
+registerBuiltin('dns/promises', () => dns.promises);
+registerBuiltin('tls', () => tls);
+registerBuiltin('zlib', () => zlib);
+registerBuiltin('readline', () => readline);
+registerBuiltin('v8', () => v8);
+registerBuiltin('vm', () => vm);
+registerBuiltin('async_hooks', () => async_hooks);
+registerBuiltin('inspector', () => inspector);
+registerBuiltin('repl', () => repl);
+registerBuiltin('constants', () => nodeConstants);
+registerBuiltin('punycode', () => punycode);
+registerBuiltin('sys', () => sys);
+registerBuiltin('cluster', () => cluster);

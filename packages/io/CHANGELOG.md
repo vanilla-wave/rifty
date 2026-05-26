@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `BuiltinFactory` is now parameterised over its return type
+  (`BuiltinFactory<T = unknown> = () => T`) and `registerBuiltin<T>(name,
+  factory)` is generic. Registration sites now preserve each builtin's
+  concrete module shape, so a typo against an exported namespace becomes a
+  typecheck error rather than a runtime surprise. Internal storage remains
+  at `BuiltinFactory<unknown>` — one well-scoped cast inside the registry
+  — and the `loadBuiltin(name)` lookup contract is unchanged
+  (`Record<string, unknown> | null`).
+
 ### Added
 
 - **ADR-0036: preview-protocol addressing module.** New module

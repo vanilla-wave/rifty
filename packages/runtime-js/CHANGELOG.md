@@ -35,6 +35,16 @@
 
 ### Changed
 
+- Builtin registration sites in `src/builtins/index.ts` drop the
+  `as unknown as Record<string, unknown>` cast on every `registerBuiltin(...)`
+  call (34 sites). `BuiltinFactory` is now generic over its return type
+  (see `@rifty/io` changelog), so TypeScript infers each factory's concrete
+  module shape and a typo against an exported namespace becomes a
+  typecheck error rather than a runtime surprise. No behaviour change. The
+  remaining structural-assertion casts on `EventEmitter` (used as a
+  namespace) and `globalThis` (capability probes in `env/capabilities.ts`)
+  are intentional and unrelated to the registry boundary.
+
 - **ADR-0035: builtin registry sourced from `@rifty/io`.** The
   `name → factory` cache that backs `node:<name>` lookups
   (`registerBuiltin`, `loadBuiltin`, `isBuiltinSpecifier`, `listBuiltins`,

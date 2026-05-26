@@ -11,7 +11,7 @@ import http from './http.ts';
 import https from './https.ts';
 import net from './net.ts';
 
-registerBuiltin('net', () => net as unknown as Record<string, unknown>);
-registerBuiltin('http', () => http as unknown as Record<string, unknown>);
+registerBuiltin('net', () => net);
+registerBuiltin('http', () => http);
 // `https` is a loud-throw stub — see ADR 0010. Imports succeed; calls throw.
-registerBuiltin('https', () => https as unknown as Record<string, unknown>);
+registerBuiltin('https', () => https);

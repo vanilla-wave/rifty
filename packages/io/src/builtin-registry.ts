@@ -12,10 +12,10 @@
  * namespace so the next `loadBuiltin` call calls the new factory.
  */
 
-export type BuiltinFactory = () => Record<string, unknown>;
+export type BuiltinFactory<T = unknown> = () => T;
 
 const cache: Map<string, Record<string, unknown>> = new Map();
-const factories: Record<string, BuiltinFactory> = {};
+const factories: Record<string, BuiltinFactory<unknown>> = {};
 
 /**
  * Higher-layer packages (`@rifty/net`, future `@rifty/wasi` builtins, etc.)
@@ -23,9 +23,15 @@ const factories: Record<string, BuiltinFactory> = {};
  * can `require('node:http')`. Keeping the registry here decouples
  * `@rifty/runtime-js` from those higher layers — see the layering rules in
  * CLAUDE.md and the rationale in ADR-0035.
+ *
+ * Generic over the factory's return type so registration sites preserve the
+ * concrete module shape and TypeScript can catch typos against the exported
+ * namespace. Internal storage erases to `BuiltinFactory<unknown>` — the
+ * lookup contract through `loadBuiltin` is `Record<string, unknown> | null`,
+ * so callers project the namespace themselves at the well-known boundary.
  */
-export function registerBuiltin(name: string, factory: BuiltinFactory): void {
-  factories[name] = factory;
+export function registerBuiltin<T>(name: string, factory: BuiltinFactory<T>): void {
+  factories[name] = factory as BuiltinFactory<unknown>;
   cache.delete(name);
 }
 
@@ -40,7 +46,7 @@ export function loadBuiltin(specifier: string): Record<string, unknown> | null {
   if (cached) return cached;
   const factory = factories[name];
   if (!factory) return null;
-  const ns = factory();
+  const ns = factory() as Record<string, unknown>;
   cache.set(name, ns);
   return ns;
 }
