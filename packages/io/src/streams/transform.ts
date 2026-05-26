@@ -13,11 +13,13 @@
  * Identity-default: if no `transform` option is given, the chunk passes
  * through unchanged.
  *
- * The writable-side impls are wired via the protected `_internalWritableSide`
- * factory hook on `Duplex` so that no instance-method rebinding is needed.
+ * The writable-side impls are wired via the Symbol-keyed
+ * {@link INTERNAL_WRITABLE_SIDE} hook on `Duplex` so that no instance-method
+ * rebinding is needed. The Symbol is intentionally not exported from
+ * `src/index.ts` — subclasses outside `@rifty/io` cannot reach it.
  */
 
-import { Duplex } from './duplex.ts';
+import { Duplex, type DuplexInternalOptions, INTERNAL_WRITABLE_SIDE } from './duplex.ts';
 import type { ReadableOptions } from './readable.ts';
 import { Writable, type WritableOptions } from './writable.ts';
 
@@ -41,9 +43,14 @@ export class Transform extends Duplex {
     // post-construction Object.assign churn and keeps the writable-side
     // factory pure.
     const transformRef: { instance: Transform | null } = { instance: null };
-    super({
+    // Symbol-keyed factory injection: the `Duplex` constructor type advertises
+    // only `ReadableOptions & WritableOptions`, but reaches for the
+    // `INTERNAL_WRITABLE_SIDE` symbol-keyed property internally. We assemble
+    // both into a single options bag here — the symbol key is invisible to
+    // any caller outside this package.
+    const superOpts: ReadableOptions & WritableOptions & DuplexInternalOptions = {
       ...opts,
-      _internalWritableSide: (innerOpts) =>
+      [INTERNAL_WRITABLE_SIDE]: (innerOpts) =>
         new Writable({
           ...innerOpts,
           write(chunk, encoding, cb): void {
@@ -87,7 +94,8 @@ export class Transform extends Duplex {
             finalize();
           },
         }),
-    });
+    };
+    super(superOpts);
     transformRef.instance = this;
   }
 }

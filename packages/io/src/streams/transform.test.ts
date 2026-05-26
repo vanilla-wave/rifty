@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { Duplex } from './duplex.ts';
 import { Transform } from './transform.ts';
+import { Writable } from './writable.ts';
 
 describe('Transform subclassing', () => {
   it('subclass that passes transform to super() transforms chunks', async () => {
@@ -92,5 +93,31 @@ describe('Duplex.write routes to the writable side', () => {
     await new Promise<void>((resolve) => queueMicrotask(resolve));
     await new Promise<void>((resolve) => queueMicrotask(resolve));
     expect(seen).toEqual([1, 2]);
+  });
+
+  it('Duplex public options interface does not expose the internal writable-side hook', () => {
+    // Type-level guard: the internal writable-side factory is keyed by a
+    // module-scoped Symbol (`INTERNAL_WRITABLE_SIDE`) that is NOT exported
+    // from `src/index.ts`. A subclass written outside `@rifty/io` cannot
+    // reach the symbol and therefore cannot inject a custom writable side.
+    // We simulate that here by reaching only through the public option
+    // surface: `_internalWritableSide` is no longer a field on the public
+    // bag, so this construct does NOT override the writable side — it just
+    // silently passes through as an unknown property (Writable's options
+    // don't reject it).
+    const factoryCalled = { hit: false };
+    new Duplex({
+      objectMode: true,
+      // @ts-expect-error — `_internalWritableSide` is intentionally absent
+      // from the public Duplex constructor options after the Symbol-keyed
+      // refactor; only `INTERNAL_WRITABLE_SIDE` (module-private Symbol) is
+      // honoured. The cast below would not type-check if the public bag
+      // still carried the field.
+      _internalWritableSide: () => {
+        factoryCalled.hit = true;
+        return new Writable({});
+      },
+    });
+    expect(factoryCalled.hit).toBe(false);
   });
 });

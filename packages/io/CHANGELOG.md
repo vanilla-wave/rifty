@@ -11,6 +11,14 @@
   received a non-stream value)"`), where previously the call would reach
   the pipe loop and crash later with a cryptic `dest.write is not a
   function`. Real stream subclasses are unaffected.
+- `Duplex`'s internal writable-side factory hook is now keyed by a
+  module-private `Symbol` (`INTERNAL_WRITABLE_SIDE`) instead of the
+  `_internalWritableSide` field on the public constructor options bag.
+  The public option type is plain `ReadableOptions & WritableOptions` —
+  the hook does not appear on it. Only `Transform` (inside `@rifty/io`)
+  imports the symbol directly; subclasses written outside the package
+  cannot reach it, so the type wall between "public option bag" and
+  "internal subclass hook" is real and not just a naming convention.
 - `BuiltinFactory` is now parameterised over its return type
   (`BuiltinFactory<T = unknown> = () => T`) and `registerBuiltin<T>(name,
   factory)` is generic. Registration sites now preserve each builtin's
