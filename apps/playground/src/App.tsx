@@ -2,6 +2,7 @@ import { detectCapabilities } from '@rifty/runtime-js/env/capabilities';
 import { Show, createSignal, onCleanup } from 'solid-js';
 import { type DevModeHandle, startDevMode } from './adapters/devMode.ts';
 import { type RealViteHandle, startRealVite } from './adapters/realVite.ts';
+import { useShellSession } from './adapters/shell-adapter.ts';
 import { useRuntime } from './adapters/useRuntime.ts';
 import { type BootResult, backendLabel, swErrorBannerMessage } from './boot.ts';
 import { CapabilitiesPanel } from './components/CapabilitiesPanel.tsx';
@@ -44,6 +45,11 @@ export function App(props: AppProps) {
   const [realVitePort, setRealVitePort] = createSignal(5174);
   const [swBannerDismissed, setSwBannerDismissed] = createSignal(false);
   const runtime = useRuntime();
+  // Long-lived shell session — drives the terminal in `dev` / `real-vite`
+  // modes so users can `npm install`, `vite dev`, file ops, etc. Output
+  // streams via `onChunk` so progress bars / live logs reach the terminal in
+  // real time. REPL mode keeps using `runtime.handleLine` to eval JS code.
+  const shell = useShellSession({ cwd: '/workspace' });
 
   // SW errors come from the consolidated bootstrap (boot.ts), no longer from
   // an `onMount` race here. If `boot.swError` is present, the bootstrap
@@ -57,6 +63,7 @@ export function App(props: AppProps) {
     void devHandle()?.close();
     void realViteHandle()?.close();
     runtime.dispose();
+    shell.dispose();
   });
 
   function onRun(): void {
@@ -276,8 +283,24 @@ export function App(props: AppProps) {
         >
           <EditorPanel value={source()} onChange={onEditorChange} />
           <TerminalPanel
-            attach={(write) => runtime.attachWriter(write)}
-            onLine={(line) => runtime.handleLine(line)}
+            attach={(write) => {
+              // Both sessions share the same terminal writer. Runtime emits
+              // worker stdout/stderr in REPL mode; shell emits builtin /
+              // command output in `dev` / `real-vite` modes. They don't
+              // contend — `onLine` below routes input to exactly one of
+              // them per mode.
+              runtime.attachWriter(write);
+              shell.attachWriter(write);
+            }}
+            onLine={(line) => {
+              // Dev / real-vite modes drive the shell (M10 Tier 0 wiring).
+              // REPL mode keeps the worker-eval behaviour unchanged.
+              if (mode() === 'dev' || mode() === 'real-vite') {
+                void shell.runLine(line);
+                return;
+              }
+              return runtime.handleLine(line);
+            }}
           />
           <Show when={mode() === 'dev'}>
             <PreviewPanel initialPort={3000} />

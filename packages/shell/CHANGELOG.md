@@ -4,6 +4,17 @@
 
 ### Added
 
+- `Shell.run(line, options?)` now accepts an optional `onChunk(chunk, stream)`
+  callback that fires synchronously for every stdout/stderr write a command
+  produces. Lets the terminal show `npm install` progress bars and
+  `vite dev` request logs in real time instead of receiving the full blob
+  after `await`. `RunResult.stdout` / `RunResult.stderr` still carry the
+  captured payload — the option is additive.
+- `&&` / `||` / `;` compound-chain parsing: `cd app && npm install` now
+  runs both segments with POSIX joiner semantics (`&&` only on success,
+  `||` only on failure, `;` always). Quoted joiners stay literal
+  (`echo 'a && b'` is one argument). Tokenizer emits the new joiners as
+  their own tokens.
 - Initial package (M10): tokenizer, `Shell` dispatcher with built-ins
   (`pwd`, `cd`, `ls`, `cat`, `echo`, `mkdir`, `rm`, `env`, `touch`),
   `>` / `>>` redirection, env-assignment prefix, `registerCommand` for
@@ -24,6 +35,12 @@
   works in command arguments.
 
 ### Loud `NotImplementedError`s (replaced silent drops)
+
+- Bare `&` (background execution) now throws
+  `NotImplementedError('shell.background')` instead of silently merging into
+  the previous argument. Use foreground execution.
+
+(legacy entries — preserved for context)
 
 - `<` input redirect now throws `NotImplementedError('shell.input-redirect')`
   with the M12 work-item hint, instead of being silently dropped by the

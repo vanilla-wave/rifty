@@ -246,6 +246,169 @@ describe('Shell — env expansion in run()', () => {
   });
 });
 
+describe('Shell — onChunk streaming writer', () => {
+  it('invokes onChunk for each stdout write while the command is running', async () => {
+    const sh = new Shell();
+    const chunks: { chunk: string; stream: 'stdout' | 'stderr' }[] = [];
+    sh.registerCommand('drip', async (_args, ctx) => {
+      ctx.stdout.write('one ');
+      ctx.stdout.write('two ');
+      ctx.stdout.write('three\n');
+      return 0;
+    });
+    const r = await sh.run('drip', {
+      onChunk: (chunk, stream) => {
+        chunks.push({ chunk, stream });
+      },
+    });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toBe('one two three\n');
+    expect(chunks).toEqual([
+      { chunk: 'one ', stream: 'stdout' },
+      { chunk: 'two ', stream: 'stdout' },
+      { chunk: 'three\n', stream: 'stdout' },
+    ]);
+  });
+
+  it('invokes onChunk for stderr writes too', async () => {
+    const sh = new Shell();
+    const chunks: { chunk: string; stream: 'stdout' | 'stderr' }[] = [];
+    sh.registerCommand('warn', async (_args, ctx) => {
+      ctx.stderr.write('careful\n');
+      return 0;
+    });
+    await sh.run('warn', {
+      onChunk: (chunk, stream) => {
+        chunks.push({ chunk, stream });
+      },
+    });
+    expect(chunks).toEqual([{ chunk: 'careful\n', stream: 'stderr' }]);
+  });
+
+  it('still returns the captured stdout/stderr blob even with onChunk', async () => {
+    // Backwards compatibility — existing callers that only read the RunResult
+    // must keep seeing the full output, identical to the no-callback path.
+    const sh = new Shell();
+    sh.registerCommand('say', async (_args, ctx) => {
+      ctx.stdout.write('hello\n');
+      return 0;
+    });
+    const r = await sh.run('say', { onChunk: () => {} });
+    expect(r.stdout).toBe('hello\n');
+  });
+
+  it('omitting onChunk preserves the legacy synchronous return-the-blob contract', async () => {
+    // The new option must be additive — calling `run(line)` without options
+    // (the shape every existing call-site uses) must continue to work.
+    const sh = new Shell();
+    const r = await sh.run('echo hi');
+    expect(r.stdout).toBe('hi\n');
+  });
+
+  it('emits redirect-write-failure chunks via onChunk too', async () => {
+    // Redirect failure goes onto stderr; onChunk subscribers should see it
+    // as a live stderr chunk, not only via the returned blob.
+    const failing: FsSync = {
+      existsSync: () => false,
+      readFileBytesSync: () => {
+        throw new Error('no read');
+      },
+      writeFileSync: () => {
+        throw new Error('disk full');
+      },
+      readdirSync: () => [],
+      mkdirSync: () => undefined,
+      rmSync: () => undefined,
+      statSync: () => ({ isFile: false, isDirectory: false }),
+      utimes: () => undefined,
+    };
+    setSyncMirror(failing);
+    const sh = new Shell({ cwd: '/' });
+    const stderrChunks: string[] = [];
+    const r = await sh.run('echo hi > /tmp/out', {
+      onChunk: (chunk, stream) => {
+        if (stream === 'stderr') stderrChunks.push(chunk);
+      },
+    });
+    expect(r.exitCode).not.toBe(0);
+    expect(stderrChunks.join('')).toMatch(/redirect write failed/);
+  });
+});
+
+describe('Shell — compound chains (&&, ||, ;)', () => {
+  it('&&: runs the next segment only if the previous exit was 0', async () => {
+    const sh = new Shell({ cwd: '/' });
+    await sh.run('mkdir -p /work');
+    const r = await sh.run('cd /work && pwd');
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout.trim()).toBe('/work');
+  });
+
+  it('&&: stops the chain when an earlier segment fails', async () => {
+    const sh = new Shell({ cwd: '/' });
+    const r = await sh.run('cd /does-not-exist && echo reached');
+    expect(r.exitCode).not.toBe(0);
+    expect(r.stdout).not.toMatch(/reached/);
+  });
+
+  it('||: runs the next segment only if the previous exit was non-zero', async () => {
+    const sh = new Shell({ cwd: '/' });
+    const r = await sh.run('cd /does-not-exist || echo recovered');
+    expect(r.stdout).toMatch(/recovered/);
+    // Final exit is the exit of the LAST executed segment (the echo, which is 0).
+    expect(r.exitCode).toBe(0);
+  });
+
+  it('||: skips the recovery branch when the first segment succeeded', async () => {
+    const sh = new Shell({ cwd: '/' });
+    const r = await sh.run('echo first || echo second');
+    expect(r.stdout.split('\n').filter(Boolean)).toEqual(['first']);
+  });
+
+  it(';: always runs the next segment regardless of exit code', async () => {
+    const sh = new Shell({ cwd: '/' });
+    const r = await sh.run('cd /does-not-exist ; echo after');
+    // Final exit is the exit of the LAST executed segment (the echo).
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toMatch(/after/);
+  });
+
+  it('does NOT split on && inside single quotes', async () => {
+    const sh = new Shell();
+    const r = await sh.run("echo 'a && b'");
+    expect(r.stdout).toBe('a && b\n');
+  });
+
+  it('does NOT split on || or ; inside double quotes', async () => {
+    const sh = new Shell();
+    const r1 = await sh.run('echo "a || b"');
+    expect(r1.stdout).toBe('a || b\n');
+    const r2 = await sh.run('echo "x ; y"');
+    expect(r2.stdout).toBe('x ; y\n');
+  });
+
+  it('mixes &&, ||, ; in one line', async () => {
+    const sh = new Shell({ cwd: '/' });
+    await sh.run('mkdir -p /m');
+    // cd /m succeeds → echo ok runs; ; → echo done runs always.
+    const r = await sh.run('cd /m && echo ok ; echo done');
+    expect(r.exitCode).toBe(0);
+    const lines = r.stdout.split('\n').filter(Boolean);
+    expect(lines).toEqual(['ok', 'done']);
+  });
+
+  it('streams chunks across segments in order via onChunk', async () => {
+    const sh = new Shell({ cwd: '/' });
+    const chunks: string[] = [];
+    await sh.run('echo a && echo b', {
+      onChunk: (chunk, stream) => {
+        if (stream === 'stdout') chunks.push(chunk);
+      },
+    });
+    expect(chunks.join('')).toBe('a\nb\n');
+  });
+});
+
 describe('touch — mtime is updated for existing files', () => {
   it('bumps mtime on each subsequent touch', async () => {
     const sh = new Shell({ cwd: '/' });

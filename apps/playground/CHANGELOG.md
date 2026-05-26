@@ -13,6 +13,33 @@
 - Runtime cross-origin-isolation guard (`assertCrossOriginIsolated` in `src/boot.ts`): if the page boots without `crossOriginIsolated === true`, paint an inline fatal banner and throw before any SAB-consuming code runs. Defence-in-depth for ADR-0002 in case COOP/COEP headers regress at the host.
 - `bootstrapPlayground()` — single awaited pipeline in `src/boot.ts` that runs the COI guard, `initBackend()` (VFS), and `registerServiceWorker('/sw.js')` in order. `main.tsx` awaits it before `render(...)`, so the App always sees a fully-resolved boot bundle. Closes A-004 (REVIEW_ACTIONS): persistence wiring is in place, plus an e2e reload assertion in `tests/e2e/m0-boot.spec.ts`.
 
+### Added
+
+- `adapters/shell-adapter.ts` — `useShellSession()` hook that owns a
+  long-lived `@rifty/shell` `Shell` and forwards stdout/stderr to the
+  terminal writer via the new `onChunk` callback. App.tsx consumes it in
+  `dev` / `real-vite` modes so users can drive `npm install`, `vite dev`,
+  file ops, and `&&`-chained commands from the terminal in real time.
+  Closes Tier 0 finding 1 in the 2026-05-26 review (`@rifty/shell` was
+  declared as a dep but had zero consumers).
+- `adapters/hmr-bridge.ts` — cross-realm HMR bridge (ADR-0017 phase 1
+  acceptance). `setupHmrBridge({port})` hosts a `BridgedWebSocketServer`
+  on `ws://preview.local:<port>/__hmr`; `createHmrBridgeVitePlugin({port})`
+  injects a vanilla-JS `BroadcastChannel` client into the served
+  `index.html` via `transformIndexHtml`; `realVite.ts` wires
+  `server.watcher.on('change', ...)` to broadcast through the bridge.
+  The iframe HMR client and Vite-side server now share the bridge's
+  wire protocol — no native `WebSocket` involved, so HMR survives the
+  page ↔ iframe realm boundary. Precursor to M11 A-026 (Vite-in-Worker):
+  the migration becomes a realm swap, not a routing rewrite. Closes
+  Tier 2 finding 9 in the 2026-05-26 review (`BridgedWebSocket` was
+  built but had no callsites).
+- `adapters/preview-bridge-wiring.ts` — `mountPlaygroundPreviewBridge()`
+  extracts the byte-identical `setupPreviewBridge` handler that
+  `devMode.ts` and `realVite.ts` each carried in-place. Closes the
+  "Дублированный preview-bridge wiring" finding in the 2026-05-26
+  architecture review (Приложение → playground).
+
 ### Changed
 
 - `App` no longer races a `registerServiceWorker()` call in `onMount`. The SW is registered by `bootstrapPlayground()` before render; failures flow through `BootResult.swError` to the existing dismissible banner. Removes the small window where the REPL was interactive but the preview iframe was not yet routable.

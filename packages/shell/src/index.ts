@@ -11,6 +11,12 @@
  * `registerCommand` from the playground or test harness — keeps shell free of
  * upper-layer dependencies.
  */
-export { Shell, type RunResult, type ShellOptions } from './shell.ts';
+export {
+  Shell,
+  type ChunkStream,
+  type RunOptions,
+  type RunResult,
+  type ShellOptions,
+} from './shell.ts';
 export { tokenize } from './tokenize.ts';
 export type { CommandContext, ShellCommand, Writer } from './types.ts';

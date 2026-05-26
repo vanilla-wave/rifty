@@ -13,6 +13,10 @@
  *   - `|` produces its own token; the shell decides whether it is supported
  *     (currently `NotImplementedError('shell.pipe')`). Without this, a line
  *     like `cat f | grep x` would silently bury the pipe inside an argument.
+ *   - `&&`, `||`, `;` produce their own tokens (compound-chain joiners). The
+ *     dispatcher splits the token list on these and runs each segment with
+ *     POSIX joiner semantics (see `shell.ts`). Inside quotes these stay
+ *     literal — `echo 'a && b'` yields one argument `a && b`.
  *
  * Deliberately NOT supported (kept loud — if a token signals these, the caller
  * is expected to error):
@@ -80,11 +84,23 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
       i++;
       continue;
     }
-    if (ch === '>' || ch === '<' || ch === '|') {
+    if (ch === '>' || ch === '<' || ch === '|' || ch === '&' || ch === ';') {
       let op = ch;
       if (ch === '>' && line[i + 1] === '>') {
         op = '>>';
         i++;
+      } else if (ch === '&' && line[i + 1] === '&') {
+        op = '&&';
+        i++;
+      } else if (ch === '|' && line[i + 1] === '|') {
+        op = '||';
+        i++;
+      } else if (ch === '&') {
+        // Bare `&` (background process) is intentionally not supported. Emit
+        // the token so the dispatcher can decide to reject loudly; without
+        // this, a line like `vite &` would silently drop the `&` into the
+        // tail of an arg.
+        op = '&';
       }
       tokens.push(op);
       i++;
@@ -100,7 +116,9 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
       line[i] !== '\t' &&
       line[i] !== '>' &&
       line[i] !== '<' &&
-      line[i] !== '|'
+      line[i] !== '|' &&
+      line[i] !== '&' &&
+      line[i] !== ';'
     ) {
       const c = line[i]!;
       if (c === "'") {
