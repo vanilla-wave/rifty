@@ -43,14 +43,6 @@ describe('OpfsFsSync (Node test env)', () => {
   // follow-up; impossible to fake in Node without writing a stub that
   // would mask real bugs.
   it.skip('reads its own writes through a sync access handle (browser Worker only)', () => {});
-
-  it.skip('directory ops throw NotImplementedError with the documented hint', () => {
-    // In a real Worker we still expect:
-    //   readdirSync / mkdirSync / rmSync → NotImplementedError
-    //     ('OpfsFsSync.<method>',
-    //      'directory ops require an async bootstrap; use OpfsVfs for those')
-    // Covered indirectly by code review until the e2e harness exists.
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -291,5 +283,149 @@ describe('OpfsFsSync.utimes (ADR-0029)', () => {
     await fs.refreshIndex();
     fs.utimes('/d', 10, 42);
     expect(fs.statSync('/d').mtime).toBe(42);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// In-memory dir-tree mirror — readdirSync / mkdirSync / rmSync. Mirrors what
+// `MemoryFsSync` does for the same methods. The async OPFS persist is
+// fire-and-forget; we assert against the in-memory mirror (the source of
+// truth for sync callers) and rely on the fake root's permissive
+// `removeEntry` / `getDirectoryHandle` to not throw spuriously.
+// ---------------------------------------------------------------------------
+
+describe('OpfsFsSync dir-tree mirror — readdirSync / mkdirSync / rmSync', () => {
+  beforeEach(() => {
+    vi.spyOn(OpfsFsSync, 'isSupported').mockReturnValue(true);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('readdirSync(/) lists entries seeded by the warm walk, sorted', async () => {
+    const root = buildFakeRoot({
+      files: new Map([
+        ['/b.txt', { bytes: new Uint8Array([1]) }],
+        ['/a.txt', { bytes: new Uint8Array([2]) }],
+      ]),
+      dirs: new Set(['/', '/sub']),
+    });
+    const fs = new OpfsFsSync(root);
+    await fs.refreshIndex();
+    expect(fs.readdirSync('/')).toEqual(['a.txt', 'b.txt', 'sub']);
+  });
+
+  it('readdirSync on a non-directory throws ENOTDIR', async () => {
+    const root = buildFakeRoot({
+      files: new Map([['/file.txt', { bytes: new Uint8Array([1]) }]]),
+      dirs: new Set(['/']),
+    });
+    const fs = new OpfsFsSync(root);
+    await fs.refreshIndex();
+    expect(() => fs.readdirSync('/file.txt')).toThrow(VfsError);
+    try {
+      fs.readdirSync('/file.txt');
+    } catch (err) {
+      expect((err as VfsError).code).toBe('ENOTDIR');
+    }
+  });
+
+  it('readdirSync on an unknown path throws ENOENT', async () => {
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root);
+    await fs.refreshIndex();
+    expect(() => fs.readdirSync('/missing')).toThrow(VfsError);
+    try {
+      fs.readdirSync('/missing');
+    } catch (err) {
+      expect((err as VfsError).code).toBe('ENOENT');
+    }
+  });
+
+  it('mkdirSync with recursive creates parents and the leaf', async () => {
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root);
+    await fs.refreshIndex();
+    fs.mkdirSync('/a/b/c', { recursive: true });
+    expect(fs.existsSync('/a')).toBe(true);
+    expect(fs.existsSync('/a/b')).toBe(true);
+    expect(fs.existsSync('/a/b/c')).toBe(true);
+    expect(fs.readdirSync('/a')).toEqual(['b']);
+    expect(fs.readdirSync('/a/b')).toEqual(['c']);
+  });
+
+  it('mkdirSync without recursive on missing parent throws ENOENT', async () => {
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root);
+    await fs.refreshIndex();
+    expect(() => fs.mkdirSync('/missing/leaf', {})).toThrow(VfsError);
+    try {
+      fs.mkdirSync('/missing/leaf', {});
+    } catch (err) {
+      expect((err as VfsError).code).toBe('ENOENT');
+    }
+  });
+
+  it('mkdirSync without recursive on existing dir throws EEXIST', async () => {
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root);
+    await fs.refreshIndex();
+    fs.mkdirSync('/d', {});
+    expect(() => fs.mkdirSync('/d', {})).toThrow(VfsError);
+    try {
+      fs.mkdirSync('/d', {});
+    } catch (err) {
+      expect((err as VfsError).code).toBe('EEXIST');
+    }
+  });
+
+  it('mkdirSync recursive is idempotent on existing dirs', async () => {
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root);
+    await fs.refreshIndex();
+    fs.mkdirSync('/d', { recursive: true });
+    expect(() => fs.mkdirSync('/d', { recursive: true })).not.toThrow();
+  });
+
+  it('rmSync removes a single empty directory and it disappears from readdirSync', async () => {
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root);
+    await fs.refreshIndex();
+    fs.mkdirSync('/a', { recursive: true });
+    fs.mkdirSync('/a/b', { recursive: true });
+    expect(fs.readdirSync('/a')).toEqual(['b']);
+    fs.rmSync('/a/b', {});
+    expect(fs.readdirSync('/a')).toEqual([]);
+    expect(fs.existsSync('/a/b')).toBe(false);
+  });
+
+  it('rmSync recursive removes a populated subtree', async () => {
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root);
+    await fs.refreshIndex();
+    fs.mkdirSync('/a/b/c', { recursive: true });
+    fs.rmSync('/a', { recursive: true });
+    expect(fs.existsSync('/a')).toBe(false);
+    expect(fs.existsSync('/a/b')).toBe(false);
+    expect(fs.existsSync('/a/b/c')).toBe(false);
+  });
+
+  it('rmSync on a non-empty dir without recursive throws ENOTEMPTY (Node parity)', async () => {
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root);
+    await fs.refreshIndex();
+    fs.mkdirSync('/a/b', { recursive: true });
+    expect(() => fs.rmSync('/a', {})).toThrow(VfsError);
+    try {
+      fs.rmSync('/a', {});
+    } catch (err) {
+      expect((err as VfsError).code).toBe('ENOTEMPTY');
+    }
+  });
+
+  it('rmSync on missing path throws ENOENT, force suppresses it', async () => {
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const fs = new OpfsFsSync(root);
+    await fs.refreshIndex();
+    expect(() => fs.rmSync('/missing', {})).toThrow(VfsError);
+    expect(() => fs.rmSync('/missing', { force: true })).not.toThrow();
   });
 });
