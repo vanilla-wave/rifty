@@ -12,9 +12,8 @@
  */
 
 import { type DevServer, startDevServer } from '@rifty-examples/vite-like-dev';
-import { dispatchToPort } from '@rifty/net';
-import { type SerializedRequest, setupPreviewBridge } from '@rifty/service-worker';
 import { syncMirror } from '@rifty/vfs';
+import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
 
 const enc = new TextEncoder();
 
@@ -64,24 +63,9 @@ export async function startDevMode(options: DevModeOptions = {}): Promise<DevMod
 
   const devServer = await startDevServer({ root, port, watchInterval: 100 });
 
-  const tearBridge = setupPreviewBridge(async (req: SerializedRequest) => {
-    const headers = new Headers(req.headers);
-    const init: RequestInit = { method: req.method, headers };
-    if (req.body && req.method !== 'GET' && req.method !== 'HEAD') {
-      const copy = new ArrayBuffer(req.body.byteLength);
-      new Uint8Array(copy).set(req.body);
-      init.body = copy;
-    }
-    const response = await dispatchToPort(req.port, new Request(req.url, init));
-    // ADR-0017: pass the ReadableStream through to the bridge; the bridge
-    // transfers it when supported, falls back to buffering on older Safari.
-    return {
-      status: response.status,
-      statusText: response.statusText,
-      headers: Object.fromEntries(response.headers),
-      body: response.body,
-    };
-  });
+  // Shared adapter wiring — see `preview-bridge-wiring.ts`. ADR-0017 phase 1
+  // streaming flows through as a `ReadableStream` when supported.
+  const tearBridge = mountPlaygroundPreviewBridge();
 
   return {
     devServer,

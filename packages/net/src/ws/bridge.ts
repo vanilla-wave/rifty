@@ -35,7 +35,18 @@ interface BridgeFrame {
 }
 
 const CHANNEL_PREFIX = 'rifty:ws:';
-function channelNameFor(url: string): string {
+
+/**
+ * Derive the `BroadcastChannel` name used by the bridge for a given WS url.
+ *
+ * Exposed publicly so non-`@rifty/net` consumers — e.g. an iframe HMR client
+ * shipped to the preview iframe as a vanilla `<script>` — can implement the
+ * client side of the bridge without depending on this package. Production
+ * code in the playground uses `BridgedWebSocket` directly; this helper is
+ * the seam for inlined / hand-rolled clients that ride the same protocol.
+ * (Closes ADR-0017 phase 1 — see `apps/playground/src/adapters/hmr-bridge.ts`.)
+ */
+export function channelNameFor(url: string): string {
   // Normalise: strip query/fragment so client and server agree.
   const u = new URL(url);
   return `${CHANNEL_PREFIX}${u.host}${u.pathname}`;

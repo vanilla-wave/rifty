@@ -1,4 +1,3 @@
-import { dispatchToPort } from '@rifty/net';
 /**
  * Real Vite, running in the playground's main-thread realm.
  *
@@ -21,8 +20,8 @@ import { dispatchToPort } from '@rifty/net';
  * (so the UI can show them in the terminal). We intentionally never silently
  * stub or swallow — every gap throws.
  */
-import { RegistryClient, install } from '@rifty/npm-client';
 import '@rifty/net/register-builtins';
+import { RegistryClient, install } from '@rifty/npm-client';
 // The four `./builtins/*` subpath imports below are part of @rifty/runtime-js's
 // public surface (see ADR 0018).
 import { Buffer } from '@rifty/runtime-js/builtins/buffer';
@@ -31,9 +30,10 @@ import { installProcessGlobals } from '@rifty/runtime-js/builtins/process';
 import { installTimerGlobals } from '@rifty/runtime-js/builtins/timers';
 import { createModuleLoader } from '@rifty/runtime-js/loader';
 import type { SyncVfs } from '@rifty/runtime-js/loader';
-import { type SerializedRequest, setupPreviewBridge } from '@rifty/service-worker';
 import { dirname, normalizePath, syncMirror } from '@rifty/vfs';
 import { esbuildShimFiles, rollupShimFiles } from './esbuild-shim.ts';
+import { type HmrBridgeHandle, createHmrBridgeVitePlugin, setupHmrBridge } from './hmr-bridge.ts';
+import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
 import { proxiedRegistryFetch } from './registry-fetch.ts';
 import { SyncMirrorVfs } from './sync-mirror-vfs.ts';
 
@@ -189,6 +189,15 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
     createServer: (cfg: ViteUserConfig) => Promise<ViteDevServer>;
   };
 
+  // Spin up the cross-realm HMR bridge **before** Vite starts so the
+  // plugin's `transformIndexHtml` hook (the only entry point that needs the
+  // channel name) sees a stable `port`. The bridge owns the page-realm
+  // `BridgedWebSocketServer` that the preview iframe's inlined HMR client
+  // connects to over `BroadcastChannel` — see ADR-0017 phase 1 acceptance
+  // and `apps/playground/src/adapters/hmr-bridge.ts`.
+  const hmrBridge: HmrBridgeHandle = setupHmrBridge({ port });
+  log(`[real-vite] hmr bridge ready at ${hmrBridge.url}\n`);
+
   log(`[real-vite] starting dev server on port ${port}…\n`);
   const server = await viteNs.createServer({
     root,
@@ -196,6 +205,13 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
       port,
       strictPort: true,
       middlewareMode: false,
+      // Vite's native HMR client opens a browser-native `WebSocket`, which
+      // can't reach an in-realm server and can't be intercepted by the SW.
+      // The cross-realm bridge replaces it (ADR-0017 phase 1): the preview
+      // iframe runs a `BroadcastChannel`-backed client injected by our
+      // `rifty:hmr-bridge` Vite plugin. The Vite-native HMR machinery stays
+      // off — Vite still does its module-graph invalidation work on
+      // `watcher.change`, we just deliver the notification ourselves.
       hmr: false,
       // Requests come in via the SW preview-bridge with `Host: preview.local`
       // (or undefined). Disable Vite's host allow-list so it serves them.
@@ -205,36 +221,29 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
     appType: 'spa',
     clearScreen: false,
     optimizeDeps: { disabled: true } as unknown as ViteUserConfig['optimizeDeps'],
-    plugins: [],
+    plugins: [createHmrBridgeVitePlugin({ port })],
   });
   await server.listen();
   log(`[real-vite] vite is listening — preview at /preview/${port}/\n`);
 
-  const tearBridge = setupPreviewBridge(async (req: SerializedRequest) => {
-    const headers = new Headers(req.headers);
-    const init: RequestInit = { method: req.method, headers };
-    if (req.body && req.method !== 'GET' && req.method !== 'HEAD') {
-      const copy = new ArrayBuffer(req.body.byteLength);
-      new Uint8Array(copy).set(req.body);
-      init.body = copy;
-    }
-    const response = await dispatchToPort(req.port, new Request(req.url, init));
-    // ADR-0017: hand the streaming body straight to the bridge. It picks the
-    // transferable-ReadableStream path when supported, falling back to a
-    // buffered Uint8Array otherwise. `response.body` may be `null` for
-    // intentionally empty responses (e.g. 204).
-    return {
-      status: response.status,
-      statusText: response.statusText,
-      headers: Object.fromEntries(response.headers),
-      body: response.body,
-    };
+  // Wire Vite's file watcher into the bridge. Vite owns the change-detection
+  // primitive (chokidar / fs.watch over `root`); we just forward each event
+  // through `BridgedWebSocketServer.broadcast` so every subscribed iframe
+  // receives the HMR payload.
+  server.watcher?.on('change', (file) => {
+    hmrBridge.broadcast(JSON.stringify({ type: 'update', path: file }));
   });
+
+  // Shared adapter wiring — see `preview-bridge-wiring.ts`. ADR-0017 phase 1
+  // streaming flows through as a `ReadableStream` when supported, with a
+  // buffered fallback for older runtimes.
+  const tearBridge = mountPlaygroundPreviewBridge();
 
   return {
     port,
     async close() {
       tearBridge();
+      hmrBridge.close();
       try {
         await server.close();
       } catch (err) {
@@ -256,7 +265,13 @@ interface ViteUserConfig {
   plugins?: unknown[];
 }
 
+interface ViteWatcher {
+  on(event: 'change', cb: (file: string) => void): void;
+}
+
 interface ViteDevServer {
   listen(): Promise<unknown>;
   close(): Promise<void>;
+  /** chokidar-shaped watcher exposed by Vite — present in dev mode. */
+  watcher?: ViteWatcher;
 }

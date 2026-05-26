@@ -14,6 +14,7 @@ export {
   BridgedWebSocket,
   BridgedWebSocketServer,
   BridgedWebSocketConnection,
+  channelNameFor,
   createCrossRealmBridge,
 } from './bridge.ts';
 export type { CrossRealmBridge } from './bridge.ts';
