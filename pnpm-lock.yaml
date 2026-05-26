@@ -108,9 +108,6 @@ importers:
       '@rifty/io':
         specifier: workspace:*
         version: link:../io
-      '@rifty/runtime-js':
-        specifier: workspace:*
-        version: link:../runtime-js
 
   packages/npm-client:
     dependencies:

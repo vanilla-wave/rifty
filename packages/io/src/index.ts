@@ -8,6 +8,8 @@
  *   - `Buffer` factory + per-instance method patching.
  *   - Stream primitives: `Readable`, `Writable`, `Duplex`, `Transform`,
  *     `PassThrough`, plus `pipeline` and `finished` helpers.
+ *   - `node:` builtin registry (`registerBuiltin` / `loadBuiltin` /
+ *     `isBuiltinSpecifier` / `listBuiltins`) — see ADR-0035.
  *
  * Higher layers re-export these through their Node-shape adapters (e.g.
  * `runtime-js/src/builtins/{events,buffer,stream}.ts`).
@@ -29,3 +31,10 @@ export {
   type WritableOptions,
   type TransformOptions,
 } from './streams/index.ts';
+export {
+  registerBuiltin,
+  isBuiltinSpecifier,
+  loadBuiltin,
+  listBuiltins,
+  type BuiltinFactory,
+} from './builtin-registry.ts';

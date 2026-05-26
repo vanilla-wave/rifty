@@ -1,9 +1,15 @@
 /**
  * Built-in registry — the source of truth for `node:<name>` lookups.
  *
- * Split out from `index.ts` to break the cycle with `module.ts`, which needs
- * `listBuiltins()` to expose `Module.builtinModules` and would otherwise
- * import-cycle through `index.ts`.
+ * Lives in `@rifty/io` (per ADR-0035) so higher layers can register their
+ * Node-shape exports via a forward import. `@rifty/runtime-js` calls
+ * `loadBuiltin` from its module loader; `@rifty/net` calls `registerBuiltin`
+ * from its side-effect entrypoint. Both depend on `@rifty/io`, so the layer
+ * direction stays top-down.
+ *
+ * The registry is a process-wide singleton: one `factories` map and one
+ * `cache` map per realm. Re-registering the same name discards the cached
+ * namespace so the next `loadBuiltin` call calls the new factory.
  */
 
 export type BuiltinFactory = () => Record<string, unknown>;
@@ -12,10 +18,11 @@ const cache: Map<string, Record<string, unknown>> = new Map();
 const factories: Record<string, BuiltinFactory> = {};
 
 /**
- * Higher-layer packages (net, etc.) call this to plug their Node-shape
- * exports into the loader so user code can `require('node:http')`. Keeping
- * the registration here decouples runtime-js from the higher layers — see
- * the layering rules in CLAUDE.md.
+ * Higher-layer packages (`@rifty/net`, future `@rifty/wasi` builtins, etc.)
+ * call this to plug their Node-shape exports into the loader so user code
+ * can `require('node:http')`. Keeping the registry here decouples
+ * `@rifty/runtime-js` from those higher layers — see the layering rules in
+ * CLAUDE.md and the rationale in ADR-0035.
  */
 export function registerBuiltin(name: string, factory: BuiltinFactory): void {
   factories[name] = factory;

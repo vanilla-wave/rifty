@@ -17,7 +17,6 @@
     "test:run": "cd ../.. && vitest run --project unit packages/net"
   },
   "dependencies": {
-    "@rifty/io": "workspace:*",
-    "@rifty/runtime-js": "workspace:*"
+    "@rifty/io": "workspace:*"
   }
 }

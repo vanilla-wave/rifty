@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **ADR-0035: reverse import on `@rifty/runtime-js` removed.**
+  `src/register-builtins.ts` now imports `registerBuiltin` from
+  `@rifty/io` instead of `@rifty/runtime-js`; `package.json` drops the
+  `@rifty/runtime-js` dependency. The `register-builtins.ts`
+  side-effect pattern is unchanged — `net` still owns the
+  `node:net`/`node:http`/`node:https` registrations — only the source
+  of the registry function has moved. Closes the residual reverse-import
+  edge noted in ADR-0012's implementation note and `TASKS.md`.
+
 ### Changed
 
 - **ADR-0034 (D-B):** `IncomingMessage` and `IncomingMessageFromFetch` now sit

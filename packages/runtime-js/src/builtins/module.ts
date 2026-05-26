@@ -11,9 +11,8 @@
  * the time of the call (so net's `node:http` shows up once @rifty/net has
  * registered itself).
  */
-import { NotImplementedError } from '@rifty/io';
+import { NotImplementedError, listBuiltins } from '@rifty/io';
 import { publishRuntimeGlobal, readRuntimeGlobal } from '../internal/worker-globals.ts';
-import { listBuiltins } from './registry.ts';
 
 interface RequireFn {
   (id: string): unknown;

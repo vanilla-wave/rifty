@@ -1,3 +1,4 @@
+import { registerBuiltin } from '@rifty/io';
 import assertModule, { AssertionError, strict as assertStrict } from './assert.ts';
 import bufferModule, { Buffer } from './buffer.ts';
 import childProcessModule from './child_process.ts';
@@ -10,9 +11,11 @@ import cryptoModule from './crypto.ts';
  * bindings, so the same factory output works for both `require('node:path')`
  * and `import path from 'node:path'`.
  *
- * The registry itself lives in `./registry.ts` to break the
- * `index.ts ↔ module.ts` cycle (module.ts needs `listBuiltins()` for
- * `Module.builtinModules`).
+ * The registry implementation lives in `@rifty/io/builtin-registry.ts`
+ * (ADR-0035). This barrel re-exports its public surface so internal
+ * runtime-js callers (`module-loader/loader.ts`, `module-loader/resolver.ts`,
+ * `builtins/module.ts`) and `src/index.ts`'s public re-exports continue to
+ * use a single import path.
  */
 import { EventEmitter, once as eventsOnce } from './events.ts';
 import fsModule, { promises as fsPromises } from './fs.ts';
@@ -34,7 +37,6 @@ import pathModule from './path.ts';
 import perfHooksModule from './perf_hooks.ts';
 import { riftyProcess } from './process.ts';
 import querystringModule from './querystring.ts';
-import { registerBuiltin } from './registry.ts';
 import streamModule from './stream.ts';
 import stringDecoderModule from './string_decoder.ts';
 import timersModule from './timers.ts';
@@ -44,15 +46,15 @@ import utilModule from './util.ts';
 import workerThreadsModule from './worker_threads.ts';
 
 // Re-export the registry surface so existing consumers
-// (`@rifty/runtime-js`, `@rifty/net/register-builtins`, the module loader)
-// keep their import paths.
+// (`@rifty/runtime-js` public index, the module loader/resolver,
+// `builtins/module.ts`) keep their import paths.
 export {
   isBuiltinSpecifier,
   listBuiltins,
   loadBuiltin,
   registerBuiltin,
   type BuiltinFactory,
-} from './registry.ts';
+} from '@rifty/io';
 
 registerBuiltin('path', () => pathModule as unknown as Record<string, unknown>);
 registerBuiltin('events', () => {

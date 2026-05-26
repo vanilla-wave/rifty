@@ -4,6 +4,18 @@
 
 ### Added
 
+- **ADR-0035: `node:` builtin registry.** New module
+  `src/builtin-registry.ts` holds the process-wide `name → factory` cache
+  that backs `node:<name>` lookups. Public surface: `registerBuiltin`,
+  `loadBuiltin`, `isBuiltinSpecifier`, `listBuiltins`, and the
+  `BuiltinFactory` type, re-exported from `src/index.ts`. Implementation
+  moved verbatim from `@rifty/runtime-js/src/builtins/registry.ts` — same
+  cache semantics, same `node:` prefix stripping, same re-register clears
+  cache behaviour. The move closes the `@rifty/net → @rifty/runtime-js`
+  reverse import that survived ADR-0012; both packages now reach the
+  registry through `@rifty/io` (forward-only). See ADR-0035 for the
+  rationale and alternatives.
+
 - `Readable.from(iterable, options?)` now accepts a second
   `ReadableOptions` argument and detects byte vs object mode from the first
   chunk when `options.objectMode` is not supplied: an iterable of

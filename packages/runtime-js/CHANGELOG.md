@@ -4,6 +4,18 @@
 
 ### Changed
 
+- **ADR-0035: builtin registry sourced from `@rifty/io`.** The
+  `name → factory` cache that backs `node:<name>` lookups
+  (`registerBuiltin`, `loadBuiltin`, `isBuiltinSpecifier`, `listBuiltins`,
+  `BuiltinFactory`) now lives in `@rifty/io`. The top-level public
+  re-exports from `@rifty/runtime-js`'s `src/index.ts` are unchanged;
+  `src/builtins/index.ts` re-exports the surface from `@rifty/io` so
+  internal callers (`module-loader/loader.ts`, `module-loader/resolver.ts`,
+  `builtins/module.ts`) keep their existing import paths. The internal
+  module `src/builtins/registry.ts` is deleted (was not on the
+  subpath-exports list, so no public path is broken). See ADR-0035 for
+  the rationale.
+
 - **ADR-0034 (D-B):** the re-exported `node:stream` surface from `@rifty/io`
   (via `src/builtins/stream.ts` shim) now matches Node's documented
   contract — `_readableState`/`_writableState` containers, `Readable.read(n)`
