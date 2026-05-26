@@ -106,9 +106,10 @@ export interface PreviewInterceptor {
 
 /**
  * Install the SW-side fetch + message listeners and return a teardown handle.
- * Internal state (ready set, waiters, mismatch-warn dedup) lives inside the
- * registry returned by `createReadyClientsRegistry` so multiple interceptors
- * don't share state in tests.
+ * Internal state (ready set, waiters, mismatch-warn dedup, outbound
+ * request-id counter) lives inside the registry returned by
+ * `createReadyClientsRegistry` so multiple interceptors don't share state
+ * in tests.
  *
  * Production callers should prefer `installPreviewInterceptor`, which calls
  * this with defaults.

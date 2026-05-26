@@ -28,8 +28,6 @@ import {
 } from './protocol.ts';
 import type { ReadyClientsRegistry } from './ready-clients.ts';
 
-let nextRequestId = 1;
-
 /**
  * Forward a matched preview fetch to the owning client and translate the
  * client's reply back into a {@link Response}. Returns 503 when the owner
@@ -69,7 +67,7 @@ export async function routePreview(
     request.method === 'GET' || request.method === 'HEAD'
       ? null
       : new Uint8Array(await request.arrayBuffer());
-  const requestId = nextRequestId++;
+  const requestId = registry.nextRequestId();
   const serialised: SerializedRequest = {
     port: match.port,
     url: `${synthesizePreviewUrl(match.path)}${new URL(request.url).search}`,

@@ -37,6 +37,13 @@ export interface ReadyClientsRegistry {
    * `rifty:preview:ready` / `rifty:preview:goodbye` are ignored.
    */
   handleMessage(clientId: string, data: { type?: unknown; version?: unknown }): void;
+  /**
+   * Allocate the next outbound request id for `rifty:preview:request` frames
+   * dispatched on behalf of this interceptor. Each registry owns its own
+   * counter so multiple interceptors in the same process (tests) don't share
+   * monotonically-increasing state.
+   */
+  nextRequestId(): number;
 }
 
 export interface ReadyClientsLogger {
@@ -61,6 +68,7 @@ export function createReadyClientsRegistry(
   const waiters = new Map<string, Set<ReadyWaiter>>();
   const mismatched = new Set<string>();
   const warned = new Set<string>();
+  let nextRequestIdCounter = 1;
 
   function markReady(id: string): void {
     ready.add(id);
@@ -146,6 +154,9 @@ export function createReadyClientsRegistry(
       } else {
         markGoodbye(clientId);
       }
+    },
+    nextRequestId(): number {
+      return nextRequestIdCounter++;
     },
   };
 }
