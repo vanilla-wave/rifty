@@ -16,6 +16,7 @@
  * for a `WorkerOwnerResolver` that consults the cross-realm port registry.
  */
 
+import { synthesizePreviewUrl } from '@rifty/io';
 import type { PreviewOwnerResolver } from './owner-resolver.ts';
 import {
   SW_ERROR_PROTOCOL_VERSION_MISMATCH,
@@ -71,7 +72,7 @@ export async function routePreview(
   const requestId = nextRequestId++;
   const serialised: SerializedRequest = {
     port: match.port,
-    url: `http://preview.local${match.path}${new URL(request.url).search}`,
+    url: `${synthesizePreviewUrl(match.path)}${new URL(request.url).search}`,
     method: request.method,
     headers: Object.fromEntries(request.headers),
     body: bodyBytes,

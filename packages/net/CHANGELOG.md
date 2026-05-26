@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **ADR-0036:** the `/preview/<port>/...` URL scheme and `preview.local`
+  synthetic host are now documented in `@rifty/io/preview-protocol`
+  rather than as a hand-written prose comment in `src/registry.ts`. The
+  doc comment cross-references the shared module so adapters that need
+  to parse a preview URL or synthesise the upstream form know where the
+  canonical primitives live. No `net` runtime behaviour changes — `net`
+  did not parse preview URLs itself; the addressing was duplicated
+  implicitly between SW's regex and `net`'s prose. ADR-0036 closes the
+  silent-drift hazard.
+
 ### Fixed
 
 - **ADR-0035: reverse import on `@rifty/runtime-js` removed.**

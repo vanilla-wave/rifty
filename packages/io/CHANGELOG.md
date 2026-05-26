@@ -4,6 +4,21 @@
 
 ### Added
 
+- **ADR-0036: preview-protocol addressing module.** New module
+  `src/preview-protocol.ts` owns the `/preview/<port>/...` URL convention
+  and the synthetic `preview.local` host shared between
+  `@rifty/service-worker` (SW-side intercept) and `@rifty/net` (port
+  registry). Public surface: `PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`,
+  `synthesizePreviewUrl(path)`, `parsePreviewPath(path)` — all re-exported
+  from `src/index.ts`. Closes the silent-drift hazard between the SW's
+  inlined regex and the `net.registry` doc-comment cross-reference;
+  future routing-scheme changes are a single-edit change here.
+  Orthogonal to ADR-0031 (`SW_PROTOCOL_VERSION` on every wire frame) —
+  that pins the *frame format*, this pins the *addressing scheme*. New
+  unit suite `src/preview-protocol.test.ts` pins the regex, host literal,
+  URL synthesis, and the suffix-default behaviour (`/preview/<port>`
+  with no trailing slash returns `rest: '/'`).
+
 - **ADR-0035: `node:` builtin registry.** New module
   `src/builtin-registry.ts` holds the process-wide `name → factory` cache
   that backs `node:<name>` lookups. Public surface: `registerBuiltin`,

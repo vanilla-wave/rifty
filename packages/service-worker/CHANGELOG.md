@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **ADR-0036:** preview-protocol addressing (`/preview/<port>/...` URL
+  scheme + `preview.local` synthetic host) now imported from `@rifty/io`
+  instead of inlined. `preview-bridge.ts` drops its private
+  `PREVIEW_PREFIX_RE` constant; `matchPreviewUrl` is now a thin
+  shape-adapter over `@rifty/io.parsePreviewPath` (preserves the
+  `{port, path}` shape SW callers use). `route-preview.ts` calls
+  `synthesizePreviewUrl(match.path)` instead of building
+  `http://preview.local${...}` inline. `package.json` gains
+  `@rifty/io: workspace:*` (was zero workspace deps). Wire-frame
+  behaviour unchanged — this is a pure addressing-primitive refactor;
+  ADR-0031 versioning is orthogonal.
+
 ### Added
 
 - `registerServiceWorker(scriptUrl, options)` helper for the host.

@@ -145,7 +145,11 @@ importers:
         specifier: workspace:*
         version: link:../vfs
 
-  packages/service-worker: {}
+  packages/service-worker:
+    dependencies:
+      '@rifty/io':
+        specifier: workspace:*
+        version: link:../io
 
   packages/shell:
     dependencies:
