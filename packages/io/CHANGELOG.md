@@ -4,6 +4,21 @@
 
 ### Added
 
+- `Readable.from(iterable, options?)` now accepts a second
+  `ReadableOptions` argument and detects byte vs object mode from the first
+  chunk when `options.objectMode` is not supplied: an iterable of
+  `Buffer`/`Uint8Array`/`string` chunks yields a byte-mode stream, an
+  iterable of objects (or an async iterable, which we can't peek
+  synchronously) yields an object-mode stream. Explicit `options.objectMode`
+  always wins. `highWaterMark` and `encoding` are forwarded. Non-iterable
+  input now throws `TypeError` synchronously (Node contract: bad input
+  surfaces before any state is created). Both sync and async iterables are
+  accepted via separate code paths (no implicit cast). New unit suite
+  `readable.from.test.ts` plus parity case `stream/readable-from-options.case.ts`.
+  Note: Node always defaults `objectMode` to `true` regardless of element
+  type; rifty's detection diverges intentionally per the 2026-05-26 streams
+  review — explicit `options.objectMode` is the cross-runtime portable path.
+
 - `Readable.unpipe(dest?)` — detach a single `pipe(dest)` wiring or all of
   them. Mirrors Node's `Readable.prototype.unpipe`. `pipe(dest)` now also
   installs symmetric error wiring (source-error tears down the dest hooks,
@@ -23,11 +38,15 @@
   listeners it attaches on every termination path — natural EOF, consumer
   `break`/`return`, or consumer `throw`. The iterator is hand-rolled (rather
   than `async function*`) so its `return()` and `throw()` hooks run the same
-  cleanup. On early termination (before EOF) the source is `pause()`d and
-  `destroy()`ed, matching Node's iterator semantics so producers learn the
-  consumer is gone. Previously `for await` left listeners attached after the
-  loop; repeated iteration and early `break` both leaked. New unit suite
-  `readable.async-iterator.test.ts` plus parity case
+  cleanup. On early termination (before the consumer drained everything) the
+  source is `pause()`d and `destroy()`ed, matching Node's iterator semantics
+  so producers learn the consumer is gone. The "drained vs early-terminated"
+  test is tracked via a `naturallyDrained` flag that's set only when `next()`
+  returned `{done:true}` — distinguishing the case where the consumer
+  finished the iteration from the case where the source happened to emit
+  `end` before the consumer broke out. Previously `for await` left listeners
+  attached after the loop; repeated iteration and early `break` both leaked.
+  New unit suite `readable.async-iterator.test.ts` plus parity case
   `stream/async-iterator-cleanup.case.ts`.
 
 ### Changed

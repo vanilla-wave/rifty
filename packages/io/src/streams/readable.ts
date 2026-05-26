@@ -579,9 +579,13 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     let resolveNext: ((v: IteratorResult<unknown>) => void) | null = null;
     let rejectNext: ((err: unknown) => void) | null = null;
     const pending: unknown[] = [];
-    let done = false;
+    let sourceEnded = false;
     let error: unknown = null;
     let cleanedUp = false;
+    /** Set only when `next()` returns `{done:true}` because the consumer fully
+     *  drained the stream — distinguishes natural completion from early
+     *  termination (break/return/throw before draining). */
+    let naturallyDrained = false;
 
     const onData = (chunk: unknown): void => {
       if (resolveNext) {
@@ -594,11 +598,14 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       }
     };
     const onEnd = (): void => {
-      done = true;
-      if (resolveNext) {
+      sourceEnded = true;
+      // Only wake a pending next() if there's nothing buffered — otherwise
+      // the consumer is mid-iteration and will see end naturally.
+      if (pending.length === 0 && resolveNext) {
         const r = resolveNext;
         resolveNext = null;
         rejectNext = null;
+        naturallyDrained = true;
         r({ value: undefined, done: true });
       }
     };
@@ -618,11 +625,11 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       this.off('data', onData);
       this.off('end', onEnd);
       this.off('error', onError);
-      // Pause the source so it stops emitting; if iteration ended before EOF
-      // we additionally destroy the stream — Node's iterator return() does
-      // this so producers learn the consumer is gone.
+      // Pause the source so it stops emitting; if iteration ended before the
+      // consumer drained everything we additionally destroy the stream — Node's
+      // iterator return() does this so producers learn the consumer is gone.
       this.pause();
-      if (!done && !error && !this._readableState.destroyed) this.destroy();
+      if (!naturallyDrained && !error && !this._readableState.destroyed) this.destroy();
     };
 
     this.on('data', onData);
@@ -640,7 +647,8 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
         if (pending.length > 0) {
           return Promise.resolve({ value: pending.shift(), done: false });
         }
-        if (done) {
+        if (sourceEnded) {
+          naturallyDrained = true;
           cleanup();
           return Promise.resolve({ value: undefined, done: true });
         }
@@ -670,11 +678,106 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     return iter;
   }
 
-  static from(iter: Iterable<unknown> | AsyncIterable<unknown>): Readable {
-    const r = new Readable({ objectMode: true });
+  /**
+   * Create a `Readable` from any sync or async iterable.
+   *
+   * Mode detection (when `options.objectMode` is NOT supplied):
+   *   - first chunk is a `string`, `Uint8Array`, or `Buffer` → byte mode
+   *     (`objectMode: false`);
+   *   - otherwise → object mode.
+   *
+   * When `options.objectMode` IS supplied it always wins — the caller knows.
+   *
+   * Non-iterable inputs throw `TypeError` synchronously (Node's contract).
+   *
+   * @param iter Any `Iterable` or `AsyncIterable`. A bare `string` qualifies
+   *   (it iterates char-by-char) and `Buffer`/`Uint8Array` also qualify
+   *   (they iterate byte-by-byte). Whether you want chars-as-chunks or
+   *   bytes-as-chunks is up to you — pass the iterable shape you want.
+   * @param options Optional `ReadableOptions`. `highWaterMark` and
+   *   `objectMode` are honoured; other fields are forwarded.
+   */
+  static from(
+    iter: Iterable<unknown> | AsyncIterable<unknown>,
+    options: ReadableOptions = {},
+  ): Readable {
+    // Surface bad input as Node does: TypeError before any state is created.
+    if (iter == null || (typeof iter !== 'object' && typeof iter !== 'string')) {
+      throw new TypeError(
+        `Readable.from: the "iterable" argument must be iterable. Received type ${typeof iter}`,
+      );
+    }
+    const sym = (iter as { [Symbol.iterator]?: unknown })[Symbol.iterator];
+    const asyncSym = (iter as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator];
+    if (typeof sym !== 'function' && typeof asyncSym !== 'function') {
+      throw new TypeError(
+        'Readable.from: the "iterable" argument must implement Symbol.iterator or Symbol.asyncIterator',
+      );
+    }
+
+    // Build the runtime iterator now so we can peek the first chunk for mode
+    // detection without re-consuming the source.
+    let iterator: AsyncIterator<unknown> | Iterator<unknown>;
+    let isAsync = false;
+    if (typeof asyncSym === 'function') {
+      iterator = (asyncSym as () => AsyncIterator<unknown>).call(iter);
+      isAsync = true;
+    } else {
+      iterator = (sym as () => Iterator<unknown>).call(iter);
+    }
+
+    // Peek the first chunk to detect byte vs object mode when objectMode is
+    // not explicit. We hold the peek to push it back before the pump.
+    let firstResult: IteratorResult<unknown> | Promise<IteratorResult<unknown>> | null = null;
+    let resolvedMode: boolean;
+    if (options.objectMode !== undefined) {
+      resolvedMode = options.objectMode;
+    } else if (!isAsync) {
+      // Sync iterator: we can peek synchronously.
+      const r = (iterator as Iterator<unknown>).next();
+      firstResult = r;
+      if (r.done) {
+        // Empty iterable: default to objectMode true (Node-like default).
+        resolvedMode = true;
+      } else {
+        const v = r.value;
+        resolvedMode = !(v instanceof Uint8Array || typeof v === 'string');
+      }
+    } else {
+      // Async iterator: we can't peek synchronously without making `from` async.
+      // Default to objectMode true until the pump observes the first chunk;
+      // since the consumer set no preference and the iterator is async, this
+      // matches Node's default for `Readable.from(asyncIter)` (objectMode: true).
+      resolvedMode = true;
+    }
+
+    const r = new Readable({
+      highWaterMark: options.highWaterMark,
+      objectMode: resolvedMode,
+      encoding: options.encoding,
+    });
+
     void (async () => {
       try {
-        for await (const v of iter as AsyncIterable<unknown>) r.push(v);
+        // Drain the peeked first chunk first (sync-iterator branch only).
+        if (firstResult !== null && !(firstResult as IteratorResult<unknown>).done) {
+          r.push((firstResult as IteratorResult<unknown>).value);
+        }
+        if (isAsync) {
+          const ai = iterator as AsyncIterator<unknown>;
+          while (true) {
+            const step = await ai.next();
+            if (step.done) break;
+            r.push(step.value);
+          }
+        } else {
+          const si = iterator as Iterator<unknown>;
+          while (true) {
+            const step = si.next();
+            if (step.done) break;
+            r.push(step.value);
+          }
+        }
         r.push(null);
       } catch (err) {
         r.destroy(err as Error);
