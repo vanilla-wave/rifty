@@ -12,7 +12,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { FirstWindowOwnerResolver, type PreviewOwnerResolver } from '../src/owner-resolver.ts';
 import { createPreviewInterceptor } from '../src/preview-bridge.ts';
-import { SW_PREVIEW_READY, SW_PROTOCOL_VERSION } from '../src/protocol.ts';
+import { SW_FRAME_VERSION, SW_PREVIEW_READY, SW_ROUTING_VERSION } from '../src/protocol.ts';
 
 interface MockClient {
   id: string;
@@ -149,7 +149,11 @@ describe('createPreviewInterceptor with custom PreviewOwnerResolver', () => {
     const messageHandler = listeners.message?.[0];
     expect(messageHandler).toBeDefined();
     messageHandler!({
-      data: { type: SW_PREVIEW_READY, version: SW_PROTOCOL_VERSION },
+      data: {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
       source: workerClient,
     });
 

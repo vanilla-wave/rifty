@@ -68,6 +68,13 @@ const fallbackWarned = new WeakSet<ServiceWorkerGlobalScope>();
  * first controlled window only when the event has no id — warns once per
  * scope because in a multi-window page this *will* misroute (ADR-0031).
  *
+ * The fallback order and the dedup key shape (the `WeakSet<ServiceWorker
+ * GlobalScope>` keyed by scope identity) are part of the routing contract
+ * pinned by `SW_ROUTING_VERSION` (ADR-0040). Changing the fallback order,
+ * the dedup key, or the warn-once semantics requires bumping that
+ * constant so a drift between peers is detected at handshake time
+ * instead of silently misrouting requests.
+ *
  * M11 A-026 lands a `WorkerOwnerResolver` alongside this class and swaps
  * the `installPreviewInterceptor` default; this implementation stays as
  * the documented fallback for non-isolated environments (ADR-0025).

@@ -3,14 +3,59 @@
  * (`@rifty/service-worker` host) and the Service Worker script (`sw.ts`).
  *
  * ADR-0016 keeps the SW source in TypeScript and bundles it for the host.
- * Pinning the protocol version here makes drift between an old main page and a
- * fresh SW (or vice-versa) detectable instead of silent: each frame carries a
- * `version` field, and either side refuses to honour a mismatched peer.
- *
- * Bump on any wire change. The host's reaction to a mismatch is "refuse the
- * request" — the protocol does NOT attempt cross-version compatibility.
+ * ADR-0031 mandates per-frame version validation: every wire frame carries the
+ * versions; the receiver refuses to honour a mismatched peer.
+ * ADR-0040 splits versioning into two orthogonal contracts:
+ *   - `SW_FRAME_VERSION` — wire-frame data shapes (this module).
+ *   - `SW_ROUTING_VERSION` — addressing scheme (in `@rifty/io/preview-protocol`)
+ *     and owner-fallback rules (in `./owner-resolver.ts`).
+ * Both must match for a peer to be accepted. A mismatch on either side
+ * triggers the same `PROTOCOL_VERSION_MISMATCH` path with both `(expected,
+ * got)` pairs in the diagnostic so the host can distinguish frame-skew from
+ * routing-skew.
  */
-export const SW_PROTOCOL_VERSION = '1';
+
+/**
+ * Wire-frame data version. Stamped onto every outgoing frame and validated
+ * by the receiver at decode time. Pins the shape of every interface in this
+ * module — {@link SwPingFrame}, {@link SwPongFrame},
+ * {@link SwPreviewReadyFrame}, {@link SwPreviewGoodbyeFrame}, the
+ * `SW_PREVIEW_REQUEST` envelope, {@link SerializedRequest},
+ * {@link SerializedResponse}.
+ *
+ * Bumping requires: any change to a frame's field set, field type, or
+ * per-field semantics. Additive optional fields with a documented default
+ * do NOT require a bump — the receiver treats `undefined` as the default
+ * (per ADR-0031's SemVer-major rule, restated here for the frame side).
+ *
+ * Does NOT cover the URL convention (`/preview/<port>/...`) or the
+ * synthetic `preview.local` host — those are pinned by
+ * {@link SW_ROUTING_VERSION} because they live in `@rifty/io/preview-protocol`.
+ */
+export const SW_FRAME_VERSION = '1';
+
+/**
+ * Addressing-scheme and owner-fallback version. Stamped alongside
+ * {@link SW_FRAME_VERSION} on every wire frame; receivers validate both.
+ *
+ * Pins:
+ *   - The URL convention exported from `@rifty/io/preview-protocol`:
+ *     `PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`, the shape of
+ *     `synthesizePreviewUrl(path)`, and the shape of `parsePreviewPath`.
+ *   - The owner-fallback rules in `./owner-resolver.ts`
+ *     ({@link import('./owner-resolver.ts').FirstWindowOwnerResolver}): prefer
+ *     `FetchEvent.clientId`, fall back to the first controlled window with a
+ *     one-shot `console.warn` per scope. The dedup key shape (`WeakSet` of
+ *     scopes, mismatch key = `clientId`) is part of the contract.
+ *
+ * Bumping requires: changes to the URL regex shape, the synthetic host
+ * literal, the `synthesizePreviewUrl` return shape, the resolver fallback
+ * order, or the mismatch / first-window-warn dedup key shape.
+ *
+ * Does NOT cover wire-frame data shapes — those are pinned by
+ * {@link SW_FRAME_VERSION}.
+ */
+export const SW_ROUTING_VERSION = '1';
 
 export const SW_PING = '__rifty_sw_ping__';
 export const SW_PONG = '__rifty_sw_pong__';
@@ -24,12 +69,14 @@ export type SwPreviewRequestType = typeof SW_PREVIEW_REQUEST;
 /** Ping/pong handshake frame — used for SW liveness checks. */
 export interface SwPingFrame {
   type: typeof SW_PING;
-  version: string;
+  frameVersion: string;
+  routingVersion: string;
 }
 
 export interface SwPongFrame {
   type: typeof SW_PONG;
-  version: string;
+  frameVersion: string;
+  routingVersion: string;
   from: 'service-worker';
 }
 
@@ -40,7 +87,8 @@ export interface SwPongFrame {
  */
 export interface SwPreviewReadyFrame {
   type: typeof SW_PREVIEW_READY;
-  version: string;
+  frameVersion: string;
+  routingVersion: string;
 }
 
 /**
@@ -50,12 +98,14 @@ export interface SwPreviewReadyFrame {
  */
 export interface SwPreviewGoodbyeFrame {
   type: typeof SW_PREVIEW_GOODBYE;
-  version: string;
+  frameVersion: string;
+  routingVersion: string;
 }
 
 /**
  * SW→client request frame payload (the actual HTTP-ish request data, sibling
- * of the wire-envelope fields like `type`/`version`/`requestId`).
+ * of the wire-envelope fields like `type`/`frameVersion`/`routingVersion`/
+ * `requestId`).
  */
 export interface SerializedRequest {
   port: number;
@@ -73,7 +123,7 @@ export interface SerializedRequest {
  *
  * Lives here alongside {@link SerializedRequest} because the request/response
  * pair forms one wire contract; `body-transport.ts` re-exports it through
- * {@link preview-bridge.ts} so the bundling-time `version` stamping can stay
+ * {@link preview-bridge.ts} so the bundling-time version stamping can stay
  * with the transport helpers.
  */
 export interface SerializedResponse {
@@ -86,23 +136,26 @@ export interface SerializedResponse {
 /**
  * Discriminator for the protocol-version-mismatch error posted from the main
  * thread back to the SW when it receives a {@link SW_PREVIEW_REQUEST} frame
- * whose `version` does not match {@link SW_PROTOCOL_VERSION}. The SW maps this
- * to a 503 response (ADR-0031).
+ * whose `frameVersion` or `routingVersion` does not match the expected pair.
+ * The SW maps this to a 503 response (ADR-0031, refined by ADR-0040).
  */
 export const SW_ERROR_PROTOCOL_VERSION_MISMATCH = 'PROTOCOL_VERSION_MISMATCH';
 
 /**
  * Structured error returned by the main-thread bridge when a peer frame
- * carries a `version` that does not match {@link SW_PROTOCOL_VERSION}.
- * Receivers should map this to a 503 ("protocol version mismatch") response.
+ * carries a `frameVersion` or `routingVersion` that does not match the local
+ * expected pair. Receivers should map this to a 503 ("protocol version
+ * mismatch") response.
  *
- * ADR-0031 — every wire frame between the SW and the main thread carries a
- * `version` field; the receiver validates at decode time and refuses to act
- * on a mismatched peer.
+ * ADR-0031 / ADR-0040 — every wire frame between the SW and the main thread
+ * carries both versions; the receiver validates at decode time and refuses
+ * to act on a mismatched peer. The `expected` and `got` pairs let the host
+ * distinguish frame-skew (likely fresh SW + stale page) from routing-skew
+ * (likely misconfigured `@rifty/io` import).
  */
 export interface SwProtocolVersionMismatchError {
   kind: typeof SW_ERROR_PROTOCOL_VERSION_MISMATCH;
-  expected: string;
-  got: string;
+  expected: { frame: string; routing: string };
+  got: { frame: string; routing: string };
   message: string;
 }

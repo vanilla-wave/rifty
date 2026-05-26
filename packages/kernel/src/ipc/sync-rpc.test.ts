@@ -6,8 +6,12 @@
  * payload is decoded — the latter is fragile and would mask a real protocol
  * drift as a "malformed reply".
  *
- * Pattern mirrors `service-worker/src/protocol.ts` `SW_PROTOCOL_VERSION`:
- * every frame carries the version, every consumer validates loudly.
+ * Pattern mirrors the SW protocol versioning in
+ * `service-worker/src/protocol.ts` (ADR-0031, ADR-0040): every frame
+ * carries the version, every consumer validates loudly. The SW side splits
+ * the constant into `SW_FRAME_VERSION` and `SW_ROUTING_VERSION` because it
+ * has two contracts; sync-RPC has only one (frame shape) and keeps a
+ * single constant.
  */
 
 import { describe, expect, it } from 'vitest';

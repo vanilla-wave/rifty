@@ -55,18 +55,38 @@ times out, or the client posts a mismatched protocol version (failed
 is `DEFAULT_READY_TIMEOUT_MS = 3_000`; on timeout the SW returns
 `503 preview-bridge not ready within Nms`.
 
-### `SW_PROTOCOL_VERSION` on every wire frame
+### `SW_FRAME_VERSION` + `SW_ROUTING_VERSION` on every wire frame
 
 Every frame across `postMessage` between the SW and the controlling page
-carries a `version: string` field set to `SW_PROTOCOL_VERSION`. Receivers
-MUST validate at decode time before any side effect; mismatch → 503
-("protocol version mismatch") and a one-shot `console.warn` per peer.
-ADR-0031 is the source-of-truth for the per-frame contract; ADR-0016
-covers the broader "TS source-of-truth + bundled `sw.js`" decision.
+carries TWO version fields: `frameVersion: string` (set to
+`SW_FRAME_VERSION`) and `routingVersion: string` (set to
+`SW_ROUTING_VERSION`). Receivers MUST validate both at decode time before
+any side effect; mismatch on either contract → 503 ("protocol version
+mismatch") and a one-shot `console.warn` per peer that names the drifted
+contract.
 
-Bump `SW_PROTOCOL_VERSION` in `protocol.ts` on any wire change. The
-protocol does not attempt cross-version compatibility — version skew
-between an old page and a fresh SW (or vice-versa) refuses both ways.
+`SW_FRAME_VERSION` pins wire-frame data shapes (`SwPingFrame`,
+`SwPongFrame`, `SwPreviewReadyFrame`, `SwPreviewGoodbyeFrame`, the
+`SW_PREVIEW_REQUEST` envelope, `SerializedRequest`, `SerializedResponse`).
+Bumping requires: changes to any frame's field set, field type, or
+per-field semantics.
+
+`SW_ROUTING_VERSION` pins (a) the addressing scheme exported from
+`@rifty/io/preview-protocol` (`PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`,
+`synthesizePreviewUrl`, `parsePreviewPath`) and (b) the owner-fallback
+rules in `owner-resolver.ts` (`FirstWindowOwnerResolver`). Bumping
+requires: changes to the URL regex shape, the synthetic host literal,
+the resolver fallback order, or the mismatch / one-shot-warn dedup key
+shape.
+
+ADR-0040 is the source-of-truth for the split; ADR-0031 is the
+predecessor that established the per-frame contract; ADR-0016 covers
+the broader "TS source-of-truth + bundled `sw.js`" decision.
+
+The protocol does not attempt cross-version compatibility — a version
+mismatch between an old page and a fresh SW (or vice-versa) refuses
+both ways. The structured mismatch error includes both `(expected,
+got)` pairs so a host can distinguish frame-skew from routing-skew.
 
 ### Registration helper
 

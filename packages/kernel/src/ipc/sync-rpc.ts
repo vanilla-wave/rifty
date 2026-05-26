@@ -10,8 +10,11 @@
  * the SAB header by `SabRing.writeRequest` / `SabRing.writeReply` (ADR-0032).
  * The version is validated on EVERY frame — readers reject mismatched
  * frames before decoding the payload so a future binary-frame extension
- * (A-021) cannot silently corrupt a v1 reader. Pattern mirrors
- * `service-worker/src/protocol.ts` `SW_PROTOCOL_VERSION` (ADR-0016).
+ * (A-021) cannot silently corrupt a v1 reader. Pattern mirrors the SW
+ * protocol versioning in `service-worker/src/protocol.ts` (ADR-0016,
+ * ADR-0031, ADR-0040 — the SW side splits `SW_FRAME_VERSION` from
+ * `SW_ROUTING_VERSION`; the sync-RPC side keeps one constant because it
+ * has only one contract surface, the frame shape).
  *
  * Bump on any wire change. There is no cross-version compatibility — a
  * mismatch surfaces as {@link SyncRpcProtocolMismatchError} (`code:

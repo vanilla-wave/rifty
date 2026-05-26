@@ -1,18 +1,21 @@
 /**
  * Tests for the main-thread side of the preview-bridge handshake — verifying
  * that `setupPreviewBridge`:
- *   1. posts `rifty:preview:ready` (with version) to the active SW controller
- *      on init, and `rifty:preview:goodbye` on teardown;
- *   2. stamps the protocol version onto outgoing response frames the SW will
- *      consume.
+ *   1. posts `rifty:preview:ready` (with both frame and routing versions) to
+ *      the active SW controller on init, and `rifty:preview:goodbye` on
+ *      teardown;
+ *   2. stamps both versions onto outgoing response frames the SW will
+ *      consume;
+ *   3. rejects mismatched frame OR routing version independently (ADR-0040).
  */
 import { describe, expect, it, vi } from 'vitest';
 import { setupPreviewBridge } from '../src/preview-bridge.ts';
 import {
+  SW_FRAME_VERSION,
   SW_PREVIEW_GOODBYE,
   SW_PREVIEW_READY,
   SW_PREVIEW_REQUEST,
-  SW_PROTOCOL_VERSION,
+  SW_ROUTING_VERSION,
 } from '../src/protocol.ts';
 
 function installNavigator(): {
@@ -54,7 +57,7 @@ function installNavigator(): {
 }
 
 describe('main-thread setupPreviewBridge handshake', () => {
-  it('posts rifty:preview:ready with version on init and goodbye on teardown', () => {
+  it('posts rifty:preview:ready with frame+routing versions on init and goodbye on teardown', () => {
     const env = installNavigator();
     try {
       const teardown = setupPreviewBridge(async () => ({
@@ -66,20 +69,22 @@ describe('main-thread setupPreviewBridge handshake', () => {
       expect(env.controller.postMessage).toHaveBeenCalledTimes(1);
       expect(env.controller.postMessage).toHaveBeenCalledWith({
         type: SW_PREVIEW_READY,
-        version: SW_PROTOCOL_VERSION,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
       });
       teardown();
       expect(env.controller.postMessage).toHaveBeenCalledTimes(2);
       expect(env.controller.postMessage).toHaveBeenNthCalledWith(2, {
         type: SW_PREVIEW_GOODBYE,
-        version: SW_PROTOCOL_VERSION,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
       });
     } finally {
       env.restore();
     }
   });
 
-  it('echoes the version in dispatched response frames', async () => {
+  it('echoes both frame and routing versions in dispatched response frames', async () => {
     const env = installNavigator();
     try {
       let received: unknown = null;
@@ -99,16 +104,18 @@ describe('main-thread setupPreviewBridge handshake', () => {
         data: {
           type: SW_PREVIEW_REQUEST,
           requestId: 1,
-          version: SW_PROTOCOL_VERSION,
+          frameVersion: SW_FRAME_VERSION,
+          routingVersion: SW_ROUTING_VERSION,
           request: { port: 3000, url: 'http://preview.local/', method: 'GET', headers: {} },
         },
         ports: [channel.port2],
       });
       await new Promise((r) => setTimeout(r, 5));
       expect(received).toBeTruthy();
-      const r = received as { status: number; version: string };
+      const r = received as { status: number; frameVersion: string; routingVersion: string };
       expect(r.status).toBe(201);
-      expect(r.version).toBe(SW_PROTOCOL_VERSION);
+      expect(r.frameVersion).toBe(SW_FRAME_VERSION);
+      expect(r.routingVersion).toBe(SW_ROUTING_VERSION);
       channel.port1.close();
       channel.port2.close();
       teardown();
@@ -117,7 +124,7 @@ describe('main-thread setupPreviewBridge handshake', () => {
     }
   });
 
-  it('rejects a SW_PREVIEW_REQUEST with mismatched version without calling the handler', async () => {
+  it('rejects a SW_PREVIEW_REQUEST with mismatched frame version without calling the handler', async () => {
     const env = installNavigator();
     try {
       let received: unknown = null;
@@ -138,7 +145,8 @@ describe('main-thread setupPreviewBridge handshake', () => {
         data: {
           type: SW_PREVIEW_REQUEST,
           requestId: 1,
-          version: '999',
+          frameVersion: '999',
+          routingVersion: SW_ROUTING_VERSION,
           request: { port: 3000, url: 'http://preview.local/', method: 'GET', headers: {} },
         },
         ports: [channel.port2],
@@ -147,12 +155,71 @@ describe('main-thread setupPreviewBridge handshake', () => {
       expect(handler).not.toHaveBeenCalled();
       expect(received).toBeTruthy();
       const r = received as {
-        error?: { kind?: string; expected?: string; got?: string };
+        error?: {
+          kind?: string;
+          expected?: { frame: string; routing: string };
+          got?: { frame: string; routing: string };
+        };
       };
       expect(r.error).toBeDefined();
       expect(r.error?.kind).toBe('PROTOCOL_VERSION_MISMATCH');
-      expect(r.error?.expected).toBe(SW_PROTOCOL_VERSION);
-      expect(r.error?.got).toBe('999');
+      expect(r.error?.expected).toEqual({
+        frame: SW_FRAME_VERSION,
+        routing: SW_ROUTING_VERSION,
+      });
+      expect(r.error?.got).toEqual({ frame: '999', routing: SW_ROUTING_VERSION });
+      channel.port1.close();
+      channel.port2.close();
+      teardown();
+    } finally {
+      env.restore();
+    }
+  });
+
+  it('rejects a SW_PREVIEW_REQUEST with mismatched routing version only (frame matches)', async () => {
+    const env = installNavigator();
+    try {
+      let received: unknown = null;
+      const channel = new MessageChannel();
+      channel.port1.onmessage = (e): void => {
+        received = e.data;
+      };
+      const handler = vi.fn(async () => ({
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        body: null,
+      }));
+      const teardown = setupPreviewBridge(handler);
+      const messageFn = env.listeners.message?.[0];
+      expect(messageFn).toBeDefined();
+      messageFn!({
+        data: {
+          type: SW_PREVIEW_REQUEST,
+          requestId: 1,
+          frameVersion: SW_FRAME_VERSION,
+          routingVersion: '999',
+          request: { port: 3000, url: 'http://preview.local/', method: 'GET', headers: {} },
+        },
+        ports: [channel.port2],
+      });
+      await new Promise((r) => setTimeout(r, 5));
+      expect(handler).not.toHaveBeenCalled();
+      expect(received).toBeTruthy();
+      const r = received as {
+        error?: {
+          kind?: string;
+          expected?: { frame: string; routing: string };
+          got?: { frame: string; routing: string };
+        };
+      };
+      expect(r.error).toBeDefined();
+      expect(r.error?.kind).toBe('PROTOCOL_VERSION_MISMATCH');
+      expect(r.error?.expected).toEqual({
+        frame: SW_FRAME_VERSION,
+        routing: SW_ROUTING_VERSION,
+      });
+      expect(r.error?.got).toEqual({ frame: SW_FRAME_VERSION, routing: '999' });
       channel.port1.close();
       channel.port2.close();
       teardown();

@@ -23,12 +23,13 @@ export type {
 } from './preview-bridge.ts';
 export {
   SW_ERROR_PROTOCOL_VERSION_MISMATCH,
+  SW_FRAME_VERSION,
   SW_PING,
   SW_PONG,
   SW_PREVIEW_GOODBYE,
   SW_PREVIEW_READY,
   SW_PREVIEW_REQUEST,
-  SW_PROTOCOL_VERSION,
+  SW_ROUTING_VERSION,
 } from './protocol.ts';
 export type {
   SwPingFrame,

@@ -2,12 +2,12 @@
  * Body-carrier helpers for the preview bridge. Decides whether a response
  * body can be transferred as a `ReadableStream` over `postMessage` (modern
  * Chromium/Firefox/Safari 16.4+) or must be drained into a `Uint8Array`
- * first (older Safari, some Workers). The version field is stamped onto the
- * packed message so the SW side can verify the peer protocol matches —
- * ADR-0016.
+ * first (older Safari, some Workers). Both the frame and routing version
+ * fields (ADR-0031/ADR-0040) are stamped onto the packed message so the SW
+ * side can verify the peer protocol matches.
  */
 
-import { SW_PROTOCOL_VERSION, type SerializedResponse } from './protocol.ts';
+import { SW_FRAME_VERSION, SW_ROUTING_VERSION, type SerializedResponse } from './protocol.ts';
 
 export type { SerializedResponse };
 
@@ -50,26 +50,28 @@ export function canTransferReadableStream(): boolean {
  * drained into a `Uint8Array` synchronously *before* this returns (so the
  * caller awaits it) and posted as a regular structured-clone.
  *
- * The version field is stamped onto the message.
+ * Both the frame and routing version fields are stamped onto the message.
  */
-export async function packSerializedResponse(
-  resp: SerializedResponse,
-): Promise<{ message: SerializedResponse & { version: string }; transfer: Transferable[] }> {
+export async function packSerializedResponse(resp: SerializedResponse): Promise<{
+  message: SerializedResponse & { frameVersion: string; routingVersion: string };
+  transfer: Transferable[];
+}> {
+  const stamp = { frameVersion: SW_FRAME_VERSION, routingVersion: SW_ROUTING_VERSION };
   const body = resp.body;
   if (body instanceof ReadableStream) {
     if (canTransferReadableStream()) {
       return {
-        message: { ...resp, version: SW_PROTOCOL_VERSION },
+        message: { ...resp, ...stamp },
         transfer: [body as unknown as Transferable],
       };
     }
     const buffered = await drainStream(body);
     return {
-      message: { ...resp, body: buffered, version: SW_PROTOCOL_VERSION },
+      message: { ...resp, body: buffered, ...stamp },
       transfer: [],
     };
   }
-  return { message: { ...resp, version: SW_PROTOCOL_VERSION }, transfer: [] };
+  return { message: { ...resp, ...stamp }, transfer: [] };
 }
 
 async function drainStream(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {

@@ -10,9 +10,13 @@
  * direction stays top-down (ADR-0012, ADR-0035 use the same pattern for other
  * cross-package primitives).
  *
- * Orthogonal to ADR-0031 (`SW_PROTOCOL_VERSION` on every wire frame). This
- * module fixes the *addressing* drift hazard; ADR-0031 fixes the *frame
- * format* drift hazard. They share no symbols.
+ * The shape of this module — `PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`,
+ * the return type of `synthesizePreviewUrl(path)`, and the return type of
+ * `parsePreviewPath(path)` — is pinned by `SW_ROUTING_VERSION` in
+ * `@rifty/service-worker/protocol` (ADR-0040). Wire-frame data shapes are
+ * pinned by `SW_FRAME_VERSION` (ADR-0031, refined by ADR-0040). The two
+ * constants are stamped onto every SW↔main wire frame so addressing-shape
+ * drift and frame-shape drift are diagnosable as distinct failures.
  */
 
 /**

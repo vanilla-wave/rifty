@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **ADR-0040:** the preview-bridge handshake stamped by
+  `mountPlaygroundPreviewBridge()` now sends two version fields
+  (`frameVersion`, `routingVersion`) instead of a single `version` field.
+  The change is transitive — `setupPreviewBridge` from
+  `@rifty/service-worker` does the actual stamping; the playground
+  wiring is untouched at the call site. A version mismatch on either
+  contract surfaces as HTTP 503 from the SW the same way as before,
+  with the warning now naming the drifted contract (`frame` or
+  `routing`).
+
 ### Added
 
 - Initial Solid UI scaffold: header + Monaco editor + xterm.js terminal in a 1:1 split, plus Run / Reset buttons.

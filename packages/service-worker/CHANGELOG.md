@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **ADR-0040 (BREAKING):** protocol versioning split into two constants —
+  `SW_FRAME_VERSION` (wire-frame data shapes) and `SW_ROUTING_VERSION`
+  (addressing scheme from `@rifty/io/preview-protocol` + owner-fallback
+  rules from `owner-resolver.ts`). The legacy `SW_PROTOCOL_VERSION`
+  constant is removed; the only in-repo consumer was the SW package
+  itself, and the comments in `kernel/sync-rpc.ts` reference the old
+  name in prose (rewritten to cite ADR-0040). Every wire frame now
+  carries both `frameVersion` and `routingVersion` fields (renamed from
+  the previous single `version` field). The mismatch error grows two
+  `(expected, got)` pairs so the host can distinguish frame-skew from
+  routing-skew. Mismatch on EITHER contract triggers the existing
+  `PROTOCOL_VERSION_MISMATCH` → HTTP 503 path; the warning lists which
+  contract drifted by name. New public exports: `SW_FRAME_VERSION`,
+  `SW_ROUTING_VERSION`. Removed: `SW_PROTOCOL_VERSION`. Two new tests
+  pin the routing-only-mismatch and frame-only-mismatch paths
+  end-to-end.
+
 ### Added
 
 - **M7 acceptance coverage:** `tests/e2e/m7-preview-sw.spec.ts` exercises

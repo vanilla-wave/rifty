@@ -20,8 +20,9 @@ import { synthesizePreviewUrl } from '@rifty/io';
 import type { PreviewOwnerResolver } from './owner-resolver.ts';
 import {
   SW_ERROR_PROTOCOL_VERSION_MISMATCH,
+  SW_FRAME_VERSION,
   SW_PREVIEW_REQUEST,
-  SW_PROTOCOL_VERSION,
+  SW_ROUTING_VERSION,
   type SerializedRequest,
   type SerializedResponse,
   type SwProtocolVersionMismatchError,
@@ -68,6 +69,10 @@ export async function routePreview(
       ? null
       : new Uint8Array(await request.arrayBuffer());
   const requestId = registry.nextRequestId();
+  // URL synthesis goes through `synthesizePreviewUrl` from
+  // `@rifty/io/preview-protocol` (ADR-0036). The shape of that contract is
+  // pinned by `SW_ROUTING_VERSION` (ADR-0040) — bumping it requires changing
+  // the addressing scheme on both peers in lockstep.
   const serialised: SerializedRequest = {
     port: match.port,
     url: `${synthesizePreviewUrl(match.path)}${new URL(request.url).search}`,
@@ -122,7 +127,8 @@ export async function routePreview(
       {
         type: SW_PREVIEW_REQUEST,
         requestId,
-        version: SW_PROTOCOL_VERSION,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
         request: serialised,
       },
       [channel.port2],

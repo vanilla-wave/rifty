@@ -9,7 +9,12 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type MessageHandlerHooks, createPreviewInterceptor } from '../src/preview-bridge.ts';
-import { SW_PREVIEW_GOODBYE, SW_PREVIEW_READY, SW_PROTOCOL_VERSION } from '../src/protocol.ts';
+import {
+  SW_FRAME_VERSION,
+  SW_PREVIEW_GOODBYE,
+  SW_PREVIEW_READY,
+  SW_ROUTING_VERSION,
+} from '../src/protocol.ts';
 
 interface MockClient {
   id: string;
@@ -95,7 +100,14 @@ describe('SW-side handshake state machine', () => {
     await Promise.resolve();
     // Before the ready handshake the SW must NOT dispatch.
     expect(client.postMessage).not.toHaveBeenCalled();
-    scope.postMessage({ type: SW_PREVIEW_READY, version: SW_PROTOCOL_VERSION }, client);
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      client,
+    );
     await Promise.resolve();
     await Promise.resolve();
     expect(client.postMessage).toHaveBeenCalledTimes(1);
@@ -128,8 +140,22 @@ describe('SW-side handshake state machine', () => {
     const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
       timeoutMs: 3_000,
     });
-    scope.postMessage({ type: SW_PREVIEW_READY, version: SW_PROTOCOL_VERSION }, client);
-    scope.postMessage({ type: SW_PREVIEW_GOODBYE, version: SW_PROTOCOL_VERSION }, client);
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      client,
+    );
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_GOODBYE,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      client,
+    );
     const responsePromise = scope.fetch('http://x/preview/3000/path', { clientId: 'client-A' });
     await vi.advanceTimersByTimeAsync(3_001);
     const response = await responsePromise;
@@ -137,14 +163,17 @@ describe('SW-side handshake state machine', () => {
     interceptor.teardown();
   });
 
-  it('refuses requests from a protocol-version-mismatched client', async () => {
+  it('refuses requests from a frame-version-mismatched client', async () => {
     const client = makeMockClient('client-A');
     const scope = makeMockScope([client]);
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
       timeoutMs: 3_000,
     });
-    scope.postMessage({ type: SW_PREVIEW_READY, version: '999' }, client);
+    scope.postMessage(
+      { type: SW_PREVIEW_READY, frameVersion: '999', routingVersion: SW_ROUTING_VERSION },
+      client,
+    );
     const responsePromise = scope.fetch('http://x/preview/3000/path', { clientId: 'client-A' });
     const response = await responsePromise;
     expect(response.status).toBe(503);
@@ -153,8 +182,39 @@ describe('SW-side handshake state machine', () => {
     const r2 = await scope.fetch('http://x/preview/3000/path', { clientId: 'client-A' });
     expect(r2.status).toBe(503);
     // A second mismatched ready frame from the same client should not re-warn.
-    scope.postMessage({ type: SW_PREVIEW_READY, version: '999' }, client);
+    scope.postMessage(
+      { type: SW_PREVIEW_READY, frameVersion: '999', routingVersion: SW_ROUTING_VERSION },
+      client,
+    );
     expect(warnSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
+    interceptor.teardown();
+  });
+
+  it('refuses requests from a routing-version-mismatched client (frame matches)', async () => {
+    const client = makeMockClient('client-A');
+    const scope = makeMockScope([client]);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    // Frame version is fine; routing version drifts. Both must match for the
+    // ready frame to count — otherwise we'd silently honour a peer that
+    // disagrees on URL shape or owner-fallback rules (ADR-0040).
+    scope.postMessage(
+      { type: SW_PREVIEW_READY, frameVersion: SW_FRAME_VERSION, routingVersion: '999' },
+      client,
+    );
+    const responsePromise = scope.fetch('http://x/preview/3000/path', { clientId: 'client-A' });
+    const response = await responsePromise;
+    expect(response.status).toBe(503);
+    expect(await response.text()).toBe('protocol version mismatch');
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    // The warning must spell out *which* contract drifted so a host can
+    // distinguish a fresh SW + stale page (frame) from a misconfigured
+    // `@rifty/io` import (routing).
+    const warnMessage = String(warnSpy.mock.calls[0]?.[0] ?? '');
+    expect(warnMessage).toContain('routing');
     warnSpy.mockRestore();
     interceptor.teardown();
   });
@@ -168,8 +228,22 @@ describe('SW-side handshake state machine', () => {
     const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
       timeoutMs: 3_000,
     });
-    scope.postMessage({ type: SW_PREVIEW_READY, version: SW_PROTOCOL_VERSION }, clientA);
-    scope.postMessage({ type: SW_PREVIEW_READY, version: SW_PROTOCOL_VERSION }, clientB);
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      clientA,
+    );
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      clientB,
+    );
     const responsePromise = scope.fetch('http://x/preview/3000/path', { clientId: 'client-B' });
     await Promise.resolve();
     await Promise.resolve();

@@ -8,18 +8,20 @@
  * sets up the bridge (main thread of the playground) implements the
  * `PreviewHandler` and returns a `SerializedResponse`.
  *
- * Wire format (ADR-0017 phase 1 streaming, plus the ADR-0016
- * `SW_PROTOCOL_VERSION` echo on every frame, ADR-0031 receive-side validation):
+ * Wire format (ADR-0017 phase 1 streaming, plus the ADR-0031 receive-side
+ * validation, refined by ADR-0040 into a frame+routing version split):
  *
- *   client→sw  : { type: 'rifty:preview:ready',   version }
- *   client→sw  : { type: 'rifty:preview:goodbye', version }     // teardown
- *   sw→client  : { type: 'rifty:preview:request', version, requestId,
+ *   client→sw  : { type: 'rifty:preview:ready',   frameVersion, routingVersion }
+ *   client→sw  : { type: 'rifty:preview:goodbye', frameVersion, routingVersion } // teardown
+ *   sw→client  : { type: 'rifty:preview:request', frameVersion, routingVersion,
+ *                  requestId,
  *                  request: { port, url, method, headers, body?: Uint8Array } }
- *                  with `replyPort: MessagePort` in the transfer list. The
- *                  `version` field is mandatory on every data frame
- *                  (ADR-0031) — receivers validate it at decode time and
- *                  reject mismatched peers with a structured error.
- *   client→sw  : { status, statusText, headers, version,
+ *                  with `replyPort: MessagePort` in the transfer list. Both
+ *                  version fields are mandatory on every data frame
+ *                  (ADR-0031/ADR-0040) — receivers validate at decode time
+ *                  and reject mismatched peers with a structured error
+ *                  carrying both `(expected, got)` pairs.
+ *   client→sw  : { status, statusText, headers, frameVersion, routingVersion,
  *                  body: ReadableStream<Uint8Array> | Uint8Array | null }
  *                  via replyPort — the stream is *transferred* in the
  *                  postMessage transfer list when the runtime supports
@@ -43,10 +45,11 @@ import { packSerializedResponse } from './body-transport.ts';
 import { FirstWindowOwnerResolver, type PreviewOwnerResolver } from './owner-resolver.ts';
 import {
   SW_ERROR_PROTOCOL_VERSION_MISMATCH,
+  SW_FRAME_VERSION,
   SW_PREVIEW_GOODBYE,
   SW_PREVIEW_READY,
   SW_PREVIEW_REQUEST,
-  SW_PROTOCOL_VERSION,
+  SW_ROUTING_VERSION,
   type SerializedRequest,
   type SerializedResponse,
   type SwProtocolVersionMismatchError,
@@ -123,7 +126,10 @@ export function createPreviewInterceptor(
   const registry = createReadyClientsRegistry();
 
   const messageHandler = (event: ExtendableMessageEvent): void => {
-    const data = event.data as { type?: string; version?: string } | null | undefined;
+    const data = event.data as
+      | { type?: string; frameVersion?: string; routingVersion?: string }
+      | null
+      | undefined;
     if (!data || typeof data !== 'object' || typeof data.type !== 'string') return;
     if (data.type !== SW_PREVIEW_READY && data.type !== SW_PREVIEW_GOODBYE) return;
     const source = event.source as Client | null;
@@ -179,23 +185,30 @@ export function setupPreviewBridge(handler: PreviewHandler): () => void {
   const listener = async (event: MessageEvent): Promise<void> => {
     const data = event.data as {
       type?: string;
-      version?: string;
+      frameVersion?: string;
+      routingVersion?: string;
       request?: SerializedRequest;
     };
     if (data?.type !== SW_PREVIEW_REQUEST || !data.request) return;
     const replyPort = event.ports[0];
     if (!replyPort) return;
-    // ADR-0031 — every data frame carries `version`; receivers validate at
-    // decode time. On mismatch we reply with a structured error and do NOT
-    // invoke the user handler so cross-version drift cannot trigger
-    // side effects.
-    if (data.version !== SW_PROTOCOL_VERSION) {
-      const got = typeof data.version === 'string' ? data.version : String(data.version);
+    // ADR-0031 / ADR-0040 — every data frame carries both `frameVersion` and
+    // `routingVersion`; receivers validate both at decode time. On mismatch
+    // we reply with a structured error carrying both `(expected, got)` pairs
+    // and do NOT invoke the user handler so cross-version drift cannot
+    // trigger side effects.
+    const gotFrame =
+      typeof data.frameVersion === 'string' ? data.frameVersion : String(data.frameVersion);
+    const gotRouting =
+      typeof data.routingVersion === 'string' ? data.routingVersion : String(data.routingVersion);
+    if (gotFrame !== SW_FRAME_VERSION || gotRouting !== SW_ROUTING_VERSION) {
       const mismatch: SwProtocolVersionMismatchError = {
         kind: SW_ERROR_PROTOCOL_VERSION_MISMATCH,
-        expected: SW_PROTOCOL_VERSION,
-        got,
-        message: `preview request protocol version mismatch: got ${got}, want ${SW_PROTOCOL_VERSION}`,
+        expected: { frame: SW_FRAME_VERSION, routing: SW_ROUTING_VERSION },
+        got: { frame: gotFrame, routing: gotRouting },
+        message:
+          `preview request protocol version mismatch: got frame=${gotFrame} routing=${gotRouting}, ` +
+          `want frame=${SW_FRAME_VERSION} routing=${SW_ROUTING_VERSION}`,
       };
       replyPort.postMessage({ error: mismatch });
       return;
@@ -219,5 +232,9 @@ export function setupPreviewBridge(handler: PreviewHandler): () => void {
 function postHandshake(type: typeof SW_PREVIEW_READY | typeof SW_PREVIEW_GOODBYE): void {
   const controller = navigator.serviceWorker.controller;
   if (!controller) return;
-  controller.postMessage({ type, version: SW_PROTOCOL_VERSION });
+  controller.postMessage({
+    type,
+    frameVersion: SW_FRAME_VERSION,
+    routingVersion: SW_ROUTING_VERSION,
+  });
 }

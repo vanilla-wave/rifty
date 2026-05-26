@@ -8,7 +8,12 @@
  * file-size budget.
  */
 
-import { SW_PREVIEW_GOODBYE, SW_PREVIEW_READY, SW_PROTOCOL_VERSION } from './protocol.ts';
+import {
+  SW_FRAME_VERSION,
+  SW_PREVIEW_GOODBYE,
+  SW_PREVIEW_READY,
+  SW_ROUTING_VERSION,
+} from './protocol.ts';
 
 /**
  * Pending waiter for a not-yet-ready client. Resolves once the client's
@@ -36,7 +41,10 @@ export interface ReadyClientsRegistry {
    * set and resolves any pending waiters. Frames whose `type` is none of
    * `rifty:preview:ready` / `rifty:preview:goodbye` are ignored.
    */
-  handleMessage(clientId: string, data: { type?: unknown; version?: unknown }): void;
+  handleMessage(
+    clientId: string,
+    data: { type?: unknown; frameVersion?: unknown; routingVersion?: unknown },
+  ): void;
   /**
    * Allocate the next outbound request id for `rifty:preview:request` frames
    * dispatched on behalf of this interceptor. Each registry owns its own
@@ -136,13 +144,24 @@ export function createReadyClientsRegistry(
     handleMessage(clientId, data): void {
       const type = data?.type;
       if (type !== SW_PREVIEW_READY && type !== SW_PREVIEW_GOODBYE) return;
-      if (data.version !== SW_PROTOCOL_VERSION) {
+      // ADR-0040: both `frameVersion` and `routingVersion` must match. The
+      // warning lists the drifted contract by name so a host can distinguish
+      // a fresh SW + stale page (frame) from a misconfigured `@rifty/io`
+      // import (routing).
+      const frameOk = data.frameVersion === SW_FRAME_VERSION;
+      const routingOk = data.routingVersion === SW_ROUTING_VERSION;
+      if (!frameOk || !routingOk) {
         if (!warned.has(clientId)) {
           warned.add(clientId);
+          const drifted: string[] = [];
+          if (!frameOk) drifted.push('frame');
+          if (!routingOk) drifted.push('routing');
           logger.warn(
-            `[rifty/service-worker] protocol version mismatch from client ${clientId}: got ${String(
-              data.version,
-            )}, want ${SW_PROTOCOL_VERSION}`,
+            `[rifty/service-worker] protocol version mismatch from client ${clientId} (${drifted.join(
+              '+',
+            )}): got frame=${String(data.frameVersion)} routing=${String(
+              data.routingVersion,
+            )}, want frame=${SW_FRAME_VERSION} routing=${SW_ROUTING_VERSION}`,
           );
         }
         mismatched.add(clientId);
