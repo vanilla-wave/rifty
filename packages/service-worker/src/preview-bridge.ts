@@ -39,6 +39,7 @@
  */
 
 import { packSerializedResponse } from './body-transport.ts';
+import { FirstWindowOwnerResolver, type PreviewOwnerResolver } from './owner-resolver.ts';
 import {
   SW_ERROR_PROTOCOL_VERSION_MISMATCH,
   SW_PREVIEW_GOODBYE,
@@ -53,6 +54,8 @@ import { createReadyClientsRegistry } from './ready-clients.ts';
 import { routePreview } from './route-preview.ts';
 
 export { canTransferReadableStream, packSerializedResponse } from './body-transport.ts';
+export { FirstWindowOwnerResolver } from './owner-resolver.ts';
+export type { PreviewOwnerResolver } from './owner-resolver.ts';
 export type { SerializedRequest, SerializedResponse } from './protocol.ts';
 
 export type PreviewHandler = (req: SerializedRequest) => Promise<SerializedResponse>;
@@ -83,6 +86,16 @@ export const DEFAULT_READY_TIMEOUT_MS = 3_000;
 export interface MessageHandlerHooks {
   /** Override the ready-handshake timeout. Defaults to `DEFAULT_READY_TIMEOUT_MS`. */
   timeoutMs?: number;
+  /**
+   * Override the {@link PreviewOwnerResolver} strategy. Defaults to
+   * {@link FirstWindowOwnerResolver}, which preserves the M10 behaviour of
+   * routing to the first controlled window client. M11 A-026 swaps this
+   * default for a `WorkerOwnerResolver` that consults the cross-realm
+   * `@rifty/net` port registry; see ADR-0011, ADR-0017, and `REVIEW_ACTIONS.md`
+   * A-023/A-026. Tests pass a mock resolver to exercise the seam without
+   * spinning up the runtime port registry.
+   */
+  resolver?: PreviewOwnerResolver;
 }
 
 export interface PreviewInterceptor {
@@ -104,6 +117,7 @@ export function createPreviewInterceptor(
   hooks: MessageHandlerHooks = {},
 ): PreviewInterceptor {
   const timeoutMs = hooks.timeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
+  const resolver = hooks.resolver ?? new FirstWindowOwnerResolver();
   const registry = createReadyClientsRegistry();
 
   const messageHandler = (event: ExtendableMessageEvent): void => {
@@ -124,7 +138,9 @@ export function createPreviewInterceptor(
     // a new client) then `event.clientId`, so multi-window pages route to the
     // correct owner instead of always picking the first match.
     const clientId = event.resultingClientId || event.clientId || null;
-    event.respondWith(routePreview(scope, event.request, match, registry, timeoutMs, clientId));
+    event.respondWith(
+      routePreview(scope, event.request, match, registry, timeoutMs, clientId, resolver),
+    );
   };
 
   scope.addEventListener('fetch', fetchHandler);

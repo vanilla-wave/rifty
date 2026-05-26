@@ -1,18 +1,22 @@
 /**
- * SW-side routing for a matched `/preview/<port>/*` fetch. Resolves the
- * owning window client, gates on the ready handshake, and forwards the
- * serialised request to that client over a fresh `MessageChannel`.
+ * SW-side routing for a matched `/preview/<port>/*` fetch. Asks the
+ * supplied {@link PreviewOwnerResolver} for the realm that owns the
+ * registered process, gates on the ready handshake, and forwards the
+ * serialised request to that owner over a fresh `MessageChannel`.
  *
  * Lives in its own module so `preview-bridge.ts` stays under the ADR-0024
  * file-size budget.
  *
- * ADR-0031 — the SW prefers `event.resultingClientId` then `event.clientId`
- * for client lookup. The legacy "first controlled window" path remains as a
- * defensive fallback for navigation-preload edge cases (and for tests that
- * simulate fetches without an owning client); each such fallback warns once
- * via `console.warn` so the misroute case is visible in production.
+ * ADR-0031 — the default resolver ({@link FirstWindowOwnerResolver}) prefers
+ * `event.resultingClientId` then `event.clientId`. The legacy "first
+ * controlled window" path remains as a defensive fallback for
+ * navigation-preload edge cases (and for tests that simulate fetches without
+ * an owning client); each such fallback warns once via `console.warn` so the
+ * misroute case is visible in production. M11 A-023/A-026 swap the default
+ * for a `WorkerOwnerResolver` that consults the cross-realm port registry.
  */
 
+import type { PreviewOwnerResolver } from './owner-resolver.ts';
 import {
   SW_ERROR_PROTOCOL_VERSION_MISMATCH,
   SW_PREVIEW_REQUEST,
@@ -24,37 +28,6 @@ import {
 import type { ReadyClientsRegistry } from './ready-clients.ts';
 
 let nextRequestId = 1;
-
-// One-shot dedup: the no-clientId fallback warns once per SW scope so the
-// signal is visible without spamming the console on every fetch. Keyed by
-// scope identity, which is stable across the SW's lifetime.
-const fallbackWarned = new WeakSet<ServiceWorkerGlobalScope>();
-
-/**
- * Look up the window client that owns the in-flight fetch. Prefers the
- * `clientId` carried by the `FetchEvent`. Falls back to the first controlled
- * window only when the event has no id — warns once per scope because in a
- * multi-window page this *will* misroute.
- */
-async function resolveOwningClient(
-  scope: ServiceWorkerGlobalScope,
-  clientId: string | null,
-): Promise<Client | null> {
-  if (clientId) {
-    const direct = (await scope.clients.get(clientId)) as Client | undefined;
-    if (direct) return direct;
-  }
-  const all = await scope.clients.matchAll({ type: 'window', includeUncontrolled: false });
-  if (all.length === 0) return null;
-  if (!fallbackWarned.has(scope)) {
-    fallbackWarned.add(scope);
-    // eslint-disable-next-line no-console
-    console.warn(
-      '[rifty/service-worker] preview fetch had no clientId; falling back to first controlled window',
-    );
-  }
-  return all[0] ?? null;
-}
 
 /**
  * Forward a matched preview fetch to the owning client and translate the
@@ -70,8 +43,9 @@ export async function routePreview(
   registry: ReadyClientsRegistry,
   timeoutMs: number,
   clientId: string | null,
+  resolver: PreviewOwnerResolver,
 ): Promise<Response> {
-  const client = await resolveOwningClient(scope, clientId);
+  const client = await resolver.resolveOwner(scope, request, clientId);
   if (!client) {
     return new Response(`No client to serve preview port ${match.port}`, { status: 503 });
   }

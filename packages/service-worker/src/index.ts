@@ -10,12 +10,14 @@ export {
   createPreviewInterceptor,
   canTransferReadableStream,
   packSerializedResponse,
+  FirstWindowOwnerResolver,
   DEFAULT_READY_TIMEOUT_MS,
 } from './preview-bridge.ts';
 export type {
   MessageHandlerHooks,
   PreviewHandler,
   PreviewInterceptor,
+  PreviewOwnerResolver,
   SerializedRequest,
   SerializedResponse,
 } from './preview-bridge.ts';
