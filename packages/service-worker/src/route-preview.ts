@@ -89,6 +89,14 @@ export async function routePreview(
       if ('error' in data) {
         const err = data.error;
         if (typeof err === 'object' && err.kind === SW_ERROR_PROTOCOL_VERSION_MISMATCH) {
+          // Drift detected by the page-side peer. The SW only sees this as a
+          // 503 carrier; logging the structured `(expected, got)` pairs from
+          // the SW makes the actual bump visible in DevTools without having
+          // to inspect the body.
+          console.error('[rifty/service-worker] preview reply protocol mismatch', {
+            expected: err.expected,
+            got: err.got,
+          });
           resolve(new Response(err.message, { status: 503 }));
           return;
         }

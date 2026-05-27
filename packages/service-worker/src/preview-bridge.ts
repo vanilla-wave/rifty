@@ -210,6 +210,16 @@ export function setupPreviewBridge(handler: PreviewHandler): () => void {
           `preview request protocol version mismatch: got frame=${gotFrame} routing=${gotRouting}, ` +
           `want frame=${SW_FRAME_VERSION} routing=${SW_ROUTING_VERSION}`,
       };
+      // Surface the drift on the main-thread console too — without this, the
+      // mismatched peer just sees a blank `/preview/...` page (the SW maps the
+      // structured error back to HTTP/503) and has no signal that the SW is
+      // running an older frame/routing contract. Logging here is the only
+      // page-side breadcrumb when `SW_FRAME_VERSION` or `SW_ROUTING_VERSION`
+      // bumps and a stale SW survives the upgrade.
+      console.error('[rifty/service-worker] preview request protocol mismatch', {
+        expected: mismatch.expected,
+        got: mismatch.got,
+      });
       replyPort.postMessage({ error: mismatch });
       return;
     }

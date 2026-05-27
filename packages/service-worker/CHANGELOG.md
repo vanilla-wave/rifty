@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- `console.error('[rifty/service-worker] …')` breadcrumbs on every
+  `SW_FRAME_VERSION` / `SW_ROUTING_VERSION` mismatch path that previously
+  produced only a structured 503 carrier (`preview-bridge.ts` incoming
+  request, `route-preview.ts` reply error). Mirrors the `console.warn`
+  already emitted by `ready-clients.ts` on handshake drift so version
+  bumps surface in DevTools without inspecting the 503 body. Follow-up
+  to the 2026-05-27 architecture review (`docs/follow-ups-architecture-review-2026-05-27.md` item #5).
+
 ### Changed
 
 - **ADR-0040 (BREAKING):** protocol versioning split into two constants —
