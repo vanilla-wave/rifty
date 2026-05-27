@@ -4,10 +4,13 @@
  * Worker the call must `Atomics.wait` until the parent dispatcher's
  * recursive child finishes and returns its captured stdout.
  *
- * Skips outside a `crossOriginIsolated && getKernelWorkerUrl()`
- * environment — Vitest's plain Node runner satisfies neither (no COOP/COEP,
- * no Vite-bundled kernel-worker URL), so the suite is a no-op in CI but
- * documents the contract for the playground's e2e harness.
+ * The non-SAB branch (no `crossOriginIsolated`, no kernel-worker URL, or
+ * call from the main realm) is asserted separately at the bottom of this
+ * file: per the 2026-05-27 audit (item #2 in
+ * `docs/follow-ups-architecture-review-2026-05-27.md`), the previous
+ * in-realm `new Function(...)` fallback is replaced by a loud
+ * `NotImplementedError` so callers can't mistake a silent stub for a
+ * working child.
  */
 import { describe, expect, it } from 'vitest';
 import { getKernelWorkerUrl, isSabIpcSupported } from '../../../packages/kernel/src/index.ts';
@@ -30,6 +33,19 @@ describe.skipIf(!sabReady)('execSync — Worker-blocking via Atomics.wait (ADR-0
     writeFileSync('/sync-bad.js', "throw new Error('boom-from-execsync');");
     expect(() => execSync('node /sync-bad.js')).toThrowError(
       expect.objectContaining({ code: 'ECHILDFAILED' }) as unknown as Error,
+    );
+  });
+});
+
+describe.skipIf(sabReady)('execSync — non-SAB realm refuses with NotImplementedError', () => {
+  it('throws NotImplementedError naming the missing capability', () => {
+    resetSyncMirror();
+    writeFileSync('/sync-no-sab.js', "globalThis.process.stdout.write('should-not-run');");
+    expect(() => execSync('node /sync-no-sab.js')).toThrowError(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'child_process.execSync',
+      }) as unknown as Error,
     );
   });
 });

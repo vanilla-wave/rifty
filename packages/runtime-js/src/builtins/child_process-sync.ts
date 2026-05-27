@@ -1,14 +1,13 @@
 /**
  * `child_process.execSync` (ADR-0011 phase 3).
  *
- * Lives in its own module so the public `child_process.ts` stays inside
- * the workspace file budget (300 lines). Holds the SAB-vs-fallback branch
+ * Lives in its own module so the public `child_process.ts` stays inside the
+ * workspace structure-by-concept layout. Holds the SAB-vs-loud-throw branch
  * for synchronous child execution.
  */
 
-import { Buffer } from '@rifty/io';
+import { Buffer, NotImplementedError } from '@rifty/io';
 import { getKernelWorkerUrl, isSabIpcSupported, readKernelSyncApi } from '@rifty/kernel';
-import { syncMirror } from './fs-sync-mirror.ts';
 
 export interface ExecSyncOptions {
   readonly cwd?: string;
@@ -22,17 +21,21 @@ export interface ExecSyncOptions {
  *
  * Branching:
  *   - If we are inside a kernel-spawned Worker (the kernel sync API is
- *     published — see `@rifty/kernel.readKernelSyncApi`), route through
- *     the sync RPC hook. The parent
- *     dispatcher spawns a fresh Worker for the child script and uses
- *     `Atomics.wait` to block this realm until the child's stdout is
- *     captured. This is the only path that truly blocks the caller — see
- *     ADR-0011 §Decision.
- *   - Otherwise — when SAB IPC is not available, when the host hasn't
- *     wired `setKernelWorkerUrl`, or when we are in the main realm where
- *     `Atomics.wait` would freeze the page — fall back to the in-realm
- *     `new Function(...)` path that has shipped since M6. This path is
- *     marked as a fallback per ADR-0011 phases 2/3.
+ *     published — see `@rifty/kernel.readKernelSyncApi`), route through the
+ *     sync RPC hook. The parent dispatcher spawns a fresh Worker for the
+ *     child script and uses `Atomics.wait` to block this realm until the
+ *     child's stdout is captured. This is the only path that truly blocks
+ *     the caller — see ADR-0011 §Decision.
+ *   - Otherwise — when SAB IPC is unavailable, when the host hasn't wired
+ *     `setKernelWorkerUrl`, or when we are in the main realm where
+ *     `Atomics.wait` would freeze the page — throw `NotImplementedError`.
+ *     The previous in-realm `new Function(...)` fallback was a silent
+ *     stub: it evaluated user code in the parent realm without an exit
+ *     code, without stdio isolation, and without a PID, while pretending to
+ *     be a child process. Per CLAUDE.md "no silent stubs" and the
+ *     2026-05-27 architecture review (item #2 in
+ *     `docs/follow-ups-architecture-review-2026-05-27.md`), the fallback
+ *     is replaced by a loud throw that names the missing capability.
  */
 export function execSync(cmd: string, opts?: ExecSyncOptions): Uint8Array {
   const api = readKernelSyncApi();
@@ -45,26 +48,11 @@ export function execSync(cmd: string, opts?: ExecSyncOptions): Uint8Array {
     }
     return Buffer.from(stdout, 'utf8');
   }
-  // fallback per ADR-0011 phases 2/3 — in-realm `new Function` evaluation.
-  // Stays available behind the capability gate for non-isolated test
-  // environments and the page realm itself (where Atomics.wait would
-  // freeze the UI). Existing 5 child_process conformance tests exercise
-  // this path.
-  const tokens = cmd.split(/\s+/).filter(Boolean);
-  if (tokens[0] !== 'node' || tokens.length < 2) {
-    throw Object.assign(new Error(`execSync only supports 'node <script>': got ${cmd}`), {
-      code: 'EUNSUPPORTED',
-    });
-  }
-  const scriptPath = tokens[1] ?? '';
-  let stdout = '';
-  const source = syncMirror().readFileBytesSync(scriptPath);
-  const fn = new Function(
-    '__stdout_write',
-    `${Buffer.from(source).toString()}\n//# sourceURL=${scriptPath}`,
-  ) as (w: (c: string) => void) => unknown;
-  fn((c) => {
-    stdout += c;
-  });
-  return Buffer.from(stdout);
+  throw new NotImplementedError(
+    'child_process.execSync',
+    'requires SharedArrayBuffer + cross-origin isolation (COOP/COEP) and a SAB-capable kernel Worker realm. ' +
+      'Check the page is `crossOriginIsolated === true`, `isSabIpcSupported()` is true, and that the host called ' +
+      '`setKernelWorkerUrl(...)` so kernel-spawned Workers can resolve. The previous in-realm fallback was a ' +
+      'silent stub (CLAUDE.md "no silent stubs" / 2026-05-27 audit item #2).',
+  );
 }

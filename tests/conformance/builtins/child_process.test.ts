@@ -81,10 +81,20 @@ describe('child_process.fork', () => {
 });
 
 describe('child_process.execSync', () => {
-  it('returns stdout synchronously', () => {
+  // Post 2026-05-27 audit item #2: the in-realm `new Function(...)` fallback
+  // was a silent stub (no exit code, no stdio isolation, no PID) and violated
+  // CLAUDE.md "no silent stubs". Outside a SAB-capable kernel Worker the
+  // function now throws `NotImplementedError`; the SAB happy path is exercised
+  // separately in `exec-sync-worker.test.ts` (gated on `crossOriginIsolated`
+  // + `getKernelWorkerUrl()`).
+  it('throws NotImplementedError when SAB IPC is unavailable', () => {
     writeFileSync('/sync.js', "__stdout_write('sync');");
-    const buf = execSync('node /sync.js');
-    expect(new TextDecoder().decode(buf)).toBe('sync');
+    expect(() => execSync('node /sync.js')).toThrowError(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'child_process.execSync',
+      }) as unknown as Error,
+    );
   });
 });
 
