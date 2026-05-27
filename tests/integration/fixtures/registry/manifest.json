@@ -1,7 +1,10 @@
 {
-  "description": "Vendored npm tarball fixtures for integration tests (ADR-0021). Generated 2026-05-24.",
+  "description": "Vendored npm tarball fixtures for integration tests (ADR-0021). Generated 2026-05-24; nested-install diamond fixtures added 2026-05-27.",
   "source": "https://registry.npmjs.org",
   "integrityAlgorithm": "sha256",
+  "notes": {
+    "diamond-conflict-parent": "Locally-synthesized wrapper package (MIT). Forces a ms@2.0.0 vs ms@2.1.3 conflict for tests/integration/nested-install.test.ts; the wrapper has no upstream registry entry. Re-pack via: cd tools/integration-fixtures/diamond-conflict-parent && npm pack && cp diamond-conflict-parent-1.0.0.tgz ../../../tests/integration/fixtures/registry/."
+  },
   "entries": [
     {
       "name": "picocolors",
@@ -18,11 +21,32 @@
       "integrity": "sha256-9mFuFeUw7VUvnaotPOcZY5R8a8fJjJtk/T5nP9AmIsY="
     },
     {
+      "name": "ms",
+      "version": "2.0.0",
+      "manifest": "ms-2.0.0.json",
+      "tarball": "ms-2.0.0.tgz",
+      "integrity": "sha256-NiFSq4hkGB/DNZo8RA7sWM4+GPdzsN3k2IqE/hPXPss="
+    },
+    {
       "name": "kleur",
       "version": "4.1.5",
       "manifest": "kleur.json",
       "tarball": "kleur-4.1.5.tgz",
       "integrity": "sha256-DZlWKs+C/KSvzipXtocomlJKxnVdyvH9+CoUdHMJFGk="
+    },
+    {
+      "name": "debug",
+      "version": "4.4.1",
+      "manifest": "debug-4.4.1.json",
+      "tarball": "debug-4.4.1.tgz",
+      "integrity": "sha256-JlynxvBQibnBSPhJynePSvcf+hEXKGNkTtGubh7T2s4="
+    },
+    {
+      "name": "diamond-conflict-parent",
+      "version": "1.0.0",
+      "manifest": "diamond-conflict-parent-1.0.0.json",
+      "tarball": "diamond-conflict-parent-1.0.0.tgz",
+      "integrity": "sha256-x3cLAV/q5ExVgIJ0BTqFYwE9/oZxVCfk/GwHRuHIU/g="
     }
   ]
 }

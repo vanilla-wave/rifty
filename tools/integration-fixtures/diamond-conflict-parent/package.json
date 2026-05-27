@@ -1,0 +1,10 @@
+{
+  "name": "diamond-conflict-parent",
+  "version": "1.0.0",
+  "description": "Vendored fixture for rifty's nested-install regression test. Forces a version conflict on `ms` by depending on the exact version that disagrees with the flat winner. See tests/integration/nested-install.test.ts.",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "ms": "2.0.0"
+  }
+}

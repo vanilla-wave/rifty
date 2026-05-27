@@ -193,6 +193,9 @@ What's landed (mini-equivalent of Vite/HMR; "vite-like" not literal upstream Vit
 - [ ] Lockfile reuse on subsequent `install` (currently regenerated each call — per ADR 0023).
 - [x] **Nested install for version conflicts — DONE 2026-05-27.** ADR-0042 ratified first-wins-flat + nest-on-conflict placement. `walkAndPin` rewritten; `ResolvedPackage.installPath` added; lockfile keyed by install path. Live express install passes end-to-end (86 packages, `ms × 5`, `debug × 3`, `statuses × 3`). EVERSIONCONFLICT is now dead code. Lockfile fast-path replay for nested entries is the follow-on.
 - [ ] Integration tests against real npm tarballs (currently hand-rolled mocks — per ADR 0021).
+  - First slice landed 2026-05-24 (`tests/integration/real-install.test.ts` — picocolors, ms, kleur as zero-dep tarballs).
+  - Nested-install diamond coverage landed 2026-05-27 (`tests/integration/nested-install.test.ts` — real `debug@4.4.1` + real `ms@2.1.3` + real `ms@2.0.0` + synthesized `diamond-conflict-parent@1.0.0` wrapper; mirrors the live express conflict shape). Regression-detector: temporarily collapsing the nest-on-conflict branch in `walkAndPin` makes both new tests fail loudly.
+  - Still open: `chalk` and full `express` fixtures, and `tools/integration-fixtures/refresh.ts` script (manual `npm pack` flow documented at `tools/integration-fixtures/diamond-conflict-parent/README.md` for the synthesized wrapper).
 - [ ] Prod-proxy decision (`Q-2026-05-24-007`).
 
 ---

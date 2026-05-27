@@ -1,0 +1,14 @@
+{
+  "name": "diamond-conflict-parent",
+  "version": "1.0.0",
+  "dist": {
+    "tarball": "tarball:diamond-conflict-parent-1.0.0",
+    "integrity": "sha256-x3cLAV/q5ExVgIJ0BTqFYwE9/oZxVCfk/GwHRuHIU/g=",
+    "upstreamTarball": "local:synthesized — see manifest.json `notes` field",
+    "upstreamIntegrity": "local:synthesized — see manifest.json `notes` field"
+  },
+  "dependencies": {
+    "ms": "2.0.0"
+  },
+  "main": "index.js"
+}

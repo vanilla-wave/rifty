@@ -16,6 +16,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { compare as compareSemver } from '@rifty/npm-client';
 import type { Fetcher, Packument, VersionManifest } from '@rifty/npm-client';
 
 interface ManifestEntry {
@@ -55,8 +56,16 @@ for (const entry of REGISTRY.entries) {
     versions: {},
   };
   packument.versions[entry.version] = version;
-  // Newest entry wins for `latest`. Good enough since the fixture set is tiny.
-  packument['dist-tags'] = { ...packument['dist-tags'], latest: entry.version };
+  // `latest` tracks the highest semver across vendored entries for this name.
+  // Matters once we vendor multiple versions of the same package (e.g. `ms`
+  // 2.0.0 and 2.1.3 for the nested-install diamond test): a naive "last entry
+  // wins" would leave `latest` pointing at the older one if it appears later
+  // in `manifest.json` — any unconstrained `name@*` install would silently
+  // resolve to the wrong version.
+  const currentLatest = packument['dist-tags']?.latest;
+  if (!currentLatest || compareSemver(entry.version, currentLatest) > 0) {
+    packument['dist-tags'] = { ...packument['dist-tags'], latest: entry.version };
+  }
   PACKUMENTS.set(entry.name, packument);
 
   const tarballBytes = readFileSync(join(FIXTURE_DIR, entry.tarball));

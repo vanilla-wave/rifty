@@ -1,0 +1,14 @@
+{
+  "name": "debug",
+  "version": "4.4.1",
+  "dist": {
+    "tarball": "tarball:debug-4.4.1",
+    "integrity": "sha256-JlynxvBQibnBSPhJynePSvcf+hEXKGNkTtGubh7T2s4=",
+    "upstreamTarball": "https://registry.npmjs.org/debug/-/debug-4.4.1.tgz",
+    "upstreamIntegrity": "sha512-KcKCqiftBJcZr++7ykoDIEwSa3XWowTfNPo92BYxjXiyYEVrUQh2aLyhxBCwww+heortUFxEJYcRzosstTEBYQ=="
+  },
+  "dependencies": {
+    "ms": "^2.1.3"
+  },
+  "main": "./src/index.js"
+}
