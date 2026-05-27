@@ -105,13 +105,18 @@ describe('integration — nested install diamond (ADR-0042) via vendored tarball
     expect(result.conflicts).toEqual([]);
   });
 
-  it('reinstall through live-resolve replays the same nested placement (fast path opts out for nested entries)', async () => {
-    // ADR-0042 explicitly opts the lockfile fast path out when the existing
-    // lockfile contains nested entries — `chooseSource` falls through to
-    // live-resolve in that case. This test pins that behaviour: a second
-    // install over the same vfs still produces the same on-disk layout and
-    // the same lockfile bytes, even though it must re-resolve through the
-    // registry. Tarball cache (ADR-0023) still satisfies the file reads.
+  it('reinstall replays nested placement from the lockfile fast path (no packument round-trips)', async () => {
+    // ADR-0042 originally opted the lockfile fast path out whenever the
+    // lockfile carried nested entries — `chooseSource` fell through to
+    // live-resolve in that case, costing one extra packument round-trip per
+    // package on every reinstall of any project with a diamond conflict.
+    // The ADR-0042 follow-on (this PR) lifts that opt-out: the fast path
+    // now does parent-aware walk-up lookups (see `pinnedEntryForParent`
+    // in `installer-lockfile-reader.ts`), so a reinstall against a
+    // nested-entry lockfile replays exclusively from the lockfile + tarball
+    // cache and never hits the network. The packument-count flip
+    // (`toBeGreaterThan(0) → toBe(0)`) IS the regression detector for the
+    // new fast-path behaviour.
     //
     // Loader resolution from the nested copy is intentionally out of scope
     // here — the placement + lockfile contract IS the regression detector
@@ -120,7 +125,7 @@ describe('integration — nested install diamond (ADR-0042) via vendored tarball
     const vfs = new MemoryVfs();
 
     const first = makeRegistry();
-    await install(
+    const firstResult = await install(
       'root',
       '0.0.0',
       { debug: '^4.4.1', 'diamond-conflict-parent': '1.0.0' },
@@ -129,7 +134,7 @@ describe('integration — nested install diamond (ADR-0042) via vendored tarball
     const firstLock = await vfs.readFileText('/app/package-lock.json');
 
     const second = makeRegistry();
-    await install(
+    const secondResult = await install(
       'root',
       '0.0.0',
       { debug: '^4.4.1', 'diamond-conflict-parent': '1.0.0' },
@@ -138,18 +143,27 @@ describe('integration — nested install diamond (ADR-0042) via vendored tarball
     const secondLock = await vfs.readFileText('/app/package-lock.json');
 
     expect(secondLock).toBe(firstLock);
-    // Tarballs come from the cache on the second pass even though the
-    // lockfile fast path is disabled — cache hits, no re-fetch.
+    // Tarballs come from the cache on the second pass — cache hits, no re-fetch.
     expect(second.calls.tarball).toBe(0);
-    // Packuments DO get refetched: the fast path opted out because the
-    // lockfile has nested entries (ADR-0042 follow-on). That is the
-    // documented cost of the M11 first-cut; the placement assertions below
-    // are what matters for this test.
-    expect(second.calls.packument).toBeGreaterThan(0);
+    // Post-follow-on: the fast path now handles nested entries via the
+    // walk-up helper, so no packument round-trips either. The whole
+    // install is a pure replay of the lockfile + tarball cache.
+    expect(second.calls.packument).toBe(0);
 
     // Same nested layout still on disk.
     expect(
       await vfs.exists('/app/node_modules/diamond-conflict-parent/node_modules/ms/package.json'),
     ).toBe(true);
+
+    // Resolved set has the same install-path shape both times — the fast
+    // path's walk-up placement matches what live-resolve produced on the
+    // first pass. Sorted-deep-equal catches any silent path drift.
+    const firstPaths = firstResult.packages
+      .map((p) => p.installPath ?? `node_modules/${p.name}`)
+      .sort();
+    const secondPaths = secondResult.packages
+      .map((p) => p.installPath ?? `node_modules/${p.name}`)
+      .sort();
+    expect(secondPaths).toEqual(firstPaths);
   });
 });

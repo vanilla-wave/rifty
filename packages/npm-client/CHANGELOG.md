@@ -4,6 +4,48 @@
 
 ### Changed
 
+- **M11 nested install — fast-path replay for nested entries (ADR-0042
+  follow-on).** Lifts the temporary opt-out the M11 first cut shipped:
+  `createLockfileSource` now resolves each `(name, range, parent)` via
+  the new `pinnedEntryForParent` walk-up, so a lockfile carrying
+  diamond-conflict nested entries replays entirely from cache instead
+  of falling through to live resolve. The walk-up mirrors Node's
+  resolver, applied to v3 lockfile keys: starting from the parent's
+  install path, check `<scope>/node_modules/<name>` at each ancestor
+  scope, take the first hit; root-scope requests (`parentInstallPath
+  === ''`) reduce to the previous bare-name lookup. `chooseSource`'s
+  `lockfileHasNestedEntries` opt-out is removed. Verified end-to-end
+  against the live `express@^4` opt-in: second install over the same
+  vfs is 86 packages / 44 ms / 0 packuments / 0 tarballs (first
+  install: 18 100 ms / 72 packuments / 83 tarballs).
+  - New helpers in `installer-lockfile-reader.ts`:
+    `pinnedEntryForParent(lockfile, name, parentInstallPath) →
+    { installPath, entry } | undefined` and the `PinnedEntryLookup`
+    interface. `lockfileCovers` and `lockfileSubgraph` are routed
+    through the walk-up so transitive subgraph divergence checks see
+    nested copies too.
+  - `ResolutionSource.resolve` signature changes from
+    `(name, range, parent: string | undefined)` to
+    `(name, range, ctx: { parentName, parentInstallPath })` — the
+    lockfile source uses `parentInstallPath` for walk-up; the
+    registry source keeps using `parentName` for `parent>child`
+    override scope.
+  - `ResolvedPin` gains an optional `installPath` field. When set
+    (lockfile-source replay), the walk honours it verbatim, which
+    keeps on-disk placement matching the lockfile even if the
+    operator reorders `dependencies` between installs. When absent
+    (live-source), the walk computes placement via the existing
+    first-wins-flat + nest-on-conflict rule (now extracted as
+    `choosePlacement`).
+  - `EBROKENLOCK` messages on missing or malformed entries now
+    include the resolved install path / the parent path used for
+    walk-up, surfacing which scope the lookup gave up on.
+  - Behavioural regression-detector lives in
+    `tests/integration/nested-install.test.ts` test #2: it now
+    asserts `second.calls.packument === 0` (previously
+    `toBeGreaterThan(0)` — the opt-out cost) and adds a sorted-deep-
+    equal on the resolved set's `installPath` shape across the two
+    installs.
 - **M11 nested install (ADR-0042).** The flat-only linker is replaced
   with first-wins-flat + nest-on-conflict placement, driven by
   `walkAndPin` in `installer.ts`. Diamond version conflicts no longer
@@ -23,7 +65,8 @@
     existing lockfile contains any nested entry (the fast-path
     resolver still does bare-name lookups); falls through to live
     resolve, which knows how to re-derive nesting. Lifting that opt-
-    out is a follow-on.
+    out is a follow-on (superseded by the entry above on
+    2026-05-27).
   - Semver `matchBranch` now strips operator-trailing whitespace
     (`>= 2.1.2 < 3` ≡ `>=2.1.2 <3`) — npm packuments emit the spaced
     form for transitive constraints and the live express graph hit it

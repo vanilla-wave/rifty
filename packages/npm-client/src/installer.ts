@@ -2,15 +2,19 @@
  * Top-level installer: resolve a name+range, walk transitive deps, fetch
  * tarballs, unpack into the VFS.
  *
- * For M9 we stay flat: every package lives directly under
- * `node_modules/<name>/`. Conflicting versions throw `EVERSIONCONFLICT`
- * (A-031) — nested install lands in M11 per ADR 0023.
+ * Placement (ADR-0042, M11, 2026-05-27): first-wins-flat + nest-on-conflict.
+ * Each package lives at `node_modules/<name>` when it wins the hoisted slot,
+ * or at `<parentInstallPath>/node_modules/<name>` when a conflicting version
+ * was already hoisted. `EVERSIONCONFLICT` is dead code; the walk handles
+ * conflicts by nesting instead of aborting.
  *
  * ADR-0023: on subsequent invocations the installer reads the existing
  * `package-lock.json` and skips network calls for any dep whose lockfile pin
  * still satisfies the requested range. Tarballs are cached at
  * `/.rifty/tarball-cache/` so even an absent lockfile won't re-download
- * already-seen tarballs once the cache is warm.
+ * already-seen tarballs once the cache is warm. Post-ADR-0042-follow-on
+ * (2026-05-27) this fast path also handles nested entries — see
+ * `createLockfileSource` / `pinnedEntryForParent`.
  *
  * Pipeline shape (D-F unification, 2026-05-26):
  * `install()` orchestrates four collaborators and stays under the
@@ -19,10 +23,11 @@
  * (`walkAndPin`) that pulls each node's pin from a `ResolutionSource`. Two
  * sources exist:
  *
- *   - {@link createLockfileSource} — replays pins from a v3 lockfile entry.
+ *   - {@link createLockfileSource} — replays pins from a v3 lockfile entry,
+ *     using parent-aware walk-up to resolve nested copies.
  *   - {@link createRegistrySource} — packument fetch + `pickBestVersion`,
- *     applies overrides per node, raises `EVERSIONCONFLICT` on diamond
- *     mismatch.
+ *     applies overrides per node. Diamond version conflicts are not a
+ *     source-level error — the walk handles them.
  *
  * The fast-path/live-path choice is a pre-flight decision before the walk
  * starts: lockfile-source iff a v3 lockfile exists, covers the top-level
@@ -40,6 +45,7 @@ import { type FetchAndUnpackCtx, fetchAndUnpackToCache } from './fetch-and-unpac
 import {
   lockfileCovers,
   lockfileSubgraph,
+  pinnedEntryForParent,
   readExistingLockfile,
   writeLockfileIfChanged,
 } from './installer-lockfile-reader.ts';
@@ -99,6 +105,15 @@ export interface InstallResult {
  * adapter that turns one of these (plus the fetched tarball bytes) into a
  * `PinnedPackage`. Before D-F (2026-05-26) the assembly logic was duplicated
  * between the fast path and live-resolve and had drifted once already.
+ *
+ * Post-ADR-0042-follow-on (2026-05-27) `installPath` is set by
+ * lockfile-source replay (where placement is dictated by the matched
+ * lockfile key) and left `undefined` by live-source (where placement is
+ * computed by the walk). This split exists so the fast path always places
+ * packages exactly where the lockfile recorded them, regardless of
+ * visit-order changes — re-deriving placement on the fast path would risk
+ * silent layout drift if the operator reorders `dependencies` between
+ * installs.
  */
 interface ResolvedPin {
   readonly name: string;
@@ -112,15 +127,33 @@ interface ResolvedPin {
    * written, optionals that succeeded made it into `dependencies` and ones
    * that didn't were dropped, so there's nothing to re-traverse. */
   readonly optionalDependencies: Record<string, string>;
+  /** Pre-determined install path (lockfile-source only). When set, the walk
+   *  honours it verbatim; when undefined, the walk applies first-wins-flat
+   *  + nest-on-conflict placement. */
+  readonly installPath?: string;
 }
 
 /**
- * Strategy for "given a (name, range, parent), return its pinned form."
+ * Resolution request context. `parentName` carries the parent package's name
+ * (used by the registry source for `parent>child` override scope);
+ * `parentInstallPath` carries the parent's actual on-disk path (used by the
+ * lockfile source's walk-up lookup). For top-level requests both are root:
+ * `parentName` is the project's root name and `parentInstallPath` is `''`.
+ */
+interface ResolveContext {
+  readonly parentName: string | undefined;
+  readonly parentInstallPath: string;
+}
+
+/**
+ * Strategy for "given a (name, range, context), return its pinned form."
  *
  * Two implementations:
- *   - {@link createLockfileSource}: pure lockfile replay, no network.
+ *   - {@link createLockfileSource}: pure lockfile replay, no network. Uses
+ *     `parentInstallPath` for the walk-up lookup (ADR-0042 follow-on,
+ *     2026-05-27) so nested entries replay correctly.
  *   - {@link createRegistrySource}: packument fetch + pickBestVersion +
- *     overrides.
+ *     overrides. Uses `parentName` for parent-scoped override resolution.
  *
  * Both implementations throw on failure rather than returning `null`. The
  * lockfile source throws `EBROKENLOCK` when a transitive dep is missing or
@@ -132,7 +165,7 @@ interface ResolvedPin {
  * install is worse than a loud failure.
  */
 interface ResolutionSource {
-  resolve(name: string, range: string | null, parent: string | undefined): Promise<ResolvedPin>;
+  resolve(name: string, range: string | null, ctx: ResolveContext): Promise<ResolvedPin>;
 }
 
 export async function install(
@@ -175,6 +208,12 @@ export async function install(
  * lockfile exists, covers every top-level request after override
  * application, and no override redirects the locked subgraph to a name the
  * lockfile doesn't pin. Otherwise we fall through to live-resolve.
+ *
+ * Pre-ADR-0042-follow-on (2026-05-27) this function additionally bailed
+ * whenever the lockfile contained any nested entry. That opt-out is gone
+ * now that `createLockfileSource` walks up the parent's install path via
+ * `pinnedEntryForParent` — diamond-bearing lockfiles replay in full from
+ * the fast path with no packument round-trips.
  */
 function chooseSource(
   existingLockfile: Lockfile | null,
@@ -187,33 +226,12 @@ function chooseSource(
     const topLevelPins = lockfileCovers(existingLockfile, effectiveRequest);
     if (
       topLevelPins &&
-      subgraphFreeOfOverrideDivergence(existingLockfile, topLevelPins, opts.overrides) &&
-      !lockfileHasNestedEntries(existingLockfile)
+      subgraphFreeOfOverrideDivergence(existingLockfile, topLevelPins, opts.overrides)
     ) {
       return createLockfileSource(existingLockfile);
     }
   }
   return createRegistrySource(opts);
-}
-
-/**
- * Returns true if the lockfile contains any nested entry (a key of the form
- * `node_modules/<x>/node_modules/<y>`). The current fast-path lockfile
- * source looks up entries by bare name (`node_modules/<name>`), so a
- * lockfile with nested entries cannot be replayed safely yet — fall
- * through to live-resolve, which knows how to re-derive the placement.
- *
- * This is a temporary opt-out for the M11 first cut; making the fast-path
- * nested-aware is a follow-on (would need to pass parent-context to the
- * resolver and walk both flat and nested entries).
- */
-function lockfileHasNestedEntries(lockfile: Lockfile): boolean {
-  for (const key of Object.keys(lockfile.packages)) {
-    if (key === '') continue;
-    // Match a SECOND `/node_modules/` segment, not just the leading one.
-    if (key.indexOf('/node_modules/', 'node_modules/'.length) >= 0) return true;
-  }
-  return false;
 }
 
 /**
@@ -226,7 +244,10 @@ function lockfileHasNestedEntries(lockfile: Lockfile): boolean {
  *
  * **Placement rule (M11 nested install, 2026-05-27).** Per-visit decision:
  *
- *   1. Resolve the pin via `source.resolve`.
+ *   1. Resolve the pin via `source.resolve`. The lockfile source returns
+ *      a `pin.installPath` (the matched entry's lockfile key) — the walk
+ *      uses it verbatim. The live source returns `pin.installPath ===
+ *      undefined`; the walk then computes placement.
  *   2. If `name` has not yet won a flat (hoisted) slot at `node_modules/<name>`:
  *      take that slot, install path = `node_modules/<name>`.
  *   3. Else, if the flat slot already holds **this same version**: dedupe —
@@ -242,6 +263,14 @@ function lockfileHasNestedEntries(lockfile: Lockfile): boolean {
  * downside is a few duplicated nested copies in deeply-shared subgraphs,
  * which costs disk but never breaks resolution. The fuller "hoist as high
  * as possible without conflict" algorithm is a follow-on optimisation.
+ *
+ * Why two placement paths? On lockfile replay we already have a recorded
+ * installPath per entry and want the on-disk layout to match the lockfile
+ * exactly, regardless of visit order. Live resolve has no such oracle —
+ * it computes placement from the first-seen-flat-wins rule. Both paths
+ * converge: the lockfile was originally written by the live path, so
+ * replaying its paths reproduces the same layout the live walk would
+ * have produced for the same visit order.
  *
  * Returns the map keyed by **install path**, not by name, since post-M11
  * the same `name` can appear at multiple paths (one flat + one or more
@@ -264,23 +293,17 @@ async function walkAndPin(
     parentInstallPath: string,
     parentName: string | undefined,
   ): Promise<void> {
-    const pin = await source.resolve(name, range, parentName);
+    const pin = await source.resolve(name, range, { parentName, parentInstallPath });
 
-    const flatVersion = flatByName.get(pin.name);
-    let installPath: string;
-    if (flatVersion === undefined) {
-      installPath = `node_modules/${pin.name}`;
+    const installPath = pin.installPath ?? choosePlacement(pin, parentInstallPath, flatByName);
+    // Keep `flatByName` consistent regardless of which placement path was
+    // taken: if the chosen path is the flat slot, record it so any later
+    // live-source visit (in a mixed run, were that to ever exist) honours
+    // first-wins. Today only one source drives a given install, but the
+    // bookkeeping is cheap and removes a foot-gun.
+    if (installPath === `node_modules/${pin.name}` && !flatByName.has(pin.name)) {
       flatByName.set(pin.name, pin.version);
-    } else if (flatVersion === pin.version) {
-      // Same name + same version already at flat: dedupe (no fetch, no recurse).
-      return;
-    } else {
-      // Diamond: nest under the requesting parent.
-      installPath = `${parentInstallPath}/node_modules/${pin.name}`;
     }
-
-    // Two callers in the dep graph can land on the same nested path (rare but
-    // possible). Treat that as already-installed.
     if (pinned.has(installPath)) return;
 
     const { bytes, integrity } = await fetchAndUnpackToCache(
@@ -322,6 +345,28 @@ async function walkAndPin(
 }
 
 /**
+ * Live-source placement: first-wins-flat + nest-on-conflict. See
+ * `walkAndPin` step 2-4. Returns the install path for `pin`; the caller
+ * is responsible for updating `flatByName` (so the same logic can be
+ * reused if the lockfile source ever needs to fall back).
+ */
+function choosePlacement(
+  pin: ResolvedPin,
+  parentInstallPath: string,
+  flatByName: Map<string, string>,
+): string {
+  const flatVersion = flatByName.get(pin.name);
+  if (flatVersion === undefined) {
+    flatByName.set(pin.name, pin.version);
+    return `node_modules/${pin.name}`;
+  }
+  if (flatVersion === pin.version) {
+    return `node_modules/${pin.name}`;
+  }
+  return `${parentInstallPath}/node_modules/${pin.name}`;
+}
+
+/**
  * Adapter: `ResolvedPin × tarballBytes × actualIntegrity → PinnedPackage`.
  *
  * Single place that knows how to take any pinned-package representation
@@ -354,34 +399,49 @@ async function pinToPackage(
 }
 
 /**
- * Lockfile-replay source. Looks up each (name, _range, _parent) in the
- * lockfile and returns its pinned form. The range argument is ignored
- * because the lockfile already records exact versions; the `parent`
- * argument is ignored because override resolution was pre-validated before
- * this source was chosen.
+ * Lockfile-replay source. For each `(name, _range, { parentInstallPath })`,
+ * walks up the parent's path via `pinnedEntryForParent` and returns the
+ * first matching entry. `range` is ignored — the lockfile records exact
+ * versions. `parentName` is ignored — override resolution was pre-validated
+ * by `subgraphFreeOfOverrideDivergence` before this source was chosen.
  *
- * Throws `EBROKENLOCK` when an expected entry is missing or malformed
- * (missing `resolved` / `integrity`). The previous behaviour was to return
- * `null` and let the walk stop with a partial pinned set; that masked
- * corrupt lockfiles as "network slowness" in user reports. The contract
- * post-2026-05-27 is "lockfile is authoritative or it's an error".
+ * Pre-ADR-0042-follow-on (2026-05-27) this source did a bare-name lookup
+ * (`node_modules/<name>`) only. That broke for any lockfile with a nested
+ * entry, which forced `chooseSource` to opt out of the fast path entirely
+ * — one extra packument round-trip per package on every reinstall of any
+ * real-world project (express, vite, opencode all hit this). The walk-up
+ * lookup lifts that limitation: the lockfile fast path now replays nested
+ * placement in full from cache.
+ *
+ * Returns `pin.installPath = <matched lockfile key>` so the walk places
+ * the package exactly where the lockfile recorded it, regardless of visit
+ * order — protects against silent layout drift if the operator reorders
+ * `dependencies` between installs.
+ *
+ * Throws `EBROKENLOCK` when no ancestor scope contains the name, or when
+ * the matched entry is malformed (missing `resolved` / `integrity`). The
+ * pre-2026-05-27 behaviour was to return `null` and let the walk stop
+ * with a partial pinned set — corruption disguised as network slowness in
+ * user reports. The contract is "lockfile is authoritative or it's an
+ * error".
  */
 function createLockfileSource(lockfile: Lockfile): ResolutionSource {
   return {
-    async resolve(name): Promise<ResolvedPin> {
-      const entry = lockfile.packages[`node_modules/${name}`];
-      if (!entry) {
+    async resolve(name, _range, ctx): Promise<ResolvedPin> {
+      const hit = pinnedEntryForParent(lockfile, name, ctx.parentInstallPath);
+      if (!hit) {
         throw Object.assign(
           new Error(
-            `EBROKENLOCK: lockfile coverage gap — '${name}' is reachable from the dep graph but missing from package-lock.json. Delete the lockfile and re-install.`,
+            `EBROKENLOCK: lockfile coverage gap — '${name}' is reachable from the dep graph but missing from package-lock.json (searched walk-up from parent path '${ctx.parentInstallPath}'). Delete the lockfile and re-install.`,
           ),
           { code: 'EBROKENLOCK', packageName: name, reason: 'missing-entry' as const },
         );
       }
+      const { entry, installPath } = hit;
       if (!entry.resolved || !entry.integrity) {
         throw Object.assign(
           new Error(
-            `EBROKENLOCK: lockfile entry for '${name}' is malformed (missing ${
+            `EBROKENLOCK: lockfile entry for '${name}' at '${installPath}' is malformed (missing ${
               !entry.resolved ? 'resolved' : 'integrity'
             }). Delete the lockfile and re-install.`,
           ),
@@ -402,6 +462,7 @@ function createLockfileSource(lockfile: Lockfile): ResolutionSource {
         // Optionals already filtered at lockfile-write time; nothing to
         // re-traverse here.
         optionalDependencies: {},
+        installPath,
       };
     },
   };
@@ -440,8 +501,8 @@ function createRegistrySource(opts: InstallOptions): ResolutionSource {
   };
 
   return {
-    async resolve(name, range, parent): Promise<ResolvedPin> {
-      const override = resolveOverride(name, parent, opts.overrides);
+    async resolve(name, range, ctx): Promise<ResolvedPin> {
+      const override = resolveOverride(name, ctx.parentName, opts.overrides);
       const effectiveName = override?.name ?? name;
       const effectiveRange = override?.range ?? range;
 
