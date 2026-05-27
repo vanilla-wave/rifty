@@ -35,6 +35,18 @@ export interface ModuleLoader {
 
 const STUB_FROM_FILE_DEFAULT = '/__entry__';
 
+/**
+ * Load a `node:`-prefixed builtin or throw `MODULE_NOT_FOUND`. Shared by the
+ * sync and async loader paths; the async path wraps the result via
+ * {@link wrapCjsAsEsmNamespace} at the call site, so this helper deliberately
+ * returns the raw CJS-shaped exports.
+ */
+function loadBuiltinOrThrow(id: string): Record<string, unknown> {
+  const builtin = loadBuiltin(id);
+  if (!builtin) throw new ModuleLoadError('MODULE_NOT_FOUND', id, `Built-in '${id}' not found`);
+  return builtin;
+}
+
 export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}): ModuleLoader {
   const registry = new ModuleRegistry();
   const resolver = createResolver(vfs);
@@ -48,10 +60,7 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     },
     loadSync(id: string): Record<string, unknown> {
       if (id.startsWith('node:')) {
-        const builtin = loadBuiltin(id);
-        if (!builtin)
-          throw new ModuleLoadError('MODULE_NOT_FOUND', id, `Built-in '${id}' not found`);
-        return builtin;
+        return loadBuiltinOrThrow(id);
       }
       const cached = registry.get(id);
       if (cached && cached.state === 'loaded') return cached.exports;
@@ -72,10 +81,7 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     },
     async loadAsync(id: string): Promise<Record<string, unknown>> {
       if (id.startsWith('node:')) {
-        const builtin = loadBuiltin(id);
-        if (!builtin)
-          throw new ModuleLoadError('MODULE_NOT_FOUND', id, `Built-in '${id}' not found`);
-        return wrapCjsAsEsmNamespace(builtin);
+        return wrapCjsAsEsmNamespace(loadBuiltinOrThrow(id));
       }
       const cached = registry.get(id);
       if (cached && cached.state === 'loaded') return cached.exports;
