@@ -35,7 +35,7 @@
  *     keyed by).
  */
 
-import { type TarballCache, computeIntegrity } from './tarball-cache.ts';
+import { type TarballCache, computeIntegrity, parseIntegrityAlgorithm } from './tarball-cache.ts';
 
 export interface FetchSpec {
   readonly name: string;
@@ -79,7 +79,29 @@ export async function fetchAndUnpackToCache(
   }
 
   const bytes = await ctx.getTarball(spec.resolved);
-  const actual = await computeIntegrity(bytes);
+  // Compute integrity using the algorithm declared by `spec.integrity` so
+  // the comparison is apples-to-apples. When no expected integrity is
+  // supplied (e.g. a registry with no manifest pin), default to sha512 —
+  // matches what modern npm packuments produce.
+  let algorithm: 'sha256' | 'sha384' | 'sha512' = 'sha512';
+  if (spec.integrity) {
+    const parsed = parseIntegrityAlgorithm(spec.integrity);
+    if (parsed === null) {
+      throw Object.assign(
+        new Error(
+          `Unsupported integrity algorithm in ${spec.name}@${spec.version}: ${spec.integrity}`,
+        ),
+        {
+          code: 'EINTEGRITY',
+          packageName: spec.name,
+          version: spec.version,
+          expected: spec.integrity,
+        },
+      );
+    }
+    algorithm = parsed;
+  }
+  const actual = await computeIntegrity(bytes, algorithm);
   if (spec.integrity && actual !== spec.integrity) {
     throw Object.assign(
       new Error(

@@ -2,6 +2,48 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Algorithm-aware integrity verification.** `computeIntegrity(bytes)` was
+  hard-coded to SHA-256, but every modern npm packument carries a
+  `sha512-…` `dist.integrity` since npm@5. The live-express smoke run on
+  2026-05-27 failed with "expected sha512-…, got sha256-…" for every real
+  package fetched from `https://registry.npmjs.org`. The function now
+  accepts `(bytes, algorithm)` with `algorithm` defaulting to `'sha512'`,
+  and `fetch-and-unpack` parses the algorithm from the supplied
+  `spec.integrity` so the verifier and the spec always agree. New
+  exports: `IntegrityAlgorithm` (the supported alphabet) and
+  `parseIntegrityAlgorithm(string)` (returns `null` on unrecognised
+  prefixes, which `fetchAndUnpackToCache` surfaces as a loud
+  `EINTEGRITY` "Unsupported integrity algorithm" — never a silent fall
+  through to a wrong-algorithm comparison). The vendored
+  integration fixtures (ADR-0021) keep their `sha256-…` pins; the
+  algorithm parser handles both transparently.
+- **Partial-version ranges in semver.** `parse('4')` returned `null`
+  because the regex required three dotted components, so `matchesRange('5.2.1', '^4')`
+  evaluated to `false` and the installer fell through to a silent
+  `dist-tags.latest` (resolved express to 5.x instead of the requested 4.x).
+  Added a new internal `coerce(base)` that zero-fills missing minor / patch
+  for comparator bases; `parse()` itself stays strict for fully-qualified
+  released versions. `matchCaret` / `matchTilde` now derive `[min,
+  maxExclusive)` bounds per npm semver semantics — including the corner
+  cases `~4 ≡ ^4 (>=4 <5)`, `^0 ≡ >=0 <1`, `^0.0 ≡ >=0.0 <0.1`, and
+  bare `'4'` acting as the `4.x.x` x-range. `>=` / `<=` / `>` / `<` / `=`
+  partial bases zero-fill via a `compareToBase` helper (slightly
+  permissive vs node-semver's `>4 ≡ >=5.0.0` interpretation, accepted
+  trade-off for installer use). 8 focused regression tests added in
+  `semver.test.ts`.
+- **No silent `dist-tags.latest` substitution on explicit ranges.** When
+  `pickBestVersion(_, '^4')` returned `null` the installer fell back to
+  `packument['dist-tags'].latest` regardless of whether the operator had
+  asked for a specific range. That silently violated the operator's semver
+  intent — exactly what masked the partial-range bug above. The fallback
+  now only fires when the range is genuinely unconstrained (`null`, `''`,
+  `'*'`, `'latest'`); explicit ranges that match no published version
+  throw `No matching version for <name>@<range>`. New `rangeIsUnconstrained`
+  helper keeps this symmetric with `matchesRange`'s special-cases. Two
+  new tests in `installer.test.ts` pin the contract.
+
 ### Changed
 
 - **Hard-throw on malformed lockfile entries (follow-ups doc item #21).**

@@ -14,5 +14,7 @@ export {
   TARBALL_CACHE_ROOT,
   VfsTarballCache,
   computeIntegrity,
+  parseIntegrityAlgorithm,
+  type IntegrityAlgorithm,
   type TarballCache,
 } from './tarball-cache.ts';

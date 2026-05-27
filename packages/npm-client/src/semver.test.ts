@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compare, pickBestVersion } from './semver.ts';
+import { compare, matchesRange, pickBestVersion } from './semver.ts';
 
 describe('semver compare — pre-release ordering (per semver §11)', () => {
   it('release > prerelease of same version', () => {
@@ -59,5 +59,78 @@ describe('pickBestVersion — pre-release sort', () => {
     // The range "1.0.0-alpha" doesn't usually match prereleases by default,
     // so use exact pickBestVersion via passing the full set with a wildcard range.
     expect(pickBestVersion(versions, '*')).toBe('1.0.0-alpha.10');
+  });
+});
+
+describe('matchesRange — partial bases (the live-express regression)', () => {
+  // `parse('4')` used to return null, so `^4` matched nothing and the
+  // installer's silent dist-tags.latest fallback resolved express to its
+  // newest major (5.x). The fix coerces partial bases via zero-fill so
+  // `^4 = >=4.0.0 <5.0.0`. Cases below cover the live-express scenario plus
+  // the corner cases npm semver pins down differently from a naive fill.
+  it('caret with major-only base covers the full major range', () => {
+    expect(matchesRange('4.21.0', '^4')).toBe(true);
+    expect(matchesRange('4.0.0', '^4')).toBe(true);
+    expect(matchesRange('5.0.0', '^4')).toBe(false);
+    expect(matchesRange('3.9.9', '^4')).toBe(false);
+  });
+
+  it('caret with major.minor base bounds at next major (not next minor)', () => {
+    expect(matchesRange('4.21.0', '^4.21')).toBe(true);
+    expect(matchesRange('4.22.0', '^4.21')).toBe(true);
+    expect(matchesRange('5.0.0', '^4.21')).toBe(false);
+    expect(matchesRange('4.20.0', '^4.21')).toBe(false);
+  });
+
+  it('caret with major=0 partial keeps the special-case 0.x semantics', () => {
+    // ^0 = >=0.0.0 <1.0.0 (whole 0.x range)
+    expect(matchesRange('0.9.0', '^0')).toBe(true);
+    expect(matchesRange('1.0.0', '^0')).toBe(false);
+    // ^0.2 = >=0.2.0 <0.3.0
+    expect(matchesRange('0.2.5', '^0.2')).toBe(true);
+    expect(matchesRange('0.3.0', '^0.2')).toBe(false);
+    // ^0.0 = >=0.0.0 <0.1.0 (any patch in 0.0.x — different from ^0.0.3!)
+    expect(matchesRange('0.0.5', '^0.0')).toBe(true);
+    expect(matchesRange('0.1.0', '^0.0')).toBe(false);
+    // ^0.0.3 = >=0.0.3 <0.0.4 (locked patch)
+    expect(matchesRange('0.0.3', '^0.0.3')).toBe(true);
+    expect(matchesRange('0.0.4', '^0.0.3')).toBe(false);
+  });
+
+  it('tilde with major-only base behaves like caret (npm semver §~)', () => {
+    // ~4 = >=4.0.0 <5.0.0, NOT >=4.0.0 <4.1.0 — easy to get wrong.
+    expect(matchesRange('4.21.0', '~4')).toBe(true);
+    expect(matchesRange('4.0.0', '~4')).toBe(true);
+    expect(matchesRange('5.0.0', '~4')).toBe(false);
+  });
+
+  it('tilde with major.minor base bounds at next minor', () => {
+    expect(matchesRange('4.1.5', '~4.1')).toBe(true);
+    expect(matchesRange('4.2.0', '~4.1')).toBe(false);
+    expect(matchesRange('4.0.5', '~4.1')).toBe(false);
+  });
+
+  it('bare partial versions act as x-ranges (`4` ≡ `4.x.x`)', () => {
+    expect(matchesRange('4.21.0', '4')).toBe(true);
+    expect(matchesRange('5.0.0', '4')).toBe(false);
+    expect(matchesRange('4.1.5', '4.1')).toBe(true);
+    expect(matchesRange('4.2.0', '4.1')).toBe(false);
+  });
+
+  it('comparators accept partial bases (`>=14` ≡ `>=14.0.0`)', () => {
+    expect(matchesRange('14.0.0', '>=14')).toBe(true);
+    expect(matchesRange('14.21.5', '>=14')).toBe(true);
+    expect(matchesRange('13.99.0', '>=14')).toBe(false);
+    expect(matchesRange('4.0.0', '<5')).toBe(true);
+    expect(matchesRange('4.21.0', '<5')).toBe(true);
+    expect(matchesRange('5.0.0', '<5')).toBe(false);
+  });
+
+  it('pickBestVersion picks the newest 4.x for `^4` from an express-like packument', () => {
+    // The exact regression: express had 4.0.0 .. 4.21.2 and 5.x; with the old
+    // semver `pickBestVersion(_, '^4')` returned null and the silent fallback
+    // resolved 5.2.1. After the fix the picker selects the newest 4.x.
+    const versions = ['4.0.0', '4.16.0', '4.17.1', '4.21.0', '4.21.2', '5.0.0', '5.2.1'];
+    expect(pickBestVersion(versions, '^4')).toBe('4.21.2');
   });
 });

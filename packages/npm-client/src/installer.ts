@@ -337,7 +337,10 @@ function createLockfileSource(lockfile: Lockfile): ResolutionSource {
  * Live-resolve source. For each (name, range, parent):
  *   1. Apply overrides (user + baked-in) to compute effective name/range.
  *   2. Load the packument (with caching across calls).
- *   3. `pickBestVersion`, falling back to `dist-tags.latest` if nothing matches.
+ *   3. `pickBestVersion`. When no version satisfies an explicit range we
+ *      throw "No matching version" — silently substituting `dist-tags.latest`
+ *      would violate the operator's semver intent (caught the 2026-05-27
+ *      live-express regression where `^4` was silently resolved to 5.x).
  *   4. Check the version against any prior pin for the same effective name;
  *      throw `EVERSIONCONFLICT` on diamond mismatch (per A-031).
  *   5. Fall back to the existing lockfile entry for an integrity hash when
@@ -374,7 +377,10 @@ function createRegistrySource(opts: InstallOptions): ResolutionSource {
       }
       const versions = Object.keys(packument.versions);
       let pick = pickBestVersion(versions, effectiveRange);
-      if (!pick) {
+      if (!pick && rangeIsUnconstrained(effectiveRange)) {
+        // No explicit range AND `pickBestVersion` returned null — only happens
+        // when the packument has zero `versions` entries. A `dist-tags.latest`
+        // pointing at an unlisted version is the last resort before failing.
         const tag = packument['dist-tags']?.latest;
         if (tag) pick = tag;
       }
@@ -429,6 +435,16 @@ function createRegistrySource(opts: InstallOptions): ResolutionSource {
       };
     },
   };
+}
+
+/**
+ * "No-constraint" ranges that the picker treats as matching every version.
+ * Mirrors the special-cases in `matchesRange`; centralised here so the
+ * `dist-tags.latest` fallback in {@link createRegistrySource} stays
+ * symmetric with the matcher.
+ */
+function rangeIsUnconstrained(range: string | null | undefined): boolean {
+  return !range || range === '*' || range === 'latest' || range === '';
 }
 
 /**

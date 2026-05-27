@@ -139,6 +139,52 @@ describe('fetchAndUnpackToCache — network integrity verification', () => {
     expect(result.bytes).toEqual(bytes);
   });
 
+  it('verifies against sha512 when the spec uses sha512 (npm packument default)', async () => {
+    // Regression for 2026-05-27 live express install: the registry returns
+    // `sha512-…` on every modern packument; before the algorithm-aware
+    // verifier landed we compared a freshly-computed sha256 to it and threw
+    // EINTEGRITY for every real package. Round-trip with an explicit sha512
+    // pin proves the fetch path picks the right algorithm.
+    const vfs = new MemoryVfs();
+    const cache = new VfsTarballCache(vfs);
+    const bytes = makeBytes('a tarball verified via sha512');
+    const sha512Pin = await computeIntegrity(bytes, 'sha512');
+    expect(sha512Pin.startsWith('sha512-')).toBe(true);
+
+    const result = await fetchAndUnpackToCache(
+      { name: 'modern', version: '5.2.1', resolved: 'fake://modern/5.2.1', integrity: sha512Pin },
+      { cache, getTarball: async () => bytes },
+    );
+
+    expect(result.cacheHit).toBe(false);
+    expect(result.integrity).toBe(sha512Pin);
+    expect(result.bytes).toEqual(bytes);
+  });
+
+  it('throws when the spec integrity uses an algorithm we do not support', async () => {
+    const vfs = new MemoryVfs();
+    const cache = new VfsTarballCache(vfs);
+    const bytes = makeBytes('any bytes');
+
+    let caught: unknown;
+    try {
+      await fetchAndUnpackToCache(
+        {
+          name: 'weird',
+          version: '1.0.0',
+          resolved: 'fake://weird/1.0.0',
+          integrity: 'md5-deadbeef',
+        },
+        { cache, getTarball: async () => bytes },
+      );
+    } catch (err) {
+      caught = err;
+    }
+    const err = caught as Error & { code?: string };
+    expect(err.code).toBe('EINTEGRITY');
+    expect(err.message).toContain('Unsupported integrity algorithm');
+  });
+
   it('writes the verified bytes to the cache exactly once', async () => {
     const vfs = new MemoryVfs();
     const realPut = new VfsTarballCache(vfs).put.bind(new VfsTarballCache(vfs));

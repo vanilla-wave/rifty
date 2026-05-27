@@ -14,12 +14,53 @@ import type { Vfs } from '@rifty/vfs';
 
 export const TARBALL_CACHE_ROOT = '/.rifty/tarball-cache';
 
-/** SHA-256-based subresource-integrity string: `sha256-<base64>`. */
-export async function computeIntegrity(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', bytes as unknown as BufferSource);
+/**
+ * Subresource-integrity algorithms we accept. SRI permits sha256, sha384,
+ * and sha512; npm packuments default to sha512 since npm@5, so that is the
+ * default we use when generating a fresh integrity. sha256 stays supported
+ * because the vendored integration fixtures (ADR-0021) were generated with
+ * it, and some private-registry mirrors still serve sha256-only metadata.
+ */
+export type IntegrityAlgorithm = 'sha256' | 'sha384' | 'sha512';
+
+const WEBCRYPTO_NAMES: Record<IntegrityAlgorithm, string> = {
+  sha256: 'SHA-256',
+  sha384: 'SHA-384',
+  sha512: 'SHA-512',
+};
+
+/**
+ * Parse the algorithm prefix from an SRI string (`sha512-<base64>`).
+ * Returns `null` when the prefix is missing or names an algorithm we do not
+ * support — the caller should surface that as an integrity-format error
+ * rather than falling through to a default and producing a misleading
+ * mismatch.
+ */
+export function parseIntegrityAlgorithm(integrity: string): IntegrityAlgorithm | null {
+  const dash = integrity.indexOf('-');
+  if (dash <= 0) return null;
+  const prefix = integrity.slice(0, dash);
+  if (prefix === 'sha256' || prefix === 'sha384' || prefix === 'sha512') return prefix;
+  return null;
+}
+
+/**
+ * Hash `bytes` and return the SRI string for the chosen algorithm. Default
+ * is `sha512` (matches modern npm); callers verifying against a known
+ * `spec.integrity` should pass the algorithm parsed from that spec so the
+ * comparison is apples-to-apples.
+ */
+export async function computeIntegrity(
+  bytes: Uint8Array,
+  algorithm: IntegrityAlgorithm = 'sha512',
+): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    WEBCRYPTO_NAMES[algorithm],
+    bytes as unknown as BufferSource,
+  );
   const bin = String.fromCharCode(...new Uint8Array(digest));
   const b64 = btoa(bin);
-  return `sha256-${b64}`;
+  return `${algorithm}-${b64}`;
 }
 
 function cachePathFor(name: string, version: string, integrity: string): string {
@@ -44,7 +85,14 @@ export class VfsTarballCache implements TarballCache {
     const path = cachePathFor(name, version, integrity);
     if (!(await this.vfs.exists(path))) return null;
     const bytes = await this.vfs.readFile(path);
-    const actual = await computeIntegrity(bytes);
+    const algorithm = parseIntegrityAlgorithm(integrity);
+    if (algorithm === null) {
+      // Unknown algorithm in the integrity string — cannot re-verify, treat
+      // as a miss so the caller refetches and the fetch path surfaces the
+      // format error loudly.
+      return null;
+    }
+    const actual = await computeIntegrity(bytes, algorithm);
     if (actual !== integrity) {
       // Corrupted entry — caller will refetch.
       return null;

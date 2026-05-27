@@ -23,6 +23,43 @@ export function parse(v: string): SemverParts | null {
   };
 }
 
+/**
+ * Coerce a possibly-partial version string (`'4'`, `'4.1'`, `'4.1.2'`) into
+ * `SemverParts`. Missing minor/patch components are filled with `0` — that
+ * matches npm semver's behaviour for comparator bases (`^4`, `~4.1`,
+ * `>=14`). Use this when parsing the right-hand-side of a range comparator;
+ * use {@link parse} when the input must be a fully-qualified released
+ * version (no zero-filling).
+ */
+function coerce(base: string): SemverParts | null {
+  const m = /^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(
+    base.trim(),
+  );
+  if (!m) return null;
+  return {
+    major: Number(m[1]),
+    minor: m[2] !== undefined ? Number(m[2]) : 0,
+    patch: m[3] !== undefined ? Number(m[3]) : 0,
+    pre: m[4] ?? '',
+  };
+}
+
+/**
+ * Number of dotted numeric components in a comparator base, ignoring any
+ * leading `v`/`=` and trailing pre-release/build metadata. `'^0.0'` returns
+ * 2; `'^0.0.3'` returns 3 — the count drives the upper-bound choice for
+ * `^` / `~` and the partial-vs-exact decision for bare comparators.
+ */
+function partsCount(s: string): number {
+  const noPrefix = s.replace(/^[v=]/, '');
+  const beforePre = noPrefix.split('-')[0] ?? noPrefix;
+  return beforePre.split('.').length;
+}
+
+function fullVersion(p: SemverParts): string {
+  return `${p.major}.${p.minor}.${p.patch}${p.pre ? `-${p.pre}` : ''}`;
+}
+
 export function compare(a: string, b: string): number {
   const pa = parse(a);
   const pb = parse(b);
@@ -106,31 +143,93 @@ function matchBranch(version: string, branch: string): boolean {
 function matchComparator(version: string, cmp: string): boolean {
   if (cmp.startsWith('^')) return matchCaret(version, cmp.slice(1));
   if (cmp.startsWith('~')) return matchTilde(version, cmp.slice(1));
-  if (cmp.startsWith('>=')) return compare(version, cmp.slice(2)) >= 0;
-  if (cmp.startsWith('<=')) return compare(version, cmp.slice(2)) <= 0;
-  if (cmp.startsWith('>')) return compare(version, cmp.slice(1)) > 0;
-  if (cmp.startsWith('<')) return compare(version, cmp.slice(1)) < 0;
-  if (cmp.startsWith('=')) return compare(version, cmp.slice(1)) === 0;
-  if (cmp.includes('x') || cmp.includes('*')) return matchXRange(version, cmp);
+  if (cmp.startsWith('>=')) return compareToBase(version, cmp.slice(2)) >= 0;
+  if (cmp.startsWith('<=')) return compareToBase(version, cmp.slice(2)) <= 0;
+  if (cmp.startsWith('>')) return compareToBase(version, cmp.slice(1)) > 0;
+  if (cmp.startsWith('<')) return compareToBase(version, cmp.slice(1)) < 0;
+  if (cmp.startsWith('=')) return compareToBase(version, cmp.slice(1)) === 0;
+  if (cmp.includes('x') || cmp.includes('X') || cmp.includes('*')) return matchXRange(version, cmp);
+  // Bare comparator: partial versions (`'4'`, `'4.1'`) are x-range patterns
+  // per npm semver; only fully-qualified `X.Y.Z` is treated as exact.
+  if (partsCount(cmp) < 3) return matchXRange(version, cmp);
   return compare(version, cmp) === 0;
 }
 
+/**
+ * Compare `version` against a possibly-partial `base` (e.g. `>=4` → base
+ * `'4'`). Partial bases are zero-filled via {@link coerce} — slightly more
+ * permissive than real `node-semver`, which interprets `>4` as `>=5.0.0`,
+ * but acceptable for installer use: the only effect is that a few packages
+ * may resolve to a narrower version than strict semver would allow.
+ */
+function compareToBase(version: string, base: string): number {
+  const p = coerce(base);
+  if (!p) return version < base ? -1 : version > base ? 1 : 0;
+  return compare(version, fullVersion(p));
+}
+
 function matchCaret(version: string, base: string): boolean {
-  const p = parse(base);
+  const bounds = caretBounds(base);
   const v = parse(version);
-  if (!p || !v) return false;
-  if (compare(version, base) < 0) return false;
-  if (p.major > 0) return v.major === p.major;
-  if (p.minor > 0) return v.major === 0 && v.minor === p.minor;
-  return v.major === 0 && v.minor === 0 && v.patch === p.patch;
+  if (!bounds || !v) return false;
+  return (
+    compare(version, fullVersion(bounds.min)) >= 0 &&
+    compare(version, fullVersion(bounds.maxExclusive)) < 0
+  );
 }
 
 function matchTilde(version: string, base: string): boolean {
-  const p = parse(base);
+  const bounds = tildeBounds(base);
   const v = parse(version);
-  if (!p || !v) return false;
-  if (compare(version, base) < 0) return false;
-  return v.major === p.major && v.minor === p.minor;
+  if (!bounds || !v) return false;
+  return (
+    compare(version, fullVersion(bounds.min)) >= 0 &&
+    compare(version, fullVersion(bounds.maxExclusive)) < 0
+  );
+}
+
+/**
+ * Translate `^base` into `[min, maxExclusive)` per npm semver:
+ *   - `^4`     → `>=4.0.0 <5.0.0`
+ *   - `^4.21`  → `>=4.21.0 <5.0.0`
+ *   - `^4.21.0`→ `>=4.21.0 <5.0.0`
+ *   - `^0`     → `>=0.0.0 <1.0.0`
+ *   - `^0.2`   → `>=0.2.0 <0.3.0`
+ *   - `^0.0.3` → `>=0.0.3 <0.0.4`
+ *   - `^0.0`   → `>=0.0.0 <0.1.0`
+ */
+function caretBounds(base: string): { min: SemverParts; maxExclusive: SemverParts } | null {
+  const p = coerce(base);
+  if (!p) return null;
+  const parts = partsCount(base);
+  if (p.major > 0) {
+    return { min: p, maxExclusive: { major: p.major + 1, minor: 0, patch: 0, pre: '' } };
+  }
+  if (parts < 2) {
+    return { min: p, maxExclusive: { major: 1, minor: 0, patch: 0, pre: '' } };
+  }
+  if (p.minor > 0) {
+    return { min: p, maxExclusive: { major: 0, minor: p.minor + 1, patch: 0, pre: '' } };
+  }
+  if (parts < 3) {
+    return { min: p, maxExclusive: { major: 0, minor: 1, patch: 0, pre: '' } };
+  }
+  return { min: p, maxExclusive: { major: 0, minor: 0, patch: p.patch + 1, pre: '' } };
+}
+
+/**
+ * Translate `~base` into `[min, maxExclusive)` per npm semver:
+ *   - `~4`     → `>=4.0.0 <5.0.0` (equivalent to `^4`)
+ *   - `~4.1`   → `>=4.1.0 <4.2.0`
+ *   - `~4.1.2` → `>=4.1.2 <4.2.0`
+ */
+function tildeBounds(base: string): { min: SemverParts; maxExclusive: SemverParts } | null {
+  const p = coerce(base);
+  if (!p) return null;
+  if (partsCount(base) <= 1) {
+    return { min: p, maxExclusive: { major: p.major + 1, minor: 0, patch: 0, pre: '' } };
+  }
+  return { min: p, maxExclusive: { major: p.major, minor: p.minor + 1, patch: 0, pre: '' } };
 }
 
 function matchXRange(version: string, range: string): boolean {

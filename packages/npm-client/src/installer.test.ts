@@ -119,6 +119,54 @@ describe('install — idempotent lockfile write', () => {
   });
 });
 
+describe('install — explicit range never falls through to dist-tags.latest', () => {
+  it('throws "No matching version" when an explicit range matches no published version', async () => {
+    // Regression for the 2026-05-27 live-express experiment: the installer
+    // used to silently fall back to `dist-tags.latest` whenever
+    // `pickBestVersion` returned null. With the partial-range semver fix
+    // already in place, the pickBestVersion path almost always succeeds —
+    // but if it ever doesn't, the operator must see "no matching version"
+    // rather than an unannounced major version jump.
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    // Only 4.x available; user asks for ^5 — must fail loud, not return 4.x.
+    db.set(
+      'express',
+      new Map([
+        ['4.17.1', await makeEntry('express', '4.17.1')],
+        ['4.21.0', await makeEntry('express', '4.21.0')],
+      ]),
+    );
+
+    const registry = new FakeRegistry(db);
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    let caught: unknown;
+    try {
+      await install('root', '1.0.0', { express: '^5' }, { vfs, cwd: '/proj', registry });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toContain('No matching version for express@^5');
+  });
+
+  it('still uses dist-tags.latest when the range is `*` (unconstrained)', async () => {
+    // The fallback path is intact for the genuinely unconstrained case — only
+    // explicit ranges are protected. We use `*` here; in practice that's
+    // mostly relevant for `npm install <name>` with no explicit version.
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('a', new Map([['1.0.0', await makeEntry('a', '1.0.0')]]));
+    const registry = new FakeRegistry(db);
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    const result = await install('root', '1.0.0', { a: '*' }, { vfs, cwd: '/proj', registry });
+    expect(result.packages[0]?.name).toBe('a');
+    expect(result.packages[0]?.version).toBe('1.0.0');
+  });
+});
+
 describe('install — version conflict', () => {
   it('throws EVERSIONCONFLICT when two deps require incompatible versions of the same transitive package', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
