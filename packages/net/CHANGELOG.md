@@ -4,6 +4,19 @@
 
 ### Added
 
+- **ADR-0043 (M11 Vite-in-Worker) — cross-realm preview-port bridge.** New
+  module `src/cross-realm/preview-port.ts` exports
+  `previewPortChannelUrl(port)`, `serveCrossRealmPreview(port, dispatch)`,
+  and `bridgeCrossRealmPreview(port, opts?)`. Bridges the page-realm
+  `dispatchToPort()` to a Worker-realm HTTP-shape listener over
+  `BroadcastChannel` — same primitive as the HMR bridge
+  (`BridgedWebSocketServer`) so the M12 ADR-0017 rewrite can swap both to
+  dedicated `MessagePort`s in one pass. 6 unit tests cover GET round-trip,
+  4 KiB POST body preservation, worker-side throw → 502, and
+  configurable timeout → 502.
+
+### Added
+
 - **M7 acceptance coverage:** `tests/e2e/m7-preview-sw.spec.ts` proves an
   HTTP request rounds through the Service Worker preview path end-to-end —
   the playground's main-thread `http.createServer().listen(3000)` (via

@@ -1,40 +1,57 @@
 /**
- * Real Vite, running in the playground's main-thread realm.
+ * Real Vite — kernel-spawned Worker realm (ADR-0043 — Vite-in-Worker,
+ * M11 / A-026).
+ *
+ * The page-realm orchestrator. Spawns the Real Vite worker (which
+ * actually runs the install + Vite createServer flow), wires the
+ * cross-realm preview-port bridge, and forwards editor edits to the
+ * worker via the VFS write port. The dev server, the HMR bridge, the
+ * file watcher, and the entire `node:*` global shim all live in the
+ * Worker realm — the page realm pays no Vite CPU cost and ships no
+ * `installProcessGlobals()` side-effect into the page's
+ * `Promise.prototype.then`.
+ *
+ * Supersedes the page-realm Real Vite path from ADR-0025. The
+ * main-thread Dev Mode (`devMode.ts`) is retained as the non-isolated
+ * fallback; this adapter requires `crossOriginIsolated` + SAB IPC
+ * (same gate as the rest of ADR-0011).
  *
  * Flow:
- *   1. Configure `@rifty/runtime-js` globals (`process`, `Buffer`) on this
- *      realm so Vite's many `node:*` imports resolve.
- *   2. Seed a minimal project tree (`index.html`, `src/main.js`,
- *      `package.json`) in the shared sync mirror.
- *   3. Drive `@rifty/npm-client` to install Vite from the npm proxy. The
- *      installer drops tarballs into `/workspace/node_modules/*` via our
- *      `SyncMirrorVfs` so the runtime can see them immediately.
- *   4. Overlay an `esbuild` shim — the real package's binary launcher is a
- *      no-go in a browser, so we substitute a passthrough.
- *   5. Build a `runtime-js` module loader rooted at `/workspace`, dynamic-
- *      import `vite`, and call `createServer()`.
- *   6. Bridge the dev server's port into the existing service-worker preview
- *      route so the iframe at `/preview/<port>/` actually serves the app.
+ *   1. Gate on `isSabIpcSupported()` — throws `NotImplementedError`
+ *      otherwise with the documented requirement.
+ *   2. Resolve the bootstrap module URL via
+ *      `new URL('../workers/real-vite-bootstrap.ts', import.meta.url)`
+ *      so Vite bundles the worker chunk at build time.
+ *   3. `globalProcessManager.spawnWorker('real-vite', spec)` — kernel
+ *      builds the SAB ring, three stdio MessagePorts, posts init,
+ *      kernel's pre-entry hook installs `globalThis.process` from the
+ *      spec, kernel imports the bootstrap URL, bootstrap takes it from
+ *      there.
+ *   4. Register a page-side `bridgeCrossRealmPreview(port)` handler
+ *      against `port` in the page's `@rifty/net` registry so the SW's
+ *      preview-bridge forwards the SW fetch into the worker.
+ *   5. Mount the existing `mountPlaygroundPreviewBridge()` — unchanged
+ *      from the M10 path; it dispatches into the page registry, which
+ *      now proxies to the worker.
+ *   6. Pump worker stdout / stderr lines into `onLog` so the playground
+ *      terminal mirrors the worker's progress.
+ *   7. `updateEntry(content)` forwards each edit over the VFS write
+ *      port — one-way mailbox per ADR-0043 / D4.
  *
- * Failures along the way are surfaced to the caller as plain Error objects
- * (so the UI can show them in the terminal). We intentionally never silently
- * stub or swallow — every gap throws.
+ * What this file does NOT do:
+ *   - Install Node-shape globals on the page realm. (That was the
+ *     ADR-0025 trade-off.)
+ *   - Run npm-install in the page realm.
+ *   - Drive Vite's module-graph work in the page realm.
+ *   - Replace the M10 Dev Mode (`devMode.ts`) — that's a separate
+ *     adapter with the same kernel-Worker migration story to do later
+ *     (out of scope here per ADR-0043 / D5).
  */
-import '@rifty/net/register-builtins';
-import { RegistryClient, install } from '@rifty/npm-client';
-// The four `./builtins/*` subpath imports below are part of @rifty/runtime-js's
-// public surface (see ADR 0018).
-import { Buffer } from '@rifty/runtime-js/builtins/buffer';
-import { __setCreateRequireImpl } from '@rifty/runtime-js/builtins/module';
-import { installProcessGlobals } from '@rifty/runtime-js/builtins/process';
-import { installTimerGlobals } from '@rifty/runtime-js/builtins/timers';
-import { createModuleLoader } from '@rifty/runtime-js/loader';
-import { dirname, normalizePath, syncMirror } from '@rifty/vfs';
-import { esbuildShimFiles, rollupShimFiles } from './esbuild-shim.ts';
-import { type HmrBridgeHandle, createHmrBridgeVitePlugin, setupHmrBridge } from './hmr-bridge.ts';
+import { globalProcessManager, isSabIpcSupported } from '@rifty/kernel';
+import { bridgeCrossRealmPreview, registerPort, unregisterPort } from '@rifty/net';
+import { NotImplementedError } from '@rifty/vfs';
 import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
-import { proxiedRegistryFetch } from './registry-fetch.ts';
-import { SyncMirrorVfs } from './sync-mirror-vfs.ts';
+import { sendVfsWrite } from './vfs-write-port.ts';
 
 export interface RealViteHandle {
   readonly port: number;
@@ -50,71 +67,17 @@ export interface RealViteOptions {
 }
 
 const enc = new TextEncoder();
+const dec = new TextDecoder();
 
-const INITIAL_INDEX_HTML = `<!doctype html>
-<html>
-  <head><meta charset="utf-8"><title>rifty + real Vite</title></head>
-  <body>
-    <h1>Hello from rifty</h1>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
-  </body>
-</html>`;
-
-const INITIAL_MAIN_JS = `document.getElementById('app').textContent =
-  'Hello from real Vite running entirely in the browser — edit me, save.';
-`;
-
-const INITIAL_PACKAGE_JSON = JSON.stringify(
-  {
-    name: 'rifty-vite-app',
-    version: '0.0.0',
-    private: true,
-    type: 'module',
-    dependencies: { vite: '^5.4.0' },
-  },
-  null,
-  2,
-);
-
-// alternative is a dedicated Worker + cross-realm `@rifty/net` registry
-// bridge; deferred until we hit a concrete UI-freeze issue.
-let globalsInstalled = false;
-function installRuntimeGlobalsOnce(): void {
-  if (globalsInstalled) return;
-  globalsInstalled = true;
-  installProcessGlobals();
-  installTimerGlobals();
-  (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
-}
-
-function seedProject(root: string, entryPath: string): void {
-  const fs = syncMirror();
-  fs.mkdirSync(root, { recursive: true });
-  fs.mkdirSync(`${root}/src`, { recursive: true });
-  if (!fs.existsSync(`${root}/index.html`)) {
-    fs.writeFileSync(`${root}/index.html`, enc.encode(INITIAL_INDEX_HTML));
-  }
-  if (!fs.existsSync(entryPath)) {
-    fs.writeFileSync(entryPath, enc.encode(INITIAL_MAIN_JS));
-  }
-  if (!fs.existsSync(`${root}/package.json`)) {
-    fs.writeFileSync(`${root}/package.json`, enc.encode(INITIAL_PACKAGE_JSON));
-  }
-}
-
-function overlayShims(): void {
-  const fs = syncMirror();
-  for (const [path, content] of [
-    ...Object.entries(esbuildShimFiles),
-    ...Object.entries(rollupShimFiles),
-  ]) {
-    const np = normalizePath(path);
-    fs.mkdirSync(dirname(np), { recursive: true });
-    fs.writeFileSync(np, enc.encode(content));
-  }
-}
-
+/**
+ * Spawn the Real Vite worker realm and wire the cross-realm bridges.
+ *
+ * Throws `NotImplementedError('startRealVite', '…')` if the host realm
+ * doesn't have SAB IPC available (cross-origin isolation is the gate;
+ * see ADR-0002 / D-001). The UI catches and surfaces the error in the
+ * playground terminal — matches the existing `useMode.toggleRealVite()`
+ * error path.
+ */
 export async function startRealVite(opts: RealViteOptions = {}): Promise<RealViteHandle> {
   const root = opts.root ?? '/workspace';
   const entryRel = opts.entry ?? '/src/main.js';
@@ -122,141 +85,96 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
   const entryPath = `${root}${entryRel}`;
   const log = opts.onLog ?? (() => {});
 
-  installRuntimeGlobalsOnce();
-  seedProject(root, entryPath);
+  if (!isSabIpcSupported()) {
+    throw new NotImplementedError(
+      'startRealVite',
+      'requires SAB IPC (cross-origin isolation) — toggle the host headers ' +
+        'or run inside the playground dev server (vite.config.ts ships them).',
+    );
+  }
 
-  log(`[real-vite] installing vite into ${root}/node_modules…\n`);
-  const registry = new RegistryClient({ fetch: proxiedRegistryFetch() });
-  const vfs = new SyncMirrorVfs();
-  const result = await install(
-    'rifty-vite-app',
-    '0.0.0',
-    { vite: '^5.4.0' },
-    { vfs, cwd: root, registry },
+  // Vite bundles the bootstrap into its own worker chunk. The URL is
+  // resolved at build time via `new URL(..., import.meta.url)`.
+  const bootstrapUrl = new URL('../workers/real-vite-bootstrap.ts', import.meta.url).toString();
+
+  log(`[real-vite] spawning worker with bootstrap ${bootstrapUrl}\n`);
+
+  const handle = globalProcessManager.spawnWorker(
+    'real-vite',
+    {
+      entry: { kind: 'url', url: bootstrapUrl },
+      argv: ['rifty', 'real-vite'],
+      env: {
+        RIFTY_RFV_PORT: String(port),
+        RIFTY_RFV_ROOT: root,
+        RIFTY_RFV_ENTRY: entryRel,
+      },
+      cwd: root,
+    },
+    /* ppid */ 1,
+    { cwd: root },
   );
-  log(
-    `[real-vite] installed ${result.packages.length} packages (${result.conflicts.length} conflicts)\n`,
-  );
 
-  // Overlay shims AFTER install — esbuild loader binary and rollup native
-  // parser both can't run in-browser.
-  overlayShims();
-  log('[real-vite] esbuild + rollup-native shims overlaid\n');
+  if (handle.kind !== 'worker') {
+    throw new NotImplementedError(
+      'startRealVite',
+      `globalProcessManager.spawnWorker returned kind=${handle.kind}; expected 'worker'`,
+    );
+  }
 
-  // Build a module loader rooted at /workspace, hook node:module to it.
-  // The module loader consumes `@rifty/vfs:FsSync` directly (ADR-0037), so
-  // the shared `syncMirror()` is the right thing to pass — no adapter layer.
-  const loader = createModuleLoader(syncMirror(), { cwd: root });
-  __setCreateRequireImpl((from: string) => {
-    // Callers may pass either a plain VFS path or a `file://…` URL string
-    // (e.g. `import.meta.url` round-tripped through `pathToFileURL`).
-    const fromPath = from.startsWith('file://')
-      ? decodeURIComponent(from.slice('file://'.length))
-      : from;
-    const req = ((id: string) => loader.require(id, fromPath)) as ((id: string) => unknown) & {
-      resolve: (id: string) => string;
-      cache: Record<string, unknown>;
-      extensions: Record<string, unknown>;
-      main: undefined;
-    };
-    req.resolve = (id: string) => {
-      const resolved = loader.resolver.resolve(id, { fromFile: fromPath, esm: false });
-      return resolved.id;
-    };
-    req.cache = {};
-    req.extensions = {};
-    req.main = undefined;
-    return req;
+  // Pump worker stdout / stderr lines into the playground log sink.
+  // Vite's progress messages, install logs, and bootstrap-error stacks
+  // all flow through here. The `Readable`'s data payload type is
+  // `unknown` by design (object-mode allowance); the SAB Worker layer
+  // always posts `Uint8Array`, so the runtime cast is sound.
+  handle.stdout().on('data', (chunk: unknown) => {
+    if (chunk instanceof Uint8Array) log(dec.decode(chunk));
+  });
+  handle.stderr().on('data', (chunk: unknown) => {
+    if (chunk instanceof Uint8Array) log(dec.decode(chunk));
   });
 
-  log('[real-vite] importing vite…\n');
-  const viteNs = (await loader.import('vite', `${root}/__entry__.mjs`)) as unknown as {
-    createServer: (cfg: ViteUserConfig) => Promise<ViteDevServer>;
-  };
-
-  // Spin up the cross-realm HMR bridge **before** Vite starts so the
-  // plugin's `transformIndexHtml` hook (the only entry point that needs the
-  // channel name) sees a stable `port`. The bridge owns the page-realm
-  // `BridgedWebSocketServer` that the preview iframe's inlined HMR client
-  // connects to over `BroadcastChannel` — see ADR-0017 phase 1 acceptance
-  // and `apps/playground/src/glue/hmr-bridge.ts`.
-  const hmrBridge: HmrBridgeHandle = setupHmrBridge({ port });
-  log(`[real-vite] hmr bridge ready at ${hmrBridge.url}\n`);
-
-  log(`[real-vite] starting dev server on port ${port}…\n`);
-  const server = await viteNs.createServer({
-    root,
-    server: {
-      port,
-      strictPort: true,
-      middlewareMode: false,
-      // Vite's native HMR client opens a browser-native `WebSocket`, which
-      // can't reach an in-realm server and can't be intercepted by the SW.
-      // The cross-realm bridge replaces it (ADR-0017 phase 1): the preview
-      // iframe runs a `BroadcastChannel`-backed client injected by our
-      // `rifty:hmr-bridge` Vite plugin. The Vite-native HMR machinery stays
-      // off — Vite still does its module-graph invalidation work on
-      // `watcher.change`, we just deliver the notification ourselves.
-      hmr: false,
-      // Requests come in via the SW preview-bridge with `Host: preview.local`
-      // (or undefined). Disable Vite's host allow-list so it serves them.
-      host: true,
-      allowedHosts: true,
-    } as unknown as ViteUserConfig['server'],
-    appType: 'spa',
-    clearScreen: false,
-    optimizeDeps: { disabled: true } as unknown as ViteUserConfig['optimizeDeps'],
-    plugins: [createHmrBridgeVitePlugin({ port })],
-  });
-  await server.listen();
-  log(`[real-vite] vite is listening — preview at /preview/${port}/\n`);
-
-  // Wire Vite's file watcher into the bridge. Vite owns the change-detection
-  // primitive (chokidar / fs.watch over `root`); we just forward each event
-  // through `BridgedWebSocketServer.broadcast` so every subscribed iframe
-  // receives the HMR payload.
-  server.watcher?.on('change', (file) => {
-    hmrBridge.broadcast(JSON.stringify({ type: 'update', path: file }));
+  // Track worker exit so the handle's `close()` is idempotent — if the
+  // worker dies on its own (install failure, vite crash) we still want
+  // `close()` to be safe.
+  let exited = false;
+  handle.on('exit', (..._args: unknown[]) => {
+    exited = true;
   });
 
-  // Shared adapter wiring — see `preview-bridge-wiring.ts`. ADR-0017 phase 1
-  // streaming flows through as a `ReadableStream` when supported, with a
-  // buffered fallback for older runtimes.
-  const tearBridge = mountPlaygroundPreviewBridge();
+  // Page-side preview-port bridge. The SW dispatches `/preview/<port>/*`
+  // to the page; the page's `@rifty/net` registry routes through this
+  // handler over `BroadcastChannel` to the worker's `serveCrossRealmPreview`.
+  const previewBridge = bridgeCrossRealmPreview(port);
+  registerPort(port, previewBridge);
+
+  // Existing M7 SW ↔ page wiring — unchanged. It dispatches into the
+  // page's `@rifty/net` registry, which now hits `previewBridge`.
+  const tearSwBridge = mountPlaygroundPreviewBridge();
+
+  log(`[real-vite] page-side preview-port bridge ready (port ${port})\n`);
 
   return {
     port,
     async close() {
-      tearBridge();
-      hmrBridge.close();
-      try {
-        await server.close();
-      } catch (err) {
-        log(`[real-vite] close error: ${(err as Error).message}\n`);
+      tearSwBridge();
+      unregisterPort(port);
+      previewBridge.dispose();
+      if (!exited) {
+        // Best-effort termination — `kill` is idempotent and the kernel
+        // teardown closes the SAB ring + stdio ports.
+        handle.kill('SIGTERM');
       }
     },
     updateEntry(content) {
-      syncMirror().writeFileSync(entryPath, enc.encode(content));
+      // One-way mailbox: edit lands in the worker's `syncMirror()`. Vite's
+      // file watcher (worker-realm) sees it and the HMR bridge
+      // (worker-realm) broadcasts the iframe reload.
+      sendVfsWrite(port, {
+        type: 'write',
+        path: entryPath,
+        data: enc.encode(content),
+      });
     },
   };
-}
-
-interface ViteUserConfig {
-  root?: string;
-  server?: { port?: number; strictPort?: boolean; middlewareMode?: boolean; hmr?: boolean };
-  appType?: string;
-  clearScreen?: boolean;
-  optimizeDeps?: { disabled?: boolean };
-  plugins?: unknown[];
-}
-
-interface ViteWatcher {
-  on(event: 'change', cb: (file: string) => void): void;
-}
-
-interface ViteDevServer {
-  listen(): Promise<unknown>;
-  close(): Promise<void>;
-  /** chokidar-shaped watcher exposed by Vite — present in dev mode. */
-  watcher?: ViteWatcher;
 }

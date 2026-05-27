@@ -34,6 +34,16 @@ When a question is reviewed:
 **Milestone:** M11  
 **Author (agent session):** 2026-05-27
 
+**Update (2026-05-27, post-ADR-0043):** A-026 (Vite-in-Worker) landed
+without graduating this question. ADR-0011 explicitly sequences A-026
+before A-023 (SW→Worker), and ADR-0043 honoured that sequencing — the
+page is still the SW's counterpart and `FirstWindowOwnerResolver` is
+untouched. The second consumer (`WorkerOwnerResolver` for A-023) has
+not arrived yet; per the entry's "defer" decision, the binding shape
+will be designed from both sides at once when the A-023 PR opens.
+"Needs human review by" target shifts from *Start of M11* to *Start of
+A-023 work*.
+
 ### Context
 
 `PreviewOwnerResolver` is cleanly extracted (commit `1bc2f91`), but the

@@ -7,6 +7,7 @@ Date: 2026-05
 
 - `SerializedResponse` body becomes `ReadableStream<Uint8Array>`, marked Transferable across realms via the cross-realm bridge from ADR-0011.
 - Cross-realm WebSocket bridge is built on a dedicated `MessagePort` per connection rather than the current `BroadcastChannel` (which has no per-connection isolation and no backpressure).
+- **New for M12 (2026-05-27):** the cross-realm preview-port bridge introduced by **ADR-0043** (`@rifty/net.bridgeCrossRealmPreview` / `serveCrossRealmPreview`) shares the same `BroadcastChannel` carrier and inherits the same buffered, no-backpressure limit. The M12 rewrite swaps both bridges to dedicated `MessagePort`s in one pass; SSE / long-poll over a Real Vite preview hangs until then.
 - `net.Socket` gains a full TCP-shape surface (raw byte streaming, `_write`/`_read` honour `chunk` not HTTP frames). Where TCP semantics can't be faithfully emulated in a browser (e.g. `localAddress` selection), the TSDoc declares the limitation as final.
 
 M12 starts only after M11 ships ADR-0011's worker-as-process — the bridge is the load-bearing primitive.

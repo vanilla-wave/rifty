@@ -7,6 +7,8 @@ Date: 2026-05
 
 **Decision (2026-05-26) — A-023 (SW → Worker process registry):** Confirmed **M11**, sequenced **after A-026 (Vite-in-Worker)**. A-023 is blocked by the cross-realm port-registry bridge that the Vite-in-Worker migration introduces. Once Vite runs in its own Worker (A-026), the Service Worker rewires from "post to first window client" to "post to the worker that owns the process registered for this URL", reusing the same `MessagePort` registry. Dependency chain: phases 1-3 of this ADR (DONE) → A-026 Vite-in-Worker → A-023 SW-to-Worker.
 
+**Decision (2026-05-27) — A-026 (Vite in Worker) — landed:** ADR-0043 ratified the migration. `apps/playground/src/glue/realVite.ts` now spawns a kernel Worker (`apps/playground/src/workers/real-vite-bootstrap.ts`); the cross-realm port-registry bridge ships as `@rifty/net.bridgeCrossRealmPreview` / `serveCrossRealmPreview` (over `BroadcastChannel`, matching the HMR bridge's primitive); the HMR bridge moves into the worker realm. ADR-0025 is superseded for the Real Vite path; main-thread Dev Mode stays as the non-isolated fallback. A-023 (SW→Worker direct routing) remains the next consumer of the bridge primitive.
+
 **Decision (2026-05-26) — A-026 (Vite in Worker):** Confirmed **M11**. Vite moves from the playground main-thread realm (per ADR-0025's provisional Option A) to a dedicated kernel-spawned Worker as soon as the cross-realm port-registry bridge in `@rifty/net` is ready. Migration is local — replace `realVite.ts` with a worker-spawning adapter plus the registry bridge. ADR-0025 is then superseded for the Real Vite case; main-thread Dev Mode stays as the non-isolated fallback.
 
 ## Context

@@ -172,10 +172,10 @@ What's landed (mini-equivalent of Vite/HMR; "vite-like" not literal upstream Vit
 
 - [ ] `npm install vite && npm run dev` literally running upstream Vite — Vite has hundreds of transitive deps and many edge cases; the equivalent dev-server is the architectural acceptance. Real Vite likely lands incrementally with `unenv` polyfills + esbuild.wasm.
 - [ ] Vite ↔ esbuild.wasm shadow-binding (TS/JSX transformation in the dev path) — needs the WASI runner's esbuild.wasm binary vendored end-to-end (M8 follow-up).
-- [ ] Cross-realm HMR bridge (iframe-loaded HMR client over a real browser `WebSocket` or BroadcastChannel) — current demo runs the dev server in the playground's main-thread realm so a same-realm `WebSocket` shim suffices. Worker→iframe routing is a separate task.
+- [x] **Cross-realm HMR bridge — DONE 2026-05-26** (ADR-0017 phase 1 addendum). `apps/playground/src/glue/hmr-bridge.ts` + `BridgedWebSocketServer` over `BroadcastChannel`; the iframe HMR client is injected via a Vite plugin and rides the same channel name without depending on `@rifty/net`. 9 unit tests + the manual / E2E flow below.
 - [x] **Playwright E2E: edit-in-editor → see-iframe-reload — done.** `tests/e2e/m10-hmr.spec.ts` ("preview iframe receives HMR update when src/main.js changes") covers the full path: load → toggle Real Vite → Monaco edit → assert iframe content updates. Gated on `RIFTY_E2E_HMR=1` (skipped by default in CI to avoid the ~20s Vite install per run).
 - [ ] Shadow-registry consolidation (per ADR 0015) — move `overrides.ts` + shim files under `tools/shadow-registry/`.
-- [ ] Vite-in-Worker (per ADR 0011) — once worker-as-process model lands, move the dev server out of the main-thread realm.
+- [x] **Vite-in-Worker (per ADR-0011 / ADR-0043) — DONE 2026-05-27.** Real Vite runs inside a kernel-spawned Worker realm. `apps/playground/src/glue/realVite.ts` rewrote as `globalProcessManager.spawnWorker(...)` against `apps/playground/src/workers/real-vite-bootstrap.ts`. Cross-realm preview-port bridge: `@rifty/net.bridgeCrossRealmPreview` / `serveCrossRealmPreview` over `BroadcastChannel` (6 unit tests). HMR bridge moved into the worker realm (M10's wiring stays since `BroadcastChannel` reaches the iframe regardless of host realm). Editor edits flow page→worker through `apps/playground/src/glue/vfs-write-port.ts` (5 unit tests). `installProcessGlobals` / `installTimerGlobals` no longer run on the page realm in Real Vite mode. ADR-0025 superseded for the Real Vite path; M10 Dev Mode retained on main thread as the non-isolated fallback. A-023 (SW→Worker direct) remains the next consumer of the bridge primitive — Q-2026-05-27-002 stays open until then.
 
 ## M9 — npm install — PARTIAL — see open acceptance below
 
@@ -204,7 +204,7 @@ What's landed (mini-equivalent of Vite/HMR; "vite-like" not literal upstream Vit
 
 | Check | Result |
 |---|---|
-| Unit + conformance + integration tests | **222 pass (33 files)** |
+| Unit + conformance + integration tests | **761 pass (99 files)** — last counted 2026-05-27 after ADR-0043 (cross-realm preview port + VFS write port adds 11 unit tests) |
 | TypeScript strict typecheck | **clean (16 projects)** |
 | Biome lint | **clean** |
 | Circular dependency check (madge) | **clean** |

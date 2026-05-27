@@ -34,3 +34,14 @@ export {
   createCrossRealmBridge,
 } from './ws.ts';
 export type { WsMessage, CrossRealmBridge } from './ws.ts';
+
+// ADR-0043 — cross-realm preview-port bridge for Vite-in-Worker (M11 / A-026).
+// Bridges page-realm `dispatchToPort()` to a Worker-realm handler over
+// `BroadcastChannel`. Symmetric with the HMR bridge primitive in
+// `BridgedWebSocketServer`.
+export {
+  bridgeCrossRealmPreview,
+  previewPortChannelUrl,
+  serveCrossRealmPreview,
+} from './cross-realm/preview-port.ts';
+export type { CrossRealmPortHandler } from './cross-realm/preview-port.ts';

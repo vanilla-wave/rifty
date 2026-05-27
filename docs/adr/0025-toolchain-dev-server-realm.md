@@ -1,7 +1,9 @@
 # ADR 0025: Toolchain dev servers run on the playground main thread
 
-Status: Accepted (promoted from Q-2026-05-23-002). Superseded by ADR-0011's M11 Vite-in-Worker migration for the Real Vite path; main-thread Dev Mode retained as non-isolated fallback.
+Status: Accepted (promoted from Q-2026-05-23-002). **Superseded by ADR-0043 for the Real Vite path** (2026-05-27); main-thread choice retained as the documented non-isolated fallback for the M10 Dev Mode adapter (`apps/playground/src/glue/devMode.ts`).
 Date: 2026-05
+
+**Decision (2026-05-27):** ADR-0043 lands the Real Vite migration to a kernel-spawned Worker realm. `startRealVite()` now requires SAB IPC and throws `NotImplementedError` when unavailable. The M10 Dev Mode adapter (`devMode.ts`) keeps the main-thread realm as documented here. Once Dev Mode acquires a non-trivial workload (or once `WorkerOwnerResolver`/A-023 lands and the page hop disappears), it can follow Real Vite into the worker realm — at which point this ADR is fully superseded.
 
 **Decision (2026-05-26):** A-026 (Vite in Worker) confirmed for **M11**. Real Vite migrates out of the page realm into a kernel-spawned Worker once the cross-realm port-registry bridge in `@rifty/net` lands (sequenced before A-023 SW→Worker). This ADR's main-thread choice remains the documented fallback for non-isolated environments.
 
