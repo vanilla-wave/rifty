@@ -4,6 +4,15 @@
 
 ### Added
 
+- **ADR-0045 — Worker-process fork IPC (M6).** `WorkerProcessHandle` gains
+  `send(message): boolean`, `disconnect(): void`, and emits `'message'` /
+  `'disconnect'` events. `spawnKernelWorker` allocates a fourth
+  `MessageChannel` (`ipc`) alongside the stdio trio and transfers it to
+  the worker. `WorkerStdioPorts` (and the mirror `KernelProcessStdioPorts`
+  in `shared-globals.ts`) gain `ipc: MessagePort`. Frame shape is
+  `{ kind: 'ipc:message', payload }` / `{ kind: 'ipc:disconnect' }` (typed
+  via new public `IpcFrame` export). Auto-disconnect on worker exit
+  (natural or `kill`) — single `'disconnect'` event regardless of path.
 - **`WorkerProcessHandle.stdout()` / `stderr()` / `stdin()` accessors.**
   Returns `@rifty/io` `Readable` / `Writable` streams already wired to the
   worker's stdio `MessagePort` triple (start/onmessage/EOF on exit handled

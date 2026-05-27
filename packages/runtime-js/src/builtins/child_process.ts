@@ -103,7 +103,9 @@ class ChildProcess extends EventEmitter {
    */
   readonly stdin: Writable;
   killed = false;
-  private readonly ipcEnabled: boolean;
+  // Mutable so {@link disconnect} can flip it off for the same-realm path
+  // (which has no separate channel to close — the gate is the whole story).
+  private ipcEnabled: boolean;
   private readonly handle: ProcessHandle;
   /** Bus the child's script subscribes to for `'childMessage'` events sent
    * by the parent. Exposed to the spawner via `internalIpc()`. */
@@ -135,6 +137,18 @@ class ChildProcess extends EventEmitter {
     handle.on('close', (code, signal) => {
       this.emit('close', code, signal);
     });
+    // ADR-0045: surface fork-IPC events from the kernel WorkerProcessHandle.
+    // The handle emits `'message'` for `ipc:message` frames and `'disconnect'`
+    // when the channel tears down; mirror both on the ChildProcess wrapper so
+    // existing consumers (Node-shape `child.on('message', …)`) keep working.
+    if (handle.kind === 'worker') {
+      handle.on('message', (msg) => {
+        this.emit('message', msg);
+      });
+      handle.on('disconnect', () => {
+        this.emit('disconnect');
+      });
+    }
   }
 
   get exitCode(): number | null {
@@ -148,11 +162,43 @@ class ChildProcess extends EventEmitter {
     return this.handle.cwd;
   }
 
-  /** Send IPC message to the child. */
+  /**
+   * Send IPC message to the child (Node parity). For the SAB-Worker path
+   * (ADR-0045) this posts the message over the parent↔child IPC port;
+   * the worker-side `process.on('message', …)` listener fires. For the
+   * in-realm fallback this emits on the in-realm `inboundIpc` bus that
+   * the script's `__process.onMessage(...)` subscribes to.
+   *
+   * Returns `false` when IPC is disabled (i.e. the child wasn't spawned
+   * via `fork()`) or when the underlying handle has already disconnected
+   * (matches Node's `subprocess.send` contract).
+   */
   send(message: unknown): boolean {
     if (!this.ipcEnabled) return false;
+    if (this.handle.kind === 'worker') {
+      return this.handle.send(message);
+    }
     this.inboundIpc.emit('childMessage', message);
     return true;
+  }
+
+  /**
+   * Disconnect the IPC channel (ADR-0045 / Node parity). For the SAB-Worker
+   * path this closes the parent↔child port; the worker side observes the
+   * `'disconnect'` event on its `process` shim. For the in-realm fallback
+   * there is no separate channel — disabling further sends is sufficient.
+   */
+  disconnect(): void {
+    if (this.handle.kind === 'worker') {
+      this.handle.disconnect();
+      return;
+    }
+    // In-realm: no separate channel to close. Flip the gate and emit so
+    // listeners on the ChildProcess observe the lifecycle.
+    if (this.ipcEnabled) {
+      this.ipcEnabled = false;
+      this.emit('disconnect');
+    }
   }
 
   kill(signal = 'SIGTERM'): boolean {
@@ -196,8 +242,11 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
 }
 
 function spawnViaWorker(command: string, args: string[], opts: SpawnOptions): ChildProcess {
-  // Use placeholder buses; spawnWorkerChild ignores them for now and
-  // phase 3 will wire fork-mode IPC into worker-entry.
+  // ADR-0045 — fork-IPC over the kernel-allocated parent↔child IPC port.
+  // `spawnWorkerChild` no longer needs the outbound / inbound buses (the
+  // worker-side `process.send` posts through the kernel port directly).
+  // Kept as a placeholder argument shape for now to avoid churn in the
+  // helper signature; both buses are unused.
   const outbound = new EventEmitter();
   const inboundIpc = new EventEmitter();
   const handle = spawnWorkerChild({

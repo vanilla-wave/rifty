@@ -1,15 +1,21 @@
 /**
- * Verifies — at the type level — that the Worker-backed `ProcessHandle`
- * variant does NOT expose `.send()`. The sealed-union refactor moved `send`
- * off the {@link ProcessHandleBase} and onto {@link SameRealmProcessHandle}
- * only; the throwing stub that used to live on {@link WorkerProcessHandle}
- * is gone. Callers narrow on `handle.kind` before reaching for `send`.
+ * ADR-0045 — Worker-process IPC: parent↔child `MessagePort` pair with
+ * `send` / `disconnect` / `'message'` / `'disconnect'` surface on the
+ * Worker-backed {@link WorkerProcessHandle}.
  *
- * Fork-mode IPC for Worker-backed children is still pending — see ADR-0011
- * phase 2 follow-ups and the M6 "Open acceptance" entry in TASKS.md. When
- * that lands, `send` is added to {@link WorkerProcessHandle} additively;
- * the `@ts-expect-error` here becomes the trigger that flips the test from
- * "negative-type guard" to "send is required on both branches".
+ * Before ADR-0045 this file was a negative-type guard: it asserted that
+ * the Worker-backed handle did NOT carry `send`, with an `@ts-expect-error`
+ * that would flip the test on the day fork-IPC landed. That day is today.
+ *
+ * Today's invariants:
+ *   - `WorkerProcessHandle.send` is a regular method (no `@ts-expect-error`).
+ *   - `WorkerProcessHandle.disconnect` exists.
+ *   - The handle emits `'disconnect'` exactly once when the IPC channel
+ *     tears down (explicit disconnect, kill, or natural worker exit).
+ *
+ * Mirror conformance lives in `tests/conformance/builtins/fork-ipc-worker.test.ts`
+ * (skipped outside SAB-capable runtimes). These kernel-level tests use the
+ * stub-Worker factory so they can run in plain Vitest.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ProcessManager } from '../src/process-manager.ts';
@@ -21,26 +27,49 @@ import {
   setWorkerFactoryForTests,
 } from '../src/spawn-worker.ts';
 
-class StubWorker implements WorkerLike {
+type WorkerListener = (ev: MessageEvent) => void;
+
+class FakeWorker implements WorkerLike {
+  private readonly listeners = new Map<string, Set<WorkerListener>>();
   postMessage(): void {}
   terminate(): void {}
-  addEventListener(): void {}
-  removeEventListener(): void {}
+  addEventListener(type: string, listener: WorkerListener): void {
+    let set = this.listeners.get(type);
+    if (!set) {
+      set = new Set();
+      this.listeners.set(type, set);
+    }
+    set.add(listener);
+  }
+  removeEventListener(type: string, listener: WorkerListener): void {
+    this.listeners.get(type)?.delete(listener);
+  }
+  fire(type: string, ev: MessageEvent): void {
+    const set = this.listeners.get(type);
+    if (!set) return;
+    for (const cb of [...set]) cb(ev);
+  }
 }
 
-describe('ProcessHandle.send (Worker-backed) — sealed-union split', () => {
+describe('WorkerProcessHandle.send / disconnect (ADR-0045)', () => {
+  let factoryWorker: FakeWorker | undefined;
+
   beforeEach(() => {
     setKernelWorkerUrl('https://example.invalid/kernel-worker.js');
-    setWorkerFactoryForTests(() => new StubWorker());
+    setWorkerFactoryForTests(() => {
+      factoryWorker = new FakeWorker();
+      return factoryWorker;
+    });
   });
 
   afterEach(() => {
     clearWorkerFactoryForTests();
     clearKernelWorkerUrl();
     clearKernelDispatcher();
+    factoryWorker = undefined;
   });
 
-  it('does not expose .send on WorkerProcessHandle (type-level)', () => {
+  it('exposes send and disconnect on the worker-backed handle', () => {
     const pm = new ProcessManager();
     const handle = pm.spawnWorker('node', {
       entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/x.js' },
@@ -48,12 +77,84 @@ describe('ProcessHandle.send (Worker-backed) — sealed-union split', () => {
       env: {},
       cwd: '/workspace',
     });
-    // Type-narrowing: the Worker branch carries `ports`, no `send`.
+    expect(handle.kind).toBe('worker');
     if (handle.kind === 'worker') {
-      expect(handle.ports).toBeDefined();
-      // @ts-expect-error — `send` is intentionally absent from WorkerProcessHandle.
-      handle.send;
+      expect(typeof handle.send).toBe('function');
+      expect(typeof handle.disconnect).toBe('function');
+      // Fresh handle has no exit; sending should succeed (postMessage
+      // on a MessagePort with no peer listener is still a valid op —
+      // it just doesn't deliver until the child starts the port).
+      expect(handle.send({ hi: 1 })).toBe(true);
     }
     handle.kill('SIGTERM');
+  });
+
+  it('send returns false after explicit disconnect', () => {
+    const pm = new ProcessManager();
+    const handle = pm.spawnWorker('node', {
+      entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/x.js' },
+      argv: ['rifty', '/tmp/x.js'],
+      env: {},
+      cwd: '/workspace',
+    });
+    if (handle.kind !== 'worker') throw new Error('expected worker handle');
+
+    let disconnectEvents = 0;
+    handle.on('disconnect', () => {
+      disconnectEvents++;
+    });
+
+    expect(handle.send({ a: 1 })).toBe(true);
+    handle.disconnect();
+    // Idempotent — second disconnect is a no-op.
+    handle.disconnect();
+    expect(disconnectEvents).toBe(1);
+    expect(handle.send({ a: 2 })).toBe(false);
+
+    handle.kill('SIGTERM');
+  });
+
+  it("worker exit emits 'disconnect' once and subsequent send returns false", () => {
+    const pm = new ProcessManager();
+    const handle = pm.spawnWorker('node', {
+      entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/x.js' },
+      argv: ['rifty', '/tmp/x.js'],
+      env: {},
+      cwd: '/workspace',
+    });
+    if (handle.kind !== 'worker') throw new Error('expected worker handle');
+
+    let disconnectEvents = 0;
+    handle.on('disconnect', () => {
+      disconnectEvents++;
+    });
+
+    const w = factoryWorker as FakeWorker;
+    w.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
+
+    expect(disconnectEvents).toBe(1);
+    expect(handle.exitCode).toBe(0);
+    expect(handle.send({ late: true })).toBe(false);
+  });
+
+  it("kill() emits 'disconnect' before tearing the handle down", () => {
+    const pm = new ProcessManager();
+    const handle = pm.spawnWorker('node', {
+      entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/x.js' },
+      argv: ['rifty', '/tmp/x.js'],
+      env: {},
+      cwd: '/workspace',
+    });
+    if (handle.kind !== 'worker') throw new Error('expected worker handle');
+
+    const events: string[] = [];
+    handle.on('disconnect', () => events.push('disconnect'));
+    handle.on('exit', () => events.push('exit'));
+
+    handle.kill('SIGTERM');
+
+    expect(events).toContain('disconnect');
+    expect(events).toContain('exit');
+    expect(events.indexOf('disconnect')).toBeLessThan(events.indexOf('exit'));
   });
 });

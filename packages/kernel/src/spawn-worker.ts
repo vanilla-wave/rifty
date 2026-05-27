@@ -126,22 +126,25 @@ export function spawnKernelWorker(
   // SAB itself is NOT in the transfer list — both peers map it.
   const { sab, ring } = createSabRing();
 
-  // Three MessageChannels for stdio. We give the kernel-side the `port1`s
-  // and ship `port2`s to the worker.
+  // Four MessageChannels: three for stdio, one for fork-mode IPC (ADR-0045).
+  // We give the kernel-side the `port1`s and ship `port2`s to the worker.
   const stdoutCh = new MessageChannel();
   const stderrCh = new MessageChannel();
   const stdinCh = new MessageChannel();
+  const ipcCh = new MessageChannel();
 
   const ports: WorkerStdioPorts = {
     stdout: stdoutCh.port1,
     stderr: stderrCh.port1,
     stdin: stdinCh.port1,
+    ipc: ipcCh.port1,
   };
 
   const childPorts: WorkerStdioPorts = {
     stdout: stdoutCh.port2,
     stderr: stderrCh.port2,
     stdin: stdinCh.port2,
+    ipc: ipcCh.port2,
   };
 
   const fullSpec: WorkerSpawnSpec = {
@@ -164,7 +167,12 @@ export function spawnKernelWorker(
   dispatcher.attach(ring);
 
   const init: WorkerInitMessage = { type: 'init', spec: fullSpec };
-  worker.postMessage(init, [childPorts.stdout, childPorts.stderr, childPorts.stdin]);
+  worker.postMessage(init, [
+    childPorts.stdout,
+    childPorts.stderr,
+    childPorts.stdin,
+    childPorts.ipc,
+  ]);
 
   let terminated = false;
   const exitListeners: ((code: number) => void)[] = [];

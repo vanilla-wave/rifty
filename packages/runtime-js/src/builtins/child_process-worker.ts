@@ -1,5 +1,5 @@
 /**
- * Worker-backed `child_process.spawn` path (ADR-0011 phase 2).
+ * Worker-backed `child_process.spawn` path (ADR-0011 phase 2 + ADR-0045).
  *
  * When `isSabIpcSupported()` is `true` AND the host has called
  * `setKernelWorkerUrl(...)`, `child_process.spawn` routes through
@@ -9,10 +9,12 @@
  *   - The translation of a `node <script>` invocation into a
  *     {@link WorkerSpawnSpec} (script bytes from the sync mirror, argv, env,
  *     cwd).
- *   - The IPC wiring for `fork()` — a dedicated `MessageChannel` carries
- *     `{type:'message', payload}` frames between the parent and the worker
- *     via `process.send` / `process.on('message')` (phase 2 surface; the
- *     worker-entry runtime that consumes it lands alongside).
+ *
+ * Fork-IPC wiring (ADR-0045) is now owned end-to-end by the kernel
+ * `WorkerProcessHandle.send` / `WorkerProcessHandle.disconnect` and the
+ * runtime-js `installNodeProcessShim` (which installs the matching
+ * `process.send` / `process.on('message', …)` on the worker side). This
+ * module no longer plumbs IPC buses.
  *
  * Stdio adaptation lives one layer down: `handle.stdout()` / `handle.stderr()`
  * on the kernel `WorkerProcessHandle` return the `@rifty/io` `Readable`s
@@ -74,9 +76,11 @@ export function spawnWorkerChild(args: SpawnWorkerArgs): ProcessHandle {
     cwd: args.opts.cwd,
   });
 
-  // fork-mode IPC is reserved for the runtime-side worker that surfaces
-  // `process.send` / `process.on('message')`. The host-side plumbing is the
-  // outbound + inbound buses; phase 3 fills in the worker-entry wiring.
+  // ADR-0045: fork-mode IPC now flows through the kernel's
+  // `WorkerProcessHandle.send` / `'message'` event and the runtime-js
+  // `installNodeProcessShim`-installed `process.send` on the worker. The
+  // outbound + inbound EventEmitter buses are vestigial — kept in the
+  // interface for caller signature stability, ignored here.
   void args.outboundMessages;
   void args.inboundIpc;
   return handle;

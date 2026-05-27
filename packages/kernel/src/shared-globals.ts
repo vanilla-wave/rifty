@@ -36,14 +36,18 @@ export interface KernelSyncApi {
 }
 
 /**
- * Stdio port shape the kernel hands to the higher layer. Identical to the
- * {@link WorkerStdioPorts} type in `./worker-entry.ts`; redeclared here to
- * keep `shared-globals.ts` import-free of the worker bootstrap module.
+ * Stdio + IPC port shape the kernel hands to the higher layer. Identical
+ * to the {@link WorkerStdioPorts} type in `./worker-entry.ts`; redeclared
+ * here to keep `shared-globals.ts` import-free of the worker bootstrap
+ * module. The `ipc` field (ADR-0045) carries the fork-mode IPC channel
+ * — runtime-js's `installNodeProcessShim` wraps it to expose Node-style
+ * `process.send` / `process.on('message', …)` / `process.disconnect()`.
  */
 export interface KernelProcessStdioPorts {
   readonly stdout: MessagePort;
   readonly stderr: MessagePort;
   readonly stdin: MessagePort;
+  readonly ipc: MessagePort;
 }
 
 /**

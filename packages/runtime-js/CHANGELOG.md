@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- **ADR-0045 — fork-IPC for Worker-backed children (M6).** `installNodeProcessShim`
+  now installs `process.send(msg)` / `process.disconnect()` and emits
+  `'message'` / `'disconnect'` on the Node shim (extends `EventEmitter`).
+  The shim wires the kernel-supplied `KernelProcessSpec.stdio.ipc`
+  `MessagePort`, dispatching `ipc:message` frames as `'message'` events and
+  closing on `ipc:disconnect`. `ChildProcess.send` routes through
+  `WorkerProcessHandle.send` for the SAB path (in-realm path keeps its
+  existing `inboundIpc` bus). `ChildProcess.disconnect()` added; mirrors
+  the handle's disconnect for the worker path and flips the local
+  `ipcEnabled` gate for the in-realm fallback. Conformance:
+  `tests/conformance/builtins/fork-ipc-worker.test.ts` (round-trip,
+  auto-disconnect on exit, explicit disconnect), skipped outside
+  SAB-capable environments.
+
 ### Changed
 
 - **ADR-0041 — `fs.readdirSync({ withFileTypes: true })` no longer re-stats children.** `FsSync.readdirSync` returns `VfsDirent[]` directly, so the `withFileTypes` branch now reads `isFile`/`isDirectory` from the dirent shape instead of doing an N+1 `statSync` per child. `fs-watch.ts` and other internal callers are updated to read `.name` instead of bare strings.

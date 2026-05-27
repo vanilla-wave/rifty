@@ -55,11 +55,22 @@ import {
 // publish/read helpers.
 export { KERNEL_SYNC_CALL_KEY, type KernelSyncCall };
 
-/** Stdio channels passed to the worker. Each is a transferred MessagePort. */
+/**
+ * Stdio + IPC channels passed to the worker. Each is a transferred
+ * MessagePort.
+ *
+ * `ipc` carries the fork-mode IPC channel (ADR-0045) — structured-cloned
+ * `{ kind: 'ipc:message', payload }` and `{ kind: 'ipc:disconnect' }`
+ * frames between the parent's `WorkerProcessHandle.send` and the child
+ * realm's `process.send` / `process.on('message', …)`. The name `stdio`
+ * is preserved for ABI continuity; conceptually it's now the wider
+ * "kernel-owned ports" struct.
+ */
 export interface WorkerStdioPorts {
   readonly stdout: MessagePort;
   readonly stderr: MessagePort;
   readonly stdin: MessagePort;
+  readonly ipc: MessagePort;
 }
 
 /** Entry script descriptor. Either inlined source or a URL to `import()`. */
@@ -185,7 +196,9 @@ async function runEntry(entry: WorkerEntryDescriptor): Promise<void> {
 
 function closePorts(ports: WorkerStdioPorts): void {
   // Closing stdout/stderr lets the parent's consumer observe EOF. stdin is
-  // reserved for phase 2 but closed here for symmetry.
+  // closed here for symmetry. `ipc` (ADR-0045) is closed last so any
+  // disconnect frame the runtime-js installer posted during teardown has
+  // already left the realm.
   try {
     ports.stdout.close();
   } catch {
@@ -198,6 +211,11 @@ function closePorts(ports: WorkerStdioPorts): void {
   }
   try {
     ports.stdin.close();
+  } catch {
+    /* port already closed by parent */
+  }
+  try {
+    ports.ipc.close();
   } catch {
     /* port already closed by parent */
   }
