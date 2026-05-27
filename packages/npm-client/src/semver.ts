@@ -133,7 +133,13 @@ export function matchesRange(version: string, range: string | undefined | null):
 }
 
 function matchBranch(version: string, branch: string): boolean {
-  const comparators = branch.split(/\s+/).filter(Boolean);
+  // npm allows whitespace between a comparator operator and its version base
+  // (`>= 2.1.2 < 3` is equivalent to `>=2.1.2 <3`). Without normalisation the
+  // tokenizer would emit four tokens (`>=`, `2.1.2`, `<`, `3`) and matching
+  // each one independently produces garbage. Strip the operator-trailing
+  // whitespace before splitting so both spellings collapse to the same form.
+  const normalized = branch.replace(/([<>=^~])\s+/g, '$1');
+  const comparators = normalized.split(/\s+/).filter(Boolean);
   for (const cmp of comparators) {
     if (!matchComparator(version, cmp)) return false;
   }

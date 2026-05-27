@@ -167,8 +167,14 @@ describe('install — explicit range never falls through to dist-tags.latest', (
   });
 });
 
-describe('install — version conflict', () => {
-  it('throws EVERSIONCONFLICT when two deps require incompatible versions of the same transitive package', async () => {
+describe('install — nested install for conflicting transitive versions (M11)', () => {
+  // Pre-M11 (flat-only linker) this scenario threw EVERSIONCONFLICT and the
+  // install died. The live express experiment on 2026-05-27 hit exactly this
+  // shape on `ms: 2.1.3 vs 2.0.0` and pinned M11 nested install as a
+  // prerequisite for M9 closure. The contract below documents the M11
+  // semantics: first-seen wins flat; subsequent conflicting versions get
+  // placed under the requesting parent's `node_modules/`.
+  it('nests the second version under the requesting parent (simple diamond)', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set('a', new Map([['1.0.0', await makeEntry('a', '1.0.0', { c: '1.0.0' })]]));
     db.set('b', new Map([['1.0.0', await makeEntry('b', '1.0.0', { c: '2.0.0' })]]));
@@ -184,35 +190,102 @@ describe('install — version conflict', () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
 
-    let caught: unknown;
-    try {
-      await install(
-        'root',
-        '1.0.0',
-        { a: '1.0.0', b: '1.0.0' },
-        {
-          vfs,
-          cwd: '/proj',
-          registry,
-        },
-      );
-    } catch (err) {
-      caught = err;
-    }
+    const result = await install(
+      'root',
+      '1.0.0',
+      { a: '1.0.0', b: '1.0.0' },
+      { vfs, cwd: '/proj', registry },
+    );
 
-    expect(caught).toBeInstanceOf(Error);
-    const err = caught as Error & {
-      code?: string;
-      packageName?: string;
-      firstVersion?: string;
-      secondVersion?: string;
+    // Both placements made it to disk. `a`'s `c@1.0.0` wins the flat slot
+    // because `a` is visited first; `b`'s `c@2.0.0` gets nested under `b`.
+    expect(await vfs.exists('/proj/node_modules/c/package.json')).toBe(true);
+    const flat = JSON.parse(await vfs.readFileText('/proj/node_modules/c/package.json')) as {
+      version: string;
     };
-    expect(err.code).toBe('EVERSIONCONFLICT');
-    expect(err.packageName).toBe('c');
-    expect(err.firstVersion).toBe('1.0.0');
-    expect(err.secondVersion).toBe('2.0.0');
-    expect(err.message).toContain('Conflicting versions of c');
-    expect(err.message).toContain('1.0.0');
-    expect(err.message).toContain('2.0.0');
+    expect(flat.version).toBe('1.0.0');
+
+    expect(await vfs.exists('/proj/node_modules/b/node_modules/c/package.json')).toBe(true);
+    const nested = JSON.parse(
+      await vfs.readFileText('/proj/node_modules/b/node_modules/c/package.json'),
+    ) as { version: string };
+    expect(nested.version).toBe('2.0.0');
+
+    // Lockfile records the actual install paths (npm v3 shape — keys ARE the
+    // path strings, not just names).
+    const lockfile = result.lockfile;
+    expect(lockfile.packages['node_modules/c']?.version).toBe('1.0.0');
+    expect(lockfile.packages['node_modules/b/node_modules/c']?.version).toBe('2.0.0');
+
+    // No EVERSIONCONFLICT was thrown and `conflicts` stays empty (it has been
+    // an empty-array shape since A-031; nested install keeps the same).
+    expect(result.conflicts).toEqual([]);
+  });
+
+  it('mirrors the live express diamond (`ms 2.1.3` flat, `ms 2.0.0` nested under finalhandler)', async () => {
+    // Exact shape the 2026-05-27 live-registry run reported.
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'express',
+      new Map([
+        [
+          '4.21.0',
+          await makeEntry('express', '4.21.0', {
+            debug: '^2.6.9',
+            finalhandler: '^1.3.0',
+          }),
+        ],
+      ]),
+    );
+    db.set('debug', new Map([['2.6.9', await makeEntry('debug', '2.6.9', { ms: '^2.1.0' })]]));
+    db.set(
+      'finalhandler',
+      new Map([['1.3.0', await makeEntry('finalhandler', '1.3.0', { ms: '2.0.0' })]]),
+    );
+    db.set(
+      'ms',
+      new Map([
+        ['2.0.0', await makeEntry('ms', '2.0.0')],
+        ['2.1.3', await makeEntry('ms', '2.1.3')],
+      ]),
+    );
+
+    const registry = new FakeRegistry(db);
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    const result = await install(
+      'root',
+      '1.0.0',
+      { express: '^4' },
+      { vfs, cwd: '/proj', registry },
+    );
+
+    // Top-level layout: express + debug + finalhandler + the flat-hoisted ms.
+    expect(await vfs.exists('/proj/node_modules/express/package.json')).toBe(true);
+    expect(await vfs.exists('/proj/node_modules/debug/package.json')).toBe(true);
+    expect(await vfs.exists('/proj/node_modules/finalhandler/package.json')).toBe(true);
+
+    // `ms@2.1.3` (debug's request) wins the flat slot because debug is
+    // visited first under express's dep order.
+    const flatMs = JSON.parse(await vfs.readFileText('/proj/node_modules/ms/package.json')) as {
+      version: string;
+    };
+    expect(flatMs.version).toBe('2.1.3');
+
+    // `ms@2.0.0` (finalhandler's request) gets nested.
+    expect(await vfs.exists('/proj/node_modules/finalhandler/node_modules/ms/package.json')).toBe(
+      true,
+    );
+    const nestedMs = JSON.parse(
+      await vfs.readFileText('/proj/node_modules/finalhandler/node_modules/ms/package.json'),
+    ) as { version: string };
+    expect(nestedMs.version).toBe('2.0.0');
+
+    // Lockfile keys carry the path; both ms entries are distinct.
+    expect(result.lockfile.packages['node_modules/ms']?.version).toBe('2.1.3');
+    expect(result.lockfile.packages['node_modules/finalhandler/node_modules/ms']?.version).toBe(
+      '2.0.0',
+    );
   });
 });

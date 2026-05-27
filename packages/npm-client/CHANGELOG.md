@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **M11 nested install (ADR-0042).** The flat-only linker is replaced
+  with first-wins-flat + nest-on-conflict placement, driven by
+  `walkAndPin` in `installer.ts`. Diamond version conflicts no longer
+  throw `EVERSIONCONFLICT`; instead the second version installs at
+  `<parentInstallPath>/node_modules/<name>` and both placements coexist
+  on disk and in the lockfile. Lockfile entries are now keyed by
+  install path (`node_modules/<name>` for hoisted, full path for
+  nested) — npm-v3 compatible shape. The opt-in live `express@^4`
+  install now succeeds end-to-end (86 packages, `ms × 5`, `debug × 3`,
+  `statuses × 3`, etc.); closes M9's "Nested install for version
+  conflicts" open-acceptance item.
+  - `ResolvedPackage` gains an optional `installPath` field; `link()`
+    writes by that path; `buildLockfile` keys by it.
+  - `createRegistrySource.resolve` no longer throws
+    `EVERSIONCONFLICT` — placement moves to the walk.
+  - `chooseSource` opts out of the lockfile fast path when the
+    existing lockfile contains any nested entry (the fast-path
+    resolver still does bare-name lookups); falls through to live
+    resolve, which knows how to re-derive nesting. Lifting that opt-
+    out is a follow-on.
+  - Semver `matchBranch` now strips operator-trailing whitespace
+    (`>= 2.1.2 < 3` ≡ `>=2.1.2 <3`) — npm packuments emit the spaced
+    form for transitive constraints and the live express graph hit it
+    immediately.
+
 ### Fixed
 
 - **Algorithm-aware integrity verification.** `computeIntegrity(bytes)` was

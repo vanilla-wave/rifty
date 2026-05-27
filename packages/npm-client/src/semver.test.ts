@@ -126,6 +126,21 @@ describe('matchesRange — partial bases (the live-express regression)', () => {
     expect(matchesRange('5.0.0', '<5')).toBe(false);
   });
 
+  it('accepts whitespace between operator and version (`>= 2.1.2 < 3`)', () => {
+    // Real npm packuments emit this spelling for transitive constraints
+    // (e.g. safer-buffer requested by ipaddr.js inside the express graph).
+    // The 2026-05-27 second live-express pass exposed the bug — without the
+    // operator-whitespace strip, `branch.split(/\s+/)` yields 4 tokens and
+    // matching each one independently returns false.
+    expect(matchesRange('2.1.2', '>= 2.1.2 < 3')).toBe(true);
+    expect(matchesRange('2.9.9', '>= 2.1.2 < 3')).toBe(true);
+    expect(matchesRange('3.0.0', '>= 2.1.2 < 3')).toBe(false);
+    expect(matchesRange('2.0.0', '>= 2.1.2 < 3')).toBe(false);
+    // Mixed and tight spacings stay equivalent.
+    expect(matchesRange('2.5.0', '>=2.1.2 <3')).toBe(true);
+    expect(matchesRange('2.5.0', '>=  2.1.2   <   3')).toBe(true);
+  });
+
   it('pickBestVersion picks the newest 4.x for `^4` from an express-like packument', () => {
     // The exact regression: express had 4.0.0 .. 4.21.2 and 5.x; with the old
     // semver `pickBestVersion(_, '^4')` returned null and the silent fallback

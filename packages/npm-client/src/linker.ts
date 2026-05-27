@@ -1,11 +1,12 @@
 /**
  * Linker — writes a resolved set of packages into `node_modules/`.
  *
- * Strategy: flat at the top level (matches npm v3+), with dedupe by name.
- * Conflicts (multiple incompatible versions of the same name) get nested
- * under the consumer that needs them — same as npm. For M9 we go flat-only
- * since the integration target is small; nested resolution arrives the first
- * time a real dependency tree forces it.
+ * Strategy: flat at the top level (matches npm v3+), with first-seen-wins
+ * hoisting and nested placement for conflicting versions (M11, 2026-05-27).
+ * Each `ResolvedPackage` carries its `installPath` — `node_modules/<name>`
+ * when hoisted, `<parent>/.../node_modules/<name>` when nested — and the
+ * linker simply writes the tarball contents at that path. The placement
+ * decision lives in `installer.ts` (`walkAndPin`), not here.
  */
 
 import { type Vfs, joinPath } from '@rifty/vfs';
@@ -16,6 +17,15 @@ export interface ResolvedPackage {
   files: Record<string, Uint8Array>;
   /** Direct dependencies (already resolved transitively elsewhere). */
   dependencies: Record<string, string>;
+  /**
+   * Project-root-relative path where this package's files are written
+   * (e.g. `node_modules/express` or
+   * `node_modules/finalhandler/node_modules/ms`). Filled by `walkAndPin`'s
+   * placement decision (see M11 install nesting). Optional for
+   * backward-compatibility with callers that pre-date M11 — when absent
+   * the linker falls back to flat `node_modules/<name>`.
+   */
+  installPath?: string;
 }
 
 export async function link(
@@ -26,10 +36,11 @@ export async function link(
   const nodeModules = joinPath(root, 'node_modules');
   await vfs.mkdir(nodeModules, { recursive: true });
   for (const pkg of packages) {
-    const target = joinPath(nodeModules, pkg.name);
+    const relPath = pkg.installPath ?? `node_modules/${pkg.name}`;
+    const target = joinPath(root, relPath);
     await vfs.mkdir(target, { recursive: true });
-    for (const [relPath, data] of Object.entries(pkg.files)) {
-      const fullPath = joinPath(target, relPath);
+    for (const [entryPath, data] of Object.entries(pkg.files)) {
+      const fullPath = joinPath(target, entryPath);
       const dir = fullPath.slice(0, fullPath.lastIndexOf('/'));
       await vfs.mkdir(dir, { recursive: true });
       await vfs.writeFile(fullPath, data);
@@ -79,16 +90,22 @@ export function buildLockfile(
     peerDependencies?: Record<string, string>;
   })[],
 ): Lockfile {
+  // The root entry lists only the FLAT (hoisted) deps as its dependency
+  // map — matching npm's lockfile shape. A nested copy is reachable only
+  // via its parent's entry, not via the root.
+  const flatTopLevel: Record<string, string> = {};
+  for (const p of packages) {
+    if (!p.installPath || p.installPath === `node_modules/${p.name}`) {
+      flatTopLevel[p.name] = p.version;
+    }
+  }
   const lf: Lockfile = {
     name: rootName,
     version: rootVersion,
     lockfileVersion: 3,
     requires: true,
     packages: {
-      '': {
-        version: rootVersion,
-        dependencies: Object.fromEntries(packages.map((p) => [p.name, p.version])),
-      },
+      '': { version: rootVersion, dependencies: flatTopLevel },
     },
   };
   for (const p of packages) {
@@ -101,7 +118,11 @@ export function buildLockfile(
     if (p.peerDependencies && Object.keys(p.peerDependencies).length > 0) {
       entry.peerDependencies = p.peerDependencies;
     }
-    lf.packages[`node_modules/${p.name}`] = entry;
+    // Key by installPath — flat packages stay at `node_modules/<name>`;
+    // nested copies use their full nested path so npm's resolver (and the
+    // lockfile fast-path) can tell them apart.
+    const key = p.installPath ?? `node_modules/${p.name}`;
+    lf.packages[key] = entry;
   }
   return lf;
 }
