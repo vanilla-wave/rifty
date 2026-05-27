@@ -1,3 +1,4 @@
+import { RegistryClient } from '@rifty/npm-client';
 import { detectCapabilities } from '@rifty/runtime-js/env/capabilities';
 import { Show, createSignal, onCleanup } from 'solid-js';
 import { useShellSession } from './adapters/shell-adapter.ts';
@@ -8,6 +9,9 @@ import { CapabilitiesPanel } from './components/CapabilitiesPanel.tsx';
 import { EditorPanel } from './components/EditorPanel.tsx';
 import { PreviewPanel } from './components/PreviewPanel.tsx';
 import { TerminalPanel } from './components/TerminalPanel.tsx';
+import { createNpmShellCommand } from './glue/npm-shell-command.ts';
+import { proxiedRegistryFetch } from './glue/registry-fetch.ts';
+import { SyncMirrorVfs } from './glue/sync-mirror-vfs.ts';
 
 const replSource = `// Welcome to rifty.
 //
@@ -44,6 +48,17 @@ export function App(props: AppProps) {
   // streams via `onChunk` so progress bars / live logs reach the terminal in
   // real time. REPL mode keeps using `runtime.handleLine` to eval JS code.
   const shell = useShellSession({ cwd: '/workspace' });
+  // Wire `npm install …` into the shell (follow-ups item #15, 2026-05-27).
+  // Without this the prompt returns exit 127. The same registry + VFS
+  // pair is used by `realVite.ts`, so installs from the shell and from the
+  // Real-Vite mode share the warm tarball cache.
+  shell.registerCommand(
+    'npm',
+    createNpmShellCommand({
+      vfs: new SyncMirrorVfs(),
+      registry: new RegistryClient({ fetch: proxiedRegistryFetch() }),
+    }),
+  );
   // Mode state machine — owns `repl | dev | real-vite`, the inner dev /
   // real-vite handles, and the editor source. App.tsx only renders JSX and
   // wires terminals; transitions live in the adapter.

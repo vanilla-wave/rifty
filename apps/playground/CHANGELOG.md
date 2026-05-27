@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`npm install …` at the shell prompt (follow-ups item #15, 2026-05-27).**
+  New glue file `apps/playground/src/glue/npm-shell-command.ts` registers
+  an `npm` builtin on the long-lived `ShellSession` so typing
+  `npm install express` in the terminal actually runs the installer
+  instead of returning exit 127 ("command not found"). Supports
+  `install` / `i` / `add` subcommands, plain `name`, `name@range`,
+  scoped `@scope/name[@range]`, auto-creates a minimal `package.json`
+  when the project has none, and merges new deps into existing ones.
+  Bare `npm install` reads existing deps but does **not** rewrite
+  `package.json`, so re-runs do not churn mtimes. Error mapping for
+  `EVERSIONCONFLICT` / `EINTEGRITY` / `EBROKENLOCK` produces single
+  operator-friendly stderr lines instead of stack traces. Flags
+  (`--save-dev` etc.) are explicitly rejected as M9-scope. The
+  `install` function is injected via a DI seam so the unit tests run
+  without reaching across into another package's `_test-fixtures/`.
+- **`ShellSession.registerCommand(name, cmd)` accessor.** Exposes the
+  underlying `Shell.registerCommand` so composition-root glue can wire
+  builtins (`npm`, future `node`) without `useShellSession` needing to
+  know about them.
+
 ### Changed
 
 - `adapters/useMode.ts` — extracted the `repl | dev | real-vite` mode state

@@ -21,7 +21,7 @@
  * exclusive mode.
  */
 
-import { Shell, type ShellOptions } from '@rifty/shell';
+import { Shell, type ShellCommand, type ShellOptions } from '@rifty/shell';
 import { onCleanup } from 'solid-js';
 
 type Writer = (chunk: string, stream?: 'stdout' | 'stderr') => void;
@@ -31,10 +31,17 @@ type Writer = (chunk: string, stream?: 'stdout' | 'stderr') => void;
  * line; its stdout/stderr stream into the writer attached via
  * `attachWriter`. `cwd()` reflects the shell's current working directory
  * after each `runLine` (mainly for prompt rendering / debugging).
+ *
+ * `registerCommand(name, cmd)` lets composition-root glue (e.g.
+ * `registerNpmShellCommand` in `glue/npm-shell-command.ts`) wire custom
+ * builtins like `npm` / `node` without the adapter having to know about
+ * them. Without this, typing `npm install foo` at the terminal would hit
+ * the shell's "command not found" path with exit 127.
  */
 export interface ShellSession {
   attachWriter(write: Writer): void;
   runLine(input: string): Promise<number>;
+  registerCommand(name: string, cmd: ShellCommand): void;
   cwd(): string;
   dispose(): void;
 }
@@ -69,6 +76,9 @@ export function useShellSession(options: ShellOptions = {}): ShellSession {
         },
       });
       return result.exitCode;
+    },
+    registerCommand(name: string, cmd: ShellCommand): void {
+      shell.registerCommand(name, cmd);
     },
     cwd(): string {
       return shell.cwd;
