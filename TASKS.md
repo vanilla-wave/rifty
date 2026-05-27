@@ -120,10 +120,10 @@ Per-milestone task tracking with acceptance review. See `PROJECT_PLAN.md` for th
 
 ### Open acceptance
 
-- [ ] `child_process.execSync` via SharedArrayBuffer+Atomics (real synchronous block, not throw).
+- [x] **`child_process.execSync` via SharedArrayBuffer+Atomics — done.** `packages/runtime-js/src/builtins/child_process-sync.ts:37-46` → `packages/kernel/src/ipc/sab-ring.ts:220` (`Atomics.wait`). Conformance: `tests/conformance/builtins/exec-sync-worker.test.ts` ("ADR-0011 phase 3").
 - [ ] "Process = Web Worker" model (real Worker per child, not `new Function` in the parent realm).
 - [ ] cwd state per-process (lives in `kernel.ProcessRecord`).
-- [ ] `ChildProcess.stdin` IPC (currently a loud-throw stub — see ADR 0011).
+- [ ] `ChildProcess.stdin` IPC (currently a loud-throw stub — see ADR 0011). *Note: the kernel-side accessor `WorkerProcessHandle.stdin()` shipped in this session's follow-ups #3 (`packages/kernel/src/process-manager.ts:328-331`), but the wiring through `ChildProcess.stdin.write` is still the loud throw at `packages/runtime-js/src/builtins/child_process.ts:91-104`. The remaining slice is the wire-up, not the accessor.*
 - [ ] Pipe stdio over `MessagePort` with backpressure.
 
 ## M7 — Network — PARTIAL — see open acceptance below
@@ -138,7 +138,7 @@ Per-milestone task tracking with acceptance review. See `PROJECT_PLAN.md` for th
 
 ### Open acceptance
 
-- [ ] Chunked transfer encoding / streaming response (`Response` body as `ReadableStream`).
+- [x] **Chunked transfer encoding / streaming response — done.** `packages/net/src/http/response.ts:1-50,134-136,160-183` — `Response` body is a `ReadableStream<Uint8Array>`; `res.write` returns `Promise<boolean>` for backpressure; `Transfer-Encoding: chunked` auto-set when no `Content-Length`. Conformance: `tests/conformance/builtins/http.test.ts:56-145` (SSE, long-poll, chunked write).
 - [ ] SW → Worker routing (today the bridge terminates in the main-thread realm).
 - [ ] Real-TCP `net.Socket` semantics (current `Socket` is HTTP-only).
 - [ ] Cross-realm WebSocket bridge (iframe-loaded HMR client over a real `WebSocket`).
@@ -173,7 +173,7 @@ What's landed (mini-equivalent of Vite/HMR; "vite-like" not literal upstream Vit
 - [ ] `npm install vite && npm run dev` literally running upstream Vite — Vite has hundreds of transitive deps and many edge cases; the equivalent dev-server is the architectural acceptance. Real Vite likely lands incrementally with `unenv` polyfills + esbuild.wasm.
 - [ ] Vite ↔ esbuild.wasm shadow-binding (TS/JSX transformation in the dev path) — needs the WASI runner's esbuild.wasm binary vendored end-to-end (M8 follow-up).
 - [ ] Cross-realm HMR bridge (iframe-loaded HMR client over a real browser `WebSocket` or BroadcastChannel) — current demo runs the dev server in the playground's main-thread realm so a same-realm `WebSocket` shim suffices. Worker→iframe routing is a separate task.
-- [ ] Playwright E2E: edit-in-editor → see-iframe-reload.
+- [x] **Playwright E2E: edit-in-editor → see-iframe-reload — done.** `tests/e2e/m10-hmr.spec.ts` ("preview iframe receives HMR update when src/main.js changes") covers the full path: load → toggle Real Vite → Monaco edit → assert iframe content updates. Gated on `RIFTY_E2E_HMR=1` (skipped by default in CI to avoid the ~20s Vite install per run).
 - [ ] Shadow-registry consolidation (per ADR 0015) — move `overrides.ts` + shim files under `tools/shadow-registry/`.
 - [ ] Vite-in-Worker (per ADR 0011) — once worker-as-process model lands, move the dev server out of the main-thread realm.
 
