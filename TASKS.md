@@ -4,7 +4,7 @@ Per-milestone task tracking with acceptance review. See `PROJECT_PLAN.md` for th
 
 ## Verification snapshot
 
-- **Unit + conformance + integration:** 222 passed (33 files).
+- **Unit + conformance + integration:** 765 passed | 10 skipped (775 total in 100 of 104 files) — last counted 2026-05-28 after ADR-0045 fork-IPC + audit cleanup (audit items #1, #2, #5).
 - **Parity-runner:** 15 cases (path, buffer, util, events, querystring, url, fs, stream) compared against real Node — all match.
 - **E2E (Playwright, Chromium):** 15 passed (M0 boot, M1 REPL+`.reset`, M2 modules, M4 fs); M10 dev-mode flow not yet covered by Playwright (verified manually).
 - **Typecheck:** `tsc --noEmit` clean across workspace (16 projects).
@@ -25,7 +25,7 @@ Per-milestone task tracking with acceptance review. See `PROJECT_PLAN.md` for th
 
 ---
 
-## M0 — Foundation — PARTIAL — see open acceptance below
+## M0 — Foundation — DONE
 
 - [x] `pnpm dev` boots playground at localhost.
 - [x] UI shows editor (Monaco), terminal (xterm.js), Run button.
@@ -38,9 +38,9 @@ Per-milestone task tracking with acceptance review. See `PROJECT_PLAN.md` for th
 - [x] `pnpm check:deps` (madge), `pnpm check:isolation` (D-002 enforcement).
 - [x] Compat-matrix bootstrap (`docs/compat/modules.md`).
 
-### Open acceptance
+### Closed acceptance
 
-- [ ] Prod COOP/COEP headers (`vercel.json` / `_headers` — being added in this session).
+- [x] **Prod COOP/COEP headers — done.** `/vercel.json` (line 5-8) emits `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: credentialless` + `Cross-Origin-Resource-Policy: cross-origin` on every route. `apps/playground/public/_headers` mirrors the same triple for non-Vercel deploys (Netlify, Cloudflare Pages). Both match the dev Vite COOP/COEP triple.
 
 ## M1 — JS Execution — DONE
 
@@ -62,7 +62,7 @@ Per-milestone task tracking with acceptance review. See `PROJECT_PLAN.md` for th
 - [x] ESM cycles (eventual values stable).
 - [x] CJS ↔ ESM interop: ESM imports CJS via `default` + named keys; `require()` of ESM throws clearly.
 - [x] Integration: `lodash`-shape CJS, `nanoid`-shape ESM, `chalk`-style ANSI helper.
-- [x] **Conformance:** 33 resolution + 1 ESM cycle + 4 integration tests pass.
+- [x] **Conformance: 40 test cases in 3 files** (34 resolver + 1 ESM cycle + 5 imports-field) under `tests/conformance/modules/`. Integration coverage extends through `tests/integration/real-packages.test.ts` (4 cases) and `tests/integration/builtins-via-require.test.ts` (7 cases).
 
 ## M3 — Node Core — DONE
 
@@ -79,7 +79,7 @@ Per-milestone task tracking with acceptance review. See `PROJECT_PLAN.md` for th
 - [x] Worker entry installs `process`, `Buffer`, `setImmediate`/`clearImmediate` as globals.
 - [x] **Event-loop order tests:** `nextTick` beats `Promise.then`; `setImmediate` runs after current task.
 - [x] **chalk-shape integration test** passes (`chalk.red('hi') === '[31mhi[39m'`).
-- [x] **121 conformance tests** spanning all built-ins.
+- [x] **73 conformance test cases in 9 files** under `tests/conformance/builtins/{path,events,util,inspect,querystring-url,assert,buffer,process-cwd,event-loop}.test.ts` + `tests/conformance/inspect.test.ts`. Backed by 48 package-level cases in `@rifty/io` (`buffer.test.ts` 36 + `event-emitter.test.ts` 12) for a total of 121 cases covering M3-area built-ins. (The "121" historical headline reflected the combined conformance + package surface; the audit on 2026-05-27 unified the formulation as "X cases in Y files".)
 
 ## M4 — FileSystem — PARTIAL — see open acceptance below
 
@@ -90,13 +90,13 @@ Per-milestone task tracking with acceptance review. See `PROJECT_PLAN.md` for th
 - [x] `fs.stat` returns correct `size`, `isFile()`, `isDirectory()`.
 - [x] **OPFS backend** (`OpfsVfs`) for browser Workers; Memory backend for everything else. Sync mirror seam lets us swap.
 - [x] Streams: `createReadStream` / `createWriteStream` with pipe + finish.
-- [x] **17 fs conformance tests** + 2 fs-streams tests.
+- [x] **17 conformance test cases in 2 files** (`fs.test.ts` 15 + `fs-streams.test.ts` 2) + 72 package-level cases in `@rifty/vfs` (`memory.test.ts` 24 + `opfs-sync.test.ts` 25 + `opfs-errors.test.ts` 17 + `path.test.ts` 6).
 
 ### Open acceptance
 
 - [ ] OPFS persistence (write→reload round-trip in a real browser session).
-- [ ] `OpfsFsSync` sync backend (`FileSystemSyncAccessHandle` in Worker realm).
-- [ ] Unify async + sync VFS to one backing tree (single `MemoryBackend` exposing both surfaces).
+- [x] **`OpfsFsSync` sync backend — done.** `packages/vfs/src/opfs-sync.ts` (~21 KB) implements the `FsSync` surface against `FileSystemSyncAccessHandle` in a Worker realm; 25 conformance cases in `packages/vfs/src/opfs-sync.test.ts` cover read/write/stat/utimes/rmdir/rename paths plus the in-memory mtime side-table ADR-0029 requires.
+- [x] **Unified async + sync VFS — done.** ADR-0037 ratified one backing tree exposing both surfaces; `packages/vfs/src/sync-mirror.ts:79-83` is the seam (the async `Vfs` and sync `FsSync` share the same `MemoryBackend` map / `FileSystemDirectoryHandle`). The earlier "two trees" risk is gone.
 
 ## M5 — Streams & IO — DONE
 
@@ -106,17 +106,17 @@ Per-milestone task tracking with acceptance review. See `PROJECT_PLAN.md` for th
 - [x] `Readable.from(iterable)`.
 - [x] `pipeline(...)` and `finished(stream)`.
 - [x] `node:stream` and `node:stream/promises` exposed.
-- [x] **9 stream conformance tests**.
+- [x] **9 conformance test cases in 1 file** (`tests/conformance/builtins/stream.test.ts`) covering Readable/Writable/Duplex/Transform/PassThrough + pipeline + finished + async iterators + object mode + backpressure. fs-stream coverage lives in M4's `fs-streams.test.ts`.
 
 ## M6 — Processes — PARTIAL — see open acceptance below
 
 - [x] `child_process.spawn('node', [script])` runs a VFS-stored JS file as a child with stdout/stderr streams.
 - [x] `exec(cmd, cb)` buffers stdout/stderr.
-- [x] `fork(modulePath)` returns a child with IPC.
+- [x] `fork(modulePath)` returns a child with IPC. **Worker-backed path closed by ADR-0045** (`packages/kernel/src/process-manager.ts` `WorkerProcessHandle.send` / `disconnect` / `'message'`; worker-side `process.send` / `'message'` / `'disconnect'` in `packages/runtime-js/src/ipc/install-process.ts`); the SAB path no longer silently drops messages. Conformance: `tests/conformance/builtins/fork-ipc-worker.test.ts`.
 - [x] `execSync` returns stdout as a Buffer.
 - [x] `worker_threads.Worker` with parentPort-style IPC.
 - [x] `ProcessManager` in `@rifty/kernel` for PID tracking.
-- [x] **5 child_process conformance tests**.
+- [x] **22 conformance test cases in 7 files** under `tests/conformance/builtins/` (`child_process.test.ts` 8, `child_process-worker.test.ts` 2, `child_process-stdin.test.ts` 1, `fork-ipc.test.ts` 2, `fork-ipc-worker.test.ts` 3 (ADR-0045), `exec-sync-worker.test.ts` 3, `worker_threads.test.ts` 3). The SAB-only suites (`*-worker`, `*-stdin`, `*-sync-worker`) gate on `crossOriginIsolated && getKernelWorkerUrl()`.
 
 ### Open acceptance
 
@@ -154,7 +154,7 @@ Per-milestone task tracking with acceptance review. See `PROJECT_PLAN.md` for th
 ### Open acceptance
 
 - [ ] Vendor `swc.wasm` end-to-end through the WASI runner (current cases use synthetic memory). _Previously named esbuild.wasm; substituted per ADR-0044 — every published `esbuild-wasm` imports Go's `gojs` ABI, not `wasi_snapshot_preview1`, so it cannot run on our WASI shim. swc ships a real Rust → WASIp1 build to npm and exercises the same surface area (argv, environ, fd_*, preopens, proc_exit) M8 needs._
-- [ ] WASI file decomposition (`wasi.ts` → `syscalls/{fd,path,proc}.ts` — per ADR 0024).
+- [x] **WASI file decomposition — done.** `packages/runtime-wasi/src/syscalls/{fd,path,proc}.ts` + `shared.ts` carry the preview1 syscall implementations; the umbrella `wasi.ts` now wires the imports table and orchestrates lifecycle. 56 package-level test cases (`syscalls/{clock,fd,fd-stat-readdir,path,path-mutate}.test.ts` + `wasi-link.test.ts` + `process-handle.test.ts`) cover the split surface.
 
 ## M10 — Real Tooling — PARTIAL — see open acceptance below
 
@@ -186,7 +186,7 @@ What's landed (mini-equivalent of Vite/HMR; "vite-like" not literal upstream Vit
 - [x] **Lockfile** generation (npm v3 shape).
 - [x] **Shadow registry** (D-005): user `overrides` + baked-in `bcrypt → bcryptjs`.
 - [x] **`install(name, version, deps, opts)`** end-to-end pipeline: resolve → tarball → unpack → link → lockfile.
-- [x] **18 npm conformance tests** (15 semver + 3 install).
+- [x] **22 conformance test cases in 3 files** under `tests/conformance/npm/` (`semver.test.ts` 15 + `install.test.ts` 3 + `lockfile-reuse.test.ts` 4) + 62 package-level cases in `@rifty/npm-client` (across 9 files: semver, registry, unpacker, fetch-and-unpack, installer, installer-pipeline, installer-lockfile, installer-lockfile-reader, installer-peer-optional) + 10 integration cases (`tests/integration/real-install.test.ts` 3 + `nested-install.test.ts` 2 + `real-packages.test.ts` 4 + `express-live.opt-in.test.ts` 1).
 
 ### Open acceptance
 
@@ -204,7 +204,7 @@ What's landed (mini-equivalent of Vite/HMR; "vite-like" not literal upstream Vit
 
 | Check | Result |
 |---|---|
-| Unit + conformance + integration tests | **761 pass (99 files)** — last counted 2026-05-27 after ADR-0043 (cross-realm preview port + VFS write port adds 11 unit tests) |
+| Unit + conformance + integration tests | **765 pass | 10 skip (100 of 104 files)** — last counted 2026-05-28 after ADR-0045 (M6 fork-IPC adds 4 kernel-level + 3 conformance tests) and the execSync loud-throw rewrite (audit item #2 adds 1 non-SAB case in `exec-sync-worker.test.ts`) |
 | TypeScript strict typecheck | **clean (16 projects)** |
 | Biome lint | **clean** |
 | Circular dependency check (madge) | **clean** |

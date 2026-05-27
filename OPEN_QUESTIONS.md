@@ -176,6 +176,22 @@ binding interface is designed from both sides at once.
 
 Start of M11.
 
+### Cross-deferral note (2026-05-27, post-audit)
+
+The 2026-05-27 architecture review (item #4) flagged a sibling
+deferral that rides the same A-023 wave: `bridgeCrossRealmPreview` is
+currently **buffered-only** (`packages/net/src/cross-realm/preview-port.ts:24-29`)
+— Worker-realm preview responses serialise the entire body into a
+`Uint8Array` before crossing the `BroadcastChannel`. This is fine for
+the `examples/vite-like-dev` fixtures (small modules, one frame), but
+Real Vite's vendor-prebundle and source-map responses will overshoot
+that envelope. Decision (2026-05-27): defer to M11 alongside this
+question. When A-023 lands, the streaming wire-frame (chunk/end split
+under `bridgeCrossRealmPreview`) will need its own ADR — likely
+ADR-0046+ — and a `SW_FRAME_VERSION` bump (ADR-0040). No code marker
+yet, by intent; the buffered shape is correct until Real Vite produces
+a body too large to fit.
+
 ---
 
 ## Q-2026-05-27-003: WASI preopens — explicit `cwd` and ordering semantics

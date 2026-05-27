@@ -173,6 +173,7 @@ webcontainer-clone/
 | M8 | WASI Runner | swc.wasm работает как процесс (esbuild deferred — ADR-0044) | 2-3 нед |
 | M9 | npm install | Реальная установка пакетов с registry | 3-4 нед |
 | M10 | Real Tooling | Vite-like dev server в браузере | 4-6 нед |
+| M11 | post-M10 follow-ups | Vite-in-Worker (ADR-0043 ✅), nested install (ADR-0042 ✅), fork-IPC через Worker (ADR-0045 ✅), SW→Worker direct routing (A-023 / Q-2026-05-27-002), streaming cross-realm preview, lockfile reuse, swc.wasm vendoring | 2-3 нед |
 
 ---
 
@@ -369,6 +370,23 @@ webcontainer-clone/
 - [ ] Изменение в редакторе → видим update в preview без перезагрузки
 
 Это финальный показательный сценарий — "вот оно как у StackBlitz".
+
+---
+
+### M11 — post-M10 follow-ups
+**Этапы:** 23.x, 24.x, 25.x (incremental refinements of M10 plus deferred items from M6/M8/M9)
+**Когда готово:** все ADR-помеченные «open acceptance» из M6–M10 закрыты или явно отложены с трекером.
+
+Состав (по состоянию на 2026-05-28, аудит 2026-05-27 подтвердил расхождение между ADR-слоем реальности и таблицей §4):
+- ✅ **Vite-in-Worker** — ADR-0043 (landed 2026-05-27). Real Vite живёт в kernel-spawned Worker; страница превращается в координатора. Часть M10 «Real Tooling» переехала сюда из практических соображений (cross-origin isolation + heavy WASM не вписывались в page realm).
+- ✅ **Nested install для конфликтов версий** — ADR-0042 (landed 2026-05-27). First-wins flat + nest-on-conflict в `walkAndPin`; lockfile fast-path replay через `pinnedEntryForParent`.
+- ✅ **Fork-IPC через Worker** — ADR-0045 (landed 2026-05-28). `WorkerProcessHandle.send`/`'message'`/`disconnect` через parent↔child `MessagePort`. Закрывает разрыв «`fork()` returns IPC ✅» из M6 acceptance, который в SAB-пути ранее тихо дропал сообщения.
+- ⏳ **SW→Worker direct routing** — A-023 (трекер: `OPEN_QUESTIONS.md` Q-2026-05-27-002). Когда landed, `WorkerOwnerResolver` заменит `FirstWindowOwnerResolver` в `@rifty/service-worker`, и SW-fetch для `/preview/<port>/*` пойдёт напрямую в worker realm.
+- ⏳ **Streaming cross-realm preview** — `bridgeCrossRealmPreview` сейчас buffered-only (`packages/net/src/cross-realm/preview-port.ts:24-29`). Поднимется как только Real Vite начнёт отдавать большие responses (vendor-prebundle, source maps). ADR-0046+ (TBD).
+- ⏳ **Lockfile reuse on subsequent `install`** — M9 acceptance, ADR-0023 пометил тактику; код пока регенерирует каждый раз. Закрывается отдельным PR.
+- ⏳ **swc.wasm vendoring** — M8 acceptance, ADR-0044 заменил esbuild на swc как forcing consumer. Закрывается отдельным PR, который вендорит swc.wasm под `tools/shadow-registry/` и прогоняет real preopens через WASI runner.
+
+Decision (2026-05-27): M11 — это не новая фаза работы, а контейнер для технического долга, оставшегося с M6 / M8 / M9 / M10. Срок 2-3 недели включает только активные работы (SW→Worker — после fork-IPC); deferred-пункты ждут реального триггерного use case.
 
 ---
 
