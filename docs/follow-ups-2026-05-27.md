@@ -24,6 +24,14 @@ Each item now carries a **Decision (2026-05-27)** line. Status legend:
 
 **Decision (2026-05-27):** `NEEDS_BROWSER` — single experimental run can only be done from the playground. Captured as a launchable opt-in test (`tests/integration/express-live.opt-in.test.ts`) wired against the prod Vercel proxy, *skipped by default* so CI does not depend on network. Operator runs `pnpm vitest run express-live.opt-in --no-skip` to capture the resolution log. If `EVERSIONCONFLICT` fires we promote M11 nested-install to a blocker on M9 closure. → **DONE this session** (test scaffold) — opt-in file lands; `describe.skipIf(!RIFTY_LIVE_REGISTRY)` gates execution. Run via `RIFTY_LIVE_REGISTRY=https://registry.npmjs.org pnpm vitest run express-live.opt-in`. The *experiment itself* (the actual install attempt) still needs an operator to invoke it once.
 
+**Outcome (2026-05-27, second pass):** the experimental run was attempted; two latent installer bugs surfaced before the gating signal could land and were fixed in the same session — see `npm-client/CHANGELOG.md`:
+
+  1. `computeIntegrity` was hard-coded to SHA-256 while the npm registry returns `sha512-…` on every modern packument → `EINTEGRITY` for every real install. Now algorithm-aware (sha256 / sha384 / sha512).
+  2. `parse('4')` returned `null`, so `^4` matched zero versions and the installer silently fell back to `dist-tags.latest` (`5.2.1`). Now `coerce()` zero-fills partial bases; bare `^4` resolves correctly to the newest 4.x.
+  3. The silent latest-fallback path itself was removed for explicit ranges (would have masked the partial-range bug). Throws `No matching version` instead.
+
+  **After these three fixes,** the run produced the expected gating signal: `EVERSIONCONFLICT` on `ms: 2.1.3 vs 2.0.0` (the classic express ↔ debug diamond). Per the decision rule above, **M11 nested install is now a prerequisite for M9 closure** — not a follow-on. Express, Vite, and OpenCode all gate on it. The readiness doc (`docs/large-targets-readiness-2026-05-27.md`) has been annotated; M9 open-acceptance "Nested install for version conflicts" is promoted to a blocker.
+
 ### 2. Unify `Vfs` / `FsSync` readdir shape on `VfsDirent[]` and add `utimes` to async `Vfs`
 **Why it matters:** `Vfs.readdir → VfsDirent[]` vs `FsSync.readdirSync → string[]` forces every adapter that bridges between them to do N+1 `statSync` per child (e.g. `apps/playground/src/adapters/sync-mirror-vfs.ts:33`). The bridge exists *because* the interfaces don't match.
 
@@ -164,7 +172,7 @@ Each item now carries a **Decision (2026-05-27)** line. Status legend:
 
 **Refs:** shell audit F1.
 
-**Decision (2026-05-27):** `DEFER` — deserves a focused PR with proper design. The `npm` and `node` shell commands need progress reporting (`shell.run`'s `onChunk` callback is the hook), correct exit-code mapping, and integration with the post-#7 `glue/` layout. The opt-in express test from item #1 is the dependency-graph signal that drives whether M11 nested install is needed; once that runs, `useNpmCommand` lands in the next session as a focused commit.
+**Decision (2026-05-27):** `DEFER` — deserves a focused PR with proper design. The `npm` and `node` shell commands need progress reporting (`shell.run`'s `onChunk` callback is the hook), correct exit-code mapping, and integration with the post-#7 `glue/` layout. The opt-in express test from item #1 is the dependency-graph signal that drives whether M11 nested install is needed; once that runs, `useNpmCommand` lands in the next session as a focused commit. → **DONE this session (2026-05-27 second pass)** — `apps/playground/src/glue/npm-shell-command.ts` ships `createNpmShellCommand({ vfs, registry, install? })`. Supports `install` / `i` / `add` subcommands, name + `name@range` + scoped specs, package.json auto-create + merge, EVERSIONCONFLICT / EINTEGRITY / EBROKENLOCK error mapping. App.tsx wires it on the long-lived shell session. Bare `npm install` is intentionally non-destructive (no rewrite). Progress is start/end + summary today; per-package fetch progress lands when `install()` grows a streaming hook. The `node` command is still deferred (OpenCode-class need; pairs with `execSync` via SAB+Atomics — M6 open acceptance). 12 unit tests in `npm-shell-command.test.ts`.
 
 ### 16. `terminal`: raw-mode line discipline
 **Today:** line-mode (history, prompt, busy gate, local echo, `^C`) is fused into `RiftyTerminal`. No raw-mode path. The day a TUI (`vim`, `top`, `ncurses` test) needs raw bytes, the class needs a `mode: 'cooked' | 'raw'` axis.

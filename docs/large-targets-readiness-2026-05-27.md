@@ -15,11 +15,12 @@ Targets ordered by ascending difficulty:
 
 ## Critical first step — settles the rest
 
-- [ ] **Run the opt-in live express install** (`tests/integration/express-live.opt-in.test.ts`).
+- [x] **Run the opt-in live express install** (`tests/integration/express-live.opt-in.test.ts`).
   - Invocation: `RIFTY_LIVE_REGISTRY=https://registry.npmjs.org pnpm vitest run express-live.opt-in`.
   - Outcome A — succeeds: M9 closure stays on its current path; M11 nested install remains a follow-on.
   - Outcome B — `EVERSIONCONFLICT`: capture the offending pair from `err.packageName` / `firstVersion` / `secondVersion`. M11 **nested install becomes a prerequisite for M9 closure**, not a follow-on. Express, Vite, and OpenCode all gate on it.
   - Refs: `docs/follow-ups-2026-05-27.md` item #1, ADR-0023, ADR-0028.
+  - **Outcome (2026-05-27 second pass): Outcome B** — `EVERSIONCONFLICT` on `ms: 2.1.3 vs 2.0.0` after fixing three latent installer bugs that the first pass surfaced (algorithm-aware integrity for sha512; partial-range semver for `^4`; removal of the silent `dist-tags.latest` fallback). The `ms` conflict is the classic express ↔ debug diamond, so we now know **M11 nested install is required** before any of the three large targets land. The blocker rows below have been updated accordingly.
 
 ## Express
 
@@ -28,15 +29,14 @@ Smallest target. M7 (net + http + SW preview) already delivers
 
 ### Hard blockers
 
-- [ ] **#1 outcome** (above) — until it runs, this is the unknown.
-- [ ] **M11 nested install** — only if #1 fails. Tracked in M9 open acceptance ("Nested install for version conflicts").
+- [x] **#1 outcome** (above) — ran 2026-05-27 second pass; settled to Outcome B.
+- [ ] **M11 nested install** — **now required.** Tracked in M9 open acceptance ("Nested install for version conflicts"). Concrete trigger: `ms: 2.1.3 vs 2.0.0`. Until this lands, *every* live install hitting the express ↔ debug ↔ ms diamond throws `EVERSIONCONFLICT`.
 
 ### Soft blockers (UX, not function)
 
-- [ ] **Follow-ups #15 — `useNpmCommand(shell, npmClient)` adapter.**
-  - Without it, `npm install express` at the playground prompt returns exit 127. Install runs only through the `npmClient.install(...)` API.
-  - Wiring lives in `apps/playground/src/glue/` (post-#7 rename). Touch the playground composition root to register `npm` and `node` shell commands.
-  - Includes progress reporting via `shell.run`'s `onChunk` callback so `npm install` shows a real bar at the terminal instead of dumping the final blob.
+- [x] **Follow-ups #15 — `npm install` at the shell prompt (done 2026-05-27).**
+  - `apps/playground/src/glue/npm-shell-command.ts` registers an `npm` builtin on the long-lived shell session. `install` / `i` / `add` subcommands; name, `name@range`, scoped specs; auto-create + merge `package.json`; EVERSIONCONFLICT / EINTEGRITY / EBROKENLOCK error mapping. The `node` builtin is still deferred (OpenCode-class — pairs with `execSync` SAB+Atomics).
+  - Per-package fetch progress is start/end + summary today; a streaming hook on `install()` is the next refinement.
 
 ### Not blocking
 
@@ -48,7 +48,7 @@ Express requirements + dev-server transformation + cross-realm HMR.
 
 ### Hard blockers
 
-- [ ] **#1 outcome** + possibly nested install — Vite's transitive graph is bigger than Express's, so the EVERSIONCONFLICT probability is higher.
+- [x] **#1 outcome** + **M11 nested install required** — confirmed by the 2026-05-27 second pass on express. Vite's transitive graph is bigger than Express's, so the same `ms` diamond (plus likely others) will fire here too.
 - [ ] **M8 — vendor `esbuild.wasm` end-to-end through the WASI runner.** Currently the M10 dev-server has no TS/JSX transformation path. M8 open acceptance.
   - [ ] **Follow-ups #24 — WASI preopens `cwd` + ordering semantics.** Currently `OPEN_QUESTIONS Q-2026-05-27-003`. esbuild expects a working directory; the right API shape (option A: `cwd?: string`; option B: ordered array; option C: both) gets decided when esbuild is the concrete consumer.
 - [ ] **Cross-realm HMR / Vite-in-Worker** — M10 open acceptance ("Vite-in-Worker per ADR-0011") + ADR-0025 dev-server-realm split.
@@ -57,7 +57,7 @@ Express requirements + dev-server transformation + cross-realm HMR.
 
 ### Soft blockers
 
-- [ ] **Follow-ups #15** — same UX gap as Express; `npm install vite` at the prompt.
+- [x] **Follow-ups #15** — landed 2026-05-27 (see Express section above). `npm install vite` at the prompt now works the same way as `npm install express`.
 - [ ] **Shadow-registry consolidation** (M10 open acceptance, ADR-0015) — move `overrides.ts` + shim files under `tools/shadow-registry/`. Needed at scale once Vite drags in packages we have to shim.
 
 ### Not blocking
@@ -72,9 +72,9 @@ streaming + likely native-dep shims.
 ### Hard blockers
 
 - [ ] **All Express + Vite hard blockers.**
-- [ ] **M11 nested install** — almost certainly triggers regardless of #1 outcome, because OpenCode's transitive graph is larger than Vite's.
+- [x] **M11 nested install** — confirmed required (2026-05-27 second pass). Almost certainly triggers regardless of #1 outcome, because OpenCode's transitive graph is larger than Vite's.
 - [ ] **`node script.ts` from shell prompt.**
-  - [ ] **Follow-ups #15** — `useNpmCommand` registers `node` alongside `npm`.
+  - [ ] **Follow-ups #15** — npm landed 2026-05-27; the `node` builtin is still open and pairs with `execSync` SAB+Atomics below.
   - [ ] **`execSync` via SAB+Atomics** (ADR-0011 phase 3, M6 open acceptance) — needed if OpenCode (or any of its tooling) uses `execSync` for sub-process orchestration.
 - [ ] **Real-TCP `WebSocket` / cross-realm WebSocket bridge** — M7/M10 open acceptance ("Cross-realm WebSocket bridge"). The in-process WS layer satisfies in-realm HMR; outbound long-lived connections to claude.ai or other services need either a real transport or a SW-mediated `fetch` upgrade.
 - [ ] **Native dep policy.** OpenCode likely pulls a package with a native (node-gyp) binding somewhere in its graph. We don't support native; the install must either:
@@ -108,9 +108,9 @@ without unblocking any of the three large targets:
 
 ## Suggested execution order
 
-1. **Today** — run the opt-in express install (#1) to settle the M11-nested-install timing. One operator action.
-2. **Next session** — land **#15** (`useNpmCommand`) as a focused PR. Closes the prompt-install UX gap for all three targets at once and is the only soft-blocker that touches the operator-facing experience.
-3. **If #1 returned EVERSIONCONFLICT** — promote M9-open-acceptance "Nested install" to a blocker; this is the biggest open work item before any of the three targets land.
+1. ✅ **2026-05-27 (today)** — ran the opt-in express install (#1). Outcome B: `EVERSIONCONFLICT` on `ms`. Three latent installer bugs (sha256-only integrity, partial-range semver, silent latest fallback) were fixed in the same session to even get the gating signal.
+2. ✅ **2026-05-27 (same session)** — landed **#15** (`npm install` at the prompt). Closes the prompt-install UX gap for all three targets.
+3. ⏳ **Next session — M11 nested install (promoted to blocker).** M9 open-acceptance "Nested install for version conflicts" is now the biggest open work item before any of the three targets land. Concrete trigger: `express → debug → ms@^2.1` collides with `express → finalhandler → ms@2.0`. The flat linker throws `EVERSIONCONFLICT`; nesting `node_modules/finalhandler/node_modules/ms/` is the unblock.
 4. **M8 esbuild.wasm + #24** — required for any vite-class target. Unblocks both Vite and OpenCode.
 5. **M11 cross-realm work (#6, #8, ADR-0025 follow-up, WebSocket bridge)** — required for Vite-in-Worker and OpenCode-class streaming.
 6. **Native-dep policy + shadow-registry consolidation** — surfaces during real install attempts; concrete shim list grows from there.

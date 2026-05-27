@@ -191,7 +191,7 @@ What's landed (mini-equivalent of Vite/HMR; "vite-like" not literal upstream Vit
 ### Open acceptance
 
 - [ ] Lockfile reuse on subsequent `install` (currently regenerated each call — per ADR 0023).
-- [ ] Nested install for version conflicts (currently throws `EVERSIONCONFLICT` — per A-031 / ADR 0011 sibling).
+- [ ] **Nested install for version conflicts — promoted to M9 blocker (2026-05-27).** The opt-in live express install hit `EVERSIONCONFLICT` on `ms: 2.1.3 vs 2.0.0` (classic express → debug diamond), so the flat linker can't actually close M9 against a real-world transitive graph. See `docs/large-targets-readiness-2026-05-27.md` (Execution order step 3) and `docs/follow-ups-2026-05-27.md` item #1 second pass.
 - [ ] Integration tests against real npm tarballs (currently hand-rolled mocks — per ADR 0021).
 - [ ] Prod-proxy decision (`Q-2026-05-24-007`).
 
