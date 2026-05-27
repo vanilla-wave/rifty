@@ -30,7 +30,7 @@ Smallest target. M7 (net + http + SW preview) already delivers
 ### Hard blockers
 
 - [x] **#1 outcome** (above) — ran 2026-05-27 second pass; settled to Outcome B.
-- [ ] **M11 nested install** — **now required.** Tracked in M9 open acceptance ("Nested install for version conflicts"). Concrete trigger: `ms: 2.1.3 vs 2.0.0`. Until this lands, *every* live install hitting the express ↔ debug ↔ ms diamond throws `EVERSIONCONFLICT`.
+- [x] **M11 nested install — LANDED 2026-05-27.** ADR-0042 ratified the first-wins-flat + nest-on-conflict placement; `walkAndPin` was rewritten; `ResolvedPackage.installPath` + lockfile-keyed-by-path shipped. The opt-in live `express@^4` install now succeeds end-to-end (86 packages; `ms × 5`, `debug × 3`, `statuses × 3` on disk + lockfile). M9 open-acceptance "Nested install for version conflicts" closes here.
 
 ### Soft blockers (UX, not function)
 
@@ -48,7 +48,7 @@ Express requirements + dev-server transformation + cross-realm HMR.
 
 ### Hard blockers
 
-- [x] **#1 outcome** + **M11 nested install required** — confirmed by the 2026-05-27 second pass on express. Vite's transitive graph is bigger than Express's, so the same `ms` diamond (plus likely others) will fire here too.
+- [x] **#1 outcome** + **M11 nested install** — both landed 2026-05-27. The ms-class diamonds Vite triggers are handled by the new placement algorithm; the remaining Vite-specific work is dev-server transformation + cross-realm HMR (the rows below).
 - [ ] **M8 — vendor `esbuild.wasm` end-to-end through the WASI runner.** Currently the M10 dev-server has no TS/JSX transformation path. M8 open acceptance.
   - [ ] **Follow-ups #24 — WASI preopens `cwd` + ordering semantics.** Currently `OPEN_QUESTIONS Q-2026-05-27-003`. esbuild expects a working directory; the right API shape (option A: `cwd?: string`; option B: ordered array; option C: both) gets decided when esbuild is the concrete consumer.
 - [ ] **Cross-realm HMR / Vite-in-Worker** — M10 open acceptance ("Vite-in-Worker per ADR-0011") + ADR-0025 dev-server-realm split.
@@ -72,7 +72,7 @@ streaming + likely native-dep shims.
 ### Hard blockers
 
 - [ ] **All Express + Vite hard blockers.**
-- [x] **M11 nested install** — confirmed required (2026-05-27 second pass). Almost certainly triggers regardless of #1 outcome, because OpenCode's transitive graph is larger than Vite's.
+- [x] **M11 nested install** — landed 2026-05-27. OpenCode's diamonds now resolve the same way express's do.
 - [ ] **`node script.ts` from shell prompt.**
   - [ ] **Follow-ups #15** — npm landed 2026-05-27; the `node` builtin is still open and pairs with `execSync` SAB+Atomics below.
   - [ ] **`execSync` via SAB+Atomics** (ADR-0011 phase 3, M6 open acceptance) — needed if OpenCode (or any of its tooling) uses `execSync` for sub-process orchestration.
@@ -108,12 +108,13 @@ without unblocking any of the three large targets:
 
 ## Suggested execution order
 
-1. ✅ **2026-05-27 (today)** — ran the opt-in express install (#1). Outcome B: `EVERSIONCONFLICT` on `ms`. Three latent installer bugs (sha256-only integrity, partial-range semver, silent latest fallback) were fixed in the same session to even get the gating signal.
-2. ✅ **2026-05-27 (same session)** — landed **#15** (`npm install` at the prompt). Closes the prompt-install UX gap for all three targets.
-3. ⏳ **Next session — M11 nested install (promoted to blocker).** M9 open-acceptance "Nested install for version conflicts" is now the biggest open work item before any of the three targets land. Concrete trigger: `express → debug → ms@^2.1` collides with `express → finalhandler → ms@2.0`. The flat linker throws `EVERSIONCONFLICT`; nesting `node_modules/finalhandler/node_modules/ms/` is the unblock.
-4. **M8 esbuild.wasm + #24** — required for any vite-class target. Unblocks both Vite and OpenCode.
+1. ✅ **2026-05-27** — ran the opt-in express install (#1). Outcome B: `EVERSIONCONFLICT` on `ms`. Three latent installer bugs (sha256-only integrity, partial-range semver, silent latest fallback) were fixed in the same session to even get the gating signal.
+2. ✅ **2026-05-27** — landed **#15** (`npm install` at the prompt). Closes the prompt-install UX gap for all three targets.
+3. ✅ **2026-05-27** — landed **M11 nested install** (ADR-0042: first-wins-flat + nest-on-conflict). Live `express@^4` now installs end-to-end (86 packages, including `ms × 5`). Express is **unblocked** at the install layer.
+4. **M8 esbuild.wasm + #24** — required for any vite-class target. Unblocks both Vite and OpenCode. Next-session priority.
 5. **M11 cross-realm work (#6, #8, ADR-0025 follow-up, WebSocket bridge)** — required for Vite-in-Worker and OpenCode-class streaming.
 6. **Native-dep policy + shadow-registry consolidation** — surfaces during real install attempts; concrete shim list grows from there.
+7. **Lockfile fast-path replay for nested entries** — ADR-0042 deferred this; install of a nested-entry-bearing project currently bypasses the lockfile fast-path. Bounded perf cost (live resolve + cache); follow-on slice when needed.
 
 ## References
 

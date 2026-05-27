@@ -32,6 +32,8 @@ Each item now carries a **Decision (2026-05-27)** line. Status legend:
 
   **After these three fixes,** the run produced the expected gating signal: `EVERSIONCONFLICT` on `ms: 2.1.3 vs 2.0.0` (the classic express ↔ debug diamond). Per the decision rule above, **M11 nested install is now a prerequisite for M9 closure** — not a follow-on. Express, Vite, and OpenCode all gate on it. The readiness doc (`docs/large-targets-readiness-2026-05-27.md`) has been annotated; M9 open-acceptance "Nested install for version conflicts" is promoted to a blocker.
 
+  **Third pass (same session, post-M11 implementation):** ADR-0042 landed in this session (first-wins-flat + nest-on-conflict). The opt-in live express install now **succeeds end-to-end** — 86 packages resolved, with the expected diamond placements on disk (`ms × 5`, `debug × 3`, `statuses × 3`, etc.) and in the lockfile. One additional semver bug surfaced and was fixed mid-pass: `>= 2.1.2 < 3` (operator-then-whitespace spelling that real npm packuments emit) used to tokenise into four useless tokens. Express is unblocked at the install layer.
+
 ### 2. Unify `Vfs` / `FsSync` readdir shape on `VfsDirent[]` and add `utimes` to async `Vfs`
 **Why it matters:** `Vfs.readdir → VfsDirent[]` vs `FsSync.readdirSync → string[]` forces every adapter that bridges between them to do N+1 `statSync` per child (e.g. `apps/playground/src/adapters/sync-mirror-vfs.ts:33`). The bridge exists *because* the interfaces don't match.
 
