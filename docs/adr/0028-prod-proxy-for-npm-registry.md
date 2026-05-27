@@ -1,6 +1,6 @@
 # ADR 0028: Vercel Edge Function proxies npm registry in production
 
-Status: Accepted (promoted from Q-2026-05-24-007)
+Status: Provisional — implementation deferred to first deploy session (downgraded 2026-05-27; see "Status update" below)
 Date: 2026-05
 
 ## Context
@@ -36,3 +36,25 @@ Migration to Option B (Cloudflare Worker) remains a single config change if Verc
 - [ ] `@rifty/npm-client` resolves prod URLs through `/npm-registry/...` exactly as it does dev URLs.
 - [ ] OPEN_QUESTIONS.md moves Q-2026-05-24-007 to the "Promoted" section with this ADR as the resolution.
 - [ ] PROJECT_PLAN.md §9 entry "Q4'" is removed; D-004 footnote points to this ADR.
+
+## Status update — 2026-05-27
+
+This ADR was originally marked **Accepted** when Q-2026-05-24-007 was
+promoted, but the 2026-05-27 architecture review (item #3 in
+`docs/follow-ups-architecture-review-2026-05-27.md`) flagged the gap
+between the recorded status and reality: the Edge Function source is
+not in the repo, no live URL exists, and the playground has never been
+deployed to prod. "Accepted" without code creates an *ADR-as-aspiration*
+shape — the most dangerous failure mode because it looks like a settled
+decision.
+
+Status is downgraded to **Provisional**. The Vercel Edge Function
+remains the leading candidate (rationale in §Decision stands), but the
+choice is not ratified until the Edge Function source exists, the
+deploy succeeds with the correct CORP/COEP headers, and the `npm-client`
+prod URL roundtrips through it. Once implemented, a new ADR (likely
+ADR-0046+) will ratify the chosen path with concrete code references;
+that new ADR supersedes this one.
+
+Q-2026-05-24-007 is restored in `OPEN_QUESTIONS.md` as an Active
+question, scoped to the first prod-deploy session.

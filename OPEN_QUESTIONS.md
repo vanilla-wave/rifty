@@ -27,6 +27,83 @@ When a question is reviewed:
 
 ## Active
 
+## Q-2026-05-24-007: Prod proxy for npm registry (reopened 2026-05-27)
+
+**Status:** 🟢 Active (reopened — see "Reopened" note below)  
+**Encountered in:** 2026-05-24 (original); reopened 2026-05-27 architecture review (`docs/follow-ups-architecture-review-2026-05-27.md` item #3)  
+**Milestone:** M9 (closure)  
+**Author (agent session):** 2026-05-27
+
+### Reopened note
+
+Originally promoted to ADR-0028 (Vercel Edge Function). The 2026-05-27
+audit surfaced that the ADR was ratified without the Edge Function
+source ever landing in the repo: acceptance criterion #1 (a file at
+`apps/playground/api/npm-registry/[...path].ts` or equivalent) is
+unmet, there is no live URL, and the playground has never been deployed
+to prod. The ADR has been downgraded to **Provisional** (see
+`docs/adr/0028-prod-proxy-for-npm-registry.md` §Status update — 2026-05-27)
+and the question is restored here as the live tracker.
+
+### Context
+
+A `crossOriginIsolated` playground (D-001) cannot fetch
+`registry.npmjs.org` directly — CORP/CORS forbids it. Dev solves this
+via the Vite proxy (D-004). Prod needs an equivalent surface so
+`@rifty/npm-client.REGISTRY_BASE_URL = '/npm-registry'` resolves both
+metadata and tarballs through a deployed proxy with
+`Access-Control-Allow-Origin: *` and `Cross-Origin-Resource-Policy: cross-origin`
+on every response.
+
+### Options considered
+
+- **Option A — Vercel Edge Function (provisional leading candidate).**
+  Single source file in the playground deploy proxying `registry.npmjs.org`.
+  Co-located with the playground; reuses the same Vercel deploy that
+  serves `vercel.json` headers.
+  - Pro: Zero extra infra; one provider.
+  - Con: Vercel Edge Function free-tier limits may bite at scale; vendor
+    lock-in on the Edge runtime.
+- **Option B — Cloudflare Worker.** Same shape, hosted on Cloudflare;
+  splits the deploy across two providers.
+  - Pro: Generous free tier; provider diversity.
+  - Con: One more deploy target to manage.
+- **Option C — Self-hosted nginx + Verdaccio mirror.** Over-engineered
+  for a pet project; on-call burden.
+
+### Decision taken (provisional)
+
+**Chose:** A — Vercel Edge Function, *as candidate*. The decision is
+not ratified until the Edge Function exists, deploys, and roundtrips a
+live `@rifty/npm-client` install. Implementation TBD by the first
+prod-deploy session.
+
+**Why:** Same rationale as the original ADR-0028 promotion — co-located
+with the playground deploy, < 50 lines, switching to Option B later is
+a config-only change. Reopening the question keeps the gap honest.
+
+### Code markers
+
+None yet — by intent. The decision is "candidate only" until the
+Edge Function lands. When the first deploy attempt opens a PR, that PR
+either (a) ratifies the candidate with a new ADR-0046+ that supersedes
+ADR-0028 with concrete code references, or (b) switches to Option B/C
+with a fresh ADR.
+
+### Reversibility justification
+
+- Public APIs affected: none — `@rifty/npm-client` already reads
+  `REGISTRY_BASE_URL`, agnostic to what the URL routes to.
+- Rough cost to revert (today): zero (no code change yet).
+- External dependencies involved: none until the Edge Function is
+  written.
+
+### Needs human review by
+
+First prod-deploy session (M9 deploy closure).
+
+---
+
 ## Q-2026-05-27-002: Coherent `OwnerResolver` + readiness-registry swap (M11 prep)
 
 **Status:** 🟢 Active  
@@ -301,7 +378,7 @@ End of milestone M<N>.
 - **Q-2026-05-23-003** — *`process.platform` / `process.arch` honest values vs compat lies* — promoted to **ADR 0026** (`docs/adr/0026-process-platform-honest-values.md`). `'rifty'` / `'wasm'` confirmed as the de-facto public ABI; per-package shim cost accepted; revisit at ~10 shimmed packages.
 - **Q-2026-05-23-004** — *File-level shim overlay vs full-package shadow* — promoted to **ADR 0027** (`docs/adr/0027-file-level-shim-overlay.md`). Per-file overlay in the consuming adapter kept until a third shim site appears, at which point the pattern moves into `@rifty/npm-client/shims/`.
 - **Q-2026-05-23-005** — *Expanded `@rifty/runtime-js` public surface via `./builtins/*` subpath exports* — promoted to **ADR 0018** (`docs/adr/0018-runtime-js-subpath-exports.md`). Retroactive accept; consolidation to a `./host` entry remains an option for the next public-API review.
-- **Q-2026-05-24-007** — *Prod proxy for npm registry* — promoted to **ADR 0028** (`docs/adr/0028-prod-proxy-for-npm-registry.md`). Vercel Edge Function chosen as the prod proxy, falling back to Cloudflare Worker by config change; closes PROJECT_PLAN.md Q4'.
+- **Q-2026-05-24-007** — *Prod proxy for npm registry* — promoted to **ADR 0028** (`docs/adr/0028-prod-proxy-for-npm-registry.md`); **reopened 2026-05-27** when the audit found the Edge Function source had never landed (see Active section above and ADR-0028 §Status update — 2026-05-27). The Vercel Edge Function candidate is provisional pending implementation.
 - **Q-2026-05-25-touch-utimes** — *Where should `utimes` live on the sync VFS surface?* — promoted to **ADR 0029** (`docs/adr/0029-utimes-on-fs-sync.md`). The trigger condition fired: a second caller (`node:fs.utimesSync` in `runtime-js`) appeared, so the provisional Option B (backend-sniffing in `shell`) was escalated to Option A — `FsSync.utimes` lives on the interface, `MemoryFsSync` mutates the shared backend, `OpfsFsSync` records into an in-memory side-table (`FileSystemSyncAccessHandle` has no mtime mutation). `shell/src/builtins.ts` drops its `@rifty/vfs/internal` import.
 
 ---
