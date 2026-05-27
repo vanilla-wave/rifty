@@ -3,7 +3,7 @@
  *
  * Per ADR 0015, all shim/override *data* lives in this package. Consumer-side
  * adapter code stays where it is used (`packages/npm-client/src/overrides.ts`
- * for npm overrides, `apps/playground/src/adapters/esbuild-shim.ts` for the
+ * for npm overrides, `apps/playground/src/glue/esbuild-shim.ts` for the
  * VFS overlay).
  *
  * Two tables are exposed:

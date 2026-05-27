@@ -179,7 +179,7 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
   // channel name) sees a stable `port`. The bridge owns the page-realm
   // `BridgedWebSocketServer` that the preview iframe's inlined HMR client
   // connects to over `BroadcastChannel` — see ADR-0017 phase 1 acceptance
-  // and `apps/playground/src/adapters/hmr-bridge.ts`.
+  // and `apps/playground/src/glue/hmr-bridge.ts`.
   const hmrBridge: HmrBridgeHandle = setupHmrBridge({ port });
   log(`[real-vite] hmr bridge ready at ${hmrBridge.url}\n`);
 

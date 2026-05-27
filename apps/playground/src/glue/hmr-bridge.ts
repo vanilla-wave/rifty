@@ -8,6 +8,22 @@
  * which cannot cross the page ↔ iframe realm boundary (no real TCP, no SW
  * interception for the WS upgrade).
  *
+ * **Dev-mode vs real-Vite asymmetry (follow-ups doc item #19).** Two HMR
+ * paths coexist intentionally today:
+ *   - **Real-Vite mode** broadcasts through this bridge — Vite hands its
+ *     HMR plugin a `BridgedWebSocketServer` and the iframe loads the inline
+ *     client.
+ *   - **Dev mode** (the in-realm mini Vite under `examples/vite-like-dev`)
+ *     uses its own internal HMR client that reads file-change events from
+ *     its own `WebSocketServer` instance directly. It does not route
+ *     through this bridge.
+ *
+ * The asymmetry is acceptable until A-026 (M11) moves Vite into a worker
+ * realm — at that point dev mode and real-Vite both have to traverse a
+ * realm boundary and unifying them through this bridge becomes free.
+ * Readers who expect parity today: there is none; the bridge is currently
+ * the real-Vite-only HMR transport.
+ *
  * Why a bridge at M10 (before A-026):
  *   - Today Vite runs in the page realm and the preview iframe is a child
  *     realm; even though Vite is in the same JS realm as the playground UI,

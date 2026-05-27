@@ -29,8 +29,8 @@
  */
 
 import { createSignal, onCleanup } from 'solid-js';
-import { type DevModeHandle, startDevMode } from './devMode.ts';
-import { type RealViteHandle, startRealVite } from './realVite.ts';
+import { type DevModeHandle, startDevMode } from '../glue/devMode.ts';
+import { type RealViteHandle, startRealVite } from '../glue/realVite.ts';
 
 export type Mode = 'repl' | 'dev' | 'real-vite';
 

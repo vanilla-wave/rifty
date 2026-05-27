@@ -31,12 +31,7 @@ export class SyncMirrorVfs implements Vfs {
     syncMirror().mkdirSync(normalizePath(path), { recursive: options?.recursive ?? false });
   }
   async readdir(path: string): Promise<readonly VfsDirent[]> {
-    const names = syncMirror().readdirSync(normalizePath(path));
-    return names.map((name) => {
-      const childPath = normalizePath(`${path}/${name}`);
-      const st = syncMirror().statSync(childPath);
-      return { name, isFile: st.isFile, isDirectory: st.isDirectory };
-    });
+    return syncMirror().readdirSync(normalizePath(path));
   }
   async rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
     syncMirror().rmSync(normalizePath(path), {
@@ -50,6 +45,9 @@ export class SyncMirrorVfs implements Vfs {
   }
   async exists(path: string): Promise<boolean> {
     return syncMirror().existsSync(normalizePath(path));
+  }
+  async utimes(path: string, atimeMs: number, mtimeMs: number): Promise<void> {
+    syncMirror().utimes(normalizePath(path), atimeMs, mtimeMs);
   }
   async openReadable(
     path: string,

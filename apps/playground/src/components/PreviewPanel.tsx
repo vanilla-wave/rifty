@@ -2,18 +2,23 @@
  * M10 preview panel — an iframe pinned to `/preview/<port>/` for the playground
  * Service Worker to route through to the runtime's port registry. Includes a
  * port input + reload button + "open in new tab" link.
+ *
+ * Reload uses `frame.contentWindow.location.reload()` rather than busting a
+ * `?v=N` query string. ADR-0017's HMR client also calls `location.reload()`
+ * on the iframe's window, so this gives HMR and the manual Reload button a
+ * single refresh mechanism instead of two competing paths (follow-ups doc
+ * item #18).
  */
 import { createSignal } from 'solid-js';
 
 export function PreviewPanel(props: { initialPort?: number }) {
   const [port, setPort] = createSignal(props.initialPort ?? 3000);
-  const [version, setVersion] = createSignal(0);
   let frame: HTMLIFrameElement | undefined;
 
-  const previewUrl = (): string => `/preview/${port()}/?v=${version()}`;
+  const previewUrl = (): string => `/preview/${port()}/`;
 
   function reload(): void {
-    setVersion(version() + 1);
+    frame?.contentWindow?.location.reload();
   }
 
   return (
