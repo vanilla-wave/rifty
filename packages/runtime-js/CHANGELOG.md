@@ -5,6 +5,7 @@
 ### Changed
 
 - **ADR-0041 — `fs.readdirSync({ withFileTypes: true })` no longer re-stats children.** `FsSync.readdirSync` returns `VfsDirent[]` directly, so the `withFileTypes` branch now reads `isFile`/`isDirectory` from the dirent shape instead of doing an N+1 `statSync` per child. `fs-watch.ts` and other internal callers are updated to read `.name` instead of bare strings.
+- **`child_process.spawn` worker path uses `handle.stdout()` / `stderr()`.** The `wireWorkerStdio` helper is removed — the kernel `WorkerProcessHandle` now owns the `MessagePort` → `Readable` wiring (port start, push-on-message, EOF on exit). `spawnWorkerChild` no longer takes `stdout`/`stderr` args; the caller reads streams from the handle. `worker_threads.Worker` (kernel path) likewise drops its hand-rolled `ports.stdout.onmessage` setup. Follow-ups doc item #3.
 
 ### Added
 

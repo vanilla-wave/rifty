@@ -171,8 +171,6 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
 }
 
 function spawnViaWorker(command: string, args: string[], opts: SpawnOptions): ChildProcess {
-  const stdout = new Readable({ objectMode: false });
-  const stderr = new Readable({ objectMode: false });
   // Use placeholder buses; spawnWorkerChild ignores them for now and
   // phase 3 will wire fork-mode IPC into worker-entry.
   const outbound = new EventEmitter();
@@ -181,12 +179,20 @@ function spawnViaWorker(command: string, args: string[], opts: SpawnOptions): Ch
     command,
     args,
     opts,
-    stdout,
-    stderr,
     outboundMessages: outbound,
     inboundIpc,
   });
-  return new ChildProcess(handle, opts.__fork ?? false, { stdout, stderr });
+  // Stdio comes from the kernel handle — `handle.stdout()` / `handle.stderr()`
+  // are the supported parent-side accessors (ADR-0011 phase 2 follow-up).
+  if (handle.kind !== 'worker') {
+    throw new Error(
+      `spawnViaWorker: expected a Worker-backed handle from spawnWorkerChild, got kind=${handle.kind}`,
+    );
+  }
+  return new ChildProcess(handle, opts.__fork ?? false, {
+    stdout: handle.stdout(),
+    stderr: handle.stderr(),
+  });
 }
 
 function spawnViaSameRealm(command: string, args: string[], opts: SpawnOptions): ChildProcess {

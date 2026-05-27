@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`WorkerProcessHandle.stdout()` / `stderr()` / `stdin()` accessors.**
+  Returns `@rifty/io` `Readable` / `Writable` streams already wired to the
+  worker's stdio `MessagePort` triple (start/onmessage/EOF on exit handled
+  internally). Same instance is returned on repeated calls (singleton per
+  handle). The raw `ports` field is kept for an interim release and marked
+  `@deprecated`; new code should reach for the accessors. Removes
+  hand-rolled `port.start()` / `port.onmessage` / push-null boilerplate
+  from runtime-js (`wireWorkerStdio` dissolved into the kernel adapter —
+  follow-ups doc item #3).
+
 ### Changed
 
 - `ProcessHandle` sealed union no longer carries `send` on the shared base.

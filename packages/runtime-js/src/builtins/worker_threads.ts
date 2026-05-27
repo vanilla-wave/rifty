@@ -81,13 +81,12 @@ export class Worker extends EventEmitter {
       // Pump stdout/stderr → emit on `this` so consumers can hook
       // `worker.on('message', ...)` etc. once phase 3 wires worker-side
       // `parentPort`. Until then, the binary stdio is best-effort surfaced
-      // as `'stdout'`/`'stderr'` events for debug visibility.
+      // as `'stdout'`/`'stderr'` events for debug visibility. The kernel
+      // handle's `stdout()`/`stderr()` accessors hide the start/onmessage
+      // boilerplate (follow-ups doc item #3).
       if (handle.kind === 'worker') {
-        const ports = handle.ports;
-        ports.stdout.onmessage = (ev) => this.emit('stdout', ev.data);
-        ports.stderr.onmessage = (ev) => this.emit('stderr', ev.data);
-        ports.stdout.start();
-        ports.stderr.start();
+        handle.stdout().on('data', (chunk) => this.emit('stdout', chunk));
+        handle.stderr().on('data', (chunk) => this.emit('stderr', chunk));
       }
       handle.on('exit', (code) => {
         this.exited = true;

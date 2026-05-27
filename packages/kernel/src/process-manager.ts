@@ -15,6 +15,7 @@
  * manager; tests exercise the manager directly.
  */
 
+import { Readable, Writable } from '@rifty/io';
 import { EventEmitter } from './internal/event-emitter.ts';
 import { type SpawnWorkerSpec, spawnKernelWorker } from './spawn-worker.ts';
 import type { WorkerStdioPorts } from './worker-entry.ts';
@@ -79,10 +80,37 @@ export interface SameRealmProcessHandle extends ProcessHandleBase {
  * Does NOT carry `send`: fork-mode IPC for Worker-backed children is pending
  * ADR-0011 phase 2 follow-up. When that lands, `send` joins this interface
  * (additive change, no migration of callers needed).
+ *
+ * Stdio accessors (`stdout` / `stderr` / `stdin`) wrap the underlying
+ * `MessagePort` triple as `@rifty/io` `Readable` / `Writable` streams. These
+ * are the supported surface for parent-side stdio; the raw `ports` field is
+ * retained for compatibility and tooling that needs the `MessagePort`
+ * objects (e.g. structured transfer). New code should reach for the
+ * accessors — they hide the start/onmessage/close boilerplate, push EOF on
+ * worker exit, and align with the rest of rifty's stream contracts.
  */
 export interface WorkerProcessHandle extends ProcessHandleBase {
   readonly kind: 'worker';
+  /**
+   * @deprecated Prefer `stdout()` / `stderr()` / `stdin()`. The raw triple
+   * is kept for an interim release to unblock M11's `WasiProcessHandle`
+   * dispatch experiments; remove when no consumer reaches for it directly.
+   */
   readonly ports: WorkerStdioPorts;
+  /**
+   * Read-side of the worker's stdout. Pushes `Uint8Array` chunks as the
+   * worker writes; emits `'end'` after `push(null)` on worker exit. Same
+   * instance is returned on repeated calls (singleton per handle).
+   */
+  stdout(): Readable;
+  /** Read-side of the worker's stderr. Same shape as {@link stdout}. */
+  stderr(): Readable;
+  /**
+   * Write-side of the worker's stdin. `write(chunk)` posts `chunk` to the
+   * worker's stdin port; `end()` closes the port. Same instance is returned
+   * on repeated calls.
+   */
+  stdin(): Writable;
 }
 
 /**
@@ -279,11 +307,35 @@ export class ProcessManager {
       signalCode: string | null = null;
       readonly ports = ports;
 
+      #stdoutReadable: Readable | null = null;
+      #stderrReadable: Readable | null = null;
+      #stdinWritable: Writable | null = null;
+
       get cwd(): string {
         return record.cwd;
       }
       setCwd(next: string): void {
         record.cwd = next;
+      }
+      stdout(): Readable {
+        if (!this.#stdoutReadable) this.#stdoutReadable = bindPortAsReadable(ports.stdout);
+        return this.#stdoutReadable;
+      }
+      stderr(): Readable {
+        if (!this.#stderrReadable) this.#stderrReadable = bindPortAsReadable(ports.stderr);
+        return this.#stderrReadable;
+      }
+      stdin(): Writable {
+        if (!this.#stdinWritable) this.#stdinWritable = bindPortAsWritable(ports.stdin);
+        return this.#stdinWritable;
+      }
+      /** Internal: push EOF on the read-side streams; called once on exit. */
+      _signalEof(): void {
+        if (this.#stdoutReadable) this.#stdoutReadable.push(null);
+        if (this.#stderrReadable) this.#stderrReadable.push(null);
+        if (this.#stdinWritable && !this.#stdinWritable._writableState.ending) {
+          this.#stdinWritable.end();
+        }
       }
       kill(signal = 'SIGTERM'): boolean {
         if (this.exitCode !== null) return false;
@@ -291,6 +343,7 @@ export class ProcessManager {
         spawnResult.terminate();
         this.signalCode = signal;
         this.exitCode = null;
+        this._signalEof();
         this.emit('exit', null, signal);
         this.emit('close', null, signal);
         manager.finalize(pid, this, [record.parentToChild]);
@@ -305,6 +358,7 @@ export class ProcessManager {
     spawnResult.onExit((code) => {
       if (handle.exitCode !== null || handle.signalCode !== null) return;
       handle.exitCode = code;
+      handle._signalEof();
       handle.emit('exit', code, null);
       handle.emit('close', code, null);
       manager.finalize(pid, handle, [record.parentToChild]);
@@ -329,3 +383,50 @@ export class ProcessManager {
 }
 
 export const globalProcessManager = new ProcessManager();
+
+/**
+ * Adapter helpers — wrap the raw `MessagePort` triple as `@rifty/io`
+ * streams. Push-side `Readable` (start the port, push each `Uint8Array`
+ * message into the stream) and post-side `Writable` (each `write` posts to
+ * the port; `end` closes it). Kept in this module because they're only
+ * meaningful in the context of a `WorkerProcessHandle`.
+ */
+function bindPortAsReadable(port: MessagePort): Readable {
+  const r = new Readable({ read() {} });
+  port.onmessage = (ev: MessageEvent) => {
+    const data = ev.data;
+    if (data instanceof Uint8Array) r.push(data);
+  };
+  // Browsers don't auto-start the port when only `onmessage` is set
+  // (vs `addEventListener('message', …)`); kick it.
+  port.start();
+  return r;
+}
+
+function bindPortAsWritable(port: MessagePort): Writable {
+  return new Writable({
+    write(chunk, _encoding, cb) {
+      try {
+        if (chunk instanceof Uint8Array) {
+          port.postMessage(chunk);
+        } else if (typeof chunk === 'string') {
+          port.postMessage(new TextEncoder().encode(chunk));
+        } else {
+          // Object-mode payloads pass through verbatim.
+          port.postMessage(chunk);
+        }
+        cb();
+      } catch (err) {
+        cb(err instanceof Error ? err : new Error(String(err)));
+      }
+    },
+    final(cb) {
+      try {
+        port.close();
+        cb();
+      } catch (err) {
+        cb(err instanceof Error ? err : new Error(String(err)));
+      }
+    },
+  });
+}
