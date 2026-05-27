@@ -188,13 +188,11 @@ export function appendFileSync(
 export function readdirSync(p: string, opts?: { withFileTypes?: boolean }): string[] | Dirent[] {
   const entries = syncMirror().readdirSync(resolvePath(p));
   if (opts?.withFileTypes) {
-    return entries.map((name) => {
-      const child = joinPath(p, name);
-      const st = syncMirror().statSync(child);
-      return new Dirent({ name, isFile: st.isFile, isDirectory: st.isDirectory });
-    });
+    return entries.map(
+      (d) => new Dirent({ name: d.name, isFile: d.isFile, isDirectory: d.isDirectory }),
+    );
   }
-  return [...entries];
+  return entries.map((d) => d.name);
 }
 
 export function mkdirSync(p: string, opts?: MkdirOptions): void {

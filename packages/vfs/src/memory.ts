@@ -56,6 +56,10 @@ export class MemoryVfs implements Vfs {
     return this.#backend.exists(normalizeAbsolute(path));
   }
 
+  async utimes(path: string, atimeMs: number, mtimeMs: number): Promise<void> {
+    this.#backend.utimes(normalizeAbsolute(path), atimeMs, mtimeMs);
+  }
+
   async openReadable(
     path: string,
     opts?: { chunkSize?: number; start?: number; end?: number },

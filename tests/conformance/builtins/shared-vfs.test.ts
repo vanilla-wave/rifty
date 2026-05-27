@@ -30,7 +30,7 @@ describe('createMemoryFs — shared backing tree (ADR-0014)', () => {
     const { vfs, fsSync } = createMemoryFs();
     await vfs.mkdir('/dir', { recursive: true });
     await vfs.writeFile('/dir/file.txt', 'x');
-    expect(fsSync.readdirSync('/dir')).toEqual(['file.txt']);
+    expect(fsSync.readdirSync('/dir').map((d) => d.name)).toEqual(['file.txt']);
     expect(fsSync.statSync('/dir').isDirectory).toBe(true);
   });
 

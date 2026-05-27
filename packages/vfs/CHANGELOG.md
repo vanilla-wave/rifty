@@ -8,6 +8,7 @@
 - `MemoryVfs` in-memory backend with mkdir-p semantics and recursive deletion.
 - Path utilities scoped to VFS (POSIX-style joins/resolves; no Node `path` dependency).
 - **ADR-0029:** `FsSync.utimes(path, atimeMs, mtimeMs)` on the interface. `MemoryFsSync` writes through to `MemoryBackend.utimes`; `OpfsFsSync` uses an in-memory atime/mtime side-table (no native `FileSystemSyncAccessHandle` mtime mutation). Throws `VfsError('ENOENT')` for unknown paths.
+- **ADR-0041:** `Vfs.utimes(path, atimeMs, mtimeMs): Promise<void>` symmetric with the sync side. `MemoryVfs` delegates to `MemoryBackend.utimes`; `OpfsVfs` keeps its own in-memory side-table (no native mtime mutation through `FileSystemFileHandle`).
 - `normalizeAbsolute(p)` path helper — normalises and coerces relative inputs to absolute (`./foo/../bar.txt → /bar.txt`). Used as the documented entry-point invariant for `Vfs` / `FsSync` implementations.
 
 ### Changed
@@ -18,6 +19,7 @@
 - `MemoryFsSync.statSync` return type now matches `FsSync.statSync` — `{ isFile, isDirectory, size?, mtime? }` — instead of inferring the wider `MemoryStat` shape with always-present fields. The `MemoryStat` shape is a subtype, so consumers that depended on always-present fields are unaffected at runtime, only the declared surface narrows.
 - **ADR-0037 — single sync surface for the runtime.** `FsSync` is now the sole sync VFS contract consumed by the JS module loader and WASI preopens (the runtime-js `SyncVfs` / `MemorySyncVfs` pair is deleted). No source change in this package; documenting the cross-package contract since `MemoryFsSync` + `MemoryBackend` are now the only shared sync backend within a Worker realm — `load-fixture`, `fs.readFileSync`, module resolution, and WASI ops all consult one tree. See `packages/runtime-js/CHANGELOG.md` for the consumer-side change.
 - **F6 (2026-05-26 vfs audit) — `MemoryBackend` is private to its wrappers.** `MemoryVfs.backend` and `MemoryFsSync.backend` were `readonly` public fields; they are now held in private slots (`#backend`). The async/sync pairing previously sniffed `instanceof MemoryFsSync` inside `setSyncMirror` to autopair an async view from `impl.backend` — that branch is gone. `setSyncMirror(impl, { async? })` now takes the paired async surface as an explicit option; `installMemoryFs`/`installOpfsFs`/`resetSyncMirror` and the runtime-js worker entry pass it at the call site. Type-level + runtime tests in `memory.test.ts` assert `.backend` no longer exists on the public surface. `createMemoryFs()` remains the canonical factory when both surfaces need to share a backend.
+- **ADR-0041 — `FsSync.readdirSync` returns `readonly VfsDirent[]`** (was `readonly string[]`). Symmetric with `Vfs.readdir`. `MemoryFsSync` routes through `MemoryBackend.readdirEntries`; `OpfsFsSync` derives `isFile`/`isDirectory` from each child entry in its in-memory index. Eliminates the N+1 `statSync` per child that the playground sync-mirror adapter and `fs.readdirSync({ withFileTypes })` previously paid. Downstream consumers updated to read `.name` instead of bare strings.
 
 ### Fixed
 

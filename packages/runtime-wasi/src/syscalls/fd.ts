@@ -268,9 +268,9 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       // entries in a different order between calls, paginating guests
       // will skip or duplicate. Re-stat / sort-by-name is a possible
       // future hardening if that turns out to matter.
-      let names: readonly string[];
+      let entries: readonly { name: string; isFile: boolean; isDirectory: boolean }[];
       try {
-        names = mirror.readdirSync(entry.path);
+        entries = mirror.readdirSync(entry.path);
       } catch {
         return E_BADF;
       }
@@ -286,20 +286,26 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       // The guest re-invokes with the cookie of the last entry it kept;
       // we must skip every entry whose index satisfies `index < cookie`,
       // i.e. `index >= cookie` is the "still to emit" predicate.
-      for (let i = 0; i < names.length; i++) {
+      for (let i = 0; i < entries.length; i++) {
         if (BigInt(i) < cookie) continue;
-        const name = names[i] ?? '';
-        const nameBytes = enc.encode(name);
+        const dirent = entries[i];
+        if (!dirent) continue;
+        const nameBytes = enc.encode(dirent.name);
         const headerSize = 21;
         const recordSize = headerSize + nameBytes.length;
         if (off + headerSize > end) break;
         view.setBigUint64(off, BigInt(i + 1), true); // d_next (cookie)
         view.setBigUint64(off + 8, 0n, true); // d_ino (not tracked)
         view.setUint32(off + 16, nameBytes.length, true);
-        // d_type — we'd need a stat per entry to distinguish file/dir; for
-        // now report unknown so guests that care can re-stat. Real WASI
-        // returns the type, but this keeps `readdir` O(N) on the VFS.
-        view.setUint8(off + 20, FILETYPE_UNKNOWN);
+        // d_type — backed by the dirent shape introduced in ADR-0041;
+        // guests like esbuild no longer need to re-stat each entry to
+        // distinguish files from subdirs.
+        const dType = dirent.isDirectory
+          ? FILETYPE_DIRECTORY
+          : dirent.isFile
+            ? FILETYPE_REGULAR_FILE
+            : FILETYPE_UNKNOWN;
+        view.setUint8(off + 20, dType);
         const namePos = off + headerSize;
         const room = Math.min(nameBytes.length, end - namePos);
         if (room > 0) bytes.set(nameBytes.subarray(0, room), namePos);

@@ -4,6 +4,9 @@
 
 ### Changed
 
+- **ADR-0041 — `fd_readdir` now writes a real `d_type`.** Each preview1 dirent emits `FILETYPE_REGULAR_FILE` / `FILETYPE_DIRECTORY` based on the `VfsDirent` shape from `FsSync.readdirSync`; guests like esbuild no longer need to re-stat every entry to distinguish files from subdirs. Closes the "fill `d_type`" follow-up (`docs/follow-ups-2026-05-27.md` item #10).
+
+
 - **ADR-0039 — worker-entry reads `KernelProcessSpec`, not `globalThis.process`.**
   The kernel-side worker bootstrap no longer installs a Node-shape `process`
   global. `worker-entry.ts` now builds its own minimal `WasiProcess`

@@ -23,7 +23,7 @@ import { MemoryVfs } from './memory.ts';
 import { OpfsFsSync } from './opfs-sync.ts';
 import { OpfsVfs } from './opfs.ts';
 import { joinPath, normalizeAbsolute } from './path.ts';
-import type { Vfs } from './types.ts';
+import type { Vfs, VfsDirent } from './types.ts';
 
 export type { FsSync };
 
@@ -46,8 +46,8 @@ export class MemoryFsSync implements FsSync {
     this.#backend.writeFile(normalizeAbsolute(path), data);
   }
 
-  readdirSync(path: string): readonly string[] {
-    return this.#backend.readdir(normalizeAbsolute(path));
+  readdirSync(path: string): readonly VfsDirent[] {
+    return this.#backend.readdirEntries(normalizeAbsolute(path));
   }
 
   mkdirSync(path: string, options: { recursive?: boolean }): void {

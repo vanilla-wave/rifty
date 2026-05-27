@@ -30,6 +30,13 @@ function decodeBytes(bytes: Uint8Array, encoding: ReadFileEncoding): string {
 
 export class OpfsVfs implements Vfs {
   private root: FileSystemDirectoryHandle | null = null;
+  /**
+   * Side-table for `utimes` — OPFS exposes no mtime mutation on either
+   * `FileSystemFileHandle` or `FileSystemSyncAccessHandle` (ADR-0029, ADR-0041).
+   * Mirrors the same shape `OpfsFsSync` uses. Each surface keeps its own
+   * table; pairing them at storage is out of scope until a consumer needs it.
+   */
+  private readonly times = new Map<string, { atime: number; mtime: number }>();
 
   static isSupported(): boolean {
     if (typeof navigator === 'undefined') return false;
@@ -211,6 +218,11 @@ export class OpfsVfs implements Vfs {
       // them would re-introduce the original silent-stub problem.
       throw err;
     }
+  }
+
+  async utimes(path: string, atimeMs: number, mtimeMs: number): Promise<void> {
+    if (!(await this.exists(path))) throw new VfsError('ENOENT', path);
+    this.times.set(path, { atime: atimeMs, mtime: mtimeMs });
   }
 
   async openReadable(

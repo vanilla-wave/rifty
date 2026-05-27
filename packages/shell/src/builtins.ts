@@ -51,7 +51,7 @@ export const ls: ShellCommand = async (args, ctx) => {
   const target = resolve(ctx.cwd, args[0] ?? '.');
   try {
     const entries = syncMirror().readdirSync(target);
-    for (const e of entries) ctx.stdout.write(`${e}\n`);
+    for (const { name } of entries) ctx.stdout.write(`${name}\n`);
     return 0;
   } catch (err) {
     ctx.stderr.write(`ls: ${(err as Error).message}\n`);

@@ -34,6 +34,7 @@
 import { NotImplementedError, VfsError } from './errors.ts';
 import type { FsSync } from './fs-sync.ts';
 import { basename, dirname, normalizePath, segments } from './path.ts';
+import type { VfsDirent } from './types.ts';
 
 declare const navigator: { storage?: { getDirectory(): Promise<FileSystemDirectoryHandle> } };
 
@@ -402,13 +403,23 @@ export class OpfsFsSync implements FsSync {
    * sorted lexicographically for deterministic iteration (matches
    * `MemoryBackend.readdir`).
    */
-  readdirSync(path: string): readonly string[] {
+  readdirSync(path: string): readonly VfsDirent[] {
     const normalized = normalizePath(path);
     const entry = this.index.get(normalized);
     if (!entry) throw new VfsError('ENOENT', path);
     if (entry.kind !== 'dir') throw new VfsError('ENOTDIR', path);
     if (!entry.children) return [];
-    return [...entry.children].sort();
+    const dirents: VfsDirent[] = [];
+    for (const name of [...entry.children].sort()) {
+      const childPath = normalized === '/' ? `/${name}` : `${normalized}/${name}`;
+      const childEntry = this.index.get(childPath);
+      // A child listed in `entry.children` should always have an `index`
+      // entry — the two are maintained in lockstep. Defensive fallback:
+      // treat an orphaned name as a file with unknown size.
+      const isDir = childEntry?.kind === 'dir';
+      dirents.push({ name, isFile: !isDir, isDirectory: isDir });
+    }
+    return dirents;
   }
 
   /**

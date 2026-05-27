@@ -81,13 +81,13 @@ function snapshotFile(p: string): FileSnapshot {
 
 function snapshotDir(p: string): Map<string, FileSnapshot> {
   const out = new Map<string, FileSnapshot>();
-  let names: readonly string[];
+  let entries: readonly { name: string }[];
   try {
-    names = syncMirror().readdirSync(p);
+    entries = syncMirror().readdirSync(p);
   } catch {
     return out;
   }
-  for (const name of names) {
+  for (const { name } of entries) {
     out.set(name, snapshotFile(joinPath(p, name)));
   }
   return out;

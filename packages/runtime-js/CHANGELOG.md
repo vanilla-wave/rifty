@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **ADR-0041 — `fs.readdirSync({ withFileTypes: true })` no longer re-stats children.** `FsSync.readdirSync` returns `VfsDirent[]` directly, so the `withFileTypes` branch now reads `isFile`/`isDirectory` from the dirent shape instead of doing an N+1 `statSync` per child. `fs-watch.ts` and other internal callers are updated to read `.name` instead of bare strings.
+
 ### Added
 
 - **ADR-0039 — Node-API knowledge moved here from `@rifty/kernel`.** Three

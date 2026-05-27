@@ -47,6 +47,15 @@ export interface Vfs {
   stat(path: string): Promise<VfsStat>;
   exists(path: string): Promise<boolean>;
   /**
+   * Update the access and modification timestamps (in ms) on `path`. Mirrors
+   * `node:fs.promises.utimes` semantics; symmetric with `FsSync.utimes`
+   * (ADR-0029, ADR-0041). `MemoryVfs` writes through to the shared backend;
+   * `OpfsVfs` keeps an in-memory side-table (`FileSystemFileHandle` exposes
+   * no native mtime mutation).
+   * Throws `VfsError('ENOENT', path)` if `path` does not exist.
+   */
+  utimes(path: string, atimeMs: number, mtimeMs: number): Promise<void>;
+  /**
    * Open `path` as a `ReadableStream<Uint8Array>` for incremental reading.
    * `chunkSize` controls the default chunk size (default 64 KiB). `start`/`end`
    * are byte offsets (Node `createReadStream` semantics).

@@ -310,7 +310,7 @@ describe('OpfsFsSync dir-tree mirror — readdirSync / mkdirSync / rmSync', () =
     });
     const fs = new OpfsFsSync(root);
     await fs.refreshIndex();
-    expect(fs.readdirSync('/')).toEqual(['a.txt', 'b.txt', 'sub']);
+    expect(fs.readdirSync('/').map((d) => d.name)).toEqual(['a.txt', 'b.txt', 'sub']);
   });
 
   it('readdirSync on a non-directory throws ENOTDIR', async () => {
@@ -348,8 +348,8 @@ describe('OpfsFsSync dir-tree mirror — readdirSync / mkdirSync / rmSync', () =
     expect(fs.existsSync('/a')).toBe(true);
     expect(fs.existsSync('/a/b')).toBe(true);
     expect(fs.existsSync('/a/b/c')).toBe(true);
-    expect(fs.readdirSync('/a')).toEqual(['b']);
-    expect(fs.readdirSync('/a/b')).toEqual(['c']);
+    expect(fs.readdirSync('/a').map((d) => d.name)).toEqual(['b']);
+    expect(fs.readdirSync('/a/b').map((d) => d.name)).toEqual(['c']);
   });
 
   it('mkdirSync without recursive on missing parent throws ENOENT', async () => {
@@ -391,7 +391,7 @@ describe('OpfsFsSync dir-tree mirror — readdirSync / mkdirSync / rmSync', () =
     await fs.refreshIndex();
     fs.mkdirSync('/a', { recursive: true });
     fs.mkdirSync('/a/b', { recursive: true });
-    expect(fs.readdirSync('/a')).toEqual(['b']);
+    expect(fs.readdirSync('/a').map((d) => d.name)).toEqual(['b']);
     fs.rmSync('/a/b', {});
     expect(fs.readdirSync('/a')).toEqual([]);
     expect(fs.existsSync('/a/b')).toBe(false);

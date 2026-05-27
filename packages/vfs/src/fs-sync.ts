@@ -1,3 +1,5 @@
+import type { VfsDirent } from './types.ts';
+
 /**
  * Sync-side counterpart of {@link Vfs}. Implementations:
  *   - {@link MemoryFsSync} — in-memory, backed by a shared `MemoryBackend`
@@ -18,7 +20,12 @@ export interface FsSync {
   existsSync(path: string): boolean;
   readFileBytesSync(path: string): Uint8Array;
   writeFileSync(path: string, data: Uint8Array): void;
-  readdirSync(path: string): readonly string[];
+  /**
+   * List immediate children of `path` as dirent records. Symmetric with
+   * `Vfs.readdir` so adapter layers don't need an N+1 `statSync` per child
+   * to recover the kind (ADR-0041).
+   */
+  readdirSync(path: string): readonly VfsDirent[];
   mkdirSync(path: string, options: { recursive?: boolean }): void;
   rmSync(path: string, options: { recursive?: boolean; force?: boolean }): void;
   statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number };
