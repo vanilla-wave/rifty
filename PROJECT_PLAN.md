@@ -10,7 +10,7 @@
 - Понять, как устроены системы вида WebContainers/StackBlitz изнутри
 - Получить работающий рантайм, способный запускать реальные Node-программы (Express, CLI-инструменты на pure JS)
 - Прокачать архитектурные навыки: слои, изоляция, контракты, эмуляция системных API
-- Параллельно изучить WASI как отдельный модуль (запуск esbuild/swc/sqlite)
+- Параллельно изучить WASI как отдельный модуль (запуск swc/sqlite — настоящие WASI-бинарники; esbuild ships gojs, не WASI — см. ADR-0044)
 - Вести devlog — серия глубоких технических статей
 
 ### Не-цели (по крайней мере на первый год)
@@ -26,7 +26,7 @@
 
 ### Стратегические решения
 1. **Браузерный V8 как основной JS-движок** — путь StackBlitz. Производительность и tooling несравнимо лучше QuickJS-в-WASM.
-2. **WASI — отдельный рантайм для нативных бинарей**, не для основного исполнения JS. Полезен для esbuild/swc/sqlite/python.
+2. **WASI — отдельный рантайм для нативных бинарей**, не для основного исполнения JS. Полезен для swc/sqlite/python (esbuild публикует только Go-ABI `gojs`, не WASI — см. ADR-0044; Go-bridge отложен).
 3. **Web Workers как процессы.** Каждый "процесс" Node = отдельный Worker со своим JS-контекстом.
 4. **Service Worker для виртуальной сети.** Перехват fetch, маршрутизация в "слушающие" воркеры.
 5. **OPFS (Origin Private File System) — основной storage backend** для VFS. Даёт sync API в Workers через `FileSystemSyncAccessHandle`.
@@ -170,7 +170,7 @@ webcontainer-clone/
 | M5 | Streams & IO | Streams работают, pipes между процессами | 2-3 нед |
 | M6 | Processes | child_process.spawn, дерево процессов, IPC | 3-4 нед |
 | M7 | Network | net + http, Service Worker bridge, Express бежит | 4-5 нед |
-| M8 | WASI Runner | esbuild.wasm работает как процесс | 2-3 нед |
+| M8 | WASI Runner | swc.wasm работает как процесс (esbuild deferred — ADR-0044) | 2-3 нед |
 | M9 | npm install | Реальная установка пакетов с registry | 3-4 нед |
 | M10 | Real Tooling | Vite-like dev server в браузере | 4-6 нед |
 
@@ -323,14 +323,14 @@ webcontainer-clone/
 
 **Acceptance:**
 - [ ] Минимальный hello.c → hello.wasm → запускается в playground, выводит в stdout
-- [ ] esbuild.wasm: `esbuild input.ts --bundle` через child_process работает, файлы в VFS
-- [ ] swc.wasm работает аналогично
+- [ ] swc.wasm: `swc transform` (или эквивалент CLI swc-WASI билда) через child_process работает, файлы в VFS
+- [ ] (отложено) esbuild через Go-runtime bridge — ADR-0044, отдельная задача в TASKS.md Follow-ups
 - [ ] WASI VFS интегрирована с основной VFS (один источник истины)
 - [ ] Бинарник видит preopens (например `/workspace`)
 
 **Тесты:**
 - Sanity: hello.wasm у нас и в `wasmtime` дают одинаковый stdout
-- esbuild: трансформируем небольшой TS, диффим против реального esbuild
+- swc: трансформируем небольшой TS, диффим против нативного swc (per ADR-0044, заменил esbuild как forcing consumer)
 
 ---
 
@@ -363,7 +363,7 @@ webcontainer-clone/
 
 **Acceptance:**
 - [ ] `npm install vite && npm run dev` запускает Vite
-- [ ] Vite ходит в esbuild.wasm через shadow-binding
+- [ ] Vite ходит в swc.wasm через shadow-binding (esbuild deferred — ADR-0044)
 - [ ] HMR работает через WebSocket-туннель
 - [ ] Preview-iframe показывает приложение
 - [ ] Изменение в редакторе → видим update в preview без перезагрузки

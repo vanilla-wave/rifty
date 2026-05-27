@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Documented
+
+- **ADR-0044 — esbuild ships gojs; substitute swc for M8/M10; defer Go-runtime bridge.** Planning correction: all published `esbuild-wasm` builds (0.21.5 / 0.25.0 / 0.28.0) import Go's `js/wasm` (`gojs`) ABI, not `wasi_snapshot_preview1`, so `@rifty/runtime-wasi` cannot host them. swc takes esbuild's place as the M8 vendoring target and the M10 Vite shadow-binding target. Q-2026-05-27-003 (preopens/cwd API) keeps its A/B/C options but its forcing consumer is now swc; status stays Active. PROJECT_PLAN.md, TASKS.md, and OPEN_QUESTIONS.md updated; the Go-runtime bridge work is parked in TASKS.md Follow-ups.
+
 ### Added
 
 - M0 Foundation: pnpm workspace, TypeScript strict, Biome, Vitest, Playwright (three engines), GitHub Actions.

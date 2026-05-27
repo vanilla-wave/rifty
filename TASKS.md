@@ -153,7 +153,7 @@ Per-milestone task tracking with acceptance review. See `PROJECT_PLAN.md` for th
 
 ### Open acceptance
 
-- [ ] Vendor `esbuild.wasm` end-to-end through the WASI runner (current cases use synthetic memory).
+- [ ] Vendor `swc.wasm` end-to-end through the WASI runner (current cases use synthetic memory). _Previously named esbuild.wasm; substituted per ADR-0044 — every published `esbuild-wasm` imports Go's `gojs` ABI, not `wasi_snapshot_preview1`, so it cannot run on our WASI shim. swc ships a real Rust → WASIp1 build to npm and exercises the same surface area (argv, environ, fd_*, preopens, proc_exit) M8 needs._
 - [ ] WASI file decomposition (`wasi.ts` → `syscalls/{fd,path,proc}.ts` — per ADR 0024).
 
 ## M10 — Real Tooling — PARTIAL — see open acceptance below
@@ -170,8 +170,8 @@ What's landed (mini-equivalent of Vite/HMR; "vite-like" not literal upstream Vit
 
 ### Open acceptance
 
-- [ ] `npm install vite && npm run dev` literally running upstream Vite — Vite has hundreds of transitive deps and many edge cases; the equivalent dev-server is the architectural acceptance. Real Vite likely lands incrementally with `unenv` polyfills + esbuild.wasm.
-- [ ] Vite ↔ esbuild.wasm shadow-binding (TS/JSX transformation in the dev path) — needs the WASI runner's esbuild.wasm binary vendored end-to-end (M8 follow-up).
+- [ ] `npm install vite && npm run dev` literally running upstream Vite — Vite has hundreds of transitive deps and many edge cases; the equivalent dev-server is the architectural acceptance. Real Vite likely lands incrementally with `unenv` polyfills + swc.wasm (substituted for esbuild.wasm per ADR-0044).
+- [ ] Vite ↔ swc.wasm shadow-binding (TS/JSX transformation in the dev path) — needs the WASI runner's swc.wasm binary vendored end-to-end (M8 follow-up). esbuild via Go-runtime bridge deferred per ADR-0044.
 - [x] **Cross-realm HMR bridge — DONE 2026-05-26** (ADR-0017 phase 1 addendum). `apps/playground/src/glue/hmr-bridge.ts` + `BridgedWebSocketServer` over `BroadcastChannel`; the iframe HMR client is injected via a Vite plugin and rides the same channel name without depending on `@rifty/net`. 9 unit tests + the manual / E2E flow below.
 - [x] **Playwright E2E: edit-in-editor → see-iframe-reload — done.** `tests/e2e/m10-hmr.spec.ts` ("preview iframe receives HMR update when src/main.js changes") covers the full path: load → toggle Real Vite → Monaco edit → assert iframe content updates. Gated on `RIFTY_E2E_HMR=1` (skipped by default in CI to avoid the ~20s Vite install per run).
 - [ ] Shadow-registry consolidation (per ADR 0015) — move `overrides.ts` + shim files under `tools/shadow-registry/`.
@@ -220,7 +220,8 @@ What's landed (mini-equivalent of Vite/HMR; "vite-like" not literal upstream Vit
 - `package.json` `imports` (`#name` subpath imports).
 - True parallel Web Workers for `worker_threads.Worker` (M6 follow-up).
 - Service Worker `fetch` interceptor handler that bridges to the port registry over a `MessageChannel` (M7 deploy task — registry contract is in place).
-- Vendor a real `hello.wasm` / `esbuild.wasm` and run them end-to-end against the WASI shim (M8 follow-up — the shim is verified against synthetic memory).
+- Vendor a real `hello.wasm` / `swc.wasm` and run them end-to-end against the WASI shim (M8 follow-up — the shim is verified against synthetic memory). esbuild substituted by swc per ADR-0044.
+- **Go-runtime (gojs) bridge for esbuild — deferred per ADR-0044.** All published `esbuild-wasm` builds (0.21.5 / 0.25.0 / 0.28.0) target Go's `js/wasm` ABI and import `gojs.runtime.*` / `gojs.syscall/js.*`, not `wasi_snapshot_preview1`. Running esbuild from inside the runtime requires building `@rifty/runtime-go-wasm`: a full `syscall/js` handle protocol (host-side handle table, ref/unref semantics, function-call marshalling), a `wasm_exec.js`-equivalent host shim, and per-instance GC + goroutine scheduling integration. Multi-week design; blocks nothing critical (swc covers M8 + M10's TS/JSX transform need today). Pick up when a second Go-WASM guest appears or when swc's coverage proves insufficient.
 - Live registry roundtrip (`registry.npmjs.org` through the Vite proxy) — the mock-based pipeline is verified; live integration needs a manual smoke.
 - Postinstall scripts in npm-client (most packages don't need them).
 - Nested resolution for conflicting transitive versions (flat install + conflict report works today).

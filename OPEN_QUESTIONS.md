@@ -162,9 +162,13 @@ budget now without that constraint risks shipping the wrong shape.
   `wasi.ts`; no callers committed yet.
 - External dependencies involved: none.
 
+### Forcing consumer update (2026-05-27, post-ADR-0044)
+
+esbuild was the originally-anticipated forcing consumer for this question. Discovered that all published esbuild-wasm builds (0.21.5 / 0.25.0 / 0.28.0) ship Go's `gojs` ABI, not `wasi_snapshot_preview1` — esbuild has no upstream WASI build (ADR-0044). swc takes esbuild's place as the M8/M10 transformer and as the forcing consumer for this question; the deferred decision (A/B/C from above) still waits until swc.wasm actually runs through `runWasi` and exercises preopens.
+
 ### Needs human review by
 
-Start of M8 esbuild.wasm vendoring work.
+Start of M8 swc.wasm vendoring work (per ADR-0044).
 
 ---
 
