@@ -27,6 +27,137 @@ When a question is reviewed:
 
 ## Active
 
+## Q-2026-05-27-002: Coherent `OwnerResolver` + readiness-registry swap (M11 prep)
+
+**Status:** 🟢 Active  
+**Encountered in:** 2026-05-26 architecture audit follow-up (service-worker F3), 2026-05-27 triage  
+**Milestone:** M11  
+**Author (agent session):** 2026-05-27
+
+### Context
+
+`PreviewOwnerResolver` is cleanly extracted (commit `1bc2f91`), but the
+companion `ReadyClientsRegistry` (the SW-side handshake that tracks
+which window clients are ready to receive preview fetches) still lives
+inside `preview-bridge.ts` and assumes `event.source as Client` — i.e.
+a window source. When M11's `WorkerOwnerResolver` arrives, both halves
+need to evolve in lockstep: workers have different `pagehide` /
+`controllerchange` lifecycles, so the readiness model can't just plug
+into the existing window-only registry.
+
+### Options considered
+
+- **Option A — define `PreviewOwnerBinding` now, ahead of the second
+  consumer.** Spec a shared interface for `{ resolveOwner,
+  subscribeReadiness }` and refactor the window path to use it
+  immediately.
+  - Pro: One refactor for the eventual swap; the M11 implementation
+    just adds a new binding.
+  - Con: Designing from a single consumer's shape risks baking in
+    window-only assumptions that the worker case will resist; net
+    rework two PRs down the line is likely.
+- **Option B — defer the design until `WorkerOwnerResolver` is on
+  deck.** Keep `ReadyClientsRegistry` window-only for now; when the
+  worker path arrives, extract `PreviewOwnerBinding` then.
+  - Pro: Two concrete consumers shape the interface from real signals.
+  - Con: Two-PR refactor instead of one; readability lag in the
+    interim.
+
+### Decision taken (provisional)
+
+**Chose:** B — defer.
+
+**Why:** Same trap that derailed early generic interfaces in this
+codebase — extracting a binding shape from one consumer almost always
+needs revision when the second arrives. The cost of carrying
+`ReadyClientsRegistry` as window-specific for one more milestone is one
+extra file rename when the worker path lands; cheap.
+
+### Code markers
+
+None yet — by intent. The decision is "do nothing now". When the M11
+`WorkerOwnerResolver` PR is opened, this question gets promoted and the
+binding interface is designed from both sides at once.
+
+### Reversibility justification
+
+- Public APIs affected: none — internal SW state.
+- Rough cost to revert: zero (the decision is "no code change").
+- External dependencies involved: none.
+
+### Needs human review by
+
+Start of M11.
+
+---
+
+## Q-2026-05-27-003: WASI preopens — explicit `cwd` and ordering semantics
+
+**Status:** 🟢 Active  
+**Encountered in:** 2026-05-26 architecture audit follow-up (runtime-wasi F5), 2026-05-27 triage  
+**Milestone:** M8  
+**Author (agent session):** 2026-05-27
+
+### Context
+
+`packages/runtime-wasi/src/wasi.ts:46-56` walks `Object.keys(preopens)`
+in insertion order to allocate fd 3, 4, … . The "first preopen wins
+fd 3" semantic leaks into how callers must construct the map. There is
+no explicit `cwd` option, and guests like esbuild expect a working
+directory (e.g. `.` or `/workspace`) — today they get whichever preopen
+happened to be first in object-property order.
+
+### Options considered
+
+- **Option A — `cwd?: string` option.** Add `cwd` to `WasiInit` /
+  `runWasi` options; semantics: this preopen is the relative-path
+  resolution default; insertion order otherwise.
+  - Pro: Minimal API change; backward-compatible if `cwd` is omitted.
+  - Con: Still depends on object insertion order for non-cwd fds; the
+    test fixtures that build preopens have to remember the implicit
+    rule.
+- **Option B — ordered array `[{ guestPath, hostPath }]`.** Replace
+  the `Record<string, string>` shape with an array; first entry is
+  fd 3, `cwd` is documented as the first entry.
+  - Pro: Order is explicit; no hidden semantics tied to object key
+    iteration.
+  - Con: Breaks every existing caller; needs migration.
+- **Option C — both: `{ preopens: ordered array, cwd: explicit }`.**
+  Decouple "what to mount" from "what's the relative-path default".
+  - Pro: Fully explicit; future-proof for cases where `cwd` is a
+    subdirectory of a preopen (which Option B can't express).
+  - Con: Two concepts to keep in mind at call sites.
+
+### Decision taken (provisional)
+
+**Chose:** Defer until M8 esbuild.wasm vendoring forces the issue.
+
+**Why:** The right API shape is best chosen from a real consumer's
+constraints. esbuild's documented behaviour around its working
+directory will pin down whether Option A's "first preopen" trick is
+sufficient or Option C's explicit `cwd` is needed. Spending design
+budget now without that constraint risks shipping the wrong shape.
+
+### Code markers
+
+- `packages/runtime-wasi/src/wasi.ts:46-56` — preopen iteration loop.
+
+### Reversibility justification
+
+- Public APIs affected: `WasiInit` / `runWasi` options shape. Once a
+  caller (esbuild) is on the new shape, reversing means migrating that
+  caller back — cost grows with adoption. Doing it once, at M8, before
+  the first real guest is on it, is cheap.
+- Rough cost to revert (if done before M8): two-line edit in
+  `wasi.ts`; no callers committed yet.
+- External dependencies involved: none.
+
+### Needs human review by
+
+Start of M8 esbuild.wasm vendoring work.
+
+---
+
 ## Q-2026-05-27-001: `process.versions.node = '22.0.0'` vs ADR-0026 honesty
 
 **Status:** 🟢 Active  

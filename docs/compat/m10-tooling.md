@@ -43,3 +43,12 @@ Status of M10 foundations: `fs.watch`, WebSocket, dev-server, shell, preview bri
   dev server to run in the main-thread realm, since native `WebSocket` can't
   reach a Worker without a network hop. The playground's Dev Mode currently
   runs the dev server in the main-thread realm for this reason.
+- `worker_threads.Worker` falls back to **same-realm** execution when the
+  kernel `spawnWorker` capability is unavailable (no SAB IPC, no configured
+  `kernelWorkerUrl`). The same-realm path runs the worker script in the
+  parent's realm with no `globalThis` isolation and no separate module
+  loader — `workerData` and `parentPort` still propagate, but a script that
+  calls `require()` will resolve against the parent's loader, not its own.
+  A one-shot warn fires on first fallback. To get real Workers: ensure
+  cross-origin isolation (SAB) and call `kernel.setKernelWorkerUrl(...)` at
+  host boot (ADR-0011 phase 2). Follow-ups doc item #13.
