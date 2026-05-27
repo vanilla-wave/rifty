@@ -28,14 +28,25 @@ ADRs are immutable after merge. New decisions get new ADRs; supersedence is expl
 | 0022 | Parity and E2E coverage gates per milestone | — |
 | 0023 | Lockfile reuse on subsequent `install()` | — |
 | 0024 | File-size budget | — |
-| 0025 | Toolchain dev servers run on the playground main thread | — |
+| 0025 | Toolchain dev servers run on the playground main thread (partially superseded by ADR-0043 for the Real Vite path) | — |
 | 0026 | `process.platform` / `process.arch` report honest values | — |
 | 0027 | Per-file shim overlays live in the consuming adapter | — |
 | 0028 | Vercel Edge Function proxies npm registry in production | closes Q4' |
 | 0029 | `FsSync.utimes` (closes Q-2026-05-25-touch-utimes) | — |
 | 0030 | `Buffer extends Uint8Array` (replaces symbol-bag brand) | — |
-| 0031 | Every SW↔main wire frame carries `version`; receivers validate at decode (extends ADR-0016) | — |
+| 0031 | Every SW↔main wire frame carries `version`; receivers validate at decode (extends ADR-0016; split into frame+routing by ADR-0040) | — |
 | 0032 | SyncRpc protocol-version field in the SAB header | — |
 | 0033 | File budget removed; structure over size (supersedes ADR-0024) | — |
+| 0034 | `@rifty/io` streams — Node-contract restoration | — |
+| 0035 | Builtin registry in `@rifty/io` | — |
+| 0036 | Preview-protocol addressing in `@rifty/io` | — |
+| 0037 | Unified sync VFS contract | — |
+| 0038 | `WasiProcessHandle` — kernel adapter for WASI guests | — |
+| 0039 | Lift Node-API knowledge from kernel to runtime-js | — |
+| 0040 | SW frame and routing versions split (splits ADR-0031 into two version axes) | — |
+| 0041 | `FsSync.readdirSync` returns `VfsDirent[]` and `Vfs.utimes` symmetry | — |
+| 0042 | M11 nested install — first-wins flat + nest-on-conflict | — |
+| 0043 | Vite-in-Worker realm and cross-realm preview bridge (partially supersedes ADR-0025 for the Real Vite path) | — |
+| 0044 | esbuild ships gojs ABI — substitute swc as the M8/M10 forcing consumer; defer the Go-runtime bridge | — |
 
 For the broad rationale and trade-offs, read PROJECT_PLAN.md §8 first; ADRs are the durable spec.
