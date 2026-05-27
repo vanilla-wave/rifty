@@ -1,63 +1,11 @@
 import { NotImplementedError } from '@rifty/io';
 import { MemoryVfs, joinPath } from '@rifty/vfs';
 import { describe, expect, it } from 'vitest';
+import { makePackageTarball } from './_test-fixtures/tar-builder.ts';
 import { readExistingLockfile } from './installer-lockfile-reader.ts';
 import { install } from './installer.ts';
 import type { Packument, VersionManifest } from './registry.ts';
 import { RegistryClient } from './registry.ts';
-
-const enc = new TextEncoder();
-
-/**
- * Build a minimal POSIX `ustar` tar with one regular file `package/package.json`
- * carrying the given (name, version). Enough for `extractTarGz` to round-trip.
- */
-function buildTar(name: string, body: Uint8Array): Uint8Array {
-  const header = new Uint8Array(512);
-  const writeStr = (str: string, off: number, len: number) => {
-    const bytes = enc.encode(str);
-    header.set(bytes.subarray(0, Math.min(bytes.length, len)), off);
-  };
-  writeStr(name, 0, 100);
-  writeStr('0000644', 100, 7);
-  writeStr('0000000', 108, 7);
-  writeStr('0000000', 116, 7);
-  writeStr(body.length.toString(8).padStart(11, '0'), 124, 11);
-  header[135] = 0x20;
-  writeStr('00000000000', 136, 11);
-  header[147] = 0x20;
-  for (let i = 148; i < 156; i++) header[i] = 0x20;
-  header[156] = 0x30;
-  writeStr('ustar', 257, 6);
-  writeStr('00', 263, 2);
-  let sum = 0;
-  for (let i = 0; i < 512; i++) sum += header[i] ?? 0;
-  writeStr(sum.toString(8).padStart(6, '0'), 148, 6);
-  header[154] = 0x00;
-  header[155] = 0x20;
-  const bodyBlocks = Math.ceil(body.length / 512);
-  const bodyBuf = new Uint8Array(bodyBlocks * 512);
-  bodyBuf.set(body);
-  const trailer = new Uint8Array(1024);
-  const total = new Uint8Array(header.length + bodyBuf.length + trailer.length);
-  total.set(header, 0);
-  total.set(bodyBuf, header.length);
-  total.set(trailer, header.length + bodyBuf.length);
-  return total;
-}
-
-async function gzip(bytes: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([bytes as unknown as BlobPart])
-    .stream()
-    .pipeThrough(new CompressionStream('gzip'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
-}
-
-async function makePackageTarball(pkgName: string, version: string): Promise<Uint8Array> {
-  const manifest = enc.encode(JSON.stringify({ name: pkgName, version }));
-  const tar = buildTar('package/package.json', manifest);
-  return await gzip(tar);
-}
 
 interface FakeRegistryEntry {
   manifest: VersionManifest;
@@ -326,5 +274,82 @@ describe('install — lockfile fast path re-applies overrides', () => {
     );
     expect(registry.calls.packument).toEqual([]);
     expect(registry.calls.tarball).toEqual([]);
+  });
+});
+
+/**
+ * Lockfile-replay was previously tolerating malformed entries (missing
+ * `resolved`/`integrity`) by returning `null` from the source — the walk
+ * silently stopped and produced a partial install. That hid corruption.
+ * Follow-ups doc item #21 promoted this to a hard `EBROKENLOCK` throw so
+ * the operator sees the gap.
+ */
+describe('install — lockfile fast path rejects malformed entries (EBROKENLOCK)', () => {
+  it('throws when a transitive subgraph entry is missing `integrity`', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('foo', new Map([['1.0.0', await makeEntry('foo', '1.0.0', { bar: '1.0.0' })]]));
+    db.set('bar', new Map([['1.0.0', await makeEntry('bar', '1.0.0')]]));
+
+    // Seed a valid lockfile, then hand-edit it to drop `integrity` on bar.
+    const seedRegistry = new CountingFakeRegistry(db);
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await install('root', '1.0.0', { foo: '1.0.0' }, { vfs, cwd: '/proj', registry: seedRegistry });
+
+    const lockPath = joinPath('/proj', 'package-lock.json');
+    const lockText = await vfs.readFileText(lockPath);
+    const lock = JSON.parse(lockText) as {
+      packages: Record<string, { integrity?: string; resolved?: string }>;
+    };
+    // biome-ignore lint/performance/noDelete: test corruption requires actual key deletion
+    delete lock.packages['node_modules/bar']?.integrity;
+    await vfs.writeFile(lockPath, JSON.stringify(lock));
+
+    // Re-install with the corrupted lockfile. The fast path must throw.
+    const registry = new CountingFakeRegistry(db);
+    let caught: unknown;
+    try {
+      await install('root', '1.0.0', { foo: '1.0.0' }, { vfs, cwd: '/proj', registry });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    const err = caught as Error & { code?: string; packageName?: string; reason?: string };
+    expect(err.code).toBe('EBROKENLOCK');
+    expect(err.packageName).toBe('bar');
+    expect(err.reason).toBe('malformed-entry');
+    expect(err.message).toContain('integrity');
+  });
+
+  it('throws when a transitive subgraph entry is missing `resolved`', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('foo', new Map([['1.0.0', await makeEntry('foo', '1.0.0', { bar: '1.0.0' })]]));
+    db.set('bar', new Map([['1.0.0', await makeEntry('bar', '1.0.0')]]));
+
+    const seedRegistry = new CountingFakeRegistry(db);
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await install('root', '1.0.0', { foo: '1.0.0' }, { vfs, cwd: '/proj', registry: seedRegistry });
+
+    const lockPath = joinPath('/proj', 'package-lock.json');
+    const lockText = await vfs.readFileText(lockPath);
+    const lock = JSON.parse(lockText) as {
+      packages: Record<string, { integrity?: string; resolved?: string }>;
+    };
+    // biome-ignore lint/performance/noDelete: test corruption requires actual key deletion
+    delete lock.packages['node_modules/bar']?.resolved;
+    await vfs.writeFile(lockPath, JSON.stringify(lock));
+
+    const registry = new CountingFakeRegistry(db);
+    let caught: unknown;
+    try {
+      await install('root', '1.0.0', { foo: '1.0.0' }, { vfs, cwd: '/proj', registry });
+    } catch (err) {
+      caught = err;
+    }
+    const err = caught as Error & { code?: string; packageName?: string; reason?: string };
+    expect(err.code).toBe('EBROKENLOCK');
+    expect(err.reason).toBe('malformed-entry');
+    expect(err.message).toContain('resolved');
   });
 });

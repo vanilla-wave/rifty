@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Hard-throw on malformed lockfile entries (follow-ups doc item #21).**
+  `createLockfileSource.resolve` now throws `EBROKENLOCK` when an entry is
+  missing or missing `resolved`/`integrity`. Previously the lockfile fast
+  path returned `null` on these and the walk silently stopped with a
+  partial pinned set — corruption that looked like network slowness in
+  user reports. `ResolutionSource.resolve` return type narrows from
+  `Promise<ResolvedPin | null>` to `Promise<ResolvedPin>`; the
+  silent-stop branch in `walkAndPin` is removed.
+- **Test fixtures consolidated.** Five npm-client test files
+  (`installer.test.ts`, `installer-lockfile.test.ts`,
+  `installer-peer-optional.test.ts`, `installer-pipeline.test.ts`,
+  `unpacker.test.ts`) shared a hand-rolled `buildHeader` +
+  `makePackageTarball` helper that had drifted across copies. They now
+  import from `packages/npm-client/src/_test-fixtures/tar-builder.ts`;
+  ~290 lines of duplicate test code deleted. The shared module is
+  test-only (no public re-export).
+
 ### Added
 
 - `fetchAndUnpackToCache(spec, ctx)` — single source of truth for the

@@ -114,18 +114,14 @@ interface ResolvedPin {
  *   - {@link createRegistrySource}: packument fetch + pickBestVersion +
  *     overrides + version-conflict detection.
  *
- * Returning `null` means "this name was expected but isn't pinned by this
- * source" — only the lockfile source ever does this, and only when a
- * subgraph entry is missing `resolved`/`integrity`. The unified walk stops
- * adding new packages on null (preserving the pre-D-F partial-return
- * shape; see report comment in this file's history).
+ * Both implementations throw on failure rather than returning `null`. The
+ * lockfile source throws `EBROKENLOCK` when a transitive dep is missing or
+ * malformed; the registry source throws the existing `EVERSIONCONFLICT` /
+ * "No matching version" errors. Either way, the walk fails fast — a partial
+ * install is worse than a loud failure.
  */
 interface ResolutionSource {
-  resolve(
-    name: string,
-    range: string | null,
-    parent: string | undefined,
-  ): Promise<ResolvedPin | null>;
+  resolve(name: string, range: string | null, parent: string | undefined): Promise<ResolvedPin>;
 }
 
 export async function install(
@@ -207,23 +203,13 @@ async function walkAndPin(
   fetchCtx: FetchAndUnpackCtx,
 ): Promise<Map<string, PinnedPackage>> {
   const pinned = new Map<string, PinnedPackage>();
-  let exhausted = false;
 
   async function visit(
     name: string,
     range: string | null,
     parent: string | undefined,
   ): Promise<void> {
-    if (exhausted) return;
     const pin = await source.resolve(name, range, parent);
-    if (pin === null) {
-      // Lockfile source signalling "subgraph entry missing resolved/integrity".
-      // Stop adding more packages but keep what we already have — preserves
-      // the pre-D-F break-and-return-partial behaviour byte-for-byte. See
-      // the latent-bug note in PROJECT_PLAN.md / installer audit 2026-05-26.
-      exhausted = true;
-      return;
-    }
     if (pinned.has(pin.name)) return;
     const { bytes, integrity } = await fetchAndUnpackToCache(
       {
@@ -300,15 +286,38 @@ async function pinToPackage(
  * argument is ignored because override resolution was pre-validated before
  * this source was chosen.
  *
- * Returns `null` when an expected subgraph entry is missing
- * `resolved`/`integrity` — signals the walk to stop. (See note on
- * `ResolutionSource` re: pre-D-F behaviour preservation.)
+ * Throws `EBROKENLOCK` when an expected entry is missing or malformed
+ * (missing `resolved` / `integrity`). The previous behaviour was to return
+ * `null` and let the walk stop with a partial pinned set; that masked
+ * corrupt lockfiles as "network slowness" in user reports. The contract
+ * post-2026-05-27 is "lockfile is authoritative or it's an error".
  */
 function createLockfileSource(lockfile: Lockfile): ResolutionSource {
   return {
-    async resolve(name): Promise<ResolvedPin | null> {
+    async resolve(name): Promise<ResolvedPin> {
       const entry = lockfile.packages[`node_modules/${name}`];
-      if (!entry || !entry.resolved || !entry.integrity) return null;
+      if (!entry) {
+        throw Object.assign(
+          new Error(
+            `EBROKENLOCK: lockfile coverage gap — '${name}' is reachable from the dep graph but missing from package-lock.json. Delete the lockfile and re-install.`,
+          ),
+          { code: 'EBROKENLOCK', packageName: name, reason: 'missing-entry' as const },
+        );
+      }
+      if (!entry.resolved || !entry.integrity) {
+        throw Object.assign(
+          new Error(
+            `EBROKENLOCK: lockfile entry for '${name}' is malformed (missing ${
+              !entry.resolved ? 'resolved' : 'integrity'
+            }). Delete the lockfile and re-install.`,
+          ),
+          {
+            code: 'EBROKENLOCK',
+            packageName: name,
+            reason: 'malformed-entry' as const,
+          },
+        );
+      }
       return {
         name,
         version: entry.version,

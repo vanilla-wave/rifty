@@ -1,80 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import {
+  buildHeader,
+  concat,
+  gzip,
+  padToBlock,
+  TAR_TRAILER as trailer,
+} from './_test-fixtures/tar-builder.ts';
 import { extractTarGz } from './unpacker.ts';
 
 const enc = new TextEncoder();
-
-/**
- * Write `bytes` of `s` (zero-padded) into `buf` at `off`, capped at `len`.
- */
-function writeStr(buf: Uint8Array, str: string, off: number, len: number): void {
-  const b = enc.encode(str);
-  buf.set(b.subarray(0, Math.min(b.length, len)), off);
-}
-
-/**
- * Build a single 512-byte tar header. `typeFlag` is a single ASCII char
- * (e.g. '0' for regular file, '2' for symlink, 'L' for GNU long-name).
- * Returns the header alone — caller appends the data blocks.
- */
-function buildHeader(
-  name: string,
-  size: number,
-  typeFlag: string,
-  opts: { linkname?: string; ustar?: boolean } = {},
-): Uint8Array {
-  const h = new Uint8Array(512);
-  writeStr(h, name, 0, 100);
-  writeStr(h, '0000644', 100, 7);
-  writeStr(h, '0000000', 108, 7);
-  writeStr(h, '0000000', 116, 7);
-  writeStr(h, size.toString(8).padStart(11, '0'), 124, 11);
-  h[135] = 0x20;
-  writeStr(h, '00000000000', 136, 11);
-  h[147] = 0x20;
-  for (let i = 148; i < 156; i++) h[i] = 0x20;
-  h[156] = typeFlag.charCodeAt(0);
-  if (opts.linkname) writeStr(h, opts.linkname, 157, 100);
-  if (opts.ustar !== false) {
-    writeStr(h, 'ustar', 257, 6);
-    writeStr(h, '00', 263, 2);
-  }
-  // Pseudo-checksum (parser doesn't actually verify it for our minimal impl).
-  let sum = 0;
-  for (let i = 0; i < 512; i++) sum += h[i] ?? 0;
-  writeStr(h, sum.toString(8).padStart(6, '0'), 148, 6);
-  h[154] = 0x00;
-  h[155] = 0x20;
-  return h;
-}
-
-function concat(...parts: Uint8Array[]): Uint8Array {
-  let total = 0;
-  for (const p of parts) total += p.length;
-  const out = new Uint8Array(total);
-  let off = 0;
-  for (const p of parts) {
-    out.set(p, off);
-    off += p.length;
-  }
-  return out;
-}
-
-function padToBlock(data: Uint8Array): Uint8Array {
-  const blocks = Math.ceil(data.length / 512);
-  const padded = new Uint8Array(blocks * 512);
-  padded.set(data);
-  return padded;
-}
-
-async function gzip(bytes: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([bytes as unknown as BlobPart])
-    .stream()
-    .pipeThrough(new CompressionStream('gzip'));
-  const ab = await new Response(stream).arrayBuffer();
-  return new Uint8Array(ab);
-}
-
-const trailer = new Uint8Array(1024); // two zero blocks
 
 describe('extractTarGz — typeflag handling', () => {
   it("throws NotImplementedError('npm-client.tar.symlink') for symlink entries (typeflag '2')", async () => {

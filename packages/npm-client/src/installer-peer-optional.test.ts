@@ -1,59 +1,9 @@
 import { MemoryVfs } from '@rifty/vfs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makePackageTarball } from './_test-fixtures/tar-builder.ts';
 import { install } from './installer.ts';
 import type { Packument, VersionManifest } from './registry.ts';
 import { RegistryClient } from './registry.ts';
-
-const enc = new TextEncoder();
-
-function writeStr(buf: Uint8Array, str: string, off: number, len: number): void {
-  const b = enc.encode(str);
-  buf.set(b.subarray(0, Math.min(b.length, len)), off);
-}
-
-function buildHeader(name: string, size: number, typeFlag: string): Uint8Array {
-  const h = new Uint8Array(512);
-  writeStr(h, name, 0, 100);
-  writeStr(h, '0000644', 100, 7);
-  writeStr(h, '0000000', 108, 7);
-  writeStr(h, '0000000', 116, 7);
-  writeStr(h, size.toString(8).padStart(11, '0'), 124, 11);
-  h[135] = 0x20;
-  writeStr(h, '00000000000', 136, 11);
-  h[147] = 0x20;
-  for (let i = 148; i < 156; i++) h[i] = 0x20;
-  h[156] = typeFlag.charCodeAt(0);
-  writeStr(h, 'ustar', 257, 6);
-  writeStr(h, '00', 263, 2);
-  let sum = 0;
-  for (let i = 0; i < 512; i++) sum += h[i] ?? 0;
-  writeStr(h, sum.toString(8).padStart(6, '0'), 148, 6);
-  h[154] = 0x00;
-  h[155] = 0x20;
-  return h;
-}
-
-async function gzip(bytes: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([bytes as unknown as BlobPart])
-    .stream()
-    .pipeThrough(new CompressionStream('gzip'));
-  const ab = await new Response(stream).arrayBuffer();
-  return new Uint8Array(ab);
-}
-
-async function makePackageTarball(pkgName: string, version: string): Promise<Uint8Array> {
-  const manifestBytes = enc.encode(JSON.stringify({ name: pkgName, version }));
-  const header = buildHeader('package/package.json', manifestBytes.length, '0');
-  const bodyBlocks = Math.ceil(manifestBytes.length / 512);
-  const body = new Uint8Array(bodyBlocks * 512);
-  body.set(manifestBytes);
-  const trailer = new Uint8Array(1024);
-  const total = new Uint8Array(header.length + body.length + trailer.length);
-  total.set(header, 0);
-  total.set(body, header.length);
-  total.set(trailer, header.length + body.length);
-  return await gzip(total);
-}
 
 interface FakeRegistryEntry {
   manifest: VersionManifest;
