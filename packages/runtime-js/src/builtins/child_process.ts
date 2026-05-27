@@ -21,7 +21,7 @@
  * no shell. `spawn('node', [script])` runs `script` through our loader.
  */
 
-import { Buffer, EventEmitter, NotImplementedError, Readable } from '@rifty/io';
+import { Buffer, EventEmitter, NotImplementedError, Readable, Writable } from '@rifty/io';
 import {
   type ProcessHandle,
   type ProcessIO,
@@ -61,12 +61,47 @@ interface ExecOptions extends SpawnOptions {
   maxBuffer?: number;
 }
 
+/**
+ * `Writable` whose synchronous `write` / `end` methods throw
+ * {@link NotImplementedError}. Used by the in-realm `spawn` fallback path —
+ * that path has no Worker, so there is no stdin destination to route bytes
+ * to. The throw is the correct user-facing signal (per CLAUDE.md "no silent
+ * stubs"); the Worker-backed path passes a real `bindPortAsWritable`-backed
+ * `Writable` from `handle.stdin()`.
+ *
+ * We override the synchronous `write` / `end` methods on the instance so the
+ * exception surfaces at the caller's stack frame instead of as a deferred
+ * `'error'` event from the buffered `_write` / `_final` pipeline.
+ */
+class InRealmStdinUnsupported extends Writable {
+  override write(): never {
+    throw new NotImplementedError(
+      'child.stdin.write',
+      'in-realm spawn fallback has no worker stdin port — only the SAB-Worker path wires stdin (ADR-0011 phase 2)',
+    );
+  }
+  override end(): never {
+    throw new NotImplementedError(
+      'child.stdin.end',
+      'in-realm spawn fallback has no worker stdin port — only the SAB-Worker path wires stdin (ADR-0011 phase 2)',
+    );
+  }
+}
+
 class ChildProcess extends EventEmitter {
   /** Allocated by `ProcessManager` so PID space is unified across the runtime. */
   readonly pid: number;
   readonly stdout: Readable;
   readonly stderr: Readable;
-  readonly stdin: { write(chunk: unknown): never; end(): never };
+  /**
+   * Write-side of the child's stdin. For the SAB-Worker path this is the
+   * `Writable` returned by `WorkerProcessHandle.stdin()` — `write(chunk)`
+   * posts each chunk to the worker's stdin `MessagePort` and `end()` closes
+   * it. For the in-realm fallback this is an {@link InRealmStdinUnsupported}
+   * whose `write` / `end` throw `NotImplementedError` (there is no worker to
+   * route to).
+   */
+  readonly stdin: Writable;
   killed = false;
   private readonly ipcEnabled: boolean;
   private readonly handle: ProcessHandle;
@@ -79,8 +114,11 @@ class ChildProcess extends EventEmitter {
     ipcEnabled: boolean,
     /** Optional pre-allocated stdio streams (used by the Worker-backed path
      * which writes into them itself so the parent can listen before the
-     * worker's first `postMessage` lands). */
-    streams?: { stdout?: Readable; stderr?: Readable },
+     * worker's first `postMessage` lands). The Worker-backed path also
+     * supplies `stdin` from `handle.stdin()`; the in-realm fallback leaves
+     * it unset and gets an {@link InRealmStdinUnsupported} that throws on
+     * write/end. */
+    streams?: { stdout?: Readable; stderr?: Readable; stdin?: Writable },
   ) {
     super();
     this.handle = handle;
@@ -88,20 +126,7 @@ class ChildProcess extends EventEmitter {
     this.ipcEnabled = ipcEnabled;
     this.stdout = streams?.stdout ?? new Readable({ objectMode: false });
     this.stderr = streams?.stderr ?? new Readable({ objectMode: false });
-    this.stdin = {
-      write: (_chunk: unknown) => {
-        throw new NotImplementedError(
-          'child.stdin.write',
-          'IPC stdin will land with the worker-as-process redesign — see ADR 0011',
-        );
-      },
-      end: () => {
-        throw new NotImplementedError(
-          'child.stdin.end',
-          'IPC stdin will land with the worker-as-process redesign — see ADR 0011',
-        );
-      },
-    };
+    this.stdin = streams?.stdin ?? new InRealmStdinUnsupported();
     // Surface kernel-tracked exit/close on the ChildProcess so existing
     // consumers (which `.on('close', …)`) keep working.
     handle.on('exit', (code, signal) => {
@@ -192,6 +217,7 @@ function spawnViaWorker(command: string, args: string[], opts: SpawnOptions): Ch
   return new ChildProcess(handle, opts.__fork ?? false, {
     stdout: handle.stdout(),
     stderr: handle.stderr(),
+    stdin: handle.stdin(),
   });
 }
 
