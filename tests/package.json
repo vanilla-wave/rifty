@@ -8,6 +8,7 @@
     "@rifty/npm-client": "workspace:*",
     "@rifty/runtime-js": "workspace:*",
     "@rifty/runtime-wasi": "workspace:*",
+    "@rifty/shadow-registry": "workspace:*",
     "@rifty/vfs": "workspace:*"
   }
 }

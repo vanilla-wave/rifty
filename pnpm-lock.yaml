@@ -195,6 +195,9 @@ importers:
       '@rifty/runtime-wasi':
         specifier: workspace:*
         version: link:../packages/runtime-wasi
+      '@rifty/shadow-registry':
+        specifier: workspace:*
+        version: link:../tools/shadow-registry
       '@rifty/vfs':
         specifier: workspace:*
         version: link:../packages/vfs
