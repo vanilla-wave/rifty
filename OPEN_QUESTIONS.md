@@ -196,10 +196,22 @@ a body too large to fit.
 
 ## Q-2026-05-27-003: WASI preopens — explicit `cwd` and ordering semantics
 
-**Status:** 🟢 Active  
+**Status:** ⚪ Promoted to **ADR-0049** (2026-05-27)  
 **Encountered in:** 2026-05-26 architecture audit follow-up (runtime-wasi F5), 2026-05-27 triage  
 **Milestone:** M8  
 **Author (agent session):** 2026-05-27
+
+### Resolution (2026-05-27, promoted to ADR-0049)
+
+esbuild (`@esbuild/wasi-preview1`, restored as the forcing consumer by
+ADR-0047) ran through `runWasi` and pinned the API: **Option A** — add
+`WasiOptions.cwd?: string` (the named preopen is hoisted to fd 3; omitting it
+keeps the insertion-order default). Running esbuild also surfaced three
+adjacent gaps it forced: `AT_FDCWD` resolution, directory-open in `path_open`,
+and `fd_readdir` returning `E_NOTDIR` (not `E_BADF`) on a file fd — plus wiring
+the long-declared `stdin` option. All implemented in
+`packages/runtime-wasi` and ratified in **ADR-0049** (public-API change →
+IRREVERSIBLE). The `TODO(ADR)` marker at `wasi.ts` is cleared.
 
 ### Context
 
@@ -255,13 +267,18 @@ budget now without that constraint risks shipping the wrong shape.
   `wasi.ts`; no callers committed yet.
 - External dependencies involved: none.
 
-### Forcing consumer update (2026-05-27, post-ADR-0044)
+### Forcing consumer update (2026-05-27, post-ADR-0044 — then REVERSED by ADR-0047)
 
-esbuild was the originally-anticipated forcing consumer for this question. Discovered that all published esbuild-wasm builds (0.21.5 / 0.25.0 / 0.28.0) ship Go's `gojs` ABI, not `wasi_snapshot_preview1` — esbuild has no upstream WASI build (ADR-0044). swc takes esbuild's place as the M8/M10 transformer and as the forcing consumer for this question; the deferred decision (A/B/C from above) still waits until swc.wasm actually runs through `runWasi` and exercises preopens.
+ADR-0044 moved the forcing consumer to swc after concluding "esbuild has no
+WASI build." That conclusion was wrong: it inspected only `esbuild-wasm` (the
+gojs build). The separate `@esbuild/wasi-preview1` IS a real `wasi_snapshot_preview1`
+binary, and swc has no WASI build at all (its published wasm is wasm-bindgen).
+ADR-0047 reversed the substitution; esbuild is the forcing consumer again, and
+running it resolved this question (Option A). See the Resolution note above.
 
 ### Needs human review by
 
-Start of M8 swc.wasm vendoring work (per ADR-0044).
+Resolved — promoted to ADR-0049 (2026-05-27).
 
 ---
 
@@ -395,6 +412,7 @@ End of milestone M<N>.
 - **Q-2026-05-23-004** — *File-level shim overlay vs full-package shadow* — promoted to **ADR 0027** (`docs/adr/0027-file-level-shim-overlay.md`). Per-file overlay in the consuming adapter kept until a third shim site appears, at which point the pattern moves into `@rifty/npm-client/shims/`.
 - **Q-2026-05-23-005** — *Expanded `@rifty/runtime-js` public surface via `./builtins/*` subpath exports* — promoted to **ADR 0018** (`docs/adr/0018-runtime-js-subpath-exports.md`). Retroactive accept; consolidation to a `./host` entry remains an option for the next public-API review.
 - **Q-2026-05-24-007** — *Prod proxy for npm registry* — promoted to **ADR 0028** (`docs/adr/0028-prod-proxy-for-npm-registry.md`); **reopened 2026-05-27** when the audit found the Edge Function source had never landed (see Active section above and ADR-0028 §Status update — 2026-05-27). The Vercel Edge Function candidate is provisional pending implementation.
+- **Q-2026-05-27-003** — *WASI preopens — explicit `cwd` and ordering semantics* — promoted to **ADR 0049** (`docs/adr/0049-wasi-cwd-and-atfdcwd-preopen-semantics.md`). esbuild (restored as the forcing consumer by ADR-0047, which reversed ADR-0044's swc substitution) ran through `runWasi` and pinned Option A — `WasiOptions.cwd?: string`. Running it also forced `AT_FDCWD` resolution, directory-open in `path_open`, and `fd_readdir` → `E_NOTDIR` on a file fd, plus wiring the `stdin` option. All in ADR-0049.
 - **Q-2026-05-25-touch-utimes** — *Where should `utimes` live on the sync VFS surface?* — promoted to **ADR 0029** (`docs/adr/0029-utimes-on-fs-sync.md`). The trigger condition fired: a second caller (`node:fs.utimesSync` in `runtime-js`) appeared, so the provisional Option B (backend-sniffing in `shell`) was escalated to Option A — `FsSync.utimes` lives on the interface, `MemoryFsSync` mutates the shared backend, `OpfsFsSync` records into an in-memory side-table (`FileSystemSyncAccessHandle` has no mtime mutation). `shell/src/builtins.ts` drops its `@rifty/vfs/internal` import.
 
 ---

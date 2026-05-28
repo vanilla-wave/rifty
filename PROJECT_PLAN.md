@@ -10,7 +10,7 @@
 - Понять, как устроены системы вида WebContainers/StackBlitz изнутри
 - Получить работающий рантайм, способный запускать реальные Node-программы (Express, CLI-инструменты на pure JS)
 - Прокачать архитектурные навыки: слои, изоляция, контракты, эмуляция системных API
-- Параллельно изучить WASI как отдельный модуль (запуск swc/sqlite — настоящие WASI-бинарники; esbuild ships gojs, не WASI — см. ADR-0044)
+- Параллельно изучить WASI как отдельный модуль (запуск esbuild/sqlite — настоящие WASI-бинарники; `@esbuild/wasi-preview1` импортирует только `wasi_snapshot_preview1` — см. ADR-0047, реверс ADR-0044)
 - Вести devlog — серия глубоких технических статей
 
 ### Не-цели (по крайней мере на первый год)
@@ -26,7 +26,7 @@
 
 ### Стратегические решения
 1. **Браузерный V8 как основной JS-движок** — путь StackBlitz. Производительность и tooling несравнимо лучше QuickJS-в-WASM.
-2. **WASI — отдельный рантайм для нативных бинарей**, не для основного исполнения JS. Полезен для swc/sqlite/python (esbuild публикует только Go-ABI `gojs`, не WASI — см. ADR-0044; Go-bridge отложен).
+2. **WASI — отдельный рантайм для нативных бинарей**, не для основного исполнения JS. Полезен для esbuild/sqlite/python (esbuild публикует настоящий WASIp1-билд `@esbuild/wasi-preview1` — см. ADR-0047, реверс ADR-0044; Go-bridge `gojs` остаётся отложен для будущих Go-гостей, но для esbuild больше не нужен).
 3. **Web Workers как процессы.** Каждый "процесс" Node = отдельный Worker со своим JS-контекстом.
 4. **Service Worker для виртуальной сети.** Перехват fetch, маршрутизация в "слушающие" воркеры.
 5. **OPFS (Origin Private File System) — основной storage backend** для VFS. Даёт sync API в Workers через `FileSystemSyncAccessHandle`.
@@ -170,10 +170,10 @@ webcontainer-clone/
 | M5 | Streams & IO | Streams работают, pipes между процессами | 2-3 нед |
 | M6 | Processes | child_process.spawn, дерево процессов, IPC | 3-4 нед |
 | M7 | Network | net + http, Service Worker bridge, Express бежит | 4-5 нед |
-| M8 | WASI Runner | swc.wasm работает как процесс (esbuild deferred — ADR-0044) | 2-3 нед |
+| M8 | WASI Runner | esbuild.wasm работает как процесс через `@esbuild/wasi-preview1` (ADR-0047, реверс ADR-0044) | 2-3 нед |
 | M9 | npm install | Реальная установка пакетов с registry | 3-4 нед |
 | M10 | Real Tooling | Vite-like dev server в браузере | 4-6 нед |
-| M11 | post-M10 follow-ups | Vite-in-Worker (ADR-0043 ✅), nested install (ADR-0042 ✅), fork-IPC через Worker (ADR-0045 ✅), SW→Worker direct routing (A-023 / Q-2026-05-27-002), streaming cross-realm preview, lockfile reuse, swc.wasm vendoring | 2-3 нед |
+| M11 | post-M10 follow-ups | Vite-in-Worker (ADR-0043 ✅), nested install (ADR-0042 ✅), fork-IPC через Worker (ADR-0045 ✅), SW→Worker direct routing (A-023 / Q-2026-05-27-002), streaming cross-realm preview, lockfile reuse, esbuild.wasm vendoring (✅ ADR-0047) | 2-3 нед |
 
 ---
 
@@ -324,14 +324,14 @@ webcontainer-clone/
 
 **Acceptance:**
 - [ ] Минимальный hello.c → hello.wasm → запускается в playground, выводит в stdout
-- [ ] swc.wasm: `swc transform` (или эквивалент CLI swc-WASI билда) через child_process работает, файлы в VFS
-- [ ] (отложено) esbuild через Go-runtime bridge — ADR-0044, отдельная задача в TASKS.md Follow-ups
+- [x] esbuild.wasm: `esbuild --loader=ts` через `runWasi` работает, трансформирует TS/JSX из stdin (ADR-0047; `tools/shadow-registry/src/esbuild-binding.ts`, integration `tests/integration/esbuild-wasi-transform.test.ts`)
+- [x] esbuild видит preopens и cwd (`AT_FDCWD`) — ADR-0049, реверс гипотезы ADR-0044 о Go-runtime bridge (для esbuild не нужен; `@esbuild/wasi-preview1` — настоящий WASI-бинарь)
 - [ ] WASI VFS интегрирована с основной VFS (один источник истины)
 - [ ] Бинарник видит preopens (например `/workspace`)
 
 **Тесты:**
 - Sanity: hello.wasm у нас и в `wasmtime` дают одинаковый stdout
-- swc: трансформируем небольшой TS, диффим против нативного swc (per ADR-0044, заменил esbuild как forcing consumer)
+- esbuild: трансформируем небольшой TS/JSX через `@esbuild/wasi-preview1` под `runWasi`, проверяем что типы вырезаны и JSX опущен (ADR-0047; esbuild вернулся как forcing consumer вместо swc)
 
 ---
 
@@ -364,7 +364,7 @@ webcontainer-clone/
 
 **Acceptance:**
 - [ ] `npm install vite && npm run dev` запускает Vite
-- [ ] Vite ходит в swc.wasm через shadow-binding (esbuild deferred — ADR-0044)
+- [ ] Vite ходит в esbuild.wasm через shadow-binding (TS/JSX transform; ADR-0047, реверс ADR-0044 — `@esbuild/wasi-preview1` под `runWasi`)
 - [ ] HMR работает через WebSocket-туннель
 - [ ] Preview-iframe показывает приложение
 - [ ] Изменение в редакторе → видим update в preview без перезагрузки
@@ -384,7 +384,7 @@ webcontainer-clone/
 - ⏳ **SW→Worker direct routing** — A-023 (трекер: `OPEN_QUESTIONS.md` Q-2026-05-27-002). Когда landed, `WorkerOwnerResolver` заменит `FirstWindowOwnerResolver` в `@rifty/service-worker`, и SW-fetch для `/preview/<port>/*` пойдёт напрямую в worker realm.
 - ⏳ **Streaming cross-realm preview** — `bridgeCrossRealmPreview` сейчас buffered-only (`packages/net/src/cross-realm/preview-port.ts:24-29`). Поднимется как только Real Vite начнёт отдавать большие responses (vendor-prebundle, source maps). ADR-0046+ (TBD).
 - ⏳ **Lockfile reuse on subsequent `install`** — M9 acceptance, ADR-0023 пометил тактику; код пока регенерирует каждый раз. Закрывается отдельным PR.
-- ⏳ **swc.wasm vendoring** — M8 acceptance, ADR-0044 заменил esbuild на swc как forcing consumer. Закрывается отдельным PR, который вендорит swc.wasm под `tools/shadow-registry/` и прогоняет real preopens через WASI runner.
+- ✅ **esbuild.wasm vendoring** — M8 acceptance. ADR-0047 реверснул ADR-0044 (swc не имеет WASI-билда; `@esbuild/wasi-preview1` — настоящий WASIp1-бинарь). Вендорится build-time скриптом `tools/shadow-registry/scripts/fetch-esbuild-wasi.mjs` (pin по версии + integrity), shadow-binding прогоняет real preopens/cwd через `runWasi` (ADR-0049).
 
 Decision (2026-05-27): M11 — это не новая фаза работы, а контейнер для технического долга, оставшегося с M6 / M8 / M9 / M10. Срок 2-3 недели включает только активные работы (SW→Worker — после fork-IPC); deferred-пункты ждут реального триггерного use case.
 

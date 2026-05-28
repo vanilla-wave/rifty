@@ -47,6 +47,13 @@ ADRs are immutable after merge. New decisions get new ADRs; supersedence is expl
 | 0041 | `FsSync.readdirSync` returns `VfsDirent[]` and `Vfs.utimes` symmetry | — |
 | 0042 | M11 nested install — first-wins flat + nest-on-conflict | — |
 | 0043 | Vite-in-Worker realm and cross-realm preview bridge (partially supersedes ADR-0025 for the Real Vite path) | — |
-| 0044 | esbuild ships gojs ABI — substitute swc as the M8/M10 forcing consumer; defer the Go-runtime bridge | — |
+| 0044 | esbuild ships gojs ABI — substitute swc as the M8/M10 forcing consumer; defer the Go-runtime bridge (D1/D2 superseded by ADR-0047) | — |
+| 0045 | Worker-process IPC | — |
+| 0047 | Revert to esbuild (`@esbuild/wasi-preview1`) as the M8/M10 WASI forcing consumer (supersedes ADR-0044 D1/D2; keeps D3/D4) | — |
+| 0049 | WASI `cwd` option + `AT_FDCWD` and directory-open semantics (promotes Q-2026-05-27-003) | — |
+
+> ADR-0046 and ADR-0048 are reserved for concurrent unmerged lanes (prod-proxy
+> ratification and streaming cross-realm preview, respectively) and are not in
+> this tree yet.
 
 For the broad rationale and trade-offs, read PROJECT_PLAN.md §8 first; ADRs are the durable spec.
