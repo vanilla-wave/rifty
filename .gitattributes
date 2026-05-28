@@ -1,3 +1,5 @@
 # Tarballs are binary; do not normalise line endings or attempt diff.
 *.tgz binary
 *.tar.gz binary
+# Vendored WASM artifacts (e.g. esbuild.wasm — ADR-0047) are binary.
+*.wasm binary
