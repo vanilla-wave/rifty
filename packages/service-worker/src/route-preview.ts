@@ -1,23 +1,26 @@
 /**
  * SW-side routing for a matched `/preview/<port>/*` fetch. Asks the
- * supplied {@link PreviewOwnerResolver} for the realm that owns the
+ * supplied {@link PreviewOwnerBinding} for the realm that owns the
  * registered process, gates on the ready handshake, and forwards the
  * serialised request to that owner over a fresh `MessageChannel`.
  *
  * Lives in its own module so `preview-bridge.ts` stays under the ADR-0024
  * file-size budget.
  *
- * ADR-0031 — the default resolver ({@link FirstWindowOwnerResolver}) prefers
- * `event.resultingClientId` then `event.clientId`. The legacy "first
- * controlled window" path remains as a defensive fallback for
- * navigation-preload edge cases (and for tests that simulate fetches without
- * an owning client); each such fallback warns once via `console.warn` so the
- * misroute case is visible in production. M11 A-023/A-026 swap the default
- * for a `WorkerOwnerResolver` that consults the cross-realm port registry.
+ * ADR-0031 — the default binding's resolver
+ * ({@link FirstWindowOwnerResolver}, wrapped by
+ * {@link FirstWindowOwnerBinding}) prefers `event.resultingClientId` then
+ * `event.clientId`. The legacy "first controlled window" path remains as a
+ * defensive fallback for navigation-preload edge cases (and for tests that
+ * simulate fetches without an owning client); each such fallback warns
+ * once via `console.warn` so the misroute case is visible in production.
+ * ADR-0046 lands the {@link WorkerOwnerBinding} consumer for A-023
+ * (SW→Worker direct routing), and the route-preview path here is the
+ * single seam both bindings flow through.
  */
 
 import { synthesizePreviewUrl } from '@rifty/io';
-import type { PreviewOwnerResolver } from './owner-resolver.ts';
+import type { PreviewOwnerBinding, ReadinessSignal } from './preview-owner-binding.ts';
 import {
   SW_ERROR_PROTOCOL_VERSION_MISMATCH,
   SW_FRAME_VERSION,
@@ -27,37 +30,45 @@ import {
   type SerializedResponse,
   type SwProtocolVersionMismatchError,
 } from './protocol.ts';
-import type { ReadyClientsRegistry } from './ready-clients.ts';
 
 /**
  * Forward a matched preview fetch to the owning client and translate the
  * client's reply back into a {@link Response}. Returns 503 when the owner
  * cannot be resolved, when the handshake times out, when the client posts a
- * mismatched protocol version, or when the main thread replies with a
+ * mismatched protocol version, when the owner is detected as gone
+ * mid-wait, or when the main thread replies with a
  * `PROTOCOL_VERSION_MISMATCH` error frame.
+ *
+ * `binding.resolveOwner` is responsible for window vs worker dispatch.
+ * `readiness` is the live signal returned by
+ * `binding.subscribeReadiness(scope)` — owned by `createPreviewInterceptor`
+ * and shared across every in-flight fetch handled by that interceptor.
  */
 export async function routePreview(
   scope: ServiceWorkerGlobalScope,
   request: Request,
   match: { port: number; path: string },
-  registry: ReadyClientsRegistry,
+  readiness: ReadinessSignal,
   timeoutMs: number,
   clientId: string | null,
-  resolver: PreviewOwnerResolver,
+  binding: PreviewOwnerBinding,
 ): Promise<Response> {
-  const client = await resolver.resolveOwner(scope, request, clientId);
+  const client = await binding.resolveOwner(scope, request, clientId, match.port);
   if (!client) {
     return new Response(`No client to serve preview port ${match.port}`, { status: 503 });
   }
-  if (registry.isMismatched(client.id)) {
+  if (readiness.isMismatched(client.id)) {
     return new Response('protocol version mismatch', { status: 503 });
   }
-  const outcome = await registry.waitForReady(client.id, timeoutMs);
+  const outcome = await readiness.waitForReady(client.id, timeoutMs);
   if (outcome === 'mismatch') {
     return new Response('protocol version mismatch', { status: 503 });
   }
+  if (outcome === 'gone') {
+    return new Response(`preview owner ${client.id} departed before handshake`, { status: 503 });
+  }
   if (outcome === 'timeout') {
-    if (registry.isMismatched(client.id)) {
+    if (readiness.isMismatched(client.id)) {
       return new Response('protocol version mismatch', { status: 503 });
     }
     return new Response(`preview-bridge not ready within ${timeoutMs}ms`, { status: 503 });
@@ -68,7 +79,7 @@ export async function routePreview(
     request.method === 'GET' || request.method === 'HEAD'
       ? null
       : new Uint8Array(await request.arrayBuffer());
-  const requestId = registry.nextRequestId();
+  const requestId = readiness.nextRequestId();
   // URL synthesis goes through `synthesizePreviewUrl` from
   // `@rifty/io/preview-protocol` (ADR-0036). The shape of that contract is
   // pinned by `SW_ROUTING_VERSION` (ADR-0040) — bumping it requires changing

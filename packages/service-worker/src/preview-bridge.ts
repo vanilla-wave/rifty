@@ -1,18 +1,25 @@
 /**
- * Bridge between the Service Worker and the main thread for `/preview/<port>/*`
- * fetches.
+ * Bridge between the Service Worker and the realm that owns the
+ * `/preview/<port>/*` handler.
  *
- * The SW can't share JS state with the runtime Worker that owns the
- * `@rifty/net` port registry, so it forwards intercepted requests to a
- * controlled window client over `postMessage` + a `MessageChannel`. Whoever
- * sets up the bridge (main thread of the playground) implements the
- * `PreviewHandler` and returns a `SerializedResponse`.
+ * Today (ADR-0046) the owner is selected by a
+ * {@link PreviewOwnerBinding} — {@link FirstWindowOwnerBinding} for the
+ * historical window path or {@link WorkerOwnerBinding} for the M11
+ * A-023 SW→Worker direct routing. The interceptor stays
+ * binding-agnostic: it asks the binding to resolve the owner and to
+ * subscribe its readiness listener, then forwards each fetch over a
+ * fresh `MessageChannel`.
  *
  * Wire format (ADR-0017 phase 1 streaming, plus the ADR-0031 receive-side
  * validation, refined by ADR-0040 into a frame+routing version split):
  *
- *   client→sw  : { type: 'rifty:preview:ready',   frameVersion, routingVersion }
- *   client→sw  : { type: 'rifty:preview:goodbye', frameVersion, routingVersion } // teardown
+ *   client→sw  : { type: 'rifty:preview:ready',   frameVersion, routingVersion,
+ *                  ports?: number[] }            // ports added in ADR-0046
+ *                                                // for worker bindings;
+ *                                                // additive optional per
+ *                                                // ADR-0031.
+ *   client→sw  : { type: 'rifty:preview:goodbye', frameVersion, routingVersion,
+ *                  ports?: number[] }            // teardown
  *   sw→client  : { type: 'rifty:preview:request', frameVersion, routingVersion,
  *                  requestId,
  *                  request: { port, url, method, headers, body?: Uint8Array } }
@@ -42,7 +49,9 @@
 
 import { parsePreviewPath } from '@rifty/io';
 import { packSerializedResponse } from './body-transport.ts';
-import { FirstWindowOwnerResolver, type PreviewOwnerResolver } from './owner-resolver.ts';
+import { FirstWindowOwnerBinding } from './owner-binding-window.ts';
+import type { PreviewOwnerResolver } from './owner-resolver.ts';
+import type { PreviewOwnerBinding } from './preview-owner-binding.ts';
 import {
   SW_ERROR_PROTOCOL_VERSION_MISMATCH,
   SW_FRAME_VERSION,
@@ -54,12 +63,24 @@ import {
   type SerializedResponse,
   type SwProtocolVersionMismatchError,
 } from './protocol.ts';
-import { createReadyClientsRegistry } from './ready-clients.ts';
 import { routePreview } from './route-preview.ts';
 
 export { canTransferReadableStream, packSerializedResponse } from './body-transport.ts';
+export { FirstWindowOwnerBinding } from './owner-binding-window.ts';
+export type { FirstWindowOwnerBindingOptions } from './owner-binding-window.ts';
+export { WorkerOwnerBinding } from './owner-binding-worker.ts';
+export type {
+  WorkerOwnerBindingOptions,
+  WorkerOwnerBindingLogger,
+} from './owner-binding-worker.ts';
 export { FirstWindowOwnerResolver } from './owner-resolver.ts';
 export type { PreviewOwnerResolver } from './owner-resolver.ts';
+export type {
+  PreviewOwnerBinding,
+  ReadinessOutcome,
+  ReadinessSignal,
+  ReadinessSubscription,
+} from './preview-owner-binding.ts';
 export type { SerializedRequest, SerializedResponse } from './protocol.ts';
 
 export type PreviewHandler = (req: SerializedRequest) => Promise<SerializedResponse>;
@@ -91,13 +112,32 @@ export interface MessageHandlerHooks {
   /** Override the ready-handshake timeout. Defaults to `DEFAULT_READY_TIMEOUT_MS`. */
   timeoutMs?: number;
   /**
-   * Override the {@link PreviewOwnerResolver} strategy. Defaults to
-   * {@link FirstWindowOwnerResolver}, which preserves the M10 behaviour of
-   * routing to the first controlled window client. M11 A-026 swaps this
-   * default for a `WorkerOwnerResolver` that consults the cross-realm
-   * `@rifty/net` port registry; see ADR-0011, ADR-0017, and `REVIEW_ACTIONS.md`
-   * A-023/A-026. Tests pass a mock resolver to exercise the seam without
-   * spinning up the runtime port registry.
+   * Override the {@link PreviewOwnerBinding} that the interceptor uses
+   * to resolve owners and subscribe readiness. Defaults to
+   * {@link FirstWindowOwnerBinding}, which preserves the M10 behaviour
+   * of routing to the first controlled window client. M11 A-023 lands
+   * the {@link WorkerOwnerBinding} consumer; the
+   * `installPreviewInterceptor` default does not change because the
+   * page is still the SW's counterpart for the legacy preview surface
+   * (ADR-0043) — callers swap in `WorkerOwnerBinding` per-context.
+   *
+   * If both `binding` and `resolver` are supplied, `binding` wins and
+   * `resolver` is ignored.
+   */
+  binding?: PreviewOwnerBinding;
+  /**
+   * Back-compat hook: override the {@link PreviewOwnerResolver} strategy
+   * used by the default window binding. Equivalent to
+   * `binding: new FirstWindowOwnerBinding({ resolver })`. Kept so the
+   * existing parity test in
+   * `tests/owner-resolver.test.ts` continues to compile without rewrite.
+   * Ignored when `binding` is supplied.
+   *
+   * Deprecation rationale: ADR-0046 collapses owner resolution and
+   * readiness behind {@link PreviewOwnerBinding}; tests and consumers
+   * that want to swap the resolver should adopt the `binding` field
+   * directly. The field stays in place until A-023 lands its real
+   * consumer (`installPreviewInterceptor` flip).
    */
   resolver?: PreviewOwnerResolver;
 }
@@ -109,10 +149,9 @@ export interface PreviewInterceptor {
 
 /**
  * Install the SW-side fetch + message listeners and return a teardown handle.
- * Internal state (ready set, waiters, mismatch-warn dedup, outbound
- * request-id counter) lives inside the registry returned by
- * `createReadyClientsRegistry` so multiple interceptors don't share state
- * in tests.
+ * The interceptor builds a {@link PreviewOwnerBinding} (or accepts one via
+ * `hooks.binding`), calls `subscribeReadiness(scope)` to install its
+ * listener, and wires each `/preview/<port>/*` fetch through `routePreview`.
  *
  * Production callers should prefer `installPreviewInterceptor`, which calls
  * this with defaults.
@@ -122,21 +161,12 @@ export function createPreviewInterceptor(
   hooks: MessageHandlerHooks = {},
 ): PreviewInterceptor {
   const timeoutMs = hooks.timeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
-  const resolver = hooks.resolver ?? new FirstWindowOwnerResolver();
-  const registry = createReadyClientsRegistry();
-
-  const messageHandler = (event: ExtendableMessageEvent): void => {
-    const data = event.data as
-      | { type?: string; frameVersion?: string; routingVersion?: string }
-      | null
-      | undefined;
-    if (!data || typeof data !== 'object' || typeof data.type !== 'string') return;
-    if (data.type !== SW_PREVIEW_READY && data.type !== SW_PREVIEW_GOODBYE) return;
-    const source = event.source as Client | null;
-    const clientId = source && 'id' in source ? source.id : null;
-    if (!clientId) return;
-    registry.handleMessage(clientId, data);
-  };
+  const binding =
+    hooks.binding ??
+    new FirstWindowOwnerBinding(
+      hooks.resolver !== undefined ? { resolver: hooks.resolver } : undefined,
+    );
+  const subscription = binding.subscribeReadiness(scope);
 
   const fetchHandler = (event: FetchEvent): void => {
     const url = new URL(event.request.url);
@@ -147,16 +177,23 @@ export function createPreviewInterceptor(
     // correct owner instead of always picking the first match.
     const clientId = event.resultingClientId || event.clientId || null;
     event.respondWith(
-      routePreview(scope, event.request, match, registry, timeoutMs, clientId, resolver),
+      routePreview(
+        scope,
+        event.request,
+        match,
+        subscription.readiness,
+        timeoutMs,
+        clientId,
+        binding,
+      ),
     );
   };
 
   scope.addEventListener('fetch', fetchHandler);
-  scope.addEventListener('message', messageHandler);
   return {
     teardown(): void {
       scope.removeEventListener('fetch', fetchHandler);
-      scope.removeEventListener('message', messageHandler);
+      subscription.teardown();
     },
   };
 }

@@ -4,6 +4,29 @@
 
 ### Added
 
+- **ADR-0046 (A-023):** `PreviewOwnerBinding` — one seam the preview
+  interceptor sits on top of, designed from both the window and worker
+  owners at once (promotes OPEN_QUESTIONS Q-2026-05-27-002). New
+  exports: `PreviewOwnerBinding`, `ReadinessSignal`,
+  `ReadinessSubscription`, `ReadinessOutcome` (now includes `'gone'`),
+  `FirstWindowOwnerBinding` (+`FirstWindowOwnerBindingOptions`),
+  `WorkerOwnerBinding` (+`WorkerOwnerBindingOptions`,
+  `WorkerOwnerBindingLogger`). `createPreviewInterceptor` resolves
+  owners and gates readiness THROUGH the binding; it defaults to
+  `FirstWindowOwnerBinding` (M10 behaviour preserved byte-for-byte) and
+  accepts a `WorkerOwnerBinding` via `hooks.binding`. The worker
+  binding routes by port (a Worker-served preview fetch has no DOM
+  `clientId`), re-validates the owner via `clients.get`, and surfaces
+  the new `'gone'` outcome for the no-`pagehide` worker lifecycle
+  (Worker terminated without a goodbye) so `route-preview` returns a
+  precise 503 instead of hanging to timeout. The worker readiness
+  frame's `ports: number[]` field is additive optional — no
+  `SW_FRAME_VERSION` / `SW_ROUTING_VERSION` bump (ADR-0040/ADR-0031).
+  The legacy `FirstWindowOwnerResolver` / `PreviewOwnerResolver`
+  surface and the `hooks.resolver` shortcut stay for back-compat. New
+  dual-strategy parity test (`tests/preview-owner-binding-parity.test.ts`)
+  plus worker-specific lifecycle cases (silent death, port handover,
+  multi-port routing, ready-without-ports).
 - `console.error('[rifty/service-worker] …')` breadcrumbs on every
   `SW_FRAME_VERSION` / `SW_ROUTING_VERSION` mismatch path that previously
   produced only a structured 503 carrier (`preview-bridge.ts` incoming

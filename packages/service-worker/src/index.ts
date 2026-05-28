@@ -10,16 +10,25 @@ export {
   createPreviewInterceptor,
   canTransferReadableStream,
   packSerializedResponse,
+  FirstWindowOwnerBinding,
   FirstWindowOwnerResolver,
+  WorkerOwnerBinding,
   DEFAULT_READY_TIMEOUT_MS,
 } from './preview-bridge.ts';
 export type {
+  FirstWindowOwnerBindingOptions,
   MessageHandlerHooks,
   PreviewHandler,
   PreviewInterceptor,
+  PreviewOwnerBinding,
   PreviewOwnerResolver,
+  ReadinessOutcome,
+  ReadinessSignal,
+  ReadinessSubscription,
   SerializedRequest,
   SerializedResponse,
+  WorkerOwnerBindingLogger,
+  WorkerOwnerBindingOptions,
 } from './preview-bridge.ts';
 export {
   SW_ERROR_PROTOCOL_VERSION_MISMATCH,
