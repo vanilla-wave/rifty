@@ -206,8 +206,8 @@ the `examples/vite-like-dev` fixtures (small modules, one frame), but
 Real Vite's vendor-prebundle and source-map responses will overshoot
 that envelope. Decision (2026-05-27): defer to M11 alongside this
 question. The streaming wire-frame (chunk/end split under
-`bridgeCrossRealmPreview`) will need its own ADR — **ADR-0047+** (0046
-is now taken by the owner-binding promotion) — and a `SW_FRAME_VERSION`
+`bridgeCrossRealmPreview`) will need its own ADR — **ADR-0048** (reserved for this; 0046 = owner-binding,
+0047/0049 = esbuild-WASI revert) — and a `SW_FRAME_VERSION`
 bump (ADR-0040). No code marker yet, by intent; the buffered shape is
 correct until Real Vite produces a body too large to fit.
 
@@ -433,7 +433,7 @@ End of milestone M<N>.
 - **Q-2026-05-24-007** — *Prod proxy for npm registry* — promoted to **ADR 0028** (`docs/adr/0028-prod-proxy-for-npm-registry.md`); **reopened 2026-05-27** when the audit found the Edge Function source had never landed (see Active section above and ADR-0028 §Status update — 2026-05-27). The Vercel Edge Function candidate is provisional pending implementation.
 - **Q-2026-05-27-003** — *WASI preopens — explicit `cwd` and ordering semantics* — promoted to **ADR 0049** (`docs/adr/0049-wasi-cwd-and-atfdcwd-preopen-semantics.md`). esbuild (restored as the forcing consumer by ADR-0047, which reversed ADR-0044's swc substitution) ran through `runWasi` and pinned Option A — `WasiOptions.cwd?: string`. Running it also forced `AT_FDCWD` resolution, directory-open in `path_open`, and `fd_readdir` → `E_NOTDIR` on a file fd, plus wiring the `stdin` option. All in ADR-0049.
 - **Q-2026-05-25-touch-utimes** — *Where should `utimes` live on the sync VFS surface?* — promoted to **ADR 0029** (`docs/adr/0029-utimes-on-fs-sync.md`). The trigger condition fired: a second caller (`node:fs.utimesSync` in `runtime-js`) appeared, so the provisional Option B (backend-sniffing in `shell`) was escalated to Option A — `FsSync.utimes` lives on the interface, `MemoryFsSync` mutates the shared backend, `OpfsFsSync` records into an in-memory side-table (`FileSystemSyncAccessHandle` has no mtime mutation). `shell/src/builtins.ts` drops its `@rifty/vfs/internal` import.
-- **Q-2026-05-27-002** — *Coherent `OwnerResolver` + readiness-registry swap* — promoted to **ADR 0046** (`docs/adr/0046-preview-owner-binding.md`). The "defer until a second consumer" decision (Option B) paid off: A-023 (SW→Worker direct routing) arrived as the second consumer, so the `PreviewOwnerBinding` seam was designed from both the window and worker shapes at once — `FirstWindowOwnerBinding` (legacy path preserved byte-for-byte) and `WorkerOwnerBinding` (port-keyed routing + the `'gone'` outcome for the no-`pagehide` worker lifecycle trap). The worker readiness frame's `ports` field is additive optional, so no `SW_FRAME_VERSION` bump (ADR-0040/ADR-0031). **The cross-deferral streaming-wire-frame sibling (see Active §Cross-deferral note) is a separate concern and stays open (ADR-0047+).**
+- **Q-2026-05-27-002** — *Coherent `OwnerResolver` + readiness-registry swap* — promoted to **ADR 0046** (`docs/adr/0046-preview-owner-binding.md`). The "defer until a second consumer" decision (Option B) paid off: A-023 (SW→Worker direct routing) arrived as the second consumer, so the `PreviewOwnerBinding` seam was designed from both the window and worker shapes at once — `FirstWindowOwnerBinding` (legacy path preserved byte-for-byte) and `WorkerOwnerBinding` (port-keyed routing + the `'gone'` outcome for the no-`pagehide` worker lifecycle trap). The worker readiness frame's `ports` field is additive optional, so no `SW_FRAME_VERSION` bump (ADR-0040/ADR-0031). **The cross-deferral streaming-wire-frame sibling (see Active §Cross-deferral note) is a separate concern and stays open (ADR-0048).**
 
 ---
 
