@@ -87,11 +87,13 @@ export function setupPathCtx(): PathCtx {
     args: [],
     env: {},
     fds,
+    cwdFd: 3,
     nextFd: { value: 4 },
     exited: { value: false },
     exitCode: { value: 0 },
     onStdout: () => {},
     onStderr: () => {},
+    onStdin: () => null,
     view: () => new DataView(memory.buffer),
     bytes: () => new Uint8Array(memory.buffer),
   };

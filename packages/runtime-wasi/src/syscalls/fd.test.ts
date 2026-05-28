@@ -84,6 +84,42 @@ describe('fd_read', () => {
   });
 });
 
+describe('fd_read — stdin (ADR-0049)', () => {
+  // esbuild's `transform` surface (vite's TS/JSX path) feeds source over
+  // stdin. fd 0 pulls from `ctx.onStdin`; a null/empty result is EOF.
+  afterEach(() => resetSyncMirror());
+
+  it('reads stdin bytes from the onStdin callback', () => {
+    let delivered = false;
+    const src = new TextEncoder().encode('hi stdin');
+    const t = setupFdCtx({
+      onStdin: () => {
+        if (delivered) return null;
+        delivered = true;
+        return src;
+      },
+    });
+    const view = new DataView(t.memory.buffer);
+    view.setUint32(0, 200, true); // iov.ptr
+    view.setUint32(4, 32, true); // iov.len
+    const rc = t.ns.fd_read(0, 0, 1, 300);
+    expect(rc).toBe(E_SUCCESS);
+    expect(view.getUint32(300, true)).toBe(src.length);
+    const got = new Uint8Array(t.memory.buffer, 200, src.length);
+    expect(new TextDecoder().decode(got)).toBe('hi stdin');
+  });
+
+  it('returns 0 bytes (EOF) when onStdin yields null', () => {
+    const t = setupFdCtx(); // default onStdin returns null
+    const view = new DataView(t.memory.buffer);
+    view.setUint32(0, 200, true);
+    view.setUint32(4, 32, true);
+    const rc = t.ns.fd_read(0, 0, 1, 300);
+    expect(rc).toBe(E_SUCCESS);
+    expect(view.getUint32(300, true)).toBe(0);
+  });
+});
+
 describe('fd_seek', () => {
   beforeEach(() => {
     setSyncMirror(new MemoryFsSync());

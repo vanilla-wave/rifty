@@ -30,6 +30,7 @@ import {
   FILETYPE_REGULAR_FILE,
   FILETYPE_UNKNOWN,
   OFLAGS_CREAT,
+  OFLAGS_DIRECTORY,
   OFLAGS_EXCL,
   OFLAGS_TRUNC,
   RIGHTS_DIR_BASE,
@@ -37,6 +38,7 @@ import {
   type WasiCtx,
   dirBase,
   errToWasiErrno,
+  resolveDirFd,
   resolveRel,
 } from './shared.ts';
 
@@ -55,7 +57,7 @@ export function pathSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       fdflags: number,
       outFd: number,
     ) => {
-      const base = ctx.fds.get(fd);
+      const base = ctx.fds.get(resolveDirFd(ctx, fd));
       if (!base || base.type !== 'dir' || !base.path) return E_BADF;
       // WASI preview1: rights granted on a fd opened via `path_open` are
       // clamped by the parent dir fd's `rights_inheriting` set, not by its
@@ -68,8 +70,48 @@ export function pathSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       const wantCreate = (oflags & OFLAGS_CREAT) !== 0;
       const wantExclusive = (oflags & OFLAGS_EXCL) !== 0;
       const wantTruncate = (oflags & OFLAGS_TRUNC) !== 0;
+      const wantDirectory = (oflags & OFLAGS_DIRECTORY) !== 0;
 
       const mirror = syncMirror();
+
+      // Directory open (ADR-0049). A guest opening its cwd (`path_open(".",
+      // O_DIRECTORY)`) or any subdir must get a *directory* fd it can
+      // `fd_readdir` / resolve children against — not a file read. esbuild's
+      // Go/WASIp1 runtime does exactly this before it can resolve a relative
+      // entry point; without it `path_open(".")` fell through to
+      // `readFileBytesSync` and returned `E_ISDIR`, so esbuild reported
+      // "Cannot read directory". We stat first: if the target is a directory
+      // (or the guest explicitly asked for one), hand back a `dir` fd. Real
+      // toolchains never combine O_CREAT with O_DIRECTORY, so a missing dir is
+      // a plain `E_NOENT`.
+      let isDir = wantDirectory;
+      if (!isDir) {
+        try {
+          isDir = mirror.statSync(fullPath).isDirectory;
+        } catch (err) {
+          const code = errToWasiErrno(err);
+          // ENOENT here just means "not an existing directory"; fall through
+          // to the file path which re-resolves create/exist semantics.
+          if (code !== E_NOENT) return code;
+        }
+      }
+      if (isDir) {
+        if (!mirror.existsSync(fullPath)) return E_NOENT;
+        if (!mirror.statSync(fullPath).isDirectory) return E_NOTDIR;
+        const dirFd = ctx.nextFd.value++;
+        ctx.fds.set(dirFd, {
+          type: 'dir',
+          path: fullPath,
+          // Sub-dir fds inherit the parent preopen's directory rights so the
+          // guest can readdir / open children through them. Clamp to the
+          // parent's inheriting set (downgrade-only handoff).
+          rights: RIGHTS_DIR_BASE & parentInheriting,
+          rightsInheriting: (RIGHTS_DIR_BASE | RIGHTS_FILE_BASE) & parentInheriting,
+        });
+        ctx.view().setUint32(outFd, dirFd, true);
+        return E_SUCCESS;
+      }
+
       let data: Uint8Array;
       let existed: boolean;
       try {

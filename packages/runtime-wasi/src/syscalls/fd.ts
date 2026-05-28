@@ -21,6 +21,7 @@ import {
   E_INVAL,
   E_NAMETOOLONG,
   E_NOSYS,
+  E_NOTDIR,
   E_PERM,
   E_SUCCESS,
   FILETYPE_DIRECTORY,
@@ -105,9 +106,34 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       // Unknown fd → bad descriptor. WASI guests rely on E_BADF here to detect
       // mis-tracked fds; silently returning E_SUCCESS + 0 bytes masked bugs.
       if (!fdEntry) return E_BADF;
-      // Stdin: not yet wired in, but it IS a valid fd, so return EOF.
+      // Stdin: pull from the `onStdin` callback (esbuild's `transform` surface
+      // feeds source bytes here). We keep a residual buffer on the fd entry so
+      // a chunk larger than the guest's iovec is delivered across reads. A
+      // `null` from the callback with an empty residual is EOF.
       if (fdEntry.type === 'stdin') {
-        ctx.view().setUint32(nread, 0, true);
+        const view = ctx.view();
+        const bytes = ctx.bytes();
+        let residual = fdEntry.data ?? new Uint8Array(0);
+        let cursor = fdEntry.cursor ?? 0;
+        let readTotal = 0;
+        for (let i = 0; i < iovsLen; i++) {
+          const ptr = view.getUint32(iovs + i * 8, true);
+          const len = view.getUint32(iovs + i * 8 + 4, true);
+          if (len === 0) continue;
+          if (cursor >= residual.length) {
+            const next = ctx.onStdin();
+            if (!next || next.length === 0) break; // EOF
+            residual = next;
+            cursor = 0;
+          }
+          const take = Math.min(len, residual.length - cursor);
+          bytes.set(residual.subarray(cursor, cursor + take), ptr);
+          cursor += take;
+          readTotal += take;
+        }
+        fdEntry.data = residual;
+        fdEntry.cursor = cursor;
+        view.setUint32(nread, readTotal, true);
         return E_SUCCESS;
       }
       // stdout/stderr are write-only.
@@ -256,7 +282,12 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
     fd_readdir: (fd: number, bufPtr: number, bufLen: number, cookie: bigint, bufUsed: number) => {
       const entry = ctx.fds.get(fd);
       if (!entry) return E_BADF;
-      if (entry.type !== 'dir' || !entry.path) return E_BADF;
+      // A valid fd that is not a directory must report E_NOTDIR, not E_BADF.
+      // Go's WASIp1 os layer (esbuild) opens a path, then probes it with
+      // `fd_readdir`: E_NOTDIR means "this is a file, read it as one" while
+      // E_BADF is a hard error ("Cannot read directory: Bad file number").
+      // Returning E_BADF here made esbuild abort on every file entry point.
+      if (entry.type !== 'dir' || !entry.path) return E_NOTDIR;
       const mirror = syncMirror();
       // Ordering contract: we trust `readdirSync` to return entries in a
       // stable order between calls for the same directory (no concurrent

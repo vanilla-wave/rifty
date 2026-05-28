@@ -9,11 +9,13 @@ import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@rifty/vfs/interna
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setupPathCtx } from './path-test-fixture.ts';
 import {
+  AT_FDCWD,
   E_BADF,
   E_EXIST,
   E_NOENT,
   E_SUCCESS,
   OFLAGS_CREAT,
+  OFLAGS_DIRECTORY,
   OFLAGS_EXCL,
   OFLAGS_TRUNC,
   RIGHTS_FD_READ,
@@ -86,6 +88,69 @@ describe('path_open', () => {
     const entry = t.fds.get(newFd);
     expect(entry?.type).toBe('file');
     expect(entry?.data?.length).toBe(0);
+  });
+});
+
+describe('path_open — directory open (ADR-0049)', () => {
+  // esbuild's Go/WASIp1 runtime opens its cwd (`path_open(".")`) and subdirs to
+  // resolve entry points. Before ADR-0049, `path_open` always tried to read the
+  // target as a file and returned E_ISDIR for a directory, so esbuild reported
+  // "Cannot read directory". A directory target must yield a `dir` fd.
+  beforeEach(() => {
+    const mirror = new MemoryFsSync();
+    mirror.loadFixture({ '/work/sub/inner.txt': 'x' });
+    setSyncMirror(mirror);
+  });
+  afterEach(() => resetSyncMirror());
+
+  it('returns a dir fd when the target is an existing directory', () => {
+    const t = setupPathCtx();
+    const len = t.writePath(100, 'sub');
+    const rc = t.ns.path_open(3, 0, 100, len, 0, 0n, 0n, 0, 200);
+    expect(rc).toBe(E_SUCCESS);
+    const newFd = t.readU32(200);
+    const entry = t.fds.get(newFd);
+    expect(entry?.type).toBe('dir');
+    expect(entry?.path).toBe('/work/sub');
+  });
+
+  it('returns a dir fd when O_DIRECTORY is requested on "."', () => {
+    const t = setupPathCtx();
+    const len = t.writePath(100, '.');
+    const rc = t.ns.path_open(3, 0, 100, len, OFLAGS_DIRECTORY, 0n, 0n, 0, 200);
+    expect(rc).toBe(E_SUCCESS);
+    const entry = t.fds.get(t.readU32(200));
+    expect(entry?.type).toBe('dir');
+    expect(entry?.path).toBe('/work');
+  });
+
+  it('still opens a regular file as a file fd', () => {
+    const t = setupPathCtx();
+    const len = t.writePath(100, 'sub/inner.txt');
+    const rc = t.ns.path_open(3, 0, 100, len, 0, 0n, 0n, 0, 200);
+    expect(rc).toBe(E_SUCCESS);
+    expect(t.fds.get(t.readU32(200))?.type).toBe('file');
+  });
+});
+
+describe('path_open — AT_FDCWD (ADR-0049)', () => {
+  // WASI has no getcwd; a guest passes AT_FDCWD (-1) as the base fd to mean
+  // "relative to cwd". The runner maps it to ctx.cwdFd (fd 3 by default).
+  beforeEach(() => {
+    const mirror = new MemoryFsSync();
+    mirror.loadFixture({ '/work/entry.ts': 'const a = 1;' });
+    setSyncMirror(mirror);
+  });
+  afterEach(() => resetSyncMirror());
+
+  it('resolves an AT_FDCWD-relative open against the cwd preopen', () => {
+    const t = setupPathCtx(); // fixture sets cwdFd = 3, preopen /work
+    const len = t.writePath(100, 'entry.ts');
+    const rc = t.ns.path_open(AT_FDCWD, 0, 100, len, 0, 0n, 0n, 0, 200);
+    expect(rc).toBe(E_SUCCESS);
+    const entry = t.fds.get(t.readU32(200));
+    expect(entry?.type).toBe('file');
+    expect(entry?.path).toBe('/work/entry.ts');
   });
 });
 

@@ -33,8 +33,8 @@ implemented — call returns `E_NOSYS` and behaviour is documented.
 | `fd_prestat_get` | ✅ | Reports preopen type + name length |
 | `fd_prestat_dir_name` | ✅ | Copies preopen name into guest memory |
 | `fd_pwrite` | ❌ | `E_NOSYS` — positional write not modelled |
-| `fd_read` | ⚠️ | Reads from fd's in-memory data buffer; stdin returns EOF (not wired) |
-| `fd_readdir` | ⚠️ | Enumerates VFS dir entries; `d_type` = `UNKNOWN` (would need per-entry stat); cookie semantics implemented per preview1 — each entry emits `d_next = index + 1`, the call skips entries with `index < cookie`, so paginating guests get every entry exactly once (no duplicates, no skips). Stable ordering assumes the VFS backend's `readdirSync` is deterministic for a fixed tree (MemoryFsSync + OpfsFsSync satisfy this today) |
+| `fd_read` | ✅ | Reads from fd's in-memory data buffer; stdin (fd 0) pulls from the `onStdin` callback with a residual buffer for chunked delivery, EOF on `null` (ADR-0049 — esbuild's `transform` surface feeds source over stdin) |
+| `fd_readdir` | ✅ | Enumerates VFS dir entries with a real `d_type` (ADR-0041). Returns `E_NOTDIR` (not `E_BADF`) on a valid non-directory fd so Go/WASIp1 guests (esbuild) treat it as "file, read it as one" rather than a hard error (ADR-0049). Cookie semantics per preview1 — each entry emits `d_next = index + 1`, the call skips entries with `index < cookie`, so paginating guests get every entry exactly once. Stable ordering assumes the backend's `readdirSync` is deterministic for a fixed tree (MemoryFsSync + OpfsFsSync satisfy this) |
 | `fd_renumber` | ✅ | Moves fd entry to a new id |
 | `fd_seek` | ✅ | All three `whence` modes; negative result → `E_INVAL` |
 | `fd_sync` | ⚠️ | `E_SUCCESS` — in-memory writes are immediately visible |
@@ -44,7 +44,7 @@ implemented — call returns `E_NOSYS` and behaviour is documented.
 | `path_filestat_get` | ✅ | Reports filetype + size; atime/ctime/nlink = 0 |
 | `path_filestat_set_times` | ❌ | `E_NOSYS` |
 | `path_link` | ❌ | `E_NOSYS` — hard links not modelled by VFS |
-| `path_open` | ⚠️ | Honours `oflags` (CREAT/EXCL/TRUNC) + `fs_rights_base` (zero = spec default-permissive; non-zero is stored and enforced by `fd_write` — `E_PERM` if `RIGHTS_FD_WRITE` absent). `fs_rights_inheriting` is stored on the new fd and intersected with the parent dir fd's inheriting set, so capability handoff is downgrade-only. `dirflags` is currently not enforced. |
+| `path_open` | ⚠️ | Honours `oflags` (CREAT/EXCL/TRUNC/DIRECTORY) + `fs_rights_base` (zero = spec default-permissive; non-zero is stored and enforced by `fd_write` — `E_PERM` if `RIGHTS_FD_WRITE` absent). Opens directories: a directory target (or `O_DIRECTORY`) yields a `dir` fd with rights clamped to the parent's inheriting set (ADR-0049 — esbuild opens its cwd via `path_open(".")`). Base fd `AT_FDCWD` (`-1`) resolves to the cwd preopen. `fs_rights_inheriting` is intersected with the parent dir fd's inheriting set (downgrade-only handoff). `dirflags` (symlink-follow) is not enforced. |
 | `path_readlink` | ❌ | `E_NOSYS` — VFS has no symlink layer (M12) |
 | `path_remove_directory` | ✅ | `ENOTEMPTY` for non-empty dirs |
 | `path_rename` | ⚠️ | Read-then-write-then-delete (non-atomic); same-dir or cross-preopen both work |
@@ -62,8 +62,8 @@ implemented — call returns `E_NOSYS` and behaviour is documented.
 
 ## Summary
 
-- **Implemented (✅):** 20 — `args_*` (2), `environ_*` (2), `fd_close`, `fd_fdstat_get`, `fd_fdstat_set_flags`, `fd_filestat_get`, `fd_prestat_*` (2), `fd_renumber`, `fd_seek`, `fd_tell`, `fd_write`, `path_create_directory`, `path_filestat_get`, `path_remove_directory`, `path_unlink_file`, `proc_exit`, `random_get`.
-- **Partial / no-op (⚠️):** 10 — `clock_res_get`, `clock_time_get`, `fd_advise`, `fd_datasync`, `fd_read`, `fd_readdir`, `fd_sync`, `path_open`, `path_rename`, `sched_yield`.
+- **Implemented (✅):** 22 — `args_*` (2), `environ_*` (2), `fd_close`, `fd_fdstat_get`, `fd_fdstat_set_flags`, `fd_filestat_get`, `fd_prestat_*` (2), `fd_read`, `fd_readdir`, `fd_renumber`, `fd_seek`, `fd_tell`, `fd_write`, `path_create_directory`, `path_filestat_get`, `path_remove_directory`, `path_unlink_file`, `proc_exit`, `random_get`.
+- **Partial / no-op (⚠️):** 8 — `clock_res_get`, `clock_time_get`, `fd_advise`, `fd_datasync`, `fd_sync`, `path_open`, `path_rename`, `sched_yield`.
 - **Not implemented — honest `E_NOSYS` (❌):** 16 — `fd_allocate`, `fd_fdstat_set_rights`, `fd_filestat_set_size`, `fd_filestat_set_times`, `fd_pread`, `fd_pwrite`, `path_filestat_set_times`, `path_link`, `path_readlink`, `path_symlink`, `poll_oneoff`, `proc_raise`, `sock_*` (4).
 
 ## Notes

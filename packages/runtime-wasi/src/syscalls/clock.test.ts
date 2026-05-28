@@ -34,11 +34,13 @@ function setupCtx(): {
     args: [],
     env: {},
     fds: new Map(),
+    cwdFd: 3,
     nextFd: { value: 3 },
     exited: { value: false },
     exitCode: { value: 0 },
     onStdout: () => {},
     onStderr: () => {},
+    onStdin: () => null,
     view: () => new DataView(memory.buffer),
     bytes: () => new Uint8Array(memory.buffer),
   };

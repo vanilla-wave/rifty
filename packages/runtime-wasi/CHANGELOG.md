@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Added
+
+- **ADR-0049 — WASI working-directory + directory-open semantics (promotes
+  Q-2026-05-27-003).** Forced by running the real esbuild WASI binary
+  (`@esbuild/wasi-preview1`, restored by ADR-0047) through `runWasi`:
+  - `WasiOptions.cwd?: string` (Option A) — names the preopen that serves as
+    the relative-path resolution default; it is hoisted to fd 3. Omitting it
+    keeps the insertion-order default (backward-compatible). `WasiCtx.cwdFd`
+    added.
+  - `AT_FDCWD` (`-1` / `0xffffffff`) base-fd resolution via `resolveDirFd`;
+    `path_open` and the `dirBase`-based path syscalls honour it.
+  - `path_open` opens directories — a directory target (or `O_DIRECTORY`)
+    yields a `dir` fd (esbuild opens its cwd via `path_open(".")`). Previously
+    returned `E_ISDIR`.
+  - `fd_readdir` returns `E_NOTDIR` (not `E_BADF`) on a valid non-directory fd
+    so Go/WASIp1 guests treat it as "file" rather than a hard error.
+  - `fd_read` on fd 0 is wired to `WasiOptions.stdin` (was always EOF) — the
+    surface esbuild's `transform` (Vite's TS/JSX path) reads from. Residual
+    buffering for chunked delivery; `null` is EOF.
+
 ### Changed
 
 - **ADR-0041 — `fd_readdir` now writes a real `d_type`.** Each preview1 dirent emits `FILETYPE_REGULAR_FILE` / `FILETYPE_DIRECTORY` based on the `VfsDirent` shape from `FsSync.readdirSync`; guests like esbuild no longer need to re-stat every entry to distinguish files from subdirs. Closes the "fill `d_type`" follow-up (`docs/follow-ups-2026-05-27.md` item #10).

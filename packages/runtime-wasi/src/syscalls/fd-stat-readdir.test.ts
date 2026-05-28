@@ -5,7 +5,13 @@
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@rifty/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setupFdCtx } from './fd-test-fixture.ts';
-import { E_BADF, E_SUCCESS, FILETYPE_DIRECTORY, FILETYPE_REGULAR_FILE } from './shared.ts';
+import {
+  E_BADF,
+  E_NOTDIR,
+  E_SUCCESS,
+  FILETYPE_DIRECTORY,
+  FILETYPE_REGULAR_FILE,
+} from './shared.ts';
 
 describe('fd_filestat_get', () => {
   beforeEach(() => {
@@ -65,6 +71,17 @@ describe('fd_readdir', () => {
     const t = setupFdCtx();
     const rc = t.ns.fd_readdir(99, 100, 256, 0n, 400);
     expect(rc).toBe(E_BADF);
+  });
+
+  it('returns E_NOTDIR (not E_BADF) for a valid file fd (ADR-0049)', () => {
+    // Go's WASIp1 os layer (esbuild) opens a path then probes it with
+    // fd_readdir: E_NOTDIR means "it's a file, read it as one" while E_BADF is
+    // a hard error. Returning E_BADF here made esbuild abort on every file
+    // entry point with "Cannot read directory: Bad file number".
+    const t = setupFdCtx();
+    t.fds.set(5, { type: 'file', path: '/work/f.txt', data: new Uint8Array(0) });
+    const rc = t.ns.fd_readdir(5, 100, 256, 0n, 400);
+    expect(rc).toBe(E_NOTDIR);
   });
 
   it('enumerates directory entries through the VFS', () => {

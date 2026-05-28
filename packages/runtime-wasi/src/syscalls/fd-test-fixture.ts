@@ -39,7 +39,12 @@ export interface FdCtx {
   fds: Map<number, FileDescriptor>;
 }
 
-export function setupFdCtx(): FdCtx {
+export interface FdCtxOptions {
+  /** Override the stdin source (defaults to immediate EOF). */
+  onStdin?: () => Uint8Array | null;
+}
+
+export function setupFdCtx(opts: FdCtxOptions = {}): FdCtx {
   const memory = new WebAssembly.Memory({ initial: 1 });
   const fds = new Map<number, FileDescriptor>();
   fds.set(0, { type: 'stdin' });
@@ -49,11 +54,13 @@ export function setupFdCtx(): FdCtx {
     args: [],
     env: {},
     fds,
+    cwdFd: 3,
     nextFd: { value: 3 },
     exited: { value: false },
     exitCode: { value: 0 },
     onStdout: () => {},
     onStderr: () => {},
+    onStdin: opts.onStdin ?? (() => null),
     view: () => new DataView(memory.buffer),
     bytes: () => new Uint8Array(memory.buffer),
   };

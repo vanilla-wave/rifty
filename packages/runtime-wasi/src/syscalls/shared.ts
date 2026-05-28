@@ -136,10 +136,30 @@ export interface FileDescriptor {
   rightsInheriting?: bigint;
 }
 
+/**
+ * WASI's `AT_FDCWD` sentinel — passed as the base fd of a path-relative call to
+ * mean "resolve against the current working directory". The witx type is a
+ * signed `i32` of `-1`; a wasm `i32` argument arrives in JS either as `-1`
+ * (signed view) or `0xffffffff` (unsigned view) depending on how the engine
+ * widens it, so callers must check both.
+ *
+ * esbuild's Go/WASIp1 runtime emits this after it has identified its cwd
+ * preopen — it does `path_open(AT_FDCWD, "entry.ts")` rather than threading the
+ * cwd dir fd through every call (ADR-0049).
+ */
+export const AT_FDCWD = -1;
+export const AT_FDCWD_U32 = 0xffffffff;
+
 export interface WasiCtx {
   readonly args: string[];
   readonly env: Record<string, string>;
   readonly fds: Map<number, FileDescriptor>;
+  /**
+   * Fd that `AT_FDCWD` resolves to — the cwd preopen (fd 3 by default, or the
+   * preopen named by `WasiOptions.cwd`). Path syscalls map an incoming
+   * `AT_FDCWD` base fd to this before looking it up in the fd table.
+   */
+  readonly cwdFd: number;
   /** Allocator for the next file descriptor id. Mutable. */
   nextFd: { value: number };
   /** True once `proc_exit` was called. */
@@ -147,6 +167,12 @@ export interface WasiCtx {
   exitCode: { value: number };
   readonly onStdout: (chunk: string) => void;
   readonly onStderr: (chunk: string) => void;
+  /**
+   * Pull the next chunk of stdin, or `null` at EOF. Defaults to immediate EOF
+   * when no `stdin` option was passed. esbuild's `transform` surface (vite's
+   * TS/JSX path) feeds source bytes here instead of via a file preopen.
+   */
+  readonly onStdin: () => Uint8Array | null;
   /** Lazy memory accessors — memory is bound after instantiation. */
   view(): DataView;
   bytes(): Uint8Array;
@@ -205,14 +231,24 @@ export function resolveRel(ctx: WasiCtx, basePath: string, ptr: number, len: num
 }
 
 /**
+ * Map an incoming base fd to a concrete fd id, translating WASI's `AT_FDCWD`
+ * sentinel (`-1` / `0xffffffff`) to the ctx's cwd fd. All path-relative
+ * syscalls run their base fd through this before touching the fd table.
+ */
+export function resolveDirFd(ctx: WasiCtx, fd: number): number {
+  return fd === AT_FDCWD || fd === AT_FDCWD_U32 ? ctx.cwdFd : fd;
+}
+
+/**
  * Resolve a directory-fd to its VFS path, or signal `E_BADF` if it isn't a
  * directory. Compact helper so each call doesn't repeat the same guard.
+ * Honours `AT_FDCWD` via {@link resolveDirFd}.
  */
 export function dirBase(
   ctx: WasiCtx,
   fd: number,
 ): { ok: true; path: string } | { ok: false; rc: number } {
-  const base = ctx.fds.get(fd);
+  const base = ctx.fds.get(resolveDirFd(ctx, fd));
   if (!base || base.type !== 'dir' || !base.path) return { ok: false, rc: E_BADF };
   return { ok: true, path: base.path };
 }
