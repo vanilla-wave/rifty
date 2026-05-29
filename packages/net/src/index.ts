@@ -43,5 +43,6 @@ export {
   bridgeCrossRealmPreview,
   previewPortChannelUrl,
   serveCrossRealmPreview,
+  PREVIEW_PORT_FRAME_VERSION,
 } from './cross-realm/preview-port.ts';
 export type { CrossRealmPortHandler } from './cross-realm/preview-port.ts';

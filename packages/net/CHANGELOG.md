@@ -4,6 +4,21 @@
 
 ### Added
 
+- **Streaming cross-realm preview wire-frame (ADR-0048).** `serveCrossRealmPreview`
+  now drains `response.body` and posts ordered `reply-stream-{start,chunk,end,error}`
+  frames (≤64 KiB/chunk); `bridgeCrossRealmPreview` reassembles them. New net-local
+  `PREVIEW_PORT_FRAME_VERSION` ('1'→'2') pins the page↔worker frame — deliberately
+  NOT `SW_FRAME_VERSION` (a different hop, owned by `@rifty/service-worker`; importing
+  it would be a sibling/reverse import). Reply mode is chosen **per request** from the
+  request's `v` (the worker outlives page reloads, so a per-channel pin would deliver
+  stream frames to a freshly-connected old page — a silent wrong answer). The buffered
+  `reply` frame is retained as the negotiated fallback + null-body fast path. Idle
+  (no-progress) timeout re-arms per chunk; the stream accumulator lives on the single
+  `pending` entry so every terminal path frees it. Page-side memory unchanged
+  (accumulate-then-concat); true end-to-end `ReadableStream` is M12 (ADR-0017).
+  Conformance: `packages/net/src/cross-realm/preview-port.test.ts` (large-body, error
+  mid-stream, version mismatch, idle re-arm, seq-gap, dispose).
+
 - **ADR-0043 (M11 Vite-in-Worker) — cross-realm preview-port bridge.** New
   module `src/cross-realm/preview-port.ts` exports
   `previewPortChannelUrl(port)`, `serveCrossRealmPreview(port, dispatch)`,

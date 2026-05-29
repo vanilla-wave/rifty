@@ -16,8 +16,11 @@
  *      the configured `timeoutMs`.
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { channelNameFor } from '../ws/bridge.ts';
 import {
+  type CrossRealmPortHandler,
+  PREVIEW_PORT_FRAME_VERSION,
   bridgeCrossRealmPreview,
   previewPortChannelUrl,
   serveCrossRealmPreview,
@@ -140,5 +143,292 @@ describe('cross-realm preview port — error paths', () => {
     // test brittle, but verify we're actually using the configured timeout.
     expect(elapsed).toBeLessThan(2000);
     expect(elapsed).toBeGreaterThanOrEqual(40);
+  });
+});
+
+// ─── ADR-0048: streaming wire-frame ──────────────────────────────────────────
+// A "raw worker" posts frames directly so tests can drive exact wire sequences
+// (version mismatch, seq gaps, idle timing) the real `serveCrossRealmPreview`
+// would never emit. Both ends share one Node realm over `BroadcastChannel`.
+
+const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+// biome-ignore lint/suspicious/noExplicitAny: raw wire frames, deliberately untyped.
+type RawFrame = any;
+function rawWorker(
+  port: number,
+  onRequest: (frame: RawFrame, channel: BroadcastChannel) => void | Promise<void>,
+): () => void {
+  const channel = new BroadcastChannel(channelNameFor(previewPortChannelUrl(port)));
+  const listener = (e: MessageEvent): void => {
+    const f = e.data as RawFrame;
+    if (f?.type === 'request') void onRequest(f, channel);
+  };
+  channel.addEventListener('message', listener as unknown as EventListener);
+  return () => {
+    channel.removeEventListener('message', listener as unknown as EventListener);
+    channel.close();
+  };
+}
+
+describe('cross-realm preview port — ADR-0048 streaming', () => {
+  it('streams a large body (5×64 KiB) and reassembles byte-for-byte', async () => {
+    const CHUNKS = 5;
+    const SIZE = 64 * 1024;
+    cleanup.add(
+      serveCrossRealmPreview(5201, async () => {
+        const stream = new ReadableStream<Uint8Array>({
+          start(c) {
+            for (let i = 0; i < CHUNKS; i++) {
+              const buf = new Uint8Array(SIZE);
+              buf.fill((i + 1) & 0xff);
+              c.enqueue(buf);
+            }
+            c.close();
+          },
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: { 'Content-Type': 'application/octet-stream', 'X-Big': 'yes' },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5201);
+    cleanup.add(handler.dispose);
+
+    const res = await handler(new Request('http://preview.local/big'));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('x-big')).toBe('yes');
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    expect(bytes.byteLength).toBe(CHUNKS * SIZE);
+    // Each 64 KiB block was filled with its (1-based) index — verify boundaries.
+    expect(bytes[0]).toBe(1);
+    expect(bytes[SIZE]).toBe(2);
+    expect(bytes[(CHUNKS - 1) * SIZE]).toBe(CHUNKS);
+  });
+
+  it('zero-chunk streamed body resolves an empty 200 (start + end(seq=0))', async () => {
+    cleanup.add(
+      serveCrossRealmPreview(5208, async () => {
+        const stream = new ReadableStream<Uint8Array>({
+          start(c) {
+            c.close(); // immediately-empty stream — never enqueues
+          },
+        });
+        return new Response(stream, { status: 200, headers: { 'X-Empty': '1' } });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5208);
+    cleanup.add(handler.dispose);
+    const res = await handler(new Request('http://preview.local/empty'));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('x-empty')).toBe('1');
+    expect((await res.arrayBuffer()).byteLength).toBe(0);
+  });
+
+  it('error mid-stream → 502 with the message; channel recovers for the next request', async () => {
+    let n = 0;
+    cleanup.add(
+      rawWorker(5202, (req, ch) => {
+        const id = req.requestId;
+        if (n++ === 0) {
+          ch.postMessage({
+            type: 'reply-stream-start',
+            v: '2',
+            requestId: id,
+            status: 200,
+            statusText: 'OK',
+            headers: {},
+          });
+          ch.postMessage({
+            type: 'reply-stream-chunk',
+            v: '2',
+            requestId: id,
+            seq: 0,
+            data: new Uint8Array([65]),
+          });
+          ch.postMessage({
+            type: 'reply-stream-chunk',
+            v: '2',
+            requestId: id,
+            seq: 1,
+            data: new Uint8Array([66]),
+          });
+          ch.postMessage({
+            type: 'reply-stream-error',
+            v: '2',
+            requestId: id,
+            seq: 2,
+            message: 'mid-stream-boom',
+          });
+        } else {
+          ch.postMessage({
+            type: 'reply',
+            v: '2',
+            requestId: id,
+            status: 200,
+            statusText: 'OK',
+            headers: {},
+            body: new Uint8Array([79, 75]),
+          });
+        }
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5202, { timeoutMs: 500 });
+    cleanup.add(handler.dispose);
+
+    const r1 = await handler(new Request('http://preview.local/a'));
+    expect(r1.status).toBe(502);
+    expect(await r1.text()).toContain('mid-stream-boom');
+    // Recovery proves the errored request didn't leak its pending/accumulator.
+    const r2 = await handler(new Request('http://preview.local/b'));
+    expect(r2.status).toBe(200);
+    expect(await r2.text()).toBe('OK');
+  });
+
+  it('version-mismatch on reply-stream-start → 503 + console.error(expected,got)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    cleanup.add(() => spy.mockRestore());
+    cleanup.add(
+      rawWorker(5203, (req, ch) => {
+        ch.postMessage({
+          type: 'reply-stream-start',
+          v: '999',
+          requestId: req.requestId,
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5203, { timeoutMs: 500 });
+    cleanup.add(handler.dispose);
+
+    const r = await handler(new Request('http://preview.local/'));
+    expect(r.status).toBe(503);
+    expect(spy).toHaveBeenCalledWith(
+      '[rifty/net] preview-port frame version mismatch',
+      expect.objectContaining({ expected: PREVIEW_PORT_FRAME_VERSION, got: '999' }),
+    );
+  });
+
+  it('idle timer re-arms per chunk — a slow live stream does NOT time out', async () => {
+    cleanup.add(
+      rawWorker(5204, async (req, ch) => {
+        const id = req.requestId;
+        ch.postMessage({
+          type: 'reply-stream-start',
+          v: '2',
+          requestId: id,
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+        });
+        for (let i = 0; i < 5; i++) {
+          await delay(60); // < timeoutMs each, but 5×60 > timeoutMs total
+          ch.postMessage({
+            type: 'reply-stream-chunk',
+            v: '2',
+            requestId: id,
+            seq: i,
+            data: new Uint8Array([48 + i]),
+          });
+        }
+        ch.postMessage({ type: 'reply-stream-end', v: '2', requestId: id, seq: 5 });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5204, { timeoutMs: 100 });
+    cleanup.add(handler.dispose);
+
+    const r = await handler(new Request('http://preview.local/'));
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe('01234');
+  });
+
+  it('start then worker goes silent → idle 502', async () => {
+    cleanup.add(
+      rawWorker(5205, (req, ch) => {
+        ch.postMessage({
+          type: 'reply-stream-start',
+          v: '2',
+          requestId: req.requestId,
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+        });
+        // ...and never sends a chunk/end.
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5205, { timeoutMs: 80 });
+    cleanup.add(handler.dispose);
+    const r = await handler(new Request('http://preview.local/'));
+    expect(r.status).toBe(502);
+    expect(await r.text()).toContain('timeout');
+  });
+
+  it('seq gap → 502 frame loss (no corrupt body)', async () => {
+    cleanup.add(
+      rawWorker(5206, (req, ch) => {
+        const id = req.requestId;
+        ch.postMessage({
+          type: 'reply-stream-start',
+          v: '2',
+          requestId: id,
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+        });
+        ch.postMessage({
+          type: 'reply-stream-chunk',
+          v: '2',
+          requestId: id,
+          seq: 0,
+          data: new Uint8Array([1]),
+        });
+        ch.postMessage({
+          type: 'reply-stream-chunk',
+          v: '2',
+          requestId: id,
+          seq: 2,
+          data: new Uint8Array([2]),
+        }); // skipped 1
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5206, { timeoutMs: 500 });
+    cleanup.add(handler.dispose);
+    const r = await handler(new Request('http://preview.local/'));
+    expect(r.status).toBe(502);
+    expect(await r.text()).toContain('frame loss');
+  });
+
+  it('dispose mid-stream rejects the in-flight request with 502', async () => {
+    let handlerRef: CrossRealmPortHandler | null = null;
+    cleanup.add(
+      rawWorker(5207, (req, ch) => {
+        const id = req.requestId;
+        ch.postMessage({
+          type: 'reply-stream-start',
+          v: '2',
+          requestId: id,
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+        });
+        ch.postMessage({
+          type: 'reply-stream-chunk',
+          v: '2',
+          requestId: id,
+          seq: 0,
+          data: new Uint8Array([1]),
+        });
+        setTimeout(() => handlerRef?.dispose(), 20); // never sends end
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5207, { timeoutMs: 2000 });
+    handlerRef = handler;
+    cleanup.add(handler.dispose);
+    const r = await handler(new Request('http://preview.local/'));
+    expect(r.status).toBe(502);
+    expect(await r.text()).toContain('disposed');
   });
 });
