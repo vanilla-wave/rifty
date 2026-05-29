@@ -44,8 +44,15 @@ export const async_hooks = {
   },
   AsyncResource: class AsyncResource {
     constructor(_type: string) {}
-    runInAsyncScope<T>(fn: () => T): T {
-      return fn();
+    /**
+     * Node's `runInAsyncScope(fn, thisArg, ...args)` invokes `fn` with the
+     * given receiver and arguments and returns its result. We don't track async
+     * context, but we MUST forward thisArg/args/return — raw-body@2.5.x binds
+     * its completion callback this way, and dropping the args silently lost the
+     * parsed body (`(err, buf)` → `()`).
+     */
+    runInAsyncScope<T>(fn: (...args: unknown[]) => T, thisArg?: unknown, ...args: unknown[]): T {
+      return fn.apply(thisArg, args);
     }
     emitDestroy(): this {
       return this;

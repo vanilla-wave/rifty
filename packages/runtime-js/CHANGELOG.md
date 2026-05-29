@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`node:string_decoder` `StringDecoder` is now a callable constructor.**
+  iconv-lite's `InternalDecoder` does `StringDecoder.call(this, enc)` then
+  borrows `StringDecoder.prototype.write` — a class threw "cannot be invoked
+  without 'new'", breaking body-parser's request decoding. Reimplemented as a
+  function-style constructor (utf-8). Conformance:
+  `tests/conformance/builtins/string-decoder.test.ts`.
+- **`async_hooks.AsyncResource.runInAsyncScope` forwards `thisArg` + args +
+  return value.** The stub called `fn()` and dropped everything; raw-body@2.5.x
+  binds its completion callback through it, so `(err, buf)` were lost and
+  body-parser left `req.body` as `{}`. Conformance:
+  `tests/conformance/builtins/async-hooks.test.ts` (+ `http-incoming-body.test.ts`
+  pins `IncomingMessage` POST-body streaming). Both found running real express@4.
+
 ### Added
 
 - **`child_process.execSync` loud-throw replaces in-realm fallback (2026-05-27 audit item #2).** `packages/runtime-js/src/builtins/child_process-sync.ts` now throws `NotImplementedError('child_process.execSync', …)` when the SAB-Worker path is unavailable (no `crossOriginIsolated`, no kernel-worker URL, or main-realm call). The previous `new Function('__stdout_write', …)` fallback was a silent stub: no exit code, no stdio isolation, no PID, while pretending to be a child process — direct violation of CLAUDE.md "Hard rules → No silent stubs". Removed the dead `syncMirror` import. The existing `describe('child_process.execSync')` block in `tests/conformance/builtins/child_process.test.ts` is rewritten to assert the new contract (`NotImplementedError`); `tests/conformance/builtins/exec-sync-worker.test.ts` gains a parity `describe.skipIf(sabReady)` block for the non-SAB path so both branches are pinned end-to-end.
