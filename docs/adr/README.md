@@ -53,5 +53,6 @@ ADRs are immutable after merge. New decisions get new ADRs; supersedence is expl
 | 0047 | Revert to esbuild (`@esbuild/wasi-preview1`) as the M8/M10 WASI forcing consumer (supersedes ADR-0044 D1/D2; keeps D3/D4) | — |
 | 0048 | Streaming cross-realm preview wire-frame — net-local `PREVIEW_PORT_FRAME_VERSION`, additive `reply-stream-*` frames, per-request mode selection (promotes Q-2026-05-29-001) | — |
 | 0049 | WASI `cwd` option + `AT_FDCWD` and directory-open semantics (promotes Q-2026-05-27-003) | — |
+| 0050 | No-symlink `fs.realpath`/`fs.lstat` semantics — `lstat≡stat`, `realpath≡normalise-if-exists` for the symlink-free VFS (promotes Q-2026-05-29-002) | — |
 
 For the broad rationale and trade-offs, read PROJECT_PLAN.md §8 first; ADRs are the durable spec.
