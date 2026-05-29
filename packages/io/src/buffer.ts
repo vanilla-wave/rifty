@@ -141,6 +141,17 @@ export class Buffer extends Uint8Array {
     return new Buffer(size);
   }
 
+  /**
+   * Node's `Buffer.allocUnsafeSlow` — like {@link allocUnsafe} but never drawn
+   * from the shared pool. We don't pool, so it's identical. Present so
+   * `safe-buffer` detects a "real" Buffer: it gates on
+   * `from && alloc && allocUnsafe && allocUnsafeSlow` before re-exporting the
+   * full surface (including {@link isBuffer}), which express's `res.send` needs.
+   */
+  static allocUnsafeSlow(size: number): Buffer {
+    return new Buffer(size);
+  }
+
   // Node's `Buffer.from` widens `Uint8Array.from`. We declare explicit overloads
   // covering both shapes so the static side remains assignable to the base
   // `typeof Uint8Array` while preserving Node's calling conventions.
@@ -207,6 +218,26 @@ export class Buffer extends Uint8Array {
 
   static isBuffer(v: unknown): boolean {
     return v instanceof Buffer;
+  }
+
+  private static readonly ENCODINGS: ReadonlySet<string> = new Set([
+    'utf8',
+    'utf-8',
+    'utf16le',
+    'utf-16le',
+    'ucs2',
+    'ucs-2',
+    'hex',
+    'base64',
+    'base64url',
+    'ascii',
+    'latin1',
+    'binary',
+  ]);
+
+  /** Node's `Buffer.isEncoding` — case-insensitive check of a known encoding. */
+  static isEncoding(encoding: unknown): boolean {
+    return typeof encoding === 'string' && Buffer.ENCODINGS.has(encoding.toLowerCase());
   }
 
   /**

@@ -23,6 +23,12 @@
   `util.inherits(SubStream, require('stream'))` + `Stream.call(this)` works
   (e.g. `send`'s `SendStream`). The `node:stream` adapter's `default` export is
   now this callable base. Conformance: `tests/conformance/builtins/stream-legacy.test.ts`.
+- **`Buffer.allocUnsafeSlow` and `Buffer.isEncoding`.** `safe-buffer` only
+  re-exports the real `buffer` module (the one carrying `Buffer.isBuffer`) when
+  `from && alloc && allocUnsafe && allocUnsafeSlow` are ALL present; the missing
+  `allocUnsafeSlow` made it fall back to a shim without `isBuffer`, so express's
+  `res.send` threw `Buffer.isBuffer is not a function`. Conformance:
+  `tests/conformance/builtins/buffer-statics.test.ts`.
 
 ### Changed
 
