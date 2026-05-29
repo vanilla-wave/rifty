@@ -4,8 +4,8 @@ Per-milestone task tracking with acceptance review. See `PROJECT_PLAN.md` for th
 
 ## Verification snapshot
 
-- **Unit + conformance + integration:** 765 passed | 10 skipped (775 total in 100 of 104 files) — last counted 2026-05-28 after ADR-0045 fork-IPC + audit cleanup (audit items #1, #2, #5).
-- **Parity-runner:** 15 cases (path, buffer, util, events, querystring, url, fs, stream) compared against real Node — all match.
+- **Unit + conformance + integration:** 794 passed | 10 skipped (804 total in 103 of 107 files) — last counted 2026-05-29 (Phase 0 ground-truth pass; superset of the 2026-05-28 count after ADR-0046 preview-owner-binding + ADR-0047 esbuild-WASI shadow-binding + ADR-0049 WASI cwd/stdin landed).
+- **Parity-runner:** 38 cases (assert, buffer, events, fs, http, modules, os, path, querystring, stream, url, util) compared against real Node — all match.
 - **E2E (Playwright, Chromium):** 15 passed (M0 boot, M1 REPL+`.reset`, M2 modules, M4 fs); M10 dev-mode flow not yet covered by Playwright (verified manually).
 - **Typecheck:** `tsc --noEmit` clean across workspace (16 projects).
 - **Lint:** `biome check .` clean.
@@ -204,15 +204,15 @@ What's landed (mini-equivalent of Vite/HMR; "vite-like" not literal upstream Vit
 
 | Check | Result |
 |---|---|
-| Unit + conformance + integration tests | **765 pass | 10 skip (100 of 104 files)** — last counted 2026-05-28 after ADR-0045 (M6 fork-IPC adds 4 kernel-level + 3 conformance tests) and the execSync loud-throw rewrite (audit item #2 adds 1 non-SAB case in `exec-sync-worker.test.ts`) |
+| Unit + conformance + integration tests | **794 pass | 10 skip (103 of 107 files)** — last counted 2026-05-29 (Phase 0 ground-truth pass; superset of the 2026-05-28 count after ADR-0046/0047/0049 landed) |
 | TypeScript strict typecheck | **clean (16 projects)** |
 | Biome lint | **clean** |
 | Circular dependency check (madge) | **clean** |
 | D-002 isolation (no `solid-js` outside `apps/playground/**`) | **clean** |
 | Playground production build (`vite build`) | **succeeds** |
 | Dev server with COOP/COEP headers | **verified live** |
-| `TODO(ADR)` markers in source | 5 (Q-002 process, Q-003 platform, Q-004 esbuild-shim, Q-005 subpath exports × 2 files) |
-| `OPEN_QUESTIONS.md` entries pending review | 4 (Q-002, Q-003, Q-004, Q-2026-05-24-007 prod proxy) |
+| `TODO(ADR)` markers in source | 1 (Q-2026-05-27-001 — `process.version`/`versions.node` impersonation; `pnpm todo:adr` exit 0) |
+| `OPEN_QUESTIONS.md` entries pending review | 3 active (Q-2026-05-24-007 prod-proxy, Q-2026-05-29-001 streaming preview → ADR-0048, Q-2026-05-27-001 process.version) |
 
 ## Follow-ups (not blocking M0–M9)
 
