@@ -54,5 +54,6 @@ ADRs are immutable after merge. New decisions get new ADRs; supersedence is expl
 | 0048 | Streaming cross-realm preview wire-frame — net-local `PREVIEW_PORT_FRAME_VERSION`, additive `reply-stream-*` frames, per-request mode selection (promotes Q-2026-05-29-001) | — |
 | 0049 | WASI `cwd` option + `AT_FDCWD` and directory-open semantics (promotes Q-2026-05-27-003) | — |
 | 0050 | No-symlink `fs.realpath`/`fs.lstat` semantics — `lstat≡stat`, `realpath≡normalise-if-exists` for the symlink-free VFS (promotes Q-2026-05-29-002) | — |
+| 0051 | Native-dependency install policy — `cpu`-keyed `ENATIVEUNSUPPORTED` loud-throw, optional natives skipped (promotes Q-2026-05-30-001) | — |
 
 For the broad rationale and trade-offs, read PROJECT_PLAN.md §8 first; ADRs are the durable spec.
