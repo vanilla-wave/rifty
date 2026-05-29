@@ -51,8 +51,7 @@ ADRs are immutable after merge. New decisions get new ADRs; supersedence is expl
 | 0045 | Worker-process IPC — fork-mode `send`/`'message'`/`disconnect` over a parent↔child MessagePort (extends ADR-0011 phase 2) | — |
 | 0046 | `PreviewOwnerBinding` — one seam for window and worker preview owners (promotes Q-2026-05-27-002) | — |
 | 0047 | Revert to esbuild (`@esbuild/wasi-preview1`) as the M8/M10 WASI forcing consumer (supersedes ADR-0044 D1/D2; keeps D3/D4) | — |
+| 0048 | Streaming cross-realm preview wire-frame — net-local `PREVIEW_PORT_FRAME_VERSION`, additive `reply-stream-*` frames, per-request mode selection (promotes Q-2026-05-29-001) | — |
 | 0049 | WASI `cwd` option + `AT_FDCWD` and directory-open semantics (promotes Q-2026-05-27-003) | — |
-
-> ADR-0048 is reserved for the streaming cross-realm preview lane (not in this tree yet).
 
 For the broad rationale and trade-offs, read PROJECT_PLAN.md §8 first; ADRs are the durable spec.
