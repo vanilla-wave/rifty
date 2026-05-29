@@ -4,6 +4,22 @@
 
 ### Fixed
 
+- **`node:fs` `realpath`/`lstat` implement no-symlink semantics; `readdir`
+  callback honours options (ADR-0050).** Reverses the prior loud-throw: for the
+  symlink-free VFS, `lstatSync ≡ statSync` and `realpathSync` = normalise to an
+  absolute path + `ENOENT` if missing (with `.native` alias); added async
+  callback `lstat`/`realpath`/`access`/`readlink`/`copyFile`/`rename`; the
+  callback `readdir` now accepts `(p, {withFileTypes}, cb)`. These are the
+  correct POSIX semantics when no symlinks exist (a missing path still throws
+  `ENOENT` — not a silent stub). Unblocks **real upstream Vite 5** — its watcher
+  (chokidar/readdirp) calls these on the happy path; `vite createServer` +
+  `listen` + `transformRequest` now run in-process. Regression:
+  `tests/conformance/builtins/fs-realpath-readdir.test.ts`, the rewritten
+  `src/builtins/fs.test.ts` contract block, and the opt-in
+  `tests/integration/vite-live-run.opt-in.test.ts` (spawns
+  `tests/integration/fixtures/real-vite-smoke.ts`). M12 symlink rewrite tracked
+  by a `TODO(M12)` anchor in `fs.ts`.
+
 - **`node:string_decoder` `StringDecoder` is now a callable constructor.**
   iconv-lite's `InternalDecoder` does `StringDecoder.call(this, enc)` then
   borrows `StringDecoder.prototype.write` — a class threw "cannot be invoked

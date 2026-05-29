@@ -10,7 +10,6 @@
  * (Buffer-tagged); passing `'utf8'` returns a string. Matches Node.
  */
 
-import { NotImplementedError } from '@rifty/io';
 import { isAbsolute, joinPath, normalizePath } from '@rifty/vfs';
 import { Buffer, type Encoding } from './buffer.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -225,16 +224,23 @@ export function renameSync(src: string, dst: string): void {
   syncMirror().rmSync(resolvePath(src), {});
 }
 
-// VFS has no symlinks (M9 acceptance: in-memory + OPFS, no symlink layer).
-// Hard rule "no silent stubs": rather than letting `lstatSync = statSync` and
-// `realpathSync = normalize`, we throw `NotImplementedError` so callers see
-// the gap. Symlinks land in M12 — until then, code paths that branch on these
-// will fail loudly and be visible in the compat matrix.
-export function lstatSync(_p: string): Stats {
-  throw new NotImplementedError('fs.lstatSync', 'symlinks not supported until M12');
+// The VFS has no symlinks (in-memory + OPFS — no symlink layer until M12).
+// With no links, `lstat` is identical to `stat`, and `realpath` is just the
+// normalised absolute path (the canonical path of a symlink-free entry). These
+// are the CORRECT semantics for our fs model, not silent stubs — real packages
+// hit them on the happy path (chokidar → Vite's file watcher calls
+// `fs.realpath`/`fs.lstat`; an earlier loud-throw made `vite createServer`
+// abort in the watcher).
+// Ratified by ADR-0050 (reverses the prior `NotImplementedError`). TODO(M12):
+// when a symlink layer lands in the VFS, revisit `lstatSync`/`realpathSync`/
+// `readlinkSync`/`Stats.isSymbolicLink()` together so they resolve/inspect links
+// instead of normalising.
+export function lstatSync(p: string): Stats {
+  return statSync(p);
 }
 
 export function readlinkSync(p: string): string {
+  // No symlinks: a path either doesn't exist (ENOENT) or is not a link (EINVAL).
   const np = resolvePath(p);
   if (!syncMirror().existsSync(np)) {
     throw Object.assign(new Error(`ENOENT: ${p}`), { code: 'ENOENT', path: p });
@@ -242,13 +248,16 @@ export function readlinkSync(p: string): string {
   throw Object.assign(new Error(`EINVAL: ${p}`), { code: 'EINVAL', path: p });
 }
 
-function _realpathSyncImpl(_p: string): string {
-  throw new NotImplementedError('fs.realpathSync', 'symlinks not supported until M12');
+function _realpathSyncImpl(p: string): string {
+  const np = resolvePath(p);
+  if (!syncMirror().existsSync(np)) {
+    throw Object.assign(new Error(`ENOENT: ${p}`), { code: 'ENOENT', path: p });
+  }
+  return np;
 }
 
-// `realpathSync` doubles as a function with a `.native` alias — Node's
-// `fs.realpathSync.native` is a separate (C++-backed) implementation; here
-// both throw the same `NotImplementedError` (no silent stub).
+// Node's `fs.realpathSync.native` is a separate (C++) impl; with no symlinks
+// it's identical to ours.
 export const realpathSync: ((p: string) => string) & { native: (p: string) => string } =
   Object.assign(_realpathSyncImpl, { native: _realpathSyncImpl });
 
@@ -367,10 +376,16 @@ export function writeFile(
   );
 }
 
-export function readdir(p: string, cb: Callback<string[]>): void {
-  promises.readdir(p).then(
-    (v) => cb(null, v as string[]),
-    (e) => cb(e as NodeJS.ErrnoException),
+export function readdir(
+  p: string,
+  optsOrCb: { withFileTypes?: boolean } | Callback<string[] | Dirent[]>,
+  cb?: Callback<string[] | Dirent[]>,
+): void {
+  const opts = typeof optsOrCb === 'function' ? undefined : optsOrCb;
+  const cbFinal = (typeof optsOrCb === 'function' ? optsOrCb : cb) as Callback<string[] | Dirent[]>;
+  promises.readdir(p, opts).then(
+    (v) => cbFinal(null, v),
+    (e) => cbFinal(e as NodeJS.ErrnoException),
   );
 }
 
@@ -401,6 +416,60 @@ export function unlink(p: string, cb: Callback<void>): void {
   );
 }
 
+export function lstat(p: string, cb: Callback<Stats>): void {
+  promises.lstat(p).then(
+    (v) => cb(null, v),
+    (e) => cb(e as NodeJS.ErrnoException),
+  );
+}
+
+const _realpath = (p: string, cb: Callback<string>): void => {
+  promises.realpath(p).then(
+    (v) => cb(null, v),
+    (e) => cb(e as NodeJS.ErrnoException),
+  );
+};
+// `fs.realpath.native` mirrors `realpathSync.native` — chokidar/promisify reach
+// for the callback form; some code reads `.native`.
+export const realpath: typeof _realpath & { native: typeof _realpath } = Object.assign(_realpath, {
+  native: _realpath,
+});
+
+export function readlink(p: string, cb: Callback<string>): void {
+  promises.readlink(p).then(
+    (v) => cb(null, v),
+    (e) => cb(e as NodeJS.ErrnoException),
+  );
+}
+
+export function access(p: string, modeOrCb: number | Callback<void>, cb?: Callback<void>): void {
+  const cbFinal = (typeof modeOrCb === 'function' ? modeOrCb : cb) as Callback<void>;
+  promises.access(p).then(
+    () => cbFinal(null),
+    (e) => cbFinal(e as NodeJS.ErrnoException),
+  );
+}
+
+export function copyFile(
+  src: string,
+  dst: string,
+  modeOrCb: number | Callback<void>,
+  cb?: Callback<void>,
+): void {
+  const cbFinal = (typeof modeOrCb === 'function' ? modeOrCb : cb) as Callback<void>;
+  promises.copyFile(src, dst).then(
+    () => cbFinal(null),
+    (e) => cbFinal(e as NodeJS.ErrnoException),
+  );
+}
+
+export function rename(src: string, dst: string, cb: Callback<void>): void {
+  promises.rename(src, dst).then(
+    () => cb(null),
+    (e) => cb(e as NodeJS.ErrnoException),
+  );
+}
+
 export const constants = {
   F_OK: 0,
   R_OK: 4,
@@ -421,6 +490,12 @@ const fs = {
   mkdir,
   stat,
   unlink,
+  lstat,
+  realpath,
+  readlink,
+  access,
+  copyFile,
+  rename,
   readFileSync,
   writeFileSync,
   appendFileSync,
