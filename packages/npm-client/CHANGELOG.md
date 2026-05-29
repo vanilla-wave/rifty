@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Semver prerelease-exclusion (node-semver rule).** A version carrying a
+  prerelease tag now only satisfies a range when some comparator in the matching
+  branch shares its exact `[major,minor,patch]` AND carries a prerelease.
+  Previously `^4` matched `5.0.0-beta.3` (it sorts below the `<5.0.0` bound), so
+  `install({express: '^4'})` resolved to an **express 5 beta**, dragging in
+  `body-parser@2-beta` + `raw-body@3-beta` and breaking express@4's body parser.
+  This mis-resolved *any* `^X` / range request whenever a next-major prerelease
+  existed. Found running real express@4 end-to-end; covered by
+  `packages/npm-client/src/semver.prerelease.test.ts`.
+
 ### Changed
 
 - **M11 nested install — fast-path replay for nested entries (ADR-0042

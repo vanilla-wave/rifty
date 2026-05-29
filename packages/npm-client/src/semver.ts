@@ -143,7 +143,31 @@ function matchBranch(version: string, branch: string): boolean {
   for (const cmp of comparators) {
     if (!matchComparator(version, cmp)) return false;
   }
+  // npm prerelease-exclusion rule (node-semver): a version with a prerelease
+  // tag only satisfies this branch if some comparator targets the SAME
+  // [major,minor,patch] AND carries a prerelease. Otherwise `^4` would greedily
+  // accept `5.0.0-beta.3` (it sorts below the `<5.0.0` bound), mis-resolving
+  // `express: ^4` to an express 5 beta.
+  const v = parse(version);
+  if (v && v.pre !== '') {
+    const allowed = comparators.some((cmp) => {
+      const cp = coerce(comparatorBase(cmp));
+      return (
+        cp !== null &&
+        cp.pre !== '' &&
+        cp.major === v.major &&
+        cp.minor === v.minor &&
+        cp.patch === v.patch
+      );
+    });
+    if (!allowed) return false;
+  }
   return true;
+}
+
+/** Strip a leading comparator operator (`^ ~ >= <= > < =`) to get the base. */
+function comparatorBase(cmp: string): string {
+  return cmp.replace(/^(>=|<=|>|<|=|\^|~)/, '');
 }
 
 function matchComparator(version: string, cmp: string): boolean {
