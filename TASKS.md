@@ -4,8 +4,8 @@ Per-milestone task tracking with acceptance review. See `PROJECT_PLAN.md` for th
 
 ## Verification snapshot
 
-- **Unit + conformance + integration:** 794 passed | 10 skipped (804 total in 103 of 107 files) — last counted 2026-05-29 (Phase 0 ground-truth pass; superset of the 2026-05-28 count after ADR-0046 preview-owner-binding + ADR-0047 esbuild-WASI shadow-binding + ADR-0049 WASI cwd/stdin landed).
-- **Parity-runner:** 38 cases (assert, buffer, events, fs, http, modules, os, path, querystring, stream, url, util) compared against real Node — all match.
+- **Unit + conformance + integration:** 810 passed | 15 skipped (825 total in 109 of 114 files) — last counted 2026-05-29 after the Phase 1 "run real express@4" pass (+16 conformance cases for the 6 compat/installer fixes below; the +5 new skips are the `express-live-run.opt-in` cases, gated on `RIFTY_LIVE_REGISTRY`).
+- **Parity-runner:** 38 cases (assert, buffer, events, fs, http, modules, os, path, querystring, stream, url, util) compared against real Node — all match (runner spawns real `node` children; run with the sandbox disabled).
 - **E2E (Playwright, Chromium):** 15 passed (M0 boot, M1 REPL+`.reset`, M2 modules, M4 fs); M10 dev-mode flow not yet covered by Playwright (verified manually).
 - **Typecheck:** `tsc --noEmit` clean across workspace (16 projects).
 - **Lint:** `biome check .` clean.
@@ -22,6 +22,20 @@ Per-milestone task tracking with acceptance review. See `PROJECT_PLAN.md` for th
 - `worker_threads.Worker`: parent→child IPC was wired to a dead event name; only child→parent worked.
 - `child_process.fork`: child script had no `send` / `on('message')` / `onMessage` API.
 - `node-parity-runner` was a no-op stub. Now has a real harness + 15 cases that drive real `node` child processes and diff stdouts.
+
+### Real bugs caught running real express@4 end-to-end (Phase 1, 2026-05-29)
+
+`tests/integration/express-live-run.opt-in.test.ts` installs express@^4 from the
+live registry, loads it through the module loader, and serves real requests
+through the `@rifty/net` port registry. Getting all 5 cases green surfaced six
+real defects (each fixed with a regression test):
+
+1. **`require('stream')` wasn't callable** — `send` does `util.inherits(SendStream, require('stream'))`; the module default was a plain object. Added the legacy callable `Stream` base in `@rifty/io`.
+2. **`EventEmitter` didn't lazy-init** — express builds `app` by mixing `EventEmitter.prototype` onto a function (`merge-descriptors`); `this.listenersMap` was undefined. Moved state to lazy getters.
+3. **`Buffer.allocUnsafeSlow` missing** — `safe-buffer` fell back to a shim without `isBuffer`, so `res.send` threw `Buffer.isBuffer is not a function`. Added `allocUnsafeSlow` + `isEncoding`.
+4. **Semver picked next-major prereleases** — `^4` matched `5.0.0-beta.3`, so `install({express:'^4'})` resolved an express 5 beta (body-parser@2-beta + raw-body@3-beta). Added the node-semver prerelease-exclusion rule. **Highest-impact: mis-resolved any `^X` range.**
+5. **`StringDecoder` wasn't callable** — iconv-lite does `StringDecoder.call(this, enc)`. Reimplemented as a function-style constructor.
+6. **`AsyncResource.runInAsyncScope` dropped args** — raw-body binds its callback through it; `(err, buf)` were lost so `req.body` stayed `{}`. Now forwards `thisArg` + args + return.
 
 ---
 
@@ -135,6 +149,7 @@ Per-milestone task tracking with acceptance review. See `PROJECT_PLAN.md` for th
 - [x] Port registry with `dispatchToPort` — consumed by Service Worker for `/preview/<port>/...` routing.
 - [x] **4 http conformance tests** + 2 Express-style integration tests.
 - [x] **E2E SW round-trip:** `tests/e2e/m7-preview-sw.spec.ts` — `fetch('/preview/3000/')` from the playground page reaches a main-thread `http.createServer().listen(3000)` through `installPreviewInterceptor` + `setupPreviewBridge` + `packSerializedResponse` and returns the registered handler's HTML body. Closes the audit gap where `tests/integration/express-style.test.ts` bypassed the SW path via direct `dispatchToPort`.
+- [x] **Real upstream `express@4` runs end-to-end (Phase 1, 2026-05-29).** `tests/integration/express-live-run.opt-in.test.ts` (opt-in, `RIFTY_LIVE_REGISTRY`) installs express@^4 (86 pkgs) from the live registry, loads it through the module loader, and serves real requests via `dispatchToPort`: `GET /` (router + `res.send`), `GET /api` (`res.json` + etag + content-type), `POST /echo` (`express.json()` body-parser round-trips JSON), `GET /missing` (finalhandler 404). Surfaced + fixed six compat/installer defects — see "Real bugs caught running real express@4" above. This supersedes the old hand-rolled `express-style.test.ts` shape as the real "Express runs" proof.
 
 ### Open acceptance
 
@@ -204,7 +219,7 @@ What's landed (mini-equivalent of Vite/HMR; "vite-like" not literal upstream Vit
 
 | Check | Result |
 |---|---|
-| Unit + conformance + integration tests | **794 pass | 10 skip (103 of 107 files)** — last counted 2026-05-29 (Phase 0 ground-truth pass; superset of the 2026-05-28 count after ADR-0046/0047/0049 landed) |
+| Unit + conformance + integration tests | **810 pass | 15 skip (109 of 114 files)** — last counted 2026-05-29 after the Phase 1 run-real-express pass (+16 conformance cases; +5 opt-in `express-live-run` skips gated on `RIFTY_LIVE_REGISTRY`) |
 | TypeScript strict typecheck | **clean (16 projects)** |
 | Biome lint | **clean** |
 | Circular dependency check (madge) | **clean** |
