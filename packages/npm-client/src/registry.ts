@@ -25,6 +25,13 @@ export interface VersionManifest {
   devDependencies?: Record<string, string>;
   peerDependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
+  /**
+   * Platform constraints (npm `os`/`cpu`). Read at resolve time by the
+   * native-dependency policy (ADR-0051): a `cpu` array that excludes `wasm`
+   * marks a compiled artifact rifty cannot run.
+   */
+  os?: string[];
+  cpu?: string[];
   dist: {
     tarball: string;
     shasum?: string;

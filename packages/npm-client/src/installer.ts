@@ -51,7 +51,7 @@ import {
 } from './installer-lockfile-reader.ts';
 import { type Lockfile, type ResolvedPackage, buildLockfile, link } from './linker.ts';
 import { type OverrideMap, resolveOverride } from './overrides.ts';
-import type { Packument, RegistryClient } from './registry.ts';
+import type { Packument, RegistryClient, VersionManifest } from './registry.ts';
 import { matchesRange, pickBestVersion } from './semver.ts';
 import { type TarballCache, VfsTarballCache } from './tarball-cache.ts';
 import { extractTarGz } from './unpacker.ts';
@@ -488,6 +488,38 @@ function createLockfileSource(lockfile: Lockfile): ResolutionSource {
  * same name; the live express install (`debug → ms@^2.1` vs
  * `finalhandler → ms@2.0`) made that limitation hard-blocking.
  */
+/**
+ * Native-dependency gate (ADR-0051, D-005 source #6). rifty runs JS + WASI
+ * WASM only — it can never load `.node` addons or execute native compiled
+ * binaries. A package whose manifest pins `cpu` to a non-empty set that
+ * excludes `wasm` (and isn't a `!`-negation that admits everything else) is a
+ * compiled artifact (e.g. `opencode-ai`, `better-sqlite3`, esbuild's
+ * `@esbuild/*` platform packages). Throw a clear, actionable error pointing at
+ * the documented incompatibility list. `cpu` (not `os`) is the signal: pure-JS
+ * packages almost never pin `cpu`, whereas every real native does; `os`-only is
+ * a soft warning many JS packages use (`fsevents` is also optional anyway).
+ */
+function assertNativeSupported(name: string, version: string, manifest: VersionManifest): void {
+  const cpu = manifest.cpu;
+  if (!Array.isArray(cpu) || cpu.length === 0) return;
+  if (cpu.includes('wasm') || cpu.some((c) => c.startsWith('!'))) return;
+  throw Object.assign(
+    new Error(
+      `ENATIVEUNSUPPORTED: '${name}@${version}' ships a native binary ` +
+        `(cpu: ${JSON.stringify(cpu)}, os: ${JSON.stringify(manifest.os ?? null)}) that cannot ` +
+        `run in rifty's JS+WASI runtime, and no shadow-registry substitution is ` +
+        `registered for it. See docs/compat/incompatible-packages.md.`,
+    ),
+    {
+      code: 'ENATIVEUNSUPPORTED',
+      packageName: name,
+      version,
+      reason: 'cpu-constraint',
+      platform: { os: manifest.os ?? null, cpu },
+    },
+  );
+}
+
 function createRegistrySource(opts: InstallOptions): ResolutionSource {
   const packumentCache = opts.packumentCache ?? new Map<string, Packument>();
   // Lockfile may still exist (live-resolve was chosen because coverage
@@ -528,6 +560,14 @@ function createRegistrySource(opts: InstallOptions): ResolutionSource {
       if (!manifest) {
         throw new Error(`Packument missing version manifest ${effectiveName}@${pick}`);
       }
+
+      // Native-dependency policy (ADR-0051). A shadow substitution (`override`)
+      // already redirected to a trusted (pure-JS) target, so only gate the
+      // un-substituted resolution. A required native aborts the install; an
+      // OPTIONAL native is caught + warned by `walkAndPin`'s optional loop
+      // (so esbuild's `@esbuild/*` platform optionals skip and Vite still
+      // installs).
+      if (!override) assertNativeSupported(effectiveName, pick, manifest);
 
       // Resolve the integrity to verify against. Prefer the manifest's pin;
       // fall back to the lockfile entry's pin for the same (name, version)

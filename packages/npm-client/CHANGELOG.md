@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Native-dependency install policy (ADR-0051).** The installer now throws
+  `ENATIVEUNSUPPORTED` (with `packageName`/`version`/`reason`/`platform`) when a
+  resolved package pins `cpu` to a non-`wasm` set (a compiled artifact rifty
+  can't run) and has no shadow substitution. Required natives abort; **optional**
+  natives skip-with-warning (inherits `walkAndPin`'s optional catch — esbuild's
+  `@esbuild/*` platform optionals skip, Vite still installs); shadow-substituted
+  (`bcrypt→bcryptjs`) and pure-JS packages are unaffected. `cpu`-keyed (not `os`)
+  to avoid false-positives. `VersionManifest` gains additive `os?`/`cpu?`. New
+  `docs/compat/incompatible-packages.md`. Forcing consumer: `opencode-ai`
+  (native binary). Tests: `src/installer-native-policy.test.ts`.
+
 ### Fixed
 
 - **Semver prerelease-exclusion (node-semver rule).** A version carrying a
