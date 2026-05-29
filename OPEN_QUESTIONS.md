@@ -84,9 +84,9 @@ a config-only change. Reopening the question keeps the gap honest.
 
 ### Code markers
 
-None yet — by intent. The decision is "candidate only" until the
-Edge Function lands. When the first deploy attempt opens a PR, that PR
-either (a) ratifies the candidate with a new ADR-0046+ that supersedes
+(none — pre-implementation, by intent). The decision is "candidate only"
+until the Edge Function lands. When the first deploy attempt opens a PR, that PR
+either (a) ratifies the candidate with a fresh ADR that supersedes
 ADR-0028 with concrete code references, or (b) switches to Option B/C
 with a fresh ADR.
 
@@ -104,200 +104,54 @@ First prod-deploy session (M9 deploy closure).
 
 ---
 
-## Q-2026-05-27-002: Coherent `OwnerResolver` + readiness-registry swap (M11 prep)
+## Q-2026-05-29-001: Streaming cross-realm preview wire-frame (ADR-0048 reserved)
 
-**Status:** ⚪ Promoted → ADR-0046 (`docs/adr/0046-preview-owner-binding.md`)  
-**Encountered in:** 2026-05-26 architecture audit follow-up (service-worker F3), 2026-05-27 triage  
-**Milestone:** M11  
-**Author (agent session):** 2026-05-27
-
-**Resolution (2026-05-28, A-023):** Promoted to **ADR-0046**. A-023
-(SW→Worker direct routing) arrived as the second consumer the "defer"
-decision (Option B) was waiting for. The binding was designed from both
-the window and worker shapes at once and lives in
-`packages/service-worker/src/preview-owner-binding.ts`
-(`PreviewOwnerBinding` + `ReadinessSignal`), with
-`FirstWindowOwnerBinding` (legacy window path, byte-for-byte preserved)
-and `WorkerOwnerBinding` (port-keyed routing, `'gone'` outcome for the
-no-`pagehide` worker lifecycle trap this question flagged). No
-`SW_FRAME_VERSION` bump — the worker readiness frame's `ports` field is
-additive optional (ADR-0040/ADR-0031). The streaming-wire-frame sibling
-deferral (cross-deferral note below) is a **separate** concern and
-remains open. Kept here briefly for traceability; see the Promoted
-section.
-
-**Update (2026-05-27, post-ADR-0043):** A-026 (Vite-in-Worker) landed
-without graduating this question. ADR-0011 explicitly sequences A-026
-before A-023 (SW→Worker), and ADR-0043 honoured that sequencing — the
-page is still the SW's counterpart and `FirstWindowOwnerResolver` is
-untouched. The second consumer (`WorkerOwnerResolver` for A-023) has
-not arrived yet; per the entry's "defer" decision, the binding shape
-will be designed from both sides at once when the A-023 PR opens.
-"Needs human review by" target shifts from *Start of M11* to *Start of
-A-023 work*.
+**Status:** 🟢 Active
+**Encountered in:** 2026-05-27 architecture review item #4; carried forward from the Q-2026-05-27-002 cross-deferral note when that question was archived to Promoted (ADR-0046)
+**Milestone:** M11 (Vite-class) — activates when Real Vite emits a body too large for one buffered frame
+**Author (agent session):** 2026-05-29
 
 ### Context
 
-`PreviewOwnerResolver` is cleanly extracted (commit `1bc2f91`), but the
-companion `ReadyClientsRegistry` (the SW-side handshake that tracks
-which window clients are ready to receive preview fetches) still lives
-inside `preview-bridge.ts` and assumes `event.source as Client` — i.e.
-a window source. When M11's `WorkerOwnerResolver` arrives, both halves
-need to evolve in lockstep: workers have different `pagehide` /
-`controllerchange` lifecycles, so the readiness model can't just plug
-into the existing window-only registry.
+`bridgeCrossRealmPreview` is currently **buffered-only**
+(`packages/net/src/cross-realm/preview-port.ts`): a Worker-realm preview
+response serialises its entire body into a `Uint8Array` before crossing the
+`BroadcastChannel`. Fine for the small `examples/vite-like-dev` modules (one
+frame), but Real Vite's vendor-prebundle and source-map responses will overshoot
+that envelope and blow latency/memory. The main-thread path already streams via
+`packSerializedResponse`; the worker path does not.
 
 ### Options considered
 
-- **Option A — define `PreviewOwnerBinding` now, ahead of the second
-  consumer.** Spec a shared interface for `{ resolveOwner,
-  subscribeReadiness }` and refactor the window path to use it
-  immediately.
-  - Pro: One refactor for the eventual swap; the M11 implementation
-    just adds a new binding.
-  - Con: Designing from a single consumer's shape risks baking in
-    window-only assumptions that the worker case will resist; net
-    rework two PRs down the line is likely.
-- **Option B — defer the design until `WorkerOwnerResolver` is on
-  deck.** Keep `ReadyClientsRegistry` window-only for now; when the
-  worker path arrives, extract `PreviewOwnerBinding` then.
-  - Pro: Two concrete consumers shape the interface from real signals.
-  - Con: Two-PR refactor instead of one; readability lag in the
-    interim.
+- **Option A — streaming wire-frame.** Extend the frame to
+  `{kind:'chunk', seq, data}` + `{kind:'end'}` under `bridgeCrossRealmPreview`,
+  bump `SW_FRAME_VERSION` (ADR-0040; handshake already detects mismatch).
+  - Pro: matches the main-thread streaming contract; bounded memory.
+  - Con: new wire-frame + version bump → IRREVERSIBLE; needs ADR-0048.
+- **Option B — keep buffered, loud-throw past N bytes.**
+  - Pro: trivial. Con: Real Vite would just hit the cap; punts the problem.
 
 ### Decision taken (provisional)
 
-**Chose:** B — defer.
-
-**Why:** Same trap that derailed early generic interfaces in this
-codebase — extracting a binding shape from one consumer almost always
-needs revision when the second arrives. The cost of carrying
-`ReadyClientsRegistry` as window-specific for one more milestone is one
-extra file rename when the worker path lands; cheap.
+**Chose:** Defer until Real Vite produces an oversized body; then Option A under
+**ADR-0048** (reserved: 0046 = owner-binding, 0047/0049 = esbuild-WASI). This
+question is the live tracker; scheduled as Phase 2 (Vite-class) **Fork A**.
 
 ### Code markers
 
-None yet — by intent. The decision is "do nothing now". When the M11
-`WorkerOwnerResolver` PR is opened, this question gets promoted and the
-binding interface is designed from both sides at once.
+(none — by intent). The buffered shape is correct until Real Vite emits an
+oversized body; no marker until ADR-0048 implementation opens.
 
 ### Reversibility justification
 
-- Public APIs affected: none — internal SW state.
-- Rough cost to revert: zero (the decision is "no code change").
+- Public APIs affected: the cross-realm preview wire-frame + `SW_FRAME_VERSION`
+  → IRREVERSIBLE once implemented; resolved via ADR-0048 + deliberation agent.
+- Rough cost to revert today: zero (no code change yet).
 - External dependencies involved: none.
 
 ### Needs human review by
 
-Start of M11.
-
-### Cross-deferral note (2026-05-27, post-audit) — STILL OPEN
-
-**This sibling deferral is NOT resolved by ADR-0046.** ADR-0046 covers
-only the SW-side owner-binding seam; the cross-realm wire-frame below is
-a separate concern and remains deferred.
-
-The 2026-05-27 architecture review (item #4) flagged a sibling
-deferral that rides the same A-023 wave: `bridgeCrossRealmPreview` is
-currently **buffered-only** (`packages/net/src/cross-realm/preview-port.ts:24-29`)
-— Worker-realm preview responses serialise the entire body into a
-`Uint8Array` before crossing the `BroadcastChannel`. This is fine for
-the `examples/vite-like-dev` fixtures (small modules, one frame), but
-Real Vite's vendor-prebundle and source-map responses will overshoot
-that envelope. Decision (2026-05-27): defer to M11 alongside this
-question. The streaming wire-frame (chunk/end split under
-`bridgeCrossRealmPreview`) will need its own ADR — **ADR-0048** (reserved for this; 0046 = owner-binding,
-0047/0049 = esbuild-WASI revert) — and a `SW_FRAME_VERSION`
-bump (ADR-0040). No code marker yet, by intent; the buffered shape is
-correct until Real Vite produces a body too large to fit.
-
----
-
-## Q-2026-05-27-003: WASI preopens — explicit `cwd` and ordering semantics
-
-**Status:** ⚪ Promoted to **ADR-0049** (2026-05-27)  
-**Encountered in:** 2026-05-26 architecture audit follow-up (runtime-wasi F5), 2026-05-27 triage  
-**Milestone:** M8  
-**Author (agent session):** 2026-05-27
-
-### Resolution (2026-05-27, promoted to ADR-0049)
-
-esbuild (`@esbuild/wasi-preview1`, restored as the forcing consumer by
-ADR-0047) ran through `runWasi` and pinned the API: **Option A** — add
-`WasiOptions.cwd?: string` (the named preopen is hoisted to fd 3; omitting it
-keeps the insertion-order default). Running esbuild also surfaced three
-adjacent gaps it forced: `AT_FDCWD` resolution, directory-open in `path_open`,
-and `fd_readdir` returning `E_NOTDIR` (not `E_BADF`) on a file fd — plus wiring
-the long-declared `stdin` option. All implemented in
-`packages/runtime-wasi` and ratified in **ADR-0049** (public-API change →
-IRREVERSIBLE). The `TODO(ADR)` marker at `wasi.ts` is cleared.
-
-### Context
-
-`packages/runtime-wasi/src/wasi.ts:46-56` walks `Object.keys(preopens)`
-in insertion order to allocate fd 3, 4, … . The "first preopen wins
-fd 3" semantic leaks into how callers must construct the map. There is
-no explicit `cwd` option, and guests like esbuild expect a working
-directory (e.g. `.` or `/workspace`) — today they get whichever preopen
-happened to be first in object-property order.
-
-### Options considered
-
-- **Option A — `cwd?: string` option.** Add `cwd` to `WasiInit` /
-  `runWasi` options; semantics: this preopen is the relative-path
-  resolution default; insertion order otherwise.
-  - Pro: Minimal API change; backward-compatible if `cwd` is omitted.
-  - Con: Still depends on object insertion order for non-cwd fds; the
-    test fixtures that build preopens have to remember the implicit
-    rule.
-- **Option B — ordered array `[{ guestPath, hostPath }]`.** Replace
-  the `Record<string, string>` shape with an array; first entry is
-  fd 3, `cwd` is documented as the first entry.
-  - Pro: Order is explicit; no hidden semantics tied to object key
-    iteration.
-  - Con: Breaks every existing caller; needs migration.
-- **Option C — both: `{ preopens: ordered array, cwd: explicit }`.**
-  Decouple "what to mount" from "what's the relative-path default".
-  - Pro: Fully explicit; future-proof for cases where `cwd` is a
-    subdirectory of a preopen (which Option B can't express).
-  - Con: Two concepts to keep in mind at call sites.
-
-### Decision taken (provisional)
-
-**Chose:** Defer until M8 esbuild.wasm vendoring forces the issue.
-
-**Why:** The right API shape is best chosen from a real consumer's
-constraints. esbuild's documented behaviour around its working
-directory will pin down whether Option A's "first preopen" trick is
-sufficient or Option C's explicit `cwd` is needed. Spending design
-budget now without that constraint risks shipping the wrong shape.
-
-### Code markers
-
-- `packages/runtime-wasi/src/wasi.ts:46-56` — preopen iteration loop.
-
-### Reversibility justification
-
-- Public APIs affected: `WasiInit` / `runWasi` options shape. Once a
-  caller (esbuild) is on the new shape, reversing means migrating that
-  caller back — cost grows with adoption. Doing it once, at M8, before
-  the first real guest is on it, is cheap.
-- Rough cost to revert (if done before M8): two-line edit in
-  `wasi.ts`; no callers committed yet.
-- External dependencies involved: none.
-
-### Forcing consumer update (2026-05-27, post-ADR-0044 — then REVERSED by ADR-0047)
-
-ADR-0044 moved the forcing consumer to swc after concluding "esbuild has no
-WASI build." That conclusion was wrong: it inspected only `esbuild-wasm` (the
-gojs build). The separate `@esbuild/wasi-preview1` IS a real `wasi_snapshot_preview1`
-binary, and swc has no WASI build at all (its published wasm is wasm-bindgen).
-ADR-0047 reversed the substitution; esbuild is the forcing consumer again, and
-running it resolved this question (Option A). See the Resolution note above.
-
-### Needs human review by
-
-Resolved — promoted to ADR-0049 (2026-05-27).
+Start of Phase 2 (Vite-class) — ADR-0048 implementation.
 
 ---
 
@@ -433,7 +287,7 @@ End of milestone M<N>.
 - **Q-2026-05-24-007** — *Prod proxy for npm registry* — promoted to **ADR 0028** (`docs/adr/0028-prod-proxy-for-npm-registry.md`); **reopened 2026-05-27** when the audit found the Edge Function source had never landed (see Active section above and ADR-0028 §Status update — 2026-05-27). The Vercel Edge Function candidate is provisional pending implementation.
 - **Q-2026-05-27-003** — *WASI preopens — explicit `cwd` and ordering semantics* — promoted to **ADR 0049** (`docs/adr/0049-wasi-cwd-and-atfdcwd-preopen-semantics.md`). esbuild (restored as the forcing consumer by ADR-0047, which reversed ADR-0044's swc substitution) ran through `runWasi` and pinned Option A — `WasiOptions.cwd?: string`. Running it also forced `AT_FDCWD` resolution, directory-open in `path_open`, and `fd_readdir` → `E_NOTDIR` on a file fd, plus wiring the `stdin` option. All in ADR-0049.
 - **Q-2026-05-25-touch-utimes** — *Where should `utimes` live on the sync VFS surface?* — promoted to **ADR 0029** (`docs/adr/0029-utimes-on-fs-sync.md`). The trigger condition fired: a second caller (`node:fs.utimesSync` in `runtime-js`) appeared, so the provisional Option B (backend-sniffing in `shell`) was escalated to Option A — `FsSync.utimes` lives on the interface, `MemoryFsSync` mutates the shared backend, `OpfsFsSync` records into an in-memory side-table (`FileSystemSyncAccessHandle` has no mtime mutation). `shell/src/builtins.ts` drops its `@rifty/vfs/internal` import.
-- **Q-2026-05-27-002** — *Coherent `OwnerResolver` + readiness-registry swap* — promoted to **ADR 0046** (`docs/adr/0046-preview-owner-binding.md`). The "defer until a second consumer" decision (Option B) paid off: A-023 (SW→Worker direct routing) arrived as the second consumer, so the `PreviewOwnerBinding` seam was designed from both the window and worker shapes at once — `FirstWindowOwnerBinding` (legacy path preserved byte-for-byte) and `WorkerOwnerBinding` (port-keyed routing + the `'gone'` outcome for the no-`pagehide` worker lifecycle trap). The worker readiness frame's `ports` field is additive optional, so no `SW_FRAME_VERSION` bump (ADR-0040/ADR-0031). **The cross-deferral streaming-wire-frame sibling (see Active §Cross-deferral note) is a separate concern and stays open (ADR-0048).**
+- **Q-2026-05-27-002** — *Coherent `OwnerResolver` + readiness-registry swap* — promoted to **ADR 0046** (`docs/adr/0046-preview-owner-binding.md`). The "defer until a second consumer" decision (Option B) paid off: A-023 (SW→Worker direct routing) arrived as the second consumer, so the `PreviewOwnerBinding` seam was designed from both the window and worker shapes at once — `FirstWindowOwnerBinding` (legacy path preserved byte-for-byte) and `WorkerOwnerBinding` (port-keyed routing + the `'gone'` outcome for the no-`pagehide` worker lifecycle trap). The worker readiness frame's `ports` field is additive optional, so no `SW_FRAME_VERSION` bump (ADR-0040/ADR-0031). **The cross-deferral streaming-wire-frame sibling is now tracked as Active Q-2026-05-29-001 (a separate concern; ADR-0048).**
 
 ---
 
