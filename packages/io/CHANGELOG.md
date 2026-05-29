@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`EventEmitter` lazily initialises its state (Node mixin/`util.inherits`
+  compat).** Instance state (`listenersMap`, `maxListeners`, `warned`) moved
+  from eager class fields to lazy getters, so the methods work when the
+  constructor never ran — the Node idioms `EventEmitter.call(this)` (via
+  `util.inherits`) and copying `EventEmitter.prototype` onto a plain function
+  (express's `app`, via `merge-descriptors`). Previously both threw
+  `Cannot read properties of undefined (reading 'get')`. Found running real
+  express@4.
+
+### Added
+
+- **Legacy callable `Stream` base (`@rifty/io` → `Stream`).** Node's
+  `require('stream')` IS the `Stream` constructor (a function inheriting
+  EventEmitter) with the modern classes attached as statics
+  (`Stream.Readable`, …, `Stream.Stream === Stream`). We collapse Node's
+  `Readable → Stream → EventEmitter` chain, so this base exists purely so
+  `util.inherits(SubStream, require('stream'))` + `Stream.call(this)` works
+  (e.g. `send`'s `SendStream`). The `node:stream` adapter's `default` export is
+  now this callable base. Conformance: `tests/conformance/builtins/stream-legacy.test.ts`.
+
 ### Changed
 
 - `pipeline()` validates each argument is a stream-shaped object (an

@@ -4,7 +4,16 @@
  * `@rifty/runtime-js/builtins`) continue to work bit-identically.
  */
 
-import { Duplex, PassThrough, Readable, Transform, Writable, finished, pipeline } from '@rifty/io';
+import {
+  Duplex,
+  PassThrough,
+  Readable,
+  Stream,
+  Transform,
+  Writable,
+  finished,
+  pipeline,
+} from '@rifty/io';
 
 export {
   Readable,
@@ -12,6 +21,7 @@ export {
   Duplex,
   Transform,
   PassThrough,
+  Stream,
   pipeline,
   finished,
   type ReadableOptions,
@@ -19,5 +29,17 @@ export {
   type TransformOptions,
 } from '@rifty/io';
 
-const stream = { Readable, Writable, Duplex, Transform, PassThrough, pipeline, finished };
+// `require('stream')` in Node IS the legacy `Stream` constructor with the
+// modern classes attached as statics (and `Stream.Stream === Stream`). Match
+// that shape so `util.inherits(X, require('stream'))` works (e.g. `send`).
+const stream = Object.assign(Stream, {
+  Readable,
+  Writable,
+  Duplex,
+  Transform,
+  PassThrough,
+  pipeline,
+  finished,
+  Stream,
+});
 export default stream;

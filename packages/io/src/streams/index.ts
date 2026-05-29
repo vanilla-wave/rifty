@@ -4,6 +4,7 @@
  */
 
 import { Duplex } from './duplex.ts';
+import { Stream } from './legacy-stream.ts';
 import { PassThrough } from './pass-through.ts';
 import { finished, pipeline } from './pipeline.ts';
 import { Readable } from './readable.ts';
@@ -16,6 +17,7 @@ export { Duplex } from './duplex.ts';
 export { Transform, type TransformOptions } from './transform.ts';
 export { PassThrough } from './pass-through.ts';
 export { pipeline, finished } from './pipeline.ts';
+export { Stream } from './legacy-stream.ts';
 
-const stream = { Readable, Writable, Duplex, Transform, PassThrough, pipeline, finished };
+const stream = { Readable, Writable, Duplex, Transform, PassThrough, pipeline, finished, Stream };
 export default stream;

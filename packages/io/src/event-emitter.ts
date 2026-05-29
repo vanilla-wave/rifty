@@ -20,8 +20,26 @@ export class EventEmitter {
   static defaultMaxListeners = DEFAULT_MAX_LISTENERS;
   static captureRejectionSymbol = captureRejectionSymbol;
 
-  private listenersMap: Map<string | symbol, Listener[]> = new Map();
-  private maxListeners: number = DEFAULT_MAX_LISTENERS;
+  // All instance state is lazily created. Node's EventEmitter initialises
+  // `this._events` on first use, so its methods work even when the constructor
+  // never ran — i.e. when a package mixes `EventEmitter.prototype` onto a plain
+  // function (express's `app`, via `merge-descriptors`) or does
+  // `EventEmitter.call(this)` through `util.inherits` (send's `SendStream`).
+  // Eagerly-initialised class fields broke both idioms; lazy getters mirror
+  // Node and fix them without per-call-site changes.
+  private _listenersMap?: Map<string | symbol, Listener[]>;
+  private _maxListeners?: number;
+  private _warned?: Set<string | symbol>;
+
+  private get listenersMap(): Map<string | symbol, Listener[]> {
+    if (this._listenersMap === undefined) this._listenersMap = new Map();
+    return this._listenersMap;
+  }
+
+  private get warned(): Set<string | symbol> {
+    if (this._warned === undefined) this._warned = new Set();
+    return this._warned;
+  }
 
   on(event: string | symbol, listener: Listener): this {
     return this.addListener(event, listener);
@@ -169,18 +187,18 @@ export class EventEmitter {
   }
 
   setMaxListeners(n: number): this {
-    this.maxListeners = n;
+    this._maxListeners = n;
     return this;
   }
 
   getMaxListeners(): number {
-    return this.maxListeners;
+    return this._maxListeners ?? EventEmitter.defaultMaxListeners;
   }
 
-  private warned = new Set<string | symbol>();
   private emitNew(event: string | symbol, _listener: Listener): void {
+    const max = this.getMaxListeners();
     const count = this.listenerCount(event);
-    if (this.maxListeners > 0 && count > this.maxListeners && !this.warned.has(event)) {
+    if (max > 0 && count > max && !this.warned.has(event)) {
       this.warned.add(event);
       console.warn(
         `MaxListenersExceededWarning: ${count} ${String(event)} listeners added. Use setMaxListeners() to increase the limit.`,

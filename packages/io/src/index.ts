@@ -28,6 +28,7 @@ export {
   Duplex,
   Transform,
   PassThrough,
+  Stream,
   pipeline,
   finished,
   type ReadableOptions,
