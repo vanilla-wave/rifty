@@ -180,23 +180,25 @@ After the spikes: **01 → 02 → 03 → 04(tierA) → [Spike C gate] → 05(T6)
 
 ## Feature status table
 
-> **Status as of the 2026-05-30 execution session** (see
-> [EXECUTION-LOG.md](EXECUTION-LOG.md)). 4 of 11 ADR drafts ratified; the
-> no-vendored-tree slice of feature 05 + the resolve/option-surface half of
-> feature 02 implemented; everything needing the (absent) vendored opencode tree is
+> **Status as of the 2026-05-30 execution sessions** (see
+> [EXECUTION-LOG.md](EXECUTION-LOG.md), incl. the "finish-unblocked run"). 4 of 11
+> ADR drafts ratified; the **entire no-vendored-tree slice is now implemented and
+> green** — feature 05, all of feature 02 (incl. the gold `.ts` parity case T7 that
+> closes P0's language unit), and all of feature 09. Everything needing the (absent)
+> vendored opencode tree (feature 01 + Spike C + the integration/boot/LLM half) is
 > blocked or deferred.
 
 | Feature | Status | Ratification gate (ratified ✓ / deferred / blocked) | Depends on |
 |---------|--------|-----------------------------------------------------|------------|
 | [01 load-opencode-into-vfs](feature-01-load-opencode-into-vfs.md) | blocked — opencode NOT vendored (network-gated dev acquisition; unblocks Spike C + all integration smokes) | **NONE** (all REVERSIBLE; scripts/ + fixtures only) | — |
-| [02 ts-on-import-graph](feature-02-ts-on-import-graph.md) | partially implemented — resolver+option-surface done (T1 `ef41164`, T8 `5ef51e0`, T2 `19dbeac`); transform-execution T3–T7 + the gold parity case **not yet landed** | ✓ **ADR-0052** ([adr/0052](../adr/0052-ts-on-import-transform-hook.md)) + ✓ **ADR-0053** ([adr/0053](../adr/0053-ts-tsx-first-class-resolvable-extensions.md)) — both RATIFIED (Spike A passed) | 01 |
+| [02 ts-on-import-graph](feature-02-ts-on-import-graph.md) | implemented (no-tree slice) — resolver+option-surface (T1 `ef41164`, T8 `5ef51e0`, T2 `19dbeac`) + transform-execution T3 `b63ff27`, T4 `c12d864`, `.d.ts`-exclude `1be1201`, T5 `3ddf9b0`, parity ts-esm kind T6 `c283c20`, **gold multi-file `.ts` parity case T7 `85ed795` (GREEN)**. **P0 language unit closed**; P0 tree-integration (T9 smoke) still blocked on 01 | ✓ **ADR-0052** ([adr/0052](../adr/0052-ts-on-import-transform-hook.md)) + ✓ **ADR-0053** ([adr/0053](../adr/0053-ts-tsx-first-class-resolvable-extensions.md)) — both RATIFIED (Spike A passed) | 01 |
 | [03 conditional-imports + sqlite-intercept](feature-03-conditional-imports-and-bun-sqlite-intercept.md) | blocked — tier-A stub gated on Spike C (vendored tree) | deferred — per-load `conditions` field converted to an OPEN_QUESTIONS option-C overlay (NOT ratified); gate: overlay proven insufficient against the real tree | 01, 02 |
 | [04 db-and-pty-shims](feature-04-db-and-pty-shims.md) | blocked — tier B needs new external deps + Spike C | deferred — **ADR-0055 (draft, WASM-SQLite)** + **ADR-0056 (draft, drizzle adapter)** NOT ratified; gate: Spike C confirms a `Database` is constructed + the `@sqlite.org`-vs-sql.js eval is written | 01, 02, 03 |
 | [05 effect-http-bridge](feature-05-effect-http-bridge.md) | implemented (T1 `39bff6a`, T2 `12edbd2`, T3 `376e3cd`, T5 `faaaf8f`, M1 `8fe16b8`); integration harness T6 blocked on 02/04 | ✓ **ADR-0054** ([adr/0054](../adr/0054-effect-consumes-node-http-as-is.md), ratifies decisions.md draft 0057) — RATIFIED (Spike B passed); pipe-sink DEFERRED | (02, 04 for harness; T1–T5 none) |
 | [06 headless-server-boot](feature-06-headless-server-boot.md) | blocked — needs the vendored tree + Spike C | deferred — **ADR-0058 (draft)** NOT ratified (no concrete gap; `os.hostname` already exists, review M7); gate: a real boot surfaces a named missing builtin | 01, 02, 03, 04, 05 |
 | [07 ws-sse-bridge](feature-07-ws-sse-bridge.md) | designed — page-direct SSE needs no code (ratified); T1 parity proof + v3 path blocked on vendored tree / Worker owner | ✓ **ADR-0055** ([adr/0055](../adr/0055-opencode-sse-streaming-http-no-ws-shim.md), ratifies decisions.md draft 0059) — RATIFIED (Spike D passed); **ADR-0060 (draft, v3 frame bump)** DEFERRED | 05, 06, 08 |
 | [08 llm-flow](feature-08-llm-flow.md) | blocked — needs vendored tree + live provider | deferred — **ADR-0061 (draft, node:https→fetch, supersedes ADR-0010)** NOT ratified; gate: clear the C1 ai-Agent pre-flight, then live-flow proof | 01, 02, 03, 04, 05, 06 |
-| [09 tool-ceiling-marker](feature-09-tool-ceiling-marker.md) | designed — T1–T5 assigned this session but **not reached** (no blocker; net/runtime-js/docs-only) | **NONE** to start; **ADR-0062 (draft)** stays a DEFERRAL tripwire (ripgrep-WASM/isomorphic-git) — must not be silently crossed | 01, 06 |
+| [09 tool-ceiling-marker](feature-09-tool-ceiling-marker.md) | implemented — read-substitute parity T1 `61da8da`, pure-JS `vfsGrep` T2 `15c6895`, failure-mode contracts T3 `93e055b`, spawn-ceiling conformance T4 `6e5b2e5`, FEASIBLE-vs-IMPOSSIBLE compat doc T5 `3890fc6`. Open follow-up: `vfsGrep` global-flag RegExp silent-zero-match (review MAJOR) | **NONE** to start; **ADR-0062 (draft)** stays a DEFERRAL tripwire (ripgrep-WASM/isomorphic-git) — must not be silently crossed | 01, 06 |
 
 > ADR numbers: **0052–0055 are now ratified ADR files on disk** (0054 ratifies
 > decisions.md draft 0057; 0055 ratifies draft 0059 — see the slate renumber note in
