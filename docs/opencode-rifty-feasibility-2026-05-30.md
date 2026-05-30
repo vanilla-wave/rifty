@@ -105,6 +105,12 @@ Incidental shims: `Heap.start()` (v8/process memory), `process.env`/`argv`,
   via `fetch`; storage JSON-over-VFS; no tools). Demonstrates a real slice.
 - **P5 (ceiling) — one tool.** A JS/WASM read/grep over the VFS to mark the
   tool-execution boundary; shell/git/PTY documented out of scope (process-spawn).
+  The authoritative FEASIBLE-vs-IMPOSSIBLE tool table lives in
+  [`docs/compat/opencode-tool-ceiling.md`](compat/opencode-tool-ceiling.md) (the
+  compat source-of-truth): ✅ read substitutes (`fs.readFileSync`/`readdirSync`,
+  the pure-JS `vfsGrep`, stat) vs ❌ process-spawn tools (bash, native git,
+  ripgrep binary, PTY). ripgrep-WASM / isomorphic-git are deferred behind explicit
+  ADR ratification.
 
 ## Чеклист «что построить» (вход для проектной сессии — только «что», без «как»)
 

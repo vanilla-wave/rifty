@@ -45,6 +45,19 @@
   change — the ceiling already exists; this locks it. opencode is NOT vendored.
   Conformance: `builtins/child_process-ceiling.test.ts`.
 
+- **Authoritative FEASIBLE-vs-IMPOSSIBLE tool boundary doc (feature-09 T5,
+  Q-2026-05-30-062).** New `docs/compat/opencode-tool-ceiling.md` — the canonical
+  table of the opencode facade's no-tool-execution ceiling in the compat
+  source-of-truth, cross-linked from `docs/opencode-rifty-feasibility-2026-05-30.md`.
+  ✅ feasible read substitutes (`fs.readFileSync`/`readdirSync` over the VFS, the
+  pure-JS `vfsGrep`, stat) each map to an fs API exercised by T1/T2/T3; ❌
+  impossible tools (bash/shell spawn, native git spawn `Git.run` →
+  `ChildProcess.make('git')`, the ripgrep BINARY, PTY) each map to the
+  spawn/native dependency pinned by T4's ENOENT-127 conformance contract.
+  ripgrep-WASM / isomorphic-git are recorded as DEFERRED behind explicit ADR
+  ratification (new dependency → IRREVERSIBLE). Documentation-only; no production
+  change, no test added (prose is the "always reversible" category per CLAUDE.md).
+
 - **`ModuleLoaderOptions` gains `workspace?` + `transformSource?`; new
   `TransformSourceHook` type (ADR-0052, feature-02 T2).** Additive optional
   public-API fields on the `@rifty/runtime-js/loader` surface. `transformSource`
