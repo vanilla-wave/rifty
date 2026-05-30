@@ -55,5 +55,7 @@ ADRs are immutable after merge. New decisions get new ADRs; supersedence is expl
 | 0049 | WASI `cwd` option + `AT_FDCWD` and directory-open semantics (promotes Q-2026-05-27-003) | — |
 | 0050 | No-symlink `fs.realpath`/`fs.lstat` semantics — `lstat≡stat`, `realpath≡normalise-if-exists` for the symlink-free VFS (promotes Q-2026-05-29-002) | — |
 | 0051 | Native-dependency install policy — `cpu`-keyed `ENATIVEUNSUPPORTED` loud-throw, optional natives skipped (promotes Q-2026-05-30-001) | — |
+| 0052 | TS-on-import transform hook on `ModuleLoaderOptions` — injected `transformSource` (`{source,id,loader,workspace}`→`Promise<string>`) + `workspace?`, async, ESM-only, extension-keyed (feature-02 T2) | — |
+| 0053 | `.ts`/`.tsx` as first-class resolvable + ESM module extensions — after the `.js` family, `type:module` classification (feature-02 T1) | — |
 
 For the broad rationale and trade-offs, read PROJECT_PLAN.md §8 first; ADRs are the durable spec.

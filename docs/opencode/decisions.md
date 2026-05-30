@@ -19,8 +19,8 @@ decisions (Q-2026-05-30-101 … -119).
 
 ## Section A — Irreversible decisions (ADR drafts, require human ratification)
 
-### ADR-0052 (draft) — TS-on-import transform hook on `ModuleLoaderOptions`
-*Feature 02. Reversibility rule 1 (cross-package public API).*
+### ADR-0052 (RATIFIED → `docs/adr/0052-ts-on-import-transform-hook.md`) — TS-on-import transform hook on `ModuleLoaderOptions`
+*Feature 02. Reversibility rule 1 (cross-package public API). Ratified 2026-05-30 with the option-surface land (feature-02 T2).*
 
 **Context.** opencode is a `.ts` graph; the core loader never strips TS types
 (`esm.ts` feeds `resolved.source` straight to acorn). The single-file WASI

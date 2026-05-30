@@ -2,15 +2,32 @@ import type { FsSync } from '@rifty/vfs';
 import { loadBuiltin } from '../builtins/index.ts';
 import { executeCjs } from './cjs.ts';
 import { ModuleLoadError } from './errors.ts';
-import { executeEsm } from './esm.ts';
+import { type TransformSourceHook, executeEsm } from './esm.ts';
 import { wrapCjsAsEsmNamespace } from './interop.ts';
 import { ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
 import { type Resolver, createResolver } from './resolver.ts';
 
+export type { TransformSourceHook } from './esm.ts';
+
 export interface ModuleLoaderOptions {
   /** Working directory used when the caller passes a relative `entry` to `import`/`require`. */
   readonly cwd?: string;
+  /**
+   * esbuild guest cwd/preopen used as the `workspace` of every
+   * {@link TransformSourceHook} call. Defaults to {@link ModuleLoaderOptions.cwd}
+   * (or the loader's internal entry stub when neither is set). A single root is
+   * sufficient because a type-strip transform does not resolve relative imports
+   * through esbuild — rifty's resolver does that (ADR-0052 D5).
+   */
+  readonly workspace?: string;
+  /**
+   * Injected per-file source transform for `.ts`/`.tsx`/`.jsx` modules
+   * (see {@link TransformSourceHook}). When absent, `.ts`/`.tsx`/`.jsx` still
+   * resolve (ADR-0053) but their TS syntax reaches the AST rewriter unstripped;
+   * the directed transform-not-configured throw is owned by feature-02 T3.
+   */
+  readonly transformSource?: TransformSourceHook;
 }
 
 export interface ModuleLoader {
@@ -51,10 +68,13 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
   const registry = new ModuleRegistry();
   const resolver = createResolver(vfs);
   const cwd = opts.cwd ?? STUB_FROM_FILE_DEFAULT;
+  const workspace = opts.workspace ?? opts.cwd ?? STUB_FROM_FILE_DEFAULT;
 
   const deps = {
     registry,
     resolver,
+    workspace,
+    transformSource: opts.transformSource,
     resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule {
       return resolver.resolve(specifier, { fromFile, esm });
     },

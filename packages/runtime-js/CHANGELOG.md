@@ -4,6 +4,19 @@
 
 ### Added
 
+- **`ModuleLoaderOptions` gains `workspace?` + `transformSource?`; new
+  `TransformSourceHook` type (ADR-0052, feature-02 T2).** Additive optional
+  public-API fields on the `@rifty/runtime-js/loader` surface. `transformSource`
+  is an injected per-file source transform
+  (`{ source, id, loader: 'ts'|'tsx'|'jsx', workspace } => Promise<string>`,
+  the load-bearing contract) invoked for every `.ts`/`.tsx`/`.jsx` module on the
+  ESM execute path BEFORE the AST rewriter parses it; `workspace` (defaults to
+  `cwd`) is the esbuild guest cwd/preopen threaded into each call. The loader
+  gains zero new package import edges — the caller injects the closure (the same
+  DI seam the WASI esbuild binding uses for `runWasi`). When no hook is
+  configured the source passes through unchanged (no behaviour change for
+  plain-JS loaders). Unit: `loader-transform.test.ts`.
+
 - **`.ts`/`.tsx` are first-class resolvable + ESM module extensions (ADR-0053).**
   The resolver now adds `.ts`,`.tsx` to `DEFAULT_EXTENSIONS`/`INDEX_FILES` —
   AFTER the `.js` family (so plain-Node packages shipping `foo.js`, or both

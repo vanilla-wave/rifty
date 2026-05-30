@@ -8,6 +8,6 @@
  * share one backing tree per Worker realm.
  */
 export { createModuleLoader } from './loader.ts';
-export type { ModuleLoader, ModuleLoaderOptions } from './loader.ts';
+export type { ModuleLoader, ModuleLoaderOptions, TransformSourceHook } from './loader.ts';
 export type { ResolvedModule, ModuleKind } from './resolver.ts';
 export { ModuleLoadError } from './errors.ts';
