@@ -54,6 +54,21 @@
 
 ### Fixed
 
+- **Resolver excludes `*.d.ts`/`.d.cts`/`.d.mts` from candidate matching
+  (review.md correctness-MAJOR, feature-02 F02-DTS-EXCLUDE, ADR-0053).** When
+  `.ts`/`.tsx` joined `DEFAULT_EXTENSIONS`/`INDEX_FILES` there was no declaration
+  -file exclusion, so a target shipping only a `.d.ts` resolved it: a relative
+  `./foo.d` matched `foo.d.ts` (`${base}.ts`), an explicit `./foo.d.ts` matched
+  via the `st.isFile` early return, and a package whose `exports`/`main` named a
+  `.d.ts` handed it back — the strip-types path then fed types-only source to
+  acorn and threw `SYNTAX_ERROR`. Declaration files are now rejected at every
+  file-acceptance point in `resolveAsFileOrDir`/`resolveAsDirectory`, resolving
+  as if the file did not exist (`MODULE_NOT_FOUND`), matching how Node's own
+  strip-types loaders skip `.d.ts`. Surgical: a runnable sibling `foo.js` next to
+  `foo.d.ts` still wins. Conformance:
+  `tests/conformance/modules/resolver.test.ts` `describe('declaration-file
+  exclusion')`.
+
 - **`node:fs` `realpath`/`lstat` implement no-symlink semantics; `readdir`
   callback honours options (ADR-0050).** Reverses the prior loud-throw: for the
   symlink-free VFS, `lstatSync ≡ statSync` and `realpathSync` = normalise to an

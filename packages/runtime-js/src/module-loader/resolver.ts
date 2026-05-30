@@ -39,6 +39,23 @@ const INDEX_FILES = [
   'index.json',
 ] as const;
 
+// TypeScript declaration files (`.d.ts`/`.d.cts`/`.d.mts`) are types-only — they
+// carry no runnable JS and the strip-types path would feed them to acorn and throw
+// `SYNTAX_ERROR`. Node's own strip-types loaders deliberately skip them. Because
+// `.d.ts` ends with `.ts` (now in DEFAULT_EXTENSIONS, ADR-0053) a naive `${base}.ts`
+// append or an `exports`/`main` target naming a `.d.ts` would otherwise match one.
+// We reject any declaration-file candidate at every file-acceptance point so it
+// resolves as if it did not exist (MODULE_NOT_FOUND), never as an executable module.
+const DECLARATION_FILE = /\.d\.(?:ts|cts|mts)$/;
+
+/**
+ * True for a TypeScript declaration file (`*.d.ts` / `*.d.cts` / `*.d.mts`).
+ * These are never resolvable as runnable modules.
+ */
+function isDeclarationFile(path: string): boolean {
+  return DECLARATION_FILE.test(path);
+}
+
 export interface Resolver {
   resolve(specifier: string, opts: ResolveOptions): ResolvedModule;
 }
@@ -123,11 +140,15 @@ function resolveSpecifierToFile(
 function resolveAsFileOrDir(vfs: FsSync, base: string): string | null {
   if (vfs.existsSync(base)) {
     const st = vfs.statSync(base);
-    if (st.isFile) return base;
+    // A declaration file named explicitly (e.g. an `exports` target `./foo.d.ts`)
+    // is not a runnable module — skip it so the caller falls back to a sibling
+    // `.js`/`.ts` or reports MODULE_NOT_FOUND.
+    if (st.isFile) return isDeclarationFile(base) ? null : base;
     if (st.isDirectory) return resolveAsDirectory(vfs, base);
   }
   for (const ext of DEFAULT_EXTENSIONS) {
     const candidate = `${base}${ext}`;
+    if (isDeclarationFile(candidate)) continue;
     if (vfs.existsSync(candidate) && vfs.statSync(candidate).isFile) return candidate;
   }
   return null;
@@ -145,6 +166,7 @@ function resolveAsDirectory(vfs: FsSync, dir: string): string | null {
   }
   for (const idx of INDEX_FILES) {
     const candidate = joinPath(dir, idx);
+    if (isDeclarationFile(candidate)) continue;
     if (vfs.existsSync(candidate) && vfs.statSync(candidate).isFile) return candidate;
   }
   return null;

@@ -268,6 +268,73 @@ describe('TS extension resolution', () => {
   });
 });
 
+describe('declaration-file exclusion', () => {
+  // review.md correctness-MAJOR: `.ts` entered DEFAULT_EXTENSIONS/INDEX_FILES with
+  // no `.d.ts` exclusion, so a target shipping ONLY a declaration file resolved the
+  // `.d.ts` and tried to EXECUTE it -> acorn SYNTAX_ERROR. Node's own strip-types
+  // loaders deliberately skip `.d.ts`/`.d.cts`/`.d.mts` — they are types-only, never
+  // runnable. The resolver must treat a `.d.ts` candidate as if it did not exist.
+
+  it('does NOT resolve a subpath that ships only foo.d.ts', () => {
+    // `./foo.d` makes `${base}.ts` === `foo.d.ts`; today that matched and resolved
+    // the declaration file. After the fix it must MODULE_NOT_FOUND (no runnable file).
+    const loader = setup({
+      '/app/foo.d.ts': 'export interface Box { n: number }',
+    });
+    expect(() =>
+      loader.resolver.resolve('./foo.d', { fromFile: '/app/entry.ts', esm: true }),
+    ).toThrow(/MODULE_NOT_FOUND|Cannot find module/);
+  });
+
+  it('does NOT resolve an explicit ./foo.d.ts import as a runnable module', () => {
+    // An explicit `.d.ts` specifier hits the `st.isFile` early-return in
+    // resolveAsFileOrDir; that path must also reject declaration files.
+    const loader = setup({
+      '/app/foo.d.ts': 'export interface Box { n: number }',
+    });
+    expect(() =>
+      loader.resolver.resolve('./foo.d.ts', { fromFile: '/app/entry.ts', esm: true }),
+    ).toThrow(/MODULE_NOT_FOUND|Cannot find module/);
+  });
+
+  it('does NOT resolve a directory whose only index is index.d.ts', () => {
+    // A package whose `main` (or directory index) lands on a declaration file must
+    // not resolve it. Uses `main: "./index.d.ts"` so the candidate is reached and
+    // rejected (rather than relying on INDEX_FILES, which carries no `.d.ts` entry).
+    const loader = setup({
+      '/app/main.ts': "import x from './pkg'; export const v = x;",
+      '/app/pkg/package.json': '{"main":"./index.d.ts"}',
+      '/app/pkg/index.d.ts': 'export interface Box { n: number }',
+    });
+    expect(() => loader.resolver.resolve('./pkg', { fromFile: '/app/main.ts', esm: true })).toThrow(
+      /MODULE_NOT_FOUND|Cannot find module/,
+    );
+  });
+
+  it('does NOT resolve a package exports target that points at a .d.ts', () => {
+    // A real package can ship `"exports": { "./types": "./types.d.ts" }`; resolving
+    // that subpath must not hand back the declaration file to be executed.
+    const loader = setup({
+      '/app/node_modules/lib/package.json': '{"exports":{"./types":"./types.d.ts"}}',
+      '/app/node_modules/lib/types.d.ts': 'export interface Box { n: number }',
+    });
+    expect(() =>
+      loader.resolver.resolve('lib/types', { fromFile: '/app/main.ts', esm: true }),
+    ).toThrow(/MODULE_NOT_FOUND|Cannot find module/);
+  });
+
+  it('still resolves a sibling .js when the directory also carries a .d.ts', () => {
+    // The exclusion must be surgical: a runnable `foo.js` next to a `foo.d.ts`
+    // must still resolve (the `.d.ts` is skipped, the `.js` wins as before).
+    const loader = setup({
+      '/app/foo.js': "module.exports = 'js';",
+      '/app/foo.d.ts': 'export interface Box { n: number }',
+    });
+    const resolved = loader.resolver.resolve('./foo', { fromFile: '/app/entry.ts', esm: true });
+    expect(resolved.id).toBe('/app/foo.js');
+  });
+});
+
 describe('ESM — import / export', () => {
   it('static default import', async () => {
     const loader = setup({
