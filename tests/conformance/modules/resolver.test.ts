@@ -248,6 +248,24 @@ describe('TS extension resolution', () => {
     const resolved = loader.resolver.resolve('./b.ts', { fromFile: '/q/entry.js', esm: false });
     expect(resolved.kind).toBe('cjs');
   });
+
+  it('a package that ships both index.ts and index.js still resolves index.js (Node parity)', () => {
+    // Regression guard for ADR-0053 (decision 2): a real package shipping its
+    // build artefact `index.js` alongside source `index.ts` and NO `exports`
+    // field MUST still pick `.js` — Node never resolves bare `.ts`, so the
+    // `.js` family ordering in INDEX_FILES is the safety property the "unchanged
+    // for all existing consumers / vite path / conformance" merge claim rests on.
+    // Asserts the EXECUTED export, not just the resolved id, so a kind/ordering
+    // drift that resolved `.ts` here would surface as the wrong runtime value.
+    const loader = setup({
+      '/app/main.js': "module.exports = require('lib');",
+      '/app/node_modules/lib/index.js': "module.exports = 'js-build';",
+      '/app/node_modules/lib/index.ts': 'export const x: number = 1;',
+    });
+    expect(loader.require('./main.js', '/app/entry.js')).toBe('js-build');
+    const resolved = loader.resolver.resolve('lib', { fromFile: '/app/main.js', esm: false });
+    expect(resolved.id).toBe('/app/node_modules/lib/index.js');
+  });
 });
 
 describe('ESM — import / export', () => {
