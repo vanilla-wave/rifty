@@ -4,6 +4,20 @@
 
 ### Added
 
+- **`vfsGrep` pure-JS VFS search marker — private helper, not exported
+  (feature-09 T2, Q-2026-05-30-061).** `src/utils/vfs-grep.ts` walks the VFS via
+  the existing `node:fs` builtin (`readdirSync` with file types / `readFileSync`
+  over `syncMirror()`) and matches lines with the JS RegExp engine — in-realm,
+  ZERO process spawn. It marks the FEASIBLE side of the no-tool-execution
+  (process-spawn) ceiling for the opencode facade: it reads bytes + matches like
+  opencode's grep tool WITHOUT the spawn that ripgrep-the-binary needs.
+  `line`/`column` are 1-based (ripgrep/Node grep convention). Private helper: no
+  cross-package export via `src/index.ts`, no new builtin, no resolver intercept;
+  imports only its own `builtins/fs.ts` + `@rifty/vfs` (layer-legal). Pure-JS by
+  design (not ripgrep-WASM) to stay dependency-free and trivially reversible;
+  ripgrep-WASM / isomorphic-git deferred behind explicit ADR ratification. Unit:
+  `utils/vfs-grep.test.ts`.
+
 - **`ModuleLoaderOptions` gains `workspace?` + `transformSource?`; new
   `TransformSourceHook` type (ADR-0052, feature-02 T2).** Additive optional
   public-API fields on the `@rifty/runtime-js/loader` surface. `transformSource`

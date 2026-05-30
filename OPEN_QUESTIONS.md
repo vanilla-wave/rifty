@@ -27,6 +27,63 @@ When a question is reviewed:
 
 ## Active
 
+## Q-2026-05-30-061: pure-JS VFS grep marker tool (vs ripgrep-WASM)
+
+**Status:** 🟢 Active  
+**Encountered in:** F09-T2 (feature 09-tool-ceiling-marker), implementing the ONE read-only tool that marks the FEASIBLE side of the no-tool-execution (process-spawn) ceiling for the opencode facade  
+**Milestone:** M12 (opencode facade)  
+**Author (agent session):** 2026-05-30
+
+### Context
+
+The facade needs ONE working read-only tool to concretely mark where the
+spawn ceiling sits. opencode's real grep tool shells out to the ripgrep
+binary (`ChildProcess` spawn) — impossible in a browser/WASI realm. The
+substitute must do what grep does (read bytes + match lines) WITHOUT spawning.
+
+### Options considered
+
+- **Option A — pure-JS recursive grep over the existing `node:fs` builtin.**
+  - Pro: zero new dependency, runs entirely in-realm (no spawn), one small
+    private helper + test, instantly reversible, sufficient to PROVE the
+    feasible side and MARK the boundary (the feature's actual intent).
+  - Con: slower on huge trees; no real ripgrep flag/output parity.
+- **Option B — ripgrep-WASM via `runWasi` (the esbuild plumbing).**
+  - Pro: production-grade search fidelity, fast on large trees.
+  - Con: vendors a `ripgrep.wasm` artifact + build-time fetch =>
+    NEW external dependency => IRREVERSIBLE (checklist rule 2); separate ADR.
+- **Option C — isomorphic-git read ops as the marker instead of grep.**
+  - Con: also a NEW dependency (IRREVERSIBLE) and broader than needed.
+
+### Decision taken (provisional)
+
+**Chose:** A
+
+**Why:** For a ceiling-MARKER the pure-JS path is the right altitude — it
+marks the line by doing exactly what opencode's read/grep tools do (read +
+match) with zero spawn and zero dependency. ripgrep-WASM/isomorphic-git are
+DEFERRED behind explicit ADR ratification (each is a new dep => IRREVERSIBLE);
+promote only if/when the facade's search tool is exercised at scale.
+
+### Code markers
+
+- `packages/runtime-js/src/utils/vfs-grep.ts` (module TSDoc `TODO(ADR)` marker)
+
+### Reversibility justification
+
+- Public APIs affected: none — a private helper, NOT re-exported via
+  `src/index.ts`, no new builtin, no resolver intercept.
+- Rough cost to revert: deleting one helper + its test (<150 lines, 2 files).
+- External dependencies involved: none (uses the existing `node:fs` builtin +
+  the JS RegExp engine). Adopting ripgrep-WASM / isomorphic-git would be
+  IRREVERSIBLE and is explicitly deferred.
+
+### Needs human review by
+
+End of M12.
+
+---
+
 ## Q-2026-05-30-101: `HttpServer.listen` options-object overload
 
 **Status:** 🟢 Active  
