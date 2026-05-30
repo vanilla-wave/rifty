@@ -31,8 +31,11 @@ export interface ParityCase {
    *   `@rifty/shadow-registry`).
    * - `'ts-esm'` — TypeScript-on-import ESM mode. Both `code` and any `.ts`
    *   `setup.files` are written verbatim and the entry is `main.ts`. The Node
-   *   side spawns `process.execPath` on `main.ts` (Node v24 strips types
-   *   natively; on older Node the runner falls back to the vendored `tsx`).
+   *   side runs `main.ts` through a FULL TS transform (the vendored `tsx`), NOT
+   *   Node's strip-only `--experimental-strip-types`, so codegen-requiring TS
+   *   (`enum`, parameter properties) lowers the same way rifty's esbuild hook
+   *   lowers it — strip-only would throw `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on
+   *   those (TODO(ADR): Q-2026-05-31-201).
    *   The rifty side builds `createModuleLoader(vfs, { cwd, workspace,
    *   transformSource })` where `transformSource` runs the REAL esbuild WASI
    *   binary (`transformWithEsbuild` over `runWasi`, ADR-0052/0049) to strip

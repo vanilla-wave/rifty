@@ -357,6 +357,73 @@ End of milestone M12.
 
 ---
 
+## Q-2026-05-31-201: `ts-esm` parity Node reference — full transform (tsx) vs strip-only Node
+
+**Status:** 🟢 Active  
+**Encountered in:** F02-T7 (feature 02-ts-on-import-graph), wiring the gold cross-file `.ts` parity case  
+**Milestone:** M12 (opencode facade)  
+**Author (agent session):** 2026-05-31
+
+### Context
+
+The gold parity case (`ts-graph-cross-file.case.ts`) exports an `enum` — the
+exact construct ADR-0052 Spike A validated rifty's esbuild hook lowers (to a
+self-referential IIFE). But Node v24's built-in `--experimental-strip-types`
+(the harness's prior `ts-esm` Node reference on Node >= 23) is *strip-only*: it
+throws `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on any TS needing runtime codegen
+(`enum`, parameter properties, runtime `namespace`). So the Node strip-only
+reference diverges from rifty on a Node *limitation*, not a rifty behaviour —
+the wrong reference for a full-transform-vs-full-transform parity proof.
+
+### Options considered
+
+- **Option A — always run the `ts-esm` Node side through a FULL TS transform
+  (the vendored `tsx`), regardless of Node major version.**
+  - Pro: apples-to-apples — rifty's esbuild hook is also a full transform, so
+    both sides lower `enum`/parameter-properties identically; the gold case can
+    use the enum the task + ADR-0052 require; `tsx` is already a devDependency
+    and was already the harness's `< 23` fallback (no new dep); the existing
+    type-only `ts-strip-smoke` case stays green (tsx prints `42` too).
+  - Con: no longer exercises Node's *native* strip-only path, so a future
+    rifty-emits-something-strip-only-rejects divergence would not be caught by
+    parity (it is not the contract under test — the contract is full-transform
+    semantics).
+- **Option B — keep strip-only Node and forbid codegen-requiring TS in cases.**
+  - Pro: tests against Node's shipped default loader.
+  - Con: cannot host the gold case's `enum` at all (task + ADR-0052 require it);
+    would silently narrow the gold case to type-only erasure and drop the
+    enum-lowering coverage that is the whole point of "TS-on-import" (not just
+    type-erase-on-import).
+
+### Decision taken (provisional)
+
+**Chose:** A
+
+**Why:** rifty's transform is a full TS transform; the only honest parity
+reference is a full TS transform (tsx). Strip-only Node is a strict subset that
+rejects the enum the gold case must prove rifty lowers, so it is the wrong
+reference, not a stricter one.
+
+### Code markers
+
+- `tools/node-parity-runner/src/run-in-node.ts` (`nodeRunnerFor` `TODO(ADR)`)
+- `tools/node-parity-runner/src/types.ts` (`ts-esm` kind TSDoc `TODO(ADR)`)
+
+### Reversibility justification
+
+- Public APIs affected: none — `run-in-node.ts`/`types.ts` are a `tools/` parity
+  harness, not a package public API; no `src/index.ts` surface changes.
+- Rough cost to revert: <20 lines, 2 files (restore the `NODE_MAJOR < 23`
+  branch and the two TSDoc blocks).
+- External dependencies involved: none new — `tsx` is an existing devDependency
+  already used as the harness's prior strip-types fallback.
+
+### Needs human review by
+
+End of milestone M12.
+
+---
+
 ## Template
 
 ```markdown

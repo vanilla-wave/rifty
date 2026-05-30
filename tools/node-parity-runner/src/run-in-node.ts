@@ -60,23 +60,28 @@ const HTTP_NODE_PREAMBLE = `
 }
 `;
 
-/** Major version of the Node running this harness (e.g. `24` for `v24.5.0`). */
-const NODE_MAJOR = Number.parseInt(process.versions.node.split('.')[0] ?? '0', 10);
-
-/** Absolute path to the workspace-vendored `tsx` CLI (the strip-types fallback). */
+/** Absolute path to the workspace-vendored `tsx` CLI (the full-TS-transform runner). */
 const TSX_CLI = fileURLToPath(new URL('../../../node_modules/.bin/tsx', import.meta.url));
 
 /**
  * Choose the executable + argv to run a case entry in Node.
  *
  * - Non-`ts-esm`: spawn `process.execPath` directly on the `.js`/`.mjs` entry.
- * - `ts-esm` on Node >= 23 (types stripped by default): spawn
- *   `process.execPath` on the `.ts` entry — no flag needed.
- * - `ts-esm` on older Node: spawn the vendored `tsx` CLI so the type-strip
- *   still happens, keeping the parity comparison valid off the v24+ matrix.
+ * - `ts-esm`: spawn the vendored `tsx` CLI on the `.ts` entry — a FULL TS
+ *   transform, matching the rifty side's esbuild hook (also a full transform).
+ *
+ *   We deliberately do NOT use Node's built-in `--experimental-strip-types`
+ *   (default on v24): that is *strip-only* and throws
+ *   `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on any TS that needs runtime codegen —
+ *   `enum`, parameter properties, runtime `namespace`. The gold cross-file
+ *   parity case (F02-T7) exports an `enum`, exactly the construct ADR-0052
+ *   Spike A validated rifty lowers; pinning the Node reference to a full
+ *   transform keeps the comparison apples-to-apples (full transform vs full
+ *   transform) instead of diverging on a Node strip-only *limitation* rather
+ *   than a rifty behaviour. TODO(ADR): Q-2026-05-31-201.
  */
 function nodeRunnerFor(testCase: ParityCase, entry: string): [string, string[]] {
-  if (testCase.kind === 'ts-esm' && NODE_MAJOR < 23) {
+  if (testCase.kind === 'ts-esm') {
     return [TSX_CLI, [entry]];
   }
   return [process.execPath, [entry]];
@@ -122,11 +127,10 @@ export async function runInNode(testCase: ParityCase): Promise<string> {
       await writeFile(join(entryDir, 'package.json'), JSON.stringify({ type: 'module' }), 'utf8');
     }
 
-    // `ts-esm`: run the `.ts` entry with type-stripping. Node v24 strips types
-    // by default, so `process.execPath main.ts` is enough; on older Node we
-    // shell out to the vendored `tsx` loader instead. Detecting the major
-    // version keeps the harness honest across the CI Node matrix rather than
-    // assuming a strip-types-capable runtime.
+    // `ts-esm`: run the `.ts` entry through a FULL TS transform (vendored `tsx`)
+    // so codegen-requiring TS (`enum`, parameter properties) lowers the same way
+    // rifty's esbuild hook lowers it. Node's built-in strip-only mode would
+    // throw `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on those (see `nodeRunnerFor`).
     const [runner, runnerArgs] = nodeRunnerFor(testCase, entry);
 
     return await new Promise<string>((resolve, reject) => {

@@ -51,6 +51,20 @@
   behaviour change for callers, plain-JS loaders unaffected. Unit:
   `loader-transform.test.ts`.
 
+- **GOLD multi-file `.ts` parity case closes P0 (ADR-0052, feature-02 T7).** A
+  cross-file `.ts` graph (`b.ts` exports a type-only `interface`, an `enum`, and
+  a type-annotated `const`; `a.ts` imports the erased type + the value and prints
+  `base + box.n + Color.G` → `43`) runs through the rifty loader's real esbuild
+  WASI `transformSource` hook and is diffed against Node — proving type-stripping,
+  `enum` lowering, and cross-file ESM load order match a full-TS-transform Node
+  reference at the unit-of-language level, independent of opencode VFS contents.
+  This is the P0 acceptance signal ADR-0052 requires.
+  `tools/node-parity-runner/cases/modules/ts-graph-cross-file.case.ts`. The
+  `ts-esm` parity Node reference is the vendored `tsx` (a FULL TS transform),
+  not Node strip-only `--experimental-strip-types` (which throws
+  `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on `enum`) — matching rifty's esbuild full
+  transform (TODO(ADR): Q-2026-05-31-201).
+
 - **`.ts`/`.tsx` are first-class resolvable + ESM module extensions (ADR-0053).**
   The resolver now adds `.ts`,`.tsx` to `DEFAULT_EXTENSIONS`/`INDEX_FILES` —
   AFTER the `.js` family (so plain-Node packages shipping `foo.js`, or both
