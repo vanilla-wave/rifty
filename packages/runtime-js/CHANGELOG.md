@@ -17,6 +17,15 @@
   configured the source passes through unchanged (no behaviour change for
   plain-JS loaders). Unit: `loader-transform.test.ts`.
 
+- **`.ts`/`.tsx`/`.jsx` reached with no `transformSource` now throws a directed
+  error on the ESM execute path (ADR-0052, feature-02 T3).** `executeEsm`
+  previously deferred the no-hook case, letting raw TS fall through to acorn and
+  die with an opaque `SYNTAX_ERROR` (`Unexpected token`). It now throws a
+  `ModuleLoadError('SYNTAX_ERROR', …)` whose message is
+  `TS transform not configured for <id>: …` BEFORE the AST rewriter parses the
+  source — honest, no silent stub. The happy path (hook present) and plain-JS
+  modules are unchanged. Unit: `esm.test.ts`.
+
 - **`.ts`/`.tsx` are first-class resolvable + ESM module extensions (ADR-0053).**
   The resolver now adds `.ts`,`.tsx` to `DEFAULT_EXTENSIONS`/`INDEX_FILES` —
   AFTER the `.js` family (so plain-Node packages shipping `foo.js`, or both

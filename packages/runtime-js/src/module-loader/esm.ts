@@ -75,12 +75,22 @@ export async function executeEsm(
   }
 
   // Strip TS types / lower JSX before the AST ESM rewriter parses the source.
-  // The transform is injected (no esbuild/runtime-wasi edge in this package);
-  // when no hook is configured the source passes through unchanged and the
-  // directed transform-not-configured throw is owned by feature-02 T3.
+  // The transform is injected (no esbuild/runtime-wasi edge in this package,
+  // ADR-0052). When a `.ts`/`.tsx`/`.jsx` module is reached with NO hook
+  // configured we throw a directed, honest error here rather than letting the
+  // raw TS fall through to acorn (which dies with an opaque SYNTAX_ERROR) — no
+  // silent stub (feature-02 T3).
   let source = resolved.source;
   const tsLoader = tsLoaderForId(resolved.id);
-  if (tsLoader && deps.transformSource) {
+  if (tsLoader) {
+    if (!deps.transformSource) {
+      throw new ModuleLoadError(
+        'SYNTAX_ERROR',
+        resolved.id,
+        `TS transform not configured for ${resolved.id}: the loader has no transformSource hook, so its .${tsLoader} syntax cannot be stripped before parsing. Inject a transformSource on createModuleLoader (ADR-0052).`,
+        resolved.id,
+      );
+    }
     source = await deps.transformSource({
       source: resolved.source,
       id: resolved.id,
