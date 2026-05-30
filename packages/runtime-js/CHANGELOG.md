@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`.ts`/`.tsx` are first-class resolvable + ESM module extensions (ADR-0053).**
+  The resolver now adds `.ts`,`.tsx` to `DEFAULT_EXTENSIONS`/`INDEX_FILES` —
+  AFTER the `.js` family (so plain-Node packages shipping `foo.js`, or both
+  `foo.js` and `foo.ts`, resolve byte-identically to Node) and before `.json`;
+  `detectKind` classifies a `.ts`/`.tsx` as `esm` under a `type:module` scope,
+  else `cjs` (mirroring the `.js` branch). This is a deliberate, scoped
+  deviation from Node resolution (Node never resolves bare `.ts`), required for
+  the opencode `.ts` graph (M12). Resolve-side only — a `.ts` that resolves with
+  no transform hook still throws a directed error at execute time (transform
+  side is feature-02 T2/T3). Conformance:
+  `tests/conformance/modules/resolver.test.ts` `describe('TS extension
+  resolution')`.
+
 ### Fixed
 
 - **`node:fs` `realpath`/`lstat` implement no-symlink semantics; `readdir`

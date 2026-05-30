@@ -22,8 +22,22 @@ export interface ResolveOptions {
   readonly esm: boolean;
 }
 
-const DEFAULT_EXTENSIONS = ['.js', '.mjs', '.cjs', '.json'] as const;
-const INDEX_FILES = ['index.js', 'index.mjs', 'index.cjs', 'index.json'] as const;
+// `.ts`/`.tsx` come AFTER the `.js` family so a plain-Node package shipping
+// `foo.js` resolves byte-identically to Node (Node never resolves bare `.ts`),
+// and BEFORE `.json` (ADR-0053). This is a deliberate, human-ratified deviation
+// from Node's resolution: rifty resolves a bare `.ts` where Node-without-a-
+// stripper would `MODULE_NOT_FOUND`. The transform side is separable — a `.ts`
+// that resolves with no transform hook throws a directed error at execute time
+// (no silent stub), not here.
+const DEFAULT_EXTENSIONS = ['.js', '.mjs', '.cjs', '.ts', '.tsx', '.json'] as const;
+const INDEX_FILES = [
+  'index.js',
+  'index.mjs',
+  'index.cjs',
+  'index.ts',
+  'index.tsx',
+  'index.json',
+] as const;
 
 export interface Resolver {
   resolve(specifier: string, opts: ResolveOptions): ResolvedModule;
@@ -438,7 +452,10 @@ function detectKind(vfs: FsSync, filePath: string): ModuleKind {
   if (filePath.endsWith('.json')) return 'json';
   if (filePath.endsWith('.mjs')) return 'esm';
   if (filePath.endsWith('.cjs')) return 'cjs';
-  if (filePath.endsWith('.js')) {
+  if (filePath.endsWith('.js') || filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
+    // `.ts`/`.tsx` mirror the `.js` branch (ADR-0053): ESM under a
+    // `type:module` scope, else CJS — matching how a TS-aware Node loader
+    // classifies a source file by its nearest package scope.
     const scope = findPackageScope(vfs, filePath);
     if (scope && scope.pkg.type === 'module') return 'esm';
     return 'cjs';

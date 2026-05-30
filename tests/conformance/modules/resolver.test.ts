@@ -204,6 +204,52 @@ describe('CJS — module semantics', () => {
   });
 });
 
+describe('TS extension resolution', () => {
+  it('resolves foo.ts when foo.js is absent', () => {
+    const loader = setup({
+      '/app/foo.ts': 'export const x: number = 1;',
+    });
+    const resolved = loader.resolver.resolve('./foo', { fromFile: '/app/entry.ts', esm: true });
+    expect(resolved.id).toBe('/app/foo.ts');
+  });
+
+  it('prefers foo.js over foo.ts when both exist (Node-deviation guard)', () => {
+    const loader = setup({
+      '/app/foo.js': "module.exports = 'js';",
+      '/app/foo.ts': 'export const x: number = 1;',
+    });
+    const resolved = loader.resolver.resolve('./foo', { fromFile: '/app/entry.ts', esm: true });
+    expect(resolved.id.endsWith('.js')).toBe(true);
+    expect(resolved.id).toBe('/app/foo.js');
+  });
+
+  it('resolves a directory via index.ts', () => {
+    const loader = setup({
+      '/app/dir/index.ts': 'export const v: number = 7;',
+    });
+    const resolved = loader.resolver.resolve('./dir', { fromFile: '/app/entry.ts', esm: true });
+    expect(resolved.id).toBe('/app/dir/index.ts');
+  });
+
+  it('detectKind: a .ts under {"type":"module"} classifies as esm', () => {
+    const loader = setup({
+      '/p/package.json': '{"type":"module"}',
+      '/p/a.ts': 'export const a: number = 1;',
+    });
+    const resolved = loader.resolver.resolve('./a.ts', { fromFile: '/p/entry.ts', esm: true });
+    expect(resolved.kind).toBe('esm');
+  });
+
+  it('detectKind: a .ts under a non-module package.json classifies as cjs', () => {
+    const loader = setup({
+      '/q/package.json': '{"name":"q"}',
+      '/q/b.ts': 'export const b = 1;',
+    });
+    const resolved = loader.resolver.resolve('./b.ts', { fromFile: '/q/entry.js', esm: false });
+    expect(resolved.kind).toBe('cjs');
+  });
+});
+
 describe('ESM — import / export', () => {
   it('static default import', async () => {
     const loader = setup({
