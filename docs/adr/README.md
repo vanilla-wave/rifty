@@ -57,5 +57,7 @@ ADRs are immutable after merge. New decisions get new ADRs; supersedence is expl
 | 0051 | Native-dependency install policy — `cpu`-keyed `ENATIVEUNSUPPORTED` loud-throw, optional natives skipped (promotes Q-2026-05-30-001) | — |
 | 0052 | TS-on-import transform hook on `ModuleLoaderOptions` — injected `transformSource` (`{source,id,loader,workspace}`→`Promise<string>`) + `workspace?`, async, ESM-only, extension-keyed (feature-02 T2) | — |
 | 0053 | `.ts`/`.tsx` as first-class resolvable + ESM module extensions — after the `.js` family, `type:module` classification (feature-02 T1) | — |
+| 0054 | Effect `@effect/platform-node` consumes rifty `node:http` AS-IS via additive shape-widening — no dedicated cross-package Effect HTTP adapter; pipe-sink DEFERRED (ratifies decisions.md draft ADR-0057; feature-05) | — |
+| 0055 | opencode event stream rides SSE-over-streaming-HTTP — no `ws` shim, page-direct deployment only; Worker v3 frame bump DEFERRED (ratifies decisions.md draft ADR-0059; feature-07) | — |
 
 For the broad rationale and trade-offs, read PROJECT_PLAN.md §8 first; ADRs are the durable spec.

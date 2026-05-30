@@ -180,21 +180,29 @@ After the spikes: **01 → 02 → 03 → 04(tierA) → [Spike C gate] → 05(T6)
 
 ## Feature status table
 
-| Feature | Status | Ratification gate (blocking irreversible decision) | Depends on |
-|---------|--------|-----------------------------------------------------|------------|
-| [01 load-opencode-into-vfs](feature-01-load-opencode-into-vfs.md) | designed | **NONE** (all REVERSIBLE; scripts/ + fixtures only) | — |
-| [02 ts-on-import-graph](feature-02-ts-on-import-graph.md) | designed | **ADR-0052** (`transformSource`/`workspace` on `ModuleLoaderOptions`) + **ADR-0053** (`.ts`/`.tsx` first-class resolvable+ESM extensions; Node-resolution deviation) | 01 |
-| [03 conditional-imports + sqlite-intercept](feature-03-conditional-imports-and-bun-sqlite-intercept.md) | designed | **ADR-0054** (per-load `ModuleLoaderOptions.conditions` vs shadow-registry overlay; opt-in `bun` condition) — *partial; tier-A throw-stub REVERSIBLE* | 01, 02 |
-| [04 db-and-pty-shims](feature-04-db-and-pty-shims.md) | designed | **ADR-0055** (WASM-SQLite engine — sql.js/wa-sqlite/@sqlite.org) + **ADR-0056** (drizzle driver adapter) — *tier B only; tier A REVERSIBLE* | 01, 02, 03 |
-| [05 effect-http-bridge](feature-05-effect-http-bridge.md) | designed | **ADR-0057** (Effect consumes node:http AS-IS via additive widening vs a new packages/net Effect adapter export) | (02, 04 for harness; T1–T5 none) |
-| [06 headless-server-boot](feature-06-headless-server-boot.md) | designed | **ADR-0058** (runtime-js builtin surface additions for Effect boot) — *CONTINGENT; `os.hostname` already exists, re-aim at real gaps* | 01, 02, 03, 04, 05 |
-| [07 ws-sse-bridge](feature-07-ws-sse-bridge.md) | designed | **ADR-0059** (SSE=streaming-HTTP, no `ws` shim) + **ADR-0060** (`PREVIEW_PORT_FRAME_VERSION` 2→3; idle-timer re-spec) — *T5–T7 hard-blocked; T1–T4 merge-gated on ADR-0059* | 05, 06, 08 |
-| [08 llm-flow](feature-08-llm-flow.md) | designed | **ADR-0061** (node:https client → fetch; supersedes ADR-0010) — *blocks T2/T7; T1/T3 unblocked* | 01, 02, 03, 04, 05, 06 |
-| [09 tool-ceiling-marker](feature-09-tool-ceiling-marker.md) | designed | **NONE** to start; **ADR-0062** (ripgrep-WASM/isomorphic-git) DEFERRED — must not be silently crossed | 01, 06 |
+> **Status as of the 2026-05-30 execution session** (see
+> [EXECUTION-LOG.md](EXECUTION-LOG.md)). 4 of 11 ADR drafts ratified; the
+> no-vendored-tree slice of feature 05 + the resolve/option-surface half of
+> feature 02 implemented; everything needing the (absent) vendored opencode tree is
+> blocked or deferred.
 
-> ADR numbers 0052–0062 are the *next free* slots (highest on disk is 0051) and
-> are **proposed allocations for the drafts in `decisions.md`** — they are not
-> reserved or ratified.
+| Feature | Status | Ratification gate (ratified ✓ / deferred / blocked) | Depends on |
+|---------|--------|-----------------------------------------------------|------------|
+| [01 load-opencode-into-vfs](feature-01-load-opencode-into-vfs.md) | blocked — opencode NOT vendored (network-gated dev acquisition; unblocks Spike C + all integration smokes) | **NONE** (all REVERSIBLE; scripts/ + fixtures only) | — |
+| [02 ts-on-import-graph](feature-02-ts-on-import-graph.md) | partially implemented — resolver+option-surface done (T1 `ef41164`, T8 `5ef51e0`, T2 `19dbeac`); transform-execution T3–T7 + the gold parity case **not yet landed** | ✓ **ADR-0052** ([adr/0052](../adr/0052-ts-on-import-transform-hook.md)) + ✓ **ADR-0053** ([adr/0053](../adr/0053-ts-tsx-first-class-resolvable-extensions.md)) — both RATIFIED (Spike A passed) | 01 |
+| [03 conditional-imports + sqlite-intercept](feature-03-conditional-imports-and-bun-sqlite-intercept.md) | blocked — tier-A stub gated on Spike C (vendored tree) | deferred — per-load `conditions` field converted to an OPEN_QUESTIONS option-C overlay (NOT ratified); gate: overlay proven insufficient against the real tree | 01, 02 |
+| [04 db-and-pty-shims](feature-04-db-and-pty-shims.md) | blocked — tier B needs new external deps + Spike C | deferred — **ADR-0055 (draft, WASM-SQLite)** + **ADR-0056 (draft, drizzle adapter)** NOT ratified; gate: Spike C confirms a `Database` is constructed + the `@sqlite.org`-vs-sql.js eval is written | 01, 02, 03 |
+| [05 effect-http-bridge](feature-05-effect-http-bridge.md) | implemented (T1 `39bff6a`, T2 `12edbd2`, T3 `376e3cd`, T5 `faaaf8f`, M1 `8fe16b8`); integration harness T6 blocked on 02/04 | ✓ **ADR-0054** ([adr/0054](../adr/0054-effect-consumes-node-http-as-is.md), ratifies decisions.md draft 0057) — RATIFIED (Spike B passed); pipe-sink DEFERRED | (02, 04 for harness; T1–T5 none) |
+| [06 headless-server-boot](feature-06-headless-server-boot.md) | blocked — needs the vendored tree + Spike C | deferred — **ADR-0058 (draft)** NOT ratified (no concrete gap; `os.hostname` already exists, review M7); gate: a real boot surfaces a named missing builtin | 01, 02, 03, 04, 05 |
+| [07 ws-sse-bridge](feature-07-ws-sse-bridge.md) | designed — page-direct SSE needs no code (ratified); T1 parity proof + v3 path blocked on vendored tree / Worker owner | ✓ **ADR-0055** ([adr/0055](../adr/0055-opencode-sse-streaming-http-no-ws-shim.md), ratifies decisions.md draft 0059) — RATIFIED (Spike D passed); **ADR-0060 (draft, v3 frame bump)** DEFERRED | 05, 06, 08 |
+| [08 llm-flow](feature-08-llm-flow.md) | blocked — needs vendored tree + live provider | deferred — **ADR-0061 (draft, node:https→fetch, supersedes ADR-0010)** NOT ratified; gate: clear the C1 ai-Agent pre-flight, then live-flow proof | 01, 02, 03, 04, 05, 06 |
+| [09 tool-ceiling-marker](feature-09-tool-ceiling-marker.md) | designed — T1–T5 assigned this session but **not reached** (no blocker; net/runtime-js/docs-only) | **NONE** to start; **ADR-0062 (draft)** stays a DEFERRAL tripwire (ripgrep-WASM/isomorphic-git) — must not be silently crossed | 01, 06 |
+
+> ADR numbers: **0052–0055 are now ratified ADR files on disk** (0054 ratifies
+> decisions.md draft 0057; 0055 ratifies draft 0059 — see the slate renumber note in
+> [EXECUTION-LOG.md §(a)](EXECUTION-LOG.md)). Drafts **0056, 0058, 0060, 0061, 0062**
+> and the converted draft-0054 (conditions) remain in `decisions.md` as DEFERRED /
+> OPEN_QUESTIONS — not reserved, not ratified.
 
 ---
 
