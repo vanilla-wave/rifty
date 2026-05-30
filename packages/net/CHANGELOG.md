@@ -4,6 +4,16 @@
 
 ### Added
 
+- **`HttpServer.listen` options-object overload (Q-2026-05-30-101).** `listen`
+  now accepts Node's `listen({ port, host }, cb)` form in addition to the
+  bare-number `listen(port, hostnameOrCb?, cb?)` form, extracting the numeric
+  port from either. Previously the options object was assigned verbatim as the
+  registry key, so the port was unroutable (502) while `'listening'` still
+  fired (the silent-bind trap). Required by `@effect/platform-node`'s
+  `NodeHttpServer.layer`, which always drives `listen` via the options form;
+  also a genuine Node-parity gap. Additive — the bare-number path is unchanged.
+  Tests: `packages/net/src/http/server.test.ts`.
+
 - **Streaming cross-realm preview wire-frame (ADR-0048).** `serveCrossRealmPreview`
   now drains `response.body` and posts ordered `reply-stream-{start,chunk,end,error}`
   frames (≤64 KiB/chunk); `bridgeCrossRealmPreview` reassembles them. New net-local

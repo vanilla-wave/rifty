@@ -27,6 +27,61 @@ When a question is reviewed:
 
 ## Active
 
+## Q-2026-05-30-101: `HttpServer.listen` options-object overload
+
+**Status:** 🟢 Active  
+**Encountered in:** F05-T1 (feature 05-effect-http-bridge), while widening `node:http` for `@effect/platform-node`  
+**Milestone:** M12 (opencode facade)  
+**Author (agent session):** 2026-05-30
+
+### Context
+
+`@effect/platform-node`'s `NodeHttpServer.layer` always drives the server
+through `server.listen({ port, host }, cb)` — the options-object overload.
+Node's real `http.Server.listen` accepts that form, but rifty's
+`HttpServer.listen` only accepted a bare number; the options object was
+assigned verbatim as `this.port` and handed to `registerPort`, so the
+registry keyed on a non-number. The port was unroutable (502) while
+`'listening'` still fired — a silent-bind trap. This is a genuine
+Node-parity gap, not an Effect-specific hack.
+
+### Options considered
+
+- **Option A — widen `HttpServer.listen` to accept Node's options form.**
+  - Pro: Node-faithful, benefits all consumers, additive (bare-number path
+    byte-for-byte unchanged), single file, no new export.
+  - Con: evolves the shared `node:http` surface (vs isolating Effect concerns).
+- **Option B — add a separate Effect-only adapter export in `packages/net`.**
+  - Pro: isolates Effect concerns from the shared http module.
+  - Con: NEW cross-package public API => IRREVERSIBLE (checklist rule 1); heavier.
+
+### Decision taken (provisional)
+
+**Chose:** A
+
+**Why:** Node's real `listen` accepts an options object, so widening is the
+most Node-faithful, lowest-regret fix; it is purely additive and avoids a new
+cross-package public symbol.
+
+### Code markers
+
+- `packages/net/src/http/server.ts:51` (`listen` TSDoc `TODO(ADR)` marker)
+
+### Reversibility justification
+
+- Public APIs affected: none added — only an existing exported method's
+  accepted input shapes are widened (every existing caller still compiles and
+  behaves identically). A local `ListenOptions` interface is exported from the
+  same module but is not re-exported cross-package.
+- Rough cost to revert: <30 lines, 1 file (`packages/net/src/http/server.ts`).
+- External dependencies involved: none.
+
+### Needs human review by
+
+End of milestone M12.
+
+---
+
 ## Q-2026-05-24-007: Prod proxy for npm registry (reopened 2026-05-27)
 
 **Status:** 🟢 Active (reopened — see "Reopened" note below)  

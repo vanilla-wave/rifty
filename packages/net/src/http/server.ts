@@ -15,6 +15,19 @@ import { registerPort, unregisterPort } from '../registry.ts';
 import { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
 import { ServerResponse } from './response.ts';
 
+/**
+ * Subset of Node's `net.ListenOptions` accepted by {@link HttpServer.listen}.
+ * Only `port` is honoured; `host` is ignored (rifty is loopback-only — see
+ * `request.ts`), and `backlog`/`exclusive` are accepted-but-unused for
+ * Node-shape parity.
+ */
+export interface ListenOptions {
+  port?: number;
+  host?: string;
+  backlog?: number;
+  exclusive?: boolean;
+}
+
 export class HttpServer extends EventEmitter {
   private port: number | null = null;
   private readonly handler: (req: IncomingMessage, res: ServerResponse) => void;
@@ -24,7 +37,30 @@ export class HttpServer extends EventEmitter {
     this.handler = handler;
   }
 
-  listen(port: number, hostnameOrCb?: string | (() => void), cb?: () => void): this {
+  /**
+   * Bind the server to a port and register it in the port registry.
+   *
+   * Accepts Node's two principal `Server.listen` shapes:
+   *   - bare number: `listen(port, hostnameOrCb?, cb?)`
+   *   - options object: `listen({ port, host }, cb?)`
+   *
+   * The options form is required by `@effect/platform-node`'s
+   * `NodeHttpServer.layer`, which always calls `listen({ port, host }, cb)`.
+   * Both forms extract a numeric port; `host` is ignored (loopback-only).
+   *
+   * TODO(ADR): Q-2026-05-30-101
+   */
+  listen(port: number, hostnameOrCb?: string | (() => void), cb?: () => void): this;
+  listen(options: ListenOptions, cb?: () => void): this;
+  listen(
+    portOrOptions: number | ListenOptions,
+    hostnameOrCb?: string | (() => void),
+    cb?: () => void,
+  ): this {
+    const port = typeof portOrOptions === 'number' ? portOrOptions : (portOrOptions.port ?? 0);
+    // In the options form, the second arg (`hostnameOrCb`) is the callback;
+    // in the bare-number form, the callback may be either arg. The selection
+    // logic is identical for both: prefer a function in the second slot.
     const callback = (typeof hostnameOrCb === 'function' ? hostnameOrCb : cb) as
       | (() => void)
       | undefined;
