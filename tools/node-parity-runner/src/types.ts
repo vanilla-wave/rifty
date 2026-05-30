@@ -29,8 +29,18 @@ export interface ParityCase {
    *   The runner is a `tools/` harness already permitted to import higher
    *   layers (precedent: the WASI cases reach into `@rifty/runtime-wasi` +
    *   `@rifty/shadow-registry`).
+   * - `'ts-esm'` — TypeScript-on-import ESM mode. Both `code` and any `.ts`
+   *   `setup.files` are written verbatim and the entry is `main.ts`. The Node
+   *   side spawns `process.execPath` on `main.ts` (Node v24 strips types
+   *   natively; on older Node the runner falls back to the vendored `tsx`).
+   *   The rifty side builds `createModuleLoader(vfs, { cwd, workspace,
+   *   transformSource })` where `transformSource` runs the REAL esbuild WASI
+   *   binary (`transformWithEsbuild` over `runWasi`, ADR-0052/0049) to strip
+   *   types / lower JSX before the AST ESM rewrite — the same edge the headless
+   *   opencode harness will use. Like `'http'`, this is a `tools/`-harness-only
+   *   reach into `@rifty/runtime-wasi` + `@rifty/shadow-registry`.
    */
-  readonly kind?: 'cjs' | 'esm' | 'http';
+  readonly kind?: 'cjs' | 'esm' | 'http' | 'ts-esm';
 }
 
 export interface CaseRun {

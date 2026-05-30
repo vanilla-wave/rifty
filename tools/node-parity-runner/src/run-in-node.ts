@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { ParityCase } from './types.ts';
 
 /**
@@ -59,6 +60,28 @@ const HTTP_NODE_PREAMBLE = `
 }
 `;
 
+/** Major version of the Node running this harness (e.g. `24` for `v24.5.0`). */
+const NODE_MAJOR = Number.parseInt(process.versions.node.split('.')[0] ?? '0', 10);
+
+/** Absolute path to the workspace-vendored `tsx` CLI (the strip-types fallback). */
+const TSX_CLI = fileURLToPath(new URL('../../../node_modules/.bin/tsx', import.meta.url));
+
+/**
+ * Choose the executable + argv to run a case entry in Node.
+ *
+ * - Non-`ts-esm`: spawn `process.execPath` directly on the `.js`/`.mjs` entry.
+ * - `ts-esm` on Node >= 23 (types stripped by default): spawn
+ *   `process.execPath` on the `.ts` entry — no flag needed.
+ * - `ts-esm` on older Node: spawn the vendored `tsx` CLI so the type-strip
+ *   still happens, keeping the parity comparison valid off the v24+ matrix.
+ */
+function nodeRunnerFor(testCase: ParityCase, entry: string): [string, string[]] {
+  if (testCase.kind === 'ts-esm' && NODE_MAJOR < 23) {
+    return [TSX_CLI, [entry]];
+  }
+  return [process.execPath, [entry]];
+}
+
 export async function runInNode(testCase: ParityCase): Promise<string> {
   // `workDir` is the case's cwd — it holds setup files so `fs.readdirSync('.')`
   // sees only the case's fixtures (no harness scaffolding). `entryDir` holds
@@ -83,7 +106,7 @@ export async function runInNode(testCase: ParityCase): Promise<string> {
     } else {
       await mkdir(entryDir, { recursive: true });
     }
-    const ext = testCase.kind === 'esm' ? 'mjs' : 'js';
+    const ext = testCase.kind === 'esm' ? 'mjs' : testCase.kind === 'ts-esm' ? 'ts' : 'js';
     const entry = join(entryDir, `main.${ext}`);
     // For the opt-in http mode, prepend the request-driver preamble so the case
     // can call `__riftyHttpRequest` under real Node exactly as it does in rifty.
@@ -91,8 +114,23 @@ export async function runInNode(testCase: ParityCase): Promise<string> {
       testCase.kind === 'http' ? `${HTTP_NODE_PREAMBLE}\n${testCase.code}` : testCase.code;
     await writeFile(entry, source, 'utf8');
 
+    // `ts-esm`: mark the entry dir as a `type:module` scope so Node parses the
+    // stripped `.ts` as ESM (matching the rifty side, which mounts the same
+    // `/work/package.json`). A setup-provided package.json wins; otherwise the
+    // harness supplies the minimal `{ "type": "module" }`.
+    if (testCase.kind === 'ts-esm' && !testCase.setup?.files?.['package.json']) {
+      await writeFile(join(entryDir, 'package.json'), JSON.stringify({ type: 'module' }), 'utf8');
+    }
+
+    // `ts-esm`: run the `.ts` entry with type-stripping. Node v24 strips types
+    // by default, so `process.execPath main.ts` is enough; on older Node we
+    // shell out to the vendored `tsx` loader instead. Detecting the major
+    // version keeps the harness honest across the CI Node matrix rather than
+    // assuming a strip-types-capable runtime.
+    const [runner, runnerArgs] = nodeRunnerFor(testCase, entry);
+
     return await new Promise<string>((resolve, reject) => {
-      const proc = spawn(process.execPath, [entry], {
+      const proc = spawn(runner, runnerArgs, {
         cwd: workDir,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
