@@ -36,13 +36,13 @@ If something conflicts, `PROJECT_PLAN.md` and ADRs win over your priors.
 
 ## Design decisions during work
 
-When you encounter an unclear design choice during implementation, **do not stop unnecessarily**. Apply this:
+When you hit a design fork during implementation, **decide, record it, and keep going — do not stop.** (ADR-0063 supersedes the old ADR-0008 "stop on irreversible" action.) Use the reversibility checklist only to choose *where* the decision is recorded — not whether to pause.
 
 ### Reversibility checklist (order matters — first "yes" determines classification)
 
 1. Does it touch public API between packages? → **IRREVERSIBLE**
 2. Does it require a new external dependency? → **IRREVERSIBLE**
-3. Does it contradict an existing ADR? → **IRREVERSIBLE**
+3. Does it contradict an existing ADR? → **IRREVERSIBLE** (see "Reconsidering" below)
 4. Would reverting require >100 lines or >2 files changed? → **IRREVERSIBLE**
 5. Otherwise → **REVERSIBLE**
 
@@ -52,12 +52,19 @@ When you encounter an unclear design choice during implementation, **do not stop
   - Make a provisional decision
   - Mark relevant code with `// TODO(ADR): Q-YYYY-MM-DD-NNN`
   - Log to `OPEN_QUESTIONS.md` using the template there
-  - **Continue working.** Do not stop.
+  - **Continue working.**
 
-- **IRREVERSIBLE or contradicts existing ADR:**
-  - Stop
-  - Document the question in the PR description with options and trade-offs
-  - Do not invent answers
+- **IRREVERSIBLE:**
+  - Make the decision — you have standing authority (ADR-0063)
+  - **Write a new ADR inline**, ratified by you, recording the options, trade-offs, and chosen path so it's auditable. (Or log an `OPEN_QUESTIONS.md` entry and promote it to an ADR before the work merges.)
+  - **Continue working.** Do not stop and wait for a human.
+  - An irreversible decision that is *not* written down is a defect — "record-and-continue" is never "decide silently".
+
+### Reconsidering an already-recorded decision
+
+The one fork you do **not** settle inline: **overturning or revising a decision that is already recorded** — a merged ADR, or a provisional decision that other work now depends on.
+- **Launch an explicit decision subagent** (the Agent tool, or a small decision workflow) dedicated to that call. It reads the existing decision + the new context + the alternatives + the risks, decides, and produces the **superseding ADR** (which cites the one it overrides — ADRs stay immutable).
+- This focused subagent is the rigor mechanism that replaced the old human-stop.
 
 ### Things that are always reversible (no logging needed)
 - Local variable naming, file structure inside a package
@@ -82,7 +89,7 @@ These are non-negotiable. Violating any of them is a defect, regardless of how g
 - **No file-size cap.** Split by concept, not by line count.
 
 ### Tests
-- **Never modify a test to make code pass.** If a test seems wrong, that's a design discussion — file an issue, don't edit the test. (This is always IRREVERSIBLE per checklist.)
+- **Never modify a test to make code pass.** If a test seems wrong, that's a design discussion — file an issue, don't edit the test. (This is a correctness/integrity invariant — explicitly *out of scope* of ADR-0063's record-and-continue relaxation. It still never happens.)
 - **Parity tests are the gold standard.** When adding Node-compatible behavior, prefer adding a parity case (Node vs our runtime, diff stdout) over hand-written assertions.
 - **Don't add tests just to bump coverage.** Each test must catch a specific failure mode you can articulate.
 
@@ -156,14 +163,14 @@ Each new dependency is a long-term commitment (and counts as IRREVERSIBLE per ch
 One change per PR. Noticed unrelated issues? File separate tickets.
 
 ### "I'll stop and ask about this"
-Apply the Reversibility checklist first. Most design questions are REVERSIBLE — log them in `OPEN_QUESTIONS.md` and continue. Stop only for IRREVERSIBLE.
+Don't. Decide and record it (ADR-0063): REVERSIBLE → `OPEN_QUESTIONS.md`; IRREVERSIBLE → a new inline ADR with options + trade-offs. Then continue. The only fork you don't settle inline is **overturning a decision that's already recorded** — for that, spin up an explicit decision subagent that produces the superseding ADR.
 
 ## When in doubt
 
 - Check if a similar pattern exists elsewhere (`rg` is your friend)
 - Check the relevant ADR
-- Apply the Reversibility checklist
-- If still IRREVERSIBLE and unclear: stop and ask explicitly in PR description, don't guess
+- Apply the Reversibility checklist (to decide *where* to record, not whether to pause)
+- If IRREVERSIBLE and unclear: pick the best-justified option and record it in a new ADR (options + trade-offs); don't stop. To change a decision that's already recorded, use a decision subagent (ADR-0063).
 - Never assume Node/Anthropic/StackBlitz behavior without verifying — use the parity-runner to check Node's actual behavior
 
 ---

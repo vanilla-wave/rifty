@@ -11,7 +11,7 @@ ADRs are immutable after merge. New decisions get new ADRs; supersedence is expl
 | 0005 | Dev proxy for npm registry via Vite | D-004 |
 | 0006 | Shadow registry — layered strategy | D-005 |
 | 0007 | Chrome-first with cross-browser infrastructure from M0 | D-006 |
-| 0008 | Reversible decisions — agents don't block on every dilemma | D-007 |
+| 0008 | Reversible decisions — agents don't block on every dilemma (stop-on-irreversible action superseded by ADR-0063) | D-007 |
 | 0009 | AST-based ESM transform (supersedes ADR 0004 §"ESM loader") | — |
 | 0010 | `node:https` registered as a loud-throw stub | — |
 | 0011 | Sync IPC via SharedArrayBuffer + Atomics; Worker-as-process model | — |
@@ -59,5 +59,6 @@ ADRs are immutable after merge. New decisions get new ADRs; supersedence is expl
 | 0053 | `.ts`/`.tsx` as first-class resolvable + ESM module extensions — after the `.js` family, `type:module` classification (feature-02 T1) | — |
 | 0054 | Effect `@effect/platform-node` consumes rifty `node:http` AS-IS via additive shape-widening — no dedicated cross-package Effect HTTP adapter; pipe-sink DEFERRED (ratifies decisions.md draft ADR-0057; feature-05) | — |
 | 0055 | opencode event stream rides SSE-over-streaming-HTTP — no `ws` shim, page-direct deployment only; Worker v3 frame bump DEFERRED (ratifies decisions.md draft ADR-0059; feature-07) | — |
+| 0063 | Record-and-continue decisions; explicit decision subagent for reconsiderations (supersedes ADR-0008/D-007 stop action) | D-008 |
 
 For the broad rationale and trade-offs, read PROJECT_PLAN.md §8 first; ADRs are the durable spec.
