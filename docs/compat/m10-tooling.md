@@ -11,6 +11,7 @@ Status of M10 foundations: `fs.watch`, WebSocket, dev-server, shell, preview bri
 | `fs.unwatchFile(path, listener?)` | ✅ | Removes specific listener or all listeners |
 | `WebSocket` (browser-shape, in-process) | ⚠️ | Same-realm pairing with `WebSocketServer`; real-TCP `WebSocket` is a follow-up |
 | `WebSocketServer` (Node `ws`-shape) | ⚠️ | In-process; `broadcast`; `'connection'` / `'message'` / `'close'` events |
+| `http.Server` WS/SSE upgrade (`server.on('upgrade')`, `res.assignSocket`) | ❌ | Owned by feature 07 (opencode facade); the port-registry bridge carries buffered+chunked HTTP only (ADR-0040/0048), no socket hijack. `ServerResponse` exposes no `assignSocket`; an upgrade is never silently routed through the buffered `'request'` path (negative test `server.test.ts`) |
 | Service Worker `/preview/<port>/*` interceptor | ✅ | Posts to window client over MessageChannel; window resolves via port registry |
 | Dev-server (`examples/vite-like-dev`) — HTML+JS serving | ✅ | From VFS; injects HMR client into `<body>` |
 | Dev-server — fs.watch-driven HMR broadcast | ✅ | Watches root + `src/`; emits `{ type: 'update', path }` |

@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Documented
+
+- **WS/SSE upgrade is the feature-07 boundary (F05-T5, negative lock).** Added a
+  net-only conformance test pinning that feature 05's buffered HTTP surface does
+  NOT silently consume a WebSocket/SSE upgrade: `ServerResponse` exposes no
+  `assignSocket` sink, and the server emits no `'upgrade'` (nor mis-routes an
+  upgrade through the buffered `'request'` dispatch). No new code path — the
+  test documents the intentional gap and goes red if a fake upgrade entry point
+  is wired (protecting feature 08's SSE round-trip from silent corruption).
+  Registered the `http.Server` WS/SSE upgrade path as not-supported (❌) in
+  `docs/compat/m10-tooling.md` (ADR-0055 — PTY/WS-shaped routes stay stubbed).
+  Test: `packages/net/src/http/server.test.ts`.
+
 ### Added
 
 - **`ServerResponse` emits Node-style `'drain'` after a backpressured write

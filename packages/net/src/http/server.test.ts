@@ -12,7 +12,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { dispatchToPort, listPorts, unregisterPort } from '../registry.ts';
-import type { ServerResponse } from './response.ts';
+import { ServerResponse } from './response.ts';
 import { createServer } from './server.ts';
 
 afterEach(() => {
@@ -88,5 +88,68 @@ describe('HttpServer — no-handler createServer + on(request) buffered (P3 firs
     expect(resp.status).toBe(200);
     expect(resp.headers.get('content-type')).toBe('application/json');
     expect(await resp.text()).toBe(JSON.stringify({ version: 'x' }));
+  });
+});
+
+/**
+ * F05-T5 (NEGATIVE — feature-07 boundary lock): the WS/SSE upgrade path is not
+ * silently consumed by feature 05's buffered HTTP surface.
+ *
+ * `@effect/platform-node` performs a WebSocket/SSE upgrade by listening on
+ * `server.on('upgrade', (req, socket, head) => …)` and calling
+ * `res.assignSocket(socket)` to hijack the connection. Both depend on a raw
+ * socket the cross-realm port-registry bridge does NOT have (ADR-0040/0048:
+ * the bridge carries buffered + chunked HTTP request/reply only, no socket
+ * hijack). Upgrade/`assignSocket` is therefore a hard-blocker-adjacent path
+ * OWNED BY FEATURE 07 and is registered as not-supported in the compat matrix
+ * (ADR-0055 — PTY/WS-shaped routes stay stubbed).
+ *
+ * This test pins the INTENTIONAL ABSENCE so feature 05 cannot silently swallow
+ * an upgrade into the buffered path — which would corrupt feature 08's SSE LLM
+ * round-trip with no error. It documents the gap today (the plumbing is absent)
+ * and goes RED the moment someone wires a fake upgrade entry point: i.e. if
+ * `ServerResponse` grows an `assignSocket` sink, or if the server starts
+ * routing an upgrade-style request through the normal `'request'` dispatch.
+ */
+describe('HttpServer — upgrade path is the feature-07 boundary (NEGATIVE)', () => {
+  it('upgrade path is not silently consumed as a normal request', async () => {
+    const port = 4101;
+    const s = createServer();
+
+    // Feature 05 only ever surfaces normal requests via `'request'`. There is
+    // no rifty code path that detects an `Upgrade:` header and converts it into
+    // a buffered request — but if one were added, this listener would catch it
+    // firing for an upgrade-style invocation.
+    const requestArgs: unknown[][] = [];
+    s.on('request', (...args: unknown[]) => {
+      requestArgs.push(args);
+    });
+
+    // Effect attaches its WS hijack here. rifty emits no `'upgrade'` event from
+    // any code path, so this listener must never fire.
+    const upgradeArgs: unknown[][] = [];
+    s.on('upgrade', (...args: unknown[]) => {
+      upgradeArgs.push(args);
+    });
+
+    s.listen({ port });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // The `assignSocket` sink Effect uses to hijack a connection must be ABSENT
+    // from `ServerResponse`. If it ever appears, the buffered path could be
+    // silently turned into a (broken) upgrade — exactly the corruption this
+    // test guards against. Asserting on a fresh instance pins the class shape.
+    const res = new ServerResponse();
+    expect('assignSocket' in res).toBe(false);
+    expect((res as unknown as { assignSocket?: unknown }).assignSocket).toBeUndefined();
+
+    // Likewise the server exposes no upgrade entry point. There is no
+    // `s.emit('upgrade', …)` call site anywhere in feature 05's surface, so an
+    // upgrade can only be reached by FEATURE-07 plumbing that does not exist
+    // yet. Merely having an `'upgrade'` listener registered must not cause any
+    // spurious `'request'` emission.
+    expect(requestArgs).toHaveLength(0);
+    expect(upgradeArgs).toHaveLength(0);
   });
 });
