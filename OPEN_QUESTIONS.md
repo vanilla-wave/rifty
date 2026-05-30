@@ -84,6 +84,64 @@ End of M12.
 
 ---
 
+## Q-2026-05-30-063: pin the spawn ceiling by a conformance test (vs prose / vs end-to-end opencode)
+
+**Status:** 🟢 Active  
+**Encountered in:** F09-T4 (feature 09-tool-ceiling-marker), proving the IMPOSSIBLE side of the no-tool-execution ceiling is walled off rather than merely asserted in comments  
+**Milestone:** M12 (opencode facade)  
+**Author (agent session):** 2026-05-31
+
+### Context
+
+The facade's hard ceiling is "no process spawn / no shell". opencode's
+impossible tools all bottom out in `child_process.spawn` of a real binary
+(`Git.run` → `ChildProcess.make('git')`, the bash tool, the ripgrep binary).
+rifty already enforces this — any command other than `node <script>` falls
+through `spawnViaSameRealm` → `execScript`, surfacing `spawn <cmd> ENOENT\n`
+with exit 127 (`child_process-exec.ts:54-58`) — but the boundary lived only in
+prose. A regression that made a non-`node` command fake-succeed would silently
+re-open the ceiling.
+
+### Options considered
+
+- **Option A — conformance test on rifty's own spawn substrate.**
+  - Pro: cheap, in-tree today, no opencode vendoring; pins the exact substrate
+    every impossible tool transitively hits; goes red if any path fake-succeeds.
+  - Con: not end-to-end against opencode's real `Git.run`.
+- **Option B — vendor opencode and drive its real git/bash tool.**
+  - Pro: highest fidelity. Con: blocked on vendoring + a full harness;
+    out of scope for the marker (opencode is NOT vendored this run).
+- **Option C — prose-only documentation.**
+  - Con: violates the project's "tests encode contracts" + no-silent-stub rules.
+
+### Decision taken (provisional)
+
+**Chose:** A
+
+**Why:** A conformance test (`git`/`bash` → ENOENT-127, never exit 0; plus
+`child.stdin.write` throws `NotImplementedError`) pins the ceiling as a
+behavioral contract at the substrate level. CONFORMANCE, not Node-parity:
+real Node WOULD spawn `git`, so a parity diff is the wrong tool here. Asserts
+on `git`/`bash` only — both always fall through, independent of the SAB /
+worker-url gate (which only routes `node <script>` to the Worker path).
+
+### Code markers
+
+- `packages/runtime-js/src/builtins/child_process-ceiling.test.ts`
+  (conformance test; no `TODO(ADR)` in production code — no production change).
+
+### Reversibility justification
+
+- Public APIs affected: none — a test only, no production change.
+- Rough cost to revert: deleting one test file (1 file, <90 lines).
+- External dependencies involved: none.
+
+### Needs human review by
+
+End of M12.
+
+---
+
 ## Q-2026-05-30-101: `HttpServer.listen` options-object overload
 
 **Status:** 🟢 Active  

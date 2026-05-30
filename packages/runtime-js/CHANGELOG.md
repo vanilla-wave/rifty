@@ -30,6 +30,21 @@
   regression pins (no production change); each was verified load-bearing (goes
   red when its branch is disabled). Unit: `utils/vfs-grep.test.ts`.
 
+- **Spawn-ceiling conformance contract (feature-09 T4, Q-2026-05-30-063).** Pins
+  the IMPOSSIBLE side of the opencode no-tool-execution ceiling as a behavioral
+  contract, not prose: `child_process.spawn('git', ['status'])` and
+  `spawn('bash', ['-c', …])` always fall through `spawnViaSameRealm` →
+  `execScript`, surfacing `spawn <cmd> ENOENT\n` on stderr with exit code 127 —
+  they MUST NOT fake-succeed. This is the substrate every impossible opencode
+  tool transitively hits (`Git.run` → `ChildProcess.make('git')`, the bash tool,
+  the ripgrep binary). A third case re-pins that `child.stdin.write` throws
+  `NotImplementedError` on the in-realm fallback (no worker stdin port — no
+  silent no-op). CONFORMANCE level, NOT Node-parity: real Node WOULD spawn
+  `git`, so a parity diff is the wrong tool; asserts on `git`/`bash` only (both
+  always fall through, independent of the SAB/worker-url gate). No production
+  change — the ceiling already exists; this locks it. opencode is NOT vendored.
+  Conformance: `builtins/child_process-ceiling.test.ts`.
+
 - **`ModuleLoaderOptions` gains `workspace?` + `transformSource?`; new
   `TransformSourceHook` type (ADR-0052, feature-02 T2).** Additive optional
   public-API fields on the `@rifty/runtime-js/loader` surface. `transformSource`
