@@ -26,6 +26,19 @@
   source — honest, no silent stub. The happy path (hook present) and plain-JS
   modules are unchanged. Unit: `esm.test.ts`.
 
+- **`require()` of a `.ts`/`.tsx` module (CJS scope) throws a directed
+  `NotImplementedError`, never silently `new Function`s raw TS (ADR-0052 D1
+  alt-C, feature-02 T4).** `executeCjs` previously fed any `.ts`/`.tsx` that
+  classified as CJS (a non-`type:module` scope) straight to `new Function`,
+  dying with an opaque `SyntaxError: Unexpected token`. It now throws
+  `NotImplementedError('module-loader.ts-via-require')` BEFORE touching the
+  registry (so repeated `require()` calls throw idempotently rather than the
+  second returning a stale loading record): the esbuild type-strip is async and
+  a synchronous `require()` cannot await it, so `.ts` is only loadable as ESM via
+  `import()` under a `type:module` scope. JSON and plain-JS CJS are unchanged.
+  Registered in `docs/compat/modules.md` as not-supported. Unit:
+  `loader-transform.test.ts`.
+
 - **`.ts`/`.tsx` are first-class resolvable + ESM module extensions (ADR-0053).**
   The resolver now adds `.ts`,`.tsx` to `DEFAULT_EXTENSIONS`/`INDEX_FILES` —
   AFTER the `.js` family (so plain-Node packages shipping `foo.js`, or both

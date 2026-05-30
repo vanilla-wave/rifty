@@ -11,6 +11,7 @@
  *  - the hook's return value is what reaches the AST ESM rewriter (the
  *    sentinel-strip round-trips into the executed module).
  */
+import { NotImplementedError } from '@rifty/io';
 import { MemoryFsSync } from '@rifty/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
 import { createModuleLoader } from './loader.ts';
@@ -77,5 +78,27 @@ describe('ModuleLoaderOptions transform surface', () => {
 
     expect(observedWorkspace).toBe('/proj');
     expect(ns.only).toBe(7);
+  });
+});
+
+describe('require() of a .ts module (CJS-scope honesty, feature 02 T4)', () => {
+  it('require() of a .ts module throws a directed NotImplementedError, never silently new-Functions TS', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      // NO `type:module` => detectKind classifies the `.ts` as CJS, the very
+      // path that would otherwise feed raw TS to executeCjs/new Function.
+      '/work/package.json': JSON.stringify({ name: 'legacy-scope' }),
+      // TS-only syntax (a type annotation) that would die with an opaque
+      // SyntaxError inside `new Function` if it ever reached executeCjs.
+      '/work/legacy.ts': 'export const x: number = 1;\n',
+    });
+
+    const loader = createModuleLoader(vfs, { cwd: '/work' });
+
+    // The strip hook is async (esbuild via runWasi) and require() cannot await
+    // it (ADR-0052 D1 alt-C), so a `.ts` reached via require() must throw a
+    // directed, honest error — not an opaque acorn/new-Function SyntaxError.
+    expect(() => loader.require('./legacy.ts', '/work/e.js')).toThrow(NotImplementedError);
+    expect(() => loader.require('./legacy.ts', '/work/e.js')).toThrow(/require\(\) of .*\.ts/);
   });
 });

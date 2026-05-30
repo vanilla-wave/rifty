@@ -1,8 +1,32 @@
+import { NotImplementedError } from '@rifty/io';
 import { dirname } from '@rifty/vfs';
 import { ModuleLoadError } from './errors.ts';
 import type { ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
 import type { Resolver } from './resolver.ts';
+
+/**
+ * Reject a `.ts`/`.tsx` module that reached the CJS execution path with a
+ * directed {@link NotImplementedError} instead of letting raw TypeScript fall
+ * through to `new Function` (where it dies with an opaque
+ * `SyntaxError: Unexpected token`).
+ *
+ * The TS type-strip is the injected, esbuild-via-`runWasi` `transformSource`
+ * hook, which is **async** (ADR-0052 D1 alt-C). Synchronous `require()` cannot
+ * await it, so a `.ts`/`.tsx` classified as CJS (a non-`type:module` package
+ * scope) is unsupported on the facade path — opencode is `type:module`, so its
+ * `.ts` loads as ESM via `import()` where the async strip runs. This keeps the
+ * gap loud, never a silent stub (CLAUDE.md). Registered in
+ * `docs/compat/modules.md` as not-supported.
+ */
+function assertNotTsCjs(id: string): void {
+  if (id.endsWith('.ts') || id.endsWith('.tsx')) {
+    throw new NotImplementedError(
+      'module-loader.ts-via-require',
+      `require() of ${id} (TypeScript) is not supported: the esbuild type-strip is async, so a synchronous require() cannot transform it. A .ts/.tsx is only loadable when its package scope is type:module (loads as ESM via import()).`,
+    );
+  }
+}
 
 export interface CjsLoaderDeps {
   readonly registry: ModuleRegistry;
@@ -20,6 +44,13 @@ export interface CjsLoaderDeps {
 }
 
 export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Record<string, unknown> {
+  // A `.ts`/`.tsx` that classified as CJS would otherwise feed raw TypeScript
+  // to `new Function` below — throw a directed NotImplementedError first
+  // (ADR-0052 D1 alt-C; the strip hook is async, require() cannot await it).
+  // Guard BEFORE touching the registry so repeated require() calls throw
+  // idempotently rather than the second one returning a stale loading record.
+  if (resolved.kind !== 'json') assertNotTsCjs(resolved.id);
+
   const { registry } = deps;
   const existing = registry.get(resolved.id);
   if (existing && existing.state === 'loaded') return existing.exports;
