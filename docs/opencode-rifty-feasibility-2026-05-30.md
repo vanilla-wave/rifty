@@ -106,6 +106,38 @@ Incidental shims: `Heap.start()` (v8/process memory), `process.env`/`argv`,
 - **P5 (ceiling) — one tool.** A JS/WASM read/grep over the VFS to mark the
   tool-execution boundary; shell/git/PTY documented out of scope (process-spawn).
 
+## Чеклист «что построить» (вход для проектной сессии — только «что», без «как»)
+
+**0. Сначала проверить (де-риск):**
+- статически ли `HttpApiApp.createRoutes` тянет DB-слой (→ `bun:sqlite`-шим нужен сразу);
+- воспроизводимы ли формы `IncomingMessage`/`ServerResponse` из `@effect/platform-node` поверх SW-моста (как у express@4).
+
+**1. Загрузить код opencode в rifty:**
+- исходники opencode + его зависимости в VFS (vendor/clone + install Bun-дерева);
+- TS-on-import по всему дереву пакета (расширить esbuild.wasm-трансформ на многофайловый ESM-граф);
+- резолвер: package.json `#`-условия (`#db`/`#pty`) + перехват голого специфайра `bun:sqlite`.
+
+**2. Поднять сервер (фасад без выполнения инструментов):**
+- мост `node:http` `createServer().listen()` → port-registry + SW (для Effect/platform-node);
+- `#db` → WASM-SQLite (sql.js/wa-sqlite) + drizzle;
+- `#pty` → заглушка (throw на create);
+- ws-over-SW мост (стрим событий/SSE);
+- программный вход `Server.listen(opts)` (минуя CLI), mDNS off.
+
+**3. Реальный (но без инструментов) поток:**
+- HTTPS-исходящие для LLM-провайдеров (`https`→fetch; сейчас loud-throw);
+- хранилище JSON-over-VFS;
+- вехи: первый GET-роут → 200 JSON; затем session create + LLM round-trip.
+
+**4. Снять потолок инструментов (модель WebContainers, без сервера — подмена tool-слоя):**
+- перехватить tool-слой opencode (bash/shell, git, grep, file-edit, spawn);
+- субституты: `@rifty/shell` + WASI-coreutils; isomorphic-git (или wasm-git); поиск по VFS (JS/ripgrep-WASM); файловые операции по VFS;
+- нативный спавн не делаем.
+
+**5. Проверка:**
+- headless-харнесс (как `real-vite-smoke.ts`) для вех 1–3;
+- браузерный e2e (cross-origin isolated) для полного потока.
+
 ## Bottom line
 
 opencode's *server* is portable to rifty as a **no-code-execution agent
