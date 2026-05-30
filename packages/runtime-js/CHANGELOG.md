@@ -18,6 +18,18 @@
   ripgrep-WASM / isomorphic-git deferred behind explicit ADR ratification. Unit:
   `utils/vfs-grep.test.ts`.
 
+- **`vfsGrep` failure-mode contract tests (feature-09 T3, Q-2026-05-30-061).**
+  Pins the off-happy-path contracts callers depend on, each catching a specific
+  articulated failure mode: `maxResults` truncation (bounded walk, not an
+  unbounded scan), `ignoreCase` (mixed-case matching), the suffix/extension
+  `include` filter (`'*.ts'` skips `/work/x.md` — minimal suffix match, NOT full
+  glob; no glob dependency), recursive descent into subdirectories, and ENOENT
+  propagation when the root is missing (surfaces the underlying `node:fs`
+  ENOENT — NOT swallowed into an empty result; no silent stub). The committed T2
+  implementation already satisfies every contract, so these are added as
+  regression pins (no production change); each was verified load-bearing (goes
+  red when its branch is disabled). Unit: `utils/vfs-grep.test.ts`.
+
 - **`ModuleLoaderOptions` gains `workspace?` + `transformSource?`; new
   `TransformSourceHook` type (ADR-0052, feature-02 T2).** Additive optional
   public-API fields on the `@rifty/runtime-js/loader` surface. `transformSource`
