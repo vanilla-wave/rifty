@@ -82,6 +82,72 @@ End of milestone M12.
 
 ---
 
+## Q-2026-05-30-102: `ServerResponse` Node-style `'drain'` emission
+
+**Status:** 🟢 Active  
+**Encountered in:** F05-T3 (feature 05-effect-http-bridge), while widening `node:http` for `@effect/platform-node`  
+**Milestone:** M12 (opencode facade)  
+**Author (agent session):** 2026-05-30
+
+### Context
+
+`@effect/platform-node`'s streaming write loop in `internal/httpServer.ts`
+parks on `nodeResponse.on('drain', ...)` and IGNORES `write()`'s return value
+to pace a streaming response. rifty's `ServerResponse` signalled backpressure
+ONLY via `write()`'s `boolean | Promise<boolean>` return and never emitted a
+Node `'drain'` event, so an Effect-driven streaming response would hang
+forever. Emitting `'drain'` is also the standard Node `Writable` contract that
+any generic Node http consumer expects.
+
+### Options considered
+
+- **Option A — emit a Node-style `'drain'` from `ServerResponse`, gated by a
+  `_needDrain` flag.** Set `_needDrain` only when a `write()` actually returned
+  the backpressure Promise (queue full); emit `'drain'` on the next
+  `ReadableStream` `pull()` when gated, then clear the flag.
+  - Pro: Node-faithful; additive (an extra event, `write()`'s return unchanged);
+    single file; no new export; no new dep. Gating prevents spurious `'drain'`
+    before any backpressure (Node only drains after `write()` returned `false`).
+  - Con: a stray `'drain'` listener in some future consumer could now fire — but
+    rifty's own callers do not listen for `'drain'` today, so additive-only.
+- **Option B — patch `@effect/platform-node` via shadow-registry to await
+  `write()`'s Promise instead of parking on `'drain'`.**
+  - Pro: leaves `ServerResponse` untouched.
+  - Con: couples to Effect internals, fragile across Effect beta versions;
+    violates the bridge-agnostic principle (fix rifty's Node shape, not the
+    consumer).
+- **Option C — buffer the whole response, never stream.**
+  - Con: defeats P4 LLM streaming; memory blows up on long generations.
+
+### Decision taken (provisional)
+
+**Chose:** A
+
+**Why:** Emitting `'drain'` is the standard Node `Writable` contract and is what
+every Node http consumer (not just Effect) expects, so it improves general
+parity. Gating behind `_needDrain` keeps it from diverging from Node by firing
+before any backpressure. It is purely additive and avoids coupling to Effect
+internals or sacrificing streaming.
+
+### Code markers
+
+- `packages/net/src/http/response.ts` (`_needDrain` field TSDoc `TODO(ADR)`
+  marker; `pull()` emission `TODO(ADR)` marker)
+
+### Reversibility justification
+
+- Public APIs affected: none added — a new `'drain'` event is emitted on the
+  already-exported `ServerResponse`; `write()`'s `boolean | Promise<boolean>`
+  return is unchanged. No new exported symbol.
+- Rough cost to revert: <30 lines, 1 file (`packages/net/src/http/response.ts`).
+- External dependencies involved: none.
+
+### Needs human review by
+
+End of milestone M12.
+
+---
+
 ## Q-2026-05-24-007: Prod proxy for npm registry (reopened 2026-05-27)
 
 **Status:** 🟢 Active (reopened — see "Reopened" note below)  

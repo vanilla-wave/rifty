@@ -71,3 +71,87 @@ describe('ServerResponse — backpressure (Item 5)', () => {
     expect(ret).toBe(true);
   });
 });
+
+describe("ServerResponse — Node-style 'drain' (F05-T3, Q-2026-05-30-102)", () => {
+  it('emits drain after a backpressured write resolves on pull()', async () => {
+    // Effect's @effect/platform-node streaming write loop parks on
+    // res.on('drain') and ignores write()'s return value. rifty signals
+    // backpressure only via the write() Promise; this test asserts the
+    // additive Node-style 'drain' event fires when the reader pulls room back.
+    const res = new ServerResponse();
+    res.writeHead(200, { 'content-type': 'text/plain' });
+
+    // First write flushes headers and enqueues chunk 0. Default HWM=1 means
+    // desiredSize drops to 0 afterwards, so the queue is now full.
+    expect(res.write('x0')).toBe(true);
+
+    const drainOrder: string[] = [];
+    res.on('drain', () => drainOrder.push('drain'));
+
+    // Second write is backpressured (desiredSize <= 0): returns a Promise that
+    // resolves on the next pull(). No 'drain' may fire yet — the reader has
+    // not pulled.
+    const second = res.write('x1');
+    expect(typeof (second as Promise<boolean>).then).toBe('function');
+
+    // Give microtasks a chance; with no reader, no pull() fires => no 'drain'.
+    await new Promise<void>((r) => setTimeout(r, 20));
+    expect(drainOrder).toEqual([]);
+
+    // Now start reading the body — this drives pull(), unblocks the parked
+    // write, and must emit exactly one 'drain'. Reading runs concurrently so
+    // the pull() that resolves the parked write actually fires.
+    const response = await res.toResponse();
+    const reader = response.body!.getReader();
+    const drainP = (async () => {
+      for (;;) {
+        const { done } = await reader.read();
+        if (done) break;
+      }
+    })();
+
+    await second; // the backpressured write resolves once the reader pulls
+    drainOrder.push('write-resolved');
+
+    // Drain the rest so the body can close cleanly.
+    res.end();
+    await drainP;
+
+    // 'drain' fired exactly once, and it fired on/before the pull that
+    // unblocked the write (i.e. it is present, ahead of write-resolved or
+    // interleaved with it — the key assertion is exactly-once and that it
+    // appeared as a result of the reader pulling).
+    expect(drainOrder.filter((e) => e === 'drain')).toEqual(['drain']);
+    // The drain event must have been observed as part of the pull cycle that
+    // resolved the parked write — so it precedes the 'write-resolved' marker.
+    expect(drainOrder.indexOf('drain')).toBeLessThan(drainOrder.indexOf('write-resolved'));
+  });
+
+  it('does NOT emit drain when no write was backpressured', async () => {
+    // A single small write into an empty HWM=1 queue is NOT backpressured
+    // (desiredSize was 1 going in), so write() returns true synchronously and
+    // no 'drain' must ever fire — even though pull() will run as the reader
+    // consumes the body.
+    const res = new ServerResponse();
+    res.writeHead(200, { 'content-type': 'text/plain' });
+
+    let drains = 0;
+    res.on('drain', () => {
+      drains++;
+    });
+
+    expect(res.write('only')).toBe(true);
+    res.end();
+
+    const response = await res.toResponse();
+    const reader = response.body!.getReader();
+    for (;;) {
+      const { done } = await reader.read();
+      if (done) break;
+    }
+    // Let any stray microtask-scheduled emits settle.
+    await new Promise<void>((r) => setTimeout(r, 20));
+
+    expect(drains).toBe(0);
+  });
+});

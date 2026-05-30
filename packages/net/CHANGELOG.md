@@ -4,6 +4,18 @@
 
 ### Added
 
+- **`ServerResponse` emits Node-style `'drain'` after a backpressured write
+  (Q-2026-05-30-102).** When a `write()` returned the backpressure Promise
+  (queue full at `desiredSize <= 0`), the next `ReadableStream` `pull()` now
+  emits a Node `Writable`-parity `'drain'` event, gated by an internal
+  `_needDrain` flag so no spurious `'drain'` fires before any backpressure
+  occurred. Required by `@effect/platform-node`'s streaming write loop, which
+  parks on `res.on('drain')` and ignores `write()`'s return value. Additive —
+  `write()`'s `boolean | Promise<boolean>` return is unchanged; existing
+  rifty/express callers that ignore the event are unaffected. No `'drain'` is
+  emitted after `end()` (Node parity). Tests:
+  `packages/net/src/http/response.test.ts`.
+
 - **`HttpServer.listen` options-object overload (Q-2026-05-30-101).** `listen`
   now accepts Node's `listen({ port, host }, cb)` form in addition to the
   bare-number `listen(port, hostnameOrCb?, cb?)` form, extracting the numeric
