@@ -39,6 +39,18 @@
   Registered in `docs/compat/modules.md` as not-supported. Unit:
   `loader-transform.test.ts`.
 
+- **`createModuleLoader` now caches stripped TS output per resolved id, dropped
+  on `invalidate(id)` (Q-2026-05-30-202, feature-02 T5).** A loader-internal
+  `Map<id,string>` wraps the injected `transformSource` so the WASI esbuild
+  strip runs at most once per `.ts`/`.tsx`/`.jsx` id across the import graph and
+  across repeated loads within one loader instance. The cache is populated
+  lazily on first hook call, read before re-invoking it, and kept coherent with
+  the executed-module cache: `invalidate(id)` drops that id's stripped output,
+  `invalidate()` clears all of it. `esm.ts` stays cache-unaware (the wrap is
+  invisible to the execute path). Performance/REVERSIBLE only — no public-API or
+  behaviour change for callers, plain-JS loaders unaffected. Unit:
+  `loader-transform.test.ts`.
+
 - **`.ts`/`.tsx` are first-class resolvable + ESM module extensions (ADR-0053).**
   The resolver now adds `.ts`,`.tsx` to `DEFAULT_EXTENSIONS`/`INDEX_FILES` —
   AFTER the `.js` family (so plain-Node packages shipping `foo.js`, or both

@@ -81,6 +81,76 @@ describe('ModuleLoaderOptions transform surface', () => {
   });
 });
 
+describe('createModuleLoader transform cache (feature 02 T5, Q-2026-05-30-202)', () => {
+  it('transforms each .ts id at most once across repeated imports, and drops the cache on invalidate', async () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/package.json': JSON.stringify({ type: 'module' }),
+      '/work/main.ts': '/*X*/export const main = 7;\n',
+    });
+
+    // Count transform calls per id. The id-keyed transform cache (T5) lives in
+    // the loader closure; the registry's executed-module cache is a SEPARATE
+    // layer. We drive the two independently below.
+    const calls = new Map<string, number>();
+    const spy = vi.fn(
+      async (req: { source: string; id: string; loader: string; workspace: string }) => {
+        calls.set(req.id, (calls.get(req.id) ?? 0) + 1);
+        return req.source.replaceAll('/*X*/', '');
+      },
+    );
+
+    const loader = createModuleLoader(vfs, { cwd: '/work', transformSource: spy });
+
+    // First import: transform fires once, registry caches the executed module.
+    const first = await loader.import('./main.ts', '/work/__entry__.ts');
+    expect(first.main).toBe(7);
+    expect(calls.get('/work/main.ts')).toBe(1);
+
+    // Drop ONLY the registry record (not the transform cache) so executeEsm is
+    // forced to run again while the transform cache stays warm. With the T5
+    // cache this is a hit -> the WASI strip is NOT re-spawned (count stays 1).
+    // Without a transform cache the hook re-fires here -> count 2 (RED leg).
+    loader.registry.invalidate('/work/main.ts');
+    const again = await loader.loadById('/work/main.ts', true);
+    expect(again.main).toBe(7);
+    expect(calls.get('/work/main.ts')).toBe(1);
+
+    // loader.invalidate(id) must drop the transform cache too, so the next load
+    // re-runs the strip.
+    loader.invalidate('/work/main.ts');
+    const afterInvalidate = await loader.loadById('/work/main.ts', true);
+    expect(afterInvalidate.main).toBe(7);
+    expect(calls.get('/work/main.ts')).toBe(2);
+  });
+
+  it('full invalidate() (no id) clears the whole transform cache', async () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/package.json': JSON.stringify({ type: 'module' }),
+      '/work/m.ts': '/*X*/export const m = 1;\n',
+    });
+
+    let count = 0;
+    const spy = vi.fn(
+      async (req: { source: string; id: string; loader: string; workspace: string }) => {
+        count += 1;
+        return req.source.replaceAll('/*X*/', '');
+      },
+    );
+
+    const loader = createModuleLoader(vfs, { cwd: '/work', transformSource: spy });
+
+    await loader.import('./m.ts', '/work/__entry__.ts');
+    expect(count).toBe(1);
+
+    // Full wipe drops registry + transform cache; the next load re-strips.
+    loader.invalidate();
+    await loader.loadById('/work/m.ts', true);
+    expect(count).toBe(2);
+  });
+});
+
 describe('require() of a .ts module (CJS-scope honesty, feature 02 T4)', () => {
   it('require() of a .ts module throws a directed NotImplementedError, never silently new-Functions TS', () => {
     const vfs = new MemoryFsSync();

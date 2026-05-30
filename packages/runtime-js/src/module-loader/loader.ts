@@ -70,11 +70,31 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
   const cwd = opts.cwd ?? STUB_FROM_FILE_DEFAULT;
   const workspace = opts.workspace ?? opts.cwd ?? STUB_FROM_FILE_DEFAULT;
 
+  // Id-keyed strip cache: the WASI esbuild process is a full process spawn per
+  // module, so re-stripping the same `.ts` across the (large) opencode import
+  // graph — or across repeated loads within one loader instance — is wasted
+  // work. Key by absolute resolved id (installed sources are immutable for a
+  // given package version in the VFS overlay), populate lazily on first hook
+  // call, read before re-invoking the hook, and drop via the same
+  // `invalidate(id)` path that drops the executed-module record. `esm.ts` stays
+  // cache-unaware: we wrap `opts.transformSource` so the cache is invisible to
+  // the execute path. TODO(ADR): Q-2026-05-30-202.
+  const transformCache = new Map<string, string>();
+  const cachedTransform: TransformSourceHook | undefined =
+    opts.transformSource &&
+    (async (req) => {
+      const hit = transformCache.get(req.id);
+      if (hit !== undefined) return hit;
+      const out = await opts.transformSource!(req);
+      transformCache.set(req.id, out);
+      return out;
+    });
+
   const deps = {
     registry,
     resolver,
     workspace,
-    transformSource: opts.transformSource,
+    transformSource: cachedTransform,
     resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule {
       return resolver.resolve(specifier, { fromFile, esm });
     },
@@ -163,6 +183,11 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     },
     invalidate(id) {
       registry.invalidate(id);
+      // Keep the strip cache coherent with the executed-module cache: a
+      // targeted invalidate drops only that id's stripped output, a full wipe
+      // clears all of it (TODO(ADR): Q-2026-05-30-202).
+      if (id === undefined) transformCache.clear();
+      else transformCache.delete(id);
     },
     registry,
     resolver,

@@ -295,6 +295,68 @@ End of milestone M11.
 
 ---
 
+## Q-2026-05-30-202: Loader-internal TS-strip cache — key and invalidation
+
+**Status:** 🟢 Active  
+**Encountered in:** F02-T5 (feature 02-ts-on-import-graph), while wiring the injected `transformSource` hook into `createModuleLoader`  
+**Milestone:** M12 (opencode facade)  
+**Author (agent session):** 2026-05-30
+
+### Context
+
+`loader.ts` passed `opts.transformSource` straight through with NO cache, so
+the WASI esbuild process is re-spawned for the same module across the large
+opencode `.ts` graph and across repeated loads within one loader instance —
+each strip is a full guest process spawn (ADR-0047/0049). ADR-0052 D4
+(REVERSIBLE) calls for a loader-internal `Map<id,string>` populated lazily,
+read before re-invoking the hook, and cleared by the existing `invalidate(id)`
+-> `registry.invalidate` path. The open sub-question is the cache KEY and the
+invalidation coupling.
+
+### Options considered
+
+- **Option A — key by absolute resolved id; drop via the existing
+  `invalidate(id)` path (full `invalidate()` clears all).**
+  - Pro: installed sources are immutable for a given package version in the VFS
+    overlay, so id is a sufficient key; integrates with the invalidate
+    semantics that already exist for the `load-fixture` / future-HMR hot path;
+    `esm.ts` stays cache-unaware (the wrap is invisible to the execute path);
+    single file, no new export, no new dep.
+  - Con: a file edited in place under a future HMR layer needs an explicit
+    `invalidate(id)` to drop the stale strip — acceptable because invalidate
+    already exists for exactly that hot path.
+- **Option B — content-hash key (hash the source before stripping).**
+  - Pro: correct under live in-place edits without an explicit invalidate.
+  - Con: unnecessary in P0 where installed sources do not mutate; adds a hash
+    per load on the hot path; the id-keyed cache already invalidates via the
+    registry hook.
+
+### Decision taken (provisional)
+
+**Chose:** A
+
+**Why:** Id is a sufficient key for immutable installed sources and reuses the
+existing `invalidate` semantics; content-hashing buys correctness only under a
+not-yet-built HMR layer at a per-load cost.
+
+### Code markers
+
+- `packages/runtime-js/src/module-loader/loader.ts` (`transformCache` TSDoc
+  `TODO(ADR)` marker on the cache declaration and on the `invalidate` coupling)
+
+### Reversibility justification
+
+- Public APIs affected: none — purely internal to `createModuleLoader`; no new
+  export, no signature change. Callers and plain-JS loaders are unaffected.
+- Rough cost to revert: <20 lines, 1 file (`loader.ts`).
+- External dependencies involved: none.
+
+### Needs human review by
+
+End of milestone M12.
+
+---
+
 ## Template
 
 ```markdown
