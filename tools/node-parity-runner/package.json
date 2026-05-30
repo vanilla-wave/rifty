@@ -8,6 +8,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@rifty/net": "workspace:*",
     "@rifty/runtime-js": "workspace:*",
     "@rifty/vfs": "workspace:*"
   }

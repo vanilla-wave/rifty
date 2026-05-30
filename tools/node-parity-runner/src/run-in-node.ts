@@ -9,6 +9,56 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { ParityCase } from './types.ts';
 
+/**
+ * Preamble injected ahead of a `kind: 'http'` case so the SAME case `code`
+ * runs unchanged in real Node. It defines the request-driver global
+ * `__riftyHttpRequest(port, path, init?)` over a real `http.request` to
+ * `127.0.0.1:<port>` and normalises the response to the same
+ * `{ status, statusText, contentType, body }` shape the rifty side returns
+ * (see `run-in-rifty.ts`). It also `unref()`s every listening server so the
+ * child process exits once the round-trip completes — the case never calls
+ * `server.close()`, and a live listening socket would otherwise keep Node's
+ * event loop alive forever.
+ */
+const HTTP_NODE_PREAMBLE = `
+'use strict';
+{
+  const __http = require('node:http');
+  const __origListen = __http.Server.prototype.listen;
+  __http.Server.prototype.listen = function (...args) {
+    const r = __origListen.apply(this, args);
+    this.unref();
+    return r;
+  };
+  globalThis.__riftyHttpRequest = function (port, path, init) {
+    const method = (init && init.method) || 'GET';
+    const headers = (init && init.headers) || {};
+    const body = init && init.body;
+    return new Promise((resolve, reject) => {
+      const req = __http.request(
+        { host: '127.0.0.1', port, path, method, headers },
+        (res) => {
+          const chunks = [];
+          res.on('data', (c) => chunks.push(c));
+          res.on('end', () => {
+            resolve({
+              status: res.statusCode,
+              statusText: res.statusMessage,
+              contentType: res.headers['content-type'] ?? null,
+              body: Buffer.concat(chunks).toString('utf8'),
+            });
+          });
+          res.on('error', reject);
+        },
+      );
+      req.on('error', reject);
+      if (body != null) req.write(body);
+      req.end();
+    });
+  };
+}
+`;
+
 export async function runInNode(testCase: ParityCase): Promise<string> {
   // `workDir` is the case's cwd — it holds setup files so `fs.readdirSync('.')`
   // sees only the case's fixtures (no harness scaffolding). `entryDir` holds
@@ -35,7 +85,11 @@ export async function runInNode(testCase: ParityCase): Promise<string> {
     }
     const ext = testCase.kind === 'esm' ? 'mjs' : 'js';
     const entry = join(entryDir, `main.${ext}`);
-    await writeFile(entry, testCase.code, 'utf8');
+    // For the opt-in http mode, prepend the request-driver preamble so the case
+    // can call `__riftyHttpRequest` under real Node exactly as it does in rifty.
+    const source =
+      testCase.kind === 'http' ? `${HTTP_NODE_PREAMBLE}\n${testCase.code}` : testCase.code;
+    await writeFile(entry, source, 'utf8');
 
     return await new Promise<string>((resolve, reject) => {
       const proc = spawn(process.execPath, [entry], {

@@ -11,8 +11,26 @@ export interface ParityCase {
   readonly code: string;
   /** If set, both runtimes must produce stdout matching this (in addition to matching each other). */
   readonly expected?: string | RegExp;
-  /** Module kind. Defaults to 'cjs'. */
-  readonly kind?: 'cjs' | 'esm';
+  /**
+   * Module kind. Defaults to 'cjs'.
+   *
+   * - `'cjs'` / `'esm'` — module-shape parity (`node:path`, `node:buffer`, …).
+   *   The rifty side runs through `@rifty/runtime-js/loader` only.
+   * - `'http'` — opt-in `@rifty/net` registration mode. The rifty side ALSO
+   *   imports `@rifty/net/register-builtins` so `require('node:http')` resolves,
+   *   and both runtimes expose a normalised request-driver global,
+   *   `__riftyHttpRequest(port, path, init?) => Promise<{ status, statusText,
+   *   contentType, body }>`. On the Node side the driver is a real
+   *   `http.request` to `127.0.0.1:<port>`; on the rifty side it is
+   *   `dispatchToPort(port, new Request('http://preview.local:<port><path>'))`.
+   *   This is the ONLY way to exercise rifty's `node:http` *server* surface
+   *   head-to-head against Node — the default modes never register `node:http`
+   *   (it lives in `@rifty/net`, which the runner does not import by default).
+   *   The runner is a `tools/` harness already permitted to import higher
+   *   layers (precedent: the WASI cases reach into `@rifty/runtime-wasi` +
+   *   `@rifty/shadow-registry`).
+   */
+  readonly kind?: 'cjs' | 'esm' | 'http';
 }
 
 export interface CaseRun {

@@ -206,6 +206,9 @@ importers:
 
   tools/node-parity-runner:
     dependencies:
+      '@rifty/net':
+        specifier: workspace:*
+        version: link:../../packages/net
       '@rifty/runtime-js':
         specifier: workspace:*
         version: link:../../packages/runtime-js
