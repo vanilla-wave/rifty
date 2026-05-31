@@ -17,6 +17,19 @@
 
 ### Added
 
+- **sql.js WASM engine bring-up for the `node:sqlite` shim (ADR-0065,
+  `sqlite-wasm-init`).** New `packages/net/src/sqlite/engine.ts` adds
+  `initSqliteEngine()` (async, memoised, one WASM bring-up per process,
+  resolving the synchronous `SqlJsStatic` handle), `getSqliteEngine()`
+  (synchronous accessor that throws a clear "engine not initialized" error
+  before init — never a silent `null`), and `isSqliteEngineReady()`. This is
+  the sync-surface-over-async-WASM bridge the synchronous `DatabaseSync`
+  constructor (opencode's eager Effect layer-build boot path, Spike C) depends
+  on. In-memory only; OPFS persistence deferred (ADR-0065 §D2). New dep:
+  `sql.js` (+ `@types/sql.js` dev). The `DatabaseSync`-shaped facade and
+  `node:sqlite` builtin registration land in a follow-up task on top of this
+  bridge. Test: `packages/net/src/sqlite/engine.test.ts`.
+
 - **`ServerResponse` emits Node-style `'drain'` after a backpressured write
   (Q-2026-05-30-102).** When a `write()` returned the backpressure Promise
   (queue full at `desiredSize <= 0`), the next `ReadableStream` `pull()` now

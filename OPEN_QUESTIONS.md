@@ -725,6 +725,74 @@ End of milestone M12.
 
 ---
 
+## Q-2026-05-31-303: `node:sqlite` parity case lands with the `DatabaseSync` shim, not the engine-init task
+
+**Status:** 🟢 Active  
+**Encountered in:** the `sqlite-wasm-init` task (ADR-0065) — engine-init only  
+**Milestone:** M12 (opencode facade)  
+**Author (agent session):** 2026-05-31
+
+### Context
+
+The `sqlite-wasm-init` task delivers ONLY the sql.js engine bridge
+(`initSqliteEngine`/`getSqliteEngine`/`isSqliteEngineReady` in
+`packages/net/src/sqlite/engine.ts`) — it does NOT yet add the
+`DatabaseSync`-shaped facade nor register the `node:sqlite` builtin
+(Q-2026-05-31-302). The task's "parity environment" note asks for a head-to-head
+parity-runner case (Node `DatabaseSync` vs rifty shim), but the parity runner
+compares **stdout of user code** running `node:sqlite`, and the rifty side has
+no `node:sqlite` specifier to resolve until the shim is registered. The runner
+also has no `'sqlite'` `kind`/registration mode (it has `cjs`/`esm`/`http`/
+`ts-esm`). A parity case here would have nothing real to exercise on the rifty
+side.
+
+### Options considered
+
+- **Option A — defer the head-to-head parity case to the `DatabaseSync` shim
+  task; cover the engine bridge with the mandated unit test now (chosen).**
+  - Pro: the unit test (`engine.test.ts`) proves the load-bearing init contract
+    (memoised async bring-up → synchronous handle; throw-before-init) which is
+    exactly what this task delivers; no fake/empty parity case; the parity case
+    lands when there is a real `node:sqlite` surface to diff against Node.
+  - Con: no Node-vs-rifty diff lands in THIS commit (it lands one task later).
+- **Option B — add a `'sqlite'` parity mode + register `node:sqlite` now, just to
+  host a parity case.**
+  - Pro: a parity case lands in this task.
+  - Con: pulls the `DatabaseSync` facade + builtin registration (the next task's
+    scope, Q-2026-05-31-302) into the engine-init task; violates one-concept-
+    per-commit; the registration-path decision is still provisional.
+
+### Decision taken (provisional)
+
+**Chose:** A — engine-init covered by its unit test now; the Node `DatabaseSync`
+vs rifty-shim parity case is written with the `DatabaseSync` shim task (where the
+`node:sqlite` specifier actually resolves on the rifty side). ADR-0065's
+"Consequences" already mandates that parity/conformance case against the real
+surface; this just sequences it to the task that creates the surface.
+
+**Why:** the parity runner needs a real `node:sqlite` rifty surface to diff;
+that surface is the next task. Writing a hollow case now would be a no-op on the
+rifty side (no honest comparison) and would drag the next task's scope in early.
+
+### Code markers
+
+- None in code (sequencing note only). The engine bridge is exercised by
+  `packages/net/src/sqlite/engine.test.ts`.
+
+### Reversibility justification
+
+- Public APIs affected: none — purely a test-sequencing decision.
+- Rough cost to revert: write the parity case in this task instead (requires
+  pulling the shim/registration forward); ≤1 new case file once the surface
+  exists. No cross-package API change.
+- External dependencies involved: none beyond `sql.js` (ADR-0065).
+
+### Needs human review by
+
+End of milestone M12.
+
+---
+
 ## Template
 
 ```markdown

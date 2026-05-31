@@ -17,6 +17,10 @@
     "test:run": "cd ../.. && vitest run --project unit packages/net"
   },
   "dependencies": {
-    "@rifty/io": "workspace:*"
+    "@rifty/io": "workspace:*",
+    "sql.js": "^1.14.1"
+  },
+  "devDependencies": {
+    "@types/sql.js": "^1.4.11"
   }
 }
