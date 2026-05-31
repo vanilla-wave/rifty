@@ -793,6 +793,68 @@ End of milestone M12.
 
 ---
 
+## Q-2026-05-31-304: TS-on-import decorator lowering — esbuild flag pass-through vs acorn decorators plugin vs leave-as-gap
+
+**Status:** 🟢 Active  
+**Encountered in:** WIRE task (opencode module-loader integration), item 3 — confirming the `transformSource` hook handles the TS-only syntax effect leans on  
+**Milestone:** M12  
+**Author (agent session):** 2026-05-31
+
+### Context
+
+The cross-file TS parity case (`modules/ts-effect-syntax-cross-file`) proves the
+real esbuild WASI `transformSource` hook erases/lowers `import type`, `const enum`,
+`interface`, `enum`, and `satisfies` identically to the Node-side `tsx` reference.
+Decorators are the exception: esbuild with `--loader=ts` and no tsconfig leaves
+stage-3 `@decorator` syntax UN-lowered (passthrough), and rifty's post-strip acorn
+parse (`ecmaVersion:'latest'`, no decorators plugin) then throws a SyntaxError —
+while `tsx` fully lowers decorators. opencode's vendored source uses NO decorators
+(verified by grep), so this is not a boot blocker, but it is a real pipeline gap.
+
+### Options considered
+
+- **Option A:** Leave it as a documented gap (compat-matrix + this entry); add real
+  decorator support only when a target package needs it.
+  - Pro: zero risk now; decorators are off opencode's path; honest (no faked test).
+  - Con: a future package using decorators would hit an opaque acorn SyntaxError.
+- **Option B:** Pass esbuild a tsconfig enabling `experimentalDecorators` (or the
+  stage-3 decorator transform) so the strip step lowers `@decorator` before acorn.
+  - Pro: closes the gap at the natural seam (the transform already runs).
+  - Con: `experimentalDecorators` vs stage-3 semantics differ; choosing the wrong
+    one silently miscompiles; needs a parity case per decorator flavour.
+- **Option C:** Add an acorn decorators plugin so the AST rewriter parses the
+  passthrough `@decorator`.
+  - Pro: no esbuild config change.
+  - Con: acorn would parse but NOT lower — decorators would still not execute
+    correctly; strictly worse than B.
+
+### Decision taken (provisional)
+
+**Chose:** A
+
+**Why:** Decorators are not on opencode's source-transform path; faking a green
+parity case would be dishonest, and lowering them correctly (B) is a separable
+decision better made against a concrete package that needs it.
+
+### Code markers
+
+- `tools/node-parity-runner/cases/modules/ts-effect-syntax-cross-file.case.ts` (NOTE block)
+- `docs/compat/modules.md` (Known limitations — TS-on-import decorators)
+
+### Reversibility justification
+
+- Public APIs affected: none — the gap is in the `tools/` parity harness +
+  `transformSource` configuration, not a cross-package API.
+- Rough cost to revert/close: adding the esbuild decorator flag is a one-line
+  arg change in `transformWithEsbuild` callers + one parity case; <2 files.
+- External dependencies involved: none (esbuild is already vendored).
+
+### Needs human review by
+
+End of milestone M12.
+
+---
+
 ## Template
 
 ```markdown
