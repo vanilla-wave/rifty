@@ -17,6 +17,20 @@
 
 ### Added
 
+- **`node:worker_threads` — `markAsUntransferable` / `isMarkedAsUntransferable`
+  / `markAsUncloneable` object markers.** undici's `lib/web/webidl/index.js`
+  destructures `markAsUncloneable` from `node:worker_threads` and assigns it to
+  `webidl.util.markAsUncloneable`, which every web-platform class (Headers,
+  Request, Response, FormData, CacheStorage, WebSocket, EventTarget, …) calls in
+  its constructor; the shim previously omitted it, so `new CacheStorage()` threw
+  `webidl.util.markAsUncloneable is not a function`. Implemented faithfully:
+  each marker is a no-op on non-objects and returns `undefined` (matching Node
+  v24), the marks add no enumerable own properties, and `isMarkedAsUntransferable`
+  round-trips. The tags live in module-scoped `WeakSet`s — Node stores them on
+  V8 internal slots for the native structured-clone serializer, which rifty has
+  no in-realm hook into; any rifty code path that re-implements clone/transfer
+  in-realm consults the marks. Parity: `cases/worker_threads/markers.case.ts`.
+
 - **`node:util/types` — full runtime type-reflection predicate set.** Promoted
   the partial 9-predicate `util.types` to a standalone faithful module
   (`builtins/util-types.ts`), registered as the standalone `node:util/types`

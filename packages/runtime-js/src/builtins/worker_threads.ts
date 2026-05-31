@@ -175,5 +175,84 @@ export const isMainThread = true;
 export const parentPort: EventEmitter | null = null;
 export const threadId = 1;
 
-const worker_threads = { Worker, isMainThread, parentPort, threadId };
+/**
+ * Object-graph tags backing `markAsUntransferable` / `markAsUncloneable`.
+ *
+ * Node stores these flags on the object's internal V8 slots so the native
+ * structured-clone serializer can consult them. We have no in-realm hook into
+ * V8's serializer, so we keep the tags in module-scoped `WeakSet`s instead.
+ * That preserves the parity-observable contract — `isMarkedAsUntransferable`
+ * round-trips, the marks add no enumerable own properties, and re-marking is a
+ * no-op — without inventing a fake serializer. The marks are consulted by any
+ * rifty code path that re-implements structured clone / port transfer in-realm
+ * (e.g. a future `MessagePort.postMessage`); the same-realm `Worker` fallback
+ * passes messages by reference and never clones, so it has nothing to enforce.
+ *
+ * `WeakSet` membership is only meaningful for objects; the marker functions are
+ * no-ops on primitives, exactly as Node's are.
+ */
+const untransferable = new WeakSet<object>();
+const uncloneable = new WeakSet<object>();
+
+function isObjectLike(value: unknown): value is object {
+  return (typeof value === 'object' && value !== null) || typeof value === 'function';
+}
+
+/**
+ * Tag `object` so it is cloned (not transferred) when passed to
+ * `postMessage(value, [transferList])`. Node returns `undefined` and silently
+ * ignores non-objects; we mirror both.
+ *
+ * @param object - Candidate to mark. Non-objects are ignored.
+ */
+export function markAsUntransferable(object: unknown): void {
+  if (isObjectLike(object)) untransferable.add(object);
+}
+
+/**
+ * Report whether `object` was tagged by {@link markAsUntransferable}. Returns
+ * `false` for primitives, `null`, and `undefined` — matching Node.
+ *
+ * @param object - Candidate to test.
+ * @returns `true` iff the object carries the untransferable mark.
+ */
+export function isMarkedAsUntransferable(object: unknown): boolean {
+  return isObjectLike(object) && untransferable.has(object);
+}
+
+/**
+ * Tag `object` so it throws `DataCloneError` if cloned via structuredClone /
+ * `postMessage`. undici marks every web-platform class instance (Headers,
+ * Request, Response, FormData, CacheStorage, WebSocket, EventTarget, ...) this
+ * way in its constructor via `webidl.util.markAsUncloneable`. Node returns
+ * `undefined` and ignores non-objects; we mirror both, and record the tag so an
+ * in-realm clone path can honour it. The mark adds no enumerable own property.
+ *
+ * @param object - Candidate to mark. Non-objects are ignored.
+ */
+export function markAsUncloneable(object: unknown): void {
+  if (isObjectLike(object)) uncloneable.add(object);
+}
+
+/**
+ * Report whether `object` was tagged by {@link markAsUncloneable}. Not part of
+ * Node's public `worker_threads` surface — exposed for rifty's own in-realm
+ * clone path to consult the mark.
+ *
+ * @param object - Candidate to test.
+ * @returns `true` iff the object carries the uncloneable mark.
+ */
+export function isMarkedAsUncloneable(object: unknown): boolean {
+  return isObjectLike(object) && uncloneable.has(object);
+}
+
+const worker_threads = {
+  Worker,
+  isMainThread,
+  parentPort,
+  threadId,
+  markAsUntransferable,
+  isMarkedAsUntransferable,
+  markAsUncloneable,
+};
 export default worker_threads;
