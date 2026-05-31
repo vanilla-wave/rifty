@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`vfsGrep` dropped every match for a `RegExp` carrying the `g`/`y` flag.**
+  `String.prototype.match` returns an index-less array under those flags, so the
+  scan silently returned zero results for a valid `/pattern/g`. `toRegExp` now
+  strips `g`/`y` (preserving `m/s/u/d/i`); regression tests cover both flags.
+
 ### Added
 
 - **`vfsGrep` pure-JS VFS search marker — private helper, not exported

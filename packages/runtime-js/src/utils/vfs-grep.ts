@@ -54,10 +54,12 @@ export interface VfsGrepOptions {
 /** Compile the user pattern into a RegExp, honouring `ignoreCase`. */
 function toRegExp(pattern: string | RegExp, ignoreCase: boolean): RegExp {
   if (pattern instanceof RegExp) {
-    if (ignoreCase && !pattern.flags.includes('i')) {
-      return new RegExp(pattern.source, `${pattern.flags}i`);
-    }
-    return pattern;
+    // Strip 'g'/'y': per-line first-match semantics never use them, and with
+    // 'g' `String.prototype.match` returns an array WITHOUT `.index`, which
+    // would silently drop every match. Other flags (m/s/u/d/i) are preserved.
+    let flags = pattern.flags.replace(/[gy]/g, '');
+    if (ignoreCase && !flags.includes('i')) flags += 'i';
+    return new RegExp(pattern.source, flags);
   }
   // Escape the literal string so it matches verbatim, not as a regex.
   const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

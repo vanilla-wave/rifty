@@ -66,4 +66,22 @@ describe('vfsGrep — pure-JS VFS search marker (Q-2026-05-30-061)', () => {
   it('vfsGrep throws ENOENT for a missing root', () => {
     expect(() => vfsGrep('x', '/nope')).toThrow(expect.objectContaining({ code: 'ENOENT' }));
   });
+
+  // Failure-mode contract: a RegExp carrying the global ('g') or sticky ('y')
+  // flag must still match. With those flags String.prototype.match returns an
+  // array WITHOUT `.index`, so a naive scan silently drops every match — a grep
+  // marker that finds nothing for a valid /pattern/g would misreport feasibility.
+  it('vfsGrep matches a RegExp with the global flag', () => {
+    mkdirSync('/work', { recursive: true });
+    writeFileSync('/work/x.ts', 'foo bar foo\nno match here');
+    expect(vfsGrep(/foo/g, '/work')).toEqual([
+      { path: '/work/x.ts', line: 1, column: 1, text: 'foo bar foo' },
+    ]);
+  });
+
+  it('vfsGrep matches a RegExp with the sticky flag', () => {
+    mkdirSync('/work', { recursive: true });
+    writeFileSync('/work/x.ts', 'leading\nNEEDLE');
+    expect(vfsGrep(/needle/giy, '/work').map((m) => m.line)).toEqual([2]);
+  });
 });
