@@ -3,6 +3,7 @@ import assertModule, { strict as assertStrict } from './assert.ts';
 import bufferModule, { Buffer } from './buffer.ts';
 import childProcessModule from './child_process.ts';
 import cryptoModule from './crypto.ts';
+import diagnosticsChannelModule from './diagnostics_channel.ts';
 /**
  * Registry of Node-compatible built-ins for our module loader.
  *
@@ -86,6 +87,7 @@ registerBuiltin('child_process', () => childProcessModule);
 registerBuiltin('worker_threads', () => workerThreadsModule);
 registerBuiltin('os', () => osModule);
 registerBuiltin('crypto', () => cryptoModule);
+registerBuiltin('diagnostics_channel', () => diagnosticsChannelModule);
 registerBuiltin('module', () => moduleModule);
 registerBuiltin('perf_hooks', () => perfHooksModule);
 registerBuiltin('tty', () => ttyModule);

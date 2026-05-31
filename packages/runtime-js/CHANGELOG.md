@@ -11,6 +11,17 @@
 
 ### Added
 
+- **`node:diagnostics_channel` — faithful pure-JS builtin.** Full named
+  publish/subscribe bus (`channel`, `Channel#publish/subscribe/unsubscribe`,
+  `hasSubscribers`, `bindStore/unbindStore/runStores`, module-level
+  `subscribe/unsubscribe/hasSubscribers`) plus `tracingChannel` /
+  `TracingChannel` with the five lifecycle sub-channels (start/end/asyncStart/
+  asyncEnd/error) and `traceSync`/`tracePromise`/`traceCallback`. There is no
+  native binding behind this module in Node either — it is a JS-level registry —
+  so the contract is mirrored exactly (parity cases under
+  `tools/node-parity-runner/cases/diagnostics_channel/`). Unblocks undici's
+  `lib/core/diagnostics.js` on the opencode `@effect/platform-node` graph.
+
 - **`vfsGrep` pure-JS VFS search marker — private helper, not exported
   (feature-09 T2, Q-2026-05-30-061).** `src/utils/vfs-grep.ts` walks the VFS via
   the existing `node:fs` builtin (`readdirSync` with file types / `readFileSync`
