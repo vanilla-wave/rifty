@@ -17,6 +17,20 @@
 
 ### Added
 
+- **`node:dgram` — module-resolution surface (loud browser-ceiling facade).**
+  The opencode server graph pulls `multicast-dns` transitively
+  (`server.ts → mdns.ts → bonjour-service → multicast-dns`), and
+  `multicast-dns/index.js` does a top-level `var dgram = require('dgram')`, so the
+  bare/`node:` `dgram` specifier must resolve for the static graph to evaluate.
+  The browser/WASI realm has no UDP socket API (WebSocket/fetch/WebTransport are
+  all stream/connection-oriented; none expose `recvfrom`/`sendto` on a UDP port),
+  so this is a genuine capability ceiling: `createSocket`/`_createSocketHandle`
+  and the `Socket` constructor each throw `NotImplementedError` on use, exactly
+  like `tls`/`zlib`. The throw fires only if UDP is actually used (mDNS publish),
+  never on import. Parity: `cases/dgram/surface.case.ts` pins the requireable
+  module shape (the by-design invocation divergence is a ceiling contract, not a
+  parity diff).
+
 - **`node:worker_threads` — `markAsUntransferable` / `isMarkedAsUntransferable`
   / `markAsUncloneable` object markers.** undici's `lib/web/webidl/index.js`
   destructures `markAsUncloneable` from `node:worker_threads` and assigns it to

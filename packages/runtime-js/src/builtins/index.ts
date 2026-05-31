@@ -33,7 +33,7 @@ import {
   v8,
 } from './misc-stubs.ts';
 import moduleModule from './module.ts';
-import { dns, readline, tls, zlib } from './null-net-stubs.ts';
+import { dgram, dns, readline, tls, zlib } from './null-net-stubs.ts';
 import osModule from './os.ts';
 import pathModule from './path.ts';
 import perfHooksModule from './perf_hooks.ts';
@@ -99,6 +99,7 @@ registerBuiltin('string_decoder', () => stringDecoderModule);
 registerBuiltin('dns', () => dns);
 registerBuiltin('dns/promises', () => dns.promises);
 registerBuiltin('tls', () => tls);
+registerBuiltin('dgram', () => dgram);
 registerBuiltin('zlib', () => zlib);
 registerBuiltin('readline', () => readline);
 registerBuiltin('v8', () => v8);

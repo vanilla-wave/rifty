@@ -65,6 +65,34 @@ export const tls = {
   TLSSocket: TlsThrow,
 };
 
+// `node:dgram` — raw UDP datagram sockets. There is NO UDP socket API in the
+// browser (WebSocket / fetch / WebTransport are all stream/connection-oriented;
+// none expose `recvfrom`/`sendto` on a UDP port), so this is a genuine
+// browser/WASI capability ceiling: every actual socket operation throws
+// NotImplementedError, exactly like `tls` / `zlib` above.
+//
+// The module surface must still RESOLVE, because `multicast-dns/index.js` does a
+// top-level `var dgram = require('dgram')` and only calls `dgram.createSocket()`
+// later, inside its exported factory — which `bonjour-service` invokes only when
+// mDNS is actually published at runtime. The opencode server graph pulls
+// multicast-dns transitively (server.ts -> mdns.ts -> bonjour-service ->
+// multicast-dns), so the import must succeed for the static graph to evaluate;
+// the throw fires only if UDP is genuinely used (mDNS publish), never on import.
+// Named `Socket` (not `DgramSocketThrow`) so `dgram.Socket.name === 'Socket'`
+// matches Node — multicast-dns probes the module shape, and the parity surface
+// case pins it.
+class Socket {
+  constructor() {
+    throw new NotImplementedError('dgram.createSocket');
+  }
+}
+
+export const dgram = {
+  createSocket: notImpl('dgram.createSocket'),
+  Socket,
+  _createSocketHandle: notImpl('dgram._createSocketHandle'),
+};
+
 export const readline = {
   createInterface: notImpl('readline.createInterface'),
   cursorTo: notImpl('readline.cursorTo'),
