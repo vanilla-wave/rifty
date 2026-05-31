@@ -31,11 +31,14 @@
 // The opencode server statically imports `node:http`'s `createServer`.
 import '../../../packages/net/src/register-builtins.ts';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   existsSync,
+  mkdirSync,
   readFileSync as realReadFileSync,
   readdirSync as realReaddirSync,
   statSync as realStatSync,
+  writeFileSync,
 } from 'node:fs';
 import { dirname as nodeDirname, join as nodeJoin } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -160,14 +163,28 @@ function buildTsTransform(): TransformSourceHook {
   const raw = loadVendoredEsbuildWasm();
   const wasm = new Uint8Array(raw.byteLength);
   wasm.set(raw);
-  return ({ source, loader, workspace }) =>
-    transformWithEsbuild(runWasi, wasm, {
+  // Disk-persistent content-hash cache for the per-file esbuild WASI strip.
+  // The strip is a deterministic single-file transform (output depends only on
+  // source + loader), so caching by sha256(loader+source) lets a warm
+  // graph-load run skip ~900 runWasi spawns — the cold run populates it. This
+  // keeps the (heavy) graph-load smoke inside an agent's no-output watchdog and
+  // makes iterating on missing-builtin walls practical.
+  const cacheDir = '/tmp/rifty-opencode-strip-cache';
+  mkdirSync(cacheDir, { recursive: true });
+  return async ({ source, loader, workspace }) => {
+    const key = createHash('sha256').update(loader).update('\0').update(source).digest('hex');
+    const cachePath = nodeJoin(cacheDir, `${key}.js`);
+    if (existsSync(cachePath)) return realReadFileSync(cachePath, 'utf8');
+    const { code } = await transformWithEsbuild(runWasi, wasm, {
       source,
       loader,
       workspace,
       format: 'esm',
       jsx: loader !== 'ts' ? 'automatic' : undefined,
-    }).then((r) => r.code);
+    });
+    writeFileSync(cachePath, code);
+    return code;
+  };
 }
 
 async function main(): Promise<void> {
