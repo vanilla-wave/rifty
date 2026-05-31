@@ -27,6 +27,53 @@ When a question is reviewed:
 
 ## Active
 
+## Q-2026-06-01-305: automatic tsconfig discovery for path aliases (vs explicit `paths` option)
+
+**Status:** 🟢 Active  
+**Encountered in:** opencode GRAPH-LOAD gate, clearing the `@/account/account`
+tsconfig-alias wall (ADR-0066)  
+**Milestone:** M12 (opencode facade)  
+**Author (agent session):** 2026-06-01
+
+### Context
+
+ADR-0066 added tsconfig-style path aliases to the resolver via an **explicit,
+caller-supplied** `paths` option on `ModuleLoaderOptions`. The resolver does pure
+pattern matching; the caller (the opencode smoke harness) reads
+`packages/opencode/tsconfig.json`'s `compilerOptions.paths` and resolves the
+targets to absolute patterns. The open question is whether the runtime should
+*also* offer **automatic** tsconfig discovery — locate `tsconfig.json`, follow the
+`extends` chain (opencode extends `@tsconfig/bun`), interpret `baseUrl`, and apply
+`paths` with no explicit caller map.
+
+### Options considered
+
+- **Option A — explicit `paths` option only (shipped in ADR-0066).** Caller reads
+  tsconfig and supplies the resolved map. Pro: core resolver stays small and
+  Node-faithful by default; no `extends`/`baseUrl` thorns in the hot path. Con: each
+  consumer (harness, future playground) writes the ~10-line tsconfig read.
+- **Option B — automatic tsconfig discovery in the runtime.** Pro: a TS project
+  "just works" with no caller wiring. Con: `extends`-chain resolution, `baseUrl`
+  semantics, and tsconfig-with-comments parsing are non-trivial and would live in or
+  beside the resolver; risk of subtle deviations from tsc.
+
+### Decision taken (provisional)
+
+**Chose:** A for now; B deferred until a concrete consumer (e.g. the playground's
+"open a TS project" flow) needs it.
+
+**Why:** Option B is purely additive over A — it would compute the *same* `paths`
+map the caller now supplies — so deferring costs nothing and keeps the core resolver
+minimal. Promote to its own ADR when a consumer actually needs zero-wiring tsconfig
+discovery; it needs no superseding of ADR-0066.
+
+### Code markers
+
+- None. This is a deferred follow-on with **no provisional code** — ADR-0066 records
+  the deferral in its Reversibility section; there is no `TODO(ADR)` marker to clean.
+
+---
+
 ## Q-2026-05-30-061: pure-JS VFS grep marker tool (vs ripgrep-WASM)
 
 **Status:** 🟢 Active  

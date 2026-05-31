@@ -583,3 +583,106 @@ describe('ESM — import / export', () => {
     expect(ns.sum).toBe(3);
   });
 });
+
+// ADR-0066: tsconfig-style path aliases via the opt-in `paths` resolver option.
+// Asserted through `loader.resolver.resolve(...).id` so the resolution algorithm
+// is tested directly (no transform hook needed for the resolve step). This is
+// rifty-specific behaviour (Node never resolves tsconfig paths) — a conformance
+// case, not a parity case.
+describe('tsconfig path aliases (ADR-0066)', () => {
+  function resolveId(
+    files: Record<string, string>,
+    paths: Record<string, string | readonly string[]>,
+    specifier: string,
+    fromFile: string,
+  ): string {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture(files);
+    const loader = createModuleLoader(vfs, { paths });
+    return loader.resolver.resolve(specifier, { fromFile, esm: true }).id;
+  }
+
+  it('wildcard alias maps `@/x` onto the absolute target', () => {
+    const id = resolveId(
+      { '/proj/src/foo.js': 'export const x = 1;' },
+      { '@/*': '/proj/src/*' },
+      '@/foo',
+      '/proj/app/main.ts',
+    );
+    expect(id).toBe('/proj/src/foo.js');
+  });
+
+  it('resolves a `.ts` extension through an alias (ADR-0053 extension set)', () => {
+    const id = resolveId(
+      { '/proj/src/account/account.ts': 'export const Account = {};' },
+      { '@/*': '/proj/src/*' },
+      '@/account/account',
+      '/proj/src/server/server.ts',
+    );
+    expect(id).toBe('/proj/src/account/account.ts');
+  });
+
+  it('most-specific wildcard wins (longest static prefix)', () => {
+    const files = {
+      '/proj/src/other.js': 'export const a = 1;',
+      '/proj/features/x.js': 'export const b = 2;',
+    };
+    const paths = { '@/*': '/proj/src/*', '@/feat/*': '/proj/features/*' };
+    expect(resolveId(files, paths, '@/feat/x', '/proj/app.ts')).toBe('/proj/features/x.js');
+    expect(resolveId(files, paths, '@/other', '/proj/app.ts')).toBe('/proj/src/other.js');
+  });
+
+  it('an exact (star-less) pattern outranks a wildcard', () => {
+    const id = resolveId(
+      {
+        '/proj/src/special.js': 'export const wrong = 1;',
+        '/proj/special-impl.js': 'export const right = 1;',
+      },
+      { '@/*': '/proj/src/*', '@/special': '/proj/special-impl.js' },
+      '@/special',
+      '/proj/app.ts',
+    );
+    expect(id).toBe('/proj/special-impl.js');
+  });
+
+  it('tries ordered candidate targets, first existing wins', () => {
+    const id = resolveId(
+      { '/proj/src/x.js': 'export const x = 1;' },
+      { '@/*': ['/proj/missing/*', '/proj/src/*'] },
+      '@/x',
+      '/proj/app.ts',
+    );
+    expect(id).toBe('/proj/src/x.js');
+  });
+
+  it('off by default — a bare `@/foo` with no paths map is MODULE_NOT_FOUND', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({ '/proj/src/foo.js': 'export const x = 1;' });
+    const loader = createModuleLoader(vfs);
+    expect(() => loader.resolver.resolve('@/foo', { fromFile: '/proj/app.ts', esm: true })).toThrow(
+      /Cannot find module '@\/foo'/,
+    );
+  });
+
+  it('no false positive — a real `@scope/pkg` still resolves via node_modules', () => {
+    const id = resolveId(
+      {
+        '/proj/node_modules/@scope/pkg/package.json': '{"name":"@scope/pkg","main":"index.js"}',
+        '/proj/node_modules/@scope/pkg/index.js': 'module.exports = 1;',
+      },
+      { '@/*': '/proj/src/*' },
+      '@scope/pkg',
+      '/proj/app.ts',
+    );
+    expect(id).toBe('/proj/node_modules/@scope/pkg/index.js');
+  });
+
+  it('alias match with no existing target falls through to MODULE_NOT_FOUND', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({ '/proj/src/present.js': 'export const x = 1;' });
+    const loader = createModuleLoader(vfs, { paths: { '@/*': '/proj/src/*' } });
+    expect(() =>
+      loader.resolver.resolve('@/absent', { fromFile: '/proj/app.ts', esm: true }),
+    ).toThrow(/Cannot find module '@\/absent'/);
+  });
+});

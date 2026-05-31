@@ -49,7 +49,10 @@ import {
 } from '../../../packages/runtime-js/src/builtins/process.ts';
 import { installTimerGlobals } from '../../../packages/runtime-js/src/builtins/timers.ts';
 import { createModuleLoader } from '../../../packages/runtime-js/src/module-loader/index.ts';
-import type { TransformSourceHook } from '../../../packages/runtime-js/src/module-loader/index.ts';
+import type {
+  PathAliases,
+  TransformSourceHook,
+} from '../../../packages/runtime-js/src/module-loader/index.ts';
 import { runWasi } from '../../../packages/runtime-wasi/src/index.ts';
 import { createMemoryFs, setSyncMirror } from '../../../packages/vfs/src/internal/index.ts';
 import {
@@ -187,6 +190,30 @@ function buildTsTransform(): TransformSourceHook {
   };
 }
 
+/**
+ * Read opencode's `compilerOptions.paths` and resolve each target to an absolute
+ * VFS path pattern under ROOT, so rifty's resolver (ADR-0066) maps opencode's
+ * `@/*` / `@tui/*` / `@test/*` tsconfig aliases onto the vendored source. tsconfig
+ * targets (e.g. `./src/*`) are relative to the opencode package dir; strip the
+ * leading `./` and rebase onto `${ROOT}/packages/opencode`. We read only this
+ * package's local tsconfig `paths` — the aliases live here, not in the `extends`
+ * chain (`@tsconfig/bun`). This is the caller-owned tsconfig read that ADR-0066
+ * keeps OUT of the core resolver.
+ */
+function buildOpencodePaths(): PathAliases {
+  const tsconfigPath = nodeJoin(SRC_PACKAGES, 'opencode', 'tsconfig.json');
+  const tsconfig = JSON.parse(realReadFileSync(tsconfigPath, 'utf8')) as {
+    compilerOptions?: { paths?: Record<string, string[]> };
+  };
+  const declared = tsconfig.compilerOptions?.paths ?? {};
+  const base = `${ROOT}/packages/opencode`;
+  const out: Record<string, string[]> = {};
+  for (const [pattern, targets] of Object.entries(declared)) {
+    out[pattern] = targets.map((t) => `${base}/${t.replace(/^\.\//, '')}`);
+  }
+  return out;
+}
+
 async function main(): Promise<void> {
   ensureDeps();
 
@@ -249,10 +276,13 @@ async function main(): Promise<void> {
   const wasm = loadVendoredEsbuildWasm();
   log(`esbuild wasm: ${wasm.byteLength} bytes`);
 
+  const opencodePaths = buildOpencodePaths();
+  log(`tsconfig path aliases: ${Object.keys(opencodePaths).join(', ')}`);
   const loader = createModuleLoader(fsSync, {
     cwd: ROOT,
     workspace: ROOT,
     transformSource: buildTsTransform(),
+    paths: opencodePaths,
   });
   __setCreateRequireImpl((from: string) => {
     const fromPath = from.startsWith('file://') ? decodeURIComponent(from.slice(7)) : from;

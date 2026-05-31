@@ -17,6 +17,20 @@
 
 ### Added
 
+- **tsconfig-style path aliases via an opt-in `paths` resolver option (ADR-0066).**
+  `ModuleLoaderOptions` gains `paths?: PathAliases` — a `pattern → target(s)` map of
+  absolute VFS path patterns (e.g. `{ "@/*": "/workspace/src/*" }`). The resolver
+  attempts aliases before the bare `node_modules` walk for non-relative/non-absolute
+  specifiers, with tsc-faithful matching (exact > wildcard; longest static prefix
+  then suffix; ordered candidate targets, first existing file wins) and
+  paths-then-fallback (an alias miss falls through to `MODULE_NOT_FOUND` on the
+  original specifier). Off by default = Node-faithful (a bare `@/foo` with no map is
+  `MODULE_NOT_FOUND`). The resolver does NOT read tsconfig itself — the caller
+  resolves `compilerOptions.paths` to absolute patterns. Unblocks the opencode
+  GRAPH-LOAD wall `@/account/account` (opencode's `@/*`/`@tui/*`/`@test/*` aliases).
+  Conformance: `tests/conformance/modules/resolver.test.ts` `describe('tsconfig path
+  aliases (ADR-0066)')`.
+
 - **`node:dgram` — module-resolution surface (loud browser-ceiling facade).**
   The opencode server graph pulls `multicast-dns` transitively
   (`server.ts → mdns.ts → bonjour-service → multicast-dns`), and

@@ -22,6 +22,25 @@ export interface ResolveOptions {
   readonly esm: boolean;
 }
 
+/**
+ * tsconfig-style path aliases (ADR-0066): a map of `pattern → target(s)` where
+ * each target is an **absolute** VFS path pattern. Patterns may carry at most
+ * one `*` (e.g. `"@/*"`); the `*` capture from the specifier is substituted into
+ * the target. Targets are an ordered candidate list (a single string is a
+ * one-element list) — the first that resolves to an existing file wins. The
+ * resolver does NOT read tsconfig itself: a caller (the opencode smoke harness, a
+ * future "open a TS project" flow) reads `compilerOptions.paths`, resolves its
+ * targets to absolute patterns (handling `baseUrl`/`extends`), and supplies this
+ * map. Off by default = Node-faithful resolution.
+ */
+export type PathAliases = Readonly<Record<string, string | readonly string[]>>;
+
+/** Options for {@link createResolver}. */
+export interface ResolverOptions {
+  /** tsconfig-style path aliases (ADR-0066). Absent = Node-faithful resolution. */
+  readonly paths?: PathAliases;
+}
+
 // `.ts`/`.tsx` come AFTER the `.js` family so a plain-Node package shipping
 // `foo.js` resolves byte-identically to Node (Node never resolves bare `.ts`),
 // and BEFORE `.json` (ADR-0053). This is a deliberate, human-ratified deviation
@@ -60,7 +79,8 @@ export interface Resolver {
   resolve(specifier: string, opts: ResolveOptions): ResolvedModule;
 }
 
-export function createResolver(vfs: FsSync): Resolver {
+export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}): Resolver {
+  const paths = resolverOpts.paths;
   return {
     resolve(specifier, opts) {
       const fromDir =
@@ -102,6 +122,17 @@ export function createResolver(vfs: FsSync): Resolver {
         return readResolved(vfs, filePath, opts.esm);
       }
 
+      // tsconfig-style path aliases (ADR-0066): tried only for non-relative,
+      // non-absolute specifiers (relative/absolute imports never alias), and
+      // only when a pattern actually matches — so real `@scope/pkg` packages are
+      // untouched. An alias that matches a pattern but resolves no candidate file
+      // falls THROUGH to the normal bare walk (matching tsc's paths-then-fallback),
+      // so a genuine miss still reports MODULE_NOT_FOUND on the original specifier.
+      if (paths !== undefined && !isRelativeSpecifier(specifier) && !isAbsolute(specifier)) {
+        const aliased = resolvePathAlias(vfs, specifier, paths);
+        if (aliased !== null) return readResolved(vfs, aliased, opts.esm);
+      }
+
       const filePath = resolveSpecifierToFile(vfs, specifier, fromDir, opts.esm);
       if (filePath === null) {
         throw new ModuleLoadError(
@@ -116,18 +147,23 @@ export function createResolver(vfs: FsSync): Resolver {
   };
 }
 
+/** A relative specifier (`./x`, `../x`, `.`, `..`) — never alias- or bare-resolved. */
+function isRelativeSpecifier(specifier: string): boolean {
+  return (
+    specifier.startsWith('./') ||
+    specifier.startsWith('../') ||
+    specifier === '.' ||
+    specifier === '..'
+  );
+}
+
 function resolveSpecifierToFile(
   vfs: FsSync,
   specifier: string,
   fromDir: string,
   esm: boolean,
 ): string | null {
-  if (
-    specifier.startsWith('./') ||
-    specifier.startsWith('../') ||
-    specifier === '.' ||
-    specifier === '..'
-  ) {
+  if (isRelativeSpecifier(specifier)) {
     const base = joinPath(fromDir, specifier);
     return resolveAsFileOrDir(vfs, base);
   }
@@ -135,6 +171,83 @@ function resolveSpecifierToFile(
     return resolveAsFileOrDir(vfs, normalizePath(specifier));
   }
   return resolveBareSpecifier(vfs, specifier, fromDir, esm);
+}
+
+/**
+ * Resolve a specifier against a tsconfig-style {@link PathAliases} map (ADR-0066).
+ * Selects the most-specific matching pattern (exact > wildcard; among wildcards,
+ * longest static prefix then longest static suffix), substitutes the `*` capture
+ * into each of that pattern's ordered candidate targets, and returns the first
+ * target that resolves to an existing file. Returns `null` when no pattern matches
+ * OR when a pattern matches but no candidate file exists — both let the caller fall
+ * through to normal resolution.
+ */
+function resolvePathAlias(vfs: FsSync, specifier: string, paths: PathAliases): string | null {
+  const match = matchAliasPattern(paths, specifier);
+  if (match === null) return null;
+  for (const target of match.targets) {
+    const substituted = match.star === null ? target : target.replace(/\*/g, match.star);
+    const resolved = resolveAsFileOrDir(vfs, normalizePath(substituted));
+    if (resolved !== null) return resolved;
+  }
+  return null;
+}
+
+interface AliasMatch {
+  /** Ordered candidate target patterns for the winning alias key. */
+  readonly targets: readonly string[];
+  /** The `*` capture, or `null` for an exact (star-less) pattern. */
+  readonly star: string | null;
+}
+
+/**
+ * Pick the most-specific {@link PathAliases} key matching `specifier`. An exact
+ * (star-less) key matches only the whole specifier and, having full length as its
+ * "base", outranks any wildcard. Among wildcards, longest static prefix wins, ties
+ * broken by longest static suffix — the same specificity model as `findWildcard`
+ * for `exports`/`imports`. Keys with more than one `*` are ignored (tsc rule).
+ */
+function matchAliasPattern(paths: PathAliases, specifier: string): AliasMatch | null {
+  let bestKey: string | null = null;
+  let bestStar: string | null = null;
+  let bestBaseLen = -1;
+  let bestTrailerLen = -1;
+  for (const key of Object.keys(paths)) {
+    const starIdx = key.indexOf('*');
+    if (starIdx === -1) {
+      if (key !== specifier) continue;
+      // Exact match: treat the whole key as the static base, no trailer, no capture.
+      if (key.length > bestBaseLen) {
+        bestKey = key;
+        bestStar = null;
+        bestBaseLen = key.length;
+        bestTrailerLen = 0;
+      }
+      continue;
+    }
+    const prefix = key.slice(0, starIdx);
+    const suffix = key.slice(starIdx + 1);
+    if (suffix.includes('*')) continue; // at most one `*` per tsc
+    if (
+      specifier.length >= prefix.length + suffix.length &&
+      specifier.startsWith(prefix) &&
+      specifier.endsWith(suffix)
+    ) {
+      const baseLen = prefix.length;
+      const trailerLen = suffix.length;
+      if (baseLen > bestBaseLen || (baseLen === bestBaseLen && trailerLen > bestTrailerLen)) {
+        bestKey = key;
+        bestStar = specifier.slice(prefix.length, specifier.length - suffix.length);
+        bestBaseLen = baseLen;
+        bestTrailerLen = trailerLen;
+      }
+    }
+  }
+  if (bestKey === null) return null;
+  const target = paths[bestKey];
+  if (target === undefined) return null;
+  const targets = typeof target === 'string' ? [target] : target;
+  return { targets, star: bestStar };
 }
 
 function resolveAsFileOrDir(vfs: FsSync, base: string): string | null {

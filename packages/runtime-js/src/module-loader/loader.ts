@@ -5,10 +5,11 @@ import { ModuleLoadError } from './errors.ts';
 import { type TransformSourceHook, executeEsm } from './esm.ts';
 import { wrapCjsAsEsmNamespace } from './interop.ts';
 import { ModuleRegistry } from './registry.ts';
-import type { ResolvedModule } from './resolver.ts';
+import type { PathAliases, ResolvedModule } from './resolver.ts';
 import { type Resolver, createResolver } from './resolver.ts';
 
 export type { TransformSourceHook } from './esm.ts';
+export type { PathAliases } from './resolver.ts';
 
 export interface ModuleLoaderOptions {
   /** Working directory used when the caller passes a relative `entry` to `import`/`require`. */
@@ -28,6 +29,13 @@ export interface ModuleLoaderOptions {
    * the directed transform-not-configured throw is owned by feature-02 T3.
    */
   readonly transformSource?: TransformSourceHook;
+  /**
+   * tsconfig-style path aliases (ADR-0066), e.g. `{ "@/*": "/workspace/src/*" }`.
+   * Targets are absolute VFS path patterns; the caller (not the resolver) reads
+   * a project's `compilerOptions.paths` and resolves them to absolute patterns.
+   * Absent = Node-faithful resolution (a bare `@/foo` is `MODULE_NOT_FOUND`).
+   */
+  readonly paths?: PathAliases;
 }
 
 export interface ModuleLoader {
@@ -66,7 +74,7 @@ function loadBuiltinOrThrow(id: string): Record<string, unknown> {
 
 export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}): ModuleLoader {
   const registry = new ModuleRegistry();
-  const resolver = createResolver(vfs);
+  const resolver = createResolver(vfs, { paths: opts.paths });
   const cwd = opts.cwd ?? STUB_FROM_FILE_DEFAULT;
   const workspace = opts.workspace ?? opts.cwd ?? STUB_FROM_FILE_DEFAULT;
 
