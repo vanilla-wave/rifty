@@ -17,6 +17,38 @@
 
 ### Added
 
+- **`node:sqlite` `StatementSync` — complete the per-query contract:
+  `iterate()`, named parameters, `setAllowBareNamedParameters` (ADR-0065,
+  `statement-run-get-iterate-columns`).** `StatementSync.iterate(...params)` is
+  now a real lazy generator that yields rows in cursor order (the configured
+  object/tuple shape) and resets the statement on exhaustion or early `break`,
+  replacing the prior `NotImplementedError`. `all`/`get`/`run`/`iterate` now also
+  accept a single named-parameter object: sigil-prefixed keys (`{ ':id' }`) bind
+  by name directly, and bare keys (`{ id }`) are prefixed with `:` when bare keys
+  are allowed. New `setAllowBareNamedParameters(bool)` (default `true`, as Node)
+  gates bare keys — `false` makes them throw the Node-shaped `ERR_INVALID_STATE`.
+  Head-to-head parity vs real Node `node:sqlite`:
+  `tools/node-parity-runner/cases/sqlite/run-get-iterate.case.ts` (run-result
+  shape, `get` row/`undefined`, `iterate` order, `:`-prefixed and bare named
+  params).
+
+### Changed
+
+- **`node:sqlite` `StatementSync.setReadBigInts(true)` and `columns()` now throw
+  `NotImplementedError` (ADR-0065 D4, no silent stubs).** The prebuilt sql.js
+  WASM cannot back either faithfully, so faking a value is removed:
+  `setReadBigInts(true)` previously coerced sql.js `number`s to `BigInt`, which
+  silently loses precision above `Number.MAX_SAFE_INTEGER` (the number is already
+  lossy before the cast) — it now throws
+  `NotImplementedError('sqlite.Statement.setReadBigInts(true)')`; the `false`
+  default plain-`number` path is unchanged. `columns()` requires SQLite's
+  `SQLITE_ENABLE_COLUMN_METADATA` build (the engine exposes only
+  `sqlite3_column_name`, not the table/database/decltype exports Node's
+  `{ column, database, name, table, type }` needs), so it throws
+  `NotImplementedError('sqlite.StatementSync.columns')` rather than return a
+  partial shape. Both registered ❌ in `docs/compat/sqlite.md`. Unit-pinned in
+  `packages/net/src/sqlite/database-sync.test.ts`.
+
 - **`node:sqlite` `StatementSync` query surface — `prepare().all/get/run` +
   `setReturnArrays`/`setReadBigInts` over sql.js (ADR-0065,
   `statement-prepare-all-positional`).** New

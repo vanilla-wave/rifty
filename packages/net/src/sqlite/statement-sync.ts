@@ -5,34 +5,53 @@
  * params)` with positional `?` placeholders, plus the row-shape toggles
  * `setReturnArrays` and `setReadBigInts`.
  *
- * Scope of THIS module (the prepare/all/run/toggles task): `all`, `run`, `get`,
- * `setReturnArrays`, `setReadBigInts`. The remaining members of Node's
- * `StatementSync` prototype (`iterate`, `expandedSQL`, `sourceSQL`,
- * `setAllowBareNamedParameters`, `columns`) are NOT yet backed — they throw a
- * directed {@link NotImplementedError} with a `docs/compat/sqlite.md` entry,
- * never a faked value (ADR-0065 D4, no silent stubs). They land in follow-up
- * tasks as opencode's boot path needs each one.
+ * Scope of THIS module: the full per-query surface the contract owes — `all`,
+ * `get`, `run`, `iterate`, `setReturnArrays`, `setReadBigInts`,
+ * `setAllowBareNamedParameters`, and (deliberately) `columns`. Each result-
+ * producing method (`all`/`get`/`iterate`) accepts EITHER positional `?` params
+ * (`get('a', 1)`) OR a single named-parameter object (`get({ ':id': 'x' })`,
+ * and bare `get({ id: 'x' })` once {@link setAllowBareNamedParameters}(true)).
  *
- * Row-type note (`setReadBigInts`): Node reads INTEGER columns as `BigInt` when
- * `setReadBigInts(true)` and as plain `number` otherwise (the default, which is
- * also effect's SafeIntegers-default state). sql.js returns INTEGER columns as
- * plain `number`s, so the default path is a direct pass-through; the `true` path
- * coerces those numbers to `BigInt` to match Node. (sql.js stores integers in a
- * JS `number`, so values beyond `Number.MAX_SAFE_INTEGER` are already lossy in
- * sql.js — a documented first-cut precision gap in `docs/compat/sqlite.md`, NOT
- * something this surface can paper over.)
+ * Two members throw a directed {@link NotImplementedError} (with a
+ * `docs/compat/sqlite.md` entry) rather than fake a value — the no-silent-stubs
+ * rule (ADR-0065 D4):
+ *
+ *   - `setReadBigInts(true)` — the prebuilt sql.js WASM has NO bigint read mode;
+ *     it stores every INTEGER in a JS `number`. Coercing those to `BigInt` would
+ *     be a silent precision lie above `Number.MAX_SAFE_INTEGER` (the number is
+ *     already lossy before the cast). The `false` path (the default, and
+ *     effect's SafeIntegers-default state) is a plain-`number` pass-through.
+ *   - `columns()` — Node returns full per-column metadata
+ *     (`{ column, database, name, table, type }`), which needs SQLite's
+ *     `SQLITE_ENABLE_COLUMN_METADATA` build (the `sqlite3_column_table_name` /
+ *     `_database_name` / `_origin_name` / `_decltype` exports). The prebuilt
+ *     sql.js WASM is compiled WITHOUT that flag (only `sqlite3_column_name` is
+ *     exposed), so a faithful shape is unavailable. A partial shape would be a
+ *     silent stub, so this throws.
+ *
+ * The remaining `StatementSync` members (`expandedSQL`, `sourceSQL`) are not yet
+ * backed; they land in follow-up tasks as opencode's path needs them.
  */
 import { NotImplementedError } from '@rifty/io';
-import type { BindParams, Database, SqlValue, Statement } from 'sql.js';
+import type { BindParams, Database, ParamsObject, SqlValue, Statement } from 'sql.js';
 
 /**
  * A single result row, either object-keyed (the Node default) or a bare value
  * tuple (after `setReturnArrays(true)`). `SqlValue` is sql.js's value union
- * (`number | string | Uint8Array | null`); when `setReadBigInts(true)` is set we
- * also yield `bigint` for INTEGER columns, so the value type widens accordingly.
+ * (`number | string | Uint8Array | null`).
  */
-type ResultValue = SqlValue | bigint;
-type ResultRow = Record<string, ResultValue> | ResultValue[];
+type ResultRow = Record<string, SqlValue> | SqlValue[];
+
+/**
+ * The argument shape the result-producing methods accept, mirroring Node's
+ * `StatementSync`: either zero-or-more POSITIONAL values (for `?` placeholders)
+ * or a SINGLE named-parameter object (for `:name` / `@name` / `$name`
+ * placeholders, with bare keys allowed once {@link StatementSync.
+ * setAllowBareNamedParameters}(true)). A lone object first argument is treated
+ * as named params; anything else (including a `Uint8Array` blob, which is a
+ * value, not a params object) is positional.
+ */
+type StatementParam = SqlValue | ParamsObject;
 
 /**
  * The shape Node's `StatementSync.prototype.run` returns: the rowid of the last
@@ -45,25 +64,36 @@ interface RunResult {
 }
 
 /**
- * Coerce one sql.js cell value to the shape Node would return for the current
- * `readBigInts` setting. sql.js hands back `number` for INTEGER columns; when
- * `readBigInts` is on, Node returns `BigInt`, so we convert integral numbers
- * to `BigInt`. Non-integral numbers, strings, blobs and `null` are returned
- * unchanged (Node never returns `BigInt` for `REAL`/`TEXT`/`BLOB`/`NULL`).
+ * Whether `value` is a named-parameter object (a plain object), as opposed to a
+ * positional `SqlValue`. A lone object first argument means "named params" in
+ * Node's `StatementSync`. `null` is a SQL value, not a params object; a
+ * `Uint8Array` is a BLOB value, not a params object — both must read as
+ * positional. Anything else that is a non-array, non-typed-array object is a
+ * named-params object.
  */
-function coerceValue(value: SqlValue, readBigInts: boolean): ResultValue {
-  if (readBigInts && typeof value === 'number' && Number.isInteger(value)) {
-    return BigInt(value);
-  }
-  return value;
+function isNamedParams(value: StatementParam): value is ParamsObject {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    !(value instanceof Uint8Array)
+  );
 }
+
+/**
+ * The sigils SQLite accepts for named parameters: `:name`, `@name`, `$name`.
+ * Used to decide whether a key in a named-params object is already prefixed (so
+ * it binds directly) or bare (so it needs the `setAllowBareNamedParameters`
+ * gate before being prefixed with `:` for sql.js).
+ */
+const NAMED_PARAM_SIGILS = [':', '@', '$'] as const;
 
 /**
  * Synchronous `node:sqlite` `StatementSync` shim backed by a sql.js prepared
  * `Statement` (ADR-0065). Constructed only by {@link DatabaseSync.prepare}; the
  * caller owns the underlying `Database` lifetime.
  *
- * Each result-producing call (`all` / `get`) binds the given positional params,
+ * Each result-producing call (`all` / `get` / `iterate`) binds the given params,
  * steps the cursor to exhaustion (or once), then resets the statement so the
  * same prepared statement is reusable across calls — matching Node's reusable
  * `StatementSync`.
@@ -78,8 +108,12 @@ export class StatementSync {
   /** When `true`, rows are bare value tuples; when `false` (default), object-keyed. */
   #returnArrays = false;
 
-  /** When `true`, INTEGER columns are read as `BigInt`; when `false` (default), `number`. */
-  #readBigInts = false;
+  /**
+   * When `true` (the default, matching Node), a named-parameter object may use
+   * BARE keys (`{ id }`) that this shim prefixes with `:` for sql.js. When
+   * `false`, bare keys throw the Node-shaped `ERR_INVALID_STATE`.
+   */
+  #allowBareNamedParameters = true;
 
   /**
    * @param db - The owning sql.js database (for run-result metadata).
@@ -91,13 +125,48 @@ export class StatementSync {
   }
 
   /**
-   * Normalise the variadic positional params Node's `StatementSync` methods
-   * accept (`all('a', 1)`) into the array sql.js `bind` wants (`['a', 1]`). An
-   * empty argument list binds nothing (sql.js treats `null`/empty as "leave
-   * unbound"), matching Node's no-arg form.
+   * Normalise the arguments Node's `StatementSync` methods accept into the
+   * `BindParams` sql.js's `bind` wants. Two forms:
+   *
+   *   - POSITIONAL: `all('a', 1)` → `['a', 1]` for the statement's `?`
+   *     placeholders. An empty argument list binds nothing (`null` — sql.js
+   *     leaves params unbound), matching Node's no-arg form.
+   *   - NAMED: a single object first argument (`get({ ':id': 'x' })`) →
+   *     `{ ':id': 'x' }`. Keys already carrying a `:`/`@`/`$` sigil pass through;
+   *     BARE keys are prefixed with `:` only when
+   *     {@link setAllowBareNamedParameters} is on, otherwise this throws the
+   *     Node-shaped `ERR_INVALID_STATE` (Node rejects bare keys by default-off).
    */
-  #bindParams(params: readonly SqlValue[]): BindParams {
-    return params.length === 0 ? null : (params as SqlValue[]);
+  #bindParams(params: readonly StatementParam[]): BindParams {
+    if (params.length === 0) return null;
+    const first = params[0] as StatementParam;
+    if (params.length === 1 && isNamedParams(first)) {
+      return this.#normaliseNamedParams(first);
+    }
+    return params as SqlValue[];
+  }
+
+  /**
+   * Translate a named-parameter object into the sigil-prefixed shape sql.js
+   * binds by name. Sigil-prefixed keys pass through unchanged; bare keys are
+   * prefixed with `:` when bare keys are allowed, else this throws the
+   * Node-shaped `ERR_INVALID_STATE` (mirroring Node's bare-key rejection when
+   * `setAllowBareNamedParameters(false)`).
+   */
+  #normaliseNamedParams(obj: ParamsObject): ParamsObject {
+    const out: ParamsObject = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if ((NAMED_PARAM_SIGILS as readonly string[]).includes(key[0] ?? '')) {
+        out[key] = value;
+      } else if (this.#allowBareNamedParameters) {
+        out[`:${key}`] = value;
+      } else {
+        const err = new Error(`Unknown named parameter '${key}'`) as Error & { code: string };
+        err.code = 'ERR_INVALID_STATE';
+        throw err;
+      }
+    }
+    return out;
   }
 
   /**
@@ -109,10 +178,10 @@ export class StatementSync {
    * This is the exact call the effect-drizzle session makes on every read query
    * (`native.prepare(q).all(...params)`).
    *
-   * @param params - Positional values for the statement's `?` placeholders.
+   * @param params - Positional `?` values, or a single named-parameter object.
    * @returns An array of rows; `[]` when no rows match.
    */
-  all(...params: SqlValue[]): ResultRow[] {
+  all(...params: StatementParam[]): ResultRow[] {
     this.#stmt.reset();
     this.#stmt.bind(this.#bindParams(params));
     const rows: ResultRow[] = [];
@@ -124,14 +193,14 @@ export class StatementSync {
   }
 
   /**
-   * Execute the statement with the given positional params and return the FIRST
-   * result row, or `undefined` when no rows match. Mirrors Node's
+   * Execute the statement with the given params and return the FIRST result row,
+   * or `undefined` when no rows match. Mirrors Node's
    * `StatementSync.prototype.get(...params)`.
    *
-   * @param params - Positional values for the statement's `?` placeholders.
+   * @param params - Positional `?` values, or a single named-parameter object.
    * @returns The first row, or `undefined` if there are none.
    */
-  get(...params: SqlValue[]): ResultRow | undefined {
+  get(...params: StatementParam[]): ResultRow | undefined {
     this.#stmt.reset();
     this.#stmt.bind(this.#bindParams(params));
     const row = this.#stmt.step() ? this.#readRow() : undefined;
@@ -140,15 +209,44 @@ export class StatementSync {
   }
 
   /**
+   * Lazily iterate the result rows. Mirrors Node's
+   * `StatementSync.prototype.iterate(...params)`: it binds the params, then
+   * yields one row per `next()` in cursor order (the SQL's `ORDER BY` order),
+   * resetting the statement once the cursor is exhausted so the prepared
+   * statement stays reusable. Rows take the configured shape (object-keyed by
+   * default, tuples after {@link setReturnArrays}(true)), exactly as `all`.
+   *
+   * Implemented as a generator so the iteration is genuinely lazy — a row is
+   * read from sql.js only when the consumer pulls it — matching Node, where
+   * `iterate` returns an iterator that steps the underlying statement on demand.
+   *
+   * @param params - Positional `?` values, or a single named-parameter object.
+   * @returns An iterator over the result rows, in cursor order.
+   */
+  *iterate(...params: StatementParam[]): IterableIterator<ResultRow> {
+    this.#stmt.reset();
+    this.#stmt.bind(this.#bindParams(params));
+    try {
+      while (this.#stmt.step()) {
+        yield this.#readRow();
+      }
+    } finally {
+      // Reset even if the consumer abandons the iterator early (`break`/`return`
+      // runs the generator's `finally`), so the prepared statement is reusable.
+      this.#stmt.reset();
+    }
+  }
+
+  /**
    * Execute a non-row-returning statement (INSERT/UPDATE/DELETE) with the given
-   * positional params. Mirrors Node's `StatementSync.prototype.run(...params)`,
-   * returning `{ lastInsertRowid, changes }` read from the database's
+   * params. Mirrors Node's `StatementSync.prototype.run(...params)`, returning
+   * `{ lastInsertRowid, changes }` read from the database's
    * `last_insert_rowid()` and `getRowsModified()` after the step.
    *
-   * @param params - Positional values for the statement's `?` placeholders.
+   * @param params - Positional `?` values, or a single named-parameter object.
    * @returns `{ lastInsertRowid, changes }` for the executed statement.
    */
-  run(...params: SqlValue[]): RunResult {
+  run(...params: StatementParam[]): RunResult {
     this.#stmt.reset();
     this.#stmt.bind(this.#bindParams(params));
     // Step the statement to completion (run ignores any rows). A single step is
@@ -179,39 +277,75 @@ export class StatementSync {
    * (`false`, the default — also effect's SafeIntegers-default state). Mirrors
    * Node's `StatementSync.prototype.setReadBigInts`.
    *
-   * @param readBigInts - `true` to read INTEGER columns as `BigInt`.
+   * The `true` path is NOT supported by the prebuilt sql.js WASM engine: it
+   * stores every INTEGER in a JS `number`, so there is no bigint read mode.
+   * Coercing those numbers to `BigInt` would silently lie about values above
+   * `Number.MAX_SAFE_INTEGER` (the number is already lossy before the cast), so
+   * `setReadBigInts(true)` throws a directed {@link NotImplementedError} rather
+   * than fake a value (ADR-0065 D4, no silent stubs; registered ❌ in
+   * `docs/compat/sqlite.md`). The `false` path is a no-op (it is already the
+   * only behaviour).
+   *
+   * @param readBigInts - `true` to request BigInt INTEGER reads (unsupported).
+   * @throws {NotImplementedError} When `readBigInts` is `true`.
    */
   setReadBigInts(readBigInts: boolean): void {
-    this.#readBigInts = readBigInts;
+    if (readBigInts) {
+      throw new NotImplementedError(
+        'sqlite.Statement.setReadBigInts(true)',
+        'the prebuilt sql.js WASM stores INTEGER columns as JS numbers and has ' +
+          'no bigint read mode; faking BigInt would lose precision above ' +
+          'Number.MAX_SAFE_INTEGER (ADR-0065)',
+      );
+    }
+  }
+
+  /**
+   * Set whether a named-parameter object may use BARE keys (`{ id }`, which this
+   * shim prefixes with `:` for sql.js) or only sigil-prefixed keys
+   * (`{ ':id' }`). Mirrors Node's `StatementSync.prototype.
+   * setAllowBareNamedParameters`. Defaults to `true` (as Node does); set to
+   * `false` to make bare keys throw `ERR_INVALID_STATE`.
+   *
+   * @param allow - `true` to accept bare keys, `false` to reject them.
+   */
+  setAllowBareNamedParameters(allow: boolean): void {
+    this.#allowBareNamedParameters = allow;
+  }
+
+  /**
+   * Return per-column metadata for the prepared statement. NOT supported by the
+   * prebuilt sql.js WASM engine: Node returns the full shape
+   * `{ column, database, name, table, type }`, which requires SQLite's
+   * `SQLITE_ENABLE_COLUMN_METADATA` build (the `sqlite3_column_table_name` /
+   * `_database_name` / `_origin_name` / `_decltype` exports). The prebuilt sql.js
+   * WASM is compiled WITHOUT that flag — it exposes only `sqlite3_column_name`,
+   * so the table/database/decltype fields are unavailable. Returning a partial
+   * shape would be a silent stub, so this throws a directed
+   * {@link NotImplementedError} (registered ❌ in `docs/compat/sqlite.md`,
+   * ADR-0065 D4). It is not on opencode's boot/query path.
+   *
+   * @throws {NotImplementedError} Always — the engine lacks column metadata.
+   */
+  columns(): never {
+    throw new NotImplementedError(
+      'sqlite.StatementSync.columns',
+      'the prebuilt sql.js WASM is built without SQLITE_ENABLE_COLUMN_METADATA, ' +
+        "so the column's table/database/declared-type are unavailable (ADR-0065)",
+    );
   }
 
   /**
    * Read the current row from the stepped statement in the configured shape
-   * (object-keyed or array tuple) with the configured integer type
-   * (`number`/`BigInt`).
+   * (object-keyed by default, or a bare value tuple after
+   * {@link setReturnArrays}(true)). INTEGER columns come back as plain `number`s
+   * (sql.js's only integer representation); the BigInt path is unsupported (see
+   * {@link setReadBigInts}).
    */
   #readRow(): ResultRow {
     if (this.#returnArrays) {
-      return this.#stmt.get().map((v) => coerceValue(v, this.#readBigInts));
+      return this.#stmt.get();
     }
-    const obj = this.#stmt.getAsObject();
-    const out: Record<string, ResultValue> = {};
-    for (const key of Object.keys(obj)) {
-      out[key] = coerceValue(obj[key] as SqlValue, this.#readBigInts);
-    }
-    return out;
-  }
-
-  /**
-   * Iterate result rows lazily. NOT YET implemented — lands in a follow-up task
-   * if opencode's query path needs it. Throws a directed
-   * {@link NotImplementedError} (registered in `docs/compat/sqlite.md`) rather
-   * than returning a fake iterator (ADR-0065 D4).
-   */
-  iterate(..._params: SqlValue[]): never {
-    throw new NotImplementedError(
-      'sqlite.StatementSync.iterate',
-      'lazy row iteration lands in a follow-up task (ADR-0065)',
-    );
+    return this.#stmt.getAsObject();
   }
 }

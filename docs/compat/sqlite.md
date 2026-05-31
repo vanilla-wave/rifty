@@ -41,13 +41,17 @@ params)`).
 
 | Member | Status | Notes |
 |---|---|---|
-| `all(...params)` | ✅ | Positional `?` params; object-keyed rows by default, array tuples after `setReturnArrays(true)`; empty result is `[]`. Pinned by parity case `cases/sqlite/prepare-all.case.ts`. |
-| `get(...params)` | ✅ | First row in the configured shape, or `undefined` when no rows match. |
-| `run(...params)` | ✅ | Executes DML; returns `{ lastInsertRowid, changes }` from `last_insert_rowid()` / `getRowsModified()`. |
+| `all(...params)` | ✅ | Positional `?` params or a single named-parameter object; object-keyed rows by default, array tuples after `setReturnArrays(true)`; empty result is `[]`. Pinned by parity case `cases/sqlite/prepare-all.case.ts`. |
+| `get(...params)` | ✅ | First row in the configured shape, or `undefined` when no rows match. Pinned by parity case `cases/sqlite/run-get-iterate.case.ts`. |
+| `run(...params)` | ✅ | Executes DML; returns `{ lastInsertRowid, changes }` (plain numbers) from `last_insert_rowid()` / `getRowsModified()`. Pinned by parity case `cases/sqlite/run-get-iterate.case.ts`. |
+| `iterate(...params)` | ✅ | Lazy generator; yields rows in cursor order (the configured shape), resets the statement on exhaustion / early `break`. Pinned by parity case `cases/sqlite/run-get-iterate.case.ts`. |
+| Named parameters (`:name` / `@name` / `$name`) | ✅ | A single object first argument binds by name. Sigil-prefixed keys (`{ ':id' }`) pass through; bare keys (`{ id }`) are prefixed with `:` when bare keys are allowed. Pinned by parity case `cases/sqlite/run-get-iterate.case.ts`. |
+| `setAllowBareNamedParameters(bool)` | ✅ | Defaults to `true` (as Node). `false` → bare named-param keys throw `ERR_INVALID_STATE`. |
 | `setReturnArrays(bool)` | ✅ | `true` → bare value-tuple rows; `false` (default) → object-keyed rows. |
-| `setReadBigInts(bool)` | ✅ | `true` → INTEGER columns read as `BigInt`; `false` (default, effect's SafeIntegers-default state) → plain `number`. ⚠️ sql.js stores integers in a JS `number`, so values beyond `Number.MAX_SAFE_INTEGER` are lossy even before the `BigInt` cast (first-cut precision gap). |
-| `iterate(...params)` | ❌ | `NotImplementedError('sqlite.StatementSync.iterate')` — lazy row iteration lands in a follow-up task; not on the boot path. |
-| `expandedSQL` / `sourceSQL` / `columns()` / `setAllowBareNamedParameters()` | ❌ | Not yet wired (`NotImplementedError` when added). |
+| `setReadBigInts(false)` | ✅ | Default (also effect's SafeIntegers-default state) → INTEGER columns read as plain `number`. |
+| `setReadBigInts(true)` | ❌ | `NotImplementedError('sqlite.Statement.setReadBigInts(true)')` — the prebuilt sql.js WASM stores INTEGER columns as JS `number`s and has no bigint read mode; faking `BigInt` would silently lose precision above `Number.MAX_SAFE_INTEGER` (the number is already lossy before the cast). No silent fallback (ADR-0065 D4). |
+| `columns()` | ❌ | `NotImplementedError('sqlite.StatementSync.columns')` — Node returns `{ column, database, name, table, type }`, which needs SQLite's `SQLITE_ENABLE_COLUMN_METADATA` build (`sqlite3_column_table_name` / `_database_name` / `_origin_name` / `_decltype`). The prebuilt sql.js WASM is compiled without it (only `sqlite3_column_name` is exposed), so a faithful shape is unavailable; a partial shape would be a silent stub. Not on the boot/query path. |
+| `expandedSQL` / `sourceSQL` | ❌ | Not yet wired (`NotImplementedError` when added). |
 
 ## Known caveats (first cut)
 
@@ -67,3 +71,13 @@ params)`).
 - **`PRAGMA journal_mode = WAL` succeeds but is moot.** sql.js is in-memory, so
   there is no WAL file; the PRAGMA runs without throwing (which is all opencode's
   boot path requires) and reports the journal mode sql.js applies.
+- **No BigInt INTEGER reads; no column metadata.** Two `StatementSync` members
+  throw `NotImplementedError` rather than fake a value, because the prebuilt
+  sql.js WASM cannot back them: `setReadBigInts(true)` (the engine stores every
+  INTEGER in a JS `number`, so a `BigInt` cast would silently lose precision
+  above `Number.MAX_SAFE_INTEGER`) and `columns()` (the engine is compiled
+  without `SQLITE_ENABLE_COLUMN_METADATA`, so the per-column
+  table/database/declared-type that Node's `columns()` returns are unavailable;
+  only `sqlite3_column_name` is exposed). Both would require a custom sql.js WASM
+  rebuild — out of scope for the in-memory first cut. They are not on opencode's
+  boot/query path.
