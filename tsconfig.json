@@ -11,5 +11,6 @@
     "apps/*/src/**/*",
     "tools/*/src/**/*",
     "tests/**/*"
-  ]
+  ],
+  "exclude": ["tests/integration/fixtures/opencode/**"]
 }
