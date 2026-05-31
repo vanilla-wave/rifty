@@ -323,7 +323,9 @@ function resolveImports(field: ExportsField, specifier: string, esm: boolean): s
     return resolveConditionTree(direct, esm);
   }
   const wildcard = findWildcard(obj, specifier);
-  if (wildcard !== null) {
+  // `undefined` = no pattern matched; `null` = the most-specific pattern is a
+  // block (deny). Both mean "no resolution" here; only a real target resolves.
+  if (wildcard !== null && wildcard !== undefined) {
     return resolveConditionTree(wildcard, esm);
   }
   return null;
@@ -351,7 +353,11 @@ function resolveExports(field: ExportsField, subpath: string, esm: boolean): str
       return resolveConditionTree(direct, esm);
     }
     const wildcard = findWildcard(obj, subpath);
-    if (wildcard !== null) {
+    // `undefined` = no pattern matched; `null` = the most-specific pattern is a
+    // block (deny, e.g. effect's `"./internal/*": null`). Both yield no
+    // resolution, so the caller throws PACKAGE_PATH_NOT_EXPORTED. Only a real
+    // target resolves.
+    if (wildcard !== null && wildcard !== undefined) {
       return resolveConditionTree(wildcard, esm);
     }
     return null;
@@ -384,23 +390,60 @@ function resolveConditionTree(node: ExportsField, esm: boolean): string | null {
   return null;
 }
 
+/**
+ * Resolve a `*`-pattern key against `subpath`, picking the MOST-SPECIFIC match
+ * per Node's `PACKAGE_IMPORTS_EXPORTS_RESOLVE` (not first-by-insertion-order).
+ * effect@4 declares a catch-all `./*` -> `./dist/*.js` alongside more-specific
+ * null blocks (its `./internal/*` and `./<star>/index` keys map to null); a
+ * first-match scan in insertion order would leak `effect/internal/x` through
+ * `./*` instead of letting the null block deny it. Node ignores key order and
+ * selects the
+ * candidate with the longest pattern base (the part before `*`), breaking ties
+ * on the longest pattern trailer (the part after `*`).
+ *
+ * A best-match whose target is `null` (or `undefined`) is a deliberate BLOCK:
+ * we return `null` so the caller throws `PACKAGE_PATH_NOT_EXPORTED` — it must
+ * NOT fall through to a less-specific non-null pattern.
+ *
+ * Returns `undefined` when no pattern matches at all (so the caller can tell a
+ * blocked subpath apart from an unmatched one), the substituted target string
+ * (wrapped) when a non-null pattern wins, or `null` when the winner is a block.
+ */
 function findWildcard(
   obj: { [key: string]: ExportsField | null },
   subpath: string,
-): ExportsField | null {
-  // Match keys like `'./fp/*'` against `subpath`.
+): ExportsField | null | undefined {
+  let bestKey: string | null = null;
+  let bestStar = '';
+  let bestBaseLen = -1;
+  let bestTrailerLen = -1;
   for (const key of Object.keys(obj)) {
     if (!key.includes('*')) continue;
     const [prefix, suffix] = key.split('*');
     if (prefix === undefined || suffix === undefined) continue;
-    if (subpath.startsWith(prefix) && subpath.endsWith(suffix)) {
-      const star = subpath.slice(prefix.length, subpath.length - suffix.length);
-      const tmpl = obj[key];
-      if (tmpl === undefined || tmpl === null) return null;
-      return substituteStar(tmpl, star);
+    // A pattern matches when the subpath carries its prefix and suffix and the
+    // two do not overlap (`prefix.length + suffix.length <= subpath.length`).
+    if (
+      subpath.length >= prefix.length + suffix.length &&
+      subpath.startsWith(prefix) &&
+      subpath.endsWith(suffix)
+    ) {
+      // Specificity = longer base wins; tie -> longer trailer wins.
+      if (
+        prefix.length > bestBaseLen ||
+        (prefix.length === bestBaseLen && suffix.length > bestTrailerLen)
+      ) {
+        bestKey = key;
+        bestStar = subpath.slice(prefix.length, subpath.length - suffix.length);
+        bestBaseLen = prefix.length;
+        bestTrailerLen = suffix.length;
+      }
     }
   }
-  return null;
+  if (bestKey === null) return undefined;
+  const tmpl = obj[bestKey];
+  if (tmpl === undefined || tmpl === null) return null;
+  return substituteStar(tmpl, bestStar);
 }
 
 function substituteStar(node: ExportsField, star: string): ExportsField {

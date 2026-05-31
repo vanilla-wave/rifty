@@ -335,6 +335,140 @@ describe('declaration-file exclusion', () => {
   });
 });
 
+describe('exports subpath patterns — effect@4 / opencode-workspace shapes', () => {
+  // These pin the EXACT `exports`-map shapes the opencode server graph leans on,
+  // verified against the vendored tree (`effect@4.0.0-beta.66`, the
+  // `@opencode-ai/*` workspace packages). The resolutions here are head-to-head
+  // with real Node 24 (`createRequire(...).resolve(...)` on the same maps):
+  //   effect: { "./unstable/http": "./dist/unstable/http/index.js",
+  //             "./*": "./dist/*.js", "./internal/*": null, "./*/index": null }
+  //   @opencode-ai/core: { "./*": "./src/*.ts" }
+  // Each test reproduces a real specifier opencode emits and asserts the file the
+  // resolver lands on, so a regression in subpath/wildcard/null-block handling
+  // surfaces as a wrong target (or a missing block) rather than a silent boot.
+
+  it('resolves an explicit deep subpath key (effect/unstable/http)', () => {
+    // The exact key `./unstable/http` wins as a literal — not the `./*` wildcard.
+    const loader = setup({
+      '/app/main.mjs': "import * as http from 'effect/unstable/http'; export const v = http.x;",
+      '/app/node_modules/effect/package.json': JSON.stringify({
+        type: 'module',
+        exports: { './unstable/http': './dist/unstable/http/index.js', './*': './dist/*.js' },
+      }),
+      '/app/node_modules/effect/dist/unstable/http/index.js': 'export const x = 1;',
+    });
+    const resolved = loader.resolver.resolve('effect/unstable/http', {
+      fromFile: '/app/main.mjs',
+      esm: true,
+    });
+    expect(resolved.id).toBe('/app/node_modules/effect/dist/unstable/http/index.js');
+  });
+
+  it('resolves a deep subpath via the catch-all "./*" wildcard (effect/unstable/http/HttpClientError)', () => {
+    // No explicit `./unstable/http/HttpClientError` key exists; Node falls through
+    // to `./*` -> `./dist/unstable/http/HttpClientError.js` (the `*` captures the
+    // whole multi-segment tail). Verified against Node 24 on the real effect map.
+    const loader = setup({
+      '/app/main.mjs':
+        "import * as e from 'effect/unstable/http/HttpClientError'; export const v = e.x;",
+      '/app/node_modules/effect/package.json': JSON.stringify({
+        type: 'module',
+        exports: { './unstable/http': './dist/unstable/http/index.js', './*': './dist/*.js' },
+      }),
+      '/app/node_modules/effect/dist/unstable/http/HttpClientError.js': 'export const x = 2;',
+    });
+    const resolved = loader.resolver.resolve('effect/unstable/http/HttpClientError', {
+      fromFile: '/app/main.mjs',
+      esm: true,
+    });
+    expect(resolved.id).toBe('/app/node_modules/effect/dist/unstable/http/HttpClientError.js');
+  });
+
+  it('resolves a top-level module name via "./*" (effect/Effect, effect/Layer)', () => {
+    const loader = setup({
+      '/app/main.mjs': "import * as E from 'effect/Effect'; export const v = E.x;",
+      '/app/node_modules/effect/package.json': JSON.stringify({
+        type: 'module',
+        exports: { '.': './dist/index.js', './*': './dist/*.js' },
+      }),
+      '/app/node_modules/effect/dist/Effect.js': 'export const x = 3;',
+    });
+    const resolved = loader.resolver.resolve('effect/Effect', {
+      fromFile: '/app/main.mjs',
+      esm: true,
+    });
+    expect(resolved.id).toBe('/app/node_modules/effect/dist/Effect.js');
+  });
+
+  it('resolves a scoped workspace package subpath to its .ts source ("./*": "./src/*.ts")', () => {
+    // `@opencode-ai/core` ships NO build — `exports: { "./*": "./src/*.ts" }`
+    // maps every subpath straight to TypeScript source. The resolver must land on
+    // the `.ts` file (the transformSource hook strips it downstream). This is the
+    // workspace-resolution shape the whole opencode graph rides on.
+    const loader = setup({
+      '/app/main.mjs': "import { Server } from '@opencode-ai/core/server/server';",
+      '/app/node_modules/@opencode-ai/core/package.json': JSON.stringify({
+        type: 'module',
+        exports: { './*': './src/*.ts' },
+      }),
+      '/app/node_modules/@opencode-ai/core/src/server/server.ts':
+        'export const Server: number = 1;',
+    });
+    const resolved = loader.resolver.resolve('@opencode-ai/core/server/server', {
+      fromFile: '/app/main.mjs',
+      esm: true,
+    });
+    expect(resolved.id).toBe('/app/node_modules/@opencode-ai/core/src/server/server.ts');
+  });
+
+  it('a more-specific null target blocks a path the catch-all "./*" would otherwise match (effect internal)', () => {
+    // effect@4 declares `"./internal/*": null` AND `"./*": "./dist/*.js"`. Node
+    // resolution picks the MOST-SPECIFIC matching pattern, so `effect/internal/x`
+    // hits the null target and throws ERR_PACKAGE_PATH_NOT_EXPORTED — it must NOT
+    // fall through to `./*` and leak `./dist/internal/x.js`. Verified against
+    // Node 24: `require.resolve('effect/internal/effect')` -> PATH_NOT_EXPORTED.
+    const loader = setup({
+      '/app/main.mjs': "import 'effect/internal/secret';",
+      '/app/node_modules/effect/package.json': JSON.stringify({
+        type: 'module',
+        // Key order mirrors the REAL effect@4 map: the catch-all `./*` is listed
+        // BEFORE the `./internal/*` null block, so a first-match wildcard scan
+        // (insertion order) leaks the internal file. Node ignores order and picks
+        // the most-specific pattern — that is the contract under test.
+        exports: { './*': './dist/*.js', './internal/*': null },
+      }),
+      // Present on disk so a wrong fall-through would actually resolve it.
+      '/app/node_modules/effect/dist/internal/secret.js': 'export const leaked = true;',
+    });
+    expect(() =>
+      loader.resolver.resolve('effect/internal/secret', { fromFile: '/app/main.mjs', esm: true }),
+    ).toThrow(/PACKAGE_PATH_NOT_EXPORTED|not (defined|exported)/);
+  });
+
+  it('the most-specific wildcard wins when two patterns both match', () => {
+    // `"./*/index": null` is more specific than `"./*"` for `foo/index`. Node
+    // matches the longer-prefix/longer-suffix pattern first. Here the specific
+    // pattern points at a REAL file (not null) so we can assert it actually wins,
+    // independent of the null-block behaviour above.
+    const loader = setup({
+      '/app/main.mjs': "import * as m from 'pkg/feature/special'; export const v = m.x;",
+      '/app/node_modules/pkg/package.json': JSON.stringify({
+        type: 'module',
+        // Generic `./*` listed FIRST so a first-match scan would wrongly pick it;
+        // Node picks the more-specific `./*/special` regardless of order.
+        exports: { './*': './dist/generic/*.js', './*/special': './dist/specific/*.js' },
+      }),
+      '/app/node_modules/pkg/dist/specific/feature.js': 'export const x = 9;',
+      '/app/node_modules/pkg/dist/generic/feature/special.js': 'export const x = 0;',
+    });
+    const resolved = loader.resolver.resolve('pkg/feature/special', {
+      fromFile: '/app/main.mjs',
+      esm: true,
+    });
+    expect(resolved.id).toBe('/app/node_modules/pkg/dist/specific/feature.js');
+  });
+});
+
 describe('ESM — import / export', () => {
   it('static default import', async () => {
     const loader = setup({
