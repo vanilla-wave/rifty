@@ -12,6 +12,19 @@ This file is maintained by hand for the surface the shim deliberately throws on
 (`pnpm compat:generate`) cover behaviours pinned by conformance/integration
 tests at milestone DoD.
 
+**Boot subset (P2 gate): ✅.** opencode's literal database-boot sequence — open
+`:memory:`, `PRAGMA journal_mode = WAL` + the five other boot PRAGMAs, the
+`migration` journal table, fresh-boot seed detection, and the first real
+migration (`20260127222353_familiar_lady_ursula`: eight `CREATE TABLE`s with
+forward FKs + six `CREATE INDEX`es) inside a `begin deferred` … `commit`
+transaction — completes without throwing and the committed migration row reads
+back. Pinned by the conformance gate
+`tests/conformance/builtins/sqlite-opencode-boot.test.ts` (runs the sequence
+through `require('node:sqlite')` in the real loader) and its head-to-head twin
+`tools/node-parity-runner/cases/sqlite/opencode-boot-sequence.case.ts` (byte-for-byte
+vs real Node `node:sqlite`). This is the P2 boot prerequisite — opencode's
+`Server.listen` builds it at layer-build time before any request (ADR-0065).
+
 Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not
 implemented (throws `NotImplementedError`).
 

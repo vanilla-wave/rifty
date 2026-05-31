@@ -17,6 +17,26 @@
 
 ### Added
 
+- **`node:sqlite` opencode-boot conformance gate + head-to-head parity
+  (ADR-0065, P2 boot prerequisite).** Added the conformance test
+  `tests/conformance/builtins/sqlite-opencode-boot.test.ts`, which runs
+  opencode's EXACT database-boot sequence through `require('node:sqlite')` inside
+  the real rifty module loader (resolving the builtin via the `@rifty/io`
+  registry that `@rifty/net/sqlite/register-builtins` populates): open `:memory:`
+  with FK constraints, the post-open `PRAGMA journal_mode = WAL`,
+  `Database.layer`'s six PRAGMAs via `prepare(pragma).all()`, then
+  `DatabaseMigration.apply` — the `migration` journal `CREATE TABLE IF NOT
+  EXISTS`, the fresh-boot seed-detection `SELECT`s (empty journal, no
+  `__drizzle_migrations`), and the first real migration
+  `20260127222353_familiar_lady_ursula` (eight `CREATE TABLE`s with forward FKs +
+  six `CREATE INDEX`es) inside a `begin deferred` … `commit` transaction,
+  asserting the committed `migration` row reads back. This is the gate that says
+  "rifty can boot opencode's database layer without throwing". Its head-to-head
+  twin against real Node `node:sqlite` is
+  `tools/node-parity-runner/cases/sqlite/opencode-boot-sequence.case.ts` (the
+  whole sequence; both stdouts agree byte-for-byte). No new shim code — both
+  exercise the existing sql.js-backed `DatabaseSync`/`StatementSync` surface; the
+  gate goes red if any statement on opencode's boot path regresses.
 - **`node:sqlite` `StatementSync` — complete the per-query contract:
   `iterate()`, named parameters, `setAllowBareNamedParameters` (ADR-0065,
   `statement-run-get-iterate-columns`).** `StatementSync.iterate(...params)` is
