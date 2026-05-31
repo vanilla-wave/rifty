@@ -17,6 +17,30 @@
 
 ### Added
 
+- **`node:sqlite` `StatementSync` query surface — `prepare().all/get/run` +
+  `setReturnArrays`/`setReadBigInts` over sql.js (ADR-0065,
+  `statement-prepare-all-positional`).** New
+  `packages/net/src/sqlite/statement-sync.ts` adds the synchronous
+  `StatementSync`-shaped class returned by `DatabaseSync.prepare(sql)` — the
+  exact query path the effect-drizzle session inside opencode runs on every
+  query (`native.prepare(q).all(...params)` with positional `?` placeholders).
+  `all(...params)` returns object-keyed rows by default and bare value-tuple
+  rows after `setReturnArrays(true)`; `setReadBigInts(false)` (the default, and
+  effect's SafeIntegers-default state) yields plain `number`s for INTEGER columns
+  while `setReadBigInts(true)` coerces them to `BigInt` to match Node; an
+  unmatched query returns `[]`. `run(...params)` returns Node's
+  `{ lastInsertRowid, changes }`; `get(...params)` returns the first row or
+  `undefined`. `DatabaseSync.prepare(sql)` now returns a `StatementSync` (throws
+  Node-shaped `ERR_INVALID_STATE` if the database is not open) instead of the
+  prior `NotImplementedError`. `StatementSync.iterate()` and the rest of Node's
+  `StatementSync` prototype (`expandedSQL`/`sourceSQL`/`columns`/
+  `setAllowBareNamedParameters`) throw `NotImplementedError` with a
+  `docs/compat/sqlite.md` entry (no silent stubs, ADR-0065 D4). Head-to-head
+  parity vs real Node `node:sqlite`:
+  `tools/node-parity-runner/cases/sqlite/prepare-all.case.ts`. Known first-cut
+  gap in `docs/compat/sqlite.md` (sql.js stores integers in a JS `number`, so
+  values beyond `Number.MAX_SAFE_INTEGER` are lossy even before `setReadBigInts`).
+
 - **`node:sqlite` `DatabaseSync` facade — constructor + `exec()` + `close()`
   over sql.js (ADR-0065, `databasesync-construct-exec-close`).** New
   `packages/net/src/sqlite/database-sync.ts` adds a synchronous

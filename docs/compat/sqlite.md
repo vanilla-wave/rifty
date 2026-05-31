@@ -27,11 +27,27 @@ implemented (throws `NotImplementedError`).
 | `exec(sql)` | ✅ | Multi-statement (`;`-separated) supported; returns `undefined`. PRAGMAs (incl. `journal_mode = WAL`) run as-is and do not throw. Pinned by the parity case. |
 | `close()` | ✅ | Frees the database; double-close throws `ERR_INVALID_STATE` ("database is not open"), matching Node. |
 | `open()` | ✅ | Opens a deferred (`open: false`) handle; re-opening an open handle throws `ERR_INVALID_STATE`. |
-| `prepare(sql)` | ❌ | `NotImplementedError('sqlite.DatabaseSync.prepare')` — sql.js-backed prepared statements (`StatementSync.run`/`all`/`get`) land in a follow-up task as opencode's parameterized-query path needs them. |
+| `prepare(sql)` | ✅ | Returns a `StatementSync` wrapping the compiled sql.js statement. Throws `ERR_INVALID_STATE` if the database is not open. Pinned by parity case `cases/sqlite/prepare-all.case.ts`. |
 | `location()` | ❌ | Not yet wired (`NotImplementedError` when added). |
 | `function()` / `aggregate()` | ❌ | User-defined functions — not on the boot path. |
 | `createSession()` / `applyChangeset()` | ❌ | Session extension — not on the boot path. |
 | `enableLoadExtension()` / `loadExtension()` | ❌ | Loadable extensions — unsupported in the WASM build. |
+
+## `StatementSync`
+
+Returned by `DatabaseSync.prepare(sql)`. The query surface the effect-drizzle
+session inside opencode calls on every query (`native.prepare(q).all(...
+params)`).
+
+| Member | Status | Notes |
+|---|---|---|
+| `all(...params)` | ✅ | Positional `?` params; object-keyed rows by default, array tuples after `setReturnArrays(true)`; empty result is `[]`. Pinned by parity case `cases/sqlite/prepare-all.case.ts`. |
+| `get(...params)` | ✅ | First row in the configured shape, or `undefined` when no rows match. |
+| `run(...params)` | ✅ | Executes DML; returns `{ lastInsertRowid, changes }` from `last_insert_rowid()` / `getRowsModified()`. |
+| `setReturnArrays(bool)` | ✅ | `true` → bare value-tuple rows; `false` (default) → object-keyed rows. |
+| `setReadBigInts(bool)` | ✅ | `true` → INTEGER columns read as `BigInt`; `false` (default, effect's SafeIntegers-default state) → plain `number`. ⚠️ sql.js stores integers in a JS `number`, so values beyond `Number.MAX_SAFE_INTEGER` are lossy even before the `BigInt` cast (first-cut precision gap). |
+| `iterate(...params)` | ❌ | `NotImplementedError('sqlite.StatementSync.iterate')` — lazy row iteration lands in a follow-up task; not on the boot path. |
+| `expandedSQL` / `sourceSQL` / `columns()` / `setAllowBareNamedParameters()` | ❌ | Not yet wired (`NotImplementedError` when added). |
 
 ## Known caveats (first cut)
 

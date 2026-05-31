@@ -10,17 +10,18 @@
  * constructed; the constructor calls the synchronous `getSqliteEngine()`, which
  * throws a clear "engine not initialized" error otherwise (no silent stub).
  *
- * Scope of THIS module (the construct/exec/close task): the constructor, `exec`,
- * and `close`. The remaining members of Node's `DatabaseSync` prototype
- * (`prepare`, `open`, `location`, `function`, `aggregate`, `createSession`,
- * `applyChangeset`, `enableLoadExtension`, `loadExtension`) are NOT yet backed —
- * they throw a directed {@link NotImplementedError} with a `docs/compat/sqlite.md`
- * entry, never a faked value (ADR-0065 D4, no silent stubs). They land in
- * follow-up tasks as opencode's boot path needs each one.
+ * Scope of THIS module: the constructor, `open`, `exec`, `close`, and `prepare`
+ * (the last returning a {@link StatementSync} for the query path). The remaining
+ * members of Node's `DatabaseSync` prototype (`location`, `function`,
+ * `aggregate`, `createSession`, `applyChangeset`, `enableLoadExtension`,
+ * `loadExtension`) are NOT yet backed — when added they throw a directed
+ * `NotImplementedError` with a `docs/compat/sqlite.md` entry, never a faked
+ * value (ADR-0065 D4, no silent stubs). They land in follow-up tasks as
+ * opencode's boot path needs each one.
  */
-import { NotImplementedError } from '@rifty/io';
 import type { Database } from 'sql.js';
 import { getSqliteEngine } from './engine.ts';
+import { StatementSync } from './statement-sync.ts';
 
 /**
  * Options accepted by Node's `DatabaseSync` constructor. Only the members
@@ -152,15 +153,19 @@ export class DatabaseSync {
   }
 
   /**
-   * Prepare a statement. NOT YET implemented — lands in a follow-up task when
-   * opencode's parameterized-query path needs it. Throws a directed
-   * {@link NotImplementedError} (registered in `docs/compat/sqlite.md`) rather
-   * than returning a fake statement (ADR-0065 D4).
+   * Prepare a statement and return a {@link StatementSync} bound to it. Mirrors
+   * Node's `DatabaseSync.prototype.prepare(sql)`: it compiles the SQL once and
+   * hands back a reusable statement whose `all`/`get`/`run` accept positional
+   * params. This is the entry point the effect-drizzle session calls on every
+   * query (`native.prepare(q).all(...params)`).
+   *
+   * @param sql - A single SQL statement, optionally with `?` placeholders.
+   * @returns A {@link StatementSync} wrapping the compiled sql.js statement.
+   * @throws {Error} `ERR_INVALID_STATE` ("database is not open") if the database
+   *   is closed or was constructed with `open: false` and not yet opened.
    */
-  prepare(_sql: string): never {
-    throw new NotImplementedError(
-      'sqlite.DatabaseSync.prepare',
-      'sql.js-backed prepared statements land in a follow-up task (ADR-0065)',
-    );
+  prepare(sql: string): StatementSync {
+    if (this.#db === undefined) throw notOpenError();
+    return new StatementSync(this.#db, this.#db.prepare(sql));
   }
 }
