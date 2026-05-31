@@ -17,6 +17,20 @@
 
 ### Added
 
+- **`node:console` — faithful pure-JS builtin.** Full `Console` class over two
+  writable streams (`lib/internal/console/constructor.js`): `log`/`info`/`debug`/
+  `dir` → stdout, `warn`/`error`/`trace` → stderr (printf via `util.format`),
+  `assert`, `group`/`groupCollapsed`/`groupEnd` indentation, `count`/`countReset`,
+  `time`/`timeEnd`/`timeLog`, and `table(data[, columns])` rendering Node v24's
+  box-drawing table byte-for-byte (`(index)` column, `Values` column for
+  primitive rows, union of object keys, left-aligned cells, non-tabular → `log`).
+  Constructor accepts positional `(stdout[, stderr])` or `{ stdout, stderr,
+  inspectOptions, groupIndentation }`. Module export is the default instance
+  augmented with `Console`. Unblocks undici's
+  `lib/mock/pending-interceptors-formatter.js` (`new Console({ stdout })` +
+  `table`) on the opencode graph. Parity:
+  `cases/console/console-class.case.ts`.
+
 - **`node:util` gains `debuglog`/`debug`.** `NODE_DEBUG`-gated lazy debug logger
   faithful to Node (`lib/internal/util/debuglog.js`): comma/space section globs
   (`*`), case-insensitive; returns a callable carrying a memoised `enabled`
