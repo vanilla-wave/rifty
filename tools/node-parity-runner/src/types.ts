@@ -42,8 +42,16 @@ export interface ParityCase {
    *   types / lower JSX before the AST ESM rewrite — the same edge the headless
    *   opencode harness will use. Like `'http'`, this is a `tools/`-harness-only
    *   reach into `@rifty/runtime-wasi` + `@rifty/shadow-registry`.
+   * - `'sqlite'` — opt-in `node:sqlite` registration mode (ADR-0065). Like
+   *   `'http'` for `@rifty/net`'s `node:http`, the rifty side imports
+   *   `@rifty/net/sqlite/register-builtins` so `require('node:sqlite')` resolves
+   *   to the sql.js-backed `DatabaseSync` shim, and it AWAITS
+   *   `initSqliteEngine()` first so the synchronous `DatabaseSync` constructor
+   *   has its WASM handle ready (the one async step the synchronous surface
+   *   depends on). The case `code` is otherwise plain CJS — the Node side runs
+   *   the genuine `node:sqlite` `DatabaseSync` (Node ≥22) with no preamble.
    */
-  readonly kind?: 'cjs' | 'esm' | 'http' | 'ts-esm';
+  readonly kind?: 'cjs' | 'esm' | 'http' | 'ts-esm' | 'sqlite';
 }
 
 export interface CaseRun {

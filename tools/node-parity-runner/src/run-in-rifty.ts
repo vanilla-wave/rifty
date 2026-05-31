@@ -83,6 +83,25 @@ async function installHttpMode(): Promise<() => void> {
 }
 
 /**
+ * Install the opt-in `kind: 'sqlite'` `node:sqlite` registration mode (ADR-0065).
+ *
+ * Mirrors {@link installHttpMode} for `@rifty/net`'s `node:http`: the side-
+ * effecting forward import of `@rifty/net/sqlite/register-builtins` plugs the
+ * sql.js-backed `DatabaseSync` factory into the shared `@rifty/io` builtin
+ * registry so `require('node:sqlite')` resolves on the rifty side. It THEN
+ * awaits `initSqliteEngine()` — the synchronous `DatabaseSync` constructor the
+ * case `code` calls needs the WASM engine already brought up (the one async
+ * step the otherwise-synchronous surface depends on, ADR-0065 D1). There is no
+ * teardown: the registry factory is process-wide and idempotent, and the engine
+ * bring-up is memoised, so leaving both in place is correct across cases.
+ */
+async function installSqliteMode(): Promise<void> {
+  await import('@rifty/net/sqlite/register-builtins');
+  const { initSqliteEngine } = await import('@rifty/net/sqlite/engine');
+  await initSqliteEngine();
+}
+
+/**
  * Build the `transformSource` hook for `kind: 'ts-esm'` — the SAME edge the
  * headless opencode harness uses (ADR-0052). It strips types / lowers JSX with
  * the REAL vendored esbuild WASI binary via the injected `runWasi`, selecting
@@ -178,6 +197,11 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
   // Opt-in net mode: register `node:http` and inject the request driver so the
   // case can drive its own server through the port registry (no OS socket).
   const teardownHttp = testCase.kind === 'http' ? await installHttpMode() : null;
+
+  // Opt-in sqlite mode: register `node:sqlite` and bring up the sql.js engine so
+  // the synchronous `DatabaseSync` constructor in the case `code` resolves and
+  // has its WASM handle ready (ADR-0065). No teardown — see `installSqliteMode`.
+  if (testCase.kind === 'sqlite') await installSqliteMode();
 
   const captured: string[] = [];
   const writeStdout = (...args: unknown[]) => {

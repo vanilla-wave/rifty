@@ -17,6 +17,30 @@
 
 ### Added
 
+- **`node:sqlite` `DatabaseSync` facade — constructor + `exec()` + `close()`
+  over sql.js (ADR-0065, `databasesync-construct-exec-close`).** New
+  `packages/net/src/sqlite/database-sync.ts` adds a synchronous
+  `DatabaseSync`-shaped class on top of the engine bridge: `new
+  DatabaseSync(filename, { open, enableForeignKeyConstraints, … })` (in-memory
+  for the first cut regardless of `filename`; `:memory:` is opencode's boot
+  path), `exec(sql)` (multi-statement `;`-separated, returns `undefined`,
+  tolerant `PRAGMA journal_mode = WAL`), `open()`, and `close()` (double-close
+  throws Node-shaped `ERR_INVALID_STATE`). New
+  `packages/net/src/sqlite/register-builtins.ts` is an opt-in side-effect module
+  that registers the `node:sqlite` builtin via `@rifty/io`'s `registerBuiltin`
+  (harness-local, mirroring `net/register-builtins.ts`; Q-2026-05-31-302
+  Option A) — the heavy WASM engine stays out of default loads. `prepare()` and
+  the rest of Node's `DatabaseSync` prototype (`location`/`function`/`aggregate`/
+  session/extension) throw `NotImplementedError` with a `docs/compat/sqlite.md`
+  entry (no silent stubs, ADR-0065 D4); they land in follow-up tasks. New net
+  subpath exports: `./sqlite/engine`, `./sqlite/database-sync`,
+  `./sqlite/register-builtins`. Head-to-head parity vs real Node `node:sqlite`:
+  `tools/node-parity-runner/cases/sqlite/construct-exec.case.ts` (new opt-in
+  parity `kind: 'sqlite'` mode that registers `node:sqlite` + awaits
+  `initSqliteEngine()`). Known first-cut gaps in `docs/compat/sqlite.md`
+  (in-memory only; DQS stays ON — use single-quoted SQL literals for Node
+  parity).
+
 - **sql.js WASM engine bring-up for the `node:sqlite` shim (ADR-0065,
   `sqlite-wasm-init`).** New `packages/net/src/sqlite/engine.ts` adds
   `initSqliteEngine()` (async, memoised, one WASM bring-up per process,

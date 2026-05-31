@@ -10,7 +10,10 @@
     ".": "./src/index.ts",
     "./registry": "./src/registry.ts",
     "./register-builtins": "./src/register-builtins.ts",
-    "./https": "./src/https.ts"
+    "./https": "./src/https.ts",
+    "./sqlite/engine": "./src/sqlite/engine.ts",
+    "./sqlite/database-sync": "./src/sqlite/database-sync.ts",
+    "./sqlite/register-builtins": "./src/sqlite/register-builtins.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
