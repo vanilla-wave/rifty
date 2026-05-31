@@ -11,6 +11,15 @@
 
 ### Added
 
+- **`node:util` gains `debuglog`/`debug`.** `NODE_DEBUG`-gated lazy debug logger
+  faithful to Node (`lib/internal/util/debuglog.js`): comma/space section globs
+  (`*`), case-insensitive; returns a callable carrying a memoised `enabled`
+  getter; the optional init callback fires on the FIRST call (not at creation);
+  disabled = no-op, enabled writes `SECTION PID: <format(...)>\n` to stderr.
+  `util.debug` aliases `util.debuglog`. Unblocks undici's
+  `lib/core/diagnostics.js` (`debuglog('undici')`) on the opencode graph. Parity:
+  `tools/node-parity-runner/cases/util/debuglog.case.ts`.
+
 - **`node:diagnostics_channel` — faithful pure-JS builtin.** Full named
   publish/subscribe bus (`channel`, `Channel#publish/subscribe/unsubscribe`,
   `hasSubscribers`, `bindStore/unbindStore/runStores`, module-level

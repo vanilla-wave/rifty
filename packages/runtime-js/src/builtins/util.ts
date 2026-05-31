@@ -4,6 +4,7 @@
  * specifiers Node supports.
  */
 import { inspect as inspectImpl } from '../repl/inspect.ts';
+import { riftyProcess } from './process.ts';
 
 export const inspect = inspectImpl;
 
@@ -68,6 +69,86 @@ export function format(fmt: unknown, ...args: unknown[]): string {
   }
   return result;
 }
+
+/**
+ * A `util.debuglog` debug function: callable with printf-style args, carrying a
+ * lazily-resolved boolean `enabled` reflecting whether `NODE_DEBUG` selected the
+ * section. When disabled the call is a no-op; when enabled it writes
+ * `SECTION PID: <formatted>\n` to stderr (matching Node).
+ */
+export interface DebugLogFunction {
+  (...args: unknown[]): void;
+  readonly enabled: boolean;
+}
+
+/**
+ * Resolve `NODE_DEBUG` against a section name. The value is a comma/space
+ * separated list of section globs (`*` = any run of chars); matching is
+ * case-insensitive, mirroring Node's `lib/internal/util/debuglog.js`.
+ */
+function debuglogEnabledFor(section: string): boolean {
+  const raw = riftyProcess.env.NODE_DEBUG;
+  if (!raw) return false;
+  const target = section.toUpperCase();
+  for (const token of raw.split(/[ ,]+/)) {
+    if (token.length === 0) continue;
+    // Translate the glob (only `*` is special in Node) into a RegExp.
+    const pattern = token
+      .toUpperCase()
+      .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*/g, '.*');
+    if (new RegExp(`^${pattern}$`).test(target)) return true;
+  }
+  return false;
+}
+
+/**
+ * `util.debuglog(section[, callback])` — lazily-initialised, env-gated debug
+ * logger. Faithful to Node:
+ * - returns a callable carrying an `enabled` getter (resolved against
+ *   `NODE_DEBUG` on first read, then memoised),
+ * - the optional `callback` fires once, on the FIRST call to the returned
+ *   function (not at creation), receiving the resolved debug function,
+ * - when disabled the call is a no-op; when enabled it writes
+ *   `SECTION PID: <util.format(...args)>\n` to `process.stderr`.
+ */
+export function debuglog(
+  section: string,
+  callback?: (fn: DebugLogFunction) => void,
+): DebugLogFunction {
+  const upper = section.toUpperCase();
+  let enabled: boolean | undefined;
+  let initialized = false;
+
+  const resolveEnabled = (): boolean => {
+    if (enabled === undefined) enabled = debuglogEnabledFor(section);
+    return enabled;
+  };
+
+  const logger = ((...args: unknown[]): void => {
+    if (!initialized) {
+      initialized = true;
+      const on = resolveEnabled();
+      if (typeof callback === 'function') callback(logger);
+      if (!on) return;
+    } else if (!resolveEnabled()) {
+      return;
+    }
+    const [fmt, ...rest] = args;
+    riftyProcess.stderr.write(`${upper} ${riftyProcess.pid}: ${format(fmt, ...rest)}\n`);
+  }) as DebugLogFunction;
+
+  Object.defineProperty(logger, 'enabled', {
+    enumerable: true,
+    configurable: true,
+    get: resolveEnabled,
+  });
+
+  return logger;
+}
+
+/** `util.debug` is an alias of `util.debuglog`. */
+export const debug = debuglog;
 
 export function promisify<T extends (...a: unknown[]) => unknown>(
   fn: T,
@@ -134,6 +215,8 @@ export const TextDecoder = globalThis.TextDecoder;
 const util = {
   inspect,
   format,
+  debuglog,
+  debug,
   promisify,
   callbackify,
   deprecate,
