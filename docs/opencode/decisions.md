@@ -3,23 +3,27 @@
 > **PARTIALLY RATIFIED.** Section A holds the full text of the 11 **ADR drafts**
 > for this effort. Each touches a public API between packages, adds a new external
 > dependency, or contradicts/supersedes an existing ADR — i.e. is **IRREVERSIBLE**
-> per the project's reversibility checklist. **4 are now ratified to disk**
-> (drafts 0052, 0053, 0057→ADR-0054, 0059→ADR-0055 — see the renumber note below);
-> the remaining **7 are DEFERRED**, each with the gate that unblocks it recorded
-> in [`README.md`](README.md). ADRs are immutable after merge; do not invent
-> answers. Section B is the **REVERSIBLE** provisional-decision block — those
-> entries have since been appended to `OPEN_QUESTIONS.md` (Active). Q-ids were
-> renumbered globally from `Q-2026-05-30-101` to avoid colliding with the landed
-> `Q-2026-05-30-001` (promoted to ADR-0051).
+> per the project's reversibility checklist. **4 are ratified to disk + 2 are now
+> SUPERSEDED by a ratified ADR** (drafts 0052, 0053, 0057→ADR-0054,
+> 0059→ADR-0055; drafts 0055+0056 → SUPERSEDED by ratified ADR-0065 — see the
+> renumber note below); the remaining **5 are DEFERRED**, each with the gate that
+> unblocks it recorded in [`README.md`](README.md). ADRs are immutable after
+> merge; do not invent answers. Section B is the **REVERSIBLE** provisional-decision
+> block — those entries have since been appended to `OPEN_QUESTIONS.md` (Active).
+> Q-ids were renumbered globally from `Q-2026-05-30-101` to avoid colliding with
+> the landed `Q-2026-05-30-001` (promoted to ADR-0051).
 >
 > **Renumber note:** the SSE/Effect-HTTP drafts ratified under *next-free* ADR
 > numbers (0054, 0055), NOT their draft numbers (0057, 0059). In THIS file's
-> numbering, "ADR-0055" is the DEFERRED WASM-SQLite draft and "ADR-0056" the
-> DEFERRED drizzle adapter. Each on-disk ADR states which draft it ratifies.
+> numbering, "ADR-0055" is the WASM-SQLite draft and "ADR-0056" the drizzle
+> adapter — both now **SUPERSEDED by the ratified on-disk ADR-0065** (sql.js
+> in-memory-first `node:sqlite` `DatabaseSync` shim; corrects the
+> `bun:sqlite`→`node:sqlite` framing and voids the drizzle adapter at the pinned
+> SHA). Each on-disk ADR states which draft it ratifies or supersedes.
 
-**Tally:** 11 irreversible decisions (ADR drafts 0052–0062; 4 ratified, 7
-deferred) · 19 reversible decisions (Q-2026-05-30-101 … -119, now Active in
-`OPEN_QUESTIONS.md`).
+**Tally:** 11 irreversible decisions (ADR drafts 0052–0062; 4 ratified to disk,
+2 superseded by ratified ADR-0065, 5 deferred) · 19 reversible decisions
+(Q-2026-05-30-101 … -119, now Active in `OPEN_QUESTIONS.md`).
 
 ---
 
@@ -120,8 +124,15 @@ either way — only the *delivery vehicle* (conditions field) is gated.
 
 ---
 
-### ADR-0055 (draft) — WASM-SQLite engine for the `#db` shim
+### ADR-0055 (draft — SUPERSEDED by ratified ADR-0065, 2026-05-31) — WASM-SQLite engine for the `#db` shim
 *Feature 04, tier B. Reversibility rule 2 (new external dependency) + rule 4.*
+
+> **SUPERSEDED by ratified `docs/adr/0065-node-sqlite-databasesync-wasm-shim.md`
+> (2026-05-31).** The engine recommendation (sql.js, in-memory-first) is ratified;
+> the `#db`/`bun:sqlite` framing is CORRECTED to `node:sqlite` (the `#db` import
+> map is stale at the pinned SHA — its targets don't exist and nothing imports
+> `#db`; rifty resolves under the `node` condition). The text below is the
+> historical draft.
 
 **Context.** Unknown #1 is YES: the createRoutes graph statically loads
 `session.ts → @/storage/db → #db → node:sqlite`. A resolvable throw-stub gets P0
@@ -153,8 +164,14 @@ criterion must be reconciled (Q-2026-05-30-114).
 
 ---
 
-### ADR-0056 (draft) — drizzle driver adapter for the WASM-SQLite `#db` shim
+### ADR-0056 (draft — SUPERSEDED by ratified ADR-0065, 2026-05-31) — drizzle driver adapter for the WASM-SQLite `#db` shim
 *Feature 04, tier B. Reversibility rule 2 (new dependency surface) + rule 4.*
+
+> **SUPERSEDED by ratified `docs/adr/0065-node-sqlite-databasesync-wasm-shim.md`
+> (2026-05-31).** Premise VOID at the pinned SHA: opencode uses
+> `@effect/sql-sqlite-node` over `node:sqlite` `DatabaseSync`, NOT a drizzle
+> driver, so no drizzle subpath redirect is needed — the shim target is the
+> synchronous `DatabaseSync` surface. The text below is the historical draft.
 
 **Context.** opencode's handlers use drizzle query builders (`eq/and/desc` over
 `SessionTable`/`PartTable`) directly; the drizzle core (`export * from
@@ -555,8 +572,9 @@ ripgrep-WASM vs isomorphic-git vs JS later against concrete requirements.
 
 | Dependency | Introduced by | Purpose | Gate |
 |------------|---------------|---------|------|
-| **sql.js** (or wa-sqlite / @sqlite.org/sqlite-wasm) | 04 tier B | WASM-SQLite engine behind `#db` for P4 storage | ADR-0055 |
-| **drizzle-orm/sql-js** driver subpath | 04 tier B | drizzle adapter over the WASM engine (the `*-sqlite` driver/migrator redirect target) | ADR-0056 |
+| **sql.js** | 04 tier B (now P2) | WASM-SQLite engine (synchronous, in-memory) behind the `node:sqlite` `DatabaseSync` shim — the P2 boot prerequisite | **RATIFIED: ADR-0065** |
+| ~~**drizzle-orm/sql-js** driver subpath~~ | ~~04 tier B~~ | VOID at the pinned SHA — opencode uses `@effect/sql-sqlite-node` over `node:sqlite`, not drizzle (see ADR-0065 §Supersedence) | n/a (ADR-0056 superseded) |
+| **@sqlite.org/sqlite-wasm** + OPFS *(DEFERRED)* | 04 follow-up | durable persistence engine for the deferred OPFS-`SyncAccessHandle` follow-up | Q-2026-05-31-301 — do not adopt now |
 | **ripgrep-WASM** *(DEFERRED)* | 09 (future) | production-grade search substitute via `runWasi` | ADR-0062 — do not adopt now |
 | **isomorphic-git** *(DEFERRED)* | 09 (future) | read-only git (log/blob) substitute | ADR-0062 — do not adopt now |
 

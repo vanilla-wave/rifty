@@ -74,9 +74,11 @@ All verified WITHOUT the vendored tree. Last full local verification on HEAD
 
 > Slate renumber note: ADR-0054/0055 ratified the SSE/Effect-HTTP drafts under
 > *next-free* ADR numbers, NOT under their `decisions.md` draft numbers (0057,
-> 0059). In `decisions.md` numbering, "ADR-0055" is the DEFERRED WASM-SQLite
-> draft. Each on-disk ADR states `ratifies decisions.md draft ADR-00NN` to make
-> the mapping explicit.
+> 0059). In `decisions.md` numbering, "ADR-0055" is the WASM-SQLite draft and
+> "ADR-0056" the drizzle-adapter draft — both now SUPERSEDED by the ratified
+> on-disk **ADR-0065** (which corrects the `bun:sqlite`→`node:sqlite` framing and
+> voids the drizzle adapter at the pinned SHA). Each on-disk ADR states which
+> `decisions.md` draft it ratifies or supersedes to make the mapping explicit.
 
 ## What shipped — F01 vendoring (done)
 
@@ -153,11 +155,15 @@ dies the layer build and fails `Server.listen`. Reaching "server boots + respond
 needs a **functioning** SQLite (`node:sqlite` `DatabaseSync` surface OR a
 drizzle-`node-sqlite`-compatible WASM shim) that can open `:memory:`, tolerate/no-op
 `PRAGMA journal_mode=WAL`, and execute the migration DDL — landing in **P2 before
-any server-boot smoke test**, not deferred to P4. **ADR-0055 draft (WASM-SQLite
-engine)** moves from "DEFERRED, gated on Spike C" to "Spike C confirms a real
-Database is built → ready to ratify" once the `@sqlite.org/sqlite-wasm`-vs-`sql.js`
-evaluation (ADR-0006) + COI/SAB analysis (ADR-0002) is written. Caveat: no live
-boot was run, so this is static; it is robust because the acquire-time
+any server-boot smoke test**, not deferred to P4. The WASM-SQLite engine decision
+is now **RATIFIED as ADR-0065**: the engine is **`sql.js`** (pure-JS WASM SQLite,
+SYNCHRONOUS API, in-memory-first), registered as a rifty **`node:sqlite` builtin**
+exposing a `DatabaseSync`-compatible synchronous surface; the
+`@sqlite.org/sqlite-wasm`-vs-`sql.js` evaluation (ADR-0006) is resolved in favour
+of `sql.js` for the synchronous in-memory boot (official build kept for the
+deferred OPFS path), and the COI/SAB analysis (ADR-0002) confirms in-memory needs
+neither. ADR-0065 supersedes the decisions.md DRAFTS ADR-0055/0056. Caveat: no live
+boot was run, so Spike C is static; it is robust because the acquire-time
 `Database.Service` pull and the `Effect.orDie` migrations are unconditional.
 
 ## What is BLOCKED (and the exact gate for each)
@@ -168,7 +174,7 @@ process/wire-contract commitments.
 
 | Blocked work | Gate to unblock |
 |--------------|-----------------|
-| **WASM-SQLite + drizzle (features 03/04) — NOW P2** | **Spike C confirmed a real `Database` is constructed at layer-build (not lazy)**, so a throw-on-USE stub is no longer sufficient and the decision is PULLED FORWARD to P2. Tier B adds NEW external deps — **ADR-0055 draft (WASM-SQLite engine)** + **ADR-0056 draft (drizzle `sql-js`/`node-sqlite` adapter)** are now ready-to-ratify (the Spike C gate is met). Remaining gate before ratification: write the `@sqlite.org/sqlite-wasm`-vs-`sql.js` evaluation (per ADR-0006) + the COI/SAB analysis (ADR-0002), and decide the persistence scope (Q-2026-05-30-114). The shim must honor `OPENCODE_DB=:memory:`, tolerate/no-op `PRAGMA journal_mode=WAL`, and run the ~24 migration DDL. The `#db` import map is a red herring (its targets don't exist at this SHA and nothing imports `#db`); the live target is `@opencode-ai/core/database`. |
+| **WASM-SQLite `node:sqlite` shim (features 03/04) — NOW P2, RATIFIED** | **Spike C confirmed a real `Database` is constructed at layer-build (not lazy)**, so a throw-on-USE stub is no longer sufficient and the decision is PULLED FORWARD to P2. **RATIFIED: ADR-0065** — the engine is **`sql.js`** (pure-JS WASM SQLite, SYNCHRONOUS API, in-memory-first), registered as a rifty **`node:sqlite` builtin** exposing a `DatabaseSync`-compatible synchronous surface (matches opencode's `OPENCODE_DB=:memory:` boot path and `@effect/sql-sqlite-node`'s `DatabaseSync` usage at the pinned SHA). OPFS persistence via `@sqlite.org/sqlite-wasm` + `SyncAccessHandle` is DEFERRED (Q-2026-05-31-301). The shim honors `:memory:`, tolerates/no-ops `PRAGMA journal_mode=WAL`, and runs the ~24 migration DDL. The `bun:sqlite`-intercept framing is CORRECTED to `node:sqlite` (rifty resolves under the `node` condition); the `#db` import map is a red herring (its targets don't exist at this SHA and nothing imports `#db`). ADR-0065 SUPERSEDES the decisions.md DRAFTS ADR-0055 (engine) + ADR-0056 (drizzle adapter — void at this SHA: opencode uses `@effect/sql-sqlite-node` over `node:sqlite`, not drizzle). **In progress:** F01 siblings are being completed and the shim is being built. |
 | **Headless server boot (feature 06)** | Needs the vendored tree to boot `Server.listen` headlessly. **ADR-0058 draft DEFERRED** — nothing concrete to ratify (`os.hostname()` already exists; the substance is a process commitment). Gate: a real boot surfaces a CONCRETE unimplemented builtin via a loud throw → open a fresh, specific ADR for the named method then. |
 | **v3 SSE frame bump (feature 07)** | **ADR-0060 draft DEFERRED** — non-additive bump of a versioned wire contract (`PREVIEW_PORT_FRAME_VERSION` 2→3) that CONTRADICTS ADR-0048 D2 and ADR-0017's M12 deferral. Page-direct SSE (ADR-0055) ships first with no code. Gate: the Worker becomes the actual opencode owner (ADR-0046 `WorkerOwnerBinding`) AND a superseding ADR cites+supersedes ADR-0048 D2 and amends ADR-0017. |
 | **LLM round-trip + `node:https`→fetch (feature 08)** | Needs the vendored tree, a live provider endpoint via env (Q-2026-05-30-116, D-004), and features 01-06. **ADR-0061 draft DEFERRED** (supersedes immutable ADR-0010). Gate: clear the **C1 pre-flight** — inspect pinned `ai@6`/`@ai-sdk/*` source for whether the global-`fetch` path constructs an `https.Agent` at init (a thrown Agent constructor would be init-time-fatal for the round-trip). Run the live flow with `node:https` left as loud-throw FIRST; adopt the client→fetch split only if it actually trips. The superseding ADR must preserve ADR-0010's no-silent-plaintext invariant. |
@@ -177,23 +183,25 @@ process/wire-contract commitments.
 ## Critical path
 
 ```
-vendor opencode (F01) ✅  →  Spike C ✅ (verdict: eager Database)  →  WASM-SQLite is P2 (ADR-0055/0056 ready to ratify)
+vendor opencode (F01) ✅  →  Spike C ✅ (verdict: eager Database)  →  WASM-SQLite is P2 (ADR-0065 RATIFIED: sql.js)
         │ DONE e8be3b2              │ DONE (static)                           │
         └────────────────────────  spine resolved  ───────────────────────────┘
                                    │
    next (unblocked): real graph-load smoke (F02-T9) — import { Server } against the vendored tree,
                      assert layer-build reaches Database (live confirmation of Spike C)
                                    │
-   then: WASM-SQLite shim lands in P2  →  headless boot (F06)  →  first route (P3)
+   then: node:sqlite sql.js shim lands in P2  →  headless boot (F06)  →  first route (P3)
                      →  session + 1 LLM round-trip (P4, after C1 https.Agent pre-flight)
                      →  tool ceiling already marked (P5, shipped)
 ```
 
-`vendor opencode → Spike C → WASM-SQLite decision` was the spine; **both
-upstream gates are now cleared.** Spike C's make-or-break call landed on
+`vendor opencode → Spike C → WASM-SQLite decision` was the spine; **all three
+gates are now cleared.** Spike C's make-or-break call landed on
 **pull-forward**: the irreversible WASM-SQLite dependency is a **P2 boot
-prerequisite, not a deferred P4 need**. P4 additionally holds on the C1
-`https.Agent` pre-flight. P5 (the tool ceiling) is already marked.
+prerequisite, not a deferred P4 need**, and the engine is now RATIFIED
+(**ADR-0065**: `sql.js`, in-memory-first `node:sqlite` `DatabaseSync` shim;
+OPFS persistence deferred). P4 additionally holds on the C1 `https.Agent`
+pre-flight. P5 (the tool ceiling) is already marked.
 
 ## Single next unblocked step
 
@@ -226,4 +234,6 @@ assumed-needed.
 - Ratified ADRs: [0052](../adr/0052-ts-on-import-transform-hook.md) ·
   [0053](../adr/0053-ts-tsx-first-class-resolvable-extensions.md) ·
   [0054](../adr/0054-effect-consumes-node-http-as-is.md) ·
-  [0055](../adr/0055-opencode-sse-streaming-http-no-ws-shim.md)
+  [0055](../adr/0055-opencode-sse-streaming-http-no-ws-shim.md) ·
+  [0065](../adr/0065-node-sqlite-databasesync-wasm-shim.md) (WASM-SQLite
+  `node:sqlite` shim — supersedes decisions.md DRAFTS ADR-0055/0056)

@@ -603,6 +603,128 @@ End of milestone M12.
 
 ---
 
+## Q-2026-05-31-301: WASM-SQLite persistence scope — in-memory-first vs OPFS-`SyncAccessHandle`
+
+**Status:** 🟢 Active  
+**Encountered in:** the `node:sqlite` `DatabaseSync` shim (ADR-0065), feature 04 (now P2)  
+**Milestone:** M12 (opencode facade)  
+**Author (agent session):** 2026-05-31
+
+### Context
+
+ADR-0065 ratifies `sql.js` (synchronous, in-memory) as the first-cut engine
+behind the rifty `node:sqlite` `DatabaseSync` builtin, because opencode boots via
+`OPENCODE_DB=:memory:` and a synchronous engine matches `@effect/sql-sqlite-node`'s
+`DatabaseSync` usage. Durable cross-reload persistence (via
+`@sqlite.org/sqlite-wasm` + OPFS `SyncAccessHandle`) is the open scope question:
+when does it land, and does the first cut need ANY durability at all?
+
+### Options considered
+
+- **Option A — in-memory-only first cut; OPFS persistence is a later follow-up
+  (chosen).**
+  - Pro: minimal — `sql.js` in-memory is the smallest thing that boots the layer
+    DAG; no COI/SAB dependency beyond ADR-0002's existing mandate; durability is
+    not on the boot/first-light path (opencode's own boot tests use `:memory:`).
+  - Con: no cross-reload durability; the P4 persistence criterion (Q-2026-05-30-114)
+    degrades to same-process read-back until the OPFS follow-up.
+- **Option B — adopt `@sqlite.org/sqlite-wasm` + OPFS up front.**
+  - Pro: durable from the start; aligns with ADR-0006 source #4.
+  - Con: the official build's ergonomic surface is async/OO and its persistent
+    variant requires OPFS + a Worker + COI — fights the synchronous `DatabaseSync`
+    boot need; far larger first cut; interacts with ADR-0002 immediately for no
+    boot benefit.
+
+### Decision taken (provisional)
+
+**Chose:** A — in-memory-first `sql.js`; OPFS persistence DEFERRED to a follow-up
+that adopts `@sqlite.org/sqlite-wasm` + `SyncAccessHandle` and does its own
+COI/SAB analysis (ADR-0002).
+
+**Why:** the proven need (Spike C) is a *synchronous* engine that opens
+`:memory:`, tolerates `PRAGMA journal_mode=WAL`, and runs the migration DDL at
+boot. Durability is not on that path. Picking the synchronous in-memory engine
+now keeps the irreversible commitment minimal and honest.
+
+### Code markers
+
+- `TODO(ADR): Q-2026-05-31-301` at the `node:sqlite` shim's `:memory:`/in-memory
+  backing site (the persistence-scope seam).
+
+### Reversibility justification
+
+- Public APIs affected: none beyond the `node:sqlite` builtin surface ADR-0065
+  already ratifies; the in-memory-vs-OPFS choice is an internal backing-store
+  decision behind that surface.
+- Rough cost to revert / change scope: switching to OPFS is an additive
+  follow-up (a new engine + a VFS-backed handle), not a revert of the shim
+  surface.
+- External dependencies involved: the OPFS follow-up would ADD
+  `@sqlite.org/sqlite-wasm` (itself IRREVERSIBLE — gated here, not adopted now).
+
+### Needs human review by
+
+End of milestone M12.
+
+---
+
+## Q-2026-05-31-302: exact `node:sqlite` builtin registration module path
+
+**Status:** 🟢 Active  
+**Encountered in:** the `node:sqlite` `DatabaseSync` shim (ADR-0065), feature 03/04  
+**Milestone:** M12 (opencode facade)  
+**Author (agent session):** 2026-05-31
+
+### Context
+
+ADR-0065 D3 registers the `sql.js`-backed `DatabaseSync` shim as a rifty
+`node:sqlite` builtin but does not pin the registration module path. The prior
+draft Q-2026-05-30-102 favoured a harness-local side-effect module (mirroring
+`net/register-builtins.ts`) scoped to the opencode load, to avoid leaking the
+specifier into all loads / the wrong layer. The corrected framing
+(`node:sqlite`, not `bun:sqlite`) does not change that placement reasoning.
+
+### Options considered
+
+- **Option A — harness-local / shadow-registry side-effect module, imported only
+  by the opencode harness (chosen, consistent with Q-2026-05-30-102).**
+  - Pro: scoped to the opencode load; matches the `net`/`https` registration
+    precedent; keeps `node:sqlite` out of unrelated default loads; correct layer.
+  - Con: the registration site is harness-local, so a non-opencode consumer
+    wanting `node:sqlite` would need its own registration.
+- **Option B — register from `runtime-js/builtins/index.ts` (always-on).**
+  - Pro: `node:sqlite` available to every load without a harness import.
+  - Con: leaks a heavy WASM-SQLite engine into ALL loads; wrong layer / scope for
+    a single-consumer facade; contradicts the feature-03 scoping intent.
+
+### Decision taken (provisional)
+
+**Chose:** A — harness-local/shadow-registry registration scoped to the opencode
+load, via the existing `registerBuiltin` extension point. Exact filename within
+that area is an always-reversible file-structure detail.
+
+**Why:** consistent with the ratified-by-precedent `net`/`https` registration
+pattern and the feature-03 scoping intent; keeps the engine out of default loads.
+
+### Code markers
+
+- `TODO(ADR): Q-2026-05-31-302` at the `node:sqlite` builtin registration module.
+
+### Reversibility justification
+
+- Public APIs affected: none new — additive registration via the existing
+  `registerBuiltin` extension point from a harness-local module.
+- Rough cost to revert / move: ≤2 files, <30 lines (relocate the registration
+  call); no cross-package API change.
+- External dependencies involved: none beyond `sql.js` (ratified separately in
+  ADR-0065); the registration vehicle adds none.
+
+### Needs human review by
+
+End of milestone M12.
+
+---
+
 ## Template
 
 ```markdown

@@ -61,5 +61,6 @@ ADRs are immutable after merge. New decisions get new ADRs; supersedence is expl
 | 0055 | opencode event stream rides SSE-over-streaming-HTTP — no `ws` shim, page-direct deployment only; Worker v3 frame bump DEFERRED (ratifies decisions.md draft ADR-0059; feature-07) | — |
 | 0063 | Record-and-continue decisions; explicit decision subagent for reconsiderations (supersedes ADR-0008/D-007 stop action) | D-008 |
 | 0064 | Inflections are not stops — empirical findings / verified-need dependency commitments / stale-assumption corrections don't pause for the human (extends ADR-0063) | D-009 |
+| 0065 | `node:sqlite` `DatabaseSync` WASM shim — sql.js, in-memory-first (P2 boot prerequisite); OPFS persistence deferred (supersedes decisions.md DRAFTS ADR-0055/0056) | — |
 
 For the broad rationale and trade-offs, read PROJECT_PLAN.md §8 first; ADRs are the durable spec.

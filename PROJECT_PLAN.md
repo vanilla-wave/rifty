@@ -401,9 +401,11 @@ Decision (2026-05-27): M11 — это не новая фаза работы, а 
 - ✅ SSE-over-streaming-HTTP, без `ws`-шима (page-direct) — ADR-0055.
 - ✅ F09 tool-ceiling marker — pure-JS `vfsGrep`, spawn-ceiling conformance, `docs/compat/opencode-tool-ceiling.md`.
 
-**Blocked / deferred** (гейты см. `docs/opencode/README.md`; полный текст ADR-черновиков — `docs/opencode/decisions.md`): вендоринг opencode (feature 01, network-gated) → Spike C (реальный createRoutes layer-build) → решение WASM-SQLite (ADR-0055/0056 draft); headless boot (ADR-0058 draft); v3 SSE frame bump (ADR-0060 draft, противоречит ADR-0048/0017); LLM round-trip + `node:https`→fetch (ADR-0061 draft, supersedes ADR-0010, за C1 https.Agent pre-flight). opencode в репозитории НЕ вендорится.
+**Spike C → WASM-SQLite re-cut в P2 (RATIFIED).** Spike C подтвердил: `Server.listen` строит layer-DAG eagerly и реальный `Database` (`node:sqlite` `DatabaseSync`) открывается+мигрируется на layer-build, поэтому WASM-SQLite перенесён из P4 в **P2 boot-prerequisite**. Движок зафиксирован **ADR-0065**: `sql.js` (pure-JS WASM SQLite, синхронный API, in-memory-first), зарегистрирован как rifty-builtin `node:sqlite` с `DatabaseSync`-совместимой синхронной поверхностью; OPFS-персистентность отложена. ADR-0065 supersedes decisions.md DRAFTS ADR-0055/0056 и исправляет каркас `bun:sqlite`→`node:sqlite`.
 
-Критический путь: **вендоринг opencode → Spike C → решение WASM-SQLite**.
+**Blocked / deferred** (гейты см. `docs/opencode/README.md`; полный текст ADR-черновиков — `docs/opencode/decisions.md`): headless boot (ADR-0058 draft); v3 SSE frame bump (ADR-0060 draft, противоречит ADR-0048/0017); LLM round-trip + `node:https`→fetch (ADR-0061 draft, supersedes ADR-0010, за C1 https.Agent pre-flight). opencode в репозитории НЕ вендорится.
+
+Критический путь: **вендоринг opencode ✅ → Spike C ✅ → WASM-SQLite `node:sqlite` shim (sql.js, ADR-0065) в P2**.
 
 ---
 
