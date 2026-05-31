@@ -172,8 +172,9 @@ webcontainer-clone/
 | M7 | Network | net + http, Service Worker bridge, Express бежит | 4-5 нед |
 | M8 | WASI Runner | esbuild.wasm работает как процесс через `@esbuild/wasi-preview1` (ADR-0047, реверс ADR-0044) | 2-3 нед |
 | M9 | npm install | Реальная установка пакетов с registry | 3-4 нед |
-| M10 | Real Tooling | Vite-like dev server в браузере | 4-6 нед |
-| M11 | post-M10 follow-ups | Vite-in-Worker (ADR-0043 ✅), nested install (ADR-0042 ✅), fork-IPC через Worker (ADR-0045 ✅), SW→Worker direct routing (A-023 / Q-2026-05-27-002), streaming cross-realm preview, lockfile reuse, esbuild.wasm vendoring (✅ ADR-0047) | 2-3 нед |
+| M10 | Real Tooling | Vite-like dev server в браузере; real express@4 + vite@5 бегут in-process (✅ ADR-0050) | 4-6 нед |
+| M11 | post-M10 follow-ups | Vite-in-Worker (ADR-0043 ✅), nested install (ADR-0042 ✅), fork-IPC через Worker (ADR-0045 ✅), SW→Worker direct routing (A-023 / Q-2026-05-27-002), streaming cross-realm preview, lockfile reuse, esbuild.wasm vendoring (✅ ADR-0047), native-dep install policy (✅ ADR-0051) | 2-3 нед |
+| M12 | opencode server facade (proposed) | Запуск anomalyco/opencode как headless Effect-сервера в rifty до tool-execution-потолка. **No-vendored-tree slice реализован и зелёный** (TS-on-import ✅ ADR-0052/0053; Effect↔node:http ✅ ADR-0054; SSE-over-HTTP ✅ ADR-0055; F09 tool-ceiling marker). Остальное blocked на вендоринге opencode → Spike C → решение WASM-SQLite. См. `docs/opencode/README.md` | TBD |
 
 ---
 
@@ -387,6 +388,22 @@ webcontainer-clone/
 - ✅ **esbuild.wasm vendoring** — M8 acceptance. ADR-0047 реверснул ADR-0044 (swc не имеет WASI-билда; `@esbuild/wasi-preview1` — настоящий WASIp1-бинарь). Вендорится build-time скриптом `tools/shadow-registry/scripts/fetch-esbuild-wasi.mjs` (pin по версии + integrity), shadow-binding прогоняет real preopens/cwd через `runWasi` (ADR-0049).
 
 Decision (2026-05-27): M11 — это не новая фаза работы, а контейнер для технического долга, оставшегося с M6 / M8 / M9 / M10. Срок 2-3 недели включает только активные работы (SW→Worker — после fork-IPC); deferred-пункты ждут реального триггерного use case.
+
+---
+
+### M12 — opencode server facade (proposed)
+
+**Цель:** запустить anomalyco/opencode (Effect/Bun TS source-граф, НЕ нативный npm `opencode-ai`) как headless server-фасад «без выполнения инструментов» — поднять ~40 Effect-слоёв, отдать тривиальные роуты, создать сессию, сделать один LLM round-trip; spawn / shell / native git/ripgrep / PTY — жёсткий browser/WASI-потолок (out of scope by design). Вердикт фисибилити: `feasible-with-major-work` (medium confidence).
+
+**Статус (2026-05-31): частично реализовано.** Весь срез, не требующий вендоренного дерева opencode, реализован и зелёный:
+- ✅ TS-on-import по module-графу — ADR-0052 (transform hook) + ADR-0053 (`.ts`/`.tsx` first-class); gold multi-file `.ts` parity case зелёный (P0 language unit закрыт).
+- ✅ Effect `@effect/platform-node` потребляет rifty `node:http` AS-IS — ADR-0054 (additive shape-widening; pipe-sink deferred).
+- ✅ SSE-over-streaming-HTTP, без `ws`-шима (page-direct) — ADR-0055.
+- ✅ F09 tool-ceiling marker — pure-JS `vfsGrep`, spawn-ceiling conformance, `docs/compat/opencode-tool-ceiling.md`.
+
+**Blocked / deferred** (гейты см. `docs/opencode/README.md`; полный текст ADR-черновиков — `docs/opencode/decisions.md`): вендоринг opencode (feature 01, network-gated) → Spike C (реальный createRoutes layer-build) → решение WASM-SQLite (ADR-0055/0056 draft); headless boot (ADR-0058 draft); v3 SSE frame bump (ADR-0060 draft, противоречит ADR-0048/0017); LLM round-trip + `node:https`→fetch (ADR-0061 draft, supersedes ADR-0010, за C1 https.Agent pre-flight). opencode в репозитории НЕ вендорится.
+
+Критический путь: **вендоринг opencode → Spike C → решение WASM-SQLite**.
 
 ---
 

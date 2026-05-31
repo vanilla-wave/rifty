@@ -4,11 +4,11 @@ Per-milestone task tracking with acceptance review. See `PROJECT_PLAN.md` for th
 
 ## Verification snapshot
 
-- **Unit + conformance + integration:** 810 passed | 15 skipped (825 total in 109 of 114 files) — last counted 2026-05-29 after the Phase 1 "run real express@4" pass (+16 conformance cases for the 6 compat/installer fixes below; the +5 new skips are the `express-live-run.opt-in` cases, gated on `RIFTY_LIVE_REGISTRY`).
-- **Parity-runner:** 38 cases (assert, buffer, events, fs, http, modules, os, path, querystring, stream, url, util) compared against real Node — all match (runner spawns real `node` children; run with the sandbox disabled).
+- **Unit + conformance + integration:** 867 passed | 16 skipped — last counted 2026-05-31 after the M12 opencode no-vendored-tree slice landed (F02 TS-on-import + transform-execution, F05 Effect↔node:http bridge, F09 tool-ceiling marker). Earlier 2026-05-29 baseline was 810 passed after the "run real express@4" pass.
+- **Parity-runner:** 43 cases (assert, buffer, events, fs, http, modules incl. the gold multi-file `ts-graph-cross-file` `.ts` case, os, path, querystring, stream, url, util) compared against real Node — all match (runner spawns real `node` children; run with the sandbox disabled).
 - **E2E (Playwright, Chromium):** 15 passed (M0 boot, M1 REPL+`.reset`, M2 modules, M4 fs); M10 dev-mode flow not yet covered by Playwright (verified manually).
 - **Typecheck:** `tsc --noEmit` clean across workspace (16 projects).
-- **Lint:** `biome check .` clean.
+- **Lint:** `biome check` clean on all changed files; whole-tree `biome check .` has 2 pre-existing errors in `packages/npm-client/src/installer.ts:508,511` (predate the M12 slice, tracked separately).
 - **Circular deps:** none (madge).
 - **D-002 isolation:** clean (no `solid-js` imports outside `apps/playground/**`).
 - **Playground build:** `vite build` succeeds.
@@ -216,19 +216,40 @@ What's landed (mini-equivalent of Vite/HMR; "vite-like" not literal upstream Vit
 
 ---
 
+## M12 — opencode server facade (proposed) — PARTIAL — no-vendored-tree slice DONE
+
+Run anomalyco/opencode's Effect HTTP server headlessly in rifty up to the
+tool-execution ceiling. Full plan + gates: `docs/opencode/README.md`; ADR-draft
+register: `docs/opencode/decisions.md`. opencode is **NOT vendored** in the repo.
+
+- [x] **TS-on-import across the module graph (F02)** — `.ts`/`.tsx` first-class resolvable + ESM, injected esbuild `transformSource` hook, `.d.ts` excluded, `require()`-of-`.ts` loud-throw, transform cache. **ADR-0052 + ADR-0053.** Gold multi-file `.ts` parity case green → P0 language unit closed.
+- [x] **Effect consumes rifty `node:http` AS-IS (F05)** — listen options overload, `ServerResponse` `'drain'`, buffered 200, upgrade-boundary lock, parity-net mode. **ADR-0054** (pipe-sink deferred).
+- [x] **SSE-over-streaming-HTTP, no `ws` shim (F07, page-direct)** — **ADR-0055**. v3 page↔Worker frame bump deferred (ADR-0060 draft).
+- [x] **F09 tool-ceiling marker** — pure-JS `vfsGrep`, read-substitute parity, spawn-ceiling conformance (`git`/`bash` → ENOENT-127), `docs/compat/opencode-tool-ceiling.md`. `vfsGrep` global-RegExp fix landed.
+
+### Blocked (gates in `docs/opencode/README.md`)
+
+- [ ] **Vendor opencode (F01)** — network-gated; unblocks Spike C + F03/04/06/07-T1/08 + F02-T9.
+- [ ] **Spike C** — real createRoutes layer-build against the tier-A throw-stub; decides WASM-SQLite P2-vs-P4.
+- [ ] **`#db`/`#pty` + WASM-SQLite + drizzle (F03/04)** — ADR-0055/0056 draft, gated on Spike C.
+- [ ] **Headless boot (F06)** — ADR-0058 draft; needs the tree.
+- [ ] **LLM round-trip + `node:https`→fetch (F08)** — ADR-0061 draft (supersedes ADR-0010), behind the C1 `https.Agent` pre-flight.
+
+---
+
 ## Definition-of-done summary across milestones
 
 | Check | Result |
 |---|---|
-| Unit + conformance + integration tests | **810 pass | 15 skip (109 of 114 files)** — last counted 2026-05-29 after the Phase 1 run-real-express pass (+16 conformance cases; +5 opt-in `express-live-run` skips gated on `RIFTY_LIVE_REGISTRY`) |
+| Unit + conformance + integration tests | **867 pass | 16 skip** — last counted 2026-05-31 after the M12 no-vendored-tree slice (F02/F05/F09) |
 | TypeScript strict typecheck | **clean (16 projects)** |
-| Biome lint | **clean** |
+| Biome lint | **clean on changed files; 2 pre-existing whole-tree errors in `npm-client/src/installer.ts:508,511`** |
 | Circular dependency check (madge) | **clean** |
 | D-002 isolation (no `solid-js` outside `apps/playground/**`) | **clean** |
 | Playground production build (`vite build`) | **succeeds** |
 | Dev server with COOP/COEP headers | **verified live** |
-| `TODO(ADR)` markers in source | 1 (Q-2026-05-27-001 — `process.version`/`versions.node` impersonation; `pnpm todo:adr` exit 0) |
-| `OPEN_QUESTIONS.md` entries pending review | 3 active (Q-2026-05-24-007 prod-proxy, Q-2026-05-29-001 streaming preview → ADR-0048, Q-2026-05-27-001 process.version) |
+| `TODO(ADR)` markers in source | resolve to active `OPEN_QUESTIONS.md` entries (`pnpm todo:adr` exit 0) |
+| `OPEN_QUESTIONS.md` entries pending review | ~10 active — Q-2026-05-24-007 (prod-proxy), Q-2026-05-27-001 (process.version), Q-2026-05-30-061/062/063 (F09 markers), Q-2026-05-30-101/102 + 202 (F05/F02), Q-2026-05-31-201 (ts-esm parity). Q-2026-05-29-001 (streaming preview) promoted to ADR-0048. |
 
 ## Follow-ups (not blocking M0–M9)
 
