@@ -22,8 +22,12 @@ server is portable as a server facade up to a hard, browser/WASI-imposed
 in-process, so "big Node/Effect server" alone is not the blocker; tool execution
 (spawn/PTY/native git/ripgrep) is the hard ceiling.
 
-opencode is **NOT vendored** in this repo. The entire no-vendored-tree slice is
-implemented and green; everything needing the vendored tree is blocked.
+opencode is now **vendored** at a pinned SHA (see F01 below). Spike C has run
+(static analysis against the vendored tree): its verdict **pulls WASM-SQLite
+forward from P4 to a P2 boot prerequisite** — `Server.listen` builds the layer
+DAG eagerly and a real `Database` (`node:sqlite` `DatabaseSync`) is opened +
+migrated at layer-build, not lazily. The no-vendored-tree slice remains green;
+the next tree-dependent step (real graph-load, F02-T9) is now unblocked.
 
 ## What shipped (green)
 
@@ -74,16 +78,97 @@ All verified WITHOUT the vendored tree. Last full local verification on HEAD
 > draft. Each on-disk ADR states `ratifies decisions.md draft ADR-00NN` to make
 > the mapping explicit.
 
+## What shipped — F01 vendoring (done)
+
+- **Vendor opencode (feature 01) — DONE.** anomalyco/opencode pinned at SHA
+  `f401f01c05bead2fd0687004c912743d271e2b7b` (branch `dev`). Committed in
+  `e8be3b2` (`vendor(opencode): pin … server-path source + facade manifest +
+  fetch script (F01)`). **5.6 MB / 911 files committed**, no `node_modules` in
+  the tree.
+  - **Source fixture:** `tests/integration/fixtures/opencode/source/` — whole
+    `src/` of the 7 server-path packages (`opencode` 593, `core` 177, `llm` 56,
+    `sdk` 41, `effect-drizzle-sqlite` 21, `plugin` 8, `ui` 6 files). The 5
+    workspace siblings beyond `opencode` were added after the first pass shipped
+    only `opencode`; an import-graph re-trace against the fixture now resolves
+    **470 internal files, 0 unresolved**.
+  - **Programmatic entry:** import `Server` from
+    `source/packages/opencode/src/server/server.ts` (`export * as Server`;
+    `Server.listen(opts)`). **Never `src/node.ts`** (its `Database` re-export
+    reaches the `bun:sqlite` import-time crash). The CLI entry `src/index.ts` is
+    also crash-prone and out of scope.
+  - **Dependency snapshot (fetch-on-demand, NOT committed inline):**
+    `tests/integration/fixtures/opencode/facade-manifest.json` +
+    `deps/package.json` + `deps/package-lock.json` (157 KB, committed). The
+    flattened npm manifest is **36 deps + 4 optionalDependencies** (catalog: →
+    concrete versions, workspace:* dropped since the source is vendored). `cd
+    deps && npm ci` reproduces the **~217 MB / 327-package** `node_modules`
+    deterministically (re-verified: exit 0, lockfile unchanged) — mirroring the
+    esbuild.wasm "pinned-fetch-script over committed-binary" house style.
+  - **Repro script:** `tools/shadow-registry/scripts/fetch-opencode.mjs`
+    (esbuild-style, zero non-builtin deps, clone-at-SHA → copy → regenerate
+    manifest → `npm ci` validate). Re-running is a no-op diff against the
+    committed manifest.
+  - **Dep-resolution gaps (honest):** every KEEP dep resolved (0 failed at
+    install). The 4 natives/wasm — `@parcel/watcher`, `@lydell/node-pty`,
+    `@silvia-odwyer/photon-node`, `web-tree-sitter` — are in
+    `optionalDependencies` and resolved as **darwin-arm64 prebuilds / wasm** (no
+    compilation). They are reached by STATIC imports in the server graph
+    (`pty.node.ts`, `file/watcher.ts`, `tool/shell.ts`→tree-sitter,
+    `image.ts`→photon), so they cannot simply be omitted — a Spike-C-era runtime
+    consideration, not an install blocker. Concrete `@ai-sdk/*` providers and
+    `@npmcli/arborist` are **dynamic `import()`** (fetch-on-demand), intentionally
+    excluded from KEEP. This is a Bun monorepo using `catalog:`/`workspace:`
+    protocols; the npm manifest is a hand-flattened projection, NOT opencode's
+    native install graph (`bun.lock` not committed). `node:sqlite` resolves under
+    the `node` condition (needs Node ≥22), dodging `bun:sqlite`.
+
+## Spike C — VERDICT: eager-database, WASM-SQLite pulled forward to P2
+
+**Confidence: high (static analysis against the vendored tree; no live boot —
+no `node_modules` in the clone).** The task premise was stale: the `#db` import
+map points at `src/storage/db.{node,bun}.ts` which **do not exist** at this SHA
+and nothing imports `#db`; `storage.ts` is now pure JSON-file storage. The REAL
+DB is `Database` from `@opencode-ai/core/database`, and it is **NOT lazy**.
+
+Verified chain in the vendored source: `Server.listen` (`server.ts:75`) →
+`Layer.buildWithMemoMap` (`:129`, **eager full-DAG build**) →
+`HttpApiApp.createRoutes` which UNCONDITIONALLY provides
+`fenceLayer.pipe(Layer.provide(Database.defaultLayer))` and `Database.defaultLayer`
+(`httpapi/server.ts:193,195`). `fenceLayer` is a `Layer.effect` whose **acquire**
+runs `const { db } = yield* Database.Service` (`middleware/fence.ts:9-11`) — at
+layer-build, not per-request. That forces `Database.layer` (`core/database/database.ts:21`)
+whose acquire runs `makeDatabase`, `PRAGMA journal_mode = WAL` + 5 more PRAGMAs,
+then `DatabaseMigration.apply(db)` (~24 migration files, real `CREATE TABLE`/
+`SELECT`/`INSERT` DDL) — all under `Effect.orDie` (`:35`). `makeDatabase` →
+`sqlite.node.ts` runs `new DatabaseSync(filename, {open: true})` (`:151,156`)
+with a top-level `import … from "node:sqlite"` (`:1`). Module-eval is clean
+(`routes = createRoutes()` at `:245` is a lazy blueprint), but the construction
+happens at **layer-build during `Server.listen`**, unconditionally, before any
+request. opencode's own boot tests confirm this — `test/preload.ts` sets
+`OPENCODE_DB=:memory:` to provision a real SQLite for the HTTP layer.
+
+**Milestone implication:** a throw-on-USE SQLite stub is **NOT sufficient** to
+reach "first light" — the first `db.run` on a throw-stub becomes a defect that
+dies the layer build and fails `Server.listen`. Reaching "server boots + responds"
+needs a **functioning** SQLite (`node:sqlite` `DatabaseSync` surface OR a
+drizzle-`node-sqlite`-compatible WASM shim) that can open `:memory:`, tolerate/no-op
+`PRAGMA journal_mode=WAL`, and execute the migration DDL — landing in **P2 before
+any server-boot smoke test**, not deferred to P4. **ADR-0055 draft (WASM-SQLite
+engine)** moves from "DEFERRED, gated on Spike C" to "Spike C confirms a real
+Database is built → ready to ratify" once the `@sqlite.org/sqlite-wasm`-vs-`sql.js`
+evaluation (ADR-0006) + COI/SAB analysis (ADR-0002) is written. Caveat: no live
+boot was run, so this is static; it is robust because the acquire-time
+`Database.Service` pull and the `Effect.orDie` migrations are unconditional.
+
 ## What is BLOCKED (and the exact gate for each)
 
-The single headline blocker is that **opencode is not vendored**. Everything
-below is tree-dependent or a deferred irreversible decision.
+With F01 done and Spike C decided, the remaining blockers are the
+WASM-SQLite/drizzle irreversible decisions (now pulled to P2) plus the deferred
+process/wire-contract commitments.
 
 | Blocked work | Gate to unblock |
 |--------------|-----------------|
-| **Vendor opencode (feature 01)** | Pin a SHA of anomalyco/opencode, generate a facade manifest (`catalog:`→concrete, drop `workspace:`, prune to the KEEP set), snapshot `node_modules`, add a shared `bootOpencodeFacade` helper. Network-gated dev-acquisition; scripts/+fixtures only (REVERSIBLE, Q-2026-05-30-101). Unblocks Spike C + features 03/04/06/07-T1/08 + F02-T9. |
-| **Spike C — real-graph layer-build** | Needs the vendored tree. Run the graph-load harness against the REAL `createRoutes` (~40 layers) with the tier-A throw-stub alone; assert NO `Database` constructed at module eval. **Decides whether WASM-SQLite is a deferred P4 need or a pulled-forward P2 prerequisite** (if a Database is built at layer-build, the milestone ordering is re-cut). |
-| **`#db`/`#pty` shims + WASM-SQLite + drizzle (features 03/04)** | Tier-A resolvable throw-on-USE stub is REVERSIBLE but gated on Spike C. Tier B adds NEW external deps — DEFERRED: **ADR-0055 draft (WASM-SQLite engine)** + **ADR-0056 draft (drizzle `sql-js` adapter)**, NOT ratified. Gate: Spike C confirms a `Database` is constructed, the `@sqlite.org/sqlite-wasm`-vs-sql.js evaluation (per ADR-0006) + COI/SAB analysis (ADR-0002) is written, and the P4 persistence scope (Q-2026-05-30-114) is decided. The per-load `conditions` field is DEFERRED to an OPEN_QUESTIONS option-C overlay (no public-API change) until the overlay is proven insufficient against the real tree. |
+| **WASM-SQLite + drizzle (features 03/04) — NOW P2** | **Spike C confirmed a real `Database` is constructed at layer-build (not lazy)**, so a throw-on-USE stub is no longer sufficient and the decision is PULLED FORWARD to P2. Tier B adds NEW external deps — **ADR-0055 draft (WASM-SQLite engine)** + **ADR-0056 draft (drizzle `sql-js`/`node-sqlite` adapter)** are now ready-to-ratify (the Spike C gate is met). Remaining gate before ratification: write the `@sqlite.org/sqlite-wasm`-vs-`sql.js` evaluation (per ADR-0006) + the COI/SAB analysis (ADR-0002), and decide the persistence scope (Q-2026-05-30-114). The shim must honor `OPENCODE_DB=:memory:`, tolerate/no-op `PRAGMA journal_mode=WAL`, and run the ~24 migration DDL. The `#db` import map is a red herring (its targets don't exist at this SHA and nothing imports `#db`); the live target is `@opencode-ai/core/database`. |
 | **Headless server boot (feature 06)** | Needs the vendored tree to boot `Server.listen` headlessly. **ADR-0058 draft DEFERRED** — nothing concrete to ratify (`os.hostname()` already exists; the substance is a process commitment). Gate: a real boot surfaces a CONCRETE unimplemented builtin via a loud throw → open a fresh, specific ADR for the named method then. |
 | **v3 SSE frame bump (feature 07)** | **ADR-0060 draft DEFERRED** — non-additive bump of a versioned wire contract (`PREVIEW_PORT_FRAME_VERSION` 2→3) that CONTRADICTS ADR-0048 D2 and ADR-0017's M12 deferral. Page-direct SSE (ADR-0055) ships first with no code. Gate: the Worker becomes the actual opencode owner (ADR-0046 `WorkerOwnerBinding`) AND a superseding ADR cites+supersedes ADR-0048 D2 and amends ADR-0017. |
 | **LLM round-trip + `node:https`→fetch (feature 08)** | Needs the vendored tree, a live provider endpoint via env (Q-2026-05-30-116, D-004), and features 01-06. **ADR-0061 draft DEFERRED** (supersedes immutable ADR-0010). Gate: clear the **C1 pre-flight** — inspect pinned `ai@6`/`@ai-sdk/*` source for whether the global-`fetch` path constructs an `https.Agent` at init (a thrown Agent constructor would be init-time-fatal for the round-trip). Run the live flow with `node:https` left as loud-throw FIRST; adopt the client→fetch split only if it actually trips. The superseding ADR must preserve ADR-0010's no-silent-plaintext invariant. |
@@ -92,18 +177,37 @@ below is tree-dependent or a deferred irreversible decision.
 ## Critical path
 
 ```
-vendor opencode (F01)  →  Spike C (real createRoutes layer-build)  →  WASM-SQLite decision (ADR-0055/0056)
-        │                          │                                            │
-        └─ unblocks ───────────────┴── decides P2-vs-P4 ordering ───────────────┘
+vendor opencode (F01) ✅  →  Spike C ✅ (verdict: eager Database)  →  WASM-SQLite is P2 (ADR-0055/0056 ready to ratify)
+        │ DONE e8be3b2              │ DONE (static)                           │
+        └────────────────────────  spine resolved  ───────────────────────────┘
                                    │
-   then: headless boot (F06) → first route (P3) → session + 1 LLM round-trip (P4, after C1 pre-flight)
-                                                              → ceiling already marked (P5, shipped)
+   next (unblocked): real graph-load smoke (F02-T9) — import { Server } against the vendored tree,
+                     assert layer-build reaches Database (live confirmation of Spike C)
+                                   │
+   then: WASM-SQLite shim lands in P2  →  headless boot (F06)  →  first route (P3)
+                     →  session + 1 LLM round-trip (P4, after C1 https.Agent pre-flight)
+                     →  tool ceiling already marked (P5, shipped)
 ```
 
-`vendor opencode → Spike C → WASM-SQLite decision` is the spine. Spike C is the
-make-or-break gate: it decides whether the irreversible WASM-SQLite dependency is
-a deferred P4 need or a pulled-forward P2 prerequisite. P4 additionally holds on
-the C1 `https.Agent` pre-flight. P5 (the tool ceiling) is already marked.
+`vendor opencode → Spike C → WASM-SQLite decision` was the spine; **both
+upstream gates are now cleared.** Spike C's make-or-break call landed on
+**pull-forward**: the irreversible WASM-SQLite dependency is a **P2 boot
+prerequisite, not a deferred P4 need**. P4 additionally holds on the C1
+`https.Agent` pre-flight. P5 (the tool ceiling) is already marked.
+
+## Single next unblocked step
+
+**F02-T9 — real graph-load smoke.** Now that the tree is vendored and resolves
+(470 internal files, 0 unresolved; 327 npm packages via `npm ci`), the immediate
+move is to `import { Server }` from
+`tests/integration/fixtures/opencode/source/packages/opencode/src/server/server.ts`
+in a rifty integration harness and drive the layer build — turning Spike C's
+static verdict into a **live** observation: confirm the layer DAG reaches
+`Database` construction at build time (it should die on a throw-stub exactly as
+predicted). That live failure is the concrete trigger to ratify **ADR-0055**
+(WASM-SQLite) for P2. Doing the live load first (rather than ratifying on static
+analysis alone) keeps the irreversible dep honest — proven-needed, not
+assumed-needed.
 
 ## Links
 
