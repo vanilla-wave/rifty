@@ -61,7 +61,7 @@ params)`).
 | Named parameters (`:name` / `@name` / `$name`) | ✅ | A single object first argument binds by name. Sigil-prefixed keys (`{ ':id' }`) pass through; bare keys (`{ id }`) are prefixed with `:` when bare keys are allowed. Pinned by parity case `cases/sqlite/run-get-iterate.case.ts`. |
 | `setAllowBareNamedParameters(bool)` | ✅ | Defaults to `true` (as Node). `false` → bare named-param keys throw `ERR_INVALID_STATE`. |
 | `setReturnArrays(bool)` | ✅ | `true` → bare value-tuple rows; `false` (default) → object-keyed rows. |
-| `setReadBigInts(false)` | ✅ | Default (also effect's SafeIntegers-default state) → INTEGER columns read as plain `number`. |
+| `setReadBigInts(false)` | ⚠️ | Default (also effect's `Client.SafeIntegers` Context.Reference default — `false` in effect@4.0.0-beta.66, invoked per-query by the real `@effect/sql-sqlite-node` driver) → INTEGER columns read as plain `number`. **NOT silent on overflow:** an INTEGER past `Number.MAX_SAFE_INTEGER` throws Node's `RangeError` / `ERR_OUT_OF_RANGE` (matching Node v24 — the first refused value is `2^53` = `MAX_SAFE + 1`), rather than returning a truncated float (ADR-0065 finding #2). Pinned by parity case `cases/sqlite/read-bigint-overflow.case.ts`. |
 | `setReadBigInts(true)` | ❌ | `NotImplementedError('sqlite.Statement.setReadBigInts(true)')` — the prebuilt sql.js WASM stores INTEGER columns as JS `number`s and has no bigint read mode; faking `BigInt` would silently lose precision above `Number.MAX_SAFE_INTEGER` (the number is already lossy before the cast). No silent fallback (ADR-0065 D4). |
 | `columns()` | ❌ | `NotImplementedError('sqlite.StatementSync.columns')` — Node returns `{ column, database, name, table, type }`, which needs SQLite's `SQLITE_ENABLE_COLUMN_METADATA` build (`sqlite3_column_table_name` / `_database_name` / `_origin_name` / `_decltype`). The prebuilt sql.js WASM is compiled without it (only `sqlite3_column_name` is exposed), so a faithful shape is unavailable; a partial shape would be a silent stub. Not on the boot/query path. |
 | `expandedSQL` / `sourceSQL` | ❌ | Not yet wired (`NotImplementedError` when added). |
@@ -94,3 +94,37 @@ params)`).
   only `sqlite3_column_name` is exposed). Both would require a custom sql.js WASM
   rebuild — out of scope for the in-memory first cut. They are not on opencode's
   boot/query path.
+- **Default INTEGER reads throw on overflow instead of truncating
+  (ADR-0065 finding #2).** Under the default `setReadBigInts(false)`, an INTEGER
+  value past `Number.MAX_SAFE_INTEGER` throws `RangeError` / `ERR_OUT_OF_RANGE`,
+  matching Node v24 (which refuses to return a truncated float). The shim detects
+  this from the returned value (`Number.isInteger(v) && !Number.isSafeInteger(v)`)
+  because the prebuilt sql.js WASM exposes no per-column `sqlite3_column_type`
+  accessor on its public API. **Known limitation:** a REAL column holding a
+  whole-number value above `2^53` is indistinguishable from a truncated INTEGER
+  given only the JS number, so it is guarded too (Node would return that REAL
+  without throwing). This is a rare, exotic edge; the shim errs toward refusing a
+  possibly-truncated value rather than silently presenting one as exact. The
+  exact, non-throwing path for genuine 64-bit integers is the (unsupported)
+  `setReadBigInts(true)` BigInt mode.
+
+## opencode-flow notes (ADR-0065 erratum, 2026-05-31)
+
+Two facts about how opencode actually drives this surface at SHA `f401f01`,
+mirrored from the ADR-0065 erratum:
+
+- **drizzle IS wired over `node:sqlite` `DatabaseSync`.** Earlier framing called
+  the drizzle adapter "void / a red herring at this SHA"; that was inaccurate.
+  `drizzle-orm/node-sqlite` consumes the SAME `DatabaseSync` instance as
+  `@effect/sql-sqlite-node`. There is still no drizzle subpath redirect to write
+  (drizzle rides the `DatabaseSync` surface this shim provides), but the shim
+  must satisfy drizzle's `DatabaseSync` usage too —
+  `prepare(...).all/.get/.run`, `setReturnArrays`, `setReadBigInts`, `exec` —
+  which it already does, since both consumers share that surface.
+- **First-flow correctness rests on `setReadBigInts(false)` being the default.**
+  effect's `Client.SafeIntegers` is a `Context.Reference` defaulting to `false`
+  in effect@4.0.0-beta.66 (verified in source); the real driver invokes
+  `setReadBigInts(...)` per-query from that reference, so the boot/first-flow path
+  calls `setReadBigInts(false)` (the supported plain-`number` read), never
+  `setReadBigInts(true)` (which throws `NotImplementedError`). That is why the
+  shim boots opencode despite the BigInt-mode throw.

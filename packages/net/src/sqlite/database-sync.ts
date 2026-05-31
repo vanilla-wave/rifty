@@ -112,6 +112,10 @@ export class DatabaseSync {
       throw err;
     }
     const engine = getSqliteEngine();
+    // TODO(ADR): Q-2026-05-31-301 — in-memory-first persistence scope. Every
+    // database is a fresh sql.js in-memory handle regardless of `#filename`; the
+    // OPFS-`SyncAccessHandle` durability follow-up (ADR-0065 D2) replaces this
+    // backing site. This is the persistence-scope seam the open question gates.
     this.#db = new engine.Database();
     // sql.js honours `PRAGMA foreign_keys`; apply the constructor option so the
     // open handle reflects the requested constraint enforcement, as Node does.

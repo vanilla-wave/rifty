@@ -20,7 +20,10 @@
  *     it stores every INTEGER in a JS `number`. Coercing those to `BigInt` would
  *     be a silent precision lie above `Number.MAX_SAFE_INTEGER` (the number is
  *     already lossy before the cast). The `false` path (the default, and
- *     effect's SafeIntegers-default state) is a plain-`number` pass-through.
+ *     effect's SafeIntegers-default state) is a plain-`number` read, but it is
+ *     NOT silent on overflow: an INTEGER past `Number.MAX_SAFE_INTEGER` throws
+ *     Node's `RangeError` / `ERR_OUT_OF_RANGE` rather than a truncated float
+ *     (ADR-0065 finding #2; see `guardSafeInteger`).
  *   - `columns()` — Node returns full per-column metadata
  *     (`{ column, database, name, table, type }`), which needs SQLite's
  *     `SQLITE_ENABLE_COLUMN_METADATA` build (the `sqlite3_column_table_name` /
@@ -87,6 +90,45 @@ function isNamedParams(value: StatementParam): value is ParamsObject {
  * gate before being prefixed with `:` for sql.js).
  */
 const NAMED_PARAM_SIGILS = [':', '@', '$'] as const;
+
+/**
+ * Guard a value read out of an INTEGER column against the precision ceiling Node
+ * enforces under the default `setReadBigInts(false)` state (ADR-0065, finding
+ * #2). Node's real `node:sqlite` throws a `RangeError` with code
+ * `ERR_OUT_OF_RANGE` when an INTEGER value's magnitude exceeds
+ * `Number.MAX_SAFE_INTEGER` (verified head-to-head against Node v24: the first
+ * value it refuses is `2^53` = `Number.MAX_SAFE_INTEGER + 1`), rather than hand
+ * back a truncated float.
+ *
+ * The prebuilt sql.js WASM stores every INTEGER as a JS `number` and exposes no
+ * per-column storage-type accessor on its public API, so we detect the overflow
+ * from the returned value itself: an integer-valued `number` that is not a
+ * SAFE integer (`Number.isInteger(v) && !Number.isSafeInteger(v)`) is a value
+ * sql.js has ALREADY truncated. Returning it would be a silent precision lie, so
+ * this throws the Node-shaped `RangeError` instead (the no-silent-stubs rule,
+ * ADR-0065 D4). Non-integer reals, strings, blobs, and `null` pass through
+ * untouched — only integer-valued numbers past the safe range are guarded, which
+ * is exactly Node's INTEGER-column threshold.
+ *
+ * Caveat (documented in `docs/compat/sqlite.md`): a REAL column holding a
+ * whole-number value above `2^53` is indistinguishable from a truncated INTEGER
+ * given only the JS number sql.js returns (the public sql.js API has no
+ * `sqlite3_column_type`), so it is guarded too. Node would return that REAL
+ * without throwing. This is a rare, exotic edge; guarding it keeps the common
+ * and dangerous case (a truncated INTEGER presented as exact) honest rather than
+ * silently lossy. The BigInt read path that would side-step this entirely is the
+ * unsupported `setReadBigInts(true)` (see {@link StatementSync.setReadBigInts}).
+ */
+function guardSafeInteger(value: SqlValue): SqlValue {
+  if (typeof value === 'number' && Number.isInteger(value) && !Number.isSafeInteger(value)) {
+    const err = new RangeError(
+      `Value is too large to be represented as a JavaScript number: ${value}`,
+    ) as RangeError & { code: string };
+    err.code = 'ERR_OUT_OF_RANGE';
+    throw err;
+  }
+  return value;
+}
 
 /**
  * Synchronous `node:sqlite` `StatementSync` shim backed by a sql.js prepared
@@ -283,8 +325,13 @@ export class StatementSync {
    * `Number.MAX_SAFE_INTEGER` (the number is already lossy before the cast), so
    * `setReadBigInts(true)` throws a directed {@link NotImplementedError} rather
    * than fake a value (ADR-0065 D4, no silent stubs; registered ❌ in
-   * `docs/compat/sqlite.md`). The `false` path is a no-op (it is already the
-   * only behaviour).
+   * `docs/compat/sqlite.md`).
+   *
+   * The `false` path (the default) does not change the row-read mechanism, but it
+   * is NOT silent on overflow: an INTEGER value past `Number.MAX_SAFE_INTEGER`
+   * throws Node's `RangeError` / `ERR_OUT_OF_RANGE` from the read methods (see
+   * {@link guardSafeInteger}), matching Node v24 exactly rather than returning a
+   * truncated float (ADR-0065 finding #2).
    *
    * @param readBigInts - `true` to request BigInt INTEGER reads (unsupported).
    * @throws {NotImplementedError} When `readBigInts` is `true`.
@@ -341,11 +388,20 @@ export class StatementSync {
    * {@link setReturnArrays}(true)). INTEGER columns come back as plain `number`s
    * (sql.js's only integer representation); the BigInt path is unsupported (see
    * {@link setReadBigInts}).
+   *
+   * Every value is run through {@link guardSafeInteger} so an INTEGER that sql.js
+   * has already truncated past `Number.MAX_SAFE_INTEGER` throws Node's
+   * `RangeError` / `ERR_OUT_OF_RANGE` rather than being returned as a silent
+   * precision lie (ADR-0065 finding #2, no-silent-stubs).
    */
   #readRow(): ResultRow {
     if (this.#returnArrays) {
-      return this.#stmt.get();
+      return this.#stmt.get().map(guardSafeInteger);
     }
-    return this.#stmt.getAsObject();
+    const obj = this.#stmt.getAsObject();
+    for (const key of Object.keys(obj)) {
+      obj[key] = guardSafeInteger(obj[key] as SqlValue);
+    }
+    return obj;
   }
 }

@@ -182,3 +182,40 @@ and the synchronous-`DatabaseSync`-surface contract are the irreversible core.
 - Q-2026-05-31-301 (in-memory-vs-OPFS persistence scope) + Q-2026-05-31-302
   (exact `node:sqlite` builtin module path) — the reversible sub-decisions.
 - Q-2026-05-30-114 (opencode persistence reconciliation, cross-referenced).
+
+## Erratum (2026-05-31)
+
+This ADR is immutable; the following is a same-day factual correction on the
+trunk that does NOT change the decision (the shim target, engine, and
+synchronous-`DatabaseSync` contract all stand). It corrects two statements in the
+Context / Supersedence framing that a closer reading of the pinned source proved
+inaccurate:
+
+- **drizzle IS wired over `node:sqlite` `DatabaseSync` at the pinned SHA.** The
+  Context premise correction ("the relevant specifier is `node:sqlite` … NOT
+  drizzle/bun-sqlite") and the Supersedence note ("opencode uses
+  `@effect/sql-sqlite-node` over `node:sqlite` `DatabaseSync`, NOT a drizzle
+  driver … the drizzle adapter [is] void") were wrong on the drizzle point.
+  `drizzle-orm/node-sqlite` IS wired over the SAME `node:sqlite` `DatabaseSync`
+  instance at SHA `f401f01`. The two statements that the drizzle adapter is "a
+  red herring" / "void at this SHA" are therefore inaccurate. The **decision is
+  unchanged**: the shim target is still the `node:sqlite` `DatabaseSync` surface,
+  and there is still no drizzle subpath redirect to write — drizzle's
+  `node-sqlite` driver consumes the very `DatabaseSync` this ADR ratifies. The
+  practical consequence is only that **the shim must satisfy drizzle's
+  `DatabaseSync` usage too** (`prepare(...).all/.get/.run`, `setReturnArrays`,
+  `setReadBigInts`, `exec`), not just `@effect/sql-sqlite-node`'s — which it
+  already does, since both ride the same surface.
+
+- **First-flow correctness rests on effect's `Client.SafeIntegers`
+  Context.Reference defaulting to `false`.** Verified in effect@4.0.0-beta.66
+  source: `Client.SafeIntegers` is a `Context.Reference` whose default value is
+  `false`. The real `@effect/sql-sqlite-node` driver invokes
+  `setReadBigInts(...)` PER-QUERY from that reference, so on the first flow it
+  calls `setReadBigInts(false)` — the plain-`number` read path — NOT
+  `setReadBigInts(true)`. This is why the shim boots opencode despite throwing a
+  directed `NotImplementedError` on `setReadBigInts(true)`: the boot/first-flow
+  path never requests BigInt reads. (Per finding #2, the `false` path is now
+  itself non-silent on overflow — an INTEGER past `Number.MAX_SAFE_INTEGER`
+  throws Node's `RangeError` / `ERR_OUT_OF_RANGE`, matching Node v24, rather than
+  returning a truncated float.)

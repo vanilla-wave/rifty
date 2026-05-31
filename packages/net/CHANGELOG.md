@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`node:sqlite` `StatementSync` default-read integer overflow now throws
+  instead of truncating (ADR-0065 finding #2, parity-verified vs Node v24).**
+  Under the default `setReadBigInts(false)` (effect's `Client.SafeIntegers`
+  Context.Reference default, invoked per-query by the real
+  `@effect/sql-sqlite-node` driver), reading an INTEGER value past
+  `Number.MAX_SAFE_INTEGER` previously returned a silently-truncated float
+  (`9223372036854775807` came back as `9223372036854776000`). It now throws
+  Node's `RangeError` with code `ERR_OUT_OF_RANGE`, matching real `node:sqlite`
+  exactly — the first refused value is `2^53` (= `MAX_SAFE + 1`), and the safe
+  ceiling `Number.MAX_SAFE_INTEGER` still reads fine. The guard
+  (`Number.isInteger(v) && !Number.isSafeInteger(v)`) lives in `#readRow` and
+  applies to both object-keyed and array-shaped rows. Known limitation
+  (documented in `docs/compat/sqlite.md`): a whole-valued REAL above `2^53` is
+  guarded too, since the prebuilt sql.js WASM exposes no per-column
+  `sqlite3_column_type`. Head-to-head parity:
+  `tools/node-parity-runner/cases/sqlite/read-bigint-overflow.case.ts`;
+  unit-pinned in `packages/net/src/sqlite/database-sync.test.ts`.
+
 ### Documented
 
 - **WS/SSE upgrade is the feature-07 boundary (F05-T5, negative lock).** Added a
