@@ -1,19 +1,25 @@
 # Decision register — opencode server facade (M12 proposed)
 
-> **STAGED, NOT RATIFIED.** Section A holds **ADR drafts** that live here, NOT in
-> `docs/adr/`. They each touch a public API between packages, add a new external
-> dependency, or contradict/supersede an existing ADR — i.e. they are
-> **IRREVERSIBLE** per the project's reversibility checklist and **must be
-> human-ratified** before the corresponding work begins. ADRs are immutable after
-> merge; do not invent answers. Section B is a copy-paste-ready block of
-> **REVERSIBLE** provisional decisions in the exact `OPEN_QUESTIONS.md` template
-> for the maintainer to append — **this workflow does not edit `OPEN_QUESTIONS.md`
-> itself.** Q-ids are renumbered globally and sequentially from
-> `Q-2026-05-30-101` to avoid colliding with the landed `Q-2026-05-30-001`
-> (promoted to ADR-0051).
+> **PARTIALLY RATIFIED.** Section A holds the full text of the 11 **ADR drafts**
+> for this effort. Each touches a public API between packages, adds a new external
+> dependency, or contradicts/supersedes an existing ADR — i.e. is **IRREVERSIBLE**
+> per the project's reversibility checklist. **4 are now ratified to disk**
+> (drafts 0052, 0053, 0057→ADR-0054, 0059→ADR-0055 — see the renumber note below);
+> the remaining **7 are DEFERRED**, each with the gate that unblocks it recorded
+> in [`README.md`](README.md). ADRs are immutable after merge; do not invent
+> answers. Section B is the **REVERSIBLE** provisional-decision block — those
+> entries have since been appended to `OPEN_QUESTIONS.md` (Active). Q-ids were
+> renumbered globally from `Q-2026-05-30-101` to avoid colliding with the landed
+> `Q-2026-05-30-001` (promoted to ADR-0051).
+>
+> **Renumber note:** the SSE/Effect-HTTP drafts ratified under *next-free* ADR
+> numbers (0054, 0055), NOT their draft numbers (0057, 0059). In THIS file's
+> numbering, "ADR-0055" is the DEFERRED WASM-SQLite draft and "ADR-0056" the
+> DEFERRED drizzle adapter. Each on-disk ADR states which draft it ratifies.
 
-**Tally:** 11 irreversible decisions (ADR drafts 0052–0062) · 19 reversible
-decisions (Q-2026-05-30-101 … -119).
+**Tally:** 11 irreversible decisions (ADR drafts 0052–0062; 4 ratified, 7
+deferred) · 19 reversible decisions (Q-2026-05-30-101 … -119, now Active in
+`OPEN_QUESTIONS.md`).
 
 ---
 
@@ -50,7 +56,7 @@ opencode is `type:module` so this never arises on the happy path.
 
 ---
 
-### ADR-0053 (draft) — `.ts`/`.tsx` as first-class resolvable + ESM extensions
+### ADR-0053 (RATIFIED → `docs/adr/0053-ts-tsx-first-class-resolvable-extensions.md`) — `.ts`/`.tsx` as first-class resolvable + ESM extensions
 *Feature 02. Reversibility rule 1 (observable cross-package behaviour) + rule 4 (>2 files).*
 
 **Context.** Verified: `DEFAULT_EXTENSIONS = ['.js','.mjs','.cjs','.json']` and
@@ -143,7 +149,7 @@ the divergence. Cite ADR-0006 and ADR-0002 (COI for any OPFS path).
 
 **Consequences.** New external dependency (IRREVERSIBLE). In-memory first light
 means no cross-reload durability until export-to-VFS lands — the P4 persistence
-criterion must be reconciled (see review completeness gap).
+criterion must be reconciled (Q-2026-05-30-114).
 
 ---
 
@@ -177,7 +183,7 @@ parity case must pin the drizzle result shape (rows vs run vs get) vs Node.
 
 ---
 
-### ADR-0057 (draft) — Effect `@effect/platform-node` consumes rifty `node:http` AS-IS
+### ADR-0057 (RATIFIED as ADR-0054 → `docs/adr/0054-effect-consumes-node-http-as-is.md`) — Effect `@effect/platform-node` consumes rifty `node:http` AS-IS
 *Feature 05. Reversibility rule 1 (the alternative adds cross-package public API).*
 
 **Context.** Effect's `NodeHttpServer` touches only `createServer()` (no-handler
@@ -231,7 +237,7 @@ discovered at bring-up, and add an explicit pre-boot check that `bonjour-service
 `NotImplementedError` loudly), then STOP and ratify the concrete missing
 method(s) with Node-parity semantics. Do not pre-add API, do not monkeypatch.
 **Pre-flight:** statically inventory the createRoutes graph's `globalThis.*` /
-`node:` / `process.*` references before the harness runs (see review).
+`node:` / `process.*` references before the harness runs.
 
 **Consequences.** Any added method is permanent public surface consumed
 cross-package. If the mDNS path needs a native UDP socket at module scope, that is
@@ -239,7 +245,7 @@ a **hard blocker** to stub/prune, not an API addition to ratify.
 
 ---
 
-### ADR-0059 (draft) — opencode event stream rides SSE-over-streaming-HTTP; no `ws` shim
+### ADR-0059 (RATIFIED as ADR-0055 → `docs/adr/0055-opencode-sse-streaming-http-no-ws-shim.md`) — opencode event stream rides SSE-over-streaming-HTTP; no `ws` shim
 *Feature 07. Reversibility rule 1 + bounds ADR-0048's streaming scope.*
 
 **Context.** opencode's `/event` route is `text/event-stream` over HTTP GET
@@ -558,7 +564,7 @@ Explicitly **NOT** new dependencies (verified): the vendor script's dev-only
 shell-out to git/curl (not bundled, feature 01); the parity-runner gaining
 `@rifty/runtime-wasi`+`shadow-registry` import edges + the `esbuild.wasm`
 artifact (feature 02 T6) — *confirm `esbuild.wasm` is already vendored, not a new
-fetch, before declaring T6 dependency-free (see review)*; no `ws` shim for the
+fetch, before declaring T6 dependency-free*; no `ws` shim for the
 event route (feature 07 explicitly rules it out); no `Agent` mapping (feature 08
 keeps it loud-throw — unless the `ai`-SDK Agent-at-init pre-flight forces a new
 decision).
