@@ -17,6 +17,27 @@
 
 ### Added
 
+- **`node:util/types` — full runtime type-reflection predicate set.** Promoted
+  the partial 9-predicate `util.types` to a standalone faithful module
+  (`builtins/util-types.ts`), registered as the standalone `node:util/types`
+  builtin specifier and re-exported as `util.types`. ~40 predicates matching
+  Node v24: the `ArrayBuffer` family (`isArrayBuffer`/`isSharedArrayBuffer`/
+  `isAnyArrayBuffer`/`isArrayBufferView`/`isDataView`), every TypedArray
+  (`isUint8Array`…`isBigUint64Array`, `isTypedArray`), keyed/weak collections and
+  their iterators (`isMap`/`isSet`/`isWeakMap`/`isWeakSet`/`isMapIterator`/
+  `isSetIterator`/`isWeakRef`), core objects (`isDate`/`isRegExp`/`isPromise`/
+  `isNativeError`/`isArgumentsObject`/`isGeneratorObject`), functions
+  (`isAsyncFunction`/`isGeneratorFunction`), and boxed primitives
+  (`isNumberObject`/`isStringObject`/`isBooleanObject`/`isSymbolObject`/
+  `isBigIntObject`/`isBoxedPrimitive`). Detection uses spoof-resistant brands:
+  `ArrayBuffer.isView`/`instanceof` where a public brand exists, and the V8
+  `Object.prototype.toString` `[[Class]]` tag for constructor-less internals
+  (iterators, `arguments`, generators, boxed primitives) — matching Node's
+  output for every genuine instance a dependency produces. `isProxy` throws
+  rather than lie (no in-realm V8 oracle). Unblocks undici's
+  `lib/web/fetch/util.js` (`require('node:util/types')` for `isUint8Array`) on
+  the opencode graph. Parity: `cases/util/types.case.ts`.
+
 - **`node:console` — faithful pure-JS builtin.** Full `Console` class over two
   writable streams (`lib/internal/console/constructor.js`): `log`/`info`/`debug`/
   `dir` → stdout, `warn`/`error`/`trace` → stderr (printf via `util.format`),

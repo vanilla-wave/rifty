@@ -44,6 +44,7 @@ import stringDecoderModule from './string_decoder.ts';
 import timersModule from './timers.ts';
 import ttyModule from './tty.ts';
 import urlModule from './url.ts';
+import utilTypesModule from './util-types.ts';
 import utilModule from './util.ts';
 import workerThreadsModule from './worker_threads.ts';
 
@@ -66,6 +67,7 @@ registerBuiltin('events', () => {
   return exports;
 });
 registerBuiltin('util', () => utilModule);
+registerBuiltin('util/types', () => utilTypesModule);
 registerBuiltin('querystring', () => querystringModule);
 registerBuiltin('url', () => urlModule);
 registerBuiltin('assert', () => assertModule);

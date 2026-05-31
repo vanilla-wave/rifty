@@ -5,6 +5,7 @@
  */
 import { inspect as inspectImpl } from '../repl/inspect.ts';
 import { riftyProcess } from './process.ts';
+import { types as utilTypes } from './util-types.ts';
 
 export const inspect = inspectImpl;
 
@@ -202,19 +203,10 @@ export function inherits(ctor: unknown, superCtor: unknown): void {
   Object.setPrototypeOf(child.prototype, parent.prototype);
 }
 
-export const types = {
-  isPromise: (v: unknown): v is Promise<unknown> => v instanceof Promise,
-  isDate: (v: unknown): v is Date => v instanceof Date,
-  isRegExp: (v: unknown): v is RegExp => v instanceof RegExp,
-  isMap: (v: unknown): v is Map<unknown, unknown> => v instanceof Map,
-  isSet: (v: unknown): v is Set<unknown> => v instanceof Set,
-  isUint8Array: (v: unknown): v is Uint8Array => v instanceof Uint8Array,
-  isArrayBuffer: (v: unknown): v is ArrayBuffer => v instanceof ArrayBuffer,
-  isAsyncFunction: (v: unknown) =>
-    typeof v === 'function' && v.constructor && v.constructor.name === 'AsyncFunction',
-  isGeneratorFunction: (v: unknown) =>
-    typeof v === 'function' && v.constructor && v.constructor.name === 'GeneratorFunction',
-};
+// The full `node:util/types` predicate set lives in its own module (it is also
+// registered as the standalone `node:util/types` builtin specifier). `util`
+// re-exports it as `util.types`, matching Node.
+export { types } from './util-types.ts';
 
 export const TextEncoder = globalThis.TextEncoder;
 export const TextDecoder = globalThis.TextDecoder;
@@ -228,7 +220,7 @@ const util = {
   callbackify,
   deprecate,
   inherits,
-  types,
+  types: utilTypes,
   TextEncoder,
   TextDecoder,
 };
