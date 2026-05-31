@@ -4,6 +4,12 @@
 
 ### Fixed
 
+- **`util.format('%s', obj)` printed `[object Object]` instead of inspecting.**
+  Node's `%s` structurally inspects non-null objects/arrays and suffixes bigints
+  with `n`; rifty was `String()`-ing everything. `%s` now matches Node for
+  shallow values (deeply-nested objects still differ pending an inspector depth
+  option). Parity: `cases/util/format-and-inspect.case.ts`.
+
 - **`vfsGrep` dropped every match for a `RegExp` carrying the `g`/`y` flag.**
   `String.prototype.match` returns an index-less array under those flags, so the
   scan silently returned zero results for a valid `/pattern/g`. `toRegExp` now

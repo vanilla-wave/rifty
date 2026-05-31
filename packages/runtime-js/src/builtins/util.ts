@@ -36,7 +36,14 @@ export function format(fmt: unknown, ...args: unknown[]): string {
     const arg = args[i++];
     switch (spec) {
       case 's':
-        result += typeof arg === 'string' ? arg : String(arg);
+        // Node's `%s`: strings pass through; bigints get the `n` suffix;
+        // non-null objects (incl. arrays) are structurally inspected (Node uses
+        // depth 2 — our inspector's default depth differs for deeply-nested
+        // values, see TODO(ADR) below); everything else is `String()`.
+        if (typeof arg === 'string') result += arg;
+        else if (typeof arg === 'bigint') result += `${arg}n`;
+        else if (arg !== null && typeof arg === 'object') result += inspectImpl(arg);
+        else result += String(arg);
         break;
       case 'd':
       case 'i':
