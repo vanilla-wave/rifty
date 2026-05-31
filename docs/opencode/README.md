@@ -26,15 +26,24 @@ opencode is now **vendored** at a pinned SHA (see F01 below). Spike C has run
 (static analysis against the vendored tree): its verdict **pulls WASM-SQLite
 forward from P4 to a P2 boot prerequisite** — `Server.listen` builds the layer
 DAG eagerly and a real `Database` (`node:sqlite` `DatabaseSync`) is opened +
-migrated at layer-build, not lazily. The no-vendored-tree slice remains green;
-the next tree-dependent step (real graph-load, F02-T9) is now unblocked.
+migrated at layer-build, not lazily. The `node:sqlite` `DatabaseSync` shim
+(ADR-0065, `sql.js` engine) is built, green, and **wired into the module loader**
+as a `node:sqlite` builtin; the TS-on-import transform + resolver are wired for
+the real graph. The **GRAPH-LOAD gate has now been driven live** (F02-T9 done):
+the real `Server` import resolves far past every previously-suspected blocker and
+hits an exact wall — `node:diagnostics_channel` (a real Node builtin absent from
+rifty), pulled onto the static server graph by undici via `@effect/platform-node`.
+The BOOT gate (`Server.listen`) is consequently blocked behind it. See the
+GRAPH-LOAD / BOOT gate sections below for the exact evidence and next wall.
 
 ## What shipped (green)
 
-All verified WITHOUT the vendored tree. Last full local verification on HEAD
-`3890fc6`: typecheck PASS, `check:deps` PASS, `test:run` 867 passed / 16 skipped
-/ 0 failed (the only red is pre-existing whole-tree `pnpm lint` debt in
-`packages/npm-client/src/installer.ts`, unrelated to this effort).
+Last full local verification on HEAD `490230a` (branch
+`wire-opencode-module-loader`): typecheck PASS (16 projects), `check:deps` PASS
+(madge: no circular dependency), `test:run` **891 passed / 17 skipped / 0 failed**,
+biome clean on the changed-files set. The only red is the pre-existing whole-tree
+`pnpm lint` debt in `packages/npm-client/src/installer.ts` (2 errors, lines 508 /
+511), unrelated to this effort and untouched.
 
 - **TS-on-import across the module graph** (feature 02). `.ts`/`.tsx` are
   first-class resolvable + ESM extensions (ordered after the `.js` family so
@@ -71,6 +80,56 @@ All verified WITHOUT the vendored tree. Last full local verification on HEAD
   `15c6895`, `93e055b`, `6e5b2e5`. The authoritative FEASIBLE-vs-IMPOSSIBLE table
   is `docs/compat/opencode-tool-ceiling.md` (`3890fc6`). The earlier `vfsGrep`
   global/sticky-RegExp silent-zero-match (review MAJOR) is **fixed** (`8a57400`).
+
+- **`node:sqlite` `DatabaseSync` shim over `sql.js` — built, green, wired**
+  (features 03/04, ADR-0065). `packages/net/src/sqlite/` (`engine.ts`,
+  `database-sync.ts`, `statement-sync.ts`, `register-builtins.ts`): a synchronous
+  in-memory `DatabaseSync`-compatible surface over `sql.js`, parity-tested
+  head-to-head vs real `node:sqlite` (Node 24). **Wired into the module loader**
+  as a `node:sqlite` builtin via the `@rifty/io` `registerBuiltin` forward seam
+  (ADR-0035) — `registerBuiltin('sqlite', () => ({ DatabaseSync }))`, zero reverse
+  imports, madge-clean. Proven end-to-end by `tests/conformance/builtins/sqlite-loader-roundtrip.test.ts`
+  (guest `require('node:sqlite')` through `createModuleLoader` opens `:memory:`,
+  INSERTs, SELECTs back `{v:42}`) plus the heavier `sqlite-opencode-boot` gate.
+  Commits `7ed6bf8`, `99c3c9f`, `65917a3`, `304d785`.
+
+- **Read-overflow RangeError parity (harden, `44f983d`).** Default integer reads
+  that exceed `Number.MAX_SAFE_INTEGER` now **throw `RangeError`/`ERR_OUT_OF_RANGE`**
+  (`guardSafeInteger()` in `statement-sync.ts`, both row shapes) instead of
+  returning a truncated number — matching real Node v24 byte-for-byte (first
+  refusal at exactly `2^53`; `±MAX_SAFE` read fine). Driven TDD by the new parity
+  case `tools/node-parity-runner/cases/sqlite/read-bigint-overflow.case.ts` (red
+  first, then green). **Honest documented caveat:** a whole-valued REAL column
+  above `2^53` is indistinguishable from a truncated INTEGER through sql.js's
+  JS-number return (no `sqlite3_column_type` on the public API), so the guard
+  errs toward *refusing a possibly-truncated value* over silently lying — it
+  cannot fire on opencode's boot path (its INTEGER timestamps are `Date.now()`
+  ms, ~`1.7e12`, three orders below `2^53`). Also shipped: an **ADR-0065 erratum**
+  (append-only; Decision untouched) correcting two framing statements verified
+  directly in vendored source — (a) `drizzle-orm/node-sqlite` **IS** wired over the
+  same `DatabaseSync` at SHA `f401f01` (`core/src/database/sqlite.node.ts` line 2 /
+  169), so the shim must satisfy drizzle's usage too (it does — same surface);
+  (b) per-query `setReadBigInts(Context.get(…, Client.SafeIntegers))` (lines 59/74)
+  with the effect@4 `SafeIntegers` reference defaulting to `false`. OPFS persistence
+  remains deferred under `Q-2026-05-31-301` (real `TODO(ADR)` marker at the
+  in-memory backing site in `database-sync.ts`).
+
+- **Module resolver: most-specific wildcard + null-block (`a397f05`).** Found and
+  fixed a **real Node-24 parity bug** while wiring effect@4's exports map:
+  `findWildcard` (`packages/runtime-js/src/module-loader/resolver.ts`) returned the
+  *first* insertion-order wildcard match and could not honour `null`-target blocks,
+  so `effect/internal/*` leaked through effect@4's catch-all `./*` instead of being
+  blocked. Rewritten to select longest-base / longest-trailer (Node
+  `PACKAGE_IMPORTS_EXPORTS_RESOLVE`) with a tri-state `undefined`(no-match) /
+  `null`(block) / string(resolve). Classified REVERSIBLE (Node-parity bug, internal,
+  no public API, no new dep — no ADR); pinned by 6 new conformance tests in
+  `tests/conformance/modules/resolver.test.ts` (51/51 green) verified against the
+  real vendored package.json maps. The latent gap was NOT on opencode's path but is
+  genuine correctness. Companion cross-file TS effect-syntax parity case
+  (`ts-effect-syntax-cross-file.case.ts`, `57b45a2`) covers `import type` / `const
+  enum` / `satisfies`; **stage-3 decorators are an honestly-recorded esbuild
+  passthrough gap** (`Q-2026-05-31-304`, off opencode's path — opencode uses no
+  decorators).
 
 > Slate renumber note: ADR-0054/0055 ratified the SSE/Effect-HTTP drafts under
 > *next-free* ADR numbers, NOT under their `decisions.md` draft numbers (0057,
@@ -162,20 +221,67 @@ exposing a `DatabaseSync`-compatible synchronous surface; the
 `@sqlite.org/sqlite-wasm`-vs-`sql.js` evaluation (ADR-0006) is resolved in favour
 of `sql.js` for the synchronous in-memory boot (official build kept for the
 deferred OPFS path), and the COI/SAB analysis (ADR-0002) confirms in-memory needs
-neither. ADR-0065 supersedes the decisions.md DRAFTS ADR-0055/0056. Caveat: no live
-boot was run, so Spike C is static; it is robust because the acquire-time
-`Database.Service` pull and the `Effect.orDie` migrations are unconditional.
+neither. ADR-0065 supersedes the decisions.md DRAFTS ADR-0055/0056. **Spike C is now
+partially LIVE-confirmed:** the GRAPH-LOAD gate (below) drove a real `Server`
+import against the vendored tree with the real esbuild transform + the `node:sqlite`
+shim wired, and the graph resolved past every previously-suspected blocker (the
+`@/` tsconfig alias, effect@4 `unstable/http`+`unstable/httpapi`, the workspace
+`#db`/`#pty` imports-map) before walling at `node:diagnostics_channel` — *upstream*
+of the layer-build, so the eager-`Database` acquire-time pull predicted by Spike C
+has not yet been reached at runtime (it remains static-only until the
+diagnostics_channel wall clears and `Server.listen` is actually invoked).
 
-## What is BLOCKED (and the exact gate for each)
+## GRAPH-LOAD gate (F02-T9) — DRIVEN LIVE, result: BLOCKED
 
-With F01 done and Spike C decided, the remaining blockers are the
-WASM-SQLite/drizzle irreversible decisions (now pulled to P2) plus the deferred
-process/wire-contract commitments.
+**The real `Server` import has now been driven against the vendored tree.**
+Harness: `tests/integration/fixtures/opencode-graph-load-smoke.ts` (forked from
+`real-vite-smoke.ts`) + opt-in driver `tests/integration/opencode-graph-load.opt-in.test.ts`
+(commit `490230a`). It (1) materializes deps via `npm ci` if absent (327 pkgs),
+(2) builds a memory/sync VFS = 902 vendored `source/packages/*` files + 23 060
+`deps/node_modules` files under `/workspace`, with the vendored `@opencode-ai/*`
+workspace pkgs mirrored into `node_modules` so the bare-name walk resolves them,
+`cwd=/workspace`, env `OPENCODE_DB=:memory:` / mDNS-off / `NODE_ENV=production`,
+(3) wires `createModuleLoader` with the **real esbuild WASI `transformSource`**
+(ADR-0052, the same edge as the parity ts-esm cases) + the `node:sqlite` shim
+brought up *before* the process-shim swap + `node:net`/`http`/`https` registered,
+(4) imports the **programmatic entry** `/workspace/packages/opencode/src/server/server.ts`
+(NOT `src/node.ts`).
 
-| Blocked work | Gate to unblock |
+**Verbatim result — BLOCKED:** the graph resolves FAR past every
+previously-suspected blocker — the `@/` tsconfig alias did NOT wall, effect@4
+`unstable/http`+`unstable/httpapi` subpaths resolve, the vendored workspace pkgs +
+`#db`/`#pty` imports-map (node condition) are in play, ~900 `.ts` files strip
+through esbuild — then hits an EXACT wall:
+
+> `ModuleLoadError: Built-in 'node:diagnostics_channel' is not implemented`
+
+thrown evaluating `/workspace/node_modules/undici/lib/core/diagnostics.js:5`
+(`require('node:diagnostics_channel')`). **undici is on the STATIC server graph
+via `@effect/platform-node`'s HTTP-client layer**; `node:diagnostics_channel` is a
+real Node builtin absent from rifty's registered set (verified: net registers
+net/http/https/sqlite; runtime-js registers path…tls etc.; `perf_hooks` IS present,
+`diagnostics_channel` is NOT). The opt-in test honestly captures the BLOCKED marker
+and **skips-with-reason** (passes green) under `RIFTY_RUN_OPENCODE_GRAPH_LOAD=1`,
+and is collected-but-skipped under default `vitest run` — never fakes a pass.
+
+## BOOT gate (`Server.listen` first light) — result: BLOCKED (not attempted)
+
+`Server.listen` was **not attempted** — the graph-load gate did not pass, so the
+boot path is unreachable until `node:diagnostics_channel` (and the undici-driven
+builtins behind it) are registered. No commit; no fake boot.
+
+## What is otherwise DEFERRED (and the exact gate for each)
+
+With F01 done, Spike C decided, the `node:sqlite` shim built+wired+green, and the
+graph-load gate driven to its exact wall, the WASM-SQLite/drizzle irreversible
+decision is RESOLVED; the remaining items are the deferred process/wire-contract
+commitments downstream of boot.
+
+| Deferred work | Gate to unblock |
 |--------------|-----------------|
-| **WASM-SQLite `node:sqlite` shim (features 03/04) — NOW P2, RATIFIED** | **Spike C confirmed a real `Database` is constructed at layer-build (not lazy)**, so a throw-on-USE stub is no longer sufficient and the decision is PULLED FORWARD to P2. **RATIFIED: ADR-0065** — the engine is **`sql.js`** (pure-JS WASM SQLite, SYNCHRONOUS API, in-memory-first), registered as a rifty **`node:sqlite` builtin** exposing a `DatabaseSync`-compatible synchronous surface (matches opencode's `OPENCODE_DB=:memory:` boot path and `@effect/sql-sqlite-node`'s `DatabaseSync` usage at the pinned SHA). OPFS persistence via `@sqlite.org/sqlite-wasm` + `SyncAccessHandle` is DEFERRED (Q-2026-05-31-301). The shim honors `:memory:`, tolerates/no-ops `PRAGMA journal_mode=WAL`, and runs the ~24 migration DDL. The `bun:sqlite`-intercept framing is CORRECTED to `node:sqlite` (rifty resolves under the `node` condition); the `#db` import map is a red herring (its targets don't exist at this SHA and nothing imports `#db`). ADR-0065 SUPERSEDES the decisions.md DRAFTS ADR-0055 (engine) + ADR-0056 (drizzle adapter — void at this SHA: opencode uses `@effect/sql-sqlite-node` over `node:sqlite`, not drizzle). **In progress:** F01 siblings are being completed and the shim is being built. |
-| **Headless server boot (feature 06)** | Needs the vendored tree to boot `Server.listen` headlessly. **ADR-0058 draft DEFERRED** — nothing concrete to ratify (`os.hostname()` already exists; the substance is a process commitment). Gate: a real boot surfaces a CONCRETE unimplemented builtin via a loud throw → open a fresh, specific ADR for the named method then. |
+| **WASM-SQLite `node:sqlite` shim (features 03/04) — DONE (P2, RATIFIED, WIRED)** | **RATIFIED + shipped: ADR-0065.** Engine is **`sql.js`** (pure-JS WASM SQLite, SYNCHRONOUS API, in-memory-first), registered as a rifty **`node:sqlite` builtin** exposing a `DatabaseSync`-compatible synchronous surface (matches opencode's `OPENCODE_DB=:memory:` boot path and the `@effect/sql-sqlite-node` + `drizzle-orm/node-sqlite` `DatabaseSync` usage at the pinned SHA — see the ADR-0065 erratum). Built, parity-green vs Node 24, RangeError-overflow-hardened, and **wired into the module loader** (proven by `sqlite-loader-roundtrip` conformance + the `sqlite-opencode-boot` gate). OPFS persistence DEFERRED (`Q-2026-05-31-301`). ADR-0065 SUPERSEDES decisions.md DRAFTS ADR-0055/0056. **No longer a blocker.** |
+| **`node:diagnostics_channel` builtin → the rest of the undici core graph (the LIVE wall)** | **This is the actual current blocker.** Register a `node:diagnostics_channel` builtin (real Node module surface: `channel` / `subscribe` / `unsubscribe` / `hasSubscribers` / `tracingChannel`) so `undici/lib/core/diagnostics.js` evaluates. undici is pulled onto the static server graph by `@effect/platform-node` — expect **more undici-driven builtins immediately after** (likely additional undici core deps); resolve them in graph order, re-running the opt-in smoke after each to find the next exact wall, until the graph loads and `Server.listen` becomes reachable (the BOOT gate). |
+| **Headless server boot (feature 06)** | Blocked behind the graph-load wall above. **ADR-0058 draft DEFERRED** — nothing concrete to ratify yet (`os.hostname()` already exists; the substance is a process commitment). Gate: once the graph loads, a real `Server.listen` surfaces the FIRST eager-layer-build failure (Spike C predicts a `Database` construction — now backed by the green shim) or a concrete unimplemented builtin via a loud throw → open a fresh, specific ADR for the named method then. |
 | **v3 SSE frame bump (feature 07)** | **ADR-0060 draft DEFERRED** — non-additive bump of a versioned wire contract (`PREVIEW_PORT_FRAME_VERSION` 2→3) that CONTRADICTS ADR-0048 D2 and ADR-0017's M12 deferral. Page-direct SSE (ADR-0055) ships first with no code. Gate: the Worker becomes the actual opencode owner (ADR-0046 `WorkerOwnerBinding`) AND a superseding ADR cites+supersedes ADR-0048 D2 and amends ADR-0017. |
 | **LLM round-trip + `node:https`→fetch (feature 08)** | Needs the vendored tree, a live provider endpoint via env (Q-2026-05-30-116, D-004), and features 01-06. **ADR-0061 draft DEFERRED** (supersedes immutable ADR-0010). Gate: clear the **C1 pre-flight** — inspect pinned `ai@6`/`@ai-sdk/*` source for whether the global-`fetch` path constructs an `https.Agent` at init (a thrown Agent constructor would be init-time-fatal for the round-trip). Run the live flow with `node:https` left as loud-throw FIRST; adopt the client→fetch split only if it actually trips. The superseding ADR must preserve ADR-0010's no-silent-plaintext invariant. |
 | **Real ripgrep/git tool fidelity (feature 09, future)** | **ADR-0062 draft is a DEFERRAL tripwire** — adopting ripgrep-WASM / isomorphic-git / wa-sqlite-search (each a NEW external dep) is BLOCKED until a concrete measured need. The pure-JS marker shipped under Q-2026-05-30-061. Do not silently cross this. |
@@ -183,39 +289,44 @@ process/wire-contract commitments.
 ## Critical path
 
 ```
-vendor opencode (F01) ✅  →  Spike C ✅ (verdict: eager Database)  →  WASM-SQLite is P2 (ADR-0065 RATIFIED: sql.js)
-        │ DONE e8be3b2              │ DONE (static)                           │
-        └────────────────────────  spine resolved  ───────────────────────────┘
+vendor opencode (F01) ✅  →  Spike C ✅ (eager Database)  →  node:sqlite sql.js shim ✅ (ADR-0065, wired+green)
+        │ DONE e8be3b2          │ DONE (static)               │ DONE 7ed6bf8..304d785, hardened 44f983d
+        └─────────────────────  spine + persistence resolved  ──────────────────────┘
                                    │
-   next (unblocked): real graph-load smoke (F02-T9) — import { Server } against the vendored tree,
-                     assert layer-build reaches Database (live confirmation of Spike C)
-                                   │
-   then: node:sqlite sql.js shim lands in P2  →  headless boot (F06)  →  first route (P3)
+   GRAPH-LOAD smoke (F02-T9) ✅ DRIVEN LIVE (490230a) — import { Server } against the vendored tree
+                                   │  result: BLOCKED, walls at ↓
+                                   ▼
+   ►►► CURRENT BLOCKER: node:diagnostics_channel  (undici/lib/core/diagnostics.js, via @effect/platform-node)
+                                   │  register builtin → expect more undici-driven builtins in graph order
+                                   ▼
+   graph fully loads  →  Server.listen first light (BOOT gate, F06)  →  first route (P3)
                      →  session + 1 LLM round-trip (P4, after C1 https.Agent pre-flight)
                      →  tool ceiling already marked (P5, shipped)
 ```
 
-`vendor opencode → Spike C → WASM-SQLite decision` was the spine; **all three
-gates are now cleared.** Spike C's make-or-break call landed on
-**pull-forward**: the irreversible WASM-SQLite dependency is a **P2 boot
-prerequisite, not a deferred P4 need**, and the engine is now RATIFIED
-(**ADR-0065**: `sql.js`, in-memory-first `node:sqlite` `DatabaseSync` shim;
-OPFS persistence deferred). P4 additionally holds on the C1 `https.Agent`
-pre-flight. P5 (the tool ceiling) is already marked.
+The original spine `vendor opencode → Spike C → WASM-SQLite decision` is **fully
+cleared**: F01 vendored, Spike C decided (pull-forward — WASM-SQLite is a P2 boot
+prerequisite, not a deferred P4 need), and the engine RATIFIED + **shipped**
+(**ADR-0065**: `sql.js` in-memory-first `node:sqlite` `DatabaseSync` shim, wired
+into the loader, parity-green, RangeError-hardened; OPFS persistence deferred). The
+critical path now runs **through the live graph-load wall**: the next gate is no
+longer a decision but a concrete missing builtin — `node:diagnostics_channel`,
+reached through undici on the static server graph. P4 still additionally holds on
+the C1 `https.Agent` pre-flight. P5 (the tool ceiling) is already marked.
 
 ## Single next unblocked step
 
-**F02-T9 — real graph-load smoke.** Now that the tree is vendored and resolves
-(470 internal files, 0 unresolved; 327 npm packages via `npm ci`), the immediate
-move is to `import { Server }` from
-`tests/integration/fixtures/opencode/source/packages/opencode/src/server/server.ts`
-in a rifty integration harness and drive the layer build — turning Spike C's
-static verdict into a **live** observation: confirm the layer DAG reaches
-`Database` construction at build time (it should die on a throw-stub exactly as
-predicted). That live failure is the concrete trigger to ratify **ADR-0055**
-(WASM-SQLite) for P2. Doing the live load first (rather than ratifying on static
-analysis alone) keeps the irreversible dep honest — proven-needed, not
-assumed-needed.
+**Register a `node:diagnostics_channel` builtin.** This is the exact wall the live
+GRAPH-LOAD smoke hit. Implement the real Node `node:diagnostics_channel` surface
+(`channel` / `subscribe` / `unsubscribe` / `hasSubscribers` / `tracingChannel`) and
+register it through the `@rifty/io` `registerBuiltin` seam, so
+`undici/lib/core/diagnostics.js` evaluates. Then **re-run the opt-in smoke**
+(`RIFTY_RUN_OPENCODE_GRAPH_LOAD=1 vitest run … opencode-graph-load.opt-in`) to find
+the next exact wall — undici being on the static server graph via
+`@effect/platform-node`, expect further undici-driven builtins immediately after;
+resolve them in graph order, one re-run per wall, until the graph loads and
+`Server.listen` (the BOOT gate) becomes reachable. Walking the real walls in order
+keeps every builtin proven-needed, not assumed-needed.
 
 ## Links
 
@@ -231,6 +342,13 @@ assumed-needed.
   [`../opencode-rifty-feasibility-2026-05-30.md`](../opencode-rifty-feasibility-2026-05-30.md)
 - Tool-execution boundary (compat source-of-truth):
   [`../compat/opencode-tool-ceiling.md`](../compat/opencode-tool-ceiling.md)
+- GRAPH-LOAD gate harness (opt-in, walls at `node:diagnostics_channel`):
+  `tests/integration/opencode-graph-load.opt-in.test.ts` +
+  `tests/integration/fixtures/opencode-graph-load-smoke.ts`
+- `node:sqlite` `DatabaseSync` shim: `packages/net/src/sqlite/` (`engine.ts`,
+  `database-sync.ts`, `statement-sync.ts`, `register-builtins.ts`); loader-wiring
+  proof `tests/conformance/builtins/sqlite-loader-roundtrip.test.ts`; compat
+  `../compat/sqlite.md`
 - Ratified ADRs: [0052](../adr/0052-ts-on-import-transform-hook.md) ·
   [0053](../adr/0053-ts-tsx-first-class-resolvable-extensions.md) ·
   [0054](../adr/0054-effect-consumes-node-http-as-is.md) ·
