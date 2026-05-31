@@ -36,7 +36,7 @@ If something conflicts, `PROJECT_PLAN.md` and ADRs win over your priors.
 
 ## Design decisions during work
 
-When you hit a design fork during implementation, **decide, record it, and keep going — do not stop.** (ADR-0063 supersedes the old ADR-0008 "stop on irreversible" action.) Use the reversibility checklist only to choose *where* the decision is recorded — not whether to pause.
+When you hit a design fork during implementation, **decide, record it, and keep going — do not stop.** (ADR-0063 + ADR-0064 supersede the old ADR-0008 "stop on irreversible" action.) Use the reversibility checklist only to choose *where* the decision is recorded — not whether to pause.
 
 ### Reversibility checklist (order matters — first "yes" determines classification)
 
@@ -65,6 +65,16 @@ When you hit a design fork during implementation, **decide, record it, and keep 
 The one fork you do **not** settle inline: **overturning or revising a decision that is already recorded** — a merged ADR, or a provisional decision that other work now depends on.
 - **Launch an explicit decision subagent** (the Agent tool, or a small decision workflow) dedicated to that call. It reads the existing decision + the new context + the alternatives + the risks, decides, and produces the **superseding ADR** (which cites the one it overrides — ADRs stay immutable).
 - This focused subagent is the rigor mechanism that replaced the old human-stop.
+
+### Inflections are not stops either (ADR-0064)
+
+A surprising result is **not** a reason to pause for the human. NONE of these are stop triggers — decide, record, re-cut the plan, continue, and report *after*:
+- a measurement / spike / test result that changes the plan or milestone order;
+- a previously-deferred decision whose gate (e.g. "no verified need") is now satisfied by evidence → ratify it;
+- discovering an earlier assumption / feasibility note / spec was stale or wrong → correct course;
+- committing to a new external dependency once its need is verified.
+
+Use a decision subagent when reconsidering an already-recorded decision; otherwise just decide. The human reviews recorded decisions retrospectively and can redirect — never a synchronous gate. **Confirm-first applies ONLY** to actions outward-facing/destructive beyond the repo (publishing, deleting the user's data, spending, pushing to shared remotes) or a direction the user explicitly reserved.
 
 ### Things that are always reversible (no logging needed)
 - Local variable naming, file structure inside a package
