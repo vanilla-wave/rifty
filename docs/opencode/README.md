@@ -316,7 +316,7 @@ commitments downstream of boot.
 | **Headless server boot (feature 06) — DONE (BOOT gate PASSED)** | **DONE first attempt, zero walls** (see the BOOT gate section above). `Server.listen` boots headless, the eager DAG runs the real drizzle/sql.js PRAGMAs + ~24 migrations under `Effect.orDie`, `/global/health` + `/doc` return 200. **ADR-0058 resolves with NO new builtin surface** (the boot called no unimplemented builtin/method); the predicted `ptyConnectApi` stub was not needed. A DB-read VIA a request (a route that QUERIES drizzle) followed in Phase 2 — see the next row. |
 | **DB-read via a request (Phase 2) — DONE (DB-READ gate PASSED)** | **DONE, zero walls.** `GET /session` drives the instance-context middleware (instance resolved from cwd `/workspace`), builds the lazy Session/Project/Workspace layers, runs a real drizzle `db.select().from(SessionTable)…all()` (session.ts:1079), and returns `200 []` (empty, fresh in-memory DB). The migrated schema is queryable end-to-end. FileWatcher (no native `@parcel/watcher`) and the `@npmcli/arborist` background install degrade gracefully — opencode logs+continues, the request is unaffected (see `../compat/opencode-tool-ceiling.md`). Gate: `tests/integration/opencode-dbread.opt-in.test.ts`. No new ADR (the degradations sit on the already-drawn no-native-addon line). |
 | **v3 SSE frame bump (feature 07)** | **ADR-0060 draft DEFERRED** — non-additive bump of a versioned wire contract (`PREVIEW_PORT_FRAME_VERSION` 2→3) that CONTRADICTS ADR-0048 D2 and ADR-0017's M12 deferral. Page-direct SSE (ADR-0055) ships first with no code. Gate: the Worker becomes the actual opencode owner (ADR-0046 `WorkerOwnerBinding`) AND a superseding ADR cites+supersedes ADR-0048 D2 and amends ADR-0017. |
-| **LLM round-trip + `node:https`→fetch (feature 08) — C1 PRE-FLIGHT CLEARED; live round-trip blocked on a key** | **C1 done (2026-06-01):** `ai@6` + `@ai-sdk/{provider-utils,gateway,provider}` use `globalThis.fetch` with ZERO `https.Agent`/`node:https` touch at init/construction/request (grep-verified; `provider-utils/dist/index.mjs:588`), and opencode injects its own `fetch` wrapper (`provider/provider.ts:1618-1667`) — so `node:https` stays loud-throw and **the ADR-0061 client→fetch split is NOT required** for the round-trip. See decisions.md "C1 PRE-FLIGHT RESULT". Remaining: the **live round-trip** needs a provider + API key + endpoint via env (Q-2026-05-30-116, D-004) — a spend + external call (confirm-first). One small pre-req: add a real-Node `STATUS_CODES` map to the `node:http` builtin (opencode `provider/error.ts` error path; not init-fatal). **ADR-0061** ratifies on the live wiring (preserving ADR-0010's no-silent-plaintext invariant). |
+| **LLM round-trip + `node:https`→fetch (feature 08) — WIRED + dry-run-verified; awaits a live endpoint** | **Harness built + dry-run-driven to the real API call** (`opencode-phase3-smoke.ts` + `opencode-llm.opt-in.test.ts`). C1 cleared: `ai@6` + `@ai-sdk/*` use `globalThis.fetch`, ZERO `https.Agent`/`node:https` touch (decisions.md "C1 PRE-FLIGHT RESULT") — `node:https` stays loud-throw, the ADR-0061 split is NOT required. A dry-run against an unreachable endpoint drove the FULL pipeline: `POST /session` → prompt → tool resolution → `llm.provider=oai-compat` → a real `fetch` POST to `/v1/chat/completions` with a valid OpenAI body, failing only on connection-refused. **3 general runtime walls cleared en route** (each parity-tested): `node:http` `STATUS_CODES`; `@rifty/io` `Readable.setEncoding` (ADR-0069 — POST-body reads); `fs.statSync` `{ throwIfNoEntry: false }` (shell-tool probe). Added `@ai-sdk/openai-compatible@2.0.41` to the facade deps. Remaining: the **live round-trip** needs a provider + API key + endpoint via env (Q-2026-05-30-116, D-004) — a spend + external call (confirm-first). **ADR-0061** ratifies once the live call succeeds. |
 | **Real ripgrep/git tool fidelity (feature 09, future)** | **ADR-0062 draft is a DEFERRAL tripwire** — adopting ripgrep-WASM / isomorphic-git / wa-sqlite-search (each a NEW external dep) is BLOCKED until a concrete measured need. The pure-JS marker shipped under Q-2026-05-30-061. Do not silently cross this. |
 
 ## Critical path
@@ -336,35 +336,42 @@ vendor opencode (F01) ✅  →  Spike C ✅ (eager Database)  →  node:sqlite s
                                    │  Project/Workspace layers → real drizzle SELECT → 200 [] (empty,
                                    │  fresh DB). FileWatcher/arborist degrade gracefully (not walls).
                                    ▼
-   ►►► NEXT: Phase 3 — create a session + 1 LLM round-trip (P4), after the C1 https.Agent pre-flight
+   Phase 3 (LLM round-trip) 🟡 WIRED — dry-run drives POST /session → prompt → @ai-sdk/openai-
+                                   │  compatible → real /v1/chat/completions POST (valid OpenAI body).
+                                   │  3 runtime walls cleared (STATUS_CODES, setEncoding, statSync).
+                                   ▼
+   ►►► NEXT: run the live round-trip against a real endpoint+key (a spend; user-provided via env)
                      →  tool ceiling already marked (P5, shipped)
 ```
 
 The original spine `vendor opencode → Spike C → WASM-SQLite decision` is **fully
-cleared**, and so are the three live gates that followed it: **GRAPH-LOAD** (the
-graph resolves + evaluates), **BOOT** (`Server.listen` boots + serves routes,
-exercising the real drizzle/sql.js layer via the eager migration run), and
-**DB-READ** (`GET /session` performs a real drizzle SELECT through the instance
-context → `200 []`). What remains is **Phase 3** — create a session + one LLM
-round-trip, holding on the C1 `https.Agent` pre-flight (ADR-0061 draft). P5 (the
+cleared**, and so are the three live gates that followed it: **GRAPH-LOAD**, **BOOT**
+(`Server.listen` boots + serves routes), and **DB-READ** (`GET /session` → real
+drizzle SELECT → `200 []`). **Phase 3** is now **WIRED**: a dry-run drove the full
+prompt pipeline to a real `/v1/chat/completions` POST (failing only on the
+unreachable test endpoint), after clearing 3 general runtime parity walls
+(`node:http` `STATUS_CODES`, `Readable.setEncoding` (ADR-0069), `fs.statSync`
+`{ throwIfNoEntry: false }`). What remains is one **live** round-trip against a real
+endpoint+key (user-provided via env — a spend); **ADR-0061** ratifies then. P5 (the
 tool ceiling) is already marked.
 
 ## Single next unblocked step
 
-**Phase 3 — a session + one LLM round-trip (P4).** The server boots, serves typed
-routes, and reads its migrated drizzle schema end-to-end. The remaining milestone
-is the agent round-trip: `POST /session` (create) then a prompt that drives one
-LLM call over `fetch`. **C1 pre-flight is DONE (gate CLEARED):** `ai@6` +
-`@ai-sdk/{provider-utils,gateway,provider}` issue requests via `globalThis.fetch`
-with ZERO `https.Agent`/`node:https` touch at init/construction/request, and
-opencode injects its own `fetch` wrapper — so `node:https` stays loud-throw and the
-ADR-0061 client→fetch split is NOT required (evidence: decisions.md "C1 PRE-FLIGHT
-RESULT"). One small pre-req surfaced: `node:http` must export `STATUS_CODES` for
-opencode's error-formatting path (`provider/error.ts`) — error-path only, not
-init-fatal. **The live round-trip itself is blocked on the user** (a provider + API
-key + endpoint via env, D-004 — a spend + external call, confirm-first); fork
-`opencode-dbread-smoke.ts` into a Phase-3 smoke once a key is provided. **ADR-0061**
-(supersedes immutable ADR-0010, preserving no-silent-plaintext) ratifies here.
+**Run the Phase-3 LLM round-trip against a real endpoint.** The wiring is done and
+dry-run-verified to a real `/v1/chat/completions` POST; the only remaining input is
+a reachable OpenAI-compatible endpoint + key (user-provided via env — a spend +
+external call, confirm-first):
+
+```
+RIFTY_OC_BASE_URL=https://host/v1 RIFTY_OC_API_KEY=sk-… RIFTY_OC_MODEL=gpt-4o-mini \
+  RIFTY_RUN_OPENCODE_LLM=1 pnpm exec vitest run opencode-llm.opt-in
+```
+
+The smoke creates a session and sends a prompt with `model: { providerID, modelID }`
+(a ModelRef object, not a string), setting the provider config via
+`OPENCODE_CONFIG_CONTENT` + `OPENCODE_DISABLE_MODELS_FETCH=1`. **ADR-0061**
+(supersedes immutable ADR-0010, preserving no-silent-plaintext) ratifies once the
+live call returns a non-empty assistant reply.
 
 ## Links
 
@@ -385,7 +392,10 @@ key + endpoint via env, D-004 — a spend + external call, confirm-first); fork
   `tests/integration/fixtures/opencode-boot-smoke.ts`
 - DB-READ gate harness (opt-in, PASSED, Phase 2): `tests/integration/opencode-dbread.opt-in.test.ts` +
   `tests/integration/fixtures/opencode-dbread-smoke.ts`
-- Shared realm builder for all three gates:
+- LLM round-trip gate harness (opt-in, WIRED — needs env creds, Phase 3):
+  `tests/integration/opencode-llm.opt-in.test.ts` +
+  `tests/integration/fixtures/opencode-phase3-smoke.ts`
+- Shared realm builder for all four gates:
   `tests/integration/fixtures/opencode-vfs-harness.ts`
 - `node:sqlite` `DatabaseSync` shim: `packages/net/src/sqlite/` (`engine.ts`,
   `database-sync.ts`, `statement-sync.ts`, `register-builtins.ts`); loader-wiring
@@ -396,4 +406,6 @@ key + endpoint via env, D-004 — a spend + external call, confirm-first); fork
   [0054](../adr/0054-effect-consumes-node-http-as-is.md) ·
   [0055](../adr/0055-opencode-sse-streaming-http-no-ws-shim.md) ·
   [0065](../adr/0065-node-sqlite-databasesync-wasm-shim.md) (WASM-SQLite
-  `node:sqlite` shim — supersedes decisions.md DRAFTS ADR-0055/0056)
+  `node:sqlite` shim — supersedes decisions.md DRAFTS ADR-0055/0056) ·
+  [0069](../adr/0069-readable-set-encoding.md) (`Readable.setEncoding` — POST-body
+  reads on the Phase-3 path)

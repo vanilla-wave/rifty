@@ -4,6 +4,7 @@
   "private": true,
   "description": "Flattened KEEP set for the opencode programmatic server path (import { Server }; Server.listen) from anomalyco/opencode @ f401f01c05bead2fd0687004c912743d271e2b7b. catalog:/workspace: refs resolved; workspace:* dropped (vendored as source); concrete @ai-sdk/* providers dropped (runtime dynamic import, fetch-on-demand).",
   "dependencies": {
+    "@ai-sdk/openai-compatible": "2.0.41",
     "@ai-sdk/provider": "3.0.8",
     "@effect/opentelemetry": "4.0.0-beta.66",
     "@effect/platform-node": "4.0.0-beta.66",

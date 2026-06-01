@@ -131,6 +131,15 @@ const UI_AUDIO_FILES = [
  * `workspace:*` refs are intentionally absent (they are the vendored source).
  */
 const FACADE_DEPENDENCIES = {
+  // Concrete `@ai-sdk/*` providers are normally DROPPED (opencode dynamic-imports
+  // them on demand — see the manifest description). `@ai-sdk/openai-compatible` is
+  // the ONE exception we keep installed: it is opencode's bundled provider for any
+  // OpenAI-compatible endpoint (`BUNDLED_PROVIDERS["@ai-sdk/openai-compatible"]` →
+  // `createOpenAICompatible`), and keeping it materialized lets the Phase-3 LLM
+  // round-trip gate resolve the dynamic import WITHOUT a runtime `npm install`
+  // (which would hit the tool-execution ceiling). Pinned to opencode's own
+  // catalog version (`packages/core/package.json` @ PINNED_SHA).
+  '@ai-sdk/openai-compatible': '2.0.41',
   '@ai-sdk/provider': '3.0.8',
   '@effect/opentelemetry': '4.0.0-beta.66',
   '@effect/platform-node': '4.0.0-beta.66',

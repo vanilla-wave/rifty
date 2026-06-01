@@ -396,6 +396,24 @@ executable dist + opencode's LLM wiring (independently grep-verified):
   faithful real-Node `STATUS_CODES` map added to the `node:http` builtin. Open a specific note/ADR
   for that export when wiring the live round-trip.
 
+**DRY-RUN RESULT (2026-06-01 — wiring confirmed to the real API call).** The Phase-3
+harness (`opencode-phase3-smoke.ts` + `opencode-llm.opt-in.test.ts`, provider via
+`OPENCODE_CONFIG_CONTENT` + `OPENCODE_DISABLE_MODELS_FETCH=1`, `@ai-sdk/openai-compatible@2.0.41`
+KEEP-installed) was driven against an UNREACHABLE endpoint (`127.0.0.1:1`). The full
+pipeline ran: `POST /session` → prompt → tool resolution → `llm.runtime=ai-sdk
+llm.provider=oai-compat` → a real `globalThis.fetch` POST to
+`http://127.0.0.1:1/v1/chat/completions` with a valid OpenAI body (model + max_tokens +
+opencode system prompt + user message), failing only with `AI_APICallError` (connection
+refused) after ai-sdk retries — confirming C1 end-to-end (the outbound went via `fetch`,
+not `https.Agent`). **Three GENERAL runtime walls were cleared in eager order** (each a
+Node parity case, full parity suite green): (1) `node:http` `STATUS_CODES` (the pre-req
+above); (2) **`Readable.setEncoding`** — `@effect/platform-node`'s `NodeStream.toString`
+calls it to read ANY POST body, so `POST /session` itself 500'd without it (**ratified
+ADR-0069**); (3) `fs.statSync` `{ throwIfNoEntry: false }` — opencode's `Filesystem.stat`
+(shell-tool resolution) walled on the thrown ENOENT (Node v24 parity). **A real
+endpoint+key now completes the round-trip; ADR-0061 ratifies on that live success** (the
+client→fetch split confirmed unnecessary).
+
 ---
 
 ### ADR-0062 (draft) — read-only tool substitutes: JS-first; ripgrep-WASM/isomorphic-git DEFERRED

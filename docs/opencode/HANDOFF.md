@@ -24,19 +24,43 @@ rifty as a no-tool-execution facade.
   schema is queryable end-to-end. FileWatcher (no native `@parcel/watcher`) +
   `@npmcli/arborist` background install degrade gracefully (opencode logs+continues;
   request unaffected) — documented in `docs/compat/opencode-tool-ceiling.md`.
-- ▶️ **NEXT: Phase 3** — session + one LLM round-trip. **C1 pre-flight DONE** (the
-  ai-sdk uses `globalThis.fetch`, zero `https.Agent`/`node:https` touch → loud-throw
-  `node:https` is fine, the client→fetch split is NOT needed). The live round-trip is
-  **blocked on the user**: needs a provider + API key + endpoint via env, and is a
-  spend / external call (confirm-first). One small pre-req: `node:http` `STATUS_CODES`
-  export (error-path only).
+- 🟡 **Phase 3 — session + one LLM round-trip: HARNESS BUILT + dry-run-verified to
+  the real API call; only a reachable endpoint+key remains.** C1 pre-flight cleared
+  (ai-sdk uses `globalThis.fetch`, no `https.Agent`). A dry-run against an
+  unreachable endpoint (`127.0.0.1:1`) drove the FULL pipeline: `POST /session` →
+  prompt → tool resolution → provider select → `@ai-sdk/openai-compatible` →
+  **a real outbound `fetch` POST to `/v1/chat/completions` with a valid OpenAI body**
+  (model + max_tokens + the opencode system prompt + the user message), failing only
+  on connection refused — exactly as expected with no real endpoint. **3 walls cleared
+  on the way** (all general runtime parity, no opencode hardcode): `node:http`
+  `STATUS_CODES`; `@rifty/io` `Readable.setEncoding` (ADR-0069 — every POST-with-body
+  route needs it); `fs.statSync` `{ throwIfNoEntry: false }` (Node v24 parity — the
+  shell-tool resolution probe).
+- ▶️ **NEXT: run the live round-trip** — needs the user's provider + API key +
+  endpoint via env (a spend + external call, confirm-first). See "Run the Phase-3
+  gate" below.
 
-## ►► NEXT WALL: Phase 3 — session create + 1 LLM round-trip
+## ►► NEXT: run the Phase-3 LLM round-trip against a real endpoint
 
-Phase 1 (Server.listen first light), the core of Phase 2 (request→response through
-Effect `HttpServer` over rifty's `node:http`, ADR-0054), AND the DB-read half of
-Phase 2 (a request that QUERIES drizzle) are ALL cleared. What remains is the agent
-round-trip. Plan (critical path):
+Phases 1, 2, AND the Phase-3 *wiring* are all cleared — the harness drives the full
+prompt pipeline to a real outbound `/v1/chat/completions` POST. The only thing left
+is to point it at a reachable OpenAI-compatible endpoint with a valid key:
+
+```
+# the smoke reads creds from env (D-004 — never hardcoded); a spend + external call
+RIFTY_OC_BASE_URL=https://host/v1 RIFTY_OC_API_KEY=sk-… RIFTY_OC_MODEL=gpt-4o-mini \
+  RIFTY_RUN_OPENCODE_LLM=1 pnpm exec vitest run opencode-llm.opt-in
+# or the smoke directly:
+RIFTY_OC_BASE_URL=… RIFTY_OC_API_KEY=… RIFTY_OC_MODEL=… \
+  npx tsx tests/integration/fixtures/opencode-phase3-smoke.ts
+```
+
+It sends `POST /session` then `POST /session/:id/message` with `model:
+{ providerID, modelID }` (NOT a string — ModelRef is an object, prompt.ts:1681) and
+asserts a non-empty assistant text. Provider config (`OPENCODE_CONFIG_CONTENT`) +
+`OPENCODE_DISABLE_MODELS_FETCH=1` are set by the smoke. **ADR-0061 ratifies once the
+live call succeeds** (the C1 result already reframed it: the client→fetch split is
+optional, not required). Plan + what's already cleared (critical path):
 
 ### Phase 1 — Server.listen first light  ✅ DONE (this session)
 - Harness: `tests/integration/fixtures/opencode-boot-smoke.ts` + opt-in driver
@@ -53,25 +77,36 @@ round-trip. Plan (critical path):
   degraded gracefully — NOT walls (`docs/compat/opencode-tool-ceiling.md`). No new
   ADR (the degradations sit on the already-drawn no-native-addon line).
 
-### Phase 3 — session + 1 LLM round-trip (P4, most uncertain)  ← START HERE
-- `POST /session` (create) then a prompt driving ONE LLM call over `fetch`.
-- **C1 pre-flight DONE (2026-06-01, this session) — gate CLEARED.** Verified (grep
-  + Explore) that `ai@6.0.168` + `@ai-sdk/{provider-utils,gateway,provider}` issue
-  requests via `globalThis.fetch` (`provider-utils/dist/index.mjs:588`) with **ZERO**
-  `https.Agent`/`globalAgent`/`node:https` touch at module-eval, provider
-  construction, OR request — and opencode injects its own `fetch` wrapper
-  (`provider/provider.ts:1618-1667`). So `node:https` can stay loud-throw and **the
-  ADR-0061 client→fetch split is NOT required** for the round-trip. Full evidence:
-  `decisions.md` ADR-0061 "C1 PRE-FLIGHT RESULT".
-- **First likely concrete wall (error-path only, NOT init-fatal):** opencode
-  `provider/error.ts:2` `import { STATUS_CODES } from "http"` + uses it at `:70,76`,
-  but rifty's `node:http` shim does **not** export `STATUS_CODES`. The happy path
-  never touches it; a failed LLM response would `TypeError`. Faithful fix: add the
-  real Node `STATUS_CODES` map to the `node:http` builtin (its own small ADR/note).
-- **BLOCKED on the user (confirm-first):** the live round-trip needs a provider +
-  API key + endpoint via **env** (D-004 — no hardcoded URLs) and is a spend + an
-  external call. Fork `opencode-dbread-smoke.ts` → a Phase-3 smoke once a key is
-  provided. **ADR-0061** ratifies here (the C1 result reframes it: split optional).
+### Phase 3 — session + 1 LLM round-trip (P4)  🟡 WIRED, awaits a live endpoint
+- Harness: `tests/integration/fixtures/opencode-phase3-smoke.ts` + opt-in driver
+  `tests/integration/opencode-llm.opt-in.test.ts` (gate `RIFTY_RUN_OPENCODE_LLM`).
+- **C1 pre-flight DONE — CLEARED.** `ai@6.0.168` + `@ai-sdk/{provider-utils,gateway,
+  provider}` issue requests via `globalThis.fetch` (`provider-utils/dist/index.mjs:588`)
+  with ZERO `https.Agent`/`node:https` touch; opencode injects its own `fetch`
+  (`provider/provider.ts:1618-1667`). `node:https` stays loud-throw; the ADR-0061
+  client→fetch split is NOT required. Evidence: `decisions.md` "C1 PRE-FLIGHT RESULT".
+- **3 walls cleared via dry-run** (against `127.0.0.1:1`, in eager order — all GENERAL
+  runtime parity fixes):
+  1. `node:http` `STATUS_CODES` — faithful Node map (opencode `provider/error.ts`
+     error path). `@rifty/net`, parity `http/status-codes.case.ts`.
+  2. `@rifty/io` `Readable.setEncoding` — **ADR-0069**. `@effect/platform-node`'s
+     `NodeStream.toString` calls `setEncoding('utf8')` to read ANY POST body; without
+     it `POST /session` 500s. Parity `stream/readable-set-encoding.case.ts`.
+  3. `fs.statSync` `{ throwIfNoEntry: false }` — Node v24 parity. opencode's
+     `Filesystem.stat` (shell-tool resolution `Filesystem.stat(shell)?.isFile()`)
+     walled on the thrown ENOENT. `@rifty/runtime-js`, parity
+     `fs/stat-throw-if-no-entry.case.ts`.
+- **Dry-run RESULT (unreachable endpoint):** the full pipeline ran — `POST /session`
+  201, prompt → tool resolution → `llm.runtime=ai-sdk llm.provider=oai-compat` → a
+  real `fetch` POST to `http://127.0.0.1:1/v1/chat/completions` with a valid OpenAI
+  body (model + max_tokens + system + user message), failing only with
+  `AI_APICallError` (connection refused) after ai-sdk retries. So a REAL endpoint+key
+  completes the round-trip. Run it with the command in "►► NEXT" above.
+- **Provider dep:** `@ai-sdk/openai-compatible@2.0.41` is now KEEP-installed in
+  `deps` (the one exception to "providers dropped" — see `fetch-opencode.mjs`).
+- **Facade ceiling note:** the shell tool now RESOLVES (its `acceptable()` probe no
+  longer throws), so it is listed to the LLM, but actually RUNNING it still hits the
+  spawn ceiling (ENOENT-127) — fine for a plain text prompt that calls no tool.
 - Note: boot/dbread runs already show `service=lsp all LSPs are disabled`,
   formatters disabled, and providers loading internal auth plugins cleanly — the
   provider/session machinery initialises headless; the only untested edge is the
@@ -120,25 +155,29 @@ generally (never special-case opencode). **missing npm dep** → add to
 `deps/package.json`, then `cd …/opencode/deps && npm install`. **browser ceiling**
 (raw socket/UDP/TLS/HTTP2) → loud-throw facade that only EVALUATES.
 
-## Done — BOOT + DB-READ + C1 pre-flight session (this session)
-Both the BOOT gate AND the Phase-2 DB-READ gate cleared with **zero runtime
-changes** — the graph-load work already laid every builtin both paths need — and
-the Phase-3 C1 pre-flight was run (docs-only, no code: ADR-0061 "C1 PRE-FLIGHT
-RESULT" — ai-sdk uses `globalThis.fetch`, no `https.Agent`, split not needed).
-New code is **test harness only** (commits on `main`):
+## Done — BOOT + DB-READ + Phase-3-wiring session (this session)
 1. Extracted the shared realm builder
    `tests/integration/fixtures/opencode-vfs-harness.ts` (`buildOpencodeLoader`)
    out of the graph-load smoke + scaffolded the BOOT smoke/driver.
-2. **BOOT gate:** `opencode-boot-smoke.ts` calls `Server.listen` + asserts
-   `/global/health` (typed handler) + `/doc` → 200; driver
+2. **BOOT gate (Phase 1)** ✅: `opencode-boot-smoke.ts` calls `Server.listen` +
+   asserts `/global/health` (typed handler) + `/doc` → 200; driver
    `opencode-boot.opt-in.test.ts`. **ADR-0058 resolved as no-op** (no new builtin
-   surface; no `ptyConnectApi` stub needed).
-3. **DB-READ gate (Phase 2):** `opencode-dbread-smoke.ts` issues `GET /session`
-   → real drizzle SELECT → `200 []`; driver `opencode-dbread.opt-in.test.ts`.
-   Recorded the FileWatcher/arborist graceful degradations in
-   `docs/compat/opencode-tool-ceiling.md`. No new ADR.
-All three opt-in gates pass green (verified via `vitest run`). No new dep, no
-public API change, no opencode-source edit, biome clean on changed files.
+   surface; no `ptyConnectApi` stub needed). Zero runtime changes.
+3. **DB-READ gate (Phase 2)** ✅: `opencode-dbread-smoke.ts` → `GET /session` →
+   real drizzle SELECT → `200 []`; driver `opencode-dbread.opt-in.test.ts`.
+   FileWatcher/arborist graceful degradations recorded in
+   `docs/compat/opencode-tool-ceiling.md`. Zero runtime changes.
+4. **Phase-3 wiring** 🟡: C1 pre-flight (ADR-0061 "C1 PRE-FLIGHT RESULT"), then the
+   `opencode-phase3-smoke.ts` + `opencode-llm.opt-in.test.ts` harness, dry-run-driven
+   to a real `/v1/chat/completions` POST. Cleared **3 GENERAL runtime walls** (each
+   TDD'd with a Node parity case, full parity suite re-run green — 64 cases):
+   `node:http` `STATUS_CODES` (`@rifty/net`); `Readable.setEncoding` (`@rifty/io`,
+   **ADR-0069**); `fs.statSync` `{ throwIfNoEntry: false }` (`@rifty/runtime-js`).
+   Added the `@ai-sdk/openai-compatible@2.0.41` facade dep. Live round-trip awaits
+   the user's endpoint+key.
+All opt-in gates green; parity suite green (64/64); io stream unit tests green
+(38/38); biome clean on changed files. No opencode-source edit. CHANGELOGs updated
+in the three affected packages.
 
 ## Done — GRAPH-LOAD session (prior, 17 commits on `main`, b425b05..f29c22e)
 All fixes are GENERAL runtime improvements (no opencode hardcode in the runtime);
@@ -176,16 +215,18 @@ debt in `npm-client/src/installer.ts` is NOT ours).
   impls; `AsyncLocalStorage` is sync-scope only.
 
 ## Pointers
-- Living current-state doc: `docs/opencode/README.md` (GRAPH-LOAD + BOOT + DB-READ = PASSED).
+- Living current-state doc: `docs/opencode/README.md` (GRAPH-LOAD + BOOT + DB-READ
+  PASSED; Phase-3 LLM round-trip WIRED, awaits a live endpoint).
 - Decision register: `docs/opencode/decisions.md`. On-disk ADRs **0052–0055,
-  0063–0068**. **ADR-0058** (headless boot) RESOLVED as no-op (no new builtin
-  surface). Draft awaiting ratification: **ADR-0061** (LLM https.Agent — Phase 3).
+  0063–0069**. **ADR-0058** (headless boot) RESOLVED as no-op. **ADR-0069**
+  (`Readable.setEncoding`). Draft awaiting ratification on the live call:
+  **ADR-0061** (LLM https.Agent — C1 result: split optional, not required).
 - Open questions: `Q-2026-05-31-301` (OPFS persistence), `-302` (sqlite builtin
   path), `-304` (decorators gap), `Q-2026-06-01-305` (auto tsconfig discovery),
   `-306` (configurable loader map + binary `.wasm` module loader).
-- Gate harnesses: `tests/integration/opencode-{graph-load,boot,dbread}.opt-in.test.ts`
-  + `tests/integration/fixtures/opencode-{graph-load,boot,dbread}-smoke.ts`, sharing
-  `tests/integration/fixtures/opencode-vfs-harness.ts`.
+- Gate harnesses: `tests/integration/opencode-{graph-load,boot,dbread,llm}.opt-in.test.ts`
+  + `tests/integration/fixtures/opencode-{graph-load,boot,dbread,phase3}-smoke.ts`,
+  sharing `tests/integration/fixtures/opencode-vfs-harness.ts`.
 - `node:sqlite` sql.js shim (the boot exercised it — migrations ran green):
   `packages/net/src/sqlite/`. Spike C verdict + critical path: `README.md`.
 - Vendored source: `tests/integration/fixtures/opencode/source`; deps manifest
