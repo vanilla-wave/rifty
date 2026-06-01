@@ -94,6 +94,17 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
     return record.exports;
   }
 
+  if (resolved.kind === 'text') {
+    // Text-asset import (ADR-0067): the module's value IS the raw file contents.
+    // `require('./f.txt')` returns the string; an ESM `import x from './f.txt'`
+    // routes through here and `wrapCjsAsEsmNamespace` exposes the string as the
+    // default export (it already maps a non-object CJS export to `default`).
+    record.exports = resolved.source as unknown as Record<string, unknown>;
+    record.cjsModule = { exports: record.exports };
+    record.state = 'loaded';
+    return record.exports;
+  }
+
   // Half-populated module is visible to dependents that come back through
   // require during this module's execution (CJS cycle).
   const moduleObject: { exports: Record<string, unknown> } = { exports: Object.create(null) };

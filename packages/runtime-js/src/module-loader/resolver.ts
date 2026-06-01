@@ -5,7 +5,14 @@ import { ModuleLoadError } from './errors.ts';
 
 const utf8 = new TextDecoder('utf-8');
 
-export type ModuleKind = 'cjs' | 'esm' | 'json' | 'builtin';
+export type ModuleKind = 'cjs' | 'esm' | 'json' | 'builtin' | 'text';
+
+// Non-JS asset extensions imported as TEXT (ADR-0067): `import s from "./f.txt"`
+// binds the default to the raw file contents (esbuild/Bun text-loader behaviour).
+// Only matched on an explicit-extension import — Node never resolves these, so
+// this is a pure additive capability, not a parity regression. opencode imports
+// `.txt` (prompts), `.sql` (schema/migrations), `.md`, `.prompt`.
+const TEXT_EXTENSIONS = ['.txt', '.sql', '.md', '.prompt'] as const;
 
 export interface ResolvedModule {
   readonly id: string;
@@ -641,6 +648,7 @@ function readResolved(vfs: FsSync, filePath: string, _esm: boolean): ResolvedMod
 
 function detectKind(vfs: FsSync, filePath: string): ModuleKind {
   if (filePath.endsWith('.json')) return 'json';
+  if (TEXT_EXTENSIONS.some((ext) => filePath.endsWith(ext))) return 'text';
   if (filePath.endsWith('.mjs')) return 'esm';
   if (filePath.endsWith('.cjs')) return 'cjs';
   if (filePath.endsWith('.js') || filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {

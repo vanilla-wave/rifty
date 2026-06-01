@@ -74,6 +74,48 @@ discovery; it needs no superseding of ADR-0066.
 
 ---
 
+## Q-2026-06-01-306: configurable loader map + binary asset loader (vs fixed text-extension set)
+
+**Status:** 🟢 Active  
+**Encountered in:** opencode GRAPH-LOAD gate, clearing the `generate.txt` asset-import
+wall (ADR-0067)  
+**Milestone:** M12 (opencode facade)  
+**Author (agent session):** 2026-06-01
+
+### Context
+
+ADR-0067 added text-asset imports for a FIXED extension set
+(`.txt`/`.sql`/`.md`/`.prompt` → default export is the file contents). Two follow-ons
+are deferred: (a) making the loader map CONFIGURABLE via `ModuleLoaderOptions` (a
+per-project extension→loader map, like esbuild's `loader` option) instead of a
+hardcoded list; (b) a BINARY asset loader for `.wasm` (and similar), which a text
+loader cannot serve.
+
+### Options considered
+
+- **Option A — fixed text-extension set (shipped in ADR-0067).** Pro: minimal,
+  covers opencode; no config surface to design. Con: a project importing a
+  different text extension, or a `.wasm`, is not served.
+- **Option B — configurable loader map + binary loader now.** Pro: general. Con:
+  needs a designed config shape + a binary-module representation (URL? bytes?
+  `WebAssembly.Module`?) that no current need pins down.
+
+### Decision taken (provisional)
+
+**Chose:** A; B deferred until a concrete need (a non-listed text extension, or the
+`.wasm` import actually landing on a live path) appears.
+
+**Why:** Option B is additive over A and needs real requirements to design well
+(esp. the binary representation). opencode's single `.wasm` (tree-sitter) is off the
+boot path; if it walls, it gets its own decision. Promote when a need is verified.
+
+### Code markers
+
+- None — ADR-0067 records the deferral in its Reversibility section; the fixed set
+  lives in `packages/runtime-js/src/module-loader/resolver.ts` (`TEXT_EXTENSIONS`).
+
+---
+
 ## Q-2026-05-30-061: pure-JS VFS grep marker tool (vs ripgrep-WASM)
 
 **Status:** 🟢 Active  

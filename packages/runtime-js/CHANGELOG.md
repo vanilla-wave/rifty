@@ -64,6 +64,17 @@
 
 ### Added
 
+- **Text-asset imports — `.txt` / `.sql` / `.md` / `.prompt` (ADR-0067).** An
+  `import s from "./f.txt"` now binds the default export to the file's raw contents
+  (esbuild/Bun text-loader behaviour), and `require("./f.txt")` returns the string;
+  a new `'text'` `ModuleKind` classifies these extensions and `executeCjs` returns
+  the source as `module.exports`. Only fires on an explicit-extension import (not
+  added to extension fallback), so it is a pure additive capability over Node, not a
+  parity regression. Unblocks opencode's 37 `.txt` prompt imports + `.sql`/`.md`/
+  `.prompt` assets (`agent/agent.ts`). Binary (`.wasm`) assets are out of scope
+  (`Q-2026-06-01-306`). Conformance:
+  `tests/conformance/modules/text-asset-import.test.ts`.
+
 - **`node:http2` — module-resolution surface (loud browser-ceiling facade).**
   `fastify/lib/server.js` does a top-level `require('node:http2')` unconditionally
   and only calls `createServer`/`createSecureServer` when configured `http2: true`,
