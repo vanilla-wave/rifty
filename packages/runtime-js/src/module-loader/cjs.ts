@@ -43,6 +43,32 @@ export interface CjsLoaderDeps {
   resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule;
 }
 
+/**
+ * Best-effort source snippet for a `new Function` compile failure. A bare
+ * SyntaxError from `new Function` usually carries no `<anonymous>:line:col` in
+ * its stack, in which case this returns '' and the directed error still names
+ * the module. When V8 does provide an offset, subtract the 2-line synthetic
+ * `function anonymous(...) {` header to map back onto the source.
+ */
+function snippetForSource(source: string, stack: string): string {
+  const m = /<anonymous>:(\d+):(\d+)/.exec(stack);
+  if (!m) return '';
+  const srcLine = Number(m[1]) - 2;
+  const lines = source.split('\n');
+  if (srcLine < 1 || srcLine > lines.length) return '';
+  const start = Math.max(0, srcLine - 3);
+  const end = Math.min(lines.length, srcLine + 2);
+  const numbered = lines
+    .slice(start, end)
+    .map((l, i) => {
+      const n = start + i + 1;
+      const marker = n === srcLine ? '>> ' : '   ';
+      return `${marker}${String(n).padStart(5, ' ')} | ${l.length > 200 ? `${l.slice(0, 200)}…` : l}`;
+    })
+    .join('\n');
+  return `\nNear line ${srcLine}:\n${numbered}`;
+}
+
 export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Record<string, unknown> {
   // A `.ts`/`.tsx` that classified as CJS would otherwise feed raw TypeScript
   // to `new Function` below — throw a directed NotImplementedError first
@@ -91,20 +117,36 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
   const __filename = resolved.id;
   const __dirname = dirname(resolved.id);
 
-  const fn = new Function(
-    'module',
-    'exports',
-    'require',
-    '__filename',
-    '__dirname',
-    `${resolved.source}\n//# sourceURL=${resolved.id}`,
-  ) as (
+  type CjsFactory = (
     module: { exports: Record<string, unknown> },
     exports: Record<string, unknown>,
     require: (s: string) => unknown,
     __filename: string,
     __dirname: string,
   ) => void;
+  let fn: CjsFactory;
+  try {
+    fn = new Function(
+      'module',
+      'exports',
+      'require',
+      '__filename',
+      '__dirname',
+      `${resolved.source}\n//# sourceURL=${resolved.id}`,
+    ) as CjsFactory;
+  } catch (err) {
+    // A parse failure here is a SyntaxError from `new Function` with no file
+    // context in its bare message — surface a directed error naming the module
+    // and the offending source line (mirrors the ESM path in esm.ts).
+    record.state = 'errored';
+    const msg = (err as Error).message ?? String(err);
+    throw new ModuleLoadError(
+      'SYNTAX_ERROR',
+      resolved.id,
+      `Failed to compile CJS module ${resolved.id}: ${msg}${snippetForSource(resolved.source, (err as Error).stack ?? '')}`,
+      resolved.id,
+    );
+  }
 
   try {
     fn(moduleObject, moduleObject.exports, require, __filename, __dirname);

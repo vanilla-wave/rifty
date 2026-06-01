@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **CJS compile failures now name the module.** A syntactically-invalid CJS module
+  previously threw a bare `SyntaxError` from `new Function` with no file context
+  (only `at new Function (<anonymous>)`). `executeCjs` now wraps the parse failure
+  in a directed `ModuleLoadError` naming the module (and a best-effort source
+  snippet), mirroring the ESM path — which is how the opencode graph-load gate
+  pinned a prose `.txt` asset being mis-executed as CJS.
+
 ### Fixed
 
 - **A module that shadows the global `Object` broke the ESM export codegen.** The
