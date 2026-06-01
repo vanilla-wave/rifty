@@ -371,6 +371,31 @@ round-trip and needs its own decision (no-op Agent vs P4-blocked).
 Fix the string-form scheme coercion to handle scheme-less hosts. Keep
 `createServer`/`Agent`/`globalAgent` regression-locked as throwing.
 
+**C1 PRE-FLIGHT RESULT (2026-06-01 — gate CLEARED, split NOT required by the LLM path).**
+Static inspection of the pinned `ai@6.0.168` + `@ai-sdk/{provider-utils,gateway,provider}`
+executable dist + opencode's LLM wiring (independently grep-verified):
+- The transport issues requests through **`globalThis.fetch`** — `getOriginalFetch =
+  () => globalThis.fetch` at `@ai-sdk/provider-utils/dist/index.mjs:588` (+ `index.js:684`);
+  `postToApi`/`getFromApi` accept an injectable `fetch?: FetchFunction` and default to it.
+- **ZERO** `new https.Agent` / `globalAgent` / `require("node:https")` / `setGlobalDispatcher`
+  in the executable JS of `ai`, `@ai-sdk/provider-utils`, `@ai-sdk/gateway`, `@ai-sdk/provider`
+  — neither at module-eval nor at provider construction (`createGatewayProvider` only threads
+  `options.fetch`; `@ai-sdk/gateway` is a dynamic `import()` anyway).
+- opencode itself **injects a custom `fetch`** wrapping rifty's global `fetch` with timeout
+  logic and passes it via `options.fetch` to the provider factory
+  (`packages/opencode/src/provider/provider.ts:1618-1667,1675-1703`).
+- **Verdict (a) FINE:** the `https.Agent` init-fatal risk this gate guarded against does **not**
+  exist on the ai-sdk path. Running the round-trip with `node:https` left as a loud-throw facade
+  is safe; **the Option-A client→fetch split is NOT needed for the LLM round-trip** (it remains a
+  valid general capability if some *other* dep ever falls back to `node:https`, but the round-trip
+  does not require it). ADR-0010's no-silent-plaintext invariant is untouched.
+- **One concrete pre-req found (NOT a TLS issue):** opencode `provider/error.ts:2` does
+  `import { STATUS_CODES } from "http"` and uses `STATUS_CODES[e.statusCode]` at `:70,76` — but
+  rifty's `node:http` shim does **not** export `STATUS_CODES`. This is **error-path only** (a
+  failed LLM response), so it is NOT init-fatal and the happy path never touches it; the fix is a
+  faithful real-Node `STATUS_CODES` map added to the `node:http` builtin. Open a specific note/ADR
+  for that export when wiring the live round-trip.
+
 ---
 
 ### ADR-0062 (draft) — read-only tool substitutes: JS-first; ripgrep-WASM/isomorphic-git DEFERRED

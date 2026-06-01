@@ -316,7 +316,7 @@ commitments downstream of boot.
 | **Headless server boot (feature 06) — DONE (BOOT gate PASSED)** | **DONE first attempt, zero walls** (see the BOOT gate section above). `Server.listen` boots headless, the eager DAG runs the real drizzle/sql.js PRAGMAs + ~24 migrations under `Effect.orDie`, `/global/health` + `/doc` return 200. **ADR-0058 resolves with NO new builtin surface** (the boot called no unimplemented builtin/method); the predicted `ptyConnectApi` stub was not needed. A DB-read VIA a request (a route that QUERIES drizzle) followed in Phase 2 — see the next row. |
 | **DB-read via a request (Phase 2) — DONE (DB-READ gate PASSED)** | **DONE, zero walls.** `GET /session` drives the instance-context middleware (instance resolved from cwd `/workspace`), builds the lazy Session/Project/Workspace layers, runs a real drizzle `db.select().from(SessionTable)…all()` (session.ts:1079), and returns `200 []` (empty, fresh in-memory DB). The migrated schema is queryable end-to-end. FileWatcher (no native `@parcel/watcher`) and the `@npmcli/arborist` background install degrade gracefully — opencode logs+continues, the request is unaffected (see `../compat/opencode-tool-ceiling.md`). Gate: `tests/integration/opencode-dbread.opt-in.test.ts`. No new ADR (the degradations sit on the already-drawn no-native-addon line). |
 | **v3 SSE frame bump (feature 07)** | **ADR-0060 draft DEFERRED** — non-additive bump of a versioned wire contract (`PREVIEW_PORT_FRAME_VERSION` 2→3) that CONTRADICTS ADR-0048 D2 and ADR-0017's M12 deferral. Page-direct SSE (ADR-0055) ships first with no code. Gate: the Worker becomes the actual opencode owner (ADR-0046 `WorkerOwnerBinding`) AND a superseding ADR cites+supersedes ADR-0048 D2 and amends ADR-0017. |
-| **LLM round-trip + `node:https`→fetch (feature 08)** | Needs the vendored tree, a live provider endpoint via env (Q-2026-05-30-116, D-004), and features 01-06. **ADR-0061 draft DEFERRED** (supersedes immutable ADR-0010). Gate: clear the **C1 pre-flight** — inspect pinned `ai@6`/`@ai-sdk/*` source for whether the global-`fetch` path constructs an `https.Agent` at init (a thrown Agent constructor would be init-time-fatal for the round-trip). Run the live flow with `node:https` left as loud-throw FIRST; adopt the client→fetch split only if it actually trips. The superseding ADR must preserve ADR-0010's no-silent-plaintext invariant. |
+| **LLM round-trip + `node:https`→fetch (feature 08) — C1 PRE-FLIGHT CLEARED; live round-trip blocked on a key** | **C1 done (2026-06-01):** `ai@6` + `@ai-sdk/{provider-utils,gateway,provider}` use `globalThis.fetch` with ZERO `https.Agent`/`node:https` touch at init/construction/request (grep-verified; `provider-utils/dist/index.mjs:588`), and opencode injects its own `fetch` wrapper (`provider/provider.ts:1618-1667`) — so `node:https` stays loud-throw and **the ADR-0061 client→fetch split is NOT required** for the round-trip. See decisions.md "C1 PRE-FLIGHT RESULT". Remaining: the **live round-trip** needs a provider + API key + endpoint via env (Q-2026-05-30-116, D-004) — a spend + external call (confirm-first). One small pre-req: add a real-Node `STATUS_CODES` map to the `node:http` builtin (opencode `provider/error.ts` error path; not init-fatal). **ADR-0061** ratifies on the live wiring (preserving ADR-0010's no-silent-plaintext invariant). |
 | **Real ripgrep/git tool fidelity (feature 09, future)** | **ADR-0062 draft is a DEFERRAL tripwire** — adopting ripgrep-WASM / isomorphic-git / wa-sqlite-search (each a NEW external dep) is BLOCKED until a concrete measured need. The pure-JS marker shipped under Q-2026-05-30-061. Do not silently cross this. |
 
 ## Critical path
@@ -354,12 +354,17 @@ tool ceiling) is already marked.
 **Phase 3 — a session + one LLM round-trip (P4).** The server boots, serves typed
 routes, and reads its migrated drizzle schema end-to-end. The remaining milestone
 is the agent round-trip: `POST /session` (create) then a prompt that drives one
-LLM call over `fetch`. **C1 pre-flight first** — inspect the pinned `ai@6` /
-`@ai-sdk/*` source for whether the global-`fetch` path constructs an `https.Agent`
-at init (a thrown Agent ctor would be init-fatal). Run with `node:https` left as a
-loud-throw FIRST; adopt the client→fetch split ONLY if it actually trips. Live
-provider endpoint via env (D-004). **ADR-0061 draft** (supersedes immutable
-ADR-0010) ratifies here and must preserve the no-silent-plaintext invariant.
+LLM call over `fetch`. **C1 pre-flight is DONE (gate CLEARED):** `ai@6` +
+`@ai-sdk/{provider-utils,gateway,provider}` issue requests via `globalThis.fetch`
+with ZERO `https.Agent`/`node:https` touch at init/construction/request, and
+opencode injects its own `fetch` wrapper — so `node:https` stays loud-throw and the
+ADR-0061 client→fetch split is NOT required (evidence: decisions.md "C1 PRE-FLIGHT
+RESULT"). One small pre-req surfaced: `node:http` must export `STATUS_CODES` for
+opencode's error-formatting path (`provider/error.ts`) — error-path only, not
+init-fatal. **The live round-trip itself is blocked on the user** (a provider + API
+key + endpoint via env, D-004 — a spend + external call, confirm-first); fork
+`opencode-dbread-smoke.ts` into a Phase-3 smoke once a key is provided. **ADR-0061**
+(supersedes immutable ADR-0010, preserving no-silent-plaintext) ratifies here.
 
 ## Links
 

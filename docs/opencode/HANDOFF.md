@@ -24,7 +24,12 @@ rifty as a no-tool-execution facade.
   schema is queryable end-to-end. FileWatcher (no native `@parcel/watcher`) +
   `@npmcli/arborist` background install degrade gracefully (opencode logs+continues;
   request unaffected) — documented in `docs/compat/opencode-tool-ceiling.md`.
-- ▶️ **NEXT: Phase 3** — create a session + one LLM round-trip. Not started.
+- ▶️ **NEXT: Phase 3** — session + one LLM round-trip. **C1 pre-flight DONE** (the
+  ai-sdk uses `globalThis.fetch`, zero `https.Agent`/`node:https` touch → loud-throw
+  `node:https` is fine, the client→fetch split is NOT needed). The live round-trip is
+  **blocked on the user**: needs a provider + API key + endpoint via env, and is a
+  spend / external call (confirm-first). One small pre-req: `node:http` `STATUS_CODES`
+  export (error-path only).
 
 ## ►► NEXT WALL: Phase 3 — session create + 1 LLM round-trip
 
@@ -50,16 +55,27 @@ round-trip. Plan (critical path):
 
 ### Phase 3 — session + 1 LLM round-trip (P4, most uncertain)  ← START HERE
 - `POST /session` (create) then a prompt driving ONE LLM call over `fetch`.
-- **C1 pre-flight FIRST:** inspect pinned `ai@6` / `@ai-sdk/*` source — does the
-  global-`fetch` path construct an `https.Agent` at init? (Would be init-fatal.)
-  Run with `node:https` left as loud-throw FIRST; adopt a client→fetch split ONLY
-  if it actually trips. **ADR-0061 draft** (supersedes immutable ADR-0010 — must
-  preserve its no-silent-plaintext invariant) ratifies here.
-- Live provider endpoint via **env** (D-004 — no hardcoded URLs).
-- Note: the boot/dbread runs already showed `service=lsp all LSPs are disabled`,
-  `all formatters are disabled`, and providers loading internal auth plugins — so
-  the provider/session machinery initialises cleanly headless; the open question is
-  the actual outbound `fetch`/`https.Agent` path under a live key.
+- **C1 pre-flight DONE (2026-06-01, this session) — gate CLEARED.** Verified (grep
+  + Explore) that `ai@6.0.168` + `@ai-sdk/{provider-utils,gateway,provider}` issue
+  requests via `globalThis.fetch` (`provider-utils/dist/index.mjs:588`) with **ZERO**
+  `https.Agent`/`globalAgent`/`node:https` touch at module-eval, provider
+  construction, OR request — and opencode injects its own `fetch` wrapper
+  (`provider/provider.ts:1618-1667`). So `node:https` can stay loud-throw and **the
+  ADR-0061 client→fetch split is NOT required** for the round-trip. Full evidence:
+  `decisions.md` ADR-0061 "C1 PRE-FLIGHT RESULT".
+- **First likely concrete wall (error-path only, NOT init-fatal):** opencode
+  `provider/error.ts:2` `import { STATUS_CODES } from "http"` + uses it at `:70,76`,
+  but rifty's `node:http` shim does **not** export `STATUS_CODES`. The happy path
+  never touches it; a failed LLM response would `TypeError`. Faithful fix: add the
+  real Node `STATUS_CODES` map to the `node:http` builtin (its own small ADR/note).
+- **BLOCKED on the user (confirm-first):** the live round-trip needs a provider +
+  API key + endpoint via **env** (D-004 — no hardcoded URLs) and is a spend + an
+  external call. Fork `opencode-dbread-smoke.ts` → a Phase-3 smoke once a key is
+  provided. **ADR-0061** ratifies here (the C1 result reframes it: split optional).
+- Note: boot/dbread runs already show `service=lsp all LSPs are disabled`,
+  formatters disabled, and providers loading internal auth plugins cleanly — the
+  provider/session machinery initialises headless; the only untested edge is the
+  actual outbound `fetch` under a live key.
 
 ### Phase 4 — tool ceiling (P5) — already shipped
 - spawn/PTY/native git/ripgrep throw the documented ceiling
@@ -104,10 +120,12 @@ generally (never special-case opencode). **missing npm dep** → add to
 `deps/package.json`, then `cd …/opencode/deps && npm install`. **browser ceiling**
 (raw socket/UDP/TLS/HTTP2) → loud-throw facade that only EVALUATES.
 
-## Done — BOOT + DB-READ gate session (this session)
+## Done — BOOT + DB-READ + C1 pre-flight session (this session)
 Both the BOOT gate AND the Phase-2 DB-READ gate cleared with **zero runtime
-changes** — the graph-load work already laid every builtin both paths need. New
-code is **test harness only** (3 commits on `main`):
+changes** — the graph-load work already laid every builtin both paths need — and
+the Phase-3 C1 pre-flight was run (docs-only, no code: ADR-0061 "C1 PRE-FLIGHT
+RESULT" — ai-sdk uses `globalThis.fetch`, no `https.Agent`, split not needed).
+New code is **test harness only** (commits on `main`):
 1. Extracted the shared realm builder
    `tests/integration/fixtures/opencode-vfs-harness.ts` (`buildOpencodeLoader`)
    out of the graph-load smoke + scaffolded the BOOT smoke/driver.
