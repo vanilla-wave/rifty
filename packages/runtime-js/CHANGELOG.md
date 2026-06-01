@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`fs.statSync` honours `{ throwIfNoEntry: false }`** (Node v24 parity). A
+  missing path now returns `undefined` instead of always throwing `ENOENT` when
+  the option is `false`; overloaded so 1-arg callers keep the `Stats` return type.
+  Real packages probe for files with this idiom — opencode's `Filesystem.stat`
+  (`statSync(p, { throwIfNoEntry: false }) ?? undefined`) walled the LLM prompt
+  path (shell-tool resolution `Filesystem.stat(shell)?.isFile()`) on the thrown
+  ENOENT. Parity: `fs/stat-throw-if-no-entry.case.ts`.
+
 ### Changed
 
 - **CJS compile failures now name the module.** A syntactically-invalid CJS module

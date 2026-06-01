@@ -198,8 +198,29 @@ export function mkdirSync(p: string, opts?: MkdirOptions): void {
   syncMirror().mkdirSync(resolvePath(p), { recursive: opts?.recursive ?? false });
 }
 
-export function statSync(p: string): Stats {
-  return new Stats(syncMirror().statSync(resolvePath(p)));
+/**
+ * `fs.statSync(path[, options])`.
+ *
+ * Honours Node's `throwIfNoEntry` option: when `false`, a missing path returns
+ * `undefined` instead of throwing `ENOENT` (Node v24 semantics). Real packages
+ * rely on this idiom to probe for a file without a try/catch — e.g. opencode's
+ * `Filesystem.stat` does `statSync(p, { throwIfNoEntry: false }) ?? undefined`,
+ * and its shell-tool resolution (`Filesystem.stat(shell)?.isFile()`) walls on a
+ * thrown ENOENT. Overloaded so existing 1-arg callers keep the `Stats` return
+ * type (no type regression); only the `{ throwIfNoEntry: false }` form widens to
+ * `Stats | undefined`. Other errors (and a missing path without the opt) throw.
+ */
+export function statSync(p: string): Stats;
+export function statSync(p: string, options: { throwIfNoEntry: false }): Stats | undefined;
+export function statSync(p: string, options?: { throwIfNoEntry?: boolean }): Stats | undefined {
+  try {
+    return new Stats(syncMirror().statSync(resolvePath(p)));
+  } catch (err) {
+    if (options?.throwIfNoEntry === false && (err as { code?: string } | null)?.code === 'ENOENT') {
+      return undefined;
+    }
+    throw err;
+  }
 }
 
 export function existsSync(p: string): boolean {
