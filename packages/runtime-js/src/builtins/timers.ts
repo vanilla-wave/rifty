@@ -59,6 +59,101 @@ export const timers = {
   queueMicrotask: globalThis.queueMicrotask,
 };
 
+// ───────────────────────────── timers/promises ─────────────────────────────
+// Node's `node:timers/promises`: promise-returning timers. opencode imports
+// `setTimeout as sleep` (`shell/shell.ts`, several plugins/commands); pino/avvio
+// reach it transitively. AbortSignal cancellation is honoured.
+
+interface TimerPromiseOptions {
+  readonly signal?: AbortSignal;
+  readonly ref?: boolean;
+}
+
+/** Node rejects an aborted timer with the signal's `reason`, else an AbortError. */
+function abortError(signal: AbortSignal): unknown {
+  const reason = (signal as { reason?: unknown }).reason;
+  if (reason !== undefined) return reason;
+  const err = new Error('The operation was aborted');
+  err.name = 'AbortError';
+  return err;
+}
+
+function setTimeoutPromise<T = void>(
+  delay = 1,
+  value?: T,
+  options: TimerPromiseOptions = {},
+): Promise<T> {
+  const { signal, ref = true } = options;
+  return new Promise<T>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError(signal));
+      return;
+    }
+    let onAbort: (() => void) | undefined;
+    const handle = setTimeout(() => {
+      if (onAbort && signal) signal.removeEventListener('abort', onAbort);
+      resolve(value as T);
+    }, delay);
+    if (ref === false) (handle as unknown as { unref?: () => void }).unref?.();
+    if (signal) {
+      onAbort = () => {
+        clearTimeout(handle);
+        reject(abortError(signal));
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
+}
+
+function setImmediatePromise<T = void>(value?: T, options: TimerPromiseOptions = {}): Promise<T> {
+  const { signal } = options;
+  return new Promise<T>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError(signal));
+      return;
+    }
+    let onAbort: (() => void) | undefined;
+    const handle = setImmediate(() => {
+      if (onAbort && signal) signal.removeEventListener('abort', onAbort);
+      resolve(value as T);
+    });
+    if (signal) {
+      onAbort = () => {
+        clearImmediate(handle);
+        reject(abortError(signal));
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
+}
+
+async function* setIntervalPromise<T = void>(
+  delay = 1,
+  value?: T,
+  options: TimerPromiseOptions = {},
+): AsyncGenerator<T> {
+  const { signal } = options;
+  while (true) {
+    if (signal?.aborted) throw abortError(signal);
+    await setTimeoutPromise(delay, undefined, { signal });
+    yield value as T;
+  }
+}
+
+export const timersPromises = {
+  setTimeout: setTimeoutPromise,
+  setImmediate: setImmediatePromise,
+  setInterval: setIntervalPromise,
+  scheduler: {
+    wait(delay?: number, options: TimerPromiseOptions = {}): Promise<void> {
+      return setTimeoutPromise(delay, undefined, options);
+    },
+    yield(): Promise<void> {
+      return setImmediatePromise(undefined);
+    },
+  },
+};
+
 /** Install setImmediate / clearImmediate on globalThis (Node-style). */
 export function installTimerGlobals(): void {
   (globalThis as unknown as { setImmediate: typeof setImmediate }).setImmediate = setImmediate;

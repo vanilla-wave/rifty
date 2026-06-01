@@ -55,6 +55,14 @@
 
 ### Added
 
+- **`node:timers/promises` builtin.** Promise-returning `setTimeout` /
+  `setImmediate`, async-iterable `setInterval`, and `scheduler.wait`/`scheduler.yield`,
+  with `AbortSignal` cancellation (an aborted wait rejects with the signal's reason
+  or an `AbortError` and clears its timer). opencode imports `setTimeout as sleep`
+  (`shell/shell.ts`, several plugins/commands); pino/avvio reach it transitively.
+  Parity: `cases/timers/promises.case.ts` (happy-path values); conformance:
+  `tests/conformance/builtins/timers-promises.test.ts` (incl. abort).
+
 - **`node:stream/consumers` builtin.** `arrayBuffer` / `blob` / `buffer` / `text` /
   `json` drain a stream (Node `Readable`, any async iterable, or a web
   `ReadableStream` via `getReader`) into a value, accumulating chunks then coercing

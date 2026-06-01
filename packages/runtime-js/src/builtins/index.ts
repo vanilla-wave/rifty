@@ -41,7 +41,7 @@ import { riftyProcess } from './process.ts';
 import querystringModule from './querystring.ts';
 import streamModule, { streamConsumers } from './stream.ts';
 import stringDecoderModule from './string_decoder.ts';
-import timersModule from './timers.ts';
+import timersModule, { timersPromises } from './timers.ts';
 import ttyModule from './tty.ts';
 import urlModule from './url.ts';
 import utilTypesModule from './util-types.ts';
@@ -79,6 +79,7 @@ registerBuiltin('buffer', () => {
 });
 registerBuiltin('process', () => riftyProcess);
 registerBuiltin('timers', () => timersModule);
+registerBuiltin('timers/promises', () => timersPromises);
 registerBuiltin('fs', () => fsModule);
 registerBuiltin('fs/promises', () => fsPromises);
 registerBuiltin('stream', () => streamModule);
