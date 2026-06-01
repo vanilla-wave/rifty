@@ -1,0 +1,56 @@
+name: Release
+
+# Publishes all @rifty libraries to npm when a vX.Y.Z tag is pushed.
+# Manual prerequisites (one-time): an NPM_TOKEN repo secret (Automation token
+# for the @rifty scope) — see docs/PUBLISHING.md. Provenance needs id-token:write
+# and a public repo on the npm registry.
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.0.8
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+      - run: pnpm install --frozen-lockfile
+
+      - name: Derive version from tag
+        run: echo "RIFTY_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Set package versions to the tag
+        run: >-
+          pnpm -r --filter "./packages/*" --filter "@rifty/shadow-registry"
+          exec npm version "$RIFTY_VERSION" --no-git-tag-version --allow-same-version
+
+      - name: Build libraries
+        run: pnpm build:libs
+
+      - name: Bundle LICENSE into each package
+        run: |
+          for d in packages/*/ tools/shadow-registry/; do
+            cp LICENSE "$d/LICENSE"
+          done
+
+      # Publishes ONLY ./packages/* + @rifty/shadow-registry — never a bare
+      # `pnpm -r publish`, which would also pick up the non-private integration
+      # fixtures under tests/ and tools/. pnpm rewrites workspace:* to the tag
+      # version and applies each package's publishConfig (dist exports).
+      - name: Publish to npm
+        run: >-
+          pnpm -r --filter "./packages/*" --filter "@rifty/shadow-registry"
+          publish --access public --no-git-checks --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
