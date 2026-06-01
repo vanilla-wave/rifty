@@ -71,6 +71,52 @@ export function chunkSize(chunk: unknown): number {
 }
 
 /**
+ * Per-instance decode state set by `setEncoding(enc)`. The text encodings that
+ * `TextDecoder` covers are decoded with a single persistent decoder in
+ * `{ stream: true }` mode so a multi-byte character split across chunk
+ * boundaries decodes correctly (matching Node's `StringDecoder`); byte-group
+ * encodings (`hex`/`base64`/`base64url`) and `ascii` are decoded per-chunk via
+ * `Buffer.toString` (Node's `ascii` is 7-bit, distinct from TextDecoder's
+ * windows-1252 alias — so route it through Buffer for exactness).
+ */
+interface EncodingState {
+  /** Node's canonical name (`readableEncoding` + the `Buffer.toString` arg). */
+  label: string;
+  decoder: TextDecoder | null;
+}
+
+/**
+ * Node encoding name / alias → { canonical name, TextDecoder label or null }.
+ * The TextDecoder set (utf8/utf16le/latin1) is streaming-decoded; the rest
+ * (ascii/hex/base64/base64url) fall through to a per-chunk `Buffer.toString`
+ * using the canonical name (all valid `Buffer` encodings).
+ */
+const ENCODINGS: Record<string, { canonical: string; td: string | null }> = {
+  utf8: { canonical: 'utf8', td: 'utf-8' },
+  'utf-8': { canonical: 'utf8', td: 'utf-8' },
+  utf16le: { canonical: 'utf16le', td: 'utf-16le' },
+  'utf-16le': { canonical: 'utf16le', td: 'utf-16le' },
+  ucs2: { canonical: 'utf16le', td: 'utf-16le' },
+  'ucs-2': { canonical: 'utf16le', td: 'utf-16le' },
+  latin1: { canonical: 'latin1', td: 'latin1' },
+  binary: { canonical: 'latin1', td: 'latin1' },
+  ascii: { canonical: 'ascii', td: null },
+  hex: { canonical: 'hex', td: null },
+  base64: { canonical: 'base64', td: null },
+  base64url: { canonical: 'base64url', td: null },
+};
+
+function makeEncodingState(encoding: string): EncodingState {
+  const entry = ENCODINGS[String(encoding).toLowerCase()];
+  if (!entry) {
+    const err = new TypeError(`Unknown encoding: ${encoding}`) as TypeError & { code?: string };
+    err.code = 'ERR_UNKNOWN_ENCODING';
+    throw err;
+  }
+  return { label: entry.canonical, decoder: entry.td ? new TextDecoder(entry.td) : null };
+}
+
+/**
  * Slice the first `n` bytes from a Buffer-mode `_readableState.buffer`,
  * coalescing across multiple queued chunks. Mutates `state.buffer` and
  * decrements `state.length` accordingly.
@@ -177,6 +223,8 @@ interface PipeableWritable extends EventEmitter {
 export class Readable extends EventEmitter implements AsyncIterable<unknown> {
   readonly _readableState: ReadableState;
   private readImpl?: (this: Readable, size: number) => void;
+  /** Set by `setEncoding(enc)`; `null` means emit raw bytes (the default). */
+  private encodingState: EncodingState | null = null;
   /**
    * Per-dest pipe cleanup. The key is the destination; the value tears down
    * every listener `pipe(dest)` attached on both ends. A `Map` (not array)
@@ -201,6 +249,9 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       errored: null,
     };
     this.readImpl = opts.read;
+    // Honour the `encoding` option (Node applies it as if `setEncoding` were
+    // called in the constructor). Also reached via `Readable.from(_, {encoding})`.
+    if (opts.encoding) this.setEncoding(opts.encoding);
     this.on('newListener', (event) => {
       if (event === 'data' && this._readableState.flowing === null) {
         this._readableState.flowing = true;
@@ -258,6 +309,39 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
 
   get destroyed(): boolean {
     return this._readableState.destroyed;
+  }
+
+  get readableEncoding(): string | null {
+    return this.encodingState?.label ?? null;
+  }
+
+  /**
+   * `Readable.setEncoding(encoding)` — emit decoded **strings** (on `'data'`
+   * and from `read()`) instead of raw bytes. Returns `this`. Throws
+   * `ERR_UNKNOWN_ENCODING` for an unsupported encoding, like Node. The decode is
+   * applied at the emit/return boundary (see {@link applyEncoding}); the
+   * internal byte buffer + length accounting are unchanged, so this is a no-op
+   * for any consumer that never calls it. Required by `@effect/platform-node`'s
+   * `NodeStream.toString`, which calls `stream.setEncoding('utf8')` before
+   * reading a request body — so every POST-with-body route depends on it.
+   */
+  setEncoding(encoding: string): this {
+    this.encodingState = makeEncodingState(encoding);
+    return this;
+  }
+
+  /**
+   * Decode a chunk for delivery when an encoding is set. Byte chunks become
+   * strings (streaming-decoded for the TextDecoder set; per-chunk Buffer decode
+   * otherwise); strings, object-mode entries, and the no-encoding case pass
+   * through unchanged.
+   */
+  private applyEncoding(chunk: unknown): unknown {
+    const enc = this.encodingState;
+    if (enc === null || this._readableState.objectMode) return chunk;
+    if (typeof chunk === 'string' || !(chunk instanceof Uint8Array)) return chunk;
+    if (enc.decoder) return enc.decoder.decode(chunk, { stream: true });
+    return Buffer.from(chunk).toString(enc.label as Parameters<Buffer['toString']>[0]);
   }
 
   /** Force-start flow on next tick. Used by `Readable.from`. */
@@ -334,7 +418,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
         state.endEmitted = true;
         queueMicrotask(() => this.emit('end'));
       }
-      return all;
+      return this.applyEncoding(all);
     }
     // n is a positive number.
     // Object mode: `n` is meaningless past 1; return one entry.
@@ -369,7 +453,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
               state.endEmitted = true;
               queueMicrotask(() => this.emit('end'));
             }
-            return partial;
+            return this.applyEncoding(partial);
           }
           // Buffer drained AND ended: schedule end + return null. Also fire a
           // final `readable` event so `read(n)`-on-`readable` consumers get a
@@ -397,7 +481,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     } else if (!state.ended && state.length < state.highWaterMark) {
       this.maybeRead();
     }
-    return slice;
+    return this.applyEncoding(slice);
   }
 
   /**
@@ -422,7 +506,10 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     while (state.flowing && state.buffer.length > 0) {
       const chunk = state.buffer.shift();
       state.length -= state.objectMode ? 1 : chunkSize(chunk);
-      this.emit('data', chunk);
+      const out = this.applyEncoding(chunk);
+      // A streaming decoder returns '' while it buffers an incomplete multi-byte
+      // sequence — Node does not surface an empty `'data'` in that case.
+      if (out !== '') this.emit('data', out);
     }
     this.finishIfDone();
     if (

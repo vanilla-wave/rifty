@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`Readable.setEncoding(encoding)` + `readableEncoding`** (ADR-0069). After
+  `setEncoding`, `'data'` events and `read()` return decoded **strings** (was raw
+  bytes); the TextDecoder set (utf8/utf16le/latin1) decodes streaming-safe across
+  chunk boundaries, the rest (ascii/hex/base64) per-chunk via `Buffer`. No-op for
+  any consumer that never calls it (existing behaviour byte-identical). Required
+  by `@effect/platform-node`'s body reader (`NodeStream.toString`), which calls
+  `stream.setEncoding('utf8')` — so every opencode POST-with-body route depends on
+  it. Parity: `stream/readable-set-encoding.case.ts`.
+
 ### Fixed
 
 - **`EventEmitter` lazily initialises its state (Node mixin/`util.inherits`
