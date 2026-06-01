@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`node:http.STATUS_CODES`** — the standard status-code → reason-phrase map
+  (faithful copy of Node v24). Real packages read `STATUS_CODES[code]` to format
+  messages; opencode's provider error path (`provider/error.ts`) does
+  `STATUS_CODES[e.statusCode]` and would `TypeError` on the missing export. Parity:
+  `http/status-codes.case.ts`.
+
 ### Fixed
 
 - **`node:sqlite` `StatementSync` default-read integer overflow now throws

@@ -14,6 +14,7 @@ import { EventEmitter } from '@rifty/io';
 import { registerPort, unregisterPort } from '../registry.ts';
 import { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
 import { ServerResponse } from './response.ts';
+import { STATUS_CODES } from './status-codes.ts';
 
 /**
  * Subset of Node's `net.ListenOptions` accepted by {@link HttpServer.listen}.
@@ -162,5 +163,12 @@ export function request(
   return req;
 }
 
-const http = { createServer, request, Server: HttpServer, IncomingMessage, ServerResponse };
+const http = {
+  createServer,
+  request,
+  Server: HttpServer,
+  IncomingMessage,
+  ServerResponse,
+  STATUS_CODES,
+};
 export default http;
