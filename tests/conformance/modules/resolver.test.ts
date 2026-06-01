@@ -686,3 +686,58 @@ describe('tsconfig path aliases (ADR-0066)', () => {
     ).toThrow(/Cannot find module '@\/absent'/);
   });
 });
+
+// Node resolution order: LOAD_AS_FILE before LOAD_AS_DIRECTORY. A file-with-
+// extension sibling wins over a same-named directory. Verified against Node 24
+// (`require('./foo')` with both `foo.js` and `foo/index.js` resolves `foo.js`).
+// opencode's `./migration` (sibling `migration.ts` barrel + `migration/` SQL-files
+// dir with no index) is the motivating real case.
+describe('file-before-directory precedence (Node parity)', () => {
+  function resolveId(files: Record<string, string>, specifier: string, fromFile: string): string {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture(files);
+    return createModuleLoader(vfs).resolver.resolve(specifier, { fromFile, esm: false }).id;
+  }
+
+  it('`./foo` with both `foo.js` and `foo/index.js` resolves the file', () => {
+    const id = resolveId(
+      {
+        '/app/foo.js': "module.exports = 'file';",
+        '/app/foo/index.js': "module.exports = 'dir';",
+      },
+      './foo',
+      '/app/main.js',
+    );
+    expect(id).toBe('/app/foo.js');
+  });
+
+  it('`./migration` resolves the `.ts` barrel over a same-named no-index dir', () => {
+    const id = resolveId(
+      {
+        '/pkg/migration.ts': 'export const DatabaseMigration = {};',
+        '/pkg/migration/0001_init.ts': 'export const up = () => {};',
+      },
+      './migration',
+      '/pkg/database.ts',
+    );
+    expect(id).toBe('/pkg/migration.ts');
+  });
+
+  it('directory still resolves when there is no sibling file (no regression)', () => {
+    const id = resolveId({ '/app/dir/index.js': "module.exports = 'idx';" }, './dir', '/app/main.js');
+    expect(id).toBe('/app/dir/index.js');
+  });
+
+  it('a sibling file wins over a directory `package.json` main', () => {
+    const id = resolveId(
+      {
+        '/app/lib.js': "module.exports = 'file';",
+        '/app/lib/package.json': '{"main": "./entry.js"}',
+        '/app/lib/entry.js': "module.exports = 'dir-main';",
+      },
+      './lib',
+      '/app/main.js',
+    );
+    expect(id).toBe('/app/lib.js');
+  });
+});

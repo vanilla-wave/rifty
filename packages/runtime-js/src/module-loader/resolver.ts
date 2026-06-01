@@ -251,19 +251,32 @@ function matchAliasPattern(paths: PathAliases, specifier: string): AliasMatch | 
 }
 
 function resolveAsFileOrDir(vfs: FsSync, base: string): string | null {
-  if (vfs.existsSync(base)) {
-    const st = vfs.statSync(base);
-    // A declaration file named explicitly (e.g. an `exports` target `./foo.d.ts`)
-    // is not a runnable module — skip it so the caller falls back to a sibling
-    // `.js`/`.ts` or reports MODULE_NOT_FOUND.
-    if (st.isFile) return isDeclarationFile(base) ? null : base;
-    if (st.isDirectory) return resolveAsDirectory(vfs, base);
-  }
+  // Node's resolution order is LOAD_AS_FILE *before* LOAD_AS_DIRECTORY: an exact
+  // file, then `X` + extension, and only then `X` as a directory. We stat `base`
+  // once and apply that order.
+  const baseStat = vfs.existsSync(base) ? vfs.statSync(base) : null;
+
+  // (1) `base` as an exact file. A declaration file named explicitly (e.g. an
+  // `exports` target `./foo.d.ts`) is not a runnable module — skip it so the
+  // caller falls back to a sibling `.js`/`.ts` or reports MODULE_NOT_FOUND.
+  if (baseStat?.isFile) return isDeclarationFile(base) ? null : base;
+
+  // (2) `base` + extension. Node tries `X.js` (and rifty's `.ts`/`.tsx` set,
+  // ADR-0053) BEFORE treating `X` as a directory — so a `foo.ts` sibling wins
+  // over a same-named `foo/` directory. opencode relies on this: `./migration`
+  // (from `core/src/database/database.ts`) must resolve the `migration.ts`
+  // barrel, NOT the sibling `migration/` directory of SQL migration files (which
+  // has no index). Verified against Node 24: `require('./foo')` with both
+  // `foo.js` and `foo/index.js` present resolves `foo.js`.
   for (const ext of DEFAULT_EXTENSIONS) {
     const candidate = `${base}${ext}`;
     if (isDeclarationFile(candidate)) continue;
     if (vfs.existsSync(candidate) && vfs.statSync(candidate).isFile) return candidate;
   }
+
+  // (3) `base` as a directory (package.json `main`, then `index.*`).
+  if (baseStat?.isDirectory) return resolveAsDirectory(vfs, base);
+
   return null;
 }
 

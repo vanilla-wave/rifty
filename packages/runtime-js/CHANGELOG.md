@@ -4,6 +4,16 @@
 
 ### Fixed
 
+- **Resolver checked a same-named directory before a file-with-extension sibling.**
+  `resolveAsFileOrDir` resolved `X` as a directory (and returned early) before
+  trying `X.js`/`X.ts`/…, inverting Node's `LOAD_AS_FILE`-before-`LOAD_AS_DIRECTORY`
+  order. So `./migration` (opencode's `core/src/database/database.ts`) hit the
+  sibling `migration/` SQL-files directory — which has no index — and reported
+  `MODULE_NOT_FOUND` instead of resolving the `migration.ts` barrel. Reordered to
+  exact-file → `X`+extension → directory, matching Node 24 (`require('./foo')` with
+  both `foo.js` and `foo/index.js` resolves `foo.js`). Regression-pinned by
+  `describe('file-before-directory precedence (Node parity)')`.
+
 - **`util.format('%s', obj)` printed `[object Object]` instead of inspecting.**
   Node's `%s` structurally inspects non-null objects/arrays and suffixes bigints
   with `n`; rifty was `String()`-ing everything. `%s` now matches Node for
