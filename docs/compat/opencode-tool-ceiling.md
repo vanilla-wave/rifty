@@ -73,6 +73,27 @@ ever routes `node <script>` to the Worker path). opencode is **not** vendored;
 the test pins rifty's own spawn substrate, which is what every impossible
 opencode tool transitively hits.
 
+## Observed at boot / first DB-read request — degraded-but-non-fatal
+
+Driving the real server (BOOT + DB-READ opt-in gates,
+`tests/integration/opencode-{boot,dbread}.opt-in.test.ts`) surfaced two
+server-internal capabilities that hit the same native ceiling but which
+**opencode itself degrades gracefully** — they log and continue, so the request
+still returns 200. These are NOT spawn-tool calls; they are recorded here so the
+degradation is disclosed rather than silent.
+
+| opencode capability | What it needs | rifty status | Observed |
+|---|---|---|---|
+| file watching (`FileWatcher.init`) | native `@parcel/watcher-<platform>-<arch>` addon | ❌ no native addon → **no-op watch** | `service=file.watcher … watcher backend not supported` then continues (`file/watcher.ts:84-85`); `GET /session` still 200 |
+| plugin/dependency auto-install | dynamic `import('@npmcli/arborist')` (npm install machinery — a tool-execution concern, intentionally outside the KEEP deps) | ❌ module absent → **background install fails, swallowed** | `WARN service=config … background dependency install failed: Cannot find module '@npmcli/arborist'`; backgrounded, request unaffected |
+
+Both are consistent with the no-tool-execution facade: a browser/WASI realm has
+no native file-watch backend and does not run npm installs. opencode's own
+error-handling keeps them non-fatal, so they need no stub and no ADR — the
+underlying limit is the same "no native addon / no spawn" line already drawn by
+the rows above. If a future need makes either load-bearing (e.g. real file-watch
+via a polling/chokidar fallback), open a fresh ADR then.
+
 ## Deferred (NOT adopted — behind explicit ADR ratification)
 
 These would make the *feasible* side more capable but each is a **new external

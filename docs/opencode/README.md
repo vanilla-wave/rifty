@@ -34,9 +34,11 @@ the real graph. Both live gates are now **GREEN**: the **GRAPH-LOAD gate**
 `Server.listen`, and the **BOOT gate** (F06) then calls `Server.listen`
 headless — the eager ~40-layer DAG builds, the real drizzle/sql.js layer runs the
 PRAGMAs + ~24 migrations under `Effect.orDie`, and `/global/health` + `/doc`
-return 200. Spike C's eager-`Database` prediction is live-confirmed. See the
-GRAPH-LOAD / BOOT gate sections below for the exact evidence; the next gate is
-Phase 2 (a request that QUERIES drizzle).
+return 200. A third gate, **DB-READ** (Phase 2), then proves the migrated schema
+is queryable through a request: `GET /session` runs a real drizzle SELECT and
+returns `200 []`. Spike C's eager-`Database` prediction is live-confirmed. See the
+gate sections below for the exact evidence; the next gate is Phase 3 (create a
+session + one LLM round-trip).
 
 ## What shipped (green)
 
@@ -303,7 +305,7 @@ builtin/method; recommendation A (harness-local env only) held.
 ## What is otherwise DEFERRED (and the exact gate for each)
 
 With F01 done, Spike C decided, the `node:sqlite` shim built+wired+green, and both
-the GRAPH-LOAD and BOOT gates PASSED, the WASM-SQLite/drizzle irreversible
+the GRAPH-LOAD, BOOT, and DB-READ gates PASSED, the WASM-SQLite/drizzle irreversible
 decision is RESOLVED; the remaining items are the deferred process/wire-contract
 commitments downstream of boot.
 
@@ -311,7 +313,8 @@ commitments downstream of boot.
 |--------------|-----------------|
 | **WASM-SQLite `node:sqlite` shim (features 03/04) — DONE (P2, RATIFIED, WIRED)** | **RATIFIED + shipped: ADR-0065.** Engine is **`sql.js`** (pure-JS WASM SQLite, SYNCHRONOUS API, in-memory-first), registered as a rifty **`node:sqlite` builtin** exposing a `DatabaseSync`-compatible synchronous surface (matches opencode's `OPENCODE_DB=:memory:` boot path and the `@effect/sql-sqlite-node` + `drizzle-orm/node-sqlite` `DatabaseSync` usage at the pinned SHA — see the ADR-0065 erratum). Built, parity-green vs Node 24, RangeError-overflow-hardened, and **wired into the module loader** (proven by `sqlite-loader-roundtrip` conformance + the `sqlite-opencode-boot` gate). OPFS persistence DEFERRED (`Q-2026-05-31-301`). ADR-0065 SUPERSEDES decisions.md DRAFTS ADR-0055/0056. **No longer a blocker.** |
 | **`node:diagnostics_channel` + the undici core builtin surface — CLEARED** | **DONE.** Was the graph-load LIVE wall; the `node:diagnostics_channel` builtin + the undici-driven surface behind it were registered in graph order during the GRAPH-LOAD session (`b425b05..ea846ef`). Graph fully loads. **No longer a blocker.** |
-| **Headless server boot (feature 06) — DONE (BOOT gate PASSED)** | **DONE first attempt, zero walls** (see the BOOT gate section above). `Server.listen` boots headless, the eager DAG runs the real drizzle/sql.js PRAGMAs + ~24 migrations under `Effect.orDie`, `/global/health` + `/doc` return 200. **ADR-0058 resolves with NO new builtin surface** (the boot called no unimplemented builtin/method); the predicted `ptyConnectApi` stub was not needed. A DB-read VIA a request (a route that QUERIES drizzle) is the Phase-2 strengthening — deferred because the DB-backed instance routes pull the instance/workspace context + lazy native/browser-ceiling layers. |
+| **Headless server boot (feature 06) — DONE (BOOT gate PASSED)** | **DONE first attempt, zero walls** (see the BOOT gate section above). `Server.listen` boots headless, the eager DAG runs the real drizzle/sql.js PRAGMAs + ~24 migrations under `Effect.orDie`, `/global/health` + `/doc` return 200. **ADR-0058 resolves with NO new builtin surface** (the boot called no unimplemented builtin/method); the predicted `ptyConnectApi` stub was not needed. A DB-read VIA a request (a route that QUERIES drizzle) followed in Phase 2 — see the next row. |
+| **DB-read via a request (Phase 2) — DONE (DB-READ gate PASSED)** | **DONE, zero walls.** `GET /session` drives the instance-context middleware (instance resolved from cwd `/workspace`), builds the lazy Session/Project/Workspace layers, runs a real drizzle `db.select().from(SessionTable)…all()` (session.ts:1079), and returns `200 []` (empty, fresh in-memory DB). The migrated schema is queryable end-to-end. FileWatcher (no native `@parcel/watcher`) and the `@npmcli/arborist` background install degrade gracefully — opencode logs+continues, the request is unaffected (see `../compat/opencode-tool-ceiling.md`). Gate: `tests/integration/opencode-dbread.opt-in.test.ts`. No new ADR (the degradations sit on the already-drawn no-native-addon line). |
 | **v3 SSE frame bump (feature 07)** | **ADR-0060 draft DEFERRED** — non-additive bump of a versioned wire contract (`PREVIEW_PORT_FRAME_VERSION` 2→3) that CONTRADICTS ADR-0048 D2 and ADR-0017's M12 deferral. Page-direct SSE (ADR-0055) ships first with no code. Gate: the Worker becomes the actual opencode owner (ADR-0046 `WorkerOwnerBinding`) AND a superseding ADR cites+supersedes ADR-0048 D2 and amends ADR-0017. |
 | **LLM round-trip + `node:https`→fetch (feature 08)** | Needs the vendored tree, a live provider endpoint via env (Q-2026-05-30-116, D-004), and features 01-06. **ADR-0061 draft DEFERRED** (supersedes immutable ADR-0010). Gate: clear the **C1 pre-flight** — inspect pinned `ai@6`/`@ai-sdk/*` source for whether the global-`fetch` path constructs an `https.Agent` at init (a thrown Agent constructor would be init-time-fatal for the round-trip). Run the live flow with `node:https` left as loud-throw FIRST; adopt the client→fetch split only if it actually trips. The superseding ADR must preserve ADR-0010's no-silent-plaintext invariant. |
 | **Real ripgrep/git tool fidelity (feature 09, future)** | **ADR-0062 draft is a DEFERRAL tripwire** — adopting ripgrep-WASM / isomorphic-git / wa-sqlite-search (each a NEW external dep) is BLOCKED until a concrete measured need. The pure-JS marker shipped under Q-2026-05-30-061. Do not silently cross this. |
@@ -329,32 +332,34 @@ vendor opencode (F01) ✅  →  Spike C ✅ (eager Database)  →  node:sqlite s
    BOOT gate (F06) ✅ PASSED — Server.listen boots the eager ~40-layer DAG (real drizzle/sql.js
                                    │  migrations under Effect.orDie); /global/health + /doc → 200
                                    ▼
-   ►►► NEXT: Phase 2 — a DB-read route (QUERIES drizzle through an instance) + Phase 3 — session +
-                       1 LLM round-trip (P4, after the C1 https.Agent pre-flight)
+   DB-READ gate (Phase 2) ✅ PASSED — GET /session drives the instance context + lazy Session/
+                                   │  Project/Workspace layers → real drizzle SELECT → 200 [] (empty,
+                                   │  fresh DB). FileWatcher/arborist degrade gracefully (not walls).
+                                   ▼
+   ►►► NEXT: Phase 3 — create a session + 1 LLM round-trip (P4), after the C1 https.Agent pre-flight
                      →  tool ceiling already marked (P5, shipped)
 ```
 
 The original spine `vendor opencode → Spike C → WASM-SQLite decision` is **fully
-cleared**, and so are the two live gates that followed it: **GRAPH-LOAD** (the
-graph resolves + evaluates) and **BOOT** (`Server.listen` boots + serves routes,
-exercising the real drizzle/sql.js layer via the eager migration run). What
-remains is downstream of a booted server: **Phase 2** — prove a request that
-actually QUERIES drizzle (needs the instance/workspace context + its lazy layers);
-**Phase 3** — a session + one LLM round-trip, holding on the C1 `https.Agent`
-pre-flight (ADR-0061 draft). P5 (the tool ceiling) is already marked.
+cleared**, and so are the three live gates that followed it: **GRAPH-LOAD** (the
+graph resolves + evaluates), **BOOT** (`Server.listen` boots + serves routes,
+exercising the real drizzle/sql.js layer via the eager migration run), and
+**DB-READ** (`GET /session` performs a real drizzle SELECT through the instance
+context → `200 []`). What remains is **Phase 3** — create a session + one LLM
+round-trip, holding on the C1 `https.Agent` pre-flight (ADR-0061 draft). P5 (the
+tool ceiling) is already marked.
 
 ## Single next unblocked step
 
-**Phase 2 — a real DB-read route.** The server boots and serves static/typed
-routes (`/doc`, `/global/health`); the next gate is a request that QUERIES the
-migrated drizzle schema (e.g. a session/project list) to prove the schema is
-usable end-to-end, not merely that the migration DDL ran. This requires driving
-the instance/workspace routing context (`instanceContextLayer` /
-`workspaceRoutingLayer`) headlessly, which will pull lazy layers (LSP, MCP, file
-watcher, provider) — expect the FIRST of those to surface a concrete browser/native
-ceiling via a loud throw. Walk them in eager order exactly as before: extend the
-boot smoke with the DB-read probe, run the opt-in gate, fix each exact wall (loud
-throw → faithful impl or documented ceiling facade), ADR per named gap.
+**Phase 3 — a session + one LLM round-trip (P4).** The server boots, serves typed
+routes, and reads its migrated drizzle schema end-to-end. The remaining milestone
+is the agent round-trip: `POST /session` (create) then a prompt that drives one
+LLM call over `fetch`. **C1 pre-flight first** — inspect the pinned `ai@6` /
+`@ai-sdk/*` source for whether the global-`fetch` path constructs an `https.Agent`
+at init (a thrown Agent ctor would be init-fatal). Run with `node:https` left as a
+loud-throw FIRST; adopt the client→fetch split ONLY if it actually trips. Live
+provider endpoint via env (D-004). **ADR-0061 draft** (supersedes immutable
+ADR-0010) ratifies here and must preserve the no-silent-plaintext invariant.
 
 ## Links
 
@@ -373,7 +378,9 @@ throw → faithful impl or documented ceiling facade), ADR per named gap.
 - GRAPH-LOAD gate harness (opt-in, PASSED): `tests/integration/opencode-graph-load.opt-in.test.ts`
 - BOOT gate harness (opt-in, PASSED): `tests/integration/opencode-boot.opt-in.test.ts` +
   `tests/integration/fixtures/opencode-boot-smoke.ts`
-- Shared realm builder for both gates:
+- DB-READ gate harness (opt-in, PASSED, Phase 2): `tests/integration/opencode-dbread.opt-in.test.ts` +
+  `tests/integration/fixtures/opencode-dbread-smoke.ts`
+- Shared realm builder for all three gates:
   `tests/integration/fixtures/opencode-vfs-harness.ts`
 - `node:sqlite` `DatabaseSync` shim: `packages/net/src/sqlite/` (`engine.ts`,
   `database-sync.ts`, `statement-sync.ts`, `register-builtins.ts`); loader-wiring

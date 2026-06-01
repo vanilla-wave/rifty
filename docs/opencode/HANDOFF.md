@@ -17,46 +17,49 @@ rifty as a no-tool-execution facade.
   return **200**. Opt-in gate genuinely green. Spike C's eager-`Database`
   prediction is live-confirmed. **Nothing stubbed** — the predicted `ptyConnectApi`
   stub was not needed; **ADR-0058 resolves with NO new builtin surface**.
-- ▶️ **NEXT: Phase 2** — a request that actually QUERIES drizzle (prove the migrated
-  schema is usable end-to-end, not merely that the migration DDL ran). Not started.
+- ✅ **DB-READ gate PASSED (2026-06-01, this session) — zero walls.** `GET /session`
+  drives the instance-context middleware (instance resolved from cwd `/workspace`),
+  builds the lazy Session/Project/Workspace layers, and runs a real drizzle
+  `db.select().from(SessionTable)…all()` → `200 []` (empty, fresh DB). The migrated
+  schema is queryable end-to-end. FileWatcher (no native `@parcel/watcher`) +
+  `@npmcli/arborist` background install degrade gracefully (opencode logs+continues;
+  request unaffected) — documented in `docs/compat/opencode-tool-ceiling.md`.
+- ▶️ **NEXT: Phase 3** — create a session + one LLM round-trip. Not started.
 
-## ►► NEXT WALL: Phase 2 — a real DB-read route
+## ►► NEXT WALL: Phase 3 — session create + 1 LLM round-trip
 
-Phases 1 (Server.listen first light) and the *core* of Phase 2 (a real
-request→response through Effect `HttpServer` over rifty's `node:http`, ADR-0054)
-are BOTH cleared by the boot gate. What is NOT yet proven: a request that QUERIES
-the drizzle schema. Plan (critical path):
+Phase 1 (Server.listen first light), the core of Phase 2 (request→response through
+Effect `HttpServer` over rifty's `node:http`, ADR-0054), AND the DB-read half of
+Phase 2 (a request that QUERIES drizzle) are ALL cleared. What remains is the agent
+round-trip. Plan (critical path):
 
 ### Phase 1 — Server.listen first light  ✅ DONE (this session)
-- Harness: `tests/integration/fixtures/opencode-boot-smoke.ts` (shares
-  `opencode-vfs-harness.ts` with the graph-load gate) + opt-in driver
-  `tests/integration/opencode-boot.opt-in.test.ts`. Calls
-  `Server.listen({ port: 4096, hostname: '127.0.0.1', mdns: false })` headless
-  (env `OPENCODE_DB=:memory:`, `OPENCODE_DISABLE_MDNS=1`, `NODE_ENV=production`).
-- Result: booted clean, both routes 200, clean `listener.stop(true)`. The eager
-  `fenceLayer` → `Database.Service` acquire ran the 6 PRAGMAs + ~24 migrations
-  against the sql.js shim (ADR-0065) with no wall. Auth is a no-op because
-  `OPENCODE_SERVER_PASSWORD` is unset (`ServerAuth.required()` false).
+- Harness: `tests/integration/fixtures/opencode-boot-smoke.ts` + opt-in driver
+  `tests/integration/opencode-boot.opt-in.test.ts`. `Server.listen` booted clean,
+  `/global/health` + `/doc` → 200, clean `listener.stop(true)`. Eager
+  `fenceLayer` → `Database.Service` ran 6 PRAGMAs + ~24 migrations against the
+  sql.js shim (ADR-0065). Auth no-op (`OPENCODE_SERVER_PASSWORD` unset).
 
-### Phase 2 — a DB-read route + first request→response  ← START HERE
-- **Core already shipped by the boot gate:** `/global/health` proved a typed
-  Effect `HttpApi` handler executes per-request through the rifty `node:http`
-  bridge (ADR-0054) + page-direct SSE principle (ADR-0055).
-- **The remaining gate:** a request that QUERIES the migrated drizzle schema (e.g.
-  a session/project list → 200 JSON). This needs the instance/workspace routing
-  context (`instanceContextLayer` / `workspaceRoutingLayer`) driven headlessly,
-  which pulls lazy layers (LSP, MCP, file watcher, provider). **Expect the first of
-  those to surface a concrete browser/native ceiling via a loud throw** — walk them
-  in eager order exactly as the graph-load walls were walked. Extend the boot smoke
-  with the DB-read probe; ADR per named gap.
+### Phase 2 — DB-read route + first request→response  ✅ DONE (this session)
+- Harness: `tests/integration/fixtures/opencode-dbread-smoke.ts` + opt-in driver
+  `tests/integration/opencode-dbread.opt-in.test.ts`. `GET /session` → `200 []`
+  via a real drizzle SELECT (session.ts:1079), driving the instance context + lazy
+  Session/Project/Workspace layers. Predicted native walls (FileWatcher / arborist)
+  degraded gracefully — NOT walls (`docs/compat/opencode-tool-ceiling.md`). No new
+  ADR (the degradations sit on the already-drawn no-native-addon line).
 
-### Phase 3 — session + 1 LLM round-trip (P4, most uncertain)
-- **C1 pre-flight:** inspect pinned `ai@6` / `@ai-sdk/*` source — does the
+### Phase 3 — session + 1 LLM round-trip (P4, most uncertain)  ← START HERE
+- `POST /session` (create) then a prompt driving ONE LLM call over `fetch`.
+- **C1 pre-flight FIRST:** inspect pinned `ai@6` / `@ai-sdk/*` source — does the
   global-`fetch` path construct an `https.Agent` at init? (Would be init-fatal.)
   Run with `node:https` left as loud-throw FIRST; adopt a client→fetch split ONLY
   if it actually trips. **ADR-0061 draft** (supersedes immutable ADR-0010 — must
-  preserve its no-silent-plaintext invariant).
+  preserve its no-silent-plaintext invariant) ratifies here.
 - Live provider endpoint via **env** (D-004 — no hardcoded URLs).
+- Note: the boot/dbread runs already showed `service=lsp all LSPs are disabled`,
+  `all formatters are disabled`, and providers loading internal auth plugins — so
+  the provider/session machinery initialises cleanly headless; the open question is
+  the actual outbound `fetch`/`https.Agent` path under a live key.
 
 ### Phase 4 — tool ceiling (P5) — already shipped
 - spawn/PTY/native git/ripgrep throw the documented ceiling
@@ -67,17 +70,20 @@ the drizzle schema. Plan (critical path):
 ```
 # GRAPH-LOAD gate (PASSED)
 RIFTY_RUN_OPENCODE_GRAPH_LOAD=1 pnpm exec vitest run tests/integration/opencode-graph-load.opt-in.test.ts
-# BOOT gate (PASSED) — the one Phase 2 will extend
+# BOOT gate (PASSED) — Server.listen first light
 RIFTY_RUN_OPENCODE_BOOT=1 pnpm exec vitest run tests/integration/opencode-boot.opt-in.test.ts
+# DB-READ gate (PASSED) — GET /session reads drizzle; the closest model for a Phase-3 smoke
+RIFTY_RUN_OPENCODE_DBREAD=1 pnpm exec vitest run tests/integration/opencode-dbread.opt-in.test.ts
 ```
 - Run **sandbox-disabled** (needs the deps) and **in background** (re-invokes on
-  completion, no watchdog). Warm run ~8s. Prints `RIFTY_OPENCODE_{GRAPH_LOAD,BOOT}_OK`
+  completion, no watchdog). Warm run ~8s. Prints `RIFTY_OPENCODE_{GRAPH_LOAD,BOOT,DBREAD}_OK`
   on success, or `GATE blocked, skipping: <wall>` (skip = green, never fakes a pass).
 - For the full uncaught stack, run a smoke script directly (sandbox off):
-  `npx tsx tests/integration/fixtures/opencode-boot-smoke.ts` (or `…-graph-load-smoke.ts`).
-- Both smokes share the realm builder `opencode-vfs-harness.ts`
-  (`buildOpencodeLoader`). Strip-cache at `/tmp/rifty-opencode-strip-cache` makes
-  warm runs fast.
+  `npx tsx tests/integration/fixtures/opencode-dbread-smoke.ts` (or `…-boot-smoke.ts`,
+  `…-graph-load-smoke.ts`).
+- All three smokes share the realm builder `opencode-vfs-harness.ts`
+  (`buildOpencodeLoader`) — a Phase-3 smoke should fork `opencode-dbread-smoke.ts`.
+  Strip-cache at `/tmp/rifty-opencode-strip-cache` makes warm runs fast.
 
 ## The loop that WORKS (use this)
 Drive from the **MAIN session** (NOT inside one Workflow — long silent commands trip
@@ -98,17 +104,23 @@ generally (never special-case opencode). **missing npm dep** → add to
 `deps/package.json`, then `cd …/opencode/deps && npm install`. **browser ceiling**
 (raw socket/UDP/TLS/HTTP2) → loud-throw facade that only EVALUATES.
 
-## Done — BOOT gate session (this session)
-The BOOT gate cleared with **zero runtime changes** — the graph-load work already
-laid every builtin the boot path needs. New code is **test harness only**:
-extracted the shared realm builder `tests/integration/fixtures/opencode-vfs-harness.ts`
-(`buildOpencodeLoader`) out of the graph-load smoke, added
-`opencode-boot-smoke.ts` (calls `Server.listen` + asserts `/global/health` +
-`/doc` → 200 through `dispatchToPort`) and its opt-in driver
-`opencode-boot.opt-in.test.ts`. Both opt-in gates pass green. Docs updated
-(README BOOT-gate section, decisions ADR-0058 resolution). No new dep, no public
-API change, no opencode-source edit. The boot needed **no** `ptyConnectApi` stub
-and **no** new builtin surface → **ADR-0058 resolved as no-op**.
+## Done — BOOT + DB-READ gate session (this session)
+Both the BOOT gate AND the Phase-2 DB-READ gate cleared with **zero runtime
+changes** — the graph-load work already laid every builtin both paths need. New
+code is **test harness only** (3 commits on `main`):
+1. Extracted the shared realm builder
+   `tests/integration/fixtures/opencode-vfs-harness.ts` (`buildOpencodeLoader`)
+   out of the graph-load smoke + scaffolded the BOOT smoke/driver.
+2. **BOOT gate:** `opencode-boot-smoke.ts` calls `Server.listen` + asserts
+   `/global/health` (typed handler) + `/doc` → 200; driver
+   `opencode-boot.opt-in.test.ts`. **ADR-0058 resolved as no-op** (no new builtin
+   surface; no `ptyConnectApi` stub needed).
+3. **DB-READ gate (Phase 2):** `opencode-dbread-smoke.ts` issues `GET /session`
+   → real drizzle SELECT → `200 []`; driver `opencode-dbread.opt-in.test.ts`.
+   Recorded the FileWatcher/arborist graceful degradations in
+   `docs/compat/opencode-tool-ceiling.md`. No new ADR.
+All three opt-in gates pass green (verified via `vitest run`). No new dep, no
+public API change, no opencode-source edit, biome clean on changed files.
 
 ## Done — GRAPH-LOAD session (prior, 17 commits on `main`, b425b05..f29c22e)
 All fixes are GENERAL runtime improvements (no opencode hardcode in the runtime);
@@ -146,15 +158,15 @@ debt in `npm-client/src/installer.ts` is NOT ours).
   impls; `AsyncLocalStorage` is sync-scope only.
 
 ## Pointers
-- Living current-state doc: `docs/opencode/README.md` (GRAPH-LOAD + BOOT = PASSED).
+- Living current-state doc: `docs/opencode/README.md` (GRAPH-LOAD + BOOT + DB-READ = PASSED).
 - Decision register: `docs/opencode/decisions.md`. On-disk ADRs **0052–0055,
   0063–0068**. **ADR-0058** (headless boot) RESOLVED as no-op (no new builtin
   surface). Draft awaiting ratification: **ADR-0061** (LLM https.Agent — Phase 3).
 - Open questions: `Q-2026-05-31-301` (OPFS persistence), `-302` (sqlite builtin
   path), `-304` (decorators gap), `Q-2026-06-01-305` (auto tsconfig discovery),
   `-306` (configurable loader map + binary `.wasm` module loader).
-- Gate harnesses: `tests/integration/opencode-{graph-load,boot}.opt-in.test.ts`
-  + `tests/integration/fixtures/opencode-{graph-load,boot}-smoke.ts`, sharing
+- Gate harnesses: `tests/integration/opencode-{graph-load,boot,dbread}.opt-in.test.ts`
+  + `tests/integration/fixtures/opencode-{graph-load,boot,dbread}-smoke.ts`, sharing
   `tests/integration/fixtures/opencode-vfs-harness.ts`.
 - `node:sqlite` sql.js shim (the boot exercised it — migrations ran green):
   `packages/net/src/sqlite/`. Spike C verdict + critical path: `README.md`.
