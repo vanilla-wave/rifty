@@ -229,8 +229,23 @@ logged as REVERSIBLE Q-2026-05-30-105/106/107.)
 
 ---
 
-### ADR-0058 (draft) — runtime-js builtin surface additions for the Effect boot
+### ADR-0058 (RESOLVED 2026-06-01 — no-op, contingency NOT triggered) — runtime-js builtin surface additions for the Effect boot
 *Feature 06. Reversibility rule 1 (public builtin surface) — CONTINGENT on a real gap.*
+
+**RESOLUTION.** The BOOT gate (`Server.listen` first light) ran headless and
+cleared with **zero walls** — it called **no** unimplemented builtin/method. The
+graph-load work already laid every builtin the boot path needs; the eager
+~40-layer DAG built (real drizzle/sql.js migrations under `Effect.orDie`) and
+`/global/health` + `/doc` returned 200. Recommendation **A** (harness-local
+`process.env` only) held: **no public builtin surface was added.** The contingency
+that would have promoted this to a ratified ADR ("a real boot path calls an
+unimplemented builtin") was never triggered, so there is nothing to ratify and no
+on-disk ADR is created. Evidence: `tests/integration/opencode-boot.opt-in.test.ts`
+(green under `RIFTY_RUN_OPENCODE_BOOT=1`); README "BOOT gate" section. The
+predicted `ptyConnectApi` stub was also unnecessary — `Pty.defaultLayer` builds
+without constructing a native pty at layer-build. If Phase 2 (a DB-read route
+driving the instance/workspace context) surfaces a concrete missing builtin, open
+a fresh, specific ADR for the named method then — do not reopen this one.
 
 **Context.** Booting `Server.listen` headlessly may exercise a runtime-js builtin
 method that does not yet exist (an Effect-runtime global, etc.). Adding such a

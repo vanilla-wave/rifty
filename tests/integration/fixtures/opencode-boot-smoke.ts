@@ -11,9 +11,16 @@
  * rifty `node:http` server into the port registry. This is the eager-`Database`
  * construction Spike C predicted.
  *
- * GATE: the server boots (a `Listener` with a `TcpAddress`) AND a trivial route
- * dispatched through the port registry returns HTTP 200 — exercising the REAL
- * session/drizzle layer, not hand-written SQL.
+ * GATE: the server boots (a `Listener` with a `TcpAddress`) AND two routes
+ * dispatched through the port registry return HTTP 200:
+ *   - `GET /global/health` — a TYPED Effect `HttpApi` handler (runs per-request:
+ *     route tree → no-op auth middleware → handler → schema-encode), asserts
+ *     `{ healthy: true }`. This is the meaningful first-light probe.
+ *   - `GET /doc` — the cached OpenAPI spec (proves the full route tree built).
+ * The drizzle/sql.js layer is exercised by the BOOT itself: the eager DAG build
+ * runs the real PRAGMAs + ~24 migrations under `Effect.orDie` (a failure dies
+ * the layer and rejects `Server.listen`). A DB-read VIA a request needs the
+ * instance/workspace context (Phase 2) and is intentionally not gated here.
  *
  * Headless config (via the harness `process.env`): `OPENCODE_DB=:memory:`,
  * `OPENCODE_DISABLE_MDNS=1`, `NODE_ENV=production`; `Server.listen` is called
@@ -43,17 +50,26 @@ type Any = any;
 const log = makeLog('opencode-boot');
 installSafetyTimeout(log);
 
-// The trivial route to assert against once the server boots. `/doc` is the
-// OpenAPI spec (`HttpServerResponse.jsonUnsafe(OpenApi.fromApi(PublicApi))`) —
-// a pure JSON GET that does not require a session token. Refined as the boot
-// walls are walked if auth/route reality differs.
-const PROBE_PATH = '/doc';
+// Routes asserted once the server boots. Auth is a no-op here: ServerAuth only
+// `required()`s when OPENCODE_SERVER_PASSWORD is set (it isn't), so the
+// authorization middleware short-circuits and these need no token.
+//   /global/health — RootHttpApi, mounted WITHOUT instance/workspace context;
+//                    a real typed Effect handler returning { healthy: true }.
+//   /doc           — the cached OpenApi.fromApi(PublicApi) spec.
+const HEALTH_PATH = '/global/health';
+const DOC_PATH = '/doc';
 
 interface Listener {
   hostname: string;
   port: number;
   url: URL;
   stop: (close?: boolean) => Promise<void>;
+}
+
+/** Dispatch a GET through the port registry and return status + body text. */
+async function get(port: number, path: string): Promise<{ status: number; body: string }> {
+  const res = await dispatchToPort(port, new Request(`http://localhost${path}`, { method: 'GET' }));
+  return { status: res.status, body: await res.text() };
 }
 
 async function main(): Promise<void> {
@@ -76,22 +92,31 @@ async function main(): Promise<void> {
   })) as Listener;
   log(`BOOTED — listening at ${listener.url} (port ${listener.port})`);
 
-  // The trivial route check: dispatch through the same port registry the
-  // rifty node:http server registered into (singleton module — guest server
-  // and this harness share it).
-  log(`dispatching GET ${PROBE_PATH} -> port ${listener.port} ...`);
-  const res = await dispatchToPort(
-    listener.port,
-    new Request(`http://localhost${PROBE_PATH}`, { method: 'GET' }),
+  // Route checks: dispatch through the same port registry the rifty node:http
+  // server registered into (singleton module — guest server and this harness
+  // share it).
+  log(`dispatching GET ${HEALTH_PATH} -> port ${listener.port} ...`);
+  const health = await get(listener.port, HEALTH_PATH);
+  log(`route GET ${HEALTH_PATH} -> ${health.status}: ${health.body.slice(0, 200)}`);
+
+  const doc = await get(listener.port, DOC_PATH);
+  log(
+    `route GET ${DOC_PATH} -> ${doc.status} (${doc.body.length} bytes): ${doc.body.slice(0, 120).replace(/\n/g, ' ')}`,
   );
-  const bodyText = await res.text();
-  const snippet = bodyText.slice(0, 200).replace(/\n/g, ' ');
-  log(`route GET ${PROBE_PATH} -> ${res.status} (${bodyText.length} bytes): ${snippet}`);
 
   await listener.stop(true).catch((e) => log(`listener.stop failed (ignored): ${String(e)}`));
 
-  if (res.status !== 200) {
-    throw new Error(`booted but ${PROBE_PATH} returned ${res.status}, expected 200: ${snippet}`);
+  if (health.status !== 200) {
+    throw new Error(
+      `booted but ${HEALTH_PATH} returned ${health.status}, expected 200: ${health.body.slice(0, 200)}`,
+    );
+  }
+  const parsed = JSON.parse(health.body) as { healthy?: unknown };
+  if (parsed.healthy !== true) {
+    throw new Error(`${HEALTH_PATH} 200 but body.healthy !== true: ${health.body.slice(0, 200)}`);
+  }
+  if (doc.status !== 200) {
+    throw new Error(`booted but ${DOC_PATH} returned ${doc.status}, expected 200`);
   }
   log('RIFTY_OPENCODE_BOOT_OK');
   realExit(0);
