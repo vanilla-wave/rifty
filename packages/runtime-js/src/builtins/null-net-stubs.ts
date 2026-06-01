@@ -93,6 +93,31 @@ export const dgram = {
   _createSocketHandle: notImpl('dgram._createSocketHandle'),
 };
 
+// `node:http2` — HTTP/2 server/client. HTTP/2 multiplexes frames over a single
+// raw TCP/TLS connection; the browser/WASI realm has no raw socket API (rifty's
+// `node:http` runs over the page<->SW port registry, and `node:tls`/raw `node:net`
+// connect already loud-throw), so a real HTTP/2 server or session is a genuine
+// capability ceiling, like `tls` / `dgram`.
+//
+// The module surface must still RESOLVE: `fastify/lib/server.js` does a top-level
+// `const http2 = require('node:http2')` UNCONDITIONALLY and only calls
+// `http2.createServer` / `createSecureServer` later, inside its server-instance
+// factory, when configured with `http2: true`. opencode boots HTTP/1, so that
+// branch is never taken at boot — but the import must succeed for the static
+// graph to evaluate. Every server/session creation throws NotImplementedError if
+// HTTP/2 is actually used. The exposed names mirror Node's real `node:http2`
+// function set (verified vs Node 24); `sensitiveHeaders` is the documented symbol.
+export const http2 = {
+  createServer: notImpl('http2.createServer'),
+  createSecureServer: notImpl('http2.createSecureServer'),
+  connect: notImpl('http2.connect'),
+  getDefaultSettings: notImpl('http2.getDefaultSettings'),
+  getPackedSettings: notImpl('http2.getPackedSettings'),
+  getUnpackedSettings: notImpl('http2.getUnpackedSettings'),
+  performServerHandshake: notImpl('http2.performServerHandshake'),
+  sensitiveHeaders: Symbol('nodejs.http2.sensitiveHeaders'),
+};
+
 export const readline = {
   createInterface: notImpl('readline.createInterface'),
   cursorTo: notImpl('readline.cursorTo'),

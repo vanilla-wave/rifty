@@ -55,6 +55,20 @@
 
 ### Added
 
+- **`node:http2` — module-resolution surface (loud browser-ceiling facade).**
+  `fastify/lib/server.js` does a top-level `require('node:http2')` unconditionally
+  and only calls `createServer`/`createSecureServer` when configured `http2: true`,
+  so the specifier must resolve for opencode's static server graph to evaluate
+  (opencode boots HTTP/1). HTTP/2 multiplexes frames over a raw TCP/TLS socket,
+  which the browser/WASI realm cannot provide (rifty's `node:http` runs over the
+  page↔SW port registry), so this is a genuine capability ceiling:
+  `createServer` / `createSecureServer` / `connect` / `getDefaultSettings` /
+  `getPackedSettings` / `getUnpackedSettings` / `performServerHandshake` each throw
+  `NotImplementedError` on use, like `tls` / `dgram`; `sensitiveHeaders` is the
+  documented symbol. The exposed function set mirrors Node 24. Parity:
+  `cases/http2/surface.case.ts` pins the requireable shape (the by-design
+  invocation divergence is a ceiling contract, not a parity diff).
+
 - **`node:timers/promises` builtin.** Promise-returning `setTimeout` /
   `setImmediate`, async-iterable `setInterval`, and `scheduler.wait`/`scheduler.yield`,
   with `AbortSignal` cancellation (an aborted wait rejects with the signal's reason
