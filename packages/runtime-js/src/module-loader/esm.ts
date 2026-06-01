@@ -226,11 +226,29 @@ function snippetForBody(body: string, line: number, _col: number): string {
 }
 
 /**
- * Recreate the `exports` object on a record from its slot table. ESM-style
+ * Recreate the `exports` namespace on a record from its slot table. ESM-style
  * exports are getter-backed so re-exports remain live.
+ *
+ * The namespace object is mutated IN PLACE (its identity is preserved), not
+ * reallocated. A `export * as ns from SPEC` re-export captures the target
+ * module's `exports` object identity at preload time — and for a
+ * SELF-referential `export * as Self from "."` (a common opencode idiom, e.g.
+ * `effect-drizzle-sqlite/index.ts`) that capture happens during the eager
+ * static-import preload, BEFORE the module's first `rebuildExports` runs and
+ * before its body has merged any `export * from "./sibling"` names. Reallocating
+ * `record.exports` on each rebuild would leave that captured reference frozen as
+ * the initial empty object, so the self-namespace would come back empty. By
+ * reusing the same object and only (re)defining getters on it, the captured
+ * reference stays live and reflects every later slot/star-merge — matching ESM's
+ * single cached, live Module Namespace object (Node: `Self.Self === Self`, and
+ * `Self` carries the module's full set of exports).
  */
 export function rebuildExports(record: ModuleRecord): void {
-  const ns: Record<string, unknown> = Object.create(null);
+  const ns = record.exports ?? Object.create(null);
+  // Drop own keys no longer exported. Slots only grow within a single execution,
+  // so this is defensive (a re-execute after `invalidate` could shrink them).
+  // `Object.keys` skips the non-enumerable `Symbol.toStringTag`, so it survives.
+  for (const key of Object.keys(ns)) delete ns[key];
   for (const key of Object.keys(record.slots)) {
     Object.defineProperty(ns, key, {
       configurable: true,
@@ -238,6 +256,10 @@ export function rebuildExports(record: ModuleRecord): void {
       get: () => record.slots[key],
     });
   }
-  Object.defineProperty(ns, Symbol.toStringTag, { value: 'Module' });
+  // Define the tag once: it is non-configurable, so redefining it on the reused
+  // object on a later rebuild would throw — guard against that.
+  if (!Object.getOwnPropertyDescriptor(ns, Symbol.toStringTag)) {
+    Object.defineProperty(ns, Symbol.toStringTag, { value: 'Module' });
+  }
   record.exports = ns;
 }

@@ -4,6 +4,22 @@
 
 ### Fixed
 
+- **A self-referential `export * as Self from "."` came back as an empty namespace.**
+  `rebuildExports` allocated a fresh `record.exports` object on every call. A
+  `export * as ns from SPEC` re-export captures the target's `exports` object
+  identity at static-import preload time; for a SELF spec (`"."` resolving to the
+  module itself — a common opencode idiom in `effect-drizzle-sqlite/index.ts`,
+  `core/database.ts`, `migration.ts`) that capture happened before the module's
+  first rebuild, so the captured reference stayed frozen as the initial empty
+  object and the self-namespace lost every export (including names merged via a
+  sibling `export * from "./driver"`). `rebuildExports` now mutates the namespace
+  **in place** (stable identity, getters redefined, `Symbol.toStringTag` guarded),
+  so the captured self-reference reflects all later exports — matching Node 24
+  (`Self.Self === Self`, `Self` carries the module's full export set). Unblocks
+  opencode's `EffectDrizzleSqlite.makeWithDefaults()`. Regression:
+  `tests/conformance/modules/cycles-esm.test.ts` `describe('ESM self-referential
+  namespace re-export')`.
+
 - **Resolver checked a same-named directory before a file-with-extension sibling.**
   `resolveAsFileOrDir` resolved `X` as a directory (and returned early) before
   trying `X.js`/`X.ts`/…, inverting Node's `LOAD_AS_FILE`-before-`LOAD_AS_DIRECTORY`
