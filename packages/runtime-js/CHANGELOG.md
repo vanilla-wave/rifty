@@ -43,6 +43,21 @@
 
 ### Added
 
+- **`async_hooks.AsyncLocalStorage` — synchronous-scope fidelity.** The
+  `async_hooks` builtin gained `AsyncLocalStorage` (`run` / `getStore` /
+  `enterWith` / `exit` / `disable`), implemented faithfully for synchronous
+  execution and the synchronous prefix of an async function — exactly what
+  opencode's `LocalContext.{provide,use}` (`util/local-context.ts`) relies on
+  (`new AsyncLocalStorage()` previously threw "is not a constructor"). The store
+  is **not** propagated across async scheduling boundaries (after an `await`/timer
+  resumes, `getStore()` reflects the current stack's store, not the one captured
+  at suspension) — faithful cross-`await` propagation needs native async-context
+  tracking the browser/WASI realm does not expose. This is a documented partial
+  fidelity, not a fake stub: synchronous use is byte-for-byte Node-correct.
+  Parity: `cases/async_hooks/local-storage.case.ts` (synchronous); conformance:
+  `async-hooks.test.ts` `describe('async_hooks.AsyncLocalStorage (synchronous
+  scope)')`.
+
 - **tsconfig-style path aliases via an opt-in `paths` resolver option (ADR-0066).**
   `ModuleLoaderOptions` gains `paths?: PathAliases` — a `pattern → target(s)` map of
   absolute VFS path patterns (e.g. `{ "@/*": "/workspace/src/*" }`). The resolver
