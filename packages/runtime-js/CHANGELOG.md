@@ -4,6 +4,18 @@
 
 ### Fixed
 
+- **A module that shadows the global `Object` broke the ESM export codegen.** The
+  transformer emits its export/re-export machinery as inline
+  `Object.defineProperty(__slots, …)` / `Object.keys(…)` calls in the module body.
+  A module declaring a module-scoped `export const Object = …` (opencode's
+  `config/permission.ts`) shadowed the global, so those bare `Object.*` calls
+  resolved to the user's value and threw `Object.defineProperty is not a function`.
+  The executor now binds the real global to a mangled name
+  (`RUNTIME_OBJECT_BINDING`) at function scope — outside the user-body arrow, where
+  the module's `const Object` cannot reach — and the codegen references that
+  binding instead of bare `Object`. Regression:
+  `tests/conformance/modules/global-shadowing.test.ts`.
+
 - **A self-referential `export * as Self from "."` came back as an empty namespace.**
   `rebuildExports` allocated a fresh `record.exports` object on every call. A
   `export * as ns from SPEC` re-export captures the target's `exports` object

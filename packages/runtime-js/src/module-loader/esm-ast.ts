@@ -51,6 +51,19 @@ import type {
 import { parse as acornParse } from 'acorn';
 import { ModuleLoadError } from './errors.ts';
 
+/**
+ * Mangled binding the generated body uses to reach the REAL global `Object`
+ * (for `Object.defineProperty`/`Object.keys` in export/re-export codegen). A
+ * module may legally declare a module-scoped `export const Object = …` (opencode's
+ * `config/permission.ts` does), which would shadow the global and break bare
+ * `Object.*` in the generated code. The executor (`esm.ts`) binds this name to
+ * the real `Object` at FUNCTION scope — outside the user-body arrow, where the
+ * module's `const Object` cannot reach it — so the codegen stays correct
+ * regardless of what the module shadows. Kept in sync with `esm.ts` (the only
+ * consumer of the binding).
+ */
+export const RUNTIME_OBJECT_BINDING = '__riftyObject';
+
 // ────────────────────────────── scope helpers ──────────────────────────────
 
 interface ImportBinding {
@@ -640,7 +653,7 @@ function handleReExportNamed(
       s.exported.type === 'Identifier' ? s.exported.name : String(s.exported.value ?? '');
     const local = s.local.type === 'Identifier' ? s.local.name : String(s.local.value ?? '');
     lines.push(
-      `Object.defineProperty(__slots, ${JSON.stringify(exported)}, { configurable: true, enumerable: true, get: () => ${ns}[${JSON.stringify(local)}] });`,
+      `${RUNTIME_OBJECT_BINDING}.defineProperty(__slots, ${JSON.stringify(exported)}, { configurable: true, enumerable: true, get: () => ${ns}[${JSON.stringify(local)}] });`,
     );
   }
   lines.push('__rebuildExports(); }');
@@ -661,7 +674,7 @@ function handleExportNamed(
     const trailing: string[] = [];
     for (const n of names) {
       trailing.push(
-        `Object.defineProperty(__slots, ${JSON.stringify(n)}, { configurable: true, enumerable: true, get: () => ${n} });`,
+        `${RUNTIME_OBJECT_BINDING}.defineProperty(__slots, ${JSON.stringify(n)}, { configurable: true, enumerable: true, get: () => ${n} });`,
       );
     }
     trailing.push('__rebuildExports();');
@@ -677,7 +690,7 @@ function handleExportNamed(
     const local = s.local.type === 'Identifier' ? s.local.name : String(s.local.value ?? '');
     const ref = referenceFor(local, imports);
     lines.push(
-      `Object.defineProperty(__slots, ${JSON.stringify(exported)}, { configurable: true, enumerable: true, get: () => ${ref} });`,
+      `${RUNTIME_OBJECT_BINDING}.defineProperty(__slots, ${JSON.stringify(exported)}, { configurable: true, enumerable: true, get: () => ${ref} });`,
     );
   }
   lines.push('__rebuildExports();');
@@ -722,11 +735,11 @@ function handleExportAll(
   if (node.exported) {
     const exportedName =
       node.exported.type === 'Identifier' ? node.exported.name : String(node.exported.value ?? '');
-    const text = `{ const ${ns} = __importStatic(${JSON.stringify(sourceLit)}); Object.defineProperty(__slots, ${JSON.stringify(exportedName)}, { configurable: true, enumerable: true, get: () => ${ns} }); __rebuildExports(); }`;
+    const text = `{ const ${ns} = __importStatic(${JSON.stringify(sourceLit)}); ${RUNTIME_OBJECT_BINDING}.defineProperty(__slots, ${JSON.stringify(exportedName)}, { configurable: true, enumerable: true, get: () => ${ns} }); __rebuildExports(); }`;
     edits.push({ start: node.start, end: node.end, text });
     return;
   }
-  const text = `{ const ${ns} = __importStatic(${JSON.stringify(sourceLit)}); for (const __k of Object.keys(${ns})) if (__k !== 'default') Object.defineProperty(__slots, __k, { configurable: true, enumerable: true, get: ((k) => () => ${ns}[k])(__k) }); __rebuildExports(); }`;
+  const text = `{ const ${ns} = __importStatic(${JSON.stringify(sourceLit)}); for (const __k of ${RUNTIME_OBJECT_BINDING}.keys(${ns})) if (__k !== 'default') ${RUNTIME_OBJECT_BINDING}.defineProperty(__slots, __k, { configurable: true, enumerable: true, get: ((k) => () => ${ns}[k])(__k) }); __rebuildExports(); }`;
   edits.push({ start: node.start, end: node.end, text });
 }
 

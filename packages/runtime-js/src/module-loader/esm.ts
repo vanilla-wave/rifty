@@ -1,7 +1,7 @@
 import { dirname } from '@rifty/vfs';
 import { publishRuntimeGlobal, readRuntimeGlobal } from '../internal/worker-globals.ts';
 import { ModuleLoadError } from './errors.ts';
-import { transformEsm } from './esm-ast.ts';
+import { RUNTIME_OBJECT_BINDING, transformEsm } from './esm-ast.ts';
 import type { ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule, Resolver } from './resolver.ts';
 
@@ -147,7 +147,15 @@ export async function executeEsm(
       '__importMetaUrl',
       '__metaDirname',
       '__metaFilename',
-      `return (async () => {\nconst import_meta = { url: __importMetaUrl, dirname: __metaDirname, filename: __metaFilename, resolve: (s) => new URL(s, __importMetaUrl).href };\n${transformed.body}\n})();\n//# sourceURL=${resolved.id}`,
+      // Bind the real global `Object` to a mangled name at FUNCTION scope (the
+      // `new Function` body runs in global scope, so `Object` here is the genuine
+      // global) — outside the user-body arrow. The generated body reaches its
+      // export/re-export `Object.defineProperty`/`Object.keys` machinery through
+      // this binding (esm-ast.ts RUNTIME_OBJECT_BINDING), so a module that shadows
+      // the global with its own `export const Object = …` (opencode's
+      // config/permission.ts) cannot break the codegen. Kept on the same line as
+      // `return` so the body's line numbering (snippetForBody) is unchanged.
+      `const ${RUNTIME_OBJECT_BINDING} = Object; return (async () => {\nconst import_meta = { url: __importMetaUrl, dirname: __metaDirname, filename: __metaFilename, resolve: (s) => new URL(s, __importMetaUrl).href };\n${transformed.body}\n})();\n//# sourceURL=${resolved.id}`,
     ) as typeof factory;
   } catch (err) {
     const msg = (err as Error).message ?? String(err);
