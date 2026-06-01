@@ -6,6 +6,7 @@
  * and is registered there (ADR-0010 loud-throw stub).
  */
 import { NotImplementedError } from '@rifty/io';
+import { HTTP2_CONSTANTS } from './http2-constants.ts';
 
 const notImpl = (feature: string) => () => {
   throw new NotImplementedError(feature);
@@ -116,6 +117,9 @@ export const http2 = {
   getUnpackedSettings: notImpl('http2.getUnpackedSettings'),
   performServerHandshake: notImpl('http2.performServerHandshake'),
   sensitiveHeaders: Symbol('nodejs.http2.sensitiveHeaders'),
+  // Real spec-defined constants (pure data) — undici's client-h2.js reads
+  // `constants.HTTP2_HEADER_*` at module-eval.
+  constants: HTTP2_CONSTANTS,
 };
 
 export const readline = {

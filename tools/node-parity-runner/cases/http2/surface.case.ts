@@ -26,6 +26,15 @@ const c: ParityCase = {
     console.log('performServerHandshake', typeof http2.performServerHandshake);
     console.log('sensitiveHeaders', typeof http2.sensitiveHeaders);
 
+    // Real spec constants (undici/client-h2.js reads these at module-eval).
+    console.log('constants', typeof http2.constants);
+    console.log('HTTP2_HEADER_AUTHORITY', http2.constants.HTTP2_HEADER_AUTHORITY);
+    console.log('HTTP2_HEADER_PATH', http2.constants.HTTP2_HEADER_PATH);
+    console.log('HTTP2_HEADER_CONTENT_LENGTH', http2.constants.HTTP2_HEADER_CONTENT_LENGTH);
+    console.log('NGHTTP2_NO_ERROR', http2.constants.NGHTTP2_NO_ERROR);
+    console.log('NGHTTP2_REFUSED_STREAM', http2.constants.NGHTTP2_REFUSED_STREAM);
+    console.log('HTTP_STATUS_OK', http2.constants.HTTP_STATUS_OK);
+
     const bare = require('http2');
     console.log('bare === node', bare === http2 ? 1 : 0);
   `,
