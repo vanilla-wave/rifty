@@ -143,6 +143,11 @@ const FACADE_DEPENDENCIES = {
   // path's external closure; pinned to opencode's otel 2.6.x line. (Transitively
   // pulls `@opentelemetry/core`.)
   '@opentelemetry/resources': '2.6.1',
+  // `@opencode-ai/llm`'s Bedrock protocol (`protocols/bedrock-event-stream.ts`)
+  // statically imports these AWS Smithy packages; declared by the llm workspace
+  // package but missed by the hand-flattened set.
+  '@smithy/eventstream-codec': '4.2.14',
+  '@smithy/util-utf8': '4.2.2',
   ai: '6.0.168',
   'bonjour-service': '1.3.0',
   'cross-spawn': '7.0.6',
