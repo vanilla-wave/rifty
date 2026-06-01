@@ -1,8 +1,21 @@
 {
   "name": "@rifty/net",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Browser node:net/node:http/node:https/ws + node:sqlite (sql.js) for rifty.",
   "type": "module",
+  "license": "MIT",
+  "author": "vanilla-wave <vizetmail@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vanilla-wave/rifty.git",
+    "directory": "packages/net"
+  },
+  "homepage": "https://github.com/vanilla-wave/rifty#readme",
+  "bugs": {
+    "url": "https://github.com/vanilla-wave/rifty/issues"
+  },
+  "keywords": ["rifty", "browser", "webcontainer", "http", "net", "websocket", "sqlite"],
+  "sideEffects": ["./dist/register-builtins.js", "./dist/sqlite/register-builtins.js"],
   "main": "./src/index.ts",
   "module": "./src/index.ts",
   "types": "./src/index.ts",
@@ -15,9 +28,47 @@
     "./sqlite/database-sync": "./src/sqlite/database-sync.ts",
     "./sqlite/register-builtins": "./src/sqlite/register-builtins.ts"
   },
+  "files": ["dist", "CHANGELOG.md"],
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./registry": {
+        "types": "./dist/registry.d.ts",
+        "import": "./dist/registry.js"
+      },
+      "./register-builtins": {
+        "types": "./dist/register-builtins.d.ts",
+        "import": "./dist/register-builtins.js"
+      },
+      "./https": {
+        "types": "./dist/https.d.ts",
+        "import": "./dist/https.js"
+      },
+      "./sqlite/engine": {
+        "types": "./dist/sqlite/engine.d.ts",
+        "import": "./dist/sqlite/engine.js"
+      },
+      "./sqlite/database-sync": {
+        "types": "./dist/sqlite/database-sync.d.ts",
+        "import": "./dist/sqlite/database-sync.js"
+      },
+      "./sqlite/register-builtins": {
+        "types": "./dist/sqlite/register-builtins.d.ts",
+        "import": "./dist/sqlite/register-builtins.js"
+      }
+    }
+  },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:run": "cd ../.. && vitest run --project unit packages/net"
+    "test:run": "cd ../.. && vitest run --project unit packages/net",
+    "build": "tsup"
   },
   "dependencies": {
     "@rifty/io": "workspace:*",

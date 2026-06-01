@@ -1,8 +1,21 @@
 {
   "name": "@rifty/kernel",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Process/scheduling/IPC kernel for rifty: Worker-as-process model over SharedArrayBuffer + Atomics.",
   "type": "module",
+  "license": "MIT",
+  "author": "vanilla-wave <vizetmail@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vanilla-wave/rifty.git",
+    "directory": "packages/kernel"
+  },
+  "homepage": "https://github.com/vanilla-wave/rifty#readme",
+  "bugs": {
+    "url": "https://github.com/vanilla-wave/rifty/issues"
+  },
+  "keywords": ["rifty", "browser", "webcontainer", "kernel", "worker", "ipc", "sharedarraybuffer"],
+  "sideEffects": ["./dist/worker-entry.js"],
   "main": "./src/index.ts",
   "module": "./src/index.ts",
   "types": "./src/index.ts",
@@ -10,7 +23,27 @@
     ".": "./src/index.ts",
     "./worker-entry": "./src/worker-entry.ts"
   },
-  "scripts": { "typecheck": "tsc -p tsconfig.json --noEmit" },
+  "files": ["dist", "CHANGELOG.md"],
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./worker-entry": {
+        "types": "./dist/worker-entry.d.ts",
+        "import": "./dist/worker-entry.js"
+      }
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsup"
+  },
   "dependencies": {
     "@rifty/io": "workspace:*"
   }

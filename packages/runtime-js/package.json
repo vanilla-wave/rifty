@@ -1,9 +1,21 @@
 {
   "name": "@rifty/runtime-js",
-  "version": "0.0.0",
-  "// TODO(ADR)": "Q-2026-05-23-005 — subpath exports `./builtins/*` are part of the public surface; promoted in ADR 0018",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Node-compatible JS runtime for rifty: CJS/ESM module loader and node: builtins, in a Worker.",
   "type": "module",
+  "license": "MIT",
+  "author": "vanilla-wave <vizetmail@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vanilla-wave/rifty.git",
+    "directory": "packages/runtime-js"
+  },
+  "homepage": "https://github.com/vanilla-wave/rifty#readme",
+  "bugs": {
+    "url": "https://github.com/vanilla-wave/rifty/issues"
+  },
+  "keywords": ["rifty", "browser", "webcontainer", "runtime", "node-compatible", "module-loader"],
+  "sideEffects": ["./dist/index.js", "./dist/worker.js"],
   "main": "./src/index.ts",
   "module": "./src/index.ts",
   "types": "./src/index.ts",
@@ -20,12 +32,68 @@
     "./builtins/buffer": "./src/builtins/buffer.ts",
     "./builtins/module": "./src/builtins/module.ts"
   },
-  "scripts": { "typecheck": "tsc -p tsconfig.json --noEmit" },
+  "files": ["dist", "CHANGELOG.md"],
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./worker": {
+        "types": "./dist/worker.d.ts",
+        "import": "./dist/worker.js"
+      },
+      "./install-process": {
+        "types": "./dist/install-process.d.ts",
+        "import": "./dist/install-process.js"
+      },
+      "./loader": {
+        "types": "./dist/loader.d.ts",
+        "import": "./dist/loader.js"
+      },
+      "./env/capabilities": {
+        "types": "./dist/env/capabilities.d.ts",
+        "import": "./dist/env/capabilities.js"
+      },
+      "./builtins": {
+        "types": "./dist/builtins.d.ts",
+        "import": "./dist/builtins.js"
+      },
+      "./builtins/fs-watch": {
+        "types": "./dist/builtins/fs-watch.d.ts",
+        "import": "./dist/builtins/fs-watch.js"
+      },
+      "./builtins/process": {
+        "types": "./dist/builtins/process.d.ts",
+        "import": "./dist/builtins/process.js"
+      },
+      "./builtins/timers": {
+        "types": "./dist/builtins/timers.d.ts",
+        "import": "./dist/builtins/timers.js"
+      },
+      "./builtins/buffer": {
+        "types": "./dist/builtins/buffer.d.ts",
+        "import": "./dist/builtins/buffer.js"
+      },
+      "./builtins/module": {
+        "types": "./dist/builtins/module.d.ts",
+        "import": "./dist/builtins/module.js"
+      }
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsup"
+  },
   "dependencies": {
     "@rifty/io": "workspace:*",
     "@rifty/kernel": "workspace:*",
     "@rifty/vfs": "workspace:*",
-    "acorn": "^8.14.0",
-    "acorn-walk": "^8.3.4"
-  }
+    "acorn": "^8.14.0"
+  },
+  "// TODO(ADR)": "Q-2026-05-23-005 — subpath exports `./builtins/*` are part of the public surface; promoted in ADR 0018"
 }

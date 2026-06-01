@@ -1,8 +1,21 @@
 {
   "name": "@rifty/vfs",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Virtual filesystem for rifty: in-memory + OPFS backends with a synchronous mirror.",
   "type": "module",
+  "license": "MIT",
+  "author": "vanilla-wave <vizetmail@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vanilla-wave/rifty.git",
+    "directory": "packages/vfs"
+  },
+  "homepage": "https://github.com/vanilla-wave/rifty#readme",
+  "bugs": {
+    "url": "https://github.com/vanilla-wave/rifty/issues"
+  },
+  "keywords": ["rifty", "browser", "webcontainer", "vfs", "opfs", "filesystem"],
+  "sideEffects": false,
   "main": "./src/index.ts",
   "module": "./src/index.ts",
   "types": "./src/index.ts",
@@ -10,8 +23,26 @@
     ".": "./src/index.ts",
     "./internal": "./src/internal/index.ts"
   },
+  "files": ["dist", "CHANGELOG.md"],
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./internal": {
+        "types": "./dist/internal.d.ts",
+        "import": "./dist/internal.js"
+      }
+    }
+  },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsup"
   },
   "devDependencies": {
     "typescript": "*",

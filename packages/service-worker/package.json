@@ -1,8 +1,21 @@
 {
   "name": "@rifty/service-worker",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Service Worker preview/HMR routing bridge for rifty.",
   "type": "module",
+  "license": "MIT",
+  "author": "vanilla-wave <vizetmail@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vanilla-wave/rifty.git",
+    "directory": "packages/service-worker"
+  },
+  "homepage": "https://github.com/vanilla-wave/rifty#readme",
+  "bugs": {
+    "url": "https://github.com/vanilla-wave/rifty/issues"
+  },
+  "keywords": ["rifty", "browser", "webcontainer", "service-worker", "preview"],
+  "sideEffects": ["./dist/sw.js"],
   "main": "./src/index.ts",
   "module": "./src/index.ts",
   "types": "./src/index.ts",
@@ -10,7 +23,27 @@
     ".": "./src/index.ts",
     "./sw": "./src/sw.ts"
   },
-  "scripts": { "typecheck": "tsc -p tsconfig.json --noEmit" },
+  "files": ["dist", "CHANGELOG.md"],
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./sw": {
+        "types": "./dist/sw.d.ts",
+        "import": "./dist/sw.js"
+      }
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsup"
+  },
   "dependencies": {
     "@rifty/io": "workspace:*"
   }
