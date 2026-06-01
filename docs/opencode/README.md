@@ -231,38 +231,36 @@ of the layer-build, so the eager-`Database` acquire-time pull predicted by Spike
 has not yet been reached at runtime (it remains static-only until the
 diagnostics_channel wall clears and `Server.listen` is actually invoked).
 
-## GRAPH-LOAD gate (F02-T9) — DRIVEN LIVE, result: BLOCKED
+## GRAPH-LOAD gate (F02-T9) — DRIVEN LIVE, result: ✅ PASSED (2026-06-01)
 
-**The real `Server` import has now been driven against the vendored tree.**
-Harness: `tests/integration/fixtures/opencode-graph-load-smoke.ts` (forked from
-`real-vite-smoke.ts`) + opt-in driver `tests/integration/opencode-graph-load.opt-in.test.ts`
-(commit `490230a`). It (1) materializes deps via `npm ci` if absent (327 pkgs),
-(2) builds a memory/sync VFS = 902 vendored `source/packages/*` files + 23 060
-`deps/node_modules` files under `/workspace`, with the vendored `@opencode-ai/*`
-workspace pkgs mirrored into `node_modules` so the bare-name walk resolves them,
-`cwd=/workspace`, env `OPENCODE_DB=:memory:` / mDNS-off / `NODE_ENV=production`,
-(3) wires `createModuleLoader` with the **real esbuild WASI `transformSource`**
-(ADR-0052, the same edge as the parity ts-esm cases) + the `node:sqlite` shim
-brought up *before* the process-shim swap + `node:net`/`http`/`https` registered,
-(4) imports the **programmatic entry** `/workspace/packages/opencode/src/server/server.ts`
-(NOT `src/node.ts`).
+**The real `Server` import resolves + evaluates the whole ~900-file server graph
+and exposes `Server.listen` as a function.** Harness:
+`tests/integration/fixtures/opencode-graph-load-smoke.ts` + opt-in driver
+`tests/integration/opencode-graph-load.opt-in.test.ts`. It builds a memory/sync VFS
+(vendored `source/packages/*` + materialized `deps/node_modules` under `/workspace`,
+workspace pkgs mirrored into `node_modules`), wires `createModuleLoader` with the
+real esbuild WASI `transformSource` (ADR-0052), the `node:sqlite` sql.js shim
+(ADR-0065), the tsconfig `paths` aliases (ADR-0066), and `node:net`/`http`/`https`,
+then imports the programmatic entry `…/server/server.ts`. The opt-in gate prints
+`RIFTY_OPENCODE_GRAPH_LOAD_OK` and **passes green (genuine OK, not
+skip-with-reason)** under `RIFTY_RUN_OPENCODE_GRAPH_LOAD=1` (~8s warm).
 
-**Verbatim result — BLOCKED:** the graph resolves FAR past every
-previously-suspected blocker — the `@/` tsconfig alias did NOT wall, effect@4
-`unstable/http`+`unstable/httpapi` subpaths resolve, the vendored workspace pkgs +
-`#db`/`#pty` imports-map (node condition) are in play, ~900 `.ts` files strip
-through esbuild — then hits an EXACT wall:
-
-> `ModuleLoadError: Built-in 'node:diagnostics_channel' is not implemented`
-
-thrown evaluating `/workspace/node_modules/undici/lib/core/diagnostics.js:5`
-(`require('node:diagnostics_channel')`). **undici is on the STATIC server graph
-via `@effect/platform-node`'s HTTP-client layer**; `node:diagnostics_channel` is a
-real Node builtin absent from rifty's registered set (verified: net registers
-net/http/https/sqlite; runtime-js registers path…tls etc.; `perf_hooks` IS present,
-`diagnostics_channel` is NOT). The opt-in test honestly captures the BLOCKED marker
-and **skips-with-reason** (passes green) under `RIFTY_RUN_OPENCODE_GRAPH_LOAD=1`,
-and is collected-but-skipped under default `vitest run` — never fakes a pass.
+**How the wall-by-wall path was cleared (2026-06-01 session, 16 commits on `main`,
+`b425b05..ea846ef`):** the graph was driven live and each exact wall fixed in graph
+order — TDD'd (Node parity case where a baseline exists, else conformance), full
+`pnpm test:run` green after each load-bearing change (948 tests), an ADR per
+irreversible decision. In order: `node:diagnostics_channel` + the undici/effect/mDNS
+builtin surface (`util.debuglog`, `console`, `util/types`, `worker_threads` markers,
+`dgram`) [prior session] → **`@/` tsconfig path aliases (ADR-0066)** → file-before-
+directory resolution → **ESM self-namespace** `export * as X from "."` live-binding
+→ **global-`Object` shadowing** in export codegen → **`async_hooks.AsyncLocalStorage`**
+→ **`node:stream/consumers`** → **`node:timers/promises`** → **`node:http2`** facade +
+real `constants` → CJS-compile-error context → **text-asset imports (ADR-0067)** →
+**`with { type: "file" }` file loader (ADR-0068)** → missing facade deps
+(`@opentelemetry/resources`, `@smithy/eventstream-codec` + `util-utf8`, `aws4fetch`).
+The full chronology + the next gate is in [`HANDOFF.md`](HANDOFF.md). The
+`node:diagnostics_channel` wall (the prior "BLOCKED" verdict) and every wall after
+it are now cleared.
 
 ## BOOT gate (`Server.listen` first light) — result: BLOCKED (not attempted)
 
@@ -316,17 +314,16 @@ the C1 `https.Agent` pre-flight. P5 (the tool ceiling) is already marked.
 
 ## Single next unblocked step
 
-**Register a `node:diagnostics_channel` builtin.** This is the exact wall the live
-GRAPH-LOAD smoke hit. Implement the real Node `node:diagnostics_channel` surface
-(`channel` / `subscribe` / `unsubscribe` / `hasSubscribers` / `tracingChannel`) and
-register it through the `@rifty/io` `registerBuiltin` seam, so
-`undici/lib/core/diagnostics.js` evaluates. Then **re-run the opt-in smoke**
-(`RIFTY_RUN_OPENCODE_GRAPH_LOAD=1 vitest run … opencode-graph-load.opt-in`) to find
-the next exact wall — undici being on the static server graph via
-`@effect/platform-node`, expect further undici-driven builtins immediately after;
-resolve them in graph order, one re-run per wall, until the graph loads and
-`Server.listen` (the BOOT gate) becomes reachable. Walking the real walls in order
-keeps every builtin proven-needed, not assumed-needed.
+**The BOOT gate (`Server.listen` first light).** The graph now LOADS; the next gate
+is to actually boot it. Extend the harness to call `Server.listen(opts)` headless
+(`OPENCODE_DISABLE_MDNS=1`, `OPENCODE_DB=:memory:`, stub `ptyConnectApi`). This
+eagerly builds the ~40-layer DAG → `fenceLayer` pulls `Database.Service` → the real
+`@effect/sql-sqlite-node` + drizzle layer runs the PRAGMAs + ~24 migrations against
+the `node:sqlite` sql.js shim (ADR-0065) — the eager-`Database` construction Spike C
+predicted. Assert boot + a trivial route → 200 JSON. Expect the FIRST eager-layer-
+build failures here (a concrete unimplemented builtin/method via a loud throw, or a
+`Database`-construction edge); open a fresh, specific ADR per named gap and walk
+them in order, exactly as the GRAPH-LOAD walls were walked.
 
 ## Links
 
