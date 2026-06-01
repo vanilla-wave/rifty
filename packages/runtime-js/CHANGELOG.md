@@ -64,6 +64,19 @@
 
 ### Added
 
+- **`with { type: "file" }` file-loader import attribute (ADR-0068).** An
+  `import x from "spec" with { type: "file" }` (esbuild/Bun file loader) now binds
+  `x` to the asset's resolved absolute path string instead of trying to load the
+  asset as a module — the specifier is excluded from the static-import preload, so
+  a binary asset (a `.wasm`) is never evaluated. The transformer detects the
+  attribute (acorn `node.attributes`) and emits `const x = __assetPath("spec")`, a
+  helper injected into the ESM factory that resolves the specifier to its file id.
+  Unblocks opencode's `import photonWasm from ".../photon_rs_bg.wasm" with { type:
+  "file" }` (`image/image.ts`); photon's wasm API stays a lazy/dynamic concern off
+  the boot path. Attribute-less ESM-wasm/binary *module* loading remains deferred
+  (`Q-2026-06-01-306`). Conformance:
+  `tests/conformance/modules/file-import-attribute.test.ts`.
+
 - **Text-asset imports — `.txt` / `.sql` / `.md` / `.prompt` (ADR-0067).** An
   `import s from "./f.txt"` now binds the default export to the file's raw contents
   (esbuild/Bun text-loader behaviour), and `require("./f.txt")` returns the string;

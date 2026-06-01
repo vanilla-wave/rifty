@@ -136,6 +136,7 @@ export async function executeEsm(
     __importMetaUrl: string,
     __metaDirname: string,
     __metaFilename: string,
+    __assetPath: (s: string) => string,
   ) => Promise<void>;
   try {
     factory = new Function(
@@ -147,6 +148,7 @@ export async function executeEsm(
       '__importMetaUrl',
       '__metaDirname',
       '__metaFilename',
+      '__assetPath',
       // Bind the real global `Object` to a mangled name at FUNCTION scope (the
       // `new Function` body runs in global scope, so `Object` here is the genuine
       // global) — outside the user-body arrow. The generated body reaches its
@@ -194,6 +196,10 @@ export async function executeEsm(
     return deps.loadAsync(dep.id);
   };
 
+  // `with { type: "file" }` file loader (ADR-0068): resolve a specifier to its
+  // absolute file path without loading it as a module — the asset may be binary.
+  const assetPath = (spec: string): string => deps.resolve(spec, resolved.id, true).id;
+
   try {
     await factory(
       dynamicImport,
@@ -204,6 +210,7 @@ export async function executeEsm(
       __importMetaUrl,
       __metaDirname,
       __metaFilename,
+      assetPath,
     );
   } catch (err) {
     record.state = 'errored';

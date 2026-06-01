@@ -582,9 +582,17 @@ export function transformEsm(source: string, id: string): TransformResult {
 
   for (const node of program.body) {
     if (node.type === 'ImportDeclaration') {
-      const ns = `__m${importCounter++}`;
-      handleImportDeclaration(node, ns, edits, importedBindings);
-      staticImports.add(literalString(node.source.value));
+      if (isFileAttributeImport(node)) {
+        // `import x from "spec" with { type: "file" }` (Bun/esbuild file loader):
+        // bind the local to the resolved file PATH, not a module load. Deliberately
+        // NOT added to staticImports — the asset is never loaded/evaluated as a
+        // module (it may be binary, e.g. opencode's `photon_rs_bg.wasm`).
+        handleFileImport(node, `__file${importCounter++}`, edits);
+      } else {
+        const ns = `__m${importCounter++}`;
+        handleImportDeclaration(node, ns, edits, importedBindings);
+        staticImports.add(literalString(node.source.value));
+      }
     } else if (node.type === 'ExportNamedDeclaration') {
       const sourceLit = node.source ? literalString(node.source.value) : null;
       if (sourceLit !== null) {
@@ -616,6 +624,44 @@ export function transformEsm(source: string, id: string): TransformResult {
 }
 
 // ────────────────────────────── import / export ──────────────────────────────
+
+/**
+ * True for an import carrying the `with { type: "file" }` attribute (the
+ * esbuild/Bun "file" loader). acorn exposes import attributes as `node.attributes`
+ * (older trees use `node.assertions`); each is `{ key, value }` with `value` a
+ * string literal. opencode uses this to import an asset's PATH, e.g.
+ * `import photonWasm from "…/photon_rs_bg.wasm" with { type: "file" }`.
+ */
+function isFileAttributeImport(node: ImportDeclaration): boolean {
+  const attrs = node.attributes;
+  if (!attrs) return false;
+  for (const a of attrs) {
+    const key = a.key.type === 'Identifier' ? a.key.name : String(a.key.value ?? '');
+    if (key === 'type' && a.value.value === 'file') return true;
+  }
+  return false;
+}
+
+/**
+ * Emit a `with { type: "file" }` import as a binding to the asset's resolved
+ * absolute PATH (the esbuild/Bun file loader). The injected `__assetPath` helper
+ * (see esm.ts) resolves the specifier to its file id without loading it as a
+ * module. The default specifier binds to the path string; a namespace specifier
+ * binds to `{ default: <path> }`. Named specifiers are meaningless for a file
+ * asset and are dropped.
+ */
+function handleFileImport(node: ImportDeclaration, assetVar: string, edits: Edit[]): void {
+  const spec = literalString(node.source.value);
+  const lines: string[] = [`const ${assetVar} = __assetPath(${JSON.stringify(spec)});`];
+  for (const s of node.specifiers) {
+    if (s.type === 'ImportDefaultSpecifier') {
+      lines.push(`const ${s.local.name} = ${assetVar};`);
+    } else if (s.type === 'ImportNamespaceSpecifier') {
+      lines.push(`const ${s.local.name} = { default: ${assetVar} };`);
+    }
+  }
+  edits.push({ start: node.start, end: node.end, text: lines.join('\n') });
+}
 
 function handleImportDeclaration(
   node: ImportDeclaration,
