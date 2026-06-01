@@ -55,6 +55,14 @@
 
 ### Added
 
+- **`node:stream/consumers` builtin.** `arrayBuffer` / `blob` / `buffer` / `text` /
+  `json` drain a stream (Node `Readable`, any async iterable, or a web
+  `ReadableStream` via `getReader`) into a value, accumulating chunks then coercing
+  — faithful to Node's `for await` implementation. opencode reaches `buffer` (child
+  stdout in `util/process.ts`) and `text` (`cli/cmd/providers.ts`, `lsp/server.ts`).
+  Parity: `cases/stream/consumers.case.ts`; conformance:
+  `tests/conformance/builtins/stream-consumers.test.ts`.
+
 - **`async_hooks.AsyncLocalStorage` — synchronous-scope fidelity.** The
   `async_hooks` builtin gained `AsyncLocalStorage` (`run` / `getStore` /
   `enterWith` / `exit` / `disable`), implemented faithfully for synchronous

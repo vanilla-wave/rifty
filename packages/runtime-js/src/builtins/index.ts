@@ -39,7 +39,7 @@ import pathModule from './path.ts';
 import perfHooksModule from './perf_hooks.ts';
 import { riftyProcess } from './process.ts';
 import querystringModule from './querystring.ts';
-import streamModule from './stream.ts';
+import streamModule, { streamConsumers } from './stream.ts';
 import stringDecoderModule from './string_decoder.ts';
 import timersModule from './timers.ts';
 import ttyModule from './tty.ts';
@@ -86,6 +86,7 @@ registerBuiltin('stream/promises', () => ({
   pipeline: streamModule.pipeline,
   finished: streamModule.finished,
 }));
+registerBuiltin('stream/consumers', () => streamConsumers);
 registerBuiltin('child_process', () => childProcessModule);
 registerBuiltin('worker_threads', () => workerThreadsModule);
 registerBuiltin('os', () => osModule);
