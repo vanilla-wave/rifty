@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Packaging
+
+- **All 10 `@rifty/*` libraries (+ `@rifty/shadow-registry`) are now publishable to npm (ADR-0069).** Each package gains a `tsup` build (ESM + bundled `.d.ts` in `dist/`), a `publishConfig` that points the published `main`/`module`/`types`/`exports` at `dist/` while the in-repo `exports` keep pointing at raw `./src/*.ts` (dev/HMR loop unchanged), plus `version`/`license`/`repository`/`keywords`/`sideEffects`/`files`. `private` dropped. Source of truth: `tools/publishing/sync-publish-config.mjs` (`pnpm sync:publish`); release on a `v*` tag via `.github/workflows/release.yml`. `@rifty/runtime-wasi` gains a `./worker-entry` subpath; `@rifty/runtime-js` drops the unused `acorn-walk` dep. Verified by packing all 11 and importing them from a clean npm consumer. See `docs/PUBLISHING.md`.
+
 ### Documented
 
 - **ADR-0047 — revert to esbuild (`@esbuild/wasi-preview1`) as the M8/M10 WASI forcing consumer; supersedes ADR-0044 D1/D2.** ADR-0044's two premises were verified false at vendoring time: swc has NO WASI build (its published wasm is wasm-bindgen, not WASIp1), and esbuild DOES — `@esbuild/wasi-preview1@0.28.0` imports only `wasi_snapshot_preview1` (zero deps, ~20 MB), a different package from the gojs `esbuild-wasm` that ADR-0044's audit inspected. ADR-0044 D3 (Go/gojs bridge deferred) stays valid and is now moot for esbuild. Q-2026-05-27-003's forcing consumer reverts to esbuild and the question is resolved (promoted to ADR-0049). PROJECT_PLAN.md, TASKS.md, OPEN_QUESTIONS.md, and `docs/compat/wasi.md` reverted to esbuild with cross-refs.
