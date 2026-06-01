@@ -149,6 +149,9 @@ const FACADE_DEPENDENCIES = {
   '@smithy/eventstream-codec': '4.2.14',
   '@smithy/util-utf8': '4.2.2',
   ai: '6.0.168',
+  // `@opencode-ai/llm`'s Bedrock auth (`protocols/utils/bedrock-auth.ts`) signs
+  // requests with aws4fetch; declared by the llm workspace package.
+  aws4fetch: '1.0.20',
   'bonjour-service': '1.3.0',
   'cross-spawn': '7.0.6',
   'decimal.js': '10.5.0',
