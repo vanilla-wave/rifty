@@ -59,12 +59,12 @@ type ConsumableStream =
 
 function chunkToBuffer(chunk: unknown): Buffer {
   if (typeof chunk === 'string') return Buffer.from(chunk, 'utf8');
-  if (Buffer.isBuffer(chunk)) return chunk;
+  if (Buffer.isBuffer(chunk)) return chunk as Buffer;
   if (chunk instanceof Uint8Array)
-    return Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+    return Buffer.from(chunk.buffer as ArrayBuffer, chunk.byteOffset, chunk.byteLength);
   if (chunk instanceof ArrayBuffer) return Buffer.from(chunk);
   if (ArrayBuffer.isView(chunk))
-    return Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+    return Buffer.from(chunk.buffer as ArrayBuffer, chunk.byteOffset, chunk.byteLength);
   // objectMode-ish/loose values: coerce to string like Node does on a non-binary
   // chunk rather than dropping it.
   return Buffer.from(String(chunk), 'utf8');
