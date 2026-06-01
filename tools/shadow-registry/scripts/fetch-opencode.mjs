@@ -136,6 +136,13 @@ const FACADE_DEPENDENCIES = {
   '@effect/platform-node': '4.0.0-beta.66',
   '@modelcontextprotocol/sdk': '1.27.1',
   '@npmcli/config': '10.8.1',
+  // `@effect/opentelemetry/Tracer` (imported by opencode's session/llm + agent)
+  // pulls `./Resource.js`, which statically imports `@opentelemetry/resources` —
+  // an OPTIONAL peer of `@effect/opentelemetry` (npm does not install optional
+  // peers), so the hand-flattened set missed it. It is genuinely on the server
+  // path's external closure; pinned to opencode's otel 2.6.x line. (Transitively
+  // pulls `@opentelemetry/core`.)
+  '@opentelemetry/resources': '2.6.1',
   ai: '6.0.168',
   'bonjour-service': '1.3.0',
   'cross-spawn': '7.0.6',
