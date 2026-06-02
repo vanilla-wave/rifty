@@ -4,9 +4,11 @@ packages:
   - "tools/*"
   - "tests"
   - "examples/*"
+# Dependencies allowed to run install/build scripts (pnpm 11 strictDepBuilds).
+# Without an explicit allow, a fresh `pnpm install --frozen-lockfile` fails with
+# ERR_PNPM_IGNORED_BUILDS (esbuild/biome ship native postinstalls), which would
+# brick every CI job and the release. pnpm manages this `allowBuilds` map; the
+# legacy `onlyBuiltDependencies` list is ignored in pnpm 11.
 allowBuilds:
-  '@biomejs/biome': set this to true or false
-  esbuild: set this to true or false
-onlyBuiltDependencies:
-  - "@biomejs/biome"
-  - esbuild
+  '@biomejs/biome': true
+  esbuild: true
