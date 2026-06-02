@@ -1,30 +1,51 @@
 name: Release
 
-# Publishes all @rifty libraries to npm when a vX.Y.Z tag is pushed.
-# Manual prerequisites (one-time): an NPM_TOKEN repo secret (Automation token
-# for the @rifty scope) — see docs/PUBLISHING.md. Provenance needs id-token:write
-# and a public repo on the npm registry.
+# Publishes all 12 rifty libraries (unscoped `rifty` + 11 @rifty/*) to npm when a
+# vX.Y.Z tag is pushed — TOKENLESS via npm OIDC trusted publishing (ADR-0070,
+# ADR-0071). There is NO NPM_TOKEN / NODE_AUTH_TOKEN secret anywhere.
+#
+# One-time prerequisites (out of repo — see docs/PUBLISHING.md):
+#   1. Own the `@rifty` org/scope on npmjs.com and bootstrap-publish each of the
+#      12 names ONCE with a token (OIDC can't create a brand-new name — npm/cli
+#      #8544). After that, every release is tokenless.
+#   2. Add a GitHub Actions trusted publisher to EACH of the 12 packages on
+#      npmjs.com: owner = vanilla-wave, repository = rifty, workflow = release.yml
+#      (case-sensitive; no environment).
+#   3. The repo must be PUBLIC for npm provenance to be emitted.
 on:
   push:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest # GitHub-hosted runner required; self-hosted unsupported
     permissions:
       contents: read
-      id-token: write # npm provenance
+      id-token: write # OIDC — load-bearing; without it trusted publishing is skipped
     steps:
       - uses: actions/checkout@v4
+
+      # pnpm version comes from package.json `packageManager` (pnpm 11.5.1).
+      # MUST be >= 11.1.3: pnpm 11.0.x (incl. the old 11.0.8 pin) hit pnpm#11513
+      # and 404 on OIDC publish.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11.0.8
+
+      # NOTE: deliberately NO `registry-url` and NO `cache: pnpm`. `registry-url`
+      # makes setup-node write an .npmrc with //registry.npmjs.org/:_authToken=
+      # ${NODE_AUTH_TOKEN}; with the var unset (the point of tokenless OIDC) that
+      # placeholder fights the OIDC fallback. Omitting it removes the failure mode
+      # entirely — the OIDC exchange does not depend on setup-node's registry-url.
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: pnpm
-          registry-url: 'https://registry.npmjs.org'
+          node-version: 22 # resolves to >= 22.14.0 (npm OIDC minimum)
+
+      # GitHub runners ship npm below the 11.5.1 OIDC floor — upgrade it.
+      - run: npm install -g npm@latest
+
       - run: pnpm install --frozen-lockfile
 
       - name: Derive version from tag
@@ -44,13 +65,14 @@ jobs:
             cp LICENSE "$d/LICENSE"
           done
 
-      # Publishes ONLY ./packages/* + @rifty/shadow-registry — never a bare
-      # `pnpm -r publish`, which would also pick up the non-private integration
-      # fixtures under tests/ and tools/. pnpm rewrites workspace:* to the tag
-      # version and applies each package's publishConfig (dist exports).
-      - name: Publish to npm
+      # Publishes ONLY ./packages/* (incl. the umbrella `rifty`) + @rifty/shadow-
+      # registry — never a bare `pnpm -r publish`, which would also pick up the
+      # non-private integration fixtures under tests/ and tools/. pnpm rewrites
+      # workspace:* to the tag version (createExportableManifest, BEFORE the OIDC
+      # handshake) and applies each package's publishConfig (dist exports). No
+      # NODE_AUTH_TOKEN: pnpm detects the OIDC env and mints a short-lived token
+      # itself; --provenance attests the build (needs this repo to be public).
+      - name: Publish to npm (OIDC trusted publishing)
         run: >-
           pnpm -r --filter "./packages/*" --filter "@rifty/shadow-registry"
           publish --access public --no-git-checks --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
