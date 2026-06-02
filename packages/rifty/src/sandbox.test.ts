@@ -137,4 +137,27 @@ describe('createSandbox', () => {
     sandbox.dispose();
     expect(onDispose).toHaveBeenCalledOnce();
   });
+
+  it('falls back to options.logger when deps.logger is absent', async () => {
+    const optWarn = vi.fn();
+    await createSandbox(
+      { workerUrl: 'w', logger: { warn: optWarn, error: vi.fn() } },
+      deps({ logger: undefined, initVfs: () => Promise.reject(new Error('opfs x')) }),
+    );
+    expect(optWarn).toHaveBeenCalledWith(expect.stringContaining('opfs x'));
+  });
+
+  it('prefers deps.logger over options.logger when both are supplied', async () => {
+    const depWarn = vi.fn();
+    const optWarn = vi.fn();
+    await createSandbox(
+      { workerUrl: 'w', logger: { warn: optWarn, error: vi.fn() } },
+      deps({
+        logger: { warn: depWarn, error: vi.fn() },
+        initVfs: () => Promise.reject(new Error('opfs x')),
+      }),
+    );
+    expect(depWarn).toHaveBeenCalled();
+    expect(optWarn).not.toHaveBeenCalled();
+  });
 });

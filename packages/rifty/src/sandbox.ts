@@ -47,7 +47,11 @@ export interface Sandbox {
   readonly capabilities: CapabilityCheck;
   /** Set only when service-worker registration failed (preview unavailable, rest works). */
   readonly swError?: string;
-  /** Tear down the runtime worker. */
+  /**
+   * Tear down the runtime worker. Realm-global state (the VFS backend and the
+   * registered service worker) is intentionally left in place — see the
+   * realm-scoped note on {@link createSandbox}.
+   */
   dispose(): void;
 }
 
@@ -82,6 +86,15 @@ export const COI_REQUIRED_MESSAGE =
  * any SAB-backed IPC, and the VFS surface must exist before the first `fs.*`.
  * Degradations are non-fatal and surfaced on the result — VFS init failure
  * falls back to memory (`vfs.reason`), SW registration failure sets `swError`.
+ *
+ * **Realm-scoped (v0.1).** The VFS backend and the service worker are
+ * realm-global singletons (ADR-0070 D4), so call this **once per page / worker
+ * realm**. A second `createSandbox()` in the same realm spawns a fresh runtime
+ * worker but shares the same filesystem and SW registration — the two `Sandbox`
+ * objects are not isolated at the VFS layer, and {@link Sandbox.dispose} tears
+ * down only the runtime worker (the VFS and SW persist). Register your
+ * `sandbox.runtime.on(...)` handler immediately after this resolves so you don't
+ * miss early `ready` / `stdout` events (the controller does not replay them).
  *
  * @param options - sandbox configuration; `workerUrl` is required.
  * @param deps - test-only injection seam; leave empty in production.

@@ -63,6 +63,13 @@ disables the preview path (`sandbox.swError`) — the REPL keeps working. Pass
 `skipServiceWorker: true` for headless eval-only use, or
 `requireCrossOriginIsolation: false` to inspect capabilities without throwing.
 
+> **One sandbox per realm (v0.1).** The VFS backend and the service worker are
+> realm-global singletons, so call `createSandbox()` **once per page/worker
+> realm**. A second call in the same realm gets its own runtime worker but shares
+> the filesystem and SW registration; `dispose()` tears down the runtime worker
+> only. Register `sandbox.runtime.on(...)` right after the call resolves so you
+> don't miss early events.
+
 ## Subpaths — reach any layer directly
 
 Each subpath re-exports the matching scoped package, so you never need a second
