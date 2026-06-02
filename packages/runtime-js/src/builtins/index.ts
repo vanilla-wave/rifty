@@ -33,7 +33,7 @@ import {
   v8,
 } from './misc-stubs.ts';
 import moduleModule from './module.ts';
-import { dgram, dns, http2, readline, tls, zlib } from './null-net-stubs.ts';
+import { dgram, dns, readline, tls, zlib, http2 } from './null-net-stubs.ts';
 import osModule from './os.ts';
 import pathModule from './path.ts';
 import perfHooksModule from './perf_hooks.ts';

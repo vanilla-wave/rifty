@@ -724,7 +724,11 @@ describe('file-before-directory precedence (Node parity)', () => {
   });
 
   it('directory still resolves when there is no sibling file (no regression)', () => {
-    const id = resolveId({ '/app/dir/index.js': "module.exports = 'idx';" }, './dir', '/app/main.js');
+    const id = resolveId(
+      { '/app/dir/index.js': "module.exports = 'idx';" },
+      './dir',
+      '/app/main.js',
+    );
     expect(id).toBe('/app/dir/index.js');
   });
 

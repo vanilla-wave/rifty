@@ -1,4 +1,4 @@
-import { createModuleLoader, ModuleLoadError } from '@rifty/runtime-js/loader';
+import { ModuleLoadError, createModuleLoader } from '@rifty/runtime-js/loader';
 import { MemoryFsSync } from '@rifty/vfs/internal';
 import { describe, expect, it } from 'vitest';
 
