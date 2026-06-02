@@ -20,7 +20,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm build:libs # publish build must stay green (ADR-0069)
+      - run: pnpm build:libs # publish build must stay green (ADR-0070)
       - run: pnpm check:deps
       - run: pnpm check:isolation
       - run: pnpm check:parity-coverage

@@ -112,7 +112,7 @@ pnpm test:e2e             # playwright (chromium)
 
 The in-repo `exports` point at raw TypeScript `src/` (so dev/HMR needs no build);
 the **published** packages point at the built `dist/` via `publishConfig`. See
-[`docs/PUBLISHING.md`](./docs/PUBLISHING.md) and ADR-0069.
+[`docs/PUBLISHING.md`](./docs/PUBLISHING.md) and ADR-0070.
 
 ## Architecture
 

@@ -1,4 +1,4 @@
-# ADR 0069: npm publish — tsup build + dual (dev-src / publish-dist) exports
+# ADR 0070: npm publish — tsup build + dual (dev-src / publish-dist) exports
 
 Status: Accepted
 Date: 2026-05

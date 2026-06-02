@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Packaging
 
-- **All 10 `@rifty/*` libraries (+ `@rifty/shadow-registry`) are now publishable to npm (ADR-0069).** Each package gains a `tsup` build (ESM + bundled `.d.ts` in `dist/`), a `publishConfig` that points the published `main`/`module`/`types`/`exports` at `dist/` while the in-repo `exports` keep pointing at raw `./src/*.ts` (dev/HMR loop unchanged), plus `version`/`license`/`repository`/`keywords`/`sideEffects`/`files`. `private` dropped. Source of truth: `tools/publishing/sync-publish-config.mjs` (`pnpm sync:publish`); release on a `v*` tag via `.github/workflows/release.yml`. `@rifty/runtime-wasi` gains a `./worker-entry` subpath; `@rifty/runtime-js` drops the unused `acorn-walk` dep. Verified by packing all 11 and importing them from a clean npm consumer. See `docs/PUBLISHING.md`.
+- **All 10 `@rifty/*` libraries (+ `@rifty/shadow-registry`) are now publishable to npm (ADR-0070).** Each package gains a `tsup` build (ESM + bundled `.d.ts` in `dist/`), a `publishConfig` that points the published `main`/`module`/`types`/`exports` at `dist/` while the in-repo `exports` keep pointing at raw `./src/*.ts` (dev/HMR loop unchanged), plus `version`/`license`/`repository`/`keywords`/`sideEffects`/`files`. `private` dropped. Source of truth: `tools/publishing/sync-publish-config.mjs` (`pnpm sync:publish`); release on a `v*` tag via `.github/workflows/release.yml`. `@rifty/runtime-wasi` gains a `./worker-entry` subpath; `@rifty/runtime-js` drops the unused `acorn-walk` dep. Verified by packing all 11 and importing them from a clean npm consumer. See `docs/PUBLISHING.md`.
 
 ### Documented
 

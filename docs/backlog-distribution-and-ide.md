@@ -21,7 +21,7 @@ This is a **pull backlog, not a plan**: no dates, no committed order beyond the
 - **DD-1 — No inlining of `@rifty/*` into each other.** `io` (builtin registry),
   `kernel` (`globalProcessManager`), `vfs` (`syncMirror`) hold shared module
   singletons read/written across packages; bundling duplicates the state and
-  silently breaks composition. They stay `external` + lockstep-pinned (ADR-0069 D4).
+  silently breaks composition. They stay `external` + lockstep-pinned (ADR-0070 D4).
 - **DD-2 — Umbrella is unscoped `rifty`** (not `@rifty/runtime`). Front-door brand
   name, conventional (`vite` + `@vitejs/*`); name is free on npm (checked
   2026-06-02). Needs a separate name claim besides the `@rifty` scope.
@@ -31,14 +31,14 @@ This is a **pull backlog, not a plan**: no dates, no committed order beyond the
 - **DD-4 — Component atoms are headless + themeable** (Radix/Headless-UI style:
   minimal markup + CSS-vars/slots, optional default theme), not batteries-styled.
 
-## EPIC A — Publishing (ADR-0069 landed; follow-ups)
+## EPIC A — Publishing (ADR-0070 landed; follow-ups)
 
-The build/publish pipeline is done and verified (see ADR-0069, `docs/PUBLISHING.md`).
+The build/publish pipeline is done and verified (see ADR-0070, `docs/PUBLISHING.md`).
 Remaining:
 
 | ID | Item | Why | Size | Status |
 |---|---|---|---|---|
-| A1 | tsup build + `publishConfig` dual exports for 11 packages | make packages consumable from npm | L | **done** (ADR-0069) |
+| A1 | tsup build + `publishConfig` dual exports for 11 packages | make packages consumable from npm | L | **done** (ADR-0070) |
 | A2 | Claim `@rifty` scope **and** unscoped `rifty` name on npm | publish + reserve brand | S | accepted (manual) |
 | A3 | `NPM_TOKEN` secret + create/push GitHub repo + fix `REPO_URL` in sync script | enable tag-driven release | S | accepted (manual) |
 | A4 | Fix `apps/playground/build/sw-plugin.ts` swallowed by `.gitignore` (`build/`) | playground typecheck/CI red on fresh checkout | S | idea |

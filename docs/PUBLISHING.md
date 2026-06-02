@@ -1,6 +1,6 @@
 # Publishing rifty packages
 
-How the `@rifty/*` packages are built and released to npm. Rationale: **ADR-0069**.
+How the `@rifty/*` packages are built and released to npm. Rationale: **ADR-0070**.
 
 ## The model: dev-src / publish-dist
 
