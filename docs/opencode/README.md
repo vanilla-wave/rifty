@@ -263,9 +263,9 @@ directory resolution → **ESM self-namespace** `export * as X from "."` live-bi
 real `constants` → CJS-compile-error context → **text-asset imports (ADR-0067)** →
 **`with { type: "file" }` file loader (ADR-0068)** → missing facade deps
 (`@opentelemetry/resources`, `@smithy/eventstream-codec` + `util-utf8`, `aws4fetch`).
-The full chronology + the next gate is in [`HANDOFF.md`](HANDOFF.md). The
-`node:diagnostics_channel` wall (the prior "BLOCKED" verdict) and every wall after
-it are now cleared.
+The full per-wall chronology lived in a session handoff doc (now in git history);
+the live LLM round-trip below is the next gate. The `node:diagnostics_channel`
+wall (the prior "BLOCKED" verdict) and every wall after it are now cleared.
 
 ## BOOT gate (`Server.listen` first light) — result: ✅ PASSED (2026-06-01)
 
