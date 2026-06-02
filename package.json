@@ -1,8 +1,8 @@
 {
-  "name": "rifty",
+  "name": "rifty-workspace",
   "version": "0.0.0",
   "private": true,
-  "description": "Browser-based Node-compatible runtime + WASI runner (pet project).",
+  "description": "Workspace root for rifty (the publishable umbrella is packages/rifty). Browser-based Node-compatible runtime + WASI runner (pet project).",
   "type": "module",
   "packageManager": "pnpm@11.0.8",
   "engines": {

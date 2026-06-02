@@ -147,6 +147,46 @@ importers:
         specifier: workspace:*
         version: link:../vfs
 
+  packages/rifty:
+    dependencies:
+      '@rifty/io':
+        specifier: workspace:*
+        version: link:../io
+      '@rifty/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@rifty/net':
+        specifier: workspace:*
+        version: link:../net
+      '@rifty/npm-client':
+        specifier: workspace:*
+        version: link:../npm-client
+      '@rifty/runtime-js':
+        specifier: workspace:*
+        version: link:../runtime-js
+      '@rifty/runtime-wasi':
+        specifier: workspace:*
+        version: link:../runtime-wasi
+      '@rifty/service-worker':
+        specifier: workspace:*
+        version: link:../service-worker
+      '@rifty/shell':
+        specifier: workspace:*
+        version: link:../shell
+      '@rifty/terminal':
+        specifier: workspace:*
+        version: link:../terminal
+      '@rifty/vfs':
+        specifier: workspace:*
+        version: link:../vfs
+    devDependencies:
+      typescript:
+        specifier: '*'
+        version: 5.9.3
+      vitest:
+        specifier: '*'
+        version: 2.1.9(@types/node@22.19.19)
+
   packages/runtime-js:
     dependencies:
       '@rifty/io':

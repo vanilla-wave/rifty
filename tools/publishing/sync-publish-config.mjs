@@ -35,6 +35,15 @@ const BASE_KEYWORDS = ['rifty', 'browser', 'webcontainer'];
 // addExports: subpath exports to add to the dev exports map before deriving.
 // dropExports: dev-only subpaths to exclude from the published exports.
 const SPEC = {
+  // Umbrella front door (EPIC B / ADR-0071). Unscoped `rifty` (DD-2): re-exports
+  // every @rifty/* layer on a subpath plus the framework-free createSandbox()
+  // façade. First-party deps stay external (DD-1), so subpath imports share the
+  // same singleton state as direct @rifty/* imports.
+  rifty: {
+    dir: 'packages/rifty',
+    sideEffects: false,
+    keywords: ['runtime', 'sdk', 'sandbox', 'node-compatible', 'wasi'],
+  },
   '@rifty/io': {
     dir: 'packages/io',
     sideEffects: false,
@@ -94,6 +103,8 @@ const SPEC = {
 };
 
 const DESCRIPTIONS = {
+  rifty:
+    'rifty — a browser-based Node-compatible runtime + WASI runner. One install, all the parts, plus a framework-free createSandbox() façade.',
   '@rifty/io':
     'Isomorphic primitives for rifty: EventEmitter, Buffer, and a node-compatible stream stack.',
   '@rifty/vfs':

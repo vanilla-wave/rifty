@@ -1,0 +1,117 @@
+{
+  "name": "rifty",
+  "version": "0.1.0",
+  "description": "rifty — a browser-based Node-compatible runtime + WASI runner. One install, all the parts, plus a framework-free createSandbox() façade.",
+  "type": "module",
+  "license": "MIT",
+  "author": "vanilla-wave <vizetmail@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vanilla-wave/rifty.git",
+    "directory": "packages/rifty"
+  },
+  "homepage": "https://github.com/vanilla-wave/rifty#readme",
+  "bugs": {
+    "url": "https://github.com/vanilla-wave/rifty/issues"
+  },
+  "keywords": [
+    "rifty",
+    "browser",
+    "webcontainer",
+    "runtime",
+    "sdk",
+    "sandbox",
+    "node-compatible",
+    "wasi"
+  ],
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./vfs": "./src/vfs.ts",
+    "./io": "./src/io.ts",
+    "./kernel": "./src/kernel.ts",
+    "./runtime": "./src/runtime.ts",
+    "./wasi": "./src/wasi.ts",
+    "./net": "./src/net.ts",
+    "./npm-client": "./src/npm-client.ts",
+    "./shell": "./src/shell.ts",
+    "./terminal": "./src/terminal.ts",
+    "./service-worker": "./src/service-worker.ts"
+  },
+  "files": ["dist", "CHANGELOG.md"],
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./vfs": {
+        "types": "./dist/vfs.d.ts",
+        "import": "./dist/vfs.js"
+      },
+      "./io": {
+        "types": "./dist/io.d.ts",
+        "import": "./dist/io.js"
+      },
+      "./kernel": {
+        "types": "./dist/kernel.d.ts",
+        "import": "./dist/kernel.js"
+      },
+      "./runtime": {
+        "types": "./dist/runtime.d.ts",
+        "import": "./dist/runtime.js"
+      },
+      "./wasi": {
+        "types": "./dist/wasi.d.ts",
+        "import": "./dist/wasi.js"
+      },
+      "./net": {
+        "types": "./dist/net.d.ts",
+        "import": "./dist/net.js"
+      },
+      "./npm-client": {
+        "types": "./dist/npm-client.d.ts",
+        "import": "./dist/npm-client.js"
+      },
+      "./shell": {
+        "types": "./dist/shell.d.ts",
+        "import": "./dist/shell.js"
+      },
+      "./terminal": {
+        "types": "./dist/terminal.d.ts",
+        "import": "./dist/terminal.js"
+      },
+      "./service-worker": {
+        "types": "./dist/service-worker.d.ts",
+        "import": "./dist/service-worker.js"
+      }
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsup"
+  },
+  "dependencies": {
+    "@rifty/io": "workspace:*",
+    "@rifty/vfs": "workspace:*",
+    "@rifty/kernel": "workspace:*",
+    "@rifty/runtime-js": "workspace:*",
+    "@rifty/runtime-wasi": "workspace:*",
+    "@rifty/net": "workspace:*",
+    "@rifty/npm-client": "workspace:*",
+    "@rifty/shell": "workspace:*",
+    "@rifty/terminal": "workspace:*",
+    "@rifty/service-worker": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "*",
+    "vitest": "*"
+  }
+}
