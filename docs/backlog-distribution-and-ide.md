@@ -23,8 +23,9 @@ This is a **pull backlog, not a plan**: no dates, no committed order beyond the
   singletons read/written across packages; bundling duplicates the state and
   silently breaks composition. They stay `external` + lockstep-pinned (ADR-0070 D4).
 - **DD-2 — Umbrella is unscoped `rifty`** (not `@rifty/runtime`). Front-door brand
-  name, conventional (`vite` + `@vitejs/*`); name is free on npm (checked
-  2026-06-02). Needs a separate name claim besides the `@rifty` scope.
+  name, conventional (`vite` + `@vitejs/*`); name is free on npm (re-verified
+  2026-06-02, E404). Needs a separate name claim besides the `@rifty` scope.
+  **Ratified: ADR-0071** (EPIC B landed).
 - **DD-3 — `@rifty/workbench` (headless UI controllers) is justified now** — non-Solid
   consumers are foreseen. It also makes the playground a thin shell and sharpens the
   D-002 boundary (solid-js stays in the binding layer only).
@@ -40,7 +41,7 @@ Remaining:
 |---|---|---|---|---|
 | A1 | tsup build + `publishConfig` dual exports for 11 packages | make packages consumable from npm | L | **done** (ADR-0070) |
 | A2 | Claim `@rifty` scope **and** unscoped `rifty` name on npm | publish + reserve brand | S | accepted (manual) |
-| A3 | `NPM_TOKEN` secret + create/push GitHub repo + fix `REPO_URL` in sync script | enable tag-driven release | S | accepted (manual) |
+| A3 | Create/push GitHub repo + per-package OIDC trusted publisher (no `NPM_TOKEN`) | enable tokenless tag-driven release | S | accepted (manual; `REPO_URL` fixed, release.yml on OIDC — ADR-0071) |
 | A4 | Fix `apps/playground/build/sw-plugin.ts` swallowed by `.gitignore` (`build/`) | playground typecheck/CI red on fresh checkout | S | idea |
 | A5 | Per-package `CHANGELOG.md` | DoD asks for it; only root + npm-client have one | M | idea |
 | A6 | `docs/compat/browsers.md` (capability/browser matrix) | flagged "coming"; consumers need it | M | idea |
@@ -53,9 +54,9 @@ The "front door". Three layers:
 
 | ID | Item | Why | Size | Status |
 |---|---|---|---|---|
-| B1 | subpath re-exports (`rifty/vfs`, `rifty/runtime`, `rifty/net`, …) | one `npm i rifty` → all parts | S | accepted |
-| B2 | `createSandbox()` façade — extract `boot.ts` + `useRuntime` wiring, framework-free | hide boot order + singleton wiring; consumer only passes worker/SW URLs | M | accepted |
-| B3 | `checkCapabilities()` (wrap `detectCapabilities`) | preflight gate for consumer UI | S | accepted |
+| B1 | subpath re-exports (`rifty/vfs`, `rifty/runtime`, `rifty/net`, …) | one `npm i rifty` → all parts | S | **done** (ADR-0071) |
+| B2 | `createSandbox()` façade — framework-free boot wiring | hide boot order + singleton wiring; consumer only passes worker/SW URLs | M | **done** (ADR-0071) |
+| B3 | `checkCapabilities()` (wrap `detectCapabilities`) | preflight gate for consumer UI | S | **done** (ADR-0071) |
 
 > Honest limit: B2 can't hide bundler-specific bits (worker URLs, `sw.js` build,
 > WASM asset serving) — those land in EPIC E.

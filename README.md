@@ -11,11 +11,15 @@ systems work, plus a practical "Express + npm install in the browser".
 
 ## Packages
 
-Every layer is published as its own package, so you can take just the part you need.
-All are ESM, ship `.d.ts`, and are released in lockstep under the `@rifty` scope.
+Want everything in one install? **`npm i rifty`** — the umbrella front door
+([`packages/rifty`](./packages/rifty)): a framework-free `createSandbox()` plus every
+layer below on a subpath (`rifty/vfs`, `rifty/runtime`, `rifty/net`, …). Or take just
+the part you need: every layer is also its own package. All are ESM, ship `.d.ts`, and
+are released in lockstep under the `@rifty` scope.
 
 | Package | What it is | Runs in |
 |---|---|---|
+| [`rifty`](./packages/rifty) | **Umbrella**: one-install front door + `createSandbox()` | browser + Worker |
 | [`@rifty/io`](./packages/io) | EventEmitter, Buffer, node-compatible streams | anywhere |
 | [`@rifty/vfs`](./packages/vfs) | Virtual FS: in-memory + OPFS, with a sync mirror | anywhere |
 | [`@rifty/kernel`](./packages/kernel) | Processes / scheduling / IPC (Worker-as-process, SAB) | browser + Worker |
@@ -29,6 +33,7 @@ All are ESM, ship `.d.ts`, and are released in lockstep under the `@rifty` scope
 | [`@rifty/shadow-registry`](./tools/shadow-registry) | Data tables of in-browser npm substitutions | anywhere |
 
 ```bash
+npm install rifty                 # everything + createSandbox() (the front door)
 npm install @rifty/vfs            # just the VFS
 npm install @rifty/npm-client     # just the npm resolver/installer
 # …or any combination — they share singletons when installed at the same version
@@ -92,6 +97,21 @@ browser prerequisites — without them it will not boot:
    `sql.js/dist/sql-wasm.wasm` reachable (inject a `locateFile` via
    `initSqliteEngine({ locateFile })`, awaited once before any `DatabaseSync`); the
    real-tooling WASI path needs its `esbuild.wasm`.
+
+Given those, the umbrella's **`createSandbox()`** does the rest of the boot wiring
+(capability probe → COI guard → VFS backend with memory fallback → service-worker
+registration → runtime worker) and hands you a live `RuntimeController`:
+
+```ts
+import { checkCapabilities, createSandbox } from 'rifty';
+
+if (!checkCapabilities().sufficient) return showUnsupportedNotice();
+const sandbox = await createSandbox({
+  workerUrl: new URL('@rifty/runtime-js/worker', import.meta.url), // your bundler resolves it
+  serviceWorkerUrl: '/sw.js',
+});
+await sandbox.runtime.eval('console.log("hello from a Worker")');
+```
 
 Target `es2022`; **Chrome-first** (cross-browser e2e infra exists, see
 [`docs/compat/`](./docs/compat/)).
