@@ -30,6 +30,14 @@
 
 ### Fixed
 
+- **Live preview now renders in-frame (ADR-0074).** The dev / Real-Vite
+  preview presets show their output (and HMR-reload on edit) instead of an
+  `unavailable` frame: the SW preview routing was fixed so requests from the
+  preview `<iframe>` resolve to the controlling-window bridge (see
+  `@riftydev/service-worker` ADR-0074), and the dev fixture
+  (`glue/devMode.ts`) now uses a **relative** `<script src="src/main.js">` so
+  the entry stays under `/preview/<port>/` instead of 404ing at origin root.
+  Verified end-to-end in Chromium via Playwright MCP.
 - **Production runtime worker never loaded (ADR-0073).** `useRuntime.ts` and
   `main.tsx` now import the worker entries via `?worker&url` instead of
   `new URL(..., import.meta.url)`, so `vite build` actually emits + bundles

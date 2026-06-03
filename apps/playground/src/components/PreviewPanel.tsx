@@ -13,14 +13,16 @@
  *      succeeds — see the known limitation below — so we report `live` only
  *      when the document truly loaded, and `unavailable` otherwise.
  *
- * Known limitation: under a cross-origin-isolated page (COEP credentialless),
- * the SW resolves a preview owner from `resultingClientId` (ADR-0031), which
- * for an iframe *navigation* is the iframe's own future client — not the
- * main-thread bridge that owns the port. The navigation can then abort
- * (`net::ERR_ABORTED`) even though a `fetch()` from the page succeeds. Routing
- * sub-frame navigations to the controlling window is SW-side work tracked
- * separately (touches ADR-0031/0046); this panel surfaces the state honestly
- * rather than papering over it.
+ * Resolved by ADR-0074: under a cross-origin-isolated page (COEP
+ * credentialless) the SW now routes every request that originates inside the
+ * preview iframe — the navigation and its subresources — to the controlling
+ * window that owns the port (the iframe's own client, empty for a navigation
+ * and the iframe itself for subresources, never runs `setupPreviewBridge`).
+ * So `/preview/<port>/` commits in-frame and the app's JS boots. The two-step
+ * poll-then-check-commit below is kept as an honest safety net for a
+ * genuinely-down server (the route 503s, the frame stays on `about:blank`, and
+ * we report `unavailable` rather than a blank "live" frame) — it no longer
+ * masks a routing bug.
  *
  * Reload (manual and HMR) uses `frame.contentWindow.location.reload()` — the
  * same mechanism ADR-0017's HMR client uses — so there's one refresh path.

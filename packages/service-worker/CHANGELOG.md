@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **ADR-0074:** in-frame preview now commits and renders under
+  cross-origin isolation. `createPreviewInterceptor`'s `fetchHandler` now
+  routes every request that originates inside the preview iframe — the
+  document navigation (`request.mode === 'navigate'`) and each subresource
+  (a non-empty `request.destination` like `script`/`style`) — to the
+  controlling top-level window (the realm that ran `setupPreviewBridge` and
+  owns the port) by dropping the request's own client id (`null`) so the
+  resolver falls back to the controlling window. The page's own bare
+  `fetch('/preview/…')` (empty `destination`, non-navigation) keeps
+  ADR-0031's `resultingClientId || clientId` order verbatim. Live Chromium
+  instrumentation established the real client semantics: an iframe
+  navigation has an **empty** `event.clientId` and a `resultingClientId`
+  that is the iframe's own about-to-exist client; an iframe subresource has
+  the iframe client as `event.clientId` — none of which own a bridge.
+  Previously such requests resolved to the iframe, the readiness handshake
+  timed out at 3 s, `route-preview` 503'd, and the navigation aborted with
+  `net::ERR_ABORTED` (stuck on `about:blank`) — even though a page
+  `fetch()` of the same route returned 200. No resolver/binding signature
+  change, no wire-frame change, and **no `SW_ROUTING_VERSION` /
+  `SW_FRAME_VERSION` bump** (the interceptor's id selection is SW-local and
+  unversioned — see ADR-0074 and the clarified `SW_ROUTING_VERSION` doc
+  comment). The worker-owner path is unaffected (`WorkerOwnerBinding`
+  routes by port and ignores `clientId`). New unit cases in
+  `tests/owner-resolver.test.ts` pin the navigation + subresource dispatch
+  to the controlling window and the ADR-0031 page-fetch regression guard.
+
 ### Added
 
 - **ADR-0046 (A-023):** `PreviewOwnerBinding` — one seam the preview

@@ -23,7 +23,11 @@ const INITIAL_INDEX_HTML = `<!doctype html>
   <body>
     <h1>Hello from rifty</h1>
     <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
+    <!-- Relative src so it resolves under the iframe's /preview/<port>/ base
+         (→ /preview/<port>/src/main.js) and routes through the SW preview
+         bridge to the dev server; an absolute "/src/main.js" would escape the
+         preview scope and 404. -->
+    <script type="module" src="src/main.js"></script>
   </body>
 </html>`;
 

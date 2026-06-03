@@ -29,22 +29,26 @@ When a question is reviewed:
 
 ## Q-2026-06-03-308: in-frame preview navigation aborts under cross-origin isolation (SW routes sub-frame nav to the wrong owner)
 
-**Status:** 🟢 Active
+**Status:** ⚪ Promoted — resolved by ADR-0074 (2026-06-03)
 **Encountered in:** ADR-0073 (playground UX overhaul), verifying the dev/real-vite preview presets
 **Milestone:** M7/M10 follow-up
 **Author (agent session):** 2026-06-03
+
+### Resolution
+
+Promoted to **ADR-0074** (`docs/adr/0074-sw-preview-navigation-routes-to-controlling-window.md`), which supersedes ADR-0031's owner-resolution preference for requests that originate inside the preview iframe. Live Chromium instrumentation corrected the first hypothesis: for an iframe **navigation** `event.clientId` is **empty** (not the parent) and `resultingClientId` is the iframe's own client; for an iframe **subresource** the client is the iframe itself — none own a bridge. The interceptor now routes any preview-frame request (`request.mode === 'navigate'` **or** a non-empty `request.destination`) to the controlling window by passing `clientId = null` (→ the resolver's first-controlled-window fallback = the bridge owner); the page's own bare `fetch('/preview/…')` (empty `destination`) keeps ADR-0031's `resultingClientId || clientId` order. A companion fix made the dev fixture's script path relative so subresources stay under `/preview/<port>/`. **Verified end-to-end in Chromium** (Playwright MCP): iframe commits, renders, `#app` populates, body styled by the preset JS, status "live". No `SW_ROUTING_VERSION`/`SW_FRAME_VERSION` bump (SW-local id selection). Worker-owner path unaffected (routes by port). Unit-covered in `packages/service-worker/tests/owner-resolver.test.ts`. Follow-ups below: a real-`<iframe>` Playwright regression case; a ready-window-preferring resolver for full robustness/multi-window; a `vite preview` prod-build CI smoke.
 
 ### Context
 
 The in-page preview `iframe` navigation to `/preview/<port>/` aborts with `net::ERR_ABORTED` under the cross-origin-isolated playground page, even though a `fetch()` of the same route from the page returns 200 (the path `m7-preview-sw.spec.ts` covers). Root cause: `routePreview` (ADR-0031) resolves the preview owner from `event.resultingClientId`, which for an iframe *navigation* is the iframe's own about-to-exist client — not the main-thread bridge that owns the registered port — so the handshake never completes and the navigation commit aborts. This is **pre-existing** (the iframe-render path was never CI-covered: m7 uses `fetch`, m10-hmr is skipped by default, and the suite runs against `pnpm dev`).
 
-### Provisional decision
+### Provisional decision (superseded by the resolution above)
 
-`PreviewPanel` reports preview readiness **honestly** — it polls the route, attempts the iframe nav, and only shows `live` if the navigation actually committed; otherwise `unavailable` with a hint and the "↗ new tab" escape hatch. The four REPL presets (the core click-&-play) are unaffected and render fully.
+`PreviewPanel` reports preview readiness **honestly** — it polls the route, attempts the iframe nav, and only shows `live` if the navigation actually committed; otherwise `unavailable` with a hint and the "↗ new tab" escape hatch. The four REPL presets (the core click-&-play) are unaffected and render fully. (Kept as the safety-net behaviour; the routing bug it papered over is now fixed.)
 
-### What a fix needs (not done here)
+### Follow-up still open
 
-Route sub-frame *navigations* to the controlling-window bridge owner instead of `resultingClientId`. That changes public SW routing behaviour and **reconsiders ADR-0031**, so per the workflow it requires a dedicated decision subagent producing a superseding ADR — a focused follow-up, out of scope for the playground overhaul. A CI smoke of the `vite preview` (production) build would also have caught the related prod-worker gap ADR-0073 fixed; worth adding.
+A Playwright case that drives a real `<iframe>` navigation (not a `fetch`) and asserts the frame leaves `about:blank` — the coverage gap that let this ship. A CI smoke of the `vite preview` (production) build would also have caught the related prod-worker gap ADR-0073 fixed; worth adding.
 
 ## Q-2026-06-03-309: light theme deferred — playground ships dark-only
 

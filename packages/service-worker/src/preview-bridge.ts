@@ -172,10 +172,25 @@ export function createPreviewInterceptor(
     const url = new URL(event.request.url);
     const match = matchPreviewUrl(url.pathname);
     if (!match) return;
-    // ADR-0031 — prefer `event.resultingClientId` (for navigations that create
-    // a new client) then `event.clientId`, so multi-window pages route to the
-    // correct owner instead of always picking the first match.
-    const clientId = event.resultingClientId || event.clientId || null;
+    // ADR-0074 — a preview renders inside a nested <iframe>, but the bridge
+    // that owns the port always lives on the controlling top-level window,
+    // never on the iframe. So every request *from the preview frame* — the
+    // document navigation (`mode === 'navigate'`, whose `event.clientId` is
+    // empty and whose `event.resultingClientId` is the iframe's own
+    // about-to-exist client that runs no `setupPreviewBridge`) and each of its
+    // subresources (a non-empty `destination` like 'script'/'style', whose
+    // `event.clientId` is the iframe client, which owns no bridge) — must
+    // resolve to the controlling window. For those we drop the request's own
+    // ids and let the resolver fall back to the first controlled window (the
+    // bridge owner). Without this the readiness handshake targets a client that
+    // never posts `rifty:preview:ready`, times out, and the navigation aborts
+    // (`net::ERR_ABORTED`). The page's own bare `fetch('/preview/…')` warm-up
+    // has an empty `destination` and is not a navigation, so it keeps ADR-0031's
+    // `resultingClientId || clientId` order (multi-window routing unchanged).
+    // This id selection is SW-local and off-wire — see ADR-0074's
+    // "`SW_ROUTING_VERSION` stays `'1'`" section.
+    const fromPreviewFrame = event.request.mode === 'navigate' || event.request.destination !== '';
+    const clientId = fromPreviewFrame ? null : event.resultingClientId || event.clientId || null;
     event.respondWith(
       routePreview(
         scope,
