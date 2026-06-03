@@ -12,6 +12,12 @@
 
 ### Fixed
 
+- **WebSocket `'close'` no longer depends on a global `CloseEvent`.** `ws/bridge.ts`
+  and `ws/in-process.ts` constructed `new CloseEvent(...)`, a global only present in
+  browsers and Node ≥23 — under a `node` test env on Node 22 (our `engines` floor)
+  it threw `ReferenceError: CloseEvent is not defined`, failing the `ws` conformance
+  suite on CI. A new `ws/close-event.ts` resolves the native constructor when present
+  and otherwise a faithful `Event` subclass carrying `code`/`reason`/`wasClean`.
 - **`node:sqlite` `StatementSync` default-read integer overflow now throws
   instead of truncating (ADR-0065 finding #2, parity-verified vs Node v24).**
   Under the default `setReadBigInts(false)` (effect's `Client.SafeIntegers`

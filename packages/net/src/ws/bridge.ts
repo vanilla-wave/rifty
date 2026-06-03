@@ -23,6 +23,7 @@
  */
 
 import { EventEmitter } from '@rifty/io';
+import { CloseEventCtor } from './close-event.ts';
 import { State, type WsMessage } from './in-process.ts';
 
 interface BridgeFrame {
@@ -194,7 +195,7 @@ export class BridgedWebSocket extends EventTarget {
       if (this.readyState !== State.CONNECTING) return;
       this.readyState = State.CLOSED;
       this.dispatchEvent(new Event('error'));
-      this.dispatchEvent(new CloseEvent('close', { code: 1006, reason: 'connection refused' }));
+      this.dispatchEvent(new CloseEventCtor('close', { code: 1006, reason: 'connection refused' }));
       this.cleanup();
     }, options.connectTimeoutMs ?? 1000);
   }
@@ -216,7 +217,7 @@ export class BridgedWebSocket extends EventTarget {
       if (this.readyState === State.CLOSED) return;
       this.readyState = State.CLOSED;
       this.dispatchEvent(
-        new CloseEvent('close', { code: frame.code ?? 1000, reason: frame.reason ?? '' }),
+        new CloseEventCtor('close', { code: frame.code ?? 1000, reason: frame.reason ?? '' }),
       );
       this.cleanup();
     }
@@ -232,7 +233,7 @@ export class BridgedWebSocket extends EventTarget {
     this.readyState = State.CLOSING;
     this.channel.postMessage({ type: 'close', cid: this.cid, code, reason, from: 'client' });
     this.readyState = State.CLOSED;
-    this.dispatchEvent(new CloseEvent('close', { code, reason }));
+    this.dispatchEvent(new CloseEventCtor('close', { code, reason }));
     this.cleanup();
   }
 

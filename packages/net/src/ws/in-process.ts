@@ -16,6 +16,7 @@
  */
 
 import { EventEmitter } from '@rifty/io';
+import { CloseEventCtor } from './close-event.ts';
 
 export type WsMessage = string | ArrayBufferView | ArrayBuffer;
 
@@ -168,7 +169,7 @@ export class WebSocket extends EventTarget {
       queueMicrotask(() => {
         this.readyState = State.CLOSED;
         this.dispatchEvent(new Event('error'));
-        this.dispatchEvent(new CloseEvent('close', { code: 1006, reason: String(err) }));
+        this.dispatchEvent(new CloseEventCtor('close', { code: 1006, reason: String(err) }));
       });
       return;
     }
@@ -177,7 +178,9 @@ export class WebSocket extends EventTarget {
       if (!server) {
         this.readyState = State.CLOSED;
         this.dispatchEvent(new Event('error'));
-        this.dispatchEvent(new CloseEvent('close', { code: 1006, reason: 'connection refused' }));
+        this.dispatchEvent(
+          new CloseEventCtor('close', { code: 1006, reason: 'connection refused' }),
+        );
         return;
       }
       const conn = server._accept(this);
@@ -200,7 +203,7 @@ export class WebSocket extends EventTarget {
     queueMicrotask(() => {
       this._server?._peerClosed(code, reason);
       this.readyState = State.CLOSED;
-      this.dispatchEvent(new CloseEvent('close', { code, reason }));
+      this.dispatchEvent(new CloseEventCtor('close', { code, reason }));
     });
   }
 
@@ -213,6 +216,6 @@ export class WebSocket extends EventTarget {
   _peerClosed(code: number, reason: string): void {
     if (this.readyState === State.CLOSED) return;
     this.readyState = State.CLOSED;
-    this.dispatchEvent(new CloseEvent('close', { code, reason }));
+    this.dispatchEvent(new CloseEventCtor('close', { code, reason }));
   }
 }
