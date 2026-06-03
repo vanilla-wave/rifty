@@ -96,4 +96,10 @@ if (failures > 0) {
   process.exit(1);
 } else {
   console.log('all cases match');
+  // Force exit (symmetric with the failure branch above). Running the cases
+  // leaves open handles the runner doesn't own — the native esbuild service
+  // spawned by `run-in-node` for TS lowering, and the WASI workers from
+  // `run-in-rifty` — so without this the process never exits and CI hangs
+  // (observed: ~53 min orphaned `esbuild` pid before the job was killed).
+  process.exit(0);
 }
