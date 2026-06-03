@@ -188,3 +188,154 @@ describe('createPreviewInterceptor with custom PreviewOwnerResolver', () => {
     interceptor.teardown();
   });
 });
+
+describe('createPreviewInterceptor preview-frame owner selection (ADR-0074)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /**
+   * Drive the default window binding with `clients` (in `clients.matchAll`
+   * order — first is the resolver's fallback pick), mark `readyId` as the ready
+   * bridge, then fire one `/preview/3000/` fetch with the given `mode` /
+   * `destination` / `clientId` / `resultingClientId`. Returns the clients (to
+   * assert which one received the dispatched request) and the response promise.
+   */
+  async function fireFetch(opts: {
+    clients: MockClient[];
+    mode: string;
+    destination: string;
+    clientId: string;
+    resultingClientId: string;
+    readyId: string;
+  }): Promise<{ clients: MockClient[]; respPromise: Promise<Response> | undefined }> {
+    const listeners: Record<string, ((event: unknown) => void)[]> = {};
+    const scope = {
+      clients: makeMockClients(opts.clients),
+      addEventListener(type: string, fn: (event: unknown) => void): void {
+        const arr = listeners[type] ?? [];
+        arr.push(fn);
+        listeners[type] = arr;
+      },
+      removeEventListener(type: string, fn: (event: unknown) => void): void {
+        const arr = listeners[type];
+        if (!arr) return;
+        const i = arr.indexOf(fn);
+        if (i !== -1) arr.splice(i, 1);
+      },
+    } as unknown as ServiceWorkerGlobalScope;
+
+    // Default window binding (no custom resolver) — the production path.
+    createPreviewInterceptor(scope, { timeoutMs: 3_000 });
+
+    // Only `readyId` posts the `rifty:preview:ready` handshake.
+    const messageHandler = listeners.message?.[0];
+    expect(messageHandler).toBeDefined();
+    messageHandler!({
+      data: {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      source: makeMockClient(opts.readyId, 'window'),
+    });
+
+    // A GET so `routePreview`'s body path is skipped. The interceptor reads
+    // `mode` + `destination` before the request reaches `routePreview`.
+    const request = {
+      url: 'http://x/preview/3000/',
+      method: 'GET',
+      mode: opts.mode,
+      destination: opts.destination,
+      headers: new Headers(),
+    } as unknown as Request;
+
+    const fetchHandler = listeners.fetch?.[0];
+    expect(fetchHandler).toBeDefined();
+    let respPromise: Promise<Response> | undefined;
+    fetchHandler!({
+      request,
+      clientId: opts.clientId,
+      resultingClientId: opts.resultingClientId,
+      respondWith(p: Promise<Response>): void {
+        respPromise = p;
+      },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    return { clients: opts.clients, respPromise };
+  }
+
+  async function settle(
+    client: MockClient,
+    respPromise: Promise<Response> | undefined,
+  ): Promise<number> {
+    const [, transfer] = client.postMessage.mock.calls[0]!;
+    const replyPort = (transfer as MessagePort[])[0]!;
+    replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
+    return (await respPromise!).status;
+  }
+
+  it('routes an iframe NAVIGATION to the controlling window, not the iframe resultingClientId', async () => {
+    // Real Chromium: a sub-frame navigation has an EMPTY `clientId` and a
+    // `resultingClientId` that is the iframe's about-to-exist client (which
+    // never runs setupPreviewBridge / never handshakes). At nav time that
+    // client doesn't exist yet, so only the page bridge is a client. The
+    // interceptor must drop both ids and fall back to the controlling window.
+    const page = makeMockClient('page-A', 'window');
+    const { respPromise } = await fireFetch({
+      clients: [page],
+      mode: 'navigate',
+      destination: 'iframe',
+      clientId: '',
+      resultingClientId: 'iframe-new',
+      readyId: 'page-A',
+    });
+    expect(page.postMessage).toHaveBeenCalledTimes(1);
+    expect(await settle(page, respPromise)).toBe(200);
+  });
+
+  it('routes an iframe SUBRESOURCE (non-empty destination) to the controlling window, not the iframe client', async () => {
+    // Once committed, the iframe IS a client and is the request's `clientId`,
+    // but it owns no bridge. The non-empty `destination` ('script') marks it as
+    // a preview-frame request, so the interceptor drops the iframe id and
+    // resolves to the first controlled window (the ready bridge `page-A`).
+    const page = makeMockClient('page-A', 'window');
+    const iframe = makeMockClient('iframe-new', 'window');
+    const { respPromise } = await fireFetch({
+      clients: [page, iframe], // page is matchAll[0]
+      mode: 'no-cors',
+      destination: 'script',
+      clientId: 'iframe-new',
+      resultingClientId: '',
+      readyId: 'page-A',
+    });
+    expect(iframe.postMessage).not.toHaveBeenCalled();
+    expect(page.postMessage).toHaveBeenCalledTimes(1);
+    expect(await settle(page, respPromise)).toBe(200);
+  });
+
+  it("keeps ADR-0031 clientId routing for the page's own bare fetch (empty destination)", async () => {
+    // The page's warm-up `fetch('/preview/…')` is not a navigation and has an
+    // empty `destination`, so it keeps the `resultingClientId || clientId`
+    // order — routing to the SPECIFIC owning window even when it is NOT the
+    // first matchAll entry (multi-window routing preserved). `other-window` is
+    // first; the request must still reach the addressed ready bridge `page-A`.
+    const other = makeMockClient('other-window', 'window');
+    const page = makeMockClient('page-A', 'window');
+    const { respPromise } = await fireFetch({
+      clients: [other, page], // other is matchAll[0]; clientId must win
+      mode: 'cors',
+      destination: '',
+      clientId: 'page-A',
+      resultingClientId: '',
+      readyId: 'page-A',
+    });
+    expect(other.postMessage).not.toHaveBeenCalled();
+    expect(page.postMessage).toHaveBeenCalledTimes(1);
+    expect(await settle(page, respPromise)).toBe(200);
+  });
+});

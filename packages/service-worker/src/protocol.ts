@@ -42,18 +42,28 @@ export const SW_FRAME_VERSION = '1';
  *   - The URL convention exported from `@riftydev/io/preview-protocol`:
  *     `PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`, the shape of
  *     `synthesizePreviewUrl(path)`, and the shape of `parsePreviewPath`.
- *   - The owner-fallback rules in `./owner-resolver.ts`
- *     ({@link import('./owner-resolver.ts').FirstWindowOwnerResolver}): prefer
- *     `FetchEvent.clientId`, fall back to the first controlled window with a
- *     one-shot `console.warn` per scope. The dedup key shape (`WeakSet` of
- *     scopes, mismatch key = `clientId`) is part of the contract.
+ *   - The owner-fallback rules *inside the resolver* in `./owner-resolver.ts`
+ *     ({@link import('./owner-resolver.ts').FirstWindowOwnerResolver}): given a
+ *     `clientId`, prefer `clients.get(clientId)`, then fall back to the first
+ *     controlled window with a one-shot `console.warn` per scope. The dedup
+ *     key shape (`WeakSet` of scopes, mismatch key = `clientId`) is part of the
+ *     contract.
  *
  * Bumping requires: changes to the URL regex shape, the synthetic host
- * literal, the `synthesizePreviewUrl` return shape, the resolver fallback
- * order, or the mismatch / first-window-warn dedup key shape.
+ * literal, the `synthesizePreviewUrl` return shape, the resolver's own
+ * fallback order, or the mismatch / first-window-warn dedup key shape.
  *
  * Does NOT cover wire-frame data shapes — those are pinned by
  * {@link SW_FRAME_VERSION}.
+ *
+ * Does NOT cover *which* `clientId` the SW interceptor hands the resolver per
+ * fetch. ADR-0074 makes the interceptor pass `null` (→ the resolver's
+ * controlling-window fallback) for requests that originate inside the preview
+ * iframe (`request.mode === 'navigate'` or a non-empty `request.destination`)
+ * and keep `event.resultingClientId || event.clientId` for the page's own
+ * bare `fetch`. That selection is derived from the live `FetchEvent`, never
+ * travels on a wire frame, and is not validated at handshake — it is SW-local
+ * and unversioned, so it is outside this contract and does NOT bump it.
  */
 export const SW_ROUTING_VERSION = '1';
 
