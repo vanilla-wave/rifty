@@ -76,6 +76,81 @@ The chosen direction is a polished dark IDE. A light/dark toggle would need coor
 
 (none — deferred; the fix is a public-API change to `RiftyTerminalOptions` that needs its own ADR and is not yet built. No provisional code to mark.)
 
+## Q-2026-06-04-311: playground sidebar defaults to Explorer (not Presets) at boot
+
+**Status:** 🟢 Active
+**Encountered in:** ADR-0075 (VSCode shell), recomposing the left rail into an activity-bar + sidebar
+**Milestone:** M10 polish
+**Author (agent session):** 2026-06-04
+
+### Context
+
+The old left rail was the preset gallery. The VSCode shell puts both Explorer and Presets behind an activity bar; one must be the boot default. Chosen: **Explorer**, because the file manager is the headline new feature and VSCode opens to Explorer. Verified no e2e asserts `[data-testid="gallery"]`/`[data-preset]` at boot, so this is selector-safe. Reversible: flip one default if the welcoming "click a preset" first-touch is preferred.
+
+### Code markers
+
+`// TODO(ADR): Q-2026-06-04-311` at the `useLayout` default `view` initializer.
+
+## Q-2026-06-04-312: file-explorer refresh is a bounded poll (no VFS change events)
+
+**Status:** 🟢 Active
+**Encountered in:** ADR-0075 (VFS file explorer)
+**Milestone:** M10 polish
+**Author (agent session):** 2026-06-04
+
+### Context
+
+`@riftydev/vfs` exposes no change events, so the explorer refreshes via (1) an action-triggered nonce and (2) a 1.5 s poll of *expanded* dirs while the Explorer view is visible and the page is foregrounded. The correct long-term fix — emitting events from the VFS write path — touches a lower layer (IRREVERSIBLE) and is out of scope. Reversible: tune the interval or replace with events later.
+
+### Code markers
+
+`// TODO(ADR): Q-2026-06-04-312` at the poll `setInterval` in `FileExplorer`.
+
+## Q-2026-06-04-313: directory rename via copyTree+rm (no native `renameSync` on the sync mirror)
+
+**Status:** 🟢 Active
+**Encountered in:** ADR-0075 (file explorer actions)
+**Milestone:** M10 polish
+**Author (agent session):** 2026-06-04
+
+### Context
+
+`FsSync` has no `renameSync`. Rename is implemented honestly: files via read-bytes → write-new-path → `rmSync(old)`; directories via a recursive `copyTree` + `rmSync(old,{recursive})`. This is a real implementation (not a silent stub), but copies subtrees rather than moving in place. Reversible: add a native `renameSync` to the VFS (lower-layer, IRREVERSIBLE) later if perf on large trees bites.
+
+### Code markers
+
+`// TODO(ADR): Q-2026-06-04-313` at `copyTree` in `glue/fs-ops.ts`.
+
+## Q-2026-06-04-314: binary files open read-only via a NUL-byte sniff
+
+**Status:** 🟢 Active
+**Encountered in:** ADR-0075 (open-file flow)
+**Milestone:** M10 polish
+**Author (agent session):** 2026-06-04
+
+### Context
+
+Opening an arbitrary VFS file in Monaco would garble binaries. Provisional heuristic: if a NUL byte appears in the first 8 KB, open a read-only "binary file" placeholder instead of decoding. Known-imperfect (UTF-16 text false-positives; NUL-free binaries slip through). Reversible: replace with a proper content-type detector later.
+
+### Code markers
+
+`// TODO(ADR): Q-2026-06-04-314` at the binary sniff in the open-file path.
+
+## Q-2026-06-04-315: bottom panel ships Console-only (PROBLEMS tab deferred)
+
+**Status:** 🟢 Active
+**Encountered in:** ADR-0075 (bottom panel)
+**Milestone:** M10 polish
+**Author (agent session):** 2026-06-04
+
+### Context
+
+The VSCode-faithful proposal included a PROBLEMS tab fed by Monaco markers. It is not one of the four asks, so v1 ships a single Console panel (the relocated terminal). Reversible: add a PROBLEMS tab (read-only, from `monaco.editor.getModelMarkers`) as a follow-up — the bottom panel is already a tabbable container.
+
+### Code markers
+
+(none — a deferred non-goal recorded in ADR-0075's "Alternatives considered"; no provisional code to mark.)
+
 ## Q-2026-06-03-307: eager vs lazy OPFS content preload in `OpfsFsSync.init`
 
 **Status:** 🟢 Active  
