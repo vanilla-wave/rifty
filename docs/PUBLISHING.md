@@ -94,18 +94,31 @@ change `name` in each `package.json`, the SPEC keys + `REPO_URL` in
 
 ### Phase 1 — bootstrap-publish each name ONCE with a token
 
-No CI secret needed — do it locally with an interactive `npm login` (or a short-lived
-granular token), from a clean tree:
+No CI secret needed. Create a short-lived **granular npm token** with publish rights
+to **both** the `@riftydev` scope **and** the unscoped `rifty` name, put it in
+`$NPM_TOKEN`, and run the bootstrap script:
 
 ```bash
-npm login                                   # interactive; nothing stored in the repo
-pnpm install && pnpm build:libs
+pnpm install
+NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --dry-run   # packs all 12, publishes nothing
+NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh             # the real publish
+```
+
+The script runs `build:libs`, bundles `LICENSE` into each package, and publishes the
+filtered set (`./packages/*` + `@riftydev/shadow-registry`, `--access public`). The
+token is read from `$NPM_TOKEN` and **never written to disk** — a throwaway npmrc holds
+the literal `${NPM_TOKEN}` placeholder that pnpm interpolates at read time, and it (plus
+the `LICENSE` copies) is removed on exit. Equivalent manual form:
+
+```bash
+pnpm build:libs
 for d in packages/*/ tools/shadow-registry/; do cp LICENSE "$d/LICENSE"; done
+# auth via `npm login` or ~/.npmrc //registry.npmjs.org/:_authToken=..., then:
 pnpm -r --filter "./packages/*" --filter "@riftydev/shadow-registry" \
   publish --access public --no-git-checks   # --access public is mandatory for @riftydev/*
 ```
 
-Every one of the 12 names now exists on the registry.
+Every one of the 12 names now exists on the registry. Revoke the token after Phase 2.
 
 ### Phase 2 — add a GitHub Actions trusted publisher to EACH package
 
