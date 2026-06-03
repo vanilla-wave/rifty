@@ -76,6 +76,20 @@
           }
         }
       }
+    },
+    {
+      "include": [
+        "apps/playground/src/components/Splitter.tsx",
+        "apps/playground/src/components/FileExplorer.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useSemanticElements": "off",
+            "noNoninteractiveTabindex": "off"
+          }
+        }
+      }
     }
   ]
 }

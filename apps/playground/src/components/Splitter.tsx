@@ -97,12 +97,15 @@ export function Splitter(props: SplitterProps) {
     }
   }
 
+  // role="separator" + aria-valuenow/min/max is the correct ARIA window-splitter
+  // pattern (focusable, keyboard-resizable). Biome's React-centric
+  // useSemanticElements (suggests <hr>) is disabled for this file in biome.json.
   return (
     <div
       class="rf-splitter"
       data-orientation={props.orientation}
       role="separator"
-      tabindex="0"
+      tabIndex={0}
       aria-orientation={props.orientation === 'vertical' ? 'vertical' : 'horizontal'}
       aria-label={props.ariaLabel}
       aria-valuenow={Math.round(props.value)}

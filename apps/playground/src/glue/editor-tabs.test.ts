@@ -85,7 +85,10 @@ describe('setDirty', () => {
 
 describe('setProgramTitle', () => {
   it('relabels only the program tab', () => {
-    const tabs = setProgramTitle(openFileTab(initialTabs('p'), '/a.js', 'a'), 'program · src/main.js');
+    const tabs = setProgramTitle(
+      openFileTab(initialTabs('p'), '/a.js', 'a'),
+      'program · src/main.js',
+    );
     expect(tabs[0]?.title).toBe('program · src/main.js');
     expect(tabs[1]?.title).toBe('a');
   });

@@ -22,11 +22,6 @@ export function clampSize(px: number, min: number, max: number): number {
  * `delta` px along the splitter's axis. The caller chooses `delta`'s sign so a
  * handle on either side of its panel grows the panel intuitively.
  */
-export function nextSizeFromDelta(
-  start: number,
-  delta: number,
-  min: number,
-  max: number,
-): number {
+export function nextSizeFromDelta(start: number, delta: number, min: number, max: number): number {
   return clampSize(start + delta, min, max);
 }

@@ -19,7 +19,7 @@ export function EditorTabs(props: {
           <div
             class="rf-tab"
             role="tab"
-            tabindex="0"
+            tabIndex={0}
             data-tab={tab.id === PROGRAM_TAB_ID ? 'program' : 'file'}
             data-active={props.activeId === tab.id}
             aria-selected={props.activeId === tab.id}

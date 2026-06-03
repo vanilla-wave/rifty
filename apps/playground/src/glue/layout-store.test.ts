@@ -9,7 +9,9 @@ import {
   saveLayout,
 } from './layout-store.ts';
 
-function fakeStorage(initial: Record<string, string> = {}): StorageLike & { map: Map<string, string> } {
+function fakeStorage(
+  initial: Record<string, string> = {},
+): StorageLike & { map: Map<string, string> } {
   const map = new Map(Object.entries(initial));
   return {
     map,

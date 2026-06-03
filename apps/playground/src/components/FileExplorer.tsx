@@ -35,7 +35,9 @@ export function FileExplorer(props: {
   const [editing, setEditing] = createSignal<Editing>(null);
 
   const fail = (err: unknown): void => props.onError?.((err as Error).message);
-  const refresh = (): void => setNonce((n) => n + 1);
+  const refresh = (): void => {
+    setNonce((n) => n + 1);
+  };
 
   function walk(dir: string, depth: number, exp: ReadonlySet<string>, out: Row[]): void {
     let children: TreeChild[];
@@ -109,7 +111,8 @@ export function FileExplorer(props: {
     try {
       if (state?.kind === 'new-file') createFile(props.vfs, joinPath(state.parent, name));
       else if (state?.kind === 'new-folder') createDir(props.vfs, joinPath(state.parent, name));
-      else if (state?.kind === 'rename') renamePath(props.vfs, state.path, joinPath(dirname(state.path), name));
+      else if (state?.kind === 'rename')
+        renamePath(props.vfs, state.path, joinPath(dirname(state.path), name));
     } catch (err) {
       fail(err);
     }
@@ -195,12 +198,14 @@ export function FileExplorer(props: {
                 <div
                   class="rf-row"
                   role="treeitem"
-                  tabindex="0"
+                  tabIndex={0}
                   data-kind={row.kind}
                   data-active={row.kind === 'file' && props.activePath === row.path}
                   aria-expanded={row.kind === 'dir' ? expanded().has(row.path) : undefined}
                   style={{ '--rf-row-depth': row.depth }}
-                  onClick={() => (row.kind === 'dir' ? toggleDir(row.path) : props.onOpenFile(row.path))}
+                  onClick={() =>
+                    row.kind === 'dir' ? toggleDir(row.path) : props.onOpenFile(row.path)
+                  }
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
@@ -210,15 +215,15 @@ export function FileExplorer(props: {
                   }}
                 >
                   {row.kind === 'dir' ? (
-                    <span class="rf-row__twisty" data-open={expanded().has(row.path)} aria-hidden="true">
+                    <span
+                      class="rf-row__twisty"
+                      data-open={expanded().has(row.path)}
+                      aria-hidden="true"
+                    >
                       ▸
                     </span>
                   ) : (
-                    <span
-                      class="rf-row__ico"
-                      data-cat={fileCategory(row.name)}
-                      aria-hidden="true"
-                    >
+                    <span class="rf-row__ico" data-cat={fileCategory(row.name)} aria-hidden="true">
                       {glyphForCategory(fileCategory(row.name))}
                     </span>
                   )}

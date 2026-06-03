@@ -24,7 +24,8 @@ describe('readChildren', () => {
   it('reads one level, joins paths, maps kind, and sorts', () => {
     const reader: DirentReader = {
       readdirSync: (path) => {
-        if (path === '/workspace') return [d('b.js', false), d('node_modules', true), d('a.js', false)];
+        if (path === '/workspace')
+          return [d('b.js', false), d('node_modules', true), d('a.js', false)];
         throw new Error(`unexpected readdir ${path}`);
       },
     };
