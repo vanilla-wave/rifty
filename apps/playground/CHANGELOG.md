@@ -4,6 +4,48 @@
 
 ### Added
 
+- **Preset gallery — click-to-run examples (ADR-0073).** New `src/presets.ts`
+  + `src/components/PresetGallery.tsx`: a category-grouped left rail of
+  example programs (Welcome, Event-loop order, Node core modules, Virtual
+  filesystem, Dev server + HMR, Real Vite + npm). Selecting a preset loads
+  its source and switches mode; REPL presets auto-run. Every preset is
+  grounded in a capability traced through the source and covered by the
+  e2e/conformance suites — no stubs. The boot preset still prints
+  `worker alive` (M1 e2e contract).
+- **Design system "terminal-luxe" (ADR-0073).** New `src/styles/theme.css`
+  with CSS-variable tokens (cool-ink palette, acid-lime accent, hairlines,
+  film grain, staggered load), class-based components replacing inline
+  styles, a custom Monaco `rifty-dark` theme, and self-hosted OFL fonts
+  under `public/fonts` (IBM Plex Mono + Bricolage Grotesque, bundled
+  `.woff2` assets — no CDN, no npm dep). New `public/favicon.svg`.
+- **Honest preview status.** `PreviewPanel` warms up the route, navigates the
+  iframe, and reports `live` only on a real navigation commit (else
+  `unavailable` with a hint) — see ADR-0073's known-limitation note and
+  OPEN_QUESTIONS Q-2026-06-03-308.
+- **Netlify hosting (`netlify.toml`).** pnpm monorepo build, COOP/COEP
+  headers (mirrored from `public/_headers`), SPA fallback, prod publish of
+  `apps/playground/dist`.
+- **`useMode.loadPreset()` + `useRuntime.whenReady()/isRunning()`.** Preset
+  loading transitions modes; REPL eval gates on worker readiness.
+
+### Fixed
+
+- **Production runtime worker never loaded (ADR-0073).** `useRuntime.ts` and
+  `main.tsx` now import the worker entries via `?worker&url` instead of
+  `new URL(..., import.meta.url)`, so `vite build` actually emits + bundles
+  the `worker-entry` / `kernel-worker-entry` chunks. Previously the prod
+  build shipped no worker chunk and the REPL worker crashed on boot
+  (`[worker error] undefined`) in any hosted build — invisible to CI, which
+  only runs against `pnpm dev`.
+- **Monaco language-service console spam.** New `src/glue/monaco-env.ts`
+  wires `MonacoEnvironment.getWorker` (Vite `?worker` imports), removing the
+  per-keystroke `toUrl` `TypeError` from the TS diagnostics adapter.
+- **Editor ignored external source changes.** `EditorPanel` now reacts to
+  `value` updates, so selecting a preset actually replaces the editor
+  content.
+- **Auto-run / Run could throw "Runtime is not running"** when fired before
+  the worker booted — both now gate on `useRuntime.whenReady()`.
+
 - **`npm install …` at the shell prompt (follow-ups item #15, 2026-05-27).**
   New glue file `apps/playground/src/glue/npm-shell-command.ts` registers
   an `npm` builtin on the long-lived `ShellSession` so typing

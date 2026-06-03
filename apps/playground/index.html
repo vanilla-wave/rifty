@@ -3,9 +3,31 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <meta
+      name="description"
+      content="rifty — a Node-compatible runtime and npm install, running entirely in your browser."
+    />
     <title>rifty — playground</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/@xterm/xterm/css/xterm.css" />
+    <link
+      rel="preload"
+      href="/fonts/ibm-plex-mono-400.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="preload"
+      href="/fonts/bricolage.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin="anonymous"
+    />
     <style>
+      /* Critical, pre-bundle styles: avoid a white flash before theme.css
+         (imported from the entry module) is injected by Vite. */
       :root {
         color-scheme: dark;
       }
@@ -15,9 +37,12 @@
         margin: 0;
         padding: 0;
         height: 100%;
-        background: #0f1115;
-        color: #e6e6e6;
-        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      }
+      body {
+        background: #08090d;
+        color: #e8eaf1;
+        font-family: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+        overflow: hidden;
       }
       * {
         box-sizing: border-box;

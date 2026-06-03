@@ -19,15 +19,5 @@ export function TerminalPanel(props: {
 
   onCleanup(() => term?.dispose());
 
-  return (
-    <div
-      ref={container}
-      style={{
-        height: '100%',
-        background: '#0f1115',
-        'border-left': '1px solid #232735',
-      }}
-      data-testid="terminal"
-    />
-  );
+  return <div ref={container} class="rf-terminal" data-testid="terminal" />;
 }

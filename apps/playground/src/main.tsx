@@ -7,6 +7,12 @@ import { setKernelWorkerUrl } from '@riftydev/kernel';
 import { render } from 'solid-js/web';
 import { App } from './App.tsx';
 import { assertCrossOriginIsolated, bootstrapPlayground } from './boot.ts';
+// `?worker&url` bundles the kernel child-worker entry and yields its URL.
+// See the matching note in adapters/useRuntime.ts: the bare
+// `new URL(..., import.meta.url)` form is not emitted as a worker chunk by
+// `vite build`, so child processes failed to spawn in production.
+import kernelWorkerUrl from './workers/kernel-worker-entry.ts?worker&url';
+import './styles/theme.css';
 
 // First statement — fails loud if COI is off. Runs *before* `bootstrapPlayground`
 // would re-invoke the guard, so the error message is painted as soon as
@@ -14,9 +20,9 @@ import { assertCrossOriginIsolated, bootstrapPlayground } from './boot.ts';
 assertCrossOriginIsolated();
 
 // ADR-0011 phase 2 — hand the kernel a URL to the Worker entry it should
-// instantiate for each spawned child. Vite resolves the URL at build time
-// and emits the worker chunk; the kernel never hardcodes a path.
-setKernelWorkerUrl(new URL('./workers/kernel-worker-entry.ts', import.meta.url));
+// instantiate for each spawned child. Vite bundles the worker chunk at build
+// time (via the `?worker&url` import above); the kernel never hardcodes a path.
+setKernelWorkerUrl(kernelWorkerUrl);
 
 const root = document.getElementById('app');
 if (!root) throw new Error('Missing #app root element');

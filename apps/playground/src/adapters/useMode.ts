@@ -88,6 +88,14 @@ export interface ModeMachine {
    * — preserved here for behavioural parity.
    */
   toggleRealVite(): Promise<void>;
+  /**
+   * Load a preset: seed the editor with `source` and transition into the
+   * preset's `mode`, starting/stopping the dev/real-vite handles as needed.
+   * Idempotent within a mode (re-selecting a dev preset while already in dev
+   * just re-seeds the entry). Distinct from {@link toggleDev}/{@link toggleRealVite}
+   * (which the header buttons use) so the e2e toggle semantics stay untouched.
+   */
+  loadPreset(preset: { readonly mode: Mode; readonly source: string }): Promise<void>;
   /** Dispose all handles. Idempotent. Called by `onCleanup` automatically. */
   dispose(): void;
 }
@@ -156,6 +164,75 @@ export function useMode(options: UseModeOptions): ModeMachine {
     if (mode() === 'real-vite') realViteHandle()?.updateEntry(next);
   }
 
+  /** Tear down whichever server handle is live and return to REPL. */
+  async function leaveServers(): Promise<void> {
+    const dev = devHandle();
+    if (dev) await dev.close();
+    setDevHandle(null);
+    const rv = realViteHandle();
+    if (rv) await rv.close();
+    setRealViteHandle(null);
+    setMode('repl');
+  }
+
+  async function loadPreset(preset: {
+    readonly mode: Mode;
+    readonly source: string;
+  }): Promise<void> {
+    const entry = preset.source;
+    if (preset.mode === 'repl') {
+      if (mode() !== 'repl') await leaveServers();
+      setSourceSignal(entry);
+      return;
+    }
+    if (preset.mode === 'dev') {
+      if (mode() === 'dev') {
+        setSource(entry);
+        return;
+      }
+      if (mode() === 'real-vite') {
+        const rv = realViteHandle();
+        if (rv) await rv.close();
+        setRealViteHandle(null);
+      }
+      log('\n[entering dev mode — starting dev server on port 3000]\n');
+      try {
+        const handle = await startDevMode({ port: 3000 });
+        setDevHandle(handle);
+        setMode('dev');
+        setSourceSignal(entry);
+        handle.updateEntry(entry);
+      } catch (err) {
+        log(`dev mode failed: ${(err as Error).message}\n`, 'stderr');
+      }
+      return;
+    }
+    // preset.mode === 'real-vite'
+    if (mode() === 'real-vite') {
+      setSource(entry);
+      return;
+    }
+    if (mode() === 'dev') {
+      const dev = devHandle();
+      if (dev) await dev.close();
+      setDevHandle(null);
+    }
+    log('\n[starting real Vite — installing from npm, this may take ~20s]\n');
+    try {
+      const handle = await startRealVite({
+        port: realVitePort(),
+        onLog: (line) => log(line),
+      });
+      setRealViteHandle(handle);
+      setRealVitePort(handle.port);
+      setMode('real-vite');
+      setSourceSignal(entry);
+      handle.updateEntry(entry);
+    } catch (err) {
+      log(`real-vite failed: ${(err as Error).stack ?? (err as Error).message}\n`, 'stderr');
+    }
+  }
+
   function dispose(): void {
     void devHandle()?.close();
     void realViteHandle()?.close();
@@ -172,6 +249,7 @@ export function useMode(options: UseModeOptions): ModeMachine {
     setSource,
     toggleDev,
     toggleRealVite,
+    loadPreset,
     dispose,
   };
 }

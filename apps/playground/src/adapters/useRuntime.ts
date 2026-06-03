@@ -1,5 +1,12 @@
 import { type RuntimeController, spawnRuntime } from '@riftydev/runtime-js';
 import { onCleanup } from 'solid-js';
+// `?worker&url` makes Vite emit + bundle the worker as a module chunk and hand
+// back its URL. The previous `new URL('../workers/worker-entry.ts',
+// import.meta.url)` form only resolves under `pnpm dev`; `vite build` ships no
+// worker chunk for it, so the production worker failed to load with an
+// empty-message ErrorEvent ("[worker error] undefined"). The kernel's child
+// worker entry is wired identically in main.tsx.
+import workerUrl from '../workers/worker-entry.ts?worker&url';
 
 type Writer = (chunk: string, stream?: 'stdout' | 'stderr') => void;
 
@@ -10,11 +17,30 @@ type Writer = (chunk: string, stream?: 'stdout' | 'stderr') => void;
  */
 export function useRuntime() {
   let writer: Writer | null = null;
-  const workerUrl = new URL('../workers/worker-entry.ts', import.meta.url).href;
+  // Worker liveness: `false` until the first `ready`, back to `false` on `exit`
+  // (reset/crash). `controller.eval` rejects with "Runtime is not running" if
+  // called while down, so callers that fire eagerly (preset auto-run, the Run
+  // button) gate on `whenReady()` instead of racing the boot.
+  let running = false;
+  let readyWaiters: Array<() => void> = [];
   const controller: RuntimeController = spawnRuntime({ workerUrl });
 
+  function markReady(): void {
+    running = true;
+    const waiters = readyWaiters;
+    readyWaiters = [];
+    for (const resolve of waiters) resolve();
+  }
+
+  // `attach()` re-runs after every `reset()` (the controller respawns the
+  // worker and the old subscription is gone). `controller.on` returns an
+  // unsubscribe fn — drop the previous listener before adding a new one so
+  // handlers don't accumulate across resets (which would duplicate every
+  // terminal line and fire `markReady` once per stale listener).
+  let detach: (() => void) | null = null;
   function attach() {
-    controller.on((event) => {
+    detach?.();
+    detach = controller.on((event) => {
       switch (event.type) {
         case 'stdout':
           writer?.(event.chunk, 'stdout');
@@ -28,9 +54,11 @@ export function useRuntime() {
           }
           break;
         case 'ready':
+          markReady();
           writer?.('[worker ready]\n');
           break;
         case 'exit':
+          running = false;
           writer?.(`[worker exited: ${event.reason}]\n`, 'stderr');
           break;
       }
@@ -46,6 +74,15 @@ export function useRuntime() {
     },
     write(chunk: string, stream: 'stdout' | 'stderr' = 'stdout') {
       writer?.(chunk, stream);
+    },
+    /** True once the worker has booted (and not since exited). */
+    isRunning(): boolean {
+      return running;
+    },
+    /** Resolves immediately if the worker is up, otherwise on the next `ready`. */
+    whenReady(): Promise<void> {
+      if (running) return Promise.resolve();
+      return new Promise<void>((resolve) => readyWaiters.push(resolve));
     },
     async evaluate(code: string) {
       return controller.eval(code);
