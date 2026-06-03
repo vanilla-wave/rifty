@@ -263,7 +263,7 @@
   opencode's grep tool WITHOUT the spawn that ripgrep-the-binary needs.
   `line`/`column` are 1-based (ripgrep/Node grep convention). Private helper: no
   cross-package export via `src/index.ts`, no new builtin, no resolver intercept;
-  imports only its own `builtins/fs.ts` + `@rifty/vfs` (layer-legal). Pure-JS by
+  imports only its own `builtins/fs.ts` + `@riftydev/vfs` (layer-legal). Pure-JS by
   design (not ripgrep-WASM) to stay dependency-free and trivially reversible;
   ripgrep-WASM / isomorphic-git deferred behind explicit ADR ratification. Unit:
   `utils/vfs-grep.test.ts`.
@@ -310,7 +310,7 @@
 
 - **`ModuleLoaderOptions` gains `workspace?` + `transformSource?`; new
   `TransformSourceHook` type (ADR-0052, feature-02 T2).** Additive optional
-  public-API fields on the `@rifty/runtime-js/loader` surface. `transformSource`
+  public-API fields on the `@riftydev/runtime-js/loader` surface. `transformSource`
   is an injected per-file source transform
   (`{ source, id, loader: 'ts'|'tsx'|'jsx', workspace } => Promise<string>`,
   the load-bearing contract) invoked for every `.ts`/`.tsx`/`.jsx` module on the
@@ -454,15 +454,15 @@
 
 ### Added
 
-- **ADR-0039 — Node-API knowledge moved here from `@rifty/kernel`.** Three
+- **ADR-0039 — Node-API knowledge moved here from `@riftydev/kernel`.** Three
   new modules under `src/ipc/`:
   - `install-process.ts` — `installNodeProcessShim(spec)` builds the
     Node-shape `process` global from the kernel's `KernelProcessSpec`
     (pid/ppid/argv/env/cwd/stdout/stderr/exit). Module-load side-effect
     registers itself as the kernel's pre-entry hook (via
     `setKernelPreEntryHook`), so host chunks that import this module
-    before `@rifty/kernel/worker-entry` get the wiring for free. Exposed
-    via the new `@rifty/runtime-js/install-process` subpath export.
+    before `@riftydev/kernel/worker-entry` get the wiring for free. Exposed
+    via the new `@riftydev/runtime-js/install-process` subpath export.
   - `handlers.ts` — `installRuntimeJsExecSyncHandler(dispatcher, resolveScript)`
     registers the `'execSync'` handler on the kernel dispatcher: parses
     `node <script>` command lines, resolves bytes from the runtime-js VFS
@@ -474,7 +474,7 @@
   - `recursive-runner.ts` — `makeRecursiveRunner()` returns a runner that
     spawns a fresh kernel Worker per `execSync` invocation, captures its
     stdout, and resolves once the child exits. Statically imports
-    `spawnKernelWorker` from `@rifty/kernel` (top-down, no late binding —
+    `spawnKernelWorker` from `@riftydev/kernel` (top-down, no late binding —
     closes the previous module-load handshake the kernel needed for
     `setKernelRecursiveSpawn`).
 - **`builtins/child_process.ts` boot wiring.** Module-load side-effect
@@ -488,32 +488,32 @@
 - Builtin registration sites in `src/builtins/index.ts` drop the
   `as unknown as Record<string, unknown>` cast on every `registerBuiltin(...)`
   call (34 sites). `BuiltinFactory` is now generic over its return type
-  (see `@rifty/io` changelog), so TypeScript infers each factory's concrete
+  (see `@riftydev/io` changelog), so TypeScript infers each factory's concrete
   module shape and a typo against an exported namespace becomes a
   typecheck error rather than a runtime surprise. No behaviour change. The
   remaining structural-assertion casts on `EventEmitter` (used as a
   namespace) and `globalThis` (capability probes in `env/capabilities.ts`)
   are intentional and unrelated to the registry boundary.
 
-- **ADR-0035: builtin registry sourced from `@rifty/io`.** The
+- **ADR-0035: builtin registry sourced from `@riftydev/io`.** The
   `name → factory` cache that backs `node:<name>` lookups
   (`registerBuiltin`, `loadBuiltin`, `isBuiltinSpecifier`, `listBuiltins`,
-  `BuiltinFactory`) now lives in `@rifty/io`. The top-level public
-  re-exports from `@rifty/runtime-js`'s `src/index.ts` are unchanged;
-  `src/builtins/index.ts` re-exports the surface from `@rifty/io` so
+  `BuiltinFactory`) now lives in `@riftydev/io`. The top-level public
+  re-exports from `@riftydev/runtime-js`'s `src/index.ts` are unchanged;
+  `src/builtins/index.ts` re-exports the surface from `@riftydev/io` so
   internal callers (`module-loader/loader.ts`, `module-loader/resolver.ts`,
   `builtins/module.ts`) keep their existing import paths. The internal
   module `src/builtins/registry.ts` is deleted (was not on the
   subpath-exports list, so no public path is broken). See ADR-0035 for
   the rationale.
 
-- **ADR-0034 (D-B):** the re-exported `node:stream` surface from `@rifty/io`
+- **ADR-0034 (D-B):** the re-exported `node:stream` surface from `@riftydev/io`
   (via `src/builtins/stream.ts` shim) now matches Node's documented
   contract — `_readableState`/`_writableState` containers, `Readable.read(n)`
   honours `n`, `Writable.destroy` cancels in-flight queue, `Duplex`/`Transform`
   methods on the prototype (no per-instance rebinding), `pipeline()` destroys
   upstream on error. No source change in this package — the shim re-exports
-  unchanged. Listed here so consumers of `@rifty/runtime-js/builtins/stream`
+  unchanged. Listed here so consumers of `@riftydev/runtime-js/builtins/stream`
   can find the breaking-contract-restoration note from their own changelog.
   See `packages/io/CHANGELOG.md` and ADR-0034 for details.
 
@@ -524,7 +524,7 @@
 
 ### Removed
 
-- **ADR-0037: parallel `SyncVfs` / `MemorySyncVfs` deleted.** The module loader (`createModuleLoader`, `createResolver`) now consumes `@rifty/vfs:FsSync` directly; the loader-local `SyncVfs` interface (`module-loader/vfs-sync.ts`) and the hand-rolled `MemorySyncVfs` backend (`module-loader/memory-sync-vfs.ts`) are removed, along with the corresponding `MemorySyncVfs` / `SyncVfs` re-exports on `@rifty/runtime-js/loader`. Inside the runtime Worker, `worker-entry.ts` now mints one `MemoryFsSync` (via `createMemoryFs()`), publishes it via `setSyncMirror(...)`, and feeds it to the loader — so `load-fixture`, `fs.readFileSync`, WASI preopens, and module resolution all reach the same `MemoryBackend` (ADR-0014's promise, finally redeemed for the Worker realm). Callers (tests, parity runner, playground adapter) construct `new MemoryFsSync()` from `@rifty/vfs/internal` and feed it to the loader; the playground's `realVite.ts` adapter drops its hand-rolled `makeSyncVfs()` wrapper and passes `syncMirror()` directly. Public API change for `@rifty/runtime-js/loader` — see ADR-0037.
+- **ADR-0037: parallel `SyncVfs` / `MemorySyncVfs` deleted.** The module loader (`createModuleLoader`, `createResolver`) now consumes `@riftydev/vfs:FsSync` directly; the loader-local `SyncVfs` interface (`module-loader/vfs-sync.ts`) and the hand-rolled `MemorySyncVfs` backend (`module-loader/memory-sync-vfs.ts`) are removed, along with the corresponding `MemorySyncVfs` / `SyncVfs` re-exports on `@riftydev/runtime-js/loader`. Inside the runtime Worker, `worker-entry.ts` now mints one `MemoryFsSync` (via `createMemoryFs()`), publishes it via `setSyncMirror(...)`, and feeds it to the loader — so `load-fixture`, `fs.readFileSync`, WASI preopens, and module resolution all reach the same `MemoryBackend` (ADR-0014's promise, finally redeemed for the Worker realm). Callers (tests, parity runner, playground adapter) construct `new MemoryFsSync()` from `@riftydev/vfs/internal` and feed it to the loader; the playground's `realVite.ts` adapter drops its hand-rolled `makeSyncVfs()` wrapper and passes `syncMirror()` directly. Public API change for `@riftydev/runtime-js/loader` — see ADR-0037.
 
 ### Fixed
 
@@ -548,9 +548,9 @@
 - **M10:** `fs.watch` / `fs.watchFile` / `fs.unwatchFile` (polling-based). Watcher emits Node-compatible `'rename'` / `'change'` events; directory watches report changed filename; abort via `AbortSignal`; idle interval doesn't fire. New `./builtins/fs-watch` subpath export. 8 conformance tests.
 - **M10:** `RuntimeController.writeFile(path, content)` for editor↔VFS sync (used by the playground's Dev Mode).
 - **ADR-0029:** `fs.utimesSync(path, atime, mtime)` and `fs.promises.utimes` route through `syncMirror().utimes`. Accepts numeric seconds or `Date` per Node semantics; mtime stored in ms.
-- **ADR-0012:** `builtins/{events,buffer,stream}.ts` became thin re-export shims over `@rifty/io` — the primitives now live in `@rifty/io`. `builtins/child_process.ts` allocates PIDs via `@rifty/kernel.globalProcessManager.spawn(...)` so `ChildProcess.pid`, `exitCode`, `signalCode`, and `cwd` (ADR-0019) come from the kernel record. Added `@rifty/kernel` as a direct dependency.
+- **ADR-0012:** `builtins/{events,buffer,stream}.ts` became thin re-export shims over `@riftydev/io` — the primitives now live in `@riftydev/io`. `builtins/child_process.ts` allocates PIDs via `@riftydev/kernel.globalProcessManager.spawn(...)` so `ChildProcess.pid`, `exitCode`, `signalCode`, and `cwd` (ADR-0019) come from the kernel record. Added `@riftydev/kernel` as a direct dependency.
 - **ADR-0011 phase 2:** `builtins/child_process.ts` (and `fork`) now branches on `isSabIpcSupported() && getKernelWorkerUrl()` — when both hold it routes through `globalProcessManager.spawnWorker(...)` (real Web Worker realm) via the new `builtins/child_process-worker.ts` helper, which builds a `SpawnWorkerSpec` from the script bytes in `syncMirror()` and pumps the worker's stdout/stderr `MessagePort`s into the existing `Readable`s. Non-`node` commands and the SAB-less fallback path keep the existing in-realm `execScript` behaviour (marked `// fallback per ADR-0011`). `execSync` stays in-realm — true sync blocking is phase 3. `builtins/worker_threads.Worker` carries the same branching: `startViaKernel()` for the SAB path, `startSameRealm()` for the fallback. 2 new conformance tests (`tests/conformance/builtins/child_process-worker.test.ts`, skip in Node-without-isolation).
-- **ADR-0011 phase 3:** `builtins/child_process-sync.ts` houses the new `execSync` body. When `isSabIpcSupported() && getKernelWorkerUrl() && globalThis[KERNEL_SYNC_CALL_KEY]` (i.e. we are inside a kernel-spawned Worker) it delegates to the global hook `__riftyKernelSyncCall('execSync', { cmd, opts })`, decoding the parent dispatcher's stdout reply as a UTF-8 `Buffer`. The hook itself is installed by `@rifty/kernel`'s `worker-entry.ts` and backed by a `SyncRpcClient` that `Atomics.wait`s on the SAB reply slot — this is the first path that truly blocks the calling realm. Outside a kernel Worker (no hook, no isolation, or main realm) the function falls back to the existing in-realm `new Function(...)` evaluation, marked `// fallback per ADR-0011 phases 2/3`. The 5 existing `child_process` conformance tests cover that fallback. A new skip-by-default suite under `tests/conformance/builtins/exec-sync-worker.test.ts` documents the SAB contract for the browser e2e harness. `builtins/child_process.ts` re-exports `execSync` from the new module so the public Node-shape surface is unchanged. The same file also calls `setExecSyncScriptResolver` at import time so the kernel's default `execSync` handler can read scripts from this realm's `syncMirror()` without taking a runtime dependency on `@rifty/vfs`.
+- **ADR-0011 phase 3:** `builtins/child_process-sync.ts` houses the new `execSync` body. When `isSabIpcSupported() && getKernelWorkerUrl() && globalThis[KERNEL_SYNC_CALL_KEY]` (i.e. we are inside a kernel-spawned Worker) it delegates to the global hook `__riftyKernelSyncCall('execSync', { cmd, opts })`, decoding the parent dispatcher's stdout reply as a UTF-8 `Buffer`. The hook itself is installed by `@riftydev/kernel`'s `worker-entry.ts` and backed by a `SyncRpcClient` that `Atomics.wait`s on the SAB reply slot — this is the first path that truly blocks the calling realm. Outside a kernel Worker (no hook, no isolation, or main realm) the function falls back to the existing in-realm `new Function(...)` evaluation, marked `// fallback per ADR-0011 phases 2/3`. The 5 existing `child_process` conformance tests cover that fallback. A new skip-by-default suite under `tests/conformance/builtins/exec-sync-worker.test.ts` documents the SAB contract for the browser e2e harness. `builtins/child_process.ts` re-exports `execSync` from the new module so the public Node-shape surface is unchanged. The same file also calls `setExecSyncScriptResolver` at import time so the kernel's default `execSync` handler can read scripts from this realm's `syncMirror()` without taking a runtime dependency on `@riftydev/vfs`.
 
 ### Changed
 

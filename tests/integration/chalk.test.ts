@@ -1,5 +1,5 @@
-import { createModuleLoader } from '@rifty/runtime-js/loader';
-import { MemoryFsSync } from '@rifty/vfs/internal';
+import { createModuleLoader } from '@riftydev/runtime-js/loader';
+import { MemoryFsSync } from '@riftydev/vfs/internal';
 /**
  * Real-package integration smoke: chalk-style ANSI helper through the loader.
  *

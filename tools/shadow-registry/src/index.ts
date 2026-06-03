@@ -15,7 +15,7 @@
  *     native binaries cannot run in a browser realm.
  *
  * The `OverrideMap` type is structurally identical to the one re-exported
- * from `@rifty/npm-client` (an open `Record<string, string>`). It is declared
+ * from `@riftydev/npm-client` (an open `Record<string, string>`). It is declared
  * locally here so that this package does not import — even type-only —
  * from `npm-client`; doing so would create a circular dependency between
  * the two packages (npm-client depends on this one for the data table). The

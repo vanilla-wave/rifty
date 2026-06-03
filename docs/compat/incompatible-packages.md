@@ -7,7 +7,7 @@ PE). This is a fundamental limit of the architecture, not a bug — see
 
 ## What the installer does (ADR-0051)
 
-At resolve time, `@rifty/npm-client`'s installer flags a package as
+At resolve time, `@riftydev/npm-client`'s installer flags a package as
 native-incompatible when its manifest pins a **`cpu`** constraint to a non-empty
 set that excludes `wasm` (the rifty arch, ADR-0026) — the reliable marker of a
 compiled artifact. (`os`-only is *not* a trigger: many pure-JS packages pin
@@ -38,7 +38,7 @@ compiled artifact. (`os`-only is *not* a trigger: many pure-JS packages pin
 
 If a package is flagged but you have a pure-JS/WASM replacement, add an npm
 `overrides` entry in your `package.json` (or, for broadly-useful cases, a baked
-entry in `@rifty/shadow-registry`):
+entry in `@riftydev/shadow-registry`):
 
 ```json
 { "overrides": { "better-sqlite3": "sql.js" } }

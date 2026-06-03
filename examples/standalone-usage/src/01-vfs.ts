@@ -1,6 +1,6 @@
-// @rifty/vfs — an in-memory virtual filesystem. Pure JS, runs anywhere (no browser
+// @riftydev/vfs — an in-memory virtual filesystem. Pure JS, runs anywhere (no browser
 // plumbing). Run: `pnpm --filter @rifty-examples/standalone vfs`.
-import { MemoryVfs, joinPath } from '@rifty/vfs';
+import { MemoryVfs, joinPath } from '@riftydev/vfs';
 
 const vfs = new MemoryVfs();
 await vfs.mkdir('/proj', { recursive: true });

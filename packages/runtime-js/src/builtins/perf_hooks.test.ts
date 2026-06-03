@@ -7,7 +7,7 @@
  * so any code that genuinely depends on the observation channel fails loudly
  * (CLAUDE.md "no silent stubs").
  */
-import { NotImplementedError } from '@rifty/io';
+import { NotImplementedError } from '@riftydev/io';
 import { describe, expect, it } from 'vitest';
 import perfHooks from './perf_hooks.ts';
 

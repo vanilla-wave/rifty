@@ -212,7 +212,7 @@ describe('SW-side handshake state machine', () => {
     expect(warnSpy).toHaveBeenCalledTimes(1);
     // The warning must spell out *which* contract drifted so a host can
     // distinguish a fresh SW + stale page (frame) from a misconfigured
-    // `@rifty/io` import (routing).
+    // `@riftydev/io` import (routing).
     const warnMessage = String(warnSpy.mock.calls[0]?.[0] ?? '');
     expect(warnMessage).toContain('routing');
     warnSpy.mockRestore();

@@ -1,4 +1,4 @@
-import { dirname } from '@rifty/vfs';
+import { dirname } from '@riftydev/vfs';
 import { publishRuntimeGlobal, readRuntimeGlobal } from '../internal/worker-globals.ts';
 import { ModuleLoadError } from './errors.ts';
 import { RUNTIME_OBJECT_BINDING, transformEsm } from './esm-ast.ts';

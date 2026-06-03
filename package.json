@@ -9,11 +9,11 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "pnpm --filter @rifty/playground dev",
-    "build": "pnpm -r --filter=!@rifty/playground build && pnpm --filter @rifty/playground build",
-    "build:libs": "pnpm -r --filter \"./packages/*\" --filter \"@rifty/shadow-registry\" build",
+    "dev": "pnpm --filter @riftydev/playground dev",
+    "build": "pnpm -r --filter=!@riftydev/playground build && pnpm --filter @riftydev/playground build",
+    "build:libs": "pnpm -r --filter \"./packages/*\" --filter \"@riftydev/shadow-registry\" build",
     "sync:publish": "node tools/publishing/sync-publish-config.mjs && biome format --write packages/*/package.json packages/*/tsup.config.ts tools/shadow-registry/package.json tools/shadow-registry/tsup.config.ts",
-    "preview": "pnpm --filter @rifty/playground preview",
+    "preview": "pnpm --filter @riftydev/playground preview",
     "typecheck": "pnpm -r --parallel typecheck",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",

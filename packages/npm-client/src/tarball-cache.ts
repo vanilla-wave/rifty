@@ -10,7 +10,7 @@
  * from the lockfile (or computed at first fetch) accompany the bytes. On
  * lookup we re-verify the integrity before handing bytes back.
  */
-import type { Vfs } from '@rifty/vfs';
+import type { Vfs } from '@riftydev/vfs';
 
 export const TARBALL_CACHE_ROOT = '/.rifty/tarball-cache';
 

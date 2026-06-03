@@ -47,7 +47,7 @@
  * natively.
  */
 
-import { parsePreviewPath } from '@rifty/io';
+import { parsePreviewPath } from '@riftydev/io';
 import { packSerializedResponse } from './body-transport.ts';
 import { FirstWindowOwnerBinding } from './owner-binding-window.ts';
 import type { PreviewOwnerResolver } from './owner-resolver.ts';
@@ -90,8 +90,8 @@ export type PreviewHandler = (req: SerializedRequest) => Promise<SerializedRespo
  * `null` if the URL is not a preview request, otherwise the parsed `port` and
  * rewritten upstream path (`/` if the suffix was empty).
  *
- * Thin shape-adapter over `@rifty/io.parsePreviewPath` — the canonical regex
- * and host primitives live in `@rifty/io/preview-protocol` (ADR-0036). This
+ * Thin shape-adapter over `@riftydev/io.parsePreviewPath` — the canonical regex
+ * and host primitives live in `@riftydev/io/preview-protocol` (ADR-0036). This
  * wrapper preserves the historical `{port, path}` shape SW callers use.
  */
 export function matchPreviewUrl(pathname: string): { port: number; path: string } | null {

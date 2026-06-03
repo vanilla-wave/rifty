@@ -1,7 +1,7 @@
 /**
- * Public surface of `@rifty/vfs`. Anything callers should be able to import
- * by name from `@rifty/vfs` lives here; runtime-wiring helpers
- * (`setSyncMirror`, `MemoryBackend`, etc.) live under `@rifty/vfs/internal`
+ * Public surface of `@riftydev/vfs`. Anything callers should be able to import
+ * by name from `@riftydev/vfs` lives here; runtime-wiring helpers
+ * (`setSyncMirror`, `MemoryBackend`, etc.) live under `@riftydev/vfs/internal`
  * and are NOT considered stable across versions.
  */
 export type { Vfs, VfsStat, VfsDirent, VfsErrorCode } from './types.ts';

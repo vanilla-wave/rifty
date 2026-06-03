@@ -1,7 +1,7 @@
-// @rifty/shell — a tiny bash-flavoured shell, backed by @rifty/vfs's sync mirror.
+// @riftydev/shell — a tiny bash-flavoured shell, backed by @riftydev/vfs's sync mirror.
 // The commands below create their own files, so no pre-seeding is needed.
 // Run: `pnpm --filter @rifty-examples/standalone shell`.
-import { Shell } from '@rifty/shell';
+import { Shell } from '@riftydev/shell';
 
 const sh = new Shell({ cwd: '/proj' });
 const result = await sh.run(

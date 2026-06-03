@@ -1,10 +1,10 @@
-import { IncomingMessage } from '@rifty/net';
+import { IncomingMessage } from '@riftydev/net';
 import { describe, expect, it } from 'vitest';
 
 /**
  * Isolates the express body-parser failure: does `IncomingMessage` actually
  * deliver a POST body via the Readable `'data'`/`'end'` events that body-parser
- * / raw-body consume? (No express, no network — pure @rifty/net.)
+ * / raw-body consume? (No express, no network — pure @riftydev/net.)
  */
 describe('IncomingMessage — POST body streaming', () => {
   function collect(req: IncomingMessage): Promise<string> {

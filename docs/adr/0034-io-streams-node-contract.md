@@ -1,4 +1,4 @@
-# ADR 0034: `@rifty/io` streams — Node-contract restoration
+# ADR 0034: `@riftydev/io` streams — Node-contract restoration
 
 Status: Accepted
 Date: 2026-05-26
@@ -6,14 +6,14 @@ Date: 2026-05-26
 ## Context
 
 The 2026-05-26 architecture review (`docs/review/2026-05-26-architecture-review.md`)
-identified five places where `@rifty/io`'s stream primitives diverged from
+identified five places where `@riftydev/io`'s stream primitives diverged from
 Node's documented contract. Quoting the review (Tier 1 #5, "io-streams ниже
 Node-контракта") and the per-module **io** appendix:
 
 > `Duplex/Transform.write` per-instance ребиндится в конструкторе;
 > `Readable.read(n)` игнорирует `n`; `pipeline` не destroy'ит upstream при
 > ошибке. Любая третья библиотека на transform pipelines (`tar-stream` /
-> `gunzip-maybe` в `@rifty/npm-client`, внутренности Vite) — undefined
+> `gunzip-maybe` в `@riftydev/npm-client`, внутренности Vite) — undefined
 > behaviour. Один корень для нескольких следствий выше по стеку.
 
 And from the "Сквозные темы #2 — Streams — слабое место всей пирамиды":
@@ -60,13 +60,13 @@ Specifically:
 The architecture review's "Архитектурные решения" section recorded this as
 **D-B [I]** with **option A: full restoration as one PR in M10** chosen
 explicitly. This is IRREVERSIBLE because it touches the public API of
-`@rifty/io` (the `Readable`/`Writable`/`Duplex`/`Transform`/`pipeline` shapes
+`@riftydev/io` (the `Readable`/`Writable`/`Duplex`/`Transform`/`pipeline` shapes
 and the `EventEmitter.removeListener` semantics). Must land before M11 A-008
 (esbuild.wasm push) — esbuild's WASI stdio assumes Node-shape streams.
 
 ## Decision
 
-Bring `@rifty/io` stream primitives back to the Node-documented contract in
+Bring `@riftydev/io` stream primitives back to the Node-documented contract in
 one PR. The five behaviour changes are:
 
 ### 1. `EventEmitter.removeListener` emits `'removeListener'` meta-event
@@ -206,7 +206,7 @@ No downstream caller depended on a broken-contract shape — searched
 The only consumer of the broken Duplex/Transform write-rebinding pattern was
 the internal `Transform` constructor itself, which is rewritten under change
 (4) above. Consumer-side migration is therefore empty — the rewrite is
-internal to `@rifty/io`. This is a deliberate side-benefit of the layered
+internal to `@riftydev/io`. This is a deliberate side-benefit of the layered
 architecture: `Readable`/`Writable`/`Duplex`/`Transform` are intermediate
 primitives, and downstream code consumes the higher-level Node-shape
 behaviour (via `node:stream` re-exports from `runtime-js/builtins/stream.ts`)

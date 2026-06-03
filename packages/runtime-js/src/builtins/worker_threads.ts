@@ -19,7 +19,7 @@ import {
   getKernelWorkerUrl,
   globalProcessManager,
   isSabIpcSupported,
-} from '@rifty/kernel';
+} from '@riftydev/kernel';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';

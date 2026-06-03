@@ -10,7 +10,7 @@
  * (Buffer-tagged); passing `'utf8'` returns a string. Matches Node.
  */
 
-import { isAbsolute, joinPath, normalizePath } from '@rifty/vfs';
+import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { Buffer, type Encoding } from './buffer.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import { getProcessCwd } from './process.ts';

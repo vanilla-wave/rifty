@@ -1,6 +1,6 @@
 # Publishing rifty packages
 
-How the `@rifty/*` packages are built and released to npm. Rationale: **ADR-0070**
+How the `@riftydev/*` packages are built and released to npm. Rationale: **ADR-0070**
 (build + dual exports), **ADR-0071** (the umbrella `rifty`).
 
 ## The model: dev-src / publish-dist
@@ -13,14 +13,14 @@ Each publishable package keeps two views of its entry points:
   applies `publishConfig` field overrides **only to the published manifest**, so the
   tarball points at the built `dist/` (ESM `.js` + bundled `.d.ts`).
 
-The build is `tsup` (`pnpm build:libs`). First-party `@rifty/*` and external deps stay
-external (not re-bundled), so installing several `@rifty/*` packages at the same
+The build is `tsup` (`pnpm build:libs`). First-party `@riftydev/*` and external deps stay
+external (not re-bundled), so installing several `@riftydev/*` packages at the same
 version shares one copy of kernel/vfs singletons.
 
 ## The publishable set (12 packages)
 
 `packages/*` (11, including the umbrella **`rifty`** front door — ADR-0071) **plus**
-`@rifty/shadow-registry` (in `tools/`, a runtime dep of `@rifty/npm-client`).
+`@riftydev/shadow-registry` (in `tools/`, a runtime dep of `@riftydev/npm-client`).
 `apps/playground` and all test fixtures stay `private`. The workspace root package is
 `rifty-workspace` (private) — the bare name `rifty` belongs to the umbrella.
 
@@ -35,7 +35,7 @@ package, change `sideEffects`, add a subpath export, or bump the baseline versio
 ```bash
 pnpm install
 pnpm build:libs                                   # produce dist/
-pnpm --filter @rifty/vfs pack --pack-destination /tmp/rifty   # inspect a tarball
+pnpm --filter @riftydev/vfs pack --pack-destination /tmp/rifty   # inspect a tarball
 tar -tzf /tmp/rifty/rifty-vfs-0.1.0.tgz           # dist/ + package.json + README + CHANGELOG (+ LICENSE on release)
 ```
 
@@ -46,7 +46,7 @@ build can't silently rot.
 
 `.github/workflows/release.yml` triggers on a `v*` tag and: installs → sets every
 package version to the tag → `pnpm build:libs` → copies `LICENSE` into each package →
-`pnpm publish` filtered to **`./packages/*` + `@rifty/shadow-registry` only** with
+`pnpm publish` filtered to **`./packages/*` + `@riftydev/shadow-registry` only** with
 `--access public --no-git-checks --provenance`. pnpm rewrites `workspace:*` to the tag
 version (at pack time, *before* the auth handshake) and applies each `publishConfig`.
 
@@ -87,7 +87,7 @@ name needs a token; every release after that is tokenless.
 
 ### Phase 0 — claim the names
 
-Create the **`@rifty` org/scope** on npmjs.com. The unscoped **`rifty`** name is
+Create the **`@riftydev` org/scope** on npmjs.com. The unscoped **`rifty`** name is
 claimed by its first publish (verified free 2026-06-02). If either is taken, rename:
 change `name` in each `package.json`, the SPEC keys + `REPO_URL` in
 `tools/publishing/sync-publish-config.mjs`, then `pnpm sync:publish`.
@@ -101,8 +101,8 @@ granular token), from a clean tree:
 npm login                                   # interactive; nothing stored in the repo
 pnpm install && pnpm build:libs
 for d in packages/*/ tools/shadow-registry/; do cp LICENSE "$d/LICENSE"; done
-pnpm -r --filter "./packages/*" --filter "@rifty/shadow-registry" \
-  publish --access public --no-git-checks   # --access public is mandatory for @rifty/*
+pnpm -r --filter "./packages/*" --filter "@riftydev/shadow-registry" \
+  publish --access public --no-git-checks   # --access public is mandatory for @riftydev/*
 ```
 
 Every one of the 12 names now exists on the registry.

@@ -11,8 +11,8 @@
  *  - the hook's return value is what reaches the AST ESM rewriter (the
  *    sentinel-strip round-trips into the executed module).
  */
-import { NotImplementedError } from '@rifty/io';
-import { MemoryFsSync } from '@rifty/vfs/internal';
+import { NotImplementedError } from '@riftydev/io';
+import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it, vi } from 'vitest';
 import { createModuleLoader } from './loader.ts';
 

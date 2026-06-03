@@ -1,7 +1,7 @@
-// @rifty/npm-client — resolving a version from a registry packument. The registry
+// @riftydev/npm-client — resolving a version from a registry packument. The registry
 // client takes an injected `fetch` (no hardcoded URL, D-004), so this example is
 // deterministic and offline. Run: `pnpm --filter @rifty-examples/standalone registry`.
-import { type Fetcher, RegistryClient, pickBestVersion } from '@rifty/npm-client';
+import { type Fetcher, RegistryClient, pickBestVersion } from '@riftydev/npm-client';
 
 // A tiny stub packument — in a real app this is `globalThis.fetch` hitting the
 // registry (or a proxy). The shape mirrors what npm returns.

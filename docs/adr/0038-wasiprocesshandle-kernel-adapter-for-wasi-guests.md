@@ -5,7 +5,7 @@ Date: 2026-05
 
 ## Context
 
-`@rifty/runtime-wasi` today exposes a synchronous, callback-stdio entry
+`@riftydev/runtime-wasi` today exposes a synchronous, callback-stdio entry
 point — `Wasi.start(instance)` and `runWasi(bytes, opts)` in
 `packages/runtime-wasi/src/wasi.ts`. The caller passes
 `stdout(chunk: string) => void` / `stderr(chunk: string) => void`
@@ -35,7 +35,7 @@ that funnels a WASI invocation through
 kernel-level treatment as a `node`-backed worker child.
 
 - **Adapter location.** `packages/runtime-wasi/src/process-handle.ts`.
-  `runtime-wasi` imports `@rifty/kernel` — top-down per CLAUDE.md
+  `runtime-wasi` imports `@riftydev/kernel` — top-down per CLAUDE.md
   layer order (vfs → kernel → runtime-* → …). The dependency is
   declared in `packages/runtime-wasi/package.json`.
 - **Realm.** WASI guests run in a Worker. Reusing
@@ -57,8 +57,8 @@ kernel-level treatment as a `node`-backed worker child.
   `process.stderr.write` — the kernel's `installProcessShim` already
   pipes those into the parent's stdio `MessagePort`s. The two URLs
   (`setKernelWorkerUrl(...)` for the boot chunk that imports
-  `@rifty/kernel/worker-entry`, and `setWasiWorkerUrl(...)` for the
-  entry chunk that imports `@rifty/runtime-wasi/worker-entry`) MUST
+  `@riftydev/kernel/worker-entry`, and `setWasiWorkerUrl(...)` for the
+  entry chunk that imports `@riftydev/runtime-wasi/worker-entry`) MUST
   be distinct: a shared bundle would auto-install the WASI side
   before the kernel runs the init shim and crash on a missing
   `globalThis.process`.
@@ -72,9 +72,9 @@ kernel-level treatment as a `node`-backed worker child.
 - **VFS sharing.** The spawned worker is a fresh realm. For M8
   toolchain calls the worker will need access to the host's VFS;
   that's the standard `setSyncMirror` / `MemoryFsSync` route that
-  `@rifty/runtime-js`'s worker-entry uses (ADR-0014 + ADR-0037), and
+  `@riftydev/runtime-js`'s worker-entry uses (ADR-0014 + ADR-0037), and
   the existing in-process WASI preopen mapping
-  (`@rifty/vfs:syncMirror()`) carries forward unchanged inside the
+  (`@riftydev/vfs:syncMirror()`) carries forward unchanged inside the
   worker. No new VFS plumbing — preopens are forwarded as the same
   `Record<guestPath, hostPath>` the in-process `Wasi` already
   accepts.
@@ -115,7 +115,7 @@ kernel-level treatment as a `node`-backed worker child.
 - One PID space across `node` children and `wasm` children. Existing
   `pm.list()` consumers (playground process inspector, future
   `ps`-like tooling) don't branch by kind.
-- New package-level edge: `@rifty/runtime-wasi → @rifty/kernel`.
+- New package-level edge: `@riftydev/runtime-wasi → @riftydev/kernel`.
   Downward per CLAUDE.md; no cycle introduced (`pnpm check:deps`
   enforces).
 - The existing in-process `Wasi` / `runWasi(...)` API stays

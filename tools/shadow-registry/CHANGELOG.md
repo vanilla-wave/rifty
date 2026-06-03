@@ -1,4 +1,4 @@
-# Changelog — @rifty/shadow-registry
+# Changelog — @riftydev/shadow-registry
 
 ## [Unreleased]
 
@@ -6,7 +6,7 @@
 
 - **esbuild WASI shadow-binding (ADR-0047).** `src/esbuild-binding.ts` exposes
   `transformWithEsbuild(runWasi, wasm, opts)` — Vite's TS/JSX transform surface
-  routed to the real esbuild WASI binary running through `@rifty/runtime-wasi`'s
+  routed to the real esbuild WASI binary running through `@riftydev/runtime-wasi`'s
   `runWasi`. Source is fed over stdin with `--loader=<ts|tsx|jsx|js>`; output is
   the transformed JS. A non-zero guest exit throws with esbuild's stderr (no
   fake passthrough output, per the "no silent stubs" rule). `runWasi` is

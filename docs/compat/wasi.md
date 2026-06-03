@@ -1,6 +1,6 @@
 # Compatibility matrix — WASI preview1
 
-Status of `wasi_snapshot_preview1` import surface in `@rifty/runtime-wasi`.
+Status of `wasi_snapshot_preview1` import surface in `@riftydev/runtime-wasi`.
 
 Every canonical preview1 syscall is **present** as a function in the imports
 table — even when not implemented — so `WebAssembly.instantiate` never fails
@@ -71,7 +71,7 @@ implemented — call returns `E_NOSYS` and behaviour is documented.
 - The `wasi-link.test.ts` smoke test asserts every name above is a function
   in the `wasi_snapshot_preview1` namespace. New WASI revisions add syscalls;
   the test list must be kept in sync.
-- `syncMirror()` is shared with `@rifty/runtime-js`'s `node:fs` layer per
+- `syncMirror()` is shared with `@riftydev/runtime-js`'s `node:fs` layer per
   ADR-0014, so files written via `fs.writeFileSync` are visible to WASI
   guests and vice versa.
 - Symlinks are intentionally absent from the VFS (M9 acceptance). Calls

@@ -1,5 +1,5 @@
 /**
- * Conformance tests for the in-process WebSocket layer in `@rifty/net`.
+ * Conformance tests for the in-process WebSocket layer in `@riftydev/net`.
  *
  * The browser's native `WebSocket` goes over TCP and is not interceptable by a
  * Service Worker. For HMR-in-the-browser we expose a `WebSocketServer` that

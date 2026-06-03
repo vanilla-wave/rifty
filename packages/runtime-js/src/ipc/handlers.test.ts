@@ -13,7 +13,7 @@
  * suite).
  */
 
-import { SyncRpcDispatcher } from '@rifty/kernel';
+import { SyncRpcDispatcher } from '@riftydev/kernel';
 import { describe, expect, it } from 'vitest';
 import { installRuntimeJsExecSyncHandler } from './handlers.ts';
 import type { RecursiveRunResult } from './recursive-runner.ts';

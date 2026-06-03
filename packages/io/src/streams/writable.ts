@@ -1,5 +1,5 @@
 /**
- * Node-compatible `node:stream.Writable` — owned by `@rifty/io` per ADR-0012.
+ * Node-compatible `node:stream.Writable` — owned by `@riftydev/io` per ADR-0012.
  *
  * Implements the buffered write / `_write` / `_final` lifecycle plus the
  * `drain` event when the buffer falls below the high-water mark.

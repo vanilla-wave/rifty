@@ -10,7 +10,7 @@
  * and `path.ts`, keeping the definitions in one place.
  */
 
-import { joinPath, normalizePath } from '@rifty/vfs';
+import { joinPath, normalizePath } from '@riftydev/vfs';
 
 // preview1 errno subset
 export const E_SUCCESS = 0;

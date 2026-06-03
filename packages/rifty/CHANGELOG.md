@@ -5,9 +5,9 @@
 ### Added
 
 - **ADR-0071 — umbrella `rifty` package (EPIC B).** One-install front door over
-  the `@rifty/*` scope.
+  the `@riftydev/*` scope.
   - **B1 — subpath re-exports.** `rifty/vfs`, `rifty/io`, `rifty/kernel`,
-    `rifty/runtime` (→ `@rifty/runtime-js`), `rifty/wasi` (→ `@rifty/runtime-wasi`),
+    `rifty/runtime` (→ `@riftydev/runtime-js`), `rifty/wasi` (→ `@riftydev/runtime-wasi`),
     `rifty/net`, `rifty/npm-client`, `rifty/shell`, `rifty/terminal`,
     `rifty/service-worker`. Each re-exports the matching package verbatim, kept
     `external` at build time so the singleton state in io/kernel/vfs is shared,

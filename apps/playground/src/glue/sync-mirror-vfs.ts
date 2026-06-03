@@ -1,14 +1,14 @@
 /**
  * A `Vfs` (async interface) that delegates everything to `syncMirror()`.
  *
- * Why: `@rifty/npm-client` writes installed package files via `vfs.writeFile`
+ * Why: `@riftydev/npm-client` writes installed package files via `vfs.writeFile`
  * (async), while Vite reads them via `fs.readFileSync` (sync, backed by
  * `syncMirror`). Without this bridge the installed tree would be invisible to
  * the runtime. Here writes land directly in the sync mirror so the very next
  * `fs.readFileSync` sees them.
  */
-import type { Vfs, VfsDirent, VfsStat } from '@rifty/vfs';
-import { NotImplementedError, dirname, normalizePath, syncMirror } from '@rifty/vfs';
+import type { Vfs, VfsDirent, VfsStat } from '@riftydev/vfs';
+import { NotImplementedError, dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();

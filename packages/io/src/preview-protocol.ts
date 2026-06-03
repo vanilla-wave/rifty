@@ -1,19 +1,19 @@
 /**
  * Preview-protocol addressing primitives — the single source of truth for the
  * `/preview/<port>/...` URL convention and the synthetic `preview.local` host
- * shared between `@rifty/service-worker` (which intercepts the request path)
- * and `@rifty/net` (whose registry the SW dispatches into).
+ * shared between `@riftydev/service-worker` (which intercepts the request path)
+ * and `@riftydev/net` (whose registry the SW dispatches into).
  *
  * Per ADR-0036 the regex and host literal live here so a future routing-scheme
- * change is a one-edit change in `@rifty/io` rather than a multi-package hunt
- * for inlined copies. Both SW and net depend on `@rifty/io`, so the import
+ * change is a one-edit change in `@riftydev/io` rather than a multi-package hunt
+ * for inlined copies. Both SW and net depend on `@riftydev/io`, so the import
  * direction stays top-down (ADR-0012, ADR-0035 use the same pattern for other
  * cross-package primitives).
  *
  * The shape of this module — `PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`,
  * the return type of `synthesizePreviewUrl(path)`, and the return type of
  * `parsePreviewPath(path)` — is pinned by `SW_ROUTING_VERSION` in
- * `@rifty/service-worker/protocol` (ADR-0040). Wire-frame data shapes are
+ * `@riftydev/service-worker/protocol` (ADR-0040). Wire-frame data shapes are
  * pinned by `SW_FRAME_VERSION` (ADR-0031, refined by ADR-0040). The two
  * constants are stamped onto every SW↔main wire frame so addressing-shape
  * drift and frame-shape drift are diagnosable as distinct failures.

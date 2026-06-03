@@ -2,7 +2,7 @@
  * Runtime-js sync RPC handler(s) (ADR-0011 phase 3, ADR-0039).
  *
  * Owns the Node-API knowledge that used to live in
- * `@rifty/kernel/ipc/default-handlers.ts`: parsing `node <script>` command
+ * `@riftydev/kernel/ipc/default-handlers.ts`: parsing `node <script>` command
  * lines, resolving the script's bytes from the VFS sync mirror, and
  * recursively spawning a kernel Worker to run the child.
  *
@@ -13,7 +13,7 @@
  * ships no handlers by default.
  */
 
-import type { SyncRpcDispatcher, WorkerEntryDescriptor } from '@rifty/kernel';
+import type { SyncRpcDispatcher, WorkerEntryDescriptor } from '@riftydev/kernel';
 import { type RecursiveRunResult, makeRecursiveRunner } from './recursive-runner.ts';
 
 /**

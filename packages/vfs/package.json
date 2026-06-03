@@ -1,5 +1,5 @@
 {
-  "name": "@rifty/vfs",
+  "name": "@riftydev/vfs",
   "version": "0.1.0",
   "description": "Virtual filesystem for rifty: in-memory + OPFS backends with a synchronous mirror.",
   "type": "module",

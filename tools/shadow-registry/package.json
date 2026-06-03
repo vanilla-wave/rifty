@@ -1,5 +1,5 @@
 {
-  "name": "@rifty/shadow-registry",
+  "name": "@riftydev/shadow-registry",
   "version": "0.1.0",
   "description": "Data tables of in-browser npm package substitutions for rifty.",
   "type": "module",

@@ -10,13 +10,13 @@
  *
  * This is a CONFORMANCE test (not a unit test of the shim internals): it runs
  * the boot sequence through `require('node:sqlite')` inside the REAL rifty module
- * loader (`@rifty/runtime-js/loader`), so the `node:sqlite` specifier resolves
- * the same way user code resolves it — through the `@rifty/io` builtin registry
- * that the `@rifty/net/sqlite/register-builtins` side-effect populates. That
+ * loader (`@riftydev/runtime-js/loader`), so the `node:sqlite` specifier resolves
+ * the same way user code resolves it — through the `@riftydev/io` builtin registry
+ * that the `@riftydev/net/sqlite/register-builtins` side-effect populates. That
  * mirrors the parity runner's `installSqliteMode` (register side-effect, then
  * await `initSqliteEngine()` so the synchronous `DatabaseSync` constructor has
- * its WASM handle) and the `node:net` precedent of registering from `@rifty/net`
- * rather than `@rifty/runtime-js` (top-down layering: runtime-* must not depend
+ * its WASM handle) and the `node:net` precedent of registering from `@riftydev/net`
+ * rather than `@riftydev/runtime-js` (top-down layering: runtime-* must not depend
  * on net).
  *
  * The sequence reproduced here is opencode's literal boot path against the
@@ -61,9 +61,9 @@
  * silently no-op'd) and the row is readable back through the same shim. The
  * empty `message` read proves the migration's DDL really created the schema.
  */
-import { initSqliteEngine, isSqliteEngineReady } from '@rifty/net/sqlite/engine';
-import { createModuleLoader } from '@rifty/runtime-js/loader';
-import { MemoryFsSync } from '@rifty/vfs/internal';
+import { initSqliteEngine, isSqliteEngineReady } from '@riftydev/net/sqlite/engine';
+import { createModuleLoader } from '@riftydev/runtime-js/loader';
+import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 /**
@@ -198,11 +198,11 @@ function bootScript(): string {
 describe('node:sqlite — opencode database-boot conformance (ADR-0065, P2 gate)', () => {
   beforeAll(async () => {
     // Mirror the runtime / parity-runner wiring: the side-effecting forward
-    // import of `@rifty/net/sqlite/register-builtins` plugs the sql.js-backed
-    // `DatabaseSync` factory into the `@rifty/io` registry (the same precedent
-    // as `@rifty/net/register-builtins` for `node:http`), then the WASM engine
+    // import of `@riftydev/net/sqlite/register-builtins` plugs the sql.js-backed
+    // `DatabaseSync` factory into the `@riftydev/io` registry (the same precedent
+    // as `@riftydev/net/register-builtins` for `node:http`), then the WASM engine
     // is brought up so the synchronous `DatabaseSync` constructor has its handle.
-    await import('@rifty/net/sqlite/register-builtins');
+    await import('@riftydev/net/sqlite/register-builtins');
     await initSqliteEngine();
   });
 

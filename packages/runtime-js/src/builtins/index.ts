@@ -1,4 +1,4 @@
-import { registerBuiltin } from '@rifty/io';
+import { registerBuiltin } from '@riftydev/io';
 import assertModule, { strict as assertStrict } from './assert.ts';
 import bufferModule, { Buffer } from './buffer.ts';
 import childProcessModule from './child_process.ts';
@@ -13,7 +13,7 @@ import diagnosticsChannelModule from './diagnostics_channel.ts';
  * bindings, so the same factory output works for both `require('node:path')`
  * and `import path from 'node:path'`.
  *
- * The registry implementation lives in `@rifty/io/builtin-registry.ts`
+ * The registry implementation lives in `@riftydev/io/builtin-registry.ts`
  * (ADR-0035). This barrel re-exports its public surface so internal
  * runtime-js callers (`module-loader/loader.ts`, `module-loader/resolver.ts`,
  * `builtins/module.ts`) and `src/index.ts`'s public re-exports continue to
@@ -49,7 +49,7 @@ import utilModule from './util.ts';
 import workerThreadsModule from './worker_threads.ts';
 
 // Re-export the registry surface so existing consumers
-// (`@rifty/runtime-js` public index, the module loader/resolver,
+// (`@riftydev/runtime-js` public index, the module loader/resolver,
 // `builtins/module.ts`) keep their import paths.
 export {
   isBuiltinSpecifier,
@@ -57,7 +57,7 @@ export {
   loadBuiltin,
   registerBuiltin,
   type BuiltinFactory,
-} from '@rifty/io';
+} from '@riftydev/io';
 
 registerBuiltin('path', () => pathModule);
 registerBuiltin('events', () => {

@@ -4,7 +4,7 @@
  * implementation ignored both and always wrote utf8 to fit.
  *
  * The case binds the runtime's `node:buffer` to a local so the parity-runner
- * actually exercises `@rifty/io`'s Buffer instead of the host's Node Buffer.
+ * actually exercises `@riftydev/io`'s Buffer instead of the host's Node Buffer.
  */
 import type { ParityCase } from '../../src/types.ts';
 

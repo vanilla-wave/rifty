@@ -1,4 +1,4 @@
-# @rifty/vfs
+# @riftydev/vfs
 
 Virtual filesystem interface + backends. Pure TypeScript, no framework deps.
 
@@ -9,4 +9,4 @@ Virtual filesystem interface + backends. Pure TypeScript, no framework deps.
 
 ## Public API
 
-See `src/types.ts`. Importable only via `@rifty/vfs` (the package root); internals under `src/internal/` are private.
+See `src/types.ts`. Importable only via `@riftydev/vfs` (the package root); internals under `src/internal/` are private.

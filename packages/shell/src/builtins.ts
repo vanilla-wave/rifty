@@ -9,7 +9,7 @@
  * `node:fs` inside the runtime.
  */
 
-import { isAbsolute, joinPath, normalizePath, syncMirror } from '@rifty/vfs';
+import { isAbsolute, joinPath, normalizePath, syncMirror } from '@riftydev/vfs';
 import type { ShellCommand } from './types.ts';
 
 function resolve(cwd: string, p: string): string {

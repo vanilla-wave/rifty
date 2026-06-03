@@ -64,7 +64,7 @@ fallback set and `detectKind` classification.
 
 - `resolver.ts`: `DEFAULT_EXTENSIONS`/`INDEX_FILES` grow by two entries each;
   `detectKind`'s `.js` branch widens to `.ts`/`.tsx`. No signature change.
-- Behaviour changes for ALL consumers of `@rifty/runtime-js` (the vite path, the
+- Behaviour changes for ALL consumers of `@riftydev/runtime-js` (the vite path, the
   conformance suite). Guarded by the both-exist parity assertion (a package with
   both `foo.js` and `foo.ts` still resolves `foo.js`).
 - Conformance: `tests/conformance/modules/resolver.test.ts` `describe('TS

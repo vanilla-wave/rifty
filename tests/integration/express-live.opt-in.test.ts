@@ -24,8 +24,8 @@
  * graph hits one, M11 nested install becomes a prerequisite for M9 closure
  * (instead of a follow-on).
  */
-import { type InstallResult, RegistryClient, install } from '@rifty/npm-client';
-import { MemoryVfs } from '@rifty/vfs';
+import { type InstallResult, RegistryClient, install } from '@riftydev/npm-client';
+import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 
 const liveRegistryUrl = process.env.RIFTY_LIVE_REGISTRY;

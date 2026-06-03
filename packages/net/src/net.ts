@@ -14,7 +14,7 @@
  * phase 2 / M12.
  */
 
-import { EventEmitter, NotImplementedError } from '@rifty/io';
+import { EventEmitter, NotImplementedError } from '@riftydev/io';
 import { registerPort, unregisterPort } from './registry.ts';
 
 export class HttpFramedSocket extends EventEmitter {

@@ -1,14 +1,14 @@
 {
-  "name": "@rifty/tests",
+  "name": "@riftydev/tests",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@rifty/net": "workspace:*",
-    "@rifty/npm-client": "workspace:*",
-    "@rifty/runtime-js": "workspace:*",
-    "@rifty/runtime-wasi": "workspace:*",
-    "@rifty/shadow-registry": "workspace:*",
-    "@rifty/vfs": "workspace:*"
+    "@riftydev/net": "workspace:*",
+    "@riftydev/npm-client": "workspace:*",
+    "@riftydev/runtime-js": "workspace:*",
+    "@riftydev/runtime-wasi": "workspace:*",
+    "@riftydev/shadow-registry": "workspace:*",
+    "@riftydev/vfs": "workspace:*"
   }
 }

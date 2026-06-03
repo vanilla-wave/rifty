@@ -16,8 +16,8 @@
  * `setImmediate`/`clearImmediate`) so user code that expects them just works.
  */
 
-import { initBackend, syncMirror } from '@rifty/vfs';
-import { installMemoryFs } from '@rifty/vfs/internal';
+import { initBackend, syncMirror } from '@riftydev/vfs';
+import { installMemoryFs } from '@riftydev/vfs/internal';
 import { Buffer } from './builtins/buffer.ts';
 import { __setCreateRequireImpl } from './builtins/module.ts';
 import { installProcessGlobals, setProcessCwd } from './builtins/process.ts';

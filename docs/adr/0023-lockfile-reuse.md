@@ -3,11 +3,11 @@
 Status: Implemented (2026-05-26)
 Date: 2026-05
 
-**Decision (2026-05-26) — A-031 nested install:** Deferred to **M12**. Until then, the installer keeps its current flat-tree linker schema: a single `node_modules/<name>/` directory per package and a hard `EVERSIONCONFLICT` (already implemented per A-031 resolution; see `packages/npm-client/src/installer.ts`) on any version disagreement. Nested install (`node_modules/<a>/node_modules/<b>/...`) requires the linker schema rewrite plus a corresponding lockfile-shape extension — both fit naturally in the M12 toolchain pass that also rewires `@rifty/net` for cross-realm streaming. Until then, real packages with conflicting transitive deps fail loudly rather than silently picking a winner.
+**Decision (2026-05-26) — A-031 nested install:** Deferred to **M12**. Until then, the installer keeps its current flat-tree linker schema: a single `node_modules/<name>/` directory per package and a hard `EVERSIONCONFLICT` (already implemented per A-031 resolution; see `packages/npm-client/src/installer.ts`) on any version disagreement. Nested install (`node_modules/<a>/node_modules/<b>/...`) requires the linker schema rewrite plus a corresponding lockfile-shape extension — both fit naturally in the M12 toolchain pass that also rewires `@riftydev/net` for cross-realm streaming. Until then, real packages with conflicting transitive deps fail loudly rather than silently picking a winner.
 
 ## Context
 
-`@rifty/npm-client.install()` re-resolves every dependency from the registry on every call, even when a `package-lock.json` exists in `<cwd>`. The lockfile is written but never read back. Repeated installs are slow and non-deterministic across registry-state changes.
+`@riftydev/npm-client.install()` re-resolves every dependency from the registry on every call, even when a `package-lock.json` exists in `<cwd>`. The lockfile is written but never read back. Repeated installs are slow and non-deterministic across registry-state changes.
 
 REVIEW_ACTIONS entry A-030 flags it. The relevant call site already has a TODO(ADR) marker pointing here, added in parallel with this ADR.
 

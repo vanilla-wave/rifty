@@ -22,7 +22,7 @@ On mismatch:
   ```ts
   { kind: 'PROTOCOL_VERSION_MISMATCH', expected: '<our>', got: '<peer>', message: '...' }
   ```
-  exposed as `SW_ERROR_PROTOCOL_VERSION_MISMATCH` and `SwProtocolVersionMismatchError` from `@rifty/service-worker`.
+  exposed as `SW_ERROR_PROTOCOL_VERSION_MISMATCH` and `SwProtocolVersionMismatchError` from `@riftydev/service-worker`.
 - The SW MUST map a `PROTOCOL_VERSION_MISMATCH` error frame received from the main thread to an `HTTP/503` response (consistent with handshake mismatch which already 503s).
 - The receiver MAY log a one-shot warning per offending peer for observability, deduplicating with a `Set<clientId>` so a stuck client cannot flood the console.
 
@@ -42,5 +42,5 @@ This routing rule is technically orthogonal to versioning but is co-located in t
 
 ## Cited ADRs
 
-- **ADR-0016** — Service Worker source-of-truth lives in `@rifty/service-worker`. Introduced `SW_PROTOCOL_VERSION` and the "either side refuses to honour a mismatched peer" rule. This ADR tightens that rule to apply on every frame, not just handshake.
+- **ADR-0016** — Service Worker source-of-truth lives in `@riftydev/service-worker`. Introduced `SW_PROTOCOL_VERSION` and the "either side refuses to honour a mismatched peer" rule. This ADR tightens that rule to apply on every frame, not just handshake.
 - **ADR-0024** — File-size budget. The bridge split was driven by the 300-line cap; both `preview-bridge.ts` and `route-preview.ts` come in under it.

@@ -40,7 +40,7 @@
  * tarball download all live in the unified flow.
  */
 
-import type { Vfs } from '@rifty/vfs';
+import type { Vfs } from '@riftydev/vfs';
 import { type FetchAndUnpackCtx, fetchAndUnpackToCache } from './fetch-and-unpack.ts';
 import {
   lockfileCovers,

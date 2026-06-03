@@ -9,7 +9,7 @@
  * (`/TS transform not configured/`) rather than falling through to acorn and
  * dying with an opaque SYNTAX_ERROR (no silent stub, no opaque parse failure).
  */
-import { MemoryFsSync } from '@rifty/vfs/internal';
+import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { createModuleLoader } from './loader.ts';
 

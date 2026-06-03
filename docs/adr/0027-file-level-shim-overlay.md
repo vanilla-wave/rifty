@@ -17,7 +17,7 @@ The provisional implementation (`apps/playground/src/adapters/esbuild-shim.ts`, 
 
 ## Decision
 
-Use Option A (per-file overlay in the consuming adapter) until at least three shim sites exist. Today the count is two (esbuild's binary launcher, Rollup's native parser). At three (likely candidates: terser, swc, sass, fsevents) we promote the pattern into `@rifty/npm-client/shims/` with a typed registry — Option B.
+Use Option A (per-file overlay in the consuming adapter) until at least three shim sites exist. Today the count is two (esbuild's binary launcher, Rollup's native parser). At three (likely candidates: terser, swc, sass, fsevents) we promote the pattern into `@riftydev/npm-client/shims/` with a typed registry — Option B.
 
 Code sites covered by this ADR:
 

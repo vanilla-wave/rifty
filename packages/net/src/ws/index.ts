@@ -1,7 +1,7 @@
 /**
  * Barrel for the WebSocket layer.
  *
- * - `./in-process.ts` — same-realm URL-routed shim (default `@rifty/net`
+ * - `./in-process.ts` — same-realm URL-routed shim (default `@riftydev/net`
  *   export, used by tests and the in-process dev-server).
  * - `./bridge.ts` — opt-in `BroadcastChannel`-backed transport for
  *   cross-realm clients (iframe HMR ↔ playground main thread). Returned by

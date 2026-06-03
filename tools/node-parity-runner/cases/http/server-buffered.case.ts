@@ -6,8 +6,8 @@ import type { ParityCase } from '../../src/types.ts';
  * This is the FIRST parity case that exercises rifty's `node:http` *server*
  * surface head-to-head against real Node. It is enabled by the runner's opt-in
  * `kind: 'http'` net-registration mode: today the rifty side of the parity
- * runner imports only `@rifty/runtime-js/loader` + `@rifty/vfs` and never
- * registers `node:http` (that builtin lives in `@rifty/net`), so this case is
+ * runner imports only `@riftydev/runtime-js/loader` + `@riftydev/vfs` and never
+ * registers `node:http` (that builtin lives in `@riftydev/net`), so this case is
  * structurally UNREACHABLE without the opt-in mode — see `parse-url.case.ts`
  * for the historical note on why URL-only http parity was the ceiling.
  *

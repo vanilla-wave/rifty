@@ -1,7 +1,7 @@
-# @rifty/shell
+# @riftydev/shell
 
 A tiny bash-flavoured shell for [rifty](https://github.com/vanilla-wave/rifty),
-backed by [`@rifty/vfs`](../vfs). It parses a command line and runs a small set of
+backed by [`@riftydev/vfs`](../vfs). It parses a command line and runs a small set of
 built-ins against a virtual filesystem; higher-level commands (`npm install`,
 `npm run`, …) plug in via `registerCommand`, so the shell stays free of
 upper-layer dependencies. Isomorphic — no DOM, no UI framework.
@@ -9,13 +9,13 @@ upper-layer dependencies. Isomorphic — no DOM, no UI framework.
 ## Install
 
 ```bash
-npm install @rifty/shell      # or: npm install rifty  →  import from 'rifty/shell'
+npm install @riftydev/shell      # or: npm install rifty  →  import from 'rifty/shell'
 ```
 
 ## Usage
 
 ```ts
-import { Shell } from '@rifty/shell';
+import { Shell } from '@riftydev/shell';
 
 const sh = new Shell({ cwd: '/proj' }); // backed by its own in-memory VFS mirror
 const result = await sh.run('mkdir -p src && echo "hi" > src/a.txt && cat src/a.txt && ls src');

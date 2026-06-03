@@ -6,8 +6,8 @@ Date: 2026-05
 ## Context
 
 The 2026-05-26 kernel architecture audit surfaced three findings that are all
-symptoms of the same root cause: `@rifty/kernel` carried knowledge of the
-Node runtime shape that should live one layer up in `@rifty/runtime-js`.
+symptoms of the same root cause: `@riftydev/kernel` carried knowledge of the
+Node runtime shape that should live one layer up in `@riftydev/runtime-js`.
 
 - **P0-1. Node-shape `process` shim inside the kernel.** The kernel's worker
   bootstrap (`packages/kernel/src/worker-entry.ts`) defined a `ProcessShim`
@@ -34,7 +34,7 @@ handler unconditionally.
 
 ## Decision
 
-Move the Node-API surface out of `@rifty/kernel` into `@rifty/runtime-js`:
+Move the Node-API surface out of `@riftydev/kernel` into `@riftydev/runtime-js`:
 
 - `installProcessShim` and the internal `ProcessShim` interface (Node-shape
   `process` global) move from `packages/kernel/src/worker-entry.ts` to a new
@@ -64,13 +64,13 @@ Move the Node-API surface out of `@rifty/kernel` into `@rifty/runtime-js`:
 - `kernel-dispatcher.ts` becomes a thin generic singleton: `getKernelDispatcher()`
   returns an empty `SyncRpcDispatcher` and ships no pre-registered handlers.
   `setKernelRecursiveSpawn` is deleted — the recursive runner now lives in
-  `runtime-js` and imports `spawnKernelWorker` from `@rifty/kernel` directly
+  `runtime-js` and imports `spawnKernelWorker` from `@riftydev/kernel` directly
   (top-down, layer-clean).
 - The host's kernel-worker chunk
   (`apps/playground/src/workers/kernel-worker-entry.ts`) composes the
   kernel bootstrap with the runtime-js installer module so the kernel-spawned
   worker is fully wired before user code runs:
-  `import '@rifty/runtime-js/install-process'; import '@rifty/kernel/worker-entry';`.
+  `import '@riftydev/runtime-js/install-process'; import '@riftydev/kernel/worker-entry';`.
 - `child_process.execSync` (in `runtime-js`) registers the `'execSync'`
   handler on the kernel dispatcher at module load via the same install hook,
   so the previous `setExecSyncScriptResolver` module-load side-effect
@@ -78,7 +78,7 @@ Move the Node-API surface out of `@rifty/kernel` into `@rifty/runtime-js`:
 
 ## Consequences
 
-- **Positive — kernel becomes runtime-agnostic.** `@rifty/kernel` no longer
+- **Positive — kernel becomes runtime-agnostic.** `@riftydev/kernel` no longer
   knows what a Node `process` looks like, what `execSync` means, or how to
   resolve a script path. A non-Node embedder can take the kernel as-is and
   install whatever process model fits their runtime (the runtime-wasi
@@ -86,21 +86,21 @@ Move the Node-API surface out of `@rifty/kernel` into `@rifty/runtime-js`:
   derived from `ProcessSpec`, no Node shape at all).
 - **Positive — late-binding cycle closed.** `setKernelRecursiveSpawn` is
   gone. The recursive runner in `runtime-js` statically imports
-  `spawnKernelWorker` from `@rifty/kernel`. No more module-load handshake;
+  `spawnKernelWorker` from `@riftydev/kernel`. No more module-load handshake;
   the dependency graph is top-down and the static cycle that the original
   split worked around no longer exists.
 - **Negative — hosts must compose two boot side-effects.** The kernel-worker
-  chunk previously imported `@rifty/kernel/worker-entry` only. Hosts that
+  chunk previously imported `@riftydev/kernel/worker-entry` only. Hosts that
   spawn Node-style children must now also import the runtime-js installer
   module to get `installNodeProcessShim` wired into the pre-entry hook.
   Documented in `packages/runtime-js/README.md`; the playground's existing
   `kernel-worker-entry.ts` chunk grows one import line.
-- **Negative — public surface trim is breaking.** `@rifty/kernel` no longer
+- **Negative — public surface trim is breaking.** `@riftydev/kernel` no longer
   exports `installProcessShim`, `ProcessShim`, `setKernelRecursiveSpawn`,
   `setExecSyncScriptResolver`, `registerDefaultHandlers`, `ScriptResolver`,
   `RecursiveWorkerRunner`, `DefaultHandlerOptions`, or `ExecSyncPayload`.
-  Callers that imported these from `@rifty/kernel` now import from
-  `@rifty/runtime-js/install-process` instead. Within this repo, the only
+  Callers that imported these from `@riftydev/kernel` now import from
+  `@riftydev/runtime-js/install-process` instead. Within this repo, the only
   external caller was `child_process.ts`; updated in the same commit. The
   matching CHANGELOG entries record the removals.
 - **Out of scope (P1 follow-ups).** Unifying `WorkerHandle.send` (still a

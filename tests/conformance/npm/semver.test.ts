@@ -1,4 +1,4 @@
-import { compare, matchesRange, parse, pickBestVersion } from '@rifty/npm-client';
+import { compare, matchesRange, parse, pickBestVersion } from '@riftydev/npm-client';
 import { describe, expect, it } from 'vitest';
 
 describe('semver.parse', () => {

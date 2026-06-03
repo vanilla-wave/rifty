@@ -7,7 +7,7 @@ Date: 2026-05
 
 ## Context
 
-`@rifty/vfs` ships an `OpfsVfs` implementation but the playground bootstrap never wires it in: `getFsVfs()` always returns `MemoryVfs`. The sync mirror (`setSyncMirror(...)` used by `fs.readFileSync` and WASI) is also memory-backed. Files written through `fs.promises` evaporate on reload; persistent storage — a stated M4 deliverable — is not actually wired.
+`@riftydev/vfs` ships an `OpfsVfs` implementation but the playground bootstrap never wires it in: `getFsVfs()` always returns `MemoryVfs`. The sync mirror (`setSyncMirror(...)` used by `fs.readFileSync` and WASI) is also memory-backed. Files written through `fs.promises` evaporate on reload; persistent storage — a stated M4 deliverable — is not actually wired.
 
 REVIEW_ACTIONS entries A-004 (OPFS not wired) and A-005 (sync mirror not OPFS-backed) describe the two halves of the gap. `FileSystemSyncAccessHandle`, the only sync OPFS API, is Worker-only — that constraint is intrinsic to the platform.
 

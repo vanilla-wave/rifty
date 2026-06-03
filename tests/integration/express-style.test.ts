@@ -1,4 +1,4 @@
-import { http, dispatchToPort, listPorts, unregisterPort } from '@rifty/net';
+import { http, dispatchToPort, listPorts, unregisterPort } from '@riftydev/net';
 /**
  * Express-style integration smoke. Builds a minimal Express-shaped router
  * (without taking on the actual express package) on top of node:http.

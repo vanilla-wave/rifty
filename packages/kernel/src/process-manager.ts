@@ -15,7 +15,7 @@
  * manager; tests exercise the manager directly.
  */
 
-import { Readable, Writable } from '@rifty/io';
+import { Readable, Writable } from '@riftydev/io';
 import { EventEmitter } from './internal/event-emitter.ts';
 import { type SpawnWorkerSpec, spawnKernelWorker } from './spawn-worker.ts';
 import type { WorkerStdioPorts } from './worker-entry.ts';
@@ -93,7 +93,7 @@ export interface SameRealmProcessHandle extends ProcessHandleBase {
  * the IPC channel in a controlled fashion.
  *
  * Stdio accessors (`stdout` / `stderr` / `stdin`) wrap the underlying
- * `MessagePort` triple as `@rifty/io` `Readable` / `Writable` streams. These
+ * `MessagePort` triple as `@riftydev/io` `Readable` / `Writable` streams. These
  * are the supported surface for parent-side stdio; the raw `ports` field is
  * retained for compatibility and tooling that needs the `MessagePort`
  * objects (e.g. structured transfer). New code should reach for the
@@ -488,7 +488,7 @@ export class ProcessManager {
 export const globalProcessManager = new ProcessManager();
 
 /**
- * Adapter helpers — wrap the raw `MessagePort` triple as `@rifty/io`
+ * Adapter helpers — wrap the raw `MessagePort` triple as `@riftydev/io`
  * streams. Push-side `Readable` (start the port, push each `Uint8Array`
  * message into the stream) and post-side `Writable` (each `write` posts to
  * the port; `end` closes it). Kept in this module because they're only

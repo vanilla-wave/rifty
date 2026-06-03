@@ -5,7 +5,7 @@
  * needs OS state (uptime over the OS, real network interfaces, etc.) throws
  * NotImplementedError so callers see the gap.
  */
-import { NotImplementedError } from '@rifty/io';
+import { NotImplementedError } from '@riftydev/io';
 
 export const EOL = '\n';
 

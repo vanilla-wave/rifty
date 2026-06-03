@@ -10,7 +10,7 @@
  * emitter carries `'response'` with an `IncomingMessageFromFetch`.
  */
 
-import { EventEmitter } from '@rifty/io';
+import { EventEmitter } from '@riftydev/io';
 import { registerPort, unregisterPort } from '../registry.ts';
 import { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
 import { ServerResponse } from './response.ts';

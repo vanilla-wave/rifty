@@ -1,5 +1,5 @@
-import { createModuleLoader } from '@rifty/runtime-js/loader';
-import { MemoryFsSync } from '@rifty/vfs/internal';
+import { createModuleLoader } from '@riftydev/runtime-js/loader';
+import { MemoryFsSync } from '@riftydev/vfs/internal';
 /**
  * End-to-end through the loader: code uses `require('node:path')`/`import`
  * to access built-ins. This is the actual user surface — the unit tests

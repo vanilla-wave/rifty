@@ -12,7 +12,7 @@
  *  - targeted invalidate re-runs only the named module's body
  *  - re-execution observes the new source, not the cached exports
  */
-import { MemoryFsSync } from '@rifty/vfs/internal';
+import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { createModuleLoader } from './loader.ts';
 

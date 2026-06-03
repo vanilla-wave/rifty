@@ -7,9 +7,9 @@ Date: 2026-05
 
 **Decision (2026-05-26) — A-023 (SW → Worker process registry):** Confirmed **M11**, sequenced **after A-026 (Vite-in-Worker)**. A-023 is blocked by the cross-realm port-registry bridge that the Vite-in-Worker migration introduces. Once Vite runs in its own Worker (A-026), the Service Worker rewires from "post to first window client" to "post to the worker that owns the process registered for this URL", reusing the same `MessagePort` registry. Dependency chain: phases 1-3 of this ADR (DONE) → A-026 Vite-in-Worker → A-023 SW-to-Worker.
 
-**Decision (2026-05-27) — A-026 (Vite in Worker) — landed:** ADR-0043 ratified the migration. `apps/playground/src/glue/realVite.ts` now spawns a kernel Worker (`apps/playground/src/workers/real-vite-bootstrap.ts`); the cross-realm port-registry bridge ships as `@rifty/net.bridgeCrossRealmPreview` / `serveCrossRealmPreview` (over `BroadcastChannel`, matching the HMR bridge's primitive); the HMR bridge moves into the worker realm. ADR-0025 is superseded for the Real Vite path; main-thread Dev Mode stays as the non-isolated fallback. A-023 (SW→Worker direct routing) remains the next consumer of the bridge primitive.
+**Decision (2026-05-27) — A-026 (Vite in Worker) — landed:** ADR-0043 ratified the migration. `apps/playground/src/glue/realVite.ts` now spawns a kernel Worker (`apps/playground/src/workers/real-vite-bootstrap.ts`); the cross-realm port-registry bridge ships as `@riftydev/net.bridgeCrossRealmPreview` / `serveCrossRealmPreview` (over `BroadcastChannel`, matching the HMR bridge's primitive); the HMR bridge moves into the worker realm. ADR-0025 is superseded for the Real Vite path; main-thread Dev Mode stays as the non-isolated fallback. A-023 (SW→Worker direct routing) remains the next consumer of the bridge primitive.
 
-**Decision (2026-05-26) — A-026 (Vite in Worker):** Confirmed **M11**. Vite moves from the playground main-thread realm (per ADR-0025's provisional Option A) to a dedicated kernel-spawned Worker as soon as the cross-realm port-registry bridge in `@rifty/net` is ready. Migration is local — replace `realVite.ts` with a worker-spawning adapter plus the registry bridge. ADR-0025 is then superseded for the Real Vite case; main-thread Dev Mode stays as the non-isolated fallback.
+**Decision (2026-05-26) — A-026 (Vite in Worker):** Confirmed **M11**. Vite moves from the playground main-thread realm (per ADR-0025's provisional Option A) to a dedicated kernel-spawned Worker as soon as the cross-realm port-registry bridge in `@riftydev/net` is ready. Migration is local — replace `realVite.ts` with a worker-spawning adapter plus the registry bridge. ADR-0025 is then superseded for the Real Vite case; main-thread Dev Mode stays as the non-isolated fallback.
 
 ## Context
 
@@ -22,7 +22,7 @@ REVIEW_ACTIONS items A-001 (sync IPC), A-002 (worker-as-process), A-008 (`esbuil
 Adopt a single process model. Each Node-style "process" runs in its own Worker realm hosted by a generic kernel entry. Sync IPC uses a `SharedArrayBuffer` ring with `Atomics`-coordinated request/reply framing.
 
 - New module `packages/kernel/src/worker-entry.ts` is the bootstrap loaded by every spawned Worker. It accepts a `WorkerSpawnSpec` over a `MessageChannel`: entry script, argv, env, stdio ports, and a SAB handle for the sync ring.
-- `@rifty/kernel.spawn(spec)` returns a `ProcessHandle` (PID, stdio `MessagePort`s, exit promise). `child_process.spawn`, `child_process.fork`, and `worker_threads.Worker` all funnel through `kernel.spawn`.
+- `@riftydev/kernel.spawn(spec)` returns a `ProcessHandle` (PID, stdio `MessagePort`s, exit promise). `child_process.spawn`, `child_process.fork`, and `worker_threads.Worker` all funnel through `kernel.spawn`.
 - Synchronous calls from inside a child Worker (`execSync`, `readFileSync` against memory-backed VFS, `worker_threads` host calls) write a request frame into the SAB ring, call `Atomics.wait` on the reply slot, and read the reply when the parent (or kernel) `Atomics.notify`s. The reply path bypasses the calling realm's microtask queue by design.
 - Stdio is binary `Uint8Array` over `MessagePort`, transferable. Text decoding lives in the consumer.
 - The current same-realm `new Function`-in-realm path stays as a fallback behind a capability gate (`crossOriginIsolated === false` or `RIFTY_FALLBACK_NO_SAB=1`). The fallback is marked deprecated in the module's TSDoc; it exists for non-isolated test environments only.
@@ -111,7 +111,7 @@ Phase 3 landed (2026-05-25):
       injected by `spawn-worker.ts`, and (c) the host-side
       `setExecSyncScriptResolver` setter the runtime-js layer uses to
       thread `syncMirror()` into the kernel without making the kernel
-      depend on `@rifty/vfs`.
+      depend on `@riftydev/vfs`.
 - [x] `packages/runtime-js/src/builtins/child_process-sync.ts` —
       `execSync` branches on `isSabIpcSupported() && getKernelWorkerUrl()
       && globalThis[KERNEL_SYNC_CALL_KEY]`. When all three hold it routes
@@ -143,7 +143,7 @@ worker-as-process model from this ADR. Scope:
 
 - Vendor `esbuild.wasm` under `tools/esbuild-wasm/` (pinned version checked
   into the repo, not fetched at runtime).
-- WASI runner (`@rifty/runtime-wasi`) gains preopens for esbuild's
+- WASI runner (`@riftydev/runtime-wasi`) gains preopens for esbuild's
   temporary directory (`/tmp` mapped into the shared backend from
   ADR-0014) so esbuild's intermediate write-then-read pattern works.
 - stdin/stdout/stderr are wired through the spawned-Worker stdio

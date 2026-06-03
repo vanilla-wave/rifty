@@ -8,8 +8,8 @@
  * `process.exit(N)`) — see `child_process.ts` for the outer wrapper.
  */
 
-import { Buffer, type EventEmitter } from '@rifty/io';
-import type { ProcessHandle, ProcessIO } from '@rifty/kernel';
+import { Buffer, type EventEmitter } from '@riftydev/io';
+import type { ProcessHandle, ProcessIO } from '@riftydev/kernel';
 import { syncMirror } from './fs-sync-mirror.ts';
 
 export interface ExecScriptArgs {

@@ -1,4 +1,4 @@
-import type { RuntimeController } from '@rifty/runtime-js';
+import type { RuntimeController } from '@riftydev/runtime-js';
 import { describe, expect, it, vi } from 'vitest';
 import type { CapabilityCheck } from './capabilities.ts';
 import { COI_REQUIRED_MESSAGE, type SandboxDeps, createSandbox } from './sandbox.ts';

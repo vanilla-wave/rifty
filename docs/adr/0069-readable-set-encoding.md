@@ -15,7 +15,7 @@ stream.setEncoding(encoding); // encoding = "utf8"
 stream.on("data", chunk => { string += chunk; });
 ```
 
-rifty's `IncomingMessage` extends `@rifty/io`'s `Readable`, which had no
+rifty's `IncomingMessage` extends `@riftydev/io`'s `Readable`, which had no
 `setEncoding`. The `encoding` constructor option was declared on
 `ReadableOptions` but ignored, and the file deliberately omitted the `decoder`
 state field. Without the method, every opencode POST-with-body route 500s — the
@@ -76,7 +76,7 @@ need verified by the live smoke wall.
 
 ## References
 
-- ADR-0012 / ADR-0034 (`@rifty/io` owns a faithful `node:stream.Readable`).
+- ADR-0012 / ADR-0034 (`@riftydev/io` owns a faithful `node:stream.Readable`).
 - ADR-0054 (Effect consumes rifty `node:http` as-is) — the consumer whose body
   read calls `setEncoding`.
 - ADR-0063/0064 (record-and-continue; verified need).

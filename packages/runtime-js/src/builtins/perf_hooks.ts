@@ -11,7 +11,7 @@
  * `observe()` was never called, and they would themselves be silent stubs
  * if reachable past a thrown `observe()`.
  */
-import { NotImplementedError } from '@rifty/io';
+import { NotImplementedError } from '@riftydev/io';
 
 class PerformanceObserver {
   constructor(_callback: (list: unknown) => void) {

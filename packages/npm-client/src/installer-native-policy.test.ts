@@ -1,4 +1,4 @@
-import { MemoryVfs } from '@rifty/vfs';
+import { MemoryVfs } from '@riftydev/vfs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makePackageTarball } from './_test-fixtures/tar-builder.ts';
 import { install } from './installer.ts';

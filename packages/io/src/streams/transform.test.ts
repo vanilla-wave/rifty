@@ -98,7 +98,7 @@ describe('Duplex.write routes to the writable side', () => {
   it('Duplex public options interface does not expose the internal writable-side hook', () => {
     // Type-level guard: the internal writable-side factory is keyed by a
     // module-scoped Symbol (`INTERNAL_WRITABLE_SIDE`) that is NOT exported
-    // from `src/index.ts`. A subclass written outside `@rifty/io` cannot
+    // from `src/index.ts`. A subclass written outside `@riftydev/io` cannot
     // reach the symbol and therefore cannot inject a custom writable side.
     // We simulate that here by reaching only through the public option
     // surface: `_internalWritableSide` is no longer a field on the public

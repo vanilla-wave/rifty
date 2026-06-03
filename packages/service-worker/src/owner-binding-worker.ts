@@ -43,7 +43,7 @@
  * Cited ADRs:
  * - **ADR-0011** — sync IPC + worker-as-process. Provides the
  *   kernel-spawned-Worker realm with `Client.type === 'worker'`.
- * - **ADR-0017** — `@rifty/net` cross-realm port-registry bridge. The
+ * - **ADR-0017** — `@riftydev/net` cross-realm port-registry bridge. The
  *   `ports: number[]` field in the ready frame mirrors the Worker's
  *   `serveCrossRealmPreview(port, …)` registrations.
  * - **ADR-0040** — `SW_FRAME_VERSION` / `SW_ROUTING_VERSION` split.

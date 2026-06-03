@@ -9,7 +9,7 @@
  * pushed individually so chunked uploads work end-to-end.
  */
 
-import { Readable } from '@rifty/io';
+import { Readable } from '@riftydev/io';
 
 /**
  * Minimal Node-compatible shape for `req.socket`. Real TCP fields aren't

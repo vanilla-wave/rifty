@@ -35,7 +35,7 @@
  * The remaining `StatementSync` members (`expandedSQL`, `sourceSQL`) are not yet
  * backed; they land in follow-up tasks as opencode's path needs them.
  */
-import { NotImplementedError } from '@rifty/io';
+import { NotImplementedError } from '@riftydev/io';
 import type { BindParams, Database, ParamsObject, SqlValue, Statement } from 'sql.js';
 
 /**

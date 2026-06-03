@@ -1,5 +1,5 @@
-import { RegistryClient } from '@rifty/npm-client';
-import { detectCapabilities } from '@rifty/runtime-js/env/capabilities';
+import { RegistryClient } from '@riftydev/npm-client';
+import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
 import { Show, createSignal, onCleanup } from 'solid-js';
 import { useShellSession } from './adapters/shell-adapter.ts';
 import { useMode } from './adapters/useMode.ts';

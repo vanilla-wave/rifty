@@ -1,4 +1,4 @@
-import { http, dispatchToPort, listPorts, unregisterPort } from '@rifty/net';
+import { http, dispatchToPort, listPorts, unregisterPort } from '@riftydev/net';
 import { afterEach, describe, expect, it } from 'vitest';
 
 afterEach(() => {

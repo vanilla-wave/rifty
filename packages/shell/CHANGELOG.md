@@ -1,4 +1,4 @@
-# @rifty/shell — Changelog
+# @riftydev/shell — Changelog
 
 ## [Unreleased]
 
@@ -26,7 +26,7 @@
   throw rather than silently dropping characters.
 - `touch` on an existing file now bumps its mtime through `FsSync.utimes`
   (ADR-0029); works on every backend, including OPFS. Dropped the
-  `@rifty/vfs/internal` backend-sniffing import and the
+  `@riftydev/vfs/internal` backend-sniffing import and the
   `NotImplementedError('shell.touch.utimes')` escape hatch.
 
 ### Changed
@@ -69,4 +69,4 @@
 
 ### Dependencies
 
-- Added `@rifty/io` (workspace) for `NotImplementedError`.
+- Added `@riftydev/io` (workspace) for `NotImplementedError`.

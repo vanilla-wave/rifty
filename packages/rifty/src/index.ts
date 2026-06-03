@@ -3,7 +3,7 @@
  *
  * `npm i rifty` pulls the whole runtime. From the root you get the
  * framework-free façade ({@link createSandbox}, {@link checkCapabilities}); each
- * individual layer is a subpath that re-exports the matching `@rifty/*` package
+ * individual layer is a subpath that re-exports the matching `@riftydev/*` package
  * verbatim:
  *
  *   rifty/vfs · rifty/io · rifty/kernel · rifty/runtime · rifty/wasi · rifty/net
@@ -14,7 +14,7 @@
  * import { checkCapabilities, createSandbox } from 'rifty';
  * if (!checkCapabilities().sufficient) showUnsupportedNotice();
  * const sandbox = await createSandbox({
- *   workerUrl: new URL('@rifty/runtime-js/worker', import.meta.url),
+ *   workerUrl: new URL('@riftydev/runtime-js/worker', import.meta.url),
  * });
  * await sandbox.runtime.eval('console.log(1 + 2)');
  * ```
@@ -30,10 +30,10 @@ export type {
 export { checkCapabilities } from './capabilities.ts';
 export type { Capabilities, CapabilityCheck } from './capabilities.ts';
 // Re-exported so `Sandbox.runtime` is fully typed from the umbrella alone,
-// without a deep `@rifty/runtime-js` import.
+// without a deep `@riftydev/runtime-js` import.
 export type {
   EvalOptions,
   EvalResult,
   RuntimeController,
   RuntimeEvent,
-} from '@rifty/runtime-js';
+} from '@riftydev/runtime-js';

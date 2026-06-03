@@ -1,4 +1,4 @@
-import type { FsSync } from '@rifty/vfs';
+import type { FsSync } from '@riftydev/vfs';
 import { loadBuiltin } from '../builtins/index.ts';
 import { executeCjs } from './cjs.ts';
 import { ModuleLoadError } from './errors.ts';

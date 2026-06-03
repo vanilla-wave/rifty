@@ -8,17 +8,17 @@
  * parent realm (the calling Worker is blocked via `Atomics.wait`, but the
  * parent must keep pumping the dispatcher).
  *
- * Lives in `@rifty/runtime-js` (post-ADR-0039) so the kernel no longer
+ * Lives in `@riftydev/runtime-js` (post-ADR-0039) so the kernel no longer
  * carries Node-API knowledge. The import flows top-down (`runtime-js` →
- * `@rifty/kernel`), so no late-binding handshake is needed: the runner
+ * `@riftydev/kernel`), so no late-binding handshake is needed: the runner
  * statically imports `spawnKernelWorker`.
  */
 
-import { type WorkerEntryDescriptor, spawnKernelWorker } from '@rifty/kernel';
+import { type WorkerEntryDescriptor, spawnKernelWorker } from '@riftydev/kernel';
 
 /**
  * Subset of `SpawnWorkerSpec` the recursive runner emits. The shape
- * matches `@rifty/kernel`'s `SpawnWorkerSpec` exactly — declared locally
+ * matches `@riftydev/kernel`'s `SpawnWorkerSpec` exactly — declared locally
  * so the handler/runner contract is documented without re-exporting
  * kernel types we don't need to re-export.
  */

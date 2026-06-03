@@ -8,10 +8,10 @@
  * `__rifty` root); this module reads from that.
  *
  * `builtinModules` reflects whatever has been registered with the loader at
- * the time of the call (so net's `node:http` shows up once @rifty/net has
+ * the time of the call (so net's `node:http` shows up once @riftydev/net has
  * registered itself).
  */
-import { NotImplementedError, listBuiltins } from '@rifty/io';
+import { NotImplementedError, listBuiltins } from '@riftydev/io';
 import { publishRuntimeGlobal, readRuntimeGlobal } from '../internal/worker-globals.ts';
 
 interface RequireFn {

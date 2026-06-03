@@ -57,7 +57,7 @@ need verified by the live smoke wall.
 - `esm-ast.ts`: `isFileAttributeImport` + `handleFileImport`; the top-level import
   loop routes file-attribute imports to the path binding and away from
   `staticImports`. `esm.ts`: a 9th factory parameter `__assetPath`.
-- Behaviour change for consumers of `@rifty/runtime-js`: an `import … with { type:
+- Behaviour change for consumers of `@riftydev/runtime-js`: an `import … with { type:
   "file" }` now yields the asset path instead of attempting (and failing) to load
   the asset as a module. Attribute-less imports are unchanged.
 - Unblocks opencode's `photon_rs_bg.wasm` path import (and any future

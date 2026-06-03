@@ -8,7 +8,7 @@
  *     expected pin → mismatch throws `EINTEGRITY` (closes the live-path's
  *     previous silent acceptance).
  */
-import { MemoryVfs } from '@rifty/vfs';
+import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import { fetchAndUnpackToCache } from './fetch-and-unpack.ts';
 import { type TarballCache, VfsTarballCache, computeIntegrity } from './tarball-cache.ts';

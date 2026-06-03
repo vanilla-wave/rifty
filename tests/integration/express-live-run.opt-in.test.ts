@@ -4,7 +4,7 @@
  * Distinct from `express-live.opt-in.test.ts`, which only proves the *install*
  * pipeline. This one installs express@^4 from the live registry, then loads it
  * through the rifty module loader and serves real HTTP requests through the
- * `@rifty/net` port registry — exercising express's actual codebase (router,
+ * `@riftydev/net` port registry — exercising express's actual codebase (router,
  * finalhandler, etag, send, body parsing) on top of rifty's builtins.
  *
  * **Skipped by default** — needs network. Run manually:
@@ -14,14 +14,14 @@
  * (and, in a sandboxed environment, with the sandbox disabled so the install
  * can reach the network and `vitest` can read the temp tree).
  */
-import '@rifty/net/register-builtins';
-import { dispatchToPort, listPorts, unregisterPort } from '@rifty/net';
-import { type InstallResult, RegistryClient, install } from '@rifty/npm-client';
-import { Buffer as RiftyBuffer } from '@rifty/runtime-js/builtins/buffer';
-import { installProcessGlobals, setProcessCwd } from '@rifty/runtime-js/builtins/process';
-import { installTimerGlobals } from '@rifty/runtime-js/builtins/timers';
-import { createModuleLoader } from '@rifty/runtime-js/loader';
-import { createMemoryFs, setSyncMirror } from '@rifty/vfs/internal';
+import '@riftydev/net/register-builtins';
+import { dispatchToPort, listPorts, unregisterPort } from '@riftydev/net';
+import { type InstallResult, RegistryClient, install } from '@riftydev/npm-client';
+import { Buffer as RiftyBuffer } from '@riftydev/runtime-js/builtins/buffer';
+import { installProcessGlobals, setProcessCwd } from '@riftydev/runtime-js/builtins/process';
+import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
+import { createModuleLoader } from '@riftydev/runtime-js/loader';
+import { createMemoryFs, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 // Worker-entry installs `globalThis.Buffer = rifty Buffer` (worker-entry.ts:30).

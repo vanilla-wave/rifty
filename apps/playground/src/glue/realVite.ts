@@ -28,7 +28,7 @@
  *      spec, kernel imports the bootstrap URL, bootstrap takes it from
  *      there.
  *   4. Register a page-side `bridgeCrossRealmPreview(port)` handler
- *      against `port` in the page's `@rifty/net` registry so the SW's
+ *      against `port` in the page's `@riftydev/net` registry so the SW's
  *      preview-bridge forwards the SW fetch into the worker.
  *   5. Mount the existing `mountPlaygroundPreviewBridge()` — unchanged
  *      from the M10 path; it dispatches into the page registry, which
@@ -47,9 +47,9 @@
  *     adapter with the same kernel-Worker migration story to do later
  *     (out of scope here per ADR-0043 / D5).
  */
-import { globalProcessManager, isSabIpcSupported } from '@rifty/kernel';
-import { bridgeCrossRealmPreview, registerPort, unregisterPort } from '@rifty/net';
-import { NotImplementedError } from '@rifty/vfs';
+import { globalProcessManager, isSabIpcSupported } from '@riftydev/kernel';
+import { bridgeCrossRealmPreview, registerPort, unregisterPort } from '@riftydev/net';
+import { NotImplementedError } from '@riftydev/vfs';
 import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
 import { sendVfsWrite } from './vfs-write-port.ts';
 
@@ -143,13 +143,13 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
   });
 
   // Page-side preview-port bridge. The SW dispatches `/preview/<port>/*`
-  // to the page; the page's `@rifty/net` registry routes through this
+  // to the page; the page's `@riftydev/net` registry routes through this
   // handler over `BroadcastChannel` to the worker's `serveCrossRealmPreview`.
   const previewBridge = bridgeCrossRealmPreview(port);
   registerPort(port, previewBridge);
 
   // Existing M7 SW ↔ page wiring — unchanged. It dispatches into the
-  // page's `@rifty/net` registry, which now hits `previewBridge`.
+  // page's `@riftydev/net` registry, which now hits `previewBridge`.
   const tearSwBridge = mountPlaygroundPreviewBridge();
 
   log(`[real-vite] page-side preview-port bridge ready (port ${port})\n`);

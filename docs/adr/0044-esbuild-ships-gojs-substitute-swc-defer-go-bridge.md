@@ -6,7 +6,7 @@ Date: 2026-05-27
 ## Context
 
 M8's open-acceptance row called for vendoring `esbuild.wasm` end-to-end
-through `@rifty/runtime-wasi`, and M10 named `Vite ↔ esbuild.wasm` as
+through `@riftydev/runtime-wasi`, and M10 named `Vite ↔ esbuild.wasm` as
 the shadow-binding target. Q-2026-05-27-003 (preopens/cwd API) was
 explicitly waiting for esbuild's behaviour as its forcing consumer. The
 plan assumed esbuild shipped a `wasi_snapshot_preview1` build to npm.
@@ -20,7 +20,7 @@ the `js/wasm` target — there is no upstream WASI build, and the path
 from Go source to a real WASI binary is non-trivial (Go's WASI/WASIp1
 support exists but the esbuild project does not ship it).
 
-`@rifty/runtime-wasi` is a WASI preview1 shim; it cannot host a `gojs`
+`@riftydev/runtime-wasi` is a WASI preview1 shim; it cannot host a `gojs`
 guest. The Go-runtime ABI is a different host contract: a `syscall/js`
 handle protocol, a `wasm_exec.js`-equivalent host shim, GC interop, and
 goroutine scheduling. Implementing it is a multi-week design effort on
@@ -53,7 +53,7 @@ through `runWasi` and exposes the constraints. The consumer is now
 
 ### D3: Go-runtime (gojs) bridge is deferred — no work now
 
-`@rifty/runtime-go-wasm` (or whatever name lands) is not in M8, M10, or
+`@riftydev/runtime-go-wasm` (or whatever name lands) is not in M8, M10, or
 M11. The required scope is:
 
 - Full `syscall/js` handle protocol (Go's bidirectional JS↔Go value
@@ -77,7 +77,7 @@ open-acceptance row and pins down Q-2026-05-27-003.
 
 ## Alternatives considered
 
-- **Build `@rifty/runtime-go-wasm` now.** Rejected as multi-week design
+- **Build `@riftydev/runtime-go-wasm` now.** Rejected as multi-week design
   (full `syscall/js` handle protocol, GC interop, `wasm_exec.js`
   rebuild). The only currently-named beneficiary is esbuild, and we
   have a substitute that ships WASI today (swc). Pay this cost when a
@@ -97,7 +97,7 @@ open-acceptance row and pins down Q-2026-05-27-003.
 - **swc ≠ esbuild bundle-for-bundle.** Vite's downstream shadow-binding
   will target the swc API surface instead of esbuild's. The
   shadow-registry adapter (ADR-0015) handles the API rename; the wire
-  contract through `@rifty/runtime-wasi` is unchanged.
+  contract through `@riftydev/runtime-wasi` is unchanged.
 - **The Go bridge is not gone — it's parked.** A future task can pick
   up the gojs work without re-litigating this ADR; the only thing this
   ADR commits to is that the bridge is not part of M8/M10/M11.

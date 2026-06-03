@@ -1,5 +1,5 @@
 /**
- * Node-compatible `node:stream.PassThrough` — owned by `@rifty/io` per ADR-0012.
+ * Node-compatible `node:stream.PassThrough` — owned by `@riftydev/io` per ADR-0012.
  *
  * Trivial Transform with an identity transform; chunks in == chunks out.
  */

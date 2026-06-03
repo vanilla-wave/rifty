@@ -43,7 +43,7 @@ which for the symlink-free case reduce to:
   symlinks the two are definitionally identical. `Stats.isSymbolicLink()` stays
   `false`, so the result is internally consistent.
 - **D2 `realpath ≡ normalise-if-exists`.** `realpathSync(p)` resolves to a
-  normalised absolute path (`@rifty/vfs` `normalizePath`/`joinPath` against
+  normalised absolute path (`@riftydev/vfs` `normalizePath`/`joinPath` against
   `process.cwd()`), then throws `ENOENT` if the entry doesn't exist. POSIX
   `realpath(3)` = absolutise + collapse `.`/`..` + resolve symlinks + ENOENT on
   a missing component; with symlink resolution vacuous it reduces exactly to

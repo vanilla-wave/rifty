@@ -9,7 +9,7 @@
  * polyfills) `import 'node:https'` defensively at the top of files they never
  * exercise on the browser dev path.
  */
-import { NotImplementedError } from '@rifty/io';
+import { NotImplementedError } from '@riftydev/io';
 
 function notImpl(method: string): never {
   throw new NotImplementedError(

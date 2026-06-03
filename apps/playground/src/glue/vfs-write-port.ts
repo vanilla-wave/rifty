@@ -18,17 +18,17 @@
  *   - Bi-directional sync needs locking + snapshot semantics. Out of
  *     scope until OPFS-as-sync (M12+).
  *
- * Why playground-local (not in `@rifty/net`):
- *   - The wire format is a `Vfs`-shaped concern; `@rifty/net` doesn't
- *     depend on `@rifty/vfs` and shouldn't. The cross-realm helper
+ * Why playground-local (not in `@riftydev/net`):
+ *   - The wire format is a `Vfs`-shaped concern; `@riftydev/net` doesn't
+ *     depend on `@riftydev/vfs` and shouldn't. The cross-realm helper
  *     primitive (`BroadcastChannel` + `channelNameFor`) is borrowed from
  *     net, but the application of the frames to `syncMirror()` is a
  *     playground adapter concern. Keep it local until a second consumer
  *     (e.g. a generic "spawn a worker that mirrors files") appears.
  */
 
-import { channelNameFor } from '@rifty/net';
-import { dirname, syncMirror } from '@rifty/vfs';
+import { channelNameFor } from '@riftydev/net';
+import { dirname, syncMirror } from '@riftydev/vfs';
 
 /**
  * Synthetic URL used as the keyed input to `channelNameFor` for the VFS

@@ -1,4 +1,4 @@
-# ADR 0018: Expanded `@rifty/runtime-js` public surface via subpath exports
+# ADR 0018: Expanded `@riftydev/runtime-js` public surface via subpath exports
 
 Status: Accepted
 Date: 2026-05
@@ -17,7 +17,7 @@ These are consumed by `apps/playground/src/adapters/realVite.ts` to install Node
 OPEN_QUESTIONS entry Q-2026-05-23-005 had two options:
 
 - A — ship the subpath exports as listed (the path taken).
-- B — consolidate the same surface under a single `./host` entry (`@rifty/runtime-js/host`).
+- B — consolidate the same surface under a single `./host` entry (`@riftydev/runtime-js/host`).
 
 Option A was shipped without a stop-and-PR cycle, which violates CLAUDE.md's IRREVERSIBLE-decision rule (rule 1 of the Reversibility checklist: "touches public API between packages"). REVIEW_ACTIONS entry A-010 calls out the workflow violation.
 
@@ -32,7 +32,7 @@ Ratify Option A retroactively.
 
 ## Consequences
 
-- `@rifty/runtime-js`'s public API is wider than `index.ts + worker + loader + env/capabilities + builtins`. Breaking changes inside `builtins/process|timers|buffer|module` propagate to consumers (today only `apps/playground`, but the surface is committed).
+- `@riftydev/runtime-js`'s public API is wider than `index.ts + worker + loader + env/capabilities + builtins`. Breaking changes inside `builtins/process|timers|buffer|module` propagate to consumers (today only `apps/playground`, but the surface is committed).
 - The real-Vite demo path keeps working without churn.
 - Negative: more surface to keep stable. Tests for each subpath should pin the exported symbols.
 - Negative: the precedent — shipping an IRREVERSIBLE change without the prescribed stop — is documented but not punished, which weakens the rule slightly. Future reviewers should treat this ADR as a one-off, not a template.

@@ -9,7 +9,7 @@
  * decision lives in `installer.ts` (`walkAndPin`), not here.
  */
 
-import { type Vfs, joinPath } from '@rifty/vfs';
+import { type Vfs, joinPath } from '@riftydev/vfs';
 
 export interface ResolvedPackage {
   name: string;

@@ -63,7 +63,7 @@ smoke wall (an inflection, not a stop).
 - `resolver.ts`: `ModuleKind` gains `'text'`; `TEXT_EXTENSIONS` const; `detectKind`
   returns `'text'` for those extensions. `cjs.ts`: a `'text'` branch returns the
   raw source as `module.exports`. No signature changes; additive.
-- Behaviour change for ALL consumers of `@rifty/runtime-js`: an explicit
+- Behaviour change for ALL consumers of `@riftydev/runtime-js`: an explicit
   `import … from "./x.txt"` (etc.) now resolves to the file's text instead of
   `MODULE_NOT_FOUND`/parse-error. Guarded to explicit-extension imports only (D3).
 - Unblocks opencode's 37 `.txt` prompt imports + `.sql`/`.md`/`.prompt` assets.

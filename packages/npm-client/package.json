@@ -1,5 +1,5 @@
 {
-  "name": "@rifty/npm-client",
+  "name": "@riftydev/npm-client",
   "version": "0.1.0",
   "description": "In-browser npm client for rifty: semver, registry, tarball extract, link, install.",
   "type": "module",
@@ -40,8 +40,8 @@
     "build": "tsup"
   },
   "dependencies": {
-    "@rifty/io": "workspace:*",
-    "@rifty/shadow-registry": "workspace:*",
-    "@rifty/vfs": "workspace:*"
+    "@riftydev/io": "workspace:*",
+    "@riftydev/shadow-registry": "workspace:*",
+    "@riftydev/vfs": "workspace:*"
   }
 }

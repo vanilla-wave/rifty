@@ -5,7 +5,7 @@ Date: 2026-05-27
 
 ## Context
 
-`@rifty/vfs` exposes two surfaces over the same backend (ADR-0014, ADR-0037):
+`@riftydev/vfs` exposes two surfaces over the same backend (ADR-0014, ADR-0037):
 
 - `Vfs` — the async surface (browser / async fixtures).
 - `FsSync` — the sync surface (`fs.readFileSync`, WASI preview1 syscalls, the
@@ -35,7 +35,7 @@ The 2026-05-26 architecture audit flagged two asymmetries between them:
      `OpfsVfs`-only host has no path.
 
 Both gaps surfaced together in the audit (vfs audit F3). Both are
-IRREVERSIBLE changes — they edit public exports of `@rifty/vfs`.
+IRREVERSIBLE changes — they edit public exports of `@riftydev/vfs`.
 
 ## Decision
 
@@ -73,7 +73,7 @@ dirent, `fd_readdir` writes `FILETYPE_REGULAR_FILE` or
 
 ## Consequences
 
-- Public API change in `@rifty/vfs`:
+- Public API change in `@riftydev/vfs`:
   - `FsSync.readdirSync(path)` return type narrows from `readonly string[]`
     to `readonly VfsDirent[]`. Mechanical migration for callers.
   - `Vfs.utimes(path, atimeMs, mtimeMs)` is now part of the contract.

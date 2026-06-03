@@ -4,8 +4,8 @@
  * ADR-0024 line budget.
  */
 
-import { NotImplementedError } from '@rifty/io';
-import { type Vfs, joinPath } from '@rifty/vfs';
+import { NotImplementedError } from '@riftydev/io';
+import { type Vfs, joinPath } from '@riftydev/vfs';
 import type { Lockfile, LockfileEntry } from './linker.ts';
 import { matchesRange } from './semver.ts';
 

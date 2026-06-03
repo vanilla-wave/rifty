@@ -1,7 +1,7 @@
 /**
  * Unit tests for the preview-protocol addressing primitives (ADR-0036).
  *
- * The behaviour pinned here is the same contract `@rifty/service-worker`'s
+ * The behaviour pinned here is the same contract `@riftydev/service-worker`'s
  * `matchPreviewUrl` used to encode inline. Existing SW tests
  * (`packages/service-worker/tests/preview-bridge.test.ts`) still cover the
  * back-compat adapter shape; this suite covers the canonical helpers

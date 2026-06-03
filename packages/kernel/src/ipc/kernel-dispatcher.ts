@@ -11,7 +11,7 @@
  * ADR-0039: the singleton ships with **no** pre-registered handlers and
  * **no** recursive-spawn wiring. Both belonged to the Node-API surface
  * (`'execSync'` + the recursive Worker runner) and have moved to
- * `@rifty/runtime-js`. Higher layers register methods via
+ * `@riftydev/runtime-js`. Higher layers register methods via
  * `getKernelDispatcher().register(method, handler)` at boot.
  */
 
@@ -22,7 +22,7 @@ let kernelDispatcher: SyncRpcDispatcher | null = null;
 /**
  * Returns the shared dispatcher, lazily constructing it on first call.
  * The dispatcher is a thin generic registry — no methods are registered
- * by the kernel itself. Higher layers (e.g. `@rifty/runtime-js`'s
+ * by the kernel itself. Higher layers (e.g. `@riftydev/runtime-js`'s
  * `installRuntimeJsExecSyncHandler`) install their handlers explicitly.
  */
 export function getKernelDispatcher(): SyncRpcDispatcher {

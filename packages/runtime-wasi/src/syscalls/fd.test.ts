@@ -6,7 +6,7 @@
  * The shim is exercised through synthetic `WasiCtx` instances with a real
  * `WebAssembly.Memory` so we can read back the bytes the syscall wrote.
  */
-import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@rifty/vfs/internal';
+import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setupFdCtx } from './fd-test-fixture.ts';
 import {

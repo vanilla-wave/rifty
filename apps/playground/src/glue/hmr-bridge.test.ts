@@ -15,7 +15,7 @@
  * `BridgedWebSocket` client suffices to prove the wire format the inlined
  * iframe script speaks (both ride the same `BroadcastChannel`).
  */
-import { BridgedWebSocket, channelNameFor } from '@rifty/net';
+import { BridgedWebSocket, channelNameFor } from '@riftydev/net';
 import { describe, expect, it } from 'vitest';
 import {
   createHmrBridgeVitePlugin,

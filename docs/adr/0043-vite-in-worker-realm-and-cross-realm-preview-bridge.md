@@ -25,14 +25,14 @@ answer:
 > A future move to Option B [dedicated Worker + cross-realm bridge]
 > remains the right long-term answer and is tracked as an M10 follow-up;
 > the migration path is local — replace `realVite.ts` with a
-> worker-spawning version plus a registry bridge in `@rifty/net`.
+> worker-spawning version plus a registry bridge in `@riftydev/net`.
 
 This ADR is that migration.
 
 Three cross-realm problems have to be solved together for Vite to live
 in its own realm:
 
-1. **Port registry.** `@rifty/net.dispatchToPort` is realm-local — a
+1. **Port registry.** `@riftydev/net.dispatchToPort` is realm-local — a
    `Map<number, PortHandler>` in module scope. The SW asks the page
    realm; the listener now lives in a Worker realm.
 2. **HMR transport.** `BridgedWebSocketServer` is the entity that
@@ -64,7 +64,7 @@ becoming a request-forwarder is the minimum delta.
 ### D2: Cross-realm preview transport is `BroadcastChannel`, matching the HMR bridge
 
 The page-side `dispatchToPort(<vite-port>, request)` resolves to a
-handler returned by a new `@rifty/net` helper, `bridgeCrossRealmPreview(port)`.
+handler returned by a new `@riftydev/net` helper, `bridgeCrossRealmPreview(port)`.
 That handler serialises the `Request` (method/url/headers/`Uint8Array`
 body) into a `request` frame, posts the frame onto a `BroadcastChannel`
 keyed by `previewPortChannelUrl(port)` (synthetic URL fed through
@@ -82,7 +82,7 @@ Two transports were considered:
   spawn flow can transfer the worker-side port half. A bigger kernel
   API change.
 - **BroadcastChannel.** Origin-scoped pub/sub. Zero kernel API change;
-  symmetric with the existing HMR bridge (`@rifty/net.BridgedWebSocketServer`);
+  symmetric with the existing HMR bridge (`@riftydev/net.BridgedWebSocketServer`);
   ADR-0017 already accepts its no-backpressure, no-per-connection
   isolation trade-offs, and its M12 rewrite already plans to swap to
   dedicated `MessagePort`s when `SerializedResponse` becomes a
@@ -122,9 +122,9 @@ scope until OPFS-as-sync (ADR-0013) is reachable from both realms —
 that is M12+ work.
 
 The VFS write port helper lives in `apps/playground/src/glue/` (not in
-`@rifty/net`) because the abstraction is "page writes file, worker
-applies to VFS" — a `@rifty/vfs` concern. Promoting the helper to
-`@rifty/net` would force `net` to know about `@rifty/vfs`, which
+`@riftydev/net`) because the abstraction is "page writes file, worker
+applies to VFS" — a `@riftydev/vfs` concern. Promoting the helper to
+`@riftydev/net` would force `net` to know about `@riftydev/vfs`, which
 inverts the layering. The wire format reuses `channelNameFor()` from
 net for the addressing pattern but the VFS application logic stays in
 the playground adapter.
@@ -177,7 +177,7 @@ moved to "Start of A-023 work."
 ### Negative
 
 - The page realm still appears on the request path: SW → Page (via
-  `setupPreviewBridge` and the page's `@rifty/net` registry) → Worker
+  `setupPreviewBridge` and the page's `@riftydev/net` registry) → Worker
   (via `BroadcastChannel`). A-023 will remove the page hop later, but
   for now every preview fetch crosses two realms and one
   `BroadcastChannel`.
@@ -223,7 +223,7 @@ moved to "Start of A-023 work."
       `install('vite')`, opens the cross-realm preview port, hosts the
       HMR bridge, opens the VFS write port, and starts
       `viteNs.createServer(...)`.
-- [x] `@rifty/net` exposes `previewPortChannelUrl`,
+- [x] `@riftydev/net` exposes `previewPortChannelUrl`,
       `serveCrossRealmPreview`, and `bridgeCrossRealmPreview` from
       `cross-realm/preview-port.ts`. Six unit tests cover round-trip,
       POST body bytes, error path, and timeout.

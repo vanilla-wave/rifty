@@ -1,11 +1,11 @@
 name: Release
 
-# Publishes all 12 rifty libraries (unscoped `rifty` + 11 @rifty/*) to npm when a
+# Publishes all 12 rifty libraries (unscoped `rifty` + 11 @riftydev/*) to npm when a
 # vX.Y.Z tag is pushed — TOKENLESS via npm OIDC trusted publishing (ADR-0070,
 # ADR-0071). There is NO NPM_TOKEN / NODE_AUTH_TOKEN secret anywhere.
 #
 # One-time prerequisites (out of repo — see docs/PUBLISHING.md):
-#   1. Own the `@rifty` org/scope on npmjs.com and bootstrap-publish each of the
+#   1. Own the `@riftydev` org/scope on npmjs.com and bootstrap-publish each of the
 #      12 names ONCE with a token (OIDC can't create a brand-new name — npm/cli
 #      #8544). After that, every release is tokenless.
 #   2. Add a GitHub Actions trusted publisher to EACH of the 12 packages on
@@ -53,7 +53,7 @@ jobs:
 
       - name: Set package versions to the tag
         run: >-
-          pnpm -r --filter "./packages/*" --filter "@rifty/shadow-registry"
+          pnpm -r --filter "./packages/*" --filter "@riftydev/shadow-registry"
           exec npm version "$RIFTY_VERSION" --no-git-tag-version --allow-same-version
 
       - name: Build libraries
@@ -65,7 +65,7 @@ jobs:
             cp LICENSE "$d/LICENSE"
           done
 
-      # Publishes ONLY ./packages/* (incl. the umbrella `rifty`) + @rifty/shadow-
+      # Publishes ONLY ./packages/* (incl. the umbrella `rifty`) + @riftydev/shadow-
       # registry — never a bare `pnpm -r publish`, which would also pick up the
       # non-private integration fixtures under tests/ and tools/. pnpm rewrites
       # workspace:* to the tag version (createExportableManifest, BEFORE the OIDC
@@ -74,5 +74,5 @@ jobs:
       # itself; --provenance attests the build (needs this repo to be public).
       - name: Publish to npm (OIDC trusted publishing)
         run: >-
-          pnpm -r --filter "./packages/*" --filter "@rifty/shadow-registry"
+          pnpm -r --filter "./packages/*" --filter "@riftydev/shadow-registry"
           publish --access public --no-git-checks --provenance

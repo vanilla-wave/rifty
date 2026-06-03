@@ -1,5 +1,5 @@
 {
-  "name": "@rifty/io",
+  "name": "@riftydev/io",
   "version": "0.1.0",
   "description": "Isomorphic primitives for rifty: EventEmitter, Buffer, and a node-compatible stream stack.",
   "type": "module",

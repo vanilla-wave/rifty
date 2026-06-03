@@ -1,5 +1,5 @@
-import { type Fetcher, type Packument, RegistryClient, install } from '@rifty/npm-client';
-import { MemoryVfs } from '@rifty/vfs';
+import { type Fetcher, type Packument, RegistryClient, install } from '@riftydev/npm-client';
+import { MemoryVfs } from '@riftydev/vfs';
 /**
  * End-to-end install against a mock registry. Builds a packument + tarball
  * in-memory, runs the installer, verifies node_modules layout + lockfile.

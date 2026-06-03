@@ -1,4 +1,4 @@
-import { RiftyTerminal } from '@rifty/terminal';
+import { RiftyTerminal } from '@riftydev/terminal';
 import { onCleanup, onMount } from 'solid-js';
 
 export function TerminalPanel(props: {

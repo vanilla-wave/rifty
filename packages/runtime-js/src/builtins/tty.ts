@@ -1,7 +1,7 @@
 /**
  * Node-compatible `node:tty` (subset). We never run on a TTY in the browser.
  */
-import { NotImplementedError } from '@rifty/io';
+import { NotImplementedError } from '@riftydev/io';
 
 export function isatty(_fd: number): boolean {
   return false;

@@ -1,9 +1,9 @@
-# Compatibility matrix — Buffer (`@rifty/io`)
+# Compatibility matrix — Buffer (`@riftydev/io`)
 
-Hand-maintained until `pnpm compat:generate` learns to source `@rifty/io` tests.
+Hand-maintained until `pnpm compat:generate` learns to source `@riftydev/io` tests.
 
-Status of the Node-compatible `Buffer` polyfill that lives in `@rifty/io` and
-is re-exported by `@rifty/runtime-js/builtins/buffer`.
+Status of the Node-compatible `Buffer` polyfill that lives in `@riftydev/io` and
+is re-exported by `@riftydev/runtime-js/builtins/buffer`.
 
 Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not
 implemented (throws `NotImplementedError` or `TypeError`).

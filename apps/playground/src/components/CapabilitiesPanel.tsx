@@ -1,4 +1,4 @@
-import type { CapabilityCheck } from '@rifty/runtime-js/env/capabilities';
+import type { CapabilityCheck } from '@riftydev/runtime-js/env/capabilities';
 
 export function CapabilitiesPanel(props: { check: CapabilityCheck }) {
   return (

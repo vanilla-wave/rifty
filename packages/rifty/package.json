@@ -99,16 +99,16 @@
     "build": "tsup"
   },
   "dependencies": {
-    "@rifty/io": "workspace:*",
-    "@rifty/vfs": "workspace:*",
-    "@rifty/kernel": "workspace:*",
-    "@rifty/runtime-js": "workspace:*",
-    "@rifty/runtime-wasi": "workspace:*",
-    "@rifty/net": "workspace:*",
-    "@rifty/npm-client": "workspace:*",
-    "@rifty/shell": "workspace:*",
-    "@rifty/terminal": "workspace:*",
-    "@rifty/service-worker": "workspace:*"
+    "@riftydev/io": "workspace:*",
+    "@riftydev/vfs": "workspace:*",
+    "@riftydev/kernel": "workspace:*",
+    "@riftydev/runtime-js": "workspace:*",
+    "@riftydev/runtime-wasi": "workspace:*",
+    "@riftydev/net": "workspace:*",
+    "@riftydev/npm-client": "workspace:*",
+    "@riftydev/shell": "workspace:*",
+    "@riftydev/terminal": "workspace:*",
+    "@riftydev/service-worker": "workspace:*"
   },
   "devDependencies": {
     "typescript": "*",

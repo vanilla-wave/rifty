@@ -1,9 +1,9 @@
-import { NotImplementedError } from '@rifty/io';
-import type { FsSync } from '@rifty/vfs';
-import { syncMirror } from '@rifty/vfs';
-import { resetSyncMirror, setSyncMirror } from '@rifty/vfs/internal';
+import { NotImplementedError } from '@riftydev/io';
+import type { FsSync } from '@riftydev/vfs';
+import { syncMirror } from '@riftydev/vfs';
+import { resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 /**
- * Unit tests for `@rifty/shell` — tokenizer, builtins, dispatch.
+ * Unit tests for `@riftydev/shell` — tokenizer, builtins, dispatch.
  *
  * The shell is intentionally bash-flavoured but not bash. It supports just
  * enough to drive `npm install`, `npm run dev`, and basic file ops in the

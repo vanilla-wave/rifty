@@ -32,7 +32,7 @@ Validation is loud and irrecoverable at the protocol layer (per ADR-0016's patte
 - Mixed-version peers fail fast with `code: 'EPROTOVERSION'` instead of silently corrupting state or surfacing a generic JSON parse error.
 - The SAB header grows by 4 bytes. The hand-written test fixtures in `tests/conformance/kernel/fixtures/sab-ring-echo.js` and `tests/conformance/kernel/fixtures/sync-rpc-echo.js` were updated to match (they hand-mirror the layout precisely so any drift between fixture and production code surfaces as a failed round-trip).
 - Wire changes from now on (e.g. A-021 binary-frame discriminator) bump `SYNC_RPC_PROTOCOL_VERSION` to `2`. The two-peer rollout is a recompile-everything-at-once moment by design — same model as ADR-0016 (`SW_PROTOCOL_VERSION`).
-- The SAB layout is no longer compatible with code that pre-dates this ADR. Both producer and consumer of every SAB ring are in the same package (`@rifty/kernel`); a single PR updates both sides atomically. There is no on-disk persistence of frames, so there is no migration story to worry about.
+- The SAB layout is no longer compatible with code that pre-dates this ADR. Both producer and consumer of every SAB ring are in the same package (`@riftydev/kernel`); a single PR updates both sides atomically. There is no on-disk persistence of frames, so there is no migration story to worry about.
 - Negative: the explicit-version variants (`writeRequestWithVersion` / `writeReplyWithVersion`) widen the `SabRing` public surface. They are documented as test/diagnostic / dispatcher-recovery hooks; production code uses the parameterless siblings.
 - Cites ADR-0011 (the protocol this layer sits on) and ADR-0016 (the pattern this ADR mirrors).
 

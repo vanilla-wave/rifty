@@ -1,5 +1,5 @@
 {
-  "name": "@rifty/runtime-js",
+  "name": "@riftydev/runtime-js",
   "version": "0.1.0",
   "description": "Node-compatible JS runtime for rifty: CJS/ESM module loader and node: builtins, in a Worker.",
   "type": "module",
@@ -90,9 +90,9 @@
     "build": "tsup"
   },
   "dependencies": {
-    "@rifty/io": "workspace:*",
-    "@rifty/kernel": "workspace:*",
-    "@rifty/vfs": "workspace:*",
+    "@riftydev/io": "workspace:*",
+    "@riftydev/kernel": "workspace:*",
+    "@riftydev/vfs": "workspace:*",
     "acorn": "^8.14.0"
   },
   "// TODO(ADR)": "Q-2026-05-23-005 — subpath exports `./builtins/*` are part of the public surface; promoted in ADR 0018"

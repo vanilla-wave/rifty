@@ -17,12 +17,12 @@
  *
  * This is a PRIVATE helper: it is NOT re-exported via `src/index.ts`, registers
  * NO new builtin, and adds NO resolver intercept. It only imports its own
- * runtime-js `builtins/fs.ts` and `@rifty/vfs` (layer-legal, no reverse import).
+ * runtime-js `builtins/fs.ts` and `@riftydev/vfs` (layer-legal, no reverse import).
  *
  * TODO(ADR): Q-2026-05-30-061 — pure-JS marker tool chosen over ripgrep-WASM;
  * ripgrep-WASM / isomorphic-git deferred behind explicit human ratification.
  */
-import { joinPath } from '@rifty/vfs';
+import { joinPath } from '@riftydev/vfs';
 import { type Dirent, readFileSync, readdirSync } from '../builtins/fs.ts';
 
 /** A single line match. `line` and `column` are 1-based (ripgrep/Node grep convention). */

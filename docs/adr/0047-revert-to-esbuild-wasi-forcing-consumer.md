@@ -24,7 +24,7 @@ verification failed for swc and succeeded for esbuild.
 1. **swc has no WASI build.** `@swc/core-wasm32-wasi` → npm 404 (does not
    exist). `@swc/wasm`, `@swc/wasm-typescript`, and `@swc/wasm-typescript-esm`
    are all **wasm-bindgen** modules: they import `__wbindgen_*`, not
-   `wasi_snapshot_preview1`. `@rifty/runtime-wasi` is a WASI-preview1 shim and
+   `wasi_snapshot_preview1`. `@riftydev/runtime-wasi` is a WASI-preview1 shim and
    cannot host a wasm-bindgen guest (which needs a JS-side glue module and a
    handle table, not a syscall ABI). swc-via-WASI is therefore impossible
    today.
@@ -76,7 +76,7 @@ question is now **resolved** and promoted to **ADR-0049** (Option A —
 
 ### D3: ADR-0044 D3 (the Go-runtime / gojs bridge stays deferred) remains valid — and is now moot for esbuild
 
-ADR-0044 D3 parked the `@rifty/runtime-go-wasm` (`syscall/js` handle protocol,
+ADR-0044 D3 parked the `@riftydev/runtime-go-wasm` (`syscall/js` handle protocol,
 `wasm_exec.js`-equivalent host shim, GC/goroutine integration) as multi-week
 work blocking nothing. **That decision stands.** It is now **moot for
 esbuild specifically**: esbuild runs through the existing WASI-preview1 shim
@@ -99,7 +99,7 @@ conformance tests. D4 described ADR-0044's own scope and is not contradicted.
   build to find. The published swc wasm artifacts are all wasm-bindgen, which
   our preview1 shim structurally cannot host. Waiting indefinitely leaves M8
   open with no path to close.
-- **Build `@rifty/runtime-go-wasm` to run the gojs `esbuild-wasm`.** Rejected
+- **Build `@riftydev/runtime-go-wasm` to run the gojs `esbuild-wasm`.** Rejected
   for the same reason ADR-0044 D3 rejected it (multi-week), and now
   unnecessary: `@esbuild/wasi-preview1` runs on the shim we already have.
 - **Vendor esbuild as a runtime npm dependency.** Rejected per the CLAUDE.md
@@ -128,8 +128,8 @@ conformance tests. D4 described ADR-0044's own scope and is not contradicted.
   (`transformWithEsbuild`, `loadVendoredEsbuildWasm`,
   `ESBUILD_WASM_VENDOR_PATH`) wires Vite's transform surface to
   `runWasi(esbuild.wasm, …)` via dependency injection (no import edge from the
-  tool to `@rifty/runtime-wasi`).
-- `@rifty/runtime-wasi` gains `WasiOptions.cwd`, `AT_FDCWD` resolution,
+  tool to `@riftydev/runtime-wasi`).
+- `@riftydev/runtime-wasi` gains `WasiOptions.cwd`, `AT_FDCWD` resolution,
   directory-open support in `path_open`, `E_NOTDIR` from `fd_readdir` on a
   file fd, and a wired stdin reader — all covered by ADR-0049.
 - Docs reversal: `PROJECT_PLAN.md` (L13, L29, L173, L176, L327-328, L334,

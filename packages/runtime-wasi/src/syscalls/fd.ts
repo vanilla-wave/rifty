@@ -15,7 +15,7 @@
  * Routes file-state queries through `syncMirror()` so the filesystem view
  * stays consistent with the `node:fs` layer.
  */
-import { syncMirror } from '@rifty/vfs';
+import { syncMirror } from '@riftydev/vfs';
 import {
   E_BADF,
   E_INVAL,

@@ -1,4 +1,4 @@
-# @rifty/service-worker
+# @riftydev/service-worker
 
 Service Worker source + main-thread registration helpers + the wire protocol
 that ties the two sides together.
@@ -12,12 +12,12 @@ and build time; the package itself never publishes the generated JS.
 ### Preview routing — `/preview/<port>/...`
 
 The SW intercepts `/preview/<port>/...` fetches in the controlled page and
-forwards them to whichever realm owns the registered `@rifty/net` listener on
+forwards them to whichever realm owns the registered `@riftydev/net` listener on
 that port. Today the owner is the first controlled window client; once the
 M11 worker-as-process model lands (ADR-0011) the resolver swaps to a
 Worker-aware variant that consults the cross-realm port registry.
 
-- URL convention + `preview.local` synthetic host: `@rifty/io/preview-protocol`,
+- URL convention + `preview.local` synthetic host: `@riftydev/io/preview-protocol`,
   ADR-0036.
 - SW-side wiring: `installPreviewInterceptor(self)` in `sw.ts` /
   `preview-bridge.ts`.
@@ -72,7 +72,7 @@ Bumping requires: changes to any frame's field set, field type, or
 per-field semantics.
 
 `SW_ROUTING_VERSION` pins (a) the addressing scheme exported from
-`@rifty/io/preview-protocol` (`PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`,
+`@riftydev/io/preview-protocol` (`PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`,
 `synthesizePreviewUrl`, `parsePreviewPath`) and (b) the owner-fallback
 rules in `owner-resolver.ts` (`FirstWindowOwnerResolver`). Bumping
 requires: changes to the URL regex shape, the synthetic host literal,
@@ -99,9 +99,9 @@ got)` pairs so a host can distinguish frame-skew from routing-skew.
 - ADR-0011 — kernel + worker-as-process model (M11 prerequisite for the
   Worker-aware owner resolver).
 - ADR-0016 — SW source-of-truth in TypeScript.
-- ADR-0017 — `@rifty/net` cross-realm scope and the streaming rewrite that
+- ADR-0017 — `@riftydev/net` cross-realm scope and the streaming rewrite that
   unblocks the body-transport upgrades scheduled for M12.
 - ADR-0031 — per-frame `version` validation.
-- ADR-0036 — preview-protocol addressing primitives live in `@rifty/io`.
+- ADR-0036 — preview-protocol addressing primitives live in `@riftydev/io`.
 - `REVIEW_ACTIONS.md` A-023 / A-026 — the M11 path that swaps the default
   owner resolver.

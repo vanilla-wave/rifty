@@ -26,7 +26,7 @@ This ADR is the **transform-side** half of feature 02-ts-on-import-graph
 
 - **D1 — Injected `transformSource` hook on `ModuleLoaderOptions` (the
   load-bearing request shape).** Add two OPTIONAL public fields to
-  `ModuleLoaderOptions` (`@rifty/runtime-js/loader`):
+  `ModuleLoaderOptions` (`@riftydev/runtime-js/loader`):
 
   ```ts
   export type TransformSourceHook = (req: {
@@ -71,7 +71,7 @@ This ADR is the **transform-side** half of feature 02-ts-on-import-graph
 
 ## Consequences
 
-- Public surface of `@rifty/runtime-js/loader` grows by two optional fields and
+- Public surface of `@riftydev/runtime-js/loader` grows by two optional fields and
   one exported type (`TransformSourceHook`). Additive and optional: every
   existing caller compiles and behaves unchanged.
 - `EsmLoaderDeps` (`esm.ts`) gains `workspace: string` and
@@ -85,7 +85,7 @@ This ADR is the **transform-side** half of feature 02-ts-on-import-graph
 ## Reversibility
 
 IRREVERSIBLE (reversibility rule 1 — cross-package public API of
-`@rifty/runtime-js`). Additive + optional, but adopting callers would ripple on
+`@riftydev/runtime-js`). Additive + optional, but adopting callers would ripple on
 revert. Recorded as an ADR because the request-object shape is a contract other
 features (03/04/05) and the harness build against.
 

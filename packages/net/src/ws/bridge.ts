@@ -22,7 +22,7 @@
  * to a future milestone after worker-as-process (ADR-0011) lands.
  */
 
-import { EventEmitter } from '@rifty/io';
+import { EventEmitter } from '@riftydev/io';
 import { CloseEventCtor } from './close-event.ts';
 import { State, type WsMessage } from './in-process.ts';
 
@@ -40,7 +40,7 @@ const CHANNEL_PREFIX = 'rifty:ws:';
 /**
  * Derive the `BroadcastChannel` name used by the bridge for a given WS url.
  *
- * Exposed publicly so non-`@rifty/net` consumers — e.g. an iframe HMR client
+ * Exposed publicly so non-`@riftydev/net` consumers — e.g. an iframe HMR client
  * shipped to the preview iframe as a vanilla `<script>` — can implement the
  * client side of the bridge without depending on this package. Production
  * code in the playground uses `BridgedWebSocket` directly; this helper is
@@ -250,7 +250,7 @@ export class BridgedWebSocket extends EventTarget {
  * live in different realms (iframe HMR client ↔ playground dev-server).
  *
  * The default same-realm shim in `./in-process.ts` remains the export of
- * `@rifty/net` for the legacy code paths (tests, in-process dev-server).
+ * `@riftydev/net` for the legacy code paths (tests, in-process dev-server).
  */
 export function createCrossRealmBridge(): {
   WebSocket: typeof BridgedWebSocket;

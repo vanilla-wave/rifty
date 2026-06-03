@@ -15,15 +15,15 @@
  *
  * What it DOES demonstrate end-to-end:
  *   - `npm run dev`-style entry point (call `startDevServer({ ... })`)
- *   - HTML / JS served from the in-Worker VFS via `@rifty/net.http`
+ *   - HTML / JS served from the in-Worker VFS via `@riftydev/net.http`
  *   - file changes picked up by polling `fs.watch`
- *   - HMR notifications over `@rifty/net.WebSocketServer`
+ *   - HMR notifications over `@riftydev/net.WebSocketServer`
  *   - HMR client injected into the served HTML
  */
 
-import { WebSocketServer, createHttpServer } from '@rifty/net';
-import { type FSWatcher, watch } from '@rifty/runtime-js/builtins/fs-watch';
-import { isAbsolute, joinPath, normalizePath, syncMirror } from '@rifty/vfs';
+import { WebSocketServer, createHttpServer } from '@riftydev/net';
+import { type FSWatcher, watch } from '@riftydev/runtime-js/builtins/fs-watch';
+import { isAbsolute, joinPath, normalizePath, syncMirror } from '@riftydev/vfs';
 
 export interface DevServerOptions {
   /** VFS path to the project root (must contain `index.html`). */

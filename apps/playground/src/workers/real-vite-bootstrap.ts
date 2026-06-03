@@ -4,11 +4,11 @@
  * Real Vite bootstrap (ADR-0043 — Vite-in-Worker, M11 / A-026).
  *
  * Loaded by the kernel-worker bootstrap (`kernel-worker-entry.ts` →
- * `@rifty/kernel/worker-entry`) via `import(spec.entry.url)` once the
+ * `@riftydev/kernel/worker-entry`) via `import(spec.entry.url)` once the
  * `WorkerInitMessage` has landed. By the time this module evaluates:
  *
  *   - `globalThis.process` is the Node-shape shim installed by
- *     `@rifty/runtime-js/install-process` (the kernel's pre-entry hook).
+ *     `@riftydev/runtime-js/install-process` (the kernel's pre-entry hook).
  *   - `globalThis.process.env` carries the env the page-realm adapter
  *     stuffed into the `WorkerSpawnSpec`.
  *   - The kernel's SAB sync-RPC client is published on globalThis for
@@ -37,7 +37,7 @@
  *  10. Open the cross-realm preview-port bridge — page-realm
  *      `bridgeCrossRealmPreview(port)` posts the SW's `SerializedRequest`
  *      over BroadcastChannel; we dispatch through the worker-local
- *      `@rifty/net` registry (where Vite registered itself when its
+ *      `@riftydev/net` registry (where Vite registered itself when its
  *      dev server `.listen`'d).
  *
  * Failure modes:
@@ -53,15 +53,15 @@
  *     page realm stops paying for them).
  */
 
-import { dispatchToPort, serveCrossRealmPreview } from '@rifty/net';
-import '@rifty/net/register-builtins';
-import { RegistryClient, install } from '@rifty/npm-client';
-import { Buffer } from '@rifty/runtime-js/builtins/buffer';
-import { __setCreateRequireImpl } from '@rifty/runtime-js/builtins/module';
-import { installProcessGlobals } from '@rifty/runtime-js/builtins/process';
-import { installTimerGlobals } from '@rifty/runtime-js/builtins/timers';
-import { createModuleLoader } from '@rifty/runtime-js/loader';
-import { dirname, normalizePath, syncMirror } from '@rifty/vfs';
+import { dispatchToPort, serveCrossRealmPreview } from '@riftydev/net';
+import '@riftydev/net/register-builtins';
+import { RegistryClient, install } from '@riftydev/npm-client';
+import { Buffer } from '@riftydev/runtime-js/builtins/buffer';
+import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
+import { installProcessGlobals } from '@riftydev/runtime-js/builtins/process';
+import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
+import { createModuleLoader } from '@riftydev/runtime-js/loader';
+import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 import { esbuildShimFiles, rollupShimFiles } from '../glue/esbuild-shim.ts';
 import {
   type HmrBridgeHandle,
@@ -251,7 +251,7 @@ async function bootstrap(): Promise<void> {
 
   // Cross-realm preview port. The page-realm `bridgeCrossRealmPreview`
   // posts every incoming SW preview request over BroadcastChannel and
-  // awaits our reply. We dispatch through the WORKER-LOCAL `@rifty/net`
+  // awaits our reply. We dispatch through the WORKER-LOCAL `@riftydev/net`
   // registry (Vite registered `port` when its dev server `listen`'d).
   const tearPreviewBridge = serveCrossRealmPreview(port, async (request) =>
     dispatchToPort(port, request),

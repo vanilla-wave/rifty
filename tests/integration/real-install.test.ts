@@ -1,7 +1,7 @@
 /**
  * Real-install integration tests (ADR-0021).
  *
- * Drives `@rifty/npm-client.install()` end-to-end against three real npm
+ * Drives `@riftydev/npm-client.install()` end-to-end against three real npm
  * tarballs vendored under `tests/integration/fixtures/registry/`:
  *
  *  - `picocolors@1.0.0` (no deps)
@@ -10,8 +10,8 @@
  *
  * No network at runtime; every fetch is routed through `local-registry.ts`.
  */
-import { RegistryClient, install } from '@rifty/npm-client';
-import { MemoryVfs } from '@rifty/vfs';
+import { RegistryClient, install } from '@riftydev/npm-client';
+import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import { LOCAL_REGISTRY_BASE_URL, makeLocalFetcher } from './fixtures/local-registry.ts';
 

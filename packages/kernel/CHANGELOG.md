@@ -14,7 +14,7 @@
   via new public `IpcFrame` export). Auto-disconnect on worker exit
   (natural or `kill`) — single `'disconnect'` event regardless of path.
 - **`WorkerProcessHandle.stdout()` / `stderr()` / `stdin()` accessors.**
-  Returns `@rifty/io` `Readable` / `Writable` streams already wired to the
+  Returns `@riftydev/io` `Readable` / `Writable` streams already wired to the
   worker's stdio `MessagePort` triple (start/onmessage/EOF on exit handled
   internally). Same instance is returned on repeated calls (singleton per
   handle). The raw `ports` field is kept for an interim release and marked
@@ -39,7 +39,7 @@
 
 ### Removed
 
-- **ADR-0039 — Node-API surface lifted to `@rifty/runtime-js`.** The kernel
+- **ADR-0039 — Node-API surface lifted to `@riftydev/runtime-js`.** The kernel
   no longer ships Node-shaped knowledge:
   - `installProcessShim` (Node-shape `process` global) and the internal
     `ProcessShim` interface have been deleted from `worker-entry.ts`. The
@@ -50,12 +50,12 @@
     `packages/runtime-js/src/ipc/`. The kernel files are gone.
   - `setKernelRecursiveSpawn` (and the `RecursiveSpawnFn` type) are gone.
     The recursive runner now lives in runtime-js and statically imports
-    `spawnKernelWorker` from `@rifty/kernel`, closing the late-binding
+    `spawnKernelWorker` from `@riftydev/kernel`, closing the late-binding
     cycle that the original split worked around.
   - The kernel index no longer exports `registerDefaultHandlers`,
     `setExecSyncScriptResolver`, `ScriptResolver`, `RecursiveWorkerRunner`,
     `DefaultHandlerOptions`, or `ExecSyncPayload`. Callers import from
-    `@rifty/runtime-js/install-process` and `@rifty/runtime-js`'s
+    `@riftydev/runtime-js/install-process` and `@riftydev/runtime-js`'s
     `ipc/handlers.ts` instead.
   - `getKernelDispatcher()` ships with **no** pre-registered handlers.
     Higher layers register methods explicitly at boot.
@@ -78,7 +78,7 @@
   Pass `null` to unregister.
 - **`spawnKernelWorker` exported from the package root.** Previously
   reachable only via the deep `./src/spawn-worker.ts` path; now part of the
-  `@rifty/kernel` public surface so runtime-js's recursive runner can
+  `@riftydev/kernel` public surface so runtime-js's recursive runner can
   statically import it.
 - **Typed cross-realm globals (P1 review fix).** New `shared-globals.ts` module exports `KernelSyncApi`, `KernelSabRing`, `publishKernelSyncApi` / `readKernelSyncApi`, and `publishKernelSabRing` / `readKernelSabRing`. Consumers (runtime-js `child_process-sync.ts`) now go through the typed read API instead of indexing `globalThis[KERNEL_SYNC_CALL_KEY]`. The string hook keys remain implementation detail but are re-exported for the rare test that needs to assert against them.
 - **`ProcessHandle` discriminator (P1 review fix).** `ProcessHandle` is now a sealed `SameRealmProcessHandle | WorkerProcessHandle` union tagged by `kind: 'same-realm' | 'worker'`. Callers branch on `handle.kind` instead of probing for `handle.ports`; the worker-backed variant's `ports` is statically known to be present.
@@ -167,8 +167,8 @@
   let the host supply the Vite-bundled kernel-worker chunk URL; the
   kernel never hardcodes a path. Missing URL → loud
   `NotImplementedError('kernel.spawnWorker', …)`.
-- Subpath export `@rifty/kernel/worker-entry` so bundler entries can
-  `import '@rifty/kernel/worker-entry'` to install the auto-bootstrap.
+- Subpath export `@riftydev/kernel/worker-entry` so bundler entries can
+  `import '@riftydev/kernel/worker-entry'` to install the auto-bootstrap.
 - ADR-0011 phase 3: `ipc/sync-rpc.ts` — JSON-over-UTF-8 framing
   (`SyncRpcRequest` / `SyncRpcReply` + `encodeRequest` / `decodeReply` /
   `decodeRequest` / `encodeReply`). Binary frames remain a follow-up

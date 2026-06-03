@@ -8,7 +8,7 @@
  * body-parser hits when decoding a request body. A class would throw "Class
  * constructor StringDecoder cannot be invoked without 'new'".
  */
-import { NotImplementedError } from '@rifty/io';
+import { NotImplementedError } from '@riftydev/io';
 
 /** Public instance shape (declaration-merged with the constructor function). */
 export interface StringDecoder {

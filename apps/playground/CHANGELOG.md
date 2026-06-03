@@ -39,7 +39,7 @@
   `mountPlaygroundPreviewBridge()` now sends two version fields
   (`frameVersion`, `routingVersion`) instead of a single `version` field.
   The change is transitive — `setupPreviewBridge` from
-  `@rifty/service-worker` does the actual stamping; the playground
+  `@riftydev/service-worker` does the actual stamping; the playground
   wiring is untouched at the call site. A version mismatch on either
   contract surfaces as HTTP 503 from the SW the same way as before,
   with the warning now naming the drifted contract (`frame` or
@@ -59,11 +59,11 @@
 ### Added
 
 - `adapters/shell-adapter.ts` — `useShellSession()` hook that owns a
-  long-lived `@rifty/shell` `Shell` and forwards stdout/stderr to the
+  long-lived `@riftydev/shell` `Shell` and forwards stdout/stderr to the
   terminal writer via the new `onChunk` callback. App.tsx consumes it in
   `dev` / `real-vite` modes so users can drive `npm install`, `vite dev`,
   file ops, and `&&`-chained commands from the terminal in real time.
-  Closes Tier 0 finding 1 in the 2026-05-26 review (`@rifty/shell` was
+  Closes Tier 0 finding 1 in the 2026-05-26 review (`@riftydev/shell` was
   declared as a dep but had zero consumers).
 - `adapters/hmr-bridge.ts` — cross-realm HMR bridge (ADR-0017 phase 1
   acceptance). `setupHmrBridge({port})` hosts a `BridgedWebSocketServer`

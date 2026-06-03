@@ -1,5 +1,5 @@
 /**
- * `@rifty/shell` — minimal bash-flavoured shell for the playground terminal.
+ * `@riftydev/shell` — minimal bash-flavoured shell for the playground terminal.
  *
  * Public API:
  *   - `Shell` — dispatcher with built-in commands; supports `registerCommand`

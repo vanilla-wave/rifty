@@ -1,5 +1,5 @@
 /**
- * Fetcher for `@rifty/npm-client.RegistryClient` that routes every request
+ * Fetcher for `@riftydev/npm-client.RegistryClient` that routes every request
  * through the playground's `/npm-registry` proxy.
  *
  * Without rewriting, the registry returns `dist.tarball` as a fully-qualified
@@ -9,7 +9,7 @@
  * traffic on one origin and avoids surprises. So we rewrite both packument
  * URLs and tarball URLs to the proxied origin.
  */
-import type { Fetcher } from '@rifty/npm-client';
+import type { Fetcher } from '@riftydev/npm-client';
 
 const UPSTREAM_PREFIX = 'https://registry.npmjs.org';
 const PROXY_PREFIX = '/npm-registry';

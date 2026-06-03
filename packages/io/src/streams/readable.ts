@@ -1,5 +1,5 @@
 /**
- * Node-compatible `node:stream.Readable` — owned by `@rifty/io` per ADR-0012.
+ * Node-compatible `node:stream.Readable` — owned by `@riftydev/io` per ADR-0012.
  *
  * Behaviour we replicate (excerpt from Node docs, normative for ADR-0034):
  *   - `_readableState` — single state container holding {buffer, length, flowing,

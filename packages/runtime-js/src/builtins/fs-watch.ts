@@ -10,7 +10,7 @@
  * via options so dev-server use cases can choose tighter loops.
  */
 
-import { basename, isAbsolute, joinPath, normalizePath } from '@rifty/vfs';
+import { basename, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 

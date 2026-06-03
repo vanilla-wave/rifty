@@ -1,5 +1,5 @@
 {
-  "name": "@rifty/runtime-wasi",
+  "name": "@riftydev/runtime-wasi",
   "version": "0.1.0",
   "description": "WASI (preview1) runner for rifty: run .wasm guests in a Web Worker.",
   "type": "module",
@@ -46,7 +46,7 @@
     "build": "tsup"
   },
   "dependencies": {
-    "@rifty/kernel": "workspace:*",
-    "@rifty/vfs": "workspace:*"
+    "@riftydev/kernel": "workspace:*",
+    "@riftydev/vfs": "workspace:*"
   }
 }

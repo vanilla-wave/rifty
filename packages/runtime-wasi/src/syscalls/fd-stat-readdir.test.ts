@@ -2,7 +2,7 @@
  * Unit tests for `fd_filestat_get` and `fd_readdir` — split from
  * {@link ./fd.test.ts} so each file stays under the ADR-0024 line budget.
  */
-import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@rifty/vfs/internal';
+import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setupFdCtx } from './fd-test-fixture.ts';
 import {

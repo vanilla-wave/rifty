@@ -6,7 +6,7 @@ import { readline } from '../../../packages/runtime-js/src/builtins/null-net-stu
  * `NotImplementedError('readline.<method>')` rather than returning
  * `undefined`. Asserts by `err.name` + `err.feature` so the test does not
  * depend on a particular module-instance of `NotImplementedError` (the
- * runtime-js source imports `@rifty/io`; this test cannot, since `@rifty/io`
+ * runtime-js source imports `@riftydev/io`; this test cannot, since `@riftydev/io`
  * is not linked into `tests/node_modules`).
  */
 function expectFeatureThrow(fn: () => unknown, feature: string): void {

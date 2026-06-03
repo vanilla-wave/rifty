@@ -1,5 +1,5 @@
 /**
- * Node-compatible `node:stream.pipeline` / `finished` — owned by `@rifty/io`
+ * Node-compatible `node:stream.pipeline` / `finished` — owned by `@riftydev/io`
  * per ADR-0012.
  *
  * Per Node docs (and ADR-0034):

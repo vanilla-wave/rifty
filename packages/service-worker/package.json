@@ -1,5 +1,5 @@
 {
-  "name": "@rifty/service-worker",
+  "name": "@riftydev/service-worker",
   "version": "0.1.0",
   "description": "Service Worker preview/HMR routing bridge for rifty.",
   "type": "module",
@@ -45,6 +45,6 @@
     "build": "tsup"
   },
   "dependencies": {
-    "@rifty/io": "workspace:*"
+    "@riftydev/io": "workspace:*"
   }
 }

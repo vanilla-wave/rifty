@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Sync the npm-publish configuration across every publishable @rifty package
+ * Sync the npm-publish configuration across every publishable @riftydev package
  * (ADR-0070). Single source of truth: edit the SPEC below (or add a package),
  * then run `pnpm sync:publish`. Idempotent — safe to re-run.
  *
@@ -36,63 +36,63 @@ const BASE_KEYWORDS = ['rifty', 'browser', 'webcontainer'];
 // dropExports: dev-only subpaths to exclude from the published exports.
 const SPEC = {
   // Umbrella front door (EPIC B / ADR-0071). Unscoped `rifty` (DD-2): re-exports
-  // every @rifty/* layer on a subpath plus the framework-free createSandbox()
+  // every @riftydev/* layer on a subpath plus the framework-free createSandbox()
   // façade. First-party deps stay external (DD-1), so subpath imports share the
-  // same singleton state as direct @rifty/* imports.
+  // same singleton state as direct @riftydev/* imports.
   rifty: {
     dir: 'packages/rifty',
     sideEffects: false,
     keywords: ['runtime', 'sdk', 'sandbox', 'node-compatible', 'wasi'],
   },
-  '@rifty/io': {
+  '@riftydev/io': {
     dir: 'packages/io',
     sideEffects: false,
     keywords: ['stream', 'buffer', 'eventemitter'],
   },
-  '@rifty/vfs': {
+  '@riftydev/vfs': {
     dir: 'packages/vfs',
     sideEffects: false,
     keywords: ['vfs', 'opfs', 'filesystem'],
   },
-  '@rifty/kernel': {
+  '@riftydev/kernel': {
     dir: 'packages/kernel',
     sideEffects: ['./dist/worker-entry.js'],
     keywords: ['kernel', 'worker', 'ipc', 'sharedarraybuffer'],
   },
-  '@rifty/net': {
+  '@riftydev/net': {
     dir: 'packages/net',
     sideEffects: ['./dist/register-builtins.js', './dist/sqlite/register-builtins.js'],
     keywords: ['http', 'net', 'websocket', 'sqlite'],
   },
-  '@rifty/runtime-js': {
+  '@riftydev/runtime-js': {
     dir: 'packages/runtime-js',
     sideEffects: ['./dist/index.js', './dist/worker.js'],
     removeDeps: ['acorn-walk'], // declared but never imported (ADR-0070 D6)
     keywords: ['runtime', 'node-compatible', 'module-loader'],
   },
-  '@rifty/runtime-wasi': {
+  '@riftydev/runtime-wasi': {
     dir: 'packages/runtime-wasi',
     sideEffects: ['./dist/worker-entry.js'],
     addExports: { './worker-entry': './src/worker-entry.ts' },
     keywords: ['wasi', 'wasm'],
   },
-  '@rifty/npm-client': {
+  '@riftydev/npm-client': {
     dir: 'packages/npm-client',
     sideEffects: false,
     keywords: ['npm', 'semver', 'install'],
   },
-  '@rifty/shell': { dir: 'packages/shell', sideEffects: false, keywords: ['shell', 'bash'] },
-  '@rifty/terminal': {
+  '@riftydev/shell': { dir: 'packages/shell', sideEffects: false, keywords: ['shell', 'bash'] },
+  '@riftydev/terminal': {
     dir: 'packages/terminal',
     sideEffects: false,
     keywords: ['terminal', 'xterm'],
   },
-  '@rifty/service-worker': {
+  '@riftydev/service-worker': {
     dir: 'packages/service-worker',
     sideEffects: ['./dist/sw.js'],
     keywords: ['service-worker', 'preview'],
   },
-  '@rifty/shadow-registry': {
+  '@riftydev/shadow-registry': {
     dir: 'tools/shadow-registry',
     sideEffects: false,
     // ./esbuild-binding uses node:fs + a vendored ~20MB WASM (playground/build
@@ -105,22 +105,22 @@ const SPEC = {
 const DESCRIPTIONS = {
   rifty:
     'rifty — a browser-based Node-compatible runtime + WASI runner. One install, all the parts, plus a framework-free createSandbox() façade.',
-  '@rifty/io':
+  '@riftydev/io':
     'Isomorphic primitives for rifty: EventEmitter, Buffer, and a node-compatible stream stack.',
-  '@rifty/vfs':
+  '@riftydev/vfs':
     'Virtual filesystem for rifty: in-memory + OPFS backends with a synchronous mirror.',
-  '@rifty/kernel':
+  '@riftydev/kernel':
     'Process/scheduling/IPC kernel for rifty: Worker-as-process model over SharedArrayBuffer + Atomics.',
-  '@rifty/net': 'Browser node:net/node:http/node:https/ws + node:sqlite (sql.js) for rifty.',
-  '@rifty/runtime-js':
+  '@riftydev/net': 'Browser node:net/node:http/node:https/ws + node:sqlite (sql.js) for rifty.',
+  '@riftydev/runtime-js':
     'Node-compatible JS runtime for rifty: CJS/ESM module loader and node: builtins, in a Worker.',
-  '@rifty/runtime-wasi': 'WASI (preview1) runner for rifty: run .wasm guests in a Web Worker.',
-  '@rifty/npm-client':
+  '@riftydev/runtime-wasi': 'WASI (preview1) runner for rifty: run .wasm guests in a Web Worker.',
+  '@riftydev/npm-client':
     'In-browser npm client for rifty: semver, registry, tarball extract, link, install.',
-  '@rifty/shell': 'Tiny bash-flavoured shell for rifty, backed by @rifty/vfs.',
-  '@rifty/terminal': 'xterm.js terminal wrapper for rifty.',
-  '@rifty/service-worker': 'Service Worker preview/HMR routing bridge for rifty.',
-  '@rifty/shadow-registry': 'Data tables of in-browser npm package substitutions for rifty.',
+  '@riftydev/shell': 'Tiny bash-flavoured shell for rifty, backed by @riftydev/vfs.',
+  '@riftydev/terminal': 'xterm.js terminal wrapper for rifty.',
+  '@riftydev/service-worker': 'Service Worker preview/HMR routing bridge for rifty.',
+  '@riftydev/shadow-registry': 'Data tables of in-browser npm package substitutions for rifty.',
 };
 
 const dedupe = (a) => [...new Set(a)];
@@ -194,7 +194,7 @@ function tsupConfig(entries) {
 
 // Generated by tools/publishing/sync-publish-config.mjs (ADR-0070). Do not edit by hand.
 // Bundles each public entry to ESM + a bundled .d.ts in dist/. First-party
-// @rifty/* and declared external deps stay external (not double-bundled).
+// @riftydev/* and declared external deps stay external (not double-bundled).
 export default defineConfig({
   entry: {
 ${body}
@@ -205,7 +205,7 @@ ${body}
   clean: true,
   treeshake: true,
   target: 'es2022',
-  external: [/^@rifty\\//],
+  external: [/^@riftydev\\//],
 });
 `;
 }

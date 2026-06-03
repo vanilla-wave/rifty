@@ -26,7 +26,7 @@
 
 ### Added
 
-- **Legacy callable `Stream` base (`@rifty/io` → `Stream`).** Node's
+- **Legacy callable `Stream` base (`@riftydev/io` → `Stream`).** Node's
   `require('stream')` IS the `Stream` constructor (a function inheriting
   EventEmitter) with the modern classes attached as statics
   (`Stream.Readable`, …, `Stream.Stream === Stream`). We collapse Node's
@@ -54,7 +54,7 @@
   module-private `Symbol` (`INTERNAL_WRITABLE_SIDE`) instead of the
   `_internalWritableSide` field on the public constructor options bag.
   The public option type is plain `ReadableOptions & WritableOptions` —
-  the hook does not appear on it. Only `Transform` (inside `@rifty/io`)
+  the hook does not appear on it. Only `Transform` (inside `@riftydev/io`)
   imports the symbol directly; subclasses written outside the package
   cannot reach it, so the type wall between "public option bag" and
   "internal subclass hook" is real and not just a naming convention.
@@ -82,7 +82,7 @@
 - **ADR-0036: preview-protocol addressing module.** New module
   `src/preview-protocol.ts` owns the `/preview/<port>/...` URL convention
   and the synthetic `preview.local` host shared between
-  `@rifty/service-worker` (SW-side intercept) and `@rifty/net` (port
+  `@riftydev/service-worker` (SW-side intercept) and `@riftydev/net` (port
   registry). Public surface: `PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`,
   `synthesizePreviewUrl(path)`, `parsePreviewPath(path)` — all re-exported
   from `src/index.ts`. Closes the silent-drift hazard between the SW's
@@ -99,11 +99,11 @@
   that backs `node:<name>` lookups. Public surface: `registerBuiltin`,
   `loadBuiltin`, `isBuiltinSpecifier`, `listBuiltins`, and the
   `BuiltinFactory` type, re-exported from `src/index.ts`. Implementation
-  moved verbatim from `@rifty/runtime-js/src/builtins/registry.ts` — same
+  moved verbatim from `@riftydev/runtime-js/src/builtins/registry.ts` — same
   cache semantics, same `node:` prefix stripping, same re-register clears
-  cache behaviour. The move closes the `@rifty/net → @rifty/runtime-js`
+  cache behaviour. The move closes the `@riftydev/net → @riftydev/runtime-js`
   reverse import that survived ADR-0012; both packages now reach the
-  registry through `@rifty/io` (forward-only). See ADR-0035 for the
+  registry through `@riftydev/io` (forward-only). See ADR-0035 for the
   rationale and alternatives.
 
 - `Readable.from(iterable, options?)` now accepts a second
@@ -153,7 +153,7 @@
 
 ### Changed
 
-- **ADR-0034 (D-B, IRREVERSIBLE):** `@rifty/io` stream primitives restored
+- **ADR-0034 (D-B, IRREVERSIBLE):** `@riftydev/io` stream primitives restored
   to Node's documented contract in one PR per the 2026-05-26 architecture
   review's Tier 1 #5. Five behavioural changes:
   - `EventEmitter.removeListener(event, listener)` now emits the synchronous
@@ -250,7 +250,7 @@
   - `EventEmitter` + `once()` promise helper (`src/event-emitter.ts`).
   - `Buffer` factory + per-instance method patching (`src/buffer.ts`, split across `src/buffer-codec.ts` and `src/buffer-methods.ts`).
   - Stream primitives — `Readable`, `Writable`, `Duplex`, `Transform`, `PassThrough`, plus `pipeline` and `finished` — under `src/streams/`.
-  - `runtime-js`, `kernel`, and `net` now import these from `@rifty/io`; their previous in-package copies became re-export shims.
+  - `runtime-js`, `kernel`, and `net` now import these from `@riftydev/io`; their previous in-package copies became re-export shims.
 - `Buffer.write(s, offset?, length?, encoding?)` now honors both the `length`
   truncation and the `encoding` argument (utf8, utf16le, hex, ascii, latin1,
   base64, base64url). Previously both were silently ignored — utf8 was always

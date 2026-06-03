@@ -32,8 +32,8 @@
  * a snapshot via the context.
  */
 
-import { NotImplementedError } from '@rifty/io';
-import { isAbsolute, joinPath, normalizePath, syncMirror } from '@rifty/vfs';
+import { NotImplementedError } from '@riftydev/io';
+import { isAbsolute, joinPath, normalizePath, syncMirror } from '@riftydev/vfs';
 import { builtinCommands } from './builtins.ts';
 import { tokenize } from './tokenize.ts';
 import type { ShellCommand } from './types.ts';

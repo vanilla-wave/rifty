@@ -13,7 +13,7 @@
  * through to the in-realm fallback.
  */
 
-import { NotImplementedError } from '@rifty/io';
+import { NotImplementedError } from '@riftydev/io';
 import type { SabRing } from './sab-ring.ts';
 import { decodeReply, encodeRequest } from './sync-rpc.ts';
 

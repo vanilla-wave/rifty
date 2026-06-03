@@ -3,7 +3,7 @@
 // SharedArrayBuffer + Atomics — i.e. cross-origin isolation. If the headers
 // aren't set we want a visible, unambiguous failure instead of a black screen
 // or a confusing downstream error. See ADR-0002 / D-001.
-import { setKernelWorkerUrl } from '@rifty/kernel';
+import { setKernelWorkerUrl } from '@riftydev/kernel';
 import { render } from 'solid-js/web';
 import { App } from './App.tsx';
 import { assertCrossOriginIsolated, bootstrapPlayground } from './boot.ts';

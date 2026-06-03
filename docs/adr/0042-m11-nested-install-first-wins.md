@@ -5,7 +5,7 @@ Date: 2026-05-27
 
 ## Context
 
-ADR-0023 ratified the lockfile-reuse path for `@rifty/npm-client.install` but
+ADR-0023 ratified the lockfile-reuse path for `@riftydev/npm-client.install` but
 explicitly deferred *nested* installs to M11. Pre-M11 the linker was flat-only:
 every (name, version) pair lived at `node_modules/<name>/`, and any second
 version of the same name aborted the install with `EVERSIONCONFLICT`

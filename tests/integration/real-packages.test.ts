@@ -1,5 +1,5 @@
-import { createModuleLoader } from '@rifty/runtime-js/loader';
-import { MemoryFsSync } from '@rifty/vfs/internal';
+import { createModuleLoader } from '@riftydev/runtime-js/loader';
+import { MemoryFsSync } from '@riftydev/vfs/internal';
 /**
  * Integration smoke: simulate a real CJS-shaped package (lodash-style) and an
  * ESM-shaped package (nanoid-style) loaded through the rifty module loader.

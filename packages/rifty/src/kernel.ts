@@ -1,2 +1,2 @@
-/** Subpath re-export: `rifty/kernel` → `@rifty/kernel` (EPIC B / B1). */
-export * from '@rifty/kernel';
+/** Subpath re-export: `rifty/kernel` → `@riftydev/kernel` (EPIC B / B1). */
+export * from '@riftydev/kernel';

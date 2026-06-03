@@ -1,7 +1,7 @@
 # rifty
 
 The one-install front door to **rifty** — a browser-based, Node-compatible
-runtime + WASI runner. `npm i rifty` pulls in the whole `@rifty/*` stack and
+runtime + WASI runner. `npm i rifty` pulls in the whole `@riftydev/*` stack and
 gives you a framework-free `createSandbox()` to boot it in one call.
 
 > rifty is a pet project exploring how WebContainers-like systems work. It runs
@@ -40,7 +40,7 @@ if (!caps.sufficient) {
 } else {
   const sandbox = await createSandbox({
     // resolved by YOUR bundler (Vite/webpack); the one bit the façade can't hide
-    workerUrl: new URL('@rifty/runtime-js/worker', import.meta.url),
+    workerUrl: new URL('@riftydev/runtime-js/worker', import.meta.url),
     // optional — defaults to '/sw.js'; needed for live preview routing
     serviceWorkerUrl: '/sw.js',
   });
@@ -77,11 +77,11 @@ Each subpath re-exports the matching scoped package, so you never need a second
 
 | Subpath | Re-exports | Subpath | Re-exports |
 |---|---|---|---|
-| `rifty/vfs` | `@rifty/vfs` | `rifty/net` | `@rifty/net` |
-| `rifty/io` | `@rifty/io` | `rifty/npm-client` | `@rifty/npm-client` |
-| `rifty/kernel` | `@rifty/kernel` | `rifty/shell` | `@rifty/shell` |
-| `rifty/runtime` | `@rifty/runtime-js` | `rifty/terminal` | `@rifty/terminal` |
-| `rifty/wasi` | `@rifty/runtime-wasi` | `rifty/service-worker` | `@rifty/service-worker` |
+| `rifty/vfs` | `@riftydev/vfs` | `rifty/net` | `@riftydev/net` |
+| `rifty/io` | `@riftydev/io` | `rifty/npm-client` | `@riftydev/npm-client` |
+| `rifty/kernel` | `@riftydev/kernel` | `rifty/shell` | `@riftydev/shell` |
+| `rifty/runtime` | `@riftydev/runtime-js` | `rifty/terminal` | `@riftydev/terminal` |
+| `rifty/wasi` | `@riftydev/runtime-wasi` | `rifty/service-worker` | `@riftydev/service-worker` |
 
 ```ts
 import { MemoryVfs } from 'rifty/vfs';
@@ -89,7 +89,7 @@ import { runWasi } from 'rifty/wasi';
 ```
 
 The scoped packages stay separate dependencies (never inlined), so importing a
-layer via `rifty/...` and via `@rifty/...` resolves to the **same** singleton
+layer via `rifty/...` and via `@riftydev/...` resolves to the **same** singleton
 state — safe to mix.
 
 ## License

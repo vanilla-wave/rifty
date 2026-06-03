@@ -1,5 +1,5 @@
 /**
- * Re-export shim — the EventEmitter implementation lives in `@rifty/io`
+ * Re-export shim — the EventEmitter implementation lives in `@riftydev/io`
  * per ADR-0012. This file used to host a private subset; now both `io` and
  * `kernel` share the full Node-compatible class.
  *
@@ -7,4 +7,4 @@
  * paths inside the kernel continue to work without churn.
  */
 
-export { EventEmitter } from '@rifty/io';
+export { EventEmitter } from '@riftydev/io';

@@ -1,7 +1,7 @@
-import { type RuntimeController, type RuntimeOptions, spawnRuntime } from '@rifty/runtime-js';
-import { detectCapabilities } from '@rifty/runtime-js/env/capabilities';
-import { registerServiceWorker } from '@rifty/service-worker';
-import { initBackend } from '@rifty/vfs';
+import { type RuntimeController, type RuntimeOptions, spawnRuntime } from '@riftydev/runtime-js';
+import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
+import { registerServiceWorker } from '@riftydev/service-worker';
+import { initBackend } from '@riftydev/vfs';
 import type { CapabilityCheck } from './capabilities.ts';
 
 /** Which VFS backend booted. */
@@ -15,10 +15,10 @@ export interface VfsBootInfo {
 
 export interface CreateSandboxOptions {
   /**
-   * URL of the `@rifty/runtime-js` worker entry, resolved by YOUR bundler — the
+   * URL of the `@riftydev/runtime-js` worker entry, resolved by YOUR bundler — the
    * one host-specific bit the façade cannot hide (EPIC E owns the template that
    * produces it). With Vite/webpack:
-   * `new URL('@rifty/runtime-js/worker', import.meta.url)`.
+   * `new URL('@riftydev/runtime-js/worker', import.meta.url)`.
    */
   readonly workerUrl: string | URL;
   /**

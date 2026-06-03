@@ -5,7 +5,7 @@ Date: 2026-05
 
 ## Context
 
-The earlier `@rifty/io` Buffer (ADR-0012 promoted it from `runtime-js`) used a
+The earlier `@riftydev/io` Buffer (ADR-0012 promoted it from `runtime-js`) used a
 factory pattern: `Buffer.from()` returned a `Uint8Array` stamped with the
 Buffer-style helpers via `Object.defineProperty`, plus a `Symbol.for('nodejs.Buffer')`
 brand on the instance. `Buffer.isBuffer` checked the brand.

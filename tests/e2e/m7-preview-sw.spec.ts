@@ -9,7 +9,7 @@
  * `tests/integration/express-style.test.ts` deliberately bypasses):
  *
  *   1. The playground main thread brings up an `http.createServer().listen(N)`
- *      using `@rifty/net` — exactly the path a user program follows. We use
+ *      using `@riftydev/net` — exactly the path a user program follows. We use
  *      the existing `@rifty-examples/vite-like-dev` fixture (started by
  *      clicking the playground's "Dev Mode" button) because it is the only
  *      runnable HTTP-server-from-user-code program currently wired into the
@@ -18,7 +18,7 @@
  *      the SW path cares about".
  *   2. `mountPlaygroundPreviewBridge()` installs the main-thread
  *      `setupPreviewBridge` handler that translates a `SerializedRequest`
- *      from the SW into a `dispatchToPort` call against the `@rifty/net`
+ *      from the SW into a `dispatchToPort` call against the `@riftydev/net`
  *      port registry, then returns the streaming `Response` as a
  *      `SerializedResponse` via `packSerializedResponse`.
  *   3. The Service Worker's `installPreviewInterceptor(self)` matches
@@ -68,7 +68,7 @@ test.describe('M7 — HTTP through the Service Worker preview bridge', () => {
     });
 
     // Click "Dev Mode" — runs `startDevMode({port: 3000})`, which (1) brings
-    // up an `http.createServer().listen(3000)` from `@rifty/net` and (2)
+    // up an `http.createServer().listen(3000)` from `@riftydev/net` and (2)
     // mounts `setupPreviewBridge` via `mountPlaygroundPreviewBridge()`. This
     // is the "user program registers an HTTP server" step.
     await page.locator('[data-action="dev-mode"]').click();

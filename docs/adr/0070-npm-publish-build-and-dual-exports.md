@@ -6,12 +6,12 @@ Date: 2026-05
 ## Context
 
 The 10 `packages/*` libraries (+ `tools/shadow-registry`, a runtime dependency of
-`@rifty/npm-client`) are all `"private": true`, `"version": "0.0.0"`, and ship
+`@riftydev/npm-client`) are all `"private": true`, `"version": "0.0.0"`, and ship
 their `main`/`module`/`types`/`exports` pointed at **raw TypeScript source**
 (`./src/index.ts`, with `.ts`-extensioned relative imports). That is exactly what
 makes the in-repo dev loop fast — Vite/Vitest transpile workspace `.ts` on the fly,
 HMR works, no build step — but it makes the packages **unpublishable and
-unconsumable** from npm: a fresh `npm install @rifty/x` would deliver `.ts` files
+unconsumable** from npm: a fresh `npm install @riftydev/x` would deliver `.ts` files
 with `.ts` import specifiers that standard Node/bundler resolution rejects.
 
 The goal (publish prep) is twofold and in tension:
@@ -24,7 +24,7 @@ The goal (publish prep) is twofold and in tension:
 
 A publish-readiness audit (13-agent fan-out, recorded in this PR) confirmed the
 dependency graphs are already publish-clean (no missing/extraneous runtime deps, no
-`/internal/` leaks except the deliberate `@rifty/vfs/internal`, no `solid-js`/`apps`
+`/internal/` leaks except the deliberate `@riftydev/vfs/internal`, no `solid-js`/`apps`
 imports). The blockers are entirely packaging/build hygiene.
 
 ## Decision
@@ -36,8 +36,8 @@ Each publishable package gets a `tsup.config.ts` that bundles every public entry
 declarations) was chosen over plain `tsc` because it inlines the in-package `.ts`
 modules — which transparently resolves the `.ts`-extension import specifiers and
 `verbatimModuleSyntax` that block a naive `tsc` emit — while keeping first-party
-`@rifty/*` (and external `acorn`/`sql.js`/`@xterm/*`) as **external** imports. A
-spike on `@rifty/vfs` verified ESM + `.d.ts` emit, the `./internal` subpath, and a
+`@riftydev/*` (and external `acorn`/`sql.js`/`@xterm/*`) as **external** imports. A
+spike on `@riftydev/vfs` verified ESM + `.d.ts` emit, the `./internal` subpath, and a
 Node `import` smoke of the built `dist/index.js` all work. `tsup` is the only new
 dependency (rule-2 IRREVERSIBLE).
 
@@ -52,10 +52,10 @@ change is non-disruptive to in-flight `main` work: it is purely additive
 (`publishConfig`, `files`, `sideEffects`, `version`, `license`, `repository`, a
 `build` script, `tsup.config.ts`) plus dropping `"private"`.
 
-### D3 — Publish set = 11 packages (incl. `@rifty/shadow-registry`)
+### D3 — Publish set = 11 packages (incl. `@riftydev/shadow-registry`)
 
-The 10 `packages/*` libraries are published. `@rifty/shadow-registry` (in `tools/`)
-is **also published** — not by choice but because `@rifty/npm-client` imports
+The 10 `packages/*` libraries are published. `@riftydev/shadow-registry` (in `tools/`)
+is **also published** — not by choice but because `@riftydev/npm-client` imports
 `bakedOverrides` from it at runtime (`src/overrides.ts`, ADR-0015); a published
 package's runtime deps must themselves resolve. Only its `.` (pure data) entry is
 published; the `./esbuild-binding` subpath (Node `fs` + a ~20 MB vendored WASM, a
@@ -68,7 +68,7 @@ All 11 packages are versioned and released **in lockstep**. `pnpm publish` rewri
 `workspace:*` to the exact same version, so cross-package deps stay
 version-matched — which is what keeps the shared singletons (`globalProcessManager`
 in kernel, `syncMirror` in vfs) a single instance for a consumer who installs
-several `@rifty/*` packages. For that reason the cross-package deps are kept as plain
+several `@riftydev/*` packages. For that reason the cross-package deps are kept as plain
 `dependencies` (lockstep-pinned), **not** `peerDependencies`: peers would push the
 install burden onto consumers for no benefit while versions move in lockstep. If
 mixed-version consumption ever becomes a real scenario, revisit peers in a
@@ -81,18 +81,18 @@ Tree-shaking safety: leaf/pure packages (`io`, `vfs`, `npm-client`, `shell`,
 registration/bootstrap modules whitelist exactly those built files, so a consumer's
 bundler can never drop them:
 
-- `@rifty/net` → `["./dist/register-builtins.js", "./dist/sqlite/register-builtins.js"]`
-- `@rifty/kernel` → `["./dist/worker-entry.js"]`
-- `@rifty/runtime-js` → `["./dist/index.js", "./dist/worker.js"]` (its `.` entry runs ~50 `registerBuiltin` calls)
-- `@rifty/runtime-wasi` → `["./dist/worker-entry.js"]`
-- `@rifty/service-worker` → `["./dist/sw.js"]`
+- `@riftydev/net` → `["./dist/register-builtins.js", "./dist/sqlite/register-builtins.js"]`
+- `@riftydev/kernel` → `["./dist/worker-entry.js"]`
+- `@riftydev/runtime-js` → `["./dist/index.js", "./dist/worker.js"]` (its `.` entry runs ~50 `registerBuiltin` calls)
+- `@riftydev/runtime-wasi` → `["./dist/worker-entry.js"]`
+- `@riftydev/service-worker` → `["./dist/sw.js"]`
 
 ### D6 — Two additive public-API touch-ups
 
-- `@rifty/runtime-wasi` gains a `./worker-entry` subpath export (matching the
+- `@riftydev/runtime-wasi` gains a `./worker-entry` subpath export (matching the
   worker-entry pattern already used by kernel/runtime-js/service-worker) so the WASI
   worker chunk is resolvable by URL standalone.
-- `@rifty/runtime-js` drops the **unused** `acorn-walk` dependency (only `acorn` is
+- `@riftydev/runtime-js` drops the **unused** `acorn-walk` dependency (only `acorn` is
   imported).
 
 ### D7 — Single source of truth + tag-driven release
@@ -100,13 +100,13 @@ bundler can never drop them:
 `tools/publishing/sync-publish-config.mjs` (idempotent; `pnpm sync:publish`) holds
 the per-package spec and regenerates every `package.json` publish block +
 `tsup.config.ts`. CI publishes on a `v*` tag: build → set versions from the tag →
-`pnpm publish` filtered to **`./packages/*` + `@rifty/shadow-registry` only** (never a
+`pnpm publish` filtered to **`./packages/*` + `@riftydev/shadow-registry` only** (never a
 bare `pnpm -r publish`, which would also pick up the non-`private` integration
 fixtures). The `NPM_TOKEN` secret and the GitHub repo are manual, out-of-repo steps.
 
 ## Consequences
 
-- (+) Each `@rifty/*` package is independently `npm install`-able with correct
+- (+) Each `@riftydev/*` package is independently `npm install`-able with correct
   ESM + types; "use it by parts" is satisfied.
 - (+) Dev loop, HMR, and the other agent's `main` work are untouched (additive only).
 - (+) `tsup` `external` keeps the package graph intact (no double-bundling of
@@ -114,8 +114,8 @@ fixtures). The `NPM_TOKEN` secret and the GitHub repo are manual, out-of-repo st
 - (−) New build dependency (`tsup`) and a `dist/` build step before publish.
 - (−) `publishConfig.exports` override is a pnpm feature (`npm publish` alone would
   not apply it) — the release path must use `pnpm publish`.
-- (−) `@rifty/shadow-registry` becomes a public package (was an internal tool) purely
-  to satisfy `@rifty/npm-client`'s runtime import.
+- (−) `@riftydev/shadow-registry` becomes a public package (was an internal tool) purely
+  to satisfy `@riftydev/npm-client`'s runtime import.
 - (follow-up) Per-package CHANGELOGs and a published browser-support matrix
   (`docs/compat/browsers.md`) remain TODO; README now documents the consumer
   prerequisites (COOP/COEP, SAB, module Workers, service worker, WASM assets).
@@ -124,13 +124,13 @@ fixtures). The `NPM_TOKEN` secret and the GitHub repo are manual, out-of-repo st
 
 IRREVERSIBLE (rule 1 — public package API/`exports` contract across packages; rule 2
 — new external dependency `tsup`; rule 4 — touches >2 files). Recorded inline per
-ADR-0063/0064 with the build approach verified by the `@rifty/vfs` spike before
+ADR-0063/0064 with the build approach verified by the `@riftydev/vfs` spike before
 roll-out. Does not contradict an existing ADR; D6's subpath addition extends
 ADR-0018's "expanded subpath surface" rationale to `runtime-wasi`.
 
 ## References
 
-- ADR-0001 (pnpm monorepo), ADR-0012 (`@rifty/io` shared primitives),
+- ADR-0001 (pnpm monorepo), ADR-0012 (`@riftydev/io` shared primitives),
   ADR-0015 (shadow-registry data tables — the `npm-client` runtime dep),
   ADR-0018 (runtime-js subpath exports — extended here to runtime-wasi),
   ADR-0002 (cross-origin isolation — the consumer prerequisite now in README).

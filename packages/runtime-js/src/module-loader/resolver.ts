@@ -1,5 +1,5 @@
-import type { FsSync } from '@rifty/vfs';
-import { dirname, isAbsolute, joinPath, normalizePath } from '@rifty/vfs';
+import type { FsSync } from '@riftydev/vfs';
+import { dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { isBuiltinSpecifier } from '../builtins/index.ts';
 import { ModuleLoadError } from './errors.ts';
 

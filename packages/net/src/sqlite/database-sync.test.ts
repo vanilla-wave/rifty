@@ -1,4 +1,4 @@
-import { NotImplementedError } from '@rifty/io';
+import { NotImplementedError } from '@riftydev/io';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { DatabaseSync } from './database-sync.ts';
 import { initSqliteEngine } from './engine.ts';

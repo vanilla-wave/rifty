@@ -21,7 +21,7 @@
  * no shell. `spawn('node', [script])` runs `script` through our loader.
  */
 
-import { Buffer, EventEmitter, NotImplementedError, Readable, Writable } from '@rifty/io';
+import { Buffer, EventEmitter, NotImplementedError, Readable, Writable } from '@riftydev/io';
 import {
   type ProcessHandle,
   type ProcessIO,
@@ -29,7 +29,7 @@ import {
   getKernelWorkerUrl,
   globalProcessManager,
   isSabIpcSupported,
-} from '@rifty/kernel';
+} from '@riftydev/kernel';
 import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
 import { execScript } from './child_process-exec.ts';
 import { execSync } from './child_process-sync.ts';

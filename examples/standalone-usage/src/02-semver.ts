@@ -1,6 +1,6 @@
-// @rifty/npm-client — the semver core behind `npm install`. Pure & synchronous.
+// @riftydev/npm-client — the semver core behind `npm install`. Pure & synchronous.
 // Run: `pnpm --filter @rifty-examples/standalone semver`.
-import { compare, matchesRange, parse, pickBestVersion } from '@rifty/npm-client';
+import { compare, matchesRange, parse, pickBestVersion } from '@riftydev/npm-client';
 
 console.log('parse 1.2.3       :', parse('1.2.3'));
 console.log('compare 1.2 vs 1.10:', compare('1.2.0', '1.10.0')); // < 0 — 1.2.0 is older

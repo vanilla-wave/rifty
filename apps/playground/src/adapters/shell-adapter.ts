@@ -1,5 +1,5 @@
 /**
- * Solid-side glue for `@rifty/shell` (M10 Tier 0 wiring).
+ * Solid-side glue for `@riftydev/shell` (M10 Tier 0 wiring).
  *
  * The hook owns one long-lived `Shell` instance plus a writer slot. The
  * caller (typically `App.tsx`) provides the writer via `attachWriter(write)`
@@ -21,7 +21,7 @@
  * exclusive mode.
  */
 
-import { Shell, type ShellCommand, type ShellOptions } from '@rifty/shell';
+import { Shell, type ShellCommand, type ShellOptions } from '@riftydev/shell';
 import { onCleanup } from 'solid-js';
 
 type Writer = (chunk: string, stream?: 'stdout' | 'stderr') => void;

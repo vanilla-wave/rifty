@@ -1,4 +1,4 @@
-# @rifty/kernel
+# @riftydev/kernel
 
 Process manager (PID table), signals, scheduling, IPC primitives.
 

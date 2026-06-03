@@ -57,9 +57,9 @@
  * Cited ADRs:
  * - **ADR-0011** — sync IPC + worker-as-process. A-023 reuses the
  *   kernel-spawned-Worker `Client.type === 'worker'` shape.
- * - **ADR-0017** — `@rifty/net` cross-realm port-registry bridge.
+ * - **ADR-0017** — `@riftydev/net` cross-realm port-registry bridge.
  *   Workers register their preview ports via
- *   `@rifty/net.serveCrossRealmPreview(port, …)`. The Worker binding's
+ *   `@riftydev/net.serveCrossRealmPreview(port, …)`. The Worker binding's
  *   readiness frame mirrors that registration so the SW can resolve
  *   port → Worker without a separate registry round-trip.
  * - **ADR-0040** — `SW_FRAME_VERSION` / `SW_ROUTING_VERSION` split. The

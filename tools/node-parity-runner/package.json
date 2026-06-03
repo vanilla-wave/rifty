@@ -1,5 +1,5 @@
 {
-  "name": "@rifty/node-parity-runner",
+  "name": "@riftydev/node-parity-runner",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -8,8 +8,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@rifty/net": "workspace:*",
-    "@rifty/runtime-js": "workspace:*",
-    "@rifty/vfs": "workspace:*"
+    "@riftydev/net": "workspace:*",
+    "@riftydev/runtime-js": "workspace:*",
+    "@riftydev/vfs": "workspace:*"
   }
 }

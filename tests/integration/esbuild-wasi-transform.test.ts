@@ -1,10 +1,10 @@
 /**
  * Integration: vite's TS/JSX transform surface, served by the REAL esbuild
- * WASI binary running through `@rifty/runtime-wasi`'s `runWasi`.
+ * WASI binary running through `@riftydev/runtime-wasi`'s `runWasi`.
  *
  * This is the M10 `Vite ↔ esbuild` shadow-binding acceptance (ADR-0047, which
  * reverses ADR-0044's swc substitution). Vite asks esbuild to strip TS types
- * and lower JSX on every module in dev; `@rifty/shadow-registry` wires that
+ * and lower JSX on every module in dev; `@riftydev/shadow-registry` wires that
  * `transform` call to `runWasi(esbuild.wasm, …)` over a real workspace preopen.
  *
  * The binary is the build-time artifact vendored by
@@ -14,14 +14,14 @@
  * vendoring step is loud about it.
  */
 import { existsSync } from 'node:fs';
-import { runWasi } from '@rifty/runtime-wasi';
+import { runWasi } from '@riftydev/runtime-wasi';
 import {
   ESBUILD_WASM_VENDOR_PATH,
   loadVendoredEsbuildWasm,
   transformWithEsbuild,
-} from '@rifty/shadow-registry/esbuild-binding';
-import { syncMirror } from '@rifty/vfs';
-import { resetSyncMirror } from '@rifty/vfs/internal';
+} from '@riftydev/shadow-registry/esbuild-binding';
+import { syncMirror } from '@riftydev/vfs';
+import { resetSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const haveWasm = existsSync(ESBUILD_WASM_VENDOR_PATH);

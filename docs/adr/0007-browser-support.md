@@ -14,7 +14,7 @@ Summary of decision D-006. Chromium is the primary target. Firefox/WebKit are be
 
 ## Capabilities detection
 
-`@rifty/runtime-js/env/capabilities` checks `crossOriginIsolated`, `SharedArrayBuffer`, `Atomics.waitAsync`, `FileSystemFileHandle.prototype.createSyncAccessHandle`, and surfaces a feature-vs-engine report at boot. Acceptance criteria for M1 explicitly require this UI fallback.
+`@riftydev/runtime-js/env/capabilities` checks `crossOriginIsolated`, `SharedArrayBuffer`, `Atomics.waitAsync`, `FileSystemFileHandle.prototype.createSyncAccessHandle`, and surfaces a feature-vs-engine report at boot. Acceptance criteria for M1 explicitly require this UI fallback.
 
 ## What we will not do
 

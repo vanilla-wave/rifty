@@ -1,13 +1,13 @@
-# @rifty/runtime-js
+# @riftydev/runtime-js
 
 Node-compatible JS runtime that runs inside a Web Worker on top of the host JS engine.
 
 ## Public surface
 
 ```ts
-import { spawnRuntime } from '@rifty/runtime-js';
-import { detectCapabilities } from '@rifty/runtime-js/env/capabilities';
-import { createModuleLoader } from '@rifty/runtime-js/loader';
+import { spawnRuntime } from '@riftydev/runtime-js';
+import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
+import { createModuleLoader } from '@riftydev/runtime-js/loader';
 ```
 
 - `spawnRuntime` — host-side controller. Boots a Worker, exposes `eval(code)`, `reset()`, `dispose()`, and an event stream of stdout/stderr/exit/error.

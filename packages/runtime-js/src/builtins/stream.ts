@@ -1,7 +1,7 @@
 /**
- * Re-export shim — stream primitives live in `@rifty/io` per ADR-0012.
+ * Re-export shim — stream primitives live in `@riftydev/io` per ADR-0012.
  * Consumers that import this path (relative `./stream.ts` or
- * `@rifty/runtime-js/builtins`) continue to work bit-identically.
+ * `@riftydev/runtime-js/builtins`) continue to work bit-identically.
  */
 
 import {
@@ -14,7 +14,7 @@ import {
   Writable,
   finished,
   pipeline,
-} from '@rifty/io';
+} from '@riftydev/io';
 
 export {
   Readable,
@@ -28,7 +28,7 @@ export {
   type ReadableOptions,
   type WritableOptions,
   type TransformOptions,
-} from '@rifty/io';
+} from '@riftydev/io';
 
 // `require('stream')` in Node IS the legacy `Stream` constructor with the
 // modern classes attached as statics (and `Stream.Stream === Stream`). Match

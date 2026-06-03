@@ -8,10 +8,10 @@ import type { ParityCase } from '../../src/types.ts';
  * two stdouts must agree.
  *
  * It is enabled by the runner's opt-in `kind: 'sqlite'` mode: the default parity
- * modes import only `@rifty/runtime-js/loader` and never register `node:sqlite`
- * (the shim lives in `@rifty/net`, like `node:http`). The `'sqlite'` mode does
+ * modes import only `@riftydev/runtime-js/loader` and never register `node:sqlite`
+ * (the shim lives in `@riftydev/net`, like `node:http`). The `'sqlite'` mode does
  * two things the default modes don't (mirroring how `'http'` registers
- * `node:net`/`node:http`): it imports `@rifty/net/sqlite/register-builtins` so
+ * `node:net`/`node:http`): it imports `@riftydev/net/sqlite/register-builtins` so
  * `require('node:sqlite')` resolves, and it AWAITS `initSqliteEngine()` so the
  * synchronous `DatabaseSync` constructor has its sql.js handle ready before the
  * case `code` runs (the WASM bring-up is the one async step the synchronous

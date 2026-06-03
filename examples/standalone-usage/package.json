@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Small, runnable examples that each use one @rifty package standalone.",
+  "description": "Small, runnable examples that each use one @riftydev package standalone.",
   "scripts": {
     "vfs": "tsx src/01-vfs.ts",
     "semver": "tsx src/02-semver.ts",
@@ -12,9 +12,9 @@
     "start": "pnpm vfs && pnpm semver && pnpm registry && pnpm shell"
   },
   "dependencies": {
-    "@rifty/npm-client": "workspace:*",
-    "@rifty/shell": "workspace:*",
-    "@rifty/vfs": "workspace:*"
+    "@riftydev/npm-client": "workspace:*",
+    "@riftydev/shell": "workspace:*",
+    "@riftydev/vfs": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.19.0"

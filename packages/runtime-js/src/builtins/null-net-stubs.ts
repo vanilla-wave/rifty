@@ -2,10 +2,10 @@
  * Loud stubs for `node:dns`, `node:tls`, `node:readline`, `node:zlib`. They
  * exist so that `import` succeeds (Vite static-imports all of them at top
  * level); every actual method call throws NotImplementedError so we never
- * silently corrupt behaviour. `node:https` lives in `@rifty/net/https.ts`
+ * silently corrupt behaviour. `node:https` lives in `@riftydev/net/https.ts`
  * and is registered there (ADR-0010 loud-throw stub).
  */
-import { NotImplementedError } from '@rifty/io';
+import { NotImplementedError } from '@riftydev/io';
 import { HTTP2_CONSTANTS } from './http2-constants.ts';
 
 const notImpl = (feature: string) => () => {

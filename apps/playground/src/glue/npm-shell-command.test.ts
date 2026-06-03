@@ -9,15 +9,15 @@
  *   - error mapping for the EVERSIONCONFLICT / EINTEGRITY / EBROKENLOCK
  *     codes the operator is most likely to hit.
  *
- * The real `install` flow is exercised by `@rifty/npm-client`'s own suite;
+ * The real `install` flow is exercised by `@riftydev/npm-client`'s own suite;
  * we inject a stub via the `install` DI seam so this file does not depend on
  * tarball fixtures from another package's private `_test-fixtures/` (would
  * violate CLAUDE.md "no internal imports across packages").
  */
-import type { InstallOptions, InstallResult } from '@rifty/npm-client';
-import { RegistryClient } from '@rifty/npm-client';
-import { Shell } from '@rifty/shell';
-import { MemoryVfs } from '@rifty/vfs';
+import type { InstallOptions, InstallResult } from '@riftydev/npm-client';
+import { RegistryClient } from '@riftydev/npm-client';
+import { Shell } from '@riftydev/shell';
+import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import { type InstallFn, createNpmShellCommand } from './npm-shell-command.ts';
 

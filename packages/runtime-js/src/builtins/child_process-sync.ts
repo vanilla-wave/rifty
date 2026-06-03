@@ -6,8 +6,8 @@
  * for synchronous child execution.
  */
 
-import { Buffer, NotImplementedError } from '@rifty/io';
-import { getKernelWorkerUrl, isSabIpcSupported, readKernelSyncApi } from '@rifty/kernel';
+import { Buffer, NotImplementedError } from '@riftydev/io';
+import { getKernelWorkerUrl, isSabIpcSupported, readKernelSyncApi } from '@riftydev/kernel';
 
 export interface ExecSyncOptions {
   readonly cwd?: string;
@@ -21,7 +21,7 @@ export interface ExecSyncOptions {
  *
  * Branching:
  *   - If we are inside a kernel-spawned Worker (the kernel sync API is
- *     published — see `@rifty/kernel.readKernelSyncApi`), route through the
+ *     published — see `@riftydev/kernel.readKernelSyncApi`), route through the
  *     sync RPC hook. The parent dispatcher spawns a fresh Worker for the
  *     child script and uses `Atomics.wait` to block this realm until the
  *     child's stdout is captured. This is the only path that truly blocks

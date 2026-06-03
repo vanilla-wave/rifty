@@ -146,7 +146,7 @@ export function createReadyClientsRegistry(
       if (type !== SW_PREVIEW_READY && type !== SW_PREVIEW_GOODBYE) return;
       // ADR-0040: both `frameVersion` and `routingVersion` must match. The
       // warning lists the drifted contract by name so a host can distinguish
-      // a fresh SW + stale page (frame) from a misconfigured `@rifty/io`
+      // a fresh SW + stale page (frame) from a misconfigured `@riftydev/io`
       // import (routing).
       const frameOk = data.frameVersion === SW_FRAME_VERSION;
       const routingOk = data.routingVersion === SW_ROUTING_VERSION;

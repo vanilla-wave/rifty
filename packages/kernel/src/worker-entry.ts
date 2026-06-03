@@ -15,7 +15,7 @@
  *      {@link publishKernelProcessSpec} (ADR-0039) — a runtime-agnostic
  *      snapshot of `{pid, ppid, argv, env, cwd, stdio}`. The kernel does
  *      NOT install a Node-shape `globalThis.process`; that Node-API
- *      knowledge lives in `@rifty/runtime-js`.
+ *      knowledge lives in `@riftydev/runtime-js`.
  *   5. Invokes the optional pre-entry hook registered by the host via
  *      {@link setKernelPreEntryHook}. Hosts that spawn Node-style children
  *      use the hook to install the Node `process` global from runtime-js
@@ -51,7 +51,7 @@ import {
 // Re-export the global-hook key + sync-call type. Historical consumers
 // (runtime-js, tests) imported these from `worker-entry.ts`; the canonical
 // home is now `shared-globals.ts` but the legacy re-exports stay for the
-// transition period. New code SHOULD prefer `@rifty/kernel`'s shared-globals
+// transition period. New code SHOULD prefer `@riftydev/kernel`'s shared-globals
 // publish/read helpers.
 export { KERNEL_SYNC_CALL_KEY, type KernelSyncCall };
 
@@ -110,7 +110,7 @@ export interface WorkerExitMessage {
  * Optional pre-entry hook signature. The kernel calls the hook (when
  * registered) right after publishing the {@link KernelProcessSpec} and
  * right before running the user's entry. Hosts that spawn Node-style
- * children register `installNodeProcessShim` from `@rifty/runtime-js` so
+ * children register `installNodeProcessShim` from `@riftydev/runtime-js` so
  * the user script sees a fully-shaped `globalThis.process`.
  *
  * The hook MAY throw — a throw is treated like any other entry failure:
@@ -127,7 +127,7 @@ let preEntryHook: KernelPreEntryHook | null = null;
  * The hook MUST be registered before the `'init'` message arrives;
  * runtime-js's `install-process` module side-effects this at module load,
  * and the host's kernel-worker chunk imports `install-process` before
- * `@rifty/kernel/worker-entry`.
+ * `@riftydev/kernel/worker-entry`.
  */
 export function setKernelPreEntryHook(hook: KernelPreEntryHook | null): void {
   preEntryHook = hook;

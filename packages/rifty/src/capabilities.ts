@@ -2,7 +2,7 @@ import {
   type Capabilities,
   type CapabilityCheck,
   detectCapabilities,
-} from '@rifty/runtime-js/env/capabilities';
+} from '@riftydev/runtime-js/env/capabilities';
 
 export type { Capabilities, CapabilityCheck };
 

@@ -461,7 +461,7 @@ and the question is restored here as the live tracker.
 A `crossOriginIsolated` playground (D-001) cannot fetch
 `registry.npmjs.org` directly — CORP/CORS forbids it. Dev solves this
 via the Vite proxy (D-004). Prod needs an equivalent surface so
-`@rifty/npm-client.REGISTRY_BASE_URL = '/npm-registry'` resolves both
+`@riftydev/npm-client.REGISTRY_BASE_URL = '/npm-registry'` resolves both
 metadata and tarballs through a deployed proxy with
 `Access-Control-Allow-Origin: *` and `Cross-Origin-Resource-Policy: cross-origin`
 on every response.
@@ -486,7 +486,7 @@ on every response.
 
 **Chose:** A — Vercel Edge Function, *as candidate*. The decision is
 not ratified until the Edge Function exists, deploys, and roundtrips a
-live `@rifty/npm-client` install. Implementation TBD by the first
+live `@riftydev/npm-client` install. Implementation TBD by the first
 prod-deploy session.
 
 **Why:** Same rationale as the original ADR-0028 promotion — co-located
@@ -503,7 +503,7 @@ with a fresh ADR.
 
 ### Reversibility justification
 
-- Public APIs affected: none — `@rifty/npm-client` already reads
+- Public APIs affected: none — `@riftydev/npm-client` already reads
   `REGISTRY_BASE_URL`, agnostic to what the URL routes to.
 - Rough cost to revert (today): zero (no code change yet).
 - External dependencies involved: none until the Edge Function is
@@ -1023,13 +1023,13 @@ End of milestone M<N>.
   real Vite's pre-bundled deps (parameter-shadowing of an imported name).
 - **Q-2026-05-23-002** — *Realm where toolchain dev-servers run* — promoted to **ADR 0025** (`docs/adr/0025-toolchain-dev-server-realm.md`). Main-thread realm ratified for M10 Dev Mode and Real Vite; a future Worker + cross-realm bridge remains the right long-term answer (M10 follow-up).
 - **Q-2026-05-23-003** — *`process.platform` / `process.arch` honest values vs compat lies* — promoted to **ADR 0026** (`docs/adr/0026-process-platform-honest-values.md`). `'rifty'` / `'wasm'` confirmed as the de-facto public ABI; per-package shim cost accepted; revisit at ~10 shimmed packages.
-- **Q-2026-05-23-004** — *File-level shim overlay vs full-package shadow* — promoted to **ADR 0027** (`docs/adr/0027-file-level-shim-overlay.md`). Per-file overlay in the consuming adapter kept until a third shim site appears, at which point the pattern moves into `@rifty/npm-client/shims/`.
-- **Q-2026-05-23-005** — *Expanded `@rifty/runtime-js` public surface via `./builtins/*` subpath exports* — promoted to **ADR 0018** (`docs/adr/0018-runtime-js-subpath-exports.md`). Retroactive accept; consolidation to a `./host` entry remains an option for the next public-API review.
+- **Q-2026-05-23-004** — *File-level shim overlay vs full-package shadow* — promoted to **ADR 0027** (`docs/adr/0027-file-level-shim-overlay.md`). Per-file overlay in the consuming adapter kept until a third shim site appears, at which point the pattern moves into `@riftydev/npm-client/shims/`.
+- **Q-2026-05-23-005** — *Expanded `@riftydev/runtime-js` public surface via `./builtins/*` subpath exports* — promoted to **ADR 0018** (`docs/adr/0018-runtime-js-subpath-exports.md`). Retroactive accept; consolidation to a `./host` entry remains an option for the next public-API review.
 - **Q-2026-05-24-007** — *Prod proxy for npm registry* — promoted to **ADR 0028** (`docs/adr/0028-prod-proxy-for-npm-registry.md`); **reopened 2026-05-27** when the audit found the Edge Function source had never landed (see Active section above and ADR-0028 §Status update — 2026-05-27). The Vercel Edge Function candidate is provisional pending implementation.
 - **Q-2026-05-27-003** — *WASI preopens — explicit `cwd` and ordering semantics* — promoted to **ADR 0049** (`docs/adr/0049-wasi-cwd-and-atfdcwd-preopen-semantics.md`). esbuild (restored as the forcing consumer by ADR-0047, which reversed ADR-0044's swc substitution) ran through `runWasi` and pinned Option A — `WasiOptions.cwd?: string`. Running it also forced `AT_FDCWD` resolution, directory-open in `path_open`, and `fd_readdir` → `E_NOTDIR` on a file fd, plus wiring the `stdin` option. All in ADR-0049.
-- **Q-2026-05-25-touch-utimes** — *Where should `utimes` live on the sync VFS surface?* — promoted to **ADR 0029** (`docs/adr/0029-utimes-on-fs-sync.md`). The trigger condition fired: a second caller (`node:fs.utimesSync` in `runtime-js`) appeared, so the provisional Option B (backend-sniffing in `shell`) was escalated to Option A — `FsSync.utimes` lives on the interface, `MemoryFsSync` mutates the shared backend, `OpfsFsSync` records into an in-memory side-table (`FileSystemSyncAccessHandle` has no mtime mutation). `shell/src/builtins.ts` drops its `@rifty/vfs/internal` import.
+- **Q-2026-05-25-touch-utimes** — *Where should `utimes` live on the sync VFS surface?* — promoted to **ADR 0029** (`docs/adr/0029-utimes-on-fs-sync.md`). The trigger condition fired: a second caller (`node:fs.utimesSync` in `runtime-js`) appeared, so the provisional Option B (backend-sniffing in `shell`) was escalated to Option A — `FsSync.utimes` lives on the interface, `MemoryFsSync` mutates the shared backend, `OpfsFsSync` records into an in-memory side-table (`FileSystemSyncAccessHandle` has no mtime mutation). `shell/src/builtins.ts` drops its `@riftydev/vfs/internal` import.
 - **Q-2026-05-27-002** — *Coherent `OwnerResolver` + readiness-registry swap* — promoted to **ADR 0046** (`docs/adr/0046-preview-owner-binding.md`). The "defer until a second consumer" decision (Option B) paid off: A-023 (SW→Worker direct routing) arrived as the second consumer, so the `PreviewOwnerBinding` seam was designed from both the window and worker shapes at once — `FirstWindowOwnerBinding` (legacy path preserved byte-for-byte) and `WorkerOwnerBinding` (port-keyed routing + the `'gone'` outcome for the no-`pagehide` worker lifecycle trap). The worker readiness frame's `ports` field is additive optional, so no `SW_FRAME_VERSION` bump (ADR-0040/ADR-0031). **The cross-deferral streaming-wire-frame sibling is resolved by ADR-0048 (Q-2026-05-29-001, promoted).**
-- **Q-2026-05-29-001** — *Streaming cross-realm preview wire-frame* — promoted to **ADR 0048** (`docs/adr/0048-streaming-cross-realm-preview-wire-frame.md`). Deliberated via a design panel + adversarial review (2026-05-29). Key correction: the bump is a **net-local `PREVIEW_PORT_FRAME_VERSION`** (`@rifty/net`), NOT `SW_FRAME_VERSION` — bumping the latter would be a sibling/reverse import and would invalidate the unrelated SW↔page hop. Four additive `reply-stream-*` frames, buffered `reply` kept as fallback, **per-request** (not per-channel) reply-mode selection, no-progress idle timeout with single-map cleanup. Implemented in `packages/net/src/cross-realm/preview-port.ts`.
+- **Q-2026-05-29-001** — *Streaming cross-realm preview wire-frame* — promoted to **ADR 0048** (`docs/adr/0048-streaming-cross-realm-preview-wire-frame.md`). Deliberated via a design panel + adversarial review (2026-05-29). Key correction: the bump is a **net-local `PREVIEW_PORT_FRAME_VERSION`** (`@riftydev/net`), NOT `SW_FRAME_VERSION` — bumping the latter would be a sibling/reverse import and would invalidate the unrelated SW↔page hop. Four additive `reply-stream-*` frames, buffered `reply` kept as fallback, **per-request** (not per-channel) reply-mode selection, no-progress idle timeout with single-map cleanup. Implemented in `packages/net/src/cross-realm/preview-port.ts`.
 - **Q-2026-05-29-002** — *No-symlink `fs.realpath`/`fs.lstat` semantics* — promoted to **ADR 0050** (`docs/adr/0050-no-symlink-realpath-lstat-semantics.md`). Resolved via a dedicated deliberation agent (adversarial M12-forward-compat check). Reverses the prior `NotImplementedError` loud-throw: for the symlink-free VFS, `lstat ≡ stat` and `realpath ≡ normalise-if-exists` are the CORRECT POSIX semantics (no-silent-stubs guards fake values, not the truthful canonical answer — a missing path still throws `ENOENT`). Forcing consumer: real Vite watcher (chokidar/readdirp). Contract test `packages/runtime-js/src/builtins/fs.test.ts` evolved to the stronger no-symlink contract; M12 symlink rewrite tracked by a `TODO(M12)` anchor in `fs.ts`.
 - **Q-2026-05-30-001** — *Native-dependency install policy* — promoted to **ADR 0051** (`docs/adr/0051-native-dependency-install-policy.md`). Resolved via a deliberation agent (adversarial false-positive + optional-handling analysis). The installer now throws `ENATIVEUNSUPPORTED` for a package pinning `cpu` to a non-`wasm` set (a compiled artifact) with no shadow substitution; **required** natives abort, **optional** natives skip-with-warning (inherits `walkAndPin`'s existing optional catch — so esbuild's `@esbuild/*` platform optionals skip and Vite still installs). Forcing consumer: `opencode-ai` (native binary → can't run by design). New `docs/compat/incompatible-packages.md`. `cpu`-keyed (not `os`) to avoid false-positives.
 

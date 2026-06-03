@@ -1,10 +1,10 @@
 /**
  * Built-in registry — the source of truth for `node:<name>` lookups.
  *
- * Lives in `@rifty/io` (per ADR-0035) so higher layers can register their
- * Node-shape exports via a forward import. `@rifty/runtime-js` calls
- * `loadBuiltin` from its module loader; `@rifty/net` calls `registerBuiltin`
- * from its side-effect entrypoint. Both depend on `@rifty/io`, so the layer
+ * Lives in `@riftydev/io` (per ADR-0035) so higher layers can register their
+ * Node-shape exports via a forward import. `@riftydev/runtime-js` calls
+ * `loadBuiltin` from its module loader; `@riftydev/net` calls `registerBuiltin`
+ * from its side-effect entrypoint. Both depend on `@riftydev/io`, so the layer
  * direction stays top-down.
  *
  * The registry is a process-wide singleton: one `factories` map and one
@@ -18,10 +18,10 @@ const cache: Map<string, Record<string, unknown>> = new Map();
 const factories: Record<string, BuiltinFactory<unknown>> = {};
 
 /**
- * Higher-layer packages (`@rifty/net`, future `@rifty/wasi` builtins, etc.)
+ * Higher-layer packages (`@riftydev/net`, future `@riftydev/wasi` builtins, etc.)
  * call this to plug their Node-shape exports into the loader so user code
  * can `require('node:http')`. Keeping the registry here decouples
- * `@rifty/runtime-js` from those higher layers — see the layering rules in
+ * `@riftydev/runtime-js` from those higher layers — see the layering rules in
  * CLAUDE.md and the rationale in ADR-0035.
  *
  * Generic over the factory's return type so registration sites preserve the

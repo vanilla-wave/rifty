@@ -1,5 +1,5 @@
-import { createModuleLoader } from '@rifty/runtime-js/loader';
-import { MemoryFsSync } from '@rifty/vfs/internal';
+import { createModuleLoader } from '@riftydev/runtime-js/loader';
+import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 
 function setup(files: Record<string, string>) {

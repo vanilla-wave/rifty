@@ -18,7 +18,7 @@
  *
  * Anything else maps to `'other'` and is filtered out of the file map.
  */
-import { NotImplementedError } from '@rifty/io';
+import { NotImplementedError } from '@riftydev/io';
 
 interface TarEntry {
   name: string;

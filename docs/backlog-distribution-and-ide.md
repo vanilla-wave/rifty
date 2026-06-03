@@ -18,15 +18,15 @@ This is a **pull backlog, not a plan**: no dates, no committed order beyond the
 
 ## Directional decisions (recorded here; promote to ADR when the track starts)
 
-- **DD-1 — No inlining of `@rifty/*` into each other.** `io` (builtin registry),
+- **DD-1 — No inlining of `@riftydev/*` into each other.** `io` (builtin registry),
   `kernel` (`globalProcessManager`), `vfs` (`syncMirror`) hold shared module
   singletons read/written across packages; bundling duplicates the state and
   silently breaks composition. They stay `external` + lockstep-pinned (ADR-0070 D4).
-- **DD-2 — Umbrella is unscoped `rifty`** (not `@rifty/runtime`). Front-door brand
+- **DD-2 — Umbrella is unscoped `rifty`** (not `@riftydev/runtime`). Front-door brand
   name, conventional (`vite` + `@vitejs/*`); name is free on npm (re-verified
-  2026-06-02, E404). Needs a separate name claim besides the `@rifty` scope.
+  2026-06-02, E404). Needs a separate name claim besides the `@riftydev` scope.
   **Ratified: ADR-0071** (EPIC B landed).
-- **DD-3 — `@rifty/workbench` (headless UI controllers) is justified now** — non-Solid
+- **DD-3 — `@riftydev/workbench` (headless UI controllers) is justified now** — non-Solid
   consumers are foreseen. It also makes the playground a thin shell and sharpens the
   D-002 boundary (solid-js stays in the binding layer only).
 - **DD-4 — Component atoms are headless + themeable** (Radix/Headless-UI style:
@@ -40,7 +40,7 @@ Remaining:
 | ID | Item | Why | Size | Status |
 |---|---|---|---|---|
 | A1 | tsup build + `publishConfig` dual exports for 11 packages | make packages consumable from npm | L | **done** (ADR-0070) |
-| A2 | Claim `@rifty` scope **and** unscoped `rifty` name on npm | publish + reserve brand | S | accepted (manual) |
+| A2 | Claim `@riftydev` scope **and** unscoped `rifty` name on npm | publish + reserve brand | S | accepted (manual) |
 | A3 | Create/push GitHub repo + per-package OIDC trusted publisher (no `NPM_TOKEN`) | enable tokenless tag-driven release | S | accepted (manual; `REPO_URL` fixed, release.yml on OIDC — ADR-0071) |
 | A4 | Fix `apps/playground/build/sw-plugin.ts` swallowed by `.gitignore` (`build/`) | playground typecheck/CI red on fresh checkout | S | idea |
 | A5 | Per-package `CHANGELOG.md` | DoD asks for it; only root + npm-client have one | M | idea |
@@ -61,7 +61,7 @@ The "front door". Three layers:
 > Honest limit: B2 can't hide bundler-specific bits (worker URLs, `sw.js` build,
 > WASM asset serving) — those land in EPIC E.
 
-## EPIC C — `@rifty/workbench` (headless UI controllers, L2)  ·  depends-on: B (loosely)
+## EPIC C — `@riftydev/workbench` (headless UI controllers, L2)  ·  depends-on: B (loosely)
 
 Lift the **already framework-agnostic** `apps/playground/src/glue/*` into a package
 (`sync-mirror-vfs`, `hmr-bridge`, `npm-shell-command`, `preview-bridge-wiring`,
@@ -69,7 +69,7 @@ Lift the **already framework-agnostic** `apps/playground/src/glue/*` into a pack
 
 | ID | Item | Why | Size | Status |
 |---|---|---|---|---|
-| C1 | Move `glue/*` → `@rifty/workbench`; verify no upward imports into playground | reuse logic across frameworks | M | accepted (DD-3) |
+| C1 | Move `glue/*` → `@riftydev/workbench`; verify no upward imports into playground | reuse logic across frameworks | M | accepted (DD-3) |
 | C2 | Controller APIs: `createEditorSync`, `createPreviewBinding`, `createRuntimeSession` | stable headless contracts | M | accepted |
 | C3 | Repoint playground `adapters/use*` to consume workbench | playground becomes a thin binding | M | idea |
 
@@ -80,11 +80,11 @@ layout/styling, no manual plumbing. `<RiftyIDE/>` = default layout over the atom
 
 | ID | Item | Why | Size | Status |
 |---|---|---|---|---|
-| D1 | `@rifty/solid`: `RiftyProvider` + atoms (`RiftyEditor`/`Terminal`/`Preview`/`CapabilitiesGate`/`RunButton`) | reuse existing playground components | M | accepted |
+| D1 | `@riftydev/solid`: `RiftyProvider` + atoms (`RiftyEditor`/`Terminal`/`Preview`/`CapabilitiesGate`/`RunButton`) | reuse existing playground components | M | accepted |
 | D2 | `RiftyFileTree` (new — playground is ~single-file) | the one genuinely new atom (VFS-watch + tree) | M | idea |
 | D3 | `<RiftyIDE/>` default-layout wrapper over atoms | lazy one-tag path | S | idea |
 | D4 | Headless theming (CSS-vars/slots + default theme) — DD-4 | reusable look, not playground-bound | M | idea |
-| D5 | `@rifty/react` (and/or `@rifty/vue`) atoms over the same workbench | non-Solid consumers (the reason for C) | L | idea |
+| D5 | `@riftydev/react` (and/or `@riftydev/vue`) atoms over the same workbench | non-Solid consumers (the reason for C) | L | idea |
 
 ## EPIC E — `create-rifty` starter template  ·  depends-on: B (+ D for the UI)
 

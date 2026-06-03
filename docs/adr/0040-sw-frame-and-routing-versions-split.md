@@ -16,7 +16,7 @@ the same constant should pin but does not:
 
 1. **Addressing scheme.** The `/preview/<port>/...` URL convention and
    the synthetic `preview.local` host now live in
-   `@rifty/io/preview-protocol` (ADR-0036). Their *shape* —
+   `@riftydev/io/preview-protocol` (ADR-0036). Their *shape* —
    `PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`, and the
    `synthesizePreviewUrl(path)` contract — is what the SW recognises and
    what `setupPreviewBridge` consumers depend on. Renaming the host or
@@ -53,7 +53,7 @@ Two constants live in `packages/service-worker/src/protocol.ts`:
   a documented default do NOT require a bump (per ADR-0031's SemVer-
   major rule, restated here for the frame side).
 - **`SW_ROUTING_VERSION` = `'1'`.** Pins the addressing scheme exported
-  from `@rifty/io/preview-protocol` (`PREVIEW_PREFIX_RE`,
+  from `@riftydev/io/preview-protocol` (`PREVIEW_PREFIX_RE`,
   `PREVIEW_LOCAL_HOST`, `synthesizePreviewUrl`, `parsePreviewPath`)
   AND the owner-fallback rules in
   `packages/service-worker/src/owner-resolver.ts`
@@ -72,7 +72,7 @@ includes both `(expected, got)` pairs — the host can branch on which
 contract drifted.
 
 The legacy `SW_PROTOCOL_VERSION` constant is removed cleanly. The only
-in-repo references were inside `@rifty/service-worker` itself (plus two
+in-repo references were inside `@riftydev/service-worker` itself (plus two
 non-code mentions in `kernel/sync-rpc.ts` and `kernel/CHANGELOG.md` as
 prose cross-references — those are rewritten to cite ADR-0031/ADR-0040
 without naming the deleted symbol). No external consumer imports the
@@ -94,7 +94,7 @@ The existing `SwProtocolVersionMismatchError` grows two pairs:
 The host can inspect `expected.frame !== got.frame` vs
 `expected.routing !== got.routing` to decide whether the drift is in
 the frame shape (likely a fresh SW + an old page that did not reload)
-or in routing (likely a misconfigured `@rifty/io` import). Either way
+or in routing (likely a misconfigured `@riftydev/io` import). Either way
 the handshake aborts cleanly with HTTP 503; the client logs and
 proceeds to the no-SW fallback rather than producing cryptic
 downstream errors.
@@ -109,7 +109,7 @@ peers across an unrelated contract (routing), forcing every caller of
 the SW package to bump in lockstep when only one contract changed.
 
 **Option B: keep `SW_PROTOCOL_VERSION` as a deprecated alias for one
-cycle.** Rejected: the only in-repo consumer is `@rifty/service-worker`
+cycle.** Rejected: the only in-repo consumer is `@riftydev/service-worker`
 itself, and the comments in `kernel/sync-rpc.ts` reference the constant
 *by name in prose*, not via import. A one-cycle alias adds clutter
 without serving any external caller. The clean removal is the simpler
@@ -136,7 +136,7 @@ contract.
   who reach for it find a typecheck error pointing at the two
   replacements; the JSDoc on each spells out which one to use.
 - The `protocol.ts` module is the single source of truth for the two
-  bump-trigger lists. ADR-0036 (addressing in `@rifty/io`) and the SW
+  bump-trigger lists. ADR-0036 (addressing in `@riftydev/io`) and the SW
   `owner-resolver.ts` reference back to `SW_ROUTING_VERSION` so a
   future contributor cannot change addressing or fallback without
   noticing the version pin.
@@ -150,7 +150,7 @@ contract.
   frame-shape side; this ADR builds on it and supersedes it in the
   sense that the constant being validated is now two constants. The
   "refuse mismatched peers" rule is unchanged.
-- **ADR-0036** — Preview-protocol addressing in `@rifty/io`. The
+- **ADR-0036** — Preview-protocol addressing in `@riftydev/io`. The
   routing version pins the shape of the addressing primitives exported
   from there.
 - **2026-05-26 service-worker audit (F2)** — recorded the gap that this

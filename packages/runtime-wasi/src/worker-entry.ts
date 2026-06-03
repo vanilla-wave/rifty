@@ -3,7 +3,7 @@
 /**
  * Runtime-side worker entry for {@link createWasiProcess} (ADR 0038, ADR 0039).
  *
- * Loaded by the kernel-side bootstrap (`@rifty/kernel/worker-entry`) via
+ * Loaded by the kernel-side bootstrap (`@riftydev/kernel/worker-entry`) via
  * the `WorkerEntryDescriptor.kind === 'url'` path: the kernel spawns a
  * Worker at `kernelWorkerUrl` (host-registered via `setKernelWorkerUrl`),
  * that Worker's `'init'` handler publishes a typed {@link KernelProcessSpec}
@@ -49,7 +49,7 @@
  *     exit 1.
  */
 
-import { readKernelProcessSpec } from '@rifty/kernel';
+import { readKernelProcessSpec } from '@riftydev/kernel';
 import { Wasi, WasiExit } from './wasi.ts';
 
 /** Env-key carrying the URL of the WASM module to fetch. */
@@ -101,7 +101,7 @@ function makeStdioWriter(port: MessagePort): { write(chunk: string | Uint8Array)
  * Build the worker-local {@link WasiProcess} from the kernel-published
  * {@link KernelProcessSpec}. `exit(N)` throws a `RIFTY_PROCESS_EXIT`-shaped
  * error so the kernel's worker bootstrap maps it to the worker exit code
- * (see `@rifty/kernel/src/worker-entry.ts`).
+ * (see `@riftydev/kernel/src/worker-entry.ts`).
  */
 function buildWasiProcess(): WasiProcess {
   const spec = readKernelProcessSpec();
@@ -219,7 +219,7 @@ function stripChannelKeys(env: Record<string, string>): Record<string, string> {
 
 /**
  * Detection: are we in a `DedicatedWorkerGlobalScope`? Mirrors the heuristic
- * from `@rifty/kernel/src/worker-entry.ts`. When true, the kernel bootstrap
+ * from `@riftydev/kernel/src/worker-entry.ts`. When true, the kernel bootstrap
  * has already published {@link KernelProcessSpec} on `globalThis` by the
  * time this module's top-level evaluation runs (the kernel publishes the
  * spec before `await import(entry.url)`).

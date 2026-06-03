@@ -16,7 +16,7 @@
  * scope". Today the only caller is the test in this directory.
  */
 
-import { type ProcessHandle, type SpawnWorkerSpec, globalProcessManager } from '@rifty/kernel';
+import { type ProcessHandle, type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
 import { WASI_PREOPENS_ENV, WASI_WASM_URL_ENV } from './worker-entry.ts';
 
 let wasiWorkerUrl: string | URL | null = null;
@@ -25,8 +25,8 @@ let wasiWorkerUrl: string | URL | null = null;
  * Host-side setter: tell the adapter where to find the runtime-wasi worker
  * entry chunk. This is a different URL from the kernel worker URL
  * (`setKernelWorkerUrl`): the kernel worker bundle imports
- * `@rifty/kernel/worker-entry` (init handler only), and the wasi worker
- * bundle imports `@rifty/runtime-wasi/worker-entry` whose top-level
+ * `@riftydev/kernel/worker-entry` (init handler only), and the wasi worker
+ * bundle imports `@riftydev/runtime-wasi/worker-entry` whose top-level
  * await runs the WASI guest. The two URLs MUST be distinct chunks —
  * sharing one bundle would fire `runtime-wasi/worker-entry`'s top-level
  * await at module load (before `init` arrives) and crash on a missing
@@ -77,7 +77,7 @@ export interface WasiProcessOpts {
 
 /**
  * Internal `Spawner` shape so tests can substitute a stub without leaning
- * on `@rifty/kernel`'s test hooks (which are intentionally not part of
+ * on `@riftydev/kernel`'s test hooks (which are intentionally not part of
  * the kernel's public surface).
  */
 type Spawner = (command: string, spec: SpawnWorkerSpec, ppid: number) => ProcessHandle;
@@ -99,7 +99,7 @@ export function __setSpawnerForTests(spawn: Spawner | null): void {
  * (i.e. `handle.kind === 'worker'`, with binary stdio `MessagePort`s on
  * `handle.ports`). Callers wire stdio through any kernel-aware adapter —
  * notably `wireWorkerStdio` from
- * `@rifty/runtime-js/src/builtins/child_process-worker.ts`.
+ * `@riftydev/runtime-js/src/builtins/child_process-worker.ts`.
  */
 export function createWasiProcess(opts: WasiProcessOpts): ProcessHandle {
   const wasmUrl = resolveWasmUrl(opts.wasm);

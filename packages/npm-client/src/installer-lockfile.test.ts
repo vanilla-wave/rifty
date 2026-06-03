@@ -1,5 +1,5 @@
-import { NotImplementedError } from '@rifty/io';
-import { MemoryVfs, joinPath } from '@rifty/vfs';
+import { NotImplementedError } from '@riftydev/io';
+import { MemoryVfs, joinPath } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import { makePackageTarball } from './_test-fixtures/tar-builder.ts';
 import { readExistingLockfile } from './installer-lockfile-reader.ts';

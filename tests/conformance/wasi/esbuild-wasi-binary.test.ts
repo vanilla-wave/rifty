@@ -7,7 +7,7 @@
  *   1. `esbuild.wasm` imports ONLY `wasi_snapshot_preview1` — it is a real
  *      WASIp1 binary, NOT the Go `js/wasm` (`gojs`) `esbuild-wasm` that
  *      ADR-0044 wrongly assumed was the only published build. If a future
- *      bump reintroduced a gojs/wbindgen import, `@rifty/runtime-wasi` could
+ *      bump reintroduced a gojs/wbindgen import, `@riftydev/runtime-wasi` could
  *      not host it and this test fails loudly.
  *   2. It runs end-to-end through `runWasi` — `esbuild --version` exits 0 and
  *      prints the version. This exercises args/environ/fd_write/proc_exit and
@@ -19,13 +19,13 @@
  * without the vendoring step is loud about it.
  */
 import { existsSync } from 'node:fs';
-import { runWasi } from '@rifty/runtime-wasi';
+import { runWasi } from '@riftydev/runtime-wasi';
 import {
   ESBUILD_WASM_VENDOR_PATH,
   loadVendoredEsbuildWasm,
-} from '@rifty/shadow-registry/esbuild-binding';
-import { syncMirror } from '@rifty/vfs';
-import { resetSyncMirror } from '@rifty/vfs/internal';
+} from '@riftydev/shadow-registry/esbuild-binding';
+import { syncMirror } from '@riftydev/vfs';
+import { resetSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const maybe = existsSync(ESBUILD_WASM_VENDOR_PATH) ? describe : describe.skip;

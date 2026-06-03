@@ -5,7 +5,7 @@ Date: 2026-05-29
 
 ## Context
 
-`@rifty/net.bridgeCrossRealmPreview` / `serveCrossRealmPreview`
+`@riftydev/net.bridgeCrossRealmPreview` / `serveCrossRealmPreview`
 (`packages/net/src/cross-realm/preview-port.ts`, ADR-0043 D2) bridge the page
 realm's `dispatchToPort()` to a Worker-realm HTTP listener over a
 `BroadcastChannel`. They were **buffered-only**: the worker read the entire
@@ -19,10 +19,10 @@ This ADR was deliberated by a design panel + adversarial review. Three facts
 constrain the design and **correct the working assumption that the bump is to
 `SW_FRAME_VERSION`**:
 
-1. **Layering.** `@rifty/net` and `@rifty/service-worker` are siblings (both
-   depend only on `@rifty/io`, which does not re-export `SW_FRAME_VERSION`). The
-   preview bridge is wired entirely inside `@rifty/net` + the playground worker
-   bootstrap; the `PreviewPortFrame` never enters `@rifty/service-worker` at
+1. **Layering.** `@riftydev/net` and `@riftydev/service-worker` are siblings (both
+   depend only on `@riftydev/io`, which does not re-export `SW_FRAME_VERSION`). The
+   preview bridge is wired entirely inside `@riftydev/net` + the playground worker
+   bootstrap; the `PreviewPortFrame` never enters `@riftydev/service-worker` at
    runtime. Importing `SW_FRAME_VERSION` here would be a reverse/sibling import
    (a CLAUDE.md hard-rule violation) and would wrongly invalidate every SW↔page
    peer for a change to a different hop.
@@ -40,7 +40,7 @@ constrain the design and **correct the working assumption that the bump is to
 
 ### D1 — Net-local `PREVIEW_PORT_FRAME_VERSION`, bumped '1' → '2'
 
-`@rifty/net` gets its own version constant `PREVIEW_PORT_FRAME_VERSION`
+`@riftydev/net` gets its own version constant `PREVIEW_PORT_FRAME_VERSION`
 (declared in `cross-realm/preview-port.ts`, re-exported from `src/index.ts`),
 bumped `'1'` → `'2'`. It is the one-layer-down analogue of ADR-0040's
 `SW_FRAME_VERSION`: it pins `PreviewPortFrame`'s shape and nothing else. The
@@ -111,7 +111,7 @@ partial-body leak.
   the random tail to avoid cross-delivery. Acceptable today (birthday-bounded);
   noted as a risk to revisit if multi-consumer channels arrive before M12.
 - If a reviewer wants `SW_FRAME_VERSION` to be the single source of truth across
-  BOTH hops, the constant must first be lifted into `@rifty/io` — a separate
+  BOTH hops, the constant must first be lifted into `@riftydev/io` — a separate
   IRREVERSIBLE decision with its own ADR.
 
 Conformance: `packages/net/src/cross-realm/preview-port.test.ts` — large-body

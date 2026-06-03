@@ -2,7 +2,7 @@
  * Path-resolving WASI preview1 syscalls.
  *
  * All path-relative calls resolve against the base-fd preopen and consult
- * the shared sync VFS mirror (ADR-0014 — `@rifty/vfs` owns the mirror).
+ * the shared sync VFS mirror (ADR-0014 — `@riftydev/vfs` owns the mirror).
  *
  * Grouped by behaviour:
  *   - `path_open` — open/create a file, granting a (possibly restricted)
@@ -17,7 +17,7 @@
  *
  * Re-exports {@link errToWasiErrno} for the test suite.
  */
-import { syncMirror } from '@rifty/vfs';
+import { syncMirror } from '@riftydev/vfs';
 import {
   E_BADF,
   E_EXIST,

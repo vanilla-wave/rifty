@@ -12,8 +12,8 @@ import {
   RegistryClient,
   TARBALL_CACHE_ROOT,
   install,
-} from '@rifty/npm-client';
-import { MemoryVfs } from '@rifty/vfs';
+} from '@riftydev/npm-client';
+import { MemoryVfs } from '@riftydev/vfs';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 function concat(parts: Uint8Array[]): Uint8Array {

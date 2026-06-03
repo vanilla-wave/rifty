@@ -53,7 +53,7 @@ Replace the sync-access-handle hot path for **file content** in `OpfsFsSync` wit
 
 ## Reversibility classification
 
-IRREVERSIBLE per CLAUDE.md checklist item 4 (the change spans >2 files / >100 lines and alters behaviour on the `@rifty/vfs` internal surface). It does **not** change the cross-package public `FsSync` interface, so it is not a public-API break; recorded here inline as required.
+IRREVERSIBLE per CLAUDE.md checklist item 4 (the change spans >2 files / >100 lines and alters behaviour on the `@riftydev/vfs` internal surface). It does **not** change the cross-package public `FsSync` interface, so it is not a public-API break; recorded here inline as required.
 
 ## Acceptance
 

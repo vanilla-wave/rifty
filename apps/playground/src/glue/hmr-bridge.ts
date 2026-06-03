@@ -46,7 +46,7 @@
  *     a `BroadcastChannel` with the same channel name (derived through
  *     {@link channelNameFor}) and speaks the same `open`/`open-ack`/`msg`
  *     wire protocol. The client is intentionally vanilla JS — no
- *     `@rifty/net` import — so it can be injected directly into the served
+ *     `@riftydev/net` import — so it can be injected directly into the served
  *     HTML without bundling.
  *
  * Adapter discipline:
@@ -59,7 +59,7 @@
  *     contract Vite already uses.
  */
 
-import { BridgedWebSocketServer, type WsMessage, channelNameFor } from '@rifty/net';
+import { BridgedWebSocketServer, type WsMessage, channelNameFor } from '@riftydev/net';
 
 /**
  * Build the WS URL the bridge listens on for a given dev server `port`.

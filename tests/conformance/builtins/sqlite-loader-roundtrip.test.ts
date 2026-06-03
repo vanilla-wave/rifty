@@ -8,9 +8,9 @@
  *
  * The failure mode it guards: the `node:sqlite` specifier must resolve to the
  * sql.js-backed `DatabaseSync` shim the SAME way `node:http` does — through the
- * `@rifty/io` builtin registry that `@rifty/net/sqlite/register-builtins`
+ * `@riftydev/io` builtin registry that `@riftydev/net/sqlite/register-builtins`
  * populates (ADR-0035 forward-import seam, NOT a reverse import from the loader
- * into `@rifty/net`). If that registration regressed, or the loader stopped
+ * into `@riftydev/net`). If that registration regressed, or the loader stopped
  * routing `node:`-prefixed specifiers through the registry, this `require`
  * would throw `MODULE_NOT_FOUND` instead of round-tripping the row.
  *
@@ -19,14 +19,14 @@
  * `DatabaseSync` constructor has its handle ready (the one async step the
  * otherwise-synchronous surface depends on, ADR-0065 D1).
  */
-import { initSqliteEngine } from '@rifty/net/sqlite/engine';
-import { createModuleLoader } from '@rifty/runtime-js/loader';
-import { MemoryFsSync } from '@rifty/vfs/internal';
+import { initSqliteEngine } from '@riftydev/net/sqlite/engine';
+import { createModuleLoader } from '@riftydev/runtime-js/loader';
+import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 describe('node:sqlite — module-loader wiring round-trip (WIRE item 1)', () => {
   beforeAll(async () => {
-    await import('@rifty/net/sqlite/register-builtins');
+    await import('@riftydev/net/sqlite/register-builtins');
     await initSqliteEngine();
   });
 

@@ -1,7 +1,7 @@
 {
-  "name": "@rifty/shell",
+  "name": "@riftydev/shell",
   "version": "0.1.0",
-  "description": "Tiny bash-flavoured shell for rifty, backed by @rifty/vfs.",
+  "description": "Tiny bash-flavoured shell for rifty, backed by @riftydev/vfs.",
   "type": "module",
   "license": "MIT",
   "author": "vanilla-wave <vizetmail@gmail.com>",
@@ -41,7 +41,7 @@
     "build": "tsup"
   },
   "dependencies": {
-    "@rifty/io": "workspace:*",
-    "@rifty/vfs": "workspace:*"
+    "@riftydev/io": "workspace:*",
+    "@riftydev/vfs": "workspace:*"
   }
 }

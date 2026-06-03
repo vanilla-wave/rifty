@@ -12,7 +12,7 @@
  * the `addEventListener`s, so the `WorkerLike` is GC-eligible.
  */
 
-import { NotImplementedError } from '@rifty/io';
+import { NotImplementedError } from '@riftydev/io';
 import { getKernelDispatcher } from './ipc/kernel-dispatcher.ts';
 import { type SabRing, createSabRing } from './ipc/sab-ring.ts';
 import type { SyncRpcDispatcher } from './ipc/sync-dispatch.ts';
@@ -283,7 +283,7 @@ export function spawnKernelWorker(
 
 // ADR-0039: no more `setKernelRecursiveSpawn(spawnKernelWorker)` at module
 // load. The recursive-spawn handshake belonged to the Node `'execSync'`
-// handler, which now lives in `@rifty/runtime-js` and imports
+// handler, which now lives in `@riftydev/runtime-js` and imports
 // `spawnKernelWorker` from this module directly (top-down).
 
 // Re-export the ring type so consumers (e.g. tests) can type-annotate

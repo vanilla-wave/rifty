@@ -17,7 +17,7 @@ consumption shape over rifty's port registry, with NO opencode/Effect dependency
   dispatched via `dispatchToPort` returns the correct status, content-type, and
   exact JSON bytes.
 - The REQUEST side works AS-IS: method/url(pathname+search)/lowercased headers and
-  a genuinely-drained Readable body over `@rifty/io` Readable
+  a genuinely-drained Readable body over `@riftydev/io` Readable
   (`packages/net/src/http/request.ts:46-83`) — the body actually flowed.
 - The ONLY gap on the P3 buffered first-light path is `listen({port,host}, cb)`:
   the current `listen(port: number, ...)` signature (`server.ts:27`) keys the port
@@ -47,7 +47,7 @@ standard Node http shapes plus the listen widen.
   emission (Q-2026-05-30-108) are additive, single-file, REVERSIBLE. They land now
   for the buffered first-light + the streaming write loop.
 - **D4 — Pipe-sink is DEFERRED (review M4).** Making `ServerResponse` a `.pipe()`
-  target (Q-2026-05-30-109) is NOT taken now: it would widen `@rifty/io`'s
+  target (Q-2026-05-30-109) is NOT taken now: it would widen `@riftydev/io`'s
   `PipeableWritable.write` return type — a SECOND package change governed by
   ADR-0034 (whose purpose is to restore Node's boolean-only write contract). The
   facade serves JSON/SSE, not FormData; the Effect web-stream-response path
@@ -70,8 +70,8 @@ standard Node http shapes plus the listen widen.
   write) are NOT touched by this decision. The deferred pipe-sink is the only path
   that would touch ADR-0034, and it is explicitly out of scope here.
 - **Parity verification vehicle (review M1):** parity is structurally unreachable
-  for `node:http` today (the runner imports only `@rifty/runtime-js/loader` +
-  `@rifty/vfs` and never registers `@rifty/net`). The "additive Node-parity
+  for `node:http` today (the runner imports only `@riftydev/runtime-js/loader` +
+  `@riftydev/vfs` and never registers `@riftydev/net`). The "additive Node-parity
   widening" claim must be verified by an opt-in net-registering parity mode (a
   tools/ harness, layer-legal) with real Node-vs-rifty cases for
   `createServer+request+res.end(body)` and the `'drain'` streaming loop — NOT by
@@ -102,7 +102,7 @@ ADR is written.
 
 ## References
 
-- ADR-0017 (`@rifty/net` scope + streaming deferral); ADR-0034 (io boolean-only
+- ADR-0017 (`@riftydev/net` scope + streaming deferral); ADR-0034 (io boolean-only
   write — the contract the deferred pipe-sink would diverge from); ADR-0040 (SW
   frame/routing versions); ADR-0048 (preview-port frame).
 - decisions.md draft ADR-0057; feature-05-effect-http-bridge.md (Q-101..Q-104,

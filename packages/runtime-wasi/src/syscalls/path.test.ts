@@ -5,7 +5,7 @@
  *   - {@link ./path-filestat.test.ts} — `path_filestat_get`
  *   - {@link ./path-mutate.test.ts}   — create/unlink/rmdir/rename/link
  */
-import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@rifty/vfs/internal';
+import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setupPathCtx } from './path-test-fixture.ts';
 import {

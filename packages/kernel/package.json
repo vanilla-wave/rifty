@@ -1,5 +1,5 @@
 {
-  "name": "@rifty/kernel",
+  "name": "@riftydev/kernel",
   "version": "0.1.0",
   "description": "Process/scheduling/IPC kernel for rifty: Worker-as-process model over SharedArrayBuffer + Atomics.",
   "type": "module",
@@ -45,6 +45,6 @@
     "build": "tsup"
   },
   "dependencies": {
-    "@rifty/io": "workspace:*"
+    "@riftydev/io": "workspace:*"
   }
 }

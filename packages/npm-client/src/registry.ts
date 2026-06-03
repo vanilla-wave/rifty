@@ -52,7 +52,7 @@ export type Fetcher = (url: string, init?: RequestInit) => Promise<Response>;
  *   3. `process.env.REGISTRY_BASE_URL` (Node-side test harness),
  *   4. `/npm-registry` (default — Vite proxy in dev, Edge Function in prod).
  *
- * Each consumer in `@rifty/npm-client` calls this function; never hardcode
+ * Each consumer in `@riftydev/npm-client` calls this function; never hardcode
  * a registry URL elsewhere (D-004 / ADR 0028).
  */
 export function getRegistryBaseUrl(): string {

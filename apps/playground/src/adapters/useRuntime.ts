@@ -1,4 +1,4 @@
-import { type RuntimeController, spawnRuntime } from '@rifty/runtime-js';
+import { type RuntimeController, spawnRuntime } from '@riftydev/runtime-js';
 import { onCleanup } from 'solid-js';
 
 type Writer = (chunk: string, stream?: 'stdout' | 'stderr') => void;

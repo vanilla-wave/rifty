@@ -12,11 +12,11 @@
  *
  * The installer registers itself as the kernel's pre-entry hook at module
  * load — host bundles can wire it in by importing this module from their
- * kernel-worker chunk BEFORE `@rifty/kernel/worker-entry`:
+ * kernel-worker chunk BEFORE `@riftydev/kernel/worker-entry`:
  *
  * ```ts
- * import '@rifty/runtime-js/install-process';
- * import '@rifty/kernel/worker-entry';
+ * import '@riftydev/runtime-js/install-process';
+ * import '@riftydev/kernel/worker-entry';
  * ```
  *
  * The kernel's bootstrap calls the hook immediately after publishing the
@@ -27,15 +27,15 @@
  * flagged it as a Node-API leak; the runtime-js side now owns it.
  */
 
-import { EventEmitter } from '@rifty/io';
-import { type IpcFrame, type KernelProcessSpec, setKernelPreEntryHook } from '@rifty/kernel';
-import type { WorkerSpawnSpec } from '@rifty/kernel';
+import { EventEmitter } from '@riftydev/io';
+import { type IpcFrame, type KernelProcessSpec, setKernelPreEntryHook } from '@riftydev/kernel';
+import type { WorkerSpawnSpec } from '@riftydev/kernel';
 
 /**
  * Internal: the `process` shim the installer attaches to globalThis.
  *
  * Narrow on purpose — matches the structural contract that
- * `@rifty/runtime-wasi`'s worker entry expects when reading
+ * `@riftydev/runtime-wasi`'s worker entry expects when reading
  * `globalThis.process` (pid/ppid/argv/env/cwd/stdout/stderr/exit), with
  * ADR-0045 fork-IPC additions layered on top: `send` / `disconnect` and
  * EventEmitter-style `on` / `off` for `'message'` and `'disconnect'`.
@@ -194,7 +194,7 @@ class WorkerNodeProcessShim extends EventEmitter implements NodeProcessShim {
  * The `exit(N)` method throws an Error tagged with
  * `code === 'RIFTY_PROCESS_EXIT'` and a numeric `exitCode`. The kernel's
  * worker bootstrap detects this exact shape and maps it to the worker's
- * exit code (see `@rifty/kernel/src/worker-entry.ts`).
+ * exit code (see `@riftydev/kernel/src/worker-entry.ts`).
  */
 export function installNodeProcessShim(spec: KernelProcessSpec): NodeProcessShim {
   const shim: NodeProcessShim = new WorkerNodeProcessShim(spec);
@@ -228,6 +228,6 @@ function preEntryInstaller(spec: WorkerSpawnSpec): void {
 
 // Module-load side effect: register the installer as the kernel's
 // pre-entry hook. Host chunks that import this module BEFORE
-// `@rifty/kernel/worker-entry` get the wiring "for free" — the kernel's
+// `@riftydev/kernel/worker-entry` get the wiring "for free" — the kernel's
 // init handler calls the hook before running the user entry.
 setKernelPreEntryHook(preEntryInstaller);

@@ -1,6 +1,6 @@
 /**
  * Shadow-binding: vite's esbuild `transform` surface, routed to the real
- * esbuild WASI binary running on `@rifty/runtime-wasi`.
+ * esbuild WASI binary running on `@riftydev/runtime-wasi`.
  *
  * Background. Vite leans on esbuild for two jobs in dev: (1) per-module TS/JSX
  * transform (strip types, lower JSX) and (2) dependency pre-bundling. This
@@ -17,8 +17,8 @@
  *
  * Dependency injection. The caller passes its own `runWasi` (and the wasm
  * bytes) so this tool package does not take a hard dependency on
- * `@rifty/runtime-wasi` — which would drag kernel/vfs into a data-table tool.
- * The structural `RunWasi` type below matches `@rifty/runtime-wasi`'s export.
+ * `@riftydev/runtime-wasi` — which would drag kernel/vfs into a data-table tool.
+ * The structural `RunWasi` type below matches `@riftydev/runtime-wasi`'s export.
  *
  * Working directory (Q-2026-05-27-003 → ADR-0049). esbuild's Go/WASIp1 runtime
  * needs a cwd preopen even for a stdin transform (it canonicalises its working
@@ -31,7 +31,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Structural shape of `@rifty/runtime-wasi`'s `runWasi`. Declared locally so
+ * Structural shape of `@riftydev/runtime-wasi`'s `runWasi`. Declared locally so
  * this package carries no import edge to the WASI runtime (the consumer
  * injects the real function). The fields used here are a strict subset of
  * `WasiOptions`.

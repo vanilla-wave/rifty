@@ -1,4 +1,4 @@
-# ADR 0016: Service Worker source-of-truth lives in `@rifty/service-worker`
+# ADR 0016: Service Worker source-of-truth lives in `@riftydev/service-worker`
 
 Status: Implemented (2026-05-24) — plugin at `apps/playground/build/sw-plugin.ts`
 Date: 2026-05

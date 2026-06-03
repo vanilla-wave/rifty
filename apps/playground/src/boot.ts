@@ -26,8 +26,8 @@
  * `main.tsx` only does: `await bootstrapPlayground()` →
  * `render(() => <App init={...}/>)`.
  */
-import { registerServiceWorker } from '@rifty/service-worker';
-import { initBackend } from '@rifty/vfs';
+import { registerServiceWorker } from '@riftydev/service-worker';
+import { initBackend } from '@riftydev/vfs';
 
 export interface VfsBootDescriptor {
   readonly backend: 'opfs' | 'memory';
@@ -41,7 +41,7 @@ export type InitBackendFn = () => Promise<'opfs' | 'memory'>;
  * Resolve the VFS backend descriptor. Catches any failure from `initBackend()`,
  * falls back to memory, and surfaces the cause via `reason`. Never throws.
  *
- * @param impl - injection seam for tests; defaults to `@rifty/vfs/initBackend`.
+ * @param impl - injection seam for tests; defaults to `@riftydev/vfs/initBackend`.
  * @param logger - injection seam for the `console.warn` side effect (tests
  *   pass a spy to assert the fallback log without polluting stderr).
  */

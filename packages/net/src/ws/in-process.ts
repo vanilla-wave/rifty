@@ -15,7 +15,7 @@
  * scope (ADR-0017 §Decision).
  */
 
-import { EventEmitter } from '@rifty/io';
+import { EventEmitter } from '@riftydev/io';
 import { CloseEventCtor } from './close-event.ts';
 
 export type WsMessage = string | ArrayBufferView | ArrayBuffer;

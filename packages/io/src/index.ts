@@ -1,8 +1,8 @@
 /**
- * `@rifty/io` — shared primitives layer.
+ * `@riftydev/io` — shared primitives layer.
  *
  * Per ADR-0012, this package owns the Node-compatible primitives consumed by
- * `@rifty/runtime-js`, `@rifty/kernel`, and `@rifty/net`:
+ * `@riftydev/runtime-js`, `@riftydev/kernel`, and `@riftydev/net`:
  *   - `NotImplementedError` for loud, structured "not yet" stubs.
  *   - `EventEmitter` (full Node-compatible) + `once()` promise helper.
  *   - `Buffer` factory + per-instance method patching.

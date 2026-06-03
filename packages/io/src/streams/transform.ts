@@ -1,5 +1,5 @@
 /**
- * Node-compatible `node:stream.Transform` — owned by `@rifty/io` per ADR-0012.
+ * Node-compatible `node:stream.Transform` — owned by `@riftydev/io` per ADR-0012.
  *
  * Per ADR-0034, `Transform.prototype.write` / `Transform.prototype.end` live
  * on the prototype — there is NO per-instance method rebinding. The transform
@@ -16,7 +16,7 @@
  * The writable-side impls are wired via the Symbol-keyed
  * {@link INTERNAL_WRITABLE_SIDE} hook on `Duplex` so that no instance-method
  * rebinding is needed. The Symbol is intentionally not exported from
- * `src/index.ts` — subclasses outside `@rifty/io` cannot reach it.
+ * `src/index.ts` — subclasses outside `@riftydev/io` cannot reach it.
  */
 
 import { Duplex, type DuplexInternalOptions, INTERNAL_WRITABLE_SIDE } from './duplex.ts';

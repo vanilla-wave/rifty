@@ -3,7 +3,7 @@
  * `path_unlink_file`, `path_remove_directory`, `path_rename`, plus the link
  * family stubs (`path_link`, `path_readlink`). See {@link ./path-mutate.ts}.
  */
-import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@rifty/vfs/internal';
+import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setupPathCtx } from './path-test-fixture.ts';
 import {

@@ -1,5 +1,5 @@
-import { NotImplementedError } from '@rifty/io';
-import { dirname } from '@rifty/vfs';
+import { NotImplementedError } from '@riftydev/io';
+import { dirname } from '@riftydev/vfs';
 import { ModuleLoadError } from './errors.ts';
 import type { ModuleRegistry } from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';

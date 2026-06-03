@@ -3,7 +3,7 @@
  *
  * Reads `./registry/manifest.json` at module load, then serves packuments and
  * tarballs for the vendored entries through a `Fetcher` compatible with
- * `@rifty/npm-client`'s `RegistryClient`. URL contract:
+ * `@riftydev/npm-client`'s `RegistryClient`. URL contract:
  *
  *  - `packument:<name>`  → JSON `Packument` synthesised from the per-package
  *                          version manifest in `./registry/<name>.json`.
@@ -16,8 +16,8 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { compare as compareSemver } from '@rifty/npm-client';
-import type { Fetcher, Packument, VersionManifest } from '@rifty/npm-client';
+import { compare as compareSemver } from '@riftydev/npm-client';
+import type { Fetcher, Packument, VersionManifest } from '@riftydev/npm-client';
 
 interface ManifestEntry {
   name: string;

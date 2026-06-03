@@ -4,7 +4,7 @@
  * Both M10 dev modes (`devMode.ts` mock Vite and `realVite.ts` real Vite)
  * mount the same `setupPreviewBridge` handler that translates a
  * `SerializedRequest` from the SW into a `dispatchToPort` call against the
- * `@rifty/net` port registry, then returns the streaming `Response` as a
+ * `@riftydev/net` port registry, then returns the streaming `Response` as a
  * `SerializedResponse`. The two adapters had byte-identical copies of this
  * function before — the 2026-05-26 architecture review (sweeping theme 4
  * "Built for the future but not connected" + Приложение → playground →
@@ -13,14 +13,14 @@
  * Extracting here keeps the seam tiny: one function, two call sites. The
  * handler closure deliberately receives only what it needs — no Solid
  * imports, no port-binding state — so it remains a pure adapter between two
- * package boundaries (`@rifty/service-worker` ↔ `@rifty/net`).
+ * package boundaries (`@riftydev/service-worker` ↔ `@riftydev/net`).
  */
-import { dispatchToPort } from '@rifty/net';
+import { dispatchToPort } from '@riftydev/net';
 import {
   type SerializedRequest,
   type SerializedResponse,
   setupPreviewBridge,
-} from '@rifty/service-worker';
+} from '@riftydev/service-worker';
 
 /**
  * Mount the playground-side preview-bridge handler. Returns the teardown
@@ -30,7 +30,7 @@ import {
  * ADR-0017 phase 1 streaming: `response.body` flows through to the bridge
  * as a `ReadableStream` when the runtime supports transferable streams,
  * with a buffered fallback. The handler does not buffer here — the
- * `setupPreviewBridge` plumbing in `@rifty/service-worker` picks the
+ * `setupPreviewBridge` plumbing in `@riftydev/service-worker` picks the
  * carrier per-response via `packSerializedResponse`.
  */
 export function mountPlaygroundPreviewBridge(): () => void {

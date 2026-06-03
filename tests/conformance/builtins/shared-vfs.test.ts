@@ -8,8 +8,8 @@
  * with a 64 KiB highWaterMark emits ≥ 4 data events rather than one giant
  * buffer.
  */
-import { asyncVfs, syncMirror } from '@rifty/vfs';
-import { createMemoryFs, installMemoryFs, resetSyncMirror } from '@rifty/vfs/internal';
+import { asyncVfs, syncMirror } from '@riftydev/vfs';
+import { createMemoryFs, installMemoryFs, resetSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createReadStream } from '../../../packages/runtime-js/src/builtins/fs-streams.ts';
 

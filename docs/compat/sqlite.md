@@ -2,7 +2,7 @@
 
 The rifty `node:sqlite` `DatabaseSync` shim, backed by `sql.js` (pure-JS WASM
 SQLite, synchronous, in-memory for the first cut — ADR-0065). Registered as a
-builtin via `@rifty/net/sqlite/register-builtins` (opt-in, harness-local — not
+builtin via `@riftydev/net/sqlite/register-builtins` (opt-in, harness-local — not
 loaded into every realm). The engine must be brought up
 (`initSqliteEngine()` awaited) before the synchronous `DatabaseSync` constructor
 runs (ADR-0065 D1).

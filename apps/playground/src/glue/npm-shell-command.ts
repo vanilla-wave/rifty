@@ -4,7 +4,7 @@
  * Without this, typing `npm install <pkg>` at the terminal hits the shell's
  * "command not found" path and returns exit 127. Closes the M9 prompt-install
  * UX gap (follow-ups item #15, 2026-05-27). The install itself runs through
- * `@rifty/npm-client.install` exactly the way `realVite.ts` does — same
+ * `@riftydev/npm-client.install` exactly the way `realVite.ts` does — same
  * registry, same VFS bridge, same proxy fetcher.
  *
  * What this supports today (M9-scope):
@@ -34,12 +34,12 @@ import {
   type InstallResult,
   type RegistryClient,
   install as realInstall,
-} from '@rifty/npm-client';
-import type { CommandContext, ShellCommand } from '@rifty/shell';
-import type { Vfs } from '@rifty/vfs';
+} from '@riftydev/npm-client';
+import type { CommandContext, ShellCommand } from '@riftydev/shell';
+import type { Vfs } from '@riftydev/vfs';
 
 /**
- * Signature of `@rifty/npm-client.install`. Inlined here so tests can pass
+ * Signature of `@riftydev/npm-client.install`. Inlined here so tests can pass
  * a stub without reaching across into `_test-fixtures` of another package
  * (would violate the "no internal imports" rule from CLAUDE.md).
  */
@@ -56,7 +56,7 @@ export interface NpmShellCommandDeps {
   /** Registry client; the playground typically passes one wired through
    *  `proxiedRegistryFetch()` so traffic stays on the proxy origin. */
   readonly registry: RegistryClient;
-  /** Injection seam for unit tests; defaults to `@rifty/npm-client.install`. */
+  /** Injection seam for unit tests; defaults to `@riftydev/npm-client.install`. */
   readonly install?: InstallFn;
 }
 

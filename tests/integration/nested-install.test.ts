@@ -29,8 +29,8 @@
  * `EVERSIONCONFLICT`), or lands at the wrong nested path. All three
  * surface as concrete failed expects below.
  */
-import { RegistryClient, install } from '@rifty/npm-client';
-import { MemoryVfs } from '@rifty/vfs';
+import { RegistryClient, install } from '@riftydev/npm-client';
+import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import { LOCAL_REGISTRY_BASE_URL, makeLocalFetcher } from './fixtures/local-registry.ts';
 

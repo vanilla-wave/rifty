@@ -97,7 +97,7 @@ Adopt option **A**.
   failure surfaces asynchronously to the parent.
 - **Worker-side process surface.** The kernel itself stays
   Node-API-agnostic (ADR-0039). Wiring `process.send` /
-  `process.on('message', …)` lives in `@rifty/runtime-js`'s
+  `process.on('message', …)` lives in `@riftydev/runtime-js`'s
   `install-process.ts` — the existing pre-entry hook reads the
   kernel's `KernelProcessSpec` (which now carries `ipc: MessagePort`
   via the renamed `stdio` field — see "Type contract" below) and
@@ -115,7 +115,7 @@ Adopt option **A**.
   and `disconnect`, new emitted events `'message'` and
   `'disconnect'`. Additive — no caller in this repo branches on
   "does the worker handle have `send`?".
-- `ChildProcess` in `@rifty/runtime-js` routes `send` to
+- `ChildProcess` in `@riftydev/runtime-js` routes `send` to
   `handle.send` for the SAB path; the same-realm path keeps using
   `inboundIpc.emit('childMessage', …)`. Symmetric for receive:
   `handle.on('message', …)` re-emits on `ChildProcess`. `ChildProcess`
@@ -125,7 +125,7 @@ Adopt option **A**.
 - `WorkerStdioPorts` carries one more port. Existing callers that
   pattern-match `{ stdout, stderr, stdin }` see a wider object —
   TypeScript strict catches mismatches at compile time.
-- `@rifty/runtime-js`'s `install-process.ts` becomes responsible for
+- `@riftydev/runtime-js`'s `install-process.ts` becomes responsible for
   the worker-side `process` IPC surface (`send`, `on('message', …)`,
   `disconnect`). The kernel exposes the raw port via
   `KernelProcessSpec.stdio.ipc`; the installer wraps it. Layering
@@ -150,7 +150,7 @@ Adopt option **A**.
 - [ ] `WorkerHandle.kill` and the spawn-result's exit callback both
       tear down IPC idempotently — a single `'disconnect'` event
       regardless of exit path.
-- [ ] `@rifty/runtime-js`'s `installNodeProcessShim` installs
+- [ ] `@riftydev/runtime-js`'s `installNodeProcessShim` installs
       `process.send`, `process.on('message', …)`, `process.disconnect`,
       and emits `process.emit('disconnect')` on incoming
       `{ kind: 'ipc:disconnect' }`.
@@ -168,14 +168,14 @@ Adopt option **A**.
       - explicit `child.disconnect()` from the parent: `'disconnect'`
         fires on the worker side; subsequent `child.send(...)` returns
         `false`.
-- [ ] CHANGELOGs updated for `@rifty/kernel` and `@rifty/runtime-js`
+- [ ] CHANGELOGs updated for `@riftydev/kernel` and `@riftydev/runtime-js`
       with a one-line reference to ADR-0045 and M6 fork-IPC.
 
 ## References
 
 - ADR-0011 — sync IPC via SharedArrayBuffer + Atomics; this ADR
   extends phase 2 with fork-IPC.
-- ADR-0039 — Node-API knowledge lives in `@rifty/runtime-js`. The
+- ADR-0039 — Node-API knowledge lives in `@riftydev/runtime-js`. The
   kernel exposes the raw IPC port; the installer wraps it.
 - ADR-0040 — SW frame versioning. Explicitly not applied here —
   the worker boundary is in-bundle, not cross-bundle.

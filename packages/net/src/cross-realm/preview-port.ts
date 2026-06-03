@@ -25,7 +25,7 @@
  *
  * Versioning (ADR-0048, applying ADR-0040's split one layer down): the
  * page↔worker hop has its OWN version pin, {@link PREVIEW_PORT_FRAME_VERSION},
- * NOT `SW_FRAME_VERSION`. `SW_FRAME_VERSION` (owned by `@rifty/service-worker`)
+ * NOT `SW_FRAME_VERSION`. `SW_FRAME_VERSION` (owned by `@riftydev/service-worker`)
  * pins the SW↔page `SerializedResponse` hop; importing it here would be a
  * sibling/reverse import (CLAUDE.md hard rule) and would wrongly invalidate
  * every SW↔page peer for a change to a different hop.

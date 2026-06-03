@@ -1,5 +1,5 @@
 /**
- * Owner table for the globals `@rifty/runtime-js` installs inside a Worker
+ * Owner table for the globals `@riftydev/runtime-js` installs inside a Worker
  * realm.
  *
  * Background — closes the "Ungoverned globals" Tier 2 #10 finding from the
@@ -26,7 +26,7 @@
  * its own sub-property; the helpers in this file are the only sanctioned
  * publish / read API. Callers never index `globalThis.__rifty` directly.
  *
- * Documented keys — every key here is owned by `@rifty/runtime-js`. The
+ * Documented keys — every key here is owned by `@riftydev/runtime-js`. The
  * comment next to each one names the call site that publishes the value
  * and the call site that reads it. If you add a key, register it in
  * {@link RUNTIME_JS_GLOBAL_KEYS}, extend
@@ -58,7 +58,7 @@
  *                          to it.
  *
  * Multi-realm note (M11 A-026) — when Vite migrates to its own Worker
- * realm, that realm imports its own copy of `@rifty/runtime-js`, and so
+ * realm, that realm imports its own copy of `@riftydev/runtime-js`, and so
  * gets its own copy of the owner table on its own `globalThis.__rifty`.
  * No realm reads another realm's table; the publish helpers are realm-
  * scoped by construction. The kernel-owned `__riftyKernelSyncCall` /

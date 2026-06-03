@@ -137,7 +137,7 @@ Incidental shims: `Heap.start()` (v8/process memory), `process.env`/`argv`,
 
 **4. Снять потолок инструментов (модель WebContainers, без сервера — подмена tool-слоя):**
 - перехватить tool-слой opencode (bash/shell, git, grep, file-edit, spawn);
-- субституты: `@rifty/shell` + WASI-coreutils; isomorphic-git (или wasm-git); поиск по VFS (JS/ripgrep-WASM); файловые операции по VFS;
+- субституты: `@riftydev/shell` + WASI-coreutils; isomorphic-git (или wasm-git); поиск по VFS (JS/ripgrep-WASM); файловые операции по VFS;
 - нативный спавн не делаем.
 
 **5. Проверка:**

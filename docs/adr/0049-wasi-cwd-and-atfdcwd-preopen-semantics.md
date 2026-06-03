@@ -11,7 +11,7 @@ restored esbuild (`@esbuild/wasi-preview1`) as that consumer. Running it forced
 the decision: esbuild's Go/WASIp1 runtime, even for a stdin transform,
 canonicalises a working directory at startup and resolves paths against it.
 
-`@rifty/runtime-wasi` previously:
+`@riftydev/runtime-wasi` previously:
 
 - allocated preopen fds by `Object.keys(preopens)` iteration order, with no
   explicit `cwd` — "first preopen wins fd 3" was an implicit, undocumented

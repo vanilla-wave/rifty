@@ -1,5 +1,5 @@
 /**
- * Node-compatible `node:events` — EventEmitter, owned by `@rifty/io`.
+ * Node-compatible `node:events` — EventEmitter, owned by `@riftydev/io`.
  *
  * Behaviours we replicate (from the Node docs):
  *   - `emit('error', ...)` with no listener throws.
@@ -8,8 +8,8 @@
  *   - `getMaxListeners` / `setMaxListeners` track a per-emitter cap; if exceeded
  *     we log a warning once (Node prints to stderr).
  *
- * Per ADR-0012, this primitive lives in `@rifty/io` and is consumed by
- * `@rifty/runtime-js`, `@rifty/kernel`, and `@rifty/net`.
+ * Per ADR-0012, this primitive lives in `@riftydev/io` and is consumed by
+ * `@riftydev/runtime-js`, `@riftydev/kernel`, and `@riftydev/net`.
  */
 type Listener = (...args: unknown[]) => void;
 

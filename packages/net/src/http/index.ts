@@ -1,5 +1,5 @@
 /**
- * Barrel for the streaming `@rifty/net` HTTP layer (ADR-0017 phase 1).
+ * Barrel for the streaming `@riftydev/net` HTTP layer (ADR-0017 phase 1).
  */
 
 export { IncomingMessage, IncomingMessageFromFetch } from './request.ts';

@@ -1,4 +1,4 @@
-import https from '@rifty/net/https';
+import https from '@riftydev/net/https';
 import { describe, expect, it } from 'vitest';
 
 describe('node:https loud-throw stub', () => {

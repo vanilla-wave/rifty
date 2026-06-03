@@ -5,11 +5,11 @@
  * substitutions on top of that — popular native packages get redirected to
  * known WASM/JS alternatives so they don't fail with `.node` loading errors.
  *
- * Per ADR 0015, the baked-in table lives in `@rifty/shadow-registry`; this
+ * Per ADR 0015, the baked-in table lives in `@riftydev/shadow-registry`; this
  * file is the thin consumer-side adapter that owns the lookup function and
  * target-string parsing.
  */
-import { bakedOverrides } from '@rifty/shadow-registry';
+import { bakedOverrides } from '@riftydev/shadow-registry';
 
 export interface OverrideMap {
   /** Map from package name (or `parent>child`) to replacement target. */

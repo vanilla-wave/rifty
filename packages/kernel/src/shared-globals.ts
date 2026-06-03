@@ -13,7 +13,7 @@
  *      kernel-owned identity (pid/ppid/argv/env/cwd/stdio) the higher
  *      runtime layer needs to build its own `process` object. The kernel
  *      itself never installs a Node-shaped `globalThis.process`; that
- *      Node-API knowledge lives in `@rifty/runtime-js`.
+ *      Node-API knowledge lives in `@riftydev/runtime-js`.
  *
  * All values still live on `globalThis` under string keys (cross-bundle
  * sharing, no module identity to rely on across the Worker boundary), but
@@ -54,7 +54,7 @@ export interface KernelProcessStdioPorts {
  * Typed snapshot of the kernel-owned identity for a spawned process
  * (ADR-0039). The kernel publishes one of these on each Worker boot; the
  * higher runtime layer reads it and constructs its own `process` object
- * (Node-shaped in `@rifty/runtime-js`, WASI-shaped in `@rifty/runtime-wasi`).
+ * (Node-shaped in `@riftydev/runtime-js`, WASI-shaped in `@riftydev/runtime-wasi`).
  *
  * Field semantics mirror {@link WorkerSpawnSpec}: `argv` / `env` / `cwd` are
  * the kernel's snapshot at spawn time (ADR-0019 — `cwd` is owned by the
@@ -144,8 +144,8 @@ export function publishKernelProcessSpec(spec: KernelProcessSpec): void {
  * e.g. on the main realm, in a worker that was created outside
  * `kernel.spawnWorker`, or before the `'init'` message has arrived.
  *
- * Consumers: `@rifty/runtime-js`'s `installNodeProcessShim` (Node-shape
- * `process` global) and `@rifty/runtime-wasi`'s worker entry (minimal
+ * Consumers: `@riftydev/runtime-js`'s `installNodeProcessShim` (Node-shape
+ * `process` global) and `@riftydev/runtime-wasi`'s worker entry (minimal
  * WASI-shaped `process` proxy).
  */
 export function readKernelProcessSpec(): KernelProcessSpec | null {

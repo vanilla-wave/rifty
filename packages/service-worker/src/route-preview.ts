@@ -19,7 +19,7 @@
  * single seam both bindings flow through.
  */
 
-import { synthesizePreviewUrl } from '@rifty/io';
+import { synthesizePreviewUrl } from '@riftydev/io';
 import type { PreviewOwnerBinding, ReadinessSignal } from './preview-owner-binding.ts';
 import {
   SW_ERROR_PROTOCOL_VERSION_MISMATCH,
@@ -81,7 +81,7 @@ export async function routePreview(
       : new Uint8Array(await request.arrayBuffer());
   const requestId = readiness.nextRequestId();
   // URL synthesis goes through `synthesizePreviewUrl` from
-  // `@rifty/io/preview-protocol` (ADR-0036). The shape of that contract is
+  // `@riftydev/io/preview-protocol` (ADR-0036). The shape of that contract is
   // pinned by `SW_ROUTING_VERSION` (ADR-0040) — bumping it requires changing
   // the addressing scheme on both peers in lockstep.
   const serialised: SerializedRequest = {

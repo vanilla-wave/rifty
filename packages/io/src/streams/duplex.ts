@@ -1,5 +1,5 @@
 /**
- * Node-compatible `node:stream.Duplex` — owned by `@rifty/io` per ADR-0012.
+ * Node-compatible `node:stream.Duplex` — owned by `@riftydev/io` per ADR-0012.
  *
  * Per ADR-0034, `Duplex` extends `Readable` and embeds a dedicated `Writable`
  * for the writable side. All public methods (`write`, `end`, `read`, `pipe`,
@@ -8,10 +8,10 @@
  * is therefore safe, and `Object.getPrototypeOf(duplex).write === Duplex.prototype.write`
  * matches Node.
  *
- * Subclasses inside `@rifty/io` (e.g. `Transform`) that need to customise the
+ * Subclasses inside `@riftydev/io` (e.g. `Transform`) that need to customise the
  * writable-side impls supply a factory through the {@link INTERNAL_WRITABLE_SIDE}
  * symbol — a Symbol that lives in this module file and is not exported via
- * `src/index.ts`. Subclasses written outside `@rifty/io` cannot reach it, so
+ * `src/index.ts`. Subclasses written outside `@riftydev/io` cannot reach it, so
  * the type wall between "public option bag" and "internal subclass hook" is
  * a real one — not a `_underscore-prefixed` field that any cast can pass
  * through.
@@ -22,16 +22,16 @@ import { Writable, type WritableOptions, type WritableState } from './writable.t
 
 /**
  * Internal subclass hook key. Symbol-keyed so it cannot appear in the public
- * `ReadableOptions & WritableOptions` shape — subclasses outside `@rifty/io`
+ * `ReadableOptions & WritableOptions` shape — subclasses outside `@riftydev/io`
  * have no way to construct this Symbol and therefore cannot inject a custom
- * writable side. {@link Transform} (inside `@rifty/io`) imports this symbol
+ * writable side. {@link Transform} (inside `@riftydev/io`) imports this symbol
  * directly.
  */
 export const INTERNAL_WRITABLE_SIDE: unique symbol = Symbol('rifty/io:duplex-internal-writable');
 
 /**
  * Type-only carrier for the symbol-keyed factory hook. Re-exported only inside
- * `@rifty/io`; not part of `src/index.ts`.
+ * `@riftydev/io`; not part of `src/index.ts`.
  */
 export interface DuplexInternalOptions {
   [INTERNAL_WRITABLE_SIDE]?: (opts: ReadableOptions & WritableOptions) => Writable;
@@ -48,7 +48,7 @@ export class Duplex extends Readable {
     super(opts);
     // The symbol-keyed factory is the only way to override the writable side.
     // Public callers can't reach the Symbol (it's not exported via index.ts);
-    // `Transform` (inside @rifty/io) injects it through `super({...})` — see
+    // `Transform` (inside @riftydev/io) injects it through `super({...})` — see
     // `transform.ts`.
     const factory = (opts as DuplexInternalOptions)[INTERNAL_WRITABLE_SIDE];
     this.writableSide = factory ? factory(opts) : new Writable(opts);

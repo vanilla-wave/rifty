@@ -4,7 +4,7 @@
  * almost never call into them on the dev path. Every access throws so we
  * notice the day one actually does.
  */
-import { NotImplementedError } from '@rifty/io';
+import { NotImplementedError } from '@riftydev/io';
 
 function loudProxy(name: string): Record<string, unknown> {
   return new Proxy(

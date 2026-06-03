@@ -1,7 +1,7 @@
 /**
  * Shape of a parity case. Each `*.case.ts` under `cases/` default-exports one
  * of these. The runner executes `code` in real Node (via child_process) and in
- * the rifty runtime (in-process, through `@rifty/runtime-js/loader`), then
+ * the rifty runtime (in-process, through `@riftydev/runtime-js/loader`), then
  * compares stdouts. Any divergence is a bug.
  */
 export interface ParityCase {
@@ -15,9 +15,9 @@ export interface ParityCase {
    * Module kind. Defaults to 'cjs'.
    *
    * - `'cjs'` / `'esm'` — module-shape parity (`node:path`, `node:buffer`, …).
-   *   The rifty side runs through `@rifty/runtime-js/loader` only.
-   * - `'http'` — opt-in `@rifty/net` registration mode. The rifty side ALSO
-   *   imports `@rifty/net/register-builtins` so `require('node:http')` resolves,
+   *   The rifty side runs through `@riftydev/runtime-js/loader` only.
+   * - `'http'` — opt-in `@riftydev/net` registration mode. The rifty side ALSO
+   *   imports `@riftydev/net/register-builtins` so `require('node:http')` resolves,
    *   and both runtimes expose a normalised request-driver global,
    *   `__riftyHttpRequest(port, path, init?) => Promise<{ status, statusText,
    *   contentType, body }>`. On the Node side the driver is a real
@@ -25,10 +25,10 @@ export interface ParityCase {
    *   `dispatchToPort(port, new Request('http://preview.local:<port><path>'))`.
    *   This is the ONLY way to exercise rifty's `node:http` *server* surface
    *   head-to-head against Node — the default modes never register `node:http`
-   *   (it lives in `@rifty/net`, which the runner does not import by default).
+   *   (it lives in `@riftydev/net`, which the runner does not import by default).
    *   The runner is a `tools/` harness already permitted to import higher
-   *   layers (precedent: the WASI cases reach into `@rifty/runtime-wasi` +
-   *   `@rifty/shadow-registry`).
+   *   layers (precedent: the WASI cases reach into `@riftydev/runtime-wasi` +
+   *   `@riftydev/shadow-registry`).
    * - `'ts-esm'` — TypeScript-on-import ESM mode. Both `code` and any `.ts`
    *   `setup.files` are written verbatim and the entry is `main.ts`. The Node
    *   side runs `main.ts` through a FULL TS transform (the vendored `tsx`), NOT
@@ -41,10 +41,10 @@ export interface ParityCase {
    *   binary (`transformWithEsbuild` over `runWasi`, ADR-0052/0049) to strip
    *   types / lower JSX before the AST ESM rewrite — the same edge the headless
    *   opencode harness will use. Like `'http'`, this is a `tools/`-harness-only
-   *   reach into `@rifty/runtime-wasi` + `@rifty/shadow-registry`.
+   *   reach into `@riftydev/runtime-wasi` + `@riftydev/shadow-registry`.
    * - `'sqlite'` — opt-in `node:sqlite` registration mode (ADR-0065). Like
-   *   `'http'` for `@rifty/net`'s `node:http`, the rifty side imports
-   *   `@rifty/net/sqlite/register-builtins` so `require('node:sqlite')` resolves
+   *   `'http'` for `@riftydev/net`'s `node:http`, the rifty side imports
+   *   `@riftydev/net/sqlite/register-builtins` so `require('node:sqlite')` resolves
    *   to the sql.js-backed `DatabaseSync` shim, and it AWAITS
    *   `initSqliteEngine()` first so the synchronous `DatabaseSync` constructor
    *   has its WASM handle ready (the one async step the synchronous surface

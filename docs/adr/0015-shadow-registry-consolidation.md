@@ -31,13 +31,13 @@ Consolidate all shim/override sources under `tools/shadow-registry/`.
 
 ## Acceptance criteria for the deferred implementation
 
-- [x] All shims live under `tools/shadow-registry/`; `apps/playground/src/adapters/esbuild-shim.ts` is now a one-line re-export from `@rifty/shadow-registry`.
-- [x] `BUILT_IN_OVERRIDES` no longer defined in `packages/npm-client/src/overrides.ts`; that file is a thin adapter reading `bakedOverrides` from `@rifty/shadow-registry`.
+- [x] All shims live under `tools/shadow-registry/`; `apps/playground/src/adapters/esbuild-shim.ts` is now a one-line re-export from `@riftydev/shadow-registry`.
+- [x] `BUILT_IN_OVERRIDES` no longer defined in `packages/npm-client/src/overrides.ts`; that file is a thin adapter reading `bakedOverrides` from `@riftydev/shadow-registry`.
 - [x] `tools/shadow-registry/src/index.ts` enumerates registered substitutions (`bakedOverrides`, `esbuildShimFiles`, `rollupShimFiles`); `npm-client` and the playground adapter import from it.
 - [ ] Documentation in `docs/compat/` references the registry's location for new contributors. *(Deferred — `docs/compat/` is auto-generated from test results; the README at `tools/shadow-registry/README.md` plus this ADR fill the discovery gap. Revisit when compat-matrix regen happens in M11 DoD cycle.)*
 
 ## Implementation notes (2026-05-24)
 
 - The originally sketched nested layout (`overrides/`, `shims/esbuild/`, `shims/rollup-native/` as separate directories) collapsed to a single `src/index.ts` with three named exports. The brief is small enough (≈190 lines incl. template strings) that the directory tax wasn't worth paying; splitting can be revisited if a third shim site appears (see ADR 0027 for the consumer-side cousin).
-- `OverrideMap` is declared locally in shadow-registry and structurally identical to the type re-exported from `@rifty/npm-client`. A type-only import would have created a madge-visible cycle (npm-client depends on shadow-registry for the data table); the two declarations are compatible by structural typing, asserted indirectly by `installer.ts` consuming both shapes through `resolveOverride`.
+- `OverrideMap` is declared locally in shadow-registry and structurally identical to the type re-exported from `@riftydev/npm-client`. A type-only import would have created a madge-visible cycle (npm-client depends on shadow-registry for the data table); the two declarations are compatible by structural typing, asserted indirectly by `installer.ts` consuming both shapes through `resolveOverride`.
 - `unenv` integration remains explicitly deferred per the original Decision; the trigger condition (three or more of `crypto`/`tty`/`perf_hooks` needing non-trivial implementations) has not been hit.

@@ -5,7 +5,7 @@
  * route-preview pipeline.
  *
  * Today (M10) the owner is a window `Client` (the playground main thread that
- * boots `@rifty/net` and serves the in-process port registry). Tomorrow
+ * boots `@riftydev/net` and serves the in-process port registry). Tomorrow
  * (M11, A-026 — Vite-in-Worker; A-023 — SW → Worker process registry) the
  * owner becomes the kernel-spawned Worker that registered the port. The
  * route-preview path stays the same: it asks the resolver, gates on the
@@ -19,7 +19,7 @@
  * Cited ADRs and action items:
  * - **ADR-0011** — Sync IPC via SAB; defines the kernel-spawned-Worker model
  *   that A-023 reuses for the SW→Worker registry.
- * - **ADR-0017** — `@rifty/net` cross-realm port-registry bridge.
+ * - **ADR-0017** — `@riftydev/net` cross-realm port-registry bridge.
  * - **ADR-0025** — Toolchain dev servers run on the main thread today;
  *   superseded for the Real Vite path by A-026.
  * - **A-023** (REVIEW_ACTIONS.md) — SW → Worker rewires through the port
@@ -33,7 +33,7 @@
  * fetch.
  *
  * Today returns a window `Client` (the playground main thread). In M11, a
- * `WorkerOwnerResolver` consulting the cross-realm `@rifty/net` port
+ * `WorkerOwnerResolver` consulting the cross-realm `@riftydev/net` port
  * registry returns a `Worker`-type `Client` instead — the route-preview
  * pipeline stays identical because `Client.postMessage` is shape-compatible
  * across `type === 'window'` and `type === 'worker'`.

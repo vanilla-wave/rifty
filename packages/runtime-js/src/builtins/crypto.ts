@@ -1,4 +1,4 @@
-import { NotImplementedError } from '@rifty/io';
+import { NotImplementedError } from '@riftydev/io';
 /**
  * Node-compatible `node:crypto` (subset).
  *

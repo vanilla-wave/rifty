@@ -11,8 +11,8 @@
  * until OPFS-as-sync is shared across realms (M12+).
  */
 
-import { syncMirror } from '@rifty/vfs';
-import { resetSyncMirror } from '@rifty/vfs/internal';
+import { syncMirror } from '@riftydev/vfs';
+import { resetSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sendVfsWrite, serveVfsWrites } from './vfs-write-port.ts';
 

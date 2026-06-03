@@ -5,7 +5,7 @@ Date: 2026-05
 
 ## Context
 
-The Service Worker preview interceptor (`@rifty/service-worker`) routes
+The Service Worker preview interceptor (`@riftydev/service-worker`) routes
 `/preview/<port>/*` fetches to whatever realm owns the in-process
 handler for that port. Through M10 that realm is always the playground
 window: `FirstWindowOwnerResolver` picks the owning `Client` and a
@@ -177,7 +177,7 @@ returned `ReadinessSignal` and the binding into `routePreview`.
 `routePreview` is the single seam both bindings flow through: it asks
 `binding.resolveOwner`, gates on the signal, and forwards each fetch
 over a fresh `MessageChannel`. The `WorkerOwnerBinding` is selectable
-via `hooks.binding` and exported from `@rifty/service-worker`; the
+via `hooks.binding` and exported from `@riftydev/service-worker`; the
 `installPreviewInterceptor` default does **not** change because the
 page is still the SW's counterpart for the legacy preview surface
 (ADR-0043) — A-023 hosts swap in `WorkerOwnerBinding` per context.
@@ -201,7 +201,7 @@ directly.
 
 ## Consequences
 
-- New public surface of `@rifty/service-worker`: `PreviewOwnerBinding`,
+- New public surface of `@riftydev/service-worker`: `PreviewOwnerBinding`,
   `ReadinessSignal`, `ReadinessSubscription`, `ReadinessOutcome`,
   `FirstWindowOwnerBinding` (+`FirstWindowOwnerBindingOptions`),
   `WorkerOwnerBinding` (+`WorkerOwnerBindingOptions`,
@@ -228,7 +228,7 @@ directly.
   future ADR if a consumer needs it.
 - Out of scope (explicitly deferred, not addressed here): the
   buffered-vs-streaming `bridgeCrossRealmPreview` wire frame in
-  `@rifty/net` and any `SW_FRAME_VERSION` bump. Real Vite's
+  `@riftydev/net` and any `SW_FRAME_VERSION` bump. Real Vite's
   vendor-prebundle / source-map responses will eventually force a
   streaming split under its own ADR; the buffered shape is correct
   until a body too large to fit appears.
@@ -245,18 +245,18 @@ directly.
       lifecycle.
 - [x] `createPreviewInterceptor` resolves owners and gates readiness
       THROUGH the binding; `WorkerOwnerBinding` selectable via
-      `hooks.binding`; exported from `@rifty/service-worker`.
+      `hooks.binding`; exported from `@riftydev/service-worker`.
 - [x] No `SW_FRAME_VERSION` / `SW_ROUTING_VERSION` bump — `ports` is
       additive optional.
 - [x] Dual-strategy parity test plus worker-specific lifecycle cases.
-- [x] `@rifty/service-worker` CHANGELOG updated with an ADR-0046 entry.
+- [x] `@riftydev/service-worker` CHANGELOG updated with an ADR-0046 entry.
 
 ## References
 
 - ADR-0011 — sync IPC via SharedArrayBuffer + Atomics; Worker-as-process
   model. Provides the kernel-spawned-Worker realm with
   `Client.type === 'worker'` that A-023 routes to.
-- ADR-0017 — `@rifty/net` cross-realm port-registry bridge. The
+- ADR-0017 — `@riftydev/net` cross-realm port-registry bridge. The
   `ports: number[]` field mirrors a Worker's `serveCrossRealmPreview`
   registrations so the SW resolves port → Worker without a separate
   registry round-trip.

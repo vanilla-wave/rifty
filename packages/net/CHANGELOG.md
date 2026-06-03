@@ -55,8 +55,8 @@
   (ADR-0065, P2 boot prerequisite).** Added the conformance test
   `tests/conformance/builtins/sqlite-opencode-boot.test.ts`, which runs
   opencode's EXACT database-boot sequence through `require('node:sqlite')` inside
-  the real rifty module loader (resolving the builtin via the `@rifty/io`
-  registry that `@rifty/net/sqlite/register-builtins` populates): open `:memory:`
+  the real rifty module loader (resolving the builtin via the `@riftydev/io`
+  registry that `@riftydev/net/sqlite/register-builtins` populates): open `:memory:`
   with FK constraints, the post-open `PRAGMA journal_mode = WAL`,
   `Database.layer`'s six PRAGMAs via `prepare(pragma).all()`, then
   `DatabaseMigration.apply` — the `migration` journal `CREATE TABLE IF NOT
@@ -137,7 +137,7 @@
   tolerant `PRAGMA journal_mode = WAL`), `open()`, and `close()` (double-close
   throws Node-shaped `ERR_INVALID_STATE`). New
   `packages/net/src/sqlite/register-builtins.ts` is an opt-in side-effect module
-  that registers the `node:sqlite` builtin via `@rifty/io`'s `registerBuiltin`
+  that registers the `node:sqlite` builtin via `@riftydev/io`'s `registerBuiltin`
   (harness-local, mirroring `net/register-builtins.ts`; Q-2026-05-31-302
   Option A) — the heavy WASM engine stays out of default loads. `prepare()` and
   the rest of Node's `DatabaseSync` prototype (`location`/`function`/`aggregate`/
@@ -190,7 +190,7 @@
   now drains `response.body` and posts ordered `reply-stream-{start,chunk,end,error}`
   frames (≤64 KiB/chunk); `bridgeCrossRealmPreview` reassembles them. New net-local
   `PREVIEW_PORT_FRAME_VERSION` ('1'→'2') pins the page↔worker frame — deliberately
-  NOT `SW_FRAME_VERSION` (a different hop, owned by `@rifty/service-worker`; importing
+  NOT `SW_FRAME_VERSION` (a different hop, owned by `@riftydev/service-worker`; importing
   it would be a sibling/reverse import). Reply mode is chosen **per request** from the
   request's `v` (the worker outlives page reloads, so a per-channel pin would deliver
   stream frames to a freshly-connected old page — a silent wrong answer). The buffered
@@ -217,7 +217,7 @@
 - **M7 acceptance coverage:** `tests/e2e/m7-preview-sw.spec.ts` proves an
   HTTP request rounds through the Service Worker preview path end-to-end —
   the playground's main-thread `http.createServer().listen(3000)` (via
-  `@rifty/net`) is reached by a `fetch('/preview/3000/')` that crosses the
+  `@riftydev/net`) is reached by a `fetch('/preview/3000/')` that crosses the
   SW interceptor + cross-realm `MessageChannel` + `packSerializedResponse`
   carrier and returns the registered handler's bytes. Closes the gap
   flagged by the 2026-05-26 architecture audit: `tests/integration/express-style.test.ts`
@@ -229,11 +229,11 @@
 
 - `src/register-builtins.ts` drops the `as unknown as Record<string, unknown>`
   cast from each `registerBuiltin('net' | 'http' | 'https', () => ...)` call
-  (3 sites) now that `BuiltinFactory` in `@rifty/io` is generic. No behaviour
+  (3 sites) now that `BuiltinFactory` in `@riftydev/io` is generic. No behaviour
   change.
 
 - **ADR-0036:** the `/preview/<port>/...` URL scheme and `preview.local`
-  synthetic host are now documented in `@rifty/io/preview-protocol`
+  synthetic host are now documented in `@riftydev/io/preview-protocol`
   rather than as a hand-written prose comment in `src/registry.ts`. The
   doc comment cross-references the shared module so adapters that need
   to parse a preview URL or synthesise the upstream form know where the
@@ -244,10 +244,10 @@
 
 ### Fixed
 
-- **ADR-0035: reverse import on `@rifty/runtime-js` removed.**
+- **ADR-0035: reverse import on `@riftydev/runtime-js` removed.**
   `src/register-builtins.ts` now imports `registerBuiltin` from
-  `@rifty/io` instead of `@rifty/runtime-js`; `package.json` drops the
-  `@rifty/runtime-js` dependency. The `register-builtins.ts`
+  `@riftydev/io` instead of `@riftydev/runtime-js`; `package.json` drops the
+  `@riftydev/runtime-js` dependency. The `register-builtins.ts`
   side-effect pattern is unchanged — `net` still owns the
   `node:net`/`node:http`/`node:https` registrations — only the source
   of the registry function has moved. Closes the residual reverse-import
@@ -256,7 +256,7 @@
 ### Changed
 
 - **ADR-0034 (D-B):** `IncomingMessage` and `IncomingMessageFromFetch` now sit
-  on top of an `@rifty/io` `Readable` whose contract has been restored to
+  on top of an `@riftydev/io` `Readable` whose contract has been restored to
   Node-shape (`_readableState`, `read(n)`, proper destroy + EOF transitions).
   No source change in this package — the consumption pattern via
   `target.push(chunk)` and `target.push(null)` works the same — but
@@ -269,7 +269,7 @@
   `BroadcastChannel` name from a WS url is now part of the public WS
   surface (re-exported from `index.ts` / `ws.ts`). The playground HMR
   bridge injects a vanilla-JS client into the preview iframe that has to
-  reach the same channel without importing `@rifty/net`; this is the
+  reach the same channel without importing `@riftydev/net`; this is the
   seam that lets the inlined client agree with `BridgedWebSocketServer`
   on the channel without duplicating the prefix convention. Closes
   ADR-0017 phase 1 acceptance for the iframe HMR client.

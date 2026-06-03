@@ -20,7 +20,7 @@
  * stays self-contained for the unit project.
  */
 
-import type { ProcessHandle, SpawnWorkerSpec } from '@rifty/kernel';
+import type { ProcessHandle, SpawnWorkerSpec } from '@riftydev/kernel';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   __clearWasiWorkerUrlForTests,

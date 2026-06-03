@@ -5,9 +5,9 @@ Date: 2026-05
 
 ## Context
 
-`@rifty/vfs` already owns a single sync-side interface — `FsSync`
+`@riftydev/vfs` already owns a single sync-side interface — `FsSync`
 (`packages/vfs/src/fs-sync.ts`) — implemented by `MemoryFsSync` and
-`OpfsFsSync`. The module loader in `@rifty/runtime-js`, however, defines
+`OpfsFsSync`. The module loader in `@riftydev/runtime-js`, however, defines
 its **own** parallel sync interface `SyncVfs`
 (`packages/runtime-js/src/module-loader/vfs-sync.ts`) and a hand-rolled
 backend `MemorySyncVfs`
@@ -32,7 +32,7 @@ internal map but is invisible to `fs.readFileSync` (which goes through
 ## Decision
 
 Drop the parallel `SyncVfs` / `MemorySyncVfs` pair. The module loader
-(resolver + linker + executor) consumes `@rifty/vfs:FsSync` directly.
+(resolver + linker + executor) consumes `@riftydev/vfs:FsSync` directly.
 
 - `packages/runtime-js/src/module-loader/vfs-sync.ts` is **deleted**.
 - `packages/runtime-js/src/module-loader/memory-sync-vfs.ts` is
@@ -49,9 +49,9 @@ Drop the parallel `SyncVfs` / `MemorySyncVfs` pair. The module loader
   `load-fixture` writes flow into `MemoryBackend` through `loadFixture`
   on `MemoryFsSync` — the very same tree that `node:fs` and the WASI
   preopens consume.
-- Subpath exports change: `@rifty/runtime-js/loader` no longer exports
+- Subpath exports change: `@riftydev/runtime-js/loader` no longer exports
   `MemorySyncVfs` or `SyncVfs`. Callers (tests, parity runner,
-  playground adapter) construct a `MemoryFsSync` from `@rifty/vfs` (or
+  playground adapter) construct a `MemoryFsSync` from `@riftydev/vfs` (or
   pass any `FsSync`) and feed it to the loader.
 
 `createReadOnlyView` was considered as an explicit narrowing helper for
@@ -66,11 +66,11 @@ later, it can be added without breaking this ADR's surface.
 - ADR-0014's "shared backing tree" is now actually achieved inside the
   Worker realm: `load-fixture`, `fs.readFileSync`, WASI preopens, and
   module resolution all consult one `MemoryBackend`.
-- Public-API change for `@rifty/runtime-js`:
+- Public-API change for `@riftydev/runtime-js`:
   - `MemorySyncVfs` removed from `./loader` subpath.
   - `SyncVfs` type removed from `./loader` subpath.
   - `createModuleLoader` and `createResolver` now take `FsSync` from
-    `@rifty/vfs`. The argument shape narrows — callers passing a
+    `@riftydev/vfs`. The argument shape narrows — callers passing a
     custom adapter must implement `readFileBytesSync` instead of
     `readFileSync(): string` and add the missing methods
     (`writeFileSync`, `mkdirSync`, `rmSync`, `utimes`).
@@ -79,7 +79,7 @@ later, it can be added without breaking this ADR's surface.
   That helper is gone; we pass `syncMirror()` (an `FsSync`) directly.
 - One source of truth for the sync interface — future evolutions
   (`renameSync`, `copyFileSync`, etc.) land in `FsSync` only.
-- `MemoryFsSync.loadFixture` already exists in `@rifty/vfs`
+- `MemoryFsSync.loadFixture` already exists in `@riftydev/vfs`
   (`sync-mirror.ts:64`), so the worker-entry fixture path stays
   one-liner: `fs.loadFixture(msg.files)`.
 

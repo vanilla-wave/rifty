@@ -1,4 +1,4 @@
-# @rifty/io
+# @riftydev/io
 
 Streams, pipes, and stdio abstractions. Framework-agnostic.
 

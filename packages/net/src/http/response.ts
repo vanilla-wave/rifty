@@ -1,5 +1,5 @@
 /**
- * Streaming `ServerResponse` for `@rifty/net`.
+ * Streaming `ServerResponse` for `@riftydev/net`.
  *
  * Per ADR-0017 phase 1, the response body is a `ReadableStream<Uint8Array>`
  * that the SW bridge can transfer across realms. The class still satisfies
@@ -22,7 +22,7 @@
  * waits for `end()`.
  */
 
-import { Buffer, EventEmitter } from '@rifty/io';
+import { Buffer, EventEmitter } from '@riftydev/io';
 
 type Chunk = Uint8Array | string;
 

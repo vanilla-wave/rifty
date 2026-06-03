@@ -5,13 +5,13 @@ Date: 2026-05
 
 ## Context
 
-`tests/integration/chalk.test.ts` and `tests/integration/express-style.test.ts` use hand-rolled in-memory mocks for the package contents — neither test exercises the real install + unpack + link + load path that `@rifty/npm-client` is meant to validate. M9 acceptance ("npm install real packages works") is therefore not provable by the current integration tests.
+`tests/integration/chalk.test.ts` and `tests/integration/express-style.test.ts` use hand-rolled in-memory mocks for the package contents — neither test exercises the real install + unpack + link + load path that `@riftydev/npm-client` is meant to validate. M9 acceptance ("npm install real packages works") is therefore not provable by the current integration tests.
 
 REVIEW_ACTIONS entry A-027 calls this out. Hitting `registry.npmjs.org` directly from CI would be flaky; the existing mock approach trades flakiness for irrelevance.
 
 ## Decision
 
-Switch integration tests to drive `@rifty/npm-client.install()` against a vendored tarball registry.
+Switch integration tests to drive `@riftydev/npm-client.install()` against a vendored tarball registry.
 
 - Fixture layout: `tests/integration/fixtures/registry/<name>/<version>/<name>-<version>.tgz` plus a manifest JSON. A small fixture loader serves these as if they came from a registry.
 - `tests/integration/chalk.test.ts` calls `install({ name: 'chalk', version: '<pinned>' })` against the fixture registry, then asserts that `import chalk from 'chalk'` works through the runtime's module loader.

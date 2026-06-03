@@ -219,7 +219,7 @@
   Closes the P0 finding from the 2026-05-26 npm-client audit. No new
   external dependencies and no new files.
 - Built-in override table moved out of `src/overrides.ts` into the new
-  `@rifty/shadow-registry` workspace package (ADR 0015). Public API
+  `@riftydev/shadow-registry` workspace package (ADR 0015). Public API
   (`resolveOverride`, `OverrideMap`) is unchanged.
 - `RegistryClient` default `baseUrl` now resolves through `getRegistryBaseUrl()`;
   explicit `baseUrl` option still wins. Existing tests that pass a `baseUrl`
@@ -280,5 +280,5 @@
 
 ### Dependencies
 
-- Added workspace dependency on `@rifty/io` for `NotImplementedError`. No new
+- Added workspace dependency on `@riftydev/io` for `NotImplementedError`. No new
   external npm dependencies.

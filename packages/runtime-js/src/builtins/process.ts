@@ -13,7 +13,7 @@
  *     boot) will bypass the drain. Acceptable for M3; revisit if a real
  *     package breaks.
  */
-import { isAbsolute, joinPath, normalizePath } from '@rifty/vfs';
+import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 

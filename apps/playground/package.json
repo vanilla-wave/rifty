@@ -1,5 +1,5 @@
 {
-  "name": "@rifty/playground",
+  "name": "@riftydev/playground",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,15 +12,15 @@
     "test:run": "vitest run"
   },
   "dependencies": {
-    "@rifty/kernel": "workspace:*",
-    "@rifty/net": "workspace:*",
-    "@rifty/npm-client": "workspace:*",
-    "@rifty/runtime-js": "workspace:*",
-    "@rifty/service-worker": "workspace:*",
-    "@rifty/shadow-registry": "workspace:*",
-    "@rifty/shell": "workspace:*",
-    "@rifty/terminal": "workspace:*",
-    "@rifty/vfs": "workspace:*",
+    "@riftydev/kernel": "workspace:*",
+    "@riftydev/net": "workspace:*",
+    "@riftydev/npm-client": "workspace:*",
+    "@riftydev/runtime-js": "workspace:*",
+    "@riftydev/service-worker": "workspace:*",
+    "@riftydev/shadow-registry": "workspace:*",
+    "@riftydev/shell": "workspace:*",
+    "@riftydev/terminal": "workspace:*",
+    "@riftydev/vfs": "workspace:*",
     "@rifty-examples/vite-like-dev": "workspace:*",
     "monaco-editor": "^0.52.0",
     "solid-js": "^1.9.0"

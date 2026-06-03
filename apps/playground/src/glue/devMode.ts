@@ -2,7 +2,7 @@
  * M10 dev-mode adapter.
  *
  * Starts a Vite-equivalent dev server in the main-thread realm so the SW's
- * `/preview/<port>/*` interceptor can dispatch into our `@rifty/net.http`
+ * `/preview/<port>/*` interceptor can dispatch into our `@riftydev/net.http`
  * port registry without crossing Worker boundaries.
  *
  * Editor edits write a single file (configurable, default `/workspace/src/main.js`)
@@ -12,7 +12,7 @@
  */
 
 import { type DevServer, startDevServer } from '@rifty-examples/vite-like-dev';
-import { syncMirror } from '@rifty/vfs';
+import { syncMirror } from '@riftydev/vfs';
 import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
 
 const enc = new TextEncoder();

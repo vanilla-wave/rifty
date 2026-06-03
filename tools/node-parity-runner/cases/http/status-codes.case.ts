@@ -10,7 +10,7 @@ import type { ParityCase } from '../../src/types.ts';
  * against real Node, catching a partial/empty/wrong map. Specific spec-stable
  * codes (not the full count) so a future Node adding a code does not falsely
  * fail. Uses the runner's opt-in `kind: 'http'` net-registration mode so
- * `require('node:http')` resolves to rifty's `@rifty/net` builtin.
+ * `require('node:http')` resolves to rifty's `@riftydev/net` builtin.
  */
 const c: ParityCase = {
   kind: 'http',

@@ -1,13 +1,13 @@
 /**
  * Shared wire-format constants and message-shape types between the main thread
- * (`@rifty/service-worker` host) and the Service Worker script (`sw.ts`).
+ * (`@riftydev/service-worker` host) and the Service Worker script (`sw.ts`).
  *
  * ADR-0016 keeps the SW source in TypeScript and bundles it for the host.
  * ADR-0031 mandates per-frame version validation: every wire frame carries the
  * versions; the receiver refuses to honour a mismatched peer.
  * ADR-0040 splits versioning into two orthogonal contracts:
  *   - `SW_FRAME_VERSION` — wire-frame data shapes (this module).
- *   - `SW_ROUTING_VERSION` — addressing scheme (in `@rifty/io/preview-protocol`)
+ *   - `SW_ROUTING_VERSION` — addressing scheme (in `@riftydev/io/preview-protocol`)
  *     and owner-fallback rules (in `./owner-resolver.ts`).
  * Both must match for a peer to be accepted. A mismatch on either side
  * triggers the same `PROTOCOL_VERSION_MISMATCH` path with both `(expected,
@@ -30,7 +30,7 @@
  *
  * Does NOT cover the URL convention (`/preview/<port>/...`) or the
  * synthetic `preview.local` host — those are pinned by
- * {@link SW_ROUTING_VERSION} because they live in `@rifty/io/preview-protocol`.
+ * {@link SW_ROUTING_VERSION} because they live in `@riftydev/io/preview-protocol`.
  */
 export const SW_FRAME_VERSION = '1';
 
@@ -39,7 +39,7 @@ export const SW_FRAME_VERSION = '1';
  * {@link SW_FRAME_VERSION} on every wire frame; receivers validate both.
  *
  * Pins:
- *   - The URL convention exported from `@rifty/io/preview-protocol`:
+ *   - The URL convention exported from `@riftydev/io/preview-protocol`:
  *     `PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`, the shape of
  *     `synthesizePreviewUrl(path)`, and the shape of `parsePreviewPath`.
  *   - The owner-fallback rules in `./owner-resolver.ts`
@@ -151,7 +151,7 @@ export const SW_ERROR_PROTOCOL_VERSION_MISMATCH = 'PROTOCOL_VERSION_MISMATCH';
  * carries both versions; the receiver validates at decode time and refuses
  * to act on a mismatched peer. The `expected` and `got` pairs let the host
  * distinguish frame-skew (likely fresh SW + stale page) from routing-skew
- * (likely misconfigured `@rifty/io` import).
+ * (likely misconfigured `@riftydev/io` import).
  */
 export interface SwProtocolVersionMismatchError {
   kind: typeof SW_ERROR_PROTOCOL_VERSION_MISMATCH;

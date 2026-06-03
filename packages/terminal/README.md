@@ -1,4 +1,4 @@
-# @rifty/terminal
+# @riftydev/terminal
 
 Framework-agnostic xterm.js wrapper + PTY-style abstraction. No SolidJS or other UI deps.
 

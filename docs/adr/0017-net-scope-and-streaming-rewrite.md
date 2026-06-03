@@ -1,4 +1,4 @@
-# ADR 0017: `@rifty/net` scope statement and streaming rewrite deferral
+# ADR 0017: `@riftydev/net` scope statement and streaming rewrite deferral
 
 Status: Accepted
 Date: 2026-05
@@ -7,20 +7,20 @@ Date: 2026-05
 
 - `SerializedResponse` body becomes `ReadableStream<Uint8Array>`, marked Transferable across realms via the cross-realm bridge from ADR-0011.
 - Cross-realm WebSocket bridge is built on a dedicated `MessagePort` per connection rather than the current `BroadcastChannel` (which has no per-connection isolation and no backpressure).
-- **New for M12 (2026-05-27):** the cross-realm preview-port bridge introduced by **ADR-0043** (`@rifty/net.bridgeCrossRealmPreview` / `serveCrossRealmPreview`) shares the same `BroadcastChannel` carrier and inherits the same buffered, no-backpressure limit. The M12 rewrite swaps both bridges to dedicated `MessagePort`s in one pass; SSE / long-poll over a Real Vite preview hangs until then.
+- **New for M12 (2026-05-27):** the cross-realm preview-port bridge introduced by **ADR-0043** (`@riftydev/net.bridgeCrossRealmPreview` / `serveCrossRealmPreview`) shares the same `BroadcastChannel` carrier and inherits the same buffered, no-backpressure limit. The M12 rewrite swaps both bridges to dedicated `MessagePort`s in one pass; SSE / long-poll over a Real Vite preview hangs until then.
 - `net.Socket` gains a full TCP-shape surface (raw byte streaming, `_write`/`_read` honour `chunk` not HTTP frames). Where TCP semantics can't be faithfully emulated in a browser (e.g. `localAddress` selection), the TSDoc declares the limitation as final.
 
 M12 starts only after M11 ships ADR-0011's worker-as-process — the bridge is the load-bearing primitive.
 
 ## Context
 
-`@rifty/net` today provides `node:http` over a buffered `Response`-shape RPC, with the response body fully materialised before delivery. `node:net.Socket` is implemented in terms of the HTTP layer (it carries HTTP-shape frames, not raw bytes). `node:ws` works only when client and server are in the same realm. Three REVIEW_ACTIONS entries — A-022 (chunked transfer encoding), A-024 (raw TCP via `net.Socket`), A-025 (cross-realm WebSocket) — each describe one symptom of the same buffered-RPC constraint.
+`@riftydev/net` today provides `node:http` over a buffered `Response`-shape RPC, with the response body fully materialised before delivery. `node:net.Socket` is implemented in terms of the HTTP layer (it carries HTTP-shape frames, not raw bytes). `node:ws` works only when client and server are in the same realm. Three REVIEW_ACTIONS entries — A-022 (chunked transfer encoding), A-024 (raw TCP via `net.Socket`), A-025 (cross-realm WebSocket) — each describe one symptom of the same buffered-RPC constraint.
 
 The clean fix for all three is a streaming `SerializedResponse` contract where the response body is a `ReadableStream<Uint8Array>` Transferable across realms, plus the cross-realm bridge that ADR 0011 introduces. Ad-hoc per-method fixes would each require a cross-cutting refactor of the same surface.
 
 ## Decision
 
-Document `@rifty/net`'s current scope explicitly and defer the streaming rewrite to a single milestone that addresses all three gaps together.
+Document `@riftydev/net`'s current scope explicitly and defer the streaming rewrite to a single milestone that addresses all three gaps together.
 
 - Current scope (documented in `packages/net/README.md` and the public TSDoc):
   - `node:http` carries fully-buffered responses. Long-poll and SSE workloads will not stream.
@@ -56,7 +56,7 @@ The "iframe-loaded HMR client connects via the cross-realm bridge" acceptance cr
 
 - `apps/playground/src/adapters/hmr-bridge.ts` — new adapter. Exports:
   - `setupHmrBridge({port}): HmrBridgeHandle` — instantiates a page-realm `BridgedWebSocketServer` on `ws://preview.local:<port>/__hmr` and returns `{ url, broadcast, close }`.
-  - `hmrClientScript(port)` — vanilla-JS string injected into the preview iframe; mirrors the bridge wire protocol (`open` → `open-ack` → `msg` → `close`) over `BroadcastChannel` directly so the client doesn't need to import `@rifty/net`.
+  - `hmrClientScript(port)` — vanilla-JS string injected into the preview iframe; mirrors the bridge wire protocol (`open` → `open-ack` → `msg` → `close`) over `BroadcastChannel` directly so the client doesn't need to import `@riftydev/net`.
   - `createHmrBridgeVitePlugin({port})` — minimal Vite plugin with `transformIndexHtml` that idempotently injects the client script before `</body>`.
 - `apps/playground/src/adapters/realVite.ts` — calls `setupHmrBridge({port})` before `vite.createServer(...)` so the plugin sees a stable port. Hooks `server.watcher.on('change', file)` to broadcast `{type: 'update', path: file}` through the bridge. Vite's native HMR machinery remains off (`server.hmr: false`) — Vite still does module-graph invalidation; the bridge delivers the iframe notification.
 - `packages/net/src/ws/bridge.ts` — `channelNameFor(url)` is now part of the public API (re-exported through `index.ts` / `ws.ts`). Inlined clients need this so server and client agree on the `BroadcastChannel` name without depending on the package's full surface. Other shapes (`BridgedWebSocket`, `BridgedWebSocketServer`, `BridgedWebSocketConnection`, `createCrossRealmBridge`, `WsMessage`, `CrossRealmBridge`) were already public; only `channelNameFor` graduated.

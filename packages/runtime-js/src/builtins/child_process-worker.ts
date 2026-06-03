@@ -17,7 +17,7 @@
  * module no longer plumbs IPC buses.
  *
  * Stdio adaptation lives one layer down: `handle.stdout()` / `handle.stderr()`
- * on the kernel `WorkerProcessHandle` return the `@rifty/io` `Readable`s
+ * on the kernel `WorkerProcessHandle` return the `@riftydev/io` `Readable`s
  * already wired to the worker's stdio `MessagePort`s with EOF on exit
  * (ADR-0011 phase 2 follow-up, follow-ups doc item #3). This module no
  * longer hand-rolls `port.onmessage` / `port.start()` / push-null plumbing.
@@ -26,8 +26,8 @@
  * ADR-0011 phase 3. The current `execSync` stays on the in-realm path.
  */
 
-import { Buffer, type EventEmitter } from '@rifty/io';
-import { type ProcessHandle, type SpawnWorkerSpec, globalProcessManager } from '@rifty/kernel';
+import { Buffer, type EventEmitter } from '@riftydev/io';
+import { type ProcessHandle, type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
 import { syncMirror } from './fs-sync-mirror.ts';
 
 export interface SpawnWorkerArgs {

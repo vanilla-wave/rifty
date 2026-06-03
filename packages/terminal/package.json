@@ -1,5 +1,5 @@
 {
-  "name": "@rifty/terminal",
+  "name": "@riftydev/terminal",
   "version": "0.1.0",
   "description": "xterm.js terminal wrapper for rifty.",
   "type": "module",

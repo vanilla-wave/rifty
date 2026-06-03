@@ -4,8 +4,8 @@ import type { ParityCase } from '../../src/types.ts';
  * URL parsing as used by HTTP servers/clients to inspect `req.url`.
  *
  * We deliberately use `node:url` rather than `node:http` here: in the parity
- * runner the rifty side imports only `@rifty/runtime-js/loader`, which does NOT
- * register the `node:http` builtin (that lives in `@rifty/net`). A real
+ * runner the rifty side imports only `@riftydev/runtime-js/loader`, which does NOT
+ * register the `node:http` builtin (that lives in `@riftydev/net`). A real
  * `http.createServer` + `http.request` roundtrip would also diverge because
  * rifty's http runs over the port-registry rather than the OS socket layer.
  * Parsing URL shapes is the part of the http contract we can exercise inside

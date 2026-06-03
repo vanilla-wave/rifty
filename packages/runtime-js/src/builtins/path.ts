@@ -1,6 +1,6 @@
 /**
  * Node-compatible `node:path` (POSIX flavour). Built on the same primitives as
- * `@rifty/vfs/path`, plus the methods specific to the Node API.
+ * `@riftydev/vfs/path`, plus the methods specific to the Node API.
  */
 import {
   joinPath,
@@ -9,7 +9,7 @@ import {
   dirname as vfsDirname,
   extname as vfsExtname,
   isAbsolute as vfsIsAbsolute,
-} from '@rifty/vfs';
+} from '@riftydev/vfs';
 
 export interface ParsedPath {
   root: string;

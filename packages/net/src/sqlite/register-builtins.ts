@@ -1,6 +1,6 @@
 /**
  * Side-effect module: registers the `node:sqlite` builtin shape with the shared
- * `@rifty/io` builtin registry (ADR-0035 / ADR-0065 D3). Import this from a
+ * `@riftydev/io` builtin registry (ADR-0035 / ADR-0065 D3). Import this from a
  * higher layer (the opencode harness, or the parity runner's `kind: 'sqlite'`
  * mode) to enable `require('node:sqlite')` inside the runtime.
  *
@@ -17,7 +17,7 @@
  * Registration itself is synchronous and does not touch the engine.
  */
 // TODO(ADR): Q-2026-05-31-302 — exact node:sqlite builtin registration module path
-import { registerBuiltin } from '@rifty/io';
+import { registerBuiltin } from '@riftydev/io';
 import { DatabaseSync } from './database-sync.ts';
 
 registerBuiltin('sqlite', () => ({ DatabaseSync }));

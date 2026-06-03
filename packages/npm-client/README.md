@@ -1,4 +1,4 @@
-# @rifty/npm-client
+# @riftydev/npm-client
 
 In-browser npm installer.
 

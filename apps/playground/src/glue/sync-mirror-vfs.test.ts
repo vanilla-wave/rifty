@@ -6,7 +6,7 @@
  * Streaming through the sync mirror is blocked on ADR-0014 (split VFS); the
  * unimplemented call MUST surface as a structured error so callers can branch.
  */
-import { NotImplementedError } from '@rifty/vfs';
+import { NotImplementedError } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
 import { SyncMirrorVfs } from './sync-mirror-vfs.ts';
 

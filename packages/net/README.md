@@ -1,4 +1,4 @@
-# @rifty/net
+# @riftydev/net
 
 Browser-side replacements for `node:net` and `node:http`.
 

@@ -1,5 +1,5 @@
 {
-  "name": "@rifty/net",
+  "name": "@riftydev/net",
   "version": "0.1.0",
   "description": "Browser node:net/node:http/node:https/ws + node:sqlite (sql.js) for rifty.",
   "type": "module",
@@ -71,7 +71,7 @@
     "build": "tsup"
   },
   "dependencies": {
-    "@rifty/io": "workspace:*",
+    "@riftydev/io": "workspace:*",
     "sql.js": "^1.14.1"
   },
   "devDependencies": {

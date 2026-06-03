@@ -26,7 +26,7 @@ describe('extractTarGz — typeflag handling', () => {
     expect(caught).toBeInstanceOf(Error);
     const err = caught as Error & { feature?: string };
     expect(err.message).toContain('npm-client.tar.symlink');
-    // NotImplementedError from @rifty/io exposes `.feature`
+    // NotImplementedError from @riftydev/io exposes `.feature`
     expect(err.feature).toBe('npm-client.tar.symlink');
   });
 

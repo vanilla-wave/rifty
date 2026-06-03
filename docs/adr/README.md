@@ -15,13 +15,13 @@ ADRs are immutable after merge. New decisions get new ADRs; supersedence is expl
 | 0009 | AST-based ESM transform (supersedes ADR 0004 §"ESM loader") | — |
 | 0010 | `node:https` registered as a loud-throw stub | — |
 | 0011 | Sync IPC via SharedArrayBuffer + Atomics; Worker-as-process model | — |
-| 0012 | `@rifty/io` owns shared primitives; `@rifty/kernel` owns processes | — |
+| 0012 | `@riftydev/io` owns shared primitives; `@riftydev/kernel` owns processes | — |
 | 0013 | OPFS as the primary VFS in browser deploys | — |
 | 0014 | `getFsVfs()` and `syncMirror()` share one backing tree | — |
 | 0015 | Shadow-registry consolidation under `tools/shadow-registry/` | — |
-| 0016 | Service Worker source-of-truth lives in `@rifty/service-worker` | — |
-| 0017 | `@rifty/net` scope statement and streaming rewrite deferral | — |
-| 0018 | Expanded `@rifty/runtime-js` public surface via subpath exports | — |
+| 0016 | Service Worker source-of-truth lives in `@riftydev/service-worker` | — |
+| 0017 | `@riftydev/net` scope statement and streaming rewrite deferral | — |
+| 0018 | Expanded `@riftydev/runtime-js` public surface via subpath exports | — |
 | 0019 | `cwd` lives in `kernel.ProcessRecord` | — |
 | 0020 | `Vfs.openReadable()` for true `createReadStream` | — |
 | 0021 | Integration tests must use real `npm install` | — |
@@ -37,9 +37,9 @@ ADRs are immutable after merge. New decisions get new ADRs; supersedence is expl
 | 0031 | Every SW↔main wire frame carries `version`; receivers validate at decode (extends ADR-0016; split into frame+routing by ADR-0040) | — |
 | 0032 | SyncRpc protocol-version field in the SAB header | — |
 | 0033 | File budget removed; structure over size (supersedes ADR-0024) | — |
-| 0034 | `@rifty/io` streams — Node-contract restoration | — |
-| 0035 | Builtin registry in `@rifty/io` | — |
-| 0036 | Preview-protocol addressing in `@rifty/io` | — |
+| 0034 | `@riftydev/io` streams — Node-contract restoration | — |
+| 0035 | Builtin registry in `@riftydev/io` | — |
+| 0036 | Preview-protocol addressing in `@riftydev/io` | — |
 | 0037 | Unified sync VFS contract | — |
 | 0038 | `WasiProcessHandle` — kernel adapter for WASI guests | — |
 | 0039 | Lift Node-API knowledge from kernel to runtime-js | — |
@@ -66,7 +66,7 @@ ADRs are immutable after merge. New decisions get new ADRs; supersedence is expl
 | 0067 | text-asset imports (`.txt` / `.sql` / `.md` / `.prompt` → file contents) | — |
 | 0068 | `with { type: "file" }` file-loader import attribute (asset → path) | — |
 | 0069 | `Readable.setEncoding(encoding)` — emit decoded strings | — |
-| 0070 | npm publish — `tsup` build + dual (dev-src / publish-dist) `exports` via `publishConfig`; 11-package public set incl. `@rifty/shadow-registry`; tag-driven release | — |
+| 0070 | npm publish — `tsup` build + dual (dev-src / publish-dist) `exports` via `publishConfig`; 11-package public set incl. `@riftydev/shadow-registry`; tag-driven release | — |
 | 0071 | Umbrella `rifty` package — one-install front door: subpath re-exports + framework-free `createSandbox()` + `checkCapabilities()` (EPIC B; ratifies DD-1/DD-2) | — |
 | 0072 | OPFS sync content cache + async write-through + async Worker VFS boot — wires OPFS persistence into the runtime Worker (closes A-004; supersedes ADR-0013's sync-access-handle content hot path) | — |
 

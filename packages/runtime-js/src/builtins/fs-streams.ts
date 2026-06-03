@@ -9,7 +9,7 @@
  * preserve the existing event order (`open` → `data*` → `end` → `close`).
  */
 
-import { asyncVfs } from '@rifty/vfs';
+import { asyncVfs } from '@riftydev/vfs';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';

@@ -11,14 +11,14 @@
  *
  * Console is replaced for the duration of the case, then restored.
  */
-import { setProcessCwd } from '@rifty/runtime-js/builtins/process';
-import { createModuleLoader } from '@rifty/runtime-js/loader';
-import type { TransformSourceHook } from '@rifty/runtime-js/loader';
-import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@rifty/vfs/internal';
+import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
+import { createModuleLoader } from '@riftydev/runtime-js/loader';
+import type { TransformSourceHook } from '@riftydev/runtime-js/loader';
+import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { formatArgs } from '../../../packages/runtime-js/src/repl/inspect.ts';
-// The runner is a `tools/` harness, so reaching into `@rifty/runtime-wasi` and
+// The runner is a `tools/` harness, so reaching into `@riftydev/runtime-wasi` and
 // the shadow-registry esbuild binding is layer-legal (same precedent as the
-// `kind: 'http'` mode importing `@rifty/net`). We pull `runWasi` from the
+// `kind: 'http'` mode importing `@riftydev/net`). We pull `runWasi` from the
 // runtime-wasi index and `transformWithEsbuild` from the binding *source*
 // (the package index does not re-export the binding). Relative source paths
 // mirror the existing `formatArgs` import above and avoid adding workspace
@@ -56,14 +56,14 @@ declare global {
  *
  * Returns a teardown that removes the injected global and unregisters any ports
  * the case bound, so the process-wide port registry does not leak state across
- * cases. Importing `@rifty/net/register-builtins` is a side-effecting forward
+ * cases. Importing `@riftydev/net/register-builtins` is a side-effecting forward
  * import that plugs the `node:http` / `node:net` / `node:https` factories into
- * the shared `@rifty/io` builtin registry — this is what makes
+ * the shared `@riftydev/io` builtin registry — this is what makes
  * `require('node:http')` resolve on the rifty side.
  */
 async function installHttpMode(): Promise<() => void> {
-  await import('@rifty/net/register-builtins');
-  const { dispatchToPort, listPorts, unregisterPort } = await import('@rifty/net/registry');
+  await import('@riftydev/net/register-builtins');
+  const { dispatchToPort, listPorts, unregisterPort } = await import('@riftydev/net/registry');
   globalThis.__riftyHttpRequest = async (port, path, init) => {
     const resp = await dispatchToPort(
       port,
@@ -85,9 +85,9 @@ async function installHttpMode(): Promise<() => void> {
 /**
  * Install the opt-in `kind: 'sqlite'` `node:sqlite` registration mode (ADR-0065).
  *
- * Mirrors {@link installHttpMode} for `@rifty/net`'s `node:http`: the side-
- * effecting forward import of `@rifty/net/sqlite/register-builtins` plugs the
- * sql.js-backed `DatabaseSync` factory into the shared `@rifty/io` builtin
+ * Mirrors {@link installHttpMode} for `@riftydev/net`'s `node:http`: the side-
+ * effecting forward import of `@riftydev/net/sqlite/register-builtins` plugs the
+ * sql.js-backed `DatabaseSync` factory into the shared `@riftydev/io` builtin
  * registry so `require('node:sqlite')` resolves on the rifty side. It THEN
  * awaits `initSqliteEngine()` — the synchronous `DatabaseSync` constructor the
  * case `code` calls needs the WASM engine already brought up (the one async
@@ -96,8 +96,8 @@ async function installHttpMode(): Promise<() => void> {
  * bring-up is memoised, so leaving both in place is correct across cases.
  */
 async function installSqliteMode(): Promise<void> {
-  await import('@rifty/net/sqlite/register-builtins');
-  const { initSqliteEngine } = await import('@rifty/net/sqlite/engine');
+  await import('@riftydev/net/sqlite/register-builtins');
+  const { initSqliteEngine } = await import('@riftydev/net/sqlite/engine');
   await initSqliteEngine();
 }
 

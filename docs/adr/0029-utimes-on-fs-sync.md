@@ -11,7 +11,7 @@ through the active sync mirror. When Q-2026-05-25-touch-utimes was logged
 `if (syncMirror() instanceof MemoryFsSync) { fs.backend.resolve(path).mtime = …
 }`, throwing `NotImplementedError` for any other backend. That sniffing
 required `packages/shell/src/builtins.ts` to import `MemoryFsSync` from
-`@rifty/vfs/internal`, which violates the "public API only via `src/index.ts`"
+`@riftydev/vfs/internal`, which violates the "public API only via `src/index.ts`"
 hard rule (CLAUDE.md), and would also block OPFS becoming the default sync
 mirror because `touch` would loudly throw inside a Worker.
 
@@ -39,7 +39,7 @@ Add `utimes(path: string, atimeMs: number, mtimeMs: number): void` to the
   cases that exist today (`touch`, `fs.utimesSync`).
 
 Consumers stop backend-sniffing. `packages/shell/src/builtins.ts` drops the
-`@rifty/vfs/internal` import and calls `syncMirror().utimes(path, now, now)`
+`@riftydev/vfs/internal` import and calls `syncMirror().utimes(path, now, now)`
 directly. `packages/runtime-js/src/builtins/fs.ts` gains a thin
 `utimesSync(path, atime, mtime)` that converts Node's seconds-or-Date inputs
 to ms and forwards to the sync mirror.
@@ -51,7 +51,7 @@ to ms and forwards to the sync mirror.
   `utimes` (irreversible per Reversibility checklist point 1 — touches the
   public API between packages).
 - `packages/shell/src/builtins.ts` is back inside the layering rules
-  (no `@rifty/vfs/internal` imports outside runtime-js' fs-sync-mirror seam).
+  (no `@riftydev/vfs/internal` imports outside runtime-js' fs-sync-mirror seam).
 - `node:fs.utimesSync` and its `fs.promises.utimes` wrapper now exist in
   `runtime-js`, closing one of the small gaps in `node:fs` compat coverage.
 - Negative: `OpfsFsSync`'s atime/mtime are not durable across page reloads
@@ -79,7 +79,7 @@ to ms and forwards to the sync mirror.
 - [x] `runtime-js` `utimesSync` and `fs.promises.utimes` route through
       `syncMirror().utimes`.
 - [x] `packages/shell/src/builtins.ts` no longer imports from
-      `@rifty/vfs/internal`; `touch` calls `syncMirror().utimes` directly.
+      `@riftydev/vfs/internal`; `touch` calls `syncMirror().utimes` directly.
 - [x] Parity case `tools/node-parity-runner/cases/fs/utimes-basic.case.ts`
       passes (Node vs rifty agree on `statSync('x').mtimeMs` after
       `utimesSync('x', 1, 2)`).

@@ -53,7 +53,7 @@ loader has no injection point to reach it (`createModuleLoader` takes only
 **Recommendation.** Option A. Ratify the hook's request-object shape
 (`{source, id, loader: 'ts'|'tsx'|'jsx', workspace}` → `Promise<string>`).
 
-**Consequences.** Public surface of `@rifty/runtime-js` grows by two optional
+**Consequences.** Public surface of `@riftydev/runtime-js` grows by two optional
 fields; future HMR/per-file invalidation reuses it. `.ts`-via-`require()` throws a
 directed `NotImplementedError` (async esbuild can't run in the sync CJS path);
 opencode is `type:module` so this never arises on the happy path.
@@ -118,7 +118,7 @@ the throw-stub (Q-2026-05-30-102) suffice for P0/P2 with no public-API change. I
 the team chooses (A), the ADR must frame the opt-in `bun` as a deliberate
 deviation from ADR-0004.
 
-**Consequences.** If (A): permanent `@rifty/runtime-js` surface; if (C): no API
+**Consequences.** If (A): permanent `@riftydev/runtime-js` surface; if (C): no API
 change. The tier-A throw-stub registration (Q-2026-05-30-102) is REVERSIBLE
 either way — only the *delivery vehicle* (conditions field) is gated.
 
@@ -526,8 +526,8 @@ ripgrep-WASM vs isomorphic-git vs JS later against concrete requirements.
 
 ### Q-2026-05-30-109 — ServerResponse as a valid pipe target (feature 05)
 - **Encountered in:** packages/net/src/http/response.ts AND packages/io/src/streams/readable.ts
-- **Context:** Effect uses Readable.fromWeb(stream).pipe(res); ServerResponse is an EventEmitter, not a Writable pipe-sink. Making it a target requires widening @rifty/io PipeableWritable.write return type to boolean|Promise<boolean> — a SECOND package (io) change.
-- **Options:** (a) add the duck-sink + widen PipeableWritable in @rifty/io (touches packages/io — affectedPackages MUST include io; cite ADR-0034 which restores Node's boolean-only write contract, so this is a deliberate divergence); (b) DEFER pipe-sink entirely (the facade serves JSON/SSE not FormData; the Effect web-stream-response path is unsupported until Readable.fromWeb lands — which @rifty/io lacks, no owner).
+- **Context:** Effect uses Readable.fromWeb(stream).pipe(res); ServerResponse is an EventEmitter, not a Writable pipe-sink. Making it a target requires widening @riftydev/io PipeableWritable.write return type to boolean|Promise<boolean> — a SECOND package (io) change.
+- **Options:** (a) add the duck-sink + widen PipeableWritable in @riftydev/io (touches packages/io — affectedPackages MUST include io; cite ADR-0034 which restores Node's boolean-only write contract, so this is a deliberate divergence); (b) DEFER pipe-sink entirely (the facade serves JSON/SSE not FormData; the Effect web-stream-response path is unsupported until Readable.fromWeb lands — which @riftydev/io lacks, no owner).
 - **Decision taken (provisional):** PREFER (b) DEFER — register the gap in compat-matrix; pipe-sink + the io widening only if a real P4 route needs it. If (a) is taken, keep write() returning raw boolean (drain carries backpressure) to stay Node-faithful per ADR-0034.
 - **Code markers:** TODO(ADR): Q-2026-05-30-109
 - **Reversibility justification:** if deferred, zero change; if taken, ≤2 files (response.ts + io readable.ts), additive duck methods + a one-line return-type widen. Rule 4 borderline — re-classify to cross-package if the io widen lands. Rule 5 if deferred.
@@ -638,7 +638,7 @@ ripgrep-WASM vs isomorphic-git vs JS later against concrete requirements.
 
 Explicitly **NOT** new dependencies (verified): the vendor script's dev-only
 shell-out to git/curl (not bundled, feature 01); the parity-runner gaining
-`@rifty/runtime-wasi`+`shadow-registry` import edges + the `esbuild.wasm`
+`@riftydev/runtime-wasi`+`shadow-registry` import edges + the `esbuild.wasm`
 artifact (feature 02 T6) — *confirm `esbuild.wasm` is already vendored, not a new
 fetch, before declaring T6 dependency-free*; no `ws` shim for the
 event route (feature 07 explicitly rules it out); no `Agent` mapping (feature 08
