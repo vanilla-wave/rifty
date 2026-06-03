@@ -4,6 +4,20 @@
 
 ### Fixed
 
+- **OPFS persistence wired in the runtime Worker (ADR-0072).** `worker-entry.ts`
+  now `await initBackend()` before building the module loader, so the Worker
+  uses the OPFS backend (cross-origin-isolated realms) instead of always
+  installing an in-memory VFS — files written via `fs.writeFileSync` now survive
+  a page reload. The loader is built behind a `boot` promise (`await
+  initBackend()`, falling back to memory if OPFS init throws); `{ type: 'ready' }`
+  is posted only after it resolves. The `message` listener is attached
+  synchronously and each `eval`/`load-fixture` awaits `boot`, so an eval the host
+  posts before readiness (the REPL types without waiting for `[worker ready]`) is
+  received and handled once wired, never dropped. `load-fixture` routes through
+  the active `syncMirror()`;
+  `handleEval` awaits `syncMirror().flush?.()` before posting the result so OPFS
+  write-through is durable before the host resolves the eval (and before reload).
+  Closes the A-004 OPFS round-trip e2e acceptance (`tests/e2e/m0-boot.spec.ts`).
 - **`fs.statSync` honours `{ throwIfNoEntry: false }`** (Node v24 parity). A
   missing path now returns `undefined` instead of always throwing `ENOENT` when
   the option is `false`; overloaded so 1-arg callers keep the `Stats` return type.

@@ -27,6 +27,28 @@ When a question is reviewed:
 
 ## Active
 
+## Q-2026-06-03-307: eager vs lazy OPFS content preload in `OpfsFsSync.init`
+
+**Status:** 🟢 Active  
+**Encountered in:** ADR-0072 (OPFS sync content cache + async write-through), making the A-004 OPFS round-trip e2e pass  
+**Milestone:** M0 acceptance / M10 follow-up  
+**Author (agent session):** 2026-06-03
+
+### Context
+
+ADR-0072 added a synchronous content cache to `OpfsFsSync` so `fs.writeFileSync` / `fs.readFileSync` succeed on a brand-new path without an async sync-access-handle open. To make reads synchronous **after a page reload**, `init()` preloads every indexed file's bytes from the paired async OPFS surface into the cache (`preloadContent()`). This is O(total persisted bytes) memory and O(files) async reads at boot.
+
+### Options considered
+
+- **Option A — eager full preload (shipped in ADR-0072).** Read all file bytes at `init()`. Pro: every post-reload `readFileSync` is synchronous with zero extra plumbing; trivially correct. Con: O(total bytes) memory + O(files) reads at boot; could be slow/heavy for a large persisted tree (e.g. a full `node_modules` from M10 integration).
+- **Option B — lazy per-file preload.** Cache on first sync access, pre-warmed by an async pass the worker awaits before serving eval. Pro: bounded boot cost. Con: needs a deterministic "warm the working set before first eval" handshake to keep the *first* post-reload read synchronous; more plumbing.
+
+### Decision taken (provisional)
+
+Ship Option A. The e2e/playground working set is tiny, and eager preload is the minimal change that makes post-reload reads synchronous. If a large persisted tree makes boot slow (measure during M10 integration), switch to Option B's lazy+pre-warm approach. Reversible: localized to `OpfsFsSync.init`/`preloadContent`, no public-API or cross-package change.
+
+`// TODO(ADR): Q-2026-06-03-307` is **not** placed in code — the decision is documented in ADR-0072's Consequences and here; marking the preload loop would add noise to a hot path with no behavioural toggle. (Per CLAUDE.md the marker is optional when the reversible decision is already captured in an ADR.)
+
 ## Q-2026-06-01-305: automatic tsconfig discovery for path aliases (vs explicit `paths` option)
 
 **Status:** 🟢 Active  

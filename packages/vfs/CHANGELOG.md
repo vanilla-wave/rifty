@@ -4,6 +4,7 @@
 
 ### Added
 
+- **ADR-0072:** `OpfsFsSync` content sync I/O is now backed by a synchronous in-memory content cache with async OPFS write-through. `writeFileSync`/`readFileBytesSync` no longer require a pre-opened `FileSystemSyncAccessHandle` and no longer throw `NotImplementedError` (replacing the sync-access-handle hot path of ADR-0013 for file content). `init(paired?)` preloads file bytes from the paired async surface so post-reload reads are synchronous; new `flush()` drains write-through deterministically before a page reload; new `loadFixture()` routes editor saves through `writeFileSync`. `installOpfsFs()` threads the `OpfsVfs` into `OpfsFsSync.init` via a structural `PairedAsyncSurface` type (no reverse import). Public `FsSync` interface unchanged.
 - Initial `Vfs` interface (read, write, readdir, mkdir, stat, exists, rm).
 - `MemoryVfs` in-memory backend with mkdir-p semantics and recursive deletion.
 - Path utilities scoped to VFS (POSIX-style joins/resolves; no Node `path` dependency).
