@@ -57,6 +57,10 @@ Route sub-frame *navigations* to the controlling-window bridge owner instead of 
 
 The chosen direction is a polished dark IDE. A light/dark toggle would need coordinated theming of three surfaces (CSS tokens, the Monaco `rifty-dark` theme, and the hard-coded `RiftyTerminal` xterm theme — see Q-310). Provisional: ship dark-only; the design system is token-based so a light theme is an additive `:root[data-theme="light"]` layer later.
 
+### Code markers
+
+(none — deferred non-goal recorded in ADR-0073's "Alternatives considered"; ship dark-only, no provisional code to mark.)
+
 ## Q-2026-06-03-310: terminal not themed/fonted to match (RiftyTerminal theme is hard-coded, not in its options)
 
 **Status:** 🟢 Active
@@ -67,6 +71,10 @@ The chosen direction is a polished dark IDE. A light/dark toggle would need coor
 ### Context
 
 `RiftyTerminal` hard-codes its xterm `theme` (`#0f1115`/`#e6e6e6`) and `fontFamily` (system mono) in its constructor; `RiftyTerminalOptions` exposes only `onInput`/`onSignal`. Matching the terminal exactly (IBM Plex Mono + design tokens) would require adding a `theme`/`fontFamily` option to `RiftyTerminalOptions` — a **public API change between packages** (IRREVERSIBLE), needing its own ADR. Provisional: leave the terminal as-is and anchor the playground palette on its existing ink so the surfaces read as one.
+
+### Code markers
+
+(none — deferred; the fix is a public-API change to `RiftyTerminalOptions` that needs its own ADR and is not yet built. No provisional code to mark.)
 
 ## Q-2026-06-03-307: eager vs lazy OPFS content preload in `OpfsFsSync.init`
 
@@ -89,6 +97,10 @@ ADR-0072 added a synchronous content cache to `OpfsFsSync` so `fs.writeFileSync`
 Ship Option A. The e2e/playground working set is tiny, and eager preload is the minimal change that makes post-reload reads synchronous. If a large persisted tree makes boot slow (measure during M10 integration), switch to Option B's lazy+pre-warm approach. Reversible: localized to `OpfsFsSync.init`/`preloadContent`, no public-API or cross-package change.
 
 `// TODO(ADR): Q-2026-06-03-307` is **not** placed in code — the decision is documented in ADR-0072's Consequences and here; marking the preload loop would add noise to a hot path with no behavioural toggle. (Per CLAUDE.md the marker is optional when the reversible decision is already captured in an ADR.)
+
+### Code markers
+
+(none — intentionally unmarked: the decision is captured in ADR-0072; per CLAUDE.md the marker is optional when a reversible decision is already recorded in an ADR.)
 
 ## Q-2026-06-01-305: automatic tsconfig discovery for path aliases (vs explicit `paths` option)
 
@@ -132,7 +144,7 @@ discovery; it needs no superseding of ADR-0066.
 
 ### Code markers
 
-- None. This is a deferred follow-on with **no provisional code** — ADR-0066 records
+- (none) — a deferred follow-on with **no provisional code**; ADR-0066 records
   the deferral in its Reversibility section; there is no `TODO(ADR)` marker to clean.
 
 ---
