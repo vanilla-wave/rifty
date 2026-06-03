@@ -9,7 +9,7 @@ upper-layer dependencies. Isomorphic — no DOM, no UI framework.
 ## Install
 
 ```bash
-npm install @riftydev/shell      # or: npm install rifty  →  import from 'rifty/shell'
+npm install @riftydev/shell      # or: npm install @riftydev/sdk  →  import from '@riftydev/sdk/shell'
 ```
 
 ## Usage

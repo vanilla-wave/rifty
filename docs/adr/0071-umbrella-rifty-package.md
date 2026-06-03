@@ -1,7 +1,12 @@
-# ADR 0071: Umbrella `rifty` package — one-install front door (EPIC B)
+# ADR 0071: Umbrella `@riftydev/sdk` package — one-install front door (EPIC B)
 
 Status: Accepted
 Date: 2026-06
+
+> **Name update (2026-06-03):** this ADR was written for an **unscoped `rifty`**
+> umbrella (DD-2). At first publish npm rejected `rifty` (403 — too similar to
+> `sift`/`citty`/`pify`), so the umbrella ships **scoped as `@riftydev/sdk`**.
+> The design below is unchanged; read "unscoped `rifty`" as "`@riftydev/sdk`".
 
 ## Context
 
@@ -27,7 +32,7 @@ new public API surface + an npm name claim), hence this ADR.
 
 ## Decision
 
-### D1 — New umbrella package `packages/rifty`, published as unscoped `rifty`
+### D1 — New umbrella package `packages/rifty`, published as `@riftydev/sdk`
 
 A twelfth publishable package. It is the topmost layer (above every `@riftydev/*`,
 peer to the playground but framework-free), so it introduces no reverse import.
@@ -45,9 +50,9 @@ rename is inert.
 ### D3 — B1: subpath re-exports, kept external at build (DD-1)
 
 One thin module per layer (`src/vfs.ts` = `export * from '@riftydev/vfs'`, etc.),
-mapped to subpaths `rifty/vfs · rifty/io · rifty/kernel · rifty/runtime`
-(→ `@riftydev/runtime-js`) `· rifty/wasi` (→ `@riftydev/runtime-wasi`) `· rifty/net ·
-rifty/npm-client · rifty/shell · rifty/terminal · rifty/service-worker`. tsup
+mapped to subpaths `@riftydev/sdk/vfs · @riftydev/sdk/io · @riftydev/sdk/kernel · @riftydev/sdk/runtime`
+(→ `@riftydev/runtime-js`) `· @riftydev/sdk/wasi` (→ `@riftydev/runtime-wasi`) `· @riftydev/sdk/net ·
+@riftydev/sdk/npm-client · @riftydev/sdk/shell · @riftydev/sdk/terminal · @riftydev/sdk/service-worker`. tsup
 keeps `@riftydev/*` **external** (the shared `external: [/^@riftydev\//]`), so the
 built `dist/vfs.js` is literally `export * from '@riftydev/vfs'`. Importing a layer
 via `rifty/...` and via `@riftydev/...` therefore resolves to the **same** singleton
@@ -81,7 +86,7 @@ single import a consumer needs for the preflight gate. Pure, no side effects.
 ## Consequences
 
 - Publish set grows 11 → 12. `docs/PUBLISHING.md` and the SPEC count are updated.
-- The unscoped `rifty` name must be claimed on npm alongside the `@riftydev` scope
+- The `@riftydev/sdk` name must be claimed on npm alongside the `@riftydev` scope
   (backlog A2) — a manual, out-of-repo step.
 - Subpath re-exports are zero-maintenance for type-only growth (`export *`), but
   a **new** scoped package or a new public subpath must be added here by hand;

@@ -1,7 +1,7 @@
-# rifty
+# @riftydev/sdk
 
 The one-install front door to **rifty** — a browser-based, Node-compatible
-runtime + WASI runner. `npm i rifty` pulls in the whole `@riftydev/*` stack and
+runtime + WASI runner. `npm i @riftydev/sdk` pulls in the whole `@riftydev/*` stack and
 gives you a framework-free `createSandbox()` to boot it in one call.
 
 > rifty is a pet project exploring how WebContainers-like systems work. It runs
@@ -26,13 +26,13 @@ template). Gate on `checkCapabilities()` before booting.
 ## Install
 
 ```bash
-npm i rifty
+npm i @riftydev/sdk
 ```
 
 ## Boot a sandbox
 
 ```ts
-import { checkCapabilities, createSandbox } from 'rifty';
+import { checkCapabilities, createSandbox } from '@riftydev/sdk';
 
 const caps = checkCapabilities();
 if (!caps.sufficient) {
@@ -77,15 +77,15 @@ Each subpath re-exports the matching scoped package, so you never need a second
 
 | Subpath | Re-exports | Subpath | Re-exports |
 |---|---|---|---|
-| `rifty/vfs` | `@riftydev/vfs` | `rifty/net` | `@riftydev/net` |
-| `rifty/io` | `@riftydev/io` | `rifty/npm-client` | `@riftydev/npm-client` |
-| `rifty/kernel` | `@riftydev/kernel` | `rifty/shell` | `@riftydev/shell` |
-| `rifty/runtime` | `@riftydev/runtime-js` | `rifty/terminal` | `@riftydev/terminal` |
-| `rifty/wasi` | `@riftydev/runtime-wasi` | `rifty/service-worker` | `@riftydev/service-worker` |
+| `@riftydev/sdk/vfs` | `@riftydev/vfs` | `@riftydev/sdk/net` | `@riftydev/net` |
+| `@riftydev/sdk/io` | `@riftydev/io` | `@riftydev/sdk/npm-client` | `@riftydev/npm-client` |
+| `@riftydev/sdk/kernel` | `@riftydev/kernel` | `@riftydev/sdk/shell` | `@riftydev/shell` |
+| `@riftydev/sdk/runtime` | `@riftydev/runtime-js` | `@riftydev/sdk/terminal` | `@riftydev/terminal` |
+| `@riftydev/sdk/wasi` | `@riftydev/runtime-wasi` | `@riftydev/sdk/service-worker` | `@riftydev/service-worker` |
 
 ```ts
-import { MemoryVfs } from 'rifty/vfs';
-import { runWasi } from 'rifty/wasi';
+import { MemoryVfs } from '@riftydev/sdk/vfs';
+import { runWasi } from '@riftydev/sdk/wasi';
 ```
 
 The scoped packages stay separate dependencies (never inlined), so importing a

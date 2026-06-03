@@ -1,17 +1,17 @@
 /**
  * rifty — the one-install front door (EPIC B, DD-2).
  *
- * `npm i rifty` pulls the whole runtime. From the root you get the
+ * `npm i @riftydev/sdk` pulls the whole runtime. From the root you get the
  * framework-free façade ({@link createSandbox}, {@link checkCapabilities}); each
  * individual layer is a subpath that re-exports the matching `@riftydev/*` package
  * verbatim:
  *
- *   rifty/vfs · rifty/io · rifty/kernel · rifty/runtime · rifty/wasi · rifty/net
- *   rifty/npm-client · rifty/shell · rifty/terminal · rifty/service-worker
+ *   @riftydev/sdk/vfs · @riftydev/sdk/io · @riftydev/sdk/kernel · @riftydev/sdk/runtime · @riftydev/sdk/wasi · @riftydev/sdk/net
+ *   @riftydev/sdk/npm-client · @riftydev/sdk/shell · @riftydev/sdk/terminal · @riftydev/sdk/service-worker
  *
  * Boot a sandbox:
  * ```ts
- * import { checkCapabilities, createSandbox } from 'rifty';
+ * import { checkCapabilities, createSandbox } from '@riftydev/sdk';
  * if (!checkCapabilities().sufficient) showUnsupportedNotice();
  * const sandbox = await createSandbox({
  *   workerUrl: new URL('@riftydev/runtime-js/worker', import.meta.url),

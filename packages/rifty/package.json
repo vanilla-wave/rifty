@@ -1,5 +1,5 @@
 {
-  "name": "rifty",
+  "name": "@riftydev/sdk",
   "version": "0.1.0",
   "description": "rifty — a browser-based Node-compatible runtime + WASI runner. One install, all the parts, plus a framework-free createSandbox() façade.",
   "type": "module",

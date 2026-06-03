@@ -1,7 +1,7 @@
 # Publishing rifty packages
 
 How the `@riftydev/*` packages are built and released to npm. Rationale: **ADR-0070**
-(build + dual exports), **ADR-0071** (the umbrella `rifty`).
+(build + dual exports), **ADR-0071** (the umbrella `@riftydev/sdk`).
 
 ## The model: dev-src / publish-dist
 
@@ -19,10 +19,12 @@ version shares one copy of kernel/vfs singletons.
 
 ## The publishable set (12 packages)
 
-`packages/*` (11, including the umbrella **`rifty`** front door — ADR-0071) **plus**
+`packages/*` (11, including the umbrella **`@riftydev/sdk`** front door — ADR-0071) **plus**
 `@riftydev/shadow-registry` (in `tools/`, a runtime dep of `@riftydev/npm-client`).
 `apps/playground` and all test fixtures stay `private`. The workspace root package is
-`rifty-workspace` (private) — the bare name `rifty` belongs to the umbrella.
+`rifty-workspace` (private). All 12 published packages live under the `@riftydev` scope
+(the unscoped `rifty` name was blocked by npm as too similar to existing packages, so
+the umbrella ships as `@riftydev/sdk`).
 
 ## Single source of truth
 
@@ -87,16 +89,18 @@ name needs a token; every release after that is tokenless.
 
 ### Phase 0 — claim the names
 
-Create the **`@riftydev` org/scope** on npmjs.com. The unscoped **`rifty`** name is
-claimed by its first publish (verified free 2026-06-02). If either is taken, rename:
-change `name` in each `package.json`, the SPEC keys + `REPO_URL` in
+Create the **`@riftydev` org** on npmjs.com (free for public packages) so the
+`@riftydev` scope is yours to publish under. All 12 packages are scoped to `@riftydev`
+(the umbrella is `@riftydev/sdk`). If the scope is taken, rename: change `name` in each
+`package.json`, the SPEC keys + `REPO_URL` in
 `tools/publishing/sync-publish-config.mjs`, then `pnpm sync:publish`.
 
 ### Phase 1 — bootstrap-publish each name ONCE with a token
 
-No CI secret needed. Create a short-lived **granular npm token** with publish rights
-to **both** the `@riftydev` scope **and** the unscoped `rifty` name, put it in
-`$NPM_TOKEN`, and run the bootstrap script:
+No CI secret needed. The names don't exist yet, so a granular token can't pre-select
+them — create a short-lived **granular token** with **All packages + Read and write +
+Bypass 2FA** (npm removed classic/automation tokens in Nov 2025; bypass-2FA is required
+for the non-interactive script). Put it in `$NPM_TOKEN` and run the bootstrap script:
 
 ```bash
 pnpm install

@@ -8,7 +8,7 @@
 # (see docs/PUBLISHING.md) and every subsequent release is TOKENLESS via
 # .github/workflows/release.yml on a `v*` tag.
 #
-# The publish set: ./packages/* (11, incl. the unscoped umbrella `rifty`) plus
+# The publish set: ./packages/* (11, incl. the umbrella `@riftydev/sdk`) plus
 # @riftydev/shadow-registry. apps/playground + test fixtures stay private and are
 # never matched by the filter.
 #
@@ -16,8 +16,10 @@
 #   NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh
 #   NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --dry-run
 #
-# The token needs publish rights to BOTH the @riftydev scope AND the unscoped
-# `rifty` name. It is read from $NPM_TOKEN and never written to disk: the
+# The token needs publish rights to the @riftydev scope. Since these names don't
+# exist yet, a granular token can't pre-select them — create it with
+# "All packages" + Read and write + Bypass 2FA (npm removed classic/automation
+# tokens in Nov 2025). It is read from $NPM_TOKEN and never written to disk: the
 # throwaway npmrc holds the literal string `${NPM_TOKEN}`, which pnpm interpolates
 # from the environment at read time. The temp file is removed on exit.
 
@@ -50,7 +52,7 @@ trap 'rm -f "$NPMRC" packages/*/LICENSE tools/shadow-registry/LICENSE' EXIT
   echo '@riftydev:registry=https://registry.npmjs.org/'
 } >"$NPMRC"
 
-echo "▶ publishing @riftydev/* + unscoped rifty (access public)…"
+echo "▶ publishing @riftydev/* (incl. the @riftydev/sdk umbrella, access public)…"
 NPM_CONFIG_USERCONFIG="$NPMRC" \
   pnpm -r --filter "./packages/*" --filter "@riftydev/shadow-registry" \
   publish --access public --no-git-checks $DRY
