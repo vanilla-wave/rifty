@@ -67,7 +67,7 @@ ADRs are immutable after merge. New decisions get new ADRs; supersedence is expl
 | 0068 | `with { type: "file" }` file-loader import attribute (asset → path) | — |
 | 0069 | `Readable.setEncoding(encoding)` — emit decoded strings | — |
 | 0070 | npm publish — `tsup` build + dual (dev-src / publish-dist) `exports` via `publishConfig`; 11-package public set incl. `@riftydev/shadow-registry`; tag-driven release | — |
-| 0071 | Umbrella `rifty` package — one-install front door: subpath re-exports + framework-free `createSandbox()` + `checkCapabilities()` (EPIC B; ratifies DD-1/DD-2) | — |
+| 0071 | Umbrella `@riftydev/sdk` package — one-install front door: subpath re-exports + framework-free `createSandbox()` + `checkCapabilities()` (EPIC B; ratifies DD-1/DD-2) | — |
 | 0072 | OPFS sync content cache + async write-through + async Worker VFS boot — wires OPFS persistence into the runtime Worker (closes A-004; supersedes ADR-0013's sync-access-handle content hot path) | — |
 
 For the broad rationale and trade-offs, read PROJECT_PLAN.md §8 first; ADRs are the durable spec.
