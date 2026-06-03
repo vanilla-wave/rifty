@@ -27,6 +27,55 @@ When a question is reviewed:
 
 ## Active
 
+## Q-2026-06-03-308: in-frame preview navigation aborts under cross-origin isolation (SW routes sub-frame nav to the wrong owner)
+
+**Status:** 🟢 Active
+**Encountered in:** ADR-0073 (playground UX overhaul), verifying the dev/real-vite preview presets
+**Milestone:** M7/M10 follow-up
+**Author (agent session):** 2026-06-03
+
+### Context
+
+The in-page preview `iframe` navigation to `/preview/<port>/` aborts with `net::ERR_ABORTED` under the cross-origin-isolated playground page, even though a `fetch()` of the same route from the page returns 200 (the path `m7-preview-sw.spec.ts` covers). Root cause: `routePreview` (ADR-0031) resolves the preview owner from `event.resultingClientId`, which for an iframe *navigation* is the iframe's own about-to-exist client — not the main-thread bridge that owns the registered port — so the handshake never completes and the navigation commit aborts. This is **pre-existing** (the iframe-render path was never CI-covered: m7 uses `fetch`, m10-hmr is skipped by default, and the suite runs against `pnpm dev`).
+
+### Provisional decision
+
+`PreviewPanel` reports preview readiness **honestly** — it polls the route, attempts the iframe nav, and only shows `live` if the navigation actually committed; otherwise `unavailable` with a hint and the "↗ new tab" escape hatch. The four REPL presets (the core click-&-play) are unaffected and render fully.
+
+### What a fix needs (not done here)
+
+Route sub-frame *navigations* to the controlling-window bridge owner instead of `resultingClientId`. That changes public SW routing behaviour and **reconsiders ADR-0031**, so per the workflow it requires a dedicated decision subagent producing a superseding ADR — a focused follow-up, out of scope for the playground overhaul. A CI smoke of the `vite preview` (production) build would also have caught the related prod-worker gap ADR-0073 fixed; worth adding.
+
+## Q-2026-06-03-309: light theme deferred — playground ships dark-only
+
+**Status:** 🟢 Active
+**Encountered in:** ADR-0073 (design system)
+**Milestone:** M10 polish
+**Author (agent session):** 2026-06-03
+
+### Context
+
+The chosen direction is a polished dark IDE. A light/dark toggle would need coordinated theming of three surfaces (CSS tokens, the Monaco `rifty-dark` theme, and the hard-coded `RiftyTerminal` xterm theme — see Q-310). Provisional: ship dark-only; the design system is token-based so a light theme is an additive `:root[data-theme="light"]` layer later.
+
+### Code markers
+
+(none — deferred non-goal recorded in ADR-0073's "Alternatives considered"; ship dark-only, no provisional code to mark.)
+
+## Q-2026-06-03-310: terminal not themed/fonted to match (RiftyTerminal theme is hard-coded, not in its options)
+
+**Status:** 🟢 Active
+**Encountered in:** ADR-0073 (design system)
+**Milestone:** M10 polish
+**Author (agent session):** 2026-06-03
+
+### Context
+
+`RiftyTerminal` hard-codes its xterm `theme` (`#0f1115`/`#e6e6e6`) and `fontFamily` (system mono) in its constructor; `RiftyTerminalOptions` exposes only `onInput`/`onSignal`. Matching the terminal exactly (IBM Plex Mono + design tokens) would require adding a `theme`/`fontFamily` option to `RiftyTerminalOptions` — a **public API change between packages** (IRREVERSIBLE), needing its own ADR. Provisional: leave the terminal as-is and anchor the playground palette on its existing ink so the surfaces read as one.
+
+### Code markers
+
+(none — deferred; the fix is a public-API change to `RiftyTerminalOptions` that needs its own ADR and is not yet built. No provisional code to mark.)
+
 ## Q-2026-06-03-307: eager vs lazy OPFS content preload in `OpfsFsSync.init`
 
 **Status:** 🟢 Active  
@@ -48,6 +97,10 @@ ADR-0072 added a synchronous content cache to `OpfsFsSync` so `fs.writeFileSync`
 Ship Option A. The e2e/playground working set is tiny, and eager preload is the minimal change that makes post-reload reads synchronous. If a large persisted tree makes boot slow (measure during M10 integration), switch to Option B's lazy+pre-warm approach. Reversible: localized to `OpfsFsSync.init`/`preloadContent`, no public-API or cross-package change.
 
 `// TODO(ADR): Q-2026-06-03-307` is **not** placed in code — the decision is documented in ADR-0072's Consequences and here; marking the preload loop would add noise to a hot path with no behavioural toggle. (Per CLAUDE.md the marker is optional when the reversible decision is already captured in an ADR.)
+
+### Code markers
+
+(none — intentionally unmarked: the decision is captured in ADR-0072; per CLAUDE.md the marker is optional when a reversible decision is already recorded in an ADR.)
 
 ## Q-2026-06-01-305: automatic tsconfig discovery for path aliases (vs explicit `paths` option)
 
@@ -91,7 +144,7 @@ discovery; it needs no superseding of ADR-0066.
 
 ### Code markers
 
-- None. This is a deferred follow-on with **no provisional code** — ADR-0066 records
+- (none) — a deferred follow-on with **no provisional code**; ADR-0066 records
   the deferral in its Reversibility section; there is no `TODO(ADR)` marker to clean.
 
 ---

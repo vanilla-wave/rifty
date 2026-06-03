@@ -1,0 +1,40 @@
+# Netlify deploy config for the rifty playground.
+#
+# rifty MUST be served cross-origin-isolated (SharedArrayBuffer + Atomics.wait
+# for sync IPC — D-001 / ADR-0002), which requires COOP/COEP response headers.
+# Those are declared below AND in apps/playground/public/_headers (Vite copies
+# it to dist/_headers); either alone is sufficient — both are kept so the dist
+# stays self-describing if served outside Netlify.
+#
+# Deploy is intentionally manual (outward-facing). See docs/hosting-netlify.md.
+
+[build]
+  base = "."
+  command = "pnpm install --frozen-lockfile && pnpm build"
+  publish = "apps/playground/dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  PNPM_VERSION = "11.5.1"
+  # The repo's postinstall runs `playwright install` (for local e2e). Skip the
+  # ~400 MB browser download on the build box — Netlify never runs Playwright.
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
+  # Monaco's worker bundle is memory-hungry under Vite/Rollup.
+  NODE_OPTIONS = "--max-old-space-size=4096"
+
+# Cross-origin isolation headers (mirror of apps/playground/public/_headers).
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "credentialless"
+    Cross-Origin-Resource-Policy = "cross-origin"
+
+# Self-hosted fonts and the SW are real files in dist and are served directly;
+# any other unmatched path falls back to the single-page app shell. (Netlify
+# only applies a 200-rewrite when no static file matches, so /sw.js, /fonts/*,
+# and hashed assets are unaffected.)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
