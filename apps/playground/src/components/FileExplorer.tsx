@@ -6,7 +6,7 @@
  * scroll / an open rename input aren't clobbered.
  */
 import { basename, dirname, joinPath } from '@riftydev/vfs';
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { type TreeChild, fileCategory, glyphForCategory, readChildren } from '../glue/file-tree.ts';
 import { type FsOpsTarget, createDir, createFile, deletePath, renamePath } from '../glue/fs-ops.ts';
 
@@ -29,9 +29,19 @@ export function FileExplorer(props: {
   onOpenFile(path: string): void;
   onError?(message: string): void;
 }) {
-  const [expanded, setExpanded] = createSignal<ReadonlySet<string>>(new Set([props.root]));
+  // `vfs` / `root` are static; capture once so the unowned poll callback never
+  // touches a reactive prop getter (that would leak a memo per tick). The
+  // reactive `visible` prop is mirrored into a plain var via an owned effect.
+  const vfs = props.vfs;
+  const root = props.root;
+  let visibleNow = props.visible;
+  createEffect(() => {
+    visibleNow = props.visible;
+  });
+
+  const [expanded, setExpanded] = createSignal<ReadonlySet<string>>(new Set([root]));
   const [nonce, setNonce] = createSignal(0);
-  const [contextDir, setContextDir] = createSignal(props.root);
+  const [contextDir, setContextDir] = createSignal(root);
   const [editing, setEditing] = createSignal<Editing>(null);
 
   const fail = (err: unknown): void => props.onError?.((err as Error).message);
@@ -42,7 +52,7 @@ export function FileExplorer(props: {
   function walk(dir: string, depth: number, exp: ReadonlySet<string>, out: Row[]): void {
     let children: TreeChild[];
     try {
-      children = readChildren(props.vfs, dir);
+      children = readChildren(vfs, dir);
     } catch {
       return; // dir vanished between reads — the next poll reconciles
     }
@@ -52,30 +62,32 @@ export function FileExplorer(props: {
     }
   }
 
+  // Cached signature of the last-rendered tree — the poll bumps `nonce` only
+  // when this changes (declared before `rows`, which writes it on first run).
+  let lastSig = '';
   const rows = createMemo<Row[]>(() => {
     nonce();
     const out: Row[] = [];
-    walk(props.root, 0, expanded(), out);
+    walk(root, 0, expanded(), out);
     lastSig = out.map((r) => `${r.path}${r.kind === 'dir' ? '/' : ''}`).join('|');
     return out;
   });
 
-  let lastSig = '';
   function currentSignature(): string {
     const out: Row[] = [];
-    walk(props.root, 0, expanded(), out);
+    walk(root, 0, expanded(), out);
     return out.map((r) => `${r.path}${r.kind === 'dir' ? '/' : ''}`).join('|');
   }
 
   onMount(() => {
     // Ensure the workspace exists so the tree is never an error/empty void.
     try {
-      props.vfs.mkdirSync(props.root, { recursive: true });
+      vfs.mkdirSync(root, { recursive: true });
     } catch {
       /* best-effort */
     }
     const timer = setInterval(() => {
-      if (!props.visible || editing() !== null) return;
+      if (!visibleNow || editing() !== null) return;
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
       // TODO(ADR): Q-2026-06-04-312 — poll only because the VFS has no events.
       if (currentSignature() !== lastSig) refresh();
@@ -109,10 +121,10 @@ export function FileExplorer(props: {
     const name = rawName.trim();
     if (!name || name.includes('/')) return;
     try {
-      if (state?.kind === 'new-file') createFile(props.vfs, joinPath(state.parent, name));
-      else if (state?.kind === 'new-folder') createDir(props.vfs, joinPath(state.parent, name));
+      if (state?.kind === 'new-file') createFile(vfs, joinPath(state.parent, name));
+      else if (state?.kind === 'new-folder') createDir(vfs, joinPath(state.parent, name));
       else if (state?.kind === 'rename')
-        renamePath(props.vfs, state.path, joinPath(dirname(state.path), name));
+        renamePath(vfs, state.path, joinPath(dirname(state.path), name));
     } catch (err) {
       fail(err);
     }
@@ -123,7 +135,7 @@ export function FileExplorer(props: {
     const what = kind === 'dir' ? 'folder (and its contents)' : 'file';
     if (typeof confirm === 'function' && !confirm(`Delete this ${what}?\n${path}`)) return;
     try {
-      deletePath(props.vfs, path);
+      deletePath(vfs, path);
     } catch (err) {
       fail(err);
     }
@@ -135,7 +147,7 @@ export function FileExplorer(props: {
       <div class="rf-explorer__head">
         <span class="rf-eyebrow">Explorer</span>
         <span class="rf-explorer__path" title={contextDir()}>
-          {contextDir() === props.root ? 'workspace' : basename(contextDir())}
+          {contextDir() === root ? 'workspace' : basename(contextDir())}
         </span>
         <span class="rf-explorer__tools">
           <button

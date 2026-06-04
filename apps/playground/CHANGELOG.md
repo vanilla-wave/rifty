@@ -4,6 +4,28 @@
 
 ### Added
 
+- **VSCode-style shell (ADR-0075).** Recomposed the playground into a real
+  workbench: a lime "alive-spine" **activity bar** toggling the sidebar between
+  a **file Explorer** and the Presets gallery, an **editor tab bar** over a
+  multi-model Monaco, the **console relocated to a bottom panel** (spanning the
+  editor area; collapsible to a header strip without unmounting xterm), preview
+  as a right "Simple Browser" pane in dev/real-vite, and a **status bar** (mode,
+  active file, language, COI, relocated storage badge). All panels are
+  **resizable + collapsible** via a hand-rolled zero-dep `<Splitter>` (pointer
+  drag, double-click reset, `role="separator"` + arrow-key resize, persisted to
+  `localStorage`, iframe-pointer guard during drag).
+- **VFS file explorer (ADR-0075).** Lazy-expand tree of `/workspace` over the
+  main-thread `syncMirror()` (reflects shell `npm install` + user edits): open,
+  new file, new folder, rename (files and dirs via a real recursive copy), and
+  delete-with-confirm; signature-gated 1.5 s poll (the VFS exposes no change
+  events). New pure modules under `src/glue` (`file-tree`, `fs-ops`,
+  `editor-tabs`, `layout-store`, `splitter-size`) with unit tests.
+- **Multi-model editor tabs (ADR-0075).** One Monaco model per tab (`setModel`
+  on switch — no spurious writes); a permanent **program tab** stays bound to
+  `machine.source`/`setSource` (REPL Run + dev/real-vite HMR unchanged) under a
+  single `suppressProgramEcho` guard; files opened from the explorer get their
+  own model with debounced VFS write-back. `monaco-env` gains the json / css /
+  html language workers.
 - **Preset gallery — click-to-run examples (ADR-0073).** New `src/presets.ts`
   + `src/components/PresetGallery.tsx`: a category-grouped left rail of
   example programs (Welcome, Event-loop order, Node core modules, Virtual
