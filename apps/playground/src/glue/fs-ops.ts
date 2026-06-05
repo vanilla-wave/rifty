@@ -21,6 +21,12 @@ export interface FsOpsTarget {
   mkdirSync(path: string, options: { recursive?: boolean }): void;
   rmSync(path: string, options: { recursive?: boolean; force?: boolean }): void;
   statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number };
+  /**
+   * When true the target is a read-only view (e.g. the real-vite worker
+   * project mirror, ADR-0076): mutations throw, and the editor opens its files
+   * read-only. Absent/false on the writable sync mirror.
+   */
+  readonly readOnly?: boolean;
 }
 
 const enc = new TextEncoder();

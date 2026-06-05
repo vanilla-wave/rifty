@@ -31,6 +31,8 @@
 import { createSignal, onCleanup } from 'solid-js';
 import { type DevModeHandle, startDevMode } from '../glue/devMode.ts';
 import { type RealViteHandle, startRealVite } from '../glue/realVite.ts';
+import type { ProjectSpec } from '../templates/project-spec.ts';
+import { defaultProjectSpec, resolveProjectSpec } from '../templates/registry.ts';
 
 export type Mode = 'repl' | 'dev' | 'real-vite';
 
@@ -51,8 +53,12 @@ export interface UseModeOptions {
   /** Initial editor content for each mode. */
   readonly sources: ModeSources;
   /** Default port for real-vite. The machine updates it after a successful
-   *  start (the adapter is free to negotiate a different port). */
+   *  start (the adapter is free to negotiate a different port). Defaults to the
+   *  active template's `defaultPort`. */
   readonly realVitePort?: number;
+  /** The real-project template to run (ADR-0078). Defaults to the registered
+   *  default (Vite). Drives the default port and the generic status copy. */
+  readonly template?: ProjectSpec;
   /** Receives every transition log line. Defaults to a no-op so the machine
    *  is safe to construct before the terminal is wired. */
   readonly log?: ModeLogger;
@@ -95,7 +101,11 @@ export interface ModeMachine {
    * just re-seeds the entry). Distinct from {@link toggleDev}/{@link toggleRealVite}
    * (which the header buttons use) so the e2e toggle semantics stay untouched.
    */
-  loadPreset(preset: { readonly mode: Mode; readonly source: string }): Promise<void>;
+  loadPreset(preset: {
+    readonly mode: Mode;
+    readonly source: string;
+    readonly templateId?: string;
+  }): Promise<void>;
   /** Dispose all handles. Idempotent. Called by `onCleanup` automatically. */
   dispose(): void;
 }
@@ -103,12 +113,17 @@ export interface ModeMachine {
 export function useMode(options: UseModeOptions): ModeMachine {
   const sources = options.sources;
   const log = options.log ?? (() => {});
+  const template = options.template ?? defaultProjectSpec();
 
   const [mode, setMode] = createSignal<Mode>('repl');
   const [source, setSourceSignal] = createSignal(sources.repl);
   const [devHandle, setDevHandle] = createSignal<DevModeHandle | null>(null);
   const [realViteHandle, setRealViteHandle] = createSignal<RealViteHandle | null>(null);
-  const [realVitePort, setRealVitePort] = createSignal(options.realVitePort ?? 5174);
+  const [realVitePort, setRealVitePort] = createSignal(
+    options.realVitePort ?? template.defaultPort,
+  );
+
+  const startingRealViteLine = `\n[starting ${template.displayName} — installing from npm, this may take ~${template.estimatedBootSeconds}s]\n`;
 
   async function toggleDev(): Promise<void> {
     if (mode() === 'repl') {
@@ -142,9 +157,10 @@ export function useMode(options: UseModeOptions): ModeMachine {
       log('\n[left real-vite mode]\n');
       return;
     }
-    log('\n[starting real Vite — installing from npm, this may take ~20s]\n');
+    log(startingRealViteLine);
     try {
       const handle = await startRealVite({
+        template,
         port: realVitePort(),
         onLog: (line) => log(line),
       });
@@ -178,6 +194,7 @@ export function useMode(options: UseModeOptions): ModeMachine {
   async function loadPreset(preset: {
     readonly mode: Mode;
     readonly source: string;
+    readonly templateId?: string;
   }): Promise<void> {
     const entry = preset.source;
     if (preset.mode === 'repl') {
@@ -217,9 +234,16 @@ export function useMode(options: UseModeOptions): ModeMachine {
       if (dev) await dev.close();
       setDevHandle(null);
     }
-    log('\n[starting real Vite — installing from npm, this may take ~20s]\n');
+    // Resolve the preset's template (defaults to the machine template). Lets
+    // the gallery scale to more templates (ADR-0078) without new header surgery.
+    const presetTemplate = preset.templateId ? resolveProjectSpec(preset.templateId) : template;
+    if (presetTemplate.defaultPort !== realVitePort()) setRealVitePort(presetTemplate.defaultPort);
+    log(
+      `\n[starting ${presetTemplate.displayName} — installing from npm, this may take ~${presetTemplate.estimatedBootSeconds}s]\n`,
+    );
     try {
       const handle = await startRealVite({
+        template: presetTemplate,
         port: realVitePort(),
         onLog: (line) => log(line),
       });

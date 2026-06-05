@@ -68,37 +68,15 @@ import {
   createHmrBridgeVitePlugin,
   setupHmrBridge,
 } from '../glue/hmr-bridge.ts';
+import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
 import { proxiedRegistryFetch } from '../glue/registry-fetch.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
+import { collectSnapshot, publishVfsSnapshot } from '../glue/vfs-snapshot-port.ts';
 import { serveVfsWrites } from '../glue/vfs-write-port.ts';
+import { type BootstrapConfig, resolveBootstrapConfig } from '../templates/project-spec.ts';
+import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
 
 const enc = new TextEncoder();
-
-const INITIAL_INDEX_HTML = `<!doctype html>
-<html>
-  <head><meta charset="utf-8"><title>rifty + real Vite (worker)</title></head>
-  <body>
-    <h1>Hello from rifty</h1>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
-  </body>
-</html>`;
-
-const INITIAL_MAIN_JS = `document.getElementById('app').textContent =
-  'Hello from real Vite running inside a kernel-spawned Worker — edit me, save.';
-`;
-
-const INITIAL_PACKAGE_JSON = JSON.stringify(
-  {
-    name: 'rifty-vite-app',
-    version: '0.0.0',
-    private: true,
-    type: 'module',
-    dependencies: { vite: '^5.4.0' },
-  },
-  null,
-  2,
-);
 
 interface ViteUserConfig {
   root?: string;
@@ -127,24 +105,46 @@ function log(line: string): void {
   globalThis.process.stdout.write(line);
 }
 
+interface ProcStdio {
+  stdout?: { write?: unknown };
+  stderr?: { write?: unknown };
+  env?: Record<string, string | undefined>;
+}
+
 function installRuntimeGlobals(): void {
+  // The kernel's pre-entry hook already installed a `process` whose stdout/
+  // stderr post to the page over the stdio MessagePorts (that wiring is why the
+  // playground terminal sees worker output at all). `installProcessGlobals`
+  // swaps in runtime-js's richer process shim (nextTick patch, full Node
+  // surface Vite reaches for) but its stdout/stderr default to `console.*` —
+  // the worker console, NOT the page terminal — and its env is empty. Clobbering
+  // the wiring made every worker log (install/boot progress AND error stacks)
+  // vanish, so a stalled boot looked frozen. Preserve the kernel stdio + env
+  // across the swap.
+  const prev = globalThis.process as unknown as ProcStdio | undefined;
+  const kStdout = prev?.stdout;
+  const kStderr = prev?.stderr;
+  const kEnv = prev?.env;
   installProcessGlobals();
   installTimerGlobals();
   (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
+  const proc = globalThis.process as unknown as ProcStdio;
+  if (kStdout && typeof kStdout.write === 'function') proc.stdout = kStdout;
+  if (kStderr && typeof kStderr.write === 'function') proc.stderr = kStderr;
+  if (kEnv) proc.env = kEnv;
 }
 
-function seedProject(root: string, entryPath: string): void {
+function seedProject(cfg: BootstrapConfig): void {
   const fs = syncMirror();
-  fs.mkdirSync(root, { recursive: true });
-  fs.mkdirSync(`${root}/src`, { recursive: true });
-  if (!fs.existsSync(`${root}/index.html`)) {
-    fs.writeFileSync(`${root}/index.html`, enc.encode(INITIAL_INDEX_HTML));
-  }
-  if (!fs.existsSync(entryPath)) {
-    fs.writeFileSync(entryPath, enc.encode(INITIAL_MAIN_JS));
-  }
-  if (!fs.existsSync(`${root}/package.json`)) {
-    fs.writeFileSync(`${root}/package.json`, enc.encode(INITIAL_PACKAGE_JSON));
+  fs.mkdirSync(cfg.root, { recursive: true });
+  // Seed each template file idempotently — the editor source overwrites the
+  // entry afterwards; an existing file (a returning session) is left alone.
+  for (const [path, content] of Object.entries(cfg.seedFiles)) {
+    const np = normalizePath(path);
+    fs.mkdirSync(dirname(np), { recursive: true });
+    if (!fs.existsSync(np)) {
+      fs.writeFileSync(np, enc.encode(content));
+    }
   }
 }
 
@@ -167,8 +167,15 @@ async function bootstrap(): Promise<void> {
   const env = globalThis.process.env;
   const port = Number.parseInt(env.RIFTY_RFV_PORT ?? '5174', 10);
   const root = env.RIFTY_RFV_ROOT ?? '/workspace';
-  const entryRel = env.RIFTY_RFV_ENTRY ?? '/src/main.js';
-  const entryPath = `${root}${entryRel}`;
+  const spec = resolveProjectSpec(env.RIFTY_RFV_TEMPLATE ?? DEFAULT_TEMPLATE_ID);
+  // Honour an explicit entry override on the spawn spec (the orchestrator
+  // defaults it to the template's own entry, so this is usually a no-op).
+  const entryRel = env.RIFTY_RFV_ENTRY ?? spec.entry.relativePath;
+  const effectiveSpec =
+    entryRel === spec.entry.relativePath
+      ? spec
+      : { ...spec, entry: { ...spec.entry, relativePath: entryRel } };
+  const cfg = resolveBootstrapConfig(effectiveSpec, port, root);
 
   installRuntimeGlobals();
 
@@ -177,20 +184,30 @@ async function bootstrap(): Promise<void> {
   // installs later sees the actual file change either way.
   const tearVfsBridge = serveVfsWrites(port);
 
-  seedProject(root, entryPath);
+  // Reverse mirror (ADR-0076): publish the project tree (sans node_modules)
+  // to the page so its file explorer reflects this worker's real Vite project.
+  const publishSnapshot = (): void => {
+    publishVfsSnapshot(port, collectSnapshot(syncMirror(), root));
+  };
 
-  log(`[real-vite/worker] installing vite into ${root}/node_modules…\n`);
+  seedProject(cfg);
+  // Publish the skeleton now, then retry a few times — the page may not have
+  // subscribed yet when this first fires (one-way BroadcastChannel, no buffer).
+  publishSnapshot();
+  for (const delay of [300, 1200, 3000]) setTimeout(publishSnapshot, delay);
+
+  log(`[real-vite/worker] installing ${spec.displayName} into ${root}/node_modules…\n`);
   const registry = new RegistryClient({ fetch: proxiedRegistryFetch() });
   const vfs = new SyncMirrorVfs();
-  const result = await install(
-    'rifty-vite-app',
-    '0.0.0',
-    { vite: '^5.4.0' },
-    { vfs, cwd: root, registry },
-  );
+  const result = await install(cfg.packageName, cfg.packageVersion, cfg.installDeps, {
+    vfs,
+    cwd: root,
+    registry,
+  });
   log(
     `[real-vite/worker] installed ${result.packages.length} packages (${result.conflicts.length} conflicts)\n`,
   );
+  publishSnapshot(); // node_modules now present — refresh the page's view
 
   overlayShims();
   log('[real-vite/worker] esbuild + rollup-native shims overlaid\n');
@@ -216,9 +233,12 @@ async function bootstrap(): Promise<void> {
     return req;
   });
 
-  log('[real-vite/worker] importing vite…\n');
-  const viteNs = (await loader.import('vite', `${root}/__entry__.mjs`)) as unknown as {
-    createServer: (cfg: ViteUserConfig) => Promise<ViteDevServer>;
+  log(`[real-vite/worker] importing ${cfg.runtimeSpecifier}…\n`);
+  const viteNs = (await loader.import(
+    cfg.runtimeSpecifier,
+    `${root}/__entry__.mjs`,
+  )) as unknown as {
+    createServer: (config: ViteUserConfig) => Promise<ViteDevServer>;
   };
 
   // HMR bridge in THIS realm. Iframe-side BroadcastChannel client
@@ -231,22 +251,26 @@ async function bootstrap(): Promise<void> {
     root,
     server: {
       port,
-      strictPort: true,
+      strictPort: cfg.server.strictPort,
       middlewareMode: false,
       hmr: false,
-      host: true,
-      allowedHosts: true,
+      host: cfg.server.host,
+      allowedHosts: cfg.server.allowedHosts,
     } as unknown as ViteUserConfig['server'],
-    appType: 'spa',
+    appType: cfg.server.appType,
     clearScreen: false,
-    optimizeDeps: { disabled: true } as unknown as ViteUserConfig['optimizeDeps'],
-    plugins: [createHmrBridgeVitePlugin({ port })],
+    optimizeDeps: {
+      disabled: cfg.server.optimizeDepsDisabled,
+    } as unknown as ViteUserConfig['optimizeDeps'],
+    plugins: cfg.hmrEnabled ? [createHmrBridgeVitePlugin({ port })] : [],
   });
   await server.listen();
   log(`[real-vite/worker] vite is listening on internal port ${port}\n`);
+  publishSnapshot(); // vite may have written config/cache during boot
 
   server.watcher?.on('change', (file) => {
     hmrBridge.broadcast(JSON.stringify({ type: 'update', path: file }));
+    publishSnapshot(); // keep the page's explorer in sync with edits
   });
 
   // Cross-realm preview port. The page-realm `bridgeCrossRealmPreview`
@@ -258,15 +282,28 @@ async function bootstrap(): Promise<void> {
   );
   log('[real-vite/worker] cross-realm preview port bridge ready\n');
 
-  // Hold references so GC doesn't drop them. The kernel terminates the
-  // realm when the page-side `.kill()`s; we don't need explicit teardown
-  // because every resource above is closed by realm death.
-  // (Future ADR-0011 follow-up: an explicit `onShutdown` hook would let
-  // us close BroadcastChannels deterministically before exit, which
-  // matters for hot-restart cases.)
+  // Lazy node_modules read bridge (ADR-0080). Answers the page explorer's
+  // request/response reads against this realm's syncMirror (which holds the
+  // installed tree — the snapshot exclusion never touched the mirror). Relies on
+  // the keep-alive below to stay alive long enough to answer reads.
+  const tearNodeModulesBridge = serveNodeModulesReads(port);
+  log('[real-vite/worker] node_modules read bridge ready\n');
+
+  // Keep the worker realm alive (ADR-0077). The kernel's `worker-entry`
+  // (`installWorkerEntry`) terminates the realm — `closePorts()` + `self.close()`
+  // — the instant the entry module's top-level `await` resolves. That is correct
+  // for a run-to-completion program (REPL/CLI), but THIS entry is a long-running
+  // **dev server**: returning here would kill Vite the moment it started
+  // listening, so every cross-realm preview request lands on a dead worker
+  // (502 bridge-timeout) and the iframe never renders. Suspend forever instead;
+  // the realm stays live (event loop, Vite server, HMR + preview bridges all
+  // keep running) until the page-side handle `.kill()`s it (`worker.terminate()`
+  // from the parent), which doesn't depend on this promise.
   void tearVfsBridge;
   void tearPreviewBridge;
+  void tearNodeModulesBridge;
   void server;
+  await new Promise<never>(() => {});
 }
 
 await bootstrap();

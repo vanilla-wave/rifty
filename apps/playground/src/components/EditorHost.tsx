@@ -50,6 +50,10 @@ export interface EditorHostProps {
   onActive(info: { label: string; language: string; path?: string }): void;
   onFileWritten?(path: string): void;
   onError?(message: string): void;
+  /** When set (real-vite mode, ADR-0080), opening a path under node_modules
+   *  reads its bytes asynchronously from the worker instead of the sync VFS.
+   *  `content` is null when the file exceeds the read cap. */
+  readNodeModulesFile?(path: string): Promise<{ size: number; content: Uint8Array | null }>;
 }
 
 let themeDefined = false;
@@ -148,9 +152,58 @@ export function EditorHost(props: EditorHostProps) {
     );
   }
 
+  function isNodeModulesPath(path: string): boolean {
+    return path.split('/').includes('node_modules');
+  }
+
+  /**
+   * Open a node_modules file (ADR-0080). The bytes live in the worker realm, so
+   * the read is async: open a transient loading tab, await the remote read, then
+   * fill in the content (or a "too large" / "binary" / error placeholder). Always
+   * read-only — there is no write path back to the worker's node_modules.
+   */
+  function openNodeModulesFile(
+    path: string,
+    read: (p: string) => Promise<{ size: number; content: Uint8Array | null }>,
+  ): void {
+    if (models.has(path)) {
+      setActiveId(path);
+      return;
+    }
+    readOnlyPaths.add(path);
+    const model = monaco.editor.createModel('// loading…', languageForPath(path));
+    models.set(path, model);
+    setTabs((t) => openFileTab(t, path, basename(path)));
+    setActiveId(path);
+    read(path).then(
+      (res) => {
+        // The tab may have been closed (model disposed) during the await.
+        if (models.get(path) !== model) return;
+        if (res.content === null) {
+          model.setValue(`// too large to preview — ${res.size} bytes`);
+        } else if (looksBinary(res.content)) {
+          model.setValue(`// binary file — ${res.size} bytes — not editable`);
+        } else {
+          model.setValue(dec.decode(res.content));
+        }
+      },
+      (err: unknown) => {
+        if (models.get(path) === model) {
+          model.setValue(`// failed to read node_modules file: ${(err as Error).message}`);
+        }
+        props.onError?.((err as Error).message);
+      },
+    );
+  }
+
   function openFile(path: string): void {
     if (path === PROGRAM_MIRROR_PATH) {
       setActiveId(PROGRAM_TAB_ID);
+      return;
+    }
+    const readNm = props.readNodeModulesFile;
+    if (readNm && isNodeModulesPath(path)) {
+      openNodeModulesFile(path, readNm);
       return;
     }
     if (models.has(path)) {
@@ -173,6 +226,9 @@ export function EditorHost(props: EditorHostProps) {
       );
     } else {
       model = monaco.editor.createModel(dec.decode(bytes), languageForPath(path));
+      // A read-only source (e.g. the real-vite worker mirror, ADR-0076) opens
+      // its files view-only — there is no write path back to the worker realm.
+      if (props.vfs.readOnly) readOnlyPaths.add(path);
     }
     models.set(path, model);
     setTabs((t) => openFileTab(t, path, basename(path)));
@@ -225,6 +281,10 @@ export function EditorHost(props: EditorHostProps) {
         if (suppressProgramEcho || !programModel) return;
         props.onProgramChange(programModel.getValue());
       } else {
+        // Read-only tabs (snapshot mirror, ADR-0076 / node_modules, ADR-0080)
+        // have no write path back; a programmatic setValue (async load) must
+        // not schedule a write into a read-only VFS.
+        if (readOnlyPaths.has(id)) return;
         setTabs((t) => setDirty(t, id, true));
         scheduleWrite(id);
       }

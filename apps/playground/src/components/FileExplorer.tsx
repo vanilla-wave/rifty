@@ -7,12 +7,21 @@
  */
 import { basename, dirname, joinPath } from '@riftydev/vfs';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
-import { type TreeChild, fileCategory, glyphForCategory, readChildren } from '../glue/file-tree.ts';
+import {
+  type NmNodeState,
+  type NmRow,
+  type TreeChild,
+  composeNodeModulesRows,
+  fileCategory,
+  glyphForCategory,
+  readChildren,
+} from '../glue/file-tree.ts';
 import { type FsOpsTarget, createDir, createFile, deletePath, renamePath } from '../glue/fs-ops.ts';
+import type { NodeModulesCache } from '../glue/node-modules-cache.ts';
 
-interface Row extends TreeChild {
-  readonly depth: number;
-}
+/** A rendered explorer row. The sync tree and the async node_modules subtree
+ *  (ADR-0080) share this shape; `loading`/`error` kinds are node_modules-only. */
+type Row = NmRow;
 
 type Editing =
   | { readonly kind: 'new-file' | 'new-folder'; readonly parent: string }
@@ -26,6 +35,16 @@ export function FileExplorer(props: {
   root: string;
   visible: boolean;
   activePath?: string;
+  /** When set, the tree is a read-only mirror (e.g. the real-vite worker
+   *  project, ADR-0076): mutation controls are hidden. */
+  readOnly?: boolean;
+  /** When in real-vite mode, enables lazy node_modules browsing (ADR-0080): an
+   *  injected node_modules row whose children load on expand via the cache. */
+  nodeModules?: {
+    readonly cache: NodeModulesCache;
+    readonly present: boolean;
+    readonly root: string;
+  };
   onOpenFile(path: string): void;
   onError?(message: string): void;
 }) {
@@ -43,8 +62,38 @@ export function FileExplorer(props: {
   const [nonce, setNonce] = createSignal(0);
   const [contextDir, setContextDir] = createSignal(root);
   const [editing, setEditing] = createSignal<Editing>(null);
+  // Per-directory async state of the node_modules subtree (ADR-0080). Written
+  // from the remote-read promise; the rows memo reads it (never awaits inside).
+  const [nmState, setNmState] = createSignal<ReadonlyMap<string, NmNodeState>>(new Map());
 
   const fail = (err: unknown): void => props.onError?.((err as Error).message);
+
+  function nodeModulesPath(): string | null {
+    const nm = props.nodeModules;
+    return nm ? joinPath(nm.root, 'node_modules') : null;
+  }
+  function isUnderNodeModules(path: string): boolean {
+    const nmPath = nodeModulesPath();
+    return nmPath !== null && (path === nmPath || path.startsWith(`${nmPath}/`));
+  }
+  /** Fetch (or replay from cache) one node_modules directory level on expand. */
+  function loadNodeModules(path: string): void {
+    const nm = props.nodeModules;
+    if (!nm) return;
+    const cached = nm.cache.peek(path);
+    if (cached) {
+      setNmState((prev) => new Map(prev).set(path, { status: 'loaded', entries: cached }));
+      return;
+    }
+    setNmState((prev) => new Map(prev).set(path, { status: 'loading' }));
+    nm.cache.readdir(path).then(
+      (entries) => setNmState((prev) => new Map(prev).set(path, { status: 'loaded', entries })),
+      (err: unknown) =>
+        setNmState((prev) =>
+          new Map(prev).set(path, { status: 'error', message: (err as Error).message }),
+        ),
+    );
+  }
   const refresh = (): void => {
     setNonce((n) => n + 1);
   };
@@ -69,7 +118,15 @@ export function FileExplorer(props: {
     nonce();
     const out: Row[] = [];
     walk(root, 0, expanded(), out);
+    // Signature covers only the sync tree — the node_modules subtree is driven
+    // by `nmState` (reactive) and must NOT make the poll spuriously refresh.
     lastSig = out.map((r) => `${r.path}${r.kind === 'dir' ? '/' : ''}`).join('|');
+    const nm = props.nodeModules;
+    if (nm?.present) {
+      out.push(
+        ...composeNodeModulesRows(joinPath(nm.root, 'node_modules'), 0, expanded(), nmState()),
+      );
+    }
     return out;
   });
 
@@ -81,10 +138,13 @@ export function FileExplorer(props: {
 
   onMount(() => {
     // Ensure the workspace exists so the tree is never an error/empty void.
-    try {
-      vfs.mkdirSync(root, { recursive: true });
-    } catch {
-      /* best-effort */
+    // Skipped for a read-only mirror (its mkdir throws by design).
+    if (!props.readOnly) {
+      try {
+        vfs.mkdirSync(root, { recursive: true });
+      } catch {
+        /* best-effort */
+      }
     }
     const timer = setInterval(() => {
       if (!visibleNow || editing() !== null) return;
@@ -97,12 +157,15 @@ export function FileExplorer(props: {
 
   function toggleDir(path: string): void {
     setContextDir(path);
+    const willExpand = !expanded().has(path);
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(path)) next.delete(path);
       else next.add(path);
       return next;
     });
+    // Lazily fetch node_modules children on expand (ADR-0080).
+    if (willExpand && isUnderNodeModules(path)) loadNodeModules(path);
   }
 
   function expand(path: string): void {
@@ -148,26 +211,33 @@ export function FileExplorer(props: {
         <span class="rf-eyebrow">Explorer</span>
         <span class="rf-explorer__path" title={contextDir()}>
           {contextDir() === root ? 'workspace' : basename(contextDir())}
+          <Show when={props.readOnly}>
+            <span class="rf-explorer__ro" title="Mirror of the Vite worker — read-only">
+              read-only
+            </span>
+          </Show>
         </span>
         <span class="rf-explorer__tools">
-          <button
-            type="button"
-            class="rf-iconbtn rf-iconbtn--sm"
-            title="New file"
-            aria-label="New file"
-            onClick={() => startCreate('new-file')}
-          >
-            ＋
-          </button>
-          <button
-            type="button"
-            class="rf-iconbtn rf-iconbtn--sm"
-            title="New folder"
-            aria-label="New folder"
-            onClick={() => startCreate('new-folder')}
-          >
-            ＋▸
-          </button>
+          <Show when={!props.readOnly}>
+            <button
+              type="button"
+              class="rf-iconbtn rf-iconbtn--sm"
+              title="New file"
+              aria-label="New file"
+              onClick={() => startCreate('new-file')}
+            >
+              ＋
+            </button>
+            <button
+              type="button"
+              class="rf-iconbtn rf-iconbtn--sm"
+              title="New folder"
+              aria-label="New folder"
+              onClick={() => startCreate('new-folder')}
+            >
+              ＋▸
+            </button>
+          </Show>
           <button
             type="button"
             class="rf-iconbtn rf-iconbtn--sm"
@@ -215,14 +285,15 @@ export function FileExplorer(props: {
                   data-active={row.kind === 'file' && props.activePath === row.path}
                   aria-expanded={row.kind === 'dir' ? expanded().has(row.path) : undefined}
                   style={{ '--rf-row-depth': row.depth }}
-                  onClick={() =>
-                    row.kind === 'dir' ? toggleDir(row.path) : props.onOpenFile(row.path)
-                  }
+                  onClick={() => {
+                    if (row.kind === 'dir') toggleDir(row.path);
+                    else if (row.kind === 'file') props.onOpenFile(row.path);
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
                       if (row.kind === 'dir') toggleDir(row.path);
-                      else props.onOpenFile(row.path);
+                      else if (row.kind === 'file') props.onOpenFile(row.path);
                     }
                   }}
                 >
@@ -234,38 +305,48 @@ export function FileExplorer(props: {
                     >
                       ▸
                     </span>
+                  ) : row.kind === 'loading' ? (
+                    <span class="rf-row__ico" data-cat="loading" aria-hidden="true">
+                      ◌
+                    </span>
+                  ) : row.kind === 'error' ? (
+                    <span class="rf-row__ico" data-cat="error" aria-hidden="true">
+                      ⚠
+                    </span>
                   ) : (
                     <span class="rf-row__ico" data-cat={fileCategory(row.name)} aria-hidden="true">
                       {glyphForCategory(fileCategory(row.name))}
                     </span>
                   )}
                   <span class="rf-row__name">{row.name}</span>
-                  <span class="rf-row__actions">
-                    <button
-                      type="button"
-                      class="rf-iconbtn rf-iconbtn--xs"
-                      title="Rename"
-                      aria-label={`Rename ${row.name}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditing({ kind: 'rename', path: row.path });
-                      }}
-                    >
-                      ✎
-                    </button>
-                    <button
-                      type="button"
-                      class="rf-iconbtn rf-iconbtn--xs"
-                      title="Delete"
-                      aria-label={`Delete ${row.name}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        remove(row.path, row.kind);
-                      }}
-                    >
-                      ✕
-                    </button>
-                  </span>
+                  <Show when={!props.readOnly && (row.kind === 'file' || row.kind === 'dir')}>
+                    <span class="rf-row__actions">
+                      <button
+                        type="button"
+                        class="rf-iconbtn rf-iconbtn--xs"
+                        title="Rename"
+                        aria-label={`Rename ${row.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditing({ kind: 'rename', path: row.path });
+                        }}
+                      >
+                        ✎
+                      </button>
+                      <button
+                        type="button"
+                        class="rf-iconbtn rf-iconbtn--xs"
+                        title="Delete"
+                        aria-label={`Delete ${row.name}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (row.kind === 'file' || row.kind === 'dir') remove(row.path, row.kind);
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  </Show>
                 </div>
               </Show>
             );
@@ -273,9 +354,17 @@ export function FileExplorer(props: {
         </For>
 
         <Show when={rows().length === 0 && !editing()}>
-          <p class="rf-explorer__empty">
-            Empty workspace. Use ＋ to add a file, or run <code>npm install</code> in the console.
-          </p>
+          <Show
+            when={props.readOnly}
+            fallback={
+              <p class="rf-explorer__empty">
+                Empty workspace. Use ＋ to add a file, or run <code>npm install</code> in the
+                console.
+              </p>
+            }
+          >
+            <p class="rf-explorer__empty">Loading the Vite project from the worker…</p>
+          </Show>
         </Show>
       </div>
     </div>
