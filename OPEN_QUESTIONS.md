@@ -27,6 +27,83 @@ When a question is reviewed:
 
 ## Active
 
+## Q-2026-06-05-318: deferred `RIFTY_RFV_*` → `RIFTY_RT_*` env rename + `Mode` token rename (post-ADR-0078)
+
+**Status:** 🟢 Active
+**Encountered in:** ADR-0078 (generic ProjectSpec/Template runtime)
+**Milestone:** M10 polish
+**Author (agent session):** 2026-06-05
+
+### Context
+
+ADR-0078 made the real-vite worker template-agnostic but, to keep the blast radius small, left two names Vite-branded:
+
+1. The `RIFTY_RFV_*` env prefix (RFV = "real Vite") now names a generic surface (`RIFTY_RFV_PORT/ROOT/ENTRY/TEMPLATE`). It also keys the snapshot (ADR-0076), write (ADR-0043), HMR, and node_modules (ADR-0080) BroadcastChannels via `channelNameFor`.
+2. The internal `Mode` token `'real-vite'` is read at ~24 sites incl. the ADR-0076 snapshot gate and the e2e `[data-preset]` contract.
+
+### Provisional decision
+
+Defer both renames. Re-keying the channels or the mode token now would touch four bridges and ~24 read sites for zero functional gain, and risks desyncing the `RIFTY_RFV_PORT`-keyed channels mid-change. The generic UI naming is already achieved via `ProjectSpec.displayName`.
+
+### What a fuller cleanup needs (not done here)
+
+A mechanical sweep renaming `RIFTY_RFV_*` → `RIFTY_RT_*` (and optionally `Mode` `'real-vite'` → `'project'`) once the switcher/channel contracts have settled — reversible, single-PR, no behavioural change. Coordinate with the m10 e2e (worker log markers) so the prefix and the asserted strings move together.
+
+### Code markers (none — captured in ADR-0078 + this entry; reversible)
+
+## Q-2026-06-05-317: kernel kills long-running (server) worker entries on top-level-await resolve
+
+**Status:** 🟢 Active
+**Encountered in:** ADR-0077 (real-vite preview fix), diagnosing the `502 preview-port bridge timeout`
+**Milestone:** M11/M12 kernel
+**Author (agent session):** 2026-06-05
+
+### Context
+
+`@riftydev/kernel`'s `installWorkerEntry` (`worker-entry.ts`) runs the entry module then unconditionally `postMessage({type:'exit'})` → `closePorts()` → `self.close()`. Correct for a run-to-completion program (REPL/CLI), but a **long-running dev server** (Vite-in-Worker, ADR-0043) resolves its top-level `await` *after* it starts listening, so the kernel tears the realm down a beat later — the server dies and every subsequent request hits a dead worker.
+
+### Provisional decision
+
+Worked around **playground-locally**: `real-vite-bootstrap` ends with `await new Promise<never>(() => {})` so the entry never resolves and the realm lives until `.kill()` (ADR-0077). This keeps the fix off the kernel's public surface.
+
+### What a proper fix needs (not done here)
+
+The kernel should natively support **server-shaped** processes — e.g. a spawn flag or an explicit `process`-driven exit/shutdown signal — so a server doesn't have to defeat the run-to-completion model with a never-resolving promise (which also means the worker can only ever exit via `worker.terminate()`, losing any graceful-shutdown hook). IRREVERSIBLE (kernel public behaviour) → its own ADR when taken up.
+
+**Update (2026-06-05):** ADR-0080 (lazy `node_modules` remote-read) is now a **second consumer** of this keep-alive workaround — the worker must stay live to answer the page explorer's reads. Two consumers strengthen the case for native kernel server-process support; the workaround is no longer a one-off.
+
+### Code markers (none — captured in ADR-0077 + this entry; 1-line playground workaround, reversible)
+
+## Q-2026-06-04-316: project/template switcher — gallery promoted, header mode-toggles kept
+
+**Status:** ⚪ Promoted → ADR-0079 (single switcher) + ADR-0078 (more templates)
+**Encountered in:** playground "доделываем" pass (console-scroll + switcher + real-vite FS), alongside ADR-0076
+**Milestone:** M10 polish
+**Author (agent session):** 2026-06-04
+
+**Resolution (2026-06-05):** Both deferred items are now done. The "more
+templates" headroom is delivered by **ADR-0078** (generic ProjectSpec/Template
+runtime). The single unified switcher is delivered by **ADR-0079**: the header
+`.rf-seg` is removed, the Templates gallery is the one switcher, and the m7/m10
+e2e contracts were moved onto it as a deliberate contract change (incl.
+correcting m10's stale worker-log markers). The deferred non-expandable
+`node_modules` placeholder is superseded by **ADR-0080** (now lazily
+*expandable*). This entry can be archived.
+
+### Context
+
+User feedback: "переключатель проектов выглядит странно. Давай заложим так, чтобы там могло быть больше шаблонов." Two surfaces currently switch projects/modes: the sidebar gallery (scales by category) and the header `.rf-seg` (`Real Vite` / `Dev Mode`) — a non-scaling pair that duplicates the gallery's "Live preview" presets. The visible "strangeness" was compounded by full-colour emoji tile icons clashing with the monochrome theme, and by the scalable gallery being hidden behind an activity-bar icon (boot default view is Explorer).
+
+### Provisional decision
+
+Make the **gallery the canonical, scalable Templates switcher** (retitled "Templates"; semantic-icon-keyed presets → trivial to add more; monochrome vendored SVG icons replace emoji — see the 2026-06-04 library review quick-win). **Keep the header `Real Vite` / `Dev Mode` seg** as quick mode-toggles: e2e locks them (`m7-preview-sw` clicks `[data-action="dev-mode"]` and asserts the text "Dev Mode"; `m10-hmr` clicks `[data-action="real-vite"]`), and CLAUDE.md forbids editing tests to enable a redesign.
+
+### What a fuller redesign needs (not done here)
+
+If we want a single unified switcher (drop/relocate the header seg), the `data-action`/text contracts must move with it and the e2e specs updated *as a deliberate contract change* (not to make code pass) — a focused follow-up. Also deferred: a non-expandable `node_modules` placeholder node in the real-vite mirror (presence is already flagged via `nodeModulesPresent`, ADR-0076).
+
+### Code markers (none — captured in ADR-0076 + this entry; UI-only, reversible)
+
 ## Q-2026-06-03-308: in-frame preview navigation aborts under cross-origin isolation (SW routes sub-frame nav to the wrong owner)
 
 **Status:** 🟢 Active
