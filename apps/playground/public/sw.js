@@ -1,12 +1,50 @@
 // Generated from packages/service-worker/src/sw.ts — do not edit. Source of truth: ADR 0016.
+// ../../packages/io/src/preview-protocol.ts
+var PREVIEW_PREFIX_RE = /^\/preview\/(\d+)(\/.*)?$/;
+var PREVIEW_LOCAL_HOST = "preview.local";
+function synthesizePreviewUrl(path) {
+  return `http://${PREVIEW_LOCAL_HOST}${path}`;
+}
+function parsePreviewPath(path) {
+  const m = PREVIEW_PREFIX_RE.exec(path);
+  if (!m) return null;
+  const port = Number.parseInt(m[1], 10);
+  const rest = m[2] ?? "/";
+  return { port, rest };
+}
+
 // ../../packages/service-worker/src/protocol.ts
-var SW_PROTOCOL_VERSION = "1";
+var SW_FRAME_VERSION = "1";
+var SW_ROUTING_VERSION = "1";
 var SW_PING = "__rifty_sw_ping__";
 var SW_PONG = "__rifty_sw_pong__";
 var SW_PREVIEW_READY = "rifty:preview:ready";
 var SW_PREVIEW_GOODBYE = "rifty:preview:goodbye";
 var SW_PREVIEW_REQUEST = "rifty:preview:request";
 var SW_ERROR_PROTOCOL_VERSION_MISMATCH = "PROTOCOL_VERSION_MISMATCH";
+
+// ../../packages/service-worker/src/owner-resolver.ts
+var fallbackWarned = /* @__PURE__ */ new WeakSet();
+var FirstWindowOwnerResolver = class {
+  async resolveOwner(scope, _request, clientId) {
+    if (clientId) {
+      const direct = await scope.clients.get(clientId);
+      if (direct) return direct;
+    }
+    const all = await scope.clients.matchAll({
+      type: "window",
+      includeUncontrolled: false
+    });
+    if (all.length === 0) return null;
+    if (!fallbackWarned.has(scope)) {
+      fallbackWarned.add(scope);
+      console.warn(
+        "[rifty/service-worker] preview fetch had no clientId; falling back to first controlled window"
+      );
+    }
+    return all[0] ?? null;
+  }
+};
 
 // ../../packages/service-worker/src/ready-clients.ts
 var defaultLogger = {
@@ -19,6 +57,7 @@ function createReadyClientsRegistry(logger = defaultLogger) {
   const waiters = /* @__PURE__ */ new Map();
   const mismatched = /* @__PURE__ */ new Set();
   const warned = /* @__PURE__ */ new Set();
+  let nextRequestIdCounter = 1;
   function markReady(id) {
     ready.add(id);
     const waiterSet = waiters.get(id);
@@ -82,13 +121,20 @@ function createReadyClientsRegistry(logger = defaultLogger) {
     handleMessage(clientId, data) {
       const type = data?.type;
       if (type !== SW_PREVIEW_READY && type !== SW_PREVIEW_GOODBYE) return;
-      if (data.version !== SW_PROTOCOL_VERSION) {
+      const frameOk = data.frameVersion === SW_FRAME_VERSION;
+      const routingOk = data.routingVersion === SW_ROUTING_VERSION;
+      if (!frameOk || !routingOk) {
         if (!warned.has(clientId)) {
           warned.add(clientId);
+          const drifted = [];
+          if (!frameOk) drifted.push("frame");
+          if (!routingOk) drifted.push("routing");
           logger.warn(
-            `[rifty/service-worker] protocol version mismatch from client ${clientId}: got ${String(
-              data.version
-            )}, want ${SW_PROTOCOL_VERSION}`
+            `[rifty/service-worker] protocol version mismatch from client ${clientId} (${drifted.join(
+              "+"
+            )}): got frame=${String(data.frameVersion)} routing=${String(
+              data.routingVersion
+            )}, want frame=${SW_FRAME_VERSION} routing=${SW_ROUTING_VERSION}`
           );
         }
         mismatched.add(clientId);
@@ -100,52 +146,100 @@ function createReadyClientsRegistry(logger = defaultLogger) {
       } else {
         markGoodbye(clientId);
       }
+    },
+    nextRequestId() {
+      return nextRequestIdCounter++;
     }
   };
 }
 
+// ../../packages/service-worker/src/owner-binding-window.ts
+var FirstWindowOwnerBinding = class {
+  #resolver;
+  #logger;
+  constructor(opts = {}) {
+    this.#resolver = opts.resolver ?? new FirstWindowOwnerResolver();
+    this.#logger = opts.logger;
+  }
+  // NOT `async` — returning the resolver's promise directly preserves the
+  // single await-unwrap timing of the pre-ADR-0046 path, where
+  // `route-preview` awaited `resolver.resolveOwner` with no intermediate
+  // binding hop. An `async` wrapper here would add one extra microtask turn
+  // (await-unwrap of the inner resolver promise), which the handshake tests
+  // observe as a missed dispatch within their fixed microtask budget.
+  resolveOwner(scope, request, clientId, _port) {
+    return this.#resolver.resolveOwner(scope, request, clientId);
+  }
+  subscribeReadiness(scope) {
+    const registry = this.#logger !== void 0 ? createReadyClientsRegistry(this.#logger) : createReadyClientsRegistry();
+    const messageHandler = (event) => {
+      const ev = event;
+      const data = ev.data;
+      if (!data || typeof data !== "object" || typeof data.type !== "string") return;
+      if (data.type !== SW_PREVIEW_READY && data.type !== SW_PREVIEW_GOODBYE) return;
+      const source = ev.source;
+      const sourceId = source && "id" in source ? source.id : null;
+      if (!sourceId) return;
+      registry.handleMessage(sourceId, data);
+    };
+    scope.addEventListener("message", messageHandler);
+    return {
+      readiness: {
+        isReady: (id) => registry.isReady(id),
+        isMismatched: (id) => registry.isMismatched(id),
+        // NOT `async` — returning the registry's promise directly preserves
+        // the exact microtask timing of the pre-ADR-0046 path (where
+        // `route-preview` awaited `registry.waitForReady` with no wrapper).
+        // An `async` wrapper would insert an extra await-unwrap tick between
+        // the ready frame resolving the waiter and `routePreview` resuming to
+        // dispatch — observable to the handshake tests that gate dispatch on
+        // a fixed number of microtask turns.
+        //
+        // The window registry has no separate "gone" signal — a window
+        // teardown comes through as a goodbye, which {@link
+        // createReadyClientsRegistry} surfaces as `'timeout'` for backward
+        // compatibility. The binding contract reserves `'gone'` for explicit
+        // owner-departed signals; the window binding only emits `'gone'` when
+        // it can distinguish it from a plain timeout, which today is never.
+        // Worker bindings do surface `'gone'`.
+        waitForReady: (id, timeoutMs) => registry.waitForReady(id, timeoutMs),
+        nextRequestId: () => registry.nextRequestId()
+      },
+      teardown() {
+        scope.removeEventListener("message", messageHandler);
+      }
+    };
+  }
+};
+
 // ../../packages/service-worker/src/route-preview.ts
-var nextRequestId = 1;
-var fallbackWarned = /* @__PURE__ */ new WeakSet();
-async function resolveOwningClient(scope, clientId) {
-  if (clientId) {
-    const direct = await scope.clients.get(clientId);
-    if (direct) return direct;
-  }
-  const all = await scope.clients.matchAll({ type: "window", includeUncontrolled: false });
-  if (all.length === 0) return null;
-  if (!fallbackWarned.has(scope)) {
-    fallbackWarned.add(scope);
-    console.warn(
-      "[rifty/service-worker] preview fetch had no clientId; falling back to first controlled window"
-    );
-  }
-  return all[0] ?? null;
-}
-async function routePreview(scope, request, match, registry, timeoutMs, clientId) {
-  const client = await resolveOwningClient(scope, clientId);
+async function routePreview(scope, request, match, readiness, timeoutMs, clientId, binding) {
+  const client = await binding.resolveOwner(scope, request, clientId, match.port);
   if (!client) {
     return new Response(`No client to serve preview port ${match.port}`, { status: 503 });
   }
-  if (registry.isMismatched(client.id)) {
+  if (readiness.isMismatched(client.id)) {
     return new Response("protocol version mismatch", { status: 503 });
   }
-  const outcome = await registry.waitForReady(client.id, timeoutMs);
+  const outcome = await readiness.waitForReady(client.id, timeoutMs);
   if (outcome === "mismatch") {
     return new Response("protocol version mismatch", { status: 503 });
   }
+  if (outcome === "gone") {
+    return new Response(`preview owner ${client.id} departed before handshake`, { status: 503 });
+  }
   if (outcome === "timeout") {
-    if (registry.isMismatched(client.id)) {
+    if (readiness.isMismatched(client.id)) {
       return new Response("protocol version mismatch", { status: 503 });
     }
     return new Response(`preview-bridge not ready within ${timeoutMs}ms`, { status: 503 });
   }
   const channel = new MessageChannel();
   const bodyBytes = request.method === "GET" || request.method === "HEAD" ? null : new Uint8Array(await request.arrayBuffer());
-  const requestId = nextRequestId++;
+  const requestId = readiness.nextRequestId();
   const serialised = {
     port: match.port,
-    url: `http://preview.local${match.path}${new URL(request.url).search}`,
+    url: `${synthesizePreviewUrl(match.path)}${new URL(request.url).search}`,
     method: request.method,
     headers: Object.fromEntries(request.headers),
     body: bodyBytes
@@ -156,6 +250,10 @@ async function routePreview(scope, request, match, registry, timeoutMs, clientId
       if ("error" in data) {
         const err = data.error;
         if (typeof err === "object" && err.kind === SW_ERROR_PROTOCOL_VERSION_MISMATCH) {
+          console.error("[rifty/service-worker] preview reply protocol mismatch", {
+            expected: err.expected,
+            got: err.got
+          });
           resolve(new Response(err.message, { status: 503 }));
           return;
         }
@@ -186,7 +284,8 @@ async function routePreview(scope, request, match, registry, timeoutMs, clientId
       {
         type: SW_PREVIEW_REQUEST,
         requestId,
-        version: SW_PROTOCOL_VERSION,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
         request: serialised
       },
       [channel.port2]
@@ -195,40 +294,43 @@ async function routePreview(scope, request, match, registry, timeoutMs, clientId
 }
 
 // ../../packages/service-worker/src/preview-bridge.ts
-var PREVIEW_PREFIX_RE = /^\/preview\/(\d+)(\/.*)?$/;
 function matchPreviewUrl(pathname) {
-  const m = PREVIEW_PREFIX_RE.exec(pathname);
-  if (!m) return null;
-  const port = Number.parseInt(m[1], 10);
-  const suffix = m[2] ?? "/";
-  return { port, path: suffix };
+  const parsed = parsePreviewPath(pathname);
+  if (!parsed) return null;
+  return { port: parsed.port, path: parsed.rest };
+}
+function isPreviewFrameRequest(request) {
+  return request.mode === "navigate" || request.destination !== "";
 }
 var DEFAULT_READY_TIMEOUT_MS = 3e3;
 function createPreviewInterceptor(scope, hooks = {}) {
   const timeoutMs = hooks.timeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
-  const registry = createReadyClientsRegistry();
-  const messageHandler = (event) => {
-    const data = event.data;
-    if (!data || typeof data !== "object" || typeof data.type !== "string") return;
-    if (data.type !== SW_PREVIEW_READY && data.type !== SW_PREVIEW_GOODBYE) return;
-    const source = event.source;
-    const clientId = source && "id" in source ? source.id : null;
-    if (!clientId) return;
-    registry.handleMessage(clientId, data);
-  };
+  const binding = hooks.binding ?? new FirstWindowOwnerBinding(
+    hooks.resolver !== void 0 ? { resolver: hooks.resolver } : void 0
+  );
+  const subscription = binding.subscribeReadiness(scope);
   const fetchHandler = (event) => {
     const url = new URL(event.request.url);
     const match = matchPreviewUrl(url.pathname);
     if (!match) return;
-    const clientId = event.resultingClientId || event.clientId || null;
-    event.respondWith(routePreview(scope, event.request, match, registry, timeoutMs, clientId));
+    const clientId = isPreviewFrameRequest(event.request) ? null : event.resultingClientId || event.clientId || null;
+    event.respondWith(
+      routePreview(
+        scope,
+        event.request,
+        match,
+        subscription.readiness,
+        timeoutMs,
+        clientId,
+        binding
+      )
+    );
   };
   scope.addEventListener("fetch", fetchHandler);
-  scope.addEventListener("message", messageHandler);
   return {
     teardown() {
       scope.removeEventListener("fetch", fetchHandler);
-      scope.removeEventListener("message", messageHandler);
+      subscription.teardown();
     }
   };
 }
@@ -250,20 +352,28 @@ self.addEventListener("message", (event) => {
   if (!data || typeof data !== "object" || data.type !== SW_PING) return;
   const source = event.source;
   const clientId = source && "id" in source && typeof source.id === "string" ? source.id : "<unknown>";
-  if (data.version !== SW_PROTOCOL_VERSION) {
+  const frameOk = data.frameVersion === SW_FRAME_VERSION;
+  const routingOk = data.routingVersion === SW_ROUTING_VERSION;
+  if (!frameOk || !routingOk) {
     if (!pingMismatchWarned.has(clientId)) {
       pingMismatchWarned.add(clientId);
+      const drifted = [];
+      if (!frameOk) drifted.push("frame");
+      if (!routingOk) drifted.push("routing");
       console.warn(
-        `[rifty/service-worker] ping protocol version mismatch from ${clientId}: got ${String(
-          data.version
-        )}, want ${SW_PROTOCOL_VERSION}`
+        `[rifty/service-worker] ping protocol version mismatch from ${clientId} (${drifted.join(
+          "+"
+        )}): got frame=${String(data.frameVersion)} routing=${String(
+          data.routingVersion
+        )}, want frame=${SW_FRAME_VERSION} routing=${SW_ROUTING_VERSION}`
       );
     }
     return;
   }
   event.source?.postMessage({
     type: SW_PONG,
-    version: SW_PROTOCOL_VERSION,
+    frameVersion: SW_FRAME_VERSION,
+    routingVersion: SW_ROUTING_VERSION,
     from: "service-worker"
   });
 });
