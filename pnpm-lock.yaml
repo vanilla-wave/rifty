@@ -65,6 +65,9 @@ importers:
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../../packages/vfs
+      '@xterm/xterm':
+        specifier: ^5.5.0
+        version: 5.5.0
       monaco-editor:
         specifier: ^0.52.0
         version: 0.52.2

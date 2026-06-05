@@ -535,15 +535,19 @@ body {
   place-items: center;
   width: 26px;
   height: 26px;
-  font-size: 14px;
   line-height: 1;
   border-radius: var(--rf-r-sm);
   background: var(--rf-bg-1);
   border: 1px solid var(--rf-line);
+  color: var(--rf-text-dim);
+}
+.rf-preset:hover .rf-preset__icon {
+  color: var(--rf-text);
 }
 .rf-preset[data-active="true"] .rf-preset__icon {
   border-color: #45531f;
   background: #141a0c;
+  color: var(--rf-accent-bright);
 }
 .rf-preset__label {
   font-size: 12.5px;
@@ -1012,6 +1016,19 @@ body.rf-resizing iframe {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.rf-explorer__ro {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rf-text-faint);
+  border: 1px solid var(--rf-line-2);
+  border-radius: var(--rf-r-pill);
+  padding: 1px 6px;
 }
 .rf-explorer__tools {
   margin-left: auto;

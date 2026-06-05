@@ -12,6 +12,13 @@ import { assertCrossOriginIsolated, bootstrapPlayground } from './boot.ts';
 // `new URL(..., import.meta.url)` form is not emitted as a worker chunk by
 // `vite build`, so child processes failed to spawn in production.
 import kernelWorkerUrl from './workers/kernel-worker-entry.ts?worker&url';
+// xterm's stylesheet is a hard dependency of the console terminal: it sets
+// `.xterm-viewport { position: absolute; overflow-y: scroll }` and the
+// absolute row layout, without which the terminal renders but never scrolls.
+// Imported here (not via an index.html <link>) so Vite resolves + bundles it
+// in dev AND prod — a bare `/@xterm/...` href hits the SPA fallback (200 HTML)
+// and is silently ignored as a stylesheet.
+import '@xterm/xterm/css/xterm.css';
 import './styles/theme.css';
 
 // First statement — fails loud if COI is off. Runs *before* `bootstrapPlayground`
