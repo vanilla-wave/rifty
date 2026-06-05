@@ -24,9 +24,10 @@
  *
  * Manual verification steps (no env flag needed):
  *   1. `pnpm dev` → open `http://localhost:5273`.
- *   2. Click "Real Vite" in the header. Wait for `[real-vite] hmr bridge
- *      ready at ws://preview.local:5174/__hmr` in the terminal followed by
- *      `[real-vite] vite is listening`.
+ *   2. Open the Templates view (activity bar) and select the "Real npm project"
+ *      tile. Wait for `[real-vite/worker] hmr bridge ready at
+ *      ws://preview.local:5174/__hmr` in the terminal followed by
+ *      `[real-vite/worker] vite is listening`.
  *   3. Confirm the preview iframe shows the seeded "Hello from real Vite"
  *      message.
  *   4. Open DevTools → `Application` → `Frames` → drill into the preview
@@ -53,10 +54,18 @@ test.describe('M10 — HMR over cross-realm bridge (ADR-0017 phase 1)', () => {
     const term = page.locator('[data-testid="terminal"]');
     await expect(term).toContainText('[worker ready]', { timeout: 10_000 });
 
-    // Enter Real Vite mode.
-    await page.locator('[data-action="real-vite"]').click();
-    await expect(term).toContainText('[real-vite] hmr bridge ready', { timeout: 60_000 });
-    await expect(term).toContainText('[real-vite] vite is listening', { timeout: 60_000 });
+    // Enter Real Vite via the single Templates switcher (ADR-0079, a deliberate
+    // e2e contract change): open the Templates view and select the "Real npm
+    // project" tile (the preset id stays 'real-vite').
+    await page.locator('[data-action="view-templates"]').click();
+    await expect(page.locator('[data-testid="gallery"]')).toBeVisible();
+    await page.locator('[data-preset="real-vite"]').click();
+    // Correct the stale markers to the ones the worker actually emits
+    // (`[real-vite/worker] …`, ADR-0077). The old `[real-vite] …` strings
+    // predate the worker-realm `/worker]` prefix and never substring-matched
+    // current output — this spec is skip-by-default, so the drift was invisible.
+    await expect(term).toContainText('[real-vite/worker] hmr bridge ready', { timeout: 60_000 });
+    await expect(term).toContainText('[real-vite/worker] vite is listening', { timeout: 60_000 });
 
     // The preview iframe must mount and load the bridge client.
     const previewFrame = page.frameLocator('iframe').first();
