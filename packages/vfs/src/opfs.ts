@@ -1,16 +1,14 @@
 /**
  * OPFS (Origin Private File System) backend.
  *
- * Works inside a Worker (where `navigator.storage.getDirectory()` is available
- * and so is `FileSystemFileHandle.createSyncAccessHandle()`). Use this for
- * persistent storage in the deployed playground.
+ * Works inside a Worker, where `navigator.storage.getDirectory()` and
+ * `FileSystemFileHandle.createSyncAccessHandle()` are available; used for
+ * persistent storage in the deployed playground. Outside an OPFS-capable
+ * environment (Node tests, some private-browsing modes), `isSupported()`
+ * returns `false` and the constructor throws.
  *
- * Outside of an OPFS-capable environment (Node tests, some private browsing
- * modes), `OpfsVfs.isSupported()` returns `false` and the constructor throws.
- *
- * OPFS errors are translated via {@link mapOpfsError} so callers see the
- * POSIX-flavoured codes they expect (`ENOENT`, `EACCES`, `EDQUOT`, `EISDIR`,
- * `ENOTDIR`, `EIO`) — ADR-0013 acceptance.
+ * Errors are translated via {@link mapOpfsError} to POSIX-flavoured codes
+ * (`ENOENT`, `EACCES`, `EDQUOT`, `EISDIR`, `ENOTDIR`, `EIO`) — ADR-0013.
  */
 
 import { VfsError } from './errors.ts';
@@ -23,7 +21,7 @@ declare const navigator: { storage?: { getDirectory(): Promise<FileSystemDirecto
 type ReadFileEncoding = 'utf8' | 'utf-8' | 'utf16le' | 'utf-16le' | 'latin1';
 
 function decodeBytes(bytes: Uint8Array, encoding: ReadFileEncoding): string {
-  // Normalise the encoding name to the form `TextDecoder` accepts.
+  // Normalise to the form `TextDecoder` accepts.
   const label = encoding === 'utf8' ? 'utf-8' : encoding === 'utf16le' ? 'utf-16le' : encoding;
   return new TextDecoder(label).decode(bytes);
 }
@@ -31,10 +29,9 @@ function decodeBytes(bytes: Uint8Array, encoding: ReadFileEncoding): string {
 export class OpfsVfs implements Vfs {
   private root: FileSystemDirectoryHandle | null = null;
   /**
-   * Side-table for `utimes` — OPFS exposes no mtime mutation on either
+   * Side-table for `utimes` — OPFS exposes no mtime mutation on
    * `FileSystemFileHandle` or `FileSystemSyncAccessHandle` (ADR-0029, ADR-0041).
-   * Mirrors the same shape `OpfsFsSync` uses. Each surface keeps its own
-   * table; pairing them at storage is out of scope until a consumer needs it.
+   * Each surface keeps its own table; pairing them is out of scope until needed.
    */
   private readonly times = new Map<string, { atime: number; mtime: number }>();
 
@@ -113,7 +110,7 @@ export class OpfsVfs implements Vfs {
     const dir = await this.getDirectory(path);
     const out: VfsDirent[] = [];
     try {
-      // FileSystemDirectoryHandle is async-iterable
+      // FileSystemDirectoryHandle is async-iterable (not in the TS lib types).
       for await (const [name, handle] of dir as unknown as AsyncIterable<
         [string, FileSystemHandle]
       >) {
@@ -162,15 +159,13 @@ export class OpfsVfs implements Vfs {
   }
 
   async stat(path: string): Promise<VfsStat> {
-    // Try as file first via the parent directory; fall back to directory.
-    // We deliberately probe the parent handle for the entry kind rather than
-    // catching opaque `getFileHandle` errors — that way `NotAllowedError`
-    // and `QuotaExceededError` propagate correctly instead of getting masked
-    // as "must be a directory then".
+    // Probe the parent handle for the entry kind rather than catching opaque
+    // `getFileHandle` errors, so `NotAllowedError`/`QuotaExceededError`
+    // propagate instead of being masked as "must be a directory then".
     const parent = await this.getDirectory(dirname(path));
     const name = basename(path);
     if (name === '') {
-      // root: it's a directory; mtime is not tracked by OPFS.
+      // root dir; OPFS does not track mtime.
       return { isFile: false, isDirectory: true, size: 0, mtime: 0 };
     }
     let fileHandle: FileSystemFileHandle | null = null;
@@ -188,18 +183,17 @@ export class OpfsVfs implements Vfs {
         throw mapOpfsError(err, path, 'file');
       }
     }
-    // Either entry doesn't exist as a file, or it's a directory.
-    // TypeMismatchError says "exists, but other kind" → it's a dir.
+    // TypeMismatchError means "exists, but other kind" → it's a dir.
     const isDirByTypeMismatch =
       fileErr &&
       typeof fileErr === 'object' &&
       (fileErr as { name?: string }).name === 'TypeMismatchError';
     if (isDirByTypeMismatch) {
-      // OPFS does not expose dir mtime — synthesise as 0 (documented).
+      // OPFS exposes no dir mtime — synthesise as 0.
       return { isFile: false, isDirectory: true, size: 0, mtime: 0 };
     }
-    // Not a known file. Try as a directory; if that throws we propagate the
-    // proper code (NotFoundError → ENOENT, NotAllowedError → EACCES, etc.).
+    // Try as a directory; on throw, propagate the mapped code
+    // (NotFoundError → ENOENT, NotAllowedError → EACCES, etc.).
     try {
       await parent.getDirectoryHandle(name, { create: false });
       return { isFile: false, isDirectory: true, size: 0, mtime: 0 };
@@ -214,8 +208,8 @@ export class OpfsVfs implements Vfs {
       return true;
     } catch (err) {
       if (err instanceof VfsError && err.code === 'ENOENT') return false;
-      // Bubble up real failures (EACCES, EDQUOT, EIO) — silently swallowing
-      // them would re-introduce the original silent-stub problem.
+      // Bubble up real failures (EACCES, EDQUOT, EIO); swallowing them would
+      // re-introduce the silent-stub problem.
       throw err;
     }
   }
@@ -229,11 +223,10 @@ export class OpfsVfs implements Vfs {
     path: string,
     opts?: { chunkSize?: number; start?: number; end?: number },
   ): Promise<ReadableStream<Uint8Array>> {
-    // ADR-0020 phase 2: wrap `File.stream()` from `FileSystemFileHandle`.
-    // `start`/`end` are honoured via `File.slice(start, end)`; `chunkSize`
-    // is informational — the underlying browser stream picks its own chunk
-    // boundaries (typically 64 KiB), which already satisfies the "no whole-
-    // file buffering" goal for `createReadStream` on big files.
+    // ADR-0020 phase 2: wrap `File.stream()`. `start`/`end` via `File.slice`;
+    // `chunkSize` is informational — the browser stream picks its own
+    // boundaries (~64 KiB), already satisfying the "no whole-file buffering"
+    // goal for `createReadStream` on big files.
     const handle = await this.getFileHandle(path);
     let file: File;
     try {

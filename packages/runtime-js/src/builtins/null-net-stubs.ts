@@ -1,9 +1,8 @@
 /**
- * Loud stubs for `node:dns`, `node:tls`, `node:readline`, `node:zlib`. They
- * exist so that `import` succeeds (Vite static-imports all of them at top
- * level); every actual method call throws NotImplementedError so we never
- * silently corrupt behaviour. `node:https` lives in `@riftydev/net/https.ts`
- * and is registered there (ADR-0010 loud-throw stub).
+ * Loud stubs for `node:dns`, `node:tls`, `node:readline`, `node:zlib`. Exist so
+ * `import` succeeds (Vite static-imports them all); every method call throws
+ * NotImplementedError rather than silently corrupting behaviour. `node:https`
+ * lives in `@riftydev/net/https.ts` (ADR-0010 loud-throw stub).
  */
 import { NotImplementedError } from '@riftydev/io';
 import { HTTP2_CONSTANTS } from './http2-constants.ts';
@@ -12,9 +11,9 @@ const notImpl = (feature: string) => () => {
   throw new NotImplementedError(feature);
 };
 
-// Browser-only "dns" — only `localhost` resolves, everything else throws.
-// Vite's `server.listen()` calls `dns.promises.lookup('localhost', …)` to
-// decide between 127.0.0.1 and ::1; that's the one case we have to handle.
+// Browser-only "dns": only `localhost` resolves. Vite's `server.listen()` calls
+// `dns.promises.lookup('localhost', …)` to choose 127.0.0.1 vs ::1 — the one
+// case we must handle; everything else throws.
 function lookupLocal(hostname: string): { address: string; family: number } {
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     return { address: '127.0.0.1', family: 4 };
@@ -66,22 +65,19 @@ export const tls = {
   TLSSocket: TlsThrow,
 };
 
-// `node:dgram` — raw UDP datagram sockets. There is NO UDP socket API in the
-// browser (WebSocket / fetch / WebTransport are all stream/connection-oriented;
-// none expose `recvfrom`/`sendto` on a UDP port), so this is a genuine
-// browser/WASI capability ceiling: every actual socket operation throws
-// NotImplementedError, exactly like `tls` / `zlib` above.
+// `node:dgram` raw UDP sockets: no UDP socket API exists in the browser
+// (WebSocket/fetch/WebTransport are all stream/connection-oriented, none expose
+// `recvfrom`/`sendto`), a genuine browser/WASI capability ceiling — socket ops
+// throw, like `tls`/`zlib`.
 //
-// The module surface must still RESOLVE, because `multicast-dns/index.js` does a
-// top-level `var dgram = require('dgram')` and only calls `dgram.createSocket()`
-// later, inside its exported factory — which `bonjour-service` invokes only when
-// mDNS is actually published at runtime. The opencode server graph pulls
+// The surface must still RESOLVE: `multicast-dns/index.js` does top-level
+// `var dgram = require('dgram')` and only calls `createSocket()` later in its
+// factory, which `bonjour-service` invokes only on mDNS publish. opencode pulls
 // multicast-dns transitively (server.ts -> mdns.ts -> bonjour-service ->
-// multicast-dns), so the import must succeed for the static graph to evaluate;
-// the throw fires only if UDP is genuinely used (mDNS publish), never on import.
-// Named `Socket` (not `DgramSocketThrow`) so `dgram.Socket.name === 'Socket'`
-// matches Node — multicast-dns probes the module shape, and the parity surface
-// case pins it.
+// multicast-dns), so import must succeed for the static graph; the throw fires
+// only if UDP is actually used (mDNS publish), never on import.
+// Named `Socket` so `dgram.Socket.name === 'Socket'` matches Node —
+// multicast-dns probes the module shape, pinned by the parity surface case.
 class Socket {
   constructor() {
     throw new NotImplementedError('dgram.createSocket');
@@ -94,20 +90,18 @@ export const dgram = {
   _createSocketHandle: notImpl('dgram._createSocketHandle'),
 };
 
-// `node:http2` — HTTP/2 server/client. HTTP/2 multiplexes frames over a single
-// raw TCP/TLS connection; the browser/WASI realm has no raw socket API (rifty's
-// `node:http` runs over the page<->SW port registry, and `node:tls`/raw `node:net`
-// connect already loud-throw), so a real HTTP/2 server or session is a genuine
-// capability ceiling, like `tls` / `dgram`.
+// `node:http2`: HTTP/2 multiplexes frames over one raw TCP/TLS connection, but
+// the browser/WASI realm has no raw socket API (rifty's `node:http` runs over the
+// page<->SW port registry; `node:tls`/raw `node:net` connect already loud-throw),
+// so a real HTTP/2 server/session is a capability ceiling, like `tls`/`dgram`.
 //
-// The module surface must still RESOLVE: `fastify/lib/server.js` does a top-level
+// The surface must still RESOLVE: `fastify/lib/server.js` does top-level
 // `const http2 = require('node:http2')` UNCONDITIONALLY and only calls
-// `http2.createServer` / `createSecureServer` later, inside its server-instance
-// factory, when configured with `http2: true`. opencode boots HTTP/1, so that
-// branch is never taken at boot — but the import must succeed for the static
-// graph to evaluate. Every server/session creation throws NotImplementedError if
-// HTTP/2 is actually used. The exposed names mirror Node's real `node:http2`
-// function set (verified vs Node 24); `sensitiveHeaders` is the documented symbol.
+// `createServer`/`createSecureServer` later, when configured `http2: true`.
+// opencode boots HTTP/1 so that branch is never taken, but the import must
+// succeed for the static graph; server/session creation throws if HTTP/2 is
+// actually used. Exposed names mirror Node 24's `node:http2`; `sensitiveHeaders`
+// is the documented symbol.
 export const http2 = {
   createServer: notImpl('http2.createServer'),
   createSecureServer: notImpl('http2.createSecureServer'),
@@ -117,7 +111,7 @@ export const http2 = {
   getUnpackedSettings: notImpl('http2.getUnpackedSettings'),
   performServerHandshake: notImpl('http2.performServerHandshake'),
   sensitiveHeaders: Symbol('nodejs.http2.sensitiveHeaders'),
-  // Real spec-defined constants (pure data) — undici's client-h2.js reads
+  // Real spec constants (pure data) — undici's client-h2.js reads
   // `constants.HTTP2_HEADER_*` at module-eval.
   constants: HTTP2_CONSTANTS,
 };

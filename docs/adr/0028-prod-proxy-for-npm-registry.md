@@ -5,56 +5,40 @@ Date: 2026-05
 
 ## Context
 
-ADR 0005 (D-004) established that the npm registry is reached through a configurable proxy. Dev uses Vite's `/npm-registry` proxy (`apps/playground/vite.config.ts`). Production needs an equivalent: direct calls to `registry.npmjs.org` from a `crossOriginIsolated` page fail CORP/CORS. PROJECT_PLAN.md §977 (Q4') and REVIEW_ACTIONS A-032 left this open as the M9-closure decision.
-
-Three deployable shapes were considered.
+ADR 0005 (D-004) routes the npm registry through a configurable proxy. Dev uses Vite's `/npm-registry` proxy (`apps/playground/vite.config.ts`). Prod needs an equivalent: direct calls to `registry.npmjs.org` from a `crossOriginIsolated` page fail CORP/CORS. Left open as the M9-closure decision (PROJECT_PLAN.md §977 Q4', REVIEW_ACTIONS A-032).
 
 ## Options considered
 
-- **A — Vercel Edge Function (chosen).** Single source file in the playground deploy proxying `registry.npmjs.org`, sets `Access-Control-Allow-Origin` and `Cross-Origin-Resource-Policy: cross-origin`. Zero extra infra; co-located with the playground; this repo already adds `vercel.json` for prod headers.
-- **B — Cloudflare Worker.** Same shape, hosted separately. Equivalent runtime semantics; would split deploy across two providers.
-- **C — Self-hosted nginx + Verdaccio mirror.** Full mirror with caching; over-engineered for a pet-project deploy, on-call burden.
+- **A — Vercel Edge Function (chosen).** Single source file in the playground deploy, proxies `registry.npmjs.org`, sets the needed CORS/CORP headers. Zero extra infra; co-located with playground; repo already adds `vercel.json` for prod headers.
+- **B — Cloudflare Worker.** Same shape, hosted separately. Equivalent runtime; splits deploy across two providers.
+- **C — Self-hosted nginx + Verdaccio mirror.** Full caching mirror — over-engineered for a pet project, adds on-call burden.
 
 ## Decision
 
-Production proxy is a Vercel Edge Function in the playground deploy. The route exposed to the client follows the dev convention (`/npm-registry/...`) so the `@riftydev/npm-client` `REGISTRY_BASE_URL` configuration switches between dev and prod by changing one value (relative path in dev, same relative path served by the Edge Function in prod).
+Prod proxy is a Vercel Edge Function in the playground deploy. It exposes the dev-convention route (`/npm-registry/...`), so `@riftydev/npm-client`'s `REGISTRY_BASE_URL` switches dev↔prod by changing one value (same relative path, served by the Edge Function in prod).
 
-Migration to Option B (Cloudflare Worker) remains a single config change if Vercel's free-tier limits or pricing change; the Edge Function source is < 50 lines and provider-agnostic in shape.
+Migrating to Option B (Cloudflare Worker) stays a single config change if Vercel's free-tier/pricing shifts; the source is < 50 lines and provider-agnostic.
 
 ## Consequences
 
-- Production deploy gains one Vercel Edge Function file (under ~50 lines) that proxies both metadata (`GET /npm-registry/:pkg`) and tarballs (`GET /npm-registry/:pkg/-/:file.tgz`). It must set `Access-Control-Allow-Origin` and `Cross-Origin-Resource-Policy: cross-origin` on every response — without those headers the `crossOriginIsolated` page rejects the response.
-- `@riftydev/npm-client` continues to read `REGISTRY_BASE_URL`; no code change. Tests keep hitting their local mock; nothing in the test path touches Vercel.
-- Caching strategy for tarballs is deferred — the Edge Function is a plain pass-through at first. If registry latency or quotas bite, a follow-up ADR adds caching (KV / Edge Config / Cloudflare Cache).
-- Switching to Cloudflare Workers later is a config-only change in `vercel.json`/deployment config plus moving the Edge Function source; no consumer-side change.
-- Closes Q4' in PROJECT_PLAN.md §977 and REVIEW_ACTIONS A-032.
+- Adds one Edge Function file (~50 lines) proxying metadata (`GET /npm-registry/:pkg`) and tarballs (`GET /npm-registry/:pkg/-/:file.tgz`). Must set `Access-Control-Allow-Origin` and `Cross-Origin-Resource-Policy: cross-origin` on every response, else the `crossOriginIsolated` page rejects it.
+- `@riftydev/npm-client` unchanged — keeps reading `REGISTRY_BASE_URL`. Tests still hit their local mock; the test path never touches Vercel.
+- Tarball caching deferred — plain pass-through first. If latency/quotas bite, a follow-up ADR adds caching (KV / Edge Config / Cloudflare Cache).
+- Switching to Cloudflare Workers later: config-only change in `vercel.json`/deploy config plus moving the source; no consumer-side change.
+- Closes Q4' (PROJECT_PLAN.md §977) and REVIEW_ACTIONS A-032.
 
 ## Acceptance criteria
 
 - [ ] Edge Function source lives in the playground deploy (e.g. `apps/playground/api/npm-registry/[...path].ts` or equivalent Vercel path).
 - [ ] Function sets `Access-Control-Allow-Origin: *` and `Cross-Origin-Resource-Policy: cross-origin` on every response.
-- [ ] `@riftydev/npm-client` resolves prod URLs through `/npm-registry/...` exactly as it does dev URLs.
-- [ ] OPEN_QUESTIONS.md moves Q-2026-05-24-007 to the "Promoted" section with this ADR as the resolution.
-- [ ] PROJECT_PLAN.md §9 entry "Q4'" is removed; D-004 footnote points to this ADR.
+- [ ] `@riftydev/npm-client` resolves prod URLs through `/npm-registry/...` exactly as dev.
+- [ ] OPEN_QUESTIONS.md moves Q-2026-05-24-007 to "Promoted" with this ADR as resolution.
+- [ ] PROJECT_PLAN.md §9 "Q4'" entry removed; D-004 footnote points here.
 
 ## Status update — 2026-05-27
 
-This ADR was originally marked **Accepted** when Q-2026-05-24-007 was
-promoted, but the 2026-05-27 architecture review (item #3 in
-`docs/follow-ups-architecture-review-2026-05-27.md`) flagged the gap
-between the recorded status and reality: the Edge Function source is
-not in the repo, no live URL exists, and the playground has never been
-deployed to prod. "Accepted" without code creates an *ADR-as-aspiration*
-shape — the most dangerous failure mode because it looks like a settled
-decision.
+Originally marked **Accepted** when Q-2026-05-24-007 was promoted, but the 2026-05-27 architecture review (item #3 in `docs/follow-ups-architecture-review-2026-05-27.md`) flagged the status/reality gap: no Edge Function source in repo, no live URL, playground never deployed to prod. "Accepted" without code is *ADR-as-aspiration* — a dangerous failure mode that looks settled.
 
-Status is downgraded to **Provisional**. The Vercel Edge Function
-remains the leading candidate (rationale in §Decision stands), but the
-choice is not ratified until the Edge Function source exists, the
-deploy succeeds with the correct CORP/COEP headers, and the `npm-client`
-prod URL roundtrips through it. Once implemented, a new ADR (likely
-ADR-0046+) will ratify the chosen path with concrete code references;
-that new ADR supersedes this one.
+Downgraded to **Provisional**. The Edge Function stays the leading candidate (§Decision rationale stands) but is not ratified until: source exists, deploy succeeds with correct CORP/COEP headers, and the `npm-client` prod URL roundtrips through it. Once implemented, a new ADR (likely ADR-0046+) ratifies the chosen path with concrete code refs and supersedes this one.
 
-Q-2026-05-24-007 is restored in `OPEN_QUESTIONS.md` as an Active
-question, scoped to the first prod-deploy session.
+Q-2026-05-24-007 is restored as Active in `OPEN_QUESTIONS.md`, scoped to the first prod-deploy session.

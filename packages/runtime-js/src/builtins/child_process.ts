@@ -11,12 +11,6 @@
  * The synchronous behavior (`execSync`) stays in-realm; actual SAB-Atomics
  * sync IPC is ADR-0011's scope.
  *
- * Acceptance pieces for M6:
- *   - `spawn(cmd, args)` returns a ChildProcess with stdout/stderr/exit events.
- *   - `exec(cmd, cb)` buffers stdout/stderr.
- *   - `fork(modulePath)` adds IPC via `send`/`message`.
- *   - `execSync` synchronously runs and returns stdout.
- *
  * The runtime intentionally does not implement `spawn('bash', …)` — there is
  * no shell. `spawn('node', [script])` runs `script` through our loader.
  */
@@ -36,13 +30,11 @@ import { execSync } from './child_process-sync.ts';
 import { spawnWorkerChild } from './child_process-worker.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 
-// ADR-0011 phase 3 / ADR-0039: register the runtime-js `'execSync'` handler
-// on the kernel dispatcher at module load. The kernel itself ships no
-// default handlers after ADR-0039 — execSync is Node-API knowledge and
-// lives here. Resolver reads bytes from the runtime-js VFS sync mirror so
-// the SAB path and the in-realm fallback see the same source of truth;
-// returning `null` for missing scripts lets the handler surface a proper
-// `ENOENT`.
+// ADR-0011 phase 3 / ADR-0039: register the runtime-js `'execSync'` handler at
+// module load. Kernel ships no default handlers after ADR-0039 — execSync is
+// Node-API knowledge and lives here. Resolver reads from the VFS sync mirror so
+// the SAB path and in-realm fallback share one source of truth; `null` for a
+// missing script lets the handler surface a proper `ENOENT`.
 installRuntimeJsExecSyncHandler(getKernelDispatcher(), (path) => {
   const mirror = syncMirror();
   if (!mirror.existsSync(path)) return null;
@@ -62,16 +54,12 @@ interface ExecOptions extends SpawnOptions {
 }
 
 /**
- * `Writable` whose synchronous `write` / `end` methods throw
- * {@link NotImplementedError}. Used by the in-realm `spawn` fallback path —
- * that path has no Worker, so there is no stdin destination to route bytes
- * to. The throw is the correct user-facing signal (per CLAUDE.md "no silent
- * stubs"); the Worker-backed path passes a real `bindPortAsWritable`-backed
- * `Writable` from `handle.stdin()`.
- *
- * We override the synchronous `write` / `end` methods on the instance so the
- * exception surfaces at the caller's stack frame instead of as a deferred
- * `'error'` event from the buffered `_write` / `_final` pipeline.
+ * `Writable` whose `write` / `end` throw {@link NotImplementedError}. The
+ * in-realm `spawn` fallback has no Worker, hence no stdin destination — throwing
+ * is the right signal (CLAUDE.md "no silent stubs"). Overridden on the instance
+ * so the throw surfaces at the caller's frame, not as a deferred `'error'` from
+ * the buffered `_write` / `_final` pipeline. The Worker path uses a real
+ * `Writable` from `handle.stdin()` instead.
  */
 class InRealmStdinUnsupported extends Writable {
   override write(): never {
@@ -89,37 +77,32 @@ class InRealmStdinUnsupported extends Writable {
 }
 
 class ChildProcess extends EventEmitter {
-  /** Allocated by `ProcessManager` so PID space is unified across the runtime. */
+  /** Allocated by `ProcessManager` — PID space is unified across the runtime. */
   readonly pid: number;
   readonly stdout: Readable;
   readonly stderr: Readable;
   /**
-   * Write-side of the child's stdin. For the SAB-Worker path this is the
-   * `Writable` returned by `WorkerProcessHandle.stdin()` — `write(chunk)`
-   * posts each chunk to the worker's stdin `MessagePort` and `end()` closes
-   * it. For the in-realm fallback this is an {@link InRealmStdinUnsupported}
-   * whose `write` / `end` throw `NotImplementedError` (there is no worker to
-   * route to).
+   * Write-side of the child's stdin. SAB-Worker path: `handle.stdin()` posts
+   * each chunk to the worker's stdin `MessagePort`. In-realm fallback: an
+   * {@link InRealmStdinUnsupported} that throws (no worker to route to).
    */
   readonly stdin: Writable;
   killed = false;
-  // Mutable so {@link disconnect} can flip it off for the same-realm path
-  // (which has no separate channel to close — the gate is the whole story).
+  // Mutable so {@link disconnect} can flip it off on the same-realm path,
+  // which has no separate channel to close — the gate is the whole story.
   private ipcEnabled: boolean;
   private readonly handle: ProcessHandle;
-  /** Bus the child's script subscribes to for `'childMessage'` events sent
-   * by the parent. Exposed to the spawner via `internalIpc()`. */
+  /** Bus the child's script subscribes to for parent-sent `'childMessage'`
+   * events. Exposed to the spawner via `internalIpc()`. */
   readonly inboundIpc: EventEmitter = new EventEmitter();
 
   constructor(
     handle: ProcessHandle,
     ipcEnabled: boolean,
-    /** Optional pre-allocated stdio streams (used by the Worker-backed path
-     * which writes into them itself so the parent can listen before the
-     * worker's first `postMessage` lands). The Worker-backed path also
-     * supplies `stdin` from `handle.stdin()`; the in-realm fallback leaves
-     * it unset and gets an {@link InRealmStdinUnsupported} that throws on
-     * write/end. */
+    /** Optional pre-allocated stdio (Worker-backed path writes into them so the
+     * parent can listen before the worker's first `postMessage` lands, and
+     * supplies `stdin` from `handle.stdin()`). In-realm fallback leaves these
+     * unset and gets an {@link InRealmStdinUnsupported} throwing on write/end. */
     streams?: { stdout?: Readable; stderr?: Readable; stdin?: Writable },
   ) {
     super();
@@ -129,18 +112,17 @@ class ChildProcess extends EventEmitter {
     this.stdout = streams?.stdout ?? new Readable({ objectMode: false });
     this.stderr = streams?.stderr ?? new Readable({ objectMode: false });
     this.stdin = streams?.stdin ?? new InRealmStdinUnsupported();
-    // Surface kernel-tracked exit/close on the ChildProcess so existing
-    // consumers (which `.on('close', …)`) keep working.
+    // Surface kernel-tracked exit/close so existing `.on('close', …)` consumers
+    // keep working.
     handle.on('exit', (code, signal) => {
       this.emit('exit', code, signal);
     });
     handle.on('close', (code, signal) => {
       this.emit('close', code, signal);
     });
-    // ADR-0045: surface fork-IPC events from the kernel WorkerProcessHandle.
-    // The handle emits `'message'` for `ipc:message` frames and `'disconnect'`
-    // when the channel tears down; mirror both on the ChildProcess wrapper so
-    // existing consumers (Node-shape `child.on('message', …)`) keep working.
+    // ADR-0045: mirror fork-IPC events from the WorkerProcessHandle (`'message'`
+    // for `ipc:message` frames, `'disconnect'` on teardown) so Node-shape
+    // `child.on('message', …)` consumers keep working.
     if (handle.kind === 'worker') {
       handle.on('message', (msg) => {
         this.emit('message', msg);
@@ -163,15 +145,11 @@ class ChildProcess extends EventEmitter {
   }
 
   /**
-   * Send IPC message to the child (Node parity). For the SAB-Worker path
-   * (ADR-0045) this posts the message over the parent↔child IPC port;
-   * the worker-side `process.on('message', …)` listener fires. For the
-   * in-realm fallback this emits on the in-realm `inboundIpc` bus that
-   * the script's `__process.onMessage(...)` subscribes to.
-   *
-   * Returns `false` when IPC is disabled (i.e. the child wasn't spawned
-   * via `fork()`) or when the underlying handle has already disconnected
-   * (matches Node's `subprocess.send` contract).
+   * Send an IPC message to the child (Node `subprocess.send` parity). SAB-Worker
+   * path (ADR-0045): posts over the parent↔child IPC port → worker-side
+   * `process.on('message', …)`. In-realm fallback: emits on `inboundIpc`, which
+   * the script's `__process.onMessage(...)` subscribes to. Returns `false` when
+   * IPC is disabled (not `fork()`ed) or the handle already disconnected.
    */
   send(message: unknown): boolean {
     if (!this.ipcEnabled) return false;
@@ -183,18 +161,17 @@ class ChildProcess extends EventEmitter {
   }
 
   /**
-   * Disconnect the IPC channel (ADR-0045 / Node parity). For the SAB-Worker
-   * path this closes the parent↔child port; the worker side observes the
-   * `'disconnect'` event on its `process` shim. For the in-realm fallback
-   * there is no separate channel — disabling further sends is sufficient.
+   * Disconnect the IPC channel (ADR-0045 / Node parity). SAB-Worker path closes
+   * the parent↔child port (worker observes `'disconnect'` on its `process`
+   * shim). In-realm fallback has no separate channel — disabling further sends
+   * is sufficient.
    */
   disconnect(): void {
     if (this.handle.kind === 'worker') {
       this.handle.disconnect();
       return;
     }
-    // In-realm: no separate channel to close. Flip the gate and emit so
-    // listeners on the ChildProcess observe the lifecycle.
+    // In-realm: no channel to close — flip the gate and emit for listeners.
     if (this.ipcEnabled) {
       this.ipcEnabled = false;
       this.emit('disconnect');
@@ -209,24 +186,20 @@ class ChildProcess extends EventEmitter {
 }
 
 /**
- * `spawn` runs a JS source file through our module loader as a "child".
- * Recognised command: `'node'` with `args[0]` being a script path in the VFS.
- * Any other command emits an error after the next tick (matches Node's
- * behaviour for missing executables).
+ * Runs a JS source file through our module loader as a "child". Recognised
+ * command: `'node'` with `args[0]` a VFS script path; any other command emits
+ * an error next tick (matches Node's missing-executable behaviour).
  *
- * The kernel allocates the PID and tracks lifecycle; we drive script eval
- * inside the spawn handler via `execScript`. To honour non-{0,1} exit codes
- * (ENOENT-127, `process.exit(N)`), the helper mutates the handle's
- * `exitCode` field directly before returning — the `ProcessManager` only
- * sets `exitCode` if it's still `null` at handler completion.
+ * Kernel allocates the PID and tracks lifecycle; `execScript` drives eval inside
+ * the spawn handler. To honour non-{0,1} exit codes (ENOENT-127,
+ * `process.exit(N)`) the helper mutates the handle's `exitCode` before returning
+ * — `ProcessManager` only sets `exitCode` if still `null` at handler completion.
  */
 export function spawn(command: string, args: string[] = [], opts: SpawnOptions = {}): ChildProcess {
-  // ADR-0011 phase 2: when SAB IPC is supported AND the host has wired
-  // `setKernelWorkerUrl`, run the child in a real Worker realm. We restrict
-  // the SAB path to `node <script>` — non-`node` commands (ENOENT case) and
-  // `node` invocations without a script stay on the in-realm fallback so
-  // their existing error semantics are preserved (the worker can't model
-  // "command not found").
+  // ADR-0011 phase 2: with SAB IPC supported and `setKernelWorkerUrl` wired,
+  // run the child in a real Worker realm. Restricted to `node <script>` —
+  // non-`node` commands (ENOENT) and `node` without a script stay in-realm to
+  // preserve their error semantics (the worker can't model "command not found").
   if (
     command === 'node' &&
     args[0] !== undefined &&
@@ -235,18 +208,15 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
   ) {
     return spawnViaWorker(command, args, opts);
   }
-  // fallback per ADR-0011 — kernel ProcessManager.spawn with same-realm
-  // handler. Stays available behind the capability gate for non-isolated
-  // test environments and for non-`node` commands that need ENOENT.
+  // ADR-0011 fallback: kept for non-isolated test environments and non-`node`
+  // commands that need ENOENT.
   return spawnViaSameRealm(command, args, opts);
 }
 
 function spawnViaWorker(command: string, args: string[], opts: SpawnOptions): ChildProcess {
-  // ADR-0045 — fork-IPC over the kernel-allocated parent↔child IPC port.
-  // `spawnWorkerChild` no longer needs the outbound / inbound buses (the
-  // worker-side `process.send` posts through the kernel port directly).
-  // Kept as a placeholder argument shape for now to avoid churn in the
-  // helper signature; both buses are unused.
+  // ADR-0045: fork-IPC goes over the kernel parent↔child port, so worker-side
+  // `process.send` posts directly and these buses are unused — kept only as a
+  // placeholder argument shape to avoid churning `spawnWorkerChild`'s signature.
   const outbound = new EventEmitter();
   const inboundIpc = new EventEmitter();
   const handle = spawnWorkerChild({
@@ -271,12 +241,10 @@ function spawnViaWorker(command: string, args: string[], opts: SpawnOptions): Ch
 }
 
 function spawnViaSameRealm(command: string, args: string[], opts: SpawnOptions): ChildProcess {
-  // fallback per ADR-0011 — the handler needs the kernel `ProcessHandle`
-  // and our `ChildProcess` wrapper, both constructed AFTER the handler is
-  // registered. We pass them through a mutable container so the handler
-  // reads them when it runs on the next microtask — no extra `await`
-  // boundaries, which would delay the script body past what existing IPC
-  // tests rely on.
+  // The handler needs the `ProcessHandle` and `ChildProcess`, both built AFTER
+  // it's registered. A mutable container lets the handler read them on the next
+  // microtask without an extra `await` boundary, which would delay the script
+  // body past what existing IPC tests rely on.
   const wiring: { handle?: ProcessHandle; child?: ChildProcess } = {};
 
   const handle = globalProcessManager.spawn(
@@ -343,10 +311,9 @@ export function fork(
   return spawn('node', [modulePath, ...args], { ...opts, __fork: true });
 }
 
-// `execSync` lives in `./child_process-sync.ts` so the SAB-vs-fallback
-// branch can stay together with its helpers without pushing this module
-// over the 300-line budget. Re-export here so the public `child_process`
-// surface still exposes it.
+// `execSync` lives in `./child_process-sync.ts` to keep the SAB-vs-fallback
+// branch with its helpers. Re-exported here for the public `child_process`
+// surface.
 export { execSync };
 
 export const ChildProcess_ = ChildProcess;

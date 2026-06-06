@@ -2,24 +2,20 @@
  * Tarball cache (ADR-0023).
  *
  * Lives in the VFS at `/.rifty/tarball-cache/<sha-prefix>/<name>-<version>.tgz`,
- * where `<sha-prefix>` is the first two hex characters of the entry's
- * integrity hash. The split into sub-directories keeps any single directory
- * listing small while remaining trivially navigable.
+ * where `<sha-prefix>` is the first two hex chars of the integrity hash —
+ * sub-dirs keep any single directory listing small.
  *
- * Each entry is keyed on `name@version`; the `resolved` URL and `integrity`
- * from the lockfile (or computed at first fetch) accompany the bytes. On
- * lookup we re-verify the integrity before handing bytes back.
+ * Keyed on `name@version`. Integrity is re-verified on lookup before bytes
+ * are returned.
  */
 import type { Vfs } from '@riftydev/vfs';
 
 export const TARBALL_CACHE_ROOT = '/.rifty/tarball-cache';
 
 /**
- * Subresource-integrity algorithms we accept. SRI permits sha256, sha384,
- * and sha512; npm packuments default to sha512 since npm@5, so that is the
- * default we use when generating a fresh integrity. sha256 stays supported
- * because the vendored integration fixtures (ADR-0021) were generated with
- * it, and some private-registry mirrors still serve sha256-only metadata.
+ * Accepted SRI algorithms. Default sha512 (npm packuments since npm@5).
+ * sha256 stays supported: vendored integration fixtures (ADR-0021) use it,
+ * and some private-registry mirrors serve sha256-only metadata.
  */
 export type IntegrityAlgorithm = 'sha256' | 'sha384' | 'sha512';
 
@@ -31,9 +27,8 @@ const WEBCRYPTO_NAMES: Record<IntegrityAlgorithm, string> = {
 
 /**
  * Parse the algorithm prefix from an SRI string (`sha512-<base64>`).
- * Returns `null` when the prefix is missing or names an algorithm we do not
- * support — the caller should surface that as an integrity-format error
- * rather than falling through to a default and producing a misleading
+ * Returns `null` on missing/unsupported prefix — caller surfaces an
+ * integrity-format error rather than defaulting and producing a misleading
  * mismatch.
  */
 export function parseIntegrityAlgorithm(integrity: string): IntegrityAlgorithm | null {
@@ -45,10 +40,9 @@ export function parseIntegrityAlgorithm(integrity: string): IntegrityAlgorithm |
 }
 
 /**
- * Hash `bytes` and return the SRI string for the chosen algorithm. Default
- * is `sha512` (matches modern npm); callers verifying against a known
- * `spec.integrity` should pass the algorithm parsed from that spec so the
- * comparison is apples-to-apples.
+ * Hash `bytes` and return the SRI string for `algorithm` (default sha512).
+ * When verifying against a known `spec.integrity`, pass the algorithm parsed
+ * from that spec so the comparison is apples-to-apples.
  */
 export async function computeIntegrity(
   bytes: Uint8Array,
@@ -65,8 +59,8 @@ export async function computeIntegrity(
 
 function cachePathFor(name: string, version: string, integrity: string): string {
   const prefix = integrity.includes('-') ? (integrity.split('-')[1]?.slice(0, 2) ?? '00') : '00';
-  // Slashes in scoped names would otherwise create extra path segments under
-  // the prefix; escape them so each entry is a single file.
+  // Escape slashes in scoped names so each entry stays a single file rather
+  // than spawning extra path segments under the prefix.
   const safeName = name.replace(/\//g, '__');
   return `${TARBALL_CACHE_ROOT}/${prefix}/${safeName}-${version}.tgz`;
 }
@@ -87,9 +81,8 @@ export class VfsTarballCache implements TarballCache {
     const bytes = await this.vfs.readFile(path);
     const algorithm = parseIntegrityAlgorithm(integrity);
     if (algorithm === null) {
-      // Unknown algorithm in the integrity string — cannot re-verify, treat
-      // as a miss so the caller refetches and the fetch path surfaces the
-      // format error loudly.
+      // Unknown algorithm: cannot re-verify, so miss — caller refetches and
+      // the fetch path surfaces the format error loudly.
       return null;
     }
     const actual = await computeIntegrity(bytes, algorithm);

@@ -23,14 +23,14 @@
  * `SW_PREVIEW_REQUEST` envelope, {@link SerializedRequest},
  * {@link SerializedResponse}.
  *
- * Bumping requires: any change to a frame's field set, field type, or
- * per-field semantics. Additive optional fields with a documented default
- * do NOT require a bump — the receiver treats `undefined` as the default
- * (per ADR-0031's SemVer-major rule, restated here for the frame side).
+ * Bump on: any change to a frame's field set, field type, or per-field
+ * semantics. Additive optional fields with a documented default do NOT
+ * require a bump — receiver treats `undefined` as the default (ADR-0031
+ * SemVer-major rule, frame side).
  *
  * Does NOT cover the URL convention (`/preview/<port>/...`) or the
  * synthetic `preview.local` host — those are pinned by
- * {@link SW_ROUTING_VERSION} because they live in `@riftydev/io/preview-protocol`.
+ * {@link SW_ROUTING_VERSION} (they live in `@riftydev/io/preview-protocol`).
  */
 export const SW_FRAME_VERSION = '1';
 
@@ -48,9 +48,9 @@ export const SW_FRAME_VERSION = '1';
  *     one-shot `console.warn` per scope. The dedup key shape (`WeakSet` of
  *     scopes, mismatch key = `clientId`) is part of the contract.
  *
- * Bumping requires: changes to the URL regex shape, the synthetic host
- * literal, the `synthesizePreviewUrl` return shape, the resolver fallback
- * order, or the mismatch / first-window-warn dedup key shape.
+ * Bump on: changes to the URL regex shape, the synthetic host literal, the
+ * `synthesizePreviewUrl` return shape, the resolver fallback order, or the
+ * mismatch / first-window-warn dedup key shape.
  *
  * Does NOT cover wire-frame data shapes — those are pinned by
  * {@link SW_FRAME_VERSION}.

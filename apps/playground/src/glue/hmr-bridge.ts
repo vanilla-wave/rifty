@@ -1,90 +1,57 @@
 /**
  * Cross-realm HMR bridge — ADR-0017 phase 1 acceptance.
  *
- * Hosts a {@link BridgedWebSocketServer} on the playground page realm and ships
- * a tiny inlined client (`hmrClientScript`) that the preview iframe can load
- * to receive HMR updates over `BroadcastChannel`. The bridge replaces the
- * browser-native `WebSocket` path that Vite's HMR client would otherwise use,
- * which cannot cross the page ↔ iframe realm boundary (no real TCP, no SW
- * interception for the WS upgrade).
+ * Hosts a {@link BridgedWebSocketServer} on the page realm and ships an inlined
+ * client (`hmrClientScript`) the preview iframe loads to receive HMR updates
+ * over `BroadcastChannel`. Replaces the native `WebSocket` path Vite's HMR
+ * client would use, which can't cross the page ↔ iframe realm boundary (no real
+ * TCP, no SW interception for the WS upgrade).
  *
- * **Dev-mode vs real-Vite asymmetry (follow-ups doc item #19).** Two HMR
- * paths coexist intentionally today:
- *   - **Real-Vite mode** broadcasts through this bridge — Vite hands its
- *     HMR plugin a `BridgedWebSocketServer` and the iframe loads the inline
- *     client.
- *   - **Dev mode** (the in-realm mini Vite under `examples/vite-like-dev`)
- *     uses its own internal HMR client that reads file-change events from
- *     its own `WebSocketServer` instance directly. It does not route
- *     through this bridge.
+ * Dev-mode vs real-Vite asymmetry (follow-ups doc item #19): real-Vite mode
+ * broadcasts through this bridge; dev mode (in-realm mini Vite under
+ * `examples/vite-like-dev`) uses its own HMR client reading from its own
+ * `WebSocketServer` directly and does not route here. Acceptable until A-026
+ * (M11) moves Vite into a worker realm — then both must traverse a realm
+ * boundary and unifying through this bridge becomes free. No parity today; the
+ * bridge is the real-Vite-only HMR transport.
  *
- * The asymmetry is acceptable until A-026 (M11) moves Vite into a worker
- * realm — at that point dev mode and real-Vite both have to traverse a
- * realm boundary and unifying them through this bridge becomes free.
- * Readers who expect parity today: there is none; the bridge is currently
- * the real-Vite-only HMR transport.
+ * Why a bridge now, before A-026: Vite currently runs in the page realm but the
+ * iframe's native `WebSocket` still can't reach an in-process `WebSocketServer`
+ * — only real TCP would, which we deliberately avoid. At M11 A-026 Vite moves
+ * to a Worker realm; wiring the bridge now makes that a realm swap, not a
+ * routing rewrite — the iframe keeps the same `BroadcastChannel` name, just
+ * gets messages from a different sender.
  *
- * Why a bridge at M10 (before A-026):
- *   - Today Vite runs in the page realm and the preview iframe is a child
- *     realm; even though Vite is in the same JS realm as the playground UI,
- *     the iframe's native `WebSocket` cannot reach an in-process
- *     `WebSocketServer`. Without this bridge HMR would only ever work if we
- *     went over real TCP, which we deliberately do not.
- *   - At M11 A-026 Vite moves into a kernel-spawned Worker realm and the
- *     iframe still wants to be told about file changes. Wiring the bridge
- *     *now* means A-026 is a realm swap, not a routing rewrite — the iframe
- *     keeps using the same `BroadcastChannel` name, just gets its messages
- *     from a different sender.
+ * Server side (page realm): {@link setupHmrBridge} owns a
+ * `BridgedWebSocketServer` on `ws://preview.local:<port>/__hmr`; callers
+ * `broadcast(...)` from a file-watcher hook. Client side (iframe): loads a
+ * script opening a `BroadcastChannel` of the same name (via
+ * {@link channelNameFor}), speaking the same `open`/`open-ack`/`msg` protocol.
+ * Client is vanilla JS — no `@riftydev/net` import — so it can be injected into
+ * served HTML without bundling.
  *
- * Realm boundaries:
- *   - **Server side** (page realm): {@link setupHmrBridge} owns a
- *     `BridgedWebSocketServer` that listens on
- *     `ws://preview.local:<port>/__hmr`. The page realm code calls
- *     `broadcast(...)` from a file-watcher hook to push HMR messages to
- *     subscribers.
- *   - **Client side** (preview iframe): the iframe loads a script that opens
- *     a `BroadcastChannel` with the same channel name (derived through
- *     {@link channelNameFor}) and speaks the same `open`/`open-ack`/`msg`
- *     wire protocol. The client is intentionally vanilla JS — no
- *     `@riftydev/net` import — so it can be injected directly into the served
- *     HTML without bundling.
- *
- * Adapter discipline:
- *   - No Solid signals here (D-002). Caller-driven lifecycle through
- *     `setupHmrBridge` → `close()`. The Solid layer in `realVite.ts` owns
- *     the lifetime.
- *   - Doesn't depend on Vite types — exposes a Vite-shaped plugin
- *     (`createHmrBridgeVitePlugin`) that callers can include in their
- *     `plugins: [...]` list with the same minimal `transformIndexHtml`
- *     contract Vite already uses.
+ * Adapter discipline: no Solid signals here (D-002); caller-driven lifecycle
+ * (`realVite.ts` owns lifetime). Doesn't depend on Vite types — exposes a
+ * Vite-shaped plugin (`createHmrBridgeVitePlugin`) declared structurally.
  */
 
 import { BridgedWebSocketServer, type WsMessage, channelNameFor } from '@riftydev/net';
 
 /**
- * Build the WS URL the bridge listens on for a given dev server `port`.
- * Exposed because the inlined client script also needs the same URL — keep
- * one source of truth so the server and client agree on the
- * `BroadcastChannel` name.
+ * WS URL the bridge listens on for a given `port`. Exposed because the inlined
+ * client needs the same URL — one source of truth so server and client agree on
+ * the `BroadcastChannel` name.
  */
 export function hmrBridgeUrl(port: number): string {
   return `ws://preview.local:${port}/__hmr`;
 }
 
 /**
- * Build the inline HMR client script the iframe loads. The returned string
- * is a self-contained `<script>` body that uses `BroadcastChannel` directly
- * to mirror {@link BridgedWebSocket}'s wire protocol — see `bridge.ts`.
- *
- * The script:
- *   - opens the channel and sends `{ type: 'open', cid }`
- *   - waits for `{ type: 'open-ack' }`
- *   - listens for `{ type: 'msg', data }` and dispatches to the iframe
- *     window as a `riftyHmrUpdate` `CustomEvent` (consumer-specific logic
- *     lives in user code or a higher-level plugin — kept generic here)
- *   - on `{ type: 'update' }` HMR payload, reloads the iframe as a default
- *     fallback (matches the same naive behaviour as
- *     `@rifty-examples/vite-like-dev`'s HMR client).
+ * Inline HMR client script the iframe loads — a self-contained `<script>` body
+ * using `BroadcastChannel` directly to mirror {@link BridgedWebSocket}'s wire
+ * protocol (see `bridge.ts`): opens the channel, waits for `open-ack`, dispatches
+ * `msg` payloads as `rifty:hmr:message` events, and reloads on an `update`
+ * payload (naive default, matching `@rifty-examples/vite-like-dev`).
  *
  * Kept under 1 KiB so callers can inline it without worrying about budget.
  */
@@ -111,8 +78,8 @@ export function hmrClientScript(port: number): string {
       try {
         window.dispatchEvent(new CustomEvent('rifty:hmr:message', { detail: payload }));
       } catch (_) {}
-      // Naive default: any update message reloads. Full ESM HMR is out of
-      // scope for the bridge — that's a higher-level concern (M12+).
+      // Naive default: reload on update. Full ESM HMR is out of scope for the
+      // bridge — higher-level concern (M12+).
       if (payload && payload.type === 'update') {
         location.reload();
       }
@@ -135,10 +102,9 @@ export interface HmrBridgeHandle {
   /** The WS-shaped URL the server listens on (= the iframe HMR client target). */
   readonly url: string;
   /**
-   * Broadcast an HMR payload to every connected iframe HMR client. Callers
-   * pre-stringify if they want to share Node's `WebSocket.send(string)`
-   * shape; the bridge accepts the underlying `BridgedWebSocketServer`
-   * `WsMessage` shape — string / `Uint8Array` / `ArrayBuffer`.
+   * Broadcast an HMR payload to every connected iframe client. Accepts the
+   * `BridgedWebSocketServer` `WsMessage` shape — string / `Uint8Array` /
+   * `ArrayBuffer`; callers pre-stringify to match Node's `WebSocket.send(string)`.
    */
   broadcast(payload: WsMessage): void;
   /** Tear down the bridge — closes every accepted connection. */
@@ -151,11 +117,10 @@ export interface SetupHmrBridgeOptions {
 }
 
 /**
- * Create the page-realm side of the HMR bridge. Idempotent at the
- * channel-name level — calling twice with the same `port` is a programmer
- * error (the second call's `BridgedWebSocketServer` will see open frames
- * from the first server's clients and reply, causing duplicate `open-ack`s).
- * Callers must `close()` before re-creating.
+ * Create the page-realm side of the HMR bridge. Calling twice with the same
+ * `port` is a programmer error: the second server sees open frames from the
+ * first's clients and replies, causing duplicate `open-ack`s. `close()` before
+ * re-creating.
  */
 export function setupHmrBridge(opts: SetupHmrBridgeOptions): HmrBridgeHandle {
   const url = hmrBridgeUrl(opts.port);
@@ -172,13 +137,10 @@ export function setupHmrBridge(opts: SetupHmrBridgeOptions): HmrBridgeHandle {
 }
 
 /**
- * Minimal shape we need from a Vite plugin object. We don't import Vite's
- * types directly here because `realVite.ts` keeps Vite's full type surface
- * out of the playground typecheck pass; the plugin contract is small enough
- * to declare structurally.
- *
- * The actual Vite plugin runtime cares only about `name` + the hooks we
- * implement — extra structural members are ignored.
+ * Minimal shape we need from a Vite plugin. Declared structurally rather than
+ * importing Vite's types — `realVite.ts` keeps Vite's full type surface out of
+ * the playground typecheck pass. The runtime cares only about `name` + the hooks
+ * we implement.
  */
 export interface HmrBridgeVitePlugin {
   readonly name: string;
@@ -186,11 +148,10 @@ export interface HmrBridgeVitePlugin {
 }
 
 /**
- * Vite plugin that injects {@link hmrClientScript} into the served
- * `index.html`. The script tag is inserted just before `</body>` so it runs
- * after the page body parses but before any deferred user scripts that may
- * register `rifty:hmr:message` listeners. Idempotent: the plugin
- * deduplicates by attribute marker so reload cycles don't stack copies.
+ * Vite plugin that injects {@link hmrClientScript} into served `index.html`,
+ * just before `</body>` so it runs after the body parses but before deferred
+ * user scripts that may register `rifty:hmr:message` listeners. Deduplicates by
+ * attribute marker so reload cycles don't stack copies.
  */
 export function createHmrBridgeVitePlugin(opts: SetupHmrBridgeOptions): HmrBridgeVitePlugin {
   const script = hmrClientScript(opts.port);

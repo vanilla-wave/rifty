@@ -19,8 +19,8 @@ import {
 import { type FsOpsTarget, createDir, createFile, deletePath, renamePath } from '../glue/fs-ops.ts';
 import type { NodeModulesCache } from '../glue/node-modules-cache.ts';
 
-/** A rendered explorer row. The sync tree and the async node_modules subtree
- *  (ADR-0080) share this shape; `loading`/`error` kinds are node_modules-only. */
+/** A rendered explorer row. Sync tree and async node_modules subtree (ADR-0080)
+ *  share this shape; `loading`/`error` kinds are node_modules-only. */
 type Row = NmRow;
 
 type Editing =
@@ -49,8 +49,8 @@ export function FileExplorer(props: {
   onError?(message: string): void;
 }) {
   // `vfs` / `root` are static; capture once so the unowned poll callback never
-  // touches a reactive prop getter (that would leak a memo per tick). The
-  // reactive `visible` prop is mirrored into a plain var via an owned effect.
+  // touches a reactive prop getter (leaks a memo per tick). `visible` is
+  // mirrored into a plain var via an owned effect.
   const vfs = props.vfs;
   const root = props.root;
   let visibleNow = props.visible;
@@ -63,7 +63,7 @@ export function FileExplorer(props: {
   const [contextDir, setContextDir] = createSignal(root);
   const [editing, setEditing] = createSignal<Editing>(null);
   // Per-directory async state of the node_modules subtree (ADR-0080). Written
-  // from the remote-read promise; the rows memo reads it (never awaits inside).
+  // from the remote-read promise; rows memo reads it but never awaits inside.
   const [nmState, setNmState] = createSignal<ReadonlyMap<string, NmNodeState>>(new Map());
 
   const fail = (err: unknown): void => props.onError?.((err as Error).message);
@@ -119,7 +119,7 @@ export function FileExplorer(props: {
     const out: Row[] = [];
     walk(root, 0, expanded(), out);
     // Signature covers only the sync tree — the node_modules subtree is driven
-    // by `nmState` (reactive) and must NOT make the poll spuriously refresh.
+    // by reactive `nmState` and must NOT make the poll spuriously refresh.
     lastSig = out.map((r) => `${r.path}${r.kind === 'dir' ? '/' : ''}`).join('|');
     const nm = props.nodeModules;
     if (nm?.present) {

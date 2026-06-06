@@ -3,50 +3,39 @@
 /**
  * Runtime-side worker entry for {@link createWasiProcess} (ADR 0038, ADR 0039).
  *
- * Loaded by the kernel-side bootstrap (`@riftydev/kernel/worker-entry`) via
- * the `WorkerEntryDescriptor.kind === 'url'` path: the kernel spawns a
- * Worker at `kernelWorkerUrl` (host-registered via `setKernelWorkerUrl`),
- * that Worker's `'init'` handler publishes a typed {@link KernelProcessSpec}
- * on `globalThis` (ADR-0039 — the kernel itself no longer installs a Node-
- * shape `process` global), then `await import(spec.entry.url)` evaluates
- * THIS module. The entry-URL bundle MUST be different from the kernel-worker
- * boot bundle — the module's top-level await reads the published
- * `KernelProcessSpec` and would crash if loaded before the kernel publishes
- * it. The host registers the wasi-entry chunk via {@link setWasiWorkerUrl};
- * the adapter ({@link createWasiProcess}) puts that URL in `spec.entry.url`.
+ * Loaded by the kernel-side bootstrap (`@riftydev/kernel/worker-entry`) via the
+ * `WorkerEntryDescriptor.kind === 'url'` path. The kernel-worker's `'init'`
+ * handler publishes a typed {@link KernelProcessSpec} on `globalThis` (ADR-0039
+ * — the kernel no longer installs a Node-shape `process` global), then
+ * `await import(spec.entry.url)` evaluates THIS module. Gotcha: the entry-URL
+ * bundle MUST differ from the kernel-worker boot bundle — the top-level await
+ * reads the published spec and would crash if loaded before it's published. The
+ * host registers the wasi-entry chunk via {@link setWasiWorkerUrl}; the adapter
+ * ({@link createWasiProcess}) puts that URL in `spec.entry.url`.
  *
- * The module's top-level `await` blocks until the WASM guest has
- * finished, so the kernel observes "entry script done" and posts the
- * standard `{type:'exit', code}` exactly when the guest exits — no new
- * wire protocol.
+ * The top-level `await` blocks until the guest exits, so the kernel posts the
+ * standard `{type:'exit', code}` exactly when the guest exits — no new wire
+ * protocol.
  *
  * Inputs travel through the kernel's existing init surface:
- *   - `processSpec.env.__RIFTY_WASI_WASM_URL` — fetchable URL of the WASM
- *     module. For `createWasiProcess({ wasm: ArrayBuffer })` callers,
- *     the adapter turns the bytes into a `blob:` URL with
- *     `URL.createObjectURL`. For `createWasiProcess({ wasm: URL })`,
- *     the URL is passed through verbatim.
- *   - `processSpec.env.__RIFTY_WASI_PREOPENS` — JSON-encoded preopens map
- *     (`Record<guestPath, hostPath>`), forwarded to `Wasi`'s constructor.
- *   - `processSpec.argv` — `['wasi-guest', ...userArgs]`. WASI's `args_get`
- *     consumes this directly via the {@link Wasi} ctor's `args` option.
- *   - `processSpec.env` — full env minus the two `__RIFTY_WASI_*` channel
- *     keys, forwarded to the guest.
+ *   - `env.__RIFTY_WASI_WASM_URL` — fetchable URL of the WASM module. For
+ *     `createWasiProcess({ wasm: ArrayBuffer })` the adapter makes a `blob:`
+ *     URL; for `{ wasm: URL }` it passes through verbatim.
+ *   - `env.__RIFTY_WASI_PREOPENS` — JSON-encoded preopens map
+ *     (`Record<guestPath, hostPath>`), forwarded to {@link Wasi}.
+ *   - `argv` — `['wasi-guest', ...userArgs]`, consumed by WASI's `args_get`.
+ *   - `env` — full env minus the two `__RIFTY_WASI_*` channel keys.
  *
- * Stdout / stderr from the guest are piped into
- * `processSpec.stdio.stdout.postMessage` / `processSpec.stdio.stderr.postMessage`
- * as binary `Uint8Array`s. The kernel-side parent listens on these
- * `MessagePort`s and forwards to the host's `ChildProcess.stdout` / stderr
+ * Guest stdout/stderr are posted as binary `Uint8Array`s on the spec's stdio
+ * `MessagePort`s; the kernel-side parent forwards to the host's `ChildProcess`
  * streams.
  *
  * Exit semantics:
- *   - guest calls `proc_exit(N)` → `Wasi.start()` returns `N` → if
- *     `N !== 0`, we throw a `RIFTY_PROCESS_EXIT`-shaped error so the
- *     kernel reports the right code; if `N === 0`, we let the module
- *     finish and the kernel reports 0.
- *   - guest throws an unrelated error → re-thrown at module top level;
- *     the kernel catches and writes the stack to stderr, then reports
- *     exit 1.
+ *   - `proc_exit(N)` → `Wasi.start()` returns N → if N !== 0 we throw a
+ *     `RIFTY_PROCESS_EXIT`-shaped error so the kernel reports the code; N === 0
+ *     lets the module finish and the kernel reports 0.
+ *   - guest throws otherwise → re-thrown at module top level; the kernel writes
+ *     the stack to stderr and reports exit 1.
  */
 
 import { readKernelProcessSpec } from '@riftydev/kernel';
@@ -63,10 +52,9 @@ export const WASI_WASM_URL_ENV = '__RIFTY_WASI_WASM_URL' as const;
 export const WASI_PREOPENS_ENV = '__RIFTY_WASI_PREOPENS' as const;
 
 /**
- * Minimal process surface the WASI runner reads inside the worker.
- * Constructed locally from the kernel's published {@link KernelProcessSpec}
- * (ADR-0039) — the kernel itself no longer installs a Node-shape `process`
- * global, so runtime-wasi builds its own narrow proxy here.
+ * Minimal process surface the WASI runner reads inside the worker. Built
+ * locally from the kernel's {@link KernelProcessSpec} (ADR-0039), since the
+ * kernel no longer installs a Node-shape `process` global.
  */
 interface WasiProcess {
   argv: readonly string[];
@@ -83,9 +71,8 @@ function makeStdioWriter(port: MessagePort): { write(chunk: string | Uint8Array)
   return {
     write(chunk) {
       const bytes = typeof chunk === 'string' ? STDIO_ENCODER.encode(chunk) : chunk;
-      // Transfer the buffer when we own it (i.e. created by TextEncoder).
-      // Pre-existing Uint8Arrays may share their backing buffer with the
-      // caller, so transferring is unsafe — copy in that case.
+      // Transfer only the buffer we own (from TextEncoder). A pre-existing
+      // Uint8Array may share its backing buffer with the caller — copy instead.
       if (typeof chunk === 'string') {
         port.postMessage(bytes, [bytes.buffer]);
       } else {
@@ -100,8 +87,7 @@ function makeStdioWriter(port: MessagePort): { write(chunk: string | Uint8Array)
 /**
  * Build the worker-local {@link WasiProcess} from the kernel-published
  * {@link KernelProcessSpec}. `exit(N)` throws a `RIFTY_PROCESS_EXIT`-shaped
- * error so the kernel's worker bootstrap maps it to the worker exit code
- * (see `@riftydev/kernel/src/worker-entry.ts`).
+ * error that the kernel's worker bootstrap maps to the worker exit code.
  */
 function buildWasiProcess(): WasiProcess {
   const spec = readKernelProcessSpec();
@@ -110,9 +96,8 @@ function buildWasiProcess(): WasiProcess {
       'runtime-wasi/worker-entry: KernelProcessSpec is missing — this module must be loaded by the kernel-side worker bootstrap (which publishes the spec on init).',
     );
   }
-  // The spec keeps `env` as a `Readonly<Record<string, string>>`. The WASI
-  // run takes a mutable `Record<string, string>`; copy to detach from the
-  // kernel's snapshot.
+  // Copy: spec.env is `Readonly`, but the WASI run needs a mutable record
+  // detached from the kernel's snapshot.
   const env: Record<string, string> = { ...spec.env };
   return {
     argv: spec.argv,
@@ -179,8 +164,8 @@ export async function runWasiInWorker(proc: WasiProcess): Promise<void> {
     if (err instanceof WasiExit) {
       exitCode = err.exitCode;
     } else {
-      // Surface the guest-side trap to the parent through stderr + non-zero
-      // exit, matching what a native WASI runtime would do.
+      // Surface the guest-side trap via stderr + non-zero exit, as a native
+      // WASI runtime would.
       const message = err instanceof Error ? `${err.stack ?? err.message}\n` : `${String(err)}\n`;
       proc.stderr.write(message);
       exitCode = 1;
@@ -201,8 +186,8 @@ function parsePreopens(raw: string | undefined): Record<string, string> {
     }
     return out;
   } catch {
-    // Malformed env value: prefer running the guest with no preopens over
-    // failing the whole process. The guest will see an empty preopen set.
+    // Malformed env value: prefer an empty preopen set over failing the
+    // whole process.
     return {};
   }
 }
@@ -217,25 +202,19 @@ function stripChannelKeys(env: Record<string, string>): Record<string, string> {
   return out;
 }
 
-/**
- * Detection: are we in a `DedicatedWorkerGlobalScope`? Mirrors the heuristic
- * from `@riftydev/kernel/src/worker-entry.ts`. When true, the kernel bootstrap
- * has already published {@link KernelProcessSpec} on `globalThis` by the
- * time this module's top-level evaluation runs (the kernel publishes the
- * spec before `await import(entry.url)`).
- */
+// In a `DedicatedWorkerGlobalScope`? Mirrors the heuristic in
+// `@riftydev/kernel/src/worker-entry.ts`. When true, the kernel has already
+// published {@link KernelProcessSpec} (before its `await import(entry.url)`).
 declare const WorkerGlobalScope: { prototype: object } | undefined;
 const isWorkerRealm =
   typeof WorkerGlobalScope !== 'undefined' &&
   typeof (globalThis as unknown as { postMessage?: unknown }).postMessage === 'function' &&
   typeof (globalThis as unknown as { window?: unknown }).window === 'undefined';
 
-// Top-level await: when loaded as a Worker entry by the kernel's
-// `await import(entry.url)`, we block here until the WASI guest exits. The
-// kernel's bootstrap awaits THIS module, sees it resolve, and posts the
-// standard `{type:'exit', code}` to the parent. When imported in a
-// non-worker realm (tests), we skip the side-effect; callers exercise
-// `runWasiInWorker` directly.
+// Top-level await: under the kernel's `await import(entry.url)`, block until
+// the guest exits so the kernel's bootstrap posts `{type:'exit', code}` when
+// the module resolves. In a non-worker realm (tests), skip the side-effect;
+// callers drive `runWasiInWorker` directly.
 if (isWorkerRealm) {
   const proc = buildWasiProcess();
   await runWasiInWorker(proc);

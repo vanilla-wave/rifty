@@ -1,15 +1,8 @@
 /**
- * Registry client. The fetcher is pluggable so tests can use a mock.
+ * Registry client. Pluggable fetcher so tests can mock.
  *
- * URLs follow the D-004 contract (ADR 0028): a base URL configured by env or
- * option, never hardcoded. {@link getRegistryBaseUrl} is the single factory
- * every consumer should go through; sources of truth are, in order:
- *
- *   1. `globalThis.__RIFTY_REGISTRY_URL__` — set by playground bootstrap.
- *   2. `globalThis.import.meta.env.RIFTY_REGISTRY_URL` — Vite build-time env.
- *   3. `process.env.REGISTRY_BASE_URL` — Node-side test/harness path.
- *   4. Default `/npm-registry` (Vite proxy in dev; Edge Function path in prod
- *      per ADR 0028).
+ * URLs follow D-004 (ADR 0028): base URL from env/option, never hardcoded.
+ * {@link getRegistryBaseUrl} is the single factory every consumer goes through.
  */
 
 export interface Packument {
@@ -26,9 +19,9 @@ export interface VersionManifest {
   peerDependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
   /**
-   * Platform constraints (npm `os`/`cpu`). Read at resolve time by the
-   * native-dependency policy (ADR-0051): a `cpu` array that excludes `wasm`
-   * marks a compiled artifact rifty cannot run.
+   * Platform constraints (npm `os`/`cpu`). Read by the native-dependency policy
+   * (ADR-0051): a `cpu` array excluding `wasm` marks a compiled artifact rifty
+   * cannot run.
    */
   os?: string[];
   cpu?: string[];
@@ -46,14 +39,13 @@ export interface VersionManifest {
 export type Fetcher = (url: string, init?: RequestInit) => Promise<Response>;
 
 /**
- * Sources of the registry base URL, in priority order:
- *   1. `globalThis.__RIFTY_REGISTRY_URL__` (playground sets this at bootstrap),
+ * Registry base URL, in priority order:
+ *   1. `globalThis.__RIFTY_REGISTRY_URL__` (playground bootstrap),
  *   2. `globalThis.import.meta.env.RIFTY_REGISTRY_URL` (Vite-style build env),
  *   3. `process.env.REGISTRY_BASE_URL` (Node-side test harness),
  *   4. `/npm-registry` (default — Vite proxy in dev, Edge Function in prod).
  *
- * Each consumer in `@riftydev/npm-client` calls this function; never hardcode
- * a registry URL elsewhere (D-004 / ADR 0028).
+ * Never hardcode a registry URL elsewhere (D-004 / ADR 0028).
  */
 export function getRegistryBaseUrl(): string {
   const g = globalThis as Record<string, unknown>;

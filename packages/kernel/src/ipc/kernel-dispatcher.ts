@@ -1,18 +1,13 @@
 /**
- * Module-level singleton {@link SyncRpcDispatcher} that backs every
+ * Module-level singleton {@link SyncRpcDispatcher} backing every
  * kernel-spawned Worker.
  *
- * Review fix for ADR-0011 phase 3: the previous implementation
- * constructed a fresh dispatcher per child, which meant N busy-poll
- * `setInterval(1ms)` timers for N children on the main realm. The
- * dispatcher's docstring promised "the same instance can serve many
- * rings" — this module makes that contract real.
+ * Singleton (not per-child) to avoid N busy-poll `setInterval(1ms)` timers
+ * on the main realm — one instance serves many rings (ADR-0011 phase 3).
  *
- * ADR-0039: the singleton ships with **no** pre-registered handlers and
- * **no** recursive-spawn wiring. Both belonged to the Node-API surface
- * (`'execSync'` + the recursive Worker runner) and have moved to
- * `@riftydev/runtime-js`. Higher layers register methods via
- * `getKernelDispatcher().register(method, handler)` at boot.
+ * ADR-0039: ships with no pre-registered handlers and no recursive-spawn
+ * wiring; both moved to `@riftydev/runtime-js`. Higher layers register
+ * methods via `getKernelDispatcher().register(method, handler)` at boot.
  */
 
 import { SyncRpcDispatcher } from './sync-dispatch.ts';
@@ -21,9 +16,8 @@ let kernelDispatcher: SyncRpcDispatcher | null = null;
 
 /**
  * Returns the shared dispatcher, lazily constructing it on first call.
- * The dispatcher is a thin generic registry — no methods are registered
- * by the kernel itself. Higher layers (e.g. `@riftydev/runtime-js`'s
- * `installRuntimeJsExecSyncHandler`) install their handlers explicitly.
+ * Thin generic registry — the kernel registers no methods itself; higher
+ * layers install their handlers explicitly.
  */
 export function getKernelDispatcher(): SyncRpcDispatcher {
   if (kernelDispatcher !== null) return kernelDispatcher;
@@ -33,8 +27,7 @@ export function getKernelDispatcher(): SyncRpcDispatcher {
 
 /**
  * Test-only: drop the singleton so the next call recreates it. Detaches
- * every ring still attached to the previous instance so the timer dies
- * with it.
+ * every still-attached ring so the previous instance's timer dies with it.
  */
 export function clearKernelDispatcher(): void {
   if (kernelDispatcher === null) return;

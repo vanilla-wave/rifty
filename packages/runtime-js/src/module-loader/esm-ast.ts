@@ -1,25 +1,14 @@
 /**
  * AST-based ESM → async-function-body transformer.
  *
- * Replaces the earlier regex + zone-scanner approach (ADR 0009). Uses acorn to
- * parse the source and acorn-walk to traverse it, tracking lexical scopes so
- * that identifier references that look like imports but are shadowed by a
- * parameter or local binding are left alone.
+ * Replaces the earlier regex + zone-scanner approach (ADR 0009). acorn parses
+ * the source; the walk tracks lexical scopes so identifier references that look
+ * like imports but are shadowed by a parameter or local binding are left alone.
  *
- * The result body, when run as the body of an `async () => { ... }` with the
- * helpers `__import`, `__importStatic`, `__slots`, `__rebuildExports` (and
- * `__filename`, `__dirname`, `__importMetaUrl`, `import_meta`) in scope,
- * populates the slot table for the module.
- *
- * File layout (top → bottom):
- *
- *   - Scope / pattern helpers (a stack of scopes that tracks declared names so
- *     identifier references can be checked for shadowing before rewriting).
- *   - Scope-aware identifier rewriter (`collectRewrites`) — walks the program,
- *     emits edits for identifier references that match an imported binding,
- *     plus `import.meta` and dynamic `import(x)`.
- *   - Public entry point (`transformEsm`) — drives parse, top-level
- *     import/export handling, the rewriter pass, and the final edit-apply.
+ * The result body, run as the body of an `async () => { ... }` with the helpers
+ * `__import`, `__importStatic`, `__slots`, `__rebuildExports` (and `__filename`,
+ * `__dirname`, `__importMetaUrl`, `import_meta`) in scope, populates the slot
+ * table for the module.
  */
 
 import type {
@@ -54,17 +43,13 @@ import { ModuleLoadError } from './errors.ts';
 /**
  * Mangled binding the generated body uses to reach the REAL global `Object`
  * (for `Object.defineProperty`/`Object.keys` in export/re-export codegen). A
- * module may legally declare a module-scoped `export const Object = …` (opencode's
- * `config/permission.ts` does), which would shadow the global and break bare
- * `Object.*` in the generated code. The executor (`esm.ts`) binds this name to
- * the real `Object` at FUNCTION scope — outside the user-body arrow, where the
- * module's `const Object` cannot reach it — so the codegen stays correct
- * regardless of what the module shadows. Kept in sync with `esm.ts` (the only
- * consumer of the binding).
+ * module may legally `export const Object = …` (opencode's `config/permission.ts`
+ * does), shadowing the global and breaking bare `Object.*` in generated code.
+ * `esm.ts` binds this name to the real `Object` at FUNCTION scope — outside the
+ * user-body arrow, where the module's `const Object` can't reach it. Kept in
+ * sync with `esm.ts`, the only consumer.
  */
 export const RUNTIME_OBJECT_BINDING = '__riftyObject';
-
-// ────────────────────────────── scope helpers ──────────────────────────────
 
 interface ImportBinding {
   /** The synthesized local namespace variable, e.g. `__m0`. */
@@ -144,8 +129,6 @@ function declareVarDecl(ctx: Ctx, decl: VariableDeclaration): void {
   for (const d of decl.declarations) declarePattern(ctx, d.id);
 }
 
-// ─────────────────────────── span / edit helpers ───────────────────────────
-
 function isForbidden(ctx: Ctx, start: number, end: number): boolean {
   // Linear scan is fine (small N — one entry per top-level import/export).
   for (const [s, e] of ctx.forbiddenSpans) {
@@ -168,23 +151,13 @@ function replacementFor(b: ImportBinding): string {
   return `${b.ns}[${JSON.stringify(b.imported)}]`;
 }
 
-// ────────────────────────────── identifier rewriter ──────────────────────────────
-
 /**
- * Walks the entire program, maintaining a stack of lexical scopes that track
- * declared names. For each identifier reference (i.e. a use, not a declaration,
- * not a static property name, not an object literal key, not a label, etc.) we
- * check:
- *   - Does it match one of the module's imported bindings?
- *   - Is it shadowed by any enclosing scope?
- *
- * If matched and not shadowed, we emit an edit replacing it with the
- * appropriate namespace member access.
- *
- * Also rewrites:
- *   - `import.meta` (MetaProperty) → `import_meta` (a local injected by the
- *     wrapper around the body).
- *   - dynamic `import(x)` (ImportExpression) → `__import(x)`.
+ * Walks the program with a stack of lexical scopes. For each identifier
+ * reference (a use, not a declaration / static property name / object key /
+ * label) that matches an imported binding and is not shadowed, emits an edit
+ * replacing it with the namespace member access. Also rewrites `import.meta`
+ * (MetaProperty) → `import_meta` (a wrapper-injected local) and dynamic
+ * `import(x)` (ImportExpression) → `__import(x)`.
  */
 function collectRewrites(
   program: Program,
@@ -204,10 +177,9 @@ function collectRewrites(
     forbiddenSpans,
   };
 
-  // Pre-pass: collect top-level (module) declared names so that, e.g., a
-  // top-level `function foo() {}` shadows an import in another module's body.
-  // (We add bindings to the module scope before walking so forward references
-  // inside hoisted function bodies see the correct shadowing.)
+  // Pre-declare top-level names into module scope before walking, so forward
+  // references inside hoisted function bodies see correct shadowing (a top-level
+  // `function foo() {}` must shadow a same-named import).
   for (const node of program.body) {
     if (node.type === 'FunctionDeclaration' && node.id) addBinding(ctx, node.id.name);
     else if (node.type === 'ClassDeclaration' && node.id) addBinding(ctx, node.id.name);
@@ -257,9 +229,8 @@ function walk(node: unknown, ctx: Ctx): void {
       };
       // Re-export with source: rewritten whole, skip.
       if (en.source) return;
-      // export { a, b }: specifiers refer to local names. We've already emitted
-      // slot-getter edits for these — skip the specifier subtree to avoid
-      // double-walking the local-name identifiers.
+      // `export { a, b }`: slot-getter edits already emitted; skip the specifier
+      // subtree to avoid double-walking the local-name identifiers.
       if (en.declaration) walk(en.declaration, ctx);
       return;
     }
@@ -309,10 +280,9 @@ function walk(node: unknown, ctx: Ctx): void {
       const p = n as unknown as Property;
       if (p.computed) walk(p.key, ctx);
       if (p.shorthand) {
-        // `{ foo }` — key and value point at the same Identifier. Rewriting
-        // its source range produces `{ <replacement> }`, which is invalid.
-        // If the identifier needs a rewrite, expand to `foo: <replacement>`
-        // by emitting an edit that prepends `name: ` at the value's start.
+        // `{ foo }`: key and value are the same Identifier, so rewriting its
+        // range yields invalid `{ <replacement> }`. Expand to `foo: <replacement>`
+        // by prepending `name: ` at the value's start.
         const id = p.value as unknown as {
           type: string;
           name?: string;
@@ -402,8 +372,7 @@ function walk(node: unknown, ctx: Ctx): void {
 
     case 'VariableDeclaration': {
       const vd = n as unknown as VariableDeclaration;
-      // Names go in the enclosing scope. The block / for-init wrappers already
-      // declared most; calling again is idempotent.
+      // Block / for-init wrappers already declared most names; idempotent here.
       declareVarDecl(ctx, vd);
       for (const d of vd.declarations) {
         walkPatternExpressions(d.id, ctx);
@@ -435,7 +404,7 @@ function walk(node: unknown, ctx: Ctx): void {
 function walkBlock(block: { body: AnyNodeShape[] }, ctx: Ctx): void {
   pushScope(ctx);
   // Pre-declare hoisted function/class/var names so siblings referring to them
-  // don't get rewritten.
+  // aren't rewritten.
   for (const child of block.body) {
     if (child.type === 'FunctionDeclaration') {
       const id = (child as unknown as { id?: Identifier | null }).id;
@@ -478,8 +447,8 @@ function walkForInOf(fs: ForInStatement | ForOfStatement, ctx: Ctx): void {
 
 function walkFunction(fn: AcornFunction, ctx: Ctx): void {
   pushScope(ctx);
-  // Function name is in scope in the body (FunctionExpression: only inside;
-  // FunctionDeclaration: in enclosing — harmless either way).
+  // Function name is in scope in the body (named FunctionExpression: only here;
+  // FunctionDeclaration: also in enclosing — harmless either way).
   if (fn.id) addBinding(ctx, fn.id.name);
   for (const p of fn.params) {
     declarePattern(ctx, p);
@@ -490,9 +459,8 @@ function walkFunction(fn: AcornFunction, ctx: Ctx): void {
 }
 
 /**
- * Patterns can contain nested expressions (default values, computed keys).
- * Walks just those expression sub-trees so identifier refs in them are
- * processed.
+ * Walks the nested expression sub-trees of a pattern (default values, computed
+ * keys) so identifier refs in them are processed.
  */
 function walkPatternExpressions(pat: Pattern, ctx: Ctx): void {
   switch (pat.type) {
@@ -541,8 +509,6 @@ function walkDefault(n: AnyNodeShape, ctx: Ctx): void {
   }
 }
 
-// ────────────────────────────── public entry point ──────────────────────────────
-
 export interface TransformResult {
   /** The rewritten body (no `async () =>` wrapper — caller adds that). */
   readonly body: string;
@@ -583,10 +549,10 @@ export function transformEsm(source: string, id: string): TransformResult {
   for (const node of program.body) {
     if (node.type === 'ImportDeclaration') {
       if (isFileAttributeImport(node)) {
-        // `import x from "spec" with { type: "file" }` (Bun/esbuild file loader):
-        // bind the local to the resolved file PATH, not a module load. Deliberately
-        // NOT added to staticImports — the asset is never loaded/evaluated as a
-        // module (it may be binary, e.g. opencode's `photon_rs_bg.wasm`).
+        // `import x from "spec" with { type: "file" }` binds the local to the
+        // resolved PATH, not a module. Deliberately NOT in staticImports — the
+        // asset is never evaluated as a module (may be binary, e.g. opencode's
+        // `photon_rs_bg.wasm`).
         handleFileImport(node, `__file${importCounter++}`, edits);
       } else {
         const ns = `__m${importCounter++}`;
@@ -612,10 +578,6 @@ export function transformEsm(source: string, id: string): TransformResult {
     }
   }
 
-  // Walk the whole program to:
-  //   - rewrite identifier references to imported bindings (scope-aware)
-  //   - rewrite `import.meta` → `import_meta`
-  //   - rewrite dynamic `import(x)` → `__import(x)`
   collectRewrites(program, source, importedBindings, edits);
 
   let body = applyEdits(source, edits);
@@ -623,13 +585,11 @@ export function transformEsm(source: string, id: string): TransformResult {
   return { body, staticImports: [...staticImports] };
 }
 
-// ────────────────────────────── import / export ──────────────────────────────
-
 /**
- * True for an import carrying the `with { type: "file" }` attribute (the
- * esbuild/Bun "file" loader). acorn exposes import attributes as `node.attributes`
- * (older trees use `node.assertions`); each is `{ key, value }` with `value` a
- * string literal. opencode uses this to import an asset's PATH, e.g.
+ * True for an import carrying the `with { type: "file" }` attribute (esbuild/Bun
+ * "file" loader). acorn exposes import attributes as `node.attributes` (older
+ * trees: `node.assertions`); each is `{ key, value }` with a string-literal
+ * `value`. opencode uses this to import an asset's PATH, e.g.
  * `import photonWasm from "…/photon_rs_bg.wasm" with { type: "file" }`.
  */
 function isFileAttributeImport(node: ImportDeclaration): boolean {
@@ -644,11 +604,10 @@ function isFileAttributeImport(node: ImportDeclaration): boolean {
 
 /**
  * Emit a `with { type: "file" }` import as a binding to the asset's resolved
- * absolute PATH (the esbuild/Bun file loader). The injected `__assetPath` helper
- * (see esm.ts) resolves the specifier to its file id without loading it as a
- * module. The default specifier binds to the path string; a namespace specifier
- * binds to `{ default: <path> }`. Named specifiers are meaningless for a file
- * asset and are dropped.
+ * absolute PATH. The injected `__assetPath` helper (esm.ts) resolves the
+ * specifier to its file id without loading it as a module. Default specifier →
+ * the path string; namespace specifier → `{ default: <path> }`. Named specifiers
+ * are meaningless for a file asset and are dropped.
  */
 function handleFileImport(node: ImportDeclaration, assetVar: string, edits: Edit[]): void {
   const spec = literalString(node.source.value);
@@ -714,8 +673,8 @@ function handleExportNamed(
   if (node.declaration) {
     const decl = node.declaration;
     const names = collectDeclarationNames(decl);
-    // Strip the `export` keyword so the declaration body is left in place and
-    // the walker can rewrite identifier references inside it.
+    // Strip `export` so the declaration body stays in place for the walker to
+    // rewrite identifier references inside it.
     edits.push({ start: node.start, end: decl.start, text: '' });
     const trailing: string[] = [];
     for (const n of names) {
@@ -724,7 +683,6 @@ function handleExportNamed(
       );
     }
     trailing.push('__rebuildExports();');
-    // Zero-width edit after the declaration body.
     edits.push({ start: decl.end, end: node.end, text: `\n${trailing.join('\n')}` });
     return;
   }
@@ -747,8 +705,8 @@ function handleExportDefault(node: ExportDefaultDeclaration, edits: Edit[], _sou
   const decl = node.declaration;
   if ((decl.type === 'FunctionDeclaration' || decl.type === 'ClassDeclaration') && decl.id) {
     const name = decl.id.name;
-    // Strip `export default ` (start..decl.start). Leave the declaration as-is
-    // so the walker can rewrite identifiers inside it. Then append a slot write.
+    // Strip `export default `, leaving the declaration for the walker to rewrite,
+    // then append a slot write.
     edits.push({ start: node.start, end: decl.start, text: '' });
     edits.push({
       start: decl.end,
@@ -757,8 +715,8 @@ function handleExportDefault(node: ExportDefaultDeclaration, edits: Edit[], _sou
     });
     return;
   }
-  // Anonymous declaration or expression — wrap as an assignment to __slots.default.
-  // Leaving the body/expr in place lets the walker rewrite refs inside it.
+  // Anonymous declaration or expression — wrap as an assignment to __slots.default,
+  // leaving the body/expr in place for the walker to rewrite refs inside it.
   edits.push({ start: node.start, end: decl.start, text: '__slots.default = (' });
   edits.push({ start: decl.end, end: node.end, text: ');\n__rebuildExports();' });
 }
@@ -836,8 +794,6 @@ function literalString(value: unknown): string {
   }
   return value;
 }
-
-// ──────────────────────────────── edits → output ────────────────────────────────
 
 function applyEdits(source: string, edits: Edit[]): string {
   const sorted = [...edits].sort((a, b) => a.start - b.start || a.end - b.end);

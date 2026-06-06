@@ -2,23 +2,15 @@
  * Capability gate for SAB-based IPC (ADR-0011 phase 1).
  *
  * Sync IPC via {@link SharedArrayBuffer} + {@link Atomics.wait} requires:
- *   - `crossOriginIsolated === true` — the page (or Worker) must be served
- *     with COOP/COEP headers. Without isolation, SAB is unavailable in
- *     modern browsers regardless of the global being present.
- *   - `SharedArrayBuffer` constructor available.
- *   - `Atomics.waitAsync` — present in all engines that ship SAB to web
- *     content today, but check anyway so older Node test environments
- *     fall through cleanly.
+ *   - `crossOriginIsolated === true` — needs COOP/COEP headers; without
+ *     isolation SAB is unavailable in modern browsers even if the global exists.
+ *   - `SharedArrayBuffer` constructor.
+ *   - `Atomics.waitAsync` — checked anyway so older Node test envs fall through.
  *
- * When any of these is missing, callers fall back to the same-realm
- * `new Function`-in-realm path (the pre-ADR-0011 behaviour). The same
- * `IpcMode` callers may also pass `forceFallback: true` to disable SAB
- * explicitly (used by tests and by non-isolated previews that want to
- * exercise the fallback path even on capable hosts). The kernel itself
- * never reads `process.env` (ADR-0039 — kernel is Node-API-free); the
- * decision is owned by whoever calls {@link getIpcMode}. The playground
- * reads the `RIFTY_FALLBACK_NO_SAB` env override (and any user-supplied
- * global flag) and passes the result through.
+ * When any is missing, callers fall back to the same-realm `new Function`
+ * path (pre-ADR-0011 behaviour). Kernel never reads `process.env`
+ * (ADR-0039 — Node-API-free); the playground reads the `RIFTY_FALLBACK_NO_SAB`
+ * override and passes the result via `forceFallback`.
  */
 
 type IpcMode = 'sab' | 'same-realm-fallback';
@@ -31,8 +23,8 @@ export function isSabIpcSupported(): boolean {
   const g = globalThis as typeof globalThis & { crossOriginIsolated?: boolean };
   if (g.crossOriginIsolated !== true) return false;
   if (typeof SharedArrayBuffer !== 'function') return false;
-  // `Atomics.waitAsync` ships in ES2024; lib target is ES2023 so we probe
-  // via a structural cast rather than dereferencing the typed name.
+  // `Atomics.waitAsync` ships in ES2024 but lib target is ES2023 — probe via
+  // structural cast rather than the typed name.
   const atomicsWithWaitAsync = Atomics as unknown as { waitAsync?: unknown };
   if (typeof Atomics === 'undefined' || typeof atomicsWithWaitAsync.waitAsync !== 'function') {
     return false;
@@ -41,26 +33,23 @@ export function isSabIpcSupported(): boolean {
 }
 
 /**
- * Optional inputs to {@link getIpcMode}. The kernel deliberately exposes
- * `forceFallback` as a parameter (rather than reading from `process.env`)
- * so callers above the kernel layer own the env / global-flag coupling.
- * ADR-0039 — kernel stays Node-API-free; runtime-js / playground are the
- * places that may legitimately consult `process.env`.
+ * Optional inputs to {@link getIpcMode}. `forceFallback` is a parameter
+ * (not a `process.env` read) so callers above the kernel own the env coupling.
+ * ADR-0039 — kernel stays Node-API-free; runtime-js / playground consult env.
  */
 export interface IpcModeOptions {
   /**
-   * When `true`, returns `'same-realm-fallback'` regardless of whether
-   * the host supports SAB IPC. Defaults to `false`. Tests and non-isolated
-   * previews that want to exercise the fallback path on a capable host
-   * pass `true`; production callers leave it unset.
+   * When `true`, returns `'same-realm-fallback'` regardless of host SAB
+   * support (default `false`). For tests and non-isolated previews exercising
+   * the fallback path on a capable host.
    */
   forceFallback?: boolean;
 }
 
 /**
- * Returns the effective IPC mode for the current realm. Use this from
- * {@link kernel.spawn} (added in phase 2) to decide whether to instantiate
- * a real Worker with a SAB ring or to fall back to the same-realm path.
+ * Returns the effective IPC mode for the current realm. Used by
+ * {@link kernel.spawn} (phase 2) to choose a real Worker with a SAB ring vs.
+ * the same-realm path.
  *
  * @param options - See {@link IpcModeOptions}.
  */

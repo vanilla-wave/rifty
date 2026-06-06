@@ -1,38 +1,38 @@
 # WebContainer Clone — Project Plan
 
-> Учебный пет-проект: браузерный Node-совместимый рантайм + WASI-runner для нативных бинарей. Цель — глубокое понимание устройства таких систем, путь к "Express + npm install в браузере" за ~год работы по вечерам.
+> Educational pet project: browser-based Node-compatible runtime + WASI runner for native binaries. Goal — deep understanding of how these systems work, a path to "Express + npm install in the browser" within ~a year of evening work.
 
 ---
 
-## 1. Цели и не-цели
+## 1. Goals and non-goals
 
-### Цели
-- Понять, как устроены системы вида WebContainers/StackBlitz изнутри
-- Получить работающий рантайм, способный запускать реальные Node-программы (Express, CLI-инструменты на pure JS)
-- Прокачать архитектурные навыки: слои, изоляция, контракты, эмуляция системных API
-- Параллельно изучить WASI как отдельный модуль (запуск esbuild/sqlite — настоящие WASI-бинарники; `@esbuild/wasi-preview1` импортирует только `wasi_snapshot_preview1` — см. ADR-0047, реверс ADR-0044)
-- Вести devlog — серия глубоких технических статей
+### Goals
+- Understand how WebContainers/StackBlitz-like systems work under the hood
+- Get a working runtime capable of running real Node programs (Express, CLI tools in pure JS)
+- Level up architectural skills: layers, isolation, contracts, system API emulation
+- Learn WASI as a separate module (running esbuild/sqlite — real WASI binaries; `@esbuild/wasi-preview1` imports only `wasi_snapshot_preview1` — see ADR-0047, reverses ADR-0044)
+- Keep a devlog — a series of deep technical articles
 
-### Не-цели (по крайней мере на первый год)
-- Полная Node-совместимость (это бесконечный путь)
-- Поддержка нативных модулей через node-gyp
+### Non-goals (at least for the first year)
+- Full Node compatibility (that's an endless path)
+- Native module support via node-gyp
 - Production-ready performance
-- Поддержка всех браузеров (целимся в свежий Chrome/Edge — нужен OPFS SyncAccessHandle в Workers)
-- Свой JS-движок (используем браузерный V8)
+- All-browser support (targeting fresh Chrome/Edge — need OPFS SyncAccessHandle in Workers)
+- Own JS engine (using the browser's V8)
 
 ---
 
-## 2. Архитектура: основные принципы
+## 2. Architecture: core principles
 
-### Стратегические решения
-1. **Браузерный V8 как основной JS-движок** — путь StackBlitz. Производительность и tooling несравнимо лучше QuickJS-в-WASM.
-2. **WASI — отдельный рантайм для нативных бинарей**, не для основного исполнения JS. Полезен для esbuild/sqlite/python (esbuild публикует настоящий WASIp1-билд `@esbuild/wasi-preview1` — см. ADR-0047, реверс ADR-0044; Go-bridge `gojs` остаётся отложен для будущих Go-гостей, но для esbuild больше не нужен).
-3. **Web Workers как процессы.** Каждый "процесс" Node = отдельный Worker со своим JS-контекстом.
-4. **Service Worker для виртуальной сети.** Перехват fetch, маршрутизация в "слушающие" воркеры.
-5. **OPFS (Origin Private File System) — основной storage backend** для VFS. Даёт sync API в Workers через `FileSystemSyncAccessHandle`.
-6. **VFS как чистый интерфейс**, in-memory backend для тестов и dev, OPFS — для прода.
+### Strategic decisions
+1. **Browser V8 as the primary JS engine** — the StackBlitz approach. Performance and tooling are incomparably better than QuickJS-in-WASM.
+2. **WASI — a separate runtime for native binaries**, not for primary JS execution. Useful for esbuild/sqlite/python (esbuild publishes a real WASIp1 build `@esbuild/wasi-preview1` — see ADR-0047, reverses ADR-0044; Go-bridge `gojs` deferred for future Go guests, but no longer needed for esbuild).
+3. **Web Workers as processes.** Each Node "process" = a separate Worker with its own JS context.
+4. **Service Worker for virtual networking.** Intercepts fetch, routes to "listening" workers.
+5. **OPFS (Origin Private File System) — primary storage backend** for VFS. Provides sync API in Workers via `FileSystemSyncAccessHandle`.
+6. **VFS as a clean interface**, in-memory backend for tests and dev, OPFS for production.
 
-### Слои
+### Layers
 ```
 ┌─────────────────────────────────────────┐
 │  apps/playground  (UI: editor + term)   │
@@ -47,50 +47,50 @@
 └─────────────────────────────────────────┘
 ```
 
-**Правило зависимостей:** только сверху вниз. Никаких обратных импортов. Каждый слой имеет публичный API в `index.ts`.
+**Dependency rule:** top-down only. No reverse imports. Each layer has a public API in `index.ts`.
 
-**Правило UI-изоляции (D-002):** UI-фреймворк используется только в `apps/playground/`. Все пакеты в `packages/` — framework-agnostic. Это обеспечивает замену UI без переписывания ядра.
+**UI isolation rule (D-002):** UI framework is used only in `apps/playground/`. All packages in `packages/` are framework-agnostic. This allows replacing the UI without rewriting the core.
 
-### Изоляция и контексты
-- **Main thread:** UI, оркестратор процессов, Process Manager (PID-таблица), управление SW
-- **Web Worker (на процесс):** runtime-js + пользовательский код + его модули
-- **Service Worker:** перехват fetch, RPC-роутер между запросами и воркерами
-- **(Опционально позже) iframe:** превью приложения, безопасный рендеринг HTML от пользователя
+### Isolation and contexts
+- **Main thread:** UI, process orchestrator, Process Manager (PID table), SW management
+- **Web Worker (per process):** runtime-js + user code + its modules
+- **Service Worker:** fetch interceptor, RPC router between requests and workers
+- **(Optionally later) iframe:** app preview, safe rendering of user HTML
 
-### Каналы коммуникации
-- Main ↔ Worker: `MessageChannel` для async, `SharedArrayBuffer` + `Atomics` для синхронных вызовов (см. D-001)
-- Worker ↔ Worker (pipes): `MessageChannel` напрямую через `Transferable`
+### Communication channels
+- Main ↔ Worker: `MessageChannel` for async, `SharedArrayBuffer` + `Atomics` for synchronous calls (see D-001)
+- Worker ↔ Worker (pipes): `MessageChannel` directly via `Transferable`
 - Main ↔ Service Worker: `postMessage` + `MessageChannel`
-- Браузер → SW → Worker: fetch перехватывается, сериализуется в RPC-запрос, ответ возвращается через ReadableStream
+- Browser → SW → Worker: fetch is intercepted, serialized into an RPC request, response returned via ReadableStream
 
-### Требование к окружению: cross-origin isolation
-Страница playground должна быть в состоянии `crossOriginIsolated === true` (см. **D-001**). Это даёт `SharedArrayBuffer`, `Atomics.wait` в Worker'ах, и является фундаментом для sync IPC (нужен в M6+). Все ресурсы (xterm, Monaco, шрифты) — локальные или с правильными CORP-заголовками. Сторонние CDN при необходимости проксируются через свой origin.
+### Environment requirement: cross-origin isolation
+The playground page must be in `crossOriginIsolated === true` state (see **D-001**). This provides `SharedArrayBuffer` and `Atomics.wait` in Workers — the foundation for sync IPC (needed in M6+). All resources (xterm, Monaco, fonts) are local or have correct CORP headers. Third-party CDNs are proxied through own origin when needed.
 
 ---
 
-## 3. Структура репозитория
+## 3. Repository structure
 
 ```
 webcontainer-clone/
 ├── package.json                  # pnpm workspace root
 ├── pnpm-workspace.yaml
 ├── tsconfig.base.json
-├── biome.json                    # линтинг + форматирование (или eslint+prettier)
+├── biome.json                    # linting + formatting (or eslint+prettier)
 ├── vitest.workspace.ts
 ├── playwright.config.ts
 ├── README.md
-├── CLAUDE.md                     # ⚡ инструкции для AI-агента (см. §6)
+├── CLAUDE.md                     # ⚡ instructions for the AI agent (see §6)
 │
 ├── docs/
 │   ├── adr/                      # Architecture Decision Records
 │   │   ├── 0001-monorepo-pnpm.md
 │   │   ├── 0002-opfs-as-primary-backend.md
 │   │   └── ...
-│   ├── devlog/                   # посты по этапам
-│   └── compat/                   # matrix совместимости (генерируется тестами)
+│   ├── devlog/                   # posts per milestone
+│   └── compat/                   # compatibility matrix (generated from tests)
 │
 ├── packages/
-│   ├── vfs/                      # интерфейс ФС + backends
+│   ├── vfs/                      # FS interface + backends
 │   │   ├── src/
 │   │   │   ├── types.ts          # VFS interface
 │   │   │   ├── memory.ts         # in-memory backend
@@ -101,9 +101,9 @@ webcontainer-clone/
 │   │
 │   ├── io/                       # streams, pipes, stdio abstractions
 │   ├── kernel/                   # process manager, PID, signals, scheduling
-│   ├── runtime-js/               # Node-совместимый рантайм поверх V8
+│   ├── runtime-js/               # Node-compatible runtime on top of V8
 │   │   ├── src/
-│   │   │   ├── worker-entry.ts   # точка входа в Worker
+│   │   │   ├── worker-entry.ts   # Worker entry point
 │   │   │   ├── module-loader/    # CJS + ESM resolver
 │   │   │   ├── globals/          # process, Buffer, console
 │   │   │   ├── builtins/         # node:fs, node:path, node:http, ...
@@ -118,323 +118,323 @@ webcontainer-clone/
 │   ├── net/                      # net.Socket, net.Server, http
 │   ├── service-worker/           # SW: fetch interceptor, port registry
 │   ├── npm-client/               # resolver, fetcher, unpacker, linker
-│   ├── shell/                    # минимальный bash-like shell
+│   ├── shell/                    # minimal bash-like shell
 │   └── terminal/                 # xterm.js glue, PTY abstraction
 │
 ├── apps/
-│   ├── playground/               # основной UI
-│   └── benchmarks/               # стенд для бенчей
+│   ├── playground/               # main UI
+│   └── benchmarks/               # benchmark harness
 │
-├── examples/                     # фикстуры для test-driven подхода
-│   ├── hello-c/                  # минимальный WASI binary
-│   ├── express-hello/            # цель милстоуна M7
-│   ├── npm-pkg-fixtures/         # реальные пакеты (chalk, commander, ...)
-│   └── vite-app/                 # цель M10
+├── examples/                     # fixtures for the test-driven approach
+│   ├── hello-c/                  # minimal WASI binary
+│   ├── express-hello/            # target of milestone M7
+│   ├── npm-pkg-fixtures/         # real packages (chalk, commander, ...)
+│   └── vite-app/                 # target of M10
 │
 ├── tools/
-│   ├── shadow-registry/          # подменные WASM-сборки нативных пакетов
-│   ├── registry-proxy/           # CORS-прокси для npm registry (dev)
-│   └── node-parity-runner/       # ⚡ запускает код в реальном Node и в нашем рантайме, диффает (см. §5)
+│   ├── shadow-registry/          # drop-in WASM builds of native packages
+│   ├── registry-proxy/           # CORS proxy for npm registry (dev)
+│   └── node-parity-runner/       # ⚡ runs code in real Node and in our runtime, diffs results (see §5)
 │
 └── tests/
-    ├── conformance/              # ⚡ ключевые тесты соответствия Node API
+    ├── conformance/              # ⚡ key Node API conformance tests
     │   ├── fs/
     │   ├── path/
     │   ├── http/
     │   └── ...
-    ├── integration/              # запуск реальных npm-пакетов
-    ├── e2e/                      # playwright по playground'у
-    └── harness/                  # утилиты: parity-runner, diff, snapshot
+    ├── integration/              # running real npm packages
+    ├── e2e/                      # playwright against playground
+    └── harness/                  # utilities: parity-runner, diff, snapshot
 ```
 
-### Конвенции
-- Каждый пакет в `packages/` экспортирует через `src/index.ts`. Прямые импорты из `src/internal/*` запрещены извне.
-- Каждый пакет содержит `README.md` с описанием публичного API и `CHANGELOG.md`.
-- Tests рядом с кодом (`*.test.ts`) для unit, отдельная папка `tests/` для интеграционных.
-- TypeScript strict mode везде, `noUncheckedIndexedAccess: true`.
-- Никаких циклических зависимостей (проверяется `madge` в CI).
+### Conventions
+- Each package in `packages/` exports via `src/index.ts`. Direct imports from `src/internal/*` are forbidden externally.
+- Each package has a `README.md` describing the public API and a `CHANGELOG.md`.
+- Tests co-located with code (`*.test.ts`) for unit, separate `tests/` folder for integration.
+- TypeScript strict mode everywhere, `noUncheckedIndexedAccess: true`.
+- No circular dependencies (enforced by `madge` in CI).
 
 ---
 
-## 4. Roadmap и милстоуны
+## 4. Roadmap and milestones
 
-Структура: **милстоун = группа этапов, заканчивающаяся демонстрируемым результатом**. Каждый милстоун имеет приёмочный сценарий (acceptance criteria) — это то, что проверяет тест и что можно увидеть глазами.
+Structure: **milestone = group of stages ending with a demonstrable result**. Each milestone has an acceptance scenario (acceptance criteria) — what the test checks and what you can see with your eyes.
 
-| # | Милстоун | Что работает | Время |
+| # | Milestone | What works | Time |
 |---|---|---|---|
-| M0 | Foundation | Монорепо, UI, терминал, пустой Worker, пустой SW | 1-2 нед |
-| M1 | JS Execution | `console.log('hi')` в Worker, REPL в xterm | 1-2 нед |
-| M2 | Modules | `require('./other')` работает, CJS + базовый ESM | 2-3 нед |
-| M3 | Node Core | process, timers, event loop, базовые built-ins | 3-4 нед |
-| M4 | FileSystem | fs API, OPFS backend, sync & async | 3-4 нед |
-| M5 | Streams & IO | Streams работают, pipes между процессами | 2-3 нед |
-| M6 | Processes | child_process.spawn, дерево процессов, IPC | 3-4 нед |
-| M7 | Network | net + http, Service Worker bridge, Express бежит | 4-5 нед |
-| M8 | WASI Runner | esbuild.wasm работает как процесс через `@esbuild/wasi-preview1` (ADR-0047, реверс ADR-0044) | 2-3 нед |
-| M9 | npm install | Реальная установка пакетов с registry | 3-4 нед |
-| M10 | Real Tooling | Vite-like dev server в браузере; real express@4 + vite@5 бегут in-process (✅ ADR-0050) | 4-6 нед |
-| M11 | post-M10 follow-ups | Vite-in-Worker (ADR-0043 ✅), nested install (ADR-0042 ✅), fork-IPC через Worker (ADR-0045 ✅), SW→Worker direct routing (A-023 / Q-2026-05-27-002), streaming cross-realm preview, lockfile reuse, esbuild.wasm vendoring (✅ ADR-0047), native-dep install policy (✅ ADR-0051) | 2-3 нед |
-| M12 | opencode server facade (proposed) | Запуск anomalyco/opencode как headless Effect-сервера в rifty до tool-execution-потолка. **No-vendored-tree slice реализован и зелёный** (TS-on-import ✅ ADR-0052/0053; Effect↔node:http ✅ ADR-0054; SSE-over-HTTP ✅ ADR-0055; F09 tool-ceiling marker). Остальное blocked на вендоринге opencode → Spike C → решение WASM-SQLite. См. `docs/opencode/README.md` | TBD |
+| M0 | Foundation | Monorepo, UI, terminal, empty Worker, empty SW | 1-2 wks |
+| M1 | JS Execution | `console.log('hi')` in Worker, REPL in xterm | 1-2 wks |
+| M2 | Modules | `require('./other')` works, CJS + basic ESM | 2-3 wks |
+| M3 | Node Core | process, timers, event loop, basic built-ins | 3-4 wks |
+| M4 | FileSystem | fs API, OPFS backend, sync & async | 3-4 wks |
+| M5 | Streams & IO | Streams work, pipes between processes | 2-3 wks |
+| M6 | Processes | child_process.spawn, process tree, IPC | 3-4 wks |
+| M7 | Network | net + http, Service Worker bridge, Express runs | 4-5 wks |
+| M8 | WASI Runner | esbuild.wasm runs as a process via `@esbuild/wasi-preview1` (ADR-0047, reverses ADR-0044) | 2-3 wks |
+| M9 | npm install | Real package installation from registry | 3-4 wks |
+| M10 | Real Tooling | Vite-like dev server in browser; real express@4 + vite@5 run in-process (✅ ADR-0050) | 4-6 wks |
+| M11 | post-M10 follow-ups | Vite-in-Worker (ADR-0043 ✅), nested install (ADR-0042 ✅), fork-IPC via Worker (ADR-0045 ✅), SW→Worker direct routing (A-023 / Q-2026-05-27-002), streaming cross-realm preview, lockfile reuse, esbuild.wasm vendoring (✅ ADR-0047), native-dep install policy (✅ ADR-0051) | 2-3 wks |
+| M12 | opencode server facade (proposed) | Running anomalyco/opencode as a headless Effect server in rifty up to the tool-execution ceiling. **No-vendored-tree slice implemented and green** (TS-on-import ✅ ADR-0052/0053; Effect↔node:http ✅ ADR-0054; SSE-over-HTTP ✅ ADR-0055; F09 tool-ceiling marker). Rest blocked on vendoring opencode → Spike C → WASM-SQLite solution. See `docs/opencode/README.md` | TBD |
 
 ---
 
 ### M0 — Foundation
-**Этапы:** 0
-**Когда готово:** есть рабочий dev-сервер, открывается страница с редактором (Monaco) и терминалом (xterm.js). Пустой Web Worker стартует по кнопке "Run", пишет в консоль "worker alive". Service Worker зарегистрирован, ничего не делает.
+**Stages:** 0
+**Done when:** there is a working dev server, a page with an editor (Monaco) and terminal (xterm.js) opens. Empty Web Worker starts on "Run" click, writes "worker alive" to the console. Service Worker is registered, does nothing.
 
 **Acceptance:**
-- [ ] `pnpm dev` поднимает playground на localhost
-- [ ] В UI виден редактор, терминал, кнопка "Run"
-- [ ] При клике "Run" Worker стартует и шлёт сообщение в main thread
-- [ ] Service Worker зарегистрирован (виден в DevTools → Application)
-- [ ] CI прогон зелёный (lint + typecheck + пустые тесты)
+- [ ] `pnpm dev` brings up playground on localhost
+- [ ] UI shows editor, terminal, "Run" button
+- [ ] Clicking "Run" starts the Worker and it sends a message to the main thread
+- [ ] Service Worker is registered (visible in DevTools → Application)
+- [ ] CI run is green (lint + typecheck + empty tests)
 
-**Инфраструктура, которая появляется:** pnpm workspace, TS, Vite, Vitest, Playwright, Biome, GitHub Actions, базовый CLAUDE.md.
+**Infrastructure that appears:** pnpm workspace, TS, Vite, Vitest, Playwright, Biome, GitHub Actions, basic CLAUDE.md.
 
 ---
 
 ### M1 — JS Execution
-**Этапы:** 1
-**Когда готово:** в терминале можно набрать JS-выражение и увидеть результат. Console.log/error прокидывается из воркера в xterm с разделением stdout/stderr. Браузерные capabilities детектятся при старте (см. D-006).
+**Stages:** 1
+**Done when:** you can type a JS expression in the terminal and see the result. console.log/error is forwarded from the worker to xterm with stdout/stderr separation. Browser capabilities are detected on startup (see D-006).
 
 **Acceptance:**
-- [ ] `> 1 + 1` в терминале → `2`
-- [ ] `> console.log('hi'); console.error('err')` → видно оба, разными цветами
-- [ ] `> throw new Error('boom')` → traceback виден
-- [ ] Worker безопасно перезапускается по команде `> .reset`
-- [ ] Стрим вывода работает (длинный `for` с console.log не блокирует UI)
-- [ ] **Capabilities-detection при старте:** проверяет `crossOriginIsolated`, `SharedArrayBuffer`, `FileSystemSyncAccessHandle`, `Atomics.waitAsync`; показывает понятное сообщение если чего-то нет
+- [ ] `> 1 + 1` in the terminal → `2`
+- [ ] `> console.log('hi'); console.error('err')` → both visible, different colors
+- [ ] `> throw new Error('boom')` → traceback visible
+- [ ] Worker restarts safely on `> .reset` command
+- [ ] Output stream works (long `for` with console.log doesn't block UI)
+- [ ] **Capabilities detection on startup:** checks `crossOriginIsolated`, `SharedArrayBuffer`, `FileSystemSyncAccessHandle`, `Atomics.waitAsync`; shows a clear message if anything is missing
 
-**Тесты:**
-- Unit: контекст исполнения, capture console
-- E2E (playwright): ввод в терминале → ожидаемый вывод
+**Tests:**
+- Unit: execution context, capture console
+- E2E (playwright): terminal input → expected output
 
 ---
 
 ### M2 — Modules
-**Этапы:** 2, 3, 4
-**Когда готово:** в VFS можно положить несколько файлов, главный делает `require('./util')` и получает экспорт. Node module resolution работает (включая `node_modules` walk-up). Базовый ESM работает.
+**Stages:** 2, 3, 4
+**Done when:** you can place several files in VFS, the main file does `require('./util')` and gets the export. Node module resolution works (including `node_modules` walk-up). Basic ESM works.
 
-**Архитектура загрузчика — см. D-003:** общий резолвер для CJS+ESM, парсинг ESM через `es-module-lexer`, исполнение через `new Function`/`async function`, module registry с live bindings.
+**Loader architecture — see D-003:** shared CJS+ESM resolver, ESM parsing via `es-module-lexer`, execution via `new Function`/`async function`, module registry with live bindings.
 
 **Acceptance:**
-- [ ] CJS: `require('./other.js')`, `require('./other')` (без расширения), `require('./dir')` (через index.js)
-- [ ] Node algorithm: walk-up по `node_modules`
-- [ ] `package.json` поля `main`, `exports` (conditional exports — хотя бы `node`/`default`/`import`/`require`)
-- [ ] ESM: статический `import`, динамический `import()`
-- [ ] Top-level await работает (модуль = async function)
-- [ ] Live bindings: реэкспортированное значение видит обновления (как в Node)
-- [ ] Циклические зависимости не падают (и для CJS, и для ESM)
-- [ ] CJS ↔ ESM интероп: ESM может импортировать CJS; CJS грузит ESM только через `import()`
-- [ ] **Тест на реальном пакете:** `lodash` (CJS) и `nanoid` (ESM) загружаются из фикстур
+- [ ] CJS: `require('./other.js')`, `require('./other')` (no extension), `require('./dir')` (via index.js)
+- [ ] Node algorithm: walk-up through `node_modules`
+- [ ] `package.json` fields `main`, `exports` (conditional exports — at minimum `node`/`default`/`import`/`require`)
+- [ ] ESM: static `import`, dynamic `import()`
+- [ ] Top-level await works (module = async function)
+- [ ] Live bindings: re-exported value sees updates (as in Node)
+- [ ] Circular dependencies don't crash (for both CJS and ESM)
+- [ ] CJS ↔ ESM interop: ESM can import CJS; CJS loads ESM only via `import()`
+- [ ] **Test with real package:** `lodash` (CJS) and `nanoid` (ESM) load from fixtures
 
-**Тесты:**
-- Conformance: 30+ кейсов resolution (см. Node docs)
-- Conformance: live bindings, top-level await, ESM↔CJS интероп (parity-runner против Node)
-- Integration: пара реальных пакетов из `examples/npm-pkg-fixtures/`
+**Tests:**
+- Conformance: 30+ resolution cases (see Node docs)
+- Conformance: live bindings, top-level await, ESM↔CJS interop (parity-runner against Node)
+- Integration: a couple of real packages from `examples/npm-pkg-fixtures/`
 
 ---
 
 ### M3 — Node Core
-**Этапы:** 5, 6, 7
-**Когда готово:** `process.env.NODE_ENV`, `process.cwd()`, `setTimeout`, `setImmediate`, `process.nextTick` работают с правильной семантикой. Базовые built-ins подключены.
+**Stages:** 5, 6, 7
+**Done when:** `process.env.NODE_ENV`, `process.cwd()`, `setTimeout`, `setImmediate`, `process.nextTick` work with correct semantics. Basic built-ins connected.
 
 **Acceptance:**
-- [ ] `path`, `url`, `querystring`, `util`, `events`, `buffer`, `assert` — все основные методы работают
-- [ ] `process.nextTick` исполняется ДО Promise.then (правильный порядок)
-- [ ] `setImmediate(fn)` исполняется после I/O-таска, но до setTimeout(fn, 0) в типичном случае
-- [ ] `EventEmitter` поддерживает on/off/emit/once
-- [ ] **Real-package test:** `chalk` работает (`chalk.red('hi')` даёт ANSI-строку)
+- [ ] `path`, `url`, `querystring`, `util`, `events`, `buffer`, `assert` — all main methods work
+- [ ] `process.nextTick` executes BEFORE Promise.then (correct order)
+- [ ] `setImmediate(fn)` executes after an I/O task but before setTimeout(fn, 0) in the typical case
+- [ ] `EventEmitter` supports on/off/emit/once
+- [ ] **Real-package test:** `chalk` works (`chalk.red('hi')` returns an ANSI string)
 
-**Тесты:**
-- Parity-runner: 100+ кейсов на каждый builtin, сравнение с реальным Node
-- Order tests на event loop: чёткие сценарии "nextTick before Promise"
+**Tests:**
+- Parity-runner: 100+ cases per builtin, comparison with real Node
+- Order tests on event loop: clear scenarios for "nextTick before Promise"
 
 ---
 
 ### M4 — FileSystem
-**Этапы:** 8 (частично), 9, 10
-**Когда готово:** `fs.readFileSync`, `fs.writeFileSync`, `fs.promises.readFile`, `fs.readdirSync` работают поверх OPFS. Persistent: после reload файлы на месте.
+**Stages:** 8 (partial), 9, 10
+**Done when:** `fs.readFileSync`, `fs.writeFileSync`, `fs.promises.readFile`, `fs.readdirSync` work on top of OPFS. Persistent: after reload the files are still there.
 
 **Acceptance:**
-- [ ] Sync API через OPFS SyncAccessHandle (внутри Worker)
+- [ ] Sync API via OPFS SyncAccessHandle (inside Worker)
 - [ ] Async API + promises
-- [ ] `mkdir -p` семантика для `fs.mkdir({ recursive: true })`
-- [ ] `fs.stat` возвращает корректные `size`, `isFile`, `isDirectory`
-- [ ] **Persistent storage:** записал файл → перезагрузил страницу → файл на месте
-- [ ] Streams: `createReadStream`/`createWriteStream` через VFS
+- [ ] `mkdir -p` semantics for `fs.mkdir({ recursive: true })`
+- [ ] `fs.stat` returns correct `size`, `isFile`, `isDirectory`
+- [ ] **Persistent storage:** wrote a file → reloaded page → file is there
+- [ ] Streams: `createReadStream`/`createWriteStream` via VFS
 
-**Тесты:**
-- Conformance: дублируем 50+ тестов из Node test suite по fs
-- Persistence test (e2e): запись → reload → чтение
+**Tests:**
+- Conformance: duplicate 50+ tests from Node test suite for fs
+- Persistence test (e2e): write → reload → read
 
 ---
 
 ### M5 — Streams & IO
-**Этапы:** 8 (полностью)
-**Когда готово:** readable-stream интегрирован, pipes работают, backpressure корректен.
+**Stages:** 8 (complete)
+**Done when:** readable-stream is integrated, pipes work, backpressure is correct.
 
 **Acceptance:**
 - [ ] `Readable`/`Writable`/`Duplex`/`Transform`
-- [ ] `pipeline()` и `pipe()` с правильным cleanup
+- [ ] `pipeline()` and `pipe()` with correct cleanup
 - [ ] Async iterators: `for await (const chunk of readable)`
 - [ ] Object mode
-- [ ] Backpressure: пишем большой файл, видим `drain` events
+- [ ] Backpressure: writing a large file, seeing `drain` events
 - [ ] **Real test:** `fs.createReadStream('big.txt').pipe(fs.createWriteStream('copy.txt'))`
 
 ---
 
 ### M6 — Processes
-**Этапы:** 11, 12, 13
-**Когда готово:** один процесс может спавнить другой, передавать аргументы, читать stdout, ждать exit code.
+**Stages:** 11, 12, 13
+**Done when:** one process can spawn another, pass arguments, read stdout, wait for exit code.
 
 **Acceptance:**
-- [ ] `child_process.spawn('node', ['script.js'])` — где 'node' это специальный handler в нашем рантайме
-- [ ] Pipes: stdout/stderr ребёнка читаются из родителя
-- [ ] `exec(cmd, callback)` — обёртка с буферизацией
-- [ ] `fork(modulePath)` с IPC через `process.send`/`message` event
-- [ ] **Sync subprocess:** `execSync` работает (через SharedArrayBuffer + Atomics)
-- [ ] `worker_threads` — параллельная реализация на Web Workers
-- [ ] Process tree виден в DevTools/UI
+- [ ] `child_process.spawn('node', ['script.js'])` — where 'node' is a special handler in our runtime
+- [ ] Pipes: child's stdout/stderr readable from parent
+- [ ] `exec(cmd, callback)` — wrapper with buffering
+- [ ] `fork(modulePath)` with IPC via `process.send`/`message` event
+- [ ] **Sync subprocess:** `execSync` works (via SharedArrayBuffer + Atomics)
+- [ ] `worker_threads` — parallel implementation on Web Workers
+- [ ] Process tree visible in DevTools/UI
 
-**Тесты:**
-- Спавним 10 параллельных процессов, ждём всех
+**Tests:**
+- Spawn 10 parallel processes, wait for all
 - Pipe-chain: `a | b | c`
-- Sync exec не вешает UI (исполняется в worker, не в main)
+- Sync exec doesn't hang the UI (runs in worker, not main)
 
 ---
 
 ### M7 — Network
-**Этапы:** 14, 15, 16
-**Когда готово:** Express приложение поднимается, отвечает на запросы из браузера через Service Worker.
+**Stages:** 14, 15, 16
+**Done when:** Express application comes up, answers requests from the browser via Service Worker.
 
 **Acceptance:**
-- [ ] `net.createServer().listen(3000)` регистрирует endpoint в SW
-- [ ] Открываем `https://<host>/preview/3000/` в новой вкладке → видим ответ от user-кода
-- [ ] HTTP методы: GET, POST с body, headers
-- [ ] Chunked transfer encoding работает (long-polling сценарии)
-- [ ] `http.request` (исходящий) через прокси
-- [ ] **Real test:** Express "hello world" → видим страницу в браузере
-- [ ] **Real test:** Express app с middleware (body-parser, cors) обрабатывает POST с JSON
+- [ ] `net.createServer().listen(3000)` registers an endpoint in SW
+- [ ] Open `https://<host>/preview/3000/` in a new tab → see response from user code
+- [ ] HTTP methods: GET, POST with body, headers
+- [ ] Chunked transfer encoding works (long-polling scenarios)
+- [ ] `http.request` (outgoing) via proxy
+- [ ] **Real test:** Express "hello world" → see page in browser
+- [ ] **Real test:** Express app with middleware (body-parser, cors) handles POST with JSON
 
 ---
 
 ### M8 — WASI Runner
-**Этапы:** 17, 18, 19
-**Когда готово:** можно запустить WASI-бинарник из shell как обычную программу.
+**Stages:** 17, 18, 19
+**Done when:** you can run a WASI binary from shell like a normal program.
 
 **Acceptance:**
-- [ ] Минимальный hello.c → hello.wasm → запускается в playground, выводит в stdout
-- [x] esbuild.wasm: `esbuild --loader=ts` через `runWasi` работает, трансформирует TS/JSX из stdin (ADR-0047; `tools/shadow-registry/src/esbuild-binding.ts`, integration `tests/integration/esbuild-wasi-transform.test.ts`)
-- [x] esbuild видит preopens и cwd (`AT_FDCWD`) — ADR-0049, реверс гипотезы ADR-0044 о Go-runtime bridge (для esbuild не нужен; `@esbuild/wasi-preview1` — настоящий WASI-бинарь)
-- [ ] WASI VFS интегрирована с основной VFS (один источник истины)
-- [ ] Бинарник видит preopens (например `/workspace`)
+- [ ] Minimal hello.c → hello.wasm → runs in playground, prints to stdout
+- [x] esbuild.wasm: `esbuild --loader=ts` via `runWasi` works, transforms TS/JSX from stdin (ADR-0047; `tools/shadow-registry/src/esbuild-binding.ts`, integration `tests/integration/esbuild-wasi-transform.test.ts`)
+- [x] esbuild sees preopens and cwd (`AT_FDCWD`) — ADR-0049, reverses ADR-0044 hypothesis about Go-runtime bridge (not needed for esbuild; `@esbuild/wasi-preview1` is a real WASI binary)
+- [ ] WASI VFS integrated with main VFS (single source of truth)
+- [ ] Binary sees preopens (e.g. `/workspace`)
 
-**Тесты:**
-- Sanity: hello.wasm у нас и в `wasmtime` дают одинаковый stdout
-- esbuild: трансформируем небольшой TS/JSX через `@esbuild/wasi-preview1` под `runWasi`, проверяем что типы вырезаны и JSX опущен (ADR-0047; esbuild вернулся как forcing consumer вместо swc)
+**Tests:**
+- Sanity: hello.wasm in our runtime and in `wasmtime` give the same stdout
+- esbuild: transform small TS/JSX via `@esbuild/wasi-preview1` under `runWasi`, verify types are stripped and JSX is lowered (ADR-0047; esbuild returned as forcing consumer instead of swc)
 
 ---
 
 ### M9 — npm install
-**Этапы:** 20, 21, 22
-**Когда готово:** `npm install express` в shell → пакет в node_modules → можно его require'ить.
+**Stages:** 20, 21, 22
+**Done when:** `npm install express` in shell → package in node_modules → can require it.
 
-**Прокси к registry — см. D-004:** dev через Vite proxy, prod через решение из Q4' (принимается к концу этого милстоуна).
+**Registry proxy — see D-004:** dev via Vite proxy, prod via solution from Q4' (decided by end of milestone).
 
 **Acceptance:**
-- [ ] Semver resolver: правильно выбирает версии из ranges
-- [ ] Скачивает tarballs через сконфигурированный registry URL (без хардкодов)
-- [ ] Тесты `npm-client` ходят в локальный mock-registry, не в реальный
-- [ ] Распаковывает (pako + tar-stream) в VFS
-- [ ] Строит правильную структуру node_modules с dedupe
-- [ ] Lockfile (npm v3) генерируется и переиспользуется
-- [ ] Postinstall scripts через child_process (опционально, многие пакеты обходятся)
-- [ ] Shadow-registry: `npm install bcrypt` → ставится `bcryptjs` (или WASM-bcrypt)
-- [ ] **Прод-прокси выбран и развёрнут** (закрывает Q4')
+- [ ] Semver resolver: correctly picks versions from ranges
+- [ ] Downloads tarballs via configured registry URL (no hardcodes)
+- [ ] `npm-client` tests go to a local mock-registry, not the real one
+- [ ] Unpacks (pako + tar-stream) into VFS
+- [ ] Builds correct node_modules structure with dedupe
+- [ ] Lockfile (npm v3) is generated and reused
+- [ ] Postinstall scripts via child_process (optional, many packages get by without)
+- [ ] Shadow-registry: `npm install bcrypt` → installs `bcryptjs` (or WASM-bcrypt)
+- [ ] **Prod proxy chosen and deployed** (closes Q4')
 
-**Тесты:**
-- Чистый install простого пакета (`chalk`) → require работает
-- Сложный install (`express` с 20+ транзитивных зависимостей) → app поднимается
+**Tests:**
+- Clean install of a simple package (`chalk`) → require works
+- Complex install (`express` with 20+ transitive dependencies) → app starts
 
 ---
 
 ### M10 — Real Tooling
-**Этапы:** 23, 24, 25
-**Когда готово:** Vite dev server (или эквивалент) запускается, отдаёт HMR в iframe-preview.
+**Stages:** 23, 24, 25
+**Done when:** Vite dev server (or equivalent) starts, serves HMR to the iframe preview.
 
 **Acceptance:**
-- [ ] `npm install vite && npm run dev` запускает Vite
-- [ ] Vite ходит в esbuild.wasm через shadow-binding (TS/JSX transform; ADR-0047, реверс ADR-0044 — `@esbuild/wasi-preview1` под `runWasi`)
-- [ ] HMR работает через WebSocket-туннель
-- [ ] Preview-iframe показывает приложение
-- [ ] Изменение в редакторе → видим update в preview без перезагрузки
+- [ ] `npm install vite && npm run dev` starts Vite
+- [ ] Vite calls esbuild.wasm via shadow-binding (TS/JSX transform; ADR-0047, reverses ADR-0044 — `@esbuild/wasi-preview1` under `runWasi`)
+- [ ] HMR works via WebSocket tunnel
+- [ ] Preview-iframe shows the app
+- [ ] Edit in editor → see update in preview without reload
 
-Это финальный показательный сценарий — "вот оно как у StackBlitz".
+This is the final showcase scenario — "here it is, like StackBlitz".
 
 ---
 
 ### M11 — post-M10 follow-ups
-**Этапы:** 23.x, 24.x, 25.x (incremental refinements of M10 plus deferred items from M6/M8/M9)
-**Когда готово:** все ADR-помеченные «open acceptance» из M6–M10 закрыты или явно отложены с трекером.
+**Stages:** 23.x, 24.x, 25.x (incremental refinements of M10 plus deferred items from M6/M8/M9)
+**Done when:** all ADR-marked "open acceptance" items from M6–M10 are closed or explicitly deferred with a tracker.
 
-Состав (по состоянию на 2026-05-28, аудит 2026-05-27 подтвердил расхождение между ADR-слоем реальности и таблицей §4):
-- ✅ **Vite-in-Worker** — ADR-0043 (landed 2026-05-27). Real Vite живёт в kernel-spawned Worker; страница превращается в координатора. Часть M10 «Real Tooling» переехала сюда из практических соображений (cross-origin isolation + heavy WASM не вписывались в page realm).
-- ✅ **Nested install для конфликтов версий** — ADR-0042 (landed 2026-05-27). First-wins flat + nest-on-conflict в `walkAndPin`; lockfile fast-path replay через `pinnedEntryForParent`.
-- ✅ **Fork-IPC через Worker** — ADR-0045 (landed 2026-05-28). `WorkerProcessHandle.send`/`'message'`/`disconnect` через parent↔child `MessagePort`. Закрывает разрыв «`fork()` returns IPC ✅» из M6 acceptance, который в SAB-пути ранее тихо дропал сообщения.
-- ⏳ **SW→Worker direct routing** — A-023 (трекер: `OPEN_QUESTIONS.md` Q-2026-05-27-002). Когда landed, `WorkerOwnerResolver` заменит `FirstWindowOwnerResolver` в `@riftydev/service-worker`, и SW-fetch для `/preview/<port>/*` пойдёт напрямую в worker realm.
-- ⏳ **Streaming cross-realm preview** — `bridgeCrossRealmPreview` сейчас buffered-only (`packages/net/src/cross-realm/preview-port.ts:24-29`). Поднимется как только Real Vite начнёт отдавать большие responses (vendor-prebundle, source maps). ADR-0046+ (TBD).
-- ⏳ **Lockfile reuse on subsequent `install`** — M9 acceptance, ADR-0023 пометил тактику; код пока регенерирует каждый раз. Закрывается отдельным PR.
-- ✅ **esbuild.wasm vendoring** — M8 acceptance. ADR-0047 реверснул ADR-0044 (swc не имеет WASI-билда; `@esbuild/wasi-preview1` — настоящий WASIp1-бинарь). Вендорится build-time скриптом `tools/shadow-registry/scripts/fetch-esbuild-wasi.mjs` (pin по версии + integrity), shadow-binding прогоняет real preopens/cwd через `runWasi` (ADR-0049).
+Composition (as of 2026-05-28, audit 2026-05-27 confirmed discrepancy between ADR-layer reality and §4 table):
+- ✅ **Vite-in-Worker** — ADR-0043 (landed 2026-05-27). Real Vite lives in a kernel-spawned Worker; the page becomes the coordinator. Part of M10 "Real Tooling" moved here for practical reasons (cross-origin isolation + heavy WASM didn't fit in the page realm).
+- ✅ **Nested install for version conflicts** — ADR-0042 (landed 2026-05-27). First-wins flat + nest-on-conflict in `walkAndPin`; lockfile fast-path replay via `pinnedEntryForParent`.
+- ✅ **Fork-IPC via Worker** — ADR-0045 (landed 2026-05-28). `WorkerProcessHandle.send`/`'message'`/`disconnect` via parent↔child `MessagePort`. Closes the "`fork()` returns IPC ✅" gap from M6 acceptance, which in the SAB path previously silently dropped messages.
+- ⏳ **SW→Worker direct routing** — A-023 (tracker: `OPEN_QUESTIONS.md` Q-2026-05-27-002). When landed, `WorkerOwnerResolver` will replace `FirstWindowOwnerResolver` in `@riftydev/service-worker`, and SW-fetch for `/preview/<port>/*` will go directly to the worker realm.
+- ⏳ **Streaming cross-realm preview** — `bridgeCrossRealmPreview` is currently buffered-only (`packages/net/src/cross-realm/preview-port.ts:24-29`). Will be upgraded once Real Vite starts serving large responses (vendor-prebundle, source maps). ADR-0046+ (TBD).
+- ⏳ **Lockfile reuse on subsequent `install`** — M9 acceptance, ADR-0023 marked the tactic; code currently regenerates every time. Closed in a separate PR.
+- ✅ **esbuild.wasm vendoring** — M8 acceptance. ADR-0047 reversed ADR-0044 (swc has no WASI build; `@esbuild/wasi-preview1` is a real WASIp1 binary). Vendored by build-time script `tools/shadow-registry/scripts/fetch-esbuild-wasi.mjs` (pinned by version + integrity), shadow-binding runs real preopens/cwd through `runWasi` (ADR-0049).
 
-Decision (2026-05-27): M11 — это не новая фаза работы, а контейнер для технического долга, оставшегося с M6 / M8 / M9 / M10. Срок 2-3 недели включает только активные работы (SW→Worker — после fork-IPC); deferred-пункты ждут реального триггерного use case.
+Decision (2026-05-27): M11 — not a new phase of work, but a container for technical debt left from M6 / M8 / M9 / M10. The 2-3 week estimate covers only active work (SW→Worker — after fork-IPC); deferred items await a real triggering use case.
 
 ---
 
 ### M12 — opencode server facade (proposed)
 
-**Цель:** запустить anomalyco/opencode (Effect/Bun TS source-граф, НЕ нативный npm `opencode-ai`) как headless server-фасад «без выполнения инструментов» — поднять ~40 Effect-слоёв, отдать тривиальные роуты, создать сессию, сделать один LLM round-trip; spawn / shell / native git/ripgrep / PTY — жёсткий browser/WASI-потолок (out of scope by design). Вердикт фисибилити: `feasible-with-major-work` (medium confidence).
+**Goal:** run anomalyco/opencode (Effect/Bun TS source-graph, NOT the native npm `opencode-ai`) as a headless server facade "without tool execution" — boot ~40 Effect layers, serve trivial routes, create a session, make one LLM round-trip; spawn / shell / native git/ripgrep / PTY — hard browser/WASI ceiling (out of scope by design). Feasibility verdict: `feasible-with-major-work` (medium confidence).
 
-**Статус (2026-05-31): частично реализовано.** Весь срез, не требующий вендоренного дерева opencode, реализован и зелёный:
-- ✅ TS-on-import по module-графу — ADR-0052 (transform hook) + ADR-0053 (`.ts`/`.tsx` first-class); gold multi-file `.ts` parity case зелёный (P0 language unit закрыт).
-- ✅ Effect `@effect/platform-node` потребляет rifty `node:http` AS-IS — ADR-0054 (additive shape-widening; pipe-sink deferred).
-- ✅ SSE-over-streaming-HTTP, без `ws`-шима (page-direct) — ADR-0055.
+**Status (2026-05-31): partially implemented.** The entire slice not requiring a vendored opencode tree is implemented and green:
+- ✅ TS-on-import by module graph — ADR-0052 (transform hook) + ADR-0053 (`.ts`/`.tsx` first-class); gold multi-file `.ts` parity case is green (P0 language unit closed).
+- ✅ Effect `@effect/platform-node` consumes rifty `node:http` AS-IS — ADR-0054 (additive shape-widening; pipe-sink deferred).
+- ✅ SSE-over-streaming-HTTP, no `ws` shim (page-direct) — ADR-0055.
 - ✅ F09 tool-ceiling marker — pure-JS `vfsGrep`, spawn-ceiling conformance, `docs/compat/opencode-tool-ceiling.md`.
 
-**Spike C → WASM-SQLite re-cut в P2 (RATIFIED).** Spike C подтвердил: `Server.listen` строит layer-DAG eagerly и реальный `Database` (`node:sqlite` `DatabaseSync`) открывается+мигрируется на layer-build, поэтому WASM-SQLite перенесён из P4 в **P2 boot-prerequisite**. Движок зафиксирован **ADR-0065**: `sql.js` (pure-JS WASM SQLite, синхронный API, in-memory-first), зарегистрирован как rifty-builtin `node:sqlite` с `DatabaseSync`-совместимой синхронной поверхностью; OPFS-персистентность отложена. ADR-0065 supersedes decisions.md DRAFTS ADR-0055/0056 и исправляет каркас `bun:sqlite`→`node:sqlite`.
+**Spike C → WASM-SQLite re-cut in P2 (RATIFIED).** Spike C confirmed: `Server.listen` builds the layer-DAG eagerly and the real `Database` (`node:sqlite` `DatabaseSync`) opens+migrates on layer-build, so WASM-SQLite is moved from P4 to **P2 boot-prerequisite**. Engine fixed in **ADR-0065**: `sql.js` (pure-JS WASM SQLite, synchronous API, in-memory-first), registered as a rifty-builtin `node:sqlite` with `DatabaseSync`-compatible synchronous surface; OPFS persistence deferred. ADR-0065 supersedes decisions.md DRAFTS ADR-0055/0056 and corrects the `bun:sqlite`→`node:sqlite` skeleton.
 
-**Blocked / deferred** (гейты см. `docs/opencode/README.md`; полный текст ADR-черновиков — `docs/opencode/decisions.md`): headless boot (ADR-0058 draft); v3 SSE frame bump (ADR-0060 draft, противоречит ADR-0048/0017); LLM round-trip + `node:https`→fetch (ADR-0061 draft, supersedes ADR-0010, за C1 https.Agent pre-flight). opencode в репозитории НЕ вендорится.
+**Blocked / deferred** (gates see `docs/opencode/README.md`; full text of ADR drafts — `docs/opencode/decisions.md`): headless boot (ADR-0058 draft); v3 SSE frame bump (ADR-0060 draft, conflicts with ADR-0048/0017); LLM round-trip + `node:https`→fetch (ADR-0061 draft, supersedes ADR-0010, after C1 https.Agent pre-flight). opencode is NOT vendored into the repository.
 
-Критический путь: **вендоринг opencode ✅ → Spike C ✅ → WASM-SQLite `node:sqlite` shim (sql.js, ADR-0065) в P2**.
+Critical path: **vendoring opencode ✅ → Spike C ✅ → WASM-SQLite `node:sqlite` shim (sql.js, ADR-0065) in P2**.
 
 ---
 
-## 5. Стратегия верификации
+## 5. Verification strategy
 
-Это **самая важная часть** при работе с AI-агентом. Без жёсткой инфры тестирования агент будет делать вещи, которые "выглядят правильно" но ломаются в реальности.
+This is **the most important part** when working with an AI agent. Without a rigid testing infrastructure the agent will do things that "look correct" but break in reality.
 
-### 5.1 Уровни тестирования
+### 5.1 Testing levels
 
-| Уровень | Что проверяет | Инструмент | Когда запускается |
+| Level | What it checks | Tool | When it runs |
 |---|---|---|---|
-| **Unit** | Изолированную логику внутри пакета | Vitest | На каждом сохранении (watch) + pre-commit |
-| **Parity (Node diff)** | Совпадение с реальным Node API | Custom harness + Vitest | Pre-commit + CI |
-| **Conformance** | Соответствие документированной семантике Node | Vitest | CI |
-| **Integration** | Реальные npm-пакеты в рантайме | Vitest в Worker / Playwright | CI |
-| **E2E** | Полный playground через браузер | Playwright | CI (полный прогон) |
-| **Smoke** | Базовые сценарии после билда | Playwright | Pre-deploy |
-| **Compat matrix** | Сводная таблица "что работает" | Auto-generated MD | После каждого CI |
+| **Unit** | Isolated logic within a package | Vitest | On every save (watch) + pre-commit |
+| **Parity (Node diff)** | Match with real Node API | Custom harness + Vitest | Pre-commit + CI |
+| **Conformance** | Adherence to documented Node semantics | Vitest | CI |
+| **Integration** | Real npm packages in the runtime | Vitest in Worker / Playwright | CI |
+| **E2E** | Full playground through the browser | Playwright | CI (full run) |
+| **Smoke** | Basic scenarios after build | Playwright | Pre-deploy |
+| **Compat matrix** | Summary table "what works" | Auto-generated MD | After each CI |
 
-### 5.2 Главное оружие: Node Parity Runner
+### 5.2 Main weapon: Node Parity Runner
 
-Ключевая идея: **у нас есть эталон — настоящий Node**. Большинство ошибок реализации можно поймать автоматически, прогнав один и тот же код в обоих средах и сдиффив результат.
+Key idea: **we have a reference — real Node**. Most implementation bugs can be caught automatically by running the same code in both environments and diffing the result.
 
 ```
 tools/node-parity-runner/
 ├── src/
-│   ├── run-in-node.ts        # запускает код в spawn'нутом Node
-│   ├── run-in-runtime.ts     # запускает код в нашем рантайме (Worker)
-│   ├── diff.ts               # нормализация и сравнение
+│   ├── run-in-node.ts        # runs code in a spawned Node
+│   ├── run-in-runtime.ts     # runs code in our runtime (Worker)
+│   ├── diff.ts               # normalization and comparison
 │   └── cli.ts
 └── cases/
     ├── fs/
@@ -445,7 +445,7 @@ tools/node-parity-runner/
         └── nexttick-order.case.ts
 ```
 
-Пример кейса:
+Example case:
 ```typescript
 // fs/readFile-basic.case.ts
 export const setup = {
@@ -461,13 +461,14 @@ export const code = `
 export const expected = { data: 'world', type: 'string' }
 ```
 
-Harness прогоняет `code` в Node (с pre-setup'ленной директорией) и в нашем рантайме (с VFS preload), сравнивает stdout. Любое расхождение — баг.
+The harness runs `code` in Node (with a pre-setup directory) and in our runtime (with VFS preload), compares stdout. Any discrepancy is a bug.
 
-**Это золотой стандарт для AI-агента:** агент не может "сжульничать", потому что эталон — внешний.
 
-### 5.3 Conformance тесты
+**This is the gold standard for the AI agent:** the agent can't "cheat" because the reference is external.
 
-Для случаев, где Node-поведение нельзя/тяжело проверить parity-runner'ом (асинхронные таймеры, edge cases event loop, ошибки), пишем декларативные тесты на конкретное поведение:
+### 5.3 Conformance tests
+
+For cases where Node behavior can't/is hard to check with the parity-runner (async timers, event loop edge cases, errors), we write declarative tests for specific behavior:
 
 ```typescript
 // tests/conformance/timers/order.test.ts
@@ -481,16 +482,16 @@ test('nextTick runs before resolved Promise.then', async () => {
 })
 ```
 
-Источники тестов:
-- Node.js test suite (`test/parallel/`) — можно адаптировать сотни
-- WPT (Web Platform Tests) для веб-частей
-- Свои тесты для edge cases, которые мы целенаправленно решили поддержать
+Test sources:
+- Node.js test suite (`test/parallel/`) — hundreds can be adapted
+- WPT (Web Platform Tests) for web parts
+- Own tests for edge cases we explicitly decided to support
 
-### 5.4 Integration: реальные npm-пакеты
+### 5.4 Integration: real npm packages
 
-`examples/npm-pkg-fixtures/` содержит **зафиксированные версии** реальных пакетов, на которых тестируется рантайм.
+`examples/npm-pkg-fixtures/` contains **pinned versions** of real packages that the runtime is tested against.
 
-Стратегия: **от простого к сложному**, постепенно расширяем список. Каждый успешно работающий пакет фиксируется регрессионным тестом.
+Strategy: **from simple to complex**, gradually expanding the list. Every package that successfully works is pinned with a regression test.
 
 ```
 examples/npm-pkg-fixtures/
@@ -499,14 +500,14 @@ examples/npm-pkg-fixtures/
 ├── tier-2-streams/        # M5: through2, split2, csv-parse
 ├── tier-3-server/         # M7: express, koa, fastify
 ├── tier-4-tooling/        # M8-M10: esbuild, vite, swc
-└── manifest.json          # таблица "пакет → тиры → ожидаемое поведение"
+└── manifest.json          # table "package → tiers → expected behavior"
 ```
 
-Каждый тир — отдельный тест-сьют, который **может быть зелёным или красным** в любой момент. Сводная таблица в `docs/compat/` показывает прогресс.
+Each tier is a separate test suite that **can be green or red** at any moment. The summary table in `docs/compat/` shows progress.
 
-### 5.5 E2E через Playwright
+### 5.5 E2E via Playwright
 
-Полный сценарий: открыть playground → ввести в редакторе код → нажать Run → проверить вывод в терминале. Для M7+ — проверить preview-iframe.
+Full scenario: open playground → enter code in editor → click Run → check output in terminal. For M7+ — check preview-iframe.
 
 ```typescript
 test('M7: express hello world', async ({ page }) => {
@@ -523,7 +524,7 @@ test('M7: express hello world', async ({ page }) => {
 
 ### 5.6 Compat matrix
 
-Авто-генерируемый markdown по результатам тестов:
+Auto-generated markdown from test results:
 
 ```markdown
 # Compatibility Matrix
@@ -538,12 +539,12 @@ test('M7: express hello world', async ({ page }) => {
 | http | request | ⚠️ | no keep-alive |
 ```
 
-Обновляется каждый CI-прогон. Это и для пользователей доки, и для агента — карта "куда копать дальше".
+Updated on every CI run. Both user documentation and for the agent — a map of "where to dig next".
 
 ### 5.7 CI pipeline
 
 ```yaml
-# .github/workflows/ci.yml (схема)
+# .github/workflows/ci.yml (schema)
 jobs:
   lint-and-typecheck:
     - biome check
@@ -555,7 +556,7 @@ jobs:
 
   parity:
     - node tools/node-parity-runner run --all
-    # сравнение каждого кейса в Node vs наш Worker
+    # compares each case in Node vs our Worker
 
   conformance:
     - vitest run tests/conformance
@@ -568,33 +569,33 @@ jobs:
 
   compat-report:
     - node tools/compat-matrix-generator
-    - git diff --exit-code docs/compat/  # коммит должен включать обновлённую матрицу
+    - git diff --exit-code docs/compat/  # commit must include updated matrix
 ```
 
-**Pre-commit hook (lefthook/husky):** lint + typecheck + unit + parity-quick (быстрая выборка). Полный прогон в CI.
+**Pre-commit hook (lefthook/husky):** lint + typecheck + unit + parity-quick (fast subset). Full run in CI.
 
-### 5.8 Бенчмарки и smoke
+### 5.8 Benchmarks and smoke
 
 `apps/benchmarks/`:
-- Boot time: сколько миллисекунд от загрузки страницы до готового рантайма
+- Boot time: milliseconds from page load to ready runtime
 - `npm install lodash` end-to-end
-- "Hello world" Express: запросов/сек через SW
+- "Hello world" Express: requests/sec through SW
 - VFS write/read throughput
 
-Запускаются раз в неделю или вручную, результаты в `docs/benchmarks/`.
+Run once a week or manually, results in `docs/benchmarks/`.
 
 ---
 
-## 6. AI-агент: правила игры
+## 6. AI agent: rules of the game
 
-### 6.1 `CLAUDE.md` в корне
+### 6.1 `CLAUDE.md` at root
 
-Это контекст для агента на каждой сессии. Минимум:
-- Ссылка на этот документ
-- Конвенции кода (см. ниже)
-- Текущий милстоун и его acceptance criteria
-- Список known issues и нерешённых вопросов
-- "Definition of done" для PR
+This is context for the agent each session. Minimum:
+- Link to this document
+- Code conventions (see below)
+- Current milestone and its acceptance criteria
+- List of known issues and unresolved questions
+- "Definition of done" for a PR
 
 ```markdown
 # CLAUDE.md
@@ -609,436 +610,436 @@ Before considering any task done, ensure:
   5. compat-matrix is regenerated if any conformance/integration changed
 ```
 
-### 6.2 Конвенции, помогающие агенту не сломать всё
+### 6.2 Conventions that help the agent not break everything
 
-1. **Strict TypeScript everywhere.** Никаких `any`. Никаких `@ts-ignore` без комментария-причины и тикета.
-2. **Public API в `src/index.ts`, всё остальное internal.** Агент не может случайно зацепиться за внутренности другого пакета.
-3. **Одно изменение — один PR в принципе.** Агент работает по милстоунам/этапам.
-4. **TSDoc на каждой публичной функции.** Это даёт агенту контекст при чтении кода.
-5. **Файлы небольшие** (<300 строк). Большие модули разбиваются.
-6. **Сначала тест, потом код** (test-driven). Агенту проще написать парный тест к фиче, чем найти регрессию постфактум.
-7. **Никаких "пока заглушим"** в основной ветке. Если не реализовано — `throw new NotImplementedError('fs.watch')` с регистрацией в compat-matrix как `❌`.
-8. **ADR на любое архитектурное решение.** Это и для агента контекст, и для тебя через год.
+1. **Strict TypeScript everywhere.** No `any`. No `@ts-ignore` without an explanatory comment and a ticket.
+2. **Public API in `src/index.ts`, everything else internal.** Agent won't accidentally touch another package's internals.
+3. **One change — one PR.** Agent works by milestones/stages.
+4. **TSDoc on every public function.** Gives the agent context when reading code.
+5. **Small files** (<300 lines). Large modules are split.
+6. **Test first, then code** (test-driven). Easier for the agent to write a parity test alongside a feature than to find a regression after the fact.
+7. **No "let's stub it for now"** in the main branch. Not implemented — `throw new NotImplementedError('fs.watch')` with registration in compat-matrix as `❌`.
+8. **ADR for every architectural decision.** Both context for the agent and for you a year from now.
 
-### 6.3 Definition of done (для задачи/PR)
+### 6.3 Definition of done (for a task/PR)
 
-- [ ] Все существующие тесты проходят
-- [ ] Новое поведение покрыто тестами (минимум — parity case, если применимо)
-- [ ] TypeScript strict без ошибок
-- [ ] Lint без ошибок
-- [ ] TSDoc на новом публичном API
-- [ ] CHANGELOG в затронутом пакете обновлён
-- [ ] compat-matrix регенерирован (если изменилась совместимость)
-- [ ] ADR добавлен (если было архитектурное решение)
-- [ ] PR-описание ссылается на этап/милстоун
+- [ ] All existing tests pass
+- [ ] New behavior is covered by tests (minimum — parity case, if applicable)
+- [ ] TypeScript strict without errors
+- [ ] Lint without errors
+- [ ] TSDoc on new public API
+- [ ] CHANGELOG in affected package updated
+- [ ] compat-matrix regenerated (if compatibility changed)
+- [ ] ADR added (if an architectural decision was made)
+- [ ] PR description links to stage/milestone
 
-### 6.4 Workflow с агентом
+### 6.4 Workflow with the agent
 
-Цикл, который реально работает:
-1. **Ты:** "Берём этап X из милстоуна Y. Напиши тесты на acceptance criteria."
-2. **Агент:** пишет тесты, они красные.
-3. **Ты:** "Имплементируй до зелёного, не меняя тесты."
-4. **Агент:** пишет код, гоняет тесты, итерирует.
-5. **Ты:** ревью архитектуры (агент может выбрать неоптимальное решение), правки.
-6. **Агент:** обновляет ADR, compat-matrix, CHANGELOG.
+Cycle that actually works:
+1. **You:** "Taking stage X from milestone Y. Write tests for acceptance criteria."
+2. **Agent:** writes tests, they're red.
+3. **You:** "Implement to green, don't change the tests."
+4. **Agent:** writes code, runs tests, iterates.
+5. **You:** architecture review (agent may pick a suboptimal solution), fixes.
+6. **Agent:** updates ADR, compat-matrix, CHANGELOG.
 7. **Merge.**
 
-Критичное правило: **тесты пишутся первыми и не редактируются под реализацию**. Если тест "оказался неудобным" — это сигнал к ADR-обсуждению, а не к подгонке.
+Critical rule: **tests are written first and not edited to match implementation**. "Inconvenient" test — signal for an ADR discussion, not for tweaking.
 
-### 6.5 Защита от типичных ошибок агента
+### 6.5 Protection against typical agent mistakes
 
-- **Молчаливые заглушки:** агент любит вернуть `null` или `''` вместо implementation. Защита — strict types и обязательный `NotImplementedError` с регистрацией.
-- **Падение тестов "по другой причине":** агент может править несвязанный тест, чтобы CI стал зелёным. Защита — pre-commit hook сравнивает diff: если правится тест в файле, где не менялся код, требуется флаг `--update-test`.
-- **Хождение в `any`:** биом/eslint правило, ESLint error.
-- **Прямой импорт из `src/internal/*` других пакетов:** ESLint правило `no-restricted-imports`.
-- **Затирание ADR:** ADR файлы immutable после merge (только новые ADR могут override старые, со ссылкой).
+- **Silent stubs:** agent loves to return `null` or `''` instead of an implementation. Protection — strict types and mandatory `NotImplementedError` with registration.
+- **Tests failing "for another reason":** agent may edit an unrelated test to make CI green. Protection — pre-commit hook compares diff: editing a test in a file where code wasn't changed requires the `--update-test` flag.
+- **Going into `any`:** biome/eslint rule, ESLint error.
+- **Direct import from `src/internal/*` of other packages:** ESLint rule `no-restricted-imports`.
+- **Overwriting ADR:** ADR-files are immutable after merge (only new ADRs can override old ones, with a reference).
 
 ---
 
-## 7. Стартовый чек-лист (M0)
+## 7. Starting checklist (M0)
 
-Конкретные шаги для первой недели:
+Concrete steps for the first week:
 
 1. [ ] `pnpm init` + `pnpm-workspace.yaml`
-2. [ ] `tsconfig.base.json` со strict-настройками
-3. [ ] Biome (или eslint+prettier) — выбрать и настроить
+2. [ ] `tsconfig.base.json` with strict settings
+3. [ ] Biome (or eslint+prettier) — choose and configure
 4. [ ] Vitest workspace
-5. [ ] **Playwright init с поддержкой всех браузеров** (см. D-006):
-    - [ ] `playwright.config.ts` с проектами `chromium`, `firefox`, `webkit`
-    - [ ] `postinstall`-скрипт устанавливает все три браузера
+5. [ ] **Playwright init with all-browser support** (see D-006):
+    - [ ] `playwright.config.ts` with `chromium`, `firefox`, `webkit` projects
+    - [ ] `postinstall` script installs all three browsers
     - [ ] npm-scripts: `test:e2e` (chromium-only), `test:e2e:all`, `test:e2e:firefox`, `test:e2e:webkit`
 6. [ ] **GitHub Actions:**
-    - [ ] `ci.yml` — на каждый PR: lint + typecheck + unit + parity + e2e:chromium
+    - [ ] `ci.yml` — on every PR: lint + typecheck + unit + parity + e2e:chromium
     - [ ] `ci-cross-browser.yml` — cron weekly + manual trigger: e2e:all + browser compat report
 7. [ ] **Cross-origin isolation:**
-    - [ ] Vite dev-server отдаёт `COOP: same-origin` + `COEP: credentialless`
-    - [ ] Headers прописаны и для prod-конфига (`vercel.json` / `_headers` / etc — в зависимости от выбранного хостинга)
-    - [ ] Все локальные ассеты (Monaco, xterm, шрифты) загружаются с того же origin'а; никаких внешних CDN
-    - [ ] Runtime-check в playground: при загрузке проверить `crossOriginIsolated === true`, иначе показать понятную ошибку с инструкцией
-    - [ ] E2E-тест в playwright: проверяет `crossOriginIsolated`, `typeof SharedArrayBuffer === 'function'`, что `new SharedArrayBuffer(8)` не падает
-8. [ ] `apps/playground` со скелетом (Vite + **SolidJS**, Monaco, xterm.js — см. D-002)
-9. [ ] `packages/terminal` — обёртка над xterm (framework-agnostic, без Solid)
-10. [ ] Пустой Service Worker в `packages/service-worker`, регистрируется из playground
-11. [ ] `packages/runtime-js` со скелетом worker-entry, грузится при клике Run
-12. [ ] **ESLint-правило `no-restricted-imports`: `solid-js` запрещён вне `apps/playground/**`** (см. D-002)
+    - [ ] Vite dev-server sends `COOP: same-origin` + `COEP: credentialless`
+    - [ ] Headers configured for prod config too (`vercel.json` / `_headers` / etc — depending on chosen hosting)
+    - [ ] All local assets (Monaco, xterm, fonts) load from same origin; no external CDN
+    - [ ] Runtime-check in playground: on load verify `crossOriginIsolated === true`, otherwise show a clear error with instructions
+    - [ ] E2E test in playwright: checks `crossOriginIsolated`, `typeof SharedArrayBuffer === 'function'`, that `new SharedArrayBuffer(8)` doesn't throw
+8. [ ] `apps/playground` with skeleton (Vite + **SolidJS**, Monaco, xterm.js — see D-002)
+9. [ ] `packages/terminal` — wrapper over xterm (framework-agnostic, no Solid)
+10. [ ] Empty Service Worker in `packages/service-worker`, registered from playground
+11. [ ] `packages/runtime-js` with worker-entry skeleton, loaded on Run click
+12. [ ] **ESLint rule `no-restricted-imports`: `solid-js` forbidden outside `apps/playground/**`** (see D-002)
 13. [ ] `CLAUDE.md` + ADR-0001 (pnpm + workspace) + ADR-0002 (cross-origin isolation, D-001) + ADR-0003 (UI framework, D-002)
-14. [ ] **`OPEN_QUESTIONS.md` в корне** + шаблон + `pnpm adr:new` и `pnpm adr:promote` скрипты (см. D-007)
-15. [ ] **CI-чек на `TODO(ADR):` маркеры** — собирает количество, выводит в отчёт, не блокирует
-16. [ ] README с roadmap-ссылкой и статусом
-17. [ ] Первый devlog-пост "почему я это делаю"
+14. [ ] **`OPEN_QUESTIONS.md` at root** + template + `pnpm adr:new` and `pnpm adr:promote` scripts (see D-007)
+15. [ ] **CI check for `TODO(ADR):` markers** — collects count, outputs to report, does not block
+16. [ ] README with roadmap link and status
+17. [ ] First devlog post "why I'm doing this"
 
-После этого можно начинать M1.
-
----
-
-## 8. Принятые решения (Decision Log)
-
-Краткие записи зафиксированных архитектурных решений. Подробные обоснования — в `docs/adr/`. Этот раздел растёт по мере прохождения открытых вопросов.
-
-### D-009: Инфлексии — не повод останавливаться
-**Решено:** 2026-05-31
-**ADR:** `docs/adr/0064-no-stop-on-inflections.md` (расширяет ADR-0063)
-**Связано с:** D-008
-
-**Проблема:** Несмотря на D-008 (record-and-continue), агент всё равно паузил ради вопроса человеку на «крупных инфлексиях» — неожиданный результат меняет план; у ранее отложенного решения появилась подтверждённая нужда; прежнее предположение оказалось устаревшим. Это ровно то трение, которое D-008 убирал.
-
-**Решение:** Инфлексия — не стоп-триггер. Не паузят работу ради вопроса: результат/замер, меняющий план или порядок милестоунов; отложенное решение, чей гейт («нет подтверждённой нужды») закрыт доказательством → ратифицировать; обнаружение устаревшего предположения/спеки/feasibility-заметки → скорректировать курс; коммит новой внешней зависимости после подтверждения нужды. Агент решает, фиксирует (новый/замещающий ADR; decision-сабагент при пересмотре уже записанного), переcut'ит план, продолжает и докладывает ПОСЛЕ. Confirm-first остаётся только для действий наружу/разрушительных за пределами репо (публикация, удаление данных пользователя, траты, push в общие remote) или направления, явно зарезервированного пользователем.
+After this, M1 can begin.
 
 ---
 
-### D-008: Record-and-continue — агент не останавливается на необратимых решениях
-**Решено:** 2026-05-30
+## 8. Decisions log
+
+Brief records of ratified architectural decisions. Detailed rationale in `docs/adr/`. This section grows as open questions are resolved.
+
+### D-009: Inflections are not a reason to stop
+**Decided:** 2026-05-31
+**ADR:** `docs/adr/0064-no-stop-on-inflections.md` (extends ADR-0063)
+**Related to:** D-008
+
+**Problem:** Despite D-008 (record-and-continue), the agent would still pause to ask a human on "large inflections" — an unexpected result changes the plan; a previously deferred decision now has a confirmed need; an earlier assumption turned out to be stale. Exactly the friction D-008 was meant to remove.
+
+**Decision:** An inflection is not a stop trigger. These don't pause work for a human question: a result/measurement that changes the plan or milestone order; a deferred decision whose gate ("no confirmed need") is closed by evidence → ratify it; discovering a stale assumption/spec/feasibility note → correct course; committing to a new external dependency after confirming need. Agent decides, records (new/superseding ADR; decision subagent when reconsidering something already recorded), re-cuts the plan, continues, and reports AFTER. Confirm-first remains only for actions outward-facing/destructive beyond the repo (publishing, deleting user data, spending, pushing to shared remotes) or a direction explicitly reserved by the user.
+
+---
+
+### D-008: Record-and-continue — agent doesn't stop on irreversible decisions
+**Decided:** 2026-05-30
 **ADR:** `docs/adr/0063-record-decisions-no-stop-on-irreversible.md` (supersedes ADR-0008)
-**Связано с:** D-007 (обновляет поведение)
+**Related to:** D-007 (updates behavior)
 
-**Проблема:** Правило D-007 «IRREVERSIBLE → стоп, вопрос в PR, ждать человека» на практике останавливало длинные автономные сессии на рутинных развилках и стало главным источником трения.
+**Problem:** Rule D-007 "IRREVERSIBLE → stop, question in PR, wait for human" in practice halted long autonomous sessions at routine forks — the main source of friction.
 
-**Решение:** Агент больше не останавливается на необратимых решениях. Reversibility-чеклист сохраняется, но определяет только **куда** записать решение, а не нужно ли паузить.
-- Любое новое решение (reversible или irreversible): **решить, зафиксировать, продолжить.** REVERSIBLE → `OPEN_QUESTIONS.md` + `TODO(ADR)`; IRREVERSIBLE → новый ADR инлайн (агент ратифицирует), с опциями и trade-offs для аудируемости.
-- **Пересмотр уже зафиксированного решения** (смёрдженный ADR или провизорное решение, на которое опёрлась другая работа) — единственный случай, когда не решаем инлайн: запускается **явный сабагент-решатель**, который оценивает и выпускает замещающий ADR (со ссылкой на старый — ADR остаются immutable).
+**Decision:** Agent no longer stops on irreversible decisions. The Reversibility checklist is retained but determines only **where** to record the decision, not whether to pause.
+- Any new decision (reversible or irreversible): **decide, record, continue.** REVERSIBLE → `OPEN_QUESTIONS.md` + `TODO(ADR)`; IRREVERSIBLE → new inline ADR (agent ratifies), with options and trade-offs for auditability.
+- **Reconsidering an already-recorded decision** (a merged ADR or provisional decision that other work now depends on) — the one case where we don't decide inline: an **explicit decision subagent** is launched, it evaluates and produces a superseding ADR (citing the old one — ADRs stay immutable).
 
-**Что НЕ меняется:** ADR immutable после merge; правило «never modify a test to make code pass» остаётся жёстким (инвариант корректности, не дизайн-развилка); каждое необратимое решение по-прежнему **записывается**.
+**What does NOT change:** ADR immutable after merge; "never modify a test to make code pass" stays hard (correctness invariant, not a design fork); every irreversible decision is still **recorded**.
 
 ---
 
-### D-007: Reversible decisions — агент не блокируется на дизайн-развилках
-**Решено:** 2026-05  
+### D-007: Reversible decisions — agent doesn't block on design forks
+**Decided:** 2026-05  
 **ADR:** `docs/adr/0008-reversible-decisions.md`  
-**Связано с:** работа с AI-агентом (§6)
+**Related to:** working with AI agent (§6)
 
-**Проблема:** Жёсткое правило "design decision = ADR discussion" останавливает длинные автономные сессии агента на каждой развилке. Это убивает продуктивность и провоцирует нарушение правил.
+**Problem:** The strict rule "design decision = ADR discussion" halts the agent's long autonomous sessions at every fork — kills productivity and provokes rule violations.
 
-**Решение:** Дифференцируем решения по обратимости. Агент имеет право принимать обратимые решения автономно, фиксируя их в `OPEN_QUESTIONS.md` и помечая код `TODO(ADR)`-маркерами. Только необратимые решения и противоречия существующим ADR прерывают работу.
+**Decision:** We differentiate decisions by reversibility. The agent may make reversible decisions autonomously, recording them in `OPEN_QUESTIONS.md` and marking code with `TODO(ADR)` markers. Only irreversible decisions and contradictions with existing ADRs interrupt work.
 
-**Reversibility checklist (порядок важен — первое "yes" определяет классификацию):**
+**Reversibility checklist (order matters — first "yes" determines classification):**
 
-1. Затрагивает ли публичный API между пакетами? → **IRREVERSIBLE**
-2. Требует ли новой внешней зависимости? → **IRREVERSIBLE**
-3. Противоречит ли существующему ADR? → **IRREVERSIBLE**
-4. Откат потребует >100 строк или правки >2 файлов? → **IRREVERSIBLE**
-5. Иначе → **REVERSIBLE**
+1. Does it touch the public API between packages? → **IRREVERSIBLE**
+2. Does it require a new external dependency? → **IRREVERSIBLE**
+3. Does it contradict an existing ADR? → **IRREVERSIBLE**
+4. Would reverting require >100 lines or >2 files changed? → **IRREVERSIBLE**
+5. Otherwise → **REVERSIBLE**
 
-**Поведение агента:**
+**Agent behavior:**
 
-| Тип решения | Действие |
+| Decision type | Action |
 |---|---|
-| Pure implementation (критерии ясны) | Делает |
-| Local naming, file structure внутри пакета | Решает сам, без записи |
-| Внутренний API между модулями одного пакета | Решает сам, документирует в TSDoc |
-| REVERSIBLE design choice | Принимает провизорное, помечает `TODO(ADR): Q-...`, логирует в `OPEN_QUESTIONS.md`, продолжает работу |
-| IRREVERSIBLE design choice | Останавливается, явно спрашивает в PR description |
-| Противоречие существующему ADR | Стоп, явный вопрос |
+| Pure implementation (criteria are clear) | Does it |
+| Local naming, file structure within a package | Decides alone, no recording |
+| Internal API between modules of the same package | Decides alone, documents in TSDoc |
+| REVERSIBLE design choice | Makes provisional decision, marks `TODO(ADR): Q-...`, logs to `OPEN_QUESTIONS.md`, continues work |
+| IRREVERSIBLE design choice | Stops, explicitly asks in PR description |
+| Contradiction with existing ADR | Stop, explicit question |
 
-**Артефакты:**
+**Artifacts:**
 
-1. **`OPEN_QUESTIONS.md`** в корне репо — живой буфер для провизорных решений. Формат записи:
+1. **`OPEN_QUESTIONS.md`** at repo root — live buffer for provisional decisions. Entry format:
    ```markdown
    ## Q-YYYY-MM-DD-NNN: <Title>
    **Encountered in:** PR #X, while implementing Y
-   **Context:** Краткое описание развилки
-   **Options considered:** A, B (с trade-offs)
+   **Context:** Brief description of the fork
+   **Options considered:** A, B (with trade-offs)
    **Decision taken (provisional):** A
-   **Code markers:** `TODO(ADR): Q-YYYY-MM-DD-NNN` в файлах X, Y
-   **Reversibility justification:** почему откат тривиален
+   **Code markers:** `TODO(ADR): Q-YYYY-MM-DD-NNN` in files X, Y
+   **Reversibility justification:** why rollback is trivial
    **Needs human review by:** end of milestone M<N>
    ```
 
-2. **Маркер `TODO(ADR): Q-...`** в коде — grep-friendly, отдельный от обычных `TODO`. CI собирает их количество в отчёт, **не блокирует**.
+2. **Marker `TODO(ADR): Q-...`** in code — grep-friendly, separate from regular `TODO`. CI collects their count into a report, **does not block**.
 
-3. **`pnpm adr:promote Q-YYYY-MM-DD-NNN`** — команда для апгрейда подтверждённого вопроса в ADR. Удаляет соответствующие `TODO(ADR)`-маркеры из кода.
+3. **`pnpm adr:promote Q-YYYY-MM-DD-NNN`** — command to upgrade a confirmed question to an ADR. Removes corresponding `TODO(ADR)` markers from code.
 
-**Процесс ревью:**
-- В конце каждого милстоуна (или по необходимости чаще) — проход по `OPEN_QUESTIONS.md`.
-- Каждый вопрос: подтверждён → промоут в ADR; отвергнут → переделка с новым ADR; отложен → остаётся с обновлённым `Needs human review by`.
-- CI сигнализирует, если `OPEN_QUESTIONS.md` содержит вопросы старше двух милстоунов — это технический долг.
+**Review process:**
+- At the end of each milestone (or more frequently as needed) — pass through `OPEN_QUESTIONS.md`.
+- Each question: confirmed → promote to ADR; rejected → redo with new ADR; deferred → stays with updated `Needs human review by`.
+- CI signals if `OPEN_QUESTIONS.md` contains questions older than two milestones — this is technical debt.
 
-**Что это даёт:**
-- Агент **продолжает работать** в большинстве случаев, где раньше тормозил.
-- Развилки **видны и аудируемы** — ничего не теряется.
-- Реально критичные решения по-прежнему останавливают — где иначе можно сделать необратимую ошибку.
-- Количество `TODO(ADR)` — индикатор технического долга, виден количественно.
+**What this gives:**
+- Agent **keeps working** in most cases where it previously stalled.
+- Forks are **visible and auditable** — nothing is lost.
+- Genuinely critical decisions still stop work — where making an irreversible mistake otherwise.
+- Count of `TODO(ADR)` — quantitative indicator of technical debt.
 
-**Следствия для CLAUDE.md:**
-- Добавляется раздел "Design decisions during work" с Reversibility checklist.
-- Workflow получает шаг 0: классифицировать задачу перед стартом.
-- Правило "Never modify a test to make code pass" остаётся жёстким — это категория необратимого.
+**Consequences for CLAUDE.md:**
+- Adding section "Design decisions during work" with Reversibility checklist.
+- Workflow gets step 0: classify the task before starting.
+- Rule "Never modify a test to make code pass" stays hard — this is an irreversibility category.
 
 ---
 
-### D-006: Chrome-first с готовой инфраструктурой для других браузеров
-**Решено:** 2026-05  
+### D-006: Chrome-first with infrastructure ready for other browsers
+**Decided:** 2026-05  
 **ADR:** `docs/adr/0007-browser-support.md`  
-**Связано с:** Q6 (закрыт)
+**Related to:** Q6 (closed)
 
-**Решение:** Основная цель — Chromium-семейство (Chrome/Edge/Arc/Brave). Firefox и WebKit/Safari поддерживаются best-effort: инфраструктура для прогонов готова с M0, но в дефолтном CI не запускается. Тестирование в "других" браузерах — один CLI-вызов, не отдельный проект.
+**Decision:** Primary target — the Chromium family (Chrome/Edge/Arc/Brave). Firefox and WebKit/Safari supported best-effort: infrastructure for runs is ready from M0, but doesn't run in default CI. Testing in "other" browsers — one CLI call, not a separate project.
 
-**Стратегия позиционирования: Chrome-first, best-effort other browsers.**
-- В Chromium всё должно работать как заявлено в acceptance criteria.
-- В Firefox/WebKit — приложение загружается, базовые сценарии работают (или показывается понятное сообщение о причине неработы).
-- Никаких vendor-prefixes и Chrome-only хаков "просто потому что". Если возможен стандартный путь — идём им.
+**Positioning strategy: Chrome-first, best-effort other browsers.**
+- In Chromium everything must work as stated in acceptance criteria.
+- In Firefox/WebKit — the app loads, basic scenarios work (or a clear message about why something doesn't work is shown).
+- No vendor-prefixes and Chrome-only hacks "just because". Standard path if possible.
 
-**Инфраструктура для всех браузеров (готовится в M0, используется по требованию):**
+**Infrastructure for all browsers (prepared in M0, used on demand):**
 
-1. **`playwright.config.ts` содержит проекты для всех трёх engines** (`chromium`, `firefox`, `webkit`) с самого начала. Не один конфиг для Chrome и отдельный "когда-нибудь" для остальных.
+1. **`playwright.config.ts` contains projects for all three engines** (`chromium`, `firefox`, `webkit`) from the start. Not one config for Chrome and a separate "someday" for the rest.
 
-2. **CI matrix скрипт умеет в любой engine:**
-   - В дефолтном `ci.yml` запускается только `chromium`.
-   - Параметризованный workflow `ci-cross-browser.yml` запускается **по cron (раз в неделю)** + ручной trigger через `workflow_dispatch`. Прогоняет всю тестовую пирамиду на всех трёх.
-   - Результаты падают в отдельный отчёт `docs/compat/browsers.md` (генерируется автоматически).
+2. **CI matrix script handles any engine:**
+   - Default `ci.yml` runs only `chromium`.
+   - Parameterized workflow `ci-cross-browser.yml` runs **on cron (once a week)** + manual trigger via `workflow_dispatch`. Runs the full test pyramid on all three.
+   - Results go into a separate report `docs/compat/browsers.md` (generated automatically).
 
-3. **Локальные npm-scripts с первого дня:**
-   - `pnpm test:e2e` → chromium (быстро, дефолт)
-   - `pnpm test:e2e:all` → все три
-   - `pnpm test:e2e:firefox`, `pnpm test:e2e:webkit` → отдельно
-   - Это включает установку браузеров через `playwright install firefox webkit` в `postinstall`.
+3. **Local npm-scripts from day one:**
+   - `pnpm test:e2e` → chromium (fast, default)
+   - `pnpm test:e2e:all` → all three
+   - `pnpm test:e2e:firefox`, `pnpm test:e2e:webkit` → separately
+   - This includes installing browsers via `playwright install firefox webkit` in `postinstall`.
 
-4. **Browser capabilities detection как отдельный модуль** (`packages/runtime-js/src/env/capabilities.ts`):
-   - При старте playground проверяет: `crossOriginIsolated`, `SharedArrayBuffer`, `FileSystemSyncAccessHandle` в Workers, `Atomics.waitAsync` (нужен в M6), и пр.
-   - Если чего-то нет — конкретное сообщение в UI: "функция X не работает, потому что в вашем браузере Y. Подробнее: [link to caniuse]".
-   - Этот же модуль логирует capabilities в e2e-тестах — отчёт по совместимости становится data-driven, не "ощущениями".
+4. **Browser capabilities detection as a separate module** (`packages/runtime-js/src/env/capabilities.ts`):
+   - On playground startup checks: `crossOriginIsolated`, `SharedArrayBuffer`, `FileSystemSyncAccessHandle` in Workers, `Atomics.waitAsync` (needed in M6), etc.
+   - If something is missing — specific message in UI: "feature X doesn't work because your browser Y doesn't support it. Details: [link to caniuse]".
+   - The same module logs capabilities in e2e tests — the compatibility report becomes data-driven, not "feelings".
 
-5. **Browser-specific known issues таблица** (`docs/compat/browsers.md`):
-   - Генерируется из результатов CI cross-browser run.
-   - Каждый failing test → запись "тест X фейлится в браузере Y, причина Z (link to bug)".
-   - Это и для пользователей доки, и для будущего "что чинить, если решим довести до full cross-browser".
+5. **Browser-specific known issues table** (`docs/compat/browsers.md`):
+   - Generated from CI cross-browser run results.
+   - Each failing test → entry "test X fails in browser Y, reason Z (link to bug)".
+   - Both user documentation and future "what to fix if we decide to achieve full cross-browser".
 
-**Что это даёт:**
-- "Посмотреть, как в FF" — это `pnpm test:e2e:firefox`, не "потратить день на настройку".
-- Когда (если) проект созреет до публичной аудитории — добавление Firefox/Safari в дефолтный CI — это правка одной строки в workflow, а не работа на неделю.
-- Регулярный cross-browser sweep (раз в неделю по cron) ловит регрессии раньше, чем мы вспомним о других браузерах руками.
-- Capabilities-detection — единый источник правды о том, что работает в каком окружении.
+**What this gives:**
+- "See how it looks in FF" — that's `pnpm test:e2e:firefox`, not "spend a day setting up".
+- When (if) the project matures to a public audience — adding Firefox/Safari to default CI will be a one-line change in the workflow, not a week of work.
+- Regular cross-browser sweep (once a week by cron) catches regressions before we remember about other browsers manually.
+- Capabilities-detection — single source of truth about what works in which environment.
 
-**CI-конфигурация:**
+**CI configuration:**
 ```
 .github/workflows/
-├── ci.yml                    # на каждый PR: lint + unit + parity + e2e:chromium
+├── ci.yml                    # on every PR: lint + unit + parity + e2e:chromium
 ├── ci-cross-browser.yml      # cron weekly + manual: e2e:all + report
-└── nightly.yml               # на main ночью: бенчи + integration full
+└── nightly.yml               # on main nightly: benchmarks + integration full
 ```
 
-**Чего НЕ делаем:**
-- Не блокируем PR на cross-browser failure. Это best-effort.
-- Не пишем "обходные пути" для нестабильных API в других браузерах. Документируем как known issue, идём дальше.
-- Не используем браузер-specific feature detection в продакт-коде (типа `if (isFirefox)`). Только feature-detection через capabilities API.
+**What we do NOT do:**
+- Don't block PRs on cross-browser failure. This is best-effort.
+- Don't write "workarounds" for unstable APIs in other browsers. Document as known issue, move on.
+- Don't use browser-specific feature detection in product code (like `if (isFirefox)`). Only feature-detection via capabilities API.
 
-**Что отложено:**
-- Mobile browsers (mobile Safari, Chrome Android) — отдельный вопрос, не сейчас. Инфра Playwright поддерживает device emulation; добавим, если/когда станет релевантно.
-- Серьёзная работа по pixel-perfect cross-browser UI — за рамками пет-проекта.
+**Deferred:**
+- Mobile browsers (mobile Safari, Chrome Android) — separate question, not now. Playwright infrastructure supports device emulation; will add if/when relevant.
+- Serious pixel-perfect cross-browser UI work — outside scope of a pet project.
 
 ---
 
-### D-005: Shadow-registry — слоистая стратегия с опорой на экосистему
-**Решено:** 2026-05  
+### D-005: Shadow-registry — layered strategy relying on the ecosystem
+**Decided:** 2026-05  
 **ADR:** `docs/adr/0006-shadow-registry.md`  
-**Связано с:** Q5 (закрыт)
+**Related to:** Q5 (closed)
 
-**Решение:** Подмена нативных и несовместимых пакетов — на уровне резолвера модулей. Источники подмен — слоистая структура с опорой на существующую экосистему вместо самописных решений.
+**Decision:** Replacing native and incompatible packages — at the module resolver level. Replacement sources — a layered structure relying on the existing ecosystem, not on homegrown solutions.
 
-**Механизм подмены:**
-- Уровень резолвера в module loader (D-003): перед поиском в `node_modules` проверяем shadow-table.
-- Реверсивно: можно отключить shadow-replacement через флаг для отладки.
-- Тестируется: каждая подмена должна проходить parity-test против ожидаемого API подменяемого пакета (где это применимо).
+**Replacement mechanism:**
+- Resolver level in module loader (D-003): before looking in `node_modules` we check the shadow-table.
+- Reversible: can disable shadow-replacement via a flag for debugging.
+- Tested: each replacement must pass a parity-test against the expected API of the replaced package (where applicable).
 
-**Источники подмен (в порядке приоритета применения):**
+**Replacement sources (in order of priority):**
 
-1. **Стандартный `overrides` из пользовательского `package.json`** — пользовательский интерфейс. Поддерживаем формат npm/yarn/pnpm как есть. Никаких своих изобретений в этом слое.
+1. **Standard `overrides` from user's `package.json`** — user interface. We support the npm/yarn/pnpm format as-is. No proprietary inventions at this layer.
 
-2. **`unenv` от UnJS-команды** — базовый слой полифилов для stdlib-модулей (`crypto`, `os`, `tty`, `perf_hooks`, `process`, и др.). Используется в продакшене Cloudflare Workers и esm.sh. Включается как зависимость `runtime-js`. Покрывает большую часть утилитарного хвоста M3 и M11.
+2. **`unenv` from the UnJS team** — base polyfill layer for stdlib modules (`crypto`, `os`, `tty`, `perf_hooks`, `process`, etc.). Used in production by Cloudflare Workers and esm.sh. Included as a `runtime-js` dependency. Covers a large portion of the utility tail in M3 and M11.
 
-3. **`e18e/module-replacements`** — community-курируемый список замен устаревших npm-пакетов на нативные/современные API. Импортируется как данные, расширяется нашими записями для нативных биндингов.
+3. **`e18e/module-replacements`** — community-curated list of replacements for outdated npm packages with native/modern APIs. Imported as data, extended with our entries for native bindings.
 
-4. **Готовые WASM-сборки** для нативных пакетов из публичной экосистемы:
-   - `sqlite3`/`better-sqlite3` → `@sqlite.org/sqlite-wasm` или `node-sqlite3-wasm`
-   - Image processing (`sharp`) → `@jsquash/*` семейство
-   - Прочие — по мере появления и потребности
+4. **Ready-made WASM builds** for native packages from the public ecosystem:
+   - `sqlite3`/`better-sqlite3` → `@sqlite.org/sqlite-wasm` or `node-sqlite3-wasm`
+   - Image processing (`sharp`) → `@jsquash/*` family
+   - Others — as they appear and are needed
 
-5. **Свои адаптеры в монорепо** (`tools/shadow-registry/packages/*`) — только для API-адаптации поверх готовых WASM или для случаев, где экосистемного решения нет. Минимизируем количество.
+5. **Own adapters in the monorepo** (`tools/shadow-registry/packages/*`) — only for API adaptation on top of ready-made WASM or for cases where no ecosystem solution exists. Minimize the count.
 
-6. **Documented incompatibility** — `docs/compat/incompatible-packages.md`. При попытке install — внятная ошибка с указанием на этот документ.
+6. **Documented incompatibility** — `docs/compat/incompatible-packages.md`. On install attempt — clear error pointing to this document.
 
 **WASM ecosystem assumptions:**
-- Рассчитываем на рост числа готовых WASM-сборок (тренд устойчивый: `wasm32-wasip2` Rust target, Component Model, активная публикация WASM-портов).
-- `.node`-файлы из npm (native bindings) **никогда не заработают магически** — это фундаментальное ограничение, не баг экосистемы.
-- Архитектурно мы готовы к преимуществам WASI preview 2 (sockets, http в стандарте): `runtime-wasi` — отдельный плагин, миграция == обновление shim'а.
+- Counting on growth of ready-made WASM builds (trend is stable: `wasm32-wasip2` Rust target, Component Model, active publishing of WASM ports).
+- `.node` files from npm (native bindings) **will never magically work** — this is a fundamental limitation, not an ecosystem bug.
+- Architecturally we're ready for WASI preview 2 advantages (sockets, http in standard): `runtime-wasi` — a separate plugin, migration == updating the shim.
 
-**Процесс: Ecosystem Sweep**
-- Раз в квартал — проход по списку "documented incompatible" и проверка, не появилось ли WASM-альтернативы или upstream WASI-сборки.
-- Раз в квартал — обновление `unenv` и `e18e/module-replacements` до свежих версий, прогон parity-тестов на регрессии.
-- Зафиксировано в `docs/processes/ecosystem-sweep.md` как чек-лист, выполняется руками или по cron-issue в GitHub.
+**Process: Ecosystem Sweep**
+- Once per quarter — pass through the "documented incompatible" list and check if a WASM alternative or upstream WASI build has appeared.
+- Once per quarter — update `unenv` and `e18e/module-replacements` to fresh versions, run parity tests for regressions.
+- Recorded in `docs/processes/ecosystem-sweep.md` as a checklist, executed manually or via cron-issue in GitHub.
 
-**Риски и митигации:**
-- **`unenv` — внешняя зависимость, ориентирована на CF Workers.** Где-то могут быть стабы вместо реализаций. Митигация: каждый модуль из unenv проходит через parity-runner перед использованием; пиннуем версию; в крайнем случае готовы форкнуть.
-- **`e18e/module-replacements` ориентирован на bundler-оптимизацию.** Часть замен подойдёт нам, часть — нет. Митигация: курируем подмножество, не используем всё подряд.
-- **Расхождение API подменного пакета и оригинала** (например, `bcryptjs` ≠ `bcrypt` на 100%). Митигация: парные тесты, документирование известных расхождений в compat-matrix.
+**Risks and mitigations:**
+- **`unenv` — external dependency, oriented toward CF Workers.** Some places may have stubs instead of implementations. Mitigation: each module from unenv goes through parity-runner before use; pin version; in extreme case fork it.
+- **`e18e/module-replacements` oriented toward bundler optimization.** Some replacements will suit us, some won't. Mitigation: curate a subset, don't use everything indiscriminately.
+- **API mismatch between replacement and original** (e.g. `bcryptjs` ≠ `bcrypt` 100%). Mitigation: paired tests, documenting known discrepancies in compat-matrix.
 
-**Следствия:**
-- `npm-client` (M9) реализует стандартный `overrides`-механизм.
-- `runtime-js` (M3+) подключает `unenv` как dependency.
-- Своих пакетов в `tools/shadow-registry/` — минимум; первый понадобится не раньше реальной потребности (вероятно M9-M10).
-- Никакого своего mini-registry на CDN/CF — нет необходимости.
+**Consequences:**
+- `npm-client` (M9) implements the standard `overrides` mechanism.
+- `runtime-js` (M3+) includes `unenv` as a dependency.
+- Own packages in `tools/shadow-registry/` — minimum; the first one will be needed no sooner than a real need arises (likely M9-M10).
+- No own mini-registry on CDN/CF — not necessary.
 
-**Что отложено:**
-- Конкретные адаптеры под `bcrypt`/`sharp`/`better-sqlite3` — пишутся по необходимости, не упреждающе.
-- Возможность пользователю указывать собственные shadow-маппинги через UI (помимо `overrides` в package.json) — отложено до момента, когда станет очевидной потребность.
+**Deferred:**
+- Specific adapters for `bcrypt`/`sharp`/`better-sqlite3` — written as needed, not preemptively.
+- Ability for user to specify custom shadow mappings via UI (in addition to `overrides` in package.json) — deferred until the need becomes obvious.
 
 ---
 
-### D-004: Dev-прокси для npm registry через Vite
-**Решено:** 2026-05  
+### D-004: Dev proxy for npm registry via Vite
+**Decided:** 2026-05  
 **ADR:** `docs/adr/0005-npm-registry-dev-proxy.md`  
-**Связано с:** Q4 (частично закрыт — prod вынесен в Q4'); напрямую влияет на M9
+**Related to:** Q4 (partially closed — prod moved to Q4'); directly affects M9
 
-**Решение:** В dev-окружении прокси к `registry.npmjs.org` реализуется через `vite.config.ts` `server.proxy`. Никакой отдельной инфраструктуры на этапе разработки. Решение по prod-прокси отложено в Q4'.
+**Decision:** In the dev environment, a proxy to `registry.npmjs.org` is implemented via `server.proxy` in `vite.config.ts`. No separate infrastructure at the development stage. Prod-proxy decision deferred to Q4'.
 
-**Что проксируется:**
+**What is proxied:**
 - Metadata: `GET /npm-registry/:pkg` → `registry.npmjs.org/:pkg`
-- Tarballs: `GET /npm-registry/:pkg/-/:file.tgz` → соответствующий tarball
+- Tarballs: `GET /npm-registry/:pkg/-/:file.tgz` → corresponding tarball
 
-**Конвенция на стороне `npm-client`:**
-- Базовый URL registry конфигурируется через переменную (`REGISTRY_BASE_URL`).
-- В dev = `/npm-registry` (относительный, ходит через Vite proxy).
-- В prod будет полный URL прод-прокси (см. Q4').
-- В тестах = mock-server, поднимаемый harness'ом, чтобы тесты были детерминистичны и не зависели от сети.
+**Convention on the `npm-client` side:**
+- Registry base URL is configured via a variable (`REGISTRY_BASE_URL`).
+- In dev = `/npm-registry` (relative, goes through Vite proxy).
+- In prod will be the full URL of the prod-proxy (see Q4').
+- In tests = mock-server raised by the harness, so tests are deterministic and don't depend on the network.
 
-**Почему так:**
-- Vite proxy — нулевая инфраструктура. Уже есть Vite, добавляем секцию в конфиг.
-- Не блокирует M0-M8 — прокси нужен только в M9.
-- К моменту prod-деплоя могут появиться новые варианты (изменения лимитов CF, новые сервисы), решение лучше принимать ближе к делу.
+**Why this way:**
+- Vite proxy — zero infrastructure. Vite is already there, we add a section to the config.
+- Doesn't block M0-M8 — proxy is only needed in M9.
+- By the time of prod-deploy there may be new options (CF limit changes, new services) — better to decide closer to the time.
 
-**Следствия:**
-- `npm-client` спроектирован вокруг конфигурируемого registry URL с самого начала. Никаких хардкодов `registry.npmjs.org` в коде.
-- Тесты для `npm-client` всегда ходят в локальный mock — это и быстрее, и стабильнее, и не нагружает реальный registry.
-- Решение по prod-прокси требуется к завершению M9. До этого момента — открытый вопрос.
+**Consequences:**
+- `npm-client` is designed around a configurable registry URL from the start. No hardcoded `registry.npmjs.org` in code.
+- Tests for `npm-client` always go to a local mock — faster, more stable, and don't burden the real registry.
+- Prod-proxy decision required by end of M9. Until then — open question.
 
-**Что отложено (Q4'):**
-- Выбор prod-прокси: Cloudflare Worker, отдельный VPS, что-то ещё.
-- Стратегия кеширования tarballs (если будет).
-- Принимается к концу M9.
+**Deferred (Q4'):**
+- Prod-proxy choice: Cloudflare Worker, separate VPS, something else.
+- Tarball caching strategy (if any).
+- Decided by end of M9.
 
 ---
 
-### D-003: Module loader — гибрид es-module-lexer + свой резолвер/линкер
-**Решено:** 2026-05  
+### D-003: Module loader — hybrid es-module-lexer + own resolver/linker
+**Decided:** 2026-05  
 **ADR:** `docs/adr/0004-module-loader.md`  
-**Связано с:** Q3 (закрыт)
+**Related to:** Q3 (closed)
 
-**Решение:** ESM-модули обрабатываются собственным загрузчиком. Парсинг import/export — через `es-module-lexer`. Резолвер, граф зависимостей, исполнение — свой код. Не используем нативный браузерный `import()` с Blob URLs для пользовательского кода.
+**Decision:** ESM modules are handled by a custom loader. Import/export parsing — via `es-module-lexer`. Resolver, dependency graph, execution — own code. We don't use the native browser `import()` with Blob URLs for user code.
 
-**Архитектура загрузчика:**
-1. Резолвер (один для CJS и ESM) превращает specifier'ы (`'react'`, `'./util'`) в абсолютные пути в VFS. Реализует Node algorithm: walk-up по `node_modules`, поля `main`/`exports`/`imports`, conditional exports.
-2. Для ESM-модуля `es-module-lexer` находит все import/export. Граф строится итеративно.
-3. Транформация: импорты заменяются на обращения к module registry (`import x from 'y'` → доступ через registry с live binding через геттер).
-4. Исполнение: модуль оборачивается в `async function` (поддерживает top-level await), вызывается с контекстом (`import.meta`, динамический `import()`, registry).
-5. CJS-модули грузятся синхронно через `new Function('module', 'exports', 'require', code)` — это базовая Node-семантика.
-6. CJS ↔ ESM интероп: ESM может импортировать CJS синхронно через namespace-обёртку; CJS может загрузить ESM только через async `import()` (как в Node).
+**Loader architecture:**
+1. Resolver (one for CJS and ESM) turns specifiers (`'react'`, `'./util'`) into absolute paths in VFS. Implements Node algorithm: walk-up through `node_modules`, fields `main`/`exports`/`imports`, conditional exports.
+2. For an ESM module `es-module-lexer` finds all import/export. Graph built iteratively.
+3. Transformation: imports replaced with accesses to module registry (`import x from 'y'` → access via registry with live binding via getter).
+4. Execution: module wrapped in an `async function` (supports top-level await), called with context (`import.meta`, dynamic `import()`, registry).
+5. CJS modules loaded synchronously via `new Function('module', 'exports', 'require', code)` — the base Node semantics.
+6. CJS ↔ ESM interop: ESM can import CJS synchronously via a namespace wrapper; CJS can load ESM only via async `import()` (like in Node).
 
-**Почему так:**
-- **Контроль над резолвером** — у нас Node-семантика, browser native ESM про package.json и conditional exports ничего не знает.
-- **Единая семантика CJS+ESM** — один граф, один резолвер, две стратегии исполнения. Это путь Vite, проверенный на масштабе.
-- **Транформации встраиваются естественно** — захотим TS/JSX в пользовательском коде позже, добавим transform-шаг между парсингом и исполнением без переделок.
-- **Source maps и debug** — мы контролируем имена/пути, можем сохранить осмысленную информацию.
-- **`es-module-lexer` дёшев** — ~5KB, быстрый, не парсит весь JS.
+**Why this way:**
+- **Control over the resolver** — we have Node semantics; browser native ESM knows nothing about package.json and conditional exports.
+- **Unified CJS+ESM semantics** — one graph, one resolver, two execution strategies. This is the Vite path, proven at scale.
+- **Transformations fit in naturally** — want TS/JSX in user code later, add a transform step between parsing and execution without refactoring.
+- **Source maps and debug** — we control names/paths, can preserve meaningful information.
+- **`es-module-lexer` is cheap** — ~5KB, fast, doesn't parse all JS.
 
-**Альтернативы и почему отклонены:**
-- **Нативный браузерный ESM через Blob URLs + SW interception:** соблазнительно дешёво, но теряем контроль в самом критичном месте (резолюция и CJS-интероп). Динамический `import()` внутри Worker может обходить SW в зависимости от регистрации. CJS-интероп всё равно пришлось бы писать самим.
-- **Полный парсер (acorn):** избыточно. Для построения графа достаточно сканера импортов/экспортов; полный AST нужен только когда мы будем добавлять transform'ы (TS/JSX) — тогда подключим отдельный парсер на этом шаге.
+**Alternatives and why rejected:**
+- **Native browser ESM via Blob URLs + SW interception:** temptingly cheap, but we lose control at the most critical point (resolution and CJS-interop). Dynamic `import()` inside Worker may bypass SW depending on registration. CJS-interop would have to be written anyway.
+- **Full parser (acorn):** excessive. For building the graph an import/export scanner is enough; full AST is only needed when adding transform steps (TS/JSX) — then we'll plug in a separate parser at that step.
 
-**Следствия:**
-- В M2 строим резолвер с самого начала как общий для CJS+ESM (а не делаем сначала CJS, потом отдельный ESM).
-- Module registry — отдельная сущность с live bindings через геттеры. Это и для CJS пригодится (циклы).
-- При M3+ TS-поддержка в пользовательском коде = добавление transform-шага, а не переписывание загрузчика.
+**Consequences:**
+- In M2 we build the resolver from the start as shared for CJS+ESM (not do CJS first, then a separate ESM).
+- Module registry — a separate entity with live bindings via getters. This will also be useful for CJS (cycles).
+- With M3+ TS support in user code = adding a transform step, not rewriting the loader.
 
-**Что отложено:**
-- Поддержка `import` assertions / attributes (`import json from './x.json' with { type: 'json' }`) — добавим при появлении реальной потребности.
-- Worker modules (`new Worker(url, { type: 'module' })`) внутри guest-кода — отдельная задача в M6 (child_process / worker_threads).
-- HMR — не входит в M2-M9, будет рассматриваться в M10.
+**Deferred:**
+- Support for `import` assertions / attributes (`import json from './x.json' with { type: 'json' }`) — will add when there's a real need.
+- Worker modules (`new Worker(url, { type: 'module' })`) inside guest code — separate task in M6 (child_process / worker_threads).
+- HMR — not part of M2-M9, will be considered in M10.
 
 ---
 
-### D-002: UI-фреймворк playground — SolidJS, изолирован от core
-**Решено:** 2026-05  
+### D-002: Playground UI framework — SolidJS, isolated from core
+**Decided:** 2026-05  
 **ADR:** `docs/adr/0003-ui-framework-solid.md`  
-**Связано с:** Q2 (закрыт)
+**Related to:** Q2 (closed)
 
-**Решение:** Playground пишется на SolidJS. UI-фреймворк используется **только** в `apps/playground/` и нигде больше. Все пакеты в `packages/` остаются framework-agnostic (чистый TS, без JSX/реактивных зависимостей).
+**Decision:** Playground is written in SolidJS. UI framework is used **only** in `apps/playground/` and nowhere else. All packages in `packages/` stay framework-agnostic (pure TS, without JSX and reactive dependencies).
 
-**Почему Solid:**
-- Fine-grained reactivity естественно ложится на наш характер обновлений: стриминг stdout в терминал, file watcher events, статусы процессов в реальном времени.
-- Маленький bundle — у нас и без UI много веса (Monaco, рантайм, WASM-бинари).
-- JSX знаком из React, кривая обучения мягкая.
-- Solid Stores хорошо подходят для глобального состояния (process manager, открытые файлы).
+**Why Solid:**
+- Fine-grained reactivity maps naturally to our update character: streaming stdout to terminal, file watcher events, process statuses in real time.
+- Small bundle — we already have a lot of weight without UI (Monaco, runtime, WASM binaries).
+- JSX is familiar from React, gentle learning curve.
+- Solid Stores fit well for global state (process manager, open files).
 
-**Почему "не врастает":**
-- Если через год захочется заменить UI (богатый IDE-интерфейс, мобильная версия, embed-режим) — это должно быть переписывание только `apps/playground/`, а не всего проекта.
-- Это дисциплинирует архитектуру: API ядра должен быть достаточно чистым, чтобы любой UI мог его потреблять.
+**Why it "doesn't grow in":**
+- If in a year you want to replace the UI (rich IDE interface, mobile version, embed mode) — only `apps/playground/` is rewritten, not the whole project.
+- This disciplines the architecture: the core API must be clean enough that any UI can consume it.
 
-**Правила изоляции:**
-- `packages/*/src/**` — никаких импортов `solid-js`, никакого JSX. Только TypeScript + Web APIs.
-- ESLint-правило `no-restricted-imports`: `solid-js` запрещён везде, кроме `apps/playground/**`.
-- Все события из ядра наружу — через типизированные event emitters или async iterators, без Solid-сигналов.
-- Адаптер "ядро → Solid Store" живёт в `apps/playground/src/adapters/`, это единственное место, где они встречаются.
+**Isolation rules:**
+- `packages/*/src/**` — no `solid-js` imports, no JSX. TypeScript + Web APIs only.
+- ESLint rule `no-restricted-imports`: `solid-js` forbidden everywhere except `apps/playground/**`.
+- All events from core outward — via typed event emitters or async iterators, without Solid signals.
+- Adapter "core → Solid Store" lives in `apps/playground/src/adapters/`, this is the only place they meet.
 
-**Следствия:**
-- При замене UI меняется только `apps/playground/`. Все `packages/` остаются нетронутыми.
-- Любая будущая интеграция (VSCode-extension, CLI-демо, headless-режим для тестов) подключается к тому же ядру без переделок.
-- Чуть больше кода на старте (адаптер вместо прямого использования Solid-стейта в ядре), но это нормальная цена за развязку.
+**Consequences:**
+- When replacing UI only `apps/playground/` changes. All `packages/` untouched.
+- Any future integration (VSCode-extension, CLI-demo, headless mode for tests) connects to the same core without refactoring.
+- A little more code at start (adapter instead of direct Solid state in core), but this is a normal price for decoupling.
 
-**Что отложено:**
-- Конкретный набор UI-компонентов (панели, табы, файловое дерево) — пишем по мере надобности, не тащим UI-kit на старте.
-- Темизация — единая CSS-переменная-схема, никакого design-system на старте.
+**Deferred:**
+- Specific set of UI components (panels, tabs, file tree) — written as needed, not pulling in a UI kit at start.
+- Theming — a single CSS-variable scheme, no design system at start.
 
 ---
 
-### D-001: Cross-origin isolation обязателен с M0
-**Решено:** 2026-05  
+### D-001: Cross-origin isolation required from M0
+**Decided:** 2026-05  
 **ADR:** `docs/adr/0002-cross-origin-isolation.md`  
-**Связано с:** Q1 (закрыт)
+**Related to:** Q1 (closed)
 
-**Решение:** Playground работает только в режиме `crossOriginIsolated === true`. Сервер отдаёт `COOP: same-origin` + `COEP: credentialless`.
+**Decision:** Playground works only in `crossOriginIsolated === true` mode. Server sends `COOP: same-origin` + `COEP: credentialless`.
 
-**Почему:**
-- К M6 нужен sync IPC между Worker'ами (для `execSync`, синхронных файловых вызовов). Единственный жизнеспособный механизм — `SharedArrayBuffer` + `Atomics.wait`, который требует isolation.
-- Альтернатива (полностью async runtime + Asyncify-стиль трансформация guest-кода) кратно сложнее и медленнее.
-- `credentialless` режим существенно облегчает работу с COEP по сравнению с `require-corp`: сторонние ресурсы можно эмбедить без CORP-заголовка, ценой отсутствия credentials. Для нашего use case это приемлемо.
+**Why:**
+- By M6 we need sync IPC between Workers (for `execSync`, synchronous file calls). The only viable mechanism — `SharedArrayBuffer` + `Atomics.wait`, which requires isolation.
+- Alternative (fully async runtime + Asyncify-transformation of guest code) is many times more complex and slower.
+- `credentialless` significantly eases COEP compared to `require-corp`: third-party resources can be embedded without a CORP header, at the cost of no credentials. Acceptable for our use case.
 
-**Следствия:**
-- Хостинг: только тот, что позволяет кастомные headers (Vercel/Netlify/Cloudflare Pages — да; GitHub Pages — нет).
-- Все ассеты playground'а — локальные или проксируются через свой origin с добавлением CORP-заголовка.
-- iframe-preview для пользовательских приложений (M10) нужно будет проектировать с учётом COEP — отдельная задача в M10.
-- M0 включает runtime-check и e2e-тест, гарантирующие, что isolation реально активен.
+**Consequences:**
+- Hosting: only those that allow custom headers (Vercel/Netlify/Cloudflare Pages — yes; GitHub Pages — no).
+- All playground assets — local or proxied through own origin with CORP header added.
+- iframe-preview for user apps (M10) will need to be designed with COEP in mind — separate task in M10.
+- M0 includes runtime-check and e2e test guaranteeing isolation is actually active.
 
-**Что отложено:**
-- Конкретный хостинг (Vercel vs Netlify vs CF Pages) — выбираем перед первым деплоем, не блокирует разработку.
-- Стратегия для iframe-preview (M10) — решим, когда дойдём.
-
----
-
-## 9. Открытые вопросы (для обсуждения)
-
-Эти вещи стоит решить **до** того, как соответствующий милстоун начнётся:
-
-*Q4' (prod-прокси для npm registry) — открыт повторно 2026-05-27.* Изначально закрывался ADR 0028 (Vercel Edge Function), но аудит 2026-05-27 выявил, что код Edge Function так и не появился в репо. Статус ADR-0028 переведён в **Provisional**, живой трекер — `OPEN_QUESTIONS.md` Q-2026-05-24-007 (Active). Финализация — к первой prod-деплой сессии M9.
+**Deferred:**
+- Specific hosting (Vercel vs Netlify vs CF Pages) — chosen before first deploy, doesn't block development.
+- iframe-preview strategy (M10) — will decide when we get there.
 
 ---
 
-*Этот документ — живой. Обновляется при крупных решениях. Каждый милстоун завершается ревью документа: что подтвердилось, что переоценили.*
+## 9. Open questions (for discussion)
+
+These things should be resolved **before** the corresponding milestone begins:
+
+*Q4' (prod proxy for npm registry) — reopened 2026-05-27.* Originally closed by ADR-0028 (Vercel Edge Function), but the 2026-05-27 audit revealed that the Edge Function code never appeared in the repo. ADR-0028 status changed to **Provisional**, live tracker — `OPEN_QUESTIONS.md` Q-2026-05-24-007 (Active). Finalization — by the first prod-deploy session of M9.
+
+---
+
+*This document is living. Updated on major decisions. Each milestone ends with a document review: what was confirmed, what was overestimated.*

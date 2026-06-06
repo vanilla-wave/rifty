@@ -62,7 +62,7 @@ describe('classifyKey — printable text', () => {
   });
 
   it('classifies a multi-byte UTF-8 character as printable', () => {
-    expect(classifyKey('ё')).toEqual({ kind: 'printable', text: 'ё' });
+    expect(classifyKey('é')).toEqual({ kind: 'printable', text: 'é' });
   });
 
   it('classifies a non-control multi-character chunk as printable', () => {

@@ -1,25 +1,21 @@
 /**
  * Typed bridge for the cross-realm globals the kernel installs inside a
- * spawned Worker.
+ * spawned Worker. Two pieces of state leak across module boundaries
+ * (kernel worker bootstrap → runtime-js / runtime-wasi builtins, same realm):
  *
- * Two pieces of state need to leak across module boundaries (kernel worker
- * bootstrap → runtime-js / runtime-wasi builtins inside the same realm):
+ *   1. {@link KernelSyncApi} — a thin `call(method, payload)` shim backed by
+ *      a {@link SyncRpcClient}. Higher layers (e.g. `child_process.execSync`)
+ *      use it to delegate sync syscalls to the parent without re-implementing
+ *      the SAB framing.
+ *   2. {@link KernelProcessSpec} (ADR-0039) — typed snapshot of the
+ *      kernel-owned identity the higher runtime layer needs to build its own
+ *      `process`. The kernel never installs a Node-shaped `globalThis.process`;
+ *      that Node-API knowledge lives in `@riftydev/runtime-js`.
  *
- *   1. The {@link KernelSyncApi} — a thin `call(method, payload)` shim
- *      backed by a {@link SyncRpcClient}. Higher layers (e.g.
- *      `child_process.execSync`) reach for this to delegate sync syscalls
- *      to the parent without re-implementing the SAB framing.
- *   2. The {@link KernelProcessSpec} (ADR-0039) — a typed snapshot of the
- *      kernel-owned identity (pid/ppid/argv/env/cwd/stdio) the higher
- *      runtime layer needs to build its own `process` object. The kernel
- *      itself never installs a Node-shaped `globalThis.process`; that
- *      Node-API knowledge lives in `@riftydev/runtime-js`.
- *
- * All values still live on `globalThis` under string keys (cross-bundle
- * sharing, no module identity to rely on across the Worker boundary), but
- * the `publish*` / `read*` helpers here are the only sanctioned API.
- * Callers never reach into `globalThis[...]` directly — that read was
- * untyped and let `any` leak through.
+ * Values live on `globalThis` under string keys (cross-bundle sharing — no
+ * module identity to rely on across the Worker boundary). The `publish*` /
+ * `read*` helpers are the only sanctioned API; reaching into `globalThis[...]`
+ * directly is untyped and leaks `any`.
  */
 
 /** Type of the in-Worker sync call shim. Narrow so callers stay `any`-free. */
@@ -27,8 +23,8 @@ export type KernelSyncCall = (method: string, payload: unknown) => unknown;
 
 /**
  * Public surface of the sync-RPC API installed inside the spawned Worker.
- * Today the only verb is `call`; future expansions (e.g. a typed dispose
- * hook) can grow this interface without changing the read/publish ABI.
+ * Only verb today is `call`; future expansions can grow this without changing
+ * the read/publish ABI.
  */
 export interface KernelSyncApi {
   /** Send a sync request to the parent dispatcher and return its reply. */
@@ -36,12 +32,12 @@ export interface KernelSyncApi {
 }
 
 /**
- * Stdio + IPC port shape the kernel hands to the higher layer. Identical
- * to the {@link WorkerStdioPorts} type in `./worker-entry.ts`; redeclared
- * here to keep `shared-globals.ts` import-free of the worker bootstrap
- * module. The `ipc` field (ADR-0045) carries the fork-mode IPC channel
- * — runtime-js's `installNodeProcessShim` wraps it to expose Node-style
- * `process.send` / `process.on('message', …)` / `process.disconnect()`.
+ * Stdio + IPC port shape the kernel hands to the higher layer. Identical to
+ * {@link WorkerStdioPorts} in `./worker-entry.ts`; redeclared here to keep
+ * `shared-globals.ts` import-free of the worker bootstrap module. `ipc`
+ * (ADR-0045) carries the fork-mode IPC channel — runtime-js's
+ * `installNodeProcessShim` wraps it to expose Node-style `process.send` /
+ * `process.on('message', …)` / `process.disconnect()`.
  */
 export interface KernelProcessStdioPorts {
   readonly stdout: MessagePort;
@@ -52,14 +48,14 @@ export interface KernelProcessStdioPorts {
 
 /**
  * Typed snapshot of the kernel-owned identity for a spawned process
- * (ADR-0039). The kernel publishes one of these on each Worker boot; the
- * higher runtime layer reads it and constructs its own `process` object
- * (Node-shaped in `@riftydev/runtime-js`, WASI-shaped in `@riftydev/runtime-wasi`).
+ * (ADR-0039). Published on each Worker boot; the higher runtime layer reads it
+ * and constructs its own `process` (Node-shaped in `@riftydev/runtime-js`,
+ * WASI-shaped in `@riftydev/runtime-wasi`).
  *
  * Field semantics mirror {@link WorkerSpawnSpec}: `argv` / `env` / `cwd` are
- * the kernel's snapshot at spawn time (ADR-0019 — `cwd` is owned by the
- * `ProcessRecord`); `stdio` ports are the child-side `MessagePort`s the
- * higher layer pipes its `process.stdout` / `process.stderr` into.
+ * the spawn-time snapshot (ADR-0019 — `cwd` owned by the `ProcessRecord`);
+ * `stdio` ports are the child-side `MessagePort`s the higher layer pipes its
+ * `process.stdout` / `process.stderr` into.
  */
 export interface KernelProcessSpec {
   readonly pid: number;
@@ -71,9 +67,9 @@ export interface KernelProcessSpec {
 }
 
 /**
- * Internal hook keys. Implementation detail — exported only so the
- * conformance tests can assert the publish path. Production code goes
- * through {@link publishKernelSyncApi} / {@link readKernelSyncApi} etc.
+ * Internal hook keys. Exported only so conformance tests can assert the
+ * publish path; production code goes through {@link publishKernelSyncApi} /
+ * {@link readKernelSyncApi} etc.
  */
 export const KERNEL_SYNC_CALL_KEY = '__riftyKernelSyncCall' as const;
 export const KERNEL_PROCESS_SPEC_KEY = '__riftyProcessSpec__' as const;
@@ -88,15 +84,12 @@ function asGlobal(): GlobalWithKernelHooks {
 }
 
 /**
- * Install the sync-call shim on this realm's globalThis as a
- * non-enumerable value. Idempotent — re-publishing on the same realm
- * overwrites the previous value (configurable: true).
+ * Install the sync-call shim on this realm's globalThis as a non-enumerable
+ * value. Idempotent — re-publishing overwrites (configurable: true).
  *
- * The published shape today stores the `call` function under the key for
- * historical compatibility (older runtime-js builds expected the raw
- * function). The {@link readKernelSyncApi} accessor wraps the function
- * back into the {@link KernelSyncApi} shape so future expansions stay
- * additive.
+ * Stores the raw `call` function under the key for historical compatibility
+ * (older runtime-js builds expected the bare function); {@link readKernelSyncApi}
+ * re-wraps it into {@link KernelSyncApi} so future expansions stay additive.
  */
 export function publishKernelSyncApi(api: KernelSyncApi): void {
   Object.defineProperty(globalThis, KERNEL_SYNC_CALL_KEY, {
@@ -108,10 +101,9 @@ export function publishKernelSyncApi(api: KernelSyncApi): void {
 }
 
 /**
- * Read the sync-call API previously published in this realm. Returns
- * `null` when the kernel bootstrap hasn't run. The returned object's
- * `call` field is the canonical entry point — higher layers MUST go
- * through it instead of reaching for `globalThis[KERNEL_SYNC_CALL_KEY]`.
+ * Read the sync-call API published in this realm; `null` when the kernel
+ * bootstrap hasn't run. The returned `call` is the canonical entry point —
+ * higher layers MUST use it, not `globalThis[KERNEL_SYNC_CALL_KEY]`.
  */
 export function readKernelSyncApi(): KernelSyncApi | null {
   const fn = asGlobal()[KERNEL_SYNC_CALL_KEY];
@@ -120,14 +112,11 @@ export function readKernelSyncApi(): KernelSyncApi | null {
 }
 
 /**
- * Install the per-process {@link KernelProcessSpec} on this realm's
- * globalThis as a non-enumerable value (ADR-0039). The kernel worker
- * bootstrap calls this exactly once per spawn, right after attaching
- * the SAB ring and immediately before invoking the optional pre-entry
- * hook (the runtime-js installer that builds the Node `process` object).
- *
- * Idempotent — re-publishing on the same realm overwrites the previous
- * value (configurable: true).
+ * Install the per-process {@link KernelProcessSpec} on this realm's globalThis
+ * as a non-enumerable value (ADR-0039). The worker bootstrap calls this once
+ * per spawn, after attaching the SAB ring and before the optional pre-entry
+ * hook (the runtime-js installer that builds the Node `process`). Idempotent —
+ * re-publishing overwrites (configurable: true).
  */
 export function publishKernelProcessSpec(spec: KernelProcessSpec): void {
   Object.defineProperty(globalThis, KERNEL_PROCESS_SPEC_KEY, {
@@ -139,14 +128,12 @@ export function publishKernelProcessSpec(spec: KernelProcessSpec): void {
 }
 
 /**
- * Read the {@link KernelProcessSpec} previously published in this realm
- * (ADR-0039). Returns `null` when the kernel bootstrap hasn't run yet —
- * e.g. on the main realm, in a worker that was created outside
- * `kernel.spawnWorker`, or before the `'init'` message has arrived.
+ * Read the {@link KernelProcessSpec} published in this realm (ADR-0039);
+ * `null` when the bootstrap hasn't run — e.g. on the main realm, a worker
+ * created outside `kernel.spawnWorker`, or before the `'init'` message.
  *
- * Consumers: `@riftydev/runtime-js`'s `installNodeProcessShim` (Node-shape
- * `process` global) and `@riftydev/runtime-wasi`'s worker entry (minimal
- * WASI-shaped `process` proxy).
+ * Consumers: runtime-js's `installNodeProcessShim` (Node-shape `process`) and
+ * runtime-wasi's worker entry (minimal WASI-shaped `process` proxy).
  */
 export function readKernelProcessSpec(): KernelProcessSpec | null {
   return asGlobal()[KERNEL_PROCESS_SPEC_KEY] ?? null;

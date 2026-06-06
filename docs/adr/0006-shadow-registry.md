@@ -3,25 +3,27 @@
 Status: Accepted
 Date: 2026-05
 
-Summary of decision D-005. Native and incompatible packages are substituted at the module resolver level. Substitution sources are layered to lean on existing ecosystem solutions before writing our own.
+## Decision (D-005)
 
-## Substitution sources (in order)
+Substitute native and incompatible packages at the module-resolver level. Substitution sources are layered to reuse existing ecosystem solutions before writing our own.
 
-1. User `package.json` `overrides` — npm/yarn/pnpm standard format, no rifty-specific dialect.
-2. `unenv` (UnJS) — base polyfill layer for stdlib modules (`crypto`, `os`, `tty`, `perf_hooks`, `process`). Production-proven in Cloudflare Workers and esm.sh.
-3. `e18e/module-replacements` — curated list of legacy npm → modern API substitutions.
-4. Existing WASM rebuilds — `@sqlite.org/sqlite-wasm`, `@jsquash/*`, etc., from the broader ecosystem.
-5. In-tree adapters under `tools/shadow-registry/packages/*` — only for API adaptation over existing WASM where the ecosystem hasn't provided one.
-6. Documented incompatibility — `docs/compat/incompatible-packages.md`, surfaced as a clear error on attempted install.
+## Substitution sources (in priority order)
+
+1. User `package.json` `overrides` — standard npm/yarn/pnpm format; no rifty-specific dialect.
+2. `unenv` (UnJS) — base polyfill layer for stdlib (`crypto`, `os`, `tty`, `perf_hooks`, `process`); proven in Cloudflare Workers and esm.sh.
+3. `e18e/module-replacements` — curated legacy-npm → modern-API substitutions.
+4. Existing WASM rebuilds — `@sqlite.org/sqlite-wasm`, `@jsquash/*`, etc.
+5. In-tree adapters under `tools/shadow-registry/packages/*` — only to adapt APIs over existing WASM where the ecosystem hasn't.
+6. Documented incompatibility — `docs/compat/incompatible-packages.md`, surfaced as a clear install-time error.
 
 ## Mechanism
 
-The resolver (D-003) consults the shadow table before searching `node_modules`. A flag disables it for debugging. Every substitution must pass parity tests against the substitute's claimed API surface.
+Resolver (D-003) consults the shadow table before `node_modules`. A flag disables it for debugging. Every substitution must pass parity tests against the substitute's claimed API surface.
 
 ## Process
 
-Quarterly "Ecosystem Sweep" — re-check incompatible-packages.md against newly published WASM ports, bump `unenv` / `e18e/module-replacements`, run parity regression suite. Tracked in `docs/processes/ecosystem-sweep.md`.
+Quarterly "Ecosystem Sweep": re-check `incompatible-packages.md` against new WASM ports, bump `unenv` / `e18e/module-replacements`, run parity regression suite. Tracked in `docs/processes/ecosystem-sweep.md`.
 
-## What this won't fix
+## Consequences
 
-`.node` native bindings will never load in the browser — that's a fundamental limit, not a bug we can patch.
+- `.node` native bindings will never load in the browser — a fundamental limit, not a patchable bug.

@@ -1,42 +1,35 @@
 /**
- * M10 preview panel — an iframe pinned to `/preview/<port>/` for the playground
- * Service Worker to route through to the runtime's port registry. Includes a
- * port input + reload button + "open in new tab" link + a live status pill.
+ * M10 preview panel — iframe pinned to `/preview/<port>/` for the playground
+ * Service Worker to route to the runtime's port registry.
  *
- * Two-step readiness, so the pill never lies:
- *   1. Poll `fetch(/preview/<port>/)` until it answers `ok`. That proves the
- *      server is up and the SW bridge round-trips a *subresource* request
- *      (the path the M7 e2e exercises).
- *   2. Point the iframe at the route and check whether the navigation actually
- *      *committed* (the frame's window left `about:blank`). A sub-frame
- *      navigation can be aborted on commit even when the subresource fetch
- *      succeeds — see the known limitation below — so we report `live` only
- *      when the document truly loaded, and `unavailable` otherwise.
+ * Two-step readiness so the pill never lies:
+ *   1. Poll `fetch(/preview/<port>/)` until `ok` — proves the server is up and
+ *      the SW bridge round-trips a *subresource* request (what M7 e2e exercises).
+ *   2. Point the iframe at the route and check the nav actually *committed*
+ *      (frame left `about:blank`). A sub-frame nav can abort on commit even
+ *      when the subresource fetch succeeds, so report `live` only on a real
+ *      document load, `unavailable` otherwise.
  *
- * Resolved by ADR-0074: under a cross-origin-isolated page (COEP
- * credentialless) the SW now routes every request that originates inside the
- * preview iframe — the navigation and its subresources — to the controlling
- * window that owns the port. So `/preview/<port>/` commits in-frame and the
- * app's JS boots. The two-step poll-then-check-commit below is kept as an
- * honest safety net for a genuinely-down server (the route stays unreachable,
- * the frame stays on `about:blank`, and we report `unavailable`).
+ * ADR-0074: under cross-origin isolation (COEP credentialless) the SW routes
+ * every request from inside the preview iframe — nav and subresources — to the
+ * controlling window owning the port, so the route commits in-frame. The
+ * two-step check is kept as an honest safety net for a genuinely-down server.
  *
- * Warm-up budget (ADR-0077): Real Vite installs from npm before it can serve,
- * so the route can stay unreachable for ~20–30 s. Each warm-up probe uses a
- * short per-fetch `AbortController` timeout (so a 30 s cross-realm bridge-
- * timeout while the worker isn't serving yet can't eat the whole budget) and
- * the overall deadline is generous enough to span an npm install — otherwise
- * the panel gave up before Vite came up and showed a false `unavailable`.
+ * Warm-up budget (ADR-0077): Real Vite installs from npm before serving, so the
+ * route can stay unreachable ~20–30 s. Each probe uses a short per-fetch
+ * `AbortController` timeout (so a 30 s cross-realm bridge-timeout while the
+ * worker isn't serving can't eat the whole budget); the overall deadline spans
+ * an npm install, else the panel showed a false `unavailable` before Vite came up.
  *
  * Reload (manual and HMR) uses `frame.contentWindow.location.reload()` — the
- * same mechanism ADR-0017's HMR client uses — so there's one refresh path.
+ * same mechanism as ADR-0017's HMR client — so there's one refresh path.
  */
 import { type Accessor, createEffect, createSignal, onCleanup } from 'solid-js';
 
 type Phase = 'starting' | 'live' | 'error';
 
-// Generous enough to span a Real Vite npm install + boot (ADR-0076); a
-// genuinely-down dev server still resolves to `unavailable`, just later.
+// Spans a Real Vite npm install + boot (ADR-0076); a down dev server resolves
+// to `unavailable`, just later.
 const WARMUP_TIMEOUT_MS = 90_000;
 const WARMUP_INTERVAL_MS = 400;
 // Cap a single probe so a 30 s cross-realm preview-bridge timeout (worker not
@@ -57,14 +50,13 @@ export function PreviewPanel(props: { initialPort?: number }) {
     if (phase() === 'live') {
       frame?.contentWindow?.location.reload();
     } else {
-      setRetry((n) => n + 1); // Reload doubles as "retry" before we're live.
+      setRetry((n) => n + 1); // Reload doubles as retry before we're live.
     }
   }
 
-  // Did the iframe actually commit a document at the preview URL? A same-origin
-  // committed nav exposes `/preview/<port>/` on its window location; an aborted
-  // one stays on `about:blank`. A thrown SecurityError would mean it navigated
-  // cross-origin (treat as committed).
+  // Did the iframe commit a document at the preview URL? A committed same-origin
+  // nav exposes `/preview/<port>/` on its location; an aborted one stays on
+  // `about:blank`. A thrown SecurityError means it went cross-origin (committed).
   function committed(): boolean {
     try {
       return (frame?.contentWindow?.location.href ?? 'about:blank').includes(previewUrl());
@@ -73,8 +65,8 @@ export function PreviewPanel(props: { initialPort?: number }) {
     }
   }
 
-  // (Re)run the warm-up whenever the port changes or Reload retries. `alive`
-  // guards against a stale loop writing state after unmount / a later run.
+  // (Re)run warm-up on port change or Reload retry. `alive` guards against a
+  // stale loop writing state after unmount / a later run.
   createEffect(() => {
     const url = previewUrl();
     retry();
@@ -90,16 +82,16 @@ export function PreviewPanel(props: { initialPort?: number }) {
           await res.body?.cancel().catch(() => {});
           if (res.ok) break;
         } catch {
-          // server/SW not ready yet, or the probe was aborted — keep polling
+          // server/SW not ready, or probe aborted — keep polling
         } finally {
           clearTimeout(cap);
         }
         await new Promise((r) => setTimeout(r, WARMUP_INTERVAL_MS));
       }
       if (!alive) return;
-      // Route is reachable — load it into the frame, then poll for an actual
-      // commit (robust across browsers: fast where the nav commits, falls
-      // through to `error` where the sub-frame navigation aborts).
+      // Route reachable — load into the frame, then poll for an actual commit
+      // (cross-browser: fast where the nav commits, falls through to `error`
+      // where the sub-frame nav aborts).
       if (frame) frame.src = url;
       const commitDeadline = Date.now() + COMMIT_TIMEOUT_MS;
       let ok = false;

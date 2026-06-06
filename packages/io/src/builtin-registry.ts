@@ -1,15 +1,13 @@
 /**
- * Built-in registry — the source of truth for `node:<name>` lookups.
+ * Built-in registry — source of truth for `node:<name>` lookups.
  *
- * Lives in `@riftydev/io` (per ADR-0035) so higher layers can register their
- * Node-shape exports via a forward import. `@riftydev/runtime-js` calls
- * `loadBuiltin` from its module loader; `@riftydev/net` calls `registerBuiltin`
- * from its side-effect entrypoint. Both depend on `@riftydev/io`, so the layer
- * direction stays top-down.
+ * Lives in `@riftydev/io` (ADR-0035) so higher layers register their
+ * Node-shape exports via a forward import, keeping the layer direction
+ * top-down: `@riftydev/runtime-js` calls `loadBuiltin`, `@riftydev/net` calls
+ * `registerBuiltin`, both depend on `@riftydev/io`.
  *
- * The registry is a process-wide singleton: one `factories` map and one
- * `cache` map per realm. Re-registering the same name discards the cached
- * namespace so the next `loadBuiltin` call calls the new factory.
+ * Process-wide singleton. Re-registering a name discards its cached namespace
+ * so the next `loadBuiltin` invokes the new factory.
  */
 
 export type BuiltinFactory<T = unknown> = () => T;
@@ -18,17 +16,14 @@ const cache: Map<string, Record<string, unknown>> = new Map();
 const factories: Record<string, BuiltinFactory<unknown>> = {};
 
 /**
- * Higher-layer packages (`@riftydev/net`, future `@riftydev/wasi` builtins, etc.)
- * call this to plug their Node-shape exports into the loader so user code
+ * Plug a higher-layer package's Node-shape exports into the loader so user code
  * can `require('node:http')`. Keeping the registry here decouples
- * `@riftydev/runtime-js` from those higher layers — see the layering rules in
- * CLAUDE.md and the rationale in ADR-0035.
+ * `@riftydev/runtime-js` from those layers (ADR-0035).
  *
- * Generic over the factory's return type so registration sites preserve the
- * concrete module shape and TypeScript can catch typos against the exported
- * namespace. Internal storage erases to `BuiltinFactory<unknown>` — the
- * lookup contract through `loadBuiltin` is `Record<string, unknown> | null`,
- * so callers project the namespace themselves at the well-known boundary.
+ * Generic over the return type so registration sites keep the concrete module
+ * shape and TS catches typos. Storage erases to `BuiltinFactory<unknown>`;
+ * `loadBuiltin` returns `Record<string, unknown> | null`, so callers project
+ * the namespace at the boundary.
  */
 export function registerBuiltin<T>(name: string, factory: BuiltinFactory<T>): void {
   factories[name] = factory as BuiltinFactory<unknown>;

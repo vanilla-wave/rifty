@@ -1,20 +1,13 @@
 /**
- * Maps DOMException-style OPFS errors to {@link VfsError} with proper
- * POSIX-flavoured `code` values (ADR-0013 acceptance).
+ * Maps DOMException-style OPFS errors to {@link VfsError} with POSIX `code`
+ * values (ADR-0013). OPFS surfaces errors as `DOMException` by `name`:
  *
- * Browser OPFS surfaces errors as `DOMException` instances whose `name` is
- * one of:
- *
- *   - `NotAllowedError`         — permission/lock denied              → EACCES
- *   - `QuotaExceededError`      — storage quota exhausted             → EDQUOT
- *   - `TypeMismatchError`       — kind mismatch (file vs directory)   → EISDIR / ENOTDIR
- *   - `InvalidModificationError`— rm on non-empty dir without recurse → ENOTEMPTY
- *   - `NotFoundError`           — path missing                        → ENOENT
- *   - (anything else)           — unknown failure                     → EIO (with `.cause`)
- *
- * The `context` argument disambiguates `TypeMismatchError`: when the caller
- * was asking for a file but found a directory, the right code is `EISDIR`;
- * when asking for a directory but the entry is a file, it's `ENOTDIR`.
+ *   - `NotAllowedError`          → EACCES   (permission/lock denied)
+ *   - `QuotaExceededError`       → EDQUOT   (quota exhausted)
+ *   - `TypeMismatchError`        → EISDIR / ENOTDIR (kind mismatch; see `context`)
+ *   - `InvalidModificationError` → ENOTEMPTY (rm non-empty dir w/o recurse)
+ *   - `NotFoundError`            → ENOENT   (path missing)
+ *   - (anything else)            → EIO      (with `.cause`)
  */
 
 import { VfsError } from './errors.ts';
@@ -35,13 +28,12 @@ function errorMessage(err: unknown): string {
 }
 
 /**
- * Translates an OPFS-thrown error into a {@link VfsError} with the right
- * POSIX code, preserving the original error as `.cause` for unknown cases.
+ * Translates an OPFS-thrown error into a {@link VfsError} with the right POSIX
+ * code, preserving the original as `.cause` for unknown cases.
  *
- * @param err - The raw error caught from an OPFS API call.
- * @param path - The user-visible path the op was working on.
- * @param context - Whether the caller was operating on a file or a directory
- *   (disambiguates `TypeMismatchError`).
+ * @param err - Raw error caught from an OPFS API call.
+ * @param path - User-visible path the op was working on.
+ * @param context - File or directory; disambiguates `TypeMismatchError`.
  */
 export function mapOpfsError(err: unknown, path: string, context: OpfsErrorContext): VfsError {
   const name = errorName(err);
@@ -54,16 +46,12 @@ export function mapOpfsError(err: unknown, path: string, context: OpfsErrorConte
     case 'QuotaExceededError':
       return new VfsError('EDQUOT', path, message);
     case 'TypeMismatchError':
-      // Caller was asking about a `context` (file/dir) but the existing
-      // entry has the other kind. Map to the POSIX code Node would emit:
-      //   - file op on a directory      → EISDIR
-      //   - directory op on a file path → ENOTDIR
+      // Entry has the other kind than `context`; match Node's code:
+      // file op on a dir → EISDIR, dir op on a file → ENOTDIR.
       return new VfsError(context === 'file' ? 'EISDIR' : 'ENOTDIR', path, message);
     case 'InvalidModificationError':
-      // Browsers throw this when `removeEntry` is asked to drop a non-empty
-      // directory without `recursive: true`. Node's `fs.rmSync` raises
-      // `ENOTEMPTY` for the same situation — mirror that so consumers can
-      // branch on a single code regardless of backend.
+      // `removeEntry` on a non-empty dir without `recursive: true`; Node's
+      // `fs.rmSync` raises ENOTEMPTY here, so consumers branch on one code.
       return new VfsError('ENOTEMPTY', path, message);
     default:
       return new VfsError('EIO', path, message || `OPFS error on ${path}`, { cause: err });

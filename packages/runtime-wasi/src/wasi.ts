@@ -19,17 +19,12 @@ interface WasiOptions {
   env?: Record<string, string>;
   preopens?: Record<string, string>;
   /**
-   * Guest path of the preopen that serves as the relative-path resolution
-   * default — the "current working directory" from the guest's point of view.
+   * Guest path of the preopen used as the guest's cwd (relative-path default).
    *
-   * WASI preview1 has no `getcwd`/`chdir`; a guest derives its cwd from the
-   * preopen table. Real consumers (esbuild's Go/WASIp1 runtime, ADR-0049)
-   * treat **fd 3** (the first preopen) as cwd and resolve relative argv paths
-   * against it. Passing `cwd` makes that choice explicit instead of depending
-   * on `Object.keys(preopens)` iteration order: the named preopen is allocated
-   * fd 3 regardless of its position in the `preopens` record. When omitted, the
-   * first key in insertion order keeps fd 3 (backward-compatible).
-   *
+   * WASI preview1 has no `getcwd`/`chdir`; a guest derives cwd from the preopen
+   * table. Consumers (esbuild's Go/WASIp1 runtime) treat fd 3 (first preopen) as
+   * cwd. Passing `cwd` allocates the named preopen fd 3 explicitly rather than
+   * depending on `Object.keys` order; omitting it keeps insertion-order first.
    * Resolves Q-2026-05-27-003 (Option A). See ADR-0049.
    */
   cwd?: string;
@@ -59,11 +54,7 @@ export class Wasi {
     this.fds.set(0, { type: 'stdin' });
     this.fds.set(1, { type: 'stdout' });
     this.fds.set(2, { type: 'stderr' });
-    // Preopen fd allocation order. WASI preview1 has no `getcwd`, so a guest
-    // takes its cwd from fd 3 (the first preopen). The `cwd` option (Option A,
-    // ADR-0049) hoists the named preopen to fd 3 so the cwd choice is explicit
-    // and not at the mercy of object key iteration order. Other preopens keep
-    // their relative order behind it.
+    // `cwd` option hoists the named preopen to fd 3 (the guest's cwd); ADR-0049.
     const keys = Object.keys(preopens);
     if (opts.cwd !== undefined) {
       if (!(opts.cwd in preopens)) {
@@ -87,11 +78,8 @@ export class Wasi {
       args,
       env,
       fds: this.fds,
-      // fd 3 is the cwd preopen — the first preopen, or the one named by
-      // `opts.cwd` (which the sort above hoists to fd 3). `AT_FDCWD` resolves
-      // here. When there are no preopens, this still points at fd 3 (absent);
-      // a guest that issues `AT_FDCWD`-relative calls without a preopen gets
-      // `E_BADF`, which is the honest signal.
+      // `AT_FDCWD` resolves to fd 3. With no preopens it points at an absent
+      // fd, so an `AT_FDCWD`-relative call gets `E_BADF` — the honest signal.
       cwdFd: 3,
       nextFd: this.nextFd,
       exited: this.exited,

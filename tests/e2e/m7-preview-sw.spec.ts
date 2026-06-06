@@ -3,7 +3,7 @@
  *
  * Covers the M7 acceptance criterion (PROJECT_PLAN.md §M7, line ~315):
  *
- *   > Express "hello world" → видим страницу в браузере.
+ *   > Express "hello world" → see the page in the browser.
  *
  * What this proves end-to-end (everything the integration smoke
  * `tests/integration/express-style.test.ts` deliberately bypasses):

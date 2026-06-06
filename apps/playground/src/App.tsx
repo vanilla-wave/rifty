@@ -31,9 +31,8 @@ const WORKSPACE = '/workspace';
 
 export interface AppProps {
   /**
-   * Single bundle from `bootstrapPlayground()`. Carries the VFS backend
-   * descriptor (ADR-0013) plus an optional SW-registration error captured by
-   * the bootstrap pipeline. App never re-registers the SW itself.
+   * Bundle from `bootstrapPlayground()`: VFS backend descriptor (ADR-0013) plus
+   * an optional SW-registration error. App never re-registers the SW itself.
    */
   readonly boot: BootResult;
 }
@@ -49,15 +48,13 @@ export function App(props: AppProps) {
 
   const layout = useLayout();
   const runtime = useRuntime();
-  // Main-thread sync VFS mirror — the same store the shell + `npm install`
-  // write to, so the file explorer is honest (ADR-0075). Captured once: the
-  // active mirror is stable after `initBackend()` ran during bootstrap.
+  // Main-thread sync VFS mirror — same store the shell + `npm install` write to,
+  // so the explorer is honest (ADR-0075). Stable after bootstrap's initBackend().
   const vfs = syncMirror();
 
   // Read-only mirror of the real-vite worker's project tree (ADR-0076). The
-  // worker's VFS is a separate realm the page can't read directly; it publishes
-  // its tree (sans node_modules) over a BroadcastChannel which we apply here so
-  // the explorer reflects the Vite project in `real-vite` mode.
+  // worker's VFS is a separate realm the page can't read directly, so it
+  // publishes its tree (sans node_modules) over a BroadcastChannel; applied here.
   const snapshotFs = new SnapshotFs(WORKSPACE);
 
   let editorApi: EditorApi | undefined;
@@ -68,8 +65,7 @@ export function App(props: AppProps) {
     toastTimer = setTimeout(() => setToast(null), 3800);
   }
 
-  // Long-lived shell session — drives the terminal in `dev` / `real-vite`
-  // modes so users can `npm install`, `vite dev`, file ops, etc.
+  // Long-lived shell session driving the terminal in `dev` / `real-vite` modes.
   const shell = useShellSession({ cwd: WORKSPACE });
   shell.registerCommand(
     'npm',
@@ -79,12 +75,11 @@ export function App(props: AppProps) {
     }),
   );
 
-  // The active real-project template (ADR-0078). Vite is the default; the chip
-  // and the mode machine read its generic display name instead of "Real Vite".
+  // Active real-project template (ADR-0078). Chip + mode machine read its generic
+  // display name instead of "Real Vite".
   const template = defaultProjectSpec();
 
-  // Mode state machine — owns `repl | dev | real-vite`, the inner dev /
-  // real-vite handles, and the editor's program source.
+  // Mode state machine — owns `repl | dev | real-vite` plus the editor source.
   const machine = useMode({
     sources: { repl: DEFAULT_PRESET.source, dev: DEFAULT_PRESET.source },
     template,
@@ -95,13 +90,12 @@ export function App(props: AppProps) {
     runtime.write(`SW registration failed: ${props.boot.swError}\n`, 'stderr');
   }
 
-  // Whether the worker's project has an installed node_modules (ADR-0080) — the
-  // snapshot excludes its contents but flags its presence, gating the lazy row.
+  // Worker project's node_modules presence (ADR-0080): snapshot excludes its
+  // contents but flags presence, gating the lazy row.
   const [nodeModulesPresent, setNodeModulesPresent] = createSignal(false);
 
-  // Subscribe to the worker's project-tree snapshots while in `real-vite` mode
-  // (ADR-0076). The explorer's poll picks up `snapshotFs` mutations; leaving the
-  // mode clears the view so a stale tree never lingers.
+  // Subscribe to the worker's project-tree snapshots while in `real-vite`
+  // (ADR-0076). Leaving the mode clears the view so no stale tree lingers.
   createEffect(() => {
     if (machine.mode() !== 'real-vite') {
       snapshotFs.clear();
@@ -116,8 +110,8 @@ export function App(props: AppProps) {
   });
 
   // Lazy node_modules read bridge + cache (ADR-0080), live only in `real-vite`.
-  // A fresh cache per mode-entry (the effect re-runs on the port signal) so no
-  // stale node_modules view bleeds across an off→on cycle.
+  // Fresh cache per mode-entry so no stale node_modules view bleeds across an
+  // off→on cycle.
   const [nmCache, setNmCache] = createSignal<NodeModulesCache | null>(null);
   createEffect(() => {
     if (machine.mode() !== 'real-vite') {
@@ -147,12 +141,12 @@ export function App(props: AppProps) {
     return cache ? (path: string) => cache.readFile(path) : undefined;
   };
 
-  // The explorer + editor read the worker mirror in `real-vite`, the writable
-  // page mirror otherwise.
+  // Explorer + editor read the worker mirror in `real-vite`, the writable page
+  // mirror otherwise.
   const activeVfs = () => (machine.mode() === 'real-vite' ? snapshotFs : vfs);
 
   onMount(() => {
-    // Seed the workspace so the explorer is immediately useful (idempotent).
+    // Seed the workspace (idempotent).
     try {
       if (!vfs.existsSync(PROGRAM_MIRROR_PATH))
         writeText(vfs, PROGRAM_MIRROR_PATH, DEFAULT_PRESET.source);
@@ -240,10 +234,8 @@ export function App(props: AppProps) {
 
         <span class="rf-spacer" />
 
-        {/* The Templates gallery (ActivityBar → PresetGallery) is the single
-            project/template switcher (ADR-0079). The header keeps only the
-            contextual Run / Reset (REPL) controls + the mode chip; entering
-            dev / real-vite is done by selecting a template tile. */}
+        {/* Templates gallery is the single project switcher (ADR-0079); the
+            header keeps only contextual Run / Reset (REPL) + the mode chip. */}
         <Show when={machine.mode() === 'repl'}>
           <button type="button" class="rf-btn rf-btn--primary" onClick={onRun} data-action="run">
             ▶ Run
@@ -272,9 +264,9 @@ export function App(props: AppProps) {
 
           <aside class="rf-sidebar">
             <Show when={layout.view() === 'explorer'}>
-              {/* real-vite swaps the explorer's backing store to the worker
-                  mirror; the component captures `vfs` once, so the mode flip
-                  must remount it (plain Show/fallback does exactly that). */}
+              {/* real-vite swaps the explorer's backing store. FileExplorer
+                  captures `vfs` once, so the mode flip must remount it —
+                  Show/fallback does exactly that. */}
               <Show
                 when={machine.mode() === 'real-vite'}
                 fallback={

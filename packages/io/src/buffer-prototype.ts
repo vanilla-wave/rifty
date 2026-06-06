@@ -1,34 +1,24 @@
 /**
  * Prototype methods for `Buffer` (ADR-0030).
  *
- * Three installer functions each register a group of prototype methods onto
- * the passed `BufferClass.prototype`:
- *
- *   - `installCoreMethods` — `toString`, `equals`, `write`, `swap16/32/64`,
- *     `compare` (instance).
+ * Three installers each register a group of methods onto `BufferClass.prototype`:
+ *   - `installCoreMethods` — `toString`, `equals`, `write`, `swap16/32/64`, `compare`.
  *   - `installIntMethods` — integer / BigInt readers + writers.
  *   - `installExtraMethods` — Float / Double readers + writers,
  *     `indexOf` / `lastIndexOf` / `includes`, `fill`, `copy`.
  *
- * Methods are written against `Uint8Array` (the only typed surface they need)
- * and assigned to the passed `BufferClass.prototype`. The class-level
- * signatures live in `buffer.ts` (using `declare`) so this file does not need
- * a type-back import — avoiding a circular dep madge would flag.
+ * Methods are typed against `Uint8Array`; class-level signatures live in `buffer.ts`
+ * (via `declare`) so this file needs no type-back import — avoids a circular dep madge would flag.
  */
 
 import { type Encoding, compareSlices, decode, encode } from './buffer-codec.ts';
 
-// Loosely typed constructor — we only need to reach `.prototype`. Keeping
-// this opaque (no `import type { Buffer }`) keeps the dependency one-way.
+// Opaque ctor (no `import type { Buffer }`) keeps the dependency one-way.
 type BufferLikeCtor = new (...args: unknown[]) => Uint8Array;
-
-// ────────────────────────────── shared helpers ──────────────────────────────
 
 function viewOf(u8: Uint8Array, offset: number, byteLen: number): DataView {
   return new DataView(u8.buffer, u8.byteOffset + offset, byteLen);
 }
-
-// ────────────────────────────── core methods ──────────────────────────────
 
 function bufferToString(
   this: Uint8Array,
@@ -52,8 +42,7 @@ function bufferWrite(
   lengthOrEncoding?: number | Encoding,
   encodingArg?: Encoding,
 ): number {
-  // Node overloads: write(s) / write(s, encoding) / write(s, offset, encoding)
-  // / write(s, offset, length, encoding). Resolve to (offset, length, encoding).
+  // Node overloads write(s[, offset][, length][, encoding]) → (offset, length, encoding).
   let offset: number;
   let length: number | undefined;
   let encoding: Encoding;
@@ -151,12 +140,9 @@ export function installCoreMethods(BufferClass: BufferLikeCtor): void {
   p.compare = bufferCompare;
 }
 
-// ────────────────────────────── integer methods ──────────────────────────────
-
 export function installIntMethods(BufferClass: BufferLikeCtor): void {
   const p = BufferClass.prototype as Record<string, unknown>;
 
-  // ---- Integer readers ----
   p.readUInt8 = function (this: Uint8Array, offset = 0) {
     return viewOf(this, offset, 1).getUint8(0);
   };
@@ -200,7 +186,7 @@ export function installIntMethods(BufferClass: BufferLikeCtor): void {
     return viewOf(this, offset, 8).getBigInt64(0, true);
   };
 
-  // ---- Integer writers (return the post-write offset, matching Node) ----
+  // Writers return the post-write offset, matching Node.
   p.writeUInt8 = function (this: Uint8Array, value: number, offset = 0) {
     viewOf(this, offset, 1).setUint8(0, value);
     return offset + 1;
@@ -259,13 +245,10 @@ export function installIntMethods(BufferClass: BufferLikeCtor): void {
   };
 }
 
-// ────────────────────────────── extra methods ──────────────────────────────
-
 /** Normalise an `indexOf`/`lastIndexOf` value to a searchable byte sequence. */
 function asBytes(value: number | string | Uint8Array, encoding: Encoding): Uint8Array {
   if (typeof value === 'number') {
-    // Node coerces a single integer 0-255 to a one-byte needle. Negative or
-    // out-of-range values wrap into 0-255 (matches Node 22 behaviour).
+    // Node 22: a single integer needle wraps into 0-255 (incl. negative/out-of-range).
     const b = ((value | 0) + 256) & 0xff;
     const out = new Uint8Array(1);
     out[0] = b;
@@ -290,8 +273,7 @@ function findIndex(haystack: Uint8Array, needle: Uint8Array, fromIndex: number):
 
 function findLastIndex(haystack: Uint8Array, needle: Uint8Array, fromIndex: number): number {
   if (needle.length === 0) return fromIndex >= 0 ? fromIndex : -1;
-  // `fromIndex` is interpreted Node-style: the highest position the match may
-  // start at. Default = haystack.length - needle.length.
+  // Node-style `fromIndex`: highest start position for the match (default = length - needle.length).
   let start = fromIndex < 0 ? Math.max(0, haystack.length + fromIndex) : fromIndex;
   const max = haystack.length - needle.length;
   if (start > max) start = max;
@@ -307,7 +289,6 @@ function findLastIndex(haystack: Uint8Array, needle: Uint8Array, fromIndex: numb
 export function installExtraMethods(BufferClass: BufferLikeCtor): void {
   const p = BufferClass.prototype as Record<string, unknown>;
 
-  // ---- Float / Double readers ----
   p.readFloatBE = function (this: Uint8Array, offset = 0) {
     return viewOf(this, offset, 4).getFloat32(0, false);
   };
@@ -321,7 +302,7 @@ export function installExtraMethods(BufferClass: BufferLikeCtor): void {
     return viewOf(this, offset, 8).getFloat64(0, true);
   };
 
-  // ---- Float / Double writers (return post-write offset, matching Node) ----
+  // Writers return the post-write offset, matching Node.
   p.writeFloatBE = function (this: Uint8Array, value: number, offset = 0) {
     viewOf(this, offset, 4).setFloat32(0, value, false);
     return offset + 4;
@@ -339,7 +320,6 @@ export function installExtraMethods(BufferClass: BufferLikeCtor): void {
     return offset + 8;
   };
 
-  // ---- indexOf / lastIndexOf / includes ----
   p.indexOf = function (
     this: Uint8Array,
     value: number | string | Uint8Array,
@@ -394,9 +374,7 @@ export function installExtraMethods(BufferClass: BufferLikeCtor): void {
     return findIndex(this, asBytes(value, enc), from) !== -1;
   };
 
-  // ---- fill(value, offset?, end?, encoding?) ----
-  // Overrides `Uint8Array.prototype.fill` to accept strings / Uint8Array per
-  // Node semantics.
+  // Overrides `Uint8Array.prototype.fill` to also accept strings / Uint8Array (Node semantics).
   p.fill = function (
     this: Uint8Array,
     value: number | string | Uint8Array,
@@ -425,8 +403,7 @@ export function installExtraMethods(BufferClass: BufferLikeCtor): void {
       throw new RangeError('Out of range index');
     }
     if (typeof value === 'number') {
-      // Use the Uint8Array prototype directly to avoid infinite recursion via
-      // the overridden `fill` on Buffer.
+      // Call Uint8Array.prototype.fill directly to avoid recursing into this override.
       Uint8Array.prototype.fill.call(this, value & 0xff, offset, end);
       return this;
     }
@@ -444,7 +421,6 @@ export function installExtraMethods(BufferClass: BufferLikeCtor): void {
     return this;
   };
 
-  // ---- copy(target, targetStart?, sourceStart?, sourceEnd?) ----
   p.copy = function (
     this: Uint8Array,
     target: Uint8Array,

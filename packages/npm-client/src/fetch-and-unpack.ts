@@ -3,36 +3,19 @@
  * trio used by both the lockfile fast path and the live-resolve path in
  * `installer.ts`.
  *
- * Before this helper existed the two pipelines were copy-pasted and had
- * drifted behaviorally:
+ * Closes a prior divergence: the live-resolve path skipped network-side
+ * verification, storing freshly fetched bytes to cache without checking them
+ * against `manifest.dist.integrity` (silent stub per CLAUDE.md §"Code
+ * quality") — a registry serving the wrong tarball for a (name, version)
+ * propagated unnoticed. The fast path verified; the helper makes both verify.
  *
- * - Fast path verified the bytes returned by the network against the
- *   lockfile-pinned integrity and threw `EINTEGRITY` on mismatch.
- * - Live-resolve path skipped network-side verification entirely: even when
- *   `manifest.dist.integrity` was present, the freshly fetched bytes were
- *   stored to the cache without checking they matched the manifest's pin
- *   (silent stub per CLAUDE.md §"Code quality"). A registry returning the
- *   wrong tarball for a (name, version) pair would propagate unnoticed.
- *
- * The helper closes that divergence:
- *
- *  1. Look up cache by integrity hash. The cache implementation
- *     ({@link TarballCache.get}) re-verifies bytes on disk against the
- *     expected integrity and returns `null` on mismatch (corruption guard —
- *     see `tests/conformance/npm/lockfile-reuse.test.ts`). When non-null is
- *     returned we treat the bytes as already-verified and return them as a
- *     cache hit.
- *  2. On cache miss (or cache corruption), fetch via `getTarball`.
- *  3. Compute the integrity of the fetched bytes. If a `spec.integrity` was
- *     supplied (lockfile pin or manifest), compare; on mismatch throw
- *     `EINTEGRITY` (no silent reuse). If no expected integrity was given,
- *     the computed value is returned to the caller so it can be persisted
- *     in the lockfile entry.
- *  4. Write the verified bytes into the cache, keyed by the
- *     resolved-or-computed integrity.
- *  5. Return `{ bytes, cacheHit, integrity }` — `integrity` is what the
- *     caller should persist in the lockfile (matches what the cache is now
- *     keyed by).
+ * Cache lookups re-verify on-disk bytes against expected integrity and return
+ * `null` on mismatch (corruption guard — see
+ * `tests/conformance/npm/lockfile-reuse.test.ts`). On miss, fetch + compare to
+ * `spec.integrity` (throw `EINTEGRITY` on mismatch, never silent reuse); when
+ * no expected integrity is given, the computed value is returned for the
+ * caller to persist in the lockfile. Returned `integrity` matches what the
+ * cache is now keyed by.
  */
 
 import { type TarballCache, computeIntegrity, parseIntegrityAlgorithm } from './tarball-cache.ts';
@@ -79,10 +62,9 @@ export async function fetchAndUnpackToCache(
   }
 
   const bytes = await ctx.getTarball(spec.resolved);
-  // Compute integrity using the algorithm declared by `spec.integrity` so
-  // the comparison is apples-to-apples. When no expected integrity is
-  // supplied (e.g. a registry with no manifest pin), default to sha512 —
-  // matches what modern npm packuments produce.
+  // Match the algorithm declared by `spec.integrity` so the comparison is
+  // apples-to-apples; default sha512 (what modern npm packuments produce)
+  // when no expected integrity is supplied.
   let algorithm: 'sha256' | 'sha384' | 'sha512' = 'sha512';
   if (spec.integrity) {
     const parsed = parseIntegrityAlgorithm(spec.integrity);

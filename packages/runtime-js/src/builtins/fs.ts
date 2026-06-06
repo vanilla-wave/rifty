@@ -1,13 +1,12 @@
 /**
  * Node-compatible `node:fs` (subset).
  *
- * Sync and async APIs both run against a single in-process tree exposed by
- * `syncMirror()`. Async methods just wrap the sync ones — for the in-memory
- * backend there's no cost, and the OPFS backend (M4+) replaces the mirror
- * with one backed by `FileSystemSyncAccessHandle` inside the Worker.
+ * Sync and async APIs share one in-process tree via `syncMirror()`; async wraps
+ * sync. OPFS backend (M4+) swaps the mirror for a `FileSystemSyncAccessHandle`
+ * one inside the Worker.
  *
- * Encoding semantics: callers that don't pass an encoding get a Uint8Array
- * (Buffer-tagged); passing `'utf8'` returns a string. Matches Node.
+ * Encoding: no encoding → Uint8Array (Buffer-tagged); `'utf8'` → string. Matches
+ * Node.
  */
 
 import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
@@ -16,9 +15,9 @@ import { syncMirror } from './fs-sync-mirror.ts';
 import { getProcessCwd } from './process.ts';
 
 /**
- * Resolve a user-facing fs path: bare/relative names are anchored at the
- * runtime's cwd (process.cwd(), default '/'), absolute paths go through
- * normalisation directly. The syncMirror always sees absolute paths.
+ * Resolve a user-facing fs path: relative names anchor at the runtime's cwd
+ * (process.cwd(), default '/'); absolute paths are normalised directly. The
+ * syncMirror always sees absolute paths.
  */
 function resolvePath(p: string | URL | Buffer | Uint8Array): string {
   let str: string;
@@ -147,8 +146,6 @@ function encodeData(data: Uint8Array | string, encoding: Encoding | null): Uint8
   return data;
 }
 
-// ─── sync API ─────────────────────────────────────────────────────────────
-
 export function readFileSync(
   p: string,
   opts?: ReadFileOptions | Encoding | null,
@@ -201,14 +198,13 @@ export function mkdirSync(p: string, opts?: MkdirOptions): void {
 /**
  * `fs.statSync(path[, options])`.
  *
- * Honours Node's `throwIfNoEntry` option: when `false`, a missing path returns
- * `undefined` instead of throwing `ENOENT` (Node v24 semantics). Real packages
- * rely on this idiom to probe for a file without a try/catch — e.g. opencode's
- * `Filesystem.stat` does `statSync(p, { throwIfNoEntry: false }) ?? undefined`,
- * and its shell-tool resolution (`Filesystem.stat(shell)?.isFile()`) walls on a
- * thrown ENOENT. Overloaded so existing 1-arg callers keep the `Stats` return
- * type (no type regression); only the `{ throwIfNoEntry: false }` form widens to
- * `Stats | undefined`. Other errors (and a missing path without the opt) throw.
+ * Honours Node v24 `throwIfNoEntry`: `false` returns `undefined` for a missing
+ * path instead of throwing `ENOENT`. Real packages probe with this idiom
+ * (opencode's `Filesystem.stat` does `statSync(p, { throwIfNoEntry: false }) ??
+ * undefined`; its shell-tool resolution walls on a thrown ENOENT). Overloaded so
+ * 1-arg callers keep the `Stats` return; only the `{ throwIfNoEntry: false }`
+ * form widens to `Stats | undefined`. Other errors (and a miss without the opt)
+ * throw.
  */
 export function statSync(p: string): Stats;
 export function statSync(p: string, options: { throwIfNoEntry: false }): Stats | undefined;
@@ -245,17 +241,13 @@ export function renameSync(src: string, dst: string): void {
   syncMirror().rmSync(resolvePath(src), {});
 }
 
-// The VFS has no symlinks (in-memory + OPFS — no symlink layer until M12).
-// With no links, `lstat` is identical to `stat`, and `realpath` is just the
-// normalised absolute path (the canonical path of a symlink-free entry). These
-// are the CORRECT semantics for our fs model, not silent stubs — real packages
-// hit them on the happy path (chokidar → Vite's file watcher calls
-// `fs.realpath`/`fs.lstat`; an earlier loud-throw made `vite createServer`
-// abort in the watcher).
-// Ratified by ADR-0050 (reverses the prior `NotImplementedError`). TODO(M12):
-// when a symlink layer lands in the VFS, revisit `lstatSync`/`realpathSync`/
-// `readlinkSync`/`Stats.isSymbolicLink()` together so they resolve/inspect links
-// instead of normalising.
+// VFS has no symlinks until M12, so `lstat` === `stat` and `realpath` is just
+// the normalised absolute path. These are CORRECT for our fs model, not stubs:
+// real packages hit them on the happy path (chokidar/Vite's watcher calls
+// `fs.realpath`/`fs.lstat`; an earlier loud-throw aborted `vite createServer`).
+// Ratified by ADR-0050 (reverses the prior `NotImplementedError`).
+// TODO(M12): when a symlink layer lands, revisit `lstatSync`/`realpathSync`/
+// `readlinkSync`/`Stats.isSymbolicLink()` together to resolve/inspect links.
 export function lstatSync(p: string): Stats {
   return statSync(p);
 }
@@ -301,8 +293,6 @@ function toMs(t: number | Date): number {
 export function utimesSync(p: string, atime: number | Date, mtime: number | Date): void {
   syncMirror().utimes(resolvePath(p), toMs(atime), toMs(mtime));
 }
-
-// ─── promise API (wraps sync — same backing store) ────────────────────────
 
 export const promises = {
   async readFile(
@@ -367,8 +357,6 @@ export const promises = {
     utimesSync(p, atime, mtime);
   },
 };
-
-// ─── callback API (wraps the promise API) ─────────────────────────────────
 
 export function readFile(
   p: string,

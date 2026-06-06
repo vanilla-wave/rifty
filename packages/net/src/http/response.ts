@@ -59,22 +59,18 @@ export class ServerResponse extends EventEmitter {
         this.controller = controller;
       },
       pull: () => {
-        // The consumer signalled it wants more — the queue has room again.
-        // Writes that parked here have already enqueued their chunks during
-        // their `write()` call, so the only thing left is to unblock the
-        // callers' awaits. Drain the entire FIFO on a single pull: otherwise
-        // back-to-back backpressured writes would deadlock, because the
-        // stream's `pull` is only invoked once per "queue empty" event when
-        // no further enqueues happen inside the handler.
+        // Parked writes already enqueued their chunks; just unblock their
+        // awaits. Drain the whole FIFO on a single pull, else back-to-back
+        // backpressured writes deadlock — `pull` only fires once per "queue
+        // empty" when no further enqueues happen inside the handler.
         while (this.pendingPulls.length > 0) {
           const next = this.pendingPulls.shift();
           next?.();
         }
-        // Node `Writable` parity: once the queue has room again, signal a
-        // `'drain'` so consumers that park on `res.on('drain')` and ignore
-        // `write()`'s return value (e.g. @effect/platform-node's streaming
-        // write loop) resume. Gated by `_needDrain` so we never emit a
-        // spurious `'drain'` before a write actually backpressured.
+        // Node `Writable` parity: emit `'drain'` so consumers that park on
+        // `res.on('drain')` and ignore `write()`'s return (e.g.
+        // @effect/platform-node's write loop) resume. Gated by `_needDrain`
+        // so we never emit a spurious `'drain'` before backpressure.
         // TODO(ADR): Q-2026-05-30-102
         if (this._needDrain) {
           this._needDrain = false;
@@ -183,8 +179,8 @@ export class ServerResponse extends EventEmitter {
     if (!this._headersSent) this.flushHeaders();
     const buf = normalise(chunk);
     if (buf.byteLength === 0) return true;
-    // controller is set during ReadableStream start callback (synchronous in
-    // the spec). flushHeaders cannot run before that, so this is safe.
+    // controller is set in the ReadableStream start callback (synchronous per
+    // spec) before flushHeaders can run, so it is non-null here.
     const ctrl = this.controller;
     if (ctrl === null) return true;
     // Snapshot desiredSize BEFORE the enqueue so the very first write (when
@@ -193,8 +189,7 @@ export class ServerResponse extends EventEmitter {
     const dsBefore = ctrl.desiredSize;
     ctrl.enqueue(buf);
     if (dsBefore !== null && dsBefore <= 0) {
-      // Backpressured: arm the Node-style `'drain'` that fires on the next
-      // `pull()`. The boolean|Promise return is unchanged for existing callers.
+      // Backpressured: arm the Node-style `'drain'` that fires on next `pull()`.
       this._needDrain = true;
       return new Promise<boolean>((resolve) => {
         this.pendingPulls.push(() => resolve(true));
@@ -206,9 +201,8 @@ export class ServerResponse extends EventEmitter {
   end(chunk?: Chunk): this {
     if (this._finished) return this;
     if (chunk !== undefined) {
-      // If we still have not flushed, and this is the only chunk, we can set
-      // Content-Length to its byte length so downstream caches and the SW can
-      // skip chunked transfer encoding. Compute once before writing.
+      // Not yet flushed and this is the only chunk: set Content-Length so
+      // downstream caches and the SW can skip chunked transfer encoding.
       if (!this._headersSent) {
         const buf = normalise(chunk);
         if (!('content-length' in this._headers) && !('transfer-encoding' in this._headers)) {
@@ -230,11 +224,9 @@ export class ServerResponse extends EventEmitter {
     }
     this._finished = true;
     this.controller?.close();
-    // Drain any waiters parked on backpressure — the stream is closing, no
-    // more `pull()` will ever fire. Resolve them so dependent code doesn't
-    // hang on an awaited `write()` promise. The stream is closed, so no
-    // `'drain'` is emitted here (Node does not emit `'drain'` after `end()`);
-    // clear the gate to avoid a stale flag.
+    // Stream is closing, no more `pull()` will fire: resolve parked waiters so
+    // awaited `write()` promises don't hang. No `'drain'` here — Node doesn't
+    // emit it after `end()` — and clear the gate to avoid a stale flag.
     this._needDrain = false;
     while (this.pendingPulls.length > 0) {
       const next = this.pendingPulls.shift();

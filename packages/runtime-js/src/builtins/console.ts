@@ -1,10 +1,9 @@
 /**
  * Node-compatible `node:console`.
  *
- * Pure-JS, in-realm faithful re-implementation of Node's `Console` class and
- * the module-level global-console-shaped export. There is no native binding
- * behind `node:console` in Node either — it is a JS class over two writable
- * streams (`lib/internal/console/constructor.js`) — so we mirror the observable
+ * Pure-JS re-implementation of Node's `Console` class. There is no native
+ * binding behind `node:console` — it is a JS class over two writable streams
+ * (`lib/internal/console/constructor.js`) — so we mirror the observable
  * contract (printf formatting, `table` box-drawing, group indentation, the
  * counter/timer maps) rather than stub it (CLAUDE.md "no silent stubs").
  *
@@ -12,27 +11,24 @@
  *  - `new Console(stdout[, stderr])` / `new Console({ stdout, stderr,
  *    inspectOptions, colorMode, groupIndentation, ignoreErrors })`.
  *  - `log` / `info` / `debug` / `dir` → stdout; `warn` / `error` / `trace` →
- *    stderr. `log`-family apply `util.format` printf semantics, exactly like
- *    Node's `formatWithOptions`.
+ *    stderr. `log`-family apply `util.format` printf semantics.
  *  - `assert(value, ...message)` — writes `Assertion failed[: message]` to
- *    stderr when `value` is falsy (no throw — Node's `console.assert` never
- *    throws).
- *  - `group` / `groupCollapsed` / `groupEnd` — leading-indent tracking with a
- *    configurable `groupIndentation` (default 2 spaces).
+ *    stderr when `value` is falsy (no throw — Node's never throws).
+ *  - `group` / `groupCollapsed` / `groupEnd` — indent tracking, configurable
+ *    `groupIndentation` (default 2 spaces).
  *  - `count` / `countReset` — per-label monotonic counter, `label: n` to stdout.
  *  - `time` / `timeEnd` / `timeLog` — per-label timers using the realm clock.
- *  - `table(data[, columns])` — the undici code path: faithful box-drawing
- *    table with an `(index)` column, a `Values` column for primitive rows, the
- *    union of own keys across object rows, left-aligned cells, and a fall-back
- *    to `log` for non-tabular (primitive) input. Matches Node v24's
- *    `lib/internal/cli_table.js` rendering byte-for-byte for ASCII content.
+ *  - `table(data[, columns])` — box-drawing table with an `(index)` column, a
+ *    `Values` column for primitive rows, the union of own keys across object
+ *    rows, left-aligned cells, and fall-back to `log` for non-tabular input.
+ *    Matches Node v24's `lib/internal/cli_table.js` byte-for-byte (ASCII).
  *  - `clear` — no-op against a non-TTY stream (Node only emits the clear escape
- *    on a TTY; our backing streams are not TTYs here).
+ *    on a TTY; our backing streams are not TTYs).
  *
- * The module-level export is Node-shaped: it IS a default `Console` instance
- * (routed at `process.stdout` / `process.stderr`) augmented with the `Console`
- * constructor as a property, so both `const c = require('node:console'); c.log`
- * and `const { Console } = require('node:console')` work.
+ * The module-level export is Node-shaped: a default `Console` instance (routed
+ * at `process.stdout` / `process.stderr`) augmented with the `Console`
+ * constructor as a property, so both `require('node:console').log` and
+ * `const { Console } = require('node:console')` work.
  */
 import { inspect } from '../repl/inspect.ts';
 import { riftyProcess } from './process.ts';
@@ -46,9 +42,8 @@ interface WritableLike {
 interface ConsoleOptions {
   stdout: WritableLike;
   stderr?: WritableLike;
-  // `inspectOptions`, `colorMode`, and `ignoreErrors` are accepted for shape
-  // compatibility (undici passes `inspectOptions`). Our inspector does not
-  // model colors, so they are stored but only `groupIndentation` affects output.
+  // Accepted for shape compatibility (undici passes `inspectOptions`); our
+  // inspector models no colors, so only `groupIndentation` affects output.
   inspectOptions?: Record<string, unknown>;
   colorMode?: boolean | 'auto';
   ignoreErrors?: boolean;
@@ -59,9 +54,8 @@ const kColorInspectOptions = Symbol('kColorInspectOptions');
 
 /**
  * Apply `util.format` printf semantics to a log call's arguments. A zero-arg
- * call (`console.log()`) yields the empty string — matching Node's
- * `util.format()` (no args) → `''`, distinct from `util.format(undefined)` →
- * `'undefined'`.
+ * call yields `''` (Node's `util.format()` → `''`, distinct from
+ * `util.format(undefined)` → `'undefined'`).
  */
 function formatLine(args: readonly unknown[]): string {
   if (args.length === 0) return '';
@@ -69,11 +63,9 @@ function formatLine(args: readonly unknown[]): string {
 }
 
 /**
- * Render a single table cell value the way Node's table does: strings are
- * single-quoted, `undefined`/`null`/booleans/numbers/bigints print bare, and
- * everything else goes through the structural inspector. This mirrors
- * `util.inspect(value, { depth })`'s leaf rendering for the common scalar cases
- * the table path produces.
+ * Render a table cell the way Node's table does: strings single-quoted,
+ * `undefined`/`null`/booleans/numbers/bigints bare, everything else through the
+ * structural inspector.
  */
 function formatCell(value: unknown): string {
   if (typeof value === 'string') return `'${value}'`;
@@ -81,11 +73,10 @@ function formatCell(value: unknown): string {
 }
 
 /**
- * Faithful re-implementation of Node's `lib/internal/cli_table.js`. `head` is
- * the column header row; `columns` is an array of columns, each an array of
- * already-stringified cell contents aligned by row index (missing cells are
- * empty strings). Produces the box-drawing table with a trailing newline,
- * left-aligned cells each wrapped in one leading and one trailing space.
+ * Re-implements Node's `lib/internal/cli_table.js`. Each column carries a header
+ * plus already-stringified cells aligned by row index (missing cells empty).
+ * Box-drawing table, trailing newline, left-aligned cells wrapped in one
+ * leading and one trailing space.
  */
 function renderTable(columns: readonly TableColumn[]): string {
   const rows = columns.length === 0 ? 0 : Math.max(...columns.map((c) => c.cells.length));
@@ -160,8 +151,8 @@ export class Console {
   }
 
   #applyIndent(text: string): string {
-    // Indent every line of `text` except a trailing empty segment after the
-    // final newline, matching Node's per-line group indentation.
+    // Indent every line except the trailing empty segment after the final
+    // newline, matching Node's per-line group indentation.
     const nl = text.endsWith('\n');
     const body = nl ? text.slice(0, -1) : text;
     const indented = body
@@ -261,11 +252,11 @@ export class Console {
   };
 
   clear = (): void => {
-    // Our backing streams are not TTYs, so — like Node — there is nothing to clear.
+    // Backing streams are not TTYs, so — like Node — nothing to clear.
   };
 
   table = (data: unknown, columns?: readonly string[]): void => {
-    // Non-tabular (primitive / null) input falls back to `log`, matching Node.
+    // Non-tabular (primitive/null) input falls back to `log`, matching Node.
     if (data === null || typeof data !== 'object') {
       this.log(data);
       return;
@@ -274,14 +265,12 @@ export class Console {
     const INDEX_HEADER = '(index)';
     const VALUES_HEADER = 'Values';
 
-    // Build (indexKey -> row) entries from arrays (numeric keys) or plain
-    // objects (own enumerable keys).
     const entries: Array<[string, unknown]> = Array.isArray(data)
       ? (data as unknown[]).map((v, i) => [String(i), v])
       : Object.entries(data as Record<string, unknown>);
 
-    // Collect the union of inner-object keys (preserving first-seen order) and
-    // whether any row is a primitive (needs the `Values` column).
+    // Union of inner-object keys (first-seen order); a primitive row needs the
+    // `Values` column.
     const innerKeys: string[] = [];
     const seen = new Set<string>();
     let hasPrimitiveRow = false;
@@ -300,9 +289,8 @@ export class Console {
 
     const dataKeys = columns ? [...columns] : innerKeys;
 
-    // One column per header. Column 0 = indices; middle = per-key cells; last
-    // (optional) = primitive values. Each cell is filled per row so columns
-    // stay aligned (a key absent from a given row renders as an empty cell).
+    // Column 0 = indices; middle = per-key cells; last (optional) = primitive
+    // values. Cells filled per row so columns stay aligned (absent key → empty).
     const indexCol: TableColumn = { header: INDEX_HEADER, cells: [] };
     const keyCols: TableColumn[] = dataKeys.map((k) => ({ header: k, cells: [] }));
     const valuesCol: TableColumn = { header: VALUES_HEADER, cells: [] };
@@ -328,7 +316,7 @@ export class Console {
   };
 }
 
-/** Monotonic millisecond clock for `time`/`timeEnd`, via the realm performance. */
+/** Monotonic millisecond clock for `time`/`timeEnd`. */
 function performanceNow(): number {
   return typeof performance !== 'undefined' && typeof performance.now === 'function'
     ? performance.now()
@@ -342,15 +330,14 @@ function formatDuration(ms: number): string {
 }
 
 /**
- * The default module-level `Console` instance, routed at `process.stdout` /
- * `process.stderr`. `process.stdout.write` forwards to the realm's global
- * `console.log` (see `builtins/process.ts`), so this preserves the existing
- * stdout/stderr wiring while exposing the full `node:console` surface.
+ * Default module-level `Console`, routed at `process.stdout` / `process.stderr`.
+ * `process.stdout.write` forwards to the realm's global `console.log` (see
+ * `builtins/process.ts`), preserving existing stdout/stderr wiring.
  */
 const defaultConsole = new Console(riftyProcess.stdout, riftyProcess.stderr);
 
-// Node's `node:console` module export is the default console instance augmented
-// with the `Console` constructor as a property.
+// Node's module export is the default instance augmented with the `Console`
+// constructor as a property.
 const consoleModule = defaultConsole as Console & { Console: typeof Console };
 consoleModule.Console = Console;
 

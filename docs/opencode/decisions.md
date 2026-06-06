@@ -1,349 +1,298 @@
 # Decision register — opencode server facade (M12 proposed)
 
-> **PARTIALLY RATIFIED.** Section A holds the full text of the 11 **ADR drafts**
-> for this effort. Each touches a public API between packages, adds a new external
-> dependency, or contradicts/supersedes an existing ADR — i.e. is **IRREVERSIBLE**
-> per the project's reversibility checklist. **4 are ratified to disk + 2 are now
-> SUPERSEDED by a ratified ADR** (drafts 0052, 0053, 0057→ADR-0054,
-> 0059→ADR-0055; drafts 0055+0056 → SUPERSEDED by ratified ADR-0065 — see the
-> renumber note below); the remaining **5 are DEFERRED**, each with the gate that
-> unblocks it recorded in [`README.md`](README.md). ADRs are immutable after
-> merge; do not invent answers. Section B is the **REVERSIBLE** provisional-decision
-> block — those entries have since been appended to `OPEN_QUESTIONS.md` (Active).
-> Q-ids were renumbered globally from `Q-2026-05-30-101` to avoid colliding with
-> the landed `Q-2026-05-30-001` (promoted to ADR-0051).
+> **PARTIALLY RATIFIED.** Section A holds the full text of the 11 **ADR drafts** for this effort. Each
+> touches a cross-package public API, adds an external dependency, or
+> contradicts/supersedes an existing ADR — i.e. **IRREVERSIBLE** per the project's
+> reversibility checklist. Status: **4 ratified to disk** (drafts 0052, 0053,
+> 0057→ADR-0054, 0059→ADR-0055); **2 superseded by ratified ADR-0065** (drafts
+> 0055+0056); **5 deferred**, each with its unblocking gate recorded in
+> [`README.md`](README.md). ADRs are immutable after merge; do not invent answers.
+> Section B is the **REVERSIBLE** provisional-decision block, since appended to
+> `OPEN_QUESTIONS.md` (Active). Q-ids were renumbered globally from
+> `Q-2026-05-30-101` to avoid colliding with the landed `Q-2026-05-30-001`
+> (promoted to ADR-0051).
 >
-> **Renumber note:** the SSE/Effect-HTTP drafts ratified under *next-free* ADR
-> numbers (0054, 0055), NOT their draft numbers (0057, 0059). In THIS file's
-> numbering, "ADR-0055" is the WASM-SQLite draft and "ADR-0056" the drizzle
-> adapter — both now **SUPERSEDED by the ratified on-disk ADR-0065** (sql.js
-> in-memory-first `node:sqlite` `DatabaseSync` shim; corrects the
-> `bun:sqlite`→`node:sqlite` framing and voids the drizzle adapter at the pinned
-> SHA). Each on-disk ADR states which draft it ratifies or supersedes.
+> **Renumber note:** the SSE/Effect-HTTP drafts ratified under *next-free* numbers
+> (0054, 0055), NOT their draft numbers (0057, 0059). In THIS file, "ADR-0055" is
+> the WASM-SQLite draft and "ADR-0056" the drizzle adapter — both **superseded by
+> ratified on-disk ADR-0065** (sql.js in-memory-first `node:sqlite` `DatabaseSync`
+> shim; corrects the `bun:sqlite`→`node:sqlite` framing, voids the drizzle adapter
+> at the pinned SHA). Each on-disk ADR states which draft it ratifies/supersedes.
 
-**Tally:** 11 irreversible decisions (ADR drafts 0052–0062; 4 ratified to disk,
-2 superseded by ratified ADR-0065, 5 deferred) · 19 reversible decisions
-(Q-2026-05-30-101 … -119, now Active in `OPEN_QUESTIONS.md`).
+**Tally:** 11 irreversible (drafts 0052–0062: 4 ratified, 2 superseded by ADR-0065,
+5 deferred) · 19 reversible (Q-2026-05-30-101 … -119, now Active in
+`OPEN_QUESTIONS.md`).
 
 ---
 
 ## Section A — Irreversible decisions (ADR drafts, require human ratification)
 
 ### ADR-0052 (RATIFIED → `docs/adr/0052-ts-on-import-transform-hook.md`) — TS-on-import transform hook on `ModuleLoaderOptions`
-*Feature 02. Reversibility rule 1 (cross-package public API). Ratified 2026-05-30 with the option-surface land (feature-02 T2).*
+*Feature 02. Rule 1 (cross-package public API). Ratified 2026-05-30 with the option-surface land (feature-02 T2).*
 
 **Context.** opencode is a `.ts` graph; the core loader never strips TS types
-(`esm.ts` feeds `resolved.source` straight to acorn). The single-file WASI
-esbuild binding exists (`tools/shadow-registry/src/esbuild-binding.ts`) but the
-loader has no injection point to reach it (`createModuleLoader` takes only
-`{ cwd }`).
+(`esm.ts` feeds `resolved.source` straight to acorn). The single-file WASI esbuild
+binding exists (`tools/shadow-registry/src/esbuild-binding.ts`) but the loader has
+no injection point (`createModuleLoader` takes only `{ cwd }`).
 
 **Options.**
 - **(A) Recommended — injected hook.** Add optional
-  `transformSource?: (req: {source,id,loader,workspace}) => Promise<string>` and
-  `workspace?: string` to `ModuleLoaderOptions`; the harness injects a closure
-  calling `transformWithEsbuild`. Loader gains zero new package import edges.
-  *Trade-off:* every loader caller now sees TS-flavoured options; the hook's
-  request shape is the load-bearing contract.
-- **(B) Inline import of shadow-registry in `esm.ts`.** Rejected — inverts the
-  vfs→kernel→runtime layering and forces a runtime-wasi edge into runtime-js.
-- **(C) Global singleton transform registry.** Reversible but order-fragile and
-  hard to test; hides a hard data dependency in a global.
+  `transformSource?: (req: {source,id,loader,workspace}) => Promise<string>` +
+  `workspace?: string` to `ModuleLoaderOptions`; harness injects a closure calling
+  `transformWithEsbuild`. Zero new loader import edges. *Trade-off:* all loader
+  callers see TS-flavoured options; the hook's request shape is the load-bearing contract.
+- **(B) Inline import of shadow-registry in `esm.ts`.** Rejected — inverts vfs→kernel→runtime layering, forces a runtime-wasi edge into runtime-js.
+- **(C) Global singleton transform registry.** Reversible but order-fragile, hard to test; hides a hard data dependency in a global.
 
-**Recommendation.** Option A. Ratify the hook's request-object shape
+**Recommendation.** Option A. Ratify the request shape
 (`{source, id, loader: 'ts'|'tsx'|'jsx', workspace}` → `Promise<string>`).
 
-**Consequences.** Public surface of `@riftydev/runtime-js` grows by two optional
-fields; future HMR/per-file invalidation reuses it. `.ts`-via-`require()` throws a
-directed `NotImplementedError` (async esbuild can't run in the sync CJS path);
-opencode is `type:module` so this never arises on the happy path.
+**Consequences.** `@riftydev/runtime-js` gains two optional fields; future
+HMR/per-file invalidation reuses it. `.ts`-via-`require()` throws a directed
+`NotImplementedError` (async esbuild can't run in the sync CJS path); opencode is
+`type:module` so this never arises on the happy path.
 
 ---
 
 ### ADR-0053 (RATIFIED → `docs/adr/0053-ts-tsx-first-class-resolvable-extensions.md`) — `.ts`/`.tsx` as first-class resolvable + ESM extensions
-*Feature 02. Reversibility rule 1 (observable cross-package behaviour) + rule 4 (>2 files).*
+*Feature 02. Rule 1 (observable cross-package behaviour) + rule 4 (>2 files).*
 
 **Context.** Verified: `DEFAULT_EXTENSIONS = ['.js','.mjs','.cjs','.json']` and
 `INDEX_FILES` lack `.ts`/`.tsx` (resolver.ts:25-26); `detectKind` classifies
-unknown extensions as CJS. A bare `import … from "@/session/session"` landing on
-`session.ts` does not resolve a file today.
+unknown extensions as CJS. `import … from "@/session/session"` landing on
+`session.ts` does not resolve today.
 
 **Options.**
 - **(A) Recommended.** Add `.ts`,`.tsx` to `DEFAULT_EXTENSIONS`/`INDEX_FILES`
-  **after** the `.js` family (so plain-Node packages shipping `foo.js` are
-  byte-unchanged) and before `.json`; `detectKind` returns ESM for `.ts`/`.tsx`
-  under a `type:module` scope, else CJS. Resolve unconditionally; a `.ts` that
-  resolves with no transform hook throws a directed error (no silent stub).
-- **(B) Per-package overlay rewriting `.ts`→`.js`.** Rejected — opencode ships
-  hundreds of `.ts` with `exports: { "./*": "./src/*.ts" }`; does not scale.
+  **after** the `.js` family (plain-Node `foo.js` packages stay byte-unchanged) and
+  before `.json`; `detectKind` returns ESM for `.ts`/`.tsx` under `type:module`,
+  else CJS. Resolve unconditionally; a `.ts` resolving with no transform hook throws
+  a directed error (no silent stub).
+- **(B) Per-package overlay rewriting `.ts`→`.js`.** Rejected — opencode ships hundreds of `.ts` with `exports: { "./*": "./src/*.ts" }`; does not scale.
 - **(C) Resolve `.ts` but classify CJS.** Rejected — opencode is `type:module`.
 
-**Recommendation.** Option A. The Node-resolution **deviation** (rifty resolves
-bare `.ts` where Node-without-a-stripper does not) is intentional for opencode
-but must be human-signed-off; cite **ADR-0004** (module loader) as the condition
-set / resolution algorithm this deviates from.
+**Recommendation.** Option A. The Node-resolution **deviation** (rifty resolves bare
+`.ts` where Node-without-a-stripper does not) is intentional for opencode but must
+be human-signed-off; cite **ADR-0004** (module loader) as the deviated-from set.
 
 **Consequences.** Changes resolver behaviour for ALL consumers (vite path,
 conformance suite). Guarded by a parity case asserting `.js` still wins when both
-`foo.js` and `foo.ts` exist. Spans `resolver.ts` + `esm.ts` + `loader.ts`.
+`foo.js`/`foo.ts` exist. Spans `resolver.ts` + `esm.ts` + `loader.ts`.
 
 ---
 
 ### ADR-0054 (draft) — Per-load module resolution conditions (opt-in `bun`)
-*Feature 03. Reversibility rule 1 (public API) — partial; deviates from ADR-0004's condition set.*
+*Feature 03. Rule 1 (public API) — partial; deviates from ADR-0004's condition set.*
 
 **Context.** opencode's `#db`/`#pty` `imports` maps carry a `bun` branch; rifty's
-`CONDITIONS = ['node','default','import','require']` has no `bun`, so `#db` lands
-on the `node` branch (`node:sqlite`). Both branches hit an unregistered builtin,
-so adding `bun` alone unblocks nothing — it only chooses *which* specifier the
-SQLite shim intercepts.
+`CONDITIONS = ['node','default','import','require']` has no `bun`, so `#db` lands on
+the `node` branch (`node:sqlite`). Both branches hit an unregistered builtin, so
+adding `bun` alone unblocks nothing — it only chooses *which* specifier the SQLite
+shim intercepts.
 
 **Options.**
 - **(A) Recommended-but-needs-ratification.** Add optional
-  `ModuleLoaderOptions.conditions?: readonly string[]` + a `createResolver(vfs,
+  `ModuleLoaderOptions.conditions?: readonly string[]` + `createResolver(vfs,
   {conditions})` arg; opencode loads with `['bun','node','import','default']`.
-  Minimal public-API growth (one field, one arg). Deviates from ADR-0004's Node
-  condition set (Node has no `bun`).
-- **(B) Richer `importsOverride` table.** More flexible for feature 04's `#db`
-  swap but a larger, more opinionated public API; defer.
-- **(C) Zero-API-change shadow-registry `package.json` overlay.** REVERSIBLE —
-  hardcode `#db`→a shim path via the VFS overlay, leaving the resolver and
-  ADR-0004 untouched. Brittle across opencode versions but downgrades the whole
-  decision to reversible.
+  Minimal API growth. Deviates from ADR-0004 (Node has no `bun`).
+- **(B) Richer `importsOverride` table.** More flexible for feature 04's `#db` swap but larger/more opinionated; defer.
+- **(C) Zero-API-change shadow-registry `package.json` overlay.** REVERSIBLE — hardcode `#db`→shim path via VFS overlay, leaving resolver + ADR-0004 untouched. Brittle across opencode versions but downgrades the whole decision to reversible.
 
-**Recommendation.** **Prefer option (C)** unless a later feature truly needs
-programmatic (non-overlay) condition control. The de-risk shows both `#db`
-branches hit an unregistered builtin regardless of condition, so the overlay +
-the throw-stub (Q-2026-05-30-102) suffice for P0/P2 with no public-API change. If
-the team chooses (A), the ADR must frame the opt-in `bun` as a deliberate
-deviation from ADR-0004.
+**Recommendation.** **Prefer (C)** unless a later feature truly needs programmatic
+(non-overlay) condition control. The de-risk shows both `#db` branches hit an
+unregistered builtin regardless of condition, so overlay + throw-stub
+(Q-2026-05-30-102) suffice for P0/P2 with no API change. If (A) chosen, the ADR must
+frame opt-in `bun` as a deliberate ADR-0004 deviation.
 
-**Consequences.** If (A): permanent `@riftydev/runtime-js` surface; if (C): no API
-change. The tier-A throw-stub registration (Q-2026-05-30-102) is REVERSIBLE
-either way — only the *delivery vehicle* (conditions field) is gated.
+**Consequences.** (A): permanent `@riftydev/runtime-js` surface; (C): no API change.
+The tier-A throw-stub registration (Q-2026-05-30-102) is REVERSIBLE either way — only
+the *delivery vehicle* (conditions field) is gated.
 
 ---
 
 ### ADR-0055 (draft — SUPERSEDED by ratified ADR-0065, 2026-05-31) — WASM-SQLite engine for the `#db` shim
-*Feature 04, tier B. Reversibility rule 2 (new external dependency) + rule 4.*
+*Feature 04, tier B. Rule 2 (new external dependency) + rule 4.*
 
 > **SUPERSEDED by ratified `docs/adr/0065-node-sqlite-databasesync-wasm-shim.md`
 > (2026-05-31).** The engine recommendation (sql.js, in-memory-first) is ratified;
-> the `#db`/`bun:sqlite` framing is CORRECTED to `node:sqlite` (the `#db` import
-> map is stale at the pinned SHA — its targets don't exist and nothing imports
-> `#db`; rifty resolves under the `node` condition). The text below is the
-> historical draft.
+> the `#db`/`bun:sqlite` framing is CORRECTED to `node:sqlite` (the `#db` import map
+> is stale at the pinned SHA — targets don't exist, nothing imports `#db`; rifty
+> resolves under the `node` condition). Text below is the historical draft.
 
-**Context.** Unknown #1 is YES: the createRoutes graph statically loads
+**Context.** Unknown #1 = YES: the createRoutes graph statically loads
 `session.ts → @/storage/db → #db → node:sqlite`. A resolvable throw-stub gets P0
 graph-load, but P4 (real session storage) needs a real engine, because opencode
-storage is **drizzle-on-SQLite** (`session.sql`), not the old JSON storage.
+storage is **drizzle-on-SQLite** (`session.sql`), not old JSON storage.
 
 **Options.**
-- **sql.js** (Emscripten SQLite, sync API). Pure-WASM, single `.wasm` + glue;
-  sync `Database` with `.export() → Uint8Array`. Maps cleanly onto drizzle's
-  sqlite drivers (which assume a sync prepare surface) and onto VFS-image
-  persistence. *In-memory first; export-to-VFS later.*
-- **wa-sqlite.** Async + OPFS persistence, but async impedance mismatch with
-  drizzle's sync driver and a COI/SharedArrayBuffer requirement (interacts with
-  ADR-0002).
-- **absurd-sql.** Durable IndexedDB-block VFS on sql.js, but a second dep + COI/
-  Worker requirement.
-- **@sqlite.org/sqlite-wasm.** The source **ADR-0006 already names** in its
-  substitution-source ordering. The official build is async/OO-API, which fights
-  drizzle's sync prepare surface — must be evaluated and either adopted or the
-  divergence documented, per ADR-0006 governance.
+- **sql.js** (Emscripten SQLite, sync API). Pure-WASM, single `.wasm` + glue; sync `Database` with `.export() → Uint8Array`. Maps cleanly onto drizzle's sync sqlite drivers and onto VFS-image persistence. *In-memory first; export-to-VFS later.*
+- **wa-sqlite.** Async + OPFS persistence, but async impedance mismatch with drizzle's sync driver + COI/SharedArrayBuffer requirement (interacts with ADR-0002).
+- **absurd-sql.** Durable IndexedDB-block VFS on sql.js, but a second dep + COI/Worker requirement.
+- **@sqlite.org/sqlite-wasm.** The source **ADR-0006 already names** in its substitution-source ordering. Official build is async/OO-API, fighting drizzle's sync prepare surface — must be evaluated and adopted or the divergence documented, per ADR-0006 governance.
 
 **Recommendation.** sql.js (in-memory first), **but** the ADR must explicitly
-evaluate `@sqlite.org/sqlite-wasm` (the ADR-0006-prescribed source) and justify
-the divergence. Cite ADR-0006 and ADR-0002 (COI for any OPFS path).
+evaluate `@sqlite.org/sqlite-wasm` (the ADR-0006-prescribed source) and justify the
+divergence. Cite ADR-0006 and ADR-0002 (COI for any OPFS path).
 
-**Consequences.** New external dependency (IRREVERSIBLE). In-memory first light
-means no cross-reload durability until export-to-VFS lands — the P4 persistence
-criterion must be reconciled (Q-2026-05-30-114).
+**Consequences.** New external dependency (IRREVERSIBLE). In-memory-first means no
+cross-reload durability until export-to-VFS lands — the P4 persistence criterion
+must be reconciled (Q-2026-05-30-114).
 
 ---
 
 ### ADR-0056 (draft — SUPERSEDED by ratified ADR-0065, 2026-05-31) — drizzle driver adapter for the WASM-SQLite `#db` shim
-*Feature 04, tier B. Reversibility rule 2 (new dependency surface) + rule 4.*
+*Feature 04, tier B. Rule 2 (new dependency surface) + rule 4.*
 
 > **SUPERSEDED by ratified `docs/adr/0065-node-sqlite-databasesync-wasm-shim.md`
 > (2026-05-31).** Premise VOID at the pinned SHA: opencode uses
-> `@effect/sql-sqlite-node` over `node:sqlite` `DatabaseSync`, NOT a drizzle
-> driver, so no drizzle subpath redirect is needed — the shim target is the
-> synchronous `DatabaseSync` surface. The text below is the historical draft.
+> `@effect/sql-sqlite-node` over `node:sqlite` `DatabaseSync`, NOT a drizzle driver,
+> so no drizzle subpath redirect is needed — the shim target is the synchronous
+> `DatabaseSync` surface. Text below is the historical draft.
 
-**Context.** opencode's handlers use drizzle query builders (`eq/and/desc` over
-`SessionTable`/`PartTable`) directly; the drizzle core (`export * from
-"drizzle-orm"`) must stay real. Only the driver constructor + `migrate`
-entrypoint are redirected.
+**Context.** opencode handlers use drizzle query builders (`eq/and/desc` over
+`SessionTable`/`PartTable`) directly; drizzle core (`export * from "drizzle-orm"`)
+must stay real. Only the driver constructor + `migrate` entrypoint are redirected.
 
 **Options.**
-- **`drizzle-orm/sql-js` driver (recommended).** Officially matches sql.js;
-  smallest adapter; `init(path)` returns `{ db: drizzle(sqljs,{schema}), client }`
-  matching `db.node.ts`'s shape. Redirect `drizzle-orm/bun-sqlite`,
-  `drizzle-orm/node-sqlite`, and the runtime `drizzle-orm/bun-sqlite/migrator`
-  subpath to a sql.js-backed shim.
-- **`drizzle-orm/sqlite-proxy`.** Engine-portable (`(sql,params,method)=>rows`)
-  but hand-rolled result-shape mapping risks dialect/return-shape bugs.
-- **Hand-written drizzle-compatible Database.** Rejected — re-implements
-  prepare/all/get/run.
+- **`drizzle-orm/sql-js` driver (recommended).** Officially matches sql.js; smallest adapter; `init(path)` returns `{ db: drizzle(sqljs,{schema}), client }` matching `db.node.ts`'s shape. Redirect `drizzle-orm/bun-sqlite`, `drizzle-orm/node-sqlite`, and the runtime `drizzle-orm/bun-sqlite/migrator` subpath to a sql.js-backed shim.
+- **`drizzle-orm/sqlite-proxy`.** Engine-portable (`(sql,params,method)=>rows`) but hand-rolled result-shape mapping risks dialect/return-shape bugs.
+- **Hand-written drizzle-compatible Database.** Rejected — re-implements prepare/all/get/run.
 
-**Recommendation.** `drizzle-orm/sql-js`, hard-coupled to the ADR-0055 engine.
-**Open sub-question for the ADR:** `overrides.ts:resolveOverride` is PACKAGE-level
-only — a SUBPATH remap (`drizzle-orm/bun-sqlite` → `drizzle-orm/sql-js`) needs
-either an override-engine extension (a further cross-package change) or a
-VFS-overlay of the subpath file. Determine which before ratifying.
+**Recommendation.** `drizzle-orm/sql-js`, hard-coupled to the ADR-0055 engine. **Open
+sub-question:** `overrides.ts:resolveOverride` is PACKAGE-level only — a SUBPATH remap
+(`drizzle-orm/bun-sqlite` → `drizzle-orm/sql-js`) needs either an override-engine
+extension (a further cross-package change) or a VFS-overlay of the subpath file.
+Determine which before ratifying.
 
-**Consequences.** Pulls a drizzle subpath into the install/override graph. A
-parity case must pin the drizzle result shape (rows vs run vs get) vs Node.
+**Consequences.** Pulls a drizzle subpath into the install/override graph. A parity
+case must pin the drizzle result shape (rows vs run vs get) vs Node.
 
 ---
 
 ### ADR-0057 (RATIFIED as ADR-0054 → `docs/adr/0054-effect-consumes-node-http-as-is.md`) — Effect `@effect/platform-node` consumes rifty `node:http` AS-IS
-*Feature 05. Reversibility rule 1 (the alternative adds cross-package public API).*
+*Feature 05. Rule 1 (the alternative adds cross-package public API).*
 
-**Context.** Effect's `NodeHttpServer` touches only `createServer()` (no-handler
-+ `server.on('request')`), `server.listen(options)`, and the
-`IncomingMessage`/`ServerResponse` duck shapes (unknown #2). The request side and
+**Context.** Effect's `NodeHttpServer` touches only `createServer()` (no-handler +
+`server.on('request')`), `server.listen(options)`, and the
+`IncomingMessage`/`ServerResponse` duck shapes (unknown #2). The request side +
 buffered `end(body)` already work (express@4 precedent).
 
 **Options.**
-- **(A) Recommended — no new export.** Effect consumes the existing `node:http`
-  builtin; all bridge work is **additive widening** of the shared http surface
-  (listen overload, `'drain'` emission, pipe-target duck shape — each
-  independently Node-parity-justified). Zero new cross-package public API.
-- **(B) New `createEffectHttpServer()` export in `packages/net`.** IRREVERSIBLE —
-  commits packages/net to an Effect-coupled public symbol forever and inverts the
-  dependency direction (net knowing Effect).
-- **(C) Adapter from a higher layer (harness/tools).** Avoids net API growth but
-  couples to Effect's `NodeHttpServer` factory injection.
+- **(A) Recommended — no new export.** Effect consumes the existing `node:http` builtin; all bridge work is **additive widening** of the shared http surface (listen overload, `'drain'` emission, pipe-target duck shape — each independently Node-parity-justified). Zero new cross-package public API.
+- **(B) New `createEffectHttpServer()` export in `packages/net`.** IRREVERSIBLE — commits packages/net to an Effect-coupled public symbol forever, inverts the dependency direction (net knowing Effect).
+- **(C) Adapter from a higher layer (harness/tools).** Avoids net API growth but couples to Effect's `NodeHttpServer` factory injection.
 
 **Recommendation.** Option A. *Selecting between A and B/C is the irreversible
 architectural fork* (once a public Effect adapter ships it cannot be quietly
-removed) and needs human ratification, even though A itself is reversible.
+removed) — needs human ratification even though A itself is reversible.
 
-**Consequences.** Evolves the shared http surface; each widening is documented as
-a Node-parity gap closure, not an Effect hack. (The individual widenings are
-logged as REVERSIBLE Q-2026-05-30-105/106/107.)
+**Consequences.** Evolves the shared http surface; each widening documented as a
+Node-parity gap closure, not an Effect hack. (Individual widenings logged as
+REVERSIBLE Q-2026-05-30-105/106/107.)
 
 ---
 
 ### ADR-0058 (RESOLVED 2026-06-01 — no-op, contingency NOT triggered) — runtime-js builtin surface additions for the Effect boot
-*Feature 06. Reversibility rule 1 (public builtin surface) — CONTINGENT on a real gap.*
+*Feature 06. Rule 1 (public builtin surface) — CONTINGENT on a real gap.*
 
-**RESOLUTION.** The BOOT gate (`Server.listen` first light) ran headless and
-cleared with **zero walls** — it called **no** unimplemented builtin/method. The
-graph-load work already laid every builtin the boot path needs; the eager
-~40-layer DAG built (real drizzle/sql.js migrations under `Effect.orDie`) and
-`/global/health` + `/doc` returned 200. Recommendation **A** (harness-local
-`process.env` only) held: **no public builtin surface was added.** The contingency
-that would have promoted this to a ratified ADR ("a real boot path calls an
-unimplemented builtin") was never triggered, so there is nothing to ratify and no
-on-disk ADR is created. Evidence: `tests/integration/opencode-boot.opt-in.test.ts`
-(green under `RIFTY_RUN_OPENCODE_BOOT=1`); README "BOOT gate" section. The
-predicted `ptyConnectApi` stub was also unnecessary — `Pty.defaultLayer` builds
-without constructing a native pty at layer-build. If Phase 2 (a DB-read route
-driving the instance/workspace context) surfaces a concrete missing builtin, open
-a fresh, specific ADR for the named method then — do not reopen this one.
+**RESOLUTION.** The BOOT gate (`Server.listen` first light) ran headless and cleared
+with **zero walls** — it called **no** unimplemented builtin/method. The graph-load
+work already laid every builtin the boot path needs; the eager ~40-layer DAG built
+(real drizzle/sql.js migrations under `Effect.orDie`) and `/global/health` + `/doc`
+returned 200. Recommendation **A** (harness-local `process.env` only) held: **no
+public builtin surface was added.** The contingency that would have promoted this to
+a ratified ADR ("a real boot path calls an unimplemented builtin") was never
+triggered, so there is nothing to ratify and no on-disk ADR is created. Evidence:
+`tests/integration/opencode-boot.opt-in.test.ts` (green under
+`RIFTY_RUN_OPENCODE_BOOT=1`); README "BOOT gate" section. The predicted
+`ptyConnectApi` stub was also unnecessary — `Pty.defaultLayer` builds without
+constructing a native pty at layer-build. If Phase 2 (a DB-read route driving the
+instance/workspace context) surfaces a concrete missing builtin, open a fresh,
+specific ADR for the named method then — do not reopen this one.
 
 **Context.** Booting `Server.listen` headlessly may exercise a runtime-js builtin
-method that does not yet exist (an Effect-runtime global, etc.). Adding such a
-method widens the public builtin surface (Node-parity semantics matter).
+method that does not yet exist (an Effect-runtime global, etc.). Adding such a method
+widens the public builtin surface (Node-parity semantics matter).
 
 **Correction (verified against the tree).** `os.hostname()` **already exists**
-(`os.ts:20`) and `networkInterfaces()` returns `{}` (`os.ts:83`). The named
-exemplar gap is closed; **re-aim this gate at the genuinely-unknown items**
-discovered at bring-up, and add an explicit pre-boot check that `bonjour-service`
-(mDNS) does not open a native UDP socket at module scope.
+(`os.ts:20`) and `networkInterfaces()` returns `{}` (`os.ts:83`). The named exemplar
+gap is closed; **re-aim this gate at the genuinely-unknown items** discovered at
+bring-up, and add an explicit pre-boot check that `bonjour-service` (mDNS) does not
+open a native UDP socket at module scope.
 
 **Options.**
-- **(A) Recommended — harness-local first.** Populate `process.env`/`argv` on the
-  existing shim; only if a real boot path calls an unimplemented builtin does it
-  become an ADR.
+- **(A) Recommended — harness-local first.** Populate `process.env`/`argv` on the existing shim; only if a real boot path calls an unimplemented builtin does it become an ADR.
 - **(B) Pre-emptively add `os.*`/`net.*`.** Rejected as speculative.
-- **(C) Monkeypatch missing methods from the harness.** Rejected — a back-door
-  silent stub mutating shared runtime-js state from a test.
+- **(C) Monkeypatch missing methods from the harness.** Rejected — a back-door silent stub mutating shared runtime-js state from a test.
 
 **Recommendation.** Discover the gap by running the harness (it throws
-`NotImplementedError` loudly), then STOP and ratify the concrete missing
-method(s) with Node-parity semantics. Do not pre-add API, do not monkeypatch.
-**Pre-flight:** statically inventory the createRoutes graph's `globalThis.*` /
-`node:` / `process.*` references before the harness runs.
+`NotImplementedError` loudly), then STOP and ratify the concrete missing method(s)
+with Node-parity semantics. Do not pre-add API, do not monkeypatch. **Pre-flight:**
+statically inventory the createRoutes graph's `globalThis.*` / `node:` / `process.*`
+references before the harness runs.
 
 **Consequences.** Any added method is permanent public surface consumed
-cross-package. If the mDNS path needs a native UDP socket at module scope, that is
-a **hard blocker** to stub/prune, not an API addition to ratify.
+cross-package. If the mDNS path needs a native UDP socket at module scope, that is a
+**hard blocker** to stub/prune, not an API addition to ratify.
 
 ---
 
 ### ADR-0059 (RATIFIED as ADR-0055 → `docs/adr/0055-opencode-sse-streaming-http-no-ws-shim.md`) — opencode event stream rides SSE-over-streaming-HTTP; no `ws` shim
-*Feature 07. Reversibility rule 1 + bounds ADR-0048's streaming scope.*
+*Feature 07. Rule 1 + bounds ADR-0048's streaming scope.*
 
-**Context.** opencode's `/event` route is `text/event-stream` over HTTP GET
-(Effect `HttpServerResponse.stream`), **not** a WebSocket. The only WS-shaped
-route is PTY-connect (a hard blocker, stays stubbed). The SW→page hop already
-transfers `ReadableStream` zero-copy; `ServerResponse.toResponse()` resolves a
-live-stream `Response` at `flushHeaders()` — so SSE flows page-direct with no
-transport change.
+**Context.** opencode's `/event` route is `text/event-stream` over HTTP GET (Effect
+`HttpServerResponse.stream`), **not** a WebSocket. The only WS-shaped route is
+PTY-connect (a hard blocker, stays stubbed). The SW→page hop already transfers
+`ReadableStream` zero-copy; `ServerResponse.toResponse()` resolves a live-stream
+`Response` at `flushHeaders()` — so SSE flows page-direct with no transport change.
 
 **Options.**
-- **(A) Recommended.** SSE = streaming HTTP `Response` over the existing bridge.
-  No `ws` shim for `/event`.
-- **(B) Cross-realm `ws` shim for the event route.** Rejected — opencode never
-  serves events over WS; pure impedance mismatch (the existing HMR
-  `BridgedWebSocket` is same-origin BroadcastChannel and does not cover the SSE
-  HTTP request).
+- **(A) Recommended.** SSE = streaming HTTP `Response` over the existing bridge. No `ws` shim for `/event`.
+- **(B) Cross-realm `ws` shim for the event route.** Rejected — opencode never serves events over WS; pure impedance mismatch (the existing HMR `BridgedWebSocket` is same-origin BroadcastChannel, does not cover the SSE HTTP request).
 - **(C) Buffer the SSE response.** Rejected — degrades the streaming event API.
 
-**Recommendation.** Option A. The page-direct **implementation needs no new
-code**, but this ADR formally rules OUT a `ws` shim and pins "SSE=streaming-HTTP"
-as the cross-package contract — so even the zero-code page-direct ship and any
-compat-matrix "supported" claim is **merge-gated** on this ADR. Cite ADR-0048.
+**Recommendation.** Option A. The page-direct **implementation needs no new code**,
+but this ADR formally rules OUT a `ws` shim and pins "SSE=streaming-HTTP" as the
+cross-package contract — so even the zero-code page-direct ship and any compat-matrix
+"supported" claim is **merge-gated** on this ADR. Cite ADR-0048.
 
-**Consequences.** PTY-connect stays a throw-on-connect stub. SSE keep-alive/
-reconnect semantics ride on top.
+**Consequences.** PTY-connect stays a throw-on-connect stub. SSE
+keep-alive/reconnect semantics ride on top.
 
 ---
 
 ### ADR-0060 (draft) — `PREVIEW_PORT_FRAME_VERSION` 2→3: incremental SSE over the page↔Worker bridge
-*Feature 07. Reversibility rule 3 (bumps a versioned wire contract governed by ADR-0048/ADR-0040) + rule 4 (>100 lines, page+worker paths).*
+*Feature 07. Rule 3 (bumps a versioned wire contract governed by ADR-0048/ADR-0040) + rule 4 (>100 lines, page+worker paths).*
 
-**Context.** Verified: `PREVIEW_PORT_FRAME_VERSION = '2'` (preview-port.ts:49);
-the page side reassembles on `reply-stream-end`, which never fires for SSE, so an
-opencode-in-Worker deployment hangs and trips the 30s no-progress idle timer.
-**This directly contradicts ADR-0048 D2** ("page memory unchanged until M12;
-true end-to-end ReadableStream is M12, ADR-0017") and partially fulfils
-ADR-0017's deferred M12 criterion ("SerializedResponse carries a ReadableStream
-body across postMessage").
+**Context.** Verified: `PREVIEW_PORT_FRAME_VERSION = '2'` (preview-port.ts:49); the
+page side reassembles on `reply-stream-end`, which never fires for SSE, so an
+opencode-in-Worker deployment hangs and trips the 30s no-progress idle timer. **This
+directly contradicts ADR-0048 D2** ("page memory unchanged until M12; true
+end-to-end ReadableStream is M12, ADR-0017") and partially fulfils ADR-0017's
+deferred M12 criterion ("SerializedResponse carries a ReadableStream body across
+postMessage").
 
 **Options.**
-- **(A) v3 bump (recommended, deferred).** Page constructs the `Response` from a
-  live `ReadableStream` resolving on `reply-stream-start`; idle timer re-armed on
-  every chunk (tolerating SSE keep-alive `:\n`); worker-death mid-stream errors
-  the handed-out stream. Negotiated v3 with v2 buffered fallback.
-- **(B) Keep v2, document Worker SSE as buffered/non-streaming.** Smallest;
-  recommended SHIP order — defer the bump until `WorkerOwnerBinding`
-  (Q-2026-05-27-002) is actually the opencode owner.
-- **(C) Dedicated MessagePort with real backpressure.** The M12/ADR-0017 endgame;
-  far larger.
+- **(A) v3 bump (recommended, deferred).** Page constructs the `Response` from a live `ReadableStream` resolving on `reply-stream-start`; idle timer re-armed on every chunk (tolerating SSE keep-alive `:\n`); worker-death mid-stream errors the handed-out stream. Negotiated v3 with v2 buffered fallback.
+- **(B) Keep v2, document Worker SSE as buffered/non-streaming.** Smallest; recommended SHIP order — defer the bump until `WorkerOwnerBinding` (Q-2026-05-27-002) is actually the opencode owner.
+- **(C) Dedicated MessagePort with real backpressure.** The M12/ADR-0017 endgame; far larger.
 
-**Recommendation.** Ship **page-direct SSE first (B)**; the v3 bump is SPECIFIED
-here but **must not be coded/shipped until this ADR ratifies**. The ADR MUST cite
-and supersede ADR-0048 D2's "page memory unchanged until M12" clause, clarify
-whether this pulls M12 forward, and confirm v3 stays on the BroadcastChannel
-carrier (no MessagePort) so the M12 envelope is intact. Amend ADR-0017's "SSE
-hangs until M12" line.
+**Recommendation.** Ship **page-direct SSE first (B)**; the v3 bump is SPECIFIED here
+but **must not be coded/shipped until this ADR ratifies**. The ADR MUST cite and
+supersede ADR-0048 D2's "page memory unchanged until M12" clause, clarify whether
+this pulls M12 forward, and confirm v3 stays on the BroadcastChannel carrier (no
+MessagePort) so the M12 envelope is intact. Amend ADR-0017's "SSE hangs until M12"
+line.
 
-**Consequences.** Non-additive change to a versioned contract; resolution
-semantics change from resolve-on-end to resolve-on-start — in-repo callers of
-`bridgeCrossRealmPreview` must be audited. Getting the idle-timer re-spec wrong
-reaps live event streams.
+**Consequences.** Non-additive change to a versioned contract; resolution semantics
+change from resolve-on-end to resolve-on-start — in-repo callers of
+`bridgeCrossRealmPreview` must be audited. Getting the idle-timer re-spec wrong reaps
+live event streams.
 
 ---
 
 ### ADR-0061 (draft) — `node:https` client (request/get) delegates to fetch; server TLS stays loud-throw (supersedes ADR-0010)
-*Feature 08. Reversibility rule 3 (supersedes ADR-0010) + rule 1 (cross-package builtin shape).*
+*Feature 08. Rule 3 (supersedes ADR-0010) + rule 1 (cross-package builtin shape).*
 
 **Context.** opencode provider calls use the `ai` SDK global `fetch` (browser
 terminates TLS) — node:https likely never hits the hot path. node:https is a
@@ -351,93 +300,70 @@ loud-throw stub today (ADR-0010). Defensive/fallback `node:https.request` paths 
 transitive deps would abort on a code path the browser can actually serve.
 
 **Options.**
-- **(A) Recommended.** Split node:https: **client** (`request`/`get`) → delegate
-  to the existing `http.request → fetch` mapping forcing `https:`; **server/TLS**
-  (`createServer`, `Agent`, `globalAgent`, `tls.connect`) → STAY loud-throw.
-- **(B) Keep ADR-0010 fully.** Provider calls still work via global fetch, but a
-  dep that falls back to node:https aborts — silent feature gap at runtime.
-- **(C) Alias node:https = node:http wholesale.** Rejected — the silent stub
-  ADR-0010 explicitly rejected; would fake server-side TLS.
+- **(A) Recommended.** Split node:https: **client** (`request`/`get`) → delegate to the existing `http.request → fetch` mapping forcing `https:`; **server/TLS** (`createServer`, `Agent`, `globalAgent`, `tls.connect`) → STAY loud-throw.
+- **(B) Keep ADR-0010 fully.** Provider calls still work via global fetch, but a dep falling back to node:https aborts — silent feature gap at runtime.
+- **(C) Alias node:https = node:http wholesale.** Rejected — the silent stub ADR-0010 explicitly rejected; would fake server-side TLS.
 
-**Recommendation.** Option A, as a **superseding ADR** (ADRs immutable — no edit
-to 0010). The ADR MUST state explicitly: *ADR-0010's no-silent-plaintext
-invariant is PRESERVED* — fetch performs real browser TLS; server TLS remains
-loud-throw. **Pre-flight gate:** verify against pinned `ai@6`/`@ai-sdk/*` source
-whether the global-fetch path constructs an `https.Agent` (keep-alive/proxy) at
-init — if it does, the thrown Agent constructor is init-time-fatal for the LLM
-round-trip and needs its own decision (no-op Agent vs P4-blocked).
+**Recommendation.** Option A, as a **superseding ADR** (ADRs immutable — no edit to
+0010). The ADR MUST state: *ADR-0010's no-silent-plaintext invariant is PRESERVED* —
+fetch performs real browser TLS; server TLS remains loud-throw. **Pre-flight gate:**
+verify against pinned `ai@6`/`@ai-sdk/*` source whether the global-fetch path
+constructs an `https.Agent` (keep-alive/proxy) at init — if it does, the thrown Agent
+constructor is init-time-fatal for the LLM round-trip and needs its own decision
+(no-op Agent vs P4-blocked).
 
-**Consequences.** Restores outbound capability with zero new in-tab TLS code.
-Fix the string-form scheme coercion to handle scheme-less hosts. Keep
+**Consequences.** Restores outbound capability with zero new in-tab TLS code. Fix the
+string-form scheme coercion to handle scheme-less hosts. Keep
 `createServer`/`Agent`/`globalAgent` regression-locked as throwing.
 
 **C1 PRE-FLIGHT RESULT (2026-06-01 — gate CLEARED, split NOT required by the LLM path).**
-Static inspection of the pinned `ai@6.0.168` + `@ai-sdk/{provider-utils,gateway,provider}`
+Static inspection of pinned `ai@6.0.168` + `@ai-sdk/{provider-utils,gateway,provider}`
 executable dist + opencode's LLM wiring (independently grep-verified):
-- The transport issues requests through **`globalThis.fetch`** — `getOriginalFetch =
-  () => globalThis.fetch` at `@ai-sdk/provider-utils/dist/index.mjs:588` (+ `index.js:684`);
-  `postToApi`/`getFromApi` accept an injectable `fetch?: FetchFunction` and default to it.
-- **ZERO** `new https.Agent` / `globalAgent` / `require("node:https")` / `setGlobalDispatcher`
-  in the executable JS of `ai`, `@ai-sdk/provider-utils`, `@ai-sdk/gateway`, `@ai-sdk/provider`
-  — neither at module-eval nor at provider construction (`createGatewayProvider` only threads
-  `options.fetch`; `@ai-sdk/gateway` is a dynamic `import()` anyway).
-- opencode itself **injects a custom `fetch`** wrapping rifty's global `fetch` with timeout
-  logic and passes it via `options.fetch` to the provider factory
-  (`packages/opencode/src/provider/provider.ts:1618-1667,1675-1703`).
-- **Verdict (a) FINE:** the `https.Agent` init-fatal risk this gate guarded against does **not**
-  exist on the ai-sdk path. Running the round-trip with `node:https` left as a loud-throw facade
-  is safe; **the Option-A client→fetch split is NOT needed for the LLM round-trip** (it remains a
-  valid general capability if some *other* dep ever falls back to `node:https`, but the round-trip
-  does not require it). ADR-0010's no-silent-plaintext invariant is untouched.
-- **One concrete pre-req found (NOT a TLS issue):** opencode `provider/error.ts:2` does
-  `import { STATUS_CODES } from "http"` and uses `STATUS_CODES[e.statusCode]` at `:70,76` — but
-  rifty's `node:http` shim does **not** export `STATUS_CODES`. This is **error-path only** (a
-  failed LLM response), so it is NOT init-fatal and the happy path never touches it; the fix is a
-  faithful real-Node `STATUS_CODES` map added to the `node:http` builtin. Open a specific note/ADR
-  for that export when wiring the live round-trip.
+- Transport issues requests through **`globalThis.fetch`** — `getOriginalFetch = () => globalThis.fetch` at `@ai-sdk/provider-utils/dist/index.mjs:588` (+ `index.js:684`); `postToApi`/`getFromApi` accept an injectable `fetch?: FetchFunction` defaulting to it.
+- **ZERO** `new https.Agent` / `globalAgent` / `require("node:https")` / `setGlobalDispatcher` in the executable JS of `ai`, `@ai-sdk/provider-utils`, `@ai-sdk/gateway`, `@ai-sdk/provider` — neither at module-eval nor at provider construction (`createGatewayProvider` only threads `options.fetch`; `@ai-sdk/gateway` is a dynamic `import()` anyway).
+- opencode itself **injects a custom `fetch`** wrapping rifty's global `fetch` with timeout logic, passed via `options.fetch` to the provider factory (`packages/opencode/src/provider/provider.ts:1618-1667,1675-1703`).
+- **Verdict (a) FINE:** the `https.Agent` init-fatal risk this gate guarded against does **not** exist on the ai-sdk path. Running the round-trip with `node:https` left as a loud-throw facade is safe; **the Option-A client→fetch split is NOT needed for the LLM round-trip** (it stays a valid general capability if some *other* dep falls back to `node:https`). ADR-0010's no-silent-plaintext invariant untouched.
+- **One concrete pre-req found (NOT a TLS issue):** opencode `provider/error.ts:2` does `import { STATUS_CODES } from "http"` and uses `STATUS_CODES[e.statusCode]` at `:70,76` — rifty's `node:http` shim does **not** export `STATUS_CODES`. This is **error-path only** (a failed LLM response), so NOT init-fatal and the happy path never touches it; fix is a faithful real-Node `STATUS_CODES` map added to the `node:http` builtin. Open a specific note/ADR for that export when wiring the live round-trip.
 
 **DRY-RUN RESULT (2026-06-01 — wiring confirmed to the real API call).** The Phase-3
 harness (`opencode-phase3-smoke.ts` + `opencode-llm.opt-in.test.ts`, provider via
-`OPENCODE_CONFIG_CONTENT` + `OPENCODE_DISABLE_MODELS_FETCH=1`, `@ai-sdk/openai-compatible@2.0.41`
-KEEP-installed) was driven against an UNREACHABLE endpoint (`127.0.0.1:1`). The full
-pipeline ran: `POST /session` → prompt → tool resolution → `llm.runtime=ai-sdk
-llm.provider=oai-compat` → a real `globalThis.fetch` POST to
-`http://127.0.0.1:1/v1/chat/completions` with a valid OpenAI body (model + max_tokens +
-opencode system prompt + user message), failing only with `AI_APICallError` (connection
-refused) after ai-sdk retries — confirming C1 end-to-end (the outbound went via `fetch`,
-not `https.Agent`). **Three GENERAL runtime walls were cleared in eager order** (each a
-Node parity case, full parity suite green): (1) `node:http` `STATUS_CODES` (the pre-req
-above); (2) **`Readable.setEncoding`** — `@effect/platform-node`'s `NodeStream.toString`
-calls it to read ANY POST body, so `POST /session` itself 500'd without it (**ratified
-ADR-0069**); (3) `fs.statSync` `{ throwIfNoEntry: false }` — opencode's `Filesystem.stat`
-(shell-tool resolution) walled on the thrown ENOENT (Node v24 parity). **A real
-endpoint+key now completes the round-trip; ADR-0061 ratifies on that live success** (the
-client→fetch split confirmed unnecessary).
+`OPENCODE_CONFIG_CONTENT` + `OPENCODE_DISABLE_MODELS_FETCH=1`,
+`@ai-sdk/openai-compatible@2.0.41` KEEP-installed) was driven against an UNREACHABLE
+endpoint (`127.0.0.1:1`). Full pipeline ran: `POST /session` → prompt → tool
+resolution → `llm.runtime=ai-sdk llm.provider=oai-compat` → a real `globalThis.fetch`
+POST to `http://127.0.0.1:1/v1/chat/completions` with a valid OpenAI body (model +
+max_tokens + opencode system prompt + user message), failing only with
+`AI_APICallError` (connection refused) after ai-sdk retries — confirming C1
+end-to-end (outbound went via `fetch`, not `https.Agent`). **Three GENERAL runtime
+walls cleared in eager order** (each a Node parity case, full parity suite green): (1)
+`node:http` `STATUS_CODES` (the pre-req above); (2) **`Readable.setEncoding`** —
+`@effect/platform-node`'s `NodeStream.toString` calls it to read ANY POST body, so
+`POST /session` itself 500'd without it (**ratified ADR-0069**); (3) `fs.statSync`
+`{ throwIfNoEntry: false }` — opencode's `Filesystem.stat` (shell-tool resolution)
+walled on the thrown ENOENT (Node v24 parity). **A real endpoint+key now completes
+the round-trip; ADR-0061 ratifies on that live success** (client→fetch split confirmed
+unnecessary).
 
 ---
 
 ### ADR-0062 (draft) — read-only tool substitutes: JS-first; ripgrep-WASM/isomorphic-git DEFERRED
-*Feature 09. Reversibility rule 2 (any of these is a new external dependency).*
+*Feature 09. Rule 2 (any of these is a new external dependency).*
 
 **Context.** Feature 09 marks the feasible side of the tool ceiling with ONE
-read-only tool. The marker is a **pure-JS** VFS grep/read over the existing
-`node:fs` builtin (zero spawn, zero new dep) — this needs NO ADR. But a future
-effort wanting real ripgrep fidelity would adopt ripgrep-WASM (run via `runWasi`
-like esbuild) or isomorphic-git or a WASM-search engine — each a NEW external
-dependency.
+read-only tool: a **pure-JS** VFS grep/read over the existing `node:fs` builtin (zero
+spawn, zero dep) — needs NO ADR. A future effort wanting real ripgrep fidelity would
+adopt ripgrep-WASM (via `runWasi` like esbuild) or isomorphic-git or a WASM-search
+engine — each a NEW external dependency.
 
 **Options.**
-- **Recommended — DEFER.** Keep the marker pure-JS now; open this ADR only when
-  real ripgrep/git fidelity is actually needed.
-- **Adopt ripgrep-WASM now.** Production-grade search + reuses esbuild WASI
-  plumbing, but commits to a vendored binary before the facade stresses search.
-- **Adopt isomorphic-git now.** Adds read-only git (log/blob) too — broader than
-  needed to mark the line.
+- **Recommended — DEFER.** Keep the marker pure-JS now; open this ADR only when real ripgrep/git fidelity is actually needed.
+- **Adopt ripgrep-WASM now.** Production-grade search + reuses esbuild WASI plumbing, but commits to a vendored binary before the facade stresses search.
+- **Adopt isomorphic-git now.** Adds read-only git (log/blob) too — broader than needed to mark the line.
 
-**Recommendation.** DEFER. This ADR is a **tripwire**: the pure-JS marker ships
-under Q-2026-05-30-118/119 with no gate; adopting ripgrep-WASM/isomorphic-git/
-wa-sqlite-search is BLOCKED until this ADR ratifies. Do not silently cross it
-while implementing the marker tool.
+**Recommendation.** DEFER. This ADR is a **tripwire**: the pure-JS marker ships under
+Q-2026-05-30-118/119 with no gate; adopting
+ripgrep-WASM/isomorphic-git/wa-sqlite-search is BLOCKED until this ADR ratifies. Do
+not silently cross it while implementing the marker tool.
 
 **Consequences.** None until adopted; the deferral preserves the option to pick
 ripgrep-WASM vs isomorphic-git vs JS later against concrete requirements.
@@ -446,10 +372,9 @@ ripgrep-WASM vs isomorphic-git vs JS later against concrete requirements.
 
 ## Section B — Reversible decisions (OPEN_QUESTIONS.md entries — copy-paste block)
 
-> Append the block below to the **Active** section of `OPEN_QUESTIONS.md`. Q-ids
-> are renumbered globally from `Q-2026-05-30-101` (the landed high-water mark is
-> `-001`). Each carries a `TODO(ADR): Q-…` code marker and "Needs human review
-> by: end of milestone M12".
+> Append the block below to the **Active** section of `OPEN_QUESTIONS.md`. Q-ids are
+> renumbered globally from `Q-2026-05-30-101` (landed high-water mark `-001`). Each
+> carries a `TODO(ADR): Q-…` code marker and "Needs human review by: end of milestone M12".
 
 ```markdown
 ### Q-2026-05-30-101 — opencode source acquisition + facade-manifest flattening (feature 01)
@@ -638,9 +563,8 @@ ripgrep-WASM vs isomorphic-git vs JS later against concrete requirements.
 
 Explicitly **NOT** new dependencies (verified): the vendor script's dev-only
 shell-out to git/curl (not bundled, feature 01); the parity-runner gaining
-`@riftydev/runtime-wasi`+`shadow-registry` import edges + the `esbuild.wasm`
-artifact (feature 02 T6) — *confirm `esbuild.wasm` is already vendored, not a new
-fetch, before declaring T6 dependency-free*; no `ws` shim for the
-event route (feature 07 explicitly rules it out); no `Agent` mapping (feature 08
-keeps it loud-throw — unless the `ai`-SDK Agent-at-init pre-flight forces a new
-decision).
+`@riftydev/runtime-wasi`+`shadow-registry` import edges + the `esbuild.wasm` artifact
+(feature 02 T6) — *confirm `esbuild.wasm` is already vendored, not a new fetch, before
+declaring T6 dependency-free*; no `ws` shim for the event route (feature 07 explicitly
+rules it out); no `Agent` mapping (feature 08 keeps it loud-throw — unless the
+`ai`-SDK Agent-at-init pre-flight forces a new decision).

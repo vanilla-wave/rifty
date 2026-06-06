@@ -1,17 +1,14 @@
 /**
  * Node-compatible `process` global (subset).
  *
- * `nextTick` is queued via `queueMicrotask`. To match Node's ordering — where
- * `nextTick` always wins over `Promise.then` — we patch `Promise.prototype.then`
- * inside the Worker so that every then-callback drains pending nextTicks
- * before firing. This is intrusive but contained: it runs once at Worker boot
- * and is undone if/when the runtime decides to dispose.
+ * `nextTick` is queued via `queueMicrotask`. To match Node's ordering (nextTick
+ * always wins over `Promise.then`), we patch `Promise.prototype.then` in the
+ * Worker so every then-callback drains pending nextTicks before firing.
+ * Intrusive but contained: runs once at Worker boot.
  *
- * Limitations:
- *   - This patch lives on the Worker's `Promise.prototype`. User code that
- *     captures the original `.then` before our patch (via `bind`/closure on
- *     boot) will bypass the drain. Acceptable for M3; revisit if a real
- *     package breaks.
+ * Limitation: code that captured the original `.then` before our patch (via
+ * `bind`/closure on boot) bypasses the drain. Acceptable for M3; revisit if a
+ * real package breaks.
  */
 import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { EventEmitter } from './events.ts';
@@ -21,12 +18,11 @@ const nextTickQueue: Array<{ fn: (...args: unknown[]) => void; args: unknown[] }
 let promisePatched = false;
 
 /**
- * Per-Worker cwd cell (ADR-0019). Conceptually a snapshot of the active
- * `ProcessRecord.cwd` — once ADR-0011's worker-as-process model lands, this
- * cell becomes a SharedArrayBuffer-mirrored slot tied to the kernel-side
- * record. Today the Worker hosts a single process realm; the cell suffices.
- *
- * The default `/workspace` matches the runtime VFS bootstrap convention.
+ * Per-Worker cwd cell (ADR-0019), a snapshot of the active `ProcessRecord.cwd`.
+ * Once ADR-0011's worker-as-process model lands, this becomes a
+ * SharedArrayBuffer-mirrored slot tied to the kernel-side record; today the
+ * Worker hosts a single process realm, so the cell suffices.
+ * Default `/workspace` matches the runtime VFS bootstrap convention.
  */
 let currentCwd = '/workspace';
 
@@ -37,7 +33,6 @@ function drainNextTicks(): void {
     try {
       item.fn(...item.args);
     } catch (err) {
-      // Surface uncaught to the host
       (riftyProcess as unknown as EventEmitter).emit('uncaughtException', err);
     }
   }
@@ -95,8 +90,7 @@ class RiftyProcess extends EventEmitter {
   exitCode = 0;
   stdout = { write: (chunk: string) => console.log(chunk), isTTY: false, fd: 1 };
   stderr = { write: (chunk: string) => console.error(chunk), isTTY: false, fd: 2 };
-  // Browser has no real stdin — give it an EventEmitter shell so consumers
-  // calling `.on('end', …)` / `.off(…)` don't blow up.
+  // No real stdin in browser; EventEmitter shell so `.on('end',…)`/`.off(…)` don't blow up.
   stdin = new EventEmitter() as EventEmitter & {
     isTTY: boolean;
     fd: number;
@@ -159,8 +153,7 @@ class RiftyProcess extends EventEmitter {
   BigInt(Math.floor(performance.now() * 1e6));
 
 export const riftyProcess = new RiftyProcess();
-// Augment the stdin EventEmitter shell with the fields/methods that don't
-// belong on the class itself (TTY-ish properties + a no-op resume/pause).
+// TTY-ish properties + no-op resume/pause that don't belong on the class itself.
 Object.assign(riftyProcess.stdin as object, {
   isTTY: false,
   fd: 0,
@@ -175,11 +168,9 @@ export function installProcessGlobals(): void {
 }
 
 /**
- * Test/host helper: override the per-Worker cwd cell without going through
- * `chdir`'s VFS validation. Used by the parity-runner so cases that exercise
- * `process.cwd()` see a stable anchor matching the Node child's `--cwd`.
- *
- * Not part of Node's API — production code should call `riftyProcess.chdir`.
+ * Test/host helper: override the per-Worker cwd cell, bypassing `chdir`'s VFS
+ * validation. Used by the parity-runner so `process.cwd()` sees a stable anchor
+ * matching the Node child's `--cwd`. Not Node API — production code uses `chdir`.
  */
 export function setProcessCwd(next: string): void {
   currentCwd = next;

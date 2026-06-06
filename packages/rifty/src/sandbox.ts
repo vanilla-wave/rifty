@@ -56,9 +56,9 @@ export interface Sandbox {
 }
 
 /**
- * Injection seam for tests — mirrors the playground `boot.ts` pattern so the
- * boot pipeline is unit-testable without a DOM, a Worker, or OPFS. Every field
- * defaults to the real implementation.
+ * Test injection seam — mirrors the playground `boot.ts` pattern so the boot
+ * pipeline is unit-testable without a DOM, Worker, or OPFS. Every field defaults
+ * to the real implementation.
  */
 export interface SandboxDeps {
   readonly detect?: () => CapabilityCheck;

@@ -1,7 +1,6 @@
 /**
- * Node-compatible `node:assert`. The two modes (`assert` and `assert/strict`)
- * differ in the default comparison: classic uses `==` / loose deep, strict uses
- * `===` / strict deep. Both throw `AssertionError` on failure.
+ * Node-compatible `node:assert`. Classic mode compares loose (`==` / loose deep),
+ * strict mode compares `===` / strict deep. Both throw `AssertionError`.
  */
 
 export class AssertionError extends Error {
@@ -135,30 +134,27 @@ function fail(message?: string): never {
 }
 
 /**
- * Test whether `err` satisfies `expected`. Matches Node's semantics for the
- * second argument of `assert.throws` / `assert.doesNotThrow`:
- *   - RegExp:  match against `err.message` (or `String(err)` if not an Error).
- *   - Function whose prototype is an Error subtype: `err instanceof expected`.
- *   - Any other function: treat as a predicate `(err) => truthy`.
+ * Whether `err` satisfies `expected` (Node's 2nd-arg semantics for
+ * `assert.throws` / `assert.doesNotThrow`):
+ *   - RegExp: match `err.message` (or `String(err)` if not an Error).
+ *   - Error-subtype constructor: `err instanceof expected`.
+ *   - Any other function: predicate `(err) => truthy`.
  *
- * Object and Error-instance forms are not yet wired (Node accepts them too,
- * but they introduce a deep-key check that isn't needed by anything in repo
- * today). They land when a real call site needs them.
+ * Object / Error-instance forms aren't wired (Node accepts them, but they need
+ * a deep-key check nothing in repo uses yet); land them when a call site needs them.
  */
 function matchesExpected(err: unknown, expected: unknown): boolean {
   if (expected instanceof RegExp) {
     return expected.test(err instanceof Error ? err.message : String(err));
   }
   if (typeof expected === 'function') {
-    // An Error subclass (or any function with a non-null prototype reachable
-    // via `Error`) is treated as a constructor check. Otherwise the function
-    // is a predicate. Node uses a similar heuristic in lib/internal/assert.
+    // Error subclass => constructor check, else predicate (Node's heuristic
+    // in lib/internal/assert).
     if (isErrorClass(expected)) {
       return err instanceof (expected as new () => Error);
     }
     return Boolean((expected as (e: unknown) => unknown)(err));
   }
-  // No other forms are supported yet — let the caller decide what to do.
   throw new TypeError('The "expected" argument must be of type Function or an instance of RegExp');
 }
 
@@ -191,18 +187,12 @@ function throws(fn: () => unknown, expected?: unknown, message?: string): void {
 /**
  * `assert.doesNotThrow(fn[, expected][, message])`.
  *
- * - With no `expected`: any thrown error is wrapped in `AssertionError`.
- * - With `expected`: errors that match `expected` are wrapped in
- *   `AssertionError`; errors that do NOT match are re-thrown unchanged.
- *
- * Matches Node's behaviour. The previous implementation wrapped every throw
- * regardless of `expected`, silently dropping the "rethrow on mismatch"
- * contract.
+ * - No `expected`: any throw is wrapped in `AssertionError`.
+ * - With `expected`: matching throws are wrapped; non-matching are re-thrown
+ *   unchanged (Node's "rethrow on mismatch" contract).
  */
 function doesNotThrow(fn: () => unknown, expectedOrMessage?: unknown, message?: string): void {
-  // Node accepts (fn) | (fn, expected) | (fn, message) | (fn, expected, message).
-  // Distinguish "message" from "expected" the same way Node does: a plain
-  // string is always a message; otherwise it's an expected.
+  // Disambiguate message vs expected as Node does: a plain string is a message.
   let expected: unknown;
   let msg: string | undefined;
   if (typeof expectedOrMessage === 'string') {
@@ -216,7 +206,7 @@ function doesNotThrow(fn: () => unknown, expectedOrMessage?: unknown, message?: 
     fn();
   } catch (err) {
     if (expected !== undefined && !matchesExpected(err, expected)) {
-      // Mismatch — re-throw the original error unchanged per Node spec.
+      // Re-throw unchanged on mismatch (Node spec).
       throw err;
     }
     throw new AssertionError({ message: msg, actual: err, expected, operator: 'doesNotThrow' });

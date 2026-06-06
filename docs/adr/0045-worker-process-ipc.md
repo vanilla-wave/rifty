@@ -5,178 +5,64 @@ Date: 2026-05-27
 
 ## Context
 
-ADR-0011 phase 2 ratified Worker-backed children for
-`child_process.spawn('node', script)` and `execSync`, but
-`fork()`-style IPC (`child.send(msg)` / `process.on('message', …)`) was
-left pending. `SameRealmProcessHandle.send` ships today;
-`WorkerProcessHandle.send` is missing. M6 `TASKS.md` claims fork-IPC
-✅ but the SAB path silently drops messages — `ChildProcess.send`
-routes to an in-realm `EventEmitter` (`inboundIpc.emit('childMessage',
-…)`) that the Worker child never subscribes to. This is a direct
-contract violation, flagged in the 2026-05-27 architecture review
-(item #1).
+ADR-0011 phase 2 ratified Worker-backed children for `child_process.spawn('node', script)` and `execSync`, but `fork()`-style IPC (`child.send` / `process.on('message', …)`) was left pending. `SameRealmProcessHandle.send` ships; `WorkerProcessHandle.send` does not. M6 `TASKS.md` claims fork-IPC ✅, but the SAB path silently drops messages: `ChildProcess.send` routes to an in-realm `EventEmitter` (`inboundIpc.emit('childMessage', …)`) that the Worker child never subscribes to — a contract violation flagged in the 2026-05-27 architecture review (item #1).
 
-Same-realm fork-IPC still works (it predates ADR-0011 phase 2 — see
-`child_process-exec.ts`). The gap is purely on the Worker-backed
-branch, which becomes the default in any `crossOriginIsolated` host
-(the playground, the future Real Vite-in-Worker path).
+Same-realm fork-IPC works (predates ADR-0011 phase 2 — see `child_process-exec.ts`). The gap is purely the Worker-backed branch, which is the default in any `crossOriginIsolated` host (playground, future Vite-in-Worker).
 
 ## Options considered
 
-- **A — Parent↔child `MessagePort` pair allocated at spawn (chosen).**
-  Allocate a `MessageChannel` inside `spawnKernelWorker`. Parent port
-  lives on `WorkerProcessHandle`; child port transferred to the
-  Worker via `postMessage`. Frame shape is structured-cloned
-  `{ kind: 'ipc:message', payload: unknown }` for user payloads and
-  `{ kind: 'ipc:disconnect' }` for tear-down. Symmetric: both
-  directions use the same frame vocabulary.
-- **B — SAB-Atomics-based IPC.** Overkill — fork-IPC is async by
-  nature (Node's `child.send` returns synchronously, but the receive
-  side fires on the next tick), so blocking via `Atomics.wait` buys
-  nothing. SAB-Atomics is the right primitive only for genuinely
-  synchronous flows (`execSync`, `readFileSync` against an out-of-realm
-  fd).
-- **C — Reuse the stdio port with frame discrimination.** Couples
-  IPC and stdio lifecycles, breaks transferables (a sender wanting to
-  pass a `MessagePort` through `send` would collide with stdio bytes),
-  and complicates EOF semantics on either side.
+- **A — parent↔child `MessagePort` pair allocated at spawn (chosen).** A `MessageChannel` in `spawnKernelWorker`; `port1` on parent (`WorkerProcessHandle`), `port2` transferred to the Worker. Symmetric frame vocabulary in both directions: structured-cloned `{ kind: 'ipc:message', payload }` for user payloads, `{ kind: 'ipc:disconnect' }` for tear-down.
+- **B — SAB-Atomics IPC.** Rejected: fork-IPC is async (`child.send` returns sync, receive fires next tick), so `Atomics.wait` blocking buys nothing. SAB-Atomics is correct only for genuinely sync flows (`execSync`, `readFileSync` on an out-of-realm fd).
+- **C — reuse the stdio port with frame discrimination.** Rejected: couples IPC and stdio lifecycles, breaks transferables (a `MessagePort` passed via `send` collides with stdio bytes), and complicates EOF semantics.
 
 ## Decision
 
 Adopt option **A**.
 
-- **Channel allocation.** `spawnKernelWorker` constructs a fourth
-  `MessageChannel` alongside the three stdio channels. `port1` stays
-  on the parent (handed to `WorkerProcessHandle`); `port2` is added
-  to the `WorkerStdioPorts` (renamed conceptually — `stdio` is a
-  misnomer once IPC joins the same struct, but the field name stays
-  for ABI continuity) under a new `ipc` field. Transfer list grows by
-  one — the kernel passes `[stdout, stderr, stdin, ipc]` to
-  `worker.postMessage(init, …)`.
+- **Channel allocation.** `spawnKernelWorker` builds a fourth `MessageChannel` alongside the three stdio channels. `port1` → parent; `port2` → `WorkerStdioPorts` under a new `ipc` field (the `stdio` name is kept for ABI continuity). Transfer list grows to `[stdout, stderr, stdin, ipc]` in `worker.postMessage(init, …)`.
 - **Frame shape.** Structured-cloned objects:
-  - `{ kind: 'ipc:message', payload: unknown }` — user-space message.
-    The `payload` is whatever the caller passed to `child.send(msg)` /
-    `process.send(msg)`. The browser's structured-clone algorithm
-    handles the heavy lifting; symbols, functions, and class
-    instances surface as `messageerror` (already wired in
-    `spawn-worker.ts`).
-  - `{ kind: 'ipc:disconnect' }` — explicit disconnect signal.
-    Either side can post this; the receiver tears down its local
-    port and emits its `'disconnect'` event.
+  - `{ kind: 'ipc:message', payload: unknown }` — user-space message; `payload` is whatever was passed to `child.send` / `process.send`. Structured-clone handles serialization; symbols/functions/class instances surface as `messageerror` (wired in `spawn-worker.ts`).
+  - `{ kind: 'ipc:disconnect' }` — disconnect signal; either side posts it, receiver tears down its local port and emits `'disconnect'`.
 
-  No version field. The channel stays within a single host realm
-  (kernel ↔ kernel-spawned worker) — both peers are built from the
-  same bundle in any practical deploy. ADR-0040's SW frame
-  versioning does not apply: the SW boundary crosses bundle
-  generations (page-side updates land before SW activation), but the
-  worker boundary does not (a new bundle replaces both sides
-  atomically).
+  No version field. The channel stays within one host realm (kernel ↔ kernel-spawned worker), both built from the same bundle. ADR-0040's SW frame versioning does not apply: the SW boundary crosses bundle generations, but the worker boundary is replaced atomically by a new bundle.
 - **Disconnect semantics.**
-  - `WorkerProcessHandle.disconnect()` is idempotent. The first call
-    posts `{ kind: 'ipc:disconnect' }` over the parent port,
-    `close()`s the port, marks the handle disconnected, and synchronously
-    emits `'disconnect'` on the handle.
-  - Worker exit (natural, terminate, or `kill`) auto-disconnects:
-    the kernel calls the same internal disconnect routine inside the
-    spawn result's `onExit` callback and inside
-    `WorkerHandle.kill`. The `'disconnect'` event fires once.
-  - On the Worker side, receiving `{ kind: 'ipc:disconnect' }`
-    triggers `process.emit('disconnect')` and closes the local IPC
-    port. Re-`send` from the worker after disconnect returns false
-    (matches Node's documented behaviour).
-- **send semantics.** `WorkerProcessHandle.send(message)` returns
-  `boolean`:
-  - `false` if the handle is disconnected (post-exit or after
-    `disconnect()`). Matches Node's `subprocess.send` behaviour:
-    Node returns `false` and does NOT throw.
-  - `true` otherwise; the message is posted to the parent port.
-  Structured-clone failures bubble out as `messageerror` on the
-  handle (the existing `spawn-worker.ts` `messageerror` listener
-  surfaces them), NOT as a `send` return value — `postMessage`
-  itself does not throw on clone failure on the Worker side; the
-  failure surfaces asynchronously to the parent.
-- **Worker-side process surface.** The kernel itself stays
-  Node-API-agnostic (ADR-0039). Wiring `process.send` /
-  `process.on('message', …)` lives in `@riftydev/runtime-js`'s
-  `install-process.ts` — the existing pre-entry hook reads the
-  kernel's `KernelProcessSpec` (which now carries `ipc: MessagePort`
-  via the renamed `stdio` field — see "Type contract" below) and
-  binds the IPC port to the installed Node `process` shim.
-- **Type contract.** `WorkerStdioPorts` (and the mirror
-  `KernelProcessStdioPorts` in `shared-globals.ts`) gain one field:
-  `ipc: MessagePort`. `WorkerProcessHandle` gains the public
-  surface `send`, `disconnect`, and emits `'message'` and
-  `'disconnect'`. `ProcessHandleKind` and the discriminated-union
-  shape are unchanged.
+  - `WorkerProcessHandle.disconnect()` is idempotent: first call posts `{ kind: 'ipc:disconnect' }`, `close()`s the port, marks the handle disconnected, synchronously emits `'disconnect'`.
+  - Worker exit (natural, terminate, `kill`) auto-disconnects via the same internal routine in the spawn result's `onExit` callback and in `WorkerHandle.kill`. `'disconnect'` fires once.
+  - Worker side: receiving `{ kind: 'ipc:disconnect' }` triggers `process.emit('disconnect')` and closes the local port. Re-`send` after disconnect returns false (matches Node).
+- **send semantics.** `WorkerProcessHandle.send(message): boolean`:
+  - `false` if disconnected (post-exit or after `disconnect()`) — matches Node's `subprocess.send`, which returns `false` and does NOT throw.
+  - `true` otherwise; message posted to the parent port.
+  Structured-clone failures surface as `messageerror` on the handle (existing `spawn-worker.ts` listener), NOT as a `send` return value — `postMessage` does not throw on clone failure on the Worker side; the failure surfaces asynchronously to the parent.
+- **Worker-side process surface.** Kernel stays Node-API-agnostic (ADR-0039). `process.send` / `process.on('message', …)` wiring lives in `@riftydev/runtime-js`'s `install-process.ts`: the pre-entry hook reads the kernel's `KernelProcessSpec` (now carrying `ipc: MessagePort` via the renamed `stdio` field) and binds the IPC port to the Node `process` shim.
+- **Type contract.** `WorkerStdioPorts` and its mirror `KernelProcessStdioPorts` (in `shared-globals.ts`) gain `ipc: MessagePort`. `WorkerProcessHandle` gains public `send`, `disconnect`, and emits `'message'` / `'disconnect'`. `ProcessHandleKind` and the discriminated-union shape are unchanged.
 
 ## Consequences
 
-- Public surface of `WorkerProcessHandle` widens: new methods `send`
-  and `disconnect`, new emitted events `'message'` and
-  `'disconnect'`. Additive — no caller in this repo branches on
-  "does the worker handle have `send`?".
-- `ChildProcess` in `@riftydev/runtime-js` routes `send` to
-  `handle.send` for the SAB path; the same-realm path keeps using
-  `inboundIpc.emit('childMessage', …)`. Symmetric for receive:
-  `handle.on('message', …)` re-emits on `ChildProcess`. `ChildProcess`
-  gains an explicit `.disconnect()` method that forwards to the
-  worker handle (or no-ops for the same-realm path — there's no
-  separate channel to close).
-- `WorkerStdioPorts` carries one more port. Existing callers that
-  pattern-match `{ stdout, stderr, stdin }` see a wider object —
-  TypeScript strict catches mismatches at compile time.
-- `@riftydev/runtime-js`'s `install-process.ts` becomes responsible for
-  the worker-side `process` IPC surface (`send`, `on('message', …)`,
-  `disconnect`). The kernel exposes the raw port via
-  `KernelProcessSpec.stdio.ipc`; the installer wraps it. Layering
-  stays top-down (vfs → kernel → runtime-js).
-- Same-realm `fork()` semantics are untouched — the existing
-  `child_process-exec.ts` IPC path stays. The decision-point in
-  `ChildProcess.send` branches on `handle.kind === 'worker'`.
+- `WorkerProcessHandle` public surface widens (new `send`, `disconnect`; new events `'message'`, `'disconnect'`) — additive; no in-repo caller branches on whether the handle has `send`.
+- `ChildProcess` (`@riftydev/runtime-js`) routes `send` to `handle.send` for the SAB path; same-realm path keeps `inboundIpc.emit('childMessage', …)`. Receive is symmetric: `handle.on('message', …)` re-emits on `ChildProcess`. New `ChildProcess.disconnect()` forwards to the worker handle (no-op for same-realm — no separate channel to close).
+- `WorkerStdioPorts` carries one more port; callers pattern-matching `{ stdout, stderr, stdin }` see a wider object — TS strict catches mismatches at compile time.
+- `install-process.ts` owns the worker-side `process` IPC surface (`send`, `on('message', …)`, `disconnect`); kernel exposes the raw port via `KernelProcessSpec.stdio.ipc`, installer wraps it. Layering stays top-down (vfs → kernel → runtime-js).
+- Same-realm `fork()` semantics untouched (`child_process-exec.ts` path stays). `ChildProcess.send` branches on `handle.kind === 'worker'`.
 - No new external dependency. No reverse imports.
-- Negative: structured-clone failures on `send` show up as
-  `messageerror` rather than a synchronous throw. This matches
-  browser-Worker `postMessage` semantics; tests should rely on the
-  `'messageerror'` event for the negative path.
+- Negative: structured-clone failures on `send` surface as `messageerror`, not a synchronous throw (matches browser-Worker `postMessage`); tests should assert on the `'messageerror'` event for the negative path.
 
 ## Acceptance criteria
 
-- [ ] `WorkerStdioPorts` gains `ipc: MessagePort`. Mirror change in
-      `KernelProcessStdioPorts`.
-- [ ] `spawnKernelWorker` allocates a fourth `MessageChannel` and
-      transfers `port2` alongside the stdio ports.
-- [ ] `WorkerProcessHandle` exposes `send(message): boolean`,
-      `disconnect(): void`, and emits `'message'` / `'disconnect'`.
-- [ ] `WorkerHandle.kill` and the spawn-result's exit callback both
-      tear down IPC idempotently — a single `'disconnect'` event
-      regardless of exit path.
-- [ ] `@riftydev/runtime-js`'s `installNodeProcessShim` installs
-      `process.send`, `process.on('message', …)`, `process.disconnect`,
-      and emits `process.emit('disconnect')` on incoming
-      `{ kind: 'ipc:disconnect' }`.
-- [ ] `ChildProcess.send` routes to `handle.send` for the SAB-Worker
-      path; `ChildProcess.disconnect()` forwards to `handle.disconnect`.
-      The same-realm path is unchanged.
-- [ ] Conformance tests (skipped without SAB capability, mirrored
-      from `child_process-stdin.test.ts`):
-      - happy round-trip: parent `child.send(msg)` → worker
-        `process.on('message', m => process.send({ echo: m }))` →
-        parent receives `{ echo: msg }`.
-      - auto-disconnect on natural worker exit: `'disconnect'` fires
-        on the parent handle, subsequent `child.send(...)` returns
-        `false`.
-      - explicit `child.disconnect()` from the parent: `'disconnect'`
-        fires on the worker side; subsequent `child.send(...)` returns
-        `false`.
-- [ ] CHANGELOGs updated for `@riftydev/kernel` and `@riftydev/runtime-js`
-      with a one-line reference to ADR-0045 and M6 fork-IPC.
+- [ ] `WorkerStdioPorts` gains `ipc: MessagePort`; mirror in `KernelProcessStdioPorts`.
+- [ ] `spawnKernelWorker` allocates a fourth `MessageChannel`, transfers `port2` alongside stdio ports.
+- [ ] `WorkerProcessHandle` exposes `send(message): boolean`, `disconnect(): void`, emits `'message'` / `'disconnect'`.
+- [ ] `WorkerHandle.kill` and the spawn-result exit callback both tear down IPC idempotently — single `'disconnect'` regardless of exit path.
+- [ ] `installNodeProcessShim` (`@riftydev/runtime-js`) installs `process.send`, `process.on('message', …)`, `process.disconnect`, and emits `process.emit('disconnect')` on incoming `{ kind: 'ipc:disconnect' }`.
+- [ ] `ChildProcess.send` routes to `handle.send` for the SAB-Worker path; `ChildProcess.disconnect()` forwards to `handle.disconnect`; same-realm path unchanged.
+- [ ] Conformance tests (skipped without SAB capability, mirrored from `child_process-stdin.test.ts`):
+      - happy round-trip: parent `child.send(msg)` → worker echoes via `process.send({ echo: m })` → parent receives `{ echo: msg }`.
+      - auto-disconnect on natural worker exit: `'disconnect'` fires on parent handle; subsequent `child.send(...)` returns `false`.
+      - explicit `child.disconnect()` from parent: `'disconnect'` fires on worker side; subsequent `child.send(...)` returns `false`.
+- [ ] CHANGELOGs for `@riftydev/kernel` and `@riftydev/runtime-js` updated with a one-line ADR-0045 / M6 fork-IPC reference.
 
 ## References
 
-- ADR-0011 — sync IPC via SharedArrayBuffer + Atomics; this ADR
-  extends phase 2 with fork-IPC.
-- ADR-0039 — Node-API knowledge lives in `@riftydev/runtime-js`. The
-  kernel exposes the raw IPC port; the installer wraps it.
-- ADR-0040 — SW frame versioning. Explicitly not applied here —
-  the worker boundary is in-bundle, not cross-bundle.
+- ADR-0011 — sync IPC via SharedArrayBuffer + Atomics; this ADR extends phase 2 with fork-IPC.
+- ADR-0039 — Node-API knowledge lives in `@riftydev/runtime-js`; kernel exposes the raw IPC port, installer wraps it.
+- ADR-0040 — SW frame versioning. Not applied: the worker boundary is in-bundle, not cross-bundle.
 - `docs/follow-ups-architecture-review-2026-05-27.md` item #1.

@@ -1,19 +1,14 @@
 /**
  * Shared playground ↔ Service Worker preview-bridge wiring.
  *
- * Both M10 dev modes (`devMode.ts` mock Vite and `realVite.ts` real Vite)
- * mount the same `setupPreviewBridge` handler that translates a
- * `SerializedRequest` from the SW into a `dispatchToPort` call against the
- * `@riftydev/net` port registry, then returns the streaming `Response` as a
- * `SerializedResponse`. The two adapters had byte-identical copies of this
- * function before — the 2026-05-26 architecture review (sweeping theme 4
- * "Built for the future but not connected" + Приложение → playground →
- * "Дублированный preview-bridge wiring") flagged the divergence-hazard.
+ * Both M10 dev modes (`devMode.ts` mock Vite, `realVite.ts` real Vite) mount
+ * the same `setupPreviewBridge` handler. Extracted from byte-identical copies
+ * the 2026-05-26 architecture review flagged as a divergence hazard ("App →
+ * playground → Duplicated preview-bridge wiring").
  *
- * Extracting here keeps the seam tiny: one function, two call sites. The
- * handler closure deliberately receives only what it needs — no Solid
- * imports, no port-binding state — so it remains a pure adapter between two
- * package boundaries (`@riftydev/service-worker` ↔ `@riftydev/net`).
+ * The handler closure receives only what it needs — no Solid imports, no
+ * port-binding state — so it stays a pure adapter between two package
+ * boundaries (`@riftydev/service-worker` ↔ `@riftydev/net`).
  */
 import { dispatchToPort } from '@riftydev/net';
 import {
@@ -23,15 +18,12 @@ import {
 } from '@riftydev/service-worker';
 
 /**
- * Mount the playground-side preview-bridge handler. Returns the teardown
- * function from `setupPreviewBridge` unchanged — callers store it and call
- * on adapter close.
+ * Mount the playground-side preview-bridge handler. Returns the
+ * `setupPreviewBridge` teardown unchanged — callers invoke it on adapter close.
  *
- * ADR-0017 phase 1 streaming: `response.body` flows through to the bridge
- * as a `ReadableStream` when the runtime supports transferable streams,
- * with a buffered fallback. The handler does not buffer here — the
- * `setupPreviewBridge` plumbing in `@riftydev/service-worker` picks the
- * carrier per-response via `packSerializedResponse`.
+ * ADR-0017 phase 1 streaming: this handler passes `response.body` through
+ * without buffering; `setupPreviewBridge` picks the carrier per-response via
+ * `packSerializedResponse` (transferable stream, else buffered fallback).
  */
 export function mountPlaygroundPreviewBridge(): () => void {
   return setupPreviewBridge(async (req: SerializedRequest): Promise<SerializedResponse> => {

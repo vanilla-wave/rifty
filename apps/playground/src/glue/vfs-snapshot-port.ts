@@ -1,25 +1,20 @@
 /**
  * Worker → Page VFS snapshot bridge (ADR-0076).
  *
- * The reverse of {@link ./vfs-write-port.ts}. That mailbox carries editor
- * writes page→worker; this one carries the worker's *project tree* worker→page
- * so the main-thread {@link ../components/FileExplorer.tsx | FileExplorer} can
- * show the real Vite project (which lives entirely in the worker realm's
- * `syncMirror()` — the page never had it). One-way and display-only: the page
- * renders a read-only view, never writes back, so the "bi-directional sync
- * needs locking/snapshot semantics" hazard called out in `vfs-write-port.ts`
- * does not apply.
+ * Reverse of {@link ./vfs-write-port.ts}: that mailbox carries editor writes
+ * page→worker; this carries the worker's *project tree* worker→page so the
+ * {@link ../components/FileExplorer.tsx | FileExplorer} can show the real Vite
+ * project (which lives only in the worker realm's `syncMirror()`). One-way and
+ * display-only — the page renders read-only and never writes back, so the
+ * bi-directional-sync locking hazard from `vfs-write-port.ts` does not apply.
  *
- * `node_modules` (and other heavy/derived dirs) are excluded — the explorer
- * shows project source, not the thousands of installed files (the worker stays
- * the source-of-truth for `node_modules`, which the page never reads). Small
- * text files ride along with their bytes so the editor can open them read-only;
- * large/binary files send size only.
+ * `node_modules` and other heavy/derived dirs are excluded — the worker stays
+ * source-of-truth for them and the page never reads them. Small text files
+ * inline their bytes (editor can open read-only); large/binary send size only.
  *
- * Why playground-local (not `@riftydev/net`): same reasoning as the write port
- * — the wire format is a `Vfs`-shaped concern and `@riftydev/net` does not
- * depend on `@riftydev/vfs`. Only the `channelNameFor` addressing primitive is
- * borrowed.
+ * Playground-local, not `@riftydev/net`: same as the write port — the wire
+ * format is a `Vfs`-shaped concern and `@riftydev/net` does not depend on
+ * `@riftydev/vfs`. Only `channelNameFor` is borrowed.
  */
 
 import { channelNameFor } from '@riftydev/net';
@@ -82,7 +77,7 @@ export function collectSnapshot(
     try {
       children = fs.readdirSync(dir);
     } catch {
-      return; // dir vanished between reads — best-effort
+      return; // dir vanished between reads
     }
     const sorted = [...children].sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
@@ -95,7 +90,7 @@ export function collectSnapshot(
       if (child.isDirectory) {
         if (exclude.has(child.name)) {
           if (child.name === 'node_modules') nodeModulesPresent = true;
-          continue; // record presence, don't descend or list it
+          continue; // record presence, don't descend
         }
         entries.push({ path, kind: 'dir', size: 0 });
         walk(path);
@@ -132,16 +127,14 @@ function snapshotChannelUrl(port: number): string {
 }
 
 /**
- * Worker-side publisher. Posts a full-tree frame; the page receives it
- * asynchronously. Per-call channel open/close keeps it stateless — the worker
- * publishes on discrete events (seed, install done, each watcher change), not a
- * hot loop.
+ * Worker-side publisher. Posts a full-tree frame, received asynchronously.
+ * Per-call open/close keeps it stateless — published on discrete events (seed,
+ * install done, each watcher change), not a hot loop.
  */
 export function publishVfsSnapshot(port: number, frame: VfsSnapshotFrame): void {
   const channel = new BroadcastChannel(channelNameFor(snapshotChannelUrl(port)));
   channel.postMessage(frame);
-  // Microtask close so the message has time to enqueue (BroadcastChannel
-  // delivery is async; a synchronous close would cancel the send).
+  // Microtask close: BroadcastChannel delivery is async, a sync close cancels the send.
   queueMicrotask(() => channel.close());
 }
 

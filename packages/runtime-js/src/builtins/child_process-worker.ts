@@ -1,29 +1,18 @@
 /**
  * Worker-backed `child_process.spawn` path (ADR-0011 phase 2 + ADR-0045).
  *
- * When `isSabIpcSupported()` is `true` AND the host has called
- * `setKernelWorkerUrl(...)`, `child_process.spawn` routes through
- * `globalProcessManager.spawnWorker(...)` instead of the in-realm
- * `execScript` fallback. This module owns:
+ * When SAB-IPC is supported and the host has set the kernel worker URL,
+ * `child_process.spawn` routes through `globalProcessManager.spawnWorker(...)`
+ * instead of the in-realm `execScript` fallback. This module only translates a
+ * `node <script>` invocation into a {@link SpawnWorkerSpec}.
  *
- *   - The translation of a `node <script>` invocation into a
- *     {@link WorkerSpawnSpec} (script bytes from the sync mirror, argv, env,
- *     cwd).
+ * Fork-IPC (ADR-0045) is owned by the kernel `WorkerProcessHandle.send` /
+ * `disconnect` and runtime-js `installNodeProcessShim`; this module no longer
+ * plumbs IPC buses. Stdio adaptation lives one layer down in the kernel
+ * `WorkerProcessHandle.stdout()` / `stderr()`.
  *
- * Fork-IPC wiring (ADR-0045) is now owned end-to-end by the kernel
- * `WorkerProcessHandle.send` / `WorkerProcessHandle.disconnect` and the
- * runtime-js `installNodeProcessShim` (which installs the matching
- * `process.send` / `process.on('message', …)` on the worker side). This
- * module no longer plumbs IPC buses.
- *
- * Stdio adaptation lives one layer down: `handle.stdout()` / `handle.stderr()`
- * on the kernel `WorkerProcessHandle` return the `@riftydev/io` `Readable`s
- * already wired to the worker's stdio `MessagePort`s with EOF on exit
- * (ADR-0011 phase 2 follow-up, follow-ups doc item #3). This module no
- * longer hand-rolls `port.onmessage` / `port.start()` / push-null plumbing.
- *
- * NOT in scope: `execSync` truly blocking via `Atomics.wait` — that is
- * ADR-0011 phase 3. The current `execSync` stays on the in-realm path.
+ * NOT in scope: `execSync` truly blocking via `Atomics.wait` (ADR-0011 phase 3);
+ * `execSync` stays on the in-realm path.
  */
 
 import { Buffer, type EventEmitter } from '@riftydev/io';
@@ -41,15 +30,12 @@ export interface SpawnWorkerArgs {
 }
 
 /**
- * Build a {@link WorkerSpawnSpec} for `node <script>` and start the
- * worker. Returns the kernel `ProcessHandle` — read stdio via
- * `handle.stdout()` / `handle.stderr()`.
+ * Build a {@link SpawnWorkerSpec} for `node <script>` and start the worker.
+ * Read stdio via `handle.stdout()` / `handle.stderr()`.
  *
- * Throws when:
- *   - command is not `'node'` (we'd want ENOENT behaviour, but the worker
- *     can't model that — callers must check upstream and stay on the
- *     in-realm fallback for non-`node` commands).
- *   - args[0] is missing or the script doesn't exist in the sync mirror.
+ * @throws if command is not `'node'` (the worker can't model ENOENT; callers
+ *   must keep non-node commands on the in-realm fallback), or if args[0] is
+ *   missing / the script isn't in the sync mirror.
  */
 export function spawnWorkerChild(args: SpawnWorkerArgs): ProcessHandle {
   if (args.command !== 'node') {
@@ -61,7 +47,6 @@ export function spawnWorkerChild(args: SpawnWorkerArgs): ProcessHandle {
   if (!scriptPath) {
     throw new Error('spawnWorkerChild: missing script path (args[0])');
   }
-  // Read source bytes synchronously from the shared VFS mirror.
   const sourceBytes = syncMirror().readFileBytesSync(scriptPath);
   const source = Buffer.from(sourceBytes).toString();
 
@@ -76,11 +61,8 @@ export function spawnWorkerChild(args: SpawnWorkerArgs): ProcessHandle {
     cwd: args.opts.cwd,
   });
 
-  // ADR-0045: fork-mode IPC now flows through the kernel's
-  // `WorkerProcessHandle.send` / `'message'` event and the runtime-js
-  // `installNodeProcessShim`-installed `process.send` on the worker. The
-  // outbound + inbound EventEmitter buses are vestigial — kept in the
-  // interface for caller signature stability, ignored here.
+  // ADR-0045: fork IPC flows through the kernel handle now; these buses are
+  // vestigial, kept in the interface for caller signature stability.
   void args.outboundMessages;
   void args.inboundIpc;
   return handle;

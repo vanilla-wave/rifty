@@ -100,9 +100,8 @@ export async function walkOpfsTree(
           const file = await (handle as FileSystemFileHandle).getFile();
           size = file.size;
         } catch {
-          // Permission or other errors — keep size as 0 so the entry is
-          // still discoverable. statSync will surface the real error if
-          // the file is later opened.
+          // Keep size 0 so the entry stays discoverable; statSync surfaces
+          // the real error if the file is later opened.
         }
         out.set(childPath, { kind: 'file', size });
       } else if (handle.kind === 'directory') {
@@ -178,8 +177,7 @@ export class OpfsFsSync implements FsSync {
     }
     this.root = root;
     this.asyncSurface = paired ?? null;
-    // Seed the root entry so `readdirSync('/')` works even before
-    // `refreshIndex` populates the rest of the tree.
+    // Seed root so `readdirSync('/')` works before `refreshIndex` runs.
     this.index.set('/', { kind: 'dir', size: 0, children: new Set() });
   }
 
@@ -230,8 +228,8 @@ export class OpfsFsSync implements FsSync {
             const bytes = await surface.readFile(path);
             this.content.set(path, bytes);
           } catch {
-            // Unreadable at boot — leave it uncached; a later sync read
-            // returns empty bytes and a later write re-establishes content.
+            // Unreadable at boot — leave uncached; a later sync read returns
+            // empty bytes, a later write re-establishes content.
           }
         })(),
       );
@@ -252,7 +250,6 @@ export class OpfsFsSync implements FsSync {
     for (const [k, v] of fresh) this.index.set(k, v);
   }
 
-  // --- async-only helpers (used internally to acquire handles lazily) ---
   private async resolveParent(path: string): Promise<FileSystemDirectoryHandle> {
     let dir: FileSystemDirectoryHandle = this.root;
     for (const part of segments(dirname(path))) {
@@ -265,13 +262,11 @@ export class OpfsFsSync implements FsSync {
    * Returns a memoised sync access handle for `path`, opening the file
    * (creating if absent) and acquiring a handle on first call.
    *
-   * Side note: this is an async helper *invoked from sync methods* via a
-   * pre-warm step. Sync methods only call it after the handle is
-   * known-present in `this.handles`. The first read/write to a brand-new
-   * path must therefore be preceded by a separate `await
-   * fsSync.openSync(path)` from the caller, or by an `OpfsVfs.writeFile`
-   * on the same path through the paired async surface — which is the
-   * intended bootstrap path.
+   * Async helper *invoked from sync methods* via a pre-warm step: sync
+   * methods only call it after the handle is known-present in `handles`.
+   * The first read/write to a brand-new path must therefore be preceded by
+   * `await openSync(path)` or by an `OpfsVfs.writeFile` through the paired
+   * async surface — the intended bootstrap path.
    */
   private async ensureHandle(path: string, create: boolean): Promise<FileSystemSyncAccessHandle> {
     const normalized = normalizePath(path);
@@ -281,8 +276,7 @@ export class OpfsFsSync implements FsSync {
     const file = await parent.getFileHandle(basename(normalized), { create });
     const handle = await file.createSyncAccessHandle();
     this.handles.set(normalized, handle);
-    // Pre-warm also adds the path to the index if it wasn't already there
-    // (e.g. `openSync(path, create=true)` for a brand-new file).
+    // Pre-warm also indexes a brand-new path (e.g. `openSync(p, create=true)`).
     if (!this.index.has(normalized)) {
       this.index.set(normalized, { kind: 'file', size: handle.getSize() });
       this.attachChild(normalized);
@@ -304,8 +298,6 @@ export class OpfsFsSync implements FsSync {
     for (const handle of this.handles.values()) handle.close();
     this.handles.clear();
   }
-
-  // --- in-memory dir-tree mirror maintenance ---
 
   /**
    * Adds `path`'s basename to its parent directory's `children` set.
@@ -340,7 +332,7 @@ export class OpfsFsSync implements FsSync {
     const entry = this.index.get(path);
     if (!entry) return;
     if (entry.kind === 'dir' && entry.children) {
-      // Iterate a snapshot — we mutate `children` via recursion.
+      // Snapshot — recursion mutates `children`.
       for (const name of [...entry.children]) {
         const childPath = path === '/' ? `/${name}` : `${path}/${name}`;
         this.removeSubtree(childPath);
@@ -351,14 +343,14 @@ export class OpfsFsSync implements FsSync {
       try {
         handle.close();
       } catch {
-        // Closing a stale handle is best-effort; nothing else to do.
+        // Closing a stale handle is best-effort.
       }
       this.handles.delete(path);
     }
     this.index.delete(path);
     this.times.delete(path);
-    // Drop cached content for removed files (ADR-0072) so a re-created path
-    // doesn't read stale bytes from a prior incarnation.
+    // Drop cached content (ADR-0072) so a re-created path can't read stale
+    // bytes from a prior incarnation.
     this.content.delete(path);
   }
 
@@ -379,8 +371,8 @@ export class OpfsFsSync implements FsSync {
           });
         }
       } catch {
-        // The mirror already reflects the user's intent; if OPFS persist
-        // fails (quota, perm), the mismatch shows up on next refresh.
+        // Mirror already reflects intent; a failed persist (quota, perm)
+        // reconciles on next refresh.
       }
     })();
   }
@@ -402,8 +394,6 @@ export class OpfsFsSync implements FsSync {
     this.trackPending(p);
   }
 
-  // --- FsSync sync surface ---
-
   existsSync(path: string): boolean {
     return this.index.has(normalizePath(path));
   }
@@ -413,24 +403,22 @@ export class OpfsFsSync implements FsSync {
     const entry = this.index.get(normalized);
     if (!entry) throw new VfsError('ENOENT', path);
     if (entry.kind === 'dir') throw new VfsError('EISDIR', path);
-    // Content cache (ADR-0072) is authoritative for sync reads. A known
-    // file always has a cache entry after the boot preload or a prior
-    // write; the `?? new Uint8Array()` covers the rare case where the boot
-    // preload couldn't read the bytes (e.g. transient OPFS error) — an
-    // empty read is the safe degenerate, never a thrown stub.
+    // Content cache (ADR-0072) is authoritative for sync reads. The
+    // `?? new Uint8Array()` covers a file the boot preload couldn't read
+    // (e.g. transient OPFS error): empty read is the safe degenerate, not a
+    // thrown stub.
     return this.content.get(normalized) ?? new Uint8Array();
   }
 
   writeFileSync(path: string, data: Uint8Array): void {
     const normalized = normalizePath(path);
-    // Parent dir must exist for a coherent tree; refuse if it doesn't.
     const parent = dirname(normalized);
     const parentEntry = this.index.get(parent);
     if (!parentEntry || parentEntry.kind !== 'dir') {
       throw new VfsError('ENOENT', parent);
     }
-    // Synchronous in-cache write (ADR-0072): copy so later mutations of the
-    // caller's buffer don't leak in. OPFS persistence flows asynchronously.
+    // In-cache write (ADR-0072): copy so later mutations of the caller's
+    // buffer don't leak in. OPFS persistence flows asynchronously.
     this.content.set(normalized, data.slice());
     const wasKnown = this.index.has(normalized);
     this.index.set(normalized, { kind: 'file', size: data.byteLength });
@@ -450,9 +438,9 @@ export class OpfsFsSync implements FsSync {
       try {
         await surface.writeFile(normalized, data);
       } catch {
-        // Persist failure (quota, perm) leaves OPFS behind the cache; the
-        // next refreshIndex/preload reconciles. The cache stays correct for
-        // sync callers in this realm.
+        // Persist failure (quota, perm) leaves OPFS behind the cache; next
+        // refreshIndex/preload reconciles. Cache stays correct for sync
+        // callers in this realm.
       }
     })();
     this.trackPending(p);
@@ -499,16 +487,14 @@ export class OpfsFsSync implements FsSync {
     const normalized = normalizePath(path);
     const entry = this.index.get(normalized);
     if (!entry) throw new VfsError('ENOENT', path);
-    // mtime: prefer the user-supplied value from the side-table (set by
-    // `utimes`); fall back to 0 because OPFS doesn't expose a native mtime
-    // to the sync surface (ADR-0029).
+    // mtime: prefer `utimes` side-table; fall back to 0 — OPFS exposes no
+    // native mtime to the sync surface (ADR-0029).
     const mtime = this.times.get(normalized)?.mtime ?? 0;
     if (entry.kind === 'dir') {
       return { isFile: false, isDirectory: true, size: 0, mtime };
     }
-    // File: prefer a live size from the open sync access handle when we
-    // have one; otherwise fall back to the cached size from the last
-    // walk / write.
+    // Prefer live size from an open sync access handle; else cached size
+    // from the last walk/write.
     const handle = this.handles.get(normalized);
     const size = handle ? handle.getSize() : entry.size;
     return { isFile: true, isDirectory: false, size, mtime };
@@ -561,7 +547,7 @@ export class OpfsFsSync implements FsSync {
     const normalized = normalizePath(path);
     const parts = segments(normalized);
     if (parts.length === 0) {
-      // mkdir('/') — root always exists.
+      // mkdir('/'): root always exists.
       if (!recursive) throw new VfsError('EEXIST', path);
       return;
     }
@@ -576,15 +562,13 @@ export class OpfsFsSync implements FsSync {
         }
         continue;
       }
-      // Missing intermediate without recursive → ENOENT.
       if (!recursive && i < parts.length - 1) {
         throw new VfsError('ENOENT', cumulative);
       }
       this.index.set(cumulative, { kind: 'dir', size: 0, children: new Set() });
       this.attachChild(cumulative);
     }
-    // Persist to OPFS asynchronously — the mirror is the source of truth
-    // for sync callers; OPFS catches up best-effort.
+    // Mirror is source of truth for sync callers; OPFS catches up best-effort.
     this.persistMkdirAsync(normalized, recursive);
   }
 
@@ -604,7 +588,7 @@ export class OpfsFsSync implements FsSync {
     const normalized = normalizePath(path);
     if (normalized === '/') {
       if (recursive) {
-        // Clear root's children, leave the root entry itself.
+        // Clear root's children, keep the root entry.
         const rootEntry = this.index.get('/');
         if (rootEntry?.children) {
           for (const name of [...rootEntry.children]) {
@@ -622,8 +606,7 @@ export class OpfsFsSync implements FsSync {
       throw new VfsError('ENOENT', path);
     }
     if (entry.kind === 'dir' && entry.children && entry.children.size > 0 && !recursive) {
-      // Match Node's `fs.rmSync` ENOTEMPTY message so callers can branch
-      // on a single code regardless of backend.
+      // Match Node `fs.rmSync` ENOTEMPTY message — single code across backends.
       throw new VfsError('ENOTEMPTY', path, `ENOTEMPTY: directory not empty, rmdir '${path}'`);
     }
     this.detachChild(normalized);

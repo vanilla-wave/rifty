@@ -1,19 +1,19 @@
 /**
- * Multi-model editor host (ADR-0075). One Monaco instance, one `ITextModel`
- * per tab; `editor.setModel()` on switch (which emits no content event, so tab
- * switches never spuriously write). Replaces the single-model `EditorPanel`.
+ * Multi-model editor host (ADR-0075). One Monaco instance, one `ITextModel` per
+ * tab; `editor.setModel()` on switch emits no content event, so tab switches
+ * never spuriously write.
  *
  * E2E-load-bearing invariants:
- *  - the permanent **program tab** is active at boot and is the ONLY tab bound
- *    to `machine.source`/`setSource` — so REPL Run and the m10 HMR textarea
- *    path (`[data-testid="editor"] textarea`) are byte-for-byte unchanged;
+ *  - the permanent program tab is active at boot and is the ONLY tab bound to
+ *    `machine.source`/`setSource` — REPL Run and the m10 HMR textarea path
+ *    (`[data-testid="editor"] textarea`) stay byte-for-byte unchanged;
  *  - nothing auto-opens a file tab, so the bare editor textarea always hosts
  *    the program model;
  *  - external program-source changes (presets / mode transitions) write the
  *    program model under the single `suppressProgramEcho` flag the change
  *    listener checks-and-clears, so they can't echo back into `setSource`;
- *  - opening `/workspace/src/main.js` from the explorer focuses the program
- *    tab instead of creating a second model (no dual writer to that path).
+ *  - opening `/workspace/src/main.js` from the explorer focuses the program tab
+ *    instead of creating a second model (no dual writer to that path).
  */
 import { basename } from '@riftydev/vfs';
 import * as monaco from 'monaco-editor';
@@ -50,9 +50,9 @@ export interface EditorHostProps {
   onActive(info: { label: string; language: string; path?: string }): void;
   onFileWritten?(path: string): void;
   onError?(message: string): void;
-  /** When set (real-vite mode, ADR-0080), opening a path under node_modules
-   *  reads its bytes asynchronously from the worker instead of the sync VFS.
-   *  `content` is null when the file exceeds the read cap. */
+  /** When set (real-vite mode, ADR-0080), opening a node_modules path reads its
+   *  bytes async from the worker instead of the sync VFS. `content` is null when
+   *  the file exceeds the read cap. */
   readNodeModulesFile?(path: string): Promise<{ size: number; content: Uint8Array | null }>;
 }
 
@@ -157,10 +157,10 @@ export function EditorHost(props: EditorHostProps) {
   }
 
   /**
-   * Open a node_modules file (ADR-0080). The bytes live in the worker realm, so
-   * the read is async: open a transient loading tab, await the remote read, then
-   * fill in the content (or a "too large" / "binary" / error placeholder). Always
-   * read-only — there is no write path back to the worker's node_modules.
+   * Open a node_modules file (ADR-0080). Bytes live in the worker realm, so the
+   * read is async: open a loading tab, await the remote read, then fill in the
+   * content (or a too-large / binary / error placeholder). Always read-only —
+   * no write path back to the worker's node_modules.
    */
   function openNodeModulesFile(
     path: string,
@@ -226,8 +226,8 @@ export function EditorHost(props: EditorHostProps) {
       );
     } else {
       model = monaco.editor.createModel(dec.decode(bytes), languageForPath(path));
-      // A read-only source (e.g. the real-vite worker mirror, ADR-0076) opens
-      // its files view-only — there is no write path back to the worker realm.
+      // Read-only source (e.g. real-vite worker mirror, ADR-0076): view-only,
+      // no write path back to the worker realm.
       if (props.vfs.readOnly) readOnlyPaths.add(path);
     }
     models.set(path, model);
@@ -292,8 +292,8 @@ export function EditorHost(props: EditorHostProps) {
 
     props.registerApi({ openFile });
 
-    // External program-source sync (presets / mode transitions). The single
-    // guarded programmatic write; the change listener skips the echo.
+    // External program-source sync (presets / mode transitions): the one guarded
+    // programmatic write; the change listener skips the echo.
     createEffect(() => {
       const next = props.programValue();
       if (programModel && programModel.getValue() !== next) {
@@ -308,7 +308,6 @@ export function EditorHost(props: EditorHostProps) {
       setTabs((t) => setProgramTitle(t, title));
     });
 
-    // Attach the active model + reflect read-only + report to the status bar.
     createEffect(() => {
       const id = activeId();
       const model = models.get(id) ?? programModel;

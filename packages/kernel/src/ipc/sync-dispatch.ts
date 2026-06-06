@@ -7,21 +7,18 @@
  * frames to registered handlers, and writes the (possibly async) reply
  * back into the ring.
  *
- * Polling rather than `Atomics.waitAsync` keeps the implementation
- * straightforward: `waitAsync` would block forever on the main thread when
- * no request arrives, and we cannot make the dispatcher block since other
- * kernel work (process exit notifications, GC, etc.) needs to run on the
- * same realm. The poll interval defaults to 1 ms which is well below
- * scheduler granularity — for a synthetic `execSync` benchmark this adds
- * sub-millisecond latency on top of the child's own runtime.
+ * Polling rather than `Atomics.waitAsync`: `waitAsync` would block forever
+ * on the main thread when no request arrives, and the dispatcher can't block
+ * since other kernel work (process exit notifications, GC, etc.) runs on the
+ * same realm. Poll defaults to 1 ms — below scheduler granularity, sub-ms
+ * latency on top of the child's runtime.
  *
- * A single shared dispatcher instance serves every kernel-spawned Worker
- * (see `spawn-worker.ts` lazy singleton). Its one global timer iterates
- * over all attached rings, so the timer count is O(1) regardless of how
- * many children are alive. The dispatcher is recursive-safe: the handler
- * for `'execSync'` may itself spawn another worker, which attaches its
- * ring to the same dispatcher — the in-flight per-ring guard prevents the
- * already-in-progress request from being re-dispatched.
+ * A single shared dispatcher serves every kernel-spawned Worker (see
+ * `spawn-worker.ts` lazy singleton); its one global timer iterates all
+ * attached rings, so timer count is O(1) regardless of live children.
+ * Recursive-safe: the `'execSync'` handler may itself spawn a worker whose
+ * ring attaches to the same dispatcher — the in-flight per-ring guard
+ * prevents re-dispatching the already-in-progress request.
  */
 
 import type { SabRing } from './sab-ring.ts';
@@ -60,9 +57,7 @@ export interface SyncRpcDispatcherOptions {
  *
  * One global poll timer drives every attached ring (review fix for
  * ADR-0011 phase 3): a per-ring `setInterval(1ms)` would mean N busy-poll
- * timers for N spawned children on the main realm. With a single shared
- * dispatcher + single timer, the cost stays O(1) regardless of how many
- * workers are alive at once.
+ * timers for N children on the main realm; one shared timer keeps cost O(1).
  */
 export class SyncRpcDispatcher {
   private readonly handlers = new Map<string, SyncRpcHandler>();
@@ -137,14 +132,11 @@ export class SyncRpcDispatcher {
   private ensureTimer(): void {
     if (this.timer !== null) return;
     const timer = setInterval(() => {
-      // Snapshot so a handler that detaches its own ring doesn't trip the
-      // iterator. The cost is small (handful of refs) and bounded by the
-      // worker count.
+      // Snapshot so a handler that detaches its own ring doesn't trip the iterator.
       for (const ring of [...this.attachments]) this.pumpOnce(ring);
     }, this.pollIntervalMs);
-    // Don't keep Node alive purely for the dispatcher; the kernel's exit
-    // path is the source of truth. `unref` is Node-only — the browser
-    // `setInterval` return type doesn't expose it, so we feature-detect.
+    // Don't keep Node alive purely for the dispatcher; the kernel's exit path
+    // is the source of truth. `unref` is Node-only, hence the feature-detect.
     const maybeUnref = (timer as unknown as { unref?: () => void }).unref;
     if (typeof maybeUnref === 'function') maybeUnref.call(timer);
     this.timer = timer;
@@ -219,10 +211,9 @@ export class SyncRpcDispatcher {
       ring.writeReply(encodeReply(reply));
       this.inFlight.delete(ring);
     } catch (err) {
-      // The ring rejects writeReply when a previous reply is unread, or
-      // when the payload exceeds capacity. Both are programmer errors at
-      // this layer — surface as an error reply that fits, since the
-      // happy-path reply already failed to land.
+      // writeReply rejects when a previous reply is unread or the payload
+      // exceeds capacity — both programmer errors here; surface as an error
+      // reply that fits, since the happy-path reply already failed to land.
       this.writeError(ring, err);
     }
   }
@@ -233,8 +224,8 @@ export class SyncRpcDispatcher {
       ring.writeReply(encodeReply(reply));
     } catch {
       // If even the error reply can't be written (e.g. ring already has a
-      // pending reply), there's nothing useful to do — drop it. The caller
-      // will time out on `waitReply` and surface that as a `RingTimeoutError`.
+      // pending reply), drop it — the caller times out on `waitReply` and
+      // surfaces a `RingTimeoutError`.
     } finally {
       this.inFlight.delete(ring);
     }

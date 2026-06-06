@@ -59,9 +59,7 @@ export class HttpServer extends EventEmitter {
     cb?: () => void,
   ): this {
     const port = typeof portOrOptions === 'number' ? portOrOptions : (portOrOptions.port ?? 0);
-    // In the options form, the second arg (`hostnameOrCb`) is the callback;
-    // in the bare-number form, the callback may be either arg. The selection
-    // logic is identical for both: prefer a function in the second slot.
+    // Both call shapes: callback is whichever of the two trailing args is a function.
     const callback = (typeof hostnameOrCb === 'function' ? hostnameOrCb : cb) as
       | (() => void)
       | undefined;

@@ -11,9 +11,6 @@
  * stubs (`fd_pread`, `fd_pwrite`, `fd_advise`, `fd_allocate`, `fd_datasync`,
  * `fd_sync`, `fd_filestat_set_size`, `fd_filestat_set_times`,
  * `fd_fdstat_set_rights`).
- *
- * Routes file-state queries through `syncMirror()` so the filesystem view
- * stays consistent with the `node:fs` layer.
  */
 import { syncMirror } from '@riftydev/vfs';
 import {
@@ -46,10 +43,8 @@ function filetypeFor(entry: FileDescriptor): number {
     case 'dir':
       return FILETYPE_DIRECTORY;
     default:
-      // stdin/stdout/stderr appear as character devices in real WASI; we
-      // don't have a constant for FILETYPE_CHARACTER_DEVICE in the
-      // truncated shared.ts set, so report unknown. Guests rarely
-      // inspect stdio filetypes.
+      // stdio is a character device in real WASI, but shared.ts lacks
+      // FILETYPE_CHARACTER_DEVICE; report unknown (guests rarely inspect this).
       return FILETYPE_UNKNOWN;
   }
 }
@@ -70,9 +65,8 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
     fd_write: (fd: number, iovs: number, iovsLen: number, nwritten: number) => {
       const fdEntry = ctx.fds.get(fd);
       if (!fdEntry) return E_BADF;
-      // Rights check: if the fd was opened with an explicit rights bag (i.e.
-      // `path_open` saved one), require RIGHTS_FD_WRITE before writing. stdio
-      // and preopens leave `rights` undefined → default-permissive.
+      // Only enforce RIGHTS_FD_WRITE when path_open saved an explicit rights bag;
+      // stdio and preopens leave `rights` undefined → default-permissive.
       if (fdEntry.type === 'file' && fdEntry.rights !== undefined) {
         if ((fdEntry.rights & RIGHTS_FD_WRITE) === 0n) return E_PERM;
       }
@@ -103,13 +97,11 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
     },
     fd_read: (fd: number, iovs: number, iovsLen: number, nread: number) => {
       const fdEntry = ctx.fds.get(fd);
-      // Unknown fd → bad descriptor. WASI guests rely on E_BADF here to detect
-      // mis-tracked fds; silently returning E_SUCCESS + 0 bytes masked bugs.
+      // Guests rely on E_BADF to detect mis-tracked fds; E_SUCCESS + 0 bytes masks bugs.
       if (!fdEntry) return E_BADF;
-      // Stdin: pull from the `onStdin` callback (esbuild's `transform` surface
-      // feeds source bytes here). We keep a residual buffer on the fd entry so
-      // a chunk larger than the guest's iovec is delivered across reads. A
-      // `null` from the callback with an empty residual is EOF.
+      // Stdin from the `onStdin` callback (esbuild's `transform` feeds source bytes).
+      // Residual buffer on the fd entry delivers a chunk larger than the guest's
+      // iovec across reads; `null`/empty from the callback with empty residual = EOF.
       if (fdEntry.type === 'stdin') {
         const view = ctx.view();
         const bytes = ctx.bytes();
@@ -229,9 +221,8 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       entry.fdflags = flags;
       return E_SUCCESS;
     },
-    // No per-fd rights downgrade in the current model (rights live on the
-    // FileDescriptor and are checked at use). E_NOSYS is the honest signal —
-    // guests that branch on this fall back to no restriction.
+    // No per-fd rights downgrade: rights live on the FileDescriptor, checked at
+    // use. E_NOSYS lets guests that branch on this fall back to no restriction.
     fd_fdstat_set_rights: () => E_NOSYS,
     fd_filestat_get: (fd: number, outBuf: number) => {
       const entry = ctx.fds.get(fd);
@@ -282,23 +273,18 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
     fd_readdir: (fd: number, bufPtr: number, bufLen: number, cookie: bigint, bufUsed: number) => {
       const entry = ctx.fds.get(fd);
       if (!entry) return E_BADF;
-      // A valid fd that is not a directory must report E_NOTDIR, not E_BADF.
-      // Go's WASIp1 os layer (esbuild) opens a path, then probes it with
-      // `fd_readdir`: E_NOTDIR means "this is a file, read it as one" while
-      // E_BADF is a hard error ("Cannot read directory: Bad file number").
-      // Returning E_BADF here made esbuild abort on every file entry point.
+      // A non-directory fd must report E_NOTDIR, not E_BADF. Go's WASIp1 os layer
+      // (esbuild) probes opened paths with fd_readdir: E_NOTDIR means "it's a file,
+      // read it as one"; E_BADF is a hard error that made esbuild abort on every
+      // file entry point.
       if (entry.type !== 'dir' || !entry.path) return E_NOTDIR;
       const mirror = syncMirror();
-      // Ordering contract: we trust `readdirSync` to return entries in a
-      // stable order between calls for the same directory (no concurrent
-      // mutation; same VFS backend). MemoryFsSync iterates an ES Map's
-      // insertion-ordered children, which is deterministic. OpfsFsSync's
-      // ordering comes from the underlying FileSystemDirectoryHandle async
-      // iterator and is also stable for a fixed tree. WASI preview1's
-      // cookie semantics rely on this — if a future backend returns
-      // entries in a different order between calls, paginating guests
-      // will skip or duplicate. Re-stat / sort-by-name is a possible
-      // future hardening if that turns out to matter.
+      // Ordering contract: preview1 cookie semantics require `readdirSync` to
+      // return entries in a stable order between calls. Both backends satisfy
+      // this for a fixed tree (MemoryFsSync: insertion-ordered Map; OpfsFsSync:
+      // FileSystemDirectoryHandle iterator). A backend that reordered between
+      // calls would make paginating guests skip or duplicate; sort-by-name is a
+      // possible future hardening.
       let entries: readonly { name: string; isFile: boolean; isDirectory: boolean }[];
       try {
         entries = mirror.readdirSync(entry.path);
@@ -312,11 +298,9 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       // preview1 dirent layout (21 bytes tightly packed):
       //   0: d_next (u64), 8: d_ino (u64), 16: d_namlen (u32), 20: d_type (u8)
       //
-      // Cookie semantics (preview1): each entry emits `d_next = index + 1`
-      // (so cookie 0 is the canonical "start from the beginning" value).
-      // The guest re-invokes with the cookie of the last entry it kept;
-      // we must skip every entry whose index satisfies `index < cookie`,
-      // i.e. `index >= cookie` is the "still to emit" predicate.
+      // Cookie semantics: each entry emits `d_next = index + 1` (so cookie 0 =
+      // start from the beginning). The guest re-invokes with the last cookie it
+      // kept, so `index >= cookie` is the "still to emit" predicate.
       for (let i = 0; i < entries.length; i++) {
         if (BigInt(i) < cookie) continue;
         const dirent = entries[i];
@@ -328,9 +312,8 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
         view.setBigUint64(off, BigInt(i + 1), true); // d_next (cookie)
         view.setBigUint64(off + 8, 0n, true); // d_ino (not tracked)
         view.setUint32(off + 16, nameBytes.length, true);
-        // d_type — backed by the dirent shape introduced in ADR-0041;
-        // guests like esbuild no longer need to re-stat each entry to
-        // distinguish files from subdirs.
+        // d_type from the dirent shape (ADR-0041); saves guests like esbuild
+        // a re-stat per entry to tell files from subdirs.
         const dType = dirent.isDirectory
           ? FILETYPE_DIRECTORY
           : dirent.isFile
@@ -359,10 +342,8 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       ctx.view().setBigUint64(outPtr, BigInt(entry.cursor ?? 0), true);
       return E_SUCCESS;
     },
-    // fd_pread / fd_pwrite take an offset rather than using the cursor. We
-    // could implement these by manipulating the cursor temporarily, but real
-    // toolchains rarely use them and the honest E_NOSYS surfaces missing
-    // support in the compat matrix.
+    // fd_pread / fd_pwrite take an offset instead of the cursor. Rarely used by
+    // real toolchains; E_NOSYS honestly surfaces the gap in the compat matrix.
     fd_pread: () => E_NOSYS,
     fd_pwrite: () => E_NOSYS,
     fd_advise: () => E_SUCCESS, // advisory hint; honest no-op

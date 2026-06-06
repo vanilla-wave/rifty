@@ -24,12 +24,10 @@ export function parse(v: string): SemverParts | null {
 }
 
 /**
- * Coerce a possibly-partial version string (`'4'`, `'4.1'`, `'4.1.2'`) into
- * `SemverParts`. Missing minor/patch components are filled with `0` — that
- * matches npm semver's behaviour for comparator bases (`^4`, `~4.1`,
- * `>=14`). Use this when parsing the right-hand-side of a range comparator;
- * use {@link parse} when the input must be a fully-qualified released
- * version (no zero-filling).
+ * Coerce a possibly-partial version (`'4'`, `'4.1'`) into `SemverParts`,
+ * zero-filling missing minor/patch — matches npm semver for comparator bases
+ * (`^4`, `~4.1`, `>=14`). Use for a range comparator's RHS; use {@link parse}
+ * when the input must be a fully-qualified released version (no zero-filling).
  */
 function coerce(base: string): SemverParts | null {
   const m = /^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(
@@ -45,10 +43,10 @@ function coerce(base: string): SemverParts | null {
 }
 
 /**
- * Number of dotted numeric components in a comparator base, ignoring any
- * leading `v`/`=` and trailing pre-release/build metadata. `'^0.0'` returns
- * 2; `'^0.0.3'` returns 3 — the count drives the upper-bound choice for
- * `^` / `~` and the partial-vs-exact decision for bare comparators.
+ * Count of dotted numeric components in a comparator base, ignoring leading
+ * `v`/`=` and trailing pre-release/build metadata (`'^0.0'`→2, `'^0.0.3'`→3).
+ * Drives the `^`/`~` upper-bound choice and the partial-vs-exact decision for
+ * bare comparators.
  */
 function partsCount(s: string): number {
   const noPrefix = s.replace(/^[v=]/, '');
@@ -133,11 +131,9 @@ export function matchesRange(version: string, range: string | undefined | null):
 }
 
 function matchBranch(version: string, branch: string): boolean {
-  // npm allows whitespace between a comparator operator and its version base
-  // (`>= 2.1.2 < 3` is equivalent to `>=2.1.2 <3`). Without normalisation the
-  // tokenizer would emit four tokens (`>=`, `2.1.2`, `<`, `3`) and matching
-  // each one independently produces garbage. Strip the operator-trailing
-  // whitespace before splitting so both spellings collapse to the same form.
+  // npm allows whitespace between a comparator operator and its base
+  // (`>= 2.1.2 < 3` == `>=2.1.2 <3`). Without this, the split below emits four
+  // tokens (`>=`, `2.1.2`, `<`, `3`) and matching each independently is garbage.
   const normalized = branch.replace(/([<>=^~])\s+/g, '$1');
   const comparators = normalized.split(/\s+/).filter(Boolean);
   for (const cmp of comparators) {

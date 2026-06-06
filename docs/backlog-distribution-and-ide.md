@@ -1,47 +1,31 @@
 # Backlog — distribution, SDK & IDE kit
 
-Separate from `PROJECT_PLAN.md`/`TASKS.md` on purpose. Those track the **runtime**
-(what rifty *is*, milestones M0–M10+). This tracks **how rifty is consumed** —
-publishing, an umbrella SDK, headless UI controllers, a component kit, an IDE
-starter. Most of it is **optional / exploratory**.
+Separate from `PROJECT_PLAN.md`/`TASKS.md` (which track the **runtime** — milestones M0–M10+). This tracks **how rifty is consumed**: publishing, an umbrella SDK, headless UI controllers, a component kit, an IDE starter. Most is **optional / exploratory**.
 
-This is a **pull backlog, not a plan**: no dates, no committed order beyond the
-`depends-on` edges. Pull an item when it's worth doing.
+A **pull backlog, not a plan**: no dates, no committed order beyond `depends-on` edges. Pull an item when it's worth doing.
 
 - **IDs:** epic letter + number (`A1`, `C2`). Distinct from `D-`/`Q-`/`ADR-`/`M`.
 - **Status:** `done` · `accepted` (direction agreed, not built) · `idea` · `deferred`.
 - **Size:** S / M / L (rough).
-- When a track actually starts, promote its directional decision to a real **ADR**
-  (don't pre-ADR speculative work — keeps the ADR log honest).
-- Seed for GitHub Issues/Projects once the repo is published: 1 item → 1 issue,
-  epics → labels/columns.
+- Promote a track's directional decision to a real **ADR** only when it starts (keeps the ADR log honest).
+- Seed for GitHub Issues/Projects once published: 1 item → 1 issue, epics → labels/columns.
 
-## Directional decisions (recorded here; promote to ADR when the track starts)
+## Directional decisions (promote to ADR when the track starts)
 
-- **DD-1 — No inlining of `@riftydev/*` into each other.** `io` (builtin registry),
-  `kernel` (`globalProcessManager`), `vfs` (`syncMirror`) hold shared module
-  singletons read/written across packages; bundling duplicates the state and
-  silently breaks composition. They stay `external` + lockstep-pinned (ADR-0070 D4).
-- **DD-2 — Umbrella is `@riftydev/sdk`** (not `@riftydev/runtime`). Originally intended
-  as the unscoped brand `rifty`, but npm rejected that name (403 — too similar to
-  `sift`/`citty`/`pify`), so the umbrella ships scoped as `@riftydev/sdk` (no separate
-  name claim; it lives in the `@riftydev` scope). **Ratified: ADR-0071** (EPIC B landed).
-- **DD-3 — `@riftydev/workbench` (headless UI controllers) is justified now** — non-Solid
-  consumers are foreseen. It also makes the playground a thin shell and sharpens the
-  D-002 boundary (solid-js stays in the binding layer only).
-- **DD-4 — Component atoms are headless + themeable** (Radix/Headless-UI style:
-  minimal markup + CSS-vars/slots, optional default theme), not batteries-styled.
+- **DD-1 — No inlining of `@riftydev/*` into each other.** `io` (builtin registry), `kernel` (`globalProcessManager`), `vfs` (`syncMirror`) hold shared module singletons read/written across packages; bundling duplicates state and silently breaks composition. They stay `external` + lockstep-pinned (ADR-0070 D4).
+- **DD-2 — Umbrella is `@riftydev/sdk`** (not `@riftydev/runtime`). Originally intended as the unscoped brand `rifty`, but npm rejected that name (403 — too similar to `sift`/`citty`/`pify`), so the umbrella ships scoped as `@riftydev/sdk` (no separate name claim; it lives in the `@riftydev` scope). **Ratified: ADR-0071** (EPIC B landed).
+- **DD-3 — `@riftydev/workbench` (headless UI controllers) is justified now** — non-Solid consumers are foreseen. Makes the playground a thin shell and sharpens the D-002 boundary (solid-js stays in the binding layer only).
+- **DD-4 — Component atoms are headless + themeable** (Radix/Headless-UI style: minimal markup + CSS-vars/slots, optional default theme), not batteries-styled.
 
 ## EPIC A — Publishing (ADR-0070 landed; follow-ups)
 
-The build/publish pipeline is done and verified (see ADR-0070, `docs/PUBLISHING.md`).
-Remaining:
+Build/publish pipeline done and verified (ADR-0070, `docs/PUBLISHING.md`). Remaining:
 
 | ID | Item | Why | Size | Status |
 |---|---|---|---|---|
-| A1 | tsup build + `publishConfig` dual exports for 11 packages | make packages consumable from npm | L | **done** (ADR-0070) |
+| A1 | tsup build + `publishConfig` dual exports for 11 packages | consumable from npm | L | **done** (ADR-0070) |
 | A2 | Claim `@riftydev` scope **and** `@riftydev/sdk` name on npm | publish + reserve brand | S | accepted (manual) |
-| A3 | Create/push GitHub repo + per-package OIDC trusted publisher (no `NPM_TOKEN`) | enable tokenless tag-driven release | S | accepted (manual; `REPO_URL` fixed, release.yml on OIDC — ADR-0071) |
+| A3 | Create/push GitHub repo + per-package OIDC trusted publisher (no `NPM_TOKEN`) | tokenless tag-driven release | S | accepted (manual; `REPO_URL` fixed, release.yml on OIDC — ADR-0071) |
 | A4 | Fix `apps/playground/build/sw-plugin.ts` swallowed by `.gitignore` (`build/`) | playground typecheck/CI red on fresh checkout | S | idea |
 | A5 | Per-package `CHANGELOG.md` | DoD asks for it; only root + npm-client have one | M | idea |
 | A6 | `docs/compat/browsers.md` (capability/browser matrix) | flagged "coming"; consumers need it | M | idea |
@@ -58,14 +42,11 @@ The "front door". Three layers:
 | B2 | `createSandbox()` façade — framework-free boot wiring | hide boot order + singleton wiring; consumer only passes worker/SW URLs | M | **done** (ADR-0071) |
 | B3 | `checkCapabilities()` (wrap `detectCapabilities`) | preflight gate for consumer UI | S | **done** (ADR-0071) |
 
-> Honest limit: B2 can't hide bundler-specific bits (worker URLs, `sw.js` build,
-> WASM asset serving) — those land in EPIC E.
+> Honest limit: B2 can't hide bundler-specific bits (worker URLs, `sw.js` build, WASM asset serving) — those land in EPIC E.
 
 ## EPIC C — `@riftydev/workbench` (headless UI controllers, L2)  ·  depends-on: B (loosely)
 
-Lift the **already framework-agnostic** `apps/playground/src/glue/*` into a package
-(`sync-mirror-vfs`, `hmr-bridge`, `npm-shell-command`, `preview-bridge-wiring`,
-`devMode`, `registry-fetch`, …). DOM-aware but framework-free.
+Lift the **already framework-agnostic** `apps/playground/src/glue/*` into a package (`sync-mirror-vfs`, `hmr-bridge`, `npm-shell-command`, `preview-bridge-wiring`, `devMode`, `registry-fetch`, …). DOM-aware but framework-free.
 
 | ID | Item | Why | Size | Status |
 |---|---|---|---|---|
@@ -75,8 +56,7 @@ Lift the **already framework-agnostic** `apps/playground/src/glue/*` into a pack
 
 ## EPIC D — Framework bindings + atomic component kit (L3)  ·  depends-on: C
 
-Compound components, auto-wired via a context provider — drop-in atoms, you own
-layout/styling, no manual plumbing. `<RiftyIDE/>` = default layout over the atoms.
+Compound components auto-wired via a context provider — drop-in atoms, you own layout/styling, no manual plumbing. `<RiftyIDE/>` = default layout over the atoms.
 
 | ID | Item | Why | Size | Status |
 |---|---|---|---|---|
@@ -88,7 +68,7 @@ layout/styling, no manual plumbing. `<RiftyIDE/>` = default layout over the atom
 
 ## EPIC E — `create-rifty` starter template  ·  depends-on: B (+ D for the UI)
 
-The host config that **cannot** be packaged into a library — only templated.
+Host config that **cannot** be packaged into a library — only templated.
 
 | ID | Item | Why | Size | Status |
 |---|---|---|---|---|

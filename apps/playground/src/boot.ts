@@ -1,30 +1,9 @@
 /**
  * Playground bootstrap helpers (ADR-0002, ADR-0013).
  *
- * `bootstrap` wires the VFS backend (OPFS vs memory) BEFORE the UI mounts so
- * that the first edit, dev-mode tick, and `fs.readFileSync` see the right
- * surface. On `initBackend()` failure the app falls back to memory storage and
- * surfaces the cause via the returned descriptor — the UI can show a banner
- * but rendering never blocks (per task spec).
- *
- * `bootstrapPlayground` is the top-level orchestrator that the entry module
- * awaits before rendering. It performs three things in order:
- *
- *   1. Cross-origin isolation guard (ADR-0002 / D-001). Fails loud with a
- *      DOM message because the runtime can't proceed without SAB/Atomics —
- *      M6+ sync IPC, the OPFS sync mirror, and the worker-per-process
- *      pipeline all require `crossOriginIsolated === true`.
- *   2. `bootstrap()` — VFS backend detection (OPFS vs memory), described
- *      above. Falls back to memory on failure.
- *   3. `registerServiceWorker('/sw.js')` — required for preview routing.
- *      Failure is non-fatal; the cause is captured and surfaced through
- *      `BootResult.swError` so the App can render an inline banner without
- *      the rest of the REPL going dark.
- *
- * The helpers are extracted from `main.tsx` so they can be unit-tested without
- * needing a DOM or Solid renderer in the test env. The thin Solid layer in
- * `main.tsx` only does: `await bootstrapPlayground()` →
- * `render(() => <App init={...}/>)`.
+ * Wires the VFS backend (OPFS vs memory) BEFORE the UI mounts so the first
+ * edit, dev-mode tick, and `fs.readFileSync` see the right surface. Extracted
+ * from `main.tsx` so they can be unit-tested without a DOM or Solid renderer.
  */
 import { registerServiceWorker } from '@riftydev/service-worker';
 import { initBackend } from '@riftydev/vfs';
@@ -38,12 +17,12 @@ export interface VfsBootDescriptor {
 export type InitBackendFn = () => Promise<'opfs' | 'memory'>;
 
 /**
- * Resolve the VFS backend descriptor. Catches any failure from `initBackend()`,
- * falls back to memory, and surfaces the cause via `reason`. Never throws.
+ * Resolve the VFS backend descriptor. On `initBackend()` failure, falls back to
+ * memory and surfaces the cause via `reason`. Never throws.
  *
  * @param impl - injection seam for tests; defaults to `@riftydev/vfs/initBackend`.
- * @param logger - injection seam for the `console.warn` side effect (tests
- *   pass a spy to assert the fallback log without polluting stderr).
+ * @param logger - injection seam for the `console.warn` side effect (tests pass a spy
+ *   to assert the fallback log without polluting stderr).
  */
 export async function bootstrap(
   impl: InitBackendFn = initBackend,
@@ -59,10 +38,7 @@ export async function bootstrap(
   }
 }
 
-/**
- * Human-readable label for the storage badge in the header.
- * Pure function — easy to test, easy to localise later.
- */
+/** Human-readable label for the storage badge in the header. */
 export function backendLabel(descriptor: VfsBootDescriptor): string {
   if (descriptor.backend === 'opfs') return 'Storage: OPFS (persisted)';
   if (descriptor.reason) return 'Storage: in-memory (will not persist) — OPFS init failed';
@@ -70,25 +46,21 @@ export function backendLabel(descriptor: VfsBootDescriptor): string {
 }
 
 /**
- * Map an unknown SW-registration rejection into the banner text shown when
- * `registerServiceWorker('/sw.js')` fails. Centralised so the `App` template
- * and tests share the same formatting.
+ * Banner text shown when `registerServiceWorker('/sw.js')` fails. Centralised so
+ * the `App` template and tests share the same formatting.
  */
 export function swErrorBannerMessage(reason: string): string {
   return `Preview unavailable — service worker registration failed: ${reason}. Reload to retry.`;
 }
 
-/**
- * Pull a stable reason string out of whatever the SW registration promise
- * rejects with. Mirrors the `.catch` arm in `bootstrapPlayground`.
- */
+/** Pull a stable reason string out of whatever the SW registration rejects with. */
 export function reasonOf(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
 }
 
 /**
- * The message rendered into the page when cross-origin isolation is off.
+ * Message rendered into the page when cross-origin isolation is off.
  * Exported so tests can assert the exact copy without re-implementing it.
  */
 export const COI_FATAL_MESSAGE =
@@ -104,17 +76,17 @@ export interface BootResult {
   /** VFS backend descriptor from {@link bootstrap}. Never throws upstream. */
   readonly vfsBoot: VfsBootDescriptor;
   /**
-   * Populated only when `registerServiceWorker()` rejected. The App renders
-   * a dismissible banner using {@link swErrorBannerMessage}; the rest of the
-   * REPL keeps running (the SW only matters for the preview iframe path).
+   * Populated only when `registerServiceWorker()` rejected. The App renders a
+   * banner via {@link swErrorBannerMessage}; the rest of the REPL keeps running
+   * (the SW only matters for the preview iframe path).
    */
   readonly swError?: string;
 }
 
 /**
- * Read globalThis.crossOriginIsolated. Pure — no side effects, no DOM access.
- * Carved out so {@link assertCrossOriginIsolated} can be unit-tested without
- * monkey-patching `globalThis`.
+ * Read globalThis.crossOriginIsolated. Carved out so
+ * {@link assertCrossOriginIsolated} can be unit-tested without monkey-patching
+ * `globalThis`.
  */
 export function isCrossOriginIsolated(): boolean {
   return Boolean((globalThis as { crossOriginIsolated?: boolean }).crossOriginIsolated);
@@ -122,22 +94,17 @@ export function isCrossOriginIsolated(): boolean {
 
 /** Injection seam for {@link assertCrossOriginIsolated} — defaults are real DOM. */
 export interface CoiGuardDeps {
-  /** Returns `true` when the realm is cross-origin isolated. */
   readonly check?: () => boolean;
-  /** Side-effecting DOM hook — used to render the fatal message visibly. */
+  /** Side-effecting DOM hook — renders the fatal message visibly. */
   readonly renderFatal?: (message: string) => void;
-  /** Logger for the console-side notice. */
   readonly logger?: Pick<Console, 'error'>;
 }
 
 /**
- * Assert cross-origin isolation (ADR-0002 / D-001). When the realm is NOT
- * isolated, paints {@link COI_FATAL_MESSAGE} into `document.body`, logs to
- * `console.error`, and throws — so any downstream code that consumes SAB never
- * starts. The page shows the user a clear cause instead of a blank screen.
- *
- * The helper is idempotent: calling it twice on an isolated realm is a no-op,
- * which keeps the e2e assertion simple.
+ * Assert cross-origin isolation (ADR-0002 / D-001). When NOT isolated, paints
+ * {@link COI_FATAL_MESSAGE} into `document.body`, logs, and throws — so
+ * downstream SAB consumers never start and the page shows a clear cause instead
+ * of a blank screen. Idempotent on an isolated realm.
  */
 export function assertCrossOriginIsolated(deps?: CoiGuardDeps): void {
   const check = deps?.check ?? isCrossOriginIsolated;
@@ -150,8 +117,7 @@ export function assertCrossOriginIsolated(deps?: CoiGuardDeps): void {
 }
 
 function defaultRenderFatal(message: string): void {
-  // Only run when a DOM is present. In Node (e.g. SSR or accidental import)
-  // the throw alone is enough; we don't want a ReferenceError on `document`.
+  // No DOM (Node/SSR/accidental import): skip to avoid a ReferenceError on `document`; the throw alone suffices.
   const doc = (globalThis as { document?: Document }).document;
   if (!doc) return;
   const pre = doc.createElement('pre');

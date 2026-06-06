@@ -59,7 +59,7 @@ const REP_STATE_INDEX = REP_STATE_OFFSET >> 2;
 const REQ_LEN_INDEX = REQ_LEN_OFFSET >> 2;
 const REP_LEN_INDEX = REP_LEN_OFFSET >> 2;
 
-/** Compile-time documentation of the header layout; useful for consumers. */
+/** Compile-time documentation of the header layout. */
 export interface SabRingHeader {
   readonly VERSION: typeof VERSION_OFFSET;
   readonly REQ_STATE: typeof REQ_STATE_OFFSET;

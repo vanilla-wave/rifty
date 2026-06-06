@@ -7,11 +7,10 @@ const utf8 = new TextDecoder('utf-8');
 
 export type ModuleKind = 'cjs' | 'esm' | 'json' | 'builtin' | 'text';
 
-// Non-JS asset extensions imported as TEXT (ADR-0067): `import s from "./f.txt"`
-// binds the default to the raw file contents (esbuild/Bun text-loader behaviour).
-// Only matched on an explicit-extension import — Node never resolves these, so
-// this is a pure additive capability, not a parity regression. opencode imports
-// `.txt` (prompts), `.sql` (schema/migrations), `.md`, `.prompt`.
+// Non-JS assets imported as TEXT (ADR-0067): `import s from "./f.txt"` binds the
+// default to raw file contents (esbuild/Bun text-loader behaviour). Only matched
+// on explicit-extension imports — Node never resolves these, so it's additive,
+// not a parity regression. opencode imports `.txt`/`.sql`/`.md`/`.prompt`.
 const TEXT_EXTENSIONS = ['.txt', '.sql', '.md', '.prompt'] as const;
 
 export interface ResolvedModule {
@@ -30,15 +29,13 @@ export interface ResolveOptions {
 }
 
 /**
- * tsconfig-style path aliases (ADR-0066): a map of `pattern → target(s)` where
- * each target is an **absolute** VFS path pattern. Patterns may carry at most
- * one `*` (e.g. `"@/*"`); the `*` capture from the specifier is substituted into
- * the target. Targets are an ordered candidate list (a single string is a
- * one-element list) — the first that resolves to an existing file wins. The
- * resolver does NOT read tsconfig itself: a caller (the opencode smoke harness, a
- * future "open a TS project" flow) reads `compilerOptions.paths`, resolves its
- * targets to absolute patterns (handling `baseUrl`/`extends`), and supplies this
- * map. Off by default = Node-faithful resolution.
+ * tsconfig-style path aliases (ADR-0066): `pattern → target(s)`, each target an
+ * **absolute** VFS path pattern. Patterns carry at most one `*`; the specifier's
+ * `*` capture is substituted into the target. Targets are an ordered candidate
+ * list (a bare string = one element) — first to resolve to an existing file wins.
+ * The resolver does NOT read tsconfig: a caller reads `compilerOptions.paths`,
+ * resolves targets to absolute patterns (handling `baseUrl`/`extends`), and
+ * supplies this map. Off by default = Node-faithful resolution.
  */
 export type PathAliases = Readonly<Record<string, string | readonly string[]>>;
 
@@ -48,13 +45,11 @@ export interface ResolverOptions {
   readonly paths?: PathAliases;
 }
 
-// `.ts`/`.tsx` come AFTER the `.js` family so a plain-Node package shipping
-// `foo.js` resolves byte-identically to Node (Node never resolves bare `.ts`),
-// and BEFORE `.json` (ADR-0053). This is a deliberate, human-ratified deviation
-// from Node's resolution: rifty resolves a bare `.ts` where Node-without-a-
-// stripper would `MODULE_NOT_FOUND`. The transform side is separable — a `.ts`
-// that resolves with no transform hook throws a directed error at execute time
-// (no silent stub), not here.
+// `.ts`/`.tsx` come AFTER the `.js` family (so a plain-Node `foo.js` resolves
+// byte-identically) and BEFORE `.json` (ADR-0053). Deliberate, human-ratified
+// deviation: rifty resolves a bare `.ts` where Node-without-a-stripper would
+// MODULE_NOT_FOUND. The transform side is separable — a resolved `.ts` with no
+// transform hook throws a directed error at execute time (no silent stub).
 const DEFAULT_EXTENSIONS = ['.js', '.mjs', '.cjs', '.ts', '.tsx', '.json'] as const;
 const INDEX_FILES = [
   'index.js',
@@ -65,13 +60,12 @@ const INDEX_FILES = [
   'index.json',
 ] as const;
 
-// TypeScript declaration files (`.d.ts`/`.d.cts`/`.d.mts`) are types-only — they
-// carry no runnable JS and the strip-types path would feed them to acorn and throw
-// `SYNTAX_ERROR`. Node's own strip-types loaders deliberately skip them. Because
-// `.d.ts` ends with `.ts` (now in DEFAULT_EXTENSIONS, ADR-0053) a naive `${base}.ts`
-// append or an `exports`/`main` target naming a `.d.ts` would otherwise match one.
-// We reject any declaration-file candidate at every file-acceptance point so it
-// resolves as if it did not exist (MODULE_NOT_FOUND), never as an executable module.
+// Declaration files (`.d.ts`/`.d.cts`/`.d.mts`) are types-only — no runnable JS;
+// strip-types would feed them to acorn and throw SYNTAX_ERROR (Node's own
+// strip-types loaders skip them). Since `.d.ts` ends with `.ts` (in
+// DEFAULT_EXTENSIONS, ADR-0053), a `${base}.ts` append or an `exports`/`main`
+// target could match one. Reject at every file-acceptance point so it resolves
+// as MODULE_NOT_FOUND, never as an executable module.
 const DECLARATION_FILE = /\.d\.(?:ts|cts|mts)$/;
 
 /**
@@ -129,12 +123,10 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
         return readResolved(vfs, filePath, opts.esm);
       }
 
-      // tsconfig-style path aliases (ADR-0066): tried only for non-relative,
-      // non-absolute specifiers (relative/absolute imports never alias), and
-      // only when a pattern actually matches — so real `@scope/pkg` packages are
-      // untouched. An alias that matches a pattern but resolves no candidate file
-      // falls THROUGH to the normal bare walk (matching tsc's paths-then-fallback),
-      // so a genuine miss still reports MODULE_NOT_FOUND on the original specifier.
+      // tsconfig-style path aliases (ADR-0066): only for bare specifiers and
+      // only when a pattern matches — so real `@scope/pkg` packages are untouched.
+      // A pattern match that resolves no file falls THROUGH to the bare walk
+      // (tsc's paths-then-fallback), so a genuine miss reports MODULE_NOT_FOUND.
       if (paths !== undefined && !isRelativeSpecifier(specifier) && !isAbsolute(specifier)) {
         const aliased = resolvePathAlias(vfs, specifier, paths);
         if (aliased !== null) return readResolved(vfs, aliased, opts.esm);
@@ -181,13 +173,11 @@ function resolveSpecifierToFile(
 }
 
 /**
- * Resolve a specifier against a tsconfig-style {@link PathAliases} map (ADR-0066).
- * Selects the most-specific matching pattern (exact > wildcard; among wildcards,
- * longest static prefix then longest static suffix), substitutes the `*` capture
- * into each of that pattern's ordered candidate targets, and returns the first
- * target that resolves to an existing file. Returns `null` when no pattern matches
- * OR when a pattern matches but no candidate file exists — both let the caller fall
- * through to normal resolution.
+ * Resolve a specifier against a {@link PathAliases} map (ADR-0066). Picks the
+ * most-specific pattern (exact > wildcard; among wildcards, longest prefix then
+ * suffix), substitutes the `*` capture into its ordered targets, returns the
+ * first that resolves to an existing file. `null` = no pattern matched OR matched
+ * but no file exists — both fall through to normal resolution.
  */
 function resolvePathAlias(vfs: FsSync, specifier: string, paths: PathAliases): string | null {
   const match = matchAliasPattern(paths, specifier);
@@ -209,10 +199,10 @@ interface AliasMatch {
 
 /**
  * Pick the most-specific {@link PathAliases} key matching `specifier`. An exact
- * (star-less) key matches only the whole specifier and, having full length as its
- * "base", outranks any wildcard. Among wildcards, longest static prefix wins, ties
- * broken by longest static suffix — the same specificity model as `findWildcard`
- * for `exports`/`imports`. Keys with more than one `*` are ignored (tsc rule).
+ * (star-less) key matches the whole specifier and, with full length as its base,
+ * outranks any wildcard. Among wildcards: longest prefix, ties broken by longest
+ * suffix — same model as `findWildcard`. Keys with more than one `*` are ignored
+ * (tsc rule).
  */
 function matchAliasPattern(paths: PathAliases, specifier: string): AliasMatch | null {
   let bestKey: string | null = null;
@@ -234,7 +224,7 @@ function matchAliasPattern(paths: PathAliases, specifier: string): AliasMatch | 
     }
     const prefix = key.slice(0, starIdx);
     const suffix = key.slice(starIdx + 1);
-    if (suffix.includes('*')) continue; // at most one `*` per tsc
+    if (suffix.includes('*')) continue; // tsc: at most one `*`
     if (
       specifier.length >= prefix.length + suffix.length &&
       specifier.startsWith(prefix) &&
@@ -258,23 +248,18 @@ function matchAliasPattern(paths: PathAliases, specifier: string): AliasMatch | 
 }
 
 function resolveAsFileOrDir(vfs: FsSync, base: string): string | null {
-  // Node's resolution order is LOAD_AS_FILE *before* LOAD_AS_DIRECTORY: an exact
-  // file, then `X` + extension, and only then `X` as a directory. We stat `base`
-  // once and apply that order.
+  // Node order is LOAD_AS_FILE before LOAD_AS_DIRECTORY: exact file, then
+  // `X` + extension, then `X` as a directory. Stat `base` once.
   const baseStat = vfs.existsSync(base) ? vfs.statSync(base) : null;
 
-  // (1) `base` as an exact file. A declaration file named explicitly (e.g. an
-  // `exports` target `./foo.d.ts`) is not a runnable module — skip it so the
-  // caller falls back to a sibling `.js`/`.ts` or reports MODULE_NOT_FOUND.
+  // (1) Exact file. An explicitly-named declaration file (e.g. exports target
+  // `./foo.d.ts`) is not runnable — skip so the caller falls back to a sibling.
   if (baseStat?.isFile) return isDeclarationFile(base) ? null : base;
 
-  // (2) `base` + extension. Node tries `X.js` (and rifty's `.ts`/`.tsx` set,
-  // ADR-0053) BEFORE treating `X` as a directory — so a `foo.ts` sibling wins
-  // over a same-named `foo/` directory. opencode relies on this: `./migration`
-  // (from `core/src/database/database.ts`) must resolve the `migration.ts`
-  // barrel, NOT the sibling `migration/` directory of SQL migration files (which
-  // has no index). Verified against Node 24: `require('./foo')` with both
-  // `foo.js` and `foo/index.js` present resolves `foo.js`.
+  // (2) `base` + extension, tried BEFORE the directory case (ADR-0053 adds
+  // `.ts`/`.tsx`) — so a `foo.ts` sibling wins over a `foo/` directory. opencode
+  // relies on this: `./migration` resolves the `migration.ts` barrel, not the
+  // sibling `migration/` dir of SQL files (no index). Verified against Node 24.
   for (const ext of DEFAULT_EXTENSIONS) {
     const candidate = `${base}${ext}`;
     if (isDeclarationFile(candidate)) continue;
@@ -406,11 +391,10 @@ function activeConditions(esm: boolean): readonly Condition[] {
 
 /**
  * Resolve a `#name` specifier against the nearest enclosing `package.json`'s
- * `imports` field. Walks upward from `fromDir` until it finds a `package.json`
- * — the spec says we don't keep walking past the first one (the first one
- * defines the package scope). Reuses the same conditions logic as `exports`.
+ * `imports` field. Walks up from `fromDir` to the first `package.json` (the spec
+ * stops there — it defines the package scope). Reuses the `exports` conditions.
  *
- * Returns the absolute resolved file path, or `null` if no match.
+ * @returns absolute resolved path, or `null` if no match.
  */
 function resolveImportsSpecifier(
   vfs: FsSync,
@@ -426,8 +410,7 @@ function resolveImportsSpecifier(
       if (pkg.imports !== undefined) {
         const resolved = resolveImports(pkg.imports, specifier, esm);
         if (resolved !== null) {
-          // `imports` targets may be absolute paths, package-relative, or bare
-          // specifiers ("lodash"). We only handle file-relative targets here.
+          // `imports` targets may be absolute, file-relative, or bare ("lodash").
           if (resolved.startsWith('./') || resolved.startsWith('../')) {
             return resolveAsFileOrDir(vfs, joinPath(dir, resolved));
           }
@@ -438,7 +421,7 @@ function resolveImportsSpecifier(
           return resolveBareSpecifier(vfs, resolved, dir, esm);
         }
       }
-      // First package.json found, no match — stop walking per Node spec.
+      // First package.json found, no match — stop walking (Node spec).
       return null;
     }
     if (dir === '/') return null;
@@ -456,8 +439,8 @@ function resolveImports(field: ExportsField, specifier: string, esm: boolean): s
     return resolveConditionTree(direct, esm);
   }
   const wildcard = findWildcard(obj, specifier);
-  // `undefined` = no pattern matched; `null` = the most-specific pattern is a
-  // block (deny). Both mean "no resolution" here; only a real target resolves.
+  // `undefined` = no pattern matched; `null` = most-specific pattern is a block.
+  // Both mean no resolution; only a real target resolves.
   if (wildcard !== null && wildcard !== undefined) {
     return resolveConditionTree(wildcard, esm);
   }
@@ -486,10 +469,9 @@ function resolveExports(field: ExportsField, subpath: string, esm: boolean): str
       return resolveConditionTree(direct, esm);
     }
     const wildcard = findWildcard(obj, subpath);
-    // `undefined` = no pattern matched; `null` = the most-specific pattern is a
-    // block (deny, e.g. effect's `"./internal/*": null`). Both yield no
-    // resolution, so the caller throws PACKAGE_PATH_NOT_EXPORTED. Only a real
-    // target resolves.
+    // `undefined` = no pattern matched; `null` = most-specific pattern is a block
+    // (e.g. effect's `"./internal/*": null`) → caller throws
+    // PACKAGE_PATH_NOT_EXPORTED. Only a real target resolves.
     if (wildcard !== null && wildcard !== undefined) {
       return resolveConditionTree(wildcard, esm);
     }
@@ -525,22 +507,18 @@ function resolveConditionTree(node: ExportsField, esm: boolean): string | null {
 
 /**
  * Resolve a `*`-pattern key against `subpath`, picking the MOST-SPECIFIC match
- * per Node's `PACKAGE_IMPORTS_EXPORTS_RESOLVE` (not first-by-insertion-order).
- * effect@4 declares a catch-all `./*` -> `./dist/*.js` alongside more-specific
- * null blocks (its `./internal/*` and `./<star>/index` keys map to null); a
- * first-match scan in insertion order would leak `effect/internal/x` through
- * `./*` instead of letting the null block deny it. Node ignores key order and
- * selects the
- * candidate with the longest pattern base (the part before `*`), breaking ties
- * on the longest pattern trailer (the part after `*`).
+ * per Node's `PACKAGE_IMPORTS_EXPORTS_RESOLVE` (not first-by-insertion-order):
+ * longest pattern base (before `*`) wins, ties broken on longest trailer (after
+ * `*`). effect@4 declares a catch-all `./*` alongside more-specific null blocks
+ * (`./internal/*`); a first-match scan would leak `effect/internal/x` through
+ * `./*` instead of letting the block deny it.
  *
- * A best-match whose target is `null` (or `undefined`) is a deliberate BLOCK:
- * we return `null` so the caller throws `PACKAGE_PATH_NOT_EXPORTED` — it must
- * NOT fall through to a less-specific non-null pattern.
+ * A winning target of `null`/`undefined` is a deliberate BLOCK: return `null`
+ * so the caller throws `PACKAGE_PATH_NOT_EXPORTED`, never falling through to a
+ * less-specific non-null pattern.
  *
- * Returns `undefined` when no pattern matches at all (so the caller can tell a
- * blocked subpath apart from an unmatched one), the substituted target string
- * (wrapped) when a non-null pattern wins, or `null` when the winner is a block.
+ * @returns `undefined` = no pattern matched (vs blocked); substituted target
+ * when a non-null pattern wins; `null` when the winner is a block.
  */
 function findWildcard(
   obj: { [key: string]: ExportsField | null },
@@ -554,14 +532,13 @@ function findWildcard(
     if (!key.includes('*')) continue;
     const [prefix, suffix] = key.split('*');
     if (prefix === undefined || suffix === undefined) continue;
-    // A pattern matches when the subpath carries its prefix and suffix and the
-    // two do not overlap (`prefix.length + suffix.length <= subpath.length`).
+    // Matches when subpath carries prefix+suffix without overlap.
     if (
       subpath.length >= prefix.length + suffix.length &&
       subpath.startsWith(prefix) &&
       subpath.endsWith(suffix)
     ) {
-      // Specificity = longer base wins; tie -> longer trailer wins.
+      // Specificity: longer base wins, tie → longer trailer.
       if (
         prefix.length > bestBaseLen ||
         (prefix.length === bestBaseLen && suffix.length > bestTrailerLen)
@@ -652,9 +629,8 @@ function detectKind(vfs: FsSync, filePath: string): ModuleKind {
   if (filePath.endsWith('.mjs')) return 'esm';
   if (filePath.endsWith('.cjs')) return 'cjs';
   if (filePath.endsWith('.js') || filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
-    // `.ts`/`.tsx` mirror the `.js` branch (ADR-0053): ESM under a
-    // `type:module` scope, else CJS — matching how a TS-aware Node loader
-    // classifies a source file by its nearest package scope.
+    // `.ts`/`.tsx` mirror the `.js` branch (ADR-0053): ESM under a `type:module`
+    // scope, else CJS — as a TS-aware Node loader classifies by package scope.
     const scope = findPackageScope(vfs, filePath);
     if (scope && scope.pkg.type === 'module') return 'esm';
     return 'cjs';

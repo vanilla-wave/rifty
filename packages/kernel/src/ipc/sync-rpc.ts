@@ -1,52 +1,33 @@
 /**
- * Sync RPC framing (ADR-0011 phase 3, version field per ADR-0032).
+ * Sync RPC framing: JSON-over-UTF-8 wire format on top of {@link SabRing}
+ * (ADR-0011 phase 3, version field per ADR-0032).
  *
- * Tiny JSON-over-UTF-8 wire format layered on top of the {@link SabRing}.
- * The protocol carries a single RPC method name + JSON-serialisable payload
- * in each request, and a JSON-serialisable result (or structured error)
- * in each reply.
+ * Each frame carries a `u32` protocol version stamped into the SAB header by
+ * `SabRing.writeRequest`/`writeReply`, validated on EVERY frame before
+ * decoding so a future binary-frame extension (A-021) can't corrupt a v1
+ * reader. (SW side splits frame/routing versions per ADR-0016/0031/0040; here
+ * one constant suffices — single contract surface.) No cross-version compat:
+ * a mismatch surfaces as {@link SyncRpcProtocolMismatchError}; the dispatcher
+ * echoes the caller's version in the error reply so the caller can decode it.
  *
- * Every frame additionally carries a `u32` protocol version stamped into
- * the SAB header by `SabRing.writeRequest` / `SabRing.writeReply` (ADR-0032).
- * The version is validated on EVERY frame — readers reject mismatched
- * frames before decoding the payload so a future binary-frame extension
- * (A-021) cannot silently corrupt a v1 reader. Pattern mirrors the SW
- * protocol versioning in `service-worker/src/protocol.ts` (ADR-0016,
- * ADR-0031, ADR-0040 — the SW side splits `SW_FRAME_VERSION` from
- * `SW_ROUTING_VERSION`; the sync-RPC side keeps one constant because it
- * has only one contract surface, the frame shape).
- *
- * Bump on any wire change. There is no cross-version compatibility — a
- * mismatch surfaces as {@link SyncRpcProtocolMismatchError} (`code:
- * 'EPROTOVERSION'`) on the consumer side; the dispatcher responds to a
- * mismatched request with a versioned error reply that echoes the caller's
- * version so the caller can still decode the failure.
- *
- * Binary frames (e.g. raw stdout bytes piggy-backed on the reply) are a
- * deliberate follow-up — phase 3 keeps the wire format JSON-only so the
- * protocol stays easy to inspect. The follow-up will be tracked under
- * A-021 (binary pipes over MessagePort with backpressure) and ship its own
- * frame discriminator + a protocol version bump.
- *
- * Errors are mapped to a plain `{name, message, code?}` triple to keep the
- * over-the-wire shape JSON-serialisable; the receiver reconstructs an
- * `Error` instance (with the original `code` preserved when present).
+ * Wire format is JSON-only by design (easy to inspect); binary frames (raw
+ * stdout piggy-backed on the reply) deferred to A-021 with its own frame
+ * discriminator + version bump. Errors travel as a plain `{name, message,
+ * code?}` triple to stay JSON-serialisable; the receiver reconstructs an
+ * `Error` (preserving `code`).
  */
 
 /**
- * Wire-format protocol version stamped into the SAB header on every frame
- * (ADR-0032). Bump on any change to the SAB header layout, the JSON frame
- * shape, or the error contract. Readers refuse to decode frames whose
- * version differs from their own.
+ * Wire-format version stamped into the SAB header on every frame (ADR-0032).
+ * Bump on any change to header layout, JSON frame shape, or error contract;
+ * readers refuse to decode frames whose version differs from their own.
  */
 export const SYNC_RPC_PROTOCOL_VERSION = 1 as const;
 
 /**
- * Thrown when a SAB frame's version field doesn't match the reader's
- * {@link SYNC_RPC_PROTOCOL_VERSION}. Carries both the expected and the
- * actually-seen version so the dispatcher can echo the caller's version
- * back in a versioned error reply (allowing the caller to still decode
- * the failure).
+ * Thrown when a SAB frame's version doesn't match the reader's
+ * {@link SYNC_RPC_PROTOCOL_VERSION}. Carries expected + seen versions so the
+ * dispatcher can echo the caller's version back in the error reply.
  */
 export class SyncRpcProtocolMismatchError extends Error {
   readonly code = 'EPROTOVERSION' as const;
@@ -89,9 +70,9 @@ const UTF8_ENCODER = new TextEncoder();
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
 
 /**
- * Serialise a {@link SyncRpcRequest} for transport over the SAB ring's
- * request slot. Throws if the request can't be JSON-encoded (e.g. cyclic
- * payload, BigInt) — the caller should validate payloads before calling.
+ * Serialise a {@link SyncRpcRequest} for the SAB ring's request slot.
+ * @throws if the request isn't JSON-encodable (cyclic payload, BigInt) —
+ * callers should validate payloads first.
  */
 export function encodeRequest(req: SyncRpcRequest): Uint8Array {
   const json = JSON.stringify(req);
@@ -102,9 +83,8 @@ export function encodeRequest(req: SyncRpcRequest): Uint8Array {
 }
 
 /**
- * Deserialise the bytes the dispatcher wrote into the reply slot back into
- * a {@link SyncRpcReply}. Throws on UTF-8 / JSON parse failure — those
- * indicate a protocol bug and should surface loudly to the caller.
+ * Deserialise reply-slot bytes into a {@link SyncRpcReply}.
+ * @throws on UTF-8/JSON parse failure — indicates a protocol bug, surface loudly.
  */
 export function decodeReply(bytes: Uint8Array): SyncRpcReply {
   const text = UTF8_DECODER.decode(bytes);

@@ -1,22 +1,20 @@
 /**
  * SW-side routing for a matched `/preview/<port>/*` fetch. Asks the
- * supplied {@link PreviewOwnerBinding} for the realm that owns the
- * registered process, gates on the ready handshake, and forwards the
- * serialised request to that owner over a fresh `MessageChannel`.
+ * {@link PreviewOwnerBinding} for the realm owning the registered process,
+ * gates on the ready handshake, and forwards the serialised request to that
+ * owner over a fresh `MessageChannel`.
  *
- * Lives in its own module so `preview-bridge.ts` stays under the ADR-0024
- * file-size budget.
+ * Separate module so `preview-bridge.ts` stays under the ADR-0024 file-size budget.
  *
  * ADR-0031 — the default binding's resolver
  * ({@link FirstWindowOwnerResolver}, wrapped by
  * {@link FirstWindowOwnerBinding}) prefers `event.resultingClientId` then
- * `event.clientId`. The legacy "first controlled window" path remains as a
- * defensive fallback for navigation-preload edge cases (and for tests that
- * simulate fetches without an owning client); each such fallback warns
- * once via `console.warn` so the misroute case is visible in production.
- * ADR-0046 lands the {@link WorkerOwnerBinding} consumer for A-023
- * (SW→Worker direct routing), and the route-preview path here is the
- * single seam both bindings flow through.
+ * `event.clientId`. The legacy "first controlled window" path is a defensive
+ * fallback for navigation-preload edge cases (and tests simulating fetches
+ * without an owning client); each fallback warns once via `console.warn` so
+ * misroutes are visible in production. ADR-0046 lands the
+ * {@link WorkerOwnerBinding} consumer for A-023 (SW→Worker direct routing);
+ * route-preview is the single seam both bindings flow through.
  */
 
 import { synthesizePreviewUrl } from '@riftydev/io';
@@ -33,16 +31,14 @@ import {
 
 /**
  * Forward a matched preview fetch to the owning client and translate the
- * client's reply back into a {@link Response}. Returns 503 when the owner
- * cannot be resolved, when the handshake times out, when the client posts a
- * mismatched protocol version, when the owner is detected as gone
- * mid-wait, or when the main thread replies with a
- * `PROTOCOL_VERSION_MISMATCH` error frame.
+ * reply back into a {@link Response}. Returns 503 when the owner cannot be
+ * resolved, the handshake times out, the client posts a mismatched protocol
+ * version, the owner is detected gone mid-wait, or the main thread replies
+ * with a `PROTOCOL_VERSION_MISMATCH` error frame.
  *
- * `binding.resolveOwner` is responsible for window vs worker dispatch.
- * `readiness` is the live signal returned by
- * `binding.subscribeReadiness(scope)` — owned by `createPreviewInterceptor`
- * and shared across every in-flight fetch handled by that interceptor.
+ * `binding.resolveOwner` handles window vs worker dispatch. `readiness` is the
+ * live signal from `binding.subscribeReadiness(scope)` — owned by
+ * `createPreviewInterceptor` and shared across every in-flight fetch it handles.
  */
 export async function routePreview(
   scope: ServiceWorkerGlobalScope,
@@ -80,10 +76,9 @@ export async function routePreview(
       ? null
       : new Uint8Array(await request.arrayBuffer());
   const requestId = readiness.nextRequestId();
-  // URL synthesis goes through `synthesizePreviewUrl` from
-  // `@riftydev/io/preview-protocol` (ADR-0036). The shape of that contract is
-  // pinned by `SW_ROUTING_VERSION` (ADR-0040) — bumping it requires changing
-  // the addressing scheme on both peers in lockstep.
+  // URL synthesis via `synthesizePreviewUrl` (ADR-0036); contract shape pinned
+  // by `SW_ROUTING_VERSION` (ADR-0040) — bumping it changes the addressing
+  // scheme on both peers in lockstep.
   const serialised: SerializedRequest = {
     port: match.port,
     url: `${synthesizePreviewUrl(match.path)}${new URL(request.url).search}`,
@@ -100,10 +95,9 @@ export async function routePreview(
       if ('error' in data) {
         const err = data.error;
         if (typeof err === 'object' && err.kind === SW_ERROR_PROTOCOL_VERSION_MISMATCH) {
-          // Drift detected by the page-side peer. The SW only sees this as a
-          // 503 carrier; logging the structured `(expected, got)` pairs from
-          // the SW makes the actual bump visible in DevTools without having
-          // to inspect the body.
+          // Drift detected by the page-side peer; SW only carries it as a 503.
+          // Log the `(expected, got)` pair so the bump shows in DevTools
+          // without inspecting the body.
           console.error('[rifty/service-worker] preview reply protocol mismatch', {
             expected: err.expected,
             got: err.got,
@@ -115,11 +109,9 @@ export async function routePreview(
         return;
       }
       const headers = new Headers(data.headers);
-      // The playground page is cross-origin-isolated (COOP same-origin + COEP
-      // credentialless — D-001). Iframe-loaded preview responses need their
-      // own CORP + COEP or the browser blocks them. Set defaults that match
-      // the page; explicit handler-supplied values win because Headers.set
-      // here would overwrite — only set if absent.
+      // Page is cross-origin-isolated (COOP same-origin + COEP credentialless —
+      // D-001); iframe-loaded preview responses need their own CORP + COEP or
+      // the browser blocks them. Only set if absent so handler-supplied values win.
       if (!headers.has('Cross-Origin-Resource-Policy')) {
         headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
       }
@@ -135,9 +127,8 @@ export async function routePreview(
         new Uint8Array(copy).set(raw);
         body = copy;
       } else if (raw != null) {
-        // Defensive: handle plain ArrayBuffer too. `data` is structured-cloned
-        // on the wire, so a Uint8Array view becomes a Uint8Array again, and
-        // an ArrayBuffer stays an ArrayBuffer.
+        // Defensive: plain ArrayBuffer. `data` is structured-cloned on the wire,
+        // so an ArrayBuffer stays an ArrayBuffer.
         body = raw as ArrayBuffer;
       }
       resolve(new Response(body, { status: data.status, statusText: data.statusText, headers }));

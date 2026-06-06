@@ -1,56 +1,44 @@
 /**
- * Worker {@link PreviewOwnerBinding} — the second binding consumer,
- * landed for A-023 (SW→Worker direct routing) on top of ADR-0043's
- * cross-realm preview bridge.
+ * Worker {@link PreviewOwnerBinding} (A-023: SW→Worker direct routing),
+ * on top of ADR-0043's cross-realm preview bridge.
  *
- * Owner shape: a `Client` of `type === 'worker'` (a kernel-spawned
- * Worker that hosts a Real-Vite-style preview port). The Worker
- * announces itself with an extended `rifty:preview:ready` frame:
+ * Owner shape: a `Client` of `type === 'worker'` hosting a Real-Vite-style
+ * preview port. The Worker announces itself with an extended
+ * `rifty:preview:ready` frame:
  *
  *   {
  *     type: 'rifty:preview:ready',
  *     frameVersion: '1',
  *     routingVersion: '1',
- *     ports: [3000, 5173]   // additive optional field — default []
+ *     ports: [3000, 5173]   // additive optional — default []
  *   }
  *
- * Each port listed becomes routable to this Worker until either:
- *   - the Worker posts `rifty:preview:goodbye` (with the same `ports`,
- *     so the SW knows which mapping to drop), OR
- *   - `scope.clients.get(workerId)` returns `undefined` at fetch time,
- *     meaning the Worker terminated without a chance to send goodbye.
+ * Each port stays routable to this Worker until either the Worker posts
+ * `rifty:preview:goodbye` (same `ports`, so the SW knows which to drop),
+ * or `scope.clients.get(workerId)` returns `undefined` at fetch time
+ * (Worker terminated without sending goodbye).
  *
- * The `ports` field is **additive optional** (default `[]`) so the
- * frame is structurally compatible with the existing window-side
- * `rifty:preview:ready` shape — no `SW_FRAME_VERSION` bump required
- * per ADR-0031's SemVer-major rule (restated in ADR-0040).
+ * `ports` is additive optional (default `[]`) so the frame stays
+ * structurally compatible with the window-side `rifty:preview:ready`
+ * shape — no `SW_FRAME_VERSION` bump per ADR-0031/ADR-0040.
  *
  * Lifecycle differences from the window binding:
- *
- *  - **No `pagehide`.** Workers have no document; the SW relies on the
- *    Worker sending goodbye on its own termination handler, plus the
- *    lazy `clients.get(id) === undefined` check at fetch time. This is
- *    the trap Q-2026-05-27-002 warned about; the binding handles it by
+ *  - No `pagehide` (Workers have no document): the SW relies on the
+ *    Worker's goodbye plus the lazy `clients.get(id) === undefined` check
+ *    at fetch time — the trap Q-2026-05-27-002 warned about; handled by
  *    re-validating the owner before returning it.
- *  - **No `controllerchange`.** Workers don't switch controllers; if
- *    the parent that spawned the Worker reloads, the Worker's owning
- *    process is gone and `clients.get` returns undefined.
- *  - **In-flight waiters.** If `resolveOwner` discovers the Worker is
- *    gone, any pending `waitForReady` resolves with `'gone'` (not
- *    `'timeout'`) so the route-preview path returns a precise 503
- *    rather than waiting for the full timeout.
+ *  - No `controllerchange`: if the parent that spawned the Worker reloads,
+ *    the owning process is gone and `clients.get` returns undefined.
+ *  - In-flight waiters: if `resolveOwner` finds the Worker gone, pending
+ *    `waitForReady` resolves `'gone'` (not `'timeout'`) for a precise 503.
  *
  * Cited ADRs:
- * - **ADR-0011** — sync IPC + worker-as-process. Provides the
- *   kernel-spawned-Worker realm with `Client.type === 'worker'`.
- * - **ADR-0017** — `@riftydev/net` cross-realm port-registry bridge. The
- *   `ports: number[]` field in the ready frame mirrors the Worker's
- *   `serveCrossRealmPreview(port, …)` registrations.
- * - **ADR-0040** — `SW_FRAME_VERSION` / `SW_ROUTING_VERSION` split.
- *   `ports` is additive optional under the frame contract.
- * - **ADR-0043** — Vite-in-Worker. Made A-023 the next consumer of the
- *   bridge primitive; ADR-0043 §"Follow-ups" called for this binding.
- * - **ADR-0046** — the binding contract this module implements.
+ * - ADR-0011 — sync IPC + worker-as-process; provides `Client.type === 'worker'`.
+ * - ADR-0017 — `@riftydev/net` cross-realm bridge; `ports` mirrors the
+ *   Worker's `serveCrossRealmPreview(port, …)` registrations.
+ * - ADR-0040 — `SW_FRAME_VERSION` / `SW_ROUTING_VERSION` split; `ports` additive.
+ * - ADR-0043 — Vite-in-Worker; §"Follow-ups" called for this binding.
+ * - ADR-0046 — the binding contract this module implements.
  */
 
 import type {
@@ -78,10 +66,7 @@ const defaultLogger: WorkerOwnerBindingLogger = {
 };
 
 export interface WorkerOwnerBindingOptions {
-  /**
-   * Forwarded to the per-binding warn path (protocol-version drift,
-   * unowned-port lookup). Defaults to `console.warn`.
-   */
+  /** Warn path for protocol-version drift / unowned-port lookup. Defaults to `console.warn`. */
   readonly logger?: WorkerOwnerBindingLogger;
 }
 
@@ -89,15 +74,12 @@ interface ReadyWaiter {
   resolve(outcome: ReadinessOutcome): void;
 }
 
-/**
- * Worker-binding internal state. Kept private to {@link WorkerOwnerBinding}
- * so each binding instance has its own mappings (tests don't bleed state).
- */
+/** Per-instance to keep state from bleeding across binding instances (tests). */
 interface WorkerBindingState {
   readonly ready: Set<string>;
   readonly mismatched: Set<string>;
   readonly warned: Set<string>;
-  /** port → ownerId mapping built from each Worker's ready frame. */
+  /** port → ownerId, built from each Worker's ready frame. */
   readonly portOwners: Map<number, string>;
   /** ownerId → ports it claimed, so goodbye can drop them precisely. */
   readonly ownerPorts: Map<string, Set<number>>;
@@ -133,8 +115,7 @@ function dropOwner(state: WorkerBindingState, ownerId: string): void {
   const ports = state.ownerPorts.get(ownerId);
   if (ports) {
     for (const port of ports) {
-      // Only drop the port mapping if it still points at this owner —
-      // a fresh owner that's already claimed the port keeps its mapping.
+      // Only drop if still ours — a fresh owner may have re-claimed the port.
       if (state.portOwners.get(port) === ownerId) {
         state.portOwners.delete(port);
       }
@@ -163,10 +144,8 @@ export class WorkerOwnerBinding implements PreviewOwnerBinding {
     if (!ownerId) return null;
     const client = (await scope.clients.get(ownerId)) ?? null;
     if (!client) {
-      // The Worker terminated without a goodbye. Drop the stale mapping
-      // so a future fetch doesn't repeat the lookup, and resolve any
-      // pending waiters with `'gone'` so the route-preview path returns
-      // a precise 503.
+      // Worker terminated without goodbye: drop the stale mapping and
+      // resolve pending waiters with `'gone'` for a precise 503.
       dropOwner(state, ownerId);
       resolveWaiters(state, ownerId, 'gone');
       return null;
@@ -194,8 +173,8 @@ export class WorkerOwnerBinding implements PreviewOwnerBinding {
       const source = ev.source as Client | null;
       const sourceId = source && 'id' in source ? source.id : null;
       if (!sourceId) return;
-      // Only act on `type === 'worker'` sources — a window posting the
-      // worker-shape frame would otherwise be erroneously claimed.
+      // Only `type === 'worker'` sources, else a window posting the
+      // worker-shape frame would be erroneously claimed.
       if (source && 'type' in source && source.type !== 'worker') return;
 
       const frameOk = data.frameVersion === SW_FRAME_VERSION;
@@ -232,8 +211,7 @@ export class WorkerOwnerBinding implements PreviewOwnerBinding {
         }
         resolveWaiters(state, sourceId, 'ready');
       } else {
-        // Goodbye — drop the owner and resolve pending waiters with
-        // `'gone'` so anything in-flight clears immediately.
+        // Goodbye: resolve pending waiters `'gone'` so in-flight requests clear at once.
         dropOwner(state, sourceId);
         resolveWaiters(state, sourceId, 'gone');
       }

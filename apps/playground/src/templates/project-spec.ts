@@ -1,19 +1,17 @@
 /**
- * ProjectSpec — the playground's runtime-agnostic description of a "real npm
- * project" template (ADR-0078). The real-vite worker bootstrap, the page-realm
- * orchestrator, and the mode machine are driven off this value object instead
- * of the inline Vite literals they used to carry, so a second runnable template
- * becomes a data change rather than a worker fork.
+ * Runtime-agnostic description of a "real npm project" template (ADR-0078).
+ * Worker bootstrap, page-realm orchestrator, and mode machine are driven off
+ * this value object instead of inline Vite literals, so a second runnable
+ * template is a data change rather than a worker fork.
  *
- * Pure data + a pure mapping function: no DOM, no channels, no solid-js import
- * (same glue-layer altitude as `glue/file-tree.ts` / `glue/snapshot-fs.ts`).
- * Only `id` ever crosses a realm boundary (carried over env as
+ * Pure data + pure mapping function: no DOM, no channels, no solid-js (glue
+ * altitude). Only `id` crosses a realm boundary (over env as
  * `RIFTY_RFV_TEMPLATE`); each realm re-resolves the full spec locally.
  */
 
 /** Serializable subset of Vite's `createServer` knobs the worker reconstructs.
- *  The non-serializable plugin instances (the HMR-bridge plugin) are NOT here —
- *  the worker builds them from {@link ProjectSpec.hmr} after resolving the spec. */
+ *  Non-serializable plugin instances (the HMR-bridge plugin) are NOT here — the
+ *  worker builds them from {@link ProjectSpec.hmr} after resolving the spec. */
 export interface ServerSpec {
   readonly appType: string;
   readonly strictPort: boolean;
@@ -65,9 +63,8 @@ export interface BootstrapConfig {
 }
 
 /**
- * Build the index.html a worker-served template needs. The `<script>` src is
- * ABSOLUTE (the worker serving contract) and DERIVED from the entry path, so the
- * seeded HTML always agrees with the entry the template declares. The dev-mode
+ * The `<script>` src is ABSOLUTE (worker serving contract) and DERIVED from the
+ * entry path, so seeded HTML always agrees with the declared entry. The dev-mode
  * fallback keeps its own RELATIVE-src HTML (it escapes the iframe `/preview/`
  * base) — the two serving contracts must not be shared (ADR-0077 / devMode.ts).
  */
@@ -99,11 +96,10 @@ function buildPackageJson(spec: ProjectSpec): {
 }
 
 /**
- * Pure mapping: a ProjectSpec + the resolved port/root → the concrete config the
- * worker bootstrap feeds to `install()` / `createServer()` / the seed step. This
- * is the unit-tested seam where the old inline Vite literals now derive from
- * data, and where an entry/package.json/index.html drift would surface as a
- * red test rather than a silent "works for vite, breaks for the next template".
+ * Pure mapping: ProjectSpec + resolved port/root → the config the worker
+ * bootstrap feeds to `install()` / `createServer()` / the seed step. Unit-tested
+ * seam where entry/package.json/index.html drift surfaces as a red test rather
+ * than a silent "works for vite, breaks for the next template".
  */
 export function resolveBootstrapConfig(
   spec: ProjectSpec,

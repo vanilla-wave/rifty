@@ -1,13 +1,12 @@
 /**
  * File-manager mutations over the sync VFS mirror (ADR-0075), factored out of
- * the {@link ../components/FileExplorer.tsx | FileExplorer} so the tricky bits
- * — recursive `copyTree`, rename (no native `renameSync` exists on `FsSync`),
- * collision guards — are unit-testable against a fake target with no DOM.
+ * {@link ../components/FileExplorer.tsx | FileExplorer} so the tricky bits —
+ * recursive `copyTree`, rename (no native `renameSync` on `FsSync`), collision
+ * guards — are unit-testable against a fake target with no DOM.
  *
- * Every op goes through the SAME sync mirror the runtime/shell read, so changes
- * are visible immediately. Collisions throw (never a silent overwrite); the
- * caller surfaces the message. There are no silent stubs here — directory
- * rename is a real recursive copy + remove.
+ * Every op uses the SAME sync mirror the runtime/shell read, so changes are
+ * visible immediately. Collisions throw (never a silent overwrite); directory
+ * rename is a real recursive copy + remove (no silent stub).
  */
 import type { VfsDirent } from '@riftydev/vfs';
 import { dirname, joinPath } from '@riftydev/vfs';

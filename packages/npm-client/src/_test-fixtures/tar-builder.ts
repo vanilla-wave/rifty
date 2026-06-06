@@ -1,15 +1,9 @@
 /**
- * Test-only tar fixture helpers.
+ * Test-only tar fixture helpers: fabricate minimal POSIX `ustar` archives
+ * (typically a single `package/package.json` entry) without a dependency.
+ * Consolidates the near-identical helper each installer/unpacker test grew.
  *
- * Several npm-client tests (`installer.test`, `installer-lockfile.test`,
- * `installer-peer-optional.test`, `installer-pipeline.test`, `unpacker.test`)
- * need to fabricate minimal POSIX `ustar` tar archives — typically a single
- * `package/package.json` entry — without pulling a dependency. Each test file
- * grew its own near-identical ~50-line helper; this module consolidates them.
- *
- * Naming: the `_test-fixtures/` prefix marks this as test-only. Do **not**
- * re-export from `src/index.ts` — production code paths must never reach for
- * these helpers.
+ * Do **not** re-export from `src/index.ts` — production must never reach here.
  */
 const enc = new TextEncoder();
 
@@ -30,15 +24,12 @@ function writeStr(buf: Uint8Array, str: string, off: number, len: number): void 
  * Build a single 512-byte tar header.
  *
  * @param name      tar entry name, e.g. `package/package.json`.
- * @param size      data length in bytes (the caller pads the body itself).
- * @param typeFlag  single ASCII char per the tar spec. Defaults to `'0'`
- *                  (regular file). Use `'2'` for symlinks, `'L'` / `'K'` for
- *                  GNU long-name / long-linkname extension headers.
- * @param opts.linkname  written into the linkname field at offset 157
- *                       (used for symlink headers).
- * @param opts.ustar     emit the `ustar\000` magic at offset 257. Defaults to
- *                       `true`; pass `false` only when testing pre-ustar
- *                       behaviour.
+ * @param size      data length in bytes (caller pads the body).
+ * @param typeFlag  ASCII char per tar spec; default `'0'` (regular file).
+ *                  `'2'` symlink, `'L'`/`'K'` GNU long-name/long-linkname.
+ * @param opts.linkname  linkname field (offset 157), for symlink headers.
+ * @param opts.ustar     emit `ustar\000` magic at offset 257; default `true`,
+ *                       pass `false` to test pre-ustar behaviour.
  */
 export function buildHeader(
   name: string,
@@ -56,7 +47,7 @@ export function buildHeader(
   h[135] = 0x20;
   writeStr(h, '00000000000', 136, 11); // mtime
   h[147] = 0x20;
-  // checksum placeholder — 8 spaces, replaced below once we know the sum
+  // checksum placeholder — spaces, replaced below once we know the sum
   for (let i = 148; i < 156; i++) h[i] = 0x20;
   h[156] = typeFlag.charCodeAt(0); // typeflag
   if (opts.linkname) writeStr(h, opts.linkname, 157, 100);
@@ -64,7 +55,6 @@ export function buildHeader(
     writeStr(h, 'ustar', 257, 6);
     writeStr(h, '00', 263, 2);
   }
-  // Now compute the real checksum.
   let sum = 0;
   for (let i = 0; i < 512; i++) sum += h[i] ?? 0;
   writeStr(h, sum.toString(8).padStart(6, '0'), 148, 6);

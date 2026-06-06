@@ -5,129 +5,52 @@ Date: 2026-05-27
 
 ## Context
 
-M8's open-acceptance row called for vendoring `esbuild.wasm` end-to-end
-through `@riftydev/runtime-wasi`, and M10 named `Vite ↔ esbuild.wasm` as
-the shadow-binding target. Q-2026-05-27-003 (preopens/cwd API) was
-explicitly waiting for esbuild's behaviour as its forcing consumer. The
-plan assumed esbuild shipped a `wasi_snapshot_preview1` build to npm.
+M8's open-acceptance row called for vendoring `esbuild.wasm` end-to-end through `@riftydev/runtime-wasi`; M10 named `Vite ↔ esbuild.wasm` as the shadow-binding target; Q-2026-05-27-003 (preopens/cwd API) waited on esbuild as its forcing consumer. All assumed esbuild ships a `wasi_snapshot_preview1` build to npm.
 
-A Wave-2 vendoring spike (2026-05-27) inspected all three published
-candidates — `esbuild-wasm@0.21.5`, `0.25.0`, and `0.28.0`. Every one of
-them imports the **`gojs` ABI** (Go's `js/wasm` target):
-`gojs.runtime.*`, `gojs.syscall/js.*`, and friends. None of them imports
-`wasi_snapshot_preview1`. esbuild is written in Go and only publishes
-the `js/wasm` target — there is no upstream WASI build, and the path
-from Go source to a real WASI binary is non-trivial (Go's WASI/WASIp1
-support exists but the esbuild project does not ship it).
+A Wave-2 vendoring spike (2026-05-27) checked `esbuild-wasm@0.21.5`, `0.25.0`, `0.28.0`. Every one imports the **`gojs` ABI** (Go's `js/wasm` target: `gojs.runtime.*`, `gojs.syscall/js.*`); none imports `wasi_snapshot_preview1`. esbuild is Go and ships only `js/wasm` — no upstream WASI build, and the Go-source → WASI path is non-trivial (Go's WASIp1 exists, esbuild doesn't ship it).
 
-`@riftydev/runtime-wasi` is a WASI preview1 shim; it cannot host a `gojs`
-guest. The Go-runtime ABI is a different host contract: a `syscall/js`
-handle protocol, a `wasm_exec.js`-equivalent host shim, GC interop, and
-goroutine scheduling. Implementing it is a multi-week design effort on
-its own.
+`@riftydev/runtime-wasi` is a WASI preview1 shim and cannot host a `gojs` guest. The gojs ABI is a different host contract (`syscall/js` handle protocol, `wasm_exec.js`-equivalent shim, GC interop, goroutine scheduling) — a multi-week effort.
 
-This is **IRREVERSIBLE per the Reversibility checklist** (M8/M10
-acceptance criteria and Q-2026-05-27-003's forcing consumer all
-referenced esbuild explicitly), so an ADR is required.
+**IRREVERSIBLE per the Reversibility checklist** (M8/M10 acceptance and Q-2026-05-27-003's forcing consumer all named esbuild), so an ADR is required.
 
 ## Decision
 
-### D1: swc replaces esbuild as the M8/M10 forcing consumer
+**D1: swc replaces esbuild as the M8/M10 forcing consumer.** `swc` (Rust → wasm) ships a real WASI build to npm and exercises the M8 surface we need: argv, environ, fd_read/fd_write, preopens, proc_exit, plus enough fs syscalls to read a TS file and write JS. Exact package name TBD at vendoring time; design point is "Rust-source, WASIp1-target binary doing TS/JSX transform," which swc satisfies upstream.
 
-`swc` (Rust → wasm) publishes a real WASI build to npm and exercises the
-same surface area we need from M8's runner — argv, environ, fd_read /
-fd_write, preopens, proc_exit, plus enough fs syscalls to read a TS file
-and write the JS output. The exact published package name will be
-verified at vendoring time (swc's published WASI build — exact package
-TBD when vendored); the design point is "a Rust-source, WASIp1-target
-binary that performs TS/JSX transformation," and swc satisfies it
-upstream.
+**D2: Q-2026-05-27-003 (preopens/cwd API) — same options, new forcing consumer.** Options unchanged (A: `cwd?: string`; B: ordered array; C: both). Still deferred until the real consumer runs through `runWasi` and exposes constraints. Consumer is now `swc.wasm`, not `esbuild.wasm`; question stays Active.
 
-### D2: Q-2026-05-27-003 (preopens/cwd API) keeps the same options, new
-forcing consumer
+**D3: Go-runtime (gojs) bridge deferred — no work now.** `@riftydev/runtime-go-wasm` is not in M8, M10, or M11. Required scope:
+- Full `syscall/js` handle protocol (bidirectional JS↔Go value refs — host-side handle table, ref/unref, function-call marshalling).
+- `wasm_exec.js`-equivalent host shim (Go's `misc/wasm/` glue — argv/env, time, random, fs stub).
+- Per-instance GC + goroutine scheduling integrated with our process model.
 
-The three options (A: `cwd?: string`, B: ordered array, C: both) are
-unchanged. The decision is still deferred until the real consumer runs
-through `runWasi` and exposes the constraints. The consumer is now
-`swc.wasm` rather than `esbuild.wasm`; the question stays Active.
+Multi-week work whose only named beneficiary is esbuild; blocks no milestone. Parked in TASKS.md Follow-ups.
 
-### D3: Go-runtime (gojs) bridge is deferred — no work now
-
-`@riftydev/runtime-go-wasm` (or whatever name lands) is not in M8, M10, or
-M11. The required scope is:
-
-- Full `syscall/js` handle protocol (Go's bidirectional JS↔Go value
-  references — a host-side handle table, ref/unref semantics, function
-  call marshalling).
-- `wasm_exec.js`-equivalent host shim (the runtime glue Go ships in its
-  `misc/wasm/` directory — argv/env, time, random, fs stub).
-- Per-instance GC + goroutine scheduling integration with our process
-  model.
-
-That is multi-week work whose only currently-named beneficiary is
-esbuild. It blocks no other milestone. The task is parked in TASKS.md
-under the Follow-ups section so it is not lost.
-
-### D4: This is a docs-only correction; no code changes ship in this ADR
-
-The runtime-wasi shim, the M8 conformance tests, and the
-`tests/integration/` set are all unchanged by this ADR. The next code
-change in this lane is the swc vendoring PR, which closes the M8
-open-acceptance row and pins down Q-2026-05-27-003.
+**D4: Docs-only correction; no code ships in this ADR.** runtime-wasi shim, M8 conformance tests, and `tests/integration/` all unchanged. Next code change in this lane is the swc vendoring PR, which closes the M8 open-acceptance row and pins Q-2026-05-27-003.
 
 ## Alternatives considered
 
-- **Build `@riftydev/runtime-go-wasm` now.** Rejected as multi-week design
-  (full `syscall/js` handle protocol, GC interop, `wasm_exec.js`
-  rebuild). The only currently-named beneficiary is esbuild, and we
-  have a substitute that ships WASI today (swc). Pay this cost when a
-  second Go-WASM guest appears, not for one.
-- **Drop esbuild entirely from the long-term plan.** Rejected: M10 still
-  wants a TS/JSX transform on the dev path, and the architectural
-  question — "does our WASI runner host a real-world transformer?" —
-  has not gone away. swc covers the same architectural need with a
-  binary we can actually run today.
-- **Stay with esbuild as the goal; accept M8 stays open indefinitely.**
-  Rejected: M10's `Vite ↔ <transformer>.wasm` shadow-binding has to
-  point somewhere concrete, and an indefinitely-open M8 row blocks the
-  M10 close.
+- **Build `@riftydev/runtime-go-wasm` now.** Rejected — multi-week design (full `syscall/js` protocol, GC interop, `wasm_exec.js` rebuild) for one named beneficiary (esbuild), when swc ships WASI today. Pay this cost when a second Go-WASM guest appears.
+- **Drop esbuild from the long-term plan entirely.** Rejected — M10 still needs a TS/JSX transform on the dev path, and "does our WASI runner host a real-world transformer?" remains open. swc covers the same need with a runnable binary.
+- **Keep esbuild as the goal; accept M8 stays open indefinitely.** Rejected — M10's `Vite ↔ <transformer>.wasm` shadow-binding must point somewhere concrete; an open-indefinitely M8 row blocks the M10 close.
 
 ## Trade-offs
 
-- **swc ≠ esbuild bundle-for-bundle.** Vite's downstream shadow-binding
-  will target the swc API surface instead of esbuild's. The
-  shadow-registry adapter (ADR-0015) handles the API rename; the wire
-  contract through `@riftydev/runtime-wasi` is unchanged.
-- **The Go bridge is not gone — it's parked.** A future task can pick
-  up the gojs work without re-litigating this ADR; the only thing this
-  ADR commits to is that the bridge is not part of M8/M10/M11.
-- **Q-2026-05-27-003's design budget shifts to swc's constraints.**
-  Whatever working-directory and preopen semantics swc needs will pin
-  down the API. esbuild's behaviour is now informational only (it would
-  re-enter the picture if and only if the Go bridge ever lands).
+- **swc ≠ esbuild bundle-for-bundle.** Vite's shadow-binding targets the swc API surface, not esbuild's. The shadow-registry adapter (ADR-0015) handles the API rename; the wire contract through `@riftydev/runtime-wasi` is unchanged.
+- **Go bridge parked, not gone.** A future task picks up gojs without re-litigating this ADR; the only commitment here is "not part of M8/M10/M11."
+- **Q-2026-05-27-003's design budget shifts to swc's constraints.** swc's working-directory/preopen needs pin the API. esbuild's behaviour is now informational only (relevant again only if the Go bridge ever lands).
 
 ## Consequences
 
-- `PROJECT_PLAN.md` edits: L13, L29, L173, L326, L327, L333, L366
-  rewritten to name swc where they used to name esbuild, with a
-  cross-reference to this ADR the first time esbuild is removed from
-  the WASI lineup so the historical trail is visible.
-- `TASKS.md` edits: M8 open-acceptance row and M10 open-acceptance row
-  point at swc; a new Follow-ups entry parks the Go-runtime bridge
-  work.
-- `OPEN_QUESTIONS.md` Q-2026-05-27-003 gets an amendment noting the
-  forcing-consumer change; status stays Active; the "Needs human review
-  by" target re-points at *Start of M8 swc.wasm vendoring work (per
-  ADR-0044)*.
-- `CHANGELOG.md` Unreleased Documented entry records the planning
-  correction.
+- `PROJECT_PLAN.md`: L13, L29, L173, L326, L327, L333, L366 rewritten to name swc instead of esbuild, with a cross-ref to this ADR at the first esbuild removal so the historical trail stays visible.
+- `TASKS.md`: M8 and M10 open-acceptance rows point at swc; new Follow-ups entry parks the Go-runtime bridge.
+- `OPEN_QUESTIONS.md`: Q-2026-05-27-003 amended for the forcing-consumer change; status stays Active; "Needs human review by" re-points at *Start of M8 swc.wasm vendoring work (per ADR-0044)*.
+- `CHANGELOG.md`: Unreleased Documented entry records the planning correction.
 - No source code changes ship in this PR.
 
 ## References
 
 - `PROJECT_PLAN.md` §4 milestones M8 and M10.
 - `OPEN_QUESTIONS.md` Q-2026-05-27-003 (preopens/cwd API).
-- ADR-0015 (shadow-registry consolidation — the layer where the
-  Vite↔swc API translation lives).
-- ADR-0011 (sync IPC + worker-as-process — the runtime that hosts the
-  swc.wasm guest, unchanged by this ADR).
+- ADR-0015 (shadow-registry consolidation — where the Vite↔swc API translation lives).
+- ADR-0011 (sync IPC + worker-as-process — the runtime hosting the swc.wasm guest, unchanged by this ADR).

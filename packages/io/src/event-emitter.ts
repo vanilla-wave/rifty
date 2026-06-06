@@ -1,15 +1,12 @@
 /**
- * Node-compatible `node:events` — EventEmitter, owned by `@riftydev/io`.
+ * Node-compatible `node:events` EventEmitter. Per ADR-0012 this primitive lives
+ * in `@riftydev/io`, consumed by `@riftydev/runtime-js`, `@riftydev/kernel`, `@riftydev/net`.
  *
- * Behaviours we replicate (from the Node docs):
+ * Node contract replicated:
  *   - `emit('error', ...)` with no listener throws.
- *   - Listeners can be added during emit; they don't fire for the in-flight event.
- *   - `once(name, fn)` wraps fn; the wrapper removes itself before invoking fn.
- *   - `getMaxListeners` / `setMaxListeners` track a per-emitter cap; if exceeded
- *     we log a warning once (Node prints to stderr).
- *
- * Per ADR-0012, this primitive lives in `@riftydev/io` and is consumed by
- * `@riftydev/runtime-js`, `@riftydev/kernel`, and `@riftydev/net`.
+ *   - Listeners added during emit don't fire for the in-flight event.
+ *   - `once(name, fn)` wraps fn; wrapper removes itself before invoking fn.
+ *   - max-listeners cap warns once when exceeded.
  */
 type Listener = (...args: unknown[]) => void;
 
@@ -20,13 +17,11 @@ export class EventEmitter {
   static defaultMaxListeners = DEFAULT_MAX_LISTENERS;
   static captureRejectionSymbol = captureRejectionSymbol;
 
-  // All instance state is lazily created. Node's EventEmitter initialises
-  // `this._events` on first use, so its methods work even when the constructor
-  // never ran — i.e. when a package mixes `EventEmitter.prototype` onto a plain
-  // function (express's `app`, via `merge-descriptors`) or does
-  // `EventEmitter.call(this)` through `util.inherits` (send's `SendStream`).
-  // Eagerly-initialised class fields broke both idioms; lazy getters mirror
-  // Node and fix them without per-call-site changes.
+  // State is lazily created so methods work when the constructor never ran —
+  // e.g. express mixing `EventEmitter.prototype` onto a plain function via
+  // `merge-descriptors`, or send's `SendStream` via `EventEmitter.call(this)`
+  // through `util.inherits`. Node lazily inits `_events`; eager class fields
+  // broke both idioms, lazy getters mirror Node.
   private _listenersMap?: Map<string | symbol, Listener[]>;
   private _maxListeners?: number;
   private _warned?: Set<string | symbol>;
@@ -69,10 +64,9 @@ export class EventEmitter {
   }
 
   /**
-   * Emit `newListener` BEFORE the target listener is added (so handlers can
-   * see the previous count). Don't re-emit for the meta-event itself.
-   * Shared between {@link addListener} and {@link prependListener} so that
-   * both insertion paths produce the same `newListener` semantics as Node.
+   * Emit `newListener` BEFORE the target is added (so handlers see the previous
+   * count); skip for the meta-event itself. Shared by {@link addListener} and
+   * {@link prependListener} for identical Node `newListener` semantics.
    */
   private emitNewListener(event: string | symbol, listener: Listener): void {
     if (event === 'newListener') return;
@@ -103,11 +97,9 @@ export class EventEmitter {
     if (idx === -1) return this;
     arr.splice(idx, 1);
     if (arr.length === 0) this.listenersMap.delete(event);
-    // Node emits a synchronous `'removeListener'` meta-event AFTER the listener
-    // has been detached (so a handler that inspects `listenerCount()` sees the
-    // post-removal count). Suppress the emit when the removed event IS
-    // `removeListener` itself — otherwise `removeListener('removeListener', ...)`
-    // would recurse infinitely.
+    // Node emits `'removeListener'` AFTER detach (handlers see post-removal
+    // count). Suppress when the removed event IS `removeListener` — else
+    // `removeListener('removeListener', ...)` recurses infinitely.
     if (event !== 'removeListener' && removed !== undefined) {
       const meta = this.listenersMap.get('removeListener');
       if (meta && meta.length > 0) {
@@ -209,10 +201,8 @@ export class EventEmitter {
 
 export function once(emitter: EventEmitter, event: string | symbol): Promise<unknown[]> {
   return new Promise((resolve, reject) => {
-    // Defensive cleanup: remove BOTH listeners on BOTH resolve and reject
-    // paths. The `emitter.once` wrappers will auto-remove the firing listener,
-    // but explicitly removing both ensures correctness even if the emitter's
-    // semantics drift (e.g., a custom `once` that doesn't auto-remove).
+    // Remove BOTH listeners on either path. `once` wrappers auto-remove the
+    // firing one, but explicit cleanup stays correct if a custom `once` doesn't.
     const cleanup = (): void => {
       emitter.off(event, onEvent);
       if (event !== 'error') emitter.off('error', onError);

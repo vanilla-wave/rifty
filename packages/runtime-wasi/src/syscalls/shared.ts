@@ -1,13 +1,11 @@
 /**
- * Shared types, constants, and small helpers for WASI preview1 syscalls. The
- * syscall factory modules ({@link ./fd.ts}, {@link ./path.ts}, {@link ./proc.ts})
- * consume a {@link WasiCtx} that owns the mutable runtime state and the memory
- * accessors.
+ * Shared types, constants, and helpers for WASI preview1 syscalls. The syscall
+ * factory modules ({@link ./fd.ts}, {@link ./path.ts}, {@link ./proc.ts}) consume
+ * a {@link WasiCtx} that owns the mutable runtime state and memory accessors.
  *
- * This file also owns the canonical preview1 rights bitsets
- * ({@link RIGHTS_FILE_BASE}, {@link RIGHTS_DIR_BASE}) and the host-error → WASI
- * errno mapping helper ({@link errToWasiErrno}) — both are consumed by `fd.ts`
- * and `path.ts`, keeping the definitions in one place.
+ * Also owns the canonical preview1 rights bitsets ({@link RIGHTS_FILE_BASE},
+ * {@link RIGHTS_DIR_BASE}) and the host-error → WASI errno mapping
+ * ({@link errToWasiErrno}), keeping these definitions in one place.
  */
 
 import { joinPath, normalizePath } from '@riftydev/vfs';
@@ -39,17 +37,15 @@ export const FDFLAGS_NONBLOCK = 1 << 2;
 export const FDFLAGS_RSYNC = 1 << 3;
 export const FDFLAGS_SYNC = 1 << 4;
 
-// preview1 rights subset — bits we explicitly check (see WASI spec rights table).
-// Used by `path_open` to derive the granted rights set on a new fd and by
-// `fd_write` to enforce that the open token actually had write capability.
+// preview1 rights bits we explicitly check (WASI spec rights table): `path_open`
+// derives a new fd's granted rights; `fd_write` enforces write capability.
 export const RIGHTS_FD_READ = 1n << 1n;
 export const RIGHTS_FD_WRITE = 1n << 6n;
 
 /**
- * Default `fs_rights_base` granted to a newly-opened file fd when the caller
- * passes `0n` (WASI spec: "do not restrict"). Mirrors what `fd_fdstat_get`
- * reports back for file fds and what `path_open` clamps requested rights
- * against when a child fd inherits from a parent dir fd.
+ * Default `fs_rights_base` for a newly-opened file fd when the caller passes
+ * `0n` (WASI spec: "do not restrict"). Also what `fd_fdstat_get` reports for
+ * file fds and the clamp ceiling when a child fd inherits from a parent dir fd.
  */
 export const RIGHTS_FILE_BASE =
   /* fd_datasync */ (1n << 0n) |
@@ -66,9 +62,9 @@ export const RIGHTS_FILE_BASE =
   /* fd_filestat_set_times */ (1n << 23n);
 
 /**
- * Default `fs_rights_base` granted to a directory fd. `fd_fdstat_get` reports
- * this, and `path_open` uses it as the upper bound when a guest passes 0n
- * (no restriction) so child fds inherit only what the parent could do.
+ * Default `fs_rights_base` for a directory fd. `fd_fdstat_get` reports this, and
+ * `path_open` uses it as the upper bound when a guest passes 0n (no restriction)
+ * so child fds inherit only what the parent could do.
  */
 export const RIGHTS_DIR_BASE =
   /* fd_fdstat_set_flags */ (1n << 3n) |
@@ -109,7 +105,7 @@ export interface FileDescriptor {
   type: 'stdin' | 'stdout' | 'stderr' | 'file' | 'dir';
   /** VFS path (for files/dirs). */
   path?: string;
-  /** File contents (for files), kept in memory for the lifetime of the fd. */
+  /** File contents (for files), kept in memory for the fd's lifetime. */
   data?: Uint8Array;
   cursor?: number;
   isPreopen?: boolean;
@@ -120,32 +116,29 @@ export interface FileDescriptor {
    */
   fdflags?: number;
   /**
-   * preview1 `rights` bitset granted at open time. When undefined, the fd is
-   * treated as default-permissive (used for stdio and preopens — guests don't
-   * open these and so never negotiate rights). `path_open` sets this from
-   * `fs_rights_base` (default-permissive when caller passed 0n, per WASI
-   * spec). `fd_write` checks `RIGHTS_FD_WRITE` and returns `E_PERM` if absent.
+   * preview1 `rights` bitset granted at open time. `undefined` =
+   * default-permissive (stdio/preopens — guests never open these, so never
+   * negotiate rights). `path_open` sets it from `fs_rights_base`
+   * (default-permissive when caller passed 0n, per spec). `fd_write` checks
+   * `RIGHTS_FD_WRITE` and returns `E_PERM` if absent.
    */
   rights?: bigint;
   /**
-   * preview1 `rights_inheriting` bitset — the upper bound for rights granted
-   * to fds opened *through* this fd via `path_open`. Stored on directory fds
-   * so that child fds can be clamped against this set. `undefined` means
-   * "default-permissive" (stdio, preopens).
+   * preview1 `rights_inheriting` bitset — upper bound for rights granted to fds
+   * opened *through* this fd via `path_open`. Stored on dir fds to clamp child
+   * fds. `undefined` = default-permissive (stdio, preopens).
    */
   rightsInheriting?: bigint;
 }
 
 /**
- * WASI's `AT_FDCWD` sentinel — passed as the base fd of a path-relative call to
- * mean "resolve against the current working directory". The witx type is a
- * signed `i32` of `-1`; a wasm `i32` argument arrives in JS either as `-1`
- * (signed view) or `0xffffffff` (unsigned view) depending on how the engine
- * widens it, so callers must check both.
+ * WASI's `AT_FDCWD` base-fd sentinel: "resolve against the cwd". The witx type
+ * is a signed `i32` of `-1`, but a wasm `i32` arg arrives in JS as either `-1`
+ * (signed) or `0xffffffff` (unsigned) depending on the engine — callers must
+ * check both.
  *
- * esbuild's Go/WASIp1 runtime emits this after it has identified its cwd
- * preopen — it does `path_open(AT_FDCWD, "entry.ts")` rather than threading the
- * cwd dir fd through every call (ADR-0049).
+ * esbuild's Go/WASIp1 runtime emits `path_open(AT_FDCWD, "entry.ts")` rather
+ * than threading the cwd dir fd through every call (ADR-0049).
  */
 export const AT_FDCWD = -1;
 export const AT_FDCWD_U32 = 0xffffffff;
@@ -168,9 +161,9 @@ export interface WasiCtx {
   readonly onStdout: (chunk: string) => void;
   readonly onStderr: (chunk: string) => void;
   /**
-   * Pull the next chunk of stdin, or `null` at EOF. Defaults to immediate EOF
-   * when no `stdin` option was passed. esbuild's `transform` surface (vite's
-   * TS/JSX path) feeds source bytes here instead of via a file preopen.
+   * Pull the next stdin chunk, or `null` at EOF (immediate EOF when no `stdin`
+   * option was passed). esbuild's `transform` surface (vite's TS/JSX path)
+   * feeds source bytes here instead of via a file preopen.
    */
   readonly onStdin: () => Uint8Array | null;
   /** Lazy memory accessors — memory is bound after instantiation. */
@@ -193,12 +186,10 @@ export class WasiExit extends Error {
 /**
  * Map a caught error from the sync VFS mirror to a WASI preview1 errno.
  *
- * The VFS layer raises `VfsError` instances with a `code` field; native fs
- * shims (Node) and bare `Error` callers may also pass a `code` like
- * `'ENOENT'` / `'EEXIST'`. Anything we don't recognise falls back to
- * `E_INVAL` — `E_NOENT` was the previous default but it lied to guests
- * (they assumed the parent dir was missing and emitted misleading
- * messages). EINVAL ("Invalid argument") is the honest catch-all.
+ * Reads an `errno`-style `code` (`VfsError`, Node fs shims, bare `Error`).
+ * Unrecognised codes fall back to `E_INVAL`, not the previous `E_NOENT`: that
+ * lied to guests (they assumed a missing parent dir and emitted misleading
+ * messages). EINVAL is the honest catch-all.
  */
 export function errToWasiErrno(err: unknown): number {
   if (err && typeof err === 'object' && 'code' in err) {
@@ -241,8 +232,7 @@ export function resolveDirFd(ctx: WasiCtx, fd: number): number {
 
 /**
  * Resolve a directory-fd to its VFS path, or signal `E_BADF` if it isn't a
- * directory. Compact helper so each call doesn't repeat the same guard.
- * Honours `AT_FDCWD` via {@link resolveDirFd}.
+ * directory. Honours `AT_FDCWD` via {@link resolveDirFd}.
  */
 export function dirBase(
   ctx: WasiCtx,
