@@ -327,6 +327,30 @@ opencode agents have two channels: structured file tools (read/grep/glob/list/ed
 
 (none — pre-implementation, M12 facade work.)
 
+## Q-2026-06-07-407: shell command-file layout — `commands/<cmd>.ts` + `_shared.ts` barrel
+
+**Status:** 🟢 Active · **Encountered in:** ADR-0081 coreutils builtins impl · **Milestone:** M10 · **Author:** 2026-06-07
+
+Each new builtin is its own `packages/shell/src/commands/<cmd>.ts` (`export const <cmd>: ShellCommand`), sharing `commands/_shared.ts` (`resolve`/`enc`/`dec`); `builtins.ts` is the registration barrel. Chosen for clean parallel fan-out (one file per builtin, no merge conflicts) over a monolithic `builtins.ts`. File-structure-inside-a-package = always-reversible per CLAUDE.md (recorded because every builtin depends on the convention). Existing 9 builtins not yet relocated (left in `builtins.ts`) — a cosmetic follow-up, not required.
+
+## Q-2026-06-07-408: head/tail GNU sign semantics (`-n -N` / `-n +N`)
+
+**Status:** 🟢 Active · **Encountered in:** ADR-0081 head/tail impl · **Milestone:** M10 · **Author:** 2026-06-07
+
+Implemented full GNU sign semantics: `head -n -N` = all but last N; `head -c -N` = all but last N bytes; `tail -n +N` = from line N (1-based); `tail -c +N` = from byte N. Cheap + a real correctness gotcha agents/humans hit. REVERSIBLE (no public-API impact). Pinned by head/tail unit tests. `tail -f` throws NotImplementedError (no polling loop).
+
+## Q-2026-06-07-409: realpath = normalize+exists (no symlink layer)
+
+**Status:** 🟢 Active · **Encountered in:** ADR-0081 realpath impl · **Milestone:** M10 · **Author:** 2026-06-07
+
+VFS has no symlinks (ADR-0050), so `realpath` of an existing path = its normalized absolute path; a missing component → exit 1 (default `-e`/`-P`), `-m` allows missing. Mirrors runtime-js `realpathSync`. Documented as a GNU-divergence for the compat matrix (milestone closer). `-s`/`--relative-to`/`--relative-base` throw NotImplementedError. REVERSIBLE.
+
+## Q-2026-06-07-410: tier-c builtin parity cases tracked for the DoD closer
+
+**Status:** 🟢 Active · **Encountered in:** ADR-0086 vs landed file-arg builtins · **Milestone:** M10/M11 · **Author:** 2026-06-07
+
+ADR-0086 (c) mandates a node-parity-runner case per tier-c builtin. The landed builtins ship rigorous vitest unit tests but no node-parity cases yet. Pure path-math builtins (basename/dirname/realpath) are string-only → a node:fs "parity case" would be engine-identical by construction (the "force-fit" anti-pattern ADR-0086 itself warns against); their honest parity rides on rifty's node:path parity (existing `cases/path`). The genuinely non-redundant cases are for the new ADR-0083 fs primitives (renameSync mtime / cpSync recursive) routed through runtime-js `node:fs` (unit U32, not yet done) + read/count/slice cases for wc/head/tail/cat. Tracked here + in CHANGELOG; to be added with U32 before the milestone-DoD closer. REVERSIBLE (test infra).
+
 ## Q-2026-06-05-318: deferred `RIFTY_RFV_*` → `RIFTY_RT_*` env rename + `Mode` token rename (post-ADR-0078)
 
 **Status:** 🟢 Active
