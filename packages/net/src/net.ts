@@ -17,6 +17,12 @@
 import { EventEmitter, NotImplementedError } from '@riftydev/io';
 import { registerPort, unregisterPort } from './registry.ts';
 
+// Shared one-shot codecs (default config, non-fatal). One-shot utf8
+// encode/decode is stateless, so a module singleton is byte-identical and
+// avoids per-call allocation.
+const UTF8_ENCODER = new TextEncoder();
+const UTF8_DECODER = new TextDecoder();
+
 export class HttpFramedSocket extends EventEmitter {
   remoteAddress = '127.0.0.1';
   localAddress = '127.0.0.1';
@@ -31,7 +37,7 @@ export class HttpFramedSocket extends EventEmitter {
   }
 
   write(chunk: Uint8Array | string): boolean {
-    const buf = typeof chunk === 'string' ? new TextEncoder().encode(chunk) : chunk;
+    const buf = typeof chunk === 'string' ? UTF8_ENCODER.encode(chunk) : chunk;
     this.emit('write', buf);
     return true;
   }
@@ -117,7 +123,7 @@ export class Server extends EventEmitter {
       for (const [k, v] of request.headers) headers.push(`${k}: ${v}`);
       const body = new Uint8Array(await request.arrayBuffer());
       const head = `${request.method} ${new URL(request.url).pathname + new URL(request.url).search} HTTP/1.1\r\n${headers.join('\r\n')}\r\n\r\n`;
-      socket.push(new TextEncoder().encode(head));
+      socket.push(UTF8_ENCODER.encode(head));
       if (body.byteLength > 0) socket.push(body);
       // Resolve from a 'response' event, else synthesise a Response from socket writes.
       return await new Promise<Response>((resolve) => {
@@ -130,7 +136,7 @@ export class Server extends EventEmitter {
             return;
           }
           const all = concat(writeBufs);
-          const text = new TextDecoder().decode(all);
+          const text = UTF8_DECODER.decode(all);
           const sep = text.indexOf('\r\n\r\n');
           if (sep === -1) {
             resolve(new Response(all as unknown as BodyInit, { status: 200 }));

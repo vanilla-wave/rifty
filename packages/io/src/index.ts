@@ -22,6 +22,9 @@ export { NotImplementedError } from './errors.ts';
 export { EventEmitter, once } from './event-emitter.ts';
 export { Buffer } from './buffer.ts';
 export type { Buffer as BufferType, BufferLike, Encoding } from './buffer.ts';
+// ADR-0082: zero-copy bytes→string decode on the public surface. Lets text
+// reads (e.g. runtime-js fs) skip the throwaway full-buffer Buffer.from copy.
+export { decode as bytesToString } from './buffer-codec.ts';
 export {
   Readable,
   Writable,

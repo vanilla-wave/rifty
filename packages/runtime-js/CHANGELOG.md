@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Performance
+
+- **fs text reads decode zero-copy via `@riftydev/io`'s `bytesToString` (ADR-0082).** `fs.decodeResult`'s encoded branch was `Buffer.from(bytes).toString(enc)` — a throwaway full-buffer copy per encoded `readFileSync`/`readFile` (sync + async both funnel here). Now `bytesToString(bytes, encoding)`, dropping the copy. The no-encoding branch is unchanged — still `Buffer.from(bytes)`, returning an owned, mutable Buffer (Node binary-read contract). Per `docs/perf/js-runtime-perf-audit-2026-06-05.md` + ADR-0082; parity `fs/read-encodings.case.ts` (empty / odd-len utf16le / latin1 high byte / hex) + `fs/readwrite.case.ts` green.
+
 ### Fixed
 
 - **OPFS persistence wired in the runtime Worker (ADR-0072).** `worker-entry.ts`

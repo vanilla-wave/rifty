@@ -60,6 +60,20 @@ describe('Buffer.write', () => {
   });
 });
 
+describe('Buffer.toString decode', () => {
+  it('ascii masks bytes >= 0x80 to 7-bit (& 0x7f)', () => {
+    const b = Buffer.from([0x41, 0x80, 0xff, 0xc3]);
+    const s = b.toString('ascii');
+    expect([...s].map((c) => c.charCodeAt(0))).toEqual([0x41, 0x00, 0x7f, 0x43]);
+  });
+
+  it('latin1 does NOT mask — full 0-255 byte', () => {
+    const b = Buffer.from([0x80, 0xff]);
+    const s = b.toString('latin1');
+    expect([...s].map((c) => c.charCodeAt(0))).toEqual([0x80, 0xff]);
+  });
+});
+
 describe('Buffer.alloc', () => {
   it('tile-fills bytes from `fill` string under default utf8', () => {
     const b = Buffer.alloc(6, 'abc');

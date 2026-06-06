@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Performance
+
+- **Hoisted module-level UTF8 codec singletons** in `net.ts` (`UTF8_ENCODER`/`UTF8_DECODER`) and `http/server.ts` (`UTF8_ENCODER`) — `HttpFramedSocket.write`, the server head encode, the response decode, and the `http.request` body-chunk encode no longer construct a `TextEncoder`/`TextDecoder` per call. One-shot utf8 codec is stateless (default non-fatal config), so a shared instance is byte-identical. Per `docs/perf/js-runtime-perf-audit-2026-06-05.md` (+ `js-runtime-perf-adr-plan-2026-06-06.md`); behavior-preserving, http/net parity + conformance green.
+
 ### Added
 
 - **`node:http.STATUS_CODES`** — the standard status-code → reason-phrase map
