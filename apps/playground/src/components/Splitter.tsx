@@ -1,20 +1,19 @@
 /**
  * Hand-rolled, zero-dep resize handle for the VSCode shell (ADR-0075).
  *
- * A thin `role="separator"` bar that drives ONE size value (px). The parent
- * owns the value (a Solid signal) and feeds it into a CSS grid-track variable,
- * so dragging reflows the grid and Monaco (`automaticLayout`) / xterm
- * (`ResizeObserver`) refit themselves — no per-component resize plumbing.
+ * A `role="separator"` bar driving ONE px value. The parent owns the value (a
+ * Solid signal) and feeds it into a CSS grid-track variable, so dragging reflows
+ * the grid and Monaco (`automaticLayout`) / xterm (`ResizeObserver`) refit
+ * themselves — no per-component resize plumbing.
  *
  * `dir` lets a handle sit on either side of its panel and still grow it
- * intuitively: +1 when moving the pointer toward larger screen coords grows the
- * panel (e.g. sidebar handle on its right edge), -1 when it's on the far side
- * (console handle on its top edge, preview handle on its left edge). Keyboard
- * nudges mirror the drag (screen-axis sign × step × dir).
+ * intuitively: +1 when larger screen coords grow the panel (sidebar handle on
+ * its right edge), -1 when it's on the far side (console top edge, preview left
+ * edge). Keyboard nudges mirror the drag (screen-axis sign × step × dir).
  *
- * While dragging, `document.body` gets `.rf-resizing` which kills text
- * selection AND sets `pointer-events:none` on the preview `<iframe>` — without
- * that the iframe swallows `pointermove` and the drag "sticks".
+ * Drag adds `.rf-resizing` to `document.body`: kills text selection AND sets
+ * `pointer-events:none` on the preview `<iframe>` — else the iframe swallows
+ * `pointermove` and the drag "sticks".
  */
 import { nextSizeFromDelta } from '../glue/splitter-size.ts';
 
@@ -97,9 +96,9 @@ export function Splitter(props: SplitterProps) {
     }
   }
 
-  // role="separator" + aria-valuenow/min/max is the correct ARIA window-splitter
-  // pattern (focusable, keyboard-resizable). Biome's React-centric
-  // useSemanticElements (suggests <hr>) is disabled for this file in biome.json.
+  // role="separator" + aria-valuenow/min/max: the ARIA window-splitter pattern.
+  // Biome's React-centric useSemanticElements (suggests <hr>) is disabled for
+  // this file in biome.json.
   return (
     <div
       class="rf-splitter"

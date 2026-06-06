@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-05
 
-Summary of decision D-004. In dev, `/npm-registry/*` proxies through Vite's `server.proxy` to `https://registry.npmjs.org`. Production strategy is deferred to Q4'.
+D-004: in dev, `/npm-registry/*` proxies via Vite's `server.proxy` to `https://registry.npmjs.org`. Production strategy deferred to Q4'.
 
 ## Implementation
 
@@ -22,11 +22,11 @@ server: {
 
 ## `npm-client` contract
 
-- Base URL configured via `REGISTRY_BASE_URL` env or option, never hardcoded.
-- In dev: `/npm-registry` (relative — Vite proxies it).
-- In prod: the Q4' decision will populate this.
-- In tests: a local mock-registry harness with deterministic fixtures.
+- Base URL from `REGISTRY_BASE_URL` env/option — never hardcoded.
+- Dev: `/npm-registry` (relative; Vite proxies).
+- Prod: populated by the Q4' decision.
+- Tests: local mock-registry harness with deterministic fixtures.
 
 ## Why not a real proxy yet
 
-M9 is months away (we're at M2). Cloudflare's free tier, Vercel functions, dedicated proxy — all change shape over a year. Defer the decision until we hit M9, when the constraints (latency, cache size, request volume) are real.
+We're at M2; M9 is months out. Cloudflare free tier, Vercel functions, dedicated proxy — all will shift over a year. Defer until M9, when real constraints (latency, cache size, request volume) are known.

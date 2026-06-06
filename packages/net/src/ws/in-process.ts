@@ -1,18 +1,14 @@
 /**
  * In-process WebSocket layer.
  *
- * Browser `WebSocket` opens a real TCP connection — Service Workers can't
- * intercept it, so we can't reuse the port-registry trick that powers `http`.
- * Instead this module pairs a `WebSocketServer.listen(port)` with a `new
- * WebSocket('ws://host:port/path')` constructor in the same JS realm via a
- * URL-keyed lookup. The API mirrors the browser/Node `ws` surface — `send`,
- * `'message'` / `'open'` / `'close'` events, `readyState` constants — so the
- * dev-server code we write today survives unchanged the day we wire it to a
- * real socket.
+ * Browser `WebSocket` opens a real TCP connection that Service Workers can't
+ * intercept, so the port-registry trick that powers `http` doesn't apply here.
+ * Instead this pairs a `WebSocketServer` with a `new WebSocket('ws://host:port/path')`
+ * in the same JS realm via URL-keyed lookup. API mirrors the browser/Node `ws`
+ * surface so dev-server code survives a future swap to a real socket.
  *
- * For cross-frame HMR (iframe ↔ Worker) see `./bridge.ts` for the
- * `BroadcastChannel`-backed transport. Real TCP WebSocket is **not** in
- * scope (ADR-0017 §Decision).
+ * Cross-frame HMR (iframe ↔ Worker) uses the `BroadcastChannel` transport in
+ * `./bridge.ts`. Real TCP WebSocket is out of scope (ADR-0017 §Decision).
  */
 
 import { EventEmitter } from '@riftydev/io';
@@ -60,9 +56,8 @@ function findListener(host: string, port: number, path: string): WebSocketServer
 /**
  * Server-side endpoint for a single connected client.
  *
- * Inherits EventEmitter — emits `message`, `close`, `error`. Mirrors the
- * subset of the `ws` library API that real dev servers (Vite, Express ws
- * middleware, etc.) actually use.
+ * Emits `message`, `close`, `error`. Mirrors the subset of the `ws` library
+ * API that real dev servers (Vite, Express ws middleware) actually use.
  */
 export class WebSocketConnection extends EventEmitter {
   state: State = State.OPEN;
@@ -146,7 +141,7 @@ export class WebSocketServer extends EventEmitter {
 
 /**
  * Client side. Mimics the browser `WebSocket` interface (events: `open`,
- * `message`, `close`, `error`). Pairs with a same-realm `WebSocketServer`.
+ * `message`, `close`, `error`); pairs with a same-realm `WebSocketServer`.
  */
 export class WebSocket extends EventTarget {
   static readonly CONNECTING = State.CONNECTING;

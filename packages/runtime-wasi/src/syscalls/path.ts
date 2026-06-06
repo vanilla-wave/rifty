@@ -59,12 +59,11 @@ export function pathSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
     ) => {
       const base = ctx.fds.get(resolveDirFd(ctx, fd));
       if (!base || base.type !== 'dir' || !base.path) return E_BADF;
-      // WASI preview1: rights granted on a fd opened via `path_open` are
-      // clamped by the parent dir fd's `rights_inheriting` set, not by its
-      // `rights` set (the parent's own rights authorise the act of opening;
-      // the inheriting set decides what the *child* may hold). `undefined`
-      // means "default-permissive" (preopens, stdio) — fall back to the same
-      // set `fd_fdstat_get` reports for dir fds.
+      // WASI preview1: rights on a `path_open`ed fd are clamped by the parent
+      // dir fd's `rights_inheriting` set, not its `rights` set (parent's own
+      // rights authorise the open; inheriting decides what the *child* holds).
+      // `undefined` = default-permissive (preopens, stdio) — same set
+      // `fd_fdstat_get` reports for dir fds.
       const parentInheriting = base.rightsInheriting ?? RIGHTS_DIR_BASE | RIGHTS_FILE_BASE;
       const fullPath = resolveRel(ctx, base.path, pathPtr, pathLen);
       const wantCreate = (oflags & OFLAGS_CREAT) !== 0;
@@ -75,15 +74,14 @@ export function pathSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       const mirror = syncMirror();
 
       // Directory open (ADR-0049). A guest opening its cwd (`path_open(".",
-      // O_DIRECTORY)`) or any subdir must get a *directory* fd it can
-      // `fd_readdir` / resolve children against — not a file read. esbuild's
-      // Go/WASIp1 runtime does exactly this before it can resolve a relative
-      // entry point; without it `path_open(".")` fell through to
-      // `readFileBytesSync` and returned `E_ISDIR`, so esbuild reported
-      // "Cannot read directory". We stat first: if the target is a directory
-      // (or the guest explicitly asked for one), hand back a `dir` fd. Real
+      // O_DIRECTORY)`) or any subdir needs a *directory* fd to `fd_readdir` /
+      // resolve children against, not a file read. esbuild's Go/WASIp1 runtime
+      // does this before resolving a relative entry point; without it
+      // `path_open(".")` fell through to `readFileBytesSync` → `E_ISDIR`, so
+      // esbuild reported "Cannot read directory". Stat first: if the target is
+      // a dir (or the guest asked for one), hand back a `dir` fd. Real
       // toolchains never combine O_CREAT with O_DIRECTORY, so a missing dir is
-      // a plain `E_NOENT`.
+      // plain `E_NOENT`.
       let isDir = wantDirectory;
       if (!isDir) {
         try {
@@ -102,9 +100,8 @@ export function pathSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
         ctx.fds.set(dirFd, {
           type: 'dir',
           path: fullPath,
-          // Sub-dir fds inherit the parent preopen's directory rights so the
-          // guest can readdir / open children through them. Clamp to the
-          // parent's inheriting set (downgrade-only handoff).
+          // Sub-dir fds inherit the parent's directory rights (readdir / open
+          // children); clamp to the parent's inheriting set (downgrade-only).
           rights: RIGHTS_DIR_BASE & parentInheriting,
           rightsInheriting: (RIGHTS_DIR_BASE | RIGHTS_FILE_BASE) & parentInheriting,
         });
@@ -129,8 +126,8 @@ export function pathSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       if (!wantCreate && !existed) return E_NOENT;
       if (wantTruncate && existed) data = new Uint8Array(0);
 
-      // If we're creating a fresh file, write the empty buffer through the
-      // mirror so the file is visible to subsequent path_open/stat calls.
+      // Write the empty buffer through the mirror so a freshly-created file is
+      // visible to subsequent path_open/stat calls.
       if (wantCreate && !existed) {
         try {
           mirror.writeFileSync(fullPath, data);
@@ -145,14 +142,11 @@ export function pathSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
         }
       }
 
-      // WASI spec: passing zero rights means "do not restrict" — every real
-      // toolchain (esbuild, tsc) does this. We use the parent's inheriting
-      // set as the upper bound (RIGHTS_FILE_BASE for default-permissive
-      // preopens). For restricted opens we intersect with the parent's rights
-      // so a child can never elevate above what its parent fd held. The same
-      // clamp applies to `fsRightsInheriting` — see WASI preview1 spec, which
-      // is explicit that both bitsets are upper-bounded by the parent fd's
-      // capabilities.
+      // WASI spec: zero rights means "do not restrict" — every real toolchain
+      // (esbuild, tsc) does this. Upper-bound by the parent's inheriting set
+      // (RIGHTS_FILE_BASE for default-permissive preopens); for restricted
+      // opens, intersect so a child can never elevate above its parent fd. Per
+      // WASI preview1 spec both bitsets are upper-bounded by the parent fd.
       const requestedBase = fsRightsBase === 0n ? RIGHTS_FILE_BASE : fsRightsBase;
       const grantedRights = requestedBase & parentInheriting;
       const requestedInheriting = fsRightsInheriting === 0n ? RIGHTS_FILE_BASE : fsRightsInheriting;
@@ -209,9 +203,9 @@ export function pathSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       if (!base.ok) return base.rc;
       const fullPath = resolveRel(ctx, base.path, pathPtr, pathLen);
       try {
-        // Note: WASI `path_create_directory` does NOT imply `recursive: true`.
-        // We pass `recursive: false` so the backend can report `EEXIST` for
-        // existing dirs (matching Node `mkdirSync` without `recursive`).
+        // WASI `path_create_directory` does NOT imply recursive; `recursive:
+        // false` lets the backend report `EEXIST` for existing dirs (Node
+        // `mkdirSync` parity).
         syncMirror().mkdirSync(fullPath, { recursive: false });
         return E_SUCCESS;
       } catch (err) {

@@ -15,25 +15,23 @@ export interface ModuleLoaderOptions {
   /** Working directory used when the caller passes a relative `entry` to `import`/`require`. */
   readonly cwd?: string;
   /**
-   * esbuild guest cwd/preopen used as the `workspace` of every
-   * {@link TransformSourceHook} call. Defaults to {@link ModuleLoaderOptions.cwd}
-   * (or the loader's internal entry stub when neither is set). A single root is
-   * sufficient because a type-strip transform does not resolve relative imports
-   * through esbuild — rifty's resolver does that (ADR-0052 D5).
+   * esbuild guest cwd/preopen, `workspace` of every {@link TransformSourceHook}
+   * call. Defaults to {@link ModuleLoaderOptions.cwd} (or the internal entry stub).
+   * A single root suffices: a type-strip transform doesn't resolve relative
+   * imports through esbuild — rifty's resolver does (ADR-0052 D5).
    */
   readonly workspace?: string;
   /**
-   * Injected per-file source transform for `.ts`/`.tsx`/`.jsx` modules
-   * (see {@link TransformSourceHook}). When absent, `.ts`/`.tsx`/`.jsx` still
-   * resolve (ADR-0053) but their TS syntax reaches the AST rewriter unstripped;
-   * the directed transform-not-configured throw is owned by feature-02 T3.
+   * Per-file source transform for `.ts`/`.tsx`/`.jsx` (see {@link TransformSourceHook}).
+   * When absent these still resolve (ADR-0053) but their TS syntax reaches the
+   * AST rewriter unstripped; the transform-not-configured throw is feature-02 T3.
    */
   readonly transformSource?: TransformSourceHook;
   /**
    * tsconfig-style path aliases (ADR-0066), e.g. `{ "@/*": "/workspace/src/*" }`.
    * Targets are absolute VFS path patterns; the caller (not the resolver) reads
-   * a project's `compilerOptions.paths` and resolves them to absolute patterns.
-   * Absent = Node-faithful resolution (a bare `@/foo` is `MODULE_NOT_FOUND`).
+   * `compilerOptions.paths` and resolves them to absolute patterns.
+   * Absent = Node-faithful resolution (bare `@/foo` is `MODULE_NOT_FOUND`).
    */
   readonly paths?: PathAliases;
 }
@@ -46,11 +44,10 @@ export interface ModuleLoader {
   /** Direct id-based loader (used by REPL and tests). */
   loadById(id: string, esm?: boolean): Promise<Record<string, unknown>>;
   /**
-   * Drop module records. With no `id` wipes the whole cache (the `load-fixture`
-   * hot path uses this so the loader instance and its resolver stay alive
-   * across editor saves). With an absolute `id` removes only that entry —
-   * future hook for HMR / per-file editor updates. Thin delegate to
-   * {@link ModuleRegistry.invalidate}; see the longer note there for the
+   * Drop module records. No `id` wipes the whole cache (the `load-fixture` hot
+   * path uses this so loader + resolver survive editor saves); an absolute `id`
+   * removes only that entry — future hook for HMR / per-file updates. Delegates
+   * to {@link ModuleRegistry.invalidate}; see its note for the
    * single-entry-vs-dependency-graph contract.
    */
   invalidate(id?: string): void;
@@ -61,10 +58,9 @@ export interface ModuleLoader {
 const STUB_FROM_FILE_DEFAULT = '/__entry__';
 
 /**
- * Load a `node:`-prefixed builtin or throw `MODULE_NOT_FOUND`. Shared by the
- * sync and async loader paths; the async path wraps the result via
- * {@link wrapCjsAsEsmNamespace} at the call site, so this helper deliberately
- * returns the raw CJS-shaped exports.
+ * Load a `node:`-prefixed builtin or throw `MODULE_NOT_FOUND`. Shared by sync
+ * and async paths; deliberately returns raw CJS-shaped exports — the async path
+ * wraps via {@link wrapCjsAsEsmNamespace} at the call site.
  */
 function loadBuiltinOrThrow(id: string): Record<string, unknown> {
   const builtin = loadBuiltin(id);
@@ -78,15 +74,11 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
   const cwd = opts.cwd ?? STUB_FROM_FILE_DEFAULT;
   const workspace = opts.workspace ?? opts.cwd ?? STUB_FROM_FILE_DEFAULT;
 
-  // Id-keyed strip cache: the WASI esbuild process is a full process spawn per
-  // module, so re-stripping the same `.ts` across the (large) opencode import
-  // graph — or across repeated loads within one loader instance — is wasted
-  // work. Key by absolute resolved id (installed sources are immutable for a
-  // given package version in the VFS overlay), populate lazily on first hook
-  // call, read before re-invoking the hook, and drop via the same
-  // `invalidate(id)` path that drops the executed-module record. `esm.ts` stays
-  // cache-unaware: we wrap `opts.transformSource` so the cache is invisible to
-  // the execute path. TODO(ADR): Q-2026-05-30-202.
+  // Id-keyed strip cache: WASI esbuild is a full process spawn per module, so
+  // re-stripping the same `.ts` across the import graph (or repeated loads in
+  // one loader) is wasted work. Key by absolute resolved id (installed sources
+  // are immutable per package version in the VFS overlay). Wrapping
+  // `opts.transformSource` keeps `esm.ts` cache-unaware. TODO(ADR): Q-2026-05-30-202.
   const transformCache = new Map<string, string>();
   const cachedTransform: TransformSourceHook | undefined =
     opts.transformSource &&
@@ -154,8 +146,8 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     if (id.startsWith('node:')) {
       return { id, kind: 'builtin', source: '', packageRoot: null };
     }
-    // We re-use the resolver by passing the id back through `resolve`, with the
-    // file itself as both specifier and fromFile (so absolute path matches).
+    // Re-resolve via the id itself as both specifier and fromFile so the
+    // absolute path matches.
     return resolver.resolve(id, { fromFile: id, esm: false });
   }
 
@@ -191,9 +183,8 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     },
     invalidate(id) {
       registry.invalidate(id);
-      // Keep the strip cache coherent with the executed-module cache: a
-      // targeted invalidate drops only that id's stripped output, a full wipe
-      // clears all of it (TODO(ADR): Q-2026-05-30-202).
+      // Keep the strip cache coherent with the executed-module cache
+      // (TODO(ADR): Q-2026-05-30-202).
       if (id === undefined) transformCache.clear();
       else transformCache.delete(id);
     },

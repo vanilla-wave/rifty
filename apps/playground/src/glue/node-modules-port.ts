@@ -64,9 +64,8 @@ type NodeModulesFrame = NodeModulesRequestFrame | NodeModulesReplyFrame;
 
 let counter = 0;
 function nextRequestId(): string {
-  // Monotonic + random suffix so concurrent reads on the same channel don't
-  // collide, and an old+new page briefly sharing the channel name during a
-  // reload can't mistake each other's replies (mirrors the preview port).
+  // Monotonic + random suffix: avoids collisions across concurrent reads and
+  // across an old+new page briefly sharing the channel on reload (mirrors the preview port).
   return `nm${++counter}-${Math.random().toString(36).slice(2, 8)}`;
 }
 

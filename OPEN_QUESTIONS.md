@@ -36,14 +36,14 @@ When a question is reviewed:
 
 ### Context
 
-ADR-0078 made the real-vite worker template-agnostic but, to keep the blast radius small, left two names Vite-branded:
+ADR-0078 made the real-vite worker template-agnostic but, to keep the blast radius small, left two Vite-branded names:
 
 1. The `RIFTY_RFV_*` env prefix (RFV = "real Vite") now names a generic surface (`RIFTY_RFV_PORT/ROOT/ENTRY/TEMPLATE`). It also keys the snapshot (ADR-0076), write (ADR-0043), HMR, and node_modules (ADR-0080) BroadcastChannels via `channelNameFor`.
 2. The internal `Mode` token `'real-vite'` is read at ~24 sites incl. the ADR-0076 snapshot gate and the e2e `[data-preset]` contract.
 
 ### Provisional decision
 
-Defer both renames. Re-keying the channels or the mode token now would touch four bridges and ~24 read sites for zero functional gain, and risks desyncing the `RIFTY_RFV_PORT`-keyed channels mid-change. The generic UI naming is already achieved via `ProjectSpec.displayName`.
+Defer both renames. Re-keying the channels or the mode token now would touch four bridges and ~24 read sites for zero functional gain, and risks desyncing the `RIFTY_RFV_PORT`-keyed channels mid-change. Generic UI naming is already achieved via `ProjectSpec.displayName`.
 
 ### What a fuller cleanup needs (not done here)
 
@@ -68,7 +68,7 @@ Worked around **playground-locally**: `real-vite-bootstrap` ends with `await new
 
 ### What a proper fix needs (not done here)
 
-The kernel should natively support **server-shaped** processes — e.g. a spawn flag or an explicit `process`-driven exit/shutdown signal — so a server doesn't have to defeat the run-to-completion model with a never-resolving promise (which also means the worker can only ever exit via `worker.terminate()`, losing any graceful-shutdown hook). IRREVERSIBLE (kernel public behaviour) → its own ADR when taken up.
+The kernel should natively support **server-shaped** processes — e.g. a spawn flag or an explicit `process`-driven exit/shutdown signal — so a server need not defeat the run-to-completion model with a never-resolving promise (which also means the worker can only exit via `worker.terminate()`, losing any graceful-shutdown hook). IRREVERSIBLE (kernel public behaviour) → its own ADR when taken up.
 
 **Update (2026-06-05):** ADR-0080 (lazy `node_modules` remote-read) is now a **second consumer** of this keep-alive workaround — the worker must stay live to answer the page explorer's reads. Two consumers strengthen the case for native kernel server-process support; the workaround is no longer a one-off.
 
@@ -77,7 +77,7 @@ The kernel should natively support **server-shaped** processes — e.g. a spawn 
 ## Q-2026-06-04-316: project/template switcher — gallery promoted, header mode-toggles kept
 
 **Status:** ⚪ Promoted → ADR-0079 (single switcher) + ADR-0078 (more templates)
-**Encountered in:** playground "доделываем" pass (console-scroll + switcher + real-vite FS), alongside ADR-0076
+**Encountered in:** playground "finishing-up" pass (console-scroll + switcher + real-vite FS), alongside ADR-0076
 **Milestone:** M10 polish
 **Author (agent session):** 2026-06-04
 
@@ -92,7 +92,7 @@ correcting m10's stale worker-log markers). The deferred non-expandable
 
 ### Context
 
-User feedback: "переключатель проектов выглядит странно. Давай заложим так, чтобы там могло быть больше шаблонов." Two surfaces currently switch projects/modes: the sidebar gallery (scales by category) and the header `.rf-seg` (`Real Vite` / `Dev Mode`) — a non-scaling pair that duplicates the gallery's "Live preview" presets. The visible "strangeness" was compounded by full-colour emoji tile icons clashing with the monochrome theme, and by the scalable gallery being hidden behind an activity-bar icon (boot default view is Explorer).
+User feedback: "the project switcher looks strange. Let's design it so there can be more templates." Two surfaces currently switch projects/modes: the sidebar gallery (scales by category) and the header `.rf-seg` (`Real Vite` / `Dev Mode`) — a non-scaling pair that duplicates the gallery's "Live preview" presets. The visible "strangeness" was compounded by full-colour emoji tile icons clashing with the monochrome theme, and by the scalable gallery being hidden behind an activity-bar icon (boot default view is Explorer).
 
 ### Provisional decision
 
@@ -113,7 +113,7 @@ If we want a single unified switcher (drop/relocate the header seg), the `data-a
 
 ### Context
 
-The in-page preview `iframe` navigation to `/preview/<port>/` aborts with `net::ERR_ABORTED` under the cross-origin-isolated playground page, even though a `fetch()` of the same route from the page returns 200 (the path `m7-preview-sw.spec.ts` covers). Root cause: `routePreview` (ADR-0031) resolves the preview owner from `event.resultingClientId`, which for an iframe *navigation* is the iframe's own about-to-exist client — not the main-thread bridge that owns the registered port — so the handshake never completes and the navigation commit aborts. This is **pre-existing** (the iframe-render path was never CI-covered: m7 uses `fetch`, m10-hmr is skipped by default, and the suite runs against `pnpm dev`).
+The in-page preview `iframe` navigation to `/preview/<port>/` aborts with `net::ERR_ABORTED` under the cross-origin-isolated playground page, even though a page `fetch()` of the same route returns 200 (the path `m7-preview-sw.spec.ts` covers). Root cause: `routePreview` (ADR-0031) resolves the preview owner from `event.resultingClientId`, which for an iframe *navigation* is the iframe's own about-to-exist client — not the main-thread bridge that owns the registered port — so the handshake never completes and the navigation commit aborts. **Pre-existing** (the iframe-render path was never CI-covered: m7 uses `fetch`, m10-hmr is skipped by default, and the suite runs against `pnpm dev`).
 
 ### Provisional decision
 
@@ -132,7 +132,7 @@ Route sub-frame *navigations* to the controlling-window bridge owner instead of 
 
 ### Context
 
-The chosen direction is a polished dark IDE. A light/dark toggle would need coordinated theming of three surfaces (CSS tokens, the Monaco `rifty-dark` theme, and the hard-coded `RiftyTerminal` xterm theme — see Q-310). Provisional: ship dark-only; the design system is token-based so a light theme is an additive `:root[data-theme="light"]` layer later.
+The chosen direction is a polished dark IDE. A light/dark toggle would need coordinated theming of three surfaces (CSS tokens, the Monaco `rifty-dark` theme, and the hard-coded `RiftyTerminal` xterm theme — see Q-310). Provisional: ship dark-only; the design system is token-based, so a light theme is an additive `:root[data-theme="light"]` layer later.
 
 ### Code markers
 
@@ -162,7 +162,7 @@ The chosen direction is a polished dark IDE. A light/dark toggle would need coor
 
 ### Context
 
-The old left rail was the preset gallery. The VSCode shell puts both Explorer and Presets behind an activity bar; one must be the boot default. Chosen: **Explorer**, because the file manager is the headline new feature and VSCode opens to Explorer. Verified no e2e asserts `[data-testid="gallery"]`/`[data-preset]` at boot, so this is selector-safe. Reversible: flip one default if the welcoming "click a preset" first-touch is preferred.
+The old left rail was the preset gallery. The VSCode shell puts both Explorer and Presets behind an activity bar; one must be the boot default. Chosen: **Explorer**, because the file manager is the headline new feature and VSCode opens to Explorer. Verified that no e2e asserts `[data-testid="gallery"]`/`[data-preset]` at boot, so this is selector-safe. Reversible: flip one default if the welcoming "click a preset" first-touch is preferred.
 
 ### Code markers
 
@@ -177,7 +177,7 @@ The old left rail was the preset gallery. The VSCode shell puts both Explorer an
 
 ### Context
 
-`@riftydev/vfs` exposes no change events, so the explorer refreshes via (1) an action-triggered nonce and (2) a 1.5 s poll of *expanded* dirs while the Explorer view is visible and the page is foregrounded. The correct long-term fix — emitting events from the VFS write path — touches a lower layer (IRREVERSIBLE) and is out of scope. Reversible: tune the interval or replace with events later.
+`@riftydev/vfs` exposes no change events, so the explorer refreshes via (1) an action-triggered nonce and (2) a 1.5 s poll of *expanded* dirs while the Explorer view is visible and the page is foregrounded. The correct long-term fix — emitting events from the VFS write path — touches a lower layer (IRREVERSIBLE) and is out of scope. Reversible: tune the interval or replace it with events later.
 
 ### Code markers
 
@@ -192,7 +192,7 @@ The old left rail was the preset gallery. The VSCode shell puts both Explorer an
 
 ### Context
 
-`FsSync` has no `renameSync`. Rename is implemented honestly: files via read-bytes → write-new-path → `rmSync(old)`; directories via a recursive `copyTree` + `rmSync(old,{recursive})`. This is a real implementation (not a silent stub), but copies subtrees rather than moving in place. Reversible: add a native `renameSync` to the VFS (lower-layer, IRREVERSIBLE) later if perf on large trees bites.
+`FsSync` has no `renameSync`. Rename is implemented honestly: files via read-bytes → write-new-path → `rmSync(old)`; directories via a recursive `copyTree` + `rmSync(old,{recursive})`. This is a real implementation (not a silent stub), but it copies subtrees rather than moving in place. Reversible: add a native `renameSync` to the VFS (lower-layer, IRREVERSIBLE) later if perf on large trees bites.
 
 ### Code markers
 
@@ -222,7 +222,7 @@ Opening an arbitrary VFS file in Monaco would garble binaries. Provisional heuri
 
 ### Context
 
-The VSCode-faithful proposal included a PROBLEMS tab fed by Monaco markers. It is not one of the four asks, so v1 ships a single Console panel (the relocated terminal). Reversible: add a PROBLEMS tab (read-only, from `monaco.editor.getModelMarkers`) as a follow-up — the bottom panel is already a tabbable container.
+The VSCode-faithful proposal included a PROBLEMS tab fed by Monaco markers. It is not one of the four asks, so v1 ships a single Console panel (the relocated terminal). Reversible: add a read-only PROBLEMS tab (from `monaco.editor.getModelMarkers`) as a follow-up — the bottom panel is already a tabbable container.
 
 ### Code markers
 
@@ -237,7 +237,7 @@ The VSCode-faithful proposal included a PROBLEMS tab fed by Monaco markers. It i
 
 ### Context
 
-ADR-0072 added a synchronous content cache to `OpfsFsSync` so `fs.writeFileSync` / `fs.readFileSync` succeed on a brand-new path without an async sync-access-handle open. To make reads synchronous **after a page reload**, `init()` preloads every indexed file's bytes from the paired async OPFS surface into the cache (`preloadContent()`). This is O(total persisted bytes) memory and O(files) async reads at boot.
+ADR-0072 added a synchronous content cache to `OpfsFsSync` so `fs.writeFileSync` / `fs.readFileSync` succeed on a brand-new path without an async sync-access-handle open. To make reads synchronous **after a page reload**, `init()` preloads every indexed file's bytes from the paired async OPFS surface into the cache (`preloadContent()`) — O(total persisted bytes) memory and O(files) async reads at boot.
 
 ### Options considered
 
@@ -246,7 +246,7 @@ ADR-0072 added a synchronous content cache to `OpfsFsSync` so `fs.writeFileSync`
 
 ### Decision taken (provisional)
 
-Ship Option A. The e2e/playground working set is tiny, and eager preload is the minimal change that makes post-reload reads synchronous. If a large persisted tree makes boot slow (measure during M10 integration), switch to Option B's lazy+pre-warm approach. Reversible: localized to `OpfsFsSync.init`/`preloadContent`, no public-API or cross-package change.
+Ship Option A. The e2e/playground working set is tiny, and eager preload is the minimal change that makes post-reload reads synchronous. If a large persisted tree makes boot slow (measure during M10 integration), switch to Option B's lazy+pre-warm approach. Reversible: localized to `OpfsFsSync.init`/`preloadContent`, with no public-API or cross-package change.
 
 `// TODO(ADR): Q-2026-06-03-307` is **not** placed in code — the decision is documented in ADR-0072's Consequences and here; marking the preload loop would add noise to a hot path with no behavioural toggle. (Per CLAUDE.md the marker is optional when the reversible decision is already captured in an ADR.)
 
@@ -268,10 +268,10 @@ ADR-0066 added tsconfig-style path aliases to the resolver via an **explicit,
 caller-supplied** `paths` option on `ModuleLoaderOptions`. The resolver does pure
 pattern matching; the caller (the opencode smoke harness) reads
 `packages/opencode/tsconfig.json`'s `compilerOptions.paths` and resolves the
-targets to absolute patterns. The open question is whether the runtime should
-*also* offer **automatic** tsconfig discovery — locate `tsconfig.json`, follow the
-`extends` chain (opencode extends `@tsconfig/bun`), interpret `baseUrl`, and apply
-`paths` with no explicit caller map.
+targets to absolute patterns. The open question: should the runtime *also* offer
+**automatic** tsconfig discovery — locate `tsconfig.json`, follow the `extends`
+chain (opencode extends `@tsconfig/bun`), interpret `baseUrl`, and apply `paths`
+with no explicit caller map?
 
 ### Options considered
 
@@ -479,7 +479,7 @@ impossible tools all bottom out in `child_process.spawn` of a real binary
 rifty already enforces this — any command other than `node <script>` falls
 through `spawnViaSameRealm` → `execScript`, surfacing `spawn <cmd> ENOENT\n`
 with exit 127 (`child_process-exec.ts:54-58`) — but the boundary lived only in
-prose. A regression that made a non-`node` command fake-succeed would silently
+prose. A regression making a non-`node` command fake-succeed would silently
 re-open the ceiling.
 
 ### Options considered
@@ -537,8 +537,8 @@ Node's real `http.Server.listen` accepts that form, but rifty's
 `HttpServer.listen` only accepted a bare number; the options object was
 assigned verbatim as `this.port` and handed to `registerPort`, so the
 registry keyed on a non-number. The port was unroutable (502) while
-`'listening'` still fired — a silent-bind trap. This is a genuine
-Node-parity gap, not an Effect-specific hack.
+`'listening'` still fired — a silent-bind trap. A genuine Node-parity gap,
+not an Effect-specific hack.
 
 ### Options considered
 
@@ -591,8 +591,8 @@ parks on `nodeResponse.on('drain', ...)` and IGNORES `write()`'s return value
 to pace a streaming response. rifty's `ServerResponse` signalled backpressure
 ONLY via `write()`'s `boolean | Promise<boolean>` return and never emitted a
 Node `'drain'` event, so an Effect-driven streaming response would hang
-forever. Emitting `'drain'` is also the standard Node `Writable` contract that
-any generic Node http consumer expects.
+forever. Emitting `'drain'` is also the standard Node `Writable` contract any
+generic Node http consumer expects.
 
 ### Options considered
 
@@ -657,9 +657,9 @@ audit surfaced that the ADR was ratified without the Edge Function
 source ever landing in the repo: acceptance criterion #1 (a file at
 `apps/playground/api/npm-registry/[...path].ts` or equivalent) is
 unmet, there is no live URL, and the playground has never been deployed
-to prod. The ADR has been downgraded to **Provisional** (see
+to prod. The ADR is downgraded to **Provisional** (see
 `docs/adr/0028-prod-proxy-for-npm-registry.md` §Status update — 2026-05-27)
-and the question is restored here as the live tracker.
+and the question restored here as the live tracker.
 
 ### Context
 
@@ -735,7 +735,7 @@ shims are accepted as the migration cost. The same `RiftyProcess` class
 nevertheless reports `version = 'v22.0.0'` and `versions = { node:
 '22.0.0', v8: '12.0.0', rifty: '0.0.0' }`. This is plausibly intentional
 (many ecosystem packages branch on `process.versions.node` to enable
-Node-specific code paths), but it directly contradicts the ADR-0026
+Node-specific code paths), but directly contradicts the ADR-0026
 honesty principle. The audit flagged the inconsistency as P1-4 with no
 TODO marker or open question on file.
 
@@ -805,7 +805,7 @@ opencode `.ts` graph and across repeated loads within one loader instance —
 each strip is a full guest process spawn (ADR-0047/0049). ADR-0052 D4
 (REVERSIBLE) calls for a loader-internal `Map<id,string>` populated lazily,
 read before re-invoking the hook, and cleared by the existing `invalidate(id)`
--> `registry.invalidate` path. The open sub-question is the cache KEY and the
+-> `registry.invalidate` path. The open sub-question: the cache KEY and the
 invalidation coupling.
 
 ### Options considered
@@ -868,7 +868,7 @@ self-referential IIFE). But Node v24's built-in `--experimental-strip-types`
 throws `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on any TS needing runtime codegen
 (`enum`, parameter properties, runtime `namespace`). So the Node strip-only
 reference diverges from rifty on a Node *limitation*, not a rifty behaviour —
-the wrong reference for a full-transform-vs-full-transform parity proof.
+the wrong reference for a full-transform vs full-transform parity proof.
 
 ### Options considered
 
@@ -933,7 +933,7 @@ behind the rifty `node:sqlite` `DatabaseSync` builtin, because opencode boots vi
 `OPENCODE_DB=:memory:` and a synchronous engine matches `@effect/sql-sqlite-node`'s
 `DatabaseSync` usage. Durable cross-reload persistence (via
 `@sqlite.org/sqlite-wasm` + OPFS `SyncAccessHandle`) is the open scope question:
-when does it land, and does the first cut need ANY durability at all?
+when does it land, and does the first cut need ANY durability?
 
 ### Options considered
 
@@ -1059,8 +1059,7 @@ parity-runner case (Node `DatabaseSync` vs rifty shim), but the parity runner
 compares **stdout of user code** running `node:sqlite`, and the rifty side has
 no `node:sqlite` specifier to resolve until the shim is registered. The runner
 also has no `'sqlite'` `kind`/registration mode (it has `cjs`/`esm`/`http`/
-`ts-esm`). A parity case here would have nothing real to exercise on the rifty
-side.
+`ts-esm`). A parity case here would have nothing real to exercise on the rifty side.
 
 ### Options considered
 
@@ -1125,7 +1124,7 @@ Decorators are the exception: esbuild with `--loader=ts` and no tsconfig leaves
 stage-3 `@decorator` syntax UN-lowered (passthrough), and rifty's post-strip acorn
 parse (`ecmaVersion:'latest'`, no decorators plugin) then throws a SyntaxError —
 while `tsx` fully lowers decorators. opencode's vendored source uses NO decorators
-(verified by grep), so this is not a boot blocker, but it is a real pipeline gap.
+(verified by grep), so this is not a boot blocker, but a real pipeline gap.
 
 ### Options considered
 

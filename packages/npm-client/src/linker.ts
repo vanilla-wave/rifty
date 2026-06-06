@@ -1,12 +1,11 @@
 /**
  * Linker — writes a resolved set of packages into `node_modules/`.
  *
- * Strategy: flat at the top level (matches npm v3+), with first-seen-wins
- * hoisting and nested placement for conflicting versions (M11, 2026-05-27).
- * Each `ResolvedPackage` carries its `installPath` — `node_modules/<name>`
- * when hoisted, `<parent>/.../node_modules/<name>` when nested — and the
- * linker simply writes the tarball contents at that path. The placement
- * decision lives in `installer.ts` (`walkAndPin`), not here.
+ * Flat top level (npm v3+), first-seen-wins hoisting, nested placement for
+ * conflicting versions (M11, 2026-05-27). Each `ResolvedPackage` carries its
+ * `installPath` (hoisted `node_modules/<name>` or nested
+ * `<parent>/.../node_modules/<name>`); the linker just writes the tarball
+ * there. Placement is decided in `installer.ts` (`walkAndPin`), not here.
  */
 
 import { type Vfs, joinPath } from '@riftydev/vfs';
@@ -18,12 +17,10 @@ export interface ResolvedPackage {
   /** Direct dependencies (already resolved transitively elsewhere). */
   dependencies: Record<string, string>;
   /**
-   * Project-root-relative path where this package's files are written
-   * (e.g. `node_modules/express` or
-   * `node_modules/finalhandler/node_modules/ms`). Filled by `walkAndPin`'s
-   * placement decision (see M11 install nesting). Optional for
-   * backward-compatibility with callers that pre-date M11 — when absent
-   * the linker falls back to flat `node_modules/<name>`.
+   * Project-root-relative write path (e.g. `node_modules/express` or
+   * `node_modules/finalhandler/node_modules/ms`). Filled by `walkAndPin`
+   * (M11 install nesting). Optional for pre-M11 callers — absent falls back
+   * to flat `node_modules/<name>`.
    */
   installPath?: string;
 }
@@ -63,23 +60,20 @@ export interface LockfileEntry {
   integrity?: string;
   dependencies?: Record<string, string>;
   /**
-   * Peer dependencies declared by this package. Persisted in the lockfile
-   * so the fast path can run the post-install missing-peer warn pass
-   * without re-fetching every packument. npm itself stores `peerDependencies`
-   * on lockfile entries since v7 (`lockfileVersion: 3`), so this is
-   * backward-compatible with their tooling — readers ignore unknown fields
-   * and consumers that don't care simply skip the warn pass.
+   * Persisted so the fast path can run the post-install missing-peer warn
+   * pass without re-fetching every packument. npm stores `peerDependencies`
+   * on lockfile v3 entries since v7, so this stays compatible with their
+   * tooling (readers ignore unknown fields).
    */
   peerDependencies?: Record<string, string>;
 }
 
 /**
  * Build a v3 lockfile from the resolved package set. Each non-root entry
- * carries the `resolved` tarball URL and `integrity` hash so subsequent
- * installs can hit the tarball cache (ADR-0023) without re-resolving.
- * `peerDependencies` is persisted on each entry so the lockfile fast path
- * can run the same post-install missing-peer warn pass that the
- * live-resolve path already runs (closes the D-F drift, 2026-05-26).
+ * carries `resolved` (tarball URL) and `integrity` so subsequent installs
+ * hit the tarball cache (ADR-0023) without re-resolving. `peerDependencies`
+ * is persisted so the lockfile fast path runs the same missing-peer warn
+ * pass as the live-resolve path (closes D-F drift, 2026-05-26).
  */
 export function buildLockfile(
   rootName: string,
@@ -90,9 +84,8 @@ export function buildLockfile(
     peerDependencies?: Record<string, string>;
   })[],
 ): Lockfile {
-  // The root entry lists only the FLAT (hoisted) deps as its dependency
-  // map — matching npm's lockfile shape. A nested copy is reachable only
-  // via its parent's entry, not via the root.
+  // Root entry lists only FLAT (hoisted) deps, matching npm's lockfile
+  // shape. A nested copy is reachable only via its parent's entry.
   const flatTopLevel: Record<string, string> = {};
   for (const p of packages) {
     if (!p.installPath || p.installPath === `node_modules/${p.name}`) {
@@ -118,9 +111,8 @@ export function buildLockfile(
     if (p.peerDependencies && Object.keys(p.peerDependencies).length > 0) {
       entry.peerDependencies = p.peerDependencies;
     }
-    // Key by installPath — flat packages stay at `node_modules/<name>`;
-    // nested copies use their full nested path so npm's resolver (and the
-    // lockfile fast-path) can tell them apart.
+    // Key by installPath so npm's resolver (and the lockfile fast-path)
+    // can distinguish a nested copy from its flat counterpart.
     const key = p.installPath ?? `node_modules/${p.name}`;
     lf.packages[key] = entry;
   }

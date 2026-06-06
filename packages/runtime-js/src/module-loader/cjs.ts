@@ -6,17 +6,14 @@ import type { ResolvedModule } from './resolver.ts';
 import type { Resolver } from './resolver.ts';
 
 /**
- * Reject a `.ts`/`.tsx` module that reached the CJS execution path with a
- * directed {@link NotImplementedError} instead of letting raw TypeScript fall
- * through to `new Function` (where it dies with an opaque
- * `SyntaxError: Unexpected token`).
+ * Reject a `.ts`/`.tsx` that reached the CJS path with a directed
+ * {@link NotImplementedError}, instead of feeding raw TS to `new Function`
+ * (opaque `SyntaxError: Unexpected token`).
  *
- * The TS type-strip is the injected, esbuild-via-`runWasi` `transformSource`
- * hook, which is **async** (ADR-0052 D1 alt-C). Synchronous `require()` cannot
- * await it, so a `.ts`/`.tsx` classified as CJS (a non-`type:module` package
- * scope) is unsupported on the facade path — opencode is `type:module`, so its
- * `.ts` loads as ESM via `import()` where the async strip runs. This keeps the
- * gap loud, never a silent stub (CLAUDE.md). Registered in
+ * The TS type-strip hook is async (esbuild-via-`runWasi`, ADR-0052 D1 alt-C);
+ * synchronous `require()` cannot await it, so a `.ts`/`.tsx` in a
+ * non-`type:module` scope is unsupported. In a `type:module` scope it loads as
+ * ESM via `import()` where the async strip runs. Registered in
  * `docs/compat/modules.md` as not-supported.
  */
 function assertNotTsCjs(id: string): void {
@@ -45,10 +42,10 @@ export interface CjsLoaderDeps {
 
 /**
  * Best-effort source snippet for a `new Function` compile failure. A bare
- * SyntaxError from `new Function` usually carries no `<anonymous>:line:col` in
- * its stack, in which case this returns '' and the directed error still names
- * the module. When V8 does provide an offset, subtract the 2-line synthetic
- * `function anonymous(...) {` header to map back onto the source.
+ * SyntaxError often carries no `<anonymous>:line:col`; then returns '' (the
+ * caller's directed error still names the module). When V8 gives an offset,
+ * subtract the 2-line synthetic `function anonymous(...) {` header to map back
+ * onto the source.
  */
 function snippetForSource(source: string, stack: string): string {
   const m = /<anonymous>:(\d+):(\d+)/.exec(stack);
@@ -70,18 +67,15 @@ function snippetForSource(source: string, stack: string): string {
 }
 
 export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Record<string, unknown> {
-  // A `.ts`/`.tsx` that classified as CJS would otherwise feed raw TypeScript
-  // to `new Function` below — throw a directed NotImplementedError first
-  // (ADR-0052 D1 alt-C; the strip hook is async, require() cannot await it).
   // Guard BEFORE touching the registry so repeated require() calls throw
-  // idempotently rather than the second one returning a stale loading record.
+  // idempotently, not return a stale loading record (ADR-0052 D1 alt-C).
   if (resolved.kind !== 'json') assertNotTsCjs(resolved.id);
 
   const { registry } = deps;
   const existing = registry.get(resolved.id);
   if (existing && existing.state === 'loaded') return existing.exports;
-  // Cycle: re-entry while the module is still executing — give back the
-  // half-populated exports object so the cyclic dep sees what's been set so far.
+  // Cycle: re-entry mid-execution — hand back the half-populated exports so
+  // the cyclic dep sees what's been set so far.
   if (existing && existing.state === 'loading') {
     return existing.cjsModule?.exports ?? existing.exports;
   }
@@ -95,18 +89,18 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
   }
 
   if (resolved.kind === 'text') {
-    // Text-asset import (ADR-0067): the module's value IS the raw file contents.
-    // `require('./f.txt')` returns the string; an ESM `import x from './f.txt'`
-    // routes through here and `wrapCjsAsEsmNamespace` exposes the string as the
-    // default export (it already maps a non-object CJS export to `default`).
+    // Text-asset import (ADR-0067): the module value IS the raw file contents.
+    // `require('./f.txt')` returns the string; ESM `import x from './f.txt'`
+    // routes here, then `wrapCjsAsEsmNamespace` maps the non-object export to
+    // `default`.
     record.exports = resolved.source as unknown as Record<string, unknown>;
     record.cjsModule = { exports: record.exports };
     record.state = 'loaded';
     return record.exports;
   }
 
-  // Half-populated module is visible to dependents that come back through
-  // require during this module's execution (CJS cycle).
+  // Expose the half-populated exports so a CJS cycle re-entering via require()
+  // during this module's execution sees it.
   const moduleObject: { exports: Record<string, unknown> } = { exports: Object.create(null) };
   record.cjsModule = moduleObject;
   record.exports = moduleObject.exports;
@@ -146,9 +140,8 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
       `${resolved.source}\n//# sourceURL=${resolved.id}`,
     ) as CjsFactory;
   } catch (err) {
-    // A parse failure here is a SyntaxError from `new Function` with no file
-    // context in its bare message — surface a directed error naming the module
-    // and the offending source line (mirrors the ESM path in esm.ts).
+    // `new Function` SyntaxError has no file context — surface a directed error
+    // naming the module and offending line (mirrors the ESM path in esm.ts).
     record.state = 'errored';
     const msg = (err as Error).message ?? String(err);
     throw new ModuleLoadError(
@@ -166,8 +159,7 @@ export function executeCjs(resolved: ResolvedModule, deps: CjsLoaderDeps): Recor
     throw err;
   }
 
-  // After execution, the module's real exports might have been reassigned
-  // (`module.exports = ...`), so re-point the record.
+  // Exports may have been reassigned (`module.exports = ...`); re-point.
   record.exports = moduleObject.exports;
   record.state = 'loaded';
   return moduleObject.exports;

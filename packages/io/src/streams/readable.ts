@@ -138,13 +138,10 @@ function sliceBuffer(state: ReadableState, n: number): Uint8Array | null {
   while (written < n && state.buffer.length > 0) {
     const head = state.buffer[0];
     if (!(head instanceof Uint8Array)) {
-      // Non-buffer mixed in (e.g. a string in encoding mode) — fall back to a
-      // single-chunk return; per Node, mixed byte/string queues happen only
-      // when an `encoding` is set, which the consumer asked for.
+      // Mixed byte/string queue happens only when `encoding` is set; per Node,
+      // return whatever we have so far.
       state.buffer.shift();
       state.length -= chunkSize(head);
-      // Out-of-band: return whatever we have so far (rare, but defined).
-      // Convert to a Buffer view of just what we wrote.
       return out.subarray(0, written);
     }
     const need = n - written;
@@ -175,15 +172,14 @@ function takeAll(state: ReadableState): unknown {
     state.length -= 1;
     return v;
   }
-  // Byte mode. If a single chunk, return as-is.
   if (state.buffer.length === 1) {
     const only = state.buffer.shift();
     if (only instanceof Uint8Array) state.length -= only.length;
     else state.length -= chunkSize(only);
     return only;
   }
-  // Coalesce — but only over Uint8Array entries; if a string sneaks in,
-  // honour Node's behaviour of returning string chunks individually.
+  // Coalesce only over Uint8Array entries; if a string sneaks in, Node returns
+  // string chunks individually.
   let allBuffers = true;
   for (const c of state.buffer) {
     if (!(c instanceof Uint8Array)) {
@@ -249,17 +245,15 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       errored: null,
     };
     this.readImpl = opts.read;
-    // Honour the `encoding` option (Node applies it as if `setEncoding` were
-    // called in the constructor). Also reached via `Readable.from(_, {encoding})`.
+    // Node applies the `encoding` option as if `setEncoding` ran in the ctor.
     if (opts.encoding) this.setEncoding(opts.encoding);
     this.on('newListener', (event) => {
       if (event === 'data' && this._readableState.flowing === null) {
         this._readableState.flowing = true;
         queueMicrotask(() => this.flow());
       } else if (event === 'readable' && !this._readableState.endEmitted) {
-        // Node fires `'readable'` after a chunk lands in the buffer and the
-        // consumer hasn't drained it. Schedule a pump so cold readers don't
-        // sit idle waiting for the first chunk that's already queued.
+        // Pump so a cold reader doesn't sit idle on a first chunk that's
+        // already queued (Node fires `'readable'` once a chunk lands).
         queueMicrotask(() => {
           if (this._readableState.buffer.length > 0 && !this._readableState.endEmitted) {
             this.emit('readable');
@@ -280,8 +274,6 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       }
     });
   }
-
-  // ---- Public accessors that mirror Node's getters on `Readable`. ----
 
   get readable(): boolean {
     return (
@@ -356,11 +348,9 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       state.ended = true;
       if (state.flowing) queueMicrotask(() => this.flow());
       else {
-        // Paused/unflowing readers still need an `end` event.
-        // Also fire `'readable'` one more time so consumers using the
-        // `read(n)`-on-`'readable'` pattern get a chance to drain the tail
-        // before `'end'`. Per Node: a final `'readable'` event fires when
-        // EOF is reached, and `read()` returns `null` after the tail drains.
+        // Paused readers still need `end`; fire a final `'readable'` first so
+        // `read(n)`-on-`'readable'` consumers can drain the tail (Node fires
+        // `'readable'` once more at EOF, then `read()` returns null).
         queueMicrotask(() => {
           if (this.listenerCount('readable') > 0 && !state.endEmitted) {
             this.emit('readable');
@@ -395,12 +385,11 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
    */
   read(n?: number): unknown {
     const state = this._readableState;
-    // Node treats `read(0)` as a peek: schedules `_read` and returns null.
+    // `read(0)` is a peek in Node: schedule `_read`, return null.
     if (n === 0) {
       this.maybeRead();
       return null;
     }
-    // No argument — return everything available as one chunk (or null).
     if (n === undefined) {
       if (state.length === 0) {
         if (state.ended && !state.endEmitted) {
@@ -412,7 +401,6 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
         return null;
       }
       const all = takeAll(state);
-      // After draining the buffer, kick off a re-pump if we're not ended.
       if (!state.ended) this.maybeRead();
       else if (state.length === 0 && !state.endEmitted) {
         state.endEmitted = true;
@@ -420,7 +408,6 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       }
       return this.applyEncoding(all);
     }
-    // n is a positive number.
     // Object mode: `n` is meaningless past 1; return one entry.
     if (state.objectMode) {
       if (state.length === 0) {
@@ -439,13 +426,11 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     }
     // Byte mode: exact-n semantics.
     if (state.length < n) {
-      // Try a synchronous pump — if `_read` enqueues enough, this satisfies
-      // the request in the same tick (matches Node's "_read may push
-      // synchronously" path).
+      // Synchronous pump: if `_read` enqueues enough we satisfy the request in
+      // the same tick (Node's "_read may push synchronously" path).
       this.maybeRead(n);
       if (state.length < n) {
-        // If the producer has ended and there's nothing more coming, return
-        // whatever's left (Node's behaviour for the final partial read).
+        // Producer ended with leftovers: return them (Node's final partial read).
         if (state.ended) {
           if (state.length > 0) {
             const partial = takeAll(state);
@@ -455,11 +440,8 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
             }
             return this.applyEncoding(partial);
           }
-          // Buffer drained AND ended: schedule end + return null. Also fire a
-          // final `readable` event so `read(n)`-on-`readable` consumers get a
-          // chance to observe the EOF transition before `end` fires (Node
-          // contract — readable fires once more on EOF after the last
-          // successful read).
+          // Drained AND ended: schedule end. (Node fires `'readable'` once more
+          // on EOF, but only after a successful read — none here, so skip it.)
           if (!state.endEmitted) {
             state.endEmitted = true;
             queueMicrotask(() => this.emit('end'));
@@ -469,11 +451,9 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       }
     }
     const slice = sliceBuffer(state, n);
-    // If buffer drained completely and the producer has ended, queue end.
     if (state.length === 0 && state.ended && !state.endEmitted) {
       state.endEmitted = true;
-      // Also fire a final `readable` so the consumer can observe EOF before
-      // `end` fires.
+      // Final `readable` so the consumer observes EOF before `end` fires.
       if (this.listenerCount('readable') > 0) {
         queueMicrotask(() => this.emit('readable'));
       }
@@ -519,7 +499,6 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       state.length < state.highWaterMark &&
       !state.reading
     ) {
-      // Pump the underlying source for more.
       this.maybeRead();
       // If `_read` enqueued synchronously, drain again on the next tick.
       if (state.buffer.length > 0 && state.flowing) queueMicrotask(() => this.flow());
@@ -573,8 +552,8 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
    *   `dest.end()`. Default `true`, matching Node.
    */
   pipe<W extends PipeableWritable>(dest: W, opts: { end?: boolean } = {}): W {
-    // If we're already piping to this dest, clean up first so the listener
-    // count returns to its pre-pipe baseline; the new wiring replaces it.
+    // Already piping to this dest: clean up first so the listener count returns
+    // to baseline; the new wiring replaces it.
     const existing = this.pipeCleanups.get(dest);
     if (existing) existing();
 
@@ -686,8 +665,8 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     };
     const onEnd = (): void => {
       sourceEnded = true;
-      // Only wake a pending next() if there's nothing buffered — otherwise
-      // the consumer is mid-iteration and will see end naturally.
+      // Wake a pending next() only if nothing is buffered; otherwise the
+      // consumer is mid-iteration and sees end naturally.
       if (pending.length === 0 && resolveNext) {
         const r = resolveNext;
         resolveNext = null;
@@ -712,9 +691,9 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       this.off('data', onData);
       this.off('end', onEnd);
       this.off('error', onError);
-      // Pause the source so it stops emitting; if iteration ended before the
-      // consumer drained everything we additionally destroy the stream — Node's
-      // iterator return() does this so producers learn the consumer is gone.
+      // Pause to stop emitting; if iteration ended before the consumer drained,
+      // also destroy — Node's iterator return() does this so the producer
+      // learns the consumer is gone.
       this.pause();
       if (!naturallyDrained && !error && !this._readableState.destroyed) this.destroy();
     };
@@ -813,28 +792,25 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       iterator = (sym as () => Iterator<unknown>).call(iter);
     }
 
-    // Peek the first chunk to detect byte vs object mode when objectMode is
-    // not explicit. We hold the peek to push it back before the pump.
+    // Peek the first chunk to detect byte vs object mode when objectMode is not
+    // explicit; the peek is pushed back before the pump.
     let firstResult: IteratorResult<unknown> | Promise<IteratorResult<unknown>> | null = null;
     let resolvedMode: boolean;
     if (options.objectMode !== undefined) {
       resolvedMode = options.objectMode;
     } else if (!isAsync) {
-      // Sync iterator: we can peek synchronously.
       const r = (iterator as Iterator<unknown>).next();
       firstResult = r;
       if (r.done) {
-        // Empty iterable: default to objectMode true (Node-like default).
+        // Empty iterable defaults to objectMode true (Node-like).
         resolvedMode = true;
       } else {
         const v = r.value;
         resolvedMode = !(v instanceof Uint8Array || typeof v === 'string');
       }
     } else {
-      // Async iterator: we can't peek synchronously without making `from` async.
-      // Default to objectMode true until the pump observes the first chunk;
-      // since the consumer set no preference and the iterator is async, this
-      // matches Node's default for `Readable.from(asyncIter)` (objectMode: true).
+      // Can't peek an async iterator without making `from` async; default to
+      // objectMode true — Node's default for `Readable.from(asyncIter)`.
       resolvedMode = true;
     }
 
@@ -846,7 +822,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
 
     void (async () => {
       try {
-        // Drain the peeked first chunk first (sync-iterator branch only).
+        // Push the peeked first chunk (sync-iterator branch only).
         if (firstResult !== null && !(firstResult as IteratorResult<unknown>).done) {
           r.push((firstResult as IteratorResult<unknown>).value);
         }

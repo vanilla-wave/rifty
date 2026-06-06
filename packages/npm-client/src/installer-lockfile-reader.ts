@@ -1,7 +1,6 @@
 /**
- * Lockfile parsing + subgraph helpers used by `installer.ts` for the
- * ADR-0023 fast path. Kept separate so `installer.ts` stays within the
- * ADR-0024 line budget.
+ * Lockfile parsing + subgraph helpers for `installer.ts`'s ADR-0023 fast
+ * path. Split out to keep `installer.ts` within the ADR-0024 line budget.
  */
 
 import { NotImplementedError } from '@riftydev/io';
@@ -20,10 +19,9 @@ export async function readExistingLockfile(vfs: Vfs, cwd: string): Promise<Lockf
     const message = parseError instanceof Error ? parseError.message : String(parseError);
     throw new Error(`lockfile corrupt at ${path}: ${message}`, { cause: parseError });
   }
-  // npm 5/6 (v1) and npm 7 (v2) use a different shape than v3. Silently
-  // returning null here would cause `install` to do a fresh resolve and
-  // overwrite the user's lockfile with v3 — data loss disguised as caching.
-  // Throw loud so the gap is visible; the caller decides how to surface it.
+  // v1 (npm 5/6) and v2 (npm 7) have a different shape than v3. Returning
+  // null would trigger a fresh resolve that overwrites the user's lockfile
+  // with v3 — data loss disguised as caching. Throw so the gap is visible.
   if (parsed.lockfileVersion === 1 || parsed.lockfileVersion === 2) {
     throw new NotImplementedError(`npm-client.lockfile.v${parsed.lockfileVersion}`);
   }
@@ -37,11 +35,10 @@ export function pinnedVersionFor(lockfile: Lockfile, name: string): string | und
 
 /**
  * Result of a walk-up lookup: the matched entry plus the lockfile key
- * (install path) it was found under. The caller needs the path because the
- * fast-path replay places packages exactly where the lockfile recorded
- * them — re-deriving placement from the walk would risk diverging from the
- * lockfile if visit-order shifts between installs (e.g. operator
- * reorders `dependencies` in `package.json`).
+ * (install path) it was found under. Caller needs the path because fast-path
+ * replay places packages exactly where the lockfile recorded them;
+ * re-deriving placement from the walk could diverge if visit-order shifts
+ * between installs (e.g. `dependencies` reordered in `package.json`).
  */
 export interface PinnedEntryLookup {
   readonly installPath: string;
@@ -51,30 +48,27 @@ export interface PinnedEntryLookup {
 /**
  * Parent-aware lookup for the lockfile fast path (ADR-0042 follow-on).
  *
- * Implements Node's resolver, applied to v3 lockfile keys: given a request
- * for `name` from a package installed at `parentInstallPath`, walk up the
- * parent's path checking `<scope>/node_modules/<name>` at each ancestor
- * scope; return the first hit. `parentInstallPath === ''` represents the
- * root (top-level requests), in which case the only candidate is
- * `node_modules/<name>`.
+ * Node's resolver applied to v3 lockfile keys: for a request for `name` from
+ * a package at `parentInstallPath`, walk up checking
+ * `<scope>/node_modules/<name>` at each ancestor scope; return the first hit.
+ * `parentInstallPath === ''` is the root (top-level requests), whose only
+ * candidate is `node_modules/<name>`.
  *
- * Why walk-up rather than bare-name: post-M11 a lockfile can carry both a
- * hoisted `node_modules/<name>` entry and one or more nested
+ * Walk-up rather than bare-name because post-M11 a lockfile can carry both a
+ * hoisted `node_modules/<name>` entry and nested
  * `node_modules/<parent>/node_modules/<name>` entries for diamond conflicts
- * (the classic `express → debug → ms@^2.1` vs `express → finalhandler →
- * ms@2.0` case). A nested package's transitive dep request must see its own
- * nested copy first, otherwise the fast path replays the wrong version.
+ * (`express → debug → ms@^2.1` vs `express → finalhandler → ms@2.0`). A
+ * nested package's transitive request must see its own nested copy first,
+ * else the fast path replays the wrong version.
  *
- * Returns `undefined` when no ancestor scope contains the name — the
- * caller (`createLockfileSource`) turns that into a loud `EBROKENLOCK`,
- * matching the post-2026-05-27 "lockfile is authoritative or it's an
- * error" contract.
+ * Returns `undefined` when no ancestor scope contains the name; the caller
+ * (`createLockfileSource`) turns that into a loud `EBROKENLOCK`, per the
+ * post-2026-05-27 "lockfile is authoritative or it's an error" contract.
  *
- * Performance: O(depth) per lookup, where depth is the number of
- * `/node_modules/` segments in `parentInstallPath`. Bounded by real-world
- * nesting depth (≤ 5 for npm projects). A precomputed parent→entry index
- * is a possible future optimisation, but the current map lookups are
- * already constant-time per ancestor.
+ * O(depth) per lookup (`/node_modules/` segments in `parentInstallPath`),
+ * bounded by real nesting depth (≤ 5). A precomputed parent→entry index
+ * could optimise further, but map lookups are already constant-time per
+ * ancestor.
  */
 export function pinnedEntryForParent(
   lockfile: Lockfile,
@@ -82,29 +76,25 @@ export function pinnedEntryForParent(
   parentInstallPath: string,
 ): PinnedEntryLookup | undefined {
   let scope = parentInstallPath;
-  // Loop terminates once we either find a hit or pop past the root scope.
-  // The "pop past root" condition is captured by the `scope === ''` check
-  // after we've already searched the root candidate `node_modules/<name>`.
+  // Terminates on a hit, or once the `scope === ''` check fires after the
+  // root candidate `node_modules/<name>` has been searched.
   while (true) {
     const candidate = scope === '' ? `node_modules/${name}` : `${scope}/node_modules/${name}`;
     const entry = lockfile.packages[candidate];
     if (entry) return { installPath: candidate, entry };
     if (scope === '') return undefined;
-    // Pop the trailing `/node_modules/<x>` segment. Anything else means
-    // someone fed us a malformed install path; that's a programmer error,
-    // not a runtime concern.
+    // Pop the trailing `/node_modules/<x>` segment. Absence means a
+    // malformed install path — a programmer error, not a runtime concern.
     const cut = scope.lastIndexOf('/node_modules/');
     scope = cut < 0 ? '' : scope.slice(0, cut);
   }
 }
 
 export function lockfileSubgraph(lockfile: Lockfile, roots: string[]): Set<string> {
-  // Build a name → install-path index from every entry in the lockfile so
-  // that the BFS can visit nested copies too. Pre-ADR-0042-follow-on this
-  // walker only knew about flat entries, which was safe because nested
-  // entries did not exist on the fast path. After the follow-on, transitive
-  // visibility includes nested keys; without this we'd miss any override
-  // divergence whose only evidence lives on a nested copy.
+  // name → install-path index over every entry so the BFS visits nested
+  // copies too. Pre-ADR-0042-follow-on only flat entries existed on the fast
+  // path; after it, transitive visibility includes nested keys, so without
+  // this we'd miss override divergence evidenced only on a nested copy.
   const namesToPaths = new Map<string, string[]>();
   for (const key of Object.keys(lockfile.packages)) {
     if (key === '') continue;
@@ -142,9 +132,9 @@ export function lockfileCovers(
   const pinned = new Map<string, string>();
   for (const [name, range] of Object.entries(request)) {
     // Top-level requests resolve from the root scope (`parentInstallPath ===
-    // ''`), so the walk-up reduces to a single bare-name check. Going
-    // through `pinnedEntryForParent` keeps the call shape symmetric with
-    // the source-level lookup that the walk uses for transitives.
+    // ''`), so the walk-up reduces to a bare-name check. Routing through
+    // `pinnedEntryForParent` keeps the call shape symmetric with the
+    // source-level lookup the walk uses for transitives.
     const hit = pinnedEntryForParent(lockfile, name, '');
     if (!hit) return null;
     if (!matchesRange(hit.entry.version, range)) return null;
@@ -154,12 +144,11 @@ export function lockfileCovers(
 }
 
 /**
- * Write a lockfile to disk only if its serialized form differs from what's
- * already there. Preserves the user-visible mtime when the install was a
- * functional no-op (ADR-0023 promise), and avoids needless OPFS churn.
+ * Write a lockfile only if its serialized form differs from what's on disk.
+ * Preserves mtime on a functional no-op (ADR-0023 promise) and avoids OPFS
+ * churn.
  *
- * Returns `true` if a write happened, `false` if the existing file was
- * byte-identical.
+ * @returns `true` if a write happened, `false` if the file was byte-identical.
  */
 export async function writeLockfileIfChanged(
   vfs: Vfs,

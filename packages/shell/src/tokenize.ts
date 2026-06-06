@@ -3,35 +3,26 @@
  *
  * Supported:
  *   - Whitespace splitting outside quotes.
- *   - Single quotes (`'…'`): literal, no expansion, no escape sequences.
+ *   - Single quotes (`'…'`): literal, no expansion, no escapes.
  *   - Double quotes (`"…"`): `$VAR` / `${VAR}` expansion; escapes for
  *     `\$`, `\"`, `\\`, `` \` `` only — other backslashes are literal.
  *   - Unquoted: `$VAR` / `${VAR}` expansion; backslash escapes the next char.
- *   - `>` and `>>` produce their own redirection tokens.
- *   - `<` produces its own token; the shell decides whether it is supported
- *     (currently `NotImplementedError('shell.input-redirect')`).
- *   - `|` produces its own token; the shell decides whether it is supported
- *     (currently `NotImplementedError('shell.pipe')`). Without this, a line
- *     like `cat f | grep x` would silently bury the pipe inside an argument.
- *   - `&&`, `||`, `;` produce their own tokens (compound-chain joiners). The
- *     dispatcher splits the token list on these and runs each segment with
- *     POSIX joiner semantics (see `shell.ts`). Inside quotes these stay
- *     literal — `echo 'a && b'` yields one argument `a && b`.
+ *   - `>` / `>>` redirection tokens.
+ *   - `<` token; shell decides support (currently `NotImplementedError('shell.input-redirect')`).
+ *   - `|` token; shell decides support (`NotImplementedError('shell.pipe')`).
+ *     Without it, `cat f | grep x` would bury the pipe inside an argument.
+ *   - `&&`, `||`, `;` compound-chain joiner tokens. The dispatcher splits on
+ *     these and runs each segment with POSIX joiner semantics (see `shell.ts`).
+ *     Inside quotes they stay literal — `echo 'a && b'` is one argument.
  *
- * Deliberately NOT supported (kept loud — if a token signals these, the caller
- * is expected to error):
- *   - Glob expansion (`*`, `?`, `[abc]`).
- *   - Command substitution `$(…)` / `` `…` ``.
- *   - Arithmetic substitution `$((…))`.
- *   - Heredocs.
+ * Deliberately NOT supported (kept loud — caller is expected to error):
+ *   glob (`*`, `?`, `[abc]`); command substitution `$(…)` / `` `…` ``;
+ *   arithmetic `$((…))`; heredocs.
  *
- * Variable expansion uses the optional `env` argument. Unknown variables expand
- * to the empty string (POSIX default). Word splitting after expansion is NOT
- * performed — an expanded `"$x"` keeps its embedded whitespace as a single
- * token; an unquoted `$x` also stays one token here. This is a deliberate
- * simplification: real bash splits unquoted expansions on `IFS`, but every
- * call-site in the playground passes already-tokenised values, so the
- * complexity isn't worth it.
+ * Expansion uses the optional `env`; unknown variables expand to '' (POSIX).
+ * Word splitting after expansion is NOT done — `"$x"` and unquoted `$x` both
+ * stay one token. Deliberate: bash splits unquoted expansions on `IFS`, but
+ * every playground call-site passes already-tokenised values.
  */
 
 const VAR_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
@@ -48,22 +39,20 @@ function expandVarAt(
   const j = i + 1;
   if (j >= line.length) return { value: '$', next: j };
   if (line[j] === '{') {
-    // ${NAME}
     const end = line.indexOf('}', j + 1);
     if (end === -1) {
-      // Unterminated — treat the rest as a malformed ${…}; emit literally.
+      // Unterminated ${…} — emit literally.
       return { value: line.slice(i), next: line.length };
     }
     const name = line.slice(j + 1, end);
     if (!VAR_NAME_RE.test(name) || name.length !== VAR_NAME_RE.exec(name)![0].length) {
-      // Unsupported expansion form: ${VAR:-default}, ${#VAR}, etc.
+      // Reject ${VAR:-default}, ${#VAR}, etc. — only plain ${NAME}.
       throw new Error(
         `shell.tokenize: unsupported variable expansion form: \${${name}} — only \${NAME} is supported`,
       );
     }
     return { value: env[name] ?? '', next: end + 1 };
   }
-  // $NAME
   const tail = line.slice(j);
   const m = VAR_NAME_RE.exec(tail);
   if (!m) {
@@ -96,10 +85,8 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
         op = '||';
         i++;
       } else if (ch === '&') {
-        // Bare `&` (background process) is intentionally not supported. Emit
-        // the token so the dispatcher can decide to reject loudly; without
-        // this, a line like `vite &` would silently drop the `&` into the
-        // tail of an arg.
+        // Bare `&` (background) unsupported — emit the token so the dispatcher
+        // rejects loudly instead of `vite &` silently dropping `&` into an arg.
         op = '&';
       }
       tokens.push(op);
@@ -107,8 +94,7 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
       continue;
     }
 
-    // Build one token: a run of single-quoted, double-quoted, and unquoted
-    // segments concatenated together. POSIX behaviour: `a"b"c` is one token.
+    // One token = concatenated quoted/unquoted segments (POSIX: `a"b"c`).
     let buf = '';
     while (
       i < n &&
@@ -128,7 +114,7 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
           buf += line[i];
           i++;
         }
-        if (i < n) i++; // consume closing quote
+        if (i < n) i++;
       } else if (c === '"') {
         // Double-quoted: expand $VAR, honour limited escapes.
         i++;
@@ -141,7 +127,7 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
               i += 2;
               continue;
             }
-            // Unknown escape inside double quotes — backslash is literal.
+            // Unknown escape in double quotes — backslash stays literal.
             buf += dc;
             i++;
             continue;
@@ -155,12 +141,12 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
           buf += dc;
           i++;
         }
-        if (i < n) i++; // consume closing quote
+        if (i < n) i++;
       } else if (c === '\\') {
         // Unquoted backslash escapes the next character literally.
         const next = line[i + 1];
         if (next === undefined) {
-          // Trailing backslash — treat as literal (no line continuation).
+          // Trailing backslash — literal, no line continuation.
           buf += '\\';
           i++;
         } else {

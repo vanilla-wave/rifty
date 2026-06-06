@@ -1,35 +1,18 @@
 /**
  * `Shell` — minimal command dispatcher.
  *
- * Steps for `run(line, options?)`:
- *   1. Tokenize the whole line (see `tokenize.ts`).
- *   2. Split on `&&` / `||` / `;` joiners — quoted instances stay literal
- *      because the tokenizer only emits joiner tokens outside quotes.
- *   3. For each segment in order, evaluate per joiner semantics:
- *        - `&&` runs next iff previous exit === 0
- *        - `||` runs next iff previous exit !== 0
- *        - `;`  always runs next
- *      The final exit code is the exit of the LAST executed segment (POSIX).
- *   4. Each segment goes through `runSegment` which:
- *        - rejects unsupported redirects (`<` -> `NotImplementedError`)
- *        - rejects pipes (`|`) loudly
- *        - rejects bare `&` (background) loudly
- *        - pops env assignments off the front
- *        - extracts a trailing `> path` / `>> path` redirection
- *        - dispatches to the command registry (exit 127 if not found)
+ * `run(line)` tokenizes, splits on `&&`/`||`/`;` joiners (quoted instances stay
+ * literal — the tokenizer only emits joiners outside quotes), and runs segments
+ * per POSIX short-circuit semantics; final exit is the LAST executed segment.
  *
  * Streaming: when `options.onChunk` is supplied, every `ctx.stdout.write` /
- * `ctx.stderr.write` call from a command (including builtins) invokes the
- * callback synchronously _before_ the captured run-blob is appended. This
- * lets the terminal see `npm install` progress bars and `vite dev` request
- * logs in real time instead of receiving the entire blob after `await`.
+ * `ctx.stderr.write` invokes the callback synchronously _before_ the captured
+ * run-blob is appended, so the terminal sees `npm install` / `vite dev` output
+ * live instead of after `await`. `RunResult` still keeps the full blob for
+ * callers that read it.
  *
- * The returned `RunResult.stdout` / `RunResult.stderr` keep the full
- * captured payload so existing callers that read the blob continue to work.
- *
- * The shell holds a mutable `cwd` and `env`; commands can mutate cwd through
- * the closure passed to built-in `cd`. Custom commands cannot — they only see
- * a snapshot via the context.
+ * `cwd`/`env` are mutable; only built-in `cd` can mutate cwd (via closure).
+ * Custom commands see only a snapshot via the context.
  */
 
 import { NotImplementedError } from '@riftydev/io';
@@ -49,23 +32,15 @@ export interface RunResult {
   stderr: string;
 }
 
-/**
- * Stream identifier for `RunOptions.onChunk`. Mirrors the union the
- * terminal/runtime layers use elsewhere in the playground.
- */
+/** Stream identifier for `RunOptions.onChunk`. */
 export type ChunkStream = 'stdout' | 'stderr';
 
 /**
  * Per-call options for {@link Shell.run}.
  *
- * `onChunk` is called synchronously whenever a command writes to stdout or
- * stderr. The callback fires BEFORE the chunk is appended to the captured
- * `RunResult` blob, so order is: callback -> capture. Implementations should
- * keep the callback fast (a single `terminal.write(chunk, stream)` is the
- * intended use).
- *
- * `onChunk` is optional and additive — calling `run(line)` without options
- * preserves the original "return the blob at the end" contract.
+ * `onChunk` fires synchronously on each stdout/stderr write, BEFORE the chunk is
+ * appended to the captured `RunResult` blob (order: callback -> capture). Keep it
+ * fast. Optional and additive — omitting it preserves the blob-at-the-end contract.
  */
 export interface RunOptions {
   readonly onChunk?: (chunk: string, stream: ChunkStream) => void;
@@ -74,7 +49,7 @@ export interface RunOptions {
 type Joiner = '&&' | '||' | ';' | null;
 interface Segment {
   readonly tokens: string[];
-  readonly joiner: Joiner; // joiner that FOLLOWS this segment; null on the last one
+  readonly joiner: Joiner; // joiner FOLLOWING this segment; null on the last
 }
 
 const encoder = new TextEncoder();
@@ -109,22 +84,16 @@ export class Shell {
    * Execute a single shell input line.
    *
    * @param line   the raw line as typed at the terminal
-   * @param options optional per-call hooks (currently: `onChunk` for live
-   *               stdout/stderr streaming — see {@link RunOptions})
-   * @returns final `RunResult` containing the exit code of the last executed
-   *          segment and the captured stdout/stderr across the whole chain
+   * @param options per-call hooks (`onChunk` for live streaming — see {@link RunOptions})
+   * @returns exit code of the last executed segment plus captured stdout/stderr
    */
   async run(line: string, options: RunOptions = {}): Promise<RunResult> {
-    // Tokenise with the shell's current env so `$VAR` expands. Inline env
-    // overrides (e.g. `FOO=bar cmd $FOO`) follow bash semantics: the override
-    // applies to the command being run, NOT to expansion in the same line.
-    // That matches POSIX (`FOO=bar echo $FOO` prints the OUTER FOO).
+    // Inline env overrides (`FOO=bar cmd $FOO`) apply to the command, NOT to
+    // expansion on the same line — POSIX: `FOO=bar echo $FOO` prints the OUTER FOO.
     const tokens = tokenize(line, this.env);
     if (tokens.length === 0) return { exitCode: 0, stdout: '', stderr: '' };
 
-    // Background `&` is not supported. The tokenizer emits a bare `&` token so
-    // we can reject it loudly instead of accidentally treating it as part of
-    // the previous arg.
+    // Reject bare `&` loudly; tokenizer emits it as a standalone token.
     if (tokens.includes('&')) {
       throw new NotImplementedError(
         'shell.background',
@@ -142,8 +111,7 @@ export class Shell {
     for (let idx = 0; idx < segments.length; idx++) {
       const seg = segments[idx]!;
 
-      // Decide if this segment should run, based on the joiner attached to
-      // the PREVIOUS segment.
+      // Short-circuit based on the PREVIOUS segment's joiner.
       if (idx > 0) {
         const prevJoiner = segments[idx - 1]!.joiner;
         if (prevJoiner === '&&' && lastExitCode !== 0) continue;
@@ -158,11 +126,8 @@ export class Shell {
       executedAny = true;
     }
 
-    // If nothing ever ran (e.g. all segments were skipped by `&&` chains
-    // after an early failure), the final exit code is the last failure.
+    // Theoretically unreachable (empty token list handled above); explicit for clarity.
     if (!executedAny) {
-      // Empty token list path already handled above; this is theoretically
-      // unreachable, but be explicit so the contract stays clear.
       return { exitCode: 0, stdout: '', stderr: '' };
     }
 
@@ -170,9 +135,8 @@ export class Shell {
   }
 
   /**
-   * Run a single segment (no joiner handling). Implements env-prefix popping,
-   * trailing-redirect extraction, command lookup and execution. The `options`
-   * carry the optional `onChunk` callback for live streaming.
+   * Run a single segment (no joiner handling): env-prefix popping,
+   * trailing-redirect extraction, command lookup and execution.
    */
   private async runSegment(segmentTokens: string[], options: RunOptions): Promise<RunResult> {
     if (segmentTokens.length === 0) return { exitCode: 0, stdout: '', stderr: '' };
@@ -191,7 +155,7 @@ export class Shell {
       );
     }
 
-    // Pop env assignments (KEY=value) off the front.
+    // Pop leading KEY=value env assignments.
     let i = 0;
     const overrides: Record<string, string> = {};
     while (i < segmentTokens.length) {
@@ -208,7 +172,7 @@ export class Shell {
       return { exitCode: 0, stdout: '', stderr: '' };
     }
 
-    // Pull off trailing redirection: `... > path` or `... >> path`.
+    // Pull off trailing `> path` / `>> path` redirection.
     let redirectTo: { path: string; append: boolean } | null = null;
     if (rest.length >= 2) {
       const op = rest[rest.length - 2];
@@ -226,13 +190,9 @@ export class Shell {
     let stdout = '';
     let stderr = '';
     const emit = (chunk: string, stream: ChunkStream): void => {
-      // onChunk first so the terminal sees the chunk synchronously _before_
-      // it lands in the captured blob. If the chunk is destined for a file
-      // (redirect path below), it will be diverted later; the stream callback
-      // still fires for stdout writes by design — the caller decides what to
-      // do with the redirected-stdout chunks (a terminal would typically
-      // ignore them when the segment ends up redirected, but exposing them
-      // keeps semantics composable).
+      // onChunk first so the terminal sees the chunk before it lands in the blob.
+      // Fires even for redirected-stdout writes (diverted to a file later) — by
+      // design, so semantics stay composable; the caller decides what to do.
       options.onChunk?.(chunk, stream);
       if (stream === 'stdout') stdout += chunk;
       else stderr += chunk;
@@ -282,10 +242,9 @@ export class Shell {
         }
         stdout = '';
       } catch (err) {
-        // Loud failure: do NOT silently drop the redirected payload onto
-        // stdout (callers expected it in a file). Surface as exit code 1
-        // with an EREDIRECT-tagged stderr line so a caller scanning logs
-        // can detect "redirect write failed" unambiguously.
+        // Loud failure: don't silently dump the redirected payload onto stdout
+        // (callers expected a file). Exit 1 + EREDIRECT-tagged stderr so log
+        // scanners can detect the failure unambiguously.
         emit(
           `${cmd}: redirect write failed: ${redirectTo.path}: ${(err as Error).message} [EREDIRECT]\n`,
           'stderr',
@@ -300,11 +259,9 @@ export class Shell {
 }
 
 /**
- * Split a token list on `&&` / `||` / `;` joiner tokens into segments. Each
- * segment carries the joiner that FOLLOWS it (or `null` for the final
- * segment). A trailing joiner (e.g. `echo a ;`) yields a final empty segment
- * with `joiner: null`; the run-loop short-circuits on empty segments so this
- * stays harmless.
+ * Split tokens on `&&`/`||`/`;` into segments; each carries the joiner that
+ * FOLLOWS it (`null` on the last). A trailing joiner (`echo a ;`) yields a final
+ * empty segment — harmless, the run-loop short-circuits on empty segments.
  */
 function splitOnJoiners(tokens: string[]): Segment[] {
   const segments: Segment[] = [];

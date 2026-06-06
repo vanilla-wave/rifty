@@ -3,17 +3,11 @@
  * (ADR-0030), so `subarray()` / `slice()` / structured-clone preserve the
  * Buffer brand via `Symbol.species`, and `instanceof Uint8Array` is `true`.
  *
- * Statics: `from`, `alloc`, `allocUnsafe`, `concat`, `byteLength`, `isBuffer`,
- * `compare`. Instance methods cover: toString, equals, write, swap16/32/64,
- * compare, copy, fill, indexOf/lastIndexOf/includes, read/write{Int,UInt}8/16/32
- * and BigInt64 LE/BE, read/writeFloat/Double LE/BE.
- *
- * Per-instance methods live on the class prototype. Their runtime
- * implementations are installed by `installCoreMethods` / `installIntMethods`
- * / `installExtraMethods` from `buffer-prototype.ts`. The type signatures
- * live here (using `declare` on the class body) so the prototype-installer
- * functions do not need to import the `Buffer` type back from this file —
- * avoiding a runtime circular dependency that `pnpm check:deps` would flag.
+ * Per-instance method impls are installed onto the prototype by
+ * `installCoreMethods` / `installIntMethods` / `installExtraMethods` from
+ * `buffer-prototype.ts`. Their type signatures live here (`declare` on the
+ * class body) so the installers need not import the `Buffer` type back —
+ * avoiding a runtime circular dep that `pnpm check:deps` would flag.
  */
 
 import { type Encoding, compareSlices, encode } from './buffer-codec.ts';
@@ -29,8 +23,6 @@ export class Buffer extends Uint8Array {
   static get [Symbol.species](): typeof Uint8Array {
     return Buffer as unknown as typeof Uint8Array;
   }
-
-  // ---- prototype-method signatures (impls installed by helper files) ----
 
   declare toString: (encoding?: Encoding, start?: number, end?: number) => string;
   declare equals: (other: Uint8Array) => boolean;
@@ -100,8 +92,7 @@ export class Buffer extends Uint8Array {
     byteOffsetOrEncoding?: number | Encoding,
     encoding?: Encoding,
   ) => boolean;
-  // `fill` overrides the Uint8Array signature with the wider Node form. The
-  // `declare` shadows the base's `fill` so callers see the Buffer-shaped one.
+  // `declare` shadows Uint8Array's `fill` with the wider Node form.
   declare fill: (
     value: number | string | Uint8Array,
     offsetOrEncoding?: number | Encoding,
@@ -114,8 +105,6 @@ export class Buffer extends Uint8Array {
     sourceStart?: number,
     sourceEnd?: number,
   ) => number;
-
-  // ---- statics ----
 
   static alloc(size: number, fill?: number | string, encoding?: Encoding): Buffer {
     const buf = new Buffer(size);
@@ -142,18 +131,17 @@ export class Buffer extends Uint8Array {
   }
 
   /**
-   * Node's `Buffer.allocUnsafeSlow` — like {@link allocUnsafe} but never drawn
-   * from the shared pool. We don't pool, so it's identical. Present so
+   * Node's `Buffer.allocUnsafeSlow` — never drawn from the shared pool. We
+   * don't pool, so it's identical to {@link allocUnsafe}. Present so
    * `safe-buffer` detects a "real" Buffer: it gates on
    * `from && alloc && allocUnsafe && allocUnsafeSlow` before re-exporting the
-   * full surface (including {@link isBuffer}), which express's `res.send` needs.
+   * full surface (incl. {@link isBuffer}), which express's `res.send` needs.
    */
   static allocUnsafeSlow(size: number): Buffer {
     return new Buffer(size);
   }
 
-  // Node's `Buffer.from` widens `Uint8Array.from`. We declare explicit overloads
-  // covering both shapes so the static side remains assignable to the base
+  // Explicit overloads keep the static side assignable to the base
   // `typeof Uint8Array` while preserving Node's calling conventions.
   static override from(value: string, encoding?: Encoding): Buffer;
   static override from(value: ArrayBuffer, offset?: number, length?: number): Buffer;
@@ -184,7 +172,6 @@ export class Buffer extends Uint8Array {
       out.set(src);
       return out;
     }
-    // ArrayLike<number> | Iterable<number>
     const arr =
       typeof (value as ArrayLike<number>).length === 'number'
         ? (value as ArrayLike<number>)
@@ -241,13 +228,11 @@ export class Buffer extends Uint8Array {
   }
 
   /**
-   * Static comparator. Node's runtime currently honours only the first two
-   * args (verified via parity-runner; `Buffer.compare.length === 2`), but the
-   * docs leave room for range-paramed comparison and the instance method
-   * already supports it. We widen the signature here so callers can pass the
-   * four optional range params symmetrically — extras are honoured via
-   * `subarray(...)` slicing. Future Node versions can adopt this surface
-   * without forcing a typing churn on our side.
+   * Static comparator. Node's runtime honours only the first two args
+   * (verified via parity-runner; `Buffer.compare.length === 2`), but its docs
+   * leave room for range params and the instance method already supports them.
+   * We widen the signature symmetrically — extras honoured via `subarray(...)`
+   * — so a future Node adopting this surface forces no typing churn here.
    */
   static compare(
     a: Uint8Array,
@@ -261,8 +246,7 @@ export class Buffer extends Uint8Array {
   }
 }
 
-// Install per-instance method implementations onto `Buffer.prototype`. The
-// installers take the class as an opaque constructor (no type-back imports)
+// Installers take the class as an opaque constructor (no type-back imports)
 // so madge sees no circular reference between this file and the helpers.
 installCoreMethods(Buffer);
 installIntMethods(Buffer);

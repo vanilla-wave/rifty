@@ -1,78 +1,48 @@
 /**
  * Owner table for the globals `@riftydev/runtime-js` installs inside a Worker
- * realm.
+ * realm. Closes the "Ungoverned globals" Tier 2 #10 finding (2026-05-26
+ * architecture review): pre-migration these were ad-hoc untyped keys on
+ * `globalThis`/`self`, which M11 A-026's multi-realm Vite worker (ADR-0011
+ * phase 3) could clobber, and which would collide with kernel's flat
+ * `__riftyKernelSyncCall` / `__riftyKernelSyncRing__`.
  *
- * Background — closes the "Ungoverned globals" Tier 2 #10 finding from the
- * 2026-05-26 architecture review. Pre-migration, runtime-js wrote ad-hoc
- * keys directly to `globalThis` / `self` (`__riftyEsmStash`,
- * `__riftyLastEsmBody`, `__riftyLastEsmFile`) and exposed a closure-bound
- * `__setCreateRequireImpl` plumbing function from `builtins/module.ts`.
- * None of those were documented as a contract; reading them was untyped.
- * When M11 A-026 spawns Vite in its own Worker realm (ADR-0011 phase 3
- * multi-realm), additional bundles in the realm could clobber these names
- * — and the unguarded flat keys would start colliding with kernel's
- * `shared-globals.ts` published `__riftyKernelSyncCall` /
- * `__riftyKernelSyncRing__`.
+ * Collision boundary — every internal hook lives under one root key
+ * {@link RUNTIME_JS_ROOT_KEY} (`'__rifty'`), which does not start with
+ * `__riftyKernel`, so it never overlaps kernel's flat keys even when several
+ * bundles share a realm (the M11 A-026 scenario). The helpers here are the
+ * only sanctioned publish/read API; callers never index `globalThis.__rifty`.
  *
- * Design choice (collision boundary) — unlike kernel which keeps two flat
- * keys (`__riftyKernelSyncCall`, `__riftyKernelSyncRing__`) at the top of
- * `globalThis`, runtime-js groups every internal hook under a single root
- * key {@link RUNTIME_JS_ROOT_KEY} (`'__rifty'`). The kernel keys keep their
- * `__riftyKernel*` flat shape (their owner table is intentionally narrow
- * and pre-dates this one). The two namespaces meet at a single collision
- * point: the flat key `__rifty` does not start with `__riftyKernel`, so the
- * two surfaces never overlap even when several bundles share one realm
- * (the scenario M11 A-026 will land us in). Inside `__rifty.*` each key is
- * its own sub-property; the helpers in this file are the only sanctioned
- * publish / read API. Callers never index `globalThis.__rifty` directly.
- *
- * Documented keys — every key here is owned by `@riftydev/runtime-js`. The
- * comment next to each one names the call site that publishes the value
- * and the call site that reads it. If you add a key, register it in
- * {@link RUNTIME_JS_GLOBAL_KEYS}, extend
- * {@link RuntimeJsGlobalRecord}, and document its lifecycle here.
+ * To add a key: register it in {@link RUNTIME_JS_GLOBAL_KEYS}, extend
+ * {@link RuntimeJsGlobalRecord}, and document its publish/read sites here.
  *
  *  - `require`           — published by `worker-entry.ts`, read by the
- *                          public-mirror that exposes it on `self.require`
- *                          for user REPL code (Node convention).
+ *                          public-mirror exposing it on `self.require`
+ *                          for REPL code (Node convention).
  *  - `import`            — published by `worker-entry.ts`, read by the
- *                          public-mirror that exposes it on
- *                          `self.__riftyImport` for REPL `import()` calls.
- *  - `esmStash`          — published by `module-loader/esm.ts` each time
- *                          the ESM transformer emits a transformed body;
- *                          read by Playwright diagnostics when an
- *                          internal error needs the original body.
+ *                          public-mirror exposing it on `self.__riftyImport`.
+ *  - `esmStash`          — published by `module-loader/esm.ts` per transformed
+ *                          body; read by Playwright diagnostics needing the
+ *                          original body on internal error.
  *  - `esmLastBody`       — published by `module-loader/esm.ts` on the
  *                          `new Function(...)` wrap-failure path so a
  *                          diagnostic snippet survives the throw; read by
- *                          Playwright when the test rig pulls the body
- *                          out of the page after a wrap failure.
- *  - `esmLastFile`       — sibling to `esmLastBody`, names the file whose
- *                          body is sitting in `esmLastBody`.
+ *                          the Playwright test rig after a wrap failure.
+ *  - `esmLastFile`       — names the file whose body is in `esmLastBody`.
  *  - `createRequireImpl` — published by `__setCreateRequireImpl` in
- *                          `builtins/module.ts` (called from
- *                          `worker-entry.ts` and from the playground's
- *                          `realVite.ts` adapter); read by `createRequire`
- *                          in the same file. Holds the closure that turns
- *                          a `from`-path into a `require()` function bound
- *                          to it.
+ *                          `builtins/module.ts` (from `worker-entry.ts` and
+ *                          the playground's `realVite.ts`); read by
+ *                          `createRequire` there. Closure turning a
+ *                          `from`-path into a bound `require()`.
  *
- * Multi-realm note (M11 A-026) — when Vite migrates to its own Worker
- * realm, that realm imports its own copy of `@riftydev/runtime-js`, and so
- * gets its own copy of the owner table on its own `globalThis.__rifty`.
- * No realm reads another realm's table; the publish helpers are realm-
- * scoped by construction. The kernel-owned `__riftyKernelSyncCall` /
- * `__riftyKernelSyncRing__` keys land on the same realm under their own
- * names and do not collide with `__rifty`.
+ * Multi-realm note (M11 A-026) — each realm imports its own runtime-js copy
+ * and gets its own table on its own `globalThis.__rifty`; no realm reads
+ * another's, and the publish helpers are realm-scoped by construction.
  */
 
 /** Single root key under which every runtime-js global lives. */
 export const RUNTIME_JS_ROOT_KEY = '__rifty' as const;
 
-/**
- * Type-level enumeration of every documented runtime-js global. The string
- * values are the sub-property names inside the `__rifty` root.
- */
+/** Documented runtime-js globals; values are sub-property names under `__rifty`. */
 export const RUNTIME_JS_GLOBAL_KEYS = {
   require: 'require',
   import: 'import',
@@ -92,16 +62,15 @@ export type RuntimeRequire = (specifier: string) => unknown;
 export type RuntimeImport = (specifier: string) => Promise<unknown>;
 
 /**
- * Function type the `createRequire(from)` builtin reads. Mirrors the local
- * `RequireFn`-producing signature in `builtins/module.ts`; the additional
- * `resolve` / `cache` fields are added by the caller, not by this typedef.
+ * Function type the `createRequire(from)` builtin reads. Mirrors the
+ * `RequireFn`-producing signature in `builtins/module.ts`; the `resolve` /
+ * `cache` fields are added by the caller, not by this typedef.
  */
 export type CreateRequireImpl = (from: string) => RuntimeRequire;
 
 /**
- * Concrete value type per key. Constrained narrowly so consumers stay
- * `any`-free at call sites; new keys must extend this record alongside
- * {@link RUNTIME_JS_GLOBAL_KEYS}.
+ * Concrete value type per key — kept narrow so call sites stay `any`-free.
+ * New keys must extend this alongside {@link RUNTIME_JS_GLOBAL_KEYS}.
  */
 export interface RuntimeJsGlobalRecord {
   require: RuntimeRequire;
@@ -137,26 +106,23 @@ function ensureRoot(): Partial<RuntimeJsGlobalRecord> {
 
 /**
  * Install a typed value on this realm's `__rifty` root. Idempotent —
- * re-publishing the same key overwrites the previous value. The root
- * itself is installed as a non-enumerable, non-writable property of
- * `globalThis` on first publish; subsequent publishes mutate the existing
- * root object.
+ * re-publishing a key overwrites it. On first publish the root is installed
+ * as a non-enumerable, non-writable `globalThis` property; later publishes
+ * mutate the existing root object.
  */
 export function publishRuntimeGlobal<K extends RuntimeJsGlobalKey>(
   key: K,
   value: RuntimeJsGlobalRecord[K],
 ): void {
   const root = ensureRoot();
-  // Assigning through the typed surface so the caller's signature is
-  // checked at the publish site.
+  // Assign through the typed surface so the caller's signature is checked here.
   (root as RuntimeJsGlobalRecord)[key] = value;
 }
 
 /**
- * Read a typed value from this realm's `__rifty` root. Returns `null` when
- * the key has never been published in the current realm (e.g. on the main
- * realm before the runtime-js worker entry has run, or after a paired
- * {@link unpublishRuntimeGlobal}).
+ * Read a typed value from this realm's `__rifty` root. `null` when the key
+ * was never published in this realm (e.g. main realm before the worker entry
+ * ran, or after a paired {@link unpublishRuntimeGlobal}).
  */
 export function readRuntimeGlobal<K extends RuntimeJsGlobalKey>(
   key: K,
@@ -168,10 +134,9 @@ export function readRuntimeGlobal<K extends RuntimeJsGlobalKey>(
 }
 
 /**
- * Remove a previously-published key. Designed for the (rare) teardown
- * path: a realm tearing down before its globals get GC'd, or a test
- * isolating per-case publishes. The root object itself is left in place —
- * other keys under it remain visible.
+ * Remove a previously-published key. For the rare teardown path (a realm
+ * tearing down before GC, or a test isolating per-case publishes). The root
+ * object is left in place — other keys under it remain visible.
  */
 export function unpublishRuntimeGlobal<K extends RuntimeJsGlobalKey>(key: K): void {
   const root = asGlobal()[RUNTIME_JS_ROOT_KEY];
@@ -180,9 +145,8 @@ export function unpublishRuntimeGlobal<K extends RuntimeJsGlobalKey>(key: K): vo
 }
 
 /**
- * Return the enumeration of documented keys. Stable order matches the
- * declaration order in {@link RUNTIME_JS_GLOBAL_KEYS}. Useful in tests
- * that iterate every key (publish/read roundtrip, key-collision asserts).
+ * Documented keys in declaration order of {@link RUNTIME_JS_GLOBAL_KEYS}.
+ * Used by tests iterating every key (publish/read roundtrip, collision asserts).
  */
 export function runtimeGlobalKeys(): readonly RuntimeJsGlobalKey[] {
   return Object.keys(RUNTIME_JS_GLOBAL_KEYS) as RuntimeJsGlobalKey[];

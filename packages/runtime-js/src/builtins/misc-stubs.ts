@@ -1,8 +1,7 @@
 /**
- * Importable-but-loud stubs for low-traffic Node builtins. Vite and a couple
- * of its transitive deps reach for these at module load time even though they
- * almost never call into them on the dev path. Every access throws so we
- * notice the day one actually does.
+ * Importable-but-loud stubs for low-traffic Node builtins. Vite and some
+ * transitive deps reach for these at module load time but almost never call
+ * into them on the dev path. Every access throws so we notice if one does.
  */
 import { NotImplementedError } from '@riftydev/io';
 
@@ -45,11 +44,11 @@ export const async_hooks = {
   AsyncResource: class AsyncResource {
     constructor(_type: string) {}
     /**
-     * Node's `runInAsyncScope(fn, thisArg, ...args)` invokes `fn` with the
-     * given receiver and arguments and returns its result. We don't track async
-     * context, but we MUST forward thisArg/args/return — raw-body@2.5.x binds
-     * its completion callback this way, and dropping the args silently lost the
-     * parsed body (`(err, buf)` → `()`).
+     * Node's `runInAsyncScope(fn, thisArg, ...args)` calls `fn` with the given
+     * receiver/args and returns its result. We don't track async context, but
+     * MUST forward thisArg/args/return — raw-body@2.5.x binds its completion
+     * callback this way, and dropping the args silently lost the parsed body
+     * (`(err, buf)` → `()`).
      */
     runInAsyncScope<T>(fn: (...args: unknown[]) => T, thisArg?: unknown, ...args: unknown[]): T {
       return fn.apply(thisArg, args);
@@ -60,18 +59,18 @@ export const async_hooks = {
   },
   /**
    * Continuation-local storage with **synchronous-scope fidelity**. `run` /
-   * `getStore` / `enterWith` / `exit` / `disable` behave exactly like Node's
+   * `getStore` / `enterWith` / `exit` / `disable` match Node's
    * `AsyncLocalStorage` throughout synchronous execution and the synchronous
    * prefix of an async function (up to its first `await`) — which is what
    * opencode's `LocalContext.{provide,use}` (`util/local-context.ts`) relies on.
    *
-   * The store is NOT propagated across async scheduling boundaries (after an
-   * `await`/timer/microtask resumes, `getStore()` reflects the store of whatever
-   * is currently on the stack, not the one captured at suspension). Faithful
-   * cross-`await` propagation requires native async-context tracking
-   * (`async_hooks` enter/exit hooks, or the TC39 `AsyncContext` proposal) which
-   * the browser/WASI realm does not expose. This is a documented partial
-   * fidelity, not a fake stub: synchronous use is byte-for-byte Node-correct.
+   * The store is NOT propagated across async scheduling boundaries: after an
+   * `await`/timer/microtask resumes, `getStore()` reflects whatever is on the
+   * stack, not the store captured at suspension. Faithful cross-`await`
+   * propagation needs native async-context tracking (`async_hooks` enter/exit
+   * hooks, or the TC39 `AsyncContext` proposal), which the browser/WASI realm
+   * does not expose. Documented partial fidelity, not a fake stub: synchronous
+   * use is byte-for-byte Node-correct.
    */
   AsyncLocalStorage: class AsyncLocalStorage<T> {
     #store: T | undefined = undefined;

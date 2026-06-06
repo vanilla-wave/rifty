@@ -97,6 +97,7 @@ These are non-negotiable. Violating any of them is a defect, regardless of how g
 - **No silent stubs.** If you can't implement something, throw `NotImplementedError('module.feature')` and register in compat-matrix as `❌`. Never return `null`/`''`/`undefined` as a placeholder.
 - **No hardcoded URLs to external services.** Configurable via env (e.g. npm registry URL — see D-004).
 - **No file-size cap.** Split by concept, not by line count.
+- **ADRs and comments: be extremely concise — sacrifice grammar for the sake of concision.** Keep only what earns its place (why / gotcha / workaround / public-API TSDoc / TODO / legal); cut anything that restates the code or pads prose. Terse phrases over full sentences. ADRs keep every decision, option, rationale, consequence, and acceptance item — but in the fewest words.
 
 ### Tests
 - **Never modify a test to make code pass.** If a test seems wrong, that's a design discussion — file an issue, don't edit the test. (This is a correctness/integrity invariant — explicitly *out of scope* of ADR-0063's record-and-continue relaxation. It still never happens.)

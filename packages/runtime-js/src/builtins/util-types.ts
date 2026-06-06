@@ -1,28 +1,17 @@
 /**
- * Node-compatible `node:util/types` — the runtime type-reflection predicates.
+ * Node-compatible `node:util/types` runtime type-reflection predicates.
  *
- * Real Node implements these against V8-internal type tags that user code
- * cannot forge. In a pure-JS realm we have no such oracle, so we approximate
- * faithfully:
- *
- * - Types with a public, spoof-resistant brand (the TypedArrays, `Map`, `Set`,
- *   `Date`, `RegExp`, `Promise`, `ArrayBuffer`, `SharedArrayBuffer`,
- *   `DataView`, `WeakMap`, `WeakSet`, `WeakRef`) are detected by `instanceof`
- *   plus, where it matters, the V8 `Object.prototype.toString` brand so that
- *   subclasses and cross-realm instances still match the way Node's do.
- * - Internal objects with no public constructor (Map/Set/Array/String
- *   iterators, `arguments`, generator objects, the boxed primitives) are
- *   detected by their V8 `[[Class]]` brand via `Object.prototype.toString`,
- *   which is exactly the tag V8 stamps on those instances.
- *
- * This matches Node's output for every genuine instance a dependency produces
- * (the only thing that can diverge is a hand-forged `Symbol.toStringTag`, which
- * no real value carries). See the `cases/util/types.case.ts` parity case for
- * the head-to-head against real Node v24.
+ * Node detects these via V8-internal type tags that user code cannot forge.
+ * A pure-JS realm has no such oracle, so we approximate via the V8 `[[Class]]`
+ * brand (`Object.prototype.toString`) — the same tag V8 stamps on instances,
+ * including internal objects with no public constructor (iterators,
+ * `arguments`, generators, boxed primitives). This matches Node for every
+ * genuine instance; the only divergence is a hand-forged `Symbol.toStringTag`,
+ * which no real value carries. Parity case: `cases/util/types.case.ts` (Node v24).
  */
 
 const objToString = Object.prototype.toString;
-/** The V8 `[[Class]]` brand, e.g. `"Map Iterator"`, `"Arguments"`, `"Number"`. */
+/** V8 `[[Class]]` brand, e.g. `"Map Iterator"`, `"Arguments"`, `"Number"`. */
 function brand(value: unknown): string {
   return objToString.call(value).slice(8, -1);
 }
@@ -30,8 +19,6 @@ function brand(value: unknown): string {
 function isObjectLike(value: unknown): value is object {
   return typeof value === 'object' && value !== null;
 }
-
-// --- ArrayBuffer family ----------------------------------------------------
 
 export function isArrayBuffer(value: unknown): value is ArrayBuffer {
   return brand(value) === 'ArrayBuffer';
@@ -53,8 +40,6 @@ export function isArrayBufferView(value: unknown): value is ArrayBufferView {
 export function isDataView(value: unknown): value is DataView {
   return brand(value) === 'DataView';
 }
-
-// --- TypedArrays -----------------------------------------------------------
 
 export function isTypedArray(
   value: unknown,
@@ -89,8 +74,6 @@ export const isFloat64Array = isBrand<Float64Array>('Float64Array');
 export const isBigInt64Array = isBrand<BigInt64Array>('BigInt64Array');
 export const isBigUint64Array = isBrand<BigUint64Array>('BigUint64Array');
 
-// --- Keyed / weak collections ---------------------------------------------
-
 export const isMap = isBrand<Map<unknown, unknown>>('Map');
 export const isSet = isBrand<Set<unknown>>('Set');
 export const isWeakMap = isBrand<WeakMap<object, unknown>>('WeakMap');
@@ -98,17 +81,14 @@ export const isWeakSet = isBrand<WeakSet<object>>('WeakSet');
 export const isMapIterator = isBrand<IterableIterator<unknown>>('Map Iterator');
 export const isSetIterator = isBrand<IterableIterator<unknown>>('Set Iterator');
 
-// --- Core JS objects -------------------------------------------------------
-
 export const isDate = isBrand<Date>('Date');
 export const isRegExp = isBrand<RegExp>('RegExp');
 export const isPromise = isBrand<Promise<unknown>>('Promise');
 
 export function isNativeError(value: unknown): value is Error {
-  // Node's predicate is true for any of the V8 native error constructors
-  // (Error, TypeError, RangeError, …) and false for plain objects that merely
-  // look error-ish. `instanceof Error` is the spoof-resistant brand check that
-  // matches that set; a forged `[object Error]` tag would not be a real error.
+  // True for any V8 native error constructor (Error, TypeError, …), false for
+  // error-ish plain objects. `instanceof Error` is the spoof-resistant check;
+  // a forged `[object Error]` tag would not be a real error.
   return value instanceof Error;
 }
 
@@ -121,8 +101,6 @@ export function isGeneratorObject(value: unknown): boolean {
   return b === 'Generator' || b === 'AsyncGenerator';
 }
 
-// --- Functions -------------------------------------------------------------
-
 export function isAsyncFunction(value: unknown): boolean {
   return typeof value === 'function' && brand(value) === 'AsyncFunction';
 }
@@ -130,8 +108,6 @@ export function isAsyncFunction(value: unknown): boolean {
 export function isGeneratorFunction(value: unknown): boolean {
   return typeof value === 'function' && brand(value) === 'GeneratorFunction';
 }
-
-// --- Boxed primitives ------------------------------------------------------
 
 export const isNumberObject = (value: unknown): boolean =>
   isObjectLike(value) && brand(value) === 'Number';
@@ -154,15 +130,12 @@ export function isBoxedPrimitive(value: unknown): boolean {
   );
 }
 
-// --- Misc V8-internal --------------------------------------------------------
-
 export const isWeakRef = isBrand<WeakRef<object>>('WeakRef');
 
 export function isProxy(_value: unknown): boolean {
-  // A Proxy is transparent to user-level reflection; there is no spoof-free way
-  // to detect one in-realm. Node's predicate relies on a V8 internal that has
-  // no JS surface, so this is a genuine in-realm ceiling. Returning false would
-  // be a silent wrong answer, so we throw rather than lie.
+  // A Proxy is transparent to user-level reflection; Node relies on a V8
+  // internal with no JS surface, so it is undetectable in-realm. Returning
+  // false would be a silent wrong answer, so we throw rather than lie.
   throw new Error(
     'util.types.isProxy is not detectable in a pure-JS realm (no V8 internal); see compat-matrix',
   );

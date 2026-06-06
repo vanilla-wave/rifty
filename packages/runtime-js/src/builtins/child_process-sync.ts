@@ -1,9 +1,8 @@
 /**
  * `child_process.execSync` (ADR-0011 phase 3).
  *
- * Lives in its own module so the public `child_process.ts` stays inside the
- * workspace structure-by-concept layout. Holds the SAB-vs-loud-throw branch
- * for synchronous child execution.
+ * Own module so `child_process.ts` stays structure-by-concept; holds the
+ * SAB-vs-loud-throw branch for synchronous child execution.
  */
 
 import { Buffer, NotImplementedError } from '@riftydev/io';
@@ -19,23 +18,17 @@ export interface ExecSyncOptions {
 /**
  * `execSync` — Node-compatible synchronous child execution.
  *
- * Branching:
- *   - If we are inside a kernel-spawned Worker (the kernel sync API is
- *     published — see `@riftydev/kernel.readKernelSyncApi`), route through the
- *     sync RPC hook. The parent dispatcher spawns a fresh Worker for the
- *     child script and uses `Atomics.wait` to block this realm until the
- *     child's stdout is captured. This is the only path that truly blocks
- *     the caller — see ADR-0011 §Decision.
- *   - Otherwise — when SAB IPC is unavailable, when the host hasn't wired
- *     `setKernelWorkerUrl`, or when we are in the main realm where
- *     `Atomics.wait` would freeze the page — throw `NotImplementedError`.
- *     The previous in-realm `new Function(...)` fallback was a silent
- *     stub: it evaluated user code in the parent realm without an exit
- *     code, without stdio isolation, and without a PID, while pretending to
- *     be a child process. Per CLAUDE.md "no silent stubs" and the
- *     2026-05-27 architecture review (item #2 in
- *     `docs/follow-ups-architecture-review-2026-05-27.md`), the fallback
- *     is replaced by a loud throw that names the missing capability.
+ * Inside a kernel-spawned Worker (sync API published), routes through the sync
+ * RPC hook: the parent dispatcher spawns a fresh Worker for the child and
+ * `Atomics.wait`s to block this realm until stdout is captured — the only path
+ * that truly blocks the caller (ADR-0011 §Decision).
+ *
+ * Otherwise (no SAB IPC, no `setKernelWorkerUrl`, or main realm where
+ * `Atomics.wait` would freeze the page) throws `NotImplementedError`. The old
+ * in-realm `new Function(...)` fallback was a silent stub — ran user code in
+ * the parent realm with no exit code, stdio isolation, or PID while posing as a
+ * child. Replaced by a loud throw per CLAUDE.md "no silent stubs" + 2026-05-27
+ * review item #2 (`docs/follow-ups-architecture-review-2026-05-27.md`).
  */
 export function execSync(cmd: string, opts?: ExecSyncOptions): Uint8Array {
   const api = readKernelSyncApi();

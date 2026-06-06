@@ -29,7 +29,7 @@ export function sortDirents(entries: readonly VfsDirent[]): VfsDirent[] {
   });
 }
 
-/** Read+sort the immediate children of `dir` into {@link TreeChild}s (lazy: one level). */
+/** Read+sort immediate children of `dir` into {@link TreeChild}s (lazy: one level). */
 export function readChildren(reader: DirentReader, dir: string): TreeChild[] {
   return sortDirents(reader.readdirSync(dir)).map((e) => ({
     path: joinPath(dir, e.name),
@@ -131,11 +131,11 @@ function appendNmChildren(
 }
 
 /**
- * Compose the rows for the `node_modules` subtree (ADR-0080), interleaving the
- * async per-directory state into the same flat row list the sync walk produces.
- * Pure (Solid-free) so the async-row interleave — the load-bearing bit — is
- * unit-tested without jsdom: the rows memo reads `nmState`/`expanded` signal
- * values and calls this; the async work lives in event handlers that write them.
+ * Compose rows for the `node_modules` subtree (ADR-0080), interleaving the async
+ * per-directory state into the flat row list the sync walk produces. Pure
+ * (Solid-free) so the async-row interleave — the load-bearing bit — is unit-tested
+ * without jsdom: the rows memo reads `nmState`/`expanded` signals and calls this;
+ * the async work lives in event handlers that write them.
  *
  * Returns the collapsed `node_modules` dir row, plus — when it (or a loaded
  * subdir) is expanded — a loading row, an error row, or its children at depth+1.

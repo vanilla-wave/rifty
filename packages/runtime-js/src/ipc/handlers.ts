@@ -6,27 +6,24 @@
  * lines, resolving the script's bytes from the VFS sync mirror, and
  * recursively spawning a kernel Worker to run the child.
  *
- * The registration is explicit — runtime-js's `child_process` module calls
- * {@link installRuntimeJsExecSyncHandler} once at module load. Before
- * ADR-0039 the kernel auto-registered an `'execSync'` handler from its
- * `getKernelDispatcher()` factory; the kernel is now runtime-agnostic and
- * ships no handlers by default.
+ * Registration is explicit (`child_process` calls
+ * {@link installRuntimeJsExecSyncHandler} at module load) because per ADR-0039
+ * the kernel is now runtime-agnostic and ships no handlers by default; before
+ * it auto-registered `'execSync'` from `getKernelDispatcher()`.
  */
 
 import type { SyncRpcDispatcher, WorkerEntryDescriptor } from '@riftydev/kernel';
 import { type RecursiveRunResult, makeRecursiveRunner } from './recursive-runner.ts';
 
-/**
- * Argument shape the runtime-js `execSync` shim writes into the request.
- */
+/** Argument shape the runtime-js `execSync` shim writes into the request. */
 export interface ExecSyncPayload {
   /**
-   * Command line as a single string, exactly as passed by the user. We
-   * only support `node <script-path>` — anything else is rejected so the
-   * caller can fall through to the in-realm path with the original error.
+   * Command line, exactly as passed. Only `node <script-path>` is supported;
+   * anything else is rejected so the caller falls through to the in-realm
+   * path with the original error.
    */
   readonly cmd: string;
-  /** `execSync` options. Currently we only forward `cwd` + `env`. */
+  /** `execSync` options; only `cwd` + `env` are forwarded. */
   readonly opts?: {
     readonly cwd?: string;
     readonly env?: Record<string, string>;
@@ -34,10 +31,9 @@ export interface ExecSyncPayload {
 }
 
 /**
- * Caller-supplied script loader: given a path in the child's VFS, returns
- * the bytes (or `null` when absent). Runtime-js wires this with a thin
- * wrapper around `syncMirror()` so the SAB path reads the same source
- * of truth as the in-realm fallback.
+ * Caller-supplied script loader: path in the child's VFS to bytes (`null` when
+ * absent). Runtime-js wraps `syncMirror()` so the SAB path reads the same
+ * source of truth as the in-realm fallback.
  */
 export type ScriptResolver = (path: string) => Uint8Array | null;
 
@@ -53,12 +49,11 @@ export interface InstallRuntimeJsExecSyncOptions {
 }
 
 /**
- * Register the runtime-js `'execSync'` handler on `dispatcher`. Idempotent
- * — re-registering replaces the previous handler (per
- * {@link SyncRpcDispatcher.register} semantics). The handler parses the
- * caller's command line, resolves the script's bytes via `resolveScript`,
- * spawns a recursive kernel Worker that runs the child, and resolves with
- * the captured stdout as a UTF-8 string.
+ * Register the runtime-js `'execSync'` handler on `dispatcher`. Idempotent:
+ * re-registering replaces the previous handler (per
+ * {@link SyncRpcDispatcher.register}). The handler parses the command line,
+ * resolves script bytes via `resolveScript`, spawns a recursive kernel Worker,
+ * and resolves with the child's stdout as a UTF-8 string.
  */
 export function installRuntimeJsExecSyncHandler(
   dispatcher: SyncRpcDispatcher,

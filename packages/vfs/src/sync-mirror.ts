@@ -1,20 +1,18 @@
 /**
  * Synchronous mirror of a VFS — needed by `fs.readFileSync` and friends.
  *
- * Per ADR-0014, the sync view ({@link MemoryFsSync}) and the async view
- * ({@link MemoryVfs}) bind to a shared {@link MemoryBackend} so writes
- * through one are visible through the other. Use {@link createMemoryFs} to
- * construct a paired set, and {@link installMemoryFs} to register both as
- * the active runtime mirror in one call.
+ * Per ADR-0014, the sync view ({@link MemoryFsSync}) and async view
+ * ({@link MemoryVfs}) bind to a shared {@link MemoryBackend} so writes through
+ * one are visible through the other. {@link createMemoryFs} builds a paired
+ * set; {@link installMemoryFs} registers both as the runtime mirror at once.
  *
- * For OPFS in a Worker the `FileSystemSyncAccessHandle` API gives true sync
- * semantics; that backend lives in `OpfsFsSync` (ADR-0013). This module is
- * the seam that lets us swap implementations behind the same interface.
+ * OPFS in a Worker gives true sync semantics via `FileSystemSyncAccessHandle`;
+ * that backend is `OpfsFsSync` (ADR-0013). This module is the seam for
+ * swapping implementations behind one interface.
  *
- * The wrapper classes (`MemoryVfs`, `MemoryFsSync`) keep their backend
- * private — pairing across surfaces flows through `createMemoryFs()` or via
- * `setSyncMirror(impl, { async })`; nothing here reaches into a class
- * instance to find a backend.
+ * Wrapper classes keep their backend private; pairing flows through
+ * `createMemoryFs()` or `setSyncMirror(impl, { async })`, never by reaching
+ * into an instance for a backend.
  */
 
 import type { FsSync } from './fs-sync.ts';
@@ -93,11 +91,10 @@ export function syncMirror(): FsSync & {
 }
 
 /**
- * Async view paired with {@link syncMirror}. Modules that need true streaming
- * (e.g. `fs.createReadStream` on top of `Vfs.openReadable`) reach for this.
- * When unset (no paired async installed) callers should construct a
- * one-shot adapter — but in normal operation {@link installMemoryFs} or
- * {@link setAsyncVfs} is called at runtime boot to wire both surfaces.
+ * Async view paired with {@link syncMirror}, used by modules needing true
+ * streaming (e.g. `fs.createReadStream` over `Vfs.openReadable`). Null when no
+ * paired async is installed — callers then build a one-shot adapter; normally
+ * {@link installMemoryFs}/{@link setAsyncVfs} wires both surfaces at boot.
  */
 export function asyncVfs(): Vfs | null {
   return activeAsync;
@@ -120,10 +117,10 @@ export function installMemoryFs(): MemoryBackend {
 export async function installOpfsFs(): Promise<{ vfs: OpfsVfs; fsSync: OpfsFsSync }> {
   const vfs = new OpfsVfs();
   await vfs.init();
-  // Pair the async surface into the sync mirror (ADR-0072) so content
-  // write-through and the boot content preload can route through OPFS. The
-  // structural `PairedAsyncSurface` arg avoids a reverse import of `OpfsVfs`
-  // into `opfs-sync.ts`; `OpfsVfs` already satisfies that shape.
+  // Pair the async surface into the sync mirror (ADR-0072) so write-through
+  // and boot preload route through OPFS. Passing the structural
+  // `PairedAsyncSurface` (which `OpfsVfs` satisfies) avoids a reverse import of
+  // `OpfsVfs` into `opfs-sync.ts`.
   const fsSync = await OpfsFsSync.init(vfs);
   setSyncMirror(fsSync, { async: vfs });
   return { vfs, fsSync };
@@ -138,12 +135,9 @@ export function resetSyncMirror(): void {
  * Install `impl` as the active sync mirror. The paired async surface is
  * explicit — callers wire both at the same call site rather than letting the
  * registry sniff at the implementation. Omitting `options.async` clears the
- * async surface; pass `{ async }` to install the matching async view in the
- * same step.
+ * async surface; pass `{ async }` to install the matching async view.
  *
- * The `instanceof MemoryFsSync` branch that this replaced was the only
- * back-channel that needed a public `.backend` field on the wrapper; with
- * pairing made explicit at the call site the field is gone.
+ * Explicit pairing is why wrappers need no public `.backend` back-channel.
  */
 export function setSyncMirror(impl: FsSync, options: { async?: Vfs } = {}): void {
   activeSync = impl;

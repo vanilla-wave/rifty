@@ -7,9 +7,9 @@
  * returned {@link SpawnWorkerResult}. Throws if {@link setKernelWorkerUrl}
  * hasn't been called by the host.
  *
- * All spawns share the singleton {@link SyncRpcDispatcher} (review §2.11
- * fix). On exit/terminate the kernel-side `removeEventListener`s mirror
- * the `addEventListener`s, so the `WorkerLike` is GC-eligible.
+ * All spawns share the singleton {@link SyncRpcDispatcher}. On exit/terminate
+ * the `removeEventListener`s mirror the `addEventListener`s, so the
+ * `WorkerLike` is GC-eligible.
  */
 
 import { NotImplementedError } from '@riftydev/io';
@@ -24,8 +24,7 @@ import type {
 } from './worker-entry.ts';
 import { type WorkerLike, makeKernelWorker } from './worker-like.ts';
 
-// Re-export so existing tests (`packages/kernel/tests/*`) keep their
-// single-import deep path. Public surface trimming is out of scope.
+// Re-export so existing tests keep their single-import deep path.
 export { clearKernelDispatcher, getKernelDispatcher } from './ipc/kernel-dispatcher.ts';
 export {
   type WorkerLike,
@@ -103,10 +102,10 @@ export interface SpawnWorkerResult {
 }
 
 /**
- * Performs the actual `new Worker(...)` + `postMessage(init, transfer)` dance.
+ * Performs the `new Worker(...)` + `postMessage(init, transfer)` dance.
  * Throws {@link NotImplementedError} when {@link setKernelWorkerUrl} hasn't
- * been called — this makes the missing host-wiring loud at the call site
- * (no silent fall-through to a broken state).
+ * been called — makes missing host-wiring loud at the call site rather than
+ * silently falling through to a broken state.
  */
 export function spawnKernelWorker(
   spec: SpawnWorkerSpec,
@@ -122,12 +121,12 @@ export function spawnKernelWorker(
 
   const { pid, ppid } = identity;
 
-  // SAB ring (sync IPC, ADR-0011 phase 1). The Int32 header is shared, so
-  // SAB itself is NOT in the transfer list — both peers map it.
+  // SAB ring (sync IPC, ADR-0011 phase 1). SAB is shared, so it is NOT in the
+  // transfer list — both peers map it.
   const { sab, ring } = createSabRing();
 
   // Four MessageChannels: three for stdio, one for fork-mode IPC (ADR-0045).
-  // We give the kernel-side the `port1`s and ship `port2`s to the worker.
+  // Kernel-side keeps the `port1`s; `port2`s ship to the worker.
   const stdoutCh = new MessageChannel();
   const stderrCh = new MessageChannel();
   const stdinCh = new MessageChannel();
@@ -160,9 +159,8 @@ export function spawnKernelWorker(
 
   const worker: WorkerLike = makeKernelWorker(url);
 
-  // ADR-0011 phase 3 (review fix): share the single module-level
-  // dispatcher across every spawn. `attach(ring)` is idempotent and
-  // reuses the global polling timer.
+  // ADR-0011 phase 3: share the single module-level dispatcher across every
+  // spawn. `attach(ring)` is idempotent and reuses the global polling timer.
   const dispatcher = getKernelDispatcher();
   dispatcher.attach(ring);
 
@@ -179,8 +177,7 @@ export function spawnKernelWorker(
   const messageErrorListeners: ((ev: MessageEvent) => void)[] = [];
 
   const dispatchExit = (code: number): void => {
-    // Snapshot listeners so a handler that unsubscribes itself doesn't
-    // skip a peer.
+    // Snapshot so a handler that unsubscribes itself doesn't skip a peer.
     for (const cb of [...exitListeners]) cb(code);
   };
 
@@ -189,10 +186,9 @@ export function spawnKernelWorker(
   };
 
   /**
-   * Shared teardown for the worker side: detach the dispatcher, terminate
-   * the worker, and `removeEventListener` for every listener the kernel
-   * installed. Idempotent. Subscriber arrays are cleared by callers AFTER
-   * the final dispatch so waiters still receive their event.
+   * Detach the dispatcher, terminate the worker, and remove every installed
+   * listener. Idempotent. Subscriber arrays are cleared by callers AFTER the
+   * final dispatch so waiters still receive their event.
    */
   function tearDownWorker(): void {
     if (terminated) return;
@@ -213,8 +209,8 @@ export function spawnKernelWorker(
     messageErrorListeners.length = 0;
   }
 
-  // Named handlers so `tearDownWorker`'s `removeEventListener`s can find
-  // them. Anonymous closures here would leak per spawn forever.
+  // Named handlers so `tearDownWorker` can `removeEventListener` them;
+  // anonymous closures would leak per spawn forever.
   const onMessage = (ev: MessageEvent): void => {
     const msg = ev.data as { type?: string; code?: number } | undefined;
     if (msg?.type === 'exit' && typeof msg.code === 'number') {
@@ -226,8 +222,8 @@ export function spawnKernelWorker(
   };
 
   // `ErrorEvent` is DOM-only; structurally it arrives as `MessageEvent`.
-  // Map uncaught worker errors to a code-1 exit (worker-entry already
-  // maps top-level throws to exit-1; this catches module parse failures).
+  // Map uncaught worker errors to a code-1 exit — catches module parse
+  // failures (worker-entry already maps top-level throws to exit-1).
   const onError = (ev: MessageEvent): void => {
     if (terminated) return;
     tearDownWorker();
@@ -236,12 +232,11 @@ export function spawnKernelWorker(
     clearSubscribers();
   };
 
-  // Review fix §1.10 — `messageerror` fires when the browser fails to
-  // structured-clone an incoming message (functions, Symbols, etc.).
-  // Non-fatal (matches browser semantics) — we log and surface, but do
-  // NOT tear down.
+  // `messageerror` fires when the browser fails to structured-clone an
+  // incoming message (functions, Symbols, etc.). Non-fatal per browser
+  // semantics — log and surface, but do NOT tear down.
   const onMessageError = (ev: MessageEvent): void => {
-    // eslint-disable-next-line no-console -- explicit logging contract per review fix
+    // eslint-disable-next-line no-console -- explicit logging contract
     console.warn(
       `[kernel.spawnKernelWorker] worker (pid=${pid}) reported messageerror; a posted message could not be deserialised`,
     );
@@ -281,11 +276,11 @@ export function spawnKernelWorker(
   };
 }
 
-// ADR-0039: no more `setKernelRecursiveSpawn(spawnKernelWorker)` at module
-// load. The recursive-spawn handshake belonged to the Node `'execSync'`
-// handler, which now lives in `@riftydev/runtime-js` and imports
-// `spawnKernelWorker` from this module directly (top-down).
+// ADR-0039: no `setKernelRecursiveSpawn(spawnKernelWorker)` at module load.
+// The recursive-spawn handshake belonged to the Node `'execSync'` handler,
+// now in `@riftydev/runtime-js`, which imports `spawnKernelWorker` directly
+// (top-down).
 
-// Re-export the ring type so consumers (e.g. tests) can type-annotate
-// `result.ring` without reaching into the ipc subfolder.
+// Re-export so consumers can type-annotate `result.ring` without reaching
+// into the ipc subfolder.
 export type { SabRing };

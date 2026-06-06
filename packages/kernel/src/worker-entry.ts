@@ -3,26 +3,22 @@
 /**
  * Kernel-side Worker bootstrap (ADR-0011 phase 1, ADR-0039).
  *
- * Loaded by `kernel.spawn` (phase 2 — wires this entry into a `new Worker(...)`
- * call via a bundler `?worker&url` import). For each spawned child, the
- * bootstrap:
+ * Loaded by `kernel.spawn` (phase 2 wires this entry into a `new Worker(...)`
+ * via a bundler `?worker&url` import). For each spawned child, the bootstrap:
  *   1. Waits for a single `init` message carrying {@link WorkerSpawnSpec}.
- *   2. Constructs a {@link SabRing} over `spec.syncRing` and uses it to back
- *      a {@link SyncRpcClient} for the parent-bound sync-call shim.
- *   3. Publishes the parent-bound sync-call shim via
- *      {@link publishKernelSyncApi}.
+ *   2. Builds a {@link SabRing} over `spec.syncRing`, backing a
+ *      {@link SyncRpcClient} for the parent-bound sync-call shim.
+ *   3. Publishes the sync-call shim via {@link publishKernelSyncApi}.
  *   4. Publishes a typed {@link KernelProcessSpec} via
  *      {@link publishKernelProcessSpec} (ADR-0039) — a runtime-agnostic
- *      snapshot of `{pid, ppid, argv, env, cwd, stdio}`. The kernel does
- *      NOT install a Node-shape `globalThis.process`; that Node-API
- *      knowledge lives in `@riftydev/runtime-js`.
- *   5. Invokes the optional pre-entry hook registered by the host via
- *      {@link setKernelPreEntryHook}. Hosts that spawn Node-style children
- *      use the hook to install the Node `process` global from runtime-js
- *      before user code runs.
- *   6. Executes the entry (either eval'd source or a dynamic `import(url)`).
- *   7. Posts `{ type: 'exit', code }` back to the parent and closes the
- *      stdio ports.
+ *      snapshot of `{pid, ppid, argv, env, cwd, stdio}`. Kernel does NOT
+ *      install a Node-shape `globalThis.process`; that lives in
+ *      `@riftydev/runtime-js`.
+ *   5. Invokes the optional pre-entry hook ({@link setKernelPreEntryHook}).
+ *      Node-style hosts use it to install the Node `process` global from
+ *      runtime-js before user code runs.
+ *   6. Runs the entry (eval'd source or a dynamic `import(url)`).
+ *   7. Posts `{ type: 'exit', code }` and closes the stdio ports.
  *
  * The exit code follows Node:
  *   - normal completion / promise resolution → 0
@@ -48,11 +44,9 @@ import {
   publishKernelSyncApi,
 } from './shared-globals.ts';
 
-// Re-export the global-hook key + sync-call type. Historical consumers
-// (runtime-js, tests) imported these from `worker-entry.ts`; the canonical
-// home is now `shared-globals.ts` but the legacy re-exports stay for the
-// transition period. New code SHOULD prefer `@riftydev/kernel`'s shared-globals
-// publish/read helpers.
+// Legacy re-exports: historical consumers (runtime-js, tests) imported these
+// from here. Canonical home is now `shared-globals.ts`; new code SHOULD prefer
+// the shared-globals publish/read helpers.
 export { KERNEL_SYNC_CALL_KEY, type KernelSyncCall };
 
 /**
@@ -181,11 +175,10 @@ async function runEntry(entry: WorkerEntryDescriptor): Promise<void> {
     await import(/* @vite-ignore */ entry.url);
     return;
   }
-  // Source kind: compile via `new AsyncFunction(code)` so top-level await
-  // works, and append a sourceURL pragma so dev-tools and stack traces
-  // show the right file. The kernel does NOT thread runtime-js's
-  // require/module here — that's the higher layer's responsibility via the
-  // pre-entry hook (ADR-0039).
+  // Compile via `new AsyncFunction(code)` so top-level await works; append a
+  // sourceURL pragma for correct stack traces. Kernel does NOT thread
+  // runtime-js's require/module here — higher layer's job via the pre-entry
+  // hook (ADR-0039).
   const AsyncFunction = Object.getPrototypeOf(async function noop() {}).constructor as new (
     body: string,
   ) => () => Promise<void>;
@@ -233,21 +226,17 @@ export function installWorkerEntry(
   const onMessage = async (ev: MessageEvent): Promise<void> => {
     const msg = ev.data as WorkerInitMessage | undefined;
     if (!msg || msg.type !== 'init') return;
-    // Init is one-shot. Detach the listener so a stray second message
-    // doesn't double-execute.
+    // Init is one-shot: detach so a stray second message doesn't double-execute.
     target.removeEventListener('message', onMessage as unknown as EventListener);
 
     const spec = msg.spec;
     const ring = SabRing.attach(spec.syncRing);
-    // Phase 3: expose `__riftyKernelSyncCall(method, payload)` so the
-    // runtime-js layer can route `execSync`, `readFileSync`, etc. through
-    // the parent dispatcher without each builtin re-implementing the
-    // SAB ring framing. The shim itself is a thin wrapper around a
-    // `SyncRpcClient` bound to this realm's ring.
+    // Expose the sync-call shim so runtime-js can route `execSync`,
+    // `readFileSync`, etc. through the parent dispatcher without each builtin
+    // re-implementing the SAB ring framing.
     publishSyncCallShim(ring);
-    // ADR-0039: publish the typed process spec (no Node-shape shim). The
-    // pre-entry hook below — when the host registered one — reads the
-    // spec to install whatever process surface its runtime needs.
+    // ADR-0039: typed process spec only, no Node-shape shim. The pre-entry hook
+    // reads it to install whatever process surface its runtime needs.
     publishProcessSpec(spec);
 
     let code = 0;
@@ -279,8 +268,8 @@ export function installWorkerEntry(
   target.addEventListener('message', onMessage as unknown as EventListener);
 }
 
-// Auto-install when loaded as a real Worker. Detection: `self` is a
-// DedicatedWorkerGlobalScope (has `postMessage` and lacks `window`).
+// Auto-install when loaded as a real Worker: `self` is a
+// DedicatedWorkerGlobalScope (has `postMessage`, lacks `window`).
 declare const WorkerGlobalScope: { prototype: object } | undefined;
 const isWorkerRealm =
   typeof WorkerGlobalScope !== 'undefined' &&

@@ -45,7 +45,7 @@ function parseTar(bytes: Uint8Array): TarEntry[] {
   let pendingLongName: string | null = null;
   while (offset + 512 <= bytes.length) {
     const header = bytes.subarray(offset, offset + 512);
-    // End of archive: two consecutive zero blocks.
+    // End of archive: zero block.
     if (header.every((b) => b === 0)) break;
     const headerName = readString(header, 0, 100, dec).replace(/\/$/, '');
     const typeFlag = String.fromCharCode(header[156] ?? 0);
@@ -63,14 +63,12 @@ function parseTar(bytes: Uint8Array): TarEntry[] {
       continue;
     }
     if (typeFlag === 'K') {
-      // GNU long linkname: not interesting once we reject symlinks. Drop the
-      // metadata entry without surfacing it as a file.
+      // GNU long linkname: irrelevant once we reject symlinks; drop without surfacing as a file.
       offset = nextOffset;
       continue;
     }
     if (typeFlag === '2') {
-      // We deliberately bail loudly so the user knows exactly which package
-      // tripped the missing feature. See file-level doc comment.
+      // Bail loudly so the user knows which package tripped the missing feature. See file-level doc.
       throw new NotImplementedError(
         'npm-client.tar.symlink',
         `tar symlinks not supported until M12 (entry: ${pendingLongName ?? `${prefix}${headerName}`})`,

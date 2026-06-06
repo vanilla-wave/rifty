@@ -1,15 +1,14 @@
 /**
  * Minimal process manager: per-PID table, parent/child links, dispatch.
  *
- * `spawn` allocates a PID and runs a JS handler with an `IO` object
- * (stdout/stderr/stdin/send/once); `spawnWorker` spawns into its own Web
- * Worker realm (ADR-0011). `kill(pid, signal)` emits `exit`/`close`.
+ * `spawn` allocates a PID and runs a JS handler with an `IO` object;
+ * `spawnWorker` spawns into its own Web Worker realm (ADR-0011).
+ * `kill(pid, signal)` emits `exit`/`close`.
  *
- * Per-PID records are removed from the manager's `table` after the `exit`
- * event has fired, and the internal stdio/IPC emitters are stripped of
- * listeners — so a long-lived host (the playground) doesn't accumulate
- * deceased records or per-spawn listener stacks. The handle object
- * itself survives so callers can still inspect `handle.exitCode`.
+ * Per-PID records are swept from `table` after `exit` fires, and the internal
+ * stdio/IPC emitters are stripped of listeners, so a long-lived host (the
+ * playground) doesn't accumulate deceased records or per-spawn listener stacks.
+ * The handle object survives so callers can still read `handle.exitCode`.
  *
  * The runtime-js `child_process` builtin wires Node's API surface to this
  * manager; tests exercise the manager directly.
@@ -45,19 +44,18 @@ export type ProcessHandleKind = 'same-realm' | 'worker';
 /**
  * Wire frame for the fork-mode IPC channel between
  * {@link WorkerProcessHandle} and the worker-side `process` shim
- * (ADR-0045). Both directions use the same vocabulary so either peer can
- * post either frame kind. No version field — the channel stays within a
- * single bundle generation (parent and child are built together).
+ * (ADR-0045). Both directions share the vocabulary so either peer can post
+ * either kind. No version field — parent and child are built together.
  */
 export type IpcFrame =
   | { readonly kind: 'ipc:message'; readonly payload: unknown }
   | { readonly kind: 'ipc:disconnect' };
 
 /**
- * Fields common to both spawn branches. Each variant carries its own
- * `send` signature with branch-specific semantics: same-realm goes through
- * an in-realm `EventEmitter`, Worker-backed goes through a `MessagePort`
- * pair (ADR-0045). Callers narrow on `handle.kind` before reaching for it.
+ * Fields common to both spawn branches. Each variant carries its own `send`
+ * signature: same-realm routes through an in-realm `EventEmitter`,
+ * Worker-backed through a `MessagePort` pair (ADR-0045). Callers narrow on
+ * `handle.kind` first.
  */
 interface ProcessHandleBase extends EventEmitter {
   readonly pid: number;
@@ -87,18 +85,14 @@ export interface SameRealmProcessHandle extends ProcessHandleBase {
 /**
  * Worker-backed `spawnWorker(...)` handle — `ports` is always present.
  * Carries fork-mode IPC (ADR-0045) over the dedicated parent↔child
- * `MessagePort` pair allocated at spawn: {@link send} posts a structured
- * frame to the worker, the worker's reciprocal `process.send` surfaces
- * as a `'message'` event on this handle, and {@link disconnect} closes
- * the IPC channel in a controlled fashion.
+ * `MessagePort` pair: {@link send} posts a frame to the worker, the worker's
+ * reciprocal `process.send` surfaces as a `'message'` event here, and
+ * {@link disconnect} closes the channel.
  *
  * Stdio accessors (`stdout` / `stderr` / `stdin`) wrap the underlying
- * `MessagePort` triple as `@riftydev/io` `Readable` / `Writable` streams. These
- * are the supported surface for parent-side stdio; the raw `ports` field is
- * retained for compatibility and tooling that needs the `MessagePort`
- * objects (e.g. structured transfer). New code should reach for the
- * accessors — they hide the start/onmessage/close boilerplate, push EOF on
- * worker exit, and align with the rest of rifty's stream contracts.
+ * `MessagePort` triple as `@riftydev/io` streams — the supported surface for
+ * parent-side stdio. The raw `ports` field is kept for tooling that needs the
+ * `MessagePort` objects directly; prefer the accessors.
  */
 export interface WorkerProcessHandle extends ProcessHandleBase {
   readonly kind: 'worker';
@@ -337,11 +331,9 @@ export class ProcessManager {
       #stderrReadable: Readable | null = null;
       #stdinWritable: Writable | null = null;
 
-      // ADR-0045: parent-side IPC port lifecycle. `#ipcStarted` flips to
-      // `true` the first time we wire `onmessage` (lazy — we only start
-      // the port once the handle is constructed, in the post-construct
-      // wiring below). `#ipcDisconnected` blocks subsequent `send` /
-      // `disconnect` from posting after the channel is torn down.
+      // ADR-0045: parent-side IPC port lifecycle. `#ipcStarted` flips on the
+      // first `onmessage` wiring; `#ipcDisconnected` blocks `send` /
+      // `disconnect` from posting after teardown.
       #ipcStarted = false;
       #ipcDisconnected = false;
 
@@ -405,9 +397,9 @@ export class ProcessManager {
         }
       }
       send(message: unknown): boolean {
-        // Node's `subprocess.send` returns `false` after the channel is
-        // closed; do the same. Structured-clone failures bubble out as
-        // 'messageerror' on the worker side, not via this return value.
+        // Node's `subprocess.send` returns `false` once the channel is closed.
+        // Structured-clone failures bubble out as 'messageerror' on the worker
+        // side, not via this return value.
         if (this.#ipcDisconnected || this.exitCode !== null || this.signalCode !== null) {
           return false;
         }
@@ -416,9 +408,8 @@ export class ProcessManager {
           ports.ipc.postMessage(frame);
           return true;
         } catch {
-          // postMessage may throw synchronously if the port has been
-          // disentangled (e.g. another peer closed it). Treat that as a
-          // disconnect and surface a stable `false`.
+          // postMessage throws synchronously if the port was disentangled
+          // (peer closed it). Treat as disconnect, return a stable `false`.
           this._tearDownIpc();
           return false;
         }
@@ -488,11 +479,9 @@ export class ProcessManager {
 export const globalProcessManager = new ProcessManager();
 
 /**
- * Adapter helpers — wrap the raw `MessagePort` triple as `@riftydev/io`
- * streams. Push-side `Readable` (start the port, push each `Uint8Array`
- * message into the stream) and post-side `Writable` (each `write` posts to
- * the port; `end` closes it). Kept in this module because they're only
- * meaningful in the context of a `WorkerProcessHandle`.
+ * Wrap the raw `MessagePort` triple as `@riftydev/io` streams: push-side
+ * `Readable` and post-side `Writable`. Kept here as they're only meaningful
+ * for a `WorkerProcessHandle`.
  */
 function bindPortAsReadable(port: MessagePort): Readable {
   const r = new Readable({ read() {} });

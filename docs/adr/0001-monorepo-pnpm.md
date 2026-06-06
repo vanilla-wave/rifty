@@ -5,21 +5,21 @@ Date: 2026-05
 
 ## Context
 
-rifty is a layered system (vfs → kernel → runtimes → shell/network → playground) where each layer needs to evolve at its own pace but share types and tooling.
+rifty is layered (vfs → kernel → runtimes → shell/network → playground); each layer evolves independently but shares types and tooling.
 
 ## Decision
 
-Use a pnpm workspace with packages under `packages/*`, apps under `apps/*`, internal tools under `tools/*`, tests in `tests/`, and fixtures under `examples/`.
+pnpm workspace: `packages/*`, apps `apps/*`, internal tools `tools/*`, tests `tests/`, fixtures `examples/`.
 
-- `pnpm` for content-addressable installs and fast cold installs of many small packages.
-- TypeScript strict project-wide, configured via a shared `tsconfig.base.json`.
-- Biome for lint + format (single-tool, fast, no eslint+prettier+stylelint matrix).
-- Vitest workspace projects for unit / conformance / integration / parity.
-- Playwright with three engine projects for cross-browser e2e (D-006).
+- **pnpm** — content-addressable, fast cold installs of many small packages.
+- **TypeScript strict** project-wide via shared `tsconfig.base.json`.
+- **Biome** — single-tool lint + format (no eslint+prettier+stylelint matrix).
+- **Vitest** workspace projects: unit / conformance / integration / parity.
+- **Playwright** — three engine projects for cross-browser e2e (D-006).
 
 ## Consequences
 
-- All packages share a single lockfile; deduplication is automatic.
-- Internal cross-package imports use `workspace:*` and resolve via `src/index.ts` only.
-- Refactors that touch many packages stay atomic in one PR.
+- Single lockfile across all packages; automatic dedup.
+- Cross-package imports use `workspace:*`, resolving via `src/index.ts` only.
+- Multi-package refactors stay atomic in one PR.
 - CI installs once per workflow run.

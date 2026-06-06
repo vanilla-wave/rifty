@@ -3,14 +3,11 @@
  *
  * Counterpart of {@link SyncRpcDispatcher}. Lives inside a kernel-spawned
  * Worker realm and provides the `call(method, payload)` primitive used by
- * `child_process.execSync`, `fs.readFileSync`, and any other Node-style
- * synchronous API the runtime layer surfaces.
+ * Node-style synchronous APIs (`execSync`, `readFileSync`, ...).
  *
- * The class throws loudly via {@link NotImplementedError} when constructed
- * outside a kernel Worker — calling sync APIs from the page realm is the
- * single most likely source of confusion ("`execSync` froze my UI?"), so
- * we surface that case at construction rather than silently falling
- * through to the in-realm fallback.
+ * Throws {@link NotImplementedError} when constructed outside a kernel
+ * Worker: calling sync APIs from the page realm freezes the UI, so we
+ * surface that at construction rather than fall through to the in-realm path.
  */
 
 import { NotImplementedError } from '@riftydev/io';
@@ -20,23 +17,19 @@ import { decodeReply, encodeRequest } from './sync-rpc.ts';
 /** Options accepted by {@link SyncRpcClient}. */
 export interface SyncRpcClientOptions {
   /**
-   * Default timeout in milliseconds for {@link SyncRpcClient.call}. The
-   * call rejects with {@link RingTimeoutError} when the dispatcher hasn't
-   * replied in time. Defaults to no timeout (block indefinitely) — the
-   * caller is responsible for surfacing timeouts when they matter.
+   * Default timeout (ms) for {@link SyncRpcClient.call}; rejects with
+   * {@link RingTimeoutError} on expiry. Defaults to blocking indefinitely —
+   * the caller surfaces timeouts when they matter.
    */
   readonly defaultTimeoutMs?: number;
 }
 
 /**
  * Synchronous RPC client. Construct one per Worker realm; `call()` blocks
- * the calling Worker via `Atomics.wait` until the parent dispatcher
- * replies.
+ * the calling Worker via `Atomics.wait` until the parent dispatcher replies.
  *
- * Construction throws {@link NotImplementedError} when the current realm
- * does not look like a kernel-spawned Worker (no `self`, or no `postMessage`
- * with the worker-scope shape). This is a hard rule — calling sync APIs on
- * the main thread would freeze the page, which is exactly what ADR-0011
+ * Construction throws {@link NotImplementedError} outside a kernel-spawned
+ * Worker — sync APIs on the main thread freeze the page, which ADR-0011
  * exists to prevent.
  */
 export class SyncRpcClient {
@@ -55,12 +48,11 @@ export class SyncRpcClient {
   }
 
   /**
-   * Send the request frame, block on the reply, decode it, and return the
-   * `value` field (or throw a reconstructed `Error` when `ok=false`).
+   * Send the request frame, block on the reply, and return its `value`
+   * (or throw a reconstructed `Error` when `ok=false`).
    *
-   * The cast to `T` mirrors a typical `fetch().then(r => r.json() as T)`
-   * — JSON doesn't carry type information so the caller asserts the
-   * expected shape.
+   * The cast to `T` mirrors `fetch().then(r => r.json() as T)`: the wire
+   * format carries no type info, so the caller asserts the shape.
    */
   call<T>(method: string, payload: unknown, timeoutMs?: number): T {
     const req = encodeRequest({ method, payload });
@@ -82,9 +74,8 @@ export class SyncRpcClient {
 }
 
 /**
- * Best-effort detection that we're running inside a Dedicated/Shared Worker
- * realm. Mirrors the predicate in `worker-entry.ts` — a `WorkerGlobalScope`
- * is present, a `postMessage` exists on the global, and there's no `window`.
+ * Best-effort detection of a Dedicated/Shared Worker realm. Mirrors the
+ * predicate in `worker-entry.ts`.
  */
 function isWorkerRealm(): boolean {
   const g = globalThis as unknown as {

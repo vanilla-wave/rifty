@@ -1,20 +1,12 @@
 /**
  * Process-lifecycle, scheduling, env/args, clock, and randomness syscalls.
  *
- * Grouped because none of them touch the fd table or VFS — they're all about
- * the WASI guest's view of the surrounding process (its argv/environ, its
- * sense of time, its ability to exit, its access to randomness).
+ * Grouped because none touch the fd table or VFS — all concern the guest's view
+ * of the surrounding process (argv/environ, time, exit, randomness).
  *
- * - `proc_exit` flips the exit flags and raises {@link WasiExit} so the outer
- *   `start()` loop sees the unwind.
- * - `proc_raise` (signal raise), `sock_*` (BSD socket ops), and `poll_oneoff`
- *   return `E_NOSYS` — not backed by the in-browser runtime, but they must
- *   be PRESENT in the imports table so `WebAssembly.instantiate` doesn't
- *   `LinkError`. See `docs/compat/wasi.md`.
- * - `args_*` and `environ_*` read the immutable `args` / `env` arrays.
- * - `clock_*` and `random_get` use `Date.now()` / `performance.now()` /
- *   `crypto.getRandomValues` — all available in both the browser and Node
- *   runtimes.
+ * `proc_raise`, `sock_*`, and `poll_oneoff` return `E_NOSYS` — unbacked, but must
+ * be PRESENT in the imports table or `WebAssembly.instantiate` raises `LinkError`.
+ * See `docs/compat/wasi.md`.
  */
 import {
   CLOCKID_MONOTONIC,
@@ -85,10 +77,9 @@ export function procSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       return E_SUCCESS;
     },
     clock_res_get: (id: number, outPtr: number) => {
-      // Report 1 µs (1000 ns) for both REALTIME and MONOTONIC — `Date.now()`
-      // is ms, `performance.now()` is sub-millisecond. Higher-precision
-      // claims would be dishonest; CPU-time clocks are not supported here
-      // (see `clock_time_get` rationale).
+      // Report 1 µs for REALTIME/MONOTONIC: `Date.now()` is ms, `performance.now()`
+      // sub-ms. Higher-precision claims would be dishonest. CPU-time clocks
+      // unsupported (see `clock_time_get`).
       if (id === CLOCKID_REALTIME || id === CLOCKID_MONOTONIC) {
         ctx.view().setBigUint64(outPtr, 1000n, true);
         return E_SUCCESS;
@@ -98,19 +89,14 @@ export function procSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
     clock_time_get: (id: number, _precision: bigint, outPtr: number) => {
       let ns: bigint;
       if (id === CLOCKID_REALTIME) {
-        // Wall-clock since unix epoch, in nanoseconds. `Date.now()` is ms.
         ns = BigInt(Date.now()) * 1_000_000n;
       } else if (id === CLOCKID_MONOTONIC) {
-        // Monotonic process uptime in nanoseconds. `performance.now()` is ms
-        // with sub-millisecond resolution. Floor before scaling so we stay
-        // within u64 even after `* 1e6`.
+        // Floor before scaling so the result stays within u64 after `* 1e6`.
         ns = BigInt(Math.floor(performance.now() * 1e6));
       } else {
-        // CLOCKID_PROCESS_CPUTIME_ID (2) and CLOCKID_THREAD_CPUTIME_ID (3)
-        // have no portable browser/Node equivalent that's both cheap and
-        // honest. We refuse instead of silently aliasing to monotonic — a
-        // benchmark that relied on CPU time would otherwise get wall time
-        // and silently mislead.
+        // CPUTIME clocks (PROCESS=2, THREAD=3) have no cheap, honest
+        // browser/Node equivalent. Refuse rather than alias to monotonic, which
+        // would silently feed wall time to a CPU-time benchmark.
         return E_INVAL;
       }
       ctx.view().setBigUint64(outPtr, ns, true);

@@ -1,26 +1,24 @@
 /**
- * Recursive Worker runner used by the runtime-js `'execSync'` sync RPC
- * handler (ADR-0011 phase 3, ADR-0039).
+ * Recursive Worker runner for the runtime-js `'execSync'` sync RPC handler
+ * (ADR-0011 phase 3, ADR-0039).
  *
- * The handler runs in the parent realm. When it fires it needs to spawn a
- * fresh `Worker` for the child script, capture the child's stdout into a
- * buffer, and resolve once the child exits — all without blocking the
- * parent realm (the calling Worker is blocked via `Atomics.wait`, but the
- * parent must keep pumping the dispatcher).
+ * Runs in the parent realm: spawns a fresh `Worker` for the child script,
+ * buffers its stdout, and resolves on exit — without blocking the parent
+ * (the calling Worker is blocked via `Atomics.wait`, but the parent must
+ * keep pumping the dispatcher).
  *
- * Lives in `@riftydev/runtime-js` (post-ADR-0039) so the kernel no longer
- * carries Node-API knowledge. The import flows top-down (`runtime-js` →
- * `@riftydev/kernel`), so no late-binding handshake is needed: the runner
- * statically imports `spawnKernelWorker`.
+ * Lives in `@riftydev/runtime-js` (post-ADR-0039) so the kernel stays free
+ * of Node-API knowledge. Imports flow top-down (`runtime-js` →
+ * `@riftydev/kernel`), so the runner statically imports `spawnKernelWorker`
+ * — no late-binding handshake needed.
  */
 
 import { type WorkerEntryDescriptor, spawnKernelWorker } from '@riftydev/kernel';
 
 /**
- * Subset of `SpawnWorkerSpec` the recursive runner emits. The shape
- * matches `@riftydev/kernel`'s `SpawnWorkerSpec` exactly — declared locally
- * so the handler/runner contract is documented without re-exporting
- * kernel types we don't need to re-export.
+ * Subset of `@riftydev/kernel`'s `SpawnWorkerSpec` the recursive runner
+ * emits. Declared locally to document the handler/runner contract without
+ * re-exporting kernel types.
  */
 export interface RecursiveSpawnSpec {
   readonly entry: WorkerEntryDescriptor;
@@ -29,25 +27,20 @@ export interface RecursiveSpawnSpec {
   readonly cwd: string;
 }
 
-/**
- * Result a recursive runner resolves with: captured stdout bytes and the
- * child's exit code. Matches the `RecursiveWorkerRunner` shape that the
- * runtime-js execSync handler consumes.
- */
+/** Captured stdout bytes and child exit code the runner resolves with. */
 export interface RecursiveRunResult {
   readonly stdout: Uint8Array;
   readonly exitCode: number;
 }
 
 /**
- * Recursive Worker runner: spawns a fresh kernel Worker, captures its
- * stdout, and resolves with the captured bytes once it exits.
+ * Spawns a fresh kernel Worker, captures its stdout, and resolves with the
+ * captured bytes once it exits.
  *
- * PIDs of recursive workers are allocated from a dedicated counter
- * starting at `0xC0000000` to avoid colliding with the main
- * `ProcessManager`'s PID space — recursive children are an internal
- * implementation detail of `execSync` blocking and aren't tracked in the
- * public process table.
+ * PIDs start at `0xC0000000`, a dedicated counter that avoids colliding
+ * with the main `ProcessManager`'s PID space — recursive children are an
+ * internal `execSync`-blocking detail, not tracked in the public process
+ * table.
  */
 export function makeRecursiveRunner(): (spec: RecursiveSpawnSpec) => Promise<RecursiveRunResult> {
   let nextNestedPid = 0xc0000000;
@@ -60,10 +53,10 @@ export function makeRecursiveRunner(): (spec: RecursiveSpawnSpec) => Promise<Rec
       if (data instanceof Uint8Array) chunks.push(data);
     };
     nested.ports.stdout.start();
-    // Don't drain stderr into the parent reply — match Node's `execSync`
-    // which defaults `stdio[2]` to `'pipe'` and surfaces stderr only on
-    // failure via the error object. Closing-side semantics covered when
-    // the runtime-js execSync layer extends the request schema.
+    // Don't drain stderr into the reply — Node's `execSync` defaults
+    // `stdio[2]` to `'pipe'` and surfaces stderr only on failure via the
+    // error object. Closing-side semantics covered when the runtime-js
+    // execSync layer extends the request schema.
     return new Promise((resolve) => {
       nested.onExit((code) => {
         let total = 0;

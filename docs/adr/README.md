@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-ADRs are immutable after merge. New decisions get new ADRs; supersedence is explicit (the new ADR cites and overrides the old).
+ADRs are immutable after merge. New decisions get new ADRs; supersedence is explicit (the new ADR cites and overrides the old). Read PROJECT_PLAN.md §8 for broad rationale and trade-offs; ADRs are the durable spec.
 
 | # | Title | Decision in PROJECT_PLAN.md |
 |---|---|---|
@@ -71,5 +71,3 @@ ADRs are immutable after merge. New decisions get new ADRs; supersedence is expl
 | 0072 | OPFS sync content cache + async write-through + async Worker VFS boot — wires OPFS persistence into the runtime Worker (closes A-004; supersedes ADR-0013's sync-access-handle content hot path) | — |
 | 0073 | Playground UX overhaul — preset gallery + design system (self-hosted OFL fonts), production worker bundling via `?worker&url` (fixes the prod REPL-worker boot, refines ADR-0011's build path), Monaco worker wiring, honest preview status, Netlify hosting | — |
 | 0075 | Playground VSCode-style shell — bottom console panel, hand-rolled resizable/collapsible splitters, VFS file explorer, multi-model editor tabs (program tab keeps `machine.source` binding); builds on ADR-0073, zero new deps | — |
-
-For the broad rationale and trade-offs, read PROJECT_PLAN.md §8 first; ADRs are the durable spec.

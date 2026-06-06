@@ -1,37 +1,15 @@
 /**
  * Node-compatible `node:diagnostics_channel`.
  *
- * Pure-JS, in-realm faithful re-implementation of Node's named publish /
- * subscribe diagnostics bus and its `TracingChannel` helper. There is no native
- * binding behind this module in Node either — it is a JS-level registry — so we
- * mirror the observable contract exactly rather than stub it (CLAUDE.md "no
- * silent stubs").
+ * Pure-JS re-implementation of Node's named publish/subscribe diagnostics bus
+ * and its `TracingChannel` helper. Node has no native binding here either — it
+ * is a JS-level registry — so we mirror the observable contract rather than
+ * stub it (CLAUDE.md "no silent stubs").
  *
- * Surface implemented:
- *  - `channel(name)` — interned `Channel` per name (object identity stable).
- *  - `Channel#publish(message)` — synchronously invokes every subscriber with
- *    `(message, name)`. A throwing subscriber does not abort the others, and
- *    its error is reported through `process.emitWarning`-equivalent (logged to
- *    the realm's `console.error`, matching Node, which surfaces it but does not
- *    let one bad subscriber break delivery).
- *  - `Channel#subscribe(onMessage)` / `Channel#unsubscribe(onMessage)`.
- *  - `Channel#hasSubscribers` (getter).
- *  - `Channel#bindStore(store, transform?)` / `Channel#unbindStore(store)` /
- *    `Channel#runStores(message, fn, thisArg?, ...args)` — context propagation
- *    via bound `AsyncLocalStorage`-shaped stores.
- *  - module-level `subscribe(name, onMessage)` / `unsubscribe(name, onMessage)`
- *    / `hasSubscribers(name)`.
- *  - `tracingChannel(nameOrChannels)` -> `TracingChannel` with `start`, `end`,
- *    `asyncStart`, `asyncEnd`, `error` sub-channels and `subscribe`,
- *    `unsubscribe`, `hasSubscribers`, `traceSync`, `tracePromise`,
- *    `traceCallback`.
- *
- * The store API depends on an `AsyncLocalStorage`-shaped object exposing a
- * `run(store, callback)` method; rifty's `node:async_hooks` does not yet model
- * async context, so `runStores` runs the callback synchronously inside each
- * bound store's `run` (which is the correct behavior for the synchronous span
- * of the call — the part that runs before any `await`). The transform contract
- * (`transform(message) -> store value`) is honored exactly.
+ * `runStores` depends on an `AsyncLocalStorage`-shaped object exposing
+ * `run(store, callback)`. rifty's `node:async_hooks` does not yet model async
+ * context, so we run the callback synchronously inside each bound store's `run`
+ * — correct for the synchronous span (the part before any `await`).
  */
 
 type OnMessage = (message: unknown, name: string | symbol) => void;
@@ -43,19 +21,16 @@ interface AsyncLocalStorageLike {
 type StoreTransform = (message: unknown) => unknown;
 
 const reportSubscriberError = (err: unknown): void => {
-  // Node surfaces a throwing subscriber as an uncaught-exception-style warning
-  // but continues delivering to the rest. We mirror "surface, do not abort":
-  // log to the realm console so the failure is visible without breaking the
-  // publish loop.
+  // Node surfaces a throwing subscriber but keeps delivering to the rest;
+  // mirror "surface, do not abort" by logging without breaking the publish loop.
   // eslint-disable-next-line no-console
   console.error(err);
 };
 
 /**
- * A named diagnostics channel. Real Node lazily upgrades an inert "no
- * subscribers" channel to an active one; we keep a single class whose
- * `publish` is a cheap no-op while the subscriber set is empty, which is the
- * observable equivalent.
+ * A named diagnostics channel. Node lazily upgrades an inert "no subscribers"
+ * channel to an active one; we use one class whose `publish` is a no-op while
+ * the subscriber set is empty — the observable equivalent.
  */
 export class Channel {
   readonly name: string | symbol;
@@ -90,8 +65,8 @@ export class Channel {
     if (this.#subscribers.length === 0) {
       return;
     }
-    // Iterate over a snapshot so a subscriber that (un)subscribes during
-    // delivery does not perturb the in-flight loop — matches Node.
+    // Snapshot: a subscriber that (un)subscribes mid-delivery must not perturb
+    // the in-flight loop — matches Node.
     for (const onMessage of this.#subscribers.slice()) {
       try {
         onMessage(message, this.name);
@@ -115,7 +90,7 @@ export class Channel {
     thisArg?: unknown,
     ...args: unknown[]
   ): R {
-    // Publish first (Node publishes the message, then enters the bound stores).
+    // Node publishes the message before entering the bound stores.
     this.publish(message);
     let run = (): R => fn.apply(thisArg, args);
     for (const [store, transform] of this.#stores) {
@@ -169,10 +144,10 @@ const TRACING_EVENTS = ['start', 'end', 'asyncStart', 'asyncEnd', 'error'] as co
 type TracingEvent = (typeof TRACING_EVENTS)[number];
 
 /**
- * Groups the five lifecycle sub-channels for a traced operation and provides
- * the `traceSync` / `tracePromise` / `traceCallback` helpers. Sub-channel names
- * follow Node's `tracing:<base>:<event>` convention so `hasSubscribers` and
- * external subscribers line up.
+ * Groups the five lifecycle sub-channels for a traced operation plus the
+ * `traceSync` / `tracePromise` / `traceCallback` helpers. Sub-channel names
+ * follow Node's `tracing:<base>:<event>` convention so external subscribers
+ * line up.
  */
 export class TracingChannel {
   readonly start: Channel;
@@ -190,7 +165,6 @@ export class TracingChannel {
       this.error = channel(`tracing:${nameOrChannels}:error`);
       return;
     }
-    // Object form: caller supplies the five channels directly.
     this.start = nameOrChannels.start as Channel;
     this.end = nameOrChannels.end as Channel;
     this.asyncStart = nameOrChannels.asyncStart as Channel;
@@ -234,8 +208,8 @@ export class TracingChannel {
     thisArg?: unknown,
     ...args: unknown[]
   ): R {
-    // `start.runStores` publishes the `start` message AND enters any bound
-    // stores; we must NOT also call `start.publish` or `start` fires twice.
+    // `start.runStores` already publishes `start`; calling `start.publish`
+    // again would fire it twice.
     try {
       const result = this.start.runStores(context, () => fn.apply(thisArg, args));
       context.result = result;
@@ -265,9 +239,8 @@ export class TracingChannel {
       throw err;
     }
     this.end.publish(context);
-    // `asyncStart`/`asyncEnd` fire at SETTLEMENT (after the await), with the
-    // settled `result`/`error` already recorded on the context — not eagerly
-    // when the promise is still pending.
+    // `asyncStart`/`asyncEnd` fire at settlement (after the await) with the
+    // settled `result`/`error` on the context — not while the promise pends.
     return Promise.resolve(promise).then(
       (result) => {
         context.result = result;
@@ -319,7 +292,7 @@ export class TracingChannel {
       wrappedArgs[wrappedArgs.length - 1] = wrapped;
     }
 
-    // `start.runStores` publishes `start`; do not publish it again.
+    // `start.runStores` already publishes `start`; do not publish it again.
     try {
       return this.start.runStores(context, () => fn.apply(thisArg, wrappedArgs));
     } catch (err) {

@@ -1,19 +1,15 @@
 /**
- * Structural Worker interface + test-only factory hook used by
- * `spawn-worker.ts`.
+ * Structural Worker interface + test-only factory hook for `spawn-worker.ts`.
  *
- * Lives in its own module so the spawn module stays under the ADR-0024
- * file-size budget. Reachable from `packages/kernel/tests/` via the
- * package-relative path; not re-exported through the public
- * `src/index.ts` because callers outside the kernel should treat the
+ * Separate module to keep spawn under the ADR-0024 file-size budget. Not
+ * re-exported via `src/index.ts`: callers outside the kernel treat the
  * Worker boundary as opaque.
  */
 
 /**
- * Structural subset of the DOM `Worker` interface that `spawnKernelWorker`
- * actually touches. Declared here so the implementation is testable in
- * Node (which lacks `Worker` as a global) without a `lib.dom`-wide
- * dependency leak.
+ * Structural subset of DOM `Worker` that `spawnKernelWorker` touches.
+ * Declared here so it's testable in Node (no `Worker` global) without a
+ * `lib.dom`-wide dependency leak.
  */
 export interface WorkerLike {
   postMessage(message: unknown, transfer?: ReadonlyArray<Transferable>): void;
@@ -22,16 +18,12 @@ export interface WorkerLike {
   removeEventListener(type: string, listener: (ev: MessageEvent) => void): void;
 }
 
-/** Test-only factory: lets the unit tests substitute a stub for `new Worker(url, opts)`. */
+/** Test-only factory: substitutes a stub for `new Worker(url, opts)`. */
 export type WorkerFactory = (url: string | URL) => WorkerLike;
 
 let workerFactoryForTests: WorkerFactory | null = null;
 
-/**
- * Test-only: install a stub factory used in place of `new Worker(...)`.
- * Not exported from the package's public `src/index.ts`; reachable via
- * the package's deep import in `packages/kernel/tests/` only.
- */
+/** Test-only: install a stub factory used in place of `new Worker(...)`. */
 export function setWorkerFactoryForTests(factory: WorkerFactory): void {
   workerFactoryForTests = factory;
 }
@@ -42,10 +34,9 @@ export function clearWorkerFactoryForTests(): void {
 }
 
 /**
- * Construct a {@link WorkerLike}. Returns the test stub when one is
- * installed via {@link setWorkerFactoryForTests}; otherwise instantiates
- * a real DOM `Worker` (which must exist in the runtime that calls
- * `spawnKernelWorker`).
+ * Construct a {@link WorkerLike}: the test stub if installed via
+ * {@link setWorkerFactoryForTests}, else a real DOM `Worker` (which must
+ * exist in the runtime calling `spawnKernelWorker`).
  */
 export function makeKernelWorker(url: string | URL): WorkerLike {
   if (workerFactoryForTests !== null) return workerFactoryForTests(url);

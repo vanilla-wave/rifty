@@ -48,7 +48,7 @@ const CHANNEL_PREFIX = 'rifty:ws:';
  * (Closes ADR-0017 phase 1 — see `apps/playground/src/glue/hmr-bridge.ts`.)
  */
 export function channelNameFor(url: string): string {
-  // Normalise: strip query/fragment so client and server agree.
+  // Strip query/fragment so client and server agree on the name.
   const u = new URL(url);
   return `${CHANNEL_PREFIX}${u.host}${u.pathname}`;
 }

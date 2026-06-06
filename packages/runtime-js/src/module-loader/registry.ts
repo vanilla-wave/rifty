@@ -1,10 +1,9 @@
 import type { ModuleKind } from './resolver.ts';
 
 /**
- * A module registry record. `exports` is shared across the system: CJS modules
- * keep it as a plain object that they write to; ESM modules expose it as a
- * `null`-prototype object with getters that read from the module's internal
- * slot map, so re-exports see live updates.
+ * Module registry record. `exports` is shared: CJS modules write to it as a
+ * plain object; ESM modules expose it as a `null`-prototype object whose getters
+ * read from the slot map, so re-exports see live updates.
  */
 export interface ModuleRecord {
   readonly id: string;
@@ -29,9 +28,9 @@ export class ModuleRegistry {
   }
 
   /**
-   * Create-or-get. Returns the existing record without touching its state — the
-   * caller is responsible for initialising fresh records before yielding the
-   * thread to user code that might recurse back through `import`/`require`.
+   * Create-or-get. Returns an existing record without touching its state — the
+   * caller must initialise fresh records before yielding to user code that might
+   * recurse back through `import`/`require`.
    */
   getOrCreate(id: string, kind: ModuleKind): ModuleRecord {
     let rec = this.records.get(id);
@@ -53,20 +52,17 @@ export class ModuleRegistry {
   }
 
   /**
-   * Drop module records so they will be re-resolved + re-executed on next
-   * `require`/`import`. Called with no `id` it wipes the whole registry —
-   * equivalent to constructing a fresh `ModuleRegistry`, used by the
-   * `load-fixture` hot path so the worker entry can keep its `ModuleLoader`
-   * instance (and its `Resolver`) alive across editor saves. Called with a
-   * specific absolute id it removes only that record, leaving siblings cached
-   * — the future hook for editor-driven HMR / file-update messages. A missing
-   * id is a no-op (matches `Map.delete` semantics; not an error).
+   * Drop records so they re-resolve + re-execute on next `require`/`import`.
+   * No `id` wipes the whole registry (used by the `load-fixture` hot path so the
+   * worker entry keeps its `ModuleLoader`/`Resolver` alive across editor saves).
+   * An absolute `id` drops only that record, leaving siblings cached — the hook
+   * for editor-driven HMR / file-update messages. A missing id is a no-op
+   * (matches `Map.delete` semantics).
    *
-   * NOTE: this is a single-entry drop. Parent modules that already imported
-   * the invalidated id keep their resolved namespace until they themselves are
-   * invalidated. Dependency-graph propagation is HMR-grade work and is
-   * intentionally left to the downstream layer (see 2026-05-26 architecture
-   * review, Tier 1 #4 / D-E).
+   * Single-entry drop only: parents that already imported the invalidated id keep
+   * their resolved namespace until they too are invalidated. Dependency-graph
+   * propagation is HMR-grade work, left to the downstream layer (see 2026-05-26
+   * architecture review, Tier 1 #4 / D-E).
    */
   invalidate(id?: string): void {
     if (id === undefined) {

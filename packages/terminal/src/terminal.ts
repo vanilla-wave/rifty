@@ -12,18 +12,13 @@ export interface RiftyTerminalOptions {
   /** Called once per Enter with the buffered line (no trailing CR/LF). */
   onInput(line: string): void | Promise<void>;
   /**
-   * Called when the user presses Ctrl+C. The host (typically the
-   * playground) should invoke the kernel's `processHandle.kill('SIGINT')`
-   * on whatever process is currently consuming stdin from this terminal.
+   * Called on Ctrl+C. Host wires this to the kernel's
+   * `processHandle.kill('SIGINT')` for the process consuming stdin.
    *
-   * The terminal handles the local-echo of `"^C\r\n"` itself (matches
-   * typical TTY behaviour where the kernel-side echo of `^C` happens
-   * before the signal is delivered) — the host only needs to wire the
-   * signal emission.
-   *
-   * If omitted, Ctrl+C still echoes `^C` and resets the buffer, but no
-   * signal is emitted — useful for REPL-only mode where there is no
-   * separate child process to kill.
+   * The terminal echoes `"^C\r\n"` itself (TTY-style: echo before signal
+   * delivery), so the host only emits the signal. If omitted, Ctrl+C
+   * still echoes and resets the buffer but emits no signal — for
+   * REPL-only mode with no child process to kill.
    */
   onSignal?(signal: 'SIGINT'): void;
 }
@@ -64,8 +59,8 @@ export class RiftyTerminal {
 
   mount(element: HTMLElement): void {
     this.term.open(element);
-    // FitAddon inspects parentElement.getComputedStyle, so it can only
-    // be loaded once the terminal is attached to a real DOM.
+    // FitAddon reads parentElement.getComputedStyle — only valid once
+    // attached to a real DOM.
     this.fit = new FitAddon();
     this.term.loadAddon(this.fit);
     this.fit.fit();
@@ -109,10 +104,9 @@ export class RiftyTerminal {
   async handleInput(data: string): Promise<void> {
     const event = classifyKey(data);
 
-    // Ctrl+C is processed even when `busy` — the whole point of SIGINT
-    // is to interrupt a running command. Every other key is dropped
-    // while we wait for `onInput` to resolve, to match typical line-mode
-    // TTY behaviour (no overlapping commands).
+    // Ctrl+C runs even when `busy` — SIGINT must interrupt a running
+    // command. Other keys are dropped while awaiting `onInput`, matching
+    // line-mode TTY behaviour (no overlapping commands).
     if (event.kind === 'ctrl-c') {
       this.handleCtrlC();
       return;
@@ -139,14 +133,11 @@ export class RiftyTerminal {
         return;
       case 'arrow-left':
       case 'arrow-right':
-        // Cursor movement within the buffer is not implemented yet —
-        // line-mode editing is append-only. We swallow the keys rather
-        // than letting them reach the buffer (where the raw escape
-        // sequence would appear as garbage).
+        // Line-mode editing is append-only; swallow the keys so their
+        // raw escape sequence doesn't leak into the buffer as garbage.
         return;
       case 'tab':
-        // No completion yet. Insert a literal tab so the user can paste
-        // indented code.
+        // No completion yet; insert a literal tab so indented code pastes.
         this.buffer += '\t';
         this.term.write('\t');
         return;
@@ -154,7 +145,7 @@ export class RiftyTerminal {
         this.appendPrintable(event.text);
         return;
       case 'ctrl-c':
-        // Handled above; unreachable.
+        // Handled in handleInput before dispatch; unreachable here.
         return;
       case 'ignored':
         return;
@@ -186,26 +177,24 @@ export class RiftyTerminal {
   }
 
   private handleCtrlC(): void {
-    // Local echo of `^C\r\n` happens BEFORE the signal is dispatched —
-    // matches kernel TTY behaviour where the line discipline echoes the
-    // visible representation before delivering SIGINT to the foreground
-    // process group.
+    // Echo `^C\r\n` BEFORE dispatching the signal — TTY line discipline
+    // echoes the visible representation before delivering SIGINT to the
+    // foreground process group.
     this.term.write('^C\r\n');
     this.buffer = '';
     this.opts.onSignal?.('SIGINT');
     if (!this.busy) {
-      // Nothing is running, just give the user a fresh prompt.
       this.term.write(PROMPT);
     }
-    // If `busy` is true, the host's signal handler is responsible for
-    // making the running command exit; the busy=false transition in
-    // {@link handleEnter} will redraw the prompt when `onInput` resolves.
+    // When busy, the host's signal handler exits the running command; the
+    // busy=false transition in handleEnter redraws the prompt once
+    // `onInput` resolves.
   }
 
   private appendPrintable(text: string): void {
-    // A multi-line paste may contain embedded `\n`. We don't auto-submit
-    // intermediate lines — that would be surprising for code paste — but
-    // we DO render the LF as CRLF so xterm's cursor moves correctly.
+    // Multi-line paste may embed `\n`: don't auto-submit intermediate
+    // lines (surprising for code paste), but render LF as CRLF so xterm's
+    // cursor moves correctly.
     this.buffer += text;
     this.term.write(text.replace(/\n/g, '\r\n'));
   }

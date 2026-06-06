@@ -1,32 +1,21 @@
 /**
- * Wire an `npm` builtin into the playground shell.
+ * Wire an `npm` builtin into the playground shell. Closes the M9 prompt-install
+ * UX gap (follow-ups item #15, 2026-05-27): without it `npm install <pkg>` hits
+ * the shell's "command not found" path and exits 127. Installs run through
+ * `@riftydev/npm-client.install` like `realVite.ts` — same registry, VFS bridge,
+ * proxy fetcher.
  *
- * Without this, typing `npm install <pkg>` at the terminal hits the shell's
- * "command not found" path and returns exit 127. Closes the M9 prompt-install
- * UX gap (follow-ups item #15, 2026-05-27). The install itself runs through
- * `@riftydev/npm-client.install` exactly the way `realVite.ts` does — same
- * registry, same VFS bridge, same proxy fetcher.
+ * M9 scope: `npm install`, `npm install <name>[@<range>] …`, `i`/`add` synonyms.
+ * Deferred: `npm run …` (M11, needs script execution), `npm uninstall`,
+ * `npm ci`/lockfile-only (M11 nested install lands first).
  *
- * What this supports today (M9-scope):
- *   - `npm install`                         — install every dep in package.json.
- *   - `npm install <name>[@<range>] ...`    — add the named deps and install.
- *   - `npm i …` / `npm add …`               — synonyms for `install`.
- *
- * Out of scope here (deferred to later milestones):
- *   - `npm run …` (needs script execution — pairs with `node` builtin / M11).
- *   - `npm uninstall` (no flow consumer yet).
- *   - Lockfile-only / `npm ci` (M11 nested install lands first).
- *
- * The command auto-creates a minimal `package.json` at `ctx.cwd` when the
- * project has none — matches what `realVite.ts` seeds for its workspace and
- * keeps `npm install express` working as a one-liner even on a blank tree.
+ * Auto-creates a minimal `package.json` at `ctx.cwd` when none exists (matches
+ * `realVite.ts` seeding) so `npm install express` is a one-liner on a blank tree.
  *
  * Progress reporting goes through `ctx.stdout.write`, which the shell pipes
- * into the terminal via `Shell.run`'s `onChunk` callback. The operator sees
- * lines as they happen rather than a single blob at the end (the readiness
- * doc's "real bar at the terminal" requirement). Per-package fetch progress
- * is not yet a hook on `install()` itself — added at start/end and once per
- * resolved package; a streaming hook lands when the installer grows one.
+ * into the terminal via `Shell.run`'s `onChunk` callback. Per-package fetch
+ * progress is not yet a hook on `install()` itself — added at start/end and
+ * once per resolved package; a streaming hook lands when the installer grows one.
  */
 
 import {
@@ -39,9 +28,8 @@ import type { CommandContext, ShellCommand } from '@riftydev/shell';
 import type { Vfs } from '@riftydev/vfs';
 
 /**
- * Signature of `@riftydev/npm-client.install`. Inlined here so tests can pass
- * a stub without reaching across into `_test-fixtures` of another package
- * (would violate the "no internal imports" rule from CLAUDE.md).
+ * Signature of `@riftydev/npm-client.install`. Inlined so tests stub it without
+ * importing another package's internals (the "no internal imports" rule).
  */
 export type InstallFn = (
   rootName: string,
@@ -53,18 +41,17 @@ export type InstallFn = (
 export interface NpmShellCommandDeps {
   /** VFS used by the installer to write `node_modules/` and the lockfile. */
   readonly vfs: Vfs;
-  /** Registry client; the playground typically passes one wired through
-   *  `proxiedRegistryFetch()` so traffic stays on the proxy origin. */
+  /** Playground wires one through `proxiedRegistryFetch()` so traffic stays on
+   *  the proxy origin. */
   readonly registry: RegistryClient;
-  /** Injection seam for unit tests; defaults to `@riftydev/npm-client.install`. */
+  /** Test seam; defaults to `@riftydev/npm-client.install`. */
   readonly install?: InstallFn;
 }
 
 /**
- * Minimal subset of the package.json shape we read and write. We do not
- * round-trip arbitrary keys — only `name`, `version`, `dependencies` and
- * `private` — because the file may be hand-edited and we want diff churn
- * scoped to what we actually touched.
+ * Subset of package.json we read/write. We don't round-trip arbitrary keys
+ * (only name/version/dependencies/private) to keep diff churn scoped to what we
+ * touched, since the file may be hand-edited.
  */
 interface ProjectPackageJson {
   name: string;
@@ -77,10 +64,9 @@ const DEFAULT_PROJECT_NAME = 'rifty-project';
 const DEFAULT_PROJECT_VERSION = '0.0.0';
 
 /**
- * Build the `npm` shell command. Registering the command on a `ShellSession`
- * is the responsibility of the composition root (`App.tsx`); this factory
- * stays free of Solid imports so the unit tests can exercise it with a
- * plain `Shell` instance.
+ * Build the `npm` shell command. The composition root (`App.tsx`) registers it
+ * on a `ShellSession`; this factory stays Solid-free so unit tests can exercise
+ * it with a plain `Shell` instance.
  */
 export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
   return async (args, ctx) => {
@@ -98,9 +84,8 @@ export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
 }
 
 /**
- * Parse a package spec of the form `name`, `name@range`, `@scope/name`, or
- * `@scope/name@range`. The leading `@` of a scope is not a version
- * separator, so we look for the *second* `@` when the spec starts with one.
+ * Parse `name`, `name@range`, `@scope/name`, or `@scope/name@range`. A scope's
+ * leading `@` isn't a version separator, so look for the *second* `@`.
  */
 function parseSpec(spec: string): { name: string; range: string } {
   if (spec.startsWith('@')) {
@@ -134,9 +119,8 @@ async function readPackageJson(vfs: Vfs, cwd: string): Promise<ProjectPackageJso
 
 async function writePackageJson(vfs: Vfs, cwd: string, pkg: ProjectPackageJson): Promise<void> {
   const path = `${cwd}/package.json`;
-  // Stable formatting so re-installs that don't change the dep set produce
-  // byte-identical output and the shell's diff-before-write keeps mtimes
-  // stable. (Matches what the installer does for the lockfile.)
+  // Stable formatting: re-installs with an unchanged dep set produce
+  // byte-identical output, so the shell's diff-before-write keeps mtimes stable.
   await vfs.writeFile(path, `${JSON.stringify(pkg, null, 2)}\n`);
 }
 
@@ -179,9 +163,8 @@ async function runInstall(
     });
     const elapsedMs = Math.round(performance.now() - start);
 
-    // Only persist package.json when the operator explicitly named packages.
-    // A bare `npm install` re-reads the existing file; rewriting it just
-    // because we read it would churn mtimes for no behavioural change.
+    // Persist only when packages were explicitly named. A bare `npm install`
+    // just re-reads the file; rewriting it would churn mtimes for no change.
     if (specs.length > 0) {
       const next: ProjectPackageJson = {
         name: pkg.name,
@@ -200,10 +183,8 @@ async function runInstall(
 }
 
 /**
- * Map known installer error shapes to single-line operator-friendly stderr
- * output. EVERSIONCONFLICT and EINTEGRITY are the two we expect to surface
- * regularly today; everything else falls through with the raw message and a
- * generic exit code so the operator still sees what happened.
+ * Map known installer error codes to single-line stderr output. Unknown errors
+ * fall through with the raw message so the operator still sees what happened.
  */
 function reportInstallError(err: unknown, ctx: CommandContext): number {
   const e = err as Error & {

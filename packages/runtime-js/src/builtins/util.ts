@@ -1,7 +1,6 @@
 /**
- * Node-compatible `node:util` (subset). Backed by our REPL inspector for
- * `inspect`, and a small `format` shim that handles the printf-style %s/%d/%j
- * specifiers Node supports.
+ * Node-compatible `node:util` (subset). `inspect` is backed by our REPL
+ * inspector; `format` shims the printf-style %s/%d/%j specifiers.
  */
 import { inspect as inspectImpl } from '../repl/inspect.ts';
 import { riftyProcess } from './process.ts';
@@ -37,10 +36,10 @@ export function format(fmt: unknown, ...args: unknown[]): string {
     const arg = args[i++];
     switch (spec) {
       case 's':
-        // Node's `%s`: strings pass through; bigints get the `n` suffix;
-        // non-null objects (incl. arrays) are structurally inspected (Node uses
-        // depth 2 — our inspector's default depth differs for deeply-nested
-        // values, see TODO(ADR) below); everything else is `String()`.
+        // Node's `%s`: strings pass through, bigints get the `n` suffix,
+        // non-null objects (incl. arrays) are inspected (Node uses depth 2; our
+        // default depth differs for deeply-nested values), everything else is
+        // `String()`.
         if (typeof arg === 'string') result += arg;
         else if (typeof arg === 'bigint') result += `${arg}n`;
         else if (arg !== null && typeof arg === 'object') result += inspectImpl(arg);
@@ -66,11 +65,11 @@ export function format(fmt: unknown, ...args: unknown[]): string {
         break;
       default:
         result += `%${spec}`;
-        i--; // didn't consume an arg
+        i--; // unknown spec consumed no arg
     }
     cursor = idx + 2;
   }
-  // Trailing args get appended like console.log does (space-separated).
+  // Trailing args get space-appended, like console.log.
   while (i < args.length) {
     const a = args[i++];
     result += ` ${typeof a === 'string' ? a : inspectImpl(a)}`;
@@ -80,9 +79,9 @@ export function format(fmt: unknown, ...args: unknown[]): string {
 
 /**
  * A `util.debuglog` debug function: callable with printf-style args, carrying a
- * lazily-resolved boolean `enabled` reflecting whether `NODE_DEBUG` selected the
- * section. When disabled the call is a no-op; when enabled it writes
- * `SECTION PID: <formatted>\n` to stderr (matching Node).
+ * lazily-resolved `enabled` reflecting whether `NODE_DEBUG` selected the
+ * section. Disabled = no-op; enabled writes `SECTION PID: <formatted>\n` to
+ * stderr (matching Node).
  */
 export interface DebugLogFunction {
   (...args: unknown[]): void;
@@ -91,8 +90,8 @@ export interface DebugLogFunction {
 
 /**
  * Resolve `NODE_DEBUG` against a section name. The value is a comma/space
- * separated list of section globs (`*` = any run of chars); matching is
- * case-insensitive, mirroring Node's `lib/internal/util/debuglog.js`.
+ * separated list of section globs (`*` = any run of chars), matched
+ * case-insensitively — mirrors Node's `lib/internal/util/debuglog.js`.
  */
 function debuglogEnabledFor(section: string): boolean {
   const raw = riftyProcess.env.NODE_DEBUG;
@@ -100,7 +99,7 @@ function debuglogEnabledFor(section: string): boolean {
   const target = section.toUpperCase();
   for (const token of raw.split(/[ ,]+/)) {
     if (token.length === 0) continue;
-    // Translate the glob (only `*` is special in Node) into a RegExp.
+    // Glob to RegExp; only `*` is special in Node.
     const pattern = token
       .toUpperCase()
       .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
@@ -113,11 +112,11 @@ function debuglogEnabledFor(section: string): boolean {
 /**
  * `util.debuglog(section[, callback])` — lazily-initialised, env-gated debug
  * logger. Faithful to Node:
- * - returns a callable carrying an `enabled` getter (resolved against
- *   `NODE_DEBUG` on first read, then memoised),
- * - the optional `callback` fires once, on the FIRST call to the returned
- *   function (not at creation), receiving the resolved debug function,
- * - when disabled the call is a no-op; when enabled it writes
+ * - returns a callable with an `enabled` getter (resolved against `NODE_DEBUG`
+ *   on first read, then memoised),
+ * - the optional `callback` fires once on the FIRST call (not at creation),
+ *   receiving the resolved debug function,
+ * - disabled = no-op; enabled writes
  *   `SECTION PID: <util.format(...args)>\n` to `process.stderr`.
  */
 export function debuglog(
@@ -203,9 +202,8 @@ export function inherits(ctor: unknown, superCtor: unknown): void {
   Object.setPrototypeOf(child.prototype, parent.prototype);
 }
 
-// The full `node:util/types` predicate set lives in its own module (it is also
-// registered as the standalone `node:util/types` builtin specifier). `util`
-// re-exports it as `util.types`, matching Node.
+// Full predicate set lives in its own module (also registered as the standalone
+// `node:util/types` builtin). Re-exported here as `util.types`, matching Node.
 export { types } from './util-types.ts';
 
 export const TextEncoder = globalThis.TextEncoder;

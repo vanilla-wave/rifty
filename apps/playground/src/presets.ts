@@ -1,21 +1,14 @@
 /**
- * Preset programs for the playground gallery.
+ * Preset programs for the playground gallery. Every preset is covered by the
+ * e2e/conformance suites (Hard rule: "no silent stubs").
  *
- * Every preset here is grounded in a capability we traced through the rifty
- * source and (for REPL/fs/node-core) is covered by the e2e + conformance
- * suites — no preset demonstrates something that throws or fakes a result
- * (Hard rule: "no silent stubs"). Sources are kept short and friendly so a
- * first-time visitor can click one and immediately read what it does.
- *
- * Capability notes that shaped this menu:
- *  - REPL `require()` resolves Node core builtins (`node:path`, `util`, `fs`,
- *    events, buffer, …) but NOT bare npm specifiers (the REPL resolver roots
- *    at `/`, while shell installs land in `/workspace/node_modules`) — so we
- *    deliberately ship no "require an npm package from the REPL" preset.
+ * Why this menu is shaped as it is:
+ *  - No "require an npm package from the REPL" preset: REPL `require()` roots at
+ *    `/` and resolves only Node core builtins, while shell installs land in
+ *    `/workspace/node_modules`, so bare npm specifiers don't resolve there.
  *  - A live HTTP/preview demo only works on the main thread (Dev / Real Vite),
- *    where the Service-Worker preview bridge is mounted; a Worker REPL has no
+ *    where the SW preview bridge is mounted; a Worker REPL has no
  *    `navigator.serviceWorker`, so an http-server-in-REPL preset would 503.
- *    The two "Live preview" presets cover that path honestly instead.
  */
 
 import type { IconName } from './components/icons.tsx';
@@ -29,19 +22,13 @@ export interface Preset {
   readonly label: string;
   /** Grouping header in the gallery. */
   readonly category: string;
-  /**
-   * Semantic icon key (not a raw glyph) rendered as a monochrome inline SVG by
-   * the gallery — so the switcher stays consistent and scales to many
-   * templates. Add a new key in {@link ./components/icons.tsx} if none fits.
-   */
+  /** Semantic icon key rendered as inline SVG; add new keys in {@link ./components/icons.tsx}. */
   readonly icon: IconName;
   /** Mode the preset runs in; selecting it transitions the mode machine. */
   readonly mode: PresetMode;
   /**
-   * For `real-vite` presets: which registered template (ADR-0078) to run. Lets
-   * the gallery scale to more templates without new header surgery — the mode
-   * machine resolves it via {@link ./templates/registry.ts}. Omitted ⇒ the
-   * machine's default template (Vite).
+   * For `real-vite` presets: which registered template (ADR-0078) to run,
+   * resolved via {@link ./templates/registry.ts}. Omitted ⇒ default template (Vite).
    */
   readonly templateId?: string;
   /** One-line description shown under the label. */
@@ -53,9 +40,8 @@ export interface Preset {
 }
 
 /**
- * The default REPL program. Kept printing `worker alive` because the M1 e2e
- * ("Run button executes editor source and streams stdout") evaluates the
- * boot-time editor content and asserts that line — see tests/e2e/m1-repl.spec.ts.
+ * Default REPL program. Must keep printing `worker alive`: the M1 e2e asserts
+ * that line from the boot-time editor content — see tests/e2e/m1-repl.spec.ts.
  */
 const WELCOME_SOURCE = `// ▶ Welcome to rifty — a Node-compatible runtime running in your browser.
 // This evaluates in a Web Worker. Hit Run (top-right) and watch stdout below.

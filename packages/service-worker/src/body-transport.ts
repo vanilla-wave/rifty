@@ -1,10 +1,9 @@
 /**
- * Body-carrier helpers for the preview bridge. Decides whether a response
- * body can be transferred as a `ReadableStream` over `postMessage` (modern
- * Chromium/Firefox/Safari 16.4+) or must be drained into a `Uint8Array`
- * first (older Safari, some Workers). Both the frame and routing version
- * fields (ADR-0031/ADR-0040) are stamped onto the packed message so the SW
- * side can verify the peer protocol matches.
+ * Body-carrier helpers for the preview bridge: transfer a response body as a
+ * `ReadableStream` over `postMessage` (modern Chromium/Firefox/Safari 16.4+),
+ * else drain it to a `Uint8Array` first (older Safari, some Workers). Frame
+ * and routing version fields (ADR-0031/ADR-0040) are stamped onto the packed
+ * message so the SW side can verify the peer protocol matches.
  */
 
 import { SW_FRAME_VERSION, SW_ROUTING_VERSION, type SerializedResponse } from './protocol.ts';
@@ -13,11 +12,9 @@ export type { SerializedResponse };
 
 /**
  * Probe whether the host realm can transfer `ReadableStream` over
- * `postMessage`. Browsers that do: Chromium ≥ 89, Firefox ≥ 103. Safari
- * historically lagged (added in 16.4). When unsupported, the bridge buffers
- * the body and posts a `Uint8Array` instead.
- *
- * The probe is cached after the first call.
+ * `postMessage` (Chromium ≥ 89, Firefox ≥ 103, Safari ≥ 16.4). When
+ * unsupported, the bridge buffers the body and posts a `Uint8Array` instead.
+ * Result is cached after the first call.
  */
 let streamTransferSupported: boolean | null = null;
 export function canTransferReadableStream(): boolean {
@@ -44,13 +41,10 @@ export function canTransferReadableStream(): boolean {
 }
 
 /**
- * Pack a `SerializedResponse` for `postMessage`, returning the message and
- * any transfer list. If `body` is a `ReadableStream` and the host supports
- * transferring it, this is a zero-copy hand-off. Otherwise the stream is
- * drained into a `Uint8Array` synchronously *before* this returns (so the
- * caller awaits it) and posted as a regular structured-clone.
- *
- * Both the frame and routing version fields are stamped onto the message.
+ * Pack a `SerializedResponse` for `postMessage`, returning the message and its
+ * transfer list. A transferable `ReadableStream` body is a zero-copy hand-off;
+ * otherwise the stream is drained to a `Uint8Array` (awaited here) and posted
+ * as a regular structured-clone. Frame and routing versions are stamped on.
  */
 export async function packSerializedResponse(resp: SerializedResponse): Promise<{
   message: SerializedResponse & { frameVersion: string; routingVersion: string };

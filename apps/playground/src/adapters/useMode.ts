@@ -1,31 +1,17 @@
 /**
- * Mode state machine for the playground top-level UI.
+ * Mode state machine for the playground top-level UI. Owns the mutually-exclusive
+ * `repl | dev | real-vite` state plus the inner handles, exposes one transition
+ * per direction (`toggleDev` / `toggleRealVite`), and routes editor edits to the
+ * active handle. Extraction flagged in the 2026-05-26 architecture review (Tier 4:
+ * App.tsx god-component).
  *
- * `App.tsx` used to keep `mode`, the dev-mode handle, the real-vite handle,
- * the real-vite port, and the editor source all in side-by-side signals,
- * with three `onToggle*` methods branching on `mode()` to dispatch into the
- * right adapter handle. The shape was flagged in the 2026-05-26 architecture
- * review (Tier 4: "App.tsx is already a 292-line god-component juggling 5
- * signals and 3 modes") and called out again in `shell-adapter.ts`'s own
- * docstring as the pattern to extract before adding more modes.
+ * Transitions preserve the original `App.tsx` semantics byte-for-byte so the e2e
+ * suite (`m7-preview-sw.spec.ts`, `m10-hmr.spec.ts`, etc.) keeps passing — including
+ * edge cases the original didn't cover (e.g. "Dev Mode" while in `real-vite`); fixing
+ * those is a separate behavioural change.
  *
- * This adapter is the extraction: it owns the mutually-exclusive
- * `repl | dev | real-vite` state plus the inner handles, exposes one
- * transition per direction (`toggleDev` / `toggleRealVite`), and routes
- * editor edits to whichever underlying handle is active. `App.tsx` shrinks
- * to JSX + wiring; the mode machine stays here.
- *
- * The transitions preserve the original `App.tsx` semantics byte-for-byte
- * so the e2e suite (`m7-preview-sw.spec.ts`, `m10-hmr.spec.ts`, etc.) keeps
- * passing without edits. The handful of edge cases the original code didn't
- * cover (e.g. pressing "Dev Mode" while in `real-vite`) are preserved as-is
- * — fixing them is a separate behavioural change outside this refactor.
- *
- * The hook stays framework-light by Solid's standards: a single Solid signal
- * per piece of state, `onCleanup` to tear down handles on unmount, no
- * reactive computations. It runs inside a Solid root because callers invoke
- * it from `App.tsx`'s component body (the same convention as `useRuntime`
- * and `useShellSession`).
+ * Must run inside a Solid root: callers invoke it from `App.tsx`'s component body
+ * (same convention as `useRuntime` / `useShellSession`).
  */
 
 import { createSignal, onCleanup } from 'solid-js';
@@ -36,77 +22,69 @@ import { defaultProjectSpec, resolveProjectSpec } from '../templates/registry.ts
 
 export type Mode = 'repl' | 'dev' | 'real-vite';
 
-/** Initial-source presets for each mode. Kept here so the machine owns the
- *  full mode → editor-content mapping; `App.tsx` doesn't need to know which
- *  template to flip to on a transition. */
+/** Initial editor content per mode, so the machine owns the full
+ *  mode → editor-content mapping. */
 export interface ModeSources {
   readonly repl: string;
   readonly dev: string;
 }
 
-/** Stream sink for transition progress messages. The machine writes status
- *  lines (`[entering dev mode …]`, `[real-vite] installing vite …`) through
- *  this; `App.tsx` typically forwards them to the runtime terminal writer. */
+/** Stream sink for transition progress messages (e.g. `[entering dev mode …]`);
+ *  `App.tsx` typically forwards them to the runtime terminal writer. */
 export type ModeLogger = (chunk: string, stream?: 'stdout' | 'stderr') => void;
 
 export interface UseModeOptions {
   /** Initial editor content for each mode. */
   readonly sources: ModeSources;
-  /** Default port for real-vite. The machine updates it after a successful
-   *  start (the adapter is free to negotiate a different port). Defaults to the
-   *  active template's `defaultPort`. */
+  /** Default port for real-vite; machine updates it after a successful start
+   *  (the adapter may negotiate a different port). Defaults to the template's
+   *  `defaultPort`. */
   readonly realVitePort?: number;
-  /** The real-project template to run (ADR-0078). Defaults to the registered
-   *  default (Vite). Drives the default port and the generic status copy. */
+  /** Real-project template to run (ADR-0078). Defaults to the registered default
+   *  (Vite); drives the default port and status copy. */
   readonly template?: ProjectSpec;
-  /** Receives every transition log line. Defaults to a no-op so the machine
-   *  is safe to construct before the terminal is wired. */
+  /** Receives every transition log line. Defaults to a no-op so the machine is
+   *  safe to construct before the terminal is wired. */
   readonly log?: ModeLogger;
 }
 
 export interface ModeMachine {
-  /** Current mode. Reactive — consume from JSX or `createEffect`. */
+  /** Current mode. Reactive. */
   mode(): Mode;
   /** Editor content for the active mode. Reactive. */
   source(): string;
-  /** Real-vite port (updated after `toggleRealVite` resolves to `real-vite`).
-   *  Reactive. */
+  /** Real-vite port, updated after `toggleRealVite` resolves to `real-vite`. Reactive. */
   realVitePort(): number;
   /**
-   * Replace the editor source for the active mode and forward the change to
-   * the underlying handle if the mode owns one (`dev`, `real-vite`).
-   * REPL mode just stores the value — there is no handle to notify.
+   * Replace the editor source for the active mode and forward it to the
+   * underlying handle if the mode owns one (`dev`, `real-vite`). REPL has no
+   * handle to notify.
    */
   setSource(next: string): void;
   /**
-   * Toggle dev mode. Mirrors the original `onToggleMode` in `App.tsx`:
-   * `repl` enters dev on port 3000; any other mode tears down the dev
-   * handle (if any) and returns to `repl`. The original branch did NOT
-   * tear down a live real-vite handle in the else arm — preserved here
-   * for behavioural parity with the e2e tests.
+   * Toggle dev mode (mirrors original `onToggleMode`): `repl` enters dev on port
+   * 3000; any other mode tears down the dev handle and returns to `repl`. The else
+   * arm does NOT tear down a live real-vite handle — preserved for e2e parity.
    */
   toggleDev(): Promise<void>;
   /**
-   * Toggle real-vite mode. Mirrors the original `onToggleRealVite` in
-   * `App.tsx`: from `real-vite` returns to `repl`; from any other mode
-   * (`repl` or `dev`) starts a fresh `RealViteHandle`. The original
-   * branch did NOT tear down a live dev handle when entering from `dev`
-   * — preserved here for behavioural parity.
+   * Toggle real-vite mode (mirrors original `onToggleRealVite`): from `real-vite`
+   * returns to `repl`; from any other mode starts a fresh `RealViteHandle`. Entering
+   * from `dev` does NOT tear down the live dev handle — preserved for e2e parity.
    */
   toggleRealVite(): Promise<void>;
   /**
-   * Load a preset: seed the editor with `source` and transition into the
-   * preset's `mode`, starting/stopping the dev/real-vite handles as needed.
-   * Idempotent within a mode (re-selecting a dev preset while already in dev
-   * just re-seeds the entry). Distinct from {@link toggleDev}/{@link toggleRealVite}
-   * (which the header buttons use) so the e2e toggle semantics stay untouched.
+   * Seed the editor with `source` and transition into `preset.mode`, starting/stopping
+   * handles as needed. Idempotent within a mode (re-selecting a dev preset while in dev
+   * just re-seeds). Distinct from {@link toggleDev}/{@link toggleRealVite} (header buttons)
+   * so e2e toggle semantics stay untouched.
    */
   loadPreset(preset: {
     readonly mode: Mode;
     readonly source: string;
     readonly templateId?: string;
   }): Promise<void>;
-  /** Dispose all handles. Idempotent. Called by `onCleanup` automatically. */
+  /** Dispose all handles. Idempotent; called by `onCleanup` automatically. */
   dispose(): void;
 }
 
@@ -234,8 +212,8 @@ export function useMode(options: UseModeOptions): ModeMachine {
       if (dev) await dev.close();
       setDevHandle(null);
     }
-    // Resolve the preset's template (defaults to the machine template). Lets
-    // the gallery scale to more templates (ADR-0078) without new header surgery.
+    // Per-preset template (defaults to machine template) lets the gallery scale
+    // to more templates without header surgery (ADR-0078).
     const presetTemplate = preset.templateId ? resolveProjectSpec(preset.templateId) : template;
     if (presetTemplate.defaultPort !== realVitePort()) setRealVitePort(presetTemplate.defaultPort);
     log(

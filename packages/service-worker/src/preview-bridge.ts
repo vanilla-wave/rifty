@@ -121,7 +121,7 @@ export function isPreviewFrameRequest(request: {
 /**
  * Default timeout (ms) for the `rifty:preview:ready` handshake. If the main
  * thread does not signal readiness within this window of a preview fetch
- * arriving, the SW responds with a 503 instead of waiting forever.
+ * arriving, the SW 503s instead of waiting forever.
  */
 export const DEFAULT_READY_TIMEOUT_MS = 3_000;
 
@@ -151,11 +151,10 @@ export interface MessageHandlerHooks {
    * `tests/owner-resolver.test.ts` continues to compile without rewrite.
    * Ignored when `binding` is supplied.
    *
-   * Deprecation rationale: ADR-0046 collapses owner resolution and
-   * readiness behind {@link PreviewOwnerBinding}; tests and consumers
-   * that want to swap the resolver should adopt the `binding` field
-   * directly. The field stays in place until A-023 lands its real
-   * consumer (`installPreviewInterceptor` flip).
+   * Deprecation: ADR-0046 collapses owner resolution and readiness
+   * behind {@link PreviewOwnerBinding}; swap the resolver via the
+   * `binding` field instead. Kept until A-023 lands its real consumer
+   * (`installPreviewInterceptor` flip).
    */
   resolver?: PreviewOwnerResolver;
 }
@@ -191,11 +190,10 @@ export function createPreviewInterceptor(
     const match = matchPreviewUrl(url.pathname);
     if (!match) return;
     // ADR-0074 — a request originating inside the preview iframe must resolve
-    // to the controlling window (see {@link isPreviewFrameRequest}); for those
-    // we drop the request's own ids and let the resolver fall back to the first
-    // controlled window (the bridge owner). The page's own bare
-    // `fetch('/preview/…')` warm-up keeps ADR-0031's `resultingClientId ||
-    // clientId` order (multi-window routing unchanged).
+    // to the controlling window (see {@link isPreviewFrameRequest}); drop its
+    // own ids so the resolver falls back to the first controlled window (the
+    // bridge owner). The page's bare `fetch('/preview/…')` warm-up keeps
+    // ADR-0031's `resultingClientId || clientId` order (multi-window unchanged).
     const clientId = isPreviewFrameRequest(event.request)
       ? null
       : event.resultingClientId || event.clientId || null;
@@ -270,12 +268,11 @@ export function setupPreviewBridge(handler: PreviewHandler): () => void {
           `preview request protocol version mismatch: got frame=${gotFrame} routing=${gotRouting}, ` +
           `want frame=${SW_FRAME_VERSION} routing=${SW_ROUTING_VERSION}`,
       };
-      // Surface the drift on the main-thread console too — without this, the
+      // Surface the drift on the main-thread console: without this, the
       // mismatched peer just sees a blank `/preview/...` page (the SW maps the
-      // structured error back to HTTP/503) and has no signal that the SW is
-      // running an older frame/routing contract. Logging here is the only
-      // page-side breadcrumb when `SW_FRAME_VERSION` or `SW_ROUTING_VERSION`
-      // bumps and a stale SW survives the upgrade.
+      // structured error to HTTP/503). This is the only page-side breadcrumb
+      // when `SW_FRAME_VERSION`/`SW_ROUTING_VERSION` bumps and a stale SW
+      // survives the upgrade.
       console.error('[rifty/service-worker] preview request protocol mismatch', {
         expected: mismatch.expected,
         got: mismatch.got,

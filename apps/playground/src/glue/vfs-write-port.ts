@@ -9,31 +9,29 @@
  * broadcasts the update to the iframe.
  *
  * Why one-way:
- *   - The npm-install + Vite read pipeline lives in the worker. The
- *     worker is the source-of-truth for installed `node_modules`; the
- *     page never reads them.
- *   - The editor is the source-of-truth for user source files. The page
- *     never reads them back from the worker either — the in-memory
- *     editor state is the model.
+ *   - Worker is source-of-truth for installed `node_modules`; page never
+ *     reads them.
+ *   - Editor is source-of-truth for user source files; page never reads
+ *     them back from the worker.
  *   - Bi-directional sync needs locking + snapshot semantics. Out of
  *     scope until OPFS-as-sync (M12+).
  *
  * Why playground-local (not in `@riftydev/net`):
  *   - The wire format is a `Vfs`-shaped concern; `@riftydev/net` doesn't
- *     depend on `@riftydev/vfs` and shouldn't. The cross-realm helper
- *     primitive (`BroadcastChannel` + `channelNameFor`) is borrowed from
- *     net, but the application of the frames to `syncMirror()` is a
- *     playground adapter concern. Keep it local until a second consumer
- *     (e.g. a generic "spawn a worker that mirrors files") appears.
+ *     depend on `@riftydev/vfs` and shouldn't. The cross-realm primitive
+ *     (`BroadcastChannel` + `channelNameFor`) is borrowed from net, but
+ *     applying frames to `syncMirror()` is a playground adapter concern.
+ *     Keep local until a second consumer (e.g. generic "spawn a worker
+ *     that mirrors files") appears.
  */
 
 import { channelNameFor } from '@riftydev/net';
 import { dirname, syncMirror } from '@riftydev/vfs';
 
 /**
- * Synthetic URL used as the keyed input to `channelNameFor` for the VFS
- * write channel. Mirrors {@link previewPortChannelUrl} so the addressing
- * pattern is recognisable across the two playground bridges.
+ * Synthetic URL keyed into `channelNameFor` for the VFS write channel.
+ * Mirrors {@link previewPortChannelUrl} so the addressing pattern is
+ * recognisable across the two playground bridges.
  */
 function vfsWritePortChannelUrl(port: number): string {
   return `ws://vfs-write.local:${port}/__rfv`;
@@ -59,15 +57,13 @@ export type VfsWriteFrame =
 
 /**
  * Page-side sender. Posts a single frame onto the channel; the worker
- * receives it asynchronously. Per-frame channel re-creation keeps the
- * helper trivially safe (no listener state to manage on the page side)
- * — the editor calls this in response to a Monaco edit, not in a hot
- * loop, so the per-call cost is negligible.
+ * receives it asynchronously. Per-frame channel re-creation avoids
+ * page-side listener state — the editor calls this on a Monaco edit, not
+ * in a hot loop, so per-call cost is negligible.
  *
- * Returns synchronously; callers don't need to await. If the worker is
- * not yet listening (race during boot), the frame is silently dropped —
- * the same semantic the M10 same-realm path had when the dev server
- * wasn't yet up.
+ * Returns synchronously. If the worker is not yet listening (boot race)
+ * the frame is silently dropped — same semantic as the M10 same-realm
+ * path when the dev server wasn't up.
  */
 export function sendVfsWrite(port: number, frame: VfsWriteFrame): void {
   const channelName = channelNameFor(vfsWritePortChannelUrl(port));
@@ -79,13 +75,12 @@ export function sendVfsWrite(port: number, frame: VfsWriteFrame): void {
 }
 
 /**
- * Worker-side receiver. Subscribes to the channel and applies each
- * frame to the worker's `syncMirror()`. Returns a teardown function.
+ * Worker-side receiver. Applies each frame to the worker's
+ * `syncMirror()`. Returns a teardown function.
  *
- * Each `write` frame `mkdir -p`s the parent directory before writing —
- * matches the {@link SyncMirrorVfs.writeFile} semantic so the editor's
- * mental model ("file appears at path X") doesn't depend on whether the
- * dir existed.
+ * Each `write` frame `mkdir -p`s the parent first — matches the
+ * {@link SyncMirrorVfs.writeFile} semantic so "file appears at path X"
+ * doesn't depend on whether the dir existed.
  */
 export function serveVfsWrites(port: number): () => void {
   const channelName = channelNameFor(vfsWritePortChannelUrl(port));

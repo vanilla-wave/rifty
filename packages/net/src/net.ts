@@ -109,18 +109,17 @@ export class Server extends EventEmitter {
       | undefined;
     this.listenedPort = port;
     registerPort(port, async (request) => {
-      // Build a socket per request; the connection handler may write Response data.
       const socket = new HttpFramedSocket();
       this.emit('connection', socket);
       this.connectionHandler?.(socket);
-      // Send the raw request bytes through the socket so the HTTP server can parse.
+      // Feed raw request bytes through the socket for the HTTP server to parse.
       const headers: string[] = [];
       for (const [k, v] of request.headers) headers.push(`${k}: ${v}`);
       const body = new Uint8Array(await request.arrayBuffer());
       const head = `${request.method} ${new URL(request.url).pathname + new URL(request.url).search} HTTP/1.1\r\n${headers.join('\r\n')}\r\n\r\n`;
       socket.push(new TextEncoder().encode(head));
       if (body.byteLength > 0) socket.push(body);
-      // Wait for a 'response' event with a Response object — or build one from socket writes.
+      // Resolve from a 'response' event, else synthesise a Response from socket writes.
       return await new Promise<Response>((resolve) => {
         const writeBufs: Uint8Array[] = [];
         socket.on('write', (chunk) => writeBufs.push(chunk as Uint8Array));
@@ -130,7 +129,6 @@ export class Server extends EventEmitter {
             resolve(new Response('', { status: 200 }));
             return;
           }
-          // Try to parse a raw HTTP response from writeBufs.
           const all = concat(writeBufs);
           const text = new TextDecoder().decode(all);
           const sep = text.indexOf('\r\n\r\n');

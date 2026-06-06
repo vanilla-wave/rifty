@@ -137,10 +137,8 @@ function headersToObject(h: Headers): Record<string, string> {
 
 let counter = 0;
 function nextRequestId(): string {
-  // Monotonic + random suffix so concurrent dispatches on the same channel
-  // don't collide. The counter resets per realm; the random tail guards
-  // collisions across realms (e.g. an old + new page briefly sharing a
-  // channel name during a reload). See ADR-0048 §Risks.
+  // Counter resets per realm; random tail guards cross-realm collisions (old +
+  // new page briefly sharing a channel name during reload). ADR-0048 §Risks.
   return `r${++counter}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
@@ -179,8 +177,8 @@ export function serveCrossRealmPreview(
     try {
       response = await dispatch(new Request(frame.url, requestInit));
     } catch (err) {
-      // Synchronous-dispatch failure: report on the legacy (version-unvalidated)
-      // `error` frame so even a pre-ADR-0048 page understands it.
+      // Report on the legacy (version-unvalidated) `error` frame so even a
+      // pre-ADR-0048 page understands it.
       channel.postMessage({
         type: 'error',
         requestId,
@@ -224,8 +222,8 @@ export function serveCrossRealmPreview(
         if (done) break;
         if (!value || value.byteLength === 0) continue;
         for (let off = 0; off < value.byteLength; off += MAX_CHUNK_BYTES) {
-          // `subarray` is a view; structured clone on postMessage copies the
-          // covered bytes (honours byteOffset/byteLength), so reuse is safe.
+          // `subarray` is a view; postMessage's structured clone copies only
+          // the covered bytes (honours byteOffset/byteLength), so reuse is safe.
           const part = value.subarray(off, Math.min(off + MAX_CHUNK_BYTES, value.byteLength));
           channel.postMessage({
             type: 'reply-stream-chunk',

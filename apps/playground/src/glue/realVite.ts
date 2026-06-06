@@ -1,51 +1,16 @@
 /**
- * Real Vite — kernel-spawned Worker realm (ADR-0043 — Vite-in-Worker,
- * M11 / A-026).
+ * Real Vite — page-realm orchestrator for the kernel-spawned Worker realm
+ * (ADR-0043 — Vite-in-Worker, M11 / A-026; supersedes the page-realm path
+ * from ADR-0025).
  *
- * The page-realm orchestrator. Spawns the Real Vite worker (which
- * actually runs the install + Vite createServer flow), wires the
- * cross-realm preview-port bridge, and forwards editor edits to the
- * worker via the VFS write port. The dev server, the HMR bridge, the
- * file watcher, and the entire `node:*` global shim all live in the
- * Worker realm — the page realm pays no Vite CPU cost and ships no
- * `installProcessGlobals()` side-effect into the page's
- * `Promise.prototype.then`.
+ * Spawns the Real Vite worker (which runs install + Vite createServer),
+ * wires the cross-realm preview-port bridge, and forwards editor edits over
+ * the VFS write port. Dev server, HMR bridge, file watcher, and the `node:*`
+ * shim all live in the worker — so the page pays no Vite CPU cost and ships
+ * no `installProcessGlobals()` side-effect into its `Promise.prototype.then`.
  *
- * Supersedes the page-realm Real Vite path from ADR-0025. The
- * main-thread Dev Mode (`devMode.ts`) is retained as the non-isolated
- * fallback; this adapter requires `crossOriginIsolated` + SAB IPC
- * (same gate as the rest of ADR-0011).
- *
- * Flow:
- *   1. Gate on `isSabIpcSupported()` — throws `NotImplementedError`
- *      otherwise with the documented requirement.
- *   2. Resolve the bootstrap module URL via
- *      `new URL('../workers/real-vite-bootstrap.ts', import.meta.url)`
- *      so Vite bundles the worker chunk at build time.
- *   3. `globalProcessManager.spawnWorker('real-vite', spec)` — kernel
- *      builds the SAB ring, three stdio MessagePorts, posts init,
- *      kernel's pre-entry hook installs `globalThis.process` from the
- *      spec, kernel imports the bootstrap URL, bootstrap takes it from
- *      there.
- *   4. Register a page-side `bridgeCrossRealmPreview(port)` handler
- *      against `port` in the page's `@riftydev/net` registry so the SW's
- *      preview-bridge forwards the SW fetch into the worker.
- *   5. Mount the existing `mountPlaygroundPreviewBridge()` — unchanged
- *      from the M10 path; it dispatches into the page registry, which
- *      now proxies to the worker.
- *   6. Pump worker stdout / stderr lines into `onLog` so the playground
- *      terminal mirrors the worker's progress.
- *   7. `updateEntry(content)` forwards each edit over the VFS write
- *      port — one-way mailbox per ADR-0043 / D4.
- *
- * What this file does NOT do:
- *   - Install Node-shape globals on the page realm. (That was the
- *     ADR-0025 trade-off.)
- *   - Run npm-install in the page realm.
- *   - Drive Vite's module-graph work in the page realm.
- *   - Replace the M10 Dev Mode (`devMode.ts`) — that's a separate
- *     adapter with the same kernel-Worker migration story to do later
- *     (out of scope here per ADR-0043 / D5).
+ * `devMode.ts` (main-thread Dev Mode) is retained as the non-isolated
+ * fallback; this adapter requires `crossOriginIsolated` + SAB IPC (ADR-0011).
  */
 import { globalProcessManager, isSabIpcSupported } from '@riftydev/kernel';
 import { bridgeCrossRealmPreview, registerPort, unregisterPort } from '@riftydev/net';
@@ -65,8 +30,8 @@ export interface RealViteOptions {
   root?: string;
   entry?: string;
   port?: number;
-  /** Template to run. Defaults to the registered default (Vite). Carried to the
-   *  worker by id over `RIFTY_RFV_TEMPLATE`; the worker re-resolves the spec. */
+  /** Template to run; defaults to the registered default. Carried to the worker
+   *  by id over `RIFTY_RFV_TEMPLATE`; the worker re-resolves the spec. */
   template?: ProjectSpec;
   onLog?(line: string): void;
 }
@@ -77,11 +42,9 @@ const dec = new TextDecoder();
 /**
  * Spawn the Real Vite worker realm and wire the cross-realm bridges.
  *
- * Throws `NotImplementedError('startRealVite', '…')` if the host realm
- * doesn't have SAB IPC available (cross-origin isolation is the gate;
- * see ADR-0002 / D-001). The UI catches and surfaces the error in the
- * playground terminal — matches the existing `useMode.toggleRealVite()`
- * error path.
+ * @throws NotImplementedError when SAB IPC is unavailable — cross-origin
+ *   isolation is the gate (ADR-0002 / D-001). UI catches and surfaces it in
+ *   the playground terminal.
  */
 export async function startRealVite(opts: RealViteOptions = {}): Promise<RealViteHandle> {
   const template = opts.template ?? defaultProjectSpec();
@@ -99,8 +62,8 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
     );
   }
 
-  // Vite bundles the bootstrap into its own worker chunk. The URL is
-  // resolved at build time via `new URL(..., import.meta.url)`.
+  // `new URL(..., import.meta.url)` so Vite bundles the bootstrap as its own
+  // worker chunk at build time.
   const bootstrapUrl = new URL('../workers/real-vite-bootstrap.ts', import.meta.url).toString();
 
   log(`[real-vite] spawning ${template.displayName} worker with bootstrap ${bootstrapUrl}\n`);
@@ -129,13 +92,10 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
     );
   }
 
-  // Pump worker stdout / stderr lines into the playground log sink.
-  // Vite's progress messages, install logs, and bootstrap-error stacks all
-  // flow through here. The `Readable`'s data payload type is `unknown` by
-  // design (object-mode allowance); decode whatever the SAB Worker layer hands
-  // us — a too-narrow `instanceof Uint8Array` guard silently swallowed worker
-  // logs (install/boot progress AND error stacks), making a stalled boot look
-  // frozen with no feedback.
+  // The `Readable` payload type is `unknown` (object-mode allowance); decode
+  // whatever the SAB Worker layer hands us. A too-narrow `instanceof
+  // Uint8Array` guard silently swallowed worker logs (install/boot progress
+  // AND error stacks), making a stalled boot look frozen with no feedback.
   const decodeChunk = (chunk: unknown): string => {
     if (chunk instanceof Uint8Array) return dec.decode(chunk);
     if (chunk instanceof ArrayBuffer) return dec.decode(new Uint8Array(chunk));
@@ -153,22 +113,19 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
     if (text) log(text);
   });
 
-  // Track worker exit so the handle's `close()` is idempotent — if the
-  // worker dies on its own (install failure, vite crash) we still want
-  // `close()` to be safe.
+  // Track exit so `close()` stays safe when the worker dies on its own
+  // (install failure, vite crash).
   let exited = false;
   handle.on('exit', (..._args: unknown[]) => {
     exited = true;
   });
 
-  // Page-side preview-port bridge. The SW dispatches `/preview/<port>/*`
-  // to the page; the page's `@riftydev/net` registry routes through this
-  // handler over `BroadcastChannel` to the worker's `serveCrossRealmPreview`.
+  // SW dispatches `/preview/<port>/*` to the page; the `@riftydev/net`
+  // registry routes through this handler over `BroadcastChannel` to the
+  // worker's `serveCrossRealmPreview`.
   const previewBridge = bridgeCrossRealmPreview(port);
   registerPort(port, previewBridge);
 
-  // Existing M7 SW ↔ page wiring — unchanged. It dispatches into the
-  // page's `@riftydev/net` registry, which now hits `previewBridge`.
   const tearSwBridge = mountPlaygroundPreviewBridge();
 
   log(`[real-vite] page-side preview-port bridge ready (port ${port})\n`);
@@ -180,15 +137,14 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
       unregisterPort(port);
       previewBridge.dispose();
       if (!exited) {
-        // Best-effort termination — `kill` is idempotent and the kernel
-        // teardown closes the SAB ring + stdio ports.
+        // `kill` is idempotent; kernel teardown closes the SAB ring + stdio.
         handle.kill('SIGTERM');
       }
     },
     updateEntry(content) {
-      // One-way mailbox: edit lands in the worker's `syncMirror()`. Vite's
-      // file watcher (worker-realm) sees it and the HMR bridge
-      // (worker-realm) broadcasts the iframe reload.
+      // One-way mailbox (ADR-0043 / D4): edit lands in the worker's
+      // `syncMirror()`; its file watcher sees it and the HMR bridge broadcasts
+      // the iframe reload.
       sendVfsWrite(port, {
         type: 'write',
         path: entryPath,

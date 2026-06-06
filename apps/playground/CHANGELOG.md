@@ -217,8 +217,8 @@
 - `adapters/preview-bridge-wiring.ts` — `mountPlaygroundPreviewBridge()`
   extracts the byte-identical `setupPreviewBridge` handler that
   `devMode.ts` and `realVite.ts` each carried in-place. Closes the
-  "Дублированный preview-bridge wiring" finding in the 2026-05-26
-  architecture review (Приложение → playground).
+  "Duplicated preview-bridge wiring" finding in the 2026-05-26
+  architecture review (Appendix → playground).
 
 ### Changed
 

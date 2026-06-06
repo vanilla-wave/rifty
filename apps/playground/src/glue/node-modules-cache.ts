@@ -1,16 +1,15 @@
 /**
  * In-memory cache over a {@link NodeModulesBridge} (ADR-0080).
  *
- * Solid-free. Coalesces concurrent expands of the same directory by storing the
- * *promise* (not the resolved value), so two near-simultaneous expands issue ONE
- * remote read. A rejected read is evicted so a transient timeout is retryable
- * rather than poisoned forever. `peek` gives the explorer a synchronous
- * "already loaded?" check to decide between a sync render and a loading row.
- * `invalidate` drops a subtree (or all) — called on mode-leave so a stale
+ * Solid-free. Coalesces concurrent expands by storing the *promise* (not the
+ * resolved value), so near-simultaneous expands issue ONE remote read. A
+ * rejected read is evicted so a transient timeout is retryable, not poisoned.
+ * `peek` gives a synchronous "already loaded?" check (sync render vs loading
+ * row). `invalidate` drops a subtree (or all) — called on mode-leave so a stale
  * `node_modules` view never lingers across a real-vite off→on cycle.
  *
- * Bounded by being dropped on mode-leave; per-dir listings are small, so v1 has
- * no LRU eviction (revisit only if a session expands thousands of dirs).
+ * No LRU eviction: dropped on mode-leave and per-dir listings are small (revisit
+ * only if a session expands thousands of dirs).
  */
 import type { NodeModulesBridge, NodeModulesDirEntry } from './node-modules-port.ts';
 
@@ -43,7 +42,7 @@ export class NodeModulesCache {
   }
 
   /** Read one file under node_modules. Not cached — the editor opens one at a
-   *  time, so caching adds little (and could pin large buffers). */
+   *  time, so a cache adds little and could pin large buffers. */
   readFile(path: string): Promise<{ readonly size: number; readonly content: Uint8Array | null }> {
     return this.bridge.readFile(path);
   }

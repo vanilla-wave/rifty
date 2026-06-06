@@ -1,21 +1,12 @@
 # rifty
 
-Browser-based, Node-compatible runtime + WASI runner — a WebContainers-like system
-built from scratch. Run `Express`, `npm install`, a dev server, even WASI binaries,
-**inside a browser tab**. Pet project; the goal is deep understanding of how these
-systems work, plus a practical "Express + npm install in the browser".
+Browser-based, Node-compatible runtime + WASI runner — a WebContainers-like system built from scratch. Run `Express`, `npm install`, a dev server, even WASI binaries, **inside a browser tab**. Pet project; goal is deep understanding of how these systems work, plus a practical "Express + npm install in the browser".
 
-> **Status:** active milestone M10 (Real Tooling). Pet project — APIs are `0.x` and
-> may move. See [`PROJECT_PLAN.md`](./PROJECT_PLAN.md), [`TASKS.md`](./TASKS.md),
-> [`docs/adr/`](./docs/adr/), [`docs/compat/`](./docs/compat/).
+> **Status:** active milestone M10 (Real Tooling). APIs are `0.x` and may move. See [`PROJECT_PLAN.md`](./PROJECT_PLAN.md), [`TASKS.md`](./TASKS.md), [`docs/adr/`](./docs/adr/), [`docs/compat/`](./docs/compat/).
 
 ## Packages
 
-Want everything in one install? **`npm i @riftydev/sdk`** — the umbrella front door
-([`packages/rifty`](./packages/rifty)): a framework-free `createSandbox()` plus every
-layer below on a subpath (`@riftydev/sdk/vfs`, `@riftydev/sdk/runtime`, `@riftydev/sdk/net`, …). Or take just
-the part you need: every layer is also its own package. All are ESM, ship `.d.ts`, and
-are released in lockstep under the `@riftydev` scope.
+**`npm i @riftydev/sdk`** is the umbrella front door ([`packages/rifty`](./packages/rifty)): framework-free `createSandbox()` plus every layer below on a subpath (`@riftydev/sdk/vfs`, `@riftydev/sdk/runtime`, `@riftydev/sdk/net`, …). Each layer is also its own package. All are ESM, ship `.d.ts`, released in lockstep under the `@riftydev` scope.
 
 | Package | What it is | Runs in |
 |---|---|---|
@@ -57,19 +48,13 @@ matchesRange('1.4.2', '^1.2.0');                              // true
 pickBestVersion(['1.0.0', '1.4.2', '2.0.0'], '^1.2.0');       // "1.4.2"
 ```
 
-More, runnable, in [`examples/standalone-usage`](./examples/standalone-usage)
-(`pnpm --filter @rifty-examples/standalone start`). The full product demo is the
-[playground](./apps/playground) (`pnpm dev`).
+More runnable examples in [`examples/standalone-usage`](./examples/standalone-usage) (`pnpm --filter @rifty-examples/standalone start`). Full product demo: the [playground](./apps/playground) (`pnpm dev`).
 
 ## Consuming rifty in your own app — read this first
 
-The leaf packages (`@riftydev/io`, `@riftydev/vfs`, `@riftydev/npm-client`, `@riftydev/shell`,
-`@riftydev/shadow-registry`) are plain isomorphic JS and need nothing special. But the
-**runtime** (`runtime-js`, `runtime-wasi`, `kernel`, `service-worker`) has hard
-browser prerequisites — without them it will not boot:
+The leaf packages (`@riftydev/io`, `@riftydev/vfs`, `@riftydev/npm-client`, `@riftydev/shell`, `@riftydev/shadow-registry`) are plain isomorphic JS and need nothing special. The **runtime** (`runtime-js`, `runtime-wasi`, `kernel`, `service-worker`) has hard browser prerequisites — without them it will not boot:
 
-1. **Cross-origin isolation is mandatory** (for `SharedArrayBuffer` + `Atomics.wait`,
-   used by synchronous IPC and sync fs). Serve your page with:
+1. **Cross-origin isolation is mandatory** (for `SharedArrayBuffer` + `Atomics.wait`, used by synchronous IPC and sync fs). Serve with:
 
    ```
    Cross-Origin-Opener-Policy: same-origin
@@ -77,30 +62,15 @@ browser prerequisites — without them it will not boot:
    Cross-Origin-Resource-Policy: cross-origin
    ```
 
-   Then `globalThis.crossOriginIsolated === true`. Header-less static hosts (e.g.
-   **GitHub Pages) do not work**; Vercel / Netlify / Cloudflare Pages do. Copy-paste
-   configs: [`vercel.json`](./vercel.json),
-   [`apps/playground/public/_headers`](./apps/playground/public/_headers), and the
-   dev-server `headers` in [`apps/playground/vite.config.ts`](./apps/playground/vite.config.ts).
+   Then `globalThis.crossOriginIsolated === true`. Header-less static hosts (e.g. **GitHub Pages) do not work**; Vercel / Netlify / Cloudflare Pages do. Copy-paste configs: [`vercel.json`](./vercel.json), [`apps/playground/public/_headers`](./apps/playground/public/_headers), and the dev-server `headers` in [`apps/playground/vite.config.ts`](./apps/playground/vite.config.ts).
 
-2. **A bundler with module Workers** + `new URL('…', import.meta.url)` worker
-   resolution (Vite `worker: { format: 'es' }`). `runtime-js`/`runtime-wasi` spawn
-   their worker entry by URL (`@riftydev/runtime-js/worker`,
-   `@riftydev/runtime-wasi/worker-entry`).
+2. **A bundler with module Workers** + `new URL('…', import.meta.url)` worker resolution (Vite `worker: { format: 'es' }`). `runtime-js`/`runtime-wasi` spawn their worker entry by URL (`@riftydev/runtime-js/worker`, `@riftydev/runtime-wasi/worker-entry`).
 
-3. **A service worker** for preview/HMR routing — build one from
-   `@riftydev/service-worker/sw` and register it via `registerServiceWorker(url)`. There
-   is no prebuilt `sw.js`; it must be bundled (the playground does this with
-   `apps/playground/build/sw-plugin.ts`).
+3. **A service worker** for preview/HMR routing — build from `@riftydev/service-worker/sw`, register via `registerServiceWorker(url)`. No prebuilt `sw.js`; it must be bundled (the playground does this in `apps/playground/build/sw-plugin.ts`).
 
-4. **Same-origin WASM assets** when you use them: `node:sqlite` needs
-   `sql.js/dist/sql-wasm.wasm` reachable (inject a `locateFile` via
-   `initSqliteEngine({ locateFile })`, awaited once before any `DatabaseSync`); the
-   real-tooling WASI path needs its `esbuild.wasm`.
+4. **Same-origin WASM assets** when used: `node:sqlite` needs `sql.js/dist/sql-wasm.wasm` reachable (inject a `locateFile` via `initSqliteEngine({ locateFile })`, awaited once before any `DatabaseSync`); the real-tooling WASI path needs its `esbuild.wasm`.
 
-Given those, the umbrella's **`createSandbox()`** does the rest of the boot wiring
-(capability probe → COI guard → VFS backend with memory fallback → service-worker
-registration → runtime worker) and hands you a live `RuntimeController`:
+Given those, the umbrella's **`createSandbox()`** does the boot wiring (capability probe → COI guard → VFS backend with memory fallback → service-worker registration → runtime worker) and hands you a live `RuntimeController`:
 
 ```ts
 import { checkCapabilities, createSandbox } from '@riftydev/sdk';
@@ -113,8 +83,7 @@ const sandbox = await createSandbox({
 await sandbox.runtime.eval('console.log("hello from a Worker")');
 ```
 
-Target `es2022`; **Chrome-first** (cross-browser e2e infra exists, see
-[`docs/compat/`](./docs/compat/)).
+Target `es2022`; **Chrome-first** (cross-browser e2e infra exists, see [`docs/compat/`](./docs/compat/)).
 
 ## Develop (monorepo)
 
@@ -130,9 +99,7 @@ pnpm test:parity          # node parity runner
 pnpm test:e2e             # playwright (chromium)
 ```
 
-The in-repo `exports` point at raw TypeScript `src/` (so dev/HMR needs no build);
-the **published** packages point at the built `dist/` via `publishConfig`. See
-[`docs/PUBLISHING.md`](./docs/PUBLISHING.md) and ADR-0070.
+In-repo `exports` point at raw TypeScript `src/` (dev/HMR needs no build); **published** packages point at built `dist/` via `publishConfig`. See [`docs/PUBLISHING.md`](./docs/PUBLISHING.md) and ADR-0070.
 
 ## Architecture
 
@@ -150,9 +117,7 @@ UI framework (SolidJS) is confined to `apps/playground/**` (D-002).
 
 ## Contributing
 
-The rules live in [`CLAUDE.md`](./CLAUDE.md): TDD (tests/parity-case first), no `any`,
-no silent stubs (throw `NotImplementedError`), one change per PR. Decisions are
-recorded as [ADRs](./docs/adr/).
+Rules live in [`CLAUDE.md`](./CLAUDE.md): TDD (tests/parity-case first), no `any`, no silent stubs (throw `NotImplementedError`), one change per PR. Decisions are recorded as [ADRs](./docs/adr/).
 
 ## License
 
