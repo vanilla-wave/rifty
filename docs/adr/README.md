@@ -71,4 +71,15 @@ ADRs are immutable after merge. New decisions get new ADRs; supersedence is expl
 | 0072 | OPFS sync content cache + async write-through + async Worker VFS boot — wires OPFS persistence into the runtime Worker (closes A-004; supersedes ADR-0013's sync-access-handle content hot path) | — |
 | 0073 | Playground UX overhaul — preset gallery + design system (self-hosted OFL fonts), production worker bundling via `?worker&url` (fixes the prod REPL-worker boot, refines ADR-0011's build path), Monaco worker wiring, honest preview status, Netlify hosting | — |
 | 0075 | Playground VSCode-style shell — bottom console panel, hand-rolled resizable/collapsible splitters, VFS file explorer, multi-model editor tabs (program tab keeps `machine.source` binding); builds on ADR-0073, zero new deps | — |
+| 0076 | Cross-realm reverse VFS snapshot for the Real Vite explorer | — |
+| 0077 | Real Vite worker lifetime + log surfacing + preview render | — |
+| 0078 | Generic ProjectSpec/Template runtime | — |
+| 0079 | Single generic template switcher | — |
+| 0080 | Lazy `node_modules` remote read | — |
 | 0087 | Honest execSync-over-SAB COI-Worker e2e harness — public runtime-js seams (`ipc/exec-sync-handler` + `builtins/child_process`) + SAB JSON-frame decode copies out of the shared view before `TextDecoder` (browser-only bug surfaced by the real round-trip) | — |
+| 0088 | Coreutils command-surface strategy — pure-JS builtins over the VFS, busybox rejected, uutils/picomatch ADR-gated | — |
+| 0089 | CommandContext gains optional stdin, isTTY, and cancellation fields | — |
+| 0090 | VFS sync `copyFileSync`/`cpSync`/`renameSync` primitives for shell `cp`/`mv` (supersedes Q-2026-06-04-313) | — |
+| 0091 | Rich token type (quote provenance) + single-segment glob expansion | — |
+| 0092 | Agent-facing `git` contract in M12 opencode bash channel — structured read-ops tool, write-ops NotImplementedError, impl deferred | — |
+| 0093 | Shell-command parity-test harness strategy — node:fs reuse + frozen GNU fixtures, never a live host-spawn oracle | — |

@@ -73,6 +73,33 @@ End of milestone M10.
 
 **Status:** 🟢 Active
 **Encountered in:** JS-runtime perf audit item #3 (`docs/perf/js-runtime-perf-audit-2026-06-05.md` + `…-adr-plan-2026-06-06.md`)
+<!-- Rich-terminal/coreutils research (docs/research/rich-terminal-coreutils-2026-06-06.md):
+     IRREVERSIBLE forks → ADR-0081..0086. REVERSIBLE forks recorded below (Q-2026-06-06-401..406),
+     pre-implementation (no code markers yet). -->
+
+## Q-2026-06-06-401: single shared home for the grep/tree-walker logic
+
+**Status:** 🟢 Active
+**Encountered in:** rich-terminal research (ADR-0081 coreutils strategy; ADR-0085 git read-ops)
+**Milestone:** M10/M12
+**Author (agent session):** 2026-06-06
+
+### Context
+
+`grep` (promoted from `vfs-grep`) and the facade `grep`/`list` tools (and the ADR-0085 git read-ops) all want the same recursive readdir + match walk. The current `packages/runtime-js/src/utils/vfs-grep.ts` imports `readFileSync/readdirSync/Dirent` from the runtime-js `builtins/fs.ts` node:fs FACADE (method-form `Dirent.isDirectory()`), NOT `@riftydev/vfs` directly.
+
+### Provisional decision
+
+Lean **(b)**: relocate ONE pure walker into shell/vfs rewired onto `syncMirror()` (field-form `VfsDirent.isDirectory` boolean), shared by builtin + facade tool, to avoid two-path divergence. Alternative **(a)** (re-export `vfsGrep` from `runtime-js/src/index.ts`) is simpler but keeps the method-form Dirent shape and a cross-layer import. REVERSIBLE while the walker stays an internal util; becomes IRREVERSIBLE only if a re-export adds public API. NB the method→field Dirent adaptation is real work, not a move. The Q-2026-05-30-061 ripgrep-WASM deferral is unaffected.
+
+### Code markers
+
+(none — pre-implementation; promote/mark when the grep builtin lands.)
+
+## Q-2026-06-06-402: `ls`/`grep` `--color` via hand-rolled SGR (not picocolors)
+
+**Status:** 🟢 Active
+**Encountered in:** rich-terminal research (ADR-0081; ADR-0082 isTTY gating)
 **Milestone:** M10
 **Author (agent session):** 2026-06-06
 
@@ -108,6 +135,21 @@ End of milestone M10.
 **Status:** 🟢 Active
 **Encountered in:** JS-runtime perf audit item #5 (`docs/perf/js-runtime-perf-audit-2026-06-05.md` line 59 + `…-adr-plan-2026-06-06.md` line 41/127)
 **Milestone:** M10
+Color output needs raw SGR (`\x1b[1;34m…\x1b[0m`) to xterm. picocolors is the popular pick but its **browser build returns plain (uncolored) strings — emits no SGR** (a render-colors PR was rejected as Chrome-only), so it's actively wrong here.
+
+### Provisional decision
+
+A ~20–40-line LS_COLORS/SGR helper in `packages/shell/src/`, zero-dep, strictly more correct than picocolors. Emission MUST be gated on `ctx.isTTY` (ADR-0082) — `--color=auto` suppresses SGR into redirects/pipes. Known limitation: hand-rolled palette won't match `$LS_COLORS`; ASCII-only column width (no wcwidth). REVERSIBLE (internal helper).
+
+### Code markers
+
+(none — pre-implementation.)
+
+## Q-2026-06-06-403: stdout/stderr kept separate internally, merged only at the xterm sink
+
+**Status:** 🟢 Active
+**Encountered in:** rich-terminal research (ADR-0082; jsh reference §3)
+**Milestone:** M10/M12
 **Author (agent session):** 2026-06-06
 
 ### Context
@@ -142,6 +184,21 @@ End of milestone M10.
 **Status:** 🟢 Active
 **Encountered in:** JS-runtime perf audit item #15 (`docs/perf/js-runtime-perf-audit-2026-06-05.md` line 71 + `…-adr-plan-2026-06-06.md` line 42/128)
 **Milestone:** M10
+jsh merges stdout+stderr into one `process.output` stream at the terminal. rifty already keeps fd1/fd2 separate in `CommandContext` (`stdout`/`stderr` writers). Builtins write usage/errors to fd2.
+
+### Provisional decision
+
+Keep fd1/fd2 **separate internally**; merge ONLY at the xterm sink (the playground terminal). Preserves Node parity, `$?`, and future `2>&1` faithfulness — the merge is a presentation concern, not the contract. REVERSIBLE/small.
+
+### Code markers
+
+(none — pre-implementation; already the shape of `CommandContext`.)
+
+## Q-2026-06-06-404: awk / full-sed deferred (`NotImplementedError` + compat ❌)
+
+**Status:** 🟢 Active
+**Encountered in:** rich-terminal research (ADR-0081 §4; gap matrix §5)
+**Milestone:** M12+
 **Author (agent session):** 2026-06-06
 
 ### Context
@@ -181,6 +238,21 @@ End of milestone M10.
 **Status:** 🟢 Active — DEFER (upholds ADR-0048 D2 / ADR-0017 M12 / ADR-0055 "do NOT ship v3")
 **Encountered in:** JS-runtime perf audit item #22 fix(b); reconsidered by a decision subagent (ADR-0063) on 2026-06-06 and **upheld**
 **Milestone:** M12
+awk and full sed are an interpreter-class effort; the JS ecosystem ports are emscripten-WASM-only (a vendored binary = IRREVERSIBLE, ADR-0081 Option B territory).
+
+### Provisional decision
+
+**Defer.** `awk`/full-`sed` throw `NotImplementedError` + register `❌` (no silent stub), so the agent fails loudly. A pure-JS `sed s///` subset (~80–120 LOC) is an optional later add if a verified need appears (REVERSIBLE). Full awk/sed only via the deferred uutils-WASM path (Q-2026-05-30-061 sibling).
+
+### Code markers
+
+(none — pre-implementation; register ❌ when the builtin set lands.)
+
+## Q-2026-06-06-405: background `&` / job model deferred
+
+**Status:** 🟢 Active
+**Encountered in:** rich-terminal research (§6 #7); distinct from the ADR-0082 cancellation contract
+**Milestone:** M12+ kernel
 **Author (agent session):** 2026-06-06
 
 ### Context
@@ -209,6 +281,21 @@ The perf audit proposed building true end-to-end page↔worker `ReadableStream` 
 **Status:** 🟢 Active — DEFER (no code change; spawn-worker.ts untouched)
 **Encountered in:** JS-runtime perf audit item #20 (`docs/perf/js-runtime-perf-audit-2026-06-05.md:95`)
 **Milestone:** M10
+`Shell.run` rejects bare `&` (`NotImplementedError('shell.background')`). The non-terminating-foreground-server problem (vite/node http) is solved by the ADR-0082 cancellation contract (Ctrl-C resolves `run`), NOT by `&`. True backgrounding needs a job model.
+
+### Provisional decision
+
+**Defer** `&`/job control as a separate decision; it ties to **Q-2026-06-05-317** (kernel native server-process support) and is explicitly NOT subsumed by ADR-0082. Its own ADR when taken up (IRREVERSIBLE — kernel public behaviour).
+
+### Code markers
+
+(none — pre-implementation; the bare-`&` throw already exists in `shell.ts`.)
+
+## Q-2026-06-06-406: agent file ops — structured-tool-first, minimal bash fallback
+
+**Status:** 🟢 Active
+**Encountered in:** rich-terminal research (§1 reframe, §5, §9; ADR-0085 git)
+**Milestone:** M12 (opencode facade)
 **Author (agent session):** 2026-06-06
 
 ### Context
@@ -230,6 +317,15 @@ Audit #20 flagged the per-spawn env+argv structured-clone (`spawnKernelWorker` b
 2. The pre-warm pool work (ADR-0088) lands — fold any env/argv sharing into that pass once the wire shape is being revised anyway.
 
 ### Code markers (none — no code change; captured here)
+opencode agents have two channels: structured file tools (read/grep/glob/list/edit/write) + one bash tool. Models still shell out to `rg`/`ls`/`find` (opencode #14791/#6506) even when structured tools exist.
+
+### Provisional decision
+
+**Structured-tool-first**: the dominant channel is pure-JS facade tools over the VFS (no pipe dependency); keep a `list` tool (opencode #6506) and tune the facade prompt to curb shell exploration. The literal-bash fallback is lower priority and gated on the M12 pipes+glob+stdin chain (ADR-0082/0084). REVERSIBLE facade-design lean.
+
+### Code markers
+
+(none — pre-implementation, M12 facade work.)
 
 ## Q-2026-06-05-318: deferred `RIFTY_RFV_*` → `RIFTY_RT_*` env rename + `Mode` token rename (post-ADR-0078)
 
@@ -389,7 +485,10 @@ The old left rail was the preset gallery. The VSCode shell puts both Explorer an
 
 ## Q-2026-06-04-313: directory rename via copyTree+rm (no native `renameSync` on the sync mirror)
 
-**Status:** 🟢 Active
+**Status:** ⚪ Promoted → ADR-0083 (VFS `copyFileSync`/`cpSync`/`renameSync` primitives)
+
+**Resolution (2026-06-06):** Promoted by **ADR-0083** — native mtime-preserving, atomic-where-possible `renameSync` + `copyFileSync`/`cpSync` added to `FsSync`. The `glue/fs-ops.ts` copyTree+rm rename workaround migrates onto `renameSync` (file case) and the `// TODO(ADR): Q-2026-06-04-313` marker is removed when that lands. Entry kept briefly for traceability.
+
 **Encountered in:** ADR-0075 (file explorer actions)
 **Milestone:** M10 polish
 **Author (agent session):** 2026-06-04
