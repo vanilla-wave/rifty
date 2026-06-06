@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Preview iframe navigation commits in-frame (ADR-0074, applied on this
+  branch).** The preview interceptor now routes every request originating
+  inside the preview `<iframe>` — the document navigation (`request.mode ===
+  'navigate'`) and its subresources (non-empty `request.destination`) — to the
+  controlling window that owns the port (`clientId = null` → first-controlled-
+  window fallback), keeping `resultingClientId || clientId` only for the page's
+  own bare `fetch` warm-up. Without this the readiness handshake targeted the
+  iframe's own client (which runs no `setupPreviewBridge`), timed out, and the
+  navigation aborted (`net::ERR_ABORTED`) so the live preview never rendered.
+  `SW_ROUTING_VERSION` stays `'1'` (the id selection is SW-local and off-wire).
+
 ### Added
 
 - **ADR-0046 (A-023):** `PreviewOwnerBinding` — one seam the preview

@@ -50,6 +50,8 @@
 import { globalProcessManager, isSabIpcSupported } from '@riftydev/kernel';
 import { bridgeCrossRealmPreview, registerPort, unregisterPort } from '@riftydev/net';
 import { NotImplementedError } from '@riftydev/vfs';
+import type { ProjectSpec } from '../templates/project-spec.ts';
+import { defaultProjectSpec } from '../templates/registry.ts';
 import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
 import { sendVfsWrite } from './vfs-write-port.ts';
 
@@ -63,6 +65,9 @@ export interface RealViteOptions {
   root?: string;
   entry?: string;
   port?: number;
+  /** Template to run. Defaults to the registered default (Vite). Carried to the
+   *  worker by id over `RIFTY_RFV_TEMPLATE`; the worker re-resolves the spec. */
+  template?: ProjectSpec;
   onLog?(line: string): void;
 }
 
@@ -79,9 +84,10 @@ const dec = new TextDecoder();
  * error path.
  */
 export async function startRealVite(opts: RealViteOptions = {}): Promise<RealViteHandle> {
+  const template = opts.template ?? defaultProjectSpec();
   const root = opts.root ?? '/workspace';
-  const entryRel = opts.entry ?? '/src/main.js';
-  const port = opts.port ?? 5174;
+  const entryRel = opts.entry ?? template.entry.relativePath;
+  const port = opts.port ?? template.defaultPort;
   const entryPath = `${root}${entryRel}`;
   const log = opts.onLog ?? (() => {});
 
@@ -97,7 +103,7 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
   // resolved at build time via `new URL(..., import.meta.url)`.
   const bootstrapUrl = new URL('../workers/real-vite-bootstrap.ts', import.meta.url).toString();
 
-  log(`[real-vite] spawning worker with bootstrap ${bootstrapUrl}\n`);
+  log(`[real-vite] spawning ${template.displayName} worker with bootstrap ${bootstrapUrl}\n`);
 
   const handle = globalProcessManager.spawnWorker(
     'real-vite',
@@ -108,6 +114,7 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
         RIFTY_RFV_PORT: String(port),
         RIFTY_RFV_ROOT: root,
         RIFTY_RFV_ENTRY: entryRel,
+        RIFTY_RFV_TEMPLATE: template.id,
       },
       cwd: root,
     },
@@ -123,15 +130,27 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
   }
 
   // Pump worker stdout / stderr lines into the playground log sink.
-  // Vite's progress messages, install logs, and bootstrap-error stacks
-  // all flow through here. The `Readable`'s data payload type is
-  // `unknown` by design (object-mode allowance); the SAB Worker layer
-  // always posts `Uint8Array`, so the runtime cast is sound.
+  // Vite's progress messages, install logs, and bootstrap-error stacks all
+  // flow through here. The `Readable`'s data payload type is `unknown` by
+  // design (object-mode allowance); decode whatever the SAB Worker layer hands
+  // us — a too-narrow `instanceof Uint8Array` guard silently swallowed worker
+  // logs (install/boot progress AND error stacks), making a stalled boot look
+  // frozen with no feedback.
+  const decodeChunk = (chunk: unknown): string => {
+    if (chunk instanceof Uint8Array) return dec.decode(chunk);
+    if (chunk instanceof ArrayBuffer) return dec.decode(new Uint8Array(chunk));
+    if (ArrayBuffer.isView(chunk)) {
+      return dec.decode(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+    }
+    return typeof chunk === 'string' ? chunk : '';
+  };
   handle.stdout().on('data', (chunk: unknown) => {
-    if (chunk instanceof Uint8Array) log(dec.decode(chunk));
+    const text = decodeChunk(chunk);
+    if (text) log(text);
   });
   handle.stderr().on('data', (chunk: unknown) => {
-    if (chunk instanceof Uint8Array) log(dec.decode(chunk));
+    const text = decodeChunk(chunk);
+    if (text) log(text);
   });
 
   // Track worker exit so the handle's `close()` is idempotent — if the

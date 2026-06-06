@@ -1,6 +1,13 @@
 import type { VfsDirent } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
-import { type DirentReader, fileCategory, readChildren, sortDirents } from './file-tree.ts';
+import {
+  type DirentReader,
+  type NmNodeState,
+  composeNodeModulesRows,
+  fileCategory,
+  readChildren,
+  sortDirents,
+} from './file-tree.ts';
 
 const d = (name: string, isDir: boolean): VfsDirent => ({
   name,
@@ -70,5 +77,53 @@ describe('fileCategory', () => {
   it('falls back for unknown / dotfiles', () => {
     expect(fileCategory('LICENSE')).toBe('file');
     expect(fileCategory('.gitignore')).toBe('file');
+  });
+});
+
+describe('composeNodeModulesRows', () => {
+  const NM = '/ws/node_modules';
+
+  it('collapsed: just the node_modules dir row', () => {
+    const rows = composeNodeModulesRows(NM, 0, new Set(), new Map());
+    expect(rows).toEqual([{ path: NM, name: 'node_modules', depth: 0, kind: 'dir' }]);
+  });
+
+  it('expanded but unloaded → a loading row at depth+1', () => {
+    const rows = composeNodeModulesRows(NM, 0, new Set([NM]), new Map());
+    expect(rows.map((r) => r.kind)).toEqual(['dir', 'loading']);
+    expect(rows[1]?.depth).toBe(1);
+  });
+
+  it('error state → an error row carrying the worker message', () => {
+    const nmState = new Map<string, NmNodeState>([[NM, { status: 'error', message: 'boom' }]]);
+    const rows = composeNodeModulesRows(NM, 0, new Set([NM]), nmState);
+    const err = rows.find((r) => r.kind === 'error');
+    expect(err?.message).toBe('boom');
+    expect(err?.depth).toBe(1);
+  });
+
+  it('loaded → children at depth+1, nested expanded dir → grandchildren at depth+2', () => {
+    const nmState = new Map<string, NmNodeState>([
+      [
+        NM,
+        {
+          status: 'loaded',
+          entries: [
+            { name: 'vite', kind: 'dir', size: 0 },
+            { name: 'README.md', kind: 'file', size: 12 },
+          ],
+        },
+      ],
+      [`${NM}/vite`, { status: 'loaded', entries: [{ name: 'index.js', kind: 'file', size: 4 }] }],
+    ]);
+    const expanded = new Set([NM, `${NM}/vite`]);
+    const rows = composeNodeModulesRows(NM, 0, expanded, nmState);
+
+    expect(rows).toEqual([
+      { path: NM, name: 'node_modules', depth: 0, kind: 'dir' },
+      { path: `${NM}/vite`, name: 'vite', depth: 1, kind: 'dir' },
+      { path: `${NM}/vite/index.js`, name: 'index.js', depth: 2, kind: 'file' },
+      { path: `${NM}/README.md`, name: 'README.md', depth: 1, kind: 'file' },
+    ]);
   });
 });

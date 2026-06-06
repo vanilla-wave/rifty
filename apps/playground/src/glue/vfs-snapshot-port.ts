@@ -1,0 +1,169 @@
+/**
+ * Worker → Page VFS snapshot bridge (ADR-0076).
+ *
+ * The reverse of {@link ./vfs-write-port.ts}. That mailbox carries editor
+ * writes page→worker; this one carries the worker's *project tree* worker→page
+ * so the main-thread {@link ../components/FileExplorer.tsx | FileExplorer} can
+ * show the real Vite project (which lives entirely in the worker realm's
+ * `syncMirror()` — the page never had it). One-way and display-only: the page
+ * renders a read-only view, never writes back, so the "bi-directional sync
+ * needs locking/snapshot semantics" hazard called out in `vfs-write-port.ts`
+ * does not apply.
+ *
+ * `node_modules` (and other heavy/derived dirs) are excluded — the explorer
+ * shows project source, not the thousands of installed files (the worker stays
+ * the source-of-truth for `node_modules`, which the page never reads). Small
+ * text files ride along with their bytes so the editor can open them read-only;
+ * large/binary files send size only.
+ *
+ * Why playground-local (not `@riftydev/net`): same reasoning as the write port
+ * — the wire format is a `Vfs`-shaped concern and `@riftydev/net` does not
+ * depend on `@riftydev/vfs`. Only the `channelNameFor` addressing primitive is
+ * borrowed.
+ */
+
+import { channelNameFor } from '@riftydev/net';
+import type { VfsDirent } from '@riftydev/vfs';
+import { joinPath } from '@riftydev/vfs';
+
+/** Dirs never walked into a snapshot — heavy or derived, not user project source. */
+export const SNAPSHOT_EXCLUDE_DIRS: readonly string[] = ['node_modules', '.git', '.vite', 'dist'];
+
+/** Files at/under this many bytes ship their content; larger send size only. */
+export const SNAPSHOT_MAX_CONTENT_BYTES = 128 * 1024;
+
+/** One node of the project tree. Dirs carry no content; files may carry bytes. */
+export interface VfsSnapshotEntry {
+  readonly path: string;
+  readonly kind: 'file' | 'dir';
+  readonly size: number;
+  /** Present for files small enough to inline (see {@link SNAPSHOT_MAX_CONTENT_BYTES}). */
+  readonly content?: Uint8Array;
+}
+
+/** A full-tree replace frame. The receiver swaps its store wholesale per frame. */
+export interface VfsSnapshotFrame {
+  readonly type: 'snapshot';
+  readonly root: string;
+  readonly entries: readonly VfsSnapshotEntry[];
+  /** True when an excluded `node_modules` exists under root (so the UI can hint it). */
+  readonly nodeModulesPresent: boolean;
+}
+
+/** The narrow sync-mirror slice {@link collectSnapshot} reads (keeps tests tiny). */
+export interface SnapshotSource {
+  readdirSync(path: string): readonly VfsDirent[];
+  statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number };
+  readFileBytesSync(path: string): Uint8Array;
+}
+
+export interface CollectOptions {
+  readonly exclude?: readonly string[];
+  readonly maxContentBytes?: number;
+}
+
+/**
+ * Walk `root` into a flat {@link VfsSnapshotFrame}, depth-first, dirs before
+ * files (matching the explorer's own sort). Excluded directories are recorded
+ * (as a dir entry) but never descended into. Pure — no DOM, no channels.
+ */
+export function collectSnapshot(
+  fs: SnapshotSource,
+  root: string,
+  options: CollectOptions = {},
+): VfsSnapshotFrame {
+  const exclude = new Set(options.exclude ?? SNAPSHOT_EXCLUDE_DIRS);
+  const maxContent = options.maxContentBytes ?? SNAPSHOT_MAX_CONTENT_BYTES;
+  const entries: VfsSnapshotEntry[] = [];
+  let nodeModulesPresent = false;
+
+  const walk = (dir: string): void => {
+    let children: readonly VfsDirent[];
+    try {
+      children = fs.readdirSync(dir);
+    } catch {
+      return; // dir vanished between reads — best-effort
+    }
+    const sorted = [...children].sort((a, b) => {
+      if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+      const an = a.name.toLowerCase();
+      const bn = b.name.toLowerCase();
+      return an < bn ? -1 : an > bn ? 1 : 0;
+    });
+    for (const child of sorted) {
+      const path = joinPath(dir, child.name);
+      if (child.isDirectory) {
+        if (exclude.has(child.name)) {
+          if (child.name === 'node_modules') nodeModulesPresent = true;
+          continue; // record presence, don't descend or list it
+        }
+        entries.push({ path, kind: 'dir', size: 0 });
+        walk(path);
+      } else {
+        const entry = fileEntry(fs, path, maxContent);
+        if (entry) entries.push(entry);
+      }
+    }
+  };
+
+  walk(root);
+  return { type: 'snapshot', root, entries, nodeModulesPresent };
+}
+
+function fileEntry(fs: SnapshotSource, path: string, maxContent: number): VfsSnapshotEntry | null {
+  let size = 0;
+  try {
+    size = fs.statSync(path).size ?? 0;
+  } catch {
+    return null;
+  }
+  if (size > maxContent) return { path, kind: 'file', size };
+  try {
+    const content = fs.readFileBytesSync(path);
+    return { path, kind: 'file', size: content.byteLength, content };
+  } catch {
+    return { path, kind: 'file', size };
+  }
+}
+
+/** Synthetic channel URL keyed by dev-server port (mirrors the write port's). */
+function snapshotChannelUrl(port: number): string {
+  return `ws://vfs-snapshot.local:${port}/__rfv`;
+}
+
+/**
+ * Worker-side publisher. Posts a full-tree frame; the page receives it
+ * asynchronously. Per-call channel open/close keeps it stateless — the worker
+ * publishes on discrete events (seed, install done, each watcher change), not a
+ * hot loop.
+ */
+export function publishVfsSnapshot(port: number, frame: VfsSnapshotFrame): void {
+  const channel = new BroadcastChannel(channelNameFor(snapshotChannelUrl(port)));
+  channel.postMessage(frame);
+  // Microtask close so the message has time to enqueue (BroadcastChannel
+  // delivery is async; a synchronous close would cancel the send).
+  queueMicrotask(() => channel.close());
+}
+
+/**
+ * Page-side subscriber. Invokes `onFrame` for every snapshot the worker
+ * publishes on `port`. Returns a teardown that closes the channel.
+ */
+export function subscribeVfsSnapshot(
+  port: number,
+  onFrame: (frame: VfsSnapshotFrame) => void,
+): () => void {
+  const channel = new BroadcastChannel(channelNameFor(snapshotChannelUrl(port)));
+  const onMessage = (event: MessageEvent): void => {
+    const frame = event.data as VfsSnapshotFrame;
+    if (frame && frame.type === 'snapshot') onFrame(frame);
+  };
+  channel.addEventListener('message', onMessage as unknown as EventListener);
+  let torn = false;
+  return (): void => {
+    if (torn) return;
+    torn = true;
+    channel.removeEventListener('message', onMessage as unknown as EventListener);
+    channel.close();
+  };
+}

@@ -1,6 +1,21 @@
-import { defineConfig } from 'vite';
+import { createLogger, defineConfig } from 'vite';
 import solid from 'vite-plugin-solid';
 import { rifySwPlugin } from './build/sw-plugin.ts';
+
+/**
+ * monaco-editor 0.52 ships `marked.umd.js` with a dangling
+ * `//# sourceMappingURL=marked.umd.js.map`, but never publishes the `.map`.
+ * With monaco served as source (optimizeDeps.exclude below) Vite tries to read
+ * it on every transform and logs a noisy `Failed to load source map …
+ * marked.umd.js.map` warning. It is harmless (dev-only, no runtime effect), so
+ * filter just that message instead of letting it drown the dev console.
+ */
+const quietLogger = createLogger();
+const origWarn = quietLogger.warn.bind(quietLogger);
+quietLogger.warn = (msg, opts) => {
+  if (typeof msg === 'string' && /marked\.umd\.js\.map|Failed to load source map/.test(msg)) return;
+  origWarn(msg, opts);
+};
 
 /**
  * COOP/COEP headers are mandatory for rifty: cross-origin isolation enables
@@ -14,6 +29,7 @@ const crossOriginIsolationHeaders = {
 };
 
 export default defineConfig({
+  customLogger: quietLogger,
   plugins: [solid(), rifySwPlugin()],
   server: {
     port: 5273,

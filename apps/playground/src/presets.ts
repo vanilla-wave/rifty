@@ -18,6 +18,8 @@
  *    The two "Live preview" presets cover that path honestly instead.
  */
 
+import type { IconName } from './components/icons.tsx';
+
 export type PresetMode = 'repl' | 'dev' | 'real-vite';
 
 export interface Preset {
@@ -27,10 +29,21 @@ export interface Preset {
   readonly label: string;
   /** Grouping header in the gallery. */
   readonly category: string;
-  /** Single glyph/emoji shown in the gallery tile. */
-  readonly icon: string;
+  /**
+   * Semantic icon key (not a raw glyph) rendered as a monochrome inline SVG by
+   * the gallery — so the switcher stays consistent and scales to many
+   * templates. Add a new key in {@link ./components/icons.tsx} if none fits.
+   */
+  readonly icon: IconName;
   /** Mode the preset runs in; selecting it transitions the mode machine. */
   readonly mode: PresetMode;
+  /**
+   * For `real-vite` presets: which registered template (ADR-0078) to run. Lets
+   * the gallery scale to more templates without new header surgery — the mode
+   * machine resolves it via {@link ./templates/registry.ts}. Omitted ⇒ the
+   * machine's default template (Vite).
+   */
+  readonly templateId?: string;
   /** One-line description shown under the label. */
   readonly blurb: string;
   /** Optional pill (e.g. "live", "~20s") shown next to the label. */
@@ -135,16 +148,17 @@ document.body.style.color = '#c4f042';
 document.body.style.font = '600 22px/1.4 ui-monospace, monospace';
 `;
 
-const REAL_VITE_SOURCE = `// Real Vite mode installs the ACTUAL vite@^5 from npm into a worker-local
-// node_modules, boots a real Vite dev server, and previews it live.
-// First run takes ~20s (npm install + boot); later runs reuse the cache.
+const REAL_VITE_SOURCE = `// Real npm project mode installs a real npm package set into a worker-local
+// node_modules, boots its actual dev server, and previews it live. The default
+// template is Vite (vite@^5); first run takes ~20s (npm install + boot), later
+// runs reuse the cache.
 //
-// This is your app entry, served by Vite at /src/main.js.
+// This is your app entry, served by the dev server at /src/main.js.
 
 document.getElementById('app').innerHTML =
-  '<h1>Real Vite, in your browser.</h1>' +
-  '<p>This page is served by an actual Vite dev server — installed from npm,' +
-  ' running in a Worker, previewed through the rifty SW bridge.</p>';
+  '<h1>A real npm project, in your browser.</h1>' +
+  '<p>This page is served by an actual dev server — its packages installed from' +
+  ' npm, running in a Worker, previewed through the rifty SW bridge.</p>';
 
 document.body.style.margin = '0';
 document.body.style.padding = '3rem';
@@ -157,7 +171,7 @@ const WELCOME_PRESET: Preset = {
   id: 'welcome',
   label: 'Welcome',
   category: 'REPL',
-  icon: '▶',
+  icon: 'play',
   mode: 'repl',
   blurb: 'Run JavaScript instantly in a browser-side Node-like REPL.',
   source: WELCOME_SOURCE,
@@ -169,7 +183,7 @@ export const PRESETS: readonly Preset[] = [
     id: 'event-loop',
     label: 'Event loop order',
     category: 'REPL',
-    icon: '🔄',
+    icon: 'repeat',
     mode: 'repl',
     blurb: 'Watch sync, microtasks and timers interleave exactly like Node.',
     source: EVENT_LOOP_SOURCE,
@@ -178,7 +192,7 @@ export const PRESETS: readonly Preset[] = [
     id: 'node-core',
     label: 'Node core modules',
     category: 'Node core',
-    icon: '📦',
+    icon: 'package',
     mode: 'repl',
     blurb: "require('node:path') and friends — real built-ins, no install.",
     source: NODE_CORE_SOURCE,
@@ -187,7 +201,7 @@ export const PRESETS: readonly Preset[] = [
     id: 'filesystem',
     label: 'Virtual filesystem',
     category: 'Filesystem',
-    icon: '🗂️',
+    icon: 'filesystem',
     mode: 'repl',
     blurb: 'Write, read and stat files with the real fs API on an in-browser VFS.',
     source: FS_SOURCE,
@@ -196,7 +210,7 @@ export const PRESETS: readonly Preset[] = [
     id: 'dev-hmr',
     label: 'Dev server + HMR',
     category: 'Live preview',
-    icon: '⚡',
+    icon: 'zap',
     mode: 'dev',
     blurb: 'A Vite-like dev server with live reload, previewed in an iframe.',
     tag: { text: 'live', tone: 'live' },
@@ -204,11 +218,12 @@ export const PRESETS: readonly Preset[] = [
   },
   {
     id: 'real-vite',
-    label: 'Real Vite + npm',
+    label: 'Real npm project',
     category: 'Live preview',
-    icon: '🚀',
+    icon: 'rocket',
     mode: 'real-vite',
-    blurb: 'Installs real Vite from npm and runs an actual dev server.',
+    templateId: 'vite',
+    blurb: 'Installs a real npm project (Vite by default) and runs its dev server.',
     tag: { text: '~20s', tone: 'slow' },
     source: REAL_VITE_SOURCE,
   },

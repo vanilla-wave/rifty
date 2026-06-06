@@ -101,6 +101,24 @@ export function matchPreviewUrl(pathname: string): { port: number; path: string 
 }
 
 /**
+ * Did this fetch originate *inside* the preview iframe (ADR-0074)? True for the
+ * document **navigation** (`mode === 'navigate'` — `event.clientId` is empty,
+ * `event.resultingClientId` is the iframe's own about-to-exist client) and for
+ * every **subresource** (a non-empty `destination` like `'script'`/`'style'` —
+ * `event.clientId` is the iframe client). Both must route to the controlling
+ * window that owns the port, since the iframe's own client runs no
+ * `setupPreviewBridge`. False for the page's own bare `fetch('/preview/…')`
+ * warm-up (mode `'cors'`/`'no-cors'`, empty `destination`), which keeps the
+ * ADR-0031 `resultingClientId || clientId` order.
+ */
+export function isPreviewFrameRequest(request: {
+  mode: string;
+  destination: string;
+}): boolean {
+  return request.mode === 'navigate' || request.destination !== '';
+}
+
+/**
  * Default timeout (ms) for the `rifty:preview:ready` handshake. If the main
  * thread does not signal readiness within this window of a preview fetch
  * arriving, the SW responds with a 503 instead of waiting forever.
@@ -172,10 +190,15 @@ export function createPreviewInterceptor(
     const url = new URL(event.request.url);
     const match = matchPreviewUrl(url.pathname);
     if (!match) return;
-    // ADR-0031 — prefer `event.resultingClientId` (for navigations that create
-    // a new client) then `event.clientId`, so multi-window pages route to the
-    // correct owner instead of always picking the first match.
-    const clientId = event.resultingClientId || event.clientId || null;
+    // ADR-0074 — a request originating inside the preview iframe must resolve
+    // to the controlling window (see {@link isPreviewFrameRequest}); for those
+    // we drop the request's own ids and let the resolver fall back to the first
+    // controlled window (the bridge owner). The page's own bare
+    // `fetch('/preview/…')` warm-up keeps ADR-0031's `resultingClientId ||
+    // clientId` order (multi-window routing unchanged).
+    const clientId = isPreviewFrameRequest(event.request)
+      ? null
+      : event.resultingClientId || event.clientId || null;
     event.respondWith(
       routePreview(
         scope,

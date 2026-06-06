@@ -13,14 +13,20 @@
  *      succeeds — see the known limitation below — so we report `live` only
  *      when the document truly loaded, and `unavailable` otherwise.
  *
- * Known limitation: under a cross-origin-isolated page (COEP credentialless),
- * the SW resolves a preview owner from `resultingClientId` (ADR-0031), which
- * for an iframe *navigation* is the iframe's own future client — not the
- * main-thread bridge that owns the port. The navigation can then abort
- * (`net::ERR_ABORTED`) even though a `fetch()` from the page succeeds. Routing
- * sub-frame navigations to the controlling window is SW-side work tracked
- * separately (touches ADR-0031/0046); this panel surfaces the state honestly
- * rather than papering over it.
+ * Resolved by ADR-0074: under a cross-origin-isolated page (COEP
+ * credentialless) the SW now routes every request that originates inside the
+ * preview iframe — the navigation and its subresources — to the controlling
+ * window that owns the port. So `/preview/<port>/` commits in-frame and the
+ * app's JS boots. The two-step poll-then-check-commit below is kept as an
+ * honest safety net for a genuinely-down server (the route stays unreachable,
+ * the frame stays on `about:blank`, and we report `unavailable`).
+ *
+ * Warm-up budget (ADR-0077): Real Vite installs from npm before it can serve,
+ * so the route can stay unreachable for ~20–30 s. Each warm-up probe uses a
+ * short per-fetch `AbortController` timeout (so a 30 s cross-realm bridge-
+ * timeout while the worker isn't serving yet can't eat the whole budget) and
+ * the overall deadline is generous enough to span an npm install — otherwise
+ * the panel gave up before Vite came up and showed a false `unavailable`.
  *
  * Reload (manual and HMR) uses `frame.contentWindow.location.reload()` — the
  * same mechanism ADR-0017's HMR client uses — so there's one refresh path.
@@ -29,8 +35,13 @@ import { type Accessor, createEffect, createSignal, onCleanup } from 'solid-js';
 
 type Phase = 'starting' | 'live' | 'error';
 
-const WARMUP_TIMEOUT_MS = 25_000;
+// Generous enough to span a Real Vite npm install + boot (ADR-0076); a
+// genuinely-down dev server still resolves to `unavailable`, just later.
+const WARMUP_TIMEOUT_MS = 90_000;
 const WARMUP_INTERVAL_MS = 400;
+// Cap a single probe so a 30 s cross-realm preview-bridge timeout (worker not
+// serving yet) doesn't block the poll loop — abort and re-probe instead.
+const WARMUP_FETCH_TIMEOUT_MS = 4_000;
 const COMMIT_TIMEOUT_MS = 4_000;
 const COMMIT_INTERVAL_MS = 200;
 
@@ -72,12 +83,16 @@ export function PreviewPanel(props: { initialPort?: number }) {
     void (async () => {
       const deadline = Date.now() + WARMUP_TIMEOUT_MS;
       while (alive && Date.now() < deadline) {
+        const ac = new AbortController();
+        const cap = setTimeout(() => ac.abort(), WARMUP_FETCH_TIMEOUT_MS);
         try {
-          const res = await fetch(url, { method: 'GET', cache: 'no-store' });
+          const res = await fetch(url, { method: 'GET', cache: 'no-store', signal: ac.signal });
           await res.body?.cancel().catch(() => {});
           if (res.ok) break;
         } catch {
-          // server/SW not ready yet — keep polling
+          // server/SW not ready yet, or the probe was aborted — keep polling
+        } finally {
+          clearTimeout(cap);
         }
         await new Promise((r) => setTimeout(r, WARMUP_INTERVAL_MS));
       }

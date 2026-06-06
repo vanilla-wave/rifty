@@ -1,7 +1,7 @@
 import { RegistryClient } from '@riftydev/npm-client';
 import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
 import { syncMirror } from '@riftydev/vfs';
-import { Show, createSignal, onCleanup, onMount } from 'solid-js';
+import { Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import { useShellSession } from './adapters/shell-adapter.ts';
 import { useLayout } from './adapters/useLayout.ts';
 import { useMode } from './adapters/useMode.ts';
@@ -17,10 +17,15 @@ import { PreviewPanel } from './components/PreviewPanel.tsx';
 import { Splitter } from './components/Splitter.tsx';
 import { StatusBar } from './components/StatusBar.tsx';
 import { writeText } from './glue/fs-ops.ts';
+import { NodeModulesCache } from './glue/node-modules-cache.ts';
+import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
 import { createNpmShellCommand } from './glue/npm-shell-command.ts';
 import { proxiedRegistryFetch } from './glue/registry-fetch.ts';
+import { SnapshotFs } from './glue/snapshot-fs.ts';
 import { SyncMirrorVfs } from './glue/sync-mirror-vfs.ts';
+import { subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
 import { DEFAULT_PRESET, type Preset } from './presets.ts';
+import { defaultProjectSpec } from './templates/registry.ts';
 
 const WORKSPACE = '/workspace';
 
@@ -49,6 +54,12 @@ export function App(props: AppProps) {
   // active mirror is stable after `initBackend()` ran during bootstrap.
   const vfs = syncMirror();
 
+  // Read-only mirror of the real-vite worker's project tree (ADR-0076). The
+  // worker's VFS is a separate realm the page can't read directly; it publishes
+  // its tree (sans node_modules) over a BroadcastChannel which we apply here so
+  // the explorer reflects the Vite project in `real-vite` mode.
+  const snapshotFs = new SnapshotFs(WORKSPACE);
+
   let editorApi: EditorApi | undefined;
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   function flashError(message: string): void {
@@ -68,16 +79,77 @@ export function App(props: AppProps) {
     }),
   );
 
+  // The active real-project template (ADR-0078). Vite is the default; the chip
+  // and the mode machine read its generic display name instead of "Real Vite".
+  const template = defaultProjectSpec();
+
   // Mode state machine — owns `repl | dev | real-vite`, the inner dev /
   // real-vite handles, and the editor's program source.
   const machine = useMode({
     sources: { repl: DEFAULT_PRESET.source, dev: DEFAULT_PRESET.source },
+    template,
     log: (chunk, stream) => runtime.write(chunk, stream),
   });
 
   if (props.boot.swError) {
     runtime.write(`SW registration failed: ${props.boot.swError}\n`, 'stderr');
   }
+
+  // Whether the worker's project has an installed node_modules (ADR-0080) — the
+  // snapshot excludes its contents but flags its presence, gating the lazy row.
+  const [nodeModulesPresent, setNodeModulesPresent] = createSignal(false);
+
+  // Subscribe to the worker's project-tree snapshots while in `real-vite` mode
+  // (ADR-0076). The explorer's poll picks up `snapshotFs` mutations; leaving the
+  // mode clears the view so a stale tree never lingers.
+  createEffect(() => {
+    if (machine.mode() !== 'real-vite') {
+      snapshotFs.clear();
+      setNodeModulesPresent(false);
+      return;
+    }
+    const unsubscribe = subscribeVfsSnapshot(machine.realVitePort(), (frame) => {
+      snapshotFs.update(frame);
+      setNodeModulesPresent(frame.nodeModulesPresent);
+    });
+    onCleanup(unsubscribe);
+  });
+
+  // Lazy node_modules read bridge + cache (ADR-0080), live only in `real-vite`.
+  // A fresh cache per mode-entry (the effect re-runs on the port signal) so no
+  // stale node_modules view bleeds across an off→on cycle.
+  const [nmCache, setNmCache] = createSignal<NodeModulesCache | null>(null);
+  createEffect(() => {
+    if (machine.mode() !== 'real-vite') {
+      setNmCache(null);
+      return;
+    }
+    const cache = new NodeModulesCache(bridgeNodeModulesReads(machine.realVitePort()));
+    setNmCache(cache);
+    onCleanup(() => {
+      cache.dispose();
+      setNmCache(null);
+    });
+  });
+
+  /** Prop bundle for the real-vite explorer's lazy node_modules branch. */
+  const nodeModulesProp = ():
+    | { cache: NodeModulesCache; present: boolean; root: string }
+    | undefined => {
+    const cache = nmCache();
+    return cache ? { cache, present: nodeModulesPresent(), root: WORKSPACE } : undefined;
+  };
+  /** Async node_modules file reader for the editor (real-vite only). */
+  const readNodeModulesFile = ():
+    | ((path: string) => Promise<{ size: number; content: Uint8Array | null }>)
+    | undefined => {
+    const cache = nmCache();
+    return cache ? (path: string) => cache.readFile(path) : undefined;
+  };
+
+  // The explorer + editor read the worker mirror in `real-vite`, the writable
+  // page mirror otherwise.
+  const activeVfs = () => (machine.mode() === 'real-vite' ? snapshotFs : vfs);
 
   onMount(() => {
     // Seed the workspace so the explorer is immediately useful (idempotent).
@@ -131,7 +203,7 @@ export function App(props: AppProps) {
     machine.mode() === 'dev'
       ? 'Dev · port 3000'
       : machine.mode() === 'real-vite'
-        ? `Real Vite · port ${machine.realVitePort()}`
+        ? `${template.displayName} · port ${machine.realVitePort()}`
         : 'REPL · Worker';
 
   const programTitle = (): string => (machine.mode() === 'repl' ? 'main.js' : 'src/main.js');
@@ -224,14 +296,33 @@ export function App(props: AppProps) {
 
           <aside class="rf-sidebar">
             <Show when={layout.view() === 'explorer'}>
-              <FileExplorer
-                vfs={vfs}
-                root={WORKSPACE}
-                visible={layout.view() === 'explorer' && !layout.sidebarCollapsed()}
-                activePath={activeFilePath()}
-                onOpenFile={(path) => editorApi?.openFile(path)}
-                onError={flashError}
-              />
+              {/* real-vite swaps the explorer's backing store to the worker
+                  mirror; the component captures `vfs` once, so the mode flip
+                  must remount it (plain Show/fallback does exactly that). */}
+              <Show
+                when={machine.mode() === 'real-vite'}
+                fallback={
+                  <FileExplorer
+                    vfs={vfs}
+                    root={WORKSPACE}
+                    visible={layout.view() === 'explorer' && !layout.sidebarCollapsed()}
+                    activePath={activeFilePath()}
+                    onOpenFile={(path) => editorApi?.openFile(path)}
+                    onError={flashError}
+                  />
+                }
+              >
+                <FileExplorer
+                  vfs={snapshotFs}
+                  root={WORKSPACE}
+                  readOnly
+                  nodeModules={nodeModulesProp()}
+                  visible={layout.view() === 'explorer' && !layout.sidebarCollapsed()}
+                  activePath={activeFilePath()}
+                  onOpenFile={(path) => editorApi?.openFile(path)}
+                  onError={flashError}
+                />
+              </Show>
             </Show>
             <Show when={layout.view() === 'presets'}>
               <PresetGallery activeId={activePreset()} onSelect={onSelectPreset} />
@@ -257,7 +348,7 @@ export function App(props: AppProps) {
                 programValue={machine.source}
                 programTitle={programTitle}
                 onProgramChange={(v) => machine.setSource(v)}
-                vfs={vfs}
+                vfs={activeVfs()}
                 registerApi={(api) => {
                   editorApi = api;
                 }}
@@ -269,6 +360,7 @@ export function App(props: AppProps) {
                 onFileWritten={() => {
                   /* explorer polls; nothing else needed */
                 }}
+                readNodeModulesFile={readNodeModulesFile()}
                 onError={flashError}
               />
 
