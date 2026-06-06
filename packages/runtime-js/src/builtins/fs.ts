@@ -244,9 +244,9 @@ export function rmdirSync(p: string, opts?: { recursive?: boolean }): void {
 }
 
 export function renameSync(src: string, dst: string): void {
-  const data = syncMirror().readFileBytesSync(resolvePath(src));
-  syncMirror().writeFileSync(resolvePath(dst), data);
-  syncMirror().rmSync(resolvePath(src), {});
+  // ADR-0083: native VFS rename — atomic-where-possible and mtime-preserving
+  // (the prior read+write+rm restamped mtime and copied subtrees).
+  syncMirror().renameSync(resolvePath(src), resolvePath(dst));
 }
 
 // VFS has no symlinks until M12, so `lstat` === `stat` and `realpath` is just
@@ -283,8 +283,13 @@ export const realpathSync: ((p: string) => string) & { native: (p: string) => st
   Object.assign(_realpathSyncImpl, { native: _realpathSyncImpl });
 
 export function copyFileSync(src: string, dst: string): void {
-  const data = syncMirror().readFileBytesSync(resolvePath(src));
-  syncMirror().writeFileSync(resolvePath(dst), data);
+  // ADR-0083: native VFS copy (single regular file; dst mtime=now).
+  syncMirror().copyFileSync(resolvePath(src), resolvePath(dst));
+}
+
+export function cpSync(src: string, dst: string, opts?: { recursive?: boolean }): void {
+  // ADR-0083: `node:fs.cpSync` — recursive-aware, best-effort fail-fast.
+  syncMirror().cpSync(resolvePath(src), resolvePath(dst), { recursive: opts?.recursive });
 }
 
 /**
@@ -360,6 +365,9 @@ export const promises = {
   },
   async rename(src: string, dst: string): Promise<void> {
     renameSync(src, dst);
+  },
+  async cp(src: string, dst: string, opts?: { recursive?: boolean }): Promise<void> {
+    cpSync(src, dst, opts);
   },
   async utimes(p: string, atime: number | Date, mtime: number | Date): Promise<void> {
     utimesSync(p, atime, mtime);
@@ -525,6 +533,7 @@ const fs = {
   rmdirSync,
   renameSync,
   copyFileSync,
+  cpSync,
   utimesSync,
   lstatSync,
   readlinkSync,
