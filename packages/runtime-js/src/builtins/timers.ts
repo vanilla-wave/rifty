@@ -7,7 +7,27 @@
 
 type ImmediateHandle = { readonly id: number };
 
-const immediateQueue: Array<{ id: number; fn: (...args: unknown[]) => void; args: unknown[] }> = [];
+// ADR-0085: setImmediate queue rep + check-phase drain-order contract.
+// `./builtins/timers` is a PUBLIC cross-package subpath export (ADR-0018), so
+// the drain order is a contract, not an internal detail.
+//
+// Rep: a Map<id, item> keyed by the monotonic id. ids are positive integers, so
+// a Map iterates them in numeric-ascending = insertion order → FIFO drain for
+// free. clearImmediate is O(1) (`delete`), replacing the old O(n) findIndex+splice.
+//
+// Scheduling is UNCHANGED from the array impl: one MessageChannel message per
+// scheduled immediate (NOT setTimeout(0)). That preserves two emergent
+// guarantees the array+single-shift impl had for free — and which the batched
+// drain would otherwise BREAK:
+//   (1) nested setImmediate defers to the NEXT check phase — re-established by
+//       the TAIL SNAPSHOT: each drain captures `nextImmediateId` on entry and
+//       runs only ids strictly below it; an immediate scheduled DURING the drain
+//       gets a higher id and is left for its own (later) message = next phase.
+//   (2) setImmediate beats setTimeout(0) — the MessageChannel task dispatches
+//       ahead of a setTimeout(0) task; keeping MessageChannel (not setTimeout)
+//       preserves it. The no-MessageChannel fallback uses setTimeout(0) for both
+//       and is realm-specific (jsdom/node test envs without a check phase).
+const immediates = new Map<number, { fn: (...args: unknown[]) => void; args: unknown[] }>();
 let nextImmediateId = 1;
 
 const channel: MessageChannel | null =
@@ -15,8 +35,13 @@ const channel: MessageChannel | null =
 
 if (channel) {
   channel.port1.onmessage = () => {
-    const item = immediateQueue.shift();
-    if (item) {
+    // Tail snapshot: only items queued BEFORE this drain began are eligible. An
+    // immediate scheduled by a callback below gets id >= tail and is serviced by
+    // its own message (next check phase), never drained in this same phase.
+    const tail = nextImmediateId;
+    for (const [id, item] of immediates) {
+      if (id >= tail) break; // Map iterates ascending — the rest are nested.
+      immediates.delete(id);
       try {
         item.fn(...item.args);
       } catch (err) {
@@ -31,22 +56,21 @@ export function setImmediate(
   ...args: unknown[]
 ): ImmediateHandle {
   const id = nextImmediateId++;
-  immediateQueue.push({ id, fn, args });
+  immediates.set(id, { fn, args });
   if (channel) channel.port2.postMessage(null);
   else
     setTimeout(() => {
-      const idx = immediateQueue.findIndex((q) => q.id === id);
-      if (idx === -1) return;
-      const [item] = immediateQueue.splice(idx, 1);
-      item?.fn(...item.args);
+      const item = immediates.get(id);
+      if (!item) return; // cleared before its timer fired
+      immediates.delete(id);
+      item.fn(...item.args);
     }, 0);
   return { id };
 }
 
 export function clearImmediate(handle: ImmediateHandle | undefined): void {
   if (!handle) return;
-  const idx = immediateQueue.findIndex((q) => q.id === handle.id);
-  if (idx !== -1) immediateQueue.splice(idx, 1);
+  immediates.delete(handle.id);
 }
 
 export const timers = {

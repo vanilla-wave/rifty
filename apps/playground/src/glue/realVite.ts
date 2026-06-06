@@ -126,7 +126,9 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
   const previewBridge = bridgeCrossRealmPreview(port);
   registerPort(port, previewBridge);
 
-  const tearSwBridge = mountPlaygroundPreviewBridge();
+  // ADR-0086: pass the typed handle so SW requests take the struct fast-path
+  // (skips the page→worker Request rebuild + arrayBuffer drain).
+  const tearSwBridge = mountPlaygroundPreviewBridge(previewBridge);
 
   log(`[real-vite] page-side preview-port bridge ready (port ${port})\n`);
 

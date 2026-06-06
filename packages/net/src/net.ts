@@ -122,7 +122,8 @@ export class Server extends EventEmitter {
       const headers: string[] = [];
       for (const [k, v] of request.headers) headers.push(`${k}: ${v}`);
       const body = new Uint8Array(await request.arrayBuffer());
-      const head = `${request.method} ${new URL(request.url).pathname + new URL(request.url).search} HTTP/1.1\r\n${headers.join('\r\n')}\r\n\r\n`;
+      const u = new URL(request.url);
+      const head = `${request.method} ${u.pathname + u.search} HTTP/1.1\r\n${headers.join('\r\n')}\r\n\r\n`;
       socket.push(UTF8_ENCODER.encode(head));
       if (body.byteLength > 0) socket.push(body);
       // Resolve from a 'response' event, else synthesise a Response from socket writes.

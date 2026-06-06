@@ -9,6 +9,7 @@ import {
   riftyProcess,
 } from '../../../packages/runtime-js/src/builtins/process.ts';
 import {
+  clearImmediate,
   installTimerGlobals,
   setImmediate,
 } from '../../../packages/runtime-js/src/builtins/timers.ts';
@@ -51,6 +52,48 @@ describe('event loop', () => {
     order.push('sync');
     await new Promise((r) => setTimeout(r, 10));
     expect(order).toEqual(['sync', 'immediate']);
+  });
+
+  // #28 (perf-audit 2026-06-05, ADR-0085): the Map + head-cursor + tail-snapshot
+  // drain must preserve the emergent check-phase semantics — a nested setImmediate
+  // defers to the NEXT check phase, and clearImmediate removes a still-queued item.
+  it('nested setImmediate defers to the next check phase (tail-snapshot)', async () => {
+    const order: string[] = [];
+    setImmediate(() => {
+      order.push('A');
+      setImmediate(() => order.push('B-nested'));
+      order.push('A-end');
+    });
+    setImmediate(() => order.push('C'));
+    await new Promise((r) => setTimeout(r, 20));
+    // Both first-round immediates (A, C) run before the nested one; a greedy
+    // same-phase batch drain would yield ['A','A-end','B-nested','C'].
+    expect(order).toEqual(['A', 'A-end', 'C', 'B-nested']);
+  });
+
+  it('clearImmediate mid-drain removes the still-queued item (Map.delete)', async () => {
+    const order: string[] = [];
+    // A is queued first; its callback clears B (queued AFTER A, same round) before
+    // the FIFO drain reaches B. A holder defers the handle read past assignment.
+    const ref: { b?: ReturnType<typeof setImmediate> } = {};
+    setImmediate(() => {
+      order.push('A');
+      clearImmediate(ref.b);
+    });
+    ref.b = setImmediate(() => order.push('B'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(order).toEqual(['A']); // B cleared before it fired
+  });
+
+  it('drains a large setImmediate burst FIFO with a mid-burst clear', async () => {
+    const order: number[] = [];
+    const handles: ReturnType<typeof setImmediate>[] = [];
+    const N = 100;
+    for (let i = 0; i < N; i++) handles.push(setImmediate(() => order.push(i)));
+    clearImmediate(handles[50]); // remove index 50 before the drain
+    await new Promise((r) => setTimeout(r, 20));
+    const expected = Array.from({ length: N }, (_, i) => i).filter((i) => i !== 50);
+    expect(order).toEqual(expected);
   });
 
   // #27 (perf-audit 2026-06-05): drainNextTicks uses a head cursor (O(n)) instead
