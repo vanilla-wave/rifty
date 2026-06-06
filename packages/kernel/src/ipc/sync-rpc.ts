@@ -1,28 +1,43 @@
 /**
- * Sync RPC framing: JSON-over-UTF-8 wire format on top of {@link SabRing}
- * (ADR-0011 phase 3, version field per ADR-0032).
+ * Sync RPC framing on top of {@link SabRing} (ADR-0011 phase 3, version field
+ * per ADR-0032, v2 binary frame per ADR-0084 #23).
  *
- * Each frame carries a `u32` protocol version stamped into the SAB header by
- * `SabRing.writeRequest`/`writeReply`, validated on EVERY frame before
- * decoding so a future binary-frame extension (A-021) can't corrupt a v1
- * reader. (SW side splits frame/routing versions per ADR-0016/0031/0040; here
- * one constant suffices — single contract surface.) No cross-version compat:
- * a mismatch surfaces as {@link SyncRpcProtocolMismatchError}; the dispatcher
- * echoes the caller's version in the error reply so the caller can decode it.
+ * Every frame body starts with a 1-byte discriminator (ADR-0084 #23):
+ *   - {@link FRAME_JSON} (0x00) — JSON-over-UTF-8 body (the v1 shape: requests,
+ *     `{ok,value|error}` replies). Used for everything except binary `ok` values.
+ *   - {@link FRAME_BINARY} (0x01) — raw bytes body (`execSync` stdout carried
+ *     verbatim, no TextDecoder). Decodes straight to a `Uint8Array`.
  *
- * Wire format is JSON-only by design (easy to inspect); binary frames (raw
- * stdout piggy-backed on the reply) deferred to A-021 with its own frame
- * discriminator + version bump. Errors travel as a plain `{name, message,
- * code?}` triple to stay JSON-serialisable; the receiver reconstructs an
- * `Error` (preserving `code`).
+ * Each frame also carries a `u32` protocol version stamped into the SAB header
+ * by `SabRing.writeRequest`/`writeReply`, validated on EVERY frame before
+ * decoding — the in-band guard that stops a v1 reader feeding a 0x01 frame to
+ * `JSON.parse`. (SW side splits frame/routing versions per ADR-0016/0031/0040;
+ * here one constant suffices — single contract surface.) No cross-version
+ * compat: a mismatch surfaces as {@link SyncRpcProtocolMismatchError}; the
+ * dispatcher echoes the caller's version in the error reply so the caller can
+ * decode it.
+ *
+ * Errors ALWAYS travel as a JSON frame ({name, message, code?} triple) so the
+ * {@link SyncRpcReply} error contract and ADR-0032's versioned-error recovery
+ * stay intact; only `ok=true` byte values use the binary frame.
  */
 
 /**
  * Wire-format version stamped into the SAB header on every frame (ADR-0032).
  * Bump on any change to header layout, JSON frame shape, or error contract;
  * readers refuse to decode frames whose version differs from their own.
+ *
+ * v2 (ADR-0084 #23, pre-authorised by ADR-0032 §Consequences): adds the 1-byte
+ * JSON/BINARY frame discriminator. The two peers (client + dispatcher) live in
+ * `@riftydev/kernel` and recompile atomically — a recompile-everything-at-once
+ * moment by design (same model as ADR-0016).
  */
-export const SYNC_RPC_PROTOCOL_VERSION = 1 as const;
+export const SYNC_RPC_PROTOCOL_VERSION = 2 as const;
+
+/** Frame discriminator: JSON-over-UTF-8 body (ADR-0084 #23). */
+export const FRAME_JSON = 0x00 as const;
+/** Frame discriminator: raw bytes body (ADR-0084 #23). */
+export const FRAME_BINARY = 0x01 as const;
 
 /**
  * Thrown when a SAB frame's version doesn't match the reader's
@@ -54,7 +69,8 @@ export interface SyncRpcRequest {
 /**
  * Reply frame written by {@link SyncRpcDispatcher}, consumed by
  * {@link SyncRpcClient}. `ok=true` carries the result in `value`; `ok=false`
- * carries the failure in `error`.
+ * carries the failure in `error`. A `Uint8Array` value rides a binary frame
+ * (ADR-0084 #23) and decodes back to a `Uint8Array` byte-exact.
  */
 export interface SyncRpcReply {
   readonly ok: boolean;
@@ -69,8 +85,18 @@ export interface SyncRpcReply {
 const UTF8_ENCODER = new TextEncoder();
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
 
+/** Prefix `body` with the 1-byte frame discriminator (ADR-0084 #23). */
+function frame(kind: typeof FRAME_JSON | typeof FRAME_BINARY, body: Uint8Array): Uint8Array {
+  const out = new Uint8Array(body.byteLength + 1);
+  out[0] = kind;
+  out.set(body, 1);
+  return out;
+}
+
 /**
- * Serialise a {@link SyncRpcRequest} for the SAB ring's request slot.
+ * Serialise a {@link SyncRpcRequest} for the SAB ring's request slot. Always a
+ * JSON frame — request payloads are small JSON (ADR-0084 #23 keeps binary on
+ * the reply side only).
  * @throws if the request isn't JSON-encodable (cyclic payload, BigInt) —
  * callers should validate payloads first.
  */
@@ -79,15 +105,29 @@ export function encodeRequest(req: SyncRpcRequest): Uint8Array {
   if (typeof json !== 'string') {
     throw new TypeError(`encodeRequest: payload is not JSON-serialisable (method=${req.method})`);
   }
-  return UTF8_ENCODER.encode(json);
+  return frame(FRAME_JSON, UTF8_ENCODER.encode(json));
 }
 
 /**
- * Deserialise reply-slot bytes into a {@link SyncRpcReply}.
- * @throws on UTF-8/JSON parse failure — indicates a protocol bug, surface loudly.
+ * Deserialise reply-slot bytes into a {@link SyncRpcReply}. Branches on the
+ * 1-byte discriminator (ADR-0084 #23): a 0x01 frame yields `{ok:true, value:
+ * Uint8Array}` with no UTF-8/JSON round-trip (the U+FFFD-corruption fix).
+ * @throws on UTF-8/JSON parse failure or an unknown discriminator — a protocol
+ * bug, surface loudly. (A v1 reader can't reach this: it rejects the v2 frame
+ * on the version guard first.)
  */
 export function decodeReply(bytes: Uint8Array): SyncRpcReply {
-  const text = UTF8_DECODER.decode(bytes);
+  const kind = bytes[0];
+  const body = bytes.subarray(1);
+  if (kind === FRAME_BINARY) {
+    // Copy out of the (possibly SAB-aliased, ADR-0084 #18) view so the value
+    // survives the next slot write.
+    return { ok: true, value: body.slice() };
+  }
+  if (kind !== FRAME_JSON) {
+    throw new TypeError(`decodeReply: unknown frame discriminator 0x${(kind ?? -1).toString(16)}`);
+  }
+  const text = UTF8_DECODER.decode(body);
   const parsed = JSON.parse(text) as unknown;
   if (!isReply(parsed)) {
     throw new TypeError(`decodeReply: malformed reply frame: ${text}`);
@@ -97,10 +137,16 @@ export function decodeReply(bytes: Uint8Array): SyncRpcReply {
 
 /**
  * Mirror of {@link decodeReply} for the dispatcher side — reads the request
- * bytes the client wrote into the SAB request slot.
+ * bytes the client wrote into the SAB request slot. Requests are JSON-only.
  */
 export function decodeRequest(bytes: Uint8Array): SyncRpcRequest {
-  const text = UTF8_DECODER.decode(bytes);
+  const kind = bytes[0];
+  if (kind !== FRAME_JSON) {
+    throw new TypeError(
+      `decodeRequest: expected JSON frame, got discriminator 0x${(kind ?? -1).toString(16)}`,
+    );
+  }
+  const text = UTF8_DECODER.decode(bytes.subarray(1));
   const parsed = JSON.parse(text) as unknown;
   if (!isRequest(parsed)) {
     throw new TypeError(`decodeRequest: malformed request frame: ${text}`);
@@ -108,13 +154,22 @@ export function decodeRequest(bytes: Uint8Array): SyncRpcRequest {
   return parsed;
 }
 
-/** Mirror of {@link encodeRequest} for the dispatcher side. */
+/** Mirror of {@link encodeRequest} for the dispatcher side. JSON frame. */
 export function encodeReply(rep: SyncRpcReply): Uint8Array {
   const json = JSON.stringify(rep);
   if (typeof json !== 'string') {
     throw new TypeError('encodeReply: reply is not JSON-serialisable');
   }
-  return UTF8_ENCODER.encode(json);
+  return frame(FRAME_JSON, UTF8_ENCODER.encode(json));
+}
+
+/**
+ * Encode an `ok=true` reply whose value is raw bytes (ADR-0084 #23). The bytes
+ * travel verbatim behind the {@link FRAME_BINARY} discriminator — no
+ * TextDecoder, so non-UTF-8 `execSync` stdout is byte-exact end to end.
+ */
+export function encodeBinaryReply(value: Uint8Array): Uint8Array {
+  return frame(FRAME_BINARY, value);
 }
 
 function isRequest(v: unknown): v is SyncRpcRequest {

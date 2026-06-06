@@ -4,7 +4,9 @@
  * must dispatch `'execSync'` requests through the runtime-js code path:
  *   - reject anything that isn't `node <script>` with `EUNSUPPORTED`.
  *   - reject missing scripts with `ENOENT` (via the resolver returning `null`).
- *   - on a healthy run, return the captured stdout as a UTF-8 string.
+ *   - on a healthy run, return the captured stdout as raw bytes (ADR-0084 #23 —
+ *     a `Uint8Array`, byte-exact; the old UTF-8-string contract mangled
+ *     non-UTF-8 stdout to U+FFFD).
  *   - on a child failure, throw an `Error` with `code = 'ECHILDFAILED'`.
  *
  * The tests substitute the recursive runner so no real Worker is spawned —
@@ -77,7 +79,13 @@ describe('installRuntimeJsExecSyncHandler — runtime-js execSync handler (ADR-0
     });
   });
 
-  it('runs the recursive runner and returns its stdout as UTF-8', async () => {
+  it('runs the recursive runner and returns its stdout as raw bytes (ADR-0084 #23)', async () => {
+    // ADR-0084 #23 contract change: the handler now returns the child's stdout
+    // as a raw Uint8Array (not a decoded UTF-8 string), so the dispatcher can
+    // carry it byte-exact on a v2 binary frame — the old string path mangled
+    // non-UTF-8 stdout to U+FFFD. The byte-exact behaviour is independently
+    // proven against real Node by `tests/conformance/builtins/child_process.test.ts`
+    // and the `binary-stdout-exec` hex parity case.
     const enc = new TextEncoder();
     const handler = installAndCapture(
       (path) => (path === '/run.js' ? enc.encode('void 0;') : null),
@@ -93,7 +101,8 @@ describe('installRuntimeJsExecSyncHandler — runtime-js execSync handler (ADR-0
       },
     );
     const result = await handler({ cmd: 'node /run.js' });
-    expect(result).toBe('hello-from-child');
+    expect(result).toBeInstanceOf(Uint8Array);
+    expect(new TextDecoder().decode(result as Uint8Array)).toBe('hello-from-child');
   });
 
   it('propagates child failure as ECHILDFAILED with the exit code', async () => {

@@ -34,7 +34,7 @@
  *     follow-ups.
  */
 
-import { SabRing } from './ipc/sab-ring.ts';
+import { DEFAULT_PAYLOAD_CAPACITY, SabRing } from './ipc/sab-ring.ts';
 import { SyncRpcClient } from './ipc/sync-client.ts';
 import {
   KERNEL_SYNC_CALL_KEY,
@@ -84,6 +84,15 @@ export interface WorkerSpawnSpec {
   readonly cwd: string;
   readonly stdio: WorkerStdioPorts;
   readonly syncRing: SharedArrayBuffer;
+  /**
+   * Per-direction SAB ring payload capacity (ADR-0084 #19). The parent picks
+   * it when allocating `syncRing`; the child attaches with the SAME value so
+   * both peers compute identical REQ/REP offsets. Defaults to
+   * {@link DEFAULT_PAYLOAD_CAPACITY} for backward compatibility when absent.
+   * `SabRing.attach` rejects a value inconsistent with `syncRing.byteLength`,
+   * so a desynced capacity fails loudly instead of reading the wrong slot.
+   */
+  readonly payloadCapacity?: number;
   readonly pid: number;
   readonly ppid: number;
 }
@@ -230,7 +239,9 @@ export function installWorkerEntry(
     target.removeEventListener('message', onMessage as unknown as EventListener);
 
     const spec = msg.spec;
-    const ring = SabRing.attach(spec.syncRing);
+    // ADR-0084 #19: attach with the parent-chosen capacity so both peers
+    // compute identical offsets. Absent (legacy specs) → default.
+    const ring = SabRing.attach(spec.syncRing, spec.payloadCapacity ?? DEFAULT_PAYLOAD_CAPACITY);
     // Expose the sync-call shim so runtime-js can route `execSync`,
     // `readFileSync`, etc. through the parent dispatcher without each builtin
     // re-implementing the SAB ring framing.

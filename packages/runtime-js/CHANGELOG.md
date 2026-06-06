@@ -13,6 +13,17 @@
 
 ### Fixed
 
+- **`execSync` returns child stdout byte-exact (ADR-0084 #23).** The `'execSync'`
+  handler (`ipc/handlers.ts`) returned `new TextDecoder().decode(result.stdout)` —
+  a non-fatal decode that mangled any non-UTF-8 child byte to U+FFFD before the RPC
+  framing (e.g. `[0xff,0xfe,0x00]`→`[ef bf bd ef bf bd 00]`), a real Node-parity bug
+  (Node's `execSync` returns a Buffer byte-exact). It now returns `result.stdout`
+  (`Uint8Array`) verbatim; the kernel carries it on a v2 binary frame, and
+  `child_process-sync.ts` returns `Buffer.from(bytes)` with no re-encode (the
+  declared `Uint8Array` return signature is unchanged). Two-peer atomic change with
+  `@riftydev/kernel` (SyncRpc v2). Guard: byte-exact conformance
+  (`tests/conformance/builtins/child_process.test.ts`, `Uint8Array.from([0xff,0xfe,0x00])`
+  length 3 not 7) + the `binary-stdout-exec` hex parity case. Per ADR-0084.
 - **OPFS persistence wired in the runtime Worker (ADR-0072).** `worker-entry.ts`
   now `await initBackend()` before building the module loader, so the Worker
   uses the OPFS backend (cross-origin-isolated realms) instead of always

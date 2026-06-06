@@ -63,6 +63,9 @@ export {
   decodeReply,
   decodeRequest,
   encodeReply,
+  encodeBinaryReply,
+  FRAME_JSON,
+  FRAME_BINARY,
   SYNC_RPC_PROTOCOL_VERSION,
   SyncRpcProtocolMismatchError,
 } from './ipc/sync-rpc.ts';
