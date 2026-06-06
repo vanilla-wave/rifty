@@ -9,14 +9,23 @@
  * `node:fs` inside the runtime.
  */
 
-import { isAbsolute, joinPath, normalizePath, syncMirror } from '@riftydev/vfs';
+import { syncMirror } from '@riftydev/vfs';
+import { resolve } from './commands/_shared.ts';
+import { basename } from './commands/basename.ts';
+import { cat } from './commands/cat.ts';
+import { cp } from './commands/cp.ts';
+import { dirname } from './commands/dirname.ts';
+import { echo } from './commands/echo.ts';
+import { head } from './commands/head.ts';
+import { mv } from './commands/mv.ts';
+import { printf } from './commands/printf.ts';
+import { realpath } from './commands/realpath.ts';
+import { seq } from './commands/seq.ts';
+import { tail } from './commands/tail.ts';
+import { falseCmd, trueCmd } from './commands/true-false.ts';
+import { wc } from './commands/wc.ts';
 import type { ShellCommand } from './types.ts';
 
-function resolve(cwd: string, p: string): string {
-  return normalizePath(isAbsolute(p) ? p : joinPath(cwd, p));
-}
-
-const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
 export const pwd: ShellCommand = async (_args, ctx) => {
@@ -42,11 +51,6 @@ export const cd =
     return 0;
   };
 
-export const echo: ShellCommand = async (args, ctx) => {
-  ctx.stdout.write(`${args.join(' ')}\n`);
-  return 0;
-};
-
 export const ls: ShellCommand = async (args, ctx) => {
   const target = resolve(ctx.cwd, args[0] ?? '.');
   try {
@@ -57,23 +61,6 @@ export const ls: ShellCommand = async (args, ctx) => {
     ctx.stderr.write(`ls: ${(err as Error).message}\n`);
     return 1;
   }
-};
-
-export const cat: ShellCommand = async (args, ctx) => {
-  if (args.length === 0) {
-    ctx.stderr.write('cat: missing argument\n');
-    return 1;
-  }
-  for (const a of args) {
-    try {
-      const bytes = syncMirror().readFileBytesSync(resolve(ctx.cwd, a));
-      ctx.stdout.write(decoder.decode(bytes));
-    } catch (err) {
-      ctx.stderr.write(`cat: ${a}: ${(err as Error).message}\n`);
-      return 1;
-    }
-  }
-  return 0;
 };
 
 export const mkdir: ShellCommand = async (args, ctx) => {
@@ -173,5 +160,17 @@ export function builtinCommands(setCwd: (p: string) => void): Record<string, She
     rm,
     env: envCmd,
     touch,
+    head,
+    tail,
+    wc,
+    basename,
+    dirname,
+    realpath,
+    seq,
+    true: trueCmd,
+    false: falseCmd,
+    printf,
+    cp,
+    mv,
   };
 }

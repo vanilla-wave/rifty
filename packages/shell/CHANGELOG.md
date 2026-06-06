@@ -4,6 +4,21 @@
 
 ### Added
 
+- **ADR-0081 (file-arg coreutils):** new pure-JS builtins over `syncMirror()`, one
+  file each under `src/commands/` + a `_shared.ts` (`resolve`/`enc`/`dec`):
+  `cat -n/-b/-A/-E`, `head -n/-c` (incl. negative-N), `tail -n/-c` (incl. `+N`;
+  `-f` throws), `wc -l/-w/-c/-m`, `cp [-r] [-n]` (over `copyFileSync`/`cpSync`),
+  `mv [-n]` (over `renameSync`, mtime-preserving), `basename`/`dirname`/`realpath`
+  (path-math; realpath is normalize+exists, no symlinks per ADR-0050), `seq -s/-w`,
+  `true`/`false`, `printf` (`%s %d %x %o %c %%` + escapes, arg-recycling), and an
+  upgraded `echo -n/-e/-E`. Every unimplemented flag throws
+  `NotImplementedError('shell.<cmd>.<flag>')` (no silent stub); each defines its
+  GNU-faithful exit code (load-bearing for `&&`/`||`). Registered in
+  `builtinCommands`. **Follow-up:** ADR-0086 node-fs-reuse parity cases for the
+  tier-c builtins (cat/head/tail/wc/basename/dirname/realpath/cp/mv) and the
+  compat-matrix rows are tracked for the milestone-DoD closer (A-033); ls/grep/find
+  (frozen-GNU-fixture tier) land with the SGR/columns/walker helpers in a later phase.
+
 - **ADR-0084:** `tokenize` now returns `Token[]` (was `string[]`) — a word token
   `{ value, quoted }` carrying quote provenance, or an operator token `{ op }`.
   `quoted` is `true` iff ≥1 character of the word came from inside `'…'`/`"…"`,
