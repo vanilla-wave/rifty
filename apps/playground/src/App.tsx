@@ -240,34 +240,10 @@ export function App(props: AppProps) {
 
         <span class="rf-spacer" />
 
-        <div class="rf-seg">
-          <button
-            type="button"
-            class="rf-btn"
-            data-kind="real-vite"
-            data-active={machine.mode() === 'real-vite'}
-            onClick={() => {
-              setActivePreset('');
-              void machine.toggleRealVite();
-            }}
-            data-action="real-vite"
-          >
-            Real Vite
-          </button>
-          <button
-            type="button"
-            class="rf-btn"
-            data-active={machine.mode() === 'dev'}
-            onClick={() => {
-              setActivePreset('');
-              void machine.toggleDev();
-            }}
-            data-action="dev-mode"
-          >
-            Dev Mode
-          </button>
-        </div>
-
+        {/* The Templates gallery (ActivityBar → PresetGallery) is the single
+            project/template switcher (ADR-0079). The header keeps only the
+            contextual Run / Reset (REPL) controls + the mode chip; entering
+            dev / real-vite is done by selecting a template tile. */}
         <Show when={machine.mode() === 'repl'}>
           <button type="button" class="rf-btn rf-btn--primary" onClick={onRun} data-action="run">
             ▶ Run

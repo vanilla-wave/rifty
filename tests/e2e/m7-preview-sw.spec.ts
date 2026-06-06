@@ -11,7 +11,7 @@
  *   1. The playground main thread brings up an `http.createServer().listen(N)`
  *      using `@riftydev/net` — exactly the path a user program follows. We use
  *      the existing `@rifty-examples/vite-like-dev` fixture (started by
- *      clicking the playground's "Dev Mode" button) because it is the only
+ *      selecting the playground's dev-server template tile) because it is the only
  *      runnable HTTP-server-from-user-code program currently wired into the
  *      playground's `node:http` builtin, and the task spec explicitly accepts
  *      it as "still proof of the SW round-trip; Express specifics aren't what
@@ -67,12 +67,16 @@ test.describe('M7 — HTTP through the Service Worker preview bridge', () => {
       timeout: 15_000,
     });
 
-    // Click "Dev Mode" — runs `startDevMode({port: 3000})`, which (1) brings
-    // up an `http.createServer().listen(3000)` from `@riftydev/net` and (2)
-    // mounts `setupPreviewBridge` via `mountPlaygroundPreviewBridge()`. This
-    // is the "user program registers an HTTP server" step.
-    await page.locator('[data-action="dev-mode"]').click();
-    await expect(page.locator('[data-action="dev-mode"]')).toContainText('Dev Mode', {
+    // The header mode toggles were retired for a single Templates switcher
+    // (ADR-0079, a deliberate e2e contract change). Open the Templates view and
+    // select the dev-server tile — selecting it runs `startDevMode({port:3000})`
+    // ((1) brings up an `http.createServer().listen(3000)` from `@riftydev/net`
+    // and (2) mounts `setupPreviewBridge` via `mountPlaygroundPreviewBridge()`),
+    // the same "user program registers an HTTP server" step the old button did.
+    await page.locator('[data-action="view-templates"]').click();
+    await expect(page.locator('[data-testid="gallery"]')).toBeVisible();
+    await page.locator('[data-preset="dev-hmr"]').click();
+    await expect(page.locator('[data-preset="dev-hmr"]')).toHaveAttribute('data-active', 'true', {
       timeout: 10_000,
     });
 

@@ -2,8 +2,81 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Real Vite preview now renders (and shows progress) instead of looking
+  frozen (ADR-0077).** Three stacked breaks fixed: (1) `installProcessGlobals()`
+  in the real-vite worker clobbered the kernel-wired `process.stdout`/`stderr`
+  with `console.*`, so all install/boot logs — and error stacks — vanished
+  (preserve the kernel stdio + env across the swap); (2) the kernel tore the
+  worker realm down the instant `bootstrap()` resolved (`self.close()` on entry
+  return), killing the Vite dev server right after it started listening → every
+  preview request hit a dead worker (`502 bridge-timeout`) — the bootstrap now
+  stays alive until `.kill()`; (3) the SW routed the iframe navigation to the
+  wrong client (ported ADR-0074). Plus `PreviewPanel` warm-up now uses a
+  per-probe `AbortController` + a 90 s budget so it spans an npm install and
+  auto-loads to `live` (~22 s) without a manual Reload. Verified live:
+  `/preview/<port>/` 200s, the iframe commits and renders the Vite app.
+- **Dev-server console noise removed.** A custom Vite logger filters the
+  harmless `Failed to load source map … marked.umd.js.map` warning (monaco 0.52
+  ships `marked.umd.js` with a dangling sourcemap ref); dev-only, no runtime
+  effect.
+- **Console now scrolls.** `xterm.css` was linked from `index.html` as
+  `/@xterm/xterm/css/xterm.css`, a path Vite never serves (it resolved to the
+  SPA-fallback HTML in dev *and* prod), so xterm rendered without its
+  stylesheet — `.xterm-viewport` had `overflow-y: visible` and zero height and
+  the terminal could not scroll. Now imported from `main.tsx` (`@xterm/xterm`
+  added as a direct dep) so Vite bundles it in dev and prod.
+
+### Changed
+
+- **Generic ProjectSpec/Template runtime — Vite is now just the default template
+  (ADR-0078).** The "Real Vite" mode no longer hardcodes Vite across five files;
+  a new playground-internal `ProjectSpec` value object (install deps, import
+  specifier, createServer knobs, entry, seed files) drives the worker bootstrap,
+  the orchestrator, and the mode machine via a new `RIFTY_RFV_TEMPLATE` env var.
+  Adding a second runnable template is now a data change (a `ProjectSpec` + a
+  preset row with a `templateId`) rather than a worker fork. The pure
+  `resolveBootstrapConfig` mapping (incl. index.html-script-src derived from the
+  entry) is unit-tested; user-facing "Real Vite" copy is generalised to "Real npm
+  project" / "Dev server". Core packages were already Vite-free; no core change.
+- **Single generic Templates switcher; header mode toggles retired (ADR-0079).**
+  The duplicate header `Real Vite` / `Dev Mode` segment is removed — the
+  Templates gallery is the one switcher (entering `dev`/`real-vite` is selecting a
+  tile). The ActivityBar Templates button gains a stable `data-action`; the m7/m10
+  e2e specs are updated as a **deliberate contract change** (new view-templates +
+  `[data-preset]` flow; m10's stale `[real-vite] …` log markers corrected to the
+  `[real-vite/worker] …` the worker actually emits). Resolves Q-2026-06-04-316.
+- **Templates switcher polish.** The preset gallery is retitled **Templates**
+  and its tiles now use vendored monochrome inline-SVG icons (new `icons.tsx`,
+  Lucide/ISC paths, zero new dep) instead of full-colour emoji that clashed with
+  the monochrome theme; presets declare a semantic `icon` key so the switcher
+  scales cleanly to more templates. (Activity-bar tooltip follows: "Templates".)
+
 ### Added
 
+- **Lazy `node_modules` browsing in the explorer (ADR-0080).** The reverse
+  snapshot (ADR-0076) excludes `node_modules`; a new two-way request/response
+  read bridge (`node-modules-port.ts`, the symmetric complement of the one-way
+  write/snapshot ports) now lets the real-vite explorer browse it lazily — one
+  directory level per expand, fetched from the worker and cached
+  (`NodeModulesCache`), with loading/error rows and `node_modules` files opening
+  read-only in the editor (≤128 KiB inline, larger shown size-only). A
+  normalised-segment scope guard keeps it a package browser, not a general remote
+  FS; over-cap files reply `content:null` (no silent empty read). The sync
+  `FsOpsTarget` path is untouched — the async branch is keyed only on the
+  `node_modules` subtree. Pure logic (the port round-trip, the cache, the
+  `composeNodeModulesRows` interleave) is unit-tested.
+- **File explorer reflects the Real Vite worker project (ADR-0076).** Switching
+  to Real Vite now switches the explorer **into the Vite filesystem**: a new
+  one-way worker→page VFS snapshot bridge (`vfs-snapshot-port.ts`, the mirror of
+  the page→worker write port) publishes the worker realm's project tree — sans
+  `node_modules` — which the page renders through a **read-only** `SnapshotFs`.
+  The view is live (updates on install + every Vite watch), honestly read-only
+  (mutation controls hidden, a `read-only` badge, worker files open view-only —
+  no fake writes), and clears on leaving the mode. Closes the split-VFS gap
+  ADR-0075 flagged for real-vite. Pure logic (`collectSnapshot`, `SnapshotFs`)
+  is unit-tested.
 - **VSCode-style shell (ADR-0075).** Recomposed the playground into a real
   workbench: a lime "alive-spine" **activity bar** toggling the sidebar between
   a **file Explorer** and the Presets gallery, an **editor tab bar** over a

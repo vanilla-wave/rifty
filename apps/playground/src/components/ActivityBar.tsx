@@ -37,8 +37,9 @@ export function ActivityBar(props: {
         class="rf-activity__btn"
         data-active={isActive('presets')}
         aria-pressed={isActive('presets')}
-        title="Presets"
-        aria-label="Presets"
+        data-action="view-templates"
+        title="Templates"
+        aria-label="Templates"
         onClick={() => props.onSelect('presets')}
       >
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">

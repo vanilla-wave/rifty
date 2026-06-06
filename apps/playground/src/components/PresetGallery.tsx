@@ -1,5 +1,6 @@
 import { For, Show } from 'solid-js';
 import { CATEGORY_ORDER, PRESETS, type Preset } from '../presets.ts';
+import { Icon } from './icons.tsx';
 
 /**
  * Left-rail preset gallery. Presets are grouped by category (in
@@ -17,7 +18,7 @@ export function PresetGallery(props: {
   return (
     <aside class="rf-gallery" data-testid="gallery">
       <div class="rf-gallery__head">
-        <span class="rf-gallery__title">Presets</span>
+        <span class="rf-gallery__title">Templates</span>
         <span class="rf-gallery__hint">click to load &amp; run</span>
       </div>
 
@@ -37,7 +38,7 @@ export function PresetGallery(props: {
                     aria-pressed={props.activeId === preset.id}
                   >
                     <span class="rf-preset__icon" aria-hidden="true">
-                      {preset.icon}
+                      <Icon name={preset.icon} size={16} />
                     </span>
                     <span class="rf-preset__body">
                       <span class="rf-preset__label">
