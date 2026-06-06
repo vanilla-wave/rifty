@@ -61,6 +61,79 @@ The merge makes the content cache and the in-flight async write-through ALIAS th
 
 End of milestone M10.
 
+## Q-2026-06-06-320: loader `package.json` parse cache — key (abs path) + full-clear invalidation
+
+**Status:** 🟢 Active
+**Encountered in:** JS-runtime perf audit item #5 (`docs/perf/js-runtime-perf-audit-2026-06-05.md` line 59 + `…-adr-plan-2026-06-06.md` line 41/127)
+**Milestone:** M10
+**Author (agent session):** 2026-06-06
+
+### Context
+
+N modules from one package re-decoded+re-parsed that package's `package.json` N times (the 4 resolver parse sites: `readPackageJson` called from `resolveAsDirectory`/`resolveInsidePackage`/`resolveImportsSpecifier`, plus the inline parse in `findPackageScope`). The audit's prior "immutable, no invalidation" rationale is WRONG: the `load-fixture` reload hot path overwrites files (incl. package.json) then calls `loader.invalidate()` (worker-entry.ts), so an unwired cache serves a stale `type`/`main`/`exports` and silently flips a sibling `.js`'s ESM/CJS classification.
+
+### Provisional decision
+
+A `Map<absPackageJsonPath, PackageJson>` owned by the `createResolver` closure, consulted/populated at all 4 parse sites (only SUCCESSFUL parses cached — a parse failure stays uncached so `readPackageJson`'s SYNTAX_ERROR throw and `findPackageScope`'s `{}` fallback each keep byte-identical behaviour). Exposed as `Resolver.clearCaches()`; `loader.invalidate()` calls it on BOTH the full-clear and targeted-id arms (package.json is package-scoped, not per-module-id, so a targeted invalidate cannot know which manifest changed → full-clear). Slightly more aggressive than `transformCache`'s per-id delete; acceptable — package.json edits are rare, correctness > micro-retention.
+
+### Concrete judgment call (why OQ, not just CHANGELOG)
+
+The full-clear-even-on-targeted-invalidate stance and the success-only caching are real semantic choices a reviewer may revisit (e.g. a per-package-scoped invalidate later). Also: `clearCaches()` adds a method to the (internal, runtime-js-only) `Resolver` interface — not re-exported cross-package, so REVERSIBLE, but recorded here for audit.
+
+### Code markers
+
+- `// TODO(ADR): Q-2026-06-06-320` on the `pkgCache` declaration in `packages/runtime-js/src/module-loader/resolver.ts`, and on the `resolver.clearCaches()` coupling in `loader.ts` `invalidate`.
+
+### Reversibility justification
+
+- Public APIs affected: none cross-package — `Resolver` is internal to runtime-js (consumed by `loader.ts`); `createModuleLoader`/`ModuleLoader` surface unchanged.
+- Rough cost to revert: drop the cache + `clearCaches()` (resolver.ts + the loader coupling, ~1 file each).
+- External dependencies involved: none.
+- Guard tests: `packages/runtime-js/src/module-loader/resolver-cache.test.ts` (parse-once; edit→invalidate→fresh gate; full-clear) + parity `tools/node-parity-runner/cases/modules/pkg-type-module-js-classification.case.ts`.
+
+### Needs human review by
+
+End of milestone M10.
+
+## Q-2026-06-06-321: resolver resolution cache — key, full-clear-on-invalidate, never cache not-found
+
+**Status:** 🟢 Active
+**Encountered in:** JS-runtime perf audit item #15 (`docs/perf/js-runtime-perf-audit-2026-06-05.md` line 71 + `…-adr-plan-2026-06-06.md` line 42/128)
+**Milestone:** M10
+**Author (agent session):** 2026-06-06
+
+### Context
+
+`resolveSpecifierToFile` re-ran the full `node_modules` walk + package.json reads for every import edge — `react` from 200 files = 200 walks. The whole risk is invalidation: the shared VFS is mutated by guest `fs.writeFileSync` / npm install WITHOUT firing `loader.invalidate()`, so a cached miss (or a cached not-exported throw) would be permanently wrong.
+
+### Provisional decision
+
+A memo in the `createResolver` closure keyed exactly `${esm?1:0}\0${fromDir}\0${specifier}` → resolved file-id string, set ONLY on a successful (non-null) resolve. Non-negotiable rules:
+1. **NEVER cache not-found** — a `null` from `resolveSpecifierToFile` leaves the memo untouched, so a later-created file (guest write / install) resolves on the next attempt.
+2. **NEVER cache the `PACKAGE_PATH_NOT_EXPORTED` throw** — it propagates before the `set`, structurally un-cacheable.
+3. **Full-clear on ANY invalidate** — the cache is input-keyed and cannot be pruned by resolved id, so both the full and targeted arms of `loader.invalidate()` clear it whole (via `Resolver.clearCaches()`, shared with #5). `readResolved` is OUTSIDE the memo — a hit still re-reads source fresh.
+
+`fromDir` (not `fromFile`) is the correct key: any two files in one dir resolve a specifier identically, so keying on dir is both correct and a better hit rate.
+
+### Concrete judgment call (why OQ, not just CHANGELOG)
+
+The key shape, the full-clear-on-targeted-invalidate stance, and the never-cache-negative policy are provisional judgment calls a reviewer may revisit (e.g. a bounded negative cache once a VFS change-event exists). Shares `clearCaches()` with #5.
+
+### Code markers
+
+- `// TODO(ADR): Q-2026-06-06-321` on the `resolveCache` declaration in `packages/runtime-js/src/module-loader/resolver.ts`, and on the `resolver.clearCaches()` coupling in `loader.ts` `invalidate`.
+
+### Reversibility justification
+
+- Public APIs affected: none cross-package — internal to the resolver closure + the internal `Resolver` interface.
+- Rough cost to revert: drop the memo + the `resolveCache` half of `clearCaches()`.
+- External dependencies involved: none.
+- Guard tests: `packages/runtime-js/src/module-loader/resolver-cache.test.ts` (resolve-once; full-clear; targeted-invalidate-also-full-clears; not-found-never-cached; not-exported-throw-never-cached). The `test:integration` suite (real-install / nested-install / vite-like / express-style / real-packages) is the critical guard that the cache did not break npm-installed module loading.
+
+### Needs human review by
+
+End of milestone M10.
+
 ## Q-2026-06-06-323: when to overturn the page-buffered cross-realm preview deferral (ADR-0048 D2) and ship the v3 frame bump
 
 **Status:** 🟢 Active — DEFER (upholds ADR-0048 D2 / ADR-0017 M12 / ADR-0055 "do NOT ship v3")
