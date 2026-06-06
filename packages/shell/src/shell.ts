@@ -18,7 +18,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { isAbsolute, joinPath, normalizePath, syncMirror } from '@riftydev/vfs';
 import { builtinCommands } from './builtins.ts';
-import { tokenize } from './tokenize.ts';
+import { type Token, isOp, tokenize } from './tokenize.ts';
 import type { CommandContext, ShellCommand } from './types.ts';
 
 export interface ShellOptions {
@@ -65,7 +65,7 @@ export interface RunOptions {
 
 type Joiner = '&&' | '||' | ';' | null;
 interface Segment {
-  readonly tokens: string[];
+  readonly tokens: Token[];
   readonly joiner: Joiner; // joiner FOLLOWING this segment; null on the last
 }
 
@@ -142,8 +142,8 @@ export class Shell {
     const tokens = tokenize(line, this.env);
     if (tokens.length === 0) return { exitCode: 0, stdout: '', stderr: '' };
 
-    // Reject bare `&` loudly; tokenizer emits it as a standalone token.
-    if (tokens.includes('&')) {
+    // Reject bare `&` loudly; tokenizer emits it as a standalone operator token.
+    if (tokens.some((t) => isOp(t) && t.op === '&')) {
       throw new NotImplementedError(
         'shell.background',
         'background execution with `&` is not supported — drop the `&` and run it foreground',
@@ -213,35 +213,37 @@ export class Shell {
    * trailing-redirect extraction, command lookup and execution.
    */
   private async runSegment(
-    segmentTokens: string[],
+    segmentTokens: Token[],
     options: RunOptions,
     signal: AbortSignal,
     abortPromise: Promise<typeof ABORTED>,
   ): Promise<RunResult> {
     if (segmentTokens.length === 0) return { exitCode: 0, stdout: '', stderr: '' };
 
-    if (segmentTokens.includes('<')) {
+    if (segmentTokens.some((t) => isOp(t) && t.op === '<')) {
       throw new NotImplementedError(
         'shell.input-redirect',
         'use bash via wasi for < input redirect — M12 work item',
       );
     }
 
-    if (segmentTokens.includes('|')) {
+    if (segmentTokens.some((t) => isOp(t) && t.op === '|')) {
       throw new NotImplementedError(
         'shell.pipe',
         'pipe operator not yet supported — M12 work item',
       );
     }
 
-    // Pop leading KEY=value env assignments.
+    // Pop leading KEY=value env assignments (an operator ends the run).
     let i = 0;
     const overrides: Record<string, string> = {};
     while (i < segmentTokens.length) {
       const t = segmentTokens[i]!;
-      const eq = t.indexOf('=');
-      if (eq > 0 && /^[A-Za-z_][A-Za-z_0-9]*$/.test(t.slice(0, eq))) {
-        overrides[t.slice(0, eq)] = t.slice(eq + 1);
+      if (isOp(t)) break;
+      const v = t.value;
+      const eq = v.indexOf('=');
+      if (eq > 0 && /^[A-Za-z_][A-Za-z_0-9]*$/.test(v.slice(0, eq))) {
+        overrides[v.slice(0, eq)] = v.slice(eq + 1);
         i++;
       } else break;
     }
@@ -254,16 +256,26 @@ export class Shell {
     // Pull off trailing `> path` / `>> path` redirection.
     let redirectTo: { path: string; append: boolean } | null = null;
     if (rest.length >= 2) {
-      const op = rest[rest.length - 2];
+      const opTok = rest[rest.length - 2];
       const target = rest[rest.length - 1];
-      if ((op === '>' || op === '>>') && target && !target.startsWith('-')) {
-        redirectTo = { path: target, append: op === '>>' };
+      if (
+        opTok &&
+        isOp(opTok) &&
+        (opTok.op === '>' || opTok.op === '>>') &&
+        target &&
+        !isOp(target) &&
+        !target.value.startsWith('-')
+      ) {
+        redirectTo = { path: target.value, append: opTok.op === '>>' };
         rest.splice(rest.length - 2, 2);
       }
     }
 
-    const cmd = rest[0]!;
-    const args = rest.slice(1);
+    const cmdTok = rest[0];
+    const cmd = cmdTok && !isOp(cmdTok) ? cmdTok.value : '';
+    // Any operator token that slipped through (e.g. a non-trailing `>`) passes
+    // to the builtin as its literal string — preserving the prior string[] behavior.
+    const args = rest.slice(1).map((t) => (isOp(t) ? t.op : t.value));
     const handler = this.commands.get(cmd);
 
     let stdout = '';
@@ -359,12 +371,12 @@ export class Shell {
  * FOLLOWS it (`null` on the last). A trailing joiner (`echo a ;`) yields a final
  * empty segment — harmless, the run-loop short-circuits on empty segments.
  */
-function splitOnJoiners(tokens: string[]): Segment[] {
+function splitOnJoiners(tokens: Token[]): Segment[] {
   const segments: Segment[] = [];
-  let current: string[] = [];
+  let current: Token[] = [];
   for (const t of tokens) {
-    if (t === '&&' || t === '||' || t === ';') {
-      segments.push({ tokens: current, joiner: t });
+    if (isOp(t) && (t.op === '&&' || t.op === '||' || t.op === ';')) {
+      segments.push({ tokens: current, joiner: t.op });
       current = [];
     } else {
       current.push(t);

@@ -18,5 +18,5 @@ export {
   type RunResult,
   type ShellOptions,
 } from './shell.ts';
-export { tokenize } from './tokenize.ts';
+export { tokenize, type Token } from './tokenize.ts';
 export type { CommandContext, ShellCommand, StdinReader, Writer } from './types.ts';

@@ -4,6 +4,19 @@
 
 ### Added
 
+- **ADR-0084:** `tokenize` now returns `Token[]` (was `string[]`) — a word token
+  `{ value, quoted }` carrying quote provenance, or an operator token `{ op }`.
+  `quoted` is `true` iff ≥1 character of the word came from inside `'…'`/`"…"`,
+  the load-bearing bit that lets the dispatcher keep `grep '*.ts'` literal while
+  expanding `grep *.ts` (glob expansion lands in a follow-up). New exports:
+  `Token` type + `isOp` guard. `shell.ts` consumes `Token[]` throughout
+  (splitOnJoiners, env-prefix pop, redirect extraction, bare-`&` rejection via
+  the `op` discriminator — not a substring match). **Public-API break** to
+  `tokenize`'s return type; contained to `@riftydev/shell` (no external
+  importers). Pure type-shape change — observable parse behavior is unchanged
+  (the existing assertions are preserved via a `vals()` projection; the new
+  `quoted` bit gets its own `tokenize-provenance.test.ts`).
+
 - **ADR-0082:** `CommandContext` gains four optional fields — `stdin?: StdinReader`
   (async `read(): Promise<Uint8Array | null>`, `null` = EOF), `isTTY?: boolean`,
   `cols?`/`rows?: number`, and `signal?: AbortSignal` — plus a new exported

@@ -10,29 +10,38 @@ import { resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
  * playground terminal (M10).
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { Shell, tokenize } from '../src/index.ts';
+import { Shell, type Token, tokenize } from '../src/index.ts';
 
 afterEach(() => {
   resetSyncMirror();
 });
 
+/**
+ * Project a `Token[]` to its word/op string sequence — the exact value contract
+ * the pre-ADR-0084 `string[]` assertions encoded. The new quote-provenance bit
+ * is covered separately in `tokenize-provenance.test.ts`; here we preserve the
+ * original assertions verbatim (mechanical adaptation to the new return type,
+ * NOT a weakening — CLAUDE.md).
+ */
+const vals = (tokens: Token[]): string[] => tokens.map((t) => ('op' in t ? t.op : t.value));
+
 describe('tokenize', () => {
   it('splits a simple command on whitespace', () => {
-    expect(tokenize('ls -la /tmp')).toEqual(['ls', '-la', '/tmp']);
+    expect(vals(tokenize('ls -la /tmp'))).toEqual(['ls', '-la', '/tmp']);
   });
 
   it('preserves quoted segments', () => {
-    expect(tokenize('echo "hello world" yes')).toEqual(['echo', 'hello world', 'yes']);
-    expect(tokenize("echo 'a b' c")).toEqual(['echo', 'a b', 'c']);
+    expect(vals(tokenize('echo "hello world" yes'))).toEqual(['echo', 'hello world', 'yes']);
+    expect(vals(tokenize("echo 'a b' c"))).toEqual(['echo', 'a b', 'c']);
   });
 
   it('returns an empty array for an empty line', () => {
-    expect(tokenize('')).toEqual([]);
-    expect(tokenize('   ')).toEqual([]);
+    expect(vals(tokenize(''))).toEqual([]);
+    expect(vals(tokenize('   '))).toEqual([]);
   });
 
   it('does not split arg=value', () => {
-    expect(tokenize('FOO=bar baz')).toEqual(['FOO=bar', 'baz']);
+    expect(vals(tokenize('FOO=bar baz'))).toEqual(['FOO=bar', 'baz']);
   });
 });
 
@@ -123,45 +132,45 @@ describe('Shell — custom command registration', () => {
 
 describe('tokenize — single vs double quotes', () => {
   it('single quotes are literal — $VAR is NOT expanded inside', () => {
-    expect(tokenize("echo '$HOME'", { HOME: '/root' })).toEqual(['echo', '$HOME']);
+    expect(vals(tokenize("echo '$HOME'", { HOME: '/root' }))).toEqual(['echo', '$HOME']);
   });
 
   it("single quotes don't honour backslash escapes", () => {
     // POSIX: inside `'…'` even \\ stays literal. The only character that
     // terminates the run is a closing `'`.
-    expect(tokenize(String.raw`echo 'a\nb'`)).toEqual(['echo', String.raw`a\nb`]);
+    expect(vals(tokenize(String.raw`echo 'a\nb'`))).toEqual(['echo', String.raw`a\nb`]);
   });
 
   it('double quotes expand $VAR', () => {
-    expect(tokenize('echo "$HOME"', { HOME: '/root' })).toEqual(['echo', '/root']);
+    expect(vals(tokenize('echo "$HOME"', { HOME: '/root' }))).toEqual(['echo', '/root']);
   });
 
   it('double quotes expand ${VAR}', () => {
-    expect(tokenize('echo "${USER}"', { USER: 'alice' })).toEqual(['echo', 'alice']);
+    expect(vals(tokenize('echo "${USER}"', { USER: 'alice' }))).toEqual(['echo', 'alice']);
   });
 
   it('double quotes preserve whitespace as one token even after expansion', () => {
-    expect(tokenize('echo "$X end"', { X: 'a b c' })).toEqual(['echo', 'a b c end']);
+    expect(vals(tokenize('echo "$X end"', { X: 'a b c' }))).toEqual(['echo', 'a b c end']);
   });
 
   it('double quotes honour limited backslash escapes', () => {
-    expect(tokenize('echo "a\\$b"', { b: 'IGNORED' })).toEqual(['echo', 'a$b']);
-    expect(tokenize('echo "a\\\\b"')).toEqual(['echo', 'a\\b']);
-    expect(tokenize('echo "a\\"b"')).toEqual(['echo', 'a"b']);
+    expect(vals(tokenize('echo "a\\$b"', { b: 'IGNORED' }))).toEqual(['echo', 'a$b']);
+    expect(vals(tokenize('echo "a\\\\b"'))).toEqual(['echo', 'a\\b']);
+    expect(vals(tokenize('echo "a\\"b"'))).toEqual(['echo', 'a"b']);
   });
 
   it('unknown variables expand to empty string', () => {
-    expect(tokenize('echo "[$NOPE]"')).toEqual(['echo', '[]']);
-    expect(tokenize('echo $NOPE end')).toEqual(['echo', '', 'end']);
+    expect(vals(tokenize('echo "[$NOPE]"'))).toEqual(['echo', '[]']);
+    expect(vals(tokenize('echo $NOPE end'))).toEqual(['echo', '', 'end']);
   });
 
   it('unquoted $VAR expands but stays one token (no IFS splitting)', () => {
-    expect(tokenize('echo $X', { X: 'a b' })).toEqual(['echo', 'a b']);
+    expect(vals(tokenize('echo $X', { X: 'a b' }))).toEqual(['echo', 'a b']);
   });
 
   it('adjacent quoted/unquoted segments concatenate into one token', () => {
-    expect(tokenize('echo a"b"c')).toEqual(['echo', 'abc']);
-    expect(tokenize("echo a'b'c")).toEqual(['echo', 'abc']);
+    expect(vals(tokenize('echo a"b"c'))).toEqual(['echo', 'abc']);
+    expect(vals(tokenize("echo a'b'c"))).toEqual(['echo', 'abc']);
   });
 
   it('${VAR:-default} and similar forms throw — unsupported, not silent', () => {
@@ -188,8 +197,8 @@ describe('Shell — pipe is loud', () => {
     // Without dedicated tokenisation `cat a | grep b` would silently become
     // ['cat', 'a', '|', 'grep', 'b'] only by accident if whitespace is right;
     // glued forms like `a|b` would otherwise be one token.
-    expect(tokenize('cat a | grep b')).toEqual(['cat', 'a', '|', 'grep', 'b']);
-    expect(tokenize('cat a|grep b')).toEqual(['cat', 'a', '|', 'grep', 'b']);
+    expect(vals(tokenize('cat a | grep b'))).toEqual(['cat', 'a', '|', 'grep', 'b']);
+    expect(vals(tokenize('cat a|grep b'))).toEqual(['cat', 'a', '|', 'grep', 'b']);
   });
 
   it('throws NotImplementedError when | appears in a command line', async () => {
@@ -202,6 +211,20 @@ describe('Shell — pipe is loud', () => {
     await expect(sh.run('cat a | grep b')).rejects.toMatchObject({
       feature: 'shell.pipe',
     });
+  });
+});
+
+describe('Shell — background & is loud (ADR-0084 op-token detection)', () => {
+  it('throws NotImplementedError(shell.background) for a bare &', async () => {
+    const sh = new Shell();
+    await expect(sh.run('vite &')).rejects.toMatchObject({ feature: 'shell.background' });
+  });
+
+  it('&& is a joiner, NOT background — the chain still runs (op discriminator, not substring)', async () => {
+    const sh = new Shell();
+    const r = await sh.run('echo a && echo b');
+    expect(r.stdout).toBe('a\nb\n');
+    expect(r.exitCode).toBe(0);
   });
 });
 
