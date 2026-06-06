@@ -27,6 +27,34 @@ When a question is reviewed:
 
 ## Active
 
+## Q-2026-06-06-323: when to overturn the page-buffered cross-realm preview deferral (ADR-0048 D2) and ship the v3 frame bump
+
+**Status:** 🟢 Active — DEFER (upholds ADR-0048 D2 / ADR-0017 M12 / ADR-0055 "do NOT ship v3")
+**Encountered in:** JS-runtime perf audit item #22 fix(b); reconsidered by a decision subagent (ADR-0063) on 2026-06-06 and **upheld**
+**Milestone:** M12
+**Author (agent session):** 2026-06-06
+
+### Context
+
+The perf audit proposed building true end-to-end page↔worker `ReadableStream` streaming for the cross-realm preview response path (remove the second O(M) page-side concat copy + head-of-line latency), which requires bumping `PREVIEW_PORT_FRAME_VERSION` 2→3. A decision subagent reconsidered the recorded deferral against ADR-0048, ADR-0017, ADR-0055 and the code.
+
+### Provisional decision
+
+**Uphold the deferral.** Keep the page side accumulating + concatenating on `reply-stream-end`; do not bump the frame to v3 yet. Load-bearing reasons (verified in code/ADRs):
+1. The transport real streaming needs does not exist — both bridge ends still run on `BroadcastChannel` (preview-port.ts:163,307); the only `MessagePort` reference is the M12-aspiration comment at preview-port.ts:14. Streaming over BroadcastChannel yields **no backpressure** (the actual point), so v3-now is a throwaway intermediate before M12 re-bumps it.
+2. ADR-0055 explicitly: "the v3 frame bump … contradicts ADR-0048 D2 / ADR-0017's M12 deferral … **Do NOT ship v3 under this ratification**"; its named gate (Worker-as-opencode-owner, ADR-0046) is unmet.
+3. The benefit doesn't land on real workloads — the audit rates the removed copy "low" + production-unverifiable; the only large-stream consumer (opencode `/event`) already streams via the page-direct SW→page path.
+
+`#22 fix(a)` (drop the redundant page-side re-copy at preview-port.ts:385-387, no frame change) is behavior-preserving and proceeds independently (CHANGELOG only).
+
+### Concrete trigger to overturn (any one)
+
+1. The M12 MessagePort transport (ADR-0017) lands — end-to-end `ReadableStream` + real backpressure ship in that one pass (one frame bump, not two).
+2. A **Worker-owned** SSE/long-poll workload becomes real (Worker becomes opencode owner, ADR-0046 gate) — making the page-buffered path an indefinite hang, not merely a copy cost.
+3. A measured profile shows the page-side concat copy / HOL latency is material on a shipped workload.
+
+### Code markers (none — captured here; reversible)
+
 ## Q-2026-06-05-318: deferred `RIFTY_RFV_*` → `RIFTY_RT_*` env rename + `Mode` token rename (post-ADR-0078)
 
 **Status:** 🟢 Active
