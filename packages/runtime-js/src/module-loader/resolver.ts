@@ -84,10 +84,8 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
   const paths = resolverOpts.paths;
   return {
     resolve(specifier, opts) {
-      const fromDir =
-        vfs.existsSync(opts.fromFile) && vfs.statSync(opts.fromFile).isDirectory
-          ? opts.fromFile
-          : dirname(opts.fromFile);
+      const fromFileStat = vfs.statSyncOrNull(opts.fromFile);
+      const fromDir = fromFileStat?.isDirectory ? opts.fromFile : dirname(opts.fromFile);
 
       if (specifier.startsWith('node:') || isBuiltinSpecifier(specifier)) {
         const name = specifier.startsWith('node:') ? specifier.slice(5) : specifier;
@@ -249,8 +247,9 @@ function matchAliasPattern(paths: PathAliases, specifier: string): AliasMatch | 
 
 function resolveAsFileOrDir(vfs: FsSync, base: string): string | null {
   // Node order is LOAD_AS_FILE before LOAD_AS_DIRECTORY: exact file, then
-  // `X` + extension, then `X` as a directory. Stat `base` once.
-  const baseStat = vfs.existsSync(base) ? vfs.statSync(base) : null;
+  // `X` + extension, then `X` as a directory. Stat `base` once (ADR-0083:
+  // non-throwing, null on miss).
+  const baseStat = vfs.statSyncOrNull(base);
 
   // (1) Exact file. An explicitly-named declaration file (e.g. exports target
   // `./foo.d.ts`) is not runnable — skip so the caller falls back to a sibling.
@@ -263,7 +262,7 @@ function resolveAsFileOrDir(vfs: FsSync, base: string): string | null {
   for (const ext of DEFAULT_EXTENSIONS) {
     const candidate = `${base}${ext}`;
     if (isDeclarationFile(candidate)) continue;
-    if (vfs.existsSync(candidate) && vfs.statSync(candidate).isFile) return candidate;
+    if (vfs.statSyncOrNull(candidate)?.isFile) return candidate;
   }
 
   // (3) `base` as a directory (package.json `main`, then `index.*`).
@@ -285,7 +284,7 @@ function resolveAsDirectory(vfs: FsSync, dir: string): string | null {
   for (const idx of INDEX_FILES) {
     const candidate = joinPath(dir, idx);
     if (isDeclarationFile(candidate)) continue;
-    if (vfs.existsSync(candidate) && vfs.statSync(candidate).isFile) return candidate;
+    if (vfs.statSyncOrNull(candidate)?.isFile) return candidate;
   }
   return null;
 }
@@ -300,7 +299,7 @@ function resolveBareSpecifier(
   let dir = fromDir;
   while (true) {
     const candidateDir = joinPath(dir, 'node_modules', name);
-    if (vfs.existsSync(candidateDir) && vfs.statSync(candidateDir).isDirectory) {
+    if (vfs.statSyncOrNull(candidateDir)?.isDirectory) {
       const file = resolveInsidePackage(vfs, candidateDir, subpath, esm);
       if (file) return file;
     }
@@ -405,7 +404,7 @@ function resolveImportsSpecifier(
   let dir = fromDir;
   while (true) {
     const pkgJsonPath = joinPath(dir, 'package.json');
-    if (vfs.existsSync(pkgJsonPath) && vfs.statSync(pkgJsonPath).isFile) {
+    if (vfs.statSyncOrNull(pkgJsonPath)?.isFile) {
       const pkg = readPackageJson(vfs, pkgJsonPath);
       if (pkg.imports !== undefined) {
         const resolved = resolveImports(pkg.imports, specifier, esm);
@@ -594,7 +593,7 @@ export function findPackageScope(
   let dir = dirname(filePath);
   while (true) {
     const candidate = joinPath(dir, 'package.json');
-    if (vfs.existsSync(candidate) && vfs.statSync(candidate).isFile) {
+    if (vfs.statSyncOrNull(candidate)?.isFile) {
       try {
         return {
           dir,

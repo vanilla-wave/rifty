@@ -27,6 +27,40 @@ When a question is reviewed:
 
 ## Active
 
+## Q-2026-06-06-319: OPFS `writeFileSync` single shared cache/write-through slice (+ WASI `fd_write` aliasing gate)
+
+**Status:** 🟢 Active
+**Encountered in:** JS-runtime perf audit item #3 (`docs/perf/js-runtime-perf-audit-2026-06-05.md` + `…-adr-plan-2026-06-06.md`)
+**Milestone:** M10
+**Author (agent session):** 2026-06-06
+
+### Context
+
+`OpfsFsSync.writeFileSync` (ADR-0072) took TWO independent defensive `data.slice()` per write — one for the content cache, one for the async OPFS write-through — i.e. 2N copies/write. The aliasing hazard the slices guard: `readFileBytesSync` returns the cache BY REFERENCE (opfs-sync.ts), and WASI `fd_write` reuses `fdEntry.data` IN PLACE on a fitting write (fd.ts:86-88), then write-throughs that buffer via `syncMirror().writeFileSync`. So the write-side copy is the sole barrier severing a live mutable caller buffer from cached content.
+
+### Provisional decision
+
+Take ONE defensive slice and reuse it for BOTH the content-cache `set` and the write-through enqueue (2N→N copies/write). The write-through consumer (`OpfsVfs.writeFile`) only passes the buffer to `createWritable().write()` — read-only — so the two surfaces can safely share one copy. The single entry-point slice is RETAINED; merging the two is safe, dropping the copy is the actual regression. An OPFS blocking-gate review (item #3) returned **safe-to-proceed** on exactly this reasoning.
+
+### Concrete judgment call (why OQ, not just CHANGELOG)
+
+The merge makes the content cache and the in-flight async write-through ALIAS the same buffer. A sync caller that mutates the `readFileBytesSync`-returned buffer AFTER a write but BEFORE `flush()` drains would now also perturb the not-yet-drained write-through (the two-slice version isolated it). In practice callers don't mutate post-write and `OpfsVfs.writeFile` snapshots synchronously, so this is the one behavior delta — a provisional judgment pinned by the aliasing guard tests, hence OQ.
+
+### Code markers
+
+- `// TODO(ADR): Q-2026-06-06-319` at the shared-slice site in `packages/vfs/src/opfs-sync.ts` (`writeFileSync`).
+
+### Reversibility justification
+
+- Public APIs affected: none — internal to `OpfsFsSync.writeFileSync`; `FsSync` surface unchanged.
+- Rough cost to revert: re-add the second `data.slice()` (1 line, 1 file).
+- External dependencies involved: none.
+- Guard tests (BLOCKING per the gate): `packages/vfs/src/opfs-sync.test.ts` (caller-mutation isolation + cache/write-through agreement) and a complementary `packages/runtime-wasi/src/syscalls/fd.test.ts` (fd_write in-place reuse stays cache-coherent).
+
+### Needs human review by
+
+End of milestone M10.
+
 ## Q-2026-06-06-323: when to overturn the page-buffered cross-realm preview deferral (ADR-0048 D2) and ship the v3 frame bump
 
 **Status:** 🟢 Active — DEFER (upholds ADR-0048 D2 / ADR-0017 M12 / ADR-0055 "do NOT ship v3")

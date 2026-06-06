@@ -38,7 +38,11 @@ function resolvePath(p: string | URL | Buffer | Uint8Array): string {
     throw new TypeError('fs path must be string, Buffer, or URL');
   }
   if (isAbsolute(str)) return normalizePath(str);
-  return normalizePath(joinPath(getProcessCwd(), str));
+  // joinPath already normalizes internally and getProcessCwd() is always an
+  // absolute normalized path, so its result is already absolute+normalized —
+  // the outer normalizePath was a redundant no-op pass (#6, perf audit
+  // 2026-06-05). joinPath itself is NOT touched (45+ callers).
+  return joinPath(getProcessCwd(), str);
 }
 
 type Callback<T> = (err: NodeJS.ErrnoException | null, value?: T) => void;

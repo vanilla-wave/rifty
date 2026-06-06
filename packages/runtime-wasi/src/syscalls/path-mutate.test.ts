@@ -49,6 +49,7 @@ describe('path_create_directory', () => {
       },
       rmSync: () => {},
       statSync: () => ({ isFile: false, isDirectory: true, size: 0, mtime: 0 }),
+      statSyncOrNull: () => ({ isFile: false, isDirectory: true, size: 0, mtime: 0 }),
       utimes: () => {},
     });
     const rc = t.ns.path_create_directory(3, 100, len);
@@ -72,6 +73,7 @@ describe('path_create_directory', () => {
       },
       rmSync: () => {},
       statSync: () => ({ isFile: false, isDirectory: false, size: 0, mtime: 0 }),
+      statSyncOrNull: () => null,
       utimes: () => {},
     });
     const rc = t.ns.path_create_directory(3, 100, len);
@@ -95,6 +97,7 @@ describe('path_create_directory', () => {
       },
       rmSync: () => {},
       statSync: () => ({ isFile: false, isDirectory: false, size: 0, mtime: 0 }),
+      statSyncOrNull: () => null,
       utimes: () => {},
     });
     const rc = t.ns.path_create_directory(3, 100, len);
@@ -120,6 +123,7 @@ describe('path_create_directory', () => {
       },
       rmSync: () => {},
       statSync: () => ({ isFile: false, isDirectory: false, size: 0, mtime: 0 }),
+      statSyncOrNull: () => null,
       utimes: () => {},
     });
     const rc = t.ns.path_create_directory(3, 100, len);
