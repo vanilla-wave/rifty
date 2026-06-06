@@ -51,6 +51,9 @@ describe('path_create_directory', () => {
       statSync: () => ({ isFile: false, isDirectory: true, size: 0, mtime: 0 }),
       statSyncOrNull: () => ({ isFile: false, isDirectory: true, size: 0, mtime: 0 }),
       utimes: () => {},
+      copyFileSync: () => {},
+      cpSync: () => {},
+      renameSync: () => {},
     });
     const rc = t.ns.path_create_directory(3, 100, len);
     expect(rc).toBe(E_EXIST);
@@ -75,6 +78,9 @@ describe('path_create_directory', () => {
       statSync: () => ({ isFile: false, isDirectory: false, size: 0, mtime: 0 }),
       statSyncOrNull: () => null,
       utimes: () => {},
+      copyFileSync: () => {},
+      cpSync: () => {},
+      renameSync: () => {},
     });
     const rc = t.ns.path_create_directory(3, 100, len);
     expect(rc).toBe(E_ACCES);
@@ -99,6 +105,9 @@ describe('path_create_directory', () => {
       statSync: () => ({ isFile: false, isDirectory: false, size: 0, mtime: 0 }),
       statSyncOrNull: () => null,
       utimes: () => {},
+      copyFileSync: () => {},
+      cpSync: () => {},
+      renameSync: () => {},
     });
     const rc = t.ns.path_create_directory(3, 100, len);
     expect(rc).toBe(E_INVAL);
@@ -125,6 +134,9 @@ describe('path_create_directory', () => {
       statSync: () => ({ isFile: false, isDirectory: false, size: 0, mtime: 0 }),
       statSyncOrNull: () => null,
       utimes: () => {},
+      copyFileSync: () => {},
+      cpSync: () => {},
+      renameSync: () => {},
     });
     const rc = t.ns.path_create_directory(3, 100, len);
     expect(rc).toBe(E_INVAL);

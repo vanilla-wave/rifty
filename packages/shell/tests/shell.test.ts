@@ -225,6 +225,17 @@ describe('Shell — redirect write failure surfaces loudly', () => {
       statSync: () => ({ isFile: false, isDirectory: false }),
       statSyncOrNull: () => null,
       utimes: () => undefined,
+      // Never exercised on the redirect-write path; throwing stubs complete
+      // the FsSync shape (ADR-0083) without changing this test's behavior.
+      copyFileSync: () => {
+        throw new Error('unused');
+      },
+      cpSync: () => {
+        throw new Error('unused');
+      },
+      renameSync: () => {
+        throw new Error('unused');
+      },
     };
     setSyncMirror(failing);
     const sh = new Shell({ cwd: '/' });
@@ -323,6 +334,17 @@ describe('Shell — onChunk streaming writer', () => {
       statSync: () => ({ isFile: false, isDirectory: false }),
       statSyncOrNull: () => null,
       utimes: () => undefined,
+      // Never exercised on the redirect-write path; throwing stubs complete
+      // the FsSync shape (ADR-0083) without changing this test's behavior.
+      copyFileSync: () => {
+        throw new Error('unused');
+      },
+      cpSync: () => {
+        throw new Error('unused');
+      },
+      renameSync: () => {
+        throw new Error('unused');
+      },
     };
     setSyncMirror(failing);
     const sh = new Shell({ cwd: '/' });

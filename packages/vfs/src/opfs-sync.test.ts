@@ -569,5 +569,105 @@ describe('OpfsFsSync content cache — input-buffer aliasing (#3, ADR-0072)', ()
     sliceSpy.mockRestore();
 
     expect(slices).toBe(1);
+// copyFileSync / cpSync / renameSync (ADR-0083). Exercised against the
+// in-memory index/content/times mirror (authoritative for sync callers); the
+// async OPFS persist is asserted via a fake PairedAsyncSurface that records
+// the move ops and is drained by flush() (ADR-0083 §74).
+// ---------------------------------------------------------------------------
+
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+
+function recordingSurface(): PairedAsyncSurface & { writes: string[]; rms: string[] } {
+  const writes: string[] = [];
+  const rms: string[] = [];
+  return {
+    writes,
+    rms,
+    readFile: () => Promise.resolve(new Uint8Array()),
+    writeFile: (path: string) => {
+      writes.push(path);
+      return Promise.resolve();
+    },
+    rm: (path: string) => {
+      rms.push(path);
+      return Promise.resolve();
+    },
+  };
+}
+
+describe('OpfsFsSync.renameSync / copyFileSync / cpSync (ADR-0083)', () => {
+  beforeEach(() => vi.spyOn(OpfsFsSync, 'isSupported').mockReturnValue(true));
+  afterEach(() => vi.restoreAllMocks());
+
+  function freshFs(surface?: PairedAsyncSurface) {
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    return new OpfsFsSync(root, surface);
+  }
+
+  it('renameSync re-keys index/content/times and PRESERVES mtime', () => {
+    const fs = freshFs();
+    fs.mkdirSync('/dir', { recursive: true });
+    fs.writeFileSync('/dir/a.txt', enc.encode('alpha'));
+    fs.utimes('/dir/a.txt', 777_000, 777_000);
+    fs.renameSync('/dir/a.txt', '/dir/b.txt');
+    expect(fs.existsSync('/dir/a.txt')).toBe(false);
+    expect(fs.existsSync('/dir/b.txt')).toBe(true);
+    expect(dec.decode(fs.readFileBytesSync('/dir/b.txt'))).toBe('alpha'); // content re-keyed
+    expect(fs.statSync('/dir/b.txt').mtime).toBe(777_000); // times re-keyed (mtime preserved)
+    expect(fs.readdirSync('/dir').map((d) => d.name)).toEqual(['b.txt']); // parent children updated
+  });
+
+  it('renameSync moves a whole subtree cross-dir, re-keying descendants', () => {
+    const fs = freshFs();
+    fs.mkdirSync('/dir/sub', { recursive: true });
+    fs.writeFileSync('/dir/sub/leaf.txt', enc.encode('leaf'));
+    fs.mkdirSync('/parent', { recursive: true });
+    fs.renameSync('/dir', '/parent/moved');
+    expect(fs.existsSync('/dir')).toBe(false);
+    expect(dec.decode(fs.readFileBytesSync('/parent/moved/sub/leaf.txt'))).toBe('leaf');
+  });
+
+  it('renameSync enqueues the async OPFS move and flush() awaits it (ADR-0083 §74)', async () => {
+    const surface = recordingSurface();
+    const fs = freshFs(surface);
+    fs.mkdirSync('/dir', { recursive: true });
+    fs.writeFileSync('/dir/a.txt', enc.encode('x'));
+    await fs.flush(); // drain the seeding write-through
+    surface.writes.length = 0;
+    surface.rms.length = 0;
+    fs.renameSync('/dir/a.txt', '/dir/b.txt');
+    await fs.flush();
+    expect(surface.writes).toContain('/dir/b.txt'); // file recreated at the new path
+    expect(surface.rms).toContain('/dir/a.txt'); // old path removed — proves the move was enqueued AND flush awaited it
+  });
+
+  it('renameSync error matrix: ENOTEMPTY / ENOENT / EINVAL', () => {
+    const fs = freshFs();
+    fs.mkdirSync('/dir/sub', { recursive: true });
+    fs.mkdirSync('/dst/occupied', { recursive: true });
+    expect(() => fs.renameSync('/dir', '/dst')).toThrow(/ENOTEMPTY/);
+    expect(() => fs.renameSync('/missing', '/x')).toThrow(/ENOENT/);
+    expect(() => fs.renameSync('/dir', '/dir/sub/deeper')).toThrow(/EINVAL/);
+  });
+
+  it('copyFileSync copies content (source untouched); EISDIR on dir src/dst', () => {
+    const fs = freshFs();
+    fs.mkdirSync('/dir', { recursive: true });
+    fs.writeFileSync('/dir/a.txt', enc.encode('alpha'));
+    fs.copyFileSync('/dir/a.txt', '/dir/b.txt');
+    expect(dec.decode(fs.readFileBytesSync('/dir/b.txt'))).toBe('alpha');
+    expect(fs.existsSync('/dir/a.txt')).toBe(true);
+    expect(() => fs.copyFileSync('/dir', '/x')).toThrow(/EISDIR/);
+  });
+
+  it('cpSync recursive deep-copies; bare dir without recursive throws EISDIR', () => {
+    const fs = freshFs();
+    fs.mkdirSync('/dir/sub', { recursive: true });
+    fs.writeFileSync('/dir/sub/leaf.txt', enc.encode('leaf'));
+    expect(() => fs.cpSync('/dir', '/copy')).toThrow(/EISDIR/);
+    fs.cpSync('/dir', '/copy', { recursive: true });
+    expect(dec.decode(fs.readFileBytesSync('/copy/sub/leaf.txt'))).toBe('leaf');
+    expect(fs.existsSync('/dir/sub/leaf.txt')).toBe(true); // source untouched
   });
 });
