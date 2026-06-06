@@ -19,7 +19,7 @@ import { NotImplementedError } from '@riftydev/io';
 import { isAbsolute, joinPath, normalizePath, syncMirror } from '@riftydev/vfs';
 import { builtinCommands } from './builtins.ts';
 import { tokenize } from './tokenize.ts';
-import type { ShellCommand } from './types.ts';
+import type { CommandContext, ShellCommand } from './types.ts';
 
 export interface ShellOptions {
   cwd?: string;
@@ -44,6 +44,23 @@ export type ChunkStream = 'stdout' | 'stderr';
  */
 export interface RunOptions {
   readonly onChunk?: (chunk: string, stream: ChunkStream) => void;
+  /**
+   * Host-supplied cancellation (Ctrl+C / SIGINT). When it fires, `run` aborts
+   * its internal per-run controller and resolves with exit `130` even if a
+   * handler never returns on its own (a `vite`/`node http` dev server) — the
+   * foreground complement to background `&`. Cooperative, not a hard kill: the
+   * handler observes `ctx.signal` and winds down (ADR-0082).
+   */
+  readonly signal?: AbortSignal;
+  /**
+   * Whether the run's stdout sink is an interactive terminal. Propagated to
+   * `ctx.isTTY` for non-redirected segments (a redirected/piped child always
+   * gets a non-TTY context). Default `false` — the color-safe default (GNU
+   * `--color=auto` emits no SGR when unsure).
+   */
+  readonly isTTY?: boolean;
+  readonly cols?: number;
+  readonly rows?: number;
 }
 
 type Joiner = '&&' | '||' | ';' | null;
@@ -53,6 +70,38 @@ interface Segment {
 }
 
 const encoder = new TextEncoder();
+
+/** Resolved by the abort race when the foreground run is cancelled. */
+const ABORTED = Symbol('shell.aborted');
+
+/** Exit code for a command interrupted by SIGINT (128 + SIGINT(2)). */
+const SIGINT_EXIT = 130;
+
+/**
+ * A promise that resolves to {@link ABORTED} when `signal` fires, plus a
+ * `cleanup` that detaches the listener so a settled run leaks nothing
+ * (ADR-0082 §83). Resolves immediately when already aborted.
+ */
+function abortRace(signal: AbortSignal): {
+  promise: Promise<typeof ABORTED>;
+  cleanup: () => void;
+} {
+  let onAbort: (() => void) | null = null;
+  const promise = new Promise<typeof ABORTED>((resolve) => {
+    if (signal.aborted) {
+      resolve(ABORTED);
+      return;
+    }
+    onAbort = () => resolve(ABORTED);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+  return {
+    promise,
+    cleanup: () => {
+      if (onAbort) signal.removeEventListener('abort', onAbort);
+    },
+  };
+}
 
 export class Shell {
   private _cwd: string;
@@ -103,27 +152,52 @@ export class Shell {
 
     const segments = splitOnJoiners(tokens);
 
+    // Per-run cancellation (ADR-0082): the host signal forwards into an
+    // internal controller whose `signal` each command observes via `ctx.signal`.
+    // A SIGINT resolves `run` (exit 130) even if a handler never returns on its
+    // own (a dev server) — cooperative, not a hard kill.
+    const controller = new AbortController();
+    const host = options.signal;
+    const forwardAbort = () => controller.abort();
+    if (host) {
+      if (host.aborted) controller.abort();
+      else host.addEventListener('abort', forwardAbort, { once: true });
+    }
+    const abort = abortRace(controller.signal);
+
     let stdout = '';
     let stderr = '';
     let lastExitCode = 0;
     let executedAny = false;
 
-    for (let idx = 0; idx < segments.length; idx++) {
-      const seg = segments[idx]!;
+    try {
+      for (let idx = 0; idx < segments.length; idx++) {
+        const seg = segments[idx]!;
 
-      // Short-circuit based on the PREVIOUS segment's joiner.
-      if (idx > 0) {
-        const prevJoiner = segments[idx - 1]!.joiner;
-        if (prevJoiner === '&&' && lastExitCode !== 0) continue;
-        if (prevJoiner === '||' && lastExitCode === 0) continue;
-        // `;` or null: always run
+        // Short-circuit based on the PREVIOUS segment's joiner.
+        if (idx > 0) {
+          const prevJoiner = segments[idx - 1]!.joiner;
+          if (prevJoiner === '&&' && lastExitCode !== 0) continue;
+          if (prevJoiner === '||' && lastExitCode === 0) continue;
+          // `;` or null: always run
+        }
+
+        const segResult = await this.runSegment(
+          seg.tokens,
+          options,
+          controller.signal,
+          abort.promise,
+        );
+        stdout += segResult.stdout;
+        stderr += segResult.stderr;
+        lastExitCode = segResult.exitCode;
+        executedAny = true;
+        // Ctrl+C aborts the whole line — stop the chain.
+        if (controller.signal.aborted) break;
       }
-
-      const segResult = await this.runSegment(seg.tokens, options);
-      stdout += segResult.stdout;
-      stderr += segResult.stderr;
-      lastExitCode = segResult.exitCode;
-      executedAny = true;
+    } finally {
+      abort.cleanup();
+      if (host) host.removeEventListener('abort', forwardAbort);
     }
 
     // Theoretically unreachable (empty token list handled above); explicit for clarity.
@@ -138,7 +212,12 @@ export class Shell {
    * Run a single segment (no joiner handling): env-prefix popping,
    * trailing-redirect extraction, command lookup and execution.
    */
-  private async runSegment(segmentTokens: string[], options: RunOptions): Promise<RunResult> {
+  private async runSegment(
+    segmentTokens: string[],
+    options: RunOptions,
+    signal: AbortSignal,
+    abortPromise: Promise<typeof ABORTED>,
+  ): Promise<RunResult> {
     if (segmentTokens.length === 0) return { exitCode: 0, stdout: '', stderr: '' };
 
     if (segmentTokens.includes('<')) {
@@ -197,7 +276,7 @@ export class Shell {
       if (stream === 'stdout') stdout += chunk;
       else stderr += chunk;
     };
-    const ctx = {
+    const ctx: CommandContext = {
       cwd: this._cwd,
       env: { ...this.env, ...overrides },
       stdout: {
@@ -210,6 +289,12 @@ export class Shell {
           emit(c, 'stderr');
         },
       },
+      // A redirected (and future piped) sink is never a TTY (ADR-0082): force
+      // isTTY false so `ls --color=auto > f` writes no SGR bytes into the file.
+      isTTY: redirectTo ? false : (options.isTTY ?? false),
+      cols: options.cols,
+      rows: options.rows,
+      signal,
     };
 
     if (!handler) {
@@ -219,13 +304,24 @@ export class Shell {
 
     let exitCode = 0;
     try {
-      exitCode = await handler(args, ctx);
+      const handlerPromise = handler(args, ctx);
+      const raced = await Promise.race([handlerPromise, abortPromise]);
+      if (raced === ABORTED) {
+        // SIGINT won the race: resolve now (exit 130). The handler keeps
+        // running until it honors ctx.signal — swallow its eventual settle so
+        // a late rejection isn't an unhandled rejection (cooperative abort).
+        void handlerPromise.then(undefined, () => {});
+        exitCode = SIGINT_EXIT;
+      } else {
+        exitCode = raced;
+      }
     } catch (err) {
       emit(`${(err as Error).stack ?? (err as Error).message}\n`, 'stderr');
       exitCode = 1;
     }
 
-    if (redirectTo && stdout.length > 0) {
+    // Don't flush a partial buffer to the redirect target on a SIGINT abort.
+    if (redirectTo && stdout.length > 0 && exitCode !== SIGINT_EXIT) {
       try {
         const path = normalizePath(
           isAbsolute(redirectTo.path) ? redirectTo.path : joinPath(this._cwd, redirectTo.path),

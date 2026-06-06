@@ -4,6 +4,22 @@
 
 ### Added
 
+- **ADR-0082:** `CommandContext` gains four optional fields — `stdin?: StdinReader`
+  (async `read(): Promise<Uint8Array | null>`, `null` = EOF), `isTTY?: boolean`,
+  `cols?`/`rows?: number`, and `signal?: AbortSignal` — plus a new exported
+  `StdinReader` type. All optional, so every existing builtin and
+  `registerCommand` registrant (incl. `npm-shell-command`) compiles and behaves
+  unchanged. `RunOptions` gains optional `signal`/`isTTY`/`cols`/`rows`.
+  `Shell.run` now owns a per-run `AbortController`: the host `signal` forwards
+  into it, each command observes `ctx.signal`, and a SIGINT **resolves** `run`
+  with exit `130` even when a handler never returns on its own (a `vite`/`node
+  http` dev server) — via `Promise.race`, cooperative (not a hard kill), with
+  the listener removed on settle (no leak). The redirect path (and future pipe
+  RHS) forces `ctx.isTTY` false so `--color=auto` emits no SGR into a
+  file/stream. **Relationship to Q-2026-06-05-317:** this foreground-dispatcher
+  cancellation contract is COMPLEMENTARY to and NOT subsumed by the kernel
+  worker-teardown question — cooperative shell-side abort vs kernel realm
+  teardown are separate decisions, kept decoupled.
 - `Shell.run(line, options?)` now accepts an optional `onChunk(chunk, stream)`
   callback that fires synchronously for every stdout/stderr write a command
   produces. Lets the terminal show `npm install` progress bars and

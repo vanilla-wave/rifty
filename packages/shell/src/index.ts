@@ -19,4 +19,4 @@ export {
   type ShellOptions,
 } from './shell.ts';
 export { tokenize } from './tokenize.ts';
-export type { CommandContext, ShellCommand, Writer } from './types.ts';
+export type { CommandContext, ShellCommand, StdinReader, Writer } from './types.ts';
