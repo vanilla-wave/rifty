@@ -275,8 +275,14 @@ export function pickBestVersion(
   versions: readonly string[],
   range: string | undefined | null,
 ): string | null {
-  const candidates = versions.filter((v) => matchesRange(v, range));
-  if (candidates.length === 0) return null;
-  candidates.sort((a, b) => compare(b, a));
-  return candidates[0] ?? null;
+  // Single linear max-scan (#8, perf-audit 2026-06-05): drops the O(n log n) sort
+  // + intermediate array of the old filter+sort. Strict `> 0` keeps the
+  // earliest-encountered max among compare-equal inputs — byte-identical to the
+  // old stable descending sort + [0].
+  let best: string | null = null;
+  for (const v of versions) {
+    if (!matchesRange(v, range)) continue;
+    if (best === null || compare(v, best) > 0) best = v;
+  }
+  return best;
 }

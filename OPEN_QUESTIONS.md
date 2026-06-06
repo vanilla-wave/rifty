@@ -162,6 +162,33 @@ The perf audit proposed building true end-to-end page↔worker `ReadableStream` 
 
 ### Code markers (none — captured here; reversible)
 
+## Q-2026-06-06-322: per-spawn env/argv sharing buys ~0 perf (postMessage clones regardless) — defer to the diff-wire variant (ADR/rule1) or the pre-warm pool (ADR-0088)
+
+**Status:** 🟢 Active — DEFER (no code change; spawn-worker.ts untouched)
+**Encountered in:** JS-runtime perf audit item #20 (`docs/perf/js-runtime-perf-audit-2026-06-05.md:95`)
+**Milestone:** M10
+**Author (agent session):** 2026-06-06
+
+### Context
+
+Audit #20 flagged the per-spawn env+argv structured-clone (`spawnKernelWorker` builds `fullSpec` then `worker.postMessage(init, [...])` in `packages/kernel/src/spawn-worker.ts`). The in-gate fix proposed (freeze + share one canonical env object) does **not** reduce that cost: `postMessage` structured-clones `env` (Record) and `argv` (array) into the child realm regardless of object identity or `Object.freeze` — non-transferables are always deep-copied. Verified there is also no redundant PARENT-side clone to dedupe: `fullSpec` takes `spec.env`/`spec.argv` by reference, and the one spread in the path (`process-manager.ts` `{...spec, cwd}`) is shallow and leaves those references untouched.
+
+### Provisional decision
+
+**No code change.** Do not freeze/share env (buys nothing) and do not ship a CHANGELOG perf claim for a no-op. Record the finding here:
+
+1. **Measured no-op in-gate:** the freeze+share variant yields ~0 wire/CPU savings; the structured-clone is intrinsic to crossing the realm boundary.
+2. **Wire payload must stay byte-identical:** any in-gate edit must keep `WorkerSpawnSpec` serializing the same own-enumerable env/argv — the child realm depends on receiving the full env + argv.
+3. **The only edit that removes the clone flips to rule1 (ADR):** a per-spawn diff/overrides wire over a hoisted shared canonical env changes the `WorkerSpawnSpec` wire shape (cross-package public API in `packages/kernel/src/worker-entry.ts`) → IRREVERSIBLE per the reversibility checklist rule 1; it needs an ADR, not this OPEN_QUESTIONS line. If anyone implements it, reclassify.
+4. **The real spawn-latency lever is deferred:** a worker pre-warm pool (1–2 fresh never-executed workers) is the audit's "biggest spawn-latency lever" (audit:95/138), gated on a measured spawn spike, tracked as the prospective ADR-0088. Env/argv micro-tuning is not on the critical path.
+
+### Concrete trigger to overturn (any one)
+
+1. A measured spawn-rate spike (test runners / `worker_threads` fan-out) makes the env/argv clone material on a shipped workload → revisit the diff-wire variant (then via an ADR, rule1).
+2. The pre-warm pool work (ADR-0088) lands — fold any env/argv sharing into that pass once the wire shape is being revised anyway.
+
+### Code markers (none — no code change; captured here)
+
 ## Q-2026-06-05-318: deferred `RIFTY_RFV_*` → `RIFTY_RT_*` env rename + `Mode` token rename (post-ADR-0078)
 
 **Status:** 🟢 Active

@@ -1,0 +1,253 @@
+import { MemoryVfs } from '@riftydev/vfs';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makePackageTarball } from './_test-fixtures/tar-builder.ts';
+import { install } from './installer.ts';
+import type { Packument, VersionManifest } from './registry.ts';
+import { RegistryClient } from './registry.ts';
+
+interface FakeRegistryEntry {
+  manifest: VersionManifest;
+  tarball: Uint8Array;
+}
+
+/**
+ * Counting + delayed registry. `getTarball` records a call per resolved URL and
+ * awaits a microtask-delay so several fetches are genuinely in flight at once —
+ * the only way to exercise the bounded-semaphore overlap and the in-flight
+ * dedupe (#24). FakeRegistry in installer.test.ts resolves synchronously, so it
+ * can't surface concurrency; this one can.
+ */
+class CountingDelayedRegistry extends RegistryClient {
+  private readonly db: Map<string, Map<string, FakeRegistryEntry>>;
+  readonly tarballCalls = new Map<string, number>();
+  /** (name,version) keys whose getTarball should reject (simulated bad optional). */
+  readonly rejectKeys = new Set<string>();
+
+  constructor(db: Map<string, Map<string, FakeRegistryEntry>>) {
+    super({ baseUrl: '/fake', fetch: async () => new Response('', { status: 599 }) });
+    this.db = db;
+  }
+
+  override async getPackument(name: string): Promise<Packument> {
+    const versions = this.db.get(name);
+    if (!versions) throw new Error(`fake registry: no packument for ${name}`);
+    const versionsMap: Record<string, VersionManifest> = {};
+    for (const [v, entry] of versions) versionsMap[v] = entry.manifest;
+    const sorted = [...versions.keys()].sort();
+    const latest = sorted[sorted.length - 1] ?? '0.0.0';
+    return { name, 'dist-tags': { latest }, versions: versionsMap };
+  }
+
+  override async getTarball(tarballUrl: string): Promise<Uint8Array> {
+    const match = /^fake:\/\/([^/]+)\/(.+)$/.exec(tarballUrl);
+    if (!match) throw new Error(`fake registry: bad tarball url ${tarballUrl}`);
+    const [, name, version] = match;
+    const key = `${name}@${version}`;
+    this.tarballCalls.set(key, (this.tarballCalls.get(key) ?? 0) + 1);
+    // Artificial async gap so concurrent requests overlap.
+    await new Promise((r) => setTimeout(r, 5));
+    if (this.rejectKeys.has(key)) {
+      throw new Error(`simulated fetch failure for ${key}`);
+    }
+    const entry = this.db.get(name ?? '')?.get(version ?? '');
+    if (!entry) throw new Error(`fake registry: no tarball for ${tarballUrl}`);
+    return entry.tarball;
+  }
+}
+
+async function makeEntry(
+  name: string,
+  version: string,
+  dependencies: Record<string, string> = {},
+  optionalDependencies: Record<string, string> = {},
+): Promise<FakeRegistryEntry> {
+  return {
+    manifest: {
+      name,
+      version,
+      dependencies,
+      ...(Object.keys(optionalDependencies).length > 0 ? { optionalDependencies } : {}),
+      dist: { tarball: `fake://${name}/${version}` },
+    },
+    tarball: await makePackageTarball(name, version),
+  };
+}
+
+/** The live express diamond: ms@2.1.3 flat (debug's req, visited first),
+ * ms@2.0.0 nested under finalhandler. Shared by the determinism tests. */
+async function expressDiamondDb(): Promise<Map<string, Map<string, FakeRegistryEntry>>> {
+  const db = new Map<string, Map<string, FakeRegistryEntry>>();
+  db.set(
+    'express',
+    new Map([
+      ['4.21.0', await makeEntry('express', '4.21.0', { debug: '^2.6.9', finalhandler: '^1.3.0' })],
+    ]),
+  );
+  db.set('debug', new Map([['2.6.9', await makeEntry('debug', '2.6.9', { ms: '^2.1.0' })]]));
+  db.set(
+    'finalhandler',
+    new Map([['1.3.0', await makeEntry('finalhandler', '1.3.0', { ms: '2.0.0' })]]),
+  );
+  db.set(
+    'ms',
+    new Map([
+      ['2.0.0', await makeEntry('ms', '2.0.0')],
+      ['2.1.3', await makeEntry('ms', '2.1.3')],
+    ]),
+  );
+  return db;
+}
+
+describe('install — deterministic layout under bounded-concurrency fetch (#24)', () => {
+  it('produces byte-identical layout on every run (express diamond, 20x)', async () => {
+    const snapshots: string[] = [];
+    for (let run = 0; run < 20; run++) {
+      const registry = new CountingDelayedRegistry(await expressDiamondDb());
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/proj', { recursive: true });
+      const result = await install(
+        'root',
+        '1.0.0',
+        { express: '^4' },
+        { vfs, cwd: '/proj', registry },
+      );
+      // Canonicalize the lockfile package keys → versions; this is the layout.
+      const layout: Record<string, string> = {};
+      for (const [key, entry] of Object.entries(result.lockfile.packages)) {
+        layout[key] = entry.version;
+      }
+      snapshots.push(JSON.stringify(layout, Object.keys(layout).sort()));
+    }
+    // Every run identical, and the express-diamond first-wins contract holds.
+    const first = snapshots[0];
+    for (const s of snapshots) expect(s).toBe(first);
+    const layout = JSON.parse(first ?? '{}') as Record<string, string>;
+    expect(layout['node_modules/ms']).toBe('2.1.3');
+    expect(layout['node_modules/finalhandler/node_modules/ms']).toBe('2.0.0');
+  });
+
+  it('fetches each distinct (name,version) tarball exactly once (no double-fetch under concurrency)', async () => {
+    const registry = new CountingDelayedRegistry(await expressDiamondDb());
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await install('root', '1.0.0', { express: '^4' }, { vfs, cwd: '/proj', registry });
+    // ms appears at two install paths but as two distinct versions → 2 keys, 1 each.
+    expect(registry.tarballCalls.get('ms@2.1.3')).toBe(1);
+    expect(registry.tarballCalls.get('ms@2.0.0')).toBe(1);
+    expect(registry.tarballCalls.get('express@4.21.0')).toBe(1);
+    expect(registry.tarballCalls.get('debug@2.6.9')).toBe(1);
+    expect(registry.tarballCalls.get('finalhandler@1.3.0')).toBe(1);
+  });
+
+  it('collapses concurrent same-(name,version) fetches to one network call (in-flight dedupe)', async () => {
+    // Two independent parents request the SAME version of `shared`; under the
+    // deferred-fetch walk both are scheduled before either lands. The flat-slot
+    // dedupe already covers the second visit, but this also locks the call count.
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('p', new Map([['1.0.0', await makeEntry('p', '1.0.0', { shared: '1.0.0' })]]));
+    db.set('q', new Map([['1.0.0', await makeEntry('q', '1.0.0', { shared: '1.0.0' })]]));
+    db.set('shared', new Map([['1.0.0', await makeEntry('shared', '1.0.0')]]));
+    const registry = new CountingDelayedRegistry(db);
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await install('root', '1.0.0', { p: '1.0.0', q: '1.0.0' }, { vfs, cwd: '/proj', registry });
+    expect(registry.tarballCalls.get('shared@1.0.0')).toBe(1);
+  });
+});
+
+describe('install — optional-dep fetch failure stays non-fatal under concurrency (#24)', () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  it('warns and skips when an optional dep tarball fetch rejects (required deps still land)', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    // root → main(req) ; main has an optional `native` whose tarball fetch fails.
+    db.set('main', new Map([['1.0.0', await makeEntry('main', '1.0.0', {}, { native: '1.0.0' })]]));
+    db.set('native', new Map([['1.0.0', await makeEntry('native', '1.0.0')]]));
+    const registry = new CountingDelayedRegistry(db);
+    registry.rejectKeys.add('native@1.0.0'); // simulate a fetch that fails
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    // Must NOT throw — optional failure is warned, not fatal.
+    const result = await install(
+      'root',
+      '1.0.0',
+      { main: '1.0.0' },
+      { vfs, cwd: '/proj', registry },
+    );
+
+    // Required dep landed.
+    expect(await vfs.exists('/proj/node_modules/main/package.json')).toBe(true);
+    expect(result.lockfile.packages['node_modules/main']?.version).toBe('1.0.0');
+    // Optional dep skipped, with the exact warn message.
+    const warned = warnSpy.mock.calls.map((c) => String(c[0]));
+    expect(
+      warned.some((m) =>
+        m.includes('optional dependency native@1.0.0 of main could not be installed'),
+      ),
+    ).toBe(true);
+  });
+
+  it('skips the ENTIRE optional subtree when an optional dep tarball fetch rejects (no orphaned grandchild)', async () => {
+    // root → main(req) → opt(optional, fetch REJECTS) → grandchild(req).
+    // The old serial walk awaited opt's fetch before recursing, so a failed opt
+    // fetch threw before grandchild was ever visited → the whole opt subtree was
+    // skipped (npm parity). The deferred-fetch walk must reproduce this: neither
+    // opt NOR grandchild is pinned / on disk. (Regression: the buggy deferred
+    // code recursed first, orphaning grandchild with no dependent.)
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('main', new Map([['1.0.0', await makeEntry('main', '1.0.0', {}, { opt: '1.0.0' })]]));
+    db.set('opt', new Map([['1.0.0', await makeEntry('opt', '1.0.0', { grandchild: '1.0.0' })]]));
+    db.set('grandchild', new Map([['1.0.0', await makeEntry('grandchild', '1.0.0')]]));
+    const registry = new CountingDelayedRegistry(db);
+    registry.rejectKeys.add('opt@1.0.0'); // optional dep's tarball fetch fails
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    // Must NOT throw — optional failure is warned, not fatal.
+    const result = await install(
+      'root',
+      '1.0.0',
+      { main: '1.0.0' },
+      { vfs, cwd: '/proj', registry },
+    );
+
+    // Exact lockfile keys: only root ('') + main. opt skipped, grandchild NOT
+    // orphaned.
+    expect(Object.keys(result.lockfile.packages).sort()).toEqual(['', 'node_modules/main']);
+    // On-disk: main present, neither opt nor grandchild written.
+    expect(await vfs.exists('/proj/node_modules/main/package.json')).toBe(true);
+    expect(await vfs.exists('/proj/node_modules/opt/package.json')).toBe(false);
+    expect(await vfs.exists('/proj/node_modules/grandchild/package.json')).toBe(false);
+    // The optional skip was warned with the exact message.
+    const warned = warnSpy.mock.calls.map((c) => String(c[0]));
+    expect(
+      warned.some((m) =>
+        m.includes('optional dependency opt@1.0.0 of main could not be installed'),
+      ),
+    ).toBe(true);
+  });
+
+  it('a failed REQUIRED dep fetch still rejects the install', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('main', new Map([['1.0.0', await makeEntry('main', '1.0.0', { req: '1.0.0' })]]));
+    db.set('req', new Map([['1.0.0', await makeEntry('req', '1.0.0')]]));
+    const registry = new CountingDelayedRegistry(db);
+    registry.rejectKeys.add('req@1.0.0');
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    await expect(
+      install('root', '1.0.0', { main: '1.0.0' }, { vfs, cwd: '/proj', registry }),
+    ).rejects.toThrow('simulated fetch failure for req@1.0.0');
+  });
+});
