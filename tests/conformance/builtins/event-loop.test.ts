@@ -66,8 +66,10 @@ describe('event loop', () => {
     });
     setImmediate(() => order.push('C'));
     await new Promise((r) => setTimeout(r, 20));
-    // Both first-round immediates (A, C) run before the nested one; a greedy
-    // same-phase batch drain would yield ['A','A-end','B-nested','C'].
+    // Both first-round immediates (A, C) run before the nested one (next check
+    // phase). NB: the ascending-id Map rep already orders B-nested last, so this
+    // pins the Node-parity contract; the tail-snapshot's role is cross-phase
+    // separation, not this single-phase string.
     expect(order).toEqual(['A', 'A-end', 'C', 'B-nested']);
   });
 

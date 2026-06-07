@@ -79,9 +79,13 @@ Options for scheduling:
 
 - [x] Parity `cases/timers/immediate-nested.case.ts` — nested setImmediate defers
   to the next check phase (`A,A-end,C,B-nested`), driven via `require('node:timers')`.
-- [x] Parity `cases/timers/immediate-vs-timeout.case.ts` — setImmediate beats
-  setTimeout(0) (gated on MessageChannel presence). RED if the scheduler drops to
-  setTimeout(0).
+- [x] Conformance `event-loop.test.ts` ("setImmediate fires after the current
+  task" + the nested / clearImmediate / FIFO-burst drain tests) pins rifty's
+  MessageChannel scheduler. NOTE: a cross-runtime `setImmediate`-beats-
+  `setTimeout(0)` PARITY oracle is INVALID — Node's top-level
+  setImmediate-vs-setTimeout(0) order is non-deterministic (empirically ~1/10
+  inverts), so it cannot be a stable parity case (the original such case was
+  removed for this reason).
 - [x] Conformance `event-loop.test.ts` — nested-defers under installTimerGlobals;
   clearImmediate mid-drain removes a still-queued item; large burst FIFO with a
   mid-burst clear.
