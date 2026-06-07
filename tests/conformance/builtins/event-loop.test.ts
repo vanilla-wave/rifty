@@ -73,6 +73,25 @@ describe('event loop', () => {
     expect(order).toEqual(['A', 'A-end', 'C', 'B-nested']);
   });
 
+  // BLOCKER #2 (#28, ADR-0085): one immediate per check-phase macrotask, so the
+  // microtask queue drains BETWEEN consecutive immediates. A's post-await line
+  // runs before B, and B reads the value A set after its await. A greedy batched
+  // drain runs A,B,C in one macrotask, skipping the checkpoint → B reads 'init'.
+  it('runs a microtask checkpoint BETWEEN consecutive immediates (drain-one)', async () => {
+    const order: string[] = [];
+    let shared = 'init';
+    setImmediate(async () => {
+      order.push('A-start');
+      await Promise.resolve();
+      shared = 'set-by-A';
+      order.push('A-after-await');
+    });
+    setImmediate(() => order.push(`B-reads:${shared}`));
+    setImmediate(() => order.push('C'));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(order).toEqual(['A-start', 'A-after-await', 'B-reads:set-by-A', 'C']);
+  });
+
   it('clearImmediate mid-drain removes the still-queued item (Map.delete)', async () => {
     const order: string[] = [];
     // A is queued first; its callback clears B (queued AFTER A, same round) before

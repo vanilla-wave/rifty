@@ -7,10 +7,11 @@ import type { ParityCase } from '../../src/types.ts';
  * NEXT check phase, not the current one. Both top-level immediates (A, C) run in
  * the same phase before the nested one (B-nested). This pins the Node-parity
  * CONTRACT. NB: with the ascending-id Map rep the observable string
- * 'A,A-end,C,B-nested' also holds under a greedy drain (B-nested has the max id,
- * iterated last), so this case guards the contract, not the snapshot mechanism;
- * the scheduler invariant is guarded by immediate-vs-timeout.case.ts and
- * clearImmediate FIFO by the conformance suite.
+ * 'A,A-end,C,B-nested' holds because a nested immediate posts its own higher-id
+ * message serviced in a LATER check phase (drain-one-per-message). The
+ * inter-immediate microtask checkpoint is guarded by
+ * immediate-microtask-checkpoint.case.ts and clearImmediate FIFO by the
+ * conformance suite.
  *
  * MUST drive via `require('node:timers')`, NOT a bare global `setImmediate`:
  * `run-in-rifty` installs NO globals, so a bare global would hit the HOST Node

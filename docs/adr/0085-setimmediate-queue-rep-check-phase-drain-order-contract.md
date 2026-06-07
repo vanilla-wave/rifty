@@ -18,20 +18,22 @@ as `node:timers` in `@riftydev/io`'s builtin registry. So the drain ORDER is a
 cross-package contract — this is a rule-1 ADR (touches public API between
 packages), not a CHANGELOG-only refactor.
 
-Two emergent guarantees of the old impl are LOAD-BEARING (Node parity):
+Three emergent guarantees of the old impl are LOAD-BEARING (Node parity):
 1. A `setImmediate` scheduled from INSIDE a running immediate callback fires in
    the NEXT check phase, not the current one (Node check-phase semantics).
 2. `setImmediate` beats `setTimeout(0)` (the MessageChannel task dispatches ahead
    of a timer task).
+3. The microtask queue drains BETWEEN consecutive immediates — one immediate per
+   check-phase macrotask, so a callback's post-`await` continuation runs before
+   the NEXT immediate, and that next immediate sees its side effects.
 
-Both held for free under "1 immediate per macrotask". Under the new Map rep
-guarantee (1)'s observable STRING also holds for free — a nested immediate gets
-the highest id and the ascending-id drain visits it last — so the tail-snapshot
-does NOT change the single nested-string order. Its load-bearing role is PHASE
-SEPARATION: a nested immediate must run in a LATER check phase so it interleaves
-correctly with timers / microtasks scheduled between phases (not exposed by the
-nested-string case alone). Guarantee (2) breaks only if the scheduler switches
-to `setTimeout(0)`.
+All three held for free under "1 immediate per macrotask". Guarantee (1) needs
+PHASE SEPARATION via one-message-per-call, NOT a snapshot: a nested immediate
+posts its own (higher-id) message serviced by a LATER check phase. Guarantee (3)
+needs the per-macrotask drain — a greedy batch that runs every queued immediate
+in one macrotask SKIPS the inter-immediate microtask checkpoint (BLOCKER #2,
+empirically confirmed vs Node v24.5.0). Guarantee (2) breaks only if the
+scheduler switches to `setTimeout(0)`.
 
 ## Decision
 
@@ -39,46 +41,57 @@ Rep: `const immediates = new Map<number, {fn,args}>()` keyed by the monotonic
 positive-integer id. A Map iterates integer keys in numeric-ascending =
 insertion order → FIFO drain for free; `clearImmediate` is O(1) `delete`.
 
-Drain (`port1.onmessage`): take a TAIL SNAPSHOT `const tail = nextImmediateId` on
-entry and run only ids `< tail`, `delete`-ing each as it runs (per-callback
-try/catch+console.error preserved). An immediate scheduled DURING the drain gets
-id `>= tail` and is left for its own message = NEXT check phase. The ascending
-Map iteration lets the loop `break` at the first `id >= tail`.
+Drain (`port1.onmessage`): drain EXACTLY ONE item — the lowest id (Map iterates
+ascending = FIFO) — `delete`-ing it before running (per-callback
+try/catch+console.error preserved). One `MessageChannel` message per call ⇒ one
+immediate per macrotask ⇒ the microtask queue drains BETWEEN consecutive
+immediates (guarantee 3, Node check-phase parity). A nested immediate posts its
+own (higher-id) message serviced in the NEXT check phase (guarantee 1) — no
+snapshot needed, no stranding (one message per call). NB: NOT a greedy batch
+(run-every-queued-id in one macrotask) — that skips the inter-immediate
+microtask checkpoint (BLOCKER #2).
 
 Scheduling: KEEP one `MessageChannel` message per scheduled immediate (NOT
 coalesced, NOT `setTimeout(0)`). One-message-per-call means every immediate —
 including a nested one — has its own pending message, so nothing is ever
-stranded regardless of the snapshot; the snapshot only governs WHICH phase each
-runs in. Keeping MessageChannel (not setTimeout) preserves guarantee (2).
+stranded. Keeping MessageChannel (not setTimeout) preserves guarantee (2).
 `ImmediateHandle = {readonly id}` is unchanged (used by setImmediatePromise /
 clearImmediate). The no-MessageChannel fallback keeps `setTimeout(0)` and stays
-realm-specific (jsdom / node test envs without a real check phase).
+realm-specific (jsdom / node test envs without a real check phase) — already
+one-timer-per-immediate, so it has the per-macrotask drain too.
 
-Options for scheduling:
-- **One message per immediate (CHOSEN).** No stranding risk; snapshot handles
-  phase ordering. Lowest risk.
-- Coalesce to a single guarded message + re-arm-if-nonempty (REJECTED). Needs a
-  re-arm check so a nested immediate isn't stranded with no pending message —
-  extra moving part for no measured win on this path.
+Options for the drain:
+- **Drain-exactly-one per message (CHOSEN).** One immediate per macrotask, so the
+  microtask checkpoint runs between consecutive immediates (guarantee 3) and a
+  nested immediate's own message lands it in the next phase (guarantee 1). No
+  stranding, lowest risk.
+- Tail-snapshot batch — run all ids `< nextImmediateId` in one drain (REJECTED).
+  Preserves guarantee (1)'s single nested-string order but BREAKS guarantee (3):
+  batching consecutive immediates into one macrotask skips the inter-immediate
+  microtask checkpoint (BLOCKER #2). The snapshot was also vestigial — one
+  message per call already separates phases.
 
 ## Consequences
 
-- `clearImmediate` is O(1) (`Map.delete`) vs O(n) findIndex+splice.
-- Guarantees (1) and (2) preserved — the rewrite is Node-parity-equivalent to
-  the old impl, proven head-to-head (rifty vs Node) by the two parity cases.
+- `clearImmediate` is O(1) (`Map.delete`) vs O(n) findIndex+splice — the only
+  real win of the Map rep over the old array (drain scheduling is identical).
+- Guarantees (1), (2), (3) preserved. CORRECTION: the original tail-snapshot
+  rewrite was claimed "Node-parity-equivalent" but MISSED guarantee (3) — its
+  greedy batch ran consecutive immediates in one macrotask, skipping the
+  inter-immediate microtask checkpoint (BLOCKER #2). The per-macrotask drain-one
+  is what delivers the intra-phase microtask checkpoint; drain-one is byte-
+  equivalent in scheduling to the old array+single-`shift`, which had all three
+  guarantees for free.
 - Public `./builtins/timers` exported symbols + handle shape unchanged.
-- Negative: the tail-snapshot is a non-obvious invariant governing PHASE
-  SEPARATION (not the single nested-string order, which the ascending-id rep
-  already produces under a greedy drain too). The mutation-catching guards are
-  the MessageChannel scheduler (`immediate-vs-timeout`, RED on `setTimeout(0)`)
-  and `clearImmediate` FIFO — `immediate-nested` pins the Node-parity CONTRACT,
-  not the snapshot mechanism.
 - Drain-order is now an explicit documented contract (this ADR), not emergent.
 
 ## Acceptance criteria
 
 - [x] Parity `cases/timers/immediate-nested.case.ts` — nested setImmediate defers
   to the next check phase (`A,A-end,C,B-nested`), driven via `require('node:timers')`.
+- [x] Parity `cases/timers/immediate-microtask-checkpoint.case.ts` — microtask
+  checkpoint BETWEEN consecutive immediates (`A-start | A-after-await |
+  B-reads:set-by-A | C`), guarantee (3) / BLOCKER #2. RED on a greedy batch.
 - [x] Conformance `event-loop.test.ts` ("setImmediate fires after the current
   task" + the nested / clearImmediate / FIFO-burst drain tests) pins rifty's
   MessageChannel scheduler. NOTE: a cross-runtime `setImmediate`-beats-
