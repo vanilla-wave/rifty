@@ -4,6 +4,18 @@
 
 ### Added
 
+- Cursor-aware line editing (ADR-0094, user-requested). The line editor tracks a
+  caret (`cursorPos`) so you can move it and edit mid-line: ArrowLeft/Right move
+  the caret (clamped at the line ends), Home/Ctrl+A jump to the start, End/Ctrl+E
+  to the end, Delete (`\x1b[3~`) forward-deletes the char at the caret, Backspace
+  deletes before it, and printable input inserts at the caret. Previously the
+  editor was append-only and ArrowLeft/Right were swallowed (so `abc`,←,←,`X`
+  yielded `abcX`; now `aXbc`). `keys.ts` classifies Home (`\x1b[H`/`\x1b[1~`/
+  `\x1bOH`), End (`\x1b[F`/`\x1b[4~`/`\x1bOF`), Delete (`\x1b[3~`), Ctrl+A, Ctrl+E.
+  History recall now clears the whole visible line even when the caret is mid-line
+  and resets the caret to the end. Word-motion / kill-ring / reverse-search are
+  intentionally out of scope.
+
 - `RiftyTerminal` exposes `cols`/`rows` getters so the host can forward the live
   terminal size into the shell's `ctx.cols`/`ctx.rows` (drives `ls` column layout).
   Review pass 2026-06-07.
