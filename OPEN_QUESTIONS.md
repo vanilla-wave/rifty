@@ -27,6 +27,44 @@ When a question is reviewed:
 
 ## Active
 
+## Q-2026-06-07-324: optional-subtree partial-failure — rifty SALVAGES surviving required siblings (vs npm atomic-rollback)
+
+**Status:** 🟢 Active
+**Encountered in:** #24 concurrency-fetch risk-closing tests (`packages/npm-client/src/installer-concurrency.test.ts`), characterizing the deferred-fetch walk's optional-failure behavior
+**Milestone:** M10
+**Author (agent session):** 2026-06-07
+
+### Context
+
+`installer.ts` `walkAndPin` (#24, deferred bounded-concurrency fetch) handles a failed optional dep non-fatally. The optional BOUNDARY node awaits its own fetch before recursing (skip-whole-subtree on a boundary-fetch failure — npm parity, covered by the existing "skips the ENTIRE optional subtree" test). But a boundary that fetches OK, then has a REQUIRED grandchild whose fetch fails, behaves differently: required grandchildren are DEFERRED fetches that inherit the boundary's `optional` descriptor, settled via `Promise.allSettled`. A failed grandchild is warned-and-skipped (attributed to the optional boundary) while its surviving required SIBLINGS still pin.
+
+### Provisional decision (current behavior, pinned)
+
+rifty SALVAGES the survivors: for root → main → opt(optional, OK) → [gcOK(req, OK), gcFail(req, FAIL)], the install keeps main + opt + gcOK and skips only gcFail (warned as "optional dependency opt@… of main could not be installed"). The whole install stays non-fatal.
+
+### Divergence from npm (the judgment call)
+
+Real npm treats an optional dependency's subtree ATOMICALLY: if any required descendant of an optional dep fails, the WHOLE optional subtree rolls back (opt, gcOK, gcFail all absent). rifty's deferred-fetch walk instead salvages the surviving required siblings — a genuine Node-parity divergence, not a bug in the concurrency refactor (the old serial walk had the same shape once the boundary fetch itself succeeded).
+
+### Why this is a separate IRREVERSIBLE decision, not settled here
+
+Flipping to npm atomic-rollback is an observable Node-parity change (reversibility checklist rule 4) — it needs its own future ADR weighing: tracking which pins belong to which optional subtree, unwinding partial pins + on-disk writes, and the warn-message contract. This OQ does NOT make that flip; it records the divergence and PINS the provisional current (salvage) behavior via a CHARACTERIZATION test so the flip cannot happen silently.
+
+### Code markers
+
+- Cross-ref comment at the optional-boundary recurse / `fetchTasks` settle site in `packages/npm-client/src/installer.ts` (`walkAndPin`) pointing here.
+- Characterization test: `packages/npm-client/src/installer-concurrency.test.ts` ("CHARACTERIZATION: salvages surviving required grandchildren …").
+
+### Reversibility justification
+
+- Public APIs affected: none — `install()` signature + non-fatal-optional contract unchanged; only the partial-failure salvage shape is at issue.
+- Rough cost to revert/flip: the atomic-rollback variant is NOT a revert — it is new subtree-tracking + unwind logic, hence its own ADR.
+- External dependencies involved: none.
+
+### Needs human review by
+
+End of milestone M10.
+
 ## Q-2026-06-06-319: OPFS `writeFileSync` single shared cache/write-through slice (+ WASI `fd_write` aliasing gate)
 
 **Status:** 🟢 Active

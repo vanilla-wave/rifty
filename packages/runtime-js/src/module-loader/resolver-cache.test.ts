@@ -184,6 +184,44 @@ describe('resolver resolution cache (#15, Q-2026-06-06-321)', () => {
     expect(resolved.id).toBe('/app/late.js');
   });
 
+  it('CHARACTERIZATION: a memoised positive masks a now-closer node_modules entry until invalidate() (Q-2026-06-06-321 documented stale-id trade-off)', () => {
+    // resolver.ts:159-178 documents the provisional stale-id trade-off
+    // (Q-2026-06-06-321): SUCCESSFUL resolutions are memoised by
+    // (esm,fromDir,specifier) and a HIT skips the node_modules walk entirely.
+    // The deliberate consequence: if a CLOSER target appears after the memo is
+    // warmed (without firing invalidate), resolution stays STALE-POSITIVE — the
+    // walk is skipped, so the old id is returned. invalidate() is the only thing
+    // that drops the memo. Pin that here so a future memo-eviction change cannot
+    // silently alter it.
+    const { fs } = countingFs();
+    fs.loadFixture({
+      '/app/node_modules/dep/package.json': JSON.stringify({ name: 'dep', main: 'index.js' }),
+      '/app/node_modules/dep/index.js': "module.exports = 'far';",
+      '/app/sub/a.js': "module.exports = 'a';",
+    });
+    const loader = createModuleLoader(fs);
+
+    // Warm: `dep` from /app/sub walks up and resolves the FAR copy at /app.
+    const first = loader.resolver.resolve('dep', { fromFile: '/app/sub/a.js', esm: false });
+    expect(first.id).toBe('/app/node_modules/dep/index.js');
+
+    // A closer copy appears under /app/sub/node_modules (guest write / install,
+    // no invalidate). A fresh walk WOULD prefer it; the memo masks it.
+    fs.loadFixture({
+      '/app/sub/node_modules/dep/package.json': JSON.stringify({ name: 'dep', main: 'index.js' }),
+      '/app/sub/node_modules/dep/index.js': "module.exports = 'near';",
+    });
+
+    // STALE-POSITIVE: memo hit returns the FAR id, not the now-closer one.
+    const stale = loader.resolver.resolve('dep', { fromFile: '/app/sub/a.js', esm: false });
+    expect(stale.id).toBe('/app/node_modules/dep/index.js');
+
+    // invalidate() drops the memo -> the re-walk now finds the CLOSER copy.
+    loader.invalidate();
+    const fresh = loader.resolver.resolve('dep', { fromFile: '/app/sub/a.js', esm: false });
+    expect(fresh.id).toBe('/app/sub/node_modules/dep/index.js');
+  });
+
   it('NEVER caches the PACKAGE_PATH_NOT_EXPORTED throw (re-throws on repeat)', () => {
     const fs = new MemoryFsSync();
     fs.loadFixture({

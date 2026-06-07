@@ -55,6 +55,51 @@ class CountingDelayedRegistry extends RegistryClient {
   }
 }
 
+/**
+ * Records the PEAK number of `getTarball` calls in flight at once via a live
+ * gauge: increment on enter, await a gap so siblings overlap, decrement on exit.
+ * `peakInFlight` is the high-water mark — the in-flight half of #24 (the dedupe
+ * + determinism halves are covered elsewhere). A serial `await visit` fetch
+ * keeps this at 1; the bounded-semaphore deferred fetch drives it above 1.
+ */
+class GaugeRegistry extends RegistryClient {
+  private readonly db: Map<string, Map<string, FakeRegistryEntry>>;
+  private inFlight = 0;
+  peakInFlight = 0;
+
+  constructor(db: Map<string, Map<string, FakeRegistryEntry>>) {
+    super({ baseUrl: '/fake', fetch: async () => new Response('', { status: 599 }) });
+    this.db = db;
+  }
+
+  override async getPackument(name: string): Promise<Packument> {
+    const versions = this.db.get(name);
+    if (!versions) throw new Error(`fake registry: no packument for ${name}`);
+    const versionsMap: Record<string, VersionManifest> = {};
+    for (const [v, entry] of versions) versionsMap[v] = entry.manifest;
+    const sorted = [...versions.keys()].sort();
+    const latest = sorted[sorted.length - 1] ?? '0.0.0';
+    return { name, 'dist-tags': { latest }, versions: versionsMap };
+  }
+
+  override async getTarball(tarballUrl: string): Promise<Uint8Array> {
+    const match = /^fake:\/\/([^/]+)\/(.+)$/.exec(tarballUrl);
+    if (!match) throw new Error(`fake registry: bad tarball url ${tarballUrl}`);
+    const [, name, version] = match;
+    this.inFlight++;
+    this.peakInFlight = Math.max(this.peakInFlight, this.inFlight);
+    try {
+      // Hold the permit long enough that concurrently-scheduled fetches overlap.
+      await new Promise((r) => setTimeout(r, 5));
+      const entry = this.db.get(name ?? '')?.get(version ?? '');
+      if (!entry) throw new Error(`fake registry: no tarball for ${tarballUrl}`);
+      return entry.tarball;
+    } finally {
+      this.inFlight--;
+    }
+  }
+}
+
 async function makeEntry(
   name: string,
   version: string,
@@ -153,6 +198,18 @@ describe('install — deterministic layout under bounded-concurrency fetch (#24)
     await install('root', '1.0.0', { p: '1.0.0', q: '1.0.0' }, { vfs, cwd: '/proj', registry });
     expect(registry.tarballCalls.get('shared@1.0.0')).toBe(1);
   });
+
+  it('runs multiple tarball fetches concurrently (peak in-flight > 1)', async () => {
+    // The express diamond has 5 distinct (name,version) tarballs, all required.
+    // With the deferred bounded-semaphore fetch they overlap; a serial
+    // `await visit` fetch would run them one at a time (peak === 1).
+    const registry = new GaugeRegistry(await expressDiamondDb());
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await install('root', '1.0.0', { express: '^4' }, { vfs, cwd: '/proj', registry });
+    // Strict: serial would cap at 1; concurrent fetch lifts it above 1.
+    expect(registry.peakInFlight).toBeGreaterThan(1);
+  });
 });
 
 describe('install — optional-dep fetch failure stays non-fatal under concurrency (#24)', () => {
@@ -228,6 +285,66 @@ describe('install — optional-dep fetch failure stays non-fatal under concurren
     expect(await vfs.exists('/proj/node_modules/opt/package.json')).toBe(false);
     expect(await vfs.exists('/proj/node_modules/grandchild/package.json')).toBe(false);
     // The optional skip was warned with the exact message.
+    const warned = warnSpy.mock.calls.map((c) => String(c[0]));
+    expect(
+      warned.some((m) =>
+        m.includes('optional dependency opt@1.0.0 of main could not be installed'),
+      ),
+    ).toBe(true);
+  });
+
+  it('CHARACTERIZATION: salvages surviving required grandchildren of an optional whose subtree partially fails (DIVERGES from npm atomic-rollback) — Q-2026-06-07-324', async () => {
+    // root → main(req) → opt(OPTIONAL, fetch OK) → [gcOK(req, fetch OK),
+    //                                               gcFail(req, fetch REJECTS)].
+    // CURRENT rifty behavior (pinned here): opt fetches OK at the optional
+    // boundary (awaited before recursing) and is kept; its required children are
+    // deferred fetches inheriting opt's optional descriptor — gcOK lands, gcFail
+    // is warned-and-skipped. So opt + gcOK SURVIVE despite gcFail failing.
+    //
+    // npm DIVERGENCE: real npm treats the optional subtree atomically — a failed
+    // required grandchild rolls back the ENTIRE opt subtree (opt, gcOK, gcFail
+    // all absent). rifty SALVAGES the surviving required siblings instead.
+    // Flipping to npm atomic-rollback is a separate IRREVERSIBLE Node-parity
+    // decision (its own future ADR); this test pins the provisional current
+    // behavior so that flip cannot happen silently. See Q-2026-06-07-324.
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('main', new Map([['1.0.0', await makeEntry('main', '1.0.0', {}, { opt: '1.0.0' })]]));
+    db.set(
+      'opt',
+      new Map([['1.0.0', await makeEntry('opt', '1.0.0', { gcOK: '1.0.0', gcFail: '1.0.0' })]]),
+    );
+    db.set('gcOK', new Map([['1.0.0', await makeEntry('gcOK', '1.0.0')]]));
+    db.set('gcFail', new Map([['1.0.0', await makeEntry('gcFail', '1.0.0')]]));
+    const registry = new CountingDelayedRegistry(db);
+    registry.rejectKeys.add('gcFail@1.0.0'); // a REQUIRED grandchild's fetch fails
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    // Non-fatal: the failure surfaces only as a warn (attributed to the optional
+    // boundary), never a throw.
+    const result = await install(
+      'root',
+      '1.0.0',
+      { main: '1.0.0' },
+      { vfs, cwd: '/proj', registry },
+    );
+
+    // SALVAGE: main + opt + gcOK pinned; gcFail skipped. (npm would have none of
+    // the opt subtree.)
+    expect(Object.keys(result.lockfile.packages).sort()).toEqual([
+      '',
+      'node_modules/gcOK',
+      'node_modules/main',
+      'node_modules/opt',
+    ]);
+    // On-disk mirrors the lockfile: the survivors landed, gcFail did not.
+    expect(await vfs.exists('/proj/node_modules/main/package.json')).toBe(true);
+    expect(await vfs.exists('/proj/node_modules/opt/package.json')).toBe(true);
+    expect(await vfs.exists('/proj/node_modules/gcOK/package.json')).toBe(true);
+    expect(await vfs.exists('/proj/node_modules/gcFail/package.json')).toBe(false);
+    // The skip is attributed to the optional boundary (opt of main), since the
+    // failed grandchild inherits opt's optional descriptor.
     const warned = warnSpy.mock.calls.map((c) => String(c[0]));
     expect(
       warned.some((m) =>

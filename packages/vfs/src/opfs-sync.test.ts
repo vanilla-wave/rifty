@@ -549,4 +549,25 @@ describe('OpfsFsSync content cache — input-buffer aliasing (#3, ADR-0072)', ()
     expect(Array.from(captured[0] as Uint8Array)).toEqual([10, 20, 30]);
     expect(Array.from(fs.readFileBytesSync('/g'))).toEqual([10, 20, 30]);
   });
+
+  // Perf-guard (#3, perf audit 2026-06-05): the two former defensive copies
+  // (content cache + write-through) are MERGED into ONE shared `data.slice()`.
+  // The aliasing tests above prove the copy is not DROPPED; this proves the two
+  // were collapsed to exactly ONE (2N->N copies/write). RED-on-revert: split
+  // back into two separate slices => count === 2.
+  it('writeFileSync takes EXACTLY ONE defensive slice (the merged cache+write-through copy)', () => {
+    const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
+    const { surface } = capturingSurface();
+    const fs = new OpfsFsSync(root, surface);
+    const src = new Uint8Array([1, 2, 3, 4]);
+
+    // Scope the spy to the single write — the fake surface stores the reference
+    // (no copy), so the only Uint8Array slice in this window is the merged one.
+    const sliceSpy = vi.spyOn(Uint8Array.prototype, 'slice');
+    fs.writeFileSync('/merged', src);
+    const slices = sliceSpy.mock.calls.length;
+    sliceSpy.mockRestore();
+
+    expect(slices).toBe(1);
+  });
 });

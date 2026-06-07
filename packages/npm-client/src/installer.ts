@@ -325,6 +325,10 @@ async function walkAndPin(
       // Recurse: deps are known from the resolved pin, not the tarball bytes, so
       // traversal order / placement is unchanged. For the optional boundary the
       // fetch above already settled, so a failed optional never reaches here.
+      // Required children of an optional boundary INHERIT `optional`, so a later
+      // failed grandchild is warned-and-skipped while surviving siblings still
+      // pin — rifty SALVAGES the optional subtree's survivors rather than doing
+      // npm's atomic-rollback. Characterization-pinned; see Q-2026-06-07-324.
       for (const [depName, depRange] of Object.entries(pin.dependencies)) {
         await visit(depName, depRange, installPath, pin.name, optional);
       }
