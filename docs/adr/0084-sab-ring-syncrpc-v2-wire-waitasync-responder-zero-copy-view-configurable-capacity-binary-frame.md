@@ -97,7 +97,16 @@ updated only to write/strip the frame discriminator (it mirrors the wire format)
   longer corrupted. Proven by `binary-stdout-exec` hex parity case + a byte-exact
   conformance test (`Uint8Array.from([0xff,0xfe,0x00])`, length 3 not 7).
 - Sub-ms event-driven sync-RPC latency; no 1 ms busy-poll burning CPU per realm.
-- Zero copy-out on every request/reply read.
+- #18's zero-copy is a RING-LAYER property only; net copy savings end-to-end are
+  ~NEUTRAL. The ring no longer copies, but both production decode consumers
+  immediately re-copy the SAB view: `decodeReply` binary path `value: body.slice()`
+  (sync-rpc.ts) always copies, and the JSON path copies in
+  `decodeUtf8FromMaybeShared` (`UTF8_DECODER.decode(body.slice())`) since the
+  ADR-0087 fix (browsers reject decoding a shared view). The win is one fewer
+  ring-internal allocation + the freedom for a FUTURE consumer that can read the
+  view in place; the value is NOT a removed copy on today's request/reply path.
+  Consumers MUST NOT decode the shared view directly (cross-ref ADR-0087 +
+  docs/backlog/tests/browser-honest-coverage.md).
 - Public API additions (rule-1 IRREVERSIBLE): `SabRing.armRequest`,
   `WorkerSpawnSpec.payloadCapacity`, `SpawnWorkerSpec.payloadCapacity`,
   `encodeBinaryReply`/`FRAME_JSON`/`FRAME_BINARY`, `SYNC_RPC_PROTOCOL_VERSION`→2.

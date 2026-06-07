@@ -63,6 +63,13 @@ export class ModuleRegistry {
    * their resolved namespace until they too are invalidated. Dependency-graph
    * propagation is HMR-grade work, left to the downstream layer (see 2026-05-26
    * architecture review, Tier 1 #4 / D-E).
+   *
+   * WARNING: this is NOT the coherent invalidation seam. It drops ONLY the
+   * executed-module record, leaving the id-keyed transform/AST caches (and the
+   * resolver caches) stale — a subsequent load would re-run a cached transform.
+   * HMR / file-update callers MUST use `ModuleLoader.invalidate(id)` (loader.ts),
+   * which drops all caches in lockstep. Treat this method as a loader-internal
+   * primitive.
    */
   invalidate(id?: string): void {
     if (id === undefined) {

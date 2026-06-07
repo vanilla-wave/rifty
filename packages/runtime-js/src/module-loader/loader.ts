@@ -45,13 +45,22 @@ export interface ModuleLoader {
   /** Direct id-based loader (used by REPL and tests). */
   loadById(id: string, esm?: boolean): Promise<Record<string, unknown>>;
   /**
-   * Drop module records. No `id` wipes the whole cache (the `load-fixture` hot
-   * path uses this so loader + resolver survive editor saves); an absolute `id`
-   * removes only that entry — future hook for HMR / per-file updates. Delegates
-   * to {@link ModuleRegistry.invalidate}; see its note for the
-   * single-entry-vs-dependency-graph contract.
+   * The coherent invalidation seam. Drops the module record AND the id-keyed
+   * transform/AST caches AND the resolver caches in lockstep, so a re-load
+   * re-resolves + re-transforms cleanly. No `id` wipes everything (the
+   * `load-fixture` hot path uses this so loader + resolver survive editor saves);
+   * an absolute `id` removes only that entry — the hook for HMR / per-file
+   * updates. See {@link ModuleRegistry.invalidate} for the
+   * single-entry-vs-dependency-graph contract (HMR callers MUST call THIS, not
+   * `registry.invalidate`).
    */
   invalidate(id?: string): void;
+  /**
+   * WARNING: do NOT call `registry.invalidate(id)` for HMR — it drops only the
+   * executed-module record, leaving transform/AST/resolver caches stale. Use
+   * {@link ModuleLoader.invalidate} instead. Exposed for read access (e.g. tests
+   * inspecting cached records).
+   */
   readonly registry: ModuleRegistry;
   readonly resolver: Resolver;
 }
