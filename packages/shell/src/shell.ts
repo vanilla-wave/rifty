@@ -51,7 +51,7 @@ export interface RunOptions {
    * its internal per-run controller and resolves with exit `130` even if a
    * handler never returns on its own (a `vite`/`node http` dev server) — the
    * foreground complement to background `&`. Cooperative, not a hard kill: the
-   * handler observes `ctx.signal` and winds down (ADR-0082).
+   * handler observes `ctx.signal` and winds down (ADR-0089).
    */
   readonly signal?: AbortSignal;
   /**
@@ -82,7 +82,7 @@ const SIGINT_EXIT = 130;
 /**
  * A promise that resolves to {@link ABORTED} when `signal` fires, plus a
  * `cleanup` that detaches the listener so a settled run leaks nothing
- * (ADR-0082 §83). Resolves immediately when already aborted.
+ * (ADR-0089 §83). Resolves immediately when already aborted.
  */
 function abortRace(signal: AbortSignal): {
   promise: Promise<typeof ABORTED>;
@@ -159,7 +159,7 @@ export class Shell {
 
     const segments = splitOnJoiners(tokens);
 
-    // Per-run cancellation (ADR-0082): the host signal forwards into an
+    // Per-run cancellation (ADR-0089): the host signal forwards into an
     // internal controller whose `signal` each command observes via `ctx.signal`.
     // A SIGINT resolves `run` (exit 130) even if a handler never returns on its
     // own (a dev server) — cooperative, not a hard kill.
@@ -310,7 +310,7 @@ export class Shell {
           emit(c, 'stderr');
         },
       },
-      // A redirected (and future piped) sink is never a TTY (ADR-0082): force
+      // A redirected (and future piped) sink is never a TTY (ADR-0089): force
       // isTTY false so `ls --color=auto > f` writes no SGR bytes into the file.
       isTTY: redirectTo ? false : (options.isTTY ?? false),
       cols: options.cols,
@@ -384,8 +384,8 @@ export class Shell {
 
   /**
    * Map argument tokens to argv strings, glob-expanding unquoted word tokens
-   * (ADR-0084 part 2). Operators pass through as their literal `op`. A quoted
-   * word is NEVER expanded (whole-word quote flag — a documented ADR-0084
+   * (ADR-0091 part 2). Operators pass through as their literal `op`. A quoted
+   * word is NEVER expanded (whole-word quote flag — a documented ADR-0091
    * limitation). An unquoted word with no glob meta passes literally.
    */
   private expandArgs(tokens: Token[]): string[] {

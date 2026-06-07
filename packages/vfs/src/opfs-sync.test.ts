@@ -569,10 +569,13 @@ describe('OpfsFsSync content cache — input-buffer aliasing (#3, ADR-0072)', ()
     sliceSpy.mockRestore();
 
     expect(slices).toBe(1);
-// copyFileSync / cpSync / renameSync (ADR-0083). Exercised against the
+  });
+});
+
+// copyFileSync / cpSync / renameSync (ADR-0090). Exercised against the
 // in-memory index/content/times mirror (authoritative for sync callers); the
 // async OPFS persist is asserted via a fake PairedAsyncSurface that records
-// the move ops and is drained by flush() (ADR-0083 §74).
+// the move ops and is drained by flush() (ADR-0090 §74).
 // ---------------------------------------------------------------------------
 
 const enc = new TextEncoder();
@@ -596,7 +599,7 @@ function recordingSurface(): PairedAsyncSurface & { writes: string[]; rms: strin
   };
 }
 
-describe('OpfsFsSync.renameSync / copyFileSync / cpSync (ADR-0083)', () => {
+describe('OpfsFsSync.renameSync / copyFileSync / cpSync (ADR-0090)', () => {
   beforeEach(() => vi.spyOn(OpfsFsSync, 'isSupported').mockReturnValue(true));
   afterEach(() => vi.restoreAllMocks());
 
@@ -628,7 +631,7 @@ describe('OpfsFsSync.renameSync / copyFileSync / cpSync (ADR-0083)', () => {
     expect(dec.decode(fs.readFileBytesSync('/parent/moved/sub/leaf.txt'))).toBe('leaf');
   });
 
-  it('renameSync enqueues the async OPFS move and flush() awaits it (ADR-0083 §74)', async () => {
+  it('renameSync enqueues the async OPFS move and flush() awaits it (ADR-0090 §74)', async () => {
     const surface = recordingSurface();
     const fs = freshFs(surface);
     fs.mkdirSync('/dir', { recursive: true });

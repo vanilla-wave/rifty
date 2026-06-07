@@ -68,7 +68,7 @@ function move(
 
 /**
  * `mv [-n] [-v] SRC DST` / `mv [-n] [-v] SRC... DIR` — rename/move via
- * `FsSync.renameSync` (mtime preserved — ADR-0083). When DST is an existing
+ * `FsSync.renameSync` (mtime preserved — ADR-0090). When DST is an existing
  * directory each SRC lands at DST/basename (GNU — file and dir sources alike);
  * the multi-source form requires DST to be an existing directory.
  *

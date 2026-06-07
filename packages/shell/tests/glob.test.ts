@@ -1,5 +1,5 @@
 /**
- * Single-segment glob expansion via the public `Shell` (ADR-0084 part 2). Each
+ * Single-segment glob expansion via the public `Shell` (ADR-0091 part 2). Each
  * case pins a specific failure mode: unquoted `*`/`?`/`[…]` expand sorted from
  * the cwd; a QUOTED glob stays literal (quote provenance is load-bearing); a
  * no-match glob stays literal (bash nullglob-off); dotfiles need an explicit

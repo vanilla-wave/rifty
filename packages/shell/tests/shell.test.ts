@@ -18,7 +18,7 @@ afterEach(() => {
 
 /**
  * Project a `Token[]` to its word/op string sequence — the exact value contract
- * the pre-ADR-0084 `string[]` assertions encoded. The new quote-provenance bit
+ * the pre-ADR-0091 `string[]` assertions encoded. The new quote-provenance bit
  * is covered separately in `tokenize-provenance.test.ts`; here we preserve the
  * original assertions verbatim (mechanical adaptation to the new return type,
  * NOT a weakening — CLAUDE.md).
@@ -214,7 +214,7 @@ describe('Shell — pipe is loud', () => {
   });
 });
 
-describe('Shell — background & is loud (ADR-0084 op-token detection)', () => {
+describe('Shell — background & is loud (ADR-0091 op-token detection)', () => {
   it('throws NotImplementedError(shell.background) for a bare &', async () => {
     const sh = new Shell();
     await expect(sh.run('vite &')).rejects.toMatchObject({ feature: 'shell.background' });
@@ -249,7 +249,7 @@ describe('Shell — redirect write failure surfaces loudly', () => {
       statSyncOrNull: () => null,
       utimes: () => undefined,
       // Never exercised on the redirect-write path; throwing stubs complete
-      // the FsSync shape (ADR-0083) without changing this test's behavior.
+      // the FsSync shape (ADR-0090) without changing this test's behavior.
       copyFileSync: () => {
         throw new Error('unused');
       },
@@ -358,7 +358,7 @@ describe('Shell — onChunk streaming writer', () => {
       statSyncOrNull: () => null,
       utimes: () => undefined,
       // Never exercised on the redirect-write path; throwing stubs complete
-      // the FsSync shape (ADR-0083) without changing this test's behavior.
+      // the FsSync shape (ADR-0090) without changing this test's behavior.
       copyFileSync: () => {
         throw new Error('unused');
       },

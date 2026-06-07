@@ -4,7 +4,7 @@
  * Emits {@link Token}s, NOT bare strings: word tokens carry a `quoted` flag
  * recording whether any character came from inside `'…'`/`"…"`, and operator
  * tokens carry an `op` discriminator. Quote provenance is load-bearing for glob
- * expansion (ADR-0084): `grep '*.ts'` (quoted) must stay literal while
+ * expansion (ADR-0091): `grep '*.ts'` (quoted) must stay literal while
  * `grep *.ts` (unquoted) expands — a bare `string[]` can't distinguish them.
  *
  * Supported:
@@ -23,7 +23,7 @@
  *
  * Deliberately NOT supported (kept loud — caller is expected to error):
  *   glob (`*`, `?`, `[abc]`) is NOT expanded here — the dispatcher expands it
- *   AFTER tokenize, using the `quoted` flag (ADR-0084); command substitution
+ *   AFTER tokenize, using the `quoted` flag (ADR-0091); command substitution
  *   `$(…)` / `` `…` ``; arithmetic `$((…))`; heredocs.
  *
  * Expansion uses the optional `env`; unknown variables expand to '' (POSIX).

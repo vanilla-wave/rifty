@@ -1,11 +1,11 @@
 import { setSyncMirror } from '@riftydev/vfs/internal';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 /**
- * `CommandContext` cancellation + TTY shape (ADR-0082).
+ * `CommandContext` cancellation + TTY shape (ADR-0089).
  *
  * Parity tier: unit-only-justified — the SIGINT-resolves-`run` contract and the
  * isTTY-per-sink rule have NO `node:*` oracle (Node ships no `Shell.run`) and no
- * GNU output to freeze; the dispatcher behavior IS the contract (ADR-0086 tiers
+ * GNU output to freeze; the dispatcher behavior IS the contract (ADR-0093 tiers
  * a/b/c all inapplicable). The relationship to Q-2026-06-05-317 (kernel worker
  * teardown) is a COMPLEMENTARY, SEPARATE decision — cooperative shell-side abort
  * vs kernel teardown — and is NOT subsumed by it (recorded in CHANGELOG).
@@ -14,7 +14,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Shell } from '../src/shell.ts';
 import type { CommandContext } from '../src/types.ts';
 
-describe('Shell.run — SIGINT cancellation contract (ADR-0082)', () => {
+describe('Shell.run — SIGINT cancellation contract (ADR-0089)', () => {
   it('resolves exit 130 when the host signal fires, even if the command NEVER returns', async () => {
     const sh = new Shell();
     sh.registerCommand('hang', () => new Promise<number>(() => {})); // never resolves
@@ -81,7 +81,7 @@ describe('Shell.run — SIGINT cancellation contract (ADR-0082)', () => {
   });
 });
 
-describe('CommandContext.isTTY per sink (ADR-0082 §56/§94)', () => {
+describe('CommandContext.isTTY per sink (ADR-0089 §56/§94)', () => {
   function probeShell(): { sh: Shell; seen: () => CommandContext | null } {
     const sh = new Shell({ cwd: '/' });
     let last: CommandContext | null = null;

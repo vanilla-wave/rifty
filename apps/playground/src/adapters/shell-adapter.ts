@@ -40,7 +40,7 @@ export interface RunContext {
  *
  * `interrupt()` aborts the in-flight run (Ctrl+C / SIGINT). The terminal's
  * `onSignal` is wired to it so a running `sleep` / dev server winds down and
- * `run` resolves exit 130 (ADR-0082) — previously unreachable from the app.
+ * `run` resolves exit 130 (ADR-0089) — previously unreachable from the app.
  */
 export interface ShellSession {
   attachWriter(write: Writer): void;

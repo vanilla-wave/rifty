@@ -23,7 +23,7 @@ function seed(files: Record<string, string>): void {
 beforeEach(() => resetSyncMirror());
 afterEach(() => resetSyncMirror());
 
-it('mv a b: moves the file AND preserves mtime (the ADR-0083 win)', async () => {
+it('mv a b: moves the file AND preserves mtime (the ADR-0090 win)', async () => {
   seed({ '/a': 'alpha' });
   fs.utimes('/a', 123_000, 123_000);
   const pre = fs.statSync('/a').mtime;

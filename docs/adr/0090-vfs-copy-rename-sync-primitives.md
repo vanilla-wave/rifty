@@ -78,5 +78,5 @@ WASI `path_rename` was **not** an option: it is a guest syscall, unreachable fro
 - [ ] All error codes are members of the existing `VfsErrorCode` union (no new codes).
 - [ ] `apps/playground/src/glue/fs-ops.ts` rename migrated off `copyTree`+rm onto `renameSync` for the file case; `// TODO(ADR): Q-2026-06-04-313` marker removed (`pnpm todo:adr`).
 - [ ] Cross-package type check passes (`pnpm typecheck`) — third-party `FsSync` adapters get a `tsc` error until they add the three methods (no silent shape drift, per ADR-0041 precedent).
-- [ ] Parity cases (per ADR-0086): `node:fs.renameSync` mtime-preservation and `cpSync` recursive/partial-failure agree with Node where `node:fs`-expressible.
+- [ ] Parity cases (per ADR-0093): `node:fs.renameSync` mtime-preservation and `cpSync` recursive/partial-failure agree with Node where `node:fs`-expressible.
 - [ ] `OPEN_QUESTIONS.md` moves Q-2026-06-04-313 to "Promoted" with this ADR as resolution.

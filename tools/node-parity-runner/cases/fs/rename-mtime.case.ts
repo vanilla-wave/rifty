@@ -1,6 +1,6 @@
 import type { ParityCase } from '../../src/types.ts';
 
-// ADR-0083: fs.renameSync must MOVE (src gone, dst has the bytes) and PRESERVE
+// ADR-0090: fs.renameSync must MOVE (src gone, dst has the bytes) and PRESERVE
 // mtime — the old read+write+rm path restamped mtime, which this catches
 // (the printed mtime would diverge from Node's preserved value).
 const c: ParityCase = {

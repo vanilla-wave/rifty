@@ -52,7 +52,7 @@
   Legacy inline builtins (`pwd`/`cd`/`mkdir`/`rm`/`env`/`touch`) relocated to
   their own `commands/<cmd>.ts` files; `builtinCommands` now takes a `hasCommand`
   probe (second param) to wire `which`.
-- **ADR-0081 (file-arg coreutils):** new pure-JS builtins over `syncMirror()`, one
+- **ADR-0088 (file-arg coreutils):** new pure-JS builtins over `syncMirror()`, one
   file each under `src/commands/` + a `_shared.ts` (`resolve`/`enc`/`dec`):
   `cat -n/-b/-A/-E`, `head -n/-c` (incl. negative-N), `tail -n/-c` (incl. `+N`;
   `-f` throws), `wc -l/-w/-c/-m`, `cp [-r] [-n]` (over `copyFileSync`/`cpSync`),
@@ -62,12 +62,12 @@
   upgraded `echo -n/-e/-E`. Every unimplemented flag throws
   `NotImplementedError('shell.<cmd>.<flag>')` (no silent stub); each defines its
   GNU-faithful exit code (load-bearing for `&&`/`||`). Registered in
-  `builtinCommands`. **Follow-up:** ADR-0086 node-fs-reuse parity cases for the
+  `builtinCommands`. **Follow-up:** ADR-0093 node-fs-reuse parity cases for the
   tier-c builtins (cat/head/tail/wc/basename/dirname/realpath/cp/mv) and the
   compat-matrix rows are tracked for the milestone-DoD closer (A-033); ls/grep/find
   (frozen-GNU-fixture tier) land with the SGR/columns/walker helpers in a later phase.
 
-- **ADR-0084:** `tokenize` now returns `Token[]` (was `string[]`) — a word token
+- **ADR-0091:** `tokenize` now returns `Token[]` (was `string[]`) — a word token
   `{ value, quoted }` carrying quote provenance, or an operator token `{ op }`.
   `quoted` is `true` iff ≥1 character of the word came from inside `'…'`/`"…"`,
   the load-bearing bit that lets the dispatcher keep `grep '*.ts'` literal while
@@ -80,7 +80,7 @@
   (the existing assertions are preserved via a `vals()` projection; the new
   `quoted` bit gets its own `tokenize-provenance.test.ts`).
 
-- **ADR-0082:** `CommandContext` gains four optional fields — `stdin?: StdinReader`
+- **ADR-0089:** `CommandContext` gains four optional fields — `stdin?: StdinReader`
   (async `read(): Promise<Uint8Array | null>`, `null` = EOF), `isTTY?: boolean`,
   `cols?`/`rows?: number`, and `signal?: AbortSignal` — plus a new exported
   `StdinReader` type. All optional, so every existing builtin and

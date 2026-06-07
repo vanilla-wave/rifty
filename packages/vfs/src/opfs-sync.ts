@@ -685,7 +685,7 @@ export class OpfsFsSync implements FsSync {
     const bytes = (this.content.get(s) ?? new Uint8Array()).slice();
     // writeFileSync updates content/index/attachChild + enqueues OPFS write-through.
     this.writeFileSync(d, bytes);
-    // A copy is a new file → dst mtime = now (ADR-0083; OPFS mtime via side-table).
+    // A copy is a new file → dst mtime = now (ADR-0090; OPFS mtime via side-table).
     const now = Date.now();
     this.times.set(d, { atime: now, mtime: now });
   }
@@ -736,7 +736,7 @@ export class OpfsFsSync implements FsSync {
     }
     // Snapshot the src subtree paths BEFORE mutating, then re-key index /
     // content / times across each — preserving the entry objects so the
-    // `times` mtime survives (the ADR-0083 win). Open handles point at the
+    // `times` mtime survives (the ADR-0090 win). Open handles point at the
     // OLD on-disk file (which the async persist removes), so close+drop them;
     // a fresh handle opens lazily on next access.
     const moved = [...this.index.keys()].filter((p) => p === s || p.startsWith(`${s}/`));

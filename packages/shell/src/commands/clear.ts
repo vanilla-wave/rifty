@@ -1,7 +1,7 @@
 /**
  * `clear` — clear the terminal screen and scrollback. Always exits 0.
  *
- * isTTY-gated (ADR-0082): emits the CSI sequences only when stdout is an
+ * isTTY-gated (ADR-0089): emits the CSI sequences only when stdout is an
  * interactive terminal. Real `clear` writes them unconditionally, so `clear > f`
  * dumps escape bytes into the file — a deliberate divergence we make to never
  * corrupt a non-TTY sink (Q-2026-06-07: clear isTTY-gating). Any flag (-T TERM,

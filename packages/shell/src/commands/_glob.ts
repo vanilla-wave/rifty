@@ -1,5 +1,5 @@
 /**
- * Single-segment glob matching (ADR-0084 part 2). Scope: ONE path segment —
+ * Single-segment glob matching (ADR-0091 part 2). Scope: ONE path segment —
  * `*` (any run incl. empty, never `/`), `?` (one non-`/` char), `[…]` char
  * class with ranges and `[!…]`/`[^…]` negation. NO `**`, NO braces, NO
  * multi-segment globbing. The dispatcher handles dir-prefix splitting and

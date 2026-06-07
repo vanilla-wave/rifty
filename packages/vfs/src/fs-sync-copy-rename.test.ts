@@ -1,6 +1,6 @@
 /**
  * `FsSync.copyFileSync` / `cpSync` / `renameSync` over the memory backend
- * (ADR-0083). Parity tier: node-fs-reuse — these map 1:1 onto
+ * (ADR-0090). Parity tier: node-fs-reuse — these map 1:1 onto
  * `node:fs.{copyFileSync,cpSync,renameSync}` semantics; the cross-engine
  * Node-vs-rifty parity case lives under the parity runner (U32). Here we pin
  * the contract directly against `MemoryFsSync`.
@@ -28,7 +28,7 @@ function codeOf(fn: () => void): string {
   throw new Error('expected throw, got none');
 }
 
-describe('FsSync.renameSync (ADR-0083)', () => {
+describe('FsSync.renameSync (ADR-0090)', () => {
   it('same-dir rename PRESERVES mtime (not restamped like copy+write+rm)', () => {
     const fs = seed();
     fs.utimes('/dir/a.txt', 123_000, 123_000);
@@ -36,7 +36,7 @@ describe('FsSync.renameSync (ADR-0083)', () => {
     fs.renameSync('/dir/a.txt', '/dir/b.txt');
     expect(fs.existsSync('/dir/a.txt')).toBe(false);
     expect(fs.existsSync('/dir/b.txt')).toBe(true);
-    expect(fs.statSync('/dir/b.txt').mtime).toBe(before); // the core ADR-0083 win
+    expect(fs.statSync('/dir/b.txt').mtime).toBe(before); // the core ADR-0090 win
     expect(dec.decode(fs.readFileBytesSync('/dir/b.txt'))).toBe('alpha');
   });
 
@@ -106,7 +106,7 @@ describe('FsSync.renameSync (ADR-0083)', () => {
   });
 });
 
-describe('FsSync.copyFileSync (ADR-0083)', () => {
+describe('FsSync.copyFileSync (ADR-0090)', () => {
   it('copies bytes and overwrites an existing dst (Node default, no EXCL)', () => {
     const fs = seed();
     fs.writeFileSync('/dir/b.txt', enc.encode('old'));
@@ -140,7 +140,7 @@ describe('FsSync.copyFileSync (ADR-0083)', () => {
   });
 });
 
-describe('FsSync.cpSync (ADR-0083)', () => {
+describe('FsSync.cpSync (ADR-0090)', () => {
   it('cpSync of a dir WITHOUT recursive throws EISDIR (Node parity)', () => {
     const fs = seed();
     expect(codeOf(() => fs.cpSync('/dir', '/copy'))).toBe('EISDIR');

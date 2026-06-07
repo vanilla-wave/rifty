@@ -244,7 +244,7 @@ export function rmdirSync(p: string, opts?: { recursive?: boolean }): void {
 }
 
 export function renameSync(src: string, dst: string): void {
-  // ADR-0083: native VFS rename — atomic-where-possible and mtime-preserving
+  // ADR-0090: native VFS rename — atomic-where-possible and mtime-preserving
   // (the prior read+write+rm restamped mtime and copied subtrees).
   syncMirror().renameSync(resolvePath(src), resolvePath(dst));
 }
@@ -283,12 +283,12 @@ export const realpathSync: ((p: string) => string) & { native: (p: string) => st
   Object.assign(_realpathSyncImpl, { native: _realpathSyncImpl });
 
 export function copyFileSync(src: string, dst: string): void {
-  // ADR-0083: native VFS copy (single regular file; dst mtime=now).
+  // ADR-0090: native VFS copy (single regular file; dst mtime=now).
   syncMirror().copyFileSync(resolvePath(src), resolvePath(dst));
 }
 
 export function cpSync(src: string, dst: string, opts?: { recursive?: boolean }): void {
-  // ADR-0083: `node:fs.cpSync` — recursive-aware, best-effort fail-fast.
+  // ADR-0090: `node:fs.cpSync` — recursive-aware, best-effort fail-fast.
   syncMirror().cpSync(resolvePath(src), resolvePath(dst), { recursive: opts?.recursive });
 }
 

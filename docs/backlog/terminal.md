@@ -2,12 +2,12 @@
 
 Status: living backlog. Last updated: 2026-06-07. Layer: `@riftydev/shell` (above runtime-*/kernel; imports `@riftydev/vfs` + `@riftydev/io` only — no reverse imports).
 
-Tracks terminal/shell follow-ups that are **not yet done**. Done work lives in git + package CHANGELOGs + ADR-0081..0086; this doc is the forward-looking queue. Source-of-truth precedence: `PROJECT_PLAN.md` > ADRs > this file.
+Tracks terminal/shell follow-ups that are **not yet done**. Done work lives in git + package CHANGELOGs + ADR-0088..0086; this doc is the forward-looking queue. Source-of-truth precedence: `PROJECT_PLAN.md` > ADRs > this file.
 
 ## What's already done (pointer, not duplicated here)
 
 Coreutils/rich-terminal command surface — **complete & green** (26 builtins, all gates pass):
-`pwd cd echo ls cat mkdir rm env touch head tail wc basename dirname realpath seq true false printf cp mv ls grep find which clear sleep` + glob expansion + shared `_walk`/`_sgr`/`_columns`/`_glob`. See ADR-0081..0086, `packages/shell/CHANGELOG.md`, OPEN_QUESTIONS Q-401/402/407..412.
+`pwd cd echo ls cat mkdir rm env touch head tail wc basename dirname realpath seq true false printf cp mv ls grep find which clear sleep` + glob expansion + shared `_walk`/`_sgr`/`_columns`/`_glob`. See ADR-0088..0086, `packages/shell/CHANGELOG.md`, OPEN_QUESTIONS Q-401/402/407..412.
 
 ## Milestone-label clarification (read first)
 
@@ -21,15 +21,15 @@ The dispatcher gap. Ordered by dependency; each gates the next. Live `NotImpleme
 
 | # | Item | Current state | Notes |
 |---|------|---------------|-------|
-| 1 | **Pipes `\|`** | `NotImplementedError('shell.pipe')` in `shell.ts` runSegment | Wire stdout of segment N → `ctx.stdin` of N+1. Foundation: `CommandContext.stdin` (ADR-0082) already exists. Exit = last stage (POSIX), no `pipefail`. |
+| 1 | **Pipes `\|`** | `NotImplementedError('shell.pipe')` in `shell.ts` runSegment | Wire stdout of segment N → `ctx.stdin` of N+1. Foundation: `CommandContext.stdin` (ADR-0089) already exists. Exit = last stage (POSIX), no `pipefail`. |
 | 2 | **Input redirect `<`** | `NotImplementedError('shell.input-redirect')` | Open VFS file → `ctx.stdin` reader. Pairs with the existing trailing `>`/`>>` redirect logic. |
 | 3 | **stdin mode for existing filters** | `NotImplementedError('shell.head.stdin')`; cat/wc/tail are file-arg-only | Once a command has no file args and `ctx.stdin` is connected, read from stdin. Needed: cat, wc, head, tail. |
-| 4 | **Cancellation wiring** | shell + terminal both ready; gap is the wire | `TerminalPanel.tsx onSignal → Shell.run({ signal })`. `Shell.run` already resolves 130 on abort (ADR-0082); only the UI→shell hookup is missing. |
+| 4 | **Cancellation wiring** | shell + terminal both ready; gap is the wire | `TerminalPanel.tsx onSignal → Shell.run({ signal })`. `Shell.run` already resolves 130 on abort (ADR-0089); only the UI→shell hookup is missing. |
 | 5 | **Background `&`** | `NotImplementedError('shell.background')` (no milestone tag) | Lower priority; decide if in-scope at all (browser has no real job control). Record decision before implementing. |
 
 **Dependencies:** stdin-filter commands (P2) need #1 or #3 first. Cancellation (#4) is independent — can land anytime. Recommended order: 1 → 3 → 2 → (P2) → 4.
 
-**Hard rules to keep:** no silent stubs (unimplemented modes throw `NotImplementedError('shell.<cmd>.<mode>')`); GNU exit codes load-bearing; stdin filter with no input connected must error cleanly, never stub (ADR-0082); parity is the gold standard.
+**Hard rules to keep:** no silent stubs (unimplemented modes throw `NotImplementedError('shell.<cmd>.<mode>')`); GNU exit codes load-bearing; stdin filter with no input connected must error cleanly, never stub (ADR-0089); parity is the gold standard.
 
 ## P2 — stdin-filter commands (need P1 pipes/stdin first)
 
@@ -65,7 +65,7 @@ Per no-silent-stub these THROW `NotImplementedError` today and are tracked `❌`
 
 ## Blocked (do not start)
 
-- **git read-ops facade** (ADR-0085): `git status`/`diff`/`log` as structured facade results, write-ops throw. **Blocked on Q-2026-05-30-061** (isomorphic-git dependency ratification). Do NOT add isomorphic-git to any `package.json` until ratified. Doc-only.
+- **git read-ops facade** (ADR-0092): `git status`/`diff`/`log` as structured facade results, write-ops throw. **Blocked on Q-2026-05-30-061** (isomorphic-git dependency ratification). Do NOT add isomorphic-git to any `package.json` until ratified. Doc-only.
 - **M12 opencode server facade** (PROJECT_PLAN §M12): the consumer of the shell-IO + structured grep/glob/list tools. No-vendored-tree slice is green (ADR-0052..0055, F09); rest blocked on vendoring opencode → Spike C → WASM-SQLite. Separate large theme.
 
 ## Cross-references

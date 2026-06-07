@@ -249,12 +249,12 @@ export class MemoryBackend {
     if (!srcNode) throw new VfsError('ENOENT', src);
     if (srcNode.kind === 'dir' && d.startsWith(`${s}/`)) throw new VfsError('EINVAL', src);
 
-    const srcParentPath = dirname(s);
+    const srcParentPath = dirnameNormalized(s);
     const srcParent = this.resolve(srcParentPath);
     if (!srcParent || srcParent.kind !== 'dir') throw new VfsError('ENOENT', srcParentPath);
     const srcName = s.slice(srcParentPath === '/' ? 1 : srcParentPath.length + 1);
 
-    const dstParentPath = dirname(d);
+    const dstParentPath = dirnameNormalized(d);
     const dstParent = this.resolve(dstParentPath);
     if (!dstParent || dstParent.kind !== 'dir') throw new VfsError('ENOENT', dstParentPath);
     const dstName = d.slice(dstParentPath === '/' ? 1 : dstParentPath.length + 1);

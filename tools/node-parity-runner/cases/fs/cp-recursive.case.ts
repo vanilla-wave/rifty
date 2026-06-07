@@ -1,6 +1,6 @@
 import type { ParityCase } from '../../src/types.ts';
 
-// ADR-0083: fs.cpSync({ recursive: true }) deep-copies a tree and leaves the
+// ADR-0090: fs.cpSync({ recursive: true }) deep-copies a tree and leaves the
 // source intact, matching node:fs.cpSync.
 const c: ParityCase = {
   code: `

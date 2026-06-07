@@ -4,7 +4,7 @@
  * Each operand is a non-negative number with an optional suffix: `s` (seconds,
  * default), `m` (minutes), `h` (hours), `d` (days). Multiple operands SUM (GNU).
  * Exit 0 when the delay completes; 130 (128+SIGINT) when cancelled via
- * `ctx.signal` — the wait races the abort so Ctrl+C returns promptly (ADR-0082).
+ * `ctx.signal` — the wait races the abort so Ctrl+C returns promptly (ADR-0089).
  * A non-numeric value or unknown suffix is a usage error (stderr + exit 1), NOT
  * a NotImplementedError: GNU sleep itself rejects these at parse time.
  */
