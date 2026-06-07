@@ -85,6 +85,20 @@ export interface SyncRpcReply {
 const UTF8_ENCODER = new TextEncoder();
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
 
+/**
+ * UTF-8 decode a frame body that may be a SharedArrayBuffer-backed view.
+ * `TextDecoder.decode` rejects shared views in browsers ("The provided
+ * ArrayBufferView value must not be shared") — Chromium/WebKit are strict where
+ * Node is lax, so the SAB frame path passed every Node test yet threw the first
+ * time it ran in a real cross-origin-isolated Worker (the COI execSync e2e).
+ * Copying into a fresh (non-shared) buffer is the spec-portable read; the bodies
+ * are small JSON (requests, `{ok,value|error}` / error replies). The binary
+ * frame body already copies via `.slice()`.
+ */
+function decodeUtf8FromMaybeShared(body: Uint8Array): string {
+  return UTF8_DECODER.decode(body.slice());
+}
+
 /** Prefix `body` with the 1-byte frame discriminator (ADR-0084 #23). */
 function frame(kind: typeof FRAME_JSON | typeof FRAME_BINARY, body: Uint8Array): Uint8Array {
   const out = new Uint8Array(body.byteLength + 1);
@@ -127,7 +141,7 @@ export function decodeReply(bytes: Uint8Array): SyncRpcReply {
   if (kind !== FRAME_JSON) {
     throw new TypeError(`decodeReply: unknown frame discriminator 0x${(kind ?? -1).toString(16)}`);
   }
-  const text = UTF8_DECODER.decode(body);
+  const text = decodeUtf8FromMaybeShared(body);
   const parsed = JSON.parse(text) as unknown;
   if (!isReply(parsed)) {
     throw new TypeError(`decodeReply: malformed reply frame: ${text}`);
@@ -146,7 +160,7 @@ export function decodeRequest(bytes: Uint8Array): SyncRpcRequest {
       `decodeRequest: expected JSON frame, got discriminator 0x${(kind ?? -1).toString(16)}`,
     );
   }
-  const text = UTF8_DECODER.decode(bytes.subarray(1));
+  const text = decodeUtf8FromMaybeShared(bytes.subarray(1));
   const parsed = JSON.parse(text) as unknown;
   if (!isRequest(parsed)) {
     throw new TypeError(`decodeRequest: malformed request frame: ${text}`);

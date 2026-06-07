@@ -23,8 +23,10 @@ import {
   SYNC_RPC_PROTOCOL_VERSION,
   SyncRpcProtocolMismatchError,
   decodeReply,
+  decodeRequest,
   encodeBinaryReply,
   encodeReply,
+  encodeRequest,
 } from './sync-rpc.ts';
 
 describe('SyncRpc protocol version (ADR-0032)', () => {
@@ -180,6 +182,43 @@ describe('SyncRpc v2 binary frame (ADR-0084 #23)', () => {
     expect(replyBytes[0]).toBe(FRAME_BINARY);
     const reply = decodeReply(replyBytes);
     expect(Array.from(reply.value as Uint8Array)).toEqual([0xff, 0xfe, 0x00]);
+  });
+});
+
+describe('SyncRpc JSON-frame decode over a SharedArrayBuffer view (browser SAB path)', () => {
+  // Regression: `TextDecoder.decode()` rejects a SharedArrayBuffer-backed view
+  // in browsers ("The provided ArrayBufferView value must not be shared") —
+  // Node is lax, so the SAB JSON-frame path passed every Node test yet threw
+  // the first time it ran in a real cross-origin-isolated Worker (the COI
+  // execSync e2e, tests/e2e/execsync-sab.spec.ts). The decoders must copy out
+  // of the shared view before decoding. This test feeds a SAB-backed view to
+  // assert the decode path never touches a shared buffer with TextDecoder.
+
+  /** Copy `frame` into a SharedArrayBuffer-backed Uint8Array view. */
+  function asSharedView(frame: Uint8Array): Uint8Array {
+    const sab = new SharedArrayBuffer(frame.byteLength);
+    const view = new Uint8Array(sab);
+    view.set(frame);
+    return view;
+  }
+
+  it('decodeReply decodes a JSON reply frame whose body is a shared view', () => {
+    const shared = asSharedView(encodeReply({ ok: true, value: { hello: 'world' } }));
+    expect(decodeReply(shared)).toEqual({ ok: true, value: { hello: 'world' } });
+  });
+
+  it('decodeReply decodes a JSON error reply frame whose body is a shared view', () => {
+    const shared = asSharedView(
+      encodeReply({ ok: false, error: { name: 'Error', message: 'boom', code: 'ECHILDFAILED' } }),
+    );
+    const reply = decodeReply(shared);
+    expect(reply.ok).toBe(false);
+    expect(reply.error).toEqual({ name: 'Error', message: 'boom', code: 'ECHILDFAILED' });
+  });
+
+  it('decodeRequest decodes a JSON request frame whose body is a shared view', () => {
+    const shared = asSharedView(encodeRequest({ method: 'execSync', payload: { cmd: 'node /x' } }));
+    expect(decodeRequest(shared)).toEqual({ method: 'execSync', payload: { cmd: 'node /x' } });
   });
 });
 

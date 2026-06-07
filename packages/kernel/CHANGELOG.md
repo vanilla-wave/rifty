@@ -57,6 +57,10 @@
   from runtime-js (`wireWorkerStdio` dissolved into the kernel adapter —
   follow-ups doc item #3).
 
+### Fixed
+
+- **SyncRpc JSON-frame decode no longer feeds a SharedArrayBuffer view to `TextDecoder` (browser SAB path).** `decodeReply`/`decodeRequest` (`ipc/sync-rpc.ts`) called `TextDecoder.decode(body)` where `body` is a `subarray` VIEW into the ring's SAB (ADR-0084 #18 zero-copy). Browsers reject a shared-backed view (`TypeError: The provided ArrayBufferView value must not be shared`); Node is lax, so this passed every Node unit + conformance test yet threw the FIRST time it ran in a real cross-origin-isolated Worker — surfaced by the new `tests/e2e/execsync-sab.spec.ts` (guest `execSync` over real SAB + `Atomics.waitAsync` + v2 binary frame). Both decoders now copy out of the (possibly shared) view via `.slice()` before `TextDecoder.decode` (small JSON bodies — requests, `{ok,value|error}` / error replies); the binary frame body already copied. The v2 binary fast-path is byte-unchanged. Guard: `ipc/sync-rpc.test.ts` "JSON-frame decode over a SharedArrayBuffer view" (decodeReply value + error, decodeRequest) + the e2e (`hex === 'fffe00'`, which only the real byte-exact round-trip yields).
+
 ### Changed
 
 - `ProcessHandle` sealed union no longer carries `send` on the shared base.

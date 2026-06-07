@@ -49,6 +49,10 @@
   path (shell-tool resolution `Filesystem.stat(shell)?.isFile()`) on the thrown
   ENOENT. Parity: `fs/stat-throw-if-no-entry.case.ts`.
 
+### Added
+
+- **Public subpaths `./ipc/exec-sync-handler` + `./builtins/child_process` for the COI execSync e2e harness.** A host realm that OWNS the kernel dispatcher (calls `spawnWorker`) must register the `'execSync'` handler on ITS dispatcher so kernel-spawned guests run `execSync` end-to-end — but the playground page never `require`s `child_process`, so the lazy first-require install (`builtins/child_process.ts`) never fires on the page realm. `./ipc/exec-sync-handler` re-exports `installRuntimeJsExecSyncHandler` (+ `ExecSyncPayload`/`ScriptResolver`/`InstallRuntimeJsExecSyncOptions`) so a host can wire it explicitly; `./builtins/child_process` exposes the real `node:child_process` surface (`execSync`/`spawn`/`exec`/`fork`) so a `kind:'url'` guest entry (no module loader) can call the genuine `execSync` client without re-implementing the SAB gate. Both surfaced via `tools/publishing/sync-publish-config.mjs` `addExports`. First consumer: `apps/playground/src/execsync-harness.ts` + `tests/e2e/execsync-sab.spec.ts` (the honest real-SAB execSync proof). New public cross-package surface → flagged for an ADR.
+
 ### Changed
 
 - **CJS compile failures now name the module.** A syntactically-invalid CJS module

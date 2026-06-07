@@ -23,11 +23,25 @@ assertCrossOriginIsolated();
 // the kernel never hardcodes a path.
 setKernelWorkerUrl(kernelWorkerUrl);
 
-const root = document.getElementById('app');
-if (!root) throw new Error('Missing #app root element');
+// e2e-only: the execSync-over-SAB harness (tests/e2e/execsync-sab.spec.ts).
+// Gated on `#test=execsync` so normal playground boot is untouched. Runs in the
+// page realm (which owns the kernel dispatcher), spawns a guest worker, and
+// paints the byte-exact execSync result into the DOM. Lazy-imported so the
+// harness chunk never loads on a normal page.
+if (location.hash.includes('test=execsync')) {
+  const { runExecSyncHarness } = await import('./execsync-harness.ts');
+  await runExecSyncHarness();
+} else {
+  await renderApp();
+}
 
-// ADR-0013 — pick OPFS vs memory + register the SW before the UI sees the runtime.
-// Pipeline: re-assert COI (defence-in-depth), init VFS (memory fallback on failure),
-// register `/sw.js` (banner on failure, not fatal). Render waits for all three.
-const bootResult = await bootstrapPlayground();
-render(() => <App boot={bootResult} />, root);
+async function renderApp(): Promise<void> {
+  const root = document.getElementById('app');
+  if (!root) throw new Error('Missing #app root element');
+
+  // ADR-0013 — pick OPFS vs memory + register the SW before the UI sees the
+  // runtime. Pipeline: re-assert COI (defence-in-depth), init VFS (memory
+  // fallback on failure), register `/sw.js` (banner on failure, not fatal).
+  const bootResult = await bootstrapPlayground();
+  render(() => <App boot={bootResult} />, root);
+}

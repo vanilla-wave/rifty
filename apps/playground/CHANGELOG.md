@@ -55,6 +55,8 @@
 
 ### Added
 
+- **e2e-gated execSync-over-SAB harness (`#test=execsync`).** A page-realm harness (`src/execsync-harness.ts`) + guest worker entry (`src/workers/execsync-harness-guest.ts`) that proves rifty's real `execSync` path end-to-end in a cross-origin-isolated chromium Worker — the path Node tests cannot exercise (real SharedArrayBuffer + `Atomics.waitAsync` dispatcher wake + ADR-0084 v2 binary frame; the conformance SAB-blocking cases `skipIf(!sabReady)` in Node). `main.tsx` runs it ONLY when `location.hash` includes `test=execsync` (lazy-imported chunk); normal boot is byte-unchanged. The page realm (which owns the kernel dispatcher) seeds the child scripts into its sync mirror, registers the runtime-js `'execSync'` handler on `getKernelDispatcher()` (via the new `@riftydev/runtime-js/ipc/exec-sync-handler` seam), and `spawnWorker`s a guest that runs `execSync('node /child.js')` where the child writes raw non-UTF-8 bytes `[0xff,0xfe,0x00]`; the guest emits the result hex into the DOM. Asserted by `tests/e2e/execsync-sab.spec.ts`: `hex === 'fffe00'` (a broken v2 frame mangles to U+FFFD → `efbfbd...`; a broken dispatcher hangs → timeout — only the real byte-exact round-trip passes) plus a `blocked-result` blocking round-trip. This harness surfaced the kernel SAB JSON-frame `TextDecoder`-on-shared-view bug (fixed in `@riftydev/kernel`).
+
 - **Lazy `node_modules` browsing in the explorer (ADR-0080).** The reverse
   snapshot (ADR-0076) excludes `node_modules`; a new two-way request/response
   read bridge (`node-modules-port.ts`, the symmetric complement of the one-way
