@@ -76,6 +76,16 @@ export class RiftyTerminal {
     this.term.dispose();
   }
 
+  /** Current terminal width in columns (xterm default 80 before {@link mount}). */
+  get cols(): number {
+    return this.term.cols;
+  }
+
+  /** Current terminal height in rows (xterm default 24 before {@link mount}). */
+  get rows(): number {
+    return this.term.rows;
+  }
+
   write(data: string, stream: TerminalStream = 'stdout'): void {
     const text = data.replace(/\n/g, '\r\n');
     if (stream === 'stderr') {

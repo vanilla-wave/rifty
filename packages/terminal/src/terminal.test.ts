@@ -290,3 +290,12 @@ describe('RiftyTerminal — onSignal contract', () => {
     expect(onSignal).toHaveBeenCalledWith('SIGINT');
   });
 });
+
+describe('RiftyTerminal — dimensions', () => {
+  it('exposes cols/rows so the host can forward ctx.cols/ctx.rows into the shell', () => {
+    const term = new RiftyTerminal({ onInput: () => {} });
+    // xterm defaults to 80x24 before mount(); the getters must surface them.
+    expect(term.cols).toBeGreaterThan(0);
+    expect(term.rows).toBeGreaterThan(0);
+  });
+});

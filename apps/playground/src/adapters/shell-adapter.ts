@@ -19,6 +19,17 @@ import { onCleanup } from 'solid-js';
 type Writer = (chunk: string, stream?: 'stdout' | 'stderr') => void;
 
 /**
+ * Terminal context for a run: it's an interactive TTY, with its live width/
+ * height. Forwarded into `ctx.isTTY`/`ctx.cols`/`ctx.rows` so `ls` column
+ * layout + `--color=auto` SGR actually engage in the real terminal (they were
+ * dead before — the adapter never forwarded these).
+ */
+export interface RunContext {
+  readonly cols: number;
+  readonly rows: number;
+}
+
+/**
  * Public surface of `useShellSession`. `runLine` executes one shell line,
  * streaming stdout/stderr into the writer attached via `attachWriter`.
  *
@@ -26,10 +37,15 @@ type Writer = (chunk: string, stream?: 'stdout' | 'stderr') => void;
  * in `glue/npm-shell-command.ts`) wire custom builtins like `npm` / `node`
  * without the adapter knowing about them — otherwise `npm install foo` hits
  * the shell's "command not found" path with exit 127.
+ *
+ * `interrupt()` aborts the in-flight run (Ctrl+C / SIGINT). The terminal's
+ * `onSignal` is wired to it so a running `sleep` / dev server winds down and
+ * `run` resolves exit 130 (ADR-0082) — previously unreachable from the app.
  */
 export interface ShellSession {
   attachWriter(write: Writer): void;
-  runLine(input: string): Promise<number>;
+  runLine(input: string, term?: RunContext): Promise<number>;
+  interrupt(): void;
   registerCommand(name: string, cmd: ShellCommand): void;
   cwd(): string;
   dispose(): void;
@@ -41,27 +57,46 @@ export interface ShellSession {
  */
 export function useShellSession(options: ShellOptions = {}): ShellSession {
   let writer: Writer | null = null;
+  // AbortController for the in-flight run; `interrupt()` aborts it (Ctrl+C).
+  let active: AbortController | null = null;
   const shell = new Shell(options);
 
   // Disposer for lifecycle parity with `useRuntime`; the shell holds no host
   // resources today.
   onCleanup(() => {
     writer = null;
+    active?.abort();
+    active = null;
   });
 
   return {
     attachWriter(w: Writer): void {
       writer = w;
     },
-    async runLine(input: string): Promise<number> {
+    async runLine(input: string, term?: RunContext): Promise<number> {
       // No-op on empty input: re-render the prompt without touching shell state.
       if (input.trim().length === 0) return 0;
-      const result = await shell.run(input, {
-        onChunk: (chunk, stream) => {
-          writer?.(chunk, stream);
-        },
-      });
-      return result.exitCode;
+      const controller = new AbortController();
+      active = controller;
+      try {
+        const result = await shell.run(input, {
+          onChunk: (chunk, stream) => {
+            writer?.(chunk, stream);
+          },
+          signal: controller.signal,
+          // The playground terminal is always an interactive TTY — engage column
+          // layout + colour. Width/height come from xterm; fall back to 80x24.
+          isTTY: true,
+          cols: term?.cols,
+          rows: term?.rows,
+        });
+        return result.exitCode;
+      } finally {
+        if (active === controller) active = null;
+      }
+    },
+    interrupt(): void {
+      active?.abort();
     },
     registerCommand(name: string, cmd: ShellCommand): void {
       shell.registerCommand(name, cmd);
@@ -71,6 +106,8 @@ export function useShellSession(options: ShellOptions = {}): ShellSession {
     },
     dispose(): void {
       writer = null;
+      active?.abort();
+      active = null;
     },
   };
 }
