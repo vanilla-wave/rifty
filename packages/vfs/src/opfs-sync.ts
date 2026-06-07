@@ -701,6 +701,10 @@ export class OpfsFsSync implements FsSync {
       return;
     }
     if (!recursive) throw new VfsError('EISDIR', src);
+    // Guard against copying a dir into its own subtree (`cp -r a a`, `cp -r a
+    // a/b`) — without it the recursion never terminates → stack overflow.
+    // Matches `renameSync`'s into-subtree EINVAL.
+    if (d === s || d.startsWith(`${s}/`)) throw new VfsError('EINVAL', src);
     this.mkdirSync(d, { recursive: true });
     // Fail-fast: a child failure propagates; entries copied before remain.
     for (const name of [...(srcEntry.children ?? [])].sort()) {

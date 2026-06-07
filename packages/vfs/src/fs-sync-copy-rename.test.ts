@@ -171,4 +171,14 @@ describe('FsSync.cpSync (ADR-0083)', () => {
     expect(codeOf(() => fs.cpSync('/dir', '/copy', { recursive: true }))).toBe('EISDIR');
     expect(fs.existsSync('/copy/a.txt')).toBe(true); // copied before the throw — not rolled back
   });
+
+  it('cpSync recursive into the SOURCE itself (a → a) throws EINVAL, not a stack overflow', () => {
+    const fs = seed(); // /dir is a dir with /dir/a.txt
+    expect(codeOf(() => fs.cpSync('/dir', '/dir', { recursive: true }))).toBe('EINVAL');
+  });
+
+  it('cpSync recursive into the source SUBTREE (a → a/b) throws EINVAL, not a stack overflow', () => {
+    const fs = seed();
+    expect(codeOf(() => fs.cpSync('/dir', '/dir/sub', { recursive: true }))).toBe('EINVAL');
+  });
 });

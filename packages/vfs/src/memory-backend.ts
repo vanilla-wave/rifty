@@ -229,6 +229,10 @@ export class MemoryBackend {
       return;
     }
     if (!recursive) throw new VfsError('EISDIR', src);
+    // Guard against copying a dir into its own subtree (`cp -r a a`, `cp -r a
+    // a/b`) — without it the recursion never terminates → stack overflow.
+    // Matches `rename`'s into-subtree EINVAL.
+    if (d === s || d.startsWith(`${s}/`)) throw new VfsError('EINVAL', src);
     this.mkdir(d, { recursive: true });
     // Fail-fast: a child failure propagates; entries copied before remain.
     for (const name of [...node.children.keys()].sort()) {

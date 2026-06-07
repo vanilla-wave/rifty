@@ -670,4 +670,12 @@ describe('OpfsFsSync.renameSync / copyFileSync / cpSync (ADR-0083)', () => {
     expect(dec.decode(fs.readFileBytesSync('/copy/sub/leaf.txt'))).toBe('leaf');
     expect(fs.existsSync('/dir/sub/leaf.txt')).toBe(true); // source untouched
   });
+
+  it('cpSync recursive into the source (a → a) or its subtree (a → a/b) throws EINVAL, not a stack overflow', () => {
+    const fs = freshFs();
+    fs.mkdirSync('/dir', { recursive: true });
+    fs.writeFileSync('/dir/a.txt', enc.encode('alpha'));
+    expect(() => fs.cpSync('/dir', '/dir', { recursive: true })).toThrow(/EINVAL/);
+    expect(() => fs.cpSync('/dir', '/dir/sub', { recursive: true })).toThrow(/EINVAL/);
+  });
 });
