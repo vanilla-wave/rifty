@@ -55,6 +55,10 @@ Flipping to npm atomic-rollback is an observable Node-parity change (reversibili
 - Cross-ref comment at the optional-boundary recurse / `fetchTasks` settle site in `packages/npm-client/src/installer.ts` (`walkAndPin`) pointing here.
 - Characterization test: `packages/npm-client/src/installer-concurrency.test.ts` ("CHARACTERIZATION: salvages surviving required grandchildren …").
 
+### Residual edge (#24 dedup-gate fix, 2026-06-07)
+
+An optional-boundary fetch REJECTION now rolls back the `scheduled`/`flatByName` claims it made so a later REQUIRED visit of the same name re-attempts and aborts (npm parity; see CHANGELOG #24 follow-on). This is orthogonal to the salvage behavior above (the salvage path is the boundary's REQUIRED grandchildren via `fetchTasks`, untouched by the boundary-rejection rollback). The shared `inFlight` promise is intentionally NOT rolled back: optional-then-required attempts of one `(name,version)` still collapse to a single (rejected) network call, so the dedup guarantee holds while the required attempt correctly re-throws. The interaction NOT covered by a test: an optional-boundary failure that also wins a flat slot a *prior* required visit had already claimed — impossible today (first-wins claims at the prior required visit, so `claimedFlat` is false and the rollback no-ops), but worth re-checking if placement ever stops being first-wins.
+
 ### Reversibility justification
 
 - Public APIs affected: none — `install()` signature + non-fatal-optional contract unchanged; only the partial-failure salvage shape is at issue.

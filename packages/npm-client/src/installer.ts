@@ -266,6 +266,12 @@ async function walkAndPin(
     return (async () => {
       const pin = await source.resolve(name, range, { parentName, parentInstallPath });
 
+      // Did THIS visit newly claim the flat slot? (Either `choosePlacement`'s
+      // first-wins set, or the block below.) Needed so an optional-boundary
+      // fetch failure rolls back ONLY a claim it owns — never a slot a prior
+      // visit already won. Captured pre-placement because `choosePlacement`
+      // mutates `flatByName` as a side effect.
+      const flatSlotFreeBefore = !flatByName.has(pin.name);
       const installPath = pin.installPath ?? choosePlacement(pin, parentInstallPath, flatByName);
       // Record the flat slot so a later live-source visit honours first-wins.
       // Only one source drives a given install today, but the bookkeeping is
@@ -275,6 +281,7 @@ async function walkAndPin(
       }
       if (scheduled.has(installPath)) return;
       scheduled.add(installPath);
+      const claimedFlat = flatSlotFreeBefore && installPath === `node_modules/${pin.name}`;
 
       // Defer the fetch through the bounded semaphore; dedupe concurrent
       // same-(name,version) fetches (flat + nested same-version, or two parents
@@ -311,7 +318,19 @@ async function walkAndPin(
       if (isOptionalBoundary) {
         // Awaits here (and pins on success) instead of deferring to `fetchTasks`,
         // so a rejection skips the subtree before it is walked.
-        const result = await p;
+        let result: FetchAndUnpackResult;
+        try {
+          result = await p;
+        } catch (err) {
+          // Roll back the synchronous claims THIS visit made before re-throwing
+          // to the parent's optional catch (#24 dedup-gate bug): `scheduled` was
+          // added pre-fetch, so without this a later REQUIRED visit of the SAME
+          // name (via another parent) would hit `scheduled.has` → early-return →
+          // silently drop a required dep while reporting success. npm aborts.
+          scheduled.delete(installPath);
+          if (claimedFlat) flatByName.delete(pin.name);
+          throw err;
+        }
         if (!pinned.has(installPath)) {
           pinned.set(
             installPath,

@@ -367,4 +367,34 @@ describe('install — optional-dep fetch failure stays non-fatal under concurren
       install('root', '1.0.0', { main: '1.0.0' }, { vfs, cwd: '/proj', registry }),
     ).rejects.toThrow('simulated fetch failure for req@1.0.0');
   });
+
+  it('a failed OPTIONAL-boundary fetch does not poison a later REQUIRED visit of the same name (#24 dedup-gate bug)', async () => {
+    // BLOCKER #24: `scheduled` is set synchronously BEFORE the optional-boundary
+    // fetch, and was NEVER cleaned when that fetch rejected (the catch only
+    // warned). So a name that fails as OPTIONAL via one parent, then is REQUIRED
+    // via another parent, hit `scheduled.has` → early-return → silently absent,
+    // and the install reported SUCCESS. Real npm (and the old serial pinned.has
+    // walk) ABORTS: `shared` is a REQUIRED dep that could not be installed.
+    //
+    // Order matters: `a` (optional `shared`) is visited before `b` (required
+    // `shared`), so the failed-optional visit poisons `scheduled` first.
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    // a: requires shared OPTIONALLY (visited first → poisons the gate on failure)
+    db.set('a', new Map([['1.0.0', await makeEntry('a', '1.0.0', {}, { shared: '1.0.0' })]]));
+    // b: requires shared (and shared requires deep) — both must abort the install
+    db.set('b', new Map([['1.0.0', await makeEntry('b', '1.0.0', { shared: '1.0.0' })]]));
+    db.set('shared', new Map([['1.0.0', await makeEntry('shared', '1.0.0', { deep: '1.0.0' })]]));
+    db.set('deep', new Map([['1.0.0', await makeEntry('deep', '1.0.0')]]));
+    const registry = new CountingDelayedRegistry(db);
+    registry.rejectKeys.add('shared@1.0.0'); // shared's tarball fetch fails
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    // shared is REQUIRED via b → the install MUST throw (npm parity), even though
+    // it ALSO appears as a failed optional via a (visited first).
+    await expect(
+      install('root', '1.0.0', { a: '1.0.0', b: '1.0.0' }, { vfs, cwd: '/proj', registry }),
+    ).rejects.toThrow('simulated fetch failure for shared@1.0.0');
+  });
 });
