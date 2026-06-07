@@ -94,7 +94,7 @@ Lean **(b)**: relocate ONE pure walker into shell/vfs rewired onto `syncMirror()
 
 ### Code markers
 
-(none — pre-implementation; promote/mark when the grep builtin lands.)
+IMPLEMENTED this phase: `packages/shell/src/commands/_walk.ts` — option (b) pure walker on field-form `VfsDirent`, no runtime-js import; consumed by `commands/grep.ts` (`-r`) and `commands/find.ts`. Facade-tool / ADR-0085 git read-ops reuse still pending.
 
 ## Q-2026-06-06-402: `ls`/`grep` `--color` via hand-rolled SGR (not picocolors)
 
@@ -143,7 +143,7 @@ A ~20–40-line LS_COLORS/SGR helper in `packages/shell/src/`, zero-dep, strictl
 
 ### Code markers
 
-(none — pre-implementation.)
+IMPLEMENTED this phase: `packages/shell/src/commands/_sgr.ts` (`sgr`/`colorize`, dirs-only subset, identity when disabled); `commands/ls.ts` gates `--color=auto` on `ctx.isTTY`. See also [[Q-2026-06-07-411]] (ls `--color` not byte-fixtured vs gls).
 
 ## Q-2026-06-06-403: stdout/stderr kept separate internally, merged only at the xterm sink
 
@@ -1494,6 +1494,38 @@ decision better made against a concrete package that needs it.
 ### Needs human review by
 
 End of milestone M12.
+
+---
+
+## Q-2026-06-07-411: grep/find frozen-GNU fixtures deferred; ls --color/-l not byte-fixtured
+
+**Status:** 🟢 Active · **Encountered in:** ADR-0086(b) vs landed ls/grep/find · **Milestone:** M10/M11 · **Author:** 2026-06-07
+
+ADR-0086(b) wants frozen-GNU golden fixtures as the oracle for ls/grep/find. Landed this phase: `ls` byte-frozen vs `gls` (GNU coreutils 9.7) for default/-a/-A/-1/-r listing (`packages/shell/fixtures/ls/`). NOT fixtured (recorded — no silent cap): (1) grep — `ggrep` not installed → 22 hand-asserted conformance tests; (2) find — `gfind`/findutils not installed (box aliases find→bfs) → 12 conformance tests; (3) ls `--color` — gls emits leading `ESC[0m` + zero-padded `01;34` vs our `ESC[1;34m`, structural assert only; (4) ls `-l` metadata (perms/owner/nlink) — fixed placeholders per ADR-0050 (VFS has no real perms), structural regex only.
+
+### Provisional decision
+
+Defer grep/find byte-fixtures to the milestone-DoD closer: capture via `brew install grep findutils` (→ ggrep/gfind, `LC_ALL=C`, version+locale header) or a Linux box, then add fixture tests mirroring `ls-fixtures.test.ts`. ls `--color`/`-l` stay structurally-asserted unless real SGR-LS_COLORS / perms ever land. REVERSIBLE (test infra only).
+
+### Code markers
+
+(none — fixtures not yet captured; mark grep.ts/find.ts/ls-fixtures.test.ts when frozen golden cases land.)
+
+---
+
+## Q-2026-06-07-412: minor GNU usage-error fidelity in find/ls (polish)
+
+**Status:** 🟢 Active · **Encountered in:** adversarial review of landed find/ls · **Milestone:** M10 polish · **Author:** 2026-06-07
+
+Review flagged 3 usage-error fidelity nits — NOT silent stubs, NOT hard-rule breaches (all loud), just mis-shaped vs GNU: (1) `find -name` with a MISSING value silently sets name='' (empty regex → no output, exit 0) instead of GNU `find: missing argument to '-name'`; (2) `find -type` missing value throws `NotImplementedError('shell.find.-type')` — loud but mislabels a usage error; (3) `ls --color=WHEN` with invalid WHEN writes a GNU-style stderr line then throws NotImplementedError — should be a GNU usage error (exit 2), not not-implemented.
+
+### Provisional decision
+
+Low-priority polish: convert these three to GNU usage errors (stderr + exit 2/1, no throw) when next touching find/ls. Not blocking — current behavior is loud and safe. REVERSIBLE (local error-path tweaks, <1 file each).
+
+### Code markers
+
+(none — fix not yet applied; mark find.ts (-name/-type arg parse) + ls.ts (--color parse) when the usage-error shaping lands.)
 
 ---
 

@@ -4,6 +4,10 @@
 
 ### Added
 
+- `RiftyTerminal` exposes `cols`/`rows` getters so the host can forward the live
+  terminal size into the shell's `ctx.cols`/`ctx.rows` (drives `ls` column layout).
+  Review pass 2026-06-07.
+
 - `RiftyTerminal` wrapper over xterm.js: mount/dispose, `write`, `writeError` with ANSI red, line-based `onInput`, history (up/down).
 - `applyAnsi`/`writeWithStream` helpers to colour stdout (default) and stderr (red).
 - `RiftyTerminalOptions.onSignal('SIGINT')` callback so the host can route Ctrl+C to a kernel `processHandle.kill('SIGINT')` capability. The terminal still local-echoes `^C\r\n` itself before invoking the callback, matching kernel-TTY behaviour.

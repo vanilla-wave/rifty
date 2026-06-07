@@ -4,6 +4,14 @@
 
 ### Fixed
 
+- **Rich-terminal capabilities were dead in the real app — now wired.** The shell
+  adapter forwarded none of `isTTY`/`cols`/`rows`/`signal`, so `ls` column layout +
+  `--color` never engaged and Ctrl+C never reached the shell. `useShellSession.runLine`
+  now passes `isTTY:true` + live `cols`/`rows` (from xterm via `RiftyTerminal`) + a
+  per-run `AbortController`; new `interrupt()` is wired to the terminal's `onSignal`
+  (Ctrl+C → SIGINT → a running `sleep`/dev-server winds down, exit 130). Threaded
+  `onSignal` + dimensions through `BottomPanel`/`TerminalPanel`/`App`. Review pass 2026-06-07.
+
 - **Real Vite preview now renders (and shows progress) instead of looking
   frozen (ADR-0077).** Three stacked breaks fixed: (1) `installProcessGlobals()`
   in the real-vite worker clobbered the kernel-wired `process.stdout`/`stderr`

@@ -2,8 +2,56 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Review pass 2026-06-07** (see `docs/backlog/review-2026-06-07.md`):
+  - **`rm -rf $UNSET` no longer wipes the cwd.** An unquoted word that expands to
+    nothing (`$UNSET`) is now elided (bash word-splitting) in `expandArgs`, so it
+    can't collapse to an empty path that resolves to cwd. A quoted `''` still survives.
+  - **`>>` append of non-ASCII no longer drops data.** The append buffer was sized
+    by `stdout.length` (UTF-16 code units) but filled with UTF-8 bytes → `RangeError`
+    → `[EREDIRECT]`. Now sized by encoded byte length.
+  - **Redirect:** truncates/creates the target even when the command writes nothing
+    (`grep nomatch x > f` empties `f`); extracts a `>`/`>>` from anywhere in the
+    command (not just the final two tokens — `echo hi > f extra` no longer leaks
+    `>` as a literal arg); allows a target that starts with `-`.
+  - **Trailing `;` no longer resets the exit code to 0** (`false ;` ⇒ 1) — empty
+    segments are skipped.
+  - **Command-thrown errors render as `cmd: message`, not a JS stack trace.**
+  - **`rm`/`mkdir`/`touch` flag parsing rewritten** to the shared convention
+    (bundled short flags, `--`, **loud `NotImplementedError` on unknown flags**):
+    `rm -fr`/bundles now work; `mkdir -pv`/`touch -c` no longer create a file/dir
+    literally named after the flag; `rm DIR` without `-r` is refused; missing-operand
+    handled; GNU `strerror` messages.
+  - **`mv SRC EXISTINGDIR`** lands at `DIR/basename` (GNU — file AND dir sources;
+    was EISDIR for files / direct-rename-ENOTEMPTY for dirs). ENOTEMPTY now surfaces
+    only on a real overwrite (`DIR/basename` already a non-empty dir). `mv` errors
+    now use the shared GNU `strerror` wording (`cannot stat`/`cannot move`).
+  - **`grep -r`** prints matched paths as-given (relative to the start path, like
+    `find`) instead of absolutized — e.g. `grep -r x .` → `./a.txt`, not `/abs/a.txt`.
+  - **`ls -l ABSOLUTE_FILE`** from a non-root cwd no longer crashes (resolve, not raw
+    join); **`ls` column widths** now ignore SGR colour bytes (alignment under
+    `--color`).
+  - **`head` with no FILE** returns a clean exit 1 (matching cat/tail/wc) instead of
+    throwing.
+
+### Refactor
+
+- `strerror` (errno→GNU text) and `escapeRegExp` consolidated into `_shared.ts`;
+  `cat`/`cp`/`wc`/`grep`/`mkdir`/`rm`/`touch` + `_glob` now import them (was copy-pasted).
+
 ### Added
 
+- **Rich terminal builtins:** rich `ls` (column layout via `_columns`, `-l`/`-a`/`-1`,
+  `--color=auto/always/never` SGR via `_sgr`), `grep -r/-n/-i/-v/-c` (tri-state
+  exit 0/1/2), `find` (path/`-name`/`-type` over `_walk`), `which NAME...`
+  (presence probe injected from the shell — no reverse import), `clear`, `sleep`.
+  Glob expansion of unquoted args wired in the dispatcher (`_glob`). New shared
+  helpers under `src/commands/`: `_walk` (recursive VFS tree walk), `_sgr` (SGR
+  color codes), `_columns` (terminal column packing), `_glob` (segment matcher).
+  Legacy inline builtins (`pwd`/`cd`/`mkdir`/`rm`/`env`/`touch`) relocated to
+  their own `commands/<cmd>.ts` files; `builtinCommands` now takes a `hasCommand`
+  probe (second param) to wire `which`.
 - **ADR-0081 (file-arg coreutils):** new pure-JS builtins over `syncMirror()`, one
   file each under `src/commands/` + a `_shared.ts` (`resolve`/`enc`/`dec`):
   `cat -n/-b/-A/-E`, `head -n/-c` (incl. negative-N), `tail -n/-c` (incl. `+N`;
