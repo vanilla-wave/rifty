@@ -29,6 +29,16 @@ export interface FsSync {
   rmSync(path: string, options: { recursive?: boolean; force?: boolean }): void;
   statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number };
   /**
+   * Non-throwing stat: returns `null` on a genuine miss instead of throwing
+   * (ADR-0083). `statSync` stays throwing (Node `fs.statSync` parity) — this is
+   * the additive companion that collapses the resolver's `existsSync`+`statSync`
+   * double-probe to one call. `null` is the contract, not a stub. Precedent:
+   * ADR-0029/0041 grew this interface the same way.
+   */
+  statSyncOrNull(
+    path: string,
+  ): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number } | null;
+  /**
    * Set access/modification timestamps (ms) on `path`. Mirrors
    * `node:fs.utimesSync` (ADR-0029). `MemoryFsSync` writes through to the
    * shared backend; `OpfsFsSync` keeps an in-memory side-table because

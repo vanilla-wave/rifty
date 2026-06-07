@@ -1,7 +1,7 @@
 import { registerBuiltin } from '@riftydev/io';
 import assertModule, { strict as assertStrict } from './assert.ts';
 import bufferModule, { Buffer } from './buffer.ts';
-import childProcessModule from './child_process.ts';
+import childProcessModule, { ensureExecSyncHandlerInstalled } from './child_process.ts';
 import consoleModule from './console.ts';
 import cryptoModule from './crypto.ts';
 import diagnosticsChannelModule from './diagnostics_channel.ts';
@@ -88,7 +88,11 @@ registerBuiltin('stream/promises', () => ({
   finished: streamModule.finished,
 }));
 registerBuiltin('stream/consumers', () => streamConsumers);
-registerBuiltin('child_process', () => childProcessModule);
+// #26 PART B: install the execSync SAB handler on first require, not at startup.
+registerBuiltin('child_process', () => {
+  ensureExecSyncHandlerInstalled();
+  return childProcessModule;
+});
 registerBuiltin('worker_threads', () => workerThreadsModule);
 registerBuiltin('os', () => osModule);
 registerBuiltin('crypto', () => cryptoModule);

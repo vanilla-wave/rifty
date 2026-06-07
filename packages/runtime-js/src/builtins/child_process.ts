@@ -30,16 +30,31 @@ import { execSync } from './child_process-sync.ts';
 import { spawnWorkerChild } from './child_process-worker.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 
-// ADR-0011 phase 3 / ADR-0039: register the runtime-js `'execSync'` handler at
-// module load. Kernel ships no default handlers after ADR-0039 — execSync is
-// Node-API knowledge and lives here. Resolver reads from the VFS sync mirror so
-// the SAB path and in-realm fallback share one source of truth; `null` for a
-// missing script lets the handler surface a proper `ENOENT`.
-installRuntimeJsExecSyncHandler(getKernelDispatcher(), (path) => {
-  const mirror = syncMirror();
-  if (!mirror.existsSync(path)) return null;
-  return mirror.readFileBytesSync(path);
-});
+// ADR-0011 phase 3 / ADR-0039: the runtime-js `'execSync'` handler. Kernel ships
+// no default handlers after ADR-0039 — execSync is Node-API knowledge and lives
+// here. Resolver reads from the VFS sync mirror so the SAB path and in-realm
+// fallback share one source of truth; `null` for a missing script lets the
+// handler surface a proper `ENOENT`.
+//
+// #26 PART B (perf): install is deferred out of the module body into a function
+// invoked by the `child_process` builtin factory (builtins/index.ts), so cold
+// start does no `getKernelDispatcher()` / `register` / runner-alloc work for
+// programs that never require child_process. Safe because execSync (the only
+// dispatch site, child_process-sync.ts) is reachable ONLY via this module's
+// exports, so first-require install always precedes any execSync() call. Runs
+// once because `loadBuiltin` caches the factory result; if the builtin is
+// re-registered against a fresh dispatcher it reinstalls there — `register` is
+// idempotent (replaces), preserving the old "install when the module comes up".
+
+/** Install the runtime-js `'execSync'` handler on the current kernel dispatcher
+ * (idempotent; #26 PART B — called by the child_process builtin factory). */
+export function ensureExecSyncHandlerInstalled(): void {
+  installRuntimeJsExecSyncHandler(getKernelDispatcher(), (path) => {
+    const mirror = syncMirror();
+    if (!mirror.existsSync(path)) return null;
+    return mirror.readFileBytesSync(path);
+  });
+}
 
 interface SpawnOptions {
   cwd?: string;

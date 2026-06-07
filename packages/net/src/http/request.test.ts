@@ -86,6 +86,67 @@ describe('IncomingMessage — streaming body (ADR-0017 phase 1 reader-side)', ()
   });
 });
 
+// #9 (perf-audit 2026-06-05) + gate G2: headers are computed lazily on first
+// read, then materialise into a WRITABLE data property. Express reassigns
+// `req.headers = {...}` (trust-proxy/body-parser), so a getter-only accessor
+// would break it. These pin the writability + lazy-identity invariants.
+describe('IncomingMessage — lazy + writable headers (#9, gate G2)', () => {
+  it('materialises headers on first read equal to Object.fromEntries(request.headers)', () => {
+    const src = new Request('http://localhost/x', { headers: { 'x-a': '1' } });
+    const req = new IncomingMessage(src);
+    expect(req.headers).toEqual(Object.fromEntries(src.headers));
+    expect(req.headers['x-a']).toBe('1');
+  });
+
+  it('header identity is stable across reads (computed once, memoised)', () => {
+    const req = new IncomingMessage(new Request('http://localhost/x', { headers: { 'x-a': '1' } }));
+    const h1 = req.headers;
+    const h2 = req.headers;
+    expect(h1).toBe(h2);
+  });
+
+  it('is reassignable AFTER first read (Express overwrite, read-then-write)', () => {
+    const req = new IncomingMessage(new Request('http://localhost/x', { headers: { 'x-a': '1' } }));
+    expect(req.headers['x-a']).toBe('1'); // trigger lazy compute
+    req.headers = { 'x-b': '2' };
+    expect(req.headers).toEqual({ 'x-b': '2' });
+  });
+
+  it('is reassignable BEFORE first read (write-before-read path)', () => {
+    const req = new IncomingMessage(new Request('http://localhost/x', { headers: { 'x-a': '1' } }));
+    req.headers = { injected: 'yes' };
+    expect(req.headers).toEqual({ injected: 'yes' });
+  });
+
+  it('materialised descriptor is writable+enumerable+configurable', () => {
+    const req = new IncomingMessage(new Request('http://localhost/x', { headers: { 'x-a': '1' } }));
+    void req.headers; // materialise
+    const d = Object.getOwnPropertyDescriptor(req, 'headers');
+    expect(d?.writable).toBe(true);
+    expect(d?.enumerable).toBe(true);
+    expect(d?.configurable).toBe(true);
+  });
+});
+
+describe('IncomingMessageFromFetch — lazy + writable headers (#9, gate G2)', () => {
+  it('materialises headers on first read equal to Object.fromEntries(response.headers)', () => {
+    const res = new Response('', { headers: { 'x-a': '1' } });
+    const msg = new IncomingMessageFromFetch(res);
+    expect(msg.headers).toEqual(Object.fromEntries(res.headers));
+  });
+
+  it('is reassignable after first read and before first read', () => {
+    const after = new IncomingMessageFromFetch(new Response('', { headers: { 'x-a': '1' } }));
+    void after.headers;
+    after.headers = { 'x-b': '2' };
+    expect(after.headers).toEqual({ 'x-b': '2' });
+
+    const before = new IncomingMessageFromFetch(new Response('', { headers: { 'x-a': '1' } }));
+    before.headers = { injected: 'yes' };
+    expect(before.headers).toEqual({ injected: 'yes' });
+  });
+});
+
 describe('IncomingMessageFromFetch — streaming response (ADR-0017 phase 1)', () => {
   it('delivers a streaming response body chunk-by-chunk', async () => {
     const stream = new ReadableStream<Uint8Array>({

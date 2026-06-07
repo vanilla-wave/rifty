@@ -278,8 +278,25 @@ export function serveCrossRealmPreview(
  * freed. All terminal paths (end/error/seq-gap/timeout/dispose) clear the
  * single `pending` entry, so there is no separate accumulator map to leak.
  */
+/** Decoded request fields for the {@link CrossRealmPortHandler.dispatchStruct} fast-path. */
+export interface PreviewDispatchStruct {
+  readonly url: string;
+  readonly method: string;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly body: Uint8Array | null;
+}
+
 export interface CrossRealmPortHandler extends PortHandler {
   dispose(): void;
+  /**
+   * Struct fast-path (ADR-0086). Same page→worker wire frame as
+   * `handler(Request)`, but the caller already holds the decoded
+   * `{url,method,headers,body}` (from a `SerializedRequest`), so this skips
+   * building a `Request` and re-draining it via `arrayBuffer()`. Byte-identical
+   * to the `Request` path; a non-null body on a GET/HEAD is dropped (matching
+   * the `Request` path, which never carries a GET/HEAD body).
+   */
+  dispatchStruct(req: PreviewDispatchStruct): Promise<Response>;
 }
 
 interface StreamAccumulator {
@@ -380,9 +397,11 @@ export function bridgeCrossRealmPreview(
           settle(frame.requestId, waiter, plain('preview-port frame loss detected', 502));
           return;
         }
-        const copy = new Uint8Array(frame.data.byteLength);
-        copy.set(frame.data);
-        accum.chunks.push(copy);
+        // #22a: BroadcastChannel already structured-cloned frame.data into a
+        // fresh page-realm-owned buffer (exclusive, read once here, never
+        // mutated after), so the manual re-copy duplicated a buffer nobody
+        // aliases. Push directly — the final concat honours byteLength either way.
+        accum.chunks.push(frame.data);
         accum.nextSeq++;
         arm(frame.requestId);
         return;
@@ -421,20 +440,23 @@ export function bridgeCrossRealmPreview(
 
   let torn = false;
 
-  const handler = (async (request: Request): Promise<Response> => {
-    if (torn) return new Response('preview-port bridge disposed', { status: 502 });
+  // Post-frame-and-await core shared by both entrypoints (the public
+  // `handler(Request)` path and the ADR-0086 `dispatchStruct` fast-path). Takes
+  // already-decoded struct fields; GET/HEAD body MUST already be null.
+  const post = (
+    method: string,
+    url: string,
+    headers: Readonly<Record<string, string>>,
+    bodyBytes: Uint8Array | null,
+  ): Promise<Response> => {
     const requestId = nextRequestId();
-    const bodyBytes =
-      request.method === 'GET' || request.method === 'HEAD'
-        ? null
-        : new Uint8Array(await request.arrayBuffer());
     const frame: PreviewPortFrame = {
       type: 'request',
       v: PREVIEW_PORT_FRAME_VERSION,
       requestId,
-      method: request.method,
-      url: request.url,
-      headers: headersToObject(request.headers),
+      method,
+      url,
+      headers,
       body: bodyBytes,
     };
     const promise = new Promise<Response>((resolve) => {
@@ -446,7 +468,25 @@ export function bridgeCrossRealmPreview(
     });
     channel.postMessage(frame);
     return promise;
+  };
+
+  const handler = (async (request: Request): Promise<Response> => {
+    if (torn) return new Response('preview-port bridge disposed', { status: 502 });
+    const bodyBytes =
+      request.method === 'GET' || request.method === 'HEAD'
+        ? null
+        : new Uint8Array(await request.arrayBuffer());
+    return post(request.method, request.url, headersToObject(request.headers), bodyBytes);
   }) as CrossRealmPortHandler;
+
+  handler.dispatchStruct = (req: PreviewDispatchStruct): Promise<Response> => {
+    if (torn) {
+      return Promise.resolve(new Response('preview-port bridge disposed', { status: 502 }));
+    }
+    // No Request rebuild, no arrayBuffer() drain — the caller already decoded.
+    const bodyBytes = req.method === 'GET' || req.method === 'HEAD' ? null : req.body;
+    return post(req.method, req.url, req.headers, bodyBytes);
+  };
 
   handler.dispose = (): void => {
     if (torn) return;

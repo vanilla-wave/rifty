@@ -60,6 +60,16 @@ export class MemoryFsSync implements FsSync {
     return this.#backend.stat(normalizeAbsolute(path));
   }
 
+  statSyncOrNull(
+    path: string,
+  ): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number } | null {
+    // One normalize, no throw: exists() gates stat() so a miss returns null
+    // (ADR-0083). The wrapper's statSync normalizes twice (here + via exists);
+    // this path normalizes once.
+    const np = normalizeAbsolute(path);
+    return this.#backend.exists(np) ? this.#backend.stat(np) : null;
+  }
+
   utimes(path: string, atimeMs: number, mtimeMs: number): void {
     this.#backend.utimes(normalizeAbsolute(path), atimeMs, mtimeMs);
   }

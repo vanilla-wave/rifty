@@ -223,6 +223,7 @@ describe('Shell — redirect write failure surfaces loudly', () => {
       mkdirSync: () => undefined,
       rmSync: () => undefined,
       statSync: () => ({ isFile: false, isDirectory: false }),
+      statSyncOrNull: () => null,
       utimes: () => undefined,
     };
     setSyncMirror(failing);
@@ -320,6 +321,7 @@ describe('Shell — onChunk streaming writer', () => {
       mkdirSync: () => undefined,
       rmSync: () => undefined,
       statSync: () => ({ isFile: false, isDirectory: false }),
+      statSyncOrNull: () => null,
       utimes: () => undefined,
     };
     setSyncMirror(failing);

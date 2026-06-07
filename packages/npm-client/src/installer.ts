@@ -29,7 +29,11 @@
  */
 
 import type { Vfs } from '@riftydev/vfs';
-import { type FetchAndUnpackCtx, fetchAndUnpackToCache } from './fetch-and-unpack.ts';
+import {
+  type FetchAndUnpackCtx,
+  type FetchAndUnpackResult,
+  fetchAndUnpackToCache,
+} from './fetch-and-unpack.ts';
 import {
   lockfileCovers,
   lockfileSubgraph,
@@ -43,6 +47,7 @@ import type { Packument, RegistryClient, VersionManifest } from './registry.ts';
 import { matchesRange, pickBestVersion } from './semver.ts';
 import { type TarballCache, VfsTarballCache } from './tarball-cache.ts';
 import { extractTarGz } from './unpacker.ts';
+import { Semaphore } from './utils/semaphore.ts';
 
 export interface InstallOptions {
   vfs: Vfs;
@@ -212,60 +217,194 @@ async function walkAndPin(
   rootName: string,
   fetchCtx: FetchAndUnpackCtx,
 ): Promise<Map<string, PinnedPackage>> {
+  // Determinism-vs-throughput invariant (#24, perf-audit 2026-06-05): the
+  // placement walk (resolve -> choosePlacement -> flatByName claim -> recurse)
+  // stays STRICTLY SERIAL and REQUEST-ORDERED. First-wins-flat is claimed AFTER
+  // `await source.resolve` (version known only post-resolve), so the claim
+  // straddles an await; running placement concurrently would make which version
+  // wins the flat slot depend on resolve-completion order, not request order,
+  // breaking the express-diamond contract (installer.test.ts:225 — ms@2.1.3
+  // flat, ms@2.0.0 nested). ONLY the tarball fetch is parallelized (bounded
+  // semaphore): tarball bytes feed extractTarGz/files alone, never the dep walk
+  // (pin.dependencies comes from the packument/lockfile, not the tarball), so
+  // fetch order cannot perturb layout. Concurrent same-(name,version) fetches
+  // dedupe to one network call via `inFlight`. ONE exception to the deferred
+  // fetch: an OPTIONAL-boundary node awaits its own fetch BEFORE recursing (see
+  // the `isOptionalBoundary` site) so a failed optional fetch skips its WHOLE
+  // subtree before it is walked — npm parity, and identical to the old serial
+  // walk. Tree + on-disk layout identical to the serial version =>
+  // behavior-preserving (ADR-0081 rule 4 does not fire; CHANGELOG-only).
+  const FETCH_CONCURRENCY = 8; // perf knob only; any value yields the identical tree.
+  const sem = new Semaphore(FETCH_CONCURRENCY);
+
   /** What's installed at `node_modules/<name>` (the hoisted slot). */
   const flatByName = new Map<string, string /* version */>();
   /** Every installed copy, keyed by install path. */
   const pinned = new Map<string, PinnedPackage>();
+  /** Install paths already scheduled this walk (synchronous path-level dedup,
+   * replaces `pinned.has` since `pinned` is now populated at the await site). */
+  const scheduled = new Set<string>();
+  /** Collapse concurrent same-(name,version) fetches to one network call. */
+  const inFlight = new Map<string, Promise<FetchAndUnpackResult>>();
+  /** Deferred fetch tasks; `optional` carries the warn descriptor (or null). */
+  const fetchTasks: Array<{
+    promise: Promise<FetchAndUnpackResult>;
+    pin: ResolvedPin;
+    installPath: string;
+    optional: { depName: string; depRange: string; parentName: string } | null;
+  }> = [];
 
-  async function visit(
+  function visit(
     name: string,
     range: string | null,
     parentInstallPath: string,
     parentName: string | undefined,
+    // When set, this node (and its subtree) is reached via an optional dep; a
+    // fetch failure warns-and-skips instead of aborting, with this descriptor.
+    optional: { depName: string; depRange: string; parentName: string } | null,
   ): Promise<void> {
-    const pin = await source.resolve(name, range, { parentName, parentInstallPath });
+    return (async () => {
+      const pin = await source.resolve(name, range, { parentName, parentInstallPath });
 
-    const installPath = pin.installPath ?? choosePlacement(pin, parentInstallPath, flatByName);
-    // Record the flat slot so a later live-source visit honours first-wins.
-    // Only one source drives a given install today, but the bookkeeping is
-    // cheap and removes a foot-gun in a hypothetical mixed run.
-    if (installPath === `node_modules/${pin.name}` && !flatByName.has(pin.name)) {
-      flatByName.set(pin.name, pin.version);
-    }
-    if (pinned.has(installPath)) return;
-
-    const { bytes, integrity } = await fetchAndUnpackToCache(
-      {
-        name: pin.name,
-        version: pin.version,
-        resolved: pin.resolved,
-        integrity: pin.integrity,
-      },
-      fetchCtx,
-    );
-    pinned.set(installPath, await pinToPackage(pin, bytes, integrity, installPath));
-
-    for (const [depName, depRange] of Object.entries(pin.dependencies)) {
-      await visit(depName, depRange, installPath, pin.name);
-    }
-    // npm contract: a missing optional dep is non-fatal (typically
-    // platform-specific native helpers like fsevents). Warn, never abort.
-    for (const [depName, depRange] of Object.entries(pin.optionalDependencies)) {
-      try {
-        await visit(depName, depRange, installPath, pin.name);
-      } catch (err) {
-        const reason = err instanceof Error ? err.message : String(err);
-        console.warn(
-          `optional dependency ${depName}@${depRange} of ${pin.name} could not be installed: ${reason}`,
-        );
+      // Did THIS visit newly claim the flat slot? (Either `choosePlacement`'s
+      // first-wins set, or the block below.) Needed so an optional-boundary
+      // fetch failure rolls back ONLY a claim it owns — never a slot a prior
+      // visit already won. Captured pre-placement because `choosePlacement`
+      // mutates `flatByName` as a side effect.
+      const flatSlotFreeBefore = !flatByName.has(pin.name);
+      const installPath = pin.installPath ?? choosePlacement(pin, parentInstallPath, flatByName);
+      // Record the flat slot so a later live-source visit honours first-wins.
+      // Only one source drives a given install today, but the bookkeeping is
+      // cheap and removes a foot-gun in a hypothetical mixed run.
+      if (installPath === `node_modules/${pin.name}` && !flatByName.has(pin.name)) {
+        flatByName.set(pin.name, pin.version);
       }
-    }
+      if (scheduled.has(installPath)) return;
+      scheduled.add(installPath);
+      const claimedFlat = flatSlotFreeBefore && installPath === `node_modules/${pin.name}`;
+
+      // Defer the fetch through the bounded semaphore; dedupe concurrent
+      // same-(name,version) fetches (flat + nested same-version, or two parents
+      // racing the same version) to a single network call.
+      const key = `${pin.name}@${pin.version}`;
+      let p = inFlight.get(key);
+      if (!p) {
+        p = sem.run(() =>
+          fetchAndUnpackToCache(
+            {
+              name: pin.name,
+              version: pin.version,
+              resolved: pin.resolved,
+              integrity: pin.integrity,
+            },
+            fetchCtx,
+          ),
+        );
+        inFlight.set(key, p);
+      }
+
+      // Optional-subtree skip-on-failure (npm parity, regression fix): when THIS
+      // node IS the optional boundary (reached as a direct optional child), its
+      // fetch must be awaited BEFORE recursing, exactly like the old serial walk.
+      // If it rejects, the throw propagates to the parent's optional try/catch
+      // (warn-and-skip) before any child `visit` runs, so the WHOLE optional
+      // subtree — the dep and its transitive required children — is skipped
+      // (not pinned, not on disk). Recursing first (the required-dep fast path)
+      // would orphan those required grandchildren on a failed optional fetch,
+      // diverging from real npm. Required deps keep the deferred/concurrent
+      // fetch; only the boundary trades concurrency for correctness here.
+      const isOptionalBoundary =
+        optional !== null && optional.depName === name && optional.parentName === parentName;
+      if (isOptionalBoundary) {
+        // Awaits here (and pins on success) instead of deferring to `fetchTasks`,
+        // so a rejection skips the subtree before it is walked.
+        let result: FetchAndUnpackResult;
+        try {
+          result = await p;
+        } catch (err) {
+          // Roll back the synchronous claims THIS visit made before re-throwing
+          // to the parent's optional catch (#24 dedup-gate bug): `scheduled` was
+          // added pre-fetch, so without this a later REQUIRED visit of the SAME
+          // name (via another parent) would hit `scheduled.has` → early-return →
+          // silently drop a required dep while reporting success. npm aborts.
+          scheduled.delete(installPath);
+          if (claimedFlat) flatByName.delete(pin.name);
+          throw err;
+        }
+        if (!pinned.has(installPath)) {
+          pinned.set(
+            installPath,
+            await pinToPackage(pin, result.bytes, result.integrity, installPath),
+          );
+        }
+      } else {
+        fetchTasks.push({ promise: p, pin, installPath, optional });
+      }
+
+      // Recurse: deps are known from the resolved pin, not the tarball bytes, so
+      // traversal order / placement is unchanged. For the optional boundary the
+      // fetch above already settled, so a failed optional never reaches here.
+      // Required children of an optional boundary INHERIT `optional`, so a later
+      // failed grandchild is warned-and-skipped while surviving siblings still
+      // pin — rifty SALVAGES the optional subtree's survivors rather than doing
+      // npm's atomic-rollback. Characterization-pinned; see Q-2026-06-07-324.
+      for (const [depName, depRange] of Object.entries(pin.dependencies)) {
+        await visit(depName, depRange, installPath, pin.name, optional);
+      }
+      // npm contract: a missing optional dep is non-fatal (typically
+      // platform-specific native helpers like fsevents). A resolve-time failure
+      // is caught here; a fetch-time failure is attributed at the await site via
+      // the `optional` descriptor propagated into the subtree.
+      for (const [depName, depRange] of Object.entries(pin.optionalDependencies)) {
+        const desc = { depName, depRange, parentName: pin.name };
+        try {
+          await visit(depName, depRange, installPath, pin.name, desc);
+        } catch (err) {
+          warnOptional(desc, err);
+        }
+      }
+    })();
   }
 
   for (const [depName, depRange] of Object.entries(topLevelDependencies)) {
-    await visit(depName, depRange, '', rootName);
+    await visit(depName, depRange, '', rootName, null);
+  }
+
+  // The ordered walk has assigned every installPath; now await the parallelized
+  // fetches and build `pinned`. A required-dep fetch failure rejects; an
+  // optional-dep fetch failure warns-and-skips (preserving the exact message),
+  // mirroring the old serial loop. Settle all so one optional failure can't
+  // strand siblings already in flight.
+  const results = await Promise.allSettled(fetchTasks.map((t) => t.promise));
+  for (let i = 0; i < fetchTasks.length; i++) {
+    const task = fetchTasks[i];
+    const outcome = results[i];
+    if (!task || !outcome) continue;
+    if (outcome.status === 'rejected') {
+      if (task.optional) {
+        warnOptional(task.optional, outcome.reason);
+        continue;
+      }
+      throw outcome.reason;
+    }
+    if (pinned.has(task.installPath)) continue;
+    pinned.set(
+      task.installPath,
+      await pinToPackage(task.pin, outcome.value.bytes, outcome.value.integrity, task.installPath),
+    );
   }
   return pinned;
+}
+
+/** Emit the existing optional-dependency warn message verbatim. */
+function warnOptional(
+  desc: { depName: string; depRange: string; parentName: string },
+  err: unknown,
+): void {
+  const reason = err instanceof Error ? err.message : String(err);
+  console.warn(
+    `optional dependency ${desc.depName}@${desc.depRange} of ${desc.parentName} could not be installed: ${reason}`,
+  );
 }
 
 /** Live-source placement: first-wins-flat + nest-on-conflict (`walkAndPin` step 2-4). */

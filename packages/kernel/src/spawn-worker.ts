@@ -14,7 +14,7 @@
 
 import { NotImplementedError } from '@riftydev/io';
 import { getKernelDispatcher } from './ipc/kernel-dispatcher.ts';
-import { type SabRing, createSabRing } from './ipc/sab-ring.ts';
+import { DEFAULT_PAYLOAD_CAPACITY, type SabRing, createSabRing } from './ipc/sab-ring.ts';
 import type { SyncRpcDispatcher } from './ipc/sync-dispatch.ts';
 import type {
   WorkerEntryDescriptor,
@@ -42,6 +42,13 @@ export interface SpawnWorkerSpec {
   readonly argv: readonly string[];
   readonly env: Readonly<Record<string, string>>;
   readonly cwd: string;
+  /**
+   * Optional per-direction SAB ring payload capacity (ADR-0084 #19). Both the
+   * allocated `syncRing` and the child-side attach derive from this single
+   * value, so the two peers can never disagree. Defaults to
+   * {@link DEFAULT_PAYLOAD_CAPACITY}. Not lowered this wave (see ADR-0084).
+   */
+  readonly payloadCapacity?: number;
 }
 
 let kernelWorkerUrl: string | URL | null = null;
@@ -122,8 +129,10 @@ export function spawnKernelWorker(
   const { pid, ppid } = identity;
 
   // SAB ring (sync IPC, ADR-0011 phase 1). SAB is shared, so it is NOT in the
-  // transfer list — both peers map it.
-  const { sab, ring } = createSabRing();
+  // transfer list — both peers map it. ADR-0084 #19: a single capacity value
+  // sizes the buffer AND travels in the spec so the child attaches identically.
+  const payloadCapacity = spec.payloadCapacity ?? DEFAULT_PAYLOAD_CAPACITY;
+  const { sab, ring } = createSabRing({ payloadCapacity });
 
   // Four MessageChannels: three for stdio, one for fork-mode IPC (ADR-0045).
   // Kernel-side keeps the `port1`s; `port2`s ship to the worker.
@@ -153,6 +162,7 @@ export function spawnKernelWorker(
     cwd: spec.cwd,
     stdio: childPorts,
     syncRing: sab,
+    payloadCapacity,
     pid,
     ppid,
   };

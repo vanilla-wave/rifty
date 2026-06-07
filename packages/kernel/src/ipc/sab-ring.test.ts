@@ -128,6 +128,74 @@ describe('SabRing — sequential round-trips', () => {
   });
 });
 
+describe('SabRing — zero-copy view (ADR-0084 #18)', () => {
+  it('readRequest returns a live SAB view the consumer reads correctly before slot reuse', () => {
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: 64 });
+    const responder = SabRing.attach(sab, 64);
+
+    caller.writeRequest(new Uint8Array([10, 20, 30]));
+    const view = responder.readRequest();
+    expect(view).not.toBeNull();
+    // Decode synchronously (the production contract): the bytes are correct now.
+    expect(Array.from(view ?? [])).toEqual([10, 20, 30]);
+  });
+
+  it('a decoded-and-copied value is NOT corrupted when a later request reuses the slot', () => {
+    // The view aliases the SAB; the contract is "decode synchronously". A
+    // consumer that copies out (as the production decoders do) keeps a stable
+    // value across the next request that overwrites the same slot.
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: 64 });
+    const responder = SabRing.attach(sab, 64);
+
+    caller.writeRequest(new Uint8Array([1, 2, 3]));
+    const first = responder.readRequest();
+    const decodedFirst = Array.from(first ?? []); // synchronous "decode" = copy out
+    expect(decodedFirst).toEqual([1, 2, 3]);
+
+    // Next request reuses the REQ slot — the live view mutates, the copy doesn't.
+    caller.writeRequest(new Uint8Array([7, 8, 9]));
+    const second = responder.readRequest();
+    expect(Array.from(second ?? [])).toEqual([7, 8, 9]);
+    expect(decodedFirst).toEqual([1, 2, 3]); // already-decoded value is intact
+  });
+});
+
+describe('SabRing — configurable capacity agreement (ADR-0084 #19)', () => {
+  it('parent + child agree on offsets for a non-default capacity', () => {
+    const cap = 4096;
+    const { sab, ring: parent } = createSabRing({ payloadCapacity: cap });
+    const child = SabRing.attach(sab, cap);
+    expect(child.payloadCapacity).toBe(cap);
+    expect(child.repPayloadOffset).toBe(parent.repPayloadOffset);
+    expect(child.reqPayloadOffset).toBe(parent.reqPayloadOffset);
+    expect(child.repPayloadOffset).toBe(SAB_RING_HEADER_BYTES + cap);
+  });
+
+  it('a >default-but-<configured payload round-trips on a larger ring', async () => {
+    const cap = 2 * 1024 * 1024; // 2 MiB — above the 1 MiB default
+    const { sab, ring: caller } = createSabRing({ payloadCapacity: cap });
+    const responder = SabRing.attach(sab, cap);
+    const big = new Uint8Array(1_500_000); // > default 1 MiB, < configured 2 MiB
+    big[0] = 0xaa;
+    big[big.length - 1] = 0xbb;
+    caller.writeRequest(big);
+    const got = responder.readRequest();
+    expect(got?.length).toBe(big.length);
+    expect(got?.[0]).toBe(0xaa);
+    expect(got?.[got.length - 1]).toBe(0xbb);
+    responder.writeReply(new Uint8Array([1]));
+    expect(Array.from(await caller.waitReplyAsync(1000))).toEqual([1]);
+  });
+
+  it('a desynced capacity is rejected loudly (not a wrong-slot read)', () => {
+    const { sab } = createSabRing({ payloadCapacity: 4096 });
+    // Peer attaches with a different capacity → buffer size no longer matches
+    // HEADER + 2×capacity → RangeError, instead of computing a wrong offset.
+    expect(() => SabRing.attach(sab, 2048)).toThrow(RangeError);
+    expect(() => SabRing.attach(sab, 8192)).toThrow(/peers disagree on payloadCapacity/);
+  });
+});
+
 describe('SabRing — protocol violations', () => {
   it('writeRequest while a reply is still unread throws', async () => {
     const { sab, ring: caller } = createSabRing({ payloadCapacity: 16 });

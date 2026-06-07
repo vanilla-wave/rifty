@@ -53,7 +53,8 @@ export interface InstallRuntimeJsExecSyncOptions {
  * re-registering replaces the previous handler (per
  * {@link SyncRpcDispatcher.register}). The handler parses the command line,
  * resolves script bytes via `resolveScript`, spawns a recursive kernel Worker,
- * and resolves with the child's stdout as a UTF-8 string.
+ * and resolves with the child's stdout as raw `Uint8Array` bytes (ADR-0084 #23
+ * — carried byte-exact on a binary frame, so non-UTF-8 stdout is not mangled).
  */
 export function installRuntimeJsExecSyncHandler(
   dispatcher: SyncRpcDispatcher,
@@ -90,7 +91,11 @@ export function installRuntimeJsExecSyncHandler(
         { code: 'ECHILDFAILED', exitCode: result.exitCode },
       );
     }
-    return new TextDecoder().decode(result.stdout);
+    // ADR-0084 #23: return the child's stdout BYTES verbatim. The dispatcher
+    // emits a binary frame (Uint8Array value) so non-UTF-8 stdout reaches the
+    // caller byte-exact — the old `new TextDecoder().decode(...)` mangled any
+    // non-UTF-8 byte to U+FFFD before framing (a real Node-parity bug).
+    return result.stdout;
   });
 }
 

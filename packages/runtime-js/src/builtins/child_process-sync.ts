@@ -34,12 +34,15 @@ export function execSync(cmd: string, opts?: ExecSyncOptions): Uint8Array {
   const api = readKernelSyncApi();
   if (api !== null && isSabIpcSupported() && getKernelWorkerUrl() !== null) {
     const stdout = api.call('execSync', { cmd, opts: opts ?? {} });
-    if (typeof stdout !== 'string') {
+    // ADR-0084 #23: the kernel returns the child's stdout as raw bytes over a
+    // binary frame (Node returns a Buffer by default). No re-encode — the old
+    // string path mangled non-UTF-8 stdout to U+FFFD.
+    if (!(stdout instanceof Uint8Array)) {
       throw new TypeError(
-        `execSync: kernel returned non-string stdout (${typeof stdout}); JSON framing should always produce a string`,
+        `execSync: kernel returned non-bytes stdout (${typeof stdout}); the v2 binary frame should always produce a Uint8Array`,
       );
     }
-    return Buffer.from(stdout, 'utf8');
+    return Buffer.from(stdout);
   }
   throw new NotImplementedError(
     'child_process.execSync',

@@ -27,6 +27,210 @@ When a question is reviewed:
 
 ## Active
 
+## Q-2026-06-07-324: optional-subtree partial-failure — rifty SALVAGES surviving required siblings (vs npm atomic-rollback)
+
+**Status:** 🟢 Active
+**Encountered in:** #24 concurrency-fetch risk-closing tests (`packages/npm-client/src/installer-concurrency.test.ts`), characterizing the deferred-fetch walk's optional-failure behavior
+**Milestone:** M10
+**Author (agent session):** 2026-06-07
+
+### Context
+
+`installer.ts` `walkAndPin` (#24, deferred bounded-concurrency fetch) handles a failed optional dep non-fatally. The optional BOUNDARY node awaits its own fetch before recursing (skip-whole-subtree on a boundary-fetch failure — npm parity, covered by the existing "skips the ENTIRE optional subtree" test). But a boundary that fetches OK, then has a REQUIRED grandchild whose fetch fails, behaves differently: required grandchildren are DEFERRED fetches that inherit the boundary's `optional` descriptor, settled via `Promise.allSettled`. A failed grandchild is warned-and-skipped (attributed to the optional boundary) while its surviving required SIBLINGS still pin.
+
+### Provisional decision (current behavior, pinned)
+
+rifty SALVAGES the survivors: for root → main → opt(optional, OK) → [gcOK(req, OK), gcFail(req, FAIL)], the install keeps main + opt + gcOK and skips only gcFail (warned as "optional dependency opt@… of main could not be installed"). The whole install stays non-fatal.
+
+### Divergence from npm (the judgment call)
+
+Real npm treats an optional dependency's subtree ATOMICALLY: if any required descendant of an optional dep fails, the WHOLE optional subtree rolls back (opt, gcOK, gcFail all absent). rifty's deferred-fetch walk instead salvages the surviving required siblings — a genuine Node-parity divergence, not a bug in the concurrency refactor (the old serial walk had the same shape once the boundary fetch itself succeeded).
+
+### Why this is a separate IRREVERSIBLE decision, not settled here
+
+Flipping to npm atomic-rollback is an observable Node-parity change (reversibility checklist rule 4) — it needs its own future ADR weighing: tracking which pins belong to which optional subtree, unwinding partial pins + on-disk writes, and the warn-message contract. This OQ does NOT make that flip; it records the divergence and PINS the provisional current (salvage) behavior via a CHARACTERIZATION test so the flip cannot happen silently.
+
+### Code markers
+
+- Cross-ref comment at the optional-boundary recurse / `fetchTasks` settle site in `packages/npm-client/src/installer.ts` (`walkAndPin`) pointing here.
+- Characterization test: `packages/npm-client/src/installer-concurrency.test.ts` ("CHARACTERIZATION: salvages surviving required grandchildren …").
+
+### Residual edge (#24 dedup-gate fix, 2026-06-07)
+
+An optional-boundary fetch REJECTION now rolls back the `scheduled`/`flatByName` claims it made so a later REQUIRED visit of the same name re-attempts and aborts (npm parity; see CHANGELOG #24 follow-on). This is orthogonal to the salvage behavior above (the salvage path is the boundary's REQUIRED grandchildren via `fetchTasks`, untouched by the boundary-rejection rollback). The shared `inFlight` promise is intentionally NOT rolled back: optional-then-required attempts of one `(name,version)` still collapse to a single (rejected) network call, so the dedup guarantee holds while the required attempt correctly re-throws. The interaction NOT covered by a test: an optional-boundary failure that also wins a flat slot a *prior* required visit had already claimed — impossible today (first-wins claims at the prior required visit, so `claimedFlat` is false and the rollback no-ops), but worth re-checking if placement ever stops being first-wins.
+
+### Reversibility justification
+
+- Public APIs affected: none — `install()` signature + non-fatal-optional contract unchanged; only the partial-failure salvage shape is at issue.
+- Rough cost to revert/flip: the atomic-rollback variant is NOT a revert — it is new subtree-tracking + unwind logic, hence its own ADR.
+- External dependencies involved: none.
+
+### Needs human review by
+
+End of milestone M10.
+
+## Q-2026-06-06-319: OPFS `writeFileSync` single shared cache/write-through slice (+ WASI `fd_write` aliasing gate)
+
+**Status:** 🟢 Active
+**Encountered in:** JS-runtime perf audit item #3 (`docs/perf/js-runtime-perf-audit-2026-06-05.md` + `…-adr-plan-2026-06-06.md`)
+**Milestone:** M10
+**Author (agent session):** 2026-06-06
+
+### Context
+
+`OpfsFsSync.writeFileSync` (ADR-0072) took TWO independent defensive `data.slice()` per write — one for the content cache, one for the async OPFS write-through — i.e. 2N copies/write. The aliasing hazard the slices guard: `readFileBytesSync` returns the cache BY REFERENCE (opfs-sync.ts), and WASI `fd_write` reuses `fdEntry.data` IN PLACE on a fitting write (fd.ts:86-88), then write-throughs that buffer via `syncMirror().writeFileSync`. So the write-side copy is the sole barrier severing a live mutable caller buffer from cached content.
+
+### Provisional decision
+
+Take ONE defensive slice and reuse it for BOTH the content-cache `set` and the write-through enqueue (2N→N copies/write). The write-through consumer (`OpfsVfs.writeFile`) only passes the buffer to `createWritable().write()` — read-only — so the two surfaces can safely share one copy. The single entry-point slice is RETAINED; merging the two is safe, dropping the copy is the actual regression. An OPFS blocking-gate review (item #3) returned **safe-to-proceed** on exactly this reasoning.
+
+### Concrete judgment call (why OQ, not just CHANGELOG)
+
+The merge makes the content cache and the in-flight async write-through ALIAS the same buffer. A sync caller that mutates the `readFileBytesSync`-returned buffer AFTER a write but BEFORE `flush()` drains would now also perturb the not-yet-drained write-through (the two-slice version isolated it). In practice callers don't mutate post-write and `OpfsVfs.writeFile` snapshots synchronously, so this is the one behavior delta — a provisional judgment pinned by the aliasing guard tests, hence OQ.
+
+### Code markers
+
+- `// TODO(ADR): Q-2026-06-06-319` at the shared-slice site in `packages/vfs/src/opfs-sync.ts` (`writeFileSync`).
+
+### Reversibility justification
+
+- Public APIs affected: none — internal to `OpfsFsSync.writeFileSync`; `FsSync` surface unchanged.
+- Rough cost to revert: re-add the second `data.slice()` (1 line, 1 file).
+- External dependencies involved: none.
+- Guard tests (BLOCKING per the gate): `packages/vfs/src/opfs-sync.test.ts` (caller-mutation isolation + cache/write-through agreement) and a complementary `packages/runtime-wasi/src/syscalls/fd.test.ts` (fd_write in-place reuse stays cache-coherent).
+
+### Needs human review by
+
+End of milestone M10.
+
+## Q-2026-06-06-320: loader `package.json` parse cache — key (abs path) + full-clear invalidation
+
+**Status:** 🟢 Active
+**Encountered in:** JS-runtime perf audit item #5 (`docs/perf/js-runtime-perf-audit-2026-06-05.md` line 59 + `…-adr-plan-2026-06-06.md` line 41/127)
+**Milestone:** M10
+**Author (agent session):** 2026-06-06
+
+### Context
+
+N modules from one package re-decoded+re-parsed that package's `package.json` N times (the 4 resolver parse sites: `readPackageJson` called from `resolveAsDirectory`/`resolveInsidePackage`/`resolveImportsSpecifier`, plus the inline parse in `findPackageScope`). The audit's prior "immutable, no invalidation" rationale is WRONG: the `load-fixture` reload hot path overwrites files (incl. package.json) then calls `loader.invalidate()` (worker-entry.ts), so an unwired cache serves a stale `type`/`main`/`exports` and silently flips a sibling `.js`'s ESM/CJS classification.
+
+### Provisional decision
+
+A `Map<absPackageJsonPath, PackageJson>` owned by the `createResolver` closure, consulted/populated at all 4 parse sites (only SUCCESSFUL parses cached — a parse failure stays uncached so `readPackageJson`'s SYNTAX_ERROR throw and `findPackageScope`'s `{}` fallback each keep byte-identical behaviour). Exposed as `Resolver.clearCaches()`; `loader.invalidate()` calls it on BOTH the full-clear and targeted-id arms (package.json is package-scoped, not per-module-id, so a targeted invalidate cannot know which manifest changed → full-clear). Slightly more aggressive than `transformCache`'s per-id delete; acceptable — package.json edits are rare, correctness > micro-retention.
+
+### Concrete judgment call (why OQ, not just CHANGELOG)
+
+The full-clear-even-on-targeted-invalidate stance and the success-only caching are real semantic choices a reviewer may revisit (e.g. a per-package-scoped invalidate later). Also: `clearCaches()` adds a method to the (internal, runtime-js-only) `Resolver` interface — not re-exported cross-package, so REVERSIBLE, but recorded here for audit.
+
+### Code markers
+
+- `// TODO(ADR): Q-2026-06-06-320` on the `pkgCache` declaration in `packages/runtime-js/src/module-loader/resolver.ts`, and on the `resolver.clearCaches()` coupling in `loader.ts` `invalidate`.
+
+### Reversibility justification
+
+- Public APIs affected: none cross-package — `Resolver` is internal to runtime-js (consumed by `loader.ts`); `createModuleLoader`/`ModuleLoader` surface unchanged.
+- Rough cost to revert: drop the cache + `clearCaches()` (resolver.ts + the loader coupling, ~1 file each).
+- External dependencies involved: none.
+- Guard tests: `packages/runtime-js/src/module-loader/resolver-cache.test.ts` (parse-once; edit→invalidate→fresh gate; full-clear) + parity `tools/node-parity-runner/cases/modules/pkg-type-module-js-classification.case.ts`.
+
+### Needs human review by
+
+End of milestone M10.
+
+## Q-2026-06-06-321: resolver resolution cache — key, full-clear-on-invalidate, never cache not-found
+
+**Status:** 🟢 Active
+**Encountered in:** JS-runtime perf audit item #15 (`docs/perf/js-runtime-perf-audit-2026-06-05.md` line 71 + `…-adr-plan-2026-06-06.md` line 42/128)
+**Milestone:** M10
+**Author (agent session):** 2026-06-06
+
+### Context
+
+`resolveSpecifierToFile` re-ran the full `node_modules` walk + package.json reads for every import edge — `react` from 200 files = 200 walks. The whole risk is invalidation: the shared VFS is mutated by guest `fs.writeFileSync` / npm install WITHOUT firing `loader.invalidate()`, so a cached miss (or a cached not-exported throw) would be permanently wrong.
+
+### Provisional decision
+
+A memo in the `createResolver` closure keyed exactly `${esm?1:0}\0${fromDir}\0${specifier}` → resolved file-id string, set ONLY on a successful (non-null) resolve. Non-negotiable rules:
+1. **NEVER cache not-found** — a `null` from `resolveSpecifierToFile` leaves the memo untouched, so a later-created file (guest write / install) resolves on the next attempt.
+2. **NEVER cache the `PACKAGE_PATH_NOT_EXPORTED` throw** — it propagates before the `set`, structurally un-cacheable.
+3. **Full-clear on ANY invalidate** — the cache is input-keyed and cannot be pruned by resolved id, so both the full and targeted arms of `loader.invalidate()` clear it whole (via `Resolver.clearCaches()`, shared with #5). `readResolved` is OUTSIDE the memo — a hit still re-reads source fresh.
+
+`fromDir` (not `fromFile`) is the correct key: any two files in one dir resolve a specifier identically, so keying on dir is both correct and a better hit rate.
+
+### Concrete judgment call (why OQ, not just CHANGELOG)
+
+The key shape, the full-clear-on-targeted-invalidate stance, and the never-cache-negative policy are provisional judgment calls a reviewer may revisit (e.g. a bounded negative cache once a VFS change-event exists). Shares `clearCaches()` with #5.
+
+### Code markers
+
+- `// TODO(ADR): Q-2026-06-06-321` on the `resolveCache` declaration in `packages/runtime-js/src/module-loader/resolver.ts`, and on the `resolver.clearCaches()` coupling in `loader.ts` `invalidate`.
+
+### Reversibility justification
+
+- Public APIs affected: none cross-package — internal to the resolver closure + the internal `Resolver` interface.
+- Rough cost to revert: drop the memo + the `resolveCache` half of `clearCaches()`.
+- External dependencies involved: none.
+- Guard tests: `packages/runtime-js/src/module-loader/resolver-cache.test.ts` (resolve-once; full-clear; targeted-invalidate-also-full-clears; not-found-never-cached; not-exported-throw-never-cached). The `test:integration` suite (real-install / nested-install / vite-like / express-style / real-packages) is the critical guard that the cache did not break npm-installed module loading.
+
+### Needs human review by
+
+End of milestone M10.
+
+## Q-2026-06-06-323: when to overturn the page-buffered cross-realm preview deferral (ADR-0048 D2) and ship the v3 frame bump
+
+**Status:** 🟢 Active — DEFER (upholds ADR-0048 D2 / ADR-0017 M12 / ADR-0055 "do NOT ship v3")
+**Encountered in:** JS-runtime perf audit item #22 fix(b); reconsidered by a decision subagent (ADR-0063) on 2026-06-06 and **upheld**
+**Milestone:** M12
+**Author (agent session):** 2026-06-06
+
+### Context
+
+The perf audit proposed building true end-to-end page↔worker `ReadableStream` streaming for the cross-realm preview response path (remove the second O(M) page-side concat copy + head-of-line latency), which requires bumping `PREVIEW_PORT_FRAME_VERSION` 2→3. A decision subagent reconsidered the recorded deferral against ADR-0048, ADR-0017, ADR-0055 and the code.
+
+### Provisional decision
+
+**Uphold the deferral.** Keep the page side accumulating + concatenating on `reply-stream-end`; do not bump the frame to v3 yet. Load-bearing reasons (verified in code/ADRs):
+1. The transport real streaming needs does not exist — both bridge ends still run on `BroadcastChannel` (preview-port.ts:163,307); the only `MessagePort` reference is the M12-aspiration comment at preview-port.ts:14. Streaming over BroadcastChannel yields **no backpressure** (the actual point), so v3-now is a throwaway intermediate before M12 re-bumps it.
+2. ADR-0055 explicitly: "the v3 frame bump … contradicts ADR-0048 D2 / ADR-0017's M12 deferral … **Do NOT ship v3 under this ratification**"; its named gate (Worker-as-opencode-owner, ADR-0046) is unmet.
+3. The benefit doesn't land on real workloads — the audit rates the removed copy "low" + production-unverifiable; the only large-stream consumer (opencode `/event`) already streams via the page-direct SW→page path.
+
+`#22 fix(a)` (drop the redundant page-side re-copy at preview-port.ts:385-387, no frame change) is behavior-preserving and proceeds independently (CHANGELOG only).
+
+### Concrete trigger to overturn (any one)
+
+1. The M12 MessagePort transport (ADR-0017) lands — end-to-end `ReadableStream` + real backpressure ship in that one pass (one frame bump, not two).
+2. A **Worker-owned** SSE/long-poll workload becomes real (Worker becomes opencode owner, ADR-0046 gate) — making the page-buffered path an indefinite hang, not merely a copy cost.
+3. A measured profile shows the page-side concat copy / HOL latency is material on a shipped workload.
+
+### Code markers (none — captured here; reversible)
+
+## Q-2026-06-06-322: per-spawn env/argv sharing buys ~0 perf (postMessage clones regardless) — defer to the diff-wire variant (ADR/rule1) or the pre-warm pool (ADR-0088)
+
+**Status:** 🟢 Active — DEFER (no code change; spawn-worker.ts untouched)
+**Encountered in:** JS-runtime perf audit item #20 (`docs/perf/js-runtime-perf-audit-2026-06-05.md:95`)
+**Milestone:** M10
+**Author (agent session):** 2026-06-06
+
+### Context
+
+Audit #20 flagged the per-spawn env+argv structured-clone (`spawnKernelWorker` builds `fullSpec` then `worker.postMessage(init, [...])` in `packages/kernel/src/spawn-worker.ts`). The in-gate fix proposed (freeze + share one canonical env object) does **not** reduce that cost: `postMessage` structured-clones `env` (Record) and `argv` (array) into the child realm regardless of object identity or `Object.freeze` — non-transferables are always deep-copied. Verified there is also no redundant PARENT-side clone to dedupe: `fullSpec` takes `spec.env`/`spec.argv` by reference, and the one spread in the path (`process-manager.ts` `{...spec, cwd}`) is shallow and leaves those references untouched.
+
+### Provisional decision
+
+**No code change.** Do not freeze/share env (buys nothing) and do not ship a CHANGELOG perf claim for a no-op. Record the finding here:
+
+1. **Measured no-op in-gate:** the freeze+share variant yields ~0 wire/CPU savings; the structured-clone is intrinsic to crossing the realm boundary.
+2. **Wire payload must stay byte-identical:** any in-gate edit must keep `WorkerSpawnSpec` serializing the same own-enumerable env/argv — the child realm depends on receiving the full env + argv.
+3. **The only edit that removes the clone flips to rule1 (ADR):** a per-spawn diff/overrides wire over a hoisted shared canonical env changes the `WorkerSpawnSpec` wire shape (cross-package public API in `packages/kernel/src/worker-entry.ts`) → IRREVERSIBLE per the reversibility checklist rule 1; it needs an ADR, not this OPEN_QUESTIONS line. If anyone implements it, reclassify.
+4. **The real spawn-latency lever is deferred:** a worker pre-warm pool (1–2 fresh never-executed workers) is the audit's "biggest spawn-latency lever" (audit:95/138), gated on a measured spawn spike, tracked as the prospective ADR-0088. Env/argv micro-tuning is not on the critical path.
+
+### Concrete trigger to overturn (any one)
+
+1. A measured spawn-rate spike (test runners / `worker_threads` fan-out) makes the env/argv clone material on a shipped workload → revisit the diff-wire variant (then via an ADR, rule1).
+2. The pre-warm pool work (ADR-0088) lands — fold any env/argv sharing into that pass once the wire shape is being revised anyway.
+
+### Code markers (none — no code change; captured here)
+
 ## Q-2026-06-05-318: deferred `RIFTY_RFV_*` → `RIFTY_RT_*` env rename + `Mode` token rename (post-ADR-0078)
 
 **Status:** 🟢 Active

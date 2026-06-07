@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Performance
+
+Per `docs/perf/js-runtime-perf-audit-2026-06-05.md` (+ `js-runtime-perf-adr-plan-2026-06-06.md`). All behavior-preserving except where noted; parity + unit suites green.
+
+- **Hoisted module-level UTF8 codec singletons** in `buffer-codec.ts` (`UTF8_ENCODER`/`UTF8_DECODER`) — `encode`/`decode` no longer `new TextEncoder()/TextDecoder()` per call. One-shot utf8 codec is stateless, so a shared instance is byte-identical. The per-stream streaming decoder (`readable.ts`, `{stream:true}`, cross-chunk state) is left per-instance.
+- **Batched `decode()` code-unit assembly.** The latin1/binary/ascii/utf16/base64 branches build chunked `number[]` and `String.fromCharCode.apply` over 8192-unit slices instead of per-char `s += String.fromCharCode(...)` (O(n²) concat → O(n)). utf16 trailing-odd-byte truncation (`units = length>>>1`) and the ascii 7-bit mask preserved; hex untouched (uses `toString(16)`).
+- **`bytesToString` exported (ADR-0082).** `decode` is now public as `bytesToString` so text reads can decode zero-copy instead of via a throwaway Buffer copy. See ADR-0082; consumed by `runtime-js` fs.
+- **Cached per-receiver full-range `DataView` for Buffer int/float accessors** (`buffer-prototype.ts`). `read/write{U,}Int*`/`Float*`/`Double*`/`Big*` reuse one lazily-built `DataView` (WeakMap-keyed per Buffer) instead of `new DataView(buffer, byteOffset+offset, N)` per call. OOB still throws `RangeError` (cached `dv.getX(offset)` past bounds throws — no byte-math garbage path). subarray/clone get a fresh view on cache miss; the `dv.buffer !== u8.buffer` guard rebuilds on backing-buffer change. Parity: `buffer/oob-accessors.case.ts`, `buffer/clone-dataview-survival.case.ts`.
+- **`EventEmitter.emit()` single-listener fast path.** Exactly one listener: read it into a local and call it directly, skipping the `arr.slice()` snapshot alloc. `len>1` keeps the slice snapshot (once/removeListener-during-emit semantics). Both branches return `true`. Parity: `events/emit-single-listener-self-remove.case.ts`.
+- **Stream single-schedule drain/flow.** `Writable` drains buffered chunks in a bounded sync loop (collapsing the one-chunk-per-microtask chain) and coalesces drain scheduling behind a `drainScheduled` flag; `Readable` coalesces a burst of `push()`/resume/flow re-arms behind a `flowScheduled` flag (its `flow()` already drained synchronously). Event order/values identical — only microtask-turn count drops. Full stream unit + `stream/*`/`http/*` parity + stream/http conformance green.
+
+### Fixed
+
+- **`Buffer.toString('ascii')` masks bytes >= 0x80 to 7-bit (`& 0x7f`).** Node's ascii decode is 7-bit (0x80→U+0000, 0xFF→U+007F); rifty previously emitted the raw byte. `latin1`/`binary` stay unmasked (full 0-255); ascii ENCODE is unchanged (Node does not 7-bit-mask on encode). Also corrects `setEncoding('ascii')` streaming decode (routes through `Buffer.toString('ascii')`). Parity: `buffer/tostring-ascii-mask.case.ts`.
+
 ### Added
 
 - **`Readable.setEncoding(encoding)` + `readableEncoding`** (ADR-0069). After

@@ -61,6 +61,12 @@ export interface ReadableState {
   destroyed: boolean;
   /** Error from `destroy(err)` if any. */
   errored: Error | null;
+  /**
+   * Coalescing flag: at most one `flow()` microtask is pending. A burst of
+   * push() calls in one tick schedules one flow turn, not one per push (flow()
+   * already drains the whole buffer synchronously).
+   */
+  flowScheduled: boolean;
 }
 
 export function chunkSize(chunk: unknown): number {
@@ -243,6 +249,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
       reading: false,
       destroyed: false,
       errored: null,
+      flowScheduled: false,
     };
     this.readImpl = opts.read;
     // Node applies the `encoding` option as if `setEncoding` ran in the ctor.
@@ -250,7 +257,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     this.on('newListener', (event) => {
       if (event === 'data' && this._readableState.flowing === null) {
         this._readableState.flowing = true;
-        queueMicrotask(() => this.flow());
+        this.scheduleFlow();
       } else if (event === 'readable' && !this._readableState.endEmitted) {
         // Pump so a cold reader doesn't sit idle on a first chunk that's
         // already queued (Node fires `'readable'` once a chunk lands).
@@ -339,14 +346,14 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
   /** Force-start flow on next tick. Used by `Readable.from`. */
   protected startFlowing(): void {
     if (this._readableState.flowing === null) this._readableState.flowing = true;
-    queueMicrotask(() => this.flow());
+    this.scheduleFlow();
   }
 
   push(chunk: unknown): boolean {
     const state = this._readableState;
     if (chunk === null) {
       state.ended = true;
-      if (state.flowing) queueMicrotask(() => this.flow());
+      if (state.flowing) this.scheduleFlow();
       else {
         // Paused readers still need `end`; fire a final `'readable'` first so
         // `read(n)`-on-`'readable'` consumers can drain the tail (Node fires
@@ -370,7 +377,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     state.buffer.push(chunk);
     state.length += state.objectMode ? 1 : chunkSize(chunk);
     if (state.flowing) {
-      queueMicrotask(() => this.flow());
+      this.scheduleFlow();
     } else if (this.listenerCount('readable') > 0) {
       queueMicrotask(() => {
         if (!state.endEmitted) this.emit('readable');
@@ -481,6 +488,21 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     }
   }
 
+  /**
+   * Schedule one `flow()` microtask, coalescing repeats. A burst of push()
+   * calls (or resume/start) in one tick enqueues at most one flow turn; flow()
+   * drains the whole buffer synchronously, so the extra turns were redundant.
+   */
+  private scheduleFlow(): void {
+    const state = this._readableState;
+    if (state.flowScheduled) return;
+    state.flowScheduled = true;
+    queueMicrotask(() => {
+      state.flowScheduled = false;
+      this.flow();
+    });
+  }
+
   private flow(): void {
     const state = this._readableState;
     while (state.flowing && state.buffer.length > 0) {
@@ -501,7 +523,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     ) {
       this.maybeRead();
       // If `_read` enqueued synchronously, drain again on the next tick.
-      if (state.buffer.length > 0 && state.flowing) queueMicrotask(() => this.flow());
+      if (state.buffer.length > 0 && state.flowing) this.scheduleFlow();
     }
   }
 
@@ -518,7 +540,7 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     if (state.flowing === true) return this;
     state.flowing = true;
     this.emit('resume');
-    queueMicrotask(() => this.flow());
+    this.scheduleFlow();
     return this;
   }
 

@@ -35,13 +35,23 @@ export async function link(
   for (const pkg of packages) {
     const relPath = pkg.installPath ?? `node_modules/${pkg.name}`;
     const target = joinPath(root, relPath);
-    await vfs.mkdir(target, { recursive: true });
-    for (const [entryPath, data] of Object.entries(pkg.files)) {
+    const entries = Object.entries(pkg.files);
+    // #7 (perf-audit 2026-06-05): dedup distinct parent dirs into a Set (O(M*D)
+    // per-file mkdir -> O(K) distinct mkdirs), then fan out the writes. Pre-create
+    // ALL distinct dirs FIRST (serial) so no parallel write races a missing dir;
+    // the writes are an independent write-only fan-out into already-created dirs,
+    // so Promise.all is order-independent and the final FS state is identical.
+    const dirs = new Set<string>([target]);
+    const writes: Array<[string, Uint8Array]> = [];
+    for (const [entryPath, data] of entries) {
       const fullPath = joinPath(target, entryPath);
-      const dir = fullPath.slice(0, fullPath.lastIndexOf('/'));
-      await vfs.mkdir(dir, { recursive: true });
-      await vfs.writeFile(fullPath, data);
+      dirs.add(fullPath.slice(0, fullPath.lastIndexOf('/')));
+      writes.push([fullPath, data]);
     }
+    for (const dir of dirs) {
+      await vfs.mkdir(dir, { recursive: true });
+    }
+    await Promise.all(writes.map(([fullPath, data]) => vfs.writeFile(fullPath, data)));
   }
 }
 

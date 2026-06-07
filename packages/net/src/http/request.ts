@@ -12,6 +12,39 @@
 import { Readable } from '@riftydev/io';
 
 /**
+ * Install `headers` as a lazy, WRITABLE data property (#9, gate G2).
+ *
+ * `Object.fromEntries(src)` is deferred to first read, then the accessor
+ * replaces itself with a plain writable+enumerable+configurable data property.
+ * Writability is load-bearing: Express reassigns `req.headers = {...}`
+ * (trust-proxy / body-parser), which a getter-only accessor would break. The
+ * setter handles the write-before-read path (a reassign before any read drops
+ * the lazy getter and honours the value).
+ */
+function defineLazyHeaders(target: { headers: Record<string, string> }, src: Headers): void {
+  const materialise = (value: Record<string, string>): void => {
+    Object.defineProperty(target, 'headers', {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  };
+  Object.defineProperty(target, 'headers', {
+    configurable: true,
+    enumerable: true,
+    get(): Record<string, string> {
+      const value = Object.fromEntries(src);
+      materialise(value);
+      return value;
+    },
+    set(value: Record<string, string>): void {
+      materialise(value);
+    },
+  });
+}
+
+/**
  * Minimal Node-compatible shape for `req.socket`. Real TCP fields aren't
  * meaningful in the browser/Service-Worker port-registry model, so we expose
  * loopback placeholders rather than `{}`. `destroy()` is a no-op since there
@@ -69,7 +102,9 @@ async function pipeBodyStream(
 export class IncomingMessage extends Readable {
   method: string;
   url: string;
-  headers: Record<string, string>;
+  // Installed lazily (writable data property) by defineLazyHeaders — no field
+  // initializer, which would clobber the accessor at construction.
+  declare headers: Record<string, string>;
   httpVersion = '1.1';
   socket: IncomingMessageSocket = makeSocket();
   constructor(request: Request) {
@@ -77,7 +112,7 @@ export class IncomingMessage extends Readable {
     const u = new URL(request.url);
     this.method = request.method;
     this.url = u.pathname + u.search;
-    this.headers = Object.fromEntries(request.headers);
+    defineLazyHeaders(this, request.headers);
     void pipeBodyStream(request.body, this);
   }
 }
@@ -85,14 +120,14 @@ export class IncomingMessage extends Readable {
 export class IncomingMessageFromFetch extends Readable {
   statusCode: number;
   statusMessage: string;
-  headers: Record<string, string>;
+  declare headers: Record<string, string>;
   httpVersion = '1.1';
   socket: IncomingMessageSocket = makeSocket();
   constructor(response: Response) {
     super({ objectMode: false });
     this.statusCode = response.status;
     this.statusMessage = response.statusText;
-    this.headers = Object.fromEntries(response.headers);
+    defineLazyHeaders(this, response.headers);
     void pipeBodyStream(response.body, this);
   }
 }

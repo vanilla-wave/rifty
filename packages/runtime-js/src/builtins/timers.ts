@@ -7,7 +7,22 @@
 
 type ImmediateHandle = { readonly id: number };
 
-const immediateQueue: Array<{ id: number; fn: (...args: unknown[]) => void; args: unknown[] }> = [];
+// ADR-0085: setImmediate queue rep + check-phase drain-order contract.
+// `./builtins/timers` is a PUBLIC cross-package subpath export (ADR-0018), so
+// the drain order is a contract, not an internal detail.
+//
+// Rep: a Map<id, item> keyed by the monotonic id. ids are positive integers, so
+// a Map iterates them in numeric-ascending = insertion order → FIFO drain for
+// free. clearImmediate is O(1) (`delete`), replacing the old O(n) findIndex+splice.
+//
+// Drain: EXACTLY ONE immediate per MessageChannel message. One message per
+// setImmediate call ⇒ one immediate per macrotask ⇒ the microtask queue drains
+// BETWEEN consecutive immediates — Node check-phase parity. A nested setImmediate
+// posts its own (higher-id) message serviced in a LATER check phase (no snapshot
+// needed). MessageChannel (not setTimeout(0)) keeps setImmediate ahead of a
+// setTimeout(0) task; the no-MessageChannel fallback uses setTimeout(0) and is
+// realm-specific (jsdom/node test envs without a check phase).
+const immediates = new Map<number, { fn: (...args: unknown[]) => void; args: unknown[] }>();
 let nextImmediateId = 1;
 
 const channel: MessageChannel | null =
@@ -15,13 +30,20 @@ const channel: MessageChannel | null =
 
 if (channel) {
   channel.port1.onmessage = () => {
-    const item = immediateQueue.shift();
-    if (item) {
-      try {
-        item.fn(...item.args);
-      } catch (err) {
-        console.error(err);
-      }
+    // Drain EXACTLY ONE (lowest id; Map iterates ascending = FIFO). One message
+    // per setImmediate call, so consecutive immediates run in SEPARATE macrotasks
+    // and the microtask queue drains BETWEEN them — Node check-phase parity. A
+    // nested immediate posts its own (higher-id) message → next check phase.
+    const first = immediates.keys().next();
+    if (first.done) return;
+    const id = first.value;
+    const item = immediates.get(id);
+    if (item === undefined) return; // cleared between message post and dispatch
+    immediates.delete(id);
+    try {
+      item.fn(...item.args);
+    } catch (err) {
+      console.error(err);
     }
   };
 }
@@ -31,22 +53,21 @@ export function setImmediate(
   ...args: unknown[]
 ): ImmediateHandle {
   const id = nextImmediateId++;
-  immediateQueue.push({ id, fn, args });
+  immediates.set(id, { fn, args });
   if (channel) channel.port2.postMessage(null);
   else
     setTimeout(() => {
-      const idx = immediateQueue.findIndex((q) => q.id === id);
-      if (idx === -1) return;
-      const [item] = immediateQueue.splice(idx, 1);
-      item?.fn(...item.args);
+      const item = immediates.get(id);
+      if (!item) return; // cleared before its timer fired
+      immediates.delete(id);
+      item.fn(...item.args);
     }, 0);
   return { id };
 }
 
 export function clearImmediate(handle: ImmediateHandle | undefined): void {
   if (!handle) return;
-  const idx = immediateQueue.findIndex((q) => q.id === handle.id);
-  if (idx !== -1) immediateQueue.splice(idx, 1);
+  immediates.delete(handle.id);
 }
 
 export const timers = {

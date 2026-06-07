@@ -69,6 +69,18 @@ const SPEC = {
     dir: 'packages/runtime-js',
     sideEffects: ['./dist/index.js', './dist/worker.js'],
     removeDeps: ['acorn-walk'], // declared but never imported (ADR-0070 D6)
+    // execSync handler seam (ipc/exec-sync-handler): a host realm that owns the
+    // dispatcher (calls spawnWorker) registers the 'execSync' handler here so
+    // kernel-spawned guests run execSync end-to-end (e.g. the COI-Worker e2e
+    // harness). The playground page never require()s child_process, so the lazy
+    // first-require install never fires on the dispatcher-owning realm.
+    addExports: {
+      './ipc/exec-sync-handler': './src/ipc/exec-sync-handler.ts',
+      // The real node:child_process surface (execSync/spawn/exec/fork). Exposed
+      // so a kernel-spawned guest entry (kind:'url', no module loader) can call
+      // the genuine execSync client without re-implementing the SAB gate.
+      './builtins/child_process': './src/builtins/child_process.ts',
+    },
     keywords: ['runtime', 'node-compatible', 'module-loader'],
   },
   '@riftydev/runtime-wasi': {

@@ -102,6 +102,132 @@ async function installSqliteMode(): Promise<void> {
 }
 
 /**
+ * Install the opt-in `kind: 'exec-sync'` mode (ADR-0084 #23). `execSync` is
+ * SAB-only by design (ADR-0011 removed the in-realm fallback as a silent stub),
+ * so the default loader path throws `NotImplementedError`. To exercise the v2
+ * binary-frame round-trip head-to-head against real Node's byte-exact `execSync`,
+ * this wires a REAL kernel `SabRing` + the genuine encode/decodeReply framing
+ * and a synchronous in-realm child runner that captures stdout BYTES, then
+ * publishes the `__riftyKernelSyncCall` shim the runtime-js `execSync` reads.
+ *
+ * Node main-thread `Atomics.wait` does not throw, and the reply is written
+ * synchronously by the (synchronous) handler before `waitReply` runs, so the
+ * whole round-trip completes without yielding — matching `execSync`'s
+ * synchronous contract. Returns a teardown that clears the published shim and
+ * the host-capability stubs.
+ */
+async function installExecSyncMode(): Promise<() => void> {
+  // Relative source imports (same `tools/`-harness precedent as `runWasi` above):
+  // kernel, io and the runtime-js sync-mirror are not workspace deps of the runner.
+  const {
+    SabRing,
+    createSabRing,
+    encodeRequest,
+    decodeReply,
+    SyncRpcDispatcher,
+    publishKernelSyncApi,
+    setKernelWorkerUrl,
+  } = await import('../../../packages/kernel/src/index.ts');
+  const { syncMirror } = await import(
+    '../../../packages/runtime-js/src/builtins/fs-sync-mirror.ts'
+  );
+  const { Buffer } = await import('../../../packages/io/src/index.ts');
+
+  // Capability stubs so runtime-js `execSync` takes the SAB branch. SAB +
+  // Atomics already exist in Node; only `crossOriginIsolated` is missing.
+  const g = globalThis as typeof globalThis & { crossOriginIsolated?: boolean };
+  const hadCOI = 'crossOriginIsolated' in g ? g.crossOriginIsolated : undefined;
+  Object.defineProperty(g, 'crossOriginIsolated', { value: true, configurable: true });
+  setKernelWorkerUrl('parity://exec-sync');
+
+  // Synchronous in-realm child runner: eval the child source with a `process`
+  // shim whose `stdout.write` captures Buffer/Uint8Array bytes verbatim (the
+  // byte-exact path real rifty uses via the Worker stdout MessagePort).
+  function runChildSync(scriptPath: string): { stdout: Uint8Array; exitCode: number } {
+    const sourceBytes = syncMirror().readFileBytesSync(scriptPath);
+    const code = Buffer.from(sourceBytes).toString();
+    const chunks: Uint8Array[] = [];
+    const write = (chunk: unknown): boolean => {
+      if (chunk instanceof Uint8Array) chunks.push(chunk);
+      else chunks.push(new TextEncoder().encode(String(chunk)));
+      return true;
+    };
+    const proc = { stdout: { write }, stderr: { write() {} }, argv: ['rifty', scriptPath] };
+    const fn = new Function('process', 'Buffer', `${code}\n//# sourceURL=${scriptPath}`) as (
+      p: unknown,
+      b: unknown,
+    ) => void;
+    let exitCode = 0;
+    try {
+      fn(proc, Buffer);
+    } catch {
+      exitCode = 1;
+    }
+    let total = 0;
+    for (const c of chunks) total += c.byteLength;
+    const out = new Uint8Array(total);
+    let off = 0;
+    for (const c of chunks) {
+      out.set(c, off);
+      off += c.byteLength;
+    }
+    return { stdout: out, exitCode };
+  }
+
+  // Real dispatcher + ring + framing. The synchronous handler returns the
+  // child's stdout BYTES — the dispatcher emits a v2 binary frame (ADR-0084
+  // #23), so the value round-trips byte-exact.
+  const dispatcher = new SyncRpcDispatcher();
+  dispatcher.register('execSync', (rawPayload) => {
+    const payload = rawPayload as { cmd: string };
+    const tokens = payload.cmd.split(/\s+/).filter(Boolean);
+    if (tokens[0] !== 'node' || tokens.length < 2) {
+      throw Object.assign(new Error(`execSync only supports 'node <script>': ${payload.cmd}`), {
+        code: 'EUNSUPPORTED',
+      });
+    }
+    const result = runChildSync(tokens[1] ?? '');
+    if (result.exitCode !== 0) {
+      throw Object.assign(new Error(`Command failed: ${payload.cmd}`), {
+        code: 'ECHILDFAILED',
+        exitCode: result.exitCode,
+      });
+    }
+    return result.stdout;
+  });
+
+  const { sab, ring } = createSabRing();
+  const dispatcherRing = SabRing.attach(sab);
+  dispatcher.attach(dispatcherRing);
+
+  publishKernelSyncApi({
+    call: (method, payload) => {
+      ring.writeRequest(encodeRequest({ method, payload }));
+      dispatcher.pumpOnce(dispatcherRing); // synchronous handler writes the reply now
+      const replyBytes = ring.waitReply(2000); // reply already present → returns immediately
+      const reply = decodeReply(replyBytes);
+      if (reply.ok) return reply.value;
+      const e = reply.error ?? { name: 'Error', message: 'unknown' };
+      const err = new Error(e.message);
+      err.name = e.name;
+      if (e.code !== undefined) (err as Error & { code?: string }).code = e.code;
+      throw err;
+    },
+  });
+
+  return () => {
+    dispatcher.detachAll();
+    Object.defineProperty(g, '__riftyKernelSyncCall', { value: undefined, configurable: true });
+    if (hadCOI === undefined) {
+      Reflect.deleteProperty(g, 'crossOriginIsolated');
+    } else {
+      Object.defineProperty(g, 'crossOriginIsolated', { value: hadCOI, configurable: true });
+    }
+    setKernelWorkerUrl('');
+  };
+}
+
+/**
  * Build the `transformSource` hook for `kind: 'ts-esm'` — the SAME edge the
  * headless opencode harness uses (ADR-0052). It strips types / lowers JSX with
  * the REAL vendored esbuild WASI binary via the injected `runWasi`, selecting
@@ -203,6 +329,11 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
   // has its WASM handle ready (ADR-0065). No teardown — see `installSqliteMode`.
   if (testCase.kind === 'sqlite') await installSqliteMode();
 
+  // Opt-in exec-sync mode (ADR-0084 #23): wire the real SAB binary-frame path so
+  // the case's `child_process.execSync` returns byte-exact stdout to diff against
+  // real Node. Teardown clears the published shim + host-capability stubs.
+  const teardownExecSync = testCase.kind === 'exec-sync' ? await installExecSyncMode() : null;
+
   const captured: string[] = [];
   const writeStdout = (...args: unknown[]) => {
     captured.push(`${formatArgs(args)}\n`);
@@ -255,6 +386,7 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
     resetSyncMirror();
     setProcessCwd('/workspace');
     teardownHttp?.();
+    teardownExecSync?.();
   }
   return captured.join('');
 }

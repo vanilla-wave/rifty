@@ -54,6 +54,27 @@ describe('MemoryVfs', () => {
     expect(entries.find((e) => e.name === 'sub')?.isDirectory).toBe(true);
   });
 
+  it('readdir dirent cache invalidates on create / unlink / kind change (perf audit 2026-06-05)', async () => {
+    const fs = new MemoryVfs();
+    await fs.mkdir('/root', { recursive: true });
+    await fs.writeFile('/root/a.txt', 'a');
+    // Fill the cache.
+    expect((await fs.readdir('/root')).map((e) => e.name)).toEqual(['a.txt']);
+    // CREATE: a new child must appear (cache must have invalidated).
+    await fs.writeFile('/root/b.txt', 'b');
+    expect((await fs.readdir('/root')).map((e) => e.name)).toEqual(['a.txt', 'b.txt']);
+    // UNLINK: a removed child must disappear.
+    await fs.rm('/root/a.txt');
+    expect((await fs.readdir('/root')).map((e) => e.name)).toEqual(['b.txt']);
+    // KIND CHANGE: replace the file `b.txt` with a directory of the same name.
+    // The cached dirent must flip isDirectory false -> true, not stay stale.
+    await fs.rm('/root/b.txt');
+    await fs.mkdir('/root/b.txt', { recursive: true });
+    const after = await fs.readdir('/root');
+    expect(after.map((e) => e.name)).toEqual(['b.txt']);
+    expect(after.find((e) => e.name === 'b.txt')?.isDirectory).toBe(true);
+  });
+
   it('stat returns sizes for files and 0 for dirs', async () => {
     const fs = new MemoryVfs();
     await fs.writeFile('/x', 'hello');
@@ -239,5 +260,36 @@ describe('MemoryFsSync.utimes (ADR-0029)', () => {
     fsSync.mkdirSync('/d', { recursive: true });
     fsSync.utimes('/d', 100, 200);
     expect(fsSync.statSync('/d').mtime).toBe(200);
+  });
+});
+
+describe('MemoryFsSync.statSyncOrNull (ADR-0083)', () => {
+  it('returns a stat for a present file and null for a miss (no throw)', () => {
+    const { fsSync } = createMemoryFs();
+    fsSync.writeFileSync('/a.txt', new Uint8Array([1, 2, 3]));
+    const present = fsSync.statSyncOrNull('/a.txt');
+    expect(present).not.toBeNull();
+    expect(present?.isFile).toBe(true);
+    expect(present?.isDirectory).toBe(false);
+    expect(present?.size).toBe(3);
+    expect(fsSync.statSyncOrNull('/missing')).toBeNull();
+  });
+
+  it('statSync STILL throws ENOENT on a miss (parity invariant — must not regress)', () => {
+    const fsSync = new MemoryFsSync();
+    expect(() => fsSync.statSync('/missing')).toThrow(VfsError);
+    try {
+      fsSync.statSync('/missing');
+    } catch (err) {
+      expect((err as VfsError).code).toBe('ENOENT');
+    }
+  });
+
+  it('differentiates directory from file', () => {
+    const { fsSync } = createMemoryFs();
+    fsSync.mkdirSync('/d', { recursive: true });
+    const s = fsSync.statSyncOrNull('/d');
+    expect(s?.isFile).toBe(false);
+    expect(s?.isDirectory).toBe(true);
   });
 });

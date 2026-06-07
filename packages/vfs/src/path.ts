@@ -9,6 +9,20 @@ export function isAbsolute(p: string): boolean {
 
 export function normalizePath(p: string): string {
   if (p === '' || p === '.') return '/';
+  // Fast path (#10, perf audit 2026-06-05): an already-normalized ABSOLUTE
+  // path is returned untouched — no split/stack alloc. Absolute-only by
+  // design; relative inputs fall through to the slow path unchanged.
+  if (p === '/') return '/';
+  if (p.startsWith('/') && !p.endsWith('/') && !p.includes('//')) {
+    let dotted = false;
+    for (const seg of p.slice(1).split('/')) {
+      if (seg === '.' || seg === '..') {
+        dotted = true;
+        break;
+      }
+    }
+    if (!dotted) return p;
+  }
   const absolute = isAbsolute(p);
   const parts = p.split('/');
   const stack: string[] = [];
@@ -55,6 +69,35 @@ export function basename(p: string, ext?: string): string {
   if (normalized === '/') return '';
   const idx = normalized.lastIndexOf('/');
   const tail = idx === -1 ? normalized : normalized.slice(idx + 1);
+  if (ext !== undefined && tail.endsWith(ext) && tail !== ext) {
+    return tail.slice(0, tail.length - ext.length);
+  }
+  return tail;
+}
+
+/**
+ * Like {@link dirname} but skips the internal `normalizePath` pass.
+ * **Precondition:** `p` MUST already be a normalized absolute path (the output
+ * of {@link normalizePath}/{@link normalizeAbsolute}). Internal-only fast path
+ * (#10, perf audit 2026-06-05) — NOT exported; UNSAFE on un-normalized input.
+ */
+export function dirnameNormalized(p: string): string {
+  if (p === '/') return '/';
+  const idx = p.lastIndexOf('/');
+  if (idx === -1) return '.';
+  if (idx === 0) return '/';
+  return p.slice(0, idx);
+}
+
+/**
+ * Like {@link basename} but skips the internal `normalizePath` pass.
+ * **Precondition:** `p` MUST already be a normalized absolute path. Internal-only
+ * fast path (#10, perf audit 2026-06-05) — NOT exported; UNSAFE on un-normalized input.
+ */
+export function basenameNormalized(p: string, ext?: string): string {
+  if (p === '/') return '';
+  const idx = p.lastIndexOf('/');
+  const tail = idx === -1 ? p : p.slice(idx + 1);
   if (ext !== undefined && tail.endsWith(ext) && tail !== ext) {
     return tail.slice(0, tail.length - ext.length);
   }

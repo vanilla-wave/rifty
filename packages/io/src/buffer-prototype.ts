@@ -16,8 +16,24 @@ import { type Encoding, compareSlices, decode, encode } from './buffer-codec.ts'
 // Opaque ctor (no `import type { Buffer }`) keeps the dependency one-way.
 type BufferLikeCtor = new (...args: unknown[]) => Uint8Array;
 
-function viewOf(u8: Uint8Array, offset: number, byteLen: number): DataView {
-  return new DataView(u8.buffer, u8.byteOffset + offset, byteLen);
+// Per-receiver cached full-range DataView. Each read/writeUInt* call reused a
+// fresh `new DataView(buffer, byteOffset+offset, N)` before; that ctor is the
+// hot cost. A full-range DataView built once per Buffer (lazily) lets the
+// accessors pass `offset` straight to get/set instead. OOB is still a throw:
+// `dv.getUint32(offset)` past bounds throws RangeError (no byte-math fallback
+// that would return garbage). Keyed per receiver (WeakMap) so subarray/clone —
+// each a NEW Uint8Array with its own .buffer — gets its own view on miss; the
+// `dv.buffer !== u8.buffer` guard rebuilds if a receiver's backing buffer ever
+// changes (detach/transfer).
+const dvCache = new WeakMap<Uint8Array, DataView>();
+
+function dvFor(u8: Uint8Array): DataView {
+  let dv = dvCache.get(u8);
+  if (dv === undefined || dv.buffer !== u8.buffer) {
+    dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    dvCache.set(u8, dv);
+  }
+  return dv;
 }
 
 function bufferToString(
@@ -144,103 +160,103 @@ export function installIntMethods(BufferClass: BufferLikeCtor): void {
   const p = BufferClass.prototype as Record<string, unknown>;
 
   p.readUInt8 = function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 1).getUint8(0);
+    return dvFor(this).getUint8(offset);
   };
   p.readUInt16BE = function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 2).getUint16(0, false);
+    return dvFor(this).getUint16(offset, false);
   };
   p.readUInt16LE = function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 2).getUint16(0, true);
+    return dvFor(this).getUint16(offset, true);
   };
   p.readUInt32BE = function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 4).getUint32(0, false);
+    return dvFor(this).getUint32(offset, false);
   };
   p.readUInt32LE = function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 4).getUint32(0, true);
+    return dvFor(this).getUint32(offset, true);
   };
   p.readInt8 = function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 1).getInt8(0);
+    return dvFor(this).getInt8(offset);
   };
   p.readInt16BE = function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 2).getInt16(0, false);
+    return dvFor(this).getInt16(offset, false);
   };
   p.readInt16LE = function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 2).getInt16(0, true);
+    return dvFor(this).getInt16(offset, true);
   };
   p.readInt32BE = function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 4).getInt32(0, false);
+    return dvFor(this).getInt32(offset, false);
   };
   p.readInt32LE = function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 4).getInt32(0, true);
+    return dvFor(this).getInt32(offset, true);
   };
   p.readBigUInt64BE = function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 8).getBigUint64(0, false);
+    return dvFor(this).getBigUint64(offset, false);
   };
   p.readBigUInt64LE = function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 8).getBigUint64(0, true);
+    return dvFor(this).getBigUint64(offset, true);
   };
   p.readBigInt64BE = function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 8).getBigInt64(0, false);
+    return dvFor(this).getBigInt64(offset, false);
   };
   p.readBigInt64LE = function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 8).getBigInt64(0, true);
+    return dvFor(this).getBigInt64(offset, true);
   };
 
   // Writers return the post-write offset, matching Node.
   p.writeUInt8 = function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 1).setUint8(0, value);
+    dvFor(this).setUint8(offset, value);
     return offset + 1;
   };
   p.writeUInt16BE = function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 2).setUint16(0, value, false);
+    dvFor(this).setUint16(offset, value, false);
     return offset + 2;
   };
   p.writeUInt16LE = function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 2).setUint16(0, value, true);
+    dvFor(this).setUint16(offset, value, true);
     return offset + 2;
   };
   p.writeUInt32BE = function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 4).setUint32(0, value, false);
+    dvFor(this).setUint32(offset, value, false);
     return offset + 4;
   };
   p.writeUInt32LE = function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 4).setUint32(0, value, true);
+    dvFor(this).setUint32(offset, value, true);
     return offset + 4;
   };
   p.writeInt8 = function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 1).setInt8(0, value);
+    dvFor(this).setInt8(offset, value);
     return offset + 1;
   };
   p.writeInt16BE = function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 2).setInt16(0, value, false);
+    dvFor(this).setInt16(offset, value, false);
     return offset + 2;
   };
   p.writeInt16LE = function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 2).setInt16(0, value, true);
+    dvFor(this).setInt16(offset, value, true);
     return offset + 2;
   };
   p.writeInt32BE = function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 4).setInt32(0, value, false);
+    dvFor(this).setInt32(offset, value, false);
     return offset + 4;
   };
   p.writeInt32LE = function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 4).setInt32(0, value, true);
+    dvFor(this).setInt32(offset, value, true);
     return offset + 4;
   };
   p.writeBigUInt64BE = function (this: Uint8Array, value: bigint, offset = 0) {
-    viewOf(this, offset, 8).setBigUint64(0, value, false);
+    dvFor(this).setBigUint64(offset, value, false);
     return offset + 8;
   };
   p.writeBigUInt64LE = function (this: Uint8Array, value: bigint, offset = 0) {
-    viewOf(this, offset, 8).setBigUint64(0, value, true);
+    dvFor(this).setBigUint64(offset, value, true);
     return offset + 8;
   };
   p.writeBigInt64BE = function (this: Uint8Array, value: bigint, offset = 0) {
-    viewOf(this, offset, 8).setBigInt64(0, value, false);
+    dvFor(this).setBigInt64(offset, value, false);
     return offset + 8;
   };
   p.writeBigInt64LE = function (this: Uint8Array, value: bigint, offset = 0) {
-    viewOf(this, offset, 8).setBigInt64(0, value, true);
+    dvFor(this).setBigInt64(offset, value, true);
     return offset + 8;
   };
 }
@@ -290,33 +306,33 @@ export function installExtraMethods(BufferClass: BufferLikeCtor): void {
   const p = BufferClass.prototype as Record<string, unknown>;
 
   p.readFloatBE = function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 4).getFloat32(0, false);
+    return dvFor(this).getFloat32(offset, false);
   };
   p.readFloatLE = function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 4).getFloat32(0, true);
+    return dvFor(this).getFloat32(offset, true);
   };
   p.readDoubleBE = function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 8).getFloat64(0, false);
+    return dvFor(this).getFloat64(offset, false);
   };
   p.readDoubleLE = function (this: Uint8Array, offset = 0) {
-    return viewOf(this, offset, 8).getFloat64(0, true);
+    return dvFor(this).getFloat64(offset, true);
   };
 
   // Writers return the post-write offset, matching Node.
   p.writeFloatBE = function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 4).setFloat32(0, value, false);
+    dvFor(this).setFloat32(offset, value, false);
     return offset + 4;
   };
   p.writeFloatLE = function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 4).setFloat32(0, value, true);
+    dvFor(this).setFloat32(offset, value, true);
     return offset + 4;
   };
   p.writeDoubleBE = function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 8).setFloat64(0, value, false);
+    dvFor(this).setFloat64(offset, value, false);
     return offset + 8;
   };
   p.writeDoubleLE = function (this: Uint8Array, value: number, offset = 0) {
-    viewOf(this, offset, 8).setFloat64(0, value, true);
+    dvFor(this).setFloat64(offset, value, true);
     return offset + 8;
   };
 

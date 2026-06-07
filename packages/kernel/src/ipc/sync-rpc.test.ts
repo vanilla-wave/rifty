@@ -17,7 +17,17 @@
 import { describe, expect, it } from 'vitest';
 import { SAB_RING_HEADER_BYTES, SabRing, VERSION_INDEX, createSabRing } from './sab-ring.ts';
 import { SyncRpcDispatcher } from './sync-dispatch.ts';
-import { SYNC_RPC_PROTOCOL_VERSION, SyncRpcProtocolMismatchError } from './sync-rpc.ts';
+import {
+  FRAME_BINARY,
+  FRAME_JSON,
+  SYNC_RPC_PROTOCOL_VERSION,
+  SyncRpcProtocolMismatchError,
+  decodeReply,
+  decodeRequest,
+  encodeBinaryReply,
+  encodeReply,
+  encodeRequest,
+} from './sync-rpc.ts';
 
 describe('SyncRpc protocol version (ADR-0032)', () => {
   it('exports a positive integer version constant', () => {
@@ -110,11 +120,113 @@ describe('SyncRpc protocol version — dispatcher behaviour (ADR-0032)', () => {
     const peer = SabRing.attach(sab, 256, { expectedVersion: forgedVersion });
     const replyBytes = await peer.waitReplyAsync(2000);
     dispatcher.detachAll();
-    const reply = JSON.parse(new TextDecoder().decode(replyBytes)) as {
-      ok: boolean;
-      error?: { code?: string; message?: string };
-    };
+    // v2 (ADR-0084 #23): the error reply is a JSON frame — decode through the
+    // real decoder which strips the 1-byte discriminator. (The error contract
+    // itself is unchanged; only the frame gained a leading byte.)
+    const reply = decodeReply(replyBytes);
     expect(reply.ok).toBe(false);
-    expect(reply.error?.code).toBe('EPROTOVERSION');
+    expect((reply.error as { code?: string } | undefined)?.code).toBe('EPROTOVERSION');
   });
 });
+
+describe('SyncRpc v2 binary frame (ADR-0084 #23)', () => {
+  it('SYNC_RPC_PROTOCOL_VERSION is bumped to 2 (binary-frame discriminator)', () => {
+    expect(SYNC_RPC_PROTOCOL_VERSION).toBe(2);
+  });
+
+  it('encodeBinaryReply → decodeReply round-trips arbitrary bytes byte-exact (incl 0xff/0xfe/0x00)', () => {
+    const value = Uint8Array.from([0xff, 0xfe, 0x00, 0x01, 0x80, 0x7f]);
+    const frame = encodeBinaryReply(value);
+    // Leading discriminator byte = BINARY; body is the verbatim bytes.
+    expect(frame[0]).toBe(FRAME_BINARY);
+    const reply = decodeReply(frame);
+    expect(reply.ok).toBe(true);
+    expect(reply.value).toBeInstanceOf(Uint8Array);
+    expect(Array.from(reply.value as Uint8Array)).toEqual([0xff, 0xfe, 0x00, 0x01, 0x80, 0x7f]);
+    // Length is the raw byte count (3 for [0xff,0xfe,0x00]), NOT a UTF-8 inflation.
+    expect(
+      (decodeReply(encodeBinaryReply(Uint8Array.from([0xff, 0xfe, 0x00]))).value as Uint8Array)
+        .length,
+    ).toBe(3);
+  });
+
+  it('JSON replies still carry the JSON discriminator and decode as values', () => {
+    const frame = encodeReply({ ok: true, value: 'hello' });
+    expect(frame[0]).toBe(FRAME_JSON);
+    expect(decodeReply(frame)).toEqual({ ok: true, value: 'hello' });
+  });
+
+  it('a binary (0x01) frame fed to a v1 reader is REJECTED at the version guard, not JSON.parse', async () => {
+    // A v1 peer (expectedVersion: 1) reading a v2-stamped binary frame must
+    // surface SyncRpcProtocolMismatchError before any decode — never feed a
+    // 0x01 body into JSON.parse.
+    const { sab } = createSabRing({ payloadCapacity: 64 });
+    const responder = SabRing.attach(sab, 64);
+    // Responder stamps v2 (its expectedVersion) and writes a binary frame.
+    responder.writeReply(encodeBinaryReply(Uint8Array.from([0xff, 0xfe, 0x00])));
+    const v1Reader = SabRing.attach(sab, 64, { expectedVersion: 1 });
+    await expect(v1Reader.waitReplyAsync(1000)).rejects.toBeInstanceOf(
+      SyncRpcProtocolMismatchError,
+    );
+  });
+
+  it('dispatcher emits a binary frame for a Uint8Array handler value (byte-exact)', async () => {
+    const { sab, ring } = createSabRing({ payloadCapacity: 256 });
+    const caller = SabRing.attach(sab, 256);
+    const dispatcher = new SyncRpcDispatcher();
+    dispatcher.register('bytes', () => Uint8Array.from([0xff, 0xfe, 0x00]));
+    dispatcher.attach(ring);
+    caller.writeRequest(encodeReqJson('bytes'));
+    const replyBytes = await caller.waitReplyAsync(2000);
+    dispatcher.detachAll();
+    expect(replyBytes[0]).toBe(FRAME_BINARY);
+    const reply = decodeReply(replyBytes);
+    expect(Array.from(reply.value as Uint8Array)).toEqual([0xff, 0xfe, 0x00]);
+  });
+});
+
+describe('SyncRpc JSON-frame decode over a SharedArrayBuffer view (browser SAB path)', () => {
+  // Regression: `TextDecoder.decode()` rejects a SharedArrayBuffer-backed view
+  // in browsers ("The provided ArrayBufferView value must not be shared") —
+  // Node is lax, so the SAB JSON-frame path passed every Node test yet threw
+  // the first time it ran in a real cross-origin-isolated Worker (the COI
+  // execSync e2e, tests/e2e/execsync-sab.spec.ts). The decoders must copy out
+  // of the shared view before decoding. This test feeds a SAB-backed view to
+  // assert the decode path never touches a shared buffer with TextDecoder.
+
+  /** Copy `frame` into a SharedArrayBuffer-backed Uint8Array view. */
+  function asSharedView(frame: Uint8Array): Uint8Array {
+    const sab = new SharedArrayBuffer(frame.byteLength);
+    const view = new Uint8Array(sab);
+    view.set(frame);
+    return view;
+  }
+
+  it('decodeReply decodes a JSON reply frame whose body is a shared view', () => {
+    const shared = asSharedView(encodeReply({ ok: true, value: { hello: 'world' } }));
+    expect(decodeReply(shared)).toEqual({ ok: true, value: { hello: 'world' } });
+  });
+
+  it('decodeReply decodes a JSON error reply frame whose body is a shared view', () => {
+    const shared = asSharedView(
+      encodeReply({ ok: false, error: { name: 'Error', message: 'boom', code: 'ECHILDFAILED' } }),
+    );
+    const reply = decodeReply(shared);
+    expect(reply.ok).toBe(false);
+    expect(reply.error).toEqual({ name: 'Error', message: 'boom', code: 'ECHILDFAILED' });
+  });
+
+  it('decodeRequest decodes a JSON request frame whose body is a shared view', () => {
+    const shared = asSharedView(encodeRequest({ method: 'execSync', payload: { cmd: 'node /x' } }));
+    expect(decodeRequest(shared)).toEqual({ method: 'execSync', payload: { cmd: 'node /x' } });
+  });
+});
+
+/** Local helper: encode a JSON request frame the way the client does. */
+function encodeReqJson(method: string): Uint8Array {
+  const body = new TextEncoder().encode(JSON.stringify({ method, payload: null }));
+  const out = new Uint8Array(body.byteLength + 1);
+  out[0] = FRAME_JSON;
+  out.set(body, 1);
+  return out;
+}

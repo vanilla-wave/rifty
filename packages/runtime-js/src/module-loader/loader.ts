@@ -2,6 +2,7 @@ import type { FsSync } from '@riftydev/vfs';
 import { loadBuiltin } from '../builtins/index.ts';
 import { executeCjs } from './cjs.ts';
 import { ModuleLoadError } from './errors.ts';
+import { type TransformResult, transformEsm } from './esm-ast.ts';
 import { type TransformSourceHook, executeEsm } from './esm.ts';
 import { wrapCjsAsEsmNamespace } from './interop.ts';
 import { ModuleRegistry } from './registry.ts';
@@ -44,13 +45,22 @@ export interface ModuleLoader {
   /** Direct id-based loader (used by REPL and tests). */
   loadById(id: string, esm?: boolean): Promise<Record<string, unknown>>;
   /**
-   * Drop module records. No `id` wipes the whole cache (the `load-fixture` hot
-   * path uses this so loader + resolver survive editor saves); an absolute `id`
-   * removes only that entry — future hook for HMR / per-file updates. Delegates
-   * to {@link ModuleRegistry.invalidate}; see its note for the
-   * single-entry-vs-dependency-graph contract.
+   * The coherent invalidation seam. Drops the module record AND the id-keyed
+   * transform/AST caches AND the resolver caches in lockstep, so a re-load
+   * re-resolves + re-transforms cleanly. No `id` wipes everything (the
+   * `load-fixture` hot path uses this so loader + resolver survive editor saves);
+   * an absolute `id` removes only that entry — the hook for HMR / per-file
+   * updates. See {@link ModuleRegistry.invalidate} for the
+   * single-entry-vs-dependency-graph contract (HMR callers MUST call THIS, not
+   * `registry.invalidate`).
    */
   invalidate(id?: string): void;
+  /**
+   * WARNING: do NOT call `registry.invalidate(id)` for HMR — it drops only the
+   * executed-module record, leaving transform/AST/resolver caches stale. Use
+   * {@link ModuleLoader.invalidate} instead. Exposed for read access (e.g. tests
+   * inspecting cached records).
+   */
   readonly registry: ModuleRegistry;
   readonly resolver: Resolver;
 }
@@ -90,11 +100,26 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
       return out;
     });
 
+  // Id-keyed ESM AST cache: `transformEsm` (acorn parse + walk) is the heaviest
+  // per-module CPU step, re-run for every byte-identical module on each
+  // editor-save `invalidate()` loop. `transformEsm` is pure, so memoizing by
+  // absolute resolved id is observationally transparent. Dropped in lockstep
+  // with `transformCache`/registry (same lifecycle). TODO(ADR): Q-2026-05-30-202.
+  const esmAstCache = new Map<string, TransformResult>();
+  const cachedTransformEsm = (source: string, id: string): TransformResult => {
+    const hit = esmAstCache.get(id);
+    if (hit !== undefined) return hit;
+    const out = transformEsm(source, id);
+    esmAstCache.set(id, out);
+    return out;
+  };
+
   const deps = {
     registry,
     resolver,
     workspace,
     transformSource: cachedTransform,
+    transformEsm: cachedTransformEsm,
     resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule {
       return resolver.resolve(specifier, { fromFile, esm });
     },
@@ -128,7 +153,26 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
       if (cached && cached.state === 'loading') {
         return cached.exports;
       }
-      const resolved = readResolvedById(id);
+      // Drop the SECOND resolve+read+scope-walk: carry the already-resolved
+      // module (perf #14). The id-only path stays for direct id callers
+      // (cjs/interop), which never hold a ResolvedModule.
+      return deps.loadAsyncResolved(readResolvedById(id));
+    },
+    // Async load of an ALREADY-RESOLVED module — skips re-resolving (perf #14).
+    // The registry short-circuit is replicated here (not only in the id path) so
+    // direct callers (import/loadById/esm preload) keep dedup + cycle handling.
+    async loadAsyncResolved(resolved: ResolvedModule): Promise<Record<string, unknown>> {
+      // A `node:` builtin reaches here when an ESM module statically imports it
+      // (the preload carries the resolved `{kind:'builtin'}` record). Mirror the
+      // id-path's `node:` short-circuit — builtins have no source to execute.
+      if (resolved.kind === 'builtin') {
+        return wrapCjsAsEsmNamespace(loadBuiltinOrThrow(resolved.id));
+      }
+      const cached = registry.get(resolved.id);
+      if (cached && cached.state === 'loaded') return cached.exports;
+      if (cached && cached.state === 'loading') {
+        return cached.exports;
+      }
       if (resolved.kind === 'esm') {
         return executeEsm(resolved, { ...deps });
       }
@@ -175,18 +219,29 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     },
     async import(specifier, from = cwd) {
       const resolved = resolver.resolve(specifier, { fromFile: from, esm: true });
-      return deps.loadAsync(resolved.id);
+      return deps.loadAsyncResolved(resolved);
     },
     loadById(id, esm = false) {
       const resolved = resolver.resolve(id, { fromFile: id, esm });
-      return deps.loadAsync(resolved.id);
+      return deps.loadAsyncResolved(resolved);
     },
     invalidate(id) {
       registry.invalidate(id);
-      // Keep the strip cache coherent with the executed-module cache
-      // (TODO(ADR): Q-2026-05-30-202).
-      if (id === undefined) transformCache.clear();
-      else transformCache.delete(id);
+      // Keep the strip cache + ESM AST cache coherent with the executed-module
+      // cache, dropping them in lockstep (TODO(ADR): Q-2026-05-30-202).
+      if (id === undefined) {
+        transformCache.clear();
+        esmAstCache.clear();
+      } else {
+        transformCache.delete(id);
+        esmAstCache.delete(id);
+      }
+      // Resolver caches (package.json parses #5 + resolution memo #15) are
+      // input-keyed and cannot be pruned by module id, so ANY invalidate —
+      // full OR targeted — clears them whole. A stale package.json (load-fixture
+      // reload) or a stale resolution would silently mis-classify / mis-route a
+      // module. TODO(ADR): Q-2026-06-06-320, Q-2026-06-06-321.
+      resolver.clearCaches();
     },
     registry,
     resolver,

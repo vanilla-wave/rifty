@@ -50,8 +50,19 @@ export interface ParityCase {
    *   has its WASM handle ready (the one async step the synchronous surface
    *   depends on). The case `code` is otherwise plain CJS — the Node side runs
    *   the genuine `node:sqlite` `DatabaseSync` (Node ≥22) with no preamble.
+   * - `'exec-sync'` — opt-in `child_process.execSync` SAB-path mode (ADR-0084 #23).
+   *   `execSync` is SAB-only by design (ADR-0011 — the in-realm fallback was
+   *   removed as a silent stub), so the default loader path would throw
+   *   `NotImplementedError`. This mode wires a REAL kernel `SyncRpcDispatcher` +
+   *   `SabRing` + the v2 binary-frame encode/decodeReply round-trip and a
+   *   synchronous in-realm child runner that captures stdout BYTES, then
+   *   publishes the `__riftyKernelSyncCall` shim so the case's `execSync` returns
+   *   a byte-exact Buffer. `setup.files` are exposed to the child via the sync
+   *   mirror. The Node side runs the genuine `child_process.execSync` (a real
+   *   subprocess) with no preamble — so binary stdout must be routed through a
+   *   HEX channel (`out.toString('hex')`) to survive the harness's UTF-8 capture.
    */
-  readonly kind?: 'cjs' | 'esm' | 'http' | 'ts-esm' | 'sqlite';
+  readonly kind?: 'cjs' | 'esm' | 'http' | 'ts-esm' | 'sqlite' | 'exec-sync';
 }
 
 export interface CaseRun {
