@@ -18,6 +18,8 @@
 import { NotImplementedError } from '@riftydev/io';
 import { isAbsolute, joinPath, normalizePath, syncMirror } from '@riftydev/vfs';
 import { builtinCommands } from './builtins.ts';
+import { hasGlobMeta, matchSegment } from './commands/_glob.ts';
+import { resolve } from './commands/_shared.ts';
 import { type Token, isOp, tokenize } from './tokenize.ts';
 import type { CommandContext, ShellCommand } from './types.ts';
 
@@ -111,9 +113,14 @@ export class Shell {
   constructor(options: ShellOptions = {}) {
     this._cwd = normalizePath(options.cwd ?? '/');
     this.env = { ...(options.env ?? {}) };
-    const builtins = builtinCommands((p) => {
-      this._cwd = p;
-    });
+    const builtins = builtinCommands(
+      (p) => {
+        this._cwd = p;
+      },
+      // Lazy presence probe: `which` reads this.commands at invocation time,
+      // after every builtin + any registerCommand has populated the map.
+      (n) => this.commands.has(n),
+    );
     for (const [name, cmd] of Object.entries(builtins)) this.commands.set(name, cmd);
   }
 
@@ -173,6 +180,11 @@ export class Shell {
     try {
       for (let idx = 0; idx < segments.length; idx++) {
         const seg = segments[idx]!;
+
+        // An empty segment (e.g. the tail of a trailing `;` or `echo a ;`) is a
+        // no-op: skip it entirely so it cannot overwrite lastExitCode with 0
+        // (`false ;` must stay exit 1).
+        if (seg.tokens.length === 0) continue;
 
         // Short-circuit based on the PREVIOUS segment's joiner.
         if (idx > 0) {
@@ -253,29 +265,26 @@ export class Shell {
       return { exitCode: 0, stdout: '', stderr: '' };
     }
 
-    // Pull off trailing `> path` / `>> path` redirection.
+    // Pull off `> path` / `>> path` redirection. bash removes redirections from
+    // ANYWHERE in a simple command, not just the tail — scan right-to-left so the
+    // RIGHTMOST target wins (last redirect for the fd) and every `>`/`>>`+word
+    // pair leaves the argv (otherwise the op leaks as a literal argument, e.g.
+    // `echo hi > out extra`). A target may start with `-` — after `>` it is a
+    // filename, never a flag.
     let redirectTo: { path: string; append: boolean } | null = null;
-    if (rest.length >= 2) {
-      const opTok = rest[rest.length - 2];
-      const target = rest[rest.length - 1];
-      if (
-        opTok &&
-        isOp(opTok) &&
-        (opTok.op === '>' || opTok.op === '>>') &&
-        target &&
-        !isOp(target) &&
-        !target.value.startsWith('-')
-      ) {
-        redirectTo = { path: target.value, append: opTok.op === '>>' };
-        rest.splice(rest.length - 2, 2);
-      }
+    for (let k = rest.length - 1; k >= 0; k--) {
+      const op = rest[k];
+      if (!op || !isOp(op) || (op.op !== '>' && op.op !== '>>')) continue;
+      const target = rest[k + 1];
+      if (!target || isOp(target)) continue; // dangling `>` with no target — leave as-is
+      if (!redirectTo) redirectTo = { path: target.value, append: op.op === '>>' };
+      rest.splice(k, 2);
     }
 
     const cmdTok = rest[0];
     const cmd = cmdTok && !isOp(cmdTok) ? cmdTok.value : '';
-    // Any operator token that slipped through (e.g. a non-trailing `>`) passes
-    // to the builtin as its literal string — preserving the prior string[] behavior.
-    const args = rest.slice(1).map((t) => (isOp(t) ? t.op : t.value));
+    // Command-name token (rest[0]) stays literal; only ARGUMENTS glob-expand.
+    const args = this.expandArgs(rest.slice(1));
     const handler = this.commands.get(cmd);
 
     let stdout = '';
@@ -328,25 +337,33 @@ export class Shell {
         exitCode = raced;
       }
     } catch (err) {
-      emit(`${(err as Error).stack ?? (err as Error).message}\n`, 'stderr');
+      // Clean shell diagnostic — never dump a JS stack trace to the terminal.
+      // Commands throw NotImplementedError for unsupported flags/features; its
+      // message ("Not implemented: shell.X.flag (…)") is the right altitude.
+      emit(`${cmd}: ${(err as Error).message}\n`, 'stderr');
       exitCode = 1;
     }
 
-    // Don't flush a partial buffer to the redirect target on a SIGINT abort.
-    if (redirectTo && stdout.length > 0 && exitCode !== SIGINT_EXIT) {
+    // Flush to the redirect target. Truncate/create even when the command wrote
+    // nothing — bash opens `> f` before running, so `grep nomatch x > f` empties
+    // f. Skip only on a SIGINT abort: don't persist a partial buffer.
+    if (redirectTo && exitCode !== SIGINT_EXIT) {
       try {
         const path = normalizePath(
           isAbsolute(redirectTo.path) ? redirectTo.path : joinPath(this._cwd, redirectTo.path),
         );
         const fs = syncMirror();
+        const payload = encoder.encode(stdout);
         if (redirectTo.append && fs.existsSync(path)) {
+          // Size by ENCODED byte length, not stdout.length (UTF-16 code units):
+          // multibyte stdout would otherwise under-allocate → set() RangeError.
           const existing = fs.readFileBytesSync(path);
-          const next = new Uint8Array(existing.length + stdout.length);
+          const next = new Uint8Array(existing.length + payload.length);
           next.set(existing, 0);
-          next.set(encoder.encode(stdout), existing.length);
+          next.set(payload, existing.length);
           fs.writeFileSync(path, next);
         } else {
-          fs.writeFileSync(path, encoder.encode(stdout));
+          fs.writeFileSync(path, payload);
         }
         stdout = '';
       } catch (err) {
@@ -364,12 +381,73 @@ export class Shell {
 
     return { exitCode, stdout, stderr };
   }
+
+  /**
+   * Map argument tokens to argv strings, glob-expanding unquoted word tokens
+   * (ADR-0084 part 2). Operators pass through as their literal `op`. A quoted
+   * word is NEVER expanded (whole-word quote flag — a documented ADR-0084
+   * limitation). An unquoted word with no glob meta passes literally.
+   */
+  private expandArgs(tokens: Token[]): string[] {
+    const out: string[] = [];
+    for (const t of tokens) {
+      if (isOp(t)) {
+        out.push(t.op);
+      } else if (t.quoted) {
+        out.push(t.value); // quoted word never globs (a quoted '' is KEPT)
+      } else if (t.value === '') {
+        // An unquoted word that expanded to nothing (`$UNSET`) produces NO word
+        // at all (bash word-splitting). Critically stops `rm -rf $UNSET` from
+        // collapsing to an empty path that resolves to cwd.
+      } else if (!hasGlobMeta(t.value)) {
+        out.push(t.value);
+      } else {
+        out.push(...this.expandGlob(t.value));
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Single-segment glob expansion of one unquoted word. Splits at the LAST `/`:
+   * the prefix resolves the search dir (against `_cwd`), the final segment is
+   * the matched pattern. Dotfiles match only when the pattern leads with `.`
+   * (bash). Zero matches or a readdir error → the ORIGINAL word verbatim (bash
+   * nullglob-off). Multi-segment globbing (glob in a non-final segment) is out
+   * of scope. Returns names mapped back through the original prefix, byte-sorted.
+   */
+  private expandGlob(word: string): string[] {
+    const slash = word.lastIndexOf('/');
+    const prefix = slash === -1 ? '' : word.slice(0, slash);
+    const seg = slash === -1 ? word : word.slice(slash + 1);
+    const dir = resolve(this._cwd, prefix === '' ? '.' : prefix);
+    const includeDot = seg.startsWith('.');
+
+    let entries: readonly { name: string }[];
+    try {
+      entries = syncMirror().readdirSync(dir);
+    } catch {
+      return [word]; // unreadable dir → literal (nullglob-off)
+    }
+
+    const matches: string[] = [];
+    for (const entry of entries) {
+      if (!includeDot && entry.name.startsWith('.')) continue;
+      if (matchSegment(seg, entry.name)) {
+        matches.push(prefix === '' ? entry.name : `${prefix}/${entry.name}`);
+      }
+    }
+    if (matches.length === 0) return [word]; // no match → literal
+    matches.sort(); // byte (lexicographic) order
+    return matches;
+  }
 }
 
 /**
  * Split tokens on `&&`/`||`/`;` into segments; each carries the joiner that
  * FOLLOWS it (`null` on the last). A trailing joiner (`echo a ;`) yields a final
- * empty segment — harmless, the run-loop short-circuits on empty segments.
+ * empty segment — the run-loop SKIPS empty segments so they neither run nor
+ * reset the exit code.
  */
 function splitOnJoiners(tokens: Token[]): Segment[] {
   const segments: Segment[] = [];

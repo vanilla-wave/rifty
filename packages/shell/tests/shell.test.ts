@@ -456,6 +456,87 @@ describe('Shell — compound chains (&&, ||, ;)', () => {
   });
 });
 
+describe('Shell — redirect correctness (Phase-1 fixes)', () => {
+  it('>> append preserves multibyte content (encoded-byte sizing, not char count)', async () => {
+    const sh = new Shell({ cwd: '/' });
+    const t = await sh.run('echo café > /m.txt'); // truncate writes "café\n"
+    expect(t.exitCode).toBe(0);
+    const a = await sh.run('echo déjà >> /m.txt'); // append must not RangeError
+    expect(a.exitCode).toBe(0);
+    expect(a.stderr).not.toMatch(/EREDIRECT|out of bounds/);
+    const cat = await sh.run('cat /m.txt');
+    expect(cat.stdout).toBe('café\ndéjà\n');
+  });
+
+  it('redirect truncates/creates the target even when the command writes nothing', async () => {
+    const sh = new Shell({ cwd: '/' });
+    sh.registerCommand('silent', async () => 0);
+    await sh.run('echo old > /e.txt');
+    const r = await sh.run('silent > /e.txt');
+    expect(r.exitCode).toBe(0);
+    const cat = await sh.run('cat /e.txt');
+    expect(cat.stdout).toBe(''); // truncated, not left as "old\n"
+  });
+
+  it('extracts a redirect that is not the final two tokens (no literal `>` leak)', async () => {
+    const sh = new Shell({ cwd: '/' });
+    const r = await sh.run('echo hi > /nt.txt extra');
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toBe(''); // diverted to the file, not printed
+    const cat = await sh.run('cat /nt.txt');
+    expect(cat.stdout).toBe('hi extra\n');
+  });
+
+  it('allows a redirect target that starts with a dash', async () => {
+    const sh = new Shell({ cwd: '/' });
+    const r = await sh.run('echo hi > -dash.txt');
+    expect(r.exitCode).toBe(0);
+    const cat = await sh.run('cat ./-dash.txt');
+    expect(cat.stdout).toBe('hi\n');
+  });
+});
+
+describe('Shell — word elision + exit-code (Phase-1 fixes)', () => {
+  it('an unquoted empty $VAR expansion is elided (no surviving empty arg)', async () => {
+    const sh = new Shell();
+    const r = await sh.run('echo $NOPE end'); // bash drops the empty word
+    expect(r.stdout).toBe('end\n');
+  });
+
+  it('a quoted empty expansion survives as one argument', async () => {
+    const sh = new Shell();
+    const r = await sh.run('echo "$NOPE" end');
+    expect(r.stdout).toBe(' end\n'); // leading space from the empty quoted arg
+  });
+
+  it('rm -rf $UNSET does NOT target the cwd (empty arg elided)', async () => {
+    const sh = new Shell({ cwd: '/' });
+    await sh.run('mkdir -p /keep/inner');
+    await sh.run('echo data > /keep/inner/a');
+    await sh.run('rm -rf $UNSET'); // must NOT wipe cwd
+    const ls = await sh.run('ls /');
+    expect(ls.stdout).toMatch(/keep/); // cwd contents intact
+  });
+
+  it('a trailing ; does not reset the exit code to 0', async () => {
+    const sh = new Shell({ cwd: '/' });
+    const r = await sh.run('false ;');
+    expect(r.exitCode).toBe(1);
+  });
+});
+
+describe('Shell — command errors are clean diagnostics, not JS stack traces', () => {
+  it('a command-thrown NotImplementedError surfaces as `cmd: message` with no stack frames', async () => {
+    const sh = new Shell({ cwd: '/' });
+    await sh.run('mkdir -p /d');
+    const r = await sh.run('ls --bogus /d');
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toMatch(/^ls: /);
+    expect(r.stderr).toMatch(/not implemented/i);
+    expect(r.stderr).not.toMatch(/\n\s+at /); // no V8 stack frames leaked
+  });
+});
+
 describe('touch — mtime is updated for existing files', () => {
   it('bumps mtime on each subsequent touch', async () => {
     const sh = new Shell({ cwd: '/' });
