@@ -4,6 +4,24 @@
 
 ### Fixed
 
+- **Terminal no longer overlaps the status bar.** xterm's `FitAddon` computes
+  rows from the mount element's height minus *that element's own* padding (the
+  `.xterm` div it creates, padding 0) — so the `6px` vertical padding on the
+  `.rf-terminal` mount container was never subtracted and the bottom row
+  overflowed ~6px past the console body into the status bar. Moved the gap from
+  `padding` to `inset` on `.rf-terminal` (+ `--rf-bg-1` on `.rf-console__body`
+  so the inset gap stays the xterm surface colour); FitAddon now fits the
+  trimmed box. Verified live: 9px clearance above the status bar.
+- **Dev-mode preview is now live (HMR auto-reload).** Editing a file in dev
+  mode left the preview frozen until a manual page reload: the mini dev server
+  (`examples/vite-like-dev`) broadcast HMR over an in-process `WebSocketServer`
+  that the preview iframe — a separate realm reached via the SW — can never
+  reach. Dev mode now routes HMR through the same cross-realm `BroadcastChannel`
+  bridge real-Vite uses: the example dev server gained a pluggable `hmr`
+  transport, and `startDevMode` wires `setupHmrBridge` + injects
+  `hmrClientScript` into served HTML. Closes the dev-vs-real-Vite HMR asymmetry.
+  Verified live: editor edit → watcher → bridge → iframe auto-reloads with the
+  new content.
 - **Rich-terminal capabilities were dead in the real app — now wired.** The shell
   adapter forwarded none of `isTTY`/`cols`/`rows`/`signal`, so `ls` column layout +
   `--color` never engaged and Ctrl+C never reached the shell. `useShellSession.runLine`

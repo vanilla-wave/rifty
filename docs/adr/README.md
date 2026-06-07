@@ -83,3 +83,5 @@ ADRs are immutable after merge. New decisions get new ADRs; supersedence is expl
 | 0091 | Rich token type (quote provenance) + single-segment glob expansion | — |
 | 0092 | Agent-facing `git` contract in M12 opencode bash channel — structured read-ops tool, write-ops NotImplementedError, impl deferred | — |
 | 0093 | Shell-command parity-test harness strategy — node:fs reuse + frozen GNU fixtures, never a live host-spawn oracle | — |
+| 0094 | Terminal line-editor becomes cursor-aware — mid-line insert/delete + Home/End/Delete + Ctrl+A/Ctrl+E (user-requested; supersedes the append-only swallow) | — |
+| 0095 | Dev-mode HMR routes through the cross-realm BroadcastChannel bridge — pluggable dev-server `hmr` transport closes the dev-vs-real-Vite asymmetry (live preview) | — |
