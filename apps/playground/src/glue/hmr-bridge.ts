@@ -7,20 +7,20 @@
  * client would use, which can't cross the page ↔ iframe realm boundary (no real
  * TCP, no SW interception for the WS upgrade).
  *
- * Dev-mode vs real-Vite asymmetry (follow-ups doc item #19): real-Vite mode
- * broadcasts through this bridge; dev mode (in-realm mini Vite under
- * `examples/vite-like-dev`) uses its own HMR client reading from its own
- * `WebSocketServer` directly and does not route here. Acceptable until A-026
- * (M11) moves Vite into a worker realm — then both must traverse a realm
- * boundary and unifying through this bridge becomes free. No parity today; the
- * bridge is the real-Vite-only HMR transport.
+ * Both HMR consumers route through this bridge: real-Vite mode (worker realm)
+ * and dev mode (in-realm mini Vite under `examples/vite-like-dev`, via its
+ * pluggable `hmr` transport — see `devMode.ts`). Dev mode formerly used its own
+ * native-`WebSocket` client against its in-process `WebSocketServer`, which the
+ * preview iframe (a separate realm) could never reach — leaving dev preview
+ * non-live. Routing dev mode through this bridge closed that asymmetry; both
+ * deliver the same naive `{type:'update'}` → iframe reload.
  *
- * Why a bridge now, before A-026: Vite currently runs in the page realm but the
- * iframe's native `WebSocket` still can't reach an in-process `WebSocketServer`
- * — only real TCP would, which we deliberately avoid. At M11 A-026 Vite moves
- * to a Worker realm; wiring the bridge now makes that a realm swap, not a
- * routing rewrite — the iframe keeps the same `BroadcastChannel` name, just
- * gets messages from a different sender.
+ * Why a bridge at all: the iframe's native `WebSocket` can't reach an in-process
+ * `WebSocketServer` (no real TCP, no SW interception for the WS upgrade);
+ * `BroadcastChannel` crosses the page↔iframe (and worker↔iframe) realm boundary
+ * instead. At M11 A-026 Vite moves fully into a Worker realm — the iframe keeps
+ * the same `BroadcastChannel` name, just gets messages from a different sender,
+ * so that migration is a realm swap, not a routing rewrite.
  *
  * Server side (page realm): {@link setupHmrBridge} owns a
  * `BridgedWebSocketServer` on `ws://preview.local:<port>/__hmr`; callers

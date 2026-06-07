@@ -7,12 +7,20 @@
  *
  * Editor edits write a single file (configurable, default `/workspace/src/main.js`)
  * into the shared VFS sync-mirror; the dev server's `fs.watch` ticks pick it up
- * and broadcast HMR over `WebSocketServer`. The injected client script in the
- * served HTML reloads the iframe on each update.
+ * and broadcast HMR. The injected client script in the served HTML reloads the
+ * iframe on each update.
+ *
+ * HMR transport: the preview iframe is a separate realm reached via the SW, so
+ * its native `WebSocket` can't reach the dev server's in-process
+ * `WebSocketServer`. We route HMR through the same cross-realm
+ * `BroadcastChannel` bridge real-Vite uses (`setupHmrBridge` + `hmrClientScript`,
+ * see `hmr-bridge.ts`) — closing the dev-mode/real-Vite asymmetry that left dev
+ * preview non-live (Q-2026-06-07-325).
  */
 
 import { type DevServer, startDevServer } from '@rifty-examples/vite-like-dev';
 import { syncMirror } from '@riftydev/vfs';
+import { hmrClientScript, setupHmrBridge } from './hmr-bridge.ts';
 import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
 
 const enc = new TextEncoder();
@@ -65,7 +73,19 @@ export async function startDevMode(options: DevModeOptions = {}): Promise<DevMod
     fs.writeFileSync(entryPath, enc.encode(INITIAL_MAIN_JS));
   }
 
-  const devServer = await startDevServer({ root, port, watchInterval: 100 });
+  // Cross-realm HMR bridge in THIS realm; the iframe-side BroadcastChannel client
+  // (injected via `clientScript`) reaches it where a native WS to the in-process
+  // `WebSocketServer` cannot.
+  const hmr = setupHmrBridge({ port });
+  const devServer = await startDevServer({
+    root,
+    port,
+    watchInterval: 100,
+    hmr: {
+      broadcast: (payload) => hmr.broadcast(payload),
+      clientScript: `<script data-rifty-hmr-bridge>${hmrClientScript(port)}</script>`,
+    },
+  });
 
   // Shared adapter wiring — see `preview-bridge-wiring.ts`. ADR-0017 phase 1
   // streaming flows through as a `ReadableStream` when supported.
@@ -79,6 +99,7 @@ export async function startDevMode(options: DevModeOptions = {}): Promise<DevMod
     },
     async close() {
       tearBridge();
+      hmr.close();
       await devServer.close();
     },
   };
