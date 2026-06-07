@@ -1,27 +1,13 @@
 import { NotImplementedError } from '@riftydev/io';
 import { VfsError, syncMirror } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { dec, resolve } from './_shared.ts';
+import { dec, resolve, strerror } from './_shared.ts';
 
 interface Opts {
   numberAll: boolean; // -n
   numberNonBlank: boolean; // -b (implies -n's format, blanks skip the counter)
   showEnds: boolean; // -E and -A: '$' at each EOL
   showTabs: boolean; // -A: tab -> ^I
-}
-
-/** Map a VfsError code to the GNU strerror text cat prints after the filename. */
-function strerror(e: VfsError): string {
-  switch (e.code) {
-    case 'ENOENT':
-      return 'No such file or directory';
-    case 'EISDIR':
-      return 'Is a directory';
-    case 'ENOTDIR':
-      return 'Not a directory';
-    default:
-      return e.code;
-  }
 }
 
 /**

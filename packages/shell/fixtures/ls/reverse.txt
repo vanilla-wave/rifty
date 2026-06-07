@@ -1,0 +1,7 @@
+# gls (GNU coreutils) 9.7 | LC_ALL=C | flags: -r | tree: 2 dirs (adir,bdir), 2 dotfiles (.config,.hidden), 4 files (Cherry,apple.txt,banana,zebra.md)
+zebra.md
+bdir
+banana
+apple.txt
+adir
+Cherry

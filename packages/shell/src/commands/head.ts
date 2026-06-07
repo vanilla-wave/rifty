@@ -130,8 +130,10 @@ export const head: ShellCommand = async (args, ctx) => {
   }
 
   if (files.length === 0) {
-    // No stdin support yet: a flagless filter would silently produce nothing.
-    throw new NotImplementedError('shell.head.stdin', 'reading from stdin not supported');
+    // No stdin support yet. Clean stderr + exit 1, consistent with cat/tail/wc
+    // (not a throw — that surfaced as a dispatcher diagnostic, an odd outlier).
+    ctx.stderr.write('head: reading from standard input is not implemented; use a file\n');
+    return 1;
   }
 
   const fs = syncMirror();

@@ -1,26 +1,12 @@
 import { NotImplementedError } from '@riftydev/io';
 import { VfsError, basename, syncMirror } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { resolve } from './_shared.ts';
+import { resolve, strerror } from './_shared.ts';
 
 interface Opts {
   recursive: boolean; // -r / -R
   noClobber: boolean; // -n
   verbose: boolean; // -v
-}
-
-/** GNU strerror text cp prints after the quoted operand. */
-function strerror(e: VfsError): string {
-  switch (e.code) {
-    case 'ENOENT':
-      return 'No such file or directory';
-    case 'EISDIR':
-      return 'Is a directory';
-    case 'ENOTDIR':
-      return 'Not a directory';
-    default:
-      return e.code;
-  }
 }
 
 function parse(args: string[]): { opts: Opts; operands: string[] } {

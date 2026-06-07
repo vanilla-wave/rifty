@@ -13,7 +13,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { VfsError, syncMirror } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { dec, resolve } from './_shared.ts';
+import { dec, resolve, strerror } from './_shared.ts';
 
 interface Selected {
   lines: boolean;
@@ -118,7 +118,7 @@ export const wc: ShellCommand = async (args, ctx) => {
       total.bytes += counts.bytes;
       total.chars += counts.chars;
     } catch (e) {
-      const msg = e instanceof VfsError ? errnoText(e.code) : 'cannot read';
+      const msg = e instanceof VfsError ? strerror(e) : 'cannot read';
       ctx.stderr.write(`wc: ${file}: ${msg}\n`);
       exit = 1;
     }
@@ -142,16 +142,3 @@ export const wc: ShellCommand = async (args, ctx) => {
 
   return exit;
 };
-
-function errnoText(code: string): string {
-  switch (code) {
-    case 'ENOENT':
-      return 'No such file or directory';
-    case 'EISDIR':
-      return 'Is a directory';
-    case 'ENOTDIR':
-      return 'Not a directory';
-    default:
-      return code;
-  }
-}

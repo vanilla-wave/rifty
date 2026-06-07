@@ -59,16 +59,27 @@ it('resolves relative SRC/DST against ctx.cwd', async () => {
   expect(err()).toBe('');
 });
 
-it('moving a dir onto a NON-EMPTY dir surfaces ENOTEMPTY: stderr "mv: ...", exit 1', async () => {
+it('mv DIR EXISTINGDIR lands the dir at DST/basename (GNU into-dir), dst contents kept', async () => {
   seed({ '/srcdir/a': 'x', '/dst/occupied': 'y' });
+  const { ctx, out, err } = makeCtx();
+  const code = await mv(['/srcdir', '/dst'], ctx);
+  expect(code).toBe(0);
+  expect(fs.existsSync('/srcdir')).toBe(false);
+  expect(dec.decode(fs.readFileBytesSync('/dst/srcdir/a'))).toBe('x');
+  expect(fs.existsSync('/dst/occupied')).toBe(true); // non-empty dst preserved
+  expect(out()).toBe('');
+  expect(err()).toBe('');
+});
+
+it('mv DIR EXISTINGDIR where DST/basename already exists non-empty surfaces ENOTEMPTY, exit 1', async () => {
+  // GNU: into-dir target /dst/srcdir exists and is non-empty -> cannot overwrite.
+  seed({ '/srcdir/a': 'x', '/dst/srcdir/keep': 'y' });
   const { ctx, out, err } = makeCtx();
   const code = await mv(['/srcdir', '/dst'], ctx);
   expect(code).toBe(1);
   expect(out()).toBe('');
-  // VfsError message starts with the code; we must not silently clobber.
-  expect(err()).toMatch(/^mv: .*ENOTEMPTY/);
-  // Source untouched after the failed move.
-  expect(fs.existsSync('/srcdir/a')).toBe(true);
+  expect(err()).toMatch(/^mv: cannot move .*Directory not empty/);
+  expect(fs.existsSync('/srcdir/a')).toBe(true); // source untouched
 });
 
 it('multi-source into a DIR: each SRC moved to DIR/basename', async () => {
@@ -81,6 +92,42 @@ it('multi-source into a DIR: each SRC moved to DIR/basename', async () => {
   expect(fs.existsSync('/b')).toBe(false);
   expect(dec.decode(fs.readFileBytesSync('/dir/a'))).toBe('A');
   expect(dec.decode(fs.readFileBytesSync('/dir/b'))).toBe('B');
+  expect(err()).toBe('');
+});
+
+it('single-source mv FILE EXISTINGDIR lands at DIR/basename (GNU), src gone', async () => {
+  seed({ '/a.txt': 'content' });
+  fs.mkdirSync('/d', { recursive: true });
+  const { ctx, out, err } = makeCtx();
+  const code = await mv(['/a.txt', '/d'], ctx);
+  expect(code).toBe(0);
+  expect(fs.existsSync('/a.txt')).toBe(false);
+  expect(dec.decode(fs.readFileBytesSync('/d/a.txt'))).toBe('content');
+  expect(out()).toBe('');
+  expect(err()).toBe('');
+});
+
+it('multi-source mv /a /b /d into existing dir: both land at /d/basename', async () => {
+  seed({ '/a': 'A', '/b': 'B' });
+  fs.mkdirSync('/d', { recursive: true });
+  const { ctx, err } = makeCtx();
+  const code = await mv(['/a', '/b', '/d'], ctx);
+  expect(code).toBe(0);
+  expect(fs.existsSync('/a')).toBe(false);
+  expect(fs.existsSync('/b')).toBe(false);
+  expect(dec.decode(fs.readFileBytesSync('/d/a'))).toBe('A');
+  expect(dec.decode(fs.readFileBytesSync('/d/b'))).toBe('B');
+  expect(err()).toBe('');
+});
+
+it('regression: 2-operand mv /a /b where /b is NOT a dir does a plain rename to /b', async () => {
+  seed({ '/a': 'X' });
+  const { ctx, out, err } = makeCtx();
+  const code = await mv(['/a', '/b'], ctx);
+  expect(code).toBe(0);
+  expect(fs.existsSync('/a')).toBe(false);
+  expect(dec.decode(fs.readFileBytesSync('/b'))).toBe('X');
+  expect(out()).toBe('');
   expect(err()).toBe('');
 });
 
@@ -115,13 +162,13 @@ it('-n (no-clobber) skips an existing DST without error, exit 0, source kept', a
   expect(err()).toBe('');
 });
 
-it('missing SRC surfaces ENOENT: stderr "mv: ...", exit 1', async () => {
+it('missing SRC surfaces a GNU stat error, exit 1', async () => {
   seed({});
   const { ctx, out, err } = makeCtx();
   const code = await mv(['/nope', '/dst'], ctx);
   expect(code).toBe(1);
   expect(out()).toBe('');
-  expect(err()).toMatch(/^mv: .*ENOENT/);
+  expect(err()).toMatch(/^mv: cannot stat '\/nope': No such file or directory/);
 });
 
 it('too few operands: usage error to stderr, exit 1', async () => {

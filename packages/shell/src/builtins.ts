@@ -1,155 +1,48 @@
+// TODO(ADR): Q-2026-06-07-407 — one builtin per file under commands/<cmd>.ts; this barrel only registers them.
 /**
- * Built-in shell commands.
+ * Built-in command registration barrel.
  *
- * Each builtin gets the parsed args plus a context with `cwd`, `env`, and the
- * stdout/stderr writers. Builtins return an exit code; the shell aggregates
- * stdout/stderr into the return value of `Shell.run`.
+ * Each builtin lives in its own `commands/<cmd>.ts` module (Q-2026-06-07-407);
+ * this file imports them and maps argv-0 → {@link ShellCommand}.
+ *
+ * `which` is a factory: it needs the shell's command-presence probe to answer
+ * "is NAME a command?" without a reverse import (mirrors `cd`'s `setCwd`).
  *
  * File ops go through the VFS sync mirror so the shell sees the same tree as
  * `node:fs` inside the runtime.
  */
 
-import { syncMirror } from '@riftydev/vfs';
-import { resolve } from './commands/_shared.ts';
 import { basename } from './commands/basename.ts';
 import { cat } from './commands/cat.ts';
+import { cd } from './commands/cd.ts';
+import { clear } from './commands/clear.ts';
 import { cp } from './commands/cp.ts';
 import { dirname } from './commands/dirname.ts';
 import { echo } from './commands/echo.ts';
+import { envCmd } from './commands/env.ts';
+import { find } from './commands/find.ts';
+import { grep } from './commands/grep.ts';
 import { head } from './commands/head.ts';
+import { ls } from './commands/ls.ts';
+import { mkdir } from './commands/mkdir.ts';
 import { mv } from './commands/mv.ts';
 import { printf } from './commands/printf.ts';
+import { pwd } from './commands/pwd.ts';
 import { realpath } from './commands/realpath.ts';
+import { rm } from './commands/rm.ts';
 import { seq } from './commands/seq.ts';
+import { sleep } from './commands/sleep.ts';
 import { tail } from './commands/tail.ts';
+import { touch } from './commands/touch.ts';
 import { falseCmd, trueCmd } from './commands/true-false.ts';
 import { wc } from './commands/wc.ts';
+import { which } from './commands/which.ts';
 import type { ShellCommand } from './types.ts';
 
-const encoder = new TextEncoder();
-
-export const pwd: ShellCommand = async (_args, ctx) => {
-  ctx.stdout.write(`${ctx.cwd}\n`);
-  return 0;
-};
-
-export const cd =
-  (setCwd: (p: string) => void): ShellCommand =>
-  async (args, ctx) => {
-    const target = args[0] ?? ctx.env.HOME ?? '/';
-    const next = resolve(ctx.cwd, target);
-    const fs = syncMirror();
-    if (!fs.existsSync(next)) {
-      ctx.stderr.write(`cd: ${target}: no such file or directory\n`);
-      return 1;
-    }
-    if (!fs.statSync(next).isDirectory) {
-      ctx.stderr.write(`cd: ${target}: not a directory\n`);
-      return 1;
-    }
-    setCwd(next);
-    return 0;
-  };
-
-export const ls: ShellCommand = async (args, ctx) => {
-  const target = resolve(ctx.cwd, args[0] ?? '.');
-  try {
-    const entries = syncMirror().readdirSync(target);
-    for (const { name } of entries) ctx.stdout.write(`${name}\n`);
-    return 0;
-  } catch (err) {
-    ctx.stderr.write(`ls: ${(err as Error).message}\n`);
-    return 1;
-  }
-};
-
-export const mkdir: ShellCommand = async (args, ctx) => {
-  let recursive = false;
-  const paths: string[] = [];
-  for (const a of args) {
-    if (a === '-p') recursive = true;
-    else paths.push(a);
-  }
-  if (paths.length === 0) {
-    ctx.stderr.write('mkdir: missing operand\n');
-    return 1;
-  }
-  for (const p of paths) {
-    try {
-      syncMirror().mkdirSync(resolve(ctx.cwd, p), { recursive });
-    } catch (err) {
-      ctx.stderr.write(`mkdir: ${p}: ${(err as Error).message}\n`);
-      return 1;
-    }
-  }
-  return 0;
-};
-
-export const rm: ShellCommand = async (args, ctx) => {
-  let recursive = false;
-  let force = false;
-  const paths: string[] = [];
-  for (const a of args) {
-    if (a === '-r' || a === '-rf' || a === '-R') recursive = true;
-    if (a === '-f' || a === '-rf') force = true;
-    if (!a.startsWith('-')) paths.push(a);
-  }
-  for (const p of paths) {
-    try {
-      syncMirror().rmSync(resolve(ctx.cwd, p), { recursive, force });
-    } catch (err) {
-      if (!force) {
-        ctx.stderr.write(`rm: ${p}: ${(err as Error).message}\n`);
-        return 1;
-      }
-    }
-  }
-  return 0;
-};
-
-export const envCmd: ShellCommand = async (_args, ctx) => {
-  for (const [k, v] of Object.entries(ctx.env)) ctx.stdout.write(`${k}=${v}\n`);
-  return 0;
-};
-
-/**
- * Update mtime of an existing file/dir on the active sync mirror via
- * `FsSync.utimes` (ADR-0029). `Date.now()` can return the same value twice
- * in tight loops, so we monotonically bump the timestamp by at least 1 ms so
- * consecutive `touch`es are visibly distinct (matches GNU `touch` semantics
- * in practice).
- */
-function bumpMtime(path: string): void {
-  const fs = syncMirror();
-  const prev = fs.statSync(path).mtime ?? 0;
-  const now = Date.now();
-  const next = now > prev ? now : prev + 1;
-  fs.utimes(path, next, next);
-}
-
-export const touch: ShellCommand = async (args, ctx) => {
-  if (args.length === 0) {
-    ctx.stderr.write('touch: missing operand\n');
-    return 1;
-  }
-  for (const a of args) {
-    const p = resolve(ctx.cwd, a);
-    const fs = syncMirror();
-    try {
-      if (fs.existsSync(p)) {
-        bumpMtime(p);
-      } else {
-        fs.writeFileSync(p, encoder.encode(''));
-      }
-    } catch (err) {
-      ctx.stderr.write(`touch: ${a}: ${(err as Error).message}\n`);
-      return 1;
-    }
-  }
-  return 0;
-};
-
-export function builtinCommands(setCwd: (p: string) => void): Record<string, ShellCommand> {
+export function builtinCommands(
+  setCwd: (p: string) => void,
+  hasCommand: (name: string) => boolean,
+): Record<string, ShellCommand> {
   return {
     pwd,
     cd: cd(setCwd),
@@ -159,6 +52,10 @@ export function builtinCommands(setCwd: (p: string) => void): Record<string, She
     mkdir,
     rm,
     env: envCmd,
+    find,
+    grep,
+    which: which(hasCommand),
+    clear,
     touch,
     head,
     tail,
@@ -167,6 +64,7 @@ export function builtinCommands(setCwd: (p: string) => void): Record<string, She
     dirname,
     realpath,
     seq,
+    sleep,
     true: trueCmd,
     false: falseCmd,
     printf,

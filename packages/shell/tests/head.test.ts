@@ -134,4 +134,15 @@ describe('head', () => {
     const { ctx } = makeCtx();
     await expect(head(['-z', '/f.txt'], ctx)).rejects.toBeInstanceOf(NotImplementedError);
   });
+
+  it('no FILE operand: clean stderr + exit 1 (consistent with cat/tail/wc, no throw)', async () => {
+    // Failure mode: throwing (dispatcher-rendered) or silently producing nothing
+    // for the no-stdin case while sibling commands return a clean exit 1.
+    seed({});
+    const { ctx, out, err } = makeCtx();
+    const code = await head([], ctx);
+    expect(code).toBe(1);
+    expect(out()).toBe('');
+    expect(err()).toMatch(/standard input/);
+  });
 });

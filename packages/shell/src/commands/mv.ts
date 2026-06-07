@@ -1,7 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { VfsError, basename, joinPath, syncMirror } from '@riftydev/vfs';
 import type { ShellCommand } from '../types.ts';
-import { resolve } from './_shared.ts';
+import { resolve, strerror } from './_shared.ts';
 
 interface Opts {
   noClobber: boolean; // -n
@@ -51,7 +51,13 @@ function move(
     fs.renameSync(srcAbs, dstAbs);
   } catch (e) {
     if (e instanceof VfsError) {
-      ctx.stderr.write(`mv: ${e.message}\n`);
+      // GNU wording via shared strerror: a missing SRC is a stat failure, any
+      // other error names the move (matches cp's diagnostic shape).
+      const msg =
+        e.code === 'ENOENT' && e.path === srcAbs
+          ? `mv: cannot stat '${srcAbs}': ${strerror(e)}`
+          : `mv: cannot move '${srcAbs}' to '${dstAbs}': ${strerror(e)}`;
+      ctx.stderr.write(`${msg}\n`);
       return 1;
     }
     throw e;
@@ -62,8 +68,9 @@ function move(
 
 /**
  * `mv [-n] [-v] SRC DST` / `mv [-n] [-v] SRC... DIR` — rename/move via
- * `FsSync.renameSync` (mtime preserved — ADR-0083). Multi-source form requires
- * the final operand to be an existing directory; each SRC lands at DIR/basename.
+ * `FsSync.renameSync` (mtime preserved — ADR-0083). When DST is an existing
+ * directory each SRC lands at DST/basename (GNU — file and dir sources alike);
+ * the multi-source form requires DST to be an existing directory.
  *
  * Exit 0 on success; 1 on any VfsError (ENOENT/EISDIR/ENOTDIR/ENOTEMPTY/EINVAL,
  * e.g. moving onto a non-empty dir) or a usage error. `-f/-i/-u/-b` throw
@@ -80,14 +87,18 @@ export const mv: ShellCommand = async (args, ctx) => {
   const dst = operands[operands.length - 1] as string;
   const sources = operands.slice(0, -1);
   const dstAbs = resolve(ctx.cwd, dst);
+  const dstIsDir = fs.existsSync(dstAbs) && fs.statSync(dstAbs).isDirectory;
 
-  // 2-operand form is a direct rename onto DST (so onto a non-empty dir
-  // surfaces ENOTEMPTY); multi-source form requires DST to be a directory and
-  // lands each SRC at DST/basename.
+  // Single-source: when DST is an existing dir, land at DST/basename (GNU — for
+  // BOTH file and dir sources). ENOTEMPTY now surfaces only when DST/basename
+  // already exists and is non-empty (a real overwrite), matching GNU. Otherwise
+  // a direct rename onto DST.
   if (sources.length === 1) {
-    return move(resolve(ctx.cwd, sources[0] as string), dstAbs, opts, ctx) === 0 ? 0 : 1;
+    const srcAbs = resolve(ctx.cwd, sources[0] as string);
+    const target = dstIsDir ? joinPath(dstAbs, basename(srcAbs)) : dstAbs;
+    return move(srcAbs, target, opts, ctx) === 0 ? 0 : 1;
   }
-  if (!(fs.existsSync(dstAbs) && fs.statSync(dstAbs).isDirectory)) {
+  if (!dstIsDir) {
     ctx.stderr.write(`mv: target '${dst}' is not a directory\n`);
     return 1;
   }
