@@ -11,9 +11,13 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { resetSyncMirror } from './fs-sync-mirror.ts';
-import { lstatSync, readlinkSync, realpathSync, statSync, writeFileSync } from './fs.ts';
+import { lstatSync, mkdirSync, readlinkSync, realpathSync, statSync, writeFileSync } from './fs.ts';
+import { setProcessCwd } from './process.ts';
 
-afterEach(() => resetSyncMirror());
+afterEach(() => {
+  resetSyncMirror();
+  setProcessCwd('/workspace'); // restore the default cwd cell after cwd tests
+});
 
 describe('node:fs symlink-shaped APIs (no-symlink VFS semantics, ADR-0050)', () => {
   it('lstatSync is identical to statSync and reports no symlink', () => {
@@ -49,5 +53,19 @@ describe('node:fs symlink-shaped APIs (no-symlink VFS semantics, ADR-0050)', () 
     writeFileSync('/exists.txt', 'data');
     expect(() => readlinkSync('/exists.txt')).toThrow(/EINVAL/);
     expect(() => readlinkSync('/missing.txt')).toThrow(/ENOENT/);
+  });
+});
+
+describe('resolvePath relative branch against a non-root cwd (#6)', () => {
+  // Guards #6: dropping the outer `normalizePath` in resolvePath's relative
+  // branch (joinPath already normalizes) keeps relative + dot-segment
+  // resolution correct against a non-`/` cwd.
+  it('resolves bare and dotted relative paths to the same file under cwd=/proj', () => {
+    setProcessCwd('/proj');
+    mkdirSync('/proj', { recursive: true });
+    writeFileSync('a.txt', 'x'); // relative — anchors at /proj
+    expect(statSync('a.txt').size).toBe(1);
+    expect(statSync('./sub/../a.txt').size).toBe(1);
+    expect(statSync('/proj/a.txt').size).toBe(1);
   });
 });

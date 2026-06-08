@@ -103,9 +103,11 @@ test.describe('M7 — HTTP through the Service Worker preview bridge', () => {
     expect(probe.status).toBe(200);
     expect(probe.contentType).toContain('text/html');
     expect(probe.body).toContain('Hello from rifty');
-    // The HMR client is appended by the dev server before `</body>` — its
-    // presence proves the response *body* (not just status/headers) round-
-    // tripped through the bridge's `packSerializedResponse` carrier.
-    expect(probe.body).toContain('rifty:hmr client');
+    // The HMR client is appended by the dev server before `</body>`. Dev mode
+    // now injects the cross-realm BroadcastChannel bridge client (ADR-0095),
+    // marked `data-rifty-hmr-bridge`, in place of the built-in native-WebSocket
+    // client. Its presence proves the response *body* (not just status/headers)
+    // round-tripped through the bridge's `packSerializedResponse` carrier.
+    expect(probe.body).toContain('data-rifty-hmr-bridge');
   });
 });

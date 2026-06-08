@@ -25,9 +25,9 @@ const AREAS = new Set([
   'distribution',
 ]);
 
-// Provisional labels reserved by the JS-runtime perf plan (docs/adr/README.md Numbering).
+// Provisional reserved labels (none — the perf-plan's 0081-0093 reservations were
+// materialised as ADRs / retired in the M11/M12 merge). Keep in sync with README "Numbering".
 const RESERVED = new Set();
-for (let n = 81; n <= 93; n++) RESERVED.add(String(n).padStart(4, '0'));
 
 // --- args: <area> "Title" [--number NNNN] -----------------------------------
 const argv = process.argv.slice(2);
@@ -79,7 +79,8 @@ if (forced != null) {
     process.exit(1);
   }
   next = forced;
-  if (!RESERVED.has(forced)) console.log(`note: ${forced} is not in the reserved 0081-0093 band.`);
+  if (RESERVED.size && !RESERVED.has(forced))
+    console.log(`note: ${forced} is outside the reserved band.`);
 } else {
   // first free number above the current max, skipping the reserved block
   let n = (existing.size === 0 ? 0 : Math.max(...[...existing].map(Number))) + 1;

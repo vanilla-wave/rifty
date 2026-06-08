@@ -62,6 +62,55 @@ describe('pickBestVersion — pre-release sort', () => {
   });
 });
 
+describe('pickBestVersion — linear max-scan parity (#8, perf-audit 2026-06-05)', () => {
+  // Reference oracle: the old filter + stable-descending-sort + [0] selection.
+  // The linear max-scan must be byte-identical to this for every input.
+  function oldPick(versions: readonly string[], range: string | null): string | null {
+    const candidates = versions.filter((v) => matchesRange(v, range));
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => compare(b, a));
+    return candidates[0] ?? null;
+  }
+
+  it('matches the old filter+sort pick on a large unsorted list (releases + prereleases + ranges)', () => {
+    const versions = [
+      '4.17.1',
+      '4.21.0',
+      '4.21.2',
+      '4.18.0',
+      '5.0.0-beta.3',
+      '5.0.0-beta.20',
+      '5.0.0',
+      '4.0.0',
+      '4.21.1',
+      '4.21.2', // duplicate — tie-break parity
+      '4.9.9',
+      '3.2.1',
+      '5.0.0-beta.3', // duplicate prerelease
+      '4.20.0',
+      '4.21.0-rc.1',
+    ];
+    for (const range of ['^4', '~4.21', '4.x', '>=4.18.0 <5.0.0', '*', '^5', '^9']) {
+      expect(pickBestVersion(versions, range)).toBe(oldPick(versions, range));
+    }
+  });
+
+  it('returns the earliest-encountered max among compare-equal distinct strings (stable tie-break)', () => {
+    // `2.0.0` and `2.0.0+build` parse to the same parts → compare() === 0, but the
+    // strings differ. The old stable-descending-sort + [0] keeps the FIRST
+    // occurrence; the linear scan with strict `> 0` must match it exactly. A
+    // `>= 0` regression would pick the last occurrence and diverge here.
+    const versions = ['2.0.0', '2.0.0+build', '1.0.0'];
+    expect(pickBestVersion(versions, '*')).toBe(oldPick(versions, '*'));
+    expect(pickBestVersion(versions, '*')).toBe('2.0.0'); // first-occurrence among ties
+  });
+
+  it('returns null when nothing matches (empty-candidate parity)', () => {
+    expect(pickBestVersion(['1.0.0', '2.0.0'], '^3')).toBe(oldPick(['1.0.0', '2.0.0'], '^3'));
+    expect(pickBestVersion([], '*')).toBe(oldPick([], '*'));
+  });
+});
+
 describe('matchesRange — partial bases (the live-express regression)', () => {
   // `parse('4')` used to return null, so `^4` matched nothing and the
   // installer's silent dist-tags.latest fallback resolved express to its

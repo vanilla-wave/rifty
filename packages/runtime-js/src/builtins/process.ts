@@ -15,6 +15,9 @@ import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 
 const nextTickQueue: Array<{ fn: (...args: unknown[]) => void; args: unknown[] }> = [];
+// Head cursor instead of shift()-per-item: O(n) drain, not O(n^2) (#27, perf-audit
+// 2026-06-05). Reset to 0 only after a full drain (see drainNextTicks).
+let drainHead = 0;
 let promisePatched = false;
 
 /**
@@ -27,8 +30,11 @@ let promisePatched = false;
 let currentCwd = '/workspace';
 
 function drainNextTicks(): void {
-  while (nextTickQueue.length > 0) {
-    const item = nextTickQueue.shift();
+  // Re-read `.length` each iteration so items enqueued mid-drain (nextTick from
+  // inside nextTick) are processed — same as the old shift()-until-empty loop.
+  // Do NOT snapshot the array.
+  while (drainHead < nextTickQueue.length) {
+    const item = nextTickQueue[drainHead++];
     if (!item) continue;
     try {
       item.fn(...item.args);
@@ -36,6 +42,10 @@ function drainNextTicks(): void {
       (riftyProcess as unknown as EventEmitter).emit('uncaughtException', err);
     }
   }
+  // Fully drained: clear the array + cursor so the next nextTick sees length
+  // 0->1 and re-arms ensureDrainScheduled. Reached exactly once per drain.
+  nextTickQueue.length = 0;
+  drainHead = 0;
 }
 
 function ensureDrainScheduled(): void {

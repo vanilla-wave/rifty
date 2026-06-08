@@ -58,6 +58,12 @@ export interface WritableState {
    * that returned `true` must NOT emit it.
    */
   needDrain: boolean;
+  /**
+   * Coalescing flag: at most one `drainBuffer()` microtask is pending at a
+   * time. N writes in one tick schedule one turn, not N (the drain loop then
+   * processes synchronously-completing chunks in the same tick).
+   */
+  drainScheduled: boolean;
 }
 
 export class Writable extends EventEmitter {
@@ -83,6 +89,7 @@ export class Writable extends EventEmitter {
       destroyed: false,
       errored: null,
       needDrain: false,
+      drainScheduled: false,
     };
     this.writeImpl = opts.write;
     this.finalImpl = opts.final;
@@ -117,6 +124,21 @@ export class Writable extends EventEmitter {
     return this._writableState.destroyed;
   }
 
+  /**
+   * Schedule one `drainBuffer()` microtask, coalescing repeats. Multiple
+   * write()/end() calls in a single tick enqueue at most one turn; the drain
+   * loop then advances through synchronously-completing chunks in-tick.
+   */
+  private scheduleDrain(): void {
+    const state = this._writableState;
+    if (state.drainScheduled) return;
+    state.drainScheduled = true;
+    queueMicrotask(() => {
+      state.drainScheduled = false;
+      this.drainBuffer();
+    });
+  }
+
   write(
     chunk: unknown,
     encodingOrCb?: string | ((err?: Error | null) => void),
@@ -142,7 +164,7 @@ export class Writable extends EventEmitter {
     }
     state.buffered.push({ chunk, encoding, cb: cbFinal });
     state.length += state.objectMode ? 1 : chunkSize(chunk);
-    queueMicrotask(() => this.drainBuffer());
+    this.scheduleDrain();
     const okToContinue = state.length < state.highWaterMark;
     // Hit HWM: owe a 'drain' for the next dip below it. Don't clear once set.
     if (!okToContinue) state.needDrain = true;
@@ -152,48 +174,68 @@ export class Writable extends EventEmitter {
   private drainBuffer(): void {
     const state = this._writableState;
     if (state.writing) return;
-    // Post-destroy: error every pending callback synchronously and bail.
-    if (state.destroyed) {
-      const err = state.errored ?? new Error('Premature close');
-      const queue = state.buffered.slice();
-      state.buffered.length = 0;
-      state.length = 0;
-      for (const entry of queue) entry.cb(err);
-      return;
-    }
-    const next = state.buffered.shift();
-    if (!next) {
-      if (state.ending && !state.finished) this.doFinal();
-      return;
-    }
-    state.writing = true;
-    state.length -= state.objectMode ? 1 : chunkSize(next.chunk);
-    const done = (err?: Error | null): void => {
-      state.writing = false;
-      // Destroyed during the sync `_write`: skip success path; this entry's cb
-      // gets the destroy error, the rest drain via the destroyed-branch above
-      // on the next pass.
+    // Sync-drain loop: process buffered chunks whose `_write` completes
+    // synchronously in this same tick (collapsing the old one-chunk-per-
+    // microtask chain). Break the moment a chunk's `done` is deferred (async
+    // `_write`) — that `done` re-arms via scheduleDrain(); or on error/destroy.
+    while (true) {
+      // Post-destroy: error every pending callback synchronously and bail.
       if (state.destroyed) {
-        const destErr = state.errored ?? err ?? new Error('Premature close');
-        next.cb(destErr);
-        queueMicrotask(() => this.drainBuffer());
+        const err = state.errored ?? new Error('Premature close');
+        const queue = state.buffered.slice();
+        state.buffered.length = 0;
+        state.length = 0;
+        for (const entry of queue) entry.cb(err);
         return;
       }
-      if (err) {
-        next.cb(err);
-        this.emit('error', err);
+      const next = state.buffered.shift();
+      if (!next) {
+        if (state.ending && !state.finished) this.doFinal();
         return;
       }
-      next.cb();
-      // Emit 'drain' only if a prior write() returned false; not on every dip below HWM.
-      if (state.needDrain && state.length < state.highWaterMark) {
-        state.needDrain = false;
-        this.emit('drain');
-      }
-      queueMicrotask(() => this.drainBuffer());
-    };
-    if (this.writeImpl) this.writeImpl.call(this, next.chunk, next.encoding, done);
-    else done();
+      state.writing = true;
+      state.length -= state.objectMode ? 1 : chunkSize(next.chunk);
+      // `true` only while `_write` runs synchronously — lets `done` tell sync
+      // from async completion. A sync `done` leaves the loop to advance; an
+      // async `done` (called after `writeImpl` returns) re-arms scheduleDrain().
+      let inSyncWrite = true;
+      // Set by `done` when the loop may advance to the next chunk in-tick
+      // (success path, sync completion). Error/destroy leave it false so the
+      // loop stops, matching the old one-shot-then-return behaviour.
+      let mayContinueSync = false;
+      const done = (err?: Error | null): void => {
+        state.writing = false;
+        // Destroyed during the `_write`: skip success path; this entry's cb gets
+        // the destroy error, the rest drain via the destroyed-branch next pass.
+        if (state.destroyed) {
+          const destErr = state.errored ?? err ?? new Error('Premature close');
+          next.cb(destErr);
+          if (!inSyncWrite) this.scheduleDrain();
+          return;
+        }
+        if (err) {
+          next.cb(err);
+          this.emit('error', err);
+          return;
+        }
+        next.cb();
+        // Emit 'drain' only if a prior write() returned false; not on every dip below HWM.
+        if (state.needDrain && state.length < state.highWaterMark) {
+          state.needDrain = false;
+          this.emit('drain');
+        }
+        // Async completion re-arms the loop; sync completion lets the loop
+        // advance to the next chunk in this tick (no extra microtask).
+        if (inSyncWrite) mayContinueSync = true;
+        else this.scheduleDrain();
+      };
+      if (this.writeImpl) this.writeImpl.call(this, next.chunk, next.encoding, done);
+      else done();
+      inSyncWrite = false;
+      // Continue only on a clean synchronous completion; stop on async-pending
+      // (`done` deferred → re-arms via scheduleDrain), error, or destroy.
+      if (!mayContinueSync) return;
+    }
   }
 
   end(chunkOrCb?: unknown, encodingOrCb?: string | (() => void), cb?: () => void): this {
@@ -211,7 +253,7 @@ export class Writable extends EventEmitter {
     }
     if (cbFinal) this.once('finish', cbFinal);
     state.ending = true;
-    queueMicrotask(() => this.drainBuffer());
+    this.scheduleDrain();
     return this;
   }
 

@@ -485,9 +485,17 @@ export const globalProcessManager = new ProcessManager();
  */
 function bindPortAsReadable(port: MessagePort): Readable {
   const r = new Readable({ read() {} });
+  // EOF guard: `_signalEof()` pushes null on worker exit, but a stdout chunk
+  // already in flight on the MessagePort can land AFTER that, and `push()` after
+  // EOF throws `stream.push() after EOF`. Drop late chunks instead — the worker
+  // has exited and its stdout is fully captured by then. `_readableState.ended`
+  // is the exact flag the throw checks (set synchronously by `push(null)`,
+  // earlier than the `'end'` event / `readableEnded`).
   port.onmessage = (ev: MessageEvent) => {
     const data = ev.data;
-    if (data instanceof Uint8Array) r.push(data);
+    if (!(data instanceof Uint8Array)) return;
+    if (r._readableState.ended) return;
+    r.push(data);
   };
   // Browsers don't auto-start the port when only `onmessage` is set
   // (vs `addEventListener('message', …)`); kick it.

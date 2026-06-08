@@ -4,6 +4,32 @@
 
 ### Fixed
 
+- **Terminal no longer overlaps the status bar.** xterm's `FitAddon` computes
+  rows from the mount element's height minus *that element's own* padding (the
+  `.xterm` div it creates, padding 0) — so the `6px` vertical padding on the
+  `.rf-terminal` mount container was never subtracted and the bottom row
+  overflowed ~6px past the console body into the status bar. Moved the gap from
+  `padding` to `inset` on `.rf-terminal` (+ `--rf-bg-1` on `.rf-console__body`
+  so the inset gap stays the xterm surface colour); FitAddon now fits the
+  trimmed box. Verified live: 9px clearance above the status bar.
+- **Dev-mode preview is now live (HMR auto-reload).** Editing a file in dev
+  mode left the preview frozen until a manual page reload: the mini dev server
+  (`examples/vite-like-dev`) broadcast HMR over an in-process `WebSocketServer`
+  that the preview iframe — a separate realm reached via the SW — can never
+  reach. Dev mode now routes HMR through the same cross-realm `BroadcastChannel`
+  bridge real-Vite uses: the example dev server gained a pluggable `hmr`
+  transport, and `startDevMode` wires `setupHmrBridge` + injects
+  `hmrClientScript` into served HTML. Closes the dev-vs-real-Vite HMR asymmetry.
+  Verified live: editor edit → watcher → bridge → iframe auto-reloads with the
+  new content.
+- **Rich-terminal capabilities were dead in the real app — now wired.** The shell
+  adapter forwarded none of `isTTY`/`cols`/`rows`/`signal`, so `ls` column layout +
+  `--color` never engaged and Ctrl+C never reached the shell. `useShellSession.runLine`
+  now passes `isTTY:true` + live `cols`/`rows` (from xterm via `RiftyTerminal`) + a
+  per-run `AbortController`; new `interrupt()` is wired to the terminal's `onSignal`
+  (Ctrl+C → SIGINT → a running `sleep`/dev-server winds down, exit 130). Threaded
+  `onSignal` + dimensions through `BottomPanel`/`TerminalPanel`/`App`. Review pass 2026-06-07.
+
 - **Real Vite preview now renders (and shows progress) instead of looking
   frozen (ADR-0077).** Three stacked breaks fixed: (1) `installProcessGlobals()`
   in the real-vite worker clobbered the kernel-wired `process.stdout`/`stderr`
@@ -54,6 +80,8 @@
   scales cleanly to more templates. (Activity-bar tooltip follows: "Templates".)
 
 ### Added
+
+- **e2e-gated execSync-over-SAB harness (`#test=execsync`).** A page-realm harness (`src/execsync-harness.ts`) + guest worker entry (`src/workers/execsync-harness-guest.ts`) that proves rifty's real `execSync` path end-to-end in a cross-origin-isolated chromium Worker — the path Node tests cannot exercise (real SharedArrayBuffer + `Atomics.waitAsync` dispatcher wake + ADR-0084 v2 binary frame; the conformance SAB-blocking cases `skipIf(!sabReady)` in Node). `main.tsx` runs it ONLY when `location.hash` includes `test=execsync` (lazy-imported chunk); normal boot is byte-unchanged. The page realm (which owns the kernel dispatcher) seeds the child scripts into its sync mirror, registers the runtime-js `'execSync'` handler on `getKernelDispatcher()` (via the new `@riftydev/runtime-js/ipc/exec-sync-handler` seam), and `spawnWorker`s a guest that runs `execSync('node /child.js')` where the child writes raw non-UTF-8 bytes `[0xff,0xfe,0x00]`; the guest emits the result hex into the DOM. Asserted by `tests/e2e/execsync-sab.spec.ts`: `hex === 'fffe00'` (a broken v2 frame mangles to U+FFFD → `efbfbd...`; a broken dispatcher hangs → timeout — only the real byte-exact round-trip passes) plus a `blocked-result` blocking round-trip. This harness surfaced the kernel SAB JSON-frame `TextDecoder`-on-shared-view bug (fixed in `@riftydev/kernel`).
 
 - **Lazy `node_modules` browsing in the explorer (ADR-0080).** The reverse
   snapshot (ADR-0076) excludes `node_modules`; a new two-way request/response

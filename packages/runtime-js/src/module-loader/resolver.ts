@@ -78,16 +78,40 @@ function isDeclarationFile(path: string): boolean {
 
 export interface Resolver {
   resolve(specifier: string, opts: ResolveOptions): ResolvedModule;
+  /**
+   * Drop the resolver-internal caches (package.json parses + resolution memo).
+   * Called by `loader.invalidate()` on BOTH the full-clear and targeted arms —
+   * the caches are input-keyed and cannot be pruned by module id, so any
+   * invalidate clears them whole (perf #5/#15). See Q-2026-06-06-320/321.
+   */
+  clearCaches(): void;
 }
+
+/** Parsed-`package.json` cache, keyed by ABSOLUTE package.json path (perf #5). */
+type PkgCache = Map<string, PackageJson>;
 
 export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}): Resolver {
   const paths = resolverOpts.paths;
+  // package.json parse cache (perf #5). N sibling imports from one package
+  // re-decoded+re-parsed its package.json N times; cache by absolute path.
+  // Cleared whole in `loader.invalidate()` (both arms) — `load-fixture` reload
+  // overwrites package.json then invalidates, so a stale `type`/`main`/`exports`
+  // would silently flip ESM/CJS classification. TODO(backlog: perf/loader-packagejson-parse-cache).
+  const pkgCache: PkgCache = new Map();
+  // Resolution memo (perf #15): key `esm\0fromDir\0specifier` -> resolved
+  // file-id. NEVER caches not-found (guest writes / npm install create files
+  // without firing invalidate) nor the PACKAGE_PATH_NOT_EXPORTED throw.
+  // Cleared whole on ANY invalidate (input-keyed; cannot prune by resolved id).
+  // TODO(backlog: perf/resolver-resolution-cache).
+  const resolveCache = new Map<string, string>();
   return {
+    clearCaches() {
+      pkgCache.clear();
+      resolveCache.clear();
+    },
     resolve(specifier, opts) {
-      const fromDir =
-        vfs.existsSync(opts.fromFile) && vfs.statSync(opts.fromFile).isDirectory
-          ? opts.fromFile
-          : dirname(opts.fromFile);
+      const fromFileStat = vfs.statSyncOrNull(opts.fromFile);
+      const fromDir = fromFileStat?.isDirectory ? opts.fromFile : dirname(opts.fromFile);
 
       if (specifier.startsWith('node:') || isBuiltinSpecifier(specifier)) {
         const name = specifier.startsWith('node:') ? specifier.slice(5) : specifier;
@@ -111,7 +135,7 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
       }
 
       if (specifier.startsWith('#')) {
-        const filePath = resolveImportsSpecifier(vfs, specifier, fromDir, opts.esm);
+        const filePath = resolveImportsSpecifier(vfs, pkgCache, specifier, fromDir, opts.esm);
         if (filePath === null) {
           throw new ModuleLoadError(
             'MODULE_NOT_FOUND',
@@ -120,7 +144,7 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
             opts.fromFile,
           );
         }
-        return readResolved(vfs, filePath, opts.esm);
+        return readResolved(vfs, pkgCache, filePath, opts.esm);
       }
 
       // tsconfig-style path aliases (ADR-0066): only for bare specifiers and
@@ -128,11 +152,20 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
       // A pattern match that resolves no file falls THROUGH to the bare walk
       // (tsc's paths-then-fallback), so a genuine miss reports MODULE_NOT_FOUND.
       if (paths !== undefined && !isRelativeSpecifier(specifier) && !isAbsolute(specifier)) {
-        const aliased = resolvePathAlias(vfs, specifier, paths);
-        if (aliased !== null) return readResolved(vfs, aliased, opts.esm);
+        const aliased = resolvePathAlias(vfs, pkgCache, specifier, paths);
+        if (aliased !== null) return readResolved(vfs, pkgCache, aliased, opts.esm);
       }
 
-      const filePath = resolveSpecifierToFile(vfs, specifier, fromDir, opts.esm);
+      // Resolution memo (perf #15): key by (esm,fromDir,specifier). A HIT skips
+      // the full node_modules walk; `readResolved` still re-reads source fresh.
+      // Only SUCCESSFUL (non-null) resolutions are cached — a miss leaves the
+      // memo untouched so a later-created file resolves, and the
+      // PACKAGE_PATH_NOT_EXPORTED throw propagates before any `set` is reached.
+      const resolveKey = `${opts.esm ? 1 : 0}\0${fromDir}\0${specifier}`;
+      const cached = resolveCache.get(resolveKey);
+      if (cached !== undefined) return readResolved(vfs, pkgCache, cached, opts.esm);
+
+      const filePath = resolveSpecifierToFile(vfs, pkgCache, specifier, fromDir, opts.esm);
       if (filePath === null) {
         throw new ModuleLoadError(
           'MODULE_NOT_FOUND',
@@ -141,7 +174,8 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
           opts.fromFile,
         );
       }
-      return readResolved(vfs, filePath, opts.esm);
+      resolveCache.set(resolveKey, filePath);
+      return readResolved(vfs, pkgCache, filePath, opts.esm);
     },
   };
 }
@@ -158,18 +192,19 @@ function isRelativeSpecifier(specifier: string): boolean {
 
 function resolveSpecifierToFile(
   vfs: FsSync,
+  pkgCache: PkgCache,
   specifier: string,
   fromDir: string,
   esm: boolean,
 ): string | null {
   if (isRelativeSpecifier(specifier)) {
     const base = joinPath(fromDir, specifier);
-    return resolveAsFileOrDir(vfs, base);
+    return resolveAsFileOrDir(vfs, pkgCache, base);
   }
   if (isAbsolute(specifier)) {
-    return resolveAsFileOrDir(vfs, normalizePath(specifier));
+    return resolveAsFileOrDir(vfs, pkgCache, normalizePath(specifier));
   }
-  return resolveBareSpecifier(vfs, specifier, fromDir, esm);
+  return resolveBareSpecifier(vfs, pkgCache, specifier, fromDir, esm);
 }
 
 /**
@@ -179,12 +214,17 @@ function resolveSpecifierToFile(
  * first that resolves to an existing file. `null` = no pattern matched OR matched
  * but no file exists — both fall through to normal resolution.
  */
-function resolvePathAlias(vfs: FsSync, specifier: string, paths: PathAliases): string | null {
+function resolvePathAlias(
+  vfs: FsSync,
+  pkgCache: PkgCache,
+  specifier: string,
+  paths: PathAliases,
+): string | null {
   const match = matchAliasPattern(paths, specifier);
   if (match === null) return null;
   for (const target of match.targets) {
     const substituted = match.star === null ? target : target.replace(/\*/g, match.star);
-    const resolved = resolveAsFileOrDir(vfs, normalizePath(substituted));
+    const resolved = resolveAsFileOrDir(vfs, pkgCache, normalizePath(substituted));
     if (resolved !== null) return resolved;
   }
   return null;
@@ -247,10 +287,11 @@ function matchAliasPattern(paths: PathAliases, specifier: string): AliasMatch | 
   return { targets, star: bestStar };
 }
 
-function resolveAsFileOrDir(vfs: FsSync, base: string): string | null {
+function resolveAsFileOrDir(vfs: FsSync, pkgCache: PkgCache, base: string): string | null {
   // Node order is LOAD_AS_FILE before LOAD_AS_DIRECTORY: exact file, then
-  // `X` + extension, then `X` as a directory. Stat `base` once.
-  const baseStat = vfs.existsSync(base) ? vfs.statSync(base) : null;
+  // `X` + extension, then `X` as a directory. Stat `base` once (ADR-0083:
+  // non-throwing, null on miss).
+  const baseStat = vfs.statSyncOrNull(base);
 
   // (1) Exact file. An explicitly-named declaration file (e.g. exports target
   // `./foo.d.ts`) is not runnable — skip so the caller falls back to a sibling.
@@ -263,35 +304,36 @@ function resolveAsFileOrDir(vfs: FsSync, base: string): string | null {
   for (const ext of DEFAULT_EXTENSIONS) {
     const candidate = `${base}${ext}`;
     if (isDeclarationFile(candidate)) continue;
-    if (vfs.existsSync(candidate) && vfs.statSync(candidate).isFile) return candidate;
+    if (vfs.statSyncOrNull(candidate)?.isFile) return candidate;
   }
 
   // (3) `base` as a directory (package.json `main`, then `index.*`).
-  if (baseStat?.isDirectory) return resolveAsDirectory(vfs, base);
+  if (baseStat?.isDirectory) return resolveAsDirectory(vfs, pkgCache, base);
 
   return null;
 }
 
-function resolveAsDirectory(vfs: FsSync, dir: string): string | null {
+function resolveAsDirectory(vfs: FsSync, pkgCache: PkgCache, dir: string): string | null {
   const pkgPath = joinPath(dir, 'package.json');
   if (vfs.existsSync(pkgPath)) {
-    const pkg = readPackageJson(vfs, pkgPath);
+    const pkg = readPackageJson(vfs, pkgCache, pkgPath);
     const main = pickMainEntry(pkg);
     if (main) {
-      const candidate = resolveAsFileOrDir(vfs, joinPath(dir, main));
+      const candidate = resolveAsFileOrDir(vfs, pkgCache, joinPath(dir, main));
       if (candidate) return candidate;
     }
   }
   for (const idx of INDEX_FILES) {
     const candidate = joinPath(dir, idx);
     if (isDeclarationFile(candidate)) continue;
-    if (vfs.existsSync(candidate) && vfs.statSync(candidate).isFile) return candidate;
+    if (vfs.statSyncOrNull(candidate)?.isFile) return candidate;
   }
   return null;
 }
 
 function resolveBareSpecifier(
   vfs: FsSync,
+  pkgCache: PkgCache,
   specifier: string,
   fromDir: string,
   esm: boolean,
@@ -300,8 +342,8 @@ function resolveBareSpecifier(
   let dir = fromDir;
   while (true) {
     const candidateDir = joinPath(dir, 'node_modules', name);
-    if (vfs.existsSync(candidateDir) && vfs.statSync(candidateDir).isDirectory) {
-      const file = resolveInsidePackage(vfs, candidateDir, subpath, esm);
+    if (vfs.statSyncOrNull(candidateDir)?.isDirectory) {
+      const file = resolveInsidePackage(vfs, pkgCache, candidateDir, subpath, esm);
       if (file) return file;
     }
     if (dir === '/') break;
@@ -332,17 +374,18 @@ function parseBareSpecifier(specifier: string): ParsedBareSpecifier {
 
 function resolveInsidePackage(
   vfs: FsSync,
+  pkgCache: PkgCache,
   pkgDir: string,
   subpath: string,
   esm: boolean,
 ): string | null {
   const pkgJsonPath = joinPath(pkgDir, 'package.json');
   if (vfs.existsSync(pkgJsonPath)) {
-    const pkg = readPackageJson(vfs, pkgJsonPath);
+    const pkg = readPackageJson(vfs, pkgCache, pkgJsonPath);
     if (pkg.exports !== undefined) {
       const resolved = resolveExports(pkg.exports, subpath, esm);
       if (resolved !== null) {
-        return resolveAsFileOrDir(vfs, joinPath(pkgDir, resolved));
+        return resolveAsFileOrDir(vfs, pkgCache, joinPath(pkgDir, resolved));
       }
       throw new ModuleLoadError(
         'PACKAGE_PATH_NOT_EXPORTED',
@@ -353,17 +396,17 @@ function resolveInsidePackage(
     if (subpath === '.') {
       const main = pickMainEntry(pkg);
       if (main) {
-        const candidate = resolveAsFileOrDir(vfs, joinPath(pkgDir, main));
+        const candidate = resolveAsFileOrDir(vfs, pkgCache, joinPath(pkgDir, main));
         if (candidate) return candidate;
       }
     } else {
-      return resolveAsFileOrDir(vfs, joinPath(pkgDir, subpath.slice(2)));
+      return resolveAsFileOrDir(vfs, pkgCache, joinPath(pkgDir, subpath.slice(2)));
     }
   }
   if (subpath === '.') {
-    return resolveAsDirectory(vfs, pkgDir);
+    return resolveAsDirectory(vfs, pkgCache, pkgDir);
   }
-  return resolveAsFileOrDir(vfs, joinPath(pkgDir, subpath.slice(2)));
+  return resolveAsFileOrDir(vfs, pkgCache, joinPath(pkgDir, subpath.slice(2)));
 }
 
 type ExportsField =
@@ -398,6 +441,7 @@ function activeConditions(esm: boolean): readonly Condition[] {
  */
 function resolveImportsSpecifier(
   vfs: FsSync,
+  pkgCache: PkgCache,
   specifier: string,
   fromDir: string,
   esm: boolean,
@@ -405,20 +449,20 @@ function resolveImportsSpecifier(
   let dir = fromDir;
   while (true) {
     const pkgJsonPath = joinPath(dir, 'package.json');
-    if (vfs.existsSync(pkgJsonPath) && vfs.statSync(pkgJsonPath).isFile) {
-      const pkg = readPackageJson(vfs, pkgJsonPath);
+    if (vfs.statSyncOrNull(pkgJsonPath)?.isFile) {
+      const pkg = readPackageJson(vfs, pkgCache, pkgJsonPath);
       if (pkg.imports !== undefined) {
         const resolved = resolveImports(pkg.imports, specifier, esm);
         if (resolved !== null) {
           // `imports` targets may be absolute, file-relative, or bare ("lodash").
           if (resolved.startsWith('./') || resolved.startsWith('../')) {
-            return resolveAsFileOrDir(vfs, joinPath(dir, resolved));
+            return resolveAsFileOrDir(vfs, pkgCache, joinPath(dir, resolved));
           }
           if (isAbsolute(resolved)) {
-            return resolveAsFileOrDir(vfs, normalizePath(resolved));
+            return resolveAsFileOrDir(vfs, pkgCache, normalizePath(resolved));
           }
           // Bare specifier — recurse through the normal bare resolver.
-          return resolveBareSpecifier(vfs, resolved, dir, esm);
+          return resolveBareSpecifier(vfs, pkgCache, resolved, dir, esm);
         }
       }
       // First package.json found, no match — stop walking (Node spec).
@@ -568,9 +612,33 @@ function substituteStar(node: ExportsField, star: string): ExportsField {
   return out;
 }
 
-function readPackageJson(vfs: FsSync, path: string): PackageJson {
+/**
+ * Decode+parse `path`'s package.json, consulting/populating `pkgCache` (perf
+ * #5). Returns `null` on a decode/parse failure WITHOUT caching it — callers
+ * apply their own error behaviour (throw vs `{}` fallback), so a failure from
+ * one caller never poisons the other. Only a successful parse is memoized
+ * (keyed by absolute path), shared across all parse sites.
+ */
+function cachedParse(vfs: FsSync, pkgCache: PkgCache, path: string): PackageJson | null {
+  const hit = pkgCache.get(path);
+  if (hit !== undefined) return hit;
+  let parsed: PackageJson;
   try {
-    return JSON.parse(utf8.decode(vfs.readFileBytesSync(path))) as PackageJson;
+    parsed = JSON.parse(utf8.decode(vfs.readFileBytesSync(path))) as PackageJson;
+  } catch {
+    return null;
+  }
+  pkgCache.set(path, parsed);
+  return parsed;
+}
+
+function readPackageJson(vfs: FsSync, pkgCache: PkgCache, path: string): PackageJson {
+  const hit = pkgCache.get(path);
+  if (hit !== undefined) return hit;
+  try {
+    const parsed = JSON.parse(utf8.decode(vfs.readFileBytesSync(path))) as PackageJson;
+    pkgCache.set(path, parsed);
+    return parsed;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new ModuleLoadError('SYNTAX_ERROR', path, `Failed to parse ${path}: ${message}`);
@@ -585,24 +653,21 @@ function pickMainEntry(pkg: PackageJson): string | null {
 
 /**
  * Find the nearest `package.json` for a resolved file (used to decide ESM vs CJS
- * via the `type` field). Walks up from the file's directory.
+ * via the `type` field). Walks up from the file's directory. Parse failure on a
+ * present-but-malformed package.json falls back to `{}` (uncached) so a broken
+ * manifest classifies as a CJS scope rather than failing the whole resolve.
  */
 export function findPackageScope(
   vfs: FsSync,
+  pkgCache: PkgCache,
   filePath: string,
 ): { dir: string; pkg: PackageJson } | null {
   let dir = dirname(filePath);
   while (true) {
     const candidate = joinPath(dir, 'package.json');
-    if (vfs.existsSync(candidate) && vfs.statSync(candidate).isFile) {
-      try {
-        return {
-          dir,
-          pkg: JSON.parse(utf8.decode(vfs.readFileBytesSync(candidate))) as PackageJson,
-        };
-      } catch {
-        return { dir, pkg: {} };
-      }
+    if (vfs.statSyncOrNull(candidate)?.isFile) {
+      const pkg = cachedParse(vfs, pkgCache, candidate);
+      return { dir, pkg: pkg ?? {} };
     }
     if (dir === '/') return null;
     const parent = dirname(dir);
@@ -611,10 +676,17 @@ export function findPackageScope(
   }
 }
 
-function readResolved(vfs: FsSync, filePath: string, _esm: boolean): ResolvedModule {
+function readResolved(
+  vfs: FsSync,
+  pkgCache: PkgCache,
+  filePath: string,
+  _esm: boolean,
+): ResolvedModule {
   const source = utf8.decode(vfs.readFileBytesSync(filePath));
-  const kind = detectKind(vfs, filePath);
-  const scope = findPackageScope(vfs, filePath);
+  // One scope walk: feed its `type` into detectKind so the `.js`/`.ts`/`.tsx`
+  // branch no longer re-walks/re-parses the same package.json (perf #4).
+  const scope = findPackageScope(vfs, pkgCache, filePath);
+  const kind = detectKind(filePath, scope?.pkg.type);
   return {
     id: filePath,
     kind,
@@ -623,7 +695,7 @@ function readResolved(vfs: FsSync, filePath: string, _esm: boolean): ResolvedMod
   };
 }
 
-function detectKind(vfs: FsSync, filePath: string): ModuleKind {
+function detectKind(filePath: string, scopeType: string | undefined): ModuleKind {
   if (filePath.endsWith('.json')) return 'json';
   if (TEXT_EXTENSIONS.some((ext) => filePath.endsWith(ext))) return 'text';
   if (filePath.endsWith('.mjs')) return 'esm';
@@ -631,9 +703,8 @@ function detectKind(vfs: FsSync, filePath: string): ModuleKind {
   if (filePath.endsWith('.js') || filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
     // `.ts`/`.tsx` mirror the `.js` branch (ADR-0053): ESM under a `type:module`
     // scope, else CJS — as a TS-aware Node loader classifies by package scope.
-    const scope = findPackageScope(vfs, filePath);
-    if (scope && scope.pkg.type === 'module') return 'esm';
-    return 'cjs';
+    // `scopeType` is the SAME findPackageScope result readResolved computed.
+    return scopeType === 'module' ? 'esm' : 'cjs';
   }
   // Unknown extension — assume CJS, matches Node's default for `.js` in non-module packages.
   return 'cjs';

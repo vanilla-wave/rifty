@@ -16,6 +16,9 @@ import { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
 import { ServerResponse } from './response.ts';
 import { STATUS_CODES } from './status-codes.ts';
 
+// Shared one-shot utf8 encoder for request-body string chunks (stateless).
+const UTF8_ENCODER = new TextEncoder();
+
 /**
  * Subset of Node's `net.ListenOptions` accepted by {@link HttpServer.listen}.
  * Only `port` is honoured; `host` is ignored (rifty is loopback-only — see
@@ -143,7 +146,7 @@ export function request(
           const body =
             bodyChunks.length === 0
               ? undefined
-              : bodyChunks.map((c) => (typeof c === 'string' ? new TextEncoder().encode(c) : c));
+              : bodyChunks.map((c) => (typeof c === 'string' ? UTF8_ENCODER.encode(c) : c));
           const response = await fetch(url, {
             method,
             headers,

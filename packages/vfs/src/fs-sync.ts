@@ -29,6 +29,16 @@ export interface FsSync {
   rmSync(path: string, options: { recursive?: boolean; force?: boolean }): void;
   statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number };
   /**
+   * Non-throwing stat: returns `null` on a genuine miss instead of throwing
+   * (ADR-0083). `statSync` stays throwing (Node `fs.statSync` parity) — this is
+   * the additive companion that collapses the resolver's `existsSync`+`statSync`
+   * double-probe to one call. `null` is the contract, not a stub. Precedent:
+   * ADR-0029/0041 grew this interface the same way.
+   */
+  statSyncOrNull(
+    path: string,
+  ): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number } | null;
+  /**
    * Set access/modification timestamps (ms) on `path`. Mirrors
    * `node:fs.utimesSync` (ADR-0029). `MemoryFsSync` writes through to the
    * shared backend; `OpfsFsSync` keeps an in-memory side-table because
@@ -36,4 +46,32 @@ export interface FsSync {
    * @throws `VfsError('ENOENT')` if `path` does not exist.
    */
   utimes(path: string, atimeMs: number, mtimeMs: number): void;
+  /**
+   * Copy a single regular file `src` → `dst`. Byte copy; `dst` mtime = now (a
+   * copy is a new file — matches `node:fs.copyFileSync`, which does NOT
+   * preserve mtime). Overwrites an existing file `dst` (no `COPYFILE_EXCL`).
+   * @throws `VfsError('ENOENT')` if `src` or `dst`'s parent is absent.
+   * @throws `VfsError('EISDIR')` if `src` OR `dst` is a directory (single-file
+   *   copy never recurses — use {@link cpSync} with `recursive`).
+   */
+  copyFileSync(src: string, dst: string): void;
+  /**
+   * `node:fs.cpSync`-faithful copy. Without `recursive`: a file behaves as
+   * {@link copyFileSync}, a directory `src` throws `EISDIR`. With
+   * `recursive: true`: a directory is copied depth-first (lexicographic per
+   * {@link readdirSync}). Best-effort, NOT transactional — on a child failure
+   * the first `VfsError` propagates (fail-fast) and entries copied before the
+   * throw remain at `dst` (no rollback; backends keep no journal). Per-file
+   * overwrite (Node `force: true` default).
+   */
+  cpSync(src: string, dst: string, options?: { recursive?: boolean }): void;
+  /**
+   * Move/rename `src` → `dst`, atomic-where-the-backend-allows, **mtime
+   * preserved** (a rename is not a content write). Same-dir and cross-dir.
+   * `node:fs.renameSync` parity: `dst` absent → move; `dst` file & `src` file
+   * → overwrite; `dst` empty-dir & `src` dir → replace; `dst` non-empty dir →
+   * `ENOTEMPTY`; kind mismatch → `EISDIR`/`ENOTDIR`; `src` absent → `ENOENT`;
+   * `src === dst` (post-normalize) → no-op; dir into its own subtree → `EINVAL`.
+   */
+  renameSync(src: string, dst: string): void;
 }

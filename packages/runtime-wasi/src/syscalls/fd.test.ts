@@ -333,3 +333,43 @@ describe('fd_write — rights enforcement', () => {
     expect(rc).toBe(E_SUCCESS);
   });
 });
+
+// fd_write writes through to the VFS cache via syncMirror().writeFileSync
+// (fd.ts:91). On a fitting write fd.ts reuses `fdEntry.data` IN PLACE
+// (fd.ts:86-88), so the buffer last handed to writeFileSync is mutated again on
+// the next write. Complementary guard for #3 / Q-2026-06-06-319: the mirror's
+// defensive write-side slice must keep the cache consistent across that reuse —
+// the cache reflects the bytes written, not a stale or over-mutated view.
+describe('fd_write — write-through cache consistency under in-place reuse (#3)', () => {
+  let mirror: MemoryFsSync;
+  beforeEach(() => {
+    mirror = new MemoryFsSync();
+    setSyncMirror(mirror);
+  });
+  afterEach(() => resetSyncMirror());
+
+  function writeFd(t: ReturnType<typeof setupFdCtx>, bytes: Uint8Array): number {
+    new Uint8Array(t.memory.buffer).set(bytes, 200);
+    const view = new DataView(t.memory.buffer);
+    view.setUint32(0, 200, true); // iov.ptr
+    view.setUint32(4, bytes.length, true); // iov.len
+    return t.ns.fd_write(5, 0, 1, 300);
+  }
+
+  it('two sequential same-length fd_writes (in-place reuse) land coherently in the cache', () => {
+    const t = setupFdCtx();
+    t.fds.set(5, { type: 'file', path: '/f.bin', data: new Uint8Array(0), cursor: 0 });
+
+    expect(writeFd(t, new Uint8Array([1, 2, 3]))).toBe(E_SUCCESS);
+    expect(Array.from(mirror.readFileBytesSync('/f.bin'))).toEqual([1, 2, 3]);
+
+    // Reset cursor so the next write fits in the existing fdEntry.data buffer
+    // (fd.ts:86 reuse branch — mutates the same buffer writeFileSync just saw).
+    const fd = t.fds.get(5);
+    if (fd) fd.cursor = 0;
+    expect(writeFd(t, new Uint8Array([7, 8, 9]))).toBe(E_SUCCESS);
+    // The cache must reflect the SECOND write, with no corruption from the
+    // in-place mutation of the buffer the first write handed to the mirror.
+    expect(Array.from(mirror.readFileBytesSync('/f.bin'))).toEqual([7, 8, 9]);
+  });
+});

@@ -375,9 +375,12 @@ export function App(props: AppProps) {
                 runtime.attachWriter(write);
                 shell.attachWriter(write);
               }}
-              onLine={(line) => {
+              onSignal={() => shell.interrupt()}
+              onLine={(line, dims) => {
                 if (machine.mode() === 'dev' || machine.mode() === 'real-vite') {
-                  void shell.runLine(line);
+                  // Forward the live terminal dimensions so ctx.cols/rows drive
+                  // ls column layout; isTTY + signal are set by the adapter.
+                  void shell.runLine(line, dims);
                   return;
                 }
                 return runtime.handleLine(line);

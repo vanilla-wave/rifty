@@ -1,7 +1,7 @@
 import { dirname } from '@riftydev/vfs';
 import { publishRuntimeGlobal, readRuntimeGlobal } from '../internal/worker-globals.ts';
 import { ModuleLoadError } from './errors.ts';
-import { RUNTIME_OBJECT_BINDING, transformEsm } from './esm-ast.ts';
+import { RUNTIME_OBJECT_BINDING, type TransformResult, transformEsm } from './esm-ast.ts';
 import type { ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule, Resolver } from './resolver.ts';
 
@@ -40,11 +40,24 @@ export interface EsmLoaderDeps {
   readonly registry: ModuleRegistry;
   readonly resolver: Resolver;
   loadAsync(id: string): Promise<Record<string, unknown>>;
+  /**
+   * Async load of an ALREADY-RESOLVED module — carries the resolved record so
+   * the static-import preload / dynamic import skip a redundant re-resolve
+   * (perf #14). `deps.resolve(...)` already returns the full {@link ResolvedModule}.
+   */
+  loadAsyncResolved(resolved: ResolvedModule): Promise<Record<string, unknown>>;
   resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule;
   /** esbuild guest cwd/preopen threaded through to {@link TransformSourceHook}. */
   readonly workspace: string;
   /** Injected per-file TS/JSX source transform; absent on plain-JS loaders. */
   readonly transformSource?: TransformSourceHook;
+  /**
+   * Injected ESM AST rewrite (acorn parse + walk). When absent, the direct
+   * {@link transformEsm} import is used. The loader injects a cached wrapper so
+   * the heaviest per-module CPU step is not re-run on a byte-identical re-load
+   * (perf #16, TODO(backlog: perf/transformesm-result-cache)). Pure: same id+source -> same output.
+   */
+  readonly transformEsm?: (source: string, id: string) => TransformResult;
 }
 
 /**
@@ -93,7 +106,9 @@ export async function executeEsm(
     });
   }
 
-  const transformed = transformEsm(source, resolved.id);
+  // Cached AST rewrite when the loader injected one (perf #16); the direct
+  // import is the default so plain construction stays unchanged.
+  const transformed = (deps.transformEsm ?? transformEsm)(source, resolved.id);
   // Stash by file path so modules don't overwrite each other. Lives on the typed
   // owner table at `__rifty.esmStash` — see `internal/worker-globals.ts`.
   const stash: Record<string, string> = readRuntimeGlobal('esmStash') ?? {};
@@ -104,7 +119,8 @@ export async function executeEsm(
   const importNamespaces = new Map<string, Record<string, unknown>>();
   for (const spec of transformed.staticImports) {
     const dep = deps.resolve(spec, resolved.id, true);
-    const ns = await deps.loadAsync(dep.id);
+    // Carry the resolved record — `loadAsyncResolved` skips re-resolving it (#14).
+    const ns = await deps.loadAsyncResolved(dep);
     importNamespaces.set(spec, ns);
   }
 
@@ -182,7 +198,8 @@ export async function executeEsm(
 
   const dynamicImport = async (spec: string): Promise<Record<string, unknown>> => {
     const dep = deps.resolve(spec, resolved.id, true);
-    return deps.loadAsync(dep.id);
+    // Carry the resolved record — `loadAsyncResolved` skips re-resolving it (#14).
+    return deps.loadAsyncResolved(dep);
   };
 
   // `with { type: "file" }` file loader (ADR-0068): resolve to absolute path

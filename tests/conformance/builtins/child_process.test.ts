@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  SabRing,
+  SyncRpcDispatcher,
+  createSabRing,
+  decodeReply,
+  encodeRequest,
+} from '../../../packages/kernel/src/index.ts';
+import {
   exec,
   execSync,
   fork,
@@ -7,6 +14,7 @@ import {
 } from '../../../packages/runtime-js/src/builtins/child_process.ts';
 import { resetSyncMirror } from '../../../packages/runtime-js/src/builtins/fs-sync-mirror.ts';
 import { writeFileSync } from '../../../packages/runtime-js/src/builtins/fs.ts';
+import { installRuntimeJsExecSyncHandler } from '../../../packages/runtime-js/src/ipc/handlers.ts';
 
 afterEach(() => resetSyncMirror());
 
@@ -95,6 +103,46 @@ describe('child_process.execSync', () => {
         feature: 'child_process.execSync',
       }) as unknown as Error,
     );
+  });
+});
+
+describe('execSync — v2 binary frame returns byte-exact stdout (ADR-0084 #23)', () => {
+  // Drives the REAL SAB path in-process: a real SabRing, the real
+  // SyncRpcDispatcher, the real runtime-js `'execSync'` handler, and the real
+  // v2 binary-frame encodeRequest/decodeReply. The runner is substituted so no
+  // Worker spawns, but the child stdout BYTES travel verbatim through the
+  // framing — proving non-UTF-8 stdout is NOT mangled to U+FFFD.
+  async function roundTrip(stdout: Uint8Array): Promise<Uint8Array> {
+    const { sab, ring } = createSabRing({ payloadCapacity: 1024 });
+    const caller = SabRing.attach(sab, 1024);
+    const dispatcher = new SyncRpcDispatcher();
+    installRuntimeJsExecSyncHandler(dispatcher, () => new TextEncoder().encode('void 0;'), {
+      runWorker: async () => ({ stdout, exitCode: 0 }),
+    });
+    dispatcher.attach(ring);
+    caller.writeRequest(encodeRequest({ method: 'execSync', payload: { cmd: 'node /bin.js' } }));
+    // The handler is async (awaits the runner); the backstop/pump writes the
+    // reply on a microtask — `waitReplyAsync` parks until the notify fires.
+    const replyBytes = await caller.waitReplyAsync(2000);
+    dispatcher.detachAll();
+    const reply = decodeReply(replyBytes);
+    if (!reply.ok) throw new Error(`unexpected error reply: ${JSON.stringify(reply.error)}`);
+    return reply.value as Uint8Array;
+  }
+
+  it('returns Uint8Array.from([0xff,0xfe,0x00]) byte-exact (length 3, not 7)', async () => {
+    const value = await roundTrip(Uint8Array.from([0xff, 0xfe, 0x00]));
+    expect(value).toBeInstanceOf(Uint8Array);
+    // Pre-fix: the non-fatal TextDecoder mangled these to U+FFFD, inflating to
+    // [0xef,0xbf,0xbd,0xef,0xbf,0xbd,0x00] (length 7). The fix keeps them raw.
+    expect(value.length).toBe(3);
+    expect(Array.from(value)).toEqual([0xff, 0xfe, 0x00]);
+  });
+
+  it('round-trips a longer non-UTF-8 byte sequence verbatim', async () => {
+    const raw = Uint8Array.from([0x00, 0xc0, 0xc1, 0xf5, 0xff, 0x80, 0x7f, 0x41]);
+    const value = await roundTrip(raw);
+    expect(Array.from(value)).toEqual(Array.from(raw));
   });
 });
 

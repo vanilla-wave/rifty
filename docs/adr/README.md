@@ -14,6 +14,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0037 | Unified sync VFS contract |
 | 0041 | `FsSync.readdirSync` returns `VfsDirent[]` and `Vfs.utimes` symmetry |
 | 0072 | OPFS sync content cache + async write-through |
+| 0090 | VFS sync `copyFileSync`/`cpSync`/`renameSync` primitives for shell `cp`/`mv` |
 
 ### kernel
 
@@ -96,6 +97,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0078 | Generic ProjectSpec/Template runtime for the playground (Vite as the default template) |
 | 0079 | Single generic project/template switcher; retire the header mode toggles |
 | 0080 | Lazy `node_modules` remote-read protocol + async explorer path |
+| 0095 | Dev-mode HMR routes through the cross-realm bridge (pluggable dev-server transport) |
 
 ### toolchain-build
 
@@ -121,6 +123,33 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | # | Title |
 |---|---|
 | 0055 | opencode event stream rides SSE-over-streaming-HTTP; no `ws` shim (page-direct deployment) |
+| 0092 | Agent-facing `git` contract — structured read-ops facade tool, write-ops `NotImplementedError`, impl deferred |
+
+### perf
+
+| # | Title |
+|---|---|
+| 0082 | Export `bytesToString` from `@riftydev/io` — drop the text-read full-buffer copy |
+| 0083 | `FsSync.statSyncOrNull` — non-throwing stat collapses resolver double-probes |
+| 0084 | SAB ring + SyncRpc v2 wire — `waitAsync` responder, zero-copy view, configurable capacity, binary frame |
+| 0085 | `setImmediate` Map rep + check-phase drain-order contract |
+| 0086 | Optional `dispatchStruct` on `CrossRealmPortHandler` |
+| 0087 | Honest execSync-over-SAB COI-Worker e2e — public handler seams + SAB JSON-frame decode fix |
+
+### shell
+
+| # | Title |
+|---|---|
+| 0088 | Coreutils command-surface strategy — pure-JS builtins over VFS; busybox rejected, uutils/picomatch ADR-gated |
+| 0089 | `CommandContext` gains optional stdin, isTTY/cols/rows, AbortSignal cancellation |
+| 0091 | Rich token type (quote provenance) + single-segment glob expansion |
+| 0093 | Shell-command parity harness — node:fs reuse + frozen GNU fixtures, no live host-spawn oracle |
+
+### terminal
+
+| # | Title |
+|---|---|
+| 0094 | Terminal line-editor becomes cursor-aware — mid-line insert/delete, Home/End/Delete, Ctrl+A/Ctrl+E |
 
 ## Superseded (removed)
 
@@ -168,7 +197,7 @@ D-007..D-009 (stop-on-irreversible → record-and-continue, inflections) were pr
 
 ## Numbering
 
-Numbers **0081–0093 are RESERVED** as provisional labels by the JS-runtime perf plan; the reserved-number → topic-slug map lives in `docs/backlog/perf/reference/js-runtime-perf-adr-plan-2026-06-06.md` (and in each perf item's `title:`). Author a reserved one with `pnpm adr:new perf "Title" --number 00NN`. Plain `pnpm adr:new` (no `--number`) **skips the reserved block** when auto-allocating, so it never collides — `tools/adr/new.mjs` keeps its `RESERVED` set in sync with this note.
+No reserved numbers. The JS-runtime perf plan's provisional **0081–0093** band was materialised in the M11/M12 merge — **0082–0093** as ADRs, **0081** retired into `CLAUDE.md` (reversibility rule 4, record-decisions-not-diffs). `pnpm adr:new <area> "Title"` auto-allocates max+1; `--number NNNN` authors a specific free number. `tools/adr/new.mjs` and `tools/refs/check.mjs` keep an (now empty) `RESERVED` set in sync with this note.
 
 opencode **decisions.md draft labels** 0056–0062 are a separate provisional namespace (drafts in `docs/backlog/opencode/reference/decisions.md`): 0057→ADR-0054, 0059→ADR-0055, 0056 superseded by ADR-0065; 0058/0060/0061/0062 deferred. A bare `ADR-005x`/`ADR-006x` citation refers to a draft, not a live ADR file.
 
@@ -182,8 +211,11 @@ Moved (redirect to the live path):
 - `OPEN_QUESTIONS.md` → `docs/backlog/<area>/`
 - `docs/opencode/` → `docs/backlog/opencode/reference/`
 - `docs/compat/` → `docs/public/compat/`
+- `docs/perf/` → `docs/backlog/perf/reference/`
+- `docs/backlog/tests/` → `docs/backlog/toolchain-build/reference/`
 - `docs/PUBLISHING.md` → `docs/public/publishing.md`
 - `docs/hosting-netlify.md` → `docs/public/hosting-netlify.md`
+- `docs/opencode-rifty-feasibility-2026-05-30.md` → `docs/backlog/opencode/reference/feasibility-2026-05-30.md`
 
 Removed, no successor (resolve to git history):
 
@@ -193,4 +225,4 @@ Removed, no successor (resolve to git history):
 - `docs/opencode/HANDOFF.md` — session handoff, not retained
 - `docs/compat/{m10-tooling,sqlite,opencode-tool-ceiling,browsers}.md` — compat pages dropped in the `docs/public` split (not regenerated)
 
-Retired ADR numbers (process moved to `CLAUDE.md`, no longer recorded as ADRs): **0008, 0022, 0024, 0033, 0063, 0064, 0094**. Older ADRs may still cite these — they resolve to `CLAUDE.md`, not a file. `tools/refs/check.mjs` treats them as retired so the citations don't dangle.
+Retired ADR numbers (process moved to `CLAUDE.md`, no longer recorded as ADRs): **0008, 0022, 0024, 0033, 0063, 0064, 0081**. Older ADRs may still cite these — they resolve to `CLAUDE.md`, not a file. `tools/refs/check.mjs` treats them as retired so the citations don't dangle. (0081 = reversibility rule 4 "record decisions, not diffs"; its rule text is grafted into `CLAUDE.md`.)

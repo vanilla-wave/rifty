@@ -18,6 +18,11 @@
  * Layout (ADR-0011 + ADR-0032): 20-byte header. VERSION at index 0 is
  * stamped on every write; the production reader validates and the
  * dispatcher rejects mismatched frames with a typed error reply.
+ *
+ * Wire (ADR-0084 #23, v2): each frame body starts with a 1-byte discriminator
+ * — 0x00 = JSON, 0x01 = BINARY. This fixture writes a JSON request (0x00 +
+ * JSON) and decodes the reply by branching on byte[0]. The SAB header stays
+ * 20 bytes (the discriminator lives in the payload body, not the header).
  */
 import { parentPort, workerData } from 'node:worker_threads';
 
@@ -40,8 +45,14 @@ const repPayloadOffset = HEADER_BYTES + payloadCapacity;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
 
-// Build the request bytes — { method, payload } JSON-encoded.
-const reqBytes = encoder.encode(JSON.stringify({ method, payload }));
+const FRAME_JSON = 0x00;
+const FRAME_BINARY = 0x01;
+
+// Build the request bytes — 1-byte JSON discriminator + { method, payload } JSON.
+const jsonBytes = encoder.encode(JSON.stringify({ method, payload }));
+const reqBytes = new Uint8Array(jsonBytes.byteLength + 1);
+reqBytes[0] = FRAME_JSON;
+reqBytes.set(jsonBytes, 1);
 if (reqBytes.byteLength > payloadCapacity) {
   throw new Error(
     `sync-rpc-echo: request (${reqBytes.byteLength}B) exceeds capacity (${payloadCapacity}B)`,
@@ -78,9 +89,16 @@ if (repVersion !== protocolVersion) {
   process.exit(1);
 }
 
+// Branch on the v2 frame discriminator (ADR-0084 #23): 0x01 BINARY → raw bytes
+// value; 0x00 JSON → parse the body. The 'echo' handler returns JSON; the
+// binary branch is here so the fixture mirrors the production decoder exactly.
 let reply;
 try {
-  reply = JSON.parse(decoder.decode(replyBytes));
+  if (replyBytes[0] === FRAME_BINARY) {
+    reply = { ok: true, value: replyBytes.slice(1) };
+  } else {
+    reply = JSON.parse(decoder.decode(replyBytes.subarray(1)));
+  }
 } catch (err) {
   parentPort.postMessage({
     type: 'error',

@@ -9,6 +9,7 @@
  * Node.
  */
 
+import { bytesToString } from '@riftydev/io';
 import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { Buffer, type Encoding } from './buffer.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -37,7 +38,11 @@ function resolvePath(p: string | URL | Buffer | Uint8Array): string {
     throw new TypeError('fs path must be string, Buffer, or URL');
   }
   if (isAbsolute(str)) return normalizePath(str);
-  return normalizePath(joinPath(getProcessCwd(), str));
+  // joinPath already normalizes internally and getProcessCwd() is always an
+  // absolute normalized path, so its result is already absolute+normalized —
+  // the outer normalizePath was a redundant no-op pass (#6, perf audit
+  // 2026-06-05). joinPath itself is NOT touched (45+ callers).
+  return joinPath(getProcessCwd(), str);
 }
 
 type Callback<T> = (err: NodeJS.ErrnoException | null, value?: T) => void;
@@ -137,8 +142,11 @@ function toEncodingOrNull(arg: ReadFileOptions | Encoding | null | undefined): E
 }
 
 function decodeResult(bytes: Uint8Array, encoding: Encoding | null): Uint8Array | string {
+  // No encoding: return an owned, mutable Buffer copy (Node binary-read
+  // contract). With encoding: decode zero-copy via io's shared codec (ADR-0082)
+  // instead of an intermediate Buffer.from copy.
   if (!encoding) return Buffer.from(bytes);
-  return (Buffer.from(bytes) as Uint8Array & { toString(e?: string): string }).toString(encoding);
+  return bytesToString(bytes, encoding);
 }
 
 function encodeData(data: Uint8Array | string, encoding: Encoding | null): Uint8Array {
@@ -236,9 +244,9 @@ export function rmdirSync(p: string, opts?: { recursive?: boolean }): void {
 }
 
 export function renameSync(src: string, dst: string): void {
-  const data = syncMirror().readFileBytesSync(resolvePath(src));
-  syncMirror().writeFileSync(resolvePath(dst), data);
-  syncMirror().rmSync(resolvePath(src), {});
+  // ADR-0090: native VFS rename — atomic-where-possible and mtime-preserving
+  // (the prior read+write+rm restamped mtime and copied subtrees).
+  syncMirror().renameSync(resolvePath(src), resolvePath(dst));
 }
 
 // VFS has no symlinks until M12, so `lstat` === `stat` and `realpath` is just
@@ -275,8 +283,13 @@ export const realpathSync: ((p: string) => string) & { native: (p: string) => st
   Object.assign(_realpathSyncImpl, { native: _realpathSyncImpl });
 
 export function copyFileSync(src: string, dst: string): void {
-  const data = syncMirror().readFileBytesSync(resolvePath(src));
-  syncMirror().writeFileSync(resolvePath(dst), data);
+  // ADR-0090: native VFS copy (single regular file; dst mtime=now).
+  syncMirror().copyFileSync(resolvePath(src), resolvePath(dst));
+}
+
+export function cpSync(src: string, dst: string, opts?: { recursive?: boolean }): void {
+  // ADR-0090: `node:fs.cpSync` — recursive-aware, best-effort fail-fast.
+  syncMirror().cpSync(resolvePath(src), resolvePath(dst), { recursive: opts?.recursive });
 }
 
 /**
@@ -352,6 +365,9 @@ export const promises = {
   },
   async rename(src: string, dst: string): Promise<void> {
     renameSync(src, dst);
+  },
+  async cp(src: string, dst: string, opts?: { recursive?: boolean }): Promise<void> {
+    cpSync(src, dst, opts);
   },
   async utimes(p: string, atime: number | Date, mtime: number | Date): Promise<void> {
     utimesSync(p, atime, mtime);
@@ -517,6 +533,7 @@ const fs = {
   rmdirSync,
   renameSync,
   copyFileSync,
+  cpSync,
   utimesSync,
   lstatSync,
   readlinkSync,

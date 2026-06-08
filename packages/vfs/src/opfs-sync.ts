@@ -43,7 +43,14 @@
 
 import { NotImplementedError, VfsError } from './errors.ts';
 import type { FsSync } from './fs-sync.ts';
-import { basename, dirname, normalizePath, segments } from './path.ts';
+import {
+  basename,
+  basenameNormalized,
+  dirname,
+  dirnameNormalized,
+  normalizePath,
+  segments,
+} from './path.ts';
 import type { VfsDirent } from './types.ts';
 
 declare const navigator: { storage?: { getDirectory(): Promise<FileSystemDirectoryHandle> } };
@@ -58,6 +65,14 @@ interface IndexEntry {
    * ops are O(children) instead of O(tree). `undefined` for files.
    */
   children?: Set<string>;
+  /**
+   * For directories: memoised sorted dirent list (perf audit 2026-06-05).
+   * Invalidated to `null` on attach/detach/removeSubtree of a child AND on a
+   * per-child index.set (a child's kind/identity can flip — e.g. writeFileSync
+   * over an existing name — and each dirent's isFile/isDirectory is derived
+   * per-child). Cleared wholesale on refreshIndex. `null`/absent = rebuild.
+   */
+  sortedDirents?: readonly VfsDirent[] | null;
 }
 
 /**
@@ -273,7 +288,9 @@ export class OpfsFsSync implements FsSync {
     const existing = this.handles.get(normalized);
     if (existing) return existing;
     const parent = await this.resolveParent(normalized);
-    const file = await parent.getFileHandle(basename(normalized), { create });
+    // `normalized` = normalizePath(path) (#10) — basenameNormalized skips the
+    // redundant normalize pass.
+    const file = await parent.getFileHandle(basenameNormalized(normalized), { create });
     const handle = await file.createSyncAccessHandle();
     this.handles.set(normalized, handle);
     // Pre-warm also indexes a brand-new path (e.g. `openSync(p, create=true)`).
@@ -307,20 +324,24 @@ export class OpfsFsSync implements FsSync {
    */
   private attachChild(path: string): void {
     if (path === '/') return;
-    const parent = dirname(path);
+    // `path` is always a normalized index key here (#10) — skip the re-normalize.
+    const parent = dirnameNormalized(path);
     const parentEntry = this.index.get(parent);
     if (parentEntry?.kind === 'dir' && parentEntry.children) {
-      parentEntry.children.add(basename(path));
+      parentEntry.children.add(basenameNormalized(path));
+      parentEntry.sortedDirents = null; // child added — invalidate dirent cache
     }
   }
 
   /** Removes `path`'s basename from its parent's `children` set. Idempotent. */
   private detachChild(path: string): void {
     if (path === '/') return;
-    const parent = dirname(path);
+    // `path` is always a normalized index key here (#10) — skip the re-normalize.
+    const parent = dirnameNormalized(path);
     const parentEntry = this.index.get(parent);
     if (parentEntry?.kind === 'dir' && parentEntry.children) {
-      parentEntry.children.delete(basename(path));
+      parentEntry.children.delete(basenameNormalized(path));
+      parentEntry.sortedDirents = null; // child removed — invalidate dirent cache
     }
   }
 
@@ -412,18 +433,36 @@ export class OpfsFsSync implements FsSync {
 
   writeFileSync(path: string, data: Uint8Array): void {
     const normalized = normalizePath(path);
-    const parent = dirname(normalized);
+    // `normalized` (#10) — skip dirname's redundant normalize.
+    const parent = dirnameNormalized(normalized);
     const parentEntry = this.index.get(parent);
     if (!parentEntry || parentEntry.kind !== 'dir') {
       throw new VfsError('ENOENT', parent);
     }
-    // In-cache write (ADR-0072): copy so later mutations of the caller's
-    // buffer don't leak in. OPFS persistence flows asynchronously.
-    this.content.set(normalized, data.slice());
+    // In-cache write (ADR-0072): ONE defensive slice shared by the content
+    // cache and the async write-through (#3, perf audit 2026-06-05: 2N->N
+    // copies/write). This single entry-point slice is the SOLE barrier
+    // severing the caller buffer (and WASI fd_write's in-place reuse, fd.ts:88)
+    // from cached content — readFileBytesSync returns the cache by reference.
+    // NEVER cache `data` directly; merging the two slices is safe, dropping the
+    // copy is the regression (Q-2026-06-06-319 aliasing gate, verdict
+    // safe-to-proceed). The write-through consumer (OpfsVfs.writeFile) is
+    // read-only, so the two surfaces can share one copy.
+    // TODO(backlog: perf/opfs-writefilesync-shared-slice)
+    const copy = data.slice();
+    this.content.set(normalized, copy);
     const wasKnown = this.index.has(normalized);
     this.index.set(normalized, { kind: 'file', size: data.byteLength });
-    if (!wasKnown) this.attachChild(normalized);
-    this.enqueueWriteThrough(normalized, data.slice());
+    if (!wasKnown) {
+      this.attachChild(normalized); // attachChild invalidates the parent cache
+    } else {
+      // Already a known child: attachChild is skipped, but the child's kind can
+      // flip (e.g. dir->file) so the parent's dirent cache must still drop
+      // (perf audit 2026-06-05; kind-flip hazard).
+      const parentEntry = this.index.get(parent);
+      if (parentEntry?.kind === 'dir') parentEntry.sortedDirents = null;
+    }
+    this.enqueueWriteThrough(normalized, copy);
   }
 
   /**
@@ -475,7 +514,7 @@ export class OpfsFsSync implements FsSync {
     const enc = new TextEncoder();
     for (const [path, content] of Object.entries(files)) {
       const normalized = normalizePath(path);
-      const dir = dirname(normalized);
+      const dir = dirnameNormalized(normalized);
       if (dir !== '/' && !this.index.has(dir)) {
         this.mkdirSync(dir, { recursive: true });
       }
@@ -500,6 +539,18 @@ export class OpfsFsSync implements FsSync {
     return { isFile: true, isDirectory: false, size, mtime };
   }
 
+  statSyncOrNull(
+    path: string,
+  ): { isFile: boolean; isDirectory: boolean; size?: number; mtime?: number } | null {
+    // Non-throwing stat (ADR-0083): null on an absent warm-index entry, else
+    // the same statSync path (live-handle size + utimes-side-table mtime).
+    // One normalize; statSync re-normalizes the already-normalized arg cheaply
+    // via the #10 fast-path.
+    const norm = normalizePath(path);
+    if (!this.index.has(norm)) return null;
+    return this.statSync(norm);
+  }
+
   utimes(path: string, atimeMs: number, mtimeMs: number): void {
     const normalized = normalizePath(path);
     if (!this.index.has(normalized)) throw new VfsError('ENOENT', path);
@@ -518,6 +569,7 @@ export class OpfsFsSync implements FsSync {
     if (!entry) throw new VfsError('ENOENT', path);
     if (entry.kind !== 'dir') throw new VfsError('ENOTDIR', path);
     if (!entry.children) return [];
+    if (entry.sortedDirents != null) return entry.sortedDirents;
     const dirents: VfsDirent[] = [];
     for (const name of [...entry.children].sort()) {
       const childPath = normalized === '/' ? `/${name}` : `${normalized}/${name}`;
@@ -528,7 +580,11 @@ export class OpfsFsSync implements FsSync {
       const isDir = childEntry?.kind === 'dir';
       dirents.push({ name, isFile: !isDir, isDirectory: isDir });
     }
-    return dirents;
+    // Cache the sorted, kind-resolved list (perf audit 2026-06-05). Frozen so
+    // callers can't mutate the shared array.
+    const frozen = Object.freeze(dirents);
+    entry.sortedDirents = frozen;
+    return frozen;
   }
 
   /**
@@ -594,6 +650,7 @@ export class OpfsFsSync implements FsSync {
           for (const name of [...rootEntry.children]) {
             this.removeSubtree(`/${name}`);
           }
+          rootEntry.sortedDirents = null; // subtree removed — invalidate root cache
         }
         this.persistRmAsync('/', true);
         return;
@@ -612,5 +669,134 @@ export class OpfsFsSync implements FsSync {
     this.detachChild(normalized);
     this.removeSubtree(normalized);
     this.persistRmAsync(normalized, recursive);
+  }
+
+  copyFileSync(src: string, dst: string): void {
+    const s = normalizePath(src);
+    const d = normalizePath(dst);
+    const srcEntry = this.index.get(s);
+    if (!srcEntry) throw new VfsError('ENOENT', src);
+    if (srcEntry.kind === 'dir') throw new VfsError('EISDIR', src);
+    const dstEntry = this.index.get(d);
+    if (dstEntry && dstEntry.kind === 'dir') throw new VfsError('EISDIR', dst);
+    const parent = dirname(d);
+    const parentEntry = this.index.get(parent);
+    if (!parentEntry || parentEntry.kind !== 'dir') throw new VfsError('ENOENT', parent);
+    const bytes = (this.content.get(s) ?? new Uint8Array()).slice();
+    // writeFileSync updates content/index/attachChild + enqueues OPFS write-through.
+    this.writeFileSync(d, bytes);
+    // A copy is a new file → dst mtime = now (ADR-0090; OPFS mtime via side-table).
+    const now = Date.now();
+    this.times.set(d, { atime: now, mtime: now });
+  }
+
+  cpSync(src: string, dst: string, options: { recursive?: boolean } = {}): void {
+    const recursive = options.recursive ?? false;
+    const s = normalizePath(src);
+    const d = normalizePath(dst);
+    const srcEntry = this.index.get(s);
+    if (!srcEntry) throw new VfsError('ENOENT', src);
+    if (srcEntry.kind === 'file') {
+      this.copyFileSync(s, d);
+      return;
+    }
+    if (!recursive) throw new VfsError('EISDIR', src);
+    // Guard against copying a dir into its own subtree (`cp -r a a`, `cp -r a
+    // a/b`) — without it the recursion never terminates → stack overflow.
+    // Matches `renameSync`'s into-subtree EINVAL.
+    if (d === s || d.startsWith(`${s}/`)) throw new VfsError('EINVAL', src);
+    this.mkdirSync(d, { recursive: true });
+    // Fail-fast: a child failure propagates; entries copied before remain.
+    for (const name of [...(srcEntry.children ?? [])].sort()) {
+      this.cpSync(`${s}/${name}`, `${d}/${name}`, { recursive: true });
+    }
+  }
+
+  renameSync(src: string, dst: string): void {
+    const s = normalizePath(src);
+    const d = normalizePath(dst);
+    if (s === d) return;
+    if (s === '/') throw new VfsError('EINVAL', src);
+    const srcEntry = this.index.get(s);
+    if (!srcEntry) throw new VfsError('ENOENT', src);
+    if (srcEntry.kind === 'dir' && d.startsWith(`${s}/`)) throw new VfsError('EINVAL', src);
+    const dstParent = dirname(d);
+    const dstParentEntry = this.index.get(dstParent);
+    if (!dstParentEntry || dstParentEntry.kind !== 'dir') throw new VfsError('ENOENT', dstParent);
+    const dstEntry = this.index.get(d);
+    if (dstEntry) {
+      if (srcEntry.kind === 'file' && dstEntry.kind === 'dir') throw new VfsError('EISDIR', dst);
+      if (srcEntry.kind === 'dir' && dstEntry.kind === 'file') throw new VfsError('ENOTDIR', dst);
+      if (dstEntry.kind === 'dir' && dstEntry.children && dstEntry.children.size > 0) {
+        throw new VfsError('ENOTEMPTY', dst);
+      }
+      // File overwrite or empty-dir replace: drop the dst subtree from all maps.
+      this.detachChild(d);
+      this.removeSubtree(d);
+    }
+    // Snapshot the src subtree paths BEFORE mutating, then re-key index /
+    // content / times across each — preserving the entry objects so the
+    // `times` mtime survives (the ADR-0090 win). Open handles point at the
+    // OLD on-disk file (which the async persist removes), so close+drop them;
+    // a fresh handle opens lazily on next access.
+    const moved = [...this.index.keys()].filter((p) => p === s || p.startsWith(`${s}/`));
+    this.detachChild(s);
+    const fileWrites: Array<readonly [string, Uint8Array]> = [];
+    for (const oldP of moved) {
+      const newP = d + oldP.slice(s.length);
+      const entry = this.index.get(oldP);
+      if (entry) {
+        this.index.set(newP, entry);
+        this.index.delete(oldP);
+      }
+      const bytes = this.content.get(oldP);
+      if (bytes !== undefined) {
+        this.content.set(newP, bytes);
+        this.content.delete(oldP);
+        fileWrites.push([newP, bytes.slice()]);
+      }
+      const t = this.times.get(oldP);
+      if (t !== undefined) {
+        this.times.set(newP, t);
+        this.times.delete(oldP);
+      }
+      const h = this.handles.get(oldP);
+      if (h !== undefined) {
+        try {
+          h.close();
+        } catch {
+          // Closing a stale handle is best-effort.
+        }
+        this.handles.delete(oldP);
+      }
+    }
+    this.attachChild(d);
+    this.persistRenameAsync(s, fileWrites);
+  }
+
+  /**
+   * Best-effort async OPFS persist of a rename: recreate the moved files at
+   * their new paths from the captured bytes, then remove the old subtree.
+   * `FileSystemSyncAccessHandle` has no native rename; the SYNC view is
+   * already atomic (the in-memory re-key above), so on-disk lag is acceptable
+   * (ADR-0072/0083) and reconciles on the next `refreshIndex`. Tracked in
+   * `pending` so `flush()` drains it before a reload.
+   */
+  private persistRenameAsync(
+    srcRoot: string,
+    fileWrites: Array<readonly [string, Uint8Array]>,
+  ): void {
+    const surface = this.asyncSurface;
+    if (!surface) return;
+    const p = (async () => {
+      try {
+        for (const [newP, bytes] of fileWrites) await surface.writeFile(newP, bytes);
+        await surface.rm(srcRoot, { recursive: true });
+      } catch {
+        // Mismatch reconciles on the next refreshIndex (same posture as
+        // enqueueWriteThrough / persistRmAsync).
+      }
+    })();
+    this.trackPending(p);
   }
 }

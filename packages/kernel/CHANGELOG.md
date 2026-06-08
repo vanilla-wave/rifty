@@ -4,6 +4,40 @@
 
 ### Added
 
+- **ADR-0084 — SAB ring + SyncRpc v2 wire (perf wave 4).** Four mechanisms over the
+  sync-IPC stack, landed atomically with runtime-js (two-peer recompile):
+  - **#18 zero-copy view.** `SabRing.readRequest`/`consumeReply` return a live
+    `subarray` VIEW into the SAB instead of copying out (no per-read allocation).
+    New contract: the view aliases the SAB and is valid only until the next
+    same-slot write — decode synchronously (production callers do). The gate is
+    preserved verbatim (success: decode-then-flip-IDLE; error/version: flip-then-throw).
+  - **#17 waitAsync responder.** New public `SabRing.armRequest(timeout)`. The
+    `SyncRpcDispatcher` arms a per-ring `Atomics.waitAsync` on REQ_STATE (the
+    caller's `writeRequest` notify wakes it sub-ms) with generation-based
+    cancel-on-detach and re-arm-after-reply; a single global backstop timer
+    (50-100 ms) recovers missed notifies. Feature-detect → legacy
+    `setInterval(pollIntervalMs)` busy-poll when `Atomics.waitAsync` is absent.
+    **`pollIntervalMs` meaning changed** (observable public option): primary wake
+    is now the notify, so it is backstop-only (clamped 50-100 ms) in event-driven
+    mode; literal poll interval in fallback. `getActiveTimerCount()` keeps its 0/1
+    contract (single backstop timer).
+  - **#19 configurable payload capacity.** `WorkerSpawnSpec` + `SpawnWorkerSpec`
+    gain a public `payloadCapacity?: number`; the parent sizes the ring AND stamps
+    the spec from one value, the child attaches with it — explicit agreement, no
+    coincidence-of-default. `SabRing`'s size guard tightened `<`→EXACT so a desynced
+    capacity throws `RangeError` loudly instead of a wrong-slot read. Default 1 MiB
+    NOT lowered (deferred, OQ-323).
+  - **#23 SyncRpc v2 binary frame.** 1-byte frame discriminator (`0x00`=JSON,
+    `0x01`=BINARY) prefixes every body; new `encodeBinaryReply` + `FRAME_JSON`/
+    `FRAME_BINARY` exports; `decodeReply` branches on byte[0] (binary → `Uint8Array`
+    value, no TextDecoder/JSON). The dispatcher auto-emits a binary frame for a
+    `Uint8Array` handler value. Requests + errors stay JSON. `SYNC_RPC_PROTOCOL_VERSION`
+    bumped 1→2 (pre-authorised by ADR-0032; the EPROTOVERSION guard still fires
+    across the bump). Discriminator lives in the payload body, so the 20-byte SAB
+    header is unchanged — `sync-rpc-echo.js` updated to write/strip the discriminator;
+    `sab-ring-echo.js` (below the framing layer) unchanged. Per ADR-0084,
+    citing ADR-0011/0032/0016 + `docs/perf/js-runtime-perf-audit-2026-06-05.md`.
+
 - **ADR-0045 — Worker-process fork IPC (M6).** `WorkerProcessHandle` gains
   `send(message): boolean`, `disconnect(): void`, and emits `'message'` /
   `'disconnect'` events. `spawnKernelWorker` allocates a fourth
@@ -22,6 +56,10 @@
   hand-rolled `port.start()` / `port.onmessage` / push-null boilerplate
   from runtime-js (`wireWorkerStdio` dissolved into the kernel adapter —
   follow-ups doc item #3).
+
+### Fixed
+
+- **SyncRpc JSON-frame decode no longer feeds a SharedArrayBuffer view to `TextDecoder` (browser SAB path).** `decodeReply`/`decodeRequest` (`ipc/sync-rpc.ts`) called `TextDecoder.decode(body)` where `body` is a `subarray` VIEW into the ring's SAB (ADR-0084 #18 zero-copy). Browsers reject a shared-backed view (`TypeError: The provided ArrayBufferView value must not be shared`); Node is lax, so this passed every Node unit + conformance test yet threw the FIRST time it ran in a real cross-origin-isolated Worker — surfaced by the new `tests/e2e/execsync-sab.spec.ts` (guest `execSync` over real SAB + `Atomics.waitAsync` + v2 binary frame). Both decoders now copy out of the (possibly shared) view via `.slice()` before `TextDecoder.decode` (small JSON bodies — requests, `{ok,value|error}` / error replies); the binary frame body already copied. The v2 binary fast-path is byte-unchanged. Guard: `ipc/sync-rpc.test.ts` "JSON-frame decode over a SharedArrayBuffer view" (decodeReply value + error, decodeRequest) + the e2e (`hex === 'fffe00'`, which only the real byte-exact round-trip yields).
 
 ### Changed
 

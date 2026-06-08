@@ -108,16 +108,17 @@ When you hit a design fork during implementation, **decide, record it, and keep 
 1. Does it touch public API between packages? → **IRREVERSIBLE**
 2. Does it require a new external dependency? → **IRREVERSIBLE**
 3. Does it contradict an existing ADR? → **IRREVERSIBLE** (see "Reconsidering" below)
-4. Would reverting require >100 lines or >2 files changed? → **IRREVERSIBLE**
-5. Otherwise → **REVERSIBLE**
+4. Does it make a genuine design choice — live alternatives, an observable-behavior / Node-parity change, a new mechanism, or a contested policy/default? → **IRREVERSIBLE** (size alone — LOC or file count — does NOT trigger this; record decisions, not diffs)
+5. Otherwise → **REVERSIBLE** — and if it is also behavior-preserving and contract-stable, it needs no governance artifact at all, however large: record it in the affected package's `CHANGELOG.md` (cite the rationale doc, e.g. a perf audit, if one exists). Log a `docs/backlog/<area>/<slug>.md` item only when a reversible change embeds a provisional judgment call (e.g. a cache key / invalidation strategy).
 
 ### Actions by classification
 
-- **REVERSIBLE:**
+- **REVERSIBLE with a provisional judgment call** (a cache key, an invalidation strategy, a default someone may revisit):
   - Make a provisional decision
   - Add a backlog item `docs/backlog/<area>/<slug>.md` (frontmatter per `docs/backlog/TEMPLATE.md`)
   - Mark the code site with `// TODO(backlog: <area>/<slug>)`
   - **Continue working.**
+- **REVERSIBLE and behavior-preserving / contract-stable** (most refactors and perf work): no backlog entry — just a `CHANGELOG.md` line (cite the rationale doc if one exists). **Continue working.**
 
 - **IRREVERSIBLE:**
   - Make the decision — you have standing authority
@@ -146,6 +147,7 @@ Use a decision subagent when reconsidering an already-recorded decision; otherwi
 - Internal helper functions, private utilities
 - Documentation wording, code comments
 - Test descriptions (but not test logic — see Hard rules)
+- Behavior-preserving, contract-stable internal refactors and performance optimizations — regardless of size (CHANGELOG only)
 
 ## Hard rules
 

@@ -25,6 +25,17 @@ import { WebSocketServer, createHttpServer } from '@riftydev/net';
 import { type FSWatcher, watch } from '@riftydev/runtime-js/builtins/fs-watch';
 import { isAbsolute, joinPath, normalizePath, syncMirror } from '@riftydev/vfs';
 
+/**
+ * Pluggable HMR transport. Lets an embedder (e.g. the rifty playground) route
+ * change notifications over its own channel and inject a matching client.
+ */
+export interface HmrTransport {
+  /** Broadcast a JSON HMR payload to connected clients. */
+  broadcast(payload: string): void;
+  /** Client `<script>…</script>` injected into served HTML (replaces the built-in WS client). */
+  clientScript: string;
+}
+
 export interface DevServerOptions {
   /** VFS path to the project root (must contain `index.html`). */
   root: string;
@@ -32,6 +43,16 @@ export interface DevServerOptions {
   port: number;
   /** fs.watch poll interval (ms). Defaults to 100 ms in dev, dropped for tests. */
   watchInterval?: number;
+  /**
+   * Override the HMR transport. When provided, served HTML embeds
+   * `hmr.clientScript` instead of the built-in native-`WebSocket` client and
+   * file-change notifications also broadcast through `hmr.broadcast`. The
+   * playground passes its cross-realm `BroadcastChannel` bridge here so HMR
+   * reaches the preview iframe — a separate realm the in-process
+   * `WebSocketServer` can't reach (no real TCP, no SW WS upgrade). Omit for the
+   * built-in same-realm WS client.
+   */
+  hmr?: HmrTransport;
 }
 
 export interface DevServer {
@@ -79,6 +100,16 @@ export async function startDevServer(opts: DevServerOptions): Promise<DevServer>
 
   const wss = new WebSocketServer({ port: opts.port, path: HMR_PATH });
 
+  // HMR client injected into served HTML + the broadcast sink. With a custom
+  // `hmr` transport (the playground's cross-realm bridge) we inject its client
+  // and fan changes out to both the in-process WSS and that bridge; without it
+  // we keep the built-in same-realm WebSocket path.
+  const clientScript = opts.hmr?.clientScript ?? HMR_CLIENT_SCRIPT;
+  const broadcast = (payload: string): void => {
+    wss.broadcast(payload);
+    opts.hmr?.broadcast(payload);
+  };
+
   const http = createHttpServer((req, res) => {
     const url = new URL(req.url, 'http://x');
     const pathname = url.pathname;
@@ -88,10 +119,7 @@ export async function startDevServer(opts: DevServerOptions): Promise<DevServer>
         const bytes = syncMirror().readFileBytesSync(joinPath(root, 'index.html'));
         let html = decoder.decode(bytes);
         const idx = html.lastIndexOf('</body>');
-        html =
-          idx >= 0
-            ? html.slice(0, idx) + HMR_CLIENT_SCRIPT + html.slice(idx)
-            : html + HMR_CLIENT_SCRIPT;
+        html = idx >= 0 ? html.slice(0, idx) + clientScript + html.slice(idx) : html + clientScript;
         res.writeHead(200, { 'content-type': ctype('.html') });
         res.end(html);
       } catch {
@@ -124,7 +152,7 @@ export async function startDevServer(opts: DevServerOptions): Promise<DevServer>
         // Translate the disk path back to a server-relative URL.
         const fullPath = joinPath(t, filename);
         const rel = fullPath.slice(root.length) || '/';
-        wss.broadcast(JSON.stringify({ type: 'update', event, path: rel }));
+        broadcast(JSON.stringify({ type: 'update', event, path: rel }));
       });
       watchers.push(w);
     } catch {

@@ -25,6 +25,44 @@ describe('classifyKey — control bytes', () => {
   it('classifies ETX (\\x03) as Ctrl+C', () => {
     expect(classifyKey('\x03')).toEqual({ kind: 'ctrl-c' });
   });
+
+  it('classifies SOH (\\x01, Ctrl+A) as Home', () => {
+    expect(classifyKey('\x01')).toEqual({ kind: 'home' });
+  });
+
+  it('classifies ENQ (\\x05, Ctrl+E) as End', () => {
+    expect(classifyKey('\x05')).toEqual({ kind: 'end' });
+  });
+});
+
+describe('classifyKey — Home / End / Delete (CSI + SS3 sequences)', () => {
+  it('classifies ESC [ H as Home', () => {
+    expect(classifyKey('\x1b[H')).toEqual({ kind: 'home' });
+  });
+
+  it('classifies ESC [ 1 ~ as Home', () => {
+    expect(classifyKey('\x1b[1~')).toEqual({ kind: 'home' });
+  });
+
+  it('classifies ESC O H (SS3) as Home', () => {
+    expect(classifyKey('\x1bOH')).toEqual({ kind: 'home' });
+  });
+
+  it('classifies ESC [ F as End', () => {
+    expect(classifyKey('\x1b[F')).toEqual({ kind: 'end' });
+  });
+
+  it('classifies ESC [ 4 ~ as End', () => {
+    expect(classifyKey('\x1b[4~')).toEqual({ kind: 'end' });
+  });
+
+  it('classifies ESC O F (SS3) as End', () => {
+    expect(classifyKey('\x1bOF')).toEqual({ kind: 'end' });
+  });
+
+  it('classifies ESC [ 3 ~ as Delete (forward-delete)', () => {
+    expect(classifyKey('\x1b[3~')).toEqual({ kind: 'delete' });
+  });
 });
 
 describe('classifyKey — arrow keys (CSI sequences)', () => {

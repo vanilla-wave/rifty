@@ -22,14 +22,14 @@ const BACKLOG_DIR = join(ROOT, 'docs', 'backlog');
 const README = join(ADR_DIR, 'README.md');
 
 // Reserved ADR numbers: provisional labels not yet materialised as files.
-// Keep in sync with docs/adr/README.md "Numbering".
+// (None — the perf-plan's 0081-0093 reservations were all materialised as ADRs
+// 0082-0093 or retired (0081) in the M11/M12 merge.) Keep in sync with README "Numbering".
 const RESERVED = new Set();
-for (let n = 81; n <= 93; n++) RESERVED.add(String(n).padStart(4, '0'));
 
 // Retired process ADR numbers: process decisions moved out of ADRs into CLAUDE.md
 // (no longer recorded as ADRs). Immutable product ADRs still cite these; they resolve
 // to CLAUDE.md. Mirror docs/adr/README.md "Historical references".
-const RETIRED = new Set(['0008', '0022', '0024', '0033', '0063', '0064', '0094']);
+const RETIRED = new Set(['0008', '0022', '0024', '0033', '0063', '0064', '0081']);
 
 // opencode decisions.md draft labels (band 0052–0062): drafts cited in ADR bodies /
 // opencode backlog as "ADR-00NN" that never became a file of that number (0052/0053
@@ -42,12 +42,16 @@ const DRAFTS = new Set(['0056', '0057', '0058', '0059', '0060', '0061', '0062'])
 const REDIRECTS = [
   ['docs/opencode/', 'docs/backlog/opencode/reference/'],
   ['docs/compat/', 'docs/public/compat/'],
+  ['docs/perf/', 'docs/backlog/perf/reference/'],
+  ['docs/backlog/tests/', 'docs/backlog/toolchain-build/reference/'],
 ];
 
 // Single-file renames (mirror "Historical references").
 const FILE_REDIRECTS = {
   'docs/PUBLISHING.md': 'docs/public/publishing.md',
   'docs/hosting-netlify.md': 'docs/public/hosting-netlify.md',
+  'docs/opencode-rifty-feasibility-2026-05-30.md':
+    'docs/backlog/opencode/reference/feasibility-2026-05-30.md',
 };
 
 // Removed with no successor: acknowledged dead, resolve to git history (mirror
@@ -186,7 +190,11 @@ const DOC_PATH_RE = /docs\/[A-Za-z0-9._*/-]+/g;
 
 function adrRefResolves(num) {
   return (
-    onDisk.has(num) || removedNums.has(num) || RESERVED.has(num) || DRAFTS.has(num) || RETIRED.has(num)
+    onDisk.has(num) ||
+    removedNums.has(num) ||
+    RESERVED.has(num) ||
+    DRAFTS.has(num) ||
+    RETIRED.has(num)
   );
 }
 

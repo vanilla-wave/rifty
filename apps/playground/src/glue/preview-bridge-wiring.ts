@@ -10,7 +10,7 @@
  * port-binding state — so it stays a pure adapter between two package
  * boundaries (`@riftydev/service-worker` ↔ `@riftydev/net`).
  */
-import { dispatchToPort } from '@riftydev/net';
+import { type CrossRealmPortHandler, dispatchToPort } from '@riftydev/net';
 import {
   type SerializedRequest,
   type SerializedResponse,
@@ -24,17 +24,35 @@ import {
  * ADR-0017 phase 1 streaming: this handler passes `response.body` through
  * without buffering; `setupPreviewBridge` picks the carrier per-response via
  * `packSerializedResponse` (transferable stream, else buffered fallback).
+ *
+ * ADR-0086 fast-path: when the caller supplies the typed `bridge`
+ * ({@link CrossRealmPortHandler}, the real-Vite path), each request takes
+ * `bridge.dispatchStruct(...)` — skipping the page→worker `Request` rebuild +
+ * `arrayBuffer()` drain. Without a typed handle (the mock dev-server path,
+ * which registers a bare `PortHandler`) it falls back to
+ * `dispatchToPort(Request)`. One shared function, deliberately de-duplicated
+ * across both dev modes — do not fork.
  */
-export function mountPlaygroundPreviewBridge(): () => void {
+export function mountPlaygroundPreviewBridge(bridge?: CrossRealmPortHandler): () => void {
   return setupPreviewBridge(async (req: SerializedRequest): Promise<SerializedResponse> => {
-    const headers = new Headers(req.headers);
-    const init: RequestInit = { method: req.method, headers };
-    if (req.body && req.method !== 'GET' && req.method !== 'HEAD') {
-      const copy = new ArrayBuffer(req.body.byteLength);
-      new Uint8Array(copy).set(req.body);
-      init.body = copy;
+    let response: Response;
+    if (bridge) {
+      response = await bridge.dispatchStruct({
+        url: req.url,
+        method: req.method,
+        headers: req.headers,
+        body: req.body ?? null,
+      });
+    } else {
+      const headers = new Headers(req.headers);
+      const init: RequestInit = { method: req.method, headers };
+      if (req.body && req.method !== 'GET' && req.method !== 'HEAD') {
+        const copy = new ArrayBuffer(req.body.byteLength);
+        new Uint8Array(copy).set(req.body);
+        init.body = copy;
+      }
+      response = await dispatchToPort(req.port, new Request(req.url, init));
     }
-    const response = await dispatchToPort(req.port, new Request(req.url, init));
     return {
       status: response.status,
       statusText: response.statusText,

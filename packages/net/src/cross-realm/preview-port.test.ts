@@ -146,6 +146,109 @@ describe('cross-realm preview port — error paths', () => {
   });
 });
 
+// ─── ADR-0086: optional dispatchStruct fast-path ─────────────────────────────
+// The page-side bridge exposes an OPTIONAL `dispatchStruct({url,method,headers,
+// body})` that skips the page→worker Request rebuild + arrayBuffer() drain. It
+// must be byte-identical to the public `handler(Request)` path.
+
+describe('cross-realm preview port — ADR-0086 dispatchStruct fast-path', () => {
+  it('dispatchStruct is byte-identical to handler(Request) for a POST body', async () => {
+    const payload = new Uint8Array(4096);
+    for (let i = 0; i < payload.length; i++) payload[i] = i & 0xff;
+
+    cleanup.add(
+      serveCrossRealmPreview(5301, async (req) => {
+        const body = new Uint8Array(await req.arrayBuffer());
+        let sum = 0;
+        for (const b of body) sum = (sum + b) & 0xff;
+        return new Response(JSON.stringify({ length: body.length, checksum: sum }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5301);
+    cleanup.add(handler.dispose);
+
+    const response = await handler.dispatchStruct({
+      url: 'http://preview.local/echo',
+      method: 'POST',
+      headers: {},
+      body: payload,
+    });
+    expect(response.status).toBe(200);
+    const parsed = (await response.json()) as { length: number; checksum: number };
+    expect(parsed.length).toBe(4096);
+    let expectedSum = 0;
+    for (const b of payload) expectedSum = (expectedSum + b) & 0xff;
+    expect(parsed.checksum).toBe(expectedSum);
+  });
+
+  it('dispatchStruct GET round-trip (null body, no arrayBuffer drain)', async () => {
+    cleanup.add(
+      serveCrossRealmPreview(5302, async (req) => {
+        expect(req.method).toBe('GET');
+        expect(new URL(req.url).pathname).toBe('/hello');
+        return new Response('worker-was-here', { status: 200, headers: { 'X-From': 'worker' } });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5302);
+    cleanup.add(handler.dispose);
+
+    const response = await handler.dispatchStruct({
+      url: 'http://preview.local/hello',
+      method: 'GET',
+      headers: {},
+      body: null,
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('x-from')).toBe('worker');
+    expect(await response.text()).toBe('worker-was-here');
+  });
+
+  it('dispatchStruct after dispose → 502', async () => {
+    const handler = bridgeCrossRealmPreview(5303);
+    handler.dispose();
+    const response = await handler.dispatchStruct({
+      url: 'http://preview.local/',
+      method: 'GET',
+      headers: {},
+      body: null,
+    });
+    expect(response.status).toBe(502);
+    expect(await response.text()).toContain('disposed');
+  });
+
+  it('dispatchStruct drops a GET/HEAD body (parity with the Request path)', async () => {
+    let observedBody = -1;
+    cleanup.add(
+      rawWorker(5304, (req, ch) => {
+        observedBody = req.body === null ? 0 : req.body.byteLength;
+        ch.postMessage({
+          type: 'reply',
+          v: '2',
+          requestId: req.requestId,
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          body: null,
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5304, { timeoutMs: 500 });
+    cleanup.add(handler.dispose);
+
+    const response = await handler.dispatchStruct({
+      url: 'http://preview.local/',
+      method: 'GET',
+      headers: {},
+      body: new Uint8Array([1, 2, 3]),
+    });
+    expect(response.status).toBe(200);
+    expect(observedBody).toBe(0); // GET body dropped — frame.body === null
+  });
+});
+
 // ─── ADR-0048: streaming wire-frame ──────────────────────────────────────────
 // A "raw worker" posts frames directly so tests can drive exact wire sequences
 // (version mismatch, seq gaps, idle timing) the real `serveCrossRealmPreview`

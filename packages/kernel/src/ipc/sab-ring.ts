@@ -148,9 +148,12 @@ export class SabRing {
 
   private constructor(sab: SharedArrayBuffer, payloadCapacity: number, expectedVersion: number) {
     const expected = SAB_RING_HEADER_BYTES + payloadCapacity * 2;
-    if (sab.byteLength < expected) {
+    // Exact match (ADR-0084 #19): the parent allocates exactly HEADER + 2×C, so
+    // a capacity that disagrees with the buffer size means the two peers picked
+    // different values — reject loudly rather than read the wrong REP/REQ slot.
+    if (sab.byteLength !== expected) {
       throw new RangeError(
-        `SabRing: SharedArrayBuffer is ${sab.byteLength} bytes; expected at least ${expected}`,
+        `SabRing: SharedArrayBuffer is ${sab.byteLength} bytes; capacity ${payloadCapacity} requires exactly ${expected} (peers disagree on payloadCapacity)`,
       );
     }
     this.i32 = new Int32Array(sab, 0, SAB_RING_HEADER_BYTES >> 2);
@@ -232,6 +235,16 @@ export class SabRing {
     return this.consumeReply();
   }
 
+  /** Responder-side arm on REQ_STATE (ADR-0084 #17). Mirror of
+   * {@link waitReplyAsync} but on the request slot: resolves when the caller
+   * flips REQ_STATE to STATE_READY and fires {@link Atomics.notify}. Returns
+   * the raw `{async, value}` so the dispatcher can branch on the synchronous
+   * `'not-equal'` fast path (a request already landed before arming) itself —
+   * `i32`/REQ_STATE are module-private, so it can't probe them inline. */
+  armRequest(timeoutMs: number): WaitAsyncResult {
+    return atomicsWaitAsync(this.i32, REQ_STATE_INDEX, STATE_IDLE, timeoutMs);
+  }
+
   private consumeReply(): Uint8Array {
     // Snapshot VERSION first, then clear state; the throw must not wedge the ring (ADR-0032).
     const version = Atomics.load(this.i32, VERSION_INDEX);
@@ -244,15 +257,17 @@ export class SabRing {
     if (len < 0 || len > this.payloadCapacity) {
       throw new Error(`SabRing: corrupt reply length ${len} (capacity ${this.payloadCapacity})`);
     }
-    const out = new Uint8Array(len);
-    out.set(this.bytes.subarray(this.repPayloadOffset, this.repPayloadOffset + len));
-    return out;
+    // ADR-0084 #18: zero-copy live VIEW into the reply slot — no copy-out. State
+    // is already flipped to IDLE above, so the consumer MUST decode synchronously
+    // before issuing the next writeReply; production callers do (sync-client.ts).
+    return this.bytes.subarray(this.repPayloadOffset, this.repPayloadOffset + len);
   }
 
-  /** Responder-side: non-blocking. Returns the request payload bytes (a
-   * fresh copy) when pending, or `null`. Clears REQ_STATE on success.
-   * Throws {@link SyncRpcProtocolMismatchError} on version mismatch —
-   * recoverable: state is cleared, the responder should reply via
+  /** Responder-side: non-blocking. Returns a zero-copy live VIEW of the
+   * request payload bytes (ADR-0084 #18 — valid only until the next slot
+   * write; decode synchronously) when pending, or `null`. Clears REQ_STATE
+   * on success. Throws {@link SyncRpcProtocolMismatchError} on version
+   * mismatch — recoverable: state is cleared, the responder should reply via
    * {@link writeReplyWithVersion} echoing the caller's version (ADR-0032). */
   readRequest(): Uint8Array | null {
     if (Atomics.load(this.i32, REQ_STATE_INDEX) !== STATE_READY) return null;
@@ -267,9 +282,8 @@ export class SabRing {
     if (len < 0 || len > this.payloadCapacity) {
       throw new Error(`SabRing: corrupt request length ${len} (capacity ${this.payloadCapacity})`);
     }
-    const out = new Uint8Array(len);
-    out.set(this.bytes.subarray(this.reqPayloadOffset, this.reqPayloadOffset + len));
-    return out;
+    // ADR-0084 #18: zero-copy live VIEW into the request slot (decode now).
+    return this.bytes.subarray(this.reqPayloadOffset, this.reqPayloadOffset + len);
   }
 
   /** Responder-side: write reply bytes, stamp VERSION with

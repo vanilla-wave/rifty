@@ -21,6 +21,9 @@ export type KeyEvent =
   | { readonly kind: 'arrow-down' }
   | { readonly kind: 'arrow-right' }
   | { readonly kind: 'arrow-left' }
+  | { readonly kind: 'home' }
+  | { readonly kind: 'end' }
+  | { readonly kind: 'delete' }
   | { readonly kind: 'ctrl-c' }
   | { readonly kind: 'printable'; readonly text: string }
   | { readonly kind: 'ignored'; readonly reason: string };
@@ -43,6 +46,8 @@ export function classifyKey(data: string): KeyEvent {
   if (data === '\x08') return { kind: 'backspace' };
   if (data === '\t') return { kind: 'tab' };
   if (data === '\x03') return { kind: 'ctrl-c' };
+  if (data === '\x01') return { kind: 'home' }; // Ctrl+A → line start
+  if (data === '\x05') return { kind: 'end' }; // Ctrl+E → line end
 
   // xterm.js delivers each CSI as one chunk per key press, so match the
   // full sequence — not just the trailing letter.
@@ -50,6 +55,13 @@ export function classifyKey(data: string): KeyEvent {
   if (data === '\x1b[B') return { kind: 'arrow-down' };
   if (data === '\x1b[C') return { kind: 'arrow-right' };
   if (data === '\x1b[D') return { kind: 'arrow-left' };
+
+  // Home: CSI H, CSI 1 ~, and the SS3 form (`\x1bOH`) some terminals send
+  // in application-cursor mode. End: CSI F, CSI 4 ~, SS3 `\x1bOF`.
+  if (data === '\x1b[H' || data === '\x1b[1~' || data === '\x1bOH') return { kind: 'home' };
+  if (data === '\x1b[F' || data === '\x1b[4~' || data === '\x1bOF') return { kind: 'end' };
+  // Delete (forward-delete): CSI 3 ~.
+  if (data === '\x1b[3~') return { kind: 'delete' };
 
   // Standalone LF (some terminals send `\n` instead of `\r` for Enter) is
   // treated like Enter — Node's readline does the same.

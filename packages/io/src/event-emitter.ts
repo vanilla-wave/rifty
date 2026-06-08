@@ -145,7 +145,16 @@ export class EventEmitter {
       }
       return false;
     }
-    // Snapshot — listeners added during emit don't fire for this event.
+    if (arr.length === 1) {
+      // Single listener: read into a local BEFORE invoking, so a once-wrapper /
+      // removeListener that mutates `arr` during its own call can't perturb the
+      // (already-captured) entry — equivalent to a 1-element slice, no alloc.
+      const only = arr[0];
+      if (only) only.apply(this, args);
+      return true;
+    }
+    // len>1: KEEP the slice() snapshot so listeners added/removed during emit
+    // don't perturb the in-flight iteration (Node semantics).
     const snapshot = arr.slice();
     for (const l of snapshot) l.apply(this, args);
     return true;
