@@ -61,7 +61,7 @@ On the live URL:
 
 The in-page **live preview** (Dev server / Real Vite presets) shows
 `unavailable`: the SW aborts sub-frame preview navigations under cross-origin
-isolation — pre-existing, tracked in `docs/backlog/service-worker/preview-subframe-nav-owner-routing.md` (Q-2026-06-03-308).
+isolation — pre-existing, tracked in `docs/backlog/service-worker/preview-subframe-nav-owner-routing.md`.
 The four REPL presets work fully; a blank preview is not a deploy failure.
 
 ## Other hosts

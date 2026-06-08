@@ -2,10 +2,10 @@
 area: perf
 subsystem: runtime-js
 status: active
-title: Q-2026-06-06-321 — resolver-internal resolution cache (key, full-clear on invalidate, never cache not-found)
+title: resolver-internal resolution cache (key, full-clear on invalidate, never cache not-found)
 created: 2026-06-08
 why: no resolution cache — react from 200 files = 200 node_modules walks + pkg-json parses; invalidation is the whole risk; the backlog item is this file
-sources: [perf-audit #15, adr-plan C/Q-2026-06-06-321, ADR-0004 (not contradicted)]
+sources: [perf-audit #15, adr-plan C, ADR-0004 (not contradicted)]
 ---
 ## Context
 resolver.ts: no memo. Reversible memo of resolveSpecifierToFile (CPU not I/O — VFS is Map-backed). Does NOT contradict ADR-0004 (binds algorithm, not caching). Invalidation is the whole risk.

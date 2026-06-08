@@ -4,7 +4,7 @@ status: parked
 title: fd_filestat_set_times / path_filestat_set_times — atime/mtime mutation (E_NOSYS)
 created: 2026-06-08
 why: both times-set syscalls return E_NOSYS; FsSync.utimes now exists (ADR-0029) so wiring is feasible, but no verified WASI guest need yet
-sources: [docs/compat/wasi.md, Q-2026-05-25-touch-utimes (→ADR-0029)]
+sources: [docs/public/compat/wasi.md, Q-2026-05-25-touch-utimes (→ADR-0029)]
 ---
 ## Context
 `fd_filestat_set_times` and `path_filestat_set_times` → `E_NOSYS` in `packages/runtime-wasi/src/syscalls/{fd,path}.ts`. atime/mtime mutation pending. Note: the sync VFS gained `FsSync.utimes` via ADR-0029 (touch/`fs.utimesSync` route through it; OPFS uses an in-memory mtime side-table), so the host primitive these syscalls need now exists — the WASI bridge to it is just not wired.

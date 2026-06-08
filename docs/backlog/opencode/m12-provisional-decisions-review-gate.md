@@ -4,7 +4,7 @@ status: active
 title: End-of-M12 review of the 19 reversible opencode provisional decisions (Q-2026-05-30-101..-119)
 created: 2026-06-08
 why: 19 REVERSIBLE provisional decisions (now in docs/backlog/) each carry "Needs human review by: end of M12" + a code marker; the review gate is unresolved
-sources: [docs/opencode/decisions.md §Section B, Q-2026-05-30-101..-119 (now docs/backlog/opencode/* items), audit-digest]
+sources: [docs/backlog/opencode/reference/decisions.md §Section B, Q-2026-05-30-101..-119 (now docs/backlog/opencode/* items), audit-digest]
 ---
 ## Context
 decisions.md Section B is the REVERSIBLE provisional-decision block for the opencode facade, since migrated into docs/backlog/: Q-2026-05-30-101 … -119 (renumbered globally from -101 to dodge the landed -001/ADR-0051). Each carries a `TODO(backlog: opencode/…)` code marker and "Needs human review by: end of milestone M12". These are the per-decision review obligations behind the technical items already split out: 101 (vendor/facade-manifest — see m12-vendor-opencode-tree), 102/103 (sqlite throw-stub registration + bun condition order — db-pty + module-resolution-conditions-bun), 104/105/106 (esbuild loader/cache/workspace — runtime-js), 107/108/109 (listen overload, drain, pipe-sink — net), 110/111/112/114/115/116 (boot harness + LLM env — headless-boot + phase3), 113 (SSE chunk boundary — v3-sse-frame-bump), 117 (boundary doc placement — tool-ceiling-table), 118/119 (vfsGrep marker + spawn-ceiling test — ripgrep-wasm-grep-tool + spawn-ceiling-end-to-end).

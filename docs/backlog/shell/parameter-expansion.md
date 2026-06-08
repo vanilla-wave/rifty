@@ -4,7 +4,7 @@ status: parked
 title: Shell parameter expansion (`${VAR:-default}`, `${#VAR}`, `${VAR%suf}` …)
 created: 2026-06-08
 why: only plain `${NAME}` supported; advanced POSIX forms throw from tokenizer
-sources: [docs/compat/m10-tooling.md, m10-tooling status row]
+sources: []
 ---
 ## Context
 m10-tooling ❌. Tokenizer supports `$VAR` / `${NAME}` only; any `${…}` that isn't a bare name throws `shell.tokenize: unsupported variable expansion form: ${…} — only ${NAME} is supported` (tokenize.ts:50). Loud, not silent. Missing: `${VAR:-default}` / `${VAR:=}` / `${VAR:?}` / `${#VAR}` (length) / `${VAR%suf}` `${VAR#pre}` (trim) / `${VAR/…/…}` (substitute).

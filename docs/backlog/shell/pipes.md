@@ -4,7 +4,7 @@ status: parked
 title: Shell pipes (`a | b`)
 created: 2026-06-08
 why: `|` tokenized but dispatcher throws — no inter-command stdout→stdin wiring
-sources: [docs/compat/m10-tooling.md, m10-tooling status row]
+sources: []
 ---
 ## Context
 m10-tooling ❌ Pending. Tokenizer emits `|` as a standalone token (tokenize.ts) so it doesn't bury inside an arg; runSegment then throws `NotImplementedError('shell.pipe', 'pipe operator not yet supported — M12 work item')` (shell.ts:151). No stdout→stdin plumbing between built-ins/commands yet.

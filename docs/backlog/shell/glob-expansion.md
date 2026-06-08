@@ -4,7 +4,7 @@ status: parked
 title: Shell glob expansion (`*`, `?`, `[abc]`)
 created: 2026-06-08
 why: not parsed — wildcards pass through literally, no pathname expansion
-sources: [docs/compat/m10-tooling.md, m10-tooling status row]
+sources: []
 ---
 ## Context
 m10-tooling ❌. tokenize.ts deliberately does NOT expand `*` / `?` / `[abc]` — listed in the tokenizer's "Deliberately NOT supported" header. Wildcards reach the command as literal argument characters; no VFS directory matching.

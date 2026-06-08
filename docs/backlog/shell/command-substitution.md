@@ -4,7 +4,7 @@ status: parked
 title: Shell command substitution `$(…)` / `` `…` ``
 created: 2026-06-08
 why: not parsed — tokenizer emits the literal characters
-sources: [docs/compat/m10-tooling.md, m10-tooling status row]
+sources: []
 ---
 ## Context
 m10-tooling ❌. tokenize.ts deliberately does NOT support `$(…)` / `` `…` `` / `$((…))` / heredocs — they pass through as literal characters. No nested-command evaluation. Listed in tokenizer's "Deliberately NOT supported" header.

@@ -4,7 +4,7 @@ status: parked
 title: browsers.md cross-browser capability/compat matrix (first cross-browser CI run)
 created: 2026-06-08
 why: docs/public/compat/README.md lists browsers.md as "coming with first cross-browser CI run"; the matrix and the run that generates it are both unfinished
-sources: [docs/compat/README.md, A-6, A6 (backlog-distribution-and-ide), D-006, ADR-0007]
+sources: [docs/public/compat/README.md, A-6, A6 (backlog-distribution-and-ide), D-006, ADR-0007]
 ---
 ## Context
 `docs/public/compat/README.md` indexes the compat matrices and notes `(browsers.md — coming with first cross-browser CI run)`. D-006 / ADR-0007: Chrome-first, best-effort Firefox/WebKit; all-3 Playwright infra exists from M0, cross-browser CI on a weekly cron only. The capability/browser support matrix consumers need (which features work per engine — e.g. transferable streams gating the SSE fast path, COI/SAB availability) does not yet exist; the cron run that would generate it is the unfinished prerequisite. Duplicated ask in the distribution backlog as A6.

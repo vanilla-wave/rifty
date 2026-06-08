@@ -62,7 +62,6 @@ Two hops carry that body in rifty, and they differ sharply:
 - **Alternatives:** Align chunk boundaries to SSE event boundaries (`\n\n`) — unnecessary coupling of a byte transport to a text protocol; rejected.
 - **Trade-offs:** Byte-faithful framing is simplest and correct; the only risk is a downstream consumer that wrongly parses per-chunk — a consumer bug, not a transport one.
 - **Reversibility justification:** Reversible: a comment + a consumer contract note; no API change, <100 lines, no dep, no ADR conflict.
-- **Q-id:** Q-2026-05-30-070
 
 ## Interface contract
 
@@ -150,7 +149,7 @@ No test is modified to make code pass; v2 buffered tests stay green and a new v3
    - **Files:** `packages/net/src/cross-realm/preview-port.ts`, `packages/net/src/cross-realm/preview-port.test.ts`
 
 7. **T7 — BLOCKED ON ADR #2. Version negotiation across the v3 bump.** [conformance]
-   A v3 page against a v2 worker still works via the buffered `reply` fast path; a v2 page against a v3 worker negotiates the buffered fallback or 503s per the existing mismatch contract (preview-port.ts:360-368). Mirror existing SW_FRAME_VERSION mismatch tests. Keep byte-faithful MAX_CHUNK_BYTES splitting and add the Q-2026-05-30-070 TODO(ADR): one SSE event MAY span multiple 64KiB chunks, so the consumer must not treat a chunk boundary as an event boundary.
+   A v3 page against a v2 worker still works via the buffered `reply` fast path; a v2 page against a v3 worker negotiates the buffered fallback or 503s per the existing mismatch contract (preview-port.ts:360-368). Mirror existing SW_FRAME_VERSION mismatch tests. Keep byte-faithful MAX_CHUNK_BYTES splitting and add the TODO(ADR): one SSE event MAY span multiple 64KiB chunks, so the consumer must not treat a chunk boundary as an event boundary.
    - **Failing test first:** preview-port.test.ts (v3 suite) add 'negotiation: v3 page <-> v2 worker buffers; v2 frame against v3 page -> 503': (a) rawWorker replying buffered `reply` (no v or `v='2'`) against a v3 bridge resolves a correct buffered Response; (b) rawWorker posts reply-stream-start with `v='2'` to a v3 page → 503 + `console.error(expected:'3', got:'2')`. Plus 'an SSE event split across two 64KiB chunks reassembles into one event for a byte-fed consumer'. FAILS until v3 negotiation + boundary note exist.
    - **Files:** `packages/net/src/cross-realm/preview-port.ts`, `packages/net/src/cross-realm/preview-port.test.ts`, `OPEN_QUESTIONS.md`
 
@@ -229,4 +228,4 @@ interface StreamAccumulator {            // v3 replaces buffered accumulator
 
 2. ADR-00NN "PREVIEW_PORT_FRAME_VERSION 3 — incremental never-ending SSE over the page↔Worker bridge; idle-timer re-spec" — bumps a versioned wire contract governed by ADR-0048/ADR-0040 and edits >100 lines across page+worker paths (rules 3, 4). T5–T7 are HARD-BLOCKED: do not write or ship the v3 bump until this ADR ratifies. They are specified so the failing tests exist, but must not be committed pre-ratification (CLAUDE.md: IRREVERSIBLE decisions must not be invented).
 
-**Net:** T1–T4 proceed now (merge-gated on ADR #1). T5–T7 fully blocked on ADR #2. Q-2026-05-30-070 (chunk-vs-event-boundary note) is REVERSIBLE — log + TODO(ADR), no gate.
+**Net:** T1–T4 proceed now (merge-gated on ADR #1). T5–T7 fully blocked on ADR #2. The chunk-vs-event-boundary note is REVERSIBLE — log + TODO(ADR), no gate.

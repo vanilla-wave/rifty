@@ -4,7 +4,7 @@ status: parked
 title: Shell input redirect (`cmd < file`)
 created: 2026-06-08
 why: `<` tokenized but throws — no stdin-from-file wiring; explicit M12 item
-sources: [docs/compat/m10-tooling.md, m10-tooling status row]
+sources: []
 ---
 ## Context
 m10-tooling ❌. Tokenizer emits `<` as a standalone token; runSegment throws `NotImplementedError('shell.input-redirect', 'use bash via wasi for < input redirect — M12 work item')` (shell.ts:144). Loud, not silent. Workaround today: run bash via WASI.

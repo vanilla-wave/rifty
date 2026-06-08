@@ -4,7 +4,7 @@ status: parked
 title: Remaining E_NOSYS preview1 syscalls (fd_allocate, fd_pread/pwrite, fd_fdstat_set_rights, fd_filestat_set_size, poll_oneoff, proc_raise, sock_*)
 created: 2026-06-08
 why: a band of preview1 syscalls are present-in-link-table but E_NOSYS; each is either platform-impossible or unneeded by current toolchain guests — documented-honest non-implementations
-sources: [docs/compat/wasi.md]
+sources: [docs/public/compat/wasi.md]
 ---
 ## Context
 Beyond the times-set (see filestat-set-times) and symlink (see vfs-symlinks) gaps, these return honest `E_NOSYS` in `packages/runtime-wasi/src/syscalls/`:

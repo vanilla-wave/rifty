@@ -4,7 +4,7 @@ status: parked
 title: EPIC D — framework bindings + atomic component kit (D1-D5)
 created: 2026-06-08
 why: drop-in per-framework atoms (<RiftyIDE/>, react/vue bindings) over the workbench — deferred, depends-on EPIC C
-sources: [DD-3, DD-4, EPIC D, docs/backlog-distribution-and-ide.md]
+sources: [DD-3, DD-4, EPIC D]
 ---
 ## Context
 Compound components auto-wired via a context provider — drop-in atoms, consumer owns layout/styling, no manual plumbing. `<RiftyIDE/>` = default layout over the atoms. L3, depends-on EPIC C (the workbench controllers it binds to).

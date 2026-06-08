@@ -51,7 +51,7 @@ Incidental shims: `Heap.start()` (v8/process memory), `process.env`/`argv`, `nod
 - **P2 — build the server layer headlessly.** `Server.listen(opts)` with mDNS disabled; confirm the ~40 default layers build (drop/stub `ptyConnectApi`). Resolves unknown #1.
 - **P3 — first HTTP request.** From a rifty page, `fetch` a trivial route (version / instance status) through the SW bridge → assert 200 JSON.
 - **P4 — meaningful flow.** Session create + an LLM message round-trip (provider via `fetch`; storage JSON-over-VFS; no tools). Proves a real slice.
-- **P5 (ceiling) — one tool.** A JS/WASM read/grep over the VFS marks the tool-execution boundary; shell/git/PTY documented out of scope (process-spawn). Authoritative FEASIBLE-vs-IMPOSSIBLE tool table lives in [`docs/compat/opencode-tool-ceiling.md`](compat/opencode-tool-ceiling.md) (compat source-of-truth): ✅ read substitutes (`fs.readFileSync`/`readdirSync`, pure-JS `vfsGrep`, stat) vs ❌ process-spawn tools (bash, native git, ripgrep binary, PTY). ripgrep-WASM / isomorphic-git deferred behind explicit ADR ratification.
+- **P5 (ceiling) — one tool.** A JS/WASM read/grep over the VFS marks the tool-execution boundary; shell/git/PTY documented out of scope (process-spawn). Authoritative FEASIBLE-vs-IMPOSSIBLE tool table (compat source-of-truth): ✅ read substitutes (`fs.readFileSync`/`readdirSync`, pure-JS `vfsGrep`, stat) vs ❌ process-spawn tools (bash, native git, ripgrep binary, PTY). ripgrep-WASM / isomorphic-git deferred behind explicit ADR ratification.
 
 ## "What to build" checklist (input for a design session — only "what", not "how")
 

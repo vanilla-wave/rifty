@@ -4,7 +4,7 @@ status: active
 title: ADR-0054 draft — per-load module resolution conditions (opt-in 'bun')
 created: 2026-06-08
 why: undecided draft — overlay (C) vs a programmatic conditions field (A); not ratified
-sources: [docs/opencode/decisions.md ADR-0054 draft, ADR-0004, Q-2026-05-30-103, audit-digest]
+sources: [docs/backlog/opencode/reference/decisions.md ADR-0054 draft, ADR-0004, Q-2026-05-30-103, audit-digest]
 ---
 ## Context
 opencode's `#db`/`#pty` `imports` maps carry a `bun` branch; rifty's `CONDITIONS = ['node','default','import','require']` has no `bun`, so `#db` lands on the `node` branch (`node:sqlite`). De-risk: both branches hit an unregistered builtin regardless, so adding `bun` alone unblocks nothing — it only chooses WHICH specifier the SQLite shim intercepts. Note: NOT the on-disk ratified ADR-0054 (that one is `effect-consumes-node:http`); this is the decisions.md DRAFT numbering for the conditions decision.

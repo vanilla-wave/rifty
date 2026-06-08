@@ -4,7 +4,7 @@ status: active
 title: EPIC B follow-ons — createSandbox facade cannot hide bundler-specific bits
 created: 2026-06-08
 why: B1-B3 shipped (ADR-0071); the honest limit is that createSandbox can't hide worker URLs / sw.js build / WASM asset serving — those leak to the consumer
-sources: [ADR-0071, DD-1, DD-2, EPIC B, docs/backlog-distribution-and-ide.md]
+sources: [ADR-0071, DD-1, DD-2, EPIC B]
 ---
 ## Context
 Umbrella `@riftydev/sdk` is the front door (one `npm i` → all parts). EPIC B landed (ADR-0071): B1 subpath re-exports (`@riftydev/sdk/{vfs,runtime,net,…}`), B2 `createSandbox(options, deps?)` framework-free boot facade (probe capabilities → opt. assert COI → bring up VFS OPFS/memory → opt. register preview SW → spawnRuntime), B3 `checkCapabilities()` wrapping `detectCapabilities`.

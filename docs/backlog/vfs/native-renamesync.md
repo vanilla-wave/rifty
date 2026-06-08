@@ -4,7 +4,7 @@ status: parked
 title: Native renameSync on the sync VFS mirror (replace copyTree+rm)
 created: 2026-06-08
 why: FsSync has no renameSync; directory rename copies subtrees via copyTree+rmSync instead of moving in place
-sources: [Q-2026-06-04-313, ADR-0075]
+sources: [ADR-0075]
 code: [apps/playground/src/glue/fs-ops.ts:73]
 ---
 ## Context
@@ -14,4 +14,4 @@ code: [apps/playground/src/glue/fs-ops.ts:73]
 Provisional (shipped): copyTree+rm. Next: add a native `renameSync` to the `FsSync`/VFS surface (in-place move) and route `renamePath` to it. Parked — promote only if large-tree rename perf bites (gate: no measured perf need yet).
 
 ## Reversibility
-copyTree+rm path REVERSIBLE (logged Q-2026-06-04-313). Adding `renameSync` to `FsSync` is a lower-layer cross-package API change → IRREVERSIBLE; needs its own ADR when the perf gate fires.
+copyTree+rm path REVERSIBLE. Adding `renameSync` to `FsSync` is a lower-layer cross-package API change → IRREVERSIBLE; needs its own ADR when the perf gate fires.

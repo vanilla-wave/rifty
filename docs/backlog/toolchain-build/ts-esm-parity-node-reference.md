@@ -4,7 +4,7 @@ status: active
 title: ts-esm parity always runs Node side through full tsx transform (vs native strip-only)
 created: 2026-06-08
 why: parity harness uses tsx full-transform so enum/param-properties lower apples-to-apples; no longer exercises Node's native strip-only path — provisional, awaiting review
-sources: [Q-2026-05-31-201, ADR-0052, TASKS M12]
+sources: [ADR-0052, TASKS M12]
 code: [tools/node-parity-runner/src/run-in-node.ts:81, tools/node-parity-runner/src/types.ts:38]
 ---
 ## Context

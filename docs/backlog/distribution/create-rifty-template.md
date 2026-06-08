@@ -4,7 +4,7 @@ status: parked
 title: EPIC E — create-rifty starter template (E1-E3)
 created: 2026-06-08
 why: host config that CANNOT be packaged into a library — COOP/COEP headers, module-worker config, sw.js build, WASM copy, worker URLs — only templated; this is exactly the bundler-bit boundary the SDK facade can't hide
-sources: [EPIC E, ADR-0071 (B2 honest limit), docs/backlog-distribution-and-ide.md]
+sources: [EPIC E, ADR-0071 (B2 honest limit)]
 ---
 ## Context
 The un-packageable host wiring. createSandbox (EPIC B/B2) explicitly cannot hide worker URLs, `sw.js` build, WASM asset serving — those land here as a scaffold. depends-on EPIC B (+ EPIC D for the UI shell). "Hosted IDE from a template" sits at the far end of the ready-IDE spectrum (B+A embeddable → +C+D drop-in `<RiftyIDE/>` → +E hosted).

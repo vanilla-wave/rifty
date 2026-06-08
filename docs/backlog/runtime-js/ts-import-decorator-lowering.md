@@ -4,7 +4,7 @@ status: parked
 title: TS-on-import decorator lowering (esbuild flag vs acorn plugin vs gap)
 created: 2026-06-08
 why: esbuild leaves stage-3 @decorator un-lowered and the post-strip acorn parse rejects it; left as a documented gap
-sources: [Q-2026-05-31-304, compat/modules.md]
+sources: [docs/public/compat/modules.md]
 ---
 ## Context
 The `transformSource` esbuild WASI hook (`--loader=ts`, no tsconfig) erases/lowers `import type`/`const enum`/`interface`/`enum`/`satisfies` identically to the Node-side `tsx` reference (parity case `modules/ts-effect-syntax-cross-file`). Decorators are the exception: esbuild leaves stage-3 `@decorator` UN-lowered (passthrough) and rifty's post-strip acorn parse (`ecmaVersion:'latest'`, no decorators plugin) throws SyntaxError — while `tsx` fully lowers them. opencode's vendored source uses NO decorators (grep-verified), so not a boot blocker — a real pipeline asymmetry. NOTE block in the case file + docs/public/compat/modules.md Known-limitations; compat row is ⚠️.

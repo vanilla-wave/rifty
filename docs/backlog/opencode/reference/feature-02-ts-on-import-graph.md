@@ -50,7 +50,6 @@ This is the P0 gate (module-graph load): without it the opencode `.ts` graph nev
 - **Alternatives:** Read each package's `tsconfig.json` `jsxImportSource`/jsx mode (more faithful, but opencode's facade serve path has no `.tsx` per the pruned dep list — TUI/@opentui pruned — so JSX is dead weight in P0); or default `jsx:'transform'` (classic) — wrong for automatic-runtime code.
 - **Trade-offs:** Extension-only selection is simple and covers the entire (JSX-free) facade path. Risk: a kept dep shipping `.tsx` expecting a specific `jsxImportSource` would get the wrong runtime — acceptable for P0; revisit if a kept package brings JSX.
 - **Reversibility:** Pure call-site logic (extension→loader map, one jsx default), no public API, no dep, <20 lines, one file. Rule 5.
-- **Open question:** Q-2026-05-30-201
 
 ### Decision 4 — Cache transformed-source results, keyed how?
 
@@ -59,7 +58,6 @@ This is the P0 gate (module-graph load): without it the opencode `.ts` graph nev
 - **Alternatives:** No cache (re-transform every `executeEsm`) — simpler but the opencode graph is large and each transform is a full WASI process spawn; measurable. Content-hash key — more correct under live edits, unnecessary in P0 where installed sources don't mutate; id-keyed cache already invalidates via the registry hook.
 - **Trade-offs:** Id-keyed cache is fast and integrates with existing invalidate semantics. Risk under future HMR/editor edits: an in-place edit needs explicit `invalidate(id)` to drop the stale strip — acceptable, invalidate exists for that hot path (`loader.ts:24-31` docstring).
 - **Reversibility:** Internal `Map` inside `createModuleLoader`, no public API, no dep, <30 lines, single file. Rule 5.
-- **Open question:** Q-2026-05-30-202
 
 ### Decision 5 — What is the esbuild 'workspace' (cwd preopen) for graph-wide transforms?
 
@@ -68,7 +66,6 @@ This is the P0 gate (module-graph load): without it the opencode `.ts` graph nev
 - **Alternatives:** Per-file package root (`resolved.packageRoot`, `resolver.ts:15/433`) — more 'correct' but pointless for typestrip-only and multiplies preopen churn; esbuild does no module resolution here. Fixed `'/workspace'` literal — fine for the harness but couples the loader to a magic path; `opts.cwd` is more honest.
 - **Trade-offs:** Single root is simplest and matches the vite precedent (`real-vite-smoke` uses `ROOT='/workspace'` as cwd and esbuild workspace, `real-vite-smoke.ts:42,120`). Risk: file-relative resolution (e.g. esbuild bundling) would need the right root — out of scope for type-strip.
 - **Reversibility:** Internal wiring of an existing optional field into an existing call; no new public API beyond the hook above; <15 lines. Rule 5.
-- **Open question:** Q-2026-05-30-203
 
 ## Interface contract
 
@@ -160,8 +157,8 @@ Each test maps to a failure mode: `SYNTAX_ERROR` on TS (no strip), `MODULE_NOT_F
    - **FAILING test first:** `loader-transform.test.ts` :: `require() of a .ts module throws a directed NotImplementedError, never silently new-Functions TS` — fixture `/work/legacy.ts` under NON-module package.json (`detectKind`→cjs), `loader.require('./legacy.ts','/work/e.js')` throws `NotImplementedError` matching `/require\(\) of .*\.ts/`. Fails first: today the unknown-extension cjs path feeds TS to `executeCjs`/`new Function`.
    - **Files:** `packages/runtime-js/src/module-loader/loader.ts`, `.../cjs.ts`, `docs/compat/`, `.../loader-transform.test.ts`
 
-5. **T5 — Loader-internal transform cache (decision 4, REVERSIBLE Q-2026-05-30-202).** (unit)
-   In `createModuleLoader` add a `Map<string,string>` keyed by absolute resolved id, populated lazily on first `transformSource`, read before re-invoking the hook, cleared by the existing `invalidate(id)` path (`loader.ts:144` → `registry.invalidate`). Wrap `deps.transformSource` so `esm.ts` is unaware of caching. Mark `TODO(ADR): Q-2026-05-30-202`. Avoids re-spawning the WASI esbuild process per module across the large graph and across repeated harness runs in one loader instance.
+5. **T5 — Loader-internal transform cache (decision 4, REVERSIBLE).** (unit)
+   In `createModuleLoader` add a `Map<string,string>` keyed by absolute resolved id, populated lazily on first `transformSource`, read before re-invoking the hook, cleared by the existing `invalidate(id)` path (`loader.ts:144` → `registry.invalidate`). Wrap `deps.transformSource` so `esm.ts` is unaware of caching. Mark `TODO(ADR)`. Avoids re-spawning the WASI esbuild process per module across the large graph and across repeated harness runs in one loader instance.
    - **FAILING test first:** `loader-transform.test.ts` :: `transforms each .ts id at most once across repeated imports, and drops the cache on invalidate` — `transformSource` counting spy; import same `/work/main.ts` twice, assert count `=== 1`; then `invalidate('/work/main.ts')`, import again, assert `=== 2`. Fails first: no cache → count 2 after first repeat (or, if registry memoises the executed module, the invalidate-then-reimport leg expecting a 2nd transform is the part that fails first).
    - **Files:** `packages/runtime-js/src/module-loader/loader.ts`, `.../loader-transform.test.ts`, `OPEN_QUESTIONS.md`
 
@@ -216,7 +213,7 @@ export interface ModuleLoaderOptions {
 }
 // inside createModuleLoader:
 //   const workspace = opts.workspace ?? opts.cwd ?? STUB_FROM_FILE_DEFAULT;
-//   const transformCache = new Map<string,string>();              // T5, TODO(ADR): Q-2026-05-30-202
+//   const transformCache = new Map<string,string>();              // T5, TODO(ADR)
 //   const cachedTransform: TransformSourceHook | undefined = opts.transformSource && (async (req) => {
 //     const hit = transformCache.get(req.id); if (hit !== undefined) return hit;
 //     const out = await opts.transformSource!(req); transformCache.set(req.id, out); return out; });
@@ -258,7 +255,7 @@ const transformSource = (req: {source:string; loader:'ts'|'tsx'|'jsx'; workspace
 - **DECLARATION FILES (`*.d.ts`/`.d.cts`/`.d.mts`) excluded from candidate matching — CLOSED by F02-DTS-EXCLUDE.** T1 added `.ts`/`.tsx` with NO declaration-file exclusion, so a target shipping only `.d.ts` resolved it (relative `./foo.d`→`foo.d.ts` via `${base}.ts`; explicit `./foo.d.ts` via `st.isFile` early return; a package whose `exports`/`main` names a `.d.ts`) — strip-types then fed types-only source to acorn → `SYNTAX_ERROR`. Node's strip-types loaders skip `.d.ts`. The resolver now rejects any `*.d.ts`/`.d.cts`/`.d.mts` candidate at every file-acceptance point (resolves as absent → `MODULE_NOT_FOUND`), surgically (a runnable sibling `foo.js` still wins). Conformance: `tests/conformance/modules/resolver.test.ts` `describe('declaration-file exclusion')`. NOTE: ADR-0053 (ratified, immutable) doesn't yet record this exclusion in its Deviation section; amending the immutable ADR is out of scope — a future superseding ADR or amendment note should fold the `.d.ts`-exclusion into ADR-0053's contract.
 - **T6 lets the `tools/` parity runner import `@riftydev/runtime-wasi` + shadow-registry.** Layer-legal for a harness, but the parity suite now spawns the WASI esbuild process per `ts-esm` case — slower; verify the T5 cache + a small case count keep `pnpm test:parity` within CI budget. If `esbuild.wasm` is unvendored, `loadVendoredEsbuildWasm()` throws and ALL `ts-esm` cases fail loudly (acceptable directed error; run `scripts/fetch-esbuild-wasi.mjs`).
 - **`transformEsm` (esm-ast.ts) parses the POST-strip JS with acorn;** if esbuild emits syntax acorn can't parse (e.g. certain decorators/lowering), the `SYNTAX_ERROR` path fires with a confusing message. Mitigate: keep `format:'esm'` and assert in T3 that stripped output round-trips through `transformEsm`.
-- **`jsx:'automatic'` hardcoded at the caller for `.tsx`/`.jsx` (decision 3).** Facade serve path is JSX-free → dead weight in P0; if a KEPT dep ships `.tsx` authored against classic runtime the automatic default lowers wrong — out of scope per the design, revisit if a kept package brings JSX (Q-2026-05-30-201).
+- **`jsx:'automatic'` hardcoded at the caller for `.tsx`/`.jsx` (decision 3).** Facade serve path is JSX-free → dead weight in P0; if a KEPT dep ships `.tsx` authored against classic runtime the automatic default lowers wrong — out of scope per the design, revisit if a kept package brings JSX.
 - **T9 uses HAND-VENDORED opencode `.ts` files, not the real tree** (feature 01 owns VFS load; 03/04 own `#db`/`#pty`/`bun:sqlite`). Proves the language/graph mechanism only; MUST NOT import anything tripping the sqlite/pty wall, or it leaves scope and fails for an unrelated reason.
 - **CJS `.ts` loud-throw (T4) assumes opencode `.ts` is always `type:module`.** A vendored fixture `.ts` under a non-module scope hits `NotImplementedError` instead of loading — correct, but a fixture footgun; T9 fixtures must carry `type:module` package.json.
 
@@ -275,6 +272,6 @@ const transformSource = (req: {source:string; loader:'ts'|'tsx'|'jsx'; workspace
 
 Next free ADR numbers: **0052/0053** (highest on disk is 0051).
 
-REVERSIBLE sub-decisions (loader-selection jsx default Q-2026-05-30-201, transform cache Q-2026-05-30-202, single workspace root Q-2026-05-30-203) need only `OPEN_QUESTIONS` entries + `TODO(ADR)` markers, no gate.
+REVERSIBLE sub-decisions (loader-selection jsx default, transform cache, single workspace root) need only `OPEN_QUESTIONS` entries + `TODO(ADR)` markers, no gate.
 
 Until 0052/0053 are ratified this plan can't start coding T1/T2; the test files (T1/T3/T7) may be written first as the red state since they are tests, not the irreversible change.

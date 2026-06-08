@@ -4,7 +4,7 @@ status: parked
 title: node:sqlite unwired DatabaseSync/StatementSync members
 created: 2026-06-08
 why: Members off the opencode boot/query path are unimplemented (loud NotImplementedError)
-sources: [ADR-0065 D4, docs/compat/sqlite.md]
+sources: [ADR-0065 D4]
 ---
 ## Context
 Several `DatabaseSync`/`StatementSync` members are ❌ — not on opencode's boot/query path, so unimplemented and throwing a directed `NotImplementedError` (never a faked value, ADR-0065 D4): `DatabaseSync.location()`, `function()`, `aggregate()`, `createSession()`, `applyChangeset()`, `enableLoadExtension()`/`loadExtension()`; `StatementSync.expandedSQL` / `sourceSQL`. `location`/`function`/`aggregate`/`expandedSQL`/`sourceSQL` are wireable on sql.js when added; `createSession`/`applyChangeset` (session ext) and `loadExtension` (loadable extensions) are unsupported in the prebuilt WASM build.

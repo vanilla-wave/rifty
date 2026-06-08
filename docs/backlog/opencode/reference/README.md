@@ -76,8 +76,8 @@ pre-existing whole-tree `pnpm lint` debt in `packages/npm-client/src/installer.t
   spawn, not a public export), read-substitute parity, failure-mode contracts, and a
   spawn-ceiling conformance test pinning `spawn('git'|'bash')` → ENOENT/exit-127
   (never fake-succeeds) + PTY throw-on-create. Commits `61da8da`, `15c6895`,
-  `93e055b`, `6e5b2e5`. Authoritative FEASIBLE-vs-IMPOSSIBLE table:
-  `docs/compat/opencode-tool-ceiling.md` (`3890fc6`). The earlier `vfsGrep`
+  `93e055b`, `6e5b2e5`. Authoritative FEASIBLE-vs-IMPOSSIBLE table recorded
+  (`3890fc6`). The earlier `vfsGrep`
   global/sticky-RegExp silent-zero-match (review MAJOR) is fixed (`8a57400`).
 
 - **`node:sqlite` `DatabaseSync` shim over `sql.js` — built, green, wired**
@@ -109,8 +109,8 @@ pre-existing whole-tree `pnpm lint` debt in `packages/npm-client/src/installer.t
   `DatabaseSync` at SHA `f401f01` (`core/src/database/sqlite.node.ts` line 2 / 169),
   so the shim must satisfy drizzle too (it does — same surface); (b) per-query
   `setReadBigInts(Context.get(…, Client.SafeIntegers))` (lines 59/74) with the effect@4
-  `SafeIntegers` reference defaulting to `false`. OPFS persistence deferred under
-  `Q-2026-05-31-301` (real `TODO(ADR)` marker at the in-memory backing site in
+  `SafeIntegers` reference defaulting to `false`. OPFS persistence deferred
+  (real `TODO(ADR)` marker at the in-memory backing site in
   `database-sync.ts`).
 
 - **Module resolver: most-specific wildcard + null-block (`a397f05`).** Found+fixed a
@@ -126,7 +126,7 @@ pre-existing whole-tree `pnpm lint` debt in `packages/npm-client/src/installer.t
   package.json maps. Latent gap was NOT on opencode's path but is genuine correctness.
   Companion cross-file TS effect-syntax parity case (`ts-effect-syntax-cross-file.case.ts`,
   `57b45a2`) covers `import type` / `const enum` / `satisfies`; **stage-3 decorators
-  are an honestly-recorded esbuild passthrough gap** (`Q-2026-05-31-304`, off
+  are an honestly-recorded esbuild passthrough gap** (off
   opencode's path — opencode uses no decorators).
 
 > **Slate renumber note:** ADR-0054/0055 ratified the SSE/Effect-HTTP drafts under
@@ -289,13 +289,13 @@ are deferred process/wire-contract commitments downstream of boot.
 
 | Deferred work | Gate to unblock |
 |--------------|-----------------|
-| **WASM-SQLite `node:sqlite` shim (features 03/04) — DONE (P2, RATIFIED, WIRED)** | **RATIFIED + shipped: ADR-0065.** Engine is **`sql.js`** (pure-JS WASM SQLite, SYNCHRONOUS API, in-memory-first), registered as a rifty **`node:sqlite` builtin** exposing a `DatabaseSync`-compatible synchronous surface (matches opencode's `OPENCODE_DB=:memory:` boot path and the `@effect/sql-sqlite-node` + `drizzle-orm/node-sqlite` `DatabaseSync` usage at the pinned SHA — see the ADR-0065 erratum). Built, parity-green vs Node 24, RangeError-overflow-hardened, **wired into the module loader** (proven by `sqlite-loader-roundtrip` conformance + the `sqlite-opencode-boot` gate). OPFS persistence DEFERRED (`Q-2026-05-31-301`). ADR-0065 SUPERSEDES decisions.md DRAFTS ADR-0055/0056. **No longer a blocker.** |
+| **WASM-SQLite `node:sqlite` shim (features 03/04) — DONE (P2, RATIFIED, WIRED)** | **RATIFIED + shipped: ADR-0065.** Engine is **`sql.js`** (pure-JS WASM SQLite, SYNCHRONOUS API, in-memory-first), registered as a rifty **`node:sqlite` builtin** exposing a `DatabaseSync`-compatible synchronous surface (matches opencode's `OPENCODE_DB=:memory:` boot path and the `@effect/sql-sqlite-node` + `drizzle-orm/node-sqlite` `DatabaseSync` usage at the pinned SHA — see the ADR-0065 erratum). Built, parity-green vs Node 24, RangeError-overflow-hardened, **wired into the module loader** (proven by `sqlite-loader-roundtrip` conformance + the `sqlite-opencode-boot` gate). OPFS persistence DEFERRED. ADR-0065 SUPERSEDES decisions.md DRAFTS ADR-0055/0056. **No longer a blocker.** |
 | **`node:diagnostics_channel` + the undici core builtin surface — CLEARED** | **DONE.** Was the graph-load LIVE wall; the `node:diagnostics_channel` builtin + the undici-driven surface behind it were registered in graph order during GRAPH-LOAD (`b425b05..ea846ef`). Graph fully loads. **No longer a blocker.** |
 | **Headless server boot (feature 06) — DONE (BOOT gate PASSED)** | **DONE first attempt, zero walls** (see BOOT gate above). `Server.listen` boots headless, the eager DAG runs the real drizzle/sql.js PRAGMAs + ~24 migrations under `Effect.orDie`, `/global/health` + `/doc` return 200. **ADR-0058 resolves with NO new builtin surface** (boot called no unimplemented builtin/method); the predicted `ptyConnectApi` stub was not needed. A DB-read via a request followed in Phase 2 — see next row. |
-| **DB-read via a request (Phase 2) — DONE (DB-READ gate PASSED)** | **DONE, zero walls.** `GET /session` drives the instance-context middleware (instance resolved from cwd `/workspace`), builds the lazy Session/Project/Workspace layers, runs a real drizzle `db.select().from(SessionTable)…all()` (session.ts:1079), returns `200 []` (empty, fresh in-memory DB). Migrated schema queryable end-to-end. FileWatcher (no native `@parcel/watcher`) and the `@npmcli/arborist` background install degrade gracefully — opencode logs+continues, request unaffected (see `../compat/opencode-tool-ceiling.md`). Gate: `tests/integration/opencode-dbread.opt-in.test.ts`. No new ADR (degradations sit on the already-drawn no-native-addon line). |
+| **DB-read via a request (Phase 2) — DONE (DB-READ gate PASSED)** | **DONE, zero walls.** `GET /session` drives the instance-context middleware (instance resolved from cwd `/workspace`), builds the lazy Session/Project/Workspace layers, runs a real drizzle `db.select().from(SessionTable)…all()` (session.ts:1079), returns `200 []` (empty, fresh in-memory DB). Migrated schema queryable end-to-end. FileWatcher (no native `@parcel/watcher`) and the `@npmcli/arborist` background install degrade gracefully — opencode logs+continues, request unaffected. Gate: `tests/integration/opencode-dbread.opt-in.test.ts`. No new ADR (degradations sit on the already-drawn no-native-addon line). |
 | **v3 SSE frame bump (feature 07)** | **ADR-0060 draft DEFERRED** — non-additive bump of a versioned wire contract (`PREVIEW_PORT_FRAME_VERSION` 2→3) that CONTRADICTS ADR-0048 D2 and ADR-0017's M12 deferral. Page-direct SSE (ADR-0055) ships first with no code. Gate: the Worker becomes the actual opencode owner (ADR-0046 `WorkerOwnerBinding`) AND a superseding ADR cites+supersedes ADR-0048 D2 and amends ADR-0017. |
 | **LLM round-trip + `node:https`→fetch (feature 08) — WIRED + dry-run-verified; awaits a live endpoint** | **Harness built + dry-run-driven to the real API call** (`opencode-phase3-smoke.ts` + `opencode-llm.opt-in.test.ts`). C1 cleared: `ai@6` + `@ai-sdk/*` use `globalThis.fetch`, ZERO `https.Agent`/`node:https` touch (decisions.md "C1 PRE-FLIGHT RESULT") — `node:https` stays loud-throw, the ADR-0061 split is NOT required. A dry-run against an unreachable endpoint drove the FULL pipeline: `POST /session` → prompt → tool resolution → `llm.provider=oai-compat` → a real `fetch` POST to `/v1/chat/completions` with a valid OpenAI body, failing only on connection-refused. **3 general runtime walls cleared en route** (each parity-tested): `node:http` `STATUS_CODES`; `@riftydev/io` `Readable.setEncoding` (ADR-0069 — POST-body reads); `fs.statSync` `{ throwIfNoEntry: false }` (shell-tool probe). Added `@ai-sdk/openai-compatible@2.0.41` to the facade deps. Remaining: the **live round-trip** needs a provider + API key + endpoint via env (Q-2026-05-30-116, D-004) — a spend + external call (confirm-first). **ADR-0061** ratifies once the live call succeeds. |
-| **Real ripgrep/git tool fidelity (feature 09, future)** | **ADR-0062 draft is a DEFERRAL tripwire** — adopting ripgrep-WASM / isomorphic-git / wa-sqlite-search (each a NEW external dep) is BLOCKED until a concrete measured need. The pure-JS marker shipped under Q-2026-05-30-061. Do not silently cross this. |
+| **Real ripgrep/git tool fidelity (feature 09, future)** | **ADR-0062 draft is a DEFERRAL tripwire** — adopting ripgrep-WASM / isomorphic-git / wa-sqlite-search (each a NEW external dep) is BLOCKED until a concrete measured need. The pure-JS marker shipped as a deferral tripwire. Do not silently cross this. |
 
 ## Critical path
 

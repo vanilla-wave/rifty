@@ -2,7 +2,7 @@
 
 How rifty is **consumed**, separate from the runtime milestones (docs/ROADMAP.md tracks M0-M12). This area = umbrella SDK, headless UI controllers, framework bindings + component kit, IDE starter template. Mostly optional / exploratory — a **pull backlog** (no dates, only `depends-on` edges; pull an item when it's worth doing).
 
-Source: `docs/backlog-distribution-and-ide.md` (epics A-E). Publishing (EPIC A) landed under ADR-0070/0071; A4/A5/A6/A7/A8 follow-ons live under playground / toolchain-build / process-meta, NOT here.
+Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR-0070/0071; A4/A5/A6/A7/A8 follow-ons live under playground / toolchain-build / process-meta, NOT here.
 
 ## Directional decisions (promote to ADR when each track starts)
 

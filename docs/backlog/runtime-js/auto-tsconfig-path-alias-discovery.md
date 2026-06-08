@@ -4,7 +4,7 @@ status: parked
 title: Automatic tsconfig discovery for path aliases (vs explicit paths option)
 created: 2026-06-08
 why: ADR-0066 ships explicit caller-supplied paths; auto-discovery deferred until a consumer needs zero-wiring
-sources: [Q-2026-06-01-305, ADR-0066]
+sources: [ADR-0066]
 ---
 ## Context
 ADR-0066 added tsconfig-style path aliases via an explicit `paths` option on `ModuleLoaderOptions`; resolver does pure pattern matching, caller (opencode harness) reads `tsconfig.json` `compilerOptions.paths` and supplies the resolved map. Open: should the runtime ALSO auto-discover — locate `tsconfig.json`, follow the `extends` chain (opencode extends `@tsconfig/bun`), interpret `baseUrl`, apply `paths` with no caller map. No provisional code; deferral recorded in ADR-0066 Reversibility (no TODO(backlog) marker to clean).

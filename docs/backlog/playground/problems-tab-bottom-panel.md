@@ -4,7 +4,7 @@ status: parked
 title: PROBLEMS tab in playground bottom panel (Monaco markers)
 created: 2026-06-08
 why: VSCode-faithful proposal included a PROBLEMS tab but it was not one of the four asks; v1 ships Console-only
-sources: [Q-2026-06-04-315, ADR-0075]
+sources: [ADR-0075]
 ---
 ## Context
 The VSCode-faithful proposal included a PROBLEMS tab fed by Monaco markers. Not one of the four asks, so v1 ships a single Console panel (the relocated terminal). The bottom panel is already a tabbable container.

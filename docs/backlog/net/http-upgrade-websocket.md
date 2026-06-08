@@ -4,7 +4,7 @@ status: parked
 title: http.Server WS/SSE upgrade (server.on('upgrade'), res.assignSocket)
 created: 2026-06-08
 why: Port-registry bridge carries buffered+chunked HTTP only; no socket hijack — owned by feature 07
-sources: [docs/compat/m10-tooling.md upgrade row, feature-07-ws-sse-bridge, ADR-0040, ADR-0048]
+sources: [feature-07-ws-sse-bridge, ADR-0040, ADR-0048]
 ---
 ## Context
 m10-tooling ❌ row: `http.Server` WS/SSE upgrade (`server.on('upgrade')`, `res.assignSocket`) is unsupported — owned by feature 07 (opencode facade). The port-registry bridge carries buffered + chunked HTTP only (ADR-0040/0048); there is no socket hijack. `ServerResponse` exposes no `assignSocket`; an upgrade is never silently routed through the buffered `'request'` path (negative test in `server.test.ts` locks this — feature-05 T5). Effect's `httpServer.ts` uses `assignSocket` + `server.on('upgrade')`, deliberately excluded from feature 05.

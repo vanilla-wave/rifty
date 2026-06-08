@@ -4,7 +4,7 @@ status: active
 title: Reconcile process.versions.node='22.0.0' impersonation with ADR-0026 honesty
 created: 2026-06-08
 why: platform/arch are honest ('rifty'/'wasm') but version/versions.node lie; the inconsistency has no ADR carve-out
-sources: [Q-2026-05-27-001, ADR-0026, audit P1-4]
+sources: [ADR-0026, audit P1-4]
 code: [packages/runtime-js/src/builtins/process.ts:82]
 ---
 ## Context

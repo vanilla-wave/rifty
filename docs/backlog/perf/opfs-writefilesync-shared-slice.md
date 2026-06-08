@@ -2,10 +2,10 @@
 area: perf
 subsystem: vfs
 status: active
-title: Q-2026-06-06-319 — OPFS writeFileSync single shared slice + WASI fd_write aliasing gate
+title: OPFS writeFileSync single shared slice + WASI fd_write aliasing gate
 created: 2026-06-08
 why: OPFS writeFileSync copies the buffer twice (cache + write-through); 2N->N — but safety disputed by cross-cutting #44 (WASI fd_write in-place mutation); the backlog item is this file
-sources: [perf-audit #3 + #44, adr-plan C/Q-2026-06-06-319, ADR-0072 (not superseded)]
+sources: [perf-audit #3 + #44, adr-plan C, ADR-0072 (not superseded)]
 ---
 ## Context
 opfs-sync.ts:434,438: `data.slice()` for content cache AND again for write-through. Reversible 2N→N decision. Cross-cutting report #44 flags HIGH risk (contradicts vfs-subsystem "low risk"): if WASI fd_write mutates the cache buffer in place via a by-reference readFileBytesSync, sharing is unsafe.

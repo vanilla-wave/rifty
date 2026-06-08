@@ -4,7 +4,7 @@ status: active
 title: F01 vendor opencode tree (KEYSTONE — unblocks the rest of M12)
 created: 2026-06-08
 why: keystone gate — Spike C + F03/04/06/07-T1/08 + F02-T9 all gate on the vendored tree; network-gated
-sources: [TASKS M12 F01, docs/opencode/README.md §What shipped — F01 vendoring, Q-2026-05-30-101, audit-digest]
+sources: [TASKS M12 F01, docs/backlog/opencode/reference/README.md §What shipped — F01 vendoring, Q-2026-05-30-101, audit-digest]
 ---
 ## Context
 opencode is a Bun monorepo (workspace:/catalog: deps) the npm installer cannot parse. F01 = vendor a pinned-SHA snapshot of the 7 server-path packages + a derived npm-installable facade manifest. README reports F01 DONE: pinned SHA `f401f01…` (branch `dev`), `e8be3b2`, 5.6 MB / 911 files, no node_modules committed; `tests/integration/fixtures/opencode/source/` + `facade-manifest.json` + `deps/{package.json,package-lock.json}`; `tools/shadow-registry/scripts/fetch-opencode.mjs` repro. Programmatic entry = `Server` from `server/server.ts`, NEVER `src/node.ts`/`src/index.ts` (bun:sqlite import-time crash). `cd deps && npm ci` → ~217 MB / 327 pkg deterministic.

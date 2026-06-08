@@ -4,7 +4,7 @@ status: parked
 title: Real file-watch / plugin auto-install for the opencode facade (currently degraded-no-op)
 created: 2026-06-08
 why: FileWatcher.init and @npmcli/arborist install both hit the native ceiling and are no-op/swallowed; open a fresh ADR only if either becomes load-bearing
-sources: [docs/compat/opencode-tool-ceiling.md §Observed at boot — degraded-but-non-fatal, docs/opencode/README.md DB-READ row, audit-digest]
+sources: [docs/backlog/opencode/reference/README.md DB-READ row, audit-digest]
 ---
 ## Context
 Driving the real server (BOOT + DB-READ gates) surfaced two server-internal capabilities that hit the no-native-addon ceiling but which opencode itself DEGRADES GRACEFULLY (logs + continues, request still 200): (1) file watching — `FileWatcher.init` needs the native `@parcel/watcher-<platform>-<arch>` addon → no-op watch (`watcher backend not supported`, file/watcher.ts:84-85); (2) plugin/dependency auto-install — dynamic `import('@npmcli/arborist')` (npm-install machinery, intentionally outside KEEP deps) → background install fails, swallowed (`Cannot find module '@npmcli/arborist'`). Both consistent with the no-tool-execution facade; same "no native addon / no spawn" line already drawn.

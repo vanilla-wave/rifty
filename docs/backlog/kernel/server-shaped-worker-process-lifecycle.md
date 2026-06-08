@@ -4,7 +4,7 @@ status: active
 title: Kernel native support for long-running (server-shaped) worker processes
 created: 2026-06-08
 why: installWorkerEntry tears the realm down on top-level-await resolve; servers survive only via a never-resolving-promise hack
-sources: [Q-2026-06-05-317, ADR-0077, ADR-0080, PROJECT_PLAN §2]
+sources: [ADR-0077, ADR-0080, PROJECT_PLAN §2]
 ---
 ## Context
 `installWorkerEntry` (`packages/kernel/src/worker-entry.ts`) runs the entry then unconditionally `postMessage({type:'exit'})` → `closePorts()` → `self.close()`. Correct for run-to-completion (REPL/CLI), wrong for a long-running dev server (Vite-in-Worker, ADR-0043): its top-level `await` resolves *after* it starts listening, so the kernel kills the realm a beat later → every later request hits a dead worker (502 preview-port bridge timeout).

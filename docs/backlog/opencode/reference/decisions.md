@@ -557,7 +557,7 @@ ripgrep-WASM vs isomorphic-git vs JS later against concrete requirements.
 |------------|---------------|---------|------|
 | **sql.js** | 04 tier B (now P2) | WASM-SQLite engine (synchronous, in-memory) behind the `node:sqlite` `DatabaseSync` shim — the P2 boot prerequisite | **RATIFIED: ADR-0065** |
 | ~~**drizzle-orm/sql-js** driver subpath~~ | ~~04 tier B~~ | VOID at the pinned SHA — opencode uses `@effect/sql-sqlite-node` over `node:sqlite`, not drizzle (see ADR-0065 §Supersedence) | n/a (ADR-0056 superseded) |
-| **@sqlite.org/sqlite-wasm** + OPFS *(DEFERRED)* | 04 follow-up | durable persistence engine for the deferred OPFS-`SyncAccessHandle` follow-up | Q-2026-05-31-301 — do not adopt now |
+| **@sqlite.org/sqlite-wasm** + OPFS *(DEFERRED)* | 04 follow-up | durable persistence engine for the deferred OPFS-`SyncAccessHandle` follow-up | DEFERRED — do not adopt now |
 | **ripgrep-WASM** *(DEFERRED)* | 09 (future) | production-grade search substitute via `runWasi` | ADR-0062 — do not adopt now |
 | **isomorphic-git** *(DEFERRED)* | 09 (future) | read-only git (log/blob) substitute | ADR-0062 — do not adopt now |
 

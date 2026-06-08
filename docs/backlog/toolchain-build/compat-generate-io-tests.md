@@ -4,7 +4,7 @@ status: parked
 title: Source @riftydev/io tests into pnpm compat:generate (Buffer matrix hand-maintained)
 created: 2026-06-08
 why: docs/public/compat/buffer.md is hand-maintained because compat:generate can't yet read @riftydev/io test results — an unfinished tooling gap
-sources: [docs/compat/buffer.md header, A-033]
+sources: [docs/public/compat/buffer.md header, A-033]
 ---
 ## Context
 `docs/public/compat/buffer.md` header: "Hand-maintained until `pnpm compat:generate` learns to source `@riftydev/io` tests." The Buffer matrix (method/encoding/test inventory) drifts from the real `packages/io/src/buffer.test.ts` (33 cases) + parity cases because the generator doesn't ingest `@riftydev/io` package-level tests — only conformance/integration results feed `compat:generate` today. Same shape as the broader A-033 obligation (matrix populated only at milestone DoD).

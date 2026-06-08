@@ -4,7 +4,7 @@ status: active
 title: Rename RIFTY_RFV_* env prefix → RIFTY_RT_* + Mode token 'real-vite' → 'project'
 created: 2026-06-08
 why: ADR-0078 made the real-vite worker template-agnostic but left two Vite-branded names; generic surface still carries "RFV" / "real-vite"
-sources: [Q-2026-06-05-318, ADR-0078, ADR-0076, ADR-0043, ADR-0080]
+sources: [ADR-0078, ADR-0076, ADR-0043, ADR-0080]
 ---
 ## Context
 ADR-0078 kept blast radius small: `RIFTY_RFV_*` prefix (`PORT/ROOT/ENTRY/TEMPLATE`) now names a generic surface + keys snapshot/write/HMR/node_modules BroadcastChannels via `channelNameFor`. Internal `Mode` token `'real-vite'` read at ~24 sites incl. ADR-0076 snapshot gate + e2e `[data-preset]` contract. No code marker; captured here + ADR-0078.

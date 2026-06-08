@@ -5,7 +5,7 @@
 
 # Consolidated ADR Change Plan — rifty JS-runtime perf audit
 
-Scope: 30 audit verdicts. New ADRs numbered 0081+ in dependency order (0056-0062, 0074 skipped — unused, not reused). New reversible-decision (backlog) ids start Q-2026-06-06-319. Verified: highest existing ADR = 0080; highest existing Q = Q-2026-06-05-318.
+Scope: 30 audit verdicts. New ADRs numbered 0081+ in dependency order (0056-0062, 0074 skipped — unused, not reused). New reversible-decision (backlog) items are the topic-slugged perf entries below. Verified: highest existing ADR = 0080.
 
 ---
 
@@ -61,7 +61,7 @@ Scope: 30 audit verdicts. New ADRs numbered 0081+ in dependency order (0056-0062
 - Governs exported `CrossRealmPortHandler` (`net/src/index.ts`), consumed by `apps/playground` preview wiring.
 - Optional `dispatchStruct` skips the page→worker `new Request(...)` + `arrayBuffer()` drain + Request rebuild. **Feasibility gap the ADR must record:** today the page reaches the handler only via `dispatchToPort(port, Request)` and holds no `CrossRealmPortHandler` ref / `getHandler` returns base `PortHandler`; the ADR must record the extra plumbing (typed handler handle) since the audit rejects threading the record through `dispatchToPort`. No decision subagent.
 
-**ADR-0092 — setImmediate/clearImmediate queue rep (Map + head-cursor) + check-phase tail-snapshot drain order** *(REASSIGNED from verdict's proposed Q-2026-06-06-319 → NEW ADR per auditor correction)* — covers **#28**; rule1.
+**ADR-0092 — setImmediate/clearImmediate queue rep (Map + head-cursor) + check-phase tail-snapshot drain order** *(REASSIGNED from the verdict's proposed reversible-decision item → NEW ADR per auditor correction)* — covers **#28**; rule1.
 - Auditor overturned the mapper's rule5/BACKLOG call (mapper's "module-private / no cross-package API" grounding is stale; **adrRefAccurate=false**). ADR-0018 ratifies `./builtins/timers` as stable public API; tail-snapshot changes the observable contract of a committed cross-package export. Verified consumed by `apps/playground/.../real-vite-bootstrap.ts:62`.
 - Governs drain-order contract of cross-package public `setImmediate`/`clearImmediate` (signatures unchanged; observable nested-drain ordering changes).
 - `Map<id,item>` for O(1) clear + head-cursor drain; snapshot tail at tick entry so a nested `setImmediate` defers to next check phase (Node parity). Write nested-setImmediate + setImmediate-vs-setTimeout(0) **parity cases FIRST** (parity-first hard rule). Does NOT supersede (ADR-0018 commits the surface, records no drain order). No decision subagent.
@@ -93,22 +93,22 @@ Scope: 30 audit verdicts. New ADRs numbered 0081+ in dependency order (0056-0062
 
 ## C. New reversible-decision backlog entries (REVERSIBLE — no ADR)
 
-**Q-2026-06-06-319 — OPFS writeFileSync single shared content-cache/write-through slice + WASI fd_write aliasing gate** — item **#3** (not a supersede of ADR-0072).
+**OPFS writeFileSync single shared content-cache/write-through slice + WASI fd_write aliasing gate** (item `perf/opfs-writefilesync-shared-slice`) — item **#3** (not a supersede of ADR-0072).
 - Decision: take one defensive `data.slice()` for both the content cache (opfs-sync.ts:434) and the enqueued write-through (:438), 2N→N copies.
 - **Gate (must record + test):** the WASI fd_write in-place-mutation aliasing hazard against by-reference `readFileBytesSync` (opfs-sync.ts:421 / path.ts:118 / fd.ts:92-97) — ship with an aliasing regression test.
 - Code marker `// TODO(backlog: perf/<slug>)`: `packages/vfs/src/opfs-sync.ts` (writeFileSync body, ~line 434).
 
-**Q-2026-06-06-320 — Loader-internal `package.json` parse cache — key (absolute path) + invalidation** — item **#5**, precedent Q-2026-05-30-202.
+**Loader-internal `package.json` parse cache — key (absolute path) + invalidation** (item `perf/loader-packagejson-parse-cache`) — item **#5**, precedent the loader-cache family.
 - Decision: `Map<string,PackageJson>` on the loader closure routing all four parse sites (readPackageJson + inline JSON.parse in findPackageScope), cleared in `loader.invalidate()` in lockstep with `transformCache` (full-clear on `id===undefined`, per-id delete otherwise).
 - Wiring nuance: bridge loader-owned invalidate to resolver-owned parse sites (thread cache into `createResolver` or co-locate). Risk = invalidation coherence (stale type/exports/main).
 - Code marker `// TODO(backlog: perf/<slug>)`: `packages/runtime-js/src/builtins/resolver.ts` (readPackageJson ~line 594; sites 293/356/425/624).
 
-**Q-2026-06-06-321 — Resolver-internal resolution cache — key, full-clear-on-invalidate, never cache not-found** — item **#15**. Does NOT contradict ADR-0004 (binds algorithm, not caching).
+**Resolver-internal resolution cache — key, full-clear-on-invalidate, never cache not-found** (item `perf/resolver-resolution-cache`) — item **#15**. Does NOT contradict ADR-0004 (binds algorithm, not caching).
 - Decision: memoize `resolveSpecifierToFile` (NOT the `resolve()` boundary — `readResolved` must re-read source fresh) keyed `${esm}\0${fromFile}\0${specifier}` → file-id; **full-clear on ANY invalidate; never cache not-found / never cache PACKAGE_PATH_NOT_EXPORTED throw**.
 - Nuance: loader owns the result Map (mirroring transformCache) so the `Resolver` interface stays unchanged.
 - Code marker `// TODO(backlog: perf/<slug>)`: `packages/runtime-js/src/builtins/resolver.ts` (resolveSpecifierToFile, ~line 167).
 
-**Q-2026-06-06-322 — Per-spawn env/argv sharing — freeze a canonical env vs ship a diff** — item **#20**.
+**Per-spawn env/argv sharing — freeze a canonical env vs ship a diff** (item `perf/per-spawn-env-argv-sharing`) — item **#20**.
 - Decision: share/freeze ONE canonical env object on the spawn-caller side, keeping `WorkerSpawnSpec.env` as `Readonly<Record<string,string>>` and the wire payload (spawn-worker.ts:150-159) byte-identical.
 - **Boundary note:** the diff/`{baseEnvId,overrides}` variant would redefine the cross-realm wire shape → flips to rule1/NEW_ADR; out of scope here.
 - Code marker `// TODO(backlog: perf/<slug>)`: `packages/kernel/src/spawn-worker.ts` (~line 150).
@@ -119,7 +119,7 @@ Scope: 30 audit verdicts. New ADRs numbered 0081+ in dependency order (0056-0062
 
 | Item | Attaches to | Note |
 |---|---|---|
-| **#16** transformEsm result cache + optional `transformEsm?` hook on internal `EsmLoaderDeps` | **Q-2026-05-30-202** (loader-cache family) | Reuse existing `cachedTransform`/wrap-and-inject seam (loader.ts:90-99); 2 files (esm.ts deps field + loader.ts wrap/invalidate), id-keyed, invalidate-coherent. Record only single-id-vs-full-clear coupling + transformEsm purity assumption as a `// TODO(backlog: …)` code marker keyed to extended Q-202. NOT governed by ADR-0052 (that's *public* ModuleLoaderOptions; EsmLoaderDeps is internal). |
+| **#16** transformEsm result cache + optional `transformEsm?` hook on internal `EsmLoaderDeps` | **loader-cache family** (`perf/transformesm-result-cache`) | Reuse existing `cachedTransform`/wrap-and-inject seam (loader.ts:90-99); 2 files (esm.ts deps field + loader.ts wrap/invalidate), id-keyed, invalidate-coherent. Record only single-id-vs-full-clear coupling + transformEsm purity assumption as a `// TODO(backlog: …)` code marker keyed to the loader-cache family. NOT governed by ADR-0052 (that's *public* ModuleLoaderOptions; EsmLoaderDeps is internal). |
 
 ---
 
@@ -147,21 +147,21 @@ Scope: 30 audit verdicts. New ADRs numbered 0081+ in dependency order (0056-0062
 | #13 Buffer cached DataView | IRREVERSIBLE | rule4 | NEW_ADR | **0082** | No |
 | #25 streams single-schedule drain | IRREVERSIBLE | rule4 | NEW_ADR | **0083** | No |
 | ascii-mask decode `&0x7f` | REVERSIBLE | none-internal | NONE | — | No |
-| #3 OPFS shared write slice | REVERSIBLE | rule5 | BACKLOG | **Q-…-319** | No |
+| #3 OPFS shared write slice | REVERSIBLE | rule5 | BACKLOG | **perf/opfs-writefilesync-shared-slice** | No |
 | #6 resolvePath drop outer normalize | REVERSIBLE | none-internal | NONE | — | No |
 | #7 Linker dir-dedup + Promise.all | REVERSIBLE | none-internal | NONE | — | No |
 | #10 normalizePath fast-path + helpers | IRREVERSIBLE | rule4 | NEW_ADR | **0084** | No |
 | #11 FsSync.statSyncOrNull | IRREVERSIBLE | rule1 | NEW_ADR | **0085** | No |
 | #4 findPackageScope once | REVERSIBLE | none-internal | NONE | — | No |
-| #5 package.json parse cache | REVERSIBLE | rule5 | BACKLOG | **Q-…-320** | No |
+| #5 package.json parse cache | REVERSIBLE | rule5 | BACKLOG | **perf/loader-packagejson-parse-cache** | No |
 | #14 loadResolved | IRREVERSIBLE | rule4 | NEW_ADR | **0086** | No |
-| #15 resolution cache | REVERSIBLE | rule5 | BACKLOG | **Q-…-321** | No |
-| #16 transformEsm result cache | REVERSIBLE | rule5 | BACKLOG (existing item) | **Q-2026-05-30-202** | No |
+| #15 resolution cache | REVERSIBLE | rule5 | BACKLOG | **perf/resolver-resolution-cache** | No |
+| #16 transformEsm result cache | REVERSIBLE | rule5 | BACKLOG (existing item) | **perf/transformesm-result-cache** | No |
 | #17 dispatcher waitAsync responder | IRREVERSIBLE | rule1 (+rule4) | NEW_ADR | **0087** | No |
 | #18 SAB zero-copy view | IRREVERSIBLE | rule1 | NEW_ADR | **0087** | No |
 | #19 configurable SAB capacity | IRREVERSIBLE | rule1 (+rule4) | NEW_ADR | **0087** | No |
 | #23 SyncRpc v2 binary frame | IRREVERSIBLE | rule1 (+rule4) | NEW_ADR | **0087** | No |
-| #20 per-spawn env/argv sharing | REVERSIBLE | rule5 | BACKLOG | **Q-…-322** | No |
+| #20 per-spawn env/argv sharing | REVERSIBLE | rule5 | BACKLOG | **perf/per-spawn-env-argv-sharing** | No |
 | #24 npm bounded-concurrency fetch | IRREVERSIBLE | rule4 | NEW_ADR | **0088** | No |
 | #26 lazy builtin loading | IRREVERSIBLE | rule4 (rule1 downgraded) | NEW_ADR | **0089** | No |
 | pre-warm worker pool | IRREVERSIBLE | rule4 | NEW_ADR | **0090** | No |

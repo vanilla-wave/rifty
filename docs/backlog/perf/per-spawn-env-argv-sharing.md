@@ -2,10 +2,10 @@
 area: perf
 subsystem: kernel
 status: active
-title: Q-2026-06-06-322 — per-spawn env/argv sharing (freeze a canonical env vs ship a diff)
+title: per-spawn env/argv sharing (freeze a canonical env vs ship a diff)
 created: 2026-06-08
 why: per-spawn full env record + argv structured-cloned every spawn regardless of ring use; the backlog item is this file
-sources: [perf-audit #20, adr-plan C/Q-2026-06-06-322]
+sources: [perf-audit #20, adr-plan C]
 ---
 ## Context
 spawn-worker.ts:150-175: full env record + argv cloned every spawn. Reversible (internal to spawn). Matters if spawn-rate high (test runners, worker_threads fan-out). Companion to the parked pre-warm pool (ADR-0090).

@@ -4,7 +4,7 @@ status: active
 title: Loader-internal TS-strip transform cache — key + invalidation
 created: 2026-06-08
 why: id-keyed cache shipped; content-hash keying deferred until a live in-place HMR edit layer exists
-sources: [Q-2026-05-30-202, ADR-0052 D4]
+sources: [ADR-0052 D4]
 code: [packages/runtime-js/src/module-loader/loader.ts:81]
 ---
 ## Context

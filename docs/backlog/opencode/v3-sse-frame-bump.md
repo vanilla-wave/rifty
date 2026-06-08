@@ -4,7 +4,7 @@ status: active
 title: v3 SSE frame bump (PREVIEW_PORT_FRAME_VERSION 2→3) for in-Worker streaming
 created: 2026-06-08
 why: page↔Worker SSE hangs (reassembles on reply-stream-end, never fires for SSE); needs a superseding ADR that contradicts ADR-0048 D2 + amends ADR-0017
-sources: [docs/opencode/README.md §deferred / §v3, decisions.md ADR-0060 draft, feature-07-ws-sse-bridge.md D2 + T5-T7, ADR-0048, ADR-0017, ADR-0040, ADR-0046, Q-2026-05-30-113, audit-digest]
+sources: [docs/backlog/opencode/reference/README.md §deferred / §v3, decisions.md ADR-0060 draft, feature-07-ws-sse-bridge.md D2 + T5-T7, ADR-0048, ADR-0017, ADR-0040, ADR-0046, Q-2026-05-30-113, audit-digest]
 ---
 ## Context
 opencode `/event` is SSE = streaming HTTP GET, not a WebSocket (ratified ADR-0055, no ws shim). SW→page hop ALREADY streams (zero-copy ReadableStream transfer; `ServerResponse.toResponse()` resolves at flushHeaders) → page-direct SSE ships with no code. The page↔Worker hop does NOT stream: `bridgeCrossRealmPreview` accumulates `reply-stream-chunk` and resolves only on `reply-stream-end`, which never fires for SSE → opencode-in-Worker HANGS + trips the 30s no-progress idle timer. Fix = bump `PREVIEW_PORT_FRAME_VERSION` 2→3 (preview-port.ts:49): page builds the Response from a live ReadableStream resolving on `reply-stream-start`, idle timer re-armed per chunk (tolerating SSE keep-alive `:\n`), worker-death mid-stream errors the handed-out stream; v2 buffered fallback under negotiation. Specified with failing tests (feature-07 T5-T7) that must NOT be committed pre-ratification.
