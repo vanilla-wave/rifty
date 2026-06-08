@@ -5,6 +5,8 @@ Date: 2026-05
 
 **Decision (2026-05-26):** Full landing targeted for **M11 (end of June 2026)**. A process-wide `MemoryBackend` singleton owns the in-memory tree; `MemoryVfs` (async) and `MemoryFsSync` (sync) are thin wrappers resolving every read/write through it. The OPFS pair (`OpfsVfs` + `OpfsFsSync`) shares one OPFS directory handle plus an in-memory `Map<string, FileSystemSyncAccessHandle>`, so neither surface reopens the same node twice. WASI preopens consume the same backend — files visible to `node:fs` are visible to a WASI-hosted binary. `installMemoryFs()` / `installOpfsFs()` are the only sites that mint a backend; everything else picks it up via `getFsVfs()` / `syncMirror()`.
 
+> TL;DR: async `Vfs` and sync `FsSync` (plus WASI preopens) share one `MemoryBackend`/OPFS tree, so a `writeFile` is instantly visible to `readFileSync`
+
 ## Context
 
 The runtime exposes two parallel filesystem surfaces: async `Vfs` (`fs.promises`) and sync `FsSync` (`fs.readFileSync` + WASI preopen layer). Today each is built independently with separate trees, so a file written via `fs.promises.writeFile('/a', 'x')` is invisible to `fs.readFileSync('/a')` — violating the "one source of truth" claim in M4/M8 acceptance.

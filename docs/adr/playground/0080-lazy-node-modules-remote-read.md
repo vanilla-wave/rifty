@@ -12,6 +12,8 @@ Relates to:
 - playground-local `vfs-write-port.ts` / `vfs-snapshot-port.ts` — the two one-way bridges this complements with a two-way one.
 - Resolves the deferred `node_modules`-placeholder item of **Q-2026-06-04-316**.
 
+> TL;DR: `node_modules` is browsed via a lazy per-directory request/response BroadcastChannel read bridge on an additive async explorer branch, leaving sync `FsOpsTarget` untouched
+
 ## Context
 
 ADR-0076's snapshot is read-only, full-tree, one-way push, and `SNAPSHOT_EXCLUDE_DIRS` deliberately drops `node_modules` (cloning thousands of installed files per snapshot, per watch event, for a rarely-opened tree). Explorer shows project source only; `nodeModulesPresent` records the dir exists but is unbrowsable.

@@ -3,6 +3,8 @@
 Status: Accepted
 Date: 2026-05
 
+> TL;DR: `createWasiProcess` routes WASI guests through `kernel.spawnWorker`, returning a worker `ProcessHandle` with one PID space and stdio shape as `node` children
+
 ## Context
 
 `@riftydev/runtime-wasi` exposes a synchronous, callback-stdio entry point —

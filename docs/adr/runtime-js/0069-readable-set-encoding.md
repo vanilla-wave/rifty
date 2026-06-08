@@ -3,6 +3,8 @@
 Status: Accepted (opencode facade M12)
 Date: 2026-06-01
 
+> TL;DR: `Readable.setEncoding` emits decoded strings, decoding only at the emit/`read()` boundary (buffer stays raw bytes) via a streaming `TextDecoder` for text encodings
+
 ## Context
 
 The opencode PHASE-3 dry-run (POST creating a session) walled at `POST /session`

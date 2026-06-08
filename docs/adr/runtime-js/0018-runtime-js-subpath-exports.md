@@ -3,6 +3,8 @@
 Status: Accepted
 Date: 2026-05
 
+> TL;DR: `@riftydev/runtime-js` ships four `./builtins/{process,timers,buffer,module}` subpath exports as stable public API, not consolidated under one `./host` entry
+
 ## Context
 
 `packages/runtime-js/package.json` gained four subpath exports for real Vite's bootstrap path:

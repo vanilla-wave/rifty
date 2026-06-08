@@ -5,6 +5,8 @@ path only; ADR-0025's main-thread choice stays as the documented
 non-isolated fallback for the M10 Dev Mode adapter.
 Date: 2026-05-27
 
+> TL;DR: Real Vite + HMR + VFS move to a dedicated Worker realm; page is a thin SAB-gated forwarder and preview/VFS-write hops ride `BroadcastChannel`
+
 ## Context
 
 This ADR executes A-026 (Vite-in-Worker), which ADR-0011 and ADR-0017

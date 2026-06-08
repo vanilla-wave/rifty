@@ -3,6 +3,8 @@
 Status: Accepted (promotes Q-2026-05-29-002)
 Date: 2026-05-29
 
+> TL;DR: In the symlink-free VFS, `lstat`≡`stat`, `realpath` is normalise-against-`cwd`-then-`ENOENT`, `readlink` keeps `EINVAL`/`ENOENT`, `readdir` honours options
+
 ## Context
 
 `packages/runtime-js/src/builtins/fs.ts` made `lstatSync`/`realpathSync` (and

@@ -3,6 +3,8 @@
 Status: Accepted (opencode facade M12)
 Date: 2026-06-01
 
+> TL;DR: Explicit `import` of `.txt`/`.sql`/`.md`/`.prompt` yields raw file text as the default export via a new `'text'` `ModuleKind` — not in extension fallback
+
 ## Context
 
 opencode imports non-JS assets as **text** (esbuild `text` loader / Bun default: `import s from "./f.txt"` binds the default export to the file's string contents):

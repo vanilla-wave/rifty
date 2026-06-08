@@ -3,6 +3,8 @@
 Status: Implemented (2026-05-26)
 Date: 2026-05
 
+> TL;DR: `cwd` lives in the kernel's `ProcessRecord`; `chdir` resolves+VFS-validates (throws `ENOENT`/`ENOTDIR`), children snapshot parent `cwd` at `spawn`
+
 ## Context
 
 `riftyProcess.cwd()` hardcodes `'/'`; `chdir(path)` is a silent no-op. Relative-path resolution is broken by design, and the silent semantics mean no test exercises chdir. Flagged by REVIEW_ACTIONS A-019. The clean fix needs the per-process kernel model from ADR 0011, since `cwd` is process-scoped state the runtime has no record for yet.

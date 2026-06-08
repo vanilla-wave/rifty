@@ -3,6 +3,8 @@
 Status: Accepted
 Date: 2026-05
 
+> TL;DR: Module loader drops its parallel `SyncVfs`/`MemorySyncVfs` and consumes `@riftydev/vfs:FsSync` directly, so loader, `node:fs`, and WASI share one `MemoryBackend`
+
 ## Context
 
 `@riftydev/vfs` owns one sync interface, `FsSync` (`packages/vfs/src/fs-sync.ts`), implemented by `MemoryFsSync` and `OpfsFsSync`. But the `@riftydev/runtime-js` module loader defines a **parallel** `SyncVfs` (`packages/runtime-js/src/module-loader/vfs-sync.ts`) with its own backend `MemorySyncVfs` (`packages/runtime-js/src/module-loader/memory-sync-vfs.ts`). They drifted:

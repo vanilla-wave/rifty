@@ -3,6 +3,8 @@
 Status: Accepted
 Date: 2026-05-27
 
+> TL;DR: Worker fork-IPC (`send`/`'message'`/`disconnect`) rides a dedicated parent↔child `MessagePort` pair with `ipc:message`/`ipc:disconnect` frames, not SAB
+
 ## Context
 
 ADR-0011 phase 2 ratified Worker-backed children for `child_process.spawn('node', script)` and `execSync`, but `fork()`-style IPC (`child.send` / `process.on('message', …)`) was left pending. `SameRealmProcessHandle.send` ships; `WorkerProcessHandle.send` does not. M6 `TASKS.md` claims fork-IPC ✅, but the SAB path silently drops messages: `ChildProcess.send` routes to an in-realm `EventEmitter` (`inboundIpc.emit('childMessage', …)`) that the Worker child never subscribes to — a contract violation flagged in the 2026-05-27 architecture review (item #1).

@@ -4,6 +4,8 @@ Status: Accepted (2026-06-05)
 Date: 2026-06-05
 Relates to: ADR-0043 (Vite-in-Worker — the realm this generalises), ADR-0077 (real-vite preview render: env-driven bootstrap + `await new Promise<never>` keep-alive, both preserved verbatim), ADR-0076 (cross-realm reverse VFS snapshot, keyed on `RIFTY_RFV_PORT`, deliberately not re-keyed here), ADR-0075 (VSCode shell / preset gallery). Resolves the "more templates" half of Q-2026-06-04-316; the single-switcher half is ADR-0079.
 
+> TL;DR: Playground-owned `ProjectSpec` registry routes every Vite literal through it; worker reads template via `RIFTY_RFV_TEMPLATE`, with `vite` the default
+
 ## Context
 
 The playground's "Real Vite" mode hardcoded Vite in ~15 places across the worker bootstrap (`workers/real-vite-bootstrap.ts`), the page-realm orchestrator (`glue/realVite.ts`), the mode machine (`adapters/useMode.ts`), the preset registry (`presets.ts`), and the shell (`App.tsx`): `INITIAL_PACKAGE_JSON` seeded `{ vite: '^5.4.0' }` (same map passed to `install(...)`), the `import('vite')` specifier, the full `createServer({...})` config (`appType: 'spa'`, `optimizeDeps.disabled`, `hmr: false`, HMR-bridge plugin), the seed sources (`INITIAL_INDEX_HTML`/`INITIAL_MAIN_JS`), default entry `/src/main.js`, default port `5174`, and every "Real Vite" string.

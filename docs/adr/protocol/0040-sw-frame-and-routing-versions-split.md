@@ -3,6 +3,8 @@
 Status: Accepted (2026-05-27)
 Date: 2026-05
 
+> TL;DR: `SW_PROTOCOL_VERSION` splits into `SW_FRAME_VERSION` (frame data shapes) + `SW_ROUTING_VERSION` (addressing + owner-fallback), both stamped per frame and validated at decode
+
 ## Context
 
 ADR-0031 introduced `SW_PROTOCOL_VERSION` and the rule "every wire frame between the SW and controlling page carries a `version`; receivers validate at decode time and refuse mismatched peers". It pins the *shape of frame data* only (`SwPingFrame`, `SwPongFrame`, `SwPreviewReadyFrame`, `SwPreviewGoodbyeFrame`, `SerializedRequest`/`SerializedResponse`). The 2026-05-26 service-worker audit (F2) flagged two contracts the constant *should* pin but does not:

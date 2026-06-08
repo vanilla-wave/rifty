@@ -3,6 +3,8 @@
 Status: Accepted
 Date: 2026-05-26
 
+> TL;DR: Preview addressing (`PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`, `synthesizePreviewUrl`, `parsePreviewPath`) lives in `@riftydev/io`; `service-worker` + `net` import it, no inline copies
+
 ## Context
 
 The `/preview/<port>/...` URL convention and the synthetic `preview.local` host are addressing primitives shared by three packages, each holding its own hand-copied version:

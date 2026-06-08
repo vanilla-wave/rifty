@@ -8,6 +8,8 @@ Date: 2026-06
 > the umbrella ships **scoped as `@riftydev/sdk`**. Design unchanged; read
 > "unscoped `rifty`" as "`@riftydev/sdk`".
 
+> TL;DR: `@riftydev/sdk` umbrella re-exports each `@riftydev/*` layer as a subpath kept external (shared singletons) + a Solid-free `createSandbox` boot façade
+
 ## Context
 
 After ADR-0070 the 11 `@riftydev/*` libraries are individually publishable, but

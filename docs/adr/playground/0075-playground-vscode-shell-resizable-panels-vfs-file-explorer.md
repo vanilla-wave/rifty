@@ -4,6 +4,8 @@ Status: Accepted (2026-06-04)
 Date: 2026-06-04
 Relates to: ADR-0073 (terminal-luxe design system — built on it), ADR-0013/ADR-0014/ADR-0072 (VFS backend, split sync/async, OPFS write-through — explorer reads/writes the sync mirror), ADR-0002/D-001 (cross-origin isolation), D-002 (solid-js isolated to `apps/playground`).
 
+> TL;DR: `apps/playground` gets a zero-dep VSCode-style shell: bottom console, CSS-var `<Splitter>` panels, `syncMirror()` VFS explorer, multi-model Monaco tabs
+
 ## Context
 
 Post-ADR-0073 the playground was polished but a *fixed* three-pane layout: a left preset rail and a `.rf-main` grid with the **console as a right-hand column** next to the editor (plus a preview column in dev/real-vite). User feedback asked for four things:

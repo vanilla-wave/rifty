@@ -3,6 +3,8 @@
 Status: Accepted
 Date: 2026-05
 
+> TL;DR: Native/incompatible pkgs are swapped at resolver time via a layered shadow table (`overrides`→`unenv`→`e18e`→WASM→in-tree adapters), parity-gated
+
 ## Decision (D-005)
 
 Substitute native and incompatible packages at the module-resolver level. Substitution sources are layered to reuse existing ecosystem solutions before writing our own.

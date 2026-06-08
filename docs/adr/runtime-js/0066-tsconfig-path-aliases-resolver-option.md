@@ -3,6 +3,8 @@
 Status: Accepted (opencode facade M12)
 Date: 2026-06-01
 
+> TL;DR: tsconfig `paths` aliases ride an opt-in `paths` map on `ModuleLoaderOptions` (caller reads tsconfig); off = Node-faithful, tsc-specificity match, miss falls through
+
 ## Context
 
 The opencode GRAPH-LOAD smoke (`tests/integration/opencode-graph-load.opt-in.test.ts`)

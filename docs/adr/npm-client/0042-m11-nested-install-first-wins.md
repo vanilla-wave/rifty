@@ -3,6 +3,8 @@
 Status: Accepted
 Date: 2026-05-27
 
+> TL;DR: `walkAndPin` places deps first-wins-flat and nests on version conflict at `<parent>/node_modules/<name>`; same version dedupes, `EVERSIONCONFLICT` removed
+
 ## Context
 
 ADR-0023 ratified lockfile-reuse for `@riftydev/npm-client.install` but deferred *nested* installs to M11. Pre-M11 the linker was flat-only: every (name, version) lived at `node_modules/<name>/`, and any second version of a name aborted with `EVERSIONCONFLICT` (A-031). Fine for M9's small fixtures; the 2026-05-27 opt-in live `express@^4` install proved it insufficient for real transitive graphs:

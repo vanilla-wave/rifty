@@ -3,6 +3,8 @@
 Status: Accepted (supersedes decisions.md DRAFTS ADR-0055 + ADR-0056; opencode facade M12)
 Date: 2026-05-31
 
+> TL;DR: `node:sqlite` `DatabaseSync` is shimmed by synchronous in-memory `sql.js` WASM (OPFS persistence deferred), unblocking opencode's eager `Server.listen` boot
+
 ## Context
 
 opencode (anomalyco/opencode, vendored at SHA `f401f01c05bead2fd0687004c912743d271e2b7b`, `tests/integration/fixtures/opencode/source`) does NOT lazily open its database. **Spike C** (static analysis; verdict in `docs/opencode/README.md`) verified the eager chain:

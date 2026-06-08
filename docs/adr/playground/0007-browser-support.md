@@ -5,6 +5,8 @@ Date: 2026-05
 
 Decision D-006: Chromium is the primary target; Firefox/WebKit are best-effort. Cross-browser test infrastructure ships from M0, so enabling the full matrix in CI is a one-line workflow change.
 
+> TL;DR: Chromium is the primary target, Firefox/WebKit best-effort; all 3 `playwright` projects ship from M0 so the full matrix is a one-line CI toggle
+
 ## Infrastructure (M0)
 
 - `playwright.config.ts`: `chromium`, `firefox`, `webkit` projects all present from day one.

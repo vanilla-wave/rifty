@@ -3,6 +3,8 @@
 Status: Implemented (2026-05-25) — `packages/service-worker/src/{preview-bridge,route-preview,protocol}.ts`
 Date: 2026-05
 
+> TL;DR: Every SW↔main frame carries `version`; receivers validate `data.version === SW_PROTOCOL_VERSION` before any side effect, replying `PROTOCOL_VERSION_MISMATCH` (`503`) on skew
+
 ## Context
 
 ADR-0016 introduced `SW_PROTOCOL_VERSION` + the rule "either side refuses a mismatched peer". The first impl honoured this only for handshake frames (`ping`/`pong`, `preview:ready`/`preview:goodbye`). Two gaps surfaced in review:

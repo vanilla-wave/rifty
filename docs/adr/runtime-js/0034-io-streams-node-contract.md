@@ -3,6 +3,8 @@
 Status: Accepted
 Date: 2026-05-26
 
+> TL;DR: `@riftydev/io` restores Node's stream contract in one PR: `removeListener` meta-event, honest `read(n)`, real `Writable.destroy`, prototype `Duplex`/`Transform`, `pipeline` upstream-destroy
+
 ## Context
 
 The 2026-05-26 architecture review (`docs/review/2026-05-26-architecture-review.md`)

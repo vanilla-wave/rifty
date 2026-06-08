@@ -3,6 +3,8 @@
 Status: Accepted (opencode facade M12)
 Date: 2026-06-01
 
+> TL;DR: `import x from "spec" with { type: "file" }` binds `x` to the resolved absolute asset path via `__assetPath`, never loading the asset as a module
+
 ## Context
 
 opencode's GRAPH-LOAD smoke walled on `@silvia-odwyer/photon-node/photon_rs_bg.wasm`: rifty compiled the `.wasm` as a CJS module (binary bytes → `new Function` → `Invalid or unexpected token`). The importer is `packages/opencode/src/image/image.ts`:

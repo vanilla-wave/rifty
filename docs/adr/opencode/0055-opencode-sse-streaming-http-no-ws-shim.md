@@ -3,6 +3,8 @@
 Status: Accepted (ratifies decisions.md draft ADR-0059; opencode facade M12)
 Date: 2026-05-30
 
+> TL;DR: opencode `/event` SSE rides the existing page-direct streaming-HTTP `Response` (live `ReadableStream`) with no `ws` shim; supported page-direct only
+
 ## Context
 
 opencode's `/event` route is `text/event-stream` over HTTP GET (Effect `HttpServerResponse.stream`), NOT a WebSocket. The only WS-shaped route is PTY-connect, a hard browser blocker that stays a throw-on-connect stub. Question: does the event stream need a cross-realm `ws` shim, or does it ride the existing streaming-HTTP path?

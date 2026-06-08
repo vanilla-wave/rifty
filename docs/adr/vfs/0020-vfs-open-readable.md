@@ -5,6 +5,8 @@ Date: 2026-05
 
 **Decision (2026-05-26):** Phase 2 (real `OpfsVfs.openReadable` wrapping `File.stream()` with optional `slice` for byte ranges; rewrite `createReadStream` on `asyncVfs().openReadable(...)`) is **gated on ADR-0014 (shared VFS backing tree) landing first**. Until `Vfs` and `FsSync` views share one backend, `openReadable` streaming from one tree while `createReadStream`'s fallback uses another would surface as a "single source of truth" violation in M4/M8 acceptance. Order: ADR-0014 → ADR-0020 phase 2; both land in M11.
 
+> TL;DR: `Vfs.openReadable(path, opts?)` returns a `ReadableStream<Uint8Array>` (64 KiB chunks / `File.stream()`+`slice`); `createReadStream` rebuilds on it for true backpressured streaming
+
 ## Context
 
 `fs.createReadStream(path)` reads the whole file into memory and emits one `data` chunk — defeats streaming and risks OOM on large files. `Vfs` exposes only `readFile(path): Promise<Uint8Array>`, so there's no streaming primitive to build on. Flagged by REVIEW_ACTIONS A-020. Backpressure also matters for piping into HTTP responses and the streaming rewrite of ADR-0017.

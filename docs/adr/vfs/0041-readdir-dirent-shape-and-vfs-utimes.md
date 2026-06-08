@@ -3,6 +3,8 @@
 Status: Accepted
 Date: 2026-05-27
 
+> TL;DR: `FsSync.readdirSync` returns `readonly VfsDirent[]` (kills N+1 `statSync`) and async `Vfs` gains symmetric `utimes`
+
 ## Context
 
 `@riftydev/vfs` exposes two surfaces over one backend (ADR-0014, ADR-0037): `Vfs` (async — browser/async fixtures) and `FsSync` (sync — `fs.readFileSync`, WASI preview1 syscalls, shell, module loader). The 2026-05-26 audit (vfs F3) flagged two asymmetries:

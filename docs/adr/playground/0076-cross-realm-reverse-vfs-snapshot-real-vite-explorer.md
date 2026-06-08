@@ -4,6 +4,8 @@ Status: Accepted (2026-06-04)
 Date: 2026-06-04
 Relates to: ADR-0075 (VSCode shell + VFS explorer over main-thread `syncMirror()`; its Consequences flagged this gap), ADR-0043 (Vite-in-Worker — the realm we mirror), ADR-0014 (split sync/async VFS, per-realm backends), the page→worker write port `vfs-write-port.ts` (this is its mirror image), D-002 (solid-js isolated to `apps/playground`).
 
+> TL;DR: Real-vite explorer reads a one-way worker→page full-tree VFS snapshot (`vfs-snapshot-port.ts`) into a throw-on-mutate read-only `SnapshotFs`, no `node_modules`
+
 ## Context
 
 ADR-0075's explorer reads the **main-thread** `syncMirror()` — honest for REPL/Dev Mode. But Real Vite runs in a kernel-spawned **Worker** realm (ADR-0043) with its *own* `syncMirror()`: the npm install, seeded project (`index.html`, `package.json`, `src/main.js`), and Vite's output live there, not on the page. So switching to the Real Vite demo left the explorer on the page's `/workspace` and never entered the Vite filesystem. (Reported bug: "switching to the Vite demo, the file manager does not move into Vite's filesystem.")

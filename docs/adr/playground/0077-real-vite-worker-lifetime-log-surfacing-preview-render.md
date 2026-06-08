@@ -4,6 +4,8 @@ Status: Accepted (2026-06-05)
 Date: 2026-06-05
 Relates to: ADR-0043 (Vite-in-Worker realm), ADR-0039 (kernel pre-entry process hook), ADR-0011 (worker IPC / stdio ports), ADR-0074 (SW routes preview-iframe requests to controlling window — ported here), ADR-0076 (read-only worker project mirror), ADR-0073 (PreviewPanel honest-status).
 
+> TL;DR: Real-Vite preview lives: bootstrap restores kernel stdio/`env` over `installProcessGlobals`, parks on a never-resolving `await` to dodge `self.close()`, ports ADR-0074 frame routing
+
 ## Context
 
 Report: "real vite won't load" — selecting **Real Vite** looked frozen (no terminal feedback), preview never rendered. The m10 e2e covering this path is `skip`ped by default, so the render path was never CI-verified on this branch; live browser diagnosis found **three stacked breaks**, each hiding the next:

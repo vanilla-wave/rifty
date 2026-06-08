@@ -3,6 +3,8 @@
 Status: Accepted (promoted from Q-2026-05-23-003)
 Date: 2026-05
 
+> TL;DR: `process.platform === 'rifty'` / `process.arch === 'wasm'` — honest host values, shimming native packages per-package rather than lying as `'linux'`/`'x64'`
+
 ## Context
 
 `riftyProcess` (`packages/runtime-js/src/builtins/process.ts:74-75`) reports `platform = 'rifty'`, `arch = 'wasm'`. Packages that branch on these (Rollup `dist/native.js`, `fsevents`, `esbuild`) bail with "platform not supported". Two stable positions:

@@ -3,6 +3,8 @@
 Status: Accepted (promotes Q-2026-05-30-001)
 Date: 2026-05-30
 
+> TL;DR: Installer loud-throws `ENATIVEUNSUPPORTED` for `cpu`-pinned (non-`wasm`) required natives at registry resolve; optional natives skip+warn, overrides exempt
+
 ## Context
 
 rifty runs JS + WASI WASM only — never `.node` node-gyp addons or native binaries (ELF/Mach-O/PE). Fundamental limit per `PROJECT_PLAN.md` non-goals, D-005, ADR-0006 ("what this won't fix"), ADR-0026 (`process.arch = 'wasm'`). The installer (`packages/npm-client/src/installer.ts`) previously installed such packages unconditionally → silently-broken tree. D-005 / ADR-0006 source #6 already committed to the fix: a documented incompatibility list surfaced as a clear install-time error.

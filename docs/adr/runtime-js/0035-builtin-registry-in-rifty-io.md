@@ -3,6 +3,8 @@
 Status: Accepted
 Date: 2026-05-26
 
+> TL;DR: `node:` builtin registry moves verbatim into `@riftydev/io`, killing the `net → runtime-js` reverse import while keeping the public API unchanged
+
 ## Context
 
 ADR-0012 moved `EventEmitter`, `Buffer`, streams, and `NotImplementedError` into the shared-primitives layer `@riftydev/io`, but consciously left the `node:` builtin **registry** in `@riftydev/runtime-js/src/builtins/registry.ts`, calling the residual `@riftydev/net → @riftydev/runtime-js` link a forward-direction wiring call, not a reverse import.

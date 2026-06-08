@@ -5,6 +5,8 @@ Date: 2026-05
 
 Decision D-001 (PROJECT_PLAN.md §8): the playground runs only in `crossOriginIsolated === true`, served with `COOP: same-origin` + `COEP: credentialless`.
 
+> TL;DR: Playground runs only when `crossOriginIsolated === true`, served with `COOP: same-origin` + `COEP: credentialless` to unlock `SharedArrayBuffer`
+
 ## Rationale
 
 - M6 sync IPC (`execSync`, sync file calls) requires `SharedArrayBuffer` + `Atomics.wait`, which needs isolation.

@@ -3,6 +3,8 @@
 Status: Implemented (2026-05-24)
 Date: 2026-05
 
+> TL;DR: Integration tests drive real `npm-client.install()` (resolve→fetch→unpack→link→lockfile) against vendored offline tarball fixtures, never the live registry
+
 ## Context
 
 `tests/integration/chalk.test.ts` and `express-style.test.ts` use in-memory mocks for package contents — neither exercises the real install + unpack + link + load path that `@riftydev/npm-client` must validate. So M9 acceptance ("npm install real packages works") is unprovable. A-027 flags this. Hitting `registry.npmjs.org` from CI is flaky; the mocks trade flakiness for irrelevance.

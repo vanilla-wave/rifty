@@ -3,6 +3,8 @@
 Status: Accepted (promoted from Q-2026-05-25-touch-utimes)
 Date: 2026-05
 
+> TL;DR: `FsSync` gains `utimes`: `MemoryFsSync` writes node `atime`/`mtime`, `OpfsFsSync` uses an in-memory side-table (no OPFS mtime primitive), killing backend-sniffing
+
 ## Context
 
 `touch` in `packages/shell/src/builtins.ts` updates `mtime` via the active sync mirror. When Q-2026-05-25-touch-utimes was logged, `touch` was the only caller, so the cheap path was backend-sniffing — `if (syncMirror() instanceof MemoryFsSync) {...}`, throwing `NotImplementedError` otherwise. That required importing `MemoryFsSync` from `@riftydev/vfs/internal`, violating the "public API only via `src/index.ts`" hard rule (CLAUDE.md), and would block OPFS as the default mirror (`touch` would throw inside a Worker).

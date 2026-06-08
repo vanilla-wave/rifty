@@ -3,6 +3,8 @@
 Status: Accepted
 Date: 2026-05
 
+> TL;DR: Node-API surface (`process` shim, `execSync`) leaves `kernel` for `runtime-js`; kernel publishes a typed `ProcessSpec` on `globalThis` + a pre-entry hook
+
 ## Context
 
 The 2026-05-26 kernel architecture audit found three symptoms of one root cause: `@riftydev/kernel` carried Node-runtime-shape knowledge that belongs one layer up in `@riftydev/runtime-js`. The kernel was therefore unusable outside a Node-style host — any consumer wanting a different process abstraction (or no `execSync`) still imported the Node shim and `'execSync'` handler unconditionally.

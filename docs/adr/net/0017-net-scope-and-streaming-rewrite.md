@@ -12,6 +12,8 @@ Date: 2026-05
 
 M12 starts only after M11 ships ADR-0011's worker-as-process — the bridge is the load-bearing primitive.
 
+> TL;DR: `@riftydev/net`'s chunked/SSE, raw-TCP `net.Socket`, and cross-realm WS gaps defer to one M12 rewrite: `ReadableStream` body + per-conn `MessagePort` over today's `BroadcastChannel`
+
 ## Context
 
 `@riftydev/net` today provides `node:http` over a buffered `Response`-shape RPC with the body fully materialised before delivery. `node:net.Socket` is built on the HTTP layer (carries HTTP-shape frames, not raw bytes). `node:ws` works only same-realm. Three REVIEW_ACTIONS entries — A-022 (chunked transfer), A-024 (raw TCP via `net.Socket`), A-025 (cross-realm WebSocket) — are symptoms of the same buffered-RPC constraint.

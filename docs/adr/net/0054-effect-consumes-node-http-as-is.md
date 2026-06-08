@@ -3,6 +3,8 @@
 Status: Accepted (ratifies decisions.md draft ADR-0057; opencode facade M12)
 Date: 2026-05-30
 
+> TL;DR: Effect's `@effect/platform-node` consumes rifty `node:http` as-is via additive Node-parity widening; no Effect-coupled export added to `packages/net`
+
 ## Context
 
 The opencode facade serves HTTP via Effect's `@effect/platform-node` `NodeHttpServer.layer`. The fork: HOW Effect reaches rifty's HTTP surface — consume `node:http` AS-IS (widening additively), OR ship a new Effect-coupled public symbol in `packages/net`.

@@ -4,6 +4,8 @@ Status: Accepted (2026-06-03)
 Date: 2026-06-03
 Supersedes (in part): ADR-0013 — replaces the `FileSystemSyncAccessHandle`-on-the-hot-path design for **file content** sync I/O in `OpfsFsSync`. ADR-0013's realm split, boot detector, directory-op scope, and main-realm `NotImplementedError` guard stand unchanged.
 
+> TL;DR: `OpfsFsSync` serves sync reads from an in-memory `content` `Map` (boot-preloaded) with async OPFS write-through; Worker boots async to wire the real backend first
+
 ## Context
 
 ADR-0013's `OpfsFsSync` routes `readFileBytesSync` / `writeFileSync` through `FileSystemSyncAccessHandle` — the only sync OPFS API. But acquiring a handle (`createSyncAccessHandle()`) is **async**, so `OpfsFsSync` threw `NotImplementedError` for any path whose handle wasn't already open, requiring callers to pre-warm via `await fsSync.openSync(path, true)`.

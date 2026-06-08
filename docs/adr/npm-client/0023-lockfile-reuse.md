@@ -5,6 +5,8 @@ Date: 2026-05
 
 **Decision (2026-05-26) — A-031 nested install:** Deferred to **M12**. Until then the installer keeps its flat-tree linker schema: one `node_modules/<name>/` per package and a hard `EVERSIONCONFLICT` on any version disagreement (implemented per A-031; `packages/npm-client/src/installer.ts`). Nested install (`node_modules/<a>/node_modules/<b>/…`) needs the linker-schema rewrite plus a lockfile-shape extension — both fit the M12 toolchain pass that also rewires `@riftydev/net` for cross-realm streaming. Real packages with conflicting transitive deps fail loudly rather than silently picking a winner.
 
+> TL;DR: `install()` reads an existing `package-lock.json`, replaying matching pins through a VFS tarball cache and live-re-resolving only subgraphs whose ranges drift
+
 ## Context
 
 `@riftydev/npm-client.install()` re-resolves every dependency from the registry on every call, even when `<cwd>/package-lock.json` exists — the lockfile is written but never read back. Repeated installs are slow and non-deterministic across registry-state changes. Flagged by REVIEW_ACTIONS A-030; the call site already has a TODO(ADR) marker pointing here.

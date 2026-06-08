@@ -3,6 +3,8 @@
 Status: Accepted (promoted from Q-2026-05-29-001)
 Date: 2026-05-29
 
+> TL;DR: Page↔worker preview bridge streams via additive `reply-stream-*` frames under net-local `PREVIEW_PORT_FRAME_VERSION` `2`, mode chosen per-request from `request.v`
+
 ## Context
 
 `@riftydev/net.bridgeCrossRealmPreview` / `serveCrossRealmPreview`

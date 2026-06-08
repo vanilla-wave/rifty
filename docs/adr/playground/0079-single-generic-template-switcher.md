@@ -4,6 +4,8 @@ Status: Accepted (2026-06-05)
 Date: 2026-06-05
 Relates to: ADR-0073 (terminal-luxe + PreviewPanel honest status), ADR-0075 (VSCode shell — ActivityBar/sidebar, `useMode`), ADR-0077 (real-vite preview render; emits the worker terminal markers m10 asserts), ADR-0078 (decouple-vite — the generic "Real npm project" naming this depends on). Resolves OPEN_QUESTIONS **Q-2026-06-04-316** (single-switcher half).
 
+> TL;DR: The Templates gallery is the ONE switcher; header `.rf-seg` toggles removed, modes entered only via `loadPreset` on a `[data-preset]` tile
+
 ## Context
 
 Two surfaces switched the playground's project/mode, duplicating each other:

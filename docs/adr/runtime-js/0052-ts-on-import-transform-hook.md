@@ -3,6 +3,8 @@
 Status: Accepted
 Date: 2026-05-30
 
+> TL;DR: optional async `transformSource` hook (+`workspace`) on `ModuleLoaderOptions`, DI-injected (zero new import edges), runs before acorn on `.ts`/`.tsx`/`.jsx` ESM ids
+
 ## Context
 
 opencode (the M12 facade target) is a `.ts` graph. ADR-0053 made `.ts`/`.tsx`

@@ -3,6 +3,8 @@
 Status: Accepted
 Date: 2026-05-27
 
+> TL;DR: `WasiOptions.cwd` hoists a preopen to fd 3; `AT_FDCWD` resolves to it; `path_open` opens dirs, `fd_readdir` returns `E_NOTDIR`, stdin wired
+
 ## Context
 
 Q-2026-05-27-003 deferred the WASI preopens / cwd API until a real consumer hit the constraints. ADR-0047 restored esbuild (`@esbuild/wasi-preview1`) as that consumer. esbuild's Go/WASIp1 runtime canonicalises a working directory at startup and resolves paths against it, forcing the decision.

@@ -3,6 +3,8 @@
 Status: Accepted (promoted from Q-2026-05-27-002)
 Date: 2026-05
 
+> TL;DR: SW preview interceptor sits on one `PreviewOwnerBinding` seam; `FirstWindowOwnerBinding` (client-id) + port-keyed `WorkerOwnerBinding` whose `'gone'` outcome traps no-`pagehide` Workers
+
 ## Context
 
 The SW preview interceptor (`@riftydev/service-worker`) routes `/preview/<port>/*` fetches to the realm owning that port's handler. Through M10 that realm is always the playground window: `FirstWindowOwnerResolver` picks the owning `Client`, and a window-shaped `ReadyClientsRegistry` (in `preview-bridge.ts`) gates each fetch on the `rifty:preview:ready` handshake. Both halves assume `event.source` is a window `Client`.

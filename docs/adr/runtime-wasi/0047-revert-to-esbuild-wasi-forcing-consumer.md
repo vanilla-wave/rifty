@@ -3,6 +3,8 @@
 Status: Accepted
 Date: 2026-05-27
 
+> TL;DR: M8/M10 WASI forcing consumer reverts to esbuild via real `@esbuild/wasi-preview1@0.28.0` (build-time vendored wasm, not a dep); swc dropped (no WASI build)
+
 ## Context
 
 ADR-0044 (Accepted, 2026-05-27) substituted **swc** for **esbuild** as the M8 vendoring target and the M10 `Vite ↔ <transformer>.wasm` shadow-binding target, on two premises:

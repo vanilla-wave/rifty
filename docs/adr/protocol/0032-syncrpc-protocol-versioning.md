@@ -3,6 +3,8 @@
 Status: Accepted (2026-05-25)
 Date: 2026-05
 
+> TL;DR: SAB header gets a `u32` `VERSION_OFFSET=0` slot (16→20 bytes), stamped per write and validated per read, throwing `EPROTOVERSION` on mismatch before decode
+
 ## Context
 
 ADR-0011 phase 3 shipped the SAB-backed sync RPC used by every kernel-spawned Worker. The phase-1 header (`packages/kernel/src/ipc/sab-ring.ts`) reserved four `Int32` slots — `REQ_STATE`, `REP_STATE`, `REQ_LEN`, `REP_LEN` — and `sync-rpc.ts` framed `{ method, payload }` / `{ ok, value | error }` as JSON-over-UTF-8.

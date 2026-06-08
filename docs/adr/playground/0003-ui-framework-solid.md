@@ -5,6 +5,8 @@ Date: 2026-05
 
 Decision D-002: Solid is used only in `apps/playground/`; every `packages/` module stays framework-agnostic TypeScript.
 
+> TL;DR: SolidJS is confined to `apps/playground/`, every `packages/` module stays framework-agnostic TS, bridged only via `adapters/` (no `solid-js` signals cross the boundary)
+
 ## Rationale
 
 - Fine-grained reactivity fits our update shapes: streaming stdout, FS events, process-tree changes.

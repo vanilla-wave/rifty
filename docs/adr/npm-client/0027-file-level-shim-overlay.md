@@ -3,6 +3,8 @@
 Status: Accepted (promoted from Q-2026-05-23-004)
 Date: 2026-05
 
+> TL;DR: per-file shims are overlaid into the VFS by the consuming adapter post-`install()`, not the npm-client layer; promote to a typed `shims/` registry at 3 sites
+
 ## Context
 
 ADR 0006 (D-005, "shadow registry") covers **full-package** swaps via `BUILT_IN_OVERRIDES` (e.g. `bcrypt → bcryptjs`). M10 Real-Vite needs finer granularity: install the real package (`esbuild`, `rollup`), then overwrite specific files inside it (`esbuild/lib/main.js`, `rollup/dist/native.js`) with browser-safe replacements while keeping the package's `package.json`, `exports` map, types, and peers intact. The provisional implementation (`esbuild-shim.ts`, `realVite.ts` calling `overlayShims()`) writes shims into the VFS after the npm-client linker finishes; this ADR ratifies it and sets the promotion threshold.

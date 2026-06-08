@@ -3,6 +3,8 @@
 Status: Implemented (2026-05-24)
 Date: 2026-05
 
+> TL;DR: `node:https` is a loud-throw stub: imports resolve and surface mirrors `node:http`, but every method throws `NotImplementedError` (no TLS in-browser)
+
 ## Context
 
 `packages/net/src/register-builtins.ts` previously aliased `node:https` to `node:http`. TLS is unavailable in the browser realm, so the alias silently stripped security semantics and let callers believe they were on an encrypted transport — a "no silent stubs" violation (CLAUDE.md hard rule).

@@ -3,6 +3,8 @@
 Status: Implemented (2026-05-24)
 Date: 2026-05
 
+> TL;DR: All shim/override sources consolidate under `tools/shadow-registry/` (`bakedOverrides`/`esbuildShimFiles`/`rollupShimFiles`); `overrides.ts` + adapters become one-line re-exports
+
 ## Context
 
 ADR 0006 (D-005) committed to a layered shadow-registry rooted under `tools/shadow-registry/packages/*`, but that directory never existed. Sources were scattered: `BUILT_IN_OVERRIDES` in `packages/npm-client/src/overrides.ts`; `esbuild`/`rollup-native` shims in `apps/playground/src/adapters/`. M9 marks the registry DONE, but only symbolically — it has no central home. REVIEW_ACTIONS A-007 flags the gap.

@@ -3,6 +3,8 @@
 Status: Implemented (2026-05-25)
 Date: 2026-05
 
+> TL;DR: `@riftydev/io` owns shared primitives (`EventEmitter`/`Buffer`/streams), `kernel.ProcessManager` owns PID allocation; `net` imports from `io`, not `runtime-js`
+
 ## Context
 
 `io` and `kernel` are near-empty skeletons. Shared Node primitives — `EventEmitter`, `Buffer`, the stream classes (`Readable`, `Writable`, `Duplex`, `Transform`, `PassThrough`), `NotImplementedError` — live in `packages/runtime-js/src/builtins/` and are imported from there. `net` imports `EventEmitter` from `@riftydev/runtime-js`, inverting the layering in `PROJECT_PLAN.md` §2 (`net` should depend on `io`, not `runtime-js`).

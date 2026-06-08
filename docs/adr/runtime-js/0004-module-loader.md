@@ -7,6 +7,8 @@ Date: 2026-05
 
 Decision D-003: CJS and ESM share one resolver and one module registry. ESM is parsed with `es-module-lexer`, rewritten to async-function form, and run via `new Function`.
 
+> TL;DR: CJS and ESM share one Node resolver and registry; ESM is lexed via `es-module-lexer`, rewritten to async-function form, and run through `new Function`
+
 ## Architecture
 
 1. **Resolver** — Node algorithm: walk-up `node_modules`, `package.json` `main`/`exports`/`imports`, conditional exports (`node`/`default`/`import`/`require`), extension fallbacks, directory index. Shared by CJS and ESM via an `esm: boolean` flag selecting conditions.

@@ -3,6 +3,8 @@
 Status: Accepted
 Date: 2026-05
 
+> TL;DR: `pnpm` workspace (`packages/*`/`apps/*`/`tools/*`) with one lockfile, project-wide TS-strict, `Biome` lint+format, `Vitest` + `Playwright` test projects
+
 ## Context
 
 rifty is layered (vfs → kernel → runtimes → shell/network → playground); each layer evolves independently but shares types and tooling.

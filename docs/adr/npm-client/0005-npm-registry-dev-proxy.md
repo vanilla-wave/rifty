@@ -5,6 +5,8 @@ Date: 2026-05
 
 D-004: in dev, `/npm-registry/*` proxies via Vite's `server.proxy` to `https://registry.npmjs.org`. Production strategy deferred to Q4'.
 
+> TL;DR: dev `/npm-registry/*` proxies to `registry.npmjs.org` via Vite `server.proxy`; base URL from `REGISTRY_BASE_URL`, never hardcoded; prod deferred to M9
+
 ## Implementation
 
 ```ts

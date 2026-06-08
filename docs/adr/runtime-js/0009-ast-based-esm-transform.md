@@ -3,6 +3,8 @@
 Status: Accepted (supersedes the regex-based approach described in ADR 0004 §"ESM loader")
 Date: 2026-05
 
+> TL;DR: ESM rewriter parses with `acorn` and a hand-rolled scope-stack walker so imported bindings shadowed by params/locals stay untouched, replacing the regex zone-scanner
+
 ## Context
 
 The ESM loader (D-003 / ADR 0004) rewrites Node-style ESM source into an

@@ -3,6 +3,8 @@
 Status: Provisional — implementation deferred to first deploy session (downgraded 2026-05-27; see "Status update" below)
 Date: 2026-05
 
+> TL;DR: prod npm proxy is a Vercel Edge Function serving the dev `/npm-registry/...` route with `CORP: cross-origin` headers; `REGISTRY_BASE_URL` flips dev↔prod
+
 ## Context
 
 ADR 0005 (D-004) routes the npm registry through a configurable proxy. Dev uses Vite's `/npm-registry` proxy (`apps/playground/vite.config.ts`). Prod needs an equivalent: direct calls to `registry.npmjs.org` from a `crossOriginIsolated` page fail CORP/CORS. Left open as the M9-closure decision (PROJECT_PLAN.md §977 Q4', REVIEW_ACTIONS A-032).

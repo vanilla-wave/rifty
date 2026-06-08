@@ -4,6 +4,8 @@ Status: Accepted (2026-06-03)
 Date: 2026-06-03
 Relates to: ADR-0011 (kernel worker URL injection — refines its *build* path), ADR-0002/D-001 (cross-origin isolation), ADR-0017/ADR-0031/ADR-0046 (preview SW routing), ADR-0013/ADR-0072 (VFS backend / OPFS).
 
+> TL;DR: Playground overhaul: typed preset gallery + `terminal-luxe` token theme, prod workers bundled via `?worker&url` (not indirected URL strings), honest preview status
+
 ## Context
 
 The playground (`apps/playground`, SolidJS) was a functional but raw dark IDE: inline styles, two hard-coded editor sources (`replSource`/`devSource`), no preset picker, no hosting. Goal: make it (1) instantly playable from presets, (2) visually modern, (3) hostable.
