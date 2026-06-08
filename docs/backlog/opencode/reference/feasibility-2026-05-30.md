@@ -1,3 +1,5 @@
+> SUPERSEDED by reference/README.md (live results) — several premises (JSON-over-VFS storage, bun:sqlite) overturned by Spike C/ADR-0065. Kept for provenance.
+
 # Running `anomalyco/opencode` in rifty — feasibility
 
 Snapshot 2026-05-30. From the `opencode-rifty-feasibility` workflow (orient → 3 recon facets → synthesis → adversarial), analysing `github.com/anomalyco/opencode@dev`. **Assessment + plan, not implementation** — scopes the realistic target and the rifty work it needs.
