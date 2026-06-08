@@ -74,6 +74,22 @@ export class MemoryFsSync implements FsSync {
     this.#backend.utimes(normalizeAbsolute(path), atimeMs, mtimeMs);
   }
 
+  copyFileSync(src: string, dst: string): void {
+    this.#backend.copyFile(normalizeAbsolute(src), normalizeAbsolute(dst));
+  }
+
+  cpSync(src: string, dst: string, options: { recursive?: boolean } = {}): void {
+    this.#backend.cpRecursive(
+      normalizeAbsolute(src),
+      normalizeAbsolute(dst),
+      options.recursive ?? false,
+    );
+  }
+
+  renameSync(src: string, dst: string): void {
+    this.#backend.rename(normalizeAbsolute(src), normalizeAbsolute(dst));
+  }
+
   loadFixture(files: Readonly<Record<string, string>>): void {
     const enc = new TextEncoder();
     for (const [path, content] of Object.entries(files)) {

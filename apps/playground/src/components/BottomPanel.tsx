@@ -6,14 +6,16 @@
  * via CSS, so the single `attachWriter` wiring stays valid and stdout keeps
  * flowing while collapsed. xterm's own `ResizeObserver` refits on expand.
  */
-import { TerminalPanel } from './TerminalPanel.tsx';
+import { type TerminalDims, TerminalPanel } from './TerminalPanel.tsx';
 
 export function BottomPanel(props: {
   sub: string;
   collapsed: boolean;
   onToggleCollapse(): void;
   attach(write: (chunk: string, stream?: 'stdout' | 'stderr') => void): void;
-  onLine(line: string): void | Promise<void>;
+  onLine(line: string, dims: TerminalDims): void | Promise<void>;
+  /** Ctrl+C from the terminal — forwarded to the shell session's `interrupt()`. */
+  onSignal?(): void;
 }) {
   return (
     <section class="rf-console" data-collapsed={props.collapsed} data-testid="console">

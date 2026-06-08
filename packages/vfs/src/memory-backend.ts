@@ -205,4 +205,73 @@ export class MemoryBackend {
     node.atime = atimeMs;
     node.mtime = mtimeMs;
   }
+
+  copyFile(src: string, dst: string): void {
+    const s = normalizeAbsolute(src);
+    const d = normalizeAbsolute(dst);
+    const node = this.resolve(s);
+    if (!node) throw new VfsError('ENOENT', src);
+    if (node.kind !== 'file') throw new VfsError('EISDIR', src);
+    const dstNode = this.resolve(d);
+    if (dstNode && dstNode.kind === 'dir') throw new VfsError('EISDIR', dst);
+    // writeFile validates dst's parent (ENOENT/ENOTDIR) and stamps mtime=now.
+    // .slice() so src and dst are independent buffers.
+    this.writeFile(d, node.data.slice());
+  }
+
+  cpRecursive(src: string, dst: string, recursive: boolean): void {
+    const s = normalizeAbsolute(src);
+    const d = normalizeAbsolute(dst);
+    const node = this.resolve(s);
+    if (!node) throw new VfsError('ENOENT', src);
+    if (node.kind === 'file') {
+      this.copyFile(s, d);
+      return;
+    }
+    if (!recursive) throw new VfsError('EISDIR', src);
+    // Guard against copying a dir into its own subtree (`cp -r a a`, `cp -r a
+    // a/b`) — without it the recursion never terminates → stack overflow.
+    // Matches `rename`'s into-subtree EINVAL.
+    if (d === s || d.startsWith(`${s}/`)) throw new VfsError('EINVAL', src);
+    this.mkdir(d, { recursive: true });
+    // Fail-fast: a child failure propagates; entries copied before remain.
+    for (const name of [...node.children.keys()].sort()) {
+      this.cpRecursive(`${s}/${name}`, `${d}/${name}`, true);
+    }
+  }
+
+  rename(src: string, dst: string): void {
+    const s = normalizeAbsolute(src);
+    const d = normalizeAbsolute(dst);
+    if (s === d) return;
+    if (s === '/') throw new VfsError('EINVAL', src);
+    const srcNode = this.resolve(s);
+    if (!srcNode) throw new VfsError('ENOENT', src);
+    if (srcNode.kind === 'dir' && d.startsWith(`${s}/`)) throw new VfsError('EINVAL', src);
+
+    const srcParentPath = dirnameNormalized(s);
+    const srcParent = this.resolve(srcParentPath);
+    if (!srcParent || srcParent.kind !== 'dir') throw new VfsError('ENOENT', srcParentPath);
+    const srcName = s.slice(srcParentPath === '/' ? 1 : srcParentPath.length + 1);
+
+    const dstParentPath = dirnameNormalized(d);
+    const dstParent = this.resolve(dstParentPath);
+    if (!dstParent || dstParent.kind !== 'dir') throw new VfsError('ENOENT', dstParentPath);
+    const dstName = d.slice(dstParentPath === '/' ? 1 : dstParentPath.length + 1);
+    if (dstName === '') throw new VfsError('EINVAL', dst);
+
+    const dstNode = dstParent.children.get(dstName);
+    if (dstNode) {
+      if (srcNode.kind === 'file' && dstNode.kind === 'dir') throw new VfsError('EISDIR', dst);
+      if (srcNode.kind === 'dir' && dstNode.kind === 'file') throw new VfsError('ENOTDIR', dst);
+      if (dstNode.kind === 'dir' && dstNode.children.size > 0) throw new VfsError('ENOTEMPTY', dst);
+      dstParent.children.delete(dstName);
+    }
+    // Move the live node reference — O(1) on the memory backend, mtime untouched.
+    srcParent.children.delete(srcName);
+    dstParent.children.set(dstName, srcNode);
+    const now = Date.now();
+    srcParent.mtime = now;
+    dstParent.mtime = now;
+  }
 }

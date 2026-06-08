@@ -654,7 +654,11 @@ body {
   background: var(--rf-bg-1);
 }
 .rf-terminal {
-  padding: 6px 4px 6px 10px;
+  /* Inset (not padding) so xterm FitAddon sees the already-trimmed box:
+     FitAddon reads parent height minus the .xterm element's own padding (0),
+     ignoring padding on the mount container — padding here overflowed the
+     last row past the console body into the status bar. */
+  inset: 6px 4px 6px 10px;
 }
 
 /* preview */
@@ -1303,6 +1307,8 @@ body.rf-resizing iframe {
 .rf-console__body {
   position: relative;
   min-height: 0;
+  /* Fill the inset gap around .rf-terminal with the xterm surface colour. */
+  background: var(--rf-bg-1);
 }
 .rf-console[data-collapsed="true"] .rf-console__body {
   display: none;

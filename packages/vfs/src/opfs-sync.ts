@@ -670,4 +670,133 @@ export class OpfsFsSync implements FsSync {
     this.removeSubtree(normalized);
     this.persistRmAsync(normalized, recursive);
   }
+
+  copyFileSync(src: string, dst: string): void {
+    const s = normalizePath(src);
+    const d = normalizePath(dst);
+    const srcEntry = this.index.get(s);
+    if (!srcEntry) throw new VfsError('ENOENT', src);
+    if (srcEntry.kind === 'dir') throw new VfsError('EISDIR', src);
+    const dstEntry = this.index.get(d);
+    if (dstEntry && dstEntry.kind === 'dir') throw new VfsError('EISDIR', dst);
+    const parent = dirname(d);
+    const parentEntry = this.index.get(parent);
+    if (!parentEntry || parentEntry.kind !== 'dir') throw new VfsError('ENOENT', parent);
+    const bytes = (this.content.get(s) ?? new Uint8Array()).slice();
+    // writeFileSync updates content/index/attachChild + enqueues OPFS write-through.
+    this.writeFileSync(d, bytes);
+    // A copy is a new file → dst mtime = now (ADR-0090; OPFS mtime via side-table).
+    const now = Date.now();
+    this.times.set(d, { atime: now, mtime: now });
+  }
+
+  cpSync(src: string, dst: string, options: { recursive?: boolean } = {}): void {
+    const recursive = options.recursive ?? false;
+    const s = normalizePath(src);
+    const d = normalizePath(dst);
+    const srcEntry = this.index.get(s);
+    if (!srcEntry) throw new VfsError('ENOENT', src);
+    if (srcEntry.kind === 'file') {
+      this.copyFileSync(s, d);
+      return;
+    }
+    if (!recursive) throw new VfsError('EISDIR', src);
+    // Guard against copying a dir into its own subtree (`cp -r a a`, `cp -r a
+    // a/b`) — without it the recursion never terminates → stack overflow.
+    // Matches `renameSync`'s into-subtree EINVAL.
+    if (d === s || d.startsWith(`${s}/`)) throw new VfsError('EINVAL', src);
+    this.mkdirSync(d, { recursive: true });
+    // Fail-fast: a child failure propagates; entries copied before remain.
+    for (const name of [...(srcEntry.children ?? [])].sort()) {
+      this.cpSync(`${s}/${name}`, `${d}/${name}`, { recursive: true });
+    }
+  }
+
+  renameSync(src: string, dst: string): void {
+    const s = normalizePath(src);
+    const d = normalizePath(dst);
+    if (s === d) return;
+    if (s === '/') throw new VfsError('EINVAL', src);
+    const srcEntry = this.index.get(s);
+    if (!srcEntry) throw new VfsError('ENOENT', src);
+    if (srcEntry.kind === 'dir' && d.startsWith(`${s}/`)) throw new VfsError('EINVAL', src);
+    const dstParent = dirname(d);
+    const dstParentEntry = this.index.get(dstParent);
+    if (!dstParentEntry || dstParentEntry.kind !== 'dir') throw new VfsError('ENOENT', dstParent);
+    const dstEntry = this.index.get(d);
+    if (dstEntry) {
+      if (srcEntry.kind === 'file' && dstEntry.kind === 'dir') throw new VfsError('EISDIR', dst);
+      if (srcEntry.kind === 'dir' && dstEntry.kind === 'file') throw new VfsError('ENOTDIR', dst);
+      if (dstEntry.kind === 'dir' && dstEntry.children && dstEntry.children.size > 0) {
+        throw new VfsError('ENOTEMPTY', dst);
+      }
+      // File overwrite or empty-dir replace: drop the dst subtree from all maps.
+      this.detachChild(d);
+      this.removeSubtree(d);
+    }
+    // Snapshot the src subtree paths BEFORE mutating, then re-key index /
+    // content / times across each — preserving the entry objects so the
+    // `times` mtime survives (the ADR-0090 win). Open handles point at the
+    // OLD on-disk file (which the async persist removes), so close+drop them;
+    // a fresh handle opens lazily on next access.
+    const moved = [...this.index.keys()].filter((p) => p === s || p.startsWith(`${s}/`));
+    this.detachChild(s);
+    const fileWrites: Array<readonly [string, Uint8Array]> = [];
+    for (const oldP of moved) {
+      const newP = d + oldP.slice(s.length);
+      const entry = this.index.get(oldP);
+      if (entry) {
+        this.index.set(newP, entry);
+        this.index.delete(oldP);
+      }
+      const bytes = this.content.get(oldP);
+      if (bytes !== undefined) {
+        this.content.set(newP, bytes);
+        this.content.delete(oldP);
+        fileWrites.push([newP, bytes.slice()]);
+      }
+      const t = this.times.get(oldP);
+      if (t !== undefined) {
+        this.times.set(newP, t);
+        this.times.delete(oldP);
+      }
+      const h = this.handles.get(oldP);
+      if (h !== undefined) {
+        try {
+          h.close();
+        } catch {
+          // Closing a stale handle is best-effort.
+        }
+        this.handles.delete(oldP);
+      }
+    }
+    this.attachChild(d);
+    this.persistRenameAsync(s, fileWrites);
+  }
+
+  /**
+   * Best-effort async OPFS persist of a rename: recreate the moved files at
+   * their new paths from the captured bytes, then remove the old subtree.
+   * `FileSystemSyncAccessHandle` has no native rename; the SYNC view is
+   * already atomic (the in-memory re-key above), so on-disk lag is acceptable
+   * (ADR-0072/0083) and reconciles on the next `refreshIndex`. Tracked in
+   * `pending` so `flush()` drains it before a reload.
+   */
+  private persistRenameAsync(
+    srcRoot: string,
+    fileWrites: Array<readonly [string, Uint8Array]>,
+  ): void {
+    const surface = this.asyncSurface;
+    if (!surface) return;
+    const p = (async () => {
+      try {
+        for (const [newP, bytes] of fileWrites) await surface.writeFile(newP, bytes);
+        await surface.rm(srcRoot, { recursive: true });
+      } catch {
+        // Mismatch reconciles on the next refreshIndex (same posture as
+        // enqueueWriteThrough / persistRmAsync).
+      }
+    })();
+    this.trackPending(p);
+  }
 }

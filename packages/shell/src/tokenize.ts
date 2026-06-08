@@ -1,6 +1,12 @@
 /**
  * Minimal shell tokenizer with POSIX-ish quoting and `$VAR` expansion.
  *
+ * Emits {@link Token}s, NOT bare strings: word tokens carry a `quoted` flag
+ * recording whether any character came from inside `'…'`/`"…"`, and operator
+ * tokens carry an `op` discriminator. Quote provenance is load-bearing for glob
+ * expansion (ADR-0091): `grep '*.ts'` (quoted) must stay literal while
+ * `grep *.ts` (unquoted) expands — a bare `string[]` can't distinguish them.
+ *
  * Supported:
  *   - Whitespace splitting outside quotes.
  *   - Single quotes (`'…'`): literal, no expansion, no escapes.
@@ -16,14 +22,35 @@
  *     Inside quotes they stay literal — `echo 'a && b'` is one argument.
  *
  * Deliberately NOT supported (kept loud — caller is expected to error):
- *   glob (`*`, `?`, `[abc]`); command substitution `$(…)` / `` `…` ``;
- *   arithmetic `$((…))`; heredocs.
+ *   glob (`*`, `?`, `[abc]`) is NOT expanded here — the dispatcher expands it
+ *   AFTER tokenize, using the `quoted` flag (ADR-0091); command substitution
+ *   `$(…)` / `` `…` ``; arithmetic `$((…))`; heredocs.
  *
  * Expansion uses the optional `env`; unknown variables expand to '' (POSIX).
  * Word splitting after expansion is NOT done — `"$x"` and unquoted `$x` both
  * stay one token. Deliberate: bash splits unquoted expansions on `IFS`, but
  * every playground call-site passes already-tokenised values.
  */
+
+/** A word token plus whether any of its characters came from inside quotes. */
+export interface WordToken {
+  value: string;
+  /** `true` iff ≥1 character of `value` originated inside `'…'` or `"…"`. */
+  quoted: boolean;
+}
+
+/** A shell operator token. */
+export interface OpToken {
+  op: '>' | '>>' | '<' | '|' | '&' | '&&' | '||' | ';';
+}
+
+/** A tokenized line element: either a word (with quote provenance) or an operator. */
+export type Token = WordToken | OpToken;
+
+/** Type guard: `true` for an operator token, narrowing to {@link OpToken}. */
+export function isOp(token: Token): token is OpToken {
+  return 'op' in token;
+}
 
 const VAR_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*/;
 
@@ -63,8 +90,8 @@ function expandVarAt(
   return { value: env[name] ?? '', next: j + name.length };
 }
 
-export function tokenize(line: string, env: Readonly<Record<string, string>> = {}): string[] {
-  const tokens: string[] = [];
+export function tokenize(line: string, env: Readonly<Record<string, string>> = {}): Token[] {
+  const tokens: Token[] = [];
   let i = 0;
   const n = line.length;
   while (i < n) {
@@ -74,7 +101,7 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
       continue;
     }
     if (ch === '>' || ch === '<' || ch === '|' || ch === '&' || ch === ';') {
-      let op = ch;
+      let op: OpToken['op'] = ch;
       if (ch === '>' && line[i + 1] === '>') {
         op = '>>';
         i++;
@@ -89,13 +116,15 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
         // rejects loudly instead of `vite &` silently dropping `&` into an arg.
         op = '&';
       }
-      tokens.push(op);
+      tokens.push({ op });
       i++;
       continue;
     }
 
     // One token = concatenated quoted/unquoted segments (POSIX: `a"b"c`).
+    // `quoted` flips true as soon as any character originates inside quotes.
     let buf = '';
+    let quoted = false;
     while (
       i < n &&
       line[i] !== ' ' &&
@@ -108,15 +137,16 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
     ) {
       const c = line[i]!;
       if (c === "'") {
-        // Single-quoted: literal, no expansion.
+        // Single-quoted: literal, no expansion. Chars are quoted-provenance.
         i++;
         while (i < n && line[i] !== "'") {
           buf += line[i];
+          quoted = true;
           i++;
         }
         if (i < n) i++;
       } else if (c === '"') {
-        // Double-quoted: expand $VAR, honour limited escapes.
+        // Double-quoted: expand $VAR, honour limited escapes. All quoted.
         i++;
         while (i < n && line[i] !== '"') {
           const dc = line[i]!;
@@ -124,21 +154,25 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
             const next = line[i + 1];
             if (next === '$' || next === '"' || next === '\\' || next === '`') {
               buf += next;
+              quoted = true;
               i += 2;
               continue;
             }
             // Unknown escape in double quotes — backslash stays literal.
             buf += dc;
+            quoted = true;
             i++;
             continue;
           }
           if (dc === '$') {
             const { value, next } = expandVarAt(line, i, env);
             buf += value;
+            quoted = true;
             i = next;
             continue;
           }
           buf += dc;
+          quoted = true;
           i++;
         }
         if (i < n) i++;
@@ -162,7 +196,7 @@ export function tokenize(line: string, env: Readonly<Record<string, string>> = {
         i++;
       }
     }
-    tokens.push(buf);
+    tokens.push({ value: buf, quoted });
   }
   return tokens;
 }

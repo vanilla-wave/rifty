@@ -176,6 +176,33 @@ The key shape, the full-clear-on-targeted-invalidate stance, and the never-cache
 
 End of milestone M10.
 
+## Q-2026-06-06-322: per-spawn env/argv sharing buys ~0 perf (postMessage clones regardless) — defer to the diff-wire variant (ADR/rule1) or the pre-warm pool (ADR-0088)
+
+**Status:** 🟢 Active — DEFER (no code change; spawn-worker.ts untouched)
+**Encountered in:** JS-runtime perf audit item #20 (`docs/perf/js-runtime-perf-audit-2026-06-05.md:95`)
+**Milestone:** M10
+**Author (agent session):** 2026-06-06
+
+### Context
+
+Audit #20 flagged the per-spawn env+argv structured-clone (`spawnKernelWorker` builds `fullSpec` then `worker.postMessage(init, [...])` in `packages/kernel/src/spawn-worker.ts`). The in-gate fix proposed (freeze + share one canonical env object) does **not** reduce that cost: `postMessage` structured-clones `env` (Record) and `argv` (array) into the child realm regardless of object identity or `Object.freeze` — non-transferables are always deep-copied. Verified there is also no redundant PARENT-side clone to dedupe: `fullSpec` takes `spec.env`/`spec.argv` by reference, and the one spread in the path (`process-manager.ts` `{...spec, cwd}`) is shallow and leaves those references untouched.
+
+### Provisional decision
+
+**No code change.** Do not freeze/share env (buys nothing) and do not ship a CHANGELOG perf claim for a no-op. Record the finding here:
+
+1. **Measured no-op in-gate:** the freeze+share variant yields ~0 wire/CPU savings; the structured-clone is intrinsic to crossing the realm boundary.
+2. **Wire payload must stay byte-identical:** any in-gate edit must keep `WorkerSpawnSpec` serializing the same own-enumerable env/argv — the child realm depends on receiving the full env + argv.
+3. **The only edit that removes the clone flips to rule1 (ADR):** a per-spawn diff/overrides wire over a hoisted shared canonical env changes the `WorkerSpawnSpec` wire shape (cross-package public API in `packages/kernel/src/worker-entry.ts`) → IRREVERSIBLE per the reversibility checklist rule 1; it needs an ADR, not this OPEN_QUESTIONS line. If anyone implements it, reclassify.
+4. **The real spawn-latency lever is deferred:** a worker pre-warm pool (1–2 fresh never-executed workers) is the audit's "biggest spawn-latency lever" (audit:95/138), gated on a measured spawn spike, tracked as the prospective ADR-0088. Env/argv micro-tuning is not on the critical path.
+
+### Concrete trigger to overturn (any one)
+
+1. A measured spawn-rate spike (test runners / `worker_threads` fan-out) makes the env/argv clone material on a shipped workload → revisit the diff-wire variant (then via an ADR, rule1).
+2. The pre-warm pool work (ADR-0088) lands — fold any env/argv sharing into that pass once the wire shape is being revised anyway.
+
+### Code markers (none — no code change; captured here)
+
 ## Q-2026-06-06-323: when to overturn the page-buffered cross-realm preview deferral (ADR-0048 D2) and ship the v3 frame bump
 
 **Status:** 🟢 Active — DEFER (upholds ADR-0048 D2 / ADR-0017 M12 / ADR-0055 "do NOT ship v3")
@@ -204,32 +231,147 @@ The perf audit proposed building true end-to-end page↔worker `ReadableStream` 
 
 ### Code markers (none — captured here; reversible)
 
-## Q-2026-06-06-322: per-spawn env/argv sharing buys ~0 perf (postMessage clones regardless) — defer to the diff-wire variant (ADR/rule1) or the pre-warm pool (ADR-0088)
+<!-- Rich-terminal/coreutils research (docs/research/rich-terminal-coreutils-2026-06-06.md):
+     IRREVERSIBLE forks → ADR-0088..0093. REVERSIBLE forks recorded below (Q-2026-06-06-401..406),
+     pre-implementation (no code markers yet). -->
 
-**Status:** 🟢 Active — DEFER (no code change; spawn-worker.ts untouched)
-**Encountered in:** JS-runtime perf audit item #20 (`docs/perf/js-runtime-perf-audit-2026-06-05.md:95`)
+## Q-2026-06-06-401: single shared home for the grep/tree-walker logic
+
+**Status:** 🟢 Active
+**Encountered in:** rich-terminal research (ADR-0088 coreutils strategy; ADR-0092 git read-ops)
+**Milestone:** M10/M12
+**Author (agent session):** 2026-06-06
+
+### Context
+
+`grep` (promoted from `vfs-grep`) and the facade `grep`/`list` tools (and the ADR-0092 git read-ops) all want the same recursive readdir + match walk. The current `packages/runtime-js/src/utils/vfs-grep.ts` imports `readFileSync/readdirSync/Dirent` from the runtime-js `builtins/fs.ts` node:fs FACADE (method-form `Dirent.isDirectory()`), NOT `@riftydev/vfs` directly.
+
+### Provisional decision
+
+Lean **(b)**: relocate ONE pure walker into shell/vfs rewired onto `syncMirror()` (field-form `VfsDirent.isDirectory` boolean), shared by builtin + facade tool, to avoid two-path divergence. Alternative **(a)** (re-export `vfsGrep` from `runtime-js/src/index.ts`) is simpler but keeps the method-form Dirent shape and a cross-layer import. REVERSIBLE while the walker stays an internal util; becomes IRREVERSIBLE only if a re-export adds public API. NB the method→field Dirent adaptation is real work, not a move. The Q-2026-05-30-061 ripgrep-WASM deferral is unaffected.
+
+### Code markers
+
+IMPLEMENTED this phase: `packages/shell/src/commands/_walk.ts` — option (b) pure walker on field-form `VfsDirent`, no runtime-js import; consumed by `commands/grep.ts` (`-r`) and `commands/find.ts`. Facade-tool / ADR-0092 git read-ops reuse still pending.
+
+## Q-2026-06-06-402: `ls`/`grep` `--color` via hand-rolled SGR (not picocolors)
+
+**Status:** 🟢 Active
+**Encountered in:** rich-terminal research (ADR-0088; ADR-0089 isTTY gating)
 **Milestone:** M10
 **Author (agent session):** 2026-06-06
 
 ### Context
 
-Audit #20 flagged the per-spawn env+argv structured-clone (`spawnKernelWorker` builds `fullSpec` then `worker.postMessage(init, [...])` in `packages/kernel/src/spawn-worker.ts`). The in-gate fix proposed (freeze + share one canonical env object) does **not** reduce that cost: `postMessage` structured-clones `env` (Record) and `argv` (array) into the child realm regardless of object identity or `Object.freeze` — non-transferables are always deep-copied. Verified there is also no redundant PARENT-side clone to dedupe: `fullSpec` takes `spec.env`/`spec.argv` by reference, and the one spread in the path (`process-manager.ts` `{...spec, cwd}`) is shallow and leaves those references untouched.
+Color output needs raw SGR (`\x1b[1;34m…\x1b[0m`) to xterm. picocolors is the popular pick but its **browser build returns plain (uncolored) strings — emits no SGR** (a render-colors PR was rejected as Chrome-only), so it's actively wrong here.
 
 ### Provisional decision
 
-**No code change.** Do not freeze/share env (buys nothing) and do not ship a CHANGELOG perf claim for a no-op. Record the finding here:
+A ~20–40-line LS_COLORS/SGR helper in `packages/shell/src/`, zero-dep, strictly more correct than picocolors. Emission MUST be gated on `ctx.isTTY` (ADR-0089) — `--color=auto` suppresses SGR into redirects/pipes. Known limitation: hand-rolled palette won't match `$LS_COLORS`; ASCII-only column width (no wcwidth). REVERSIBLE (internal helper).
 
-1. **Measured no-op in-gate:** the freeze+share variant yields ~0 wire/CPU savings; the structured-clone is intrinsic to crossing the realm boundary.
-2. **Wire payload must stay byte-identical:** any in-gate edit must keep `WorkerSpawnSpec` serializing the same own-enumerable env/argv — the child realm depends on receiving the full env + argv.
-3. **The only edit that removes the clone flips to rule1 (ADR):** a per-spawn diff/overrides wire over a hoisted shared canonical env changes the `WorkerSpawnSpec` wire shape (cross-package public API in `packages/kernel/src/worker-entry.ts`) → IRREVERSIBLE per the reversibility checklist rule 1; it needs an ADR, not this OPEN_QUESTIONS line. If anyone implements it, reclassify.
-4. **The real spawn-latency lever is deferred:** a worker pre-warm pool (1–2 fresh never-executed workers) is the audit's "biggest spawn-latency lever" (audit:95/138), gated on a measured spawn spike, tracked as the prospective ADR-0088. Env/argv micro-tuning is not on the critical path.
+### Code markers
 
-### Concrete trigger to overturn (any one)
+IMPLEMENTED this phase: `packages/shell/src/commands/_sgr.ts` (`sgr`/`colorize`, dirs-only subset, identity when disabled); `commands/ls.ts` gates `--color=auto` on `ctx.isTTY`. See also [[Q-2026-06-07-411]] (ls `--color` not byte-fixtured vs gls).
 
-1. A measured spawn-rate spike (test runners / `worker_threads` fan-out) makes the env/argv clone material on a shipped workload → revisit the diff-wire variant (then via an ADR, rule1).
-2. The pre-warm pool work (ADR-0088) lands — fold any env/argv sharing into that pass once the wire shape is being revised anyway.
+## Q-2026-06-06-403: stdout/stderr kept separate internally, merged only at the xterm sink
 
-### Code markers (none — no code change; captured here)
+**Status:** 🟢 Active
+**Encountered in:** rich-terminal research (ADR-0089; jsh reference §3)
+**Milestone:** M10/M12
+**Author (agent session):** 2026-06-06
+
+### Context
+
+jsh merges stdout+stderr into one `process.output` stream at the terminal. rifty already keeps fd1/fd2 separate in `CommandContext` (`stdout`/`stderr` writers). Builtins write usage/errors to fd2.
+
+### Provisional decision
+
+Keep fd1/fd2 **separate internally**; merge ONLY at the xterm sink (the playground terminal). Preserves Node parity, `$?`, and future `2>&1` faithfulness — the merge is a presentation concern, not the contract. REVERSIBLE/small.
+
+### Code markers
+
+(none — pre-implementation; already the shape of `CommandContext`.)
+
+## Q-2026-06-06-404: awk / full-sed deferred (`NotImplementedError` + compat ❌)
+
+**Status:** 🟢 Active
+**Encountered in:** rich-terminal research (ADR-0088 §4; gap matrix §5)
+**Milestone:** M12+
+**Author (agent session):** 2026-06-06
+
+### Context
+
+awk and full sed are an interpreter-class effort; the JS ecosystem ports are emscripten-WASM-only (a vendored binary = IRREVERSIBLE, ADR-0088 Option B territory).
+
+### Provisional decision
+
+**Defer.** `awk`/full-`sed` throw `NotImplementedError` + register `❌` (no silent stub), so the agent fails loudly. A pure-JS `sed s///` subset (~80–120 LOC) is an optional later add if a verified need appears (REVERSIBLE). Full awk/sed only via the deferred uutils-WASM path (Q-2026-05-30-061 sibling).
+
+### Code markers
+
+(none — pre-implementation; register ❌ when the builtin set lands.)
+
+## Q-2026-06-06-405: background `&` / job model deferred
+
+**Status:** 🟢 Active
+**Encountered in:** rich-terminal research (§6 #7); distinct from the ADR-0089 cancellation contract
+**Milestone:** M12+ kernel
+**Author (agent session):** 2026-06-06
+
+### Context
+
+`Shell.run` rejects bare `&` (`NotImplementedError('shell.background')`). The non-terminating-foreground-server problem (vite/node http) is solved by the ADR-0089 cancellation contract (Ctrl-C resolves `run`), NOT by `&`. True backgrounding needs a job model.
+
+### Provisional decision
+
+**Defer** `&`/job control as a separate decision; it ties to **Q-2026-06-05-317** (kernel native server-process support) and is explicitly NOT subsumed by ADR-0089. Its own ADR when taken up (IRREVERSIBLE — kernel public behaviour).
+
+### Code markers
+
+(none — pre-implementation; the bare-`&` throw already exists in `shell.ts`.)
+
+## Q-2026-06-06-406: agent file ops — structured-tool-first, minimal bash fallback
+
+**Status:** 🟢 Active
+**Encountered in:** rich-terminal research (§1 reframe, §5, §9; ADR-0092 git)
+**Milestone:** M12 (opencode facade)
+**Author (agent session):** 2026-06-06
+
+### Context
+
+opencode agents have two channels: structured file tools (read/grep/glob/list/edit/write) + one bash tool. Models still shell out to `rg`/`ls`/`find` (opencode #14791/#6506) even when structured tools exist.
+
+### Provisional decision
+
+**Structured-tool-first**: the dominant channel is pure-JS facade tools over the VFS (no pipe dependency); keep a `list` tool (opencode #6506) and tune the facade prompt to curb shell exploration. The literal-bash fallback is lower priority and gated on the M12 pipes+glob+stdin chain (ADR-0089/0091). REVERSIBLE facade-design lean.
+
+### Code markers
+
+(none — pre-implementation, M12 facade work.)
+
+## Q-2026-06-07-407: shell command-file layout — `commands/<cmd>.ts` + `_shared.ts` barrel
+
+**Status:** 🟢 Active · **Encountered in:** ADR-0088 coreutils builtins impl · **Milestone:** M10 · **Author:** 2026-06-07
+
+Each new builtin is its own `packages/shell/src/commands/<cmd>.ts` (`export const <cmd>: ShellCommand`), sharing `commands/_shared.ts` (`resolve`/`enc`/`dec`); `builtins.ts` is the registration barrel. Chosen for clean parallel fan-out (one file per builtin, no merge conflicts) over a monolithic `builtins.ts`. File-structure-inside-a-package = always-reversible per CLAUDE.md (recorded because every builtin depends on the convention). Existing 9 builtins not yet relocated (left in `builtins.ts`) — a cosmetic follow-up, not required.
+
+## Q-2026-06-07-408: head/tail GNU sign semantics (`-n -N` / `-n +N`)
+
+**Status:** 🟢 Active · **Encountered in:** ADR-0088 head/tail impl · **Milestone:** M10 · **Author:** 2026-06-07
+
+Implemented full GNU sign semantics: `head -n -N` = all but last N; `head -c -N` = all but last N bytes; `tail -n +N` = from line N (1-based); `tail -c +N` = from byte N. Cheap + a real correctness gotcha agents/humans hit. REVERSIBLE (no public-API impact). Pinned by head/tail unit tests. `tail -f` throws NotImplementedError (no polling loop).
+
+## Q-2026-06-07-409: realpath = normalize+exists (no symlink layer)
+
+**Status:** 🟢 Active · **Encountered in:** ADR-0088 realpath impl · **Milestone:** M10 · **Author:** 2026-06-07
+
+VFS has no symlinks (ADR-0050), so `realpath` of an existing path = its normalized absolute path; a missing component → exit 1 (default `-e`/`-P`), `-m` allows missing. Mirrors runtime-js `realpathSync`. Documented as a GNU-divergence for the compat matrix (milestone closer). `-s`/`--relative-to`/`--relative-base` throw NotImplementedError. REVERSIBLE.
+
+## Q-2026-06-07-410: tier-c builtin parity cases tracked for the DoD closer
+
+**Status:** 🟢 Active · **Encountered in:** ADR-0093 vs landed file-arg builtins · **Milestone:** M10/M11 · **Author:** 2026-06-07
+
+ADR-0093 (c) mandates a node-parity-runner case per tier-c builtin. The landed builtins ship rigorous vitest unit tests but no node-parity cases yet. Pure path-math builtins (basename/dirname/realpath) are string-only → a node:fs "parity case" would be engine-identical by construction (the "force-fit" anti-pattern ADR-0093 itself warns against); their honest parity rides on rifty's node:path parity (existing `cases/path`). The genuinely non-redundant cases are for the new ADR-0090 fs primitives (renameSync mtime / cpSync recursive) routed through runtime-js `node:fs` (unit U32, not yet done) + read/count/slice cases for wc/head/tail/cat. Tracked here + in CHANGELOG; to be added with U32 before the milestone-DoD closer. REVERSIBLE (test infra).
 
 ## Q-2026-06-05-318: deferred `RIFTY_RFV_*` → `RIFTY_RT_*` env rename + `Mode` token rename (post-ADR-0078)
 
@@ -389,7 +531,10 @@ The old left rail was the preset gallery. The VSCode shell puts both Explorer an
 
 ## Q-2026-06-04-313: directory rename via copyTree+rm (no native `renameSync` on the sync mirror)
 
-**Status:** 🟢 Active
+**Status:** ⚪ Promoted → ADR-0090 (VFS `copyFileSync`/`cpSync`/`renameSync` primitives)
+
+**Resolution (2026-06-06):** Promoted by **ADR-0090** — native mtime-preserving, atomic-where-possible `renameSync` + `copyFileSync`/`cpSync` added to `FsSync`. The `glue/fs-ops.ts` copyTree+rm rename workaround migrates onto `renameSync` (file case) and the `// TODO(ADR): Q-2026-06-04-313` marker is removed when that lands. Entry kept briefly for traceability.
+
 **Encountered in:** ADR-0075 (file explorer actions)
 **Milestone:** M10 polish
 **Author (agent session):** 2026-06-04
@@ -1371,6 +1516,38 @@ decision better made against a concrete package that needs it.
 ### Needs human review by
 
 End of milestone M12.
+
+---
+
+## Q-2026-06-07-411: grep/find frozen-GNU fixtures deferred; ls --color/-l not byte-fixtured
+
+**Status:** 🟢 Active · **Encountered in:** ADR-0093(b) vs landed ls/grep/find · **Milestone:** M10/M11 · **Author:** 2026-06-07
+
+ADR-0093(b) wants frozen-GNU golden fixtures as the oracle for ls/grep/find. Landed this phase: `ls` byte-frozen vs `gls` (GNU coreutils 9.7) for default/-a/-A/-1/-r listing (`packages/shell/fixtures/ls/`). NOT fixtured (recorded — no silent cap): (1) grep — `ggrep` not installed → 22 hand-asserted conformance tests; (2) find — `gfind`/findutils not installed (box aliases find→bfs) → 12 conformance tests; (3) ls `--color` — gls emits leading `ESC[0m` + zero-padded `01;34` vs our `ESC[1;34m`, structural assert only; (4) ls `-l` metadata (perms/owner/nlink) — fixed placeholders per ADR-0050 (VFS has no real perms), structural regex only.
+
+### Provisional decision
+
+Defer grep/find byte-fixtures to the milestone-DoD closer: capture via `brew install grep findutils` (→ ggrep/gfind, `LC_ALL=C`, version+locale header) or a Linux box, then add fixture tests mirroring `ls-fixtures.test.ts`. ls `--color`/`-l` stay structurally-asserted unless real SGR-LS_COLORS / perms ever land. REVERSIBLE (test infra only).
+
+### Code markers
+
+(none — fixtures not yet captured; mark grep.ts/find.ts/ls-fixtures.test.ts when frozen golden cases land.)
+
+---
+
+## Q-2026-06-07-412: minor GNU usage-error fidelity in find/ls (polish)
+
+**Status:** 🟢 Active · **Encountered in:** adversarial review of landed find/ls · **Milestone:** M10 polish · **Author:** 2026-06-07
+
+Review flagged 3 usage-error fidelity nits — NOT silent stubs, NOT hard-rule breaches (all loud), just mis-shaped vs GNU: (1) `find -name` with a MISSING value silently sets name='' (empty regex → no output, exit 0) instead of GNU `find: missing argument to '-name'`; (2) `find -type` missing value throws `NotImplementedError('shell.find.-type')` — loud but mislabels a usage error; (3) `ls --color=WHEN` with invalid WHEN writes a GNU-style stderr line then throws NotImplementedError — should be a GNU usage error (exit 2), not not-implemented.
+
+### Provisional decision
+
+Low-priority polish: convert these three to GNU usage errors (stderr + exit 2/1, no throw) when next touching find/ls. Not blocking — current behavior is loud and safe. REVERSIBLE (local error-path tweaks, <1 file each).
+
+### Code markers
+
+(none — fix not yet applied; mark find.ts (-name/-type arg parse) + ls.ts (--color parse) when the usage-error shaping lands.)
 
 ---
 

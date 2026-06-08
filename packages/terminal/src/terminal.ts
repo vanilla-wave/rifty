@@ -38,6 +38,8 @@ export class RiftyTerminal {
   private fit: FitAddon | null = null;
   private readonly opts: RiftyTerminalOptions;
   private buffer = '';
+  /** Caret index into `buffer`, 0..buffer.length. Insert/delete happen here. */
+  private cursorPos = 0;
   private history: string[] = [];
   private historyIdx = 0;
   private resizeObserver: ResizeObserver | null = null;
@@ -76,6 +78,16 @@ export class RiftyTerminal {
     this.term.dispose();
   }
 
+  /** Current terminal width in columns (xterm default 80 before {@link mount}). */
+  get cols(): number {
+    return this.term.cols;
+  }
+
+  /** Current terminal height in rows (xterm default 24 before {@link mount}). */
+  get rows(): number {
+    return this.term.rows;
+  }
+
   write(data: string, stream: TerminalStream = 'stdout'): void {
     const text = data.replace(/\n/g, '\r\n');
     if (stream === 'stderr') {
@@ -92,6 +104,7 @@ export class RiftyTerminal {
   writePrompt(): void {
     this.term.write(`\r\n${PROMPT}`);
     this.buffer = '';
+    this.cursorPos = 0;
   }
 
   /**
@@ -132,17 +145,26 @@ export class RiftyTerminal {
         this.replaceBuffer(this.historyNext());
         return;
       case 'arrow-left':
+        this.moveLeft();
+        return;
       case 'arrow-right':
-        // Line-mode editing is append-only; swallow the keys so their
-        // raw escape sequence doesn't leak into the buffer as garbage.
+        this.moveRight();
+        return;
+      case 'home':
+        this.moveToStart();
+        return;
+      case 'end':
+        this.moveToEnd();
+        return;
+      case 'delete':
+        this.handleDelete();
         return;
       case 'tab':
         // No completion yet; insert a literal tab so indented code pastes.
-        this.buffer += '\t';
-        this.term.write('\t');
+        this.insertPrintable('\t');
         return;
       case 'printable':
-        this.appendPrintable(event.text);
+        this.insertPrintable(event.text);
         return;
       case 'ctrl-c':
         // Handled in handleInput before dispatch; unreachable here.
@@ -156,6 +178,7 @@ export class RiftyTerminal {
     this.term.write('\r\n');
     const line = this.buffer;
     this.buffer = '';
+    this.cursorPos = 0;
     if (line.trim().length > 0) {
       this.history.push(line);
       this.historyIdx = this.history.length;
@@ -170,10 +193,51 @@ export class RiftyTerminal {
   }
 
   private handleBackspace(): void {
-    if (this.buffer.length > 0) {
-      this.buffer = this.buffer.slice(0, -1);
-      this.term.write('\b \b');
-    }
+    // Delete the char BEFORE the caret. At the end of the line this is the
+    // classic `\b \b`; mid-line it must repaint the tail and blank the stale
+    // trailing cell, then restore the caret.
+    if (this.cursorPos === 0) return;
+    const tail = this.buffer.slice(this.cursorPos);
+    this.buffer = this.buffer.slice(0, this.cursorPos - 1) + tail;
+    this.cursorPos -= 1;
+    // Step left over the removed cell, repaint the tail, blank the now-stale
+    // last cell, then walk the caret back to just before the tail.
+    this.term.write(`\b${tail} ${'\b'.repeat(tail.length + 1)}`);
+  }
+
+  /** Forward-delete the char AT the caret (Delete key). No-op at line end. */
+  private handleDelete(): void {
+    if (this.cursorPos >= this.buffer.length) return;
+    const tail = this.buffer.slice(this.cursorPos + 1);
+    this.buffer = this.buffer.slice(0, this.cursorPos) + tail;
+    // Caret stays put; repaint the shortened tail, blank the stale cell,
+    // restore the caret.
+    this.term.write(`${tail} ${'\b'.repeat(tail.length + 1)}`);
+  }
+
+  private moveLeft(): void {
+    if (this.cursorPos === 0) return;
+    this.cursorPos -= 1;
+    this.term.write('\b');
+  }
+
+  private moveRight(): void {
+    if (this.cursorPos >= this.buffer.length) return;
+    this.cursorPos += 1;
+    this.term.write('\x1b[C');
+  }
+
+  private moveToStart(): void {
+    if (this.cursorPos === 0) return;
+    this.term.write('\b'.repeat(this.cursorPos));
+    this.cursorPos = 0;
+  }
+
+  private moveToEnd(): void {
+    const delta = this.buffer.length - this.cursorPos;
+    if (delta === 0) return;
+    this.term.write('\x1b[C'.repeat(delta));
+    this.cursorPos = this.buffer.length;
   }
 
   private handleCtrlC(): void {
@@ -182,6 +246,7 @@ export class RiftyTerminal {
     // foreground process group.
     this.term.write('^C\r\n');
     this.buffer = '';
+    this.cursorPos = 0;
     this.opts.onSignal?.('SIGINT');
     if (!this.busy) {
       this.term.write(PROMPT);
@@ -191,12 +256,24 @@ export class RiftyTerminal {
     // `onInput` resolves.
   }
 
-  private appendPrintable(text: string): void {
-    // Multi-line paste may embed `\n`: don't auto-submit intermediate
-    // lines (surprising for code paste), but render LF as CRLF so xterm's
-    // cursor moves correctly.
-    this.buffer += text;
-    this.term.write(text.replace(/\n/g, '\r\n'));
+  private insertPrintable(text: string): void {
+    // Insert AT the caret (append when the caret is already at the end).
+    // Multi-line paste may embed `\n`: don't auto-submit intermediate lines
+    // (surprising for code paste), but render LF as CRLF so xterm's cursor
+    // moves correctly.
+    const tail = this.buffer.slice(this.cursorPos);
+    this.buffer = this.buffer.slice(0, this.cursorPos) + text + tail;
+    this.cursorPos += text.length;
+    const echo = `${text}${tail}`.replace(/\n/g, '\r\n');
+    if (tail.length === 0) {
+      // Pure append — no caret restore needed (fast path; also keeps the
+      // existing append/paste echo byte-for-byte unchanged).
+      this.term.write(echo);
+      return;
+    }
+    // Mid-line: write the inserted text + the repainted tail, then walk the
+    // caret back over the tail so it sits right after the inserted text.
+    this.term.write(`${echo}${'\b'.repeat(tail.length)}`);
   }
 
   private historyPrev(): string {
@@ -216,11 +293,15 @@ export class RiftyTerminal {
   }
 
   private replaceBuffer(next: string): void {
+    // The caret may be mid-line; walk it to the end first so the per-char
+    // `\b \b` erase clears the WHOLE visible line, not just the prefix.
+    this.term.write('\x1b[C'.repeat(this.buffer.length - this.cursorPos));
     while (this.buffer.length > 0) {
       this.term.write('\b \b');
       this.buffer = this.buffer.slice(0, -1);
     }
     this.buffer = next;
+    this.cursorPos = next.length;
     this.term.write(next);
   }
 }
