@@ -2,7 +2,7 @@
 area: perf
 subsystem: runtime-js
 status: active
-title: transformEsm result cache + optional transformEsm hook on EsmLoaderDeps (TODO(backlog: perf/transformesm-cache) keyed to Q-2026-05-30-202)
+title: transformEsm result cache + optional transformEsm hook on EsmLoaderDeps (keyed to Q-2026-05-30-202)
 created: 2026-06-08
 why: transformEsm (acorn parse + AST walk) — heaviest per-module CPU step — never cached; editor-save invalidate() loop re-parses every byte-identical module
 sources: [perf-audit #16, adr-plan D, Q-2026-05-30-202, ADR-0052 (not governing — internal EsmLoaderDeps)]
