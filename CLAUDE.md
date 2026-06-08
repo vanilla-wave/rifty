@@ -2,36 +2,101 @@
 
 Browser-based Node-compatible runtime + WASI runner. Pet project, goal is deep understanding of how WebContainers-like systems work, plus practical "Express + npm install in browser" within ~year of evening work.
 
-See `PROJECT_PLAN.md` for the master plan.
-
 ## Sources of truth (read in this order)
 
-1. **`PROJECT_PLAN.md`** — architecture, milestones, decisions log (D-001..D-NNN)
-2. **`docs/adr/`** — detailed rationale for each architectural decision
-3. **`OPEN_QUESTIONS.md`** — provisional decisions awaiting human review (see D-007)
-4. **`docs/compat/`** — what's known to work / not work
-5. This file — rules for this session
+1. **`CLAUDE.md`** (this file) — vision + rules for the session
+2. **`docs/ROADMAP.md`** — milestones M0–M12 + open acceptance items
+3. **`docs/adr/<area>/`** — decisions (rationale per record); `docs/adr/README.md` is the index
+4. **`docs/backlog/<area>/`** — open/provisional work; lint via `pnpm backlog:check`
+5. **`docs/public/`** — compat matrix, publishing, hosting (ship-facing)
 
-If something conflicts, `PROJECT_PLAN.md` and ADRs win over your priors.
+If something conflicts, `docs/ROADMAP.md` and ADRs win over your priors.
 
 ## Current context
 
-- **Active milestone:** M10 (Real Tooling) — M0 through M9 complete (see `TASKS.md`)
-- **Decisions in effect:** D-001 through D-007 (see `PROJECT_PLAN.md` §8)
+- **Active milestone:** see `docs/ROADMAP.md` (milestones M0–M12; most early ones complete)
+- **Decisions in effect:** D-001..D-009 — indexed in `docs/adr/README.md` (Appendix B, D→ADR map)
+
+## Vision & rationale
+
+### Goals
+- Understand how WebContainers/StackBlitz-like systems work under the hood
+- A runtime that runs real Node programs (Express, pure-JS CLI tools)
+- Level up architecture: layers, isolation, contracts, system-API emulation
+- WASI as a separate module (esbuild/sqlite — real WASI binaries)
+
+### Non-goals (first year)
+- Full Node compatibility; native modules via node-gyp; production perf
+- All-browser support (target fresh Chrome/Edge — need OPFS SyncAccessHandle in Workers)
+- Own JS engine (use the browser's V8)
+
+### Strategic decisions
+1. **Browser V8 = primary JS engine** — perf + tooling beat QuickJS-in-WASM.
+2. **WASI = separate runtime for native binaries**, not primary JS exec (esbuild/sqlite/python).
+3. **Web Workers as processes** — each Node "process" = a Worker with its own JS context.
+4. **Service Worker for virtual networking** — intercepts fetch, routes to listening workers.
+5. **OPFS = primary storage backend** for VFS (sync API in Workers via `FileSystemSyncAccessHandle`).
+6. **VFS = clean interface** — in-memory backend for tests/dev, OPFS for prod.
+
+### Layers (top-down only; no reverse imports)
+```
+┌──────────────────────────────────────────┐
+│  apps/playground  (UI: editor + term)     │
+├──────────────────────────────────────────┤
+│  shell, terminal, npm-client              │  ← high-level features
+├──────────────────────────────────────────┤
+│  runtime-js (Node API)   runtime-wasi     │  ← language runtimes
+├──────────────────────────────────────────┤
+│  kernel (processes, scheduling, IPC)      │  ← core
+├──────────────────────────────────────────┤
+│  vfs   io   net (+ service-worker)        │  ← system primitives
+└──────────────────────────────────────────┘
+```
+Each layer exposes a public API in `index.ts`. UI framework only in `apps/playground/` (D-002).
+
+### Isolation / contexts
+- **Main thread:** UI, ProcessManager (PID table), SW management
+- **Web Worker (per process):** runtime-js + user code + its modules
+- **Service Worker:** fetch interceptor, RPC router between requests and workers
+- **(optional later) iframe:** app preview, safe render of user HTML
+
+### Communication channels
+- Main ↔ Worker: `MessageChannel` async; `SharedArrayBuffer` + `Atomics` sync (D-001)
+- Worker ↔ Worker (pipes): `MessageChannel` via `Transferable`
+- Main ↔ SW: `postMessage` + `MessageChannel`
+- Browser → SW → Worker: fetch intercepted, serialized to RPC, response via `ReadableStream`
+
+### Cross-origin isolation (D-001)
+Playground page must be `crossOriginIsolated === true` (server sends `COOP: same-origin` + `COEP: credentialless`). Gives `SharedArrayBuffer` + `Atomics.wait` in Workers — foundation for sync IPC (M6+). All assets local or CORP-correct; third-party CDNs proxied through own origin.
+
+## Verification philosophy
+
+Gold standard = the **Node Parity Runner**: run the same code in real Node and in rifty, diff stdout. The agent can't cheat — the reference is external. (`tools/node-parity-runner/`; a case has `setup` files, `code`, and `expected`.) Any discrepancy is a bug.
+
+Test pyramid:
+- **Unit** — isolated logic within a package (Vitest)
+- **Parity** — match real Node API (parity-runner + Vitest)
+- **Conformance** — documented Node semantics where parity-runner can't reach (event-loop order, async timers, errors)
+- **Integration** — real npm tarballs, tiered simple→complex (`tier-0-utility` … `tier-4-tooling`); each green package pinned with a regression test
+- **E2E** — full playground through Playwright (default chromium)
+- **Smoke** — basic scenarios after build
+- **Compat matrix** — auto-generated summary in `docs/public/compat/`
+
+Tests-first. For Node-compatible behavior, prefer a parity case over hand-written assertions. **Never edit a test to make code pass** (correctness invariant — see Hard rules).
 
 ## Workflow for any task
 
 **Step 0. Classify the task before starting:**
-- Pure implementation (criteria are clear from milestone) → proceed to Step 1
-- Design decision needed → apply Reversibility checklist (see below)
+- Pure implementation (criteria clear from milestone) → Step 1
+- Design decision needed → apply Reversibility checklist (below)
 
 **Steps 1-7:**
-1. Read the task description; locate it in the relevant milestone
-2. Check acceptance criteria for the milestone — your work serves these
-3. **Write tests first.** If the change is behavioral, write a failing test (preferably a parity-runner case) before any implementation
+1. Read the task description; locate it in the relevant milestone (`docs/ROADMAP.md`)
+2. Check the milestone's acceptance criteria — your work serves these
+3. **Write tests first.** If behavioral, write a failing test (preferably a parity case) before any implementation
 4. Implement until tests pass
 5. Run the full local verification (see Commands below)
-6. Update CHANGELOG, compat-matrix, ADR (if applicable) — see Definition of Done
+6. Update CHANGELOG, compat-matrix, ADR / backlog (if applicable) — see Definition of Done
 7. Open PR with clear linkage to milestone/etap
 
 ## Design decisions during work
@@ -50,20 +115,20 @@ When you hit a design fork during implementation, **decide, record it, and keep 
 
 - **REVERSIBLE:**
   - Make a provisional decision
-  - Mark relevant code with `// TODO(ADR): Q-YYYY-MM-DD-NNN`
-  - Log to `OPEN_QUESTIONS.md` using the template there
+  - Add a backlog item `docs/backlog/<area>/<slug>.md` (frontmatter per `docs/backlog/TEMPLATE.md`)
+  - Mark the code site with `// TODO(backlog: <area>/<slug>)`
   - **Continue working.**
 
 - **IRREVERSIBLE:**
   - Make the decision — you have standing authority (ADR-0063)
-  - **Write a new ADR inline**, ratified by you, recording the options, trade-offs, and chosen path so it's auditable. (Or log an `OPEN_QUESTIONS.md` entry and promote it to an ADR before the work merges.)
+  - **Write a new ADR inline** (`pnpm adr:new <area> "Title"`), ratified by you, recording options, trade-offs, and chosen path so it's auditable. (Or log a backlog item and promote it to an ADR before the work merges.)
   - **Continue working.** Do not stop and wait for a human.
-  - An irreversible decision that is *not* written down is a defect — "record-and-continue" is never "decide silently".
+  - An irreversible decision *not* written down is a defect — "record-and-continue" is never "decide silently".
 
 ### Reconsidering an already-recorded decision
 
-The one fork you do **not** settle inline: **overturning or revising a decision that is already recorded** — a merged ADR, or a provisional decision that other work now depends on.
-- **Launch an explicit decision subagent** (the Agent tool, or a small decision workflow) dedicated to that call. It reads the existing decision + the new context + the alternatives + the risks, decides, and produces the **superseding ADR** (which cites the one it overrides — ADRs stay immutable).
+The one fork you do **not** settle inline: **overturning or revising a decision that is already recorded** — an active ADR, or a provisional decision that other work now depends on.
+- **Launch an explicit decision subagent** (the Agent tool, or a small decision workflow) dedicated to that call. It reads the existing decision + the new context + the alternatives + the risks, decides, and produces the **superseding ADR** (which cites the one it overrides — see Hard rules / ADR-0094 for the supersede-by-removal mechanics).
 - This focused subagent is the rigor mechanism that replaced the old human-stop.
 
 ### Inflections are not stops either (ADR-0064)
@@ -105,8 +170,8 @@ These are non-negotiable. Violating any of them is a defect, regardless of how g
 - **Don't add tests just to bump coverage.** Each test must catch a specific failure mode you can articulate.
 
 ### Memory/state
-- **Never assume previous session context.** Re-read `PROJECT_PLAN.md` and current ADRs at start of each session.
-- **Decisions in `docs/adr/` are immutable after merge.** If you think one needs updating, write a new ADR that supersedes the old, with a reference.
+- **Never assume previous session context.** Re-read `docs/ROADMAP.md` and current ADRs at start of each session.
+- **Active ADRs are immutable.** A **SUPERSEDED** ADR is **REMOVED** (git keeps history): its load-bearing context is grafted into the successor, and `docs/adr/README.md` keeps a removed→successor pointer. New decisions still get new ADRs (`pnpm adr:new <area>`). See ADR-0094.
 
 ## Definition of done (per PR)
 
@@ -119,7 +184,7 @@ These are non-negotiable. Violating any of them is a defect, regardless of how g
 - [ ] `CHANGELOG.md` updated in affected packages
 - [ ] compat-matrix regenerated if any conformance/integration changed (`pnpm compat:generate`) — **manually triggered before each milestone DoD cycle** (per A-033 decision, 2026-05-26). Not invoked on every PR to keep CI fast and avoid noisy churn; the milestone closer runs it once and commits the diff.
 - [ ] ADR added if an IRREVERSIBLE decision was made
-- [ ] `OPEN_QUESTIONS.md` updated if any REVERSIBLE provisional decisions were made
+- [ ] `docs/backlog/` updated for any provisional (REVERSIBLE) decisions; `pnpm backlog:check` green
 - [ ] PR description links to milestone and etap
 
 ## Commands
@@ -147,10 +212,9 @@ pnpm test:e2e:webkit            # webkit only
 pnpm test:all                   # everything above sequentially
 
 # Maintenance
-pnpm compat:generate            # regenerate docs/compat/*.md from test results
-pnpm adr:new "Title"            # scaffold new ADR
-pnpm adr:promote Q-YYYY-MM-DD-N # promote OPEN_QUESTIONS entry to ADR, clean TODO(ADR) markers
-pnpm todo:adr                   # report count of TODO(ADR) markers in code
+pnpm compat:generate            # regenerate docs/public/compat/*.md from test results
+pnpm adr:new <area> "Title"     # scaffold new ADR under docs/adr/<area>/
+pnpm backlog:check              # lint backlog frontmatter + code-marker integrity (CI gate)
 ```
 
 ## Anti-patterns (things you'll be tempted to do — don't)
@@ -173,8 +237,11 @@ Each new dependency is a long-term commitment (and counts as IRREVERSIBLE per ch
 ### "I'll fix three things in this PR since I'm here"
 One change per PR. Noticed unrelated issues? File separate tickets.
 
+### "I'll overwrite this ADR to fix it"
+No. Active ADRs are immutable. To change a recorded decision, write a new ADR (`pnpm adr:new <area>`) that supersedes it; the old one is removed with its context grafted into the successor and a removed→successor pointer in `docs/adr/README.md` (ADR-0094).
+
 ### "I'll stop and ask about this"
-Don't. Decide and record it (ADR-0063): REVERSIBLE → `OPEN_QUESTIONS.md`; IRREVERSIBLE → a new inline ADR with options + trade-offs. Then continue. The only fork you don't settle inline is **overturning a decision that's already recorded** — for that, spin up an explicit decision subagent that produces the superseding ADR.
+Don't. Decide and record it (ADR-0063): REVERSIBLE → `docs/backlog/<area>/` + `TODO(backlog: <area>/<slug>)`; IRREVERSIBLE → a new inline ADR with options + trade-offs. Then continue. The only fork you don't settle inline is **overturning a decision that's already recorded** — for that, spin up an explicit decision subagent that produces the superseding ADR.
 
 ## When in doubt
 
@@ -186,4 +253,4 @@ Don't. Decide and record it (ADR-0063): REVERSIBLE → `OPEN_QUESTIONS.md`; IRRE
 
 ---
 
-*This file is reviewed at the end of each milestone. If you encounter a recurring problem, propose adding a rule here. The `OPEN_QUESTIONS.md` is reviewed at the same time — provisional decisions get promoted to ADRs or rolled back.*
+*This file is reviewed at the end of each milestone. If you encounter a recurring problem, propose adding a rule here. `docs/backlog/` is reviewed at the same time — provisional decisions get promoted to ADRs or rolled back.*
