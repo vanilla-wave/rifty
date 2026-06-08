@@ -143,6 +143,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0024 | 0033 | file budget; WASI-coverage note grafted |
 | 0025 | 0043 | dev-server realm; page-realm globals-guard grafted |
 | 0044 | 0047 | esbuild WASI |
+| 0074 | 0077 | SW preview-nav routing; ported into ADR-0077 |
 
 ## Appendix A — Q→ADR provenance
 
@@ -180,12 +181,27 @@ Promoted `OPEN_QUESTIONS` ids → ADRs.
 
 ## Numbering
 
-The retention-policy ADR is **0094** (see process-meta). Numbers **0081–0093 are RESERVED** as provisional labels by the JS-runtime perf plan (`docs/backlog/perf/adr-008x-*.md`); each becomes a real ADR file only when that wave's work is authored. `pnpm adr:new` computes the next free number, so it allocates from **0095+** and leaves the reserved block untouched.
+The retention-policy ADR is **0094** (see process-meta). Numbers **0081–0093 are RESERVED** as provisional labels by the JS-runtime perf plan; the reserved-number → topic-slug map lives in `docs/backlog/perf/reference/js-runtime-perf-adr-plan-2026-06-06.md` (and in each perf item's `title:`). Each becomes a real ADR file only when that wave's work is authored. `pnpm adr:new` computes the next free number, so it allocates from **0095+** and leaves the reserved block untouched.
+
+opencode **decisions.md draft labels** 0056–0062 are a separate provisional namespace (drafts in `docs/backlog/opencode/reference/decisions.md`): 0057→ADR-0054, 0059→ADR-0055, 0056 superseded by ADR-0065; 0058/0060/0061/0062 deferred. A bare `ADR-005x`/`ADR-006x` citation refers to a draft, not a live ADR file.
 
 ## Historical references
 
-Deleted root docs are still cited inside older ADRs; their content moved. Do not rewrite those in-ADR references — this note resolves them.
+Moved/removed docs are still cited inside older (immutable) ADRs; their content moved or closed. **Do not rewrite those in-ADR references — this note resolves them.** `tools/refs/check.mjs` enforces this table (every cited `docs/…` path must resolve, redirect, or be tombstoned here), so it cannot silently rot.
+
+Moved (redirect to the live path):
 
 - `PROJECT_PLAN.md` → `CLAUDE.md` (vision/architecture) + `docs/ROADMAP.md` (milestones)
 - `OPEN_QUESTIONS.md` → `docs/backlog/<area>/`
-- `REVIEW_ACTIONS.md` → removed (closed review ledger; git history)
+- `docs/opencode/` → `docs/backlog/opencode/reference/`
+- `docs/compat/` → `docs/public/compat/`
+- `docs/PUBLISHING.md` → `docs/public/publishing.md`
+- `docs/hosting-netlify.md` → `docs/public/hosting-netlify.md`
+
+Removed, no successor (resolve to git history):
+
+- `REVIEW_ACTIONS.md`, `TASKS.md` — closed review/acceptance ledgers
+- `docs/follow-ups-2026-05-27.md`, `docs/follow-ups-architecture-review-2026-05-27.md`, `docs/large-targets-readiness-2026-05-27.md`, `docs/review/2026-05-26-architecture-review.md` — closed review/follow-up ledgers
+- `docs/processes/ecosystem-sweep.md`, `docs/backlog-distribution-and-ide.md` — folded into `docs/backlog/<area>/`
+- `docs/opencode/HANDOFF.md` — session handoff, not retained
+- `docs/compat/{m10-tooling,sqlite,opencode-tool-ceiling,browsers}.md` — compat pages dropped in the `docs/public` split (not regenerated)

@@ -184,7 +184,7 @@ These are non-negotiable. Violating any of them is a defect, regardless of how g
 - [ ] `CHANGELOG.md` updated in affected packages
 - [ ] compat-matrix regenerated if any conformance/integration changed (`pnpm compat:generate`) — **manually triggered before each milestone DoD cycle** (per A-033 decision, 2026-05-26). Not invoked on every PR to keep CI fast and avoid noisy churn; the milestone closer runs it once and commits the diff.
 - [ ] ADR added if an IRREVERSIBLE decision was made
-- [ ] `docs/backlog/` updated for any provisional (REVERSIBLE) decisions; `pnpm backlog:check` green
+- [ ] `docs/backlog/` updated for any provisional (REVERSIBLE) decisions; `pnpm docs:check` green (backlog + cross-ref integrity)
 - [ ] PR description links to milestone and etap
 
 ## Commands
@@ -215,6 +215,8 @@ pnpm test:all                   # everything above sequentially
 pnpm compat:generate            # regenerate docs/public/compat/*.md from test results
 pnpm adr:new <area> "Title"     # scaffold new ADR under docs/adr/<area>/
 pnpm backlog:check              # lint backlog frontmatter + code-marker integrity (CI gate)
+pnpm refs:check                 # lint ADR index + cross-ref integrity (no dangling docs/ADR refs; CI gate)
+pnpm docs:check                 # backlog:check + refs:check together
 ```
 
 ## Anti-patterns (things you'll be tempted to do — don't)

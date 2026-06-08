@@ -35,6 +35,8 @@
     "compat:generate": "node tools/compat-matrix-generator/cli.js",
     "adr:new": "node tools/adr/new.mjs",
     "backlog:check": "node tools/backlog/check.mjs",
+    "refs:check": "node tools/refs/check.mjs",
+    "docs:check": "pnpm backlog:check && pnpm refs:check",
     "postinstall": "playwright install --with-deps chromium firefox webkit || true"
   },
   "devDependencies": {
