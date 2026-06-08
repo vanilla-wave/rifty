@@ -168,7 +168,7 @@ D-007..D-009 (stop-on-irreversible → record-and-continue, inflections) were pr
 
 ## Numbering
 
-Numbers **0081–0093 are RESERVED** as provisional labels by the JS-runtime perf plan; the reserved-number → topic-slug map lives in `docs/backlog/perf/reference/js-runtime-perf-adr-plan-2026-06-06.md` (and in each perf item's `title:`). Each becomes a real ADR file only when that wave's work is authored. `pnpm adr:new` computes the next free number, so it allocates from **0095+** and leaves the reserved block untouched.
+Numbers **0081–0093 are RESERVED** as provisional labels by the JS-runtime perf plan; the reserved-number → topic-slug map lives in `docs/backlog/perf/reference/js-runtime-perf-adr-plan-2026-06-06.md` (and in each perf item's `title:`). Author a reserved one with `pnpm adr:new perf "Title" --number 00NN`. Plain `pnpm adr:new` (no `--number`) **skips the reserved block** when auto-allocating, so it never collides — `tools/adr/new.mjs` keeps its `RESERVED` set in sync with this note.
 
 opencode **decisions.md draft labels** 0056–0062 are a separate provisional namespace (drafts in `docs/backlog/opencode/reference/decisions.md`): 0057→ADR-0054, 0059→ADR-0055, 0056 superseded by ADR-0065; 0058/0060/0061/0062 deferred. A bare `ADR-005x`/`ADR-006x` citation refers to a draft, not a live ADR file.
 
