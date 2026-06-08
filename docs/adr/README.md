@@ -116,16 +116,6 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0040 | SW frame and routing versions split |
 | 0048 | Streaming cross-realm preview wire-frame |
 
-### process-meta
-
-| # | Title |
-|---|---|
-| 0022 | Parity and E2E coverage gates per milestone |
-| 0033 | File budget removed; structure over size |
-| 0063 | Record-and-continue decisions; decision subagent for reconsiderations |
-| 0064 | Inflections are not stops — empirical findings and verified-need commitments don't pause for the human |
-| 0094 | Superseded ADRs are removed, not retained (amends the immutability "keep the old" rule for retention only) |
-
 ### opencode
 
 | # | Title |
@@ -138,9 +128,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 
 | removed | superseded by | note |
 |---|---|---|
-| 0008 | 0063 / 0064 | record-and-continue |
 | 0013 | 0072 | OPFS hot path; context grafted |
-| 0024 | 0033 | file budget; WASI-coverage note grafted |
 | 0025 | 0043 | dev-server realm; page-realm globals-guard grafted |
 | 0044 | 0047 | esbuild WASI |
 | 0074 | 0077 | SW preview-nav routing; ported into ADR-0077 |
@@ -175,13 +163,12 @@ Promoted `OPEN_QUESTIONS` ids → ADRs.
 | D-004 | 0005 |
 | D-005 | 0006 |
 | D-006 | 0007 |
-| D-007 | 0008 (removed → 0063) |
-| D-008 | 0063 |
-| D-009 | 0064 |
+
+D-007..D-009 (stop-on-irreversible → record-and-continue, inflections) were process decisions; process is no longer recorded in ADRs — see `CLAUDE.md`.
 
 ## Numbering
 
-The retention-policy ADR is **0094** (see process-meta). Numbers **0081–0093 are RESERVED** as provisional labels by the JS-runtime perf plan; the reserved-number → topic-slug map lives in `docs/backlog/perf/reference/js-runtime-perf-adr-plan-2026-06-06.md` (and in each perf item's `title:`). Each becomes a real ADR file only when that wave's work is authored. `pnpm adr:new` computes the next free number, so it allocates from **0095+** and leaves the reserved block untouched.
+Numbers **0081–0093 are RESERVED** as provisional labels by the JS-runtime perf plan; the reserved-number → topic-slug map lives in `docs/backlog/perf/reference/js-runtime-perf-adr-plan-2026-06-06.md` (and in each perf item's `title:`). Each becomes a real ADR file only when that wave's work is authored. `pnpm adr:new` computes the next free number, so it allocates from **0095+** and leaves the reserved block untouched.
 
 opencode **decisions.md draft labels** 0056–0062 are a separate provisional namespace (drafts in `docs/backlog/opencode/reference/decisions.md`): 0057→ADR-0054, 0059→ADR-0055, 0056 superseded by ADR-0065; 0058/0060/0061/0062 deferred. A bare `ADR-005x`/`ADR-006x` citation refers to a draft, not a live ADR file.
 
@@ -205,3 +192,5 @@ Removed, no successor (resolve to git history):
 - `docs/processes/ecosystem-sweep.md`, `docs/backlog-distribution-and-ide.md` — folded into `docs/backlog/<area>/`
 - `docs/opencode/HANDOFF.md` — session handoff, not retained
 - `docs/compat/{m10-tooling,sqlite,opencode-tool-ceiling,browsers}.md` — compat pages dropped in the `docs/public` split (not regenerated)
+
+Retired ADR numbers (process moved to `CLAUDE.md`, no longer recorded as ADRs): **0008, 0022, 0024, 0033, 0063, 0064, 0094**. Older ADRs may still cite these — they resolve to `CLAUDE.md`, not a file. `tools/refs/check.mjs` treats them as retired so the citations don't dangle.

@@ -26,6 +26,11 @@ const README = join(ADR_DIR, 'README.md');
 const RESERVED = new Set();
 for (let n = 81; n <= 93; n++) RESERVED.add(String(n).padStart(4, '0'));
 
+// Retired process ADR numbers: process decisions moved out of ADRs into CLAUDE.md
+// (no longer recorded as ADRs). Immutable product ADRs still cite these; they resolve
+// to CLAUDE.md. Mirror docs/adr/README.md "Historical references".
+const RETIRED = new Set(['0008', '0022', '0024', '0033', '0063', '0064', '0094']);
+
 // opencode decisions.md draft labels (band 0052–0062): drafts cited in ADR bodies /
 // opencode backlog as "ADR-00NN" that never became a file of that number (0052/0053
 // and ratified 0054/0055 ARE real files; these are the ones that aren't).
@@ -180,7 +185,9 @@ const ADR_REF_RE = /\bADR[-\s](\d{4})\b/g;
 const DOC_PATH_RE = /docs\/[A-Za-z0-9._*/-]+/g;
 
 function adrRefResolves(num) {
-  return onDisk.has(num) || removedNums.has(num) || RESERVED.has(num) || DRAFTS.has(num);
+  return (
+    onDisk.has(num) || removedNums.has(num) || RESERVED.has(num) || DRAFTS.has(num) || RETIRED.has(num)
+  );
 }
 
 for (const file of sources) {

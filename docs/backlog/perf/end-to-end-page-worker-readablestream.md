@@ -12,4 +12,4 @@ preview-port.ts:379-414: worker chunks into ≤64 KiB frames but page copies eac
 ## Options / Next
 ADR-0093 formally supersedes ADR-0048 (owns PREVIEW_PORT_FRAME_VERSION + page-buffered clause), cites ADR-0017 (M12 envelope) + ADR-0055 (opencode SSE compat depending on the deferral); aligns with named draft ADR-0060. Subagent reads ADR-0048/0017/0055 + draft 0060 and produces ADR-0093.
 ## Reversibility
-IRREVERSIBLE — rule3 (overturns recorded deferral other work depends on) + rule1 (versioned wire bump). DECISION-SUBAGENT-REQUIRED (ADR-0063, the one item that overturns a recorded decision). BLOCKED on that subagent producing the superseding ADR.
+IRREVERSIBLE — rule3 (overturns recorded deferral other work depends on) + rule1 (versioned wire bump). DECISION-SUBAGENT-REQUIRED (reconsidering a recorded decision — CLAUDE.md; the one item that overturns a recorded decision). BLOCKED on that subagent producing the superseding ADR.

@@ -15,7 +15,7 @@ If something conflicts, `docs/ROADMAP.md` and ADRs win over your priors.
 ## Current context
 
 - **Active milestone:** see `docs/ROADMAP.md` (milestones M0–M12; most early ones complete)
-- **Decisions in effect:** D-001..D-009 — indexed in `docs/adr/README.md` (Appendix B, D→ADR map)
+- **Decisions in effect:** D-001..D-006 — indexed in `docs/adr/README.md` (Appendix B, D→ADR map). Process rules (record-and-continue etc.) live in this file, not in ADRs.
 
 ## Vision & rationale
 
@@ -101,7 +101,7 @@ Tests-first. For Node-compatible behavior, prefer a parity case over hand-writte
 
 ## Design decisions during work
 
-When you hit a design fork during implementation, **decide, record it, and keep going — do not stop.** (ADR-0063 + ADR-0064 supersede the old ADR-0008 "stop on irreversible" action.) Use the reversibility checklist only to choose *where* the decision is recorded — not whether to pause.
+When you hit a design fork during implementation, **decide, record it, and keep going — do not stop.** Use the reversibility checklist only to choose *where* the decision is recorded — not whether to pause.
 
 ### Reversibility checklist (order matters — first "yes" determines classification)
 
@@ -120,7 +120,7 @@ When you hit a design fork during implementation, **decide, record it, and keep 
   - **Continue working.**
 
 - **IRREVERSIBLE:**
-  - Make the decision — you have standing authority (ADR-0063)
+  - Make the decision — you have standing authority
   - **Write a new ADR inline** (`pnpm adr:new <area> "Title"`), ratified by you, recording options, trade-offs, and chosen path so it's auditable. (Or log a backlog item and promote it to an ADR before the work merges.)
   - **Continue working.** Do not stop and wait for a human.
   - An irreversible decision *not* written down is a defect — "record-and-continue" is never "decide silently".
@@ -128,10 +128,10 @@ When you hit a design fork during implementation, **decide, record it, and keep 
 ### Reconsidering an already-recorded decision
 
 The one fork you do **not** settle inline: **overturning or revising a decision that is already recorded** — an active ADR, or a provisional decision that other work now depends on.
-- **Launch an explicit decision subagent** (the Agent tool, or a small decision workflow) dedicated to that call. It reads the existing decision + the new context + the alternatives + the risks, decides, and produces the **superseding ADR** (which cites the one it overrides — see Hard rules / ADR-0094 for the supersede-by-removal mechanics).
+- **Launch an explicit decision subagent** (the Agent tool, or a small decision workflow) dedicated to that call. It reads the existing decision + the new context + the alternatives + the risks, decides, and produces the **superseding ADR** (which cites the one it overrides — see Hard rules for the supersede-by-removal mechanics).
 - This focused subagent is the rigor mechanism that replaced the old human-stop.
 
-### Inflections are not stops either (ADR-0064)
+### Inflections are not stops either
 
 A surprising result is **not** a reason to pause for the human. NONE of these are stop triggers — decide, record, re-cut the plan, continue, and report *after*:
 - a measurement / spike / test result that changes the plan or milestone order;
@@ -165,13 +165,13 @@ These are non-negotiable. Violating any of them is a defect, regardless of how g
 - **ADRs and comments: be extremely concise — sacrifice grammar for the sake of concision.** Keep only what earns its place (why / gotcha / workaround / public-API TSDoc / TODO / legal); cut anything that restates the code or pads prose. Terse phrases over full sentences. ADRs keep every decision, option, rationale, consequence, and acceptance item — but in the fewest words.
 
 ### Tests
-- **Never modify a test to make code pass.** If a test seems wrong, that's a design discussion — file an issue, don't edit the test. (This is a correctness/integrity invariant — explicitly *out of scope* of ADR-0063's record-and-continue relaxation. It still never happens.)
+- **Never modify a test to make code pass.** If a test seems wrong, that's a design discussion — file an issue, don't edit the test. (This is a correctness/integrity invariant — explicitly *out of scope* of the record-and-continue relaxation. It still never happens.)
 - **Parity tests are the gold standard.** When adding Node-compatible behavior, prefer adding a parity case (Node vs our runtime, diff stdout) over hand-written assertions.
 - **Don't add tests just to bump coverage.** Each test must catch a specific failure mode you can articulate.
 
 ### Memory/state
 - **Never assume previous session context.** Re-read `docs/ROADMAP.md` and current ADRs at start of each session.
-- **Active ADRs are immutable.** A **SUPERSEDED** ADR is **REMOVED** (git keeps history): its load-bearing context is grafted into the successor, and `docs/adr/README.md` keeps a removed→successor pointer. New decisions still get new ADRs (`pnpm adr:new <area>`). See ADR-0094.
+- **Active ADRs are immutable.** A **SUPERSEDED** ADR is **REMOVED** (git keeps history): its load-bearing context is grafted into the successor, and `docs/adr/README.md` keeps a removed→successor pointer. New decisions still get new ADRs (`pnpm adr:new <area>`).
 
 ## Definition of done (per PR)
 
@@ -240,17 +240,17 @@ Each new dependency is a long-term commitment (and counts as IRREVERSIBLE per ch
 One change per PR. Noticed unrelated issues? File separate tickets.
 
 ### "I'll overwrite this ADR to fix it"
-No. Active ADRs are immutable. To change a recorded decision, write a new ADR (`pnpm adr:new <area>`) that supersedes it; the old one is removed with its context grafted into the successor and a removed→successor pointer in `docs/adr/README.md` (ADR-0094).
+No. Active ADRs are immutable. To change a recorded decision, write a new ADR (`pnpm adr:new <area>`) that supersedes it; the old one is removed with its context grafted into the successor and a removed→successor pointer in `docs/adr/README.md`.
 
 ### "I'll stop and ask about this"
-Don't. Decide and record it (ADR-0063): REVERSIBLE → `docs/backlog/<area>/` + `TODO(backlog: <area>/<slug>)`; IRREVERSIBLE → a new inline ADR with options + trade-offs. Then continue. The only fork you don't settle inline is **overturning a decision that's already recorded** — for that, spin up an explicit decision subagent that produces the superseding ADR.
+Don't. Decide and record it: REVERSIBLE → `docs/backlog/<area>/` + `TODO(backlog: <area>/<slug>)`; IRREVERSIBLE → a new inline ADR with options + trade-offs. Then continue. The only fork you don't settle inline is **overturning a decision that's already recorded** — for that, spin up an explicit decision subagent that produces the superseding ADR.
 
 ## When in doubt
 
 - Check if a similar pattern exists elsewhere (`rg` is your friend)
 - Check the relevant ADR
 - Apply the Reversibility checklist (to decide *where* to record, not whether to pause)
-- If IRREVERSIBLE and unclear: pick the best-justified option and record it in a new ADR (options + trade-offs); don't stop. To change a decision that's already recorded, use a decision subagent (ADR-0063).
+- If IRREVERSIBLE and unclear: pick the best-justified option and record it in a new ADR (options + trade-offs); don't stop. To change a decision that's already recorded, use a decision subagent.
 - Never assume Node/Anthropic/StackBlitz behavior without verifying — use the parity-runner to check Node's actual behavior
 
 ---

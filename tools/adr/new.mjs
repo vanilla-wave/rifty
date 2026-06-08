@@ -13,7 +13,6 @@ const AREAS = new Set([
   'playground',
   'toolchain-build',
   'protocol',
-  'process-meta',
   'opencode',
 ]);
 

@@ -11,4 +11,4 @@ F02-T1 added `.ts`/`.tsx` to `DEFAULT_EXTENSIONS`/`INDEX_FILES` with NO declarat
 ## Options / Next
 ADRs are immutable after merge → amending ADR-0053 in place is out of scope. Next: write a SUPERSEDING ADR (or an amendment note) that folds the `.d.ts`/`.d.cts`/`.d.mts`-exclusion into ADR-0053's resolver-extension contract, citing ADR-0053. Behavior + tests already exist; this is purely making the recorded decision honest/auditable.
 ## Reversibility
-IRREVERSIBLE doc step: updating an already-recorded immutable ADR → produce a new superseding ADR (per ADR-0063 reconsideration-of-a-recorded-decision). No code change; no behavioral fork.
+IRREVERSIBLE doc step: updating an already-recorded immutable ADR → produce a new superseding ADR (reconsidering a recorded decision — CLAUDE.md). No code change; no behavioral fork.
