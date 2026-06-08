@@ -1,73 +1,191 @@
 # Architecture Decision Records
 
-ADRs are immutable after merge. New decisions get new ADRs; supersedence is explicit (the new ADR cites and overrides the old). Read PROJECT_PLAN.md §8 for broad rationale and trade-offs; ADRs are the durable spec.
+ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history); its load-bearing context is grafted into the successor. New decisions get new ADRs via `pnpm adr:new <area> "Title"`.
 
-| # | Title | Decision in PROJECT_PLAN.md |
+## Index
+
+### vfs
+
+| # | Title |
+|---|---|
+| 0014 | `getFsVfs()` and `syncMirror()` share one backing tree |
+| 0020 | `Vfs.openReadable()` for true `createReadStream` |
+| 0029 | `utimes` on the `FsSync` interface |
+| 0037 | Unified sync VFS contract |
+| 0041 | `FsSync.readdirSync` returns `VfsDirent[]` and `Vfs.utimes` symmetry |
+| 0072 | OPFS sync content cache + async write-through |
+
+### kernel
+
+| # | Title |
+|---|---|
+| 0011 | Sync IPC via SharedArrayBuffer + Atomics; Worker-as-process model |
+| 0012 | `@riftydev/io` owns shared primitives; `@riftydev/kernel` owns processes |
+| 0019 | `cwd` lives in `kernel.ProcessRecord` |
+| 0039 | Lift Node-API knowledge from kernel to runtime-js |
+| 0045 | Worker-process IPC — fork-mode `send` / `'message'` / `disconnect` over a parent↔child MessagePort |
+
+### runtime-js
+
+| # | Title |
+|---|---|
+| 0004 | Module loader — hybrid `es-module-lexer` + own resolver |
+| 0009 | AST-based ESM transform |
+| 0018 | Expanded `@riftydev/runtime-js` public surface via subpath exports |
+| 0026 | `process.platform` / `process.arch` report honest values |
+| 0030 | Buffer extends Uint8Array (real subclass, Symbol.species) |
+| 0034 | `@riftydev/io` streams — Node-contract restoration |
+| 0035 | Builtin registry in `@riftydev/io` |
+| 0050 | No-symlink `fs.realpath`/`fs.lstat` semantics |
+| 0052 | TS-on-import transform hook on `ModuleLoaderOptions` |
+| 0053 | `.ts`/`.tsx` as first-class resolvable + ESM module extensions |
+| 0066 | tsconfig-style path aliases via an explicit `paths` resolver option |
+| 0067 | text-asset imports (`.txt` / `.sql` / `.md` / `.prompt` → file contents) |
+| 0068 | `with { type: "file" }` file-loader import attribute (asset → path) |
+| 0069 | `Readable.setEncoding(encoding)` — emit decoded strings |
+
+### runtime-wasi
+
+| # | Title |
+|---|---|
+| 0038 | WasiProcessHandle — kernel adapter for WASI guests |
+| 0047 | Revert to esbuild (`@esbuild/wasi-preview1`) as the M8/M10 WASI forcing consumer |
+| 0049 | WASI `cwd` option + `AT_FDCWD` and directory-open semantics |
+
+### net
+
+| # | Title |
+|---|---|
+| 0010 | `node:https` registered as a loud-throw stub |
+| 0017 | `@riftydev/net` scope statement and streaming rewrite deferral |
+| 0054 | Effect `@effect/platform-node` consumes rifty `node:http` AS-IS via additive shape-widening |
+| 0065 | `node:sqlite` `DatabaseSync` WASM shim — sql.js, in-memory-first (P2 boot prerequisite) |
+
+### service-worker
+
+| # | Title |
+|---|---|
+| 0002 | Cross-origin isolation is mandatory |
+| 0016 | Service Worker source-of-truth lives in `@riftydev/service-worker` |
+| 0046 | `PreviewOwnerBinding` — one seam for window and worker preview owners |
+
+### npm-client
+
+| # | Title |
+|---|---|
+| 0005 | Dev proxy for npm registry via Vite |
+| 0006 | Shadow registry — layered strategy with ecosystem leverage |
+| 0015 | Shadow-registry consolidation under `tools/shadow-registry/` |
+| 0021 | Integration tests must use real `npm install` |
+| 0023 | Lockfile reuse on subsequent `install()` |
+| 0027 | Per-file shim overlays live in the consuming adapter |
+| 0028 | Vercel Edge Function proxies npm registry in production |
+| 0042 | M11 nested install — first-wins flat + nest-on-conflict |
+| 0051 | Native-dependency install policy — loud `ENATIVEUNSUPPORTED`, optional natives skipped |
+
+### playground
+
+| # | Title |
+|---|---|
+| 0003 | Playground UI on SolidJS, isolated from core |
+| 0007 | Chrome-first with cross-browser infrastructure from M0 |
+| 0073 | Playground UX overhaul — preset gallery, design system, production worker bundling, honest preview status |
+| 0075 | Playground VSCode-style shell — bottom console panel, resizable/collapsible splitters, VFS file explorer, multi-model editor tabs |
+| 0076 | Cross-realm reverse VFS snapshot — the file explorer reflects the real-vite worker project |
+| 0077 | Real Vite preview renders — worker lifetime, log surfacing, and SW frame routing |
+| 0078 | Generic ProjectSpec/Template runtime for the playground (Vite as the default template) |
+| 0079 | Single generic project/template switcher; retire the header mode toggles |
+| 0080 | Lazy `node_modules` remote-read protocol + async explorer path |
+
+### toolchain-build
+
+| # | Title |
+|---|---|
+| 0001 | Monorepo on pnpm workspaces |
+| 0043 | Vite-in-Worker realm and cross-realm preview bridge |
+| 0070 | npm publish — tsup build + dual (dev-src / publish-dist) exports |
+| 0071 | Umbrella `@riftydev/sdk` package — one-install front door |
+
+### protocol
+
+| # | Title |
+|---|---|
+| 0031 | Every SW↔main wire frame carries `version`, receivers validate at decode |
+| 0032 | SyncRpc protocol-version field in the SAB header |
+| 0036 | Preview-protocol addressing in `@riftydev/io` |
+| 0040 | SW frame and routing versions split |
+| 0048 | Streaming cross-realm preview wire-frame |
+
+### process-meta
+
+| # | Title |
+|---|---|
+| 0022 | Parity and E2E coverage gates per milestone |
+| 0033 | File budget removed; structure over size |
+| 0063 | Record-and-continue decisions; decision subagent for reconsiderations |
+| 0064 | Inflections are not stops — empirical findings and verified-need commitments don't pause for the human |
+| 0094 | Superseded ADRs are removed, not retained (amends the immutability "keep the old" rule for retention only) |
+
+### opencode
+
+| # | Title |
+|---|---|
+| 0055 | opencode event stream rides SSE-over-streaming-HTTP; no `ws` shim (page-direct deployment) |
+
+## Superseded (removed)
+
+ADRs below were removed; load-bearing context grafted into the successor. See git history.
+
+| removed | superseded by | note |
 |---|---|---|
-| 0001 | Monorepo on pnpm workspaces | — |
-| 0002 | Cross-origin isolation is mandatory | D-001 |
-| 0003 | Playground UI on SolidJS, isolated from core | D-002 |
-| 0004 | Module loader — hybrid `es-module-lexer` + own resolver | D-003 |
-| 0005 | Dev proxy for npm registry via Vite | D-004 |
-| 0006 | Shadow registry — layered strategy | D-005 |
-| 0007 | Chrome-first with cross-browser infrastructure from M0 | D-006 |
-| 0008 | Reversible decisions — agents don't block on every dilemma (stop-on-irreversible action superseded by ADR-0063) | D-007 |
-| 0009 | AST-based ESM transform (supersedes ADR 0004 §"ESM loader") | — |
-| 0010 | `node:https` registered as a loud-throw stub | — |
-| 0011 | Sync IPC via SharedArrayBuffer + Atomics; Worker-as-process model | — |
-| 0012 | `@riftydev/io` owns shared primitives; `@riftydev/kernel` owns processes | — |
-| 0013 | OPFS as the primary VFS in browser deploys | — |
-| 0014 | `getFsVfs()` and `syncMirror()` share one backing tree | — |
-| 0015 | Shadow-registry consolidation under `tools/shadow-registry/` | — |
-| 0016 | Service Worker source-of-truth lives in `@riftydev/service-worker` | — |
-| 0017 | `@riftydev/net` scope statement and streaming rewrite deferral | — |
-| 0018 | Expanded `@riftydev/runtime-js` public surface via subpath exports | — |
-| 0019 | `cwd` lives in `kernel.ProcessRecord` | — |
-| 0020 | `Vfs.openReadable()` for true `createReadStream` | — |
-| 0021 | Integration tests must use real `npm install` | — |
-| 0022 | Parity and E2E coverage gates per milestone | — |
-| 0023 | Lockfile reuse on subsequent `install()` | — |
-| 0024 | File-size budget | — |
-| 0025 | Toolchain dev servers run on the playground main thread (partially superseded by ADR-0043 for the Real Vite path) | — |
-| 0026 | `process.platform` / `process.arch` report honest values | — |
-| 0027 | Per-file shim overlays live in the consuming adapter | — |
-| 0028 | Vercel Edge Function proxies npm registry in production | closes Q4' |
-| 0029 | `FsSync.utimes` (closes Q-2026-05-25-touch-utimes) | — |
-| 0030 | `Buffer extends Uint8Array` (replaces symbol-bag brand) | — |
-| 0031 | Every SW↔main wire frame carries `version`; receivers validate at decode (extends ADR-0016; split into frame+routing by ADR-0040) | — |
-| 0032 | SyncRpc protocol-version field in the SAB header | — |
-| 0033 | File budget removed; structure over size (supersedes ADR-0024) | — |
-| 0034 | `@riftydev/io` streams — Node-contract restoration | — |
-| 0035 | Builtin registry in `@riftydev/io` | — |
-| 0036 | Preview-protocol addressing in `@riftydev/io` | — |
-| 0037 | Unified sync VFS contract | — |
-| 0038 | `WasiProcessHandle` — kernel adapter for WASI guests | — |
-| 0039 | Lift Node-API knowledge from kernel to runtime-js | — |
-| 0040 | SW frame and routing versions split (splits ADR-0031 into two version axes) | — |
-| 0041 | `FsSync.readdirSync` returns `VfsDirent[]` and `Vfs.utimes` symmetry | — |
-| 0042 | M11 nested install — first-wins flat + nest-on-conflict | — |
-| 0043 | Vite-in-Worker realm and cross-realm preview bridge (partially supersedes ADR-0025 for the Real Vite path) | — |
-| 0044 | esbuild ships gojs ABI — substitute swc as the M8/M10 forcing consumer; defer the Go-runtime bridge (D1/D2 superseded by ADR-0047) | — |
-| 0045 | Worker-process IPC — fork-mode `send`/`'message'`/`disconnect` over a parent↔child MessagePort (extends ADR-0011 phase 2) | — |
-| 0046 | `PreviewOwnerBinding` — one seam for window and worker preview owners (promotes Q-2026-05-27-002) | — |
-| 0047 | Revert to esbuild (`@esbuild/wasi-preview1`) as the M8/M10 WASI forcing consumer (supersedes ADR-0044 D1/D2; keeps D3/D4) | — |
-| 0048 | Streaming cross-realm preview wire-frame — net-local `PREVIEW_PORT_FRAME_VERSION`, additive `reply-stream-*` frames, per-request mode selection (promotes Q-2026-05-29-001) | — |
-| 0049 | WASI `cwd` option + `AT_FDCWD` and directory-open semantics (promotes Q-2026-05-27-003) | — |
-| 0050 | No-symlink `fs.realpath`/`fs.lstat` semantics — `lstat≡stat`, `realpath≡normalise-if-exists` for the symlink-free VFS (promotes Q-2026-05-29-002) | — |
-| 0051 | Native-dependency install policy — `cpu`-keyed `ENATIVEUNSUPPORTED` loud-throw, optional natives skipped (promotes Q-2026-05-30-001) | — |
-| 0052 | TS-on-import transform hook on `ModuleLoaderOptions` — injected `transformSource` (`{source,id,loader,workspace}`→`Promise<string>`) + `workspace?`, async, ESM-only, extension-keyed (feature-02 T2) | — |
-| 0053 | `.ts`/`.tsx` as first-class resolvable + ESM module extensions — after the `.js` family, `type:module` classification (feature-02 T1) | — |
-| 0054 | Effect `@effect/platform-node` consumes rifty `node:http` AS-IS via additive shape-widening — no dedicated cross-package Effect HTTP adapter; pipe-sink DEFERRED (ratifies decisions.md draft ADR-0057; feature-05) | — |
-| 0055 | opencode event stream rides SSE-over-streaming-HTTP — no `ws` shim, page-direct deployment only; Worker v3 frame bump DEFERRED (ratifies decisions.md draft ADR-0059; feature-07) | — |
-| 0063 | Record-and-continue decisions; explicit decision subagent for reconsiderations (supersedes ADR-0008/D-007 stop action) | D-008 |
-| 0064 | Inflections are not stops — empirical findings / verified-need dependency commitments / stale-assumption corrections don't pause for the human (extends ADR-0063) | D-009 |
-| 0065 | `node:sqlite` `DatabaseSync` WASM shim — sql.js, in-memory-first (P2 boot prerequisite); OPFS persistence deferred (supersedes decisions.md DRAFTS ADR-0055/0056) | — |
-| 0066 | tsconfig-style path aliases via an explicit `paths` resolver option | — |
-| 0067 | text-asset imports (`.txt` / `.sql` / `.md` / `.prompt` → file contents) | — |
-| 0068 | `with { type: "file" }` file-loader import attribute (asset → path) | — |
-| 0069 | `Readable.setEncoding(encoding)` — emit decoded strings | — |
-| 0070 | npm publish — `tsup` build + dual (dev-src / publish-dist) `exports` via `publishConfig`; 11-package public set incl. `@riftydev/shadow-registry`; tag-driven release | — |
-| 0071 | Umbrella `@riftydev/sdk` package — one-install front door: subpath re-exports + framework-free `createSandbox()` + `checkCapabilities()` (EPIC B; ratifies DD-1/DD-2) | — |
-| 0072 | OPFS sync content cache + async write-through + async Worker VFS boot — wires OPFS persistence into the runtime Worker (closes A-004; supersedes ADR-0013's sync-access-handle content hot path) | — |
-| 0073 | Playground UX overhaul — preset gallery + design system (self-hosted OFL fonts), production worker bundling via `?worker&url` (fixes the prod REPL-worker boot, refines ADR-0011's build path), Monaco worker wiring, honest preview status, Netlify hosting | — |
-| 0075 | Playground VSCode-style shell — bottom console panel, hand-rolled resizable/collapsible splitters, VFS file explorer, multi-model editor tabs (program tab keeps `machine.source` binding); builds on ADR-0073, zero new deps | — |
+| 0008 | 0063 / 0064 | record-and-continue |
+| 0013 | 0072 | OPFS hot path; context grafted |
+| 0024 | 0033 | file budget; WASI-coverage note grafted |
+| 0025 | 0043 | dev-server realm; page-realm globals-guard grafted |
+| 0044 | 0047 | esbuild WASI |
+
+## Appendix A — Q→ADR provenance
+
+Promoted `OPEN_QUESTIONS` ids → ADRs.
+
+| Q | ADR |
+|---|---|
+| Q-2026-05-23-001 | 0009 |
+| Q-2026-05-23-002 | 0025 (removed) |
+| Q-2026-05-23-003 | 0026 |
+| Q-2026-05-23-004 | 0027 |
+| Q-2026-05-23-005 | 0018 |
+| Q-2026-05-23-006 | Rejected / 0010 |
+| Q-2026-05-24-007 | 0028 (reopened) |
+| Q-2026-05-25-touch-utimes | 0029 |
+| Q-2026-05-27-002 | 0046 |
+| Q-2026-05-27-003 | 0049 |
+| Q-2026-05-29-001 | 0048 |
+| Q-2026-05-29-002 | 0050 |
+| Q-2026-05-30-001 | 0051 |
+
+## Appendix B — D→ADR map
+
+| D | ADR |
+|---|---|
+| D-001 | 0002 |
+| D-002 | 0003 |
+| D-003 | 0004 |
+| D-004 | 0005 |
+| D-005 | 0006 |
+| D-006 | 0007 |
+| D-007 | 0008 (removed → 0063) |
+| D-008 | 0063 |
+| D-009 | 0064 |
+
+## Numbering
+
+The retention-policy ADR is **0094** (see process-meta). Numbers **0081–0093 are RESERVED** as provisional labels by the JS-runtime perf plan (`docs/backlog/perf/adr-008x-*.md`); each becomes a real ADR file only when that wave's work is authored. `pnpm adr:new` computes the next free number, so it allocates from **0095+** and leaves the reserved block untouched.
+
+## Historical references
+
+Deleted root docs are still cited inside older ADRs; their content moved. Do not rewrite those in-ADR references — this note resolves them.
+
+- `PROJECT_PLAN.md` → `CLAUDE.md` (vision/architecture) + `docs/ROADMAP.md` (milestones)
+- `OPEN_QUESTIONS.md` → `docs/backlog/<area>/`
+- `REVIEW_ACTIONS.md` → removed (closed review ledger; git history)

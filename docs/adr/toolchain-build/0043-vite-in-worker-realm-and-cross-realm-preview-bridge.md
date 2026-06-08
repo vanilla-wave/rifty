@@ -193,3 +193,13 @@ gate moves from *Start of M11* (now elapsed) to *Start of A-023 work*.
 - [x] ADR-0025 status header updated to note the supersession scope.
 - [ ] Manual smoke test: `pnpm dev`, toggle Real Vite, verify the iframe
       renders + hot-reloads on edit. (See report for status.)
+
+
+## Retained from ADR-0025 (page-realm fallback rules)
+
+ADR-0025's main-thread choice survives for the page-realm fallback set (M10 Dev Mode `devMode.ts`; future page adapters e.g. swc/esbuild dev pipeline). Two rules from it stay in force:
+
+- One-shot globals guard is MANDATORY for any toolchain adapter kept on the page realm: install Node-compat globals (the `Promise.prototype.then`/process.nextTick patch in `runtime-js/builtins/process.ts`, timers, Buffer) at most once per page session — second invocation must no-op. Double-patching `Promise.prototype.then` is the failure this prevents; it's observable by other page consumers (Solid, Monaco).
+- A page-realm adapter that wants a different realm must supersede this ADR — don't switch realms ad hoc.
+
+(Rejected in ADR-0025, no longer relevant: hosting the dev server inside the existing REPL Worker — mixed user REPL code with the dev-server fixture; this ADR's dedicated-worker design supersedes that option.)

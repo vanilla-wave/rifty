@@ -61,3 +61,14 @@ IRREVERSIBLE per CLAUDE.md checklist item 4 (>2 files / >100 lines, alters behav
 - [x] Parity runner exits 0 (`pnpm test:parity` → "all cases match").
 - [x] `pnpm check:deps` → no new circular dependency.
 - [ ] e2e OPFS round-trip passes in Chromium — verified by parent harness (`CI=1 pnpm exec playwright test --project=chromium tests/e2e/m0-boot.spec.ts -g "OPFS round-trip"`); not runnable in the implementation sandbox (no browser).
+
+
+## Inherited from ADR-0013 (deleted; git keeps history)
+
+0072 supersedes only 0013's sync-access-handle content hot path. These 0013 decisions stay in force and are restated here so deleting 0013 loses nothing load-bearing:
+
+- **OPFS as primary browser VFS.** Boot detector (`packages/vfs/src/boot.ts`): `detectVfsBackend()` → `'opfs'` iff `crossOriginIsolated && OpfsVfs.isSupported()`, else `'memory'` (Node tests + non-isolated dev fallback). `getFsVfs()` returns `OpfsVfs` vs `MemoryVfs` accordingly; `initBackend()` calls `installOpfsFs()` / `installMemoryFs()`.
+- **Realm split.** Worker realms → sync mirror is `OpfsFsSync`. Main realm → `fs.readFileSync` throws `NotImplementedError('fs.readFileSync', 'sync fs only available in Worker — use fs.promises in main realm')`. Intrinsic: `FileSystemSyncAccessHandle` is Worker-only by platform design, not a stub.
+- **A-005 Closed — permanent, not deferred (2026-05-26).** Sync-OPFS directory ops `OpfsFsSync.readdirSync` / `mkdirSync` / `rmSync` throw `NotImplementedError` as FINAL scope. `FileSystemSyncAccessHandle` has no directory variant by design; callers route directory work through the paired async `OpfsVfs`. Scope fixed, never to be filled.
+- **Circular-dep gotcha.** Shared `FsSync` interface lives in `packages/vfs/src/fs-sync.ts` so backend modules don't import the swap-in registry (the one circular-dep risk).
+- **QuotaExceededError** (0013 follow-up) is now resolved in code — `opfs-errors.ts` maps `QuotaExceededError` → `EDQUOT`. No further action.

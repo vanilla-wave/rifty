@@ -3,6 +3,8 @@
 Status: Accepted
 Date: 2026-05
 
+> Note: only the regex ESM-loader is superseded (by ADR-0009). The resolver, module registry, CJS loader, and CJS↔ESM interop remain active.
+
 Decision D-003: CJS and ESM share one resolver and one module registry. ESM is parsed with `es-module-lexer`, rewritten to async-function form, and run via `new Function`.
 
 ## Architecture

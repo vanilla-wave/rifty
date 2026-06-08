@@ -3,6 +3,8 @@
 Status: Implemented (2026-05-24) — plugin at `apps/playground/build/sw-plugin.ts`
 Date: 2026-05
 
+> Note: ADR-0031 supersedes only the protocol-version wording. The load-bearing decision — sw.ts is the single source, public/sw.js is generated at build — stays active.
+
 ## Context
 
 SW logic is duplicated: TS source `packages/service-worker/src/sw.ts` vs hand-edited JS copy `apps/playground/public/sw.js` (served verbatim by Vite). They drift — the JS lags the TS on every SW-protocol change, because the TS module has no pipeline emitting to `public/`. Flagged by REVIEW_ACTIONS A-017.

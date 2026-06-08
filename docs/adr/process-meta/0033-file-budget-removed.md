@@ -30,3 +30,8 @@ Split-by-concept stays: one purpose per file; single-consumer helpers live with 
 - Cited forced splits merged back in companion changes: buffer-prototype trio → `packages/io/src/buffer-prototype.ts`; esm-ast trio → `packages/runtime-js/src/module-loader/esm-ast.ts`. The WASI scatter is folded back by its owning agent (separate scope).
 - Negative: review burden shifts to humans, no automated backstop. Mitigation: non-cohesive long files surface at PR review like any other quality issue.
 - Negative: no automated nudge when a file drifts into a god-module. Mitigation: ADR-0012 drew the package boundaries; cross-cutting drift surfaces there.
+
+
+## Carried over from superseded ADR-0024
+
+Open followup (was ADR-0024 acceptance, still unchecked): WASI lacks ≥1 parity case per syscall family. Current coverage = 7 conformance tests (`tests/conformance/wasi/wasi.test.ts`) exercising env/fd/path/proc end-to-end via real `_start` + hand-crafted wasm; per-family parity cases never landed. Track when folding the WASI syscall scatter back. Note: ADR-0024 deferred the original `wasi.ts` split to M11 precisely because it lacked coverage to decompose safely — that gap is still open.
