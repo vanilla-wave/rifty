@@ -70,7 +70,7 @@ export function deletePath(fs: FsOpsTarget, path: string): void {
  * recreated and their children copied. `FsSync` has no `renameSync`, so this is
  * the honest primitive behind {@link renamePath}.
  *
- * TODO(ADR): Q-2026-06-04-313
+ * TODO(backlog: vfs/native-renamesync)
  */
 export function copyTree(fs: FsOpsTarget, from: string, to: string): void {
   const st = fs.statSync(from);
@@ -93,7 +93,7 @@ export function renamePath(fs: FsOpsTarget, from: string, to: string): void {
   fs.rmSync(from, { recursive: true, force: true });
 }
 
-/** Heuristic binary sniff: a NUL byte in the first 8 KB. TODO(ADR): Q-2026-06-04-314 */
+/** Heuristic binary sniff: a NUL byte in the first 8 KB. TODO(backlog: playground/binary-file-content-type-detection) */
 export function looksBinary(bytes: Uint8Array): boolean {
   const n = Math.min(bytes.length, 8192);
   for (let i = 0; i < n; i += 1) {

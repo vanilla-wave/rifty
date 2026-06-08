@@ -14,7 +14,7 @@ import type { Resolver } from './resolver.ts';
  * synchronous `require()` cannot await it, so a `.ts`/`.tsx` in a
  * non-`type:module` scope is unsupported. In a `type:module` scope it loads as
  * ESM via `import()` where the async strip runs. Registered in
- * `docs/compat/modules.md` as not-supported.
+ * `docs/public/compat/modules.md` as not-supported.
  */
 function assertNotTsCjs(id: string): void {
   if (id.endsWith('.ts') || id.endsWith('.tsx')) {

@@ -55,7 +55,7 @@ export interface EsmLoaderDeps {
    * Injected ESM AST rewrite (acorn parse + walk). When absent, the direct
    * {@link transformEsm} import is used. The loader injects a cached wrapper so
    * the heaviest per-module CPU step is not re-run on a byte-identical re-load
-   * (perf #16, TODO(ADR): Q-2026-05-30-202). Pure: same id+source -> same output.
+   * (perf #16, TODO(backlog: perf/transformesm-result-cache)). Pure: same id+source -> same output.
    */
   readonly transformEsm?: (source: string, id: string) => TransformResult;
 }

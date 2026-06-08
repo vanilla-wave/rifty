@@ -1,4 +1,4 @@
-// TODO(ADR): Q-2026-06-07-407 — one builtin per file under commands/<cmd>.ts; this barrel only registers them.
+// TODO(backlog: shell/command-file-layout) — one builtin per file under commands/<cmd>.ts; this barrel only registers them.
 /**
  * Built-in command registration barrel.
  *

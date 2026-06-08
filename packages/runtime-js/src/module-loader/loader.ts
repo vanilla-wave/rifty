@@ -88,7 +88,7 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
   // re-stripping the same `.ts` across the import graph (or repeated loads in
   // one loader) is wasted work. Key by absolute resolved id (installed sources
   // are immutable per package version in the VFS overlay). Wrapping
-  // `opts.transformSource` keeps `esm.ts` cache-unaware. TODO(ADR): Q-2026-05-30-202.
+  // `opts.transformSource` keeps `esm.ts` cache-unaware. TODO(backlog: runtime-js/ts-strip-transform-cache).
   const transformCache = new Map<string, string>();
   const cachedTransform: TransformSourceHook | undefined =
     opts.transformSource &&
@@ -104,7 +104,7 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
   // per-module CPU step, re-run for every byte-identical module on each
   // editor-save `invalidate()` loop. `transformEsm` is pure, so memoizing by
   // absolute resolved id is observationally transparent. Dropped in lockstep
-  // with `transformCache`/registry (same lifecycle). TODO(ADR): Q-2026-05-30-202.
+  // with `transformCache`/registry (same lifecycle). TODO(backlog: perf/transformesm-result-cache).
   const esmAstCache = new Map<string, TransformResult>();
   const cachedTransformEsm = (source: string, id: string): TransformResult => {
     const hit = esmAstCache.get(id);
@@ -228,7 +228,8 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     invalidate(id) {
       registry.invalidate(id);
       // Keep the strip cache + ESM AST cache coherent with the executed-module
-      // cache, dropping them in lockstep (TODO(ADR): Q-2026-05-30-202).
+      // cache, dropping them in lockstep (TODO(backlog: runtime-js/ts-strip-transform-cache),
+      // TODO(backlog: perf/transformesm-result-cache)).
       if (id === undefined) {
         transformCache.clear();
         esmAstCache.clear();
@@ -240,7 +241,8 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
       // input-keyed and cannot be pruned by module id, so ANY invalidate —
       // full OR targeted — clears them whole. A stale package.json (load-fixture
       // reload) or a stale resolution would silently mis-classify / mis-route a
-      // module. TODO(ADR): Q-2026-06-06-320, Q-2026-06-06-321.
+      // module. TODO(backlog: perf/loader-packagejson-parse-cache),
+      // TODO(backlog: perf/resolver-resolution-cache).
       resolver.clearCaches();
     },
     registry,

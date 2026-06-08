@@ -448,7 +448,7 @@ export class OpfsFsSync implements FsSync {
     // copy is the regression (Q-2026-06-06-319 aliasing gate, verdict
     // safe-to-proceed). The write-through consumer (OpfsVfs.writeFile) is
     // read-only, so the two surfaces can share one copy.
-    // TODO(ADR): Q-2026-06-06-319
+    // TODO(backlog: perf/opfs-writefilesync-shared-slice)
     const copy = data.slice();
     this.content.set(normalized, copy);
     const wasKnown = this.index.has(normalized);

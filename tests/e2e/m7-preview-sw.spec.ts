@@ -1,7 +1,7 @@
 /**
  * M7 — HTTP request rounds through the Service Worker preview path.
  *
- * Covers the M7 acceptance criterion (PROJECT_PLAN.md §M7, line ~315):
+ * Covers the M7 acceptance criterion (docs/ROADMAP.md M7):
  *
  *   > Express "hello world" → see the page in the browser.
  *

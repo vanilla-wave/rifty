@@ -89,9 +89,9 @@ class RiftyProcess extends EventEmitter {
   execPath = '/usr/local/bin/rifty';
   platform = 'rifty';
   arch = 'wasm';
-  // TODO(ADR): Q-2026-05-27-001 — `version`/`versions.node` impersonate Node
+  // TODO(backlog: runtime-js/process-versions-node-honesty) — `version`/`versions.node` impersonate Node
   // while `platform`/`arch` follow ADR-0026's honesty principle. Tracked for
-  // human review by M11 close; see OPEN_QUESTIONS.md.
+  // human review by M11 close; see docs/backlog/runtime-js/process-versions-node-honesty.md.
   version = 'v22.0.0';
   versions = { node: '22.0.0', v8: '12.0.0', rifty: '0.0.0' };
   pid = 1;

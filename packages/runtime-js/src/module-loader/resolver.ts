@@ -96,13 +96,13 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
   // re-decoded+re-parsed its package.json N times; cache by absolute path.
   // Cleared whole in `loader.invalidate()` (both arms) — `load-fixture` reload
   // overwrites package.json then invalidates, so a stale `type`/`main`/`exports`
-  // would silently flip ESM/CJS classification. TODO(ADR): Q-2026-06-06-320.
+  // would silently flip ESM/CJS classification. TODO(backlog: perf/loader-packagejson-parse-cache).
   const pkgCache: PkgCache = new Map();
   // Resolution memo (perf #15): key `esm\0fromDir\0specifier` -> resolved
   // file-id. NEVER caches not-found (guest writes / npm install create files
   // without firing invalidate) nor the PACKAGE_PATH_NOT_EXPORTED throw.
   // Cleared whole on ANY invalidate (input-keyed; cannot prune by resolved id).
-  // TODO(ADR): Q-2026-06-06-321.
+  // TODO(backlog: perf/resolver-resolution-cache).
   const resolveCache = new Map<string, string>();
   return {
     clearCaches() {

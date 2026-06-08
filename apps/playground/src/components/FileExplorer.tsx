@@ -149,7 +149,7 @@ export function FileExplorer(props: {
     const timer = setInterval(() => {
       if (!visibleNow || editing() !== null) return;
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
-      // TODO(ADR): Q-2026-06-04-312 — poll only because the VFS has no events.
+      // TODO(backlog: vfs/vfs-change-events) — poll only because the VFS has no events.
       if (currentSignature() !== lastSig) refresh();
     }, POLL_MS);
     onCleanup(() => clearInterval(timer));

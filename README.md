@@ -2,7 +2,7 @@
 
 Browser-based, Node-compatible runtime + WASI runner — a WebContainers-like system built from scratch. Run `Express`, `npm install`, a dev server, even WASI binaries, **inside a browser tab**. Pet project; goal is deep understanding of how these systems work, plus a practical "Express + npm install in the browser".
 
-> **Status:** active milestone M10 (Real Tooling). APIs are `0.x` and may move. See [`PROJECT_PLAN.md`](./PROJECT_PLAN.md), [`TASKS.md`](./TASKS.md), [`docs/adr/`](./docs/adr/), [`docs/compat/`](./docs/compat/).
+> **Status:** active milestone M10 (Real Tooling). APIs are `0.x` and may move. See [`docs/ROADMAP.md`](./docs/ROADMAP.md), [`docs/adr/`](./docs/adr/), [`docs/public/compat/`](./docs/public/compat/).
 
 ## Packages
 
@@ -83,7 +83,7 @@ const sandbox = await createSandbox({
 await sandbox.runtime.eval('console.log("hello from a Worker")');
 ```
 
-Target `es2022`; **Chrome-first** (cross-browser e2e infra exists, see [`docs/compat/`](./docs/compat/)).
+Target `es2022`; **Chrome-first** (cross-browser e2e infra exists, see [`docs/public/compat/`](./docs/public/compat/)).
 
 ## Develop (monorepo)
 

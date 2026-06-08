@@ -52,7 +52,7 @@ export class HttpServer extends EventEmitter {
    * `NodeHttpServer.layer`, which always calls `listen({ port, host }, cb)`.
    * Both forms extract a numeric port; `host` is ignored (loopback-only).
    *
-   * TODO(ADR): Q-2026-05-30-101
+   * TODO(backlog: net/http-listen-options-overload)
    */
   listen(port: number, hostnameOrCb?: string | (() => void), cb?: () => void): this;
   listen(options: ListenOptions, cb?: () => void): this;

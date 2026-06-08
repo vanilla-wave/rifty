@@ -48,7 +48,7 @@ export class ServerResponse extends EventEmitter {
    * queue was full). Gates the Node-style `'drain'` emission in `pull()` so we
    * never fire a spurious `'drain'` before any backpressure occurred. See
    * `write` and the `ReadableStream` `pull` callback.
-   * TODO(ADR): Q-2026-05-30-102
+   * TODO(backlog: net/serverresponse-drain-emission)
    */
   private _needDrain = false;
 
@@ -71,7 +71,7 @@ export class ServerResponse extends EventEmitter {
         // `res.on('drain')` and ignore `write()`'s return (e.g.
         // @effect/platform-node's write loop) resume. Gated by `_needDrain`
         // so we never emit a spurious `'drain'` before backpressure.
-        // TODO(ADR): Q-2026-05-30-102
+        // TODO(backlog: net/serverresponse-drain-emission)
         if (this._needDrain) {
           this._needDrain = false;
           this.emit('drain');

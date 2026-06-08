@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Regenerates docs/compat/*.md from the most recent vitest run.
+ * Regenerates docs/public/compat/*.md from the most recent vitest run.
  *
  * Skeleton: until we wire a JSON reporter pass into the vitest workspace, the
  * matrix is hand-curated. This script verifies that every conformance test
@@ -10,7 +10,7 @@ import { readdir } from 'node:fs/promises';
 
 const here = new URL('.', import.meta.url);
 const conformanceDir = new URL('../../tests/conformance/', here);
-const matrixDir = new URL('../../docs/compat/', here);
+const matrixDir = new URL('../../docs/public/compat/', here);
 
 async function listFiles(dir) {
   try {

@@ -103,5 +103,5 @@ got)` pairs so a host can distinguish frame-skew from routing-skew.
   unblocks the body-transport upgrades scheduled for M12.
 - ADR-0031 — per-frame `version` validation.
 - ADR-0036 — preview-protocol addressing primitives live in `@riftydev/io`.
-- `REVIEW_ACTIONS.md` A-023 / A-026 — the M11 path that swaps the default
-  owner resolver.
+- [`docs/backlog/service-worker/sw-to-worker-direct-routing.md`](../../docs/backlog/service-worker/sw-to-worker-direct-routing.md)
+  (A-023 / A-026) — the M11 path that swaps the default owner resolver.

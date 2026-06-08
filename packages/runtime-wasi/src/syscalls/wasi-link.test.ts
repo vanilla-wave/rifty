@@ -6,7 +6,7 @@
  *
  * We don't assert behaviour here — that lives in `fd.test.ts` and
  * `path.test.ts`. We only assert presence so the matrix in
- * `docs/compat/wasi.md` stays honest.
+ * `docs/public/compat/wasi.md` stays honest.
  */
 import { describe, expect, it } from 'vitest';
 import { Wasi } from '../wasi.ts';

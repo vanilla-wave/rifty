@@ -4,7 +4,7 @@
  * database-boot sequence without throwing — because opencode's `Server.listen`
  * builds the Effect layer DAG eagerly, and `Database.layer`'s acquire opens the
  * database, runs the PRAGMAs, and applies the migrations BEFORE any HTTP request
- * is served (Spike C, `docs/opencode/README.md`). A throw anywhere on this path
+ * is served (Spike C, `docs/backlog/opencode/spike-c-createroutes-layer-build.md`). A throw anywhere on this path
  * dies the layer build under `Effect.orDie` and fails boot. So this is the gate
  * that says "rifty can boot opencode's database layer".
  *
