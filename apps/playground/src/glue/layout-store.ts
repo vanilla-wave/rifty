@@ -35,7 +35,7 @@ export const LAYOUT_DEFAULTS: LayoutState = {
   sidebarCollapsed: false,
   consoleCollapsed: false,
   // Explorer is the boot default — the file manager is the headline feature.
-  // TODO(ADR): Q-2026-06-04-311
+  // TODO(backlog: playground/sidebar-boot-default-view)
   view: 'explorer',
 };
 

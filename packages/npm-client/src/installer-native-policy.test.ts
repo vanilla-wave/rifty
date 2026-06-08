@@ -87,7 +87,7 @@ describe('install — native-dependency policy (ADR-0051)', () => {
     expect((err as { code?: string }).code).toBe('ENATIVEUNSUPPORTED');
     expect((err as { packageName?: string }).packageName).toBe('opencode-ai');
     expect((err as { platform?: { cpu?: string[] } }).platform?.cpu).toEqual(['arm64', 'x64']);
-    expect((err as Error).message).toContain('docs/compat/incompatible-packages.md');
+    expect((err as Error).message).toContain('docs/public/compat/incompatible-packages.md');
   });
 
   it('aborts on a REQUIRED transitive native dep', async () => {

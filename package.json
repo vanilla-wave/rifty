@@ -34,8 +34,7 @@
     "test:all": "pnpm test:run && pnpm test:parity && pnpm test:e2e",
     "compat:generate": "node tools/compat-matrix-generator/cli.js",
     "adr:new": "node tools/adr/new.mjs",
-    "adr:promote": "node tools/adr/promote.mjs",
-    "todo:adr": "node tools/adr/todo-report.mjs",
+    "backlog:check": "node tools/backlog/check.mjs",
     "postinstall": "playwright install --with-deps chromium firefox webkit || true"
   },
   "devDependencies": {

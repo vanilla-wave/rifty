@@ -195,7 +195,8 @@ export function pathSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       }
     },
     // VFS doesn't track atime/ctime; touching mtime through WASI is a
-    // separate question (see Q-2026-05-25-touch-utimes in OPEN_QUESTIONS).
+    // separate question (Q-2026-05-25-touch-utimes; ADR-0029 /
+    // docs/backlog/runtime-wasi/filestat-set-times.md).
     // For now this is an honest E_NOSYS rather than a silent no-op.
     path_filestat_set_times: () => E_NOSYS,
     path_create_directory: (fd: number, pathPtr: number, pathLen: number) => {

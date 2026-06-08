@@ -14,7 +14,7 @@
  * members (`location`, `function`, `aggregate`, `createSession`,
  * `applyChangeset`, `enableLoadExtension`, `loadExtension`) are not yet backed —
  * when added they throw a directed `NotImplementedError` with a
- * `docs/compat/sqlite.md` entry, never a faked value (ADR-0065 D4).
+ * `docs/backlog/net/sqlite-unwired-members.md` entry, never a faked value (ADR-0065 D4).
  */
 import type { Database } from 'sql.js';
 import { getSqliteEngine } from './engine.ts';
@@ -31,7 +31,7 @@ import { StatementSync } from './statement-sync.ts';
  * - `enableForeignKeyConstraints` (default `true` in Node): issues
  *   `PRAGMA foreign_keys = ON|OFF` on open. sql.js honours it.
  * - `readOnly` / `allowExtension` / `enableDoubleQuotedStringLiterals` /
- *   `timeout`: inert (see `docs/compat/sqlite.md`). DQS cannot be toggled at
+ *   `timeout`: inert (see `docs/backlog/net/sqlite-options-and-dqs.md`). DQS cannot be toggled at
  *   runtime in the prebuilt sql.js WASM, so it is a documented no-op.
  */
 export interface DatabaseSyncOptions {
@@ -104,7 +104,7 @@ export class DatabaseSync {
       throw err;
     }
     const engine = getSqliteEngine();
-    // TODO(ADR): Q-2026-05-31-301 — in-memory-first persistence scope. Fresh
+    // TODO(backlog: net/sqlite-opfs-persistence) — in-memory-first persistence scope. Fresh
     // sql.js in-memory handle regardless of `#filename`; the OPFS-`SyncAccessHandle`
     // durability follow-up (ADR-0065 D2) replaces this backing site.
     this.#db = new engine.Database();

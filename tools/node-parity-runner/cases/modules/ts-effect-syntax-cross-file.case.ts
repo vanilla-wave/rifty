@@ -42,8 +42,8 @@ import type { ParityCase } from '../../src/types.ts';
  * the Node-side `tsx` fully lowers it. That asymmetry is a real rifty-pipeline
  * gap, but decorators are NOT on opencode's source-transform path (the grep
  * across the vendored tree finds none), so faking a green parity case for them
- * would be dishonest. The gap is recorded in `docs/compat/` + OPEN_QUESTIONS
- * (Q-2026-05-31-304) instead.
+ * would be dishonest. The gap is recorded in `docs/public/compat/modules.md`
+ * + docs/backlog/ (Q-2026-05-31-304) instead.
  */
 const c: ParityCase = {
   kind: 'ts-esm',

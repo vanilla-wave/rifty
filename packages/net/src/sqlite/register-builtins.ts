@@ -16,7 +16,7 @@
  * synchronous constructor depends on the resolved engine handle (ADR-0065 D1).
  * Registration itself is synchronous and does not touch the engine.
  */
-// TODO(ADR): Q-2026-05-31-302 — exact node:sqlite builtin registration module path
+// TODO(backlog: net/sqlite-registration-path) — exact node:sqlite builtin registration module path
 import { registerBuiltin } from '@riftydev/io';
 import { DatabaseSync } from './database-sync.ts';
 

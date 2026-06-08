@@ -78,7 +78,7 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
   // re-stripping the same `.ts` across the import graph (or repeated loads in
   // one loader) is wasted work. Key by absolute resolved id (installed sources
   // are immutable per package version in the VFS overlay). Wrapping
-  // `opts.transformSource` keeps `esm.ts` cache-unaware. TODO(ADR): Q-2026-05-30-202.
+  // `opts.transformSource` keeps `esm.ts` cache-unaware. TODO(backlog: runtime-js/ts-strip-transform-cache).
   const transformCache = new Map<string, string>();
   const cachedTransform: TransformSourceHook | undefined =
     opts.transformSource &&
@@ -184,7 +184,7 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     invalidate(id) {
       registry.invalidate(id);
       // Keep the strip cache coherent with the executed-module cache
-      // (TODO(ADR): Q-2026-05-30-202).
+      // (TODO(backlog: runtime-js/ts-strip-transform-cache)).
       if (id === undefined) transformCache.clear();
       else transformCache.delete(id);
     },

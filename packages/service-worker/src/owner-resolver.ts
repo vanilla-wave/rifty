@@ -12,8 +12,7 @@
  *
  * Refs: ADR-0011 (Sync IPC via SAB; kernel-spawned-Worker model A-023 reuses),
  * ADR-0017 (`@riftydev/net` cross-realm port-registry bridge), ADR-0025
- * (main-thread dev servers; superseded for Real Vite by A-026), A-023 / A-026
- * (REVIEW_ACTIONS.md).
+ * (main-thread dev servers; superseded for Real Vite by A-026), A-023 / A-026.
  */
 
 /**

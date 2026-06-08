@@ -10,7 +10,8 @@
  * bare `get({ id: 'x' })` once {@link setAllowBareNamedParameters}(true)).
  *
  * Two members throw a directed {@link NotImplementedError} rather than fake a
- * value (no-silent-stubs, ADR-0065 D4; both ❌ in `docs/compat/sqlite.md`):
+ * value (no-silent-stubs, ADR-0065 D4; both ❌, tracked in
+ * `docs/backlog/net/sqlite-bigint-reads.md` + `docs/backlog/net/sqlite-column-metadata.md`):
  * `setReadBigInts(true)` (prebuilt sql.js WASM has no bigint read mode) and
  * `columns()` (WASM built without `SQLITE_ENABLE_COLUMN_METADATA`). See each
  * member's doc for detail.
@@ -73,7 +74,7 @@ const NAMED_PARAM_SIGILS = [':', '@', '$'] as const;
  * returning it would be a silent precision lie (no-silent-stubs, ADR-0065 D4).
  * Non-integer reals, strings, blobs, `null` pass through.
  *
- * Caveat (`docs/compat/sqlite.md`): a REAL holding a whole number above `2^53`
+ * Caveat (`docs/backlog/net/sqlite-bigint-reads.md`): a REAL holding a whole number above `2^53`
  * is indistinguishable from a truncated INTEGER given only the JS number (sql.js
  * has no `sqlite3_column_type`), so it is guarded too — Node would return it.
  * Rare edge; guarding keeps the dangerous case (truncated INTEGER passed as
@@ -253,7 +254,7 @@ export class StatementSync {
    * The `true` path is NOT supported: the prebuilt sql.js WASM stores INTEGERs as
    * JS `number` with no bigint read mode, and coercing to `BigInt` would silently
    * lie above `Number.MAX_SAFE_INTEGER` (already lossy before the cast), so it
-   * throws (ADR-0065 D4, no-silent-stubs; ❌ in `docs/compat/sqlite.md`).
+   * throws (ADR-0065 D4, no-silent-stubs; ❌, `docs/backlog/net/sqlite-bigint-reads.md`).
    *
    * The `false` path is NOT silent on overflow either: an INTEGER past
    * `Number.MAX_SAFE_INTEGER` throws `RangeError`/`ERR_OUT_OF_RANGE` on read (see
@@ -291,7 +292,7 @@ export class StatementSync {
    * `SQLITE_ENABLE_COLUMN_METADATA` build (the `sqlite3_column_table_name` etc.
    * exports). The prebuilt sql.js WASM is compiled WITHOUT it (only
    * `sqlite3_column_name`), so a partial shape would be a silent stub — this
-   * throws (ADR-0065 D4, ❌ in `docs/compat/sqlite.md`). Not on opencode's path.
+   * throws (ADR-0065 D4, ❌, `docs/backlog/net/sqlite-column-metadata.md`). Not on opencode's path.
    *
    * @throws {NotImplementedError} Always — engine lacks column metadata.
    */

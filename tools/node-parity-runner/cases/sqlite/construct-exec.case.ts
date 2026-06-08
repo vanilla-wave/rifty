@@ -34,7 +34,7 @@ import type { ParityCase } from '../../src/types.ts';
  * string literal and the only form that both opens-and-inserts AND matches Node.
  * (The first-cut sql.js build leaves DQS ON with no runtime toggle, so the
  * double-quoted form would DIVERGE — it is a documented first-cut gap in
- * `docs/compat/sqlite.md`, NOT something this case relies on.)
+ * `docs/backlog/net/sqlite-options-and-dqs.md`, NOT something this case relies on.)
  */
 const c: ParityCase = {
   kind: 'sqlite',

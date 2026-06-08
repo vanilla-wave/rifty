@@ -55,7 +55,7 @@ jobs:
           name: playwright-report
           path: playwright-report
 
-  todo-adr-report:
+  backlog-check:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
@@ -63,5 +63,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Count TODO(ADR) markers
-        run: node tools/adr/todo-report.mjs
+      - name: backlog check
+        run: node tools/backlog/check.mjs

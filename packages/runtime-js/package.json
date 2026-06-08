@@ -94,6 +94,5 @@
     "@riftydev/kernel": "workspace:*",
     "@riftydev/vfs": "workspace:*",
     "acorn": "^8.14.0"
-  },
-  "// TODO(ADR)": "Q-2026-05-23-005 — subpath exports `./builtins/*` are part of the public surface; promoted in ADR 0018"
+  }
 }

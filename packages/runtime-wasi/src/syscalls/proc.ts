@@ -6,7 +6,7 @@
  *
  * `proc_raise`, `sock_*`, and `poll_oneoff` return `E_NOSYS` — unbacked, but must
  * be PRESENT in the imports table or `WebAssembly.instantiate` raises `LinkError`.
- * See `docs/compat/wasi.md`.
+ * See `docs/public/compat/wasi.md`.
  */
 import {
   CLOCKID_MONOTONIC,

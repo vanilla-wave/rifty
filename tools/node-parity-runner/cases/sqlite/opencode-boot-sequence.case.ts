@@ -12,7 +12,8 @@ import type { ParityCase } from '../../src/types.ts';
  *
  * Why it matters: opencode's `Server.listen` builds its Effect layer DAG eagerly,
  * and `Database.layer`'s acquire opens `:memory:`, runs the PRAGMAs, and applies
- * the migrations BEFORE any request is served (Spike C, `docs/opencode/README.md`).
+ * the migrations BEFORE any request is served (Spike C,
+ * `docs/backlog/opencode/spike-c-createroutes-layer-build.md`).
  * If rifty's shim diverged from Node on any of these — a PRAGMA throwing, the
  * migration journal table not seeding as empty, the transaction not committing —
  * boot would fail or behave differently. This case pins that it does not.

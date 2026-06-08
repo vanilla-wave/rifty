@@ -380,7 +380,7 @@ function assertNativeSupported(name: string, version: string, manifest: VersionM
   if (cpu.includes('wasm') || cpu.some((c) => c.startsWith('!'))) return;
   throw Object.assign(
     new Error(
-      `ENATIVEUNSUPPORTED: '${name}@${version}' ships a native binary (cpu: ${JSON.stringify(cpu)}, os: ${JSON.stringify(manifest.os ?? null)}) that cannot run in rifty's JS+WASI runtime, and no shadow-registry substitution is registered for it. See docs/compat/incompatible-packages.md.`,
+      `ENATIVEUNSUPPORTED: '${name}@${version}' ships a native binary (cpu: ${JSON.stringify(cpu)}, os: ${JSON.stringify(manifest.os ?? null)}) that cannot run in rifty's JS+WASI runtime, and no shadow-registry substitution is registered for it. See docs/public/compat/incompatible-packages.md.`,
     ),
     {
       code: 'ENATIVEUNSUPPORTED',

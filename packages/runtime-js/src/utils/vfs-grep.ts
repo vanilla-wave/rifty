@@ -12,7 +12,7 @@
  * adds no resolver intercept; imports only `builtins/fs.ts` and `@riftydev/vfs`
  * (layer-legal, no reverse import).
  *
- * TODO(ADR): Q-2026-05-30-061 — pure-JS marker chosen over ripgrep-WASM;
+ * TODO(backlog: opencode/ripgrep-wasm-grep-tool) — pure-JS marker chosen over ripgrep-WASM;
  * ripgrep-WASM / isomorphic-git deferred behind explicit human ratification.
  */
 import { joinPath } from '@riftydev/vfs';

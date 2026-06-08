@@ -161,12 +161,10 @@ var FirstWindowOwnerBinding = class {
     this.#resolver = opts.resolver ?? new FirstWindowOwnerResolver();
     this.#logger = opts.logger;
   }
-  // NOT `async` — returning the resolver's promise directly preserves the
-  // single await-unwrap timing of the pre-ADR-0046 path, where
-  // `route-preview` awaited `resolver.resolveOwner` with no intermediate
-  // binding hop. An `async` wrapper here would add one extra microtask turn
-  // (await-unwrap of the inner resolver promise), which the handshake tests
-  // observe as a missed dispatch within their fixed microtask budget.
+  // NOT `async`: returning the resolver promise directly preserves the
+  // pre-ADR-0046 await-unwrap timing. An `async` wrapper adds one extra
+  // microtask turn, which the handshake tests observe as a missed dispatch
+  // within their fixed microtask budget.
   resolveOwner(scope, request, clientId, _port) {
     return this.#resolver.resolveOwner(scope, request, clientId);
   }
@@ -187,21 +185,17 @@ var FirstWindowOwnerBinding = class {
       readiness: {
         isReady: (id) => registry.isReady(id),
         isMismatched: (id) => registry.isMismatched(id),
-        // NOT `async` — returning the registry's promise directly preserves
-        // the exact microtask timing of the pre-ADR-0046 path (where
-        // `route-preview` awaited `registry.waitForReady` with no wrapper).
-        // An `async` wrapper would insert an extra await-unwrap tick between
-        // the ready frame resolving the waiter and `routePreview` resuming to
-        // dispatch — observable to the handshake tests that gate dispatch on
+        // NOT `async`: returning the registry promise directly preserves
+        // pre-ADR-0046 microtask timing; an `async` wrapper inserts an extra
+        // await-unwrap tick between the ready frame resolving the waiter and
+        // `routePreview` resuming — observable to handshake tests that gate on
         // a fixed number of microtask turns.
         //
-        // The window registry has no separate "gone" signal — a window
-        // teardown comes through as a goodbye, which {@link
-        // createReadyClientsRegistry} surfaces as `'timeout'` for backward
-        // compatibility. The binding contract reserves `'gone'` for explicit
-        // owner-departed signals; the window binding only emits `'gone'` when
-        // it can distinguish it from a plain timeout, which today is never.
-        // Worker bindings do surface `'gone'`.
+        // The window registry has no separate "gone" signal: a window teardown
+        // arrives as a goodbye, which {@link createReadyClientsRegistry}
+        // surfaces as `'timeout'` for backward compat. The contract reserves
+        // `'gone'` for explicit owner-departed signals, which the window binding
+        // can never distinguish from a plain timeout. Worker bindings do emit it.
         waitForReady: (id, timeoutMs) => registry.waitForReady(id, timeoutMs),
         nextRequestId: () => registry.nextRequestId()
       },
