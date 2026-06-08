@@ -73,33 +73,6 @@ End of milestone M10.
 
 **Status:** 🟢 Active
 **Encountered in:** JS-runtime perf audit item #3 (`docs/perf/js-runtime-perf-audit-2026-06-05.md` + `…-adr-plan-2026-06-06.md`)
-<!-- Rich-terminal/coreutils research (docs/research/rich-terminal-coreutils-2026-06-06.md):
-     IRREVERSIBLE forks → ADR-0088..0086. REVERSIBLE forks recorded below (Q-2026-06-06-401..406),
-     pre-implementation (no code markers yet). -->
-
-## Q-2026-06-06-401: single shared home for the grep/tree-walker logic
-
-**Status:** 🟢 Active
-**Encountered in:** rich-terminal research (ADR-0088 coreutils strategy; ADR-0092 git read-ops)
-**Milestone:** M10/M12
-**Author (agent session):** 2026-06-06
-
-### Context
-
-`grep` (promoted from `vfs-grep`) and the facade `grep`/`list` tools (and the ADR-0092 git read-ops) all want the same recursive readdir + match walk. The current `packages/runtime-js/src/utils/vfs-grep.ts` imports `readFileSync/readdirSync/Dirent` from the runtime-js `builtins/fs.ts` node:fs FACADE (method-form `Dirent.isDirectory()`), NOT `@riftydev/vfs` directly.
-
-### Provisional decision
-
-Lean **(b)**: relocate ONE pure walker into shell/vfs rewired onto `syncMirror()` (field-form `VfsDirent.isDirectory` boolean), shared by builtin + facade tool, to avoid two-path divergence. Alternative **(a)** (re-export `vfsGrep` from `runtime-js/src/index.ts`) is simpler but keeps the method-form Dirent shape and a cross-layer import. REVERSIBLE while the walker stays an internal util; becomes IRREVERSIBLE only if a re-export adds public API. NB the method→field Dirent adaptation is real work, not a move. The Q-2026-05-30-061 ripgrep-WASM deferral is unaffected.
-
-### Code markers
-
-IMPLEMENTED this phase: `packages/shell/src/commands/_walk.ts` — option (b) pure walker on field-form `VfsDirent`, no runtime-js import; consumed by `commands/grep.ts` (`-r`) and `commands/find.ts`. Facade-tool / ADR-0092 git read-ops reuse still pending.
-
-## Q-2026-06-06-402: `ls`/`grep` `--color` via hand-rolled SGR (not picocolors)
-
-**Status:** 🟢 Active
-**Encountered in:** rich-terminal research (ADR-0088; ADR-0089 isTTY gating)
 **Milestone:** M10
 **Author (agent session):** 2026-06-06
 
@@ -135,21 +108,6 @@ End of milestone M10.
 **Status:** 🟢 Active
 **Encountered in:** JS-runtime perf audit item #5 (`docs/perf/js-runtime-perf-audit-2026-06-05.md` line 59 + `…-adr-plan-2026-06-06.md` line 41/127)
 **Milestone:** M10
-Color output needs raw SGR (`\x1b[1;34m…\x1b[0m`) to xterm. picocolors is the popular pick but its **browser build returns plain (uncolored) strings — emits no SGR** (a render-colors PR was rejected as Chrome-only), so it's actively wrong here.
-
-### Provisional decision
-
-A ~20–40-line LS_COLORS/SGR helper in `packages/shell/src/`, zero-dep, strictly more correct than picocolors. Emission MUST be gated on `ctx.isTTY` (ADR-0089) — `--color=auto` suppresses SGR into redirects/pipes. Known limitation: hand-rolled palette won't match `$LS_COLORS`; ASCII-only column width (no wcwidth). REVERSIBLE (internal helper).
-
-### Code markers
-
-IMPLEMENTED this phase: `packages/shell/src/commands/_sgr.ts` (`sgr`/`colorize`, dirs-only subset, identity when disabled); `commands/ls.ts` gates `--color=auto` on `ctx.isTTY`. See also [[Q-2026-06-07-411]] (ls `--color` not byte-fixtured vs gls).
-
-## Q-2026-06-06-403: stdout/stderr kept separate internally, merged only at the xterm sink
-
-**Status:** 🟢 Active
-**Encountered in:** rich-terminal research (ADR-0089; jsh reference §3)
-**Milestone:** M10/M12
 **Author (agent session):** 2026-06-06
 
 ### Context
@@ -184,21 +142,6 @@ End of milestone M10.
 **Status:** 🟢 Active
 **Encountered in:** JS-runtime perf audit item #15 (`docs/perf/js-runtime-perf-audit-2026-06-05.md` line 71 + `…-adr-plan-2026-06-06.md` line 42/128)
 **Milestone:** M10
-jsh merges stdout+stderr into one `process.output` stream at the terminal. rifty already keeps fd1/fd2 separate in `CommandContext` (`stdout`/`stderr` writers). Builtins write usage/errors to fd2.
-
-### Provisional decision
-
-Keep fd1/fd2 **separate internally**; merge ONLY at the xterm sink (the playground terminal). Preserves Node parity, `$?`, and future `2>&1` faithfulness — the merge is a presentation concern, not the contract. REVERSIBLE/small.
-
-### Code markers
-
-(none — pre-implementation; already the shape of `CommandContext`.)
-
-## Q-2026-06-06-404: awk / full-sed deferred (`NotImplementedError` + compat ❌)
-
-**Status:** 🟢 Active
-**Encountered in:** rich-terminal research (ADR-0088 §4; gap matrix §5)
-**Milestone:** M12+
 **Author (agent session):** 2026-06-06
 
 ### Context
@@ -233,26 +176,38 @@ The key shape, the full-clear-on-targeted-invalidate stance, and the never-cache
 
 End of milestone M10.
 
+## Q-2026-06-06-322: per-spawn env/argv sharing buys ~0 perf (postMessage clones regardless) — defer to the diff-wire variant (ADR/rule1) or the pre-warm pool (ADR-0088)
+
+**Status:** 🟢 Active — DEFER (no code change; spawn-worker.ts untouched)
+**Encountered in:** JS-runtime perf audit item #20 (`docs/perf/js-runtime-perf-audit-2026-06-05.md:95`)
+**Milestone:** M10
+**Author (agent session):** 2026-06-06
+
+### Context
+
+Audit #20 flagged the per-spawn env+argv structured-clone (`spawnKernelWorker` builds `fullSpec` then `worker.postMessage(init, [...])` in `packages/kernel/src/spawn-worker.ts`). The in-gate fix proposed (freeze + share one canonical env object) does **not** reduce that cost: `postMessage` structured-clones `env` (Record) and `argv` (array) into the child realm regardless of object identity or `Object.freeze` — non-transferables are always deep-copied. Verified there is also no redundant PARENT-side clone to dedupe: `fullSpec` takes `spec.env`/`spec.argv` by reference, and the one spread in the path (`process-manager.ts` `{...spec, cwd}`) is shallow and leaves those references untouched.
+
+### Provisional decision
+
+**No code change.** Do not freeze/share env (buys nothing) and do not ship a CHANGELOG perf claim for a no-op. Record the finding here:
+
+1. **Measured no-op in-gate:** the freeze+share variant yields ~0 wire/CPU savings; the structured-clone is intrinsic to crossing the realm boundary.
+2. **Wire payload must stay byte-identical:** any in-gate edit must keep `WorkerSpawnSpec` serializing the same own-enumerable env/argv — the child realm depends on receiving the full env + argv.
+3. **The only edit that removes the clone flips to rule1 (ADR):** a per-spawn diff/overrides wire over a hoisted shared canonical env changes the `WorkerSpawnSpec` wire shape (cross-package public API in `packages/kernel/src/worker-entry.ts`) → IRREVERSIBLE per the reversibility checklist rule 1; it needs an ADR, not this OPEN_QUESTIONS line. If anyone implements it, reclassify.
+4. **The real spawn-latency lever is deferred:** a worker pre-warm pool (1–2 fresh never-executed workers) is the audit's "biggest spawn-latency lever" (audit:95/138), gated on a measured spawn spike, tracked as the prospective ADR-0088. Env/argv micro-tuning is not on the critical path.
+
+### Concrete trigger to overturn (any one)
+
+1. A measured spawn-rate spike (test runners / `worker_threads` fan-out) makes the env/argv clone material on a shipped workload → revisit the diff-wire variant (then via an ADR, rule1).
+2. The pre-warm pool work (ADR-0088) lands — fold any env/argv sharing into that pass once the wire shape is being revised anyway.
+
+### Code markers (none — no code change; captured here)
+
 ## Q-2026-06-06-323: when to overturn the page-buffered cross-realm preview deferral (ADR-0048 D2) and ship the v3 frame bump
 
 **Status:** 🟢 Active — DEFER (upholds ADR-0048 D2 / ADR-0017 M12 / ADR-0055 "do NOT ship v3")
 **Encountered in:** JS-runtime perf audit item #22 fix(b); reconsidered by a decision subagent (ADR-0063) on 2026-06-06 and **upheld**
 **Milestone:** M12
-awk and full sed are an interpreter-class effort; the JS ecosystem ports are emscripten-WASM-only (a vendored binary = IRREVERSIBLE, ADR-0088 Option B territory).
-
-### Provisional decision
-
-**Defer.** `awk`/full-`sed` throw `NotImplementedError` + register `❌` (no silent stub), so the agent fails loudly. A pure-JS `sed s///` subset (~80–120 LOC) is an optional later add if a verified need appears (REVERSIBLE). Full awk/sed only via the deferred uutils-WASM path (Q-2026-05-30-061 sibling).
-
-### Code markers
-
-(none — pre-implementation; register ❌ when the builtin set lands.)
-
-## Q-2026-06-06-405: background `&` / job model deferred
-
-**Status:** 🟢 Active
-**Encountered in:** rich-terminal research (§6 #7); distinct from the ADR-0089 cancellation contract
-**Milestone:** M12+ kernel
 **Author (agent session):** 2026-06-06
 
 ### Context
@@ -276,11 +231,95 @@ The perf audit proposed building true end-to-end page↔worker `ReadableStream` 
 
 ### Code markers (none — captured here; reversible)
 
-## Q-2026-06-06-322: per-spawn env/argv sharing buys ~0 perf (postMessage clones regardless) — defer to the diff-wire variant (ADR/rule1) or the pre-warm pool (ADR-0088)
+<!-- Rich-terminal/coreutils research (docs/research/rich-terminal-coreutils-2026-06-06.md):
+     IRREVERSIBLE forks → ADR-0088..0093. REVERSIBLE forks recorded below (Q-2026-06-06-401..406),
+     pre-implementation (no code markers yet). -->
 
-**Status:** 🟢 Active — DEFER (no code change; spawn-worker.ts untouched)
-**Encountered in:** JS-runtime perf audit item #20 (`docs/perf/js-runtime-perf-audit-2026-06-05.md:95`)
+## Q-2026-06-06-401: single shared home for the grep/tree-walker logic
+
+**Status:** 🟢 Active
+**Encountered in:** rich-terminal research (ADR-0088 coreutils strategy; ADR-0092 git read-ops)
+**Milestone:** M10/M12
+**Author (agent session):** 2026-06-06
+
+### Context
+
+`grep` (promoted from `vfs-grep`) and the facade `grep`/`list` tools (and the ADR-0092 git read-ops) all want the same recursive readdir + match walk. The current `packages/runtime-js/src/utils/vfs-grep.ts` imports `readFileSync/readdirSync/Dirent` from the runtime-js `builtins/fs.ts` node:fs FACADE (method-form `Dirent.isDirectory()`), NOT `@riftydev/vfs` directly.
+
+### Provisional decision
+
+Lean **(b)**: relocate ONE pure walker into shell/vfs rewired onto `syncMirror()` (field-form `VfsDirent.isDirectory` boolean), shared by builtin + facade tool, to avoid two-path divergence. Alternative **(a)** (re-export `vfsGrep` from `runtime-js/src/index.ts`) is simpler but keeps the method-form Dirent shape and a cross-layer import. REVERSIBLE while the walker stays an internal util; becomes IRREVERSIBLE only if a re-export adds public API. NB the method→field Dirent adaptation is real work, not a move. The Q-2026-05-30-061 ripgrep-WASM deferral is unaffected.
+
+### Code markers
+
+IMPLEMENTED this phase: `packages/shell/src/commands/_walk.ts` — option (b) pure walker on field-form `VfsDirent`, no runtime-js import; consumed by `commands/grep.ts` (`-r`) and `commands/find.ts`. Facade-tool / ADR-0092 git read-ops reuse still pending.
+
+## Q-2026-06-06-402: `ls`/`grep` `--color` via hand-rolled SGR (not picocolors)
+
+**Status:** 🟢 Active
+**Encountered in:** rich-terminal research (ADR-0088; ADR-0089 isTTY gating)
 **Milestone:** M10
+**Author (agent session):** 2026-06-06
+
+### Context
+
+Color output needs raw SGR (`\x1b[1;34m…\x1b[0m`) to xterm. picocolors is the popular pick but its **browser build returns plain (uncolored) strings — emits no SGR** (a render-colors PR was rejected as Chrome-only), so it's actively wrong here.
+
+### Provisional decision
+
+A ~20–40-line LS_COLORS/SGR helper in `packages/shell/src/`, zero-dep, strictly more correct than picocolors. Emission MUST be gated on `ctx.isTTY` (ADR-0089) — `--color=auto` suppresses SGR into redirects/pipes. Known limitation: hand-rolled palette won't match `$LS_COLORS`; ASCII-only column width (no wcwidth). REVERSIBLE (internal helper).
+
+### Code markers
+
+IMPLEMENTED this phase: `packages/shell/src/commands/_sgr.ts` (`sgr`/`colorize`, dirs-only subset, identity when disabled); `commands/ls.ts` gates `--color=auto` on `ctx.isTTY`. See also [[Q-2026-06-07-411]] (ls `--color` not byte-fixtured vs gls).
+
+## Q-2026-06-06-403: stdout/stderr kept separate internally, merged only at the xterm sink
+
+**Status:** 🟢 Active
+**Encountered in:** rich-terminal research (ADR-0089; jsh reference §3)
+**Milestone:** M10/M12
+**Author (agent session):** 2026-06-06
+
+### Context
+
+jsh merges stdout+stderr into one `process.output` stream at the terminal. rifty already keeps fd1/fd2 separate in `CommandContext` (`stdout`/`stderr` writers). Builtins write usage/errors to fd2.
+
+### Provisional decision
+
+Keep fd1/fd2 **separate internally**; merge ONLY at the xterm sink (the playground terminal). Preserves Node parity, `$?`, and future `2>&1` faithfulness — the merge is a presentation concern, not the contract. REVERSIBLE/small.
+
+### Code markers
+
+(none — pre-implementation; already the shape of `CommandContext`.)
+
+## Q-2026-06-06-404: awk / full-sed deferred (`NotImplementedError` + compat ❌)
+
+**Status:** 🟢 Active
+**Encountered in:** rich-terminal research (ADR-0088 §4; gap matrix §5)
+**Milestone:** M12+
+**Author (agent session):** 2026-06-06
+
+### Context
+
+awk and full sed are an interpreter-class effort; the JS ecosystem ports are emscripten-WASM-only (a vendored binary = IRREVERSIBLE, ADR-0088 Option B territory).
+
+### Provisional decision
+
+**Defer.** `awk`/full-`sed` throw `NotImplementedError` + register `❌` (no silent stub), so the agent fails loudly. A pure-JS `sed s///` subset (~80–120 LOC) is an optional later add if a verified need appears (REVERSIBLE). Full awk/sed only via the deferred uutils-WASM path (Q-2026-05-30-061 sibling).
+
+### Code markers
+
+(none — pre-implementation; register ❌ when the builtin set lands.)
+
+## Q-2026-06-06-405: background `&` / job model deferred
+
+**Status:** 🟢 Active
+**Encountered in:** rich-terminal research (§6 #7); distinct from the ADR-0089 cancellation contract
+**Milestone:** M12+ kernel
+**Author (agent session):** 2026-06-06
+
+### Context
+
 `Shell.run` rejects bare `&` (`NotImplementedError('shell.background')`). The non-terminating-foreground-server problem (vite/node http) is solved by the ADR-0089 cancellation contract (Ctrl-C resolves `run`), NOT by `&`. True backgrounding needs a job model.
 
 ### Provisional decision
@@ -300,28 +339,11 @@ The perf audit proposed building true end-to-end page↔worker `ReadableStream` 
 
 ### Context
 
-Audit #20 flagged the per-spawn env+argv structured-clone (`spawnKernelWorker` builds `fullSpec` then `worker.postMessage(init, [...])` in `packages/kernel/src/spawn-worker.ts`). The in-gate fix proposed (freeze + share one canonical env object) does **not** reduce that cost: `postMessage` structured-clones `env` (Record) and `argv` (array) into the child realm regardless of object identity or `Object.freeze` — non-transferables are always deep-copied. Verified there is also no redundant PARENT-side clone to dedupe: `fullSpec` takes `spec.env`/`spec.argv` by reference, and the one spread in the path (`process-manager.ts` `{...spec, cwd}`) is shallow and leaves those references untouched.
-
-### Provisional decision
-
-**No code change.** Do not freeze/share env (buys nothing) and do not ship a CHANGELOG perf claim for a no-op. Record the finding here:
-
-1. **Measured no-op in-gate:** the freeze+share variant yields ~0 wire/CPU savings; the structured-clone is intrinsic to crossing the realm boundary.
-2. **Wire payload must stay byte-identical:** any in-gate edit must keep `WorkerSpawnSpec` serializing the same own-enumerable env/argv — the child realm depends on receiving the full env + argv.
-3. **The only edit that removes the clone flips to rule1 (ADR):** a per-spawn diff/overrides wire over a hoisted shared canonical env changes the `WorkerSpawnSpec` wire shape (cross-package public API in `packages/kernel/src/worker-entry.ts`) → IRREVERSIBLE per the reversibility checklist rule 1; it needs an ADR, not this OPEN_QUESTIONS line. If anyone implements it, reclassify.
-4. **The real spawn-latency lever is deferred:** a worker pre-warm pool (1–2 fresh never-executed workers) is the audit's "biggest spawn-latency lever" (audit:95/138), gated on a measured spawn spike, tracked as the prospective ADR-0088. Env/argv micro-tuning is not on the critical path.
-
-### Concrete trigger to overturn (any one)
-
-1. A measured spawn-rate spike (test runners / `worker_threads` fan-out) makes the env/argv clone material on a shipped workload → revisit the diff-wire variant (then via an ADR, rule1).
-2. The pre-warm pool work (ADR-0088) lands — fold any env/argv sharing into that pass once the wire shape is being revised anyway.
-
-### Code markers (none — no code change; captured here)
 opencode agents have two channels: structured file tools (read/grep/glob/list/edit/write) + one bash tool. Models still shell out to `rg`/`ls`/`find` (opencode #14791/#6506) even when structured tools exist.
 
 ### Provisional decision
 
-**Structured-tool-first**: the dominant channel is pure-JS facade tools over the VFS (no pipe dependency); keep a `list` tool (opencode #6506) and tune the facade prompt to curb shell exploration. The literal-bash fallback is lower priority and gated on the M12 pipes+glob+stdin chain (ADR-0089/0084). REVERSIBLE facade-design lean.
+**Structured-tool-first**: the dominant channel is pure-JS facade tools over the VFS (no pipe dependency); keep a `list` tool (opencode #6506) and tune the facade prompt to curb shell exploration. The literal-bash fallback is lower priority and gated on the M12 pipes+glob+stdin chain (ADR-0089/0091). REVERSIBLE facade-design lean.
 
 ### Code markers
 
