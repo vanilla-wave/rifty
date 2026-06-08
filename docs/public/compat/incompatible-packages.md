@@ -3,7 +3,7 @@
 rifty runs **JavaScript + WASI WebAssembly only**. It can never load native
 `.node` addons (node-gyp) or execute native compiled binaries (ELF / Mach-O /
 PE). This is a fundamental limit of the architecture, not a bug — see
-`PROJECT_PLAN.md` non-goals and D-005 (`docs/adr/0006-shadow-registry.md`).
+`CLAUDE.md` non-goals and D-005 (`docs/adr/npm-client/0006-shadow-registry.md`).
 
 ## What the installer does (ADR-0051)
 
@@ -45,4 +45,4 @@ entry in `@riftydev/shadow-registry`):
 ```
 
 A self-map (`"pkg": "pkg"`) bypasses the check if you're certain a `cpu`-pinned
-package is actually pure-JS (rare). See `docs/adr/0051-native-dependency-install-policy.md`.
+package is actually pure-JS (rare). See `docs/adr/npm-client/0051-native-dependency-install-policy.md`.
