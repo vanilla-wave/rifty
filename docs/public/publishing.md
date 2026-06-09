@@ -47,7 +47,7 @@ Tokenless OIDC has exact minimums, all satisfied by the repo + workflow:
 
 | Tool | Floor | Notes |
 |---|---|---|
-| pnpm | **≥ 11.1.3** | Pinned **`pnpm@11.5.1`** via `packageManager`; `11.0.x` (old `11.0.8` pin) 404s on OIDC publish ([pnpm#11513]). CI reads the version from `packageManager`. |
+| pnpm | **≥ 11.1.3** | Pinned **`pnpm@11.5.2`** via `packageManager`; `11.0.x` (old `11.0.8` pin) 404s on OIDC publish ([pnpm#11513]). CI reads the version from `packageManager`. |
 | npm CLI | **≥ 11.5.1** | GitHub runners ship older, so `release.yml` runs `npm install -g npm@latest`. |
 | Node | **≥ 22.14.0** | `node-version: 22` resolves to it. |
 

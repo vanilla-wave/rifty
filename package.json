@@ -4,7 +4,7 @@
   "private": true,
   "description": "Workspace root for rifty (the publishable umbrella is packages/rifty). Browser-based Node-compatible runtime + WASI runner (pet project).",
   "type": "module",
-  "packageManager": "pnpm@11.5.1",
+  "packageManager": "pnpm@11.5.2",
   "engines": {
     "node": ">=22"
   },

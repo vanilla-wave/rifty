@@ -197,7 +197,7 @@ D-007..D-009 (stop-on-irreversible → record-and-continue, inflections) were pr
 
 ## Numbering
 
-No reserved numbers. The JS-runtime perf plan's provisional **0081–0093** band was materialised in the M11/M12 merge — **0082–0093** as ADRs, **0081** retired into `CLAUDE.md` (reversibility rule 4, record-decisions-not-diffs). `pnpm adr:new <area> "Title"` auto-allocates max+1; `--number NNNN` authors a specific free number. `tools/adr/new.mjs` and `tools/refs/check.mjs` keep an (now empty) `RESERVED` set in sync with this note.
+No reserved numbers. The JS-runtime perf plan's provisional **0081–0093** band was materialised in the M11/M12 merge — **0082–0093** as ADRs, **0081** retired into `CLAUDE.md` (reversibility rule 4, record-decisions-not-diffs). `pnpm adr:new <area> "Title"` auto-allocates from a machine-local counter seeded from repo max; each successful allocation increments that counter before the ADR is written, so parallel worktrees on one machine get distinct numbers. `--number NNNN` authors a specific free number. `tools/adr/new.mjs` and `tools/refs/check.mjs` keep an (now empty) `RESERVED` set in sync with this note.
 
 opencode **decisions.md draft labels** 0056–0062 are a separate provisional namespace (drafts in `docs/backlog/opencode/reference/decisions.md`): 0057→ADR-0054, 0059→ADR-0055, 0056 superseded by ADR-0065; 0058/0060/0061/0062 deferred. A bare `ADR-005x`/`ADR-006x` citation refers to a draft, not a live ADR file.
 
