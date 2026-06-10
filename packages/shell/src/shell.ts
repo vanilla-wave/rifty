@@ -76,6 +76,7 @@ interface Segment {
 interface BackgroundJob {
   readonly id: number;
   readonly command: string;
+  readonly tokens: readonly Token[];
   readonly controller: AbortController;
   status: ShellJobListItem['status'];
 }
@@ -227,8 +228,33 @@ export class Shell {
     if (tokens.length === 0) return { exitCode: 0, stdout: '', stderr: '' };
 
     const background = this.trailingBackground(line, tokens);
-    if (background) return this.startBackgroundJob(background.line, background.tokens, options);
+    if (background) {
+      if (background.foregroundTokens.length === 0) {
+        return this.startBackgroundJob(background.line, background.backgroundTokens, options);
+      }
+      const foreground = await this.runTokens(background.foregroundTokens, options);
+      if (
+        (background.joiner === '&&' && foreground.exitCode !== 0) ||
+        (background.joiner === '||' && foreground.exitCode === 0)
+      ) {
+        return foreground;
+      }
+      const started = await this.startBackgroundJob(
+        background.line,
+        background.backgroundTokens,
+        options,
+      );
+      return {
+        exitCode: started.exitCode,
+        stdout: foreground.stdout + started.stdout,
+        stderr: foreground.stderr + started.stderr,
+      };
+    }
 
+    return this.runTokens(tokens, options);
+  }
+
+  private async runTokens(tokens: readonly Token[], options: RunOptions): Promise<RunResult> {
     // Reject non-trailing bare `&` loudly; tokenizer emits it as an operator token.
     if (tokens.some((t) => isOp(t) && t.op === '&')) {
       throw new NotImplementedError(
@@ -303,14 +329,41 @@ export class Shell {
   private trailingBackground(
     line: string,
     tokens: readonly Token[],
-  ): { readonly line: string; readonly tokens: readonly Token[] } | null {
+  ): {
+    readonly line: string;
+    readonly foregroundTokens: readonly Token[];
+    readonly backgroundTokens: readonly Token[];
+    readonly joiner: Exclude<Joiner, null> | null;
+  } | null {
     const last = tokens[tokens.length - 1];
     if (!last || !isOp(last) || last.op !== '&') return null;
-    const backgroundTokens = tokens.slice(0, -1);
+    const body = tokens.slice(0, -1);
+    if (body.length === 0) {
+      throw new NotImplementedError('shell.background', 'missing command before `&`');
+    }
+    const joinerIdx = findLastJoinerIndex(body);
+    if (joinerIdx === -1) {
+      return {
+        line: stripTrailingAmp(line),
+        foregroundTokens: [],
+        backgroundTokens: body,
+        joiner: null,
+      };
+    }
+    const joiner = body[joinerIdx];
+    if (!joiner || !isOp(joiner) || !isJoiner(joiner.op)) {
+      throw new Error('shell.trailingBackground: invalid joiner index');
+    }
+    const backgroundTokens = body.slice(joinerIdx + 1);
     if (backgroundTokens.length === 0) {
       throw new NotImplementedError('shell.background', 'missing command before `&`');
     }
-    return { line: stripTrailingAmp(line), tokens: backgroundTokens };
+    return {
+      line: tokensToShellLine(backgroundTokens),
+      foregroundTokens: body.slice(0, joinerIdx + 1),
+      backgroundTokens,
+      joiner: joiner.op,
+    };
   }
 
   private async startBackgroundJob(
@@ -340,6 +393,7 @@ export class Shell {
     const job: BackgroundJob = {
       id: ++this.backgroundSeq,
       command: line,
+      tokens,
       controller: new AbortController(),
       status: 'Running',
     };
@@ -353,7 +407,7 @@ export class Shell {
   private async runBackgroundJob(job: BackgroundJob, options: RunOptions): Promise<void> {
     const shell = this.cloneForBackground();
     try {
-      const result = await shell.run(job.command, {
+      const result = await shell.runTokens(job.tokens, {
         onChunk: options.onChunk,
         signal: job.controller.signal,
         isTTY: options.isTTY,
@@ -619,11 +673,11 @@ export class Shell {
  * empty segment — the run-loop SKIPS empty segments so they neither run nor
  * reset the exit code.
  */
-function splitOnJoiners(tokens: Token[]): Segment[] {
+function splitOnJoiners(tokens: readonly Token[]): Segment[] {
   const segments: Segment[] = [];
   let current: Token[] = [];
   for (const t of tokens) {
-    if (isOp(t) && (t.op === '&&' || t.op === '||' || t.op === ';')) {
+    if (isOp(t) && isJoiner(t.op)) {
       segments.push({ tokens: current, joiner: t.op });
       current = [];
     } else {
@@ -632,6 +686,27 @@ function splitOnJoiners(tokens: Token[]): Segment[] {
   }
   segments.push({ tokens: current, joiner: null });
   return segments;
+}
+
+function isJoiner(op: string): op is Exclude<Joiner, null> {
+  return op === '&&' || op === '||' || op === ';';
+}
+
+function findLastJoinerIndex(tokens: readonly Token[]): number {
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    const token = tokens[i];
+    if (token && isOp(token) && isJoiner(token.op)) return i;
+  }
+  return -1;
+}
+
+function tokensToShellLine(tokens: readonly Token[]): string {
+  return tokens.map((token) => (isOp(token) ? token.op : quoteShellWord(token.value))).join(' ');
+}
+
+function quoteShellWord(value: string): string {
+  if (value.length > 0 && !/[\s'"\\;&|<>]/u.test(value)) return value;
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 function stripTrailingAmp(line: string): string {

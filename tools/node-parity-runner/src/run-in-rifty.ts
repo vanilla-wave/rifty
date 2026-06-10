@@ -11,7 +11,11 @@
  *
  * Console is replaced for the duration of the case, then restored.
  */
-import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
+import {
+  riftyProcess,
+  setProcessCwd,
+  writeProcessStdin,
+} from '@riftydev/runtime-js/builtins/process';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import type { TransformSourceHook } from '@riftydev/runtime-js/loader';
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
@@ -361,6 +365,10 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
     } else {
       loader.require('./main.js', '/work/__entry.js');
     }
+    if (testCase.stdin) {
+      for (const chunk of testCase.stdin) writeProcessStdin(chunk);
+      (riftyProcess.stdin as { emit(event: string): void }).emit('end');
+    }
     if (testCase.kind === 'http') {
       // The http case drives its own server inside `listen`'s callback (a
       // microtask) and prints from the awaited `__riftyHttpRequest` round-trip.
@@ -385,6 +393,10 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
     console.error = original.error;
     resetSyncMirror();
     setProcessCwd('/workspace');
+    if (testCase.stdin) {
+      riftyProcess.stdin.removeAllListeners('data');
+      riftyProcess.stdin.setEncoding(null);
+    }
     teardownHttp?.();
     teardownExecSync?.();
   }

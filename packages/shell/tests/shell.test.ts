@@ -295,6 +295,40 @@ describe('Shell — background jobs', () => {
     expect((await sh.run('pwd')).stdout).toBe('/fg\n');
   });
 
+  it('runs the foreground prefix before backgrounding only the final segment', async () => {
+    const sh = new Shell();
+    let finish: () => void = () => {};
+    sh.registerCommand(
+      'slow',
+      async () =>
+        new Promise<number>((resolve) => {
+          finish = () => resolve(0);
+        }),
+    );
+
+    const run = await sh.run('echo a ; slow &');
+
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout).toBe('a\n[1] Running slow\n');
+    expect((await sh.run('jobs')).stdout).toBe('[1] Running slow\n');
+    finish();
+  });
+
+  it('honors && short-circuit before a trailing background segment', async () => {
+    const sh = new Shell();
+    let started = false;
+    sh.registerCommand('slow', async () => {
+      started = true;
+      return 0;
+    });
+
+    const run = await sh.run('false && slow &');
+
+    expect(run.exitCode).toBe(1);
+    expect(started).toBe(false);
+    expect((await sh.run('jobs')).stdout).toBe('');
+  });
+
   it('rejects background commands that still need pipe support', async () => {
     const sh = new Shell();
     await expect(sh.run('cat a | grep b &')).rejects.toMatchObject({ feature: 'shell.pipe' });

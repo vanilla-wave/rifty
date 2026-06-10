@@ -33,6 +33,19 @@ describe('process.stdin host bridge', () => {
     riftyProcess.stdin.setEncoding(null);
   });
 
+  it('decodes utf8 split across stdin chunks', () => {
+    const chunks: unknown[] = [];
+    riftyProcess.stdin.setEncoding('utf8');
+    riftyProcess.stdin.on('data', (chunk) => chunks.push(chunk));
+
+    writeProcessStdin(new Uint8Array([0xe2, 0x82]));
+    writeProcessStdin(new Uint8Array([0xac]));
+
+    expect(chunks).toEqual(['€']);
+    riftyProcess.stdin.removeAllListeners('data');
+    riftyProcess.stdin.setEncoding(null);
+  });
+
   it('buffers stdin until a data listener is attached', async () => {
     const chunks: unknown[] = [];
 

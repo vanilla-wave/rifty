@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`process.stdin.setEncoding('utf8')` now decodes multibyte characters across
+  chunk boundaries.** The REPL host bridge and kernel `install-process` shim now
+  keep a streaming `TextDecoder` per stdin stream instead of decoding each
+  `Uint8Array` independently, so split UTF-8 sequences (for example `€` as
+  `[e2 82]` + `[ac]`) match Node's `StringDecoder` behavior. This covers the
+  ADR-0122 `RuntimeController.writeStdin()` / `HostMessage { type: 'stdin' }`
+  surface and is pinned by unit tests plus a `process.stdin` parity case.
+
 ### Performance
 
 - **execSync SAB handler installs on first `child_process` require, not at startup (#26 PART B).** `builtins/child_process.ts` ran `installRuntimeJsExecSyncHandler(getKernelDispatcher(), …)` at module-top, so the barrel import (`builtins/index.ts` imports the module statically) did `getKernelDispatcher()` + a `register` + a `makeRecursiveRunner()` alloc at cold start even for programs that never spawn. The install moves into an exported `ensureExecSyncHandlerInstalled()` invoked by the `registerBuiltin('child_process', …)` factory, so it runs on the FIRST `require('node:child_process')` (loadBuiltin caches the factory result → runs once; re-register reinstalls on the current dispatcher, `register` being idempotent — same "install when the module comes up" timing). Observable-identical: execSync (`child_process-sync.ts`, the only dispatch site) is reachable ONLY via this module's exports, so first-require install always precedes any reachable `execSync()`; the Wave-4 v2 binary-frame path is byte-unchanged. The hot core (path/util/events/buffer/process/stream/fs/os/crypto) stays eager-static. PART A (cold lazy-load / names-only split deferring module-body eval for cold builtins) is NOT pursued — infeasible under the synchronous `require()`/`loadBuiltin` contract (a sync require must return synchronously; an `import()`-based lazy builtin would make it async). Behavior-preserving / contract-stable (ADR-0081 rule 5; CHANGELOG-only, no ADR). Guard: `builtins/child_process-lazy-handler.test.ts` (hot-core require installs nothing; first child_process require installs + the live handler services dispatch) + the existing `ipc/handlers.test.ts` wire contract + `binary-stdout-exec` parity (require-then-execSync, byte-exact). Per `docs/perf/js-runtime-perf-audit-2026-06-05.md` (#26).

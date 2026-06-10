@@ -632,6 +632,21 @@ describe('RiftyTerminal — cursor-aware mid-line editing', () => {
     await term.handleInput('\r');
     expect(rec.lines).toEqual(['abc']);
   });
+
+  it('Ctrl+L restores a mid-line caret after redrawing', async () => {
+    const { term, rec } = createTerminal();
+    await term.handleInput('abc');
+    await term.handleInput('\x1b[D');
+    await term.handleInput('\x1b[D');
+    const writes = tapWrites(term);
+
+    await term.handleInput('\x0c');
+
+    expect(writes.join('')).toBe('\x1b[2J\x1b[H\x1b[90m> \x1b[0mabc\b\b');
+    await term.handleInput('X');
+    await term.handleInput('\r');
+    expect(rec.lines).toEqual(['aXbc']);
+  });
 });
 
 describe('RiftyTerminal — Emacs history aliases', () => {
@@ -1652,10 +1667,28 @@ describe('RiftyTerminal — options polish API', () => {
     expect(writes).toEqual([]);
   });
 
-  it('handles OSC 52 clipboard writes without rendering the escape sequence', () => {
+  it('strips OSC 52 clipboard writes without touching the clipboard by default', () => {
     const writes: string[] = [];
     const term = new RiftyTerminal({
       onInput: () => {},
+      clipboard: {
+        writeText: (text) => {
+          writes.push(text);
+        },
+      },
+    });
+    const screen = tapWrites(term);
+    term.write(`before\x1b]52;c;${globalThis.btoa('copied')}\x07after`);
+
+    expect(writes).toEqual([]);
+    expect(screen.join('')).toBe('beforeafter');
+  });
+
+  it('handles OSC 52 clipboard writes when explicitly enabled', () => {
+    const writes: string[] = [];
+    const term = new RiftyTerminal({
+      onInput: () => {},
+      allowOsc52Clipboard: true,
       clipboard: {
         writeText: (text) => {
           writes.push(text);

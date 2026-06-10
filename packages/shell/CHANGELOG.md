@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- **Trailing `&` after a compound separator now backgrounds only the final
+  segment.** `echo a ; slow &` runs `echo a` in the foreground and starts only
+  `slow` as a background job; `&&`/`||` short-circuit semantics are preserved.
+
 - **Review pass 2026-06-07** (see `docs/backlog/review-2026-06-07.md`):
   - **`rm -rf $UNSET` no longer wipes the cwd.** An unquoted word that expands to
     nothing (`$UNSET`) is now elided (bash word-splitting) in `expandArgs`, so it

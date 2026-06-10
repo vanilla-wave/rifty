@@ -90,11 +90,14 @@ function makeStdinReader(port: MessagePort): NodeProcessShim['stdin'] {
   const stdin = new EventEmitter() as NodeProcessShim['stdin'];
   let encoding: string | null = null;
   const pending: Array<string | Uint8Array> = [];
-  const decoder = new TextDecoder();
+  let decoder = new TextDecoder();
   const normalize = (data: unknown): string | Uint8Array | null => {
     if (typeof data === 'string') return data;
     if (!(data instanceof Uint8Array)) return null;
-    if (encoding && /^utf-?8$/iu.test(encoding)) return decoder.decode(data);
+    if (encoding && /^utf-?8$/iu.test(encoding)) {
+      const text = decoder.decode(data, { stream: true });
+      return text.length === 0 ? null : text;
+    }
     return data;
   };
   const flush = (): void => {
@@ -110,6 +113,7 @@ function makeStdinReader(port: MessagePort): NodeProcessShim['stdin'] {
     fd: 0,
     setEncoding(next: string | null) {
       encoding = next;
+      decoder = new TextDecoder();
     },
     resume() {
       flush();
@@ -118,6 +122,16 @@ function makeStdinReader(port: MessagePort): NodeProcessShim['stdin'] {
   });
   stdin.on('newListener', (event) => {
     if (event === 'data') queueMicrotask(flush);
+  });
+  stdin.on('end', () => {
+    if (!encoding || !/^utf-?8$/iu.test(encoding)) return;
+    const tail = decoder.decode();
+    if (tail.length === 0) return;
+    if (stdin.listenerCount('data') === 0) {
+      pending.push(tail);
+      return;
+    }
+    stdin.emit('data', tail);
   });
   port.onmessage = (ev: MessageEvent): void => {
     const chunk = normalize(ev.data);

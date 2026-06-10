@@ -136,14 +136,14 @@ export async function runInNode(testCase: ParityCase): Promise<string> {
     return await new Promise<string>((resolve, reject) => {
       const proc = spawn(runner, runnerArgs, {
         cwd: workDir,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: [testCase.stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
       });
       let out = '';
       let err = '';
-      proc.stdout.on('data', (c) => {
+      proc.stdout!.on('data', (c) => {
         out += c.toString('utf8');
       });
-      proc.stderr.on('data', (c) => {
+      proc.stderr!.on('data', (c) => {
         err += c.toString('utf8');
       });
       proc.on('close', (code) => {
@@ -151,6 +151,10 @@ export async function runInNode(testCase: ParityCase): Promise<string> {
         else resolve(out);
       });
       proc.on('error', reject);
+      if (testCase.stdin && proc.stdin) {
+        for (const chunk of testCase.stdin) proc.stdin.write(chunk);
+        proc.stdin.end();
+      }
     });
   } finally {
     await rm(workDir, { recursive: true, force: true });

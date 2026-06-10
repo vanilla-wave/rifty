@@ -507,6 +507,8 @@ export interface RiftyTerminalOptions {
   copyOnSelect?: boolean;
   /** Clipboard port for browser writes and tests. Defaults to `navigator.clipboard`. */
   clipboard?: { writeText(text: string): void | Promise<void> };
+  /** Allow OSC 52 output to write the host clipboard. Defaults to false. */
+  allowOsc52Clipboard?: boolean;
   /** Detect web URLs. Default opens only on Ctrl/Cmd-click. */
   webLinks?: boolean | TerminalWebLinksOptions;
   /** Enable in-terminal scrollback search wrappers. Defaults to true. */
@@ -810,7 +812,9 @@ export class RiftyTerminal {
 
   write(data: string, stream: TerminalStream = 'stdout'): void {
     const osc52 = extractOsc52Writes(data);
-    for (const write of osc52.writes) this.writeClipboard(write.text);
+    if (this.opts.allowOsc52Clipboard) {
+      for (const write of osc52.writes) this.writeClipboard(write.text);
+    }
     const text = osc52.text.replace(/\n/g, '\r\n');
     const rendered = stream === 'stderr' ? `${ANSI_RED}${text}${ANSI_RESET}` : text;
     this.writeOutput(rendered);
@@ -1786,6 +1790,8 @@ export class RiftyTerminal {
   private clearScreen(): void {
     this.clearSuggestion();
     this.term.write(`\x1b[2J\x1b[H${PROMPT}${this.renderInputBuffer(this.buffer)}`);
+    const tail = this.buffer.slice(this.cursorPos);
+    if (tail.length > 0) this.term.write(cursorLeft(cellWidth(tail)));
     this.renderSuggestion();
   }
 

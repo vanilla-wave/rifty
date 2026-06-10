@@ -77,4 +77,19 @@ describe('installNodeProcessShim stdin', () => {
 
     await expect(chunk).resolves.toBe('✓');
   });
+
+  it('decodes utf8 split across stdin messages', async () => {
+    const stdin = new MessageChannel();
+    const process = installNodeProcessShim({
+      ...spec(),
+      stdio: { ...spec().stdio, stdin: stdin.port1 },
+    });
+
+    process.stdin.setEncoding('utf8');
+    const chunk = onceData(process);
+    stdin.port2.postMessage(new Uint8Array([0xe2, 0x82]));
+    stdin.port2.postMessage(new Uint8Array([0xac]));
+
+    await expect(chunk).resolves.toBe('€');
+  });
 });

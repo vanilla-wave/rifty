@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- OSC 52 output is now stripped from rendered terminal text without writing the
+  host clipboard unless `allowOsc52Clipboard` is explicitly enabled on the
+  terminal instance. Ctrl+L also restores a mid-line caret after redrawing the
+  prompt buffer.
+
 ### Added
 
 - Cursor-aware line editing (ADR-0094, user-requested). The line editor tracks a

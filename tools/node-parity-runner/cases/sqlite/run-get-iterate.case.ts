@@ -15,11 +15,11 @@ import type { ParityCase } from '../../src/types.ts';
  * synchronous `prepare`/`run`/`get`/`iterate` calls have their WASM handle ready.
  *
  * What the case pins:
- *   - `prepare('INSERT ...').run('id', 5)` returns `{ lastInsertRowid, changes }`
- *     with PLAIN-number fields equal to Node (here `lastInsertRowid: 1`,
- *     `changes: 1` for the first row), and the same on a second insert
- *     (`lastInsertRowid: 2`). `JSON.stringify` of the result object is therefore
- *     identical across engines.
+ *   - `prepare('INSERT ...').run('id', 5)` returns plain-number
+ *     `lastInsertRowid` and `changes` fields equal to Node (here
+ *     `lastInsertRowid: 1`, `changes: 1` for the first row), and the same on a
+ *     second insert (`lastInsertRowid: 2`). The case prints fields explicitly
+ *     because Node patch versions have differed in object insertion order.
  *   - `get(...)` returns the FIRST result row (object-keyed) like Node, and
  *     `undefined` (serialised by `JSON.stringify` to the literal absence — we
  *     print `String(row)` for the no-row case so `undefined` is visible) when no
@@ -47,12 +47,12 @@ const c: ParityCase = {
     const db = new DatabaseSync(':memory:', { open: true });
     db.exec('CREATE TABLE t (id TEXT PRIMARY KEY, n INTEGER NOT NULL);');
 
-    // run() returns { lastInsertRowid, changes } with plain-number fields.
+    // run() returns lastInsertRowid + changes with plain-number fields.
     const ins = db.prepare('INSERT INTO t (id, n) VALUES (?, ?)');
     const r1 = ins.run('a', 5);
-    console.log('run1:' + JSON.stringify(r1));
+    console.log('run1:' + r1.lastInsertRowid + ',' + r1.changes);
     const r2 = ins.run('b', 2);
-    console.log('run2:' + JSON.stringify(r2));
+    console.log('run2:' + r2.lastInsertRowid + ',' + r2.changes);
     ins.run('c', 9);
 
     // get() returns the first row, in declared order, or undefined for no match.
