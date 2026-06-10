@@ -21,12 +21,9 @@ test.describe('M1 — JS Execution', () => {
 
   test('REPL help makes the first prompt discoverable', async ({ page }) => {
     await page.goto('/');
-    const term = page.locator('[data-testid="terminal"]');
-    await expect(page.locator('[data-testid="terminal-mode-hint"]')).toContainText('.help');
-
-    await term.click();
-    await page.keyboard.type('.help');
-    await page.keyboard.press('Enter');
+    const hint = page.locator('[data-testid="terminal-mode-hint"]');
+    await expect(hint).toContainText('JS REPL');
+    await hint.getByRole('button', { name: 'Show REPL help' }).click();
 
     await expect.poll(() => terminalBuffer(page), { timeout: 5000 }).toContain('REPL quick start');
     await expect.poll(() => terminalBuffer(page), { timeout: 5000 }).toContain('1 + 1');
@@ -37,6 +34,13 @@ test.describe('M1 — JS Execution', () => {
       'data-status',
       'ok',
     );
+  });
+
+  test('REPL hint actions execute examples', async ({ page }) => {
+    await page.goto('/');
+    const hint = page.locator('[data-testid="terminal-mode-hint"]');
+    await hint.getByRole('button', { name: 'Run REPL expression 1 + 1' }).click();
+    await expect.poll(() => terminalBuffer(page), { timeout: 5000 }).toContain('2');
   });
 
   test('Run button executes editor source and streams stdout', async ({ page }) => {

@@ -672,16 +672,15 @@ body {
   z-index: 2;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  max-width: min(420px, calc(100% - 24px));
-  height: 28px;
-  padding: 0 10px;
+  gap: 6px;
+  max-width: min(640px, calc(100% - 24px));
+  min-height: 30px;
+  padding: 3px 5px 3px 10px;
   color: var(--rf-text-dim);
   background: color-mix(in srgb, var(--rf-bg-2) 88%, black);
   border: 1px solid var(--rf-line);
   border-radius: var(--rf-r-sm);
   box-shadow: var(--rf-shadow-1);
-  pointer-events: none;
 }
 .rf-terminal-modehint__label {
   flex: none;
@@ -695,6 +694,31 @@ body {
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.rf-terminal-modehint__actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+.rf-terminal-modehint__action {
+  display: inline-grid;
+  place-items: center;
+  height: 22px;
+  padding: 0 7px;
+  color: var(--rf-text-dim);
+  background: var(--rf-bg-inset);
+  border: 1px solid var(--rf-line);
+  border-radius: var(--rf-r-xs);
+  font-family: var(--rf-font-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+.rf-terminal-modehint__action:hover,
+.rf-terminal-modehint__action:focus-visible {
+  color: var(--rf-text);
+  border-color: var(--rf-line-2);
+  outline: none;
 }
 .rf-terminal-find {
   position: absolute;

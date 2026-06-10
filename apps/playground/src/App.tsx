@@ -30,6 +30,7 @@ import { PresetGallery } from './components/PresetGallery.tsx';
 import { PreviewPanel } from './components/PreviewPanel.tsx';
 import { Splitter } from './components/Splitter.tsx';
 import { StatusBar } from './components/StatusBar.tsx';
+import type { TerminalModeHint } from './components/TerminalPanel.tsx';
 import { writeText } from './glue/fs-ops.ts';
 import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
@@ -301,9 +302,17 @@ export function App(props: AppProps) {
       : machine.mode() === 'real-vite'
         ? `${template.displayName} · port ${machine.realVitePort()}`
         : 'REPL · Worker';
-  const terminalModeHint = (): { readonly label: string; readonly detail: string } =>
+  const terminalModeHint = (): TerminalModeHint =>
     machine.mode() === 'repl'
-      ? { label: 'JS REPL', detail: 'Enter 1 + 1, type .help, or Run main.js.' }
+      ? {
+          label: 'JS REPL',
+          detail: 'Try',
+          actions: [
+            { label: '1 + 1', title: 'Run REPL expression 1 + 1', line: '1 + 1' },
+            { label: '.help', title: 'Show REPL help', line: '.help' },
+            { label: 'Run main.js', title: 'Run editor file main.js', onSelect: onRun },
+          ],
+        }
       : { label: 'Shell', detail: 'Commands run in /workspace; running programs own stdin.' };
 
   const programTitle = (): string => (machine.mode() === 'repl' ? 'main.js' : 'src/main.js');

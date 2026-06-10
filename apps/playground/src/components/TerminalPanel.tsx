@@ -38,10 +38,23 @@ interface PaletteItem {
   readonly action?: () => void;
 }
 
+export interface TerminalModeHintAction {
+  readonly label: string;
+  readonly title: string;
+  readonly line?: string;
+  readonly onSelect?: () => void;
+}
+
+export interface TerminalModeHint {
+  readonly label: string;
+  readonly detail: string;
+  readonly actions?: readonly TerminalModeHintAction[];
+}
+
 export function TerminalPanel(props: {
   attach(write: (chunk: string, stream?: 'stdout' | 'stderr') => void): void;
   onLine(line: string, dims: TerminalDims): TerminalInputResult | Promise<TerminalInputResult>;
-  modeHint?: { readonly label: string; readonly detail: string };
+  modeHint?: TerminalModeHint;
   completer?: TerminalCompleter;
   commandItems?: () => readonly string[];
   highlighter?: TerminalLineHighlighter;
@@ -282,6 +295,20 @@ export function TerminalPanel(props: {
     closePalette(false);
   };
 
+  const chooseModeHintAction = (action: TerminalModeHintAction) => {
+    setAutocomplete(null);
+    setHistoryOpen(false);
+    setPaletteOpen(false);
+    setFindOpen(false);
+    if (action.line) {
+      void term?.submitLine(action.line);
+      scheduleTerminalBufferRefresh();
+      return;
+    }
+    action.onSelect?.();
+    term?.focus();
+  };
+
   const inspectQuickFix = (chunk: string, stream?: 'stdout' | 'stderr') => {
     if (stream !== 'stderr') return;
     stderrTail = `${stderrTail}${chunk}`.slice(-600);
@@ -436,6 +463,24 @@ export function TerminalPanel(props: {
           <div class="rf-terminal-modehint" data-testid="terminal-mode-hint">
             <span class="rf-terminal-modehint__label">{hint().label}</span>
             <span class="rf-terminal-modehint__detail">{hint().detail}</span>
+            <Show when={hint().actions?.length}>
+              <span class="rf-terminal-modehint__actions">
+                <For each={hint().actions ?? []}>
+                  {(action) => (
+                    <button
+                      type="button"
+                      class="rf-terminal-modehint__action"
+                      aria-label={action.title}
+                      title={action.title}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => chooseModeHintAction(action)}
+                    >
+                      {action.label}
+                    </button>
+                  )}
+                </For>
+              </span>
+            </Show>
           </div>
         )}
       </Show>

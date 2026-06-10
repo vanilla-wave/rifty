@@ -16,11 +16,11 @@ import type {
   TerminalRawInput,
   TerminalRewriteRule,
 } from '@riftydev/terminal';
-import { type TerminalDims, TerminalPanel } from './TerminalPanel.tsx';
+import { type TerminalDims, type TerminalModeHint, TerminalPanel } from './TerminalPanel.tsx';
 
 export function BottomPanel(props: {
   sub: string;
-  modeHint?: { readonly label: string; readonly detail: string };
+  modeHint?: TerminalModeHint;
   collapsed: boolean;
   onToggleCollapse(): void;
   attach(write: (chunk: string, stream?: 'stdout' | 'stderr') => void): void;
