@@ -32,6 +32,12 @@ afterEach(() => {
   });
 });
 
+function onceData(process: ReturnType<typeof installNodeProcessShim>): Promise<unknown> {
+  return new Promise((resolve) => {
+    process.stdin.once('data', resolve);
+  });
+}
+
 describe('installNodeProcessShim stdin', () => {
   it('exposes kernel stdin as process.stdin data events', async () => {
     const stdin = new MessageChannel();
@@ -39,29 +45,23 @@ describe('installNodeProcessShim stdin', () => {
       ...spec(),
       stdio: { ...spec().stdio, stdin: stdin.port1 },
     });
-    const chunks: unknown[] = [];
 
-    process.stdin.once('data', (chunk) => chunks.push(chunk));
+    const chunk = onceData(process);
     stdin.port2.postMessage(new Uint8Array([0x68, 0x69]));
-    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(chunks).toEqual([new Uint8Array([0x68, 0x69])]);
+    await expect(chunk).resolves.toEqual(new Uint8Array([0x68, 0x69]));
   });
 
-  it('buffers stdin until a data listener attaches', async () => {
+  it('delivers stdin posted before a data listener attaches', async () => {
     const stdin = new MessageChannel();
     const process = installNodeProcessShim({
       ...spec(),
       stdio: { ...spec().stdio, stdin: stdin.port1 },
     });
-    const chunks: unknown[] = [];
 
     stdin.port2.postMessage(new Uint8Array([0x78]));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    process.stdin.once('data', (chunk) => chunks.push(chunk));
-    await Promise.resolve();
 
-    expect(chunks).toEqual([new Uint8Array([0x78])]);
+    await expect(onceData(process)).resolves.toEqual(new Uint8Array([0x78]));
   });
 
   it('decodes stdin bytes when utf8 encoding is set', async () => {
@@ -70,13 +70,11 @@ describe('installNodeProcessShim stdin', () => {
       ...spec(),
       stdio: { ...spec().stdio, stdin: stdin.port1 },
     });
-    const chunks: unknown[] = [];
 
     process.stdin.setEncoding('utf8');
-    process.stdin.once('data', (chunk) => chunks.push(chunk));
+    const chunk = onceData(process);
     stdin.port2.postMessage(new Uint8Array([0xe2, 0x9c, 0x93]));
-    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(chunks).toEqual(['✓']);
+    await expect(chunk).resolves.toBe('✓');
   });
 });
