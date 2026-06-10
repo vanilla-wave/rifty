@@ -1077,8 +1077,9 @@ describe('RiftyTerminal — command-line highlighting', () => {
 
     await term.handleInput('b');
 
-    expect(writes.join('')).toContain('\x1b[38;2;127;178;255mabc\x1b[39m');
-    expect(writes.at(-1)).toBe(`\r${'\x1b[C'.repeat(4)}`);
+    expect(writes).toEqual([
+      `\x1b[?25l\r${'\x1b[C'.repeat(2)}\x1b[K\x1b[38;2;127;178;255mabc\x1b[39m\r${'\x1b[C'.repeat(4)}\x1b[?25h`,
+    ]);
   });
 
   it('highlights host replaceLine redraws while submitting raw text', async () => {

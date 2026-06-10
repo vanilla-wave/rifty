@@ -32,6 +32,8 @@ const CURSOR_RIGHT = '\x1b[C';
 const CURSOR_UP = '\x1b[A';
 const CURSOR_DOWN = '\x1b[B';
 const CLEAR_TO_EOL = '\x1b[K';
+const HIDE_CURSOR = '\x1b[?25l';
+const SHOW_CURSOR = '\x1b[?25h';
 const SEARCH_DECORATIONS = {
   matchBackground: '#264f78',
   matchBorder: '#6cb6ff',
@@ -1136,14 +1138,16 @@ export class RiftyTerminal {
   private renderBuffer(nextBuffer: string, nextCursorPos: number): void {
     this.clearSuggestion();
     if (this.needsFullInputRepaint(nextBuffer)) {
-      this.term.write(cursorMoveByOffset(this.buffer, this.cursorPos, 0, this.term.cols));
-      this.term.write(clearWrappedInputRegion(this.buffer, this.term.cols));
+      const repaint =
+        HIDE_CURSOR +
+        cursorMoveByOffset(this.buffer, this.cursorPos, 0, this.term.cols) +
+        clearWrappedInputRegion(this.buffer, this.term.cols) +
+        this.renderInputBuffer(nextBuffer) +
+        cursorMoveByOffset(nextBuffer, nextBuffer.length, nextCursorPos, this.term.cols) +
+        SHOW_CURSOR;
       this.buffer = nextBuffer;
       this.cursorPos = nextBuffer.length;
-      this.term.write(this.renderInputBuffer(nextBuffer));
-      this.term.write(
-        cursorMoveByOffset(nextBuffer, nextBuffer.length, nextCursorPos, this.term.cols),
-      );
+      this.term.write(repaint);
       this.cursorPos = nextCursorPos;
       this.emitEditStateChange();
       return;

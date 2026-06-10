@@ -120,16 +120,17 @@ async function firstCellStatusFills(
   const metrics = await terminal.evaluate((element) => {
     const termRect = element.getBoundingClientRect();
     const rowsRect = element.querySelector('.xterm-rows')?.getBoundingClientRect();
-    const measureRect = element
-      .querySelector('.xterm-char-measure-element')
-      ?.getBoundingClientRect();
+    const measureElement = element.querySelector('.xterm-char-measure-element');
+    const measureRect = measureElement?.getBoundingClientRect();
     const rowRects = Array.from(element.querySelectorAll('.xterm-rows > div')).map((row) => {
       const rect = row.getBoundingClientRect();
       return { top: rect.top - termRect.top, height: rect.height };
     });
     return {
       rowsLeft: rowsRect ? rowsRect.left - termRect.left : 0,
-      cellWidth: measureRect?.width || 8,
+      cellWidth: measureRect
+        ? measureRect.width / Math.max(1, measureElement?.textContent?.length ?? 1)
+        : 8,
       rowRects,
     };
   });
@@ -167,6 +168,79 @@ async function expectNoStatusFillInTextPlane(page: Page): Promise<void> {
   expect(await firstCellStatusFills(page)).toEqual([]);
 }
 
+function colorAt(image: PngImage, x: number, y: number): readonly [number, number, number] {
+  const idx = (y * image.width + x) * 4;
+  return [image.data[idx] ?? 0, image.data[idx + 1] ?? 0, image.data[idx + 2] ?? 0];
+}
+
+function colorDistance(
+  a: readonly [number, number, number],
+  b: readonly [number, number, number],
+): number {
+  return Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
+}
+
+async function promptCellCursorBars(
+  page: Page,
+): Promise<
+  Array<{ readonly row: number; readonly x: number; readonly run: number; readonly height: number }>
+> {
+  const terminal = page.locator('[data-testid="terminal"]');
+  const metrics = await terminal.evaluate((element) => {
+    const termRect = element.getBoundingClientRect();
+    const rowsRect = element.querySelector('.xterm-rows')?.getBoundingClientRect();
+    const measureElement = element.querySelector('.xterm-char-measure-element');
+    const measureRect = measureElement?.getBoundingClientRect();
+    const rowRects = Array.from(element.querySelectorAll('.xterm-rows > div')).map((row) => {
+      const rect = row.getBoundingClientRect();
+      return { top: rect.top - termRect.top, height: rect.height };
+    });
+    return {
+      rowsLeft: rowsRect ? rowsRect.left - termRect.left : 0,
+      cellWidth: measureRect
+        ? measureRect.width / Math.max(1, measureElement?.textContent?.length ?? 1)
+        : 8,
+      rowRects,
+    };
+  });
+  expect(metrics.rowRects.length).toBeGreaterThan(0);
+  expect(metrics.cellWidth).toBeGreaterThan(0);
+  const image = parseRgbaPng(await terminal.screenshot());
+  const bars: Array<{ row: number; x: number; run: number; height: number }> = [];
+
+  for (let row = 0; row < metrics.rowRects.length; row++) {
+    const rect = metrics.rowRects[row];
+    if (!rect) continue;
+    const x0 = Math.max(0, Math.floor(metrics.rowsLeft));
+    const x1 = Math.min(image.width, Math.ceil(metrics.rowsLeft + metrics.cellWidth * 2));
+    const bgX = Math.min(image.width - 1, Math.max(x1 + 8, image.width - 6));
+    const y0 = Math.max(0, Math.floor(rect.top + 2));
+    const y1 = Math.min(image.height, Math.ceil(rect.top + rect.height - 2));
+    const height = y1 - y0;
+    if (height <= 0) continue;
+    const background = colorAt(image, bgX, Math.floor((y0 + y1) / 2));
+    for (let x = x0; x < x1; x++) {
+      let run = 0;
+      for (let y = y0; y < y1; y++) {
+        if (colorDistance(colorAt(image, x, y), background) > 72) run++;
+      }
+      if (run >= Math.ceil(height * 0.72)) bars.push({ row, x, run, height });
+    }
+  }
+
+  return bars;
+}
+
+async function expectNoNewCursorBarBeforePrompt(
+  page: Page,
+  action: () => Promise<void>,
+): Promise<void> {
+  const before = new Set((await promptCellCursorBars(page)).map((bar) => `${bar.row}:${bar.x}`));
+  await action();
+  const after = await promptCellCursorBars(page);
+  expect(after.filter((bar) => !before.has(`${bar.row}:${bar.x}`))).toEqual([]);
+}
+
 test.describe('Terminal visual regressions', () => {
   test('command status never paints over the first text cell', async ({ page }) => {
     await page.goto('/');
@@ -196,7 +270,7 @@ test.describe('Terminal visual regressions', () => {
     await page.locator('[data-testid="terminal"]').click();
 
     for (const char of 'node 1.js') {
-      await page.keyboard.type(char);
+      await expectNoNewCursorBarBeforePrompt(page, () => page.keyboard.type(char));
       await expectNoStatusFillInTextPlane(page);
     }
   });
