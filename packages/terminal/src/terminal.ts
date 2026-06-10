@@ -127,6 +127,11 @@ export type TerminalInputValidator = (line: string, cursor: number) => TerminalI
 
 export type TerminalRawInput = string | Uint8Array;
 
+export interface TerminalBusyInputEvent {
+  readonly data: TerminalRawInput;
+  readonly binary: boolean;
+}
+
 export interface TerminalWebLinksOptions {
   /** Require Ctrl/Cmd when opening a detected URL. Defaults to true. */
   readonly requireModifier?: boolean;
@@ -463,6 +468,11 @@ export interface RiftyTerminalOptions {
   onSignal?(signal: 'SIGINT'): void;
   /** Raw stdin bytes received while a foreground command is running. */
   onRawInput?(data: TerminalRawInput): void;
+  /**
+   * Called when editable terminal input is redirected to a running foreground
+   * command instead of becoming a new command line.
+   */
+  onBusyInput?(event: TerminalBusyInputEvent): void;
   /** Host-owned completion source. Terminal owns rendering/application only. */
   completer?: TerminalCompleter;
   /** Host-owned editable-input highlighter. Spans use raw line offsets. */
@@ -699,6 +709,15 @@ export class RiftyTerminal {
 
   serializeHtml(options: TerminalSerializeHtmlOptions = {}): string {
     return this.requireSerializeAddon().serializeAsHTML(options);
+  }
+
+  /**
+   * Stable test/debug text snapshot of the terminal scrollback. Prefer this over
+   * renderer DOM internals such as `.xterm-rows`, which are absent with canvas
+   * or WebGL renderers.
+   */
+  snapshotBuffer(options: TerminalSerializeOptions = { excludeModes: true }): string {
+    return this.serializeText(options);
   }
 
   getCommandBlocks(): TerminalCommandBlock[] {
@@ -944,6 +963,7 @@ export class RiftyTerminal {
 
     if (this.busy) {
       this.opts.onRawInput?.(data);
+      this.opts.onBusyInput?.({ data, binary: false });
       return;
     }
     this.promptActive = true;
@@ -958,7 +978,9 @@ export class RiftyTerminal {
 
   handleBinaryInput(data: string): void {
     if (!this.busy) return;
-    this.opts.onRawInput?.(latin1Bytes(data));
+    const bytes = latin1Bytes(data);
+    this.opts.onRawInput?.(bytes);
+    this.opts.onBusyInput?.({ data: bytes, binary: true });
   }
 
   private async dispatch(event: KeyEvent): Promise<void> {

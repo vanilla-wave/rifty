@@ -20,6 +20,7 @@ import { type TerminalDims, TerminalPanel } from './TerminalPanel.tsx';
 
 export function BottomPanel(props: {
   sub: string;
+  modeHint?: { readonly label: string; readonly detail: string };
   collapsed: boolean;
   onToggleCollapse(): void;
   attach(write: (chunk: string, stream?: 'stdout' | 'stderr') => void): void;
@@ -57,6 +58,7 @@ export function BottomPanel(props: {
         <TerminalPanel
           attach={props.attach}
           onLine={props.onLine}
+          modeHint={props.modeHint}
           completer={props.completer}
           commandItems={props.commandItems}
           highlighter={props.highlighter}

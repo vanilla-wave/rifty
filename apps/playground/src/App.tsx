@@ -294,6 +294,10 @@ export function App(props: AppProps) {
       : machine.mode() === 'real-vite'
         ? `${template.displayName} · port ${machine.realVitePort()}`
         : 'REPL · Worker';
+  const terminalModeHint = (): { readonly label: string; readonly detail: string } =>
+    machine.mode() === 'repl'
+      ? { label: 'JS REPL', detail: 'Expressions run in the Worker; switch to Dev for shell.' }
+      : { label: 'Shell', detail: 'Commands run in /workspace; running programs own stdin.' };
 
   const programTitle = (): string => (machine.mode() === 'repl' ? 'main.js' : 'src/main.js');
   const hasPreview = (): boolean => machine.mode() === 'dev' || machine.mode() === 'real-vite';
@@ -464,14 +468,27 @@ export function App(props: AppProps) {
 
             <BottomPanel
               sub={machine.mode() === 'repl' ? 'worker · stdout / stderr' : 'shell'}
+              modeHint={terminalModeHint()}
               collapsed={layout.consoleCollapsed()}
               onToggleCollapse={() => layout.toggleConsole()}
               attach={(write) => {
                 runtime.attachWriter(write);
                 shell.attachWriter(write);
               }}
-              onSignal={() => shell.interrupt()}
-              onRawInput={(data) => shell.writeStdin(data)}
+              onSignal={() => {
+                if (machine.mode() === 'repl') {
+                  runtime.writeStdin('\x03');
+                  return;
+                }
+                shell.interrupt();
+              }}
+              onRawInput={(data) => {
+                if (machine.mode() === 'repl') {
+                  runtime.writeStdin(data);
+                  return;
+                }
+                shell.writeStdin(data);
+              }}
               completer={completeShellLine}
               commandItems={() => shell.commandNames()}
               highlighter={(line) =>

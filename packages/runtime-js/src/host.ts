@@ -29,6 +29,8 @@ export interface EvalOptions {
 export interface RuntimeController {
   /** Send an eval request; resolves with the result message. */
   eval(code: string, options?: EvalOptions): Promise<EvalResult>;
+  /** Send raw terminal stdin to the runtime Worker's `process.stdin`. */
+  writeStdin(data: string | Uint8Array): void;
   /** Terminate and respawn the worker. */
   reset(): Promise<void>;
   dispose(): void;
@@ -133,6 +135,9 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
       const request = options?.cwd !== undefined ? { id, code, cwd: options.cwd } : { id, code };
       send({ type: 'eval', request });
       return promise;
+    },
+    writeStdin(data) {
+      send({ type: 'stdin', data });
     },
     async reset() {
       if (worker) {

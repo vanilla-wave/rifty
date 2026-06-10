@@ -1,6 +1,7 @@
 export {
   RiftyTerminal,
   type RiftyTerminalOptions,
+  type TerminalBusyInputEvent,
   type TerminalCommandBlock,
   type TerminalCompleter,
   type TerminalCompletionItem,

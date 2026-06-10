@@ -104,6 +104,7 @@ class RiftyProcess extends EventEmitter {
   stdin = new EventEmitter() as EventEmitter & {
     isTTY: boolean;
     fd: number;
+    setEncoding(encoding: string | null): void;
     resume(): void;
     pause(): void;
   };
@@ -164,12 +165,50 @@ class RiftyProcess extends EventEmitter {
 
 export const riftyProcess = new RiftyProcess();
 // TTY-ish properties + no-op resume/pause that don't belong on the class itself.
+let stdinEncoding: string | null = null;
+const pendingStdin: Array<string | Uint8Array> = [];
+
+function flushPendingStdin(): void {
+  if ((riftyProcess.stdin as EventEmitter).listenerCount('data') === 0) return;
+  while (pendingStdin.length > 0) {
+    const chunk = pendingStdin.shift();
+    if (chunk === undefined) continue;
+    (riftyProcess.stdin as EventEmitter).emit('data', chunk);
+  }
+}
+
+(riftyProcess.stdin as EventEmitter).on('newListener', (event) => {
+  if (event !== 'data') return;
+  queueMicrotask(flushPendingStdin);
+});
+
 Object.assign(riftyProcess.stdin as object, {
   isTTY: false,
   fd: 0,
+  setEncoding(encoding: string | null) {
+    stdinEncoding = encoding;
+  },
   resume() {},
   pause() {},
 });
+
+const STDIN_DECODER = new TextDecoder();
+
+function normalizeStdinChunk(data: string | Uint8Array): string | Uint8Array {
+  if (typeof data === 'string') return data;
+  if (stdinEncoding && /^utf-?8$/iu.test(stdinEncoding)) return STDIN_DECODER.decode(data);
+  return data;
+}
+
+/** Host bridge: deliver terminal/process stdin into the REPL Worker process. */
+export function writeProcessStdin(data: string | Uint8Array): void {
+  const chunk = normalizeStdinChunk(data);
+  if ((riftyProcess.stdin as EventEmitter).listenerCount('data') === 0) {
+    pendingStdin.push(chunk);
+    return;
+  }
+  (riftyProcess.stdin as EventEmitter).emit('data', chunk);
+}
 
 /** Install the global `process`, patch Promise for nextTick ordering. */
 export function installProcessGlobals(): void {

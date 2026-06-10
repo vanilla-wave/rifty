@@ -43,8 +43,8 @@ small host rewrites without turning `@riftydev/terminal` into shell/readline.
 
 - `@riftydev/terminal` exports generic input seams; `@riftydev/shell` exports
   shell language-service helpers; playground wires them.
-- The editor is much richer but remains line-mode; interactive child programs
-  still need the runtime/process stdin bridge.
+- The editor is much richer but remains line-mode; foreground raw input is owned
+  by ADR-0122's shell/runtime stdin bridge rather than by the line editor.
 - Repaint code is more complex and must stay unit-tested around wide/wrapped
   input and key classification.
 

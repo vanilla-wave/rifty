@@ -1905,4 +1905,29 @@ describe('RiftyTerminal — command marker substrate', () => {
       [{ id: 1, command: 'echo hi', exitCode: 0, startLine: 5, endLine: 7 }],
     ]);
   });
+
+  it('exposes a stable serialized buffer snapshot for tests/debug UI', () => {
+    const term = new RiftyTerminal({ onInput: () => {} });
+
+    expect(term.snapshotBuffer()).toBe('serialized text');
+    expect(addonMocks.serialize).toHaveBeenCalledWith({ excludeModes: true });
+  });
+
+  it('reports busy input when foreground stdin owns typed data', async () => {
+    const rawInputs: TerminalRawInput[] = [];
+    const busyInputs: unknown[] = [];
+    const { term, rec } = createTerminal({
+      onRawInput: (data) => rawInputs.push(data),
+      onBusyInput: (event) => busyInputs.push(event),
+    });
+    rec.resolveNextInput = () => {};
+
+    const pending = term.handleInput('\r');
+    await term.handleInput('next command');
+    rec.resolveNextInput?.();
+    await pending;
+
+    expect(rawInputs).toEqual(['next command']);
+    expect(busyInputs).toEqual([{ data: 'next command', binary: false }]);
+  });
 });

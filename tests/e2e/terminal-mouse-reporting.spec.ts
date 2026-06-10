@@ -16,11 +16,14 @@ test.describe('Terminal mouse reporting', () => {
     await term.click();
     await page.keyboard.type('mouse-demo');
     await page.keyboard.press('Enter');
+    await expect(
+      page.locator('.rf-terminal-blockrail__item[aria-label*="mouse-demo"]'),
+    ).toHaveAttribute('data-status', 'running');
 
     await term.click({ position: { x: 120, y: 48 } });
 
-    const rows = page.locator('.xterm-rows');
-    await expect(rows).toBeVisible();
-    await expect.poll(async () => rows.textContent()).toMatch(/mouse \\x1b\[<\d+;\d+;\d+M/u);
+    await expect
+      .poll(async () => (await term.getAttribute('data-terminal-buffer')) ?? '')
+      .toMatch(/mouse \\x1b\[<\d+;\d+;\d+M/u);
   });
 });

@@ -96,6 +96,13 @@ export function useRuntime() {
       if (line.trim().length === 0) return;
       await controller.eval(line);
     },
+    writeStdin(data: string | Uint8Array) {
+      try {
+        controller.writeStdin(data);
+      } catch {
+        /* worker may be between reset/ready; stdin is best-effort */
+      }
+    },
     async reset() {
       await controller.reset();
       attach();
