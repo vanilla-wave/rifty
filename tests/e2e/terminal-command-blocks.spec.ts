@@ -20,6 +20,14 @@ test.describe('Terminal command blocks UX', () => {
     await page.keyboard.press('Enter');
     const railItem = page.locator('.rf-terminal-blockrail__item[aria-label*="echo block-preview"]');
     await expect(railItem).toHaveAttribute('data-status', 'ok', { timeout: 5000 });
+    await expect
+      .poll(async () => {
+        const railBox = await railItem.boundingBox();
+        const rowsBox = await page.locator('.rf-terminal .xterm-rows').boundingBox();
+        if (!railBox || !rowsBox) return 'missing';
+        return railBox.x + railBox.width <= rowsBox.x ? 'clear' : 'overlap';
+      })
+      .toBe('clear');
     await page.keyboard.type('pwd');
     await page.keyboard.press('Enter');
     await expect(page.locator('.rf-terminal-blockrail__item[aria-label*="pwd"]')).toHaveAttribute(

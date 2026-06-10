@@ -423,11 +423,13 @@ export function TerminalPanel(props: {
 
   return (
     <div class="rf-terminal-shell">
-      <div
-        ref={container}
-        class="rf-terminal"
-        data-testid="terminal"
+      <div ref={container} class="rf-terminal" data-testid="terminal" />
+      <output
+        class="rf-terminal-buffer"
+        data-testid="terminal-buffer"
         data-terminal-buffer={terminalBuffer()}
+        aria-hidden="true"
+        hidden
       />
       <Show when={props.modeHint}>
         {(hint) => (

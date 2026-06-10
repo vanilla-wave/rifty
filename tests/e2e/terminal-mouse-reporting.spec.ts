@@ -23,7 +23,12 @@ test.describe('Terminal mouse reporting', () => {
     await term.click({ position: { x: 120, y: 48 } });
 
     await expect
-      .poll(async () => (await term.getAttribute('data-terminal-buffer')) ?? '')
+      .poll(
+        async () =>
+          (await page
+            .locator('[data-testid="terminal-buffer"]')
+            .getAttribute('data-terminal-buffer')) ?? '',
+      )
       .toMatch(/mouse \\x1b\[<\d+;\d+;\d+M/u);
   });
 });

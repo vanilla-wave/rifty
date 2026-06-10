@@ -662,7 +662,7 @@ body {
      FitAddon reads parent height minus the .xterm element's own padding (0),
      ignoring padding on the mount container — padding here overflowed the
      last row past the console body into the status bar. */
-  inset: 6px 4px 6px 10px;
+  inset: 6px 4px 6px 30px;
   background: var(--rf-bg-1);
 }
 .rf-terminal-modehint {
@@ -941,7 +941,7 @@ body {
 .rf-terminal-blockrail {
   position: absolute;
   top: 48px;
-  left: 9px;
+  left: 8px;
   z-index: 2;
   display: grid;
   gap: 5px;
@@ -953,24 +953,25 @@ body {
   width: 8px;
   height: 18px;
   padding: 0;
-  background: var(--rf-text-faint);
-  border: 1px solid transparent;
-  border-radius: var(--rf-r-xs);
-  opacity: 0.7;
+  background: transparent;
+  border: 0;
+  border-left: 3px solid var(--rf-text-faint);
+  border-radius: 0;
+  opacity: 0.6;
   cursor: pointer;
 }
 .rf-terminal-blockrail__item[data-status="ok"] {
-  background: var(--rf-ok);
+  border-left-color: var(--rf-ok);
 }
 .rf-terminal-blockrail__item[data-status="error"] {
-  background: var(--rf-err);
+  border-left-color: var(--rf-err);
 }
 .rf-terminal-blockrail__item[data-status="running"] {
-  background: var(--rf-warn);
+  border-left-color: var(--rf-warn);
 }
 .rf-terminal-blockrail__item[data-active="true"] {
-  border-color: var(--rf-text);
   opacity: 1;
+  box-shadow: inset 3px 0 0 var(--rf-text);
 }
 .rf-terminal-blockpreview {
   position: absolute;
