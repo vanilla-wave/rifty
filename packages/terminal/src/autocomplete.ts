@@ -1,4 +1,4 @@
-import type { TerminalCompletionItem, TerminalCompletionResult } from '@riftydev/terminal';
+import type { TerminalCompletionItem, TerminalCompletionResult } from './terminal.ts';
 
 export interface TerminalAutocompleteState {
   readonly start: number;

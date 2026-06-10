@@ -3,31 +3,36 @@
 Status: Accepted
 Date: 2026-06-10
 
-> TL;DR: busy terminal input may flow to foreground stdin; mouse reports become bytes.
+> TL;DR: busy terminal input reaches foreground shell stdin; Node process stdin is backlog.
 
 ## Context
 
 Mouse reporting is xterm-side protocol plus foreground raw stdin. `RiftyTerminal`
-already received xterm data, but line-mode dropped non-Ctrl+C bytes while a
-command was running. Shell commands also had no per-run stdin from the playground.
+received xterm bytes, but line-mode dropped non-Ctrl+C input while commands ran.
+Shell commands also had no per-run stdin from playground.
 
-Need close the UX backlog item without claiming full Node TTY/raw-mode parity.
+## Options considered
+
+- Keep dropping busy input: safe, no mouse/interactive demos.
+- Wire directly to runtime `process.stdin`: desired, but foreground process and
+  kernel/runtime stdin contracts are not settled.
+- Chosen: terminal forwards raw bytes; playground routes them to active shell
+  command stdin; runtime stdin bridge is explicit backlog.
 
 ## Decision
 
 - Add `TerminalRawInput = string | Uint8Array` and
   `RiftyTerminalOptions.onRawInput`.
-- While `busy`, keep Ctrl+C as `SIGINT`; forward other `onData` payloads as
-  strings to `onRawInput`.
-- Forward xterm `onBinary` payloads as Latin-1 `Uint8Array`, preserving
-  default/drag mouse protocol bytes beyond UTF-8 text.
+- While busy, keep Ctrl+C as `SIGINT`; forward other `onData` payloads to
+  `onRawInput`.
+- Forward xterm `onBinary` payloads as Latin-1 `Uint8Array`.
 - Add `RunOptions.stdin`; shell passes it to `ctx.stdin`.
 - Playground owns a per-foreground-run stdin queue and routes terminal raw input
   to the active shell command only.
-- Add `mouse-demo`: enables DECSET 1000+1006, reads one stdin chunk, disables
-  modes, prints escaped bytes.
+- Playground registers optional `mouse-demo`, which enables DECSET 1000+1006,
+  reads one stdin chunk, disables modes, and prints escaped bytes.
 - Defer Node `process.stdin`, `tty.setRawMode`, literal ETX raw mode, and kernel
-  worker TTY plumbing.
+  worker TTY plumbing to `docs/backlog/runtime-js/process-stdin-terminal-bridge.md`.
 
 ## Consequences
 
@@ -39,6 +44,6 @@ Need close the UX backlog item without claiming full Node TTY/raw-mode parity.
 ## Acceptance
 
 - [x] Terminal raw/onBinary forwarding tests.
-- [x] Shell `RunOptions.stdin` and `mouse-demo` tests.
+- [x] Shell `RunOptions.stdin` and optional `mouse-demo` tests.
 - [x] Playground stdin queue test.
 - [x] Chromium e2e: click reaches `mouse-demo` stdin.

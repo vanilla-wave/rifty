@@ -9,13 +9,13 @@
 import type {
   TerminalCompleter,
   TerminalGhostSuggestionProvider,
+  TerminalHistoryRecord,
   TerminalInputResult,
   TerminalInputValidator,
   TerminalLineHighlighter,
   TerminalRawInput,
   TerminalRewriteRule,
 } from '@riftydev/terminal';
-import type { TerminalHistoryRecord } from '../glue/terminal-history.ts';
 import { type TerminalDims, TerminalPanel } from './TerminalPanel.tsx';
 
 export function BottomPanel(props: {

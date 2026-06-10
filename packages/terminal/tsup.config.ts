@@ -6,6 +6,11 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
+    autocomplete: 'src/autocomplete.ts',
+    'command-blocks': 'src/command-blocks.ts',
+    export: 'src/export.ts',
+    history: 'src/history.ts',
+    state: 'src/state.ts',
   },
   format: ['esm'],
   dts: true,

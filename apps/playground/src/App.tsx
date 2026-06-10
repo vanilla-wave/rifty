@@ -1,7 +1,19 @@
 import { RegistryClient } from '@riftydev/npm-client';
 import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
-import { coreCommandNames } from '@riftydev/shell';
+import {
+  coreCommandNames,
+  createShellCompleter,
+  img,
+  mouseDemo,
+  shellLineHighlightSpans,
+  validateShellInput,
+} from '@riftydev/shell';
 import type { TerminalGhostSuggestionProvider, TerminalRewriteRule } from '@riftydev/terminal';
+import {
+  type TerminalHistoryMode,
+  type TerminalHistoryRecord,
+  addTerminalHistoryRecord,
+} from '@riftydev/terminal/history';
 import { syncMirror } from '@riftydev/vfs';
 import { Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import { useShellSession } from './adapters/shell-adapter.ts';
@@ -23,9 +35,6 @@ import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
 import { createNpmShellCommand } from './glue/npm-shell-command.ts';
 import { proxiedRegistryFetch } from './glue/registry-fetch.ts';
-import { createShellCompleter } from './glue/shell-completion.ts';
-import { shellLineHighlightSpans } from './glue/shell-highlighting.ts';
-import { validateShellInput } from './glue/shell-input-validator.ts';
 import { SnapshotFs } from './glue/snapshot-fs.ts';
 import { SyncMirrorVfs } from './glue/sync-mirror-vfs.ts';
 import {
@@ -33,11 +42,6 @@ import {
   readAiCommandSuggestionConfig,
   suggestAiCommand,
 } from './glue/terminal-ai-suggestions.ts';
-import {
-  type TerminalHistoryMode,
-  type TerminalHistoryRecord,
-  addTerminalHistoryRecord,
-} from './glue/terminal-history.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
 import { subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
@@ -102,6 +106,8 @@ export function App(props: AppProps) {
       registry: new RegistryClient({ fetch: proxiedRegistryFetch() }),
     }),
   );
+  shell.registerCommand('img', img);
+  shell.registerCommand('mouse-demo', mouseDemo);
 
   // Active real-project template (ADR-0078). Chip + mode machine read its generic
   // display name instead of "Real Vite".

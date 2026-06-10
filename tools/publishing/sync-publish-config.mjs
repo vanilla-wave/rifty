@@ -98,6 +98,13 @@ const SPEC = {
   '@riftydev/terminal': {
     dir: 'packages/terminal',
     sideEffects: false,
+    addExports: {
+      './autocomplete': './src/autocomplete.ts',
+      './command-blocks': './src/command-blocks.ts',
+      './export': './src/export.ts',
+      './history': './src/history.ts',
+      './state': './src/state.ts',
+    },
     keywords: ['terminal', 'xterm'],
   },
   '@riftydev/service-worker': {

@@ -1,41 +1,34 @@
 # ADR 0121: Background jobs
 
-Status: Accepted (2026-06-09)
-Date: 2026-06-09
+Status: Accepted
+Date: 2026-06-10
 
-> TL;DR: `cmd &` starts shell-level job, prompt returns
+> TL;DR: support transitional shell-level trailing `&`; real job control deferred.
 
 ## Context
 
-Terminal UX backlog asks for background blocks. Kernel process job control is
-not ready, but shell commands are async, cancellable, and already stream output.
-Need useful browser terminal UX without fake PIDs or silent drops.
+Users expect `sleep 1 &`/dev-server-like background work, but kernel process
+groups and terminal foreground ownership are not ready.
+
+## Options considered
+
+- Reject `&`: honest, poor terminal UX.
+- Fake POSIX PIDs/job control: misleading without process groups.
+- Chosen: shell-local background jobs with `jobs` listing and cooperative abort.
 
 ## Decision
 
-- Implement transitional shell jobs, not OS/kernel processes.
-- Trailing `cmd &` starts a cloned `Shell` with cwd/env snapshot and registered
-  custom commands, then returns prompt immediately.
-- Parent shell owns job id/status table; `jobs` lists `Running`, `Done`, or
-  `Exit N`.
-- Background output streams through existing `onChunk`; completion emits job
-  status.
-- `dispose()` aborts running jobs. Foreground SIGINT does not kill background
-  jobs.
-- `|`, `<`, and nested/non-trailing `&` stay loud `NotImplementedError`.
-- Terminal `write()` protects editable input by clearing/redrawing prompt around
-  async output.
+- Only trailing `cmd &` is supported.
+- Background jobs run through cloned shell state and stream output asynchronously.
+- `jobs` lists shell-local id/status/command.
+- Non-trailing `&`, pipes, and full job control remain loud unsupported paths.
 
 ## Consequences
 
-- Useful `sleep 1 &`, dev-server-style command UX without blocking prompt.
-- No fake PID/fg/bg. Kernel process jobs remain later.
-- Background `cd` cannot mutate parent cwd.
-- High-volume output/backpressure and full TTY job control remain follow-ups.
+- Better playground UX without claiming POSIX job control.
+- Async output must not corrupt editable prompt repaint.
 
 ## Acceptance
 
-- [x] Shell tests cover start, jobs table, cwd isolation, unsupported pipes,
-  dispose abort.
-- [x] Terminal tests cover async output while editing.
-- [x] Backlog/changelogs record shipped scope.
+- [x] Background start/list/status tests.
+- [x] Async output prompt repaint tests.

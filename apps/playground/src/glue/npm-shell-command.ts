@@ -48,16 +48,11 @@ export interface NpmShellCommandDeps {
   readonly install?: InstallFn;
 }
 
-/**
- * Subset of package.json we read/write. We don't round-trip arbitrary keys
- * (only name/version/dependencies/private) to keep diff churn scoped to what we
- * touched, since the file may be hand-edited.
- */
 interface ProjectPackageJson {
-  name: string;
-  version: string;
-  private?: boolean;
-  dependencies?: Record<string, string>;
+  readonly raw: Record<string, unknown>;
+  readonly name: string;
+  readonly version: string;
+  readonly dependencies: Record<string, string>;
 }
 
 const DEFAULT_PROJECT_NAME = 'rifty-project';
@@ -101,16 +96,33 @@ function parseSpec(spec: string): { name: string; range: string } {
 async function readPackageJson(vfs: Vfs, cwd: string): Promise<ProjectPackageJson> {
   const path = `${cwd}/package.json`;
   if (!(await vfs.exists(path))) {
-    return { name: DEFAULT_PROJECT_NAME, version: DEFAULT_PROJECT_VERSION, private: true };
+    return {
+      raw: { name: DEFAULT_PROJECT_NAME, version: DEFAULT_PROJECT_VERSION, private: true },
+      name: DEFAULT_PROJECT_NAME,
+      version: DEFAULT_PROJECT_VERSION,
+      dependencies: {},
+    };
   }
   const text = await vfs.readFileText(path);
   try {
-    const parsed = JSON.parse(text) as Partial<ProjectPackageJson>;
+    const parsed = JSON.parse(text) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('expected an object');
+    }
+    const raw = parsed as Record<string, unknown>;
+    const dependencies =
+      raw.dependencies && typeof raw.dependencies === 'object' && !Array.isArray(raw.dependencies)
+        ? Object.fromEntries(
+            Object.entries(raw.dependencies).filter(
+              (entry): entry is [string, string] => typeof entry[1] === 'string',
+            ),
+          )
+        : {};
     return {
-      name: parsed.name ?? DEFAULT_PROJECT_NAME,
-      version: parsed.version ?? DEFAULT_PROJECT_VERSION,
-      private: parsed.private,
-      dependencies: parsed.dependencies,
+      raw,
+      name: typeof raw.name === 'string' ? raw.name : DEFAULT_PROJECT_NAME,
+      version: typeof raw.version === 'string' ? raw.version : DEFAULT_PROJECT_VERSION,
+      dependencies,
     };
   } catch (err) {
     throw new Error(`npm: package.json at ${path} is not valid JSON: ${(err as Error).message}`);
@@ -121,7 +133,7 @@ async function writePackageJson(vfs: Vfs, cwd: string, pkg: ProjectPackageJson):
   const path = `${cwd}/package.json`;
   // Stable formatting: re-installs with an unchanged dep set produce
   // byte-identical output, so the shell's diff-before-write keeps mtimes stable.
-  await vfs.writeFile(path, `${JSON.stringify(pkg, null, 2)}\n`);
+  await vfs.writeFile(path, `${JSON.stringify(pkg.raw, null, 2)}\n`);
 }
 
 async function runInstall(
@@ -130,7 +142,7 @@ async function runInstall(
   deps: NpmShellCommandDeps,
 ): Promise<number> {
   const pkg = await readPackageJson(deps.vfs, ctx.cwd);
-  const dependencies = { ...(pkg.dependencies ?? {}) };
+  const dependencies = { ...pkg.dependencies };
 
   for (const spec of specs) {
     if (spec.startsWith('-')) {
@@ -167,9 +179,9 @@ async function runInstall(
     // just re-reads the file; rewriting it would churn mtimes for no change.
     if (specs.length > 0) {
       const next: ProjectPackageJson = {
+        raw: { ...pkg.raw, dependencies },
         name: pkg.name,
         version: pkg.version,
-        ...(pkg.private !== undefined ? { private: pkg.private } : {}),
         dependencies,
       };
       await writePackageJson(deps.vfs, ctx.cwd, next);

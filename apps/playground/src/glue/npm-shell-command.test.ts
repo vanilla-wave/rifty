@@ -109,7 +109,7 @@ describe('npm-shell-command — happy path', () => {
     expect(pkg.dependencies).toEqual({ lodash: '^4.17.0' });
   });
 
-  it('merges new deps into existing package.json without clobbering', async () => {
+  it('merges new deps into existing package.json without clobbering existing deps', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
     await vfs.writeFile(
@@ -132,6 +132,45 @@ describe('npm-shell-command — happy path', () => {
     const pkg = JSON.parse(await vfs.readFileText('/proj/package.json')) as {
       dependencies?: Record<string, string>;
     };
+    expect(pkg.dependencies).toEqual({ a: '1.0.0', b: '2.0.0' });
+  });
+
+  it('preserves unrelated package.json fields when adding dependencies', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify(
+        {
+          name: 'demo',
+          version: '0.0.0',
+          type: 'module',
+          private: true,
+          scripts: { dev: 'vite' },
+          devDependencies: { vite: '^5.4.0' },
+          dependencies: { a: '1.0.0' },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const { install } = makeStubInstall(() => emptyResult());
+
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    const { exitCode } = await runShell(shell, 'npm install b@2.0.0');
+    expect(exitCode).toBe(0);
+
+    const pkg = JSON.parse(await vfs.readFileText('/proj/package.json')) as {
+      type?: string;
+      scripts?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+      dependencies?: Record<string, string>;
+    };
+    expect(pkg.type).toBe('module');
+    expect(pkg.scripts).toEqual({ dev: 'vite' });
+    expect(pkg.devDependencies).toEqual({ vite: '^5.4.0' });
     expect(pkg.dependencies).toEqual({ a: '1.0.0', b: '2.0.0' });
   });
 

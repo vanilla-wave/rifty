@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { applyAutocompleteItem, createAutocompleteState } from './terminal-autocomplete.ts';
+import { applyAutocompleteItem, createAutocompleteState } from './autocomplete.ts';
 
 const result = {
   start: 4,

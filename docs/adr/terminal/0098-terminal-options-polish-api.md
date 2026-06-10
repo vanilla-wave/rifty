@@ -1,33 +1,35 @@
 # ADR 0098: Terminal options polish API
 
-Status: Accepted (2026-06-09)
-Date: 2026-06-09
+Status: Accepted
+Date: 2026-06-10
 
-> TL;DR: expose small xterm-backed polish knobs on `RiftyTerminalOptions`; keep defaults stable
+> TL;DR: expose additive wrapper options, not raw xterm ownership.
 
 ## Context
 
-The terminal UX backlog calls for theme/font options, light/dark readiness, `minimumContrastRatio`, screen-reader mode, cursor style, and copy-on-select. `RiftyTerminalOptions` is exported, so adding knobs is a public API change. xterm 5.5 already exposes these as stable options.
+Playground UX needs theme/font/cursor/a11y/clipboard polish, and hosts need a
+small stable API without reaching into xterm internals.
+
+## Options considered
+
+- Expose raw `Terminal`: maximum power, leaks implementation and addon state.
+- No polish API: keeps wrapper small, blocks host theming/accessibility.
+- Chosen: additive `RiftyTerminalOptions` plus narrow methods.
 
 ## Decision
 
-Add additive options:
-
-- `theme`, `fontFamily`, `fontSize`, `minimumContrastRatio`, `screenReaderMode`, `cursorStyle`.
-- `copyOnSelect` and `clipboard` injection for best-effort clipboard writes.
-- `setTheme(theme)` and `focus()` public methods.
-
-Defaults preserve current visuals except `minimumContrastRatio` defaults to 4.5 for WCAG-AA protection. Clipboard writes are best-effort and never throw into terminal input.
+- Add options for theme, font family/size, cursor style, screen reader mode,
+  contrast, copy-on-select, clipboard port, and macOS Option-as-Meta.
+- Add `setTheme()` and `focus()` methods.
+- Keep copy-on-select opt-in; Ctrl+C selection copy is line-editor policy
+  covered by ADR-0096.
 
 ## Consequences
 
-- Playground and later light theme work can control terminal appearance without importing xterm.
-- Tests can inject clipboard and inspect xterm constructor/options.
-- Copy-on-select remains opt-in; Ctrl+C selection copy stays always-on from ADR-0097.
-- No new dependency.
+- Hosts can theme/accessibilize the terminal without xterm internals.
+- Wrapper remains responsible for translating stable options to xterm.
 
 ## Acceptance
 
-- [x] Unit tests cover constructor options/defaults, `setTheme`, `focus`, and copy-on-select guard.
-- [x] Existing Ctrl+C copy-vs-SIGINT behavior remains green.
-- [x] `packages/terminal/CHANGELOG.md` records the API.
+- [x] Options pass-through tests.
+- [x] Clipboard-key tests.

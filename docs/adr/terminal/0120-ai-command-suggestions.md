@@ -1,40 +1,36 @@
 # ADR 0120: AI command suggestions
 
-Status: Accepted (2026-06-09)
-Date: 2026-06-09
+Status: Accepted
+Date: 2026-06-10
 
-> TL;DR: `# prompt` asks opt-in endpoint, ghost-fills safe coreutil
+> TL;DR: opt-in ghost command suggestions; never auto-run.
 
 ## Context
 
-Backlog asks for AI command suggestions: `#` prefix, endpoint/key, coreutils
-constraint, opt-in, never auto-run. Browser client cannot hide API keys.
+UX backlog asks for command suggestions, but browser-side LLM calls expose keys,
+latency, and safety risks. The terminal can show ghost text; policy belongs to
+the host.
+
+## Options considered
+
+- No AI seam: safest, misses backlog.
+- Built-in provider/client in terminal: convenient, couples terminal to network.
+- Chosen: host-owned provider with explicit env opt-in and never-auto-run UI.
 
 ## Decision
 
-- `RiftyTerminalOptions.ghostSuggestion(state, signal)` is the public terminal
-  seam; terminal renders dim text, accept replaces the line, never submits.
-- Disabled unless `VITE_RIFTY_AI_COMMAND_SUGGEST_URL` is set.
-- Optional `VITE_RIFTY_AI_COMMAND_SUGGEST_KEY` is sent as Bearer; client-visible,
-  use only with same-origin proxy/dev keys.
-- `# prompt` in shell modes calls the endpoint; REPL stays normal.
-- Endpoint returns `{ command }` or `{ suggestion }`.
-- Suggested first word must match `@riftydev/shell` core command names, not
-  host-registered commands such as `npm`.
-- Compound commands with joiners/redirection/background/newline are rejected.
-- Enter on raw `# prompt` in shell modes is no-op; accepting the ghost
-  replacement is required before the user can press Enter to run.
-- No hardcoded external URL, no auto-run.
+- Add `ghostSuggestion(state, signal)` terminal seam.
+- Playground reads opt-in endpoint/key config and sends command context.
+- Suggestions are displayed as ghost replacements only; Enter still submits the
+  user's explicit line.
+- Restrict prompt context to cwd/mode/core command names; no filesystem upload.
 
 ## Consequences
 
-- Real provider seam without vendor lock-in.
-- Safe default: no endpoint means no network.
-- Browser keys are visible; production should use same-origin proxy/session keys.
-- Streaming ghost text and server-side key storage remain follow-ups.
+- AI is optional and host-owned.
+- Browser-visible keys remain a demo/development trade-off, not production auth.
 
 ## Acceptance
 
-- [x] Glue tests cover config parsing, request shape, response filtering.
-- [x] Playground wires shell-mode `#` ghost suggestions, accept-only execution.
-- [x] Backlog/changelogs record shipped scope.
+- [x] Ghost suggestion cancellation/application tests.
+- [x] Playground provider tests.

@@ -12,6 +12,8 @@
  * upper-layer dependencies.
  */
 export { coreCommandNames } from './builtins.ts';
+export { img } from './commands/img.ts';
+export { mouseDemo } from './commands/mouse-demo.ts';
 export {
   Shell,
   type ChunkStream,
@@ -20,4 +22,16 @@ export {
   type ShellOptions,
 } from './shell.ts';
 export { tokenize, type Token } from './tokenize.ts';
+export {
+  createShellCompleter,
+  shellLineHighlightSpans,
+  validateShellInput,
+  type CompletionDirEntry,
+  type ShellCompletionDeps,
+  type ShellCompletionItem,
+  type ShellCompletionMode,
+  type ShellCompletionResult,
+  type ShellHighlightSpan,
+  type ShellInputValidation,
+} from './language-service.ts';
 export type { CommandContext, ShellCommand, StdinReader, Writer } from './types.ts';

@@ -20,7 +20,12 @@
   "module": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./autocomplete": "./src/autocomplete.ts",
+    "./command-blocks": "./src/command-blocks.ts",
+    "./export": "./src/export.ts",
+    "./history": "./src/history.ts",
+    "./state": "./src/state.ts"
   },
   "files": ["dist", "CHANGELOG.md"],
   "publishConfig": {
@@ -32,12 +37,32 @@
       ".": {
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
+      },
+      "./autocomplete": {
+        "types": "./dist/autocomplete.d.ts",
+        "import": "./dist/autocomplete.js"
+      },
+      "./command-blocks": {
+        "types": "./dist/command-blocks.d.ts",
+        "import": "./dist/command-blocks.js"
+      },
+      "./export": {
+        "types": "./dist/export.d.ts",
+        "import": "./dist/export.js"
+      },
+      "./history": {
+        "types": "./dist/history.d.ts",
+        "import": "./dist/history.js"
+      },
+      "./state": {
+        "types": "./dist/state.d.ts",
+        "import": "./dist/state.js"
       }
     }
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:run": "vitest run packages/terminal",
+    "test:run": "vitest run src",
     "build": "tsup"
   },
   "dependencies": {

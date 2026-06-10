@@ -1,5 +1,3 @@
-import { dirname } from '@riftydev/vfs';
-
 export const TERMINAL_HISTORY_PATH = '/workspace/.rifty/terminal-history.json';
 export const TERMINAL_HISTORY_LIMIT = 500;
 
@@ -31,6 +29,12 @@ export interface TerminalHistoryVfs {
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
+
+function dirname(path: string): string {
+  const idx = path.lastIndexOf('/');
+  if (idx <= 0) return '/';
+  return path.slice(0, idx);
+}
 
 function isMode(value: unknown): value is TerminalHistoryMode {
   return value === 'repl' || value === 'dev' || value === 'real-vite';

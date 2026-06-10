@@ -26,3 +26,41 @@ export {
   type TerminalWebLinksOptions,
 } from './terminal.ts';
 export type { TerminalStream } from './types.ts';
+export {
+  applyAutocompleteItem,
+  createAutocompleteState,
+  moveAutocompleteIndex,
+  type TerminalAutocompleteState,
+} from './autocomplete.ts';
+export {
+  commandBlockAtViewport,
+  commandBlockRailItems,
+  commandBlockStatus,
+  type TerminalCommandBlockRailItem,
+  type TerminalCommandBlockStatus,
+} from './command-blocks.ts';
+export { makeTerminalHtmlExport, type TerminalExportArtifact } from './export.ts';
+export {
+  TERMINAL_HISTORY_LIMIT,
+  TERMINAL_HISTORY_PATH,
+  addTerminalHistoryRecord,
+  loadTerminalHistory,
+  loadTerminalHistoryAsync,
+  saveTerminalHistory,
+  saveTerminalHistoryAsync,
+  searchTerminalHistory,
+  type TerminalHistoryFs,
+  type TerminalHistoryMode,
+  type TerminalHistoryRecord,
+  type TerminalHistoryVfs,
+} from './history.ts';
+export {
+  TERMINAL_STATE_PATH,
+  loadTerminalState,
+  loadTerminalStateAsync,
+  saveTerminalState,
+  saveTerminalStateAsync,
+  type TerminalState,
+  type TerminalStateFs,
+  type TerminalStateVfs,
+} from './state.ts';

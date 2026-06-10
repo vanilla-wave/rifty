@@ -7,7 +7,7 @@ import {
   loadTerminalStateAsync,
   saveTerminalState,
   saveTerminalStateAsync,
-} from './terminal-state.ts';
+} from './state.ts';
 
 function fakeFs(): TerminalStateFs {
   const files = new Map<string, Uint8Array>();

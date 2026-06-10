@@ -10,7 +10,7 @@ import {
   saveTerminalHistory,
   saveTerminalHistoryAsync,
   searchTerminalHistory,
-} from './terminal-history.ts';
+} from './history.ts';
 
 const baseRecord: TerminalHistoryRecord = {
   command: 'echo one',

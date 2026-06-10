@@ -1,32 +1,37 @@
-# ADR 0100: Command marker substrate
+# ADR 0100: Command block metadata substrate
 
-Status: Accepted (2026-06-09)
-Date: 2026-06-09
+Status: Accepted
+Date: 2026-06-10
 
-> TL;DR: terminal commands become tracked blocks; optional exit codes drive markers, ruler marks, nav, and selection
+> TL;DR: submitted commands become navigable/copyable blocks with exit status.
 
 ## Context
 
-UX backlog calls for exit-status gutter marks, scrollbar history marks, jump-to-prompt, select-whole-command-output, sticky headers, command blocks, and quick fixes. rifty owns the line editor and shell result, so it does not need OSC 133 parsing. `RiftyTerminalOptions.onInput` currently discards command exit status.
+Terminal output is hard to scan after long commands. UX backlog asks for command
+headers, block rail, block output selection/copy, and status without baking
+Solid UI into `@riftydev/terminal`.
+
+## Options considered
+
+- Pure scrollback text: simple, no structured navigation.
+- Playground-only parsing of prompt text: brittle and host-specific.
+- Chosen: terminal records command markers/exit codes and exports selectors; UI
+  stays host-owned.
 
 ## Decision
 
-Widen `onInput` to `number | void | Promise<number | void>`. `RiftyTerminal` records one block per submitted command:
-
-- marker at command start, marker at command end;
-- optional exit-code decoration + overview ruler mark when an exit code is returned;
-- public block inspection + `scrollToBlock`, `selectBlockOutput`, `jumpBlockPrev/Next`.
-
-No dependency. Decorations are best-effort: if xterm returns `undefined`, block metadata remains.
+- `onInput` may return an exit code; terminal records command block start/end.
+- Expose `TerminalCommandBlock`, block change callbacks, viewport line callbacks,
+  `getViewportLine()`, `scrollToBlock()`, and `copyBlockOutput()`.
+- Package exports pure command-block selectors for rail/sticky UI.
+- Playground owns the visible rail/sticky header and copy button.
 
 ## Consequences
 
-- Shell mode can render exit status from its existing `runLine()` result.
-- REPL/runtime mode can keep returning `void`; no marker color is shown.
-- Later sticky headers, command blocks, and quick fixes reuse this single metadata home.
+- Hosts can build IDE-like command navigation without parsing ANSI text.
+- Exit status is optional/running until command completion.
 
 ## Acceptance
 
-- [x] Unit tests cover `onInput` exit code capture, decorations, block nav, and selection.
-- [x] Playground returns shell exit code to terminal.
-- [x] `packages/terminal` and `apps/playground` typechecks pass.
+- [x] Command marker, nav, copy, and selector tests.
+- [x] Playground uses package selectors for rail/sticky UI.

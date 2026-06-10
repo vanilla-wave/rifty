@@ -42,17 +42,17 @@
 
 ### Added
 
-- **Command-not-found suggestions (ADR-0099).** Unknown commands still exit 127,
+- **Command-not-found suggestions (ADR-0104).** Unknown commands still exit 127,
   but close typos now print one conservative `Did you mean 'cmd'?` diagnostic
   from the current command registry, including custom `registerCommand`
   commands. Distant names stay quiet.
 - **Command-name completion seam (ADR-0104).** `Shell.commandNames()` returns a
   sorted list of builtin + registered command names so hosts can complete argv-0
   without reaching into the private command registry.
-- **Shell env snapshot seam (ADR-0117).** `Shell.envSnapshot()` returns a
+- **Shell env snapshot seam (ADR-0116).** `Shell.envSnapshot()` returns a
   defensive copy of the mutable shell env so hosts can persist terminal state
   without exposing the internal env object.
-- **Inline image producer (ADR-0119).** New `img` builtin emits a tiny iTerm
+- **Inline image producer (ADR-0105).** New `img` builtin emits a tiny iTerm
   inline-image PNG sequence on TTY output and writes nothing on non-TTY output.
 - **Core command allowlist (ADR-0120).** `coreCommandNames()` exposes builtin
   coreutils only, excluding host-registered commands such as `npm`; playground AI
@@ -64,7 +64,7 @@
 - **Foreground stdin and mouse demo (ADR-0122).** `RunOptions.stdin` now flows
   to `ctx.stdin`, and the new `mouse-demo` builtin enables DECSET 1000/1006,
   reads one raw input chunk, then prints escaped bytes for browser e2e coverage.
-- **OSC 8 grep file links (ADR-0111).** In interactive TTY output, `grep`
+- **OSC 8 grep file links (ADR-0105).** In interactive TTY output, `grep`
   filename prefixes are wrapped in OSC 8 `file://` links to their resolved VFS
   path while preserving the GNU/as-given label. Non-TTY output stays byte-stable.
 - **Rich terminal builtins:** rich `ls` (column layout via `_columns`, `-l`/`-a`/`-1`,

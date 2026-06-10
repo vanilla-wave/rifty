@@ -23,11 +23,9 @@ import { envCmd } from './commands/env.ts';
 import { find } from './commands/find.ts';
 import { grep } from './commands/grep.ts';
 import { head } from './commands/head.ts';
-import { img } from './commands/img.ts';
 import { type ShellJobListItem, jobs } from './commands/jobs.ts';
 import { ls } from './commands/ls.ts';
 import { mkdir } from './commands/mkdir.ts';
-import { mouseDemo } from './commands/mouse-demo.ts';
 import { mv } from './commands/mv.ts';
 import { printf } from './commands/printf.ts';
 import { pwd } from './commands/pwd.ts';
@@ -57,9 +55,7 @@ export const CORE_COMMAND_NAMES = [
   'clear',
   'touch',
   'head',
-  'img',
   'jobs',
-  'mouse-demo',
   'tail',
   'wc',
   'basename',
@@ -98,9 +94,7 @@ export function builtinCommands(
     clear,
     touch,
     head,
-    img,
     jobs: jobs(listJobs),
-    'mouse-demo': mouseDemo,
     tail,
     wc,
     basename,

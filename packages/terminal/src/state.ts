@@ -1,5 +1,3 @@
-import { dirname } from '@riftydev/vfs';
-
 export const TERMINAL_STATE_PATH = '/workspace/.rifty/terminal-state.json';
 
 export interface TerminalState {
@@ -25,6 +23,12 @@ const dec = new TextDecoder();
 const MAX_ENV_ENTRIES = 256;
 const MAX_ENV_KEY_LENGTH = 256;
 const MAX_ENV_VALUE_LENGTH = 8192;
+
+function dirname(path: string): string {
+  const idx = path.lastIndexOf('/');
+  if (idx <= 0) return '/';
+  return path.slice(0, idx);
+}
 
 function parseEnv(value: unknown): Record<string, string> {
   if (!value || typeof value !== 'object') return {};

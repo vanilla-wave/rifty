@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { Shell } from '../src/index.ts';
+import { Shell, mouseDemo } from '../src/index.ts';
 
-describe('mouse-demo builtin', () => {
+describe('mouse-demo optional command', () => {
+  function makeShell(): Shell {
+    const shell = new Shell();
+    shell.registerCommand('mouse-demo', mouseDemo);
+    return shell;
+  }
+
   it('enables SGR mouse reporting and prints escaped raw stdin bytes', async () => {
-    const sh = new Shell();
+    const sh = makeShell();
     const chunks = [new TextEncoder().encode('\x1b[<0;10;20M')];
 
     const result = await sh.run('mouse-demo', {
@@ -20,7 +26,7 @@ describe('mouse-demo builtin', () => {
   });
 
   it('fails cleanly without interactive stdin', async () => {
-    const sh = new Shell();
+    const sh = makeShell();
     const result = await sh.run('mouse-demo');
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toBe('mouse-demo: interactive stdin required\n');

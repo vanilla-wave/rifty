@@ -1,4 +1,4 @@
-import type { TerminalCommandBlock } from '@riftydev/terminal';
+import type { TerminalCommandBlock } from './terminal.ts';
 
 export type TerminalCommandBlockStatus = 'ok' | 'error' | 'running';
 

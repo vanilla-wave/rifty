@@ -1,15 +1,25 @@
+import type { TerminalHistoryFs, TerminalHistoryVfs } from '@riftydev/terminal/history';
+import type { TerminalStateFs, TerminalStateVfs } from '@riftydev/terminal/state';
 import { describe, expect, it } from 'vitest';
-import type { TerminalHistoryFs, TerminalHistoryVfs } from './terminal-history.ts';
 import { createTerminalPersistence } from './terminal-persistence.ts';
-import type { TerminalStateFs, TerminalStateVfs } from './terminal-state.ts';
 
-type TestStore = TerminalHistoryFs & TerminalStateFs & TerminalHistoryVfs & TerminalStateVfs;
+type TestStore = TerminalHistoryFs &
+  TerminalStateFs &
+  TerminalHistoryVfs &
+  TerminalStateVfs & {
+    statSync(path: string): { isDirectory: boolean };
+  };
 
 function fakeStore(): TestStore {
   const files = new Map<string, Uint8Array>();
   const dirs = new Set(['/']);
   return {
     existsSync: (path) => files.has(path) || dirs.has(path),
+    statSync: (path) => {
+      if (dirs.has(path)) return { isDirectory: true };
+      if (files.has(path)) return { isDirectory: false };
+      throw new Error(`ENOENT ${path}`);
+    },
     readFileBytesSync: (path) => {
       const bytes = files.get(path);
       if (!bytes) throw new Error(`ENOENT ${path}`);
@@ -38,9 +48,11 @@ function fakeStore(): TestStore {
 describe('terminal persistence adapter', () => {
   it('prefers the async OPFS store when it initializes', async () => {
     const opfs = fakeStore();
+    const workspace = fakeStore();
+    workspace.mkdirSync('/workspace/app', { recursive: true });
     const persistence = await createTerminalPersistence('/workspace', {
       createOpfs: async () => opfs,
-      syncFs: () => fakeStore(),
+      syncFs: () => workspace,
     });
 
     expect(persistence.backend).toBe('opfs');
@@ -59,7 +71,7 @@ describe('terminal persistence adapter', () => {
     ]);
     const reloaded = await createTerminalPersistence('/workspace', {
       createOpfs: async () => opfs,
-      syncFs: () => fakeStore(),
+      syncFs: () => workspace,
     });
     expect(reloaded.initialState).toEqual({
       cwd: '/workspace/app',
@@ -68,8 +80,29 @@ describe('terminal persistence adapter', () => {
     expect(reloaded.initialHistory.map((item) => item.command)).toEqual(['pwd']);
   });
 
+  it('falls back to default cwd when OPFS restores a path absent from the workspace VFS', async () => {
+    const opfs = fakeStore();
+    const workspace = fakeStore();
+    const persistence = await createTerminalPersistence('/workspace', {
+      createOpfs: async () => opfs,
+      syncFs: () => workspace,
+    });
+    await persistence.saveState({ cwd: '/workspace/stale', env: { FOO: 'bar' } });
+
+    const reloaded = await createTerminalPersistence('/workspace', {
+      createOpfs: async () => opfs,
+      syncFs: () => workspace,
+    });
+
+    expect(reloaded.initialState).toEqual({
+      cwd: '/workspace',
+      env: { FOO: 'bar' },
+    });
+  });
+
   it('falls back to the sync mirror when OPFS initialization fails', async () => {
     const sync = fakeStore();
+    sync.mkdirSync('/workspace/fallback', { recursive: true });
     const persistence = await createTerminalPersistence('/workspace', {
       createOpfs: async () => {
         throw new Error('no opfs');

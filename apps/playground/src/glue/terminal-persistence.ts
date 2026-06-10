@@ -1,4 +1,3 @@
-import { OpfsVfs, syncMirror } from '@riftydev/vfs';
 import {
   type TerminalHistoryFs,
   type TerminalHistoryRecord,
@@ -7,7 +6,7 @@ import {
   loadTerminalHistoryAsync,
   saveTerminalHistory,
   saveTerminalHistoryAsync,
-} from './terminal-history.ts';
+} from '@riftydev/terminal/history';
 import {
   type TerminalState,
   type TerminalStateFs,
@@ -16,7 +15,8 @@ import {
   loadTerminalStateAsync,
   saveTerminalState,
   saveTerminalStateAsync,
-} from './terminal-state.ts';
+} from '@riftydev/terminal/state';
+import { OpfsVfs, syncMirror } from '@riftydev/vfs';
 
 export interface TerminalPersistence {
   readonly backend: 'opfs' | 'memory';
@@ -26,9 +26,15 @@ export interface TerminalPersistence {
   saveState(state: TerminalState): Promise<void>;
 }
 
+interface CwdValidator {
+  statSync(path: string): { isDirectory: boolean };
+}
+
+type TerminalWorkspaceFs = TerminalHistoryFs & TerminalStateFs & CwdValidator;
+
 export interface TerminalPersistenceDeps {
   createOpfs?: () => Promise<TerminalHistoryVfs & TerminalStateVfs>;
-  syncFs?: () => TerminalHistoryFs & TerminalStateFs;
+  syncFs?: () => TerminalWorkspaceFs;
 }
 
 async function createOpfsStore(): Promise<TerminalHistoryVfs & TerminalStateVfs> {
@@ -37,27 +43,48 @@ async function createOpfsStore(): Promise<TerminalHistoryVfs & TerminalStateVfs>
   return opfs;
 }
 
+function validCwd(fs: CwdValidator, cwd: string): boolean {
+  try {
+    return fs.statSync(cwd).isDirectory;
+  } catch {
+    return false;
+  }
+}
+
+function withReachableCwd(
+  state: TerminalState,
+  defaultCwd: string,
+  fs: CwdValidator,
+): TerminalState {
+  return validCwd(fs, state.cwd) ? state : { ...state, cwd: defaultCwd };
+}
+
 export async function createTerminalPersistence(
   defaultCwd: string,
   deps: TerminalPersistenceDeps = {},
 ): Promise<TerminalPersistence> {
+  const workspaceFs = (deps.syncFs ?? syncMirror)();
   try {
     const opfs = await (deps.createOpfs ?? createOpfsStore)();
+    const initialState = await loadTerminalStateAsync(opfs, defaultCwd);
     return {
       backend: 'opfs',
       initialHistory: await loadTerminalHistoryAsync(opfs),
-      initialState: await loadTerminalStateAsync(opfs, defaultCwd),
+      initialState: withReachableCwd(initialState, defaultCwd, workspaceFs),
       saveHistory: (records) => saveTerminalHistoryAsync(opfs, records),
       saveState: (state) => saveTerminalStateAsync(opfs, state),
     };
   } catch {
-    const fs = (deps.syncFs ?? syncMirror)();
     return {
       backend: 'memory',
-      initialHistory: loadTerminalHistory(fs),
-      initialState: loadTerminalState(fs, defaultCwd),
-      saveHistory: async (records) => saveTerminalHistory(fs, records),
-      saveState: async (state) => saveTerminalState(fs, state),
+      initialHistory: loadTerminalHistory(workspaceFs),
+      initialState: withReachableCwd(
+        loadTerminalState(workspaceFs, defaultCwd),
+        defaultCwd,
+        workspaceFs,
+      ),
+      saveHistory: async (records) => saveTerminalHistory(workspaceFs, records),
+      saveState: async (state) => saveTerminalState(workspaceFs, state),
     };
   }
 }

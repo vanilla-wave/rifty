@@ -1,6 +1,6 @@
 import type { TerminalCommandBlock } from '@riftydev/terminal';
 import { describe, expect, it } from 'vitest';
-import { commandBlockAtViewport, commandBlockRailItems } from './terminal-command-blocks.ts';
+import { commandBlockAtViewport, commandBlockRailItems } from './command-blocks.ts';
 
 const blocks: readonly TerminalCommandBlock[] = [
   { id: 1, command: 'echo one', exitCode: 0, startLine: 2, endLine: 4 },

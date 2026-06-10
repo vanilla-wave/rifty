@@ -1,29 +1,26 @@
 import {
   RiftyTerminal,
+  type TerminalAutocompleteState,
   type TerminalCommandBlock,
+  type TerminalCommandBlockRailItem,
   type TerminalCompleter,
   type TerminalEditState,
   type TerminalGhostSuggestionProvider,
+  type TerminalHistoryRecord,
   type TerminalInputResult,
   type TerminalInputValidator,
   type TerminalLineHighlighter,
   type TerminalRawInput,
   type TerminalRewriteRule,
-} from '@riftydev/terminal';
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
-import {
-  type TerminalAutocompleteState,
   applyAutocompleteItem,
-  createAutocompleteState,
-  moveAutocompleteIndex,
-} from '../glue/terminal-autocomplete.ts';
-import {
-  type TerminalCommandBlockRailItem,
   commandBlockAtViewport,
   commandBlockRailItems,
-} from '../glue/terminal-command-blocks.ts';
-import { makeTerminalHtmlExport } from '../glue/terminal-export.ts';
-import { type TerminalHistoryRecord, searchTerminalHistory } from '../glue/terminal-history.ts';
+  createAutocompleteState,
+  makeTerminalHtmlExport,
+  moveAutocompleteIndex,
+  searchTerminalHistory,
+} from '@riftydev/terminal';
+import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { type TerminalQuickFix, detectTerminalQuickFix } from '../glue/terminal-quick-fix.ts';
 import { preferredTerminalTheme, watchPreferredTerminalTheme } from '../glue/terminal-theme.ts';
 import { Icon } from './icons.tsx';

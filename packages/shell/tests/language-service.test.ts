@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { type CompletionMode, createShellCompleter } from './shell-completion.ts';
+import {
+  type ShellCompletionMode,
+  createShellCompleter,
+  shellLineHighlightSpans,
+  validateShellInput,
+} from '../src/index.ts';
 
-function makeCompleter(options?: { mode?: CompletionMode }) {
+function makeCompleter(options?: { mode?: ShellCompletionMode }) {
   const dirs: Record<string, Array<{ name: string; isDirectory: boolean }>> = {
     '/workspace': [
       { name: 'package.json', isDirectory: false },
@@ -61,5 +66,41 @@ describe('createShellCompleter', () => {
   it('returns null for missing completion directories', () => {
     const complete = makeCompleter();
     expect(complete('cat nope/a', 10)).toBeNull();
+  });
+});
+
+describe('shellLineHighlightSpans', () => {
+  it('highlights command, string, and shell operators with raw offsets', () => {
+    expect(shellLineHighlightSpans("grep 'a b' src/app.ts && echo ok")).toEqual([
+      { start: 0, end: 4, foreground: '#7fb2ff' },
+      { start: 5, end: 10, foreground: '#c4f042' },
+      { start: 22, end: 24, foreground: '#98a1b6' },
+      { start: 25, end: 29, foreground: '#7fb2ff' },
+    ]);
+  });
+
+  it('keeps escaped quotes inside a double-quoted string span', () => {
+    expect(shellLineHighlightSpans('echo "a \\" b"')).toEqual([
+      { start: 0, end: 4, foreground: '#7fb2ff' },
+      { start: 5, end: 13, foreground: '#c4f042' },
+    ]);
+  });
+});
+
+describe('validateShellInput', () => {
+  it('treats closed commands as complete', () => {
+    expect(validateShellInput('echo ok')).toBe('complete');
+    expect(validateShellInput('echo \'ok\' && printf "x"')).toBe('complete');
+    expect(validateShellInput('echo "("')).toBe('complete');
+  });
+
+  it('keeps unterminated quotes incomplete', () => {
+    expect(validateShellInput("echo 'unterminated")).toBe('incomplete');
+    expect(validateShellInput('echo "unterminated')).toBe('incomplete');
+  });
+
+  it('keeps trailing continuations and open shell brackets incomplete', () => {
+    expect(validateShellInput('echo \\')).toBe('incomplete');
+    expect(validateShellInput('echo {')).toBe('incomplete');
   });
 });

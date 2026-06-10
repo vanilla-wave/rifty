@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeTerminalHtmlExport } from './terminal-export.ts';
+import { makeTerminalHtmlExport } from './export.ts';
 
 describe('makeTerminalHtmlExport', () => {
   it('wraps serialized terminal HTML in a downloadable document', () => {

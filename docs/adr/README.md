@@ -144,7 +144,6 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0089 | `CommandContext` gains optional stdin, isTTY/cols/rows, AbortSignal cancellation |
 | 0091 | Rich token type (quote provenance) + single-segment glob expansion |
 | 0093 | Shell-command parity harness — node:fs reuse + frozen GNU fixtures, no live host-spawn oracle |
-| 0099 | Command-not-found suggestions |
 | 0121 | Background jobs |
 
 ### terminal
@@ -152,29 +151,12 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | # | Title |
 |---|---|
 | 0094 | Terminal line-editor becomes cursor-aware — mid-line insert/delete, Home/End/Delete, Ctrl+A/Ctrl+E |
-| 0096 | Cell-width-aware terminal line editing |
-| 0097 | Readline-style keymap and history UX |
+| 0096 | Terminal line-editor model |
 | 0098 | Terminal options polish API |
-| 0100 | Command marker substrate |
-| 0101 | Alt kill-ring keymap |
-| 0102 | Line-mode bracketed paste policy |
-| 0103 | Line edit undo |
-| 0104 | Tab completion seam |
-| 0105 | xterm addon drop-ins |
-| 0106 | Terminal host line injection |
-| 0107 | Line edit redo |
-| 0108 | Terminal viewport command header seam |
-| 0109 | OSC 52 clipboard write |
-| 0110 | Wrapped-line cursor layout |
-| 0111 | OSC 8 file hyperlinks |
-| 0112 | Command-line syntax highlighting seam |
-| 0113 | Multiline input validator |
-| 0114 | IDE autocomplete dropdown host seam |
-| 0115 | Command blocks UI subset |
-| 0116 | Rich history overlay |
-| 0117 | Terminal state persistence |
-| 0118 | Terminal abbreviations and snippets |
-| 0119 | Inline image producer command |
+| 0100 | Command block metadata substrate |
+| 0104 | Host assistance seams |
+| 0105 | xterm addons and escape policy |
+| 0116 | Persisted terminal session state |
 | 0120 | AI command suggestions |
 | 0122 | Raw stdin and mouse reporting |
 

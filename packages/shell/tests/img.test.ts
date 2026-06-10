@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { img } from '../src/commands/img.ts';
+import { img } from '../src/index.ts';
 import { makeCtx } from './_ctx.ts';
 
 const BEL = String.fromCharCode(7);
