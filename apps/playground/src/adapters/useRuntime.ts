@@ -10,6 +10,18 @@ import workerUrl from '../workers/worker-entry.ts?worker&url';
 
 type Writer = (chunk: string, stream?: 'stdout' | 'stderr') => void;
 
+const REPL_HELP = [
+  'REPL quick start',
+  '  1 + 1                         evaluate an expression',
+  "  console.log('hello')          stream stdout",
+  "  require('node:path').basename('/tmp/demo.txt')",
+  '  await Promise.resolve(42)      await promises directly',
+  '',
+  'Run executes the editor file main.js.',
+  'Commands: .help, .reset',
+  '',
+].join('\n');
+
 /**
  * Solid adapter around the framework-agnostic runtime controller. This is the
  * only place where the playground UI touches the runtime — keeps the boundary
@@ -88,13 +100,25 @@ export function useRuntime() {
       return controller.eval(code);
     },
     async handleLine(line: string) {
-      if (line === '.reset') {
+      const command = line.trim();
+      if (command === '.help' || command === '?') {
+        writer?.(REPL_HELP);
+        return;
+      }
+      if (command === '.reset') {
         await controller.reset();
         attach();
         return;
       }
       if (line.trim().length === 0) return;
       await controller.eval(line);
+    },
+    writeStdin(data: string | Uint8Array) {
+      try {
+        controller.writeStdin(data);
+      } catch {
+        /* worker may be between reset/ready; stdin is best-effort */
+      }
     },
     async reset() {
       await controller.reset();

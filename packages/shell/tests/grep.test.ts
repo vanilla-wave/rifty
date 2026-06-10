@@ -125,6 +125,14 @@ it('-n with a prefix orders fields as "filename:lineno:line"', async () => {
   expect(out()).toBe('/f.txt:2:apple\n');
 });
 
+it('wraps grep filename prefixes as OSC 8 links only on a TTY', async () => {
+  seed({ '/work/f.txt': 'x\napple\n' });
+  const { ctx, out } = makeCtx({ cwd: '/work', isTTY: true });
+  const code = await grep(['-Hn', 'apple', 'f.txt'], ctx);
+  expect(code).toBe(0);
+  expect(out()).toBe('\x1b]8;;file:///work/f.txt\x07f.txt\x1b]8;;\x07:2:apple\n');
+});
+
 it('-r recurses a nested tree (files-only), prefixing each match (proves walk())', async () => {
   // Failure mode: not descending, or not using walk()'s deterministic order.
   seed({

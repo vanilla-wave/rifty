@@ -144,12 +144,21 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0089 | `CommandContext` gains optional stdin, isTTY/cols/rows, AbortSignal cancellation |
 | 0091 | Rich token type (quote provenance) + single-segment glob expansion |
 | 0093 | Shell-command parity harness — node:fs reuse + frozen GNU fixtures, no live host-spawn oracle |
+| 0121 | Background jobs |
 
 ### terminal
 
 | # | Title |
 |---|---|
 | 0094 | Terminal line-editor becomes cursor-aware — mid-line insert/delete, Home/End/Delete, Ctrl+A/Ctrl+E |
+| 0096 | Terminal line-editor model |
+| 0098 | Terminal options polish API |
+| 0100 | Command block metadata substrate |
+| 0104 | Host assistance seams |
+| 0105 | xterm addons and escape policy |
+| 0116 | Persisted terminal session state |
+| 0120 | AI command suggestions |
+| 0122 | Raw stdin and mouse reporting |
 
 ## Superseded (removed)
 

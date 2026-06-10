@@ -1,6 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { VfsError, syncMirror } from '@riftydev/vfs';
-import type { ShellCommand } from '../types.ts';
+import type { CommandContext, ShellCommand } from '../types.ts';
+import { osc8FileLink } from './_osc8.ts';
 import { dec, escapeRegExp, resolve, strerror } from './_shared.ts';
 import { walk } from './_walk.ts';
 
@@ -100,6 +101,7 @@ function grepFile(
   re: RegExp,
   opts: Opts,
   showName: boolean,
+  ctx: CommandContext,
 ): { count: number; lines: string[] } {
   const fs = syncMirror();
   const text = dec.decode(fs.readFileBytesSync(t.read));
@@ -115,7 +117,8 @@ function grepFile(
     if (!matched) continue;
     count++;
     if (opts.countOnly || opts.filesWithMatch) continue; // suppress the line itself
-    const prefix = `${showName ? `${t.show}:` : ''}${opts.lineNo ? `${i + 1}:` : ''}`;
+    const name = showName ? `${osc8FileLink(t.read, t.show, ctx)}:` : '';
+    const prefix = `${name}${opts.lineNo ? `${i + 1}:` : ''}`;
     lines.push(`${prefix}${line}`);
   }
   return { count, lines };
@@ -192,12 +195,13 @@ export const grep: ShellCommand = async (args, ctx) => {
   let anyMatch = false;
   for (const t of targets) {
     try {
-      const { count, lines } = grepFile(t, re, opts, showName);
+      const { count, lines } = grepFile(t, re, opts, showName, ctx);
       if (count > 0) anyMatch = true;
       if (opts.filesWithMatch) {
-        if (count > 0) ctx.stdout.write(`${t.show}\n`);
+        if (count > 0) ctx.stdout.write(`${osc8FileLink(t.read, t.show, ctx)}\n`);
       } else if (opts.countOnly) {
-        ctx.stdout.write(`${showName ? `${t.show}:` : ''}${count}\n`);
+        const name = showName ? `${osc8FileLink(t.read, t.show, ctx)}:` : '';
+        ctx.stdout.write(`${name}${count}\n`);
       } else {
         for (const line of lines) ctx.stdout.write(`${line}\n`);
       }

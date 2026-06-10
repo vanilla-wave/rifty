@@ -23,7 +23,8 @@ export type EvalResult =
 export type HostMessage =
   | { readonly type: 'eval'; readonly request: EvalRequest }
   | { readonly type: 'ping' }
-  | { readonly type: 'load-fixture'; readonly files: Readonly<Record<string, string>> };
+  | { readonly type: 'load-fixture'; readonly files: Readonly<Record<string, string>> }
+  | { readonly type: 'stdin'; readonly data: string | Uint8Array };
 
 export type WorkerMessage =
   | { readonly type: 'ready' }

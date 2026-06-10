@@ -11,6 +11,7 @@ function fakeRuntime(onDispose: () => void = () => {}): RuntimeController {
     dispose: onDispose,
     on: () => () => {},
     writeFile: () => {},
+    writeStdin: () => {},
     isReady: () => true,
   };
 }

@@ -7,6 +7,8 @@
 export interface ParityCase {
   /** Files preloaded into the runtime's in-memory VFS, relative to /work/. */
   readonly setup?: { readonly files?: Readonly<Record<string, string>> };
+  /** Optional stdin chunks written to both runtimes after the entry attaches listeners. */
+  readonly stdin?: readonly Uint8Array[];
   /** Source to evaluate as CJS in /work/main.js (or ESM in /work/main.mjs). */
   readonly code: string;
   /** If set, both runtimes must produce stdout matching this (in addition to matching each other). */

@@ -14,60 +14,114 @@ observable-behavior change. Tick the box when shipped.
 - [x] Cursor-aware line editor — mid-line insert/delete, Home/End/Delete, Ctrl+A/E (ADR-0094)
 - [x] Dev-mode HMR live preview via the cross-realm bridge (ADR-0095)
 - [x] Terminal no longer overlaps the status bar (xterm fit `padding`→`inset`)
+- [x] Cell-width-aware single-row editing for CJK/emoji/combining marks (ADR-0096)
+- [x] Readline-style keymap batch: prefix history, word motion, autosuggest,
+  Ctrl+C copy-vs-SIGINT, Ctrl-tier kill ring, Ctrl+R reverse search (ADR-0096)
+- [x] Alt-tier kill-ring keys: Alt+D, Alt+Backspace, Alt+Y, and
+  `macOptionIsMeta` pass-through (ADR-0096)
+- [x] Terminal options API: theme/font/contrast/a11y/cursor/copyOnSelect (ADR-0098)
+- [x] Command-not-found suggestions (ADR-0104)
+- [x] Command marker substrate: exit-code decorations, overview-ruler marks,
+  block nav, and block selection helpers (ADR-0100)
+- [x] Bracketed paste wrappers stripped for line-mode input (ADR-0096)
+- [x] Line-edit undo via Ctrl+_ / delivered Ctrl+Z (ADR-0096)
+- [x] Tab completion seam + playground command/path completion (ADR-0104)
+- [x] Terminal xterm theme follows OS light/dark preference via ADR-0098 `setTheme`
+- [x] Ctrl+Shift+Up/Down selects previous/next command block output (ADR-0100)
+- [x] xterm addon drop-ins: Ctrl/Cmd-gated web links, WebGL renderer fallback,
+  and Unicode 11 output widths (ADR-0105)
+- [x] In-terminal find overlay with Enter/Shift+Enter navigation (ADR-0105)
+- [x] Command palette seeded from shell commands (ADR-0104)
+- [x] Did-you-mean quick-fix action for command-not-found output (ADR-0104)
+- [x] Line-edit redo via Ctrl/Cmd+Shift+Z (ADR-0096)
+- [x] Quick-fix provider registry with command typo + EADDRINUSE actions (ADR-0104)
+- [x] Sticky command header over the current command block (ADR-0100)
+- [x] Shareable/exportable output via serialize text/HTML actions (ADR-0105)
+- [x] OSC 52 clipboard write, readback ignored for browser safety (ADR-0105)
+- [x] Wrapped-line cursor layout for long single-line movement/repaint (ADR-0096)
+- [x] OSC 8 grep file hyperlinks open safe workspace editor tabs (ADR-0105)
+- [x] Shell-mode command-line syntax highlighting via host spans (ADR-0096)
+- [x] Multiline input validator: Enter inserts newline until host says complete (ADR-0096)
+- [x] IDE-style autocomplete dropdown over the existing completion seam (ADR-0104)
+- [x] Command-block rail + sticky block-copy action (ADR-0100)
+- [x] Atuin-style rich history overlay with OPFS-backed records (ADR-0116)
+- [x] Terminal state persistence: rich history plus shell cwd/env saved through
+  async OPFS with session-only memory fallback (ADR-0116)
+- [x] fish abbreviations/snippets via host-provided terminal rewrite rules
+  (ADR-0096)
+- [x] Inline images: xterm image addon plus `img` builtin producer (ADR-0105)
+- [x] AI command suggestions: opt-in `#` prompt ghost suggestions constrained to
+  rifty coreutils and never auto-run (ADR-0120)
+- [x] Background jobs: trailing `cmd &` starts transitional shell job with
+  `jobs` table and async-output-safe prompt repaint (ADR-0121)
+- [x] Mouse reporting: foreground raw stdin route plus `mouse-demo` verifies
+  DECSET 1000/1006 click reports in Chromium (ADR-0122)
 
 ## Foundation (do first — unblocks several below)
-- [ ] **Cell-width-correct, wrapped-line cursor model.** Today the editor counts
-  UTF-16 code units and assumes a single visual row (`'\b'.repeat(str.length)`),
-  so CJK/emoji and wrapped long lines desync the caret. Rewrite edit primitives
-  (`handleBackspace`/`handleDelete`/`insertPrintable`/`moveTo*`/`replaceBuffer`)
-  to an offset→(row,col) cell-aware model. **I:high E:high** · app-layer ·
-  prerequisite for multiline, syntax highlight, CJK, long completions/suggestions.
+- [x] **Wrapped-line cursor model.** Cell-width math for CJK/emoji/combining
+  edits shipped in ADR-0096; ADR-0096 adds offset→(row,col) repaint math for
+  long single-line input. Multiline, syntax highlight, and anchored dropdowns
+  remain separate follow-ups. **I:high E:high** · app-layer.
 
 ## Tier 1 — quick wins (zero-dep app-layer, ship as one batch)
-- [ ] **Prefix history search (Up/Down)** — filter history by the typed prefix; empty prefix = today's behaviour. **I:high E:low** · app-layer.
-- [ ] **Word-wise motion (Ctrl+←/→, Alt+←/→)** — add `word-left/right` to `classifyKey` before the catch-all; reuse the boundary scanner for Ctrl-W. **I:high E:low** · app-layer.
-- [ ] **Fish-style inline autosuggestions** — dim (`\x1b[2m`) suffix from history at EOL; accept on →/End/Ctrl+E. Avoid DECSC/DECRC. **I:high E:low** · app-layer.
-- [ ] **Ctrl+C: copy-on-selection vs SIGINT** — `attachCustomKeyEventHandler`; copy when a selection exists, else SIGINT. The #1 web-terminal papercut. **I:high E:low** · app-layer.
-- [ ] **Emacs/readline keymap** — Ctrl-F/B/P/N/D/T/L (+ those needing `preventDefault`). **I:high E:low** · app-layer · `ADR` (parity behavior; updates the `\x0c→ignored` keys.test contract).
-- [ ] **Mouse selection → copy** — selection already works; wire copy + opt-in `copyOnSelect`. Wrap behind `RiftyTerminal` (D-002). **I:med E:low** · app-layer.
-- [ ] **Clickable URLs** — `@xterm/addon-web-links`, gated on Cmd/Ctrl-click. **I:med E:low** · `dep`+`ADR`.
-- [ ] **In-terminal find (Ctrl+F)** — `@xterm/addon-search` + Solid find-box. **I:med E:low** · `dep`+`ADR`.
-- [ ] **Copy-on-select** — `onSelectionChange`→clipboard (guard empty, always `.catch()`). **I:med E:low** · app-layer.
-- [ ] **Themes + OS light/dark** — `options.theme` swap + `matchMedia`. **I:med E:low** · `ADR` (new public `setTheme`).
-- [ ] **`minimumContrastRatio: 4.5`** — one-line WCAG-AA legibility. **I:low E:low** · core option.
-- [ ] **Did-you-mean (command-not-found)** — Damerau-Levenshtein over builtins at the shell error site; diagnostic-only, exit stays 127. **I:med E:low** · shell-side.
-- [ ] **GPU rendering (WebGL) + DOM fallback** — `@xterm/addon-webgl` in try/catch; keep DOM renderer in e2e. **I:med E:low** · `dep`+`ADR`.
+- [x] **Prefix history search (Up/Down)** — filter history by the typed prefix; empty prefix = today's behaviour. **I:high E:low** · app-layer.
+- [x] **Word-wise motion (Ctrl+←/→, Alt+←/→)** — add `word-left/right` to `classifyKey` before the catch-all; reuse the boundary scanner for Ctrl-W. **I:high E:low** · app-layer.
+- [x] **Fish-style inline autosuggestions** — dim (`\x1b[2m`) suffix from history at EOL; accept on →/End/Ctrl+E. Avoid DECSC/DECRC. **I:high E:low** · app-layer.
+- [x] **Ctrl+C: copy-on-selection vs SIGINT** — `attachCustomKeyEventHandler`; copy when a selection exists, else SIGINT. The #1 web-terminal papercut. **I:high E:low** · app-layer.
+- [x] **Emacs/readline keymap** — Ctrl-F/B/P/N/D/T/L (+ those needing `preventDefault`). **I:high E:low** · app-layer · `ADR` (parity behavior; updates the `\x0c→ignored` keys.test contract).
+- [x] **Mouse selection → copy** — selection already works; wire copy + opt-in `copyOnSelect`. Wrap behind `RiftyTerminal` (D-002). **I:med E:low** · app-layer.
+- [x] **Clickable URLs** — `@xterm/addon-web-links`, gated on Cmd/Ctrl-click. **I:med E:low** · `dep`+`ADR`.
+- [x] **In-terminal find (Ctrl+F)** — `@xterm/addon-search` + Solid find-box. **I:med E:low** · `dep`+`ADR`.
+- [x] **Copy-on-select** — `onSelectionChange`→clipboard (guard empty, always `.catch()`). **I:med E:low** · app-layer.
+- [x] **Themes + OS light/dark** — `options.theme` swap + `matchMedia`. **I:med E:low** · `ADR` (new public `setTheme`).
+- [x] **`minimumContrastRatio: 4.5`** — one-line WCAG-AA legibility. **I:low E:low** · core option.
+- [x] **Did-you-mean (command-not-found)** — Damerau-Levenshtein over builtins at the shell error site; diagnostic-only, exit stays 127. **I:med E:low** · shell-side.
+- [x] **GPU rendering (WebGL) + DOM fallback** — `@xterm/addon-webgl` in try/catch; keep DOM renderer in e2e. **I:med E:low** · `dep`+`ADR`.
 
 ## Tier 2 — high impact (medium effort)
-- [ ] **Kill-ring (Ctrl-W/U/K/Y, Alt-D/Backspace/Y)** — Ctrl-tier always-on; Alt-tier behind `macOptionIsMeta`. Note Ctrl-W vs Alt-Backspace word rules differ. **I:high E:med** · app-layer.
-- [ ] **Reverse history search (Ctrl+R)** — search-mode state machine + `(reverse-i-search)` prompt; `preventDefault` browser default. **I:high E:med** · app-layer.
-- [ ] **Tab completion + menu/LCP** — inject `completer(line,cursor)` on `RiftyTerminalOptions`; reuse `Shell.commands` + VFS `readdir` + `packColumns`/`matchSegment`. The capability unlock. **I:high E:med** · app-layer · `ADR` (public callback).
-- [ ] **OSC 8 hyperlinks → vfs/editor** — TTY-gated emit in coreutils + core `linkHandler` routing file paths to editor tabs. **I:med→high E:low–med** · `ADR` (new `onLink`) · security: scheme allowlist, reject `../`.
-- [ ] **Exit-status gutter marks** — `registerMarker`/`registerDecoration` per command (green/red, height=1); needs exit code threaded back. The substrate for #blocks. **I:high E:med** · `ADR` (`onInput`→exitCode).
-- [ ] **Scrollbar history marks + jump (Ctrl-↑/↓)** — markers + `overviewRulerWidth` + `scrollToLine`. **I:med E:low** · app-layer (rides the marker substrate).
-- [ ] **Syntax highlighting of the command line** — SGR truecolor in the echo path via an offset-preserving lexer; shell-mode only. **I:high E:med** · app-layer (needs cell-width foundation).
-- [ ] **Jump-to-prompt nav (Ctrl/Cmd+↑/↓)** — key handler + marker walk + `scrollToLine`; Shift→`selectLines`. **I:med E:med** · app-layer.
-- [ ] **Select-whole-command-output** — start/end markers + gutter-decoration click → `selectLines`→copy. **I:med E:med** · app-layer.
-- [ ] **Command palette (Ctrl/Cmd+Shift+P)** — Solid overlay + additive `injectLine`/`focus`; seed from `Shell.commands`. **I:med E:med** · `ADR` (public methods).
-- [ ] **Sticky command header** — markers + `onScroll` + DOM overlay pinned over `.xterm`. **I:med E:med** · app-layer (after marker substrate).
-- [ ] **Quick-fixes from output (lightbulb)** — `QuickFixProvider` registry at the `App.onLine` seam (EADDRINUSE→kill+rerun, did-you-mean, etc.). **I:med E:med** · `ADR` (prefill/run method).
-- [ ] **CJK/emoji widths** — `@xterm/addon-unicode11` fixes output; editor needs the cell-width foundation for correct editing. **I:med E:med** · `dep`+`ADR`.
-- [ ] **Bracketed paste / robust paste** — `Terminal.paste()` + DECSET 2004 (mostly redundant today). **I:low E:low** · app-layer.
-- [ ] **Undo/redo of line edits** — snapshot stack; ship undo-only first (redo binding is byte-collision-constrained). **I:med E:low** · app-layer.
-- [ ] **Screen-reader / a11y mode** — core `screenReaderMode`, opt-in (conflicts with Ctrl+R/F). **I:low E:low** · core option.
+- [x] **Kill-ring (Ctrl-W/U/K/Y, Alt-D/Backspace/Y)** — Ctrl-tier always-on; Alt-tier behind `macOptionIsMeta`. Note Ctrl-W vs Alt-Backspace word rules differ. **I:high E:med** · app-layer.
+- [x] **Reverse history search (Ctrl+R)** — search-mode state machine + `(reverse-i-search)` prompt; `preventDefault` browser default. **I:high E:med** · app-layer.
+- [x] **Tab completion + menu/LCP** — inject `completer(line,cursor)` on `RiftyTerminalOptions`; reuse `Shell.commands` + VFS `readdir` + `packColumns`/`matchSegment`. The capability unlock. **I:high E:med** · app-layer · `ADR` (public callback).
+- [x] **OSC 8 hyperlinks → vfs/editor** — TTY-gated emit in coreutils + core `linkHandler` routing file paths to editor tabs. **I:med→high E:low–med** · `ADR` (new `onLink`) · security: scheme allowlist, reject `../`.
+- [x] **Exit-status gutter marks** — `registerMarker`/`registerDecoration` per command (green/red, height=1); needs exit code threaded back. The substrate for #blocks. **I:high E:med** · `ADR` (`onInput`→exitCode).
+- [x] **Scrollbar history marks + jump (Ctrl-↑/↓)** — markers + `overviewRulerWidth` + `scrollToLine`. **I:med E:low** · app-layer (rides the marker substrate).
+- [x] **Syntax highlighting of the command line** — SGR truecolor in the echo path via an offset-preserving lexer; shell-mode only. **I:high E:med** · app-layer (needs cell-width foundation).
+- [x] **Jump-to-prompt nav (Ctrl/Cmd+↑/↓)** — key handler + marker walk + `scrollToLine`; Shift→`selectLines`. **I:med E:med** · app-layer.
+- [x] **Select-whole-command-output** — start/end markers + gutter-decoration click → `selectLines`→copy. **I:med E:med** · app-layer.
+- [x] **Command palette (Ctrl/Cmd+Shift+P)** — Solid overlay + additive `injectLine`/`focus`; seed from `Shell.commands`. **I:med E:med** · `ADR` (public methods).
+- [x] **Sticky command header** — markers + `onScroll` + DOM overlay pinned over `.xterm`. **I:med E:med** · app-layer (after marker substrate).
+- [x] **Quick-fixes from output (lightbulb)** — `QuickFixProvider` registry at the `App.onLine` seam (EADDRINUSE→kill+rerun, did-you-mean, etc.). **I:med E:med** · `ADR` (prefill/run method).
+- [x] **CJK/emoji widths** — `@xterm/addon-unicode11` fixes output; editor needs the cell-width foundation for correct editing. **I:med E:med** · `dep`+`ADR`.
+- [x] **Bracketed paste / robust paste** — `Terminal.paste()` + DECSET 2004 (mostly redundant today). **I:low E:low** · app-layer.
+- [x] **Undo of line edits** — snapshot stack; Ctrl+_ / delivered Ctrl+Z. **I:med E:low** · app-layer.
+- [x] **Redo of line edits** — binding still byte-collision-constrained. **I:med E:low** · app-layer.
+- [x] **Screen-reader / a11y mode** — core `screenReaderMode`, opt-in (conflicts with Ctrl+R/F). **I:low E:low** · core option.
 
 ## Tier 3 — ambitious / optional (gated on prerequisites)
-- [ ] **Multi-line editing + input validator** — Enter-when-complete; the cost is the cell-width/wrapped-layout rewrite. **I:med E:high** · app-layer.
-- [ ] **IDE-style autocomplete dropdown (Fig/Amazon Q)** — `registerDecoration` anchor + portaled DOM list; build atop tab-completion. **I:high E:high** · app-layer.
-- [ ] **Command blocks (VS Code subset)** — gutter rail + ruler marks + nav + block-copy (NOT Warp widgets). **I:high E:high** · app-layer (marker substrate).
-- [ ] **Atuin-style rich history (Ctrl+R overlay)** — DOM overlay over rich in-memory records + OPFS persistence; capture metadata directly. **I:high E:high** · app-layer.
-- [ ] **Background blocks (`&` jobs)** — blocked on `shell.background` (NotImplementedError) + pipes/redirect; needs a job table. **I:med E:high** · shell+kernel.
-- [ ] **Inline images (SIXEL/IIP)** — `@xterm/addon-image` + an `img` coreutil producer. **I:low E:med** · `dep`+`ADR`.
-- [ ] **AI command suggestions (`#`-prefix)** — ghost-text plumbing + endpoint/key; constrain to rifty's coreutils; opt-in, never auto-run. **I:med E:med** · `ADR`.
-- [ ] **State persistence** — history/cwd/env to OPFS (addon-serialize only restores visual scrollback). **I:med E:med** · app-layer.
-- [ ] **Shareable/exportable output** — `serializeAsHTML` → clipboard-HTML / download / fragment-URL. **I:low E:med** · `dep`.
-- [ ] **Configurable cursor style (DECSCUSR)** / **OSC 52 clipboard write** (drop read for security) / **fish abbreviations** / **snippets**. **I:low E:low–med**.
-- [ ] **Mouse reporting (DECSET 1000/1002/1006)** — render side free, but needs raw-stdin TTY mode + a TUI consumer first. **I:low E:high** · kernel+shell.
+- [x] **Multi-line editing + input validator** — Enter-when-complete; the cost is the cell-width/wrapped-layout rewrite. **I:med E:high** · app-layer.
+- [x] **IDE-style autocomplete dropdown (Fig/Amazon Q)** — DOM list in the
+  playground over the existing tab-completion seam; exact cursor anchoring remains
+  a polish follow-up. **I:high E:high** · app-layer.
+- [x] **Command blocks (VS Code subset)** — gutter rail + ruler marks + nav + block-copy (NOT Warp widgets). **I:high E:high** · app-layer (marker substrate).
+- [x] **Atuin-style rich history (Ctrl+R overlay)** — DOM overlay over rich records
+  captured at the terminal line seam and persisted through async OPFS when
+  available.
+  **I:high E:high** · app-layer.
+- [x] **Background blocks (`&` jobs)** — shipped as transitional shell jobs:
+  trailing `cmd &`, `jobs` table, dispose cleanup, async-output-safe prompt
+  repaint; full kernel PID/fg/bg job control remains future work. **I:med
+  E:high** · shell+kernel.
+- [x] **Inline images (SIXEL/IIP)** — `@xterm/addon-image` + an `img` coreutil producer. **I:low E:med** · `dep`+`ADR`.
+- [x] **AI command suggestions (`#`-prefix)** — ghost-text plumbing + endpoint/key; constrain to rifty's coreutils; opt-in, never auto-run. **I:med E:med** · `ADR`.
+- [x] **State persistence** — history/cwd/env to OPFS (addon-serialize only restores visual scrollback). **I:med E:med** · app-layer.
+- [x] **Shareable/exportable output** — `serializeAsHTML` → clipboard-HTML / download / fragment-URL. **I:low E:med** · `dep`.
+- [x] **Configurable cursor style (DECSCUSR)** — `cursorStyle` pass-through (ADR-0098). **I:low E:low–med**.
+- [x] **fish abbreviations** / **snippets**. **I:low E:low–med**.
+- [x] **OSC 52 clipboard write** (drop read for security). **I:low E:low–med**.
+- [x] **Mouse reporting (DECSET 1000/1002/1006)** — foreground raw stdin
+  route plus a `mouse-demo` TUI consumer; browser e2e covers DECSET 1000/1006,
+  `onBinary` unit coverage keeps default byte reports intact. **I:low E:high**
+  · terminal+shell.
 
 ## Out of scope — NOT feasible in a browser (don't build)
 Middle-click X11 PRIMARY paste · Warp/Wave atomic block *widgets* (ship the VS Code

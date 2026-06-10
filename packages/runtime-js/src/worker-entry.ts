@@ -18,7 +18,7 @@ import { initBackend, syncMirror } from '@riftydev/vfs';
 import { installMemoryFs } from '@riftydev/vfs/internal';
 import { Buffer } from './builtins/buffer.ts';
 import { __setCreateRequireImpl } from './builtins/module.ts';
-import { installProcessGlobals, setProcessCwd } from './builtins/process.ts';
+import { installProcessGlobals, setProcessCwd, writeProcessStdin } from './builtins/process.ts';
 import { installTimerGlobals } from './builtins/timers.ts';
 import { publishRuntimeGlobal } from './internal/worker-globals.ts';
 import { createModuleLoader } from './module-loader/index.ts';
@@ -134,6 +134,10 @@ self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
   // `ping` is a liveness probe — answer immediately, no backend needed.
   if (msg.type === 'ping') {
     post({ type: 'pong' });
+    return;
+  }
+  if (msg.type === 'stdin') {
+    writeProcessStdin(msg.data);
     return;
   }
   // `eval`/`load-fixture` need the wired backend + loader. Awaiting `boot` lets

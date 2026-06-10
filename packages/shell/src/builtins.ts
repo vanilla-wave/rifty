@@ -23,6 +23,7 @@ import { envCmd } from './commands/env.ts';
 import { find } from './commands/find.ts';
 import { grep } from './commands/grep.ts';
 import { head } from './commands/head.ts';
+import { type ShellJobListItem, jobs } from './commands/jobs.ts';
 import { ls } from './commands/ls.ts';
 import { mkdir } from './commands/mkdir.ts';
 import { mv } from './commands/mv.ts';
@@ -39,9 +40,44 @@ import { wc } from './commands/wc.ts';
 import { which } from './commands/which.ts';
 import type { ShellCommand } from './types.ts';
 
+export const CORE_COMMAND_NAMES = [
+  'pwd',
+  'cd',
+  'echo',
+  'ls',
+  'cat',
+  'mkdir',
+  'rm',
+  'env',
+  'find',
+  'grep',
+  'which',
+  'clear',
+  'touch',
+  'head',
+  'jobs',
+  'tail',
+  'wc',
+  'basename',
+  'dirname',
+  'realpath',
+  'seq',
+  'sleep',
+  'true',
+  'false',
+  'printf',
+  'cp',
+  'mv',
+] as const;
+
+export function coreCommandNames(): string[] {
+  return [...CORE_COMMAND_NAMES].sort();
+}
+
 export function builtinCommands(
   setCwd: (p: string) => void,
   hasCommand: (name: string) => boolean,
+  listJobs: () => readonly ShellJobListItem[],
 ): Record<string, ShellCommand> {
   return {
     pwd,
@@ -58,6 +94,7 @@ export function builtinCommands(
     clear,
     touch,
     head,
+    jobs: jobs(listJobs),
     tail,
     wc,
     basename,

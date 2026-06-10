@@ -43,6 +43,13 @@ export interface NodeProcessShim extends EventEmitter {
   cwd(): string;
   stdout: { write(chunk: string | Uint8Array): boolean };
   stderr: { write(chunk: string | Uint8Array): boolean };
+  stdin: EventEmitter & {
+    isTTY: boolean;
+    fd: number;
+    setEncoding(encoding: string | null): void;
+    resume(): void;
+    pause(): void;
+  };
   exit(code?: number): never;
   /**
    * Send a structured-cloned message to the parent (ADR-0045). Returns `false`
@@ -79,6 +86,66 @@ function makeStdioWriter(port: MessagePort): { write(chunk: string | Uint8Array)
   };
 }
 
+function makeStdinReader(port: MessagePort): NodeProcessShim['stdin'] {
+  const stdin = new EventEmitter() as NodeProcessShim['stdin'];
+  let encoding: string | null = null;
+  const pending: Array<string | Uint8Array> = [];
+  let decoder = new TextDecoder();
+  const normalize = (data: unknown): string | Uint8Array | null => {
+    if (typeof data === 'string') return data;
+    if (!(data instanceof Uint8Array)) return null;
+    if (encoding && /^utf-?8$/iu.test(encoding)) {
+      const text = decoder.decode(data, { stream: true });
+      return text.length === 0 ? null : text;
+    }
+    return data;
+  };
+  const flush = (): void => {
+    if (stdin.listenerCount('data') === 0) return;
+    while (pending.length > 0) {
+      const chunk = pending.shift();
+      if (chunk !== undefined) stdin.emit('data', chunk);
+    }
+  };
+
+  Object.assign(stdin, {
+    isTTY: false,
+    fd: 0,
+    setEncoding(next: string | null) {
+      encoding = next;
+      decoder = new TextDecoder();
+    },
+    resume() {
+      flush();
+    },
+    pause() {},
+  });
+  stdin.on('newListener', (event) => {
+    if (event === 'data') queueMicrotask(flush);
+  });
+  stdin.on('end', () => {
+    if (!encoding || !/^utf-?8$/iu.test(encoding)) return;
+    const tail = decoder.decode();
+    if (tail.length === 0) return;
+    if (stdin.listenerCount('data') === 0) {
+      pending.push(tail);
+      return;
+    }
+    stdin.emit('data', tail);
+  });
+  port.onmessage = (ev: MessageEvent): void => {
+    const chunk = normalize(ev.data);
+    if (chunk == null) return;
+    if (stdin.listenerCount('data') === 0) {
+      pending.push(chunk);
+      return;
+    }
+    stdin.emit('data', chunk);
+  };
+  port.start();
+  return stdin;
+}
+
 /**
  * Concrete `NodeProcessShim` subclass of {@link EventEmitter}. Owns the
  * fork-IPC port lifecycle (ADR-0045).
@@ -93,6 +160,7 @@ class WorkerNodeProcessShim extends EventEmitter implements NodeProcessShim {
   readonly env: Readonly<Record<string, string>>;
   readonly stdout: { write(chunk: string | Uint8Array): boolean };
   readonly stderr: { write(chunk: string | Uint8Array): boolean };
+  readonly stdin: NodeProcessShim['stdin'];
   readonly #cwd: string;
   readonly #ipcPort: MessagePort;
   #ipcDisconnected = false;
@@ -106,6 +174,7 @@ class WorkerNodeProcessShim extends EventEmitter implements NodeProcessShim {
     this.#cwd = spec.cwd;
     this.stdout = makeStdioWriter(spec.stdio.stdout);
     this.stderr = makeStdioWriter(spec.stdio.stderr);
+    this.stdin = makeStdinReader(spec.stdio.stdin);
     this.#ipcPort = spec.stdio.ipc;
 
     // Browsers auto-start a port only with `addEventListener('message')`; using

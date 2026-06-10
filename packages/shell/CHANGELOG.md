@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- **Trailing `&` after a compound separator now backgrounds only the final
+  segment.** `echo a ; slow &` runs `echo a` in the foreground and starts only
+  `slow` as a background job; `&&`/`||` short-circuit semantics are preserved.
+
 - **Review pass 2026-06-07** (see `docs/backlog/review-2026-06-07.md`):
   - **`rm -rf $UNSET` no longer wipes the cwd.** An unquoted word that expands to
     nothing (`$UNSET`) is now elided (bash word-splitting) in `expandArgs`, so it
@@ -42,6 +46,31 @@
 
 ### Added
 
+- **Command-not-found suggestions (ADR-0104).** Unknown commands still exit 127,
+  but close typos now print one conservative `Did you mean 'cmd'?` diagnostic
+  from the current command registry, including custom `registerCommand`
+  commands. Distant names stay quiet.
+- **Command-name completion seam (ADR-0104).** `Shell.commandNames()` returns a
+  sorted list of builtin + registered command names so hosts can complete argv-0
+  without reaching into the private command registry.
+- **Shell env snapshot seam (ADR-0116).** `Shell.envSnapshot()` returns a
+  defensive copy of the mutable shell env so hosts can persist terminal state
+  without exposing the internal env object.
+- **Inline image producer (ADR-0105).** New `img` builtin emits a tiny iTerm
+  inline-image PNG sequence on TTY output and writes nothing on non-TTY output.
+- **Core command allowlist (ADR-0120).** `coreCommandNames()` exposes builtin
+  coreutils only, excluding host-registered commands such as `npm`; playground AI
+  command suggestions use it as their safety boundary.
+- **Background jobs (ADR-0121).** Trailing `cmd &` starts a shell-level
+  background job in a cloned shell, returns the prompt immediately, streams
+  output through `onChunk`, and records status in the new `jobs` builtin.
+  Non-trailing/nested `&`, pipes, and input redirect stay loud unsupported paths.
+- **Foreground stdin and mouse demo (ADR-0122).** `RunOptions.stdin` now flows
+  to `ctx.stdin`, and the new `mouse-demo` builtin enables DECSET 1000/1006,
+  reads one raw input chunk, then prints escaped bytes for browser e2e coverage.
+- **OSC 8 grep file links (ADR-0105).** In interactive TTY output, `grep`
+  filename prefixes are wrapped in OSC 8 `file://` links to their resolved VFS
+  path while preserving the GNU/as-given label. Non-TTY output stays byte-stable.
 - **Rich terminal builtins:** rich `ls` (column layout via `_columns`, `-l`/`-a`/`-1`,
   `--color=auto/always/never` SGR via `_sgr`), `grep -r/-n/-i/-v/-c` (tri-state
   exit 0/1/2), `find` (path/`-name`/`-type` over `_walk`), `which NAME...`

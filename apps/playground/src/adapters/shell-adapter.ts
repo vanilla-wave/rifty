@@ -14,6 +14,7 @@
  */
 
 import { Shell, type ShellCommand, type ShellOptions } from '@riftydev/shell';
+import type { TerminalRawInput } from '@riftydev/terminal';
 import { onCleanup } from 'solid-js';
 
 type Writer = (chunk: string, stream?: 'stdout' | 'stderr') => void;
@@ -45,9 +46,12 @@ export interface RunContext {
 export interface ShellSession {
   attachWriter(write: Writer): void;
   runLine(input: string, term?: RunContext): Promise<number>;
+  writeStdin(data: TerminalRawInput): void;
   interrupt(): void;
   registerCommand(name: string, cmd: ShellCommand): void;
+  commandNames(): readonly string[];
   cwd(): string;
+  env(): Record<string, string>;
   dispose(): void;
 }
 
@@ -59,6 +63,7 @@ export function useShellSession(options: ShellOptions = {}): ShellSession {
   let writer: Writer | null = null;
   // AbortController for the in-flight run; `interrupt()` aborts it (Ctrl+C).
   let active: AbortController | null = null;
+  let activeStdin: StdinQueue | null = null;
   const shell = new Shell(options);
 
   // Disposer for lifecycle parity with `useRuntime`; the shell holds no host
@@ -66,7 +71,10 @@ export function useShellSession(options: ShellOptions = {}): ShellSession {
   onCleanup(() => {
     writer = null;
     active?.abort();
+    activeStdin?.close();
     active = null;
+    activeStdin = null;
+    shell.dispose();
   });
 
   return {
@@ -77,7 +85,9 @@ export function useShellSession(options: ShellOptions = {}): ShellSession {
       // No-op on empty input: re-render the prompt without touching shell state.
       if (input.trim().length === 0) return 0;
       const controller = new AbortController();
+      const stdin = new StdinQueue();
       active = controller;
+      activeStdin = stdin;
       try {
         const result = await shell.run(input, {
           onChunk: (chunk, stream) => {
@@ -89,11 +99,17 @@ export function useShellSession(options: ShellOptions = {}): ShellSession {
           isTTY: true,
           cols: term?.cols,
           rows: term?.rows,
+          stdin,
         });
         return result.exitCode;
       } finally {
         if (active === controller) active = null;
+        if (activeStdin === stdin) activeStdin = null;
+        stdin.close();
       }
+    },
+    writeStdin(data: TerminalRawInput): void {
+      activeStdin?.write(data);
     },
     interrupt(): void {
       active?.abort();
@@ -101,13 +117,55 @@ export function useShellSession(options: ShellOptions = {}): ShellSession {
     registerCommand(name: string, cmd: ShellCommand): void {
       shell.registerCommand(name, cmd);
     },
+    commandNames(): readonly string[] {
+      return shell.commandNames();
+    },
     cwd(): string {
       return shell.cwd;
+    },
+    env(): Record<string, string> {
+      return shell.envSnapshot();
     },
     dispose(): void {
       writer = null;
       active?.abort();
+      activeStdin?.close();
       active = null;
+      activeStdin = null;
+      shell.dispose();
     },
   };
+}
+
+class StdinQueue {
+  private readonly enc = new TextEncoder();
+  private readonly chunks: Uint8Array[] = [];
+  private readonly readers: Array<(chunk: Uint8Array | null) => void> = [];
+  private closed = false;
+
+  write(data: TerminalRawInput): void {
+    if (this.closed) return;
+    const chunk = typeof data === 'string' ? this.enc.encode(data) : data;
+    const reader = this.readers.shift();
+    if (reader) {
+      reader(chunk);
+      return;
+    }
+    this.chunks.push(chunk);
+  }
+
+  async read(): Promise<Uint8Array | null> {
+    const chunk = this.chunks.shift();
+    if (chunk) return chunk;
+    if (this.closed) return null;
+    return new Promise((resolve) => {
+      this.readers.push(resolve);
+    });
+  }
+
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    for (const reader of this.readers.splice(0)) reader(null);
+  }
 }

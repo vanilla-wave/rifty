@@ -20,7 +20,12 @@
   "module": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./autocomplete": "./src/autocomplete.ts",
+    "./command-blocks": "./src/command-blocks.ts",
+    "./export": "./src/export.ts",
+    "./history": "./src/history.ts",
+    "./state": "./src/state.ts"
   },
   "files": ["dist", "CHANGELOG.md"],
   "publishConfig": {
@@ -32,16 +37,42 @@
       ".": {
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
+      },
+      "./autocomplete": {
+        "types": "./dist/autocomplete.d.ts",
+        "import": "./dist/autocomplete.js"
+      },
+      "./command-blocks": {
+        "types": "./dist/command-blocks.d.ts",
+        "import": "./dist/command-blocks.js"
+      },
+      "./export": {
+        "types": "./dist/export.d.ts",
+        "import": "./dist/export.js"
+      },
+      "./history": {
+        "types": "./dist/history.d.ts",
+        "import": "./dist/history.js"
+      },
+      "./state": {
+        "types": "./dist/state.d.ts",
+        "import": "./dist/state.js"
       }
     }
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:run": "vitest run packages/terminal",
+    "test:run": "vitest run src",
     "build": "tsup"
   },
   "dependencies": {
-    "@xterm/xterm": "^5.5.0",
-    "@xterm/addon-fit": "^0.10.0"
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-image": "^0.9.0",
+    "@xterm/addon-search": "^0.16.0",
+    "@xterm/addon-serialize": "^0.14.0",
+    "@xterm/addon-unicode11": "^0.9.0",
+    "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/addon-webgl": "^0.19.0",
+    "@xterm/xterm": "^5.5.0"
   }
 }

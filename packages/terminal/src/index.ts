@@ -1,2 +1,67 @@
-export { RiftyTerminal, type RiftyTerminalOptions } from './terminal.ts';
+export {
+  RiftyTerminal,
+  type RiftyTerminalOptions,
+  type TerminalBusyInputEvent,
+  type TerminalCommandBlock,
+  type TerminalCompleter,
+  type TerminalCompletionItem,
+  type TerminalCompletionResult,
+  type TerminalEditState,
+  type TerminalGhostSuggestion,
+  type TerminalGhostSuggestionProvider,
+  type TerminalGhostSuggestionState,
+  type TerminalHighlightSpan,
+  type TerminalImageOptions,
+  type TerminalInputHandler,
+  type TerminalInputResult,
+  type TerminalInputValidation,
+  type TerminalInputValidator,
+  type TerminalLineHighlighter,
+  type TerminalRawInput,
+  type TerminalRewriteRule,
+  type TerminalSearchAddonOptions,
+  type TerminalSearchOptions,
+  type TerminalSerializeHtmlOptions,
+  type TerminalSerializeOptions,
+  type TerminalWebglOptions,
+  type TerminalWebLinksOptions,
+} from './terminal.ts';
 export type { TerminalStream } from './types.ts';
+export {
+  applyAutocompleteItem,
+  createAutocompleteState,
+  moveAutocompleteIndex,
+  type TerminalAutocompleteState,
+} from './autocomplete.ts';
+export {
+  commandBlockAtViewport,
+  commandBlockRailItems,
+  commandBlockStatus,
+  type TerminalCommandBlockRailItem,
+  type TerminalCommandBlockStatus,
+} from './command-blocks.ts';
+export { makeTerminalHtmlExport, type TerminalExportArtifact } from './export.ts';
+export {
+  TERMINAL_HISTORY_LIMIT,
+  TERMINAL_HISTORY_PATH,
+  addTerminalHistoryRecord,
+  loadTerminalHistory,
+  loadTerminalHistoryAsync,
+  saveTerminalHistory,
+  saveTerminalHistoryAsync,
+  searchTerminalHistory,
+  type TerminalHistoryFs,
+  type TerminalHistoryMode,
+  type TerminalHistoryRecord,
+  type TerminalHistoryVfs,
+} from './history.ts';
+export {
+  TERMINAL_STATE_PATH,
+  loadTerminalState,
+  loadTerminalStateAsync,
+  saveTerminalState,
+  saveTerminalStateAsync,
+  type TerminalState,
+  type TerminalStateFs,
+  type TerminalStateVfs,
+} from './state.ts';
