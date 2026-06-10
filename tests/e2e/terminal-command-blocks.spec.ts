@@ -8,6 +8,15 @@ async function selectDevPreset(page: Page): Promise<void> {
 }
 
 test.describe('Terminal command blocks UX', () => {
+  test('bottom panel is named Shell in dev mode', async ({ page }) => {
+    await page.goto('/');
+    await selectDevPreset(page);
+    await expect(page.getByRole('button', { name: 'Collapse Shell' })).toContainText('Shell');
+    await expect(page.locator('[data-testid="console"] .rf-console__sub')).toContainText(
+      '/workspace',
+    );
+  });
+
   test('rail items expose command preview and copy actions without reading renderer rows', async ({
     page,
   }) => {

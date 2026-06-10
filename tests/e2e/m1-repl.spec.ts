@@ -10,6 +10,14 @@ async function terminalBuffer(page: Page): Promise<string> {
 }
 
 test.describe('M1 — JS Execution', () => {
+  test('bottom panel is named REPL in worker mode', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('button', { name: 'Collapse REPL' })).toContainText('REPL');
+    await expect(page.locator('[data-testid="console"] .rf-console__sub')).toContainText(
+      'JavaScript worker',
+    );
+  });
+
   test('terminal evaluates expressions', async ({ page }) => {
     await page.goto('/');
     const term = page.locator('[data-testid="terminal"]');

@@ -314,6 +314,9 @@ export function App(props: AppProps) {
           ],
         }
       : { label: 'Shell', detail: 'Commands run in /workspace; running programs own stdin.' };
+  const terminalTitle = (): string => (machine.mode() === 'repl' ? 'REPL' : 'Shell');
+  const terminalSub = (): string =>
+    machine.mode() === 'repl' ? 'JavaScript worker' : `${shell.cwd()} · terminal`;
 
   const programTitle = (): string => (machine.mode() === 'repl' ? 'main.js' : 'src/main.js');
   const hasPreview = (): boolean => machine.mode() === 'dev' || machine.mode() === 'real-vite';
@@ -483,7 +486,8 @@ export function App(props: AppProps) {
             />
 
             <BottomPanel
-              sub={machine.mode() === 'repl' ? 'worker · stdout / stderr' : 'shell'}
+              title={terminalTitle()}
+              sub={terminalSub()}
               modeHint={terminalModeHint()}
               collapsed={layout.consoleCollapsed()}
               onToggleCollapse={() => layout.toggleConsole()}

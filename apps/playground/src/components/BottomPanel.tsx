@@ -19,6 +19,7 @@ import type {
 import { type TerminalDims, type TerminalModeHint, TerminalPanel } from './TerminalPanel.tsx';
 
 export function BottomPanel(props: {
+  title: string;
   sub: string;
   modeHint?: TerminalModeHint;
   collapsed: boolean;
@@ -44,13 +45,13 @@ export function BottomPanel(props: {
           type="button"
           class="rf-console__toggle"
           aria-expanded={!props.collapsed}
-          aria-label={props.collapsed ? 'Expand console' : 'Collapse console'}
+          aria-label={props.collapsed ? `Expand ${props.title}` : `Collapse ${props.title}`}
           onClick={() => props.onToggleCollapse()}
         >
           <span class="rf-console__chevron" data-collapsed={props.collapsed} aria-hidden="true">
             ⌄
           </span>
-          <span class="rf-eyebrow">Console</span>
+          <span class="rf-eyebrow">{props.title}</span>
         </button>
         <span class="rf-console__sub">{props.sub}</span>
       </div>
