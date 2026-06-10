@@ -6,7 +6,6 @@ import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { WebglAddon } from '@xterm/addon-webgl';
 import {
-  type IDecoration,
   type IDisposable,
   type ILinkHandler,
   type IMarker,
@@ -205,7 +204,6 @@ interface MutableCommandBlock {
   exitCode?: number;
   readonly startMarker: IMarker;
   endMarker?: IMarker;
-  decoration?: IDecoration;
 }
 
 interface LineSegment {
@@ -1388,21 +1386,6 @@ export class RiftyTerminal {
       this.emitCommandBlocksChange();
       return;
     }
-    const color = exitCode === 0 ? '#2ea043' : '#f85149';
-    const decoration = this.term.registerDecoration({
-      marker: block.startMarker,
-      x: 0,
-      width: 1,
-      height: 1,
-      backgroundColor: color,
-      overviewRulerOptions: { color, position: 'full' },
-    });
-    if (!decoration) {
-      this.emitCommandBlocksChange();
-      return;
-    }
-    block.decoration = decoration;
-    this.disposables.push(decoration);
     this.emitCommandBlocksChange();
   }
 

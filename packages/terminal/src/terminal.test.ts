@@ -1686,7 +1686,7 @@ describe('RiftyTerminal — edit state host seam', () => {
 });
 
 describe('RiftyTerminal — command marker substrate', () => {
-  it('records command blocks with exit code and decorates the start marker', async () => {
+  it('records command blocks with exit code without coloring terminal cells', async () => {
     const term = new RiftyTerminal({
       onInput: () => 7,
     });
@@ -1715,15 +1715,10 @@ describe('RiftyTerminal — command marker substrate', () => {
         endLine: 11,
       },
     ]);
-    expect(decorations).toEqual([
-      expect.objectContaining({
-        backgroundColor: '#f85149',
-        overviewRulerOptions: { color: '#f85149', position: 'full' },
-      }),
-    ]);
+    expect(decorations).toEqual([]);
   });
 
-  it('uses success color for exit 0 and records void exit code without decoration', async () => {
+  it('records success and void exit codes without terminal cell decorations', async () => {
     const ok = new RiftyTerminal({ onInput: () => 0 });
     const okXterm = internalXterm(ok);
     const okDecorations: Array<Record<string, unknown>> = [];
@@ -1734,12 +1729,8 @@ describe('RiftyTerminal — command marker substrate', () => {
     };
     await ok.handleInput('true');
     await ok.handleInput('\r');
-    expect(okDecorations[0]).toEqual(
-      expect.objectContaining({
-        backgroundColor: '#2ea043',
-        overviewRulerOptions: { color: '#2ea043', position: 'full' },
-      }),
-    );
+    expect(ok.getCommandBlocks()[0]?.exitCode).toBe(0);
+    expect(okDecorations).toEqual([]);
 
     const noCode = new RiftyTerminal({ onInput: () => {} });
     const noCodeXterm = internalXterm(noCode);
