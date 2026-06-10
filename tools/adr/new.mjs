@@ -19,7 +19,6 @@ const AREAS = new Set([
   'playground',
   'toolchain-build',
   'protocol',
-  'opencode',
   'perf',
   'shell',
   'terminal',

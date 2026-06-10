@@ -24,7 +24,6 @@ const KNOWN_AREAS = new Set([
   'toolchain-build',
   'protocol',
   'process-meta',
-  'opencode',
   'perf',
   'terminal',
   'distribution',

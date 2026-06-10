@@ -1,9 +1,0 @@
-# The materialized dependency tree is ~217 MB and is NOT committed (too large
-# for the repo). It is reproduced on demand from the committed lockfile:
-#
-#   cd deps && npm ci          # deterministic, 327 packages, from facade-manifest.lock.json
-#   # or, full re-vendor from the pinned SHA (also re-clones the source):
-#   node ../../../../tools/shadow-registry/scripts/fetch-opencode.mjs
-#
-node_modules/
-deps/node_modules/

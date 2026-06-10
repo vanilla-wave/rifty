@@ -1,19 +1,14 @@
 /**
- * Pure-JS VFS grep marker tool — marks the FEASIBLE side of the
- * no-tool-execution (process-spawn) ceiling for the opencode server facade
- * (F09 D1): does what opencode's read/grep tools do (read bytes + match)
+ * Pure-JS VFS grep helper for terminal/search flows. It reads bytes and matches
  * in-realm with ZERO process spawn, unlike ripgrep-the-binary.
  *
- * Pure-JS rather than ripgrep-WASM keeps the marker dependency-free and
- * trivially reversible. A ripgrep-WASM substitute would vendor a new binary
- * (IRREVERSIBLE) and is DEFERRED behind ADR ratification.
+ * Pure-JS rather than ripgrep-WASM keeps the helper dependency-free and
+ * trivially reversible. A ripgrep-WASM substitute would vendor a new binary and
+ * should be justified by measured terminal/search needs.
  *
  * PRIVATE helper: not re-exported via `src/index.ts`, registers no builtin,
  * adds no resolver intercept; imports only `builtins/fs.ts` and `@riftydev/vfs`
  * (layer-legal, no reverse import).
- *
- * TODO(backlog: opencode/ripgrep-wasm-grep-tool) — pure-JS marker chosen over ripgrep-WASM;
- * ripgrep-WASM / isomorphic-git deferred behind explicit human ratification.
  */
 import { joinPath } from '@riftydev/vfs';
 import { type Dirent, readFileSync, readdirSync } from '../builtins/fs.ts';

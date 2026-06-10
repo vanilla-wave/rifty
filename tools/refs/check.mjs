@@ -31,16 +31,14 @@ const RESERVED = new Set();
 // to CLAUDE.md. Mirror docs/adr/README.md "Historical references".
 const RETIRED = new Set(['0008', '0022', '0024', '0033', '0063', '0064', '0081']);
 
-// opencode decisions.md draft labels (band 0052–0062): drafts cited in ADR bodies /
-// opencode backlog as "ADR-00NN" that never became a file of that number (0052/0053
-// and ratified 0054/0055 ARE real files; these are the ones that aren't).
-// Keep in sync with docs/adr/README.md "Numbering".
+// Retired opencode draft labels still cited by historical ADRs. The opencode
+// server-facade docs were removed, but immutable ADR prose can keep citing the
+// old provisional labels without becoming dangling references.
 const DRAFTS = new Set(['0056', '0057', '0058', '0059', '0060', '0061', '0062']);
 
 // Moved doc trees: a `docs/<old>/x` ref resolves if `docs/<new>/x` exists.
 // Mirror docs/adr/README.md "Historical references".
 const REDIRECTS = [
-  ['docs/opencode/', 'docs/backlog/opencode/reference/'],
   ['docs/compat/', 'docs/public/compat/'],
   ['docs/perf/', 'docs/backlog/perf/reference/'],
   ['docs/backlog/tests/', 'docs/backlog/toolchain-build/reference/'],
@@ -50,8 +48,6 @@ const REDIRECTS = [
 const FILE_REDIRECTS = {
   'docs/PUBLISHING.md': 'docs/public/publishing.md',
   'docs/hosting-netlify.md': 'docs/public/hosting-netlify.md',
-  'docs/opencode-rifty-feasibility-2026-05-30.md':
-    'docs/backlog/opencode/reference/feasibility-2026-05-30.md',
 };
 
 // Removed with no successor: acknowledged dead, resolve to git history (mirror
@@ -70,8 +66,15 @@ const TOMBSTONES = new Set([
   'docs/review/2026-05-26-architecture-review.md',
   'docs/processes/ecosystem-sweep.md',
   'docs/backlog-distribution-and-ide.md',
-  // opencode handoff (no successor in reference/)
+  // retired opencode server-facade exploration (no successor)
+  'docs/opencode/',
+  'docs/opencode-rifty-feasibility-2026-05-30.md',
   'docs/opencode/HANDOFF.md',
+  'docs/opencode/README.md',
+  'docs/opencode/decisions.md',
+  'docs/opencode/feature-02-ts-on-import-graph.md',
+  'docs/opencode/feature-05-effect-http-bridge.md',
+  'docs/opencode/feature-07-ws-sse-bridge.md',
   // compat pages deleted in the docs/public split (not regenerated)
   'docs/compat/m10-tooling.md',
   'docs/compat/m10-tooling',
