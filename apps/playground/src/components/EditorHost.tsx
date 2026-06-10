@@ -5,8 +5,8 @@
  *
  * E2E-load-bearing invariants:
  *  - the permanent program tab is active at boot and is the ONLY tab bound to
- *    `machine.source`/`setSource` — REPL Run and the m10 HMR textarea path
- *    (`[data-testid="editor"] textarea`) stay byte-for-byte unchanged;
+ *    `machine.source`/`setSource` — the m10 HMR textarea path
+ *    (`[data-testid="editor"] textarea`) stays byte-for-byte unchanged;
  *  - nothing auto-opens a file tab, so the bare editor textarea always hosts
  *    the program model;
  *  - external program-source changes (presets / mode transitions) write the
@@ -50,6 +50,8 @@ export interface EditorHostProps {
   onActive(info: { label: string; language: string; path?: string }): void;
   onFileWritten?(path: string): void;
   onError?(message: string): void;
+  readonly previewUrl?: Accessor<string | undefined>;
+  onOpenPreviewTab?(): void;
   /** When set (real-vite mode, ADR-0080), opening a node_modules path reads its
    *  bytes async from the worker instead of the sync VFS. `content` is null when
    *  the file exceeds the read cap. */
@@ -337,6 +339,8 @@ export function EditorHost(props: EditorHostProps) {
         activeId={activeId()}
         onSelect={(id) => setActiveId(id)}
         onClose={closeFile}
+        previewUrl={props.previewUrl?.()}
+        onOpenPreviewTab={props.onOpenPreviewTab}
       />
       <div class="rf-editor__surface">
         <div ref={container} class="rf-editor" data-testid="editor" />

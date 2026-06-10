@@ -14,17 +14,17 @@ observable-behavior change. Tick the box when shipped.
 - [x] Cursor-aware line editor — mid-line insert/delete, Home/End/Delete, Ctrl+A/E (ADR-0094)
 - [x] Dev-mode HMR live preview via the cross-realm bridge (ADR-0095)
 - [x] Terminal no longer overlaps the status bar (xterm fit `padding`→`inset`)
-- [x] Cell-width-aware single-row editing for CJK/emoji/combining marks (ADR-0096)
+- [x] Cell-width-aware single-row editing for CJK/emoji/combining marks (ADR-0097)
 - [x] Readline-style keymap batch: prefix history, word motion, autosuggest,
-  Ctrl+C copy-vs-SIGINT, Ctrl-tier kill ring, Ctrl+R reverse search (ADR-0096)
+  Ctrl+C copy-vs-SIGINT, Ctrl-tier kill ring, Ctrl+R reverse search (ADR-0097)
 - [x] Alt-tier kill-ring keys: Alt+D, Alt+Backspace, Alt+Y, and
-  `macOptionIsMeta` pass-through (ADR-0096)
+  `macOptionIsMeta` pass-through (ADR-0097)
 - [x] Terminal options API: theme/font/contrast/a11y/cursor/copyOnSelect (ADR-0098)
 - [x] Command-not-found suggestions (ADR-0104)
 - [x] Command marker substrate: exit-code decorations, overview-ruler marks,
   block nav, and block selection helpers (ADR-0100)
-- [x] Bracketed paste wrappers stripped for line-mode input (ADR-0096)
-- [x] Line-edit undo via Ctrl+_ / delivered Ctrl+Z (ADR-0096)
+- [x] Bracketed paste wrappers stripped for line-mode input (ADR-0097)
+- [x] Line-edit undo via Ctrl+_ / delivered Ctrl+Z (ADR-0097)
 - [x] Tab completion seam + playground command/path completion (ADR-0104)
 - [x] Terminal xterm theme follows OS light/dark preference via ADR-0098 `setTheme`
 - [x] Ctrl+Shift+Up/Down selects previous/next command block output (ADR-0100)
@@ -33,22 +33,22 @@ observable-behavior change. Tick the box when shipped.
 - [x] In-terminal find overlay with Enter/Shift+Enter navigation (ADR-0105)
 - [x] Command palette seeded from shell commands (ADR-0104)
 - [x] Did-you-mean quick-fix action for command-not-found output (ADR-0104)
-- [x] Line-edit redo via Ctrl/Cmd+Shift+Z (ADR-0096)
+- [x] Line-edit redo via Ctrl/Cmd+Shift+Z (ADR-0097)
 - [x] Quick-fix provider registry with command typo + EADDRINUSE actions (ADR-0104)
 - [x] Sticky command header over the current command block (ADR-0100)
 - [x] Shareable/exportable output via serialize text/HTML actions (ADR-0105)
 - [x] OSC 52 clipboard write, readback ignored for browser safety (ADR-0105)
-- [x] Wrapped-line cursor layout for long single-line movement/repaint (ADR-0096)
+- [x] Wrapped-line cursor layout for long single-line movement/repaint (ADR-0097)
 - [x] OSC 8 grep file hyperlinks open safe workspace editor tabs (ADR-0105)
-- [x] Shell-mode command-line syntax highlighting via host spans (ADR-0096)
-- [x] Multiline input validator: Enter inserts newline until host says complete (ADR-0096)
+- [x] Shell-mode command-line syntax highlighting via host spans (ADR-0097)
+- [x] Multiline input validator: Enter inserts newline until host says complete (ADR-0097)
 - [x] IDE-style autocomplete dropdown over the existing completion seam (ADR-0104)
 - [x] Command-block rail + sticky block-copy action (ADR-0100)
 - [x] Atuin-style rich history overlay with OPFS-backed records (ADR-0116)
 - [x] Terminal state persistence: rich history plus shell cwd/env saved through
   async OPFS with session-only memory fallback (ADR-0116)
 - [x] fish abbreviations/snippets via host-provided terminal rewrite rules
-  (ADR-0096)
+  (ADR-0097)
 - [x] Inline images: xterm image addon plus `img` builtin producer (ADR-0105)
 - [x] AI command suggestions: opt-in `#` prompt ghost suggestions constrained to
   rifty coreutils and never auto-run (ADR-0120)
@@ -59,7 +59,7 @@ observable-behavior change. Tick the box when shipped.
 
 ## Foundation (do first — unblocks several below)
 - [x] **Wrapped-line cursor model.** Cell-width math for CJK/emoji/combining
-  edits shipped in ADR-0096; ADR-0096 adds offset→(row,col) repaint math for
+  edits shipped in ADR-0097; ADR-0097 adds offset→(row,col) repaint math for
   long single-line input. Multiline, syntax highlight, and anchored dropdowns
   remain separate follow-ups. **I:high E:high** · app-layer.
 

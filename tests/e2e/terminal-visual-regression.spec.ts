@@ -1,11 +1,12 @@
 import { inflateSync } from 'node:zlib';
 import { type Page, expect, test } from '@playwright/test';
 
-async function selectDevPreset(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Templates' }).click();
-  const devPreset = page.locator('button[data-preset="dev-hmr"]');
-  await devPreset.evaluate((button) => (button as HTMLButtonElement).click());
-  await expect(devPreset).toHaveAttribute('aria-pressed', 'true');
+async function openShellTerminal(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'New terminal' }).click();
+  await expect(page.getByRole('tab', { name: /Terminal 2/ })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
 }
 
 async function runCommand(page: Page, command: string): Promise<void> {
@@ -244,7 +245,7 @@ async function expectNoNewCursorBarBeforePrompt(
 test.describe('Terminal visual regressions', () => {
   test('command status never paints over the first text cell', async ({ page }) => {
     await page.goto('/');
-    await selectDevPreset(page);
+    await openShellTerminal(page);
 
     await runCommand(page, 'ls');
     await expect(page.locator('.rf-terminal-blockrail__item[aria-label*="ls"]')).toHaveAttribute(
@@ -263,7 +264,7 @@ test.describe('Terminal visual regressions', () => {
 
   test('typing at the prompt does not flash stale status cells at line start', async ({ page }) => {
     await page.goto('/');
-    await selectDevPreset(page);
+    await openShellTerminal(page);
 
     await runCommand(page, 'ls');
     await runCommand(page, 'src');

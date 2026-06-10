@@ -8,7 +8,7 @@ import { assertCrossOriginIsolated, bootstrapPlayground } from './boot.ts';
 import { createTerminalPersistence } from './glue/terminal-persistence.ts';
 // `?worker&url` bundles the kernel child-worker entry + yields its URL. The bare
 // `new URL(..., import.meta.url)` form isn't emitted as a worker chunk by `vite build`,
-// so child processes failed to spawn in prod (see note in adapters/useRuntime.ts).
+// so child processes failed to spawn in prod.
 import kernelWorkerUrl from './workers/kernel-worker-entry.ts?worker&url';
 // xterm's stylesheet is required for terminal scrolling (`.xterm-viewport` position +
 // absolute row layout). Imported here (not via index.html <link>) so Vite bundles it in

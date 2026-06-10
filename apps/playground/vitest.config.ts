@@ -1,3 +1,4 @@
+import solid from 'vite-plugin-solid';
 import { defineConfig } from 'vitest/config';
 
 /**
@@ -8,6 +9,7 @@ import { defineConfig } from 'vitest/config';
  * tsconfig). Run with `pnpm --filter @riftydev/playground test:run`.
  */
 export default defineConfig({
+  plugins: [solid({ ssr: true })],
   test: {
     name: 'playground',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],

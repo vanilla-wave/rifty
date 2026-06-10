@@ -66,6 +66,7 @@ export function TerminalPanel(props: {
   onSignal?(): void;
   onRawInput?(data: TerminalRawInput): void;
   onLink?(uri: string, event: MouseEvent): void;
+  testId?: string;
 }) {
   let container: HTMLDivElement | undefined;
   let findInput: HTMLInputElement | undefined;
@@ -450,7 +451,7 @@ export function TerminalPanel(props: {
 
   return (
     <div class="rf-terminal-shell">
-      <div ref={container} class="rf-terminal" data-testid="terminal" />
+      <div ref={container} class="rf-terminal" data-testid={props.testId} />
       <output
         class="rf-terminal-buffer"
         data-testid="terminal-buffer"

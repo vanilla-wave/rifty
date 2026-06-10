@@ -43,6 +43,10 @@ function vfsWritePortChannelUrl(port: number): string {
  * seeding step does this for the initial project tree); a write also
  * `mkdir -p`s its parent implicitly on the receiving side.
  */
+export interface VfsWriteServerOptions {
+  onWrite?(path: string): void;
+}
+
 export type VfsWriteFrame =
   | {
       readonly type: 'write';
@@ -54,6 +58,28 @@ export type VfsWriteFrame =
       readonly path: string;
       readonly recursive: boolean;
     };
+
+export function applyVfsWriteFrame(frame: VfsWriteFrame, opts: VfsWriteServerOptions = {}): void {
+  if (frame.type === 'write') {
+    const fs = syncMirror();
+    const parent = dirname(frame.path);
+    fs.mkdirSync(parent, { recursive: true });
+    // BroadcastChannel hands us a structured-cloned `Uint8Array`; copy
+    // into a fresh ArrayBuffer so downstream consumers don't share the
+    // backing memory with the structured-clone allocator. IPC sends also
+    // benefit from the same defensive copy.
+    const copy = new Uint8Array(frame.data.byteLength);
+    copy.set(frame.data);
+    fs.writeFileSync(frame.path, copy);
+    opts.onWrite?.(frame.path);
+    return;
+  }
+  if (frame.type === 'mkdir') {
+    syncMirror().mkdirSync(frame.path, { recursive: frame.recursive });
+    opts.onWrite?.(frame.path);
+    return;
+  }
+}
 
 /**
  * Page-side sender. Posts a single frame onto the channel; the worker
@@ -82,28 +108,12 @@ export function sendVfsWrite(port: number, frame: VfsWriteFrame): void {
  * {@link SyncMirrorVfs.writeFile} semantic so "file appears at path X"
  * doesn't depend on whether the dir existed.
  */
-export function serveVfsWrites(port: number): () => void {
+export function serveVfsWrites(port: number, opts: VfsWriteServerOptions = {}): () => void {
   const channelName = channelNameFor(vfsWritePortChannelUrl(port));
   const channel = new BroadcastChannel(channelName);
 
   const onMessage = (event: MessageEvent): void => {
-    const frame = event.data as VfsWriteFrame;
-    if (frame.type === 'write') {
-      const fs = syncMirror();
-      const parent = dirname(frame.path);
-      fs.mkdirSync(parent, { recursive: true });
-      // BroadcastChannel hands us a structured-cloned `Uint8Array`; copy
-      // into a fresh ArrayBuffer so downstream consumers don't share the
-      // backing memory with the structured-clone allocator.
-      const copy = new Uint8Array(frame.data.byteLength);
-      copy.set(frame.data);
-      fs.writeFileSync(frame.path, copy);
-      return;
-    }
-    if (frame.type === 'mkdir') {
-      syncMirror().mkdirSync(frame.path, { recursive: frame.recursive });
-      return;
-    }
+    applyVfsWriteFrame(event.data as VfsWriteFrame, opts);
   };
 
   channel.addEventListener('message', onMessage as unknown as EventListener);

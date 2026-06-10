@@ -1,25 +1,21 @@
 import { RegistryClient } from '@riftydev/npm-client';
 import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
 import {
-  coreCommandNames,
-  createShellCompleter,
-  img,
-  mouseDemo,
-  shellLineHighlightSpans,
-  validateShellInput,
-} from '@riftydev/shell';
-import type { TerminalGhostSuggestionProvider, TerminalRewriteRule } from '@riftydev/terminal';
-import {
   type TerminalHistoryMode,
   type TerminalHistoryRecord,
   addTerminalHistoryRecord,
 } from '@riftydev/terminal/history';
-import { syncMirror } from '@riftydev/vfs';
+import { normalizePath, syncMirror } from '@riftydev/vfs';
 import { Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
-import { useShellSession } from './adapters/shell-adapter.ts';
+import {
+  type TerminalCommand,
+  type TerminalCommandContext,
+  type TerminalRunDimensions,
+  type TerminalSessionSnapshot,
+  createTerminalManager,
+} from './adapters/terminal-manager.ts';
 import { useLayout } from './adapters/useLayout.ts';
 import { useMode } from './adapters/useMode.ts';
-import { useRuntime } from './adapters/useRuntime.ts';
 import { type BootResult, isCrossOriginIsolated, swErrorBannerMessage } from './boot.ts';
 import { ActivityBar } from './components/ActivityBar.tsx';
 import { BottomPanel } from './components/BottomPanel.tsx';
@@ -35,34 +31,18 @@ import { writeText } from './glue/fs-ops.ts';
 import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
 import { createNpmShellCommand } from './glue/npm-shell-command.ts';
+import { type RealViteHandle, startRealVite } from './glue/realVite.ts';
 import { proxiedRegistryFetch } from './glue/registry-fetch.ts';
 import { SnapshotFs } from './glue/snapshot-fs.ts';
 import { SyncMirrorVfs } from './glue/sync-mirror-vfs.ts';
-import {
-  extractAiCommandPrompt,
-  readAiCommandSuggestionConfig,
-  suggestAiCommand,
-} from './glue/terminal-ai-suggestions.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
 import { subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
-import { DEFAULT_PRESET, type Preset } from './presets.ts';
+import { DEFAULT_PRESET, PRESETS, type Preset } from './presets.ts';
+import { buildProjectPackageJson } from './templates/project-spec.ts';
 import { defaultProjectSpec } from './templates/registry.ts';
 
 const WORKSPACE = '/workspace';
-const TERMINAL_SESSION_ID = `session-${Date.now().toString(36)}`;
-const SHELL_REWRITE_RULES: readonly TerminalRewriteRule[] = [
-  { trigger: 'll', replacement: 'ls -la', description: 'long listing' },
-  { trigger: 'la', replacement: 'ls -a', description: 'all files' },
-  { trigger: 'mk', replacement: 'mkdir -p', description: 'recursive mkdir' },
-];
-const REPL_COMMAND_ITEMS = [
-  '.help',
-  '.reset',
-  '1 + 1',
-  "console.log('hello from REPL')",
-  "require('node:path').basename('/tmp/demo.txt')",
-];
 
 export interface AppProps {
   /**
@@ -83,10 +63,10 @@ export function App(props: AppProps) {
   const [toast, setToast] = createSignal<string | null>(null);
 
   const layout = useLayout();
-  const runtime = useRuntime();
   // Main-thread sync VFS mirror — same store the shell + `npm install` write to,
   // so the explorer is honest (ADR-0075). Stable after bootstrap's initBackend().
   const vfs = syncMirror();
+
   // Read-only mirror of the real-vite worker's project tree (ADR-0076). The
   // worker's VFS is a separate realm the page can't read directly, so it
   // publishes its tree (sans node_modules) over a BroadcastChannel; applied here.
@@ -100,56 +80,156 @@ export function App(props: AppProps) {
     toastTimer = setTimeout(() => setToast(null), 3800);
   }
 
-  const persistedTerminalState = props.terminalPersistence.initialState;
-
-  // Long-lived shell session driving the terminal in `dev` / `real-vite` modes.
-  const shell = useShellSession({
-    cwd: persistedTerminalState.cwd,
-    env: persistedTerminalState.env,
-  });
-  shell.registerCommand(
-    'npm',
-    createNpmShellCommand({
-      vfs: new SyncMirrorVfs(),
-      registry: new RegistryClient({ fetch: proxiedRegistryFetch() }),
-    }),
-  );
-  shell.registerCommand('img', img);
-  shell.registerCommand('mouse-demo', mouseDemo);
-
   // Active real-project template (ADR-0078). Chip + mode machine read its generic
   // display name instead of "Real Vite".
   const template = defaultProjectSpec();
+  const npmInstall = createNpmShellCommand({
+    vfs: new SyncMirrorVfs(),
+    registry: new RegistryClient({ fetch: proxiedRegistryFetch() }),
+  });
+  let realViteHandle: RealViteHandle | null = null;
 
-  // Mode state machine — owns `repl | dev | real-vite` plus the editor source.
+  // Mode state machine owns UI state only. Real server lifetime belongs to the
+  // visible `vite` terminal command.
   const machine = useMode({
-    sources: { repl: DEFAULT_PRESET.source, dev: DEFAULT_PRESET.source },
-    template,
-    log: (chunk, stream) => runtime.write(chunk, stream),
+    sources: { dev: DEFAULT_PRESET.source, realVite: DEFAULT_PRESET.source },
   });
 
-  const completeShellLine = createShellCompleter({
-    mode: machine.mode,
-    commandNames: () => shell.commandNames(),
-    cwd: () => shell.cwd(),
-    readdirSync: (path) => vfs.readdirSync(path),
-  });
-  const terminalRewriteRules = (): readonly TerminalRewriteRule[] =>
-    machine.mode() === 'repl' ? [] : SHELL_REWRITE_RULES;
-  const aiCommandConfig = readAiCommandSuggestionConfig(import.meta.env);
-  const aiCommandNames = coreCommandNames();
-  const terminalGhostSuggestion: TerminalGhostSuggestionProvider = (state, signal) => {
-    const mode = machine.mode();
-    if (!aiCommandConfig || mode === 'repl') return null;
-    const prompt = extractAiCommandPrompt(state.line);
-    if (!prompt) return null;
-    return suggestAiCommand(
-      aiCommandConfig,
-      { prompt, cwd: shell.cwd(), mode, commands: aiCommandNames },
-      undefined,
-      signal,
-    ).then((command) => (command ? { display: `  -> ${command}`, replacement: command } : null));
+  const [devServerRunning, setDevServerRunning] = createSignal(false);
+  const [previewRevision, setPreviewRevision] = createSignal(0);
+  const [devServerStatus, setDevServerStatus] = createSignal<'stopped' | 'starting' | 'running'>(
+    'stopped',
+  );
+  let devServerSessionId: string | null = null;
+  let devServerRestartGeneration = 0;
+
+  async function runViteCommand(ctx: TerminalCommandContext): Promise<number> {
+    devServerSessionId = ctx.sessionId;
+    ctx.stdout.write('vite: starting dev server\n');
+    setDevServerStatus('starting');
+    if (ctx.signal?.aborted) {
+      setDevServerStatus('stopped');
+      return 130;
+    }
+    if (realViteHandle) {
+      await realViteHandle.close();
+      realViteHandle = null;
+      setDevServerRunning(false);
+    }
+
+    let handle: RealViteHandle;
+    let resolveReady: (() => void) | undefined;
+    let readySeen = false;
+    const ready = new Promise<'ready'>((resolve) => {
+      resolveReady = () => resolve('ready');
+    });
+    const aborted = new Promise<'aborted'>((resolve) => {
+      if (ctx.signal?.aborted) {
+        resolve('aborted');
+        return;
+      }
+      ctx.signal?.addEventListener('abort', () => resolve('aborted'), { once: true });
+    });
+    try {
+      handle = await startRealVite({
+        template,
+        port: machine.realVitePort(),
+        onLog: (line) => {
+          ctx.stdout.write(line);
+          if (line.includes('[real-vite/worker] node_modules read bridge ready')) {
+            readySeen = true;
+            resolveReady?.();
+          }
+        },
+      });
+    } catch (err) {
+      ctx.stderr.write(`vite failed: ${(err as Error).stack ?? (err as Error).message}\n`);
+      setDevServerStatus('stopped');
+      return 1;
+    }
+
+    realViteHandle = handle;
+    machine.setRealVitePort(handle.port);
+    const closed = handle.closed.then((code) => ({ kind: 'exited' as const, code }));
+    const bootResult = readySeen
+      ? { kind: 'ready' as const }
+      : await Promise.race([
+          ready.then(() => ({ kind: 'ready' as const })),
+          aborted.then(() => ({ kind: 'aborted' as const })),
+          closed,
+        ]);
+    if (bootResult.kind === 'aborted') {
+      if (realViteHandle === handle) realViteHandle = null;
+      try {
+        await handle.close();
+      } catch (err) {
+        ctx.stderr.write(`[vite] cleanup failed: ${(err as Error).message}\n`);
+      }
+      setDevServerRunning(false);
+      setDevServerStatus('stopped');
+      ctx.stdout.write('\n[vite] stopped\n');
+      return 130;
+    }
+    if (bootResult.kind === 'exited') {
+      if (realViteHandle === handle) realViteHandle = null;
+      setDevServerRunning(false);
+      setDevServerStatus('stopped');
+      ctx.stderr.write('[vite] worker exited before the dev server was ready\n');
+      return bootResult.code ?? 1;
+    }
+
+    // Once Vite is listening, the worker's preview route can accept file writes.
+    // Send dependencies first so the entry never reloads before its imports exist.
+    syncPresetFilesToWorker(handle, presetForId(activePreset()));
+    handle.updateEntry(machine.source());
+    setDevServerRunning(true);
+    setDevServerStatus('running');
+    ctx.stdout.write(`[vite] dev server ready on port ${handle.port}\n`);
+
+    const stopResult = await Promise.race([
+      aborted.then(() => ({ kind: 'aborted' as const })),
+      closed,
+    ]);
+
+    if (realViteHandle === handle) realViteHandle = null;
+    if (stopResult.kind === 'aborted') {
+      try {
+        await handle.close();
+      } catch (err) {
+        ctx.stderr.write(`[vite] cleanup failed: ${(err as Error).message}\n`);
+      }
+    }
+    setDevServerRunning(false);
+    setDevServerStatus('stopped');
+    if (stopResult.kind === 'aborted') {
+      ctx.stdout.write('\n[vite] stopped\n');
+      return 130;
+    }
+    ctx.stderr.write('\n[vite] worker exited\n');
+    return stopResult.code ?? 1;
+  }
+
+  const npmCommand: TerminalCommand = async (args, ctx) => npmInstall(args, ctx);
+
+  const viteCommand: TerminalCommand = async (args, ctx) => {
+    if (args.length > 0) {
+      ctx.stderr.write(
+        `vite: arguments are not supported in the playground yet: ${args.join(' ')}\n`,
+      );
+      return 1;
+    }
+    return runViteCommand(ctx);
   };
+
+  const manager = createTerminalManager({
+    cwd: props.terminalPersistence.initialState.cwd,
+    commands: { npm: npmCommand, vite: viteCommand },
+  });
+  const hiddenSessionIds = new Set<string>();
+  const visibleSessions = (): TerminalSessionSnapshot[] =>
+    manager.sessions().filter((session) => !hiddenSessionIds.has(session.id));
+  const [sessions, setSessions] = createSignal<TerminalSessionSnapshot[]>(visibleSessions());
+  const [activeSessionId, setActiveSessionId] = createSignal(manager.activeSessionId());
   const [terminalHistory, setTerminalHistory] = createSignal<readonly TerminalHistoryRecord[]>(
     props.terminalPersistence.initialHistory,
   );
@@ -160,48 +240,137 @@ export function App(props: AppProps) {
     void props.terminalPersistence.saveHistory(next);
   }
 
-  function persistTerminalState(): void {
-    const state = { cwd: shell.cwd(), env: shell.env() };
-    void props.terminalPersistence.saveState(state);
+  function persistTerminalState(id: string): void {
+    const session = manager.snapshot(id);
+    void props.terminalPersistence.saveState({ cwd: session.cwd, env: {} });
   }
 
-  function terminalHistoryContext(): { readonly mode: TerminalHistoryMode; readonly cwd: string } {
-    const mode = machine.mode();
-    return {
-      mode,
-      cwd: mode === 'repl' ? WORKSPACE : shell.cwd(),
-    };
+  function refreshTerminalState(): void {
+    const next = visibleSessions();
+    setSessions(next);
+    const active = manager.activeSessionId();
+    if (next.some((session) => session.id === active)) {
+      setActiveSessionId(active);
+      return;
+    }
+    const fallback = next[0];
+    if (fallback) {
+      manager.select(fallback.id);
+      setActiveSessionId(fallback.id);
+    }
   }
 
-  if (props.boot.swError) {
-    runtime.write(`SW registration failed: ${props.boot.swError}\n`, 'stderr');
+  function selectSession(id: string): void {
+    manager.select(id);
+    refreshTerminalState();
+  }
+
+  function createSession(title?: string): TerminalSessionSnapshot {
+    const session = manager.createSession(title);
+    manager.select(session.id);
+    refreshTerminalState();
+    return session;
+  }
+
+  function closeSession(id: string): void {
+    const session = manager.snapshot(id);
+    if (session.status === 'running') return;
+    hiddenSessionIds.add(id);
+    refreshTerminalState();
+  }
+
+  function attachTerminalWriter(
+    id: string,
+    write: (chunk: string, stream?: 'stdout' | 'stderr') => void,
+  ): void {
+    manager.attachWriter(id, write);
+  }
+
+  async function runTerminalLine(
+    id: string,
+    line: string,
+    dims?: TerminalRunDimensions,
+  ): Promise<number | undefined> {
+    const startedMs = Date.now();
+    const startedAt = new Date(startedMs).toISOString();
+    let exitCode: number | undefined;
+    const cwd = manager.snapshot(id).cwd;
+    const mode = machine.mode() as TerminalHistoryMode;
+    const run = manager.runLine(id, line, dims);
+    refreshTerminalState();
+    try {
+      exitCode = await run;
+      return exitCode;
+    } catch (err) {
+      console.error(err);
+      exitCode = 1;
+      return exitCode;
+    } finally {
+      refreshTerminalState();
+      const finishedMs = Date.now();
+      if (line.trim().length > 0) {
+        rememberTerminalHistory({
+          command: line,
+          cwd,
+          mode,
+          sessionId: id,
+          startedAt,
+          finishedAt: new Date(finishedMs).toISOString(),
+          durationMs: finishedMs - startedMs,
+          exitCode,
+        });
+        persistTerminalState(id);
+      }
+    }
+  }
+
+  async function runTerminalSequence(
+    id: string,
+    lines: readonly string[],
+    dims?: TerminalRunDimensions,
+  ): Promise<void> {
+    const run = manager.runSequence(id, lines, dims);
+    refreshTerminalState();
+    try {
+      await run;
+    } catch (err) {
+      console.error(err);
+    } finally {
+      refreshTerminalState();
+    }
+  }
+
+  function stopSession(id: string): void {
+    manager.stop(id);
+    refreshTerminalState();
   }
 
   // Worker project's node_modules presence (ADR-0080): snapshot excludes its
   // contents but flags presence, gating the lazy row.
   const [nodeModulesPresent, setNodeModulesPresent] = createSignal(false);
 
-  // Subscribe to the worker's project-tree snapshots while in `real-vite`
-  // (ADR-0076). Leaving the mode clears the view so no stale tree lingers.
+  // Subscribe while the worker is starting/running so we do not miss its early
+  // snapshot frames, but only render that mirror once Vite is actually ready.
   createEffect(() => {
-    if (machine.mode() !== 'real-vite') {
+    if (devServerStatus() === 'stopped') {
       snapshotFs.clear();
       setNodeModulesPresent(false);
+      setPreviewRevision(0);
       return;
     }
     const unsubscribe = subscribeVfsSnapshot(machine.realVitePort(), (frame) => {
       snapshotFs.update(frame);
       setNodeModulesPresent(frame.nodeModulesPresent);
+      setPreviewRevision((n) => n + 1);
     });
     onCleanup(unsubscribe);
   });
 
-  // Lazy node_modules read bridge + cache (ADR-0080), live only in `real-vite`.
-  // Fresh cache per mode-entry so no stale node_modules view bleeds across an
-  // off→on cycle.
+  // Lazy node_modules read bridge + cache (ADR-0080), scoped to one worker
+  // on-cycle. The UI only exposes it once the worker server is ready.
   const [nmCache, setNmCache] = createSignal<NodeModulesCache | null>(null);
   createEffect(() => {
-    if (machine.mode() !== 'real-vite') {
+    if (devServerStatus() === 'stopped') {
       setNmCache(null);
       return;
     }
@@ -228,50 +397,171 @@ export function App(props: AppProps) {
     return cache ? (path: string) => cache.readFile(path) : undefined;
   };
 
-  // Explorer + editor read the worker mirror in `real-vite`, the writable page
-  // mirror otherwise.
-  const activeVfs = () => (machine.mode() === 'real-vite' ? snapshotFs : vfs);
+  // Explorer + editor read the worker mirror only once `vite` is really up;
+  // during install/start/stop they stay on the writable workspace mirror.
+  const activeVfs = () => (devServerRunning() ? snapshotFs : vfs);
+  let initialRunTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function presetForId(id: string): Preset {
+    return PRESETS.find((preset) => preset.id === id) ?? DEFAULT_PRESET;
+  }
+
+  function workspacePresetPath(path: string): string {
+    const normalized = normalizePath(`${WORKSPACE}/${path.replace(/^\/+/, '')}`);
+    if (normalized === WORKSPACE || !normalized.startsWith(`${WORKSPACE}/`)) {
+      throw new Error(`Preset file escapes workspace: ${path}`);
+    }
+    return normalized;
+  }
+
+  function seedPresetFiles(preset: Preset): void {
+    for (const file of preset.files ?? []) {
+      writeText(vfs, workspacePresetPath(file.path), file.content);
+    }
+  }
+
+  function syncPresetFilesToWorker(handle: RealViteHandle | null, preset: Preset): void {
+    if (!handle) return;
+    for (const file of preset.files ?? []) {
+      handle.updateFile(workspacePresetPath(file.path), file.content);
+    }
+  }
+
+  function syncWorkspaceFileToWorker(path: string): void {
+    const handle = realViteHandle;
+    if (!handle || path === PROGRAM_MIRROR_PATH) return;
+    try {
+      handle.updateFile(path, new TextDecoder().decode(vfs.readFileBytesSync(path)));
+    } catch {
+      /* best-effort live sync for opened text files */
+    }
+  }
+
+  function seedViteWorkspace(preset: Preset): void {
+    const packageJson = buildProjectPackageJson(template).json;
+    writeText(vfs, `${WORKSPACE}/package.json`, packageJson);
+    writeText(vfs, PROGRAM_MIRROR_PATH, preset.source);
+    seedPresetFiles(preset);
+  }
+
+  function devServerSession(): TerminalSessionSnapshot {
+    if (devServerSessionId) {
+      const previous = manager.snapshot(devServerSessionId);
+      if (previous.status === 'idle' && !hiddenSessionIds.has(previous.id)) {
+        manager.select(previous.id);
+        refreshTerminalState();
+        return previous;
+      }
+    }
+    const active = manager.snapshot(manager.activeSessionId());
+    if (active.status === 'idle') return active;
+    const idle = visibleSessions().find((session) => session.status === 'idle');
+    if (idle) {
+      manager.select(idle.id);
+      refreshTerminalState();
+      return idle;
+    }
+    return createSession();
+  }
+
+  async function waitForDevServerStop(): Promise<void> {
+    while (devServerStatus() !== 'stopped') {
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
+  async function restartDevServer(sessionId: string): Promise<void> {
+    const generation = ++devServerRestartGeneration;
+    try {
+      await realViteHandle?.close();
+    } catch {
+      /* terminal command will surface the exit path */
+    }
+    await waitForDevServerStop();
+    if (generation !== devServerRestartGeneration) return;
+    devServerSessionId = sessionId;
+    await runTerminalSequence(sessionId, ['vite']);
+  }
+
+  async function runVitePreset(preset: Preset): Promise<void> {
+    setActivePreset(preset.id);
+    await machine.loadPreset(preset);
+    seedViteWorkspace(preset);
+    syncPresetFilesToWorker(realViteHandle, preset);
+    realViteHandle?.updateEntry(preset.source);
+    if (devServerStatus() !== 'stopped') {
+      const restartSessionId = devServerSessionId;
+      if (restartSessionId) void restartDevServer(restartSessionId);
+      return;
+    }
+    const session = devServerSession();
+    devServerSessionId = session.id;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await runTerminalSequence(session.id, ['vite']);
+  }
 
   onMount(() => {
     // Seed the workspace (idempotent).
     try {
-      if (!vfs.existsSync(PROGRAM_MIRROR_PATH))
-        writeText(vfs, PROGRAM_MIRROR_PATH, DEFAULT_PRESET.source);
+      seedViteWorkspace(DEFAULT_PRESET);
       if (!vfs.existsSync(`${WORKSPACE}/README.md`)) {
         writeText(
           vfs,
           `${WORKSPACE}/README.md`,
-          '# workspace\n\nThis is the in-browser virtual filesystem.\n\n- Edit the program in the `main.js` tab (it drives Run / the live preview).\n- Create files here, or run `npm install <pkg>` in the console — installs land in `node_modules`.\n',
+          '# workspace\n\nThis is the in-browser virtual filesystem.\n\n- Edit the program in the `src/main.js` tab.\n- Run `npm install <pkg>` in any terminal; installs land in `node_modules`.\n',
         );
       }
     } catch {
       /* best-effort seeding */
     }
+    initialRunTimer = setTimeout(() => {
+      void runVitePreset(DEFAULT_PRESET);
+    }, 0);
   });
 
   onCleanup(() => {
+    if (initialRunTimer) clearTimeout(initialRunTimer);
     if (toastTimer) clearTimeout(toastTimer);
-    runtime.dispose();
-    shell.dispose();
+    void realViteHandle?.close();
+    manager.dispose();
   });
 
-  async function runRepl(source: string, label: string): Promise<void> {
-    await runtime.whenReady();
-    runtime.write(`\n> [${label}] ${new Date().toLocaleTimeString()}\n`);
-    try {
-      await runtime.evaluate(source);
-    } catch (err) {
-      runtime.write(`${(err as Error).message}\n`, 'stderr');
-    }
+  function onSelectPreset(preset: Preset): void {
+    void runVitePreset(preset);
   }
 
-  function onRun(): void {
-    void runRepl(machine.source(), 'Run');
+  const previewUrl = (): string | undefined =>
+    devServerRunning() ? `/preview/${machine.realVitePort()}/` : undefined;
+
+  function escapeHtmlAttr(value: string): string {
+    return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   }
 
-  function onReset(): void {
-    runtime.write('\n[worker reset]\n', 'stderr');
-    void runtime.reset();
+  function openPreviewTab(): void {
+    const url = previewUrl();
+    if (!url) return;
+    const previewWindow = globalThis.window?.open('', '_blank');
+    if (!previewWindow) return;
+    previewWindow.document.open();
+    previewWindow.document.write(`<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>rifty preview ${machine.realVitePort()}</title>
+    <style>
+      html, body, iframe { margin: 0; width: 100%; height: 100%; border: 0; background: #0f1115; }
+    </style>
+  </head>
+  <body>
+    <iframe src="${escapeHtmlAttr(url)}" title="Preview port ${machine.realVitePort()}"></iframe>
+  </body>
+</html>`);
+    previewWindow.document.close();
+  }
+
+  function onProgramChange(next: string): void {
+    machine.setSource(next);
+    realViteHandle?.updateEntry(next);
   }
 
   function onTerminalLink(uri: string): void {
@@ -290,36 +580,21 @@ export function App(props: AppProps) {
     }
   }
 
-  function onSelectPreset(preset: Preset): void {
-    setActivePreset(preset.id);
-    void machine.loadPreset(preset);
-    if (preset.mode === 'repl') void runRepl(preset.source, preset.label);
-  }
-
   const modeLabel = (): string =>
     machine.mode() === 'dev'
       ? 'Dev · port 3000'
       : machine.mode() === 'real-vite'
-        ? `${template.displayName} · port ${machine.realVitePort()}`
-        : 'REPL · Worker';
-  const terminalModeHint = (): TerminalModeHint =>
-    machine.mode() === 'repl'
-      ? {
-          label: 'JS REPL',
-          detail: 'Try',
-          actions: [
-            { label: '1 + 1', title: 'Run REPL expression 1 + 1', line: '1 + 1' },
-            { label: '.help', title: 'Show REPL help', line: '.help' },
-            { label: 'Run main.js', title: 'Run editor file main.js', onSelect: onRun },
-          ],
-        }
-      : { label: 'Shell', detail: 'Commands run in /workspace; running programs own stdin.' };
-  const terminalTitle = (): string => (machine.mode() === 'repl' ? 'REPL' : 'Shell');
-  const terminalSub = (): string =>
-    machine.mode() === 'repl' ? 'JavaScript worker' : `${shell.cwd()} · terminal`;
+        ? devServerStatus() === 'running'
+          ? `${template.displayName} · port ${machine.realVitePort()}`
+          : `${template.displayName} · ${devServerStatus()}`
+        : template.displayName;
 
-  const programTitle = (): string => (machine.mode() === 'repl' ? 'main.js' : 'src/main.js');
-  const hasPreview = (): boolean => machine.mode() === 'dev' || machine.mode() === 'real-vite';
+  const terminalModeHint = (): TerminalModeHint => ({
+    label: 'Shell',
+    detail: 'Commands run in /workspace; running programs own stdin.',
+  });
+  const programTitle = (): string => 'src/main.js';
+  const hasPreview = (): boolean => devServerStatus() !== 'stopped';
   const isOpfs = props.boot.vfsBoot.backend === 'opfs';
 
   return (
@@ -351,17 +626,6 @@ export function App(props: AppProps) {
         </span>
 
         <span class="rf-spacer" />
-
-        {/* Templates gallery is the single project switcher (ADR-0079); the
-            header keeps only contextual Run / Reset (REPL) + the mode chip. */}
-        <Show when={machine.mode() === 'repl'}>
-          <button type="button" class="rf-btn rf-btn--primary" onClick={onRun} data-action="run">
-            ▶ Run
-          </button>
-          <button type="button" class="rf-btn rf-btn--ghost" onClick={onReset} data-action="reset">
-            Reset
-          </button>
-        </Show>
       </header>
 
       <Show when={capabilities.sufficient} fallback={<CapabilitiesPanel check={capabilities} />}>
@@ -386,7 +650,7 @@ export function App(props: AppProps) {
                   captures `vfs` once, so the mode flip must remount it —
                   Show/fallback does exactly that. */}
               <Show
-                when={machine.mode() === 'real-vite'}
+                when={devServerRunning()}
                 fallback={
                   <FileExplorer
                     vfs={vfs}
@@ -433,7 +697,7 @@ export function App(props: AppProps) {
               <EditorHost
                 programValue={machine.source}
                 programTitle={programTitle}
-                onProgramChange={(v) => machine.setSource(v)}
+                onProgramChange={onProgramChange}
                 vfs={activeVfs()}
                 registerApi={(api) => {
                   editorApi = api;
@@ -443,10 +707,10 @@ export function App(props: AppProps) {
                   setActiveLang(info.language);
                   setActiveFilePath(info.path);
                 }}
-                onFileWritten={() => {
-                  /* explorer polls; nothing else needed */
-                }}
+                onFileWritten={syncWorkspaceFileToWorker}
                 readNodeModulesFile={readNodeModulesFile()}
+                previewUrl={previewUrl}
+                onOpenPreviewTab={openPreviewTab}
                 onError={flashError}
               />
 
@@ -464,11 +728,14 @@ export function App(props: AppProps) {
                   onReset={() => layout.resetPreviewW()}
                 />
               </Show>
-              <Show when={machine.mode() === 'dev'}>
-                <PreviewPanel initialPort={3000} />
-              </Show>
-              <Show when={machine.mode() === 'real-vite'}>
-                <PreviewPanel initialPort={machine.realVitePort()} />
+              <Show when={hasPreview() ? machine.realVitePort() : false} keyed>
+                {(port) => (
+                  <PreviewPanel
+                    initialPort={port}
+                    refreshKey={previewRevision()}
+                    onOpenTab={openPreviewTab}
+                  />
+                )}
               </Show>
             </div>
 
@@ -486,73 +753,20 @@ export function App(props: AppProps) {
             />
 
             <BottomPanel
-              title={terminalTitle()}
-              sub={terminalSub()}
-              modeHint={terminalModeHint()}
               collapsed={layout.consoleCollapsed()}
+              sessions={sessions()}
+              activeSessionId={activeSessionId()}
               onToggleCollapse={() => layout.toggleConsole()}
-              attach={(write) => {
-                runtime.attachWriter(write);
-                shell.attachWriter(write);
-              }}
-              onSignal={() => {
-                if (machine.mode() === 'repl') {
-                  runtime.writeStdin('\x03');
-                  return;
-                }
-                shell.interrupt();
-              }}
-              onRawInput={(data) => {
-                if (machine.mode() === 'repl') {
-                  runtime.writeStdin(data);
-                  return;
-                }
-                shell.writeStdin(data);
-              }}
-              completer={machine.mode() === 'repl' ? undefined : completeShellLine}
-              commandItems={() =>
-                machine.mode() === 'repl' ? REPL_COMMAND_ITEMS : shell.commandNames()
-              }
-              highlighter={(line) =>
-                machine.mode() === 'repl' ? [] : shellLineHighlightSpans(line)
-              }
-              ghostSuggestion={terminalGhostSuggestion}
-              inputValidator={(line) =>
-                machine.mode() === 'repl' ? 'complete' : validateShellInput(line)
-              }
-              rewriteRules={terminalRewriteRules}
+              onSelectSession={selectSession}
+              onCreateSession={() => createSession()}
+              onCloseSession={closeSession}
+              onStopSession={stopSession}
+              attach={attachTerminalWriter}
+              modeHint={terminalModeHint()}
               historyRecords={terminalHistory}
               onLink={onTerminalLink}
-              onLine={async (line, dims) => {
-                const { mode, cwd } = terminalHistoryContext();
-                if (mode !== 'repl' && extractAiCommandPrompt(line)) return undefined;
-                const startedMs = Date.now();
-                const startedAt = new Date(startedMs).toISOString();
-                let exitCode: number | undefined;
-                try {
-                  if (mode === 'dev' || mode === 'real-vite') {
-                    // Forward the live terminal dimensions so ctx.cols/rows drive
-                    // ls column layout; isTTY + signal are set by the adapter.
-                    exitCode = await shell.runLine(line, dims);
-                    return exitCode;
-                  }
-                  await runtime.handleLine(line);
-                  return 0;
-                } finally {
-                  const finishedMs = Date.now();
-                  rememberTerminalHistory({
-                    command: line,
-                    cwd,
-                    mode,
-                    sessionId: TERMINAL_SESSION_ID,
-                    startedAt,
-                    finishedAt: new Date(finishedMs).toISOString(),
-                    durationMs: finishedMs - startedMs,
-                    exitCode,
-                  });
-                  persistTerminalState();
-                }
-              }}
+              onSignal={stopSession}
+              onLine={(id, line, dims) => runTerminalLine(id, line, dims)}
             />
           </main>
         </div>

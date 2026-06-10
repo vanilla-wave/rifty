@@ -77,7 +77,7 @@ export interface BootResult {
   readonly vfsBoot: VfsBootDescriptor;
   /**
    * Populated only when `registerServiceWorker()` rejected. The App renders a
-   * banner via {@link swErrorBannerMessage}; the rest of the REPL keeps running
+   * banner via {@link swErrorBannerMessage}; the rest of the playground keeps running
    * (the SW only matters for the preview iframe path).
    */
   readonly swError?: string;

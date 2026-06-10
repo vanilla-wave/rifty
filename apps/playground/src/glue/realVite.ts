@@ -22,8 +22,10 @@ import { sendVfsWrite } from './vfs-write-port.ts';
 
 export interface RealViteHandle {
   readonly port: number;
+  readonly closed: Promise<number | null>;
   close(): Promise<void>;
   updateEntry(content: string): void;
+  updateFile(path: string, content: string): void;
 }
 
 export interface RealViteOptions {
@@ -116,8 +118,13 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
   // Track exit so `close()` stays safe when the worker dies on its own
   // (install failure, vite crash).
   let exited = false;
-  handle.on('exit', (..._args: unknown[]) => {
+  let resolveClosed: (code: number | null) => void = () => {};
+  const closed = new Promise<number | null>((resolve) => {
+    resolveClosed = resolve;
+  });
+  handle.on('exit', (code?: unknown) => {
     exited = true;
+    resolveClosed(typeof code === 'number' ? code : null);
   });
 
   // SW dispatches `/preview/<port>/*` to the page; the `@riftydev/net`
@@ -132,8 +139,20 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
 
   log(`[real-vite] page-side preview-port bridge ready (port ${port})\n`);
 
+  const updateFile = (path: string, content: string): void => {
+    const frame = {
+      type: 'write' as const,
+      path,
+      data: enc.encode(content),
+    };
+    if (!handle.send({ type: 'rifty:vfs-write', frame })) {
+      sendVfsWrite(port, frame);
+    }
+  };
+
   return {
     port,
+    closed,
     async close() {
       tearSwBridge();
       unregisterPort(port);
@@ -144,14 +163,8 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
       }
     },
     updateEntry(content) {
-      // One-way mailbox (ADR-0043 / D4): edit lands in the worker's
-      // `syncMirror()`; its file watcher sees it and the HMR bridge broadcasts
-      // the iframe reload.
-      sendVfsWrite(port, {
-        type: 'write',
-        path: entryPath,
-        data: enc.encode(content),
-      });
+      updateFile(entryPath, content);
     },
+    updateFile,
   };
 }

@@ -3,8 +3,7 @@
  *
  * No Solid signals here — Solid state lives at the topmost glue point in
  * `App.tsx`, per the D-002 adapter discipline. The only Solid touch is
- * `onCleanup`, registering a no-op disposer for shape-parity with
- * `useRuntime.ts`.
+ * `onCleanup`, registering a disposer for the long-lived shell instance.
  *
  * Why an adapter and not a top-level `'shell'` mode in `App.tsx`: App.tsx is
  * already a 292-line god-component (Tier 4 finding, 2026-05-26 review); a 4th
@@ -66,8 +65,7 @@ export function useShellSession(options: ShellOptions = {}): ShellSession {
   let activeStdin: StdinQueue | null = null;
   const shell = new Shell(options);
 
-  // Disposer for lifecycle parity with `useRuntime`; the shell holds no host
-  // resources today.
+  // Disposer for the long-lived shell session.
   onCleanup(() => {
     writer = null;
     active?.abort();

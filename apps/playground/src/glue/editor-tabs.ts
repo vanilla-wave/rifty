@@ -3,8 +3,8 @@
  *
  * Solid-free so the invariants e2e selectors depend on are unit-testable:
  *  - the program tab ({@link PROGRAM_TAB_ID}) is always index 0 and non-closable
- *    — it stays bound to `machine.source`/`setSource`, keeping REPL Run and the
- *    dev/real-vite HMR textarea path unchanged;
+ *    — it stays bound to `machine.source`/`setSource`, keeping the
+ *    real-vite HMR textarea path unchanged;
  *  - file tabs are keyed by absolute VFS path; opening the same path twice is
  *    idempotent (re-activates), preventing two models over one path.
  */

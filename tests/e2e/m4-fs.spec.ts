@@ -1,45 +1,34 @@
-import { expect, test } from '@playwright/test';
+import { test } from '@playwright/test';
+import {
+  expectTerminalContains,
+  openShellTerminal,
+  runTerminalLine,
+} from './helpers/playground.ts';
 
 /**
- * M4 acceptance: sync + async fs APIs over the in-Worker VFS. To avoid the
- * terminal's "busy" filter dropping fast keystrokes between separate evals,
- * each test sends a single self-contained IIFE that exercises a slice of the
- * fs API and prints a deterministic marker.
+ * M4 acceptance: shell file commands over the browser-backed VFS. The default
+ * terminal owns the visible Vite process, so each test opens a separate idle
+ * terminal and drives commands through the same shell a user sees.
  */
 test.describe('M4 — FileSystem', () => {
-  test('writeFileSync + readFileSync round-trip', async ({ page }) => {
+  test('write + read round-trip', async ({ page }) => {
     await page.goto('/');
-    const term = page.locator('[data-testid="terminal"]');
-    await expect(term).toContainText('[worker ready]', { timeout: 10_000 });
-    await term.click();
-    await page.keyboard.type(
-      "(()=>{const fs=require('fs');fs.mkdirSync('/tmp',{recursive:true});fs.writeFileSync('/tmp/n.txt','hi-rifty');return fs.readFileSync('/tmp/n.txt','utf8')})()",
-    );
-    await page.keyboard.press('Enter');
-    await expect(term).toContainText('hi-rifty', { timeout: 5000 });
+    await openShellTerminal(page);
+    await runTerminalLine(page, 'mkdir -p /tmp && echo hi-rifty > /tmp/n.txt && cat /tmp/n.txt');
+    await expectTerminalContains(page, 'hi-rifty');
   });
 
-  test('mkdirSync recursive + readdirSync', async ({ page }) => {
+  test('mkdir recursive + ls', async ({ page }) => {
     await page.goto('/');
-    const term = page.locator('[data-testid="terminal"]');
-    await expect(term).toContainText('[worker ready]', { timeout: 10_000 });
-    await term.click();
-    await page.keyboard.type(
-      "(()=>{const fs=require('fs');fs.mkdirSync('/a/b/c',{recursive:true});fs.writeFileSync('/a/b/c/leaf.txt','L');return fs.readdirSync('/a/b/c').join(',')})()",
-    );
-    await page.keyboard.press('Enter');
-    await expect(term).toContainText('leaf.txt', { timeout: 5000 });
+    await openShellTerminal(page);
+    await runTerminalLine(page, 'mkdir -p /a/b/c && echo L > /a/b/c/leaf.txt && ls /a/b/c');
+    await expectTerminalContains(page, 'leaf.txt');
   });
 
-  test('statSync reports size and isFile', async ({ page }) => {
+  test('wc reports file size', async ({ page }) => {
     await page.goto('/');
-    const term = page.locator('[data-testid="terminal"]');
-    await expect(term).toContainText('[worker ready]', { timeout: 10_000 });
-    await term.click();
-    await page.keyboard.type(
-      "(()=>{const fs=require('fs');fs.mkdirSync('/t',{recursive:true});fs.writeFileSync('/t/x.txt','abc');const s=fs.statSync('/t/x.txt');return 'size='+s.size+'|file='+s.isFile()})()",
-    );
-    await page.keyboard.press('Enter');
-    await expect(term).toContainText('size=3|file=true', { timeout: 5000 });
+    await openShellTerminal(page);
+    await runTerminalLine(page, 'mkdir -p /t && printf abc > /t/x.txt && wc -c /t/x.txt');
+    await expectTerminalContains(page, /3\s+\/t\/x\.txt/);
   });
 });

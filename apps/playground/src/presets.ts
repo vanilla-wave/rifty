@@ -1,19 +1,12 @@
-/**
- * Preset programs for the playground gallery. Every preset is covered by the
- * e2e/conformance suites (Hard rule: "no silent stubs").
- *
- * Why this menu is shaped as it is:
- *  - No "require an npm package from the REPL" preset: REPL `require()` roots at
- *    `/` and resolves only Node core builtins, while shell installs land in
- *    `/workspace/node_modules`, so bare npm specifiers don't resolve there.
- *  - A live HTTP/preview demo only works on the main thread (Dev / Real Vite),
- *    where the SW preview bridge is mounted; a Worker REPL has no
- *    `navigator.serviceWorker`, so an http-server-in-REPL preset would 503.
- */
-
 import type { IconName } from './components/icons.tsx';
 
-export type PresetMode = 'repl' | 'dev' | 'real-vite';
+export type PresetMode = 'dev' | 'real-vite';
+
+export interface PresetFile {
+  /** Workspace-relative path written next to src/main.js when this preset loads. */
+  readonly path: string;
+  readonly content: string;
+}
 
 export interface Preset {
   /** Stable id used for the active-selection highlight. */
@@ -24,11 +17,11 @@ export interface Preset {
   readonly category: string;
   /** Semantic icon key rendered as inline SVG; add new keys in {@link ./components/icons.tsx}. */
   readonly icon: IconName;
-  /** Mode the preset runs in; selecting it transitions the mode machine. */
+  /** Mode the preset runs in; selecting it transitions the live-preview UI. */
   readonly mode: PresetMode;
   /**
    * For `real-vite` presets: which registered template (ADR-0078) to run,
-   * resolved via {@link ./templates/registry.ts}. Omitted ⇒ default template (Vite).
+   * resolved via {@link ./templates/registry.ts}. Omitted means the default template.
    */
   readonly templateId?: string;
   /** One-line description shown under the label. */
@@ -37,113 +30,193 @@ export interface Preset {
   readonly tag?: { readonly text: string; readonly tone: 'live' | 'slow' };
   /** Editor source loaded when the preset is selected. */
   readonly source: string;
+  /** Additional project files written into /workspace for this preset. */
+  readonly files?: readonly PresetFile[];
 }
 
-/**
- * Default REPL program. Must keep printing `worker alive`: the M1 e2e asserts
- * that line from the boot-time editor content — see tests/e2e/m1-repl.spec.ts.
- */
-const WELCOME_SOURCE = `// ▶ Welcome to rifty — a Node-compatible runtime running in your browser.
-// This evaluates in a Web Worker. Hit Run (top-right) and watch stdout below.
+const PROJECT_FILES_SOURCE = `const projectUrl = new URL('src/project.json?import', window.location.href).href;
+const summaryUrl = new URL('src/project-summary.js', window.location.href).href;
+const { describeProject, formatFileList } = await import(/* @vite-ignore */ summaryUrl);
+const project = (await import(/* @vite-ignore */ projectUrl)).default;
 
-console.log('worker alive');
+const style = document.createElement('style');
+style.textContent = 'body{margin:0;background:#10131a;color:#eef2f7;font-family:Inter,ui-sans-serif,system-ui,sans-serif}.workspace-shell{max-width:760px;padding:34px}.eyebrow{color:#84d8c8;font-size:12px;font-weight:700;letter-spacing:.08em;margin:0 0 10px;text-transform:uppercase}h1{font-size:32px;margin:0 0 12px}.lede{color:#c8d0dc;line-height:1.6;max-width:680px}.file-list{display:grid;gap:10px;list-style:none;padding:0}.file-list li{border:1px solid #273044;border-radius:6px;display:grid;gap:4px;padding:12px}code{color:#c6f26b}';
+document.head.append(style);
 
-// Plain JS works out of the box — math, template literals, destructuring:
-const area = Math.PI * 2 ** 2;
-console.log(\`Circle area (r=2) = \${area.toFixed(4)}\`);
+const app = document.getElementById('app');
+const fileItems = formatFileList(project.files)
+  .map((file) => '<li><code>' + file.path + '</code><span>' + file.reason + '</span></li>')
+  .join('');
 
-// console.error streams to stderr, just like Node:
-console.error('(this line is stderr)');
-
-// 👈 Pick a preset on the left to explore the event loop, Node core modules,
-//    the virtual filesystem, a live dev server with HMR, or a real
-//    \`npm install\` + Vite build.
+app.innerHTML = '<main class="workspace-shell">'
+  + '<p class="eyebrow">Project files</p>'
+  + '<h1>' + project.name + '</h1>'
+  + '<p class="lede">' + describeProject(project) + '</p>'
+  + '<section><h2>Open these in Explorer</h2>'
+  + '<ul class="file-list">' + fileItems + '</ul></section>'
+  + '</main>';
 `;
 
-const EVENT_LOOP_SOURCE = `// rifty runs a real event loop inside the Worker.
-// Predict the output order before you hit Run!
+const PROJECT_SUMMARY_SOURCE = `export function describeProject(project) {
+  return project.name + ' is rendered from ' + project.files.length + ' workspace files. The preview is useful here because Vite has to resolve imports from the in-browser filesystem.';
+}
 
-console.log('1 — sync');
-
-// Microtask: a resolved-promise callback
-Promise.resolve().then(() => console.log('2 — microtask'));
-
-// Macrotask: a timer (fires after every microtask drains)
-setTimeout(() => console.log('3 — timer'), 0);
-
-// Another microtask, scheduled explicitly
-queueMicrotask(() => console.log('4 — microtask'));
-
-console.log('5 — sync');
-
-// Rule: all sync code first, then the microtask queue, then timers.
+export function formatFileList(files) {
+  return files.map((file) => ({
+    path: file.path,
+    reason: file.reason,
+  }));
+}
 `;
 
-const NODE_CORE_SOURCE = `// rifty ships Node's core modules. require() is available in the REPL,
-// and the 'node:' prefix is optional — both forms resolve identically.
-
-const path = require('node:path');
-const util = require('node:util');
-
-// path: the full POSIX API (join, dirname, basename, extname, parse, …)
-const p = path.join('/home', 'user', 'docs');
-console.log('joined  :', p);
-console.log('basename:', path.basename(p));
-console.log('dirname :', path.dirname(p));
-
-// util.format: printf-style %s / %d specifiers
-console.log(util.format('%s has %d segments', p, p.split('/').filter(Boolean).length));
-
-// Also bundled: events, buffer, assert, url, stream, crypto, os, and more.
+const PROJECT_JSON_SOURCE = `{
+  "name": "Workspace anatomy",
+  "files": [
+    {
+      "path": "src/main.js",
+      "reason": "entry module served by Vite"
+    },
+    {
+      "path": "src/project-summary.js",
+      "reason": "plain JS module imported by the entry"
+    },
+    {
+      "path": "src/project.json",
+      "reason": "structured data imported through Vite"
+    },
+    {
+      "path": "src/workspace.css",
+      "reason": "CSS imported as part of the module graph"
+    }
+  ]
+}
 `;
 
-const FS_SOURCE = `// rifty has a full virtual filesystem. The fs module is require()'d
-// (it is not a global). Everything below runs against an in-browser VFS.
+const WORKSPACE_CSS_SOURCE = `body {
+  margin: 0;
+  background: #10131a;
+  color: #eef2f7;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
 
-const fs = require('fs');
+.workspace-shell {
+  max-width: 760px;
+  padding: 34px;
+}
 
-// Create a directory tree:
-fs.mkdirSync('/demo', { recursive: true });
+.eyebrow {
+  color: #84d8c8;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  margin: 0 0 10px;
+  text-transform: uppercase;
+}
 
-// Write text, then read it back:
-fs.writeFileSync('/demo/hello.txt', 'fs works in the browser!');
-console.log('read back:', fs.readFileSync('/demo/hello.txt', 'utf8'));
+h1 {
+  font-size: 32px;
+  margin: 0 0 12px;
+}
 
-// Write binary data (a Uint8Array), then list the directory:
-fs.writeFileSync('/demo/data.bin', new Uint8Array([72, 105]));
-console.log('dir:', fs.readdirSync('/demo').join(', '));
+.lede {
+  color: #c8d0dc;
+  line-height: 1.6;
+  max-width: 680px;
+}
 
-// Stat a file:
-const st = fs.statSync('/demo/hello.txt');
-console.log(\`stat: size=\${st.size}, isFile=\${st.isFile()}\`);
+.file-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  padding: 0;
+}
+
+.file-list li {
+  border: 1px solid #273044;
+  border-radius: 6px;
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+}
+
+code {
+  color: #c6f26b;
+}
 `;
 
-const DEV_SOURCE = `// Dev Mode starts a Vite-like dev server (port 3000) and opens a live
-// preview. This code is your app entry — written to /workspace/src/main.js
-// and served to the iframe. Edit the text, save, and the preview reloads.
+const NODE_WORKER_SOURCE = `const notesUrl = new URL('src/runtime-notes.js', window.location.href).href;
+const { runtimeNotes, renderRuntimeNotes } = await import(/* @vite-ignore */ notesUrl);
 
-document.getElementById('app').textContent =
-  'Hello from rifty — edit me, save, and watch the preview reload. ⚡';
+const style = document.createElement('style');
+style.textContent = 'body{margin:0;background:#10131a;color:#eef2f7;font-family:Inter,ui-sans-serif,system-ui,sans-serif}.workspace-shell{max-width:760px;padding:34px}.eyebrow{color:#84d8c8;font-size:12px;font-weight:700;letter-spacing:.08em;margin:0 0 10px;text-transform:uppercase}h1{font-size:32px;margin:0 0 12px}.lede{color:#c8d0dc;line-height:1.6;max-width:680px}.file-list{display:grid;gap:10px;list-style:none;padding:0}.file-list li{border:1px solid #273044;border-radius:6px;display:grid;gap:4px;padding:12px}code{color:#c6f26b}';
+document.head.append(style);
 
-document.body.style.margin = '0';
-document.body.style.minHeight = '100vh';
-document.body.style.display = 'grid';
-document.body.style.placeItems = 'center';
-document.body.style.background = '#0f1115';
-document.body.style.color = '#c4f042';
-document.body.style.font = '600 22px/1.4 ui-monospace, monospace';
+const app = document.getElementById('app');
+app.innerHTML = '<main class="workspace-shell">'
+  + '<p class="eyebrow">Node-shaped project</p>'
+  + '<h1>Worker runtime map</h1>'
+  + '<p class="lede">This example points at the Node-style pieces Rifty uses while the preview stays an ordinary browser render.</p>'
+  + '<section><h2>What to inspect</h2>'
+  + '<ul class="file-list">' + renderRuntimeNotes(runtimeNotes) + '</ul></section>'
+  + '</main>';
+`;
+
+const RUNTIME_NOTES_SOURCE = `export const runtimeNotes = [
+  {
+    path: 'package.json',
+    reason: 'npm metadata the terminal command reads before starting Vite',
+  },
+  {
+    path: 'scripts/inspect-workspace.mjs',
+    reason: 'a Node-style script file showing fs/path imports as project code',
+  },
+  {
+    path: 'src/runtime-notes.js',
+    reason: 'a module imported by src/main.js and resolved through Vite',
+  },
+];
+
+export function renderRuntimeNotes(notes) {
+  return notes
+    .map((note) => '<li><code>' + note.path + '</code><span>' + note.reason + '</span></li>')
+    .join('');
+}
+`;
+
+const INSPECT_WORKSPACE_SOURCE = `import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const root = new URL('../', import.meta.url);
+const files = readdirSync(root);
+const pkg = JSON.parse(readFileSync(join(root.pathname, 'package.json'), 'utf8'));
+
+console.log({ name: pkg.name, files });
+`;
+
+const PROJECT_README = `# Workspace anatomy
+
+This preset is useful from the Explorer, not only from the rendered page.
+
+Open src/main.js, src/project-summary.js, src/project.json, and src/workspace.css to see the module graph Vite resolves from Rifty's in-browser filesystem.
+`;
+
+const NODE_README = `# Node-shaped project
+
+This preset keeps the preview honest: the browser renders the result, while the interesting project files show the Node-style shape around it.
+
+The terminal prestarts vite. The script under scripts/ is a project file to inspect; the playground shell exposes vite for the dev server and npm install for package experiments.
 `;
 
 const REAL_VITE_SOURCE = `// Real npm project mode installs a real npm package set into a worker-local
 // node_modules, boots its actual dev server, and previews it live. The default
-// template is Vite (vite@^5); first run takes ~20s (npm install + boot), later
+// template is Vite (vite@^5); first run takes ~20s (install + boot), later
 // runs reuse the cache.
 //
 // This is your app entry, served by the dev server at /src/main.js.
 
 document.getElementById('app').innerHTML =
   '<h1>A real npm project, in your browser.</h1>' +
-  '<p>This page is served by an actual dev server — its packages installed from' +
+  '<p>This page is served by an actual dev server - its packages installed from' +
   ' npm, running in a Worker, previewed through the rifty SW bridge.</p>';
 
 document.body.style.margin = '0';
@@ -153,75 +226,62 @@ document.body.style.color = '#e6e6e6';
 document.body.style.fontFamily = 'ui-monospace, monospace';
 `;
 
-const WELCOME_PRESET: Preset = {
-  id: 'welcome',
-  label: 'Welcome',
-  category: 'REPL',
+const PROJECT_FILES_PRESET: Preset = {
+  id: 'project-files',
+  label: 'Project files',
+  category: 'Files + modules',
+  icon: 'zap',
+  mode: 'real-vite',
+  templateId: 'vite',
+  blurb: 'A small module graph with JS, JSON, CSS, and a README to inspect.',
+  tag: { text: 'live', tone: 'live' },
+  source: PROJECT_FILES_SOURCE,
+  files: [
+    { path: 'src/project-summary.js', content: PROJECT_SUMMARY_SOURCE },
+    { path: 'src/project.json', content: PROJECT_JSON_SOURCE },
+    { path: 'src/workspace.css', content: WORKSPACE_CSS_SOURCE },
+    { path: 'README.md', content: PROJECT_README },
+  ],
+};
+
+const NODE_WORKER_PRESET: Preset = {
+  id: 'node-worker',
+  label: 'Node worker map',
+  category: 'Files + modules',
   icon: 'play',
-  mode: 'repl',
-  blurb: 'Run JavaScript instantly in a browser-side Node-like REPL.',
-  source: WELCOME_SOURCE,
+  mode: 'real-vite',
+  templateId: 'vite',
+  blurb: 'Shows where Node-style project files fit around the worker dev server.',
+  tag: { text: 'live', tone: 'live' },
+  source: NODE_WORKER_SOURCE,
+  files: [
+    { path: 'src/runtime-notes.js', content: RUNTIME_NOTES_SOURCE },
+    { path: 'src/workspace.css', content: WORKSPACE_CSS_SOURCE },
+    { path: 'scripts/inspect-workspace.mjs', content: INSPECT_WORKSPACE_SOURCE },
+    { path: 'README.md', content: NODE_README },
+  ],
+};
+
+const REAL_VITE_PRESET: Preset = {
+  id: 'real-vite',
+  label: 'Real npm project',
+  category: 'Live preview',
+  icon: 'rocket',
+  mode: 'real-vite',
+  templateId: 'vite',
+  blurb: 'Installs a real npm project and runs its Vite dev server in a terminal.',
+  tag: { text: '~20s', tone: 'slow' },
+  source: REAL_VITE_SOURCE,
 };
 
 export const PRESETS: readonly Preset[] = [
-  WELCOME_PRESET,
-  {
-    id: 'event-loop',
-    label: 'Event loop order',
-    category: 'REPL',
-    icon: 'repeat',
-    mode: 'repl',
-    blurb: 'Watch sync, microtasks and timers interleave exactly like Node.',
-    source: EVENT_LOOP_SOURCE,
-  },
-  {
-    id: 'node-core',
-    label: 'Node core modules',
-    category: 'Node core',
-    icon: 'package',
-    mode: 'repl',
-    blurb: "require('node:path') and friends — real built-ins, no install.",
-    source: NODE_CORE_SOURCE,
-  },
-  {
-    id: 'filesystem',
-    label: 'Virtual filesystem',
-    category: 'Filesystem',
-    icon: 'filesystem',
-    mode: 'repl',
-    blurb: 'Write, read and stat files with the real fs API on an in-browser VFS.',
-    source: FS_SOURCE,
-  },
-  {
-    id: 'dev-hmr',
-    label: 'Dev server + HMR',
-    category: 'Live preview',
-    icon: 'zap',
-    mode: 'dev',
-    blurb: 'A Vite-like dev server with live reload, previewed in an iframe.',
-    tag: { text: 'live', tone: 'live' },
-    source: DEV_SOURCE,
-  },
-  {
-    id: 'real-vite',
-    label: 'Real npm project',
-    category: 'Live preview',
-    icon: 'rocket',
-    mode: 'real-vite',
-    templateId: 'vite',
-    blurb: 'Installs a real npm project (Vite by default) and runs its dev server.',
-    tag: { text: '~20s', tone: 'slow' },
-    source: REAL_VITE_SOURCE,
-  },
+  PROJECT_FILES_PRESET,
+  NODE_WORKER_PRESET,
+  REAL_VITE_PRESET,
 ];
 
 /** The preset selected at boot. Its source is the default editor content. */
-export const DEFAULT_PRESET: Preset = WELCOME_PRESET;
+export const DEFAULT_PRESET: Preset = PROJECT_FILES_PRESET;
 
 /** Category render order in the gallery. */
-export const CATEGORY_ORDER: readonly string[] = [
-  'REPL',
-  'Node core',
-  'Filesystem',
-  'Live preview',
-];
+export const CATEGORY_ORDER: readonly string[] = ['Files + modules', 'Live preview'];

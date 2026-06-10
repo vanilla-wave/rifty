@@ -22,38 +22,38 @@
   History recall now clears the whole visible line even when the caret is mid-line
   and resets the caret to the end.
 
-- Cell-width-aware edit math (ADR-0096). The line editor still stores
+- Cell-width-aware edit math (ADR-0097). The line editor still stores
   `cursorPos` as a string offset, but cursor motion, erase, and mid-line repaint
   now use display-cell widths over small grapheme-ish edit segments. CJK and
   emoji glyphs move/erase as two cells instead of one UTF-16 code unit, and
   combining marks stay attached to their base during Backspace/Delete.
   Full wrapped-row editing remains deferred.
 
-- Readline-style history/word navigation (ADR-0096). ArrowUp/Down with a
+- Readline-style history/word navigation (ADR-0097). ArrowUp/Down with a
   non-empty buffer at the end of the line now searches command history by that
   prefix; unmatched prefixes stay intact and empty-prefix history keeps its
   previous chronological behavior. Ctrl+Left/Right and Alt+B/F move by
   shell-ish words using the same cell-width-aware cursor math.
-- Fish/readline-style editor aids (ADR-0096): a dim autosuggestion suffix from
+- Fish/readline-style editor aids (ADR-0097): a dim autosuggestion suffix from
   the newest matching history entry appears at end-of-line and Right/End accepts
   it; Ctrl+U/Ctrl+K/Ctrl+W cut into an editor-local kill ring and Ctrl+Y yanks;
   Ctrl+R opens reverse history search, repeated Ctrl+R walks older matches,
   Enter accepts, and Ctrl+G/Esc restores the original buffer.
-- Ctrl+C copy-vs-SIGINT disambiguation (ADR-0096). `RiftyTerminal` now installs
+- Ctrl+C copy-vs-SIGINT disambiguation (ADR-0097). `RiftyTerminal` now installs
   an xterm custom key handler: Ctrl+C/Ctrl+Shift+C (and Cmd+C on macOS) copies a
   non-empty terminal selection through `navigator.clipboard` and suppresses ETX;
   Ctrl+C with no selection still flows through xterm and emits SIGINT as before.
-- Emacs/readline key aliases (ADR-0096): Ctrl+B/F move left/right, Ctrl+P/N walk
+- Emacs/readline key aliases (ADR-0097): Ctrl+B/F move left/right, Ctrl+P/N walk
   history, Ctrl+D forward-deletes, Ctrl+L clears/redraws the current prompt, and
   Ctrl+T transposes adjacent edit segments.
-- Alt-tier kill-ring keys (ADR-0096): `macOptionIsMeta` is now exposed through
+- Alt-tier kill-ring keys (ADR-0097): `macOptionIsMeta` is now exposed through
   `RiftyTerminalOptions`; Alt+D kills the word to the right, Alt+Backspace kills
   the word to the left, and Alt+Y rotates the most recent yank through the local
   kill ring.
-- Bracketed paste policy (ADR-0096): line-mode terminal sets xterm's
+- Bracketed paste policy (ADR-0097): line-mode terminal sets xterm's
   `ignoreBracketedPasteMode` and strips pasted `\x1b[200~...\x1b[201~` wrappers
   before they can enter the command buffer.
-- Line-edit undo (ADR-0096): Ctrl+_ and delivered Ctrl+Z restore the previous
+- Line-edit undo (ADR-0097): Ctrl+_ and delivered Ctrl+Z restore the previous
   editor buffer/cursor snapshot for inserts, deletes, kills, yanks, suggestions,
   and transpose. Redo remains deferred.
 - Tab completion seam (ADR-0104): `RiftyTerminalOptions.completer(line, cursor)`
@@ -85,7 +85,7 @@
 - IDE autocomplete host seam (ADR-0104): `onEditStateChange` reports the current
   editable line/cursor to hosts, and `replaceLine(line, cursor?)` can restore the
   caret inside the injected line.
-- Line-edit redo (ADR-0096): Ctrl/Cmd+Shift+Z is caught at xterm's DOM key
+- Line-edit redo (ADR-0097): Ctrl/Cmd+Shift+Z is caught at xterm's DOM key
   handler and replays the latest undone edit. New edits, Enter, and Ctrl+C clear
   redo history.
 - Viewport command-header seam (ADR-0100): `getViewportLine()`,
@@ -93,19 +93,19 @@
   command headers from public command-block state.
 - OSC 52 clipboard writes (ADR-0105): terminal output may request a clipboard
   write with bounded OSC 52 payloads; readback requests are stripped and ignored.
-- Wrapped-line cursor layout (ADR-0096): long line edits now map buffer offsets
+- Wrapped-line cursor layout (ADR-0097): long line edits now map buffer offsets
   to prompt-relative visual rows/columns, so movement, mid-line repaint, Delete,
   and history recall stay coherent after the input crosses terminal `cols`.
 - OSC 8 link handling (ADR-0105): xterm OSC 8 hyperlinks now route through the
   host-owned `webLinks.onLink` seam with the same Ctrl/Cmd modifier policy as
   detected web links; non-HTTP protocols are enabled only for that host seam.
-- Command-line highlighting seam (ADR-0096): hosts may provide
+- Command-line highlighting seam (ADR-0097): hosts may provide
   `highlighter(line)` spans with truecolor foregrounds. The terminal renders
   editable input with SGR while keeping `cursorPos` and submitted lines raw.
-- Multiline input validator (ADR-0096): hosts may provide
+- Multiline input validator (ADR-0097): hosts may provide
   `inputValidator(line, cursor)`. Enter inserts an undoable newline while input
   is incomplete and submits the raw multiline buffer once complete.
-- Abbreviations/snippets (ADR-0096): hosts may provide
+- Abbreviations/snippets (ADR-0097): hosts may provide
   `rewriteRules` trigger/replacement pairs. Space expands the trigger token and
   keeps editing; Enter expands before submit; the rewrite is undoable.
 - Ghost suggestions (ADR-0120): hosts may provide
