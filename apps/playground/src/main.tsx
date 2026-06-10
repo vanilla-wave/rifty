@@ -5,6 +5,7 @@ import { setKernelWorkerUrl } from '@riftydev/kernel';
 import { render } from 'solid-js/web';
 import { App } from './App.tsx';
 import { assertCrossOriginIsolated, bootstrapPlayground } from './boot.ts';
+import { createTerminalPersistence } from './glue/terminal-persistence.ts';
 // `?worker&url` bundles the kernel child-worker entry + yields its URL. The bare
 // `new URL(..., import.meta.url)` form isn't emitted as a worker chunk by `vite build`,
 // so child processes failed to spawn in prod (see note in adapters/useRuntime.ts).
@@ -14,6 +15,8 @@ import kernelWorkerUrl from './workers/kernel-worker-entry.ts?worker&url';
 // dev AND prod — a bare `/@xterm/...` href hits the SPA fallback (200 HTML), silently ignored.
 import '@xterm/xterm/css/xterm.css';
 import './styles/theme.css';
+
+const WORKSPACE = '/workspace';
 
 // Fail loud if COI is off, before VFS detection / SW registration, so the error
 // is painted as early as possible.
@@ -43,5 +46,6 @@ async function renderApp(): Promise<void> {
   // runtime. Pipeline: re-assert COI (defence-in-depth), init VFS (memory
   // fallback on failure), register `/sw.js` (banner on failure, not fatal).
   const bootResult = await bootstrapPlayground();
-  render(() => <App boot={bootResult} />, root);
+  const terminalPersistence = await createTerminalPersistence(WORKSPACE);
+  render(() => <App boot={bootResult} terminalPersistence={terminalPersistence} />, root);
 }

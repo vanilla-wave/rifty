@@ -4,6 +4,79 @@
 
 ### Fixed
 
+- **Ctrl+C now reaches the shell through the bottom console.** `BottomPanel`
+  declared `onSignal` but dropped it before `TerminalPanel`, so the terminal
+  echoed `^C` while the playground shell never received `interrupt()`. The
+  prop is now forwarded to the mounted xterm wrapper.
+- **Terminal command status now reaches xterm markers.** Shell-mode `runLine()`
+  returns its exit code through `BottomPanel`/`TerminalPanel` into
+  `RiftyTerminal`, so command blocks can show success/failure decorations. REPL
+  mode keeps returning `void`, leaving status decoration unset.
+- **Terminal tab completion is wired in shell modes.** The playground now feeds
+  `RiftyTerminal` completions from `Shell.commandNames()` at argv-0 and from the
+  main-thread VFS for path arguments; REPL mode stays untouched.
+- **Terminal follows OS light/dark preference.** The xterm wrapper now starts
+  with a terminal theme derived from `prefers-color-scheme` and updates it via
+  `setTheme()` on OS theme changes. The broader playground CSS light theme
+  remains its parked backlog item.
+- **Terminal find overlay.** Ctrl/Cmd+F inside the console opens a compact find
+  box backed by `RiftyTerminal.findNext()` / `findPrevious()`; Enter and
+  Shift+Enter walk matches, Esc closes and clears decorations.
+- **Terminal command palette.** Ctrl/Cmd+Shift+P inside the console opens a
+  command picker seeded from `Shell.commandNames()`; selecting a command
+  pre-fills the terminal through `RiftyTerminal.replaceLine()`.
+- **Terminal quick fix for command typos.** Shell stderr `Did you mean 'cmd'?`
+  diagnostics now surface a console action that runs the suggested command via
+  `RiftyTerminal.submitLine()`.
+- **Terminal quick fixes are provider-based.** The quick-fix glue now supports
+  multiple output providers; `EADDRINUSE` / address-in-use diagnostics offer a
+  stop-and-rerun action for the last submitted command.
+- **Terminal sticky command header.** The console now pins the command block at
+  the top of the xterm viewport and lets you click it to jump back to that
+  command.
+- **Terminal command-block rail.** Recent command blocks now show as a compact
+  status rail in the console; clicking a mark jumps to that block, and the
+  sticky command header has an icon action to copy the current block output.
+- **Terminal rich history overlay.** Ctrl/Cmd+R inside the console opens a DOM
+  history picker backed by rich records (command, cwd, mode, duration, exit
+  code, session id) saved through the terminal persistence store; selecting a
+  row restores the command line.
+- **Terminal state persistence.** The playground now restores shell `cwd` and
+  env from `/workspace/.rifty/terminal-state.json` before constructing the shell
+  session, then saves updated state after each submitted terminal line. Async
+  OPFS is used when available; memory fallback remains session-only.
+- **Shell abbreviations/snippets.** Shell-mode terminal input now seeds
+  fish-style rewrite rules for `ll -> ls -la`, `la -> ls -a`, and
+  `mk -> mkdir -p`; REPL input stays unmodified.
+- **AI command suggestions.** When `VITE_RIFTY_AI_COMMAND_SUGGEST_URL` is set,
+  shell-mode `# prompt` lines request a command suggestion, render it as ghost
+  text, and accept it by replacement only. Suggestions are filtered to rifty
+  coreutils, reject compound shell syntax, and never auto-run; raw `# prompt`
+  Enter is a no-op.
+- **Background jobs.** Shell-mode `cmd &` now returns the prompt immediately,
+  streams background output into the terminal without corrupting the editable
+  line, and exposes status through the `jobs` builtin.
+- **Terminal raw stdin.** Shell-mode foreground commands now receive terminal
+  raw input while running, enabling `mouse-demo` to verify xterm mouse reports
+  through the browser.
+- **Terminal e2e renderer.** Automated browsers disable the WebGL addon via
+  `navigator.webdriver`, keeping xterm's DOM rows available for Playwright
+  assertions while normal sessions keep best-effort WebGL.
+- **Terminal output export.** The terminal command palette now includes actions
+  to copy text output, copy HTML output, and download the serialized scrollback
+  as a standalone HTML document.
+- **Terminal OSC 8 file links.** Ctrl/Cmd-clicking a `grep` file hyperlink opens
+  safe `file:///workspace/...` targets in the editor; non-file, outside-workspace,
+  and traversal links are ignored.
+- **Shell command-line syntax highlighting.** Shell-mode terminal input now
+  colors command words, quoted strings, and shell operators through the
+  `@riftydev/terminal` highlighter seam; REPL input stays plain.
+- **Shell multiline input.** Shell-mode Enter now keeps editing when quotes,
+  bracket groups, or trailing continuations are incomplete; the completed raw
+  multiline buffer is submitted as one command.
+- **Terminal autocomplete dropdown.** Tab or Ctrl/Cmd+Space inside the console now
+  opens a keyboardable DOM completion list backed by the existing shell
+  command/path completer; ArrowUp/Down selects, Enter/Tab applies, Esc closes.
 - **Terminal no longer overlaps the status bar.** xterm's `FitAddon` computes
   rows from the mount element's height minus *that element's own* padding (the
   `.xterm` div it creates, padding 0) — so the `6px` vertical padding on the

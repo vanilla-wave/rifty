@@ -11,6 +11,7 @@
  * `registerCommand` from the playground or test harness — keeps shell free of
  * upper-layer dependencies.
  */
+export { coreCommandNames } from './builtins.ts';
 export {
   Shell,
   type ChunkStream,

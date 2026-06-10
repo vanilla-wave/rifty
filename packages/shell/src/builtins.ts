@@ -23,8 +23,11 @@ import { envCmd } from './commands/env.ts';
 import { find } from './commands/find.ts';
 import { grep } from './commands/grep.ts';
 import { head } from './commands/head.ts';
+import { img } from './commands/img.ts';
+import { type ShellJobListItem, jobs } from './commands/jobs.ts';
 import { ls } from './commands/ls.ts';
 import { mkdir } from './commands/mkdir.ts';
+import { mouseDemo } from './commands/mouse-demo.ts';
 import { mv } from './commands/mv.ts';
 import { printf } from './commands/printf.ts';
 import { pwd } from './commands/pwd.ts';
@@ -39,9 +42,46 @@ import { wc } from './commands/wc.ts';
 import { which } from './commands/which.ts';
 import type { ShellCommand } from './types.ts';
 
+export const CORE_COMMAND_NAMES = [
+  'pwd',
+  'cd',
+  'echo',
+  'ls',
+  'cat',
+  'mkdir',
+  'rm',
+  'env',
+  'find',
+  'grep',
+  'which',
+  'clear',
+  'touch',
+  'head',
+  'img',
+  'jobs',
+  'mouse-demo',
+  'tail',
+  'wc',
+  'basename',
+  'dirname',
+  'realpath',
+  'seq',
+  'sleep',
+  'true',
+  'false',
+  'printf',
+  'cp',
+  'mv',
+] as const;
+
+export function coreCommandNames(): string[] {
+  return [...CORE_COMMAND_NAMES].sort();
+}
+
 export function builtinCommands(
   setCwd: (p: string) => void,
   hasCommand: (name: string) => boolean,
+  listJobs: () => readonly ShellJobListItem[],
 ): Record<string, ShellCommand> {
   return {
     pwd,
@@ -58,6 +98,9 @@ export function builtinCommands(
     clear,
     touch,
     head,
+    img,
+    jobs: jobs(listJobs),
+    'mouse-demo': mouseDemo,
     tail,
     wc,
     basename,

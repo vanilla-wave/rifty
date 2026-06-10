@@ -109,4 +109,40 @@ describe('useShellSession', () => {
       dispose();
     });
   });
+
+  it('env() reflects persistent shell env without exposing mutation', async () => {
+    await createRoot(async (dispose) => {
+      const session = useShellSession({ env: { FOO: 'bar' } });
+      await session.runLine('NEXT=one');
+      const snapshot = session.env();
+      expect(snapshot).toEqual({ FOO: 'bar', NEXT: 'one' });
+      snapshot.NEXT = 'mutated';
+      expect(session.env().NEXT).toBe('one');
+      dispose();
+    });
+  });
+
+  it('routes raw terminal input to the active shell run stdin', async () => {
+    await createRoot(async (dispose) => {
+      const session = useShellSession();
+      const writer = makeWriter();
+      session.attachWriter(writer.write);
+      session.registerCommand('read-one', async (_args, ctx) => {
+        const chunk = await ctx.stdin?.read();
+        ctx.stdout.write(chunk ? new TextDecoder().decode(chunk) : '<eof>');
+        return 0;
+      });
+
+      const run = session.runLine('read-one');
+      await Promise.resolve();
+      session.writeStdin('\x1b[<0;10;20M');
+      await expect(run).resolves.toBe(0);
+
+      expect(writer.calls).toContainEqual({
+        chunk: '\x1b[<0;10;20M',
+        stream: 'stdout',
+      });
+      dispose();
+    });
+  });
 });

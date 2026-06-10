@@ -94,6 +94,75 @@ describe('classifyKey — arrow keys (CSI sequences)', () => {
   });
 });
 
+describe('classifyKey — word motion', () => {
+  it('classifies Ctrl+Up/Down as command-block navigation', () => {
+    expect(classifyKey('\x1b[1;5A')).toEqual({ kind: 'command-prev' });
+    expect(classifyKey('\x1b[5A')).toEqual({ kind: 'command-prev' });
+    expect(classifyKey('\x1b[1;5B')).toEqual({ kind: 'command-next' });
+    expect(classifyKey('\x1b[5B')).toEqual({ kind: 'command-next' });
+  });
+
+  it('classifies Ctrl+Shift+Up/Down as command-block selection', () => {
+    expect(classifyKey('\x1b[1;6A')).toEqual({ kind: 'command-prev-select' });
+    expect(classifyKey('\x1b[6A')).toEqual({ kind: 'command-prev-select' });
+    expect(classifyKey('\x1b[1;6B')).toEqual({ kind: 'command-next-select' });
+    expect(classifyKey('\x1b[6B')).toEqual({ kind: 'command-next-select' });
+  });
+
+  it('classifies Ctrl+Left as word-left', () => {
+    expect(classifyKey('\x1b[1;5D')).toEqual({ kind: 'word-left' });
+  });
+
+  it('classifies Ctrl+Right as word-right', () => {
+    expect(classifyKey('\x1b[1;5C')).toEqual({ kind: 'word-right' });
+  });
+
+  it('classifies Alt+B/F as word-left/right', () => {
+    expect(classifyKey('\x1bb')).toEqual({ kind: 'word-left' });
+    expect(classifyKey('\x1bf')).toEqual({ kind: 'word-right' });
+  });
+});
+
+describe('classifyKey — readline editing/search keys', () => {
+  it('classifies Emacs movement aliases', () => {
+    expect(classifyKey('\x02')).toEqual({ kind: 'arrow-left' }); // Ctrl+B
+    expect(classifyKey('\x06')).toEqual({ kind: 'arrow-right' }); // Ctrl+F
+    expect(classifyKey('\x10')).toEqual({ kind: 'arrow-up' }); // Ctrl+P
+    expect(classifyKey('\x0e')).toEqual({ kind: 'arrow-down' }); // Ctrl+N
+  });
+
+  it('classifies kill/yank controls', () => {
+    expect(classifyKey('\x04')).toEqual({ kind: 'delete' }); // Ctrl+D
+    expect(classifyKey('\x15')).toEqual({ kind: 'kill-before-cursor' }); // Ctrl+U
+    expect(classifyKey('\x0b')).toEqual({ kind: 'kill-after-cursor' }); // Ctrl+K
+    expect(classifyKey('\x17')).toEqual({ kind: 'kill-word-left' }); // Ctrl+W
+    expect(classifyKey('\x19')).toEqual({ kind: 'yank' }); // Ctrl+Y
+  });
+
+  it('classifies Alt-tier kill-ring controls', () => {
+    expect(classifyKey('\x1bd')).toEqual({ kind: 'kill-word-right' }); // Alt+D
+    expect(classifyKey('\x1b\x7f')).toEqual({ kind: 'kill-word-left' }); // Alt+Backspace
+    expect(classifyKey('\x1b\b')).toEqual({ kind: 'kill-word-left' }); // Alt+BS
+    expect(classifyKey('\x1by')).toEqual({ kind: 'yank-pop' }); // Alt+Y
+  });
+
+  it('classifies redraw and transpose controls', () => {
+    expect(classifyKey('\x0c')).toEqual({ kind: 'clear-screen' }); // Ctrl+L
+    expect(classifyKey('\x14')).toEqual({ kind: 'transpose' }); // Ctrl+T
+  });
+
+  it('classifies undo controls', () => {
+    expect(classifyKey('\x1f')).toEqual({ kind: 'undo' }); // Ctrl+_
+    expect(classifyKey('\x1a')).toEqual({ kind: 'undo' }); // Ctrl+Z, when delivered
+  });
+
+  it('classifies reverse-search controls', () => {
+    expect(classifyKey('\x12')).toEqual({ kind: 'reverse-search' }); // Ctrl+R
+    expect(classifyKey('\x07')).toEqual({ kind: 'search-cancel' }); // Ctrl+G
+    expect(classifyKey('\x1b')).toEqual({ kind: 'search-cancel' }); // Esc
+  });
+});
+
 describe('classifyKey — printable text', () => {
   it('classifies a single ASCII letter as printable', () => {
     expect(classifyKey('a')).toEqual({ kind: 'printable', text: 'a' });
@@ -127,6 +196,12 @@ describe('classifyKey — paste containing newlines', () => {
     if (ev.kind === 'printable') expect(ev.text).toBe('safeevil');
   });
 
+  it('strips bracketed paste wrappers from a paste', () => {
+    const ev = classifyKey('\x1b[200~line 1\nline 2\x1b[201~');
+    expect(ev.kind).toBe('printable');
+    if (ev.kind === 'printable') expect(ev.text).toBe('line 1\nline 2');
+  });
+
   it('strips embedded NUL / SOH bytes from a paste', () => {
     const ev = classifyKey('a\x00b\x01c');
     expect(ev.kind).toBe('printable');
@@ -140,8 +215,8 @@ describe('classifyKey — edge cases', () => {
   });
 
   it('drops a lone unprintable control byte that is not whitelisted', () => {
-    // Form feed — not in whitelist, drop.
-    const ev = classifyKey('\x0c');
+    // SYN — not in whitelist, drop.
+    const ev = classifyKey('\x16');
     expect(ev.kind).toBe('ignored');
   });
 });

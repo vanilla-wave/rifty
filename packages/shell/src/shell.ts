@@ -20,6 +20,7 @@ import { isAbsolute, joinPath, normalizePath, syncMirror } from '@riftydev/vfs';
 import { builtinCommands } from './builtins.ts';
 import { hasGlobMeta, matchSegment } from './commands/_glob.ts';
 import { resolve } from './commands/_shared.ts';
+import type { ShellJobListItem } from './commands/jobs.ts';
 import { type Token, isOp, tokenize } from './tokenize.ts';
 import type { CommandContext, ShellCommand } from './types.ts';
 
@@ -63,12 +64,20 @@ export interface RunOptions {
   readonly isTTY?: boolean;
   readonly cols?: number;
   readonly rows?: number;
+  readonly stdin?: CommandContext['stdin'];
 }
 
 type Joiner = '&&' | '||' | ';' | null;
 interface Segment {
   readonly tokens: Token[];
   readonly joiner: Joiner; // joiner FOLLOWING this segment; null on the last
+}
+
+interface BackgroundJob {
+  readonly id: number;
+  readonly command: string;
+  readonly controller: AbortController;
+  status: ShellJobListItem['status'];
 }
 
 const encoder = new TextEncoder();
@@ -78,6 +87,38 @@ const ABORTED = Symbol('shell.aborted');
 
 /** Exit code for a command interrupted by SIGINT (128 + SIGINT(2)). */
 const SIGINT_EXIT = 130;
+
+function damerauLevenshtein(a: string, b: string): number {
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  const dist: number[] = Array.from({ length: rows * cols }, () => 0);
+  const at = (row: number, col: number): number => dist[row * cols + col] ?? 0;
+  const set = (row: number, col: number, value: number): void => {
+    dist[row * cols + col] = value;
+  };
+
+  for (let row = 0; row < rows; row++) set(row, 0, row);
+  for (let col = 0; col < cols; col++) set(0, col, col);
+
+  for (let row = 1; row < rows; row++) {
+    for (let col = 1; col < cols; col++) {
+      const cost = a[row - 1] === b[col - 1] ? 0 : 1;
+      let best = Math.min(at(row - 1, col) + 1, at(row, col - 1) + 1, at(row - 1, col - 1) + cost);
+      if (row > 1 && col > 1 && a[row - 1] === b[col - 2] && a[row - 2] === b[col - 1]) {
+        best = Math.min(best, at(row - 2, col - 2) + 1);
+      }
+      set(row, col, best);
+    }
+  }
+
+  return at(a.length, b.length);
+}
+
+function suggestionThreshold(input: string): number {
+  if (input.length <= 2) return 0;
+  if (input.length <= 5) return 1;
+  return 2;
+}
 
 /**
  * A promise that resolves to {@link ABORTED} when `signal` fires, plus a
@@ -109,6 +150,9 @@ export class Shell {
   private _cwd: string;
   private readonly env: Record<string, string>;
   private readonly commands: Map<string, ShellCommand> = new Map();
+  private readonly customCommands: Map<string, ShellCommand> = new Map();
+  private readonly backgroundJobs: BackgroundJob[] = [];
+  private backgroundSeq = 0;
 
   constructor(options: ShellOptions = {}) {
     this._cwd = normalizePath(options.cwd ?? '/');
@@ -120,6 +164,7 @@ export class Shell {
       // Lazy presence probe: `which` reads this.commands at invocation time,
       // after every builtin + any registerCommand has populated the map.
       (n) => this.commands.has(n),
+      () => this.listBackgroundJobs(),
     );
     for (const [name, cmd] of Object.entries(builtins)) this.commands.set(name, cmd);
   }
@@ -128,12 +173,44 @@ export class Shell {
     return this._cwd;
   }
 
+  envSnapshot(): Record<string, string> {
+    return { ...this.env };
+  }
+
   registerCommand(name: string, cmd: ShellCommand): void {
     this.commands.set(name, cmd);
+    this.customCommands.set(name, cmd);
   }
 
   hasCommand(name: string): boolean {
     return this.commands.has(name);
+  }
+
+  commandNames(): readonly string[] {
+    return [...this.commands.keys()].sort();
+  }
+
+  dispose(): void {
+    for (const job of this.backgroundJobs) {
+      if (job.status === 'Running') job.controller.abort();
+    }
+  }
+
+  private suggestCommand(cmd: string): string | null {
+    let best: { name: string; distance: number } | null = null;
+    for (const name of this.commands.keys()) {
+      const distance = damerauLevenshtein(cmd, name);
+      if (
+        best &&
+        (distance > best.distance ||
+          (distance === best.distance && name.length <= best.name.length))
+      ) {
+        continue;
+      }
+      best = { name, distance };
+    }
+    if (!best || best.distance > suggestionThreshold(cmd)) return null;
+    return best.name;
   }
 
   /**
@@ -149,11 +226,14 @@ export class Shell {
     const tokens = tokenize(line, this.env);
     if (tokens.length === 0) return { exitCode: 0, stdout: '', stderr: '' };
 
-    // Reject bare `&` loudly; tokenizer emits it as a standalone operator token.
+    const background = this.trailingBackground(line, tokens);
+    if (background) return this.startBackgroundJob(background.line, background.tokens, options);
+
+    // Reject non-trailing bare `&` loudly; tokenizer emits it as an operator token.
     if (tokens.some((t) => isOp(t) && t.op === '&')) {
       throw new NotImplementedError(
         'shell.background',
-        'background execution with `&` is not supported — drop the `&` and run it foreground',
+        'only trailing background execution (`cmd &`) is supported',
       );
     }
 
@@ -218,6 +298,93 @@ export class Shell {
     }
 
     return { exitCode: lastExitCode, stdout, stderr };
+  }
+
+  private trailingBackground(
+    line: string,
+    tokens: readonly Token[],
+  ): { readonly line: string; readonly tokens: readonly Token[] } | null {
+    const last = tokens[tokens.length - 1];
+    if (!last || !isOp(last) || last.op !== '&') return null;
+    const backgroundTokens = tokens.slice(0, -1);
+    if (backgroundTokens.length === 0) {
+      throw new NotImplementedError('shell.background', 'missing command before `&`');
+    }
+    return { line: stripTrailingAmp(line), tokens: backgroundTokens };
+  }
+
+  private async startBackgroundJob(
+    line: string,
+    tokens: readonly Token[],
+    options: RunOptions,
+  ): Promise<RunResult> {
+    for (const token of tokens) {
+      if (!isOp(token)) continue;
+      if (token.op === '&') {
+        throw new NotImplementedError('shell.background', 'only one trailing `&` is supported');
+      }
+      if (token.op === '|') {
+        throw new NotImplementedError(
+          'shell.pipe',
+          'pipe operator not yet supported — M12 work item',
+        );
+      }
+      if (token.op === '<') {
+        throw new NotImplementedError(
+          'shell.input-redirect',
+          'use bash via wasi for < input redirect — M12 work item',
+        );
+      }
+    }
+
+    const job: BackgroundJob = {
+      id: ++this.backgroundSeq,
+      command: line,
+      controller: new AbortController(),
+      status: 'Running',
+    };
+    this.backgroundJobs.push(job);
+    const started = this.formatJob(job);
+    options.onChunk?.(started, 'stdout');
+    void this.runBackgroundJob(job, options);
+    return { exitCode: 0, stdout: started, stderr: '' };
+  }
+
+  private async runBackgroundJob(job: BackgroundJob, options: RunOptions): Promise<void> {
+    const shell = this.cloneForBackground();
+    try {
+      const result = await shell.run(job.command, {
+        onChunk: options.onChunk,
+        signal: job.controller.signal,
+        isTTY: options.isTTY,
+        cols: options.cols,
+        rows: options.rows,
+      });
+      job.status = result.exitCode === 0 ? 'Done' : `Exit ${result.exitCode}`;
+    } catch (err) {
+      job.status = 'Exit 1';
+      options.onChunk?.(`${job.command}: ${(err as Error).message}\n`, 'stderr');
+    } finally {
+      options.onChunk?.(this.formatJob(job), 'stdout');
+    }
+  }
+
+  private cloneForBackground(): Shell {
+    const shell = new Shell({ cwd: this._cwd, env: this.env });
+    for (const [name, command] of this.customCommands) shell.registerCommand(name, command);
+    return shell;
+  }
+
+  private listBackgroundJobs(): readonly ShellJobListItem[] {
+    return this.backgroundJobs.map((job) => ({
+      id: job.id,
+      command: job.command,
+      status: job.status,
+    }));
+  }
+
+  private formatJob(job: ShellJobListItem): string {
+    return `[${job.id}] ${job.status} ${job.command}\n`;
   }
 
   /**
@@ -315,11 +482,14 @@ export class Shell {
       isTTY: redirectTo ? false : (options.isTTY ?? false),
       cols: options.cols,
       rows: options.rows,
+      stdin: options.stdin,
       signal,
     };
 
     if (!handler) {
       emit(`${cmd}: command not found\n`, 'stderr');
+      const suggestion = this.suggestCommand(cmd);
+      if (suggestion) emit(`Did you mean '${suggestion}'?\n`, 'stderr');
       return { exitCode: 127, stdout, stderr };
     }
 
@@ -462,4 +632,11 @@ function splitOnJoiners(tokens: Token[]): Segment[] {
   }
   segments.push({ tokens: current, joiner: null });
   return segments;
+}
+
+function stripTrailingAmp(line: string): string {
+  let end = line.length;
+  while (end > 0 && /\s/u.test(line[end - 1] ?? '')) end--;
+  if (line[end - 1] !== '&') return line.trimEnd();
+  return line.slice(0, end - 1).trimEnd();
 }

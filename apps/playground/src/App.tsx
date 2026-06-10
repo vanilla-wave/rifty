@@ -1,5 +1,7 @@
 import { RegistryClient } from '@riftydev/npm-client';
 import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
+import { coreCommandNames } from '@riftydev/shell';
+import type { TerminalGhostSuggestionProvider, TerminalRewriteRule } from '@riftydev/terminal';
 import { syncMirror } from '@riftydev/vfs';
 import { Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import { useShellSession } from './adapters/shell-adapter.ts';
@@ -21,13 +23,34 @@ import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
 import { createNpmShellCommand } from './glue/npm-shell-command.ts';
 import { proxiedRegistryFetch } from './glue/registry-fetch.ts';
+import { createShellCompleter } from './glue/shell-completion.ts';
+import { shellLineHighlightSpans } from './glue/shell-highlighting.ts';
+import { validateShellInput } from './glue/shell-input-validator.ts';
 import { SnapshotFs } from './glue/snapshot-fs.ts';
 import { SyncMirrorVfs } from './glue/sync-mirror-vfs.ts';
+import {
+  extractAiCommandPrompt,
+  readAiCommandSuggestionConfig,
+  suggestAiCommand,
+} from './glue/terminal-ai-suggestions.ts';
+import {
+  type TerminalHistoryMode,
+  type TerminalHistoryRecord,
+  addTerminalHistoryRecord,
+} from './glue/terminal-history.ts';
+import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
+import type { TerminalPersistence } from './glue/terminal-persistence.ts';
 import { subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
 import { DEFAULT_PRESET, type Preset } from './presets.ts';
 import { defaultProjectSpec } from './templates/registry.ts';
 
 const WORKSPACE = '/workspace';
+const TERMINAL_SESSION_ID = `session-${Date.now().toString(36)}`;
+const SHELL_REWRITE_RULES: readonly TerminalRewriteRule[] = [
+  { trigger: 'll', replacement: 'ls -la', description: 'long listing' },
+  { trigger: 'la', replacement: 'ls -a', description: 'all files' },
+  { trigger: 'mk', replacement: 'mkdir -p', description: 'recursive mkdir' },
+];
 
 export interface AppProps {
   /**
@@ -35,6 +58,7 @@ export interface AppProps {
    * an optional SW-registration error. App never re-registers the SW itself.
    */
   readonly boot: BootResult;
+  readonly terminalPersistence: TerminalPersistence;
 }
 
 export function App(props: AppProps) {
@@ -51,7 +75,6 @@ export function App(props: AppProps) {
   // Main-thread sync VFS mirror — same store the shell + `npm install` write to,
   // so the explorer is honest (ADR-0075). Stable after bootstrap's initBackend().
   const vfs = syncMirror();
-
   // Read-only mirror of the real-vite worker's project tree (ADR-0076). The
   // worker's VFS is a separate realm the page can't read directly, so it
   // publishes its tree (sans node_modules) over a BroadcastChannel; applied here.
@@ -65,8 +88,13 @@ export function App(props: AppProps) {
     toastTimer = setTimeout(() => setToast(null), 3800);
   }
 
+  const persistedTerminalState = props.terminalPersistence.initialState;
+
   // Long-lived shell session driving the terminal in `dev` / `real-vite` modes.
-  const shell = useShellSession({ cwd: WORKSPACE });
+  const shell = useShellSession({
+    cwd: persistedTerminalState.cwd,
+    env: persistedTerminalState.env,
+  });
   shell.registerCommand(
     'npm',
     createNpmShellCommand({
@@ -85,6 +113,51 @@ export function App(props: AppProps) {
     template,
     log: (chunk, stream) => runtime.write(chunk, stream),
   });
+
+  const completeShellLine = createShellCompleter({
+    mode: machine.mode,
+    commandNames: () => shell.commandNames(),
+    cwd: () => shell.cwd(),
+    readdirSync: (path) => vfs.readdirSync(path),
+  });
+  const terminalRewriteRules = (): readonly TerminalRewriteRule[] =>
+    machine.mode() === 'repl' ? [] : SHELL_REWRITE_RULES;
+  const aiCommandConfig = readAiCommandSuggestionConfig(import.meta.env);
+  const aiCommandNames = coreCommandNames();
+  const terminalGhostSuggestion: TerminalGhostSuggestionProvider = (state, signal) => {
+    const mode = machine.mode();
+    if (!aiCommandConfig || mode === 'repl') return null;
+    const prompt = extractAiCommandPrompt(state.line);
+    if (!prompt) return null;
+    return suggestAiCommand(
+      aiCommandConfig,
+      { prompt, cwd: shell.cwd(), mode, commands: aiCommandNames },
+      undefined,
+      signal,
+    ).then((command) => (command ? { display: `  -> ${command}`, replacement: command } : null));
+  };
+  const [terminalHistory, setTerminalHistory] = createSignal<readonly TerminalHistoryRecord[]>(
+    props.terminalPersistence.initialHistory,
+  );
+
+  function rememberTerminalHistory(record: TerminalHistoryRecord): void {
+    const next = addTerminalHistoryRecord(terminalHistory(), record);
+    setTerminalHistory(next);
+    void props.terminalPersistence.saveHistory(next);
+  }
+
+  function persistTerminalState(): void {
+    const state = { cwd: shell.cwd(), env: shell.env() };
+    void props.terminalPersistence.saveState(state);
+  }
+
+  function terminalHistoryContext(): { readonly mode: TerminalHistoryMode; readonly cwd: string } {
+    const mode = machine.mode();
+    return {
+      mode,
+      cwd: mode === 'repl' ? WORKSPACE : shell.cwd(),
+    };
+  }
 
   if (props.boot.swError) {
     runtime.write(`SW registration failed: ${props.boot.swError}\n`, 'stderr');
@@ -185,6 +258,22 @@ export function App(props: AppProps) {
   function onReset(): void {
     runtime.write('\n[worker reset]\n', 'stderr');
     void runtime.reset();
+  }
+
+  function onTerminalLink(uri: string): void {
+    const path = pathFromTerminalFileLink(uri, WORKSPACE);
+    if (path) {
+      editorApi?.openFile(path);
+      return;
+    }
+    try {
+      const url = new URL(uri);
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        globalThis.window?.open(uri, '_blank', 'noopener,noreferrer');
+      }
+    } catch {
+      /* ignore malformed links */
+    }
   }
 
   function onSelectPreset(preset: Preset): void {
@@ -376,14 +465,48 @@ export function App(props: AppProps) {
                 shell.attachWriter(write);
               }}
               onSignal={() => shell.interrupt()}
-              onLine={(line, dims) => {
-                if (machine.mode() === 'dev' || machine.mode() === 'real-vite') {
-                  // Forward the live terminal dimensions so ctx.cols/rows drive
-                  // ls column layout; isTTY + signal are set by the adapter.
-                  void shell.runLine(line, dims);
-                  return;
+              onRawInput={(data) => shell.writeStdin(data)}
+              completer={completeShellLine}
+              commandItems={() => shell.commandNames()}
+              highlighter={(line) =>
+                machine.mode() === 'repl' ? [] : shellLineHighlightSpans(line)
+              }
+              ghostSuggestion={terminalGhostSuggestion}
+              inputValidator={(line) =>
+                machine.mode() === 'repl' ? 'complete' : validateShellInput(line)
+              }
+              rewriteRules={terminalRewriteRules}
+              historyRecords={terminalHistory}
+              onLink={onTerminalLink}
+              onLine={async (line, dims) => {
+                const { mode, cwd } = terminalHistoryContext();
+                if (mode !== 'repl' && extractAiCommandPrompt(line)) return undefined;
+                const startedMs = Date.now();
+                const startedAt = new Date(startedMs).toISOString();
+                let exitCode: number | undefined;
+                try {
+                  if (mode === 'dev' || mode === 'real-vite') {
+                    // Forward the live terminal dimensions so ctx.cols/rows drive
+                    // ls column layout; isTTY + signal are set by the adapter.
+                    exitCode = await shell.runLine(line, dims);
+                    return exitCode;
+                  }
+                  await runtime.handleLine(line);
+                  return undefined;
+                } finally {
+                  const finishedMs = Date.now();
+                  rememberTerminalHistory({
+                    command: line,
+                    cwd,
+                    mode,
+                    sessionId: TERMINAL_SESSION_ID,
+                    startedAt,
+                    finishedAt: new Date(finishedMs).toISOString(),
+                    durationMs: finishedMs - startedMs,
+                    exitCode,
+                  });
+                  persistTerminalState();
                 }
-                return runtime.handleLine(line);
               }}
             />
           </main>

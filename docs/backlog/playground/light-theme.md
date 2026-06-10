@@ -7,8 +7,8 @@ why: Chosen direction is a polished dark IDE; a light/dark toggle is a deferred 
 sources: [ADR-0073]
 ---
 ## Context
-Playground ships dark-only. A light/dark toggle needs coordinated theming of three surfaces: CSS tokens, the Monaco `rifty-dark` theme, and the hard-coded `RiftyTerminal` xterm theme (see terminal-theme-options-api). Design system is token-based.
+Playground ships dark-only. A light/dark toggle needs coordinated theming of three surfaces: CSS tokens, the Monaco `rifty-dark` theme, and the terminal theme API (ADR-0098). Design system is token-based.
 ## Options / Next
-Provisional (ADR-0073 "Alternatives considered"): ship dark-only. Light theme is an additive `:root[data-theme="light"]` layer added later. Depends on the terminal theming being exposed (terminal-theme-options-api) for a fully-matched light surface.
+Provisional (ADR-0073 "Alternatives considered"): ship dark-only. Light theme is an additive `:root[data-theme="light"]` layer added later. Terminal theming is now exposed by ADR-0098.
 ## Reversibility
 Reversible — additive token layer, no provisional code to revert. Parked non-goal; gated on appetite + terminal-theme-options-api landing.

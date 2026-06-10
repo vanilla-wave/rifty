@@ -24,7 +24,13 @@ export type IconName =
   | 'zap'
   | 'rocket'
   | 'terminal'
-  | 'layers';
+  | 'layers'
+  | 'search'
+  | 'history'
+  | 'chevron-up'
+  | 'chevron-down'
+  | 'copy'
+  | 'x';
 
 /** Path data (Lucide, ISC). `play` is a filled glyph; the rest are strokes. */
 const PATHS: Record<IconName, string> = {
@@ -39,6 +45,12 @@ const PATHS: Record<IconName, string> = {
     'M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0 M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5',
   terminal: 'M4 17l6-6-6-6 M12 19h8',
   layers: 'M12 2 2 7l10 5 10-5z M2 17l10 5 10-5 M2 12l10 5 10-5',
+  search: 'M21 21l-4.34-4.34 M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15z',
+  history: 'M3 12a9 9 0 1 0 3-6.7 M3 3v6h6 M12 7v5l3 2',
+  'chevron-up': 'M18 15l-6-6-6 6',
+  'chevron-down': 'M6 9l6 6 6-6',
+  copy: 'M8 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z M16 8V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2',
+  x: 'M18 6 6 18 M6 6l12 12',
 };
 
 /** Inline SVG icon. Inherits colour via `currentColor`; sized by `size` (px). */

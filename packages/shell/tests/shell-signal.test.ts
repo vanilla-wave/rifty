@@ -114,3 +114,23 @@ describe('CommandContext.isTTY per sink (ADR-0089 §56/§94)', () => {
     expect(seen()?.isTTY).toBe(false); // a file sink is never a TTY → SGR must be suppressed
   });
 });
+
+describe('CommandContext.stdin', () => {
+  it('passes RunOptions.stdin through to the command context', async () => {
+    const sh = new Shell();
+    const chunks = [new TextEncoder().encode('\x1b[<0;10;20M')];
+    sh.registerCommand('read-stdin', async (_args, ctx) => {
+      const chunk = await ctx.stdin?.read();
+      ctx.stdout.write(chunk ? new TextDecoder().decode(chunk) : '<eof>');
+      return 0;
+    });
+
+    const r = await sh.run('read-stdin', {
+      stdin: {
+        read: async () => chunks.shift() ?? null,
+      },
+    });
+
+    expect(r.stdout).toBe('\x1b[<0;10;20M');
+  });
+});

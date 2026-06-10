@@ -10,7 +10,7 @@ import { resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
  * playground terminal (M10).
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { Shell, type Token, tokenize } from '../src/index.ts';
+import { Shell, type Token, coreCommandNames, tokenize } from '../src/index.ts';
 
 afterEach(() => {
   resetSyncMirror();
@@ -104,9 +104,47 @@ describe('Shell — builtins', () => {
     expect(r.exitCode).toBe(127);
     expect(r.stderr).toMatch(/foobarbaz/);
   });
+
+  it('suggests a close builtin typo without changing exit 127', async () => {
+    const sh = new Shell();
+    const r = await sh.run('grpe needle file.txt');
+    expect(r.exitCode).toBe(127);
+    expect(r.stderr).toContain('grpe: command not found');
+    expect(r.stderr).toContain("Did you mean 'grep'?");
+  });
+
+  it('suggests close custom registered commands', async () => {
+    const sh = new Shell();
+    sh.registerCommand('greet', async () => 0);
+    const r = await sh.run('gret alice');
+    expect(r.exitCode).toBe(127);
+    expect(r.stderr).toContain("Did you mean 'greet'?");
+  });
+
+  it('does not suggest for distant unknown commands', async () => {
+    const sh = new Shell();
+    const r = await sh.run('zzzzzzzz');
+    expect(r.exitCode).toBe(127);
+    expect(r.stderr).toBe('zzzzzzzz: command not found\n');
+  });
 });
 
 describe('Shell — custom command registration', () => {
+  it('exposes builtin core command names separately from registered commands', () => {
+    const sh = new Shell();
+    sh.registerCommand('npm', async () => 0);
+    expect(coreCommandNames()).toContain('ls');
+    expect(coreCommandNames()).not.toContain('npm');
+    expect(sh.commandNames()).toContain('npm');
+  });
+
+  it('exposes registered command names for host-side completion', () => {
+    const sh = new Shell();
+    sh.registerCommand('greet', async () => 0);
+    expect(sh.commandNames()).toContain('grep');
+    expect(sh.commandNames()).toContain('greet');
+  });
+
   it('routes a registered command and returns its exit code', async () => {
     const sh = new Shell();
     sh.registerCommand('greet', async (args, ctx) => {
@@ -214,10 +252,73 @@ describe('Shell — pipe is loud', () => {
   });
 });
 
-describe('Shell — background & is loud (ADR-0091 op-token detection)', () => {
-  it('throws NotImplementedError(shell.background) for a bare &', async () => {
+describe('Shell — background jobs', () => {
+  it('runs a trailing & command in the background and tracks it in jobs', async () => {
     const sh = new Shell();
-    await expect(sh.run('vite &')).rejects.toMatchObject({ feature: 'shell.background' });
+    let finish: () => void = () => {
+      throw new Error('background command was not started');
+    };
+    sh.registerCommand(
+      'slow',
+      async () =>
+        new Promise<number>((resolve) => {
+          finish = () => resolve(0);
+        }),
+    );
+    const chunks: string[] = [];
+
+    const run = await sh.run('slow &', {
+      onChunk: (chunk) => chunks.push(chunk),
+    });
+
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout).toBe('[1] Running slow\n');
+    expect((await sh.run('jobs')).stdout).toBe('[1] Running slow\n');
+
+    finish();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(chunks.join('')).toContain('[1] Done slow\n');
+    expect((await sh.run('jobs')).stdout).toBe('[1] Done slow\n');
+  });
+
+  it('runs background commands in a cloned shell so cd does not mutate parent cwd', async () => {
+    const sh = new Shell({ cwd: '/' });
+    await sh.run('mkdir -p /fg /bg');
+    await sh.run('cd /fg');
+
+    const run = await sh.run('cd /bg &');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(run.exitCode).toBe(0);
+    expect(sh.cwd).toBe('/fg');
+    expect((await sh.run('pwd')).stdout).toBe('/fg\n');
+  });
+
+  it('rejects background commands that still need pipe support', async () => {
+    const sh = new Shell();
+    await expect(sh.run('cat a | grep b &')).rejects.toMatchObject({ feature: 'shell.pipe' });
+  });
+
+  it('dispose aborts running background jobs', async () => {
+    const sh = new Shell();
+    let aborted = false;
+    sh.registerCommand(
+      'hang',
+      async (_args, ctx) =>
+        new Promise<number>((resolve) => {
+          ctx.signal?.addEventListener('abort', () => {
+            aborted = true;
+            resolve(130);
+          });
+        }),
+    );
+
+    await sh.run('hang &');
+    sh.dispose();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(aborted).toBe(true);
   });
 
   it('&& is a joiner, NOT background — the chain still runs (op discriminator, not substring)', async () => {
@@ -274,6 +375,15 @@ describe('Shell — redirect write failure surfaces loudly', () => {
 });
 
 describe('Shell — env expansion in run()', () => {
+  it('exposes a copy of the persisted shell env', async () => {
+    const sh = new Shell({ env: { GREETING: 'hello' } });
+    await sh.run('NEXT=one');
+    const snapshot = sh.envSnapshot();
+    expect(snapshot).toEqual({ GREETING: 'hello', NEXT: 'one' });
+    snapshot.NEXT = 'mutated';
+    expect(sh.envSnapshot().NEXT).toBe('one');
+  });
+
   it('$VAR in arguments expands from the shell env', async () => {
     const sh = new Shell({ env: { GREETING: 'hello there' } });
     const r = await sh.run('echo "$GREETING"');
