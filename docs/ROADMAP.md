@@ -87,13 +87,11 @@ open:
 - `docs/backlog/net/streaming-cross-realm-preview` — buffered→streaming upgrade.
 - `docs/backlog/npm-client/prod-npm-registry-proxy` — lockfile reuse + prod proxy residue.
 
-## M12 — opencode server facade
+## M12 — retired agent-facade exploration
 
-**PROPOSED.**
-Run anomalyco/opencode's Effect HTTP server headlessly up to the tool-execution ceiling; opencode NOT vendored. No-vendored-tree slice DONE (TS-on-import, Effect↔node:http, SSE-over-HTTP, F09 marker). ADR-0052, ADR-0053, ADR-0054, ADR-0055, ADR-0065.
-open:
-- `docs/backlog/opencode/m12-vendor-opencode-tree` — vendor opencode (F01), gates the rest.
-- `docs/backlog/opencode/spike-c-createroutes-layer-build` — Spike C layer-build (decided WASM-SQLite P2).
-- `docs/backlog/opencode/db-pty-wasm-sqlite-drizzle` — `#db`/`#pty` + WASM-SQLite (ADR-0065) + drizzle.
-- `docs/backlog/opencode/headless-boot` — headless boot (F06).
-- `docs/backlog/opencode/phase3-live-llm-roundtrip` — LLM round-trip + `node:https`→fetch.
+**CANCELLED.**
+The opencode server-facade track was retired before product integration. The reusable
+runtime work stays in place where it serves rifty independently: TS-on-import, Effect-shaped
+`node:http` parity, streaming HTTP/SSE primitives, `node:sqlite`, and VFS search/shell
+building blocks. The vendored opencode fixture, opt-in smoke harnesses, and opencode backlog
+were removed so the roadmap no longer carries that specific integration as active work.

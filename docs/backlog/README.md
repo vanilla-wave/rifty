@@ -4,7 +4,7 @@ One item per file: `docs/backlog/<area>/<slug>.md`. Slug = filename without `.md
 
 ## Areas
 
-`vfs`, `kernel`, `runtime-js`, `runtime-wasi`, `net`, `service-worker`, `npm-client`, `shell`, `playground`, `toolchain-build`, `protocol`, `process-meta`, `opencode`, `perf`, `terminal`, `distribution`.
+`vfs`, `kernel`, `runtime-js`, `runtime-wasi`, `net`, `service-worker`, `npm-client`, `shell`, `playground`, `toolchain-build`, `protocol`, `process-meta`, `perf`, `terminal`, `distribution`.
 
 ## Frontmatter
 

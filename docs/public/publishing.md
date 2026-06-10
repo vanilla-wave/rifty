@@ -39,7 +39,7 @@ CI's `lint-and-typecheck` job runs `pnpm build:libs` on every PR, so the publish
 
 **No NPM_TOKEN.** Auth is **npm OIDC trusted publishing**: with `id-token: write`, pnpm mints a short-lived token from GitHub's OIDC and publishes with build provenance — no long-lived secret in the repo. The bootstrap below makes that work.
 
-> ⚠️ Never run a bare `pnpm -r publish`: the workspace also contains non-`private` integration fixtures (`tools/integration-fixtures/*`, vendored opencode packages under `tests/`) that must never reach npm. Always use the scoped filter above.
+> ⚠️ Never run a bare `pnpm -r publish`: the workspace also contains non-`private` integration fixtures (`tools/integration-fixtures/*`) that must never reach npm. Always use the scoped filter above.
 
 ### Tooling-version floor (do not regress)
 

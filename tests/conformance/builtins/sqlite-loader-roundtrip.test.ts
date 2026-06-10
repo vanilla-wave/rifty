@@ -1,9 +1,6 @@
 /**
- * Focused wiring proof for the `node:sqlite` builtin reaching the module loader
- * (WIRE task item 1). It is intentionally minimal and SEPARATE from the
- * `sqlite-opencode-boot` conformance gate: that test reproduces opencode's full
- * PRAGMA + 24-migration boot path; THIS one pins only the load-bearing seam — a
- * plain guest module that does `require('node:sqlite')` through the real module
+ * Focused wiring proof for the `node:sqlite` builtin reaching the module loader:
+ * a plain guest module does `require('node:sqlite')` through the real module
  * loader, opens an in-memory database, INSERTs a row, and SELECTs it back.
  *
  * The failure mode it guards: the `node:sqlite` specifier must resolve to the

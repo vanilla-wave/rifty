@@ -118,13 +118,6 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0040 | SW frame and routing versions split |
 | 0048 | Streaming cross-realm preview wire-frame |
 
-### opencode
-
-| # | Title |
-|---|---|
-| 0055 | opencode event stream rides SSE-over-streaming-HTTP; no `ws` shim (page-direct deployment) |
-| 0092 | Agent-facing `git` contract — structured read-ops facade tool, write-ops `NotImplementedError`, impl deferred |
-
 ### perf
 
 | # | Title |
@@ -169,7 +162,9 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0013 | 0072 | OPFS hot path; context grafted |
 | 0025 | 0043 | dev-server realm; page-realm globals-guard grafted |
 | 0044 | 0047 | esbuild WASI |
+| 0055 | n/a | retired opencode facade ADR; integration cancelled |
 | 0074 | 0077 | SW preview-nav routing; ported into ADR-0077 |
+| 0092 | n/a | retired opencode facade ADR; integration cancelled |
 
 ## Appendix A — Q→ADR provenance
 
@@ -208,8 +203,6 @@ D-007..D-009 (stop-on-irreversible → record-and-continue, inflections) were pr
 
 No reserved numbers. The JS-runtime perf plan's provisional **0081–0093** band was materialised in the M11/M12 merge — **0082–0093** as ADRs, **0081** retired into `CLAUDE.md` (reversibility rule 4, record-decisions-not-diffs). `pnpm adr:new <area> "Title"` auto-allocates from a machine-local counter seeded from repo max; each successful allocation increments that counter before the ADR is written, so parallel worktrees on one machine get distinct numbers. `--number NNNN` authors a specific free number. `tools/adr/new.mjs` and `tools/refs/check.mjs` keep an (now empty) `RESERVED` set in sync with this note.
 
-opencode **decisions.md draft labels** 0056–0062 are a separate provisional namespace (drafts in `docs/backlog/opencode/reference/decisions.md`): 0057→ADR-0054, 0059→ADR-0055, 0056 superseded by ADR-0065; 0058/0060/0061/0062 deferred. A bare `ADR-005x`/`ADR-006x` citation refers to a draft, not a live ADR file.
-
 ## Historical references
 
 Moved/removed docs are still cited inside older (immutable) ADRs; their content moved or closed. **Do not rewrite those in-ADR references — this note resolves them.** `tools/refs/check.mjs` enforces this table (every cited `docs/…` path must resolve, redirect, or be tombstoned here), so it cannot silently rot.
@@ -218,20 +211,18 @@ Moved (redirect to the live path):
 
 - `PROJECT_PLAN.md` → `CLAUDE.md` (vision/architecture) + `docs/ROADMAP.md` (milestones)
 - `OPEN_QUESTIONS.md` → `docs/backlog/<area>/`
-- `docs/opencode/` → `docs/backlog/opencode/reference/`
 - `docs/compat/` → `docs/public/compat/`
 - `docs/perf/` → `docs/backlog/perf/reference/`
 - `docs/backlog/tests/` → `docs/backlog/toolchain-build/reference/`
 - `docs/PUBLISHING.md` → `docs/public/publishing.md`
 - `docs/hosting-netlify.md` → `docs/public/hosting-netlify.md`
-- `docs/opencode-rifty-feasibility-2026-05-30.md` → `docs/backlog/opencode/reference/feasibility-2026-05-30.md`
 
 Removed, no successor (resolve to git history):
 
 - `REVIEW_ACTIONS.md`, `TASKS.md` — closed review/acceptance ledgers
 - `docs/follow-ups-2026-05-27.md`, `docs/follow-ups-architecture-review-2026-05-27.md`, `docs/large-targets-readiness-2026-05-27.md`, `docs/review/2026-05-26-architecture-review.md` — closed review/follow-up ledgers
 - `docs/processes/ecosystem-sweep.md`, `docs/backlog-distribution-and-ide.md` — folded into `docs/backlog/<area>/`
-- `docs/opencode/HANDOFF.md` — session handoff, not retained
+- `docs/opencode/`, `docs/opencode-rifty-feasibility-2026-05-30.md`, `docs/opencode/HANDOFF.md` — retired server-facade exploration, not retained
 - `docs/compat/{m10-tooling,sqlite,opencode-tool-ceiling,browsers}.md` — compat pages dropped in the `docs/public` split (not regenerated)
 
 Retired ADR numbers (process moved to `CLAUDE.md`, no longer recorded as ADRs): **0008, 0022, 0024, 0033, 0063, 0064, 0081**. Older ADRs may still cite these — they resolve to `CLAUDE.md`, not a file. `tools/refs/check.mjs` treats them as retired so the citations don't dangle. (0081 = reversibility rule 4 "record decisions, not diffs"; its rule text is grafted into `CLAUDE.md`.)
