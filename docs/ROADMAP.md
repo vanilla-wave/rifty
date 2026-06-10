@@ -46,9 +46,8 @@ open:
 ## M7 — Network
 
 **PARTIAL.**
-`net`/`http` servers, `IncomingMessage` Readable, `http.request` over fetch, port registry + SW preview round-trip, chunked streaming; real `express@4` runs end-to-end. ADR-0010, ADR-0017, ADR-0048.
+`net`/`http` servers, `IncomingMessage` Readable, `http.request` over fetch, port registry + SW preview round-trip, chunked streaming; real `express@4` runs end-to-end. ADR-0010, ADR-0017, ADR-0048, ADR-0096.
 open:
-- `docs/backlog/service-worker/sw-to-worker-direct-routing` — SW→Worker (bridge terminates in the main-thread realm today).
 - `docs/backlog/net/real-tcp-socket-semantics` — real-TCP `net.Socket` (HTTP-only today).
 - `docs/backlog/net/cross-realm-websocket-bridge` — iframe HMR client over a real `WebSocket`.
 
@@ -81,9 +80,8 @@ open:
 ## M11 — post-M10 follow-ups
 
 **PARTIAL.**
-Container for M6/M8/M9/M10 tech debt, not a new work phase. Landed: Vite-in-Worker (ADR-0043), nested install (ADR-0042), fork-IPC via Worker (ADR-0045), esbuild.wasm vendoring (ADR-0047), native-dep policy (ADR-0051).
+Container for M6/M8/M9/M10 tech debt, not a new work phase. Landed: Vite-in-Worker (ADR-0043), nested install (ADR-0042), fork-IPC via Worker (ADR-0045), esbuild.wasm vendoring (ADR-0047), native-dep policy (ADR-0051), port-aware SW preview routing (ADR-0096).
 open:
-- `docs/backlog/service-worker/sw-to-worker-direct-routing` — A-023 / Q-2026-05-27-002.
 - `docs/backlog/net/streaming-cross-realm-preview` — buffered→streaming upgrade.
 - `docs/backlog/npm-client/prod-npm-registry-proxy` — lockfile reuse + prod proxy residue.
 

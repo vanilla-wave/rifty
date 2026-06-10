@@ -116,6 +116,11 @@
   per-probe `AbortController` + a 90 s budget so it spans an npm install and
   auto-loads to `live` (~22 s) without a manual Reload. Verified live:
   `/preview/<port>/` 200s, the iframe commits and renders the Vite app.
+- **Real Vite preview now owns its Service Worker route directly (ADR-0096).**
+  The Real Vite Worker mounts `setupPreviewBridge(..., { ports: [port] })`, so
+  the SW can route `/preview/<port>/...` straight to the Worker-owned Vite
+  server. The page-side cross-realm preview proxy remains as a compatibility
+  fallback for legacy window-owned paths and old-SW/new-page skew.
 - **Dev-server console noise removed.** A custom Vite logger filters the
   harmless `Failed to load source map … marked.umd.js.map` warning (monaco 0.52
   ships `marked.umd.js` with a dangling sourcemap ref); dev-only, no runtime

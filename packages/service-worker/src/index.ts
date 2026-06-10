@@ -11,6 +11,7 @@ export {
   canTransferReadableStream,
   packSerializedResponse,
   FirstWindowOwnerBinding,
+  PortAwareOwnerBinding,
   FirstWindowOwnerResolver,
   WorkerOwnerBinding,
   DEFAULT_READY_TIMEOUT_MS,
@@ -18,6 +19,8 @@ export {
 export type {
   FirstWindowOwnerBindingOptions,
   MessageHandlerHooks,
+  PortAwareOwnerBindingOptions,
+  PreviewBridgeOptions,
   PreviewHandler,
   PreviewInterceptor,
   PreviewOwnerBinding,

@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- **Preview bridge readiness survives Service Worker global restarts.**
+  `setupPreviewBridge` now re-advertises `rifty:preview:ready` on
+  `controllerchange` and on a small heartbeat while mounted, so a browser-idled
+  SW global can rebuild its in-memory ready registry instead of timing out a
+  still-running preview later. Teardown clears the heartbeat and posts goodbye.
 - **Preview iframe navigation commits in-frame (ADR-0074, applied on this
   branch).** The preview interceptor now routes every request originating
   inside the preview `<iframe>` — the document navigation (`request.mode ===
@@ -17,6 +22,13 @@
 
 ### Added
 
+- **ADR-0096:** `PortAwareOwnerBinding` becomes the default owner binding for
+  `createPreviewInterceptor`: Worker owners that claim a preview port via
+  `ports: [...]` win, while unclaimed ports fall back to the historical window
+  bridge. New public exports: `PortAwareOwnerBinding`,
+  `PortAwareOwnerBindingOptions`, and `PreviewBridgeOptions`; `setupPreviewBridge`
+  can now advertise `ports` on ready/goodbye frames. No frame/routing version
+  bump: `ports` was already additive optional under ADR-0046.
 - **ADR-0046 (A-023):** `PreviewOwnerBinding` — one seam the preview
   interceptor sits on top of, designed from both the window and worker
   owners at once (promotes OPEN_QUESTIONS Q-2026-05-27-002). New
@@ -25,9 +37,8 @@
   `FirstWindowOwnerBinding` (+`FirstWindowOwnerBindingOptions`),
   `WorkerOwnerBinding` (+`WorkerOwnerBindingOptions`,
   `WorkerOwnerBindingLogger`). `createPreviewInterceptor` resolves
-  owners and gates readiness THROUGH the binding; it defaults to
-  `FirstWindowOwnerBinding` (M10 behaviour preserved byte-for-byte) and
-  accepts a `WorkerOwnerBinding` via `hooks.binding`. The worker
+  owners and gates readiness THROUGH the binding; ADR-0096 later makes the
+  default port-aware (Worker-owned ports first, window fallback). The worker
   binding routes by port (a Worker-served preview fetch has no DOM
   `clientId`), re-validates the owner via `clients.get`, and surfaces
   the new `'gone'` outcome for the no-`pagehide` worker lifecycle

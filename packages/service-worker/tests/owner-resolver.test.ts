@@ -1,15 +1,15 @@
 /**
- * Tests for `PreviewOwnerResolver` strategy — the seam introduced ahead of
- * M11 A-026 (Vite-in-Worker) and A-023 (SW → Worker process registry).
+ * Tests for `PreviewOwnerResolver` strategy — the legacy window-resolver seam
+ * that still backs `FirstWindowOwnerBinding`.
  *
- * The default `FirstWindowOwnerResolver` carries the current (pre-M11)
- * behaviour verbatim: prefer the `event.clientId`, fall back once per scope
- * to the first controlled window when the id is empty. M11 ships a
- * `WorkerOwnerResolver` that consults the cross-realm port registry; the
- * route-preview pipeline must accept either implementation without code
- * change, so this file pins both the default behaviour and the seam shape.
+ * `FirstWindowOwnerResolver` preserves the historical window behaviour:
+ * prefer the `event.clientId`, then fall back once per scope to the first
+ * controlled window when the id is empty. ADR-0096 makes the interceptor
+ * default port-aware, but callers can still inject an explicit binding when
+ * they need lower-level resolver behaviour.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FirstWindowOwnerBinding } from '../src/owner-binding-window.ts';
 import { FirstWindowOwnerResolver, type PreviewOwnerResolver } from '../src/owner-resolver.ts';
 import { createPreviewInterceptor } from '../src/preview-bridge.ts';
 import { SW_FRAME_VERSION, SW_PREVIEW_READY, SW_ROUTING_VERSION } from '../src/protocol.ts';
@@ -106,7 +106,7 @@ describe('FirstWindowOwnerResolver', () => {
   });
 });
 
-describe('createPreviewInterceptor with custom PreviewOwnerResolver', () => {
+describe('createPreviewInterceptor with custom PreviewOwnerBinding', () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -114,7 +114,7 @@ describe('createPreviewInterceptor with custom PreviewOwnerResolver', () => {
     vi.useRealTimers();
   });
 
-  it('routes preview fetches through the resolver the caller supplied', async () => {
+  it('routes preview fetches through the explicit binding the caller supplied', async () => {
     // A resolver that returns a non-window client, proving the seam: the
     // route-preview path uses whatever the resolver returns, not its own
     // baked-in client lookup.
@@ -140,24 +140,27 @@ describe('createPreviewInterceptor with custom PreviewOwnerResolver', () => {
 
     const interceptor = createPreviewInterceptor(scope, {
       timeoutMs: 3_000,
-      resolver: customResolver,
+      binding: new FirstWindowOwnerBinding({ resolver: customResolver }),
     });
 
     // The registry-internal ready-handshake path needs the worker client to
     // post `ready` for the request to be dispatched. Reuse the message
     // handler the interceptor installed.
-    const messageHandler = listeners.message?.[0];
-    expect(messageHandler).toBeDefined();
-    messageHandler!({
-      data: {
-        type: SW_PREVIEW_READY,
-        frameVersion: SW_FRAME_VERSION,
-        routingVersion: SW_ROUTING_VERSION,
-      },
-      source: workerClient,
-    });
+    const messageHandlers = listeners.message ?? [];
+    expect(messageHandlers.length).toBeGreaterThan(0);
+    for (const messageHandler of messageHandlers) {
+      messageHandler({
+        data: {
+          type: SW_PREVIEW_READY,
+          frameVersion: SW_FRAME_VERSION,
+          routingVersion: SW_ROUTING_VERSION,
+        },
+        source: workerClient,
+      });
+    }
 
-    // Fire a /preview/* fetch, give the routePreview promise chain a tick.
+    // Fire a /preview/* fetch, give the routePreview promise chain time to
+    // run the caller-supplied binding resolver.
     const fetchHandler = listeners.fetch?.[0];
     expect(fetchHandler).toBeDefined();
     let respPromise: Promise<Response> | undefined;
@@ -170,8 +173,9 @@ describe('createPreviewInterceptor with custom PreviewOwnerResolver', () => {
       },
     });
     expect(respPromise).toBeDefined();
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let i = 0; i < 8; i += 1) {
+      await Promise.resolve();
+    }
 
     // The custom resolver was consulted exactly once for this fetch.
     expect(customResolver.resolveOwner).toHaveBeenCalledTimes(1);

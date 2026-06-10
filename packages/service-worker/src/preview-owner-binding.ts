@@ -8,8 +8,8 @@
  *  1. {@link FirstWindowOwnerBinding} (`./owner-binding-window.ts`) wraps the
  *     `FirstWindowOwnerResolver` + `ReadyClientsRegistry` pair. Owner is a
  *     window `Client`; readiness arrives via `postMessage` from
- *     `setupPreviewBridge`; teardown is `pagehide` / `controllerchange`
- *     (both make the page post `rifty:preview:goodbye`).
+ *     `setupPreviewBridge` on mount, heartbeat, and `controllerchange`.
+ *     Teardown posts `rifty:preview:goodbye`.
  *
  *  2. {@link WorkerOwnerBinding} (`./owner-binding-worker.ts`) — the M11
  *     A-023 (SW→Worker direct routing) addition. Owner is a `Client` with
@@ -28,7 +28,8 @@
  * cursor beyond the monotonic `nextRequestId`).
  *
  * Both consumers expose the SAME shape; the interceptor stays
- * binding-agnostic. The window vs worker choice is made at install time.
+ * binding-agnostic. The default {@link PortAwareOwnerBinding} composes both:
+ * Worker-owned ports win, window-owned ports keep the legacy fallback.
  *
  * One interface, not two: Q-2026-05-27-002 deferred defining the binding
  * until both consumers existed so "two concrete consumers shape the interface
@@ -101,8 +102,9 @@ export interface ReadinessSubscription {
  * differences stay inside the implementation; the interceptor only sees the
  * uniform `resolveOwner` / `ReadinessSignal` API.
  *
- *  - Window: `pagehide` / `controllerchange` make the page post
- *    `rifty:preview:goodbye`, flipping the owner out of the ready set.
+ *  - Window: mounted pages post `rifty:preview:ready` on mount, heartbeat, and
+ *    `controllerchange`; teardown posts `rifty:preview:goodbye`, flipping the
+ *    owner out of the ready set.
  *  - Worker: no `pagehide`. Worker sends `rifty:preview:goodbye` on
  *    termination if it can; otherwise `resolveOwner` returns `null` once
  *    `scope.clients.get(id)` reports it gone, and in-flight `waitForReady`

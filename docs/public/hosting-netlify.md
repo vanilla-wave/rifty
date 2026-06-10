@@ -53,16 +53,11 @@ On the live URL:
 1. Console: `crossOriginIsolated` → `true`.
 2. Terminal shows `[worker ready]` (not `[worker error] undefined`).
 3. **Welcome** preset → prints `worker alive` + the circle-area line.
-4. Response headers on `/` include
+4. **Dev server** or **Real npm project** preset → live preview becomes `live`
+   and renders in-frame.
+5. Response headers on `/` include
    `Cross-Origin-Opener-Policy: same-origin` and
    `Cross-Origin-Embedder-Policy: credentialless`.
-
-## Known limitation
-
-The in-page **live preview** (Dev server / Real Vite presets) shows
-`unavailable`: the SW aborts sub-frame preview navigations under cross-origin
-isolation — pre-existing, tracked in `docs/backlog/service-worker/preview-subframe-nav-owner-routing.md`.
-The four REPL presets work fully; a blank preview is not a deploy failure.
 
 ## Other hosts
 

@@ -206,6 +206,218 @@ var FirstWindowOwnerBinding = class {
   }
 };
 
+// ../../packages/service-worker/src/owner-binding-worker.ts
+var defaultLogger2 = {
+  warn(msg) {
+    console.warn(msg);
+  }
+};
+function createState() {
+  return {
+    ready: /* @__PURE__ */ new Set(),
+    mismatched: /* @__PURE__ */ new Set(),
+    warned: /* @__PURE__ */ new Set(),
+    portOwners: /* @__PURE__ */ new Map(),
+    ownerPorts: /* @__PURE__ */ new Map(),
+    waiters: /* @__PURE__ */ new Map(),
+    requestIdCounter: 1
+  };
+}
+function resolveWaiters(state, ownerId, outcome) {
+  const set = state.waiters.get(ownerId);
+  if (!set) return;
+  for (const w of set) w.resolve(outcome);
+  state.waiters.delete(ownerId);
+}
+function dropOwner(state, ownerId) {
+  state.ready.delete(ownerId);
+  const ports = state.ownerPorts.get(ownerId);
+  if (ports) {
+    for (const port of ports) {
+      if (state.portOwners.get(port) === ownerId) {
+        state.portOwners.delete(port);
+      }
+    }
+    state.ownerPorts.delete(ownerId);
+  }
+}
+var WorkerOwnerBinding = class {
+  #logger;
+  #states = /* @__PURE__ */ new WeakMap();
+  constructor(opts = {}) {
+    this.#logger = opts.logger ?? defaultLogger2;
+  }
+  async resolveOwner(scope, _request, _clientId, port) {
+    const state = this.#states.get(scope);
+    if (!state) return null;
+    const ownerId = state.portOwners.get(port);
+    if (!ownerId) return null;
+    const client = await scope.clients.get(ownerId) ?? null;
+    if (!client) {
+      dropOwner(state, ownerId);
+      resolveWaiters(state, ownerId, "gone");
+      return null;
+    }
+    return client;
+  }
+  subscribeReadiness(scope) {
+    const state = createState();
+    this.#states.set(scope, state);
+    const handleMessage = (event) => {
+      const ev = event;
+      const data = ev.data;
+      if (!data || typeof data !== "object" || typeof data.type !== "string") return;
+      if (data.type !== SW_PREVIEW_READY && data.type !== SW_PREVIEW_GOODBYE) return;
+      const source = ev.source;
+      const sourceId = source && "id" in source ? source.id : null;
+      if (!sourceId) return;
+      if (source && "type" in source && source.type !== "worker") return;
+      const frameOk = data.frameVersion === SW_FRAME_VERSION;
+      const routingOk = data.routingVersion === SW_ROUTING_VERSION;
+      if (!frameOk || !routingOk) {
+        if (!state.warned.has(sourceId)) {
+          state.warned.add(sourceId);
+          const drifted = [];
+          if (!frameOk) drifted.push("frame");
+          if (!routingOk) drifted.push("routing");
+          this.#logger.warn(
+            `[rifty/service-worker] worker preview protocol mismatch from ${sourceId} (${drifted.join(
+              "+"
+            )}): got frame=${String(data.frameVersion)} routing=${String(
+              data.routingVersion
+            )}, want frame=${SW_FRAME_VERSION} routing=${SW_ROUTING_VERSION}`
+          );
+        }
+        state.mismatched.add(sourceId);
+        resolveWaiters(state, sourceId, "mismatch");
+        return;
+      }
+      const ports = Array.isArray(data.ports) ? data.ports.filter((p) => Number.isInteger(p)) : [];
+      if (data.type === SW_PREVIEW_READY) {
+        state.ready.add(sourceId);
+        if (ports.length > 0) {
+          const owned = state.ownerPorts.get(sourceId) ?? /* @__PURE__ */ new Set();
+          for (const port of ports) {
+            state.portOwners.set(port, sourceId);
+            owned.add(port);
+          }
+          state.ownerPorts.set(sourceId, owned);
+        }
+        resolveWaiters(state, sourceId, "ready");
+      } else {
+        dropOwner(state, sourceId);
+        resolveWaiters(state, sourceId, "gone");
+      }
+    };
+    scope.addEventListener("message", handleMessage);
+    const readiness = {
+      isReady: (id) => state.ready.has(id),
+      isMismatched: (id) => state.mismatched.has(id),
+      waitForReady(id, timeoutMs) {
+        if (state.mismatched.has(id)) return Promise.resolve("mismatch");
+        if (state.ready.has(id)) return Promise.resolve("ready");
+        return new Promise((resolve) => {
+          let timer = null;
+          const waiter = {
+            resolve(outcome) {
+              if (timer !== null) clearTimeout(timer);
+              resolve(outcome);
+            }
+          };
+          const set = state.waiters.get(id) ?? /* @__PURE__ */ new Set();
+          set.add(waiter);
+          state.waiters.set(id, set);
+          timer = setTimeout(() => {
+            const s = state.waiters.get(id);
+            if (s) {
+              s.delete(waiter);
+              if (s.size === 0) state.waiters.delete(id);
+            }
+            resolve("timeout");
+          }, timeoutMs);
+        });
+      },
+      nextRequestId: () => state.requestIdCounter++
+    };
+    return {
+      readiness,
+      teardown: () => {
+        scope.removeEventListener("message", handleMessage);
+        this.#states.delete(scope);
+      }
+    };
+  }
+};
+
+// ../../packages/service-worker/src/owner-binding-port-aware.ts
+var PortAwareOwnerBinding = class {
+  #window;
+  #worker;
+  #ownerKinds = /* @__PURE__ */ new Map();
+  constructor(opts = {}) {
+    this.#window = new FirstWindowOwnerBinding(opts.window);
+    this.#worker = new WorkerOwnerBinding(opts.worker);
+  }
+  async resolveOwner(scope, request, clientId, port) {
+    const worker = await this.#worker.resolveOwner(scope, request, clientId, port);
+    if (worker) {
+      this.#ownerKinds.set(worker.id, "worker");
+      return worker;
+    }
+    const window = await this.#window.resolveOwner(scope, request, clientId, port);
+    if (window) {
+      if ("type" in window && window.type !== "window") return null;
+      this.#ownerKinds.set(window.id, "window");
+    }
+    return window;
+  }
+  subscribeReadiness(scope) {
+    const workerSub = this.#worker.subscribeReadiness(scope);
+    const windowSub = this.#window.subscribeReadiness(scope);
+    const ownerKinds = this.#ownerKinds;
+    let requestIdCounter = 1;
+    const pick = (id) => {
+      const kind = this.#ownerKinds.get(id);
+      if (kind === "worker") return workerSub.readiness;
+      if (kind === "window") return windowSub.readiness;
+      return null;
+    };
+    const readiness = {
+      isReady: (id) => {
+        const signal = pick(id);
+        return signal ? signal.isReady(id) : workerSub.readiness.isReady(id) || windowSub.readiness.isReady(id);
+      },
+      isMismatched: (id) => {
+        const signal = pick(id);
+        return signal ? signal.isMismatched(id) : workerSub.readiness.isMismatched(id) || windowSub.readiness.isMismatched(id);
+      },
+      waitForReady: async (id, timeoutMs) => {
+        const signal = pick(id);
+        if (signal) return signal.waitForReady(id, timeoutMs);
+        if (workerSub.readiness.isMismatched(id) || windowSub.readiness.isMismatched(id)) {
+          return "mismatch";
+        }
+        if (workerSub.readiness.isReady(id) || windowSub.readiness.isReady(id)) {
+          return "ready";
+        }
+        return Promise.race([
+          workerSub.readiness.waitForReady(id, timeoutMs),
+          windowSub.readiness.waitForReady(id, timeoutMs)
+        ]);
+      },
+      nextRequestId: () => requestIdCounter++
+    };
+    return {
+      readiness,
+      teardown() {
+        workerSub.teardown();
+        windowSub.teardown();
+        ownerKinds.clear();
+      }
+    };
+  }
+};
+
 // ../../packages/service-worker/src/route-preview.ts
 async function routePreview(scope, request, match, readiness, timeoutMs, clientId, binding) {
   const client = await binding.resolveOwner(scope, request, clientId, match.port);
@@ -299,9 +511,9 @@ function isPreviewFrameRequest(request) {
 var DEFAULT_READY_TIMEOUT_MS = 3e3;
 function createPreviewInterceptor(scope, hooks = {}) {
   const timeoutMs = hooks.timeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
-  const binding = hooks.binding ?? new FirstWindowOwnerBinding(
-    hooks.resolver !== void 0 ? { resolver: hooks.resolver } : void 0
-  );
+  const binding = hooks.binding ?? new PortAwareOwnerBinding({
+    window: hooks.resolver !== void 0 ? { resolver: hooks.resolver } : void 0
+  });
   const subscription = binding.subscribeReadiness(scope);
   const fetchHandler = (event) => {
     const url = new URL(event.request.url);

@@ -89,6 +89,7 @@ export interface SwPreviewReadyFrame {
   type: typeof SW_PREVIEW_READY;
   frameVersion: string;
   routingVersion: string;
+  ports?: number[];
 }
 
 /**
@@ -100,6 +101,7 @@ export interface SwPreviewGoodbyeFrame {
   type: typeof SW_PREVIEW_GOODBYE;
   frameVersion: string;
   routingVersion: string;
+  ports?: number[];
 }
 
 /**

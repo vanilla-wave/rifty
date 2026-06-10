@@ -49,7 +49,7 @@
 
 import { parsePreviewPath } from '@riftydev/io';
 import { packSerializedResponse } from './body-transport.ts';
-import { FirstWindowOwnerBinding } from './owner-binding-window.ts';
+import { PortAwareOwnerBinding } from './owner-binding-port-aware.ts';
 import type { PreviewOwnerResolver } from './owner-resolver.ts';
 import type { PreviewOwnerBinding } from './preview-owner-binding.ts';
 import {
@@ -68,6 +68,8 @@ import { routePreview } from './route-preview.ts';
 export { canTransferReadableStream, packSerializedResponse } from './body-transport.ts';
 export { FirstWindowOwnerBinding } from './owner-binding-window.ts';
 export type { FirstWindowOwnerBindingOptions } from './owner-binding-window.ts';
+export { PortAwareOwnerBinding } from './owner-binding-port-aware.ts';
+export type { PortAwareOwnerBindingOptions } from './owner-binding-port-aware.ts';
 export { WorkerOwnerBinding } from './owner-binding-worker.ts';
 export type {
   WorkerOwnerBindingOptions,
@@ -84,6 +86,12 @@ export type {
 export type { SerializedRequest, SerializedResponse } from './protocol.ts';
 
 export type PreviewHandler = (req: SerializedRequest) => Promise<SerializedResponse>;
+
+const PREVIEW_READY_HEARTBEAT_MS = 1_000;
+
+export interface PreviewBridgeOptions {
+  readonly ports?: readonly number[];
+}
 
 /**
  * Match a request URL against the `/preview/<port>/...` convention. Returns
@@ -132,12 +140,8 @@ export interface MessageHandlerHooks {
   /**
    * Override the {@link PreviewOwnerBinding} that the interceptor uses
    * to resolve owners and subscribe readiness. Defaults to
-   * {@link FirstWindowOwnerBinding}, which preserves the M10 behaviour
-   * of routing to the first controlled window client. M11 A-023 lands
-   * the {@link WorkerOwnerBinding} consumer; the
-   * `installPreviewInterceptor` default does not change because the
-   * page is still the SW's counterpart for the legacy preview surface
-   * (ADR-0043) — callers swap in `WorkerOwnerBinding` per-context.
+   * {@link PortAwareOwnerBinding}: Worker owners that claim `ports` win,
+   * historical window bridge remains the fallback.
    *
    * If both `binding` and `resolver` are supplied, `binding` wins and
    * `resolver` is ignored.
@@ -145,16 +149,12 @@ export interface MessageHandlerHooks {
   binding?: PreviewOwnerBinding;
   /**
    * Back-compat hook: override the {@link PreviewOwnerResolver} strategy
-   * used by the default window binding. Equivalent to
-   * `binding: new FirstWindowOwnerBinding({ resolver })`. Kept so the
-   * existing parity test in
-   * `tests/owner-resolver.test.ts` continues to compile without rewrite.
-   * Ignored when `binding` is supplied.
+   * used by the default port-aware binding's window fallback. Ignored when
+   * `binding` is supplied.
    *
    * Deprecation: ADR-0046 collapses owner resolution and readiness
    * behind {@link PreviewOwnerBinding}; swap the resolver via the
-   * `binding` field instead. Kept until A-023 lands its real consumer
-   * (`installPreviewInterceptor` flip).
+   * `binding` field instead, especially for custom non-window owners.
    */
   resolver?: PreviewOwnerResolver;
 }
@@ -180,9 +180,9 @@ export function createPreviewInterceptor(
   const timeoutMs = hooks.timeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
   const binding =
     hooks.binding ??
-    new FirstWindowOwnerBinding(
-      hooks.resolver !== undefined ? { resolver: hooks.resolver } : undefined,
-    );
+    new PortAwareOwnerBinding({
+      window: hooks.resolver !== undefined ? { resolver: hooks.resolver } : undefined,
+    });
   const subscription = binding.subscribeReadiness(scope);
 
   const fetchHandler = (event: FetchEvent): void => {
@@ -238,8 +238,15 @@ export function installPreviewInterceptor(scope: ServiceWorkerGlobalScope): () =
  * this client is subscribed; posts `rifty:preview:goodbye` on teardown.
  * Returns a teardown function.
  */
-export function setupPreviewBridge(handler: PreviewHandler): () => void {
+export function setupPreviewBridge(
+  handler: PreviewHandler,
+  opts: PreviewBridgeOptions = {},
+): () => void {
   if (!('serviceWorker' in navigator)) return (): void => {};
+  const announceReady = (): void => {
+    postHandshake(SW_PREVIEW_READY, opts.ports);
+  };
+  const readyHeartbeat = setInterval(announceReady, PREVIEW_READY_HEARTBEAT_MS);
   const listener = async (event: MessageEvent): Promise<void> => {
     const data = event.data as {
       type?: string;
@@ -289,19 +296,37 @@ export function setupPreviewBridge(handler: PreviewHandler): () => void {
     }
   };
   navigator.serviceWorker.addEventListener('message', listener);
-  postHandshake(SW_PREVIEW_READY);
+  navigator.serviceWorker.addEventListener('controllerchange', announceReady);
+  announceReady();
   return (): void => {
-    postHandshake(SW_PREVIEW_GOODBYE);
-    navigator.serviceWorker.removeEventListener('message', listener);
+    try {
+      postHandshake(SW_PREVIEW_GOODBYE, opts.ports);
+    } finally {
+      clearInterval(readyHeartbeat);
+      navigator.serviceWorker.removeEventListener('controllerchange', announceReady);
+      navigator.serviceWorker.removeEventListener('message', listener);
+    }
   };
 }
 
-function postHandshake(type: typeof SW_PREVIEW_READY | typeof SW_PREVIEW_GOODBYE): void {
+function postHandshake(
+  type: typeof SW_PREVIEW_READY | typeof SW_PREVIEW_GOODBYE,
+  ports?: readonly number[],
+): void {
   const controller = navigator.serviceWorker.controller;
   if (!controller) return;
-  controller.postMessage({
+  const message: {
+    type: typeof SW_PREVIEW_READY | typeof SW_PREVIEW_GOODBYE;
+    frameVersion: string;
+    routingVersion: string;
+    ports?: number[];
+  } = {
     type,
     frameVersion: SW_FRAME_VERSION,
     routingVersion: SW_ROUTING_VERSION,
-  });
+  };
+  if (ports && ports.length > 0) {
+    message.ports = [...ports];
+  }
+  controller.postMessage(message);
 }
