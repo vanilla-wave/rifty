@@ -55,6 +55,13 @@ const SHELL_REWRITE_RULES: readonly TerminalRewriteRule[] = [
   { trigger: 'la', replacement: 'ls -a', description: 'all files' },
   { trigger: 'mk', replacement: 'mkdir -p', description: 'recursive mkdir' },
 ];
+const REPL_COMMAND_ITEMS = [
+  '.help',
+  '.reset',
+  '1 + 1',
+  "console.log('hello from REPL')",
+  "require('node:path').basename('/tmp/demo.txt')",
+];
 
 export interface AppProps {
   /**
@@ -296,7 +303,7 @@ export function App(props: AppProps) {
         : 'REPL · Worker';
   const terminalModeHint = (): { readonly label: string; readonly detail: string } =>
     machine.mode() === 'repl'
-      ? { label: 'JS REPL', detail: 'Expressions run in the Worker; switch to Dev for shell.' }
+      ? { label: 'JS REPL', detail: 'Enter 1 + 1, type .help, or Run main.js.' }
       : { label: 'Shell', detail: 'Commands run in /workspace; running programs own stdin.' };
 
   const programTitle = (): string => (machine.mode() === 'repl' ? 'main.js' : 'src/main.js');
@@ -489,8 +496,10 @@ export function App(props: AppProps) {
                 }
                 shell.writeStdin(data);
               }}
-              completer={completeShellLine}
-              commandItems={() => shell.commandNames()}
+              completer={machine.mode() === 'repl' ? undefined : completeShellLine}
+              commandItems={() =>
+                machine.mode() === 'repl' ? REPL_COMMAND_ITEMS : shell.commandNames()
+              }
               highlighter={(line) =>
                 machine.mode() === 'repl' ? [] : shellLineHighlightSpans(line)
               }
@@ -515,7 +524,7 @@ export function App(props: AppProps) {
                     return exitCode;
                   }
                   await runtime.handleLine(line);
-                  return undefined;
+                  return 0;
                 } finally {
                   const finishedMs = Date.now();
                   rememberTerminalHistory({

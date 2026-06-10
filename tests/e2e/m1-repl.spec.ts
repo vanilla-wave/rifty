@@ -19,6 +19,26 @@ test.describe('M1 — JS Execution', () => {
     await expect.poll(() => terminalBuffer(page), { timeout: 5000 }).toContain('2');
   });
 
+  test('REPL help makes the first prompt discoverable', async ({ page }) => {
+    await page.goto('/');
+    const term = page.locator('[data-testid="terminal"]');
+    await expect(page.locator('[data-testid="terminal-mode-hint"]')).toContainText('.help');
+
+    await term.click();
+    await page.keyboard.type('.help');
+    await page.keyboard.press('Enter');
+
+    await expect.poll(() => terminalBuffer(page), { timeout: 5000 }).toContain('REPL quick start');
+    await expect.poll(() => terminalBuffer(page), { timeout: 5000 }).toContain('1 + 1');
+    await expect
+      .poll(() => terminalBuffer(page), { timeout: 5000 })
+      .toContain('Run executes the editor file main.js.');
+    await expect(page.locator('.rf-terminal-blockrail__item[aria-label*=".help"]')).toHaveAttribute(
+      'data-status',
+      'ok',
+    );
+  });
+
   test('Run button executes editor source and streams stdout', async ({ page }) => {
     await page.goto('/');
     const term = page.locator('[data-testid="terminal"]');
