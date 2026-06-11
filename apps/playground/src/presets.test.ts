@@ -8,6 +8,11 @@ describe('playground presets', () => {
 
     expect(filePresets).toHaveLength(2);
     expect(filePresets.every((preset) => (preset.files?.length ?? 0) >= 2)).toBe(true);
+    expect(filePresets.every((preset) => (preset.openFiles?.length ?? 0) >= 2)).toBe(true);
+    for (const preset of filePresets) {
+      const filePaths = new Set((preset.files ?? []).map((file) => file.path));
+      expect(preset.openFiles?.every((path) => filePaths.has(path))).toBe(true);
+    }
     expect(filePresets.every((preset) => preset.source.includes("new URL('src/"))).toBe(true);
     expect(filePresets.every((preset) => preset.source.includes('await import('))).toBe(true);
     expect(filePresets.every((preset) => preset.source.includes('@vite-ignore'))).toBe(true);

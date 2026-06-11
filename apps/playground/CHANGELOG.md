@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- **Project presets now open starter editor tabs.** File-oriented presets open
+  two seeded files beside `src/main.js` as inactive tabs, so users see the tab
+  strip immediately while the entry file remains active.
 - **Terminal tabs now keep the add button attached to the tab strip.** The
   bottom-console tab list no longer stretches across the whole toolbar before
   the `+` action, so the new-terminal control stays visually glued to the

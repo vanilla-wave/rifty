@@ -446,6 +446,12 @@ export function App(props: AppProps) {
     }
   }
 
+  function openPresetEditorTabs(preset: Preset): void {
+    for (const path of preset.openFiles ?? []) {
+      editorApi?.openFile(workspacePresetPath(path), { activate: false });
+    }
+  }
+
   function syncWorkspaceFileToWorker(path: string): void {
     const handle = realViteHandle;
     if (!handle || path === PROGRAM_MIRROR_PATH) return;
@@ -516,6 +522,7 @@ export function App(props: AppProps) {
     setActivePreset(preset.id);
     await machine.loadPreset(preset);
     seedViteWorkspace(preset);
+    openPresetEditorTabs(preset);
     syncPresetFilesToWorker(realViteHandle, preset);
     realViteHandle?.updateEntry(preset.source);
     if (devServerStatus() !== 'stopped') {

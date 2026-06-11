@@ -32,6 +32,8 @@ export interface Preset {
   readonly source: string;
   /** Additional project files written into /workspace for this preset. */
   readonly files?: readonly PresetFile[];
+  /** Workspace-relative files opened as inactive editor tabs when this preset loads. */
+  readonly openFiles?: readonly string[];
 }
 
 const PROJECT_FILES_SOURCE = `const projectUrl = new URL('src/project.json?import', window.location.href).href;
@@ -236,6 +238,7 @@ const PROJECT_FILES_PRESET: Preset = {
   blurb: 'A small module graph with JS, JSON, CSS, and a README to inspect.',
   tag: { text: 'live', tone: 'live' },
   source: PROJECT_FILES_SOURCE,
+  openFiles: ['src/project-summary.js', 'src/project.json'],
   files: [
     { path: 'src/project-summary.js', content: PROJECT_SUMMARY_SOURCE },
     { path: 'src/project.json', content: PROJECT_JSON_SOURCE },
@@ -254,6 +257,7 @@ const NODE_WORKER_PRESET: Preset = {
   blurb: 'Shows where Node-style project files fit around the worker dev server.',
   tag: { text: 'live', tone: 'live' },
   source: NODE_WORKER_SOURCE,
+  openFiles: ['src/runtime-notes.js', 'scripts/inspect-workspace.mjs'],
   files: [
     { path: 'src/runtime-notes.js', content: RUNTIME_NOTES_SOURCE },
     { path: 'src/workspace.css', content: WORKSPACE_CSS_SOURCE },

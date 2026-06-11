@@ -7,8 +7,8 @@
  *  - the permanent program tab is active at boot and is the ONLY tab bound to
  *    `machine.source`/`setSource` — the m10 HMR textarea path
  *    (`[data-testid="editor"] textarea`) stays byte-for-byte unchanged;
- *  - nothing auto-opens a file tab, so the bare editor textarea always hosts
- *    the program model;
+ *  - preset tabs may auto-open inactive, but the bare editor textarea still
+ *    hosts the program model until the user explicitly switches tabs;
  *  - external program-source changes (presets / mode transitions) write the
  *    program model under the single `suppressProgramEcho` flag the change
  *    listener checks-and-clears, so they can't echo back into `setSource`;
@@ -36,9 +36,13 @@ import { EditorTabs } from './EditorTabs.tsx';
 /** Program edits write here; opening this exact path focuses the program tab. */
 export const PROGRAM_MIRROR_PATH = '/workspace/src/main.js';
 
+export interface EditorOpenFileOptions {
+  readonly activate?: boolean;
+}
+
 /** Imperative handle handed to the App so the explorer can open files. */
 export interface EditorApi {
-  openFile(path: string): void;
+  openFile(path: string, options?: EditorOpenFileOptions): void;
 }
 
 export interface EditorHostProps {
@@ -167,16 +171,18 @@ export function EditorHost(props: EditorHostProps) {
   function openNodeModulesFile(
     path: string,
     read: (p: string) => Promise<{ size: number; content: Uint8Array | null }>,
+    options: EditorOpenFileOptions = {},
   ): void {
+    const shouldActivate = options.activate !== false;
     if (models.has(path)) {
-      setActiveId(path);
+      if (shouldActivate) setActiveId(path);
       return;
     }
     readOnlyPaths.add(path);
     const model = monaco.editor.createModel('// loading…', languageForPath(path));
     models.set(path, model);
     setTabs((t) => openFileTab(t, path, basename(path)));
-    setActiveId(path);
+    if (shouldActivate) setActiveId(path);
     read(path).then(
       (res) => {
         // The tab may have been closed (model disposed) during the await.
@@ -198,18 +204,19 @@ export function EditorHost(props: EditorHostProps) {
     );
   }
 
-  function openFile(path: string): void {
+  function openFile(path: string, options: EditorOpenFileOptions = {}): void {
+    const shouldActivate = options.activate !== false;
     if (path === PROGRAM_MIRROR_PATH) {
-      setActiveId(PROGRAM_TAB_ID);
+      if (shouldActivate) setActiveId(PROGRAM_TAB_ID);
       return;
     }
     const readNm = props.readNodeModulesFile;
     if (readNm && isNodeModulesPath(path)) {
-      openNodeModulesFile(path, readNm);
+      openNodeModulesFile(path, readNm, options);
       return;
     }
     if (models.has(path)) {
-      setActiveId(path);
+      if (shouldActivate) setActiveId(path);
       return;
     }
     let bytes: Uint8Array;
@@ -234,7 +241,7 @@ export function EditorHost(props: EditorHostProps) {
     }
     models.set(path, model);
     setTabs((t) => openFileTab(t, path, basename(path)));
-    setActiveId(path);
+    if (shouldActivate) setActiveId(path);
   }
 
   function closeFile(path: string): void {

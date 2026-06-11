@@ -36,6 +36,13 @@ describe('App terminal startup wiring', () => {
     );
   });
 
+  it('opens configured preset files as inactive editor tabs', () => {
+    expect(source).toContain('function openPresetEditorTabs(preset: Preset): void');
+    expect(source).toContain('for (const path of preset.openFiles ?? [])');
+    expect(source).toContain('editorApi?.openFile(workspacePresetPath(path), { activate: false })');
+    expect(source).toContain('openPresetEditorTabs(preset);');
+  });
+
   it('waits for the worker preview bridges before treating Vite as ready', () => {
     expect(source).toContain("line.includes('[real-vite/worker] node_modules read bridge ready')");
   });
