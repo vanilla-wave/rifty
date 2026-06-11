@@ -11,6 +11,9 @@
 - **Terminal tab switching is regression-covered end-to-end.** Playwright now
   switches Terminal 2 → Terminal 1 → Terminal 2 and asserts the active buffer
   changes with the selected tab.
+- **Idle terminal tabs close cleanly.** Closing a newly created terminal no
+  longer lets an xterm WebGL teardown exception interrupt Solid's DOM update;
+  the console returns to the running terminal with a single active panel.
 - **`npm run vite` works in the playground shell.** The seeded Vite project now
   exposes both `dev` and `vite` scripts, and the playground `npm run <script>`
   path routes `vite` scripts through the same visible terminal command that owns

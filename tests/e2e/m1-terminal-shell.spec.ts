@@ -61,6 +61,22 @@ test.describe('M1 - terminal shell', () => {
     await expectTerminalContains(page, 'hello-from-terminal-2');
   });
 
+  test('closing an idle terminal returns to the running terminal cleanly', async ({ page }) => {
+    await page.goto('/');
+    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+
+    await openShellTerminal(page);
+    await page.getByRole('button', { name: 'Close Terminal 2' }).click();
+
+    await expect(page.locator('.rf-terminal-tab')).toHaveCount(1);
+    await expect(page.getByRole('tab', { name: 'Terminal 1' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(page.locator('.rf-terminal-slot[data-active="true"]')).toHaveCount(1);
+    await expect.poll(() => terminalBuffer(page)).toContain('$ vite');
+  });
+
   test('new-terminal button stays attached to the terminal tabs', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('tab', { name: 'Terminal 1' })).toBeVisible();
