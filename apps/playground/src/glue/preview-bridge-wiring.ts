@@ -33,7 +33,14 @@ import {
  * `dispatchToPort(Request)`. One shared function, deliberately de-duplicated
  * across both dev modes — do not fork.
  */
-export function mountPlaygroundPreviewBridge(bridge?: CrossRealmPortHandler): () => void {
+export interface PlaygroundPreviewBridgeOptions {
+  readonly ownerToken?: string;
+}
+
+export function mountPlaygroundPreviewBridge(
+  bridge?: CrossRealmPortHandler,
+  opts: PlaygroundPreviewBridgeOptions = {},
+): () => void {
   return setupPreviewBridge(async (req: SerializedRequest): Promise<SerializedResponse> => {
     let response: Response;
     if (bridge) {
@@ -59,5 +66,5 @@ export function mountPlaygroundPreviewBridge(bridge?: CrossRealmPortHandler): ()
       headers: Object.fromEntries(response.headers),
       body: response.body,
     };
-  });
+  }, opts);
 }

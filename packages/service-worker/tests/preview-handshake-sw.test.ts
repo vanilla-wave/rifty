@@ -18,6 +18,7 @@ import {
 
 interface MockClient {
   id: string;
+  type: ClientTypes;
   postMessage: ReturnType<typeof vi.fn>;
 }
 
@@ -26,13 +27,22 @@ interface MockScope {
   listeners: Record<string, ((event: unknown) => void)[]>;
   addEventListener: (type: string, fn: (event: unknown) => void) => void;
   removeEventListener: (type: string, fn: (event: unknown) => void) => void;
-  fetch: (url: string, init?: RequestInit & { clientId?: string }) => Promise<Response>;
+  fetch: (
+    url: string,
+    init?: RequestInit & {
+      clientId?: string;
+      resultingClientId?: string;
+      requestMode?: RequestMode;
+      destination?: RequestDestination;
+    },
+  ) => Promise<Response>;
   postMessage: (data: unknown, source: MockClient) => void;
 }
 
-function makeMockClient(id: string): MockClient {
+function makeMockClient(id: string, type: ClientTypes = 'window'): MockClient {
   return {
     id,
+    type,
     postMessage: vi.fn<(message: unknown, transfer: Transferable[]) => void>(),
   };
 }
@@ -59,11 +69,18 @@ function makeMockScope(clients: MockClient[]): MockScope {
     async fetch(url, init): Promise<Response> {
       const fetchListeners = listeners.fetch ?? [];
       let response: Promise<Response> | undefined;
-      const { clientId, ...requestInit } = init ?? {};
+      const { clientId, resultingClientId, requestMode, destination, ...requestInit } = init ?? {};
+      const request = new Request(url, requestInit);
+      if (requestMode !== undefined) {
+        Object.defineProperty(request, 'mode', { configurable: true, value: requestMode });
+      }
+      if (destination !== undefined) {
+        Object.defineProperty(request, 'destination', { configurable: true, value: destination });
+      }
       const event = {
-        request: new Request(url, requestInit),
+        request,
         clientId: clientId ?? '',
-        resultingClientId: '',
+        resultingClientId: resultingClientId ?? '',
         respondWith(p: Promise<Response>): void {
           response = p;
         },
@@ -78,6 +95,12 @@ function makeMockScope(clients: MockClient[]): MockScope {
       for (const fn of messageListeners) fn(event);
     },
   };
+}
+
+async function flushPreviewDispatch(): Promise<void> {
+  for (let i = 0; i < 8; i += 1) {
+    await Promise.resolve();
+  }
 }
 
 describe('SW-side handshake state machine', () => {
@@ -108,8 +131,7 @@ describe('SW-side handshake state machine', () => {
       },
       client,
     );
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushPreviewDispatch();
     expect(client.postMessage).toHaveBeenCalledTimes(1);
     const [, transfer] = client.postMessage.mock.calls[0]!;
     const replyPort = (transfer as MessagePort[])[0]!;
@@ -245,10 +267,7 @@ describe('SW-side handshake state machine', () => {
       clientB,
     );
     const responsePromise = scope.fetch('http://x/preview/3000/path', { clientId: 'client-B' });
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushPreviewDispatch();
     expect(clientA.postMessage).not.toHaveBeenCalled();
     expect(clientB.postMessage).toHaveBeenCalledTimes(1);
     const [, transfer] = clientB.postMessage.mock.calls[0]!;
@@ -256,6 +275,249 @@ describe('SW-side handshake state machine', () => {
     replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
     const response = await responsePromise;
     expect(response.status).toBe(200);
+    interceptor.teardown();
+  });
+
+  it('routes worker-owned ports directly to the Worker even when a window bridge is ready', async () => {
+    const windowClient = makeMockClient('window-A');
+    const workerClient = makeMockClient('worker-A', 'worker');
+    const scope = makeMockScope([windowClient, workerClient]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ownerToken: 'owner-A',
+      },
+      windowClient,
+    );
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ports: [3000],
+        ownerToken: 'owner-A',
+      },
+      workerClient,
+    );
+    const responsePromise = scope.fetch('http://x/preview/3000/path', {
+      clientId: 'window-A',
+    });
+    await flushPreviewDispatch();
+    expect(windowClient.postMessage).not.toHaveBeenCalled();
+    expect(workerClient.postMessage).toHaveBeenCalledTimes(1);
+    const [, transfer] = workerClient.postMessage.mock.calls[0]!;
+    const replyPort = (transfer as MessagePort[])[0]!;
+    replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
+    expect((await responsePromise).status).toBe(200);
+    interceptor.teardown();
+  });
+
+  it('does not let a Worker claim the same port for another window owner', async () => {
+    const windowA = makeMockClient('window-A');
+    const windowB = makeMockClient('window-B');
+    const workerB = makeMockClient('worker-B', 'worker');
+    const scope = makeMockScope([windowA, windowB, workerB]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ownerToken: 'owner-A',
+      },
+      windowA,
+    );
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ownerToken: 'owner-B',
+      },
+      windowB,
+    );
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ports: [3000],
+        ownerToken: 'owner-B',
+      },
+      workerB,
+    );
+
+    const responsePromise = scope.fetch('http://x/preview/3000/path', {
+      clientId: 'window-A',
+    });
+    await flushPreviewDispatch();
+
+    expect(workerB.postMessage).not.toHaveBeenCalled();
+    expect(windowA.postMessage).toHaveBeenCalledTimes(1);
+    const [, transfer] = windowA.postMessage.mock.calls[0]!;
+    const replyPort = (transfer as MessagePort[])[0]!;
+    replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
+    expect((await responsePromise).status).toBe(200);
+    interceptor.teardown();
+  });
+
+  it('falls back to the window bridge when no Worker owns the requested port', async () => {
+    const windowClient = makeMockClient('window-A');
+    const workerClient = makeMockClient('worker-A', 'worker');
+    const scope = makeMockScope([windowClient, workerClient]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      windowClient,
+    );
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ports: [5173],
+        ownerToken: 'owner-A',
+      },
+      workerClient,
+    );
+    const responsePromise = scope.fetch('http://x/preview/3000/path', {
+      clientId: 'window-A',
+    });
+    await flushPreviewDispatch();
+    expect(workerClient.postMessage).not.toHaveBeenCalled();
+    expect(windowClient.postMessage).toHaveBeenCalledTimes(1);
+    const [, transfer] = windowClient.postMessage.mock.calls[0]!;
+    const replyPort = (transfer as MessagePort[])[0]!;
+    replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
+    expect((await responsePromise).status).toBe(200);
+    interceptor.teardown();
+  });
+
+  it('does not treat an unclaimed Worker clientId as the window fallback owner', async () => {
+    const workerClient = makeMockClient('worker-A', 'worker');
+    const scope = makeMockScope([workerClient]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ports: [5173],
+        ownerToken: 'owner-A',
+      },
+      workerClient,
+    );
+    const responsePromise = scope.fetch('http://x/preview/3000/path', {
+      clientId: 'worker-A',
+    });
+    await flushPreviewDispatch();
+    expect(workerClient.postMessage).not.toHaveBeenCalled();
+    expect((await responsePromise).status).toBe(503);
+    interceptor.teardown();
+  });
+
+  it('routes iframe document navigations to the controlling window, not resultingClientId', async () => {
+    const owner = makeMockClient('window-A');
+    const iframe = makeMockClient('iframe-client');
+    const scope = makeMockScope([owner, iframe]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      owner,
+    );
+    const responsePromise = scope.fetch('http://x/preview/3000/', {
+      requestMode: 'navigate',
+      destination: 'iframe',
+      resultingClientId: 'iframe-client',
+    });
+    await flushPreviewDispatch();
+    expect(iframe.postMessage).not.toHaveBeenCalled();
+    expect(owner.postMessage).toHaveBeenCalledTimes(1);
+    const [, transfer] = owner.postMessage.mock.calls[0]!;
+    const replyPort = (transfer as MessagePort[])[0]!;
+    replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
+    expect((await responsePromise).status).toBe(200);
+    interceptor.teardown();
+  });
+
+  it('routes iframe subresources to the controlling window, not iframe clientId', async () => {
+    const owner = makeMockClient('window-A');
+    const iframe = makeMockClient('iframe-client');
+    const scope = makeMockScope([owner, iframe]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      owner,
+    );
+    const responsePromise = scope.fetch('http://x/preview/3000/src/main.js', {
+      clientId: 'iframe-client',
+      destination: 'script',
+    });
+    await flushPreviewDispatch();
+    expect(iframe.postMessage).not.toHaveBeenCalled();
+    expect(owner.postMessage).toHaveBeenCalledTimes(1);
+    const [, transfer] = owner.postMessage.mock.calls[0]!;
+    const replyPort = (transfer as MessagePort[])[0]!;
+    replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
+    expect((await responsePromise).status).toBe(200);
+    interceptor.teardown();
+  });
+
+  it('keeps bare page fetch routing on the named client instead of first window fallback', async () => {
+    const clientA = makeMockClient('client-A');
+    const clientB = makeMockClient('client-B');
+    const scope = makeMockScope([clientA, clientB]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    for (const client of [clientA, clientB]) {
+      scope.postMessage(
+        {
+          type: SW_PREVIEW_READY,
+          frameVersion: SW_FRAME_VERSION,
+          routingVersion: SW_ROUTING_VERSION,
+        },
+        client,
+      );
+    }
+    const responsePromise = scope.fetch('http://x/preview/3000/', {
+      clientId: 'client-B',
+      destination: '',
+    });
+    await flushPreviewDispatch();
+    expect(clientA.postMessage).not.toHaveBeenCalled();
+    expect(clientB.postMessage).toHaveBeenCalledTimes(1);
+    const [, transfer] = clientB.postMessage.mock.calls[0]!;
+    const replyPort = (transfer as MessagePort[])[0]!;
+    replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
+    expect((await responsePromise).status).toBe(200);
     interceptor.teardown();
   });
 });

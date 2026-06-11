@@ -645,8 +645,8 @@ export class RiftyTerminal {
 
   dispose(): void {
     this.resizeObserver?.disconnect();
-    for (const disposable of this.disposables.splice(0)) disposable.dispose();
-    this.term.dispose();
+    for (const disposable of this.disposables.splice(0)) this.safeDispose(disposable);
+    this.safeDispose(this.term);
   }
 
   setTheme(theme: ITheme): void {
@@ -837,7 +837,7 @@ export class RiftyTerminal {
       this.term.loadAddon(addon);
       return true;
     } catch {
-      addon.dispose();
+      this.safeDispose(addon);
       return false;
     }
   }
@@ -891,10 +891,18 @@ export class RiftyTerminal {
     this.webglAddon = addon;
     this.disposables.push(
       addon.onContextLoss(() => {
-        addon.dispose();
+        this.safeDispose(addon);
         if (this.webglAddon === addon) this.webglAddon = null;
       }),
     );
+  }
+
+  private safeDispose(disposable: { dispose(): void }): void {
+    try {
+      disposable.dispose();
+    } catch {
+      /* Addon teardown is best-effort; callers must not be left half-unmounted. */
+    }
   }
 
   private requireSearchAddon(): SearchAddon {

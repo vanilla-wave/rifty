@@ -6,7 +6,7 @@ import { Icon } from './icons.tsx';
  * Left-rail preset gallery. Presets are grouped by category (in
  * {@link CATEGORY_ORDER}) and rendered as clickable tiles; the active tile is
  * highlighted via `data-active`. Selecting a tile is the only thing this
- * component does — the mode transition (REPL / dev / real-vite) lives in the
+ * component does — the mode transition and terminal startup live in the
  * caller's `onSelect`, so the gallery stays presentational.
  */
 export function PresetGallery(props: {

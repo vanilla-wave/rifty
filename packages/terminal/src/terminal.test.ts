@@ -1629,6 +1629,19 @@ describe('RiftyTerminal — options polish API', () => {
     expect(addonMocks.webglDisposed).toBe(1);
   });
 
+  it('does not throw when an addon fails during terminal dispose', () => {
+    const term = new RiftyTerminal({ onInput: () => {} });
+    const disposable = {
+      dispose: vi.fn(() => {
+        throw new Error('addon dispose failed');
+      }),
+    };
+    (term as unknown as { disposables: Array<{ dispose(): void }> }).disposables.push(disposable);
+
+    expect(() => term.dispose()).not.toThrow();
+    expect(disposable.dispose).toHaveBeenCalledTimes(1);
+  });
+
   it('copyOnSelect writes non-empty selections through the injected clipboard', () => {
     const writes: string[] = [];
     const term = new RiftyTerminal({

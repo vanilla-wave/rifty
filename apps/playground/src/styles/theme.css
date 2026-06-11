@@ -1696,11 +1696,18 @@ body.rf-resizing iframe {
   min-width: 0;
   min-height: 0;
 }
+.rf-tabsbar {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  background: linear-gradient(180deg, var(--rf-bg-2), #0e1015);
+  border-bottom: 1px solid var(--rf-line);
+}
 .rf-tabs {
   display: flex;
   align-items: stretch;
-  background: linear-gradient(180deg, var(--rf-bg-2), #0e1015);
-  border-bottom: 1px solid var(--rf-line);
+  flex: 1 1 auto;
+  min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -1777,6 +1784,31 @@ body.rf-resizing iframe {
   background: var(--rf-line-2);
   color: var(--rf-text);
 }
+.rf-tabs__actions {
+  display: flex;
+  align-items: center;
+  flex: none;
+  padding: 0 6px;
+  border-left: 1px solid var(--rf-line-soft);
+}
+.rf-tab-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--rf-line);
+  border-radius: var(--rf-r-xs);
+  background: transparent;
+  color: var(--rf-text-faint);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.rf-tab-action:hover {
+  background: var(--rf-bg-3);
+  color: var(--rf-text);
+}
 
 /* — bottom console panel — */
 .rf-console {
@@ -1817,11 +1849,138 @@ body.rf-resizing iframe {
   font-size: 11px;
   color: var(--rf-text-ghost);
 }
+.rf-terminal-tabsbar {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  align-self: stretch;
+  flex: 1 1 auto;
+}
+.rf-terminal-tabs {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  align-self: stretch;
+  flex: 0 1 auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.rf-terminal-tabs::-webkit-scrollbar {
+  height: 0;
+}
+.rf-terminal-tab {
+  display: flex;
+  align-items: stretch;
+  max-width: 220px;
+  border-right: 1px solid var(--rf-line-soft);
+  color: var(--rf-text-faint);
+  background: transparent;
+  position: relative;
+}
+.rf-terminal-tab[data-active="true"] {
+  color: var(--rf-text);
+  background: var(--rf-bg-1);
+}
+.rf-terminal-tab[data-active="true"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--rf-accent);
+  box-shadow: 0 0 8px var(--rf-accent-glow);
+}
+.rf-terminal-tab__select {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 0 8px 0 10px;
+  border: none;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.rf-terminal-tab__select:hover,
+.rf-terminal-tab__close:hover {
+  background: var(--rf-bg-3);
+  color: var(--rf-text);
+}
+.rf-terminal-tab__dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--rf-line-2);
+}
+.rf-terminal-tab[data-running="true"] .rf-terminal-tab__dot {
+  background: var(--rf-run);
+  border-color: #244a31;
+  box-shadow: 0 0 8px rgba(87, 227, 155, 0.35);
+}
+.rf-terminal-tab__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rf-terminal-tab__close,
+.rf-terminal-action {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  border: none;
+  color: var(--rf-text-faint);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.rf-terminal-tab__close {
+  position: relative;
+  z-index: 1;
+}
+.rf-terminal-action {
+  align-self: stretch;
+  flex: none;
+  border-left: 1px solid var(--rf-line-soft);
+  border-right: 1px solid var(--rf-line-soft);
+  font-size: 15px;
+}
+.rf-terminal-action:hover {
+  background: var(--rf-bg-3);
+  color: var(--rf-text);
+}
+.rf-terminal-stop {
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--rf-err-line);
+  border-radius: var(--rf-r-xs);
+  color: #fecaca;
+  background: var(--rf-err-bg);
+  font: inherit;
+  cursor: pointer;
+}
+.rf-terminal-stop:hover {
+  border-color: var(--rf-err);
+  color: #fff1f1;
+}
 .rf-console__body {
   position: relative;
   min-height: 0;
   /* Fill the inset gap around .rf-terminal with the xterm surface colour. */
   background: var(--rf-bg-1);
+}
+.rf-terminal-slot {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.rf-terminal-slot[data-active="true"] {
+  visibility: visible;
+  pointer-events: auto;
 }
 .rf-console[data-collapsed="true"] .rf-console__body {
   display: none;

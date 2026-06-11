@@ -4,7 +4,8 @@
  *
  * Owner shape: a window `Client` (the playground page hosting
  * `setupPreviewBridge`). The page sends `rifty:preview:ready` on init and
- * `rifty:preview:goodbye` on `pagehide`/teardown; the subscription consumes them.
+ * heartbeat/controllerchange, then `rifty:preview:goodbye` on teardown; the
+ * subscription consumes them.
  *
  * `resolveOwner` preserves the M10 behaviour verbatim: prefer the `clientId`
  * carried by the `FetchEvent`, fall back to the first controlled window when the
@@ -68,7 +69,7 @@ export class FirstWindowOwnerBinding implements PreviewOwnerBinding {
       // both filter ready/goodbye frames keyed by `event.source.id`.
       const ev = event as ExtendableMessageEvent;
       const data = ev.data as
-        | { type?: string; frameVersion?: string; routingVersion?: string }
+        | { type?: string; frameVersion?: string; routingVersion?: string; ownerToken?: string }
         | null
         | undefined;
       if (!data || typeof data !== 'object' || typeof data.type !== 'string') return;
@@ -85,6 +86,7 @@ export class FirstWindowOwnerBinding implements PreviewOwnerBinding {
       readiness: {
         isReady: (id): boolean => registry.isReady(id),
         isMismatched: (id): boolean => registry.isMismatched(id),
+        ownerToken: (id): string | undefined => registry.ownerToken(id),
         // NOT `async`: returning the registry promise directly preserves
         // pre-ADR-0046 microtask timing; an `async` wrapper inserts an extra
         // await-unwrap tick between the ready frame resolving the waiter and

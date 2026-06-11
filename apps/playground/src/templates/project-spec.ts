@@ -63,35 +63,41 @@ export interface BootstrapConfig {
 }
 
 /**
- * The `<script>` src is ABSOLUTE (worker serving contract) and DERIVED from the
- * entry path, so seeded HTML always agrees with the declared entry. The dev-mode
- * fallback keeps its own RELATIVE-src HTML (it escapes the iframe `/preview/`
- * base) — the two serving contracts must not be shared (ADR-0077 / devMode.ts).
+ * The `<script>` src is RELATIVE and DERIVED from the entry path, so seeded
+ * HTML always agrees with the declared entry without escaping the routed
+ * `/preview/<port>/` base.
  */
 function buildIndexHtml(title: string, entryRelativePath: string): string {
+  const scriptSrc = entryRelativePath.replace(/^\/+/, '');
   return `<!doctype html>
 <html>
   <head><meta charset="utf-8"><title>${title}</title></head>
   <body>
-    <h1>Hello from rifty</h1>
     <div id="app"></div>
-    <script type="module" src="${entryRelativePath}"></script>
+    <script type="module" src="${scriptSrc}"></script>
   </body>
 </html>`;
 }
 
-function buildPackageJson(spec: ProjectSpec): {
+export function buildProjectPackageJson(spec: ProjectSpec): {
   readonly name: string;
   readonly version: string;
   readonly json: string;
 } {
   const name = `rifty-${spec.id}-app`;
   const version = '0.0.0';
-  const json = JSON.stringify(
-    { name, version, private: true, type: 'module', dependencies: spec.install },
+  const json = `${JSON.stringify(
+    {
+      name,
+      version,
+      private: true,
+      type: 'module',
+      scripts: { dev: 'vite', vite: 'vite' },
+      dependencies: spec.install,
+    },
     null,
     2,
-  );
+  )}\n`;
   return { name, version, json };
 }
 
@@ -107,7 +113,7 @@ export function resolveBootstrapConfig(
   root: string,
 ): BootstrapConfig {
   const entryPath = `${root}${spec.entry.relativePath}`;
-  const pkg = buildPackageJson(spec);
+  const pkg = buildProjectPackageJson(spec);
   const seedFiles: Record<string, string> = {
     [`${root}/index.html`]: buildIndexHtml(spec.htmlTitle, spec.entry.relativePath),
     [entryPath]: spec.entry.content,

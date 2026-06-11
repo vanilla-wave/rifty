@@ -38,13 +38,25 @@ const WARMUP_FETCH_TIMEOUT_MS = 4_000;
 const COMMIT_TIMEOUT_MS = 4_000;
 const COMMIT_INTERVAL_MS = 200;
 
-export function PreviewPanel(props: { initialPort?: number }) {
+export function PreviewPanel(props: {
+  initialPort?: number;
+  refreshKey?: number;
+  onOpenTab?: (port: number) => void;
+}) {
   const [port, setPort] = createSignal(props.initialPort ?? 3000);
   const [phase, setPhase] = createSignal<Phase>('starting');
   const [retry, setRetry] = createSignal(0);
   let frame: HTMLIFrameElement | undefined;
 
   const previewUrl = (): string => `/preview/${port()}/`;
+
+  function openTab(): void {
+    if (props.onOpenTab) {
+      props.onOpenTab(port());
+      return;
+    }
+    globalThis.window?.open(previewUrl(), '_blank');
+  }
 
   function reload(): void {
     if (phase() === 'live') {
@@ -69,6 +81,7 @@ export function PreviewPanel(props: { initialPort?: number }) {
   // stale loop writing state after unmount / a later run.
   createEffect(() => {
     const url = previewUrl();
+    props.refreshKey;
     retry();
     let alive = true;
     setPhase('starting');
@@ -92,7 +105,12 @@ export function PreviewPanel(props: { initialPort?: number }) {
       // Route reachable — load into the frame, then poll for an actual commit
       // (cross-browser: fast where the nav commits, falls through to `error`
       // where the sub-frame nav aborts).
-      if (frame) frame.src = url;
+      if (frame) {
+        frame.src = 'about:blank';
+        await new Promise((r) => setTimeout(r, 0));
+        if (!alive) return;
+        frame.src = url;
+      }
       const commitDeadline = Date.now() + COMMIT_TIMEOUT_MS;
       let ok = false;
       while (alive && Date.now() < commitDeadline) {
@@ -130,9 +148,6 @@ export function PreviewPanel(props: { initialPort?: number }) {
           <button type="button" class="rf-btn rf-btn--ghost" onClick={reload}>
             ↻ Reload
           </button>
-          <a class="rf-preview__link" href={previewUrl()} target="_blank" rel="noopener noreferrer">
-            ↗ new tab
-          </a>
         </div>
       </div>
       <div class="rf-pane__body">
@@ -152,9 +167,9 @@ export function PreviewPanel(props: { initialPort?: number }) {
                 Reload
               </button>{' '}
               or open{' '}
-              <a href={previewUrl()} target="_blank" rel="noopener noreferrer">
-                ↗ a new tab
-              </a>
+              <button type="button" class="rf-linkbtn" onClick={openTab}>
+                a new tab
+              </button>
               .
             </p>
           </div>

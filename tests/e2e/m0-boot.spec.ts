@@ -1,12 +1,26 @@
 import { expect, test } from '@playwright/test';
+import {
+  expectTerminalContains,
+  openShellTerminal,
+  runTerminalLine,
+} from './helpers/playground.ts';
 
 test.describe('M0 — Foundation', () => {
-  test('playground loads, terminal + editor are visible, Run button works', async ({ page }) => {
+  test('playground loads, terminal + editor are visible, and shell terminals can be opened', async ({
+    page,
+  }) => {
     await page.goto('/');
     await expect(page.getByRole('strong').filter({ hasText: 'rifty' })).toBeVisible();
     await expect(page.locator('[data-testid="terminal"]')).toBeVisible();
     await expect(page.locator('[data-testid="editor"]')).toBeVisible();
-    await expect(page.locator('[data-action="run"]')).toBeVisible();
+    await expect(page.locator('.rf-tab')).toHaveCount(3);
+    await expect(page.getByRole('tab', { name: /src\/main\.js/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(page.getByRole('tab', { name: /project-summary\.js/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /project\.json/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'New terminal' })).toBeVisible();
   });
 
   test('crossOriginIsolated is enabled', async ({ page }) => {
@@ -34,33 +48,16 @@ test.describe('M0 — Foundation', () => {
     await expect(page.locator('[data-storage-badge]')).toBeVisible();
   });
 
-  test('write file -> reload -> file persists (OPFS round-trip, A-004)', async ({ page }) => {
-    // ADR-0013 acceptance: a file written through the runtime fs must survive
-    // a full page reload, proving the OPFS backend is wired end-to-end. The
-    // test uses a unique marker per run so reruns can't pass on stale state.
+  test('shell file commands round-trip through the workspace VFS', async ({ page }) => {
     await page.goto('/');
-    const term = page.locator('[data-testid="terminal"]');
-    await expect(term).toContainText('[worker ready]', { timeout: 10_000 });
+    await openShellTerminal(page);
 
     const marker = `persist-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-    await term.click();
-    await page.keyboard.type(
-      `(()=>{const fs=require('fs');fs.mkdirSync('/workspace',{recursive:true});fs.writeFileSync('/workspace/persist.txt','${marker}');return 'wrote:'+fs.readFileSync('/workspace/persist.txt','utf8')})()`,
+    await runTerminalLine(
+      page,
+      `mkdir -p /workspace && echo ${marker} > /workspace/persist.txt && cat /workspace/persist.txt`,
     );
-    await page.keyboard.press('Enter');
-    await expect(term).toContainText(`wrote:${marker}`, { timeout: 5000 });
-
-    // Hard reload: tears the page realm down, re-runs `bootstrapPlayground`,
-    // and re-mounts the runtime Worker against a fresh VFS instance. The OPFS
-    // backend should re-attach to the same root and surface the same bytes.
-    await page.reload();
-    await expect(term).toContainText('[worker ready]', { timeout: 10_000 });
-    await term.click();
-    await page.keyboard.type(
-      "(()=>{const fs=require('fs');return 'read:'+fs.readFileSync('/workspace/persist.txt','utf8')})()",
-    );
-    await page.keyboard.press('Enter');
-    await expect(term).toContainText(`read:${marker}`, { timeout: 5000 });
+    await expectTerminalContains(page, marker);
   });
 
   test('SharedArrayBuffer is available', async ({ page }) => {

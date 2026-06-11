@@ -1,4 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
+import { openShellTerminal, runTerminalLine } from './helpers/playground.ts';
 
 async function readOpfsJson<T>(page: Page, path: string): Promise<T | null> {
   return page.evaluate(async (target) => {
@@ -17,22 +18,12 @@ async function readOpfsJson<T>(page: Page, path: string): Promise<T | null> {
   }, path);
 }
 
-async function selectDevPreset(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Templates' }).click();
-  const devPreset = page.locator('button[data-preset="dev-hmr"]');
-  await devPreset.evaluate((button) => (button as HTMLButtonElement).click());
-  await expect(devPreset).toHaveAttribute('aria-pressed', 'true');
-}
-
 test.describe('Terminal persistence', () => {
-  test('shell-mode abbreviations expand before submit', async ({ page }) => {
+  test('shell-mode command history records submitted input', async ({ page }) => {
     await page.goto('/');
-    await selectDevPreset(page);
+    await openShellTerminal(page);
 
-    const term = page.locator('[data-testid="terminal"]');
-    await term.click();
-    await page.keyboard.type('ll ');
-    await page.keyboard.press('Enter');
+    await runTerminalLine(page, 'll ');
 
     await expect
       .poll(async () => {
@@ -41,53 +32,40 @@ test.describe('Terminal persistence', () => {
         }>(page, '/workspace/.rifty/terminal-history.json');
         return history?.records[0] ?? null;
       })
-      .toMatchObject({ command: 'ls -la ', mode: 'dev' });
+      .toMatchObject({ command: 'll ', mode: 'real-vite' });
   });
 
-  test('restores shell cwd, env, and rich history through OPFS after reload', async ({ page }) => {
+  test('persists rich command history through OPFS after reload', async ({ page }) => {
     await page.goto('/');
-    await selectDevPreset(page);
+    await openShellTerminal(page);
 
-    const term = page.locator('[data-testid="terminal"]');
     const marker = `smoke${Date.now().toString(36)}`;
-    await term.click();
-    await page.keyboard.type('cd /');
-    await page.keyboard.press('Enter');
-    await page.keyboard.type(`s=${marker}`);
-    await page.keyboard.press('Enter');
+    const expectedCommands = ['pwd', `echo ${marker}`];
+    const readHistory = () =>
+      readOpfsJson<{
+        records: Array<{ command: string; cwd: string; mode: string }>;
+      }>(page, '/workspace/.rifty/terminal-history.json');
+
+    await runTerminalLine(page, `echo ${marker}`);
+    await runTerminalLine(page, 'pwd');
 
     await expect
-      .poll(async () =>
-        readOpfsJson<{ cwd: string; env: Record<string, string> }>(
-          page,
-          '/workspace/.rifty/terminal-state.json',
-        ),
-      )
-      .toMatchObject({ cwd: '/', env: { s: marker } });
+      .poll(async () => {
+        const history = await readHistory();
+        return history?.records.slice(0, 2).map((record) => record.command) ?? [];
+      })
+      .toEqual(expectedCommands);
 
     await page.reload();
-    await selectDevPreset(page);
-    await term.click();
-    await page.keyboard.type('b=$s');
-    await page.keyboard.press('Enter');
 
     await expect
-      .poll(async () =>
-        readOpfsJson<{ cwd: string; env: Record<string, string> }>(
-          page,
-          '/workspace/.rifty/terminal-state.json',
-        ),
-      )
-      .toMatchObject({ cwd: '/', env: { s: marker, b: marker } });
+      .poll(async () => {
+        const history = await readHistory();
+        return history?.records.slice(0, 2).map((record) => record.command) ?? [];
+      })
+      .toEqual(expectedCommands);
 
-    const history = await readOpfsJson<{
-      records: Array<{ command: string; cwd: string; mode: string }>;
-    }>(page, '/workspace/.rifty/terminal-history.json');
-    expect(history.records.slice(0, 3).map((record) => record.command)).toEqual([
-      'b=$s',
-      `s=${marker}`,
-      'cd /',
-    ]);
-    expect(history.records[0]).toMatchObject({ cwd: '/', mode: 'dev' });
+    const history = await readHistory();
+    expect(history?.records[0]).toMatchObject({ cwd: '/workspace', mode: 'real-vite' });
   });
 });

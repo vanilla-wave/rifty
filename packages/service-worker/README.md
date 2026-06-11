@@ -13,16 +13,17 @@ and build time; the package itself never publishes the generated JS.
 
 The SW intercepts `/preview/<port>/...` fetches in the controlled page and
 forwards them to whichever realm owns the registered `@riftydev/net` listener on
-that port. Today the owner is the first controlled window client; once the
-M11 worker-as-process model lands (ADR-0011) the resolver swaps to a
-Worker-aware variant that consults the cross-realm port registry.
+that port. The default owner binding is port-aware (ADR-0123): a Worker client
+that announces the controlling window's `ownerToken` plus `ports: [port]` wins,
+otherwise routing falls back to the historical first controlled window bridge.
 
 - URL convention + `preview.local` synthetic host: `@riftydev/io/preview-protocol`,
   ADR-0036.
 - SW-side wiring: `installPreviewInterceptor(self)` in `sw.ts` /
   `preview-bridge.ts`.
 - Main-side wiring: `setupPreviewBridge(handler)` posts the
-  `rifty:preview:ready` frame on init and `goodbye` on teardown.
+  `rifty:preview:ready` frame on init, `controllerchange`, and heartbeat;
+  teardown posts `rifty:preview:goodbye`.
 - Cross-realm scope statement: ADR-0017.
 
 ### Body-transport / streaming carrier
@@ -34,15 +35,17 @@ Workers). `canTransferReadableStream()` is the runtime probe; the result is
 cached after the first call. The protocol-version stamp is added to the
 packed message envelope.
 
-### Owner resolver
+### Owner binding / resolver
 
-`PreviewOwnerResolver` is the strategy that names the realm an intercepted
-preview fetch should be forwarded to. `FirstWindowOwnerResolver` is the
-default — prefers `FetchEvent.clientId` then falls back to the first
-controlled window with a one-shot `console.warn`. M11's `WorkerOwnerResolver`
-will replace the default once A-023 (SW → Worker port registry rewire) and
-A-026 (Vite-in-Worker) land. See `owner-resolver.ts` for the seam and
-ADR-0031 for the rationale.
+`PreviewOwnerBinding` is the strategy that names the realm an intercepted
+preview fetch should be forwarded to and gates readiness before dispatch.
+`PortAwareOwnerBinding` is the default: it resolves the controlling window
+first, reads that window's `ownerToken`, asks `WorkerOwnerBinding` for a Worker
+that claimed the matching `(ownerToken, port)`, then falls back to
+`FirstWindowOwnerBinding` for page-owned previews. `FirstWindowOwnerResolver`
+still documents the historical window path: prefer `FetchEvent.clientId`, then
+fall back to the first controlled window with a one-shot `console.warn`. See
+`owner-resolver.ts` and ADR-0031 for the fallback rationale.
 
 ### Ready-clients registry / handshake
 
@@ -73,11 +76,10 @@ per-field semantics.
 
 `SW_ROUTING_VERSION` pins (a) the addressing scheme exported from
 `@riftydev/io/preview-protocol` (`PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`,
-`synthesizePreviewUrl`, `parsePreviewPath`) and (b) the owner-fallback
-rules in `owner-resolver.ts` (`FirstWindowOwnerResolver`). Bumping
-requires: changes to the URL regex shape, the synthetic host literal,
-the resolver fallback order, or the mismatch / one-shot-warn dedup key
-shape.
+`synthesizePreviewUrl`, `parsePreviewPath`) and (b) the owner-fallback and
+owner-scoping rules in the preview owner bindings. Bumping requires: changes to
+the URL regex shape, the synthetic host literal, the resolver fallback order,
+the Worker claim scope, or the mismatch / one-shot-warn dedup key shape.
 
 ADR-0040 is the source-of-truth for the split; ADR-0031 is the
 predecessor that established the per-frame contract; ADR-0016 covers
@@ -103,5 +105,6 @@ got)` pairs so a host can distinguish frame-skew from routing-skew.
   unblocks the body-transport upgrades scheduled for M12.
 - ADR-0031 — per-frame `version` validation.
 - ADR-0036 — preview-protocol addressing primitives live in `@riftydev/io`.
-- [`docs/backlog/service-worker/sw-to-worker-direct-routing.md`](../../docs/backlog/service-worker/sw-to-worker-direct-routing.md)
-  (A-023 / A-026) — the M11 path that swaps the default owner resolver.
+- ADR-0123 — port-aware preview owner routing: Worker-owned `(ownerToken, port)`
+  routes go directly SW→Worker, while page-owned previews keep the first-window
+  fallback.

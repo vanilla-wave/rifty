@@ -4,17 +4,17 @@
  * The page side calls `sendVfsWrite(port, frame)` from the editor; the
  * worker side runs `serveVfsWrites(port)` which applies each frame to the
  * realm-local `syncMirror()`. Both ends run in the same Node realm here
- * over distinct `BroadcastChannel` instances — the same pattern the
+ * over distinct `BroadcastChannel` instances - the same pattern the
  * preview-port unit tests use.
  *
- * One-way only: edits flow page → worker. Two-way sync is out of scope
+ * One-way only: edits flow page -> worker. Two-way sync is out of scope
  * until OPFS-as-sync is shared across realms (M12+).
  */
 
 import { syncMirror } from '@riftydev/vfs';
 import { resetSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { sendVfsWrite, serveVfsWrites } from './vfs-write-port.ts';
+import { applyVfsWriteFrame, sendVfsWrite, serveVfsWrites } from './vfs-write-port.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -118,5 +118,42 @@ describe('serveVfsWrites + sendVfsWrite', () => {
     await tick();
 
     expect(syncMirror().existsSync('/workspace/new/path/file.js')).toBe(true);
+  });
+
+  it('applies a write frame without requiring BroadcastChannel transport', () => {
+    const changes: string[] = [];
+
+    applyVfsWriteFrame(
+      {
+        type: 'write',
+        path: '/workspace/ipc/main.js',
+        data: enc.encode('from ipc'),
+      },
+      { onWrite: (path) => changes.push(path) },
+    );
+
+    expect(dec.decode(syncMirror().readFileBytesSync('/workspace/ipc/main.js'))).toBe('from ipc');
+    expect(changes).toEqual(['/workspace/ipc/main.js']);
+  });
+
+  it('notifies after applying write and mkdir frames', async () => {
+    const changes: string[] = [];
+    teardown = serveVfsWrites(7006, {
+      onWrite: (path) => changes.push(path),
+    });
+
+    sendVfsWrite(7006, {
+      type: 'mkdir',
+      path: '/workspace/src',
+      recursive: true,
+    });
+    sendVfsWrite(7006, {
+      type: 'write',
+      path: '/workspace/src/extra.js',
+      data: enc.encode('export const ok = true;'),
+    });
+    await tick();
+
+    expect(changes).toEqual(['/workspace/src', '/workspace/src/extra.js']);
   });
 });

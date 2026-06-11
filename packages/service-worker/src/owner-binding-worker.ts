@@ -9,18 +9,21 @@
  *   {
  *     type: 'rifty:preview:ready',
  *     frameVersion: '1',
- *     routingVersion: '1',
+ *     routingVersion: '2',
+ *     ownerToken: '...',     // page owner scope that spawned this Worker
  *     ports: [3000, 5173]   // additive optional — default []
  *   }
  *
- * Each port stays routable to this Worker until either the Worker posts
- * `rifty:preview:goodbye` (same `ports`, so the SW knows which to drop),
+ * Each `(ownerToken, port)` stays routable to this Worker until either the
+ * Worker posts `rifty:preview:goodbye` (same `ownerToken` + `ports`, so the SW
+ * knows which to drop),
  * or `scope.clients.get(workerId)` returns `undefined` at fetch time
  * (Worker terminated without sending goodbye).
  *
- * `ports` is additive optional (default `[]`) so the frame stays
- * structurally compatible with the window-side `rifty:preview:ready`
- * shape — no `SW_FRAME_VERSION` bump per ADR-0031/ADR-0040.
+ * `ports` and `ownerToken` are additive optional (default `[]` / unscoped), so
+ * the frame stays structurally compatible with the window-side
+ * `rifty:preview:ready` shape — no `SW_FRAME_VERSION` bump per
+ * ADR-0031/ADR-0040.
  *
  * Lifecycle differences from the window binding:
  *  - No `pagehide` (Workers have no document): the SW relies on the
@@ -36,7 +39,8 @@
  * - ADR-0011 — sync IPC + worker-as-process; provides `Client.type === 'worker'`.
  * - ADR-0017 — `@riftydev/net` cross-realm bridge; `ports` mirrors the
  *   Worker's `serveCrossRealmPreview(port, …)` registrations.
- * - ADR-0040 — `SW_FRAME_VERSION` / `SW_ROUTING_VERSION` split; `ports` additive.
+ * - ADR-0040 — `SW_FRAME_VERSION` / `SW_ROUTING_VERSION` split; `ports`
+ *   and `ownerToken` are additive frame fields.
  * - ADR-0043 — Vite-in-Worker; §"Follow-ups" called for this binding.
  * - ADR-0046 — the binding contract this module implements.
  */
@@ -79,10 +83,10 @@ interface WorkerBindingState {
   readonly ready: Set<string>;
   readonly mismatched: Set<string>;
   readonly warned: Set<string>;
-  /** port → ownerId, built from each Worker's ready frame. */
-  readonly portOwners: Map<number, string>;
-  /** ownerId → ports it claimed, so goodbye can drop them precisely. */
-  readonly ownerPorts: Map<string, Set<number>>;
+  /** `${ownerToken}\0${port}` → ownerId, built from each Worker's ready frame. */
+  readonly portOwners: Map<string, string>;
+  /** ownerId → route keys it claimed, so goodbye can drop them precisely. */
+  readonly ownerPorts: Map<string, Set<string>>;
   readonly waiters: Map<string, Set<ReadyWaiter>>;
   requestIdCounter: number;
 }
@@ -110,17 +114,42 @@ function resolveWaiters(
   state.waiters.delete(ownerId);
 }
 
+function routeKey(ownerToken: string, port: number): string {
+  return `${ownerToken}\0${port}`;
+}
+
 function dropOwner(state: WorkerBindingState, ownerId: string): void {
   state.ready.delete(ownerId);
-  const ports = state.ownerPorts.get(ownerId);
-  if (ports) {
-    for (const port of ports) {
-      // Only drop if still ours — a fresh owner may have re-claimed the port.
-      if (state.portOwners.get(port) === ownerId) {
-        state.portOwners.delete(port);
+  const keys = state.ownerPorts.get(ownerId);
+  if (keys) {
+    for (const key of keys) {
+      // Only drop if still ours — a fresh owner may have re-claimed the route.
+      if (state.portOwners.get(key) === ownerId) {
+        state.portOwners.delete(key);
       }
     }
     state.ownerPorts.delete(ownerId);
+  }
+}
+
+function dropPorts(
+  state: WorkerBindingState,
+  ownerId: string,
+  ownerToken: string,
+  ports: readonly number[],
+): void {
+  const keys = state.ownerPorts.get(ownerId);
+  if (!keys) return;
+  for (const port of ports) {
+    const key = routeKey(ownerToken, port);
+    if (state.portOwners.get(key) === ownerId) {
+      state.portOwners.delete(key);
+    }
+    keys.delete(key);
+  }
+  if (keys.size === 0) {
+    state.ownerPorts.delete(ownerId);
+    state.ready.delete(ownerId);
   }
 }
 
@@ -135,12 +164,13 @@ export class WorkerOwnerBinding implements PreviewOwnerBinding {
   async resolveOwner(
     scope: ServiceWorkerGlobalScope,
     _request: Request,
-    _clientId: string | null,
+    ownerToken: string | null,
     port: number,
   ): Promise<Client | null> {
     const state = this.#states.get(scope);
     if (!state) return null;
-    const ownerId = state.portOwners.get(port);
+    if (!ownerToken) return null;
+    const ownerId = state.portOwners.get(routeKey(ownerToken, port));
     if (!ownerId) return null;
     const client = (await scope.clients.get(ownerId)) ?? null;
     if (!client) {
@@ -165,6 +195,7 @@ export class WorkerOwnerBinding implements PreviewOwnerBinding {
             frameVersion?: string;
             routingVersion?: string;
             ports?: number[];
+            ownerToken?: string;
           }
         | null
         | undefined;
@@ -199,21 +230,32 @@ export class WorkerOwnerBinding implements PreviewOwnerBinding {
       }
 
       const ports = Array.isArray(data.ports) ? data.ports.filter((p) => Number.isInteger(p)) : [];
+      const ownerToken =
+        typeof data.ownerToken === 'string' && data.ownerToken.length > 0 ? data.ownerToken : null;
       if (data.type === SW_PREVIEW_READY) {
         state.ready.add(sourceId);
-        if (ports.length > 0) {
-          const owned = state.ownerPorts.get(sourceId) ?? new Set<number>();
+        if (ownerToken && ports.length > 0) {
+          const owned = state.ownerPorts.get(sourceId) ?? new Set<string>();
           for (const port of ports) {
-            state.portOwners.set(port, sourceId);
-            owned.add(port);
+            const key = routeKey(ownerToken, port);
+            state.portOwners.set(key, sourceId);
+            owned.add(key);
           }
           state.ownerPorts.set(sourceId, owned);
         }
         resolveWaiters(state, sourceId, 'ready');
       } else {
-        // Goodbye: resolve pending waiters `'gone'` so in-flight requests clear at once.
-        dropOwner(state, sourceId);
-        resolveWaiters(state, sourceId, 'gone');
+        // Goodbye: resolve pending waiters `'gone'` once the owner has no
+        // claimed ports left, so in-flight requests clear at once without
+        // breaking partial port teardown.
+        if (ownerToken && ports.length > 0) {
+          dropPorts(state, sourceId, ownerToken, ports);
+        } else {
+          dropOwner(state, sourceId);
+        }
+        if (!state.ready.has(sourceId)) {
+          resolveWaiters(state, sourceId, 'gone');
+        }
       }
     };
 

@@ -22,8 +22,10 @@ import { sendVfsWrite } from './vfs-write-port.ts';
 
 export interface RealViteHandle {
   readonly port: number;
+  readonly closed: Promise<number | null>;
   close(): Promise<void>;
   updateEntry(content: string): void;
+  updateFile(path: string, content: string): void;
 }
 
 export interface RealViteOptions {
@@ -39,6 +41,12 @@ export interface RealViteOptions {
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
+function createPreviewOwnerToken(): string {
+  const randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto);
+  if (randomUUID) return randomUUID();
+  return `owner-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
 /**
  * Spawn the Real Vite worker realm and wire the cross-realm bridges.
  *
@@ -51,6 +59,7 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
   const root = opts.root ?? '/workspace';
   const entryRel = opts.entry ?? template.entry.relativePath;
   const port = opts.port ?? template.defaultPort;
+  const ownerToken = createPreviewOwnerToken();
   const entryPath = `${root}${entryRel}`;
   const log = opts.onLog ?? (() => {});
 
@@ -78,6 +87,7 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
         RIFTY_RFV_ROOT: root,
         RIFTY_RFV_ENTRY: entryRel,
         RIFTY_RFV_TEMPLATE: template.id,
+        RIFTY_PREVIEW_OWNER_TOKEN: ownerToken,
       },
       cwd: root,
     },
@@ -116,8 +126,13 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
   // Track exit so `close()` stays safe when the worker dies on its own
   // (install failure, vite crash).
   let exited = false;
-  handle.on('exit', (..._args: unknown[]) => {
+  let resolveClosed: (code: number | null) => void = () => {};
+  const closed = new Promise<number | null>((resolve) => {
+    resolveClosed = resolve;
+  });
+  handle.on('exit', (code?: unknown) => {
     exited = true;
+    resolveClosed(typeof code === 'number' ? code : null);
   });
 
   // SW dispatches `/preview/<port>/*` to the page; the `@riftydev/net`
@@ -128,12 +143,24 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
 
   // ADR-0086: pass the typed handle so SW requests take the struct fast-path
   // (skips the page→worker Request rebuild + arrayBuffer drain).
-  const tearSwBridge = mountPlaygroundPreviewBridge(previewBridge);
+  const tearSwBridge = mountPlaygroundPreviewBridge(previewBridge, { ownerToken });
 
   log(`[real-vite] page-side preview-port bridge ready (port ${port})\n`);
 
+  const updateFile = (path: string, content: string): void => {
+    const frame = {
+      type: 'write' as const,
+      path,
+      data: enc.encode(content),
+    };
+    if (!handle.send({ type: 'rifty:vfs-write', frame })) {
+      sendVfsWrite(port, frame);
+    }
+  };
+
   return {
     port,
+    closed,
     async close() {
       tearSwBridge();
       unregisterPort(port);
@@ -144,14 +171,8 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
       }
     },
     updateEntry(content) {
-      // One-way mailbox (ADR-0043 / D4): edit lands in the worker's
-      // `syncMirror()`; its file watcher sees it and the HMR bridge broadcasts
-      // the iframe reload.
-      sendVfsWrite(port, {
-        type: 'write',
-        path: entryPath,
-        data: enc.encode(content),
-      });
+      updateFile(entryPath, content);
     },
+    updateFile,
   };
 }

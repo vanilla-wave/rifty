@@ -29,6 +29,8 @@ export interface ReadyClientsRegistry {
   isReady(id: string): boolean;
   /** Has the client posted a mismatched protocol version? */
   isMismatched(id: string): boolean;
+  /** Stable owner token declared by the client, if any. */
+  ownerToken(id: string): string | undefined;
   /**
    * Wait until the given client is ready, or until `timeoutMs` elapses.
    * Resolves with `'ready'` on success, `'timeout'` when the timer fires,
@@ -43,7 +45,12 @@ export interface ReadyClientsRegistry {
    */
   handleMessage(
     clientId: string,
-    data: { type?: unknown; frameVersion?: unknown; routingVersion?: unknown },
+    data: {
+      type?: unknown;
+      frameVersion?: unknown;
+      routingVersion?: unknown;
+      ownerToken?: unknown;
+    },
   ): void;
   /**
    * Allocate the next outbound request id for `rifty:preview:request` frames
@@ -76,6 +83,7 @@ export function createReadyClientsRegistry(
   const waiters = new Map<string, Set<ReadyWaiter>>();
   const mismatched = new Set<string>();
   const warned = new Set<string>();
+  const ownerTokens = new Map<string, string>();
   let nextRequestIdCounter = 1;
 
   function markReady(id: string): void {
@@ -89,6 +97,7 @@ export function createReadyClientsRegistry(
 
   function markGoodbye(id: string): void {
     ready.delete(id);
+    ownerTokens.delete(id);
     const waiterSet = waiters.get(id);
     if (waiterSet) {
       for (const w of waiterSet) {
@@ -112,6 +121,9 @@ export function createReadyClientsRegistry(
     },
     isMismatched(id): boolean {
       return mismatched.has(id);
+    },
+    ownerToken(id): string | undefined {
+      return ownerTokens.get(id);
     },
     waitForReady(id, timeoutMs): Promise<'ready' | 'timeout' | 'mismatch'> {
       if (mismatched.has(id)) return Promise.resolve('mismatch');
@@ -168,6 +180,9 @@ export function createReadyClientsRegistry(
         return;
       }
       if (type === SW_PREVIEW_READY) {
+        if (typeof data.ownerToken === 'string' && data.ownerToken.length > 0) {
+          ownerTokens.set(clientId, data.ownerToken);
+        }
         markReady(clientId);
       } else {
         markGoodbye(clientId);

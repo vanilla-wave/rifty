@@ -32,6 +32,7 @@ export type IconName =
   | 'copy'
   | 'corner-down-left'
   | 'file-output'
+  | 'external-link'
   | 'x';
 
 /** Path data (Lucide, ISC). `play` is a filled glyph; the rest are strokes. */
@@ -55,6 +56,7 @@ const PATHS: Record<IconName, string> = {
   'corner-down-left': 'M20 4v7a4 4 0 0 1-4 4H4 M9 10l-5 5 5 5',
   'file-output':
     'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M2 15h10 M9 18l3-3-3-3',
+  'external-link': 'M15 3h6v6 M10 14 21 3 M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6',
   x: 'M18 6 6 18 M6 6l12 12',
 };
 

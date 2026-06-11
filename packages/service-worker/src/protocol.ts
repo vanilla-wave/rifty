@@ -8,7 +8,7 @@
  * ADR-0040 splits versioning into two orthogonal contracts:
  *   - `SW_FRAME_VERSION` — wire-frame data shapes (this module).
  *   - `SW_ROUTING_VERSION` — addressing scheme (in `@riftydev/io/preview-protocol`)
- *     and owner-fallback rules (in `./owner-resolver.ts`).
+ *     and owner routing / fallback rules (in the owner bindings).
  * Both must match for a peer to be accepted. A mismatch on either side
  * triggers the same `PROTOCOL_VERSION_MISMATCH` path with both `(expected,
  * got)` pairs in the diagnostic so the host can distinguish frame-skew from
@@ -35,27 +35,27 @@
 export const SW_FRAME_VERSION = '1';
 
 /**
- * Addressing-scheme and owner-fallback version. Stamped alongside
+ * Addressing-scheme and owner-routing version. Stamped alongside
  * {@link SW_FRAME_VERSION} on every wire frame; receivers validate both.
  *
  * Pins:
  *   - The URL convention exported from `@riftydev/io/preview-protocol`:
  *     `PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`, the shape of
  *     `synthesizePreviewUrl(path)`, and the shape of `parsePreviewPath`.
- *   - The owner-fallback rules in `./owner-resolver.ts`
- *     ({@link import('./owner-resolver.ts').FirstWindowOwnerResolver}): prefer
- *     `FetchEvent.clientId`, fall back to the first controlled window with a
- *     one-shot `console.warn` per scope. The dedup key shape (`WeakSet` of
- *     scopes, mismatch key = `clientId`) is part of the contract.
+ *   - The owner-fallback and owner-scoping rules in the preview owner bindings:
+ *     prefer `FetchEvent.clientId`, fall back to the first controlled window,
+ *     and let Worker owners win only when `(ownerToken, port)` matches the
+ *     controlling window. The warn/mismatch dedup key shapes are part of the
+ *     contract.
  *
  * Bump on: changes to the URL regex shape, the synthetic host literal, the
- * `synthesizePreviewUrl` return shape, the resolver fallback order, or the
- * mismatch / first-window-warn dedup key shape.
+ * `synthesizePreviewUrl` return shape, the resolver fallback order, the Worker
+ * claim scope, or the mismatch / first-window-warn dedup key shape.
  *
  * Does NOT cover wire-frame data shapes — those are pinned by
  * {@link SW_FRAME_VERSION}.
  */
-export const SW_ROUTING_VERSION = '1';
+export const SW_ROUTING_VERSION = '2';
 
 export const SW_PING = '__rifty_sw_ping__';
 export const SW_PONG = '__rifty_sw_pong__';
@@ -89,6 +89,8 @@ export interface SwPreviewReadyFrame {
   type: typeof SW_PREVIEW_READY;
   frameVersion: string;
   routingVersion: string;
+  ports?: number[];
+  ownerToken?: string;
 }
 
 /**
@@ -100,6 +102,8 @@ export interface SwPreviewGoodbyeFrame {
   type: typeof SW_PREVIEW_GOODBYE;
   frameVersion: string;
   routingVersion: string;
+  ports?: number[];
+  ownerToken?: string;
 }
 
 /**

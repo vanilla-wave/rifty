@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- `RiftyTerminal.dispose()` now treats addon/xterm teardown as best-effort. A
+  WebGL addon dispose failure no longer escapes into the host framework and
+  leaves UI updates half-applied.
 - OSC 52 output is now stripped from rendered terminal text without writing the
   host clipboard unless `allowOsc52Clipboard` is explicitly enabled on the
   terminal instance. Ctrl+L also restores a mid-line caret after redrawing the

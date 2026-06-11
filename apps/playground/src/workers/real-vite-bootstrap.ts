@@ -24,6 +24,11 @@ import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
 import { installProcessGlobals } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
+import {
+  type SerializedRequest,
+  type SerializedResponse,
+  setupPreviewBridge,
+} from '@riftydev/service-worker';
 import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 import { esbuildShimFiles, rollupShimFiles } from '../glue/esbuild-shim.ts';
 import {
@@ -35,7 +40,7 @@ import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
 import { proxiedRegistryFetch } from '../glue/registry-fetch.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { collectSnapshot, publishVfsSnapshot } from '../glue/vfs-snapshot-port.ts';
-import { serveVfsWrites } from '../glue/vfs-write-port.ts';
+import { type VfsWriteFrame, applyVfsWriteFrame, serveVfsWrites } from '../glue/vfs-write-port.ts';
 import { type BootstrapConfig, resolveBootstrapConfig } from '../templates/project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
 
@@ -43,6 +48,7 @@ const enc = new TextEncoder();
 
 interface ViteUserConfig {
   root?: string;
+  base?: string;
   server?: { port?: number; strictPort?: boolean; middlewareMode?: boolean; hmr?: boolean };
   appType?: string;
   clearScreen?: boolean;
@@ -61,8 +67,8 @@ interface ViteDevServer {
 }
 
 function log(line: string): void {
-  // Kernel pre-entry hook wired process.stdout.write → stdout MessagePort;
-  // page-side WorkerProcessHandle.stdout() emits each chunk, realVite.ts → onLog.
+  // Kernel pre-entry hook wired process.stdout.write -> stdout MessagePort;
+  // page-side WorkerProcessHandle.stdout() emits each chunk, realVite.ts -> onLog.
   globalThis.process.stdout.write(line);
 }
 
@@ -70,9 +76,25 @@ interface ProcStdio {
   stdout?: { write?: unknown };
   stderr?: { write?: unknown };
   env?: Record<string, string | undefined>;
+  on?(event: 'message', handler: (message: unknown) => void): unknown;
 }
 
-function installRuntimeGlobals(): void {
+interface KernelIpc {
+  onMessage?(handler: (message: unknown) => void): void;
+}
+
+interface VfsWriteIpcMessage {
+  readonly type: 'rifty:vfs-write';
+  readonly frame: VfsWriteFrame;
+}
+
+function isVfsWriteIpcMessage(message: unknown): message is VfsWriteIpcMessage {
+  if (!message || typeof message !== 'object') return false;
+  const candidate = message as { readonly type?: unknown; readonly frame?: unknown };
+  return candidate.type === 'rifty:vfs-write' && !!candidate.frame;
+}
+
+function installRuntimeGlobals(): KernelIpc {
   // Gotcha: the kernel pre-entry hook's `process` posts stdout/stderr to the
   // page over MessagePorts (the only reason the terminal sees worker output).
   // `installProcessGlobals` swaps in runtime-js's richer shim, but its stdout/
@@ -84,6 +106,12 @@ function installRuntimeGlobals(): void {
   const kStdout = prev?.stdout;
   const kStderr = prev?.stderr;
   const kEnv = prev?.env;
+  const kOnMessage =
+    typeof prev?.on === 'function'
+      ? (handler: (message: unknown) => void) => {
+          prev.on?.('message', handler);
+        }
+      : undefined;
   installProcessGlobals();
   installTimerGlobals();
   (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
@@ -91,6 +119,7 @@ function installRuntimeGlobals(): void {
   if (kStdout && typeof kStdout.write === 'function') proc.stdout = kStdout;
   if (kStderr && typeof kStderr.write === 'function') proc.stderr = kStderr;
   if (kEnv) proc.env = kEnv;
+  return { onMessage: kOnMessage };
 }
 
 function seedProject(cfg: BootstrapConfig): void {
@@ -119,11 +148,29 @@ function overlayShims(): void {
   }
 }
 
+async function dispatchSerializedPreview(req: SerializedRequest): Promise<SerializedResponse> {
+  const headers = new Headers(req.headers);
+  const init: RequestInit = { method: req.method, headers };
+  if (req.body && req.method !== 'GET' && req.method !== 'HEAD') {
+    const copy = new ArrayBuffer(req.body.byteLength);
+    new Uint8Array(copy).set(req.body);
+    init.body = copy;
+  }
+  const response = await dispatchToPort(req.port, new Request(req.url, init));
+  return {
+    status: response.status,
+    statusText: response.statusText,
+    headers: Object.fromEntries(response.headers),
+    body: response.body,
+  };
+}
+
 async function bootstrap(): Promise<void> {
   // Defaults match the page-realm path so non-overriding callers behave the same.
   const env = globalThis.process.env;
   const port = Number.parseInt(env.RIFTY_RFV_PORT ?? '5174', 10);
   const root = env.RIFTY_RFV_ROOT ?? '/workspace';
+  const ownerToken = env.RIFTY_PREVIEW_OWNER_TOKEN;
   const spec = resolveProjectSpec(env.RIFTY_RFV_TEMPLATE ?? DEFAULT_TEMPLATE_ID);
   // Honour an explicit entry override on the spawn spec (usually a no-op —
   // the orchestrator defaults it to the template's own entry).
@@ -134,16 +181,31 @@ async function bootstrap(): Promise<void> {
       : { ...spec, entry: { ...spec.entry, relativePath: entryRel } };
   const cfg = resolveBootstrapConfig(effectiveSpec, port, root);
 
-  installRuntimeGlobals();
-
-  // Opens BEFORE seeding so an edit racing the install lands in the right realm.
-  const tearVfsBridge = serveVfsWrites(port);
+  const kernelIpc = installRuntimeGlobals();
 
   // Reverse mirror (ADR-0076): publish the project tree (sans node_modules) to
   // the page so its file explorer reflects this worker's real Vite project.
   const publishSnapshot = (): void => {
     publishVfsSnapshot(port, collectSnapshot(syncMirror(), root));
   };
+
+  const hmrBridgeRef: { current?: HmrBridgeHandle } = {};
+  function broadcastFileUpdate(path: string): void {
+    hmrBridgeRef.current?.broadcast(JSON.stringify({ type: 'update', path }));
+  }
+
+  function handleVfsWrite(path: string): void {
+    publishSnapshot();
+    broadcastFileUpdate(path);
+  }
+
+  kernelIpc.onMessage?.((message) => {
+    if (!isVfsWriteIpcMessage(message)) return;
+    applyVfsWriteFrame(message.frame, { onWrite: handleVfsWrite });
+  });
+
+  // Opens BEFORE seeding so an edit racing the install lands in the right realm.
+  const tearVfsBridge = serveVfsWrites(port, { onWrite: handleVfsWrite });
 
   seedProject(cfg);
   // Retry a few times: the page may not have subscribed when this first fires
@@ -198,12 +260,13 @@ async function bootstrap(): Promise<void> {
 
   // HMR bridge in THIS realm; iframe-side BroadcastChannel client reaches it
   // regardless of which realm hosts the server.
-  const hmrBridge: HmrBridgeHandle = setupHmrBridge({ port });
-  log(`[real-vite/worker] hmr bridge ready at ${hmrBridge.url}\n`);
+  hmrBridgeRef.current = setupHmrBridge({ port });
+  log(`[real-vite/worker] hmr bridge ready at ${hmrBridgeRef.current.url}\n`);
 
   log(`[real-vite/worker] starting dev server on port ${port}…\n`);
   const server = await viteNs.createServer({
     root,
+    base: './',
     server: {
       port,
       strictPort: cfg.server.strictPort,
@@ -224,9 +287,18 @@ async function bootstrap(): Promise<void> {
   publishSnapshot(); // vite may have written config/cache during boot
 
   server.watcher?.on('change', (file) => {
-    hmrBridge.broadcast(JSON.stringify({ type: 'update', path: file }));
+    broadcastFileUpdate(file);
     publishSnapshot(); // keep the page's explorer in sync with edits
   });
+
+  // Direct SW→Worker preview route (A-023): the Worker owns this Vite port, so
+  // advertise it to the SW. The page-side bridge below stays as fallback for
+  // legacy window-owned paths and for browsers without Worker SW messaging.
+  const tearDirectSwBridge = setupPreviewBridge(dispatchSerializedPreview, {
+    ports: [port],
+    ownerToken,
+  });
+  log('[real-vite/worker] direct service-worker preview bridge ready\n');
 
   // Page-realm `bridgeCrossRealmPreview` posts each SW preview request over
   // BroadcastChannel and awaits our reply; we dispatch through the WORKER-LOCAL
@@ -245,12 +317,13 @@ async function bootstrap(): Promise<void> {
   // Keep the worker realm alive (ADR-0077). The kernel's `worker-entry`
   // terminates the realm (`closePorts()` + `self.close()`) the instant the
   // entry's top-level `await` resolves — correct for a run-to-completion program
-  // (REPL/CLI), but THIS is a long-running dev server: returning would kill Vite
+  // or CLI, but THIS is a long-running dev server: returning would kill Vite
   // the moment it started listening, so every preview request hits a dead worker
   // (502 bridge-timeout) and the iframe never renders. Suspend forever; the realm
   // stays live until the page-side handle `.kill()`s it (`worker.terminate()`),
   // which doesn't depend on this promise.
   void tearVfsBridge;
+  void tearDirectSwBridge;
   void tearPreviewBridge;
   void tearNodeModulesBridge;
   void server;
