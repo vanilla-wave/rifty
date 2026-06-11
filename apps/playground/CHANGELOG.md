@@ -61,7 +61,11 @@
   `--rf-shadow-2` were referenced but never defined (block-rail / history
   exit-status colors and overlay shadows silently fell back); the token set
   now defines `--rf-ok` and real shadow tokens.
-
+- **Cross-origin isolation failures now explain embedded-browser requirements.**
+  The fatal COI guard still refuses to boot without `crossOriginIsolated === true`,
+  but the message now calls out iframe/app-browser embeds: the parent page must
+  also be cross-origin isolated and the iframe must include
+  `allow="cross-origin-isolated"`.
 - **Project presets now open starter editor tabs.** File-oriented presets open
   two seeded files beside `src/main.js` as inactive tabs, so users see the tab
   strip immediately while the entry file remains active.

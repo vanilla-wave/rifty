@@ -13,7 +13,9 @@ export function CapabilitiesPanel(props: { check: CapabilityCheck }) {
         If you're running locally with <code>pnpm dev</code>, the Vite server sets the necessary
         COOP/COEP headers — try reloading. In production, ensure your host serves
         <code> Cross-Origin-Opener-Policy: same-origin </code>and
-        <code> Cross-Origin-Embedder-Policy: credentialless</code>.
+        <code> Cross-Origin-Embedder-Policy: credentialless</code>. If rifty is embedded in another
+        app, the parent page must be cross-origin isolated and the iframe must include{' '}
+        <code>allow="cross-origin-isolated"</code>.
       </p>
     </div>
   );

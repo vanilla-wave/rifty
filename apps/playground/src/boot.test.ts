@@ -168,6 +168,12 @@ describe('assertCrossOriginIsolated', () => {
     expect(COI_FATAL_MESSAGE).toMatch(/Cross-Origin-Embedder-Policy/);
     expect(COI_FATAL_MESSAGE).toMatch(/SharedArrayBuffer/);
   });
+
+  it('explains embedded iframe requirements when isolation is unavailable', () => {
+    expect(COI_FATAL_MESSAGE).toMatch(/embedded/i);
+    expect(COI_FATAL_MESSAGE).toMatch(/iframe/i);
+    expect(COI_FATAL_MESSAGE).toContain('allow="cross-origin-isolated"');
+  });
 });
 
 describe('bootstrapPlayground', () => {
