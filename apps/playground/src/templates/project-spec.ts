@@ -92,7 +92,7 @@ export function buildProjectPackageJson(spec: ProjectSpec): {
       version,
       private: true,
       type: 'module',
-      scripts: { dev: 'vite' },
+      scripts: { dev: 'vite', vite: 'vite' },
       dependencies: spec.install,
     },
     null,

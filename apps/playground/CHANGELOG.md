@@ -4,6 +4,17 @@
 
 ### Fixed
 
+- **Terminal tabs now keep the add button attached to the tab strip.** The
+  bottom-console tab list no longer stretches across the whole toolbar before
+  the `+` action, so the new-terminal control stays visually glued to the
+  terminal tabs while remaining visible when the tab list overflows.
+- **Terminal tab switching is regression-covered end-to-end.** Playwright now
+  switches Terminal 2 → Terminal 1 → Terminal 2 and asserts the active buffer
+  changes with the selected tab.
+- **`npm run vite` works in the playground shell.** The seeded Vite project now
+  exposes both `dev` and `vite` scripts, and the playground `npm run <script>`
+  path routes `vite` scripts through the same visible terminal command that owns
+  the real Vite worker lifecycle.
 - **Ctrl+C now reaches the shell through the bottom console.** `BottomPanel`
   declared `onSignal` but dropped it before `TerminalPanel`, so the terminal
   echoed `^C` while the playground shell never received `interrupt()`. The

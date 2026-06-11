@@ -23,7 +23,7 @@ describe('resolveBootstrapConfig', () => {
       type: string;
       private: boolean;
     };
-    expect(pkg.scripts).toEqual({ dev: 'vite' });
+    expect(pkg.scripts).toEqual({ dev: 'vite', vite: 'vite' });
     expect(pkg.dependencies).toEqual(VITE_TEMPLATE.install);
     expect(pkg.type).toBe('module');
     expect(pkg.private).toBe(true);
@@ -72,7 +72,7 @@ describe('resolveBootstrapConfig', () => {
       dependencies: Record<string, string>;
       scripts: Record<string, string>;
     };
-    expect(pkg.scripts).toEqual({ dev: 'vite' });
+    expect(pkg.scripts).toEqual({ dev: 'vite', vite: 'vite' });
     expect(pkg.dependencies).toEqual(custom.install);
   });
 });

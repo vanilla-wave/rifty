@@ -84,10 +84,8 @@ export function App(props: AppProps) {
   // Active real-project template (ADR-0078). Chip + mode machine read its generic
   // display name instead of "Real Vite".
   const template = defaultProjectSpec();
-  const npmInstall = createNpmShellCommand({
-    vfs: new SyncMirrorVfs(),
-    registry: new RegistryClient({ fetch: proxiedRegistryFetch() }),
-  });
+  const npmVfs = new SyncMirrorVfs();
+  const npmRegistry = new RegistryClient({ fetch: proxiedRegistryFetch() });
   let realViteHandle: RealViteHandle | null = null;
 
   // Mode state machine owns UI state only. Real server lifetime belongs to the
@@ -210,7 +208,22 @@ export function App(props: AppProps) {
     return stopResult.code ?? 1;
   }
 
-  const npmCommand: TerminalCommand = async (args, ctx) => npmInstall(args, ctx);
+  async function runTerminalScript(
+    scriptName: string,
+    command: string,
+    ctx: TerminalCommandContext,
+  ): Promise<number> {
+    if (command.trim() === 'vite') return runViteCommand(ctx);
+    ctx.stderr.write(`npm: script '${scriptName}' uses unsupported command '${command}'\n`);
+    return 1;
+  }
+
+  const npmCommand: TerminalCommand = async (args, ctx) =>
+    createNpmShellCommand({
+      vfs: npmVfs,
+      registry: npmRegistry,
+      runScript: async (scriptName, command) => runTerminalScript(scriptName, command, ctx),
+    })(args, ctx);
 
   const viteCommand: TerminalCommand = async (args, ctx) => {
     if (args.length > 0) {

@@ -5,9 +5,9 @@
  * `@riftydev/npm-client.install` like `realVite.ts` — same registry, VFS bridge,
  * proxy fetcher.
  *
- * M9 scope: `npm install`, `npm install <name>[@<range>] …`, `i`/`add` synonyms.
- * Deferred: `npm run …` (M11, needs script execution), `npm uninstall`,
- * `npm ci`/lockfile-only (M11 nested install lands first).
+ * Scope: `npm install`, `npm install <name>[@<range>] …`, `i`/`add` synonyms,
+ * plus `npm run <script>` via an injected host script runner. Deferred:
+ * `npm uninstall`, `npm ci`/lockfile-only (M11 nested install lands first).
  *
  * Auto-creates a minimal `package.json` at `ctx.cwd` when none exists (matches
  * `realVite.ts` seeding) so `npm install express` is a one-liner on a blank tree.
@@ -46,12 +46,15 @@ export interface NpmShellCommandDeps {
   readonly registry: RegistryClient;
   /** Test seam; defaults to `@riftydev/npm-client.install`. */
   readonly install?: InstallFn;
+  /** Executes an `npm run <script>` command in the host shell/session. */
+  readonly runScript?: (name: string, command: string, ctx: CommandContext) => Promise<number>;
 }
 
 interface ProjectPackageJson {
   readonly raw: Record<string, unknown>;
   readonly name: string;
   readonly version: string;
+  readonly scripts: Record<string, string>;
   readonly dependencies: Record<string, string>;
 }
 
@@ -73,7 +76,10 @@ export function createNpmShellCommand(deps: NpmShellCommandDeps): ShellCommand {
     if (sub === 'install' || sub === 'i' || sub === 'add') {
       return runInstall(args.slice(1), ctx, deps);
     }
-    ctx.stderr.write(`npm: unknown subcommand '${sub}' (supported: install, i, add)\n`);
+    if (sub === 'run' || sub === 'run-script') {
+      return runPackageScript(args.slice(1), ctx, deps);
+    }
+    ctx.stderr.write(`npm: unknown subcommand '${sub}' (supported: install, i, add, run)\n`);
     return 1;
   };
 }
@@ -100,6 +106,7 @@ async function readPackageJson(vfs: Vfs, cwd: string): Promise<ProjectPackageJso
       raw: { name: DEFAULT_PROJECT_NAME, version: DEFAULT_PROJECT_VERSION, private: true },
       name: DEFAULT_PROJECT_NAME,
       version: DEFAULT_PROJECT_VERSION,
+      scripts: {},
       dependencies: {},
     };
   }
@@ -118,10 +125,19 @@ async function readPackageJson(vfs: Vfs, cwd: string): Promise<ProjectPackageJso
             ),
           )
         : {};
+    const scripts =
+      raw.scripts && typeof raw.scripts === 'object' && !Array.isArray(raw.scripts)
+        ? Object.fromEntries(
+            Object.entries(raw.scripts).filter(
+              (entry): entry is [string, string] => typeof entry[1] === 'string',
+            ),
+          )
+        : {};
     return {
       raw,
       name: typeof raw.name === 'string' ? raw.name : DEFAULT_PROJECT_NAME,
       version: typeof raw.version === 'string' ? raw.version : DEFAULT_PROJECT_VERSION,
+      scripts,
       dependencies,
     };
   } catch (err) {
@@ -134,6 +150,34 @@ async function writePackageJson(vfs: Vfs, cwd: string, pkg: ProjectPackageJson):
   // Stable formatting: re-installs with an unchanged dep set produce
   // byte-identical output, so the shell's diff-before-write keeps mtimes stable.
   await vfs.writeFile(path, `${JSON.stringify(pkg.raw, null, 2)}\n`);
+}
+
+async function runPackageScript(
+  args: string[],
+  ctx: CommandContext,
+  deps: NpmShellCommandDeps,
+): Promise<number> {
+  const scriptName = args[0];
+  if (!scriptName) {
+    ctx.stderr.write('npm: missing script name (try `npm run dev`)\n');
+    return 1;
+  }
+  if (scriptName.startsWith('-')) {
+    ctx.stderr.write(`npm: flag '${scriptName}' not supported for run\n`);
+    return 1;
+  }
+
+  const pkg = await readPackageJson(deps.vfs, ctx.cwd);
+  const command = pkg.scripts[scriptName];
+  if (!command) {
+    ctx.stderr.write(`npm: missing script '${scriptName}'\n`);
+    return 1;
+  }
+  if (!deps.runScript) {
+    ctx.stderr.write('npm: script execution is not available in this shell\n');
+    return 1;
+  }
+  return deps.runScript(scriptName, command, ctx);
 }
 
 async function runInstall(
@@ -182,6 +226,7 @@ async function runInstall(
         raw: { ...pkg.raw, dependencies },
         name: pkg.name,
         version: pkg.version,
+        scripts: pkg.scripts,
         dependencies,
       };
       await writePackageJson(deps.vfs, ctx.cwd, next);

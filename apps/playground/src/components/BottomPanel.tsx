@@ -60,60 +60,62 @@ export function BottomPanel(props: {
           <span class="rf-eyebrow">Terminal</span>
         </button>
 
-        <div class="rf-terminal-tabs" role="tablist" aria-label="Terminal sessions">
-          <For each={sessionIds()}>
-            {(id) => {
-              const session = () => sessionById(id);
-              const isActive = () => id === props.activeSessionId;
-              const isRunning = () => session()?.status === 'running';
-              return (
-                <Show when={session()}>
-                  {(current) => (
-                    <div
-                      class="rf-terminal-tab"
-                      data-active={isActive()}
-                      data-running={isRunning()}
-                    >
-                      <button
-                        type="button"
-                        role="tab"
-                        class="rf-terminal-tab__select"
-                        aria-selected={isActive()}
-                        onClick={() => props.onSelectSession(id)}
+        <div class="rf-terminal-tabsbar">
+          <div class="rf-terminal-tabs" role="tablist" aria-label="Terminal sessions">
+            <For each={sessionIds()}>
+              {(id) => {
+                const session = () => sessionById(id);
+                const isActive = () => id === props.activeSessionId;
+                const isRunning = () => session()?.status === 'running';
+                return (
+                  <Show when={session()}>
+                    {(current) => (
+                      <div
+                        class="rf-terminal-tab"
+                        data-active={isActive()}
+                        data-running={isRunning()}
                       >
-                        <span class="rf-terminal-tab__dot" aria-hidden="true" />
-                        <span class="rf-terminal-tab__label">{current().title}</span>
-                      </button>
-                      <Show when={!isRunning()}>
                         <button
                           type="button"
-                          class="rf-terminal-tab__close"
-                          aria-label={`Close ${current().title}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            props.onCloseSession(id);
-                          }}
+                          role="tab"
+                          class="rf-terminal-tab__select"
+                          aria-selected={isActive()}
+                          onClick={() => props.onSelectSession(id)}
                         >
-                          ×
+                          <span class="rf-terminal-tab__dot" aria-hidden="true" />
+                          <span class="rf-terminal-tab__label">{current().title}</span>
                         </button>
-                      </Show>
-                    </div>
-                  )}
-                </Show>
-              );
-            }}
-          </For>
+                        <Show when={!isRunning()}>
+                          <button
+                            type="button"
+                            class="rf-terminal-tab__close"
+                            aria-label={`Close ${current().title}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              props.onCloseSession(id);
+                            }}
+                          >
+                            ×
+                          </button>
+                        </Show>
+                      </div>
+                    )}
+                  </Show>
+                );
+              }}
+            </For>
+          </div>
+          <button
+            type="button"
+            class="rf-terminal-action"
+            aria-label="New terminal"
+            title="New terminal"
+            onClick={() => props.onCreateSession()}
+          >
+            +
+          </button>
         </div>
 
-        <button
-          type="button"
-          class="rf-terminal-action"
-          aria-label="New terminal"
-          title="New terminal"
-          onClick={() => props.onCreateSession()}
-        >
-          +
-        </button>
         <Show when={activeRunning()}>
           <button
             type="button"

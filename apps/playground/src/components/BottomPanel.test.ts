@@ -64,6 +64,17 @@ describe('BottomPanel', () => {
     expect(html).not.toContain('aria-label="Close Server"');
   });
 
+  it('keeps the new-terminal button attached to the terminal tab strip', () => {
+    const html = render();
+    const tabsbar = html.indexOf('class="rf-terminal-tabsbar"');
+    const tablist = html.indexOf('role="tablist"', tabsbar);
+    const newTerminal = html.indexOf('aria-label="New terminal"', tabsbar);
+
+    expect(tabsbar).toBeGreaterThanOrEqual(0);
+    expect(tablist).toBeGreaterThan(tabsbar);
+    expect(newTerminal).toBeGreaterThan(tablist);
+  });
+
   it('keeps only the active mounted terminal discoverable by test id', () => {
     const html = render();
 

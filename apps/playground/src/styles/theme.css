@@ -1849,12 +1849,19 @@ body.rf-resizing iframe {
   font-size: 11px;
   color: var(--rf-text-ghost);
 }
+.rf-terminal-tabsbar {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  align-self: stretch;
+  flex: 1 1 auto;
+}
 .rf-terminal-tabs {
   display: flex;
   align-items: stretch;
   min-width: 0;
   align-self: stretch;
-  flex: 1;
+  flex: 0 1 auto;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -1933,9 +1940,10 @@ body.rf-resizing iframe {
   z-index: 1;
 }
 .rf-terminal-action {
-  height: 24px;
-  border: 1px solid var(--rf-line);
-  border-radius: var(--rf-r-xs);
+  align-self: stretch;
+  flex: none;
+  border-left: 1px solid var(--rf-line-soft);
+  border-right: 1px solid var(--rf-line-soft);
   font-size: 15px;
 }
 .rf-terminal-action:hover {

@@ -89,6 +89,43 @@ async function runShell(shell: Shell, line: string): Promise<{ exitCode: number;
 }
 
 describe('npm-shell-command — happy path', () => {
+  it('runs package scripts through the injected script runner', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify(
+        {
+          name: 'demo',
+          version: '0.0.0',
+          scripts: { vite: 'vite' },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const calls: Array<{ name: string; command: string; cwd: string }> = [];
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        runScript: async (name, command, ctx) => {
+          calls.push({ name, command, cwd: ctx.cwd });
+          ctx.stdout.write(`script:${command}\n`);
+          return 0;
+        },
+      }),
+    );
+
+    const { exitCode, rec } = await runShell(shell, 'npm run vite');
+
+    expect(exitCode).toBe(0);
+    expect(calls).toEqual([{ name: 'vite', command: 'vite', cwd: '/proj' }]);
+    expect(rec.stdout.join('')).toContain('script:vite');
+  });
+
   it('installs a single package and writes it into package.json', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });

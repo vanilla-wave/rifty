@@ -69,6 +69,12 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('commands: { npm: npmCommand, vite: viteCommand }');
   });
 
+  it('routes npm run scripts through the same visible Vite terminal command', () => {
+    expect(source).toContain('async function runTerminalScript(');
+    expect(source).toContain("if (command.trim() === 'vite') return runViteCommand(ctx);");
+    expect(source).toContain('runScript: async (scriptName, command) =>');
+  });
+
   it('loads and persists terminal environment state', () => {
     expect(source).toContain('env: props.terminalPersistence.initialState.env');
     expect(source).toContain('saveState({ cwd: session.cwd, env: session.env })');
