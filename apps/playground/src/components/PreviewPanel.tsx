@@ -25,6 +25,7 @@
  * same mechanism as ADR-0017's HMR client — so there's one refresh path.
  */
 import { type Accessor, createEffect, createSignal, onCleanup } from 'solid-js';
+import { Icon } from './icons.tsx';
 
 type Phase = 'starting' | 'live' | 'error';
 
@@ -128,27 +129,46 @@ export function PreviewPanel(props: {
   });
 
   return (
-    <section class="rf-pane" data-testid="preview">
-      <div class="rf-pane__chrome">
-        <span class="rf-pane__title">Preview</span>
-        <PhasePill phase={phase} />
-        <span class="rf-preview__url">
-          :
-          <input
-            class="rf-preview__port"
-            type="number"
-            value={port()}
-            min={1}
-            max={65535}
-            onChange={(e) => setPort(Number.parseInt(e.currentTarget.value, 10) || 3000)}
-            aria-label="Preview port"
-          />
-        </span>
-        <div class="rf-pane__tools">
-          <button type="button" class="rf-btn rf-btn--ghost" onClick={reload}>
-            ↻ Reload
-          </button>
+    <section class="rf-pane rf-card" data-testid="preview">
+      {/* Browser-frame chrome: traffic dots · address (lock + host + phase pill) · reload / open. */}
+      <div class="rf-preview__chrome">
+        <span class="rf-preview__dot" aria-hidden="true" />
+        <span class="rf-preview__dot" aria-hidden="true" />
+        <span class="rf-preview__dot" aria-hidden="true" />
+        <div class="rf-preview__address">
+          <Icon name="lock" size={11} />
+          <span class="rf-preview__host">
+            localhost:
+            <input
+              class="rf-preview__port"
+              type="number"
+              value={port()}
+              min={1}
+              max={65535}
+              onChange={(e) => setPort(Number.parseInt(e.currentTarget.value, 10) || 3000)}
+              aria-label="Preview port"
+            />
+          </span>
+          <PhasePill phase={phase} />
         </div>
+        <button
+          type="button"
+          class="rf-iconbtn"
+          title="Reload preview"
+          aria-label="Reload preview"
+          onClick={reload}
+        >
+          <Icon name="rotate-ccw" size={14} />
+        </button>
+        <button
+          type="button"
+          class="rf-iconbtn"
+          title="Open preview in new tab"
+          aria-label="Open preview in new tab"
+          onClick={openTab}
+        >
+          <Icon name="external-link" size={14} />
+        </button>
       </div>
       <div class="rf-pane__body">
         <iframe
@@ -181,9 +201,15 @@ export function PreviewPanel(props: {
 
 function PhasePill(props: { phase: Accessor<Phase> }) {
   const label = (): string =>
-    props.phase() === 'live' ? 'live' : props.phase() === 'error' ? 'unavailable' : 'starting…';
+    props.phase() === 'live' ? 'LIVE' : props.phase() === 'error' ? 'OFF' : 'STARTING';
+  const title = (): string =>
+    props.phase() === 'live'
+      ? 'Preview is live'
+      : props.phase() === 'error'
+        ? 'Preview unavailable — the frame did not commit'
+        : 'Waiting for the dev server…';
   return (
-    <span class="rf-preview__status" data-phase={props.phase()}>
+    <span class="rf-preview__status" data-phase={props.phase()} title={title()}>
       <span class="rf-preview__status-dot" />
       {label()}
     </span>

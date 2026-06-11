@@ -3,14 +3,20 @@ import type { RiftyTerminalOptions } from '@riftydev/terminal';
 export type TerminalColorScheme = 'dark' | 'light';
 export type TerminalTheme = NonNullable<RiftyTerminalOptions['theme']>;
 
+// The playground shell is dark-only (Soft Panels), so both schemes resolve to
+// the panel surface — a light xterm inside the dark card read as a glitch. The
+// scheme hook stays for a future light shell.
+const SOFT_PANEL_TERMINAL: TerminalTheme = {
+  background: '#1d1f26',
+  foreground: '#bdbfc5',
+  cursor: '#c7f05a',
+  cursorAccent: '#1d1f26',
+  selectionBackground: '#c7f05a40',
+};
+
 export const terminalThemes: Record<TerminalColorScheme, TerminalTheme> = {
-  dark: { background: '#0f1115', foreground: '#e6e6e6' },
-  light: {
-    background: '#f7f8fb',
-    foreground: '#171a21',
-    cursor: '#171a21',
-    selectionBackground: '#c9d4e8',
-  },
+  dark: SOFT_PANEL_TERMINAL,
+  light: SOFT_PANEL_TERMINAL,
 };
 
 export interface MediaQueryLike {

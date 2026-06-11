@@ -2,7 +2,47 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **"Soft Panels" visual redesign (ADR-0124).** UI rebuilt to the Gravity-UI
+  design handoff: rounded card panels (`#1D1F26`) with 12px gaps on a
+  `#131419` page, rifty lime `#C7F05A` accent, Inter (UI) + Roboto Mono
+  (code/terminal) self-hosted variable fonts (latin + cyrillic). Top bar now
+  hosts the template switcher (dropdown; replaces the activity bar + sidebar
+  gallery, same e2e selectors), a LIVE/STARTING/STOPPED status pill, a ⌘K
+  command bar, a GitHub link, and a Share button (copies the URL, success
+  toast). Preview pane gained browser-frame chrome (address bar with editable
+  port, phase pill, reload / open-in-tab). Monaco and xterm re-themed to the
+  panel surface with handoff syntax colors; splitters now live invisibly in
+  the panel gaps. Layout defaults follow the mockup (files 232 / terminal 212
+  / preview 464).
+
+### Added
+
+- **Global command palette (⌘K / Ctrl-K).** Searches project templates,
+  workspace files, and shell actions (new terminal, toggle terminal/files
+  panels, open preview tab, stop dev server, copy share link). Modal dialog
+  semantics with a focus trap, document-level Escape, focus restore on close,
+  and keep-in-view arrow navigation. The hotkey is capture-phase and matches
+  the physical key, so it works with Monaco/xterm focus and on non-Latin
+  keyboard layouts.
+
+### Changed (migration)
+
+- **Layout persistence key bumped to `rf.layout.v2`.** Old v1 sizes fit the
+  pre-redesign shell, and a stale `sidebarCollapsed=true` from the removed
+  activity bar would have hidden the files panel with no recovery UI; v1
+  state is orphaned and defaults apply on first load.
+
 ### Fixed
+
+- **Terminal no longer flips to a light theme on light-OS machines.** The
+  shell is dark-only; both `prefers-color-scheme` branches now resolve to the
+  panel-surface xterm theme.
+- **Undefined CSS variables in terminal overlays.** `--rf-ok` and
+  `--rf-shadow-2` were referenced but never defined (block-rail / history
+  exit-status colors and overlay shadows silently fell back); the token set
+  now defines `--rf-ok` and real shadow tokens.
 
 - **Project presets now open starter editor tabs.** File-oriented presets open
   two seeded files beside `src/main.js` as inactive tabs, so users see the tab

@@ -26,12 +26,16 @@ export interface StorageLike {
   setItem(key: string, value: string): void;
 }
 
-export const LAYOUT_KEY = 'rf.layout.v1';
+// v2: Soft Panels redesign (ADR-0124). v1 state is intentionally orphaned —
+// its sizes fit the old shell, and a persisted sidebarCollapsed=true had no
+// recovery UI once the activity bar was removed.
+export const LAYOUT_KEY = 'rf.layout.v2';
 
+/* Soft Panels mockup sizes: files 232 · terminal 212 · preview 464. */
 export const LAYOUT_DEFAULTS: LayoutState = {
-  sidebarW: 264,
-  consoleH: 232,
-  previewW: 480,
+  sidebarW: 232,
+  consoleH: 212,
+  previewW: 464,
   sidebarCollapsed: false,
   consoleCollapsed: false,
   // Explorer is the boot default — the file manager is the headline feature.

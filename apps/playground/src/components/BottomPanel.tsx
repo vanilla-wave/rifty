@@ -45,7 +45,11 @@ export function BottomPanel(props: {
   const activeRunning = () => activeSession()?.status === 'running';
 
   return (
-    <section class="rf-console" data-collapsed={props.collapsed} data-testid="terminal-panel">
+    <section
+      class="rf-console rf-card"
+      data-collapsed={props.collapsed}
+      data-testid="terminal-panel"
+    >
       <div class="rf-console__head">
         <button
           type="button"

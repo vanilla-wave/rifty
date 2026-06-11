@@ -26,6 +26,8 @@ export interface Preset {
   readonly templateId?: string;
   /** One-line description shown under the label. */
   readonly blurb: string;
+  /** Mono badge in the template switcher (e.g. `JS` in template yellow). */
+  readonly glyph?: { readonly text: string; readonly color: string };
   /** Optional pill (e.g. "live", "~20s") shown next to the label. */
   readonly tag?: { readonly text: string; readonly tone: 'live' | 'slow' };
   /** Editor source loaded when the preset is selected. */
@@ -236,6 +238,7 @@ const PROJECT_FILES_PRESET: Preset = {
   mode: 'real-vite',
   templateId: 'vite',
   blurb: 'A small module graph with JS, JSON, CSS, and a README to inspect.',
+  glyph: { text: 'JS', color: '#E8D44D' },
   tag: { text: 'live', tone: 'live' },
   source: PROJECT_FILES_SOURCE,
   openFiles: ['src/project-summary.js', 'src/project.json'],
@@ -255,6 +258,7 @@ const NODE_WORKER_PRESET: Preset = {
   mode: 'real-vite',
   templateId: 'vite',
   blurb: 'Shows where Node-style project files fit around the worker dev server.',
+  glyph: { text: 'N', color: '#9BD060' },
   tag: { text: 'live', tone: 'live' },
   source: NODE_WORKER_SOURCE,
   openFiles: ['src/runtime-notes.js', 'scripts/inspect-workspace.mjs'],
@@ -274,6 +278,7 @@ const REAL_VITE_PRESET: Preset = {
   mode: 'real-vite',
   templateId: 'vite',
   blurb: 'Installs a real npm project and runs its Vite dev server in a terminal.',
+  glyph: { text: 'V', color: '#5FCE96' },
   tag: { text: '~20s', tone: 'slow' },
   source: REAL_VITE_SOURCE,
 };

@@ -363,6 +363,9 @@ export function TerminalPanel(props: {
       },
       onBusyInput: showBusyNotice,
       theme: preferredTerminalTheme(),
+      fontFamily: "'Roboto Mono', ui-monospace, 'SF Mono', Menlo, monospace",
+      fontSize: 12,
+      lineHeight: 19 / 12, // handoff: terminal type 12px / 19px
       webLinks: props.onLink ? { onLink: props.onLink } : undefined,
       webgl: navigator.webdriver ? false : undefined,
       onSignal: props.onSignal ? () => props.onSignal?.() : undefined,
