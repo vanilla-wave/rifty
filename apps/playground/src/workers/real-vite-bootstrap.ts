@@ -60,10 +60,17 @@ interface ViteWatcher {
   on(event: 'change', cb: (file: string) => void): void;
 }
 
+interface ViteModuleGraph {
+  getModuleById?(id: string): unknown;
+  invalidateModule?(mod: unknown): void;
+  invalidateAll?(): void;
+}
+
 interface ViteDevServer {
   listen(): Promise<unknown>;
   close(): Promise<void>;
   watcher?: ViteWatcher;
+  moduleGraph?: ViteModuleGraph;
 }
 
 function log(line: string): void {
@@ -165,6 +172,27 @@ async function dispatchSerializedPreview(req: SerializedRequest): Promise<Serial
   };
 }
 
+function toRootRelativePath(root: string, path: string): string {
+  const normalizedRoot = normalizePath(root);
+  const normalizedPath = normalizePath(path);
+  if (normalizedPath === normalizedRoot) return '/';
+  if (normalizedPath.startsWith(`${normalizedRoot}/`)) {
+    return normalizedPath.slice(normalizedRoot.length);
+  }
+  return normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`;
+}
+
+function invalidateViteModule(server: ViteDevServer, file: string): void {
+  const graph = server.moduleGraph;
+  if (!graph) return;
+  const mod = graph.getModuleById?.(file);
+  if (mod !== undefined && graph.invalidateModule) {
+    graph.invalidateModule(mod);
+    return;
+  }
+  graph.invalidateAll?.();
+}
+
 async function bootstrap(): Promise<void> {
   // Defaults match the page-realm path so non-overriding callers behave the same.
   const env = globalThis.process.env;
@@ -190,11 +218,31 @@ async function bootstrap(): Promise<void> {
   };
 
   const hmrBridgeRef: { current?: HmrBridgeHandle } = {};
+  let activeServer: ViteDevServer | null = null;
   function broadcastFileUpdate(path: string): void {
-    hmrBridgeRef.current?.broadcast(JSON.stringify({ type: 'update', path }));
+    const modulePath = normalizePath(path);
+    if (activeServer) {
+      try {
+        invalidateViteModule(activeServer, modulePath);
+      } catch (err) {
+        log(
+          `[real-vite/worker] module invalidation failed for ${modulePath}: ${
+            (err as Error).message
+          }\n`,
+        );
+      }
+    }
+    hmrBridgeRef.current?.broadcast(
+      JSON.stringify({
+        type: 'update',
+        event: 'change',
+        path: toRootRelativePath(root, modulePath),
+      }),
+    );
   }
 
   function handleVfsWrite(path: string): void {
+    log(`[real-vite/worker] editor write applied ${normalizePath(path)}\n`);
     publishSnapshot();
     broadcastFileUpdate(path);
   }
@@ -283,6 +331,7 @@ async function bootstrap(): Promise<void> {
     plugins: cfg.hmrEnabled ? [createHmrBridgeVitePlugin({ port })] : [],
   });
   await server.listen();
+  activeServer = server;
   log(`[real-vite/worker] vite is listening on internal port ${port}\n`);
   publishSnapshot(); // vite may have written config/cache during boot
 

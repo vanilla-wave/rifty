@@ -151,6 +151,12 @@
 - **Terminal autocomplete dropdown.** Tab or Ctrl/Cmd+Space inside the console now
   opens a keyboardable DOM completion list backed by the existing shell
   command/path completer; ArrowUp/Down selects, Enter/Tab applies, Esc closes.
+- **Real Vite browser e2e is green end-to-end.** The opt-in Playwright
+  `m10-hmr` flow now proves the cross-origin-isolated path: select the Real npm
+  project template, boot Vite in the worker realm, render the iframe through SW
+  preview routing, edit `src/main.js` via Monaco, write it into the worker VFS,
+  invalidate Vite's module graph, and reload the iframe through the cross-realm
+  HMR bridge. This closes the stale backlog item for full Real Vite browser e2e.
 - **Terminal no longer overlaps the status bar.** xterm's `FitAddon` computes
   rows from the mount element's height minus *that element's own* padding (the
   `.xterm` div it creates, padding 0) — so the `6px` vertical padding on the

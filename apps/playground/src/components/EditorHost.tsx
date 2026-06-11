@@ -130,6 +130,7 @@ export function EditorHost(props: EditorHostProps) {
   let container: HTMLDivElement | undefined;
   let editor: monaco.editor.IStandaloneCodeEditor | undefined;
   let programModel: monaco.editor.ITextModel | undefined;
+  let setProgramSourceFromEvent: ((event: Event) => void) | undefined;
   let suppressProgramEcho = false;
 
   const models = new Map<string, monaco.editor.ITextModel>();
@@ -310,6 +311,23 @@ export function EditorHost(props: EditorHostProps) {
       }
     });
 
+    setProgramSourceFromEvent = (event: Event) => {
+      const next = (event as CustomEvent<{ value?: unknown }>).detail?.value;
+      if (typeof next !== 'string' || !programModel) return;
+      const activeModel = editor?.getModel();
+      suppressProgramEcho = true;
+      if (activeModel && activeModel.getValue() !== next) activeModel.setValue(next);
+      if (programModel !== activeModel && programModel.getValue() !== next) {
+        programModel.setValue(next);
+      }
+      suppressProgramEcho = false;
+      props.onProgramChange(next);
+    };
+    // E2E hook: update Monaco models and exercise the same onProgramChange path
+    // without relying on platform-specific keyboard selection behaviour.
+    container.addEventListener('rifty:set-program-source', setProgramSourceFromEvent);
+    globalThis.addEventListener('rifty:set-program-source', setProgramSourceFromEvent);
+
     props.registerApi({ openFile });
 
     // External program-source sync (presets / mode transitions): the one guarded
@@ -347,6 +365,12 @@ export function EditorHost(props: EditorHostProps) {
   onCleanup(() => {
     for (const timer of writeTimers.values()) clearTimeout(timer);
     writeTimers.clear();
+    if (container && setProgramSourceFromEvent) {
+      container.removeEventListener('rifty:set-program-source', setProgramSourceFromEvent);
+    }
+    if (setProgramSourceFromEvent) {
+      globalThis.removeEventListener('rifty:set-program-source', setProgramSourceFromEvent);
+    }
     editor?.dispose();
     for (const m of models.values()) m.dispose();
     models.clear();

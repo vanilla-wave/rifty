@@ -24,10 +24,9 @@
  *
  * Manual verification steps (no env flag needed):
  *   1. `pnpm dev` → open `http://localhost:5273`.
- *   2. Open the Templates view (activity bar) and select the "Real npm project"
- *      tile. Wait for `[real-vite/worker] hmr bridge ready at
- *      ws://preview.local:5174/__hmr` in the terminal followed by
- *      `[real-vite/worker] vite is listening`.
+ *   2. Wait for the visible terminal's `vite` command to print
+ *      `[real-vite/worker] hmr bridge ready at ws://preview.local:5174/__hmr`
+ *      followed by `[real-vite/worker] vite is listening`.
  *   3. Confirm the preview iframe shows the seeded "Hello from real Vite"
  *      message.
  *   4. Open DevTools → `Application` → `Frames` → drill into the preview
@@ -52,20 +51,9 @@ test.describe('M10 — HMR over cross-realm bridge (ADR-0017 phase 1)', () => {
     await page.goto('/');
 
     const term = page.locator('[data-testid="terminal"]');
-    await expect(term).toContainText('[worker ready]', { timeout: 10_000 });
-
-    // Enter Real Vite via the single Templates switcher (ADR-0079, a deliberate
-    // e2e contract change): open the Templates view and select the "Real npm
-    // project" tile (the preset id stays 'real-vite').
-    await page.locator('[data-action="view-templates"]').click();
-    await expect(page.locator('[data-testid="gallery"]')).toBeVisible();
-    await page.locator('[data-preset="real-vite"]').click();
-    // Correct the stale markers to the ones the worker actually emits
-    // (`[real-vite/worker] …`, ADR-0077). The old `[real-vite] …` strings
-    // predate the worker-realm `/worker]` prefix and never substring-matched
-    // current output — this spec is skip-by-default, so the drift was invisible.
-    await expect(term).toContainText('[real-vite/worker] hmr bridge ready', { timeout: 60_000 });
+    await expect(term).toContainText('vite: starting dev server', { timeout: 10_000 });
     await expect(term).toContainText('[real-vite/worker] vite is listening', { timeout: 60_000 });
+    await expect(term).toContainText('[vite] dev server ready on port 5174', { timeout: 60_000 });
 
     // The preview iframe must mount and load the bridge client.
     const previewFrame = page.frameLocator('iframe').first();
@@ -82,16 +70,20 @@ test.describe('M10 — HMR over cross-realm bridge (ADR-0017 phase 1)', () => {
     // reload signal — so the iframe `#app` text changes to whatever we just
     // wrote.
     const marker = `hmr-${Date.now()}`;
-    await page.evaluate((m) => {
-      const editor = document.querySelector('[data-testid="editor"] textarea');
-      if (!(editor instanceof HTMLTextAreaElement)) throw new Error('editor textarea missing');
-      const setter = Object.getOwnPropertyDescriptor(
-        window.HTMLTextAreaElement.prototype,
-        'value',
-      )?.set;
-      setter?.call(editor, `document.getElementById('app').textContent = ${JSON.stringify(m)};\n`);
-      editor.dispatchEvent(new Event('input', { bubbles: true }));
-    }, marker);
+    const editor = page.locator('[data-testid="editor"]');
+    await page.evaluate(
+      (value) => {
+        window.dispatchEvent(new CustomEvent('rifty:set-program-source', { detail: { value } }));
+      },
+      `document.getElementById('app').textContent = ${JSON.stringify(marker)};\n`,
+    );
+    await expect(editor).toContainText(marker);
+    await expect(term).toContainText(
+      '[real-vite/worker] editor write applied /workspace/src/main.js',
+      {
+        timeout: 10_000,
+      },
+    );
 
     // The iframe reloads as part of the HMR update path; wait for the new
     // body content.

@@ -19,6 +19,7 @@ import {
 interface MockClient {
   id: string;
   type: ClientTypes;
+  url?: string;
   postMessage: ReturnType<typeof vi.fn>;
 }
 
@@ -39,10 +40,11 @@ interface MockScope {
   postMessage: (data: unknown, source: MockClient) => void;
 }
 
-function makeMockClient(id: string, type: ClientTypes = 'window'): MockClient {
+function makeMockClient(id: string, type: ClientTypes = 'window', url?: string): MockClient {
   return {
     id,
     type,
+    url,
     postMessage: vi.fn<(message: unknown, transfer: Transferable[]) => void>(),
   };
 }
@@ -518,6 +520,231 @@ describe('SW-side handshake state machine', () => {
     const replyPort = (transfer as MessagePort[])[0]!;
     replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
     expect((await responsePromise).status).toBe(200);
+    interceptor.teardown();
+  });
+
+  it('routes root-relative subresources from a preview iframe to the iframe port', async () => {
+    const pageClient = makeMockClient('page-client');
+    const scope = makeMockScope([pageClient]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      pageClient,
+    );
+
+    const navResponse = scope.fetch('http://x/preview/5174/', {
+      requestMode: 'navigate',
+      destination: 'iframe',
+      resultingClientId: 'preview-frame-1',
+    });
+    await flushPreviewDispatch();
+    expect(pageClient.postMessage).toHaveBeenCalledTimes(1);
+    let call = pageClient.postMessage.mock.calls[0]!;
+    let message = call[0] as { request?: { port: number; url: string } };
+    expect(message.request?.port).toBe(5174);
+    expect(message.request?.url).toBe('http://preview.local/');
+    let replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
+    expect((await navResponse).status).toBe(200);
+
+    const scriptResponse = scope.fetch('http://x/src/main.js', {
+      requestMode: 'cors',
+      destination: 'script',
+      clientId: 'preview-frame-1',
+    });
+    await flushPreviewDispatch();
+    expect(pageClient.postMessage).toHaveBeenCalledTimes(2);
+    call = pageClient.postMessage.mock.calls[1]!;
+    message = call[0] as { request?: { port: number; url: string } };
+    expect(message.request?.port).toBe(5174);
+    expect(message.request?.url).toBe('http://preview.local/src/main.js');
+    replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'application/javascript' },
+      body: new TextEncoder().encode('console.log("preview script")'),
+    });
+    const response = await scriptResponse;
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('console.log("preview script")');
+    interceptor.teardown();
+  });
+
+  it('routes root-relative fetches and navigations from a preview iframe to the iframe port', async () => {
+    const pageClient = makeMockClient('page-client');
+    const scope = makeMockScope([pageClient]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      pageClient,
+    );
+
+    const initialResponse = scope.fetch('http://x/preview/5174/', {
+      requestMode: 'navigate',
+      destination: 'iframe',
+      resultingClientId: 'preview-frame-1',
+    });
+    await flushPreviewDispatch();
+    let call = pageClient.postMessage.mock.calls[0]!;
+    let replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
+    expect((await initialResponse).status).toBe(200);
+
+    const apiResponse = scope.fetch('http://x/api/config', {
+      requestMode: 'cors',
+      destination: '',
+      clientId: 'preview-frame-1',
+    });
+    await flushPreviewDispatch();
+    call = pageClient.postMessage.mock.calls[1]!;
+    let message = call[0] as { request?: { port: number; url: string } };
+    expect(message.request?.port).toBe(5174);
+    expect(message.request?.url).toBe('http://preview.local/api/config');
+    replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'application/json' },
+      body: new TextEncoder().encode('{"ok":true}'),
+    });
+    expect(await (await apiResponse).text()).toBe('{"ok":true}');
+
+    const navResponse = scope.fetch('http://x/dashboard', {
+      requestMode: 'navigate',
+      destination: 'document',
+      clientId: 'preview-frame-1',
+      resultingClientId: 'preview-frame-2',
+    });
+    await flushPreviewDispatch();
+    call = pageClient.postMessage.mock.calls[2]!;
+    message = call[0] as { request?: { port: number; url: string } };
+    expect(message.request?.port).toBe(5174);
+    expect(message.request?.url).toBe('http://preview.local/dashboard');
+    replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'text/html' },
+      body: new TextEncoder().encode('<div>dashboard</div>'),
+    });
+    expect(await (await navResponse).text()).toBe('<div>dashboard</div>');
+
+    const chunkResponse = scope.fetch('http://x/assets/chunk.js', {
+      requestMode: 'cors',
+      destination: 'script',
+      clientId: 'preview-frame-2',
+    });
+    await flushPreviewDispatch();
+    call = pageClient.postMessage.mock.calls[3]!;
+    message = call[0] as { request?: { port: number; url: string } };
+    expect(message.request?.port).toBe(5174);
+    expect(message.request?.url).toBe('http://preview.local/assets/chunk.js');
+    replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'application/javascript' },
+      body: new TextEncoder().encode('export default 1'),
+    });
+    expect(await (await chunkResponse).text()).toBe('export default 1');
+    interceptor.teardown();
+  });
+
+  it('recovers preview port context from referrer after an iframe reload changes client id', async () => {
+    const pageClient = makeMockClient('page-client');
+    const scope = makeMockScope([pageClient]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      pageClient,
+    );
+
+    const reloadResponse = scope.fetch('http://x/preview/5174/', {
+      requestMode: 'navigate',
+      destination: 'iframe',
+      clientId: 'preview-frame-1',
+    });
+    await flushPreviewDispatch();
+    let call = pageClient.postMessage.mock.calls[0]!;
+    let replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
+    expect((await reloadResponse).status).toBe(200);
+
+    const scriptResponse = scope.fetch('http://x/src/main.js', {
+      requestMode: 'cors',
+      destination: 'script',
+      referrer: 'http://x/preview/5174/',
+      clientId: 'preview-frame-2',
+    });
+    await flushPreviewDispatch();
+    call = pageClient.postMessage.mock.calls[1]!;
+    const message = call[0] as { request?: { port: number; url: string } };
+    expect(message.request?.port).toBe(5174);
+    expect(message.request?.url).toBe('http://preview.local/src/main.js');
+    replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'application/javascript' },
+      body: new TextEncoder().encode('console.log("after reload")'),
+    });
+    expect(await (await scriptResponse).text()).toBe('console.log("after reload")');
+    interceptor.teardown();
+  });
+
+  it('recovers preview port context from the iframe client url after reload', async () => {
+    const pageClient = makeMockClient('page-client');
+    const frameClient = makeMockClient('preview-frame-2', 'window', 'http://x/preview/5174/');
+    const scope = makeMockScope([pageClient, frameClient]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      pageClient,
+    );
+
+    const scriptResponse = scope.fetch('http://x/src/main.js', {
+      requestMode: 'cors',
+      destination: 'script',
+      clientId: 'preview-frame-2',
+    });
+    await flushPreviewDispatch();
+    const call = pageClient.postMessage.mock.calls[0]!;
+    const message = call[0] as { request?: { port: number; url: string } };
+    expect(message.request?.port).toBe(5174);
+    expect(message.request?.url).toBe('http://preview.local/src/main.js');
+    const replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'application/javascript' },
+      body: new TextEncoder().encode('console.log("client url")'),
+    });
+    expect(await (await scriptResponse).text()).toBe('console.log("client url")');
     interceptor.teardown();
   });
 });

@@ -62,27 +62,36 @@ export function hmrClientScript(port: number): string {
   var ch = new BroadcastChannel(${JSON.stringify(channelName)});
   var cid = 'iframe-' + Math.random().toString(36).slice(2, 10);
   var open = false;
+  function onPayload(payload) {
+    try {
+      if (typeof payload === 'string') payload = JSON.parse(payload);
+    } catch (_) {}
+    try {
+      window.dispatchEvent(new CustomEvent('rifty:hmr:message', { detail: payload }));
+    } catch (_) {}
+    try { window.__riftyHmrLastMessage = payload; } catch (_) {}
+    // Naive default: reload on update. Full ESM HMR is out of scope for the
+    // bridge — higher-level concern (M12+).
+    if (payload && payload.type === 'update') {
+      location.reload();
+    }
+  }
   ch.addEventListener('message', function (e) {
     var f = e.data;
-    if (!f || f.cid !== cid) return;
+    if (!f) return;
+    if (f.type === 'broadcast') {
+      onPayload(f.data);
+      return;
+    }
+    if (f.cid !== cid) return;
     if (f.type === 'open-ack') {
       open = true;
+      try { window.__riftyHmrOpen = true; } catch (_) {}
       try { window.dispatchEvent(new Event('rifty:hmr:open')); } catch (_) {}
       return;
     }
     if (f.type === 'msg' && open) {
-      var payload = f.data;
-      try {
-        if (typeof payload === 'string') payload = JSON.parse(payload);
-      } catch (_) {}
-      try {
-        window.dispatchEvent(new CustomEvent('rifty:hmr:message', { detail: payload }));
-      } catch (_) {}
-      // Naive default: reload on update. Full ESM HMR is out of scope for the
-      // bridge — higher-level concern (M12+).
-      if (payload && payload.type === 'update') {
-        location.reload();
-      }
+      onPayload(f.data);
       return;
     }
     if (f.type === 'close' && f.from === 'server') {
@@ -125,13 +134,16 @@ export interface SetupHmrBridgeOptions {
 export function setupHmrBridge(opts: SetupHmrBridgeOptions): HmrBridgeHandle {
   const url = hmrBridgeUrl(opts.port);
   const server = new BridgedWebSocketServer(url);
+  const fanout = new BroadcastChannel(channelNameFor(url));
   return {
     url,
     broadcast(payload: WsMessage): void {
       server.broadcast(payload);
+      fanout.postMessage({ type: 'broadcast', data: payload });
     },
     close(): void {
       server.close();
+      fanout.close();
     },
   };
 }

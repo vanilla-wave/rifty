@@ -76,14 +76,19 @@ per-field semantics.
 
 `SW_ROUTING_VERSION` pins (a) the addressing scheme exported from
 `@riftydev/io/preview-protocol` (`PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`,
-`synthesizePreviewUrl`, `parsePreviewPath`) and (b) the owner-fallback and
-owner-scoping rules in the preview owner bindings. Bumping requires: changes to
-the URL regex shape, the synthetic host literal, the resolver fallback order,
-the Worker claim scope, or the mismatch / one-shot-warn dedup key shape.
+`synthesizePreviewUrl`, `parsePreviewPath`), (b) the preview-frame port
+context that routes root-relative iframe requests to the same preview port
+by iframe `clientId`, same-origin `/preview/<port>/` referrer, or iframe
+`Client.url`, and (c) the owner-fallback and owner-scoping rules in the
+preview owner bindings. Bumping requires: changes to the URL regex shape, the
+synthetic host literal, the preview-frame port-context rule, the resolver
+fallback order, the Worker claim scope, or the mismatch / one-shot-warn dedup
+key shape.
 
 ADR-0040 is the source-of-truth for the split; ADR-0031 is the
 predecessor that established the per-frame contract; ADR-0016 covers
-the broader "TS source-of-truth + bundled `sw.js`" decision.
+the broader "TS source-of-truth + bundled `sw.js`" decision. ADR-0097 records
+the `SW_ROUTING_VERSION` `'2'` bump for preview-frame root-relative routing.
 
 The protocol does not attempt cross-version compatibility — a version
 mismatch between an old page and a fresh SW (or vice-versa) refuses

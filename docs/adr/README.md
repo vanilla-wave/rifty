@@ -69,6 +69,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0002 | Cross-origin isolation is mandatory |
 | 0016 | Service Worker source-of-truth lives in `@riftydev/service-worker` |
 | 0046 | `PreviewOwnerBinding` — one seam for window and worker preview owners |
+| 0097 | Preview frame port context routes root-relative requests |
 | 0123 | Port-aware preview owner routing |
 
 ### npm-client

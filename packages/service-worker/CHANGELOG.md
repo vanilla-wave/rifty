@@ -21,6 +21,15 @@
   This branch bumps `SW_ROUTING_VERSION` to `'2'` together with ADR-0123's
   owner-scoped Worker routing, so stale peers fail loudly instead of silently
   disagreeing on owner selection.
+- **Preview iframe root-relative requests route to the iframe's preview port
+  (ADR-0097).** After a preview iframe commits `/preview/<port>/`, the SW records
+  the iframe client id as owning that port and routes same-origin root requests
+  from that client (`/src/main.js`, `/@vite/client`, lazy chunks,
+  `fetch('/api')`, SPA navigations) through the same preview owner; reloads that
+  mint a fresh iframe client id recover the port from a same-origin
+  `/preview/<port>/` referrer or iframe `Client.url`. This keeps real Vite apps
+  working without rewriting their HTML to relative paths. This rides on the
+  same `SW_ROUTING_VERSION` `'2'` contract as ADR-0123.
 
 ### Added
 

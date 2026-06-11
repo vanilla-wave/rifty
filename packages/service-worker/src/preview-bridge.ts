@@ -128,6 +128,21 @@ export function isPreviewFrameRequest(request: {
   return request.mode === 'navigate' || request.destination !== '';
 }
 
+function matchPreviewReferrer(request: Request): { port: number } | null {
+  if (!request.referrer) return null;
+  const referrer = new URL(request.referrer);
+  return matchPreviewUrl(referrer.pathname);
+}
+
+async function matchPreviewClientUrl(
+  scope: ServiceWorkerGlobalScope,
+  clientId: string,
+): Promise<{ port: number } | null> {
+  const client = await scope.clients.get(clientId);
+  if (!client) return null;
+  return matchPreviewUrl(new URL(client.url).pathname);
+}
+
 /**
  * Default timeout (ms) for the `rifty:preview:ready` handshake. If the main
  * thread does not signal readiness within this window of a preview fetch
@@ -187,19 +202,57 @@ export function createPreviewInterceptor(
       window: hooks.resolver !== undefined ? { resolver: hooks.resolver } : undefined,
     });
   const subscription = binding.subscribeReadiness(scope);
+  const previewFramePorts = new Map<string, number>();
 
   const fetchHandler = (event: FetchEvent): void => {
     const url = new URL(event.request.url);
-    const match = matchPreviewUrl(url.pathname);
+    const directMatch = matchPreviewUrl(url.pathname);
+    const frameRequest = isPreviewFrameRequest(event.request);
+    let match = directMatch;
+    let clientId = event.resultingClientId || event.clientId || null;
+
+    if (directMatch && frameRequest) {
+      const frameClientId = event.resultingClientId || event.clientId || null;
+      if (frameClientId) previewFramePorts.set(frameClientId, directMatch.port);
+      // ADR-0097 extends ADR-0074: remember the iframe's port context, then
+      // route this navigation through the controlling window.
+      clientId = null;
+    } else if (!directMatch) {
+      const frameClientId = event.clientId || null;
+      let port = frameClientId ? previewFramePorts.get(frameClientId) : undefined;
+      if (port === undefined) {
+        port = matchPreviewReferrer(event.request)?.port;
+        if (port !== undefined && frameClientId) previewFramePorts.set(frameClientId, port);
+      }
+      if (port === undefined && frameRequest && frameClientId) {
+        event.respondWith(
+          (async (): Promise<Response> => {
+            const clientMatch = await matchPreviewClientUrl(scope, frameClientId);
+            if (!clientMatch) return fetch(event.request);
+            previewFramePorts.set(frameClientId, clientMatch.port);
+            const nextFrameClientId = event.resultingClientId || null;
+            if (nextFrameClientId) previewFramePorts.set(nextFrameClientId, clientMatch.port);
+            return routePreview(
+              scope,
+              event.request,
+              { port: clientMatch.port, path: url.pathname },
+              subscription.readiness,
+              timeoutMs,
+              null,
+              binding,
+            );
+          })(),
+        );
+        return;
+      }
+      if (port === undefined) return;
+      const nextFrameClientId = event.resultingClientId || null;
+      if (nextFrameClientId) previewFramePorts.set(nextFrameClientId, port);
+      match = { port, path: url.pathname };
+      clientId = null;
+    }
+
     if (!match) return;
-    // ADR-0074 — a request originating inside the preview iframe must resolve
-    // to the controlling window (see {@link isPreviewFrameRequest}); drop its
-    // own ids so the resolver falls back to the first controlled window (the
-    // bridge owner). The page's bare `fetch('/preview/…')` warm-up keeps
-    // ADR-0031's `resultingClientId || clientId` order (multi-window unchanged).
-    const clientId = isPreviewFrameRequest(event.request)
-      ? null
-      : event.resultingClientId || event.clientId || null;
     event.respondWith(
       routePreview(
         scope,
