@@ -4,6 +4,10 @@ packages:
   - "tools/*"
   - "tests"
   - "examples/*"
+# CI/release still uses the exact packageManager pin. Locally, keep compatible
+# pnpm 11.x installs usable even when a user-level registry mirror has not
+# synced the pinned @pnpm/exe version yet.
+pmOnFail: warn
 # Dependencies allowed to run install/build scripts (pnpm 11 strictDepBuilds).
 # Without an explicit allow, a fresh `pnpm install --frozen-lockfile` fails with
 # ERR_PNPM_IGNORED_BUILDS (esbuild/biome ship native postinstalls), which would

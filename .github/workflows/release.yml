@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # pnpm version comes from package.json `packageManager` (pnpm 11.5.1).
+      # pnpm version comes from package.json `packageManager` (pnpm 11.5.2).
       # MUST be >= 11.1.3: pnpm 11.0.x (incl. the old 11.0.8 pin) hit pnpm#11513
       # and 404 on OIDC publish.
       - uses: pnpm/action-setup@v4
