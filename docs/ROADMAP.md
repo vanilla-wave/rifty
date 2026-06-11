@@ -1,6 +1,6 @@
 # Roadmap
 
-Internal milestone map (M0–M12). Detail lives in the cited ADRs; open work links to `docs/backlog/<area>/<slug>`.
+Internal milestone map (M0–M11). Detail lives in the cited ADRs; open work links to `docs/backlog/<area>/<slug>`.
 
 ## M0 — Foundation
 
@@ -78,19 +78,30 @@ open:
 - `docs/backlog/playground/real-vite-browser-e2e` — full worker+HMR+iframe+SW-routing flow in a cross-origin-isolated browser via Playwright.
 - `docs/backlog/net/streaming-cross-realm-preview` — streaming (not buffered-only) cross-realm preview, ADR-0048.
 
-## M11 — post-M10 follow-ups
+## M11 — Consumer Ready
 
-**PARTIAL.**
-Container for M6/M8/M9/M10 tech debt, not a new work phase. Landed: Vite-in-Worker (ADR-0043), nested install (ADR-0042), fork-IPC via Worker (ADR-0045), esbuild.wasm vendoring (ADR-0047), native-dep policy (ADR-0051), port-aware SW preview routing (ADR-0123).
-open:
-- `docs/backlog/net/streaming-cross-realm-preview` — buffered→streaming upgrade.
-- `docs/backlog/npm-client/prod-npm-registry-proxy` — lockfile reuse + prod proxy residue.
+**ACTIVE — the current focus.**
+The adoption milestone: turn a capable core into something a tinkerer can actually stand up and
+use comfortably. The wedge is *usage ergonomics*, not new runtime capability — the platform
+ceilings are shared with WebContainers; rifty wins on being open, self-hostable, and auditable.
+Theme (not a checklist):
 
-## M12 — retired agent-facade exploration
+- **Standable.** Install works off a real deploy, not just the dev proxy; a one-command scaffold
+  emits the un-packageable host wiring (COOP/COEP, module-worker config, `sw.js` build, WASM copy,
+  worker URLs). Day-1 adoption is a command, not hours of reverse-engineering.
+- **Embeddable.** Headless controller/SDK surface beyond a JS REPL, and an AI-agent-shaped sandbox
+  contract (create → write/read → `exec` streaming `{stdout,stderr,exitCode}` → preview URL →
+  teardown + VFS snapshot/restore).
+- **Runs real-ish projects.** Knock down the high-frequency runtime walls that steer ordinary npm
+  code into hard failures (zlib, plausible `platform`/`arch`, fd-fs + `cp`/`mkdtemp`, http loopback);
+  previews that don't hang (end-to-end streaming, SW→Worker direct routing); off-main-thread heavy
+  guests + worker pools.
+- **Durable & portable.** `persist()`/quota, out-of-space UX, project export/import — the user's
+  code survives reload and can leave the browser.
+- **Trustworthy.** An honest, auditable open-licensing position vs the proprietary/metered/CDN-locked
+  incumbents, and a compat-matrix presented as the pitch ("good enough for Express + Vite + npm
+  install, fully open").
 
-**CANCELLED.**
-The opencode server-facade track was retired before product integration. The reusable
-runtime work stays in place where it serves rifty independently: TS-on-import, Effect-shaped
-`node:http` parity, streaming HTTP/SSE primitives, `node:sqlite`, and VFS search/shell
-building blocks. The vendored opencode fixture, opt-in smoke harnesses, and opencode backlog
-were removed so the roadmap no longer carries that specific integration as active work.
+Contributing work is tagged **M11** across `docs/backlog/<area>/*` items (one-way by design: items
+cite M11; this section deliberately does not enumerate them, so there is no list to drift). Grep
+`M11` in `docs/backlog` for the live set.

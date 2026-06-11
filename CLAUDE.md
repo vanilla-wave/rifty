@@ -5,7 +5,7 @@ Browser-based Node-compatible runtime + WASI runner. Pet project, goal is deep u
 ## Sources of truth (read in this order)
 
 1. **`CLAUDE.md`** (this file) — vision + rules for the session
-2. **`docs/ROADMAP.md`** — milestones M0–M12 + open acceptance items
+2. **`docs/ROADMAP.md`** — milestones M0–M11 + open acceptance items
 3. **`docs/adr/<area>/`** — decisions (rationale per record); `docs/adr/README.md` is the index
 4. **`docs/backlog/<area>/`** — open/provisional work; lint via `pnpm backlog:check`
 5. **`docs/public/`** — compat matrix, publishing, hosting (ship-facing)
@@ -14,7 +14,7 @@ If something conflicts, `docs/ROADMAP.md` and ADRs win over your priors.
 
 ## Current context
 
-- **Active milestone:** see `docs/ROADMAP.md` (milestones M0–M12; most early ones complete)
+- **Active milestone:** M11 (Consumer Ready) — see `docs/ROADMAP.md` (milestones M0–M11; M0–M10 mostly complete)
 - **Decisions in effect:** D-001..D-006 — indexed in `docs/adr/README.md` (Appendix B, D→ADR map). Process rules (record-and-continue etc.) live in this file, not in ADRs.
 
 ## Vision & rationale
