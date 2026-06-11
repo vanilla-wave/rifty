@@ -121,7 +121,7 @@
   --rf-split: 12px; /* splitters fill the panel gaps */
   /* live panel sizes — overwritten inline on .rf-shell by the splitters */
   --rf-sidebar-w: 232px;
-  --rf-console-h: 212px;
+  --rf-console-h: 280px;
   --rf-preview-w: 464px;
   --rf-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
@@ -917,6 +917,25 @@ body {
   min-width: 0;
   color: var(--rf-text-muted);
 }
+.rf-preview__copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: copy;
+}
+.rf-preview__copy:hover .rf-preview__host {
+  color: var(--rf-text);
+}
+.rf-preview__copy:focus-visible {
+  outline: 1px solid var(--rf-accent);
+  border-radius: 2px;
+}
 .rf-preview__host {
   display: inline-flex;
   align-items: center;
@@ -925,6 +944,7 @@ body {
   white-space: nowrap;
 }
 .rf-preview__port {
+  margin-left: -8px; /* sit flush after "localhost:" despite the address gap */
   width: 5ch;
   font: 400 12px / 16px var(--rf-font-mono);
   color: var(--rf-text-dim);
@@ -1176,21 +1196,6 @@ body {
   background: var(--rf-hover);
   color: var(--rf-text);
 }
-.rf-terminal-stop {
-  height: 24px;
-  padding: 0 10px;
-  border: 1px solid var(--rf-err-border);
-  border-radius: var(--rf-r-sm);
-  color: var(--rf-err);
-  background: transparent;
-  font: 400 12px / 16px var(--rf-font-sans);
-  cursor: pointer;
-  transition: background 0.15s var(--rf-ease);
-}
-.rf-terminal-stop:hover {
-  background: rgba(255, 0, 61, 0.12);
-}
-
 .rf-console__body {
   position: relative;
   min-height: 0;
@@ -1714,6 +1719,8 @@ body {
   background: rgba(7, 8, 10, 0.45);
 }
 .rf-palette__panel {
+  /* beat <dialog> UA styles (absolute + inset auto-margins) — flex centers it */
+  position: static;
   margin: 0;
   padding: 0;
   color: inherit;

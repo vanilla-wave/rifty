@@ -29,6 +29,7 @@ import { StatusBar } from './components/StatusBar.tsx';
 import { TemplateSwitcher } from './components/TemplateSwitcher.tsx';
 import type { TerminalModeHint } from './components/TerminalPanel.tsx';
 import { Icon } from './components/icons.tsx';
+import { copyToClipboard } from './glue/clipboard.ts';
 import { readChildren } from './glue/file-tree.ts';
 import { writeText } from './glue/fs-ops.ts';
 import { NodeModulesCache } from './glue/node-modules-cache.ts';
@@ -46,32 +47,6 @@ import { buildProjectPackageJson } from './templates/project-spec.ts';
 import { defaultProjectSpec } from './templates/registry.ts';
 
 const WORKSPACE = '/workspace';
-
-/** Clipboard write with a legacy textarea fallback (denied permission / no API). */
-async function copyToClipboard(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    /* fall through to execCommand */
-  }
-  try {
-    const doc = globalThis.document;
-    if (!doc) return false;
-    const area = doc.createElement('textarea');
-    area.value = text;
-    area.setAttribute('readonly', '');
-    area.style.position = 'fixed';
-    area.style.opacity = '0';
-    doc.body.appendChild(area);
-    area.select();
-    const ok = doc.execCommand('copy');
-    area.remove();
-    return ok;
-  } catch {
-    return false;
-  }
-}
 
 export interface AppProps {
   /**
@@ -980,6 +955,7 @@ export function App(props: AppProps) {
                     initialPort={port}
                     refreshKey={previewRevision()}
                     onOpenTab={openPreviewTab}
+                    onNotify={flashToast}
                   />
                 )}
               </Show>
@@ -990,7 +966,7 @@ export function App(props: AppProps) {
               value={layout.consoleH()}
               min={layout.bounds.consoleH[0]}
               max={layout.bounds.consoleH[1]}
-              defaultValue={212}
+              defaultValue={280}
               dir={-1}
               ariaLabel="Resize console"
               onInput={(px) => layout.setConsoleH(px)}
@@ -1006,7 +982,6 @@ export function App(props: AppProps) {
               onSelectSession={selectSession}
               onCreateSession={() => createSession()}
               onCloseSession={closeSession}
-              onStopSession={stopSession}
               attach={attachTerminalWriter}
               modeHint={terminalModeHint()}
               historyRecords={terminalHistory}

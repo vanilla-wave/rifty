@@ -34,8 +34,26 @@
   activity bar would have hidden the files panel with no recovery UI; v1
   state is orphaned and defaults apply on first load.
 
+### Changed (2026-06-11 design feedback)
+
+- **Terminal Stop button removed.** Server state shows in the status pills;
+  stopping goes through Ctrl-C in the terminal or the ⌘K palette ("Stop dev
+  server"). Matches the handoff, which dropped the button.
+- **Default terminal height raised to 280px** (mockup's 212px was too shallow
+  for real logs).
+- **Preview address copies the real URL.** The shown `localhost:<port>` host
+  is virtual; clicking the address copies this origin's SW-routed
+  `/preview/<port>/` URL with a toast. The URL serves only tabs the
+  playground opens itself (`↗` button) — SW routing scopes a port to its
+  owner window (backlog: `service-worker/cross-tab-preview-routing`).
+
 ### Fixed
 
+- **Command palette opened pinned to the top-left corner.** `<dialog>` UA
+  positioning (absolute + auto margins) escaped the flex centering; the panel
+  is now statically positioned inside the scrim.
+- **Editor code no longer collides with the right-edge ruler strip.** The
+  overview ruler is disabled (minimap already off).
 - **Terminal no longer flips to a light theme on light-OS machines.** The
   shell is dark-only; both `prefers-color-scheme` branches now resolve to the
   panel-surface xterm theme.

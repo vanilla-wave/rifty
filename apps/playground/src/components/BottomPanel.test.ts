@@ -40,7 +40,6 @@ function render(activeSessionId = 'terminal-2'): string {
       onSelectSession: () => {},
       onCreateSession: () => {},
       onCloseSession: () => {},
-      onStopSession: () => {},
       attach: () => {},
       onLine: () => 0,
     }),
@@ -59,7 +58,9 @@ describe('BottomPanel', () => {
     expect(html).toContain('Terminal');
     expect(html).toContain('role="tablist"');
     expect(html).toContain('aria-label="New terminal"');
-    expect(html).toContain('Stop');
+    // No Stop button by design (2026-06-11): server state shows in the status
+    // pills; stopping goes through Ctrl-C / the ⌘K palette.
+    expect(html).not.toContain('rf-terminal-stop');
     expect(html).toContain('aria-label="Close Terminal 1"');
     expect(html).not.toContain('aria-label="Close Server"');
   });

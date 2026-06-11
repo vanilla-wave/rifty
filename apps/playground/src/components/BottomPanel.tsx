@@ -21,7 +21,6 @@ export function BottomPanel(props: {
   onSelectSession(id: string): void;
   onCreateSession(): void;
   onCloseSession(id: string): void;
-  onStopSession(id: string): void;
   attach(id: string, write: (chunk: string, stream?: 'stdout' | 'stderr') => void): void;
   onLine(
     id: string,
@@ -41,8 +40,6 @@ export function BottomPanel(props: {
 }) {
   const sessionIds = createMemo(() => props.sessions.map((session) => session.id));
   const sessionById = (id: string) => props.sessions.find((session) => session.id === id);
-  const activeSession = () => sessionById(props.activeSessionId) ?? props.sessions[0];
-  const activeRunning = () => activeSession()?.status === 'running';
 
   return (
     <section
@@ -119,16 +116,6 @@ export function BottomPanel(props: {
             +
           </button>
         </div>
-
-        <Show when={activeRunning()}>
-          <button
-            type="button"
-            class="rf-terminal-stop"
-            onClick={() => props.onStopSession(props.activeSessionId)}
-          >
-            Stop
-          </button>
-        </Show>
       </div>
       <div class="rf-console__body">
         <For each={sessionIds()}>

@@ -287,6 +287,11 @@ export function EditorHost(props: EditorHostProps) {
       cursorBlinking: 'smooth',
       tabSize: 2,
       renderLineHighlight: 'all',
+      // No overview ruler: with the minimap off it only added a colored strip
+      // that long lines visually collided with at the right edge.
+      overviewRulerLanes: 0,
+      overviewRulerBorder: false,
+      hideCursorInOverviewRuler: true,
       scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
     });
 

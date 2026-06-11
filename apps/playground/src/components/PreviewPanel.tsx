@@ -25,6 +25,7 @@
  * same mechanism as ADR-0017's HMR client — so there's one refresh path.
  */
 import { type Accessor, createEffect, createSignal, onCleanup } from 'solid-js';
+import { copyToClipboard } from '../glue/clipboard.ts';
 import { Icon } from './icons.tsx';
 
 type Phase = 'starting' | 'live' | 'error';
@@ -43,6 +44,8 @@ export function PreviewPanel(props: {
   initialPort?: number;
   refreshKey?: number;
   onOpenTab?: (port: number) => void;
+  /** Toast bridge for copy-URL feedback. */
+  onNotify?: (message: string, tone: 'error' | 'success') => void;
 }) {
   const [port, setPort] = createSignal(props.initialPort ?? 3000);
   const [phase, setPhase] = createSignal<Phase>('starting');
@@ -65,6 +68,18 @@ export function PreviewPanel(props: {
     } else {
       setRetry((n) => n + 1); // Reload doubles as retry before we're live.
     }
+  }
+
+  // The displayed `localhost:<port>` host is virtual (no real TCP listener) —
+  // the real route is this origin's SW-routed /preview/<port>/ path. It only
+  // serves tabs the playground opens itself (SW routing scopes the port to
+  // its owner window, ADR-0040) — hence the ↗ hint in the toast.
+  // TODO(backlog: service-worker/cross-tab-preview-routing)
+  async function copyUrl(): Promise<void> {
+    const url = new URL(previewUrl(), globalThis.location?.href).href;
+    const ok = await copyToClipboard(url);
+    if (ok) props.onNotify?.('Preview URL copied — for a separate tab use ↗', 'success');
+    else props.onNotify?.('Could not copy the preview URL', 'error');
   }
 
   // Did the iframe commit a document at the preview URL? A committed same-origin
@@ -136,19 +151,25 @@ export function PreviewPanel(props: {
         <span class="rf-preview__dot" aria-hidden="true" />
         <span class="rf-preview__dot" aria-hidden="true" />
         <div class="rf-preview__address">
-          <Icon name="lock" size={11} />
-          <span class="rf-preview__host">
-            localhost:
-            <input
-              class="rf-preview__port"
-              type="number"
-              value={port()}
-              min={1}
-              max={65535}
-              onChange={(e) => setPort(Number.parseInt(e.currentTarget.value, 10) || 3000)}
-              aria-label="Preview port"
-            />
-          </span>
+          <button
+            type="button"
+            class="rf-preview__copy"
+            title="Copy preview URL"
+            aria-label="Copy preview URL"
+            onClick={() => void copyUrl()}
+          >
+            <Icon name="lock" size={11} />
+            <span class="rf-preview__host">localhost:</span>
+          </button>
+          <input
+            class="rf-preview__port"
+            type="number"
+            value={port()}
+            min={1}
+            max={65535}
+            onChange={(e) => setPort(Number.parseInt(e.currentTarget.value, 10) || 3000)}
+            aria-label="Preview port"
+          />
           <PhasePill phase={phase} />
         </div>
         <button

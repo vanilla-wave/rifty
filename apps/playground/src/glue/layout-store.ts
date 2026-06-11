@@ -31,10 +31,11 @@ export interface StorageLike {
 // recovery UI once the activity bar was removed.
 export const LAYOUT_KEY = 'rf.layout.v2';
 
-/* Soft Panels mockup sizes: files 232 · terminal 212 · preview 464. */
+/* Soft Panels mockup sizes (files 232 · preview 464); terminal raised to 280
+   over the mockup's 212 — more useful log depth (2026-06-11 feedback). */
 export const LAYOUT_DEFAULTS: LayoutState = {
   sidebarW: 232,
-  consoleH: 212,
+  consoleH: 280,
   previewW: 464,
   sidebarCollapsed: false,
   consoleCollapsed: false,
