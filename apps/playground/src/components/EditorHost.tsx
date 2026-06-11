@@ -326,7 +326,6 @@ export function EditorHost(props: EditorHostProps) {
     // E2E hook: update Monaco models and exercise the same onProgramChange path
     // without relying on platform-specific keyboard selection behaviour.
     container.addEventListener('rifty:set-program-source', setProgramSourceFromEvent);
-    globalThis.addEventListener('rifty:set-program-source', setProgramSourceFromEvent);
 
     props.registerApi({ openFile });
 
@@ -367,9 +366,6 @@ export function EditorHost(props: EditorHostProps) {
     writeTimers.clear();
     if (container && setProgramSourceFromEvent) {
       container.removeEventListener('rifty:set-program-source', setProgramSourceFromEvent);
-    }
-    if (setProgramSourceFromEvent) {
-      globalThis.removeEventListener('rifty:set-program-source', setProgramSourceFromEvent);
     }
     editor?.dispose();
     for (const m of models.values()) m.dispose();

@@ -71,9 +71,9 @@ test.describe('M10 — HMR over cross-realm bridge (ADR-0017 phase 1)', () => {
     // wrote.
     const marker = `hmr-${Date.now()}`;
     const editor = page.locator('[data-testid="editor"]');
-    await page.evaluate(
-      (value) => {
-        window.dispatchEvent(new CustomEvent('rifty:set-program-source', { detail: { value } }));
+    await editor.evaluate(
+      (node, value) => {
+        node.dispatchEvent(new CustomEvent('rifty:set-program-source', { detail: { value } }));
       },
       `document.getElementById('app').textContent = ${JSON.stringify(marker)};\n`,
     );

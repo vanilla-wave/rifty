@@ -551,15 +551,25 @@ function matchPreviewUrl(pathname) {
 function isPreviewFrameRequest(request) {
   return request.mode === "navigate" || request.destination !== "";
 }
-function matchPreviewReferrer(request) {
+function matchPreviewReferrer(request, origin) {
   if (!request.referrer) return null;
   const referrer = new URL(request.referrer);
+  if (referrer.origin !== origin) return null;
   return matchPreviewUrl(referrer.pathname);
 }
-async function matchPreviewClientUrl(scope, clientId) {
+async function matchPreviewClientUrl(scope, clientId, origin) {
   const client = await scope.clients.get(clientId);
   if (!client) return null;
-  return matchPreviewUrl(new URL(client.url).pathname);
+  const url = new URL(client.url);
+  if (url.origin !== origin) return null;
+  return matchPreviewUrl(url.pathname);
+}
+function getScopeOrigin(scope, requestUrl) {
+  const locationOrigin = scope.location?.origin;
+  if (locationOrigin) return locationOrigin;
+  const registrationScope = scope.registration?.scope;
+  if (registrationScope) return new URL(registrationScope).origin;
+  return requestUrl.origin;
 }
 var DEFAULT_READY_TIMEOUT_MS = 3e3;
 function createPreviewInterceptor(scope, hooks = {}) {
@@ -571,7 +581,9 @@ function createPreviewInterceptor(scope, hooks = {}) {
   const previewFramePorts = /* @__PURE__ */ new Map();
   const fetchHandler = (event) => {
     const url = new URL(event.request.url);
-    const directMatch = matchPreviewUrl(url.pathname);
+    const scopeOrigin = getScopeOrigin(scope, url);
+    const sameOrigin = url.origin === scopeOrigin;
+    const directMatch = sameOrigin ? matchPreviewUrl(url.pathname) : null;
     const frameRequest = isPreviewFrameRequest(event.request);
     let match = directMatch;
     let clientId = event.resultingClientId || event.clientId || null;
@@ -579,17 +591,17 @@ function createPreviewInterceptor(scope, hooks = {}) {
       const frameClientId = event.resultingClientId || event.clientId || null;
       if (frameClientId) previewFramePorts.set(frameClientId, directMatch.port);
       clientId = null;
-    } else if (!directMatch) {
+    } else if (!directMatch && sameOrigin) {
       const frameClientId = event.clientId || null;
       let port = frameClientId ? previewFramePorts.get(frameClientId) : void 0;
       if (port === void 0) {
-        port = matchPreviewReferrer(event.request)?.port;
+        port = matchPreviewReferrer(event.request, scopeOrigin)?.port;
         if (port !== void 0 && frameClientId) previewFramePorts.set(frameClientId, port);
       }
-      if (port === void 0 && frameRequest && frameClientId) {
+      if (port === void 0 && frameClientId) {
         event.respondWith(
           (async () => {
-            const clientMatch = await matchPreviewClientUrl(scope, frameClientId);
+            const clientMatch = await matchPreviewClientUrl(scope, frameClientId, scopeOrigin);
             if (!clientMatch) return fetch(event.request);
             previewFramePorts.set(frameClientId, clientMatch.port);
             const nextFrameClientId2 = event.resultingClientId || null;

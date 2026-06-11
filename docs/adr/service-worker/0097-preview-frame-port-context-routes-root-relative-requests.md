@@ -5,7 +5,8 @@ Date: 2026-06
 
 > TL;DR: once a preview iframe commits `/preview/<port>/`, the SW treats
 > same-origin root-relative requests from that iframe client as preview traffic
-> for the same port; this bumps `SW_ROUTING_VERSION` to `'2'`.
+> for the same port. This extends the routing contract carried by
+> `SW_ROUTING_VERSION === '2'`.
 
 ## Context
 
@@ -50,16 +51,17 @@ The SW keeps a preview-frame port context:
 4. If a browser reload creates a new iframe client id without preserving the
    prior mapping, recover the port from either the same-origin `Request.referrer`
    or the iframe `Client.url` when either points at `/preview/<port>/`.
-5. Forward the request through the existing owner path (`SW -> Page -> Worker`
-   today). This ADR does not flip the default to `WorkerOwnerBinding`; ADR-0043
-   and ADR-0046 leave that for A-023.
+5. Forward the request through the existing owner-binding path. ADR-0097 is
+   owner-binding agnostic: it preserves ADR-0123's direct worker owner selection
+   when a Worker has claimed `(ownerToken, port)`, and preserves the historical
+   window fallback otherwise.
 
 `routePreview` still receives the synthetic upstream URL
 `http://preview.local${pathname}${search}`. The change is only how a root-origin
 iframe request becomes associated with a preview port.
 
-This changes the routing contract pinned by ADR-0040, so
-`SW_ROUTING_VERSION` bumps from `'1'` to `'2'`. `SW_FRAME_VERSION` stays `'1'`
+This uses the routing contract pinned by ADR-0040 and already bumped to
+`SW_ROUTING_VERSION === '2'` by ADR-0123. `SW_FRAME_VERSION` stays `'1'`
 because no wire-frame field shape changes.
 
 The page's own root-origin fetches are not intercepted: without a known preview
@@ -76,10 +78,9 @@ iframe `clientId`, non-`/preview` URLs fall through normally.
   `SW_ROUTING_VERSION` differs. This is noisy by design; otherwise the page and
   SW could silently disagree about which origin-root requests are preview
   traffic.
-- The first iframe navigation still falls back to the first controlled window
-  owner for the legacy `FirstWindowOwnerBinding` path. Multi-window owner
-  precision remains the same as ADR-0077 until A-023 supplies direct worker
-  ownership.
+- Owner precision is unchanged by this ADR. With ADR-0123's default
+  `PortAwareOwnerBinding`, Worker-owned ports route directly to the claiming
+  Worker; legacy window-owned ports still use the window fallback path.
 - The preview-frame context is SW-local and memory-only. A reload reconstructs
   it from the next `/preview/<port>/` iframe navigation, or from the following
   root-relative request's same-origin `/preview/<port>/` referrer / iframe
@@ -89,9 +90,10 @@ iframe `clientId`, non-`/preview` URLs fall through normally.
 
 - ADR-0036 — preview URL addressing primitives.
 - ADR-0040 — `SW_ROUTING_VERSION` pins addressing and owner-fallback semantics.
-- ADR-0043 — Real Vite still uses `SW -> Page -> Worker`; direct SW-to-worker
-  routing is A-023, not this decision.
+- ADR-0043 — original Real Vite page-owned routing background.
 - ADR-0046 — `PreviewOwnerBinding` seam for future worker owners.
 - ADR-0077 — preview iframe requests route to the controlling window owner.
 - ADR-0078 — Real Vite templates intentionally use absolute entry URLs;
   dev-mode relative HTML is not the Real Vite contract.
+- ADR-0123 — port-aware owner routing and direct SW-to-worker dispatch for
+  Worker-owned preview ports.
