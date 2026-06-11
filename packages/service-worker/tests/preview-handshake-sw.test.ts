@@ -435,6 +435,258 @@ describe('SW-side handshake state machine', () => {
     interceptor.teardown();
   });
 
+  it('routes a copied top-level preview URL to the only Worker claiming that port', async () => {
+    const workerClient = makeMockClient('worker-A', 'worker');
+    const scope = makeMockScope([workerClient]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ports: [5174],
+        ownerToken: 'owner-A',
+      },
+      workerClient,
+    );
+
+    const responsePromise = scope.fetch('http://x/preview/5174/', {
+      requestMode: 'navigate',
+      destination: 'document',
+      resultingClientId: 'preview-tab',
+    });
+    await flushPreviewDispatch();
+    expect(workerClient.postMessage).toHaveBeenCalledTimes(1);
+    const call = workerClient.postMessage.mock.calls[0]!;
+    const message = call[0] as { request?: { port: number; url: string } };
+    expect(message.request?.port).toBe(5174);
+    expect(message.request?.url).toBe('http://preview.local/');
+    const replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'text/html' },
+      body: new TextEncoder().encode('<div id="app">direct preview</div>'),
+    });
+    expect(await (await responsePromise).text()).toContain('direct preview');
+    interceptor.teardown();
+  });
+
+  it('routes copied top-level preview subresources to the only Worker claiming that port', async () => {
+    const previewTab = makeMockClient('preview-tab');
+    const workerClient = makeMockClient('worker-A', 'worker');
+    const scope = makeMockScope([previewTab, workerClient]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ports: [5174],
+        ownerToken: 'owner-A',
+      },
+      workerClient,
+    );
+
+    const responsePromise = scope.fetch('http://x/preview/5174/src/main.js', {
+      requestMode: 'cors',
+      destination: 'script',
+      clientId: 'preview-tab',
+    });
+    await flushPreviewDispatch();
+    expect(previewTab.postMessage).not.toHaveBeenCalled();
+    expect(workerClient.postMessage).toHaveBeenCalledTimes(1);
+    const call = workerClient.postMessage.mock.calls[0]!;
+    const message = call[0] as { request?: { port: number; url: string } };
+    expect(message.request?.port).toBe(5174);
+    expect(message.request?.url).toBe('http://preview.local/src/main.js');
+    const replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'application/javascript' },
+      body: new TextEncoder().encode('document.getElementById("app").textContent = "direct"'),
+    });
+    expect(await (await responsePromise).text()).toContain('direct');
+    interceptor.teardown();
+  });
+
+  it('routes preview-prefixed requests from a known top-level preview client even without destination', async () => {
+    const previewTab = makeMockClient('preview-tab');
+    const workerClient = makeMockClient('worker-A', 'worker');
+    const scope = makeMockScope([previewTab, workerClient]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ports: [5174],
+        ownerToken: 'owner-A',
+      },
+      workerClient,
+    );
+
+    const documentResponse = scope.fetch('http://x/preview/5174/', {
+      requestMode: 'navigate',
+      destination: 'document',
+      resultingClientId: 'preview-tab',
+    });
+    await flushPreviewDispatch();
+    let call = workerClient.postMessage.mock.calls[0]!;
+    let replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'text/html' },
+      body: new TextEncoder().encode('<script type="module" src="src/main.js"></script>'),
+    });
+    expect((await documentResponse).status).toBe(200);
+
+    const scriptResponse = scope.fetch('http://x/preview/5174/src/main.js', {
+      requestMode: 'cors',
+      destination: '',
+      clientId: 'preview-tab',
+    });
+    await flushPreviewDispatch();
+    expect(previewTab.postMessage).not.toHaveBeenCalled();
+    expect(workerClient.postMessage).toHaveBeenCalledTimes(2);
+    call = workerClient.postMessage.mock.calls[1]!;
+    const message = call[0] as { request?: { port: number; url: string } };
+    expect(message.request?.port).toBe(5174);
+    expect(message.request?.url).toBe('http://preview.local/src/main.js');
+    replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'application/javascript' },
+      body: new TextEncoder().encode('document.getElementById("app").textContent = "direct"'),
+    });
+    expect(await (await scriptResponse).text()).toContain('direct');
+    interceptor.teardown();
+  });
+
+  it('routes copied top-level preview URLs through a ready playground window before an unready preview tab', async () => {
+    const previewTab = makeMockClient('preview-tab');
+    const pageClient = makeMockClient('page-client');
+    const scope = makeMockScope([previewTab, pageClient]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ownerToken: 'owner-A',
+      },
+      pageClient,
+    );
+
+    const responsePromise = scope.fetch('http://x/preview/5174/', {
+      requestMode: 'navigate',
+      destination: 'document',
+      resultingClientId: 'preview-tab',
+    });
+    await flushPreviewDispatch();
+    expect(previewTab.postMessage).not.toHaveBeenCalled();
+    expect(pageClient.postMessage).toHaveBeenCalledTimes(1);
+    const call = pageClient.postMessage.mock.calls[0]!;
+    const message = call[0] as { request?: { port: number; url: string } };
+    expect(message.request?.port).toBe(5174);
+    expect(message.request?.url).toBe('http://preview.local/');
+    const replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'text/html' },
+      body: new TextEncoder().encode('<div id="app">page proxy</div>'),
+    });
+    expect(await (await responsePromise).text()).toContain('page proxy');
+    interceptor.teardown();
+  });
+
+  it('does not route a copied top-level preview URL when multiple Workers claim the same port', async () => {
+    const workerA = makeMockClient('worker-A', 'worker');
+    const workerB = makeMockClient('worker-B', 'worker');
+    const scope = makeMockScope([workerA, workerB]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    for (const [worker, ownerToken] of [
+      [workerA, 'owner-A'],
+      [workerB, 'owner-B'],
+    ] as const) {
+      scope.postMessage(
+        {
+          type: SW_PREVIEW_READY,
+          frameVersion: SW_FRAME_VERSION,
+          routingVersion: SW_ROUTING_VERSION,
+          ports: [5174],
+          ownerToken,
+        },
+        worker,
+      );
+    }
+
+    const response = await scope.fetch('http://x/preview/5174/', {
+      requestMode: 'navigate',
+      destination: 'document',
+      resultingClientId: 'preview-tab',
+    });
+    expect(response.status).toBe(503);
+    expect(workerA.postMessage).not.toHaveBeenCalled();
+    expect(workerB.postMessage).not.toHaveBeenCalled();
+    interceptor.teardown();
+  });
+
+  it('does not route a copied top-level preview URL through an arbitrary ready window when multiple Workers claim the same port', async () => {
+    const previewTab = makeMockClient('preview-tab');
+    const pageA = makeMockClient('page-A');
+    const pageB = makeMockClient('page-B');
+    const workerA = makeMockClient('worker-A', 'worker');
+    const workerB = makeMockClient('worker-B', 'worker');
+    const scope = makeMockScope([previewTab, pageA, pageB, workerA, workerB]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    for (const [client, ownerToken, ports] of [
+      [pageA, 'owner-A', undefined],
+      [pageB, 'owner-B', undefined],
+      [workerA, 'owner-A', [5174]],
+      [workerB, 'owner-B', [5174]],
+    ] as const) {
+      scope.postMessage(
+        {
+          type: SW_PREVIEW_READY,
+          frameVersion: SW_FRAME_VERSION,
+          routingVersion: SW_ROUTING_VERSION,
+          ownerToken,
+          ...(ports ? { ports } : {}),
+        },
+        client,
+      );
+    }
+
+    const response = await scope.fetch('http://x/preview/5174/', {
+      requestMode: 'navigate',
+      destination: 'document',
+      resultingClientId: 'preview-tab',
+    });
+    expect(response.status).toBe(503);
+    expect(pageA.postMessage).not.toHaveBeenCalled();
+    expect(pageB.postMessage).not.toHaveBeenCalled();
+    expect(workerA.postMessage).not.toHaveBeenCalled();
+    expect(workerB.postMessage).not.toHaveBeenCalled();
+    interceptor.teardown();
+  });
+
   it('routes iframe document navigations to the controlling window, not resultingClientId', async () => {
     const owner = makeMockClient('window-A');
     const iframe = makeMockClient('iframe-client');

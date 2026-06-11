@@ -33,22 +33,35 @@ Default preview routing becomes port-aware and owner-scoped:
   `(ownerToken, port)` route key.
 - If no matching Worker owns the requested port, routing falls back to the
   historical window bridge.
+- A copied top-level `/preview/<port>/` URL has no controlling playground window
+  owner token, and the browser may enumerate the new preview tab before the
+  playground shell. For that case, no-clientId window fallback prefers an
+  already-ready window. The binding may also route directly to a Worker when
+  exactly one live Worker claims the port. If more than one Worker claims that
+  port, the URL is ambiguous and routing refuses to guess.
 - Worker goodbye frames that name `ports` drop only those route keys; a full
   goodbye still drops the owner.
 - The page-side Real Vite bridge remains for compatibility/version-skew and
   legacy window-owned paths.
 
 `SW_FRAME_VERSION` stays `1`: `ownerToken` and `ports` are additive optional
-fields. `SW_ROUTING_VERSION` bumps to `2` because owner selection semantics
-changed on the wire: peers must agree that Worker port ownership is scoped by
-the controlling window owner token.
+fields. `SW_ROUTING_VERSION` first bumps to `2` because owner selection
+semantics changed on the wire: peers must agree that Worker port ownership is
+scoped by the controlling window owner token. The copied-top-level preview
+fallback refinement bumps it again to `3` because peers must also agree on the
+ready-window preference and unambiguous single-Worker fallback.
 
 ## Consequences
 
 - Positive: Real Vite preview can route `SW -> Worker` directly.
 - Positive: same-port Workers in different playground windows cannot steal one
   another's preview requests.
+- Positive: a copied preview URL works in a standalone tab for the common
+  single-owner / ready-shell case without putting owner tokens in user-visible
+  URLs.
 - Positive: page-owned Dev Mode keeps working via window fallback.
+- Negative: a bare top-level preview URL remains intentionally ambiguous when
+  two live Workers claim the same port under different owner tokens.
 - Negative: two bridge paths coexist until the page proxy is retired.
 - Tests pin Worker-wins-with-same-token, cross-owner port isolation, window
   fallback, iframe nav/subresource owner routing, partial Worker goodbye, and

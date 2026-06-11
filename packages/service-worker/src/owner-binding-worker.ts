@@ -9,7 +9,7 @@
  *   {
  *     type: 'rifty:preview:ready',
  *     frameVersion: '1',
- *     routingVersion: '2',
+ *     routingVersion: '3',
  *     ownerToken: '...',     // page owner scope that spawned this Worker
  *     ports: [3000, 5173]   // additive optional — default []
  *   }
@@ -74,6 +74,11 @@ export interface WorkerOwnerBindingOptions {
   readonly logger?: WorkerOwnerBindingLogger;
 }
 
+export type WorkerPortOwnerResolution =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'unique'; readonly client: Client }
+  | { readonly kind: 'multiple' };
+
 interface ReadyWaiter {
   resolve(outcome: ReadinessOutcome): void;
 }
@@ -116,6 +121,13 @@ function resolveWaiters(
 
 function routeKey(ownerToken: string, port: number): string {
   return `${ownerToken}\0${port}`;
+}
+
+function routeKeyPort(key: string): number | null {
+  const i = key.lastIndexOf('\0');
+  if (i === -1) return null;
+  const port = Number.parseInt(key.slice(i + 1), 10);
+  return Number.isInteger(port) ? port : null;
 }
 
 function dropOwner(state: WorkerBindingState, ownerId: string): void {
@@ -181,6 +193,31 @@ export class WorkerOwnerBinding implements PreviewOwnerBinding {
       return null;
     }
     return client as Client;
+  }
+
+  async resolvePortOwners(
+    scope: ServiceWorkerGlobalScope,
+    port: number,
+  ): Promise<WorkerPortOwnerResolution> {
+    const state = this.#states.get(scope);
+    if (!state) return { kind: 'none' };
+    const candidateIds = new Set<string>();
+    for (const [key, ownerId] of state.portOwners) {
+      if (routeKeyPort(key) === port) candidateIds.add(ownerId);
+    }
+    const live: Client[] = [];
+    for (const ownerId of candidateIds) {
+      const client = (await scope.clients.get(ownerId)) ?? null;
+      if (client) {
+        live.push(client as Client);
+      } else {
+        dropOwner(state, ownerId);
+        resolveWaiters(state, ownerId, 'gone');
+      }
+    }
+    if (live.length === 0) return { kind: 'none' };
+    if (live.length === 1) return { kind: 'unique', client: live[0]! };
+    return { kind: 'multiple' };
   }
 
   subscribeReadiness(scope: ServiceWorkerGlobalScope): ReadinessSubscription {

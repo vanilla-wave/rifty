@@ -44,8 +44,20 @@ first, reads that window's `ownerToken`, asks `WorkerOwnerBinding` for a Worker
 that claimed the matching `(ownerToken, port)`, then falls back to
 `FirstWindowOwnerBinding` for page-owned previews. `FirstWindowOwnerResolver`
 still documents the historical window path: prefer `FetchEvent.clientId`, then
-fall back to the first controlled window with a one-shot `console.warn`. See
-`owner-resolver.ts` and ADR-0031 for the fallback rationale.
+fall back to a controlled window with a one-shot `console.warn`. When the first
+fallback candidate is not ready, the binding prefers an already-ready window so a
+copied top-level preview tab does not steal its own preview request from the
+playground shell. See `owner-resolver.ts` and ADR-0031 for the fallback
+rationale.
+
+Copied top-level preview URLs (`/preview/<port>/` opened outside the playground
+shell) may have no controlling window owner token, or the browser may enumerate
+the new preview tab before the playground shell. For that case, the window
+binding prefers a ready playground window; the default binding may also route
+directly to a Worker when exactly one live Worker claims the requested port. If
+multiple Workers claim the same port under different owner tokens, the URL is
+ambiguous and the SW refuses to pick a winner, preserving ADR-0123 multi-window
+isolation.
 
 ### Ready-clients registry / handshake
 
@@ -80,15 +92,17 @@ per-field semantics.
 context that routes root-relative iframe requests to the same preview port
 by iframe `clientId`, same-origin `/preview/<port>/` referrer, or iframe
 `Client.url`, and (c) the owner-fallback and owner-scoping rules in the
-preview owner bindings. Bumping requires: changes to the URL regex shape, the
-synthetic host literal, the preview-frame port-context rule, the resolver
-fallback order, the Worker claim scope, or the mismatch / one-shot-warn dedup
-key shape.
+preview owner bindings, including the unambiguous Worker fallback for copied
+top-level preview URLs and the ready-window preference for no-clientId fallback.
+Bumping requires: changes to the URL regex shape, the synthetic host literal,
+the preview-frame port-context rule, the resolver fallback order, the Worker
+claim scope, or the mismatch / one-shot-warn dedup key shape.
 
 ADR-0040 is the source-of-truth for the split; ADR-0031 is the
 predecessor that established the per-frame contract; ADR-0016 covers
 the broader "TS source-of-truth + bundled `sw.js`" decision. ADR-0097 records
-the `SW_ROUTING_VERSION` `'2'` bump for preview-frame root-relative routing.
+the preview-frame root-relative routing contract; ADR-0123 records the owner
+routing bumps through `SW_ROUTING_VERSION` `'3'`.
 
 The protocol does not attempt cross-version compatibility — a version
 mismatch between an old page and a fresh SW (or vice-versa) refuses

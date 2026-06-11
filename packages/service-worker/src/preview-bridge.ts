@@ -222,14 +222,17 @@ export function createPreviewInterceptor(
     const sameOrigin = url.origin === scopeOrigin;
     const directMatch = sameOrigin ? matchPreviewUrl(url.pathname) : null;
     const frameRequest = isPreviewFrameRequest(event.request);
+    const knownPreviewClient = event.clientId ? previewFramePorts.has(event.clientId) : false;
     let match = directMatch;
     let clientId = event.resultingClientId || event.clientId || null;
 
-    if (directMatch && frameRequest) {
+    if (directMatch && (frameRequest || knownPreviewClient)) {
       const frameClientId = event.resultingClientId || event.clientId || null;
       if (frameClientId) previewFramePorts.set(frameClientId, directMatch.port);
       // ADR-0097 extends ADR-0074: remember the iframe's port context, then
-      // route this navigation through the controlling window.
+      // route this navigation through the controlling window. Some browsers do
+      // not expose `request.destination` for later module requests, so a known
+      // preview client id also keeps preview-prefixed subresources on this path.
       clientId = null;
     } else if (!directMatch && sameOrigin) {
       const frameClientId = event.clientId || null;
@@ -291,8 +294,9 @@ export function createPreviewInterceptor(
 
 /**
  * Install the SW-side fetch listener. Call inside a Service Worker after
- * `activate`. The listener intercepts `/preview/<port>/*` requests and asks
- * the first registered, ready window client to handle them.
+ * `activate`. The listener intercepts `/preview/<port>/*` requests, resolves
+ * their owner through the default port-aware binding, then forwards each request
+ * to a ready Worker or window owner.
  *
  * Returns a teardown function — useful in tests.
  */

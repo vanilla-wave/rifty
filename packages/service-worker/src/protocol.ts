@@ -44,9 +44,11 @@ export const SW_FRAME_VERSION = '1';
  *     `PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`, the shape of
  *     `synthesizePreviewUrl(path)`, and the shape of `parsePreviewPath`.
  *   - The owner-fallback and owner-scoping rules in the preview owner bindings:
- *     prefer `FetchEvent.clientId`, fall back to the first controlled window,
- *     and let Worker owners win only when `(ownerToken, port)` matches the
- *     controlling window. The warn/mismatch dedup key shapes are part of the
+ *     prefer `FetchEvent.clientId`, fall back to a controlled window, prefer an
+ *     already-ready window for no-clientId copied preview URLs, and let Worker
+ *     owners win either when `(ownerToken, port)` matches the controlling
+ *     window or when a copied top-level preview URL has exactly one live Worker
+ *     owner for that port. The warn/mismatch dedup key shapes are part of the
  *     contract.
  *   - Preview-frame port context in `./preview-bridge.ts` (ADR-0097): once an
  *     iframe commits `/preview/<port>/`, same-origin root requests from that
@@ -61,7 +63,7 @@ export const SW_FRAME_VERSION = '1';
  * Does NOT cover wire-frame data shapes — those are pinned by
  * {@link SW_FRAME_VERSION}.
  */
-export const SW_ROUTING_VERSION = '2';
+export const SW_ROUTING_VERSION = '3';
 
 export const SW_PING = '__rifty_sw_ping__';
 export const SW_PONG = '__rifty_sw_pong__';

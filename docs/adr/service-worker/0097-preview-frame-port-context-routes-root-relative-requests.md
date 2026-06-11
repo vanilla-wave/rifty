@@ -6,7 +6,7 @@ Date: 2026-06
 > TL;DR: once a preview iframe commits `/preview/<port>/`, the SW treats
 > same-origin root-relative requests from that iframe client as preview traffic
 > for the same port. This extends the routing contract carried by
-> `SW_ROUTING_VERSION === '2'`.
+> `SW_ROUTING_VERSION`.
 
 ## Context
 
@@ -60,9 +60,10 @@ The SW keeps a preview-frame port context:
 `http://preview.local${pathname}${search}`. The change is only how a root-origin
 iframe request becomes associated with a preview port.
 
-This uses the routing contract pinned by ADR-0040 and already bumped to
-`SW_ROUTING_VERSION === '2'` by ADR-0123. `SW_FRAME_VERSION` stays `'1'`
-because no wire-frame field shape changes.
+This uses the routing contract pinned by ADR-0040. ADR-0123 bumped
+`SW_ROUTING_VERSION` to `'2'` for owner-scoped Worker routing, and the later
+copied-top-level preview fallback refinement bumps it to `'3'`. `SW_FRAME_VERSION`
+stays `'1'` because no wire-frame field shape changes.
 
 The page's own root-origin fetches are not intercepted: without a known preview
 iframe `clientId`, non-`/preview` URLs fall through normally.

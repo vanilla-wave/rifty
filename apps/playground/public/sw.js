@@ -15,7 +15,7 @@ function parsePreviewPath(path) {
 
 // ../../packages/service-worker/src/protocol.ts
 var SW_FRAME_VERSION = "1";
-var SW_ROUTING_VERSION = "2";
+var SW_ROUTING_VERSION = "3";
 var SW_PING = "__rifty_sw_ping__";
 var SW_PONG = "__rifty_sw_pong__";
 var SW_PREVIEW_READY = "rifty:preview:ready";
@@ -165,16 +165,25 @@ function createReadyClientsRegistry(logger = defaultLogger) {
 var FirstWindowOwnerBinding = class {
   #resolver;
   #logger;
+  #readiness = /* @__PURE__ */ new WeakMap();
   constructor(opts = {}) {
     this.#resolver = opts.resolver ?? new FirstWindowOwnerResolver();
     this.#logger = opts.logger;
   }
-  // NOT `async`: returning the resolver promise directly preserves the
-  // pre-ADR-0046 await-unwrap timing. An `async` wrapper adds one extra
-  // microtask turn, which the handshake tests observe as a missed dispatch
-  // within their fixed microtask budget.
-  resolveOwner(scope, request, clientId, _port) {
-    return this.#resolver.resolveOwner(scope, request, clientId);
+  async resolveOwner(scope, request, clientId, _port) {
+    const owner = await this.#resolver.resolveOwner(scope, request, clientId);
+    if (clientId || !owner) return owner;
+    const readiness = this.#readiness.get(scope);
+    if (!readiness || readiness.isReady(owner.id) || readiness.isMismatched(owner.id)) {
+      return owner;
+    }
+    const windows = await scope.clients.matchAll({
+      type: "window",
+      includeUncontrolled: false
+    });
+    return windows.find(
+      (candidate) => (!("type" in candidate) || candidate.type === "window") && readiness.isReady(candidate.id)
+    ) ?? owner;
   }
   subscribeReadiness(scope) {
     const registry = this.#logger !== void 0 ? createReadyClientsRegistry(this.#logger) : createReadyClientsRegistry();
@@ -189,27 +198,31 @@ var FirstWindowOwnerBinding = class {
       registry.handleMessage(sourceId, data);
     };
     scope.addEventListener("message", messageHandler);
+    const readiness = {
+      isReady: (id) => registry.isReady(id),
+      isMismatched: (id) => registry.isMismatched(id),
+      ownerToken: (id) => registry.ownerToken(id),
+      // NOT `async`: returning the registry promise directly preserves
+      // pre-ADR-0046 microtask timing; an `async` wrapper inserts an extra
+      // await-unwrap tick between the ready frame resolving the waiter and
+      // `routePreview` resuming — observable to handshake tests that gate on
+      // a fixed number of microtask turns.
+      //
+      // The window registry has no separate "gone" signal: a window teardown
+      // arrives as a goodbye, which {@link createReadyClientsRegistry}
+      // surfaces as `'timeout'` for backward compat. The contract reserves
+      // `'gone'` for explicit owner-departed signals, which the window binding
+      // can never distinguish from a plain timeout. Worker bindings do emit it.
+      waitForReady: (id, timeoutMs) => registry.waitForReady(id, timeoutMs),
+      nextRequestId: () => registry.nextRequestId()
+    };
+    this.#readiness.set(scope, readiness);
+    const readinessByScope = this.#readiness;
     return {
-      readiness: {
-        isReady: (id) => registry.isReady(id),
-        isMismatched: (id) => registry.isMismatched(id),
-        ownerToken: (id) => registry.ownerToken(id),
-        // NOT `async`: returning the registry promise directly preserves
-        // pre-ADR-0046 microtask timing; an `async` wrapper inserts an extra
-        // await-unwrap tick between the ready frame resolving the waiter and
-        // `routePreview` resuming — observable to handshake tests that gate on
-        // a fixed number of microtask turns.
-        //
-        // The window registry has no separate "gone" signal: a window teardown
-        // arrives as a goodbye, which {@link createReadyClientsRegistry}
-        // surfaces as `'timeout'` for backward compat. The contract reserves
-        // `'gone'` for explicit owner-departed signals, which the window binding
-        // can never distinguish from a plain timeout. Worker bindings do emit it.
-        waitForReady: (id, timeoutMs) => registry.waitForReady(id, timeoutMs),
-        nextRequestId: () => registry.nextRequestId()
-      },
+      readiness,
       teardown() {
         scope.removeEventListener("message", messageHandler);
+        readinessByScope.delete(scope);
       }
     };
   }
@@ -240,6 +253,12 @@ function resolveWaiters(state, ownerId, outcome) {
 }
 function routeKey(ownerToken, port) {
   return `${ownerToken}\0${port}`;
+}
+function routeKeyPort(key) {
+  const i = key.lastIndexOf("\0");
+  if (i === -1) return null;
+  const port = Number.parseInt(key.slice(i + 1), 10);
+  return Number.isInteger(port) ? port : null;
 }
 function dropOwner(state, ownerId) {
   state.ready.delete(ownerId);
@@ -287,6 +306,27 @@ var WorkerOwnerBinding = class {
       return null;
     }
     return client;
+  }
+  async resolvePortOwners(scope, port) {
+    const state = this.#states.get(scope);
+    if (!state) return { kind: "none" };
+    const candidateIds = /* @__PURE__ */ new Set();
+    for (const [key, ownerId] of state.portOwners) {
+      if (routeKeyPort(key) === port) candidateIds.add(ownerId);
+    }
+    const live = [];
+    for (const ownerId of candidateIds) {
+      const client = await scope.clients.get(ownerId) ?? null;
+      if (client) {
+        live.push(client);
+      } else {
+        dropOwner(state, ownerId);
+        resolveWaiters(state, ownerId, "gone");
+      }
+    }
+    if (live.length === 0) return { kind: "none" };
+    if (live.length === 1) return { kind: "unique", client: live[0] };
+    return { kind: "multiple" };
   }
   subscribeReadiness(scope) {
     const state = createState();
@@ -396,9 +436,17 @@ var PortAwareOwnerBinding = class {
     this.#worker = new WorkerOwnerBinding(opts.worker);
   }
   async resolveOwner(scope, request, clientId, port) {
-    const window = await this.#window.resolveOwner(scope, request, clientId, port);
+    if (clientId === null) {
+      const portOwners = await this.#worker.resolvePortOwners(scope, port);
+      if (portOwners.kind === "multiple") return null;
+      if (portOwners.kind === "unique") {
+        this.#ownerKinds.set(portOwners.client.id, "worker");
+        return portOwners.client;
+      }
+    }
+    const resolvedWindow = await this.#window.resolveOwner(scope, request, clientId, port);
+    const window = resolvedWindow && "type" in resolvedWindow && resolvedWindow.type !== "window" ? null : resolvedWindow;
     if (window) {
-      if ("type" in window && window.type !== "window") return null;
       this.#ownerKinds.set(window.id, "window");
       const ownerToken = this.#signals.get(scope)?.window.ownerToken?.(window.id);
       if (ownerToken) {
@@ -585,9 +633,10 @@ function createPreviewInterceptor(scope, hooks = {}) {
     const sameOrigin = url.origin === scopeOrigin;
     const directMatch = sameOrigin ? matchPreviewUrl(url.pathname) : null;
     const frameRequest = isPreviewFrameRequest(event.request);
+    const knownPreviewClient = event.clientId ? previewFramePorts.has(event.clientId) : false;
     let match = directMatch;
     let clientId = event.resultingClientId || event.clientId || null;
-    if (directMatch && frameRequest) {
+    if (directMatch && (frameRequest || knownPreviewClient)) {
       const frameClientId = event.resultingClientId || event.clientId || null;
       if (frameClientId) previewFramePorts.set(frameClientId, directMatch.port);
       clientId = null;
