@@ -12,4 +12,4 @@ Worked around playground-locally: `real-vite-bootstrap` ends with `await new Pro
 ## Options / Next
 Provisional: keep the never-resolving-promise keep-alive (off kernel public surface). Proper fix: kernel natively supports server-shaped processes — a `spawn` flag or explicit `process`-driven exit/shutdown signal — so a server stays alive until explicit shutdown and keeps a graceful-shutdown hook. Two consumers strengthen the case; no longer a one-off.
 ## Reversibility
-IRREVERSIBLE — kernel public behaviour. Its own ADR when taken up (records the spawn-flag-vs-shutdown-signal options + trade-offs). Milestone M11/M12.
+IRREVERSIBLE — kernel public behaviour. Its own ADR when taken up (records the spawn-flag-vs-shutdown-signal options + trade-offs). Milestone M11.
