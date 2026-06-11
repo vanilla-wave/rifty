@@ -10,7 +10,8 @@ Monorepo + playground + Worker + SW + cross-origin isolation. ADR-0001, ADR-0002
 ## M1 — JS Execution
 
 **DONE.**
-Worker REPL, console capture/streaming, `.reset` respawn, capabilities detection.
+Initial JS worker runner, console capture/streaming, resettable worker lifecycle,
+capabilities detection.
 
 ## M2 — Modules
 
@@ -46,7 +47,7 @@ open:
 ## M7 — Network
 
 **PARTIAL.**
-`net`/`http` servers, `IncomingMessage` Readable, `http.request` over fetch, port registry + SW preview round-trip, chunked streaming; real `express@4` runs end-to-end. ADR-0010, ADR-0017, ADR-0048, ADR-0096.
+`net`/`http` servers, `IncomingMessage` Readable, `http.request` over fetch, port registry + SW preview round-trip, chunked streaming; real `express@4` runs end-to-end. ADR-0010, ADR-0017, ADR-0048, ADR-0123.
 open:
 - `docs/backlog/net/real-tcp-socket-semantics` — real-TCP `net.Socket` (HTTP-only today).
 - `docs/backlog/net/cross-realm-websocket-bridge` — iframe HMR client over a real `WebSocket`.
@@ -80,7 +81,7 @@ open:
 ## M11 — post-M10 follow-ups
 
 **PARTIAL.**
-Container for M6/M8/M9/M10 tech debt, not a new work phase. Landed: Vite-in-Worker (ADR-0043), nested install (ADR-0042), fork-IPC via Worker (ADR-0045), esbuild.wasm vendoring (ADR-0047), native-dep policy (ADR-0051), port-aware SW preview routing (ADR-0096).
+Container for M6/M8/M9/M10 tech debt, not a new work phase. Landed: Vite-in-Worker (ADR-0043), nested install (ADR-0042), fork-IPC via Worker (ADR-0045), esbuild.wasm vendoring (ADR-0047), native-dep policy (ADR-0051), port-aware SW preview routing (ADR-0123).
 open:
 - `docs/backlog/net/streaming-cross-realm-preview` — buffered→streaming upgrade.
 - `docs/backlog/npm-client/prod-npm-registry-proxy` — lockfile reuse + prod proxy residue.

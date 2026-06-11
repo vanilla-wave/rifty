@@ -1,4 +1,4 @@
-# ADR 0097: Terminal line-editor model
+# ADR 0096: Terminal line-editor model
 
 Status: Accepted
 Date: 2026-06-10

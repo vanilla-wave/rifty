@@ -41,6 +41,12 @@ export interface RealViteOptions {
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
+function createPreviewOwnerToken(): string {
+  const randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto);
+  if (randomUUID) return randomUUID();
+  return `owner-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
 /**
  * Spawn the Real Vite worker realm and wire the cross-realm bridges.
  *
@@ -53,6 +59,7 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
   const root = opts.root ?? '/workspace';
   const entryRel = opts.entry ?? template.entry.relativePath;
   const port = opts.port ?? template.defaultPort;
+  const ownerToken = createPreviewOwnerToken();
   const entryPath = `${root}${entryRel}`;
   const log = opts.onLog ?? (() => {});
 
@@ -80,6 +87,7 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
         RIFTY_RFV_ROOT: root,
         RIFTY_RFV_ENTRY: entryRel,
         RIFTY_RFV_TEMPLATE: template.id,
+        RIFTY_PREVIEW_OWNER_TOKEN: ownerToken,
       },
       cwd: root,
     },
@@ -135,7 +143,7 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
 
   // ADR-0086: pass the typed handle so SW requests take the struct fast-path
   // (skips the page→worker Request rebuild + arrayBuffer drain).
-  const tearSwBridge = mountPlaygroundPreviewBridge(previewBridge);
+  const tearSwBridge = mountPlaygroundPreviewBridge(previewBridge, { ownerToken });
 
   log(`[real-vite] page-side preview-port bridge ready (port ${port})\n`);
 

@@ -267,7 +267,7 @@ describe('main-thread setupPreviewBridge handshake', () => {
     }
   });
 
-  it('includes claimed ports on ready, heartbeat, controllerchange, and goodbye', () => {
+  it('includes claimed ports and owner token on ready, heartbeat, controllerchange, and goodbye', () => {
     vi.useFakeTimers();
     const env = installNavigator();
     try {
@@ -278,13 +278,14 @@ describe('main-thread setupPreviewBridge handshake', () => {
           headers: {},
           body: null,
         }),
-        { ports: [5174] },
+        { ports: [5174], ownerToken: 'owner-A' },
       );
       expect(env.controller.postMessage).toHaveBeenLastCalledWith({
         type: SW_PREVIEW_READY,
         frameVersion: SW_FRAME_VERSION,
         routingVersion: SW_ROUTING_VERSION,
         ports: [5174],
+        ownerToken: 'owner-A',
       });
       vi.advanceTimersByTime(1_000);
       expect(env.controller.postMessage).toHaveBeenLastCalledWith({
@@ -292,6 +293,7 @@ describe('main-thread setupPreviewBridge handshake', () => {
         frameVersion: SW_FRAME_VERSION,
         routingVersion: SW_ROUTING_VERSION,
         ports: [5174],
+        ownerToken: 'owner-A',
       });
       env.listeners.controllerchange?.[0]?.({});
       expect(env.controller.postMessage).toHaveBeenLastCalledWith({
@@ -299,6 +301,7 @@ describe('main-thread setupPreviewBridge handshake', () => {
         frameVersion: SW_FRAME_VERSION,
         routingVersion: SW_ROUTING_VERSION,
         ports: [5174],
+        ownerToken: 'owner-A',
       });
       teardown();
       expect(env.controller.postMessage).toHaveBeenLastCalledWith({
@@ -306,6 +309,7 @@ describe('main-thread setupPreviewBridge handshake', () => {
         frameVersion: SW_FRAME_VERSION,
         routingVersion: SW_ROUTING_VERSION,
         ports: [5174],
+        ownerToken: 'owner-A',
       });
     } finally {
       env.restore();

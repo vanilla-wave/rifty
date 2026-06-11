@@ -242,6 +242,7 @@ function workerFixture(opts?: WorkerOwnerBindingOptions): BindingFixture {
             frameVersion: SW_FRAME_VERSION,
             routingVersion: SW_ROUTING_VERSION,
             ports: [3000],
+            ownerToken: 'owner-A',
           },
           owner,
         );
@@ -252,6 +253,7 @@ function workerFixture(opts?: WorkerOwnerBindingOptions): BindingFixture {
             frameVersion: SW_FRAME_VERSION,
             routingVersion: SW_ROUTING_VERSION,
             ports: [3000],
+            ownerToken: 'owner-A',
           },
           owner,
         );
@@ -262,6 +264,7 @@ function workerFixture(opts?: WorkerOwnerBindingOptions): BindingFixture {
             frameVersion: '999',
             routingVersion: SW_ROUTING_VERSION,
             ports: [3000],
+            ownerToken: 'owner-A',
           },
           owner,
         );
@@ -274,7 +277,7 @@ function workerFixture(opts?: WorkerOwnerBindingOptions): BindingFixture {
         // For workers, the fetch event has no clientId — the SW sees a
         // request for /preview/3000/* and asks the binding "who owns
         // port 3000?". The port is the routing key.
-        resolveContext: { clientId: null, port: 3000 },
+        resolveContext: { clientId: 'owner-A', port: 3000 },
         postReady: ready,
         postGoodbye: goodbye,
         postMismatchedReady: mismatch,
@@ -404,7 +407,7 @@ describe('WorkerOwnerBinding — worker-specific lifecycle traps', () => {
     const owner = await env.binding.resolveOwner(
       scope as unknown as ServiceWorkerGlobalScope,
       new Request('http://x/preview/3000/'),
-      null,
+      'owner-A',
       3000,
     );
     expect(owner).toBeNull();
@@ -431,6 +434,7 @@ describe('WorkerOwnerBinding — worker-specific lifecycle traps', () => {
         frameVersion: SW_FRAME_VERSION,
         routingVersion: SW_ROUTING_VERSION,
         ports: [3000],
+        ownerToken: 'owner-A',
       },
       worker2,
     );
@@ -438,7 +442,7 @@ describe('WorkerOwnerBinding — worker-specific lifecycle traps', () => {
     const owner = await env.binding.resolveOwner(
       scope as unknown as ServiceWorkerGlobalScope,
       new Request('http://x/preview/3000/'),
-      null,
+      'owner-A',
       3000,
     );
     expect(owner?.id).toBe('worker-B');
@@ -465,23 +469,66 @@ describe('WorkerOwnerBinding — worker-specific lifecycle traps', () => {
         frameVersion: SW_FRAME_VERSION,
         routingVersion: SW_ROUTING_VERSION,
         ports: [5173],
+        ownerToken: 'owner-A',
       },
       workerB,
     );
     const own3000 = await env.binding.resolveOwner(
       scope as unknown as ServiceWorkerGlobalScope,
       new Request('http://x/preview/3000/'),
-      null,
+      'owner-A',
       3000,
     );
     const own5173 = await env.binding.resolveOwner(
       scope as unknown as ServiceWorkerGlobalScope,
       new Request('http://x/preview/5173/'),
-      null,
+      'owner-A',
       5173,
     );
     expect(own3000?.id).toBe(env.ownerId);
     expect(own5173?.id).toBe('worker-B');
+    env.subscription.teardown();
+  });
+
+  it('drops only the ports named by a worker goodbye frame', async () => {
+    const scope = makeMockScope([]);
+    const env = workerFixture().build(scope);
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ports: [3000, 5173],
+        ownerToken: 'owner-A',
+      },
+      env.owner,
+    );
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_GOODBYE,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ports: [3000],
+        ownerToken: 'owner-A',
+      },
+      env.owner,
+    );
+
+    const dropped = await env.binding.resolveOwner(
+      scope as unknown as ServiceWorkerGlobalScope,
+      new Request('http://x/preview/3000/'),
+      'owner-A',
+      3000,
+    );
+    const kept = await env.binding.resolveOwner(
+      scope as unknown as ServiceWorkerGlobalScope,
+      new Request('http://x/preview/5173/'),
+      'owner-A',
+      5173,
+    );
+
+    expect(dropped).toBeNull();
+    expect(kept?.id).toBe(env.ownerId);
     env.subscription.teardown();
   });
 
@@ -504,7 +551,7 @@ describe('WorkerOwnerBinding — worker-specific lifecycle traps', () => {
     const owner = await env.binding.resolveOwner(
       scope as unknown as ServiceWorkerGlobalScope,
       new Request('http://x/preview/3000/'),
-      null,
+      'owner-A',
       3000,
     );
     expect(owner).toBeNull();

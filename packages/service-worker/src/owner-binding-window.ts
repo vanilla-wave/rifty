@@ -69,7 +69,7 @@ export class FirstWindowOwnerBinding implements PreviewOwnerBinding {
       // both filter ready/goodbye frames keyed by `event.source.id`.
       const ev = event as ExtendableMessageEvent;
       const data = ev.data as
-        | { type?: string; frameVersion?: string; routingVersion?: string }
+        | { type?: string; frameVersion?: string; routingVersion?: string; ownerToken?: string }
         | null
         | undefined;
       if (!data || typeof data !== 'object' || typeof data.type !== 'string') return;
@@ -86,6 +86,7 @@ export class FirstWindowOwnerBinding implements PreviewOwnerBinding {
       readiness: {
         isReady: (id): boolean => registry.isReady(id),
         isMismatched: (id): boolean => registry.isMismatched(id),
+        ownerToken: (id): string | undefined => registry.ownerToken(id),
         // NOT `async`: returning the registry promise directly preserves
         // pre-ADR-0046 microtask timing; an `async` wrapper inserts an extra
         // await-unwrap tick between the ready frame resolving the waiter and

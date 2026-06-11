@@ -10,4 +10,9 @@ describe('PreviewPanel refresh contract', () => {
     expect(source).toContain('props.refreshKey;');
     expect(source).not.toContain('?rf=');
   });
+
+  it('passes the manually selected preview port to the open-tab callback', () => {
+    expect(source).toContain('onOpenTab?: (port: number) => void');
+    expect(source).toContain('props.onOpenTab(port());');
+  });
 });

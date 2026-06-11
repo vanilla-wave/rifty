@@ -15,7 +15,7 @@ function parsePreviewPath(path) {
 
 // ../../packages/service-worker/src/protocol.ts
 var SW_FRAME_VERSION = "1";
-var SW_ROUTING_VERSION = "1";
+var SW_ROUTING_VERSION = "2";
 var SW_PING = "__rifty_sw_ping__";
 var SW_PONG = "__rifty_sw_pong__";
 var SW_PREVIEW_READY = "rifty:preview:ready";
@@ -57,6 +57,7 @@ function createReadyClientsRegistry(logger = defaultLogger) {
   const waiters = /* @__PURE__ */ new Map();
   const mismatched = /* @__PURE__ */ new Set();
   const warned = /* @__PURE__ */ new Set();
+  const ownerTokens = /* @__PURE__ */ new Map();
   let nextRequestIdCounter = 1;
   function markReady(id) {
     ready.add(id);
@@ -68,6 +69,7 @@ function createReadyClientsRegistry(logger = defaultLogger) {
   }
   function markGoodbye(id) {
     ready.delete(id);
+    ownerTokens.delete(id);
     const waiterSet = waiters.get(id);
     if (waiterSet) {
       for (const w of waiterSet) {
@@ -89,6 +91,9 @@ function createReadyClientsRegistry(logger = defaultLogger) {
     },
     isMismatched(id) {
       return mismatched.has(id);
+    },
+    ownerToken(id) {
+      return ownerTokens.get(id);
     },
     waitForReady(id, timeoutMs) {
       if (mismatched.has(id)) return Promise.resolve("mismatch");
@@ -142,6 +147,9 @@ function createReadyClientsRegistry(logger = defaultLogger) {
         return;
       }
       if (type === SW_PREVIEW_READY) {
+        if (typeof data.ownerToken === "string" && data.ownerToken.length > 0) {
+          ownerTokens.set(clientId, data.ownerToken);
+        }
         markReady(clientId);
       } else {
         markGoodbye(clientId);
@@ -185,6 +193,7 @@ var FirstWindowOwnerBinding = class {
       readiness: {
         isReady: (id) => registry.isReady(id),
         isMismatched: (id) => registry.isMismatched(id),
+        ownerToken: (id) => registry.ownerToken(id),
         // NOT `async`: returning the registry promise directly preserves
         // pre-ADR-0046 microtask timing; an `async` wrapper inserts an extra
         // await-unwrap tick between the ready frame resolving the waiter and
@@ -229,16 +238,34 @@ function resolveWaiters(state, ownerId, outcome) {
   for (const w of set) w.resolve(outcome);
   state.waiters.delete(ownerId);
 }
+function routeKey(ownerToken, port) {
+  return `${ownerToken}\0${port}`;
+}
 function dropOwner(state, ownerId) {
   state.ready.delete(ownerId);
-  const ports = state.ownerPorts.get(ownerId);
-  if (ports) {
-    for (const port of ports) {
-      if (state.portOwners.get(port) === ownerId) {
-        state.portOwners.delete(port);
+  const keys = state.ownerPorts.get(ownerId);
+  if (keys) {
+    for (const key of keys) {
+      if (state.portOwners.get(key) === ownerId) {
+        state.portOwners.delete(key);
       }
     }
     state.ownerPorts.delete(ownerId);
+  }
+}
+function dropPorts(state, ownerId, ownerToken, ports) {
+  const keys = state.ownerPorts.get(ownerId);
+  if (!keys) return;
+  for (const port of ports) {
+    const key = routeKey(ownerToken, port);
+    if (state.portOwners.get(key) === ownerId) {
+      state.portOwners.delete(key);
+    }
+    keys.delete(key);
+  }
+  if (keys.size === 0) {
+    state.ownerPorts.delete(ownerId);
+    state.ready.delete(ownerId);
   }
 }
 var WorkerOwnerBinding = class {
@@ -247,10 +274,11 @@ var WorkerOwnerBinding = class {
   constructor(opts = {}) {
     this.#logger = opts.logger ?? defaultLogger2;
   }
-  async resolveOwner(scope, _request, _clientId, port) {
+  async resolveOwner(scope, _request, ownerToken, port) {
     const state = this.#states.get(scope);
     if (!state) return null;
-    const ownerId = state.portOwners.get(port);
+    if (!ownerToken) return null;
+    const ownerId = state.portOwners.get(routeKey(ownerToken, port));
     if (!ownerId) return null;
     const client = await scope.clients.get(ownerId) ?? null;
     if (!client) {
@@ -293,20 +321,28 @@ var WorkerOwnerBinding = class {
         return;
       }
       const ports = Array.isArray(data.ports) ? data.ports.filter((p) => Number.isInteger(p)) : [];
+      const ownerToken = typeof data.ownerToken === "string" && data.ownerToken.length > 0 ? data.ownerToken : null;
       if (data.type === SW_PREVIEW_READY) {
         state.ready.add(sourceId);
-        if (ports.length > 0) {
+        if (ownerToken && ports.length > 0) {
           const owned = state.ownerPorts.get(sourceId) ?? /* @__PURE__ */ new Set();
           for (const port of ports) {
-            state.portOwners.set(port, sourceId);
-            owned.add(port);
+            const key = routeKey(ownerToken, port);
+            state.portOwners.set(key, sourceId);
+            owned.add(key);
           }
           state.ownerPorts.set(sourceId, owned);
         }
         resolveWaiters(state, sourceId, "ready");
       } else {
-        dropOwner(state, sourceId);
-        resolveWaiters(state, sourceId, "gone");
+        if (ownerToken && ports.length > 0) {
+          dropPorts(state, sourceId, ownerToken, ports);
+        } else {
+          dropOwner(state, sourceId);
+        }
+        if (!state.ready.has(sourceId)) {
+          resolveWaiters(state, sourceId, "gone");
+        }
       }
     };
     scope.addEventListener("message", handleMessage);
@@ -354,26 +390,31 @@ var PortAwareOwnerBinding = class {
   #window;
   #worker;
   #ownerKinds = /* @__PURE__ */ new Map();
+  #signals = /* @__PURE__ */ new WeakMap();
   constructor(opts = {}) {
     this.#window = new FirstWindowOwnerBinding(opts.window);
     this.#worker = new WorkerOwnerBinding(opts.worker);
   }
   async resolveOwner(scope, request, clientId, port) {
-    const worker = await this.#worker.resolveOwner(scope, request, clientId, port);
-    if (worker) {
-      this.#ownerKinds.set(worker.id, "worker");
-      return worker;
-    }
     const window = await this.#window.resolveOwner(scope, request, clientId, port);
     if (window) {
       if ("type" in window && window.type !== "window") return null;
       this.#ownerKinds.set(window.id, "window");
+      const ownerToken = this.#signals.get(scope)?.window.ownerToken?.(window.id);
+      if (ownerToken) {
+        const worker = await this.#worker.resolveOwner(scope, request, ownerToken, port);
+        if (worker) {
+          this.#ownerKinds.set(worker.id, "worker");
+          return worker;
+        }
+      }
     }
     return window;
   }
   subscribeReadiness(scope) {
     const workerSub = this.#worker.subscribeReadiness(scope);
     const windowSub = this.#window.subscribeReadiness(scope);
+    this.#signals.set(scope, { worker: workerSub.readiness, window: windowSub.readiness });
     const ownerKinds = this.#ownerKinds;
     let requestIdCounter = 1;
     const pick = (id) => {
@@ -391,14 +432,15 @@ var PortAwareOwnerBinding = class {
         const signal = pick(id);
         return signal ? signal.isMismatched(id) : workerSub.readiness.isMismatched(id) || windowSub.readiness.isMismatched(id);
       },
-      waitForReady: async (id, timeoutMs) => {
+      ownerToken: (id) => workerSub.readiness.ownerToken?.(id) ?? windowSub.readiness.ownerToken?.(id),
+      waitForReady(id, timeoutMs) {
         const signal = pick(id);
         if (signal) return signal.waitForReady(id, timeoutMs);
         if (workerSub.readiness.isMismatched(id) || windowSub.readiness.isMismatched(id)) {
-          return "mismatch";
+          return Promise.resolve("mismatch");
         }
         if (workerSub.readiness.isReady(id) || windowSub.readiness.isReady(id)) {
-          return "ready";
+          return Promise.resolve("ready");
         }
         return Promise.race([
           workerSub.readiness.waitForReady(id, timeoutMs),
@@ -409,9 +451,10 @@ var PortAwareOwnerBinding = class {
     };
     return {
       readiness,
-      teardown() {
+      teardown: () => {
         workerSub.teardown();
         windowSub.teardown();
+        this.#signals.delete(scope);
         ownerKinds.clear();
       }
     };

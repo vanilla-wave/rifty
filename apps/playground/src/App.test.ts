@@ -23,9 +23,11 @@ describe('App terminal startup wiring', () => {
   });
 
   it('opens preview tabs as an opener-owned iframe wrapper', () => {
+    expect(source).toContain('function openPreviewTab(port = machine.realVitePort()): void');
     expect(source).toContain("globalThis.window?.open('', '_blank')");
     expect(source).toContain('previewWindow.document.write');
     expect(source).toContain('<iframe src="${escapeHtmlAttr(url)}"');
+    expect(source).toContain('<title>rifty preview ${port}</title>');
   });
 
   it('sends preset files before the entry once Vite is ready', () => {
@@ -50,7 +52,14 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('function restartDevServer(sessionId: string)');
     expect(source).toContain('if (restartSessionId) void restartDevServer(restartSessionId)');
     expect(source).toContain('devServerSessionId = session.id');
-    expect(source).toContain("await runTerminalSequence(sessionId, ['vite'])");
+    expect(source).toContain("await runTerminalSequence(targetSessionId, ['vite'])");
+  });
+
+  it('does not restart Vite inside a hidden stale terminal session', () => {
+    expect(source).toContain('function isVisibleTerminalSession(id: string): boolean');
+    expect(source).toContain(
+      'const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;',
+    );
   });
 
   it('records manually started vite as the dev-server terminal owner', () => {
@@ -60,10 +69,16 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('commands: { npm: npmCommand, vite: viteCommand }');
   });
 
+  it('loads and persists terminal environment state', () => {
+    expect(source).toContain('env: props.terminalPersistence.initialState.env');
+    expect(source).toContain('saveState({ cwd: session.cwd, env: session.env })');
+    expect(source).not.toContain('saveState({ cwd: session.cwd, env: {} })');
+  });
+
   it('shows the preview pane while Vite is starting but opens tabs only once running', () => {
     expect(source).toContain("const hasPreview = (): boolean => devServerStatus() !== 'stopped'");
     expect(source).toContain(
-      'devServerRunning() ? `/preview/${machine.realVitePort()}/` : undefined',
+      'const previewUrl = (port = machine.realVitePort()): string | undefined',
     );
   });
 

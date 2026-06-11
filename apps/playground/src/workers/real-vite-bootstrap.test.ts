@@ -29,4 +29,10 @@ describe('real Vite bootstrap preview routing', () => {
     expect(source).toContain('kernelIpc.onMessage?.((message) => {');
     expect(source).toContain('applyVfsWriteFrame(message.frame, { onWrite: handleVfsWrite })');
   });
+
+  it('advertises the page owner token on the direct service-worker bridge', () => {
+    expect(source).toContain('const ownerToken = env.RIFTY_PREVIEW_OWNER_TOKEN');
+    expect(source).toContain('setupPreviewBridge(dispatchSerializedPreview, {');
+    expect(source).toContain('ownerToken,');
+  });
 });

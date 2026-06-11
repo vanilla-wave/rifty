@@ -273,6 +273,21 @@ describe('createTerminalManager', () => {
     manager.dispose();
   });
 
+  it('initializes sessions with persisted env and snapshots later env assignments', async () => {
+    const manager = createTerminalManager({ cwd: '/', env: { FOO: 'bar' } });
+    const session = manager.sessions()[0]!;
+    const writer = makeWriter();
+    manager.attachWriter(session.id, writer.write);
+
+    expect(manager.snapshot(session.id).env).toEqual({ FOO: 'bar' });
+
+    await expect(manager.runLine(session.id, 'BAR=baz')).resolves.toBe(0);
+
+    expect(manager.snapshot(session.id).env).toEqual({ FOO: 'bar', BAR: 'baz' });
+
+    manager.dispose();
+  });
+
   it('refuses a second foreground command in the same session while keeping the first stoppable', async () => {
     const started = deferred<void>();
     const wait: ShellCommand = async (_args, ctx) => {
@@ -301,6 +316,33 @@ describe('createTerminalManager', () => {
     manager.dispose();
   });
 
+  it('forwards raw terminal input to the active command stdin', async () => {
+    const started = deferred<void>();
+    const manager = createTerminalManager({
+      cwd: '/',
+      commands: {
+        read: async (_args, ctx) => {
+          started.resolve();
+          const chunk = await ctx.stdin?.read();
+          ctx.stdout.write(chunk ? new TextDecoder().decode(chunk) : '<eof>');
+          return 0;
+        },
+      },
+    });
+    const session = manager.sessions()[0]!;
+    const writer = makeWriter();
+    manager.attachWriter(session.id, writer.write);
+
+    const run = manager.runLine(session.id, 'read');
+    await started.promise;
+    manager.writeStdin(session.id, 'typed input');
+
+    await expect(run).resolves.toBe(0);
+    expect(writer.calls).toEqual([{ chunk: 'typed input', stream: 'stdout' }]);
+
+    manager.dispose();
+  });
+
   it('throws for post-dispose public methods and remains idempotent', async () => {
     const manager = createTerminalManager({ cwd: '/' });
     const session = manager.sessions()[0]!;
@@ -316,6 +358,7 @@ describe('createTerminalManager', () => {
     expect(() => manager.attachWriter(session.id, () => {})).toThrow(
       'Terminal manager is disposed',
     );
+    expect(() => manager.writeStdin(session.id, 'x')).toThrow('Terminal manager is disposed');
     expect(() => manager.stop(session.id)).toThrow('Terminal manager is disposed');
     await expect(manager.runLine(session.id, 'echo nope')).rejects.toThrow(
       'Terminal manager is disposed',

@@ -1,5 +1,6 @@
 import { RegistryClient } from '@riftydev/npm-client';
 import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
+import type { TerminalRawInput } from '@riftydev/terminal';
 import {
   type TerminalHistoryMode,
   type TerminalHistoryRecord,
@@ -223,6 +224,7 @@ export function App(props: AppProps) {
 
   const manager = createTerminalManager({
     cwd: props.terminalPersistence.initialState.cwd,
+    env: props.terminalPersistence.initialState.env,
     commands: { npm: npmCommand, vite: viteCommand },
   });
   const hiddenSessionIds = new Set<string>();
@@ -242,7 +244,7 @@ export function App(props: AppProps) {
 
   function persistTerminalState(id: string): void {
     const session = manager.snapshot(id);
-    void props.terminalPersistence.saveState({ cwd: session.cwd, env: {} });
+    void props.terminalPersistence.saveState({ cwd: session.cwd, env: session.env });
   }
 
   function refreshTerminalState(): void {
@@ -343,6 +345,10 @@ export function App(props: AppProps) {
   function stopSession(id: string): void {
     manager.stop(id);
     refreshTerminalState();
+  }
+
+  function writeTerminalStdin(id: string, data: TerminalRawInput): void {
+    manager.writeStdin(id, data);
   }
 
   // Worker project's node_modules presence (ADR-0080): snapshot excludes its
@@ -464,6 +470,15 @@ export function App(props: AppProps) {
     return createSession();
   }
 
+  function isVisibleTerminalSession(id: string): boolean {
+    try {
+      manager.snapshot(id);
+      return !hiddenSessionIds.has(id);
+    } catch {
+      return false;
+    }
+  }
+
   async function waitForDevServerStop(): Promise<void> {
     while (devServerStatus() !== 'stopped') {
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
@@ -479,8 +494,9 @@ export function App(props: AppProps) {
     }
     await waitForDevServerStop();
     if (generation !== devServerRestartGeneration) return;
-    devServerSessionId = sessionId;
-    await runTerminalSequence(sessionId, ['vite']);
+    const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;
+    devServerSessionId = targetSessionId;
+    await runTerminalSequence(targetSessionId, ['vite']);
   }
 
   async function runVitePreset(preset: Preset): Promise<void> {
@@ -530,15 +546,15 @@ export function App(props: AppProps) {
     void runVitePreset(preset);
   }
 
-  const previewUrl = (): string | undefined =>
-    devServerRunning() ? `/preview/${machine.realVitePort()}/` : undefined;
+  const previewUrl = (port = machine.realVitePort()): string | undefined =>
+    devServerRunning() ? `/preview/${port}/` : undefined;
 
   function escapeHtmlAttr(value: string): string {
     return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
   }
 
-  function openPreviewTab(): void {
-    const url = previewUrl();
+  function openPreviewTab(port = machine.realVitePort()): void {
+    const url = previewUrl(port);
     if (!url) return;
     const previewWindow = globalThis.window?.open('', '_blank');
     if (!previewWindow) return;
@@ -547,13 +563,13 @@ export function App(props: AppProps) {
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>rifty preview ${machine.realVitePort()}</title>
+    <title>rifty preview ${port}</title>
     <style>
       html, body, iframe { margin: 0; width: 100%; height: 100%; border: 0; background: #0f1115; }
     </style>
   </head>
   <body>
-    <iframe src="${escapeHtmlAttr(url)}" title="Preview port ${machine.realVitePort()}"></iframe>
+    <iframe src="${escapeHtmlAttr(url)}" title="Preview port ${port}"></iframe>
   </body>
 </html>`);
     previewWindow.document.close();
@@ -766,6 +782,7 @@ export function App(props: AppProps) {
               historyRecords={terminalHistory}
               onLink={onTerminalLink}
               onSignal={stopSession}
+              onRawInput={writeTerminalStdin}
               onLine={(id, line, dims) => runTerminalLine(id, line, dims)}
             />
           </main>

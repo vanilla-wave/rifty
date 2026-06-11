@@ -170,6 +170,7 @@ async function bootstrap(): Promise<void> {
   const env = globalThis.process.env;
   const port = Number.parseInt(env.RIFTY_RFV_PORT ?? '5174', 10);
   const root = env.RIFTY_RFV_ROOT ?? '/workspace';
+  const ownerToken = env.RIFTY_PREVIEW_OWNER_TOKEN;
   const spec = resolveProjectSpec(env.RIFTY_RFV_TEMPLATE ?? DEFAULT_TEMPLATE_ID);
   // Honour an explicit entry override on the spawn spec (usually a no-op —
   // the orchestrator defaults it to the template's own entry).
@@ -293,7 +294,10 @@ async function bootstrap(): Promise<void> {
   // Direct SW→Worker preview route (A-023): the Worker owns this Vite port, so
   // advertise it to the SW. The page-side bridge below stays as fallback for
   // legacy window-owned paths and for browsers without Worker SW messaging.
-  const tearDirectSwBridge = setupPreviewBridge(dispatchSerializedPreview, { ports: [port] });
+  const tearDirectSwBridge = setupPreviewBridge(dispatchSerializedPreview, {
+    ports: [port],
+    ownerToken,
+  });
   log('[real-vite/worker] direct service-worker preview bridge ready\n');
 
   // Page-realm `bridgeCrossRealmPreview` posts each SW preview request over

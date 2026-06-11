@@ -290,6 +290,7 @@ describe('SW-side handshake state machine', () => {
         type: SW_PREVIEW_READY,
         frameVersion: SW_FRAME_VERSION,
         routingVersion: SW_ROUTING_VERSION,
+        ownerToken: 'owner-A',
       },
       windowClient,
     );
@@ -299,6 +300,7 @@ describe('SW-side handshake state machine', () => {
         frameVersion: SW_FRAME_VERSION,
         routingVersion: SW_ROUTING_VERSION,
         ports: [3000],
+        ownerToken: 'owner-A',
       },
       workerClient,
     );
@@ -309,6 +311,57 @@ describe('SW-side handshake state machine', () => {
     expect(windowClient.postMessage).not.toHaveBeenCalled();
     expect(workerClient.postMessage).toHaveBeenCalledTimes(1);
     const [, transfer] = workerClient.postMessage.mock.calls[0]!;
+    const replyPort = (transfer as MessagePort[])[0]!;
+    replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
+    expect((await responsePromise).status).toBe(200);
+    interceptor.teardown();
+  });
+
+  it('does not let a Worker claim the same port for another window owner', async () => {
+    const windowA = makeMockClient('window-A');
+    const windowB = makeMockClient('window-B');
+    const workerB = makeMockClient('worker-B', 'worker');
+    const scope = makeMockScope([windowA, windowB, workerB]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ownerToken: 'owner-A',
+      },
+      windowA,
+    );
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ownerToken: 'owner-B',
+      },
+      windowB,
+    );
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ports: [3000],
+        ownerToken: 'owner-B',
+      },
+      workerB,
+    );
+
+    const responsePromise = scope.fetch('http://x/preview/3000/path', {
+      clientId: 'window-A',
+    });
+    await flushPreviewDispatch();
+
+    expect(workerB.postMessage).not.toHaveBeenCalled();
+    expect(windowA.postMessage).toHaveBeenCalledTimes(1);
+    const [, transfer] = windowA.postMessage.mock.calls[0]!;
     const replyPort = (transfer as MessagePort[])[0]!;
     replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
     expect((await responsePromise).status).toBe(200);
@@ -336,6 +389,7 @@ describe('SW-side handshake state machine', () => {
         frameVersion: SW_FRAME_VERSION,
         routingVersion: SW_ROUTING_VERSION,
         ports: [5173],
+        ownerToken: 'owner-A',
       },
       workerClient,
     );
@@ -364,6 +418,7 @@ describe('SW-side handshake state machine', () => {
         frameVersion: SW_FRAME_VERSION,
         routingVersion: SW_ROUTING_VERSION,
         ports: [5173],
+        ownerToken: 'owner-A',
       },
       workerClient,
     );

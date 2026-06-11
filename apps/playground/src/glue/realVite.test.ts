@@ -9,4 +9,10 @@ describe('real Vite page-to-worker updates', () => {
     expect(source).toContain("handle.send({ type: 'rifty:vfs-write', frame })");
     expect(source).toContain('sendVfsWrite(port, frame)');
   });
+
+  it('shares a preview owner token between the page bridge and worker bridge', () => {
+    expect(source).toContain('const ownerToken = createPreviewOwnerToken()');
+    expect(source).toContain('RIFTY_PREVIEW_OWNER_TOKEN: ownerToken');
+    expect(source).toContain('mountPlaygroundPreviewBridge(previewBridge, { ownerToken })');
+  });
 });

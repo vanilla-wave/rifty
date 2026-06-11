@@ -10,11 +10,10 @@
   prop is now forwarded to the mounted xterm wrapper.
 - **Terminal command status now reaches xterm markers.** Shell-mode `runLine()`
   returns its exit code through `BottomPanel`/`TerminalPanel` into
-  `RiftyTerminal`, so command blocks can show success/failure decorations. REPL
-  mode keeps returning `void`, leaving status decoration unset.
+  `RiftyTerminal`, so command blocks can show success/failure decorations.
 - **Terminal tab completion is wired in shell modes.** The playground now feeds
   `RiftyTerminal` completions from `Shell.commandNames()` at argv-0 and from the
-  main-thread VFS for path arguments; REPL mode stays untouched.
+  main-thread VFS for path arguments.
 - **Terminal follows OS light/dark preference.** The xterm wrapper now starts
   with a terminal theme derived from `prefers-color-scheme` and updates it via
   `setTheme()` on OS theme changes. The broader playground CSS light theme
@@ -47,7 +46,7 @@
   OPFS is used when available; memory fallback remains session-only.
 - **Shell abbreviations/snippets.** Shell-mode terminal input now seeds
   fish-style rewrite rules for `ll -> ls -la`, `la -> ls -a`, and
-  `mk -> mkdir -p`; REPL input stays unmodified.
+  `mk -> mkdir -p`.
 - **AI command suggestions.** When `VITE_RIFTY_AI_COMMAND_SUGGEST_URL` is set,
   shell-mode `# prompt` lines request a command suggestion, render it as ghost
   text, and accept it by replacement only. Suggestions are filtered to rifty
@@ -70,7 +69,7 @@
   and traversal links are ignored.
 - **Shell command-line syntax highlighting.** Shell-mode terminal input now
   colors command words, quoted strings, and shell operators through the
-  `@riftydev/terminal` highlighter seam; REPL input stays plain.
+  `@riftydev/terminal` highlighter seam.
 - **Shell multiline input.** Shell-mode Enter now keeps editing when quotes,
   bracket groups, or trailing continuations are incomplete; the completed raw
   multiline buffer is submitted as one command.
@@ -116,11 +115,12 @@
   per-probe `AbortController` + a 90 s budget so it spans an npm install and
   auto-loads to `live` (~22 s) without a manual Reload. Verified live:
   `/preview/<port>/` 200s, the iframe commits and renders the Vite app.
-- **Real Vite preview now owns its Service Worker route directly (ADR-0096).**
-  The Real Vite Worker mounts `setupPreviewBridge(..., { ports: [port] })`, so
-  the SW can route `/preview/<port>/...` straight to the Worker-owned Vite
-  server. The page-side cross-realm preview proxy remains as a compatibility
-  fallback for legacy window-owned paths and old-SW/new-page skew.
+- **Real Vite preview now owns its Service Worker route directly (ADR-0123).**
+  The Real Vite page and Worker share a preview `ownerToken`; the Worker mounts
+  `setupPreviewBridge(..., { ownerToken, ports: [port] })`, so the SW can route
+  `/preview/<port>/...` straight to the matching Worker-owned Vite server. The
+  page-side cross-realm preview proxy remains as a compatibility fallback for
+  legacy window-owned paths and old-SW/new-page skew.
 - **Dev-server console noise removed.** A custom Vite logger filters the
   harmless `Failed to load source map … marked.umd.js.map` warning (monaco 0.52
   ships `marked.umd.js` with a dangling sourcemap ref); dev-only, no runtime
@@ -201,15 +201,15 @@
   `editor-tabs`, `layout-store`, `splitter-size`) with unit tests.
 - **Multi-model editor tabs (ADR-0075).** One Monaco model per tab (`setModel`
   on switch — no spurious writes); a permanent **program tab** stays bound to
-  `machine.source`/`setSource` (REPL Run + dev/real-vite HMR unchanged) under a
-  single `suppressProgramEcho` guard; files opened from the explorer get their
-  own model with debounced VFS write-back. `monaco-env` gains the json / css /
-  html language workers.
+  `machine.source`/`setSource` (initial JS runner + dev/real-vite HMR unchanged)
+  under a single `suppressProgramEcho` guard; files opened from the explorer get
+  their own model with debounced VFS write-back. `monaco-env` gains the json /
+  css / html language workers.
 - **Preset gallery — click-to-run examples (ADR-0073).** New `src/presets.ts`
   + `src/components/PresetGallery.tsx`: a category-grouped left rail of
   example programs (Welcome, Event-loop order, Node core modules, Virtual
   filesystem, Dev server + HMR, Real Vite + npm). Selecting a preset loads
-  its source and switches mode; REPL presets auto-run. Every preset is
+  its source and switches mode; JS-runner presets auto-run. Every preset is
   grounded in a capability traced through the source and covered by the
   e2e/conformance suites — no stubs. The boot preset still prints
   `worker alive` (M1 e2e contract).
@@ -227,7 +227,7 @@
   headers (mirrored from `public/_headers`), SPA fallback, prod publish of
   `apps/playground/dist`.
 - **`useMode.loadPreset()` + `useRuntime.whenReady()/isRunning()`.** Preset
-  loading transitions modes; REPL eval gates on worker readiness.
+  loading transitions modes; JS-runner eval gates on worker readiness.
 
 ### Fixed
 
@@ -235,7 +235,7 @@
   `main.tsx` now import the worker entries via `?worker&url` instead of
   `new URL(..., import.meta.url)`, so `vite build` actually emits + bundles
   the `worker-entry` / `kernel-worker-entry` chunks. Previously the prod
-  build shipped no worker chunk and the REPL worker crashed on boot
+  build shipped no worker chunk and the runtime worker crashed on boot
   (`[worker error] undefined`) in any hosted build — invisible to CI, which
   only runs against `pnpm dev`.
 - **Monaco language-service console spam.** New `src/glue/monaco-env.ts`
@@ -328,7 +328,7 @@
 
 ### Changed
 
-- `App` no longer races a `registerServiceWorker()` call in `onMount`. The SW is registered by `bootstrapPlayground()` before render; failures flow through `BootResult.swError` to the existing dismissible banner. Removes the small window where the REPL was interactive but the preview iframe was not yet routable.
+- `App` no longer races a `registerServiceWorker()` call in `onMount`. The SW is registered by `bootstrapPlayground()` before render; failures flow through `BootResult.swError` to the existing dismissible banner. Removes the small window where the JS runner was interactive but the preview iframe was not yet routable.
 
 ### Fixed
 

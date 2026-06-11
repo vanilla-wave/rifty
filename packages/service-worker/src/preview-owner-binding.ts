@@ -14,22 +14,24 @@
  *  2. {@link WorkerOwnerBinding} (`./owner-binding-worker.ts`) — the M11
  *     A-023 (SW→Worker direct routing) addition. Owner is a `Client` with
  *     `type === 'worker'`; readiness arrives via the same
- *     `rifty:preview:ready` frame plus a `ports: number[]` field naming the
- *     preview ports the Worker serves. Workers have no `pagehide`; goodbye is
- *     either explicit `rifty:preview:goodbye` on termination OR a lazy
- *     `clients.get(id) === undefined` lookup at fetch time when a Worker died
- *     without sending goodbye.
+ *     `rifty:preview:ready` frame plus `ownerToken` and `ports: number[]`
+ *     fields naming the page owner scope and preview ports the Worker serves.
+ *     Workers have no `pagehide`; goodbye is either explicit
+ *     `rifty:preview:goodbye` on termination OR a lazy `clients.get(id) ===
+ *     undefined` lookup at fetch time when a Worker died without sending
+ *     goodbye.
  *
- * `resolveOwner` carries `port` because the Worker binding routes by it
- * (multiple Workers may host different preview ports on one page); the window
- * binding ignores it (the window owns every port it registers via
+ * `resolveOwner` carries `port` because the Worker binding routes by
+ * `(ownerToken, port)` (multiple Workers may host different preview ports on one
+ * page); the window binding ignores it (the window owns every port it registers via
  * `setupPreviewBridge`). `subscribeReadiness` returns a {@link ReadinessSignal}
  * that MUST be safe across concurrent in-flight fetches (no shared mutable
  * cursor beyond the monotonic `nextRequestId`).
  *
  * Both consumers expose the SAME shape; the interceptor stays
  * binding-agnostic. The default {@link PortAwareOwnerBinding} composes both:
- * Worker-owned ports win, window-owned ports keep the legacy fallback.
+ * matching Worker-owned `(ownerToken, port)` routes win, window-owned ports keep
+ * the legacy fallback.
  *
  * One interface, not two: Q-2026-05-27-002 deferred defining the binding
  * until both consumers existed so "two concrete consumers shape the interface
@@ -40,11 +42,11 @@
  *   kernel-spawned-Worker `Client.type === 'worker'` shape.
  * - **ADR-0017** — `@riftydev/net` cross-realm port-registry bridge. The
  *   Worker readiness frame mirrors `serveCrossRealmPreview(port, …)`
- *   registration so the SW resolves port → Worker without a registry
- *   round-trip.
+ *   registration so the SW resolves `(ownerToken, port)` → Worker without a
+ *   registry round-trip.
  * - **ADR-0040** — `SW_FRAME_VERSION` / `SW_ROUTING_VERSION` split. Binding
- *   contract lives in `SW_ROUTING_VERSION`; the additive `ports: number[]`
- *   field (default empty) needs no `SW_FRAME_VERSION` bump per ADR-0031's
+ *   contract lives in `SW_ROUTING_VERSION`; the additive `ownerToken` and
+ *   `ports: number[]` fields need no `SW_FRAME_VERSION` bump per ADR-0031's
  *   SemVer-major rule.
  * - **ADR-0043** — Vite-in-Worker; made A-023 the next consumer of the
  *   cross-realm bridge.
@@ -74,6 +76,8 @@ export interface ReadinessSignal {
   isReady(ownerId: string): boolean;
   /** Has `ownerId` posted a mismatched protocol version? */
   isMismatched(ownerId: string): boolean;
+  /** Optional owner scope declared by this owner during readiness. */
+  ownerToken?(ownerId: string): string | undefined;
   /**
    * Wait until the owner is ready, `timeoutMs` elapses, or the owner is gone.
    * Never rejects. Concurrent waiters for the same `ownerId` resolve together.

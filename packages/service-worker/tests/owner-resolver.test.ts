@@ -4,7 +4,7 @@
  *
  * `FirstWindowOwnerResolver` preserves the historical window behaviour:
  * prefer the `event.clientId`, then fall back once per scope to the first
- * controlled window when the id is empty. ADR-0096 makes the interceptor
+ * controlled window when the id is empty. ADR-0123 makes the interceptor
  * default port-aware, but callers can still inject an explicit binding when
  * they need lower-level resolver behaviour.
  */

@@ -41,7 +41,7 @@ const COMMIT_INTERVAL_MS = 200;
 export function PreviewPanel(props: {
   initialPort?: number;
   refreshKey?: number;
-  onOpenTab?: () => void;
+  onOpenTab?: (port: number) => void;
 }) {
   const [port, setPort] = createSignal(props.initialPort ?? 3000);
   const [phase, setPhase] = createSignal<Phase>('starting');
@@ -52,7 +52,7 @@ export function PreviewPanel(props: {
 
   function openTab(): void {
     if (props.onOpenTab) {
-      props.onOpenTab();
+      props.onOpenTab(port());
       return;
     }
     globalThis.window?.open(previewUrl(), '_blank');

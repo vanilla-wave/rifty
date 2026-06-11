@@ -22,7 +22,7 @@ small stable API without reaching into xterm internals.
   contrast, copy-on-select, clipboard port, and macOS Option-as-Meta.
 - Add `setTheme()` and `focus()` methods.
 - Keep copy-on-select opt-in; Ctrl+C selection copy is line-editor policy
-  covered by ADR-0097.
+  covered by ADR-0096.
 
 ## Consequences
 

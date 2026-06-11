@@ -1,4 +1,5 @@
-import { type CommandContext, Shell } from '@riftydev/shell';
+import { type CommandContext, Shell, type StdinReader } from '@riftydev/shell';
+import type { TerminalRawInput } from '@riftydev/terminal';
 
 export type TerminalStatus = 'idle' | 'running';
 
@@ -6,6 +7,7 @@ export interface TerminalSessionSnapshot {
   readonly id: string;
   readonly title: string;
   readonly cwd: string;
+  readonly env: Record<string, string>;
   readonly status: TerminalStatus;
   readonly exitCode?: number;
 }
@@ -30,6 +32,7 @@ export interface TerminalManager {
   createSession(title?: string): TerminalSessionSnapshot;
   select(id: string): void;
   attachWriter(id: string, writer: TerminalWriter): void;
+  writeStdin(id: string, data: TerminalRawInput): void;
   runLine(id: string, input: string, dims?: TerminalRunDimensions): Promise<number>;
   runSequence(id: string, lines: readonly string[], dims?: TerminalRunDimensions): Promise<number>;
   stop(id: string): void;
@@ -44,6 +47,7 @@ interface TerminalSession {
   shell: Shell;
   writer: TerminalWriter | null;
   active: AbortController | null;
+  activeStdin: StdinQueue | null;
   activeRunToken: symbol | null;
   commandError: TerminalCommandError | null;
 }
@@ -57,6 +61,7 @@ const DISPOSED_ERROR = 'Terminal manager is disposed';
 
 export function createTerminalManager(opts: {
   cwd: string;
+  env?: Record<string, string>;
   commands?: Record<string, TerminalCommand>;
 }): TerminalManager {
   const commands = opts.commands ?? {};
@@ -74,9 +79,10 @@ export function createTerminalManager(opts: {
       id,
       title: displayTitle,
       status: 'idle',
-      shell: new Shell({ cwd: opts.cwd }),
+      shell: new Shell({ cwd: opts.cwd, env: opts.env }),
       writer: null,
       active: null,
+      activeStdin: null,
       activeRunToken: null,
       commandError: null,
     };
@@ -116,6 +122,7 @@ export function createTerminalManager(opts: {
       id: session.id,
       title: session.title,
       cwd: session.shell.cwd,
+      env: session.shell.envSnapshot(),
       status: session.status,
       ...(session.exitCode === undefined ? {} : { exitCode: session.exitCode }),
     };
@@ -144,8 +151,10 @@ export function createTerminalManager(opts: {
     if (trimmed.length === 0) return 0;
 
     const controller = new AbortController();
+    const stdin = new StdinQueue();
     const runToken = Symbol(session.id);
     session.active = controller;
+    session.activeStdin = stdin;
     session.activeRunToken = runToken;
     session.status = 'running';
     session.exitCode = undefined;
@@ -160,6 +169,7 @@ export function createTerminalManager(opts: {
         isTTY: true,
         cols: dims?.cols,
         rows: dims?.rows,
+        stdin,
       });
       const error = commandError(session);
       if (error?.token === runToken) throw error.error;
@@ -168,8 +178,10 @@ export function createTerminalManager(opts: {
       return exitCode;
     } finally {
       if (session.active === controller) session.active = null;
+      if (session.activeStdin === stdin) session.activeStdin = null;
       if (session.activeRunToken === runToken) session.activeRunToken = null;
       if (commandError(session)?.token === runToken) session.commandError = null;
+      stdin.close();
       session.status = 'idle';
     }
   }
@@ -197,6 +209,9 @@ export function createTerminalManager(opts: {
     attachWriter(id: string, writer: TerminalWriter): void {
       getSession(id).writer = writer;
     },
+    writeStdin(id: string, data: TerminalRawInput): void {
+      getSession(id).activeStdin?.write(data);
+    },
     runLine,
     async runSequence(
       id: string,
@@ -220,6 +235,8 @@ export function createTerminalManager(opts: {
       for (const session of sessions.values()) {
         const active = session.active;
         session.active = null;
+        session.activeStdin?.close();
+        session.activeStdin = null;
         session.activeRunToken = null;
         session.commandError = null;
         session.writer = null;
@@ -227,4 +244,37 @@ export function createTerminalManager(opts: {
       }
     },
   };
+}
+
+class StdinQueue implements StdinReader {
+  readonly #enc = new TextEncoder();
+  readonly #chunks: Uint8Array[] = [];
+  readonly #readers: Array<(chunk: Uint8Array | null) => void> = [];
+  #closed = false;
+
+  write(data: TerminalRawInput): void {
+    if (this.#closed) return;
+    const chunk = typeof data === 'string' ? this.#enc.encode(data) : data;
+    const reader = this.#readers.shift();
+    if (reader) {
+      reader(chunk);
+      return;
+    }
+    this.#chunks.push(chunk);
+  }
+
+  read(): Promise<Uint8Array | null> {
+    const chunk = this.#chunks.shift();
+    if (chunk) return Promise.resolve(chunk);
+    if (this.#closed) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      this.#readers.push(resolve);
+    });
+  }
+
+  close(): void {
+    if (this.#closed) return;
+    this.#closed = true;
+    for (const reader of this.#readers.splice(0)) reader(null);
+  }
 }

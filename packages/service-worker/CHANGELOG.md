@@ -18,17 +18,21 @@
   own bare `fetch` warm-up. Without this the readiness handshake targeted the
   iframe's own client (which runs no `setupPreviewBridge`), timed out, and the
   navigation aborted (`net::ERR_ABORTED`) so the live preview never rendered.
-  `SW_ROUTING_VERSION` stays `'1'` (the id selection is SW-local and off-wire).
+  This branch bumps `SW_ROUTING_VERSION` to `'2'` together with ADR-0123's
+  owner-scoped Worker routing, so stale peers fail loudly instead of silently
+  disagreeing on owner selection.
 
 ### Added
 
-- **ADR-0096:** `PortAwareOwnerBinding` becomes the default owner binding for
-  `createPreviewInterceptor`: Worker owners that claim a preview port via
-  `ports: [...]` win, while unclaimed ports fall back to the historical window
-  bridge. New public exports: `PortAwareOwnerBinding`,
-  `PortAwareOwnerBindingOptions`, and `PreviewBridgeOptions`; `setupPreviewBridge`
-  can now advertise `ports` on ready/goodbye frames. No frame/routing version
-  bump: `ports` was already additive optional under ADR-0046.
+- **ADR-0123:** `PortAwareOwnerBinding` becomes the default owner binding for
+  `createPreviewInterceptor`: the controlling window advertises `ownerToken`,
+  Workers claim `(ownerToken, port)` via `ports: [...]`, and only matching
+  Worker claims win; unclaimed ports fall back to the historical window bridge.
+  New public exports: `PortAwareOwnerBinding`, `PortAwareOwnerBindingOptions`,
+  and `PreviewBridgeOptions`; `setupPreviewBridge` can now advertise `ownerToken`
+  and `ports` on ready/goodbye frames. `SW_FRAME_VERSION` stays `1` because the
+  fields are additive optional; `SW_ROUTING_VERSION` bumps to `2` because owner
+  selection semantics changed.
 - **ADR-0046 (A-023):** `PreviewOwnerBinding` — one seam the preview
   interceptor sits on top of, designed from both the window and worker
   owners at once (promotes OPEN_QUESTIONS Q-2026-05-27-002). New
@@ -37,15 +41,15 @@
   `FirstWindowOwnerBinding` (+`FirstWindowOwnerBindingOptions`),
   `WorkerOwnerBinding` (+`WorkerOwnerBindingOptions`,
   `WorkerOwnerBindingLogger`). `createPreviewInterceptor` resolves
-  owners and gates readiness THROUGH the binding; ADR-0096 later makes the
-  default port-aware (Worker-owned ports first, window fallback). The worker
-  binding routes by port (a Worker-served preview fetch has no DOM
-  `clientId`), re-validates the owner via `clients.get`, and surfaces
+  owners and gates readiness THROUGH the binding; ADR-0123 later makes the
+  default port-aware and owner-scoped. The worker binding routes by
+  `(ownerToken, port)` (a Worker-served preview fetch has no DOM
+  `clientId` of its own), re-validates the owner via `clients.get`, and surfaces
   the new `'gone'` outcome for the no-`pagehide` worker lifecycle
   (Worker terminated without a goodbye) so `route-preview` returns a
   precise 503 instead of hanging to timeout. The worker readiness
-  frame's `ports: number[]` field is additive optional — no
-  `SW_FRAME_VERSION` / `SW_ROUTING_VERSION` bump (ADR-0040/ADR-0031).
+  frame's `ports: number[]` field is additive optional; ADR-0123 adds the
+  routing-version bump when those claims become owner-scoped.
   The legacy `FirstWindowOwnerResolver` / `PreviewOwnerResolver`
   surface and the `hooks.resolver` shortcut stay for back-compat. New
   dual-strategy parity test (`tests/preview-owner-binding-parity.test.ts`)

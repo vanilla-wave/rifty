@@ -69,7 +69,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0002 | Cross-origin isolation is mandatory |
 | 0016 | Service Worker source-of-truth lives in `@riftydev/service-worker` |
 | 0046 | `PreviewOwnerBinding` — one seam for window and worker preview owners |
-| 0096 | Port-aware preview owner routing |
+| 0123 | Port-aware preview owner routing |
 
 ### npm-client
 
@@ -145,7 +145,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | # | Title |
 |---|---|
 | 0094 | Terminal line-editor becomes cursor-aware — mid-line insert/delete, Home/End/Delete, Ctrl+A/Ctrl+E |
-| 0097 | Terminal line-editor model |
+| 0096 | Terminal line-editor model |
 | 0098 | Terminal options polish API |
 | 0100 | Command block metadata substrate |
 | 0104 | Host assistance seams |

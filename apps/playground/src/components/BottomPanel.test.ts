@@ -26,8 +26,8 @@ vi.mock('@riftydev/terminal', () => ({
 }));
 
 const sessions = [
-  { id: 'terminal-1', title: 'Terminal 1', cwd: '/workspace', status: 'idle' as const },
-  { id: 'terminal-2', title: 'Server', cwd: '/workspace', status: 'running' as const },
+  { id: 'terminal-1', title: 'Terminal 1', cwd: '/workspace', env: {}, status: 'idle' as const },
+  { id: 'terminal-2', title: 'Server', cwd: '/workspace', env: {}, status: 'running' as const },
 ];
 
 function render(activeSessionId = 'terminal-2'): string {

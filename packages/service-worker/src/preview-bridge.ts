@@ -14,11 +14,12 @@
  * validation, refined by ADR-0040 into a frame+routing version split):
  *
  *   client→sw  : { type: 'rifty:preview:ready',   frameVersion, routingVersion,
- *                  ports?: number[] }            // ports added in ADR-0046
- *                                                // for worker bindings;
- *                                                // additive optional per
- *                                                // ADR-0031.
+ *                  ownerToken?: string,
+ *                  ports?: number[] }            // ownerToken+ports scope
+ *                                                // worker claims; additive
+ *                                                // optional per ADR-0031.
  *   client→sw  : { type: 'rifty:preview:goodbye', frameVersion, routingVersion,
+ *                  ownerToken?: string,
  *                  ports?: number[] }            // teardown
  *   sw→client  : { type: 'rifty:preview:request', frameVersion, routingVersion,
  *                  requestId,
@@ -91,6 +92,7 @@ const PREVIEW_READY_HEARTBEAT_MS = 1_000;
 
 export interface PreviewBridgeOptions {
   readonly ports?: readonly number[];
+  readonly ownerToken?: string;
 }
 
 /**
@@ -140,8 +142,9 @@ export interface MessageHandlerHooks {
   /**
    * Override the {@link PreviewOwnerBinding} that the interceptor uses
    * to resolve owners and subscribe readiness. Defaults to
-   * {@link PortAwareOwnerBinding}: Worker owners that claim `ports` win,
-   * historical window bridge remains the fallback.
+   * {@link PortAwareOwnerBinding}: Worker owners that claim the controlling
+   * window's `ownerToken` plus `ports` win, historical window bridge remains the
+   * fallback.
    *
    * If both `binding` and `resolver` are supplied, `binding` wins and
    * `resolver` is ignored.
@@ -244,7 +247,7 @@ export function setupPreviewBridge(
 ): () => void {
   if (!('serviceWorker' in navigator)) return (): void => {};
   const announceReady = (): void => {
-    postHandshake(SW_PREVIEW_READY, opts.ports);
+    postHandshake(SW_PREVIEW_READY, opts);
   };
   const readyHeartbeat = setInterval(announceReady, PREVIEW_READY_HEARTBEAT_MS);
   const listener = async (event: MessageEvent): Promise<void> => {
@@ -300,7 +303,7 @@ export function setupPreviewBridge(
   announceReady();
   return (): void => {
     try {
-      postHandshake(SW_PREVIEW_GOODBYE, opts.ports);
+      postHandshake(SW_PREVIEW_GOODBYE, opts);
     } finally {
       clearInterval(readyHeartbeat);
       navigator.serviceWorker.removeEventListener('controllerchange', announceReady);
@@ -311,7 +314,7 @@ export function setupPreviewBridge(
 
 function postHandshake(
   type: typeof SW_PREVIEW_READY | typeof SW_PREVIEW_GOODBYE,
-  ports?: readonly number[],
+  opts: PreviewBridgeOptions,
 ): void {
   const controller = navigator.serviceWorker.controller;
   if (!controller) return;
@@ -320,13 +323,17 @@ function postHandshake(
     frameVersion: string;
     routingVersion: string;
     ports?: number[];
+    ownerToken?: string;
   } = {
     type,
     frameVersion: SW_FRAME_VERSION,
     routingVersion: SW_ROUTING_VERSION,
   };
-  if (ports && ports.length > 0) {
-    message.ports = [...ports];
+  if (opts.ports && opts.ports.length > 0) {
+    message.ports = [...opts.ports];
+  }
+  if (opts.ownerToken) {
+    message.ownerToken = opts.ownerToken;
   }
   controller.postMessage(message);
 }
