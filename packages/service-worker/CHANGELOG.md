@@ -25,11 +25,15 @@
   (ADR-0097).** After a preview iframe commits `/preview/<port>/`, the SW records
   the iframe client id as owning that port and routes same-origin root requests
   from that client (`/src/main.js`, `/@vite/client`, lazy chunks,
-  `fetch('/api')`, SPA navigations) through the same preview owner; reloads that
-  mint a fresh iframe client id recover the port from a same-origin
-  `/preview/<port>/` referrer or iframe `Client.url`. This keeps real Vite apps
-  working without rewriting their HTML to relative paths. This rides on the
-  same `SW_ROUTING_VERSION` contract as ADR-0123.
+  `fetch('/api')`, SPA navigations) through the same preview owner. Unknown
+  page-root requests now fall through without `respondWith`; reload recovery is
+  limited to known iframe context or a same-origin `/preview/<port>/` referrer,
+  so ordinary playground assets are not proxied through the SW and page-owned
+  `/preview/...` subresources do not poison the page client context. Cross-port
+  preview subrequests route only that explicit request and do not rebind the
+  iframe's root-relative context. This keeps real Vite apps working without
+  rewriting their HTML to relative paths. This rides on the same
+  `SW_ROUTING_VERSION` contract as ADR-0123.
 - **Copied top-level preview URLs resolve when the port has a single Worker
   owner.** Opening `/preview/<port>/` outside the playground shell has no
   iframe parent client and may enumerate the new preview tab before the

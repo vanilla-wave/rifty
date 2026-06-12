@@ -41,6 +41,18 @@ interface MockScope {
   postMessage: (data: unknown, source: MockClient) => void;
 }
 
+interface MockFetchInit extends RequestInit {
+  clientId?: string;
+  resultingClientId?: string;
+  requestMode?: RequestMode;
+  destination?: RequestDestination;
+}
+
+interface MockFetchDispatch {
+  responded: boolean;
+  response?: Promise<Response>;
+}
+
 function makeMockClient(id: string, type: ClientTypes = 'window', url?: string): MockClient {
   return {
     id,
@@ -48,6 +60,33 @@ function makeMockClient(id: string, type: ClientTypes = 'window', url?: string):
     url,
     postMessage: vi.fn<(message: unknown, transfer: Transferable[]) => void>(),
   };
+}
+
+function dispatchFetchEvent(
+  scope: MockScope,
+  url: string,
+  init?: MockFetchInit,
+): MockFetchDispatch {
+  const fetchListeners = scope.listeners.fetch ?? [];
+  let response: Promise<Response> | undefined;
+  const { clientId, resultingClientId, requestMode, destination, ...requestInit } = init ?? {};
+  const request = new Request(url, requestInit);
+  if (requestMode !== undefined) {
+    Object.defineProperty(request, 'mode', { configurable: true, value: requestMode });
+  }
+  if (destination !== undefined) {
+    Object.defineProperty(request, 'destination', { configurable: true, value: destination });
+  }
+  const event = {
+    request,
+    clientId: clientId ?? '',
+    resultingClientId: resultingClientId ?? '',
+    respondWith(p: Promise<Response>): void {
+      response = p;
+    },
+  };
+  for (const fn of fetchListeners) fn(event);
+  return { responded: response !== undefined, response };
 }
 
 function makeMockScope(clients: MockClient[]): MockScope {
@@ -71,27 +110,9 @@ function makeMockScope(clients: MockClient[]): MockScope {
       if (i !== -1) arr.splice(i, 1);
     },
     async fetch(url, init): Promise<Response> {
-      const fetchListeners = listeners.fetch ?? [];
-      let response: Promise<Response> | undefined;
-      const { clientId, resultingClientId, requestMode, destination, ...requestInit } = init ?? {};
-      const request = new Request(url, requestInit);
-      if (requestMode !== undefined) {
-        Object.defineProperty(request, 'mode', { configurable: true, value: requestMode });
-      }
-      if (destination !== undefined) {
-        Object.defineProperty(request, 'destination', { configurable: true, value: destination });
-      }
-      const event = {
-        request,
-        clientId: clientId ?? '',
-        resultingClientId: resultingClientId ?? '',
-        respondWith(p: Promise<Response>): void {
-          response = p;
-        },
-      };
-      for (const fn of fetchListeners) fn(event);
-      if (!response) throw new Error('respondWith never called');
-      return response;
+      const dispatch = dispatchFetchEvent(this, url, init);
+      if (!dispatch.response) throw new Error('respondWith never called');
+      return dispatch.response;
     },
     postMessage(data, source): void {
       const messageListeners = listeners.message ?? [];
@@ -884,6 +905,25 @@ describe('SW-side handshake state machine', () => {
     interceptor.teardown();
   });
 
+  it('lets same-origin non-preview page assets fall through without respondWith', () => {
+    const pageClient = makeMockClient('page-client');
+    const scope = makeMockScope([pageClient]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+
+    const dispatch = dispatchFetchEvent(scope, 'http://x/assets/editor.worker.js', {
+      requestMode: 'cors',
+      destination: 'script',
+      clientId: 'page-client',
+    });
+
+    expect(dispatch.responded).toBe(false);
+    expect(scope.clients.get).not.toHaveBeenCalled();
+    expect(pageClient.postMessage).not.toHaveBeenCalled();
+    interceptor.teardown();
+  });
+
   it('does not route cross-origin requests from a mapped preview iframe', async () => {
     const pageClient = makeMockClient('page-client');
     const scope = makeMockScope([pageClient]);
@@ -917,6 +957,111 @@ describe('SW-side handshake state machine', () => {
         clientId: 'preview-frame-1',
       }),
     ).rejects.toThrow('respondWith never called');
+    expect(pageClient.postMessage).toHaveBeenCalledTimes(1);
+    interceptor.teardown();
+  });
+
+  it('does not let cross-port preview subresources rebind an iframe root-relative context', async () => {
+    const pageClient = makeMockClient('page-client');
+    const scope = makeMockScope([pageClient]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      pageClient,
+    );
+
+    const initialResponse = scope.fetch('http://x/preview/5173/', {
+      requestMode: 'navigate',
+      destination: 'iframe',
+      resultingClientId: 'preview-frame-1',
+    });
+    await flushPreviewDispatch();
+    let call = pageClient.postMessage.mock.calls[0]!;
+    let replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
+    expect((await initialResponse).status).toBe(200);
+
+    const crossPortResponse = scope.fetch('http://x/preview/3000/api/ping', {
+      requestMode: 'cors',
+      destination: '',
+      clientId: 'preview-frame-1',
+    });
+    await flushPreviewDispatch();
+    call = pageClient.postMessage.mock.calls[1]!;
+    let message = call[0] as { request?: { port: number; url: string } };
+    expect(message.request?.port).toBe(3000);
+    expect(message.request?.url).toBe('http://preview.local/api/ping');
+    replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
+    expect((await crossPortResponse).status).toBe(200);
+
+    const rootRelativeResponse = scope.fetch('http://x/src/main.js', {
+      requestMode: 'cors',
+      destination: 'script',
+      clientId: 'preview-frame-1',
+    });
+    await flushPreviewDispatch();
+    call = pageClient.postMessage.mock.calls[2]!;
+    message = call[0] as { request?: { port: number; url: string } };
+    expect(message.request?.port).toBe(5173);
+    expect(message.request?.url).toBe('http://preview.local/src/main.js');
+    replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'application/javascript' },
+      body: new TextEncoder().encode('console.log("root")'),
+    });
+    expect(await (await rootRelativeResponse).text()).toBe('console.log("root")');
+    interceptor.teardown();
+  });
+
+  it('does not let page-owned preview subresources poison the page client context', async () => {
+    const pageClient = makeMockClient('page-client');
+    const scope = makeMockScope([pageClient]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      pageClient,
+    );
+
+    const imageResponse = scope.fetch('http://x/preview/5174/logo.png', {
+      requestMode: 'no-cors',
+      destination: 'image',
+      clientId: 'page-client',
+    });
+    await flushPreviewDispatch();
+    const call = pageClient.postMessage.mock.calls[0]!;
+    const message = call[0] as { request?: { port: number; url: string } };
+    expect(message.request?.port).toBe(5174);
+    expect(message.request?.url).toBe('http://preview.local/logo.png');
+    const replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'image/png' },
+      body: new Uint8Array([1, 2, 3]),
+    });
+    expect((await imageResponse).status).toBe(200);
+
+    const dispatch = dispatchFetchEvent(scope, 'http://x/assets/monaco.js', {
+      requestMode: 'cors',
+      destination: 'script',
+      clientId: 'page-client',
+    });
+    expect(dispatch.responded).toBe(false);
     expect(pageClient.postMessage).toHaveBeenCalledTimes(1);
     interceptor.teardown();
   });
@@ -1055,7 +1200,7 @@ describe('SW-side handshake state machine', () => {
     interceptor.teardown();
   });
 
-  it('recovers preview port context from the iframe client url after reload', async () => {
+  it('does not recover preview port context from client url without referrer or known context', () => {
     const pageClient = makeMockClient('page-client');
     const frameClient = makeMockClient('preview-frame-2', 'window', 'http://x/preview/5174/');
     const scope = makeMockScope([pageClient, frameClient]);
@@ -1071,28 +1216,19 @@ describe('SW-side handshake state machine', () => {
       pageClient,
     );
 
-    const scriptResponse = scope.fetch('http://x/src/main.js', {
+    const dispatch = dispatchFetchEvent(scope, 'http://x/src/main.js', {
       requestMode: 'cors',
       destination: 'script',
       clientId: 'preview-frame-2',
     });
-    await flushPreviewDispatch();
-    const call = pageClient.postMessage.mock.calls[0]!;
-    const message = call[0] as { request?: { port: number; url: string } };
-    expect(message.request?.port).toBe(5174);
-    expect(message.request?.url).toBe('http://preview.local/src/main.js');
-    const replyPort = (call[1] as MessagePort[])[0]!;
-    replyPort.postMessage({
-      status: 200,
-      statusText: 'OK',
-      headers: { 'content-type': 'application/javascript' },
-      body: new TextEncoder().encode('console.log("client url")'),
-    });
-    expect(await (await scriptResponse).text()).toBe('console.log("client url")');
+
+    expect(dispatch.responded).toBe(false);
+    expect(scope.clients.get).not.toHaveBeenCalled();
+    expect(pageClient.postMessage).not.toHaveBeenCalled();
     interceptor.teardown();
   });
 
-  it('recovers preview port context from the iframe client url for root-relative fetches', async () => {
+  it('lets root-relative fetches with only a preview client url fall through', () => {
     const pageClient = makeMockClient('page-client');
     const frameClient = makeMockClient('preview-frame-2', 'window', 'http://x/preview/5174/');
     const scope = makeMockScope([pageClient, frameClient]);
@@ -1108,24 +1244,15 @@ describe('SW-side handshake state machine', () => {
       pageClient,
     );
 
-    const apiResponse = scope.fetch('http://x/api/config', {
+    const dispatch = dispatchFetchEvent(scope, 'http://x/api/config', {
       requestMode: 'cors',
       destination: '',
       clientId: 'preview-frame-2',
     });
-    await flushPreviewDispatch();
-    const call = pageClient.postMessage.mock.calls[0]!;
-    const message = call[0] as { request?: { port: number; url: string } };
-    expect(message.request?.port).toBe(5174);
-    expect(message.request?.url).toBe('http://preview.local/api/config');
-    const replyPort = (call[1] as MessagePort[])[0]!;
-    replyPort.postMessage({
-      status: 200,
-      statusText: 'OK',
-      headers: { 'content-type': 'application/json' },
-      body: new TextEncoder().encode('{"ok":true}'),
-    });
-    expect(await (await apiResponse).text()).toBe('{"ok":true}');
+
+    expect(dispatch.responded).toBe(false);
+    expect(scope.clients.get).not.toHaveBeenCalled();
+    expect(pageClient.postMessage).not.toHaveBeenCalled();
     interceptor.teardown();
   });
 });

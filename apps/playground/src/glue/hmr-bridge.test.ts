@@ -18,6 +18,7 @@
 import { BridgedWebSocket, channelNameFor } from '@riftydev/net';
 import { describe, expect, it } from 'vitest';
 import {
+  createHmrBridgeToken,
   createHmrBridgeVitePlugin,
   hmrBridgeUrl,
   hmrClientScript,
@@ -29,9 +30,20 @@ describe('hmrBridgeUrl', () => {
     expect(hmrBridgeUrl(3000)).toBe('ws://preview.local:3000/__hmr');
     expect(hmrBridgeUrl(5174)).toBe('ws://preview.local:5174/__hmr');
   });
+
+  it('scopes the ws URL by nonce when supplied', () => {
+    expect(hmrBridgeUrl(3000, 'nonce-1')).toBe('ws://preview.local:3000/__hmr/nonce-1');
+    expect(channelNameFor(hmrBridgeUrl(3000, 'nonce-1'))).not.toBe(
+      channelNameFor(hmrBridgeUrl(3000)),
+    );
+  });
 });
 
 describe('setupHmrBridge', () => {
+  it('creates per-server tokens for HMR bridge channels', () => {
+    expect(createHmrBridgeToken()).not.toBe(createHmrBridgeToken());
+  });
+
   it('accepts a BridgedWebSocket client on the per-port channel', async () => {
     const bridge = setupHmrBridge({ port: 3100 });
     try {
@@ -74,6 +86,16 @@ describe('setupHmrBridge', () => {
     }
   });
 
+  it('does not expose a tokenized bridge on the predictable port-only channel', () => {
+    const bridge = setupHmrBridge({ port: 3102, token: 'secret' });
+    try {
+      expect(bridge.url).toBe(hmrBridgeUrl(3102, 'secret'));
+      expect(bridge.url).not.toBe(hmrBridgeUrl(3102));
+    } finally {
+      bridge.close();
+    }
+  });
+
   it('uses the same BroadcastChannel name the iframe client script would use', () => {
     // The wire-format check that protects the page ↔ iframe contract: the
     // server side derives its channel name from `hmrBridgeUrl(port)`, and the
@@ -81,19 +103,19 @@ describe('setupHmrBridge', () => {
     // literal. If `channelNameFor` ever changes shape, this test breaks
     // before the iframe silently fails to connect in production.
     const port = 4200;
-    const expectedChannel = channelNameFor(hmrBridgeUrl(port));
-    const script = hmrClientScript(port);
+    const expectedChannel = channelNameFor(hmrBridgeUrl(port, 'shared'));
+    const script = hmrClientScript(port, 'shared');
     expect(script).toContain(JSON.stringify(expectedChannel));
   });
 });
 
 describe('createHmrBridgeVitePlugin', () => {
   it('injects the HMR client script before </body>', () => {
-    const plugin = createHmrBridgeVitePlugin({ port: 3200 });
+    const plugin = createHmrBridgeVitePlugin({ port: 3200, token: 'plugin-token' });
     const html = '<!doctype html><html><body><div id="app"></div></body></html>';
     const transformed = plugin.transformIndexHtml(html);
     expect(transformed).toContain('data-rifty-hmr-bridge');
-    expect(transformed).toContain(channelNameFor(hmrBridgeUrl(3200)));
+    expect(transformed).toContain(channelNameFor(hmrBridgeUrl(3200, 'plugin-token')));
     // Body content preserved.
     expect(transformed).toContain('<div id="app"></div>');
     // Script lands inside the body, just before </body>.

@@ -95,12 +95,11 @@ describe('App terminal startup wiring', () => {
     );
   });
 
-  it('refreshes the preview after the worker confirms VFS writes through snapshots', () => {
-    expect(source).toContain('const [previewRevision, setPreviewRevision] = createSignal(0)');
-    expect(source).toContain('setPreviewRevision((n) => n + 1);');
-    expect(source).not.toContain('if (devServerRunning()) setPreviewRevision');
+  it('keeps worker snapshots from reloading the preview iframe', () => {
+    expect(source).not.toContain('previewRevision');
+    expect(source).not.toContain('setPreviewRevision');
     expect(source).toContain('<PreviewPanel');
-    expect(source).toContain('refreshKey={previewRevision()}');
+    expect(source).not.toContain('refreshKey=');
     expect(source).toContain('onOpenTab={openPreviewTab}');
   });
 });

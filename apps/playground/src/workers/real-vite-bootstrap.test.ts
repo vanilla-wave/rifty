@@ -20,7 +20,9 @@ describe('real Vite bootstrap preview routing', () => {
     expect(source).toContain("type: 'update'");
     expect(source).toContain("event: 'change'");
     expect(source).toContain('path: toRootRelativePath(root, modulePath)');
-    expect(source).toContain('hmrBridgeRef.current = setupHmrBridge({ port })');
+    expect(source).toContain(
+      'hmrBridgeRef.current = setupHmrBridge({ port, token: hmrBridgeToken })',
+    );
     expect(source).toContain(
       'const tearVfsBridge = serveVfsWrites(port, { onWrite: handleVfsWrite })',
     );

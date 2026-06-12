@@ -25,8 +25,7 @@
  * Manual verification steps (no env flag needed):
  *   1. `pnpm dev` → open `http://localhost:5273`.
  *   2. Wait for the visible terminal's `vite` command to print
- *      `[real-vite/worker] hmr bridge ready at ws://preview.local:5174/__hmr`
- *      followed by `[real-vite/worker] vite is listening`.
+ *      `[vite] dev server ready on port 5174`.
  *   3. Confirm the preview iframe shows the seeded "Hello from real Vite"
  *      message.
  *   4. Open DevTools → `Application` → `Frames` → drill into the preview
@@ -42,6 +41,7 @@
 import { expect, test } from '@playwright/test';
 
 const enabled = process.env.RIFTY_E2E_HMR === '1';
+const HMR_EVENT_KEY = '__rifty_e2e_hmr';
 
 test.describe('M10 — HMR over cross-realm bridge (ADR-0017 phase 1)', () => {
   test.skip(!enabled, 'set RIFTY_E2E_HMR=1 to run; bootstraps a real Vite install (~20s)');
@@ -52,7 +52,6 @@ test.describe('M10 — HMR over cross-realm bridge (ADR-0017 phase 1)', () => {
 
     const term = page.locator('[data-testid="terminal"]');
     await expect(term).toContainText('vite: starting dev server', { timeout: 10_000 });
-    await expect(term).toContainText('[real-vite/worker] vite is listening', { timeout: 60_000 });
     await expect(term).toContainText('[vite] dev server ready on port 5174', { timeout: 60_000 });
 
     // The preview iframe must mount and load the bridge client.
@@ -60,6 +59,23 @@ test.describe('M10 — HMR over cross-realm bridge (ADR-0017 phase 1)', () => {
     await expect(previewFrame.locator('script[data-rifty-hmr-bridge]')).toHaveCount(1, {
       timeout: 30_000,
     });
+    await page.evaluate((key) => localStorage.removeItem(key), HMR_EVENT_KEY);
+    await previewFrame.locator('body').evaluate((_, key) => {
+      globalThis.addEventListener('rifty:hmr:message', (event: Event) => {
+        const detail = (event as CustomEvent<unknown>).detail;
+        localStorage.setItem(key, JSON.stringify(detail));
+      });
+    }, HMR_EVENT_KEY);
+    await expect
+      .poll(
+        () =>
+          previewFrame.locator('body').evaluate(() => {
+            const global = globalThis as unknown as { __riftyHmrOpen?: unknown };
+            return global.__riftyHmrOpen === true;
+          }),
+        { timeout: 10_000 },
+      )
+      .toBe(true);
 
     // Snapshot the current body text so we can assert a real change.
     const initialBody = await previewFrame.locator('#app').textContent();
@@ -91,6 +107,15 @@ test.describe('M10 — HMR over cross-realm bridge (ADR-0017 phase 1)', () => {
         timeout: 10_000,
       },
     );
+    await expect
+      .poll(() => page.evaluate((key) => localStorage.getItem(key), HMR_EVENT_KEY), {
+        timeout: 30_000,
+      })
+      .toContain('/src/main.js');
+    const hmrPayload = JSON.parse(
+      (await page.evaluate((key) => localStorage.getItem(key), HMR_EVENT_KEY)) ?? 'null',
+    ) as { type?: unknown; path?: unknown };
+    expect(hmrPayload).toMatchObject({ type: 'update', path: '/src/main.js' });
 
     // The iframe reloads as part of the HMR update path; wait for the new
     // body content.

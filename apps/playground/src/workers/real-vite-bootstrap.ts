@@ -33,6 +33,7 @@ import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 import { esbuildShimFiles, rollupShimFiles } from '../glue/esbuild-shim.ts';
 import {
   type HmrBridgeHandle,
+  createHmrBridgeToken,
   createHmrBridgeVitePlugin,
   setupHmrBridge,
 } from '../glue/hmr-bridge.ts';
@@ -43,6 +44,7 @@ import { collectSnapshot, publishVfsSnapshot } from '../glue/vfs-snapshot-port.t
 import { type VfsWriteFrame, applyVfsWriteFrame, serveVfsWrites } from '../glue/vfs-write-port.ts';
 import { type BootstrapConfig, resolveBootstrapConfig } from '../templates/project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
+import { type ViteModuleGraph, invalidateViteModule } from './real-vite-invalidation.ts';
 
 const enc = new TextEncoder();
 
@@ -58,12 +60,6 @@ interface ViteUserConfig {
 
 interface ViteWatcher {
   on(event: 'change', cb: (file: string) => void): void;
-}
-
-interface ViteModuleGraph {
-  getModuleById?(id: string): unknown;
-  invalidateModule?(mod: unknown): void;
-  invalidateAll?(): void;
 }
 
 interface ViteDevServer {
@@ -182,17 +178,6 @@ function toRootRelativePath(root: string, path: string): string {
   return normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`;
 }
 
-function invalidateViteModule(server: ViteDevServer, file: string): void {
-  const graph = server.moduleGraph;
-  if (!graph) return;
-  const mod = graph.getModuleById?.(file);
-  if (mod !== undefined && graph.invalidateModule) {
-    graph.invalidateModule(mod);
-    return;
-  }
-  graph.invalidateAll?.();
-}
-
 async function bootstrap(): Promise<void> {
   // Defaults match the page-realm path so non-overriding callers behave the same.
   const env = globalThis.process.env;
@@ -308,7 +293,8 @@ async function bootstrap(): Promise<void> {
 
   // HMR bridge in THIS realm; iframe-side BroadcastChannel client reaches it
   // regardless of which realm hosts the server.
-  hmrBridgeRef.current = setupHmrBridge({ port });
+  const hmrBridgeToken = createHmrBridgeToken();
+  hmrBridgeRef.current = setupHmrBridge({ port, token: hmrBridgeToken });
   log(`[real-vite/worker] hmr bridge ready at ${hmrBridgeRef.current.url}\n`);
 
   log(`[real-vite/worker] starting dev server on port ${port}…\n`);
@@ -328,7 +314,7 @@ async function bootstrap(): Promise<void> {
     optimizeDeps: {
       disabled: cfg.server.optimizeDepsDisabled,
     } as unknown as ViteUserConfig['optimizeDeps'],
-    plugins: cfg.hmrEnabled ? [createHmrBridgeVitePlugin({ port })] : [],
+    plugins: cfg.hmrEnabled ? [createHmrBridgeVitePlugin({ port, token: hmrBridgeToken })] : [],
   });
   await server.listen();
   activeServer = server;

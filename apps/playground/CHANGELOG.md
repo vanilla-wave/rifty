@@ -63,8 +63,16 @@
   now defines `--rf-ok` and real shadow tokens.
 - **Real Vite editor writes are now checked through the real Monaco path.** The
   HMR e2e no longer uses a production-only source setter; it focuses Monaco's
-  input, edits the visible model, then waits for the worker-applied write and
-  iframe update.
+  input, edits the visible model, then waits for the worker-applied write, an
+  actual iframe HMR bridge `update` event, and the iframe update. The parent
+  preview panel no longer reloads the iframe for every worker VFS snapshot, so
+  the e2e cannot pass via explorer refresh alone.
+- **Real Vite HMR invalidates by Vite file-change semantics.** Worker-side
+  writes now call `moduleGraph.onFileChange(file)` instead of probing
+  `getModuleById(file)` and falling back to `invalidateAll()`.
+- **HMR bridge channels are per-server tokenized.** The iframe client and bridge
+  server share a nonce-scoped URL/channel, so unrelated same-origin code cannot
+  join the old predictable port-only HMR channel.
 - **Cross-origin isolation failures now explain embedded-browser requirements.**
   The fatal COI guard still refuses to boot without `crossOriginIsolated === true`,
   but the message now calls out iframe/app-browser embeds: the parent page must

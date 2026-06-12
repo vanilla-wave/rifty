@@ -1,7 +1,7 @@
 # ADR 0097: Preview frame port context routes root-relative requests
 
 Status: Accepted
-Date: 2026-06
+Date: 2026-06-12
 
 > TL;DR: once a preview iframe commits `/preview/<port>/`, the SW treats
 > same-origin root-relative requests from that iframe client as preview traffic
@@ -38,10 +38,10 @@ reason.
 
 The SW keeps a preview-frame port context:
 
-1. When a request for `/preview/<port>/...` originates inside a preview iframe
-   (`request.mode === 'navigate'` or a non-empty `request.destination`), record
-   `iframeClientId -> port` using `FetchEvent.resultingClientId` when present,
-   otherwise `FetchEvent.clientId`.
+1. When a navigation to `/preview/<port>/...` creates or reuses a preview frame
+   client, record `iframeClientId -> port` using
+   `FetchEvent.resultingClientId` when present, otherwise
+   `FetchEvent.clientId`.
 2. For subsequent same-origin requests whose `FetchEvent.clientId` is a known
    preview iframe client, route the request to the recorded port even when the
    URL path does not start with `/preview/<port>/`.
@@ -49,21 +49,31 @@ The SW keeps a preview-frame port context:
    (`resultingClientId` is present), carry the port context forward to the new
    iframe client id.
 4. If a browser reload creates a new iframe client id without preserving the
-   prior mapping, recover the port from either the same-origin `Request.referrer`
-   or the iframe `Client.url` when either points at `/preview/<port>/`.
+   prior mapping, recover the port only from a same-origin
+   `Request.referrer` that points at `/preview/<port>/`. Do not speculatively
+   call `clients.get()` for arbitrary root-origin requests: unknown non-preview
+   requests must fall through without `respondWith`.
 5. Forward embedded iframe-context requests through the existing owner-binding
    path. The copied-top-level `/preview/<port>/` fallback is separate: it may
    route directly to the only live Worker for that port, but refuses ambiguous
    same-port Workers.
+
+Direct `/preview/<other-port>/...` requests from a known preview iframe route
+that one request to the explicit port but do not rebind the iframe's
+root-relative context. Page-owned subresources such as
+`<img src="/preview/5174/logo.png">` may route as explicit preview requests,
+but they never record the page `clientId` as a preview-frame context.
 
 `routePreview` still receives the synthetic upstream URL
 `http://preview.local${pathname}${search}`. The change is only how a root-origin
 iframe request becomes associated with a preview port.
 
 This uses the routing contract pinned by ADR-0040. ADR-0123 bumped
-`SW_ROUTING_VERSION` to `'2'` for owner-scoped Worker routing; ADR-0097 bumps it
+`SW_ROUTING_VERSION` to `'2'` for owner-scoped Worker routing; this ADR bumps it
 to `'3'` for iframe port context plus copied-top-level preview fallback.
 `SW_FRAME_VERSION` stays `'1'` because no wire-frame field shape changes.
+Number 0097 came from a scaffold gap and was accepted after ADR-0123 in the
+same PR batch; it records the follow-up routing refinement.
 
 The page's own root-origin fetches are not intercepted: without a known preview
 iframe `clientId`, non-`/preview` URLs fall through normally.
@@ -83,9 +93,10 @@ iframe `clientId`, non-`/preview` URLs fall through normally.
   URLs remain intentionally ambiguous when multiple live Workers claim the same
   port under different owner tokens.
 - The preview-frame context is SW-local and memory-only. A reload reconstructs
-  it from the next `/preview/<port>/` iframe navigation, or from the following
-  root-relative request's same-origin `/preview/<port>/` referrer / iframe
-  `Client.url`.
+  it from the next `/preview/<port>/` iframe navigation, or from a following
+  root-relative request's same-origin `/preview/<port>/` referrer. The current
+  map is bounded by fixed-cap eviction; `docs/backlog/service-worker/preview-frame-context-lifecycle.md`
+  tracks more precise lifetime cleanup.
 
 ## Cited ADRs and references
 
