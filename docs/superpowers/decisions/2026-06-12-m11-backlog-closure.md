@@ -164,3 +164,12 @@ It is intentionally concise and append-only during the work.
   shutdown protocol, and exported worker-spawn types. The playground keep-alive
   workaround already preserves the current consumer surface.
 - **Reversibility:** Doc-only retarget. Implementation needs its own ADR.
+
+### D17 — Crypto Sync Expansion Retarget
+
+- **Decision:** Retarget `runtime-js/crypto-sync-subset-expansion` as future
+  verified-consumer crypto work.
+- **Why:** Sync ciphers, KDFs, and signing need pure-JS correctness/timing
+  decisions where SubtleCrypto cannot satisfy sync Node APIs.
+- **Reversibility:** Doc-only retarget. Runtime additions stay gated on a real
+  package need and focused tests.
