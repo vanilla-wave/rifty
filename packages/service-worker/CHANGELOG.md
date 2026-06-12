@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **ADR-0125 supersedes ADR-0046 (removed).** Records the previously
+  unrecorded `SW_ROUTING_VERSION` `'3'` owner-selection decisions: async
+  `FirstWindowOwnerBinding.resolveOwner` (microtask-timing invariant dropped —
+  its fixed-turn rationale was stale), the ready-window preference for
+  no-clientId fallback, and the clientId sentinel trichotomy (id / `''`
+  anonymous-embedded / `null` copied-top-level). TSDoc across the owner
+  bindings updated to cite ADR-0125 and document the sentinels; no behavior
+  change.
+
 ### Fixed
 
 - **Preview bridge readiness survives Service Worker global restarts.**

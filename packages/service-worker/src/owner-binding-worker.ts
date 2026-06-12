@@ -196,6 +196,13 @@ export class WorkerOwnerBinding implements PreviewOwnerBinding {
     return client as Client;
   }
 
+  /**
+   * Which live Workers claim `port` across ALL owner tokens — the
+   * copied-top-level fast path (ADR-0125). `'unique'` carries the only live
+   * claimant; `'multiple'` = ambiguous, caller refuses (503); `'none'` = fall
+   * back to window resolution. Side effect: dead claimants are dropped and
+   * their in-flight `waitForReady` waiters resolve `'gone'`.
+   */
   async resolvePortOwners(
     scope: ServiceWorkerGlobalScope,
     port: number,

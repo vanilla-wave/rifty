@@ -4,6 +4,11 @@
 
 ### Changed
 
+- **ADR-0126 records the preview reload policy.** Preview iframe reloads are
+  HMR-client-driven; the snapshot-driven `previewRevision`/`refreshKey` reload
+  removed in the preview-routing branch is now ADR-recorded (options,
+  rationale, stale-iframe trade-off). Docs/comments only; no behavior change.
+
 - **"Soft Panels" visual redesign (ADR-0124).** UI rebuilt to the Gravity-UI
   design handoff: rounded card panels (`#1D1F26`) with 12px gaps on a
   `#131419` page, rifty lime `#C7F05A` accent, Inter (UI) + Roboto Mono

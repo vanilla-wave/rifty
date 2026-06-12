@@ -68,9 +68,9 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 |---|---|
 | 0002 | Cross-origin isolation is mandatory |
 | 0016 | Service Worker source-of-truth lives in `@riftydev/service-worker` |
-| 0046 | `PreviewOwnerBinding` — one seam for window and worker preview owners |
 | 0097 | Preview frame port context routes root-relative requests |
 | 0123 | Port-aware preview owner routing |
+| 0125 | Preview owner binding — async resolution, ready-window preference, clientId sentinels |
 
 ### npm-client
 
@@ -101,6 +101,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0080 | Lazy `node_modules` remote-read protocol + async explorer path |
 | 0095 | Dev-mode HMR routes through the cross-realm bridge (pluggable dev-server transport) |
 | 0124 | Soft Panels visual redesign adopts the Gravity UI handoff |
+| 0126 | Preview reloads are HMR-client-driven; snapshot-driven iframe reload removed |
 
 ### toolchain-build
 
@@ -165,6 +166,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0013 | 0072 | OPFS hot path; context grafted |
 | 0025 | 0043 | dev-server realm; page-realm globals-guard grafted |
 | 0044 | 0047 | esbuild WASI |
+| 0046 | 0125 | owner-binding seam; microtask invariant dropped, context grafted |
 | 0055 | n/a | retired opencode facade ADR; integration cancelled |
 | 0074 | 0077 | SW preview-nav routing; ported into ADR-0077 |
 | 0092 | n/a | retired opencode facade ADR; integration cancelled |
@@ -183,7 +185,7 @@ Promoted `OPEN_QUESTIONS` ids → ADRs.
 | Q-2026-05-23-006 | Rejected / 0010 |
 | Q-2026-05-24-007 | 0028 (reopened) |
 | Q-2026-05-25-touch-utimes | 0029 |
-| Q-2026-05-27-002 | 0046 |
+| Q-2026-05-27-002 | 0046 (removed) |
 | Q-2026-05-27-003 | 0049 |
 | Q-2026-05-29-001 | 0048 |
 | Q-2026-05-29-002 | 0050 |

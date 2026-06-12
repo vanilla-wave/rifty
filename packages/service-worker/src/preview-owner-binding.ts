@@ -121,8 +121,11 @@ export interface PreviewOwnerBinding {
    * @param scope - SW global scope (provides `clients`).
    * @param request - Fetch request being routed. Window binding ignores it;
    *   worker binding may key off URL/headers in the future.
-   * @param clientId - Owning client id from the fetch event
-   *   (`event.resultingClientId || event.clientId`), or `null` if both empty.
+   * @param clientId - Owner-attribution sentinel synthesized by the
+   *   interceptor, NOT the raw event id (ADR-0125): a real client id = direct
+   *   attribution; `''` = anonymous-but-embedded preview traffic (window
+   *   fallback + ready-window preference); `null` = copied top-level / unknown
+   *   frame context (unique-worker fast path, 503 on ambiguity).
    * @param port - Preview port from the matched URL (`/preview/<port>/…`).
    *   Worker binding routes by it; window binding ignores it.
    * @returns Owning client, or `null` if none resolved (route-preview turns

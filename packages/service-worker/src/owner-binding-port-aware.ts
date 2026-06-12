@@ -3,11 +3,12 @@
  * prefer a Worker that claims the requested port within that window's owner
  * token. Fall back to the historical window bridge otherwise.
  *
- * A copied top-level `/preview/<port>/` URL has no controlling playground window
- * token. For that case only (`clientId === null`), the binding may route
- * directly to a Worker when exactly one live Worker claims the port. Ambiguous
- * same-port Worker owners return 503 before window fallback to preserve
- * ADR-0123 multi-window isolation.
+ * Embedded iframe traffic arrives as the `''` sentinel (ADR-0125) and always
+ * takes the window -> ownerToken path. A copied top-level `/preview/<port>/`
+ * URL has no controlling playground window token and arrives as `null`; only
+ * then may the binding route directly to a Worker when exactly one live Worker
+ * claims the port. Ambiguous same-port Worker owners return 503 before window
+ * fallback to preserve ADR-0123 multi-window isolation.
  *
  * Real Vite runs in a Worker and posts `{ ownerToken, ports: [...] }`, so
  * `/preview/<port>` can route SW -> Worker directly without letting a Worker

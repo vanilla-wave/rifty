@@ -101,8 +101,10 @@ claim scope, or the mismatch / one-shot-warn dedup key shape.
 ADR-0040 is the source-of-truth for the split; ADR-0031 is the
 predecessor that established the per-frame contract; ADR-0016 covers
 the broader "TS source-of-truth + bundled `sw.js`" decision. ADR-0097 records
-the preview-frame root-relative routing contract; ADR-0123 records the owner
-routing bumps through `SW_ROUTING_VERSION` `'3'`.
+the preview-frame root-relative routing contract and the bump to
+`SW_ROUTING_VERSION` `'3'`; ADR-0123 records the `'2'` owner-scoped Worker
+routing bump; ADR-0125 records the ready-window preference, async owner
+resolution, and the clientId sentinel trichotomy.
 
 The protocol does not attempt cross-version compatibility — a version
 mismatch between an old page and a fresh SW (or vice-versa) refuses
