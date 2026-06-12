@@ -29,6 +29,7 @@ import '@riftydev/net/sqlite/register-builtins';
 import { initSqliteEngine } from '@riftydev/net/sqlite/engine';
 import { RegistryClient, install } from '@riftydev/npm-client';
 import { Buffer } from '@riftydev/runtime-js/builtins/buffer';
+import { Console } from '@riftydev/runtime-js/builtins/console';
 import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
 import { installProcessGlobals, setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
@@ -253,6 +254,15 @@ async function bootNodeServer(cfg: NodeServerBootstrapConfig, loader: Loader): P
     await Promise.race([initSqliteEngine(config), engineTimeout]);
     log('[real-vite/worker] node:sqlite engine ready\n');
   }
+
+  // Node parity: console.log IS stdout. Route the server program's console
+  // into the kernel stdio so its request/db logs land in the playground
+  // terminal instead of the worker devtools.
+  const proc = globalThis.process as unknown as {
+    stdout: { write(chunk: string): unknown };
+    stderr: { write(chunk: string): unknown };
+  };
+  (globalThis as { console: unknown }).console = new Console(proc.stdout, proc.stderr);
 
   log(`[real-vite/worker] starting server ${cfg.entryPath} on port ${cfg.port}…\n`);
   await loader.import(cfg.entryPath, `${cfg.root}/__entry__.mjs`);

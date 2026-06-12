@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`./builtins/console` subpath export** — the Node-compatible `Console`
+  class over writable streams, so embedders (playground node-server bootstrap)
+  can route a guest program's console into kernel stdio.
+
 ### Fixed
 
 - **`path.resolve` anchors relative paths at `process.cwd()`** (Node parity;

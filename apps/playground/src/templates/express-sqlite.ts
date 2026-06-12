@@ -34,9 +34,18 @@ db.exec(\`
     ('Route requests through the Service Worker', 1),
     ('Persist rows in SQLite-as-WASM', 0);
 \`);
+console.log('[db] CREATE TABLE todos + 3 seed rows');
 
 const app = express();
 app.use(express.json());
+
+// Log every incoming request (API and static alike) before routing — the
+// worker's stdout lands in the playground terminal.
+app.use((req, _res, next) => {
+  console.log('[http] ' + req.method + ' ' + req.url);
+  next();
+});
+
 app.use(express.static('public'));
 
 app.get('/api/todos', (_req, res) => {
@@ -47,6 +56,7 @@ app.post('/api/todos', (req, res) => {
   const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
   if (!title) return res.status(400).json({ error: 'title required' });
   const { lastInsertRowid } = db.prepare('INSERT INTO todos (title) VALUES (?)').run(title);
+  console.log('[db] INSERT todos #' + lastInsertRowid + ' "' + title + '"');
   res.status(201).json(db.prepare('SELECT id, title, done FROM todos WHERE id = ?').get(lastInsertRowid));
 });
 
@@ -54,12 +64,14 @@ app.patch('/api/todos/:id', (req, res) => {
   const done = req.body?.done ? 1 : 0;
   const { changes } = db.prepare('UPDATE todos SET done = ? WHERE id = ?').run(done, Number(req.params.id));
   if (changes === 0) return res.status(404).json({ error: 'no such todo' });
+  console.log('[db] UPDATE todos #' + req.params.id + ' done=' + done);
   res.json(db.prepare('SELECT id, title, done FROM todos WHERE id = ?').get(Number(req.params.id)));
 });
 
 app.delete('/api/todos/:id', (req, res) => {
   const { changes } = db.prepare('DELETE FROM todos WHERE id = ?').run(Number(req.params.id));
   if (changes === 0) return res.status(404).json({ error: 'no such todo' });
+  console.log('[db] DELETE todos #' + req.params.id);
   res.status(204).end();
 });
 

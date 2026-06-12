@@ -63,6 +63,12 @@ describe('node-server runtime branch', () => {
     expect(source).toContain('await loader.import(cfg.entryPath');
   });
 
+  it('routes the server program console into kernel stdio (Node parity: console.log IS stdout)', () => {
+    // Without this, server console.log lands in worker devtools, not the
+    // playground terminal — the demo's request/db logs would be invisible.
+    expect(source).toContain('console = new Console(');
+  });
+
   it('fails loudly when the entry never starts listening on the routed port', () => {
     expect(source).toContain('listPorts()');
     expect(source).toContain('never started listening');

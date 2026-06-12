@@ -31,6 +31,7 @@
     "./builtins/process": "./src/builtins/process.ts",
     "./builtins/timers": "./src/builtins/timers.ts",
     "./builtins/buffer": "./src/builtins/buffer.ts",
+    "./builtins/console": "./src/builtins/console.ts",
     "./builtins/module": "./src/builtins/module.ts",
     "./builtins/child_process": "./src/builtins/child_process.ts"
   },
@@ -84,6 +85,10 @@
       "./builtins/buffer": {
         "types": "./dist/builtins/buffer.d.ts",
         "import": "./dist/builtins/buffer.js"
+      },
+      "./builtins/console": {
+        "types": "./dist/builtins/console.d.ts",
+        "import": "./dist/builtins/console.js"
       },
       "./builtins/module": {
         "types": "./dist/builtins/module.d.ts",

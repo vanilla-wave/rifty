@@ -83,6 +83,11 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     const seeded = JSON.parse((await fetchTodos()).body) as { id: number; title: string }[];
     expect(seeded.length).toBeGreaterThanOrEqual(3);
 
+    // The server program's console.log reaches the playground terminal
+    // (kernel-stdio console wiring): boot-time seed log + request logging.
+    await expectTerminalContains(page, '[db] CREATE TABLE todos + 3 seed rows', 10_000);
+    await expectTerminalContains(page, '[http] GET /api/todos', 10_000);
+
     // Static client served by express.static through the same SW route.
     const home = await page.evaluate(async (port: number) => {
       const r = await fetch(`/preview/${port}/`, { cache: 'no-store' });
@@ -123,5 +128,8 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     await expect(frame.locator('.row__title', { hasText: 'added from the e2e test' })).toBeVisible({
       timeout: 15_000,
     });
+
+    // The write made it into the terminal as a db log line.
+    await expectTerminalContains(page, '[db] INSERT todos #', 10_000);
   });
 });
