@@ -87,11 +87,17 @@ const dispatcherPrepareStackTrace: PrepareStackTrace = (err, stackTraces) => {
 export function extractInlineSourceMap(source: string): ExtractedSourceMap {
   const match = INLINE_SOURCE_MAP_RE.exec(source);
   if (!match) return { code: source };
-  const rawMap = decodeRawSourceMap(match[1] ?? '');
-  return {
-    code: source.slice(0, match.index).trimEnd(),
-    map: decodeSourceMap(rawMap),
-  };
+  try {
+    const rawMap = decodeRawSourceMap(match[1] ?? '');
+    return {
+      code: source.slice(0, match.index).trimEnd(),
+      map: decodeSourceMap(rawMap),
+    };
+  } catch {
+    // Stack remapping is a DX layer: a malformed inline map must not turn
+    // into a module-load failure — run the module with unmapped stacks.
+    return { code: source };
+  }
 }
 
 export async function withStackRemapping<T>(
@@ -186,9 +192,12 @@ function decodeSourceMap(map: RawSourceMap): DecodedSourceMap {
     if (line.length === 0) return segments;
     for (const rawSegment of line.split(',')) {
       const values = decodeVlqSegment(rawSegment);
-      if (values.length < 4) continue;
+      if (values.length === 0) continue;
       const generatedColumn = previousGeneratedColumn + (values[0] ?? 0);
       previousGeneratedColumn = generatedColumn;
+      // 1-field segments carry only a generated-column delta (esbuild emits
+      // them for unmapped generated text); the delta above must still apply.
+      if (values.length < 4) continue;
       previousSource += values[1] ?? 0;
       previousOriginalLine += values[2] ?? 0;
       previousOriginalColumn += values[3] ?? 0;

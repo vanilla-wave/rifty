@@ -1,6 +1,7 @@
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { createModuleLoader } from './loader.ts';
+import { SourceMapRegistry, extractInlineSourceMap } from './source-maps.ts';
 
 declare global {
   var __riftyStackFrame: string | undefined;
@@ -93,6 +94,47 @@ describe('module loader source-map stack remapping', () => {
       const frame = (err as Error).stack?.match(/\/work\/main\.ts:\d+:\d+/)?.[0] ?? 'missing';
       expect(frame).toBe('/work/main.ts:5:1');
     }
+  });
+
+  it('advances generated columns across single-field VLQ segments', () => {
+    const map = {
+      version: 3,
+      sources: ['main.ts'],
+      sourcesContent: [''],
+      names: [],
+      // col 0 → orig 1:1, then a 1-field segment advancing the generated
+      // column by 5, then a 4-field segment at generated col 8 → orig 2:1.
+      mappings: `${segment([0, 0, 0, 0])},${segment([5])},${segment([3, 0, 1, 0])}`,
+    };
+    const code = `code\n//# sourceMappingURL=data:application/json;base64,${Buffer.from(
+      JSON.stringify(map),
+    ).toString('base64')}`;
+
+    const extracted = extractInlineSourceMap(code);
+    if (!extracted.map) throw new Error('expected an inline map to decode');
+    const registry = new SourceMapRegistry();
+    registry.set('/work/main.ts', extracted.map);
+
+    // Column 6 sits between the first segment (col 0) and the third (col 8):
+    // it must resolve to the FIRST segment, not be pulled right because the
+    // 1-field segment failed to advance the running column.
+    expect(registry.remapStack('    at /work/main.ts:1:6', '/work/main.ts', 0)).toBe(
+      '    at /work/main.ts:1:1',
+    );
+    expect(registry.remapStack('    at /work/main.ts:1:10', '/work/main.ts', 0)).toBe(
+      '    at /work/main.ts:2:1',
+    );
+  });
+
+  it('degrades to the raw source when an inline map is malformed', () => {
+    const bad = `code\n//# sourceMappingURL=data:application/json;base64,${Buffer.from(
+      '{"version":7,"mappings":5}',
+    ).toString('base64')}`;
+
+    const extracted = extractInlineSourceMap(bad);
+
+    expect(extracted.map).toBeUndefined();
+    expect(extracted.code).toBe(bad);
   });
 
   it('materializes escaping errors only once under the stack hook', async () => {

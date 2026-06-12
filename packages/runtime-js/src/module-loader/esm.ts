@@ -63,6 +63,13 @@ export interface EsmLoaderDeps {
   readonly transformEsm?: (source: string, id: string) => TransformResult;
 }
 
+// V8 renders `new Function(args, body)` as `function anonymous(args\n) {\n<body>`
+// — the module body starts 4 lines below the reported frame line. Coupled to
+// the factory wrapper in `executeEsm`; wrong on non-V8 engines (we target
+// Chromium, D-001). Remapping is active only while the module factory runs
+// (top-level evaluation) — frames rendered later, e.g. an exported handler
+// throwing at request time, stay unmapped.
+// TODO(backlog: runtime-js/worker-stack-remap-error-overlay)
 const ESM_STACK_LINE_OFFSET = 4;
 
 /**
