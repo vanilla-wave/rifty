@@ -1,4 +1,9 @@
-import { type RuntimeController, type RuntimeOptions, spawnRuntime } from '@riftydev/runtime-js';
+import {
+  type RuntimeController,
+  type RuntimeFs,
+  type RuntimeOptions,
+  spawnRuntime,
+} from '@riftydev/runtime-js';
 import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
 import { registerServiceWorker } from '@riftydev/service-worker';
 import { initBackend } from '@riftydev/vfs';
@@ -41,6 +46,8 @@ export interface CreateSandboxOptions {
 export interface Sandbox {
   /** Framework-agnostic JS runtime controller (`eval` / `reset` / `on` / …). */
   readonly runtime: RuntimeController;
+  /** Worker-owned filesystem RPC surface for AI-agent style file IO. */
+  readonly fs: RuntimeFs;
   /** Which VFS backend booted, and why if it fell back to memory. */
   readonly vfs: VfsBootInfo;
   /** Capability probe taken at boot. */
@@ -132,6 +139,7 @@ export async function createSandbox(
 
   return {
     runtime,
+    fs: runtime.fs,
     vfs,
     capabilities,
     ...(swError === undefined ? {} : { swError }),

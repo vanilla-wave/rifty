@@ -36,4 +36,5 @@ export type {
   EvalResult,
   RuntimeController,
   RuntimeEvent,
+  RuntimeFs,
 } from '@riftydev/runtime-js';
