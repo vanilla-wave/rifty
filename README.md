@@ -2,7 +2,9 @@
 
 Browser-based, Node-compatible runtime + WASI runner — a WebContainers-like system built from scratch. Run `Express`, `npm install`, a dev server, even WASI binaries, **inside a browser tab**. Pet project; goal is deep understanding of how these systems work, plus a practical "Express + npm install in the browser".
 
-> **Status:** active milestone M10 (Real Tooling). APIs are `0.x` and may move. See [`docs/ROADMAP.md`](./docs/ROADMAP.md), [`docs/adr/`](./docs/adr/), [`docs/public/compat/`](./docs/public/compat/).
+> **Status:** active milestone M11 (Consumer Ready). APIs are `0.x` and may move. See [`docs/ROADMAP.md`](./docs/ROADMAP.md), [`docs/adr/`](./docs/adr/), [`docs/public/compat/`](./docs/public/compat/).
+
+> **Position:** open, self-hostable, browser-local runtime infrastructure. See [`docs/public/open-runtime-position.md`](./docs/public/open-runtime-position.md) and the [`trust model`](./docs/public/trust-model.md); compatibility claims live in [`docs/public/compat/`](./docs/public/compat/).
 
 ## Packages
 
@@ -99,7 +101,7 @@ pnpm test:parity          # node parity runner
 pnpm test:e2e             # playwright (chromium)
 ```
 
-In-repo `exports` point at raw TypeScript `src/` (dev/HMR needs no build); **published** packages point at built `dist/` via `publishConfig`. See [`docs/PUBLISHING.md`](./docs/PUBLISHING.md) and ADR-0070.
+In-repo `exports` point at raw TypeScript `src/` (dev/HMR needs no build); **published** packages point at built `dist/` via `publishConfig`. See [`docs/public/publishing.md`](./docs/public/publishing.md) and ADR-0070.
 
 ## Architecture
 
@@ -121,4 +123,4 @@ Rules live in [`CLAUDE.md`](./CLAUDE.md): TDD (tests/parity-case first), no `any
 
 ## License
 
-[MIT](./LICENSE).
+First-party rifty packages publish as [MIT](./LICENSE). See the [open runtime position](./docs/public/open-runtime-position.md) for the claim boundary; transitive dependency audit is tracked separately.

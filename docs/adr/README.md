@@ -112,6 +112,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0043 | Vite-in-Worker realm and cross-realm preview bridge |
 | 0070 | npm publish — tsup build + dual (dev-src / publish-dist) exports |
 | 0071 | Umbrella `@riftydev/sdk` package — one-install front door |
+| 0131 | Public sandbox filesystem API for AI agents |
 
 ### protocol
 
