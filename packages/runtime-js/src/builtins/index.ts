@@ -26,7 +26,6 @@ import {
   punycode,
   repl,
   sys,
-  vm,
   async_hooks,
   inspector,
   constants as nodeConstants,
@@ -46,6 +45,7 @@ import ttyModule from './tty.ts';
 import urlModule from './url.ts';
 import utilTypesModule from './util-types.ts';
 import utilModule from './util.ts';
+import vmModule from './vm.ts';
 import workerThreadsModule from './worker_threads.ts';
 
 // Re-export the registry surface so existing consumers
@@ -59,62 +59,71 @@ export {
   type BuiltinFactory,
 } from '@riftydev/io';
 
-registerBuiltin('path', () => pathModule);
-registerBuiltin('events', () => {
-  const exports = EventEmitter as unknown as Record<string, unknown>;
-  exports.EventEmitter = EventEmitter;
-  exports.once = eventsOnce;
-  return exports;
-});
-registerBuiltin('util', () => utilModule);
-registerBuiltin('util/types', () => utilTypesModule);
-registerBuiltin('querystring', () => querystringModule);
-registerBuiltin('url', () => urlModule);
-registerBuiltin('assert', () => assertModule);
-registerBuiltin('assert/strict', () => assertStrict);
-registerBuiltin('buffer', () => {
-  const exports = { Buffer } as Record<string, unknown>;
-  Object.assign(exports, bufferModule);
-  return exports;
-});
-registerBuiltin('process', () => riftyProcess);
-registerBuiltin('timers', () => timersModule);
-registerBuiltin('timers/promises', () => timersPromises);
-registerBuiltin('fs', () => fsModule);
-registerBuiltin('fs/promises', () => fsPromises);
-registerBuiltin('stream', () => streamModule);
-registerBuiltin('stream/promises', () => ({
-  pipeline: streamModule.pipeline,
-  finished: streamModule.finished,
-}));
-registerBuiltin('stream/consumers', () => streamConsumers);
-// #26 PART B: install the execSync SAB handler on first require, not at startup.
-registerBuiltin('child_process', () => {
-  ensureExecSyncHandlerInstalled();
-  return childProcessModule;
-});
-registerBuiltin('worker_threads', () => workerThreadsModule);
-registerBuiltin('os', () => osModule);
-registerBuiltin('crypto', () => cryptoModule);
-registerBuiltin('console', () => consoleModule);
-registerBuiltin('diagnostics_channel', () => diagnosticsChannelModule);
-registerBuiltin('module', () => moduleModule);
-registerBuiltin('perf_hooks', () => perfHooksModule);
-registerBuiltin('tty', () => ttyModule);
-registerBuiltin('string_decoder', () => stringDecoderModule);
-registerBuiltin('dns', () => dns);
-registerBuiltin('dns/promises', () => dns.promises);
-registerBuiltin('tls', () => tls);
-registerBuiltin('dgram', () => dgram);
-registerBuiltin('http2', () => http2);
-registerBuiltin('zlib', () => zlib);
-registerBuiltin('readline', () => readline);
-registerBuiltin('v8', () => v8);
-registerBuiltin('vm', () => vm);
-registerBuiltin('async_hooks', () => async_hooks);
-registerBuiltin('inspector', () => inspector);
-registerBuiltin('repl', () => repl);
-registerBuiltin('constants', () => nodeConstants);
-registerBuiltin('punycode', () => punycode);
-registerBuiltin('sys', () => sys);
-registerBuiltin('cluster', () => cluster);
+let runtimeJsBuiltinsRegistered = false;
+
+export function ensureRuntimeJsBuiltinsRegistered(): void {
+  if (runtimeJsBuiltinsRegistered) return;
+  runtimeJsBuiltinsRegistered = true;
+
+  registerBuiltin('path', () => pathModule);
+  registerBuiltin('events', () => {
+    const exports = EventEmitter as unknown as Record<string, unknown>;
+    exports.EventEmitter = EventEmitter;
+    exports.once = eventsOnce;
+    return exports;
+  });
+  registerBuiltin('util', () => utilModule);
+  registerBuiltin('util/types', () => utilTypesModule);
+  registerBuiltin('querystring', () => querystringModule);
+  registerBuiltin('url', () => urlModule);
+  registerBuiltin('assert', () => assertModule);
+  registerBuiltin('assert/strict', () => assertStrict);
+  registerBuiltin('buffer', () => {
+    const exports = { Buffer } as Record<string, unknown>;
+    Object.assign(exports, bufferModule);
+    return exports;
+  });
+  registerBuiltin('process', () => riftyProcess);
+  registerBuiltin('timers', () => timersModule);
+  registerBuiltin('timers/promises', () => timersPromises);
+  registerBuiltin('fs', () => fsModule);
+  registerBuiltin('fs/promises', () => fsPromises);
+  registerBuiltin('stream', () => streamModule);
+  registerBuiltin('stream/promises', () => ({
+    pipeline: streamModule.pipeline,
+    finished: streamModule.finished,
+  }));
+  registerBuiltin('stream/consumers', () => streamConsumers);
+  // #26 PART B: install the execSync SAB handler on first require, not at startup.
+  registerBuiltin('child_process', () => {
+    ensureExecSyncHandlerInstalled();
+    return childProcessModule;
+  });
+  registerBuiltin('worker_threads', () => workerThreadsModule);
+  registerBuiltin('os', () => osModule);
+  registerBuiltin('crypto', () => cryptoModule);
+  registerBuiltin('console', () => consoleModule);
+  registerBuiltin('diagnostics_channel', () => diagnosticsChannelModule);
+  registerBuiltin('module', () => moduleModule);
+  registerBuiltin('perf_hooks', () => perfHooksModule);
+  registerBuiltin('tty', () => ttyModule);
+  registerBuiltin('string_decoder', () => stringDecoderModule);
+  registerBuiltin('dns', () => dns);
+  registerBuiltin('dns/promises', () => dns.promises);
+  registerBuiltin('tls', () => tls);
+  registerBuiltin('dgram', () => dgram);
+  registerBuiltin('http2', () => http2);
+  registerBuiltin('zlib', () => zlib);
+  registerBuiltin('readline', () => readline);
+  registerBuiltin('v8', () => v8);
+  registerBuiltin('vm', () => vmModule);
+  registerBuiltin('async_hooks', () => async_hooks);
+  registerBuiltin('inspector', () => inspector);
+  registerBuiltin('repl', () => repl);
+  registerBuiltin('constants', () => nodeConstants);
+  registerBuiltin('punycode', () => punycode);
+  registerBuiltin('sys', () => sys);
+  registerBuiltin('cluster', () => cluster);
+}
+
+ensureRuntimeJsBuiltinsRegistered();

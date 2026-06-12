@@ -28,7 +28,8 @@
  * `PinnedPackage`.
  */
 
-import type { Vfs } from '@riftydev/vfs';
+import { NotImplementedError } from '@riftydev/io';
+import { type Vfs, joinPath } from '@riftydev/vfs';
 import {
   type FetchAndUnpackCtx,
   type FetchAndUnpackResult,
@@ -98,6 +99,7 @@ interface ResolvedPin {
   readonly resolved: string;
   readonly integrity?: string;
   readonly dependencies: Record<string, string>;
+  readonly bin?: string | Record<string, string>;
   readonly peerDependencies?: Record<string, string>;
   /** Live-resolve only. The lockfile source returns `{}`: at write time,
    * succeeding optionals were folded into `dependencies` and failures dropped,
@@ -108,6 +110,20 @@ interface ResolvedPin {
    *  layout regardless of visit order; when undefined, the walk computes
    *  first-wins-flat + nest-on-conflict placement. */
   readonly installPath?: string;
+}
+
+interface NormalizedInstallRequest {
+  readonly rootName: string;
+  readonly rootVersion: string;
+  readonly dependencies: Record<string, string>;
+  readonly optionalDependencies: Record<string, string>;
+  readonly opts: InstallOptions;
+}
+
+interface SourcePlan {
+  readonly source: ResolutionSource;
+  readonly dependencies: Record<string, string>;
+  readonly optionalDependencies: Record<string, string>;
 }
 
 /**
@@ -135,12 +151,37 @@ interface ResolutionSource {
   resolve(name: string, range: string | null, ctx: ResolveContext): Promise<ResolvedPin>;
 }
 
+export async function install(opts: InstallOptions): Promise<InstallResult>;
+export async function install(
+  rootName: string,
+  rootVersion: string,
+  opts: InstallOptions,
+): Promise<InstallResult>;
 export async function install(
   rootName: string,
   rootVersion: string,
   dependencies: Record<string, string>,
   opts: InstallOptions,
+): Promise<InstallResult>;
+export async function install(
+  rootNameOrOpts: string | InstallOptions,
+  rootVersion?: string,
+  dependenciesOrOpts?: Record<string, string> | InstallOptions,
+  maybeOpts?: InstallOptions,
 ): Promise<InstallResult> {
+  const request = await normalizeInstallArgs(
+    rootNameOrOpts,
+    rootVersion,
+    dependenciesOrOpts,
+    maybeOpts,
+  );
+  const {
+    rootName,
+    rootVersion: normalizedRootVersion,
+    dependencies,
+    optionalDependencies,
+    opts,
+  } = request;
   const tarballCache: TarballCache = opts.tarballCache ?? new VfsTarballCache(opts.vfs);
   const fetchCtx: FetchAndUnpackCtx = {
     cache: tarballCache,
@@ -148,19 +189,201 @@ export async function install(
   };
 
   const existingLockfile = await readExistingLockfile(opts.vfs, opts.cwd);
-  const source = chooseSource(existingLockfile, dependencies, rootName, opts);
+  const plan = chooseSource(existingLockfile, dependencies, optionalDependencies, rootName, opts);
 
-  const resolved = await walkAndPin(source, dependencies, rootName, fetchCtx);
+  const resolved = await walkAndPin(
+    plan.source,
+    plan.dependencies,
+    plan.optionalDependencies,
+    rootName,
+    fetchCtx,
+  );
   const packages = [...resolved.values()];
 
   // Runs on both paths (D-F): lockfile entries carry `peerDependencies`, so
   // warn output is identical whichever path the install took.
   warnUnsatisfiedPeers(packages);
   await link(opts.vfs, opts.cwd, packages);
-  const lockfile = buildLockfile(rootName, rootVersion, packages);
+  const lockfile = buildLockfile(rootName, normalizedRootVersion, packages);
   // Diff-before-write preserves user-visible mtime on a no-op install (ADR-0023).
   await writeLockfileIfChanged(opts.vfs, opts.cwd, lockfile);
   return { packages, lockfile, conflicts: [] };
+}
+
+async function normalizeInstallArgs(
+  rootNameOrOpts: string | InstallOptions,
+  rootVersion: string | undefined,
+  dependenciesOrOpts: Record<string, string> | InstallOptions | undefined,
+  maybeOpts: InstallOptions | undefined,
+): Promise<NormalizedInstallRequest> {
+  let rootName: string | undefined;
+  let normalizedRootVersion: string | undefined;
+  let dependencies: Record<string, string> | undefined;
+  let optionalDependencies: Record<string, string> = {};
+  let opts: InstallOptions | undefined;
+  let shouldReadPackageJson = false;
+
+  if (isInstallOptions(rootNameOrOpts)) {
+    opts = rootNameOrOpts;
+    shouldReadPackageJson = true;
+  } else {
+    rootName = rootNameOrOpts;
+    normalizedRootVersion = rootVersion;
+    if (isInstallOptions(dependenciesOrOpts)) {
+      opts = dependenciesOrOpts;
+      shouldReadPackageJson = true;
+    } else {
+      dependencies = dependenciesOrOpts;
+      opts = maybeOpts;
+    }
+  }
+
+  if (!opts) throw new TypeError('install() missing InstallOptions');
+
+  if (shouldReadPackageJson) {
+    const manifest = await readRootPackageJson(opts.vfs, opts.cwd);
+    rootName = rootName ?? manifest.name ?? 'root';
+    normalizedRootVersion = normalizedRootVersion ?? manifest.version ?? '0.0.0';
+    dependencies = { ...manifest.devDependencies, ...manifest.dependencies };
+    optionalDependencies = { ...manifest.optionalDependencies };
+    for (const name of Object.keys(optionalDependencies)) {
+      delete dependencies[name];
+    }
+    opts = {
+      ...opts,
+      overrides: mergeOverrides(manifest.overrides, opts.overrides),
+    };
+  }
+
+  dependencies ??= {};
+  rootName ??= 'root';
+  normalizedRootVersion ??= '0.0.0';
+  assertRegistryDependencySpecs(dependencies, optionalDependencies);
+  assertRegistryOverrideTargets(opts.overrides);
+  return { rootName, rootVersion: normalizedRootVersion, dependencies, optionalDependencies, opts };
+}
+
+function isInstallOptions(value: unknown): value is InstallOptions {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<InstallOptions>;
+  return !!candidate.vfs && typeof candidate.cwd === 'string' && !!candidate.registry;
+}
+
+interface RootPackageJson {
+  readonly name?: string;
+  readonly version?: string;
+  readonly dependencies: Record<string, string>;
+  readonly devDependencies: Record<string, string>;
+  readonly optionalDependencies: Record<string, string>;
+  readonly overrides: OverrideMap;
+}
+
+async function readRootPackageJson(vfs: Vfs, cwd: string): Promise<RootPackageJson> {
+  const text = await vfs.readFileText(joinPath(cwd, 'package.json'));
+  const parsed = JSON.parse(text) as unknown;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`package.json at ${joinPath(cwd, 'package.json')} must be a JSON object`);
+  }
+  const raw = parsed as Record<string, unknown>;
+  assertNoLifecycleScripts(readStringRecord(raw, 'scripts'));
+  return {
+    name: typeof raw.name === 'string' ? raw.name : undefined,
+    version: typeof raw.version === 'string' ? raw.version : undefined,
+    dependencies: readStringRecord(raw, 'dependencies'),
+    devDependencies: readStringRecord(raw, 'devDependencies'),
+    optionalDependencies: readStringRecord(raw, 'optionalDependencies'),
+    overrides: readStringRecord(raw, 'overrides'),
+  };
+}
+
+function readStringRecord(source: Record<string, unknown>, field: string): Record<string, string> {
+  const value = source[field];
+  if (value === undefined) return {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`package.json#${field} must be an object of string values`);
+  }
+  const out: Record<string, string> = {};
+  for (const [name, range] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof range !== 'string') {
+      throw new NotImplementedError(
+        `npm-client.package-json.${field}`,
+        'nested/non-string entries',
+      );
+    }
+    out[name] = range;
+  }
+  return out;
+}
+
+function mergeOverrides(
+  fromPackageJson: OverrideMap,
+  fromOptions: OverrideMap | undefined,
+): OverrideMap | undefined {
+  const merged = { ...fromPackageJson, ...(fromOptions ?? {}) };
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
+function assertRegistryDependencySpecs(
+  dependencies: Record<string, string>,
+  optionalDependencies: Record<string, string>,
+): void {
+  for (const [name, range] of Object.entries({ ...dependencies, ...optionalDependencies })) {
+    const feature = unsupportedDependencySpec(range);
+    if (feature) {
+      throw new NotImplementedError(
+        `npm-client.dependency-spec.${feature}`,
+        `${name}@${range} is outside registry semver/tag installs`,
+      );
+    }
+  }
+}
+
+function assertRegistryOverrideTargets(overrides: OverrideMap | undefined): void {
+  if (!overrides) return;
+  for (const [name, target] of Object.entries(overrides)) {
+    const feature = unsupportedOverrideTargetSpec(target);
+    if (!feature) continue;
+    throw new NotImplementedError(
+      `npm-client.dependency-spec.${feature}`,
+      `override ${name} -> ${target} is outside registry semver/tag installs`,
+    );
+  }
+}
+
+function unsupportedDependencySpec(range: string): string | null {
+  const spec = range.trim();
+  if (/^(file|link):/.test(spec)) return 'file';
+  if (spec.startsWith('workspace:')) return 'workspace';
+  if (/^(git\+|git:|github:|gitlab:|bitbucket:)/.test(spec) || /\.git(?:#|$)/.test(spec)) {
+    return 'git';
+  }
+  if (/^https?:/.test(spec)) return 'http-tarball';
+  if (spec.startsWith('npm:')) return 'npm-alias';
+  return null;
+}
+
+function unsupportedOverrideTargetSpec(target: string): string | null {
+  const raw = target.trim();
+  const withoutAlias = raw.startsWith('npm:') ? raw.slice(4) : raw;
+  const direct = unsupportedDependencySpec(withoutAlias);
+  if (direct) return direct;
+  const at = withoutAlias.lastIndexOf('@');
+  if (at <= 0) return null;
+  return unsupportedDependencySpec(withoutAlias.slice(at + 1));
+}
+
+const ROOT_LIFECYCLE_SCRIPTS = ['preinstall', 'install', 'postinstall', 'prepare'] as const;
+const REGISTRY_TARBALL_LIFECYCLE_SCRIPTS = ['preinstall', 'install', 'postinstall'] as const;
+
+function assertNoLifecycleScripts(
+  scripts: Record<string, string> | undefined,
+  lifecycleScripts: readonly string[] = ROOT_LIFECYCLE_SCRIPTS,
+): void {
+  if (!scripts) return;
+  for (const name of lifecycleScripts) {
+    if (scripts[name] === undefined) continue;
+    throw new NotImplementedError(`npm-client.lifecycle.${name}`);
+  }
 }
 
 /**
@@ -171,20 +394,31 @@ export async function install(
 function chooseSource(
   existingLockfile: Lockfile | null,
   dependencies: Record<string, string>,
+  optionalDependencies: Record<string, string>,
   rootName: string,
   opts: InstallOptions,
-): ResolutionSource {
+): SourcePlan {
+  const effectiveDependencies = applyOverridesToRequest(dependencies, rootName, opts.overrides);
+  const effectiveOptionalDependencies = applyOverridesToRequest(
+    optionalDependencies,
+    rootName,
+    opts.overrides,
+  );
   if (existingLockfile) {
-    const effectiveRequest = applyOverridesToRequest(dependencies, rootName, opts.overrides);
+    const effectiveRequest = { ...effectiveDependencies, ...effectiveOptionalDependencies };
     const topLevelPins = lockfileCovers(existingLockfile, effectiveRequest);
     if (
       topLevelPins &&
       subgraphFreeOfOverrideDivergence(existingLockfile, topLevelPins, opts.overrides)
     ) {
-      return createLockfileSource(existingLockfile);
+      return {
+        source: createLockfileSource(existingLockfile),
+        dependencies: effectiveDependencies,
+        optionalDependencies: effectiveOptionalDependencies,
+      };
     }
   }
-  return createRegistrySource(opts);
+  return { source: createRegistrySource(opts), dependencies, optionalDependencies };
 }
 
 /**
@@ -214,6 +448,7 @@ function chooseSource(
 async function walkAndPin(
   source: ResolutionSource,
   topLevelDependencies: Record<string, string>,
+  topLevelOptionalDependencies: Record<string, string>,
   rootName: string,
   fetchCtx: FetchAndUnpackCtx,
 ): Promise<Map<string, PinnedPackage>> {
@@ -369,6 +604,14 @@ async function walkAndPin(
   for (const [depName, depRange] of Object.entries(topLevelDependencies)) {
     await visit(depName, depRange, '', rootName, null);
   }
+  for (const [depName, depRange] of Object.entries(topLevelOptionalDependencies)) {
+    const desc = { depName, depRange, parentName: rootName };
+    try {
+      await visit(depName, depRange, '', rootName, desc);
+    } catch (err) {
+      warnOptional(desc, err);
+    }
+  }
 
   // The ordered walk has assigned every installPath; now await the parallelized
   // fetches and build `pinned`. A required-dep fetch failure rejects; an
@@ -441,6 +684,7 @@ async function pinToPackage(
     version: pin.version,
     files,
     dependencies: pin.dependencies,
+    bin: pin.bin,
     resolved: pin.resolved,
     integrity,
     installPath,
@@ -495,6 +739,7 @@ function createLockfileSource(lockfile: Lockfile): ResolutionSource {
         resolved: entry.resolved,
         integrity: entry.integrity,
         dependencies: entry.dependencies ?? {},
+        bin: entry.bin,
         peerDependencies: entry.peerDependencies,
         // Optionals already filtered at lockfile-write time.
         optionalDependencies: {},
@@ -583,6 +828,9 @@ function createRegistrySource(opts: InstallOptions): ResolutionSource {
       // aborts; an optional one is caught + warned by `walkAndPin` (so esbuild's
       // `@esbuild/*` optionals skip and Vite still installs).
       if (!override) assertNativeSupported(effectiveName, pick, manifest);
+      // npm does not run dependency `prepare` for registry tarball installs;
+      // it is a prepack/git/local-root lifecycle, not a registry install hook.
+      assertNoLifecycleScripts(manifest.scripts, REGISTRY_TARBALL_LIFECYCLE_SCRIPTS);
 
       // Prefer the manifest's integrity; fall back to the lockfile entry's so a
       // partial re-resolve still serves unchanged transitive deps from cache.
@@ -602,6 +850,7 @@ function createRegistrySource(opts: InstallOptions): ResolutionSource {
         resolved: manifest.dist.tarball,
         integrity: expectedIntegrity,
         dependencies: manifest.dependencies ?? {},
+        bin: manifest.bin,
         peerDependencies: manifest.peerDependencies,
         optionalDependencies: manifest.optionalDependencies ?? {},
       };
@@ -660,6 +909,7 @@ function subgraphFreeOfOverrideDivergence(
   topLevelPins: Map<string, string>,
   overrides: OverrideMap | undefined,
 ): boolean {
+  if (hasParentScopedOverride(overrides)) return false;
   const subgraph = lockfileSubgraph(lockfile, [...topLevelPins.keys()]);
   for (const name of subgraph) {
     const override = resolveOverride(name, undefined, overrides);
@@ -674,6 +924,10 @@ function subgraphFreeOfOverrideDivergence(
     }
   }
   return true;
+}
+
+function hasParentScopedOverride(overrides: OverrideMap | undefined): boolean {
+  return Object.keys(overrides ?? {}).some((key) => key.includes('>'));
 }
 
 /**

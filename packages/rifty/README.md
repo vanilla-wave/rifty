@@ -19,9 +19,24 @@ Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp   # or: credentialless
 ```
 
-`createSandbox()` cannot ship these headers or the bundler-specific worker/SW
-asset URLs for you — those are host config (see EPIC E `create-rifty` for a
-template). Gate on `checkCapabilities()` before booting.
+`createSandbox()` cannot ship host wiring for you. Consumers still own:
+
+- COOP/COEP headers for cross-origin isolation.
+- A bundler-resolved runtime Worker URL, usually
+  `new URL('@riftydev/runtime-js/worker', import.meta.url)`.
+- A bundled same-origin `sw.js` built from `@riftydev/service-worker/sw` when
+  preview routing is enabled.
+- Same-origin WASM assets when sqlite/WASI guests are used.
+
+Those bits belong in app/template config, not the SDK facade. Future starter
+templates should own that host wiring. Gate on `checkCapabilities()` before booting.
+
+Cross-origin isolation enables the browser capabilities rifty needs; it does not
+turn guest code into safely hostile code. Current host controls are lifecycle
+controls such as `sandbox.dispose()` and Worker kill/terminate paths, not hard
+CPU, memory, spawn, or egress quotas. See the
+[trust model](https://github.com/vanilla-wave/rifty/blob/main/docs/public/trust-model.md)
+for the current boundary.
 
 ## Install
 
@@ -39,9 +54,10 @@ if (!caps.sufficient) {
   document.body.textContent = caps.summary; // missing Worker / ServiceWorker / COI
 } else {
   const sandbox = await createSandbox({
-    // resolved by YOUR bundler (Vite/webpack); the one bit the façade can't hide
+    // resolved by YOUR bundler; createSandbox cannot infer host worker assets
     workerUrl: new URL('@riftydev/runtime-js/worker', import.meta.url),
-    // optional — defaults to '/sw.js'; needed for live preview routing
+    // optional; defaults to '/sw.js'. Must be bundled from
+    // '@riftydev/service-worker/sw' and served same-origin for preview routing.
     serviceWorkerUrl: '/sw.js',
   });
 
@@ -49,6 +65,8 @@ if (!caps.sufficient) {
     if (e.type === 'stdout') console.log(e.chunk);
   });
   await sandbox.runtime.eval('console.log("hello from a Worker")');
+  await sandbox.fs.writeFile('/workspace/hello.txt', 'hello');
+  console.log(await sandbox.fs.readFile('/workspace/hello.txt', 'utf8'));
 
   console.log(sandbox.vfs.backend); // 'opfs' | 'memory'
   if (sandbox.swError) console.warn('preview unavailable:', sandbox.swError);
@@ -89,8 +107,8 @@ import { runWasi } from '@riftydev/sdk/wasi';
 ```
 
 The scoped packages stay separate dependencies (never inlined), so importing a
-layer via `rifty/...` and via `@riftydev/...` resolves to the **same** singleton
-state — safe to mix.
+layer via `@riftydev/sdk/...` and via `@riftydev/...` resolves to the **same**
+singleton state — safe to mix.
 
 ## License
 

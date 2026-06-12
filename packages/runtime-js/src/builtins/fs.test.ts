@@ -11,13 +11,41 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { resetSyncMirror } from './fs-sync-mirror.ts';
-import { lstatSync, mkdirSync, readlinkSync, realpathSync, statSync, writeFileSync } from './fs.ts';
+import fs, {
+  closeSync,
+  constants,
+  copyFileSync,
+  fstatSync,
+  ftruncateSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  opendirSync,
+  readSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  statSync,
+  truncateSync,
+  writeFileSync,
+  writeSync,
+} from './fs.ts';
 import { setProcessCwd } from './process.ts';
 
 afterEach(() => {
   resetSyncMirror();
   setProcessCwd('/workspace'); // restore the default cwd cell after cwd tests
 });
+
+function codeOf(fn: () => void): string | undefined {
+  try {
+    fn();
+  } catch (err) {
+    return (err as { code?: string }).code;
+  }
+  return undefined;
+}
 
 describe('node:fs symlink-shaped APIs (no-symlink VFS semantics, ADR-0050)', () => {
   it('lstatSync is identical to statSync and reports no symlink', () => {
@@ -96,5 +124,152 @@ describe('fs stream classes are exposed for instanceof probes', () => {
     expect(typeof fs.WriteStream).toBe('function');
     writeFileSync('/probe.txt', 'x');
     expect(fs.createReadStream('/probe.txt') instanceof fs.ReadStream).toBe(true);
+  });
+});
+
+describe('node:fs fd APIs (M11 runtime-local surface)', () => {
+  it('tracks fd position and supports positional read/write without moving it', () => {
+    writeFileSync('/fd.txt', 'abcdef');
+    const fd = openSync('/fd.txt', constants.O_RDWR);
+    const positioned = Buffer.alloc(3);
+
+    expect(readSync(fd, positioned, 0, 3, 1)).toBe(3);
+    expect(positioned.toString('utf8')).toBe('bcd');
+    expect(writeSync(fd, Buffer.from('XY'), 0, 2, 2)).toBe(2);
+    expect(readFileSync('/fd.txt', 'utf8')).toBe('abXYef');
+
+    const sequential = Buffer.alloc(2);
+    expect(readSync(fd, sequential, 0, 2, null)).toBe(2);
+    expect(sequential.toString('utf8')).toBe('ab');
+    closeSync(fd);
+  });
+
+  it('ftruncateSync shrinks and zero-extends through an open fd', () => {
+    writeFileSync('/truncate.txt', 'abcdef');
+    const fd = openSync('/truncate.txt', 'r+');
+
+    ftruncateSync(fd, 3);
+    expect(readFileSync('/truncate.txt', 'utf8')).toBe('abc');
+    ftruncateSync(fd, 5);
+    expect(Array.from(readFileSync('/truncate.txt') as Uint8Array)).toEqual([97, 98, 99, 0, 0]);
+    expect(fstatSync(fd).size).toBe(5);
+    closeSync(fd);
+  });
+
+  it('ftruncateSync preserves the current fd position', () => {
+    writeFileSync('/cursor.txt', 'abcdef');
+    const fd = openSync('/cursor.txt', 'r+');
+    const consumed = Buffer.alloc(6);
+    expect(readSync(fd, consumed, 0, 6, null)).toBe(6);
+
+    ftruncateSync(fd, 2);
+    expect(writeSync(fd, 'Z')).toBe(1);
+
+    expect(Array.from(readFileSync('/cursor.txt') as Uint8Array)).toEqual([97, 98, 0, 0, 0, 0, 90]);
+    closeSync(fd);
+  });
+
+  it('honors create/exclusive/truncate/append/open-directory flags', () => {
+    const created = openSync('/created.txt', constants.O_WRONLY | constants.O_CREAT);
+    expect(writeSync(created, 'a')).toBe(1);
+    closeSync(created);
+    expect(readFileSync('/created.txt', 'utf8')).toBe('a');
+
+    expect(
+      codeOf(() =>
+        openSync('/created.txt', constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL),
+      ),
+    ).toBe('EEXIST');
+
+    const append = openSync('/created.txt', constants.O_WRONLY | constants.O_APPEND);
+    expect(writeSync(append, Buffer.from('b'), 0, 1, 0)).toBe(1);
+    closeSync(append);
+    expect(readFileSync('/created.txt', 'utf8')).toBe('ab');
+
+    mkdirSync('/dir', { recursive: true });
+    const dirFd = openSync('/dir', constants.O_RDONLY | constants.O_DIRECTORY);
+    expect(fstatSync(dirFd).isDirectory()).toBe(true);
+    closeSync(dirFd);
+    expect(codeOf(() => openSync('/created.txt', constants.O_RDONLY | constants.O_DIRECTORY))).toBe(
+      'ENOTDIR',
+    );
+  });
+
+  it('throws loudly for unsupported numeric open flag bits', () => {
+    expect(codeOf(() => openSync('/x', constants.O_WRONLY | 0x20000000))).toBe('EINVAL');
+  });
+});
+
+describe('node:fs directory and temp APIs (M11 runtime-local surface)', () => {
+  it('mkdtempSync creates unique directories under the exact prefix', () => {
+    mkdirSync('/tmp', { recursive: true });
+    const first = mkdtempSync('/tmp/rifty-');
+    const second = mkdtempSync('/tmp/rifty-');
+
+    expect(first.startsWith('/tmp/rifty-')).toBe(true);
+    expect(second.startsWith('/tmp/rifty-')).toBe(true);
+    expect(first).not.toBe(second);
+    expect(statSync(first).isDirectory()).toBe(true);
+    expect(statSync(second).isDirectory()).toBe(true);
+  });
+
+  it('opendirSync snapshots entries and supports readSync plus async iteration', async () => {
+    mkdirSync('/snap', { recursive: true });
+    writeFileSync('/snap/a.txt', 'a');
+    writeFileSync('/snap/b.txt', 'b');
+
+    const dir = opendirSync('/snap');
+    writeFileSync('/snap/c.txt', 'c');
+    expect(dir.readSync()?.name).toBe('a.txt');
+    expect(dir.readSync()?.name).toBe('b.txt');
+    expect(dir.readSync()).toBeNull();
+    dir.closeSync();
+
+    const iterated: string[] = [];
+    for await (const dirent of opendirSync('/snap')) {
+      iterated.push(dirent.name);
+    }
+    expect(iterated).toEqual(['a.txt', 'b.txt', 'c.txt']);
+  });
+
+  it('Dir read/close support callback overloads and closed-dir errors', async () => {
+    mkdirSync('/callbacks', { recursive: true });
+    writeFileSync('/callbacks/a.txt', 'a');
+
+    const dir = opendirSync('/callbacks');
+    const first = await new Promise<string | undefined>((resolve, reject) => {
+      (
+        dir as unknown as { read(cb: (err: Error | null, dirent?: { name: string }) => void): void }
+      ).read((err, dirent) => (err ? reject(err) : resolve(dirent?.name)));
+      setTimeout(() => resolve('not-called'), 0);
+    });
+    expect(first).toBe('a.txt');
+
+    const closeResult = await new Promise<string>((resolve, reject) => {
+      (dir as unknown as { close(cb: (err: Error | null) => void): void }).close((err) =>
+        err ? reject(err) : resolve('closed'),
+      );
+      setTimeout(() => resolve('not-called'), 0);
+    });
+    expect(closeResult).toBe('closed');
+    expect(codeOf(() => dir.closeSync())).toBe('ERR_DIR_CLOSED');
+    expect(() => dir.readSync()).toThrow(/ERR_DIR_CLOSED/);
+  });
+
+  it('truncateSync and promises.truncate shrink and zero-extend files', async () => {
+    writeFileSync('/path-truncate.txt', 'abcdef');
+    truncateSync('/path-truncate.txt', 2);
+    expect(readFileSync('/path-truncate.txt', 'utf8')).toBe('ab');
+    await fs.promises.truncate('/path-truncate.txt', 4);
+    expect(Array.from(readFileSync('/path-truncate.txt') as Uint8Array)).toEqual([97, 98, 0, 0]);
+  });
+
+  it('copyFileSync honors COPYFILE_EXCL', () => {
+    writeFileSync('/src.txt', 'source');
+    copyFileSync('/src.txt', '/dst.txt', constants.COPYFILE_EXCL);
+    expect(readFileSync('/dst.txt', 'utf8')).toBe('source');
+    expect(codeOf(() => copyFileSync('/src.txt', '/dst.txt', constants.COPYFILE_EXCL))).toBe(
+      'EEXIST',
+    );
   });
 });

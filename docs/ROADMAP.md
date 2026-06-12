@@ -47,7 +47,7 @@ open:
 ## M7 — Network
 
 **PARTIAL.**
-`net`/`http` servers, `IncomingMessage` Readable, `http.request` over fetch, port registry + SW preview round-trip, chunked streaming; real `express@4` runs end-to-end. ADR-0010, ADR-0017, ADR-0048, ADR-0123.
+`net`/`http` servers, `IncomingMessage` Readable, `http.request`/`http.get` loopback over the port registry plus fetch egress, SW preview round-trip, chunked streaming; real `express@4` runs end-to-end. ADR-0010, ADR-0017, ADR-0048, ADR-0123.
 open:
 - `docs/backlog/net/real-tcp-socket-semantics` — real-TCP `net.Socket` (HTTP-only today).
 - `docs/backlog/net/cross-realm-websocket-bridge` — iframe HMR client over a real `WebSocket`.
@@ -65,7 +65,7 @@ open:
 **PARTIAL.**
 Semver, RegistryClient, gzip+tar, linker, lockfile, shadow registry, nested install (first-wins-flat + nest-on-conflict) with lockfile replay. ADR-0005, ADR-0006, ADR-0015, ADR-0021, ADR-0023, ADR-0027, ADR-0042, ADR-0051.
 open:
-- `docs/backlog/npm-client/prod-npm-registry-proxy` — prod registry proxy (ADR-0028 reopened, Q-2026-05-24-007).
+- `docs/backlog/npm-client/prod-npm-registry-deploy-smoke` — deployed prod registry proxy round-trip (ADR-0028, Q-2026-05-24-007).
 - `docs/backlog/npm-client/chalk-express-integration-fixtures` — chalk + full express real-tarball fixtures.
 - `docs/backlog/npm-client/live-registry-roundtrip-smoke` — live `registry.npmjs.org` through the Vite proxy.
 - `docs/backlog/npm-client/postinstall-scripts` — postinstall via child_process.
@@ -76,7 +76,6 @@ open:
 Mini Vite-equivalent dev server (fs.watch, in-process WebSocket/HMR, shell, SW preview bridge); real `vite@5.4` runs in-process; esbuild.wasm TS/JSX transform; Vite-in-Worker; cross-realm HMR bridge; preview iframe root-relative routing. ADR-0043, ADR-0047, ADR-0049, ADR-0050, ADR-0073, ADR-0075, ADR-0076, ADR-0077, ADR-0078, ADR-0079, ADR-0080, ADR-0097.
 open:
 - `docs/backlog/playground/real-vite-browser-e2e` — full worker+HMR+iframe+SW-routing flow in a cross-origin-isolated browser via a default/CI verification lane.
-- `docs/backlog/net/streaming-cross-realm-preview` — streaming (not buffered-only) cross-realm preview, ADR-0048.
 
 ## M11 — Consumer Ready
 
@@ -94,7 +93,7 @@ Theme (not a checklist):
   teardown + VFS snapshot/restore).
 - **Runs real-ish projects.** Knock down the high-frequency runtime walls that steer ordinary npm
   code into hard failures (zlib, plausible `platform`/`arch`, fd-fs + `cp`/`mkdtemp`, http loopback);
-  previews that don't hang (end-to-end streaming, SW→Worker direct routing); off-main-thread heavy
+  previews that don't hang (streaming preview frames, SW→Worker direct routing); off-main-thread heavy
   guests + worker pools.
 - **Durable & portable.** `persist()`/quota, out-of-space UX, project export/import — the user's
   code survives reload and can leave the browser.

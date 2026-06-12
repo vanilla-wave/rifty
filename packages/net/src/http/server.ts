@@ -6,12 +6,13 @@
  * `Response` whose body is the streaming `ReadableStream` written by user
  * code).
  *
- * Client: `http.request()` issues through the host `fetch`. The returned
- * emitter carries `'response'` with an `IncomingMessageFromFetch`.
+ * Client: `http.request()` loops back through the registry for registered local
+ * ports, otherwise issues through the host `fetch`. The returned emitter
+ * carries `'response'` with an `IncomingMessageFromFetch`.
  */
 
 import { EventEmitter } from '@riftydev/io';
-import { registerPort, unregisterPort } from '../registry.ts';
+import { dispatchToPort, getHandler, registerPort, unregisterPort } from '../registry.ts';
 import { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
 import { ServerResponse } from './response.ts';
 import { STATUS_CODES } from './status-codes.ts';
@@ -106,6 +107,7 @@ export function createServer(
 
 interface RequestOptions {
   method?: string;
+  host?: string;
   hostname?: string;
   port?: number;
   path?: string;
@@ -113,22 +115,62 @@ interface RequestOptions {
   protocol?: string;
 }
 
+export type ClientRequest = EventEmitter & {
+  write(chunk: Uint8Array | string): void;
+  end(chunk?: Uint8Array | string): void;
+};
+export type ClientResponse = IncomingMessageFromFetch;
+
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]']);
+
+function bracketIpv6Host(host: string): string {
+  if (host.startsWith('[')) return host;
+  const colonCount = host.split(':').length - 1;
+  return colonCount > 1 ? `[${host}]` : host;
+}
+
+function buildRequestUrl(opts: RequestOptions): string {
+  const protocol = opts.protocol ?? 'http:';
+  const path = opts.path ?? '/';
+  if (opts.hostname !== undefined) {
+    const host = bracketIpv6Host(opts.hostname);
+    const port = opts.port === undefined ? '' : `:${opts.port}`;
+    return `${protocol}//${host}${port}${path}`;
+  }
+  if (opts.host !== undefined) {
+    const host = bracketIpv6Host(opts.host);
+    const port = opts.port === undefined ? '' : `:${opts.port}`;
+    return `${protocol}//${host}${port}${path}`;
+  }
+  const port = opts.port === undefined ? '' : `:${opts.port}`;
+  return `${protocol}//localhost${port}${path}`;
+}
+
+function loopbackRegisteredPort(url: string): number | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'http:') return null;
+  if (!LOOPBACK_HOSTS.has(parsed.hostname.toLowerCase())) return null;
+  const port = parsed.port === '' ? 80 : Number(parsed.port);
+  if (!Number.isInteger(port)) return null;
+  return getHandler(port) === null ? null : port;
+}
+
 /**
- * `http.request(opts, cb)` — issued through the host's `fetch`. The callback
- * receives an `IncomingMessage` once the response arrives. Outgoing body is
- * sent via `req.write()` / `req.end()`.
+ * `http.request(opts, cb)` — registered local loopback ports route through the
+ * in-process registry; everything else falls through to the host's `fetch`.
+ * The callback receives an `IncomingMessage` once the response arrives.
+ * Outgoing body is sent via `req.write()` / `req.end()`.
  */
 export function request(
   opts: string | RequestOptions,
-  cb?: (res: IncomingMessage) => void,
-): EventEmitter & {
-  write(chunk: Uint8Array | string): void;
-  end(chunk?: Uint8Array | string): void;
-} {
-  const url =
-    typeof opts === 'string'
-      ? opts
-      : `${opts.protocol ?? 'http:'}//${opts.hostname ?? 'localhost'}:${opts.port ?? 80}${opts.path ?? '/'}`;
+  cb?: (res: ClientResponse) => void,
+): ClientRequest {
+  const url = typeof opts === 'string' ? opts : buildRequestUrl(opts);
   const method = typeof opts === 'string' ? 'GET' : (opts.method ?? 'GET');
   const headers = typeof opts === 'string' ? {} : (opts.headers ?? {});
 
@@ -147,13 +189,18 @@ export function request(
             bodyChunks.length === 0
               ? undefined
               : bodyChunks.map((c) => (typeof c === 'string' ? UTF8_ENCODER.encode(c) : c));
-          const response = await fetch(url, {
+          const init = {
             method,
             headers,
             body: body ? new Blob(body as unknown as BlobPart[]) : undefined,
-          });
+          };
+          const localPort = loopbackRegisteredPort(url);
+          const response =
+            localPort === null
+              ? await fetch(url, init)
+              : await dispatchToPort(localPort, new Request(url, init));
           const incoming = new IncomingMessageFromFetch(response);
-          cb?.(incoming as unknown as IncomingMessage);
+          cb?.(incoming);
           emitter.emit('response', incoming);
         } catch (err) {
           emitter.emit('error', err);
@@ -164,9 +211,19 @@ export function request(
   return req;
 }
 
+export function get(
+  opts: string | RequestOptions,
+  cb?: (res: ClientResponse) => void,
+): ClientRequest {
+  const req = request(opts, cb);
+  req.end();
+  return req;
+}
+
 const http = {
   createServer,
   request,
+  get,
   Server: HttpServer,
   IncomingMessage,
   ServerResponse,

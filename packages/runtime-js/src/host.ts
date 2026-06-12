@@ -1,4 +1,12 @@
-import type { EvalResult, HostMessage, WorkerMessage } from './protocol.ts';
+import type {
+  EvalResult,
+  FsReadEncoding,
+  FsRequest,
+  FsResult,
+  HostMessage,
+  SerializedRuntimeError,
+  WorkerMessage,
+} from './protocol.ts';
 
 export interface RuntimeOptions {
   /** URL of the worker entry module. */
@@ -29,6 +37,7 @@ export interface EvalOptions {
 export interface RuntimeController {
   /** Send an eval request; resolves with the result message. */
   eval(code: string, options?: EvalOptions): Promise<EvalResult>;
+  readonly fs: RuntimeFs;
   /** Send raw terminal stdin to the runtime Worker's `process.stdin`. */
   writeStdin(data: string | Uint8Array): void;
   /** Terminate and respawn the worker. */
@@ -40,9 +49,25 @@ export interface RuntimeController {
   readonly isReady: () => boolean;
 }
 
+export interface RuntimeFs {
+  readFile(path: string): Promise<Uint8Array>;
+  readFile(path: string, encoding: FsReadEncoding): Promise<string>;
+  writeFile(path: string, data: string | Uint8Array): Promise<void>;
+}
+
 interface PendingEval {
   resolve(result: EvalResult): void;
   reject(err: unknown): void;
+}
+
+interface PendingFs {
+  resolve(result: FsResult): void;
+  reject(err: unknown): void;
+}
+
+interface RuntimeError extends Error {
+  code?: string;
+  path?: string;
 }
 
 /**
@@ -54,6 +79,7 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
   let nextId = 1;
   let ready = false;
   const pending = new Map<number, PendingEval>();
+  const pendingFs = new Map<number, PendingFs>();
 
   function emit(event: RuntimeEvent): void {
     for (const h of handlers) {
@@ -68,6 +94,64 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
   function send(message: HostMessage): void {
     if (!worker) throw new Error('Runtime is not running');
     worker.postMessage(message);
+  }
+
+  function workerTerminatedError(message: string): RuntimeError {
+    const err = new Error(message) as RuntimeError;
+    err.name = 'WorkerTerminated';
+    return err;
+  }
+
+  function deserializeError(error: SerializedRuntimeError): RuntimeError {
+    const err = new Error(error.message) as RuntimeError;
+    err.name = error.name;
+    if (error.stack !== undefined) err.stack = error.stack;
+    if (error.code !== undefined) err.code = error.code;
+    if (error.path !== undefined) err.path = error.path;
+    return err;
+  }
+
+  function rejectPendingFs(err: unknown): void {
+    for (const p of pendingFs.values()) {
+      p.reject(err);
+    }
+    pendingFs.clear();
+  }
+
+  function requestFs(request: FsRequest): Promise<FsResult> {
+    const promise = new Promise<FsResult>((resolve, reject) => {
+      pendingFs.set(request.id, { resolve, reject });
+    });
+    try {
+      send({ type: 'fs', request });
+    } catch (err) {
+      pendingFs.delete(request.id);
+      return Promise.reject(err);
+    }
+    return promise;
+  }
+
+  function readFile(path: string): Promise<Uint8Array>;
+  function readFile(path: string, encoding: FsReadEncoding): Promise<string>;
+  async function readFile(path: string, encoding?: FsReadEncoding): Promise<Uint8Array | string> {
+    const id = nextId++;
+    const result = await requestFs(
+      encoding === undefined
+        ? { id, op: 'readFile', path }
+        : { id, op: 'readFile', path, encoding },
+    );
+    if (!result.ok) throw deserializeError(result.error);
+    if (encoding === undefined) {
+      if (result.value instanceof Uint8Array) return result.value;
+      throw new Error('Invalid fs readFile byte response');
+    }
+    if (typeof result.value === 'string') return result.value;
+    throw new Error('Invalid fs readFile text response');
+  }
+
+  async function writeFile(path: string, data: string | Uint8Array): Promise<void> {
+    const result = await requestFs({ id: nextId++, op: 'writeFile', path, data });
+    if (!result.ok) throw deserializeError(result.error);
   }
 
   function start(): void {
@@ -95,6 +179,14 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
           emit({ type: 'result', result: msg.result });
           break;
         }
+        case 'fs-result': {
+          const p = pendingFs.get(msg.result.id);
+          if (p) {
+            pendingFs.delete(msg.result.id);
+            p.resolve(msg.result);
+          }
+          break;
+        }
         case 'pong':
           break;
       }
@@ -111,6 +203,11 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
         );
       }
       pending.clear();
+      rejectPendingFs(
+        Object.assign(new Error(`Worker crashed: ${event.message}`), {
+          code: 'WORKER_CRASHED',
+        }),
+      );
       emit({
         type: 'stderr',
         chunk: `[worker error] ${event.message}\n`,
@@ -126,6 +223,8 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
 
   start();
 
+  const fs: RuntimeFs = { readFile, writeFile };
+
   return {
     eval(code, options) {
       const id = nextId++;
@@ -136,6 +235,7 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
       send({ type: 'eval', request });
       return promise;
     },
+    fs,
     writeStdin(data) {
       send({ type: 'stdin', data });
     },
@@ -150,6 +250,7 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
           });
         }
         pending.clear();
+        rejectPendingFs(workerTerminatedError('Worker was reset'));
         worker = null;
         ready = false;
         emit({ type: 'exit', reason: 'reset' });
@@ -161,6 +262,7 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
         worker.terminate();
         worker = null;
       }
+      rejectPendingFs(workerTerminatedError('Worker was disposed'));
       handlers.clear();
       pending.clear();
       ready = false;

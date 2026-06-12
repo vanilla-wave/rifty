@@ -2,7 +2,9 @@
 
 Browser-based, Node-compatible runtime + WASI runner — a WebContainers-like system built from scratch. Run `Express`, `npm install`, a dev server, even WASI binaries, **inside a browser tab**. Pet project; goal is deep understanding of how these systems work, plus a practical "Express + npm install in the browser".
 
-> **Status:** active milestone M10 (Real Tooling). APIs are `0.x` and may move. See [`docs/ROADMAP.md`](./docs/ROADMAP.md), [`docs/adr/`](./docs/adr/), [`docs/public/compat/`](./docs/public/compat/).
+> **Status:** active milestone M11 (Consumer Ready). APIs are `0.x` and may move. See [`docs/ROADMAP.md`](./docs/ROADMAP.md), [`docs/adr/`](./docs/adr/), [`docs/public/compat/`](./docs/public/compat/).
+
+> **Position:** open, self-hostable, browser-local runtime infrastructure. See [`docs/public/open-runtime-position.md`](./docs/public/open-runtime-position.md) and the [`trust model`](./docs/public/trust-model.md); compatibility claims live in [`docs/public/compat/`](./docs/public/compat/).
 
 ## Packages
 
@@ -62,7 +64,7 @@ The leaf packages (`@riftydev/io`, `@riftydev/vfs`, `@riftydev/npm-client`, `@ri
    Cross-Origin-Resource-Policy: cross-origin
    ```
 
-   Then `globalThis.crossOriginIsolated === true`. Header-less static hosts (e.g. **GitHub Pages) do not work**; Vercel / Netlify / Cloudflare Pages do. Copy-paste configs: [`vercel.json`](./vercel.json), [`apps/playground/public/_headers`](./apps/playground/public/_headers), and the dev-server `headers` in [`apps/playground/vite.config.ts`](./apps/playground/vite.config.ts). If you embed rifty in an iframe or app browser, the parent page must also be cross-origin isolated and the iframe must include `allow="cross-origin-isolated"`; otherwise open rifty as a top-level page.
+   Then `globalThis.crossOriginIsolated === true`. Header-less static hosts (e.g. **GitHub Pages) do not work**; Netlify / Cloudflare Pages / Vercel can work when configured with equivalent headers. Copy-paste configs: [`netlify.toml`](./netlify.toml), [`apps/playground/public/_headers`](./apps/playground/public/_headers), and the dev-server `headers` in [`apps/playground/vite.config.ts`](./apps/playground/vite.config.ts). If you embed rifty in an iframe or app browser, the parent page must also be cross-origin isolated and the iframe must include `allow="cross-origin-isolated"`; otherwise open rifty as a top-level page.
 
 2. **A bundler with module Workers** + `new URL('…', import.meta.url)` worker resolution (Vite `worker: { format: 'es' }`). `runtime-js`/`runtime-wasi` spawn their worker entry by URL (`@riftydev/runtime-js/worker`, `@riftydev/runtime-wasi/worker-entry`).
 
@@ -99,7 +101,7 @@ pnpm test:parity          # node parity runner
 pnpm test:e2e             # playwright (chromium)
 ```
 
-In-repo `exports` point at raw TypeScript `src/` (dev/HMR needs no build); **published** packages point at built `dist/` via `publishConfig`. See [`docs/PUBLISHING.md`](./docs/PUBLISHING.md) and ADR-0070.
+In-repo `exports` point at raw TypeScript `src/` (dev/HMR needs no build); **published** packages point at built `dist/` via `publishConfig`. See [`docs/public/publishing.md`](./docs/public/publishing.md) and ADR-0070.
 
 ## Architecture
 
@@ -121,4 +123,4 @@ Rules live in [`CLAUDE.md`](./CLAUDE.md): TDD (tests/parity-case first), no `any
 
 ## License
 
-[MIT](./LICENSE).
+First-party rifty packages publish as [MIT](./LICENSE). See the [open runtime position](./docs/public/open-runtime-position.md) for the claim boundary; transitive dependency audit is tracked separately.

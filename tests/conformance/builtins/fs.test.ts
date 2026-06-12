@@ -5,19 +5,38 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { resetSyncMirror } from '../../../packages/runtime-js/src/builtins/fs-sync-mirror.ts';
 import fs, {
+  closeSync,
+  constants,
   existsSync,
+  fstatSync,
+  ftruncateSync,
   mkdirSync,
+  mkdtempSync,
+  openSync,
+  opendirSync,
   promises as fsp,
+  readSync,
   readFileSync,
   readdirSync,
   rmSync,
   statSync,
+  truncateSync,
   writeFileSync,
+  writeSync,
 } from '../../../packages/runtime-js/src/builtins/fs.ts';
 
 afterEach(() => {
   resetSyncMirror();
 });
+
+function codeOf(fn: () => void): string | undefined {
+  try {
+    fn();
+  } catch (err) {
+    return (err as { code?: string }).code;
+  }
+  return undefined;
+}
 
 describe('node:fs sync API', () => {
   it('writeFileSync + readFileSync (utf8)', () => {
@@ -138,5 +157,84 @@ describe('node:fs callback API', () => {
       fs.writeFile('/cbw.txt', 'value', (err) => (err ? reject(err) : resolve())),
     );
     expect(readFileSync('/cbw.txt', 'utf8')).toBe('value');
+  });
+});
+
+describe('node:fs fd API', () => {
+  it('supports positional and sequential reads/writes on fd state', () => {
+    writeFileSync('/fd.txt', 'abcdef');
+    const fd = openSync('/fd.txt', constants.O_RDWR);
+    const buf = Buffer.alloc(2);
+
+    expect(readSync(fd, buf, 0, 2, 2)).toBe(2);
+    expect(buf.toString('utf8')).toBe('cd');
+    expect(writeSync(fd, Buffer.from('Z'), 0, 1, null)).toBe(1);
+    expect(writeSync(fd, Buffer.from('!'), 0, 1, 5)).toBe(1);
+    expect(readFileSync('/fd.txt', 'utf8')).toBe('Zbcde!');
+    closeSync(fd);
+  });
+
+  it('ftruncateSync and truncateSync resize files with zero fill', () => {
+    writeFileSync('/resize.txt', 'abcd');
+    const fd = openSync('/resize.txt', 'r+');
+
+    ftruncateSync(fd, 2);
+    expect(readFileSync('/resize.txt', 'utf8')).toBe('ab');
+    truncateSync('/resize.txt', 4);
+    expect(Array.from(readFileSync('/resize.txt') as Uint8Array)).toEqual([97, 98, 0, 0]);
+    expect(fstatSync(fd).size).toBe(4);
+    closeSync(fd);
+  });
+
+  it('rejects unsupported numeric open flags and exposes supported constants only', () => {
+    expect(constants).toMatchObject({
+      O_RDONLY: 0,
+      O_WRONLY: 1,
+      O_RDWR: 2,
+      O_CREAT: 64,
+      O_EXCL: 128,
+      O_TRUNC: 512,
+      O_APPEND: 1024,
+      O_DIRECTORY: 65536,
+      COPYFILE_EXCL: 1,
+    });
+    expect('O_SYNC' in constants).toBe(false);
+    expect('O_DSYNC' in constants).toBe(false);
+    expect('COPYFILE_FICLONE' in constants).toBe(false);
+    expect(codeOf(() => openSync('/bad.txt', constants.O_WRONLY | 0x40000000))).toBe('EINVAL');
+  });
+});
+
+describe('node:fs M11 directory/temp APIs', () => {
+  it('mkdtempSync and promises.mkdtemp create unique prefixed directories', async () => {
+    mkdirSync('/tmp', { recursive: true });
+
+    const first = mkdtempSync('/tmp/rifty-');
+    const second = await fsp.mkdtemp('/tmp/rifty-');
+
+    expect(first).toMatch(/^\/tmp\/rifty-/);
+    expect(second).toMatch(/^\/tmp\/rifty-/);
+    expect(first).not.toBe(second);
+    expect(statSync(first).isDirectory()).toBe(true);
+    expect(statSync(second).isDirectory()).toBe(true);
+  });
+
+  it('opendir snapshots entries and supports async iteration', async () => {
+    mkdirSync('/dir', { recursive: true });
+    writeFileSync('/dir/a', 'a');
+    writeFileSync('/dir/b', 'b');
+
+    const opened = opendirSync('/dir');
+    writeFileSync('/dir/c', 'c');
+    expect(opened.readSync()?.name).toBe('a');
+    expect(opened.readSync()?.name).toBe('b');
+    expect(opened.readSync()).toBeNull();
+    opened.closeSync();
+
+    const asyncNames: string[] = [];
+    for await (const dirent of await fsp.opendir('/dir')) {
+      asyncNames.push(dirent.name);
+    }
+    expect(asyncNames).toEqual(['a', 'b', 'c']);
   });
 });

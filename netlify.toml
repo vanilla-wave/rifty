@@ -6,7 +6,8 @@
 # it to dist/_headers); either alone is sufficient — both are kept so the dist
 # stays self-describing if served outside Netlify.
 #
-# Deploy is intentionally manual (outward-facing). See docs/hosting-netlify.md.
+# Deploys are automated from .github/workflows/netlify.yml.
+# See docs/public/hosting-netlify.md.
 
 [build]
   base = "."
@@ -21,6 +22,7 @@
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
   # Monaco's worker bundle is memory-hungry under Vite/Rollup.
   NODE_OPTIONS = "--max-old-space-size=4096"
+  RIFTY_NPM_REGISTRY_UPSTREAM = "https://registry.npmjs.org"
 
 # Cross-origin isolation headers (mirror of apps/playground/public/_headers).
 [[headers]]

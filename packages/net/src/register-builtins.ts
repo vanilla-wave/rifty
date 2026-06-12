@@ -11,7 +11,16 @@ import http from './http.ts';
 import https from './https.ts';
 import net from './net.ts';
 
-registerBuiltin('net', () => net);
-registerBuiltin('http', () => http);
-// `https` is a loud-throw stub — see ADR 0010. Imports succeed; calls throw.
-registerBuiltin('https', () => https);
+let netBuiltinsRegistered = false;
+
+export function registerNetBuiltins(): void {
+  if (netBuiltinsRegistered) return;
+  netBuiltinsRegistered = true;
+
+  registerBuiltin('net', () => net);
+  registerBuiltin('http', () => http);
+  // `https` is a loud-throw stub — see ADR 0010. Imports succeed; calls throw.
+  registerBuiltin('https', () => https);
+}
+
+registerNetBuiltins();

@@ -11,9 +11,28 @@ export function StatusBar(props: {
   activeFile: string;
   language: string;
   isOpfs: boolean;
+  storagePersisted?: boolean;
+  storageUsage?: number;
+  storageQuota?: number;
   storageReason?: string;
   coi: boolean;
 }) {
+  const storageLabel = (): string => {
+    if (!props.isOpfs) return 'in-memory';
+    if (props.storagePersisted === undefined) return 'OPFS · unknown';
+    if (props.storagePersisted === false) return 'OPFS · best effort';
+    return 'OPFS · persisted';
+  };
+  const storageTone = (): 'ok' | 'warn' =>
+    props.isOpfs && props.storagePersisted === true ? 'ok' : 'warn';
+  const storageTitle = (): string => {
+    if (props.storageReason) return props.storageReason;
+    if (props.storageUsage !== undefined && props.storageQuota !== undefined) {
+      return `${props.storageUsage} / ${props.storageQuota} bytes`;
+    }
+    return '';
+  };
+
   return (
     <footer class="rf-statusbar">
       <span class="rf-status__item rf-status__mode" data-mode={props.mode}>
@@ -30,11 +49,11 @@ export function StatusBar(props: {
       <span
         class="rf-status__item rf-status__badge"
         data-storage-badge
-        data-tone={props.isOpfs ? 'ok' : 'warn'}
-        title={props.storageReason ?? ''}
+        data-tone={storageTone()}
+        title={storageTitle()}
       >
         <span class="rf-status__dot" />
-        {props.isOpfs ? 'OPFS · persisted' : 'in-memory'}
+        {storageLabel()}
       </span>
       <span
         class="rf-status__item rf-status__coi"

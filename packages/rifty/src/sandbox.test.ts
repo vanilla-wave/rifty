@@ -1,12 +1,23 @@
 import type { RuntimeController } from '@riftydev/runtime-js';
+import type { FsReadEncoding } from '@riftydev/runtime-js';
 import { describe, expect, it, vi } from 'vitest';
 import type { CapabilityCheck } from './capabilities.ts';
 import { COI_REQUIRED_MESSAGE, type SandboxDeps, createSandbox } from './sandbox.ts';
 
 /** A typed no-op controller — these tests assert wiring, never drive eval. */
 function fakeRuntime(onDispose: () => void = () => {}): RuntimeController {
+  function readFile(path: string): Promise<Uint8Array>;
+  function readFile(path: string, encoding: FsReadEncoding): Promise<string>;
+  function readFile(_path: string, encoding?: FsReadEncoding): Promise<Uint8Array | string> {
+    return Promise.resolve(encoding === undefined ? new Uint8Array() : '');
+  }
+
   return {
     eval: () => Promise.resolve({ id: 0, ok: true, value: undefined }),
+    fs: {
+      readFile,
+      writeFile: () => Promise.resolve(),
+    },
     reset: () => Promise.resolve(),
     dispose: onDispose,
     on: () => () => {},
@@ -46,10 +57,12 @@ function deps(over: Partial<SandboxDeps> = {}): SandboxDeps {
 
 describe('createSandbox', () => {
   it('wires capabilities, OPFS backend, and the runtime on the happy path', async () => {
-    const spawn = vi.fn(() => fakeRuntime());
+    const runtime = fakeRuntime();
+    const spawn = vi.fn(() => runtime);
     const sandbox = await createSandbox({ workerUrl: 'http://x/worker.js' }, deps({ spawn }));
 
     expect(spawn).toHaveBeenCalledWith({ workerUrl: 'http://x/worker.js' });
+    expect(sandbox.fs).toBe(runtime.fs);
     expect(sandbox.vfs).toEqual({ backend: 'opfs' });
     expect(sandbox.capabilities.capabilities.crossOriginIsolated).toBe(true);
     expect(sandbox.swError).toBeUndefined();

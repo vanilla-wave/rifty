@@ -8,10 +8,12 @@ export {
 export {
   default as http,
   createServer as createHttpServer,
+  get as httpGet,
   request,
   HttpServer,
   IncomingMessage,
   ServerResponse,
+  STATUS_CODES,
 } from './http.ts';
 export {
   registerPort,

@@ -1,0 +1,138 @@
+name: Netlify
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: netlify-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-playground:
+    name: Deploy playground
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID || secrets.NETLIFY_SITE_ID || '441e5f8c-dbb4-43d7-8429-69983cc704c1' }}
+      NETLIFY_SITE_NAME: ${{ vars.NETLIFY_SITE_NAME || 'rifty-playground' }}
+      NODE_OPTIONS: --max-old-space-size=4096
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Validate Netlify configuration
+        run: |
+          set -euo pipefail
+          if [ -z "$NETLIFY_AUTH_TOKEN" ]; then
+            echo "::error::Set the NETLIFY_AUTH_TOKEN repository secret before Netlify deploys can run."
+            exit 1
+          fi
+          if [ -z "$NETLIFY_SITE_ID" ]; then
+            echo "::error::Set NETLIFY_SITE_ID as a repository variable or secret."
+            exit 1
+          fi
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build playground
+        run: pnpm build
+
+      - name: Deploy PR preview
+        id: preview
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          output="$(
+            pnpm dlx netlify@26.0.2 deploy \
+              --no-build \
+              --filter="@riftydev/playground" \
+              --dir=apps/playground/dist \
+              --site="$NETLIFY_SITE_ID" \
+              --auth="$NETLIFY_AUTH_TOKEN" \
+              --alias="pr-${{ github.event.pull_request.number }}" \
+              --json \
+              --message="PR #${{ github.event.pull_request.number }} ${GITHUB_SHA}"
+          )"
+          printf '%s\n' "$output"
+
+          deploy_url="$(printf '%s' "$output" | node -e 'const data = JSON.parse(require("node:fs").readFileSync(0, "utf8")); process.stdout.write(data.deploy_url ?? data.deployUrl ?? data.ssl_url ?? data.sslUrl ?? data.url ?? "");')"
+          logs_url="$(printf '%s' "$output" | node -e 'const data = JSON.parse(require("node:fs").readFileSync(0, "utf8")); process.stdout.write(data.logs ?? data.deploy_logs ?? data.deployLogs ?? data.logsUrl ?? "");')"
+          alias_url="https://pr-${{ github.event.pull_request.number }}--${NETLIFY_SITE_NAME}.netlify.app"
+
+          if [ -z "$deploy_url" ]; then
+            echo "::error::Netlify CLI did not return a deploy URL."
+            exit 1
+          fi
+
+          echo "deploy_url=$deploy_url" >> "$GITHUB_OUTPUT"
+          echo "alias_url=$alias_url" >> "$GITHUB_OUTPUT"
+          echo "logs_url=$logs_url" >> "$GITHUB_OUTPUT"
+
+      - name: Comment PR preview URL
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ALIAS_URL: ${{ steps.preview.outputs.alias_url }}
+          PREVIEW_URL: ${{ steps.preview.outputs.deploy_url }}
+          LOGS_URL: ${{ steps.preview.outputs.logs_url }}
+        run: |
+          set -euo pipefail
+          marker="<!-- rifty-netlify-preview -->"
+          body_file="$(mktemp)"
+          {
+            printf '%s\n\n' "$marker"
+            printf 'Netlify preview: %s\n' "$ALIAS_URL"
+            printf 'Immutable deploy: %s\n' "$PREVIEW_URL"
+            if [ -n "$LOGS_URL" ]; then
+              printf 'Deploy logs: %s\n' "$LOGS_URL"
+            fi
+          } > "$body_file"
+          body="$(cat "$body_file")"
+
+          comment_id="$(
+            gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+              --paginate \
+              --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- rifty-netlify-preview -->"))) | .id' \
+              | head -n 1
+          )"
+
+          if [ -n "$comment_id" ]; then
+            gh api \
+              --method PATCH \
+              "repos/${{ github.repository }}/issues/comments/$comment_id" \
+              --field body="$body"
+          else
+            gh api \
+              --method POST \
+              "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+              --field body="$body"
+          fi
+
+      - name: Deploy production
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          pnpm dlx netlify@26.0.2 deploy \
+            --prod \
+            --no-build \
+            --filter="@riftydev/playground" \
+            --dir=apps/playground/dist \
+            --site="$NETLIFY_SITE_ID" \
+            --auth="$NETLIFY_AUTH_TOKEN" \
+            --message="main ${GITHUB_SHA}"

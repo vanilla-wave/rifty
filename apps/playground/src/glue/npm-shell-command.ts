@@ -32,10 +32,10 @@ import type { Vfs } from '@riftydev/vfs';
  * importing another package's internals (the "no internal imports" rule).
  */
 export type InstallFn = (
-  rootName: string,
-  rootVersion: string,
-  dependencies: Record<string, string>,
-  opts: InstallOptions,
+  arg1: string | InstallOptions,
+  rootVersion?: string,
+  dependenciesOrOpts?: Record<string, string> | InstallOptions,
+  opts?: InstallOptions,
 ) => Promise<InstallResult>;
 
 export interface NpmShellCommandDeps {
@@ -56,6 +56,8 @@ interface ProjectPackageJson {
   readonly version: string;
   readonly scripts: Record<string, string>;
   readonly dependencies: Record<string, string>;
+  readonly devDependencies: Record<string, string>;
+  readonly optionalDependencies: Record<string, string>;
 }
 
 const DEFAULT_PROJECT_NAME = 'rifty-project';
@@ -108,6 +110,8 @@ async function readPackageJson(vfs: Vfs, cwd: string): Promise<ProjectPackageJso
       version: DEFAULT_PROJECT_VERSION,
       scripts: {},
       dependencies: {},
+      devDependencies: {},
+      optionalDependencies: {},
     };
   }
   const text = await vfs.readFileText(path);
@@ -133,16 +137,29 @@ async function readPackageJson(vfs: Vfs, cwd: string): Promise<ProjectPackageJso
             ),
           )
         : {};
+    const devDependencies = readStringMap(raw.devDependencies);
+    const optionalDependencies = readStringMap(raw.optionalDependencies);
     return {
       raw,
       name: typeof raw.name === 'string' ? raw.name : DEFAULT_PROJECT_NAME,
       version: typeof raw.version === 'string' ? raw.version : DEFAULT_PROJECT_VERSION,
       scripts,
       dependencies,
+      devDependencies,
+      optionalDependencies,
     };
   } catch (err) {
     throw new Error(`npm: package.json at ${path} is not valid JSON: ${(err as Error).message}`);
   }
+}
+
+function readStringMap(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string',
+    ),
+  );
 }
 
 async function writePackageJson(vfs: Vfs, cwd: string, pkg: ProjectPackageJson): Promise<void> {
@@ -202,8 +219,29 @@ async function runInstall(
   }
 
   if (Object.keys(dependencies).length === 0) {
-    ctx.stdout.write('npm: no dependencies to install\n');
-    return 0;
+    const hasPackageJsonDeps =
+      Object.keys(pkg.devDependencies).length > 0 ||
+      Object.keys(pkg.optionalDependencies).length > 0;
+    if (specs.length === 0 && !hasPackageJsonDeps) {
+      ctx.stdout.write('npm: no dependencies to install\n');
+      return 0;
+    }
+  }
+
+  const packageJsonPath = `${ctx.cwd}/package.json`;
+  const hadPackageJson = await deps.vfs.exists(packageJsonPath);
+  const previousPackageJson = hadPackageJson ? await deps.vfs.readFile(packageJsonPath) : null;
+  if (specs.length > 0) {
+    const next: ProjectPackageJson = {
+      raw: { ...pkg.raw, dependencies },
+      name: pkg.name,
+      version: pkg.version,
+      scripts: pkg.scripts,
+      dependencies,
+      devDependencies: pkg.devDependencies,
+      optionalDependencies: pkg.optionalDependencies,
+    };
+    await writePackageJson(deps.vfs, ctx.cwd, next);
   }
 
   const requested = specs.length > 0 ? specs.join(' ') : 'all from package.json';
@@ -212,29 +250,23 @@ async function runInstall(
 
   const installFn = deps.install ?? realInstall;
   try {
-    const result = await installFn(pkg.name, pkg.version, dependencies, {
+    const result = await installFn({
       vfs: deps.vfs,
       cwd: ctx.cwd,
       registry: deps.registry,
     });
     const elapsedMs = Math.round(performance.now() - start);
 
-    // Persist only when packages were explicitly named. A bare `npm install`
-    // just re-reads the file; rewriting it would churn mtimes for no change.
-    if (specs.length > 0) {
-      const next: ProjectPackageJson = {
-        raw: { ...pkg.raw, dependencies },
-        name: pkg.name,
-        version: pkg.version,
-        scripts: pkg.scripts,
-        dependencies,
-      };
-      await writePackageJson(deps.vfs, ctx.cwd, next);
-    }
-
     ctx.stdout.write(`npm: installed ${result.packages.length} package(s) in ${elapsedMs}ms\n`);
     return 0;
   } catch (err) {
+    if (specs.length > 0) {
+      if (previousPackageJson) {
+        await deps.vfs.writeFile(packageJsonPath, previousPackageJson);
+      } else {
+        await deps.vfs.rm(packageJsonPath, { force: true });
+      }
+    }
     return reportInstallError(err, ctx);
   }
 }

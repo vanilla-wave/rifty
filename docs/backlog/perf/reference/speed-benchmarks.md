@@ -11,7 +11,7 @@ The waves were protected against silent revert by **count-based RED-on-revert gu
 
 - **No regression floor on speed.** A future change can keep all counts green yet regress wall-clock (e.g. re-introduce a hidden allocation the count doesn't see, or a layout that defeats a cache). Nothing catches it.
 - **Headline magnitudes are unproven.** Some are *unverifiable today*:
-  - **npm #24 concurrency** — the audit's #1 cold-install lever, but the ceiling is capped by `extractTarGz` gzip-inflate/tar-parse serializing on the main thread, and the assumed registry proxy (ADR-0028 Edge Function) is **not deployed** → prod magnitude unknown.
+  - **npm #24 concurrency** — the audit's #1 cold-install lever, but the ceiling is capped by `extractTarGz` gzip-inflate/tar-parse serializing on the main thread, and the registry proxy (ADR-0028 Netlify Function) is **not deployed/smoked** → prod magnitude unknown.
   - **dispatcher `waitAsync` (ADR-0084 #17)** — claimed to remove the ~2–4 ms browser nested-timer clamp per parent-delegated sync call; never wall-clock measured end-to-end in a real COI Worker.
   - **resolver caching (#4/#5/#15)** — claimed ≈50% fewer source reads + parse-once-per-package; only asserted indirectly.
   - **`clearImmediate` O(1) (#28)** — micro-benched ONCE in review (2.7× @N=10 … 37.8× @N=1000) but no committed bench.
@@ -25,10 +25,10 @@ The waves were protected against silent revert by **count-based RED-on-revert gu
 
 ### High — the genuinely-unmeasured latency/throughput claims
 - **PB-4 — dispatcher `waitAsync` wall-clock in a real COI Worker.** `idea · M`. Per audit §6 (#8): drive N (≈5000) serialized execSync-style round-trips through `pumpOnce` (already public for deterministic driving) and assert the ~2–4 ms/call nested-timer clamp floor is gone vs the legacy `setInterval(1ms)` path. **Overlaps `BT-5`** in the browser-coverage backlog — share the `#test=execsync` harness. The single highest-value claim with zero current measurement (Node unit only has the huge-backstop stand-in).
-- **PB-5 — npm install concurrency, real registry.** `blocked · L`. The in-flight gauge (`peakInFlight > 1`) already exists in `installer-concurrency.test.ts` (mechanism proven). MISSING: wall-clock against the **real** registry path (not `FakeRegistry`) + quantify how much main-thread `extractTarGz` inflate caps the overlap. Headline magnitude **blocked on the ADR-0028 Edge Function deploying** — size conservatively until then; until it lands, the honest claim is "fetches overlap" not a speedup number.
+- **PB-5 — npm install concurrency, real registry.** `blocked · L`. The in-flight gauge (`peakInFlight > 1`) already exists in `installer-concurrency.test.ts` (mechanism proven). MISSING: wall-clock against the **real** registry path (not `FakeRegistry`) + quantify how much main-thread `extractTarGz` inflate caps the overlap. Headline magnitude **blocked on the ADR-0028 Netlify proxy smoke** — size conservatively until then; until it lands, the honest claim is "fetches overlap" not a speedup number.
 
 ### Policy
 - **PB-6 — bench CI-gating policy (provisional decision).** `accepted · S`. Which benches gate vs diagnose. Proposed: **count/instrument benches (PB-2) gate CI** (deterministic); **wall-clock benches (PB-3/PB-4) are local/diagnostic** with a committed `baselines.json` compared by hand, NOT a CI threshold (avoids flake-driven reverts). If adopted, record as an `OPEN_QUESTIONS.md` provisional decision (cache-key/policy class) + a `TODO(ADR)` at the harness.
 
 ## Recommended first pull
-**PB-1 + PB-2** (+ PB-6 once): a harness plus the deterministic express-boot instrument — CI-safe, and it converts the audit's biggest headline (codec + resolver) from "claimed" to "asserted". **PB-4** next when the COI harness (`BT-5`) is built — the one latency win nothing measures today. **PB-5** waits on ADR-0028 infra.
+**PB-1 + PB-2** (+ PB-6 once): a harness plus the deterministic express-boot instrument — CI-safe, and it converts the audit's biggest headline (codec + resolver) from "claimed" to "asserted". **PB-4** next when the COI harness (`BT-5`) is built — the one latency win nothing measures today. **PB-5** waits on the ADR-0028 live proxy smoke.

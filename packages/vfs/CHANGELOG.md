@@ -9,6 +9,12 @@
 - **`readdirSync` caches the sorted dirent list per directory (memory + OPFS backends).** `MemoryBackend.readdirEntries` and `OpfsFsSync.readdirSync` memoise the sorted, kind-resolved dirent array instead of re-sorting + rebuilding per call. The cache invalidates on every create / unlink / rename AND on a child's kind/identity change (e.g. `writeFileSync` over an existing name that flips a dirent's type) — invalidated on every `children.set`/`delete`/`clear` (memory) and on every per-child `index.set` / attach / detach / root-subtree-rm (OPFS), so a stale `dirent.isDirectory()` can never be served. Sort order unchanged (lexicographic — Node parity); returned arrays are frozen. The live async `OpfsVfs.readdir` (real OPFS handle iteration) is deliberately NOT cached (no invalidation channel). Behavior-preserving / contract-stable (ADR-0081 rule 5; CHANGELOG-only). Unit: cache-invalidation tests in `memory.test.ts` + `opfs-sync.test.ts`. Per `docs/perf/js-runtime-perf-audit-2026-06-05.md` + `…-adr-plan-2026-06-06.md`.
 ### Fixed
 
+- **`OpfsFsSync.flush()` now drains directory-shape persistence, not just file writes/deletes.**
+  `mkdirSync` directory creation is tracked in the pending queue, so a flush boundary guarantees
+  recursive mkdir durability before reload. `renameSync` also persists moved directory shells,
+  covering empty-directory moves that previously only changed the in-memory mirror. Pending OPFS
+  side effects are serialized in sync-call order, and directory rename persistence reads uncached
+  indexed files through the paired async surface before removing the old subtree.
 - **`cpSync`/`cpRecursive` copy into the source's own subtree** (`cp -r a a` or `cp -r a a/b`)
   no longer infinite-recurses into a stack overflow — both `MemoryFsSync` and `OpfsFsSync`
   now throw `VfsError('EINVAL')` (the guard `renameSync` already had). Review pass 2026-06-07.

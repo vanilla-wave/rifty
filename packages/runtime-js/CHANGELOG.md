@@ -7,9 +7,38 @@
 - **`./builtins/console` subpath export** — the Node-compatible `Console`
   class over writable streams, so embedders (playground node-server bootstrap)
   can route a guest program's console into kernel stdio.
+- **Minimal `node:vm` subset.** `require('node:vm')` now exposes
+  `Script`, `createContext`, `isContext`, `runInThisContext`,
+  `runInContext`, `runInNewContext`, and `compileFunction` for config loaders
+  and template engines. Contexts are mutable property bags, not security
+  isolation; unsupported execution controls such as `timeout` and
+  `contextExtensions` throw `NotImplementedError`.
+- **Worker-backed public FS RPC (ADR-0131).** `RuntimeController.fs` now exposes
+  awaited `readFile()` / `writeFile()` backed by runtime Worker messages. Writes
+  create parent dirs, invalidate the module loader, and await active VFS
+  `flush?.()` before resolving. Legacy `runtime.writeFile(path, content): void`
+  remains source-compatible.
+- **M11 fd-based `node:fs`/`node:os` surface.** Runtime-local fd table adds
+  `open`/`close`/`read`/`write`/`fstat`/`ftruncate` plus `truncate`,
+  `mkdtemp`, `opendir`/`Dir`, `COPYFILE_EXCL`, supported `O_*` constants, and
+  scoped `os.constants.signals`/positive `errno` ABI integers. `ftruncate`
+  preserves fd position, `Dir.read`/`Dir.close` support callback overloads and
+  closed-dir errors, unsupported numeric open flag bits throw `EINVAL`, and
+  `O_SYNC`/`O_DSYNC`/reflink constants stay absent.
 
 ### Fixed
 
+- **Bundled resolver now explicitly registers runtime-js builtins before
+  `node:` detection.** Production builds could tree-shake the
+  `builtins/index.ts` registration side effects and then fail real Vite imports
+  with `Built-in 'node:path' is not implemented`. `createResolver()` now calls
+  the idempotent registration guard before builtin resolution. Guard:
+  `src/module-loader/resolver-bundling.test.ts`.
+- **Transformed TypeScript stack frames remap to source lines.** The ESM loader
+  now extracts inline source maps from `transformSource` output and installs a
+  scoped stack renderer while guest modules execute, so caught `err.stack`
+  reads inside `.ts` guests report the original TypeScript line. The public
+  `TransformSourceHook` remains `Promise<string>`.
 - **`path.resolve` anchors relative paths at `process.cwd()`** (Node parity;
   fs already did) — `express.static('public')` under a non-root cwd resolved
   to `/public` and 404'd.

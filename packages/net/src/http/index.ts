@@ -4,6 +4,6 @@
 
 export { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
 export { ServerResponse } from './response.ts';
-export { HttpServer, createServer, request } from './server.ts';
+export { HttpServer, createServer, get, request } from './server.ts';
 export { STATUS_CODES } from './status-codes.ts';
 export { default } from './server.ts';

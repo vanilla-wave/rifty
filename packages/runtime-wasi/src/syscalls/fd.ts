@@ -6,11 +6,11 @@
  * table and (for `fd_write` on file fds) writes through to the shared VFS via
  * `syncMirror()` (ADR-0014).
  *
- * Auxiliary calls: `fd_fdstat_set_flags`, `fd_filestat_get`, `fd_readdir`,
- * `fd_renumber`, `fd_tell`, plus the family of `E_NOSYS` / harmless-success
- * stubs (`fd_pread`, `fd_pwrite`, `fd_advise`, `fd_allocate`, `fd_datasync`,
- * `fd_sync`, `fd_filestat_set_size`, `fd_filestat_set_times`,
- * `fd_fdstat_set_rights`).
+ * Auxiliary calls: `fd_fdstat_set_flags`, `fd_filestat_get`,
+ * `fd_filestat_set_size`, `fd_pread`, `fd_pwrite`, `fd_readdir`,
+ * `fd_renumber`, `fd_tell`, plus the remaining `E_NOSYS` / harmless-success
+ * stubs (`fd_advise`, `fd_allocate`, `fd_datasync`, `fd_sync`,
+ * `fd_filestat_set_times`, `fd_fdstat_set_rights`).
  */
 import { syncMirror } from '@riftydev/vfs';
 import {
@@ -21,11 +21,15 @@ import {
   E_NOTDIR,
   E_PERM,
   E_SUCCESS,
+  FDFLAGS_APPEND,
   FILETYPE_DIRECTORY,
   FILETYPE_REGULAR_FILE,
   FILETYPE_UNKNOWN,
   type FileDescriptor,
   RIGHTS_DIR_BASE,
+  RIGHTS_FD_FILESTAT_SET_SIZE,
+  RIGHTS_FD_READ,
+  RIGHTS_FD_SEEK,
   RIGHTS_FD_WRITE,
   RIGHTS_FILE_BASE,
   WHENCE_CUR,
@@ -51,13 +55,34 @@ function filetypeFor(entry: FileDescriptor): number {
 
 function rightsFor(entry: FileDescriptor): { base: bigint; inheriting: bigint } {
   if (entry.type === 'dir') {
-    return { base: RIGHTS_DIR_BASE, inheriting: RIGHTS_DIR_BASE | RIGHTS_FILE_BASE };
+    return {
+      base: entry.rights ?? RIGHTS_DIR_BASE,
+      inheriting: entry.rightsInheriting ?? RIGHTS_DIR_BASE | RIGHTS_FILE_BASE,
+    };
   }
   if (entry.type === 'file') {
-    return { base: RIGHTS_FILE_BASE, inheriting: 0n };
+    return { base: entry.rights ?? RIGHTS_FILE_BASE, inheriting: entry.rightsInheriting ?? 0n };
   }
   // stdio
-  return { base: RIGHTS_FILE_BASE, inheriting: 0n };
+  return { base: entry.rights ?? RIGHTS_FILE_BASE, inheriting: entry.rightsInheriting ?? 0n };
+}
+
+function toSafeNonNegativeNumber(value: bigint): number | null {
+  if (value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+  return Number(value);
+}
+
+function allocateFileBytes(length: number): Uint8Array | null {
+  try {
+    return new Uint8Array(length);
+  } catch (err) {
+    if (err instanceof RangeError) return null;
+    throw err;
+  }
+}
+
+function hasRight(entry: FileDescriptor, right: bigint): boolean {
+  return entry.rights === undefined || (entry.rights & right) !== 0n;
 }
 
 export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
@@ -67,9 +92,7 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       if (!fdEntry) return E_BADF;
       // Only enforce RIGHTS_FD_WRITE when path_open saved an explicit rights bag;
       // stdio and preopens leave `rights` undefined → default-permissive.
-      if (fdEntry.type === 'file' && fdEntry.rights !== undefined) {
-        if ((fdEntry.rights & RIGHTS_FD_WRITE) === 0n) return E_PERM;
-      }
+      if (fdEntry.type === 'file' && !hasRight(fdEntry, RIGHTS_FD_WRITE)) return E_PERM;
       const view = ctx.view();
       const bytes = ctx.bytes();
       let written = 0;
@@ -80,8 +103,9 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
         if (fdEntry.type === 'stdout') ctx.onStdout(dec.decode(slice));
         else if (fdEntry.type === 'stderr') ctx.onStderr(dec.decode(slice));
         else if (fdEntry.type === 'file') {
-          const cur = fdEntry.cursor ?? 0;
           const existing = fdEntry.data ?? new Uint8Array(0);
+          const cur =
+            (fdEntry.fdflags ?? 0) & FDFLAGS_APPEND ? existing.length : (fdEntry.cursor ?? 0);
           const needed = cur + slice.length;
           const next = needed > existing.length ? new Uint8Array(needed) : existing;
           if (next !== existing) next.set(existing, 0);
@@ -130,6 +154,7 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       }
       // stdout/stderr are write-only.
       if (fdEntry.type !== 'file') return E_BADF;
+      if (!hasRight(fdEntry, RIGHTS_FD_READ)) return E_PERM;
       const view = ctx.view();
       const bytes = ctx.bytes();
       let readTotal = 0;
@@ -158,23 +183,26 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
     fd_seek: (fd: number, offset: bigint, whence: number, newOffset: number) => {
       const fdEntry = ctx.fds.get(fd);
       if (!fdEntry || fdEntry.type !== 'file') return E_BADF;
+      if (!hasRight(fdEntry, RIGHTS_FD_SEEK)) return E_PERM;
       if (whence !== WHENCE_SET && whence !== WHENCE_CUR && whence !== WHENCE_END) {
         return E_INVAL;
       }
       const cur = fdEntry.cursor ?? 0;
       const size = (fdEntry.data ?? new Uint8Array(0)).length;
-      const offsetNum = Number(offset);
+      const offsetNum = toSafeNonNegativeNumber(offset < 0n ? -offset : offset);
+      if (offsetNum === null) return E_INVAL;
       let next: number;
       if (whence === WHENCE_SET) {
-        if (offsetNum < 0) return E_INVAL;
+        if (offset < 0n) return E_INVAL;
         next = offsetNum;
       } else if (whence === WHENCE_CUR) {
-        next = cur + offsetNum;
+        next = offset < 0n ? cur - offsetNum : cur + offsetNum;
         if (next < 0) return E_INVAL;
       } else {
-        next = size + offsetNum;
+        next = offset < 0n ? size - offsetNum : size + offsetNum;
         if (next < 0) return E_INVAL;
       }
+      if (!Number.isSafeInteger(next)) return E_INVAL;
       fdEntry.cursor = next;
       ctx.view().setBigUint64(newOffset, BigInt(next), true);
       return E_SUCCESS;
@@ -268,7 +296,28 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       view.setBigUint64(outBuf + 56, 0n, true);
       return E_SUCCESS;
     },
-    fd_filestat_set_size: () => E_NOSYS,
+    fd_filestat_set_size: (fd: number, size: bigint) => {
+      const entry = ctx.fds.get(fd);
+      if (!entry || entry.type !== 'file') return E_BADF;
+      if (!hasRight(entry, RIGHTS_FD_FILESTAT_SET_SIZE)) return E_PERM;
+      const sizeNum = toSafeNonNegativeNumber(size);
+      if (sizeNum === null) return E_INVAL;
+      const existing = entry.data ?? new Uint8Array(0);
+      let next: Uint8Array;
+      if (sizeNum === existing.length) {
+        next = existing;
+      } else if (sizeNum < existing.length) {
+        next = existing.slice(0, sizeNum);
+      } else {
+        const grown = allocateFileBytes(sizeNum);
+        if (!grown) return E_INVAL;
+        grown.set(existing, 0);
+        next = grown;
+      }
+      entry.data = next;
+      if (entry.path) syncMirror().writeFileSync(entry.path, next);
+      return E_SUCCESS;
+    },
     fd_filestat_set_times: () => E_NOSYS,
     fd_readdir: (fd: number, bufPtr: number, bufLen: number, cookie: bigint, bufUsed: number) => {
       const entry = ctx.fds.get(fd);
@@ -342,10 +391,67 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       ctx.view().setBigUint64(outPtr, BigInt(entry.cursor ?? 0), true);
       return E_SUCCESS;
     },
-    // fd_pread / fd_pwrite take an offset instead of the cursor. Rarely used by
-    // real toolchains; E_NOSYS honestly surfaces the gap in the compat matrix.
-    fd_pread: () => E_NOSYS,
-    fd_pwrite: () => E_NOSYS,
+    fd_pread: (fd: number, iovs: number, iovsLen: number, offset: bigint, nread: number) => {
+      const entry = ctx.fds.get(fd);
+      if (!entry || entry.type !== 'file') return E_BADF;
+      if (!hasRight(entry, RIGHTS_FD_READ)) return E_PERM;
+      const offsetNum = toSafeNonNegativeNumber(offset);
+      if (offsetNum === null) return E_INVAL;
+      const view = ctx.view();
+      const bytes = ctx.bytes();
+      let readTotal = 0;
+      let cursor = offsetNum;
+      const data = entry.data ?? new Uint8Array(0);
+      for (let i = 0; i < iovsLen; i++) {
+        const ptr = view.getUint32(iovs + i * 8, true);
+        const len = view.getUint32(iovs + i * 8 + 4, true);
+        const remaining = data.length - cursor;
+        if (remaining <= 0) break;
+        const take = Math.min(len, remaining);
+        bytes.set(data.subarray(cursor, cursor + take), ptr);
+        cursor += take;
+        readTotal += take;
+      }
+      view.setUint32(nread, readTotal, true);
+      return E_SUCCESS;
+    },
+    fd_pwrite: (fd: number, iovs: number, iovsLen: number, offset: bigint, nwritten: number) => {
+      const entry = ctx.fds.get(fd);
+      if (!entry || entry.type !== 'file') return E_BADF;
+      if (!hasRight(entry, RIGHTS_FD_WRITE)) return E_PERM;
+      const offsetNum = toSafeNonNegativeNumber(offset);
+      if (offsetNum === null) return E_INVAL;
+      const view = ctx.view();
+      const bytes = ctx.bytes();
+      const chunks: { offset: number; data: Uint8Array }[] = [];
+      let writeOffset = offsetNum;
+      let written = 0;
+      let neededLength = (entry.data ?? new Uint8Array(0)).length;
+      for (let i = 0; i < iovsLen; i++) {
+        const ptr = view.getUint32(iovs + i * 8, true);
+        const len = view.getUint32(iovs + i * 8 + 4, true);
+        const slice = bytes.subarray(ptr, ptr + len);
+        const needed = writeOffset + slice.length;
+        if (!Number.isSafeInteger(needed)) return E_INVAL;
+        chunks.push({ offset: writeOffset, data: slice });
+        writeOffset = needed;
+        written += slice.length;
+        neededLength = Math.max(neededLength, needed);
+      }
+      const existing = entry.data ?? new Uint8Array(0);
+      let next = existing;
+      if (neededLength > existing.length) {
+        const grown = allocateFileBytes(neededLength);
+        if (!grown) return E_INVAL;
+        grown.set(existing, 0);
+        next = grown;
+      }
+      for (const chunk of chunks) next.set(chunk.data, chunk.offset);
+      entry.data = next;
+      if (entry.path) syncMirror().writeFileSync(entry.path, next);
+      view.setUint32(nwritten, written, true);
+      return E_SUCCESS;
+    },
     fd_advise: () => E_SUCCESS, // advisory hint; honest no-op
     fd_allocate: () => E_NOSYS, // pre-allocating storage is meaningless in-memory
     fd_datasync: () => E_SUCCESS, // in-memory writes are immediately visible

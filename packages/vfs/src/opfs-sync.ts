@@ -16,10 +16,10 @@
  * retained but off the read/write hot path. Callers can drain the
  * write-through deterministically via {@link flush} before a reload.
  *
- * Directory-shape ops (`readdirSync`, `mkdirSync`, `rmSync`) read/write an
- * in-memory directory tree mirror that is **seeded** at boot from the OPFS
- * root and kept in sync as the page runs. Persistence of directory-shape
- * mutations back to OPFS happens via async helpers
+ * Directory-shape ops (`readdirSync`, `mkdirSync`, `rmSync`, `renameSync`)
+ * read/write an in-memory directory tree mirror that is **seeded** at boot
+ * from the OPFS root and kept in sync as the page runs. Persistence of
+ * directory-shape mutations back to OPFS happens via async helpers
  * (`getDirectoryHandle`/`removeEntry`) tracked in the same `flush` queue; if
  * the page is closed before a flush completes, the on-disk tree is slightly
  * behind the in-memory mirror — acceptable for a dev runtime.
@@ -144,13 +144,15 @@ export class OpfsFsSync implements FsSync {
    * async write-through.
    */
   private readonly content = new Map<string, Uint8Array>();
-  /** In-flight async OPFS write-through / rm promises; drained by {@link flush}. */
+  /** In-flight async OPFS write-through / structural promises; drained by {@link flush}. */
   private readonly pending: Array<Promise<void>> = [];
+  /** Serialises OPFS side effects so durable state follows sync call order. */
+  private pendingTail: Promise<void> = Promise.resolve();
   /**
    * Paired async OPFS surface used for content write-through, content
-   * preload, and durable deletes. `null` when constructed without a pair
-   * (the unit-test path), in which case writes stay in-cache only — fine,
-   * because those tests never reload a page.
+   * preload, and durable file-bearing structural moves/deletes. `null` when
+   * constructed without a pair (the unit-test path), in which case writes
+   * stay in-cache only — fine, because those tests never reload a page.
    */
   private readonly asyncSurface: PairedAsyncSurface | null;
 
@@ -273,6 +275,17 @@ export class OpfsFsSync implements FsSync {
     return dir;
   }
 
+  private async persistDirectoryPath(path: string, recursive: boolean): Promise<void> {
+    const parts = segments(path);
+    let dir: FileSystemDirectoryHandle = this.root;
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i] as string;
+      dir = await dir.getDirectoryHandle(part, {
+        create: recursive || i === parts.length - 1,
+      });
+    }
+  }
+
   /**
    * Returns a memoised sync access handle for `path`, opening the file
    * (creating if absent) and acquiring a handle on first call.
@@ -381,21 +394,14 @@ export class OpfsFsSync implements FsSync {
    * Errors are swallowed — the next `refreshIndex` will reconcile.
    */
   private persistMkdirAsync(path: string, recursive: boolean): void {
-    void (async () => {
+    this.enqueuePending(async () => {
       try {
-        const parts = segments(path);
-        let dir: FileSystemDirectoryHandle = this.root;
-        for (let i = 0; i < parts.length; i++) {
-          const part = parts[i] as string;
-          dir = await dir.getDirectoryHandle(part, {
-            create: recursive || i === parts.length - 1,
-          });
-        }
+        await this.persistDirectoryPath(path, recursive);
       } catch {
         // Mirror already reflects intent; a failed persist (quota, perm)
         // reconciles on next refresh.
       }
-    })();
+    });
   }
 
   /**
@@ -404,15 +410,14 @@ export class OpfsFsSync implements FsSync {
    * the next `refreshIndex` reconciles any mismatch.
    */
   private persistRmAsync(path: string, recursive: boolean): void {
-    const p = (async () => {
+    this.enqueuePending(async () => {
       try {
         const parent = await this.resolveParent(path);
         await parent.removeEntry(basename(path), { recursive });
       } catch {
         // See `persistMkdirAsync` — mismatch reconciles on refresh.
       }
-    })();
-    this.trackPending(p);
+    });
   }
 
   existsSync(path: string): boolean {
@@ -473,7 +478,7 @@ export class OpfsFsSync implements FsSync {
   private enqueueWriteThrough(normalized: string, data: Uint8Array): void {
     const surface = this.asyncSurface;
     if (!surface) return;
-    const p = (async () => {
+    this.enqueuePending(async () => {
       try {
         await surface.writeFile(normalized, data);
       } catch {
@@ -481,8 +486,7 @@ export class OpfsFsSync implements FsSync {
         // refreshIndex/preload reconciles. Cache stays correct for sync
         // callers in this realm.
       }
-    })();
-    this.trackPending(p);
+    });
   }
 
   /** Adds `p` to {@link pending} and self-removes it on settle. */
@@ -494,8 +498,14 @@ export class OpfsFsSync implements FsSync {
     });
   }
 
+  private enqueuePending(task: () => Promise<void>): void {
+    const p = this.pending.length === 0 ? task() : this.pendingTail.then(task, task);
+    this.pendingTail = p.catch(() => {});
+    this.trackPending(p);
+  }
+
   /**
-   * Drains all in-flight async OPFS write-through / rm operations
+   * Drains all in-flight async OPFS write-through / structural operations
    * (ADR-0072). Callers invoke this before a deterministic boundary —
    * e.g. the runtime worker awaits it before resolving an `eval` result so
    * persistence completes before any page reload. Never rejects.
@@ -739,21 +749,35 @@ export class OpfsFsSync implements FsSync {
     // `times` mtime survives (the ADR-0090 win). Open handles point at the
     // OLD on-disk file (which the async persist removes), so close+drop them;
     // a fresh handle opens lazily on next access.
-    const moved = [...this.index.keys()].filter((p) => p === s || p.startsWith(`${s}/`));
+    const moved = [...this.index.keys()]
+      .filter((p) => p === s || p.startsWith(`${s}/`))
+      .sort((a, b) => segments(a).length - segments(b).length || a.localeCompare(b));
     this.detachChild(s);
-    const fileWrites: Array<readonly [string, Uint8Array]> = [];
+    const dirCreates = new Set<string>();
+    const fileMoves: Array<{
+      readonly oldPath: string;
+      readonly newPath: string;
+      readonly bytes?: Uint8Array;
+    }> = [];
     for (const oldP of moved) {
       const newP = d + oldP.slice(s.length);
       const entry = this.index.get(oldP);
       if (entry) {
         this.index.set(newP, entry);
         this.index.delete(oldP);
+        if (entry.kind === 'dir') dirCreates.add(newP);
       }
       const bytes = this.content.get(oldP);
       if (bytes !== undefined) {
         this.content.set(newP, bytes);
         this.content.delete(oldP);
-        fileWrites.push([newP, bytes.slice()]);
+      }
+      if (entry?.kind === 'file') {
+        fileMoves.push({
+          oldPath: oldP,
+          newPath: newP,
+          ...(bytes !== undefined ? { bytes: bytes.slice() } : {}),
+        });
       }
       const t = this.times.get(oldP);
       if (t !== undefined) {
@@ -771,12 +795,13 @@ export class OpfsFsSync implements FsSync {
       }
     }
     this.attachChild(d);
-    this.persistRenameAsync(s, fileWrites);
+    this.persistRenameAsync(s, [...dirCreates], fileMoves);
   }
 
   /**
-   * Best-effort async OPFS persist of a rename: recreate the moved files at
-   * their new paths from the captured bytes, then remove the old subtree.
+   * Best-effort async OPFS persist of a rename: recreate moved directories
+   * and files at their new paths from the captured snapshot, then remove the
+   * old subtree.
    * `FileSystemSyncAccessHandle` has no native rename; the SYNC view is
    * already atomic (the in-memory re-key above), so on-disk lag is acceptable
    * (ADR-0072/0083) and reconciles on the next `refreshIndex`. Tracked in
@@ -784,19 +809,35 @@ export class OpfsFsSync implements FsSync {
    */
   private persistRenameAsync(
     srcRoot: string,
-    fileWrites: Array<readonly [string, Uint8Array]>,
+    dirCreates: readonly string[],
+    fileMoves: ReadonlyArray<{
+      readonly oldPath: string;
+      readonly newPath: string;
+      readonly bytes?: Uint8Array;
+    }>,
   ): void {
     const surface = this.asyncSurface;
-    if (!surface) return;
-    const p = (async () => {
+    this.enqueuePending(async () => {
       try {
-        for (const [newP, bytes] of fileWrites) await surface.writeFile(newP, bytes);
-        await surface.rm(srcRoot, { recursive: true });
+        if (fileMoves.length > 0 && !surface) return;
+        const orderedDirs = [...dirCreates].sort(
+          (a, b) => segments(a).length - segments(b).length || a.localeCompare(b),
+        );
+        for (const dir of orderedDirs) await this.persistDirectoryPath(dir, true);
+        if (surface) {
+          for (const move of fileMoves) {
+            const bytes = move.bytes ?? (await surface.readFile(move.oldPath));
+            await surface.writeFile(move.newPath, bytes);
+          }
+          await surface.rm(srcRoot, { recursive: true });
+        } else {
+          const parent = await this.resolveParent(srcRoot);
+          await parent.removeEntry(basename(srcRoot), { recursive: true });
+        }
       } catch {
         // Mismatch reconciles on the next refreshIndex (same posture as
         // enqueueWriteThrough / persistRmAsync).
       }
-    })();
-    this.trackPending(p);
+    });
   }
 }

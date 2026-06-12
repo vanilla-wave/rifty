@@ -20,4 +20,13 @@
 import { registerBuiltin } from '@riftydev/io';
 import { DatabaseSync } from './database-sync.ts';
 
-registerBuiltin('sqlite', () => ({ DatabaseSync }));
+let sqliteBuiltinRegistered = false;
+
+export function registerSqliteBuiltin(): void {
+  if (sqliteBuiltinRegistered) return;
+  sqliteBuiltinRegistered = true;
+
+  registerBuiltin('sqlite', () => ({ DatabaseSync }));
+}
+
+registerSqliteBuiltin();

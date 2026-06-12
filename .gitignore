@@ -22,3 +22,6 @@ test-results/
 # a fresh checkout is missing the file and playground typecheck/build go red.
 !apps/playground/build/
 !apps/playground/build/**
+
+# Local Netlify folder
+.netlify

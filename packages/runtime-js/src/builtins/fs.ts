@@ -9,34 +9,36 @@
  * Node.
  */
 
-import { bytesToString } from '@riftydev/io';
+import { NotImplementedError, bytesToString } from '@riftydev/io';
 import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { Buffer, type Encoding } from './buffer.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import { getProcessCwd } from './process.ts';
 
-/**
- * Resolve a user-facing fs path: relative names anchor at the runtime's cwd
- * (process.cwd(), default '/'); absolute paths are normalised directly. The
- * syncMirror always sees absolute paths.
- */
-function resolvePath(p: string | URL | Buffer | Uint8Array): string {
-  let str: string;
-  if (typeof p === 'string') {
-    str = p;
-  } else if (p instanceof URL) {
+type PathLike = string | URL | Uint8Array;
+
+function pathToString(p: PathLike): string {
+  if (typeof p === 'string') return p;
+  if (p instanceof URL) {
     // Node's fs accepts file:// URLs; decode to a path.
     if (p.protocol !== 'file:') {
       throw Object.assign(new TypeError('Only file: URLs are supported'), {
         code: 'ERR_INVALID_URL_SCHEME',
       });
     }
-    str = decodeURIComponent(p.pathname);
-  } else if (p instanceof Uint8Array) {
-    str = new TextDecoder().decode(p);
-  } else {
-    throw new TypeError('fs path must be string, Buffer, or URL');
+    return decodeURIComponent(p.pathname);
   }
+  if (p instanceof Uint8Array) return new TextDecoder().decode(p);
+  throw new TypeError('fs path must be string, Buffer, or URL');
+}
+
+/**
+ * Resolve a user-facing fs path: relative names anchor at the runtime's cwd
+ * (process.cwd(), default '/'); absolute paths are normalised directly. The
+ * syncMirror always sees absolute paths.
+ */
+function resolvePath(p: PathLike): string {
+  const str = pathToString(p);
   if (isAbsolute(str)) return normalizePath(str);
   // joinPath already normalizes internally and getProcessCwd() is always an
   // absolute normalized path, so its result is already absolute+normalized —
@@ -46,6 +48,21 @@ function resolvePath(p: string | URL | Buffer | Uint8Array): string {
 }
 
 type Callback<T> = (err: NodeJS.ErrnoException | null, value?: T) => void;
+type OpenFlags = string | number;
+type FdCallback = (err: NodeJS.ErrnoException | null, fd?: number) => void;
+type VoidCallback = (err: NodeJS.ErrnoException | null) => void;
+type ReadCallback = (
+  err: NodeJS.ErrnoException | null,
+  bytesRead?: number,
+  buffer?: Uint8Array,
+) => void;
+type WriteCallback = (
+  err: NodeJS.ErrnoException | null,
+  bytesWritten?: number,
+  data?: Uint8Array | string,
+) => void;
+type StatsCallback = (err: NodeJS.ErrnoException | null, stats?: Stats) => void;
+type DirCallback = (err: NodeJS.ErrnoException | null, dir?: Dir) => void;
 
 interface ReadFileOptions {
   encoding?: Encoding | null;
@@ -64,6 +81,56 @@ interface MkdirOptions {
 interface RmOptions {
   recursive?: boolean;
   force?: boolean;
+}
+
+interface FdRecord {
+  path: string;
+  readable: boolean;
+  writable: boolean;
+  append: boolean;
+  position: number;
+}
+
+interface ParsedOpenFlags {
+  readable: boolean;
+  writable: boolean;
+  create: boolean;
+  exclusive: boolean;
+  truncate: boolean;
+  append: boolean;
+  directory: boolean;
+}
+
+interface FdReadOptions {
+  offset?: number;
+  length?: number;
+  position?: number | null;
+}
+
+const fdTable = new Map<number, FdRecord>();
+let nextFd = 3;
+
+function fsError(code: string, path?: string, syscall?: string): NodeJS.ErrnoException {
+  const target = path ? `: ${path}` : '';
+  const err = new Error(`${code}${target}`) as NodeJS.ErrnoException;
+  err.code = code;
+  err.path = path;
+  err.syscall = syscall;
+  return err;
+}
+
+function assertNonNegativeInteger(value: number, name: string): void {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new RangeError(`${name} must be a non-negative integer`);
+  }
+}
+
+function checkedSliceBounds(buffer: Uint8Array, offset: number, length: number): void {
+  assertNonNegativeInteger(offset, 'offset');
+  assertNonNegativeInteger(length, 'length');
+  if (offset + length > buffer.byteLength) {
+    throw new RangeError('offset + length exceeds buffer length');
+  }
 }
 
 class Stats {
@@ -135,6 +202,77 @@ class Dirent {
   }
 }
 
+class Dir implements AsyncIterable<Dirent> {
+  readonly path: string;
+  readonly #entries: Dirent[];
+  #index = 0;
+  #closed = false;
+
+  constructor(path: string, entries: Dirent[]) {
+    this.path = path;
+    this.#entries = entries;
+  }
+
+  readSync(): Dirent | null {
+    this.#assertOpen();
+    const entry = this.#entries[this.#index];
+    if (!entry) return null;
+    this.#index += 1;
+    return entry;
+  }
+
+  read(): Promise<Dirent | null>;
+  read(cb: (err: NodeJS.ErrnoException | null, dirent?: Dirent | null) => void): void;
+  read(cb?: (err: NodeJS.ErrnoException | null, dirent?: Dirent | null) => void) {
+    if (cb) {
+      Promise.resolve()
+        .then(() => this.readSync())
+        .then(
+          (dirent) => cb(null, dirent),
+          (err) => cb(err as NodeJS.ErrnoException),
+        );
+      return;
+    }
+    return Promise.resolve().then(() => this.readSync());
+  }
+
+  closeSync(): void {
+    this.#assertOpen();
+    this.#closed = true;
+  }
+
+  close(): Promise<void>;
+  close(cb: (err: NodeJS.ErrnoException | null) => void): void;
+  close(cb?: (err: NodeJS.ErrnoException | null) => void) {
+    if (cb) {
+      Promise.resolve()
+        .then(() => this.closeSync())
+        .then(
+          () => cb(null),
+          (err) => cb(err as NodeJS.ErrnoException),
+        );
+      return;
+    }
+    return Promise.resolve().then(() => this.closeSync());
+  }
+
+  async *[Symbol.asyncIterator](): AsyncIterator<Dirent> {
+    try {
+      while (true) {
+        const entry = this.readSync();
+        if (entry === null) return;
+        yield entry;
+      }
+    } finally {
+      this.closeSync();
+    }
+  }
+
+  #assertOpen(): void {
+    if (this.#closed) throw fsError('ERR_DIR_CLOSED', this.path, 'readdir');
+  }
+}
+
 function toEncodingOrNull(arg: ReadFileOptions | Encoding | null | undefined): Encoding | null {
   if (arg === undefined || arg === null) return null;
   if (typeof arg === 'string') return arg as Encoding;
@@ -152,6 +290,122 @@ function decodeResult(bytes: Uint8Array, encoding: Encoding | null): Uint8Array 
 function encodeData(data: Uint8Array | string, encoding: Encoding | null): Uint8Array {
   if (typeof data === 'string') return Buffer.from(data, encoding ?? 'utf8');
   return data;
+}
+
+function parseOpenFlags(flags: OpenFlags): ParsedOpenFlags {
+  const numeric = typeof flags === 'number' ? flags : openFlagsFromString(flags);
+  if (!Number.isInteger(numeric) || numeric < 0) throw fsError('EINVAL', undefined, 'open');
+
+  const supported =
+    constants.O_WRONLY |
+    constants.O_RDWR |
+    constants.O_CREAT |
+    constants.O_EXCL |
+    constants.O_TRUNC |
+    constants.O_APPEND |
+    constants.O_DIRECTORY;
+  if ((numeric & ~supported) !== 0) throw fsError('EINVAL', undefined, 'open');
+
+  const access = numeric & 3;
+  if (access === 3) throw fsError('EINVAL', undefined, 'open');
+  const writable = access === constants.O_WRONLY || access === constants.O_RDWR;
+  const readable = access === constants.O_RDONLY || access === constants.O_RDWR;
+  const truncate = (numeric & constants.O_TRUNC) !== 0;
+  const append = (numeric & constants.O_APPEND) !== 0;
+  if ((truncate || append) && !writable) throw fsError('EINVAL', undefined, 'open');
+
+  return {
+    readable,
+    writable,
+    create: (numeric & constants.O_CREAT) !== 0,
+    exclusive: (numeric & constants.O_EXCL) !== 0,
+    truncate,
+    append,
+    directory: (numeric & constants.O_DIRECTORY) !== 0,
+  };
+}
+
+function openFlagsFromString(flags: string): number {
+  switch (flags) {
+    case 'r':
+      return constants.O_RDONLY;
+    case 'r+':
+      return constants.O_RDWR;
+    case 'w':
+      return constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC;
+    case 'wx':
+    case 'xw':
+      return constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_EXCL;
+    case 'w+':
+      return constants.O_RDWR | constants.O_CREAT | constants.O_TRUNC;
+    case 'wx+':
+    case 'xw+':
+      return constants.O_RDWR | constants.O_CREAT | constants.O_TRUNC | constants.O_EXCL;
+    case 'a':
+      return constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND;
+    case 'ax':
+    case 'xa':
+      return constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND | constants.O_EXCL;
+    case 'a+':
+      return constants.O_RDWR | constants.O_CREAT | constants.O_APPEND;
+    case 'ax+':
+    case 'xa+':
+      return constants.O_RDWR | constants.O_CREAT | constants.O_APPEND | constants.O_EXCL;
+    case 'rs':
+    case 'sr':
+    case 'rs+':
+    case 'sr+':
+    case 'as':
+    case 'sa':
+    case 'as+':
+    case 'sa+':
+      throw new NotImplementedError('fs.openSync.O_SYNC');
+    default:
+      throw fsError('EINVAL', undefined, 'open');
+  }
+}
+
+function getFd(fd: number): FdRecord {
+  const record = fdTable.get(fd);
+  if (!record) throw fsError('EBADF', undefined, 'fd');
+  return record;
+}
+
+function resizeFile(path: string, len: number): void {
+  assertNonNegativeInteger(len, 'len');
+  const current = syncMirror().readFileBytesSync(path);
+  const next = new Uint8Array(len);
+  next.set(current.subarray(0, Math.min(current.byteLength, len)));
+  syncMirror().writeFileSync(path, next);
+}
+
+function writeBytesAt(record: FdRecord, bytes: Uint8Array, position: number | null): number {
+  if (!record.writable) throw fsError('EBADF', record.path, 'write');
+  const stat = syncMirror().statSync(record.path);
+  if (stat.isDirectory) throw fsError('EISDIR', record.path, 'write');
+
+  const existing = syncMirror().readFileBytesSync(record.path);
+  const start = record.append ? existing.byteLength : (position ?? record.position);
+  assertNonNegativeInteger(start, 'position');
+
+  const next = new Uint8Array(Math.max(existing.byteLength, start + bytes.byteLength));
+  next.set(existing);
+  next.set(bytes, start);
+  syncMirror().writeFileSync(record.path, next);
+  if (position === null || record.append) record.position = start + bytes.byteLength;
+  return bytes.byteLength;
+}
+
+function randomMkdtempSuffix(): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const bytes = new Uint8Array(6);
+  const webCrypto = globalThis.crypto;
+  if (webCrypto?.getRandomValues) {
+    webCrypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('');
 }
 
 export function readFileSync(
@@ -282,7 +536,13 @@ function _realpathSyncImpl(p: string): string {
 export const realpathSync: ((p: string) => string) & { native: (p: string) => string } =
   Object.assign(_realpathSyncImpl, { native: _realpathSyncImpl });
 
-export function copyFileSync(src: string, dst: string): void {
+export function copyFileSync(src: string, dst: string, mode = 0): void {
+  if (!Number.isInteger(mode) || mode < 0 || (mode & ~constants.COPYFILE_EXCL) !== 0) {
+    throw fsError('EINVAL', undefined, 'copyfile');
+  }
+  if ((mode & constants.COPYFILE_EXCL) !== 0 && existsSync(dst)) {
+    throw fsError('EEXIST', resolvePath(dst), 'copyfile');
+  }
   // ADR-0090: native VFS copy (single regular file; dst mtime=now).
   syncMirror().copyFileSync(resolvePath(src), resolvePath(dst));
 }
@@ -290,6 +550,154 @@ export function copyFileSync(src: string, dst: string): void {
 export function cpSync(src: string, dst: string, opts?: { recursive?: boolean }): void {
   // ADR-0090: `node:fs.cpSync` — recursive-aware, best-effort fail-fast.
   syncMirror().cpSync(resolvePath(src), resolvePath(dst), { recursive: opts?.recursive });
+}
+
+export function openSync(p: PathLike, flags: OpenFlags = 'r', _mode?: number): number {
+  const path = resolvePath(p);
+  const parsed = parseOpenFlags(flags);
+  const stat = syncMirror().statSyncOrNull(path);
+
+  if (stat) {
+    if (parsed.create && parsed.exclusive) throw fsError('EEXIST', path, 'open');
+    if (parsed.directory && !stat.isDirectory) throw fsError('ENOTDIR', path, 'open');
+    if (stat.isDirectory && (parsed.writable || parsed.truncate)) {
+      throw fsError('EISDIR', path, 'open');
+    }
+    if (parsed.truncate && stat.isFile) syncMirror().writeFileSync(path, new Uint8Array());
+  } else {
+    if (!parsed.create || parsed.directory) throw fsError('ENOENT', path, 'open');
+    syncMirror().writeFileSync(path, new Uint8Array());
+  }
+
+  const fd = nextFd++;
+  fdTable.set(fd, {
+    path,
+    readable: parsed.readable,
+    writable: parsed.writable,
+    append: parsed.append,
+    position: 0,
+  });
+  return fd;
+}
+
+export function closeSync(fd: number): void {
+  if (!fdTable.delete(fd)) throw fsError('EBADF', undefined, 'close');
+}
+
+export function readSync(
+  fd: number,
+  buffer: Uint8Array,
+  offset: number,
+  length: number,
+  position: number | null,
+): number;
+export function readSync(fd: number, buffer: Uint8Array, options?: FdReadOptions): number;
+export function readSync(
+  fd: number,
+  buffer: Uint8Array,
+  offsetOrOptions: number | FdReadOptions = 0,
+  length?: number,
+  position?: number | null,
+): number {
+  const record = getFd(fd);
+  if (!record.readable) throw fsError('EBADF', record.path, 'read');
+  if (!(buffer instanceof Uint8Array)) throw new TypeError('buffer must be a Uint8Array');
+
+  const offset =
+    typeof offsetOrOptions === 'number' ? offsetOrOptions : (offsetOrOptions.offset ?? 0);
+  const count =
+    typeof offsetOrOptions === 'number'
+      ? (length ?? buffer.byteLength - offset)
+      : (offsetOrOptions.length ?? buffer.byteLength - offset);
+  const pos =
+    typeof offsetOrOptions === 'number' ? (position ?? null) : (offsetOrOptions.position ?? null);
+  checkedSliceBounds(buffer, offset, count);
+  if (pos !== null) assertNonNegativeInteger(pos, 'position');
+
+  const stat = syncMirror().statSync(record.path);
+  if (stat.isDirectory) throw fsError('EISDIR', record.path, 'read');
+  const bytes = syncMirror().readFileBytesSync(record.path);
+  const start = pos ?? record.position;
+  const end = Math.min(bytes.byteLength, start + count);
+  const read = Math.max(0, end - start);
+  if (read > 0) buffer.set(bytes.subarray(start, end), offset);
+  if (pos === null) record.position += read;
+  return read;
+}
+
+export function writeSync(
+  fd: number,
+  buffer: Uint8Array,
+  offset?: number,
+  length?: number,
+  position?: number | null,
+): number;
+export function writeSync(
+  fd: number,
+  str: string,
+  position?: number | null,
+  encoding?: Encoding,
+): number;
+export function writeSync(
+  fd: number,
+  data: Uint8Array | string,
+  offsetOrPosition?: number | null,
+  lengthOrEncoding?: number | Encoding,
+  position?: number | null,
+): number {
+  const record = getFd(fd);
+  if (typeof data === 'string') {
+    const pos =
+      typeof offsetOrPosition === 'number' || offsetOrPosition === null ? offsetOrPosition : null;
+    const enc = typeof lengthOrEncoding === 'string' ? lengthOrEncoding : 'utf8';
+    return writeBytesAt(record, Buffer.from(data, enc), pos);
+  }
+  if (!(data instanceof Uint8Array)) throw new TypeError('data must be a string or Uint8Array');
+  const offset = offsetOrPosition ?? 0;
+  const length = typeof lengthOrEncoding === 'number' ? lengthOrEncoding : data.byteLength - offset;
+  const pos = position ?? null;
+  checkedSliceBounds(data, offset, length);
+  return writeBytesAt(record, data.subarray(offset, offset + length), pos);
+}
+
+export function fstatSync(fd: number): Stats {
+  return new Stats(syncMirror().statSync(getFd(fd).path));
+}
+
+export function ftruncateSync(fd: number, len = 0): void {
+  const record = getFd(fd);
+  if (!record.writable) throw fsError('EBADF', record.path, 'ftruncate');
+  resizeFile(record.path, len);
+}
+
+export function truncateSync(p: PathLike, len = 0): void {
+  resizeFile(resolvePath(p), len);
+}
+
+export function mkdtempSync(
+  prefix: PathLike,
+  _opts?: Encoding | { encoding?: Encoding | null },
+): string {
+  const prefixText = pathToString(prefix);
+  for (let attempt = 0; attempt < 128; attempt++) {
+    const candidate = `${prefixText}${randomMkdtempSuffix()}`;
+    try {
+      mkdirSync(resolvePath(candidate));
+      return candidate;
+    } catch (err) {
+      if ((err as { code?: string }).code !== 'EEXIST') throw err;
+    }
+  }
+  throw fsError('EEXIST', prefixText, 'mkdtemp');
+}
+
+export function opendirSync(
+  p: PathLike,
+  _opts?: { encoding?: Encoding; bufferSize?: number },
+): Dir {
+  const displayPath = pathToString(p);
+  const entries = readdirSync(p as string, { withFileTypes: true }) as Dirent[];
+  return new Dir(displayPath, entries.slice());
 }
 
 /**
@@ -360,14 +768,26 @@ export const promises = {
       throw Object.assign(new Error(`ENOENT: ${p}`), { code: 'ENOENT', path: p });
     }
   },
-  async copyFile(src: string, dst: string): Promise<void> {
-    copyFileSync(src, dst);
+  async copyFile(src: string, dst: string, mode = 0): Promise<void> {
+    copyFileSync(src, dst, mode);
   },
   async rename(src: string, dst: string): Promise<void> {
     renameSync(src, dst);
   },
   async cp(src: string, dst: string, opts?: { recursive?: boolean }): Promise<void> {
     cpSync(src, dst, opts);
+  },
+  async truncate(p: PathLike, len = 0): Promise<void> {
+    truncateSync(p, len);
+  },
+  async mkdtemp(
+    prefix: PathLike,
+    opts?: Encoding | { encoding?: Encoding | null },
+  ): Promise<string> {
+    return mkdtempSync(prefix, opts);
+  },
+  async opendir(p: PathLike, opts?: { encoding?: Encoding; bufferSize?: number }): Promise<Dir> {
+    return opendirSync(p, opts);
   },
   async utimes(p: string, atime: number | Date, mtime: number | Date): Promise<void> {
     utimesSync(p, atime, mtime);
@@ -385,6 +805,126 @@ export function readFile(
     (v) => cbFinal(null, v),
     (e) => cbFinal(e as NodeJS.ErrnoException),
   );
+}
+
+export function open(
+  p: PathLike,
+  flagsOrCb?: OpenFlags | FdCallback,
+  modeOrCb?: number | FdCallback,
+  cb?: FdCallback,
+): void {
+  const flags = typeof flagsOrCb === 'function' || flagsOrCb === undefined ? 'r' : flagsOrCb;
+  const cbFinal = (
+    typeof flagsOrCb === 'function' ? flagsOrCb : typeof modeOrCb === 'function' ? modeOrCb : cb
+  ) as FdCallback;
+  const mode = typeof modeOrCb === 'number' ? modeOrCb : undefined;
+  Promise.resolve()
+    .then(() => openSync(p, flags, mode))
+    .then(
+      (fd) => cbFinal(null, fd),
+      (e) => cbFinal(e as NodeJS.ErrnoException),
+    );
+}
+
+export function close(fd: number, cb: VoidCallback): void {
+  Promise.resolve()
+    .then(() => closeSync(fd))
+    .then(
+      () => cb(null),
+      (e) => cb(e as NodeJS.ErrnoException),
+    );
+}
+
+export function read(
+  fd: number,
+  buffer: Uint8Array,
+  offsetOrOptions: number | FdReadOptions | ReadCallback,
+  lengthOrCb?: number | ReadCallback,
+  positionOrCb?: number | null | ReadCallback,
+  cb?: ReadCallback,
+): void {
+  const options =
+    typeof offsetOrOptions === 'object'
+      ? offsetOrOptions
+      : {
+          offset: typeof offsetOrOptions === 'number' ? offsetOrOptions : 0,
+          length: typeof lengthOrCb === 'number' ? lengthOrCb : buffer.byteLength,
+          position: typeof positionOrCb === 'number' || positionOrCb === null ? positionOrCb : null,
+        };
+  const cbFinal = (
+    typeof offsetOrOptions === 'function'
+      ? offsetOrOptions
+      : typeof lengthOrCb === 'function'
+        ? lengthOrCb
+        : typeof positionOrCb === 'function'
+          ? positionOrCb
+          : cb
+  ) as ReadCallback;
+  Promise.resolve()
+    .then(() => readSync(fd, buffer, options))
+    .then(
+      (bytesRead) => cbFinal(null, bytesRead, buffer),
+      (e) => cbFinal(e as NodeJS.ErrnoException),
+    );
+}
+
+export function write(
+  fd: number,
+  data: Uint8Array | string,
+  offsetOrPositionOrCb?: number | null | WriteCallback,
+  lengthOrEncodingOrCb?: number | Encoding | WriteCallback,
+  positionOrCb?: number | null | WriteCallback,
+  cb?: WriteCallback,
+): void {
+  const cbFinal = (
+    typeof offsetOrPositionOrCb === 'function'
+      ? offsetOrPositionOrCb
+      : typeof lengthOrEncodingOrCb === 'function'
+        ? lengthOrEncodingOrCb
+        : typeof positionOrCb === 'function'
+          ? positionOrCb
+          : cb
+  ) as WriteCallback;
+  Promise.resolve()
+    .then(() => {
+      if (typeof data === 'string') {
+        const position =
+          typeof offsetOrPositionOrCb === 'number' || offsetOrPositionOrCb === null
+            ? offsetOrPositionOrCb
+            : null;
+        const encoding = typeof lengthOrEncodingOrCb === 'string' ? lengthOrEncodingOrCb : 'utf8';
+        return writeSync(fd, data, position, encoding);
+      }
+      const offset = typeof offsetOrPositionOrCb === 'number' ? offsetOrPositionOrCb : 0;
+      const length = typeof lengthOrEncodingOrCb === 'number' ? lengthOrEncodingOrCb : undefined;
+      const position =
+        typeof positionOrCb === 'number' || positionOrCb === null ? positionOrCb : null;
+      return writeSync(fd, data, offset, length, position);
+    })
+    .then(
+      (bytesWritten) => cbFinal(null, bytesWritten, data),
+      (e) => cbFinal(e as NodeJS.ErrnoException),
+    );
+}
+
+export function fstat(fd: number, cb: StatsCallback): void {
+  Promise.resolve()
+    .then(() => fstatSync(fd))
+    .then(
+      (stats) => cb(null, stats),
+      (e) => cb(e as NodeJS.ErrnoException),
+    );
+}
+
+export function ftruncate(fd: number, lenOrCb?: number | VoidCallback, cb?: VoidCallback): void {
+  const len = typeof lenOrCb === 'number' ? lenOrCb : 0;
+  const cbFinal = (typeof lenOrCb === 'function' ? lenOrCb : cb) as VoidCallback;
+  Promise.resolve()
+    .then(() => ftruncateSync(fd, len))
+    .then(
+      () => cbFinal(null),
+      (e) => cbFinal(e as NodeJS.ErrnoException),
+    );
 }
 
 export function writeFile(
@@ -481,8 +1021,9 @@ export function copyFile(
   modeOrCb: number | Callback<void>,
   cb?: Callback<void>,
 ): void {
+  const mode = typeof modeOrCb === 'number' ? modeOrCb : 0;
   const cbFinal = (typeof modeOrCb === 'function' ? modeOrCb : cb) as Callback<void>;
-  promises.copyFile(src, dst).then(
+  promises.copyFile(src, dst, mode).then(
     () => cbFinal(null),
     (e) => cbFinal(e as NodeJS.ErrnoException),
   );
@@ -495,14 +1036,64 @@ export function rename(src: string, dst: string, cb: Callback<void>): void {
   );
 }
 
+export function truncate(p: PathLike, lenOrCb?: number | VoidCallback, cb?: VoidCallback): void {
+  const len = typeof lenOrCb === 'number' ? lenOrCb : 0;
+  const cbFinal = (typeof lenOrCb === 'function' ? lenOrCb : cb) as VoidCallback;
+  Promise.resolve()
+    .then(() => truncateSync(p, len))
+    .then(
+      () => cbFinal(null),
+      (e) => cbFinal(e as NodeJS.ErrnoException),
+    );
+}
+
+export function mkdtemp(
+  prefix: PathLike,
+  optsOrCb?: Encoding | { encoding?: Encoding | null } | Callback<string>,
+  cb?: Callback<string>,
+): void {
+  const opts = typeof optsOrCb === 'function' ? undefined : optsOrCb;
+  const cbFinal = (typeof optsOrCb === 'function' ? optsOrCb : cb) as Callback<string>;
+  Promise.resolve()
+    .then(() => mkdtempSync(prefix, opts))
+    .then(
+      (dir) => cbFinal(null, dir),
+      (e) => cbFinal(e as NodeJS.ErrnoException),
+    );
+}
+
+export function opendir(
+  p: PathLike,
+  optsOrCb?: { encoding?: Encoding; bufferSize?: number } | DirCallback,
+  cb?: DirCallback,
+): void {
+  const opts = typeof optsOrCb === 'function' ? undefined : optsOrCb;
+  const cbFinal = (typeof optsOrCb === 'function' ? optsOrCb : cb) as DirCallback;
+  Promise.resolve()
+    .then(() => opendirSync(p, opts))
+    .then(
+      (dir) => cbFinal(null, dir),
+      (e) => cbFinal(e as NodeJS.ErrnoException),
+    );
+}
+
 export const constants = {
   F_OK: 0,
   R_OK: 4,
   W_OK: 2,
   X_OK: 1,
-};
+  O_RDONLY: 0,
+  O_WRONLY: 1,
+  O_RDWR: 2,
+  O_CREAT: 64,
+  O_EXCL: 128,
+  O_TRUNC: 512,
+  O_APPEND: 1024,
+  O_DIRECTORY: 65536,
+  COPYFILE_EXCL: 1,
+} as const;
 
-export { Stats, Dirent };
+export { Stats, Dirent, Dir };
 export { createReadStream, createWriteStream } from './fs-streams.ts';
 export { watch, watchFile, unwatchFile, FSWatcher } from './fs-watch.ts';
 import {
@@ -515,6 +1106,12 @@ import { FSWatcher, unwatchFile, watch, watchFile } from './fs-watch.ts';
 
 const fs = {
   promises,
+  open,
+  close,
+  read,
+  write,
+  fstat,
+  ftruncate,
   readFile,
   writeFile,
   readdir,
@@ -527,6 +1124,15 @@ const fs = {
   access,
   copyFile,
   rename,
+  truncate,
+  mkdtemp,
+  opendir,
+  openSync,
+  closeSync,
+  readSync,
+  writeSync,
+  fstatSync,
+  ftruncateSync,
   readFileSync,
   writeFileSync,
   appendFileSync,
@@ -540,6 +1146,9 @@ const fs = {
   renameSync,
   copyFileSync,
   cpSync,
+  truncateSync,
+  mkdtempSync,
+  opendirSync,
   utimesSync,
   lstatSync,
   readlinkSync,
@@ -547,6 +1156,7 @@ const fs = {
   constants,
   Stats,
   Dirent,
+  Dir,
   createReadStream,
   createWriteStream,
   // Node-named stream classes: `destroy`/`send` probe `stream instanceof

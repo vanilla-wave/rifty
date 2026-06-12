@@ -13,6 +13,8 @@ export {
   ServerResponse,
   HttpServer,
   createServer,
+  get,
   request,
   default,
+  STATUS_CODES,
 } from './http/index.ts';

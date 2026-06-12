@@ -6,6 +6,10 @@ describe('shadow-registry', () => {
     expect(bakedOverrides.bcrypt).toBe('bcryptjs');
   });
 
+  it('bakedOverrides replaces esbuild with the WASI artifact', () => {
+    expect(bakedOverrides.esbuild).toBe('@esbuild/wasi-preview1@0.28.0');
+  });
+
   it('esbuildShimFiles exposes a passthrough package.json + main.js', () => {
     expect(esbuildShimFiles['/workspace/node_modules/esbuild/package.json']).toContain('"esbuild"');
     expect(esbuildShimFiles['/workspace/node_modules/esbuild/lib/main.js']).toContain(

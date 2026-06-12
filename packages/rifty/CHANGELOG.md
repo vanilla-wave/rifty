@@ -4,6 +4,10 @@
 
 ### Added
 
+- **ADR-0131 — `sandbox.fs` for AI-agent file IO.** `createSandbox()` now exposes
+  the runtime Worker-backed `fs.readFile()` / `fs.writeFile()` surface while
+  keeping `sandbox.runtime` unchanged.
+
 - **ADR-0071 — umbrella `@riftydev/sdk` package (EPIC B).** One-install front door over
   the `@riftydev/*` scope.
   - **B1 — subpath re-exports.** `@riftydev/sdk/vfs`, `@riftydev/sdk/io`, `@riftydev/sdk/kernel`,
@@ -19,3 +23,12 @@
     template that produces them). Unit-testable via the `SandboxDeps` seam.
   - **B3 — `checkCapabilities()`.** Preflight gate wrapping runtime-js
     `detectCapabilities`.
+
+### Changed
+
+- Clarified the SDK README host-wiring boundary: consumers still own COOP/COEP
+  headers, bundler-resolved runtime Worker URLs, bundled same-origin `sw.js`
+  from `@riftydev/service-worker/sw`, and same-origin WASM assets for
+  sqlite/WASI use.
+- Documented the SDK trust model and current resource-control limits; no runtime
+  behavior changed.

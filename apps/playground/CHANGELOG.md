@@ -4,6 +4,11 @@
 
 ### Changed
 
+- **Netlify deploy automation.** GitHub Actions now deploys `main` to the
+  production site and same-repo PRs to stable `pr-<number>` preview aliases;
+  `netlify/functions/npm-registry.mts` carries the npm-registry proxy while
+  `public/_redirects` keeps the SPA fallback in the built artifact.
+
 - **ADR-0126 records the preview reload policy.** Preview iframe reloads are
   HMR-client-driven; the snapshot-driven `previewRevision`/`refreshKey` reload
   removed in the preview-routing branch is now ADR-recorded (options,
@@ -22,8 +27,24 @@
   the panel gaps. Layout defaults follow the mockup (files 232 / terminal 212
   / preview 464).
 
+### Fixed
+
+- **Real Vite worker registers net/sqlite builtins through explicit calls.**
+  Production bundling could drop side-effect-only imports and make Vite fail on
+  `Built-in 'node:http' is not implemented`; the bootstrap now calls the
+  idempotent `@riftydev/net` registrars directly.
+
 ### Added
 
+- **Storage persistence + workspace archive.** Playground boot now probes
+  `navigator.storage.persisted()` / `persist()` / `estimate()`, threads the
+  result into the status badge, and exposes command-palette actions to
+  download/import a dependency-free JSON workspace archive that excludes
+  derived/heavy directories (`node_modules`, `.git`, `.vite`, `dist`).
+- **Production npm registry proxy source.** Netlify routes `/npm-registry/*`
+  to `netlify/functions/npm-registry.mts`, preserving metadata/tarball paths
+  and adding CORS/CORP headers so the cross-origin isolated playground can use
+  the same `/npm-registry` base outside dev.
 - **Global command palette (⌘K / Ctrl-K).** Searches project templates,
   workspace files, and shell actions (new terminal, toggle terminal/files
   panels, open preview tab, stop dev server, copy share link). Modal dialog

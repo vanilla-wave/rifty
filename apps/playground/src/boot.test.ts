@@ -75,8 +75,8 @@ describe('bootstrap', () => {
 });
 
 describe('backendLabel', () => {
-  it('reports OPFS as persisted', () => {
-    expect(backendLabel({ backend: 'opfs' })).toBe('Storage: OPFS (persisted)');
+  it('reports OPFS without implying persistence', () => {
+    expect(backendLabel({ backend: 'opfs' })).toBe('Storage: OPFS');
   });
 
   it('reports memory backend as non-persistent', () => {
@@ -190,19 +190,40 @@ describe('bootstrapPlayground', () => {
       order.push(`sw:${url}`);
       return { registration: {}, active: {} };
     });
+    const probeStorage = vi.fn(async () => {
+      order.push('storage');
+      return {
+        available: true as const,
+        persistedBefore: false,
+        persistedAfter: true,
+        usage: 10,
+        quota: 100,
+      };
+    });
 
     const result = await bootstrapPlayground({
       assertCoi,
       initVfs,
       registerSw,
+      probeStorage,
       logger: { warn: () => {}, error: () => {} },
     });
 
-    expect(order).toEqual(['coi', 'vfs', 'sw:/sw.js']);
+    expect(order).toEqual(['coi', 'vfs', 'storage', 'sw:/sw.js']);
     expect(assertCoi).toHaveBeenCalledTimes(1);
     expect(initVfs).toHaveBeenCalledTimes(1);
+    expect(probeStorage).toHaveBeenCalledTimes(1);
     expect(registerSw).toHaveBeenCalledWith('/sw.js');
-    expect(result).toEqual({ vfsBoot: { backend: 'opfs' } });
+    expect(result).toEqual({
+      vfsBoot: { backend: 'opfs' },
+      storage: {
+        available: true,
+        persistedBefore: false,
+        persistedAfter: true,
+        usage: 10,
+        quota: 100,
+      },
+    });
   });
 
   it('propagates a COI failure without touching VFS or SW', async () => {

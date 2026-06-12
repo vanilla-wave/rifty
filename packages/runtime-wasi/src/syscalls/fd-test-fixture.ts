@@ -14,7 +14,22 @@ type FdReadFn = (fd: number, iovs: number, iovsLen: number, nread: number) => nu
 type FdSeekFn = (fd: number, offset: bigint, whence: number, newOffset: number) => number;
 type FdFdstatGetFn = (fd: number, outPtr: number) => number;
 type FdWriteFn = (fd: number, iovs: number, iovsLen: number, nwritten: number) => number;
+type FdPreadFn = (
+  fd: number,
+  iovs: number,
+  iovsLen: number,
+  offset: bigint,
+  nread: number,
+) => number;
+type FdPwriteFn = (
+  fd: number,
+  iovs: number,
+  iovsLen: number,
+  offset: bigint,
+  nwritten: number,
+) => number;
 type FdFilestatGetFn = (fd: number, outBuf: number) => number;
+type FdFilestatSetSizeFn = (fd: number, size: bigint) => number;
 type FdReaddirFn = (
   fd: number,
   bufPtr: number,
@@ -28,7 +43,10 @@ export interface FdNs {
   fd_seek: FdSeekFn;
   fd_fdstat_get: FdFdstatGetFn;
   fd_write: FdWriteFn;
+  fd_pread: FdPreadFn;
+  fd_pwrite: FdPwriteFn;
   fd_filestat_get: FdFilestatGetFn;
+  fd_filestat_set_size: FdFilestatSetSizeFn;
   fd_readdir: FdReaddirFn;
 }
 

@@ -1,7 +1,7 @@
 /**
  * Registry client. Pluggable fetcher so tests can mock.
  *
- * URLs follow D-004 (ADR 0028): base URL from env/option, never hardcoded.
+ * URLs follow D-004 (ADR-0028): base URL from env/option, never hardcoded.
  * {@link getRegistryBaseUrl} is the single factory every consumer goes through.
  */
 
@@ -18,6 +18,8 @@ export interface VersionManifest {
   devDependencies?: Record<string, string>;
   peerDependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
+  scripts?: Record<string, string>;
+  bin?: string | Record<string, string>;
   /**
    * Platform constraints (npm `os`/`cpu`). Read by the native-dependency policy
    * (ADR-0051): a `cpu` array excluding `wasm` marks a compiled artifact rifty
@@ -43,9 +45,9 @@ export type Fetcher = (url: string, init?: RequestInit) => Promise<Response>;
  *   1. `globalThis.__RIFTY_REGISTRY_URL__` (playground bootstrap),
  *   2. `globalThis.import.meta.env.RIFTY_REGISTRY_URL` (Vite-style build env),
  *   3. `process.env.REGISTRY_BASE_URL` (Node-side test harness),
- *   4. `/npm-registry` (default — Vite proxy in dev, Edge Function in prod).
+ *   4. `/npm-registry` (default — Vite proxy in dev, Netlify Function in prod).
  *
- * Never hardcode a registry URL elsewhere (D-004 / ADR 0028).
+ * Never hardcode a registry URL elsewhere (D-004 / ADR-0028).
  */
 export function getRegistryBaseUrl(): string {
   const g = globalThis as Record<string, unknown>;

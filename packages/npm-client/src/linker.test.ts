@@ -4,10 +4,15 @@ import { type ResolvedPackage, link } from './linker.ts';
 
 const enc = new TextEncoder();
 
-function pkg(name: string, files: Record<string, string>, installPath?: string): ResolvedPackage {
+function pkg(
+  name: string,
+  files: Record<string, string>,
+  installPath?: string,
+  bin?: ResolvedPackage['bin'],
+): ResolvedPackage {
   const fileBytes: Record<string, Uint8Array> = {};
   for (const [p, body] of Object.entries(files)) fileBytes[p] = enc.encode(body);
-  return { name, version: '1.0.0', files: fileBytes, dependencies: {}, installPath };
+  return { name, version: '1.0.0', files: fileBytes, dependencies: {}, installPath, bin };
 }
 
 describe('linker — dir dedup + parallel writes (#7, perf-audit 2026-06-05)', () => {
@@ -72,5 +77,56 @@ describe('linker — dir dedup + parallel writes (#7, perf-audit 2026-06-05)', (
     expect(await vfs.readFileText('/proj/node_modules/m/lib/a.js')).toBe('AAA');
     expect(await vfs.readFileText('/proj/node_modules/m/lib/sub/b.js')).toBe('BBB');
     expect(await vfs.readFileText('/proj/node_modules/m/bin/run')).toBe('RUN');
+  });
+});
+
+describe('linker — node_modules/.bin copy shims', () => {
+  it('writes root .bin entries for top-level package bin manifests', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    await link(vfs, '/proj', [
+      pkg(
+        'vite',
+        {
+          'package.json': '{"name":"vite"}',
+          'bin/vite.js': '#!/usr/bin/env node\nconsole.log("vite");\n',
+        },
+        'node_modules/vite',
+        'bin/vite.js',
+      ),
+      pkg(
+        'typescript',
+        {
+          'package.json': '{"name":"typescript"}',
+          'bin/tsc': '#!/usr/bin/env node\nconsole.log("tsc");\n',
+          'bin/tsserver': '#!/usr/bin/env node\nconsole.log("tsserver");\n',
+        },
+        'node_modules/typescript',
+        { tsc: 'bin/tsc', tsserver: './bin/tsserver' },
+      ),
+      pkg(
+        'nested-cli',
+        {
+          'package.json': '{"name":"nested-cli"}',
+          'bin/nested': '#!/usr/bin/env node\nconsole.log("nested");\n',
+        },
+        'node_modules/vite/node_modules/nested-cli',
+        { nested: 'bin/nested' },
+      ),
+    ]);
+
+    expect(await vfs.readFileText('/proj/node_modules/.bin/vite')).toBe(
+      '#!/usr/bin/env node\nconsole.log("vite");\n',
+    );
+    expect(await vfs.readFileText('/proj/node_modules/.bin/tsc')).toBe(
+      '#!/usr/bin/env node\nconsole.log("tsc");\n',
+    );
+    expect(await vfs.readFileText('/proj/node_modules/.bin/tsserver')).toBe(
+      '#!/usr/bin/env node\nconsole.log("tsserver");\n',
+    );
+    expect(await vfs.readFileText('/proj/node_modules/vite/node_modules/.bin/nested')).toBe(
+      '#!/usr/bin/env node\nconsole.log("nested");\n',
+    );
   });
 });

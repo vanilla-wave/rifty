@@ -10,6 +10,19 @@ Pieces:
 - **`linker`** — builds a deduplicated `node_modules` tree, writes a lockfile.
 - **`overrides`** — applies the shadow registry (D-005) before resolution.
 
+`install({ vfs, cwd, registry })` reads `<cwd>/package.json` and installs
+`dependencies`, `devDependencies`, and optional root dependencies, applying
+string-valued `overrides`. The older explicit form
+`install(name, version, deps, opts)` still works for callers that already have a
+dependency map. Installed package `bin` metadata is copied into the containing
+`node_modules/.bin` scope; non-registry specs such as `file:`, `workspace:`,
+git, and URL tarballs throw named `NotImplementedError`s instead of pretending
+to work. Registry packages declaring install lifecycle scripts (`preinstall`,
+`install`, `postinstall`) throw named `NotImplementedError`s; registry tarball
+`prepare` metadata is ignored because npm does not run it for registry
+dependency installs. Script execution is tracked separately from registry
+resolution/linking.
+
 ## Why none of this hits the live registry in tests
 
 We pin a mock fetcher in the test harness. Real-network installs are exercised manually; CI uses fixtures. This matches D-004's contract.

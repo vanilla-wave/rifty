@@ -4,6 +4,17 @@
 
 ### Added
 
+- **M11 fd-based fs slice** — implemented local preview1
+  `fd_pread`, `fd_pwrite`, and `fd_filestat_set_size` over `FileDescriptor.data`.
+  Positional read/write leave `cursor` unchanged; `fd_read`/`fd_pread` enforce
+  `RIGHTS_FD_READ`, `fd_write`/`fd_pwrite` enforce `RIGHTS_FD_WRITE`, and
+  `fd_filestat_set_size` enforces `RIGHTS_FD_FILESTAT_SET_SIZE`. Append-mode
+  `fd_write` extends from EOF, `fd_seek` enforces `RIGHTS_FD_SEEK`, and
+  `fd_fdstat_get` reports the descriptor's granted rights. `fd_filestat_set_size`
+  shrinks or grows with zero fill and writes through to the mirror, and invalid
+  negative/unsafe offsets or sizes return `E_INVAL`; unknown/non-file fds return
+  `E_BADF`.
+
 - **ADR-0049 — WASI working-directory + directory-open semantics (promotes
   Q-2026-05-27-003).** Forced by running the real esbuild WASI binary
   (`@esbuild/wasi-preview1`, restored by ADR-0047) through `runWasi`:
@@ -64,9 +75,8 @@
   - `fd_renumber`, `fd_fdstat_set_flags`, `fd_tell` — backed by the fd table
   - `path_unlink_file`, `path_remove_directory`, `path_rename` — route to VFS
   - `path_readlink`, `path_link`, `path_symlink`, `path_filestat_set_times`,
-    `fd_filestat_set_size`, `fd_filestat_set_times`, `fd_fdstat_set_rights`,
-    `fd_pread`, `fd_pwrite`, `fd_allocate`, `proc_raise`, `sock_*`,
-    `poll_oneoff` — honest `E_NOSYS` (still PRESENT as functions so
+    `fd_filestat_set_times`, `fd_fdstat_set_rights`, `fd_allocate`,
+    `proc_raise`, `sock_*`, `poll_oneoff` — honest `E_NOSYS` (still PRESENT as functions so
     `WebAssembly.instantiate` doesn't `LinkError`)
   - `clock_res_get` — reports 1 µs resolution for REALTIME / MONOTONIC
   - `fd_advise`, `fd_datasync`, `fd_sync` — harmless successes (advisory or

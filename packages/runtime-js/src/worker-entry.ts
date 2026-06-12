@@ -26,6 +26,7 @@ import type { EvalRequest, EvalResult, HostMessage, WorkerMessage } from './prot
 import { installConsole } from './repl/console.ts';
 import { evalInRepl } from './repl/eval.ts';
 import { inspect } from './repl/inspect.ts';
+import { handleWorkerFsRequest } from './worker-fs-rpc.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
 
@@ -159,6 +160,18 @@ self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
     case 'eval': {
       const result = await handleEval(msg.request);
       post({ type: 'result', result });
+      break;
+    }
+    case 'fs': {
+      const result = await handleWorkerFsRequest(msg.request, {
+        fs: syncMirror(),
+        invalidate: () => loader.invalidate(),
+        flush: async () => {
+          const mirror = syncMirror() as { flush?: () => Promise<void> };
+          if (typeof mirror.flush === 'function') await mirror.flush();
+        },
+      });
+      post({ type: 'fs-result', result });
       break;
     }
   }

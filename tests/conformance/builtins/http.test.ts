@@ -103,6 +103,27 @@ describe('node:http server via port registry', () => {
     const response = await dispatchToPort(9999, new Request('http://x/'));
     expect(response.status).toBe(502);
   });
+
+  it('http.get loops back to the process own registered port', async () => {
+    const server = http.createServer((req, res) => {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end(`self ${req.url}`);
+    });
+    server.listen(3003);
+
+    const response = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
+      const req = http.get('http://localhost:3003/self-check', (res) => {
+        const chunks: string[] = [];
+        const decoder = new TextDecoder();
+        res.on('data', (chunk) => chunks.push(decoder.decode(chunk as Uint8Array)));
+        res.on('end', () => resolve({ statusCode: res.statusCode, body: chunks.join('') }));
+        res.on('error', reject);
+      });
+      req.on('error', reject);
+    });
+
+    expect(response).toEqual({ statusCode: 200, body: 'self /self-check' });
+  });
 });
 
 describe('node:http streaming responses (ADR-0017 phase 1)', () => {

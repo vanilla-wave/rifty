@@ -1,6 +1,14 @@
+import { NotImplementedError } from '@riftydev/io';
 import { MemoryVfs } from '@riftydev/vfs';
 import { describe, expect, it } from 'vitest';
-import { makePackageTarball } from './_test-fixtures/tar-builder.ts';
+import {
+  TAR_TRAILER,
+  buildHeader,
+  concat,
+  gzip,
+  makePackageTarball,
+  padToBlock,
+} from './_test-fixtures/tar-builder.ts';
 import { install } from './installer.ts';
 import type { Packument, VersionManifest } from './registry.ts';
 import { RegistryClient } from './registry.ts';
@@ -34,8 +42,9 @@ class FakeRegistry extends RegistryClient {
     // tarballUrl format we use below: `fake://<name>/<version>`
     const match = /^fake:\/\/([^/]+)\/(.+)$/.exec(tarballUrl);
     if (!match) throw new Error(`fake registry: bad tarball url ${tarballUrl}`);
-    const [, name, version] = match;
-    const entry = this.db.get(name ?? '')?.get(version ?? '');
+    const [, encodedName, version] = match;
+    const name = decodeURIComponent(encodedName ?? '');
+    const entry = this.db.get(name)?.get(version ?? '');
     if (!entry) throw new Error(`fake registry: no tarball for ${tarballUrl}`);
     return entry.tarball;
   }
@@ -45,17 +54,337 @@ async function makeEntry(
   name: string,
   version: string,
   dependencies: Record<string, string> = {},
+  manifestExtras: Partial<Omit<VersionManifest, 'name' | 'version' | 'dependencies' | 'dist'>> = {},
+  files?: Record<string, string>,
 ): Promise<FakeRegistryEntry> {
   return {
     manifest: {
       name,
       version,
       dependencies,
-      dist: { tarball: `fake://${name}/${version}` },
+      ...manifestExtras,
+      dist: { tarball: `fake://${encodeURIComponent(name)}/${version}` },
     },
-    tarball: await makePackageTarball(name, version),
+    tarball: files
+      ? await makePackageTarballWithFiles(name, version, manifestExtras, files)
+      : await makePackageTarball(name, version),
   };
 }
+
+async function makePackageTarballWithFiles(
+  name: string,
+  version: string,
+  manifestExtras: Partial<Omit<VersionManifest, 'name' | 'version' | 'dependencies' | 'dist'>>,
+  files: Record<string, string>,
+): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  const packageJson = JSON.stringify({ name, version, ...manifestExtras });
+  for (const [entry, body] of Object.entries({ 'package.json': packageJson, ...files })) {
+    const bytes = new TextEncoder().encode(body);
+    chunks.push(buildHeader(`package/${entry}`, bytes.length), padToBlock(bytes));
+  }
+  return await gzip(concat(...chunks, TAR_TRAILER));
+}
+
+describe('install — package.json defaults', () => {
+  it('reads dependencies, devDependencies, optionalDependencies, overrides, name, and version from package.json when called with only options', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('dep', new Map([['1.0.0', await makeEntry('dep', '1.0.0')]]));
+    db.set('dev', new Map([['1.0.0', await makeEntry('dev', '1.0.0')]]));
+    db.set('opt', new Map([['1.0.0', await makeEntry('opt', '1.0.0')]]));
+    db.set('pure', new Map([['1.0.0', await makeEntry('pure', '1.0.0')]]));
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'app',
+        version: '2.3.4',
+        dependencies: { dep: '^1.0.0', native: '1.0.0' },
+        devDependencies: { dev: '1.0.0' },
+        optionalDependencies: { opt: '1.0.0' },
+        overrides: { native: 'pure@1.0.0' },
+        engines: { node: '>=22' },
+      }),
+    );
+
+    const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+
+    expect(result.lockfile.name).toBe('app');
+    expect(result.lockfile.version).toBe('2.3.4');
+    expect(result.packages.map((p) => p.name).sort()).toEqual(['dep', 'dev', 'opt', 'pure']);
+    expect(await vfs.exists('/proj/node_modules/dep/package.json')).toBe(true);
+    expect(await vfs.exists('/proj/node_modules/dev/package.json')).toBe(true);
+    expect(await vfs.exists('/proj/node_modules/opt/package.json')).toBe(true);
+    expect(await vfs.exists('/proj/node_modules/pure/package.json')).toBe(true);
+  });
+
+  it('keeps root optionalDependencies non-fatal when package.json drives install', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('dep', new Map([['1.0.0', await makeEntry('dep', '1.0.0')]]));
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'app',
+        version: '1.0.0',
+        dependencies: { dep: '1.0.0' },
+        optionalDependencies: { missing: '1.0.0' },
+      }),
+    );
+
+    const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+
+    expect(result.packages.map((p) => p.name)).toEqual(['dep']);
+    expect(await vfs.exists('/proj/node_modules/dep/package.json')).toBe(true);
+    expect(await vfs.exists('/proj/node_modules/missing/package.json')).toBe(false);
+  });
+
+  it('treats a root optionalDependency as optional even when dependencies repeats the same name', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('dep', new Map([['1.0.0', await makeEntry('dep', '1.0.0')]]));
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'app',
+        version: '1.0.0',
+        dependencies: { dep: '1.0.0', duplicate: '1.0.0' },
+        optionalDependencies: { duplicate: '1.0.0' },
+      }),
+    );
+
+    const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+
+    expect(result.packages.map((p) => p.name)).toEqual(['dep']);
+    expect(await vfs.exists('/proj/node_modules/duplicate/package.json')).toBe(false);
+  });
+
+  it('throws a named NotImplementedError for package.json non-registry dependency specs', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'app',
+        version: '1.0.0',
+        dependencies: { local: 'file:../local' },
+      }),
+    );
+
+    let caught: unknown;
+    try {
+      await install({ vfs, cwd: '/proj', registry: new FakeRegistry(new Map()) });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(NotImplementedError);
+    expect((caught as NotImplementedError).feature).toBe('npm-client.dependency-spec.file');
+  });
+
+  it('throws for non-registry package.json specs before root overrides can hide them', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('dep', new Map([['1.0.0', await makeEntry('dep', '1.0.0')]]));
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'app',
+        version: '1.0.0',
+        dependencies: { local: 'file:../local' },
+        overrides: { local: 'dep@1.0.0' },
+      }),
+    );
+
+    let caught: unknown;
+    try {
+      await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(NotImplementedError);
+    expect((caught as NotImplementedError).feature).toBe('npm-client.dependency-spec.file');
+  });
+
+  it('throws a named NotImplementedError for registry package lifecycle scripts', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'with-script',
+      new Map([
+        [
+          '1.0.0',
+          await makeEntry(
+            'with-script',
+            '1.0.0',
+            {},
+            { scripts: { postinstall: 'node build.js' } },
+          ),
+        ],
+      ]),
+    );
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'app',
+        version: '1.0.0',
+        dependencies: { 'with-script': '1.0.0' },
+      }),
+    );
+
+    let caught: unknown;
+    try {
+      await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(NotImplementedError);
+    expect((caught as NotImplementedError).feature).toBe('npm-client.lifecycle.postinstall');
+  });
+
+  it('ignores registry package prepare scripts during tarball installs', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'with-prepare',
+      new Map([
+        [
+          '1.0.0',
+          await makeEntry(
+            'with-prepare',
+            '1.0.0',
+            {},
+            { scripts: { prepare: 'node scripts/prepare.js' } },
+          ),
+        ],
+      ]),
+    );
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'app',
+        version: '1.0.0',
+        dependencies: { 'with-prepare': '1.0.0' },
+      }),
+    );
+
+    const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+
+    expect(result.packages.map((p) => p.name)).toEqual(['with-prepare']);
+    expect(await vfs.exists('/proj/node_modules/with-prepare/package.json')).toBe(true);
+  });
+
+  it('uses the baked esbuild override before the registry lifecycle gate', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'esbuild',
+      new Map([
+        [
+          '0.21.5',
+          await makeEntry('esbuild', '0.21.5', {}, { scripts: { postinstall: 'node install.js' } }),
+        ],
+      ]),
+    );
+    db.set(
+      '@esbuild/wasi-preview1',
+      new Map([
+        ['0.28.0', await makeEntry('@esbuild/wasi-preview1', '0.28.0', {}, { cpu: ['wasm'] })],
+      ]),
+    );
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'app',
+        version: '1.0.0',
+        dependencies: { esbuild: '0.21.5' },
+      }),
+    );
+
+    const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+
+    expect(result.packages.map((p) => `${p.name}@${p.version}`)).toEqual([
+      '@esbuild/wasi-preview1@0.28.0',
+    ]);
+    expect(await vfs.exists('/proj/node_modules/@esbuild/wasi-preview1/package.json')).toBe(true);
+    expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(false);
+  });
+
+  it('throws a deliberate error for malformed root package.json shapes', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile('/proj/package.json', '[]');
+
+    let caught: unknown;
+    try {
+      await install({ vfs, cwd: '/proj', registry: new FakeRegistry(new Map()) });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toContain('package.json');
+    expect((caught as Error).message).toContain('object');
+  });
+
+  it('propagates package bin metadata into node_modules/.bin and package-lock replay', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'cli',
+      new Map([
+        [
+          '1.0.0',
+          await makeEntry(
+            'cli',
+            '1.0.0',
+            {},
+            { bin: { cli: 'bin/cli.js' } },
+            { 'bin/cli.js': '#!/usr/bin/env node\nconsole.log("cli");\n' },
+          ),
+        ],
+      ]),
+    );
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({ name: 'app', version: '1.0.0', dependencies: { cli: '1.0.0' } }),
+    );
+
+    const firstRegistry = new FakeRegistry(db);
+    const first = await install({ vfs, cwd: '/proj', registry: firstRegistry });
+
+    expect(first.lockfile.packages['node_modules/cli']?.bin).toEqual({ cli: 'bin/cli.js' });
+    expect(await vfs.readFileText('/proj/node_modules/.bin/cli')).toBe(
+      '#!/usr/bin/env node\nconsole.log("cli");\n',
+    );
+
+    await vfs.rm('/proj/node_modules/.bin/cli');
+    const second = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+
+    expect(second.lockfile.packages['node_modules/cli']?.bin).toEqual({ cli: 'bin/cli.js' });
+    expect(await vfs.readFileText('/proj/node_modules/.bin/cli')).toBe(
+      '#!/usr/bin/env node\nconsole.log("cli");\n',
+    );
+  });
+});
 
 describe('install — idempotent lockfile write', () => {
   it('does not rewrite package-lock.json byte-for-byte across two installs (mtime stable)', async () => {

@@ -10,6 +10,19 @@
 
 ### Added
 
+- **Package.json-driven install + `.bin` copy shims (M11).**
+  `install({ vfs, cwd, registry })` now reads `<cwd>/package.json`, deriving the
+  root name/version, `dependencies`, `devDependencies`, root
+  `optionalDependencies`, and string-valued `overrides`. Root optionals keep the
+  existing warn-and-skip semantics, while `file:`, `workspace:`, git, URL
+  tarball, and npm-alias specs throw named `NotImplementedError`s. Package
+  install lifecycle scripts (`preinstall`, `install`, `postinstall`, `prepare`)
+  also throw named `NotImplementedError`s instead of being silently skipped.
+  Registry manifests and lockfile entries now preserve `bin`; `link()` writes
+  containing-scope `node_modules/.bin` copy shims (no symlinks per ADR-0050),
+  and lockfile replay recreates them without refetching packuments. The
+  playground `npm install` wrapper and Real Vite worker bootstrap now call the
+  package.json-driven API.
 - **Native-dependency install policy (ADR-0051).** The installer now throws
   `ENATIVEUNSUPPORTED` (with `packageName`/`version`/`reason`/`platform`) when a
   resolved package pins `cpu` to a non-`wasm` set (a compiled artifact rifty
@@ -23,6 +36,17 @@
 
 ### Fixed
 
+- **Registry tarball `prepare` metadata no longer blocks installs.** Published
+  registry packages can carry `scripts.prepare`, but npm does not run that hook
+  when installing dependency tarballs from the registry. The live Vite bootstrap
+  hit this on Netlify (`NotImplementedError: npm-client.lifecycle.prepare`) and
+  stopped before the dev server could start. Registry packages still hard-fail
+  on `preinstall`, `install`, and `postinstall`; root package lifecycle handling
+  is unchanged. Guard: `src/installer.test.ts`.
+- **Baked esbuild substitution runs before lifecycle gating.** The installer now
+  exercises the shadow-registry `esbuild` redirect before it can fail on the
+  real package's native-binary `postinstall`, covering the Vite install path
+  used by the Netlify playground smoke. Guard: `src/installer.test.ts`.
 - **Semver prerelease-exclusion (node-semver rule).** A version carrying a
   prerelease tag now only satisfies a range when some comparator in the matching
   branch shares its exact `[major,minor,patch]` AND carries a prerelease.

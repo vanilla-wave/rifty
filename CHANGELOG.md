@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### CI
+
+- **Netlify playground deploys.** GitHub Actions deploys pushes to `main` to
+  production and same-repo PRs to stable `pr-<number>` preview aliases, with
+  the latest preview URL written back to the PR.
+
 ### Documented
 
 - **Agent rules unified for Codex + Claude Code.** `AGENTS.md` is the single binding rules file; `CLAUDE.md` is now a symlink to it. Both cut to the binding minimum; vision/layers moved to `docs/ARCHITECTURE.md`, test pyramid + new minimal-mocks policy to `docs/process/testing.md`, full reversibility checklist + subagent budget grafted into `docs/process/decision-workflow.md`. New hard rule: every found bug/problem gets a regression test (failing before the fix) — no fix without its test.

@@ -37,7 +37,7 @@ export interface ParityCase {
    *   Node's strip-only `--experimental-strip-types`, so codegen-requiring TS
    *   (`enum`, parameter properties) lowers the same way rifty's esbuild hook
    *   lowers it — strip-only would throw `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX` on
-   *   those (TODO(backlog: toolchain-build/ts-esm-parity-node-reference)).
+   *   those (ADR-0132).
    *   The rifty side builds `createModuleLoader(vfs, { cwd, workspace,
    *   transformSource })` where `transformSource` runs the REAL esbuild WASI
    *   binary (`transformWithEsbuild` over `runWasi`, ADR-0052/0049) to strip
