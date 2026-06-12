@@ -7,6 +7,18 @@
 - **`./builtins/console` subpath export** — the Node-compatible `Console`
   class over writable streams, so embedders (playground node-server bootstrap)
   can route a guest program's console into kernel stdio.
+- **Worker-backed public FS RPC (ADR-0131).** `RuntimeController.fs` now exposes
+  awaited `readFile()` / `writeFile()` backed by runtime Worker messages. Writes
+  create parent dirs, invalidate the module loader, and await active VFS
+  `flush?.()` before resolving. Legacy `runtime.writeFile(path, content): void`
+  remains source-compatible.
+- **M11 fd-based `node:fs`/`node:os` surface.** Runtime-local fd table adds
+  `open`/`close`/`read`/`write`/`fstat`/`ftruncate` plus `truncate`,
+  `mkdtemp`, `opendir`/`Dir`, `COPYFILE_EXCL`, supported `O_*` constants, and
+  scoped `os.constants.signals`/positive `errno` ABI integers. `ftruncate`
+  preserves fd position, `Dir.read`/`Dir.close` support callback overloads and
+  closed-dir errors, unsupported numeric open flag bits throw `EINVAL`, and
+  `O_SYNC`/`O_DSYNC`/reflink constants stay absent.
 
 ### Fixed
 
