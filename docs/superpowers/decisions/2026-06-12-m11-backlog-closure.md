@@ -310,3 +310,24 @@ It is intentionally concise and append-only during the work.
 - **Why:** Review found user scopes could shadow `globalThis`, and eager own
   property hoists changed Node-observable `var` behavior.
 - **Reversibility:** Runtime-internal fix. Guarded by conformance and parity.
+
+### D32 — Honest Consumer-Ready Follow-Up Cutline
+
+- **Decision:** Ship the current M11 slice as-is, and record the remaining
+  consumer-ready gaps as future backlog rather than expanding this already-large
+  branch.
+- **Why:** The branch now covers a substantial adoption slice, but ROADMAP M11
+  still names surfaces not implemented here: `Sandbox.exec`, preview URL,
+  snapshot/restore, `@riftydev/workbench`, one-command scaffold, real deploy
+  smoke, and selected runtime walls.
+- **Reversibility:** Process/documentation cutline only. Each future public API
+  or package still needs its own ADR when pulled.
+
+### D33 — zlib Runtime Wall Backlog
+
+- **Decision:** Add `runtime-js/zlib-web-compression-subset` as a future M11
+  adoption follow-up.
+- **Why:** `node:zlib` remains a loud stub while ROADMAP M11 explicitly calls out
+  zlib as a high-frequency wall for real-ish npm projects.
+- **Reversibility:** Backlog-only. Additive methods are reversible; dependency or
+  sync-emulation policy choices need ADR.
