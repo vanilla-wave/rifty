@@ -15,7 +15,7 @@ function parsePreviewPath(path) {
 
 // ../../packages/service-worker/src/protocol.ts
 var SW_FRAME_VERSION = "1";
-var SW_ROUTING_VERSION = "2";
+var SW_ROUTING_VERSION = "3";
 var SW_PING = "__rifty_sw_ping__";
 var SW_PONG = "__rifty_sw_pong__";
 var SW_PREVIEW_READY = "rifty:preview:ready";
@@ -165,16 +165,25 @@ function createReadyClientsRegistry(logger = defaultLogger) {
 var FirstWindowOwnerBinding = class {
   #resolver;
   #logger;
+  #readiness = /* @__PURE__ */ new WeakMap();
   constructor(opts = {}) {
     this.#resolver = opts.resolver ?? new FirstWindowOwnerResolver();
     this.#logger = opts.logger;
   }
-  // NOT `async`: returning the resolver promise directly preserves the
-  // pre-ADR-0046 await-unwrap timing. An `async` wrapper adds one extra
-  // microtask turn, which the handshake tests observe as a missed dispatch
-  // within their fixed microtask budget.
-  resolveOwner(scope, request, clientId, _port) {
-    return this.#resolver.resolveOwner(scope, request, clientId);
+  async resolveOwner(scope, request, clientId, _port) {
+    const owner = await this.#resolver.resolveOwner(scope, request, clientId);
+    if (clientId || !owner) return owner;
+    const readiness = this.#readiness.get(scope);
+    if (!readiness || readiness.isReady(owner.id) || readiness.isMismatched(owner.id)) {
+      return owner;
+    }
+    const windows = await scope.clients.matchAll({
+      type: "window",
+      includeUncontrolled: false
+    });
+    return windows.find(
+      (candidate) => (!("type" in candidate) || candidate.type === "window") && readiness.isReady(candidate.id)
+    ) ?? owner;
   }
   subscribeReadiness(scope) {
     const registry = this.#logger !== void 0 ? createReadyClientsRegistry(this.#logger) : createReadyClientsRegistry();
@@ -189,27 +198,31 @@ var FirstWindowOwnerBinding = class {
       registry.handleMessage(sourceId, data);
     };
     scope.addEventListener("message", messageHandler);
+    const readiness = {
+      isReady: (id) => registry.isReady(id),
+      isMismatched: (id) => registry.isMismatched(id),
+      ownerToken: (id) => registry.ownerToken(id),
+      // NOT `async`: returning the registry promise directly preserves
+      // pre-ADR-0046 microtask timing; an `async` wrapper inserts an extra
+      // await-unwrap tick between the ready frame resolving the waiter and
+      // `routePreview` resuming — observable to handshake tests that gate on
+      // a fixed number of microtask turns.
+      //
+      // The window registry has no separate "gone" signal: a window teardown
+      // arrives as a goodbye, which {@link createReadyClientsRegistry}
+      // surfaces as `'timeout'` for backward compat. The contract reserves
+      // `'gone'` for explicit owner-departed signals, which the window binding
+      // can never distinguish from a plain timeout. Worker bindings do emit it.
+      waitForReady: (id, timeoutMs) => registry.waitForReady(id, timeoutMs),
+      nextRequestId: () => registry.nextRequestId()
+    };
+    this.#readiness.set(scope, readiness);
+    const readinessByScope = this.#readiness;
     return {
-      readiness: {
-        isReady: (id) => registry.isReady(id),
-        isMismatched: (id) => registry.isMismatched(id),
-        ownerToken: (id) => registry.ownerToken(id),
-        // NOT `async`: returning the registry promise directly preserves
-        // pre-ADR-0046 microtask timing; an `async` wrapper inserts an extra
-        // await-unwrap tick between the ready frame resolving the waiter and
-        // `routePreview` resuming — observable to handshake tests that gate on
-        // a fixed number of microtask turns.
-        //
-        // The window registry has no separate "gone" signal: a window teardown
-        // arrives as a goodbye, which {@link createReadyClientsRegistry}
-        // surfaces as `'timeout'` for backward compat. The contract reserves
-        // `'gone'` for explicit owner-departed signals, which the window binding
-        // can never distinguish from a plain timeout. Worker bindings do emit it.
-        waitForReady: (id, timeoutMs) => registry.waitForReady(id, timeoutMs),
-        nextRequestId: () => registry.nextRequestId()
-      },
+      readiness,
       teardown() {
         scope.removeEventListener("message", messageHandler);
+        readinessByScope.delete(scope);
       }
     };
   }
@@ -240,6 +253,12 @@ function resolveWaiters(state, ownerId, outcome) {
 }
 function routeKey(ownerToken, port) {
   return `${ownerToken}\0${port}`;
+}
+function routeKeyPort(key) {
+  const i = key.lastIndexOf("\0");
+  if (i === -1) return null;
+  const port = Number.parseInt(key.slice(i + 1), 10);
+  return Number.isInteger(port) ? port : null;
 }
 function dropOwner(state, ownerId) {
   state.ready.delete(ownerId);
@@ -287,6 +306,27 @@ var WorkerOwnerBinding = class {
       return null;
     }
     return client;
+  }
+  async resolvePortOwners(scope, port) {
+    const state = this.#states.get(scope);
+    if (!state) return { kind: "none" };
+    const candidateIds = /* @__PURE__ */ new Set();
+    for (const [key, ownerId] of state.portOwners) {
+      if (routeKeyPort(key) === port) candidateIds.add(ownerId);
+    }
+    const live = [];
+    for (const ownerId of candidateIds) {
+      const client = await scope.clients.get(ownerId) ?? null;
+      if (client) {
+        live.push(client);
+      } else {
+        dropOwner(state, ownerId);
+        resolveWaiters(state, ownerId, "gone");
+      }
+    }
+    if (live.length === 0) return { kind: "none" };
+    if (live.length === 1) return { kind: "unique", client: live[0] };
+    return { kind: "multiple" };
   }
   subscribeReadiness(scope) {
     const state = createState();
@@ -396,9 +436,17 @@ var PortAwareOwnerBinding = class {
     this.#worker = new WorkerOwnerBinding(opts.worker);
   }
   async resolveOwner(scope, request, clientId, port) {
-    const window = await this.#window.resolveOwner(scope, request, clientId, port);
+    if (clientId === null) {
+      const portOwners = await this.#worker.resolvePortOwners(scope, port);
+      if (portOwners.kind === "multiple") return null;
+      if (portOwners.kind === "unique") {
+        this.#ownerKinds.set(portOwners.client.id, "worker");
+        return portOwners.client;
+      }
+    }
+    const resolvedWindow = await this.#window.resolveOwner(scope, request, clientId, port);
+    const window = resolvedWindow && "type" in resolvedWindow && resolvedWindow.type !== "window" ? null : resolvedWindow;
     if (window) {
-      if ("type" in window && window.type !== "window") return null;
       this.#ownerKinds.set(window.id, "window");
       const ownerToken = this.#signals.get(scope)?.window.ownerToken?.(window.id);
       if (ownerToken) {
@@ -543,6 +591,7 @@ async function routePreview(scope, request, match, readiness, timeoutMs, clientI
 }
 
 // ../../packages/service-worker/src/preview-bridge.ts
+var MAX_PREVIEW_FRAME_CONTEXTS = 256;
 function matchPreviewUrl(pathname) {
   const parsed = parsePreviewPath(pathname);
   if (!parsed) return null;
@@ -551,6 +600,32 @@ function matchPreviewUrl(pathname) {
 function isPreviewFrameRequest(request) {
   return request.mode === "navigate" || request.destination !== "";
 }
+function isTopLevelPreviewNavigation(request) {
+  return request.mode === "navigate" && request.destination === "document";
+}
+function matchPreviewReferrer(request, origin) {
+  if (!request.referrer) return null;
+  const referrer = new URL(request.referrer);
+  if (referrer.origin !== origin) return null;
+  return matchPreviewUrl(referrer.pathname);
+}
+function rememberPreviewFrameContext(contexts, clientId, context) {
+  if (!clientId) return;
+  if (contexts.has(clientId)) contexts.delete(clientId);
+  contexts.set(clientId, context);
+  while (contexts.size > MAX_PREVIEW_FRAME_CONTEXTS) {
+    const oldest = contexts.keys().next().value;
+    if (oldest === void 0) return;
+    contexts.delete(oldest);
+  }
+}
+function getScopeOrigin(scope, requestUrl) {
+  const locationOrigin = scope.location?.origin;
+  if (locationOrigin) return locationOrigin;
+  const registrationScope = scope.registration?.scope;
+  if (registrationScope) return new URL(registrationScope).origin;
+  return requestUrl.origin;
+}
 var DEFAULT_READY_TIMEOUT_MS = 3e3;
 function createPreviewInterceptor(scope, hooks = {}) {
   const timeoutMs = hooks.timeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
@@ -558,11 +633,52 @@ function createPreviewInterceptor(scope, hooks = {}) {
     window: hooks.resolver !== void 0 ? { resolver: hooks.resolver } : void 0
   });
   const subscription = binding.subscribeReadiness(scope);
+  const previewFrameContexts = /* @__PURE__ */ new Map();
   const fetchHandler = (event) => {
     const url = new URL(event.request.url);
-    const match = matchPreviewUrl(url.pathname);
+    const scopeOrigin = getScopeOrigin(scope, url);
+    const sameOrigin = url.origin === scopeOrigin;
+    const directMatch = sameOrigin ? matchPreviewUrl(url.pathname) : null;
+    const frameRequest = isPreviewFrameRequest(event.request);
+    const knownPreviewContext = event.clientId ? previewFrameContexts.get(event.clientId) : void 0;
+    const knownPreviewClient = knownPreviewContext !== void 0;
+    let match = directMatch;
+    let clientId = event.resultingClientId || event.clientId || null;
+    if (directMatch && (frameRequest || knownPreviewClient)) {
+      const frameClientId = event.resultingClientId || event.clientId || null;
+      const createsFrameContext = event.request.mode === "navigate" && frameClientId !== null;
+      const context = createsFrameContext ? {
+        port: directMatch.port,
+        copiedTopLevel: isTopLevelPreviewNavigation(event.request)
+      } : knownPreviewContext;
+      if (createsFrameContext && context) {
+        rememberPreviewFrameContext(previewFrameContexts, frameClientId, context);
+      }
+      clientId = context ? context.copiedTopLevel ? null : "" : null;
+    } else if (!directMatch && sameOrigin) {
+      const frameClientId = event.clientId || null;
+      let context = frameClientId ? previewFrameContexts.get(frameClientId) : void 0;
+      let port = context?.port;
+      if (port === void 0) {
+        port = matchPreviewReferrer(event.request, scopeOrigin)?.port;
+        if (port !== void 0 && frameClientId) {
+          context = { port, copiedTopLevel: false };
+          rememberPreviewFrameContext(previewFrameContexts, frameClientId, context);
+        }
+      }
+      if (port === void 0) return;
+      const nextFrameClientId = event.resultingClientId || null;
+      if (nextFrameClientId) {
+        rememberPreviewFrameContext(
+          previewFrameContexts,
+          nextFrameClientId,
+          context ?? { port, copiedTopLevel: false }
+        );
+      }
+      match = { port, path: url.pathname };
+      clientId = context?.copiedTopLevel ? null : "";
+    }
     if (!match) return;
-    const clientId = isPreviewFrameRequest(event.request) ? null : event.resultingClientId || event.clientId || null;
     event.respondWith(
       routePreview(
         scope,

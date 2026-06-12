@@ -66,7 +66,9 @@ export function reasonOf(err: unknown): string {
 export const COI_FATAL_MESSAGE =
   'Cross-origin isolation is not active. Sync IPC and SharedArrayBuffer are unavailable. ' +
   'Check COOP/COEP headers (Cross-Origin-Opener-Policy: same-origin, ' +
-  'Cross-Origin-Embedder-Policy: credentialless).';
+  'Cross-Origin-Embedder-Policy: credentialless). If rifty is embedded in another app or ' +
+  'iframe, the embedding page must also be cross-origin isolated and the iframe must include ' +
+  'allow="cross-origin-isolated"; otherwise open rifty as a top-level page.';
 
 /**
  * Result of {@link bootstrapPlayground} — handed to `App` as a single bundle so

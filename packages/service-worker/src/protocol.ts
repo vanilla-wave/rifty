@@ -7,8 +7,9 @@
  * versions; the receiver refuses to honour a mismatched peer.
  * ADR-0040 splits versioning into two orthogonal contracts:
  *   - `SW_FRAME_VERSION` — wire-frame data shapes (this module).
- *   - `SW_ROUTING_VERSION` — addressing scheme (in `@riftydev/io/preview-protocol`)
- *     and owner routing / fallback rules (in the owner bindings).
+ *   - `SW_ROUTING_VERSION` — addressing scheme (in `@riftydev/io/preview-protocol`),
+ *     preview-frame port context (ADR-0097), and owner routing / fallback rules
+ *     in the owner bindings.
  * Both must match for a peer to be accepted. A mismatch on either side
  * triggers the same `PROTOCOL_VERSION_MISMATCH` path with both `(expected,
  * got)` pairs in the diagnostic so the host can distinguish frame-skew from
@@ -43,19 +44,26 @@ export const SW_FRAME_VERSION = '1';
  *     `PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`, the shape of
  *     `synthesizePreviewUrl(path)`, and the shape of `parsePreviewPath`.
  *   - The owner-fallback and owner-scoping rules in the preview owner bindings:
- *     prefer `FetchEvent.clientId`, fall back to the first controlled window,
- *     and let Worker owners win only when `(ownerToken, port)` matches the
- *     controlling window. The warn/mismatch dedup key shapes are part of the
+ *     prefer `FetchEvent.clientId`, fall back to a controlled window, prefer an
+ *     already-ready window for no-clientId copied preview URLs, and let Worker
+ *     owners win either when `(ownerToken, port)` matches the controlling
+ *     window or when a copied top-level preview URL has exactly one live Worker
+ *     owner for that port. The warn/mismatch dedup key shapes are part of the
  *     contract.
+ *   - Preview-frame port context in `./preview-bridge.ts` (ADR-0097): once an
+ *     iframe commits `/preview/<port>/`, same-origin root requests from that
+ *     iframe's `FetchEvent.clientId` (or a same-origin `/preview/<port>/`
+ *     request referrer after reload) route to the same port.
  *
  * Bump on: changes to the URL regex shape, the synthetic host literal, the
  * `synthesizePreviewUrl` return shape, the resolver fallback order, the Worker
- * claim scope, or the mismatch / first-window-warn dedup key shape.
+ * claim scope, the preview-frame port context, or the mismatch /
+ * first-window-warn dedup key shape.
  *
  * Does NOT cover wire-frame data shapes — those are pinned by
  * {@link SW_FRAME_VERSION}.
  */
-export const SW_ROUTING_VERSION = '2';
+export const SW_ROUTING_VERSION = '3';
 
 export const SW_PING = '__rifty_sw_ping__';
 export const SW_PONG = '__rifty_sw_pong__';

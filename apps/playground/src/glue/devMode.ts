@@ -20,7 +20,7 @@
 
 import { type DevServer, startDevServer } from '@rifty-examples/vite-like-dev';
 import { syncMirror } from '@riftydev/vfs';
-import { hmrClientScript, setupHmrBridge } from './hmr-bridge.ts';
+import { createHmrBridgeToken, hmrClientScript, setupHmrBridge } from './hmr-bridge.ts';
 import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
 
 const enc = new TextEncoder();
@@ -76,14 +76,15 @@ export async function startDevMode(options: DevModeOptions = {}): Promise<DevMod
   // Cross-realm HMR bridge in THIS realm; the iframe-side BroadcastChannel client
   // (injected via `clientScript`) reaches it where a native WS to the in-process
   // `WebSocketServer` cannot.
-  const hmr = setupHmrBridge({ port });
+  const hmrToken = createHmrBridgeToken();
+  const hmr = setupHmrBridge({ port, token: hmrToken });
   const devServer = await startDevServer({
     root,
     port,
     watchInterval: 100,
     hmr: {
       broadcast: (payload) => hmr.broadcast(payload),
-      clientScript: `<script data-rifty-hmr-bridge>${hmrClientScript(port)}</script>`,
+      clientScript: `<script data-rifty-hmr-bridge>${hmrClientScript(port, hmrToken)}</script>`,
     },
   });
 

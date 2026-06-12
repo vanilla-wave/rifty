@@ -3,6 +3,12 @@
  * prefer a Worker that claims the requested port within that window's owner
  * token. Fall back to the historical window bridge otherwise.
  *
+ * A copied top-level `/preview/<port>/` URL has no controlling playground window
+ * token. For that case only (`clientId === null`), the binding may route
+ * directly to a Worker when exactly one live Worker claims the port. Ambiguous
+ * same-port Worker owners return 503 before window fallback to preserve
+ * ADR-0123 multi-window isolation.
+ *
  * Real Vite runs in a Worker and posts `{ ownerToken, ports: [...] }`, so
  * `/preview/<port>` can route SW -> Worker directly without letting a Worker
  * from another playground tab steal the same port. Legacy page-owned dev mode
@@ -34,8 +40,8 @@ export interface PortAwareOwnerBindingOptions {
 }
 
 export class PortAwareOwnerBinding implements PreviewOwnerBinding {
-  readonly #window: PreviewOwnerBinding;
-  readonly #worker: PreviewOwnerBinding;
+  readonly #window: FirstWindowOwnerBinding;
+  readonly #worker: WorkerOwnerBinding;
   readonly #ownerKinds = new Map<string, OwnerKind>();
   readonly #signals = new WeakMap<ServiceWorkerGlobalScope, ScopeSignals>();
 
@@ -50,9 +56,20 @@ export class PortAwareOwnerBinding implements PreviewOwnerBinding {
     clientId: string | null,
     port: number,
   ): Promise<Client | null> {
-    const window = await this.#window.resolveOwner(scope, request, clientId, port);
+    if (clientId === null) {
+      const portOwners = await this.#worker.resolvePortOwners(scope, port);
+      if (portOwners.kind === 'multiple') return null;
+      if (portOwners.kind === 'unique') {
+        this.#ownerKinds.set(portOwners.client.id, 'worker');
+        return portOwners.client;
+      }
+    }
+    const resolvedWindow = await this.#window.resolveOwner(scope, request, clientId, port);
+    const window =
+      resolvedWindow && 'type' in resolvedWindow && resolvedWindow.type !== 'window'
+        ? null
+        : resolvedWindow;
     if (window) {
-      if ('type' in window && window.type !== 'window') return null;
       this.#ownerKinds.set(window.id, 'window');
       const ownerToken = this.#signals.get(scope)?.window.ownerToken?.(window.id);
       if (ownerToken) {

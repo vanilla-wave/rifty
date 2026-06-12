@@ -21,8 +21,8 @@
  * worker isn't serving can't eat the whole budget); the overall deadline spans
  * an npm install, else the panel showed a false `unavailable` before Vite came up.
  *
- * Reload (manual and HMR) uses `frame.contentWindow.location.reload()` — the
- * same mechanism as ADR-0017's HMR client — so there's one refresh path.
+ * Manual Reload uses `frame.contentWindow.location.reload()`. File edits are
+ * refreshed by the iframe HMR client itself, not by parent snapshot updates.
  */
 import { type Accessor, createEffect, createSignal, onCleanup } from 'solid-js';
 import { copyToClipboard } from '../glue/clipboard.ts';
@@ -42,7 +42,6 @@ const COMMIT_INTERVAL_MS = 200;
 
 export function PreviewPanel(props: {
   initialPort?: number;
-  refreshKey?: number;
   onOpenTab?: (port: number) => void;
   /** Toast bridge for copy-URL feedback. */
   onNotify?: (message: string, tone: 'error' | 'success') => void;
@@ -97,7 +96,6 @@ export function PreviewPanel(props: {
   // stale loop writing state after unmount / a later run.
   createEffect(() => {
     const url = previewUrl();
-    props.refreshKey;
     retry();
     let alive = true;
     setPhase('starting');

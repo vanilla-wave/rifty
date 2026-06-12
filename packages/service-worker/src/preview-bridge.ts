@@ -75,6 +75,7 @@ export { WorkerOwnerBinding } from './owner-binding-worker.ts';
 export type {
   WorkerOwnerBindingOptions,
   WorkerOwnerBindingLogger,
+  WorkerPortOwnerResolution,
 } from './owner-binding-worker.ts';
 export { FirstWindowOwnerResolver } from './owner-resolver.ts';
 export type { PreviewOwnerResolver } from './owner-resolver.ts';
@@ -89,6 +90,7 @@ export type { SerializedRequest, SerializedResponse } from './protocol.ts';
 export type PreviewHandler = (req: SerializedRequest) => Promise<SerializedResponse>;
 
 const PREVIEW_READY_HEARTBEAT_MS = 1_000;
+const MAX_PREVIEW_FRAME_CONTEXTS = 256;
 
 export interface PreviewBridgeOptions {
   readonly ports?: readonly number[];
@@ -126,6 +128,48 @@ export function isPreviewFrameRequest(request: {
   destination: string;
 }): boolean {
   return request.mode === 'navigate' || request.destination !== '';
+}
+
+function isTopLevelPreviewNavigation(request: Request): boolean {
+  return request.mode === 'navigate' && request.destination === 'document';
+}
+
+interface PreviewFrameContext {
+  readonly port: number;
+  readonly copiedTopLevel: boolean;
+}
+
+function matchPreviewReferrer(request: Request, origin: string): { port: number } | null {
+  if (!request.referrer) return null;
+  const referrer = new URL(request.referrer);
+  if (referrer.origin !== origin) return null;
+  return matchPreviewUrl(referrer.pathname);
+}
+
+function rememberPreviewFrameContext(
+  contexts: Map<string, PreviewFrameContext>,
+  clientId: string | null,
+  context: PreviewFrameContext,
+): void {
+  if (!clientId) return;
+  // TODO(backlog: service-worker/preview-frame-context-lifecycle): replace the
+  // fixed cap with explicit client-lifetime cleanup once browser support is
+  // mapped. Until then, insertion-order eviction bounds reload churn.
+  if (contexts.has(clientId)) contexts.delete(clientId);
+  contexts.set(clientId, context);
+  while (contexts.size > MAX_PREVIEW_FRAME_CONTEXTS) {
+    const oldest = contexts.keys().next().value;
+    if (oldest === undefined) return;
+    contexts.delete(oldest);
+  }
+}
+
+function getScopeOrigin(scope: ServiceWorkerGlobalScope, requestUrl: URL): string {
+  const locationOrigin = scope.location?.origin;
+  if (locationOrigin) return locationOrigin;
+  const registrationScope = scope.registration?.scope;
+  if (registrationScope) return new URL(registrationScope).origin;
+  return requestUrl.origin;
 }
 
 /**
@@ -187,19 +231,63 @@ export function createPreviewInterceptor(
       window: hooks.resolver !== undefined ? { resolver: hooks.resolver } : undefined,
     });
   const subscription = binding.subscribeReadiness(scope);
+  const previewFrameContexts = new Map<string, PreviewFrameContext>();
 
   const fetchHandler = (event: FetchEvent): void => {
     const url = new URL(event.request.url);
-    const match = matchPreviewUrl(url.pathname);
+    const scopeOrigin = getScopeOrigin(scope, url);
+    const sameOrigin = url.origin === scopeOrigin;
+    const directMatch = sameOrigin ? matchPreviewUrl(url.pathname) : null;
+    const frameRequest = isPreviewFrameRequest(event.request);
+    const knownPreviewContext = event.clientId
+      ? previewFrameContexts.get(event.clientId)
+      : undefined;
+    const knownPreviewClient = knownPreviewContext !== undefined;
+    let match = directMatch;
+    let clientId = event.resultingClientId || event.clientId || null;
+
+    if (directMatch && (frameRequest || knownPreviewClient)) {
+      const frameClientId = event.resultingClientId || event.clientId || null;
+      const createsFrameContext = event.request.mode === 'navigate' && frameClientId !== null;
+      const context = createsFrameContext
+        ? {
+            port: directMatch.port,
+            copiedTopLevel: isTopLevelPreviewNavigation(event.request),
+          }
+        : knownPreviewContext;
+      if (createsFrameContext && context) {
+        rememberPreviewFrameContext(previewFrameContexts, frameClientId, context);
+      }
+      // ADR-0097 extends ADR-0074: remember the iframe's port context, then
+      // route this navigation through the controlling window. Some browsers do
+      // not expose `request.destination` for later module requests, so a known
+      // preview client id also keeps preview-prefixed subresources on this path.
+      clientId = context ? (context.copiedTopLevel ? null : '') : null;
+    } else if (!directMatch && sameOrigin) {
+      const frameClientId = event.clientId || null;
+      let context = frameClientId ? previewFrameContexts.get(frameClientId) : undefined;
+      let port = context?.port;
+      if (port === undefined) {
+        port = matchPreviewReferrer(event.request, scopeOrigin)?.port;
+        if (port !== undefined && frameClientId) {
+          context = { port, copiedTopLevel: false };
+          rememberPreviewFrameContext(previewFrameContexts, frameClientId, context);
+        }
+      }
+      if (port === undefined) return;
+      const nextFrameClientId = event.resultingClientId || null;
+      if (nextFrameClientId) {
+        rememberPreviewFrameContext(
+          previewFrameContexts,
+          nextFrameClientId,
+          context ?? { port, copiedTopLevel: false },
+        );
+      }
+      match = { port, path: url.pathname };
+      clientId = context?.copiedTopLevel ? null : '';
+    }
+
     if (!match) return;
-    // ADR-0074 — a request originating inside the preview iframe must resolve
-    // to the controlling window (see {@link isPreviewFrameRequest}); drop its
-    // own ids so the resolver falls back to the first controlled window (the
-    // bridge owner). The page's bare `fetch('/preview/…')` warm-up keeps
-    // ADR-0031's `resultingClientId || clientId` order (multi-window unchanged).
-    const clientId = isPreviewFrameRequest(event.request)
-      ? null
-      : event.resultingClientId || event.clientId || null;
     event.respondWith(
       routePreview(
         scope,
@@ -224,8 +312,9 @@ export function createPreviewInterceptor(
 
 /**
  * Install the SW-side fetch listener. Call inside a Service Worker after
- * `activate`. The listener intercepts `/preview/<port>/*` requests and asks
- * the first registered, ready window client to handle them.
+ * `activate`. The listener intercepts `/preview/<port>/*` requests, resolves
+ * their owner through the default port-aware binding, then forwards each request
+ * to a ready Worker or window owner.
  *
  * Returns a teardown function — useful in tests.
  */

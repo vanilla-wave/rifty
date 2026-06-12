@@ -15,10 +15,14 @@ describe('real Vite bootstrap preview routing', () => {
   it('broadcasts HMR updates for page-to-worker VFS writes', () => {
     expect(source).toContain('function handleVfsWrite(path: string): void');
     expect(source).toContain('const hmrBridgeRef: { current?: HmrBridgeHandle } = {}');
+    expect(source).toContain('function broadcastFileUpdate(path: string): void');
+    expect(source).toContain('hmrBridgeRef.current?.broadcast(');
+    expect(source).toContain("type: 'update'");
+    expect(source).toContain("event: 'change'");
+    expect(source).toContain('path: toRootRelativePath(root, modulePath)');
     expect(source).toContain(
-      "hmrBridgeRef.current?.broadcast(JSON.stringify({ type: 'update', path }))",
+      'hmrBridgeRef.current = setupHmrBridge({ port, token: hmrBridgeToken })',
     );
-    expect(source).toContain('hmrBridgeRef.current = setupHmrBridge({ port })');
     expect(source).toContain(
       'const tearVfsBridge = serveVfsWrites(port, { onWrite: handleVfsWrite })',
     );

@@ -22,11 +22,11 @@
  * the same `BroadcastChannel` name, just gets messages from a different sender,
  * so that migration is a realm swap, not a routing rewrite.
  *
- * Server side (page realm): {@link setupHmrBridge} owns a
- * `BridgedWebSocketServer` on `ws://preview.local:<port>/__hmr`; callers
- * `broadcast(...)` from a file-watcher hook. Client side (iframe): loads a
- * script opening a `BroadcastChannel` of the same name (via
- * {@link channelNameFor}), speaking the same `open`/`open-ack`/`msg` protocol.
+ * Server side: {@link setupHmrBridge} owns a token-scoped
+ * `BridgedWebSocketServer` URL; callers `broadcast(...)` from a file-watcher
+ * hook. Client side (iframe): loads a script opening a `BroadcastChannel` of
+ * the same name (via {@link channelNameFor}), speaking the same
+ * `open`/`open-ack`/`msg` protocol.
  * Client is vanilla JS — no `@riftydev/net` import — so it can be injected into
  * served HTML without bundling.
  *
@@ -38,12 +38,24 @@
 import { BridgedWebSocketServer, type WsMessage, channelNameFor } from '@riftydev/net';
 
 /**
- * WS URL the bridge listens on for a given `port`. Exposed because the inlined
- * client needs the same URL — one source of truth so server and client agree on
- * the `BroadcastChannel` name.
+ * Per-server nonce for the HMR bridge URL. This is not a sandbox boundary —
+ * the iframe page can read its injected script — but it keeps unrelated
+ * same-origin realms from joining a predictable port-only channel.
  */
-export function hmrBridgeUrl(port: number): string {
-  return `ws://preview.local:${port}/__hmr`;
+export function createHmrBridgeToken(): string {
+  const randomUUID = globalThis.crypto?.randomUUID?.bind(globalThis.crypto);
+  if (randomUUID) return randomUUID();
+  return `hmr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+/**
+ * WS URL the bridge listens on for a given `port` and optional per-server
+ * `token`. Exposed because the inlined client needs the same URL — one source
+ * of truth so server and client agree on the `BroadcastChannel` name.
+ */
+export function hmrBridgeUrl(port: number, token?: string): string {
+  const suffix = token ? `/${encodeURIComponent(token)}` : '';
+  return `ws://preview.local:${port}/__hmr${suffix}`;
 }
 
 /**
@@ -55,34 +67,39 @@ export function hmrBridgeUrl(port: number): string {
  *
  * Kept under 1 KiB so callers can inline it without worrying about budget.
  */
-export function hmrClientScript(port: number): string {
-  const channelName = channelNameFor(hmrBridgeUrl(port));
+export function hmrClientScript(port: number, token?: string): string {
+  const channelName = channelNameFor(hmrBridgeUrl(port, token));
   return `(function () {
   if (typeof BroadcastChannel === 'undefined') return;
   var ch = new BroadcastChannel(${JSON.stringify(channelName)});
   var cid = 'iframe-' + Math.random().toString(36).slice(2, 10);
   var open = false;
+  function onPayload(payload) {
+    try {
+      if (typeof payload === 'string') payload = JSON.parse(payload);
+    } catch (_) {}
+    try {
+      window.dispatchEvent(new CustomEvent('rifty:hmr:message', { detail: payload }));
+    } catch (_) {}
+    try { window.__riftyHmrLastMessage = payload; } catch (_) {}
+    // Naive default: reload on update. Full ESM HMR is out of scope for the
+    // bridge — higher-level concern (M12+).
+    if (payload && payload.type === 'update') {
+      location.reload();
+    }
+  }
   ch.addEventListener('message', function (e) {
     var f = e.data;
-    if (!f || f.cid !== cid) return;
+    if (!f) return;
+    if (f.cid !== cid) return;
     if (f.type === 'open-ack') {
       open = true;
+      try { window.__riftyHmrOpen = true; } catch (_) {}
       try { window.dispatchEvent(new Event('rifty:hmr:open')); } catch (_) {}
       return;
     }
     if (f.type === 'msg' && open) {
-      var payload = f.data;
-      try {
-        if (typeof payload === 'string') payload = JSON.parse(payload);
-      } catch (_) {}
-      try {
-        window.dispatchEvent(new CustomEvent('rifty:hmr:message', { detail: payload }));
-      } catch (_) {}
-      // Naive default: reload on update. Full ESM HMR is out of scope for the
-      // bridge — higher-level concern (M12+).
-      if (payload && payload.type === 'update') {
-        location.reload();
-      }
+      onPayload(f.data);
       return;
     }
     if (f.type === 'close' && f.from === 'server') {
@@ -114,6 +131,8 @@ export interface HmrBridgeHandle {
 export interface SetupHmrBridgeOptions {
   /** Dev server port; selects the per-port `BroadcastChannel` name. */
   readonly port: number;
+  /** Per-server nonce; prevents unrelated same-origin code from guessing the channel. */
+  readonly token?: string;
 }
 
 /**
@@ -123,7 +142,7 @@ export interface SetupHmrBridgeOptions {
  * re-creating.
  */
 export function setupHmrBridge(opts: SetupHmrBridgeOptions): HmrBridgeHandle {
-  const url = hmrBridgeUrl(opts.port);
+  const url = hmrBridgeUrl(opts.port, opts.token);
   const server = new BridgedWebSocketServer(url);
   return {
     url,
@@ -154,7 +173,7 @@ export interface HmrBridgeVitePlugin {
  * attribute marker so reload cycles don't stack copies.
  */
 export function createHmrBridgeVitePlugin(opts: SetupHmrBridgeOptions): HmrBridgeVitePlugin {
-  const script = hmrClientScript(opts.port);
+  const script = hmrClientScript(opts.port, opts.token);
   const marker = 'data-rifty-hmr-bridge';
   const injection = `<script ${marker}>${script}</script>`;
   return {

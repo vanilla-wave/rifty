@@ -111,7 +111,6 @@ export function App(props: AppProps) {
   });
 
   const [devServerRunning, setDevServerRunning] = createSignal(false);
-  const [previewRevision, setPreviewRevision] = createSignal(0);
   const [devServerStatus, setDevServerStatus] = createSignal<'stopped' | 'starting' | 'running'>(
     'stopped',
   );
@@ -390,13 +389,11 @@ export function App(props: AppProps) {
     if (devServerStatus() === 'stopped') {
       snapshotFs.clear();
       setNodeModulesPresent(false);
-      setPreviewRevision(0);
       return;
     }
     const unsubscribe = subscribeVfsSnapshot(machine.realVitePort(), (frame) => {
       snapshotFs.update(frame);
       setNodeModulesPresent(frame.nodeModulesPresent);
-      setPreviewRevision((n) => n + 1);
     });
     onCleanup(unsubscribe);
   });
@@ -953,7 +950,6 @@ export function App(props: AppProps) {
                 {(port) => (
                   <PreviewPanel
                     initialPort={port}
-                    refreshKey={previewRevision()}
                     onOpenTab={openPreviewTab}
                     onNotify={flashToast}
                   />

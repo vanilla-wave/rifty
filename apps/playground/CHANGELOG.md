@@ -61,7 +61,23 @@
   `--rf-shadow-2` were referenced but never defined (block-rail / history
   exit-status colors and overlay shadows silently fell back); the token set
   now defines `--rf-ok` and real shadow tokens.
-
+- **Real Vite editor writes are now checked through the real Monaco path.** The
+  HMR e2e no longer uses a production-only source setter; it focuses Monaco's
+  input, edits the visible model, then waits for the worker-applied write, an
+  actual iframe HMR bridge `update` event, and the iframe update. The parent
+  preview panel no longer reloads the iframe for every worker VFS snapshot, so
+  the e2e cannot pass via explorer refresh alone.
+- **Real Vite HMR invalidates by Vite file-change semantics.** Worker-side
+  writes now call `moduleGraph.onFileChange(file)` instead of probing
+  `getModuleById(file)` and falling back to `invalidateAll()`.
+- **HMR bridge channels are per-server tokenized.** The iframe client and bridge
+  server share a nonce-scoped URL/channel, so unrelated same-origin code cannot
+  join the old predictable port-only HMR channel.
+- **Cross-origin isolation failures now explain embedded-browser requirements.**
+  The fatal COI guard still refuses to boot without `crossOriginIsolated === true`,
+  but the message now calls out iframe/app-browser embeds: the parent page must
+  also be cross-origin isolated and the iframe must include
+  `allow="cross-origin-isolated"`.
 - **Project presets now open starter editor tabs.** File-oriented presets open
   two seeded files beside `src/main.js` as inactive tabs, so users see the tab
   strip immediately while the entry file remains active.
@@ -151,6 +167,12 @@
 - **Terminal autocomplete dropdown.** Tab or Ctrl/Cmd+Space inside the console now
   opens a keyboardable DOM completion list backed by the existing shell
   command/path completer; ArrowUp/Down selects, Enter/Tab applies, Esc closes.
+- **Real Vite browser e2e covers the full opt-in path.** The `RIFTY_E2E_HMR=1`
+  Playwright flow now drives the cross-origin-isolated path: boot Vite in the
+  worker realm, render the iframe through SW preview routing, edit `src/main.js`
+  through Monaco, write it into the worker VFS, invalidate Vite's module graph,
+  and reload the iframe through the cross-realm HMR bridge. The backlog stays
+  open until this path has a default or CI verification lane.
 - **Terminal no longer overlaps the status bar.** xterm's `FitAddon` computes
   rows from the mount element's height minus *that element's own* padding (the
   `.xterm` div it creates, padding 0) — so the `6px` vertical padding on the

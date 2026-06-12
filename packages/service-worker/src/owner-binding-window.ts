@@ -7,10 +7,11 @@
  * heartbeat/controllerchange, then `rifty:preview:goodbye` on teardown; the
  * subscription consumes them.
  *
- * `resolveOwner` preserves the M10 behaviour verbatim: prefer the `clientId`
+ * `resolveOwner` preserves the M10 resolver path first: prefer the `clientId`
  * carried by the `FetchEvent`, fall back to the first controlled window when the
- * id is empty, warn once per scope for the multi-window misroute risk
- * (ADR-0031, ADR-0040).
+ * id is empty, and warn once per scope for the multi-window misroute risk. For
+ * no-clientId copied preview tabs, the binding then prefers an already-ready
+ * window over an unready first match (ADR-0031, ADR-0040, ADR-0123).
  *
  * The `port` argument is intentionally ignored — a window owns every preview port
  * the page registers via `setupPreviewBridge`, so there is no port-keyed dispatch
@@ -22,7 +23,11 @@
  */
 
 import { FirstWindowOwnerResolver, type PreviewOwnerResolver } from './owner-resolver.ts';
-import type { PreviewOwnerBinding, ReadinessSubscription } from './preview-owner-binding.ts';
+import type {
+  PreviewOwnerBinding,
+  ReadinessSignal,
+  ReadinessSubscription,
+} from './preview-owner-binding.ts';
 import { SW_PREVIEW_GOODBYE, SW_PREVIEW_READY } from './protocol.ts';
 import { type ReadyClientsLogger, createReadyClientsRegistry } from './ready-clients.ts';
 
@@ -39,23 +44,40 @@ export interface FirstWindowOwnerBindingOptions {
 export class FirstWindowOwnerBinding implements PreviewOwnerBinding {
   readonly #resolver: PreviewOwnerResolver;
   readonly #logger: ReadyClientsLogger | undefined;
+  readonly #readiness = new WeakMap<ServiceWorkerGlobalScope, ReadinessSignal>();
 
   constructor(opts: FirstWindowOwnerBindingOptions = {}) {
     this.#resolver = opts.resolver ?? new FirstWindowOwnerResolver();
     this.#logger = opts.logger;
   }
 
-  // NOT `async`: returning the resolver promise directly preserves the
-  // pre-ADR-0046 await-unwrap timing. An `async` wrapper adds one extra
-  // microtask turn, which the handshake tests observe as a missed dispatch
-  // within their fixed microtask budget.
-  resolveOwner(
+  async resolveOwner(
     scope: ServiceWorkerGlobalScope,
     request: Request,
     clientId: string | null,
     _port: number,
   ): Promise<Client | null> {
-    return this.#resolver.resolveOwner(scope, request, clientId);
+    const owner = await this.#resolver.resolveOwner(scope, request, clientId);
+    if (clientId || !owner) return owner;
+    const readiness = this.#readiness.get(scope);
+    if (!readiness || readiness.isReady(owner.id) || readiness.isMismatched(owner.id)) {
+      return owner;
+    }
+    // Copied top-level preview URLs create their own controlled window. Browser
+    // enumeration may return that unready preview tab before the playground page
+    // that actually mounted the preview bridge, so no-clientId fallback prefers
+    // a ready window when one exists.
+    const windows = await scope.clients.matchAll({
+      type: 'window',
+      includeUncontrolled: false,
+    });
+    return (
+      (windows.find(
+        (candidate) =>
+          (!('type' in candidate) || candidate.type === 'window') &&
+          readiness.isReady(candidate.id),
+      ) as Client | undefined) ?? owner
+    );
   }
 
   subscribeReadiness(scope: ServiceWorkerGlobalScope): ReadinessSubscription {
@@ -82,28 +104,33 @@ export class FirstWindowOwnerBinding implements PreviewOwnerBinding {
 
     scope.addEventListener('message', messageHandler);
 
+    const readiness: ReadinessSignal = {
+      isReady: (id): boolean => registry.isReady(id),
+      isMismatched: (id): boolean => registry.isMismatched(id),
+      ownerToken: (id): string | undefined => registry.ownerToken(id),
+      // NOT `async`: returning the registry promise directly preserves
+      // pre-ADR-0046 microtask timing; an `async` wrapper inserts an extra
+      // await-unwrap tick between the ready frame resolving the waiter and
+      // `routePreview` resuming — observable to handshake tests that gate on
+      // a fixed number of microtask turns.
+      //
+      // The window registry has no separate "gone" signal: a window teardown
+      // arrives as a goodbye, which {@link createReadyClientsRegistry}
+      // surfaces as `'timeout'` for backward compat. The contract reserves
+      // `'gone'` for explicit owner-departed signals, which the window binding
+      // can never distinguish from a plain timeout. Worker bindings do emit it.
+      waitForReady: (id, timeoutMs): Promise<'ready' | 'timeout' | 'mismatch' | 'gone'> =>
+        registry.waitForReady(id, timeoutMs),
+      nextRequestId: (): number => registry.nextRequestId(),
+    };
+    this.#readiness.set(scope, readiness);
+    const readinessByScope = this.#readiness;
+
     return {
-      readiness: {
-        isReady: (id): boolean => registry.isReady(id),
-        isMismatched: (id): boolean => registry.isMismatched(id),
-        ownerToken: (id): string | undefined => registry.ownerToken(id),
-        // NOT `async`: returning the registry promise directly preserves
-        // pre-ADR-0046 microtask timing; an `async` wrapper inserts an extra
-        // await-unwrap tick between the ready frame resolving the waiter and
-        // `routePreview` resuming — observable to handshake tests that gate on
-        // a fixed number of microtask turns.
-        //
-        // The window registry has no separate "gone" signal: a window teardown
-        // arrives as a goodbye, which {@link createReadyClientsRegistry}
-        // surfaces as `'timeout'` for backward compat. The contract reserves
-        // `'gone'` for explicit owner-departed signals, which the window binding
-        // can never distinguish from a plain timeout. Worker bindings do emit it.
-        waitForReady: (id, timeoutMs): Promise<'ready' | 'timeout' | 'mismatch' | 'gone'> =>
-          registry.waitForReady(id, timeoutMs),
-        nextRequestId: (): number => registry.nextRequestId(),
-      },
+      readiness,
       teardown(): void {
         scope.removeEventListener('message', messageHandler);
+        readinessByScope.delete(scope);
       },
     };
   }

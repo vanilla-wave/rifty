@@ -33,6 +33,7 @@ import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 import { esbuildShimFiles, rollupShimFiles } from '../glue/esbuild-shim.ts';
 import {
   type HmrBridgeHandle,
+  createHmrBridgeToken,
   createHmrBridgeVitePlugin,
   setupHmrBridge,
 } from '../glue/hmr-bridge.ts';
@@ -43,6 +44,7 @@ import { collectSnapshot, publishVfsSnapshot } from '../glue/vfs-snapshot-port.t
 import { type VfsWriteFrame, applyVfsWriteFrame, serveVfsWrites } from '../glue/vfs-write-port.ts';
 import { type BootstrapConfig, resolveBootstrapConfig } from '../templates/project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
+import { type ViteModuleGraph, invalidateViteModule } from './real-vite-invalidation.ts';
 
 const enc = new TextEncoder();
 
@@ -64,6 +66,7 @@ interface ViteDevServer {
   listen(): Promise<unknown>;
   close(): Promise<void>;
   watcher?: ViteWatcher;
+  moduleGraph?: ViteModuleGraph;
 }
 
 function log(line: string): void {
@@ -165,6 +168,16 @@ async function dispatchSerializedPreview(req: SerializedRequest): Promise<Serial
   };
 }
 
+function toRootRelativePath(root: string, path: string): string {
+  const normalizedRoot = normalizePath(root);
+  const normalizedPath = normalizePath(path);
+  if (normalizedPath === normalizedRoot) return '/';
+  if (normalizedPath.startsWith(`${normalizedRoot}/`)) {
+    return normalizedPath.slice(normalizedRoot.length);
+  }
+  return normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`;
+}
+
 async function bootstrap(): Promise<void> {
   // Defaults match the page-realm path so non-overriding callers behave the same.
   const env = globalThis.process.env;
@@ -190,11 +203,31 @@ async function bootstrap(): Promise<void> {
   };
 
   const hmrBridgeRef: { current?: HmrBridgeHandle } = {};
+  let activeServer: ViteDevServer | null = null;
   function broadcastFileUpdate(path: string): void {
-    hmrBridgeRef.current?.broadcast(JSON.stringify({ type: 'update', path }));
+    const modulePath = normalizePath(path);
+    if (activeServer) {
+      try {
+        invalidateViteModule(activeServer, modulePath);
+      } catch (err) {
+        log(
+          `[real-vite/worker] module invalidation failed for ${modulePath}: ${
+            (err as Error).message
+          }\n`,
+        );
+      }
+    }
+    hmrBridgeRef.current?.broadcast(
+      JSON.stringify({
+        type: 'update',
+        event: 'change',
+        path: toRootRelativePath(root, modulePath),
+      }),
+    );
   }
 
   function handleVfsWrite(path: string): void {
+    log(`[real-vite/worker] editor write applied ${normalizePath(path)}\n`);
     publishSnapshot();
     broadcastFileUpdate(path);
   }
@@ -260,7 +293,8 @@ async function bootstrap(): Promise<void> {
 
   // HMR bridge in THIS realm; iframe-side BroadcastChannel client reaches it
   // regardless of which realm hosts the server.
-  hmrBridgeRef.current = setupHmrBridge({ port });
+  const hmrBridgeToken = createHmrBridgeToken();
+  hmrBridgeRef.current = setupHmrBridge({ port, token: hmrBridgeToken });
   log(`[real-vite/worker] hmr bridge ready at ${hmrBridgeRef.current.url}\n`);
 
   log(`[real-vite/worker] starting dev server on port ${port}…\n`);
@@ -280,9 +314,10 @@ async function bootstrap(): Promise<void> {
     optimizeDeps: {
       disabled: cfg.server.optimizeDepsDisabled,
     } as unknown as ViteUserConfig['optimizeDeps'],
-    plugins: cfg.hmrEnabled ? [createHmrBridgeVitePlugin({ port })] : [],
+    plugins: cfg.hmrEnabled ? [createHmrBridgeVitePlugin({ port, token: hmrBridgeToken })] : [],
   });
   await server.listen();
+  activeServer = server;
   log(`[real-vite/worker] vite is listening on internal port ${port}\n`);
   publishSnapshot(); // vite may have written config/cache during boot
 

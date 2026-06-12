@@ -317,9 +317,12 @@ export function EditorHost(props: EditorHostProps) {
     createEffect(() => {
       const next = props.programValue();
       if (programModel && programModel.getValue() !== next) {
-        suppressProgramEcho = true;
-        programModel.setValue(next);
-        suppressProgramEcho = false;
+        try {
+          suppressProgramEcho = true;
+          programModel.setValue(next);
+        } finally {
+          suppressProgramEcho = false;
+        }
       }
     });
 

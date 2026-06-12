@@ -18,9 +18,31 @@
   own bare `fetch` warm-up. Without this the readiness handshake targeted the
   iframe's own client (which runs no `setupPreviewBridge`), timed out, and the
   navigation aborted (`net::ERR_ABORTED`) so the live preview never rendered.
-  This branch bumps `SW_ROUTING_VERSION` to `'2'` together with ADR-0123's
-  owner-scoped Worker routing, so stale peers fail loudly instead of silently
-  disagreeing on owner selection.
+  This branch bumps `SW_ROUTING_VERSION` through `'3'` together with ADR-0123's
+  owner-scoped Worker routing and copied top-level preview fallback refinement,
+  so stale peers fail loudly instead of silently disagreeing on owner selection.
+- **Preview iframe root-relative requests route to the iframe's preview port
+  (ADR-0097).** After a preview iframe commits `/preview/<port>/`, the SW records
+  the iframe client id as owning that port and routes same-origin root requests
+  from that client (`/src/main.js`, `/@vite/client`, lazy chunks,
+  `fetch('/api')`, SPA navigations) through the same preview owner. Unknown
+  page-root requests now fall through without `respondWith`; reload recovery is
+  limited to known iframe context or a same-origin `/preview/<port>/` referrer,
+  so ordinary playground assets are not proxied through the SW and page-owned
+  `/preview/...` subresources do not poison the page client context. Cross-port
+  preview subrequests route only that explicit request and do not rebind the
+  iframe's root-relative context. This keeps real Vite apps working without
+  rewriting their HTML to relative paths. This rides on the same
+  `SW_ROUTING_VERSION` contract as ADR-0123.
+- **Copied top-level preview URLs resolve when the port has a single Worker
+  owner.** Opening `/preview/<port>/` outside the playground shell has no
+  iframe parent client and may enumerate the new preview tab before the
+  playground shell, so the no-clientId window fallback now prefers an
+  already-ready window. `PortAwareOwnerBinding` also uses a direct Worker
+  fallback only when exactly one live Worker claims that port. If multiple
+  playground windows claim the same port under different owner tokens, the SW
+  keeps refusing to guess, preserving ADR-0123 isolation. `SW_ROUTING_VERSION`
+  bumps to `3` because owner-fallback order changed.
 
 ### Added
 
@@ -31,8 +53,9 @@
   New public exports: `PortAwareOwnerBinding`, `PortAwareOwnerBindingOptions`,
   and `PreviewBridgeOptions`; `setupPreviewBridge` can now advertise `ownerToken`
   and `ports` on ready/goodbye frames. `SW_FRAME_VERSION` stays `1` because the
-  fields are additive optional; `SW_ROUTING_VERSION` bumps to `2` because owner
-  selection semantics changed.
+  fields are additive optional; `SW_ROUTING_VERSION` first bumps to `2` because
+  owner selection semantics changed, and the copied top-level preview fallback
+  refinement above bumps the same contract to `3`.
 - **ADR-0046 (A-023):** `PreviewOwnerBinding` — one seam the preview
   interceptor sits on top of, designed from both the window and worker
   owners at once (promotes OPEN_QUESTIONS Q-2026-05-27-002). New
