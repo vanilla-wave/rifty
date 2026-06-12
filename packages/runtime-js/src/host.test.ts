@@ -136,4 +136,19 @@ describe('spawnRuntime fs controller', () => {
     disposable.dispose();
     await expect(disposeRead).rejects.toMatchObject({ name: 'WorkerTerminated' });
   });
+
+  it('rejects fs calls issued after teardown with a typed error', async () => {
+    installFakeWorker();
+    const runtime = spawnRuntime({ workerUrl: '/worker.js' });
+    runtime.dispose();
+
+    await expect(runtime.fs.readFile('/late.txt')).rejects.toMatchObject({
+      name: 'WorkerTerminated',
+      code: 'RUNTIME_NOT_RUNNING',
+    });
+    await expect(runtime.fs.writeFile('/late.txt', 'x')).rejects.toMatchObject({
+      name: 'WorkerTerminated',
+      code: 'RUNTIME_NOT_RUNNING',
+    });
+  });
 });

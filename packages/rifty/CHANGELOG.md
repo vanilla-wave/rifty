@@ -6,7 +6,10 @@
 
 - **ADR-0131 — `sandbox.fs` for AI-agent file IO.** `createSandbox()` now exposes
   the runtime Worker-backed `fs.readFile()` / `fs.writeFile()` surface while
-  keeping `sandbox.runtime` unchanged.
+  keeping `sandbox.runtime` unchanged. PR #21 review: TSDoc now states the two
+  load-bearing gotchas — `fs` paths anchor at the VFS root (not the guest cwd
+  `/workspace`), and `sandbox.vfs` reports the PAGE-realm backend probe while
+  the runtime Worker's backend can independently fall back to memory.
 
 - **ADR-0071 — umbrella `@riftydev/sdk` package (EPIC B).** One-install front door over
   the `@riftydev/*` scope.

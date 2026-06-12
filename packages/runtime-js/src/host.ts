@@ -37,6 +37,10 @@ export interface EvalOptions {
 export interface RuntimeController {
   /** Send an eval request; resolves with the result message. */
   eval(code: string, options?: EvalOptions): Promise<EvalResult>;
+  /**
+   * Worker-realm filesystem RPC (ADR-0131) — reads/writes the authoritative
+   * VFS the guest's `node:fs` sees. See {@link RuntimeFs} for path semantics.
+   */
   readonly fs: RuntimeFs;
   /** Send raw terminal stdin to the runtime Worker's `process.stdin`. */
   writeStdin(data: string | Uint8Array): void;
@@ -49,6 +53,20 @@ export interface RuntimeController {
   readonly isReady: () => boolean;
 }
 
+/**
+ * Host-side filesystem surface backed by the runtime Worker's VFS (ADR-0131).
+ *
+ * Path semantics: paths resolve from the VFS ROOT (`/`), NOT the guest's
+ * `process.cwd()` (default `/workspace`) — `writeFile('a.txt', …)` lands at
+ * `/a.txt` while guest `fs.writeFileSync('a.txt', …)` lands at
+ * `/workspace/a.txt`. Pass absolute paths to avoid the divergence.
+ *
+ * `writeFile` resolves only after the worker created parent dirs, wrote the
+ * bytes, invalidated the module loader, and awaited the active mirror's flush.
+ * Failures reject with the serialized VFS error (`name`/`message`/`code`/
+ * `path`); calls against a crashed/reset/disposed worker reject with
+ * `name: 'WorkerTerminated'` or `code: 'WORKER_CRASHED'`/`'RUNTIME_NOT_RUNNING'`.
+ */
 export interface RuntimeFs {
   readFile(path: string): Promise<Uint8Array>;
   readFile(path: string, encoding: FsReadEncoding): Promise<string>;
@@ -119,6 +137,13 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
   }
 
   function requestFs(request: FsRequest): Promise<FsResult> {
+    // Typed like the crash/reset rejections so consumers can branch on
+    // err.name/err.code uniformly (the bare send() throw is name 'Error').
+    if (!worker) {
+      const err = workerTerminatedError('Runtime is not running');
+      err.code = 'RUNTIME_NOT_RUNNING';
+      return Promise.reject(err);
+    }
     const promise = new Promise<FsResult>((resolve, reject) => {
       pendingFs.set(request.id, { resolve, reject });
     });
