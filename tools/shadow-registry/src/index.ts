@@ -36,6 +36,9 @@ export interface OverrideMap {
 export const bakedOverrides: OverrideMap = {
   // bcrypt's native bindings don't load in the browser; bcryptjs is a drop-in.
   bcrypt: 'bcryptjs',
+  // Real esbuild's registry package runs a native-binary postinstall. The
+  // playground overlays node_modules/esbuild with a browser-safe shim later.
+  esbuild: '@esbuild/wasi-preview1@0.28.0',
 };
 
 const SHIM_ESBUILD_VERSION = '0.21.5';

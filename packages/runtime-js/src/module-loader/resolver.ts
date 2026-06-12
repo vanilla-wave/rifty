@@ -1,6 +1,6 @@
 import type { FsSync } from '@riftydev/vfs';
 import { dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
-import { isBuiltinSpecifier } from '../builtins/index.ts';
+import { ensureRuntimeJsBuiltinsRegistered, isBuiltinSpecifier } from '../builtins/index.ts';
 import { ModuleLoadError } from './errors.ts';
 
 const utf8 = new TextDecoder('utf-8');
@@ -113,6 +113,7 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
       const fromFileStat = vfs.statSyncOrNull(opts.fromFile);
       const fromDir = fromFileStat?.isDirectory ? opts.fromFile : dirname(opts.fromFile);
 
+      ensureRuntimeJsBuiltinsRegistered();
       if (specifier.startsWith('node:') || isBuiltinSpecifier(specifier)) {
         const name = specifier.startsWith('node:') ? specifier.slice(5) : specifier;
         if (!isBuiltinSpecifier(name)) {

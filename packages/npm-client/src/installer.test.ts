@@ -42,8 +42,9 @@ class FakeRegistry extends RegistryClient {
     // tarballUrl format we use below: `fake://<name>/<version>`
     const match = /^fake:\/\/([^/]+)\/(.+)$/.exec(tarballUrl);
     if (!match) throw new Error(`fake registry: bad tarball url ${tarballUrl}`);
-    const [, name, version] = match;
-    const entry = this.db.get(name ?? '')?.get(version ?? '');
+    const [, encodedName, version] = match;
+    const name = decodeURIComponent(encodedName ?? '');
+    const entry = this.db.get(name)?.get(version ?? '');
     if (!entry) throw new Error(`fake registry: no tarball for ${tarballUrl}`);
     return entry.tarball;
   }
@@ -62,7 +63,7 @@ async function makeEntry(
       version,
       dependencies,
       ...manifestExtras,
-      dist: { tarball: `fake://${name}/${version}` },
+      dist: { tarball: `fake://${encodeURIComponent(name)}/${version}` },
     },
     tarball: files
       ? await makePackageTarballWithFiles(name, version, manifestExtras, files)
@@ -251,6 +252,78 @@ describe('install — package.json defaults', () => {
 
     expect(caught).toBeInstanceOf(NotImplementedError);
     expect((caught as NotImplementedError).feature).toBe('npm-client.lifecycle.postinstall');
+  });
+
+  it('ignores registry package prepare scripts during tarball installs', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'with-prepare',
+      new Map([
+        [
+          '1.0.0',
+          await makeEntry(
+            'with-prepare',
+            '1.0.0',
+            {},
+            { scripts: { prepare: 'node scripts/prepare.js' } },
+          ),
+        ],
+      ]),
+    );
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'app',
+        version: '1.0.0',
+        dependencies: { 'with-prepare': '1.0.0' },
+      }),
+    );
+
+    const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+
+    expect(result.packages.map((p) => p.name)).toEqual(['with-prepare']);
+    expect(await vfs.exists('/proj/node_modules/with-prepare/package.json')).toBe(true);
+  });
+
+  it('uses the baked esbuild override before the registry lifecycle gate', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'esbuild',
+      new Map([
+        [
+          '0.21.5',
+          await makeEntry('esbuild', '0.21.5', {}, { scripts: { postinstall: 'node install.js' } }),
+        ],
+      ]),
+    );
+    db.set(
+      '@esbuild/wasi-preview1',
+      new Map([
+        ['0.28.0', await makeEntry('@esbuild/wasi-preview1', '0.28.0', {}, { cpu: ['wasm'] })],
+      ]),
+    );
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'app',
+        version: '1.0.0',
+        dependencies: { esbuild: '0.21.5' },
+      }),
+    );
+
+    const result = await install({ vfs, cwd: '/proj', registry: new FakeRegistry(db) });
+
+    expect(result.packages.map((p) => `${p.name}@${p.version}`)).toEqual([
+      '@esbuild/wasi-preview1@0.28.0',
+    ]);
+    expect(await vfs.exists('/proj/node_modules/@esbuild/wasi-preview1/package.json')).toBe(true);
+    expect(await vfs.exists('/proj/node_modules/esbuild/package.json')).toBe(false);
   });
 
   it('throws a deliberate error for malformed root package.json shapes', async () => {

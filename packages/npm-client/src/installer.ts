@@ -372,11 +372,15 @@ function unsupportedOverrideTargetSpec(target: string): string | null {
   return unsupportedDependencySpec(withoutAlias.slice(at + 1));
 }
 
-const LIFECYCLE_SCRIPTS = ['preinstall', 'install', 'postinstall', 'prepare'] as const;
+const ROOT_LIFECYCLE_SCRIPTS = ['preinstall', 'install', 'postinstall', 'prepare'] as const;
+const REGISTRY_TARBALL_LIFECYCLE_SCRIPTS = ['preinstall', 'install', 'postinstall'] as const;
 
-function assertNoLifecycleScripts(scripts: Record<string, string> | undefined): void {
+function assertNoLifecycleScripts(
+  scripts: Record<string, string> | undefined,
+  lifecycleScripts: readonly string[] = ROOT_LIFECYCLE_SCRIPTS,
+): void {
   if (!scripts) return;
-  for (const name of LIFECYCLE_SCRIPTS) {
+  for (const name of lifecycleScripts) {
     if (scripts[name] === undefined) continue;
     throw new NotImplementedError(`npm-client.lifecycle.${name}`);
   }
@@ -824,7 +828,9 @@ function createRegistrySource(opts: InstallOptions): ResolutionSource {
       // aborts; an optional one is caught + warned by `walkAndPin` (so esbuild's
       // `@esbuild/*` optionals skip and Vite still installs).
       if (!override) assertNativeSupported(effectiveName, pick, manifest);
-      assertNoLifecycleScripts(manifest.scripts);
+      // npm does not run dependency `prepare` for registry tarball installs;
+      // it is a prepack/git/local-root lifecycle, not a registry install hook.
+      assertNoLifecycleScripts(manifest.scripts, REGISTRY_TARBALL_LIFECYCLE_SCRIPTS);
 
       // Prefer the manifest's integrity; fall back to the lockfile entry's so a
       // partial re-resolve still serves unchanged transitive deps from cache.

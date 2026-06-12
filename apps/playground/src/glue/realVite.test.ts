@@ -20,4 +20,9 @@ describe('real Vite page-to-worker updates', () => {
     // line-anchored: must be the bare PORT env key, not RIFTY_RFV_PORT
     expect(source).toMatch(/\n\s+PORT: String\(port\),/);
   });
+
+  it('bundles the bootstrap as JavaScript before handing it to the kernel worker', () => {
+    expect(source).toContain("from '../workers/real-vite-bootstrap.ts?worker&url'");
+    expect(source).not.toContain("new URL('../workers/real-vite-bootstrap.ts', import.meta.url)");
+  });
 });

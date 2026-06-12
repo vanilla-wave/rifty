@@ -6,7 +6,8 @@
 # it to dist/_headers); either alone is sufficient — both are kept so the dist
 # stays self-describing if served outside Netlify.
 #
-# Deploy is intentionally manual (outward-facing). See docs/hosting-netlify.md.
+# Deploys are automated from .github/workflows/netlify.yml.
+# See docs/public/hosting-netlify.md.
 
 [build]
   base = "."
@@ -34,6 +35,12 @@
 # any other unmatched path falls back to the single-page app shell. (Netlify
 # only applies a 200-rewrite when no static file matches, so /sw.js, /fonts/*,
 # and hashed assets are unaffected.)
+[[redirects]]
+  from = "/npm-registry/*"
+  to = "https://registry.npmjs.org/:splat"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

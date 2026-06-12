@@ -36,6 +36,17 @@
 
 ### Fixed
 
+- **Registry tarball `prepare` metadata no longer blocks installs.** Published
+  registry packages can carry `scripts.prepare`, but npm does not run that hook
+  when installing dependency tarballs from the registry. The live Vite bootstrap
+  hit this on Netlify (`NotImplementedError: npm-client.lifecycle.prepare`) and
+  stopped before the dev server could start. Registry packages still hard-fail
+  on `preinstall`, `install`, and `postinstall`; root package lifecycle handling
+  is unchanged. Guard: `src/installer.test.ts`.
+- **Baked esbuild substitution runs before lifecycle gating.** The installer now
+  exercises the shadow-registry `esbuild` redirect before it can fail on the
+  real package's native-binary `postinstall`, covering the Vite install path
+  used by the Netlify playground smoke. Guard: `src/installer.test.ts`.
 - **Semver prerelease-exclusion (node-semver rule).** A version carrying a
   prerelease tag now only satisfies a range when some comparator in the matching
   branch shares its exact `[major,minor,patch]` AND carries a prerelease.

@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- **`register-builtins` modules now expose idempotent callable registrars.**
+  `registerNetBuiltins()` and `registerSqliteBuiltin()` preserve the old
+  side-effect import behavior while letting production workers call the
+  registration explicitly, so bundlers cannot drop `node:http` / `node:sqlite`
+  registration as unused side effects.
 - **Null-body statuses (204/205/304/1xx) no longer throw on dispatch.** The
   fetch `Response` constructor rejects ANY body for them; `res.status(204).end()`
   (express DELETE handlers) blew up. Body is now `null`, chunked framing omitted.

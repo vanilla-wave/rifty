@@ -28,6 +28,17 @@
 
 ### Fixed
 
+- **Bundled resolver now explicitly registers runtime-js builtins before
+  `node:` detection.** Production builds could tree-shake the
+  `builtins/index.ts` registration side effects and then fail real Vite imports
+  with `Built-in 'node:path' is not implemented`. `createResolver()` now calls
+  the idempotent registration guard before builtin resolution. Guard:
+  `src/module-loader/resolver-bundling.test.ts`.
+- **Transformed TypeScript stack frames remap to source lines.** The ESM loader
+  now extracts inline source maps from `transformSource` output and installs a
+  scoped stack renderer while guest modules execute, so caught `err.stack`
+  reads inside `.ts` guests report the original TypeScript line. The public
+  `TransformSourceHook` remains `Promise<string>`.
 - **`path.resolve` anchors relative paths at `process.cwd()`** (Node parity;
   fs already did) — `express.static('public')` under a non-root cwd resolved
   to `/public` and 404'd.

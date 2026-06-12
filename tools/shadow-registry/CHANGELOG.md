@@ -4,6 +4,12 @@
 
 ### Added
 
+- `bakedOverrides` now redirects `esbuild` to `@esbuild/wasi-preview1@0.28.0`,
+  so Vite installs avoid the real package's native-binary `postinstall`; the
+  playground still overlays `node_modules/esbuild` with the browser-safe shim.
+- `transformWithEsbuild(..., { sourcemap: 'inline' })` now forwards
+  `--sourcemap=inline`, keeping the default output unchanged while allowing
+  loader stack-remap tests and parity cases to consume esbuild's map.
 - **esbuild WASI shadow-binding (ADR-0047).** `src/esbuild-binding.ts` exposes
   `transformWithEsbuild(runWasi, wasm, opts)` — Vite's TS/JSX transform surface
   routed to the real esbuild WASI binary running through `@riftydev/runtime-wasi`'s

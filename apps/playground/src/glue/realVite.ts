@@ -17,6 +17,7 @@ import { bridgeCrossRealmPreview, registerPort, unregisterPort } from '@riftydev
 import { NotImplementedError } from '@riftydev/vfs';
 import type { ProjectSpec } from '../templates/project-spec.ts';
 import { defaultProjectSpec } from '../templates/registry.ts';
+import bootstrapWorkerUrl from '../workers/real-vite-bootstrap.ts?worker&url';
 import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
 import { sendVfsWrite } from './vfs-write-port.ts';
 
@@ -71,9 +72,7 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
     );
   }
 
-  // `new URL(..., import.meta.url)` so Vite bundles the bootstrap as its own
-  // worker chunk at build time.
-  const bootstrapUrl = new URL('../workers/real-vite-bootstrap.ts', import.meta.url).toString();
+  const bootstrapUrl = bootstrapWorkerUrl;
 
   log(`[real-vite] spawning ${template.displayName} worker with bootstrap ${bootstrapUrl}\n`);
 

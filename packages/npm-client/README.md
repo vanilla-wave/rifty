@@ -17,9 +17,11 @@ string-valued `overrides`. The older explicit form
 dependency map. Installed package `bin` metadata is copied into the containing
 `node_modules/.bin` scope; non-registry specs such as `file:`, `workspace:`,
 git, and URL tarballs throw named `NotImplementedError`s instead of pretending
-to work. Packages declaring install lifecycle scripts (`preinstall`, `install`,
-`postinstall`, `prepare`) also throw named `NotImplementedError`s; script
-execution is tracked separately from registry resolution/linking.
+to work. Registry packages declaring install lifecycle scripts (`preinstall`,
+`install`, `postinstall`) throw named `NotImplementedError`s; registry tarball
+`prepare` metadata is ignored because npm does not run it for registry
+dependency installs. Script execution is tracked separately from registry
+resolution/linking.
 
 ## Why none of this hits the live registry in tests
 

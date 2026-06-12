@@ -24,9 +24,9 @@
  */
 
 import { dispatchToPort, listPorts, serveCrossRealmPreview } from '@riftydev/net';
-import '@riftydev/net/register-builtins';
-import '@riftydev/net/sqlite/register-builtins';
+import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { initSqliteEngine } from '@riftydev/net/sqlite/engine';
+import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
 import { RegistryClient, install } from '@riftydev/npm-client';
 import { Buffer } from '@riftydev/runtime-js/builtins/buffer';
 import { Console } from '@riftydev/runtime-js/builtins/console';
@@ -64,6 +64,9 @@ import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.t
 import { type ViteModuleGraph, invalidateViteModule } from './real-vite-invalidation.ts';
 
 const enc = new TextEncoder();
+
+registerNetBuiltins();
+registerSqliteBuiltin();
 
 interface ViteUserConfig {
   root?: string;

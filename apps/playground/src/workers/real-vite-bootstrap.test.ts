@@ -42,14 +42,25 @@ describe('real Vite bootstrap preview routing', () => {
 });
 
 describe('node-server runtime branch', () => {
+  it('calls builtin registrars explicitly so production bundling cannot drop them', () => {
+    expect(source).toContain(
+      "import { registerNetBuiltins } from '@riftydev/net/register-builtins'",
+    );
+    expect(source).toContain(
+      "import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins'",
+    );
+    expect(source).toContain('registerNetBuiltins()');
+    expect(source).toContain('registerSqliteBuiltin()');
+  });
+
   it('dispatches on the bootstrap config runtime discriminant', () => {
     expect(source).toContain("cfg.runtime === 'node-server'");
     expect(source).toContain("cfg.runtime === 'vite'");
   });
 
   it('registers node:sqlite and brings the WASM engine up from a same-origin asset', () => {
-    // side-effect import makes require('node:sqlite') resolvable in user code
-    expect(source).toContain("import '@riftydev/net/sqlite/register-builtins'");
+    // explicit registrar makes require('node:sqlite') resolvable in user code
+    expect(source).toContain('registerSqliteBuiltin()');
     // engine bytes come from the bundled asset (CORP-correct, D-001 — no CDN),
     // passed as wasmBinary so the emscripten glue never probes fs/fetch paths
     expect(source).toContain("from 'sql.js/dist/sql-wasm.wasm?url'");

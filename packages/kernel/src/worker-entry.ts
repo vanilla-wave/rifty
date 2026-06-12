@@ -229,9 +229,14 @@ function closePorts(ports: WorkerStdioPorts): void {
  * Phase 2's `kernel.spawn` is responsible for invoking
  * {@link installWorkerEntry} from the actual worker module that Vite emits.
  */
+const installedTargets = new WeakSet<DedicatedWorkerGlobalScope>();
+
 export function installWorkerEntry(
   target: DedicatedWorkerGlobalScope = self as DedicatedWorkerGlobalScope,
 ): void {
+  if (installedTargets.has(target)) return;
+  installedTargets.add(target);
+
   const onMessage = async (ev: MessageEvent): Promise<void> => {
     const msg = ev.data as WorkerInitMessage | undefined;
     if (!msg || msg.type !== 'init') return;

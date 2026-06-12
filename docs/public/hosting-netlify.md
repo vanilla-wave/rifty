@@ -5,9 +5,10 @@ The playground is a static SPA that **must** be served cross-origin-isolated
 (D-001 / ADR-0002). GitHub Pages can't set those headers; Netlify can — hence
 the target (ADR-0073).
 
-Config: `netlify.toml` (repo root) and `apps/playground/public/_headers`
-(copied to `dist/_headers` by Vite). Either alone sets the headers; both are
-kept so `dist/` is self-describing.
+Config: `netlify.toml` (repo root), `apps/playground/public/_headers`, and
+`apps/playground/public/_redirects` (both copied to `dist/` by Vite). The
+artifact carries the required headers, npm registry proxy, and SPA fallback, so
+CLI deploys do not depend on Netlify running a build.
 
 ## What gets built
 
@@ -24,23 +25,32 @@ imported with `?worker&url` (ADR-0073). A deployed REPL crashing with
 
 ## Deploy
 
-Manual (outward-facing). Two options:
+`.github/workflows/netlify.yml` owns continuous deploys:
 
-### A. Connect the Git repo (continuous deploys, recommended)
+- push to `main` → production deploy at `https://rifty-playground.netlify.app`;
+- same-repo pull request → preview deploy with stable alias
+  `https://pr-<number>--rifty-playground.netlify.app`;
+- each Netlify deploy still has its own immutable deploy URL, and the workflow
+  writes the latest preview URL back to the PR comment.
 
-1. Netlify → **Add new site → Import an existing project** → pick
-   `github.com/vanilla-wave/rifty`.
-2. Netlify reads `netlify.toml` automatically — leave detected build
-   command / publish dir.
-3. Deploy. Every push to `main` redeploys.
+Required GitHub configuration:
 
-### B. One-off from the CLI
+- `NETLIFY_AUTH_TOKEN` repository secret;
+- `NETLIFY_SITE_ID` repository variable or secret, only if overriding the
+  checked-in `rifty-playground` site id;
+- `NETLIFY_SITE_NAME` repository variable, only if overriding the
+  checked-in `rifty-playground` site name used for PR alias comments.
+
+Fork PRs do not run Netlify deploys because GitHub withholds repository
+secrets from untrusted code.
+
+### One-off from the CLI
 
 ```bash
-npx netlify-cli login                  # once, to authenticate
+pnpm dlx netlify@26.0.2 login          # once, to authenticate
 
 pnpm build                             # from the repo root
-npx netlify-cli deploy --dir=apps/playground/dist --prod
+pnpm dlx netlify@26.0.2 deploy --dir=apps/playground/dist --prod
 ```
 
 (`netlify deploy` without `--prod` creates a preview URL first — useful to

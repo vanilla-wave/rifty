@@ -1,0 +1,2 @@
+/npm-registry/*  https://registry.npmjs.org/:splat  200!
+/*  /index.html  200

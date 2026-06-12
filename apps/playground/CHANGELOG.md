@@ -4,6 +4,11 @@
 
 ### Changed
 
+- **Netlify deploy automation.** GitHub Actions now deploys `main` to the
+  production site and same-repo PRs to stable `pr-<number>` preview aliases;
+  `public/_redirects` carries the npm-registry proxy and SPA fallback in the
+  built artifact.
+
 - **ADR-0126 records the preview reload policy.** Preview iframe reloads are
   HMR-client-driven; the snapshot-driven `previewRevision`/`refreshKey` reload
   removed in the preview-routing branch is now ADR-recorded (options,
@@ -21,6 +26,13 @@
   panel surface with handoff syntax colors; splitters now live invisibly in
   the panel gaps. Layout defaults follow the mockup (files 232 / terminal 212
   / preview 464).
+
+### Fixed
+
+- **Real Vite worker registers net/sqlite builtins through explicit calls.**
+  Production bundling could drop side-effect-only imports and make Vite fail on
+  `Built-in 'node:http' is not implemented`; the bootstrap now calls the
+  idempotent `@riftydev/net` registrars directly.
 
 ### Added
 
