@@ -337,7 +337,9 @@ export function EditorHost(props: EditorHostProps) {
       props.onActive({
         label: id === PROGRAM_TAB_ID ? 'main.js' : basename(id),
         language: model.getLanguageId(),
-        path: id === PROGRAM_TAB_ID ? undefined : id,
+        // The program tab mirrors PROGRAM_MIRROR_PATH — report it so the
+        // explorer highlights src/main.js (mockup: active file is lit).
+        path: id === PROGRAM_TAB_ID ? PROGRAM_MIRROR_PATH : id,
       });
     });
   });

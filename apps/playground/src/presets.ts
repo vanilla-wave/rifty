@@ -44,7 +44,7 @@ const { describeProject, formatFileList } = await import(/* @vite-ignore */ summ
 const project = (await import(/* @vite-ignore */ projectUrl)).default;
 
 const style = document.createElement('style');
-style.textContent = 'body{margin:0;background:#10131a;color:#eef2f7;font-family:Inter,ui-sans-serif,system-ui,sans-serif}.workspace-shell{max-width:760px;padding:34px}.eyebrow{color:#84d8c8;font-size:12px;font-weight:700;letter-spacing:.08em;margin:0 0 10px;text-transform:uppercase}h1{font-size:32px;margin:0 0 12px}.lede{color:#c8d0dc;line-height:1.6;max-width:680px}.file-list{display:grid;gap:10px;list-style:none;padding:0}.file-list li{border:1px solid #273044;border-radius:6px;display:grid;gap:4px;padding:12px}code{color:#c6f26b}';
+style.textContent = 'body{margin:0;background:#101218;color:rgba(255,255,255,.85);font-family:Inter,ui-sans-serif,system-ui,sans-serif}.workspace-shell{max-width:720px;padding:28px}.eyebrow{color:#c7f05a;font:600 10px/12px \\'Roboto Mono\\',monospace;letter-spacing:.2em;margin:0 0 10px;text-transform:uppercase}h1{font:600 26px/32px Inter,ui-sans-serif,sans-serif;letter-spacing:-.01em;color:rgba(255,255,255,.92);margin:0 0 8px}h2{font:600 15px/20px Inter,ui-sans-serif,sans-serif;color:rgba(255,255,255,.85);margin:24px 0 0}.lede{color:rgba(255,255,255,.55);font-size:13px;line-height:19px;max-width:520px;margin:0}.file-list{display:grid;gap:8px;list-style:none;padding:0;margin:14px 0 0}.file-list li{border:1px solid rgba(255,255,255,.09);border-radius:8px;display:grid;gap:2px;padding:11px 13px}.file-list span{color:rgba(255,255,255,.5);font-size:11.5px;line-height:16px}code{color:#dff7ad;font:400 12px/16px \\'Roboto Mono\\',monospace}';
 document.head.append(style);
 
 const app = document.getElementById('app');
@@ -96,55 +96,73 @@ const PROJECT_JSON_SOURCE = `{
 }
 `;
 
-const WORKSPACE_CSS_SOURCE = `body {
+const WORKSPACE_CSS_SOURCE = `/* Soft Panels preview typography (matches the playground design tokens). */
+body {
   margin: 0;
-  background: #10131a;
-  color: #eef2f7;
+  background: #101218;
+  color: rgba(255, 255, 255, 0.85);
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
 .workspace-shell {
-  max-width: 760px;
-  padding: 34px;
+  max-width: 720px;
+  padding: 28px;
 }
 
 .eyebrow {
-  color: #84d8c8;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: .08em;
+  color: #c7f05a;
+  font: 600 10px/12px 'Roboto Mono', monospace;
+  letter-spacing: 0.2em;
   margin: 0 0 10px;
   text-transform: uppercase;
 }
 
 h1 {
-  font-size: 32px;
-  margin: 0 0 12px;
+  font: 600 26px/32px Inter, ui-sans-serif, sans-serif;
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.92);
+  margin: 0 0 8px;
+}
+
+h2 {
+  font: 600 15px/20px Inter, ui-sans-serif, sans-serif;
+  color: rgba(255, 255, 255, 0.85);
+  margin: 24px 0 0;
 }
 
 .lede {
-  color: #c8d0dc;
-  line-height: 1.6;
-  max-width: 680px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 13px;
+  line-height: 19px;
+  max-width: 520px;
+  margin: 0;
 }
 
 .file-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   list-style: none;
   padding: 0;
+  margin: 14px 0 0;
 }
 
 .file-list li {
-  border: 1px solid #273044;
-  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
   display: grid;
-  gap: 4px;
-  padding: 12px;
+  gap: 2px;
+  padding: 11px 13px;
+}
+
+.file-list span {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11.5px;
+  line-height: 16px;
 }
 
 code {
-  color: #c6f26b;
+  color: #dff7ad;
+  font: 400 12px/16px 'Roboto Mono', monospace;
 }
 `;
 
@@ -152,7 +170,7 @@ const NODE_WORKER_SOURCE = `const notesUrl = new URL('src/runtime-notes.js', win
 const { runtimeNotes, renderRuntimeNotes } = await import(/* @vite-ignore */ notesUrl);
 
 const style = document.createElement('style');
-style.textContent = 'body{margin:0;background:#10131a;color:#eef2f7;font-family:Inter,ui-sans-serif,system-ui,sans-serif}.workspace-shell{max-width:760px;padding:34px}.eyebrow{color:#84d8c8;font-size:12px;font-weight:700;letter-spacing:.08em;margin:0 0 10px;text-transform:uppercase}h1{font-size:32px;margin:0 0 12px}.lede{color:#c8d0dc;line-height:1.6;max-width:680px}.file-list{display:grid;gap:10px;list-style:none;padding:0}.file-list li{border:1px solid #273044;border-radius:6px;display:grid;gap:4px;padding:12px}code{color:#c6f26b}';
+style.textContent = 'body{margin:0;background:#101218;color:rgba(255,255,255,.85);font-family:Inter,ui-sans-serif,system-ui,sans-serif}.workspace-shell{max-width:720px;padding:28px}.eyebrow{color:#c7f05a;font:600 10px/12px \\'Roboto Mono\\',monospace;letter-spacing:.2em;margin:0 0 10px;text-transform:uppercase}h1{font:600 26px/32px Inter,ui-sans-serif,sans-serif;letter-spacing:-.01em;color:rgba(255,255,255,.92);margin:0 0 8px}h2{font:600 15px/20px Inter,ui-sans-serif,sans-serif;color:rgba(255,255,255,.85);margin:24px 0 0}.lede{color:rgba(255,255,255,.55);font-size:13px;line-height:19px;max-width:520px;margin:0}.file-list{display:grid;gap:8px;list-style:none;padding:0;margin:14px 0 0}.file-list li{border:1px solid rgba(255,255,255,.09);border-radius:8px;display:grid;gap:2px;padding:11px 13px}.file-list span{color:rgba(255,255,255,.5);font-size:11.5px;line-height:16px}code{color:#dff7ad;font:400 12px/16px \\'Roboto Mono\\',monospace}';
 document.head.append(style);
 
 const app = document.getElementById('app');
@@ -225,7 +243,7 @@ document.getElementById('app').innerHTML =
 
 document.body.style.margin = '0';
 document.body.style.padding = '3rem';
-document.body.style.background = '#0f1115';
+document.body.style.background = '#101218';
 document.body.style.color = '#e6e6e6';
 document.body.style.fontFamily = 'ui-monospace, monospace';
 `;
