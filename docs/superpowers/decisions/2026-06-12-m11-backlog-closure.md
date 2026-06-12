@@ -222,3 +222,12 @@ It is intentionally concise and append-only during the work.
   gate decision beyond the current page claim.
 - **Reversibility:** Doc-only retarget. Future enforcement can be added as a
   checklist, report, or CI warning.
+
+### D23 — Sandbox Exec/Preview API Retarget
+
+- **Decision:** Retarget `distribution/public-api-ai-agent-exec-preview` as a
+  future public SDK API design item.
+- **Why:** Streamed command exec, cancellation/stdin/cwd/env semantics, and
+  preview URL normalization expand `Sandbox` beyond ADR-0131's FS slice.
+- **Reversibility:** Doc-only retarget. Implementation needs its own ADR and
+  public API tests.

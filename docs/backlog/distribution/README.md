@@ -16,7 +16,7 @@ Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR
 | file | status | epic | gist |
 |---|---|---|---|
 | `public-api-ai-agent-contract-snapshot-restore.md` | parked | M11 | residual disk-state snapshot/restore/fork API after ADR-0131 FS slice |
-| `public-api-ai-agent-exec-preview.md` | parked | M11 | residual streamed exec + preview URL API after ADR-0131 FS slice |
+| `public-api-ai-agent-exec-preview.md` | parked | SDK API | residual streamed exec + preview URL API after ADR-0131 FS slice |
 | `workbench-controllers.md` | parked | C | lift framework-agnostic `glue/*` → `@riftydev/workbench`; playground becomes a thin binding (DD-3) |
 | `framework-bindings-kit.md` | parked | D | per-framework atoms + `<RiftyIDE/>` + react/vue bindings over the workbench (DD-4) |
 | `create-rifty-template.md` | parked | E | un-packageable host config (COOP/COEP, module-worker, sw.js build, WASM copy, Monaco) as a scaffold |
