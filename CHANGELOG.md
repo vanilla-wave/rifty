@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Documented
+
+- **Agent rules unified for Codex + Claude Code.** `AGENTS.md` is the single binding rules file; `CLAUDE.md` is now a symlink to it. Both cut to the binding minimum; vision/layers moved to `docs/ARCHITECTURE.md`, test pyramid + new minimal-mocks policy to `docs/process/testing.md`, full reversibility checklist + subagent budget grafted into `docs/process/decision-workflow.md`. New hard rule: every found bug/problem gets a regression test (failing before the fix) — no fix without its test.
+
 ### Packaging
 
 - **All 10 `@riftydev/*` libraries (+ `@riftydev/shadow-registry`) are now publishable to npm (ADR-0070).** Each package gains a `tsup` build (ESM + bundled `.d.ts` in `dist/`), a `publishConfig` pointing the published `main`/`module`/`types`/`exports` at `dist/` while the in-repo `exports` stay on raw `./src/*.ts` (dev/HMR loop unchanged), plus `version`/`license`/`repository`/`keywords`/`sideEffects`/`files`. `private` dropped. Source of truth: `tools/publishing/sync-publish-config.mjs` (`pnpm sync:publish`); release on a `v*` tag via `.github/workflows/release.yml`. `@riftydev/runtime-wasi` gains a `./worker-entry` subpath; `@riftydev/runtime-js` drops the unused `acorn-walk` dep. Verified by packing all 11 and importing them from a clean npm consumer. See `docs/PUBLISHING.md`.
