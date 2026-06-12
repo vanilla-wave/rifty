@@ -10,7 +10,7 @@ sources: [ADR-0077, ADR-0080, PROJECT_PLAN §2]
 
 `installWorkerEntry` (`packages/kernel/src/worker-entry.ts`) runs the entry then unconditionally `postMessage({type:'exit'})` → `closePorts()` → `self.close()`. Correct for run-to-completion (REPL/CLI), wrong for a long-running dev server (Vite-in-Worker, ADR-0043): its top-level `await` resolves *after* it starts listening, so the kernel kills the realm a beat later → every later request hits a dead worker (502 preview-port bridge timeout).
 
-M11 keeps the workaround playground-local: `real-vite-bootstrap` ends with `await new Promise<never>(() => {})` (ADR-0077) so the entry never resolves. ADR-0080's lazy `node_modules` remote-read is a second consumer of that live worker. That is sufficient for Consumer Ready because Real Vite preview and page-explorer reads stay alive without changing kernel public behavior.
+The current workaround stays playground-local: `real-vite-bootstrap` ends with `await new Promise<never>(() => {})` (ADR-0077) so the entry never resolves. ADR-0080's lazy `node_modules` remote-read is a second consumer of that live worker. That is sufficient for the current consumer-ready surface because Real Vite preview and page-explorer reads stay alive without changing kernel public behavior.
 
 The remaining gap is a kernel-native lifecycle contract: the worker can only die via `worker.terminate()` today, so there is no graceful-shutdown hook or explicit server-process exit protocol.
 
@@ -26,4 +26,4 @@ Parked until a kernel ADR chooses the public contract:
 
 ## Reversibility
 
-IRREVERSIBLE when taken up - kernel public behaviour and exported worker-spawn types. Needs its own ADR. Parked for post-M11 kernel work.
+IRREVERSIBLE when taken up - kernel public behaviour and exported worker-spawn types. Needs its own ADR. Parked for future kernel lifecycle work.

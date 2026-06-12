@@ -155,3 +155,12 @@ It is intentionally concise and append-only during the work.
 - **Why:** Enforced Worker caps, watchdogs, memory signals, and fetch/egress
   policy change kernel public behavior and host configuration.
 - **Reversibility:** Doc-only retarget. Implementation needs a new ADR.
+
+### D16 — Server Worker Lifecycle Retarget
+
+- **Decision:** Retarget `kernel/server-shaped-worker-process-lifecycle` as
+  future kernel lifecycle work.
+- **Why:** Native long-running worker support changes the public spawn contract,
+  shutdown protocol, and exported worker-spawn types. The playground keep-alive
+  workaround already preserves the current consumer surface.
+- **Reversibility:** Doc-only retarget. Implementation needs its own ADR.
