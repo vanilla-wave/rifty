@@ -147,3 +147,11 @@ It is intentionally concise and append-only during the work.
   fs/streams/http claims visible and repeatable.
 - **Reversibility:** Tooling/docs-only. Future data-driven generation can
   replace the static inventories without changing runtime API.
+
+### D15 — Host Resource Policy Retarget
+
+- **Decision:** Retarget `kernel/host-operator-resource-enforcement` as future
+  host-operator policy work, not current milestone closure.
+- **Why:** Enforced Worker caps, watchdogs, memory signals, and fetch/egress
+  policy change kernel public behavior and host configuration.
+- **Reversibility:** Doc-only retarget. Implementation needs a new ADR.
