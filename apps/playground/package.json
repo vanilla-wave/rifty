@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "snapshots:bake": "tsx tools/bake-dep-snapshots.ts"
   },
   "dependencies": {
     "@rifty-examples/vite-like-dev": "workspace:*",

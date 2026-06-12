@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-06
 
-> TL;DR: presets split into `setup: 'instant' | 'from-scratch'`. Instant boots straight to the dev line and the worker skips a redundant install via a stamp file; from-scratch visibly runs `npm install` in the terminal (per-package lines, ADR-0134) before the dev line.
+> TL;DR: presets split into `setup: 'instant' | 'from-scratch'`. Instant boots straight to the dev line — the first-ever boot restores a BAKED node_modules snapshot (static asset), later boots skip via a stamp file; from-scratch visibly runs `npm install` in the terminal (per-package lines, ADR-0134) before the dev line.
 
 ## Context
 
@@ -21,12 +21,18 @@ Key mechanics available: page and worker realms share origin OPFS (each realm pr
    - worker bootstrap: stamp matches package.json effective deps AND `node_modules/` exists → **skip `install()` entirely** (log reuse). This is what makes instant presets (and the post-install boot of from-scratch presets) fast: page-side install warms the shared OPFS, worker preloads it.
 4. **Trust model**: stamp trusts the tree — no per-file verification. Escape hatch: an explicit terminal `npm install` never consults the stamp (always runs the real installer, then re-stamps). Invalidation strategy is provisional → `docs/backlog/playground/install-stamp-invalidation.md`.
 5. **UI**: TemplateSwitcher dropdown groups rows under "Instant start" / "From scratch"; rows render the preset `tag` pill (instant / npm install). e2e selectors (`data-testid="gallery"`, `data-preset`) unchanged.
+6. **Baked node_modules snapshots** — the first-ever boot of an instant template is truly instant, no silent install:
+   - `pnpm snapshots:bake` runs a REAL `install()` (same installer, shadow overrides, native gate as the worker) into a memory VFS for every template declaring `bakedNodeModulesUrl`, and writes node_modules + lockfile as a gzipped JSON asset under `apps/playground/public/snapshots/` (vite: 8 packages, ~9 MB gz — dominated by `@esbuild/wasi-preview1/esbuild.wasm`; kept, the tree must be byte-equivalent to an installed one).
+   - Asset is COMMITTED: deploys stay hermetic (no registry at build time), dev + e2e get the instant path deterministically. Regeneration is manual after a baked template's `install` map changes.
+   - Dependency arrival priority in the worker (`ensureProjectDependencies`): stamp → snapshot → install. Snapshot restore is gated on `templateId` + `depsEqual(snapshot.deps, package.json)` — a stale asset falls back to install, never a wrong tree. Restore REPLACES node_modules, writes the lockfile, then stamps (flush → stamp → flush).
+   - Gzip is sniffed by magic bytes, not URL/headers: vite dev serves `.gz` with `Content-Encoding: gzip` (browser pre-decodes), static hosts serve raw bytes — both must work. Any fetch/parse/restore failure → install fallback; a broken asset never bricks the boot.
 
-Rejected: bundling node_modules snapshots as static assets (true cold-start instant — heavy asset pipeline, separate milestone); faking the install by echoing a command the page didn't run (dishonest); making the worker's internal install the "visible" one (it runs inside the `vite` command, can't be presented as a user-level `npm install`).
+Rejected: faking the install by echoing a command the page didn't run (dishonest); making the worker's internal install the "visible" one (it runs inside the `vite` command, can't be presented as a user-level `npm install`); generating the snapshot at deploy time (build needs the live registry, e2e loses determinism); stripping the unused-today esbuild.wasm from the snapshot (restored tree would silently diverge from an installed one).
 
 ## Consequences
 
-- From-scratch flow installs twice in substance once: page realm does the real (visible) install; worker bootstrap then skips via stamp (shared OPFS). First-ever instant boot still pays one silent worker install, then stamps — later boots are near-instant.
+- From-scratch flow installs twice in substance once: page realm does the real (visible) install; worker bootstrap then skips via stamp (shared OPFS). First-ever instant boot restores the baked snapshot (seconds, no resolver/network); later boots skip via stamp.
+- ~9 MB committed asset; each re-bake adds another copy to git history. Regeneration policy + size pressure tracked in `docs/backlog/playground/baked-snapshot-regeneration.md`.
 - A corrupted-but-stamped tree boots a broken dev server; recovery = run `npm install` (stampless path) or change deps. Accepted for now; see backlog item.
 - `fullstack-demo` e2e updated: selecting `express-sqlite` now shows `$ cd /workspace && npm install` + `npm: + express@…` before `dev:` boot (deliberate product change).
 - Worker bootstrap install stays summary-only (instant kind is quiet); per-package streaming is the page-side install's job.

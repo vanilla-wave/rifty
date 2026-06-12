@@ -49,8 +49,8 @@ import {
   createHmrBridgeVitePlugin,
   setupHmrBridge,
 } from '../glue/hmr-bridge.ts';
-import { installStampSatisfied, writeInstallStamp } from '../glue/install-stamp.ts';
 import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
+import { ensureProjectDependencies } from '../glue/project-deps.ts';
 import { proxiedRegistryFetch } from '../glue/registry-fetch.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { collectSnapshot, publishVfsSnapshot } from '../glue/vfs-snapshot-port.ts';
@@ -348,30 +348,29 @@ async function bootstrap(): Promise<void> {
   for (const delay of [300, 1200, 3000]) setTimeout(publishSnapshot, delay);
 
   const vfs = new SyncMirrorVfs();
-  // Skip the redundant install when the stamped tree still matches
-  // package.json (ADR-0135) — instant presets and the post-`npm install` boot
-  // of from-scratch presets reuse the OPFS-persisted node_modules as-is.
-  const stamp = await installStampSatisfied(vfs, root);
-  if (stamp) {
-    log(
-      `[real-vite/worker] node_modules reused via install stamp (${stamp.packages} packages, install skipped)\n`,
-    );
-  } else {
-    log(`[real-vite/worker] installing ${spec.displayName} into ${root}/node_modules…\n`);
-    const registry = new RegistryClient({ fetch: proxiedRegistryFetch() });
-    const result = await install({
-      vfs,
-      cwd: root,
-      registry,
-    });
-    log(
-      `[real-vite/worker] installed ${result.packages.length} packages (${result.conflicts.length} conflicts)\n`,
-    );
-    // Flush → stamp → flush: a durable stamp must imply a durable tree.
-    await flushSyncMirror();
-    await writeInstallStamp(vfs, root, result.packages.length);
-    await flushSyncMirror();
-  }
+  // Dependency arrival (ADR-0135): stamp reuse → baked snapshot → install.
+  await ensureProjectDependencies({
+    vfs,
+    fsSync: syncMirror(),
+    root,
+    templateId: spec.id,
+    snapshotUrl: cfg.bakedNodeModulesUrl,
+    install: async () => {
+      log(`[real-vite/worker] installing ${spec.displayName} into ${root}/node_modules…\n`);
+      const registry = new RegistryClient({ fetch: proxiedRegistryFetch() });
+      const result = await install({
+        vfs,
+        cwd: root,
+        registry,
+      });
+      log(
+        `[real-vite/worker] installed ${result.packages.length} packages (${result.conflicts.length} conflicts)\n`,
+      );
+      return { packages: result.packages.length };
+    },
+    flush: flushSyncMirror,
+    log,
+  });
   publishSnapshot(); // node_modules now present — refresh the page's view
 
   const loader = createModuleLoader(syncMirror(), { cwd: root });

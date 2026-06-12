@@ -31,3 +31,8 @@ export function resolveProjectSpec(id: string): ProjectSpec {
 export function defaultProjectSpec(): ProjectSpec {
   return resolveProjectSpec(DEFAULT_TEMPLATE_ID);
 }
+
+/** Every registered template — drives the snapshot bake script (ADR-0135). */
+export function allProjectSpecs(): readonly ProjectSpec[] {
+  return [...TEMPLATES.values()];
+}

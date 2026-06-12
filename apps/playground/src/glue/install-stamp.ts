@@ -94,6 +94,9 @@ export async function writeInstallStamp(vfs: Vfs, root: string, packages: number
   const deps = await readEffectiveDeps(vfs, root);
   if (!deps) return;
   const stamp: InstallStamp = { version: 1, deps, packages };
+  // A zero-package install legitimately creates no node_modules — the stamp
+  // still must land so the next boot skips the resolver.
+  await vfs.mkdir(joinPath(root, 'node_modules'), { recursive: true });
   await vfs.writeFile(installStampPath(root), `${JSON.stringify(stamp, null, 2)}\n`);
 }
 

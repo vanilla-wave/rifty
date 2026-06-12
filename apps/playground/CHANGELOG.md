@@ -4,6 +4,17 @@
 
 ### Added
 
+- **Baked node_modules snapshots — instant presets are instant on the FIRST
+  boot too (ADR-0135 item 6).** `pnpm snapshots:bake` runs a real `install()`
+  per baked template and ships node_modules + lockfile as a committed gzipped
+  asset (`public/snapshots/`, vite ≈9 MB gz). The worker's dependency arrival
+  (`glue/project-deps.ts`) is now stamp → snapshot → install: a stampless boot
+  restores the baked tree (deps-equality gated, REPLACE semantics, then
+  stamped) instead of resolving/fetching; any snapshot failure falls back to a
+  real install. Gzip is sniffed by magic bytes (vite dev pre-decodes `.gz` via
+  Content-Encoding; static hosts serve raw bytes). Regeneration policy:
+  `docs/backlog/playground/baked-snapshot-regeneration.md`.
+
 - **Sandbox setup kinds: instant vs from-scratch (ADR-0135).** Presets carry
   `setup: 'instant' | 'from-scratch'`. From-scratch presets (`real-vite`,
   `express-sqlite`) boot through a VISIBLE terminal `npm install` — the command
