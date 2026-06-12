@@ -29,12 +29,13 @@
 
 ### Fixed
 
-- **Netlify npm registry proxy deploy.** CI and one-off Netlify deploy docs now
-  run `netlify build` before artifact deploys so the function bundle and
-  metadata stay in Netlify's build state; checked-in redirects now route
-  `/npm-registry/*` to the production proxy before the SPA fallback. The
-  function also falls back to `process.env.RIFTY_NPM_REGISTRY_UPSTREAM`, and
-  deploys smoke-test `/npm-registry/vite` on the live URL.
+- **Netlify npm registry proxy deploy (ADR-0133, supersedes ADR-0028).** CI and
+  one-off Netlify deploy docs now run `netlify build` before artifact deploys
+  so the function bundle and metadata stay in Netlify's build state; checked-in
+  redirects now route `/npm-registry/*` to the production proxy before the SPA
+  fallback. The function also falls back to
+  `process.env.RIFTY_NPM_REGISTRY_UPSTREAM`, and deploys smoke-test
+  `/npm-registry/vite` metadata plus its latest tarball on the live URL.
 
 - **Real Vite worker registers net/sqlite builtins through explicit calls.**
   Production bundling could drop side-effect-only imports and make Vite fail on

@@ -222,6 +222,7 @@ describe('npm registry production proxy', () => {
     );
     expect(smoke).toContain('/npm-registry/vite');
     expect(smoke).toContain("data.name !== 'vite'");
+    expect(smoke).toContain('/npm-registry/vite/-/vite-');
     expect(staticDeploys).toHaveLength(2);
   });
 });

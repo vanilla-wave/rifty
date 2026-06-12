@@ -114,6 +114,7 @@ export async function handleNpmRegistryRequest(
   }
 
   const upstream = await fetcher(target, { method: request.method });
+  // TODO(backlog: npm-client/netlify-proxy-buffered-bodies)
   const body = request.method === 'HEAD' ? null : await upstream.arrayBuffer();
   return new Response(body, {
     status: upstream.status,
