@@ -4,6 +4,12 @@ interface NpmRegistryProxyOptions {
   readonly upstreamBase?: string;
 }
 
+interface ProcessEnvGlobal {
+  readonly process?: {
+    readonly env?: Record<string, string | undefined>;
+  };
+}
+
 declare const Netlify:
   | {
       readonly env: {
@@ -29,7 +35,11 @@ const UNSAFE_RESPONSE_HEADERS = [
 ] as const;
 
 function envUpstream(): string | undefined {
-  return typeof Netlify === 'undefined' ? undefined : Netlify.env.get(UPSTREAM_ENV);
+  const netlifyEnv = typeof Netlify === 'undefined' ? undefined : Netlify.env.get(UPSTREAM_ENV);
+  const processEnv = (globalThis as typeof globalThis & ProcessEnvGlobal).process?.env?.[
+    UPSTREAM_ENV
+  ];
+  return netlifyEnv ?? processEnv;
 }
 
 function corsHeaders(): Headers {

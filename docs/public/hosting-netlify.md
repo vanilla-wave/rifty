@@ -33,6 +33,8 @@ imported with `?worker&url` (ADR-0073). A deployed REPL crashing with
   `https://pr-<number>--rifty-playground.netlify.app`;
 - each Netlify deploy still has its own immutable deploy URL, and the workflow
   writes the latest preview URL back to the PR comment.
+- both preview and production deploy jobs smoke-test `/npm-registry/vite` on
+  the live URL so the production npm proxy cannot silently fall back to the SPA.
 
 Required GitHub configuration:
 

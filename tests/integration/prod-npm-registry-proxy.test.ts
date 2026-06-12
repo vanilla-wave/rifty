@@ -1,6 +1,18 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { handleNpmRegistryRequest } from '../../netlify/functions/npm-registry.mts';
+
+const UPSTREAM_ENV = 'RIFTY_NPM_REGISTRY_UPSTREAM';
+const originalUpstreamEnv = process.env[UPSTREAM_ENV];
+
+afterEach(() => {
+  if (originalUpstreamEnv === undefined) {
+    delete process.env[UPSTREAM_ENV];
+    return;
+  }
+
+  process.env[UPSTREAM_ENV] = originalUpstreamEnv;
+});
 
 describe('npm registry production proxy', () => {
   it('proxies scoped package metadata with COI-safe headers', async () => {
@@ -118,6 +130,25 @@ describe('npm registry production proxy', () => {
     expect(response.headers.get('access-control-allow-methods')).toContain('GET');
   });
 
+  it('reads upstream config from process env when Netlify.env is unavailable', async () => {
+    process.env[UPSTREAM_ENV] = 'https://registry.npmjs.org';
+    const calls: string[] = [];
+    const response = await handleNpmRegistryRequest(
+      new Request('https://site.test/npm-registry/vite'),
+      {},
+      async (url) => {
+        calls.push(String(url));
+        return new Response('{"name":"vite"}', {
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+    );
+
+    expect(calls).toEqual(['https://registry.npmjs.org/vite']);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('{"name":"vite"}');
+  });
+
   it('rejects unsupported methods without upstream fetch', async () => {
     let called = false;
     const response = await handleNpmRegistryRequest(
@@ -135,6 +166,7 @@ describe('npm registry production proxy', () => {
   });
 
   it('fails loudly when no upstream env config is present', async () => {
+    delete process.env[UPSTREAM_ENV];
     const response = await handleNpmRegistryRequest(
       new Request('https://site.test/npm-registry/pkg'),
       { upstreamBase: undefined },
@@ -148,6 +180,7 @@ describe('npm registry production proxy', () => {
   it('routes Netlify production through the function, not a hardcoded external redirect', () => {
     const toml = readFileSync('netlify.toml', 'utf8');
     const redirects = readFileSync('apps/playground/public/_redirects', 'utf8');
+    const smoke = readFileSync('tools/netlify/smoke-npm-registry.mjs', 'utf8');
     const workflow = readFileSync('.github/workflows/netlify.yml', 'utf8');
     const staticDeploys =
       workflow.match(/--dir="\$GITHUB_WORKSPACE\/apps\/playground\/dist"/g) ?? [];
@@ -177,6 +210,14 @@ describe('npm registry production proxy', () => {
     expect(workflow).not.toContain('build --filter="@riftydev/playground" --site=');
     expect(workflow).not.toContain('functions:build');
     expect(workflow).not.toContain('--functions=');
+    expect(workflow).toContain('Smoke PR preview npm registry proxy');
+    expect(workflow).toContain('Smoke production npm registry proxy');
+    expect(workflow).toContain('node tools/netlify/smoke-npm-registry.mjs "$ALIAS_URL"');
+    expect(workflow).toContain(
+      'node tools/netlify/smoke-npm-registry.mjs "https://${NETLIFY_SITE_NAME}.netlify.app"',
+    );
+    expect(smoke).toContain('/npm-registry/vite');
+    expect(smoke).toContain("data.name !== 'vite'");
     expect(staticDeploys).toHaveLength(2);
   });
 });

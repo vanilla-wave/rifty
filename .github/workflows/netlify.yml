@@ -85,6 +85,12 @@ jobs:
           echo "alias_url=$alias_url" >> "$GITHUB_OUTPUT"
           echo "logs_url=$logs_url" >> "$GITHUB_OUTPUT"
 
+      - name: Smoke PR preview npm registry proxy
+        if: github.event_name == 'pull_request'
+        env:
+          ALIAS_URL: ${{ steps.preview.outputs.alias_url }}
+        run: node tools/netlify/smoke-npm-registry.mjs "$ALIAS_URL"
+
       - name: Comment PR preview URL
         if: github.event_name == 'pull_request'
         env:
@@ -137,3 +143,7 @@ jobs:
             --site="$NETLIFY_SITE_ID" \
             --auth="$NETLIFY_AUTH_TOKEN" \
             --message="main ${GITHUB_SHA}"
+
+      - name: Smoke production npm registry proxy
+        if: github.event_name == 'push'
+        run: node tools/netlify/smoke-npm-registry.mjs "https://${NETLIFY_SITE_NAME}.netlify.app"
