@@ -125,3 +125,14 @@ It is intentionally concise and append-only during the work.
 - **Reversibility:** JSON archive v1 is app-local and dependency-free. Browser
   EDQUOT/eviction recovery and streaming/zip/tar archive formats remain future
   slices.
+
+### D13 — Source-Map Remap Boundary
+
+- **Decision:** Close the source-map item with loader-internal inline sourcemap
+  extraction and scoped stack rendering for current-realm ESM guests, while
+  keeping `TransformSourceHook` as `Promise<string>`.
+- **Why:** Original `.ts` stack lines are the immediate DX gap and are parity
+  testable. Widening the hook shape or designing cross-worker/overlay payloads
+  would be a public contract decision outside this slice.
+- **Reversibility:** Runtime-internal and dependency-free. Worker stack remap
+  and visual overlay remain parked residual work.

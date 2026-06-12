@@ -255,6 +255,7 @@ function buildTsTransform(): TransformSourceHook {
       loader,
       workspace,
       format: 'esm',
+      sourcemap: 'inline',
       jsx: loader !== 'ts' ? 'automatic' : undefined,
     }).then((r) => r.code);
 }
