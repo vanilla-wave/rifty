@@ -136,3 +136,14 @@ It is intentionally concise and append-only during the work.
   would be a public contract decision outside this slice.
 - **Reversibility:** Runtime-internal and dependency-free. Worker stack remap
   and visual overlay remain parked residual work.
+
+### D14 — Compat Matrix Generation
+
+- **Decision:** Close the milestone compat item by teaching
+  `pnpm compat:generate` to publish deterministic fs/streams/http docs from
+  static inventories backed by existing conformance and parity files.
+- **Why:** The milestone obligation is a public claim surface now. A Vitest JSON
+  reporter pipeline is broader tooling work and not required to make the M11
+  fs/streams/http claims visible and repeatable.
+- **Reversibility:** Tooling/docs-only. Future data-driven generation can
+  replace the static inventories without changing runtime API.
