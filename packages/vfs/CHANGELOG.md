@@ -10,11 +10,17 @@
 ### Fixed
 
 - **`OpfsFsSync.flush()` now drains directory-shape persistence, not just file writes/deletes.**
-  `mkdirSync` directory creation is tracked in the pending queue, so a flush boundary guarantees
-  recursive mkdir durability before reload. `renameSync` also persists moved directory shells,
-  covering empty-directory moves that previously only changed the in-memory mirror. Pending OPFS
-  side effects are serialized in sync-call order, and directory rename persistence reads uncached
-  indexed files through the paired async surface before removing the old subtree.
+  `mkdirSync` directory creation is tracked in the pending queue, so a flush boundary awaits the
+  recursive mkdir persist attempt before reload (best-effort, NOT a durability guarantee — a
+  failed persist is still swallowed and reconciles on the next `refreshIndex`, same posture as
+  file write-through). `renameSync` also persists moved directory shells, covering
+  empty-directory moves that previously only changed the in-memory mirror. Pending OPFS
+  side effects are serialized in sync-call order (one global chain — ordering is broader than
+  the overlapping-path minimum; revisit if write throughput regresses), and directory rename
+  persistence reads uncached indexed files through the paired async surface before removing the
+  old subtree. `rmSync('/')` now persists by removing each root child individually — OPFS
+  `removeEntry` cannot target the root, so the old single `persistRmAsync('/')` was a silent
+  on-disk no-op (PR #21 review fix).
 - **`cpSync`/`cpRecursive` copy into the source's own subtree** (`cp -r a a` or `cp -r a a/b`)
   no longer infinite-recurses into a stack overflow — both `MemoryFsSync` and `OpfsFsSync`
   now throw `VfsError('EINVAL')` (the guard `renameSync` already had). Review pass 2026-06-07.

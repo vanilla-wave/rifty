@@ -654,15 +654,20 @@ export class OpfsFsSync implements FsSync {
     const normalized = normalizePath(path);
     if (normalized === '/') {
       if (recursive) {
-        // Clear root's children, keep the root entry.
+        // Clear root's children, keep the root entry. Persist per-child:
+        // OPFS `removeEntry` cannot target the root itself, so a single
+        // persistRmAsync('/') was a silent on-disk no-op.
         const rootEntry = this.index.get('/');
         if (rootEntry?.children) {
-          for (const name of [...rootEntry.children]) {
+          const names = [...rootEntry.children];
+          for (const name of names) {
             this.removeSubtree(`/${name}`);
           }
           rootEntry.sortedDirents = null; // subtree removed — invalidate root cache
+          for (const name of names) {
+            this.persistRmAsync(`/${name}`, true);
+          }
         }
-        this.persistRmAsync('/', true);
         return;
       }
       throw new VfsError('EPERM', '/');
