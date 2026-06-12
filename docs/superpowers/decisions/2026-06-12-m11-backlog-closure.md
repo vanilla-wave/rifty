@@ -241,3 +241,13 @@ It is intentionally concise and append-only during the work.
   process-state scope, archive format, quota posture, and Worker/VFS copy model.
 - **Reversibility:** Doc-only retarget. Implementation needs its own ADR and
   public API tests.
+
+### D25 — Workbench Controllers Retarget
+
+- **Decision:** Retarget `distribution/workbench-controllers` as future EPIC C
+  headless controller package work.
+- **Why:** Lifting playground glue into `@riftydev/workbench` creates a new
+  cross-package public surface and should wait for a concrete non-Solid consumer
+  or a deliberate playground-thin-shell refactor.
+- **Reversibility:** Doc-only retarget. Starting the package needs an ADR that
+  promotes DD-3.
