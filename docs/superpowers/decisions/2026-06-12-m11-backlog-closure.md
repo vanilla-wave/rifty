@@ -289,3 +289,14 @@ It is intentionally concise and append-only during the work.
   server from booting.
 - **Reversibility:** npm-client behavior fix. Guarded by unit regression and
   live Vite install probe.
+
+### D30 — Vite Shim Lifecycle Registry Adapter
+
+- **Decision:** Strip `esbuild.postinstall` only in the playground's Real Vite
+  registry adapter, keyed by `@riftydev/shadow-registry`
+  `browserShimLifecycleScriptSkips`.
+- **Why:** `esbuild.postinstall` selects native binaries, but the playground
+  immediately overlays `esbuild` with the browser-safe shim. The default
+  `npm-client` policy must still reject generic `postinstall` loudly.
+- **Reversibility:** Playground-local adapter. Guarded by playground unit test,
+  shadow-registry table test, live Vite install probe, and Chromium e2e.

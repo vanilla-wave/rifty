@@ -7,6 +7,9 @@
 - `bakedOverrides` now redirects `esbuild` to `@esbuild/wasi-preview1@0.28.0`,
   so Vite installs avoid the real package's native-binary `postinstall`; the
   playground still overlays `node_modules/esbuild` with the browser-safe shim.
+- `browserShimLifecycleScriptSkips` records lifecycle hooks made redundant by
+  VFS package overlays; currently `esbuild.postinstall` for the playground's
+  Real Vite bootstrap.
 - `transformWithEsbuild(..., { sourcemap: 'inline' })` now forwards
   `--sourcemap=inline`, keeping the default output unchanged while allowing
   loader stack-remap tests and parity cases to consume esbuild's map.
