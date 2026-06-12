@@ -340,7 +340,7 @@ async function bootstrap(): Promise<void> {
   log(`[real-vite/worker] installing ${spec.displayName} into ${root}/node_modules…\n`);
   const registry = new RegistryClient({ fetch: proxiedRegistryFetch() });
   const vfs = new SyncMirrorVfs();
-  const result = await install(cfg.packageName, cfg.packageVersion, cfg.installDeps, {
+  const result = await install({
     vfs,
     cwd: root,
     registry,

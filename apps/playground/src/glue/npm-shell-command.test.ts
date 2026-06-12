@@ -33,8 +33,26 @@ function makeStubInstall(responder: (deps: Record<string, string>) => InstallRes
   calls: Array<{ root: string; deps: Record<string, string>; cwd: string }>;
 } {
   const calls: Array<{ root: string; deps: Record<string, string>; cwd: string }> = [];
-  const install: InstallFn = async (rootName, _rootVersion, dependencies, opts: InstallOptions) => {
-    calls.push({ root: rootName, deps: { ...dependencies }, cwd: opts.cwd });
+  const install: InstallFn = async (arg1, _rootVersion, dependenciesOrOpts, opts) => {
+    let rootName: string;
+    let dependencies: Record<string, string>;
+    let installOpts: InstallOptions;
+    if (typeof arg1 === 'string') {
+      rootName = arg1;
+      dependencies = dependenciesOrOpts as Record<string, string>;
+      installOpts = opts as InstallOptions;
+    } else {
+      installOpts = arg1;
+      const raw = JSON.parse(
+        await installOpts.vfs.readFileText(`${installOpts.cwd}/package.json`),
+      ) as {
+        name?: string;
+        dependencies?: Record<string, string>;
+      };
+      rootName = raw.name ?? 'root';
+      dependencies = raw.dependencies ?? {};
+    }
+    calls.push({ root: rootName, deps: { ...dependencies }, cwd: installOpts.cwd });
     return responder(dependencies);
   };
   return { install, calls };

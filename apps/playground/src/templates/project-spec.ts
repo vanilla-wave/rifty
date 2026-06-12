@@ -74,9 +74,10 @@ interface BootstrapConfigBase {
   readonly root: string;
   readonly port: number;
   readonly entryPath: string;
-  /** npm package name/version passed to `install()` (derived from the id). */
+  /** npm package name/version serialized into the seeded package.json. */
   readonly packageName: string;
   readonly packageVersion: string;
+  /** Dependencies serialized into package.json; npm-client reads them from VFS. */
   readonly installDeps: Readonly<Record<string, string>>;
   /** Serialized package.json written into the project root. */
   readonly packageJson: string;
@@ -164,9 +165,9 @@ export function buildProjectPackageJson(spec: ProjectSpec): {
 
 /**
  * Pure mapping: ProjectSpec + resolved port/root → the config the worker
- * bootstrap feeds to `install()` / `createServer()` / the seed step. Unit-tested
- * seam where entry/package.json/index.html drift surfaces as a red test rather
- * than a silent "works for vite, breaks for the next template".
+ * bootstrap uses for package.json seeding / `createServer()` / the seed step.
+ * Unit-tested seam where entry/package.json/index.html drift surfaces as a red
+ * test rather than a silent "works for vite, breaks for the next template".
  */
 export function resolveBootstrapConfig(
   spec: ProjectSpec,

@@ -217,6 +217,65 @@ describe('install — lockfile fast path re-applies overrides', () => {
     expect(await vfs.exists('/proj/node_modules/bar/package.json')).toBe(true);
   });
 
+  it('replays an override-redirected top-level dependency from lockfile on the second install', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('bar', new Map([['1.0.0', await makeEntry('bar', '1.0.0')]]));
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const firstRegistry = new CountingFakeRegistry(db);
+    const overrides = { foo: 'bar@1.0.0' };
+
+    const first = await install(
+      'root',
+      '1.0.0',
+      { foo: '1.0.0' },
+      { vfs, cwd: '/proj', registry: firstRegistry, overrides },
+    );
+    expect(first.packages.map((p) => p.name)).toEqual(['bar']);
+    expect(await vfs.exists('/proj/node_modules/bar/package.json')).toBe(true);
+
+    const secondRegistry = new CountingFakeRegistry(db);
+    const second = await install(
+      'root',
+      '1.0.0',
+      { foo: '1.0.0' },
+      { vfs, cwd: '/proj', registry: secondRegistry, overrides },
+    );
+
+    expect(second.packages.map((p) => p.name)).toEqual(['bar']);
+    expect(secondRegistry.calls.packument).toEqual([]);
+    expect(secondRegistry.calls.tarball).toEqual([]);
+  });
+
+  it('falls through to live-resolve for parent-scoped overrides instead of replaying stale child names', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('parent', new Map([['1.0.0', await makeEntry('parent', '1.0.0', { child: '1.0.0' })]]));
+    db.set('bar', new Map([['1.0.0', await makeEntry('bar', '1.0.0')]]));
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const overrides = { 'parent>child': 'bar@1.0.0' };
+    await install(
+      'root',
+      '1.0.0',
+      { parent: '1.0.0' },
+      { vfs, cwd: '/proj', registry: new CountingFakeRegistry(db), overrides },
+    );
+    expect(await vfs.exists('/proj/node_modules/bar/package.json')).toBe(true);
+
+    const registry = new CountingFakeRegistry(db);
+    const result = await install(
+      'root',
+      '1.0.0',
+      { parent: '1.0.0' },
+      { vfs, cwd: '/proj', registry, overrides },
+    );
+
+    expect(result.packages.map((p) => p.name).sort()).toEqual(['bar', 'parent']);
+    expect(registry.calls.packument).toEqual(['parent', 'bar']);
+  });
+
   it('falls through when an override changes the locked range to one the pin no longer satisfies', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set(

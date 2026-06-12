@@ -8,7 +8,7 @@
  * there. Placement is decided in `installer.ts` (`walkAndPin`), not here.
  */
 
-import { type Vfs, joinPath } from '@riftydev/vfs';
+import { type Vfs, joinPath, normalizePath } from '@riftydev/vfs';
 
 export interface ResolvedPackage {
   name: string;
@@ -16,6 +16,8 @@ export interface ResolvedPackage {
   files: Record<string, Uint8Array>;
   /** Direct dependencies (already resolved transitively elsewhere). */
   dependencies: Record<string, string>;
+  /** npm package `bin` metadata. String form uses the package basename. */
+  bin?: string | Record<string, string>;
   /**
    * Project-root-relative write path (e.g. `node_modules/express` or
    * `node_modules/finalhandler/node_modules/ms`). Filled by `walkAndPin`
@@ -52,7 +54,61 @@ export async function link(
       await vfs.mkdir(dir, { recursive: true });
     }
     await Promise.all(writes.map(([fullPath, data]) => vfs.writeFile(fullPath, data)));
+    await linkBins(vfs, root, target, pkg);
   }
+}
+
+async function linkBins(
+  vfs: Vfs,
+  root: string,
+  packageRoot: string,
+  pkg: ResolvedPackage,
+): Promise<void> {
+  const installPath = pkg.installPath ?? `node_modules/${pkg.name}`;
+  const bins = normalizeBin(pkg.name, pkg.bin);
+  const entries = Object.entries(bins);
+  if (entries.length === 0) return;
+
+  const binDir = joinPath(root, packageNodeModulesDir(installPath, pkg.name), '.bin');
+  await vfs.mkdir(binDir, { recursive: true });
+  for (const [command, target] of entries) {
+    const relTarget = normalizeBinTarget(target);
+    const bytes = await vfs.readFile(joinPath(packageRoot, relTarget));
+    await vfs.writeFile(joinPath(binDir, command), bytes);
+  }
+}
+
+function packageNodeModulesDir(installPath: string, packageName: string): string {
+  const suffix = `node_modules/${packageName}`;
+  if (!installPath.endsWith(suffix)) {
+    throw new Error(`Invalid package installPath for ${packageName}: ${installPath}`);
+  }
+  return installPath.slice(0, installPath.length - packageName.length - 1);
+}
+
+function normalizeBin(name: string, bin: ResolvedPackage['bin']): Record<string, string> {
+  if (!bin) return {};
+  if (typeof bin === 'string') return { [defaultBinName(name)]: bin };
+  const out: Record<string, string> = {};
+  for (const [command, target] of Object.entries(bin)) {
+    if (command.includes('/') || command === '' || typeof target !== 'string' || target === '') {
+      continue;
+    }
+    out[command] = target;
+  }
+  return out;
+}
+
+function defaultBinName(name: string): string {
+  return name.startsWith('@') ? (name.split('/')[1] ?? name) : name;
+}
+
+function normalizeBinTarget(target: string): string {
+  const normalized = normalizePath(target.replace(/^\.\//, ''));
+  if (normalized.startsWith('/') || normalized === '..' || normalized.startsWith('../')) {
+    throw new Error(`Invalid package bin target: ${target}`);
+  }
+  return normalized;
 }
 
 /** Lockfile shape — npm-compatible "v3"-ish subset. */
@@ -69,6 +125,7 @@ export interface LockfileEntry {
   resolved?: string;
   integrity?: string;
   dependencies?: Record<string, string>;
+  bin?: string | Record<string, string>;
   /**
    * Persisted so the fast path can run the post-install missing-peer warn
    * pass without re-fetching every packument. npm stores `peerDependencies`
@@ -118,6 +175,7 @@ export function buildLockfile(
     };
     if (p.resolved) entry.resolved = p.resolved;
     if (p.integrity) entry.integrity = p.integrity;
+    if (p.bin) entry.bin = p.bin;
     if (p.peerDependencies && Object.keys(p.peerDependencies).length > 0) {
       entry.peerDependencies = p.peerDependencies;
     }
