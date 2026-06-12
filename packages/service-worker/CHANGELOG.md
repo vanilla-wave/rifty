@@ -15,15 +15,10 @@
 
 ### Fixed
 
-- **In-preview-iframe `fetch()` routes to the bridge owner** (ADR-0130;
-  `SW_ROUTING_VERSION` 2 → 3). A plain fetch from inside a preview document
-  carried the iframe's own clientId — a client that never handshakes — so
-  every API call a previewed client-server app made 503'd; the first-window
-  fallback could also pick the (focus-ordered) preview iframe itself. The
-  requester's client URL is now checked against the preview route, and
-  preview documents are excluded from the fallback.
 - **Serialized POSTs advertise `content-length`** derived from the drained
-  body bytes (fetch Request headers never expose it).
+  body bytes (fetch Request headers never expose it) — without it, worker-side
+  body parsers (express.json's typeis `hasBody()`) silently skipped bodies
+  (ADR-0130 fullstack demo).
 
 - **Preview bridge readiness survives Service Worker global restarts.**
   `setupPreviewBridge` now re-advertises `rifty:preview:ready` on

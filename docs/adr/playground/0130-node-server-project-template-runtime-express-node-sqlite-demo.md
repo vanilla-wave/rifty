@@ -39,7 +39,7 @@ Options rejected: (a) hidden `startRealVite` boot keeping `['vite']`-only — re
 4. `net/http/response.ts` — fetch `Response` THROWS on any body for 204/205/304; `res.status(204).end()` (express DELETE) blew up dispatch. Null-body statuses now send `null`, no chunked framing.
 5. `service-worker/route-preview.ts` — serialized POSTs lacked `content-length` (fetch Requests never expose it); re-derived from drained bytes.
 6. `net/http/request.ts` — bodied requests with neither `content-length` nor `transfer-encoding` (browser strips the former on Request rebuild — forbidden header) now present honest `transfer-encoding: chunked`, so typeis-style `hasBody()` (express.json) reads the body.
-7. `service-worker/preview-bridge.ts` + `owner-resolver.ts` — in-iframe `fetch()` (mode cors, destination '') carried the IFRAME's clientId → SW waited on a client that never handshakes → 503; and `matchAll` focus-ordering could pick the preview iframe (itself a window client) as "first window". Requester-is-a-preview-document detection (client URL) + preview-document filtering in the fallback. **`SW_ROUTING_VERSION` 2 → 3** (ADR-0040 doctrine: owner-resolution rules changed).
+7. In-iframe `fetch()` 503 (iframe clientId never handshakes; focus-ordered `matchAll` could pick the iframe as owner) — first exposed by this demo, fixed UPSTREAM in parallel by ADR-0097 (`previewFrameContexts` + ready-window preference, `SW_ROUTING_VERSION` 3); this branch's interim fix was dropped in favour of it on rebase. The demo e2e remains the end-to-end regression for that path.
 
 ## Consequences
 
@@ -51,4 +51,4 @@ Options rejected: (a) hidden `startRealVite` boot keeping `['vite']`-only — re
 - Shipped alongside: `RIFTY_PLAYGROUND_PORT` env (vite + playwright configs) — parallel-worktree dev/e2e.
 - Follow-ups: sqlite OPFS persistence (`docs/backlog/net/sqlite-opfs-persistence.md`) would let the demo survive restarts; window-owner readiness is unauthenticated (`docs/backlog/service-worker/preview-owner-window-auth.md`); transient port-flip window on cross-template preset switch (`docs/backlog/playground/preset-switch-port-flip-window.md`).
 
-Refs: ADR-0065 (sql.js DatabaseSync), ADR-0078 (ProjectSpec), ADR-0040 (`SW_ROUTING_VERSION`), ADR-0123 (port-aware owner routing), D-001 (COI/no-CDN), D-004 (registry URL).
+Refs: ADR-0065 (sql.js DatabaseSync), ADR-0078 (ProjectSpec), ADR-0040 (`SW_ROUTING_VERSION`), ADR-0097 (preview frame contexts), ADR-0123 (port-aware owner routing), D-001 (COI/no-CDN), D-004 (registry URL).

@@ -31,16 +31,9 @@ var FirstWindowOwnerResolver = class {
       const direct = await scope.clients.get(clientId);
       if (direct) return direct;
     }
-    const matched = await scope.clients.matchAll({
+    const all = await scope.clients.matchAll({
       type: "window",
       includeUncontrolled: false
-    });
-    const all = matched.filter((candidate) => {
-      try {
-        return parsePreviewPath(new URL(candidate.url).pathname) === null;
-      } catch {
-        return true;
-      }
     });
     if (all.length === 0) return null;
     if (!fallbackWarned.has(scope)) {
@@ -697,29 +690,15 @@ function createPreviewInterceptor(scope, hooks = {}) {
     }
     if (!match) return;
     event.respondWith(
-      (async () => {
-        let clientId = isPreviewFrameRequest(event.request) ? null : event.resultingClientId || event.clientId || null;
-        if (clientId) {
-          const requester = await scope.clients.get(clientId);
-          if (requester?.url) {
-            let requesterPath = null;
-            try {
-              requesterPath = new URL(requester.url).pathname;
-            } catch {
-            }
-            if (requesterPath && matchPreviewUrl(requesterPath)) clientId = null;
-          }
-        }
-        return routePreview(
-          scope,
-          event.request,
-          match,
-          subscription.readiness,
-          timeoutMs,
-          clientId,
-          binding
-        );
-      })()
+      routePreview(
+        scope,
+        event.request,
+        match,
+        subscription.readiness,
+        timeoutMs,
+        clientId,
+        binding
+      )
     );
   };
   scope.addEventListener("fetch", fetchHandler);
