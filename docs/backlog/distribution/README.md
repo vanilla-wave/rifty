@@ -1,6 +1,6 @@
 # Backlog — distribution (consumption-side)
 
-How rifty is **consumed**, separate from the runtime milestones in docs/ROADMAP.md. This area = umbrella SDK, headless UI controllers, framework bindings + component kit, IDE starter template. Mostly optional / exploratory — a **pull backlog** (no dates, only `depends-on` edges; pull an item when it's worth doing).
+How rifty is **consumed**, separate from the runtime milestones in docs/ROADMAP.md. This area = umbrella SDK, headless UI controllers, framework bindings + component kit, IDE starter template. This is a **pull backlog** (no dates, only `depends-on` edges); several items are required for the full Consumer Ready story, but are deliberately outside the current branch cutline.
 
 Source: the distribution-and-IDE epics A-E. Publishing (EPIC A) landed under ADR-0070/0071; A4/A5/A6/A7/A8 follow-ons live under playground / toolchain-build / process-meta, NOT here.
 

@@ -14,6 +14,7 @@ test-results/
 .vite/
 .playwright-mcp/
 .claude/
+docs/superpowers/
 /vite-iframe-*.png
 /vite-running-in-browser.png
 
