@@ -40,7 +40,9 @@ export const FDFLAGS_SYNC = 1 << 4;
 // preview1 rights bits we explicitly check (WASI spec rights table): `path_open`
 // derives a new fd's granted rights; `fd_write` enforces write capability.
 export const RIGHTS_FD_READ = 1n << 1n;
+export const RIGHTS_FD_SEEK = 1n << 2n;
 export const RIGHTS_FD_WRITE = 1n << 6n;
+export const RIGHTS_FD_FILESTAT_SET_SIZE = 1n << 22n;
 
 /**
  * Default `fs_rights_base` for a newly-opened file fd when the caller passes

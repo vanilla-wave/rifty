@@ -17,6 +17,7 @@ import {
   FDFLAGS_APPEND,
   FILETYPE_DIRECTORY,
   FILETYPE_REGULAR_FILE,
+  RIGHTS_FD_FILESTAT_SET_SIZE,
   RIGHTS_FD_READ,
   RIGHTS_FD_WRITE,
   WHENCE_CUR,
@@ -81,6 +82,22 @@ describe('fd_read', () => {
     expect(view.getUint32(300, true)).toBe(5);
     const bytes = new Uint8Array(t.memory.buffer, 200, 5);
     expect(new TextDecoder().decode(bytes)).toBe('hello');
+  });
+
+  it('returns E_PERM when explicit rights lack RIGHTS_FD_READ', () => {
+    const t = setupFdCtx();
+    t.fds.set(5, {
+      type: 'file',
+      path: '/x',
+      data: new TextEncoder().encode('hello'),
+      cursor: 0,
+      rights: RIGHTS_FD_WRITE,
+    });
+    const view = new DataView(t.memory.buffer);
+    view.setUint32(0, 200, true);
+    view.setUint32(4, 5, true);
+
+    expect(t.ns.fd_read(5, 0, 1, 300)).toBe(E_PERM);
   });
 });
 
@@ -218,6 +235,32 @@ describe('fd_seek', () => {
     expect(t.fds.get(5)?.cursor).toBe(8);
     expect(view.getBigUint64(100, true)).toBe(8n);
   });
+
+  it('returns E_INVAL for unsafe BigInt offsets', () => {
+    const t = setupFdCtx();
+    t.fds.set(5, {
+      type: 'file',
+      path: '/x',
+      data: new Uint8Array(10),
+      cursor: 0,
+    });
+
+    expect(t.ns.fd_seek(5, BigInt(Number.MAX_SAFE_INTEGER) + 1n, WHENCE_SET, 100)).toBe(E_INVAL);
+  });
+
+  it('returns E_PERM when explicit rights lack fd_seek', () => {
+    const t = setupFdCtx();
+    t.fds.set(5, {
+      type: 'file',
+      path: '/x',
+      data: new Uint8Array(10),
+      cursor: 3,
+      rights: RIGHTS_FD_READ | RIGHTS_FD_WRITE,
+    });
+
+    expect(t.ns.fd_seek(5, 7n, WHENCE_SET, 100)).toBe(E_PERM);
+    expect(t.fds.get(5)?.cursor).toBe(3);
+  });
 });
 
 describe('fd_fdstat_get', () => {
@@ -267,6 +310,22 @@ describe('fd_fdstat_get', () => {
     const rc = t.ns.fd_fdstat_get(5, 100);
     expect(rc).toBe(E_SUCCESS);
     expect(view.getUint8(100)).toBe(FILETYPE_DIRECTORY);
+  });
+
+  it('reports the descriptor explicit rights instead of synthetic defaults', () => {
+    const t = setupFdCtx();
+    t.fds.set(5, {
+      type: 'file',
+      path: '/x',
+      data: new Uint8Array(10),
+      rights: RIGHTS_FD_READ,
+      rightsInheriting: RIGHTS_FD_WRITE,
+    });
+    const view = new DataView(t.memory.buffer);
+
+    expect(t.ns.fd_fdstat_get(5, 100)).toBe(E_SUCCESS);
+    expect(view.getBigUint64(108, true)).toBe(RIGHTS_FD_READ);
+    expect(view.getBigUint64(116, true)).toBe(RIGHTS_FD_WRITE);
   });
 });
 
@@ -332,6 +391,30 @@ describe('fd_write — rights enforcement', () => {
     const rc = t.ns.fd_write(5, 0, 1, 300);
     expect(rc).toBe(E_SUCCESS);
   });
+
+  it('honors FDFLAGS_APPEND for file writes', () => {
+    const mirror = new MemoryFsSync();
+    mirror.loadFixture({ '/append.txt': 'abc' });
+    setSyncMirror(mirror);
+    const t = setupFdCtx();
+    t.fds.set(5, {
+      type: 'file',
+      path: '/append.txt',
+      data: new TextEncoder().encode('abc'),
+      cursor: 0,
+      fdflags: FDFLAGS_APPEND,
+      rights: RIGHTS_FD_WRITE,
+    });
+    const view = new DataView(t.memory.buffer);
+    const payload = new TextEncoder().encode('Z');
+    new Uint8Array(t.memory.buffer).set(payload, 200);
+    view.setUint32(0, 200, true);
+    view.setUint32(4, payload.length, true);
+
+    expect(t.ns.fd_write(5, 0, 1, 300)).toBe(E_SUCCESS);
+    expect(new TextDecoder().decode(t.fds.get(5)?.data)).toBe('abcZ');
+    expect(new TextDecoder().decode(mirror.readFileBytesSync('/append.txt'))).toBe('abcZ');
+  });
 });
 
 // fd_write writes through to the VFS cache via syncMirror().writeFileSync
@@ -371,5 +454,224 @@ describe('fd_write — write-through cache consistency under in-place reuse (#3)
     // The cache must reflect the SECOND write, with no corruption from the
     // in-place mutation of the buffer the first write handed to the mirror.
     expect(Array.from(mirror.readFileBytesSync('/f.bin'))).toEqual([7, 8, 9]);
+  });
+});
+
+describe('fd_pread', () => {
+  beforeEach(() => {
+    setSyncMirror(new MemoryFsSync());
+  });
+  afterEach(() => resetSyncMirror());
+
+  it('reads from an explicit offset without moving the cursor', () => {
+    const t = setupFdCtx();
+    t.fds.set(5, {
+      type: 'file',
+      path: '/pread.txt',
+      data: new TextEncoder().encode('abcdef'),
+      cursor: 4,
+    });
+    const view = new DataView(t.memory.buffer);
+    view.setUint32(0, 200, true);
+    view.setUint32(4, 3, true);
+
+    const rc = t.ns.fd_pread(5, 0, 1, 1n, 300);
+
+    expect(rc).toBe(E_SUCCESS);
+    expect(view.getUint32(300, true)).toBe(3);
+    expect(new TextDecoder().decode(new Uint8Array(t.memory.buffer, 200, 3))).toBe('bcd');
+    expect(t.fds.get(5)?.cursor).toBe(4);
+  });
+
+  it('returns E_PERM when explicit rights lack RIGHTS_FD_READ', () => {
+    const t = setupFdCtx();
+    t.fds.set(5, {
+      type: 'file',
+      path: '/pread.txt',
+      data: new TextEncoder().encode('abcdef'),
+      cursor: 4,
+      rights: RIGHTS_FD_WRITE,
+    });
+    const view = new DataView(t.memory.buffer);
+    view.setUint32(0, 200, true);
+    view.setUint32(4, 3, true);
+
+    expect(t.ns.fd_pread(5, 0, 1, 1n, 300)).toBe(E_PERM);
+  });
+
+  it('returns E_BADF for unknown and non-file fds', () => {
+    const t = setupFdCtx();
+    t.fds.set(6, { type: 'dir', path: '/d' });
+    const view = new DataView(t.memory.buffer);
+    view.setUint32(0, 200, true);
+    view.setUint32(4, 3, true);
+
+    expect(t.ns.fd_pread(99, 0, 1, 0n, 300)).toBe(E_BADF);
+    expect(t.ns.fd_pread(6, 0, 1, 0n, 300)).toBe(E_BADF);
+  });
+
+  it('returns E_INVAL for invalid offsets', () => {
+    const t = setupFdCtx();
+    t.fds.set(5, {
+      type: 'file',
+      path: '/pread.txt',
+      data: new TextEncoder().encode('abc'),
+      cursor: 0,
+    });
+    const view = new DataView(t.memory.buffer);
+    view.setUint32(0, 200, true);
+    view.setUint32(4, 3, true);
+
+    expect(t.ns.fd_pread(5, 0, 1, -1n, 300)).toBe(E_INVAL);
+    expect(t.ns.fd_pread(5, 0, 1, BigInt(Number.MAX_SAFE_INTEGER) + 1n, 300)).toBe(E_INVAL);
+  });
+});
+
+describe('fd_pwrite', () => {
+  let mirror: MemoryFsSync;
+  beforeEach(() => {
+    mirror = new MemoryFsSync();
+    mirror.loadFixture({ '/work/pwrite.txt': 'abcdef' });
+    setSyncMirror(mirror);
+  });
+  afterEach(() => resetSyncMirror());
+
+  function writeIov(t: ReturnType<typeof setupFdCtx>, text: string): void {
+    const payload = new TextEncoder().encode(text);
+    new Uint8Array(t.memory.buffer).set(payload, 200);
+    const view = new DataView(t.memory.buffer);
+    view.setUint32(0, 200, true);
+    view.setUint32(4, payload.length, true);
+  }
+
+  it('writes at an explicit offset without moving the cursor and writes through', () => {
+    const t = setupFdCtx();
+    t.fds.set(5, {
+      type: 'file',
+      path: '/work/pwrite.txt',
+      data: new TextEncoder().encode('abcdef'),
+      cursor: 5,
+      rights: RIGHTS_FD_WRITE,
+    });
+    writeIov(t, 'ZZ');
+
+    const rc = t.ns.fd_pwrite(5, 0, 1, 2n, 300);
+
+    expect(rc).toBe(E_SUCCESS);
+    expect(new DataView(t.memory.buffer).getUint32(300, true)).toBe(2);
+    expect(t.fds.get(5)?.cursor).toBe(5);
+    expect(new TextDecoder().decode(t.fds.get(5)?.data)).toBe('abZZef');
+    expect(new TextDecoder().decode(mirror.readFileBytesSync('/work/pwrite.txt'))).toBe('abZZef');
+  });
+
+  it('enforces write rights like fd_write', () => {
+    const t = setupFdCtx();
+    t.fds.set(5, {
+      type: 'file',
+      path: '/work/pwrite.txt',
+      data: new TextEncoder().encode('abcdef'),
+      cursor: 5,
+      rights: RIGHTS_FD_READ,
+    });
+    writeIov(t, 'NO');
+
+    const rc = t.ns.fd_pwrite(5, 0, 1, 2n, 300);
+
+    expect(rc).toBe(E_PERM);
+    expect(t.fds.get(5)?.cursor).toBe(5);
+    expect(new TextDecoder().decode(t.fds.get(5)?.data)).toBe('abcdef');
+    expect(new TextDecoder().decode(mirror.readFileBytesSync('/work/pwrite.txt'))).toBe('abcdef');
+  });
+
+  it('returns E_BADF for unknown and non-file fds', () => {
+    const t = setupFdCtx();
+    t.fds.set(6, { type: 'dir', path: '/work' });
+    writeIov(t, 'x');
+
+    expect(t.ns.fd_pwrite(99, 0, 1, 0n, 300)).toBe(E_BADF);
+    expect(t.ns.fd_pwrite(6, 0, 1, 0n, 300)).toBe(E_BADF);
+  });
+
+  it('returns E_INVAL for invalid offsets', () => {
+    const t = setupFdCtx();
+    t.fds.set(5, {
+      type: 'file',
+      path: '/work/pwrite.txt',
+      data: new TextEncoder().encode('abcdef'),
+      cursor: 0,
+      rights: RIGHTS_FD_WRITE,
+    });
+    writeIov(t, 'x');
+
+    expect(t.ns.fd_pwrite(5, 0, 1, -1n, 300)).toBe(E_INVAL);
+    expect(t.ns.fd_pwrite(5, 0, 1, BigInt(Number.MAX_SAFE_INTEGER) + 1n, 300)).toBe(E_INVAL);
+  });
+});
+
+describe('fd_filestat_set_size', () => {
+  let mirror: MemoryFsSync;
+  beforeEach(() => {
+    mirror = new MemoryFsSync();
+    mirror.loadFixture({ '/work/size.txt': 'abcdef' });
+    setSyncMirror(mirror);
+  });
+  afterEach(() => resetSyncMirror());
+
+  it('shrinks, grows with zero fill, and updates fd_filestat_get size', () => {
+    const t = setupFdCtx();
+    t.fds.set(5, {
+      type: 'file',
+      path: '/work/size.txt',
+      data: new TextEncoder().encode('abcdef'),
+      cursor: 6,
+      rights: RIGHTS_FD_FILESTAT_SET_SIZE,
+    });
+    const view = new DataView(t.memory.buffer);
+
+    expect(t.ns.fd_filestat_set_size(5, 3n)).toBe(E_SUCCESS);
+    expect(new TextDecoder().decode(t.fds.get(5)?.data)).toBe('abc');
+    expect(new TextDecoder().decode(mirror.readFileBytesSync('/work/size.txt'))).toBe('abc');
+    expect(t.ns.fd_filestat_get(5, 100)).toBe(E_SUCCESS);
+    expect(view.getBigUint64(132, true)).toBe(3n);
+
+    expect(t.ns.fd_filestat_set_size(5, 6n)).toBe(E_SUCCESS);
+    expect(Array.from(t.fds.get(5)?.data ?? [])).toEqual([97, 98, 99, 0, 0, 0]);
+    expect(Array.from(mirror.readFileBytesSync('/work/size.txt'))).toEqual([97, 98, 99, 0, 0, 0]);
+    expect(t.ns.fd_filestat_get(5, 200)).toBe(E_SUCCESS);
+    expect(view.getBigUint64(232, true)).toBe(6n);
+  });
+
+  it('returns E_BADF for unknown and non-file fds', () => {
+    const t = setupFdCtx();
+    t.fds.set(6, { type: 'dir', path: '/work' });
+
+    expect(t.ns.fd_filestat_set_size(99, 0n)).toBe(E_BADF);
+    expect(t.ns.fd_filestat_set_size(6, 0n)).toBe(E_BADF);
+  });
+
+  it('returns E_PERM when explicit rights lack fd_filestat_set_size', () => {
+    const t = setupFdCtx();
+    t.fds.set(5, {
+      type: 'file',
+      path: '/work/size.txt',
+      data: new TextEncoder().encode('abcdef'),
+      cursor: 0,
+      rights: RIGHTS_FD_READ | RIGHTS_FD_WRITE,
+    });
+
+    expect(t.ns.fd_filestat_set_size(5, 3n)).toBe(E_PERM);
+  });
+
+  it('returns E_INVAL for invalid sizes', () => {
+    const t = setupFdCtx();
+    t.fds.set(5, {
+      type: 'file',
+      path: '/work/size.txt',
+      data: new TextEncoder().encode('abcdef'),
+      cursor: 0,
+    });
+
+    expect(t.ns.fd_filestat_set_size(5, -1n)).toBe(E_INVAL);
+    expect(t.ns.fd_filestat_set_size(5, BigInt(Number.MAX_SAFE_INTEGER) + 1n)).toBe(E_INVAL);
   });
 });
