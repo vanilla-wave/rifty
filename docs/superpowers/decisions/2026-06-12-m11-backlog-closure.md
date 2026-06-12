@@ -113,3 +113,15 @@ It is intentionally concise and append-only during the work.
   reporter, mocking, and `TestContext` semantics.
 - **Reversibility:** The VM subset is additive and documented with loud
   unsupported controls. The test runner remains uncommitted residual work.
+
+### D12 — Storage Archive Format
+
+- **Decision:** Close the storage portability item with a playground-local
+  storage persistence probe and JSON workspace archive v1, then split deeper
+  storage-pressure UX into a parked non-M11 residual.
+- **Why:** The M11 user promise needs persistence request/quota visibility and
+  a way for source files to leave/re-enter the origin. Zip/tar would add a new
+  dependency and a stronger archive contract than needed for this slice.
+- **Reversibility:** JSON archive v1 is app-local and dependency-free. Browser
+  EDQUOT/eviction recovery and streaming/zip/tar archive formats remain future
+  slices.

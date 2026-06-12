@@ -24,6 +24,11 @@
 
 ### Added
 
+- **Storage persistence + workspace archive.** Playground boot now probes
+  `navigator.storage.persisted()` / `persist()` / `estimate()`, threads the
+  result into the status badge, and exposes command-palette actions to
+  download/import a dependency-free JSON workspace archive that excludes
+  derived/heavy directories (`node_modules`, `.git`, `.vite`, `dist`).
 - **Production npm registry proxy source.** Vercel rewrites `/npm-registry/*`
   to an Edge runtime handler at `api/npm-registry/[...path].ts`, preserving
   metadata/tarball paths and adding CORS/CORP headers so the cross-origin

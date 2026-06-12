@@ -42,6 +42,7 @@ import { SyncMirrorVfs } from './glue/sync-mirror-vfs.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
 import { subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
+import { exportWorkspaceArchive, importWorkspaceArchive } from './glue/workspace-archive.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset } from './presets.ts';
 import {
   type ProjectSpec,
@@ -100,6 +101,64 @@ export function App(props: AppProps) {
     const copied = await copyToClipboard(url);
     if (copied) flashToast(`Link copied — ${globalThis.location?.host ?? url}`, 'success');
     else flashToast('Could not copy the link to the clipboard', 'error');
+  }
+
+  function workspaceArchiveBlocked(): boolean {
+    return devServerStatus() !== 'stopped';
+  }
+
+  function downloadWorkspaceArchive(): void {
+    if (workspaceArchiveBlocked()) {
+      flashError('Stop the dev server to archive the editable workspace');
+      return;
+    }
+    const doc = globalThis.document;
+    if (!doc) {
+      flashError('Workspace archive download is unavailable here');
+      return;
+    }
+    const archive = exportWorkspaceArchive(vfs, WORKSPACE);
+    const blob = new Blob([archive], { type: 'application/vnd.rifty.workspace+json' });
+    const url = URL.createObjectURL(blob);
+    const a = doc.createElement('a');
+    a.href = url;
+    a.download = 'rifty-workspace.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+    flashToast('Workspace archive downloaded', 'success');
+  }
+
+  async function importWorkspaceArchiveFile(file: File): Promise<void> {
+    try {
+      importWorkspaceArchive(vfs, await file.text(), { root: WORKSPACE });
+      flashToast('Workspace archive imported', 'success');
+    } catch (err) {
+      flashError(`Import failed: ${(err as Error).message}`);
+    }
+  }
+
+  function chooseWorkspaceArchive(): void {
+    if (workspaceArchiveBlocked()) {
+      flashError('Stop the dev server to import into the editable workspace');
+      return;
+    }
+    const doc = globalThis.document;
+    if (!doc) {
+      flashError('Workspace archive import is unavailable here');
+      return;
+    }
+    const input = doc.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json,application/vnd.rifty.workspace+json';
+    input.addEventListener(
+      'change',
+      () => {
+        const file = input.files?.[0];
+        if (file) void importWorkspaceArchiveFile(file);
+      },
+      { once: true },
+    );
+    input.click();
   }
 
   // Active real-project template (ADR-0078): follows the selected preset's
@@ -762,6 +821,26 @@ export function App(props: AppProps) {
       run: () => void share(),
     });
     items.push({
+      id: 'act:export-workspace',
+      section: 'Commands',
+      label: 'Download workspace archive',
+      hint: workspaceArchiveBlocked()
+        ? 'Stop the dev server to archive the editable workspace'
+        : undefined,
+      icon: 'file-output',
+      run: () => downloadWorkspaceArchive(),
+    });
+    items.push({
+      id: 'act:import-workspace',
+      section: 'Commands',
+      label: 'Import workspace archive',
+      hint: workspaceArchiveBlocked()
+        ? 'Stop the dev server to import into the editable workspace'
+        : undefined,
+      icon: 'folder-open',
+      run: () => chooseWorkspaceArchive(),
+    });
+    items.push({
       id: 'act:github',
       section: 'Commands',
       label: 'Open GitHub repository',
@@ -1021,7 +1100,12 @@ export function App(props: AppProps) {
           activeFile={activeFile()}
           language={activeLang()}
           isOpfs={isOpfs}
-          storageReason={props.boot.vfsBoot.reason}
+          storagePersisted={
+            props.boot.storage.available ? props.boot.storage.persistedAfter : undefined
+          }
+          storageUsage={props.boot.storage.available ? props.boot.storage.usage : undefined}
+          storageQuota={props.boot.storage.available ? props.boot.storage.quota : undefined}
+          storageReason={props.boot.storage.error ?? props.boot.vfsBoot.reason}
           coi={isCrossOriginIsolated()}
         />
       </Show>

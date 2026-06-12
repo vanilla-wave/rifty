@@ -116,6 +116,16 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain('saveState({ cwd: session.cwd, env: {} })');
   });
 
+  it('offers workspace archive export and import commands', () => {
+    expect(source).toContain('exportWorkspaceArchive');
+    expect(source).toContain('importWorkspaceArchive');
+    expect(source).toContain("id: 'act:export-workspace'");
+    expect(source).toContain("id: 'act:import-workspace'");
+    expect(source).toContain('function workspaceArchiveBlocked(): boolean');
+    expect(source).toContain("return devServerStatus() !== 'stopped';");
+    expect(source).toContain('Stop the dev server to archive the editable workspace');
+  });
+
   it('shows the preview pane while Vite is starting but opens tabs only once running', () => {
     expect(source).toContain("const hasPreview = (): boolean => devServerStatus() !== 'stopped'");
     expect(source).toContain(

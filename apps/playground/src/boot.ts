@@ -7,6 +7,7 @@
  */
 import { registerServiceWorker } from '@riftydev/service-worker';
 import { initBackend } from '@riftydev/vfs';
+import { type StoragePersistenceStatus, probeStoragePersistence } from './glue/storage-status.ts';
 
 export interface VfsBootDescriptor {
   readonly backend: 'opfs' | 'memory';
@@ -40,7 +41,7 @@ export async function bootstrap(
 
 /** Human-readable label for the storage badge in the header. */
 export function backendLabel(descriptor: VfsBootDescriptor): string {
-  if (descriptor.backend === 'opfs') return 'Storage: OPFS (persisted)';
+  if (descriptor.backend === 'opfs') return 'Storage: OPFS';
   if (descriptor.reason) return 'Storage: in-memory (will not persist) — OPFS init failed';
   return 'Storage: in-memory (will not persist)';
 }
@@ -77,6 +78,8 @@ export const COI_FATAL_MESSAGE =
 export interface BootResult {
   /** VFS backend descriptor from {@link bootstrap}. Never throws upstream. */
   readonly vfsBoot: VfsBootDescriptor;
+  /** Browser storage persistence/quota probe. */
+  readonly storage: StoragePersistenceStatus;
   /**
    * Populated only when `registerServiceWorker()` rejected. The App renders a
    * banner via {@link swErrorBannerMessage}; the rest of the playground keeps running
@@ -142,6 +145,7 @@ function defaultRenderFatal(message: string): void {
 export interface BootstrapPlaygroundDeps {
   readonly assertCoi?: (deps?: CoiGuardDeps) => void;
   readonly initVfs?: InitBackendFn;
+  readonly probeStorage?: () => Promise<StoragePersistenceStatus>;
   readonly registerSw?: (scriptUrl: string) => Promise<unknown>;
   readonly logger?: Pick<Console, 'warn' | 'error'>;
 }
@@ -156,13 +160,14 @@ export async function bootstrapPlayground(deps: BootstrapPlaygroundDeps = {}): P
   const logger = deps.logger ?? console;
   (deps.assertCoi ?? assertCrossOriginIsolated)();
   const vfsBoot = await bootstrap(deps.initVfs, logger);
+  const storage = await (deps.probeStorage ?? (() => probeStoragePersistence()))();
   const swRegister = deps.registerSw ?? ((url: string) => registerServiceWorker(url));
   try {
     await swRegister('/sw.js');
-    return { vfsBoot };
+    return { vfsBoot, storage };
   } catch (err) {
     const swError = reasonOf(err);
     logger.warn(`[rifty] service worker registration failed: ${swError}`);
-    return { vfsBoot, swError };
+    return { vfsBoot, storage, swError };
   }
 }
