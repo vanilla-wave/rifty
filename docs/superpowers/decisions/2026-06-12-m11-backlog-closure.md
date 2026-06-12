@@ -251,3 +251,13 @@ It is intentionally concise and append-only during the work.
   or a deliberate playground-thin-shell refactor.
 - **Reversibility:** Doc-only retarget. Starting the package needs an ADR that
   promotes DD-3.
+
+### D26 — Lower-Layer FsSync fd Retarget
+
+- **Decision:** Retarget `vfs/fs-sync-fd-api-and-fsync-durability` as future
+  lower-layer VFS fd and durability contract work.
+- **Why:** The runtime-local fd tables cover practical build-tool behavior, but
+  inode-like open-unlink/rename semantics and honest sync durability would
+  change public `FsSync` guarantees.
+- **Reversibility:** Doc-only retarget. Implementation needs a dedicated ADR and
+  conformance evidence.
