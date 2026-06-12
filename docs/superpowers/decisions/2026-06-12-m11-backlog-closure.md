@@ -212,3 +212,13 @@ It is intentionally concise and append-only during the work.
   worth packaging into a template.
 - **Reversibility:** Doc-only retarget. A template can start later without
   changing existing `@riftydev/*` package APIs.
+
+### D22 — Dependency License Audit Retarget
+
+- **Decision:** Retarget `distribution/dependency-license-audit` as future
+  release/compliance audit work.
+- **Why:** First-party MIT and self-hosting positioning is already documented;
+  transitive dependency license inventory needs a generated report or release
+  gate decision beyond the current page claim.
+- **Reversibility:** Doc-only retarget. Future enforcement can be added as a
+  checklist, report, or CI warning.
