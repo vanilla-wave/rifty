@@ -512,6 +512,8 @@ function walkDefault(n: AnyNodeShape, ctx: Ctx): void {
 export interface TransformResult {
   /** The rewritten body (no `async () =>` wrapper — caller adds that). */
   readonly body: string;
+  /** 1-based body-line -> 1-based pre-rewrite source line. `0` means generated code. */
+  readonly lineMap: readonly number[];
   /** Every static import / re-export specifier — preloaded by the caller. */
   readonly staticImports: readonly string[];
 }
@@ -580,9 +582,9 @@ export function transformEsm(source: string, id: string): TransformResult {
 
   collectRewrites(program, source, importedBindings, edits);
 
-  let body = applyEdits(source, edits);
-  body = `__rebuildExports();\n${body}`;
-  return { body, staticImports: [...staticImports] };
+  const applied = applyEdits(source, edits);
+  const body = `__rebuildExports();\n${applied.body}`;
+  return { body, lineMap: [0, ...applied.lineMap], staticImports: [...staticImports] };
 }
 
 /**
@@ -795,7 +797,12 @@ function literalString(value: unknown): string {
   return value;
 }
 
-function applyEdits(source: string, edits: Edit[]): string {
+interface AppliedEdits {
+  readonly body: string;
+  readonly lineMap: readonly number[];
+}
+
+function applyEdits(source: string, edits: Edit[]): AppliedEdits {
   const sorted = [...edits].sort((a, b) => a.start - b.start || a.end - b.end);
   // Filter overlaps: keep the outer/earlier one.
   const kept: Edit[] = [];
@@ -805,13 +812,63 @@ function applyEdits(source: string, edits: Edit[]): string {
     kept.push(e);
     lastEnd = e.end;
   }
+  const lineStarts = lineStartsFor(source);
   let out = '';
+  let outputLine = 1;
+  const lineMap: number[] = [0];
   let cursor = 0;
+
+  function appendGenerated(text: string): void {
+    for (const char of text) {
+      if (lineMap[outputLine - 1] === undefined) lineMap[outputLine - 1] = 0;
+      out += char;
+      if (char === '\n') {
+        outputLine += 1;
+        lineMap[outputLine - 1] = 0;
+      }
+    }
+  }
+
+  function appendSource(text: string, startOffset: number): void {
+    let sourceLine = lineAtOffset(lineStarts, startOffset);
+    for (const char of text) {
+      if (lineMap[outputLine - 1] === 0 || lineMap[outputLine - 1] === undefined) {
+        lineMap[outputLine - 1] = sourceLine;
+      }
+      out += char;
+      if (char === '\n') {
+        outputLine += 1;
+        sourceLine += 1;
+        lineMap[outputLine - 1] = sourceLine;
+      }
+    }
+  }
+
   for (const e of kept) {
-    out += source.slice(cursor, e.start);
-    out += e.text;
+    appendSource(source.slice(cursor, e.start), cursor);
+    appendGenerated(e.text);
     cursor = e.end;
   }
-  out += source.slice(cursor);
-  return out;
+  appendSource(source.slice(cursor), cursor);
+  return { body: out, lineMap };
+}
+
+function lineStartsFor(source: string): number[] {
+  const starts = [0];
+  for (let i = 0; i < source.length; i++) {
+    if (source[i] === '\n') starts.push(i + 1);
+  }
+  return starts;
+}
+
+function lineAtOffset(lineStarts: readonly number[], offset: number): number {
+  let lo = 0;
+  let hi = lineStarts.length - 1;
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    const start = lineStarts[mid] ?? 0;
+    if (start <= offset) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  return hi + 1;
 }

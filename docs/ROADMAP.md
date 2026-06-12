@@ -103,4 +103,5 @@ Theme (not a checklist):
 
 Contributing work is tagged **M11** across `docs/backlog/<area>/*` items (one-way by design: items
 cite M11; this section deliberately does not enumerate them, so there is no list to drift). Grep
-`M11` in `docs/backlog` for the live set.
+`M11` in `docs/backlog` for the live set. Consumer-ready follow-ups deliberately retargeted beyond
+M11 are indexed in `docs/backlog/process-meta/consumer-ready-followup-cutline`.

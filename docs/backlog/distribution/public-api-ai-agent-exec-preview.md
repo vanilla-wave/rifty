@@ -4,7 +4,7 @@ status: parked
 title: Residual AI-agent sandbox exec streaming + preview URL API
 created: 2026-06-12
 why: ADR-0131 landed only public FS read/write; agent contract still needs streamed exec results and a normalized preview URL surface
-sources: [M11, docs/research/open-webcontainers-alternative-2026-06.md, ADR-0071, ADR-0131, ADR-0048, ADR-0123]
+sources: [docs/research/open-webcontainers-alternative-2026-06.md, ADR-0071, ADR-0131, ADR-0048, ADR-0123]
 code: [packages/rifty/src/sandbox.ts, packages/runtime-js/src/host.ts]
 ---
 

@@ -4,7 +4,7 @@ status: blocked
 title: process.platform/arch honesty (ADR-0026) vs real-code branching — recorded tension
 created: 2026-06-11
 why: ADR-0026 returns platform='rifty'/arch='wasm' (honest), but ubiquitous platform==='darwin'|'linux'|'win32' and arch branches then misfire; reconsidering a recorded ADR is the one fork that must go through a decision subagent, so this records the tension, not a change
-sources: [M11, docs/research/open-webcontainers-alternative-2026-06.md, ADR-0026]
+sources: [docs/research/open-webcontainers-alternative-2026-06.md, ADR-0026]
 code: [packages/runtime-js/src/builtins/process.ts]
 ---
 

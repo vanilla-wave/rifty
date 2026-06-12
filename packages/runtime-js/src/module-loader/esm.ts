@@ -4,6 +4,7 @@ import { ModuleLoadError } from './errors.ts';
 import { RUNTIME_OBJECT_BINDING, type TransformResult, transformEsm } from './esm-ast.ts';
 import type { ModuleRecord, ModuleRegistry } from './registry.ts';
 import type { ResolvedModule, Resolver } from './resolver.ts';
+import { type SourceMapRegistry, withStackRemapping } from './source-maps.ts';
 
 /**
  * Per-file source transform for `.ts`/`.tsx`/`.jsx` modules, run BEFORE the AST
@@ -49,6 +50,8 @@ export interface EsmLoaderDeps {
   resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule;
   /** esbuild guest cwd/preopen threaded through to {@link TransformSourceHook}. */
   readonly workspace: string;
+  /** Internal transform sourcemap registry, keyed by resolved id. */
+  readonly sourceMaps?: SourceMapRegistry;
   /** Injected per-file TS/JSX source transform; absent on plain-JS loaders. */
   readonly transformSource?: TransformSourceHook;
   /**
@@ -59,6 +62,15 @@ export interface EsmLoaderDeps {
    */
   readonly transformEsm?: (source: string, id: string) => TransformResult;
 }
+
+// V8 renders `new Function(args, body)` as `function anonymous(args\n) {\n<body>`
+// — the module body starts 4 lines below the reported frame line. Coupled to
+// the factory wrapper in `executeEsm`; wrong on non-V8 engines (we target
+// Chromium, D-001). Remapping is active only while the module factory runs
+// (top-level evaluation) — frames rendered later, e.g. an exported handler
+// throwing at request time, stay unmapped.
+// TODO(backlog: runtime-js/worker-stack-remap-error-overlay)
+const ESM_STACK_LINE_OFFSET = 4;
 
 /**
  * Loads and executes an ESM module, populating its slot table and exports
@@ -109,6 +121,7 @@ export async function executeEsm(
   // Cached AST rewrite when the loader injected one (perf #16); the direct
   // import is the default so plain construction stays unchanged.
   const transformed = (deps.transformEsm ?? transformEsm)(source, resolved.id);
+  deps.sourceMaps?.setGeneratedLineMap(resolved.id, transformed.lineMap);
   // Stash by file path so modules don't overwrite each other. Lives on the typed
   // owner table at `__rifty.esmStash` — see `internal/worker-globals.ts`.
   const stash: Record<string, string> = readRuntimeGlobal('esmStash') ?? {};
@@ -207,16 +220,18 @@ export async function executeEsm(
   const assetPath = (spec: string): string => deps.resolve(spec, resolved.id, true).id;
 
   try {
-    await factory(
-      dynamicImport,
-      importStatic,
-      record.slots,
-      importStatic,
-      () => rebuildExports(record),
-      __importMetaUrl,
-      __metaDirname,
-      __metaFilename,
-      assetPath,
+    await withStackRemapping(deps.sourceMaps, resolved.id, ESM_STACK_LINE_OFFSET, () =>
+      factory(
+        dynamicImport,
+        importStatic,
+        record.slots,
+        importStatic,
+        () => rebuildExports(record),
+        __importMetaUrl,
+        __metaDirname,
+        __metaFilename,
+        assetPath,
+      ),
     );
   } catch (err) {
     record.state = 'errored';

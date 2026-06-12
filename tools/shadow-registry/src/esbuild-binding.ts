@@ -68,6 +68,8 @@ export interface EsbuildTransformOptions {
   jsx?: 'transform' | 'preserve' | 'automatic';
   /** Output module format. Defaults to `esm` (vite's dev format). */
   format?: 'esm' | 'cjs' | 'iife';
+  /** Source map mode passed through to esbuild when set. */
+  sourcemap?: 'inline';
 }
 
 export interface EsbuildTransformResult {
@@ -121,6 +123,7 @@ export async function transformWithEsbuild(
   const format = options.format ?? 'esm';
   const args = ['esbuild', `--loader=${options.loader}`, `--format=${format}`];
   if (options.jsx) args.push(`--jsx=${options.jsx}`);
+  if (options.sourcemap) args.push(`--sourcemap=${options.sourcemap}`);
 
   const bytes = enc.encode(options.source);
   let delivered = false;

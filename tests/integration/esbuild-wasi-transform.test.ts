@@ -68,6 +68,17 @@ maybe('integration — esbuild WASI transform (shadow-binding)', () => {
     expect(out.code).toContain('className: "x"');
   });
 
+  it('emits inline sourcemaps when requested', async () => {
+    const wasm = loadVendoredEsbuildWasm();
+    const out = await transformWithEsbuild(runWasi, wasm, {
+      source: 'const x: number = 1;\nconsole.log(x);\n',
+      loader: 'ts',
+      sourcemap: 'inline',
+      workspace: '/workspace',
+    });
+    expect(out.code).toContain('sourceMappingURL=data:application/json;base64');
+  });
+
   it('surfaces a syntax error from the guest as a thrown error, not fake output', async () => {
     const wasm = loadVendoredEsbuildWasm();
     await expect(

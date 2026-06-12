@@ -65,9 +65,9 @@ All were INFRA — none needed a curated package-substitution registry.
 - vfs/runtime fs: OPFS mkdir/empty-dir rename structural flush tracking landed; runtime-local
   fd/mkdtemp/opendir/truncate/constants plus WASI positional fd syscalls landed; lower FsSync
   fd/fsync fidelity parked; storage-durability-and-portability remains.
-- runtime-js: sourcemap-remapping-error-overlay; vm-subset-node-test-support;
-  crypto-sync-subset-expansion (parked); platform-arch-adoption-friction (blocked — ADR-0026
-  reconsideration via a decision subagent).
+- runtime-js: worker-stack-remap-error-overlay (loader-local remap landed; worker/overlay residue);
+  node-test-runner-built-in; crypto-sync-subset-expansion (parked); platform-arch-adoption-friction
+  (blocked — ADR-0026 reconsideration via a decision subagent).
 - kernel: public trust model now lives in `docs/public/trust-model.md`; hard host-operator resource
   enforcement is parked as `kernel/host-operator-resource-enforcement`.
 - runtime-wasi: runwasi-kernel-dispatch-wiring (enriched — off-main-thread dispatch + worker stdin).

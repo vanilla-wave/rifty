@@ -59,11 +59,34 @@
   with `Built-in 'node:path' is not implemented`. `createResolver()` now calls
   the idempotent registration guard before builtin resolution. Guard:
   `src/module-loader/resolver-bundling.test.ts`.
-- **Transformed TypeScript stack frames remap to source lines.** The ESM loader
-  now extracts inline source maps from `transformSource` output and installs a
-  scoped stack renderer while guest modules execute, so caught `err.stack`
-  reads inside `.ts` guests report the original TypeScript line. The public
-  `TransformSourceHook` remains `Promise<string>`.
+- **`node:vm` context assignment rewrites now cover nested blocks and loops.**
+  Missing global writes such as `if (...) y = 1` or `for (...) y = 2` inside
+  `runInNewContext()` now land on the context object like Node instead of
+  leaking to the host `globalThis`.
+- **`node:vm` context rewrites preserve shadowed globals and top-level `var`
+  hoisting.** Missing-global assignments now target a generated helper binding,
+  so user parameters named `globalThis` cannot steal sandbox writes; top-level
+  `var` names are visible as `undefined` during evaluation before their
+  initializers run.
+- **Transformed TypeScript stack frames remap to source lines (ADR-0136).** The
+  ESM loader now extracts inline source maps from `transformSource` output and
+  installs a scoped stack renderer while guest modules execute, so caught
+  `err.stack` reads inside `.ts` guests report the original TypeScript line.
+  The public `TransformSourceHook` remains `Promise<string>`.
+- **`node:vm` write-leak class closed for sibling syntax forms.** Top-level
+  `var` initializers are now AST-walked instead of spliced raw (a function body
+  inside `var a = function () { x = 1 }` wrote to the host realm), and
+  compound/logical assignment (`+=`, `??=`), `++`/`--`, destructuring
+  assignment targets, bare/`var` for-in/of loop targets, and `delete` on
+  unbound names all land on the context. `switch` cases get a lexical scope;
+  `for (var k in o)` no longer rewrites into a SyntaxError. Reads of unbound
+  names stay loud (`ReferenceError`) / fall through to host globals by design.
+  Residual gaps (direct `eval`, function hoisting) documented in
+  `docs/backlog/runtime-js/vm-sandbox-residual-gaps`.
+- **Source-map decoding: 1-field VLQ segments advance the running generated
+  column** (esbuild emits them for unmapped text; columns after them were
+  shifted left), and a malformed inline source map now degrades to unmapped
+  stacks instead of failing the module load.
 - **`path.resolve` anchors relative paths at `process.cwd()`** (Node parity;
   fs already did) — `express.static('public')` under a non-root cwd resolved
   to `/public` and 404'd.

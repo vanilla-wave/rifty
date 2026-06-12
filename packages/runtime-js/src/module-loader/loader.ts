@@ -8,6 +8,7 @@ import { wrapCjsAsEsmNamespace } from './interop.ts';
 import { ModuleRegistry } from './registry.ts';
 import type { PathAliases, ResolvedModule } from './resolver.ts';
 import { type Resolver, createResolver } from './resolver.ts';
+import { SourceMapRegistry, extractInlineSourceMap } from './source-maps.ts';
 
 export type { TransformSourceHook } from './esm.ts';
 export type { PathAliases } from './resolver.ts';
@@ -90,14 +91,18 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
   // are immutable per package version in the VFS overlay). Wrapping
   // `opts.transformSource` keeps `esm.ts` cache-unaware. TODO(backlog: runtime-js/ts-strip-transform-cache).
   const transformCache = new Map<string, string>();
+  const sourceMaps = new SourceMapRegistry();
   const cachedTransform: TransformSourceHook | undefined =
     opts.transformSource &&
     (async (req) => {
       const hit = transformCache.get(req.id);
       if (hit !== undefined) return hit;
       const out = await opts.transformSource!(req);
-      transformCache.set(req.id, out);
-      return out;
+      const extracted = extractInlineSourceMap(out);
+      if (extracted.map) sourceMaps.set(req.id, extracted.map);
+      else sourceMaps.delete(req.id);
+      transformCache.set(req.id, extracted.code);
+      return extracted.code;
     });
 
   // Id-keyed ESM AST cache: `transformEsm` (acorn parse + walk) is the heaviest
@@ -118,6 +123,7 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     registry,
     resolver,
     workspace,
+    sourceMaps,
     transformSource: cachedTransform,
     transformEsm: cachedTransformEsm,
     resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule {
@@ -233,9 +239,11 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
       if (id === undefined) {
         transformCache.clear();
         esmAstCache.clear();
+        sourceMaps.clear();
       } else {
         transformCache.delete(id);
         esmAstCache.delete(id);
+        sourceMaps.delete(id);
       }
       // Resolver caches (package.json parses #5 + resolution memo #15) are
       // input-keyed and cannot be pruned by module id, so ANY invalidate —
