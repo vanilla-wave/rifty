@@ -59,6 +59,10 @@
   with `Built-in 'node:path' is not implemented`. `createResolver()` now calls
   the idempotent registration guard before builtin resolution. Guard:
   `src/module-loader/resolver-bundling.test.ts`.
+- **`node:vm` context assignment rewrites now cover nested blocks and loops.**
+  Missing global writes such as `if (...) y = 1` or `for (...) y = 2` inside
+  `runInNewContext()` now land on the context object like Node instead of
+  leaking to the host `globalThis`.
 - **Transformed TypeScript stack frames remap to source lines.** The ESM loader
   now extracts inline source maps from `transformSource` output and installs a
   scoped stack renderer while guest modules execute, so caught `err.stack`

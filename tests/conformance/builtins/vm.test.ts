@@ -79,6 +79,10 @@ describe('node:vm subset', () => {
 
   it('uses the context object as the script global', () => {
     (globalThis as typeof globalThis & { __riftyVmCreated?: number }).__riftyVmCreated = undefined;
+    (globalThis as typeof globalThis & { __riftyVmBlockLeak?: number }).__riftyVmBlockLeak =
+      undefined;
+    (globalThis as typeof globalThis & { __riftyVmLoopLeak?: number }).__riftyVmLoopLeak =
+      undefined;
     const globals: Record<string, unknown> = {};
 
     expect(
@@ -86,21 +90,38 @@ describe('node:vm subset', () => {
         `
           __riftyVmCreated = 1;
           var declared = 2;
+          if (true) __riftyVmBlockLeak = 5;
+          for (let i = 0; i < 1; i++) __riftyVmLoopLeak = 6;
           this.viaThis = 3;
           globalThis.viaGlobal = 4;
-          ({ __riftyVmCreated, declared, viaThis, viaGlobal });
+          ({ __riftyVmCreated, declared, __riftyVmBlockLeak, __riftyVmLoopLeak, viaThis, viaGlobal });
         `,
         globals,
       ),
-    ).toEqual({ __riftyVmCreated: 1, declared: 2, viaThis: 3, viaGlobal: 4 });
+    ).toEqual({
+      __riftyVmCreated: 1,
+      declared: 2,
+      __riftyVmBlockLeak: 5,
+      __riftyVmLoopLeak: 6,
+      viaThis: 3,
+      viaGlobal: 4,
+    });
     expect(globals).toMatchObject({
       __riftyVmCreated: 1,
       declared: 2,
+      __riftyVmBlockLeak: 5,
+      __riftyVmLoopLeak: 6,
       viaThis: 3,
       viaGlobal: 4,
     });
     expect(
       (globalThis as typeof globalThis & { __riftyVmCreated?: number }).__riftyVmCreated,
+    ).toBeUndefined();
+    expect(
+      (globalThis as typeof globalThis & { __riftyVmBlockLeak?: number }).__riftyVmBlockLeak,
+    ).toBeUndefined();
+    expect(
+      (globalThis as typeof globalThis & { __riftyVmLoopLeak?: number }).__riftyVmLoopLeak,
     ).toBeUndefined();
   });
 

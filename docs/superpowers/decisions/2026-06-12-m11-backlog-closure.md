@@ -271,3 +271,11 @@ It is intentionally concise and append-only during the work.
   or `node:stream/web`.
 - **Reversibility:** Doc-only retarget. Additive stream helpers stay gated on a
   real consumer and compat-matrix claims.
+
+### D28 — VM Context Assignment Review Fix
+
+- **Decision:** Keep the `node:vm` subset but widen its context-source rewrite
+  from top-level statements to a scoped AST walk.
+- **Why:** Review found block/loop assignments to missing globals leaked to host
+  `globalThis`; Node stores those writes on the sandbox object.
+- **Reversibility:** Runtime-internal fix. Guarded by conformance and parity.

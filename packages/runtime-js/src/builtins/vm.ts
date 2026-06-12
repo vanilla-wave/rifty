@@ -1,9 +1,17 @@
 import { NotImplementedError } from '@riftydev/io';
 import type {
+  Function as AcornFunction,
   AssignmentExpression,
-  ExpressionStatement,
+  AssignmentPattern,
+  CatchClause,
+  ClassDeclaration,
+  ClassExpression,
+  ForInStatement,
+  ForOfStatement,
+  ForStatement,
   FunctionDeclaration,
   Identifier,
+  Pattern,
   Program,
   VariableDeclaration,
 } from 'acorn';
@@ -17,6 +25,20 @@ interface SourceEdit {
   readonly start: number;
   readonly end: number;
   readonly text: string;
+}
+
+interface AnyNodeShape {
+  type: string;
+  start: number;
+  end: number;
+  [k: string]: unknown;
+}
+
+interface RewriteContext {
+  readonly source: string;
+  readonly edits: SourceEdit[];
+  readonly scopes: Array<Set<string>>;
+  functionDepth: number;
 }
 
 export interface RunningScriptOptions {
@@ -268,76 +290,328 @@ function identifierName(node: unknown): string | null {
     : null;
 }
 
+function pushScope(ctx: RewriteContext): void {
+  ctx.scopes.push(new Set());
+}
+
+function popScope(ctx: RewriteContext): void {
+  ctx.scopes.pop();
+}
+
+function addBinding(ctx: RewriteContext, name: string): void {
+  ctx.scopes[ctx.scopes.length - 1]?.add(name);
+}
+
+function isBound(ctx: RewriteContext, name: string): boolean {
+  for (let i = ctx.scopes.length - 1; i >= 0; i--) {
+    if (ctx.scopes[i]?.has(name)) return true;
+  }
+  return false;
+}
+
+function declarePattern(ctx: RewriteContext, pat: Pattern): void {
+  switch (pat.type) {
+    case 'Identifier':
+      addBinding(ctx, pat.name);
+      return;
+    case 'ObjectPattern':
+      for (const property of pat.properties) {
+        if (property.type === 'RestElement') declarePattern(ctx, property.argument);
+        else declarePattern(ctx, property.value);
+      }
+      return;
+    case 'ArrayPattern':
+      for (const element of pat.elements) {
+        if (element) declarePattern(ctx, element);
+      }
+      return;
+    case 'RestElement':
+      declarePattern(ctx, pat.argument);
+      return;
+    case 'AssignmentPattern':
+      declarePattern(ctx, (pat as AssignmentPattern).left);
+      return;
+    default:
+      return;
+  }
+}
+
+function declareVarDecl(ctx: RewriteContext, declaration: VariableDeclaration): void {
+  for (const declarator of declaration.declarations) declarePattern(ctx, declarator.id);
+}
+
+function emitContextVarRewrite(ctx: RewriteContext, declaration: VariableDeclaration): void {
+  const assignments: string[] = [];
+  for (const declarator of declaration.declarations) {
+    const name = identifierName(declarator.id);
+    if (!name) {
+      throw new NotImplementedError('vm.context.var-pattern');
+    }
+    const init = declarator.init
+      ? ctx.source.slice(declarator.init.start, declarator.init.end)
+      : 'undefined';
+    assignments.push(`globalThis.${name} = ${init}`);
+  }
+  ctx.edits.push({ start: declaration.start, end: declaration.end, text: assignments.join('; ') });
+}
+
+function predeclareLexicalBody(ctx: RewriteContext, body: readonly AnyNodeShape[]): void {
+  for (const child of body) {
+    if (child.type === 'VariableDeclaration') {
+      const declaration = child as unknown as VariableDeclaration;
+      if (declaration.kind !== 'var') declareVarDecl(ctx, declaration);
+    } else if (child.type === 'ClassDeclaration') {
+      const id = (child as unknown as ClassDeclaration).id;
+      if (id) addBinding(ctx, id.name);
+    } else if (child.type === 'FunctionDeclaration' && ctx.functionDepth > 0) {
+      const id = (child as unknown as FunctionDeclaration).id;
+      if (id) addBinding(ctx, id.name);
+    }
+  }
+}
+
+function collectFunctionVarBindings(node: unknown, ctx: RewriteContext): void {
+  if (!node || typeof node !== 'object') return;
+  const n = node as AnyNodeShape;
+  if (typeof n.type !== 'string') return;
+  if (
+    n.type === 'FunctionDeclaration' ||
+    n.type === 'FunctionExpression' ||
+    n.type === 'ArrowFunctionExpression'
+  ) {
+    return;
+  }
+  if (n.type === 'VariableDeclaration') {
+    const declaration = n as unknown as VariableDeclaration;
+    if (declaration.kind === 'var') declareVarDecl(ctx, declaration);
+  }
+  for (const key of Object.keys(n)) {
+    if (key === 'type' || key === 'start' || key === 'end' || key === 'loc' || key === 'range') {
+      continue;
+    }
+    const value = n[key];
+    if (!value) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) collectFunctionVarBindings(item, ctx);
+    } else if (typeof value === 'object') {
+      collectFunctionVarBindings(value, ctx);
+    }
+  }
+}
+
+function walkPatternExpressions(pattern: Pattern, ctx: RewriteContext): void {
+  switch (pattern.type) {
+    case 'ObjectPattern':
+      for (const property of pattern.properties) {
+        if (property.type === 'RestElement') {
+          walkPatternExpressions(property.argument, ctx);
+        } else {
+          if (property.computed) walkContextNode(property.key, ctx);
+          walkPatternExpressions(property.value, ctx);
+        }
+      }
+      return;
+    case 'ArrayPattern':
+      for (const element of pattern.elements) {
+        if (element) walkPatternExpressions(element, ctx);
+      }
+      return;
+    case 'RestElement':
+      walkPatternExpressions(pattern.argument, ctx);
+      return;
+    case 'AssignmentPattern':
+      walkPatternExpressions(pattern.left, ctx);
+      walkContextNode(pattern.right, ctx);
+      return;
+    default:
+      return;
+  }
+}
+
+function walkFunction(fn: AcornFunction, ctx: RewriteContext): void {
+  pushScope(ctx);
+  ctx.functionDepth += 1;
+  if (fn.id) addBinding(ctx, fn.id.name);
+  for (const param of fn.params) {
+    declarePattern(ctx, param);
+    walkPatternExpressions(param, ctx);
+  }
+  collectFunctionVarBindings(fn.body, ctx);
+  walkContextNode(fn.body, ctx);
+  ctx.functionDepth -= 1;
+  popScope(ctx);
+}
+
+function walkBlock(body: readonly AnyNodeShape[], ctx: RewriteContext): void {
+  pushScope(ctx);
+  predeclareLexicalBody(ctx, body);
+  for (const child of body) walkContextNode(child, ctx);
+  popScope(ctx);
+}
+
+function walkForStatement(statement: ForStatement, ctx: RewriteContext): void {
+  pushScope(ctx);
+  if (statement.init) {
+    if ((statement.init as unknown as AnyNodeShape).type === 'VariableDeclaration') {
+      const declaration = statement.init as unknown as VariableDeclaration;
+      if (declaration.kind !== 'var') declareVarDecl(ctx, declaration);
+    }
+    walkContextNode(statement.init, ctx);
+  }
+  if (statement.test) walkContextNode(statement.test, ctx);
+  if (statement.update) walkContextNode(statement.update, ctx);
+  walkContextNode(statement.body, ctx);
+  popScope(ctx);
+}
+
+function walkForInOfStatement(
+  statement: ForInStatement | ForOfStatement,
+  ctx: RewriteContext,
+): void {
+  pushScope(ctx);
+  if ((statement.left as unknown as AnyNodeShape).type === 'VariableDeclaration') {
+    const declaration = statement.left as unknown as VariableDeclaration;
+    if (declaration.kind !== 'var') declareVarDecl(ctx, declaration);
+  }
+  walkContextNode(statement.left, ctx);
+  walkContextNode(statement.right, ctx);
+  walkContextNode(statement.body, ctx);
+  popScope(ctx);
+}
+
+function walkDefault(node: AnyNodeShape, ctx: RewriteContext): void {
+  for (const key of Object.keys(node)) {
+    if (key === 'type' || key === 'start' || key === 'end' || key === 'loc' || key === 'range') {
+      continue;
+    }
+    const value = node[key];
+    if (!value) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) walkContextNode(item, ctx);
+    } else if (typeof value === 'object') {
+      walkContextNode(value, ctx);
+    }
+  }
+}
+
+function walkContextNode(node: unknown, ctx: RewriteContext): void {
+  if (!node || typeof node !== 'object') return;
+  const n = node as AnyNodeShape;
+  if (typeof n.type !== 'string') return;
+
+  switch (n.type) {
+    case 'Program': {
+      const program = n as unknown as Program;
+      predeclareLexicalBody(ctx, program.body as unknown as AnyNodeShape[]);
+      for (const child of program.body) walkContextNode(child, ctx);
+      return;
+    }
+
+    case 'BlockStatement':
+      walkBlock((n as unknown as { body: AnyNodeShape[] }).body, ctx);
+      return;
+
+    case 'FunctionDeclaration': {
+      const declaration = n as unknown as FunctionDeclaration;
+      if (ctx.functionDepth === 0 && declaration.id) {
+        ctx.edits.push({
+          start: declaration.start,
+          end: declaration.start,
+          text: `globalThis.${declaration.id.name} = `,
+        });
+        ctx.edits.push({ start: declaration.end, end: declaration.end, text: ';' });
+      }
+      walkFunction(declaration as unknown as AcornFunction, ctx);
+      return;
+    }
+
+    case 'FunctionExpression':
+    case 'ArrowFunctionExpression':
+      walkFunction(n as unknown as AcornFunction, ctx);
+      return;
+
+    case 'VariableDeclaration': {
+      const declaration = n as unknown as VariableDeclaration;
+      if (declaration.kind === 'var') {
+        if (ctx.functionDepth === 0) {
+          emitContextVarRewrite(ctx, declaration);
+          return;
+        }
+        declareVarDecl(ctx, declaration);
+      }
+      for (const declarator of declaration.declarations) {
+        walkPatternExpressions(declarator.id, ctx);
+        if (declarator.init) walkContextNode(declarator.init, ctx);
+      }
+      return;
+    }
+
+    case 'AssignmentExpression': {
+      const assignment = n as unknown as AssignmentExpression;
+      const name = assignment.operator === '=' ? identifierName(assignment.left) : null;
+      if (name && !isBound(ctx, name)) {
+        ctx.edits.push({
+          start: assignment.left.start,
+          end: assignment.left.end,
+          text: `globalThis.${name}`,
+        });
+      } else {
+        walkContextNode(assignment.left, ctx);
+      }
+      walkContextNode(assignment.right, ctx);
+      return;
+    }
+
+    case 'ForStatement':
+      walkForStatement(n as unknown as ForStatement, ctx);
+      return;
+
+    case 'ForInStatement':
+    case 'ForOfStatement':
+      walkForInOfStatement(n as unknown as ForInStatement | ForOfStatement, ctx);
+      return;
+
+    case 'CatchClause': {
+      const clause = n as unknown as CatchClause;
+      pushScope(ctx);
+      if (clause.param) declarePattern(ctx, clause.param);
+      walkContextNode(clause.body, ctx);
+      popScope(ctx);
+      return;
+    }
+
+    case 'ClassDeclaration':
+    case 'ClassExpression': {
+      const klass = n as unknown as ClassDeclaration | ClassExpression;
+      pushScope(ctx);
+      if (klass.id) addBinding(ctx, klass.id.name);
+      if (klass.superClass) walkContextNode(klass.superClass, ctx);
+      walkContextNode(klass.body, ctx);
+      popScope(ctx);
+      return;
+    }
+
+    default:
+      walkDefault(n, ctx);
+      return;
+  }
+}
+
 function rewriteContextSource(source: string): string {
   const program = acornParse(source, {
     ecmaVersion: 'latest',
     sourceType: 'script',
     allowReturnOutsideFunction: true,
   }) as Program;
-  const lexicalBindings = new Set<string>();
-  const edits: SourceEdit[] = [];
+  const ctx: RewriteContext = {
+    source,
+    edits: [],
+    scopes: [new Set()],
+    functionDepth: 0,
+  };
 
-  for (const statement of program.body) {
-    if (statement.type === 'VariableDeclaration') {
-      const declaration = statement as VariableDeclaration;
-      for (const declarator of declaration.declarations) {
-        const name = identifierName(declarator.id);
-        if (name && declaration.kind !== 'var') lexicalBindings.add(name);
-      }
-    }
-    if (statement.type === 'ClassDeclaration') {
-      const name = identifierName((statement as { id?: unknown }).id);
-      if (name) lexicalBindings.add(name);
-    }
-  }
-
-  for (const statement of program.body) {
-    if (statement.type === 'FunctionDeclaration') {
-      const declaration = statement as FunctionDeclaration;
-      if (!declaration.id) continue;
-      edits.push({
-        start: declaration.start,
-        end: declaration.start,
-        text: `globalThis.${declaration.id.name} = `,
-      });
-      edits.push({ start: declaration.end, end: declaration.end, text: ';' });
-      continue;
-    }
-
-    if (statement.type === 'VariableDeclaration') {
-      const declaration = statement as VariableDeclaration;
-      if (declaration.kind !== 'var') continue;
-      const assignments: string[] = [];
-      for (const declarator of declaration.declarations) {
-        const name = identifierName(declarator.id);
-        if (!name) {
-          throw new NotImplementedError('vm.context.var-pattern');
-        }
-        const init = declarator.init
-          ? source.slice(declarator.init.start, declarator.init.end)
-          : 'undefined';
-        assignments.push(`globalThis.${name} = ${init}`);
-      }
-      edits.push({ start: declaration.start, end: declaration.end, text: assignments.join('; ') });
-      continue;
-    }
-
-    if (statement.type === 'ExpressionStatement') {
-      const expression = (statement as ExpressionStatement).expression;
-      if (expression.type !== 'AssignmentExpression') continue;
-      const assignment = expression as AssignmentExpression;
-      if (assignment.operator !== '=') continue;
-      const name = identifierName(assignment.left);
-      if (!name || lexicalBindings.has(name)) continue;
-      edits.push({
-        start: assignment.left.start,
-        end: assignment.left.end,
-        text: `globalThis.${name}`,
-      });
-    }
-  }
-
-  return applySourceEdits(source, edits);
+  walkContextNode(program, ctx);
+  return applySourceEdits(source, ctx.edits);
 }
 
 export function createContext<T extends Record<string, unknown> = Record<string, unknown>>(
