@@ -173,3 +173,12 @@ It is intentionally concise and append-only during the work.
   decisions where SubtleCrypto cannot satisfy sync Node APIs.
 - **Reversibility:** Doc-only retarget. Runtime additions stay gated on a real
   package need and focused tests.
+
+### D18 — Platform/Arch ADR Reconsideration Retarget
+
+- **Decision:** Retarget `runtime-js/platform-arch-adoption-friction` as a
+  blocked ADR-0026 reconsideration item.
+- **Why:** Changing `process.platform` / `process.arch` would contradict an
+  active ADR and needs a decision subagent plus superseding ADR, not milestone
+  cleanup.
+- **Reversibility:** Doc-only retarget. Behavior remains unchanged.
