@@ -16,8 +16,9 @@
   `optionalDependencies`, and string-valued `overrides`. Root optionals keep the
   existing warn-and-skip semantics, while `file:`, `workspace:`, git, URL
   tarball, and npm-alias specs throw named `NotImplementedError`s. Package
-  install lifecycle scripts (`preinstall`, `install`, `postinstall`, `prepare`)
-  also throw named `NotImplementedError`s instead of being silently skipped.
+  install-time lifecycle scripts (`preinstall`, `install`, `postinstall`) also
+  throw named `NotImplementedError`s instead of being silently skipped. Registry
+  `prepare` metadata is ignored because published tarballs are already prepared.
   Registry manifests and lockfile entries now preserve `bin`; `link()` writes
   containing-scope `node_modules/.bin` LAUNCHER shims (no symlinks per
   ADR-0050) — `#!/usr/bin/env node` + `import('../<pkg>/<bin>')`, not a byte

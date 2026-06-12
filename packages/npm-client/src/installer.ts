@@ -285,7 +285,7 @@ async function readRootPackageJson(vfs: Vfs, cwd: string): Promise<RootPackageJs
     throw new Error(`package.json at ${joinPath(cwd, 'package.json')} must be a JSON object`);
   }
   const raw = parsed as Record<string, unknown>;
-  assertNoLifecycleScripts(readStringRecord(raw, 'scripts'));
+  assertNoLifecycleScripts(readStringRecord(raw, 'scripts'), ROOT_LIFECYCLE_SCRIPTS);
   return {
     name: typeof raw.name === 'string' ? raw.name : undefined,
     version: typeof raw.version === 'string' ? raw.version : undefined,

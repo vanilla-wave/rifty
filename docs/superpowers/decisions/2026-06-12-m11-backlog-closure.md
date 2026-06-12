@@ -279,3 +279,13 @@ It is intentionally concise and append-only during the work.
 - **Why:** Review found block/loop assignments to missing globals leaked to host
   `globalThis`; Node stores those writes on the sandbox object.
 - **Reversibility:** Runtime-internal fix. Guarded by conformance and parity.
+
+### D29 — Registry Prepare Metadata
+
+- **Decision:** Ignore `prepare` scripts on registry package manifests while
+  continuing to reject `preinstall`/`install`/`postinstall`.
+- **Why:** Registry tarballs are already prepared; live Vite installs now see
+  Rollup metadata with `prepare`, and blocking it prevents the e2e preview
+  server from booting.
+- **Reversibility:** npm-client behavior fix. Guarded by unit regression and
+  live Vite install probe.
