@@ -147,6 +147,155 @@ class DomError extends Error {
   }
 }
 
+async function waitForMicrotaskCondition(predicate: () => boolean, label: string): Promise<void> {
+  for (let i = 0; i < 10; i++) {
+    if (predicate()) return;
+    await Promise.resolve();
+  }
+  throw new Error(`Timed out waiting for ${label}`);
+}
+
+interface MutableRootOptions {
+  dirs?: readonly string[];
+  files?: ReadonlyMap<string, { bytes: Uint8Array; mtime?: number }>;
+  deferCreates?: boolean;
+}
+
+interface MutableFakeRoot {
+  root: FileSystemDirectoryHandle;
+  dirs: Set<string>;
+  files: Map<string, { bytes: Uint8Array; mtime?: number }>;
+  pendingCreates: Array<{ path: string; resolve: () => void }>;
+  releaseNextCreate(): string;
+}
+
+function buildMutableRoot({
+  dirs: initialDirs = ['/'],
+  files: initialFiles = new Map(),
+  deferCreates = false,
+}: MutableRootOptions = {}): MutableFakeRoot {
+  const dirs = new Set(initialDirs);
+  dirs.add('/');
+  const files = new Map(initialFiles);
+  const pendingCreates: Array<{ path: string; resolve: () => void }> = [];
+
+  function makeDir(prefix: string): FileSystemDirectoryHandle {
+    const handle: FileSystemDirectoryHandle = {
+      kind: 'directory',
+      name: prefix === '/' ? '' : (prefix.split('/').pop() ?? ''),
+      isSameEntry: () => Promise.resolve(false),
+      getFileHandle(name: string) {
+        const fullPath = prefix === '/' ? `/${name}` : `${prefix}/${name}`;
+        const file = files.get(fullPath);
+        if (!file) return Promise.reject(new DomError('NotFoundError'));
+        return Promise.resolve({
+          kind: 'file',
+          name,
+          isSameEntry: () => Promise.resolve(false),
+          getFile: () =>
+            Promise.resolve({
+              size: file.bytes.byteLength,
+              lastModified: file.mtime ?? 0,
+              arrayBuffer: () =>
+                Promise.resolve(
+                  file.bytes.buffer.slice(
+                    file.bytes.byteOffset,
+                    file.bytes.byteOffset + file.bytes.byteLength,
+                  ),
+                ),
+            } as unknown as File),
+        } as unknown as FileSystemFileHandle);
+      },
+      getDirectoryHandle(name: string, options?: { create?: boolean }) {
+        const fullPath = prefix === '/' ? `/${name}` : `${prefix}/${name}`;
+        if (dirs.has(fullPath)) return Promise.resolve(makeDir(fullPath));
+        if (!options?.create) return Promise.reject(new DomError('NotFoundError'));
+        if (!deferCreates) {
+          dirs.add(fullPath);
+          return Promise.resolve(makeDir(fullPath));
+        }
+        return new Promise<FileSystemDirectoryHandle>((resolve) => {
+          pendingCreates.push({
+            path: fullPath,
+            resolve: () => {
+              dirs.add(fullPath);
+              resolve(makeDir(fullPath));
+            },
+          });
+        });
+      },
+      removeEntry(name: string, options?: { recursive?: boolean }) {
+        const fullPath = prefix === '/' ? `/${name}` : `${prefix}/${name}`;
+        if (files.delete(fullPath)) return Promise.resolve();
+        if (!dirs.has(fullPath)) return Promise.reject(new DomError('NotFoundError'));
+        const hasChildren =
+          [...dirs].some((p) => p !== fullPath && p.startsWith(`${fullPath}/`)) ||
+          [...files.keys()].some((p) => p.startsWith(`${fullPath}/`));
+        if (hasChildren && !options?.recursive) {
+          return Promise.reject(new DomError('InvalidModificationError'));
+        }
+        for (const dir of [...dirs]) {
+          if (dir === fullPath || dir.startsWith(`${fullPath}/`)) dirs.delete(dir);
+        }
+        for (const file of [...files.keys()]) {
+          if (file === fullPath || file.startsWith(`${fullPath}/`)) files.delete(file);
+        }
+        return Promise.resolve();
+      },
+      resolve: () => Promise.resolve([] as string[]),
+      [Symbol.asyncIterator]: () => {
+        const childNames = new Set<string>();
+        const childKinds = new Map<string, 'file' | 'directory'>();
+        for (const dirPath of dirs) {
+          if (dirPath === prefix) continue;
+          if (!dirPath.startsWith(prefix === '/' ? '/' : `${prefix}/`)) continue;
+          const rest = dirPath.slice(prefix === '/' ? 1 : prefix.length + 1);
+          const head = rest.split('/')[0];
+          if (head) {
+            childNames.add(head);
+            childKinds.set(head, 'directory');
+          }
+        }
+        for (const filePath of files.keys()) {
+          if (!filePath.startsWith(prefix === '/' ? '/' : `${prefix}/`)) continue;
+          const rest = filePath.slice(prefix === '/' ? 1 : prefix.length + 1);
+          if (!rest.includes('/')) {
+            childNames.add(rest);
+            childKinds.set(rest, 'file');
+          }
+        }
+        const names = [...childNames].sort();
+        let i = 0;
+        return {
+          async next(): Promise<IteratorResult<[string, FileSystemHandle]>> {
+            if (i >= names.length) return { value: undefined, done: true };
+            const name = names[i++] as string;
+            const kind = childKinds.get(name);
+            if (kind === 'file') {
+              return { value: [name, await handle.getFileHandle(name)], done: false };
+            }
+            return { value: [name, await handle.getDirectoryHandle(name)], done: false };
+          },
+        };
+      },
+    } as unknown as FileSystemDirectoryHandle;
+    return handle;
+  }
+
+  return {
+    root: makeDir('/'),
+    dirs,
+    files,
+    pendingCreates,
+    releaseNextCreate(): string {
+      const next = pendingCreates.shift();
+      if (!next) throw new Error('No pending directory create');
+      next.resolve();
+      return next.path;
+    },
+  };
+}
+
 describe('walkOpfsTree', () => {
   it('indexes the empty root as a directory', async () => {
     const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
@@ -410,6 +559,63 @@ describe('OpfsFsSync dir-tree mirror — readdirSync / mkdirSync / rmSync', () =
     expect(fs.readdirSync('/a/b').map((d) => d.name)).toEqual(['c']);
   });
 
+  it('flush waits for mkdirSync to persist recursive directory creation to OPFS', async () => {
+    const fake = buildMutableRoot({ deferCreates: true });
+    const fs = new OpfsFsSync(fake.root);
+    await fs.refreshIndex();
+
+    fs.mkdirSync('/a/b', { recursive: true });
+    let flushed = false;
+    const flush = fs.flush().then(() => {
+      flushed = true;
+    });
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(flushed).toBe(false);
+
+    expect(fake.releaseNextCreate()).toBe('/a');
+    await Promise.resolve();
+    expect(flushed).toBe(false);
+
+    expect(fake.releaseNextCreate()).toBe('/a/b');
+    await flush;
+    expect(flushed).toBe(true);
+
+    const durable = await walkOpfsTree(fake.root);
+    expect(durable.has('/a')).toBe(true);
+    expect(durable.has('/a/b')).toBe(true);
+  });
+
+  it('flush persists dependent mkdirSync calls in call order', async () => {
+    const fake = buildMutableRoot({ deferCreates: true });
+    const fs = new OpfsFsSync(fake.root);
+    await fs.refreshIndex();
+
+    fs.mkdirSync('/a', { recursive: true });
+    fs.mkdirSync('/a/b');
+
+    let flushed = false;
+    const flush = fs.flush().then(() => {
+      flushed = true;
+    });
+
+    await Promise.resolve();
+    expect(fake.pendingCreates.map((create) => create.path)).toEqual(['/a']);
+    expect(fake.releaseNextCreate()).toBe('/a');
+    await waitForMicrotaskCondition(
+      () => fake.pendingCreates[0]?.path === '/a/b',
+      'second mkdir persist',
+    );
+
+    expect(flushed).toBe(false);
+    expect(fake.releaseNextCreate()).toBe('/a/b');
+    await flush;
+
+    expect(flushed).toBe(true);
+    const durable = await walkOpfsTree(fake.root);
+    expect(durable.has('/a/b')).toBe(true);
+  });
+
   it('mkdirSync without recursive on missing parent throws ENOENT', async () => {
     const root = buildFakeRoot({ files: new Map(), dirs: new Set(['/']) });
     const fs = new OpfsFsSync(root);
@@ -599,6 +805,19 @@ function recordingSurface(): PairedAsyncSurface & { writes: string[]; rms: strin
   };
 }
 
+function removeMutableSubtree(
+  dirs: Set<string>,
+  files: Map<string, { bytes: Uint8Array; mtime?: number }>,
+  path: string,
+): void {
+  for (const dir of [...dirs]) {
+    if (dir === path || dir.startsWith(`${path}/`)) dirs.delete(dir);
+  }
+  for (const file of [...files.keys()]) {
+    if (file === path || file.startsWith(`${path}/`)) files.delete(file);
+  }
+}
+
 describe('OpfsFsSync.renameSync / copyFileSync / cpSync (ADR-0090)', () => {
   beforeEach(() => vi.spyOn(OpfsFsSync, 'isSupported').mockReturnValue(true));
   afterEach(() => vi.restoreAllMocks());
@@ -629,6 +848,103 @@ describe('OpfsFsSync.renameSync / copyFileSync / cpSync (ADR-0090)', () => {
     fs.renameSync('/dir', '/parent/moved');
     expect(fs.existsSync('/dir')).toBe(false);
     expect(dec.decode(fs.readFileBytesSync('/parent/moved/sub/leaf.txt'))).toBe('leaf');
+  });
+
+  it('renameSync persists an empty directory move across flush', async () => {
+    const fake = buildMutableRoot({ dirs: ['/', '/dir', '/dir/empty'] });
+    const fs = new OpfsFsSync(fake.root);
+    await fs.refreshIndex();
+
+    fs.renameSync('/dir/empty', '/moved');
+    await fs.flush();
+
+    const durable = await walkOpfsTree(fake.root);
+    expect(durable.has('/dir/empty')).toBe(false);
+    expect(durable.has('/moved')).toBe(true);
+  });
+
+  it('renameSync persists uncached indexed files before removing the old subtree', async () => {
+    const files = new Map<string, { bytes: Uint8Array; mtime?: number }>([
+      ['/dir/uncached.txt', { bytes: enc.encode('durable') }],
+    ]);
+    const fake = buildMutableRoot({ dirs: ['/', '/dir'], files });
+    const reads: string[] = [];
+    const writes: string[] = [];
+    const rms: string[] = [];
+    const surface: PairedAsyncSurface = {
+      readFile: (path: string) => {
+        reads.push(path);
+        const file = fake.files.get(path);
+        if (!file) return Promise.reject(new Error(`missing ${path}`));
+        return Promise.resolve(file.bytes.slice());
+      },
+      writeFile: (path: string, data: Uint8Array) => {
+        writes.push(path);
+        fake.files.set(path, { bytes: data.slice() });
+        return Promise.resolve();
+      },
+      rm: (path: string) => {
+        rms.push(path);
+        removeMutableSubtree(fake.dirs, fake.files, path);
+        return Promise.resolve();
+      },
+    };
+    const fs = new OpfsFsSync(fake.root, surface);
+    await fs.refreshIndex();
+
+    fs.renameSync('/dir', '/moved');
+    await fs.flush();
+
+    expect(reads).toEqual(['/dir/uncached.txt']);
+    expect(writes).toEqual(['/moved/uncached.txt']);
+    expect(rms).toEqual(['/dir']);
+    const durable = await walkOpfsTree(fake.root);
+    expect(durable.has('/dir/uncached.txt')).toBe(false);
+    expect(durable.has('/moved/uncached.txt')).toBe(true);
+  });
+
+  it('renameSync waits for older write-through before removing the source path', async () => {
+    const fake = buildMutableRoot();
+    const writes: Array<{ path: string; resolve: () => void }> = [];
+    const surface: PairedAsyncSurface = {
+      readFile: (path: string) => {
+        const file = fake.files.get(path);
+        if (!file) return Promise.reject(new Error(`missing ${path}`));
+        return Promise.resolve(file.bytes.slice());
+      },
+      writeFile: (path: string, data: Uint8Array) =>
+        new Promise<void>((resolve) => {
+          writes.push({
+            path,
+            resolve: () => {
+              fake.files.set(path, { bytes: data.slice() });
+              resolve();
+            },
+          });
+        }),
+      rm: (path: string) => {
+        removeMutableSubtree(fake.dirs, fake.files, path);
+        return Promise.resolve();
+      },
+    };
+    const fs = new OpfsFsSync(fake.root, surface);
+    await fs.refreshIndex();
+
+    fs.writeFileSync('/old.txt', enc.encode('x'));
+    fs.renameSync('/old.txt', '/new.txt');
+    const flush = fs.flush();
+
+    await Promise.resolve();
+    expect(writes.map((write) => write.path)).toEqual(['/old.txt']);
+    writes[0]?.resolve();
+    await waitForMicrotaskCondition(() => writes.length === 2, 'rename write-through');
+
+    expect(writes.map((write) => write.path)).toEqual(['/old.txt', '/new.txt']);
+    writes[1]?.resolve();
+    await flush;
+
+    expect(fake.files.has('/old.txt')).toBe(false);
+    expect(fake.files.has('/new.txt')).toBe(true);
   });
 
   it('renameSync enqueues the async OPFS move and flush() awaits it (ADR-0090 §74)', async () => {
