@@ -495,6 +495,8 @@ export interface RiftyTerminalOptions {
   fontFamily?: string;
   /** xterm font size override. Defaults to 13. */
   fontSize?: number;
+  /** xterm line-height multiplier override (e.g. 19/12). Defaults to xterm's 1. */
+  lineHeight?: number;
   /** xterm cursor style override. */
   cursorStyle?: ITerminalOptions['cursorStyle'];
   /** xterm macOS Option-as-Meta. Defaults to false. */
@@ -571,6 +573,7 @@ export class RiftyTerminal {
       cursorBlink: true,
       fontFamily: opts.fontFamily ?? 'ui-monospace, "SF Mono", Menlo, monospace',
       fontSize: opts.fontSize ?? 13,
+      lineHeight: opts.lineHeight ?? 1,
       theme: opts.theme ?? { background: '#0f1115', foreground: '#e6e6e6' },
       convertEol: true,
       minimumContrastRatio: opts.minimumContrastRatio ?? 4.5,

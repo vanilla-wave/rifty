@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- `RiftyTerminalOptions.lineHeight` — optional xterm line-height multiplier
+  forwarded to the renderer (defaults to 1). Lets hosts match designed
+  terminal type scales (e.g. 12px/19px).
+
 ### Fixed
 
 - `RiftyTerminal.dispose()` now treats addon/xterm teardown as best-effort. A

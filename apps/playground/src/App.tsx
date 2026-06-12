@@ -18,16 +18,19 @@ import {
 import { useLayout } from './adapters/useLayout.ts';
 import { useMode } from './adapters/useMode.ts';
 import { type BootResult, isCrossOriginIsolated, swErrorBannerMessage } from './boot.ts';
-import { ActivityBar } from './components/ActivityBar.tsx';
 import { BottomPanel } from './components/BottomPanel.tsx';
 import { CapabilitiesPanel } from './components/CapabilitiesPanel.tsx';
+import { CommandPalette, type PaletteItem } from './components/CommandPalette.tsx';
 import { type EditorApi, EditorHost, PROGRAM_MIRROR_PATH } from './components/EditorHost.tsx';
 import { FileExplorer } from './components/FileExplorer.tsx';
-import { PresetGallery } from './components/PresetGallery.tsx';
 import { PreviewPanel } from './components/PreviewPanel.tsx';
 import { Splitter } from './components/Splitter.tsx';
 import { StatusBar } from './components/StatusBar.tsx';
+import { TemplateSwitcher } from './components/TemplateSwitcher.tsx';
 import type { TerminalModeHint } from './components/TerminalPanel.tsx';
+import { Icon } from './components/icons.tsx';
+import { copyToClipboard } from './glue/clipboard.ts';
+import { readChildren } from './glue/file-tree.ts';
 import { writeText } from './glue/fs-ops.ts';
 import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
@@ -61,7 +64,10 @@ export function App(props: AppProps) {
   const [activeFile, setActiveFile] = createSignal('main.js');
   const [activeFilePath, setActiveFilePath] = createSignal<string | undefined>(undefined);
   const [activeLang, setActiveLang] = createSignal('javascript');
-  const [toast, setToast] = createSignal<string | null>(null);
+  const [toast, setToast] = createSignal<{ message: string; tone: 'error' | 'success' } | null>(
+    null,
+  );
+  const [paletteOpen, setPaletteOpen] = createSignal(false);
 
   const layout = useLayout();
   // Main-thread sync VFS mirror — same store the shell + `npm install` write to,
@@ -75,10 +81,20 @@ export function App(props: AppProps) {
 
   let editorApi: EditorApi | undefined;
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
-  function flashError(message: string): void {
-    setToast(message);
+  function flashToast(message: string, tone: 'error' | 'success'): void {
+    setToast({ message, tone });
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => setToast(null), 3800);
+    toastTimer = setTimeout(() => setToast(null), tone === 'success' ? 2200 : 3800);
+  }
+  function flashError(message: string): void {
+    flashToast(message, 'error');
+  }
+
+  async function share(): Promise<void> {
+    const url = globalThis.location?.href ?? '';
+    const copied = await copyToClipboard(url);
+    if (copied) flashToast(`Link copied — ${globalThis.location?.host ?? url}`, 'success');
+    else flashToast('Could not copy the link to the clipboard', 'error');
   }
 
   // Active real-project template (ADR-0078). Chip + mode machine read its generic
@@ -585,7 +601,7 @@ export function App(props: AppProps) {
     <meta charset="utf-8" />
     <title>rifty preview ${port}</title>
     <style>
-      html, body, iframe { margin: 0; width: 100%; height: 100%; border: 0; background: #0f1115; }
+      html, body, iframe { margin: 0; width: 100%; height: 100%; border: 0; background: #101218; }
     </style>
   </head>
   <body>
@@ -616,6 +632,161 @@ export function App(props: AppProps) {
     }
   }
 
+  /** Workspace files for the command palette (sync walk, node_modules skipped). */
+  function listWorkspaceFiles(limit = 400): { files: string[]; truncated: boolean } {
+    const out: string[] = [];
+    let truncated = false;
+    const tree = activeVfs();
+    const walkDir = (dir: string): void => {
+      let children: ReturnType<typeof readChildren>;
+      try {
+        children = readChildren(tree, dir);
+      } catch {
+        return;
+      }
+      for (const child of children) {
+        if (out.length >= limit) {
+          truncated = true;
+          return;
+        }
+        if (child.name === 'node_modules') continue;
+        if (child.kind === 'dir') walkDir(child.path);
+        else out.push(child.path);
+      }
+    };
+    walkDir(WORKSPACE);
+    return { files: out, truncated };
+  }
+
+  function paletteItems(): PaletteItem[] {
+    const items: PaletteItem[] = [];
+    for (const preset of PRESETS) {
+      items.push({
+        id: `tpl:${preset.id}`,
+        section: 'Templates',
+        label: preset.label,
+        hint: preset.id,
+        icon: 'layers',
+        run: () => void runVitePreset(preset),
+      });
+    }
+    const workspace = listWorkspaceFiles();
+    for (const path of workspace.files) {
+      items.push({
+        id: `file:${path}`,
+        section: 'Files',
+        label: path.startsWith(`${WORKSPACE}/`) ? path.slice(WORKSPACE.length + 1) : path,
+        icon: 'file',
+        run: () => editorApi?.openFile(path),
+      });
+    }
+    if (workspace.truncated) {
+      items.push({
+        id: 'file:truncated',
+        section: 'Files',
+        label: `…only the first ${workspace.files.length} files are listed`,
+        icon: 'ellipsis',
+        run: () => {},
+      });
+    }
+    items.push({
+      id: 'act:new-terminal',
+      section: 'Commands',
+      label: 'New terminal',
+      icon: 'terminal',
+      run: () => {
+        createSession();
+      },
+    });
+    items.push({
+      id: 'act:toggle-console',
+      section: 'Commands',
+      label: layout.consoleCollapsed() ? 'Expand terminal panel' : 'Collapse terminal panel',
+      icon: layout.consoleCollapsed() ? 'chevron-up' : 'chevron-down',
+      run: () => layout.toggleConsole(),
+    });
+    items.push({
+      id: 'act:toggle-sidebar',
+      section: 'Commands',
+      label: layout.sidebarCollapsed() ? 'Show files panel' : 'Hide files panel',
+      icon: 'folder',
+      run: () => layout.toggleSidebar(),
+    });
+    if (devServerRunning()) {
+      items.push({
+        id: 'act:open-preview',
+        section: 'Commands',
+        label: 'Open preview in new tab',
+        icon: 'external-link',
+        run: () => openPreviewTab(),
+      });
+    }
+    if (devServerStatus() !== 'stopped' && devServerSessionId) {
+      const sessionId = devServerSessionId;
+      items.push({
+        id: 'act:stop-server',
+        section: 'Commands',
+        label: 'Stop dev server',
+        icon: 'x',
+        run: () => stopSession(sessionId),
+      });
+    }
+    items.push({
+      id: 'act:share',
+      section: 'Commands',
+      label: 'Copy share link',
+      icon: 'copy',
+      run: () => void share(),
+    });
+    items.push({
+      id: 'act:github',
+      section: 'Commands',
+      label: 'Open GitHub repository',
+      icon: 'github',
+      run: () =>
+        globalThis.window?.open(
+          'https://github.com/vanilla-wave/rifty',
+          '_blank',
+          'noopener,noreferrer',
+        ),
+    });
+    return items;
+  }
+
+  // Items snapshot, built once per palette open — not a getter, so typing in
+  // the palette doesn't re-walk the VFS on every keystroke.
+  const [paletteData, setPaletteData] = createSignal<readonly PaletteItem[]>([]);
+  function openPalette(): void {
+    setPaletteData(paletteItems());
+    setPaletteOpen(true);
+  }
+  function togglePalette(): void {
+    if (paletteOpen()) setPaletteOpen(false);
+    else openPalette();
+  }
+
+  onMount(() => {
+    // Capture phase + physical-key match: Monaco (⌘K chord prefix) and xterm
+    // (Ctrl-K) swallow the bubble-phase event, and e.key is layout-dependent
+    // (Cyrillic layouts yield 'л').
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K' || e.code === 'KeyK')) {
+        e.preventDefault();
+        e.stopPropagation();
+        togglePalette();
+      }
+    };
+    globalThis.window?.addEventListener('keydown', onKey, true);
+    onCleanup(() => globalThis.window?.removeEventListener('keydown', onKey, true));
+  });
+
+  const livePillLabel = (): string =>
+    devServerStatus() === 'running'
+      ? `LIVE :${machine.realVitePort()}`
+      : devServerStatus() === 'starting'
+        ? 'STARTING'
+        : 'STOPPED';
+
   const modeLabel = (): string =>
     machine.mode() === 'dev'
       ? 'Dev · port 3000'
@@ -634,7 +805,7 @@ export function App(props: AppProps) {
   const isOpfs = props.boot.vfsBoot.backend === 'opfs';
 
   return (
-    <div class="rf-app rf-grain">
+    <div class="rf-app">
       <Show when={props.boot.swError && !swBannerDismissed()}>
         <div class="rf-banner" role="alert" data-banner="sw-error">
           <span class="rf-banner__msg">{swErrorBannerMessage(props.boot.swError ?? '')}</span>
@@ -650,18 +821,43 @@ export function App(props: AppProps) {
         </div>
       </Show>
 
-      <header class="rf-header">
+      <header class="rf-header rf-card">
         <span class="rf-brand">
           <span class="rf-brand__mark" aria-hidden="true" />
           <strong class="rf-wordmark">rifty</strong>
         </span>
 
-        <span class="rf-modechip" data-mode={machine.mode()}>
-          <span class="rf-modechip__dot" />
-          {modeLabel()}
+        <TemplateSwitcher activeId={activePreset()} onSelect={onSelectPreset} />
+
+        <span class="rf-livepill" data-state={devServerStatus()} title={modeLabel()}>
+          <span class="rf-livepill__dot" aria-hidden="true" />
+          {livePillLabel()}
         </span>
 
         <span class="rf-spacer" />
+
+        <button type="button" class="rf-cmdbar" data-action="open-palette" onClick={openPalette}>
+          <Icon name="search" size={13} />
+          <span class="rf-cmdbar__hint">Search or run a command</span>
+          <span class="rf-kbd">⌘K</span>
+        </button>
+
+        <span class="rf-spacer" />
+
+        <a
+          class="rf-iconbtn"
+          href="https://github.com/vanilla-wave/rifty"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="rifty on GitHub"
+          aria-label="rifty on GitHub"
+        >
+          <Icon name="github" size={16} />
+        </a>
+        <button type="button" class="rf-share" data-action="share" onClick={() => void share()}>
+          <Icon name="users" size={13} />
+          Share
+        </button>
       </header>
 
       <Show when={capabilities.sufficient} fallback={<CapabilitiesPanel check={capabilities} />}>
@@ -674,44 +870,33 @@ export function App(props: AppProps) {
             '--rf-preview-w': `${layout.previewW()}px`,
           }}
         >
-          <ActivityBar
-            view={layout.view()}
-            collapsed={layout.sidebarCollapsed()}
-            onSelect={(v) => layout.selectView(v)}
-          />
-
-          <aside class="rf-sidebar">
-            <Show when={layout.view() === 'explorer'}>
-              {/* real-vite swaps the explorer's backing store. FileExplorer
-                  captures `vfs` once, so the mode flip must remount it —
-                  Show/fallback does exactly that. */}
-              <Show
-                when={devServerRunning()}
-                fallback={
-                  <FileExplorer
-                    vfs={vfs}
-                    root={WORKSPACE}
-                    visible={layout.view() === 'explorer' && !layout.sidebarCollapsed()}
-                    activePath={activeFilePath()}
-                    onOpenFile={(path) => editorApi?.openFile(path)}
-                    onError={flashError}
-                  />
-                }
-              >
+          <aside class="rf-sidebar rf-card">
+            {/* real-vite swaps the explorer's backing store. FileExplorer
+                captures `vfs` once, so the mode flip must remount it —
+                Show/fallback does exactly that. */}
+            <Show
+              when={devServerRunning()}
+              fallback={
                 <FileExplorer
-                  vfs={snapshotFs}
+                  vfs={vfs}
                   root={WORKSPACE}
-                  readOnly
-                  nodeModules={nodeModulesProp()}
-                  visible={layout.view() === 'explorer' && !layout.sidebarCollapsed()}
+                  visible={!layout.sidebarCollapsed()}
                   activePath={activeFilePath()}
                   onOpenFile={(path) => editorApi?.openFile(path)}
                   onError={flashError}
                 />
-              </Show>
-            </Show>
-            <Show when={layout.view() === 'presets'}>
-              <PresetGallery activeId={activePreset()} onSelect={onSelectPreset} />
+              }
+            >
+              <FileExplorer
+                vfs={snapshotFs}
+                root={WORKSPACE}
+                readOnly
+                nodeModules={nodeModulesProp()}
+                visible={!layout.sidebarCollapsed()}
+                activePath={activeFilePath()}
+                onOpenFile={(path) => editorApi?.openFile(path)}
+                onError={flashError}
+              />
             </Show>
           </aside>
 
@@ -720,7 +905,7 @@ export function App(props: AppProps) {
             value={layout.sidebarW()}
             min={layout.bounds.sidebarW[0]}
             max={layout.bounds.sidebarW[1]}
-            defaultValue={264}
+            defaultValue={232}
             dir={1}
             ariaLabel="Resize sidebar"
             onInput={(px) => layout.setSidebarW(px)}
@@ -756,7 +941,7 @@ export function App(props: AppProps) {
                   value={layout.previewW()}
                   min={layout.bounds.previewW[0]}
                   max={layout.bounds.previewW[1]}
-                  defaultValue={480}
+                  defaultValue={464}
                   dir={-1}
                   ariaLabel="Resize preview"
                   onInput={(px) => layout.setPreviewW(px)}
@@ -770,6 +955,7 @@ export function App(props: AppProps) {
                     initialPort={port}
                     refreshKey={previewRevision()}
                     onOpenTab={openPreviewTab}
+                    onNotify={flashToast}
                   />
                 )}
               </Show>
@@ -780,7 +966,7 @@ export function App(props: AppProps) {
               value={layout.consoleH()}
               min={layout.bounds.consoleH[0]}
               max={layout.bounds.consoleH[1]}
-              defaultValue={232}
+              defaultValue={280}
               dir={-1}
               ariaLabel="Resize console"
               onInput={(px) => layout.setConsoleH(px)}
@@ -796,7 +982,6 @@ export function App(props: AppProps) {
               onSelectSession={selectSession}
               onCreateSession={() => createSession()}
               onCloseSession={closeSession}
-              onStopSession={stopSession}
               attach={attachTerminalWriter}
               modeHint={terminalModeHint()}
               historyRecords={terminalHistory}
@@ -819,9 +1004,24 @@ export function App(props: AppProps) {
         />
       </Show>
 
-      <Show when={toast()}>
-        <output class="rf-toast">{toast()}</output>
+      <Show when={toast()} keyed>
+        {(t) => (
+          <output class="rf-toast" data-tone={t.tone}>
+            <Show when={t.tone === 'success'}>
+              <span class="rf-toast__ico" aria-hidden="true">
+                <Icon name="check" size={14} />
+              </span>
+            </Show>
+            {t.message}
+          </output>
+        )}
       </Show>
+
+      <CommandPalette
+        open={paletteOpen()}
+        items={paletteData()}
+        onClose={() => setPaletteOpen(false)}
+      />
     </div>
   );
 }

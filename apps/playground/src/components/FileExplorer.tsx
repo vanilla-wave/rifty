@@ -13,11 +13,25 @@ import {
   type TreeChild,
   composeNodeModulesRows,
   fileCategory,
-  glyphForCategory,
   readChildren,
 } from '../glue/file-tree.ts';
 import { type FsOpsTarget, createDir, createFile, deletePath, renamePath } from '../glue/fs-ops.ts';
 import type { NodeModulesCache } from '../glue/node-modules-cache.ts';
+import { Icon, type IconName } from './icons.tsx';
+
+/** Monochrome row icon per file category (Soft Panels: outline icons, no colour badges). */
+const CATEGORY_ICONS: Record<string, IconName> = {
+  js: 'code',
+  jsx: 'code',
+  ts: 'code',
+  json: 'file-text',
+  md: 'file-text',
+  css: 'file-text',
+  html: 'file',
+};
+function iconForCategory(category: string): IconName {
+  return CATEGORY_ICONS[category] ?? 'file';
+}
 
 /** A rendered explorer row. Sync tree and async node_modules subtree (ADR-0080)
  *  share this shape; `loading`/`error` kinds are node_modules-only. */
@@ -208,9 +222,9 @@ export function FileExplorer(props: {
   return (
     <div class="rf-explorer">
       <div class="rf-explorer__head">
-        <span class="rf-eyebrow">Explorer</span>
+        <span class="rf-explorer__title">Files</span>
         <span class="rf-explorer__path" title={contextDir()}>
-          {contextDir() === root ? 'workspace' : basename(contextDir())}
+          {contextDir() === root ? '' : basename(contextDir())}
           <Show when={props.readOnly}>
             <span class="rf-explorer__ro" title="Mirror of the Vite worker — read-only">
               read-only
@@ -226,7 +240,7 @@ export function FileExplorer(props: {
               aria-label="New file"
               onClick={() => startCreate('new-file')}
             >
-              ＋
+              <Icon name="file-plus" size={13} />
             </button>
             <button
               type="button"
@@ -235,7 +249,7 @@ export function FileExplorer(props: {
               aria-label="New folder"
               onClick={() => startCreate('new-folder')}
             >
-              ＋▸
+              <Icon name="folder-plus" size={13} />
             </button>
           </Show>
           <button
@@ -245,7 +259,7 @@ export function FileExplorer(props: {
             aria-label="Refresh"
             onClick={refresh}
           >
-            ↻
+            <Icon name="rotate-ccw" size={13} />
           </button>
         </span>
       </div>
@@ -282,6 +296,7 @@ export function FileExplorer(props: {
                   role="treeitem"
                   tabIndex={0}
                   data-kind={row.kind}
+                  data-dim={row.kind === 'dir' && row.name === 'node_modules'}
                   data-active={row.kind === 'file' && props.activePath === row.path}
                   aria-expanded={row.kind === 'dir' ? expanded().has(row.path) : undefined}
                   style={{ '--rf-row-depth': row.depth }}
@@ -298,12 +313,8 @@ export function FileExplorer(props: {
                   }}
                 >
                   {row.kind === 'dir' ? (
-                    <span
-                      class="rf-row__twisty"
-                      data-open={expanded().has(row.path)}
-                      aria-hidden="true"
-                    >
-                      ▸
+                    <span class="rf-row__ico" data-cat="dir" aria-hidden="true">
+                      <Icon name={expanded().has(row.path) ? 'folder-open' : 'folder'} size={14} />
                     </span>
                   ) : row.kind === 'loading' ? (
                     <span class="rf-row__ico" data-cat="loading" aria-hidden="true">
@@ -315,7 +326,7 @@ export function FileExplorer(props: {
                     </span>
                   ) : (
                     <span class="rf-row__ico" data-cat={fileCategory(row.name)} aria-hidden="true">
-                      {glyphForCategory(fileCategory(row.name))}
+                      <Icon name={iconForCategory(fileCategory(row.name))} size={14} />
                     </span>
                   )}
                   <span class="rf-row__name">{row.name}</span>

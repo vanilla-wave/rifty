@@ -99,6 +99,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0079 | Single generic project/template switcher; retire the header mode toggles |
 | 0080 | Lazy `node_modules` remote-read protocol + async explorer path |
 | 0095 | Dev-mode HMR routes through the cross-realm bridge (pluggable dev-server transport) |
+| 0124 | Soft Panels visual redesign adopts the Gravity UI handoff |
 
 ### toolchain-build
 

@@ -33,7 +33,21 @@ export type IconName =
   | 'corner-down-left'
   | 'file-output'
   | 'external-link'
-  | 'x';
+  | 'x'
+  | 'folder'
+  | 'folder-open'
+  | 'file'
+  | 'file-text'
+  | 'code'
+  | 'lock'
+  | 'rotate-ccw'
+  | 'check'
+  | 'users'
+  | 'plus'
+  | 'file-plus'
+  | 'folder-plus'
+  | 'ellipsis'
+  | 'github';
 
 /** Path data (Lucide, ISC). `play` is a filled glyph; the rest are strokes. */
 const PATHS: Record<IconName, string> = {
@@ -58,12 +72,34 @@ const PATHS: Record<IconName, string> = {
     'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M2 15h10 M9 18l3-3-3-3',
   'external-link': 'M15 3h6v6 M10 14 21 3 M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6',
   x: 'M18 6 6 18 M6 6l12 12',
+  folder:
+    'M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z',
+  'folder-open':
+    'm6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2',
+  file: 'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z M14 2v4a2 2 0 0 0 2 2h4',
+  'file-text':
+    'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z M14 2v4a2 2 0 0 0 2 2h4 M16 13H8 M16 17H8 M10 9H8',
+  code: 'm16 18 6-6-6-6 M8 6l-6 6 6 6',
+  lock: 'M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z M7 11V7a5 5 0 0 1 10 0v4',
+  'rotate-ccw': 'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8 M3 3v5h5',
+  check: 'M20 6 9 17l-5-5',
+  users:
+    'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
+  plus: 'M5 12h14 M12 5v14',
+  'file-plus':
+    'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z M14 2v4a2 2 0 0 0 2 2h4 M9 15h6 M12 12v6',
+  'folder-plus':
+    'M12 10v6 M9 13h6 M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z',
+  ellipsis: 'M12 12h.01 M19 12h.01 M5 12h.01',
+  // GitHub mark (Simple Icons, CC0) — filled like `play`.
+  github:
+    'M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48l-.01-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.1-1.47-1.1-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.9.83.1-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.9-1.29 2.74-1.02 2.74-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.93.36.31.68.92.68 1.86l-.01 2.76c0 .27.18.58.69.48A10 10 0 0 0 12 2z',
 };
 
 /** Inline SVG icon. Inherits colour via `currentColor`; sized by `size` (px). */
 export function Icon(props: { name: IconName; size?: number; class?: string }): JSX.Element {
   const size = (): number => props.size ?? 18;
-  const filled = (): boolean => props.name === 'play';
+  const filled = (): boolean => props.name === 'play' || props.name === 'github';
   return (
     <svg
       class={props.class}

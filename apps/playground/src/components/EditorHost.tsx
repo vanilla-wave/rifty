@@ -63,29 +63,34 @@ export interface EditorHostProps {
 }
 
 let themeDefined = false;
+/** Soft Panels editor theme — gravity syntax tokens on the #1D1F26 panel. */
 function ensureTheme(): void {
   if (themeDefined) return;
   monaco.editor.defineTheme('rifty-dark', {
     base: 'vs-dark',
     inherit: true,
     rules: [
-      { token: 'comment', foreground: '626b80', fontStyle: 'italic' },
-      { token: 'string', foreground: 'c4f042' },
-      { token: 'keyword', foreground: '7fb2ff' },
-      { token: 'number', foreground: 'f5b942' },
+      { token: 'comment', foreground: 'ffffff4d', fontStyle: 'italic' },
+      { token: 'string', foreground: '6fd89a' },
+      { token: 'keyword', foreground: 'c7f05a' },
+      { token: 'number', foreground: 'ffad7a' },
+      { token: 'type', foreground: '7fb5ff' },
+      { token: 'attribute.name', foreground: 'c9a6ff' },
+      { token: 'key', foreground: 'c9a6ff' },
+      { token: 'string.key.json', foreground: 'c9a6ff' },
     ],
     colors: {
-      'editor.background': '#0f1115',
-      'editor.foreground': '#e8eaf1',
-      'editorLineNumber.foreground': '#3c4356',
-      'editorLineNumber.activeForeground': '#98a1b6',
-      'editor.selectionBackground': '#1f2a12',
-      'editor.lineHighlightBackground': '#13161d',
-      'editorCursor.foreground': '#c4f042',
-      'editorIndentGuide.background1': '#171a23',
-      'editorIndentGuide.activeBackground1': '#2a2f3c',
-      'editorWidget.background': '#12141b',
-      'editorWidget.border': '#1f232e',
+      'editor.background': '#1d1f26',
+      'editor.foreground': '#ddddde',
+      'editorLineNumber.foreground': '#ffffff38',
+      'editorLineNumber.activeForeground': '#ffffff80',
+      'editor.selectionBackground': '#c7f05a26',
+      'editor.lineHighlightBackground': '#ffffff08',
+      'editorCursor.foreground': '#c7f05a',
+      'editorIndentGuide.background1': '#ffffff12',
+      'editorIndentGuide.activeBackground1': '#ffffff24',
+      'editorWidget.background': '#23262e',
+      'editorWidget.border': '#ffffff1f',
     },
   });
   themeDefined = true;
@@ -271,16 +276,22 @@ export function EditorHost(props: EditorHostProps) {
       theme: 'rifty-dark',
       automaticLayout: true,
       minimap: { enabled: false },
-      fontSize: 13,
-      fontFamily: "'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace",
+      fontSize: 12.5,
+      lineHeight: 21,
+      fontFamily: "'Roboto Mono', ui-monospace, 'SF Mono', Menlo, monospace",
       fontLigatures: true,
       lineNumbersMinChars: 3,
-      padding: { top: 12, bottom: 12 },
+      padding: { top: 14, bottom: 14 },
       scrollBeyondLastLine: false,
       smoothScrolling: true,
       cursorBlinking: 'smooth',
       tabSize: 2,
       renderLineHighlight: 'all',
+      // No overview ruler: with the minimap off it only added a colored strip
+      // that long lines visually collided with at the right edge.
+      overviewRulerLanes: 0,
+      overviewRulerBorder: false,
+      hideCursorInOverviewRuler: true,
       scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
     });
 
@@ -326,7 +337,9 @@ export function EditorHost(props: EditorHostProps) {
       props.onActive({
         label: id === PROGRAM_TAB_ID ? 'main.js' : basename(id),
         language: model.getLanguageId(),
-        path: id === PROGRAM_TAB_ID ? undefined : id,
+        // The program tab mirrors PROGRAM_MIRROR_PATH — report it so the
+        // explorer highlights src/main.js (mockup: active file is lit).
+        path: id === PROGRAM_TAB_ID ? PROGRAM_MIRROR_PATH : id,
       });
     });
   });
@@ -340,7 +353,7 @@ export function EditorHost(props: EditorHostProps) {
   });
 
   return (
-    <div class="rf-editorhost">
+    <div class="rf-editorhost rf-card">
       <EditorTabs
         tabs={tabs()}
         activeId={activeId()}

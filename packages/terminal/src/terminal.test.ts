@@ -1472,6 +1472,13 @@ describe('RiftyTerminal — options polish API', () => {
     expect(internalXterm(term).options.minimumContrastRatio).toBe(4.5);
   });
 
+  it('threads lineHeight into xterm and defaults it to 1', () => {
+    const custom = new RiftyTerminal({ onInput: () => {}, lineHeight: 19 / 12 });
+    expect(internalXterm(custom).options.lineHeight).toBeCloseTo(19 / 12);
+    const fallback = new RiftyTerminal({ onInput: () => {} });
+    expect(internalXterm(fallback).options.lineHeight).toBe(1);
+  });
+
   it('strips bracketed paste wrappers at the xterm paste boundary', () => {
     const term = new RiftyTerminal({ onInput: () => {} });
     expect(internalXterm(term).options.ignoreBracketedPasteMode).toBe(true);
