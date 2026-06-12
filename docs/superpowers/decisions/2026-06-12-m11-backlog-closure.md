@@ -191,3 +191,13 @@ It is intentionally concise and append-only during the work.
   and lower VFS fd semantics beyond the high-frequency fd wall already covered.
 - **Reversibility:** Doc-only retarget. Runtime API addition remains gated on
   package evidence and parity tests.
+
+### D20 — runWasi Kernel Dispatch Retarget
+
+- **Decision:** Retarget `runtime-wasi/runwasi-kernel-dispatch-wiring` as future
+  runtime-wasi/kernel worker dispatch work.
+- **Why:** The item first requires confirming whether heavy WASI guests route
+  through `spawnWorker`; wiring stdin and worker dispatch can alter kernel
+  process behavior even if ADR-0038 already authorizes the bridge.
+- **Reversibility:** Doc-only retarget. Implementation stays gated on focused
+  worker-dispatch tests and ADR-0038 compatibility.
