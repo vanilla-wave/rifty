@@ -134,4 +134,10 @@ describe('hmrClientScript', () => {
     expect(script).toContain("type: 'open'");
     expect(script).toContain('open-ack');
   });
+
+  it('only accepts per-client bridged messages after the open handshake', () => {
+    const script = hmrClientScript(3302);
+    expect(script).not.toContain("f.type === 'broadcast'");
+    expect(script).toContain("f.type === 'msg' && open");
+  });
 });

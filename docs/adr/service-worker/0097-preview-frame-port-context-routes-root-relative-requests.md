@@ -51,19 +51,19 @@ The SW keeps a preview-frame port context:
 4. If a browser reload creates a new iframe client id without preserving the
    prior mapping, recover the port from either the same-origin `Request.referrer`
    or the iframe `Client.url` when either points at `/preview/<port>/`.
-5. Forward the request through the existing owner-binding path. ADR-0097 is
-   owner-binding agnostic: it preserves ADR-0123's direct worker owner selection
-   when a Worker has claimed `(ownerToken, port)`, and preserves the historical
-   window fallback otherwise.
+5. Forward embedded iframe-context requests through the existing owner-binding
+   path. The copied-top-level `/preview/<port>/` fallback is separate: it may
+   route directly to the only live Worker for that port, but refuses ambiguous
+   same-port Workers.
 
 `routePreview` still receives the synthetic upstream URL
 `http://preview.local${pathname}${search}`. The change is only how a root-origin
 iframe request becomes associated with a preview port.
 
 This uses the routing contract pinned by ADR-0040. ADR-0123 bumped
-`SW_ROUTING_VERSION` to `'2'` for owner-scoped Worker routing, and the later
-copied-top-level preview fallback refinement bumps it to `'3'`. `SW_FRAME_VERSION`
-stays `'1'` because no wire-frame field shape changes.
+`SW_ROUTING_VERSION` to `'2'` for owner-scoped Worker routing; ADR-0097 bumps it
+to `'3'` for iframe port context plus copied-top-level preview fallback.
+`SW_FRAME_VERSION` stays `'1'` because no wire-frame field shape changes.
 
 The page's own root-origin fetches are not intercepted: without a known preview
 iframe `clientId`, non-`/preview` URLs fall through normally.
@@ -79,9 +79,9 @@ iframe `clientId`, non-`/preview` URLs fall through normally.
   `SW_ROUTING_VERSION` differs. This is noisy by design; otherwise the page and
   SW could silently disagree about which origin-root requests are preview
   traffic.
-- Owner precision is unchanged by this ADR. With ADR-0123's default
-  `PortAwareOwnerBinding`, Worker-owned ports route directly to the claiming
-  Worker; legacy window-owned ports still use the window fallback path.
+- Owner precision is preserved for embedded previews. Copied top-level preview
+  URLs remain intentionally ambiguous when multiple live Workers claim the same
+  port under different owner tokens.
 - The preview-frame context is SW-local and memory-only. A reload reconstructs
   it from the next `/preview/<port>/` iframe navigation, or from the following
   root-relative request's same-origin `/preview/<port>/` referrer / iframe

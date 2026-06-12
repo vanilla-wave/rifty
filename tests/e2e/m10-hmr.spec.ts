@@ -65,19 +65,26 @@ test.describe('M10 — HMR over cross-realm bridge (ADR-0017 phase 1)', () => {
     const initialBody = await previewFrame.locator('#app').textContent();
     expect(initialBody).toBeTruthy();
 
-    // Edit the file; the watcher should pick it up and the bridge should
-    // broadcast `{type: 'update'}` which the injected client treats as a
-    // reload signal — so the iframe `#app` text changes to whatever we just
-    // wrote.
+    // Edit the file through Monaco's real input path; no test-only setter.
+    // Prepend a stable override instead of relying on platform-specific
+    // select-all shortcuts to replace the whole model.
     const marker = `hmr-${Date.now()}`;
     const editor = page.locator('[data-testid="editor"]');
-    await editor.evaluate(
-      (node, value) => {
-        node.dispatchEvent(new CustomEvent('rifty:set-program-source', { detail: { value } }));
-      },
-      `document.getElementById('app').textContent = ${JSON.stringify(marker)};\n`,
+    const editorInput = editor.locator('textarea.inputarea').first();
+    const editorLines = editor.locator('.view-lines').first();
+    await editor
+      .locator('.view-line')
+      .first()
+      .click({ position: { x: 0, y: 8 } });
+    await editorInput.click({ force: true });
+    await expect(editorInput).toBeFocused();
+    await page.keyboard.press('Home');
+    await page.keyboard.insertText(
+      `setInterval(() => { document.getElementById('app').textContent = ${JSON.stringify(
+        marker,
+      )}; }, 50);\n`,
     );
-    await expect(editor).toContainText(marker);
+    await expect(editorLines).toContainText(marker);
     await expect(term).toContainText(
       '[real-vite/worker] editor write applied /workspace/src/main.js',
       {

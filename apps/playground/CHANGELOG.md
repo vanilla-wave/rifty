@@ -61,6 +61,10 @@
   `--rf-shadow-2` were referenced but never defined (block-rail / history
   exit-status colors and overlay shadows silently fell back); the token set
   now defines `--rf-ok` and real shadow tokens.
+- **Real Vite editor writes are now checked through the real Monaco path.** The
+  HMR e2e no longer uses a production-only source setter; it focuses Monaco's
+  input, edits the visible model, then waits for the worker-applied write and
+  iframe update.
 - **Cross-origin isolation failures now explain embedded-browser requirements.**
   The fatal COI guard still refuses to boot without `crossOriginIsolated === true`,
   but the message now calls out iframe/app-browser embeds: the parent page must
@@ -155,12 +159,12 @@
 - **Terminal autocomplete dropdown.** Tab or Ctrl/Cmd+Space inside the console now
   opens a keyboardable DOM completion list backed by the existing shell
   command/path completer; ArrowUp/Down selects, Enter/Tab applies, Esc closes.
-- **Real Vite browser e2e is green end-to-end.** The opt-in Playwright
-  `m10-hmr` flow now proves the cross-origin-isolated path: select the Real npm
-  project template, boot Vite in the worker realm, render the iframe through SW
-  preview routing, edit `src/main.js` via Monaco, write it into the worker VFS,
-  invalidate Vite's module graph, and reload the iframe through the cross-realm
-  HMR bridge. This closes the stale backlog item for full Real Vite browser e2e.
+- **Real Vite browser e2e covers the full opt-in path.** The `RIFTY_E2E_HMR=1`
+  Playwright flow now drives the cross-origin-isolated path: boot Vite in the
+  worker realm, render the iframe through SW preview routing, edit `src/main.js`
+  through Monaco, write it into the worker VFS, invalidate Vite's module graph,
+  and reload the iframe through the cross-realm HMR bridge. The backlog stays
+  open until this path has a default or CI verification lane.
 - **Terminal no longer overlaps the status bar.** xterm's `FitAddon` computes
   rows from the mount element's height minus *that element's own* padding (the
   `.xterm` div it creates, padding 0) — so the `6px` vertical padding on the

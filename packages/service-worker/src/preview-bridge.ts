@@ -75,6 +75,7 @@ export { WorkerOwnerBinding } from './owner-binding-worker.ts';
 export type {
   WorkerOwnerBindingOptions,
   WorkerOwnerBindingLogger,
+  WorkerPortOwnerResolution,
 } from './owner-binding-worker.ts';
 export { FirstWindowOwnerResolver } from './owner-resolver.ts';
 export type { PreviewOwnerResolver } from './owner-resolver.ts';
@@ -126,6 +127,15 @@ export function isPreviewFrameRequest(request: {
   destination: string;
 }): boolean {
   return request.mode === 'navigate' || request.destination !== '';
+}
+
+function isTopLevelPreviewNavigation(request: Request): boolean {
+  return request.mode === 'navigate' && request.destination === 'document';
+}
+
+interface PreviewFrameContext {
+  readonly port: number;
+  readonly copiedTopLevel: boolean;
 }
 
 function matchPreviewReferrer(request: Request, origin: string): { port: number } | null {
@@ -214,7 +224,7 @@ export function createPreviewInterceptor(
       window: hooks.resolver !== undefined ? { resolver: hooks.resolver } : undefined,
     });
   const subscription = binding.subscribeReadiness(scope);
-  const previewFramePorts = new Map<string, number>();
+  const previewFrameContexts = new Map<string, PreviewFrameContext>();
 
   const fetchHandler = (event: FetchEvent): void => {
     const url = new URL(event.request.url);
@@ -222,40 +232,60 @@ export function createPreviewInterceptor(
     const sameOrigin = url.origin === scopeOrigin;
     const directMatch = sameOrigin ? matchPreviewUrl(url.pathname) : null;
     const frameRequest = isPreviewFrameRequest(event.request);
-    const knownPreviewClient = event.clientId ? previewFramePorts.has(event.clientId) : false;
+    const knownPreviewContext = event.clientId
+      ? previewFrameContexts.get(event.clientId)
+      : undefined;
+    const knownPreviewClient = knownPreviewContext !== undefined;
     let match = directMatch;
     let clientId = event.resultingClientId || event.clientId || null;
 
     if (directMatch && (frameRequest || knownPreviewClient)) {
       const frameClientId = event.resultingClientId || event.clientId || null;
-      if (frameClientId) previewFramePorts.set(frameClientId, directMatch.port);
+      const context: PreviewFrameContext = {
+        port: directMatch.port,
+        copiedTopLevel:
+          knownPreviewContext?.copiedTopLevel ??
+          (isTopLevelPreviewNavigation(event.request) ||
+            (event.request.destination !== 'iframe' &&
+              event.clientId !== '' &&
+              event.resultingClientId === '')),
+      };
+      if (frameClientId) previewFrameContexts.set(frameClientId, context);
       // ADR-0097 extends ADR-0074: remember the iframe's port context, then
       // route this navigation through the controlling window. Some browsers do
       // not expose `request.destination` for later module requests, so a known
       // preview client id also keeps preview-prefixed subresources on this path.
-      clientId = null;
+      clientId = context.copiedTopLevel ? null : '';
     } else if (!directMatch && sameOrigin) {
       const frameClientId = event.clientId || null;
-      let port = frameClientId ? previewFramePorts.get(frameClientId) : undefined;
+      let context = frameClientId ? previewFrameContexts.get(frameClientId) : undefined;
+      let port = context?.port;
       if (port === undefined) {
         port = matchPreviewReferrer(event.request, scopeOrigin)?.port;
-        if (port !== undefined && frameClientId) previewFramePorts.set(frameClientId, port);
+        if (port !== undefined && frameClientId) {
+          context = { port, copiedTopLevel: false };
+          previewFrameContexts.set(frameClientId, context);
+        }
       }
       if (port === undefined && frameClientId) {
         event.respondWith(
           (async (): Promise<Response> => {
             const clientMatch = await matchPreviewClientUrl(scope, frameClientId, scopeOrigin);
             if (!clientMatch) return fetch(event.request);
-            previewFramePorts.set(frameClientId, clientMatch.port);
+            const clientContext: PreviewFrameContext = {
+              port: clientMatch.port,
+              copiedTopLevel: false,
+            };
+            previewFrameContexts.set(frameClientId, clientContext);
             const nextFrameClientId = event.resultingClientId || null;
-            if (nextFrameClientId) previewFramePorts.set(nextFrameClientId, clientMatch.port);
+            if (nextFrameClientId) previewFrameContexts.set(nextFrameClientId, clientContext);
             return routePreview(
               scope,
               event.request,
               { port: clientMatch.port, path: url.pathname },
               subscription.readiness,
               timeoutMs,
-              null,
+              '',
               binding,
             );
           })(),
@@ -264,9 +294,11 @@ export function createPreviewInterceptor(
       }
       if (port === undefined) return;
       const nextFrameClientId = event.resultingClientId || null;
-      if (nextFrameClientId) previewFramePorts.set(nextFrameClientId, port);
+      if (nextFrameClientId) {
+        previewFrameContexts.set(nextFrameClientId, context ?? { port, copiedTopLevel: false });
+      }
       match = { port, path: url.pathname };
-      clientId = null;
+      clientId = context?.copiedTopLevel ? null : '';
     }
 
     if (!match) return;

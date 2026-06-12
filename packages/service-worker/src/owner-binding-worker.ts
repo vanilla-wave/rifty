@@ -74,6 +74,7 @@ export interface WorkerOwnerBindingOptions {
   readonly logger?: WorkerOwnerBindingLogger;
 }
 
+/** Result of resolving a copied top-level preview URL by port alone. */
 export type WorkerPortOwnerResolution =
   | { readonly kind: 'none' }
   | { readonly kind: 'unique'; readonly client: Client }

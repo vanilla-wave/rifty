@@ -687,6 +687,59 @@ describe('SW-side handshake state machine', () => {
     interceptor.teardown();
   });
 
+  it('keeps embedded iframe preview routing owner-scoped when multiple Workers claim the same port', async () => {
+    const pageA = makeMockClient('page-A');
+    const pageB = makeMockClient('page-B');
+    const workerA = makeMockClient('worker-A', 'worker');
+    const workerB = makeMockClient('worker-B', 'worker');
+    const iframe = makeMockClient('iframe-A');
+    const scope = makeMockScope([pageA, pageB, workerA, workerB, iframe]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    for (const [client, ownerToken, ports] of [
+      [pageA, 'owner-A', undefined],
+      [pageB, 'owner-B', undefined],
+      [workerA, 'owner-A', [5174]],
+      [workerB, 'owner-B', [5174]],
+    ] as const) {
+      scope.postMessage(
+        {
+          type: SW_PREVIEW_READY,
+          frameVersion: SW_FRAME_VERSION,
+          routingVersion: SW_ROUTING_VERSION,
+          ownerToken,
+          ...(ports ? { ports } : {}),
+        },
+        client,
+      );
+    }
+
+    const responsePromise = scope.fetch('http://x/preview/5174/', {
+      requestMode: 'navigate',
+      destination: 'iframe',
+      resultingClientId: 'iframe-A',
+    });
+    await flushPreviewDispatch();
+    expect(pageA.postMessage).not.toHaveBeenCalled();
+    expect(pageB.postMessage).not.toHaveBeenCalled();
+    expect(workerB.postMessage).not.toHaveBeenCalled();
+    expect(workerA.postMessage).toHaveBeenCalledTimes(1);
+    const call = workerA.postMessage.mock.calls[0]!;
+    const message = call[0] as { request?: { port: number; url: string } };
+    expect(message.request?.port).toBe(5174);
+    expect(message.request?.url).toBe('http://preview.local/');
+    const replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'text/html' },
+      body: new TextEncoder().encode('<div id="app">embedded</div>'),
+    });
+    expect(await (await responsePromise).text()).toContain('embedded');
+    interceptor.teardown();
+  });
+
   it('routes iframe document navigations to the controlling window, not resultingClientId', async () => {
     const owner = makeMockClient('window-A');
     const iframe = makeMockClient('iframe-client');

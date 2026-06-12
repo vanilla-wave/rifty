@@ -79,10 +79,6 @@ export function hmrClientScript(port: number): string {
   ch.addEventListener('message', function (e) {
     var f = e.data;
     if (!f) return;
-    if (f.type === 'broadcast') {
-      onPayload(f.data);
-      return;
-    }
     if (f.cid !== cid) return;
     if (f.type === 'open-ack') {
       open = true;
@@ -134,16 +130,13 @@ export interface SetupHmrBridgeOptions {
 export function setupHmrBridge(opts: SetupHmrBridgeOptions): HmrBridgeHandle {
   const url = hmrBridgeUrl(opts.port);
   const server = new BridgedWebSocketServer(url);
-  const fanout = new BroadcastChannel(channelNameFor(url));
   return {
     url,
     broadcast(payload: WsMessage): void {
       server.broadcast(payload);
-      fanout.postMessage({ type: 'broadcast', data: payload });
     },
     close(): void {
       server.close();
-      fanout.close();
     },
   };
 }

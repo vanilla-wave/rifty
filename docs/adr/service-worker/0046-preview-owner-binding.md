@@ -37,7 +37,7 @@ interface PreviewOwnerBinding {
 }
 ```
 
-- **`resolveOwner`** returns the owning `Client`, or `null` when none is found (route-preview maps `null` to HTTP 503). `port` is carried because the worker binding routes by port (multiple Workers may host different ports); the window binding ignores it (a window owns every port the page registers via `setupPreviewBridge`). At ADR-0046 landing, the window binding forwarded the historical `clientId`-then-first-window fallback from ADR-0031; later ADR-0123 refines no-clientId copied preview URLs to prefer an already-ready window and to refuse ambiguous same-port Worker owners.
+- **`resolveOwner`** returns the owning `Client`, or `null` when none is found (route-preview maps `null` to HTTP 503). `port` is carried because the worker binding routes by port (multiple Workers may host different ports); the window binding ignores it (a window owns every port the page registers via `setupPreviewBridge`). The window binding forwards the historical `clientId`-then-first-window fallback verbatim (ADR-0031).
 - **`subscribeReadiness`** installs the binding's message listener on the SW scope and returns a `ReadinessSubscription`: a live `ReadinessSignal` the route-preview pipeline gates on, plus `teardown()` that removes binding-installed listeners. Each `createPreviewInterceptor` call owns one subscription, so multiple bindings in one process (tests, future per-realm bindings) never share mutable readiness state.
 
 `ReadinessSignal.waitForReady` resolves with a `ReadinessOutcome` and **never rejects**:
@@ -72,17 +72,17 @@ The worker readiness frame adds one **additive optional** field to `rifty:previe
   ports?: number[] }   // default []
 ```
 
-ADR-0031 established that SW↔peer frames carry version fields validated at decode, and **additive optional fields with a documented default do NOT trigger a SemVer-major bump** (receiver treats `undefined` as the default). ADR-0040 restated that for the frame side when it split versioning into `SW_FRAME_VERSION` (data shapes) and `SW_ROUTING_VERSION` (addressing + owner-fallback). `ports` is compatible with the window ready frame: a window omits it, a worker supplies it, missing `ports` is `[]` (records readiness but claims no port — cannot accidentally claim port 0). So **`SW_FRAME_VERSION` stays `'1'`**. At ADR-0046 landing, `SW_ROUTING_VERSION` also stayed `'1'` because no default addressing or fallback order changed yet. ADR-0123 later changes owner selection semantics and bumps the routing contract through `'3'`; the frame version still stays `'1'`.
+ADR-0031 established that SW↔peer frames carry version fields validated at decode, and **additive optional fields with a documented default do NOT trigger a SemVer-major bump** (receiver treats `undefined` as the default). ADR-0040 restated that for the frame side when it split versioning into `SW_FRAME_VERSION` (data shapes) and `SW_ROUTING_VERSION` (addressing + owner-fallback). `ports` is compatible with the window ready frame: a window omits it, a worker supplies it, missing `ports` is `[]` (records readiness but claims no port — cannot accidentally claim port 0). So **`SW_FRAME_VERSION` stays `'1'`** and `SW_ROUTING_VERSION` stays `'1'`. The binding's owner-fallback semantics are conceptually part of `SW_ROUTING_VERSION`; nothing in addressing or fallback order changed, so neither constant moves.
 
 ### Wiring
 
-`createPreviewInterceptor(scope, hooks)` builds a `PreviewOwnerBinding`, calls `subscribeReadiness(scope)`, and threads both the returned `ReadinessSignal` and the binding into `routePreview`. `routePreview` is the single seam both bindings flow through: it asks `binding.resolveOwner`, gates on the signal, and forwards each fetch over a fresh `MessageChannel`. At ADR-0046 landing the default was `FirstWindowOwnerBinding`; ADR-0123 later makes `PortAwareOwnerBinding` the default so matching Worker-owned `(ownerToken, port)` routes win while page-owned paths keep the window fallback.
+`createPreviewInterceptor(scope, hooks)` builds a `PreviewOwnerBinding` (default `FirstWindowOwnerBinding`, preserving M10 behaviour byte-for-byte), calls `subscribeReadiness(scope)`, and threads both the returned `ReadinessSignal` and the binding into `routePreview`. `routePreview` is the single seam both bindings flow through: it asks `binding.resolveOwner`, gates on the signal, and forwards each fetch over a fresh `MessageChannel`. `WorkerOwnerBinding` is selectable via `hooks.binding` and exported from `@riftydev/service-worker`; the `installPreviewInterceptor` default is unchanged because the page is still the SW's counterpart for the legacy surface (ADR-0043) — A-023 hosts swap in `WorkerOwnerBinding` per context.
 
 A back-compat `hooks.resolver` hook remains (equivalent to `binding: new FirstWindowOwnerBinding({ resolver })`) so existing `owner-resolver.test.ts` consumers compile unchanged; `binding` wins when both are supplied.
 
-### Microtask-timing note
+### Microtask-timing invariant
 
-At ADR-0046 landing, `FirstWindowOwnerBinding.resolveOwner` and its `waitForReady` returned their inner promises directly to avoid changing the pre-existing handshake timing. Later routing refinements make `resolveOwner` async so it can inspect ready-window state for no-clientId copied preview tabs; the handshake tests now pin the current timing and dispatch behaviour rather than the original single-unwrap implementation detail. `waitForReady` still returns the registry promise directly.
+Both `FirstWindowOwnerBinding.resolveOwner` and its `waitForReady` return their inner promise **directly** (methods are not `async`). Wrapping the inner resolver/registry promise in an `async` method would insert an extra await-unwrap microtask turn between a ready frame resolving a waiter and `routePreview` resuming to dispatch. The SW handshake tests gate dispatch on a fixed microtask-turn count, so the binding must preserve the single-unwrap timing of the pre-ADR-0046 path where `route-preview` awaited the resolver/registry directly.
 
 ## Consequences
 
@@ -97,10 +97,10 @@ At ADR-0046 landing, `FirstWindowOwnerBinding.resolveOwner` and its `waitForRead
 ## Acceptance criteria
 
 - [x] `PreviewOwnerBinding` / `ReadinessSignal` / `ReadinessSubscription` contract defined, from both window and worker consumers.
-- [x] `FirstWindowOwnerBinding` wraps the historical `FirstWindowOwnerResolver` + `ReadyClientsRegistry`; ADR-0123 later refines its no-clientId copied-preview fallback.
+- [x] `FirstWindowOwnerBinding` wraps the historical `FirstWindowOwnerResolver` + `ReadyClientsRegistry` with no behaviour change; default for `createPreviewInterceptor`.
 - [x] `WorkerOwnerBinding` routes by port, revalidates the owner via `clients.get`, and surfaces `'gone'` for the no-`pagehide` lifecycle.
 - [x] `createPreviewInterceptor` resolves owners and gates readiness THROUGH the binding; `WorkerOwnerBinding` selectable via `hooks.binding`; exported from `@riftydev/service-worker`.
-- [x] No `SW_FRAME_VERSION` bump for `ports` — additive optional frame fields do not change the frame shape. ADR-0123 later bumps `SW_ROUTING_VERSION` for owner-selection changes.
+- [x] No `SW_FRAME_VERSION` / `SW_ROUTING_VERSION` bump — `ports` is additive optional.
 - [x] Dual-strategy parity test plus worker-specific lifecycle cases.
 - [x] `@riftydev/service-worker` CHANGELOG updated with an ADR-0046 entry.
 
@@ -109,7 +109,6 @@ At ADR-0046 landing, `FirstWindowOwnerBinding.resolveOwner` and its `waitForRead
 - ADR-0011 — sync IPC via SharedArrayBuffer + Atomics; Worker-as-process model. Provides the kernel-spawned-Worker realm (`Client.type === 'worker'`) A-023 routes to.
 - ADR-0017 — `@riftydev/net` cross-realm port-registry bridge. The `ports: number[]` field mirrors a Worker's `serveCrossRealmPreview` registrations so the SW resolves port → Worker without a separate registry round-trip.
 - ADR-0031 — every SW↔main frame carries version fields validated at decode; additive optional fields with a default need no major bump.
-- ADR-0040 — split into `SW_FRAME_VERSION` (frame data) and `SW_ROUTING_VERSION` (addressing + owner-fallback). The binding's owner-fallback sits under routing; the additive `ports` field under frame.
+- ADR-0040 — split into `SW_FRAME_VERSION` (frame data) and `SW_ROUTING_VERSION` (addressing + owner-fallback). The binding's owner-fallback sits under routing; the additive `ports` field under frame — neither constant moves.
 - ADR-0043 — Vite-in-Worker realm and cross-realm preview bridge; made A-023 the next consumer of the bridge primitive and the forcing consumer that closes Q-2026-05-27-002.
-- ADR-0123 — port-aware owner routing, default `PortAwareOwnerBinding`, and routing-version bumps for owner-selection changes.
 - OPEN_QUESTIONS.md — Q-2026-05-27-002, promoted by this ADR.

@@ -599,6 +599,9 @@ function matchPreviewUrl(pathname) {
 function isPreviewFrameRequest(request) {
   return request.mode === "navigate" || request.destination !== "";
 }
+function isTopLevelPreviewNavigation(request) {
+  return request.mode === "navigate" && request.destination === "document";
+}
 function matchPreviewReferrer(request, origin) {
   if (!request.referrer) return null;
   const referrer = new URL(request.referrer);
@@ -626,42 +629,55 @@ function createPreviewInterceptor(scope, hooks = {}) {
     window: hooks.resolver !== void 0 ? { resolver: hooks.resolver } : void 0
   });
   const subscription = binding.subscribeReadiness(scope);
-  const previewFramePorts = /* @__PURE__ */ new Map();
+  const previewFrameContexts = /* @__PURE__ */ new Map();
   const fetchHandler = (event) => {
     const url = new URL(event.request.url);
     const scopeOrigin = getScopeOrigin(scope, url);
     const sameOrigin = url.origin === scopeOrigin;
     const directMatch = sameOrigin ? matchPreviewUrl(url.pathname) : null;
     const frameRequest = isPreviewFrameRequest(event.request);
-    const knownPreviewClient = event.clientId ? previewFramePorts.has(event.clientId) : false;
+    const knownPreviewContext = event.clientId ? previewFrameContexts.get(event.clientId) : void 0;
+    const knownPreviewClient = knownPreviewContext !== void 0;
     let match = directMatch;
     let clientId = event.resultingClientId || event.clientId || null;
     if (directMatch && (frameRequest || knownPreviewClient)) {
       const frameClientId = event.resultingClientId || event.clientId || null;
-      if (frameClientId) previewFramePorts.set(frameClientId, directMatch.port);
-      clientId = null;
+      const context = {
+        port: directMatch.port,
+        copiedTopLevel: knownPreviewContext?.copiedTopLevel ?? (isTopLevelPreviewNavigation(event.request) || event.request.destination !== "iframe" && event.clientId !== "" && event.resultingClientId === "")
+      };
+      if (frameClientId) previewFrameContexts.set(frameClientId, context);
+      clientId = context.copiedTopLevel ? null : "";
     } else if (!directMatch && sameOrigin) {
       const frameClientId = event.clientId || null;
-      let port = frameClientId ? previewFramePorts.get(frameClientId) : void 0;
+      let context = frameClientId ? previewFrameContexts.get(frameClientId) : void 0;
+      let port = context?.port;
       if (port === void 0) {
         port = matchPreviewReferrer(event.request, scopeOrigin)?.port;
-        if (port !== void 0 && frameClientId) previewFramePorts.set(frameClientId, port);
+        if (port !== void 0 && frameClientId) {
+          context = { port, copiedTopLevel: false };
+          previewFrameContexts.set(frameClientId, context);
+        }
       }
       if (port === void 0 && frameClientId) {
         event.respondWith(
           (async () => {
             const clientMatch = await matchPreviewClientUrl(scope, frameClientId, scopeOrigin);
             if (!clientMatch) return fetch(event.request);
-            previewFramePorts.set(frameClientId, clientMatch.port);
+            const clientContext = {
+              port: clientMatch.port,
+              copiedTopLevel: false
+            };
+            previewFrameContexts.set(frameClientId, clientContext);
             const nextFrameClientId2 = event.resultingClientId || null;
-            if (nextFrameClientId2) previewFramePorts.set(nextFrameClientId2, clientMatch.port);
+            if (nextFrameClientId2) previewFrameContexts.set(nextFrameClientId2, clientContext);
             return routePreview(
               scope,
               event.request,
               { port: clientMatch.port, path: url.pathname },
               subscription.readiness,
               timeoutMs,
-              null,
+              "",
               binding
             );
           })()
@@ -670,9 +686,11 @@ function createPreviewInterceptor(scope, hooks = {}) {
       }
       if (port === void 0) return;
       const nextFrameClientId = event.resultingClientId || null;
-      if (nextFrameClientId) previewFramePorts.set(nextFrameClientId, port);
+      if (nextFrameClientId) {
+        previewFrameContexts.set(nextFrameClientId, context ?? { port, copiedTopLevel: false });
+      }
       match = { port, path: url.pathname };
-      clientId = null;
+      clientId = context?.copiedTopLevel ? null : "";
     }
     if (!match) return;
     event.respondWith(

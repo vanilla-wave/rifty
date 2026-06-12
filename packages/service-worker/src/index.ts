@@ -32,6 +32,7 @@ export type {
   SerializedResponse,
   WorkerOwnerBindingLogger,
   WorkerOwnerBindingOptions,
+  WorkerPortOwnerResolution,
 } from './preview-bridge.ts';
 export {
   SW_ERROR_PROTOCOL_VERSION_MISMATCH,

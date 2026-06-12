@@ -75,6 +75,7 @@ open:
 **PARTIAL.**
 Mini Vite-equivalent dev server (fs.watch, in-process WebSocket/HMR, shell, SW preview bridge); real `vite@5.4` runs in-process; esbuild.wasm TS/JSX transform; Vite-in-Worker; cross-realm HMR bridge; preview iframe root-relative routing. ADR-0043, ADR-0047, ADR-0049, ADR-0050, ADR-0073, ADR-0075, ADR-0076, ADR-0077, ADR-0078, ADR-0079, ADR-0080, ADR-0097.
 open:
+- `docs/backlog/playground/real-vite-browser-e2e` — full worker+HMR+iframe+SW-routing flow in a cross-origin-isolated browser via a default/CI verification lane.
 - `docs/backlog/net/streaming-cross-realm-preview` — streaming (not buffered-only) cross-realm preview, ADR-0048.
 
 ## M11 — Consumer Ready
