@@ -31,6 +31,20 @@
   and keep-in-view arrow navigation. The hotkey is capture-phase and matches
   the physical key, so it works with Monaco/xterm focus and on non-Latin
   keyboard layouts.
+- **Express + SQLite fullstack demo template (ADR-0130).** Second runnable
+  project template (`node-server` runtime): real `express@4` installed from
+  npm inside the worker, static client served from the VFS via
+  `express.static`, `node:sqlite` (DatabaseSync over the sql.js WASM engine)
+  as the database. New "Express + SQLite" preset in the gallery; covered by
+  `tests/e2e/fullstack-demo.spec.ts` plus the opt-in
+  `tests/integration/fullstack-demo-live-run.opt-in.test.ts`.
+- **`ProjectSpec` is a discriminated union** (`vite` | `node-server`); the
+  worker bootstrap dispatches on it — node servers run the ENTRY itself (cwd
+  at project root, loud no-listen failure); HMR bridge + esbuild/rollup shims
+  stay vite-only. sqlite engine bring-up uses an explicit `wasmBinary` +
+  pinned `locateFile` from the bundled same-origin asset.
+- **`RIFTY_PLAYGROUND_PORT` env** overrides the dev/e2e port (vite +
+  playwright configs) so parallel git worktrees run side by side.
 
 ### Changed (migration)
 
@@ -83,6 +97,15 @@
   but the message now calls out iframe/app-browser embeds: the parent page must
   also be cross-origin isolated and the iframe must include
   `allow="cross-origin-isolated"`.
+- **`preset.templateId` wired (ADR-0130).** App follows the selected preset's
+  template (reactive `activeTemplate()`) instead of always booting the
+  registry default; boot line is template-dispatched (`terminalDevLine`:
+  `vite` | `npm run dev`), `npm run dev` routes the template's dev script to
+  the lifecycle-owning dev-server command, `vite` refuses non-vite templates
+  with a hint; spawn env gains Node-idiomatic `PORT`.
+- **sql.js pre-bundled** (`optimizeDeps.include`) — lazy CJS discovery from
+  the worker chunk made dev Vite re-optimize and full-reload the page
+  mid-session, dropping the selected preset and running dev server.
 - **Project presets now open starter editor tabs.** File-oriented presets open
   two seeded files beside `src/main.js` as inactive tabs, so users see the tab
   strip immediately while the entry file remains active.

@@ -10,6 +10,7 @@ import {
   extname as vfsExtname,
   isAbsolute as vfsIsAbsolute,
 } from '@riftydev/vfs';
+import { getProcessCwd } from './process.ts';
 
 export interface ParsedPath {
   root: string;
@@ -44,8 +45,9 @@ export function resolve(...parts: string[]): string {
     }
   }
   if (!lastAbsolute) {
-    // Anchor at cwd-like '/' for our virtual filesystem.
-    collected.unshift('/');
+    // Node parity: relative resolution anchors at process.cwd() (defaults to
+    // '/workspace', see process.ts) — fs.resolvePath already does; keep in sync.
+    collected.unshift(getProcessCwd());
   }
   result = normalizePath(collected.join('/'));
   if (!vfsIsAbsolute(result)) result = `/${result}`;

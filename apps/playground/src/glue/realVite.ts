@@ -88,6 +88,8 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
         RIFTY_RFV_ENTRY: entryRel,
         RIFTY_RFV_TEMPLATE: template.id,
         RIFTY_PREVIEW_OWNER_TOKEN: ownerToken,
+        // Node idiom for node-server template entries (`process.env.PORT`).
+        PORT: String(port),
       },
       cwd: root,
     },

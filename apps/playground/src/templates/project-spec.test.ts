@@ -1,14 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import {
+  type NodeServerProjectSpec,
   type ProjectSpec,
   buildProjectPackageJson,
+  devScriptCommand,
   resolveBootstrapConfig,
+  terminalDevLine,
 } from './project-spec.ts';
 import { VITE_TEMPLATE } from './vite.ts';
+
+const NODE_FIXTURE: NodeServerProjectSpec = {
+  id: 'node-fixture',
+  displayName: 'Node fixture',
+  runtime: 'node-server',
+  install: { express: '^4.19.0' },
+  entry: { relativePath: '/src/main.js', content: 'console.log("server")\n' },
+  defaultPort: 3210,
+  estimatedBootSeconds: 15,
+  sqlite: true,
+  extraFiles: {
+    '/public/index.html': '<!doctype html><title>fixture</title>\n',
+    '/public/client.js': 'console.log("client")\n',
+  },
+};
 
 describe('resolveBootstrapConfig', () => {
   it('maps a ProjectSpec + port + root to the concrete install/server config', () => {
     const cfg = resolveBootstrapConfig(VITE_TEMPLATE, 5174, '/workspace');
+    if (cfg.runtime !== 'vite') throw new Error('expected a vite bootstrap config');
 
     expect(cfg.entryPath).toBe('/workspace/src/main.js');
     expect(cfg.installDeps).toEqual({ vite: '^5.4.0' });
@@ -74,5 +93,73 @@ describe('resolveBootstrapConfig', () => {
     };
     expect(pkg.scripts).toEqual({ dev: 'vite', vite: 'vite' });
     expect(pkg.dependencies).toEqual(custom.install);
+  });
+});
+
+describe('resolveBootstrapConfig (node-server runtime)', () => {
+  it('seeds entry + package.json + extraFiles and does NOT seed index.html', () => {
+    const cfg = resolveBootstrapConfig(NODE_FIXTURE, 3210, '/workspace');
+
+    expect(cfg.seedFiles['/workspace/src/main.js']).toBe(NODE_FIXTURE.entry.content);
+    expect(cfg.seedFiles['/workspace/package.json']).toBe(cfg.packageJson);
+    expect(cfg.seedFiles['/workspace/public/index.html']).toBe(
+      NODE_FIXTURE.extraFiles['/public/index.html'],
+    );
+    expect(cfg.seedFiles['/workspace/public/client.js']).toBe(
+      NODE_FIXTURE.extraFiles['/public/client.js'],
+    );
+    // A node server serves its own HTML; a seeded SPA index.html would shadow it.
+    expect(cfg.seedFiles['/workspace/index.html']).toBeUndefined();
+  });
+
+  it('tolerates extraFiles keys without a leading slash (no silent root-sibling seed)', () => {
+    const cfg = resolveBootstrapConfig(
+      { ...NODE_FIXTURE, extraFiles: { 'public/no-slash.txt': 'x' } },
+      3210,
+      '/workspace',
+    );
+    expect(cfg.seedFiles['/workspace/public/no-slash.txt']).toBe('x');
+    expect(cfg.seedFiles['/workspacepublic/no-slash.txt']).toBeUndefined();
+  });
+
+  it('builds package.json with node scripts derived from the entry path', () => {
+    const cfg = resolveBootstrapConfig(NODE_FIXTURE, 3210, '/workspace');
+    const pkg = JSON.parse(cfg.packageJson) as {
+      scripts: Record<string, string>;
+      dependencies: Record<string, string>;
+      type: string;
+    };
+    expect(pkg.scripts).toEqual({ dev: 'node src/main.js', start: 'node src/main.js' });
+    expect(pkg.dependencies).toEqual(NODE_FIXTURE.install);
+    expect(pkg.type).toBe('module');
+  });
+
+  it('carries the runtime discriminant + sqlite flag for the worker branch', () => {
+    const cfg = resolveBootstrapConfig(NODE_FIXTURE, 3210, '/workspace');
+    expect(cfg.runtime).toBe('node-server');
+    if (cfg.runtime !== 'node-server') throw new Error('unreachable');
+    expect(cfg.sqlite).toBe(true);
+  });
+
+  it('keeps the vite runtime discriminant on the vite config', () => {
+    const cfg = resolveBootstrapConfig(VITE_TEMPLATE, 5174, '/workspace');
+    expect(cfg.runtime).toBe('vite');
+  });
+});
+
+describe('terminal dev command derivation', () => {
+  it("boots vite templates with the visible 'vite' command", () => {
+    expect(terminalDevLine(VITE_TEMPLATE, '/workspace')).toBe('vite');
+  });
+
+  it("boots node-server templates through 'npm run dev' pinned to the project root", () => {
+    // cd-prefixed: `npm run` reads package.json from the SESSION cwd, which a
+    // persisted terminal may have left outside the project.
+    expect(terminalDevLine(NODE_FIXTURE, '/workspace')).toBe('cd /workspace && npm run dev');
+  });
+
+  it('derives the package.json dev script from the entry for node-server', () => {
+    expect(devScriptCommand(NODE_FIXTURE)).toBe('node src/main.js');
+    expect(devScriptCommand(VITE_TEMPLATE)).toBe('vite');
   });
 });

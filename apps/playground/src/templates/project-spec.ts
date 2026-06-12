@@ -4,6 +4,13 @@
  * this value object instead of inline Vite literals, so a second runnable
  * template is a data change rather than a worker fork.
  *
+ * Two runtimes (discriminated on `runtime`):
+ * - `'vite'` — the worker imports `runtimeSpecifier` and boots its dev server
+ *   (`createServer` + HMR bridge); the worker seeds an index.html for it.
+ * - `'node-server'` — the worker imports the ENTRY itself; the entry is a
+ *   long-running Node program (e.g. Express) that calls `listen(port)` and
+ *   serves its own HTML. No index.html is seeded — it would shadow the server.
+ *
  * Pure data + pure mapping function: no DOM, no channels, no solid-js (glue
  * altitude). Only `id` crosses a realm boundary (over env as
  * `RIFTY_RFV_TEMPLATE`); each realm re-resolves the full spec locally.
@@ -11,7 +18,7 @@
 
 /** Serializable subset of Vite's `createServer` knobs the worker reconstructs.
  *  Non-serializable plugin instances (the HMR-bridge plugin) are NOT here — the
- *  worker builds them from {@link ProjectSpec.hmr} after resolving the spec. */
+ *  worker builds them from {@link ViteProjectSpec.hmr} after resolving the spec. */
 export interface ServerSpec {
   readonly appType: string;
   readonly strictPort: boolean;
@@ -27,40 +34,69 @@ export interface ProjectEntry {
   readonly content: string;
 }
 
-export interface ProjectSpec {
+interface ProjectSpecBase {
   /** Stable template key — the only field that crosses realms (over env). */
   readonly id: string;
   /** Generic UI label, replaces the hardcoded "Real Vite". */
   readonly displayName: string;
   /** npm dependencies to install into the worker-local node_modules. */
   readonly install: Readonly<Record<string, string>>;
-  /** Dynamic-`import()` specifier the worker loads to get the dev server. */
-  readonly runtimeSpecifier: string;
   readonly entry: ProjectEntry;
   readonly defaultPort: number;
   readonly estimatedBootSeconds: number;
+}
+
+/** Template whose worker boots a Vite-shaped dev server from an npm package. */
+export interface ViteProjectSpec extends ProjectSpecBase {
+  readonly runtime: 'vite';
+  /** Dynamic-`import()` specifier the worker loads to get the dev server. */
+  readonly runtimeSpecifier: string;
   /** `<title>` for the seeded index.html. */
   readonly htmlTitle: string;
   readonly server: ServerSpec;
   readonly hmr: { readonly enabled: boolean };
 }
 
-export interface BootstrapConfig {
+/** Template whose worker runs the entry as a long-running Node server program. */
+export interface NodeServerProjectSpec extends ProjectSpecBase {
+  readonly runtime: 'node-server';
+  /** Root-relative extra files the WORKER seeds BEFORE the server starts
+   *  (e.g. `/public/*` for `express.static`) — page-side preset sync is too
+   *  late for assets the first preview request already needs. */
+  readonly extraFiles: Readonly<Record<string, string>>;
+  /** Bring up the sql.js WASM engine (`node:sqlite`) before importing the entry. */
+  readonly sqlite: boolean;
+}
+
+export type ProjectSpec = ViteProjectSpec | NodeServerProjectSpec;
+
+interface BootstrapConfigBase {
   readonly root: string;
   readonly port: number;
   readonly entryPath: string;
-  readonly runtimeSpecifier: string;
   /** npm package name/version passed to `install()` (derived from the id). */
   readonly packageName: string;
   readonly packageVersion: string;
   readonly installDeps: Readonly<Record<string, string>>;
   /** Serialized package.json written into the project root. */
   readonly packageJson: string;
-  readonly server: ServerSpec;
-  readonly hmrEnabled: boolean;
   /** Absolute-path → contents map the worker seeds idempotently. */
   readonly seedFiles: Readonly<Record<string, string>>;
 }
+
+export interface ViteBootstrapConfig extends BootstrapConfigBase {
+  readonly runtime: 'vite';
+  readonly runtimeSpecifier: string;
+  readonly server: ServerSpec;
+  readonly hmrEnabled: boolean;
+}
+
+export interface NodeServerBootstrapConfig extends BootstrapConfigBase {
+  readonly runtime: 'node-server';
+  readonly sqlite: boolean;
+}
+
+export type BootstrapConfig = ViteBootstrapConfig | NodeServerBootstrapConfig;
 
 /**
  * The `<script>` src is RELATIVE and DERIVED from the entry path, so seeded
@@ -79,6 +115,28 @@ function buildIndexHtml(title: string, entryRelativePath: string): string {
 </html>`;
 }
 
+/**
+ * The package.json `dev`/`start` script body for a spec — `'vite'` for the vite
+ * runtime, `node <entry>` for a node server. Single source for the script the
+ * page-realm `npm run` matcher recognises and the seeded package.json declares.
+ */
+export function devScriptCommand(spec: ProjectSpec): string {
+  if (spec.runtime === 'vite') return 'vite';
+  return `node ${spec.entry.relativePath.replace(/^\/+/, '')}`;
+}
+
+/**
+ * The visible terminal line the playground runs to boot a template — the
+ * lifecycle-owning `vite` command for vite templates, `npm run dev` (resolved
+ * through the seeded package.json script) for node servers. The node line is
+ * `cd <root> && …`-pinned: `npm run` reads package.json from the SESSION cwd,
+ * and the auto-boot session may have a persisted/user cwd outside the project.
+ */
+export function terminalDevLine(spec: ProjectSpec, root: string): string {
+  if (spec.runtime === 'vite') return 'vite';
+  return `cd ${root} && npm run dev`;
+}
+
 export function buildProjectPackageJson(spec: ProjectSpec): {
   readonly name: string;
   readonly version: string;
@@ -86,13 +144,16 @@ export function buildProjectPackageJson(spec: ProjectSpec): {
 } {
   const name = `rifty-${spec.id}-app`;
   const version = '0.0.0';
+  const script = devScriptCommand(spec);
+  const scripts =
+    spec.runtime === 'vite' ? { dev: script, vite: script } : { dev: script, start: script };
   const json = `${JSON.stringify(
     {
       name,
       version,
       private: true,
       type: 'module',
-      scripts: { dev: 'vite', vite: 'vite' },
+      scripts,
       dependencies: spec.install,
     },
     null,
@@ -114,20 +175,37 @@ export function resolveBootstrapConfig(
 ): BootstrapConfig {
   const entryPath = `${root}${spec.entry.relativePath}`;
   const pkg = buildProjectPackageJson(spec);
+  const base = {
+    root,
+    port,
+    entryPath,
+    packageName: pkg.name,
+    packageVersion: pkg.version,
+    installDeps: spec.install,
+    packageJson: pkg.json,
+  };
+  if (spec.runtime === 'node-server') {
+    const seedFiles: Record<string, string> = {
+      [entryPath]: spec.entry.content,
+      [`${root}/package.json`]: pkg.json,
+    };
+    for (const [relPath, content] of Object.entries(spec.extraFiles)) {
+      // Tolerate a missing leading slash — `${root}public/x` would silently
+      // seed a sibling of root and express.static would 404 with no hint.
+      const rel = relPath.startsWith('/') ? relPath : `/${relPath}`;
+      seedFiles[`${root}${rel}`] = content;
+    }
+    return { ...base, runtime: 'node-server', sqlite: spec.sqlite, seedFiles };
+  }
   const seedFiles: Record<string, string> = {
     [`${root}/index.html`]: buildIndexHtml(spec.htmlTitle, spec.entry.relativePath),
     [entryPath]: spec.entry.content,
     [`${root}/package.json`]: pkg.json,
   };
   return {
-    root,
-    port,
-    entryPath,
+    ...base,
+    runtime: 'vite',
     runtimeSpecifier: spec.runtimeSpecifier,
-    packageName: pkg.name,
-    packageVersion: pkg.version,
-    installDeps: spec.install,
-    packageJson: pkg.json,
     server: spec.server,
     hmrEnabled: spec.hmr.enabled,
     seedFiles,

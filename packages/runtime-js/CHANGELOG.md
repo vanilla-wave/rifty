@@ -4,6 +4,14 @@
 
 ### Fixed
 
+- **`path.resolve` anchors relative paths at `process.cwd()`** (Node parity;
+  fs already did) — `express.static('public')` under a non-root cwd resolved
+  to `/public` and 404'd.
+- **`require('fs')` exposes `createReadStream`/`createWriteStream` and the
+  `ReadStream`/`WriteStream` classes.** They were named ESM exports missing
+  from the default module object; serve-static/send broke, and `destroy()`'s
+  `stream instanceof fs.ReadStream` probe threw.
+
 - **`process.stdin.setEncoding('utf8')` now decodes multibyte characters across
   chunk boundaries.** The REPL host bridge and kernel `install-process` shim now
   keep a streaming `TextDecoder` per stdin stream instead of decoding each

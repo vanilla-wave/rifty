@@ -5,21 +5,40 @@ import { describe, expect, it } from 'vitest';
 const source = readFileSync(fileURLToPath(new URL('./App.tsx', import.meta.url)), 'utf8');
 
 describe('App terminal startup wiring', () => {
-  it('auto-starts Vite through the command that owns the real worker lifecycle', () => {
-    expect(source).toContain("await runTerminalSequence(session.id, ['vite'])");
+  // Revised pins (see the node-server template ADR): the boot line is
+  // template-dispatched via terminalDevLine(); the ORIGINAL intent — boot goes
+  // through the visible command that owns the worker lifecycle, never cosmetic
+  // terminal theater — stays enforced for both runtimes.
+  it('auto-starts the active template through the command that owns the real worker lifecycle', () => {
+    expect(source).toContain(
+      'await runTerminalSequence(session.id, [terminalDevLine(activeTemplate(), WORKSPACE)])',
+    );
     expect(source).not.toContain("['npm install', 'npm run dev']");
+    // hardcoded boot literals bypassing the dispatch helper are banned
     expect(source).not.toContain("['npm run dev']");
+    expect(source).not.toContain("['vite']");
   });
 
   it('seeds package.json through the shared project-spec builder', () => {
-    expect(source).toContain(
-      "import { buildProjectPackageJson } from './templates/project-spec.ts'",
+    // one regex so the builder provably comes from the SHARED project-spec
+    // import block, not a local re-definition
+    expect(source).toMatch(
+      /import \{[^}]*buildProjectPackageJson[^}]*\} from '\.\/templates\/project-spec\.ts'/s,
     );
-    expect(source).toContain('const packageJson = buildProjectPackageJson(template).json;');
+    expect(source).toContain('const packageJson = buildProjectPackageJson(activeTemplate()).json;');
     expect(source).toContain('writeText(vfs, `${WORKSPACE}/package.json`, packageJson);');
     expect(source).not.toContain('const packageJson = {');
-    expect(source).toContain("await runTerminalSequence(session.id, ['vite'])");
-    expect(source).not.toContain("await runTerminalSequence(session.id, ['npm run dev'])");
+  });
+
+  it('follows the active preset template instead of hardcoding the default', () => {
+    expect(source).not.toContain('const template = defaultProjectSpec()');
+    expect(source).toContain('const activeTemplate = ');
+    expect(source).toContain('resolveProjectSpec(');
+    expect(source).toContain('.templateId');
+    // the worker spawns with the ACTIVE template, not the registry default:
+    // the dev-server command snapshots it once, then hands it to the spawn
+    expect(source).toContain('const template = activeTemplate();');
+    expect(source).toContain('await startRealVite({\n        template,');
   });
 
   it('opens preview tabs as an opener-owned iframe wrapper', () => {
@@ -59,7 +78,9 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('function restartDevServer(sessionId: string)');
     expect(source).toContain('if (restartSessionId) void restartDevServer(restartSessionId)');
     expect(source).toContain('devServerSessionId = session.id');
-    expect(source).toContain("await runTerminalSequence(targetSessionId, ['vite'])");
+    expect(source).toContain(
+      'await runTerminalSequence(targetSessionId, [terminalDevLine(activeTemplate(), WORKSPACE)])',
+    );
   });
 
   it('does not restart Vite inside a hidden stale terminal session', () => {
@@ -76,9 +97,16 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('commands: { npm: npmCommand, vite: viteCommand }');
   });
 
-  it('routes npm run scripts through the same visible Vite terminal command', () => {
+  it('routes npm run scripts through the same visible dev-server terminal command', () => {
     expect(source).toContain('async function runTerminalScript(');
     expect(source).toContain("if (command.trim() === 'vite') return runViteCommand(ctx);");
+    // the node-server script body (e.g. 'node src/main.js') reaches the SAME
+    // lifecycle owner, single-sourced from project-spec — no second literal,
+    // and the FULL routing line is pinned so a cosmetic rewrite fails here
+    expect(source).toContain(
+      'if (command.trim() === devScriptCommand(activeTemplate())) return runViteCommand(ctx);',
+    );
+    expect(source).not.toContain("'node src/main.js'");
     expect(source).toContain('runScript: async (scriptName, command) =>');
   });
 

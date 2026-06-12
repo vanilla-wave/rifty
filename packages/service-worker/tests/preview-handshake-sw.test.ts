@@ -1256,3 +1256,88 @@ describe('SW-side handshake state machine', () => {
     interceptor.teardown();
   });
 });
+
+describe('SW-side body serialization', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('advertises content-length on serialized POST bodies', async () => {
+    // fetch Request headers NEVER expose content-length (the network layer
+    // adds it on the wire); without re-deriving it from the drained bytes the
+    // worker-side server sees a length-less POST and body parsers
+    // (express.json's typeis.hasBody) silently skip the body.
+    const client = makeMockClient('client-A');
+    const scope = makeMockScope([client]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      client,
+    );
+    const payload = JSON.stringify({ title: 'from the bridge' });
+    const responsePromise = scope.fetch('http://x/preview/3000/api/todos', {
+      method: 'POST',
+      body: payload,
+      headers: { 'content-type': 'application/json' },
+      clientId: 'client-A',
+    });
+    // Body drain (request.arrayBuffer) may resolve via a FAKED timer on some
+    // Node versions — advance fake time between microtask flushes.
+    await flushPreviewDispatch();
+    await vi.advanceTimersByTimeAsync(50);
+    await flushPreviewDispatch();
+    expect(client.postMessage).toHaveBeenCalledTimes(1);
+    const [message, transfer] = client.postMessage.mock.calls[0]!;
+    const { request } = message as {
+      request: { headers: Record<string, string>; body: Uint8Array | null };
+    };
+    const expectedLength = new TextEncoder().encode(payload).byteLength;
+    expect(request.body?.byteLength).toBe(expectedLength);
+    expect(request.headers['content-length']).toBe(String(expectedLength));
+    const replyPort = (transfer as MessagePort[])[0]!;
+    replyPort.postMessage({ status: 201, statusText: 'Created', headers: {}, body: null });
+    await responsePromise;
+    interceptor.teardown();
+  });
+
+  it('does not override an explicitly forwarded content-length', async () => {
+    const client = makeMockClient('client-A');
+    const scope = makeMockScope([client]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      client,
+    );
+    const responsePromise = scope.fetch('http://x/preview/3000/api/todos', {
+      method: 'POST',
+      body: 'abc',
+      headers: { 'content-type': 'text/plain', 'content-length': '3' },
+      clientId: 'client-A',
+    });
+    await flushPreviewDispatch();
+    await vi.advanceTimersByTimeAsync(50);
+    await flushPreviewDispatch();
+    const [message, transfer] = client.postMessage.mock.calls[0]!;
+    const { request } = message as { request: { headers: Record<string, string> } };
+    expect(request.headers['content-length']).toBe('3');
+    const replyPort = (transfer as MessagePort[])[0]!;
+    replyPort.postMessage({ status: 201, statusText: 'Created', headers: {}, body: null });
+    await responsePromise;
+    interceptor.teardown();
+  });
+});

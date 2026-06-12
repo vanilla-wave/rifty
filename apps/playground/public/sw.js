@@ -31,9 +31,16 @@ var FirstWindowOwnerResolver = class {
       const direct = await scope.clients.get(clientId);
       if (direct) return direct;
     }
-    const all = await scope.clients.matchAll({
+    const matched = await scope.clients.matchAll({
       type: "window",
       includeUncontrolled: false
+    });
+    const all = matched.filter((candidate) => {
+      try {
+        return parsePreviewPath(new URL(candidate.url).pathname) === null;
+      } catch {
+        return true;
+      }
     });
     if (all.length === 0) return null;
     if (!fallbackWarned.has(scope)) {
@@ -540,11 +547,15 @@ async function routePreview(scope, request, match, readiness, timeoutMs, clientI
   const channel = new MessageChannel();
   const bodyBytes = request.method === "GET" || request.method === "HEAD" ? null : new Uint8Array(await request.arrayBuffer());
   const requestId = readiness.nextRequestId();
+  const headers = Object.fromEntries(request.headers);
+  if (bodyBytes && !("content-length" in headers) && !("transfer-encoding" in headers)) {
+    headers["content-length"] = String(bodyBytes.byteLength);
+  }
   const serialised = {
     port: match.port,
     url: `${synthesizePreviewUrl(match.path)}${new URL(request.url).search}`,
     method: request.method,
-    headers: Object.fromEntries(request.headers),
+    headers,
     body: bodyBytes
   };
   return new Promise((resolve) => {
@@ -563,12 +574,12 @@ async function routePreview(scope, request, match, readiness, timeoutMs, clientI
         resolve(new Response(typeof err === "string" ? err : err.message, { status: 502 }));
         return;
       }
-      const headers = new Headers(data.headers);
-      if (!headers.has("Cross-Origin-Resource-Policy")) {
-        headers.set("Cross-Origin-Resource-Policy", "cross-origin");
+      const headers2 = new Headers(data.headers);
+      if (!headers2.has("Cross-Origin-Resource-Policy")) {
+        headers2.set("Cross-Origin-Resource-Policy", "cross-origin");
       }
-      if (!headers.has("Cross-Origin-Embedder-Policy")) {
-        headers.set("Cross-Origin-Embedder-Policy", "credentialless");
+      if (!headers2.has("Cross-Origin-Embedder-Policy")) {
+        headers2.set("Cross-Origin-Embedder-Policy", "credentialless");
       }
       let body = null;
       const raw = data.body;
@@ -581,7 +592,7 @@ async function routePreview(scope, request, match, readiness, timeoutMs, clientI
       } else if (raw != null) {
         body = raw;
       }
-      resolve(new Response(body, { status: data.status, statusText: data.statusText, headers }));
+      resolve(new Response(body, { status: data.status, statusText: data.statusText, headers: headers2 }));
     };
     client.postMessage(
       {
@@ -686,15 +697,29 @@ function createPreviewInterceptor(scope, hooks = {}) {
     }
     if (!match) return;
     event.respondWith(
-      routePreview(
-        scope,
-        event.request,
-        match,
-        subscription.readiness,
-        timeoutMs,
-        clientId,
-        binding
-      )
+      (async () => {
+        let clientId = isPreviewFrameRequest(event.request) ? null : event.resultingClientId || event.clientId || null;
+        if (clientId) {
+          const requester = await scope.clients.get(clientId);
+          if (requester?.url) {
+            let requesterPath = null;
+            try {
+              requesterPath = new URL(requester.url).pathname;
+            } catch {
+            }
+            if (requesterPath && matchPreviewUrl(requesterPath)) clientId = null;
+          }
+        }
+        return routePreview(
+          scope,
+          event.request,
+          match,
+          subscription.readiness,
+          timeoutMs,
+          clientId,
+          binding
+        );
+      })()
     );
   };
   scope.addEventListener("fetch", fetchHandler);

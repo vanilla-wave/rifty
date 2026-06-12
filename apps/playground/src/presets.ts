@@ -1,4 +1,8 @@
 import type { IconName } from './components/icons.tsx';
+import {
+  EXPRESS_SQLITE_SERVER_SOURCE,
+  EXPRESS_SQLITE_TEMPLATE,
+} from './templates/express-sqlite.ts';
 
 export type PresetMode = 'dev' | 'real-vite';
 
@@ -301,10 +305,33 @@ const REAL_VITE_PRESET: Preset = {
   source: REAL_VITE_SOURCE,
 };
 
+/**
+ * Fullstack demo (node-server template, see the node-server template ADR):
+ * the editor program is the SERVER entry; explorer files mirror the template's
+ * worker-seeded `extraFiles` so both realms show the same project.
+ */
+const EXPRESS_SQLITE_PRESET: Preset = {
+  id: 'express-sqlite',
+  label: 'Express + SQLite',
+  category: 'Live preview',
+  icon: 'layers',
+  mode: 'real-vite',
+  templateId: EXPRESS_SQLITE_TEMPLATE.id,
+  blurb: 'A client-server app: real Express from npm, SQLite-as-WASM behind node:sqlite.',
+  tag: { text: '~15s', tone: 'slow' },
+  source: EXPRESS_SQLITE_SERVER_SOURCE,
+  openFiles: ['public/index.html', 'public/client.js'],
+  files: Object.entries(EXPRESS_SQLITE_TEMPLATE.extraFiles).map(([path, content]) => ({
+    path: path.replace(/^\/+/, ''),
+    content,
+  })),
+};
+
 export const PRESETS: readonly Preset[] = [
   PROJECT_FILES_PRESET,
   NODE_WORKER_PRESET,
   REAL_VITE_PRESET,
+  EXPRESS_SQLITE_PRESET,
 ];
 
 /** The preset selected at boot. Its source is the default editor content. */

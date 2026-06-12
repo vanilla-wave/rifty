@@ -142,14 +142,26 @@ export class ServerResponse extends EventEmitter {
       if (Array.isArray(v)) for (const item of v) headers.append(k, item);
       else headers.set(k, v);
     }
+    // Null-body statuses (RFC 9110: 204/205/304; fetch spec list incl. 1xx):
+    // the Response constructor THROWS on any body, and Node sends none — drop
+    // the stream, the chunked framing, AND any content-length `end(chunk)`
+    // stamped for the now-dropped body (Node omits it entirely).
+    const nullBody =
+      this.statusCode === 204 ||
+      this.statusCode === 205 ||
+      this.statusCode === 304 ||
+      (this.statusCode >= 100 && this.statusCode < 200);
+    if (nullBody) {
+      headers.delete('content-length');
+    }
     // Per RFC 7230 §3.3.1, Content-Length wins; otherwise streaming responses
     // must be chunked. We never know the length up front in streaming mode,
     // so default to chunked when neither is set.
-    if (!headers.has('content-length') && !headers.has('transfer-encoding')) {
+    if (!nullBody && !headers.has('content-length') && !headers.has('transfer-encoding')) {
       headers.set('transfer-encoding', 'chunked');
     }
     this.resolveResp(
-      new Response(this.body, {
+      new Response(nullBody ? null : this.body, {
         status: this.statusCode,
         statusText: this.statusMessage,
         headers,

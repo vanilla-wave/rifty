@@ -1,12 +1,19 @@
 /// <reference lib="webworker" />
 
 /**
- * Real Vite bootstrap (ADR-0043 — Vite-in-Worker, M11 / A-026).
+ * Real project bootstrap (ADR-0043 — Vite-in-Worker, M11 / A-026; extended for
+ * the `node-server` template runtime).
  *
  * Loaded by the kernel-worker bootstrap via `import(spec.entry.url)` once the
  * `WorkerInitMessage` lands. By the time this evaluates, `globalThis.process`
  * is the Node-shape shim from the kernel's pre-entry hook and `process.env`
  * carries the env the page-realm adapter put on the `WorkerSpawnSpec`.
+ *
+ * The common head (runtime globals, VFS bridges, seed, npm install, module
+ * loader) is template-agnostic; the tail dispatches on the template's runtime:
+ * - `'vite'` — import the dev-server package and boot it (HMR bridge, shims).
+ * - `'node-server'` — run the ENTRY itself as a long-running server program
+ *   (optionally bringing up the `node:sqlite` WASM engine first).
  *
  * Any throw propagates to the kernel's `worker-entry` → exit code 1 +
  * stack-on-stderr; page-side `realVite.ts` forwards stderr into the terminal.
@@ -16,12 +23,14 @@
  * paths (A-026's whole point is the page realm stops paying for them).
  */
 
-import { dispatchToPort, serveCrossRealmPreview } from '@riftydev/net';
+import { dispatchToPort, listPorts, serveCrossRealmPreview } from '@riftydev/net';
 import '@riftydev/net/register-builtins';
+import '@riftydev/net/sqlite/register-builtins';
+import { initSqliteEngine } from '@riftydev/net/sqlite/engine';
 import { RegistryClient, install } from '@riftydev/npm-client';
 import { Buffer } from '@riftydev/runtime-js/builtins/buffer';
 import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
-import { installProcessGlobals } from '@riftydev/runtime-js/builtins/process';
+import { installProcessGlobals, setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import {
@@ -30,6 +39,8 @@ import {
   setupPreviewBridge,
 } from '@riftydev/service-worker';
 import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
+import type { SqlJsConfig } from 'sql.js';
+import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { esbuildShimFiles, rollupShimFiles } from '../glue/esbuild-shim.ts';
 import {
   type HmrBridgeHandle,
@@ -42,7 +53,12 @@ import { proxiedRegistryFetch } from '../glue/registry-fetch.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { collectSnapshot, publishVfsSnapshot } from '../glue/vfs-snapshot-port.ts';
 import { type VfsWriteFrame, applyVfsWriteFrame, serveVfsWrites } from '../glue/vfs-write-port.ts';
-import { type BootstrapConfig, resolveBootstrapConfig } from '../templates/project-spec.ts';
+import {
+  type BootstrapConfig,
+  type NodeServerBootstrapConfig,
+  type ProjectSpec,
+  resolveBootstrapConfig,
+} from '../templates/project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
 import { type ViteModuleGraph, invalidateViteModule } from './real-vite-invalidation.ts';
 
@@ -151,6 +167,12 @@ function overlayShims(): void {
   }
 }
 
+/** Apply the optional `RIFTY_RFV_ENTRY` override. */
+function withEntryOverride(spec: ProjectSpec, entryRel: string): ProjectSpec {
+  if (entryRel === spec.entry.relativePath) return spec;
+  return { ...spec, entry: { ...spec.entry, relativePath: entryRel } };
+}
+
 async function dispatchSerializedPreview(req: SerializedRequest): Promise<SerializedResponse> {
   const headers = new Headers(req.headers);
   const init: RequestInit = { method: req.method, headers };
@@ -168,6 +190,8 @@ async function dispatchSerializedPreview(req: SerializedRequest): Promise<Serial
   };
 }
 
+type Loader = ReturnType<typeof createModuleLoader>;
+
 function toRootRelativePath(root: string, path: string): string {
   const normalizedRoot = normalizePath(root);
   const normalizedPath = normalizePath(path);
@@ -176,6 +200,64 @@ function toRootRelativePath(root: string, path: string): string {
     return normalizedPath.slice(normalizedRoot.length);
   }
   return normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`;
+}
+
+/**
+ * Wait for the entry to register `port` with the net registry (its
+ * `listen(port)` call). Polled briefly: a top-level `await` in the entry may
+ * defer the listen past the import's resolution.
+ */
+async function waitForListeningPort(port: number, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (listPorts().includes(port)) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+  }
+  // A listen() landing during the final sleep must not read as a dead server.
+  if (listPorts().includes(port)) return;
+  throw new Error(
+    `[real-vite/worker] entry never started listening on port ${port} — a node-server template entry must call listen(process.env.PORT)`,
+  );
+}
+
+/**
+ * Node-server tail: optionally bring up the `node:sqlite` engine, then run the
+ * ENTRY as the server program and wait for its `listen(port)`.
+ */
+async function bootNodeServer(cfg: NodeServerBootstrapConfig, loader: Loader): Promise<void> {
+  if (cfg.sqlite) {
+    // wasmBinary (not locateFile): the bundled same-origin asset is fetched
+    // here, so the emscripten glue never walks its Node fs / web fetch
+    // environment-detection paths inside the worker realm.
+    log('[real-vite/worker] bringing up the node:sqlite WASM engine…\n');
+    const wasmResponse = await fetch(sqlWasmUrl);
+    if (!wasmResponse.ok) {
+      throw new Error(`[real-vite/worker] sql.js wasm fetch failed: HTTP ${wasmResponse.status}`);
+    }
+    const wasmBinary = await wasmResponse.arrayBuffer();
+    log(`[real-vite/worker] sql.js wasm fetched: ${wasmBinary.byteLength} bytes\n`);
+    // locateFile must ALSO be pinned: the emscripten glue computes the wasm
+    // path eagerly even when wasmBinary is provided, and the engine's default
+    // (import.meta.resolve on a bare specifier) throws inside a bundled worker.
+    const config: SqlJsConfig & { readonly wasmBinary: ArrayBuffer } = {
+      wasmBinary,
+      locateFile: () => sqlWasmUrl,
+    };
+    // Diagnosable failure over a silent stall: surface WHERE the engine died.
+    const engineTimeout = new Promise<never>((_, reject) => {
+      setTimeout(
+        () => reject(new Error('[real-vite/worker] node:sqlite engine bring-up timed out (30s)')),
+        30_000,
+      );
+    });
+    await Promise.race([initSqliteEngine(config), engineTimeout]);
+    log('[real-vite/worker] node:sqlite engine ready\n');
+  }
+
+  log(`[real-vite/worker] starting server ${cfg.entryPath} on port ${cfg.port}…\n`);
+  await loader.import(cfg.entryPath, `${cfg.root}/__entry__.mjs`);
+  await waitForListeningPort(cfg.port, 10_000);
+  log(`[real-vite/worker] server is listening on internal port ${cfg.port}\n`);
 }
 
 async function bootstrap(): Promise<void> {
@@ -187,17 +269,16 @@ async function bootstrap(): Promise<void> {
   const spec = resolveProjectSpec(env.RIFTY_RFV_TEMPLATE ?? DEFAULT_TEMPLATE_ID);
   // Honour an explicit entry override on the spawn spec (usually a no-op —
   // the orchestrator defaults it to the template's own entry).
-  const entryRel = env.RIFTY_RFV_ENTRY ?? spec.entry.relativePath;
-  const effectiveSpec =
-    entryRel === spec.entry.relativePath
-      ? spec
-      : { ...spec, entry: { ...spec.entry, relativePath: entryRel } };
+  const effectiveSpec = withEntryOverride(spec, env.RIFTY_RFV_ENTRY ?? spec.entry.relativePath);
   const cfg = resolveBootstrapConfig(effectiveSpec, port, root);
 
   const kernelIpc = installRuntimeGlobals();
+  // Both runtimes resolve relative paths (express.static('public'), tool cwd
+  // probes) against the project root, whatever RIFTY_RFV_ROOT says.
+  setProcessCwd(cfg.root);
 
   // Reverse mirror (ADR-0076): publish the project tree (sans node_modules) to
-  // the page so its file explorer reflects this worker's real Vite project.
+  // the page so its file explorer reflects this worker's real project.
   const publishSnapshot = (): void => {
     publishVfsSnapshot(port, collectSnapshot(syncMirror(), root));
   };
@@ -259,9 +340,6 @@ async function bootstrap(): Promise<void> {
   );
   publishSnapshot(); // node_modules now present — refresh the page's view
 
-  overlayShims();
-  log('[real-vite/worker] esbuild + rollup-native shims overlaid\n');
-
   const loader = createModuleLoader(syncMirror(), { cwd: root });
   __setCreateRequireImpl((from: string) => {
     const fromPath = from.startsWith('file://')
@@ -283,50 +361,60 @@ async function bootstrap(): Promise<void> {
     return req;
   });
 
-  log(`[real-vite/worker] importing ${cfg.runtimeSpecifier}…\n`);
-  const viteNs = (await loader.import(
-    cfg.runtimeSpecifier,
-    `${root}/__entry__.mjs`,
-  )) as unknown as {
-    createServer: (config: ViteUserConfig) => Promise<ViteDevServer>;
-  };
+  if (cfg.runtime === 'node-server') {
+    await bootNodeServer(cfg, loader);
+    publishSnapshot();
+  }
 
-  // HMR bridge in THIS realm; iframe-side BroadcastChannel client reaches it
-  // regardless of which realm hosts the server.
-  const hmrBridgeToken = createHmrBridgeToken();
-  hmrBridgeRef.current = setupHmrBridge({ port, token: hmrBridgeToken });
-  log(`[real-vite/worker] hmr bridge ready at ${hmrBridgeRef.current.url}\n`);
+  if (cfg.runtime === 'vite') {
+    overlayShims();
+    log('[real-vite/worker] esbuild + rollup-native shims overlaid\n');
 
-  log(`[real-vite/worker] starting dev server on port ${port}…\n`);
-  const server = await viteNs.createServer({
-    root,
-    base: './',
-    server: {
-      port,
-      strictPort: cfg.server.strictPort,
-      middlewareMode: false,
-      hmr: false,
-      host: cfg.server.host,
-      allowedHosts: cfg.server.allowedHosts,
-    } as unknown as ViteUserConfig['server'],
-    appType: cfg.server.appType,
-    clearScreen: false,
-    optimizeDeps: {
-      disabled: cfg.server.optimizeDepsDisabled,
-    } as unknown as ViteUserConfig['optimizeDeps'],
-    plugins: cfg.hmrEnabled ? [createHmrBridgeVitePlugin({ port, token: hmrBridgeToken })] : [],
-  });
-  await server.listen();
-  activeServer = server;
-  log(`[real-vite/worker] vite is listening on internal port ${port}\n`);
-  publishSnapshot(); // vite may have written config/cache during boot
+    log(`[real-vite/worker] importing ${cfg.runtimeSpecifier}…\n`);
+    const viteNs = (await loader.import(
+      cfg.runtimeSpecifier,
+      `${root}/__entry__.mjs`,
+    )) as unknown as {
+      createServer: (config: ViteUserConfig) => Promise<ViteDevServer>;
+    };
 
-  server.watcher?.on('change', (file) => {
-    broadcastFileUpdate(file);
-    publishSnapshot(); // keep the page's explorer in sync with edits
-  });
+    // HMR bridge in THIS realm; iframe-side BroadcastChannel client reaches it
+    // regardless of which realm hosts the server.
+    const hmrBridgeToken = createHmrBridgeToken();
+    hmrBridgeRef.current = setupHmrBridge({ port, token: hmrBridgeToken });
+    log(`[real-vite/worker] hmr bridge ready at ${hmrBridgeRef.current.url}\n`);
 
-  // Direct SW→Worker preview route (A-023): the Worker owns this Vite port, so
+    log(`[real-vite/worker] starting dev server on port ${port}…\n`);
+    const server = await viteNs.createServer({
+      root,
+      base: './',
+      server: {
+        port,
+        strictPort: cfg.server.strictPort,
+        middlewareMode: false,
+        hmr: false,
+        host: cfg.server.host,
+        allowedHosts: cfg.server.allowedHosts,
+      } as unknown as ViteUserConfig['server'],
+      appType: cfg.server.appType,
+      clearScreen: false,
+      optimizeDeps: {
+        disabled: cfg.server.optimizeDepsDisabled,
+      } as unknown as ViteUserConfig['optimizeDeps'],
+      plugins: cfg.hmrEnabled ? [createHmrBridgeVitePlugin({ port, token: hmrBridgeToken })] : [],
+    });
+    await server.listen();
+    activeServer = server;
+    log(`[real-vite/worker] vite is listening on internal port ${port}\n`);
+    publishSnapshot(); // vite may have written config/cache during boot
+
+    server.watcher?.on('change', (file) => {
+      broadcastFileUpdate(file);
+      publishSnapshot(); // keep the page's explorer in sync with edits
+    });
+  }
+
+  // Direct SW→Worker preview route (A-023): the Worker owns this port, so
   // advertise it to the SW. The page-side bridge below stays as fallback for
   // legacy window-owned paths and for browsers without Worker SW messaging.
   const tearDirectSwBridge = setupPreviewBridge(dispatchSerializedPreview, {
@@ -337,7 +425,7 @@ async function bootstrap(): Promise<void> {
 
   // Page-realm `bridgeCrossRealmPreview` posts each SW preview request over
   // BroadcastChannel and awaits our reply; we dispatch through the WORKER-LOCAL
-  // `@riftydev/net` registry (Vite registered `port` when its dev server listened).
+  // `@riftydev/net` registry (the server registered `port` when it listened).
   const tearPreviewBridge = serveCrossRealmPreview(port, async (request) =>
     dispatchToPort(port, request),
   );
@@ -352,7 +440,7 @@ async function bootstrap(): Promise<void> {
   // Keep the worker realm alive (ADR-0077). The kernel's `worker-entry`
   // terminates the realm (`closePorts()` + `self.close()`) the instant the
   // entry's top-level `await` resolves — correct for a run-to-completion program
-  // or CLI, but THIS is a long-running dev server: returning would kill Vite
+  // or CLI, but THIS is a long-running dev server: returning would kill it
   // the moment it started listening, so every preview request hits a dead worker
   // (502 bridge-timeout) and the iframe never renders. Suspend forever; the realm
   // stays live until the page-side handle `.kill()`s it (`worker.terminate()`),
@@ -361,7 +449,6 @@ async function bootstrap(): Promise<void> {
   void tearDirectSwBridge;
   void tearPreviewBridge;
   void tearNodeModulesBridge;
-  void server;
   await new Promise<never>(() => {});
 }
 

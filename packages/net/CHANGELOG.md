@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Null-body statuses (204/205/304/1xx) no longer throw on dispatch.** The
+  fetch `Response` constructor rejects ANY body for them; `res.status(204).end()`
+  (express DELETE handlers) blew up. Body is now `null`, chunked framing omitted.
+- **Bodied requests without `content-length`/`transfer-encoding` now present
+  `transfer-encoding: chunked`** on `IncomingMessage` — browsers strip
+  `content-length` when a Request is rebuilt across the preview bridge
+  (forbidden request header), so typeis-style `hasBody()` (express.json)
+  silently skipped bodies.
+- **sqlite engine survives a process-shim swap.** `defaultLocateFile` ran
+  inside the async WASM bring-up; after `installProcessGlobals()` the rifty
+  shim (has `versions.node`, lacks `getBuiltinModule`) made init throw deep in
+  sql.js and the memoised promise never settled. The Node binding is captured
+  at module-eval time.
+
 ### Performance
 
 - **Lazy + single-`URL` net micro-fixes (#9, gate G2).** Two byte-identical wins on the request hot path: (a) `net.ts`'s `Server.listen` handler built `new URL(request.url)` TWICE in one template literal (`.pathname` + `.search`) — hoisted to a single `const u = new URL(...)`, reused for both (pure CSE). (b) `http/request.ts` computed `Object.fromEntries(headers)` eagerly in BOTH `IncomingMessage` and `IncomingMessageFromFetch` constructors; now deferred to first read of `req.headers` via a self-replacing accessor (`defineLazyHeaders`) — a configurable getter that, on first read, materialises the record and `Object.defineProperty`'s itself into a **writable**+enumerable+configurable data property, with a setter for the write-before-read path. Writability is load-bearing (gate G2): Express reassigns `req.headers = {...}` (trust-proxy / body-parser), which a getter-only accessor would break — so this stays behavior-preserving / contract-stable (ADR-0081 rule 5; CHANGELOG-only, no ADR). The plan's third sub-action (pre-sized http body) was a no-op: `net.ts`'s `new Uint8Array(await request.arrayBuffer())` is already an exact-length zero-copy view. Guard: `http/request.test.ts` (lazy compute, identity-stable, reassign before+after read, writable+enumerable+configurable descriptor, both classes) + new parity `http/server-headers-reassign.case.ts` (header read → Express reassign + path/query echo after the single-URL change). Per `docs/perf/js-runtime-perf-audit-2026-06-05.md` (#9).

@@ -7,12 +7,16 @@
  * the wrong runtime.
  */
 import { NotImplementedError } from '@riftydev/vfs';
+import { EXPRESS_SQLITE_TEMPLATE } from './express-sqlite.ts';
 import type { ProjectSpec } from './project-spec.ts';
 import { VITE_TEMPLATE } from './vite.ts';
 
 export const DEFAULT_TEMPLATE_ID = 'vite';
 
-const TEMPLATES: ReadonlyMap<string, ProjectSpec> = new Map([[VITE_TEMPLATE.id, VITE_TEMPLATE]]);
+const TEMPLATES: ReadonlyMap<string, ProjectSpec> = new Map<string, ProjectSpec>([
+  [VITE_TEMPLATE.id, VITE_TEMPLATE],
+  [EXPRESS_SQLITE_TEMPLATE.id, EXPRESS_SQLITE_TEMPLATE],
+]);
 
 /** Resolve a template id to its spec, or throw for an unregistered id. */
 export function resolveProjectSpec(id: string): ProjectSpec {

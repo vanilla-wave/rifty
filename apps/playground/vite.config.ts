@@ -28,11 +28,15 @@ const crossOriginIsolationHeaders = {
   'Cross-Origin-Resource-Policy': 'cross-origin',
 };
 
+// Overridable so parallel checkouts (git worktrees) can run dev/e2e side by
+// side; playwright.config.ts reads the same env. Default stays 5273.
+const port = Number(process.env.RIFTY_PLAYGROUND_PORT ?? 5273);
+
 export default defineConfig({
   customLogger: quietLogger,
   plugins: [solid(), rifySwPlugin()],
   server: {
-    port: 5273,
+    port,
     strictPort: true,
     headers: crossOriginIsolationHeaders,
     // Dev proxy for npm registry (D-004) — keeps M9 wiring testable from day 1.
@@ -45,7 +49,7 @@ export default defineConfig({
     },
   },
   preview: {
-    port: 5273,
+    port,
     strictPort: true,
     headers: crossOriginIsolationHeaders,
   },
@@ -58,5 +62,9 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: ['monaco-editor'],
+    // Pre-bundle upfront: sql.js is CJS and first imported from the real-vite
+    // worker chunk — discovering it lazily makes dev Vite re-optimize and
+    // FULL-RELOAD the page mid-session (drops the selected preset/dev server).
+    include: ['sql.js'],
   },
 });
