@@ -1,0 +1,28 @@
+---
+area: distribution
+status: parked
+title: M12 — subagent / task orchestration over the embeddable Pi loop
+created: 2026-06-13
+why: the one genuine opencode-richer feature that survives the browser ceiling — agents dispatching focused sub-tasks with isolated context
+sources: [M12, docs/backlog/distribution/ai-ide-pi-agent-harness.md]
+---
+
+## Context
+
+A `task` tool = a tool that runs a NESTED `runAgentLoop` with a fresh
+`InMemorySessionRepo` (its own context window) + a tool subset + a sub-prompt, returning
+its final message to the parent. Pure loop-level recursion — no spawn — so it works in
+the browser, unlike opencode's process-spawning subagents. Parent context compaction is
+already in Pi core.
+
+## Options or Next
+
+- `task` AgentTool over the M12 harness loop; context isolation via a fresh repo.
+- Parallel dispatch (`Promise.all`); OPTIONAL Worker isolation per subagent via the kernel.
+- Depth + step + cost caps (runaway guard); cascade the parent `AbortSignal`.
+- Surface nested progress to the UI via the loop's `onUpdate` hooks.
+
+## Reversibility
+
+REVERSIBLE — built on the harness's own public loop; adds no rifty surface. Folds under
+the harness ADR.

@@ -1,6 +1,6 @@
 # Roadmap
 
-Internal milestone map (M0–M11). Detail lives in the cited ADRs; open work links to `docs/backlog/<area>/<slug>`.
+Internal milestone map (M0–M12). Detail lives in the cited ADRs; open work links to `docs/backlog/<area>/<slug>`.
 
 ## M0 — Foundation
 
@@ -104,3 +104,23 @@ Contributing work is tagged **M11** across `docs/backlog/<area>/*` items (one-wa
 cite M11; this section deliberately does not enumerate them, so there is no list to drift). Grep
 `M11` in `docs/backlog` for the live set. Consumer-ready follow-ups deliberately retargeted beyond
 M11 are indexed in `docs/backlog/process-meta/consumer-ready-followup-cutline`.
+
+## M12 — AI-First IDE for Node Projects
+
+**PROPOSED — next after M11.**
+The product layer: an in-browser AI coding agent for Node projects whose only external
+dependency is an OpenAI-compatible endpoint. Builds on M11's AI-agent sandbox contract
+(exec → preview → snapshot). Reclaims the M12 slot from the dropped opencode-facade
+exploration (an aborted spike, never shipped) as the in-browser-agent direction —
+opencode's tool layer needs native process spawn (a browser
+ceiling) plus permanent vendoring; the agent is built instead on the embeddable **Pi**
+harness (`@earendil-works/pi-agent-core`, verified browser-clean), registering rifty-native
+tools as plain pluggable functions. **AI lives outside rifty** — a consumer of `@riftydev/*`;
+rifty grows only AI-agnostic capabilities (TS language service, git over VFS). Positioning:
+`docs/research/open-webcontainers-alternative-2026-06.md`.
+open:
+- `docs/backlog/distribution/ai-ide-pi-agent-harness` — embed Pi + the `pi-ai` openai subpath + rifty-tool bindings; records the Pi-over-opencode + AI-outside-rifty direction.
+- `docs/backlog/distribution/ai-agent-subagent-orchestration` — `task`/subagent orchestration over the embeddable loop.
+- `docs/backlog/distribution/ai-ide-product-ui` — chat + streamed tool-call/diff/approve UI over the IDE-kit.
+- `docs/backlog/toolchain-build/ts-language-service` — in-browser TS diagnostics/hover/defs over VFS (agent `typecheck` + editor squiggles).
+- `docs/backlog/shell/git-command-isomorphic` — git over VFS (isomorphic-git) for git-aware tools.
