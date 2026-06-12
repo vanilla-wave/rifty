@@ -4,6 +4,12 @@ interface NpmRegistryProxyOptions {
   readonly upstreamBase?: string;
 }
 
+interface ProcessEnvGlobal {
+  readonly process?: {
+    readonly env?: Record<string, string | undefined>;
+  };
+}
+
 declare const Netlify:
   | {
       readonly env: {
@@ -14,6 +20,7 @@ declare const Netlify:
 
 const UPSTREAM_ENV = 'RIFTY_NPM_REGISTRY_UPSTREAM';
 const ROUTE_PREFIX = '/npm-registry';
+const DIRECT_FUNCTION_PREFIX = '/.netlify/functions/npm-registry';
 const UNSAFE_RESPONSE_HEADERS = [
   'connection',
   'content-encoding',
@@ -28,7 +35,11 @@ const UNSAFE_RESPONSE_HEADERS = [
 ] as const;
 
 function envUpstream(): string | undefined {
-  return typeof Netlify === 'undefined' ? undefined : Netlify.env.get(UPSTREAM_ENV);
+  const netlifyEnv = typeof Netlify === 'undefined' ? undefined : Netlify.env.get(UPSTREAM_ENV);
+  const processEnv = (globalThis as typeof globalThis & ProcessEnvGlobal).process?.env?.[
+    UPSTREAM_ENV
+  ];
+  return netlifyEnv ?? processEnv;
 }
 
 function corsHeaders(): Headers {
@@ -48,8 +59,10 @@ function withCors(headers: Headers): Headers {
 }
 
 function routeSuffix(pathname: string): string | null {
-  if (pathname === ROUTE_PREFIX) return '/';
-  if (pathname.startsWith(`${ROUTE_PREFIX}/`)) return pathname.slice(ROUTE_PREFIX.length);
+  for (const prefix of [ROUTE_PREFIX, DIRECT_FUNCTION_PREFIX]) {
+    if (pathname === prefix) return '/';
+    if (pathname.startsWith(`${prefix}/`)) return pathname.slice(prefix.length);
+  }
   return null;
 }
 
@@ -101,7 +114,9 @@ export async function handleNpmRegistryRequest(
   }
 
   const upstream = await fetcher(target, { method: request.method });
-  return new Response(request.method === 'HEAD' ? null : upstream.body, {
+  // TODO(backlog: npm-client/netlify-proxy-buffered-bodies)
+  const body = request.method === 'HEAD' ? null : await upstream.arrayBuffer();
+  return new Response(body, {
     status: upstream.status,
     statusText: upstream.statusText,
     headers: withCors(upstream.headers),

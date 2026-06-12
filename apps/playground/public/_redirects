@@ -1,1 +1,3 @@
+/npm-registry/*  /.netlify/functions/npm-registry/:splat  200
+/npm-registry  /.netlify/functions/npm-registry  200
 /*  /index.html  200

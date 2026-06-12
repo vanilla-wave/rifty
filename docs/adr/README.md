@@ -83,9 +83,9 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0021 | Integration tests must use real `npm install` |
 | 0023 | Lockfile reuse on subsequent `install()` |
 | 0027 | Per-file shim overlays live in the consuming adapter |
-| 0028 | Netlify Function proxies npm registry in production |
 | 0042 | M11 nested install — first-wins flat + nest-on-conflict |
 | 0051 | Native-dependency install policy — loud `ENATIVEUNSUPPORTED`, optional natives skipped |
+| 0133 | Netlify npm-registry proxy v2 — netlify-build deploys, pre-SPA function redirects, runtime site env, buffered bodies, CI deploy smoke |
 
 ### playground
 
@@ -169,6 +169,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 |---|---|---|
 | 0013 | 0072 | OPFS hot path; context grafted |
 | 0025 | 0043 | dev-server realm; page-realm globals-guard grafted |
+| 0028 | 0133 | prod npm-registry proxy; deploy/routing/env contract reshaped, context grafted |
 | 0044 | 0047 | esbuild WASI |
 | 0046 | 0125 | owner-binding seam; microtask invariant dropped, context grafted |
 | 0055 | n/a | retired opencode facade ADR; integration cancelled |
@@ -187,7 +188,7 @@ Promoted `OPEN_QUESTIONS` ids → ADRs.
 | Q-2026-05-23-004 | 0027 |
 | Q-2026-05-23-005 | 0018 |
 | Q-2026-05-23-006 | Rejected / 0010 |
-| Q-2026-05-24-007 | 0028 |
+| Q-2026-05-24-007 | 0028 (removed) |
 | Q-2026-05-25-touch-utimes | 0029 |
 | Q-2026-05-27-002 | 0046 (removed) |
 | Q-2026-05-27-003 | 0049 |

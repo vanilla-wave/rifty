@@ -1,6 +1,18 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { handleNpmRegistryRequest } from '../../netlify/functions/npm-registry.mts';
+
+const UPSTREAM_ENV = 'RIFTY_NPM_REGISTRY_UPSTREAM';
+const originalUpstreamEnv = process.env[UPSTREAM_ENV];
+
+afterEach(() => {
+  if (originalUpstreamEnv === undefined) {
+    delete process.env[UPSTREAM_ENV];
+    return;
+  }
+
+  process.env[UPSTREAM_ENV] = originalUpstreamEnv;
+});
 
 describe('npm registry production proxy', () => {
   it('proxies scoped package metadata with COI-safe headers', async () => {
@@ -41,6 +53,40 @@ describe('npm registry production proxy', () => {
     expect(response.statusText).toBe('Not Found');
     expect(response.headers.get('access-control-allow-origin')).toBe('*');
     expect(await response.text()).toBe('missing');
+  });
+
+  it('proxies direct Netlify function paths used by CLI rewrites', async () => {
+    const calls: string[] = [];
+    const response = await handleNpmRegistryRequest(
+      new Request('https://site.test/.netlify/functions/npm-registry/vite'),
+      { upstreamBase: 'https://registry.npmjs.org' },
+      async (url) => {
+        calls.push(String(url));
+        return new Response('{"name":"vite"}', {
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+    );
+
+    expect(calls).toEqual(['https://registry.npmjs.org/vite']);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('{"name":"vite"}');
+  });
+
+  it('buffers upstream bodies before returning a Netlify response', async () => {
+    const upstream = new Response('{"name":"pkg"}', {
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const response = await handleNpmRegistryRequest(
+      new Request('https://site.test/npm-registry/pkg'),
+      { upstreamBase: 'https://registry.npmjs.org' },
+      async () => upstream,
+    );
+
+    expect(response.body).not.toBe(upstream.body);
+    expect(response.headers.get('content-type')).toBe('application/json');
+    expect(await response.text()).toBe('{"name":"pkg"}');
   });
 
   it('strips upstream body framing headers when re-wrapping the body', async () => {
@@ -84,6 +130,25 @@ describe('npm registry production proxy', () => {
     expect(response.headers.get('access-control-allow-methods')).toContain('GET');
   });
 
+  it('reads upstream config from process env when Netlify.env is unavailable', async () => {
+    process.env[UPSTREAM_ENV] = 'https://registry.npmjs.org';
+    const calls: string[] = [];
+    const response = await handleNpmRegistryRequest(
+      new Request('https://site.test/npm-registry/vite'),
+      {},
+      async (url) => {
+        calls.push(String(url));
+        return new Response('{"name":"vite"}', {
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+    );
+
+    expect(calls).toEqual(['https://registry.npmjs.org/vite']);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('{"name":"vite"}');
+  });
+
   it('rejects unsupported methods without upstream fetch', async () => {
     let called = false;
     const response = await handleNpmRegistryRequest(
@@ -101,6 +166,7 @@ describe('npm registry production proxy', () => {
   });
 
   it('fails loudly when no upstream env config is present', async () => {
+    delete process.env[UPSTREAM_ENV];
     const response = await handleNpmRegistryRequest(
       new Request('https://site.test/npm-registry/pkg'),
       { upstreamBase: undefined },
@@ -113,10 +179,50 @@ describe('npm registry production proxy', () => {
 
   it('routes Netlify production through the function, not a hardcoded external redirect', () => {
     const toml = readFileSync('netlify.toml', 'utf8');
+    const hostingDoc = readFileSync('docs/public/hosting-netlify.md', 'utf8');
     const redirects = readFileSync('apps/playground/public/_redirects', 'utf8');
+    const smoke = readFileSync('tools/netlify/smoke-npm-registry.mjs', 'utf8');
+    const workflow = readFileSync('.github/workflows/netlify.yml', 'utf8');
+    const staticDeploys =
+      workflow.match(/--dir="\$GITHUB_WORKSPACE\/apps\/playground\/dist"/g) ?? [];
+    const redirectsProxyIndex = redirects.indexOf(
+      '/npm-registry/*  /.netlify/functions/npm-registry/:splat  200',
+    );
+    const redirectsSpaIndex = redirects.indexOf('/*  /index.html  200');
+    const tomlProxyIndex = toml.indexOf('from = "/npm-registry/*"');
+    const tomlSpaIndex = toml.indexOf('from = "/*"');
 
     expect(toml).not.toContain('to = "https://registry.npmjs.org');
-    expect(redirects).not.toContain('/npm-registry');
+    expect(redirects).not.toContain('https://registry.npmjs.org');
+    expect(redirectsProxyIndex).toBeGreaterThanOrEqual(0);
+    expect(redirectsSpaIndex).toBeGreaterThanOrEqual(0);
+    expect(redirectsProxyIndex).toBeLessThan(redirectsSpaIndex);
+    expect(toml).toContain('to = "/.netlify/functions/npm-registry/:splat"');
+    expect(tomlProxyIndex).toBeGreaterThanOrEqual(0);
+    expect(tomlSpaIndex).toBeGreaterThanOrEqual(0);
+    expect(tomlProxyIndex).toBeLessThan(tomlSpaIndex);
     expect(toml).toContain('RIFTY_NPM_REGISTRY_UPSTREAM');
+    expect(toml).toContain('Runtime Functions read this from Netlify site env');
+    expect(hostingDoc).toContain('Required Netlify site environment');
+    expect(hostingDoc).toContain('RIFTY_NPM_REGISTRY_UPSTREAM=https://registry.npmjs.org');
+    expect(toml).toContain('[functions]\n  directory = "netlify/functions"');
+    expect(workflow).toContain('NETLIFY_BUILD_CONTEXT:');
+    expect(workflow).toContain('NETLIFY_SITE_ID:');
+    expect(workflow).toContain(
+      'pnpm dlx netlify@26.0.2 build --filter="@riftydev/playground" --context="$NETLIFY_BUILD_CONTEXT"',
+    );
+    expect(workflow).not.toContain('build --filter="@riftydev/playground" --site=');
+    expect(workflow).not.toContain('functions:build');
+    expect(workflow).not.toContain('--functions=');
+    expect(workflow).toContain('Smoke PR preview npm registry proxy');
+    expect(workflow).toContain('Smoke production npm registry proxy');
+    expect(workflow).toContain('node tools/netlify/smoke-npm-registry.mjs "$ALIAS_URL"');
+    expect(workflow).toContain(
+      'node tools/netlify/smoke-npm-registry.mjs "https://${NETLIFY_SITE_NAME}.netlify.app"',
+    );
+    expect(smoke).toContain('/npm-registry/vite');
+    expect(smoke).toContain("data.name !== 'vite'");
+    expect(smoke).toContain('/npm-registry/vite/-/vite-');
+    expect(staticDeploys).toHaveLength(2);
   });
 });
