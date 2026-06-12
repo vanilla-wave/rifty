@@ -3,7 +3,7 @@
  * scenario the 2026-05-26 audit flagged as the M9 closure gate.
  *
  * **Skipped by default** — CI must not depend on network or on the live
- * Vercel Edge proxy (ADR-0028). Run manually:
+ * production npm-registry proxy (ADR-0028). Run manually:
  *
  *     RIFTY_LIVE_REGISTRY=https://registry.npmjs.org pnpm vitest run express-live.opt-in
  *

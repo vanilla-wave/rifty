@@ -115,8 +115,8 @@ git commit -m "docs(toolchain): ratify ts-esm parity oracle"
 ### Task 2: Close `npm-client/prod-npm-registry-proxy`
 
 **Files:**
-- Create: `api/npm-registry/[...path].ts`
-- Create: `api/npm-registry/proxy.test.ts`
+- Create: `netlify/functions/npm-registry.mts`
+- Create/update: `tests/integration/prod-npm-registry-proxy.test.ts`
 - Modify: `docs/backlog/npm-client/prod-npm-registry-proxy.md` or delete it after closure
 - Modify: `docs/superpowers/decisions/2026-06-12-m11-backlog-closure.md`
 - Modify: `apps/playground/CHANGELOG.md`
@@ -149,7 +149,7 @@ it('proxies scoped package metadata with COI-safe headers', async () => {
 Run:
 
 ```bash
-pnpm vitest run api/npm-registry/proxy.test.ts
+pnpm vitest run tests/integration/prod-npm-registry-proxy.test.ts
 ```
 
 Expected: fail because the handler does not exist.
@@ -171,7 +171,7 @@ Set `Access-Control-Allow-Origin: *`, `Cross-Origin-Resource-Policy: cross-origi
 Run:
 
 ```bash
-pnpm vitest run api/npm-registry/proxy.test.ts packages/npm-client/src/registry.test.ts
+pnpm vitest run tests/integration/prod-npm-registry-proxy.test.ts packages/npm-client/src/registry.test.ts
 pnpm docs:check
 ```
 

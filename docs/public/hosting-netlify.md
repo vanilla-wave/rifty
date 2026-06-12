@@ -71,7 +71,7 @@ On the live URL:
 
 ## Other hosts
 
-Any host that can set custom response headers works the same way: Vercel
-(`vercel.json`, already present), Cloudflare Pages / Netlify (`_headers`).
+Any host that can set custom response headers works the same way; the checked-in
+production path is Netlify (`netlify.toml` plus `_headers`).
 Plain GitHub Pages would need a `coi-serviceworker` shim to fake COOP/COEP
 client-side.

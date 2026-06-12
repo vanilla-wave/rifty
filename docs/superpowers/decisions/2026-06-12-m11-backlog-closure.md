@@ -96,13 +96,13 @@ It is intentionally concise and append-only during the work.
 
 ### D10 — Prod Registry Proxy Boundary
 
-- **Decision:** Close the active prod proxy source gap with a Vercel Edge
-  handler and rewrite, then file only the live deploy smoke as a blocked
+- **Decision:** Close the active prod proxy source gap with a Netlify Function
+  handler and route config, then file only the live deploy smoke as a blocked
   non-M11 residual.
 - **Why:** Source and route tests are repo-local. Deploying the playground and
   proving a real URL are outward actions that require explicit confirmation.
-- **Reversibility:** Repo-local source is reversible. Ratifying ADR-0028 still
-  needs live evidence and a successor ADR.
+- **Reversibility:** Repo-local source is reversible. ADR-0028 records the
+  Netlify provider path inline; live evidence remains confirm-first and blocked.
 
 ### D11 — VM Subset vs Test Runner
 

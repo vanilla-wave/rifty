@@ -64,7 +64,7 @@ The leaf packages (`@riftydev/io`, `@riftydev/vfs`, `@riftydev/npm-client`, `@ri
    Cross-Origin-Resource-Policy: cross-origin
    ```
 
-   Then `globalThis.crossOriginIsolated === true`. Header-less static hosts (e.g. **GitHub Pages) do not work**; Vercel / Netlify / Cloudflare Pages do. Copy-paste configs: [`vercel.json`](./vercel.json), [`apps/playground/public/_headers`](./apps/playground/public/_headers), and the dev-server `headers` in [`apps/playground/vite.config.ts`](./apps/playground/vite.config.ts). If you embed rifty in an iframe or app browser, the parent page must also be cross-origin isolated and the iframe must include `allow="cross-origin-isolated"`; otherwise open rifty as a top-level page.
+   Then `globalThis.crossOriginIsolated === true`. Header-less static hosts (e.g. **GitHub Pages) do not work**; Netlify / Cloudflare Pages / Vercel can work when configured with equivalent headers. Copy-paste configs: [`netlify.toml`](./netlify.toml), [`apps/playground/public/_headers`](./apps/playground/public/_headers), and the dev-server `headers` in [`apps/playground/vite.config.ts`](./apps/playground/vite.config.ts). If you embed rifty in an iframe or app browser, the parent page must also be cross-origin isolated and the iframe must include `allow="cross-origin-isolated"`; otherwise open rifty as a top-level page.
 
 2. **A bundler with module Workers** + `new URL('…', import.meta.url)` worker resolution (Vite `worker: { format: 'es' }`). `runtime-js`/`runtime-wasi` spawn their worker entry by URL (`@riftydev/runtime-js/worker`, `@riftydev/runtime-wasi/worker-entry`).
 

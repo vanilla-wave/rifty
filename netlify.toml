@@ -22,6 +22,7 @@
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
   # Monaco's worker bundle is memory-hungry under Vite/Rollup.
   NODE_OPTIONS = "--max-old-space-size=4096"
+  RIFTY_NPM_REGISTRY_UPSTREAM = "https://registry.npmjs.org"
 
 # Cross-origin isolation headers (mirror of apps/playground/public/_headers).
 [[headers]]
@@ -35,12 +36,6 @@
 # any other unmatched path falls back to the single-page app shell. (Netlify
 # only applies a 200-rewrite when no static file matches, so /sw.js, /fonts/*,
 # and hashed assets are unaffected.)
-[[redirects]]
-  from = "/npm-registry/*"
-  to = "https://registry.npmjs.org/:splat"
-  status = 200
-  force = true
-
 [[redirects]]
   from = "/*"
   to = "/index.html"

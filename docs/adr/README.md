@@ -82,7 +82,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0021 | Integration tests must use real `npm install` |
 | 0023 | Lockfile reuse on subsequent `install()` |
 | 0027 | Per-file shim overlays live in the consuming adapter |
-| 0028 | Vercel Edge Function proxies npm registry in production |
+| 0028 | Netlify Function proxies npm registry in production |
 | 0042 | M11 nested install — first-wins flat + nest-on-conflict |
 | 0051 | Native-dependency install policy — loud `ENATIVEUNSUPPORTED`, optional natives skipped |
 
@@ -186,7 +186,7 @@ Promoted `OPEN_QUESTIONS` ids → ADRs.
 | Q-2026-05-23-004 | 0027 |
 | Q-2026-05-23-005 | 0018 |
 | Q-2026-05-23-006 | Rejected / 0010 |
-| Q-2026-05-24-007 | 0028 (reopened) |
+| Q-2026-05-24-007 | 0028 |
 | Q-2026-05-25-touch-utimes | 0029 |
 | Q-2026-05-27-002 | 0046 (removed) |
 | Q-2026-05-27-003 | 0049 |

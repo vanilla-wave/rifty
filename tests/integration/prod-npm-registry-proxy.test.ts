@@ -1,11 +1,13 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { handleNpmRegistryRequest } from '../../api/npm-registry/[...path].ts';
+import { handleNpmRegistryRequest } from '../../netlify/functions/npm-registry.mts';
 
 describe('npm registry production proxy', () => {
   it('proxies scoped package metadata with COI-safe headers', async () => {
     const calls: string[] = [];
     const response = await handleNpmRegistryRequest(
       new Request('https://site.test/npm-registry/@scope/pkg?write=true'),
+      { upstreamBase: 'https://registry.npmjs.org' },
       async (url) => {
         calls.push(String(url));
         return new Response('{"name":"@scope/pkg"}', {
@@ -27,6 +29,7 @@ describe('npm registry production proxy', () => {
     const calls: string[] = [];
     const response = await handleNpmRegistryRequest(
       new Request('https://site.test/npm-registry/pkg/-/pkg-1.0.0.tgz'),
+      { upstreamBase: 'https://registry.npmjs.org' },
       async (url) => {
         calls.push(String(url));
         return new Response('missing', { status: 404, statusText: 'Not Found' });
@@ -43,6 +46,7 @@ describe('npm registry production proxy', () => {
   it('strips upstream body framing headers when re-wrapping the body', async () => {
     const response = await handleNpmRegistryRequest(
       new Request('https://site.test/npm-registry/pkg'),
+      { upstreamBase: 'https://registry.npmjs.org' },
       async () =>
         new Response('{"name":"pkg"}', {
           headers: {
@@ -67,6 +71,7 @@ describe('npm registry production proxy', () => {
     let called = false;
     const response = await handleNpmRegistryRequest(
       new Request('https://site.test/npm-registry/pkg', { method: 'OPTIONS' }),
+      { upstreamBase: 'https://registry.npmjs.org' },
       async () => {
         called = true;
         return new Response('nope');
@@ -83,6 +88,7 @@ describe('npm registry production proxy', () => {
     let called = false;
     const response = await handleNpmRegistryRequest(
       new Request('https://site.test/npm-registry/pkg', { method: 'POST', body: 'x' }),
+      { upstreamBase: 'https://registry.npmjs.org' },
       async () => {
         called = true;
         return new Response('nope');
@@ -92,5 +98,25 @@ describe('npm registry production proxy', () => {
     expect(called).toBe(false);
     expect(response.status).toBe(405);
     expect(response.headers.get('allow')).toBe('GET, HEAD, OPTIONS');
+  });
+
+  it('fails loudly when no upstream env config is present', async () => {
+    const response = await handleNpmRegistryRequest(
+      new Request('https://site.test/npm-registry/pkg'),
+      { upstreamBase: undefined },
+      async () => new Response('nope'),
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.text()).toContain('RIFTY_NPM_REGISTRY_UPSTREAM');
+  });
+
+  it('routes Netlify production through the function, not a hardcoded external redirect', () => {
+    const toml = readFileSync('netlify.toml', 'utf8');
+    const redirects = readFileSync('apps/playground/public/_redirects', 'utf8');
+
+    expect(toml).not.toContain('to = "https://registry.npmjs.org');
+    expect(redirects).not.toContain('/npm-registry');
+    expect(toml).toContain('RIFTY_NPM_REGISTRY_UPSTREAM');
   });
 });

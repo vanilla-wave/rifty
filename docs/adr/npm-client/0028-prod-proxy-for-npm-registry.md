@@ -1,46 +1,56 @@
-# ADR 0028: Vercel Edge Function proxies npm registry in production
+# ADR 0028: Netlify Function proxies npm registry in production
 
-Status: Provisional — implementation deferred to first deploy session (downgraded 2026-05-27; see "Status update" below)
+Status: Accepted
 Date: 2026-05
 
-> TL;DR: prod npm proxy is a Vercel Edge Function serving the dev `/npm-registry/...` route with `CORP: cross-origin` headers; `REGISTRY_BASE_URL` flips dev↔prod
+> TL;DR: production `/npm-registry/*` is a Netlify Function backed by `RIFTY_NPM_REGISTRY_UPSTREAM`; the npm client keeps the same relative `/npm-registry` base as dev.
 
 ## Context
 
-ADR 0005 (D-004) routes the npm registry through a configurable proxy. Dev uses Vite's `/npm-registry` proxy (`apps/playground/vite.config.ts`). Prod needs an equivalent: direct calls to `registry.npmjs.org` from a `crossOriginIsolated` page fail CORP/CORS. Left open as the M9-closure decision (PROJECT_PLAN.md §977 Q4', REVIEW_ACTIONS A-032).
+ADR-0005 keeps npm registry access behind a same-origin `/npm-registry` route.
+Dev uses Vite's proxy. Prod needs the same route shape because direct browser
+calls to `registry.npmjs.org` from a cross-origin-isolated playground can fail
+CORS/CORP checks, and hardcoding external registry URLs in consumers violates
+D-004.
+
+The playground production host is Netlify (`.github/workflows/netlify.yml` and
+`netlify.toml`). A production proxy must therefore be tested on the same deploy
+path the workflow publishes.
 
 ## Options considered
 
-- **A — Vercel Edge Function (chosen).** Single source file in the playground deploy, proxies `registry.npmjs.org`, sets the needed CORS/CORP headers. Zero extra infra; co-located with playground; repo already adds `vercel.json` for prod headers.
-- **B — Cloudflare Worker.** Same shape, hosted separately. Equivalent runtime; splits deploy across two providers.
-- **C — Self-hosted nginx + Verdaccio mirror.** Full caching mirror — over-engineered for a pet project, adds on-call burden.
+- **A — Netlify Function (chosen).** Same provider as the playground deploy,
+  one checked-in function, route config in code, upstream from env.
+- **B — Netlify redirect to npmjs.** Shorter config, but no tested handler seam
+  for method policy, CORS/CORP headers, or env-driven upstream changes.
+- **C — Separate Worker/proxy host.** Equivalent runtime shape, but splits
+  deployment and operator state across providers.
 
 ## Decision
 
-Prod proxy is a Vercel Edge Function in the playground deploy. It exposes the dev-convention route (`/npm-registry/...`), so `@riftydev/npm-client`'s `REGISTRY_BASE_URL` switches dev↔prod by changing one value (same relative path, served by the Edge Function in prod).
+Production `/npm-registry` is served by `netlify/functions/npm-registry.mts`
+using a Netlify Function route config for `/npm-registry` and `/npm-registry/*`.
+The function reads `RIFTY_NPM_REGISTRY_UPSTREAM` via `Netlify.env`; `netlify.toml`
+sets the repo default for the checked-in playground site. The handler preserves
+the dev route shape, forwards only `GET`/`HEAD`, handles `OPTIONS`, and sets
+COI-safe CORS/CORP headers on every response.
 
-Migrating to Option B (Cloudflare Worker) stays a single config change if Vercel's free-tier/pricing shifts; the source is < 50 lines and provider-agnostic.
+`@riftydev/npm-client` keeps the same relative default `/npm-registry`, so dev
+and prod differ only by host routing.
 
 ## Consequences
 
-- Adds one Edge Function file (~50 lines) proxying metadata (`GET /npm-registry/:pkg`) and tarballs (`GET /npm-registry/:pkg/-/:file.tgz`). Must set `Access-Control-Allow-Origin` and `Cross-Origin-Resource-Policy: cross-origin` on every response, else the `crossOriginIsolated` page rejects it.
-- `@riftydev/npm-client` unchanged — keeps reading `REGISTRY_BASE_URL`. Tests still hit their local mock; the test path never touches Vercel.
-- Tarball caching deferred — plain pass-through first. If latency/quotas bite, a follow-up ADR adds caching (KV / Edge Config / Cloudflare Cache).
-- Switching to Cloudflare Workers later: config-only change in `vercel.json`/deploy config plus moving the source; no consumer-side change.
-- Closes Q4' (PROJECT_PLAN.md §977) and REVIEW_ACTIONS A-032.
+- One production provider path: Netlify workflow, Netlify config, Netlify function.
+- No consumer-side registry URL change.
+- Direct provider redirects stay out of the production registry path.
+- Live deploy round-trip remains confirm-first/outward and is tracked by the
+  deploy-smoke backlog item.
 
 ## Acceptance criteria
 
-- [ ] Edge Function source lives in the playground deploy (e.g. `apps/playground/api/npm-registry/[...path].ts` or equivalent Vercel path).
-- [ ] Function sets `Access-Control-Allow-Origin: *` and `Cross-Origin-Resource-Policy: cross-origin` on every response.
-- [ ] `@riftydev/npm-client` resolves prod URLs through `/npm-registry/...` exactly as dev.
-- [ ] OPEN_QUESTIONS.md moves Q-2026-05-24-007 to "Promoted" with this ADR as resolution.
-- [ ] PROJECT_PLAN.md §9 "Q4'" entry removed; D-004 footnote points here.
-
-## Status update — 2026-05-27
-
-Originally marked **Accepted** when Q-2026-05-24-007 was promoted, but the 2026-05-27 architecture review (item #3 in `docs/follow-ups-architecture-review-2026-05-27.md`) flagged the status/reality gap: no Edge Function source in repo, no live URL, playground never deployed to prod. "Accepted" without code is *ADR-as-aspiration* — a dangerous failure mode that looks settled.
-
-Downgraded to **Provisional**. The Edge Function stays the leading candidate (§Decision rationale stands) but is not ratified until: source exists, deploy succeeds with correct CORP/COEP headers, and the `npm-client` prod URL roundtrips through it. Once implemented, a new ADR (likely ADR-0046+) ratifies the chosen path with concrete code refs and supersedes this one.
-
-Q-2026-05-24-007 is restored as Active in `OPEN_QUESTIONS.md`, scoped to the first prod-deploy session.
+- [x] Function source lives in the playground deploy path.
+- [x] Function sets `Access-Control-Allow-Origin: *` and
+  `Cross-Origin-Resource-Policy: cross-origin` on every response.
+- [x] `@riftydev/npm-client` resolves prod URLs through `/npm-registry/...`
+  exactly as dev.
+- [ ] Live deployed `/npm-registry/<package>` and tarball round-trip smoked.

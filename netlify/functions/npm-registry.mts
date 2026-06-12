@@ -1,9 +1,19 @@
-export const config = { runtime: 'edge' };
-
 type Fetcher = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
-const DEFAULT_UPSTREAM = 'https://registry.npmjs.org';
-const ROUTE_PREFIXES = ['/npm-registry', '/api/npm-registry'] as const;
+interface NpmRegistryProxyOptions {
+  readonly upstreamBase?: string;
+}
+
+declare const Netlify:
+  | {
+      readonly env: {
+        get(name: string): string | undefined;
+      };
+    }
+  | undefined;
+
+const UPSTREAM_ENV = 'RIFTY_NPM_REGISTRY_UPSTREAM';
+const ROUTE_PREFIX = '/npm-registry';
 const UNSAFE_RESPONSE_HEADERS = [
   'connection',
   'content-encoding',
@@ -17,10 +27,8 @@ const UNSAFE_RESPONSE_HEADERS = [
   'upgrade',
 ] as const;
 
-function envUpstream(): string {
-  if (typeof process === 'undefined') return DEFAULT_UPSTREAM;
-  const value = process.env.RIFTY_NPM_REGISTRY_UPSTREAM;
-  return value && value.length > 0 ? value : DEFAULT_UPSTREAM;
+function envUpstream(): string | undefined {
+  return typeof Netlify === 'undefined' ? undefined : Netlify.env.get(UPSTREAM_ENV);
 }
 
 function corsHeaders(): Headers {
@@ -40,14 +48,12 @@ function withCors(headers: Headers): Headers {
 }
 
 function routeSuffix(pathname: string): string | null {
-  for (const prefix of ROUTE_PREFIXES) {
-    if (pathname === prefix) return '/';
-    if (pathname.startsWith(`${prefix}/`)) return pathname.slice(prefix.length);
-  }
+  if (pathname === ROUTE_PREFIX) return '/';
+  if (pathname.startsWith(`${ROUTE_PREFIX}/`)) return pathname.slice(ROUTE_PREFIX.length);
   return null;
 }
 
-function upstreamUrl(request: Request, upstreamBase = envUpstream()): string | null {
+function upstreamUrl(request: Request, upstreamBase: string): string | null {
   const incoming = new URL(request.url);
   const suffix = routeSuffix(incoming.pathname);
   if (suffix === null) return null;
@@ -61,6 +67,7 @@ function upstreamUrl(request: Request, upstreamBase = envUpstream()): string | n
 
 export async function handleNpmRegistryRequest(
   request: Request,
+  options: NpmRegistryProxyOptions = {},
   fetcher: Fetcher = globalThis.fetch.bind(globalThis),
 ): Promise<Response> {
   if (request.method === 'OPTIONS') {
@@ -73,7 +80,22 @@ export async function handleNpmRegistryRequest(
     return new Response('Method Not Allowed', { status: 405, headers });
   }
 
-  const target = upstreamUrl(request);
+  const upstreamBase = options.upstreamBase ?? envUpstream();
+  if (upstreamBase === undefined || upstreamBase.length === 0) {
+    return new Response(`Missing ${UPSTREAM_ENV}`, { status: 500, headers: corsHeaders() });
+  }
+
+  let target: string | null;
+  try {
+    target = upstreamUrl(request, upstreamBase);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return new Response(`Invalid ${UPSTREAM_ENV}: ${message}`, {
+      status: 500,
+      headers: corsHeaders(),
+    });
+  }
+
   if (target === null) {
     return new Response('Not Found', { status: 404, headers: corsHeaders() });
   }
@@ -86,4 +108,10 @@ export async function handleNpmRegistryRequest(
   });
 }
 
-export default handleNpmRegistryRequest;
+export default async function npmRegistryProxy(request: Request): Promise<Response> {
+  return handleNpmRegistryRequest(request);
+}
+
+export const config = {
+  path: ['/npm-registry', '/npm-registry/*'],
+};
