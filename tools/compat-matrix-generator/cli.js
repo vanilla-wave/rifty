@@ -5,6 +5,7 @@
  * This intentionally uses static inventories tied to checked-in conformance
  * and parity files. A Vitest JSON reporter sink can replace the static rows
  * later, but milestone close needs stable public claim pages now.
+ * TODO(backlog: toolchain-build/compat-matrix-test-result-sink)
  */
 import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 

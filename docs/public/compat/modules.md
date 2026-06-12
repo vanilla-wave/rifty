@@ -39,7 +39,13 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 
 - Identifier rewriter for live bindings is AST-based (acorn + scope-tracking walker — ADR 0009). Same-name local shadowing of imported bindings is handled correctly.
 - `node:vm` contexts are compatibility property bags, not security sandboxes. Existing context
-  properties are resolved and mutated; unsupported execution controls throw loudly.
+  properties are resolved and mutated; unsupported execution controls throw loudly. Writes from
+  context code (assignments incl. compound/update/destructuring, `var`/function declarations,
+  for-in/of targets, `delete`) land on the context, while reads of names absent from the context
+  fall through to host globals BY DESIGN. Known ❌ gaps (see
+  `docs/backlog/runtime-js/vm-sandbox-residual-gaps`): direct `eval(...)` runs unrewritten (writes
+  inside it leak to the host), top-level function declarations are not hoisted, destructuring
+  `var` patterns throw `NotImplementedError('vm.context.var-pattern')`.
 - `package.json` `imports` (subpath imports starting with `#`) is not yet wired.
 - The in-Worker VFS is in-memory only (M4 adds OPFS).
 - A `.ts`/`.tsx` module that classifies as CJS (its nearest package scope is not `type:module`) cannot be `require()`d: the TS type-strip is the async esbuild-via-`runWasi` `transformSource` hook and a synchronous `require()` cannot await it (ADR-0052 D1 alt-C). It throws `NotImplementedError('module-loader.ts-via-require')` rather than feeding raw TypeScript to `new Function`. A `.ts` under a `type:module` scope loads as ESM via `import()`, where the async strip runs.

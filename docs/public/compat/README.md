@@ -4,7 +4,10 @@ These files are the public claim surface for rifty compatibility. Treat missing 
 undocumented, not supported. The point is honest fit: tested support, visible caveats, and loud
 unsupported rows.
 
-Each markdown here mirrors the test results in `tests/conformance/` and `tests/integration/` for a Node-compatible area.
+Each markdown here cites the covering tests in `tests/conformance/` and `tests/integration/` for a
+Node-compatible area. `fs.md`/`streams.md`/`http.md` are rendered by `pnpm compat:generate` from
+static inventories whose cited test files are existence-checked, not re-run — deriving statuses
+from test RESULTS is tracked in `docs/backlog/toolchain-build/compat-matrix-test-result-sink`.
 
 - [modules.md](./modules.md) — M2 (Modules)
 - [buffer.md](./buffer.md) — `Buffer` polyfill (`@riftydev/io`)

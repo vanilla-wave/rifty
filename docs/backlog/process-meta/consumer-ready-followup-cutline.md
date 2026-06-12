@@ -58,6 +58,16 @@ Trust/release follow-ups:
 - `service-worker/cross-browser-compat-matrix` — per-browser capability matrix
   after the first cross-browser sweep.
 
+Open M11 tech debt (still M11-tagged, NOT part of this cutline — listed so the
+index is complete):
+
+- `net/cross-realm-http-loopback` — loopback `http.request` across Worker
+  realms (port registry is realm-local).
+- `shell/node-modules-bin-execution` — PATH-style `.bin` launcher execution by
+  command name.
+- `runtime-js/vm-sandbox-residual-gaps` — documented `node:vm` write-rewrite
+  gaps (direct eval, top-level function hoisting, completion values).
+
 Pull public API and new-package items only with ADRs. Pull outward deploy smoke
 only after explicit approval.
 

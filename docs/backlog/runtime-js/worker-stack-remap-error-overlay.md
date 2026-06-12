@@ -5,15 +5,23 @@ title: Worker stack remap and playground error overlay
 created: 2026-06-12
 why: loader-local TypeScript stack remapping now covers guest module execution, but spawned Worker errors and a visual playground overlay need separate host/worker plumbing
 sources: [docs/research/open-webcontainers-alternative-2026-06.md, ADR-0052]
-code: [packages/runtime-js/src/builtins/worker_threads.ts, apps/playground/src]
+code:
+  [
+    packages/runtime-js/src/builtins/worker_threads.ts,
+    packages/runtime-js/src/module-loader/esm.ts,
+    apps/playground/src,
+  ]
 ---
 
 ## Context
 
 The ESM loader now extracts inline transform sourcemaps and remaps stack reads while a guest module
-executes in the current realm. Remaining DX work crosses realm/UI boundaries: Worker-originated
-errors need map data or normalized stack frames returned to the host, and the playground needs a
-designed overlay surface instead of terminal-only reporting.
+executes in the current realm. The remap window is top-level evaluation ONLY (`withStackRemapping`
+wraps the module factory): an exported function throwing later — e.g. a route handler at request
+time — renders an unmapped stack. Remaining DX work crosses realm/UI boundaries: Worker-originated
+errors need map data or normalized stack frames returned to the host, runtime-phase frames need a
+persistent (or re-entrant) remap surface, and the playground needs a designed overlay surface
+instead of terminal-only reporting.
 
 ## Options or Next
 
