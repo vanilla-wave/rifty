@@ -44,6 +44,12 @@ Required GitHub configuration:
 - `NETLIFY_SITE_NAME` repository variable, only if overriding the
   checked-in `rifty-playground` site name used for PR alias comments.
 
+Required Netlify site environment:
+
+- `RIFTY_NPM_REGISTRY_UPSTREAM=https://registry.npmjs.org`, non-secret,
+  available to Functions/runtime. The value in `[build.environment]` is only a
+  build-time mirror; the live proxy reads the Netlify site env at runtime.
+
 Fork PRs do not run Netlify deploys because GitHub withholds repository
 secrets from untrusted code.
 

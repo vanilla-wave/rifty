@@ -179,6 +179,7 @@ describe('npm registry production proxy', () => {
 
   it('routes Netlify production through the function, not a hardcoded external redirect', () => {
     const toml = readFileSync('netlify.toml', 'utf8');
+    const hostingDoc = readFileSync('docs/public/hosting-netlify.md', 'utf8');
     const redirects = readFileSync('apps/playground/public/_redirects', 'utf8');
     const smoke = readFileSync('tools/netlify/smoke-npm-registry.mjs', 'utf8');
     const workflow = readFileSync('.github/workflows/netlify.yml', 'utf8');
@@ -201,6 +202,9 @@ describe('npm registry production proxy', () => {
     expect(tomlSpaIndex).toBeGreaterThanOrEqual(0);
     expect(tomlProxyIndex).toBeLessThan(tomlSpaIndex);
     expect(toml).toContain('RIFTY_NPM_REGISTRY_UPSTREAM');
+    expect(toml).toContain('Runtime Functions read this from Netlify site env');
+    expect(hostingDoc).toContain('Required Netlify site environment');
+    expect(hostingDoc).toContain('RIFTY_NPM_REGISTRY_UPSTREAM=https://registry.npmjs.org');
     expect(toml).toContain('[functions]\n  directory = "netlify/functions"');
     expect(workflow).toContain('NETLIFY_BUILD_CONTEXT:');
     expect(workflow).toContain('NETLIFY_SITE_ID:');

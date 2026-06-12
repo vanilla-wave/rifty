@@ -25,6 +25,7 @@
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
   # Monaco's worker bundle is memory-hungry under Vite/Rollup.
   NODE_OPTIONS = "--max-old-space-size=4096"
+  # Build-time mirror. Runtime Functions read this from Netlify site env.
   RIFTY_NPM_REGISTRY_UPSTREAM = "https://registry.npmjs.org"
 
 # Cross-origin isolation headers (mirror of apps/playground/public/_headers).
