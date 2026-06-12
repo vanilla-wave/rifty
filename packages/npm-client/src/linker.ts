@@ -58,6 +58,8 @@ export async function link(
   }
 }
 
+const shimEncoder = new TextEncoder();
+
 async function linkBins(
   vfs: Vfs,
   root: string,
@@ -73,8 +75,15 @@ async function linkBins(
   await vfs.mkdir(binDir, { recursive: true });
   for (const [command, target] of entries) {
     const relTarget = normalizeBinTarget(target);
-    const bytes = await vfs.readFile(joinPath(packageRoot, relTarget));
-    await vfs.writeFile(joinPath(binDir, command), bytes);
+    // Existence check: a manifest pointing at a file the tarball lacks fails
+    // loudly here rather than at first exec.
+    await vfs.readFile(joinPath(packageRoot, relTarget));
+    // Launcher shim, NOT a byte copy (ADR-0050: no symlinks). A copy breaks the
+    // moment the bin does a relative require/import (vite's bin/vite.js loads
+    // '../dist/...'): relative resolution must happen at the REAL file's path.
+    // Dynamic import() loads both CJS and ESM targets.
+    const shim = `#!/usr/bin/env node\nimport('../${pkg.name}/${relTarget}');\n`;
+    await vfs.writeFile(joinPath(binDir, command), shimEncoder.encode(shim));
   }
 }
 

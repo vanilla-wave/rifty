@@ -405,6 +405,9 @@ function chooseSource(
     opts.overrides,
   );
   if (existingLockfile) {
+    // TODO(backlog: npm-client/lockfile-fast-path-failed-optionals) — a root
+    // optional that failed resolution is absent from the lockfile, so including
+    // optionals here defeats the fast path on every subsequent install.
     const effectiveRequest = { ...effectiveDependencies, ...effectiveOptionalDependencies };
     const topLevelPins = lockfileCovers(existingLockfile, effectiveRequest);
     if (
