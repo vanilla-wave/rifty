@@ -52,8 +52,8 @@ export const SW_FRAME_VERSION = '1';
  *     contract.
  *   - Preview-frame port context in `./preview-bridge.ts` (ADR-0097): once an
  *     iframe commits `/preview/<port>/`, same-origin root requests from that
- *     iframe's `FetchEvent.clientId` (or same-origin `/preview/<port>/`
- *     referrer / `Client.url` after reload) route to the same port.
+ *     iframe's `FetchEvent.clientId` (or a same-origin `/preview/<port>/`
+ *     request referrer after reload) route to the same port.
  *
  * Bump on: changes to the URL regex shape, the synthetic host literal, the
  * `synthesizePreviewUrl` return shape, the resolver fallback order, the Worker

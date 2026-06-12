@@ -90,8 +90,8 @@ per-field semantics.
 `@riftydev/io/preview-protocol` (`PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`,
 `synthesizePreviewUrl`, `parsePreviewPath`), (b) the preview-frame port
 context that routes root-relative iframe requests to the same preview port
-by iframe `clientId`, same-origin `/preview/<port>/` referrer, or iframe
-`Client.url`, and (c) the owner-fallback and owner-scoping rules in the
+by iframe `clientId` or same-origin `/preview/<port>/` request referrer, and
+(c) the owner-fallback and owner-scoping rules in the
 preview owner bindings, including the unambiguous Worker fallback for copied
 top-level preview URLs and the ready-window preference for no-clientId fallback.
 Bumping requires: changes to the URL regex shape, the synthetic host literal,
