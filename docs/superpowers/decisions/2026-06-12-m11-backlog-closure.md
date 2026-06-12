@@ -201,3 +201,14 @@ It is intentionally concise and append-only during the work.
   process behavior even if ADR-0038 already authorizes the bridge.
 - **Reversibility:** Doc-only retarget. Implementation stays gated on focused
   worker-dispatch tests and ADR-0038 compatibility.
+
+### D21 — Starter Template Retarget
+
+- **Decision:** Retarget `distribution/create-rifty-template` as future
+  consumption-side scaffold work, and remove the distribution README's broad
+  milestone framing.
+- **Why:** Host headers, worker URLs, service-worker build, WASM asset copying,
+  and editor bundling are consumer scaffold choices after the SDK surface is
+  worth packaging into a template.
+- **Reversibility:** Doc-only retarget. A template can start later without
+  changing existing `@riftydev/*` package APIs.
