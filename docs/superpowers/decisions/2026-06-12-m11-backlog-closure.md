@@ -93,3 +93,13 @@ It is intentionally concise and append-only during the work.
   wording.
 - **Reversibility:** Tooling-only decision, but recorded as an ADR because it
   defines the parity oracle for future TypeScript cases.
+
+### D10 — Prod Registry Proxy Boundary
+
+- **Decision:** Close the active prod proxy source gap with a Vercel Edge
+  handler and rewrite, then file only the live deploy smoke as a blocked
+  non-M11 residual.
+- **Why:** Source and route tests are repo-local. Deploying the playground and
+  proving a real URL are outward actions that require explicit confirmation.
+- **Reversibility:** Repo-local source is reversible. Ratifying ADR-0028 still
+  needs live evidence and a successor ADR.

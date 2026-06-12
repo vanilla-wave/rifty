@@ -24,6 +24,10 @@
 
 ### Added
 
+- **Production npm registry proxy source.** Vercel rewrites `/npm-registry/*`
+  to an Edge runtime handler at `api/npm-registry/[...path].ts`, preserving
+  metadata/tarball paths and adding CORS/CORP headers so the cross-origin
+  isolated playground can use the same `/npm-registry` base outside dev.
 - **Global command palette (⌘K / Ctrl-K).** Searches project templates,
   workspace files, and shell actions (new terminal, toggle terminal/files
   panels, open preview tab, stop dev server, copy share link). Modal dialog

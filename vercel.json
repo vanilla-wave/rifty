@@ -1,4 +1,10 @@
 {
+  "rewrites": [
+    {
+      "source": "/npm-registry/:path*",
+      "destination": "/api/npm-registry/:path*"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",
