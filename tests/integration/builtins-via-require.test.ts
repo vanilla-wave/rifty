@@ -66,4 +66,12 @@ describe('built-ins via loader', () => {
     });
     expect(l.require('./m.js', '/app/entry.js')).toBe('ok');
   });
+
+  it('require("node:vm") gives the executable vm subset', () => {
+    const l = loader({
+      '/app/m.js':
+        "const vm = require('node:vm'); const box = { x: 3 }; module.exports = vm.runInNewContext('x += 4; x;', box) + ':' + box.x;",
+    });
+    expect(l.require('./m.js', '/app/entry.js')).toBe('7:7');
+  });
 });

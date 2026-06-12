@@ -7,6 +7,12 @@
 - **`./builtins/console` subpath export** — the Node-compatible `Console`
   class over writable streams, so embedders (playground node-server bootstrap)
   can route a guest program's console into kernel stdio.
+- **Minimal `node:vm` subset.** `require('node:vm')` now exposes
+  `Script`, `createContext`, `isContext`, `runInThisContext`,
+  `runInContext`, `runInNewContext`, and `compileFunction` for config loaders
+  and template engines. Contexts are mutable property bags, not security
+  isolation; unsupported execution controls such as `timeout` and
+  `contextExtensions` throw `NotImplementedError`.
 - **Worker-backed public FS RPC (ADR-0131).** `RuntimeController.fs` now exposes
   awaited `readFile()` / `writeFile()` backed by runtime Worker messages. Writes
   create parent dirs, invalidate the module loader, and await active VFS

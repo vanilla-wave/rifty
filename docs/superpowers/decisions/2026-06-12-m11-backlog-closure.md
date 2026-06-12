@@ -103,3 +103,13 @@ It is intentionally concise and append-only during the work.
   proving a real URL are outward actions that require explicit confirmation.
 - **Reversibility:** Repo-local source is reversible. Ratifying ADR-0028 still
   needs live evidence and a successor ADR.
+
+### D11 — VM Subset vs Test Runner
+
+- **Decision:** Close the runtime VM item with a tested `node:vm` subset and
+  split `node:test` into a parked non-M11 backlog item.
+- **Why:** `node:vm` replaces an existing loud stub and is parity-testable as a
+  small slice. `node:test` is a separate runner contract with scheduling,
+  reporter, mocking, and `TestContext` semantics.
+- **Reversibility:** The VM subset is additive and documented with loud
+  unsupported controls. The test runner remains uncommitted residual work.

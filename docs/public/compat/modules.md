@@ -17,7 +17,7 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 | `package.json` `imports` (`#name`) | ❌ | Pending |
 | JSON modules via `require` | ✅ | |
 | JSON modules via `import` | ✅ | Synthetic default + named keys |
-| `node:` built-ins | ❌ | Throws `UNSUPPORTED_PROTOCOL`; arrive in M3 |
+| `node:` built-ins | ⚠️ | Registry supports `node:` and bare built-ins; each module is a tested subset. `node:vm` covers `Script`, `createContext`, `isContext`, `runInThisContext`, `runInContext`, `runInNewContext`, and `compileFunction` without true isolation or timeout support. |
 | `data:` / `file:` URLs | ❌ | Throws `UNSUPPORTED_PROTOCOL` |
 | ESM static `import` | ✅ | Named, default, namespace, side-effect-only |
 | ESM `export` named / default / re-export | ✅ | |
@@ -38,6 +38,8 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 ## Known limitations (M2)
 
 - Identifier rewriter for live bindings is AST-based (acorn + scope-tracking walker — ADR 0009). Same-name local shadowing of imported bindings is handled correctly.
+- `node:vm` contexts are compatibility property bags, not security sandboxes. Existing context
+  properties are resolved and mutated; unsupported execution controls throw loudly.
 - `package.json` `imports` (subpath imports starting with `#`) is not yet wired.
 - The in-Worker VFS is in-memory only (M4 adds OPFS).
 - A `.ts`/`.tsx` module that classifies as CJS (its nearest package scope is not `type:module`) cannot be `require()`d: the TS type-strip is the async esbuild-via-`runWasi` `transformSource` hook and a synchronous `require()` cannot await it (ADR-0052 D1 alt-C). It throws `NotImplementedError('module-loader.ts-via-require')` rather than feeding raw TypeScript to `new Function`. A `.ts` under a `type:module` scope loads as ESM via `import()`, where the async strip runs.

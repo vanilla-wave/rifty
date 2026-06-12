@@ -26,7 +26,6 @@ import {
   punycode,
   repl,
   sys,
-  vm,
   async_hooks,
   inspector,
   constants as nodeConstants,
@@ -46,6 +45,7 @@ import ttyModule from './tty.ts';
 import urlModule from './url.ts';
 import utilTypesModule from './util-types.ts';
 import utilModule from './util.ts';
+import vmModule from './vm.ts';
 import workerThreadsModule from './worker_threads.ts';
 
 // Re-export the registry surface so existing consumers
@@ -110,7 +110,7 @@ registerBuiltin('http2', () => http2);
 registerBuiltin('zlib', () => zlib);
 registerBuiltin('readline', () => readline);
 registerBuiltin('v8', () => v8);
-registerBuiltin('vm', () => vm);
+registerBuiltin('vm', () => vmModule);
 registerBuiltin('async_hooks', () => async_hooks);
 registerBuiltin('inspector', () => inspector);
 registerBuiltin('repl', () => repl);

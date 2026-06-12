@@ -33,7 +33,6 @@ export const v8 = {
   },
 };
 
-export const vm = loudProxy('vm');
 export const async_hooks = {
   createHook(_handlers: unknown): { enable(): void; disable(): void } {
     return { enable() {}, disable() {} };
