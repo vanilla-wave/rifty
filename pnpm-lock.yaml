@@ -74,7 +74,13 @@ importers:
       solid-js:
         specifier: ^1.9.0
         version: 1.9.13
+      sql.js:
+        specifier: ^1.14.1
+        version: 1.14.1
     devDependencies:
+      '@types/sql.js':
+        specifier: ^1.4.11
+        version: 1.4.11
       vite:
         specifier: ^5.4.0
         version: 5.4.21(@types/node@22.19.19)

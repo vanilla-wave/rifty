@@ -102,6 +102,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0095 | Dev-mode HMR routes through the cross-realm bridge (pluggable dev-server transport) |
 | 0124 | Soft Panels visual redesign adopts the Gravity UI handoff |
 | 0126 | Preview reloads are HMR-client-driven; snapshot-driven iframe reload removed |
+| 0130 | Node-server project template runtime (Express + node:sqlite demo) |
 
 ### toolchain-build
 

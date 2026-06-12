@@ -43,8 +43,13 @@ import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
 import { subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset } from './presets.ts';
-import { buildProjectPackageJson } from './templates/project-spec.ts';
-import { defaultProjectSpec } from './templates/registry.ts';
+import {
+  type ProjectSpec,
+  buildProjectPackageJson,
+  devScriptCommand,
+  terminalDevLine,
+} from './templates/project-spec.ts';
+import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
 
 const WORKSPACE = '/workspace';
 
@@ -97,9 +102,13 @@ export function App(props: AppProps) {
     else flashToast('Could not copy the link to the clipboard', 'error');
   }
 
-  // Active real-project template (ADR-0078). Chip + mode machine read its generic
-  // display name instead of "Real Vite".
-  const template = defaultProjectSpec();
+  // Active real-project template (ADR-0078): follows the selected preset's
+  // templateId, so a node-server preset boots ITS worker runtime, not the
+  // registry default. Chip + mode machine read its generic display name.
+  const activeTemplate = (): ProjectSpec => {
+    const preset = presetForId(activePreset());
+    return preset.templateId ? resolveProjectSpec(preset.templateId) : defaultProjectSpec();
+  };
   const npmVfs = new SyncMirrorVfs();
   const npmRegistry = new RegistryClient({ fetch: proxiedRegistryFetch() });
   let realViteHandle: RealViteHandle | null = null;
@@ -118,8 +127,15 @@ export function App(props: AppProps) {
   let devServerRestartGeneration = 0;
 
   async function runViteCommand(ctx: TerminalCommandContext): Promise<number> {
+    const template = activeTemplate();
+    // 'vite' keeps its historical terminal tag (e2e-pinned); node servers log as 'dev'.
+    const bootTag = template.runtime === 'vite' ? 'vite' : 'dev';
     devServerSessionId = ctx.sessionId;
-    ctx.stdout.write('vite: starting dev server\n');
+    ctx.stdout.write(
+      template.runtime === 'vite'
+        ? 'vite: starting dev server\n'
+        : `dev: starting ${template.displayName} server\n`,
+    );
     setDevServerStatus('starting');
     if (ctx.signal?.aborted) {
       setDevServerStatus('stopped');
@@ -157,7 +173,7 @@ export function App(props: AppProps) {
         },
       });
     } catch (err) {
-      ctx.stderr.write(`vite failed: ${(err as Error).stack ?? (err as Error).message}\n`);
+      ctx.stderr.write(`${bootTag} failed: ${(err as Error).stack ?? (err as Error).message}\n`);
       setDevServerStatus('stopped');
       return 1;
     }
@@ -177,18 +193,18 @@ export function App(props: AppProps) {
       try {
         await handle.close();
       } catch (err) {
-        ctx.stderr.write(`[vite] cleanup failed: ${(err as Error).message}\n`);
+        ctx.stderr.write(`[${bootTag}] cleanup failed: ${(err as Error).message}\n`);
       }
       setDevServerRunning(false);
       setDevServerStatus('stopped');
-      ctx.stdout.write('\n[vite] stopped\n');
+      ctx.stdout.write(`\n[${bootTag}] stopped\n`);
       return 130;
     }
     if (bootResult.kind === 'exited') {
       if (realViteHandle === handle) realViteHandle = null;
       setDevServerRunning(false);
       setDevServerStatus('stopped');
-      ctx.stderr.write('[vite] worker exited before the dev server was ready\n');
+      ctx.stderr.write(`[${bootTag}] worker exited before the dev server was ready\n`);
       return bootResult.code ?? 1;
     }
 
@@ -198,7 +214,7 @@ export function App(props: AppProps) {
     handle.updateEntry(machine.source());
     setDevServerRunning(true);
     setDevServerStatus('running');
-    ctx.stdout.write(`[vite] dev server ready on port ${handle.port}\n`);
+    ctx.stdout.write(`[${bootTag}] dev server ready on port ${handle.port}\n`);
 
     const stopResult = await Promise.race([
       aborted.then(() => ({ kind: 'aborted' as const })),
@@ -210,16 +226,16 @@ export function App(props: AppProps) {
       try {
         await handle.close();
       } catch (err) {
-        ctx.stderr.write(`[vite] cleanup failed: ${(err as Error).message}\n`);
+        ctx.stderr.write(`[${bootTag}] cleanup failed: ${(err as Error).message}\n`);
       }
     }
     setDevServerRunning(false);
     setDevServerStatus('stopped');
     if (stopResult.kind === 'aborted') {
-      ctx.stdout.write('\n[vite] stopped\n');
+      ctx.stdout.write(`\n[${bootTag}] stopped\n`);
       return 130;
     }
-    ctx.stderr.write('\n[vite] worker exited\n');
+    ctx.stderr.write(`\n[${bootTag}] worker exited\n`);
     return stopResult.code ?? 1;
   }
 
@@ -229,6 +245,9 @@ export function App(props: AppProps) {
     ctx: TerminalCommandContext,
   ): Promise<number> {
     if (command.trim() === 'vite') return runViteCommand(ctx);
+    // The active template's own dev script (e.g. `node src/main.js`) routes to
+    // the SAME lifecycle-owning command, so `npm run dev` boots node servers.
+    if (command.trim() === devScriptCommand(activeTemplate())) return runViteCommand(ctx);
     ctx.stderr.write(`npm: script '${scriptName}' uses unsupported command '${command}'\n`);
     return 1;
   }
@@ -244,6 +263,13 @@ export function App(props: AppProps) {
     if (args.length > 0) {
       ctx.stderr.write(
         `vite: arguments are not supported in the playground yet: ${args.join(' ')}\n`,
+      );
+      return 1;
+    }
+    const template = activeTemplate();
+    if (template.runtime !== 'vite') {
+      ctx.stderr.write(
+        `vite: the active project is ${template.displayName}; run \`${terminalDevLine(template, WORKSPACE)}\` instead\n`,
       );
       return 1;
     }
@@ -476,7 +502,7 @@ export function App(props: AppProps) {
   }
 
   function seedViteWorkspace(preset: Preset): void {
-    const packageJson = buildProjectPackageJson(template).json;
+    const packageJson = buildProjectPackageJson(activeTemplate()).json;
     writeText(vfs, `${WORKSPACE}/package.json`, packageJson);
     writeText(vfs, PROGRAM_MIRROR_PATH, preset.source);
     seedPresetFiles(preset);
@@ -528,7 +554,7 @@ export function App(props: AppProps) {
     if (generation !== devServerRestartGeneration) return;
     const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;
     devServerSessionId = targetSessionId;
-    await runTerminalSequence(targetSessionId, ['vite']);
+    await runTerminalSequence(targetSessionId, [terminalDevLine(activeTemplate(), WORKSPACE)]);
   }
 
   async function runVitePreset(preset: Preset): Promise<void> {
@@ -546,7 +572,7 @@ export function App(props: AppProps) {
     const session = devServerSession();
     devServerSessionId = session.id;
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    await runTerminalSequence(session.id, ['vite']);
+    await runTerminalSequence(session.id, [terminalDevLine(activeTemplate(), WORKSPACE)]);
   }
 
   onMount(() => {
@@ -789,15 +815,15 @@ export function App(props: AppProps) {
       ? 'Dev · port 3000'
       : machine.mode() === 'real-vite'
         ? devServerStatus() === 'running'
-          ? `${template.displayName} · port ${machine.realVitePort()}`
-          : `${template.displayName} · ${devServerStatus()}`
-        : template.displayName;
+          ? `${activeTemplate().displayName} · port ${machine.realVitePort()}`
+          : `${activeTemplate().displayName} · ${devServerStatus()}`
+        : activeTemplate().displayName;
 
   const terminalModeHint = (): TerminalModeHint => ({
     label: 'Shell',
     detail: 'Commands run in /workspace; running programs own stdin.',
   });
-  const programTitle = (): string => 'src/main.js';
+  const programTitle = (): string => activeTemplate().entry.relativePath.replace(/^\/+/, '');
   const hasPreview = (): boolean => devServerStatus() !== 'stopped';
   const isOpfs = props.boot.vfsBoot.backend === 'opfs';
 

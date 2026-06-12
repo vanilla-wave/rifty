@@ -20,4 +20,22 @@ describe('resolveProjectSpec', () => {
     expect(() => resolveProjectSpec('svelte')).toThrow(/templates\.resolveProjectSpec/);
     expect(() => resolveProjectSpec('svelte')).toThrow(/svelte/);
   });
+
+  it('resolves the express-sqlite node-server template', () => {
+    const spec = resolveProjectSpec('express-sqlite');
+    expect(spec.runtime).toBe('node-server');
+    if (spec.runtime !== 'node-server') throw new Error('unreachable');
+    expect(spec.install).toHaveProperty('express');
+    expect(spec.sqlite).toBe(true);
+    expect(spec.entry.relativePath).toBe('/src/main.js');
+    // server entry talks to the builtin DB and a real npm express
+    expect(spec.entry.content).toContain("from 'node:sqlite'");
+    expect(spec.entry.content).toContain("from 'express'");
+    // client assets the server serves via express.static
+    expect(Object.keys(spec.extraFiles)).toEqual(
+      expect.arrayContaining(['/public/index.html', '/public/client.js']),
+    );
+    // demo must not collide with the vite template's port
+    expect(spec.defaultPort).not.toBe(resolveProjectSpec('vite').defaultPort);
+  });
 });

@@ -15,6 +15,11 @@
 
 ### Fixed
 
+- **Serialized POSTs advertise `content-length`** derived from the drained
+  body bytes (fetch Request headers never expose it) — without it, worker-side
+  body parsers (express.json's typeis `hasBody()`) silently skipped bodies
+  (ADR-0130 fullstack demo).
+
 - **Preview bridge readiness survives Service Worker global restarts.**
   `setupPreviewBridge` now re-advertises `rifty:preview:ready` on
   `controllerchange` and on a small heartbeat while mounted, so a browser-idled

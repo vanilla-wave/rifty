@@ -76,6 +76,13 @@ export async function routePreview(
       ? null
       : new Uint8Array(await request.arrayBuffer());
   const requestId = readiness.nextRequestId();
+  const headers = Object.fromEntries(request.headers);
+  // fetch Request headers never expose content-length (the network layer adds
+  // it on the wire); re-derive it from the drained bytes so worker-side body
+  // parsers (express.json's typeis.hasBody) see a Node-shaped POST.
+  if (bodyBytes && !('content-length' in headers) && !('transfer-encoding' in headers)) {
+    headers['content-length'] = String(bodyBytes.byteLength);
+  }
   // URL synthesis via `synthesizePreviewUrl` (ADR-0036); contract shape pinned
   // by `SW_ROUTING_VERSION` (ADR-0040) — bumping it changes the addressing
   // scheme on both peers in lockstep.
@@ -83,7 +90,7 @@ export async function routePreview(
     port: match.port,
     url: `${synthesizePreviewUrl(match.path)}${new URL(request.url).search}`,
     method: request.method,
-    headers: Object.fromEntries(request.headers),
+    headers,
     body: bodyBytes,
   };
 

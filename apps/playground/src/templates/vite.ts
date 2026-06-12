@@ -7,15 +7,16 @@
  * template means writing a sibling ProjectSpec and registering it in
  * `registry.ts` — no worker or orchestrator edits.
  */
-import type { ProjectSpec } from './project-spec.ts';
+import type { ViteProjectSpec } from './project-spec.ts';
 
 const INITIAL_MAIN_JS = `document.getElementById('app').textContent =
   'Hello from real Vite running inside a kernel-spawned Worker — edit me, save.';
 `;
 
-export const VITE_TEMPLATE: ProjectSpec = {
+export const VITE_TEMPLATE: ViteProjectSpec = {
   id: 'vite',
   displayName: 'Vite dev server',
+  runtime: 'vite',
   install: { vite: '^5.4.0' },
   runtimeSpecifier: 'vite',
   entry: { relativePath: '/src/main.js', content: INITIAL_MAIN_JS },

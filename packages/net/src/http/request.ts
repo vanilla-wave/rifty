@@ -112,7 +112,17 @@ export class IncomingMessage extends Readable {
     const u = new URL(request.url);
     this.method = request.method;
     this.url = u.pathname + u.search;
-    defineLazyHeaders(this, request.headers);
+    // Node never delivers a bodied request with NEITHER content-length NOR
+    // transfer-encoding, but fetch Requests rebuilt across the preview bridge
+    // lose content-length (forbidden request header in browsers). Present the
+    // honest equivalent — chunked (length unknown, body present) — so
+    // typeis-style hasBody() checks (express.json) read the body.
+    let headers = request.headers;
+    if (request.body && !headers.has('content-length') && !headers.has('transfer-encoding')) {
+      headers = new Headers(headers);
+      headers.set('transfer-encoding', 'chunked');
+    }
+    defineLazyHeaders(this, headers);
     void pipeBodyStream(request.body, this);
   }
 }

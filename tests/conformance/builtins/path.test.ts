@@ -10,7 +10,25 @@ describe('node:path', () => {
   it('resolve', () => {
     expect(path.resolve('/a/b', 'c')).toBe('/a/b/c');
     expect(path.resolve('/a/b', '/c/d')).toBe('/c/d');
-    expect(path.resolve('a', 'b')).toBe('/a/b');
+    // `resolve('a', 'b')` is cwd-dependent in Node — pinned in the cwd test
+    // below (the old `'/a/b'` expectation encoded the pre-fix '/' anchor).
+  });
+  it('resolve anchors relative paths at process.cwd(), like Node', async () => {
+    // Regression: a '/'-anchored resolve broke express.static('public') under
+    // a non-root cwd (fs already resolved against cwd; path.resolve did not).
+    const { getProcessCwd, setProcessCwd } = await import(
+      '../../../packages/runtime-js/src/builtins/process.ts'
+    );
+    const saved = getProcessCwd();
+    try {
+      setProcessCwd('/workspace');
+      expect(path.resolve('public')).toBe('/workspace/public');
+      expect(path.resolve('a', 'b')).toBe('/workspace/a/b');
+      expect(path.resolve()).toBe('/workspace');
+      expect(path.resolve('/abs', 'c')).toBe('/abs/c');
+    } finally {
+      setProcessCwd(saved);
+    }
   });
   it('normalize', () => {
     expect(path.normalize('/a/./b/../c')).toBe('/a/c');

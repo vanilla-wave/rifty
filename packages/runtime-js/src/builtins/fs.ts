@@ -505,6 +505,12 @@ export const constants = {
 export { Stats, Dirent };
 export { createReadStream, createWriteStream } from './fs-streams.ts';
 export { watch, watchFile, unwatchFile, FSWatcher } from './fs-watch.ts';
+import {
+  FileReadStream,
+  FileWriteStream,
+  createReadStream,
+  createWriteStream,
+} from './fs-streams.ts';
 import { FSWatcher, unwatchFile, watch, watchFile } from './fs-watch.ts';
 
 const fs = {
@@ -541,6 +547,12 @@ const fs = {
   constants,
   Stats,
   Dirent,
+  createReadStream,
+  createWriteStream,
+  // Node-named stream classes: `destroy`/`send` probe `stream instanceof
+  // fs.ReadStream` on cleanup — an absent class makes that probe throw.
+  ReadStream: FileReadStream,
+  WriteStream: FileWriteStream,
   watch,
   watchFile,
   unwatchFile,

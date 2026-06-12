@@ -39,6 +39,58 @@ describe('node:http server via port registry', () => {
     expect(await response.text()).toBe('got: hello!');
   });
 
+  it('serves null-body statuses (204/304) without throwing, like Node', async () => {
+    // Regression: the fetch Response constructor rejects ANY body for
+    // 204/205/304; passing the streaming body unconditionally made
+    // `res.status(204).end()` (express DELETE handlers) blow up the dispatch.
+    const server = http.createServer((req, res) => {
+      res.writeHead(req.url === '/modified' ? 304 : 204);
+      res.end();
+    });
+    server.listen(3024);
+
+    const noContent = await dispatchToPort(3024, new Request('http://x/gone'));
+    expect(noContent.status).toBe(204);
+    expect(await noContent.text()).toBe('');
+    // 204 has no body — neither chunked framing nor a content-length (Node
+    // omits both; end() must not leave a stamp for the dropped body)
+    expect(noContent.headers.get('transfer-encoding')).toBeNull();
+    expect(noContent.headers.get('content-length')).toBeNull();
+
+    const notModified = await dispatchToPort(3024, new Request('http://x/modified'));
+    expect(notModified.status).toBe(304);
+    expect(await notModified.text()).toBe('');
+  });
+
+  it('marks length-less bodied requests as chunked so body parsers read them', async () => {
+    // fetch Requests rebuilt across the preview bridge LOSE content-length
+    // (forbidden request header in browsers). Node never delivers a bodied
+    // request with neither content-length nor transfer-encoding; typeis-style
+    // hasBody() checks (express.json) would silently skip the body otherwise.
+    const server = http.createServer((req, res) => {
+      res.end(
+        JSON.stringify({
+          te: req.headers['transfer-encoding'] ?? null,
+          cl: req.headers['content-length'] ?? null,
+        }),
+      );
+    });
+    server.listen(3025);
+
+    const bodied = await dispatchToPort(
+      3025,
+      new Request('http://x/', { method: 'POST', body: 'abc' }),
+    );
+    const seen = (await bodied.json()) as { te: string | null; cl: string | null };
+    expect(seen.cl !== null || seen.te === 'chunked').toBe(true);
+
+    // body-less GET must NOT grow framing headers
+    const bare = await dispatchToPort(3025, new Request('http://x/'));
+    const bareSeen = (await bare.json()) as { te: string | null; cl: string | null };
+    expect(bareSeen.te).toBeNull();
+    expect(bareSeen.cl).toBeNull();
+  });
+
   it('close() unregisters the port', async () => {
     const server = http.createServer((_req, res) => res.end('x'));
     server.listen(3002);

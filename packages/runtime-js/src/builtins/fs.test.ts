@@ -69,3 +69,32 @@ describe('resolvePath relative branch against a non-root cwd (#6)', () => {
     expect(statSync('/proj/a.txt').size).toBe(1);
   });
 });
+
+describe('require("fs") module object exposes the stream factories', () => {
+  // Regression: createReadStream/createWriteStream were named ESM exports but
+  // missing from the default module object the builtin registry serves — so
+  // `require('fs').createReadStream` (serve-static/send under express.static)
+  // was undefined while the ESM named import worked.
+  it('default fs object carries createReadStream/createWriteStream', async () => {
+    const fs = (await import('./fs.ts')).default as Record<string, unknown>;
+    expect(typeof fs.createReadStream).toBe('function');
+    expect(typeof fs.createWriteStream).toBe('function');
+  });
+});
+
+describe('fs stream classes are exposed for instanceof probes', () => {
+  // send/destroy does `stream instanceof fs.ReadStream` on cleanup; an absent
+  // class made that probe THROW (instanceof undefined) on every static file
+  // teardown in the express demo.
+  it('ReadStream/WriteStream classes exist and instanceof works', async () => {
+    const fs = (await import('./fs.ts')).default as Record<string, unknown> & {
+      createReadStream: (p: string) => unknown;
+      ReadStream: new (...args: never[]) => unknown;
+      WriteStream: new (...args: never[]) => unknown;
+    };
+    expect(typeof fs.ReadStream).toBe('function');
+    expect(typeof fs.WriteStream).toBe('function');
+    writeFileSync('/probe.txt', 'x');
+    expect(fs.createReadStream('/probe.txt') instanceof fs.ReadStream).toBe(true);
+  });
+});

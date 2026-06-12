@@ -30,54 +30,41 @@ let enginePromise: Promise<SqlJsStatic> | undefined;
  */
 let engine: SqlJsStatic | undefined;
 
+type GetBuiltinModule = (id: string) => {
+  createRequire: (path: string) => { resolve: (spec: string) => string };
+};
+
 /**
- * Whether we are running under a Node-style runtime (vs a browser/Worker
- * realm). Drives how the sql.js WASM file is located: Node resolves a
- * filesystem path via the module loader; the browser leaves it to the
- * bundler/`import.meta.resolve`.
+ * Real-Node `process.getBuiltinModule` (Node ≥22.3), captured at MODULE-EVAL
+ * time. The capture (not a lazy `process` read) is load-bearing: embedders swap
+ * `globalThis.process` for the rifty shim (worker bootstrap, harnesses calling
+ * `installProcessGlobals()`) BEFORE the engine's first init, and the shim
+ * advertises `versions.node` without `getBuiltinModule` — a lazy Node-detection
+ * here used to throw deep inside sql.js and hang the memoised init forever.
+ * `undefined` ⇔ not a real Node realm ⇒ browser path below.
  */
-function isNodeRuntime(): boolean {
-  return (
-    typeof process !== 'undefined' && process.versions != null && process.versions.node != null
-  );
-}
+const nodeGetBuiltinModule: GetBuiltinModule | undefined = (() => {
+  if (typeof process === 'undefined') return undefined;
+  const getBuiltin = (process as unknown as { getBuiltinModule?: GetBuiltinModule })
+    .getBuiltinModule;
+  return typeof getBuiltin === 'function' ? getBuiltin.bind(process) : undefined;
+})();
 
 /**
  * Default `locateFile` telling the sql.js glue where `sql-wasm.wasm` lives.
  *
  * Node: filesystem path via `createRequire(...).resolve` — works regardless of
  * pnpm's store-symlink layout, in plain ESM and vitest SSR alike. Browser:
- * `import.meta.resolve` URL for the glue to `fetch`.
+ * `import.meta.resolve` URL for the glue to `fetch` (bundled worker realms
+ * should pass `wasmBinary`/`locateFile` explicitly instead).
  */
 function defaultLocateFile(file: string): string {
   const spec = `sql.js/dist/${file}`;
-  if (isNodeRuntime()) {
-    const { createRequire } = nodeModule();
+  if (nodeGetBuiltinModule) {
+    const { createRequire } = nodeGetBuiltinModule('node:module');
     return createRequire(import.meta.url).resolve(spec);
   }
   return import.meta.resolve(spec);
-}
-
-/**
- * Node-only `node:module` access, isolated so bundlers can ignore it in browser
- * builds. Never reached in a browser realm because `defaultLocateFile` guards
- * on {@link isNodeRuntime}. Uses `process.getBuiltinModule` (Node ≥22.3), which
- * is synchronous and present in both CJS and ESM.
- */
-function nodeModule(): {
-  createRequire: (path: string) => { resolve: (spec: string) => string };
-} {
-  const getBuiltin = (
-    process as unknown as {
-      getBuiltinModule?: (id: string) => {
-        createRequire: (path: string) => { resolve: (spec: string) => string };
-      };
-    }
-  ).getBuiltinModule;
-  if (typeof getBuiltin === 'function') {
-    return getBuiltin('node:module');
-  }
-  throw new Error('sqlite engine: cannot resolve node:module to locate the sql.js WASM file');
 }
 
 /**

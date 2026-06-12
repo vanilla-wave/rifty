@@ -15,4 +15,9 @@ describe('real Vite page-to-worker updates', () => {
     expect(source).toContain('RIFTY_PREVIEW_OWNER_TOKEN: ownerToken');
     expect(source).toContain('mountPlaygroundPreviewBridge(previewBridge, { ownerToken })');
   });
+
+  it('exposes the routed port as PORT so node-server entries bind Node-idiomatically', () => {
+    // line-anchored: must be the bare PORT env key, not RIFTY_RFV_PORT
+    expect(source).toMatch(/\n\s+PORT: String\(port\),/);
+  });
 });
