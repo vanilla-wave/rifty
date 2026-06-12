@@ -54,7 +54,6 @@ import { proxiedRegistryFetch } from '../glue/registry-fetch.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { collectSnapshot, publishVfsSnapshot } from '../glue/vfs-snapshot-port.ts';
 import { type VfsWriteFrame, applyVfsWriteFrame, serveVfsWrites } from '../glue/vfs-write-port.ts';
-import { createViteRegistryClient } from '../glue/vite-registry-client.ts';
 import {
   type BootstrapConfig,
   type NodeServerBootstrapConfig,
@@ -342,10 +341,7 @@ async function bootstrap(): Promise<void> {
   for (const delay of [300, 1200, 3000]) setTimeout(publishSnapshot, delay);
 
   log(`[real-vite/worker] installing ${spec.displayName} into ${root}/node_modules…\n`);
-  const registry =
-    cfg.runtime === 'vite'
-      ? createViteRegistryClient(proxiedRegistryFetch())
-      : new RegistryClient({ fetch: proxiedRegistryFetch() });
+  const registry = new RegistryClient({ fetch: proxiedRegistryFetch() });
   const vfs = new SyncMirrorVfs();
   const result = await install({
     vfs,

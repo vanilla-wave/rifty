@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  bakedOverrides,
-  browserShimLifecycleScriptSkips,
-  esbuildShimFiles,
-  rollupShimFiles,
-} from './index.ts';
+import { bakedOverrides, esbuildShimFiles, rollupShimFiles } from './index.ts';
 
 describe('shadow-registry', () => {
   it('bakedOverrides contains the bcrypt → bcryptjs entry', () => {
@@ -20,10 +15,6 @@ describe('shadow-registry', () => {
     expect(esbuildShimFiles['/workspace/node_modules/esbuild/lib/main.js']).toContain(
       'export const version',
     );
-    expect(browserShimLifecycleScriptSkips.esbuild).toContainEqual({
-      version: '0.21.5',
-      scripts: ['postinstall'],
-    });
   });
 
   it('rollupShimFiles overlays dist/native.js', () => {

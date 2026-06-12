@@ -277,7 +277,7 @@ describe('install — package.json defaults', () => {
     expect((caught as NotImplementedError).feature).toBe('npm-client.lifecycle.prepare');
   });
 
-  it('ignores registry package prepare scripts because tarballs are already prepared', async () => {
+  it('ignores registry package prepare scripts during tarball installs', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set(
       'with-prepare',

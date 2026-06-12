@@ -6,15 +6,13 @@
  * for npm overrides, `apps/playground/src/glue/esbuild-shim.ts` for the
  * VFS overlay).
  *
- * Three tables are exposed:
+ * Two tables are exposed:
  *
  *   - `bakedOverrides` — full-package substitutions consumed by the npm
  *     installer's override hook (D-005).
  *   - `esbuildShimFiles` / `rollupShimFiles` — VFS-path-keyed source bundles
  *     overlaid by the playground after install, replacing packages whose
  *     native binaries cannot run in a browser realm.
- *   - `browserShimLifecycleScriptSkips` — lifecycle metadata made redundant by
- *     those overlays.
  *
  * The `OverrideMap` type is structurally identical to the one re-exported
  * from `@riftydev/npm-client` (an open `Record<string, string>`). It is declared
@@ -26,11 +24,6 @@
 export interface OverrideMap {
   /** Map from package name (or `parent>child`) to replacement target. */
   [key: string]: string;
-}
-
-export interface BrowserShimLifecycleScriptSkip {
-  readonly version: string;
-  readonly scripts: readonly string[];
 }
 
 /**
@@ -168,13 +161,6 @@ const SHIM_ESBUILD_PACKAGE_JSON = JSON.stringify(
 export const esbuildShimFiles: Record<string, string> = {
   '/workspace/node_modules/esbuild/package.json': SHIM_ESBUILD_PACKAGE_JSON,
   '/workspace/node_modules/esbuild/lib/main.js': SHIM_ESBUILD_SOURCE,
-};
-
-export const browserShimLifecycleScriptSkips: Record<
-  string,
-  readonly BrowserShimLifecycleScriptSkip[]
-> = {
-  esbuild: [{ version: SHIM_ESBUILD_VERSION, scripts: ['postinstall'] }],
 };
 
 const ROLLUP_NATIVE_SHIM = `// rifty: rollup native bindings shim

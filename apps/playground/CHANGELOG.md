@@ -89,11 +89,6 @@
 
 ### Fixed
 
-- **Real Vite bootstrap strips shim-covered `esbuild.postinstall`.** The worker
-  now uses a shim-aware registry adapter only for Vite templates before calling
-  `npm-client`, removing only version-matched lifecycle metadata listed by
-  `@riftydev/shadow-registry` and then overlaying the browser-safe `esbuild`
-  package as before. Generic `postinstall` remains unsupported in `npm-client`.
 - **Command palette opened pinned to the top-left corner.** `<dialog>` UA
   positioning (absolute + auto margins) escaped the flex centering; the panel
   is now statically positioned inside the scrim.
