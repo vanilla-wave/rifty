@@ -318,6 +318,7 @@ const EXPRESS_SQLITE_PRESET: Preset = {
   mode: 'real-vite',
   templateId: EXPRESS_SQLITE_TEMPLATE.id,
   blurb: 'A client-server app: real Express from npm, SQLite-as-WASM behind node:sqlite.',
+  glyph: { text: 'EX', color: '#7FB7E8' },
   tag: { text: '~15s', tone: 'slow' },
   source: EXPRESS_SQLITE_SERVER_SOURCE,
   openFiles: ['public/index.html', 'public/client.js'],

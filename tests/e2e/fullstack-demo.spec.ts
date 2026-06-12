@@ -31,14 +31,13 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     // interacting — clicks during the mount storm can land on replaced nodes.
     await expectTerminalContains(page, 'vite: starting dev server', 15_000);
 
-    // Select the demo preset from the gallery and confirm it actually took.
+    // Select the demo preset from the template switcher and confirm it took:
+    // the dropdown unmounts on pick, so assert via the chip's active id.
     await page.click('[data-action="view-templates"]');
     await page.click('[data-preset="express-sqlite"]');
-    await expect(page.locator('[data-preset="express-sqlite"]')).toHaveAttribute(
-      'aria-pressed',
-      'true',
-      { timeout: 5_000 },
-    );
+    await expect(page.locator('[data-action="view-templates"]')).toContainText('express-sqlite', {
+      timeout: 5_000,
+    });
     // The node-server boot line surfaces in the dev-server terminal.
     await expectTerminalContains(page, 'dev: starting Express + SQLite server', 30_000);
 
