@@ -34,6 +34,13 @@
 
 ### Fixed
 
+- **`node:http` loopback self-calls now stay in-process.** `http.request()` and
+  `http.get()` route `http:` requests for registered local ports (`localhost`,
+  `127.0.0.1`, `0.0.0.0`, IPv6 loopback) through the existing port registry
+  instead of falling out to real `fetch()`. External hosts, unregistered local
+  ports, and non-HTTP URLs still use `fetch()`. Guards:
+  `packages/net/src/http/client.test.ts` and
+  `tests/conformance/builtins/http.test.ts`.
 - **WebSocket `'close'` no longer depends on a global `CloseEvent`.** `ws/bridge.ts`
   and `ws/in-process.ts` constructed `new CloseEvent(...)`, a global only present in
   browsers and Node ≥23 — under a `node` test env on Node 22 (our `engines` floor)
