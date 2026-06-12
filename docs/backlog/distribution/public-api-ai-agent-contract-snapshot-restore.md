@@ -4,7 +4,7 @@ status: parked
 title: Residual AI-agent sandbox snapshot/restore/fork API
 created: 2026-06-11
 why: ADR-0131 landed the public Worker-backed read/write FS slice; disk-state snapshot/restore/fork remains separate and needs its own public semantics
-sources: [M11, docs/research/open-webcontainers-alternative-2026-06.md, ADR-0071, ADR-0076, ADR-0131]
+sources: [docs/research/open-webcontainers-alternative-2026-06.md, ADR-0071, ADR-0076, ADR-0131]
 code: [packages/rifty/src/sandbox.ts, packages/runtime-js/src/host.ts]
 ---
 

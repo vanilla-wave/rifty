@@ -231,3 +231,13 @@ It is intentionally concise and append-only during the work.
   preview URL normalization expand `Sandbox` beyond ADR-0131's FS slice.
 - **Reversibility:** Doc-only retarget. Implementation needs its own ADR and
   public API tests.
+
+### D24 — Sandbox Snapshot/Restore API Retarget
+
+- **Decision:** Retarget
+  `distribution/public-api-ai-agent-contract-snapshot-restore` as a future
+  public SDK API design item.
+- **Why:** Snapshot, restore, and fork semantics require deciding disk-state vs
+  process-state scope, archive format, quota posture, and Worker/VFS copy model.
+- **Reversibility:** Doc-only retarget. Implementation needs its own ADR and
+  public API tests.
