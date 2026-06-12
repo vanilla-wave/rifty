@@ -38,7 +38,15 @@ interface RewriteContext {
   readonly source: string;
   readonly edits: SourceEdit[];
   readonly scopes: Array<Set<string>>;
+  readonly contextVarNames: Set<string>;
+  readonly helperName: string;
   functionDepth: number;
+}
+
+interface ContextRewrite {
+  readonly source: string;
+  readonly contextVarNames: readonly string[];
+  readonly helperName: string;
 }
 
 export interface RunningScriptOptions {
@@ -78,13 +86,9 @@ const runGlobalScript = new Function('source', 'return (0, eval)(source);') as (
   source: string,
 ) => unknown;
 
-const runContextScript = new Function(
-  '__riftyVmContext',
-  '__riftyVmSource',
-  'with (__riftyVmContext) { return eval(__riftyVmSource); }',
-) as (context: ContextProxy, source: string) => unknown;
-
 const HELPER_BINDINGS = new Set<PropertyKey>(['__riftyVmContext', '__riftyVmSource', 'eval']);
+const activeHelperBindings = new Map<PropertyKey, number>();
+const activeContextVarBindings = new WeakMap<ContextObject, Map<PropertyKey, number>>();
 
 const INTRINSIC_GLOBALS = new Set<PropertyKey>([
   'AggregateError',
@@ -245,14 +249,18 @@ function contextProxy(context: ContextObject): ContextProxy {
     has(_target, prop) {
       if (prop === Symbol.unscopables) return false;
       return (
-        !HELPER_BINDINGS.has(prop) &&
-        (prop === 'globalThis' || Reflect.has(context, prop) || INTRINSIC_GLOBALS.has(prop))
+        !isHelperBinding(prop) &&
+        (prop === 'globalThis' ||
+          Reflect.has(context, prop) ||
+          isActiveContextVarBinding(context, prop) ||
+          INTRINSIC_GLOBALS.has(prop))
       );
     },
     get(target, prop, receiver) {
       if (prop === Symbol.unscopables) return undefined;
       if (prop === 'globalThis') return proxy;
       if (Reflect.has(target, prop)) return Reflect.get(target, prop, receiver) as unknown;
+      if (isActiveContextVarBinding(target, prop)) return undefined;
       if (INTRINSIC_GLOBALS.has(prop)) return Reflect.get(globalThis, prop);
       return undefined;
     },
@@ -269,6 +277,61 @@ function contextProxy(context: ContextObject): ContextProxy {
 
   contextProxies.set(context, proxy);
   return proxy;
+}
+
+function isHelperBinding(prop: PropertyKey): boolean {
+  return HELPER_BINDINGS.has(prop) || activeHelperBindings.has(prop);
+}
+
+function pushActiveHelperBinding(prop: PropertyKey): void {
+  activeHelperBindings.set(prop, (activeHelperBindings.get(prop) ?? 0) + 1);
+}
+
+function popActiveHelperBinding(prop: PropertyKey): void {
+  const count = activeHelperBindings.get(prop) ?? 0;
+  if (count <= 1) activeHelperBindings.delete(prop);
+  else activeHelperBindings.set(prop, count - 1);
+}
+
+function isActiveContextVarBinding(context: ContextObject, prop: PropertyKey): boolean {
+  return activeContextVarBindings.get(context)?.has(prop) ?? false;
+}
+
+function pushActiveContextVarBindings(context: ContextObject, names: readonly string[]): void {
+  let bindings = activeContextVarBindings.get(context);
+  if (!bindings) {
+    bindings = new Map();
+    activeContextVarBindings.set(context, bindings);
+  }
+  for (const name of names) {
+    bindings.set(name, (bindings.get(name) ?? 0) + 1);
+  }
+}
+
+function popActiveContextVarBindings(context: ContextObject, names: readonly string[]): void {
+  const bindings = activeContextVarBindings.get(context);
+  if (!bindings) return;
+  for (const name of names) {
+    const count = bindings.get(name) ?? 0;
+    if (count <= 1) bindings.delete(name);
+    else bindings.set(name, count - 1);
+  }
+  if (bindings.size === 0) activeContextVarBindings.delete(context);
+}
+
+function runContextScript(context: ContextProxy, source: string, helperName: string): unknown {
+  const runner = new Function(
+    '__riftyVmContext',
+    '__riftyVmSource',
+    helperName,
+    'with (__riftyVmContext) { return eval(__riftyVmSource); }',
+  ) as (context: ContextProxy, source: string, global: ContextProxy) => unknown;
+  pushActiveHelperBinding(helperName);
+  try {
+    return runner.call(context, context, source, context);
+  } finally {
+    popActiveHelperBinding(helperName);
+  }
 }
 
 function applySourceEdits(source: string, edits: SourceEdit[]): string {
@@ -288,6 +351,16 @@ function identifierName(node: unknown): string | null {
   return (node as { type?: string; name?: string }).type === 'Identifier'
     ? ((node as Identifier).name ?? null)
     : null;
+}
+
+function makeContextHelperName(source: string): string {
+  let suffix = 0;
+  let candidate = '__riftyVmGlobal';
+  while (source.includes(candidate)) {
+    suffix += 1;
+    candidate = `__riftyVmGlobal${suffix}`;
+  }
+  return candidate;
 }
 
 function pushScope(ctx: RewriteContext): void {
@@ -340,19 +413,32 @@ function declareVarDecl(ctx: RewriteContext, declaration: VariableDeclaration): 
   for (const declarator of declaration.declarations) declarePattern(ctx, declarator.id);
 }
 
-function emitContextVarRewrite(ctx: RewriteContext, declaration: VariableDeclaration): void {
-  const assignments: string[] = [];
+function emitContextVarRewrite(
+  ctx: RewriteContext,
+  declaration: VariableDeclaration,
+  mode: 'statement' | 'expression',
+): void {
+  const expressions: string[] = [];
   for (const declarator of declaration.declarations) {
     const name = identifierName(declarator.id);
     if (!name) {
       throw new NotImplementedError('vm.context.var-pattern');
     }
-    const init = declarator.init
-      ? ctx.source.slice(declarator.init.start, declarator.init.end)
-      : 'undefined';
-    assignments.push(`globalThis.${name} = ${init}`);
+    ctx.contextVarNames.add(name);
+    if (declarator.init) {
+      expressions.push(
+        `${ctx.helperName}.${name} = ${ctx.source.slice(declarator.init.start, declarator.init.end)}`,
+      );
+    } else {
+      expressions.push('void 0');
+    }
   }
-  ctx.edits.push({ start: declaration.start, end: declaration.end, text: assignments.join('; ') });
+  const text = expressions.join(', ');
+  ctx.edits.push({
+    start: declaration.start,
+    end: declaration.end,
+    text: mode === 'statement' ? `${text};` : text,
+  });
 }
 
 function predeclareLexicalBody(ctx: RewriteContext, body: readonly AnyNodeShape[]): void {
@@ -454,9 +540,15 @@ function walkForStatement(statement: ForStatement, ctx: RewriteContext): void {
   if (statement.init) {
     if ((statement.init as unknown as AnyNodeShape).type === 'VariableDeclaration') {
       const declaration = statement.init as unknown as VariableDeclaration;
-      if (declaration.kind !== 'var') declareVarDecl(ctx, declaration);
+      if (declaration.kind === 'var' && ctx.functionDepth === 0) {
+        emitContextVarRewrite(ctx, declaration, 'expression');
+      } else {
+        if (declaration.kind !== 'var') declareVarDecl(ctx, declaration);
+        walkContextNode(statement.init, ctx);
+      }
+    } else {
+      walkContextNode(statement.init, ctx);
     }
-    walkContextNode(statement.init, ctx);
   }
   if (statement.test) walkContextNode(statement.test, ctx);
   if (statement.update) walkContextNode(statement.update, ctx);
@@ -517,7 +609,7 @@ function walkContextNode(node: unknown, ctx: RewriteContext): void {
         ctx.edits.push({
           start: declaration.start,
           end: declaration.start,
-          text: `globalThis.${declaration.id.name} = `,
+          text: `${ctx.helperName}.${declaration.id.name} = `,
         });
         ctx.edits.push({ start: declaration.end, end: declaration.end, text: ';' });
       }
@@ -534,7 +626,7 @@ function walkContextNode(node: unknown, ctx: RewriteContext): void {
       const declaration = n as unknown as VariableDeclaration;
       if (declaration.kind === 'var') {
         if (ctx.functionDepth === 0) {
-          emitContextVarRewrite(ctx, declaration);
+          emitContextVarRewrite(ctx, declaration, 'statement');
           return;
         }
         declareVarDecl(ctx, declaration);
@@ -553,7 +645,7 @@ function walkContextNode(node: unknown, ctx: RewriteContext): void {
         ctx.edits.push({
           start: assignment.left.start,
           end: assignment.left.end,
-          text: `globalThis.${name}`,
+          text: `${ctx.helperName}.${name}`,
         });
       } else {
         walkContextNode(assignment.left, ctx);
@@ -597,21 +689,28 @@ function walkContextNode(node: unknown, ctx: RewriteContext): void {
   }
 }
 
-function rewriteContextSource(source: string): string {
+function rewriteContextSource(source: string): ContextRewrite {
   const program = acornParse(source, {
     ecmaVersion: 'latest',
     sourceType: 'script',
     allowReturnOutsideFunction: true,
   }) as Program;
+  const helperName = makeContextHelperName(source);
   const ctx: RewriteContext = {
     source,
     edits: [],
     scopes: [new Set()],
+    contextVarNames: new Set(),
+    helperName,
     functionDepth: 0,
   };
 
   walkContextNode(program, ctx);
-  return applySourceEdits(source, ctx.edits);
+  return {
+    source: applySourceEdits(source, ctx.edits),
+    contextVarNames: [...ctx.contextVarNames],
+    helperName,
+  };
 }
 
 export function createContext<T extends Record<string, unknown> = Record<string, unknown>>(
@@ -656,9 +755,19 @@ export function runInContext(
   if (!isContext(contextifiedObject)) {
     throw new TypeError('The "contextifiedObject" argument must be a vm.Context.');
   }
-  const proxy = contextProxy(contextifiedObject as ContextObject);
+  const context = contextifiedObject as ContextObject;
   const rewritten = rewriteContextSource(asSource(code));
-  return runContextScript.call(proxy, proxy, withSourceURL(rewritten, normalized.filename));
+  const proxy = contextProxy(context);
+  pushActiveContextVarBindings(context, rewritten.contextVarNames);
+  try {
+    return runContextScript(
+      proxy,
+      withSourceURL(rewritten.source, normalized.filename),
+      rewritten.helperName,
+    );
+  } finally {
+    popActiveContextVarBindings(context, rewritten.contextVarNames);
+  }
 }
 
 export function runInNewContext(

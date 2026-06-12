@@ -292,11 +292,21 @@ It is intentionally concise and append-only during the work.
 
 ### D30 — Vite Shim Lifecycle Registry Adapter
 
-- **Decision:** Strip `esbuild.postinstall` only in the playground's Real Vite
-  registry adapter, keyed by `@riftydev/shadow-registry`
-  `browserShimLifecycleScriptSkips`.
+- **Decision:** Strip `esbuild@0.21.5 postinstall` only in the playground's
+  Real Vite registry adapter, keyed by `@riftydev/shadow-registry`
+  `browserShimLifecycleScriptSkips`, and use the plain registry client for
+  non-Vite templates.
 - **Why:** `esbuild.postinstall` selects native binaries, but the playground
   immediately overlays `esbuild` with the browser-safe shim. The default
   `npm-client` policy must still reject generic `postinstall` loudly.
 - **Reversibility:** Playground-local adapter. Guarded by playground unit test,
   shadow-registry table test, live Vite install probe, and Chromium e2e.
+
+### D31 — VM Rewrite Helper and Var Hoist Review Fix
+
+- **Decision:** Use a generated VM context helper binding for rewritten sandbox
+  writes and keep top-level `var` hoists virtual during eval until an initializer
+  writes the context object.
+- **Why:** Review found user scopes could shadow `globalThis`, and eager own
+  property hoists changed Node-observable `var` behavior.
+- **Reversibility:** Runtime-internal fix. Guarded by conformance and parity.

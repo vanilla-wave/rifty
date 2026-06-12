@@ -254,7 +254,30 @@ describe('install — package.json defaults', () => {
     expect((caught as NotImplementedError).feature).toBe('npm-client.lifecycle.postinstall');
   });
 
-  it('ignores registry package prepare scripts during tarball installs', async () => {
+  it('still rejects root prepare scripts when package.json drives install', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'app',
+        version: '1.0.0',
+        scripts: { prepare: 'node build.js' },
+      }),
+    );
+
+    let caught: unknown;
+    try {
+      await install({ vfs, cwd: '/proj', registry: new FakeRegistry(new Map()) });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(NotImplementedError);
+    expect((caught as NotImplementedError).feature).toBe('npm-client.lifecycle.prepare');
+  });
+
+  it('ignores registry package prepare scripts because tarballs are already prepared', async () => {
     const db = new Map<string, Map<string, FakeRegistryEntry>>();
     db.set(
       'with-prepare',

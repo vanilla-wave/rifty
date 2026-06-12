@@ -92,4 +92,10 @@ describe('node-server runtime branch', () => {
     // count so a node-branch copy fails this test.
     expect(source.split('setupHmrBridge(').length - 1).toBe(1);
   });
+
+  it('uses the shim-aware registry client only when the vite shim overlay will run', () => {
+    expect(source).toContain("cfg.runtime === 'vite'");
+    expect(source).toContain('createViteRegistryClient(proxiedRegistryFetch())');
+    expect(source).toContain('new RegistryClient({ fetch: proxiedRegistryFetch() })');
+  });
 });

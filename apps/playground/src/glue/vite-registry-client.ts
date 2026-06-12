@@ -17,13 +17,19 @@ export function createViteRegistryClient(fetch: Fetcher): RegistryClient {
 }
 
 export function stripBrowserShimLifecycleScripts(name: string, packument: Packument): Packument {
-  const skipped = browserShimLifecycleScriptSkips[name];
-  if (!skipped) return packument;
+  const skips = browserShimLifecycleScriptSkips[name];
+  if (!skips) return packument;
 
   let changed = false;
   const versions: Record<string, VersionManifest> = {};
   for (const [version, manifest] of Object.entries(packument.versions)) {
-    const scripts = stripScripts(manifest.scripts, skipped);
+    const skippedScripts = skips.find((skip) => skip.version === version)?.scripts;
+    if (!skippedScripts) {
+      versions[version] = manifest;
+      continue;
+    }
+
+    const scripts = stripScripts(manifest.scripts, skippedScripts);
     if (scripts === manifest.scripts) {
       versions[version] = manifest;
       continue;

@@ -38,6 +38,27 @@ const c: ParityCase = {
     console.log(typeof globalThis.__riftyVmParityBlockLeak);
     console.log(typeof globalThis.__riftyVmParityLoopLeak);
 
+    const shadowed = {};
+    const shadowedResult = vm.runInNewContext(\`
+      function write(globalThis) {
+        shadowedWrite = 7;
+        return globalThis.shadowedWrite;
+      }
+      ({ returned: write({}), sandboxValue: shadowedWrite });
+    \`, shadowed);
+    console.log(JSON.stringify(shadowedResult));
+    console.log(JSON.stringify(shadowed));
+
+    const hoisted = {};
+    const hoistedResult = vm.runInNewContext(\`
+      before = typeof x + ':' + String(x);
+      var x = 1;
+      var y = y === undefined ? 2 : 9;
+      ({ before, x, y });
+    \`, hoisted);
+    console.log(JSON.stringify(hoistedResult));
+    console.log(JSON.stringify(hoisted));
+
     const add = vm.compileFunction('return a + b;', ['a', 'b']);
     console.log(add(2, 5));
 

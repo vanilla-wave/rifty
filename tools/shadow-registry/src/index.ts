@@ -28,6 +28,11 @@ export interface OverrideMap {
   [key: string]: string;
 }
 
+export interface BrowserShimLifecycleScriptSkip {
+  readonly version: string;
+  readonly scripts: readonly string[];
+}
+
 /**
  * Built-in package substitutions. Source of truth for what the npm installer
  * silently redirects when no user override matches.
@@ -165,8 +170,11 @@ export const esbuildShimFiles: Record<string, string> = {
   '/workspace/node_modules/esbuild/lib/main.js': SHIM_ESBUILD_SOURCE,
 };
 
-export const browserShimLifecycleScriptSkips: Record<string, readonly string[]> = {
-  esbuild: ['postinstall'],
+export const browserShimLifecycleScriptSkips: Record<
+  string,
+  readonly BrowserShimLifecycleScriptSkip[]
+> = {
+  esbuild: [{ version: SHIM_ESBUILD_VERSION, scripts: ['postinstall'] }],
 };
 
 const ROLLUP_NATIVE_SHIM = `// rifty: rollup native bindings shim

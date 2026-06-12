@@ -63,6 +63,11 @@
   Missing global writes such as `if (...) y = 1` or `for (...) y = 2` inside
   `runInNewContext()` now land on the context object like Node instead of
   leaking to the host `globalThis`.
+- **`node:vm` context rewrites preserve shadowed globals and top-level `var`
+  hoisting.** Missing-global assignments now target a generated helper binding,
+  so user parameters named `globalThis` cannot steal sandbox writes; top-level
+  `var` names are visible as `undefined` during evaluation before their
+  initializers run.
 - **Transformed TypeScript stack frames remap to source lines.** The ESM loader
   now extracts inline source maps from `transformSource` output and installs a
   scoped stack renderer while guest modules execute, so caught `err.stack`

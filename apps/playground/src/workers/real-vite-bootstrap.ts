@@ -27,7 +27,7 @@ import { dispatchToPort, listPorts, serveCrossRealmPreview } from '@riftydev/net
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { initSqliteEngine } from '@riftydev/net/sqlite/engine';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
-import { install } from '@riftydev/npm-client';
+import { RegistryClient, install } from '@riftydev/npm-client';
 import { Buffer } from '@riftydev/runtime-js/builtins/buffer';
 import { Console } from '@riftydev/runtime-js/builtins/console';
 import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
@@ -342,7 +342,10 @@ async function bootstrap(): Promise<void> {
   for (const delay of [300, 1200, 3000]) setTimeout(publishSnapshot, delay);
 
   log(`[real-vite/worker] installing ${spec.displayName} into ${root}/node_modules…\n`);
-  const registry = createViteRegistryClient(proxiedRegistryFetch());
+  const registry =
+    cfg.runtime === 'vite'
+      ? createViteRegistryClient(proxiedRegistryFetch())
+      : new RegistryClient({ fetch: proxiedRegistryFetch() });
   const vfs = new SyncMirrorVfs();
   const result = await install({
     vfs,

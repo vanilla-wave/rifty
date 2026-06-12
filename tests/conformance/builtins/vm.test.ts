@@ -125,6 +125,41 @@ describe('node:vm subset', () => {
     ).toBeUndefined();
   });
 
+  it('keeps context writes independent of shadowed globalThis parameters', () => {
+    const globals: Record<string, unknown> = {};
+
+    expect(
+      vm.runInNewContext(
+        `
+          function write(globalThis) {
+            shadowedWrite = 7;
+            return globalThis.shadowedWrite;
+          }
+          ({ returned: write({}), sandboxValue: shadowedWrite });
+        `,
+        globals,
+      ),
+    ).toEqual({ returned: undefined, sandboxValue: 7 });
+    expect(globals.shadowedWrite).toBe(7);
+  });
+
+  it('hoists top-level var declarations onto the context before initializers run', () => {
+    const globals: Record<string, unknown> = {};
+
+    expect(
+      vm.runInNewContext(
+        `
+          before = typeof x + ':' + String(x);
+          var x = 1;
+          var y = y === undefined ? 2 : 9;
+          ({ before, x, y });
+        `,
+        globals,
+      ),
+    ).toEqual({ before: 'undefined:undefined', x: 1, y: 2 });
+    expect(globals).toMatchObject({ before: 'undefined:undefined', x: 1, y: 2 });
+  });
+
   it('keeps missing reads loud and function declarations on the context', () => {
     const functions: Record<string, unknown> = {};
 

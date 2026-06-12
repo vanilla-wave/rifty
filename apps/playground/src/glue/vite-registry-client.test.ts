@@ -46,4 +46,21 @@ describe('vite registry client shim lifecycle policy', () => {
 
     expect(stripBrowserShimLifecycleScripts('with-script', packument)).toBe(packument);
   });
+
+  it('leaves esbuild versions without a matching shim untouched', () => {
+    const packument: Packument = {
+      name: 'esbuild',
+      'dist-tags': { latest: '0.99.0' },
+      versions: {
+        '0.99.0': {
+          name: 'esbuild',
+          version: '0.99.0',
+          scripts: { postinstall: 'node install.js' },
+          dist: { tarball: 'fake://esbuild/0.99.0' },
+        },
+      },
+    };
+
+    expect(stripBrowserShimLifecycleScripts('esbuild', packument)).toBe(packument);
+  });
 });

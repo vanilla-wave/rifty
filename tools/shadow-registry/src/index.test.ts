@@ -20,7 +20,10 @@ describe('shadow-registry', () => {
     expect(esbuildShimFiles['/workspace/node_modules/esbuild/lib/main.js']).toContain(
       'export const version',
     );
-    expect(browserShimLifecycleScriptSkips.esbuild).toContain('postinstall');
+    expect(browserShimLifecycleScriptSkips.esbuild).toContainEqual({
+      version: '0.21.5',
+      scripts: ['postinstall'],
+    });
   });
 
   it('rollupShimFiles overlays dist/native.js', () => {
