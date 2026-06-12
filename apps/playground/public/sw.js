@@ -202,11 +202,10 @@ var FirstWindowOwnerBinding = class {
       isReady: (id) => registry.isReady(id),
       isMismatched: (id) => registry.isMismatched(id),
       ownerToken: (id) => registry.ownerToken(id),
-      // NOT `async`: returning the registry promise directly preserves
-      // pre-ADR-0046 microtask timing; an `async` wrapper inserts an extra
-      // await-unwrap tick between the ready frame resolving the waiter and
-      // `routePreview` resuming — observable to handshake tests that gate on
-      // a fixed number of microtask turns.
+      // Returns the registry promise directly — simplest form. The old
+      // fixed-microtask-turn invariant is dropped (ADR-0125): handshake tests
+      // flush a turn budget, not an exact count, so wrapper unwrap ticks are
+      // not observable.
       //
       // The window registry has no separate "gone" signal: a window teardown
       // arrives as a goodbye, which {@link createReadyClientsRegistry}
@@ -307,6 +306,13 @@ var WorkerOwnerBinding = class {
     }
     return client;
   }
+  /**
+   * Which live Workers claim `port` across ALL owner tokens — the
+   * copied-top-level fast path (ADR-0125). `'unique'` carries the only live
+   * claimant; `'multiple'` = ambiguous, caller refuses (503); `'none'` = fall
+   * back to window resolution. Side effect: dead claimants are dropped and
+   * their in-flight `waitForReady` waiters resolve `'gone'`.
+   */
   async resolvePortOwners(scope, port) {
     const state = this.#states.get(scope);
     if (!state) return { kind: "none" };

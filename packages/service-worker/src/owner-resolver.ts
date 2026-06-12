@@ -28,9 +28,9 @@
  * @param scope - SW global scope (provides `clients`).
  * @param request - Fetch being routed. Reserved for URL-keyed resolvers; the
  *   default resolver ignores it.
- * @param clientId - Owning client id from the fetch event
- *   (`event.resultingClientId || event.clientId`), or `null` when both are
- *   empty (navigation-preload edge cases). ADR-0031.
+ * @param clientId - Owner attribution from the interceptor: a real client id,
+ *   or the `''`/`null` no-attribution sentinels (both take the first-window
+ *   fallback here; ADR-0125 records the sentinel split). ADR-0031.
  */
 export interface PreviewOwnerResolver {
   resolveOwner(

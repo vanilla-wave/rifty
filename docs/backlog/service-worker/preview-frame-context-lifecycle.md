@@ -13,6 +13,13 @@ The SW stores preview-frame clientId -> port context so root-relative iframe
 requests route to the preview owner. Current cleanup is bounded insertion-order
 eviction, not precise lifetime tracking.
 
+Known caps of the current policy: reads (`.get`) do not refresh recency, so a
+long-lived active iframe is evictable after 256+ navigations elsewhere while
+fresher dead-client entries survive (not LRU); referrer recovery after
+eviction/SW restart rebuilds the context with `copiedTopLevel: false`, silently
+downgrading a copied top-level tab from the unique-worker fast path to the
+window-fallback path.
+
 ## Options or Next
 
 Map browser support for detecting departed iframe clients, then replace or

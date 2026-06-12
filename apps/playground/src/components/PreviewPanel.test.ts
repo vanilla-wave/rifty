@@ -6,6 +6,7 @@ const source = readFileSync(fileURLToPath(new URL('./PreviewPanel.tsx', import.m
 
 describe('PreviewPanel refresh contract', () => {
   it('does not accept a parent snapshot refresh key', () => {
+    // ADR-0126 — preview reloads are HMR-client-driven; snapshot reload removed.
     expect(source).not.toContain('refreshKey?: number');
     expect(source).not.toContain('props.refreshKey;');
     expect(source).not.toContain('?rf=');

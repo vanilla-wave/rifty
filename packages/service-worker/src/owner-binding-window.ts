@@ -10,8 +10,9 @@
  * `resolveOwner` preserves the M10 resolver path first: prefer the `clientId`
  * carried by the `FetchEvent`, fall back to the first controlled window when the
  * id is empty, and warn once per scope for the multi-window misroute risk. For
- * no-clientId copied preview tabs, the binding then prefers an already-ready
- * window over an unready first match (ADR-0031, ADR-0040, ADR-0123).
+ * no-clientId preview traffic (`''`/`null` sentinels), the binding then prefers
+ * an already-ready window over an unready first match (ADR-0031, ADR-0040,
+ * ADR-0125).
  *
  * The `port` argument is intentionally ignored — a window owns every preview port
  * the page registers via `setupPreviewBridge`, so there is no port-keyed dispatch
@@ -19,7 +20,7 @@
  *
  * - ADR-0031 — prefer `event.resultingClientId`/`event.clientId`.
  * - ADR-0040 — owner-fallback rules pinned by `SW_ROUTING_VERSION`.
- * - ADR-0046 — the binding contract this module implements.
+ * - ADR-0125 — the binding contract this module implements (supersedes ADR-0046).
  */
 
 import { FirstWindowOwnerResolver, type PreviewOwnerResolver } from './owner-resolver.ts';
@@ -108,11 +109,10 @@ export class FirstWindowOwnerBinding implements PreviewOwnerBinding {
       isReady: (id): boolean => registry.isReady(id),
       isMismatched: (id): boolean => registry.isMismatched(id),
       ownerToken: (id): string | undefined => registry.ownerToken(id),
-      // NOT `async`: returning the registry promise directly preserves
-      // pre-ADR-0046 microtask timing; an `async` wrapper inserts an extra
-      // await-unwrap tick between the ready frame resolving the waiter and
-      // `routePreview` resuming — observable to handshake tests that gate on
-      // a fixed number of microtask turns.
+      // Returns the registry promise directly — simplest form. The old
+      // fixed-microtask-turn invariant is dropped (ADR-0125): handshake tests
+      // flush a turn budget, not an exact count, so wrapper unwrap ticks are
+      // not observable.
       //
       // The window registry has no separate "gone" signal: a window teardown
       // arrives as a goodbye, which {@link createReadyClientsRegistry}

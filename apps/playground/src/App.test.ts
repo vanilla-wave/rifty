@@ -96,6 +96,7 @@ describe('App terminal startup wiring', () => {
   });
 
   it('keeps worker snapshots from reloading the preview iframe', () => {
+    // ADR-0126 — preview reloads are HMR-client-driven; snapshot reload removed.
     expect(source).not.toContain('previewRevision');
     expect(source).not.toContain('setPreviewRevision');
     expect(source).toContain('<PreviewPanel');

@@ -22,7 +22,8 @@
  * an npm install, else the panel showed a false `unavailable` before Vite came up.
  *
  * Manual Reload uses `frame.contentWindow.location.reload()`. File edits are
- * refreshed by the iframe HMR client itself, not by parent snapshot updates.
+ * refreshed by the iframe HMR client itself, not by parent snapshot updates
+ * (ADR-0126).
  */
 import { type Accessor, createEffect, createSignal, onCleanup } from 'solid-js';
 import { copyToClipboard } from '../glue/clipboard.ts';
