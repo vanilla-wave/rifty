@@ -26,9 +26,9 @@ const README = join(ADR_DIR, 'README.md');
 // 0082-0093 or retired (0081) in the M11/M12 merge.) Keep in sync with README "Numbering".
 const RESERVED = new Set();
 
-// Retired process ADR numbers: process decisions moved out of ADRs into CLAUDE.md
-// (no longer recorded as ADRs). Immutable product ADRs still cite these; they resolve
-// to CLAUDE.md. Mirror docs/adr/README.md "Historical references".
+// Retired process ADR numbers: process decisions moved out of ADRs into AGENTS.md /
+// docs/process/decision-workflow.md (no longer recorded as ADRs). Immutable product ADRs
+// still cite these; they resolve there. Mirror docs/adr/README.md "Historical references".
 const RETIRED = new Set(['0008', '0022', '0024', '0033', '0063', '0064', '0081']);
 
 // Retired opencode draft labels still cited by historical ADRs. The opencode

@@ -1,37 +1,56 @@
-# Decision workflow — anti-patterns & when-in-doubt
+# Decision workflow — reversibility, anti-patterns, when-in-doubt
 
-On-demand elaboration of `CLAUDE.md` ("Design decisions during work" + "Hard rules"). Read this when you hit a fork. The **binding** rules live in `CLAUDE.md`; this file is the worked cautions, kept out of the always-resident file to save per-turn context.
+Elaborates `AGENTS.md` §Decisions (`CLAUDE.md` = symlink). Read at any fork. Rule: decide, record, continue — never pause. Checklist picks WHERE to record, never whether to stop.
 
-## Anti-patterns (things you'll be tempted to do — don't)
+## Reversibility checklist (order matters; first "yes" wins)
+1. Public API between packages → **IRREVERSIBLE**
+2. New external dependency → **IRREVERSIBLE**
+3. Contradicts existing ADR → **IRREVERSIBLE** (see Reconsidering)
+4. Genuine design choice — live alternatives, observable-behavior/Node-parity change, new mechanism, contested policy/default → **IRREVERSIBLE**. Size (LOC/files) alone ≠ trigger — record decisions, not diffs.
+5. Else **REVERSIBLE**. Behavior-preserving + contract-stable → no governance artifact, however large: CHANGELOG line (cite rationale doc if exists). Backlog item only if embeds provisional judgment call (cache key, invalidation strategy, …).
 
-### "Let me just stub this for now"
-No. Throw `NotImplementedError` with a clear message. Stubs that return fake values create subtle bugs downstream.
+## Actions
+- REVERSIBLE + judgment call: decide provisionally → `docs/backlog/<area>/<slug>.md` (frontmatter per `docs/backlog/TEMPLATE.md`) + `// TODO(backlog: <area>/<slug>)` at site → continue.
+- REVERSIBLE behavior-preserving (most refactors/perf): CHANGELOG line → continue.
+- IRREVERSIBLE: decide (standing authority) → inline ADR `pnpm adr:new <area> "Title"` (options, trade-offs, choice) — or backlog item promoted to ADR before merge → continue. Unrecorded irreversible decision = defect; record-and-continue ≠ decide silently.
 
-### "The test is too strict, let me relax it"
-No. Tests encode behavioral contracts. If you think one is wrong, file an issue and discuss — don't edit the test.
+## Reconsidering a recorded decision
+Only fork NOT settled inline: overturning active ADR or depended-on provisional decision. Dedicated decision subagent: reads decision + new context + alternatives + risks → decides → **superseding ADR** (cites overridden). Supersede mechanics: old ADR REMOVED (git keeps history), load-bearing context grafted into successor, removed→successor pointer in `docs/adr/README.md`.
 
-### "I'll skip the parity test, the unit test is enough"
-For Node-compatible behavior, parity tests catch things unit tests can't (subtle semantic differences, edge cases). Default to parity unless there's a specific reason not to.
+## Subagent budget
+- OK for: independent research, review, verification, scoped implementation.
+- Max depth 1 default; 2+ needs explicit current-task permission; depth 3 read-only only (research/audit/verify/map-reduce); >3 forbidden w/o user override.
+- Subagent prompt states: depth, max depth, children yes/no, mode (read-only/code-edit), owned scope.
+- Leaves never spawn children — report need upward.
+- Code-editing agents: disjoint file/module ownership; never revert/overwrite others' work. Parent owns integration, architecture calls, final verification.
 
-### "This pattern would be cleaner with a back-reference"
-No reverse imports. If you find yourself wanting one, the abstraction in the lower layer is wrong — fix it there, not by inverting deps.
+## Inflections ≠ stops
+Decide, record, re-cut plan, continue, report after:
+- measurement/spike/test result changes plan or milestone order
+- deferred decision's gate now met by evidence → ratify
+- stale/wrong assumption, feasibility note, spec → correct course
+- new external dep once need verified
 
-### "Let me add this convenient helper from npm — only 50 lines"
-Each new dependency is a long-term commitment (and counts as IRREVERSIBLE per checklist). Check: is it broadly useful, or could I write the 50 lines myself? Bias toward zero-dep small helpers in `packages/*/src/utils/`.
+Human reviews recorded decisions retrospectively — never a sync gate. Confirm-first ONLY: outward/destructive beyond repo (publish, delete user data, spend, push shared remotes) or user-reserved direction.
 
-### "I'll fix three things in this PR since I'm here"
-One change per PR. Noticed unrelated issues? File separate tickets.
+## Always reversible (no logging)
+Naming, in-package file structure, internal helpers, doc wording, comments, test descriptions (not test logic — see AGENTS.md). Behavior-preserving contract-stable refactors/perf any size — CHANGELOG only.
 
-### "I'll overwrite this ADR to fix it"
-No. Active ADRs are immutable. To change a recorded decision, write a new ADR (`pnpm adr:new <area>`) that supersedes it; the old one is removed with its context grafted into the successor and a removed→successor pointer in `docs/adr/README.md`.
-
-### "I'll stop and ask about this"
-Don't. Decide and record it: REVERSIBLE → `docs/backlog/<area>/` + `TODO(backlog: <area>/<slug>)`; IRREVERSIBLE → a new inline ADR with options + trade-offs. Then continue. The only fork you don't settle inline is **overturning a decision that's already recorded** — for that, spin up an explicit decision subagent that produces the superseding ADR.
+## Anti-patterns (tempting — don't)
+- **"Stub for now"** → no; throw `NotImplementedError`. Fake values = subtle downstream bugs.
+- **"Test too strict, relax it"** → no; tests = behavioral contracts. Wrong test → file issue, don't edit.
+- **"Unit test enough, skip parity"** → parity catches what unit can't (semantic diffs, edge cases); default parity.
+- **"Just mock the dependency"** → minimal mocks (`docs/process/testing.md`): real Memory VFS / tarballs / parity runner; mock only unavoidable external boundaries. Hard to instantiate = API smell — fix it.
+- **"Bug fixed, existing tests pass"** → not done; found bug = coverage hole → regression test (failing first, prefer parity) or fix doesn't merge.
+- **"Cleaner with back-reference"** → no reverse imports; abstraction in lower layer wrong — fix there, not by inverting deps.
+- **"Handy npm helper, only 50 lines"** → new dep = long-term commitment, IRREVERSIBLE per checklist. Prefer zero-dep helper in `packages/*/src/utils/`.
+- **"Fix three things in one PR"** → one change per PR; rest = separate tickets.
+- **"Overwrite this ADR"** → no; active ADRs immutable. New superseding ADR (`pnpm adr:new <area>`); old removed, context grafted, pointer in `docs/adr/README.md`.
+- **"Stop and ask"** → no; decide + record (REVERSIBLE → backlog + TODO; IRREVERSIBLE → inline ADR with options/trade-offs), continue. Only exception: overturning recorded decision → decision subagent.
 
 ## When in doubt
-
-- Check if a similar pattern exists elsewhere (`rg` is your friend)
-- Check the relevant ADR
-- Apply the Reversibility checklist (to decide *where* to record, not whether to pause)
-- If IRREVERSIBLE and unclear: pick the best-justified option and record it in a new ADR (options + trade-offs); don't stop. To change a decision that's already recorded, use a decision subagent.
-- Never assume Node/Anthropic/StackBlitz behavior without verifying — use the parity-runner to check Node's actual behavior
+- Similar pattern elsewhere? (`rg`)
+- Relevant ADR?
+- Reversibility checklist (where to record, not whether to pause)
+- IRREVERSIBLE + unclear → best-justified option, record in ADR, don't stop. Changing recorded decision → decision subagent.
+- Never assume Node/Anthropic/StackBlitz behavior — verify via parity-runner.
