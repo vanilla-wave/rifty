@@ -41,11 +41,24 @@
 
 - **`node:http` loopback self-calls now stay in-process.** `http.request()` and
   `http.get()` route `http:` requests for registered local ports (`localhost`,
-  `127.0.0.1`, `0.0.0.0`, IPv6 loopback) through the existing port registry
-  instead of falling out to real `fetch()`. External hosts, unregistered local
-  ports, and non-HTTP URLs still use `fetch()`. Guards:
+  whole `127.0.0.0/8`, `0.0.0.0`, IPv6 loopback) through the existing port
+  registry instead of falling out to real `fetch()`. External hosts and
+  non-HTTP URLs still use `fetch()`. Guards:
   `packages/net/src/http/client.test.ts` and
   `tests/conformance/builtins/http.test.ts`.
+- **Unregistered loopback ports fail with Node-shaped `ECONNREFUSED`** (`code`,
+  `errno -111`, `syscall 'connect'`, `address`, `port`) instead of leaking the
+  request to the HOST machine's real loopback via `fetch()` — a sandboxed probe
+  of `localhost:5173` could silently get the playground's own dev server. The
+  registry is the realm's whole network namespace; servers in other Workers are
+  not reachable either way (`docs/backlog/net/cross-realm-http-loopback`).
+- **`http.request` client matches more Node `ClientRequest` shapes.** 3-arg
+  `request(url, options, cb)` (options override URL parts), `end(callback)` as
+  finish callback (was: callback sent as body), `'finish'` event, `write()`
+  returns `true` (in-memory buffering — no backpressure; request body is
+  buffered whole, `docs/backlog/net/client-request-body-streaming`), repeated
+  bare `end()` no longer double-dispatches, and `write()`/`end(chunk)` after
+  end emit `ERR_STREAM_WRITE_AFTER_END`. Guards: `http/client.test.ts`.
 - **WebSocket `'close'` no longer depends on a global `CloseEvent`.** `ws/bridge.ts`
   and `ws/in-process.ts` constructed `new CloseEvent(...)`, a global only present in
   browsers and Node ≥23 — under a `node` test env on Node 22 (our `engines` floor)

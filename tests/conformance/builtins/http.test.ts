@@ -124,6 +124,23 @@ describe('node:http server via port registry', () => {
 
     expect(response).toEqual({ statusCode: 200, body: 'self /self-check' });
   });
+
+  it('http.get to a closed loopback port emits ECONNREFUSED (Node contract)', async () => {
+    const server = http.createServer((_req, res) => res.end('x'));
+    server.listen(3004);
+    await new Promise<void>((r) => server.close(() => r()));
+
+    const err = await new Promise<Error & { code?: string; syscall?: string; port?: number }>(
+      (resolve, reject) => {
+        const req = http.get('http://localhost:3004/', () =>
+          reject(new Error('expected ECONNREFUSED, got a response')),
+        );
+        req.on('error', (e) => resolve(e as Error & { code?: string }));
+      },
+    );
+
+    expect(err).toMatchObject({ code: 'ECONNREFUSED', syscall: 'connect', port: 3004 });
+  });
 });
 
 describe('node:http streaming responses (ADR-0017 phase 1)', () => {
