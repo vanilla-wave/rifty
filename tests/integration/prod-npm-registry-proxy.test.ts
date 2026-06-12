@@ -151,8 +151,6 @@ describe('npm registry production proxy', () => {
     const workflow = readFileSync('.github/workflows/netlify.yml', 'utf8');
     const staticDeploys =
       workflow.match(/--dir="\$GITHUB_WORKSPACE\/apps\/playground\/dist"/g) ?? [];
-    const bundledFunctionUses =
-      workflow.match(/--functions="\$GITHUB_WORKSPACE\/\.netlify\/functions"/g) ?? [];
     const redirectsProxyIndex = redirects.indexOf(
       '/npm-registry/*  /.netlify/functions/npm-registry/:splat  200',
     );
@@ -171,10 +169,14 @@ describe('npm registry production proxy', () => {
     expect(tomlProxyIndex).toBeLessThan(tomlSpaIndex);
     expect(toml).toContain('RIFTY_NPM_REGISTRY_UPSTREAM');
     expect(toml).toContain('[functions]\n  directory = "netlify/functions"');
-    expect(workflow).toContain('netlify@26.0.2 functions:build');
-    expect(workflow).toContain('--src="$GITHUB_WORKSPACE/netlify/functions"');
-    expect(workflow).not.toContain('--functions=netlify/functions');
+    expect(workflow).toContain('NETLIFY_BUILD_CONTEXT:');
+    expect(workflow).toContain('NETLIFY_SITE_ID:');
+    expect(workflow).toContain(
+      'pnpm dlx netlify@26.0.2 build --filter="@riftydev/playground" --context="$NETLIFY_BUILD_CONTEXT"',
+    );
+    expect(workflow).not.toContain('build --filter="@riftydev/playground" --site=');
+    expect(workflow).not.toContain('functions:build');
+    expect(workflow).not.toContain('--functions=');
     expect(staticDeploys).toHaveLength(2);
-    expect(bundledFunctionUses).toHaveLength(staticDeploys.length + 1);
   });
 });

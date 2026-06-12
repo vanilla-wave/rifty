@@ -30,8 +30,8 @@
 ### Fixed
 
 - **Netlify npm registry proxy deploy.** CI and one-off Netlify deploy docs now
-  build `.netlify/functions` from `netlify/functions` and upload that bundle
-  with the static playground artifact; checked-in redirects now route
+  run `netlify build` before artifact deploys so the function bundle and
+  metadata stay in Netlify's build state; checked-in redirects now route
   `/npm-registry/*` to the production proxy before the SPA fallback.
 
 - **Real Vite worker registers net/sqlite builtins through explicit calls.**

@@ -7,11 +7,9 @@ the target (ADR-0073).
 
 Config: `netlify.toml` (repo root), `apps/playground/public/_headers`,
 `apps/playground/public/_redirects` (both copied to `dist/` by Vite), and
-`netlify/functions/npm-registry.mts`. The artifact carries the required headers
-plus the `/npm-registry/*` function rewrite before the SPA fallback; CLI
-deploys must build `.netlify/functions` from `netlify/functions` and upload
-that bundle alongside `apps/playground/dist` so `/npm-registry/*` reaches the
-proxy function.
+`netlify/functions/npm-registry.mts`. Netlify build creates the static artifact
+plus function metadata from the same config; deploys then publish that build
+state so `/npm-registry/*` reaches the proxy function before the SPA fallback.
 
 ## What gets built
 
@@ -52,10 +50,11 @@ secrets from untrusted code.
 ```bash
 pnpm dlx netlify@26.0.2 login          # once, to authenticate
 
-pnpm build                             # from the repo root
 root="$(pwd)"
-pnpm dlx netlify@26.0.2 functions:build --filter="@riftydev/playground" --src="$root/netlify/functions" --functions="$root/.netlify/functions"
-pnpm dlx netlify@26.0.2 deploy --filter="@riftydev/playground" --dir="$root/apps/playground/dist" --functions="$root/.netlify/functions" --prod
+site_id="${NETLIFY_SITE_ID:-441e5f8c-dbb4-43d7-8429-69983cc704c1}"
+context="${NETLIFY_CONTEXT:-production}"
+NETLIFY_SITE_ID="$site_id" pnpm dlx netlify@26.0.2 build --filter="@riftydev/playground" --context="$context"
+pnpm dlx netlify@26.0.2 deploy --no-build --filter="@riftydev/playground" --dir="$root/apps/playground/dist" --site="$site_id" --prod
 ```
 
 (`netlify deploy` without `--prod` creates a preview URL first — useful to

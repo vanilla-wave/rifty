@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      NETLIFY_BUILD_CONTEXT: ${{ github.event_name == 'pull_request' && 'deploy-preview' || 'production' }}
       NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID || secrets.NETLIFY_SITE_ID || '441e5f8c-dbb4-43d7-8429-69983cc704c1' }}
       NETLIFY_SITE_NAME: ${{ vars.NETLIFY_SITE_NAME || 'rifty-playground' }}
       NODE_OPTIONS: --max-old-space-size=4096
@@ -48,18 +49,10 @@ jobs:
             exit 1
           fi
 
-      - run: pnpm install --frozen-lockfile
-
-      - name: Build playground
-        run: pnpm build
-
-      - name: Build Netlify functions
+      - name: Build Netlify deploy bundle
         run: |
           set -euo pipefail
-          pnpm dlx netlify@26.0.2 functions:build \
-            --filter="@riftydev/playground" \
-            --src="$GITHUB_WORKSPACE/netlify/functions" \
-            --functions="$GITHUB_WORKSPACE/.netlify/functions"
+          pnpm dlx netlify@26.0.2 build --filter="@riftydev/playground" --context="$NETLIFY_BUILD_CONTEXT"
 
       - name: Deploy PR preview
         id: preview
@@ -71,7 +64,6 @@ jobs:
               --no-build \
               --filter="@riftydev/playground" \
               --dir="$GITHUB_WORKSPACE/apps/playground/dist" \
-              --functions="$GITHUB_WORKSPACE/.netlify/functions" \
               --site="$NETLIFY_SITE_ID" \
               --auth="$NETLIFY_AUTH_TOKEN" \
               --alias="pr-${{ github.event.pull_request.number }}" \
@@ -142,7 +134,6 @@ jobs:
             --no-build \
             --filter="@riftydev/playground" \
             --dir="$GITHUB_WORKSPACE/apps/playground/dist" \
-            --functions="$GITHUB_WORKSPACE/.netlify/functions" \
             --site="$NETLIFY_SITE_ID" \
             --auth="$NETLIFY_AUTH_TOKEN" \
             --message="main ${GITHUB_SHA}"
