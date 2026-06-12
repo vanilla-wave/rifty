@@ -182,3 +182,12 @@ It is intentionally concise and append-only during the work.
   active ADR and needs a decision subagent plus superseding ADR, not milestone
   cleanup.
 - **Reversibility:** Doc-only retarget. Behavior remains unchanged.
+
+### D19 — FileHandle API Retarget
+
+- **Decision:** Retarget `runtime-js/fs-promises-filehandle` as future
+  `fs.promises.open()` / FileHandle work.
+- **Why:** FileHandle introduces async object lifetime, close-after-use errors,
+  and lower VFS fd semantics beyond the high-frequency fd wall already covered.
+- **Reversibility:** Doc-only retarget. Runtime API addition remains gated on
+  package evidence and parity tests.
