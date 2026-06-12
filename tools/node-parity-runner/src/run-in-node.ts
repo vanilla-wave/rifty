@@ -78,7 +78,7 @@ const TSX_CLI = fileURLToPath(new URL('../../../node_modules/.bin/tsx', import.m
  *   Spike A validated rifty lowers; pinning the Node reference to a full
  *   transform keeps the comparison apples-to-apples (full transform vs full
  *   transform) instead of diverging on a Node strip-only *limitation* rather
- *   than a rifty behaviour. TODO(backlog: toolchain-build/ts-esm-parity-node-reference).
+ *   than a rifty behaviour (ADR-0132).
  */
 function nodeRunnerFor(testCase: ParityCase, entry: string): [string, string[]] {
   if (testCase.kind === 'ts-esm') {

@@ -83,3 +83,13 @@ It is intentionally concise and append-only during the work.
   a full Vitest JSON reporter pipeline.
 - **Reversibility:** Reversible docs/tooling work. No ADR unless a new dependency
   or CI gate is added.
+
+### D9 — TS ESM Parity Oracle
+
+- **Decision:** Promote `toolchain-build/ts-esm-parity-node-reference` to
+  ADR-0132 and remove the provisional backlog markers.
+- **Why:** The implementation already runs the Node side through vendored `tsx`;
+  the remaining work was ratifying the oracle choice and fixing stale README
+  wording.
+- **Reversibility:** Tooling-only decision, but recorded as an ADR because it
+  defines the parity oracle for future TypeScript cases.
