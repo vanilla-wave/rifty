@@ -17,6 +17,10 @@ const c: ParityCase = {
     const seq = Buffer.alloc(2);
     console.log(fs.readSync(fd, seq, 0, 2, null));
     console.log(seq.toString('utf8'));
+    // position -1 === "current position" (Node treats -1 like null)
+    const minus = Buffer.alloc(2);
+    console.log(fs.readSync(fd, minus, 0, 2, -1));
+    console.log(minus.toString('utf8'));
     fs.closeSync(fd);
   `,
 };

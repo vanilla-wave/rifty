@@ -24,6 +24,16 @@ const c: ParityCase = {
     } catch (err) {
       console.log(err.code);
     }
+    const trunc = fs.openSync('created.txt', fs.constants.O_WRONLY | fs.constants.O_TRUNC);
+    fs.closeSync(trunc);
+    console.log(JSON.stringify(fs.readFileSync('created.txt', 'utf8')));
+    try {
+      fs.writeFileSync('created.txt', 'nope', { flag: 'wx' });
+    } catch (err) {
+      console.log(err.code);
+    }
+    fs.writeFileSync('created.txt', 'tail', { flag: 'a' });
+    console.log(fs.readFileSync('created.txt', 'utf8'));
   `,
 };
 
