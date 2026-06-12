@@ -13,6 +13,9 @@ import type {
   Identifier,
   Pattern,
   Program,
+  SwitchStatement,
+  UnaryExpression,
+  UpdateExpression,
   VariableDeclaration,
 } from 'acorn';
 import { parse as acornParse } from 'acorn';
@@ -35,7 +38,6 @@ interface AnyNodeShape {
 }
 
 interface RewriteContext {
-  readonly source: string;
   readonly edits: SourceEdit[];
   readonly scopes: Array<Set<string>>;
   readonly contextVarNames: Set<string>;
@@ -86,6 +88,9 @@ const runGlobalScript = new Function('source', 'return (0, eval)(source);') as (
   source: string,
 ) => unknown;
 
+// TODO(backlog: runtime-js/vm-sandbox-residual-gaps): direct `eval(...)` in vm
+// code evaluates UNREWRITTEN source — writes to undeclared names inside it
+// leak to the host realm. Faithful interception needs realm-level support.
 const HELPER_BINDINGS = new Set<PropertyKey>(['__riftyVmContext', '__riftyVmSource', 'eval']);
 const activeHelperBindings = new Map<PropertyKey, number>();
 const activeContextVarBindings = new WeakMap<ContextObject, Map<PropertyKey, number>>();
@@ -413,32 +418,28 @@ function declareVarDecl(ctx: RewriteContext, declaration: VariableDeclaration): 
   for (const declarator of declaration.declarations) declarePattern(ctx, declarator.id);
 }
 
-function emitContextVarRewrite(
-  ctx: RewriteContext,
-  declaration: VariableDeclaration,
-  mode: 'statement' | 'expression',
-): void {
-  const expressions: string[] = [];
-  for (const declarator of declaration.declarations) {
+// Per-declarator edits keep initializer expressions in the source so the walk
+// rewrites writes nested inside them (gotcha: a raw-slice rebuild would leak
+// `var a = function () { undeclared = 1; }` to the host realm).
+function emitContextVarRewrite(ctx: RewriteContext, declaration: VariableDeclaration): void {
+  const declarations = declaration.declarations;
+  for (let i = 0; i < declarations.length; i++) {
+    const declarator = declarations[i];
+    if (!declarator) continue;
     const name = identifierName(declarator.id);
     if (!name) {
       throw new NotImplementedError('vm.context.var-pattern');
     }
     ctx.contextVarNames.add(name);
+    const start = i === 0 ? declaration.start : declarator.id.start;
     if (declarator.init) {
-      expressions.push(
-        `${ctx.helperName}.${name} = ${ctx.source.slice(declarator.init.start, declarator.init.end)}`,
-      );
+      ctx.edits.push({ start, end: declarator.id.end, text: `${ctx.helperName}.${name}` });
+      walkContextNode(declarator.init, ctx);
     } else {
-      expressions.push('void 0');
+      // Node leaves `var x;` without initializer off the sandbox object.
+      ctx.edits.push({ start, end: declarator.end, text: 'void 0' });
     }
   }
-  const text = expressions.join(', ');
-  ctx.edits.push({
-    start: declaration.start,
-    end: declaration.end,
-    text: mode === 'statement' ? `${text};` : text,
-  });
 }
 
 function predeclareLexicalBody(ctx: RewriteContext, body: readonly AnyNodeShape[]): void {
@@ -514,6 +515,63 @@ function walkPatternExpressions(pattern: Pattern, ctx: RewriteContext): void {
   }
 }
 
+// Rewrite unbound Identifier targets inside destructuring assignments so the
+// writes land on the context (`({ a } = o)` → `({ a: helper.a } = o)`).
+function rewriteAssignmentTargetPattern(pattern: Pattern, ctx: RewriteContext): void {
+  switch (pattern.type) {
+    case 'Identifier':
+      if (!isBound(ctx, pattern.name)) {
+        ctx.edits.push({
+          start: pattern.start,
+          end: pattern.end,
+          text: `${ctx.helperName}.${pattern.name}`,
+        });
+      }
+      return;
+    case 'ObjectPattern':
+      for (const property of pattern.properties) {
+        if (property.type === 'RestElement') {
+          rewriteAssignmentTargetPattern(property.argument, ctx);
+          continue;
+        }
+        if (property.computed) walkContextNode(property.key, ctx);
+        if (property.shorthand) {
+          const value = property.value;
+          const target = value.type === 'AssignmentPattern' ? value.left : value;
+          const targetName = identifierName(target);
+          if (targetName && !isBound(ctx, targetName)) {
+            // Shorthand must expand: `{ a }` → `{ a: helper.a }`.
+            ctx.edits.push({
+              start: target.start,
+              end: target.end,
+              text: `${targetName}: ${ctx.helperName}.${targetName}`,
+            });
+          }
+          if (value.type === 'AssignmentPattern') walkContextNode(value.right, ctx);
+        } else {
+          rewriteAssignmentTargetPattern(property.value as Pattern, ctx);
+        }
+      }
+      return;
+    case 'ArrayPattern':
+      for (const element of pattern.elements) {
+        if (element) rewriteAssignmentTargetPattern(element, ctx);
+      }
+      return;
+    case 'AssignmentPattern':
+      rewriteAssignmentTargetPattern(pattern.left, ctx);
+      walkContextNode(pattern.right, ctx);
+      return;
+    case 'RestElement':
+      rewriteAssignmentTargetPattern(pattern.argument, ctx);
+      return;
+    default:
+      // MemberExpression and other expression targets only need their reads walked.
+      walkContextNode(pattern, ctx);
+      return;
+  }
+}
+
 function walkFunction(fn: AcornFunction, ctx: RewriteContext): void {
   pushScope(ctx);
   ctx.functionDepth += 1;
@@ -541,7 +599,7 @@ function walkForStatement(statement: ForStatement, ctx: RewriteContext): void {
     if ((statement.init as unknown as AnyNodeShape).type === 'VariableDeclaration') {
       const declaration = statement.init as unknown as VariableDeclaration;
       if (declaration.kind === 'var' && ctx.functionDepth === 0) {
-        emitContextVarRewrite(ctx, declaration, 'expression');
+        emitContextVarRewrite(ctx, declaration);
       } else {
         if (declaration.kind !== 'var') declareVarDecl(ctx, declaration);
         walkContextNode(statement.init, ctx);
@@ -561,11 +619,39 @@ function walkForInOfStatement(
   ctx: RewriteContext,
 ): void {
   pushScope(ctx);
-  if ((statement.left as unknown as AnyNodeShape).type === 'VariableDeclaration') {
+  const left = statement.left as unknown as AnyNodeShape;
+  if (left.type === 'VariableDeclaration') {
     const declaration = statement.left as unknown as VariableDeclaration;
-    if (declaration.kind !== 'var') declareVarDecl(ctx, declaration);
+    if (declaration.kind === 'var' && ctx.functionDepth === 0) {
+      // `for (var k in o)` hoists k onto the context; a member expression is a
+      // valid loop target, so rewrite the whole declaration to `helper.k`.
+      const declarator = declaration.declarations[0];
+      const name = declarator ? identifierName(declarator.id) : null;
+      if (!name) {
+        throw new NotImplementedError('vm.context.var-pattern');
+      }
+      ctx.contextVarNames.add(name);
+      ctx.edits.push({
+        start: declaration.start,
+        end: declaration.end,
+        text: `${ctx.helperName}.${name}`,
+      });
+    } else {
+      if (declaration.kind !== 'var') declareVarDecl(ctx, declaration);
+      walkContextNode(statement.left, ctx);
+    }
+  } else {
+    const name = identifierName(statement.left);
+    if (name) {
+      if (!isBound(ctx, name)) {
+        ctx.edits.push({ start: left.start, end: left.end, text: `${ctx.helperName}.${name}` });
+      }
+    } else if (left.type === 'ObjectPattern' || left.type === 'ArrayPattern') {
+      rewriteAssignmentTargetPattern(statement.left as unknown as Pattern, ctx);
+    } else {
+      walkContextNode(statement.left, ctx);
+    }
   }
-  walkContextNode(statement.left, ctx);
   walkContextNode(statement.right, ctx);
   walkContextNode(statement.body, ctx);
   popScope(ctx);
@@ -604,6 +690,8 @@ function walkContextNode(node: unknown, ctx: RewriteContext): void {
       return;
 
     case 'FunctionDeclaration': {
+      // TODO(backlog: runtime-js/vm-sandbox-residual-gaps): top-level function
+      // declarations are not hoisted — `f(); function f() {}` throws, Node runs.
       const declaration = n as unknown as FunctionDeclaration;
       if (ctx.functionDepth === 0 && declaration.id) {
         ctx.edits.push({
@@ -626,7 +714,7 @@ function walkContextNode(node: unknown, ctx: RewriteContext): void {
       const declaration = n as unknown as VariableDeclaration;
       if (declaration.kind === 'var') {
         if (ctx.functionDepth === 0) {
-          emitContextVarRewrite(ctx, declaration, 'statement');
+          emitContextVarRewrite(ctx, declaration);
           return;
         }
         declareVarDecl(ctx, declaration);
@@ -640,17 +728,108 @@ function walkContextNode(node: unknown, ctx: RewriteContext): void {
 
     case 'AssignmentExpression': {
       const assignment = n as unknown as AssignmentExpression;
-      const name = assignment.operator === '=' ? identifierName(assignment.left) : null;
+      const left = assignment.left;
+      const name = identifierName(left);
       if (name && !isBound(ctx, name)) {
-        ctx.edits.push({
-          start: assignment.left.start,
-          end: assignment.left.end,
-          text: `${ctx.helperName}.${name}`,
-        });
+        if (assignment.operator === '=') {
+          ctx.edits.push({
+            start: left.start,
+            end: left.end,
+            text: `${ctx.helperName}.${name}`,
+          });
+        } else if (
+          assignment.operator === '&&=' ||
+          assignment.operator === '||=' ||
+          assignment.operator === '??='
+        ) {
+          // `x &&= v` → `(x && (helper.x = v))`: the read resolves through the
+          // normal scope chain (ReferenceError stays loud), only the write is
+          // redirected, and short-circuiting skips the write entirely.
+          const op = assignment.operator.slice(0, -1);
+          ctx.edits.push({ start: assignment.start, end: left.start, text: '(' });
+          ctx.edits.push({
+            start: left.end,
+            end: assignment.right.start,
+            text: ` ${op} (${ctx.helperName}.${name} = `,
+          });
+          ctx.edits.push({ start: assignment.end, end: assignment.end, text: '))' });
+        } else {
+          // `x += v` → `helper.x = x + (v)`: read through the scope chain,
+          // write to the context.
+          const op = assignment.operator.slice(0, -1);
+          ctx.edits.push({
+            start: left.start,
+            end: assignment.right.start,
+            text: `${ctx.helperName}.${name} = ${name} ${op} (`,
+          });
+          ctx.edits.push({ start: assignment.end, end: assignment.end, text: ')' });
+        }
+        walkContextNode(assignment.right, ctx);
+        return;
+      }
+      if (left.type === 'ObjectPattern' || left.type === 'ArrayPattern') {
+        rewriteAssignmentTargetPattern(left as unknown as Pattern, ctx);
       } else {
-        walkContextNode(assignment.left, ctx);
+        walkContextNode(left, ctx);
       }
       walkContextNode(assignment.right, ctx);
+      return;
+    }
+
+    case 'UpdateExpression': {
+      const update = n as unknown as UpdateExpression;
+      const name = identifierName(update.argument);
+      if (name && !isBound(ctx, name)) {
+        // Redirect the write while keeping ToNumeric coercion and the
+        // prefix/postfix result value; the argument read stays loud.
+        const tmp = `${ctx.helperName}Tmp`;
+        const step = update.operator === '++' ? `++${tmp}` : `--${tmp}`;
+        const undo = update.operator === '++' ? `--${tmp}` : `++${tmp}`;
+        const text = update.prefix
+          ? `((${tmp}) => (${ctx.helperName}.${name} = ${step}))(${name})`
+          : `((${tmp}) => (${step}, ${ctx.helperName}.${name} = ${tmp}, ${undo}))(${name})`;
+        ctx.edits.push({ start: update.start, end: update.end, text });
+        return;
+      }
+      walkDefault(n, ctx);
+      return;
+    }
+
+    case 'UnaryExpression': {
+      const unary = n as unknown as UnaryExpression;
+      if (unary.operator === 'delete') {
+        const name = identifierName(unary.argument);
+        if (name && !isBound(ctx, name)) {
+          // Unrewritten `delete x` on an unbound name would fall through the
+          // `with` scope and delete the HOST global.
+          ctx.edits.push({
+            start: unary.argument.start,
+            end: unary.argument.end,
+            text: `${ctx.helperName}.${name}`,
+          });
+          return;
+        }
+      }
+      walkDefault(n, ctx);
+      return;
+    }
+
+    case 'SwitchStatement': {
+      const switchStatement = n as unknown as SwitchStatement;
+      walkContextNode(switchStatement.discriminant, ctx);
+      pushScope(ctx);
+      const caseBody: AnyNodeShape[] = [];
+      for (const switchCase of switchStatement.cases) {
+        for (const statement of switchCase.consequent) {
+          caseBody.push(statement as unknown as AnyNodeShape);
+        }
+      }
+      predeclareLexicalBody(ctx, caseBody);
+      for (const switchCase of switchStatement.cases) {
+        if (switchCase.test) walkContextNode(switchCase.test, ctx);
+        for (const statement of switchCase.consequent) walkContextNode(statement, ctx);
+      }
+      popScope(ctx);
       return;
     }
 
@@ -697,7 +876,6 @@ function rewriteContextSource(source: string): ContextRewrite {
   }) as Program;
   const helperName = makeContextHelperName(source);
   const ctx: RewriteContext = {
-    source,
     edits: [],
     scopes: [new Set()],
     contextVarNames: new Set(),

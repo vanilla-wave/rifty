@@ -66,6 +66,42 @@ const c: ParityCase = {
     console.log(vm.runInNewContext('function f() { return 9; } f();', functions));
     console.log(typeof functions.f);
 
+    const writes = {};
+    globalThis.__riftyVmParityInitLeak = undefined;
+    globalThis.__riftyVmParityDeleteHost = 'host';
+    const writesResult = vm.runInNewContext(\`
+      var fromInit = (function () { __riftyVmParityInitLeak = 11; return 12; })();
+      ({ a: dA, b: dB = 8 } = { a: 4 });
+      [dC, ...dR] = [1, 2, 3];
+      switch (1) { case 1: let local = 1; local = 2; caseLocal = local; }
+      for (var k in { a: 1, b: 1 }) ;
+      for (loose of [14]) ;
+      removedHost = delete __riftyVmParityDeleteHost;
+      ({ fromInit, dA, dB, dC, dR, caseLocal, k, loose, removedHost });
+    \`, writes);
+    console.log(JSON.stringify(writesResult));
+    console.log(JSON.stringify(writes, Object.keys(writes).sort()));
+    console.log(typeof globalThis.__riftyVmParityInitLeak);
+    console.log(globalThis.__riftyVmParityDeleteHost);
+    delete globalThis.__riftyVmParityInitLeak;
+    delete globalThis.__riftyVmParityDeleteHost;
+
+    try {
+      vm.runInNewContext('missingCompound += 1;', {});
+    } catch (err) {
+      console.log(err.name);
+    }
+    try {
+      vm.runInNewContext('missingUpdate++;', {});
+    } catch (err) {
+      console.log(err.name);
+    }
+    try {
+      vm.runInNewContext('missingLogical &&= 1;', {});
+    } catch (err) {
+      console.log(err.name);
+    }
+
     try {
       vm.runInNewContext('missing', {});
     } catch (err) {
