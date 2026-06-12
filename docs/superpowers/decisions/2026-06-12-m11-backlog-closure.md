@@ -261,3 +261,13 @@ It is intentionally concise and append-only during the work.
   change public `FsSync` guarantees.
 - **Reversibility:** Doc-only retarget. Implementation needs a dedicated ADR and
   conformance evidence.
+
+### D27 — Readable.fromWeb Pipe Sink Retarget
+
+- **Decision:** Retarget `net/readable-fromweb-pipe-sink` as future
+  `@riftydev/io` stream/web interop work.
+- **Why:** The concrete Effect path still needs a verified web-stream/FormData
+  consumer before adding `Readable.fromWeb`, broader toWeb/fromWeb conversions,
+  or `node:stream/web`.
+- **Reversibility:** Doc-only retarget. Additive stream helpers stay gated on a
+  real consumer and compat-matrix claims.
