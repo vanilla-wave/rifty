@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **PR #21 review fixes (fs/os/fs-RPC contract).**
+  - `fs.readSync`/`writeSync`/`read`/`write` treat position `-1` as "current
+    position" like Node (was: `RangeError`). Parity:
+    `cases/fs/fd-read-write-position.case.ts`.
+  - `fs.read(fd, cb)` / `fs.read(fd, options, cb)` short forms work (buffer
+    defaults to a fresh 16 KiB allocation); previously the callback was never
+    invoked.
+  - `readFile`/`writeFile`/`appendFile` honor the `flag` option through the
+    open-flags engine (`wx` → `EEXIST`, `a` appends, `a+` creates, …) — was
+    silently ignored. Parity: `cases/fs/open-flags-copyfile-excl.case.ts`.
+  - fs errors now carry Node-shaped `errno` (negative Linux ABI) and message
+    prose (`ENOENT: no such file or directory, open '/x'`).
+  - `os.constants.priority` filled with Node's static PRIORITY_* values (was a
+    silent `{}` stub pinned green by a conformance test); full signal/errno
+    tables now pinned by `tests/conformance/builtins/os.test.ts`, and the
+    parity case prints the darwin/linux-invariant subset BY VALUE.
+  - `RuntimeFs` calls against a torn-down runtime reject with typed
+    `WorkerTerminated`/`RUNTIME_NOT_RUNNING` (was a bare `Error`); worker-side
+    FS RPC rejects non-utf8 encodings and unknown ops loudly instead of
+    decoding-as-utf8 / falling through to a write. TSDoc documents root-anchored
+    path resolution. Real-Worker round-trip covered by
+    `tests/e2e/sandbox-fs-rpc.spec.ts`.
+
 ### Added
 
 - **`./builtins/console` subpath export** — the Node-compatible `Console`

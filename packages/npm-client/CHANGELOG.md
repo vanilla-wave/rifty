@@ -10,7 +10,7 @@
 
 ### Added
 
-- **Package.json-driven install + `.bin` copy shims (M11).**
+- **Package.json-driven install + `.bin` launcher shims (M11).**
   `install({ vfs, cwd, registry })` now reads `<cwd>/package.json`, deriving the
   root name/version, `dependencies`, `devDependencies`, root
   `optionalDependencies`, and string-valued `overrides`. Root optionals keep the
@@ -19,9 +19,13 @@
   install lifecycle scripts (`preinstall`, `install`, `postinstall`, `prepare`)
   also throw named `NotImplementedError`s instead of being silently skipped.
   Registry manifests and lockfile entries now preserve `bin`; `link()` writes
-  containing-scope `node_modules/.bin` copy shims (no symlinks per ADR-0050),
-  and lockfile replay recreates them without refetching packuments. The
-  playground `npm install` wrapper and Real Vite worker bootstrap now call the
+  containing-scope `node_modules/.bin` LAUNCHER shims (no symlinks per
+  ADR-0050) — `#!/usr/bin/env node` + `import('../<pkg>/<bin>')`, not a byte
+  copy: a copy breaks bins that resolve relative imports (vite/tsc). Lockfile
+  replay recreates them without refetching packuments. Shell-side `.bin` PATH
+  lookup is NOT wired yet — CLIs are not invokable by name until
+  `docs/backlog/shell/node-modules-bin-execution` lands. The playground
+  `npm install` wrapper and Real Vite worker bootstrap now call the
   package.json-driven API.
 - **Native-dependency install policy (ADR-0051).** The installer now throws
   `ENATIVEUNSUPPORTED` (with `packageName`/`version`/`reason`/`platform`) when a

@@ -1,18 +1,136 @@
 import { describe, expect, it } from 'vitest';
 import { constants } from '../../../packages/runtime-js/src/builtins/os.ts';
 
+// Full-table pins, not spot checks: the tables are rifty's own static ABI claim
+// (Linux values, ADR-0026 platform posture), so any typo'd entry must go red.
+// The os/constants-shape parity case covers the darwin/linux-invariant subset
+// against real Node; platform-divergent values are only verifiable here.
 describe('node:os constants', () => {
-  it('exposes scoped rifty ABI signal and errno integers', () => {
-    expect(constants.signals).toMatchObject({
+  it('exposes the full Linux signal table', () => {
+    expect(constants.signals).toEqual({
       SIGHUP: 1,
       SIGINT: 2,
+      SIGQUIT: 3,
+      SIGILL: 4,
+      SIGTRAP: 5,
+      SIGABRT: 6,
+      SIGBUS: 7,
+      SIGFPE: 8,
+      SIGKILL: 9,
+      SIGUSR1: 10,
+      SIGSEGV: 11,
+      SIGUSR2: 12,
+      SIGPIPE: 13,
+      SIGALRM: 14,
       SIGTERM: 15,
+      SIGCHLD: 17,
+      SIGCONT: 18,
+      SIGSTOP: 19,
+      SIGTSTP: 20,
+      SIGTTIN: 21,
+      SIGTTOU: 22,
+      SIGURG: 23,
+      SIGXCPU: 24,
+      SIGXFSZ: 25,
+      SIGVTALRM: 26,
+      SIGPROF: 27,
+      SIGWINCH: 28,
+      SIGIO: 29,
+      SIGPWR: 30,
+      SIGSYS: 31,
     });
-    expect(constants.errno).toMatchObject({
+  });
+
+  it('exposes the full Linux errno table', () => {
+    expect(constants.errno).toEqual({
+      EPERM: 1,
       ENOENT: 2,
+      ESRCH: 3,
+      EINTR: 4,
+      EIO: 5,
+      ENXIO: 6,
+      E2BIG: 7,
+      ENOEXEC: 8,
+      EBADF: 9,
+      ECHILD: 10,
+      EAGAIN: 11,
+      EWOULDBLOCK: 11,
+      ENOMEM: 12,
+      EACCES: 13,
+      EFAULT: 14,
+      EBUSY: 16,
       EEXIST: 17,
+      EXDEV: 18,
+      ENODEV: 19,
+      ENOTDIR: 20,
+      EISDIR: 21,
       EINVAL: 22,
+      ENFILE: 23,
+      EMFILE: 24,
+      ENOTTY: 25,
+      ETXTBSY: 26,
+      EFBIG: 27,
+      ENOSPC: 28,
+      ESPIPE: 29,
+      EROFS: 30,
+      EMLINK: 31,
+      EPIPE: 32,
+      EDOM: 33,
+      ERANGE: 34,
+      EDEADLK: 35,
+      ENAMETOOLONG: 36,
+      ENOLCK: 37,
+      ENOSYS: 38,
+      ENOTEMPTY: 39,
+      ELOOP: 40,
+      ENOMSG: 42,
+      EIDRM: 43,
+      ENODATA: 61,
+      ETIME: 62,
+      ENOSR: 63,
+      ENOLINK: 67,
+      EPROTO: 71,
+      EMULTIHOP: 72,
+      EOVERFLOW: 75,
+      EILSEQ: 84,
+      ENOTSOCK: 88,
+      EDESTADDRREQ: 89,
+      EMSGSIZE: 90,
+      EPROTOTYPE: 91,
+      ENOPROTOOPT: 92,
+      EPROTONOSUPPORT: 93,
+      ENOTSUP: 95,
+      EOPNOTSUPP: 95,
+      EAFNOSUPPORT: 97,
+      EADDRINUSE: 98,
+      EADDRNOTAVAIL: 99,
+      ENETDOWN: 100,
+      ENETUNREACH: 101,
+      ENETRESET: 102,
+      ECONNABORTED: 103,
+      ECONNRESET: 104,
+      ENOBUFS: 105,
+      EISCONN: 106,
+      ENOTCONN: 107,
+      ETIMEDOUT: 110,
+      ECONNREFUSED: 111,
+      EHOSTUNREACH: 113,
+      EALREADY: 114,
+      EINPROGRESS: 115,
+      ESTALE: 116,
+      EDQUOT: 122,
+      ECANCELED: 125,
     });
-    expect(constants.priority).toEqual({});
+  });
+
+  it('exposes Node scheduling priority labels (was: silent {} stub)', () => {
+    expect(constants.priority).toEqual({
+      PRIORITY_LOW: 19,
+      PRIORITY_BELOW_NORMAL: 10,
+      PRIORITY_NORMAL: 0,
+      PRIORITY_ABOVE_NORMAL: -7,
+      PRIORITY_HIGH: -14,
+      PRIORITY_HIGHEST: -20,
+    });
   });
 });

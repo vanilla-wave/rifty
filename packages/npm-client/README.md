@@ -14,8 +14,9 @@ Pieces:
 `dependencies`, `devDependencies`, and optional root dependencies, applying
 string-valued `overrides`. The older explicit form
 `install(name, version, deps, opts)` still works for callers that already have a
-dependency map. Installed package `bin` metadata is copied into the containing
-`node_modules/.bin` scope; non-registry specs such as `file:`, `workspace:`,
+dependency map. Installed package `bin` metadata becomes launcher shims in the
+containing `node_modules/.bin` scope (shell PATH lookup is a separate,
+not-yet-wired step); non-registry specs such as `file:`, `workspace:`,
 git, and URL tarballs throw named `NotImplementedError`s instead of pretending
 to work. Registry packages declaring install lifecycle scripts (`preinstall`,
 `install`, `postinstall`) throw named `NotImplementedError`s; registry tarball

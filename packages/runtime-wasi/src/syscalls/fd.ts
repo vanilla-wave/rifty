@@ -15,11 +15,13 @@
 import { syncMirror } from '@riftydev/vfs';
 import {
   E_BADF,
+  E_FAULT,
   E_INVAL,
+  E_ISDIR,
   E_NAMETOOLONG,
   E_NOSYS,
+  E_NOTCAPABLE,
   E_NOTDIR,
-  E_PERM,
   E_SUCCESS,
   FDFLAGS_APPEND,
   FILETYPE_DIRECTORY,
@@ -90,9 +92,12 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
     fd_write: (fd: number, iovs: number, iovsLen: number, nwritten: number) => {
       const fdEntry = ctx.fds.get(fd);
       if (!fdEntry) return E_BADF;
+      // Non-writable fd types fail loudly (was: silent fake success counting bytes).
+      if (fdEntry.type === 'dir') return E_ISDIR;
+      if (fdEntry.type === 'stdin') return E_BADF;
       // Only enforce RIGHTS_FD_WRITE when path_open saved an explicit rights bag;
       // stdio and preopens leave `rights` undefined → default-permissive.
-      if (fdEntry.type === 'file' && !hasRight(fdEntry, RIGHTS_FD_WRITE)) return E_PERM;
+      if (fdEntry.type === 'file' && !hasRight(fdEntry, RIGHTS_FD_WRITE)) return E_NOTCAPABLE;
       const view = ctx.view();
       const bytes = ctx.bytes();
       let written = 0;
@@ -154,7 +159,7 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       }
       // stdout/stderr are write-only.
       if (fdEntry.type !== 'file') return E_BADF;
-      if (!hasRight(fdEntry, RIGHTS_FD_READ)) return E_PERM;
+      if (!hasRight(fdEntry, RIGHTS_FD_READ)) return E_NOTCAPABLE;
       const view = ctx.view();
       const bytes = ctx.bytes();
       let readTotal = 0;
@@ -183,7 +188,7 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
     fd_seek: (fd: number, offset: bigint, whence: number, newOffset: number) => {
       const fdEntry = ctx.fds.get(fd);
       if (!fdEntry || fdEntry.type !== 'file') return E_BADF;
-      if (!hasRight(fdEntry, RIGHTS_FD_SEEK)) return E_PERM;
+      if (!hasRight(fdEntry, RIGHTS_FD_SEEK)) return E_NOTCAPABLE;
       if (whence !== WHENCE_SET && whence !== WHENCE_CUR && whence !== WHENCE_END) {
         return E_INVAL;
       }
@@ -299,7 +304,7 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
     fd_filestat_set_size: (fd: number, size: bigint) => {
       const entry = ctx.fds.get(fd);
       if (!entry || entry.type !== 'file') return E_BADF;
-      if (!hasRight(entry, RIGHTS_FD_FILESTAT_SET_SIZE)) return E_PERM;
+      if (!hasRight(entry, RIGHTS_FD_FILESTAT_SET_SIZE)) return E_NOTCAPABLE;
       const sizeNum = toSafeNonNegativeNumber(size);
       if (sizeNum === null) return E_INVAL;
       const existing = entry.data ?? new Uint8Array(0);
@@ -394,7 +399,10 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
     fd_pread: (fd: number, iovs: number, iovsLen: number, offset: bigint, nread: number) => {
       const entry = ctx.fds.get(fd);
       if (!entry || entry.type !== 'file') return E_BADF;
-      if (!hasRight(entry, RIGHTS_FD_READ)) return E_PERM;
+      // preview1: fd_pread requires fd_read AND fd_seek.
+      if (!hasRight(entry, RIGHTS_FD_READ) || !hasRight(entry, RIGHTS_FD_SEEK)) {
+        return E_NOTCAPABLE;
+      }
       const offsetNum = toSafeNonNegativeNumber(offset);
       if (offsetNum === null) return E_INVAL;
       const view = ctx.view();
@@ -405,6 +413,7 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       for (let i = 0; i < iovsLen; i++) {
         const ptr = view.getUint32(iovs + i * 8, true);
         const len = view.getUint32(iovs + i * 8 + 4, true);
+        if (ptr + len > bytes.length) return E_FAULT;
         const remaining = data.length - cursor;
         if (remaining <= 0) break;
         const take = Math.min(len, remaining);
@@ -418,7 +427,10 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
     fd_pwrite: (fd: number, iovs: number, iovsLen: number, offset: bigint, nwritten: number) => {
       const entry = ctx.fds.get(fd);
       if (!entry || entry.type !== 'file') return E_BADF;
-      if (!hasRight(entry, RIGHTS_FD_WRITE)) return E_PERM;
+      // preview1: fd_pwrite requires fd_write AND fd_seek.
+      if (!hasRight(entry, RIGHTS_FD_WRITE) || !hasRight(entry, RIGHTS_FD_SEEK)) {
+        return E_NOTCAPABLE;
+      }
       const offsetNum = toSafeNonNegativeNumber(offset);
       if (offsetNum === null) return E_INVAL;
       const view = ctx.view();
@@ -430,6 +442,7 @@ export function fdSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       for (let i = 0; i < iovsLen; i++) {
         const ptr = view.getUint32(iovs + i * 8, true);
         const len = view.getUint32(iovs + i * 8 + 4, true);
+        if (ptr + len > bytes.length) return E_FAULT;
         const slice = bytes.subarray(ptr, ptr + len);
         const needed = writeOffset + slice.length;
         if (!Number.isSafeInteger(needed)) return E_INVAL;

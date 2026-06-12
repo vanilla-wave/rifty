@@ -46,9 +46,17 @@ export interface CreateSandboxOptions {
 export interface Sandbox {
   /** Framework-agnostic JS runtime controller (`eval` / `reset` / `on` / …). */
   readonly runtime: RuntimeController;
-  /** Worker-owned filesystem RPC surface for AI-agent style file IO. */
+  /**
+   * Worker-owned filesystem RPC surface for AI-agent style file IO. Paths
+   * anchor at the VFS root (`/`), not the guest cwd — see `RuntimeFs` TSDoc.
+   */
   readonly fs: RuntimeFs;
-  /** Which VFS backend booted, and why if it fell back to memory. */
+  /**
+   * Which VFS backend booted, and why if it fell back to memory. Gotcha: this
+   * is the PAGE-realm probe; the runtime Worker initialises its own backend
+   * and can independently fall back to memory ({@link Sandbox.fs} still works,
+   * just without OPFS durability there).
+   */
   readonly vfs: VfsBootInfo;
   /** Capability probe taken at boot. */
   readonly capabilities: CapabilityCheck;

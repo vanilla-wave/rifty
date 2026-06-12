@@ -169,4 +169,33 @@ describe('worker FS RPC', () => {
       },
     });
   });
+
+  it('rejects non-utf8 encodings loudly instead of silently decoding as utf8', async () => {
+    const fs = new TestFs();
+    fs.writeFileSync('/enc.txt', new TextEncoder().encode('x'));
+
+    await expect(
+      handleWorkerFsRequest(
+        {
+          id: 7,
+          op: 'readFile',
+          path: '/enc.txt',
+          encoding: 'latin1' as unknown as 'utf8',
+        },
+        { fs, invalidate: () => {} },
+      ),
+    ).resolves.toMatchObject({ id: 7, ok: false, error: { code: 'ERR_INVALID_ARG_VALUE' } });
+  });
+
+  it('fails an unknown op instead of treating it as a write', async () => {
+    const fs = new TestFs();
+
+    const result = await handleWorkerFsRequest(
+      { id: 8, op: 'unlink', path: '/x' } as unknown as Parameters<typeof handleWorkerFsRequest>[0],
+      { fs, invalidate: () => {} },
+    );
+
+    expect(result).toMatchObject({ id: 8, ok: false, error: { code: 'ERR_INVALID_ARG_VALUE' } });
+    expect(fs.existsSync('/x')).toBe(false);
+  });
 });

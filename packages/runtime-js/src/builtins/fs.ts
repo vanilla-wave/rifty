@@ -110,10 +110,26 @@ interface FdReadOptions {
 const fdTable = new Map<number, FdRecord>();
 let nextFd = 3;
 
+// Node-shaped errno (negative Linux ABI, matches builtins/os.ts table) + the
+// message prose Node renders: "ENOENT: no such file or directory, open '/x'".
+const FS_ERRNO: Record<string, { errno: number; description: string }> = {
+  EACCES: { errno: -13, description: 'permission denied' },
+  EBADF: { errno: -9, description: 'bad file descriptor' },
+  EEXIST: { errno: -17, description: 'file already exists' },
+  EINVAL: { errno: -22, description: 'invalid argument' },
+  EISDIR: { errno: -21, description: 'illegal operation on a directory' },
+  ENOENT: { errno: -2, description: 'no such file or directory' },
+  ENOTDIR: { errno: -20, description: 'not a directory' },
+  ENOTEMPTY: { errno: -39, description: 'directory not empty' },
+};
+
 function fsError(code: string, path?: string, syscall?: string): NodeJS.ErrnoException {
-  const target = path ? `: ${path}` : '';
-  const err = new Error(`${code}${target}`) as NodeJS.ErrnoException;
+  const info = FS_ERRNO[code];
+  const suffix = syscall && path ? `, ${syscall} '${path}'` : path ? `: ${path}` : '';
+  const message = info ? `${code}: ${info.description}${suffix}` : `${code}${suffix}`;
+  const err = new Error(message) as NodeJS.ErrnoException;
   err.code = code;
+  if (info) err.errno = info.errno;
   err.path = path;
   err.syscall = syscall;
   return err;
@@ -408,12 +424,32 @@ function randomMkdtempSuffix(): string {
   return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('');
 }
 
+function flagOf(opts: ReadFileOptions | Encoding | null | undefined): string | undefined {
+  return opts !== null && typeof opts === 'object' ? opts.flag : undefined;
+}
+
 export function readFileSync(
   p: string,
   opts?: ReadFileOptions | Encoding | null,
 ): Uint8Array | string {
   const enc = toEncodingOrNull(opts);
-  const bytes = syncMirror().readFileBytesSync(resolvePath(p));
+  const np = resolvePath(p);
+  const flag = flagOf(opts);
+  // Honor the `flag` option through the open-flags engine (was: silently
+  // ignored): 'a+'/'w+' create a missing file, 'wx'-family raises EEXIST, etc.
+  if (flag !== undefined && flag !== 'r') {
+    const parsed = parseOpenFlags(flag);
+    if (!parsed.readable) throw fsError('EBADF', np, 'read');
+    const exists = syncMirror().existsSync(np);
+    if (exists && parsed.create && parsed.exclusive) throw fsError('EEXIST', np, 'open');
+    if (!exists) {
+      if (!parsed.create) throw fsError('ENOENT', np, 'open');
+      syncMirror().writeFileSync(np, new Uint8Array());
+    } else if (parsed.truncate) {
+      syncMirror().writeFileSync(np, new Uint8Array());
+    }
+  }
+  const bytes = syncMirror().readFileBytesSync(np);
   return decodeResult(bytes, enc);
 }
 
@@ -423,7 +459,20 @@ export function writeFileSync(
   opts?: WriteFileOptions | Encoding | null,
 ): void {
   const enc = toEncodingOrNull(opts);
-  syncMirror().writeFileSync(resolvePath(p), encodeData(data, enc));
+  const np = resolvePath(p);
+  const flag = flagOf(opts);
+  if (flag !== undefined && flag !== 'w' && flag !== 'w+') {
+    const parsed = parseOpenFlags(flag);
+    if (!parsed.writable) throw fsError('EBADF', np, 'write');
+    const exists = syncMirror().existsSync(np);
+    if (exists && parsed.create && parsed.exclusive) throw fsError('EEXIST', np, 'open');
+    if (!exists && !parsed.create) throw fsError('ENOENT', np, 'open');
+    if (parsed.append) {
+      appendFileSync(p, data, opts);
+      return;
+    }
+  }
+  syncMirror().writeFileSync(np, encodeData(data, enc));
 }
 
 export function appendFileSync(
@@ -433,6 +482,19 @@ export function appendFileSync(
 ): void {
   const enc = toEncodingOrNull(opts);
   const np = resolvePath(p);
+  const flag = flagOf(opts);
+  if (flag !== undefined && flag !== 'a' && flag !== 'a+') {
+    const parsed = parseOpenFlags(flag);
+    if (!parsed.writable) throw fsError('EBADF', np, 'write');
+    if (parsed.create && parsed.exclusive && syncMirror().existsSync(np)) {
+      throw fsError('EEXIST', np, 'open');
+    }
+    if (parsed.truncate) {
+      // 'w'-family flag on appendFile truncates first (Node honors the flag).
+      syncMirror().writeFileSync(np, encodeData(data, enc));
+      return;
+    }
+  }
   const existing = syncMirror().existsSync(np)
     ? syncMirror().readFileBytesSync(np)
     : new Uint8Array();
@@ -609,8 +671,10 @@ export function readSync(
     typeof offsetOrOptions === 'number'
       ? (length ?? buffer.byteLength - offset)
       : (offsetOrOptions.length ?? buffer.byteLength - offset);
-  const pos =
+  const rawPos =
     typeof offsetOrOptions === 'number' ? (position ?? null) : (offsetOrOptions.position ?? null);
+  // Node: position -1 (and null) means "read from the current fd position".
+  const pos = rawPos === -1 ? null : rawPos;
   checkedSliceBounds(buffer, offset, count);
   if (pos !== null) assertNonNegativeInteger(pos, 'position');
 
@@ -647,15 +711,17 @@ export function writeSync(
 ): number {
   const record = getFd(fd);
   if (typeof data === 'string') {
-    const pos =
+    const rawPos =
       typeof offsetOrPosition === 'number' || offsetOrPosition === null ? offsetOrPosition : null;
     const enc = typeof lengthOrEncoding === 'string' ? lengthOrEncoding : 'utf8';
-    return writeBytesAt(record, Buffer.from(data, enc), pos);
+    return writeBytesAt(record, Buffer.from(data, enc), rawPos === -1 ? null : rawPos);
   }
   if (!(data instanceof Uint8Array)) throw new TypeError('data must be a string or Uint8Array');
   const offset = offsetOrPosition ?? 0;
   const length = typeof lengthOrEncoding === 'number' ? lengthOrEncoding : data.byteLength - offset;
-  const pos = position ?? null;
+  // Node: position -1 (and null) means "write at the current fd position".
+  const rawPos = position ?? null;
+  const pos = rawPos === -1 ? null : rawPos;
   checkedSliceBounds(data, offset, length);
   return writeBytesAt(record, data.subarray(offset, offset + length), pos);
 }
@@ -837,12 +903,34 @@ export function close(fd: number, cb: VoidCallback): void {
 
 export function read(
   fd: number,
-  buffer: Uint8Array,
-  offsetOrOptions: number | FdReadOptions | ReadCallback,
+  bufferOrOptsOrCb: Uint8Array | (FdReadOptions & { buffer?: Uint8Array }) | ReadCallback,
+  offsetOrOptions?: number | FdReadOptions | ReadCallback,
   lengthOrCb?: number | ReadCallback,
   positionOrCb?: number | null | ReadCallback,
   cb?: ReadCallback,
 ): void {
+  // Node also accepts read(fd, cb) and read(fd, options, cb) — the buffer
+  // defaults to a fresh 16 KiB allocation (fs.read docs).
+  if (!(bufferOrOptsOrCb instanceof Uint8Array)) {
+    const opts = typeof bufferOrOptsOrCb === 'object' ? bufferOrOptsOrCb : {};
+    const cbShort = (
+      typeof bufferOrOptsOrCb === 'function' ? bufferOrOptsOrCb : offsetOrOptions
+    ) as ReadCallback;
+    const buf = opts.buffer ?? Buffer.alloc(16384);
+    read(
+      fd,
+      buf,
+      {
+        offset: opts.offset ?? 0,
+        length: opts.length ?? buf.byteLength,
+        position: opts.position ?? null,
+      },
+      cbShort,
+    );
+    return;
+  }
+  const buffer = bufferOrOptsOrCb;
+  if (offsetOrOptions === undefined) throw new TypeError('callback is required');
   const options =
     typeof offsetOrOptions === 'object'
       ? offsetOrOptions

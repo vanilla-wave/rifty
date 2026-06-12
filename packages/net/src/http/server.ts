@@ -7,8 +7,14 @@
  * code).
  *
  * Client: `http.request()` loops back through the registry for registered local
- * ports, otherwise issues through the host `fetch`. The returned emitter
- * carries `'response'` with an `IncomingMessageFromFetch`.
+ * ports; loopback ports with no listener fail with Node-shaped `ECONNREFUSED`;
+ * everything else (external hosts, non-http protocols) issues through the host
+ * `fetch`. The returned emitter carries `'response'` with an
+ * `IncomingMessageFromFetch`.
+ *
+ * Scope gotcha: the port registry is realm-local (per Worker process). A server
+ * listening in another Worker is NOT reachable via loopback here — see
+ * docs/backlog/net/cross-realm-http-loopback.
  */
 
 import { EventEmitter } from '@riftydev/io';
@@ -116,12 +122,19 @@ interface RequestOptions {
 }
 
 export type ClientRequest = EventEmitter & {
-  write(chunk: Uint8Array | string): void;
-  end(chunk?: Uint8Array | string): void;
+  write(chunk: Uint8Array | string): boolean;
+  end(chunkOrCb?: Uint8Array | string | (() => void), cb?: () => void): void;
 };
 export type ClientResponse = IncomingMessageFromFetch;
 
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]']);
+const LOOPBACK_HOSTS = new Set(['localhost', '0.0.0.0', '::1', '[::1]']);
+
+// Whole 127.0.0.0/8 block is loopback (Node connects any 127.x.y.z locally).
+function isLoopbackHost(hostname: string): boolean {
+  const lower = hostname.toLowerCase();
+  if (LOOPBACK_HOSTS.has(lower)) return true;
+  return /^127(\.\d{1,3}){3}$/.test(lower);
+}
 
 function bracketIpv6Host(host: string): string {
   if (host.startsWith('[')) return host;
@@ -146,59 +159,125 @@ function buildRequestUrl(opts: RequestOptions): string {
   return `${protocol}//localhost${port}${path}`;
 }
 
-function loopbackRegisteredPort(url: string): number | null {
+type ClientRoute =
+  | { kind: 'local'; port: number }
+  | { kind: 'refused'; address: string; port: number }
+  | { kind: 'fetch' };
+
+/**
+ * Route an outgoing client request. `http:` + loopback host: a registered port
+ * dispatches in-process; an unregistered one is a dead end (the registry is the
+ * realm's whole network namespace), surfaced as Node-shaped `ECONNREFUSED`
+ * instead of leaking to the host machine's real loopback. Anything else
+ * (external hosts, `https:`) keeps real `fetch` egress.
+ */
+function routeClientRequest(url: string): ClientRoute {
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
-    return null;
+    return { kind: 'fetch' };
   }
-  if (parsed.protocol !== 'http:') return null;
-  if (!LOOPBACK_HOSTS.has(parsed.hostname.toLowerCase())) return null;
+  if (parsed.protocol !== 'http:' || !isLoopbackHost(parsed.hostname)) return { kind: 'fetch' };
   const port = parsed.port === '' ? 80 : Number(parsed.port);
-  if (!Number.isInteger(port)) return null;
-  return getHandler(port) === null ? null : port;
+  if (!Number.isInteger(port)) return { kind: 'fetch' };
+  if (getHandler(port) !== null) return { kind: 'local', port };
+  const address = parsed.hostname.includes(':') ? '::1' : '127.0.0.1';
+  return { kind: 'refused', address, port };
+}
+
+function connRefusedError(address: string, port: number): Error {
+  return Object.assign(new Error(`connect ECONNREFUSED ${address}:${port}`), {
+    code: 'ECONNREFUSED',
+    errno: -111,
+    syscall: 'connect',
+    address,
+    port,
+  });
+}
+
+function streamWriteAfterEndError(): Error {
+  return Object.assign(new Error('write after end'), { code: 'ERR_STREAM_WRITE_AFTER_END' });
 }
 
 /**
- * `http.request(opts, cb)` — registered local loopback ports route through the
- * in-process registry; everything else falls through to the host's `fetch`.
- * The callback receives an `IncomingMessage` once the response arrives.
- * Outgoing body is sent via `req.write()` / `req.end()`.
+ * `http.request(url | opts[, opts][, cb])` — registered local loopback ports
+ * route through the in-process registry; unregistered loopback ports emit
+ * `ECONNREFUSED`; everything else falls through to the host's `fetch`. The
+ * callback receives an `IncomingMessage` once the response arrives. Outgoing
+ * body is sent via `req.write()` / `req.end()` (buffered whole — see
+ * docs/backlog/net/client-request-body-streaming).
  */
 export function request(
-  opts: string | RequestOptions,
-  cb?: (res: ClientResponse) => void,
+  urlOrOpts: string | RequestOptions,
+  optsOrCb?: RequestOptions | ((res: ClientResponse) => void),
+  maybeCb?: (res: ClientResponse) => void,
 ): ClientRequest {
-  const url = typeof opts === 'string' ? opts : buildRequestUrl(opts);
-  const method = typeof opts === 'string' ? 'GET' : (opts.method ?? 'GET');
-  const headers = typeof opts === 'string' ? {} : (opts.headers ?? {});
+  // Node's 3-arg form `request(url, options, cb)`: options override URL parts.
+  const overrides = typeof optsOrCb === 'object' ? optsOrCb : undefined;
+  const cb = typeof optsOrCb === 'function' ? optsOrCb : maybeCb;
+  let url: string;
+  if (typeof urlOrOpts === 'string') {
+    url = overrides ? buildRequestUrl({ ...optionsFromUrl(urlOrOpts), ...overrides }) : urlOrOpts;
+  } else {
+    url = buildRequestUrl(urlOrOpts);
+  }
+  const base = typeof urlOrOpts === 'string' ? undefined : urlOrOpts;
+  const method = overrides?.method ?? base?.method ?? 'GET';
+  const headers = overrides?.headers ?? base?.headers ?? {};
 
   const emitter = new EventEmitter();
   const bodyChunks: (Uint8Array | string)[] = [];
+  let finished = false;
 
   const req = Object.assign(emitter, {
-    write(chunk: Uint8Array | string) {
+    write(chunk: Uint8Array | string): boolean {
+      if (finished) {
+        queueMicrotask(() => emitter.emit('error', streamWriteAfterEndError()));
+        return false;
+      }
       bodyChunks.push(chunk);
+      // Buffered in memory — no backpressure, so never ask the caller to wait.
+      return true;
     },
-    end(chunk?: Uint8Array | string) {
+    end(chunkOrCb?: Uint8Array | string | (() => void), endCb?: () => void): void {
+      const finishCb = typeof chunkOrCb === 'function' ? chunkOrCb : endCb;
+      const chunk = typeof chunkOrCb === 'function' ? undefined : chunkOrCb;
+      if (finished) {
+        // Node: data after end errors; a bare repeated end() is a no-op.
+        if (chunk !== undefined) {
+          queueMicrotask(() => emitter.emit('error', streamWriteAfterEndError()));
+        }
+        return;
+      }
+      finished = true;
       if (chunk !== undefined) bodyChunks.push(chunk);
+      if (finishCb) emitter.once('finish', finishCb);
       void (async () => {
+        // Defer one microtask so listeners attached AFTER end() — the standard
+        // Node pattern with http.get(url, cb); req.on('error', …) — still see
+        // 'finish'/'error'. Node never emits these synchronously from end().
+        await Promise.resolve();
+        const body =
+          bodyChunks.length === 0
+            ? undefined
+            : bodyChunks.map((c) => (typeof c === 'string' ? UTF8_ENCODER.encode(c) : c));
+        const init = {
+          method,
+          headers,
+          body: body ? new Blob(body as unknown as BlobPart[]) : undefined,
+        };
+        emitter.emit('finish');
+        const route = routeClientRequest(url);
+        if (route.kind === 'refused') {
+          emitter.emit('error', connRefusedError(route.address, route.port));
+          return;
+        }
         try {
-          const body =
-            bodyChunks.length === 0
-              ? undefined
-              : bodyChunks.map((c) => (typeof c === 'string' ? UTF8_ENCODER.encode(c) : c));
-          const init = {
-            method,
-            headers,
-            body: body ? new Blob(body as unknown as BlobPart[]) : undefined,
-          };
-          const localPort = loopbackRegisteredPort(url);
           const response =
-            localPort === null
-              ? await fetch(url, init)
-              : await dispatchToPort(localPort, new Request(url, init));
+            route.kind === 'local'
+              ? await dispatchToPort(route.port, new Request(url, init))
+              : await fetch(url, init);
           const incoming = new IncomingMessageFromFetch(response);
           cb?.(incoming);
           emitter.emit('response', incoming);
@@ -211,11 +290,26 @@ export function request(
   return req;
 }
 
+function optionsFromUrl(url: string): RequestOptions {
+  try {
+    const parsed = new URL(url);
+    return {
+      protocol: parsed.protocol,
+      hostname: parsed.hostname,
+      ...(parsed.port === '' ? {} : { port: Number(parsed.port) }),
+      path: `${parsed.pathname}${parsed.search}`,
+    };
+  } catch {
+    return {};
+  }
+}
+
 export function get(
-  opts: string | RequestOptions,
-  cb?: (res: ClientResponse) => void,
+  urlOrOpts: string | RequestOptions,
+  optsOrCb?: RequestOptions | ((res: ClientResponse) => void),
+  maybeCb?: (res: ClientResponse) => void,
 ): ClientRequest {
-  const req = request(opts, cb);
+  const req = request(urlOrOpts, optsOrCb, maybeCb);
   req.end();
   return req;
 }

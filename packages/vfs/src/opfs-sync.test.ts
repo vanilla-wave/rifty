@@ -863,6 +863,22 @@ describe('OpfsFsSync.renameSync / copyFileSync / cpSync (ADR-0090)', () => {
     expect(durable.has('/moved')).toBe(true);
   });
 
+  it("rmSync('/') persists root-child removal to OPFS (was: silent on-disk no-op)", async () => {
+    const fake = buildMutableRoot({ dirs: ['/', '/a', '/a/sub', '/b'] });
+    const fs = new OpfsFsSync(fake.root);
+    await fs.refreshIndex();
+
+    fs.rmSync('/', { recursive: true });
+    expect(fs.existsSync('/a')).toBe(false);
+    expect(fs.existsSync('/b')).toBe(false);
+    await fs.flush();
+
+    const durable = await walkOpfsTree(fake.root);
+    expect(durable.has('/a')).toBe(false);
+    expect(durable.has('/a/sub')).toBe(false);
+    expect(durable.has('/b')).toBe(false);
+  });
+
   it('renameSync persists uncached indexed files before removing the old subtree', async () => {
     const files = new Map<string, { bytes: Uint8Array; mtime?: number }>([
       ['/dir/uncached.txt', { bytes: enc.encode('durable') }],

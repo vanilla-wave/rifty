@@ -144,6 +144,67 @@ describe('node:fs fd APIs (M11 runtime-local surface)', () => {
     closeSync(fd);
   });
 
+  it('treats position -1 as "current position" like Node', () => {
+    writeFileSync('/minus.txt', 'abcdef');
+    const fd = openSync('/minus.txt', constants.O_RDWR);
+    const buf = Buffer.alloc(2);
+
+    expect(readSync(fd, buf, 0, 2, -1)).toBe(2);
+    expect(buf.toString('utf8')).toBe('ab');
+    expect(readSync(fd, buf, 0, 2, -1)).toBe(2);
+    expect(buf.toString('utf8')).toBe('cd'); // position advanced
+    expect(writeSync(fd, Buffer.from('ZZ'), 0, 2, -1)).toBe(2);
+    expect(readFileSync('/minus.txt', 'utf8')).toBe('abcdZZ');
+    closeSync(fd);
+  });
+
+  it('read(fd, cb) and read(fd, options, cb) invoke the callback (Node short forms)', async () => {
+    writeFileSync('/short.txt', 'hello');
+    const fd = openSync('/short.txt', 'r');
+
+    const first = await new Promise<{ bytesRead: number; text: string }>((resolve, reject) => {
+      fs.read(fd, (err: Error | null, bytesRead?: number, buffer?: Uint8Array) => {
+        if (err) return reject(err);
+        resolve({
+          bytesRead: bytesRead ?? 0,
+          text: Buffer.from(buffer ?? new Uint8Array())
+            .subarray(0, bytesRead)
+            .toString('utf8'),
+        });
+      });
+    });
+    expect(first).toEqual({ bytesRead: 5, text: 'hello' });
+
+    const second = await new Promise<{ bytesRead: number; text: string }>((resolve, reject) => {
+      fs.read(
+        fd,
+        { position: 1, length: 3, buffer: Buffer.alloc(3) },
+        (err: Error | null, bytesRead?: number, buffer?: Uint8Array) => {
+          if (err) return reject(err);
+          resolve({
+            bytesRead: bytesRead ?? 0,
+            text: Buffer.from(buffer ?? new Uint8Array()).toString('utf8'),
+          });
+        },
+      );
+    });
+    expect(second).toEqual({ bytesRead: 3, text: 'ell' });
+    closeSync(fd);
+  });
+
+  it('honors the flag option in readFile/writeFile/appendFile (was: silently ignored)', () => {
+    writeFileSync('/flagged.txt', 'seed');
+    expect(codeOf(() => writeFileSync('/flagged.txt', 'x', { flag: 'wx' }))).toBe('EEXIST');
+    expect(readFileSync('/flagged.txt', 'utf8')).toBe('seed');
+
+    writeFileSync('/flagged.txt', '+more', { flag: 'a' });
+    expect(readFileSync('/flagged.txt', 'utf8')).toBe('seed+more');
+
+    expect(codeOf(() => readFileSync('/missing-r.txt', { flag: 'r' }))).toBe('ENOENT');
+    expect(readFileSync('/missing-aplus.txt', { encoding: 'utf8', flag: 'a+' })).toBe('');
+    expect(statSync('/missing-aplus.txt').isFile()).toBe(true);
+  });
+
   it('ftruncateSync shrinks and zero-extends through an open fd', () => {
     writeFileSync('/truncate.txt', 'abcdef');
     const fd = openSync('/truncate.txt', 'r+');
@@ -185,6 +246,11 @@ describe('node:fs fd APIs (M11 runtime-local surface)', () => {
     expect(writeSync(append, Buffer.from('b'), 0, 1, 0)).toBe(1);
     closeSync(append);
     expect(readFileSync('/created.txt', 'utf8')).toBe('ab');
+
+    const truncated = openSync('/created.txt', constants.O_WRONLY | constants.O_TRUNC);
+    closeSync(truncated);
+    expect(readFileSync('/created.txt', 'utf8')).toBe('');
+    writeFileSync('/created.txt', 'ab');
 
     mkdirSync('/dir', { recursive: true });
     const dirFd = openSync('/dir', constants.O_RDONLY | constants.O_DIRECTORY);

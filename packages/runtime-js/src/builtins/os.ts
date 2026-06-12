@@ -206,7 +206,16 @@ export const constants = {
     EDQUOT: 122,
     ECANCELED: 125,
   },
-  priority: {} as Record<string, number>,
+  // Node's static scheduling-priority labels (Linux niceness). getPriority()
+  // returns PRIORITY_NORMAL; setPriority() stays a loud NotImplementedError.
+  priority: {
+    PRIORITY_LOW: 19,
+    PRIORITY_BELOW_NORMAL: 10,
+    PRIORITY_NORMAL: 0,
+    PRIORITY_ABOVE_NORMAL: -7,
+    PRIORITY_HIGH: -14,
+    PRIORITY_HIGHEST: -20,
+  },
 } as const;
 
 export function availableParallelism(): number {

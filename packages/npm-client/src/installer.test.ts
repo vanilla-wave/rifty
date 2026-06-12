@@ -373,7 +373,7 @@ describe('install — package.json defaults', () => {
 
     expect(first.lockfile.packages['node_modules/cli']?.bin).toEqual({ cli: 'bin/cli.js' });
     expect(await vfs.readFileText('/proj/node_modules/.bin/cli')).toBe(
-      '#!/usr/bin/env node\nconsole.log("cli");\n',
+      "#!/usr/bin/env node\nimport('../cli/bin/cli.js');\n",
     );
 
     await vfs.rm('/proj/node_modules/.bin/cli');
@@ -381,7 +381,7 @@ describe('install — package.json defaults', () => {
 
     expect(second.lockfile.packages['node_modules/cli']?.bin).toEqual({ cli: 'bin/cli.js' });
     expect(await vfs.readFileText('/proj/node_modules/.bin/cli')).toBe(
-      '#!/usr/bin/env node\nconsole.log("cli");\n',
+      "#!/usr/bin/env node\nimport('../cli/bin/cli.js');\n",
     );
   });
 });

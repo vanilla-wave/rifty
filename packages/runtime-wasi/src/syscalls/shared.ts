@@ -15,6 +15,7 @@ export const E_SUCCESS = 0;
 export const E_ACCES = 2;
 export const E_BADF = 8;
 export const E_EXIST = 20;
+export const E_FAULT = 21;
 export const E_INVAL = 28;
 export const E_ISDIR = 31;
 export const E_NAMETOOLONG = 37;
@@ -23,6 +24,7 @@ export const E_NOSYS = 52;
 export const E_NOTDIR = 54;
 export const E_NOTEMPTY = 55;
 export const E_PERM = 63;
+export const E_NOTCAPABLE = 76;
 
 // path_open oflags (preview1)
 export const OFLAGS_CREAT = 1 << 0;
@@ -84,8 +86,8 @@ export const RIGHTS_DIR_BASE =
   /* path_filestat_set_size */ (1n << 19n) |
   /* path_filestat_set_times */ (1n << 20n) |
   /* fd_filestat_get */ (1n << 21n) |
-  /* path_remove_directory */ (1n << 28n) |
-  /* path_unlink_file */ (1n << 29n);
+  /* path_remove_directory */ (1n << 25n) |
+  /* path_unlink_file */ (1n << 26n);
 
 // clock ids (preview1)
 export const CLOCKID_REALTIME = 0;
@@ -121,8 +123,8 @@ export interface FileDescriptor {
    * preview1 `rights` bitset granted at open time. `undefined` =
    * default-permissive (stdio/preopens — guests never open these, so never
    * negotiate rights). `path_open` sets it from `fs_rights_base`
-   * (default-permissive when caller passed 0n, per spec). `fd_write` checks
-   * `RIGHTS_FD_WRITE` and returns `E_PERM` if absent.
+   * (default-permissive when caller passed 0n, per spec). fd syscalls check
+   * their required rights and return `E_NOTCAPABLE` (preview1) if absent.
    */
   rights?: bigint;
   /**

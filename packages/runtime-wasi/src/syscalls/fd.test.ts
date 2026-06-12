@@ -11,14 +11,17 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setupFdCtx } from './fd-test-fixture.ts';
 import {
   E_BADF,
+  E_FAULT,
   E_INVAL,
-  E_PERM,
+  E_ISDIR,
+  E_NOTCAPABLE,
   E_SUCCESS,
   FDFLAGS_APPEND,
   FILETYPE_DIRECTORY,
   FILETYPE_REGULAR_FILE,
   RIGHTS_FD_FILESTAT_SET_SIZE,
   RIGHTS_FD_READ,
+  RIGHTS_FD_SEEK,
   RIGHTS_FD_WRITE,
   WHENCE_CUR,
   WHENCE_END,
@@ -84,7 +87,7 @@ describe('fd_read', () => {
     expect(new TextDecoder().decode(bytes)).toBe('hello');
   });
 
-  it('returns E_PERM when explicit rights lack RIGHTS_FD_READ', () => {
+  it('returns E_NOTCAPABLE when explicit rights lack RIGHTS_FD_READ', () => {
     const t = setupFdCtx();
     t.fds.set(5, {
       type: 'file',
@@ -97,7 +100,7 @@ describe('fd_read', () => {
     view.setUint32(0, 200, true);
     view.setUint32(4, 5, true);
 
-    expect(t.ns.fd_read(5, 0, 1, 300)).toBe(E_PERM);
+    expect(t.ns.fd_read(5, 0, 1, 300)).toBe(E_NOTCAPABLE);
   });
 });
 
@@ -248,7 +251,7 @@ describe('fd_seek', () => {
     expect(t.ns.fd_seek(5, BigInt(Number.MAX_SAFE_INTEGER) + 1n, WHENCE_SET, 100)).toBe(E_INVAL);
   });
 
-  it('returns E_PERM when explicit rights lack fd_seek', () => {
+  it('returns E_NOTCAPABLE when explicit rights lack fd_seek', () => {
     const t = setupFdCtx();
     t.fds.set(5, {
       type: 'file',
@@ -258,7 +261,7 @@ describe('fd_seek', () => {
       rights: RIGHTS_FD_READ | RIGHTS_FD_WRITE,
     });
 
-    expect(t.ns.fd_seek(5, 7n, WHENCE_SET, 100)).toBe(E_PERM);
+    expect(t.ns.fd_seek(5, 7n, WHENCE_SET, 100)).toBe(E_NOTCAPABLE);
     expect(t.fds.get(5)?.cursor).toBe(3);
   });
 });
@@ -329,13 +332,40 @@ describe('fd_fdstat_get', () => {
   });
 });
 
+describe('fd_write — non-writable fd types', () => {
+  beforeEach(() => {
+    setSyncMirror(new MemoryFsSync());
+  });
+  afterEach(() => resetSyncMirror());
+
+  it('returns E_ISDIR for a directory fd instead of faking success', () => {
+    const t = setupFdCtx();
+    t.fds.set(5, { type: 'dir', path: '/d' });
+    const view = new DataView(t.memory.buffer);
+    view.setUint32(0, 200, true);
+    view.setUint32(4, 4, true);
+    view.setUint32(300, 0xdead, true);
+    expect(t.ns.fd_write(5, 0, 1, 300)).toBe(E_ISDIR);
+    // nwritten untouched — no fake byte count.
+    expect(view.getUint32(300, true)).toBe(0xdead);
+  });
+
+  it('returns E_BADF for the stdin fd', () => {
+    const t = setupFdCtx();
+    const view = new DataView(t.memory.buffer);
+    view.setUint32(0, 200, true);
+    view.setUint32(4, 4, true);
+    expect(t.ns.fd_write(0, 0, 1, 300)).toBe(E_BADF);
+  });
+});
+
 describe('fd_write — rights enforcement', () => {
   beforeEach(() => {
     setSyncMirror(new MemoryFsSync());
   });
   afterEach(() => resetSyncMirror());
 
-  it('returns E_PERM when the open fd lacks RIGHTS_FD_WRITE', () => {
+  it('returns E_NOTCAPABLE when the open fd lacks RIGHTS_FD_WRITE', () => {
     const t = setupFdCtx();
     t.fds.set(5, {
       type: 'file',
@@ -351,7 +381,7 @@ describe('fd_write — rights enforcement', () => {
     view.setUint32(0, 200, true); // iov.ptr
     view.setUint32(4, payload.length, true); // iov.len
     const rc = t.ns.fd_write(5, 0, 1, 300);
-    expect(rc).toBe(E_PERM);
+    expect(rc).toBe(E_NOTCAPABLE);
   });
 
   it('allows write when the open fd has RIGHTS_FD_WRITE', () => {
@@ -483,7 +513,7 @@ describe('fd_pread', () => {
     expect(t.fds.get(5)?.cursor).toBe(4);
   });
 
-  it('returns E_PERM when explicit rights lack RIGHTS_FD_READ', () => {
+  it('returns E_NOTCAPABLE when explicit rights lack RIGHTS_FD_READ', () => {
     const t = setupFdCtx();
     t.fds.set(5, {
       type: 'file',
@@ -496,7 +526,7 @@ describe('fd_pread', () => {
     view.setUint32(0, 200, true);
     view.setUint32(4, 3, true);
 
-    expect(t.ns.fd_pread(5, 0, 1, 1n, 300)).toBe(E_PERM);
+    expect(t.ns.fd_pread(5, 0, 1, 1n, 300)).toBe(E_NOTCAPABLE);
   });
 
   it('returns E_BADF for unknown and non-file fds', () => {
@@ -551,7 +581,7 @@ describe('fd_pwrite', () => {
       path: '/work/pwrite.txt',
       data: new TextEncoder().encode('abcdef'),
       cursor: 5,
-      rights: RIGHTS_FD_WRITE,
+      rights: RIGHTS_FD_WRITE | RIGHTS_FD_SEEK,
     });
     writeIov(t, 'ZZ');
 
@@ -577,7 +607,7 @@ describe('fd_pwrite', () => {
 
     const rc = t.ns.fd_pwrite(5, 0, 1, 2n, 300);
 
-    expect(rc).toBe(E_PERM);
+    expect(rc).toBe(E_NOTCAPABLE);
     expect(t.fds.get(5)?.cursor).toBe(5);
     expect(new TextDecoder().decode(t.fds.get(5)?.data)).toBe('abcdef');
     expect(new TextDecoder().decode(mirror.readFileBytesSync('/work/pwrite.txt'))).toBe('abcdef');
@@ -599,12 +629,51 @@ describe('fd_pwrite', () => {
       path: '/work/pwrite.txt',
       data: new TextEncoder().encode('abcdef'),
       cursor: 0,
-      rights: RIGHTS_FD_WRITE,
+      rights: RIGHTS_FD_WRITE | RIGHTS_FD_SEEK,
     });
     writeIov(t, 'x');
 
     expect(t.ns.fd_pwrite(5, 0, 1, -1n, 300)).toBe(E_INVAL);
     expect(t.ns.fd_pwrite(5, 0, 1, BigInt(Number.MAX_SAFE_INTEGER) + 1n, 300)).toBe(E_INVAL);
+  });
+
+  it('requires the fd_seek right (preview1: pread/pwrite need read|write AND seek)', () => {
+    const t = setupFdCtx();
+    t.fds.set(5, {
+      type: 'file',
+      path: '/work/pwrite.txt',
+      data: new TextEncoder().encode('abcdef'),
+      cursor: 0,
+      rights: RIGHTS_FD_WRITE, // no fd_seek
+    });
+    t.fds.set(6, {
+      type: 'file',
+      path: '/work/pwrite.txt',
+      data: new TextEncoder().encode('abcdef'),
+      cursor: 0,
+      rights: RIGHTS_FD_READ, // no fd_seek
+    });
+    writeIov(t, 'x');
+
+    expect(t.ns.fd_pwrite(5, 0, 1, 0n, 300)).toBe(E_NOTCAPABLE);
+    expect(t.ns.fd_pread(6, 0, 1, 0n, 300)).toBe(E_NOTCAPABLE);
+  });
+
+  it('returns E_FAULT for an iovec pointing outside guest memory', () => {
+    const t = setupFdCtx();
+    t.fds.set(5, {
+      type: 'file',
+      path: '/work/pwrite.txt',
+      data: new TextEncoder().encode('abcdef'),
+      cursor: 0,
+    });
+    const view = new DataView(t.memory.buffer);
+    // iovec: ptr beyond the 64KiB page.
+    view.setUint32(0, t.memory.buffer.byteLength - 2, true);
+    view.setUint32(4, 8, true);
+
+    expect(t.ns.fd_pwrite(5, 0, 1, 0n, 300)).toBe(E_FAULT);
+    expect(t.ns.fd_pread(5, 0, 1, 0n, 300)).toBe(E_FAULT);
   });
 });
 
@@ -649,7 +718,7 @@ describe('fd_filestat_set_size', () => {
     expect(t.ns.fd_filestat_set_size(6, 0n)).toBe(E_BADF);
   });
 
-  it('returns E_PERM when explicit rights lack fd_filestat_set_size', () => {
+  it('returns E_NOTCAPABLE when explicit rights lack fd_filestat_set_size', () => {
     const t = setupFdCtx();
     t.fds.set(5, {
       type: 'file',
@@ -659,7 +728,7 @@ describe('fd_filestat_set_size', () => {
       rights: RIGHTS_FD_READ | RIGHTS_FD_WRITE,
     });
 
-    expect(t.ns.fd_filestat_set_size(5, 3n)).toBe(E_PERM);
+    expect(t.ns.fd_filestat_set_size(5, 3n)).toBe(E_NOTCAPABLE);
   });
 
   it('returns E_INVAL for invalid sizes', () => {

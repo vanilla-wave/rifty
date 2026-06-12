@@ -80,8 +80,8 @@ describe('linker — dir dedup + parallel writes (#7, perf-audit 2026-06-05)', (
   });
 });
 
-describe('linker — node_modules/.bin copy shims', () => {
-  it('writes root .bin entries for top-level package bin manifests', async () => {
+describe('linker — node_modules/.bin launcher shims', () => {
+  it('writes launcher shims (not byte copies) so the real bin keeps relative resolution', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
 
@@ -117,16 +117,27 @@ describe('linker — node_modules/.bin copy shims', () => {
     ]);
 
     expect(await vfs.readFileText('/proj/node_modules/.bin/vite')).toBe(
-      '#!/usr/bin/env node\nconsole.log("vite");\n',
+      "#!/usr/bin/env node\nimport('../vite/bin/vite.js');\n",
     );
     expect(await vfs.readFileText('/proj/node_modules/.bin/tsc')).toBe(
-      '#!/usr/bin/env node\nconsole.log("tsc");\n',
+      "#!/usr/bin/env node\nimport('../typescript/bin/tsc');\n",
     );
     expect(await vfs.readFileText('/proj/node_modules/.bin/tsserver')).toBe(
-      '#!/usr/bin/env node\nconsole.log("tsserver");\n',
+      "#!/usr/bin/env node\nimport('../typescript/bin/tsserver');\n",
     );
     expect(await vfs.readFileText('/proj/node_modules/vite/node_modules/.bin/nested')).toBe(
-      '#!/usr/bin/env node\nconsole.log("nested");\n',
+      "#!/usr/bin/env node\nimport('../nested-cli/bin/nested');\n",
     );
+  });
+
+  it('fails loudly when the manifest bin target is missing from the tarball', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    await expect(
+      link(vfs, '/proj', [
+        pkg('liar', { 'package.json': '{"name":"liar"}' }, 'node_modules/liar', 'bin/ghost.js'),
+      ]),
+    ).rejects.toThrow(/ghost\.js/);
   });
 });

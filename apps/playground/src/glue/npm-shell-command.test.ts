@@ -357,6 +357,69 @@ describe('npm-shell-command — error mapping', () => {
   });
 });
 
+describe('npm-shell-command — package.json rollback on failed named install', () => {
+  const throwingInstall: InstallFn = async () => {
+    throw Object.assign(new Error('boom'), { code: 'ENETUNREACH' });
+  };
+
+  it('restores the prior package.json bytes exactly', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const before = `${JSON.stringify(
+      { name: 'demo', version: '1.2.3', dependencies: { ms: '^2.0.0' }, license: 'MIT' },
+      null,
+      2,
+    )}\n`;
+    await vfs.writeFile('/proj/package.json', before);
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fakeRegistry, install: throwingInstall }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install lodash');
+
+    expect(exitCode).toBe(1);
+    expect(await vfs.readFileText('/proj/package.json')).toBe(before);
+  });
+
+  it('removes the package.json the install itself created', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fakeRegistry, install: throwingInstall }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install lodash');
+
+    expect(exitCode).toBe(1);
+    expect(await vfs.exists('/proj/package.json')).toBe(false);
+  });
+
+  it('bare `npm install` failure leaves package.json untouched (no rollback writes)', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const before = `${JSON.stringify(
+      { name: 'demo', version: '0.0.0', dependencies: { a: '1.0.0' } },
+      null,
+      2,
+    )}\n`;
+    await vfs.writeFile('/proj/package.json', before);
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fakeRegistry, install: throwingInstall }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install');
+
+    expect(exitCode).toBe(1);
+    expect(await vfs.readFileText('/proj/package.json')).toBe(before);
+  });
+});
+
 describe('npm-shell-command — argv', () => {
   it('rejects unknown subcommands without exit 127', async () => {
     const vfs = new MemoryVfs();

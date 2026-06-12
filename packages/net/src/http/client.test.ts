@@ -109,13 +109,36 @@ describe('http.request — local registered port loopback', () => {
     expect(response).toEqual({ statusCode: 200, body: 'external host' });
   });
 
-  it('keeps unregistered local ports on fetch', async () => {
+  it('fails unregistered loopback ports with Node-shaped ECONNREFUSED (no host egress)', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('no listener'));
 
-    const response = await readClientResponse('http://localhost:4399/health');
+    const err = await readClientResponse('http://localhost:4399/health').then(
+      () => null,
+      (e: Error & { code?: string; errno?: number; syscall?: string; port?: number }) => e,
+    );
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(response).toEqual({ statusCode: 200, body: 'no listener' });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(err).toMatchObject({
+      code: 'ECONNREFUSED',
+      errno: -111,
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 4399,
+    });
+    expect(err?.message).toBe('connect ECONNREFUSED 127.0.0.1:4399');
+  });
+
+  it('routes the whole 127.0.0.0/8 block through the registry', async () => {
+    const port = 4308;
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));
+    createServer((req, res) => {
+      res.end(`block ${req.url}`);
+    }).listen(port);
+
+    const response = await readClientResponse({ hostname: '127.1.2.3', port, path: '/block' });
+
+    expect(response).toEqual({ statusCode: 200, body: 'block /block' });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it('keeps non-http protocols on fetch even when the port is registered', async () => {
@@ -159,5 +182,115 @@ describe('node:http named exports', () => {
   it('re-exports STATUS_CODES through the compatibility barrels', () => {
     expect(HTTP_STATUS_CODES).toBe(STATUS_CODES);
     expect(ROOT_STATUS_CODES).toBe(STATUS_CODES);
+  });
+});
+
+describe('http.request — Node ClientRequest call shapes', () => {
+  it('supports the 3-arg request(url, options, cb) form with method/header overrides', async () => {
+    const port = 4310;
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));
+    createServer((req, res) => {
+      res.end(`${req.method} ${req.url} x=${req.headers['x-probe']}`);
+    }).listen(port);
+
+    const response = await new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
+      const req = request(
+        `http://localhost:${port}/three-arg`,
+        { method: 'POST', headers: { 'x-probe': 'yes' } },
+        (res) => {
+          const chunks: string[] = [];
+          res.on('data', (chunk) => chunks.push(decoder.decode(chunk as Uint8Array)));
+          res.on('end', () => resolve({ statusCode: res.statusCode, body: chunks.join('') }));
+          res.on('error', reject);
+        },
+      );
+      req.on('error', reject);
+      req.end();
+    });
+
+    expect(response).toEqual({ statusCode: 200, body: 'POST /three-arg x=yes' });
+  });
+
+  it('treats end(callback) as a finish callback, not a body chunk', async () => {
+    const port = 4311;
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));
+    const bodies: string[] = [];
+    createServer((req, res) => {
+      const chunks: string[] = [];
+      req.on('data', (chunk) => chunks.push(decoder.decode(chunk as Uint8Array)));
+      req.on('end', () => {
+        bodies.push(chunks.join(''));
+        res.end('ok');
+      });
+    }).listen(port);
+
+    let finishCalled = false;
+    const response = await new Promise<{ statusCode: number }>((resolve, reject) => {
+      const req = request({ hostname: 'localhost', port, method: 'POST', path: '/' }, (res) => {
+        res.on('data', () => {});
+        res.on('end', () => resolve({ statusCode: res.statusCode }));
+      });
+      req.on('error', reject);
+      req.write('payload');
+      req.end(() => {
+        finishCalled = true;
+      });
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(finishCalled).toBe(true);
+    expect(bodies).toEqual(['payload']);
+  });
+
+  it('write() returns true and a bare repeated end() does not double-dispatch', async () => {
+    const port = 4312;
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));
+    let hits = 0;
+    createServer((_req, res) => {
+      hits += 1;
+      res.end('once');
+    }).listen(port);
+
+    const statusCode = await new Promise<number>((resolve, reject) => {
+      const req = request({ hostname: 'localhost', port, method: 'POST', path: '/' }, (res) => {
+        res.on('data', () => {});
+        res.on('end', () => resolve(res.statusCode));
+      });
+      req.on('error', reject);
+      expect(req.write('chunk')).toBe(true);
+      req.end();
+      req.end();
+    });
+    // Drain microtasks so a buggy double-dispatch would have landed.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(statusCode).toBe(200);
+    expect(hits).toBe(1);
+  });
+
+  it('emits ERR_STREAM_WRITE_AFTER_END for write()/end(chunk) after end', async () => {
+    const port = 4313;
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));
+    createServer((_req, res) => {
+      res.end('ok');
+    }).listen(port);
+
+    const errors: Array<Error & { code?: string }> = [];
+    await new Promise<void>((resolve) => {
+      const req = request({ hostname: 'localhost', port, method: 'POST', path: '/' }, (res) => {
+        res.on('data', () => {});
+        res.on('end', () => resolve());
+      });
+      req.on('error', (err) => errors.push(err as Error & { code?: string }));
+      req.end();
+      expect(req.write('late')).toBe(false);
+      req.end('also late');
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(errors.map((e) => e.code)).toEqual([
+      'ERR_STREAM_WRITE_AFTER_END',
+      'ERR_STREAM_WRITE_AFTER_END',
+    ]);
   });
 });
