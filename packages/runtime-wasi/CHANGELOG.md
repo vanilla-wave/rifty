@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **PR #21 review fixes (preview1 contract).** (a) Rights violations now return
+  the spec errno `E_NOTCAPABLE` (76), not `E_PERM` — fd_read/fd_write/fd_seek/
+  fd_pread/fd_pwrite/fd_filestat_set_size. (b) `fd_pread`/`fd_pwrite`
+  additionally require `RIGHTS_FD_SEEK` per spec. (c) `fd_write` on a directory
+  fd returns `E_ISDIR`, on stdin `E_BADF` (was: silent fake success counting
+  bytes). (d) `RIGHTS_DIR_BASE` had `path_remove_directory`/`path_unlink_file`
+  at bits 28/29 (= sock_shutdown/sock_accept); corrected to spec bits 25/26.
+  (e) `fd_pread`/`fd_pwrite` iovecs outside guest memory return `E_FAULT`
+  instead of throwing a host `RangeError` through the trap path. Guards:
+  `syscalls/fd.test.ts`; `docs/public/compat/wasi.md` rows updated.
+
 ### Added
 
 - **M11 fd-based fs slice** — implemented local preview1

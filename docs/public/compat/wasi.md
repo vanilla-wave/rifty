@@ -27,19 +27,19 @@ implemented — call returns `E_NOSYS` and behaviour is documented.
 | `fd_fdstat_set_flags` | ✅ | Mutates fd's `fdflags` field |
 | `fd_fdstat_set_rights` | ❌ | `E_NOSYS` — per-fd rights downgrade not modelled |
 | `fd_filestat_get` | ✅ | Routes to `syncMirror().statSync` for fd's path; reports size + mtime (atime/ctime = 0) |
-| `fd_filestat_set_size` | ✅ | Enforces `RIGHTS_FD_FILESTAT_SET_SIZE`; resizes fd data locally; shrink/grow zero-fills and writes through to `syncMirror()` when the fd has a path. Invalid/unsafe sizes → `E_INVAL` |
+| `fd_filestat_set_size` | ✅ | Enforces `RIGHTS_FD_FILESTAT_SET_SIZE` (`E_NOTCAPABLE` if absent); resizes fd data locally; shrink/grow zero-fills and writes through to `syncMirror()` when the fd has a path. Invalid/unsafe sizes → `E_INVAL` |
 | `fd_filestat_set_times` | ❌ | `E_NOSYS` — atime/mtime mutation pending (see Q-2026-05-25-touch-utimes) |
-| `fd_pread` | ✅ | Positional read from fd data; leaves cursor unchanged and enforces `RIGHTS_FD_READ`. Invalid/unsafe offsets → `E_INVAL` |
+| `fd_pread` | ✅ | Positional read from fd data; leaves cursor unchanged and enforces `RIGHTS_FD_READ` + `RIGHTS_FD_SEEK` per preview1 (`E_NOTCAPABLE` if absent). Invalid/unsafe offsets → `E_INVAL`; out-of-memory iovecs → `E_FAULT` |
 | `fd_prestat_get` | ✅ | Reports preopen type + name length |
 | `fd_prestat_dir_name` | ✅ | Copies preopen name into guest memory |
-| `fd_pwrite` | ✅ | Positional write into fd data; leaves cursor unchanged, zero-fills gaps, enforces `RIGHTS_FD_WRITE`, writes through to `syncMirror()` when the fd has a path. Invalid/unsafe offsets → `E_INVAL` |
-| `fd_read` | ✅ | Reads from fd's in-memory data buffer and enforces `RIGHTS_FD_READ`; stdin (fd 0) pulls from the `onStdin` callback with a residual buffer for chunked delivery, EOF on `null` (ADR-0049 — esbuild's `transform` surface feeds source over stdin) |
+| `fd_pwrite` | ✅ | Positional write into fd data; leaves cursor unchanged, zero-fills gaps, enforces `RIGHTS_FD_WRITE` + `RIGHTS_FD_SEEK` per preview1 (`E_NOTCAPABLE` if absent), writes through to `syncMirror()` when the fd has a path. Invalid/unsafe offsets → `E_INVAL`; out-of-memory iovecs → `E_FAULT` |
+| `fd_read` | ✅ | Reads from fd's in-memory data buffer and enforces `RIGHTS_FD_READ` (`E_NOTCAPABLE` if absent); stdin (fd 0) pulls from the `onStdin` callback with a residual buffer for chunked delivery, EOF on `null` (ADR-0049 — esbuild's `transform` surface feeds source over stdin) |
 | `fd_readdir` | ✅ | Enumerates VFS dir entries with a real `d_type` (ADR-0041). Returns `E_NOTDIR` (not `E_BADF`) on a valid non-directory fd so Go/WASIp1 guests (esbuild) treat it as "file, read it as one" rather than a hard error (ADR-0049). Cookie semantics per preview1 — each entry emits `d_next = index + 1`, the call skips entries with `index < cookie`, so paginating guests get every entry exactly once. Stable ordering assumes the backend's `readdirSync` is deterministic for a fixed tree (MemoryFsSync + OpfsFsSync satisfy this) |
 | `fd_renumber` | ✅ | Moves fd entry to a new id |
-| `fd_seek` | ✅ | All three `whence` modes; negative results or unsafe offsets → `E_INVAL` |
+| `fd_seek` | ✅ | All three `whence` modes; enforces `RIGHTS_FD_SEEK` (`E_NOTCAPABLE` if absent); negative results or unsafe offsets → `E_INVAL` |
 | `fd_sync` | ⚠️ | `E_SUCCESS` — in-memory writes are immediately visible |
 | `fd_tell` | ✅ | Returns current cursor |
-| `fd_write` | ✅ | Writes through cursor, honors `FDFLAGS_APPEND`, and writes through `syncMirror()` for file fds; stdio routed to `onStdout` / `onStderr`. Enforces `RIGHTS_FD_WRITE` — returns `E_PERM` if absent. |
+| `fd_write` | ✅ | Writes through cursor, honors `FDFLAGS_APPEND`, and writes through `syncMirror()` for file fds; stdio routed to `onStdout` / `onStderr`. Enforces `RIGHTS_FD_WRITE` — returns `E_NOTCAPABLE` if absent (preview1 errno for rights violations). Directory fds → `E_ISDIR`, stdin → `E_BADF` (was: silent fake success). |
 | `path_create_directory` | ✅ | Non-recursive; `EEXIST` mapped from VFS |
 | `path_filestat_get` | ✅ | Reports filetype + size; atime/ctime/nlink = 0 |
 | `path_filestat_set_times` | ❌ | `E_NOSYS` |
