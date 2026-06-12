@@ -5,10 +5,13 @@ The playground is a static SPA that **must** be served cross-origin-isolated
 (D-001 / ADR-0002). GitHub Pages can't set those headers; Netlify can — hence
 the target (ADR-0073).
 
-Config: `netlify.toml` (repo root), `apps/playground/public/_headers`, and
-`apps/playground/public/_redirects` (both copied to `dist/` by Vite). The
-artifact carries the required headers, npm registry proxy, and SPA fallback, so
-CLI deploys do not depend on Netlify running a build.
+Config: `netlify.toml` (repo root), `apps/playground/public/_headers`,
+`apps/playground/public/_redirects` (both copied to `dist/` by Vite), and
+`netlify/functions/npm-registry.mts`. The artifact carries the required headers
+plus the `/npm-registry/*` function rewrite before the SPA fallback; CLI
+deploys must build `.netlify/functions` from `netlify/functions` and upload
+that bundle alongside `apps/playground/dist` so `/npm-registry/*` reaches the
+proxy function.
 
 ## What gets built
 
@@ -50,7 +53,9 @@ secrets from untrusted code.
 pnpm dlx netlify@26.0.2 login          # once, to authenticate
 
 pnpm build                             # from the repo root
-pnpm dlx netlify@26.0.2 deploy --dir=apps/playground/dist --prod
+root="$(pwd)"
+pnpm dlx netlify@26.0.2 functions:build --filter="@riftydev/playground" --src="$root/netlify/functions" --functions="$root/.netlify/functions"
+pnpm dlx netlify@26.0.2 deploy --filter="@riftydev/playground" --dir="$root/apps/playground/dist" --functions="$root/.netlify/functions" --prod
 ```
 
 (`netlify deploy` without `--prod` creates a preview URL first — useful to

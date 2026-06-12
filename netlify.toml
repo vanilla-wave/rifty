@@ -14,6 +14,9 @@
   command = "pnpm install --frozen-lockfile && pnpm build"
   publish = "apps/playground/dist"
 
+[functions]
+  directory = "netlify/functions"
+
 [build.environment]
   NODE_VERSION = "22"
   PNPM_VERSION = "11.5.1"
@@ -36,6 +39,16 @@
 # any other unmatched path falls back to the single-page app shell. (Netlify
 # only applies a 200-rewrite when no static file matches, so /sw.js, /fonts/*,
 # and hashed assets are unaffected.)
+[[redirects]]
+  from = "/npm-registry/*"
+  to = "/.netlify/functions/npm-registry/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/npm-registry"
+  to = "/.netlify/functions/npm-registry"
+  status = 200
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

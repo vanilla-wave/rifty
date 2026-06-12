@@ -43,6 +43,40 @@ describe('npm registry production proxy', () => {
     expect(await response.text()).toBe('missing');
   });
 
+  it('proxies direct Netlify function paths used by CLI rewrites', async () => {
+    const calls: string[] = [];
+    const response = await handleNpmRegistryRequest(
+      new Request('https://site.test/.netlify/functions/npm-registry/vite'),
+      { upstreamBase: 'https://registry.npmjs.org' },
+      async (url) => {
+        calls.push(String(url));
+        return new Response('{"name":"vite"}', {
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+    );
+
+    expect(calls).toEqual(['https://registry.npmjs.org/vite']);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('{"name":"vite"}');
+  });
+
+  it('buffers upstream bodies before returning a Netlify response', async () => {
+    const upstream = new Response('{"name":"pkg"}', {
+      headers: { 'content-type': 'application/json' },
+    });
+
+    const response = await handleNpmRegistryRequest(
+      new Request('https://site.test/npm-registry/pkg'),
+      { upstreamBase: 'https://registry.npmjs.org' },
+      async () => upstream,
+    );
+
+    expect(response.body).not.toBe(upstream.body);
+    expect(response.headers.get('content-type')).toBe('application/json');
+    expect(await response.text()).toBe('{"name":"pkg"}');
+  });
+
   it('strips upstream body framing headers when re-wrapping the body', async () => {
     const response = await handleNpmRegistryRequest(
       new Request('https://site.test/npm-registry/pkg'),
@@ -114,9 +148,33 @@ describe('npm registry production proxy', () => {
   it('routes Netlify production through the function, not a hardcoded external redirect', () => {
     const toml = readFileSync('netlify.toml', 'utf8');
     const redirects = readFileSync('apps/playground/public/_redirects', 'utf8');
+    const workflow = readFileSync('.github/workflows/netlify.yml', 'utf8');
+    const staticDeploys =
+      workflow.match(/--dir="\$GITHUB_WORKSPACE\/apps\/playground\/dist"/g) ?? [];
+    const bundledFunctionUses =
+      workflow.match(/--functions="\$GITHUB_WORKSPACE\/\.netlify\/functions"/g) ?? [];
+    const redirectsProxyIndex = redirects.indexOf(
+      '/npm-registry/*  /.netlify/functions/npm-registry/:splat  200',
+    );
+    const redirectsSpaIndex = redirects.indexOf('/*  /index.html  200');
+    const tomlProxyIndex = toml.indexOf('from = "/npm-registry/*"');
+    const tomlSpaIndex = toml.indexOf('from = "/*"');
 
     expect(toml).not.toContain('to = "https://registry.npmjs.org');
-    expect(redirects).not.toContain('/npm-registry');
+    expect(redirects).not.toContain('https://registry.npmjs.org');
+    expect(redirectsProxyIndex).toBeGreaterThanOrEqual(0);
+    expect(redirectsSpaIndex).toBeGreaterThanOrEqual(0);
+    expect(redirectsProxyIndex).toBeLessThan(redirectsSpaIndex);
+    expect(toml).toContain('to = "/.netlify/functions/npm-registry/:splat"');
+    expect(tomlProxyIndex).toBeGreaterThanOrEqual(0);
+    expect(tomlSpaIndex).toBeGreaterThanOrEqual(0);
+    expect(tomlProxyIndex).toBeLessThan(tomlSpaIndex);
     expect(toml).toContain('RIFTY_NPM_REGISTRY_UPSTREAM');
+    expect(toml).toContain('[functions]\n  directory = "netlify/functions"');
+    expect(workflow).toContain('netlify@26.0.2 functions:build');
+    expect(workflow).toContain('--src="$GITHUB_WORKSPACE/netlify/functions"');
+    expect(workflow).not.toContain('--functions=netlify/functions');
+    expect(staticDeploys).toHaveLength(2);
+    expect(bundledFunctionUses).toHaveLength(staticDeploys.length + 1);
   });
 });

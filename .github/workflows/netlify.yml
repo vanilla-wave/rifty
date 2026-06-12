@@ -53,6 +53,14 @@ jobs:
       - name: Build playground
         run: pnpm build
 
+      - name: Build Netlify functions
+        run: |
+          set -euo pipefail
+          pnpm dlx netlify@26.0.2 functions:build \
+            --filter="@riftydev/playground" \
+            --src="$GITHUB_WORKSPACE/netlify/functions" \
+            --functions="$GITHUB_WORKSPACE/.netlify/functions"
+
       - name: Deploy PR preview
         id: preview
         if: github.event_name == 'pull_request'
@@ -62,7 +70,8 @@ jobs:
             pnpm dlx netlify@26.0.2 deploy \
               --no-build \
               --filter="@riftydev/playground" \
-              --dir=apps/playground/dist \
+              --dir="$GITHUB_WORKSPACE/apps/playground/dist" \
+              --functions="$GITHUB_WORKSPACE/.netlify/functions" \
               --site="$NETLIFY_SITE_ID" \
               --auth="$NETLIFY_AUTH_TOKEN" \
               --alias="pr-${{ github.event.pull_request.number }}" \
@@ -132,7 +141,8 @@ jobs:
             --prod \
             --no-build \
             --filter="@riftydev/playground" \
-            --dir=apps/playground/dist \
+            --dir="$GITHUB_WORKSPACE/apps/playground/dist" \
+            --functions="$GITHUB_WORKSPACE/.netlify/functions" \
             --site="$NETLIFY_SITE_ID" \
             --auth="$NETLIFY_AUTH_TOKEN" \
             --message="main ${GITHUB_SHA}"
