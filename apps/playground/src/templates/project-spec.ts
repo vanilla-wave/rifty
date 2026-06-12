@@ -138,6 +138,15 @@ export function terminalDevLine(spec: ProjectSpec, root: string): string {
   return `cd ${root} && npm run dev`;
 }
 
+/**
+ * The visible `npm install` line a from-scratch preset runs before its dev
+ * line (ADR-0135). `cd`-pinned for the same reason as {@link terminalDevLine}:
+ * the install must read the PROJECT's package.json, whatever the session cwd.
+ */
+export function terminalInstallLine(root: string): string {
+  return `cd ${root} && npm install`;
+}
+
 export function buildProjectPackageJson(spec: ProjectSpec): {
   readonly name: string;
   readonly version: string;

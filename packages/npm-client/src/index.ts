@@ -9,7 +9,12 @@ export {
 export { extractTarGz } from './unpacker.ts';
 export { link, buildLockfile, type ResolvedPackage, type Lockfile } from './linker.ts';
 export { resolveOverride, type OverrideMap } from './overrides.ts';
-export { install, type InstallOptions, type InstallResult } from './installer.ts';
+export {
+  install,
+  type InstallOptions,
+  type InstallProgressEvent,
+  type InstallResult,
+} from './installer.ts';
 export {
   TARBALL_CACHE_ROOT,
   VfsTarballCache,

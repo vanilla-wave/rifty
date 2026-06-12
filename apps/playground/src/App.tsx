@@ -43,7 +43,7 @@ import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
 import { subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
 import { exportWorkspaceArchive, importWorkspaceArchive } from './glue/workspace-archive.ts';
-import { DEFAULT_PRESET, PRESETS, type Preset } from './presets.ts';
+import { DEFAULT_PRESET, PRESETS, type Preset, presetBootLines } from './presets.ts';
 import {
   type ProjectSpec,
   buildProjectPackageJson,
@@ -311,11 +311,19 @@ export function App(props: AppProps) {
     return 1;
   }
 
+  // Drains the OPFS write-through so the install stamp lands after the tree
+  // (ADR-0135) and the next worker spawn preloads a complete node_modules.
+  async function flushSyncMirror(): Promise<void> {
+    const mirror = vfs as { flush?: () => Promise<void> };
+    if (typeof mirror.flush === 'function') await mirror.flush();
+  }
+
   const npmCommand: TerminalCommand = async (args, ctx) =>
     createNpmShellCommand({
       vfs: npmVfs,
       registry: npmRegistry,
       runScript: async (scriptName, command) => runTerminalScript(scriptName, command, ctx),
+      flush: flushSyncMirror,
     })(args, ctx);
 
   const viteCommand: TerminalCommand = async (args, ctx) => {
@@ -613,7 +621,10 @@ export function App(props: AppProps) {
     if (generation !== devServerRestartGeneration) return;
     const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;
     devServerSessionId = targetSessionId;
-    await runTerminalSequence(targetSessionId, [terminalDevLine(activeTemplate(), WORKSPACE)]);
+    await runTerminalSequence(
+      targetSessionId,
+      presetBootLines(presetForId(activePreset()), WORKSPACE),
+    );
   }
 
   async function runVitePreset(preset: Preset): Promise<void> {
@@ -631,7 +642,7 @@ export function App(props: AppProps) {
     const session = devServerSession();
     devServerSessionId = session.id;
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    await runTerminalSequence(session.id, [terminalDevLine(activeTemplate(), WORKSPACE)]);
+    await runTerminalSequence(session.id, presetBootLines(preset, WORKSPACE));
   }
 
   onMount(() => {

@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Sandbox setup kinds: instant vs from-scratch (ADR-0135).** Presets carry
+  `setup: 'instant' | 'from-scratch'`. From-scratch presets (`real-vite`,
+  `express-sqlite`) boot through a VISIBLE terminal `npm install` — the command
+  line plus live `npm: + <name>@<version>` per-package output (ADR-0134) —
+  before the dev line; instant presets (`project-files`, `node-worker`) go
+  straight to the dev line. After any successful install the tree is stamped
+  (`node_modules/.rifty-install-stamp.json`, flush-before-stamp so a durable
+  stamp implies a durable tree); the real-vite worker bootstrap skips its
+  redundant install when the stamp still matches package.json — instant presets
+  reuse the OPFS-persisted node_modules instead of re-linking on every boot.
+  Template switcher groups presets under "Instant start" / "From scratch" with
+  kind pills. Stamp invalidation is provisional —
+  `docs/backlog/playground/install-stamp-invalidation.md`.
+
 ### Changed
 
 - **Mono font → JetBrains Mono.** Code surfaces (Monaco editor, xterm terminal,

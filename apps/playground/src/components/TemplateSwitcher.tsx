@@ -10,10 +10,16 @@
  * `[data-testid="gallery"]`, rows are `[data-preset="<id>"]`.
  */
 import { For, Show, createSignal } from 'solid-js';
-import { DEFAULT_PRESET, PRESETS, type Preset } from '../presets.ts';
+import { DEFAULT_PRESET, PRESETS, type Preset, type PresetSetup } from '../presets.ts';
 import { Icon } from './icons.tsx';
 
 const FALLBACK_GLYPH_COLOR = 'rgba(255,255,255,0.7)';
+
+/** Dropdown sections — one per sandbox setup kind (ADR-0135). */
+const SETUP_GROUPS: ReadonlyArray<{ readonly setup: PresetSetup; readonly head: string }> = [
+  { setup: 'instant', head: 'Instant start' },
+  { setup: 'from-scratch', head: 'From scratch (npm install)' },
+];
 
 export function TemplateSwitcher(props: {
   activeId: string;
@@ -64,32 +70,48 @@ export function TemplateSwitcher(props: {
       </button>
       <Show when={open()}>
         <div class="rf-tpl__menu" data-testid="gallery" aria-label="Project template">
-          <div class="rf-tpl__menuhead">Project template</div>
-          <For each={PRESETS}>
-            {(preset) => (
-              <button
-                type="button"
-                class="rf-tpl__row"
-                data-preset={preset.id}
-                data-active={preset.id === props.activeId}
-                aria-pressed={preset.id === props.activeId}
-                onClick={() => pick(preset)}
-              >
-                <span
-                  class="rf-tpl__rowbadge"
-                  style={{ color: glyphColor(preset) }}
-                  aria-hidden="true"
-                >
-                  {glyphText(preset)}
-                </span>
-                <span class="rf-tpl__rowtext">
-                  <span class="rf-tpl__rowlabel">{preset.label}</span>
-                  <span class="rf-tpl__rowsub">{preset.blurb}</span>
-                </span>
-                <span class="rf-tpl__check" aria-hidden="true">
-                  <Icon name="check" size={14} />
-                </span>
-              </button>
+          <For each={SETUP_GROUPS}>
+            {(group) => (
+              <>
+                <div class="rf-tpl__menuhead">{group.head}</div>
+                <For each={PRESETS.filter((preset) => preset.setup === group.setup)}>
+                  {(preset) => (
+                    <button
+                      type="button"
+                      class="rf-tpl__row"
+                      data-preset={preset.id}
+                      data-setup={preset.setup}
+                      data-active={preset.id === props.activeId}
+                      aria-pressed={preset.id === props.activeId}
+                      onClick={() => pick(preset)}
+                    >
+                      <span
+                        class="rf-tpl__rowbadge"
+                        style={{ color: glyphColor(preset) }}
+                        aria-hidden="true"
+                      >
+                        {glyphText(preset)}
+                      </span>
+                      <span class="rf-tpl__rowtext">
+                        <span class="rf-tpl__rowtitle">
+                          <span class="rf-tpl__rowlabel">{preset.label}</span>
+                          <Show when={preset.tag} keyed>
+                            {(tag) => (
+                              <span class="rf-tpl__rowtag" data-tone={tag.tone}>
+                                {tag.text}
+                              </span>
+                            )}
+                          </Show>
+                        </span>
+                        <span class="rf-tpl__rowsub">{preset.blurb}</span>
+                      </span>
+                      <span class="rf-tpl__check" aria-hidden="true">
+                        <Icon name="check" size={14} />
+                      </span>
+                    </button>
+                  )}
+                </For>
+              </>
             )}
           </For>
           <div class="rf-tpl__foot">Switching restarts the dev server with the template files</div>

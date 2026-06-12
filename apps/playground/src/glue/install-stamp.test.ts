@@ -1,0 +1,112 @@
+import { MemoryVfs } from '@riftydev/vfs';
+import { describe, expect, it } from 'vitest';
+import {
+  depsEqual,
+  installStampPath,
+  installStampSatisfied,
+  readEffectiveDeps,
+  readInstallStamp,
+  writeInstallStamp,
+} from './install-stamp.ts';
+
+const ROOT = '/workspace';
+
+async function seedProject(
+  vfs: MemoryVfs,
+  pkg: Record<string, unknown> = {
+    name: 'app',
+    dependencies: { vite: '^5.4.0' },
+  },
+): Promise<void> {
+  await vfs.mkdir(ROOT, { recursive: true });
+  await vfs.writeFile(`${ROOT}/package.json`, JSON.stringify(pkg));
+}
+
+async function seedNodeModules(vfs: MemoryVfs): Promise<void> {
+  await vfs.mkdir(`${ROOT}/node_modules/vite`, { recursive: true });
+}
+
+describe('install stamp (ADR-0135)', () => {
+  it('round-trips a stamp with the package.json effective dep set (deps + dev + optional)', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs, {
+      name: 'app',
+      dependencies: { vite: '^5.4.0' },
+      devDependencies: { tool: '1.0.0' },
+      optionalDependencies: { fsevents: '^2' },
+    });
+    await seedNodeModules(vfs);
+
+    await writeInstallStamp(vfs, ROOT, 14);
+    const stamp = await readInstallStamp(vfs, ROOT);
+
+    expect(stamp).toEqual({
+      version: 1,
+      deps: { vite: '^5.4.0', tool: '1.0.0', fsevents: '^2' },
+      packages: 14,
+    });
+    expect(await vfs.exists(installStampPath(ROOT))).toBe(true);
+  });
+
+  it('is satisfied when stamp deps match package.json and node_modules exists', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    await writeInstallStamp(vfs, ROOT, 14);
+
+    const hit = await installStampSatisfied(vfs, ROOT);
+    expect(hit?.packages).toBe(14);
+  });
+
+  it('is not satisfied when package.json deps drift after stamping', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    await writeInstallStamp(vfs, ROOT, 14);
+
+    await seedProject(vfs, {
+      name: 'app',
+      dependencies: { vite: '^5.4.0', lodash: '^4' },
+    });
+    expect(await installStampSatisfied(vfs, ROOT)).toBeNull();
+  });
+
+  it('is not satisfied without node_modules, without a stamp, or without package.json', async () => {
+    const noNodeModules = new MemoryVfs();
+    await seedProject(noNodeModules);
+    await noNodeModules.mkdir(`${ROOT}/node_modules`, { recursive: true });
+    await writeInstallStamp(noNodeModules, ROOT, 1);
+    await noNodeModules.rm(`${ROOT}/node_modules`, { recursive: true, force: true });
+    expect(await installStampSatisfied(noNodeModules, ROOT)).toBeNull();
+
+    const noStamp = new MemoryVfs();
+    await seedProject(noStamp);
+    await seedNodeModules(noStamp);
+    expect(await installStampSatisfied(noStamp, ROOT)).toBeNull();
+
+    const noPackageJson = new MemoryVfs();
+    await seedProject(noPackageJson);
+    await seedNodeModules(noPackageJson);
+    await writeInstallStamp(noPackageJson, ROOT, 1);
+    await noPackageJson.rm(`${ROOT}/package.json`, { force: true });
+    expect(await installStampSatisfied(noPackageJson, ROOT)).toBeNull();
+  });
+
+  it('treats a malformed stamp or malformed package.json as no stamp', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    await vfs.writeFile(installStampPath(ROOT), 'not json');
+    expect(await readInstallStamp(vfs, ROOT)).toBeNull();
+    expect(await installStampSatisfied(vfs, ROOT)).toBeNull();
+
+    await vfs.writeFile(`${ROOT}/package.json`, '[]');
+    expect(await readEffectiveDeps(vfs, ROOT)).toBeNull();
+  });
+
+  it('compares dep maps by entries, ignoring key order', () => {
+    expect(depsEqual({ a: '1', b: '2' }, { b: '2', a: '1' })).toBe(true);
+    expect(depsEqual({ a: '1' }, { a: '2' })).toBe(false);
+    expect(depsEqual({ a: '1' }, { a: '1', b: '2' })).toBe(false);
+  });
+});

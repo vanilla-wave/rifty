@@ -444,3 +444,88 @@ describe('npm-shell-command — argv', () => {
     expect(calls).toEqual([]);
   });
 });
+
+describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0135)', () => {
+  function twoPackageResult(): InstallResult {
+    return {
+      packages: [
+        { name: 'lodash', version: '4.17.21', dependencies: {}, files: {} },
+        { name: 'ms', version: '2.1.3', dependencies: {}, files: {} },
+      ],
+      lockfile: {
+        name: 'root',
+        version: '0.0.0',
+        lockfileVersion: 3,
+        requires: true,
+        packages: {},
+      },
+      conflicts: [],
+    };
+  }
+
+  it('streams a `npm: + name@version` line per package as the installer reports progress', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const install: InstallFn = async (arg1) => {
+      const opts = arg1 as InstallOptions;
+      opts.onPackage?.({ name: 'lodash', version: '4.17.21', cacheHit: false });
+      opts.onPackage?.({ name: 'ms', version: '2.1.3', cacheHit: true });
+      return twoPackageResult();
+    };
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    const { exitCode, rec } = await runShell(shell, 'npm install lodash');
+
+    expect(exitCode).toBe(0);
+    const stdout = rec.stdout.join('');
+    expect(stdout).toContain('npm: + lodash@4.17.21\n');
+    expect(stdout).toContain('npm: + ms@2.1.3 (cached)\n');
+    expect(stdout.indexOf('npm: + lodash@4.17.21')).toBeLessThan(
+      stdout.indexOf('installed 2 package'),
+    );
+  });
+
+  it('flushes, then writes the install stamp, then flushes again after a successful install', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const flushSawStamp: boolean[] = [];
+    const flush = async (): Promise<void> => {
+      flushSawStamp.push(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json'));
+    };
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({ vfs, registry: fakeRegistry, install, flush }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(0);
+    // First flush drains the tree BEFORE the stamp exists; second flush makes
+    // the stamp itself durable (ADR-0135 ordering: stamp implies tree).
+    expect(flushSawStamp).toEqual([false, true]);
+    const stamp = JSON.parse(
+      await vfs.readFileText('/proj/node_modules/.rifty-install-stamp.json'),
+    ) as { version: number; deps: Record<string, string>; packages: number };
+    expect(stamp.version).toBe(1);
+    expect(stamp.deps).toEqual({ lodash: '^4.17.0' });
+    expect(stamp.packages).toBe(2);
+  });
+
+  it('does not write a stamp when the install fails', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const install: InstallFn = async () => {
+      throw new Error('network down');
+    };
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    const { exitCode } = await runShell(shell, 'npm install lodash');
+
+    expect(exitCode).toBe(1);
+    expect(await vfs.exists('/proj/node_modules/.rifty-install-stamp.json')).toBe(false);
+  });
+});

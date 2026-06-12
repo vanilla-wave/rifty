@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { CATEGORY_ORDER, DEFAULT_PRESET, PRESETS, type Preset } from './presets.ts';
+import {
+  CATEGORY_ORDER,
+  DEFAULT_PRESET,
+  PRESETS,
+  type Preset,
+  presetBootLines,
+} from './presets.ts';
 import { EXPRESS_SQLITE_TEMPLATE } from './templates/express-sqlite.ts';
 
 function presetText(preset: Preset): string {
@@ -67,5 +73,46 @@ describe('playground presets', () => {
 
     expect(demo.openFiles?.length ?? 0).toBeGreaterThanOrEqual(2);
     expect(demo.openFiles?.every((path) => filePaths.has(path))).toBe(true);
+  });
+});
+
+describe('sandbox setup kinds (ADR-0135)', () => {
+  it('classifies every preset as instant or from-scratch, with both kinds present', () => {
+    for (const preset of PRESETS) {
+      expect(['instant', 'from-scratch']).toContain(preset.setup);
+    }
+    expect(PRESETS.some((preset) => preset.setup === 'instant')).toBe(true);
+    expect(PRESETS.some((preset) => preset.setup === 'from-scratch')).toBe(true);
+    // the boot default must stay instant: m1/m10 e2e pin the `$ vite` first line
+    expect(DEFAULT_PRESET.setup).toBe('instant');
+  });
+
+  it('boots instant presets straight to the dev line', () => {
+    const instant = PRESETS.filter((preset) => preset.setup === 'instant');
+    for (const preset of instant) {
+      expect(presetBootLines(preset, '/workspace')).toEqual(['vite']);
+    }
+  });
+
+  it('boots from-scratch presets through a visible npm install first', () => {
+    const realVite = PRESETS.find((preset) => preset.id === 'real-vite');
+    expect(realVite?.setup).toBe('from-scratch');
+    expect(presetBootLines(realVite as Preset, '/workspace')).toEqual([
+      'cd /workspace && npm install',
+      'vite',
+    ]);
+
+    const fullstack = PRESETS.find((preset) => preset.id === 'express-sqlite');
+    expect(fullstack?.setup).toBe('from-scratch');
+    expect(presetBootLines(fullstack as Preset, '/workspace')).toEqual([
+      'cd /workspace && npm install',
+      'cd /workspace && npm run dev',
+    ]);
+  });
+
+  it('advertises the kind in the preset tag', () => {
+    for (const preset of PRESETS) {
+      expect(preset.tag?.text).toBe(preset.setup === 'instant' ? 'instant' : 'npm install');
+    }
   });
 });

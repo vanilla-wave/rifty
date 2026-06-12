@@ -38,8 +38,12 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     await expect(page.locator('[data-action="view-templates"]')).toContainText('express-sqlite', {
       timeout: 5_000,
     });
-    // The node-server boot line surfaces in the dev-server terminal.
-    await expectTerminalContains(page, 'dev: starting Express + SQLite server', 30_000);
+    // From-scratch preset (ADR-0135): the terminal honestly runs `npm install`
+    // — the command itself and per-package lines — before the dev line.
+    await expectTerminalContains(page, '$ cd /workspace && npm install', 15_000);
+    await expectTerminalContains(page, 'npm: + express@', 120_000);
+    // The node-server boot line surfaces in the same terminal after install.
+    await expectTerminalContains(page, 'dev: starting Express + SQLite server', 150_000);
 
     // Express + engine boot behind a live npm install — poll the API route.
     // The predicate demands PARSEABLE JSON: a transient 200 from a non-SW

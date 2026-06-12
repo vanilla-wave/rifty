@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`InstallOptions.onPackage` per-package progress hook (ADR-0134).** Optional
+  callback firing once per unique `(name, version)` when its tarball resolves
+  (cache or network), with `cacheHit`; fires on both the lockfile fast path and
+  live resolve, never for failed fetches (incl. skipped optionals). Callback
+  throws are caught + warned. Event order is fetch-completion order. Consumer:
+  the playground terminal streams `npm: + <name>@<version>` lines (ADR-0135).
+
 ### Performance
 
 - **`pickBestVersion` is a single linear max-scan, not filter+sort (#8).** Was `versions.filter(matchesRange).sort((a,b)=>compare(b,a))[0]` — an O(n log n) sort plus an intermediate candidate array per resolution. Now one forward pass keeping the running max via `compare(v, best) > 0`. Selection is byte-identical for every input: `Array.prototype.sort` is stable, so the old descending sort kept the EARLIEST input occurrence among `compare`-equal candidates at `[0]`; the strict `> 0` scan also keeps the earliest-encountered max (a `>= 0` would pick the last — a divergence the parity test pins via a `2.0.0` / `2.0.0+build` tie). Empty/no-match → `null`, as before. `matchesRange`/`compare` unchanged. Behavior-preserving / contract-stable (ADR-0081 rule 5; CHANGELOG-only). Guard: `src/semver.test.ts` parity oracle (large unsorted list × releases/prereleases/ranges asserted equal to the old filter+sort pick; stable tie-break; empty-candidate null). Per `docs/perf/js-runtime-perf-audit-2026-06-05.md` (#8).
