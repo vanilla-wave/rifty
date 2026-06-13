@@ -28,6 +28,7 @@ import {
   setDirty,
   setProgramTitle,
 } from '../glue/editor-tabs.ts';
+import { MONO_FONT_STACK } from '../glue/fonts.ts';
 import { type FsOpsTarget, looksBinary } from '../glue/fs-ops.ts';
 // Side-effect: wires MonacoEnvironment.getWorker before the first editor.
 import '../glue/monaco-env.ts';
@@ -278,7 +279,7 @@ export function EditorHost(props: EditorHostProps) {
       minimap: { enabled: false },
       fontSize: 12.5,
       lineHeight: 21,
-      fontFamily: "'Roboto Mono', ui-monospace, 'SF Mono', Menlo, monospace",
+      fontFamily: MONO_FONT_STACK,
       fontLigatures: true,
       lineNumbersMinChars: 3,
       padding: { top: 14, bottom: 14 },
