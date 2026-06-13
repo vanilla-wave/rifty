@@ -81,8 +81,20 @@
   unbound names all land on the context. `switch` cases get a lexical scope;
   `for (var k in o)` no longer rewrites into a SyntaxError. Reads of unbound
   names stay loud (`ReferenceError`) / fall through to host globals by design.
-  Residual gaps (direct `eval`, function hoisting) documented in
-  `docs/backlog/runtime-js/vm-sandbox-residual-gaps`.
+  The remaining `eval` divergence is recorded in ADR-0138.
+- **`node:vm` residual sandbox gaps closed.** Top-level function declarations are
+  hoisted (callable before their text, incl. mutual recursion; a later `f = …`
+  reassignment is visible), declaration statements keep Node's EMPTY completion
+  value (`9; var z;` ⇒ 9, `var q = 5;` ⇒ undefined, `5; function f(){}` ⇒ 5),
+  statement-position destructuring `var` patterns (`var { a, b = 2, ...r } = o`,
+  `for (var { a } of xs)`) land on the context instead of throwing
+  `NotImplementedError('vm.context.var-pattern')`, and a declared `var` stays a
+  known global of the context — readable as `undefined` after the run and in later
+  runs — instead of leaking to the host realm afterwards. `vm.Script` memoises its
+  AST rewrite (parse + rewrite once, reuse across runs). Direct `eval(...)` remains
+  a permanent divergence (ADR-0138). Closes the
+  `runtime-js/vm-sandbox-residual-gaps` backlog item; parity
+  `cases/vm/sandbox-residual-gaps.case.ts`.
 - **Source-map decoding: 1-field VLQ segments advance the running generated
   column** (esbuild emits them for unmapped text; columns after them were
   shifted left), and a malformed inline source map now degrades to unmapped

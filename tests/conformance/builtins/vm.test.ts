@@ -335,6 +335,95 @@ describe('node:vm subset', () => {
     expect(() => vm.runInNewContext('missing', {})).toThrow(ReferenceError);
   });
 
+  it('hoists top-level function declarations so they are callable before their text', () => {
+    const ctx: Record<string, unknown> = {};
+    expect(vm.runInNewContext('var r = f(); function f() { return 9; } r;', ctx)).toBe(9);
+    expect(ctx.f).toBeTypeOf('function');
+
+    expect(
+      vm.runInNewContext(
+        'function a(n) { return n <= 0 ? 0 : b(n - 1); } function b(n) { return a(n) + 1; } a(3);',
+        {},
+      ),
+    ).toBe(3);
+
+    const reassigned: Record<string, unknown> = {};
+    expect(vm.runInNewContext('function f() { return 1; } f = 5; f;', reassigned)).toBe(5);
+    expect(reassigned.f).toBe(5);
+  });
+
+  it('gives declaration statements an empty completion value like Node', () => {
+    expect(vm.runInNewContext('var q = 5;', {})).toBeUndefined();
+    expect(vm.runInNewContext('1; var w = 7;', {})).toBe(1);
+    expect(vm.runInNewContext('9; var z;', {})).toBe(9);
+    expect(vm.runInNewContext('var a = 1, b = 2;', {})).toBeUndefined();
+    expect(vm.runInNewContext('function f() {}', {})).toBeUndefined();
+    expect(vm.runInNewContext('5; function f() {}', {})).toBe(5);
+    expect(vm.runInNewContext('var x = 5; x;', {})).toBe(5);
+  });
+
+  it('lands statement-position var destructuring patterns on the context', () => {
+    const ctx: Record<string, unknown> = {};
+    expect(
+      vm.runInNewContext(
+        'var { a, b = 2, ...rest } = { a: 1, c: 3, d: 4 }; var [x, , y = 9] = [10]; ({ a, b, rest, x, y });',
+        ctx,
+      ),
+    ).toEqual({ a: 1, b: 2, rest: { c: 3, d: 4 }, x: 10, y: 9 });
+    expect(Object.keys(ctx).sort()).toEqual(['a', 'b', 'rest', 'x', 'y']);
+
+    const nested: Record<string, unknown> = {};
+    expect(vm.runInNewContext('var { p: { q } } = { p: { q: 5 } }; ({ q });', nested)).toEqual({
+      q: 5,
+    });
+    expect('q' in nested).toBe(true);
+    expect('p' in nested).toBe(false);
+  });
+
+  it('rewrites a parenthesised last var initializer without corrupting the source', () => {
+    // acorn strips wrapping parens from the init node, so the completion-neutral
+    // `{ let T = (…); }` closer must use the declarator's end, not init.end.
+    expect(vm.runInNewContext('var c = (1, 2, 3); c', {})).toBe(3);
+    expect(vm.runInNewContext('var x = (5); x', {})).toBe(5);
+    expect(vm.runInNewContext('var x = ((7)); x', {})).toBe(7);
+    expect(vm.runInNewContext('var z = (9)', {})).toBeUndefined();
+    expect(vm.runInNewContext('var f = (a => a + 1); f(4)', {})).toBe(5);
+    expect(vm.runInNewContext('var o = ({ a: 1 }); o.a', {})).toBe(1);
+    expect(vm.runInNewContext('var a = 1, b = (2); a + b', {})).toBe(3);
+
+    const ctx: Record<string, unknown> = {};
+    expect(vm.runInNewContext('var { a } = ({ a: 1 }); var [b] = ([2]); ({ a, b });', ctx)).toEqual(
+      {
+        a: 1,
+        b: 2,
+      },
+    );
+    expect(Object.keys(ctx).sort()).toEqual(['a', 'b']);
+  });
+
+  it('keeps context var bindings readable after the run instead of leaking to the host', () => {
+    type HostGlobals = typeof globalThis & Record<string, unknown>;
+    const ctx: Record<string, unknown> = {};
+    vm.runInNewContext('var unset; this.read = function () { return unset; };', ctx);
+    expect((ctx.read as () => unknown)()).toBeUndefined();
+
+    (globalThis as HostGlobals).__riftyVmGapShadow = 'HOST';
+    try {
+      const shadowed: Record<string, unknown> = {};
+      vm.runInNewContext(
+        'var __riftyVmGapShadow; this.read = function () { return __riftyVmGapShadow; };',
+        shadowed,
+      );
+      expect((shadowed.read as () => unknown)()).toBeUndefined();
+    } finally {
+      Reflect.deleteProperty(globalThis, '__riftyVmGapShadow');
+    }
+
+    const persistent = vm.createContext({});
+    vm.runInContext('var later;', persistent);
+    expect(vm.runInContext('typeof later;', persistent)).toBe('undefined');
+  });
+
   it('compiles functions with parameters', () => {
     const add = vm.compileFunction('return a + b;', ['a', 'b']);
     expect(add(2, 5)).toBe(7);

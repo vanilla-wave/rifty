@@ -40,12 +40,21 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 - Identifier rewriter for live bindings is AST-based (acorn + scope-tracking walker — ADR 0009). Same-name local shadowing of imported bindings is handled correctly.
 - `node:vm` contexts are compatibility property bags, not security sandboxes. Existing context
   properties are resolved and mutated; unsupported execution controls throw loudly. Writes from
-  context code (assignments incl. compound/update/destructuring, `var`/function declarations,
-  for-in/of targets, `delete`) land on the context, while reads of names absent from the context
-  fall through to host globals BY DESIGN. Known ❌ gaps (see
-  `docs/backlog/runtime-js/vm-sandbox-residual-gaps`): direct `eval(...)` runs unrewritten (writes
-  inside it leak to the host), top-level function declarations are not hoisted, destructuring
-  `var` patterns throw `NotImplementedError('vm.context.var-pattern')`.
+  context code (assignments incl. compound/update/destructuring, `var`/function declarations incl.
+  statement-position destructuring `var` patterns, for-in/of targets, `delete`) land on the
+  context; top-level function declarations are hoisted (callable before their text); declaration
+  statements keep Node's empty completion value; and a declared `var` stays readable (as
+  `undefined`) after the run and in later runs of the same context. Reads of names absent from the
+  context fall through to host globals BY DESIGN. Two ❌ divergence classes remain. (1) **Direct
+  `eval(...)`** runs unrewritten, so writes to undeclared names inside it leak to the host realm — a
+  permanent divergence for this host-realm `with(proxy) + eval` design, recorded in ADR-0138 (kept
+  loud rather than half-intercepted). (2) The context is a plain-object property bag, so it does NOT
+  model a real vm global object's property attributes / lexical intrinsics / strict mode:
+  non-writable intrinsics (`var undefined = 5` no-ops in Node), non-configurable bindings (`delete`
+  of a `var`/function returns `false` and keeps the value in Node), a pre-declared lexical
+  `undefined`, a writable `globalThis`, a user `var eval`, and `"use strict"` undeclared-write
+  `ReferenceError`s all diverge — tracked in
+  `docs/backlog/runtime-js/vm-context-global-object-fidelity`.
 - `package.json` `imports` (subpath imports starting with `#`) is not yet wired.
 - The in-Worker VFS is in-memory only (M4 adds OPFS).
 - A `.ts`/`.tsx` module that classifies as CJS (its nearest package scope is not `type:module`) cannot be `require()`d: the TS type-strip is the async esbuild-via-`runWasi` `transformSource` hook and a synchronous `require()` cannot await it (ADR-0052 D1 alt-C). It throws `NotImplementedError('module-loader.ts-via-require')` rather than feeding raw TypeScript to `new Function`. A `.ts` under a `type:module` scope loads as ESM via `import()`, where the async strip runs.
