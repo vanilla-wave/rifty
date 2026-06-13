@@ -37,38 +37,51 @@ describe('install stamp (ADR-0135)', () => {
     });
     await seedNodeModules(vfs);
 
-    await writeInstallStamp(vfs, ROOT, 14);
+    await writeInstallStamp(vfs, ROOT, 14, 'real-vite');
     const stamp = await readInstallStamp(vfs, ROOT);
 
     expect(stamp).toEqual({
       version: 1,
+      slug: 'real-vite',
       deps: { vite: '^5.4.0', tool: '1.0.0', fsevents: '^2' },
       packages: 14,
     });
     expect(await vfs.exists(installStampPath(ROOT))).toBe(true);
   });
 
-  it('is satisfied when stamp deps match package.json and node_modules exists', async () => {
+  it('is satisfied when the slug + deps match and node_modules exists', async () => {
     const vfs = new MemoryVfs();
     await seedProject(vfs);
     await seedNodeModules(vfs);
-    await writeInstallStamp(vfs, ROOT, 14);
+    await writeInstallStamp(vfs, ROOT, 14, 'real-vite');
 
-    const hit = await installStampSatisfied(vfs, ROOT);
+    const hit = await installStampSatisfied(vfs, ROOT, 'real-vite');
     expect(hit?.packages).toBe(14);
+  });
+
+  it('is not satisfied when the project slug differs (shared-deps presets)', async () => {
+    // project-files (instant) and real-vite (from-scratch) share the vite deps;
+    // a stamp one wrote must not let the other skip its install.
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    await writeInstallStamp(vfs, ROOT, 8, 'project-files');
+
+    expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
+    expect((await installStampSatisfied(vfs, ROOT, 'project-files'))?.packages).toBe(8);
   });
 
   it('is not satisfied when package.json deps drift after stamping', async () => {
     const vfs = new MemoryVfs();
     await seedProject(vfs);
     await seedNodeModules(vfs);
-    await writeInstallStamp(vfs, ROOT, 14);
+    await writeInstallStamp(vfs, ROOT, 14, 'real-vite');
 
     await seedProject(vfs, {
       name: 'app',
       dependencies: { vite: '^5.4.0', lodash: '^4' },
     });
-    expect(await installStampSatisfied(vfs, ROOT)).toBeNull();
+    expect(await installStampSatisfied(vfs, ROOT, 'real-vite')).toBeNull();
   });
 
   it('is not satisfied without node_modules, without a stamp, or without package.json', async () => {

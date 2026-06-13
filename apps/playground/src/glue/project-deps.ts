@@ -1,10 +1,17 @@
 /**
  * Dependency arrival for a real-project boot (ADR-0135), in priority order:
  *
- *   1. **stamp** — `node_modules` already matches package.json → do nothing;
+ *   1. **stamp** — a tree stamped for THIS project `slug` already sits in OPFS
+ *      (reuse is keyed on the slug, not the deps: two projects can share deps
+ *      yet must not reuse each other's tree) → do nothing;
  *   2. **snapshot** — a baked asset matching the template AND the current
  *      package.json deps → restore it (no network, no resolver);
  *   3. **install** — real `install()` through the registry.
+ *
+ * from-scratch presets pass no `snapshotUrl`, so on a slug miss they run the
+ * visible install (never a silent snapshot restore). Because the slug differs
+ * from the instant default that shares the same template, a from-scratch preset
+ * shows its install even when OPFS was already warmed by an instant preset.
  *
  * Paths 2 and 3 finish by stamping the tree (flush → stamp → flush, so a
  * durable stamp implies a durable tree). Any snapshot failure — fetch,
@@ -40,6 +47,9 @@ export interface EnsureProjectDepsOptions {
   readonly fsSync: WorkspaceArchiveFs;
   readonly root: string;
   readonly templateId: string;
+  /** Project identity (preset slug) — the install-stamp reuse key. A stamp from
+   *  a different slug never suppresses this project's install. */
+  readonly slug: string;
   /** Baked snapshot URL; absent → straight to install on a stampless boot. */
   readonly snapshotUrl?: string;
   /** Runs the real installer; returns the installed package count. */
@@ -54,7 +64,7 @@ export interface EnsureProjectDepsOptions {
 export async function ensureProjectDependencies(
   opts: EnsureProjectDepsOptions,
 ): Promise<EnsureProjectDepsResult> {
-  const stamp = await installStampSatisfied(opts.vfs, opts.root);
+  const stamp = await installStampSatisfied(opts.vfs, opts.root, opts.slug);
   if (stamp) {
     opts.log(
       `[real-vite/worker] node_modules reused via install stamp (${stamp.packages} packages, install skipped)\n`,
@@ -106,6 +116,6 @@ async function tryRestoreSnapshot(
 
 async function stampTree(opts: EnsureProjectDepsOptions, packages: number): Promise<void> {
   await opts.flush();
-  await writeInstallStamp(opts.vfs, opts.root, packages);
+  await writeInstallStamp(opts.vfs, opts.root, packages, opts.slug);
   await opts.flush();
 }

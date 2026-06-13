@@ -84,6 +84,15 @@ describe('App terminal startup wiring', () => {
     );
   });
 
+  it('tags the worker with the project slug and clears the console on a project switch', () => {
+    // slug → worker install-stamp reuse key (distinct presets on the same
+    // template must not reuse each other's tree, ADR-0135); clear → fresh
+    // console for the switched-in project.
+    expect(source).toContain('slug: activePreset(),');
+    expect(source).toContain('manager.clear(targetSessionId)');
+    expect(source).toContain('manager.clear(session.id)');
+  });
+
   it('does not restart Vite inside a hidden stale terminal session', () => {
     expect(source).toContain('function isVisibleTerminalSession(id: string): boolean');
     expect(source).toContain(

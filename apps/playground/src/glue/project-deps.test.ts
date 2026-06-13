@@ -27,16 +27,17 @@ function project(deps: Record<string, string> = { vite: '^5.4.0' }) {
 }
 
 describe('ensureProjectDependencies (ADR-0135)', () => {
-  it('reuses a satisfied stamp without fetching or installing', async () => {
+  it('reuses a stamp written under the SAME slug without fetching or installing', async () => {
     const { vfs, fsSync, log, logFn } = project();
     fsSync.mkdirSync(`${ROOT}/node_modules`, { recursive: true });
-    await writeInstallStamp(vfs, ROOT, 8);
+    await writeInstallStamp(vfs, ROOT, 8, 'project-files');
 
     const result = await ensureProjectDependencies({
       vfs,
       fsSync,
       root: ROOT,
       templateId: 'vite',
+      slug: 'project-files',
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => {
         throw new Error('must not fetch on a stamp hit');
@@ -52,6 +53,38 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect(log.join('')).toContain('install skipped');
   });
 
+  it('ignores a stamp written under a DIFFERENT slug — the from-scratch install still runs', async () => {
+    // project-files (instant) stamped OPFS for the shared vite deps; selecting
+    // real-vite (from-scratch, no snapshot) must still install, not reuse.
+    const { vfs, fsSync, log, logFn } = project();
+    fsSync.mkdirSync(`${ROOT}/node_modules`, { recursive: true });
+    await writeInstallStamp(vfs, ROOT, 8, 'project-files');
+    let installed = false;
+
+    const result = await ensureProjectDependencies({
+      vfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'real-vite',
+      fetchSnapshot: async () => {
+        throw new Error('from-scratch must not consult the snapshot');
+      },
+      install: async () => {
+        installed = true;
+        return { packages: 8 };
+      },
+      flush: async () => {},
+      log: logFn,
+    });
+
+    expect(result).toEqual({ source: 'install', packages: 8 });
+    expect(installed).toBe(true);
+    expect(log.join('')).not.toContain('install skipped');
+    // re-selecting the SAME slug now reuses the tree it just stamped.
+    expect((await installStampSatisfied(vfs, ROOT, 'real-vite'))?.packages).toBe(8);
+  });
+
   it('restores the baked snapshot on a stampless boot and stamps the tree', async () => {
     const { vfs, fsSync, log, logFn } = project();
     let installed = false;
@@ -61,6 +94,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       fsSync,
       root: ROOT,
       templateId: 'vite',
+      slug: 'project-files',
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => viteSnapshot(),
       install: async () => {
@@ -75,7 +109,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect(installed).toBe(false);
     expect(fsSync.existsSync(`${ROOT}/node_modules/vite/package.json`)).toBe(true);
     expect(fsSync.existsSync(`${ROOT}/package-lock.json`)).toBe(true);
-    expect((await installStampSatisfied(vfs, ROOT))?.packages).toBe(8);
+    expect((await installStampSatisfied(vfs, ROOT, 'project-files'))?.packages).toBe(8);
     expect(log.join('')).toContain('baked node_modules restored');
   });
 
@@ -87,6 +121,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       fsSync,
       root: ROOT,
       templateId: 'vite',
+      slug: 'project-files',
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => viteSnapshot(),
       install: async () => ({ packages: 9 }),
@@ -96,7 +131,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
 
     expect(result).toEqual({ source: 'install', packages: 9 });
     expect(log.join('')).toContain('stale');
-    expect((await installStampSatisfied(vfs, ROOT))?.packages).toBe(9);
+    expect((await installStampSatisfied(vfs, ROOT, 'project-files'))?.packages).toBe(9);
   });
 
   it('falls back to install when the snapshot asset is unavailable', async () => {
@@ -107,6 +142,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       fsSync,
       root: ROOT,
       templateId: 'vite',
+      slug: 'project-files',
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => null,
       install: async () => ({ packages: 9 }),
@@ -126,6 +162,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       fsSync,
       root: ROOT,
       templateId: 'express-sqlite',
+      slug: 'express-sqlite',
       fetchSnapshot: async () => {
         throw new Error('must not fetch without a snapshot url');
       },
@@ -135,7 +172,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     });
 
     expect(result).toEqual({ source: 'install', packages: 60 });
-    expect((await installStampSatisfied(vfs, ROOT))?.packages).toBe(60);
+    expect((await installStampSatisfied(vfs, ROOT, 'express-sqlite'))?.packages).toBe(60);
   });
 
   it('flush-before-stamp ordering holds on the snapshot path', async () => {
@@ -147,6 +184,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       fsSync,
       root: ROOT,
       templateId: 'vite',
+      slug: 'project-files',
       snapshotUrl: '/snapshots/vite.json.gz',
       fetchSnapshot: async () => viteSnapshot(),
       install: async () => ({ packages: 0 }),

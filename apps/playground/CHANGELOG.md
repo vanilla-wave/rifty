@@ -23,10 +23,12 @@
   is served from — skipping the baked snapshot and streaming live
   `npm: + <name>@<version>` per-package output (ADR-0134) before the dev server
   starts. Instant presets (`project-files`, `node-worker`) take the quiet
-  snapshot/stamp path. After any successful worker install the tree is stamped
-  (`node_modules/.rifty-install-stamp.json` in OPFS, flush-before-stamp so a
-  durable stamp implies a durable tree), so a re-selected from-scratch preset
-  reuses the installed tree instead of re-resolving. Template switcher groups
+  snapshot/stamp path. Node_modules reuse is keyed on the **project slug**
+  (preset id, `node_modules/.rifty-install-stamp.json` in OPFS), not the deps:
+  `project-files` and `real-vite` both run `vite` but must not reuse each
+  other's tree, so a from-scratch preset always shows its install even when an
+  instant preset already warmed OPFS — re-selecting the same project reuses
+  (fast). Switching projects clears the terminal first. Template switcher groups
   presets under "Instant start" / "From scratch" with kind pills. Stamp
   invalidation is provisional —
   `docs/backlog/playground/install-stamp-invalidation.md`.

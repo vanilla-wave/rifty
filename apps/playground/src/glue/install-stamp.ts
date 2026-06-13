@@ -1,22 +1,28 @@
 /**
  * Install stamp (ADR-0135): `<root>/node_modules/.rifty-install-stamp.json`
- * marks "this node_modules was fully installed for dep set D". Written after
- * every successful install (page `npm install` and worker bootstrap); the
- * worker bootstrap skips its redundant `install()` when the stamp still
- * matches package.json — that skip is what makes instant presets fast.
+ * marks "this node_modules was installed for project SLUG". The worker bootstrap
+ * skips its `install()` when the stamp's slug matches the project being booted —
+ * that skip is what makes a re-opened project fast.
+ *
+ * Reuse key = the project SLUG (preset id), NOT the dep set: two projects can
+ * share dependencies (e.g. `project-files` and `real-vite` both run `vite`) yet
+ * must not reuse each other's tree — otherwise a from-scratch preset would skip
+ * the very install it exists to show. package.json deps are kept as a secondary
+ * freshness guard.
  *
  * Trust model: the stamp trusts the tree wholesale — no per-file verification.
- * An explicit terminal `npm install` never consults it (always re-installs,
- * then re-stamps). Callers own flush ordering: drain the VFS write-through
- * BEFORE `writeInstallStamp` so a durable stamp implies a durable tree.
+ * Callers own flush ordering: drain the VFS write-through BEFORE
+ * `writeInstallStamp` so a durable stamp implies a durable tree.
  */
 // TODO(backlog: playground/install-stamp-invalidation)
 import { type Vfs, joinPath } from '@riftydev/vfs';
 
 export interface InstallStamp {
   readonly version: 1;
+  /** Project identity (preset slug) the tree was installed for — the reuse key. */
+  readonly slug: string;
   /** package.json effective request: dependencies ∪ devDependencies ∪
-   *  optionalDependencies (mirrors the installer's package.json-driven set). */
+   *  optionalDependencies (secondary freshness guard alongside the slug). */
   readonly deps: Readonly<Record<string, string>>;
   /** `result.packages.length` of the install that produced the tree. */
   readonly packages: number;
@@ -80,20 +86,36 @@ export async function readInstallStamp(vfs: Vfs, root: string): Promise<InstallS
     return null;
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-  const raw = parsed as { version?: unknown; deps?: unknown; packages?: unknown };
+  const raw = parsed as {
+    version?: unknown;
+    slug?: unknown;
+    deps?: unknown;
+    packages?: unknown;
+  };
   if (raw.version !== 1 || typeof raw.packages !== 'number') return null;
   if (!raw.deps || typeof raw.deps !== 'object' || Array.isArray(raw.deps)) return null;
-  return { version: 1, deps: readStringMap(raw.deps), packages: raw.packages };
+  return {
+    version: 1,
+    slug: typeof raw.slug === 'string' ? raw.slug : '',
+    deps: readStringMap(raw.deps),
+    packages: raw.packages,
+  };
 }
 
 /**
- * Stamp the tree for the CURRENT package.json effective dep set. No-op when
- * package.json is unreadable (nothing to match against later).
+ * Stamp the tree for project `slug` + the CURRENT package.json effective dep
+ * set. No-op when package.json is unreadable (nothing to match against later).
+ * `slug` defaults to `''` (page-side ad-hoc installs that no boot ever reuses).
  */
-export async function writeInstallStamp(vfs: Vfs, root: string, packages: number): Promise<void> {
+export async function writeInstallStamp(
+  vfs: Vfs,
+  root: string,
+  packages: number,
+  slug = '',
+): Promise<void> {
   const deps = await readEffectiveDeps(vfs, root);
   if (!deps) return;
-  const stamp: InstallStamp = { version: 1, deps, packages };
+  const stamp: InstallStamp = { version: 1, slug, deps, packages };
   // A zero-package install legitimately creates no node_modules — the stamp
   // still must land so the next boot skips the resolver.
   await vfs.mkdir(joinPath(root, 'node_modules'), { recursive: true });
@@ -101,12 +123,18 @@ export async function writeInstallStamp(vfs: Vfs, root: string, packages: number
 }
 
 /**
- * The skip predicate: stamp present, deps still match package.json, and
- * `node_modules/` exists. Returns the stamp (for its package count) or null.
+ * The skip predicate: stamp present, its slug matches the project being booted,
+ * `node_modules/` exists, and deps still match package.json (freshness guard).
+ * Returns the stamp (for its package count) or null.
  */
-export async function installStampSatisfied(vfs: Vfs, root: string): Promise<InstallStamp | null> {
+export async function installStampSatisfied(
+  vfs: Vfs,
+  root: string,
+  slug = '',
+): Promise<InstallStamp | null> {
   const stamp = await readInstallStamp(vfs, root);
   if (!stamp) return null;
+  if (stamp.slug !== slug) return null;
   if (!(await vfs.exists(joinPath(root, 'node_modules')))) return null;
   const deps = await readEffectiveDeps(vfs, root);
   if (!deps || !depsEqual(stamp.deps, deps)) return null;

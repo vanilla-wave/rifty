@@ -17,13 +17,14 @@ Realm/storage constraint (load-bearing): the VFS interface is synchronous; sync 
 
 1. **`Preset.setup: 'instant' | 'from-scratch'`** (required). instant: `project-files`, `node-worker`; from-scratch: `real-vite`, `express-sqlite`. `DEFAULT_PRESET` stays instant (preserves `$ vite` boot contract in e2e).
 2. **Boot lines** come from `presetBootLines(preset, root)` = `[<dev line>]` for BOTH kinds. The setup kind no longer changes the page's boot lines — it is carried to the worker over `RIFTY_RFV_SETUP` and drives the worker's dependency-arrival path. Single source for first boot AND preset-switch restart.
-3. **Worker-owned dependency arrival** (`ensureProjectDependencies`, priority stamp → snapshot → install), parameterised by setup:
-   - **instant** — snapshot enabled, quiet: stamp reuse → baked snapshot restore → install. First-ever boot restores the snapshot; later boots skip via the stamp.
-   - **from-scratch** — snapshot DISABLED (honest), streamed: stamp reuse → real `install()` with the ADR-0134 `onPackage` hook logging `npm: + <name>@<version>` to the terminal. The dev server starts after the install settles.
-4. **Install stamp** `<root>/node_modules/.rifty-install-stamp.json` (`{version, deps, packages}`), in the worker's OPFS:
+3. **Worker-owned dependency arrival** (`ensureProjectDependencies`, priority stamp → snapshot → install). Reuse is keyed on the **project slug** (preset id, over `RIFTY_RFV_SLUG`), NOT the deps:
+   - **instant** — quiet reuse: stamp(slug) → baked snapshot restore → install. First-ever boot restores the snapshot; later boots skip via the slug stamp.
+   - **from-scratch** — no snapshot: stamp(slug) → real `install()` with the ADR-0134 `onPackage` hook logging `npm: + <name>@<version>` to the terminal, then the dev server. Because the slug differs from the instant default that shares the same template, the install is shown — not silently skipped.
+4. **Install stamp** `<root>/node_modules/.rifty-install-stamp.json` (`{version, slug, deps, packages}`), in the worker's OPFS:
+   - reuse key is the **slug**: `project-files` (instant) and `real-vite` (from-scratch) both run `vite` (same deps) but must not reuse each other's tree — keying on deps alone hid the from-scratch install once the instant default warmed OPFS. `deps` is kept as a secondary freshness guard;
    - written after every successful worker install, `deps` = package.json effective set (deps ∪ devDeps ∪ optionals — mirrors installer's request);
    - VFS `flush()` runs BEFORE the stamp write: OPFS write-through is unordered across files, so the stamp lands durable only after the tree — stamp implies tree;
-   - a re-selected from-scratch preset whose tree is already installed hits the stamp and skips the install — fast after the first honest install, exactly like `npm install` once then `npm run dev` (the install is visible on the first-ever boot).
+   - re-selecting the SAME project (same slug) reuses its tree (fast); switching to a different project re-runs its arrival path (instant: snapshot restore; from-scratch: visible install). The page-side ad-hoc `npm install` stamps under slug `''`, which no worker boot ever reuses.
 5. **Trust model**: stamp trusts the tree — no per-file verification. Escape hatch: deleting `node_modules` or changing package.json deps forces a fresh worker install. Invalidation strategy is provisional → `docs/backlog/playground/install-stamp-invalidation.md`.
 6. **UI**: TemplateSwitcher dropdown groups rows under "Instant start" / "From scratch"; rows render the preset `tag` pill (instant / npm install). e2e selectors (`data-testid="gallery"`, `data-preset`) unchanged.
 7. **Baked node_modules snapshots** (instant only) — the first-ever boot of an instant template is truly instant, no silent install:
@@ -39,8 +40,9 @@ Superseded sub-decision (this ADR was not yet merged): a first cut ran the from-
 
 ## Consequences
 
-- From-scratch installs ONCE, in the worker realm that serves the preview, streamed live to the terminal; re-selecting the same preset reuses the OPFS stamp (fast). First-ever instant boot restores the baked snapshot (seconds, no resolver/network); later boots skip via stamp.
+- Switching INTO a from-scratch project shows its install (slug differs from whatever warmed OPFS), streamed live in the worker realm that serves the preview; re-selecting the SAME project reuses its slug-stamped tree (fast). Instant presets reuse by slug too: first-ever boot restores the baked snapshot (seconds, no resolver/network), and a same-template instant switch re-restores it (local, no network) rather than sharing the other preset's stamp.
 - The visible install now appears under the dev command (`$ vite` / `npm run dev`) rather than a discrete `$ npm install` page line — the per-package `npm: + …` stream is the honest signal. The page-side `npm` shell command stays for ad-hoc `npm install <pkg>` (M9) but is no longer part of the from-scratch boot.
+- Switching projects clears the terminal first, so each project's boot starts on a fresh console.
 - ~9 MB committed asset; each re-bake adds another copy to git history. Regeneration policy + size pressure tracked in `docs/backlog/playground/baked-snapshot-regeneration.md`.
 - A corrupted-but-stamped tree boots a broken dev server; recovery = delete node_modules / change deps. Accepted for now; see backlog item.
 - `fullstack-demo` e2e: selecting `express-sqlite` streams `npm: + express@…` from the worker before the server boots (deliberate product change).

@@ -223,6 +223,7 @@ export function App(props: AppProps) {
       handle = await startRealVite({
         template,
         setup: presetForId(activePreset()).setup,
+        slug: activePreset(),
         port: machine.realVitePort(),
         onLog: (line) => {
           ctx.stdout.write(line);
@@ -622,6 +623,7 @@ export function App(props: AppProps) {
     if (generation !== devServerRestartGeneration) return;
     const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;
     devServerSessionId = targetSessionId;
+    manager.clear(targetSessionId); // fresh console for the switched-in project
     await runTerminalSequence(
       targetSessionId,
       presetBootLines(presetForId(activePreset()), WORKSPACE),
@@ -643,6 +645,7 @@ export function App(props: AppProps) {
     const session = devServerSession();
     devServerSessionId = session.id;
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    manager.clear(session.id); // fresh console for the switched-in project
     await runTerminalSequence(session.id, presetBootLines(preset, WORKSPACE));
   }
 

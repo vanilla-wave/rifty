@@ -290,6 +290,9 @@ async function bootstrap(): Promise<void> {
   // Sandbox setup kind (ADR-0135): from-scratch runs the visible, honest install
   // HERE (the OPFS-owning realm), streamed to the terminal; instant stays quiet.
   const fromScratch = env.RIFTY_RFV_SETUP === 'from-scratch';
+  // Project slug (preset id) — the install-stamp reuse key, so a from-scratch
+  // preset isn't silenced by a stamp an instant preset on the same template left.
+  const slug = env.RIFTY_RFV_SLUG ?? spec.id;
   // Honour an explicit entry override on the spawn spec (usually a no-op —
   // the orchestrator defaults it to the template's own entry).
   const effectiveSpec = withEntryOverride(spec, env.RIFTY_RFV_ENTRY ?? spec.entry.relativePath);
@@ -351,17 +354,19 @@ async function bootstrap(): Promise<void> {
   for (const delay of [300, 1200, 3000]) setTimeout(publishSnapshot, delay);
 
   const vfs = new SyncMirrorVfs();
-  // Dependency arrival (ADR-0135): stamp reuse → baked snapshot → install. The
+  // Dependency arrival (ADR-0135): stamp(slug) → baked snapshot → install. The
   // visible install runs HERE — the worker realm owns the OPFS tree the preview
   // is served from, and the page realm is memory-backed (sync OPFS is
-  // worker-only), so a page-side install never reaches this tree. from-scratch
-  // skips the snapshot (honest real resolve) and streams each package to the
-  // terminal; instant keeps the quiet snapshot/stamp path.
+  // worker-only), so a page-side install never reaches this tree. Reuse is keyed
+  // on the project slug; from-scratch additionally disables the snapshot so a
+  // slug miss runs the honest, streamed install (not a silent restore). instant
+  // keeps the quiet stamp → snapshot → install reuse path.
   await ensureProjectDependencies({
     vfs,
     fsSync: syncMirror(),
     root,
     templateId: spec.id,
+    slug,
     snapshotUrl: fromScratch ? undefined : cfg.bakedNodeModulesUrl,
     install: async () => {
       log(`[real-vite/worker] installing ${spec.displayName} into ${root}/node_modules…\n`);
