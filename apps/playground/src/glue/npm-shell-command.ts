@@ -13,9 +13,13 @@
  * `realVite.ts` seeding) so `npm install express` is a one-liner on a blank tree.
  *
  * Progress reporting goes through `ctx.stdout.write`, which the shell pipes
- * into the terminal via `Shell.run`'s `onChunk` callback. Per-package fetch
- * progress is not yet a hook on `install()` itself — added at start/end and
- * once per resolved package; a streaming hook lands when the installer grows one.
+ * into the terminal via `Shell.run`'s `onChunk` callback. Per-package lines
+ * stream live through `InstallOptions.onPackage` (ADR-0134).
+ *
+ * After a successful install the tree is stamped (ADR-0135) so the real-vite
+ * worker bootstrap can skip its redundant install; `deps.flush` drains the
+ * OPFS write-through before/after the stamp so a durable stamp implies a
+ * durable tree.
  */
 
 import {
@@ -26,6 +30,7 @@ import {
 } from '@riftydev/npm-client';
 import type { CommandContext, ShellCommand } from '@riftydev/shell';
 import type { Vfs } from '@riftydev/vfs';
+import { writeInstallStamp } from './install-stamp.ts';
 
 /**
  * Signature of `@riftydev/npm-client.install`. Inlined so tests stub it without
@@ -48,6 +53,9 @@ export interface NpmShellCommandDeps {
   readonly install?: InstallFn;
   /** Executes an `npm run <script>` command in the host shell/session. */
   readonly runScript?: (name: string, command: string, ctx: CommandContext) => Promise<number>;
+  /** Drains the VFS write-through (page wires the OPFS sync-mirror flush) so
+   *  the install stamp lands durably AFTER the tree (ADR-0135). */
+  readonly flush?: () => Promise<void>;
 }
 
 interface ProjectPackageJson {
@@ -254,9 +262,15 @@ async function runInstall(
       vfs: deps.vfs,
       cwd: ctx.cwd,
       registry: deps.registry,
+      onPackage: (event) => {
+        ctx.stdout.write(
+          `npm: + ${event.name}@${event.version}${event.cacheHit ? ' (cached)' : ''}\n`,
+        );
+      },
     });
     const elapsedMs = Math.round(performance.now() - start);
 
+    await stampInstalledTree(deps, ctx.cwd, result.packages.length);
     ctx.stdout.write(`npm: installed ${result.packages.length} package(s) in ${elapsedMs}ms\n`);
     return 0;
   } catch (err) {
@@ -268,6 +282,25 @@ async function runInstall(
       }
     }
     return reportInstallError(err, ctx);
+  }
+}
+
+/**
+ * Stamp the freshly installed tree (ADR-0135): flush write-through → write
+ * stamp → flush stamp. Best-effort — a stamp failure costs the worker's skip
+ * optimization, never the install's success.
+ */
+async function stampInstalledTree(
+  deps: NpmShellCommandDeps,
+  cwd: string,
+  packages: number,
+): Promise<void> {
+  try {
+    await deps.flush?.();
+    await writeInstallStamp(deps.vfs, cwd, packages);
+    await deps.flush?.();
+  } catch (err) {
+    console.warn(`npm: install stamp write failed: ${(err as Error).message}`);
   }
 }
 

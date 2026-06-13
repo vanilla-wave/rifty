@@ -18,6 +18,8 @@ export const VITE_TEMPLATE: ViteProjectSpec = {
   displayName: 'Vite dev server',
   runtime: 'vite',
   install: { vite: '^5.4.0' },
+  // Regenerate with `pnpm snapshots:bake` after changing `install` (ADR-0135).
+  bakedNodeModulesUrl: '/snapshots/vite-node-modules.json.gz',
   runtimeSpecifier: 'vite',
   entry: { relativePath: '/src/main.js', content: INITIAL_MAIN_JS },
   defaultPort: 5174,

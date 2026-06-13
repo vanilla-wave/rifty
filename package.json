@@ -38,7 +38,8 @@
     "backlog:check": "node tools/backlog/check.mjs",
     "refs:check": "node tools/refs/check.mjs",
     "docs:check": "pnpm backlog:check && pnpm refs:check",
-    "postinstall": "playwright install --with-deps chromium firefox webkit || true"
+    "postinstall": "playwright install --with-deps chromium firefox webkit || true",
+    "snapshots:bake": "pnpm --filter @riftydev/playground snapshots:bake"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

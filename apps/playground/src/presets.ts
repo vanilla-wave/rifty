@@ -3,8 +3,19 @@ import {
   EXPRESS_SQLITE_SERVER_SOURCE,
   EXPRESS_SQLITE_TEMPLATE,
 } from './templates/express-sqlite.ts';
+import { terminalDevLine } from './templates/project-spec.ts';
+import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
 
 export type PresetMode = 'dev' | 'real-vite';
+
+/**
+ * How the preset's dependencies arrive (ADR-0135):
+ * - `'instant'` — the project shows up ready; the worker installs silently on
+ *   the first-ever boot and skips via the install stamp afterwards.
+ * - `'from-scratch'` — the terminal visibly runs `npm install` (per-package
+ *   lines) before the dev line; the worker then reuses the stamped tree.
+ */
+export type PresetSetup = 'instant' | 'from-scratch';
 
 export interface PresetFile {
   /** Workspace-relative path written next to src/main.js when this preset loads. */
@@ -23,6 +34,8 @@ export interface Preset {
   readonly icon: IconName;
   /** Mode the preset runs in; selecting it transitions the live-preview UI. */
   readonly mode: PresetMode;
+  /** Sandbox setup kind — drives the terminal boot sequence (ADR-0135). */
+  readonly setup: PresetSetup;
   /**
    * For `real-vite` presets: which registered template (ADR-0078) to run,
    * resolved via {@link ./templates/registry.ts}. Omitted means the default template.
@@ -233,10 +246,10 @@ This preset keeps the preview honest: the browser renders the result, while the 
 The terminal prestarts vite. The script under scripts/ is a project file to inspect; the playground shell exposes vite for the dev server and npm install for package experiments.
 `;
 
-const REAL_VITE_SOURCE = `// Real npm project mode installs a real npm package set into a worker-local
-// node_modules, boots its actual dev server, and previews it live. The default
-// template is Vite (vite@^5); first run takes ~20s (install + boot), later
-// runs reuse the cache.
+const REAL_VITE_SOURCE = `// Real npm project mode builds the project from scratch: the terminal runs a
+// visible npm install (watch the packages stream in), then boots the actual
+// dev server and previews it live. The default template is Vite (vite@^5);
+// later runs reuse the tarball cache and the stamped node_modules.
 //
 // This is your app entry, served by the dev server at /src/main.js.
 
@@ -258,10 +271,11 @@ const PROJECT_FILES_PRESET: Preset = {
   category: 'Files + modules',
   icon: 'zap',
   mode: 'real-vite',
+  setup: 'instant',
   templateId: 'vite',
   blurb: 'A small module graph with JS, JSON, CSS, and a README to inspect.',
   glyph: { text: 'JS', color: '#E8D44D' },
-  tag: { text: 'live', tone: 'live' },
+  tag: { text: 'instant', tone: 'live' },
   source: PROJECT_FILES_SOURCE,
   openFiles: ['src/project-summary.js', 'src/project.json'],
   files: [
@@ -278,10 +292,11 @@ const NODE_WORKER_PRESET: Preset = {
   category: 'Files + modules',
   icon: 'play',
   mode: 'real-vite',
+  setup: 'instant',
   templateId: 'vite',
   blurb: 'Shows where Node-style project files fit around the worker dev server.',
   glyph: { text: 'N', color: '#9BD060' },
-  tag: { text: 'live', tone: 'live' },
+  tag: { text: 'instant', tone: 'live' },
   source: NODE_WORKER_SOURCE,
   openFiles: ['src/runtime-notes.js', 'scripts/inspect-workspace.mjs'],
   files: [
@@ -298,10 +313,11 @@ const REAL_VITE_PRESET: Preset = {
   category: 'Live preview',
   icon: 'rocket',
   mode: 'real-vite',
+  setup: 'from-scratch',
   templateId: 'vite',
-  blurb: 'Installs a real npm project and runs its Vite dev server in a terminal.',
+  blurb: 'Runs a visible npm install in the terminal, then boots the Vite dev server.',
   glyph: { text: 'V', color: '#5FCE96' },
-  tag: { text: '~20s', tone: 'slow' },
+  tag: { text: 'npm install', tone: 'slow' },
   source: REAL_VITE_SOURCE,
 };
 
@@ -316,10 +332,11 @@ const EXPRESS_SQLITE_PRESET: Preset = {
   category: 'Live preview',
   icon: 'layers',
   mode: 'real-vite',
+  setup: 'from-scratch',
   templateId: EXPRESS_SQLITE_TEMPLATE.id,
   blurb: 'A client-server app: real Express from npm, SQLite-as-WASM behind node:sqlite.',
   glyph: { text: 'EX', color: '#7FB7E8' },
-  tag: { text: '~15s', tone: 'slow' },
+  tag: { text: 'npm install', tone: 'slow' },
   source: EXPRESS_SQLITE_SERVER_SOURCE,
   openFiles: ['public/index.html', 'public/client.js'],
   files: Object.entries(EXPRESS_SQLITE_TEMPLATE.extraFiles).map(([path, content]) => ({
@@ -337,6 +354,23 @@ export const PRESETS: readonly Preset[] = [
 
 /** The preset selected at boot. Its source is the default editor content. */
 export const DEFAULT_PRESET: Preset = PROJECT_FILES_PRESET;
+
+/**
+ * The terminal lines that boot a preset (ADR-0135). BOTH setup kinds boot the
+ * template's dev line; the instant/from-scratch difference lives in the WORKER
+ * realm (carried over `RIFTY_RFV_SETUP`), not in the page boot lines.
+ *
+ * from-scratch's visible `npm install` runs INSIDE the worker — the realm that
+ * owns the OPFS tree the preview is served from — streamed to the terminal
+ * (per-package lines, ADR-0134). It cannot run on the page: the page realm is
+ * memory-backed (sync OPFS is worker-only), so a page-side install would land
+ * in a store the preview never reads. Single source for first boot AND
+ * preset-switch restart.
+ */
+export function presetBootLines(preset: Preset, root: string): readonly string[] {
+  const spec = preset.templateId ? resolveProjectSpec(preset.templateId) : defaultProjectSpec();
+  return [terminalDevLine(spec, root)];
+}
 
 /** Category render order in the gallery. */
 export const CATEGORY_ORDER: readonly string[] = ['Files + modules', 'Live preview'];

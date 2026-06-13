@@ -641,3 +641,126 @@ describe('install — nested install for conflicting transitive versions (M11)',
     );
   });
 });
+
+describe('install — onPackage progress hook (ADR-0134)', () => {
+  async function diamondDb(): Promise<Map<string, Map<string, FakeRegistryEntry>>> {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set('a', new Map([['1.0.0', await makeEntry('a', '1.0.0', { b: '^1.0.0' })]]));
+    db.set('b', new Map([['1.2.0', await makeEntry('b', '1.2.0')]]));
+    return db;
+  }
+
+  it('fires once per unique (name, version) with cacheHit=false on a cold live install', async () => {
+    const db = await diamondDb();
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const events: { name: string; version: string; cacheHit: boolean }[] = [];
+
+    await install(
+      'root',
+      '1.0.0',
+      { a: '^1.0.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry: new FakeRegistry(db),
+        onPackage: (event) => events.push(event),
+      },
+    );
+
+    expect(events.map((e) => `${e.name}@${e.version}`).sort()).toEqual(['a@1.0.0', 'b@1.2.0']);
+    expect(events.every((e) => e.cacheHit === false)).toBe(true);
+  });
+
+  it('fires on the lockfile fast path with cacheHit=true once the tarball cache is warm', async () => {
+    const db = await diamondDb();
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const registry = new FakeRegistry(db);
+    await install('root', '1.0.0', { a: '^1.0.0' }, { vfs, cwd: '/proj', registry });
+
+    const events: { name: string; version: string; cacheHit: boolean }[] = [];
+    await install(
+      'root',
+      '1.0.0',
+      { a: '^1.0.0' },
+      {
+        vfs,
+        cwd: '/proj',
+        registry,
+        onPackage: (event) => events.push(event),
+      },
+    );
+
+    expect(events.map((e) => `${e.name}@${e.version}`).sort()).toEqual(['a@1.0.0', 'b@1.2.0']);
+    expect(events.every((e) => e.cacheHit === true)).toBe(true);
+  });
+
+  it('a throwing hook is warned and does not abort the install', async () => {
+    const db = await diamondDb();
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (msg: string) => warnings.push(String(msg));
+    try {
+      const result = await install(
+        'root',
+        '1.0.0',
+        { a: '^1.0.0' },
+        {
+          vfs,
+          cwd: '/proj',
+          registry: new FakeRegistry(db),
+          onPackage: () => {
+            throw new Error('sink failed');
+          },
+        },
+      );
+      expect(result.packages.map((p) => p.name).sort()).toEqual(['a', 'b']);
+    } finally {
+      console.warn = originalWarn;
+    }
+    expect(warnings.some((w) => w.includes('onPackage'))).toBe(true);
+    expect(await vfs.exists('/proj/node_modules/a/package.json')).toBe(true);
+    expect(await vfs.exists('/proj/node_modules/b/package.json')).toBe(true);
+  });
+
+  it('does not fire for a skipped optional dependency whose fetch fails', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    const broken = await makeEntry('broken', '1.0.0');
+    broken.manifest.dist = { tarball: 'fake://missing/9.9.9' };
+    db.set(
+      'host',
+      new Map([
+        [
+          '1.0.0',
+          await makeEntry('host', '1.0.0', {}, { optionalDependencies: { broken: '1.0.0' } }),
+        ],
+      ]),
+    );
+    db.set('broken', new Map([['1.0.0', broken]]));
+
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const events: { name: string }[] = [];
+    const originalWarn = console.warn;
+    console.warn = () => {};
+    try {
+      await install(
+        'root',
+        '1.0.0',
+        { host: '^1.0.0' },
+        {
+          vfs,
+          cwd: '/proj',
+          registry: new FakeRegistry(db),
+          onPackage: (event) => events.push(event),
+        },
+      );
+    } finally {
+      console.warn = originalWarn;
+    }
+    expect(events.map((e) => e.name)).toEqual(['host']);
+  });
+});

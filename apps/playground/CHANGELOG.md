@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Baked node_modules snapshots — instant presets are instant on the FIRST
+  boot too (ADR-0135 item 6).** `pnpm snapshots:bake` runs a real `install()`
+  per baked template and ships node_modules + lockfile as a committed gzipped
+  asset (`public/snapshots/`, vite ≈9 MB gz). The worker's dependency arrival
+  (`glue/project-deps.ts`) is now stamp → snapshot → install: a stampless boot
+  restores the baked tree (deps-equality gated, REPLACE semantics, then
+  stamped) instead of resolving/fetching; any snapshot failure falls back to a
+  real install. Gzip is sniffed by magic bytes (vite dev pre-decodes `.gz` via
+  Content-Encoding; static hosts serve raw bytes). Regeneration policy:
+  `docs/backlog/playground/baked-snapshot-regeneration.md`.
+
+- **Sandbox setup kinds: instant vs from-scratch (ADR-0135).** Presets carry
+  `setup: 'instant' | 'from-scratch'`. BOTH kinds boot the template's dev line;
+  the difference lives in the WORKER realm (carried over `RIFTY_RFV_SETUP`).
+  From-scratch presets (`real-vite`, `express-sqlite`) run a VISIBLE, honest
+  `install()` inside the worker — the realm that owns the OPFS tree the preview
+  is served from — skipping the baked snapshot and streaming live
+  `npm: + <name>@<version>` per-package output (ADR-0134) before the dev server
+  starts. Instant presets (`project-files`, `node-worker`) take the quiet
+  snapshot/stamp path. Node_modules reuse is keyed on the **project slug**
+  (preset id, `node_modules/.rifty-install-stamp.json` in OPFS), not the deps:
+  `project-files` and `real-vite` both run `vite` but must not reuse each
+  other's tree, so a from-scratch preset always shows its install even when an
+  instant preset already warmed OPFS — re-selecting the same project reuses
+  (fast). Switching projects clears the terminal first. Template switcher groups
+  presets under "Instant start" / "From scratch" with kind pills. Stamp
+  invalidation is provisional —
+  `docs/backlog/playground/install-stamp-invalidation.md`.
+
 ### Changed
 
 - **Mono font → JetBrains Mono.** Code surfaces (Monaco editor, xterm terminal,
