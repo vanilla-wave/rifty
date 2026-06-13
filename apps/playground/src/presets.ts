@@ -3,7 +3,7 @@ import {
   EXPRESS_SQLITE_SERVER_SOURCE,
   EXPRESS_SQLITE_TEMPLATE,
 } from './templates/express-sqlite.ts';
-import { terminalDevLine, terminalInstallLine } from './templates/project-spec.ts';
+import { terminalDevLine } from './templates/project-spec.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
 
 export type PresetMode = 'dev' | 'real-vite';
@@ -356,17 +356,20 @@ export const PRESETS: readonly Preset[] = [
 export const DEFAULT_PRESET: Preset = PROJECT_FILES_PRESET;
 
 /**
- * The terminal lines that boot a preset (ADR-0135): from-scratch presets run a
- * visible `npm install` before the template's dev line; instant presets go
- * straight to the dev line. Single source for first boot AND preset-switch
- * restart, so re-selecting a from-scratch preset always replays the honest
- * install.
+ * The terminal lines that boot a preset (ADR-0135). BOTH setup kinds boot the
+ * template's dev line; the instant/from-scratch difference lives in the WORKER
+ * realm (carried over `RIFTY_RFV_SETUP`), not in the page boot lines.
+ *
+ * from-scratch's visible `npm install` runs INSIDE the worker — the realm that
+ * owns the OPFS tree the preview is served from — streamed to the terminal
+ * (per-package lines, ADR-0134). It cannot run on the page: the page realm is
+ * memory-backed (sync OPFS is worker-only), so a page-side install would land
+ * in a store the preview never reads. Single source for first boot AND
+ * preset-switch restart.
  */
 export function presetBootLines(preset: Preset, root: string): readonly string[] {
   const spec = preset.templateId ? resolveProjectSpec(preset.templateId) : defaultProjectSpec();
-  const dev = terminalDevLine(spec, root);
-  if (preset.setup === 'from-scratch') return [terminalInstallLine(root), dev];
-  return [dev];
+  return [terminalDevLine(spec, root)];
 }
 
 /** Category render order in the gallery. */

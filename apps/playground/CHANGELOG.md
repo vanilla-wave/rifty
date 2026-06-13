@@ -16,17 +16,19 @@
   `docs/backlog/playground/baked-snapshot-regeneration.md`.
 
 - **Sandbox setup kinds: instant vs from-scratch (ADR-0135).** Presets carry
-  `setup: 'instant' | 'from-scratch'`. From-scratch presets (`real-vite`,
-  `express-sqlite`) boot through a VISIBLE terminal `npm install` — the command
-  line plus live `npm: + <name>@<version>` per-package output (ADR-0134) —
-  before the dev line; instant presets (`project-files`, `node-worker`) go
-  straight to the dev line. After any successful install the tree is stamped
-  (`node_modules/.rifty-install-stamp.json`, flush-before-stamp so a durable
-  stamp implies a durable tree); the real-vite worker bootstrap skips its
-  redundant install when the stamp still matches package.json — instant presets
-  reuse the OPFS-persisted node_modules instead of re-linking on every boot.
-  Template switcher groups presets under "Instant start" / "From scratch" with
-  kind pills. Stamp invalidation is provisional —
+  `setup: 'instant' | 'from-scratch'`. BOTH kinds boot the template's dev line;
+  the difference lives in the WORKER realm (carried over `RIFTY_RFV_SETUP`).
+  From-scratch presets (`real-vite`, `express-sqlite`) run a VISIBLE, honest
+  `install()` inside the worker — the realm that owns the OPFS tree the preview
+  is served from — skipping the baked snapshot and streaming live
+  `npm: + <name>@<version>` per-package output (ADR-0134) before the dev server
+  starts. Instant presets (`project-files`, `node-worker`) take the quiet
+  snapshot/stamp path. After any successful worker install the tree is stamped
+  (`node_modules/.rifty-install-stamp.json` in OPFS, flush-before-stamp so a
+  durable stamp implies a durable tree), so a re-selected from-scratch preset
+  reuses the installed tree instead of re-resolving. Template switcher groups
+  presets under "Instant start" / "From scratch" with kind pills. Stamp
+  invalidation is provisional —
   `docs/backlog/playground/install-stamp-invalidation.md`.
 
 ### Changed

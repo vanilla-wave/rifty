@@ -36,6 +36,11 @@ export interface RealViteOptions {
   /** Template to run; defaults to the registered default. Carried to the worker
    *  by id over `RIFTY_RFV_TEMPLATE`; the worker re-resolves the spec. */
   template?: ProjectSpec;
+  /** Sandbox setup kind (ADR-0135), carried over `RIFTY_RFV_SETUP`. Drives the
+   *  worker's dependency arrival: `from-scratch` skips the baked snapshot and
+   *  streams a real `npm install` to the terminal; `instant` (default) uses the
+   *  quiet snapshot/stamp path. */
+  setup?: 'instant' | 'from-scratch';
   onLog?(line: string): void;
 }
 
@@ -60,6 +65,7 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
   const root = opts.root ?? '/workspace';
   const entryRel = opts.entry ?? template.entry.relativePath;
   const port = opts.port ?? template.defaultPort;
+  const setup = opts.setup ?? 'instant';
   const ownerToken = createPreviewOwnerToken();
   const entryPath = `${root}${entryRel}`;
   const log = opts.onLog ?? (() => {});
@@ -86,6 +92,7 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
         RIFTY_RFV_ROOT: root,
         RIFTY_RFV_ENTRY: entryRel,
         RIFTY_RFV_TEMPLATE: template.id,
+        RIFTY_RFV_SETUP: setup,
         RIFTY_PREVIEW_OWNER_TOKEN: ownerToken,
         // Node idiom for node-server template entries (`process.env.PORT`).
         PORT: String(port),

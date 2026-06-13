@@ -94,18 +94,20 @@ describe('sandbox setup kinds (ADR-0135)', () => {
     }
   });
 
-  it('boots from-scratch presets through a visible npm install first', () => {
+  it('boots from-scratch presets straight to the dev line — the visible install runs in the worker', () => {
+    // ADR-0135 (revised): the honest `npm install` lives in the WORKER realm (the
+    // OPFS owner that serves the preview), streamed to the terminal — not a
+    // page-side boot line. The page realm is memory-backed (sync OPFS is
+    // worker-only), so a page-side install would never reach the served tree.
+    // from-scratch differs from instant only inside the worker (snapshot off +
+    // per-package stream), never in the page boot lines.
     const realVite = PRESETS.find((preset) => preset.id === 'real-vite');
     expect(realVite?.setup).toBe('from-scratch');
-    expect(presetBootLines(realVite as Preset, '/workspace')).toEqual([
-      'cd /workspace && npm install',
-      'vite',
-    ]);
+    expect(presetBootLines(realVite as Preset, '/workspace')).toEqual(['vite']);
 
     const fullstack = PRESETS.find((preset) => preset.id === 'express-sqlite');
     expect(fullstack?.setup).toBe('from-scratch');
     expect(presetBootLines(fullstack as Preset, '/workspace')).toEqual([
-      'cd /workspace && npm install',
       'cd /workspace && npm run dev',
     ]);
   });

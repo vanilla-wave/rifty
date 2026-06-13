@@ -222,6 +222,7 @@ export function App(props: AppProps) {
     try {
       handle = await startRealVite({
         template,
+        setup: presetForId(activePreset()).setup,
         port: machine.realVitePort(),
         onLog: (line) => {
           ctx.stdout.write(line);

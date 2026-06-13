@@ -287,6 +287,9 @@ async function bootstrap(): Promise<void> {
   const root = env.RIFTY_RFV_ROOT ?? '/workspace';
   const ownerToken = env.RIFTY_PREVIEW_OWNER_TOKEN;
   const spec = resolveProjectSpec(env.RIFTY_RFV_TEMPLATE ?? DEFAULT_TEMPLATE_ID);
+  // Sandbox setup kind (ADR-0135): from-scratch runs the visible, honest install
+  // HERE (the OPFS-owning realm), streamed to the terminal; instant stays quiet.
+  const fromScratch = env.RIFTY_RFV_SETUP === 'from-scratch';
   // Honour an explicit entry override on the spawn spec (usually a no-op —
   // the orchestrator defaults it to the template's own entry).
   const effectiveSpec = withEntryOverride(spec, env.RIFTY_RFV_ENTRY ?? spec.entry.relativePath);
@@ -348,13 +351,18 @@ async function bootstrap(): Promise<void> {
   for (const delay of [300, 1200, 3000]) setTimeout(publishSnapshot, delay);
 
   const vfs = new SyncMirrorVfs();
-  // Dependency arrival (ADR-0135): stamp reuse → baked snapshot → install.
+  // Dependency arrival (ADR-0135): stamp reuse → baked snapshot → install. The
+  // visible install runs HERE — the worker realm owns the OPFS tree the preview
+  // is served from, and the page realm is memory-backed (sync OPFS is
+  // worker-only), so a page-side install never reaches this tree. from-scratch
+  // skips the snapshot (honest real resolve) and streams each package to the
+  // terminal; instant keeps the quiet snapshot/stamp path.
   await ensureProjectDependencies({
     vfs,
     fsSync: syncMirror(),
     root,
     templateId: spec.id,
-    snapshotUrl: cfg.bakedNodeModulesUrl,
+    snapshotUrl: fromScratch ? undefined : cfg.bakedNodeModulesUrl,
     install: async () => {
       log(`[real-vite/worker] installing ${spec.displayName} into ${root}/node_modules…\n`);
       const registry = new RegistryClient({ fetch: proxiedRegistryFetch() });
@@ -362,6 +370,11 @@ async function bootstrap(): Promise<void> {
         vfs,
         cwd: root,
         registry,
+        // from-scratch streams what it installs (ADR-0134 hook); instant is quiet.
+        onPackage: fromScratch
+          ? (event) =>
+              log(`npm: + ${event.name}@${event.version}${event.cacheHit ? ' (cached)' : ''}\n`)
+          : undefined,
       });
       log(
         `[real-vite/worker] installed ${result.packages.length} packages (${result.conflicts.length} conflicts)\n`,
