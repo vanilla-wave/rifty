@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Documented
 
 - **Agent rules unified for Codex + Claude Code.** `AGENTS.md` is the single binding rules file; `CLAUDE.md` is now a symlink to it. Both cut to the binding minimum; vision/layers moved to `docs/ARCHITECTURE.md`, test pyramid + new minimal-mocks policy to `docs/process/testing.md`, full reversibility checklist + subagent budget grafted into `docs/process/decision-workflow.md`. New hard rule: every found bug/problem gets a regression test (failing before the fix) — no fix without its test.
+- **M12 roadmap milestone + backlog: AI-first IDE for Node projects.** `docs/ROADMAP.md` gains M12 — an in-browser AI coding agent on the embeddable Pi harness (`@earendil-works/pi-agent-core`) over the M11 sandbox contract; only external dep is an OpenAI-compatible endpoint; AI lives outside rifty as a `@riftydev/*` consumer; reclaims the M12 slot from the dropped opencode-facade exploration (native-spawn tool layer = browser ceiling). New backlog: `distribution/ai-ide-pi-agent-harness` (+ `ai-agent-subagent-orchestration`, `ai-ide-product-ui`), `toolchain-build/ts-language-service`, `shell/git-command-isomorphic`. AI-agnostic capabilities (TS language service, git over VFS) land in rifty; the agent/prompts/bindings/UI stay in the consumer. Deduped against M11 (the AI-agent sandbox contract, IDE-kit EPIC C/D/E, shell grep/find, node/`.bin` commands already exist/tracked).
 
 ### Packaging
 
