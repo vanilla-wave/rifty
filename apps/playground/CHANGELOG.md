@@ -4,6 +4,14 @@
 
 ### Changed
 
+- **Mono font → JetBrains Mono.** Code surfaces (Monaco editor, xterm terminal,
+  code chips, `--rf-font-mono`) now use self-hosted JetBrains Mono (OFL, variable
+  woff2, latin + cyrillic subsets) in place of Roboto Mono; `index.html` preload
+  and `public/fonts/LICENSE.md` updated, Roboto Mono woff2 removed. Editor +
+  terminal share a single `glue/fonts.ts` `MONO_FONT_STACK` constant. Refines the
+  mono token recorded in ADR-0124 (Inter UI font unchanged). Sample-template CSS
+  in `presets.ts` keeps its own font and is unaffected.
+
 - **Netlify deploy automation.** GitHub Actions now deploys `main` to the
   production site and same-repo PRs to stable `pr-<number>` preview aliases;
   `netlify/functions/npm-registry.mts` carries the npm-registry proxy while

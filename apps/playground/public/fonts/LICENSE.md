@@ -7,7 +7,7 @@ SIL Open Font License 1.1 — full text: <https://scripts.sil.org/OFL>.
 | File | Family | Copyright |
 | --- | --- | --- |
 | `inter.woff2`, `inter-cyr.woff2` | Inter (variable; latin + cyrillic subsets) | © 2020 The Inter Project Authors (<https://github.com/rsms/inter>) |
-| `roboto-mono.woff2`, `roboto-mono-cyr.woff2` | Roboto Mono (variable; latin + cyrillic subsets) | © 2015 The Roboto Mono Project Authors (<https://github.com/googlefonts/robotomono>) |
+| `jetbrains-mono.woff2`, `jetbrains-mono-cyr.woff2` | JetBrains Mono (variable; latin + cyrillic subsets) | © 2020 The JetBrains Mono Project Authors (<https://github.com/JetBrains/JetBrainsMono>) |
 
 The OFL permits use, study, modification and redistribution (including
 embedding) provided the fonts are not sold by themselves and the original

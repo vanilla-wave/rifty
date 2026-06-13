@@ -22,6 +22,7 @@ import {
   searchTerminalHistory,
 } from '@riftydev/terminal';
 import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { MONO_FONT_STACK } from '../glue/fonts.ts';
 import { type TerminalQuickFix, detectTerminalQuickFix } from '../glue/terminal-quick-fix.ts';
 import { preferredTerminalTheme, watchPreferredTerminalTheme } from '../glue/terminal-theme.ts';
 import { Icon } from './icons.tsx';
@@ -363,7 +364,7 @@ export function TerminalPanel(props: {
       },
       onBusyInput: showBusyNotice,
       theme: preferredTerminalTheme(),
-      fontFamily: "'Roboto Mono', ui-monospace, 'SF Mono', Menlo, monospace",
+      fontFamily: MONO_FONT_STACK,
       fontSize: 12,
       lineHeight: 19 / 12, // handoff: terminal type 12px / 19px
       webLinks: props.onLink ? { onLink: props.onLink } : undefined,
