@@ -1,3 +1,4 @@
+import { globalProcessManager, isSabIpcSupported } from '@riftydev/kernel';
 import { RegistryClient } from '@riftydev/npm-client';
 import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
 import type { TerminalRawInput } from '@riftydev/terminal';
@@ -6,7 +7,7 @@ import {
   type TerminalHistoryRecord,
   addTerminalHistoryRecord,
 } from '@riftydev/terminal/history';
-import { normalizePath, syncMirror } from '@riftydev/vfs';
+import { NotImplementedError, normalizePath, syncMirror } from '@riftydev/vfs';
 import { Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import {
   type TerminalCommand,
@@ -29,6 +30,7 @@ import { StatusBar } from './components/StatusBar.tsx';
 import { TemplateSwitcher } from './components/TemplateSwitcher.tsx';
 import type { TerminalModeHint } from './components/TerminalPanel.tsx';
 import { Icon } from './components/icons.tsx';
+import { createBinExecutor } from './glue/bin-executor.ts';
 import { copyToClipboard } from './glue/clipboard.ts';
 import { readChildren } from './glue/file-tree.ts';
 import { writeText } from './glue/fs-ops.ts';
@@ -335,10 +337,48 @@ export function App(props: AppProps) {
     return runViteCommand(ctx);
   };
 
+  // Runs a shell-resolved `node_modules/.bin/<name>` shim as a Node entry
+  // (ADR-0137). The shell resolves the bare name; this spawns the shim in a
+  // kernel Worker, so `eslint` / `tsc` / any installed CLI is invokable by name.
+  // Registered commands (`vite`) still win — the playground owns that lifecycle.
+  const terminalBinExecutor = createBinExecutor({
+    readShim: (binPath) => {
+      const fs = syncMirror();
+      return fs.statSyncOrNull(binPath)?.isFile ? fs.readFileBytesSync(binPath) : null;
+    },
+    spawn: (spec) => {
+      if (!isSabIpcSupported()) {
+        throw new NotImplementedError(
+          'shell.bin-exec',
+          'running an installed CLI needs SAB IPC (cross-origin isolation)',
+        );
+      }
+      const handle = globalProcessManager.spawnWorker(
+        spec.argv[1] ?? 'bin',
+        {
+          entry: { kind: 'source', code: spec.code, sourceUrl: spec.sourceUrl },
+          argv: [...spec.argv],
+          env: spec.env,
+          cwd: spec.cwd,
+        },
+        /* ppid */ 1,
+        { cwd: spec.cwd },
+      );
+      if (handle.kind !== 'worker') {
+        throw new NotImplementedError(
+          'shell.bin-exec',
+          `spawnWorker returned kind=${handle.kind}; expected 'worker'`,
+        );
+      }
+      return handle;
+    },
+  });
+
   const manager = createTerminalManager({
     cwd: props.terminalPersistence.initialState.cwd,
     env: props.terminalPersistence.initialState.env,
     commands: { npm: npmCommand, vite: viteCommand },
+    execBin: terminalBinExecutor,
   });
   const hiddenSessionIds = new Set<string>();
   const visibleSessions = (): TerminalSessionSnapshot[] =>

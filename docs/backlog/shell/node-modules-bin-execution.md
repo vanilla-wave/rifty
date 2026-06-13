@@ -1,27 +1,34 @@
 ---
 area: shell
-status: active
+status: parked
 title: Execute node_modules/.bin launcher shims by command name (PATH lookup)
 created: 2026-06-12
-why: install() now writes .bin launcher shims (PR #21 + review fix), but nothing in the shell resolves a bare `vite`/`tsc` to them — "installed CLIs invokable by name" is still NOT delivered; `npm run` relies on the host script runner special-casing commands
-sources: [M11, "npm-client/packagejson-driven-install-and-bin-linking (closed, PR #21)", ADR-0050]
-code: [packages/shell/src/shell.ts, packages/npm-client/src/linker.ts]
+why: shell PATH-style `.bin` resolution + dispatch + a real host executor landed (ADR-0137); residual is browser-only verification + the `npm run` integration nicety, gated on M6 real-worker maturity
+sources: [M11, ADR-0137, ADR-0050]
+code: [packages/shell/src/bin-resolver.ts, packages/shell/src/shell.ts, apps/playground/src/glue/bin-executor.ts]
 ---
 
 ## Context
 
-The linker writes `node_modules/.bin/<command>` launcher shims
-(`#!/usr/bin/env node` + `import('../<pkg>/<bin>')`) — the format is execution-ready, the
-executor is missing. Shell command dispatch has no PATH-style lookup: `vite` at the prompt or
-inside an `npm run` script line does not consult `.bin` of the cwd's nearest `node_modules`.
+DELIVERED (ADR-0137): `bin-resolver.ts` walks up to the nearest
+`node_modules/.bin/<name>` shim (registered cmds win → walk-up → miss); `Shell`
+runs a resolved shim through an injected `BinExecutor` (exit 126 when no
+executor is wired, never a silent stub); `which` reports shim paths; the
+playground `createBinExecutor` spawns the shim as a `kind:'source'` kernel
+Worker streaming stdio with SIGINT teardown. Bare installed CLIs (`eslint`,
+`tsc`, …) are invokable by name.
 
-## Options or Next
+## Options or Next (residual)
 
-- Command resolution order: builtins → walk-up `node_modules/.bin/<name>` → error. Execute the
-  shim as a Node entry in the process Worker (shebang line already tolerated by the loader path
-  used for `npm run`-spawned scripts — verify).
-- `npm run` script lines get the project's `.bin` prepended to resolution (npm semantics).
+- Real-Worker e2e: prove an arbitrary installed `.bin` runs end-to-end in a COI
+  Worker (the executor glue is unit-tested with an injected handle; arbitrary-bin
+  execution shares M6 "real Worker per child" maturity — see
+  `docs/backlog/kernel/process-equals-web-worker.md`).
+- `npm run` script lines: route the script `command` through the shell so its
+  argv-0 gets `.bin` resolution (npm semantics), replacing the host runner's
+  hardcoded `vite`/dev-script switch in `App.tsx runTerminalScript`.
 
 ## Reversibility
 
-REVERSIBLE — shell-internal dispatch; shim format is already in the lockfile-replayed contract.
+REVERSIBLE residual. The delivered mechanism's public API (`BinExecutor`,
+`ShellOptions.execBin`) is IRREVERSIBLE and recorded in ADR-0137.

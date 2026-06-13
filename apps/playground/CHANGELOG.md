@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Run installed CLIs from the terminal (ADR-0137).** `createBinExecutor`
+  spawns a shell-resolved `node_modules/.bin/<name>` shim as a `kind:'source'`
+  kernel Worker — streams stdout/stderr to the terminal, `ctx.signal` (Ctrl+C)
+  kills it — wired into the terminal shell via
+  `createTerminalManager({ execBin })`. SAB-IPC-gated (`NotImplementedError`
+  when cross-origin isolation is absent). Registered commands (`vite`) still
+  win, so the playground keeps that dev-server lifecycle.
+
 ### Changed
 
 - **Netlify deploy automation.** GitHub Actions now deploys `main` to the

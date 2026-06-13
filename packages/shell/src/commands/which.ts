@@ -5,17 +5,22 @@
  * can answer "is NAME a command?" without a reverse import (mirrors `cd`'s
  * `setCwd`). The shell wires the real sink in Integrate.
  *
- * Divergence from real `which`: we have no PATH / filesystem location, so the
- * honest "location" of a builtin is just its name — we print NAME, not a path.
- * On a miss we print nothing (GNU `which` is silent on a miss). Exit 0 iff
- * every NAME resolved; 1 if any missed; 2 on usage error (no NAME operand).
+ * A builtin has no filesystem location, so its honest "location" is just its
+ * name — we print NAME, not a path. An installed CLI (ADR-0137) DOES have one:
+ * `resolveBinPath` reports its `node_modules/.bin/<name>` shim path. Builtins
+ * win over a same-named shim (resolution order). On a miss we print nothing
+ * (GNU `which` is silent on a miss). Exit 0 iff every NAME resolved; 1 if any
+ * missed; 2 on usage error (no NAME operand).
  */
 
 import { NotImplementedError } from '@riftydev/io';
 import type { ShellCommand } from '../types.ts';
 
 export const which =
-  (hasCommand: (name: string) => boolean): ShellCommand =>
+  (
+    hasCommand: (name: string) => boolean,
+    resolveBinPath?: (name: string) => string | null,
+  ): ShellCommand =>
   async (args, ctx) => {
     const names: string[] = [];
     for (const arg of args) {
@@ -37,6 +42,11 @@ export const which =
     for (const name of names) {
       if (hasCommand(name)) {
         ctx.stdout.write(`${name}\n`);
+        continue;
+      }
+      const binPath = resolveBinPath?.(name) ?? null;
+      if (binPath !== null) {
+        ctx.stdout.write(`${binPath}\n`);
       } else {
         allFound = false; // silent on a miss; exit reflects it.
       }

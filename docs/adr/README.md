@@ -146,6 +146,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0091 | Rich token type (quote provenance) + single-segment glob expansion |
 | 0093 | Shell-command parity harness — node:fs reuse + frozen GNU fixtures, no live host-spawn oracle |
 | 0121 | Background jobs |
+| 0137 | Shell PATH-style node_modules/.bin resolution + injected BinExecutor seam |
 
 ### terminal
 

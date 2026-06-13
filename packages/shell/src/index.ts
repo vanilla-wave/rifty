@@ -16,6 +16,7 @@ export { img } from './commands/img.ts';
 export { mouseDemo } from './commands/mouse-demo.ts';
 export {
   Shell,
+  type BinExecutor,
   type ChunkStream,
   type RunOptions,
   type RunResult,
