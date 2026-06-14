@@ -32,6 +32,12 @@ describe('playground mono font', () => {
     expect(themeCss).toMatch(/--rf-font-mono:\s*"JetBrains Mono"/);
   });
 
+  it('uses JetBrains Mono for playground chrome text too', () => {
+    expect(themeCss).toMatch(/--rf-font-sans:\s*"JetBrains Mono"/);
+    expect(themeCss).not.toMatch(/--rf-font-sans:\s*"Inter"/);
+    expect(themeCss).not.toContain('font-family: "Inter"');
+  });
+
   it('ships the referenced self-hosted woff2 subsets', () => {
     expect(existsSync(`${fontsDir}jetbrains-mono.woff2`)).toBe(true);
     expect(existsSync(`${fontsDir}jetbrains-mono-cyr.woff2`)).toBe(true);
@@ -39,6 +45,8 @@ describe('playground mono font', () => {
 
   it('preloads the JetBrains Mono subset, not the removed Roboto Mono', () => {
     expect(indexHtml).toContain('/fonts/jetbrains-mono.woff2');
+    expect(indexHtml).not.toContain('/fonts/inter.woff2');
+    expect(indexHtml).not.toContain("'Inter'");
     expect(indexHtml).not.toContain('roboto-mono');
   });
 
@@ -53,6 +61,7 @@ describe('playground mono font', () => {
     ].join('\n');
 
     expect(seededSources).toContain('JetBrains Mono');
+    expect(seededSources).not.toContain('Inter');
     expect(seededSources).not.toContain('Roboto Mono');
     expect(seededSources).not.toContain("fontFamily = 'ui-monospace, monospace'");
     expect(seededSources).not.toMatch(/font:\s*14px\/1\.55 ui-monospace/);

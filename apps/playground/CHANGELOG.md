@@ -40,8 +40,11 @@
   JetBrains Mono (OFL, variable woff2, latin + cyrillic subsets) in place of
   Roboto Mono; `index.html` preload and `public/fonts/LICENSE.md` updated,
   Roboto Mono woff2 removed. Editor, terminal, and sandbox preview templates
-  share a single `glue/fonts.ts` `MONO_FONT_STACK` constant. Refines the mono
-  token recorded in ADR-0124 (Inter UI font unchanged).
+  share a single `glue/fonts.ts` `MONO_FONT_STACK` constant.
+
+- **JetBrains Mono throughout the playground (ADR-0140).** Playground chrome now
+  points `--rf-font-sans` at the same JetBrains Mono stack as code surfaces, and
+  critical `index.html` styles preload/use JetBrains Mono instead of Inter.
 
 - **Netlify deploy automation.** GitHub Actions now deploys `main` to the
   production site and same-repo PRs to stable `pr-<number>` preview aliases;
@@ -55,8 +58,9 @@
 
 - **"Soft Panels" visual redesign (ADR-0124).** UI rebuilt to the Gravity-UI
   design handoff: rounded card panels (`#1D1F26`) with 12px gaps on a
-  `#131419` page, rifty lime `#C7F05A` accent, Inter (UI) + Roboto Mono
-  (code/terminal) self-hosted variable fonts (latin + cyrillic). Top bar now
+  `#131419` page, rifty lime `#C7F05A` accent, originally Inter (UI) + Roboto
+  Mono (code/terminal), now superseded by ADR-0140's single JetBrains Mono
+  stack. Top bar now
   hosts the template switcher (dropdown; replaces the activity bar + sidebar
   gallery, same e2e selectors), a LIVE/STARTING/STOPPED status pill, a ⌘K
   command bar, a GitHub link, and a Share button (copies the URL, success
