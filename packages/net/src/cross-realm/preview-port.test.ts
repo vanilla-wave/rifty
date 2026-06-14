@@ -568,7 +568,7 @@ describe('cross-realm preview port — SSE ceiling (ADR-0048)', () => {
     cleanup.add(handler.dispose);
 
     const settled = await Promise.race([
-      handler(new Request('http://preview.local/events')).then((r) => ({
+      Promise.resolve(handler(new Request('http://preview.local/events'))).then((r) => ({
         kind: 'response' as const,
         r,
       })),
