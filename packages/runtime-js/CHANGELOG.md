@@ -4,6 +4,17 @@
 
 ### Added
 
+- **Divergence / NotImplemented telemetry sink (T14).** Leaf module
+  `src/telemetry/divergence-sink.ts` — dependency-free, session-scoped, dev-only
+  in-process hit counter. `recordNotImplemented(feature)` / `recordDivergence(feature)`
+  increment per-feature counts; `snapshotTelemetry()` returns `TelemetryEntry[]` sorted
+  by count desc (ties stable by insertion order); `resetTelemetry()` clears. Both
+  recorders accept `{ warnOnce: true }`, returning `true` only the first time per
+  feature (warned-set, also cleared by reset) so a caller can emit a one-time loud
+  warning. No network, no persistence (T16 playground may persist; sink stays pure).
+  T15 wires boundary capture (`error.name === 'NotImplementedError'`) + a `diagnostic`
+  WorkerMessage + the rewrite-engine opt-in warning.
+
 - **`node:vm` QuickJS engine — real global-object fidelity (T13, ADR-0138).** The
   QuickJS real realm reproduces a real vm global object's attribute/lexical/strict
   semantics that the rewrite engine (a `with(proxy)+eval` over a plain property bag)
