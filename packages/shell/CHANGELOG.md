@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Installed CLIs invokable by name — PATH-style `node_modules/.bin` lookup
+  (ADR-0137).** A command miss now walks up to the nearest
+  `node_modules/.bin/<name>` launcher shim (resolution order: registered
+  builtins/commands → walk-up → miss) and runs it through an injected
+  `BinExecutor` (`ShellOptions.execBin`). Bare names only — a name containing
+  `/` is a path, never a PATH lookup. A shim found with no executor wired ⇒
+  exit 126 ("installed, cannot execute here"), distinct from the 127 miss —
+  never a silent stub. `which <cli>` now reports the resolved shim path; a
+  builtin still shadows a same-named shim. New public API: the `BinExecutor`
+  type. Closes (residual parked) `docs/backlog/shell/node-modules-bin-execution`.
+
 ### Fixed
 
 - **Trailing `&` after a compound separator now backgrounds only the final

@@ -683,11 +683,22 @@ function readResolved(
   filePath: string,
   _esm: boolean,
 ): ResolvedModule {
-  const source = utf8.decode(vfs.readFileBytesSync(filePath));
+  const raw = utf8.decode(vfs.readFileBytesSync(filePath));
   // One scope walk: feed its `type` into detectKind so the `.js`/`.ts`/`.tsx`
   // branch no longer re-walks/re-parses the same package.json (perf #4).
   const scope = findPackageScope(vfs, pkgCache, filePath);
   const kind = detectKind(filePath, scope?.pkg.type);
+  // Node strips a leading `#!` shebang before compiling a JS module (CJS
+  // `Module._compile` + the ESM loader). Match it for the compiled kinds so a
+  // shebang'd entry — `node <script>`, a child_process spawn, or a
+  // `node_modules/.bin/<name>` launcher shim (ADR-0137) — never reaches
+  // `new Function`/`new AsyncFunction` (which throw on `#!`). Drop only the
+  // `#!` line's text, keep its newline so line numbers + source-map offsets
+  // past line 1 are unchanged. json/text are not compiled — leave them verbatim.
+  const source =
+    (kind === 'cjs' || kind === 'esm') && raw.charCodeAt(0) === 0x23 && raw.charCodeAt(1) === 0x21
+      ? raw.replace(/^#![^\n]*/, '')
+      : raw;
   return {
     id: filePath,
     kind,

@@ -78,6 +78,7 @@ export function builtinCommands(
   setCwd: (p: string) => void,
   hasCommand: (name: string) => boolean,
   listJobs: () => readonly ShellJobListItem[],
+  resolveBinPath: (name: string) => string | null,
 ): Record<string, ShellCommand> {
   return {
     pwd,
@@ -90,7 +91,7 @@ export function builtinCommands(
     env: envCmd,
     find,
     grep,
-    which: which(hasCommand),
+    which: which(hasCommand, resolveBinPath),
     clear,
     touch,
     head,

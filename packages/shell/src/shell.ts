@@ -17,6 +17,7 @@
 
 import { NotImplementedError } from '@riftydev/io';
 import { isAbsolute, joinPath, normalizePath, syncMirror } from '@riftydev/vfs';
+import { resolveBin } from './bin-resolver.ts';
 import { builtinCommands } from './builtins.ts';
 import { hasGlobMeta, matchSegment } from './commands/_glob.ts';
 import { resolve } from './commands/_shared.ts';
@@ -24,9 +25,23 @@ import type { ShellJobListItem } from './commands/jobs.ts';
 import { type Token, isOp, tokenize } from './tokenize.ts';
 import type { CommandContext, ShellCommand } from './types.ts';
 
+/**
+ * Runs a resolved `node_modules/.bin/<name>` launcher shim as a Node entry and
+ * resolves its exit code (ADR-0137). Receives the absolute shim path, the
+ * post-glob argv, and the command context (stdout/stderr/cwd/env/signal).
+ */
+export type BinExecutor = (binPath: string, args: string[], ctx: CommandContext) => Promise<number>;
+
 export interface ShellOptions {
   cwd?: string;
   env?: Record<string, string>;
+  /**
+   * Injected by the host to run a resolved `.bin` shim (ADR-0137). Executing a
+   * Node program needs a Worker realm the shell layer can't reach, so the
+   * playground wires it; absent ⇒ a resolved shim reports exit 126 ("installed,
+   * no Node runtime here") rather than the 127 of a genuine miss.
+   */
+  execBin?: BinExecutor;
 }
 
 export interface RunResult {
@@ -154,10 +169,12 @@ export class Shell {
   private readonly customCommands: Map<string, ShellCommand> = new Map();
   private readonly backgroundJobs: BackgroundJob[] = [];
   private backgroundSeq = 0;
+  private readonly execBin?: BinExecutor;
 
   constructor(options: ShellOptions = {}) {
     this._cwd = normalizePath(options.cwd ?? '/');
     this.env = { ...(options.env ?? {}) };
+    this.execBin = options.execBin;
     const builtins = builtinCommands(
       (p) => {
         this._cwd = p;
@@ -166,6 +183,8 @@ export class Shell {
       // after every builtin + any registerCommand has populated the map.
       (n) => this.commands.has(n),
       () => this.listBackgroundJobs(),
+      // `which` reports installed-CLI hits at the LIVE cwd (cd mutates it).
+      (n) => resolveBin(this._cwd, n),
     );
     for (const [name, cmd] of Object.entries(builtins)) this.commands.set(name, cmd);
   }
@@ -424,7 +443,7 @@ export class Shell {
   }
 
   private cloneForBackground(): Shell {
-    const shell = new Shell({ cwd: this._cwd, env: this.env });
+    const shell = new Shell({ cwd: this._cwd, env: this.env, execBin: this.execBin });
     for (const [name, command] of this.customCommands) shell.registerCommand(name, command);
     return shell;
   }
@@ -506,7 +525,9 @@ export class Shell {
     const cmd = cmdTok && !isOp(cmdTok) ? cmdTok.value : '';
     // Command-name token (rest[0]) stays literal; only ARGUMENTS glob-expand.
     const args = this.expandArgs(rest.slice(1));
-    const handler = this.commands.get(cmd);
+    // Resolution order (ADR-0137): registered (builtins + registerCommand) →
+    // walk-up `node_modules/.bin/<name>` → miss.
+    let handler = this.commands.get(cmd);
 
     let stdout = '';
     let stderr = '';
@@ -541,10 +562,24 @@ export class Shell {
     };
 
     if (!handler) {
-      emit(`${cmd}: command not found\n`, 'stderr');
-      const suggestion = this.suggestCommand(cmd);
-      if (suggestion) emit(`Did you mean '${suggestion}'?\n`, 'stderr');
-      return { exitCode: 127, stdout, stderr };
+      const binPath = resolveBin(this._cwd, cmd);
+      if (binPath === null) {
+        emit(`${cmd}: command not found\n`, 'stderr');
+        const suggestion = this.suggestCommand(cmd);
+        if (suggestion) emit(`Did you mean '${suggestion}'?\n`, 'stderr');
+        return { exitCode: 127, stdout, stderr };
+      }
+      if (!this.execBin) {
+        // Shim present but no Node executor wired — installed, not runnable
+        // here. Exit 126 ("command found, cannot execute"), never a silent
+        // stub or a misleading 127 miss.
+        emit(`${cmd}: cannot execute ${binPath}: no Node executor configured\n`, 'stderr');
+        return { exitCode: 126, stdout, stderr };
+      }
+      // Run the resolved shim through the normal handler path so it inherits
+      // SIGINT abort-race and `>` redirect flush for free.
+      const execBin = this.execBin;
+      handler = (a, c) => execBin(binPath, a, c);
     }
 
     let exitCode = 0;

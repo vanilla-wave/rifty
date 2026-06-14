@@ -15,9 +15,9 @@
  * `execSync` stays on the in-realm path.
  */
 
-import { Buffer, type EventEmitter } from '@riftydev/io';
+import type { EventEmitter } from '@riftydev/io';
 import { type ProcessHandle, type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
-import { syncMirror } from './fs-sync-mirror.ts';
+import { getNodeEntryWorkerUrl } from './node-entry-url.ts';
 
 export interface SpawnWorkerArgs {
   command: string;
@@ -47,11 +47,18 @@ export function spawnWorkerChild(args: SpawnWorkerArgs): ProcessHandle {
   if (!scriptPath) {
     throw new Error('spawnWorkerChild: missing script path (args[0])');
   }
-  const sourceBytes = syncMirror().readFileBytesSync(scriptPath);
-  const source = Buffer.from(sourceBytes).toString();
-
+  // Run the script through the node-entry bootstrap (ADR-0137) so it goes via
+  // the module loader — shebang stripped, relative import/require resolved
+  // against the VFS — instead of the kernel's raw `kind:'source'`
+  // `new AsyncFunction`. The worker reads the script from its own sync mirror.
+  const bootstrapUrl = getNodeEntryWorkerUrl();
+  if (bootstrapUrl === null) {
+    throw new Error(
+      'spawnWorkerChild: node-entry worker URL not set — the host must call setNodeEntryWorkerUrl (ADR-0137)',
+    );
+  }
   const spec: SpawnWorkerSpec = {
-    entry: { kind: 'source', code: source, sourceUrl: scriptPath },
+    entry: { kind: 'url', url: String(bootstrapUrl) },
     argv: ['rifty', scriptPath, ...args.args.slice(1)],
     env: args.opts.env ?? {},
     cwd: args.opts.cwd ?? '/workspace',

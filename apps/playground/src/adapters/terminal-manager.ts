@@ -1,4 +1,4 @@
-import { type CommandContext, Shell, type StdinReader } from '@riftydev/shell';
+import { type BinExecutor, type CommandContext, Shell, type StdinReader } from '@riftydev/shell';
 import type { TerminalRawInput } from '@riftydev/terminal';
 
 export type TerminalStatus = 'idle' | 'running';
@@ -65,6 +65,8 @@ export function createTerminalManager(opts: {
   cwd: string;
   env?: Record<string, string>;
   commands?: Record<string, TerminalCommand>;
+  /** Runs a resolved `node_modules/.bin/<name>` shim (ADR-0137); per session. */
+  execBin?: BinExecutor;
 }): TerminalManager {
   const commands = opts.commands ?? {};
   const sessions = new Map<string, TerminalSession>();
@@ -81,7 +83,7 @@ export function createTerminalManager(opts: {
       id,
       title: displayTitle,
       status: 'idle',
-      shell: new Shell({ cwd: opts.cwd, env: opts.env }),
+      shell: new Shell({ cwd: opts.cwd, env: opts.env, execBin: opts.execBin }),
       writer: null,
       active: null,
       activeStdin: null,

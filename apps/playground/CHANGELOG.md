@@ -4,6 +4,23 @@
 
 ### Added
 
+- **Wire installed-CLI execution to the node-entry loader bootstrap (ADR-0137,
+  Opt-Y).** `createBinExecutor` spawns the `kind:'url'` node-entry bootstrap
+  (`workers/node-entry-bootstrap.ts`) for a shell-resolved `node_modules/.bin/<name>`
+  shim; in the worker it reads the shim, resolves its launcher target, and runs
+  THAT through the module loader (shebang stripped, relative imports resolved vs
+  VFS) — streams stdout/stderr to the terminal, `ctx.signal` (Ctrl+C) kills it.
+  Wired via `createTerminalManager({ execBin })`; `main.tsx` injects the bootstrap
+  URL for runtime-js (`setNodeEntryWorkerUrl`). SAB-IPC-gated. Registered commands
+  (`vite`) still win. Replaces the earlier `kind:'source'` approach, which threw
+  on the shim's shebang (ADR-0137 §Rejected).
+  - The execution MECHANISM (`runNodeEntry` + loader) is proven by node unit
+    tests + parity. NOT YET working end-to-end in the browser: the spawned bin
+    worker's `syncMirror` is a separate in-worker realm that does not yet hold
+    the installed `node_modules` (after ADR-0135 `install()` runs in the
+    worker/OPFS realm) — a real CLI `ENOENT`s on its shim. Tracked in
+    `docs/backlog/shell/node-modules-bin-execution.md`.
+
 - **Baked node_modules snapshots — instant presets are instant on the FIRST
   boot too (ADR-0135 item 6).** `pnpm snapshots:bake` runs a real `install()`
   per baked template and ships node_modules + lockfile as a committed gzipped
