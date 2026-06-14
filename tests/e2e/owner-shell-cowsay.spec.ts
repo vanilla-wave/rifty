@@ -40,7 +40,13 @@ test.describe('owner-resident shell runs an installed CLI end-to-end (ADR-0146 P
     await openShellTerminal(page);
 
     await runTerminalLine(page, 'npm install cowsay');
-    await expectTerminalContains(page, 'npm: + cowsay@', 150_000);
+    // Wait for the install to COMPLETE, not for the mid-stream `+ cowsay@`:
+    // cowsay resolves several packages deep, so a command typed at that point
+    // lands in the still-running install's stdin (the terminal routes keystrokes
+    // to the foreground process), never running as its own line. The summary
+    // line is the idle signal.
+    await expectTerminalContains(page, /npm: installed \d+ package\(s\)/, 150_000);
+    expect(await terminalBuffer(page)).toContain('npm: + cowsay@');
 
     await runTerminalLine(page, 'cowsay hi');
     // cowsay wraps short text as `< hi >` above the ASCII cow (`^__^`).

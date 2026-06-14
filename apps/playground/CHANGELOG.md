@@ -108,6 +108,21 @@
 
 ### Fixed
 
+- **P2 owner regressions caught only by CI e2e (ADR-0146).** Four baseline
+  chromium specs broke under the owner-resident shell and are green again:
+  (1) a fork-IPC message-drop race (fixed in `runtime-js`) hung EVERY shell
+  command with no output — `pty:open` was posted before the slow owner bootstrap
+  registered its `process.on('message')`; (2) preset files (`src/project-summary.js`
+  …) reached only the preview worker, so the owner shell `cat`'d ENOENT —
+  `seedViteWorkspace` now pushes them to the owner via the new
+  `WorkspaceOwnerHandle.writeFile` (a `rifty:vfs-write` frame); (3) the
+  PAGE-driven dev-server tab showed `data-running=false` (its session never runs
+  through `manager.runLine`) — the tabs now reflect `devServerRunning` for the
+  owning session; (4) the cowsay e2e matched the mid-stream `+ cowsay@` and typed
+  `cowsay hi` into the still-running install (keystrokes → npm stdin), so it never
+  ran — it now waits for the install-complete summary. These slipped past local
+  green because the owner path is cross-origin-isolation-gated (CI-only).
+
 - **Seeded sandbox previews now use JetBrains Mono.** The playground chrome,
   Monaco, and xterm had already switched, but the project preview templates
   still carried Roboto/system monospace literals.

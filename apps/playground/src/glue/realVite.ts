@@ -234,6 +234,14 @@ export interface WorkspaceOwnerHandle {
   signal(sid: string, rid: string): void;
   resize(sid: string, rid: string, cols: number, rows: number): void;
   closeSession(sid: string): void;
+  /**
+   * Seed/overwrite a file in the owner realm's tree (a `rifty:vfs-write` frame,
+   * ADR-0146). The owner-resident shell reads its OWN realm's `syncMirror()`, so
+   * project files the page seeds must be pushed here too — else `cat`/`ls` miss
+   * preset files the template seed didn't carry (P3 makes the owner the single
+   * source of truth). Falls back to the snapshot-port vfs-write channel.
+   */
+  writeFile(path: string, content: string): void;
   /** Cached cwd/env for a session (from the latest `pty:exit`). */
   snapshot(sid: string): PtySessionSnapshot;
   /** Terminate the owner worker; idempotent. */
@@ -381,6 +389,14 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     signal: (sid, rid) => client.signal(sid, rid),
     resize: (sid, rid, cols, rows) => client.resize(sid, rid, cols, rows),
     closeSession: (sid) => client.closeSession(sid),
+    writeFile(path, content) {
+      const frame = { type: 'write' as const, path, data: enc.encode(content) };
+      // IPC first (the owner's onMessage applies it to syncMirror); the
+      // shim buffers frames sent before the slow entry registers its handler.
+      if (!worker.send({ type: 'rifty:vfs-write', frame })) {
+        sendVfsWrite(snapshotPort, frame);
+      }
+    },
     snapshot: (sid) => client.snapshot(sid),
     close() {
       if (!exited) handle.kill('SIGTERM');

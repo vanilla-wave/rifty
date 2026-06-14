@@ -15,6 +15,16 @@
 
 ### Fixed
 
+- **Fork-IPC shim buffers messages until the first listener (ADR-0045 / ADR-0146
+  P2).** `WorkerNodeProcessShim` emitted `'message'` on every inbound
+  `ipc:message` frame even with zero `'message'` listeners → the frame dropped. A
+  worker that registers `process.on('message')` only after a slow async module
+  load (the shell owner's heavy bootstrap) lost every frame the parent posted in
+  the gap — `pty:open` never reached the owner, so the thin terminal hung with no
+  output (`vfs-write` masked it with a BroadcastChannel fallback; the pty channel
+  had none). Now buffered and flushed in order on the first listener, mirroring
+  the stdin reader in the same module. Regression: `install-process-ipc.test.ts`.
+
 - **Module loader strips a leading `#!` shebang (CJS + ESM) — Node parity.**
   Node's `Module._compile` / ESM loader drop a leading shebang line before
   compiling; rifty's loader did not (CJS `new Function` threw; the ESM executor

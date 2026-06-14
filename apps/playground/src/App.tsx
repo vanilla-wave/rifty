@@ -80,6 +80,7 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     signal: () => {},
     resize: () => {},
     closeSession: () => {},
+    writeFile: () => {},
     snapshot: () => ({ cwd: WORKSPACE, env: {} }),
     close: () => {},
   };
@@ -474,8 +475,20 @@ export function App(props: AppProps) {
     void props.terminalPersistence.saveState({ cwd: session.cwd, env: session.env });
   }
 
+  // The lifecycle-owning dev-server line runs PAGE-side (off the owner pty
+  // channel, ADR-0146), so its session never goes through `manager.runLine` and
+  // the manager reports it idle. Reflect the live dev server as a running tab
+  // (data-running) by overriding the owning session's status for display only.
+  function withDevServerRunning(
+    snaps: readonly TerminalSessionSnapshot[],
+  ): TerminalSessionSnapshot[] {
+    const id = devServerSessionId;
+    if (!devServerRunning() || id === null) return [...snaps];
+    return snaps.map((s) => (s.id === id && s.status !== 'running' ? { ...s, status: 'running' } : s));
+  }
+
   function refreshTerminalState(): void {
-    const next = visibleSessions();
+    const next = withDevServerRunning(visibleSessions());
     setSessions(next);
     const active = manager.activeSessionId();
     if (next.some((session) => session.id === active)) {
@@ -631,6 +644,14 @@ export function App(props: AppProps) {
     });
   });
 
+  // The PAGE-driven dev server flips `devServerRunning` mid-run (off the owner
+  // pty channel), so re-publish the terminal tabs to reflect its session as
+  // running (data-running) — see `withDevServerRunning`.
+  createEffect(() => {
+    devServerRunning();
+    refreshTerminalState();
+  });
+
   /** Prop bundle for the real-vite explorer's lazy node_modules branch. */
   const nodeModulesProp = ():
     | { cache: NodeModulesCache; present: boolean; root: string }
@@ -692,11 +713,26 @@ export function App(props: AppProps) {
     }
   }
 
+  /**
+   * Push the project files into the persistent owner realm (ADR-0146 P2). The
+   * owner-resident shell reads its OWN `syncMirror()`, seeded from the template
+   * only — without this the shell `cat`/`ls` miss preset files (project-summary
+   * etc.) and the editor source. Entry source + preset files only; the owner's
+   * own template package.json stands. P3 makes the owner the single writer.
+   */
+  function seedWorkspaceOwner(preset: Preset): void {
+    workspaceOwner.writeFile(PROGRAM_MIRROR_PATH, preset.source);
+    for (const file of preset.files ?? []) {
+      workspaceOwner.writeFile(workspacePresetPath(file.path), file.content);
+    }
+  }
+
   function seedViteWorkspace(preset: Preset): void {
     const packageJson = buildProjectPackageJson(activeTemplate()).json;
     writeText(vfs, `${WORKSPACE}/package.json`, packageJson);
     writeText(vfs, PROGRAM_MIRROR_PATH, preset.source);
     seedPresetFiles(preset);
+    seedWorkspaceOwner(preset);
   }
 
   function devServerSession(): TerminalSessionSnapshot {

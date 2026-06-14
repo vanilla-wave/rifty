@@ -164,6 +164,15 @@ class WorkerNodeProcessShim extends EventEmitter implements NodeProcessShim {
   readonly #cwd: string;
   readonly #ipcPort: MessagePort;
   #ipcDisconnected = false;
+  /**
+   * Frames received before any `'message'` listener attaches (ADR-0045). The
+   * worker entry may register its handler only after a slow async module load
+   * (the shell-owner's heavy bootstrap, ADR-0146), yet the parent posts as soon
+   * as the channel opens; without this buffer an `emit('message')` with no
+   * listeners drops the frame silently. Flushed in order on the first listener —
+   * mirrors {@link makeStdinReader}'s `pending` buffer.
+   */
+  readonly #ipcBacklog: unknown[] = [];
 
   constructor(spec: KernelProcessSpec) {
     super();
@@ -183,12 +192,26 @@ class WorkerNodeProcessShim extends EventEmitter implements NodeProcessShim {
       const frame = ev.data as IpcFrame | undefined;
       if (!frame || typeof frame !== 'object' || typeof frame.kind !== 'string') return;
       if (frame.kind === 'ipc:message') {
-        this.emit('message', frame.payload);
+        if (this.listenerCount('message') === 0) {
+          this.#ipcBacklog.push(frame.payload);
+        } else {
+          this.emit('message', frame.payload);
+        }
       } else if (frame.kind === 'ipc:disconnect') {
         this.#tearDownIpc();
       }
     };
     this.#ipcPort.start();
+
+    // Flush any frames buffered before the first listener (see #ipcBacklog).
+    // `newListener` fires BEFORE the listener is added, so defer to a microtask
+    // so the flush reaches it (mirrors makeStdinReader's queueMicrotask).
+    this.on('newListener', (event) => {
+      if (event !== 'message' || this.#ipcBacklog.length === 0) return;
+      queueMicrotask(() => {
+        for (const payload of this.#ipcBacklog.splice(0)) this.emit('message', payload);
+      });
+    });
   }
 
   cwd(): string {
