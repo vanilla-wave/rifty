@@ -31,8 +31,14 @@ directly). The fix needs the recursive runner to own the entry-kind decision
 - Push the entry-kind choice into the recursive runner: the browser runner
   spawns the node-entry bootstrap (`setNodeEntryWorkerUrl` URL) with the script
   path as `argv[1]`; the Node conformance runner keeps loader-running the source.
+  This refactor is the SAFE REVERSIBLE increment — correct under both transport
+  options (B and D), landable NOW on unit/conformance alone.
 - Verify with a COI e2e (the shared bin-exec / execSync transport harness) that a
-  shebang'd `execSync('node script.js')` returns the child's stdout.
+  shebang'd `execSync('node script.js')` returns the child's stdout. **GATED on
+  the worker-VFS transport:** the child worker hits the SAME ENOENT (it can't read
+  PAGE-memory node_modules / the script's relative imports). Transport fork +
+  recommendation: `shell/bin-worker-vfs-transport-b-vs-d.md`. End-to-end waits on
+  that; the entry-kind refactor above does not.
 
 ## Reversibility
 
