@@ -4,6 +4,30 @@
 
 ### Added
 
+- **`node:vm` QuickJS engine — real global-object fidelity (T13, ADR-0138).** The
+  QuickJS real realm reproduces a real vm global object's attribute/lexical/strict
+  semantics that the rewrite engine (a `with(proxy)+eval` over a plain property bag)
+  could not — mostly BY CONSTRUCTION (real intrinsics, strict mode, lexical scope,
+  real global). Verified byte-for-byte vs real Node (parity `vm/quickjs-global-object`)
+  + locked in conformance: redeclared intrinsics (`var undefined/NaN/Infinity`, bare
+  `NaN = 1`) are silent no-ops; `var`/`function` bindings are non-configurable so
+  `delete d`/`delete f` are no-ops returning `false`; `let undefined` is a
+  redeclaration `SyntaxError`; a written `globalThis` and a context var named `eval`
+  read back; a `"use strict"` undeclared write throws `ReferenceError`; top-level
+  `let`/`const`/`class` persist across `runInContext` calls (re-declaration next run
+  is a `SyntaxError`) via the reused per-context `QuickJSContext`. The membrane sweep
+  was fixed so a declaration-only `var z;` no longer leaks to the contextified
+  sandbox object (it is an enumerable own prop of the vm GLOBAL only — matching V8
+  contextify, which copies a global to the sandbox only when an assignment fired): a
+  swept key whose value is `undefined` AND whose global binding is non-configurable is
+  recognised as a declaration-only `var`/`function` and skipped, while assigned
+  values, `this.x =`/bare writes (configurable), and a later assignment to a declared
+  var still propagate. Residuals (documented, not faked): an explicit `var x =
+  undefined` initializer is post-run indistinguishable from `var x;` so it is also
+  skipped; and `function undefined(){}` raises QuickJS's spec-literal runtime
+  `TypeError` ("cannot define variable") vs V8's early `SyntaxError` — the one genuine
+  ES2023-vs-V8 divergence (T19 triage; the conformance test pins both).
+
 - **`node:vm` QuickJS engine — descriptor fidelity + frozen + prototype/has
   coherence (T12, ADR-0138).** The OUT object wrapper now reports the GUEST
   object's REAL descriptors and a coherent prototype/`has` view, and writes

@@ -1,7 +1,8 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import '../../../packages/runtime-js/src/builtins/index.ts';
 import { loadBuiltin } from '../../../packages/io/src/builtin-registry.ts';
 import { NotImplementedError } from '../../../packages/io/src/errors.ts';
+import { setVmEngineOverride } from '../../../packages/runtime-js/src/builtins/vm/engine-config.ts';
 import { ensureVmEngineReady } from '../../../packages/runtime-js/src/builtins/vm/quickjs-loader.ts';
 
 type VmScript = {
@@ -488,5 +489,133 @@ describe('node:vm subset', () => {
     expect(() => vm.runInNewContext('1 + 1', null as unknown as Record<string, unknown>)).toThrow(
       TypeError,
     );
+  });
+});
+
+// T13 — real global-object fidelity (QuickJS realm). The rewrite engine (with(proxy)
+// over a plain property bag) could not reproduce a real vm global object's
+// attribute/lexical/strict semantics; the QuickJS real realm does — mostly BY
+// CONSTRUCTION (real intrinsics, strict mode, lexical scope, real global). Behaviour
+// is verified byte-for-byte against real Node in the parity case
+// `vm/quickjs-global-object`; this suite locks the same behaviour in-unit and also
+// records the ONE genuine QuickJS-vs-V8 divergence (function-named-intrinsic
+// redeclaration error type) so a regression in either direction is loud (T19).
+describe('node:vm QuickJS global-object fidelity (T13)', () => {
+  // Guest errors cross the membrane as cross-realm MIRRORS: `instanceof`/
+  // `constructor ===` against host constructors are FALSE (different realm), but
+  // `.constructor.name`/`.name` are faithful (T11). So we assert on the name.
+  const ctor = (e: unknown): string =>
+    e && (e as { constructor?: { name?: string } }).constructor
+      ? ((e as { constructor: { name: string } }).constructor.name as string)
+      : String(e);
+  const throwsNamed = (fn: () => unknown, name: string): void => {
+    let got = 'no-throw';
+    try {
+      fn();
+    } catch (e) {
+      got = ctor(e);
+    }
+    expect(got).toBe(name);
+  };
+
+  beforeAll(() => setVmEngineOverride('quickjs'));
+  afterAll(() => setVmEngineOverride(undefined));
+
+  it('treats redeclared intrinsics as non-writable data props (silent no-op)', () => {
+    const sb = vm.createContext({});
+    expect(vm.runInContext('var undefined = 5; undefined', sb)).toBeUndefined();
+    expect(vm.runInContext('var NaN = 1; NaN', sb)).toBeNaN();
+    expect(vm.runInContext('var Infinity = 0; Infinity', sb)).toBe(Number.POSITIVE_INFINITY);
+    expect(vm.runInContext('NaN = 1; NaN', sb)).toBeNaN();
+    // the silent intrinsic redeclaration never surfaces on the sandbox object
+    expect(Object.keys(sb)).toEqual([]);
+  });
+
+  it('makes var/function bindings non-configurable (delete is a no-op returning false)', () => {
+    const sb = vm.createContext({});
+    expect(vm.runInContext('var d = 5; delete d; d', sb)).toBe(5);
+    expect(vm.runInContext('function f(){}; delete f', sb)).toBe(false);
+    expect(vm.runInContext('typeof f', sb)).toBe('function');
+  });
+
+  it('pre-declares the lexical intrinsics so let-redeclaration is a SyntaxError', () => {
+    const sb = vm.createContext({});
+    throwsNamed(() => vm.runInContext('let undefined = 5', sb), 'SyntaxError');
+  });
+
+  it('reads back a written globalThis and a context var named eval', () => {
+    const sb = vm.createContext({});
+    expect(vm.runInContext('var globalThis = 5; globalThis', sb)).toBe(5);
+    const sb2 = vm.createContext({});
+    expect(vm.runInContext('var eval = 5; eval', sb2)).toBe(5);
+  });
+
+  it('throws ReferenceError for a strict-mode undeclared write', () => {
+    const sb = vm.createContext({});
+    throwsNamed(() => vm.runInContext('"use strict"; xxx = 1', sb), 'ReferenceError');
+  });
+
+  it('exposes a declaration-only var on the vm global but NOT on the sandbox object', () => {
+    const sb = vm.createContext({});
+    vm.runInContext('var z;', sb);
+    // sandbox object: no own key (V8 contextify copies a global to the sandbox only
+    // when an assignment fired; a pure `var z;` declaration never sets)
+    expect(Object.keys(sb)).toEqual([]);
+    expect(Object.prototype.hasOwnProperty.call(sb, 'z')).toBe(false);
+    expect(Object.getOwnPropertyDescriptor(sb, 'z')).toBeUndefined();
+    // vm GLOBAL (`this`): a non-configurable, enumerable own prop, value undefined
+    expect(vm.runInContext('JSON.stringify(Object.getOwnPropertyDescriptor(this,"z"))', sb)).toBe(
+      '{"writable":true,"enumerable":true,"configurable":false}',
+    );
+    expect(vm.runInContext('JSON.stringify(Object.keys(this))', sb)).toBe('["z"]');
+    expect(vm.runInContext('this.hasOwnProperty("z")', sb)).toBe(true);
+    expect(vm.runInContext('[String(this.z), "z" in this].join(",")', sb)).toBe('undefined,true');
+    // a later actual assignment surfaces on the sandbox
+    vm.runInContext('z = 42;', sb);
+    expect(sb.z).toBe(42);
+    expect(Object.keys(sb)).toEqual(['z']);
+  });
+
+  it('propagates assigned vars/functions/this-props/bare-assignments to the sandbox', () => {
+    const sb = vm.createContext({});
+    vm.runInContext('var assigned = 5; var declonly; this.tp = 9; bare = 7; function fn(){}', sb);
+    expect(Object.keys(sb).sort()).toEqual(['assigned', 'bare', 'fn', 'tp']);
+    expect(Object.prototype.hasOwnProperty.call(sb, 'declonly')).toBe(false);
+    // configurable undefined writes DO propagate (only declaration-only vars skip)
+    const sb2 = vm.createContext({});
+    vm.runInContext('this.tp = undefined; bare = undefined;', sb2);
+    expect(Object.keys(sb2).sort()).toEqual(['bare', 'tp']);
+    // an existing sandbox key is never wiped by a same-name declaration-only var
+    const sb3 = vm.createContext({ pre: 99 });
+    vm.runInContext('var pre;', sb3);
+    expect(sb3.pre).toBe(99);
+  });
+
+  it('persists top-level let/const/class across runs as the context lexical scope', () => {
+    const sb = vm.createContext({});
+    vm.runInContext('let persist = 7', sb);
+    expect(vm.runInContext('persist', sb)).toBe(7);
+    throwsNamed(() => vm.runInContext('let persist = 8', sb), 'SyntaxError');
+    vm.runInContext('const k = 11', sb);
+    expect(vm.runInContext('k', sb)).toBe(11);
+    throwsNamed(() => vm.runInContext('const k = 12', sb), 'SyntaxError');
+    vm.runInContext('class Cls { m(){ return 42; } }', sb);
+    expect(vm.runInContext('new Cls().m()', sb)).toBe(42);
+    throwsNamed(() => vm.runInContext('class Cls {}', sb), 'SyntaxError');
+    // lexical bindings stay OFF the sandbox object (they are not global props)
+    expect(Object.keys(sb)).toEqual([]);
+    expect(sb.persist).toBeUndefined();
+  });
+
+  it('documents the function-named-intrinsic redeclaration divergence (T19)', () => {
+    // V8 raises an EARLY SyntaxError ("Identifier 'undefined' has already been
+    // declared"); QuickJS raises the spec-literal RUNTIME TypeError ("cannot define
+    // variable 'undefined'") from GlobalDeclarationInstantiation /
+    // CanDeclareGlobalFunction. We faithfully surface the engine's real error rather
+    // than fake V8's type, so this is the one genuine ES2023-vs-V8 residual (T19);
+    // `let undefined` (lexical) DOES match V8 above. This test pins QuickJS's actual
+    // type so a change is caught.
+    const sb = vm.createContext({});
+    throwsNamed(() => vm.runInContext('function undefined(){}', sb), 'TypeError');
   });
 });

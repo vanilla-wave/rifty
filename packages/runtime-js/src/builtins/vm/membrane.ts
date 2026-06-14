@@ -766,6 +766,20 @@ export class Membrane {
    *   - otherwise (new global, or reassigned to a guest value) → write the
    *     marshalled-out value. The OUT identity cache makes this the SAME wrapper
    *     as a value the run also returned (`ret === sb.shared`, #21).
+   *
+   * Declaration-only `var`/`function` exception (T13): a top-level `var z;` makes
+   * `z` an enumerable own prop of the vm GLOBAL (so `this.z`/`Object.keys(this)`
+   * see it — matching Node), but V8's contextify does NOT copy it to the
+   * contextified sandbox object: it only mirrors a global back to the sandbox when
+   * an assignment actually fired (the global property SETTER), and a pure `var z;`
+   * declaration never sets. We have no global setter interceptor in the QuickJS
+   * realm, so we approximate with the post-run signature of a declaration-only
+   * binding — value `undefined` AND a NON-CONFIGURABLE binding (`#isDeclOnlyVar`):
+   * skip those, matching Node's `var z;`/`function … then deleted` while still
+   * propagating `this.x = undefined` / `bare = undefined` (configurable) and every
+   * assigned value. Residual divergence: an explicit `var x = undefined` initializer
+   * is post-run indistinguishable from `var x;` (same undefined value + non-config),
+   * so it is ALSO skipped — Node would copy it (documented T13 residual).
    */
   sweepContext(context: Record<string, unknown>): void {
     const ctx = this.#ctx;
@@ -776,13 +790,36 @@ export class Membrane {
         if (origin !== undefined) {
           this.#sweepInto(guestVal, origin);
           context[key] = origin;
-        } else {
+        } else if (!this.#isDeclOnlyVar(ctx.global, key, guestVal)) {
           context[key] = this.wrapGuestToHost(guestVal);
         }
       } finally {
         guestVal.dispose();
       }
     }
+  }
+
+  /**
+   * True if a guest global key is a declaration-only `var`/`function` binding NOT
+   * meant to surface on the contextified sandbox (T13): its current value is
+   * `undefined` AND it is a NON-CONFIGURABLE own prop of the global. Seeded sandbox
+   * keys are configurable (`setProp`), so this never skips them; an actual
+   * assignment to a non-undefined value also passes through. See `sweepContext`.
+   */
+  #isDeclOnlyVar(global: QuickJSHandle, key: string, value: QuickJSHandle): boolean {
+    if (this.#ctx.typeof(value) !== 'undefined') return false;
+    return this.#isNonConfigurableGlobalKey(global, key);
+  }
+
+  /** Read just the `configurable` flag of a string key on the guest global (false ⇒ non-config). */
+  #isNonConfigurableGlobalKey(global: QuickJSHandle, key: string): boolean {
+    const ctx = this.#ctx;
+    return Scope.withScope((scope) => {
+      const keyH = scope.manage(ctx.newString(key));
+      const d = scope.manage(this.#callReflect('descriptor', global, keyH));
+      if (this.#readBool(d, 'present') !== true) return false;
+      return this.#readBool(d, 'configurable') !== true;
+    });
   }
 
   /**
