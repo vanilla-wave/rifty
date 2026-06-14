@@ -39,6 +39,12 @@ export interface VmEngine {
   /** vm.Script support: precompile + run. */
   compile(code: string, filename?: string): CompiledScript;
   runCompiled(script: CompiledScript, context: ContextObject): unknown;
-  /** Release engine state when the context is torn down. */
+  /**
+   * Release engine state when the context is torn down. Reserved seam: no
+   * dispatcher/public caller today — production teardown is GC-only (the
+   * ContextObject finalizer marks the lifetime controller pending, mirroring Node's
+   * lack of vm-context teardown). Kept for the M11 embeddable sandbox teardown
+   * contract. TODO(backlog: runtime-js/vm-unwired-seams)
+   */
   disposeContext(context: ContextObject): void;
 }

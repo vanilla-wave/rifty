@@ -33,6 +33,7 @@ export const QUICKJS_WASM_URL_ENV = '__RIFTY_QUICKJS_WASM_URL' as const;
  * `node_modules` automatically, so {@link ensureVmEngineReady} does NOT thread
  * this URL today; it exists for the browser/worker host that serves the wasm
  * over HTTP (consumed when the worker variant loader is wired — later task).
+ * TODO(backlog: runtime-js/vm-unwired-seams)
  */
 export function getQuickjsWasmUrl(): string {
   const g = globalThis as Record<string, unknown>;

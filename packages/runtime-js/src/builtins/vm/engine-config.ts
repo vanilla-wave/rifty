@@ -2,6 +2,12 @@
  * `vm` engine selector. Precedence: explicit override > `__RIFTY_VM_ENGINE`
  * (process.env then globalThis) > default. Default is `quickjs` (the real-realm
  * engine) since the T17 cutover (ADR-0142); `rewrite` is the loud opt-in floor.
+ *
+ * PROCESS-GLOBAL by design (ADR-0142 §1): the engine is re-resolved per op from this
+ * process-level state (set once at boot via the `vmEngine` host option / env), NOT
+ * bound per-context — a ContextObject carries no engine identity. Flipping the
+ * selection mid-process between a context's createContext and its runs is therefore
+ * unsupported (the run would silently re-contextify under the other engine).
  */
 
 import { quickjsEngine } from './quickjs-engine.ts';

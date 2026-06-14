@@ -50,8 +50,8 @@
  *   - FUNCTION → `Proxy(hostThunk, {getPrototypeOf:()=>null})`. The target is a host
  *                function (keeps the Proxy callable); the null proto makes
  *                `instanceof Function` FALSE. The `apply` path marshals host args →
- *                guest (primitives only for now — full host→guest object marshalling
- *                is T7), calls the guest fn, and marshals the result back.
+ *                guest via `marshalHostToGuest` (primitives + objects/arrays/host fns/
+ *                exotics — T7/T9/T10), calls the guest fn, and marshals the result back.
  *
  * Host→guest read path (T7, `reseedContext`/`marshalHostToGuest`) — the MIRROR of
  * the outbound technique. A host array/object seen in the guest must be
@@ -183,9 +183,13 @@
  * Disposal / handle lifetime (T9, {@link ContextLifetime}): every WRAPPER-backed
  * guest handle is registered in a FinalizationRegistry — when the host GC's the
  * wrapper, its guest handle is disposed and the identity-cache entry evicted, so
- * growth is BOUNDED (a wrapper no host code holds frees its handle). INFRASTRUCTURE
- * handles (the id registry closure + inbound seeds + inbound host-fn handles) live
- * for the context's life and are disposed only at teardown. TRANSIENT handles in a
+ * OUT-wrapper growth is BOUNDED (a wrapper no host code holds frees its handle).
+ * INFRASTRUCTURE handles (the id registry closure + inbound seeds + inbound host-fn
+ * handles) live for the context's life and are disposed only at teardown: the INBOUND
+ * (host→guest) side is context-life-bounded, NOT GC-evicted like OUT wrappers — a
+ * long-lived context marshalling a FRESH host object/fn IN each run accumulates one
+ * seed + `#hostOrigins` entry per DISTINCT value until teardown (keep `vm` off a hot
+ * loop that streams fresh objects in). TRANSIENT handles in a
  * trap/callback are disposed immediately (Scope / explicit). The QuickJSContext is
  * disposed ONLY when it is pending-dispose AND no wrapper-backed handle is live
  * (refcount, NOT finalizer ordering), so `ctx.dispose()` never trips the
@@ -614,17 +618,17 @@ export class Membrane {
    * primitives are fresh/constant per the existing convention.
    *
    * The seed is a WRITABLE guest object the guest may deep-mutate; T8's post-run
-   * `sweepContext` reconciles those mutations back to the host. Host FUNCTION
-   * marshalling (a genuine HOST function entering the guest) is T9 — loud boundary
-   * here — EXCEPT an OUT wrapper round-tripping back IN: that recovers the
-   * original guest handle (`#outWrapperGuest`), so a guest value a prior run
-   * returned and the host stored back is seen by the next run as its own object.
+   * `sweepContext` reconciles those mutations back to the host. A genuine HOST
+   * function entering the guest becomes a guest-callable `ctx.newFunction` wrapper
+   * (`#marshalInboundFunction`, T9) — EXCEPT an OUT wrapper round-tripping back IN:
+   * that recovers the original guest handle (`#outWrapperGuest`), so a guest value a
+   * prior run returned and the host stored back is seen by the next run as its own object.
    */
   marshalHostToGuest(value: unknown): QuickJSHandle {
     const ctx = this.#ctx;
     // OUT wrapper round-trip (covers object/array/function): hand the guest back
-    // its OWN handle. Must precede both the inbound-seed and the function-boundary
-    // throw — a wrapped guest fn is `typeof 'function'` but is NOT a host fn.
+    // its OWN handle. Must precede both the inbound-seed and the inbound host-fn
+    // marshal — a wrapped guest fn is `typeof 'function'` but is NOT a host fn.
     if (value !== null && (typeof value === 'object' || typeof value === 'function')) {
       const guest = this.#outWrapperGuest.get(value as object);
       if (guest) return guest.dup();

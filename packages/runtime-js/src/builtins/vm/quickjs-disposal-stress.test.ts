@@ -150,15 +150,14 @@ describe('T18 stress — long-lived context, many runs', () => {
     }
     const peak = membrane.lifetime.liveWrapperCount;
     expect(peak).toBeGreaterThan(0);
-    await drainGc(() => membrane.lifetime.liveWrapperCount > 0);
-    // Production reclaim path: GC of the unreferenced arg wrappers freed their guest
-    // handles → live count collapsed (bounded growth proven, not just asserted).
-    expect(membrane.lifetime.liveWrapperCount).toBeLessThan(peak);
+    await drainGc(() => membrane.lifetime.liveWrapperCount > 0, 40);
+    // Production reclaim path: the arg wrappers are definitively unreachable (local,
+    // never stored), so GC + the FinalizationRegistry free EVERY backing guest handle
+    // → FULL reclaim to 0 (bounded growth proven, not just "< peak").
+    expect(membrane.lifetime.liveWrapperCount).toBe(0);
     membrane.lifetime.markPending();
-    // After full reclaim the context disposes cleanly (no abort).
-    if (membrane.lifetime.liveWrapperCount === 0) {
-      expect(membrane.lifetime.disposed).toBe(true);
-    }
+    // With no live wrapper, markPending tears the context down cleanly (no abort).
+    expect(membrane.lifetime.disposed).toBe(true);
     // Diagnostic numbers for the report (noConsole is off for this repo).
     console.log(`[T18] long-lived peak=${peak} post-gc=${membrane.lifetime.liveWrapperCount}`);
   });
@@ -343,12 +342,11 @@ describe('T18 stress — hot host-fn loop (transient arg wrappers)', () => {
     resH.dispose();
     const peak = membrane.lifetime.liveWrapperCount;
     expect(peak).toBeGreaterThan(0);
-    await drainGc(() => membrane.lifetime.liveWrapperCount > 0);
-    expect(membrane.lifetime.liveWrapperCount).toBeLessThan(peak);
+    await drainGc(() => membrane.lifetime.liveWrapperCount > 0, 40);
+    // Definitively-unreachable transient arg wrappers fully reclaim to 0 under GC.
+    expect(membrane.lifetime.liveWrapperCount).toBe(0);
     membrane.lifetime.markPending();
-    if (membrane.lifetime.liveWrapperCount === 0) {
-      expect(membrane.lifetime.disposed).toBe(true);
-    }
+    expect(membrane.lifetime.disposed).toBe(true);
     console.log(`[T18] hot-fn peak=${peak} post-gc=${membrane.lifetime.liveWrapperCount}`);
   });
 });

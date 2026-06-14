@@ -35,6 +35,15 @@
   of a sandbox is V8-internal, not spec). The rewrite engine stays a shippable opt-in,
   guarded by the `rewrite-optin-*` parity cases.
 
+- **`node:vm` review follow-ups (doc + test hardening, no behavior change).** Fixed two stale
+  `membrane.ts` doc-comments (host-fn marshalling + the function-wrapper arg path are IMPLEMENTED,
+  not "loud boundary"/"primitives only"); documented the inbound (host→guest) seed retention + the
+  two membrane reconciliation caveats on the public compat surface; clarified that engine selection
+  is process-global (not per-context); strengthened the GC-gated disposal-stress assertions to
+  require FULL reclaim (`toBe(0)` + unconditional dispose). Tracked two defined-but-unwired vm seams
+  (wasm-URL env-config, explicit `disposeContext`) and the remaining vm test-pinning gaps in
+  `docs/backlog/runtime-js/vm-unwired-seams` + `vm-test-pinning`.
+
 ### Fixed
 
 - **`node:vm` (quickjs) inbound prototype-method fidelity (T19).** A host array/object seeded

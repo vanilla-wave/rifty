@@ -62,6 +62,12 @@ statements keep Node's empty completion value; a declared `var` stays readable a
 later runs. A non-object context arg throws Node's exact `ERR_INVALID_ARG_TYPE`. Unsupported
 execution controls (`timeout`/`displayErrors`/`cachedData`/`contextExtensions`/…) throw loudly.
 
+The default engine shares the live `contextObject` via a reconcile-based membrane (reseed
+host→guest before each run, sweep guest→host after) — observationally equivalent to Node's live
+context for synchronous code. Two caveats: a guest callback mutating the sandbox AFTER the run is
+seen only at the next run; the host→guest side retains one seed per DISTINCT inbound object/fn for
+the context's life (not GC-evicted), so keep `vm` off a hot loop that streams fresh objects in.
+
 **ES2023 (QuickJS) ≠ V8 residual divergences** (default engine; each verified vs real Node, pinned
 by conformance + parity cases; workaround = the `rewrite` opt-in, which is V8-correct for these):
 
