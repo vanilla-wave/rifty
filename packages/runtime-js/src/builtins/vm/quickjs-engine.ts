@@ -66,25 +66,32 @@ function evalToHost(rt: GuestRuntime, context: ContextObject, source: string): u
   // Sync semantics make this observationally equivalent to a live contextObject.
   membrane.reseedContext(context);
   const result = qctx.evalCode(source);
-  // unwrapResult returns the success handle (caller owns it) or throws the guest
-  // error as a native Error (disposing the error handle itself). A raw throw is
-  // acceptable through T6 — faithful error marshalling is T11. On throw we skip
-  // the sweep (Node likewise does not reconcile a sandbox after a thrown run for
-  // the completion value — partial mutations that occurred still live in the
-  // guest and surface on the NEXT run's reseed-from-host? no: they are guest-side
-  // until a successful sweep; matching Node's "no observable host write on throw"
-  // for these cases is T11's error-path concern).
-  const handle = qctx.unwrapResult(result);
+  // Node's contextObject is LIVE: writes made BEFORE a throw ARE observable to the
+  // host (verified probe — `this.a=1; throw` → `sb.a===1`; deep `o.n=99; throw` →
+  // `sb.o.n===99`). The sweep therefore runs in `finally` so it executes on BOTH
+  // the success and throw paths. `unwrapResult` returns the success handle (caller
+  // owns it) or throws the guest error as a native Error (disposing the error
+  // handle itself — no double-dispose). The QuickJSContext stays alive after that
+  // throw; `sweepContext` walks `ctx.global` and needs no completion handle, so it
+  // is safe in finally. The raw throw then still propagates (faithful error
+  // marshalling is T11).
   try {
-    // Primitives are marshalled by value; OBJECT/ARRAY/FUNCTION become membrane
-    // wrappers that RETAIN an internal dup of the guest handle. Disposing this
-    // per-run completion handle afterwards is therefore safe — the wrapper holds
-    // its own retained dup, not this handle.
-    const out = membrane.wrapGuestToHost(handle);
-    membrane.sweepContext(context);
-    return out;
+    const handle = qctx.unwrapResult(result);
+    try {
+      // Primitives are marshalled by value; OBJECT/ARRAY/FUNCTION become membrane
+      // wrappers that RETAIN an internal dup of the guest handle. Disposing this
+      // per-run completion handle afterwards is therefore safe — the wrapper holds
+      // its own retained dup, not this handle.
+      return membrane.wrapGuestToHost(handle);
+    } finally {
+      handle.dispose();
+    }
   } finally {
-    handle.dispose();
+    // Reconcile guest writes back to the host on EVERY exit path. On throw this is
+    // what makes pre-throw mutations visible (and prevents the next run's reseed
+    // from clobbering them). Transient handles inside use Scope/finally; the
+    // context is NOT disposed here.
+    membrane.sweepContext(context);
   }
 }
 

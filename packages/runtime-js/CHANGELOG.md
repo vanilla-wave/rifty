@@ -42,6 +42,22 @@
 
 ### Fixed
 
+- **`node:vm` QuickJS engine — sweep on throw (T8 review, ADR-0138).** A run that
+  THREW skipped the write-back sweep (it sat after `unwrapResult`, which throws on
+  a guest error), so pre-throw host writes were lost — and the next run's
+  reseed-from-host then clobbered any deep pre-throw mutation entirely. But Node's
+  contextObject is LIVE: writes made BEFORE a throw ARE observable to the host
+  (verified probe — `this.a=1; throw` → `sb.a===1`; `o.n=99; throw` →
+  `sb.o.n===99`). `sweepContext` now runs in a `finally` so it reconciles on BOTH
+  the success and throw paths; the QuickJSContext stays alive after `unwrapResult`
+  throws (only the error handle is freed — no double-dispose) and the sweep walks
+  `ctx.global` needing no completion handle. The raw guest error still propagates
+  (faithful error marshalling is T11). Removed the false comment claiming "Node
+  likewise does not reconcile a sandbox after a thrown run" / "no observable host
+  write on throw" (it documented a real divergence as conformance) and its
+  unfinished fragment. Parity: `cases/vm/quickjs-throw-writeback.case.ts`
+  (Node-captured: pre-throw new globals + deep mutation visible to host, next run
+  reads the reconciled state).
 - **`node:vm` QuickJS membrane — unforgeable host-origin tracking (T7 review,
   ADR-0138).** The host→guest round-trip identity (#14) previously tagged each
   inbound seed with a guest-visible, guest-WRITABLE marker symbol
