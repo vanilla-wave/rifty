@@ -63,4 +63,27 @@ describe('packSerializedResponse body fallback', () => {
       );
     });
   });
+
+  it('still drains a non-SSE body to a Uint8Array when transfer is unavailable (guard keys on content-type, not no-transfer)', async () => {
+    await withNoMessageChannel(async () => {
+      const { packSerializedResponse } = await import('./body-transport.ts');
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1, 2, 3]));
+          controller.close();
+        },
+      });
+
+      const { message, transfer } = await packSerializedResponse({
+        status: 200,
+        statusText: 'OK',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body,
+      });
+
+      expect(transfer).toEqual([]);
+      expect(message.body).toBeInstanceOf(Uint8Array);
+      expect(Array.from(message.body as Uint8Array)).toEqual([1, 2, 3]);
+    });
+  });
 });

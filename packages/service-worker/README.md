@@ -35,7 +35,8 @@ Workers). `canTransferReadableStream()` is the runtime probe; the result is
 cached after the first call. The protocol-version stamp is added to the
 packed message envelope. If transfer is unavailable, `text/event-stream`
 responses throw `NotImplementedError('service-worker.preview.sse-drain-fallback')`
-instead of buffering an unending SSE body forever.
+instead of buffering an unending SSE body forever; the bridge catches the throw
+and the preview `fetch` resolves to an HTTP 502 carrying that message.
 
 ### Owner binding / resolver
 

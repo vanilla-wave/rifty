@@ -535,3 +535,50 @@ describe('cross-realm preview port — ADR-0048 streaming', () => {
     expect(await r.text()).toContain('disposed');
   });
 });
+
+// ─── ADR-0048: SSE ceiling ───────────────────────────────────────────────────
+// The cross-realm reply is buffered-until-`end` (the page concats on
+// `reply-stream-end`; true end-to-end `ReadableStream` is M12, ADR-0017). An
+// unending `text/event-stream` body therefore never resolves — both the
+// buffered `arrayBuffer()` path and the streaming drain loop await forever.
+// `serveCrossRealmPreview` must fail loud naming the ceiling instead of hanging,
+// mirroring the SW-bridge guard in `@riftydev/service-worker` body-transport.ts.
+
+describe('cross-realm preview port — SSE ceiling (ADR-0048)', () => {
+  it('refuses to drain an unending text/event-stream body → fast 502 naming the ceiling (no silent hang)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    cleanup.add(() => spy.mockRestore());
+    cleanup.add(
+      serveCrossRealmPreview(5209, async () => {
+        // Keep-alive SSE body: emits one frame, never closes — `reader.read()`
+        // would otherwise await forever and the page would never resolve.
+        const stream = new ReadableStream<Uint8Array>({
+          start(c) {
+            c.enqueue(new Uint8Array([100, 97, 116, 97, 58, 32, 49, 10, 10])); // "data: 1\n\n"
+          },
+        });
+        return new Response(stream, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream; charset=utf-8' },
+        });
+      }),
+    );
+    // Large idle timeout so a pass can only come from the guard, never a timeout.
+    const handler = bridgeCrossRealmPreview(5209, { timeoutMs: 5000 });
+    cleanup.add(handler.dispose);
+
+    const settled = await Promise.race([
+      handler(new Request('http://preview.local/events')).then((r) => ({
+        kind: 'response' as const,
+        r,
+      })),
+      delay(300).then(() => ({ kind: 'pending' as const })),
+    ]);
+    // Before the guard the worker streams the first frame then drains forever →
+    // the page accumulator never resolves → 'pending'.
+    expect(settled.kind).toBe('response');
+    if (settled.kind !== 'response') return;
+    expect(settled.r.status).toBe(502);
+    expect(await settled.r.text()).toContain('net.preview.cross-realm-sse-drain');
+  });
+});

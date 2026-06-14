@@ -142,7 +142,7 @@ const matrices = [
       [
         'SSE over preview bridge',
         '⚠️',
-        'Requires transferable `ReadableStream`; no-transfer fallback throws `NotImplementedError` instead of hanging',
+        'Delivered only where transferable `ReadableStream` exists (SW bridge); the no-transfer SW path and the cross-realm worker bridge both fail loud (HTTP 502 naming the ceiling) instead of hanging on an unending body',
       ],
       ['Header reassignment / status codes', '✅', 'Pinned by parity cases'],
       [
@@ -160,10 +160,11 @@ const matrices = [
       '`tools/node-parity-runner/cases/http/*.case.ts`',
       '`tools/node-parity-runner/cases/http2/surface.case.ts`',
       '`packages/service-worker/src/body-transport.test.ts`',
+      '`packages/net/src/cross-realm/preview-port.test.ts`',
     ],
     limitations: [
       'Networking is browser-local: servers bind a rifty port registry and preview dispatch, not native sockets.',
-      'SSE preview delivery depends on browser `ReadableStream` transfer over `postMessage`; old realms fail loud rather than silently buffering forever.',
+      'SSE preview delivery needs browser `ReadableStream` transfer over `postMessage` (SW bridge); the cross-realm worker bridge buffers until end (true end-to-end stream is M12). Paths without it fail loud (HTTP 502 naming the ceiling) rather than silently buffering an unending body forever.',
       '`node:https` cannot promise real TLS egress inside the local runtime without host integration.',
     ],
   },
