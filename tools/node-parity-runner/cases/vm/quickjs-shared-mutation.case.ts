@@ -8,7 +8,6 @@ import type { ParityCase } from '../../src/types.ts';
 //   (2) host MUTATES the sandbox BETWEEN two runs, the second run reads it.
 const c: ParityCase = {
   code: `
-    globalThis.__RIFTY_VM_ENGINE = 'quickjs';
     const vm = require('node:vm');
 
     // (1) guest mutates a property of a pre-existing shared host object.

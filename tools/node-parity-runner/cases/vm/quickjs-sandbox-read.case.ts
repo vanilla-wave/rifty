@@ -9,7 +9,6 @@ import type { ParityCase } from '../../src/types.ts';
 //     SAME host object (reference identity via the bidirectional identity cache).
 const c: ParityCase = {
   code: `
-    globalThis.__RIFTY_VM_ENGINE = 'quickjs';
     const vm = require('node:vm');
     const hostArr = [1,2,3];
     const ctx = vm.createContext({ hostArr, num: 7, str: 'hi' });

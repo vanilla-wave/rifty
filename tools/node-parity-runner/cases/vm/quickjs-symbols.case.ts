@@ -15,7 +15,6 @@ import type { ParityCase } from '../../src/types.ts';
 //     symbol (`=== hostSym`).
 const c: ParityCase = {
   code: `
-    globalThis.__RIFTY_VM_ENGINE = 'quickjs';
     const vm = require('node:vm');
     const s = vm.runInNewContext('Symbol("x")');
     console.log('uniq', typeof s, JSON.stringify(s.description), s.toString());

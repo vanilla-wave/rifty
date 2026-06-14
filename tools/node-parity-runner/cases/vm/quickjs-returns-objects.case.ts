@@ -8,7 +8,6 @@ import type { ParityCase } from '../../src/types.ts';
 //   - functions: typeof 'function', callable, NOT instanceof host Function.
 const c: ParityCase = {
   code: `
-    globalThis.__RIFTY_VM_ENGINE = 'quickjs';
     const vm = require('node:vm');
     const arr = vm.runInNewContext('[1,2,3]');
     console.log(arr instanceof Array, Array.isArray(arr), JSON.stringify(arr));

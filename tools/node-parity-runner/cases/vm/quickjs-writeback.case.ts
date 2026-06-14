@@ -12,7 +12,6 @@ import type { ParityCase } from '../../src/types.ts';
 //   - a guest-INVENTED global (`newGlobal = 99`) → host `sb2.newGlobal === 99`.
 const c: ParityCase = {
   code: `
-    globalThis.__RIFTY_VM_ENGINE = 'quickjs';
     const vm = require('node:vm');
     const sb = { module: { exports: null } };
     vm.createContext(sb);

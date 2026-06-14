@@ -2,7 +2,6 @@ import type { ParityCase } from '../../src/types.ts';
 
 const c: ParityCase = {
   code: `
-    globalThis.__RIFTY_VM_ENGINE = 'quickjs';
     const vm = require('node:vm');
     console.log(vm.runInNewContext('40 + 2'));
     console.log(vm.runInNewContext('"a" + "b"'));

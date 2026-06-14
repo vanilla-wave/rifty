@@ -19,7 +19,6 @@ import type { ParityCase } from '../../src/types.ts';
 //     object writes to the guest, and the guest sees it live.
 const c: ParityCase = {
   code: `
-    globalThis.__RIFTY_VM_ENGINE = 'quickjs';
     const vm = require('node:vm');
     const out = [];
     // frozen

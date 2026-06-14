@@ -9,7 +9,6 @@ import type { ParityCase } from '../../src/types.ts';
 //   RangeError:hostboom         (host error caught INSIDE the guest)
 const c: ParityCase = {
   code: `
-    globalThis.__RIFTY_VM_ENGINE = 'quickjs';
     const vm = require('node:vm');
     try { vm.runInNewContext('throw new TypeError("boom")'); }
     catch (e) { console.log(e instanceof TypeError, e.constructor.name, e.message); }

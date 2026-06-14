@@ -87,6 +87,36 @@ function asSource(code: string): string {
   return code;
 }
 
+/**
+ * Engine-agnostic guard for the two entry points that take an ALREADY-contextified
+ * object (`runInContext`, `Script.runInContext`). Node throws a TypeError for a
+ * value that never went through `createContext`. The rewrite engine checked this
+ * internally; the quickjs engine did not, so the assertion lives here at the shared
+ * surface. Message wording matches real Node: a non-object value (null/primitive)
+ * fails the "object" arg check first; a wrong-kind OBJECT fails the vm.Context check
+ * ("must be an vm.Context. Received an instance of <Ctor>").
+ */
+function assertContextified(value: unknown): void {
+  if (typeof value !== 'object' || value === null) {
+    throw new TypeError(
+      `The "object" argument must be of type object. Received ${describeNonObject(value)}`,
+    );
+  }
+  if (!isVmContext(value)) {
+    const ctor = (value as { constructor?: { name?: string } }).constructor?.name ?? 'Object';
+    throw new TypeError(
+      `The "contextifiedObject" argument must be an vm.Context. Received an instance of ${ctor}`,
+    );
+  }
+}
+
+/** Node ERR_INVALID_ARG_TYPE tail for a non-object value: `null` or `type <t> (<v>)`. */
+function describeNonObject(value: unknown): string {
+  if (value === null) return 'null';
+  const rendered = typeof value === 'string' ? `'${value}'` : String(value);
+  return `type ${typeof value} (${rendered})`;
+}
+
 function normalizeOptions(options?: VmOptions): ScriptOptions {
   if (options === undefined) return {};
   if (typeof options === 'string') return { filename: options };
@@ -196,6 +226,7 @@ export function runInContext(
 ): unknown {
   const normalized = normalizeOptions(options);
   assertSupportedScriptOptions(normalized, 'vm.runInContext');
+  assertContextified(contextifiedObject);
   return selectEngineForRun().runInContext(
     asSource(code),
     contextifiedObject as ContextObject,
@@ -243,6 +274,7 @@ export class Script {
   runInContext(contextifiedObject: Record<string, unknown>, options?: VmOptions): unknown {
     const normalized = { ...normalizeOptions(options), filename: this.#filename };
     assertSupportedScriptOptions(normalized, 'vm.Script');
+    assertContextified(contextifiedObject);
     return selectEngineForRun().runCompiled(
       this.#getCompiled(),
       contextifiedObject as ContextObject,

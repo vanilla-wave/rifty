@@ -8,7 +8,6 @@ import type { ParityCase } from '../../src/types.ts';
 //   - the NEXT run reads the reconciled state (`a + b + o.n === 105`).
 const c: ParityCase = {
   code: `
-    globalThis.__RIFTY_VM_ENGINE = 'quickjs';
     const vm = require('node:vm');
     const sb = { o: { n: 1 } }; vm.createContext(sb);
     try { vm.runInContext('this.a = 1; globalThis.b = 5; o.n = 99; throw new Error("boom")', sb); } catch (e) {}

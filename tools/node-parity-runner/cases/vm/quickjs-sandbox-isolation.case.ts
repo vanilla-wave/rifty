@@ -12,7 +12,6 @@ import type { ParityCase } from '../../src/types.ts';
 //      returned OUT is the SAME host reference. Node: true.
 const c: ParityCase = {
   code: `
-    globalThis.__RIFTY_VM_ENGINE = 'quickjs';
     const vm = require('node:vm');
     const secret = { token: 'sekret' };
     const ctx = vm.createContext({ secret });

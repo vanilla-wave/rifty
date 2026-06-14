@@ -5,7 +5,6 @@ import type { ParityCase } from '../../src/types.ts';
 // Node is the oracle. `length` counts params before the first default/rest.
 const c: ParityCase = {
   code: `
-    globalThis.__RIFTY_VM_ENGINE = 'quickjs';
     const vm = require('node:vm');
     const fn = vm.runInNewContext('(function foo(a,b,c){return a})');
     console.log('named', JSON.stringify(fn.name), fn.length, fn(7,8,9));

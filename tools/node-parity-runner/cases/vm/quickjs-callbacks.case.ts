@@ -11,7 +11,6 @@ import type { ParityCase } from '../../src/types.ts';
 //     run on the still-alive context.
 const c: ParityCase = {
   code: `
-    globalThis.__RIFTY_VM_ENGINE = 'quickjs';
     const vm = require('node:vm');
     let seenType, seenIsArr;
     const ctx = vm.createContext({

@@ -28,7 +28,6 @@ import type { ParityCase } from '../../src/types.ts';
 //      next run; a re-declaration next run is a redeclaration SyntaxError).
 const c: ParityCase = {
   code: `
-    globalThis.__RIFTY_VM_ENGINE = 'quickjs';
     const vm = require('node:vm');
     const out = [];
     const C = (e) => (e && e.constructor ? e.constructor.name : String(e));

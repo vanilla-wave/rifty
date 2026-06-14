@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`node:vm` CUTOVER — QuickJS real realm is now the DEFAULT engine (T17, ADR-0138).**
+  `resolveVmEngineName()` defaults to `'quickjs'`; the hardened-rewrite engine is now a
+  LOUD opt-in (`__RIFTY_VM_ENGINE='rewrite'` / `vmEngine` host option → one-time stderr
+  warning + `vm.engine.rewrite-active` telemetry). BEHAVIOR CHANGE: sandbox semantics are
+  now Node-correct where the rewrite engine was Node-WRONG — (1) **cross-realm identity**:
+  a guest throw/value crosses the membrane as a cross-realm mirror, so `instanceof`/
+  `constructor ===` against a HOST constructor is now FALSE (matching real Node; `.name`/
+  `.constructor.name` stay faithful); (2) **realm isolation**: a fresh context no longer
+  inherits host globals (rewrite's `with(proxy)` leaked them); (3) **direct eval** stays in
+  the guest realm (no host leak); (4) real global-object attribute/lexical/strict semantics.
+  Shared dispatcher guard: `runInContext`/`Script.runInContext` now reject a
+  non-contextified object with a Node-faithful `TypeError` (both engines). Membrane sweep
+  now reflects a guest `delete` of a seeded sandbox key back to the sandbox object (Node's
+  live contextified object). Known residual (T19): contextified-sandbox key ENUMERATION
+  order differs from V8 (QuickJS creation order vs V8's setter order — `Object.keys` order
+  of a sandbox is V8-internal, not spec). The rewrite engine stays a shippable opt-in,
+  guarded by the `rewrite-optin-*` parity cases.
+
 ### Added
 
 - **Public telemetry data types (T16).** `TelemetryEntry`, `TelemetryKind`, `TelemetrySnapshot`

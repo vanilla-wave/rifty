@@ -7,7 +7,6 @@ import type { ParityCase } from '../../src/types.ts';
 // cross-realm array identity (`Array.isArray` TRUE, `instanceof Array` FALSE).
 const c: ParityCase = {
   code: `
-    globalThis.__RIFTY_VM_ENGINE = 'quickjs';
     const vm = require('node:vm');
     const ctx = vm.createContext({});
     vm.runInContext('globalThis.shared = {x:1}; globalThis.getShared = () => shared;', ctx);

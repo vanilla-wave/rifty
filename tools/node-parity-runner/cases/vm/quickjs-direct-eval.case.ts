@@ -6,7 +6,6 @@ import type { ParityCase } from '../../src/types.ts';
 // only via the contextObject (`sb.leaked`). Captured `undefined 1` via real Node.
 const c: ParityCase = {
   code: `
-    globalThis.__RIFTY_VM_ENGINE = 'quickjs';
     const vm = require('node:vm');
     const sb = {}; vm.createContext(sb);
     vm.runInContext('eval("leaked = 1")', sb);

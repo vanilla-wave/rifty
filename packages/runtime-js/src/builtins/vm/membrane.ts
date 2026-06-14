@@ -441,6 +441,14 @@ export class Membrane {
   #rebrandHandle: QuickJSHandle | undefined;
   /** Lazily-installed guest reflection closure (`REFLECT_BOOTSTRAP`, T12), infra-tracked. */
   #reflectHandle: QuickJSHandle | undefined;
+  /**
+   * Sandbox own keys captured at `reseedContext` time, consumed by the next
+   * `sweepContext` for DELETE-reflection: a seeded key the guest deleted (a
+   * configurable global removed via `delete`) is no longer an own-enumerable key
+   * of the guest global after the run, so it is removed from the sandbox too —
+   * matching Node's live contextified object (`delete gone` ⇒ `'gone' in sb` false).
+   */
+  #preRunSandboxKeys: readonly string[] = [];
 
   constructor(ctx: QuickJSContext) {
     this.#ctx = ctx;
@@ -745,7 +753,10 @@ export class Membrane {
    */
   reseedContext(context: Record<string, unknown>): void {
     const ctx = this.#ctx;
-    for (const key of Object.keys(context)) {
+    // Snapshot the sandbox keys present BEFORE the run so the post-run sweep can
+    // reflect a guest `delete` of a seeded key back onto the sandbox.
+    this.#preRunSandboxKeys = Object.keys(context);
+    for (const key of this.#preRunSandboxKeys) {
       const valueH = this.marshalHostToGuest(context[key]);
       try {
         ctx.setProp(ctx.global, key, valueH);
@@ -783,7 +794,8 @@ export class Membrane {
    */
   sweepContext(context: Record<string, unknown>): void {
     const ctx = this.#ctx;
-    for (const key of this.#ownEnumerableKeys(ctx.global)) {
+    const guestKeys = this.#ownEnumerableKeys(ctx.global);
+    for (const key of guestKeys) {
       const guestVal = ctx.getProp(ctx.global, key);
       try {
         const origin = this.#originOf(guestVal);
@@ -797,6 +809,15 @@ export class Membrane {
         guestVal.dispose();
       }
     }
+    // DELETE-reflection: a seeded key the guest removed (`delete`) is gone from the
+    // guest global's enumerable keys → drop it from the sandbox too (Node's live
+    // contextified object reflects the delete). Only pre-run seeded keys are
+    // considered, so a NEW global is never spuriously deleted.
+    const present = new Set(guestKeys);
+    for (const key of this.#preRunSandboxKeys) {
+      if (!present.has(key) && key in context) delete context[key];
+    }
+    this.#preRunSandboxKeys = [];
   }
 
   /**

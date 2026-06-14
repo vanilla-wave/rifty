@@ -14,7 +14,6 @@ import type { ParityCase } from '../../src/types.ts';
 //     `instanceof guestCtor` FALSE but brand/methods/data all faithful.
 const c: ParityCase = {
   code: `
-    globalThis.__RIFTY_VM_ENGINE = 'quickjs';
     const vm = require('node:vm');
     // --- OUT ---
     const d = vm.runInNewContext('new Date(0)');
