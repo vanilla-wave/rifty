@@ -38,10 +38,15 @@ interface AnyNodeShape {
 }
 
 interface RewriteContext {
-  readonly edits: SourceEdit[];
+  // mutable: a sub-walk swaps in a temp list to render a node to string
+  // (rewriteFunctionToString) without polluting the main edit stream.
+  edits: SourceEdit[];
   readonly scopes: Array<Set<string>>;
   readonly contextVarNames: Set<string>;
   readonly helperName: string;
+  // block-scoped temp for completion-neutralising wrappers (`{ let T = (…); }`).
+  readonly tempName: string;
+  readonly source: string;
   functionDepth: number;
 }
 
@@ -88,12 +93,14 @@ const runGlobalScript = new Function('source', 'return (0, eval)(source);') as (
   source: string,
 ) => unknown;
 
-// TODO(backlog: runtime-js/vm-sandbox-residual-gaps): direct `eval(...)` in vm
-// code evaluates UNREWRITTEN source — writes to undeclared names inside it
-// leak to the host realm. Faithful interception needs realm-level support.
+// Direct `eval(...)` in vm code evaluates UNREWRITTEN source, so writes to
+// undeclared names inside it leak to the host realm. Faithful interception needs
+// realm-level support this host-realm `with(proxy)+eval` design cannot provide —
+// a permanent divergence recorded in ADR-0138. `eval` is a helper binding so the
+// `with` proxy never shadows the host `eval` the rewritten code calls.
 const HELPER_BINDINGS = new Set<PropertyKey>(['__riftyVmContext', '__riftyVmSource', 'eval']);
 const activeHelperBindings = new Map<PropertyKey, number>();
-const activeContextVarBindings = new WeakMap<ContextObject, Map<PropertyKey, number>>();
+const activeContextVarBindings = new WeakMap<ContextObject, Set<PropertyKey>>();
 
 const INTRINSIC_GLOBALS = new Set<PropertyKey>([
   'AggregateError',
@@ -265,8 +272,12 @@ function contextProxy(context: ContextObject): ContextProxy {
       if (prop === Symbol.unscopables) return undefined;
       if (prop === 'globalThis') return proxy;
       if (Reflect.has(target, prop)) return Reflect.get(target, prop, receiver) as unknown;
-      if (isActiveContextVarBinding(target, prop)) return undefined;
+      // A no-init `var X;` registers X as a context-var binding but creates NO own
+      // property until assigned. Node leaves an existing writable intrinsic (Map,
+      // JSON, …) intact for a bare `var X;`, so intrinsics resolve BEFORE the
+      // bare-binding `undefined`; once X is assigned the own-prop branch above wins.
       if (INTRINSIC_GLOBALS.has(prop)) return Reflect.get(globalThis, prop);
+      if (isActiveContextVarBinding(target, prop)) return undefined;
       return undefined;
     },
     set(target, prop, value) {
@@ -302,26 +313,21 @@ function isActiveContextVarBinding(context: ContextObject, prop: PropertyKey): b
   return activeContextVarBindings.get(context)?.has(prop) ?? false;
 }
 
-function pushActiveContextVarBindings(context: ContextObject, names: readonly string[]): void {
+// Once a `var` / top-level-function name is declared in a context it stays a known
+// global of that context for its lifetime (Node parity): reads after the run — and
+// in later runs of the same context — resolve to `undefined` instead of falling
+// through to the host realm. rifty records the name in this side table rather than
+// as an own property; Node DOES make `var x;` a (non-configurable, enumerable) own
+// property of its global — that property-attribute gap is tracked in
+// `docs/backlog/runtime-js/vm-context-global-object-fidelity`.
+function registerContextVarBindings(context: ContextObject, names: readonly string[]): void {
+  if (names.length === 0) return;
   let bindings = activeContextVarBindings.get(context);
   if (!bindings) {
-    bindings = new Map();
+    bindings = new Set();
     activeContextVarBindings.set(context, bindings);
   }
-  for (const name of names) {
-    bindings.set(name, (bindings.get(name) ?? 0) + 1);
-  }
-}
-
-function popActiveContextVarBindings(context: ContextObject, names: readonly string[]): void {
-  const bindings = activeContextVarBindings.get(context);
-  if (!bindings) return;
-  for (const name of names) {
-    const count = bindings.get(name) ?? 0;
-    if (count <= 1) bindings.delete(name);
-    else bindings.set(name, count - 1);
-  }
-  if (bindings.size === 0) activeContextVarBindings.delete(context);
+  for (const name of names) bindings.add(name);
 }
 
 function runContextScript(context: ContextProxy, source: string, helperName: string): unknown {
@@ -339,16 +345,43 @@ function runContextScript(context: ContextProxy, source: string, helperName: str
   }
 }
 
+// Edits must not overlap. At a shared start a zero-width insert sorts before a
+// replacement (ascending end) so a prelude/`{ let T = (` opener emits before the
+// `var ` text it precedes; a stable sort keeps the push order of coincident inserts.
+function sortEdits(edits: SourceEdit[]): SourceEdit[] {
+  return edits.sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
 function applySourceEdits(source: string, edits: SourceEdit[]): string {
   if (edits.length === 0) return source;
   let out = '';
   let cursor = 0;
-  for (const edit of edits.sort((a, b) => a.start - b.start || b.end - a.end)) {
+  for (const edit of sortEdits(edits)) {
     out += source.slice(cursor, edit.start);
     out += edit.text;
     cursor = edit.end;
   }
   out += source.slice(cursor);
+  return out;
+}
+
+// Render `source[start, end)` with `edits` (absolute coords inside the slice)
+// applied. Used to hoist a top-level function declaration into a prelude with its
+// nested writes already rewritten, without those edits hitting the main stream.
+function applyEditsToSlice(
+  source: string,
+  start: number,
+  end: number,
+  edits: SourceEdit[],
+): string {
+  let out = '';
+  let cursor = start;
+  for (const edit of sortEdits(edits)) {
+    out += source.slice(cursor, edit.start);
+    out += edit.text;
+    cursor = edit.end;
+  }
+  out += source.slice(cursor, end);
   return out;
 }
 
@@ -418,26 +451,108 @@ function declareVarDecl(ctx: RewriteContext, declaration: VariableDeclaration): 
   for (const declarator of declaration.declarations) declarePattern(ctx, declarator.id);
 }
 
-// Per-declarator edits keep initializer expressions in the source so the walk
-// rewrites writes nested inside them (gotcha: a raw-slice rebuild would leak
-// `var a = function () { undeclared = 1; }` to the host realm).
-function emitContextVarRewrite(ctx: RewriteContext, declaration: VariableDeclaration): void {
-  const declarations = declaration.declarations;
-  for (let i = 0; i < declarations.length; i++) {
-    const declarator = declarations[i];
-    if (!declarator) continue;
+// Register every name a `var` declarator binds (incl. destructuring patterns) as a
+// context var, so reads before assignment — and after the run — resolve to
+// `undefined` on the context instead of the host realm.
+function registerContextVarNames(ctx: RewriteContext, pat: Pattern): void {
+  switch (pat.type) {
+    case 'Identifier':
+      ctx.contextVarNames.add(pat.name);
+      return;
+    case 'ObjectPattern':
+      for (const property of pat.properties) {
+        if (property.type === 'RestElement') registerContextVarNames(ctx, property.argument);
+        else registerContextVarNames(ctx, property.value);
+      }
+      return;
+    case 'ArrayPattern':
+      for (const element of pat.elements) {
+        if (element) registerContextVarNames(ctx, element);
+      }
+      return;
+    case 'RestElement':
+      registerContextVarNames(ctx, pat.argument);
+      return;
+    case 'AssignmentPattern':
+      registerContextVarNames(ctx, (pat as AssignmentPattern).left);
+      return;
+    default:
+      return;
+  }
+}
+
+// Redirect one top-level `var` declarator's write onto the context, leaving the
+// initializer in source so nested writes are still walked (a raw-slice rebuild
+// would leak `var a = function () { x = 1 }` to the host). `helper.x` for a simple
+// id (a harmless read when there is no initializer); a destructuring-assignment
+// target for a pattern (`{ a } → ({ a: helper.a } = init)`).
+function emitContextVarDeclaratorWrite(
+  ctx: RewriteContext,
+  declarator: VariableDeclaration['declarations'][number],
+): void {
+  const name = identifierName(declarator.id);
+  if (name) {
+    ctx.edits.push({
+      start: declarator.id.start,
+      end: declarator.id.end,
+      text: `${ctx.helperName}.${name}`,
+    });
+    if (declarator.init) walkContextNode(declarator.init, ctx);
+    return;
+  }
+  // Pattern target: wrap in parens so `{…}`/`[…]` parses as a destructuring
+  // assignment (not a block / array literal) inside the surrounding sequence.
+  // Close at the declarator's end (NOT init.end): acorn strips a parenthesised
+  // initializer's outer `)` from the init node, so init.end would land inside the
+  // user's parens.
+  ctx.edits.push({ start: declarator.id.start, end: declarator.id.start, text: '(' });
+  rewriteAssignmentTargetPattern(declarator.id, ctx);
+  ctx.edits.push({ start: declarator.end, end: declarator.end, text: ')' });
+  if (declarator.init) walkContextNode(declarator.init, ctx);
+}
+
+// Top-level `var` as a STATEMENT. Node gives a `var` statement an EMPTY completion
+// value (`9; var x = 1` ⇒ 9, not 1), so the writes are wrapped in a
+// completion-neutral `{ let T = (…); }` block rather than left as a bare
+// assignment-expression statement. Declarators are joined by the source commas
+// acting as the sequence operator.
+function emitContextVarStatement(ctx: RewriteContext, declaration: VariableDeclaration): void {
+  const declarators = declaration.declarations;
+  const first = declarators[0];
+  if (!first) return;
+  for (const declarator of declarators) registerContextVarNames(ctx, declarator.id);
+  // Replace the `var ` keyword with the block + let + opening paren.
+  ctx.edits.push({
+    start: declaration.start,
+    end: first.id.start,
+    text: `{ let ${ctx.tempName} = (`,
+  });
+  for (const declarator of declarators) emitContextVarDeclaratorWrite(ctx, declarator);
+  // Close at the declaration's END, consuming the source `;`. `last.end` (the last
+  // declarator's end — includes wrapping parens acorn strips from the init node,
+  // `var c = (1, 2, 3)`) is where the value text stops; [last.end, declaration.end)
+  // is just the trailing `;`. Leaving that `;` outside the block would turn
+  // `var x = 1;` into `{ … }; ` (block + empty stmt), which breaks an unbraced
+  // if/else/do-while body whose `;`/keyword boundary is grammatically load-bearing.
+  const last = declarators.at(-1) ?? first;
+  ctx.edits.push({ start: last.end, end: declaration.end, text: '); }' });
+}
+
+// Top-level `var` as a for-loop INIT (expression position: no completion to
+// neutralise, no block wrapper). Strip `var ` and redirect each declarator inline.
+function emitContextVarForInit(ctx: RewriteContext, declaration: VariableDeclaration): void {
+  const declarators = declaration.declarations;
+  const first = declarators[0];
+  if (!first) return;
+  for (const declarator of declarators) registerContextVarNames(ctx, declarator.id);
+  ctx.edits.push({ start: declaration.start, end: first.id.start, text: '' });
+  for (const declarator of declarators) {
     const name = identifierName(declarator.id);
-    if (!name) {
-      throw new NotImplementedError('vm.context.var-pattern');
-    }
-    ctx.contextVarNames.add(name);
-    const start = i === 0 ? declaration.start : declarator.id.start;
-    if (declarator.init) {
-      ctx.edits.push({ start, end: declarator.id.end, text: `${ctx.helperName}.${name}` });
-      walkContextNode(declarator.init, ctx);
+    if (name && !declarator.init) {
+      // `for (var x; …)` — Node leaves x off the context; keep the slot value-less.
+      ctx.edits.push({ start: declarator.id.start, end: declarator.id.end, text: 'void 0' });
     } else {
-      // Node leaves `var x;` without initializer off the sandbox object.
-      ctx.edits.push({ start, end: declarator.end, text: 'void 0' });
+      emitContextVarDeclaratorWrite(ctx, declarator);
     }
   }
 }
@@ -593,13 +708,26 @@ function walkBlock(body: readonly AnyNodeShape[], ctx: RewriteContext): void {
   popScope(ctx);
 }
 
+// Render a top-level function declaration as a named function-expression string
+// with its nested writes already rewritten, for hoisting into the program prelude.
+// Walks into a temp edit list so the body rewrites don't touch the main stream;
+// the original declaration site is removed separately by the Program case.
+function rewriteFunctionToString(ctx: RewriteContext, fn: AnyNodeShape): string {
+  const outer = ctx.edits;
+  const inner: SourceEdit[] = [];
+  ctx.edits = inner;
+  walkFunction(fn as unknown as AcornFunction, ctx);
+  ctx.edits = outer;
+  return applyEditsToSlice(ctx.source, fn.start, fn.end, inner);
+}
+
 function walkForStatement(statement: ForStatement, ctx: RewriteContext): void {
   pushScope(ctx);
   if (statement.init) {
     if ((statement.init as unknown as AnyNodeShape).type === 'VariableDeclaration') {
       const declaration = statement.init as unknown as VariableDeclaration;
       if (declaration.kind === 'var' && ctx.functionDepth === 0) {
-        emitContextVarRewrite(ctx, declaration);
+        emitContextVarForInit(ctx, declaration);
       } else {
         if (declaration.kind !== 'var') declareVarDecl(ctx, declaration);
         walkContextNode(statement.init, ctx);
@@ -623,19 +751,27 @@ function walkForInOfStatement(
   if (left.type === 'VariableDeclaration') {
     const declaration = statement.left as unknown as VariableDeclaration;
     if (declaration.kind === 'var' && ctx.functionDepth === 0) {
-      // `for (var k in o)` hoists k onto the context; a member expression is a
-      // valid loop target, so rewrite the whole declaration to `helper.k`.
+      // `for (var k in o)` hoists k onto the context; a member expression (or a
+      // parenthesised destructuring assignment) is a valid loop target, so rewrite
+      // the whole declaration to `helper.k` / `({ a: helper.a })`.
       const declarator = declaration.declarations[0];
-      const name = declarator ? identifierName(declarator.id) : null;
-      if (!name) {
-        throw new NotImplementedError('vm.context.var-pattern');
+      if (declarator) {
+        registerContextVarNames(ctx, declarator.id);
+        const name = identifierName(declarator.id);
+        if (name) {
+          ctx.edits.push({
+            start: declaration.start,
+            end: declaration.end,
+            text: `${ctx.helperName}.${name}`,
+          });
+        } else {
+          // `for (var { a } of o)` → `for ({ a: helper.a } of o)`. A for-of/in
+          // target pattern must NOT be parenthesised, so just strip `var ` and
+          // redirect the pattern's ids in place (mirrors the no-`var` case below).
+          ctx.edits.push({ start: declaration.start, end: declarator.id.start, text: '' });
+          rewriteAssignmentTargetPattern(declarator.id, ctx);
+        }
       }
-      ctx.contextVarNames.add(name);
-      ctx.edits.push({
-        start: declaration.start,
-        end: declaration.end,
-        text: `${ctx.helperName}.${name}`,
-      });
     } else {
       if (declaration.kind !== 'var') declareVarDecl(ctx, declaration);
       walkContextNode(statement.left, ctx);
@@ -680,8 +816,41 @@ function walkContextNode(node: unknown, ctx: RewriteContext): void {
   switch (n.type) {
     case 'Program': {
       const program = n as unknown as Program;
-      predeclareLexicalBody(ctx, program.body as unknown as AnyNodeShape[]);
-      for (const child of program.body) walkContextNode(child, ctx);
+      const body = program.body as unknown as AnyNodeShape[];
+      predeclareLexicalBody(ctx, body);
+
+      // Hoist top-level function declarations: copy each onto the context via a
+      // prelude that runs before any user statement, then remove the original
+      // sites. Unlike a leave-in-place declaration, this makes `f()` callable
+      // before its text AND keeps a later `f = …` reassignment visible (no local
+      // eval binding to shadow it); the block-let prelude keeps an empty
+      // completion (`function f(){}` ⇒ undefined, like Node).
+      const fnDecls = body.filter(
+        (child) =>
+          child.type === 'FunctionDeclaration' && (child as unknown as FunctionDeclaration).id,
+      );
+      if (fnDecls.length > 0) {
+        const assigns = fnDecls
+          .map(
+            (fn) =>
+              `${ctx.helperName}.${(fn as unknown as FunctionDeclaration).id?.name} = ${rewriteFunctionToString(ctx, fn)}`,
+          )
+          .join(', ');
+        for (const fn of fnDecls) {
+          ctx.contextVarNames.add((fn as unknown as FunctionDeclaration).id?.name as string);
+        }
+        // Prelude runs before the first user statement (zero-width insert, ordered
+        // ahead of that statement's own edits by sortEdits); each original site
+        // becomes an empty statement.
+        const at = body[0]?.start ?? program.start;
+        ctx.edits.push({ start: at, end: at, text: `{ let ${ctx.tempName} = (${assigns}); } ` });
+        for (const fn of fnDecls) ctx.edits.push({ start: fn.start, end: fn.end, text: ';' });
+      }
+
+      for (const child of body) {
+        if (child.type === 'FunctionDeclaration') continue; // hoisted above
+        walkContextNode(child, ctx);
+      }
       return;
     }
 
@@ -690,8 +859,11 @@ function walkContextNode(node: unknown, ctx: RewriteContext): void {
       return;
 
     case 'FunctionDeclaration': {
-      // TODO(backlog: runtime-js/vm-sandbox-residual-gaps): top-level function
-      // declarations are not hoisted — `f(); function f() {}` throws, Node runs.
+      // Program-level declarations are hoisted into the prelude by the Program
+      // case and never reach here. This covers block-level (Annex B, depth 0) and
+      // nested (depth > 0) declarations: a block-level one copies onto the context
+      // in place when its block runs (best-effort; full Annex B hoisting is out of
+      // scope), a nested one binds locally.
       const declaration = n as unknown as FunctionDeclaration;
       if (ctx.functionDepth === 0 && declaration.id) {
         ctx.edits.push({
@@ -714,7 +886,7 @@ function walkContextNode(node: unknown, ctx: RewriteContext): void {
       const declaration = n as unknown as VariableDeclaration;
       if (declaration.kind === 'var') {
         if (ctx.functionDepth === 0) {
-          emitContextVarRewrite(ctx, declaration);
+          emitContextVarStatement(ctx, declaration);
           return;
         }
         declareVarDecl(ctx, declaration);
@@ -880,6 +1052,10 @@ function rewriteContextSource(source: string): ContextRewrite {
     scopes: [new Set()],
     contextVarNames: new Set(),
     helperName,
+    // helperName never appears in source (by construction), so this won't collide;
+    // it is block-scoped anyway. Reused across every `{ let T = (…); }` wrapper.
+    tempName: `${helperName}T`,
+    source,
     functionDepth: 0,
   };
 
@@ -922,6 +1098,26 @@ export function runInThisContext(code: string, options?: VmOptions): unknown {
   return runGlobalScript(withSourceURL(asSource(code), normalized.filename));
 }
 
+// Run an already-rewritten script against a contextified object. The rewrite is
+// context-independent, so `vm.Script` computes it once and reuses it here.
+function runRewrittenInContext(
+  rewritten: ContextRewrite,
+  contextifiedObject: Record<string, unknown>,
+  filename?: string,
+): unknown {
+  assertObjectContext(contextifiedObject);
+  if (!isContext(contextifiedObject)) {
+    throw new TypeError('The "contextifiedObject" argument must be a vm.Context.');
+  }
+  const context = contextifiedObject as ContextObject;
+  const proxy = contextProxy(context);
+  // Permanent registration (not push/pop): a declared `var` stays a known global
+  // of the context — readable as `undefined` after the run and in later runs —
+  // instead of falling through to the host realm afterwards.
+  registerContextVarBindings(context, rewritten.contextVarNames);
+  return runContextScript(proxy, withSourceURL(rewritten.source, filename), rewritten.helperName);
+}
+
 export function runInContext(
   code: string,
   contextifiedObject: Record<string, unknown>,
@@ -929,23 +1125,11 @@ export function runInContext(
 ): unknown {
   const normalized = normalizeOptions(options);
   assertSupportedScriptOptions(normalized, 'vm.runInContext');
-  assertObjectContext(contextifiedObject);
-  if (!isContext(contextifiedObject)) {
-    throw new TypeError('The "contextifiedObject" argument must be a vm.Context.');
-  }
-  const context = contextifiedObject as ContextObject;
-  const rewritten = rewriteContextSource(asSource(code));
-  const proxy = contextProxy(context);
-  pushActiveContextVarBindings(context, rewritten.contextVarNames);
-  try {
-    return runContextScript(
-      proxy,
-      withSourceURL(rewritten.source, normalized.filename),
-      rewritten.helperName,
-    );
-  } finally {
-    popActiveContextVarBindings(context, rewritten.contextVarNames);
-  }
+  return runRewrittenInContext(
+    rewriteContextSource(asSource(code)),
+    contextifiedObject,
+    normalized.filename,
+  );
 }
 
 export function runInNewContext(
@@ -963,6 +1147,9 @@ export function runInNewContext(
 export class Script {
   readonly #code: string;
   readonly #filename?: string;
+  // Memoised AST rewrite — parse + rewrite once, reuse across every run of this
+  // Script instance (the rewrite does not depend on the target context).
+  #rewrite?: ContextRewrite;
 
   constructor(code: string, options?: VmOptions) {
     const normalized = normalizeOptions(options);
@@ -971,22 +1158,29 @@ export class Script {
     this.#filename = normalized.filename;
   }
 
+  #getRewrite(): ContextRewrite {
+    if (!this.#rewrite) this.#rewrite = rewriteContextSource(this.#code);
+    return this.#rewrite;
+  }
+
   runInThisContext(options?: VmOptions): unknown {
     return runInThisContext(this.#code, { ...normalizeOptions(options), filename: this.#filename });
   }
 
   runInContext(contextifiedObject: Record<string, unknown>, options?: VmOptions): unknown {
-    return runInContext(this.#code, contextifiedObject, {
-      ...normalizeOptions(options),
-      filename: this.#filename,
-    });
+    const normalized = { ...normalizeOptions(options), filename: this.#filename };
+    assertSupportedScriptOptions(normalized, 'vm.Script');
+    return runRewrittenInContext(this.#getRewrite(), contextifiedObject, normalized.filename);
   }
 
   runInNewContext(contextObject?: Record<string, unknown>, options?: VmOptions): unknown {
-    return runInNewContext(this.#code, contextObject, {
-      ...normalizeOptions(options),
-      filename: this.#filename,
-    });
+    if (contextObject === null) {
+      throw new TypeError('The "object" argument must be of type object. Received null');
+    }
+    const normalized = { ...normalizeOptions(options), filename: this.#filename };
+    assertSupportedScriptOptions(normalized, 'vm.Script');
+    const context = createContext(contextObject === undefined ? {} : contextObject);
+    return runRewrittenInContext(this.#getRewrite(), context, normalized.filename);
   }
 }
 

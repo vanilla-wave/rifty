@@ -45,6 +45,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0068 | `with { type: "file" }` file-loader import attribute (asset → path) |
 | 0069 | `Readable.setEncoding(encoding)` — emit decoded strings |
 | 0136 | Transformed-module stack remapping via scoped prepareStackTrace |
+| 0138 | node:vm direct eval not intercepted (permanent compat divergence) |
 
 ### runtime-wasi
 
