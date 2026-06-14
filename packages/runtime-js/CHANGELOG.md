@@ -60,6 +60,15 @@
 
 ### Added
 
+- **QuickJS vm-engine loader (`builtins/vm/quickjs-loader.ts`).**
+  `getQuickjsWasmUrl()` resolves the QuickJS `.wasm` URL via tiered env-config
+  (bootstrap global → Vite build env → Node env → `/quickjs.wasm`) per D-004 /
+  ADR-0005 — never hardcoded elsewhere. `ensureVmEngineReady()` is a one-time
+  idempotent async preload of the release-sync WASM module returning a single
+  shared `QuickJSWASMModule`; `getQuickJsModuleSync()` then serves it
+  synchronously to the membrane (throws with guidance if not yet preloaded),
+  and `isVmEngineReady()` reports readiness. Mirrors the WASI worker-boot
+  preload pattern.
 - **`./builtins/console` subpath export** — the Node-compatible `Console`
   class over writable streams, so embedders (playground node-server bootstrap)
   can route a guest program's console into kernel stdio.
