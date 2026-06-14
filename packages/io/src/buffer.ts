@@ -7,7 +7,7 @@
  * `installCoreMethods` / `installIntMethods` / `installExtraMethods` from
  * `buffer-prototype.ts`. Their type signatures live here (`declare` on the
  * class body) so the installers need not import the `Buffer` type back —
- * avoiding a runtime circular dep that `pnpm check:deps` would flag.
+ * avoiding a runtime circular dep that `pnpm check:arch` would flag.
  */
 
 import { type Encoding, compareSlices, encode } from './buffer-codec.ts';
@@ -247,7 +247,7 @@ export class Buffer extends Uint8Array {
 }
 
 // Installers take the class as an opaque constructor (no type-back imports)
-// so madge sees no circular reference between this file and the helpers.
+// so check:arch sees no circular reference between this file and the helpers.
 installCoreMethods(Buffer);
 installIntMethods(Buffer);
 installExtraMethods(Buffer);

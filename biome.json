@@ -20,6 +20,7 @@
       "**/examples/npm-pkg-fixtures/**/node_modules/**",
       "apps/playground/public/sw.js",
       "tools/integration-fixtures/**",
+      ".arch-fixtures/**",
       ".claude/**"
     ]
   },
