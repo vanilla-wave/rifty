@@ -12,6 +12,23 @@
   `node <script>`. `child_process.spawn('node', [script])` (worker path) now
   spawns this bootstrap instead of a raw `kind:'source'` worker, so a spawned
   script with a shebang / relative import runs via the loader.
+- **`node:vm` QuickJS engine — guest→host membrane for OBJECT/ARRAY/FUNCTION
+  completion values + identity cache (T6, ADR-0138).** New `Membrane`
+  (`vm/membrane.ts`), one per `QuickJSContext`. Cross-realm-faithful host
+  wrappers (Node oracle): ARRAY → `Proxy(realHostArray,{getPrototypeOf:()=>null})`
+  (`Array.isArray` TRUE, `instanceof Array` FALSE, recursively-marshalled
+  elements); OBJECT → `Proxy({}, traps)` routing reads (incl. `constructor`) to
+  the guest handle so `constructor !== host Object` and `instanceof Object` FALSE,
+  `Object.keys`/JSON via ownKeys+getOwnPropertyDescriptor; FUNCTION → callable
+  `Proxy(thunk,{getPrototypeOf:()=>null})` (`typeof 'function'`, callable,
+  `instanceof Function` FALSE) marshalling primitive args in / result out.
+  Identity cache: guest-side Symbol-keyed `WeakMap` id registry → host
+  `Map<id, wrapper>`, so the same guest object yields the same host wrapper
+  (handles aren't stable keys). Disposal bounded for T6: per-run completion
+  handles disposed; wrapper-retained guest handles persist (wrapper lifetime is
+  T9). Engine now routes object/function/array through the membrane instead of
+  throwing. Parity: `cases/vm/quickjs-returns-objects.case.ts`,
+  `cases/vm/quickjs-returns-identity.case.ts`.
 - **`node:vm` QuickJS engine — primitive completion values (T5, ADR-0138).**
   New `quickjsEngine: VmEngine` (`vm/quickjs-engine.ts`): one persistent
   `QuickJSContext` per `vm.Context` (WeakMap, reused across runs for later
