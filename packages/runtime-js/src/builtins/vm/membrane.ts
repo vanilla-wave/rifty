@@ -52,24 +52,30 @@
  * inbound symbols are T10 (loud boundaries).
  *
  * Round-trip identity (#14): a host object marshalled IN then returned OUT must
- * be the SAME host reference. The inbound seed is tagged with a cross-realm
- * marker symbol (`Symbol.for('rifty.vm.hostOrigin')`) carrying a numeric
- * host-origin id; the host keeps `Map<id, originalHostObject>`. `wrapGuestToHost`
- * checks the marker first and returns the original. The marker is symbol-keyed,
- * so it stays out of the guest's `Object.keys`/`JSON` view (verified). Inbound
+ * be the SAME host reference. We track host origin by the guest object's STABLE
+ * ID (see `#idOf` below) — when seeding a host object in we record
+ * `#hostOrigins.set(idOf(seed), originalHostObject)`; `wrapGuestToHost` computes
+ * `idOf(handle)` and, if it is a known host-origin id, returns the original. NO
+ * guest-visible / guest-writable marker is carried on the seed, so guest code
+ * CANNOT forge a host reference (it has no reference to the id registry — see
+ * `#idOf`) and the seed carries no membrane-visible own symbol
+ * (`Object.getOwnPropertySymbols(seed)` is empty, matching real Node). Inbound
  * identity is also cached host-side (`WeakMap<hostObject, guestSeedHandle>`) so
  * the same host object always seeds the SAME guest value.
  *
- * Identity cache (guest-side WeakMap id — see `#idOf`): handles are
- * NOT stable Map keys (`ctx.eq` only, QUICKJS_API.md), so the SAME guest object
- * would otherwise yield DIFFERENT host wrappers. We eval a tiny id registry into
- * the guest keyed by a Symbol (no enumerable global pollution) that hands out a
- * stable numeric id per guest object via a guest `WeakMap`; the host keys a
- * `Map<number, hostWrapper>` on it. Chosen over the O(n) `ctx.eq` scan for O(1)
- * lookup and because it works on frozen guest objects (a WeakMap does not mutate
- * them, unlike tagging a hidden property). Trade-off: each wrapped guest object is
- * retained by the guest WeakMap for the context's life — acceptable until T9 adds
- * wrapper lifetime management.
+ * Identity / host-origin registry (`#idOf`): handles are NOT stable Map keys
+ * (`ctx.eq` only, QUICKJS_API.md), so the SAME guest object would otherwise yield
+ * DIFFERENT host wrappers AND host-origin lookups. We eval a tiny id registry as
+ * a CLOSURE that hands out a stable numeric id per guest object via a guest
+ * `WeakMap`, and RETAIN the closure's function handle HOST-SIDE only — it is
+ * NEVER `setProp`-ed onto the guest global, so guest code has no reference to the
+ * WeakMap and cannot pre-seed an id, read the registry, or otherwise influence
+ * identity. The host keys both `#wrappers: Map<id, hostWrapper>` and
+ * `#hostOrigins: Map<id, hostObject>` on it. Chosen over the O(n) `ctx.eq` scan
+ * for O(1) lookup and because it works on frozen guest objects (a WeakMap does
+ * not mutate them, unlike tagging a hidden property). Trade-off: each tracked
+ * guest object is retained by the guest WeakMap for the context's life —
+ * acceptable until T9 adds wrapper lifetime management.
  *
  * Disposal (bounded for T6, full lifetime is T9): wrappers RETAIN the guest handle
  * their traps call into — those are NOT disposed here (disposing them breaks the
@@ -83,16 +89,22 @@
 import type { QuickJSContext, QuickJSHandle } from 'quickjs-emscripten-core';
 import { Scope } from 'quickjs-emscripten-core';
 
-/** Symbol-keyed guest id registry — installed once per context, no enumerable pollution. */
+/**
+ * Guest id registry as an UNREACHABLE closure. Evaluates to a function that maps
+ * each guest object → a stable numeric id via a private `WeakMap`. The host
+ * RETAINS the returned function handle and NEVER `setProp`s it onto the guest
+ * global, so guest code cannot reach `m`/the function — it cannot pre-seed an id,
+ * read the registry, or influence host-origin identity. (Contrast: the prior
+ * `globalThis[Symbol.for('rifty.vm.idOf')]` form was reachable + writable from
+ * guest, re-enabling forgery.)
+ */
 const ID_REGISTRY_BOOTSTRAP = `
 (() => {
-  const KEY = Symbol.for('rifty.vm.idOf');
-  if (globalThis[KEY]) return;
-  const map = new WeakMap();
+  const m = new WeakMap();
   let next = 0;
-  globalThis[KEY] = (o) => {
-    let id = map.get(o);
-    if (id === undefined) { id = ++next; map.set(o, id); }
+  return (o) => {
+    let id = m.get(o);
+    if (id === undefined) { id = ++next; m.set(o, id); }
     return id;
   };
 })();
@@ -100,16 +112,6 @@ const ID_REGISTRY_BOOTSTRAP = `
 
 /** Marker so the function wrapper can recover its retained guest handle (T7 round-trip). */
 const GUEST_HANDLE = Symbol('rifty.vm.guestHandle');
-
-/**
- * Cross-realm Symbol key (registry) tagging a guest value as host-origin — it
- * carries a numeric host-origin id. `Symbol.for` keeps it stable so the same
- * symbol handle (`ctx.newSymbolFor`) reads the tag both when writing it on the
- * inbound value and detecting it on the round-trip out. Symbol-keyed props are
- * excluded from default `getOwnPropertyNames`/`JSON`/`Object.keys`, so the tag
- * never leaks into the guest's view of keys (verified). T10 mirrors symbols.
- */
-const HOST_ORIGIN_KEY = 'rifty.vm.hostOrigin';
 
 /** A host callable carrying the guest fn handle it forwards to. */
 interface GuestFunctionThunk {
@@ -130,36 +132,24 @@ export class Membrane {
   // --- Inbound (host→guest) bidirectional identity cache (T7 read path) ---
   /** host object/array/fn → its single seeded guest handle (inbound identity). */
   readonly #inboundGuest = new WeakMap<object, QuickJSHandle>();
-  /** host-origin id → ORIGINAL host object, for the round-trip OUT (#14). */
+  /** guest id (of the seed) → ORIGINAL host object, for the round-trip OUT (#14). */
   readonly #hostOrigins = new Map<number, object>();
-  #nextHostOriginId = 0;
-  /** Cached guest handle for the host-origin marker symbol (`Symbol.for(KEY)`). */
-  #hostOriginSym: QuickJSHandle | undefined;
 
   constructor(ctx: QuickJSContext) {
     this.#ctx = ctx;
   }
 
-  /** Lazily-resolved guest handle for the host-origin marker symbol. */
-  #hostOriginSymbol(): QuickJSHandle {
-    if (!this.#hostOriginSym) {
-      this.#hostOriginSym = this.#ctx.newSymbolFor(HOST_ORIGIN_KEY);
-      this.#retained.push(this.#hostOriginSym);
-    }
-    return this.#hostOriginSym;
-  }
-
-  /** Stable numeric id for a guest object handle (lazy-installs the guest registry). */
+  /**
+   * Stable numeric id for a guest object handle (lazy-installs the guest
+   * registry). The registry is an UNREACHABLE closure — its function handle is
+   * RETAINED host-side and NEVER exposed on the guest global, so guest code can
+   * neither read nor pre-seed ids (see `ID_REGISTRY_BOOTSTRAP`).
+   */
   #idOf(handle: QuickJSHandle): number {
     if (!this.#idOfHandle) {
       const ctx = this.#ctx;
-      ctx.unwrapResult(ctx.evalCode(ID_REGISTRY_BOOTSTRAP)).dispose();
-      const sym = ctx.newSymbolFor('rifty.vm.idOf');
-      try {
-        this.#idOfHandle = ctx.getProp(ctx.global, sym);
-      } finally {
-        sym.dispose();
-      }
+      this.#idOfHandle = ctx.unwrapResult(ctx.evalCode(ID_REGISTRY_BOOTSTRAP));
+      this.#retained.push(this.#idOfHandle);
     }
     return Scope.withScope((scope) => {
       const result = scope.manage(
@@ -179,12 +169,6 @@ export class Membrane {
   wrapGuestToHost(handle: QuickJSHandle): unknown {
     const ctx = this.#ctx;
     const kind = ctx.typeof(handle);
-    // Round-trip identity (#14): a guest value tagged host-origin is one we
-    // marshalled IN — return the ORIGINAL host object, never a fresh wrapper.
-    if (kind === 'object' || kind === 'function') {
-      const origin = this.#hostOriginOf(handle);
-      if (origin !== undefined) return origin;
-    }
     switch (kind) {
       case 'undefined':
         return undefined;
@@ -199,16 +183,29 @@ export class Membrane {
       case 'symbol':
         // Symbol completion values are exotic mirroring — T10.
         throw new Error('vm: symbol marshalling not implemented (Task 10)');
-      case 'function':
-        return this.#wrapCached(handle, () => this.#wrapFunction(handle));
+      case 'function': {
+        // Compute the guest id ONCE — reused for the host-origin round-trip
+        // check and the wrapper identity cache. NO guest property is read, so
+        // guest code cannot forge a host reference.
+        const id = this.#idOf(handle);
+        const origin = this.#hostOrigins.get(id);
+        if (origin !== undefined) return origin;
+        return this.#wrapCached(id, () => this.#wrapFunction(handle));
+      }
       case 'object': {
         // null is typeof 'object' in QuickJS too — distinguish via dump (reliable
         // for null per QUICKJS_API.md).
         if (ctx.dump(handle) === null) return null;
+        const id = this.#idOf(handle);
+        // Round-trip identity (#14): a guest value whose id is a known host-origin
+        // is one we marshalled IN — return the ORIGINAL host object. The id comes
+        // from the unreachable registry, never a guest-readable/writable marker.
+        const origin = this.#hostOrigins.get(id);
+        if (origin !== undefined) return origin;
         if (this.#isArray(handle)) {
-          return this.#wrapCached(handle, () => this.#wrapArray(handle));
+          return this.#wrapCached(id, () => this.#wrapArray(handle));
         }
-        return this.#wrapCached(handle, () => this.#wrapObject(handle));
+        return this.#wrapCached(id, () => this.#wrapObject(handle));
       }
       default:
         throw new Error(`vm: ${kind} marshalling not implemented (Task 6)`);
@@ -253,10 +250,12 @@ export class Membrane {
   }
 
   /**
-   * Marshal a host object/array INTO the guest as a host-origin-tagged snapshot.
+   * Marshal a host object/array INTO the guest as a host-origin snapshot.
    * Returns a `dup` of the cached seed (caller owns it). Builds-once per host
    * object (inbound identity cache) so re-marshalling yields the same guest
-   * value and the round-trip OUT recovers this same host object (#14).
+   * value and the round-trip OUT recovers this same host object (#14). Host
+   * origin is recorded by the seed's UNFORGEABLE registry id — NO guest-visible
+   * marker is written.
    */
   #marshalInboundObject(value: object): QuickJSHandle {
     const cached = this.#inboundGuest.get(value);
@@ -286,14 +285,10 @@ export class Membrane {
         }
       }
     }
-    // Tag host-origin (numeric id → original host object) BEFORE severing the
-    // prototype so the round-trip OUT returns the exact same host reference.
-    const id = this.#nextHostOriginId++;
-    this.#hostOrigins.set(id, value);
-    Scope.withScope((scope) => {
-      const idH = scope.manage(ctx.newNumber(id));
-      ctx.setProp(seed, this.#hostOriginSymbol(), idH);
-    });
+    // Record host-origin keyed by the seed's UNFORGEABLE registry id (NOT a
+    // guest-written marker) so the round-trip OUT returns the exact same host
+    // reference. `#idOf` assigns a fresh id to this never-before-seen seed.
+    this.#hostOrigins.set(this.#idOf(seed), value);
     // Sever the prototype: a host array seen in the guest is `Array.isArray`
     // TRUE (real guest array brand) but `instanceof Array` FALSE (proto is not
     // the guest Array.prototype) — mirrors the OUTBOUND null-proto technique.
@@ -311,21 +306,6 @@ export class Membrane {
       const setProto = scope.manage(ctx.getProp(objectCtor, 'setPrototypeOf'));
       ctx.unwrapResult(ctx.callFunction(setProto, ctx.undefined, handle, ctx.null)).dispose();
     });
-  }
-
-  /**
-   * If the guest handle carries the host-origin marker, return the ORIGINAL host
-   * object; otherwise undefined. Reads the numeric id off the marker symbol.
-   */
-  #hostOriginOf(handle: QuickJSHandle): object | undefined {
-    const ctx = this.#ctx;
-    const markH = ctx.getProp(handle, this.#hostOriginSymbol());
-    try {
-      if (ctx.typeof(markH) !== 'number') return undefined;
-      return this.#hostOrigins.get(ctx.getNumber(markH));
-    } finally {
-      markH.dispose();
-    }
   }
 
   /**
@@ -352,9 +332,8 @@ export class Membrane {
     }
   }
 
-  /** Identity-cache wrapper: same guest object id → same host wrapper. Retains a dup. */
-  #wrapCached(handle: QuickJSHandle, make: () => unknown): unknown {
-    const id = this.#idOf(handle);
+  /** Identity-cache wrapper: same guest object id → same host wrapper. `id` is the precomputed `#idOf`. */
+  #wrapCached(id: number, make: () => unknown): unknown {
     const existing = this.#wrappers.get(id);
     if (existing !== undefined) return existing;
     const wrapper = make();

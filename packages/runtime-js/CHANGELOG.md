@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`node:vm` QuickJS membrane — unforgeable host-origin tracking (T7 review,
+  ADR-0138).** The host→guest round-trip identity (#14) previously tagged each
+  inbound seed with a guest-visible, guest-WRITABLE marker symbol
+  (`Symbol.for('rifty.vm.hostOrigin')`) carrying a predictable sequential id, and
+  the OUT path read that property to recover the original host object. Guest code
+  could FORGE the marker (`f[Symbol.for('rifty.vm.hostOrigin')] = 0`) and
+  exfiltrate a real host reference it was never given — breaking cross-realm
+  isolation (Node never lets guest code obtain such a reference). The marker was
+  also an observable guest own-symbol (`Object.getOwnPropertySymbols(hostObj)`
+  length 1 vs Node's 0), contradicting the prior "(verified)" no-leak claim.
+  FIX: removed the guest tag entirely; host-origin is now keyed on the seed's id
+  from an UNREACHABLE-closure registry — `#idOf` evals `(() => { const m = new
+  WeakMap(); let n = 0; return o => {…}; })()` and RETAINS the returned function
+  handle HOST-SIDE only (never `setProp`-ed onto the guest global), so guest code
+  has no reference to the WeakMap and cannot pre-seed/read ids. `wrapGuestToHost`
+  computes `idOf(handle)` and returns the original iff it is a known host-origin
+  id — NO guest property read. The outbound wrapper identity cache shares the same
+  hardened registry (previously the reachable `globalThis[Symbol.for(
+  'rifty.vm.idOf')]` form — also forgery-capable — now the closure form). Parity:
+  `cases/vm/quickjs-sandbox-isolation.case.ts` (forgery `false`, own-symbols `0`,
+  legit round-trip `true`).
+
 ### Added
 
 - **Run a VFS Node entry through the module loader (ADR-0137).** New
@@ -16,14 +40,14 @@
   (T7, ADR-0138).** `Membrane.seedContext` seeds each own enumerable key of the
   live contextObject INTO the guest realm before any run; the engine seeds at
   context creation. Primitives by value; host objects/arrays via the extended
-  `marshalHostToGuest` as a host-origin-tagged guest SNAPSHOT — a real guest
+  `marshalHostToGuest` as a host-origin guest SNAPSHOT — a real guest
   array/object (recursively marshalled) with its prototype severed
   (`Object.setPrototypeOf(v,null)`), the MIRROR of the outbound null-proto trick:
   `Array.isArray` TRUE (real guest brand) but `instanceof Array`/`Object` FALSE
-  (cross-realm). Round-trip identity (#14): the seed carries a cross-realm marker
-  symbol (`Symbol.for('rifty.vm.hostOrigin')`) with a numeric id → host
-  `Map<id, originalHostObject>`; `wrapGuestToHost` checks it first and returns the
-  ORIGINAL host reference (symbol-keyed, so out of `Object.keys`/`JSON`). Inbound
+  (cross-realm). Round-trip identity (#14): host origin is tracked by the seed's
+  UNFORGEABLE registry id → host `Map<id, originalHostObject>` (see the Fixed
+  entry above — NO guest-visible marker); `wrapGuestToHost` returns the ORIGINAL
+  host reference for a known host-origin id. Inbound
   identity cached host-side (`WeakMap<hostObject, guestSeed>`). SNAPSHOT only —
   guest writes to a shared object aren't seen by the host yet; host-side re-sync +
   guest→host write-back is T8, guest-callable host functions T9, inbound symbols
@@ -40,7 +64,8 @@
   `Object.keys`/JSON via ownKeys+getOwnPropertyDescriptor; FUNCTION → callable
   `Proxy(thunk,{getPrototypeOf:()=>null})` (`typeof 'function'`, callable,
   `instanceof Function` FALSE) marshalling primitive args in / result out.
-  Identity cache: guest-side Symbol-keyed `WeakMap` id registry → host
+  Identity cache: an UNREACHABLE-closure guest `WeakMap` id registry (retained
+  host-side, never exposed on the guest global — see the Fixed entry) → host
   `Map<id, wrapper>`, so the same guest object yields the same host wrapper
   (handles aren't stable keys). Disposal bounded for T6: per-run completion
   handles disposed; wrapper-retained guest handles persist (wrapper lifetime is
