@@ -4,6 +4,25 @@
 
 ### Added
 
+- **`node:vm` divergence telemetry wiring + `vmEngine` host option + loud opt-in (T15,
+  ADR-0138).** Five wirings: (1) the QuickJS preload (`ensureVmEngineReady`) joins the
+  worker `boot` promise so a synchronous `vm.*` sandbox call in an early eval always
+  finds the engine ready (preload failure → `[rifty]` stderr line + continue on the
+  rewrite engine). (2) The worker error boundary calls `captureNotImplemented(err)` —
+  matched by `error.name === 'NotImplementedError'` (NOT instanceof; io + vfs each
+  define the class), recording `error.feature` in the telemetry sink. (3) A sandbox RUN
+  resolving to the opt-in rewrite engine records `vm.engine.rewrite-active` and emits ONE
+  loud `[rifty]` warning per process/worker via `process.stderr.write` (real fd 2 in
+  Node, the worker stderr bridge in the worker) — the parity runner diffs STDOUT and only
+  intercepts `console.*`, so the warning never pollutes parity stdout. (4) New
+  `RuntimeOptions.vmEngine?: 'quickjs' | 'rewrite'` (host) → `vm-config` HostMessage sent
+  on worker `ready` → worker applies `setVmEngineOverride` (programmatic path; the
+  `__RIFTY_VM_ENGINE` env fallback is unchanged). Default behavior unchanged when absent.
+  (5) New `diagnostic` WorkerMessage carrying a `TelemetrySnapshot`, posted after each
+  eval only when the snapshot CHANGED; the host surfaces it as a `diagnostic`
+  RuntimeEvent for the playground panel (T16). `captureNotImplemented` is exported from
+  the telemetry sink (pure, name-matched, no-op for non-NotImplemented values).
+
 - **Divergence / NotImplemented telemetry sink (T14).** Leaf module
   `src/telemetry/divergence-sink.ts` — dependency-free, session-scoped, dev-only
   in-process hit counter. `recordNotImplemented(feature)` / `recordDivergence(feature)`

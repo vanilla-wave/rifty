@@ -1,9 +1,13 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../../packages/runtime-js/src/builtins/index.ts';
 import { loadBuiltin } from '../../../packages/io/src/builtin-registry.ts';
 import { NotImplementedError } from '../../../packages/io/src/errors.ts';
 import { setVmEngineOverride } from '../../../packages/runtime-js/src/builtins/vm/engine-config.ts';
 import { ensureVmEngineReady } from '../../../packages/runtime-js/src/builtins/vm/quickjs-loader.ts';
+import {
+  resetTelemetry,
+  snapshotTelemetry,
+} from '../../../packages/runtime-js/src/telemetry/divergence-sink.ts';
 
 type VmScript = {
   runInThisContext(options?: VmRunOptions): unknown;
@@ -617,5 +621,67 @@ describe('node:vm QuickJS global-object fidelity (T13)', () => {
     // type so a change is caught.
     const sb = vm.createContext({});
     throwsNamed(() => vm.runInContext('function undefined(){}', sb), 'TypeError');
+  });
+});
+
+// T15 — rewrite-engine opt-in is LOUD. A sandbox run under the opt-in `rewrite`
+// engine must emit ONE stderr warning per process AND record a divergence hit, so
+// the gap is never silent. The warning goes to `process.stderr.write` (real fd 2
+// in plain Node, the worker stderr bridge in the worker) — NOT `console.error` —
+// so it never pollutes parity STDOUT (the parity runner diffs stdout and only
+// intercepts console.*). resetTelemetry() in beforeEach re-arms the warnOnce gate.
+describe('node:vm rewrite-engine loud opt-in + telemetry wiring (T15)', () => {
+  const WARNING =
+    '[rifty] node:vm is using the hardened-rewrite engine (opt-in). Known divergences ' +
+    'vs the default QuickJS real realm: cross-realm identity (instanceof across ' +
+    'contexts), direct eval leaks to host, no real global-object semantics. See docs.\n';
+
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    resetTelemetry();
+    setVmEngineOverride('rewrite');
+    stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  });
+  afterEach(() => {
+    stderrSpy.mockRestore();
+    setVmEngineOverride(undefined);
+    resetTelemetry();
+  });
+
+  const warnCalls = (): string[] =>
+    stderrSpy.mock.calls.map((c) => String(c[0])).filter((s) => s.startsWith('[rifty] node:vm'));
+
+  it('emits the loud warning exactly once and records a divergence hit', () => {
+    expect(vm.runInNewContext('1 + 1', {})).toBe(2);
+    // repeated runs (incl. Script + runInContext paths) must NOT re-warn
+    expect(vm.runInNewContext('2 + 2', {})).toBe(4);
+    const ctx = vm.createContext({ x: 1 });
+    expect(vm.runInContext('x + 1', ctx)).toBe(2);
+    expect(new vm.Script('3 + 3').runInContext(vm.createContext({}))).toBe(6);
+
+    const calls = warnCalls();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toBe(WARNING);
+
+    const snap = snapshotTelemetry();
+    const entry = snap.find((e) => e.feature === 'vm.engine.rewrite-active');
+    expect(entry).toBeDefined();
+    expect(entry?.kind).toBe('divergence');
+    // every sandbox RUN counts (4 runs above), but the warning only fires once
+    expect(entry?.count).toBe(4);
+  });
+
+  it('does NOT warn when the quickjs engine is selected', () => {
+    setVmEngineOverride('quickjs');
+    expect(vm.runInNewContext('1 + 1', {})).toBe(2);
+    expect(warnCalls()).toHaveLength(0);
+    expect(snapshotTelemetry().some((e) => e.feature === 'vm.engine.rewrite-active')).toBe(false);
+  });
+
+  it('does NOT warn for createContext alone (contextify is not a run)', () => {
+    vm.createContext({ a: 1 });
+    expect(warnCalls()).toHaveLength(0);
+    expect(snapshotTelemetry()).toEqual([]);
   });
 });

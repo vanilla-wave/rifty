@@ -62,3 +62,19 @@ export function resetTelemetry(): void {
   hits.clear();
   warned.clear();
 }
+
+/**
+ * Boundary capture (T15): if `err` is a NotImplementedError, record its feature.
+ *
+ * Matched by `name === 'NotImplementedError'` NOT `instanceof` — `@riftydev/io`
+ * and `@riftydev/vfs` each define their own `NotImplementedError` class, so a
+ * single `instanceof` check would miss errors from the other package. The
+ * `feature` field is preferred; falls back to the message. No-op for any other
+ * value, so it is safe to call on every surfaced error at the worker boundary.
+ */
+export function captureNotImplemented(err: unknown): void {
+  if (err instanceof Error && err.name === 'NotImplementedError') {
+    const feature = (err as Error & { feature?: string }).feature ?? err.message;
+    recordNotImplemented(feature);
+  }
+}

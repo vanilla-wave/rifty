@@ -11,8 +11,37 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
+import { recordDivergence } from '../../telemetry/divergence-sink.ts';
 import { selectEngine } from './engine-config.ts';
 import { type CompiledScript, type ContextObject, VM_CONTEXT, isVmContext } from './types.ts';
+
+/**
+ * Select the engine for a SANDBOX RUN (`runInContext`/`runInNewContext`/
+ * `Script.runIn*Context`). When it resolves to the opt-in `rewrite` engine,
+ * record a divergence hit and emit ONE loud stderr line per process/worker.
+ *
+ * Stderr path: `process.stderr.write` is available BOTH in the worker (rifty's
+ * `process` → `console.error` → the worker stderr message bridge) and in plain
+ * Node (conformance/parity → real fd 2). The parity runner diffs STDOUT and
+ * only intercepts `console.*`, so the warning never leaks into parity stdout.
+ *
+ * NOT called from `createContext` (a contextify op, not a run) — the warning is
+ * about EXECUTING under the divergent engine.
+ */
+function selectEngineForRun(): ReturnType<typeof selectEngine> {
+  const engine = selectEngine();
+  if (
+    engine.name === 'rewrite' &&
+    recordDivergence('vm.engine.rewrite-active', { warnOnce: true })
+  ) {
+    process.stderr.write(
+      '[rifty] node:vm is using the hardened-rewrite engine (opt-in). Known divergences ' +
+        'vs the default QuickJS real realm: cross-realm identity (instanceof across ' +
+        'contexts), direct eval leaks to host, no real global-object semantics. See docs.\n',
+    );
+  }
+  return engine;
+}
 
 export interface RunningScriptOptions {
   filename?: string;
@@ -167,7 +196,7 @@ export function runInContext(
 ): unknown {
   const normalized = normalizeOptions(options);
   assertSupportedScriptOptions(normalized, 'vm.runInContext');
-  return selectEngine().runInContext(
+  return selectEngineForRun().runInContext(
     asSource(code),
     contextifiedObject as ContextObject,
     normalized.filename,
@@ -214,7 +243,10 @@ export class Script {
   runInContext(contextifiedObject: Record<string, unknown>, options?: VmOptions): unknown {
     const normalized = { ...normalizeOptions(options), filename: this.#filename };
     assertSupportedScriptOptions(normalized, 'vm.Script');
-    return selectEngine().runCompiled(this.#getCompiled(), contextifiedObject as ContextObject);
+    return selectEngineForRun().runCompiled(
+      this.#getCompiled(),
+      contextifiedObject as ContextObject,
+    );
   }
 
   runInNewContext(contextObject?: Record<string, unknown>, options?: VmOptions): unknown {
@@ -224,7 +256,7 @@ export class Script {
     const normalized = { ...normalizeOptions(options), filename: this.#filename };
     assertSupportedScriptOptions(normalized, 'vm.Script');
     const context = createContext(contextObject === undefined ? {} : contextObject);
-    return selectEngine().runCompiled(this.#getCompiled(), context as ContextObject);
+    return selectEngineForRun().runCompiled(this.#getCompiled(), context as ContextObject);
   }
 }
 

@@ -1,5 +1,8 @@
+import { NotImplementedError as IoNotImplementedError } from '@riftydev/io';
+import { NotImplementedError as VfsNotImplementedError } from '@riftydev/vfs';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  captureNotImplemented,
   recordDivergence,
   recordNotImplemented,
   resetTelemetry,
@@ -54,5 +57,55 @@ describe('divergence sink', () => {
     recordDivergence('z', { warnOnce: true });
     recordDivergence('z', { warnOnce: true });
     expect(snapshotTelemetry()).toEqual([{ feature: 'z', kind: 'divergence', count: 2 }]);
+  });
+});
+
+// T15 boundary capture: the worker error boundary calls captureNotImplemented on
+// every surfaced error. It must record by NAME (io + vfs each define their own
+// NotImplementedError class, so instanceof against one misses the other) and be a
+// no-op for anything else.
+describe('captureNotImplemented (boundary)', () => {
+  beforeEach(resetTelemetry);
+
+  it('records the feature of an io NotImplementedError', () => {
+    captureNotImplemented(new IoNotImplementedError('vm.runInNewContext.timeout'));
+    expect(snapshotTelemetry()).toEqual([
+      { feature: 'vm.runInNewContext.timeout', kind: 'not-implemented', count: 1 },
+    ]);
+  });
+
+  it('records a vfs NotImplementedError too (matched by name, not instanceof)', () => {
+    // The two classes are distinct; matching by name is what catches both.
+    const err = new VfsNotImplementedError('fs.watch');
+    expect(err instanceof IoNotImplementedError).toBe(false);
+    captureNotImplemented(err);
+    expect(snapshotTelemetry()).toEqual([
+      { feature: 'fs.watch', kind: 'not-implemented', count: 1 },
+    ]);
+  });
+
+  it('matches a name-shaped error even without the io/vfs class (cross-realm)', () => {
+    // A deserialized worker error has the right name but no real class — still caught.
+    const err = Object.assign(new Error('Not implemented: x.y'), {
+      name: 'NotImplementedError',
+      feature: 'x.y',
+    });
+    captureNotImplemented(err);
+    expect(snapshotTelemetry()).toEqual([{ feature: 'x.y', kind: 'not-implemented', count: 1 }]);
+  });
+
+  it('falls back to the message when feature is absent', () => {
+    const err = Object.assign(new Error('Not implemented: z'), { name: 'NotImplementedError' });
+    captureNotImplemented(err);
+    expect(snapshotTelemetry()).toEqual([
+      { feature: 'Not implemented: z', kind: 'not-implemented', count: 1 },
+    ]);
+  });
+
+  it('is a no-op for ordinary errors and non-errors', () => {
+    captureNotImplemented(new TypeError('nope'));
+    captureNotImplemented('a string');
+    captureNotImplemented(undefined);
+    expect(snapshotTelemetry()).toEqual([]);
   });
 });

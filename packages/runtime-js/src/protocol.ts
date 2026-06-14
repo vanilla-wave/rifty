@@ -5,6 +5,12 @@
  * grows incompatibly, add a new `type` rather than mutating an existing one.
  */
 
+import type { TelemetryEntry } from './telemetry/divergence-sink.ts';
+
+/** Aggregated divergence / NotImplemented telemetry, posted over the worker
+ * boundary as the `diagnostic` message payload (T15). */
+export type TelemetrySnapshot = readonly TelemetryEntry[];
+
 export interface EvalRequest {
   readonly id: number;
   readonly code: string;
@@ -48,12 +54,19 @@ export type FsResult =
   | { readonly id: number; readonly ok: true; readonly value?: string | Uint8Array }
   | { readonly id: number; readonly ok: false; readonly error: SerializedRuntimeError };
 
+/** `node:vm` sandbox engine (ADR-0138): the real-realm QuickJS engine (default
+ * after the T17 cutover) or the opt-in hardened-rewrite engine. */
+export type VmEngineName = 'quickjs' | 'rewrite';
+
 export type HostMessage =
   | { readonly type: 'eval'; readonly request: EvalRequest }
   | { readonly type: 'fs'; readonly request: FsRequest }
   | { readonly type: 'ping' }
   | { readonly type: 'load-fixture'; readonly files: Readonly<Record<string, string>> }
-  | { readonly type: 'stdin'; readonly data: string | Uint8Array };
+  | { readonly type: 'stdin'; readonly data: string | Uint8Array }
+  /** Programmatic `node:vm` engine override (ADR-0138). The worker applies it via
+   * `setVmEngineOverride`, taking precedence over the `__RIFTY_VM_ENGINE` env. */
+  | { readonly type: 'vm-config'; readonly engine: VmEngineName };
 
 export type WorkerMessage =
   | { readonly type: 'ready' }
@@ -61,4 +74,7 @@ export type WorkerMessage =
   | { readonly type: 'stderr'; readonly chunk: string }
   | { readonly type: 'result'; readonly result: EvalResult }
   | { readonly type: 'fs-result'; readonly result: FsResult }
-  | { readonly type: 'pong' };
+  | { readonly type: 'pong' }
+  /** Divergence / NotImplemented telemetry snapshot (T15). Posted by the worker
+   * when the snapshot changes; surfaced host-side for the playground panel (T16). */
+  | { readonly type: 'diagnostic'; readonly payload: TelemetrySnapshot };
