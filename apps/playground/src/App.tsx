@@ -48,6 +48,7 @@ import {
   type ProjectSpec,
   buildProjectPackageJson,
   devScriptCommand,
+  projectScripts,
   terminalDevLine,
 } from './templates/project-spec.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
@@ -387,13 +388,27 @@ export function App(props: AppProps) {
   const devRunControllers = new Map<string, AbortController>();
 
   /** Recognise the lines the PAGE intercepts to drive the preview worker. */
+  /**
+   * Resolve `npm run <script>` to its dev-server command body from the active
+   * template's scripts, or null when the line isn't an npm-run of a known script.
+   * npm itself runs in the owner now (ADR-0146), but the lifecycle-owning dev
+   * line stays page-driven — so `npm run dev` / `npm run vite` boot the preview
+   * worker, single-sourced from project-spec (restores the pre-P2 runScript route).
+   */
+  function npmRunDevBody(line: string, template: ProjectSpec): string | null {
+    const name = /^npm run (\S+)$/.exec(line.trim())?.[1];
+    if (name === undefined) return null;
+    return projectScripts(template)[name] ?? null;
+  }
+
   function isDevServerLine(line: string): boolean {
     const trimmed = line.trim();
     const template = activeTemplate();
     return (
       trimmed === 'vite' ||
       trimmed === devScriptCommand(template) ||
-      trimmed === terminalDevLine(template, WORKSPACE)
+      trimmed === terminalDevLine(template, WORKSPACE) ||
+      npmRunDevBody(line, template) !== null
     );
   }
 
@@ -429,6 +444,10 @@ export function App(props: AppProps) {
         }
         return await runViteCommand(ctx);
       }
+      // `npm run dev` / `npm run vite` — npm runs in the owner, but the resolved
+      // dev script is routed page-side to the lifecycle owner (pre-P2 parity).
+      const npmBody = npmRunDevBody(line, activeTemplate());
+      if (npmBody !== null) return await runTerminalScript(npmBody, ctx);
       // `cd <root> && npm run dev` / `node <entry>` — the template's dev script.
       return await runTerminalScript(devScriptCommand(activeTemplate()), ctx);
     } finally {

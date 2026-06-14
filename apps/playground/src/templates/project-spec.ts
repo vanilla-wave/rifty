@@ -147,6 +147,17 @@ export function terminalDevLine(spec: ProjectSpec, root: string): string {
   return `cd ${root} && npm run dev`;
 }
 
+/**
+ * package.json `scripts` for a spec. Every alias (`dev`/`vite`/`start`) runs the
+ * dev-server command, so `npm run <any>` here boots the dev server — the single
+ * source the page realm uses to recognise `npm run <script>` dev lines (ADR-0146:
+ * npm runs in the owner, but the lifecycle-owning dev line is intercepted page-side).
+ */
+export function projectScripts(spec: ProjectSpec): Record<string, string> {
+  const body = devScriptCommand(spec);
+  return spec.runtime === 'vite' ? { dev: body, vite: body } : { dev: body, start: body };
+}
+
 export function buildProjectPackageJson(spec: ProjectSpec): {
   readonly name: string;
   readonly version: string;
@@ -154,9 +165,7 @@ export function buildProjectPackageJson(spec: ProjectSpec): {
 } {
   const name = `rifty-${spec.id}-app`;
   const version = '0.0.0';
-  const script = devScriptCommand(spec);
-  const scripts =
-    spec.runtime === 'vite' ? { dev: script, vite: script } : { dev: script, start: script };
+  const scripts = projectScripts(spec);
   const json = `${JSON.stringify(
     {
       name,

@@ -126,6 +126,12 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain(
       'return await runTerminalScript(devScriptCommand(activeTemplate()), ctx);',
     );
+    // `npm run <script>` is still recognised page-side (single-sourced from
+    // project-spec via projectScripts) and its dev-script body routed to the
+    // lifecycle owner — pre-P2 `npm run vite` / `npm run dev` parity.
+    expect(source).toContain('function npmRunDevBody(line: string, template: ProjectSpec)');
+    expect(source).toContain('return projectScripts(template)[name] ?? null;');
+    expect(source).toContain('if (npmBody !== null) return await runTerminalScript(npmBody, ctx);');
   });
 
   it('loads and persists terminal environment state', () => {
