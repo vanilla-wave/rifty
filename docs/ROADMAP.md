@@ -50,7 +50,6 @@ open:
 `net`/`http` servers, `IncomingMessage` Readable, `http.request`/`http.get` loopback over the port registry plus fetch egress, SW preview round-trip, chunked streaming; real `express@4` runs end-to-end. ADR-0010, ADR-0017, ADR-0048, ADR-0123.
 open:
 - `docs/backlog/net/real-tcp-socket-semantics` — real-TCP `net.Socket` (HTTP-only today).
-- `docs/backlog/net/cross-realm-websocket-bridge` — iframe HMR client over a real `WebSocket`.
 
 ## M8 — WASI Runner
 

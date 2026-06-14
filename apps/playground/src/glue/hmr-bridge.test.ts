@@ -2,21 +2,20 @@
  * Unit tests for the cross-realm HMR bridge (ADR-0017 phase 1).
  *
  * These tests prove the wiring contract:
- *   1. `setupHmrBridge` instantiates a `BridgedWebSocketServer` that a
- *      `BridgedWebSocket` client (representing the iframe HMR client) can
- *      connect to using `hmrBridgeUrl(port)` as the shared URL.
+ *   1. `setupHmrBridge` exposes the ordinary WebSocketServer surface that a
+ *      cross-realm client can connect to using `hmrBridgeUrl(port)`.
  *   2. `broadcast()` from the page side reaches the client.
  *   3. The Vite plugin `transformIndexHtml` injects the client script once
  *      (idempotent across reload cycles).
  *
  * The full browser HMR roundtrip is covered by the e2e spec
  * (`tests/e2e/m10-hmr.spec.ts`), which exercises the iframe-loaded HMR
- * client end-to-end. Here we run the bridge in a single Node realm — the
- * `BridgedWebSocket` client suffices to prove the wire format the inlined
- * iframe script speaks (both ride the same `BroadcastChannel`).
+ * client end-to-end. Here we run the bridge in a single Node realm and use
+ * `BridgedWebSocket` to prove old opt-in clients still interop with the
+ * ordinary server surface.
  */
 import { PREVIEW_LOCAL_HOST } from '@riftydev/io';
-import { BridgedWebSocket, channelNameFor } from '@riftydev/net';
+import { BridgedWebSocket } from '@riftydev/net';
 import { describe, expect, it } from 'vitest';
 import {
   createHmrBridgeToken,
@@ -36,9 +35,7 @@ describe('hmrBridgeUrl', () => {
 
   it('scopes the ws URL by nonce when supplied', () => {
     expect(hmrBridgeUrl(3000, 'nonce-1')).toBe(`ws://${PREVIEW_LOCAL_HOST}:3000/__hmr/nonce-1`);
-    expect(channelNameFor(hmrBridgeUrl(3000, 'nonce-1'))).not.toBe(
-      channelNameFor(hmrBridgeUrl(3000)),
-    );
+    expect(hmrBridgeUrl(3000, 'nonce-1')).not.toBe(hmrBridgeUrl(3000));
   });
 });
 
@@ -99,16 +96,11 @@ describe('setupHmrBridge', () => {
     }
   });
 
-  it('uses the same BroadcastChannel name the iframe client script would use', () => {
-    // The wire-format check that protects the page ↔ iframe contract: the
-    // server side derives its channel name from `hmrBridgeUrl(port)`, and the
-    // inlined client script embeds the same channel name as a JSON-encoded
-    // literal. If `channelNameFor` ever changes shape, this test breaks
-    // before the iframe silently fails to connect in production.
+  it('opens the same HMR URL from the iframe client script', () => {
     const port = 4200;
-    const expectedChannel = channelNameFor(hmrBridgeUrl(port, 'shared'));
     const script = hmrClientScript(port, 'shared');
-    expect(script).toContain(JSON.stringify(expectedChannel));
+    expect(script).toContain(`new WebSocket(${JSON.stringify(hmrBridgeUrl(port, 'shared'))})`);
+    expect(script).toContain('__riftyWebSocketBridgeInstalled');
   });
 });
 
@@ -195,9 +187,7 @@ describe('createHmrBridgeVitePlugin', () => {
         attrs: expect.objectContaining({ 'data-rifty-hmr-bridge': '' }),
       }),
     ]);
-    expect(String(transformed.tags?.[0]?.children)).toContain(
-      channelNameFor(hmrBridgeUrl(3200, 'plugin-token')),
-    );
+    expect(String(transformed.tags?.[0]?.children)).toContain(hmrBridgeUrl(3200, 'plugin-token'));
   });
 
   it('is idempotent: running twice does not duplicate the script', () => {
@@ -229,28 +219,28 @@ describe('hmrClientScript', () => {
     expect(() => new Function(script)).not.toThrow();
   });
 
-  it('uses BroadcastChannel and posts an open frame matching the bridge protocol', () => {
+  it('installs the generic WebSocket bridge and opens the HMR URL', () => {
     const script = hmrClientScript(3301);
-    expect(script).toContain('new BroadcastChannel');
-    expect(script).toContain("type: 'open'");
-    expect(script).toContain('open-ack');
+    expect(script).toContain('__riftyWebSocketBridgeInstalled');
+    expect(script).toContain(`new WebSocket(${JSON.stringify(hmrBridgeUrl(3301))})`);
   });
 
-  it('only accepts per-client bridged messages after the open handshake', () => {
+  it('keeps mini-dev reload semantics out of the generic bridge shim', () => {
     const script = hmrClientScript(3302);
-    expect(script).not.toContain("f.type === 'broadcast'");
-    expect(script).toContain("f.type === 'msg' && open");
+    expect(script).toContain('location.reload()');
+    expect(script).toContain('var eventPrefix = "rifty:hmr"');
   });
 });
 
 describe('viteHmrClientScript', () => {
-  it('produces valid JS that installs a targeted vite-hmr WebSocket shim', () => {
+  it('produces valid JS that installs the generic WebSocket bridge before Vite', () => {
     const script = viteHmrClientScript(3303, 'vite-token');
     expect(() => new Function(script)).not.toThrow();
     expect(script).toContain('window.WebSocket');
-    expect(script).toContain("'vite-hmr'");
-    expect(script).toContain('this.OPEN = RiftyViteHmrWebSocket.OPEN');
-    expect(script).toContain(channelNameFor(hmrBridgeUrl(3303, 'vite-token')));
+    expect(script).toContain('__riftyWebSocketBridgeInstalled');
+    expect(script).toContain(hmrBridgeUrl(3303, 'vite-token'));
+    expect(script).not.toContain('RiftyViteHmrWebSocket');
+    expect(script).not.toContain("protocols === 'vite-hmr'");
     expect(script).not.toContain('location.reload()');
   });
 });

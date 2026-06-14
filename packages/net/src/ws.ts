@@ -16,5 +16,12 @@ export {
   BridgedWebSocketConnection,
   channelNameFor,
   createCrossRealmBridge,
+  portChannelNameFor,
+  webSocketBridgeClientScript,
 } from './ws/index.ts';
-export type { WsMessage, CrossRealmBridge } from './ws/index.ts';
+export type {
+  CrossRealmBridge,
+  WebSocketBridgeClientScriptOptions,
+  WebSocketBridgeInstrumentation,
+  WsMessage,
+} from './ws/index.ts';

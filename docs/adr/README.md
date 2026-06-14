@@ -66,6 +66,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0017 | `@riftydev/net` scope statement and streaming rewrite deferral |
 | 0054 | Effect `@effect/platform-node` consumes rifty `node:http` AS-IS via additive shape-widening |
 | 0065 | `node:sqlite` `DatabaseSync` WASM shim — sql.js, in-memory-first (P2 boot prerequisite) |
+| 0147 | Default cross-realm WebSocket bridge |
 
 ### service-worker
 

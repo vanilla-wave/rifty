@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Default WebSocket surface crosses same-origin realms (ADR-0147).**
+  `WebSocket` / `WebSocketServer` keep the same-realm fast path and fall back to
+  the bridge protocol when client and server live in different realms. Servers
+  listen on URL + port-discovery channels and validate the requested URL, so
+  wildcard hosts work for preview domains. New `webSocketBridgeClientScript()`
+  lets hosts inject a generic browser `window.WebSocket` bridge before framework
+  dev clients run.
+
 ### Fixed
 
 - **SSE bodies fail loud over the cross-realm preview bridge.**

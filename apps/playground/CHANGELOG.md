@@ -212,14 +212,16 @@
   `location.reload()`. The worker now registers a rifty
   `server.hmr.channels` transport, disables Vite's native `ws` server
   (`ws:false`), and lets Vite generate real HMR payloads (`update.updates[]`,
-  `full-reload`, `prune`, `error`). The injected iframe script is now a targeted
-  `"vite-hmr"` `WebSocket` shim over the existing BroadcastChannel bridge, so
-  Vite's own `@vite/client` patches self-accepting modules in place. The seeded
-  Vite entry is self-accepting, and editor writes wake Vite's native watcher
-  path instead of manually broadcasting a fake update. Tests:
-  `glue/hmr-bridge.test.ts`, `workers/real-vite-bootstrap.test.ts`,
-  `workers/real-vite-invalidation.test.ts`, `templates/project-spec.test.ts`,
-  opt-in browser `tests/e2e/m10-hmr.spec.ts`.
+  `full-reload`, `prune`, `error`). The injected iframe script installs the
+  generic `@riftydev/net` browser `WebSocket` bridge, so Vite's own
+  `@vite/client` patches self-accepting modules in place without a Vite-only
+  socket shim. The seeded Vite entry is self-accepting, and editor writes wake
+  Vite's native watcher path instead of manually broadcasting a fake update.
+  Tests: `packages/workbench/src/hmr-bridge.test.ts`,
+  `packages/workbench/src/project-worker-source.test.ts`,
+  `packages/workbench/src/vite-invalidation.test.ts`,
+  `packages/workbench/src/project-spec.test.ts`, opt-in browser
+  `tests/e2e/m10-hmr.spec.ts`.
 
 - **Editable project files in real-vite mode (ADR-0076 §Decision-4, corrected).**
   Editing a seeded source tab (e.g. `src/project-summary.js`) while the dev

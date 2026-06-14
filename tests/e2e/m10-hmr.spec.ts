@@ -5,8 +5,8 @@
  *   1. The playground enters Real Vite mode.
  *   2. The preview iframe loads.
  *   3. An HMR-able edit to `src/main.js` propagates through Vite's real HMR
- *      channel over `BridgedWebSocketServer` and patches the module without a
- *      full iframe reload.
+ *      channel over the generic `@riftydev/net` WebSocket bridge and patches
+ *      the module without a full iframe reload.
  *
  * Why this spec is skipped by default at agent-runtime time:
  *   - Real Vite mode bootstraps by installing Vite from the npm registry
@@ -15,9 +15,9 @@
  *     it as part of every CI invocation would dwarf the rest of the M0..M9
  *     suite. The unit test in
  *     `apps/playground/src/glue/hmr-bridge.test.ts` already exercises
- *     the wiring contract (server accepts iframe-shaped clients, broadcasts
- *     reach them, `transformIndexHtml` injects the Vite transport shim
- *     idempotently).
+ *     the wiring contract (ordinary WebSocketServer accepts cross-realm
+ *     clients, broadcasts reach them, `transformIndexHtml` injects the generic
+ *     WebSocket bridge idempotently).
  *   - Set `RIFTY_E2E_HMR=1` to opt-in locally once you've warmed the
  *     install cache and want to validate the full roundtrip against a real
  *     browser. The first run still pays the install cost; subsequent runs
@@ -33,7 +33,7 @@
  *      iframe; in its Console run
  *         document.querySelector('script[data-rifty-hmr-bridge]') !== null
  *      and confirm it is `true`. That proves
- *      {@link createHmrBridgeVitePlugin} injected the inline Vite transport.
+ *      {@link createHmrBridgeVitePlugin} injected the inline WebSocket bridge.
  *   5. Edit the editor pane to change the body text. Save (Cmd/Ctrl-S in
  *      the editor or wait the implicit auto-update).
  *   6. The iframe should update within the file-watcher poll interval without

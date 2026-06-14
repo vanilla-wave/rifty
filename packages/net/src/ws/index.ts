@@ -1,11 +1,11 @@
 /**
  * Barrel for the WebSocket layer.
  *
- * - `./in-process.ts` — same-realm URL-routed shim (default `@riftydev/net`
- *   export, used by tests and the in-process dev-server).
- * - `./bridge.ts` — opt-in `BroadcastChannel`-backed transport for
- *   cross-realm clients (iframe HMR ↔ playground main thread). Returned by
+ * - `./in-process.ts` — default URL-routed shim with same-realm fast path and
+ *   same-origin cross-realm fallback.
+ * - `./bridge.ts` — opt-in compatibility transport returned by
  *   `createCrossRealmBridge()`.
+ * - `./browser-client-script.ts` — injectable browser `window.WebSocket` shim.
  */
 
 export { WebSocket, WebSocketServer, WebSocketConnection, State } from './in-process.ts';
@@ -16,5 +16,11 @@ export {
   BridgedWebSocketConnection,
   channelNameFor,
   createCrossRealmBridge,
+  portChannelNameFor,
 } from './bridge.ts';
 export type { CrossRealmBridge } from './bridge.ts';
+export { webSocketBridgeClientScript } from './browser-client-script.ts';
+export type {
+  WebSocketBridgeClientScriptOptions,
+  WebSocketBridgeInstrumentation,
+} from './browser-client-script.ts';

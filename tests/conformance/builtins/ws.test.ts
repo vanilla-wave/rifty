@@ -175,3 +175,80 @@ describe('cross-realm WebSocket bridge (ADR-0017 phase 1)', () => {
     server2.close();
   });
 });
+
+describe('default WebSocket surface crosses realms', () => {
+  it('lets a bridged client connect to the ordinary WebSocketServer surface', async () => {
+    const server = new WebSocketServer({ port: 9010, path: '/hmr' });
+    const serverSeen: string[] = [];
+    server.on('connection', (sock) => {
+      sock.on('message', (data: unknown) => serverSeen.push(String(data)));
+      sock.send('server-hello');
+    });
+
+    const { WebSocket: RealmWebSocket } = createCrossRealmBridge();
+    const ws = new RealmWebSocket('ws://localhost:9010/hmr');
+    const clientSeen: string[] = [];
+    ws.addEventListener('message', (e) => clientSeen.push(String((e as MessageEvent).data)));
+    await new Promise<void>((resolve) =>
+      ws.addEventListener('open', () => resolve(), { once: true }),
+    );
+    ws.send('client-hello');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(serverSeen).toEqual(['client-hello']);
+    expect(clientSeen).toEqual(['server-hello']);
+
+    ws.close();
+    server.close();
+  });
+
+  it('routes bridged clients through wildcard WebSocketServer hosts', async () => {
+    const server = new WebSocketServer({ port: 9012, path: '/hmr' });
+    const serverSeen: string[] = [];
+    server.on('connection', (sock) => {
+      sock.on('message', (data: unknown) => serverSeen.push(String(data)));
+      sock.send('server-hello');
+    });
+
+    const { WebSocket: RealmWebSocket } = createCrossRealmBridge();
+    const ws = new RealmWebSocket('ws://preview.local:9012/hmr', { connectTimeoutMs: 50 });
+    const clientSeen: string[] = [];
+    ws.addEventListener('message', (e) => clientSeen.push(String((e as MessageEvent).data)));
+    await new Promise<void>((resolve) =>
+      ws.addEventListener('open', () => resolve(), { once: true }),
+    );
+    ws.send('client-hello');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(serverSeen).toEqual(['client-hello']);
+    expect(clientSeen).toEqual(['server-hello']);
+
+    ws.close();
+    server.close();
+  });
+
+  it('lets an ordinary WebSocket client connect to a bridged server', async () => {
+    const { WebSocketServer: RealmWebSocketServer } = createCrossRealmBridge();
+    const server = new RealmWebSocketServer('ws://localhost:9011/hmr');
+    const serverSeen: string[] = [];
+    server.on('connection', (sock) => {
+      sock.on('message', (data: unknown) => serverSeen.push(String(data)));
+      sock.send('server-hello');
+    });
+
+    const ws = new WebSocket('ws://localhost:9011/hmr');
+    const clientSeen: string[] = [];
+    ws.addEventListener('message', (e) => clientSeen.push(String((e as MessageEvent).data)));
+    await new Promise<void>((resolve) =>
+      ws.addEventListener('open', () => resolve(), { once: true }),
+    );
+    ws.send('client-hello');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(serverSeen).toEqual(['client-hello']);
+    expect(clientSeen).toEqual(['server-hello']);
+
+    ws.close();
+    server.close();
+  });
+});
