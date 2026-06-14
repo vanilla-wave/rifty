@@ -600,7 +600,9 @@ export class Membrane {
         return this.#wrapCached(id, () => this.#wrapObject(handle, id));
       }
       default:
-        throw new Error(`vm: ${kind} marshalling not implemented (Task 6)`);
+        // Unreachable: `kind` is `ctx.typeof`, every JS typeof is handled above.
+        // Exhaustiveness guard (not an unbuilt feature).
+        throw new Error(`vm: unexpected guest value kind '${kind}'`);
     }
   }
 
