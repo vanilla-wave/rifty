@@ -83,7 +83,7 @@ export function hmrClientScript(port: number, token?: string): string {
     } catch (_) {}
     try { window.__riftyHmrLastMessage = payload; } catch (_) {}
     // Naive default: reload on update. Full ESM HMR is out of scope for the
-    // bridge — higher-level concern (M12+).
+    // bridge — higher-level concern (M12+). TODO(backlog: playground/honest-vite-hmr)
     if (payload && payload.type === 'update') {
       location.reload();
     }

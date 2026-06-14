@@ -119,6 +119,7 @@ function buildIndexHtml(title: string, entryRelativePath: string): string {
   // on every edit (hmr-bridge naive reload), and entry code that sets `body`
   // background via JS only applies after the module evaluates — so a bg-less
   // document flashes white between reload and eval. The initial CSS removes that.
+  // Interim mitigation for the naive reload: TODO(backlog: playground/honest-vite-hmr)
   return `<!doctype html>
 <html>
   <head><meta charset="utf-8"><title>${title}</title><style>html,body{margin:0;background:#101218}</style></head>
