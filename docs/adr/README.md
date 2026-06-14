@@ -224,7 +224,8 @@ Moved/removed docs are still cited inside older (immutable) ADRs; their content 
 
 Moved (redirect to the live path):
 
-- `PROJECT_PLAN.md` → `docs/ARCHITECTURE.md` (vision/architecture) + `docs/ROADMAP.md` (milestones)
+- `PROJECT_PLAN.md` → `AGENTS.md` (mission/scope) + `docs/adr/` (architecture decisions) + `docs/ROADMAP.md` (milestones)
+- `docs/ARCHITECTURE.md` → `AGENTS.md` §Mission (vision/scope) + `docs/adr/` (strategic decisions D-001..D-006, isolation, COI)
 - `OPEN_QUESTIONS.md` → `docs/backlog/<area>/`
 - `docs/compat/` → `docs/public/compat/`
 - `docs/perf/` → `docs/backlog/perf/reference/`
