@@ -31,6 +31,7 @@
  * every SW↔page peer for a change to a different hop.
  */
 
+import { NotImplementedError } from '@riftydev/io';
 import type { PortHandler } from '../registry.ts';
 import { channelNameFor } from '../ws/bridge.ts';
 
@@ -135,6 +136,13 @@ function headersToObject(h: Headers): Record<string, string> {
   return out;
 }
 
+/** True when the response media type is `text/event-stream` (ignoring params). */
+function isEventStream(headers: Headers): boolean {
+  const ct = headers.get('content-type');
+  if (ct === null) return false;
+  return ct.split(';', 1)[0]?.trim().toLowerCase() === 'text/event-stream';
+}
+
 let counter = 0;
 function nextRequestId(): string {
   // Counter resets per realm; random tail guards cross-realm collisions (old +
@@ -183,6 +191,33 @@ export function serveCrossRealmPreview(
         type: 'error',
         requestId,
         message: err instanceof Error ? err.message : String(err),
+      } satisfies PreviewPortFrame);
+      return;
+    }
+
+    // SSE ceiling (ADR-0048): this hop is buffered-until-`end` — the page concats
+    // chunks on `reply-stream-end` (true end-to-end `ReadableStream` is M12,
+    // ADR-0017), and the buffered path below awaits `arrayBuffer()`. An unending
+    // `text/event-stream` body therefore resolves on NEITHER path: the page would
+    // hang forever, delivering SSE never and silently. Fail loud naming the
+    // ceiling instead — mirrors the SW-bridge guard (`@riftydev/service-worker`
+    // body-transport.ts). Posted on the legacy `error` frame so a pre-ADR-0048
+    // page understands it (→ page maps to a 502 carrying the message).
+    // TODO(backlog: net/cross-realm-preview-unbounded-body) — a non-SSE unending
+    // body (chunked log-tail, NDJSON feed) still drains forever below; only
+    // `text/event-stream` is guarded here.
+    if (response.body !== null && isEventStream(response.headers)) {
+      const ceiling = new NotImplementedError(
+        'net.preview.cross-realm-sse-drain',
+        'text/event-stream needs true end-to-end streaming (M12, ADR-0017); the cross-realm preview bridge buffers until end',
+      );
+      console.error('[rifty/net] cross-realm preview refusing to drain SSE body', {
+        feature: ceiling.feature,
+      });
+      channel.postMessage({
+        type: 'error',
+        requestId,
+        message: ceiling.message,
       } satisfies PreviewPortFrame);
       return;
     }

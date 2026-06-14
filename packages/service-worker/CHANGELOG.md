@@ -15,6 +15,12 @@
 
 ### Fixed
 
+- **SSE bodies fail loud in no-transferable-stream realms.**
+  `packSerializedResponse` now refuses to drain `text/event-stream` bodies when
+  `ReadableStream` transfer over `postMessage` is unavailable, throwing
+  `NotImplementedError('service-worker.preview.sse-drain-fallback')` instead of
+  hanging forever on an unending SSE response. The throw is caught by the bridge
+  and surfaces to the preview `fetch` as an HTTP 502 carrying that message.
 - **Serialized POSTs advertise `content-length`** derived from the drained
   body bytes (fetch Request headers never expose it) — without it, worker-side
   body parsers (express.json's typeis `hasBody()`) silently skipped bodies
