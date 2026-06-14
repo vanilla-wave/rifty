@@ -14,7 +14,7 @@ const indexHtml = readFileSync(fileURLToPath(new URL('../../index.html', import.
 
 describe('playground mono font', () => {
   it('leads the shared mono stack with JetBrains Mono', () => {
-    expect(MONO_FONT_STACK.startsWith("'JetBrains Mono'")).toBe(true);
+    expect(MONO_FONT_STACK.startsWith('"JetBrains Mono"')).toBe(true);
   });
 
   it('keeps system monospace fallbacks after JetBrains Mono', () => {
@@ -65,5 +65,18 @@ describe('playground mono font', () => {
     expect(seededSources).not.toContain('Roboto Mono');
     expect(seededSources).not.toContain("fontFamily = 'ui-monospace, monospace'");
     expect(seededSources).not.toMatch(/font:\s*14px\/1\.55 ui-monospace/);
+  });
+
+  it('does not inject single-quoted font families into seeded JS string literals', () => {
+    const seededSources = [
+      ...PRESETS.flatMap((preset) => [
+        preset.source,
+        ...(preset.files?.map((file) => file.content) ?? []),
+      ]),
+    ].join('\n');
+
+    expect(seededSources).not.toContain("font-family:'JetBrains Mono'");
+    expect(seededSources).not.toContain("font:600 10px/12px 'JetBrains Mono'");
+    expect(seededSources).not.toContain("font:400 12px/16px 'JetBrains Mono'");
   });
 });
