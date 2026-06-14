@@ -19,6 +19,14 @@ import {
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import type { TransformSourceHook } from '@riftydev/runtime-js/loader';
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
+// vm-engine relative source imports (same `tools/`-harness precedent as
+// `formatArgs` below): `setVmEngineOverride` lets the runner reset the engine
+// selection between cases, and `ensureVmEngineReady` preloads the QuickJS WASM
+// module once so a case opting into the `quickjs` engine (via
+// `globalThis.__RIFTY_VM_ENGINE`) can run `vm.*` SYNCHRONOUSLY (the engine reads
+// `getQuickJsModuleSync()`). Both are memoised/idempotent — one-time cost.
+import { setVmEngineOverride } from '../../../packages/runtime-js/src/builtins/vm/engine-config.ts';
+import { ensureVmEngineReady } from '../../../packages/runtime-js/src/builtins/vm/quickjs-loader.ts';
 import { formatArgs } from '../../../packages/runtime-js/src/repl/inspect.ts';
 // The runner is a `tools/` harness, so reaching into `@riftydev/runtime-wasi` and
 // the shadow-registry esbuild binding is layer-legal (same precedent as the
@@ -339,6 +347,18 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
   // real Node. Teardown clears the published shim + host-capability stubs.
   const teardownExecSync = testCase.kind === 'exec-sync' ? await installExecSyncMode() : null;
 
+  // Preload QuickJS before any user code runs: a case can opt the `vm.*` sandbox
+  // into the quickjs engine via `globalThis.__RIFTY_VM_ENGINE = 'quickjs'`, and
+  // that engine evaluates synchronously via `getQuickJsModuleSync()`. Memoised,
+  // so this is a one-time bring-up shared across all cases.
+  await ensureVmEngineReady();
+
+  // The runner evaluates cases IN-PROCESS, so the `vm` engine selection — driven
+  // by `globalThis.__RIFTY_VM_ENGINE` (e.g. a case opting into 'quickjs') and the
+  // explicit override — must not leak into the next case. Snapshot here, restore
+  // in `finally`. Default stays rewrite for every case that does not opt in.
+  const priorVmEngineGlobal = (globalThis as Record<string, unknown>).__RIFTY_VM_ENGINE;
+
   const captured: string[] = [];
   const writeStdout = (...args: unknown[]) => {
     captured.push(`${formatArgs(args)}\n`);
@@ -400,6 +420,9 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
     }
     teardownHttp?.();
     teardownExecSync?.();
+    // Restore the vm-engine selection so an opt-in case does not poison the next.
+    (globalThis as Record<string, unknown>).__RIFTY_VM_ENGINE = priorVmEngineGlobal;
+    setVmEngineOverride(undefined);
   }
   return captured.join('');
 }

@@ -12,6 +12,17 @@
   `node <script>`. `child_process.spawn('node', [script])` (worker path) now
   spawns this bootstrap instead of a raw `kind:'source'` worker, so a spawned
   script with a shebang / relative import runs via the loader.
+- **`node:vm` QuickJS engine — primitive completion values (T5, ADR-0138).**
+  New `quickjsEngine: VmEngine` (`vm/quickjs-engine.ts`): one persistent
+  `QuickJSContext` per `vm.Context` (WeakMap, reused across runs for later
+  cross-run persistence), `evalCode` + `unwrapResult`, marshalling guest
+  completion values that are PRIMITIVES (number/string/boolean/bigint/null/
+  undefined) back to the host; object/function throw a loud Task-6 boundary.
+  Every per-run handle is disposed (a leak aborts the WASM runtime); constants
+  never are. `selectEngine()` now returns it when `__RIFTY_VM_ENGINE === 'quickjs'`
+  (default stays `rewrite`). Parity: `cases/vm/quickjs-returns.case.ts`. The
+  parity runner + vm conformance now preload via `ensureVmEngineReady()`.
+
 ### Changed
 
 - **`node:vm` split behind a `VmEngine` interface (no behavior change).** `vm.ts`
@@ -30,6 +41,10 @@
   keeping line numbers. Required to run `node_modules/.bin` launcher shims and
   any shebang'd entry. Parity: `cases/modules/{cjs,esm}-shebang.case.ts`.
 
+- **REPL/console inspector rendered bigints without the trailing `n`.** `inspect`
+  printed `3n` as `3` (and `{ a: 3n }` as `{ a: 3 }`) — `String(3n)` drops the
+  suffix Node keeps at every depth. Surfaced by the QuickJS vm parity case
+  (`vm.runInNewContext('1n + 2n')` → `3n`). Regression: `repl/inspect.test.ts`.
 - **PR #30 review fixes (`node:vm` statement-position var + intrinsic shadow).**
   Two divergences inside the just-closed `vm-sandbox-residual-gaps` work:
   - A top-level `var` used as the UNBRACED body of `if`/`else`/`do-while` threw

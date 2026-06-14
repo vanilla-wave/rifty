@@ -4,6 +4,7 @@
  * cutover (T17, ADR-0138) flips it to `quickjs`.
  */
 
+import { quickjsEngine } from './quickjs-engine.ts';
 import { rewriteEngine } from './rewrite-engine.ts';
 import type { VmEngine } from './types.ts';
 
@@ -25,6 +26,5 @@ export function resolveVmEngineName(): 'quickjs' | 'rewrite' {
 }
 
 export function selectEngine(): VmEngine {
-  // quickjsEngine is wired in a later task (T5); until then only rewrite exists.
-  return rewriteEngine;
+  return resolveVmEngineName() === 'quickjs' ? quickjsEngine : rewriteEngine;
 }

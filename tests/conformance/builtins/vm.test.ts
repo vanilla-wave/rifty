@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import '../../../packages/runtime-js/src/builtins/index.ts';
 import { loadBuiltin } from '../../../packages/io/src/builtin-registry.ts';
 import { NotImplementedError } from '../../../packages/io/src/errors.ts';
+import { ensureVmEngineReady } from '../../../packages/runtime-js/src/builtins/vm/quickjs-loader.ts';
 
 type VmScript = {
   runInThisContext(options?: VmRunOptions): unknown;
@@ -35,6 +36,14 @@ type VmModule = {
 };
 
 const vm = loadBuiltin('node:vm') as unknown as VmModule;
+
+// Preload QuickJS once so any quickjs-engine-backed case runs synchronously
+// (the engine reads `getQuickJsModuleSync()`). Default stays rewrite, so the
+// existing rewrite-based cases below are unaffected; this only guarantees the
+// sync module is ready if/when a case opts into quickjs.
+beforeAll(async () => {
+  await ensureVmEngineReady();
+});
 
 describe('node:vm subset', () => {
   it('runs scripts in this context', () => {
