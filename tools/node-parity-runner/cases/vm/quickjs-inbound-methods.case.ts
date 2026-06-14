@@ -17,7 +17,7 @@ const c: ParityCase = {
       catch (e) { console.log(label, 'THROW', e.constructor.name); }
     };
     p('join', 'items.join("-")');
-    p('map', 'items.map(function (i) { return i.toUpperCase(); }).join(","))');
+    p('map', 'items.map(function (i) { return i.toUpperCase(); }).join(",")');
     p('filter', 'items.filter(function (i) { return i !== "y"; }).length');
     p('typeof-join', 'typeof items.join');
     p('isArray', 'Array.isArray(items)');
