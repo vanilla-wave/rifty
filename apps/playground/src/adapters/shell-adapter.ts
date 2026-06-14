@@ -34,7 +34,7 @@ export interface RunContext {
  * streaming stdout/stderr into the writer attached via `attachWriter`.
  *
  * `registerCommand` lets composition-root glue (e.g. `registerNpmShellCommand`
- * in `glue/npm-shell-command.ts`) wire custom builtins like `npm` / `node`
+ * in `@riftydev/workbench`) wire custom builtins like `npm` / `node`
  * without the adapter knowing about them — otherwise `npm install foo` hits
  * the shell's "command not found" path with exit 127.
  *

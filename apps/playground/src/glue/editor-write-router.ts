@@ -15,7 +15,7 @@
  * read-only, preserving ADR-0076's honesty for worker-owned files.
  */
 import { dirname } from '@riftydev/vfs';
-import type { FsOpsTarget } from './fs-ops.ts';
+import type { FsOpsTarget } from '@riftydev/workbench';
 
 const enc = new TextEncoder();
 

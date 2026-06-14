@@ -11,12 +11,12 @@ Each publishable package exposes two views of its entry points:
 
 Build is `tsup` (`pnpm build:libs`). First-party `@riftydev/*` and external deps stay external (not re-bundled), so installing several `@riftydev/*` packages at the same version shares one copy of kernel/vfs singletons.
 
-## Publishable set (12 packages)
+## Publishable set (13 packages)
 
-- `packages/*` (11, including the umbrella front door **`@riftydev/sdk`** — ADR-0071)
+- `packages/*` (12, including the umbrella front door **`@riftydev/sdk`** — ADR-0071)
 - `@riftydev/shadow-registry` (in `tools/`, a runtime dep of `@riftydev/npm-client`)
 
-`apps/playground`, all test fixtures, and the workspace root `rifty-workspace` stay `private`. All 12 published packages are under the `@riftydev` scope (the unscoped `rifty` name was blocked by npm as too similar to existing packages, so the umbrella ships as `@riftydev/sdk`).
+`apps/playground`, all test fixtures, and the workspace root `rifty-workspace` stay `private`. All 13 published packages are under the `@riftydev` scope (the unscoped `rifty` name was blocked by npm as too similar to existing packages, so the umbrella ships as `@riftydev/sdk`).
 
 ## Single source of truth
 
@@ -56,7 +56,7 @@ setup-node uses **no `registry-url`** (it would write an `${NODE_AUTH_TOKEN}` pl
 ```bash
 # cut a release once the one-time setup below is done:
 git tag v0.1.0
-git push origin v0.1.0        # → release.yml builds & publishes all 12 packages, tokenless
+git push origin v0.1.0        # → release.yml builds & publishes all 13 packages, tokenless
 ```
 
 ## One-time setup (out of repo) — two phases
@@ -65,7 +65,7 @@ OIDC trusted publishing **cannot create a brand-new package name** (npm has noth
 
 ### Phase 0 — claim the names
 
-Create the **`@riftydev` org** on npmjs.com (free for public packages) so the scope is yours. All 12 packages are scoped to `@riftydev` (umbrella is `@riftydev/sdk`). If the scope is taken, rename: change `name` in each `package.json`, the SPEC keys + `REPO_URL` in `tools/publishing/sync-publish-config.mjs`, then `pnpm sync:publish`.
+Create the **`@riftydev` org** on npmjs.com (free for public packages) so the scope is yours. All 13 packages are scoped to `@riftydev` (umbrella is `@riftydev/sdk`). If the scope is taken, rename: change `name` in each `package.json`, the SPEC keys + `REPO_URL` in `tools/publishing/sync-publish-config.mjs`, then `pnpm sync:publish`.
 
 ### Phase 1 — bootstrap-publish each name ONCE with a token
 
@@ -73,7 +73,7 @@ No CI secret needed. Since the names don't exist yet, a granular token can't pre
 
 ```bash
 pnpm install
-NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --dry-run   # packs all 12, publishes nothing
+NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --dry-run   # packs all 13, publishes nothing
 NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh             # the real publish
 ```
 
@@ -87,11 +87,11 @@ pnpm -r --filter "./packages/*" --filter "@riftydev/shadow-registry" \
   publish --access public --no-git-checks   # --access public is mandatory for @riftydev/*
 ```
 
-All 12 names now exist on the registry. Revoke the token after Phase 2.
+All 13 names now exist on the registry. Revoke the token after Phase 2.
 
 ### Phase 2 — add a GitHub Actions trusted publisher to EACH package
 
-On npmjs.com, for **each** of the 12 packages → **Settings → Trusted Publisher → GitHub Actions**, fill (all **case-sensitive**; npm validates only at publish time):
+On npmjs.com, for **each** of the 13 packages → **Settings → Trusted Publisher → GitHub Actions**, fill (all **case-sensitive**; npm validates only at publish time):
 
 | Field | Value |
 |---|---|
@@ -101,11 +101,11 @@ On npmjs.com, for **each** of the 12 packages → **Settings → Trusted Publish
 | Environment | *(leave empty)* |
 | Allowed actions | tick **npm publish** |
 
-To skip the 12× toil, use npm's **bulk trusted-publishing** config flow, or the `npm trust github <pkg> --repo vanilla-wave/rifty --file release.yml --allow-publish` CLI (npm ≥ 11.10.0; needs account 2FA + an interactive OTP). The package must already exist either way (Phase 1).
+To skip the 13× toil, use npm's **bulk trusted-publishing** config flow, or the `npm trust github <pkg> --repo vanilla-wave/rifty --file release.yml --allow-publish` CLI (npm ≥ 11.10.0; needs account 2FA + an interactive OTP). The package must already exist either way (Phase 1).
 
 ### After that
 
-Every `git push origin vX.Y.Z` publishes all 12 packages tokenlessly via OIDC with provenance. **The repo must stay PUBLIC** — provenance silently emits nothing for a private repo.
+Every `git push origin vX.Y.Z` publishes all 13 packages tokenlessly via OIDC with provenance. **The repo must stay PUBLIC** — provenance silently emits nothing for a private repo.
 
 A `404`/`ENEEDAUTH` at publish almost always means: a trusted-publisher field typo (owner / repo-name-only / workflow-filename / environment case), a missing `id-token: write`, a stray `NODE_AUTH_TOKEN`, or pnpm pinned below 11.1.3.
 

@@ -19,8 +19,7 @@
  * guards) run unchanged on top of this.
  */
 import type { VfsDirent } from '@riftydev/vfs';
-import type { FsOpsTarget } from './fs-ops.ts';
-import type { VfsWriteFrame } from './vfs-write-port.ts';
+import type { FsOpsTarget, VfsWriteFrame } from '@riftydev/workbench';
 
 export class RealViteExplorerVfs implements FsOpsTarget {
   readonly readOnly = false;

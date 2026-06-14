@@ -53,9 +53,6 @@ importers:
       '@riftydev/service-worker':
         specifier: workspace:*
         version: link:../../packages/service-worker
-      '@riftydev/shadow-registry':
-        specifier: workspace:*
-        version: link:../../tools/shadow-registry
       '@riftydev/shell':
         specifier: workspace:*
         version: link:../../packages/shell
@@ -65,6 +62,9 @@ importers:
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../../packages/vfs
+      '@riftydev/workbench':
+        specifier: workspace:*
+        version: link:../../packages/workbench
       '@xterm/xterm':
         specifier: ^5.5.0
         version: 5.5.0
@@ -188,6 +188,9 @@ importers:
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../vfs
+      '@riftydev/workbench':
+        specifier: workspace:*
+        version: link:../workbench
     devDependencies:
       typescript:
         specifier: '*'
@@ -269,6 +272,43 @@ importers:
         version: 5.5.0
 
   packages/vfs:
+    devDependencies:
+      typescript:
+        specifier: '*'
+        version: 5.9.3
+      vitest:
+        specifier: '*'
+        version: 2.1.9(@types/node@22.19.19)
+
+  packages/workbench:
+    dependencies:
+      '@riftydev/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@riftydev/net':
+        specifier: workspace:*
+        version: link:../net
+      '@riftydev/npm-client':
+        specifier: workspace:*
+        version: link:../npm-client
+      '@riftydev/runtime-js':
+        specifier: workspace:*
+        version: link:../runtime-js
+      '@riftydev/service-worker':
+        specifier: workspace:*
+        version: link:../service-worker
+      '@riftydev/shadow-registry':
+        specifier: workspace:*
+        version: link:../../tools/shadow-registry
+      '@riftydev/shell':
+        specifier: workspace:*
+        version: link:../shell
+      '@riftydev/terminal':
+        specifier: workspace:*
+        version: link:../terminal
+      '@riftydev/vfs':
+        specifier: workspace:*
+        version: link:../vfs
     devDependencies:
       typescript:
         specifier: '*'

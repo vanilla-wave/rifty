@@ -16,6 +16,7 @@
  *    instead of creating a second model (no dual writer to that path).
  */
 import { basename } from '@riftydev/vfs';
+import { type FsOpsTarget, looksBinary } from '@riftydev/workbench';
 import * as monaco from 'monaco-editor';
 import { type Accessor, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import {
@@ -30,7 +31,6 @@ import {
 } from '../glue/editor-tabs.ts';
 import { isEditorPathWritable, writeEditorFile } from '../glue/editor-write-router.ts';
 import { MONO_FONT_STACK } from '../glue/fonts.ts';
-import { type FsOpsTarget, looksBinary } from '../glue/fs-ops.ts';
 // Side-effect: wires MonacoEnvironment.getWorker before the first editor.
 import '../glue/monaco-env.ts';
 import { EditorTabs } from './EditorTabs.tsx';

@@ -1,11 +1,12 @@
-import type { IconName } from './components/icons.tsx';
-import { MONO_FONT_STACK } from './glue/fonts.ts';
 import {
   EXPRESS_SQLITE_SERVER_SOURCE,
   EXPRESS_SQLITE_TEMPLATE,
-} from './templates/express-sqlite.ts';
-import { terminalDevLine } from './templates/project-spec.ts';
-import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
+  defaultProjectSpec,
+  resolveProjectSpec,
+  terminalDevLine,
+} from '@riftydev/workbench';
+import type { IconName } from './components/icons.tsx';
+import { MONO_FONT_STACK } from './glue/fonts.ts';
 
 export type PresetMode = 'dev' | 'real-vite';
 
@@ -39,7 +40,7 @@ export interface Preset {
   readonly setup: PresetSetup;
   /**
    * For `real-vite` presets: which registered template (ADR-0078) to run,
-   * resolved via {@link ./templates/registry.ts}. Omitted means the default template.
+   * resolved via `@riftydev/workbench`. Omitted means the default template.
    */
   readonly templateId?: string;
   /** One-line description shown under the label. */

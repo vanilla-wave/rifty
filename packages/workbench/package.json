@@ -1,0 +1,68 @@
+{
+  "name": "@riftydev/workbench",
+  "version": "0.1.0",
+  "description": "Headless workbench controllers for rifty: editor sync, preview binding, npm shell, and real-project sessions.",
+  "type": "module",
+  "license": "MIT",
+  "author": "vanilla-wave <vizetmail@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vanilla-wave/rifty.git",
+    "directory": "packages/workbench"
+  },
+  "homepage": "https://github.com/vanilla-wave/rifty#readme",
+  "bugs": {
+    "url": "https://github.com/vanilla-wave/rifty/issues"
+  },
+  "keywords": ["rifty", "browser", "webcontainer", "workbench", "headless", "preview", "editor"],
+  "sideEffects": false,
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./project-worker": "./src/project-worker.ts",
+    "./terminal": "./src/terminal.ts"
+  },
+  "files": ["dist", "CHANGELOG.md"],
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./project-worker": {
+        "types": "./dist/project-worker.d.ts",
+        "import": "./dist/project-worker.js"
+      },
+      "./terminal": {
+        "types": "./dist/terminal.d.ts",
+        "import": "./dist/terminal.js"
+      }
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:run": "cd ../.. && vitest run --project unit packages/workbench",
+    "build": "tsup"
+  },
+  "dependencies": {
+    "@riftydev/kernel": "workspace:*",
+    "@riftydev/net": "workspace:*",
+    "@riftydev/npm-client": "workspace:*",
+    "@riftydev/runtime-js": "workspace:*",
+    "@riftydev/service-worker": "workspace:*",
+    "@riftydev/shadow-registry": "workspace:*",
+    "@riftydev/shell": "workspace:*",
+    "@riftydev/terminal": "workspace:*",
+    "@riftydev/vfs": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "*",
+    "vitest": "*"
+  }
+}

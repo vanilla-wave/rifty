@@ -24,7 +24,7 @@ describe('App terminal startup wiring', () => {
     // one regex so the builder provably comes from the SHARED project-spec
     // import block, not a local re-definition
     expect(source).toMatch(
-      /import \{[^}]*buildProjectPackageJson[^}]*\} from '\.\/templates\/project-spec\.ts'/s,
+      /import \{[^}]*buildProjectPackageJson[^}]*\} from '@riftydev\/workbench'/s,
     );
     expect(source).toContain('const packageJson = buildProjectPackageJson(activeTemplate()).json;');
     expect(source).toContain('writeText(vfs, `${WORKSPACE}/package.json`, packageJson);');
@@ -39,7 +39,9 @@ describe('App terminal startup wiring', () => {
     // the worker spawns with the ACTIVE template, not the registry default:
     // the dev-server command snapshots it once, then hands it to the spawn
     expect(source).toContain('const template = activeTemplate();');
-    expect(source).toContain('await startRealVite({\n        template,');
+    expect(source).toContain(
+      'await createRuntimeSession({\n        bootstrapWorkerUrl,\n        template,',
+    );
   });
 
   it('opens preview tabs as an opener-owned iframe wrapper', () => {
@@ -78,6 +80,7 @@ describe('App terminal startup wiring', () => {
   it('restarts the existing dev-server terminal when changing presets while Vite is running', () => {
     expect(source).toContain('function restartDevServer(sessionId: string)');
     expect(source).toContain('if (restartSessionId) void restartDevServer(restartSessionId)');
+    expect(source).toContain('if (isVisibleTerminalSession(sessionId)) manager.stop(sessionId);');
     expect(source).toContain('devServerSessionId = session.id');
     expect(source).toContain(
       'await runTerminalSequence(\n      targetSessionId,\n      presetBootLines(presetForId(activePreset()), WORKSPACE),\n    );',

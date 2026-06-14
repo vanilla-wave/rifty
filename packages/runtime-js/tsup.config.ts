@@ -16,6 +16,7 @@ export default defineConfig({
     'builtins/process': 'src/builtins/process.ts',
     'builtins/timers': 'src/builtins/timers.ts',
     'builtins/buffer': 'src/builtins/buffer.ts',
+    'builtins/console': 'src/builtins/console.ts',
     'builtins/module': 'src/builtins/module.ts',
     'builtins/child_process': 'src/builtins/child_process.ts',
   },
