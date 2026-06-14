@@ -1,6 +1,6 @@
 # ADR 0146: PTY channel and owner-resident shell — ADR-0143 P2
 
-Status: Proposed
+Status: Accepted (2026-06-14)
 Date: 2026-06
 
 > TL;DR: The `Shell` + cwd/env + npm-install + bin/`execSync` execution move WHOLESALE into a persistent **workspace owner** (the real-vite bootstrap generalized to a mode-parametrized owner, spawned `serve:true` at App-mount, addressed by a stable `workspaceId`); the PAGE terminal becomes a thin client over a **pty channel = structured `pty:*` frames on the kernel fork-mode IPC MessagePort** (control AND stdout/stderr chunks on one ordered channel, `sessionId`+`runId` correlated). No kernel API change (kernel stays generic; pty is a playground-layer protocol). This is ADR-0143 **P2**, gated on ADR-0144 (`serve`).

@@ -4,6 +4,22 @@
 
 ### Added
 
+- **Owner-resident shell + pty channel (ADR-0146, P2 of ADR-0143 "D").** The
+  `Shell`, cwd/env, `npm install`, and bin/`execSync` now run inside ONE
+  persistent workspace-owner worker (the real-vite bootstrap generalized to a
+  mode-parametrized `shell`|`preview` owner, spawned `serve:true` at App-mount,
+  addressed by a stable `workspaceId`); the PAGE terminal is a thin client over a
+  `pty:*` frame channel on the kernel fork-IPC port (control AND stdout/stderr
+  chunks on one ordered channel, `sessionId`+`runId` correlated, cwd/env pushed
+  on `pty:exit`, structured `pty:ready` handshake). npm + bin share the owner's
+  `syncMirror`, so an installed CLI (`cowsay hi`) finally runs end-to-end —
+  closes the ADR-0143 ENOENT dead link. New `pty-protocol`/`pty-server`/
+  `pty-client`/`owner-bin-executor`; `terminal-manager` is now a pty port client;
+  the dead `useShellSession` adapter is removed. Persisted cwd/env restore via the
+  `pty:open` seed; `npm run <dev>` routing stays page-driven. COI e2e
+  `owner-shell-cowsay.spec.ts` (CI-only). The dev-server preview owner stays
+  separate (page-driven) until **P4** folds it into this owner — a tracked
+  two-owners transient (no residual debt at D close).
 - **Wire installed-CLI execution to the node-entry loader bootstrap (ADR-0137,
   Opt-Y).** `createBinExecutor` spawns the `kind:'url'` node-entry bootstrap
   (`workers/node-entry-bootstrap.ts`) for a shell-resolved `node_modules/.bin/<name>`
