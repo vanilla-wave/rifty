@@ -4,6 +4,23 @@
 
 ### Added
 
+- **`node:vm` QuickJS engine — cross-realm Error marshalling + direct-eval
+  isolation (T11, ADR-0138).** A guest throw now crosses the membrane as a host
+  THROWABLE matching Node's cross-realm shape (parity `vm/quickjs-errors`):
+  `instanceof Error`/`TypeError` FALSE but `.constructor.name`/`.name`/`.message`/
+  `.stack`/`toString()` faithful, and the value is genuinely catchable/rethrowable.
+  OUT builds a REAL host Error backing (the `.stack` slot) with the guest's own
+  `name`/`message`/`stack` under a per-ctor-name flat null-based proto carrying the
+  host `Error.prototype` methods + a synthetic `constructor` (right `.name`) — same
+  technique as the exotic mirrors, identity-cached + GC-tracked. The engine inspects
+  the `{error}` handle directly (NOT `unwrapResult`, which threw the wrong shape and
+  disposed the handle), marshals, disposes once, then throws. A non-Error throw
+  (`throw 42`) marshals as the raw primitive. IN: a host fn that throws raises the
+  error INTO the guest as a real guest exception of the matching ctor (so guest
+  `try/catch` sees the right `e.constructor.name`/`e.message`). **Direct `eval`**
+  inside the guest stays in the guest realm (parity `vm/quickjs-direct-eval`,
+  `typeof globalThis.leaked === 'undefined'`) — falsifies the ADR-0138 premise that
+  direct eval leaks to the host (T20 supersedes the ADR).
 - **`node:vm` QuickJS engine — exotic mirroring (Date/RegExp/TypedArray) + fn
   name/length + symbols (T10, ADR-0138).** Exotics now cross the membrane both ways
   matching Node's cross-realm behavior (parity `vm/quickjs-exotic`): `instanceof

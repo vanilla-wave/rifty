@@ -14,8 +14,10 @@
  * Each run is bracketed by `membrane.reseedContext` (host→guest, BEFORE — picks up
  * between-run host mutations) and `membrane.sweepContext` (guest→host, AFTER —
  * deep write-back + new globals). Sync run semantics make this observationally
- * equivalent to a live contextObject (ADR-0138, T8). Errors still throw raw
- * (faithful error marshalling is T11).
+ * equivalent to a live contextObject (ADR-0138, T8). A guest throw is marshalled
+ * to a host THROWABLE — a cross-realm error mirror (`instanceof` FALSE,
+ * `.constructor.name`/`.name`/`.message`/`.stack` faithful) or the raw primitive
+ * for a non-Error throw (T11, via {@link Membrane#wrapGuestError}).
  *
  * Disposal discipline (QUICKJS_API.md): a single leaked handle ABORTS the whole
  * WASM runtime at context teardown. Every PER-RUN handle (evalCode/unwrapResult)
@@ -94,14 +96,32 @@ function evalToHost(rt: GuestRuntime, context: ContextObject, source: string): u
   // Node's contextObject is LIVE: writes made BEFORE a throw ARE observable to the
   // host (verified probe — `this.a=1; throw` → `sb.a===1`; deep `o.n=99; throw` →
   // `sb.o.n===99`). The sweep therefore runs in `finally` so it executes on BOTH
-  // the success and throw paths. `unwrapResult` returns the success handle (caller
-  // owns it) or throws the guest error as a native Error (disposing the error
-  // handle itself — no double-dispose). The QuickJSContext stays alive after that
-  // throw; `sweepContext` walks `ctx.global` and needs no completion handle, so it
-  // is safe in finally. The raw throw then still propagates (faithful error
-  // marshalling is T11).
+  // the success and throw paths. The QuickJSContext stays alive after a throw;
+  // `sweepContext` walks `ctx.global` and needs no completion handle, so it is safe
+  // in finally.
+  //
+  // Error marshalling (T11): we do NOT use `unwrapResult` on the fail branch — it
+  // throws a raw `QuickJSUnwrapError` (wrong cross-realm shape) AND disposes the
+  // error handle. Instead we inspect the `{error}` handle ourselves, marshal it to
+  // a host THROWABLE (`membrane.wrapGuestError` — a cross-realm error mirror, or
+  // the raw primitive for a non-Error throw), dispose the handle ONCE here, then
+  // `throw`. The wrapper retains its own internal dup, so disposing this completion
+  // handle is safe. Symmetric with the success branch's dispose-after-marshal.
   try {
-    const handle = qctx.unwrapResult(result);
+    // `SuccessOrFail` is `{value; error?:undefined} | {error}` — the success
+    // variant also carries `error?:undefined`, so `'error' in result` cannot
+    // narrow; discriminate on `error !== undefined` (then `error` is the handle).
+    if (result.error !== undefined) {
+      const errorHandle = result.error;
+      let thrown: unknown;
+      try {
+        thrown = membrane.wrapGuestError(errorHandle);
+      } finally {
+        errorHandle.dispose();
+      }
+      throw thrown;
+    }
+    const handle = result.value;
     try {
       // Primitives are marshalled by value; OBJECT/ARRAY/FUNCTION become membrane
       // wrappers that RETAIN an internal dup of the guest handle. Disposing this

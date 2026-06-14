@@ -87,6 +87,26 @@
  *   - Function name/length: the OUT fn wrapper copies the GUEST fn's `name`/`length`
  *     onto the host thunk (`#copyFnNameLength`) so a returned guest fn reports them.
  *
+ * Error marshalling (T11, both directions) — same cross-realm pattern as exotics.
+ * Node truth (parity `vm/quickjs-errors`): a guest error caught in the host is
+ * `instanceof Error`/`TypeError` FALSE but `.constructor.name`/`.name`/`.message`/
+ * `.stack`/`toString()` faithful and REALLY catchable/rethrowable; a non-Error
+ * throw (`throw 42`) is the raw primitive; a host error thrown INTO the guest is a
+ * real guest exception with the right `e.constructor.name`/`e.message`.
+ *   - OUT (`wrapGuestError` → `#wrapError`): a REAL host Error backing (genuine
+ *     throwable + `.stack` slot) whose OWN `name`/`message`/`stack` are the guest's,
+ *     with a per-ctor-name FLAT null-based proto (`#errorProtoFor`) carrying the
+ *     host `Error.prototype` methods (`toString`) + a SYNTHETIC `constructor` whose
+ *     `.name` is the guest ctor name → `instanceof` FALSE, `.constructor.name` +
+ *     `toString()` faithful. Identity-cached + GC-tracked like exotics; the engine
+ *     inspects the `{error}` handle WITHOUT `unwrapResult` (which would throw the
+ *     wrong shape AND dispose the handle), marshals, disposes once, then throws.
+ *   - IN (`#guestErrorFromHost`, in the inbound host-fn impl): a thrown host Error
+ *     becomes a REAL guest error of the matching ctor (`new globalThis[name](msg)`
+ *     via a cached factory, `.name` re-set) THROWN as the guest exception
+ *     (`newFunction` transfers a thrown handle); a non-Error host throw marshals
+ *     through `marshalHostToGuest` as the raw guest value.
+ *
  * Write-back / reconciliation (T8, Option A — post-run sweep + per-run reseed).
  * vm runs are SYNCHRONOUS: the host cannot observe the sandbox DURING a run, so a
  * post-run reconciliation is observationally EQUIVALENT to a live contextObject
@@ -336,6 +356,16 @@ export class Membrane {
    */
   readonly #exoticProtos = new Map<string, object>();
   /**
+   * Per-error-ctor-name shared host prototype for the OUT error mirror (T11).
+   * A null-based flat proto carrying the host `Error.prototype` chain methods
+   * (`toString` …) PLUS a synthetic `constructor` whose `.name` is the guest
+   * ctor name — so a mirror's `e.constructor.name` is faithful and `e.toString()`
+   * works, while `instanceof Error` is FALSE (the proto is NOT host
+   * `Error.prototype`). One proto per ctor name (`TypeError`/`Error`/custom),
+   * reused across mirrors. Keyed by the guest `constructor.name`.
+   */
+  readonly #errorProtos = new Map<string, object>();
+  /**
    * Cached guest factory functions for IN exotic construction (the API has no
    * `callConstructor` — QUICKJS_API.md). Keyed by factory source; each is an
    * infra-tracked guest fn handle (disposed at teardown), so re-marshalling is cheap.
@@ -433,6 +463,11 @@ export class Membrane {
         const brand = this.#brandOf(handle);
         if (brand === 'Date') return this.#wrapCached(id, () => this.#wrapDate(handle, id));
         if (brand === 'RegExp') return this.#wrapCached(id, () => this.#wrapRegExp(handle, id));
+        // Error OUT (T11): a guest Error must mirror Node's cross-realm shape —
+        // `instanceof Error` FALSE, but `.constructor.name`/`.name`/`.message`/
+        // `.stack`/`toString()` faithful and the value REALLY catchable/rethrowable.
+        // The brand of every Error subclass is `Error` (`Object.prototype.toString`).
+        if (brand === 'Error') return this.#wrapCached(id, () => this.#wrapError(handle, id));
         const taKind = TYPED_ARRAY_BRANDS.get(brand);
         if (taKind !== undefined) {
           return this.#wrapCached(id, () => this.#wrapTypedArray(handle, id, taKind));
@@ -497,7 +532,8 @@ export class Membrane {
       case 'symbol':
         return this.#marshalInboundSymbol(value as symbol);
       default:
-        throw new Error(`vm: host→guest ${typeof value} marshalling not implemented (Task 11)`);
+        // Exhaustiveness guard: the 7 JS `typeof`s above are total. Unreachable.
+        throw new Error(`vm: host→guest ${typeof value} marshalling unreachable`);
     }
   }
 
@@ -571,7 +607,17 @@ export class Membrane {
       // objects/functions (so a guest callback survives the run), so we read them
       // directly without managing disposal here.
       const args = argHandles.map((h) => this.wrapGuestToHost(h));
-      const result = fn(...args);
+      let result: unknown;
+      try {
+        result = fn(...args);
+      } catch (err) {
+        // Host fn threw (T11): raise it INTO the guest as a real guest exception
+        // so guest `try/catch` sees the right `e.constructor.name`/`e.message`
+        // (verified oracle, `vm/quickjs-errors`). `newFunction` TRANSFERS a thrown
+        // handle (quickjs becomes its owner — do NOT dispose it here), so guest
+        // code catches it and (if rethrown) it round-trips back OUT via the engine.
+        throw this.#guestErrorFromHost(err);
+      }
       const resultH = this.marshalHostToGuest(result);
       // newFunction consumes the returned handle; context constants are
       // context-owned and must NOT be handed over — return a fresh owned dup.
@@ -1069,6 +1115,143 @@ export class Membrane {
     Object.setPrototypeOf(mirror, this.#exoticProtoFor('RegExp', RegExp.prototype));
     this.#retainForWrapper(mirror, handle, id);
     return mirror;
+  }
+
+  // ===========================================================================
+  // Error marshalling (T11).
+  // ===========================================================================
+
+  /**
+   * Marshal a guest completion ERROR (the `{error}` handle from `evalCode` /
+   * `callFunction`) to a host THROWABLE, WITHOUT `unwrapResult` (which disposes
+   * the handle): the engine inspects the `{error}` handle, calls this, disposes
+   * the handle, then `throw`s the returned value. NON-Error throws (`throw 42`,
+   * `throw "str"`, `throw {custom:1}`) are NOT error-shaped, so they fall through
+   * to the normal `wrapGuestToHost` (a caught `42` is the primitive `42`, Node-
+   * faithful). An Error-branded object routes to `#wrapError` (identity-cached).
+   * Never disposes `handle` — the caller owns it (mirrors `wrapGuestToHost`).
+   */
+  wrapGuestError(handle: QuickJSHandle): unknown {
+    return this.wrapGuestToHost(handle);
+  }
+
+  /**
+   * OUT Error mirror — a REAL host Error backing (a genuine catchable/rethrowable
+   * value carrying a `.stack`) whose own `name`/`message`/`stack` are copied from
+   * the guest error, with a per-ctor-name FLAT proto (`#errorProtoFor`) so:
+   *   - `instanceof Error`/`TypeError` FALSE (proto is NOT host `Error.prototype`),
+   *   - `.constructor.name` faithful (synthetic ctor on the flat proto),
+   *   - `.name`/`.message`/`.stack` faithful (own props from the guest),
+   *   - `e.toString()` faithful (host `Error.prototype.toString` on the flat proto
+   *     reads the own `name`/`message`).
+   * Mirrors Node's cross-realm error shape (verified oracle, `vm/quickjs-errors`).
+   * The guest handle is retained for identity/round-trip like other wrappers.
+   */
+  #wrapError(handle: QuickJSHandle, id: number): unknown {
+    const ctx = this.#ctx;
+    const readStr = (key: string): string =>
+      Scope.withScope((scope) => {
+        const h = scope.manage(ctx.getProp(handle, key));
+        return ctx.typeof(h) === 'string' ? ctx.getString(h) : '';
+      });
+    const name = readStr('name');
+    const message = readStr('message');
+    const stack = readStr('stack');
+    // Guest `constructor.name` drives the host mirror's `.constructor.name`
+    // (faithful even for a custom subclass whose `.name` was reassigned).
+    const ctorName = Scope.withScope((scope) => {
+      const ctor = scope.manage(ctx.getProp(handle, 'constructor'));
+      const cn = scope.manage(ctx.getProp(ctor, 'name'));
+      return ctx.typeof(cn) === 'string' ? ctx.getString(cn) : 'Error';
+    });
+    // Real host Error backing so the value is genuinely throwable + has a `.stack`
+    // slot; own props then override name/message/stack with the GUEST's values.
+    const mirror = new Error(message);
+    Object.defineProperty(mirror, 'message', {
+      value: message,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(mirror, 'name', { value: name, writable: true, configurable: true });
+    Object.defineProperty(mirror, 'stack', { value: stack, writable: true, configurable: true });
+    Object.setPrototypeOf(mirror, this.#errorProtoFor(ctorName));
+    this.#retainForWrapper(mirror, handle, id);
+    return mirror;
+  }
+
+  /**
+   * Shared host prototype for an OUT error mirror of guest ctor `ctorName`. A
+   * null-based flat proto carrying the host `Error.prototype` chain methods
+   * (`toString` …, excluding `name`/`message` so the mirror's OWN values win) PLUS
+   * a synthetic `constructor` whose `.name === ctorName` — so `e.constructor.name`
+   * is faithful and `e.toString()` works, while `instanceof Error` is FALSE (the
+   * proto is NOT host `Error.prototype`). One proto per ctor name, reused.
+   */
+  #errorProtoFor(ctorName: string): object {
+    const cached = this.#errorProtos.get(ctorName);
+    if (cached) return cached;
+    const proto = Object.create(null) as Record<PropertyKey, unknown>;
+    for (
+      let p: object | null = Error.prototype;
+      p !== null && p !== Object.prototype;
+      p = Object.getPrototypeOf(p)
+    ) {
+      for (const key of Object.getOwnPropertyNames(p)) {
+        // `name`/`message` belong to the mirror's OWN props (the guest values);
+        // `constructor` is replaced with the synthetic one below.
+        if (key === 'constructor' || key === 'name' || key === 'message') continue;
+        if (Object.prototype.hasOwnProperty.call(proto, key)) continue;
+        Object.defineProperty(
+          proto,
+          key,
+          Object.getOwnPropertyDescriptor(p, key) as PropertyDescriptor,
+        );
+      }
+    }
+    // Synthetic constructor: only its `.name` is observed (`e.constructor.name`);
+    // it is NOT a host Error ctor, so `e.constructor !== host TypeError` (Node-
+    // faithful cross-realm). Non-enumerable, matching a real `constructor` slot.
+    const ctor = { name: ctorName };
+    Object.defineProperty(proto, 'constructor', {
+      value: ctor,
+      writable: true,
+      enumerable: false,
+      configurable: true,
+    });
+    this.#errorProtos.set(ctorName, proto);
+    return proto;
+  }
+
+  /**
+   * Marshal a thrown HOST value INTO the guest as a guest exception handle (T11),
+   * for a host fn that threw while called from the guest. The caller (`newFunction`
+   * impl) `throw`s the returned handle; `newFunction` TRANSFERS ownership to quickjs
+   * — so this returns an OWNED handle the caller must NOT dispose.
+   *
+   * An Error-shaped host throw becomes a REAL guest error of the matching ctor
+   * (`globalThis[ctorName]`, e.g. `RangeError`) so guest `e.constructor.name`/
+   * `e.message`/`e.name` are faithful (verified oracle). A NON-Error host throw
+   * (a host `throw 42`/`"str"`/object) marshals straight through `marshalHostToGuest`
+   * as the raw guest value — guest `catch` sees the primitive/object, not an Error.
+   */
+  #guestErrorFromHost(value: unknown): QuickJSHandle {
+    const ctx = this.#ctx;
+    if (!(value instanceof Error)) return this.marshalHostToGuest(value);
+    // Factory: `new globalThis[name](msg)` if that ctor exists, else a plain Error.
+    // Then overwrite `.name` so a custom error (ctor `Error` but `.name` reassigned)
+    // keeps its `.name` in the guest (mirrors how the host carries it).
+    const factory = this.#exoticFactory(
+      '(name, msg, nm) => { const C = globalThis[name]; const e = (typeof C === "function") ? new C(msg) : new Error(msg); e.name = nm; return e; }',
+    );
+    const ctorName = value.constructor?.name ?? 'Error';
+    return Scope.withScope((scope) => {
+      const nameH = scope.manage(ctx.newString(ctorName));
+      const msgH = scope.manage(ctx.newString(value.message));
+      const nmH = scope.manage(
+        ctx.newString(typeof value.name === 'string' ? value.name : ctorName),
+      );
+      return ctx.unwrapResult(ctx.callFunction(factory, ctx.undefined, nameH, msgH, nmH));
+    });
   }
 
   /**

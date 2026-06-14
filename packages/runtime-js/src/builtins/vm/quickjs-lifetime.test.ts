@@ -233,6 +233,91 @@ describe('exotic mirroring + symbols — identity & disposal (T10)', () => {
   });
 });
 
+describe('error marshalling — identity & disposal (T11)', () => {
+  it('OUT guest error: cross-realm shape (instanceof FALSE, ctor.name/name/message/stack faithful)', () => {
+    const ctx = freshContext();
+    const membrane = new Membrane(ctx);
+    // The engine inspects the {error} handle (no unwrapResult) and marshals it.
+    const res = ctx.evalCode('throw new TypeError("boom")');
+    expect('error' in res && res.error !== undefined).toBe(true);
+    const errH = (res as { error: import('quickjs-emscripten-core').QuickJSHandle }).error;
+    const e = membrane.wrapGuestError(errH) as Error & { constructor: { name: string } };
+    // Capture cross-realm probes into booleans BEFORE any teardown.
+    const isErr = e instanceof Error;
+    const ctorName = e.constructor.name;
+    expect(isErr).toBe(false); // cross-realm: proto is NOT host Error.prototype
+    expect(ctorName).toBe('TypeError');
+    expect(e.name).toBe('TypeError');
+    expect(e.message).toBe('boom');
+    expect(typeof e.stack === 'string' && e.stack.length > 0).toBe(true);
+    expect(e.toString()).toBe('TypeError: boom');
+    // Genuinely catchable/rethrowable host value.
+    expect(
+      (() => {
+        try {
+          throw e;
+        } catch (x) {
+          return x === e;
+        }
+      })(),
+    ).toBe(true);
+    errH.dispose();
+    expect(membrane.lifetime.liveWrapperCount).toBe(1); // one error backing handle
+    membrane.lifetime.markPending();
+    expect(membrane.lifetime.disposed).toBe(false); // wrapper live → deferred
+    membrane.lifetime.releaseWrapper(e);
+    expect(membrane.lifetime.disposed).toBe(true); // no abort
+  });
+
+  it('non-Error throw marshals as the raw primitive (catch sees 42)', () => {
+    const ctx = freshContext();
+    const membrane = new Membrane(ctx);
+    const res = ctx.evalCode('throw 42');
+    const errH = (res as { error: import('quickjs-emscripten-core').QuickJSHandle }).error;
+    expect(membrane.wrapGuestError(errH)).toBe(42); // primitive, not an Error wrapper
+    errH.dispose();
+    expect(membrane.lifetime.liveWrapperCount).toBe(0); // no wrapper for a primitive
+    membrane.lifetime.markPending();
+    expect(membrane.lifetime.disposed).toBe(true);
+  });
+
+  it('same guest error marshalled twice → same host wrapper (identity-cached)', () => {
+    const ctx = freshContext();
+    const membrane = new Membrane(ctx);
+    ctx.unwrapResult(ctx.evalCode('globalThis.E = new RangeError("r")')).dispose();
+    const h1 = ctx.unwrapResult(ctx.evalCode('E'));
+    const h2 = ctx.unwrapResult(ctx.evalCode('E'));
+    const w1 = membrane.wrapGuestToHost(h1) as Error;
+    const w2 = membrane.wrapGuestToHost(h2);
+    expect(w1 === w2).toBe(true); // identity-cached by guest id
+    h1.dispose();
+    h2.dispose();
+    expect(membrane.lifetime.liveWrapperCount).toBe(1);
+    membrane.lifetime.releaseWrapper(w1);
+    membrane.lifetime.markPending();
+    expect(membrane.lifetime.disposed).toBe(true);
+  });
+
+  it('IN host error thrown from a seeded host fn → guest exception with faithful ctor.name/message', () => {
+    const ctx = freshContext();
+    const membrane = new Membrane(ctx);
+    const hostFn = (): never => {
+      throw new RangeError('hostboom');
+    };
+    const guestFn = membrane.marshalHostToGuest(hostFn);
+    ctx.setProp(ctx.global, 'boom', guestFn);
+    guestFn.dispose();
+    // Guest catches the host error: it is a REAL guest exception of the right ctor.
+    const resH = ctx.unwrapResult(
+      ctx.evalCode('try { boom() } catch (e) { e.constructor.name + ":" + e.message }'),
+    );
+    expect(membrane.wrapGuestToHost(resH)).toBe('RangeError:hostboom');
+    resH.dispose();
+    membrane.lifetime.markPending();
+    expect(membrane.lifetime.disposed).toBe(true);
+  });
+});
+
 describe('bidirectional callables (T9)', () => {
   it('host fn seeded into the guest is callable; args marshal OUT, result marshals IN', () => {
     const ctx = freshContext();
