@@ -4,6 +4,17 @@
 
 ### Added
 
+- **Owner snapshot coherence + readiness handshake (ADR-0146, P3 of ADR-0143
+  "D").** The page file explorer now reflects files the owner-resident shell
+  writes: the owner republishes its `syncMirror` snapshot on every command exit
+  (`pty:exit`), so a bare `echo > f` / a program's output shows up without a
+  dev-server restart (e2e `owner-explorer-coherence.spec.ts`). The blind
+  owner-side snapshot retry-storm (`[300,1200,3000]ms` re-publish) is replaced by
+  a structured handshake: the page posts `snapshot-req` on subscribe and the
+  owner replies via `serveSnapshotRequests`, so the initial sync is deterministic
+  whichever side comes up first (and survives page reload). Deferred to P4: the
+  general (non-`node_modules`) on-demand read-port widening — it needs an editor
+  consumer for large/owner-only files and lands when the preview owner unifies.
 - **Owner-resident shell + pty channel (ADR-0146, P2 of ADR-0143 "D").** The
   `Shell`, cwd/env, `npm install`, and bin/`execSync` now run inside ONE
   persistent workspace-owner worker (the real-vite bootstrap generalized to a

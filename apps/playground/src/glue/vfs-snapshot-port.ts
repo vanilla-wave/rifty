@@ -45,6 +45,17 @@ export interface VfsSnapshotFrame {
   readonly nodeModulesPresent: boolean;
 }
 
+/**
+ * Page→owner readiness handshake frame (ADR-0146 P3). The owner can't know when
+ * the page has subscribed (one-way BroadcastChannel, no buffer); historically it
+ * blind-republished on a `[300,1200,3000]ms` retry-storm. Instead the page posts
+ * this once on subscribe and the owner replies with a fresh snapshot — pull, not
+ * spray. Shares the snapshot channel; {@link subscribeVfsSnapshot} ignores it.
+ */
+export interface VfsSnapshotRequestFrame {
+  readonly type: 'snapshot-req';
+}
+
 /** The narrow sync-mirror slice {@link collectSnapshot} reads (keeps tests tiny). */
 export interface SnapshotSource {
   readdirSync(path: string): readonly VfsDirent[];
@@ -150,6 +161,40 @@ export function subscribeVfsSnapshot(
   const onMessage = (event: MessageEvent): void => {
     const frame = event.data as VfsSnapshotFrame;
     if (frame && frame.type === 'snapshot') onFrame(frame);
+  };
+  channel.addEventListener('message', onMessage as unknown as EventListener);
+  let torn = false;
+  return (): void => {
+    if (torn) return;
+    torn = true;
+    channel.removeEventListener('message', onMessage as unknown as EventListener);
+    channel.close();
+  };
+}
+
+/**
+ * Page side. Ask the owner to (re)publish its snapshot now — the readiness
+ * handshake (ADR-0146 P3). Posted once when the page subscribes; pairs with the
+ * owner's startup publish so the initial sync is deterministic whichever side
+ * comes up first, without the old blind-retry timers.
+ */
+export function requestVfsSnapshot(port: number): void {
+  const channel = new BroadcastChannel(channelNameFor(snapshotChannelUrl(port)));
+  channel.postMessage({ type: 'snapshot-req' } satisfies VfsSnapshotRequestFrame);
+  queueMicrotask(() => channel.close());
+}
+
+/**
+ * Owner side. Run `publish` on every page `snapshot-req`. The owner's startup
+ * publish covers a page that subscribed first; this covers a page that
+ * subscribes (or reloads) after the owner is already serving. Returns a
+ * teardown that closes the channel.
+ */
+export function serveSnapshotRequests(port: number, publish: () => void): () => void {
+  const channel = new BroadcastChannel(channelNameFor(snapshotChannelUrl(port)));
+  const onMessage = (event: MessageEvent): void => {
+    const frame = event.data as { readonly type?: unknown };
+    if (frame && frame.type === 'snapshot-req') publish();
   };
   channel.addEventListener('message', onMessage as unknown as EventListener);
   let torn = false;

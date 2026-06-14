@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { type SnapshotSource, collectSnapshot } from './vfs-snapshot-port.ts';
+import {
+  type SnapshotSource,
+  type VfsSnapshotFrame,
+  collectSnapshot,
+  publishVfsSnapshot,
+  requestVfsSnapshot,
+  serveSnapshotRequests,
+  subscribeVfsSnapshot,
+} from './vfs-snapshot-port.ts';
 
 const enc = new TextEncoder();
 
@@ -102,5 +110,60 @@ describe('collectSnapshot', () => {
     expect(big?.content).toBeUndefined();
     const small = frame.entries.find((e) => e.path === '/workspace/small.txt');
     expect(small?.content).toBeDefined();
+  });
+});
+
+const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 20));
+
+const sampleFrame = (root: string): VfsSnapshotFrame => ({
+  type: 'snapshot',
+  root,
+  entries: [{ path: `${root}/x.txt`, kind: 'file', size: 1 }],
+  nodeModulesPresent: false,
+});
+
+describe('snapshot readiness handshake (P3)', () => {
+  it('owner publishes on a page snapshot-req (replaces the blind retry-storm)', async () => {
+    const port = 59401;
+    let published = 0;
+    const teardown = serveSnapshotRequests(port, () => {
+      published += 1;
+    });
+
+    requestVfsSnapshot(port);
+    await flush();
+
+    expect(published).toBe(1);
+    teardown();
+  });
+
+  it('round-trips: page request → owner publishes → page receives the snapshot', async () => {
+    const port = 59402;
+    const received: VfsSnapshotFrame[] = [];
+    const unsubscribe = subscribeVfsSnapshot(port, (frame) => received.push(frame));
+    // The owner answers a request by publishing its current tree.
+    const serve = serveSnapshotRequests(port, () =>
+      publishVfsSnapshot(port, sampleFrame('/workspace')),
+    );
+
+    requestVfsSnapshot(port);
+    await flush();
+
+    expect(received).toHaveLength(1);
+    expect(received[0]?.root).toBe('/workspace');
+    serve();
+    unsubscribe();
+  });
+
+  it('subscribeVfsSnapshot ignores the page→owner snapshot-req frame', async () => {
+    const port = 59403;
+    const received: VfsSnapshotFrame[] = [];
+    const unsubscribe = subscribeVfsSnapshot(port, (frame) => received.push(frame));
+
+    requestVfsSnapshot(port);
+    await flush();
+
+    expect(received).toHaveLength(0);
+    unsubscribe();
   });
 });

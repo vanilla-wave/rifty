@@ -41,7 +41,7 @@ import {
 import { SnapshotFs } from './glue/snapshot-fs.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
-import { subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
+import { requestVfsSnapshot, subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
 import { exportWorkspaceArchive, importWorkspaceArchive } from './glue/workspace-archive.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset, presetBootLines } from './presets.ts';
 import {
@@ -631,6 +631,10 @@ export function App(props: AppProps) {
       snapshotFs.update(frame);
       setNodeModulesPresent(frame.nodeModulesPresent);
     });
+    // Readiness handshake (ADR-0146 P3): ask the owner to publish now — covers
+    // the case where the owner came up before this subscription (its startup
+    // publish would have been missed), replacing the owner-side retry-storm.
+    requestVfsSnapshot(workspaceOwner.snapshotPort);
     onCleanup(unsubscribe);
   });
 

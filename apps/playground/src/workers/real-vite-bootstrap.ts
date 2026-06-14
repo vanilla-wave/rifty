@@ -61,7 +61,11 @@ import {
 } from '../glue/pty-protocol.ts';
 import { proxiedRegistryFetch } from '../glue/registry-fetch.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
-import { collectSnapshot, publishVfsSnapshot } from '../glue/vfs-snapshot-port.ts';
+import {
+  collectSnapshot,
+  publishVfsSnapshot,
+  serveSnapshotRequests,
+} from '../glue/vfs-snapshot-port.ts';
 import { type VfsWriteFrame, applyVfsWriteFrame, serveVfsWrites } from '../glue/vfs-write-port.ts';
 import {
   type BootstrapConfig,
@@ -320,7 +324,10 @@ async function bootShellOwner(opts: {
 
   seedProject(cfg);
   publishSnapshot();
-  for (const delay of [300, 1200, 3000]) setTimeout(publishSnapshot, delay);
+  // Readiness handshake (ADR-0146 P3): the page replies-via-request rather than
+  // us blind-republishing on a retry-storm. Startup publish above covers a page
+  // already subscribed; this covers a page that subscribes/reloads after us.
+  const tearSnapReq = serveSnapshotRequests(port, publishSnapshot);
 
   // Editor writes still land via the vfs-write bridge; the shell owner serves
   // its own (the preview HMR/vite tail is skipped entirely in shell mode).
@@ -357,6 +364,9 @@ async function bootShellOwner(opts: {
 
   const send = (frame: OwnerToPageFrame): void => {
     kernelIpc.send?.({ type: PTY_IPC_TYPE, frame });
+    // A finished command may have mutated the tree (e.g. `echo > f`, a program
+    // writing files); republish so the page explorer reflects it (ADR-0146 P3).
+    if (frame.type === 'pty:exit') publishSnapshot();
   };
   const server = createPtyServer({ send, makeShell });
 
@@ -378,6 +388,7 @@ async function bootShellOwner(opts: {
 
   // Referenced so the served bridges + server aren't GC'd while the realm serves.
   void tearVfsBridge;
+  void tearSnapReq;
   void tearNodeModulesBridge;
   void server;
 }
