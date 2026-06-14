@@ -8,10 +8,12 @@
  * only in {@link disposeContext}. Each context also gets one {@link Membrane}
  * (identity cache + wrappers) bound to it.
  *
- * Scope through T6: marshal guest completion values back to the host — primitives
+ * Scope through T7: marshal guest completion values back to the host — primitives
  * directly, OBJECT/ARRAY/FUNCTION through the {@link Membrane} (cross-realm
- * wrappers, identity-cached). No sandbox sharing, no host→guest object writes yet
- * (T7/T8); errors still throw raw (faithful error marshalling is T11).
+ * wrappers, identity-cached) — AND seed the live contextObject INTO the guest at
+ * context creation (T7 read path, `membrane.seedContext`). Host-side mutation
+ * re-sync between runs + guest→host write-back are T8; errors still throw raw
+ * (faithful error marshalling is T11).
  *
  * Disposal discipline (QUICKJS_API.md): a single leaked handle ABORTS the whole
  * WASM runtime at context teardown. Every PER-RUN handle (evalCode/unwrapResult)
@@ -47,8 +49,13 @@ function getOrCreateGuestRuntime(context: ContextObject): GuestRuntime {
   let rt = guestRuntimes.get(context);
   if (!rt) {
     const qctx = getQuickJsModuleSync().newContext();
-    rt = { qctx, membrane: new Membrane(qctx) };
+    const membrane = new Membrane(qctx);
+    rt = { qctx, membrane };
     guestRuntimes.set(context, rt);
+    // Seed the LIVE contextObject INTO the guest realm (T7 read path) BEFORE any
+    // run, so seeded names are readable on first eval. Host-side mutation re-sync
+    // between runs + guest→host write-back is T8.
+    membrane.seedContext(context);
   }
   return rt;
 }

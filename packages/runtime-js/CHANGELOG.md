@@ -12,6 +12,24 @@
   `node <script>`. `child_process.spawn('node', [script])` (worker path) now
   spawns this bootstrap instead of a raw `kind:'source'` worker, so a spawned
   script with a shebang / relative import runs via the loader.
+- **`node:vm` QuickJS engine — host→guest membrane: live contextObject read path
+  (T7, ADR-0138).** `Membrane.seedContext` seeds each own enumerable key of the
+  live contextObject INTO the guest realm before any run; the engine seeds at
+  context creation. Primitives by value; host objects/arrays via the extended
+  `marshalHostToGuest` as a host-origin-tagged guest SNAPSHOT — a real guest
+  array/object (recursively marshalled) with its prototype severed
+  (`Object.setPrototypeOf(v,null)`), the MIRROR of the outbound null-proto trick:
+  `Array.isArray` TRUE (real guest brand) but `instanceof Array`/`Object` FALSE
+  (cross-realm). Round-trip identity (#14): the seed carries a cross-realm marker
+  symbol (`Symbol.for('rifty.vm.hostOrigin')`) with a numeric id → host
+  `Map<id, originalHostObject>`; `wrapGuestToHost` checks it first and returns the
+  ORIGINAL host reference (symbol-keyed, so out of `Object.keys`/`JSON`). Inbound
+  identity cached host-side (`WeakMap<hostObject, guestSeed>`). SNAPSHOT only —
+  guest writes to a shared object aren't seen by the host yet; host-side re-sync +
+  guest→host write-back is T8, guest-callable host functions T9, inbound symbols
+  T10 (loud boundaries). Disposal: inbound seeds RETAINED (back live globals),
+  per-call dups disposed; never `ctx.dispose()` on the run path. Parity:
+  `cases/vm/quickjs-sandbox-read.case.ts`.
 - **`node:vm` QuickJS engine — guest→host membrane for OBJECT/ARRAY/FUNCTION
   completion values + identity cache (T6, ADR-0138).** New `Membrane`
   (`vm/membrane.ts`), one per `QuickJSContext`. Cross-realm-faithful host

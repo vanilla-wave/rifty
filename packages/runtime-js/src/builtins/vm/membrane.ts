@@ -1,5 +1,8 @@
 /**
- * Guest→host membrane for QuickJS completion values (T6).
+ * Two-way membrane between host + guest realms.
+ *
+ * Guest→host (T6): wrap guest completion values for the host.
+ * Host→guest (T7 read path): seed the live contextObject INTO the guest.
  *
  * Wraps OBJECT / FUNCTION / ARRAY guest values so the host sees them with
  * Node-faithful cross-realm identity. Real Node returns vm completion objects
@@ -37,6 +40,25 @@
  *                `instanceof Function` FALSE. The `apply` path marshals host args →
  *                guest (primitives only for now — full host→guest object marshalling
  *                is T7), calls the guest fn, and marshals the result back.
+ *
+ * Host→guest read path (T7, `seedContext`/`marshalHostToGuest`) — the MIRROR of
+ * the outbound technique. A host array/object seen in the guest must be
+ * `Array.isArray` TRUE (real guest brand) yet `instanceof Array`/`Object` FALSE
+ * (cross-realm proto break). We build a REAL guest array/object holding the
+ * recursively-marshalled elements, then sever its prototype in the guest
+ * (`Object.setPrototypeOf(v, null)`) — same null-proto trick, in reverse. This
+ * is a SNAPSHOT: a guest write to a shared object is NOT yet seen by the host
+ * (deep live mutation / write-back is T8). Guest-callable host FUNCTIONS are T9;
+ * inbound symbols are T10 (loud boundaries).
+ *
+ * Round-trip identity (#14): a host object marshalled IN then returned OUT must
+ * be the SAME host reference. The inbound seed is tagged with a cross-realm
+ * marker symbol (`Symbol.for('rifty.vm.hostOrigin')`) carrying a numeric
+ * host-origin id; the host keeps `Map<id, originalHostObject>`. `wrapGuestToHost`
+ * checks the marker first and returns the original. The marker is symbol-keyed,
+ * so it stays out of the guest's `Object.keys`/`JSON` view (verified). Inbound
+ * identity is also cached host-side (`WeakMap<hostObject, guestSeedHandle>`) so
+ * the same host object always seeds the SAME guest value.
  *
  * Identity cache (guest-side WeakMap id — see `#idOf`): handles are
  * NOT stable Map keys (`ctx.eq` only, QUICKJS_API.md), so the SAME guest object
@@ -79,6 +101,16 @@ const ID_REGISTRY_BOOTSTRAP = `
 /** Marker so the function wrapper can recover its retained guest handle (T7 round-trip). */
 const GUEST_HANDLE = Symbol('rifty.vm.guestHandle');
 
+/**
+ * Cross-realm Symbol key (registry) tagging a guest value as host-origin — it
+ * carries a numeric host-origin id. `Symbol.for` keeps it stable so the same
+ * symbol handle (`ctx.newSymbolFor`) reads the tag both when writing it on the
+ * inbound value and detecting it on the round-trip out. Symbol-keyed props are
+ * excluded from default `getOwnPropertyNames`/`JSON`/`Object.keys`, so the tag
+ * never leaks into the guest's view of keys (verified). T10 mirrors symbols.
+ */
+const HOST_ORIGIN_KEY = 'rifty.vm.hostOrigin';
+
 /** A host callable carrying the guest fn handle it forwards to. */
 interface GuestFunctionThunk {
   (...args: unknown[]): unknown;
@@ -95,8 +127,26 @@ export class Membrane {
   readonly #retained: QuickJSHandle[] = [];
   #idOfHandle: QuickJSHandle | undefined;
 
+  // --- Inbound (host→guest) bidirectional identity cache (T7 read path) ---
+  /** host object/array/fn → its single seeded guest handle (inbound identity). */
+  readonly #inboundGuest = new WeakMap<object, QuickJSHandle>();
+  /** host-origin id → ORIGINAL host object, for the round-trip OUT (#14). */
+  readonly #hostOrigins = new Map<number, object>();
+  #nextHostOriginId = 0;
+  /** Cached guest handle for the host-origin marker symbol (`Symbol.for(KEY)`). */
+  #hostOriginSym: QuickJSHandle | undefined;
+
   constructor(ctx: QuickJSContext) {
     this.#ctx = ctx;
+  }
+
+  /** Lazily-resolved guest handle for the host-origin marker symbol. */
+  #hostOriginSymbol(): QuickJSHandle {
+    if (!this.#hostOriginSym) {
+      this.#hostOriginSym = this.#ctx.newSymbolFor(HOST_ORIGIN_KEY);
+      this.#retained.push(this.#hostOriginSym);
+    }
+    return this.#hostOriginSym;
   }
 
   /** Stable numeric id for a guest object handle (lazy-installs the guest registry). */
@@ -129,6 +179,12 @@ export class Membrane {
   wrapGuestToHost(handle: QuickJSHandle): unknown {
     const ctx = this.#ctx;
     const kind = ctx.typeof(handle);
+    // Round-trip identity (#14): a guest value tagged host-origin is one we
+    // marshalled IN — return the ORIGINAL host object, never a fresh wrapper.
+    if (kind === 'object' || kind === 'function') {
+      const origin = this.#hostOriginOf(handle);
+      if (origin !== undefined) return origin;
+    }
     switch (kind) {
       case 'undefined':
         return undefined;
@@ -159,7 +215,17 @@ export class Membrane {
     }
   }
 
-  /** Minimal host→guest marshaller — PRIMITIVES only (full object marshalling is T7). */
+  /**
+   * Host→guest marshaller (T7 read path). PRIMITIVES become guest values by
+   * value; OBJECT/ARRAY become a host-origin-tagged guest SNAPSHOT (identity
+   * cached, so the same host object → the same guest value). The returned handle
+   * is OWNED by the caller — for cached objects/arrays it is a `dup` of the
+   * retained seed; primitives are fresh/constant per the existing convention.
+   *
+   * Snapshot, not live: a guest write to a shared object is NOT yet seen by the
+   * host (deep live mutation / write-back is T8). Host FUNCTION marshalling
+   * (guest calling a host fn) is T9 — loud boundary here.
+   */
   marshalHostToGuest(value: unknown): QuickJSHandle {
     const ctx = this.#ctx;
     switch (typeof value) {
@@ -173,13 +239,116 @@ export class Membrane {
         return value ? ctx.true : ctx.false;
       case 'bigint':
         return ctx.newBigInt(value);
-      case 'object':
+      case 'object': {
         if (value === null) return ctx.null;
-        // Host→guest OBJECT/ARRAY marshalling is T7.
-        throw new Error('vm: host→guest object marshalling not implemented (Task 7)');
+        return this.#marshalInboundObject(value);
+      }
+      case 'function':
+        // Guest-callable host functions (+ guest callbacks back to host) are T9.
+        throw new Error('vm: host→guest function marshalling not implemented (Task 9)');
       default:
-        // function / symbol host→guest is T7/T9.
-        throw new Error(`vm: host→guest ${typeof value} marshalling not implemented (Task 7)`);
+        // symbol host→guest is exotic mirroring — T10.
+        throw new Error(`vm: host→guest ${typeof value} marshalling not implemented (Task 10)`);
+    }
+  }
+
+  /**
+   * Marshal a host object/array INTO the guest as a host-origin-tagged snapshot.
+   * Returns a `dup` of the cached seed (caller owns it). Builds-once per host
+   * object (inbound identity cache) so re-marshalling yields the same guest
+   * value and the round-trip OUT recovers this same host object (#14).
+   */
+  #marshalInboundObject(value: object): QuickJSHandle {
+    const cached = this.#inboundGuest.get(value);
+    if (cached) return cached.dup();
+    const ctx = this.#ctx;
+    const isArray = Array.isArray(value);
+    // Build the snapshot. The seed handle is RETAINED (it backs the live seeded
+    // global); the returned dup is the caller's to dispose.
+    const seed = isArray ? ctx.newArray() : ctx.newObject();
+    if (isArray) {
+      const arr = value as unknown[];
+      for (let i = 0; i < arr.length; i++) {
+        const elem = this.marshalHostToGuest(arr[i]);
+        try {
+          ctx.setProp(seed, i, elem);
+        } finally {
+          if (!this.#isContextConstant(elem)) elem.dispose();
+        }
+      }
+    } else {
+      for (const key of Object.keys(value as Record<string, unknown>)) {
+        const elem = this.marshalHostToGuest((value as Record<string, unknown>)[key]);
+        try {
+          ctx.setProp(seed, key, elem);
+        } finally {
+          if (!this.#isContextConstant(elem)) elem.dispose();
+        }
+      }
+    }
+    // Tag host-origin (numeric id → original host object) BEFORE severing the
+    // prototype so the round-trip OUT returns the exact same host reference.
+    const id = this.#nextHostOriginId++;
+    this.#hostOrigins.set(id, value);
+    Scope.withScope((scope) => {
+      const idH = scope.manage(ctx.newNumber(id));
+      ctx.setProp(seed, this.#hostOriginSymbol(), idH);
+    });
+    // Sever the prototype: a host array seen in the guest is `Array.isArray`
+    // TRUE (real guest array brand) but `instanceof Array` FALSE (proto is not
+    // the guest Array.prototype) — mirrors the OUTBOUND null-proto technique.
+    this.#severPrototype(seed);
+    this.#inboundGuest.set(value, seed);
+    this.#retained.push(seed);
+    return seed.dup();
+  }
+
+  /** `Object.setPrototypeOf(handle, null)` in the guest. */
+  #severPrototype(handle: QuickJSHandle): void {
+    const ctx = this.#ctx;
+    Scope.withScope((scope) => {
+      const objectCtor = scope.manage(ctx.getProp(ctx.global, 'Object'));
+      const setProto = scope.manage(ctx.getProp(objectCtor, 'setPrototypeOf'));
+      ctx.unwrapResult(ctx.callFunction(setProto, ctx.undefined, handle, ctx.null)).dispose();
+    });
+  }
+
+  /**
+   * If the guest handle carries the host-origin marker, return the ORIGINAL host
+   * object; otherwise undefined. Reads the numeric id off the marker symbol.
+   */
+  #hostOriginOf(handle: QuickJSHandle): object | undefined {
+    const ctx = this.#ctx;
+    const markH = ctx.getProp(handle, this.#hostOriginSymbol());
+    try {
+      if (ctx.typeof(markH) !== 'number') return undefined;
+      return this.#hostOrigins.get(ctx.getNumber(markH));
+    } finally {
+      markH.dispose();
+    }
+  }
+
+  /**
+   * Seed the LIVE contextObject INTO the guest realm (T7 read path). Each own
+   * enumerable key becomes readable in the guest: primitives are defined by
+   * value; host objects/arrays are marshalled IN as host-origin-tagged guest
+   * snapshots. Defined as own enumerable, writable, configurable globals (a
+   * later guest reassignment shadows them — matches Node's contextified global).
+   *
+   * Re-sync of host-side mutations between runs + write-back of guest-invented
+   * globals is T8 — NOT done here (this seeds once, read-only semantics).
+   */
+  seedContext(context: Record<string, unknown>): void {
+    const ctx = this.#ctx;
+    for (const key of Object.keys(context)) {
+      const valueH = this.marshalHostToGuest(context[key]);
+      try {
+        // setProp (not defineProp) so the binding is a normal writable global —
+        // a guest `key = …` reassigns it rather than throwing.
+        ctx.setProp(ctx.global, key, valueH);
+      } finally {
+        if (!this.#isContextConstant(valueH)) valueH.dispose();
+      }
     }
   }
 
@@ -300,8 +469,9 @@ export class Membrane {
   /**
    * FUNCTION wrapper — callable Proxy over a host thunk (target stays a function so
    * the Proxy is callable) with a null proto (so `instanceof Function` FALSE). The
-   * thunk marshals host args → guest (primitives only — T7 adds objects), calls the
-   * guest fn, and marshals the result back through the membrane.
+   * thunk marshals host args → guest (primitives + objects/arrays via T7's extended
+   * `marshalHostToGuest`; host-fn args are T9), calls the guest fn, and marshals
+   * the result back through the membrane.
    */
   #wrapFunction(handle: QuickJSHandle): unknown {
     const ctx = this.#ctx;
