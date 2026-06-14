@@ -54,7 +54,7 @@ export type FsResult =
   | { readonly id: number; readonly ok: true; readonly value?: string | Uint8Array }
   | { readonly id: number; readonly ok: false; readonly error: SerializedRuntimeError };
 
-/** `node:vm` sandbox engine (ADR-0138): the real-realm QuickJS engine (default
+/** `node:vm` sandbox engine (ADR-0142): the real-realm QuickJS engine (default
  * after the T17 cutover) or the opt-in hardened-rewrite engine. */
 export type VmEngineName = 'quickjs' | 'rewrite';
 
@@ -64,7 +64,7 @@ export type HostMessage =
   | { readonly type: 'ping' }
   | { readonly type: 'load-fixture'; readonly files: Readonly<Record<string, string>> }
   | { readonly type: 'stdin'; readonly data: string | Uint8Array }
-  /** Programmatic `node:vm` engine override (ADR-0138). The worker applies it via
+  /** Programmatic `node:vm` engine override (ADR-0142). The worker applies it via
    * `setVmEngineOverride`, taking precedence over the `__RIFTY_VM_ENGINE` env. */
   | { readonly type: 'vm-config'; readonly engine: VmEngineName };
 

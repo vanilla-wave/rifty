@@ -24,7 +24,7 @@ const ctx = QuickJS.newContext();                                 // QuickJSCont
 - Result is a `SuccessOrFail`: success `{ value: handle }`, fail `{ error: handle }`. Use `ctx.unwrapResult(result)` → returns value handle OR throws (converting guest error to native).
 - `ctx.callMethod(thisH, key, args?)` = getProp+callFunction convenience.
 
-## Direct-eval stays in guest (FALSIFIES ADR-0138 premise)
+## Direct-eval stays in guest (FALSIFIES ADR-0138 premise; superseded by ADR-0142)
 `ctx.evalCode('eval("leaked=1")')` does NOT touch host `globalThis`. Verified: `typeof globalThis.leaked === 'undefined'` stays true. The guest realm is real & isolated; no host-leak via `eval`.
 
 ## Handle constants (getters, NOT methods; do NOT dispose them)

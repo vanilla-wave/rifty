@@ -1,8 +1,8 @@
 /**
  * `node:vm` public surface (dispatcher). Sandbox operations
  * (`runInContext`/`runInNewContext`/`Script.runInContext*`) delegate to the
- * selected {@link VmEngine} (rewrite today; quickjs after the T17 cutover —
- * ADR-0138). `runInThisContext` is NOT an engine op — it always runs in the host
+ * selected {@link VmEngine} (quickjs default; rewrite opt-in after the T17 cutover —
+ * ADR-0142). `runInThisContext` is NOT an engine op — it always runs in the host
  * realm via `(0,eval)`.
  *
  * Option-assertion + normalisation helpers and `createContext`/`isContext`/

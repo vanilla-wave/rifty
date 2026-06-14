@@ -5,8 +5,9 @@
  * function declarations are redirected onto the contextified object, then run in
  * the host realm under a `with (proxy) { eval(...) }` membrane.
  *
- * Permanent divergences (direct `eval`, global-object property attributes) are
- * recorded in ADR-0138 and `docs/backlog/runtime-js/vm-context-global-object-fidelity`.
+ * Rewrite-engine divergences (direct `eval`, global-object property attributes) are
+ * recorded in ADR-0138 (superseded by ADR-0142) and
+ * `docs/backlog/runtime-js/vm-context-global-object-fidelity`.
  */
 
 import type {
@@ -67,7 +68,8 @@ interface ContextRewrite {
 // Direct `eval(...)` in vm code evaluates UNREWRITTEN source, so writes to
 // undeclared names inside it leak to the host realm. Faithful interception needs
 // realm-level support this host-realm `with(proxy)+eval` design cannot provide —
-// a permanent divergence recorded in ADR-0138. `eval` is a helper binding so the
+// a rewrite-engine divergence recorded in ADR-0138 (superseded by ADR-0142;
+// the quickjs default closes this leak). `eval` is a helper binding so the
 // `with` proxy never shadows the host `eval` the rewritten code calls.
 const HELPER_BINDINGS = new Set<PropertyKey>(['__riftyVmContext', '__riftyVmSource', 'eval']);
 const activeHelperBindings = new Map<PropertyKey, number>();

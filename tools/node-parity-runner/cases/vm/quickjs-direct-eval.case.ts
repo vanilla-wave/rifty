@@ -1,7 +1,8 @@
 import type { ParityCase } from '../../src/types.ts';
 
 // T11 — direct `eval` inside the guest stays in the guest realm (FALSIFIES the
-// ADR-0138 premise that direct eval leaks to the host). Node oracle: the host
+// ADR-0138 premise that direct eval leaks to the host; ADR-0138 superseded by
+// ADR-0142). Node oracle: the host
 // `globalThis.leaked` is never defined; the guest's `leaked` global is observable
 // only via the contextObject (`sb.leaked`). Captured `undefined 1` via real Node.
 const c: ParityCase = {

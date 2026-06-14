@@ -123,7 +123,7 @@ const boot = (async () => {
     installMemoryFs();
   }
 
-  // Preload the QuickJS WASM engine into the boot promise (ADR-0138) so a
+  // Preload the QuickJS WASM engine into the boot promise (ADR-0142) so a
   // SYNCHRONOUS `vm.*` sandbox call in evaled code always finds the engine ready
   // (`getQuickJsModuleSync`). Eval awaits `boot`, so an early eval calling
   // `vm.runInNewContext` is safe. On preload failure, log + continue — the
@@ -173,7 +173,7 @@ self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
     writeProcessStdin(msg.data);
     return;
   }
-  // Programmatic `node:vm` engine override (ADR-0138). Synchronous — no backend
+  // Programmatic `node:vm` engine override (ADR-0142). Synchronous — no backend
   // needed; takes precedence over the `__RIFTY_VM_ENGINE` env in resolveVmEngineName.
   if (msg.type === 'vm-config') {
     setVmEngineOverride(msg.engine);

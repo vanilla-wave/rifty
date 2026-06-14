@@ -1,6 +1,6 @@
 /**
  * Shared `vm` types + the {@link VmEngine} interface the dispatcher
- * (`vm/index.ts`) selects between (rewrite today, quickjs later — ADR-0138 /
+ * (`vm/index.ts`) selects between (quickjs default, rewrite opt-in — ADR-0142 /
  * T17). `runInThisContext` is deliberately NOT on the engine: it always runs in
  * the host realm via `(0,eval)` and never goes through a sandbox engine.
  */

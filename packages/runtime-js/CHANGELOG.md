@@ -181,8 +181,8 @@
   error INTO the guest as a real guest exception of the matching ctor (so guest
   `try/catch` sees the right `e.constructor.name`/`e.message`). **Direct `eval`**
   inside the guest stays in the guest realm (parity `vm/quickjs-direct-eval`,
-  `typeof globalThis.leaked === 'undefined'`) — falsifies the ADR-0142 premise that
-  direct eval leaks to the host (T20 supersedes the ADR).
+  `typeof globalThis.leaked === 'undefined'`) — falsifies the ADR-0138 premise that
+  direct eval leaks to the host (T20 supersedes ADR-0138 with ADR-0142).
 - **`node:vm` QuickJS engine — exotic mirroring (Date/RegExp/TypedArray) + fn
   name/length + symbols (T10, ADR-0142).** Exotics now cross the membrane both ways
   matching Node's cross-realm behavior (parity `vm/quickjs-exotic`): `instanceof
@@ -505,7 +505,7 @@
   unbound names all land on the context. `switch` cases get a lexical scope;
   `for (var k in o)` no longer rewrites into a SyntaxError. Reads of unbound
   names stay loud (`ReferenceError`) / fall through to host globals by design.
-  The remaining `eval` divergence is recorded in ADR-0142.
+  The remaining `eval` divergence is recorded in ADR-0138 (superseded by ADR-0142).
 - **`node:vm` residual sandbox gaps closed.** Top-level function declarations are
   hoisted (callable before their text, incl. mutual recursion; a later `f = …`
   reassignment is visible), declaration statements keep Node's EMPTY completion
@@ -516,7 +516,7 @@
   known global of the context — readable as `undefined` after the run and in later
   runs — instead of leaking to the host realm afterwards. `vm.Script` memoises its
   AST rewrite (parse + rewrite once, reuse across runs). Direct `eval(...)` remains
-  a permanent divergence (ADR-0142). Closes the
+  a permanent divergence (ADR-0138, superseded by ADR-0142). Closes the
   `runtime-js/vm-sandbox-residual-gaps` backlog item; parity
   `cases/vm/sandbox-residual-gaps.case.ts`.
 - **Source-map decoding: 1-field VLQ segments advance the running generated

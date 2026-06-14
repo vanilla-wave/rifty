@@ -14,7 +14,7 @@
  * Each run is bracketed by `membrane.reseedContext` (host→guest, BEFORE — picks up
  * between-run host mutations) and `membrane.sweepContext` (guest→host, AFTER —
  * deep write-back + new globals). Sync run semantics make this observationally
- * equivalent to a live contextObject (ADR-0138, T8). A guest throw is marshalled
+ * equivalent to a live contextObject (ADR-0142, T8). A guest throw is marshalled
  * to a host THROWABLE — a cross-realm error mirror (`instanceof` FALSE,
  * `.constructor.name`/`.name`/`.message`/`.stack` faithful) or the raw primitive
  * for a non-Error throw (T11, via {@link Membrane#wrapGuestError}).
