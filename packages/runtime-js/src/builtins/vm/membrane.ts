@@ -8,8 +8,10 @@
  * Node-faithful cross-realm identity. Real Node returns vm completion objects
  * from the *guest* realm, so they fail `instanceof` against host constructors
  * while still being array-/object-/function-shaped. We reproduce that with host
- * Proxies whose `getPrototypeOf` trap returns `null` (cross-realm proto break)
- * and whose other traps route reads to the live guest handle.
+ * Proxies whose proto break is cross-realm: ARRAY/FUNCTION wrappers use a `null`
+ * `getPrototypeOf` trap, while the OBJECT wrapper returns the WRAPPED GUEST
+ * prototype (so the chain is guest-wrappers, never host Object.prototype — T12
+ * prototype/has coherence) and routes its other traps to the live guest handle.
  *
  * Verified Node oracle (parity case `vm/quickjs-returns-objects`):
  *   - array:    `instanceof Array` FALSE, `Array.isArray` TRUE, JSON/.map work.
@@ -28,13 +30,23 @@
  *                property reads (incl. `constructor`) route through `ctx.getProp`
  *                to the guest handle and back through the membrane, so
  *                `obj.constructor` resolves to the *guest* Object constructor
- *                (wrapped → never `=== host Object`). `getPrototypeOf:()=>null`
- *                gives `instanceof Object` FALSE. `ownKeys`+`getOwnPropertyDescriptor`
- *                drive `Object.keys`/JSON. The target MUST stay extensible and the
- *                reported descriptors MUST be `configurable:true` — a non-extensible
- *                target + null proto, or a non-configurable descriptor over an empty
- *                target, violates a Proxy invariant and throws. Faithful
- *                frozen/non-configurable descriptor mirroring is T12.
+ *                (wrapped → never `=== host Object`). `getPrototypeOf` returns the
+ *                WRAPPED GUEST prototype (cross-realm chain of guest-wrappers, never
+ *                host Object.prototype → `instanceof Object` FALSE,
+ *                `Object.getPrototypeOf(obj) !== host Object.prototype`, terminating
+ *                at the guest Object.prototype whose proto is null) while `has` does
+ *                a guest-side `key in guest` over that SAME chain (so `'toString' in
+ *                obj` is TRUE — T12 prototype/has coherence). `ownKeys`+
+ *                `getOwnPropertyDescriptor` drive `Object.keys`/JSON, the descriptor
+ *                reconstructed FAITHFULLY (real writable/enumerable/configurable, or
+ *                marshalled get/set) via the unreachable reflect closure (T12). Proxy
+ *                invariants for a non-configurable / frozen / non-extensible guest
+ *                object are satisfied by MIRRORING the relevant state onto the target
+ *                (a non-config own prop, a matching proto + `preventExtensions`) on
+ *                demand, keeping the empty target otherwise extensible.
+ *                `set`/`deleteProperty`/`defineProperty`/`preventExtensions` WRITE
+ *                THROUGH to the guest (Node: host mutating a returned guest object
+ *                writes to the guest; frozen → loose no-op / strict throw).
  *   - FUNCTION → `Proxy(hostThunk, {getPrototypeOf:()=>null})`. The target is a host
  *                function (keeps the Proxy callable); the null proto makes
  *                `instanceof Function` FALSE. The `apply` path marshals host args →
@@ -244,6 +256,60 @@ const EXOTIC_REBRAND_BOOTSTRAP = `
 })();
 `;
 
+/**
+ * Guest-side reflection helper as an UNREACHABLE closure (like the id registry +
+ * exotic rebrand) — the no-forgery discipline: retained host-side, NEVER exposed
+ * on the guest global, so guest code cannot reach it to influence the host's view.
+ *
+ * Returns a single function `(op, target, key, arg) => result` for the OUT object
+ * wrapper's faithful traps (T12). The host can't `Object.getOwnPropertyDescriptor`
+ * a guest object directly (no `ctx.getOwnPropertyDescriptor` — QUICKJS_API.md), so
+ * descriptors are reconstructed guest-side and read field-by-field by the host:
+ *   - `descriptor` → a fresh object `{present, isAccessor, value?, get?, set?,
+ *      writable, enumerable, configurable}` (the host marshals `value`/`get`/`set`
+ *      OUT through the membrane); `present:false` if `key` is not an own prop.
+ *   - `getProto` → the object's [[Prototype]] (a guest object or null) for the
+ *      wrapper's `getPrototypeOf` (wrapped OUT → cross-realm proto chain).
+ *   - `has` → `key in target` (walks the guest prototype chain) for `has`.
+ *   - `isExtensible` → `Object.isExtensible(target)`.
+ *   - `set` → `target[key] = arg` (host→guest write-through); returns whether the
+ *      assignment took (false on a frozen/read-only prop, matching Node's loose
+ *      `set` trap result), so the host trap returns it.
+ *   - `delete` → `delete target[key]`; returns the result.
+ *   - `define` → `Object.defineProperty(target, key, arg)` write-through (`arg` is a
+ *      guest descriptor the host built — data, or accessor with marshalled guest fns).
+ *   - `preventExtensions` → `Object.preventExtensions(target)`.
+ * `key` is passed as a guest handle (string OR symbol) so symbol-keyed props work.
+ */
+const REFLECT_BOOTSTRAP = `
+(() => {
+  const gOPD = Object.getOwnPropertyDescriptor;
+  return (op, target, key, arg) => {
+    switch (op) {
+      case 'descriptor': {
+        const d = gOPD(target, key);
+        if (d === undefined) return { present: false };
+        const isAccessor = ('get' in d) || ('set' in d);
+        return isAccessor
+          ? { present: true, isAccessor: true, get: d.get, set: d.set, enumerable: d.enumerable, configurable: d.configurable }
+          : { present: true, isAccessor: false, value: d.value, writable: d.writable, enumerable: d.enumerable, configurable: d.configurable };
+      }
+      case 'getProto': return Object.getPrototypeOf(target);
+      case 'has': return (key in target);
+      case 'isExtensible': return Object.isExtensible(target);
+      // Reflect.set / Reflect.deleteProperty return the spec success boolean WITHOUT
+      // throwing — false on a frozen/read-only/non-extensible-new prop, matching
+      // Node's loose host trap (silent no-op; host then rejects strict writes).
+      case 'set': return Reflect.set(target, key, arg);
+      case 'delete': return Reflect.deleteProperty(target, key);
+      case 'define': { Object.defineProperty(target, key, arg); return true; }
+      case 'preventExtensions': { Object.preventExtensions(target); return true; }
+      default: throw new TypeError('vm reflect: unknown op ' + op);
+    }
+  };
+})();
+`;
+
 /** Host TypedArray constructors keyed by `Object.prototype.toString` brand tag. */
 const TYPED_ARRAY_CTORS = {
   Int8Array,
@@ -373,6 +439,8 @@ export class Membrane {
   readonly #exoticFactories = new Map<string, QuickJSHandle>();
   /** Lazily-installed guest exotic rebrand closure (`EXOTIC_REBRAND_BOOTSTRAP`), infra-tracked. */
   #rebrandHandle: QuickJSHandle | undefined;
+  /** Lazily-installed guest reflection closure (`REFLECT_BOOTSTRAP`, T12), infra-tracked. */
+  #reflectHandle: QuickJSHandle | undefined;
 
   constructor(ctx: QuickJSContext) {
     this.#ctx = ctx;
@@ -865,16 +933,28 @@ export class Membrane {
   /**
    * OBJECT wrapper — Proxy over a fresh EXTENSIBLE empty target. Reads route to the
    * guest handle via `ctx.getProp` (incl. `constructor` → guest Object ctor wrapped
-   * → `!== host Object`); null proto → `instanceof Object` FALSE; ownKeys +
-   * getOwnPropertyDescriptor drive `Object.keys`/JSON. Descriptors are reported
-   * `configurable:true` to satisfy Proxy invariants over an empty target (faithful
-   * frozen/non-config mirroring is T12).
+   * → `!== host Object`); `getPrototypeOf` returns the WRAPPED GUEST prototype so
+   * the proto CHAIN is guest-wrappers (`instanceof Object` FALSE, `getPrototypeOf
+   * !== host Object.prototype`, terminating at the guest Object.prototype whose
+   * proto is null) while `'toString' in obj` is TRUE — `has` does a guest-side
+   * `key in guest` walking that same chain (T6 prototype/has coherence). ownKeys +
+   * getOwnPropertyDescriptor drive `Object.keys`/JSON.
+   *
+   * Descriptor fidelity (T12): `getOwnPropertyDescriptor` reconstructs the REAL
+   * guest descriptor (writable/enumerable/configurable, or get/set marshalled OUT)
+   * via the unreachable reflect closure. Proxy invariants: a non-configurable guest
+   * prop is MIRRORED as a matching non-configurable own prop on the target (else the
+   * trap report is rejected); a frozen/non-extensible guest object makes the target
+   * non-extensible too (after aligning its proto), so `Object.isFrozen`/`isSealed`/
+   * `isExtensible` are faithful. `set`/`deleteProperty`/`defineProperty`/
+   * `preventExtensions` WRITE THROUGH to the guest (Node: host mutating a returned
+   * guest object writes to the guest; rejected on frozen → loose no-op / strict throw).
    *
    * Symbol-keyed props (T10): `ownKeys` also lists the guest's own SYMBOL keys
    * (marshalled OUT to host symbols → `Object.getOwnPropertySymbols` works), and
-   * `get`/`has`/`getOwnPropertyDescriptor` route a host symbol key BACK to a guest
-   * symbol handle (`#guestSymbolHandleFor`) so `obj[sym]` reads and well-known
-   * iteration (`[...obj]` via `Symbol.iterator`) resolve to the guest member.
+   * `get`/`has`/`getOwnPropertyDescriptor`/`set`/`deleteProperty` route a host
+   * symbol key BACK to a guest symbol handle (`#guestSymbolHandleFor`) so `obj[sym]`
+   * reads/writes and well-known iteration (`[...obj]` via `Symbol.iterator`) resolve.
    */
   #wrapObject(handle: QuickJSHandle, id: number): unknown {
     const ctx = this.#ctx;
@@ -916,40 +996,53 @@ export class Membrane {
       }
     };
     const hasSymbolKey = (key: symbol): boolean => ownSymbolKeys().includes(key);
+    const hasOwn = (key: string | symbol): boolean =>
+      typeof key === 'symbol' ? hasSymbolKey(key) : ownStringKeys().includes(key);
+
+    // Bring the target into agreement with the guest BEFORE a structural trap
+    // result (descriptor/isExtensible/preventExtensions) so the Proxy invariants
+    // hold: non-configurable guest props become matching non-configurable own props
+    // on the target, and a non-extensible guest object makes the target
+    // non-extensible (with a matching wrapped proto). Lazy + idempotent.
+    const syncTarget = (key?: string | symbol): void => {
+      this.#syncTargetWith(target, guest, () => this.#wrappedGuestProto(guest), key);
+    };
 
     const wrapper = new Proxy(target, {
-      getPrototypeOf: () => null,
+      getPrototypeOf: () => this.#wrappedGuestProto(guest),
       get(_t, key) {
         if (typeof key === 'symbol' && !hasSymbolKey(key)) return undefined;
         return readProp(key);
       },
-      has(_t, key) {
-        if (typeof key === 'symbol') return hasSymbolKey(key);
-        return ownStringKeys().includes(key);
-      },
+      has: (_t, key) => this.#reflectHas(guest, key),
       ownKeys() {
         return [...ownStringKeys(), ...ownSymbolKeys()];
       },
-      getOwnPropertyDescriptor(_t, key) {
-        if (typeof key === 'symbol') {
-          if (!hasSymbolKey(key)) return undefined;
-        } else if (!ownStringKeys().includes(key)) {
-          return undefined;
-        }
-        const value = readProp(key);
-        // configurable:true REQUIRED over an empty target (Proxy invariant). T12
-        // reconstructs the real writable/enumerable/configurable flags.
-        return { value, writable: true, enumerable: true, configurable: true };
+      getOwnPropertyDescriptor: (_t, key) => {
+        if (!hasOwn(key)) return undefined;
+        syncTarget(key);
+        return this.#reflectDescriptor(guest, key);
       },
-      set() {
-        // Host MUTATING a returned guest-realm object (live host→guest write on
-        // an OUT wrapper) is distinct from T8's contextObject write-back (which
-        // reconciles GUEST writes back to the host). Live OUT-wrapper mutation is
-        // bidirectional-liveness — T9. Loud boundary.
-        throw new Error('vm: host write to returned guest object not implemented (Task 9)');
+      isExtensible: (_t) => {
+        syncTarget();
+        return Reflect.isExtensible(_t);
       },
-      deleteProperty() {
-        throw new Error('vm: host delete on returned guest object not implemented (Task 9)');
+      preventExtensions: (_t) => {
+        // Write through to the guest, then realign the target to the now-frozen
+        // guest so `Reflect.isExtensible(target)` is false (invariant: the trap
+        // must report the target's real extensibility).
+        this.#reflectPreventExtensions(guest);
+        syncTarget();
+        return !Reflect.isExtensible(_t);
+      },
+      set: (_t, key, value) => this.#reflectSet(guest, key, value),
+      deleteProperty: (_t, key) => this.#reflectDelete(guest, key),
+      defineProperty: (_t, key, desc) => {
+        const ok = this.#reflectDefine(guest, key, desc);
+        // A non-configurable define must be mirrored onto the target so a later
+        // `getOwnPropertyDescriptor`/`isExtensible` report stays invariant-consistent.
+        if (ok && desc.configurable === false) syncTarget(key);
+        return ok;
       },
     });
     // dup+track the guest handle (and record the OUT round-trip) via the shared
@@ -959,12 +1052,273 @@ export class Membrane {
     return wrapper;
   }
 
+  // ===========================================================================
+  // Object-wrapper reflection (T12): faithful descriptor / proto / has / mutation.
+  // ===========================================================================
+
+  /**
+   * Call the unreachable guest reflect closure (`REFLECT_BOOTSTRAP`) and return the
+   * RESULT handle (caller owns + disposes). `op` selects the operation; `key`/`arg`
+   * are optional guest handles. The closure is lazily installed + infra-tracked (it
+   * is NEVER exposed on the guest global, preserving the no-forgery discipline).
+   */
+  #callReflect(
+    op: string,
+    target: QuickJSHandle,
+    key?: QuickJSHandle,
+    arg?: QuickJSHandle,
+  ): QuickJSHandle {
+    const ctx = this.#ctx;
+    if (!this.#reflectHandle) {
+      this.#reflectHandle = ctx.unwrapResult(ctx.evalCode(REFLECT_BOOTSTRAP));
+      this.#lifetime.trackInfra(this.#reflectHandle);
+    }
+    return Scope.withScope((scope) => {
+      const opH = scope.manage(ctx.newString(op));
+      const args: QuickJSHandle[] = [opH, target, key ?? ctx.undefined, arg ?? ctx.undefined];
+      // The returned handle must OUTLIVE the scope — do NOT manage it here.
+      return ctx.unwrapResult(
+        ctx.callFunction(this.#reflectHandle as QuickJSHandle, ctx.undefined, ...args),
+      );
+    });
+  }
+
+  /** Transient guest key handle for a host property key (string OR symbol). Caller disposes. */
+  #guestKeyHandle(key: string | symbol): QuickJSHandle {
+    return typeof key === 'symbol' ? this.#guestSymbolHandleFor(key) : this.#ctx.newString(key);
+  }
+
+  /** Wrapped-OUT host view of a guest object's [[Prototype]] (null if guest proto is null). */
+  #wrappedGuestProto(guest: QuickJSHandle): object | null {
+    const protoH = this.#callReflect('getProto', guest);
+    try {
+      const wrapped = this.wrapGuestToHost(protoH);
+      // Guest proto is an object or null; `wrapGuestToHost` returns the wrapper
+      // (identity-cached → stable `getPrototypeOf`) or null. Never a primitive.
+      return wrapped as object | null;
+    } finally {
+      protoH.dispose();
+    }
+  }
+
+  /** Guest-side `key in guest` (walks the guest prototype chain) for the `has` trap. */
+  #reflectHas(guest: QuickJSHandle, key: string | symbol): boolean {
+    const keyH = this.#guestKeyHandle(key);
+    try {
+      const r = this.#callReflect('has', guest, keyH);
+      try {
+        return this.#ctx.dump(r) === true;
+      } finally {
+        r.dispose();
+      }
+    } finally {
+      keyH.dispose();
+    }
+  }
+
+  /**
+   * Reconstruct a guest own-property descriptor as a host descriptor (T12). Data
+   * props carry the real writable/enumerable/configurable + marshalled value;
+   * accessor props carry the marshalled get/set fns. Returns undefined if the key
+   * is not an own prop. The caller has already mirrored a non-configurable prop onto
+   * the target (`syncTarget`) so the Proxy invariant holds.
+   */
+  #reflectDescriptor(guest: QuickJSHandle, key: string | symbol): PropertyDescriptor | undefined {
+    const keyH = this.#guestKeyHandle(key);
+    try {
+      const d = this.#callReflect('descriptor', guest, keyH);
+      try {
+        if (this.#readBool(d, 'present') !== true) return undefined;
+        const enumerable = this.#readBool(d, 'enumerable') === true;
+        const configurable = this.#readBool(d, 'configurable') === true;
+        if (this.#readBool(d, 'isAccessor') === true) {
+          return {
+            get: this.#readField(d, 'get') as PropertyDescriptor['get'],
+            set: this.#readField(d, 'set') as PropertyDescriptor['set'],
+            enumerable,
+            configurable,
+          };
+        }
+        return {
+          value: this.#readField(d, 'value'),
+          writable: this.#readBool(d, 'writable') === true,
+          enumerable,
+          configurable,
+        };
+      } finally {
+        d.dispose();
+      }
+    } finally {
+      keyH.dispose();
+    }
+  }
+
+  /** Host→guest write-through `set` (`Reflect.set` semantics → success boolean). */
+  #reflectSet(guest: QuickJSHandle, key: string | symbol, value: unknown): boolean {
+    const ctx = this.#ctx;
+    const keyH = this.#guestKeyHandle(key);
+    const argH = this.marshalHostToGuest(value);
+    try {
+      const r = this.#callReflect('set', guest, keyH, argH);
+      try {
+        return ctx.dump(r) === true;
+      } finally {
+        r.dispose();
+      }
+    } finally {
+      keyH.dispose();
+      if (!this.#isContextConstant(argH)) argH.dispose();
+    }
+  }
+
+  /** Host→guest write-through `deleteProperty` (`Reflect.deleteProperty` → boolean). */
+  #reflectDelete(guest: QuickJSHandle, key: string | symbol): boolean {
+    const ctx = this.#ctx;
+    const keyH = this.#guestKeyHandle(key);
+    try {
+      const r = this.#callReflect('delete', guest, keyH);
+      try {
+        return ctx.dump(r) === true;
+      } finally {
+        r.dispose();
+      }
+    } finally {
+      keyH.dispose();
+    }
+  }
+
+  /** Host→guest write-through `preventExtensions`. */
+  #reflectPreventExtensions(guest: QuickJSHandle): void {
+    this.#callReflect('preventExtensions', guest).dispose();
+  }
+
+  /**
+   * Host→guest write-through `defineProperty` (T12). Builds a guest descriptor object
+   * (value or get/set marshalled IN), then `Object.defineProperty(guest, key, desc)`.
+   */
+  #reflectDefine(guest: QuickJSHandle, key: string | symbol, desc: PropertyDescriptor): boolean {
+    const ctx = this.#ctx;
+    const keyH = this.#guestKeyHandle(key);
+    const descH = this.#guestDescriptor(desc);
+    try {
+      const r = this.#callReflect('define', guest, keyH, descH);
+      try {
+        return ctx.dump(r) === true;
+      } finally {
+        r.dispose();
+      }
+    } finally {
+      keyH.dispose();
+      descH.dispose();
+    }
+  }
+
+  /** Build a guest descriptor object from a host one (value/get/set marshalled IN). Caller disposes. */
+  #guestDescriptor(desc: PropertyDescriptor): QuickJSHandle {
+    const ctx = this.#ctx;
+    const g = ctx.newObject();
+    const setField = (k: string, v: unknown): void => {
+      const vh = this.marshalHostToGuest(v);
+      try {
+        ctx.setProp(g, k, vh);
+      } finally {
+        if (!this.#isContextConstant(vh)) vh.dispose();
+      }
+    };
+    try {
+      if ('value' in desc) setField('value', desc.value);
+      if ('writable' in desc) setField('writable', desc.writable);
+      if ('get' in desc) setField('get', desc.get);
+      if ('set' in desc) setField('set', desc.set);
+      if ('enumerable' in desc) setField('enumerable', desc.enumerable);
+      if ('configurable' in desc) setField('configurable', desc.configurable);
+    } catch (err) {
+      g.dispose();
+      throw err;
+    }
+    return g;
+  }
+
+  /**
+   * Mirror the guest object's invariant-relevant state onto the wrapper's target so
+   * the Proxy invariants hold (T12): any NON-CONFIGURABLE own prop becomes a
+   * matching own prop on the target, and if the guest is NON-EXTENSIBLE the target's
+   * proto is aligned to the wrapped guest proto and the target is sealed
+   * non-extensible. Lazy + idempotent (skips props already on the target). `key`
+   * scopes the prop sync to one key (descriptor/define path); omitted = all own
+   * string keys (isExtensible/preventExtensions path).
+   */
+  #syncTargetWith(
+    target: Record<PropertyKey, unknown>,
+    guest: QuickJSHandle,
+    protoFor: () => object | null,
+    key?: string | symbol,
+  ): void {
+    const ctx = this.#ctx;
+    const keys: (string | symbol)[] =
+      key !== undefined
+        ? [key]
+        : Scope.withScope((scope) => {
+            const names = scope.manage(ctx.getOwnPropertyNames(guest).unwrap());
+            return names.map((k) => ctx.getString(k));
+          });
+    for (const k of keys) {
+      if (Object.prototype.hasOwnProperty.call(target, k)) continue;
+      const desc = this.#reflectDescriptor(guest, k);
+      if (desc === undefined || desc.configurable !== false) continue;
+      // A non-configurable guest prop MUST exist on the target with a compatible
+      // descriptor (Proxy invariant). Mirror it exactly (the marshalled value is
+      // identity-cached, so the `get` trap returns the SAME reference — the
+      // non-config/non-writable `get` invariant holds).
+      Object.defineProperty(target, k, desc);
+    }
+    // Non-extensible guest → make the target non-extensible too (after aligning its
+    // proto, so the `getPrototypeOf` invariant on a non-extensible target holds).
+    if (Reflect.isExtensible(target) && !this.#reflectIsExtensible(guest)) {
+      Object.setPrototypeOf(target, protoFor());
+      Object.preventExtensions(target);
+    }
+  }
+
+  /** Guest-side `Object.isExtensible(guest)`. */
+  #reflectIsExtensible(guest: QuickJSHandle): boolean {
+    const r = this.#callReflect('isExtensible', guest);
+    try {
+      return this.#ctx.dump(r) === true;
+    } finally {
+      r.dispose();
+    }
+  }
+
+  /** Read a boolean field off a guest result object. */
+  #readBool(obj: QuickJSHandle, key: string): boolean {
+    const ctx = this.#ctx;
+    return Scope.withScope((scope) => {
+      const h = scope.manage(ctx.getProp(obj, key));
+      return ctx.dump(h) === true;
+    });
+  }
+
+  /** Marshal a field off a guest result object OUT to a host value. */
+  #readField(obj: QuickJSHandle, key: string): unknown {
+    const ctx = this.#ctx;
+    const h = ctx.getProp(obj, key);
+    try {
+      return this.wrapGuestToHost(h);
+    } finally {
+      h.dispose();
+    }
+  }
+
   /**
    * FUNCTION wrapper — callable Proxy over a host thunk (target stays a function so
    * the Proxy is callable) with a null proto (so `instanceof Function` FALSE). The
    * thunk marshals host args → guest (primitives + objects/arrays + host fns via
-   * `marshalHostToGuest`), calls the guest fn, and marshals the result back. The
-   * guest handle is DUP+RETAINED so the host can call the wrapper AFTER the run —
+   * `marshalHostToGuest`), marshals the `this` binding (so a returned guest METHOD
+   * called as `obj.method()` / `fn.call(obj, …)` runs with the right guest receiver
+   * — the wrapper `this` round-trips back to its guest object via `#outWrapperGuest`,
+   * T12 prototype/has coherence), calls the guest fn, and marshals the result back.
+   * The guest handle is DUP+RETAINED so the host can call the wrapper AFTER the run —
    * e.g. a guest callback passed to a host fn and stored (`keep(cb); stored()`).
    */
   #wrapFunction(handle: QuickJSHandle, id: number): unknown {
@@ -975,20 +1329,27 @@ export class Membrane {
     // biome-ignore lint/style/useConst: late-bound across the thunk closure — see above.
     let guest!: QuickJSHandle;
 
-    const thunk = (...args: unknown[]): unknown => {
+    // Regular function (NOT arrow) so it has its OWN `this` — bound by the Proxy's
+    // default `apply` to the receiver (`obj.method()` → the wrapper; `fn.call(o)` →
+    // `o`). `this` is marshalled IN as the guest call receiver.
+    const self = this;
+    function thunk(this: unknown, ...args: unknown[]): unknown {
       return Scope.withScope((scope) => {
-        const argHandles = args.map((a) => {
-          const h = this.marshalHostToGuest(a);
+        const manageArg = (h: QuickJSHandle): QuickJSHandle =>
           // Context constants (undefined/null/true/false) are context-owned — never
           // manage them for disposal; only manage freshly-created arg handles.
-          return this.#isContextConstant(h) ? h : scope.manage(h);
-        });
-        const ret = scope.manage(
-          ctx.unwrapResult(ctx.callFunction(guest, ctx.undefined, ...argHandles)),
-        );
-        return this.wrapGuestToHost(ret);
+          self.#isContextConstant(h) ? h : scope.manage(h);
+        // Marshal `this`: undefined/non-object receivers call with guest undefined;
+        // a wrapper receiver round-trips to its own guest object (`#outWrapperGuest`).
+        const thisH =
+          this === undefined || this === null
+            ? ctx.undefined
+            : manageArg(self.marshalHostToGuest(this));
+        const argHandles = args.map((a) => manageArg(self.marshalHostToGuest(a)));
+        const ret = scope.manage(ctx.unwrapResult(ctx.callFunction(guest, thisH, ...argHandles)));
+        return self.wrapGuestToHost(ret);
       });
-    };
+    }
 
     // Fidelity (T10): a returned guest fn must report the GUEST fn's `name` and
     // `length`, not the host thunk's (`'thunk'`/0). Read them off the guest handle
@@ -1057,7 +1418,7 @@ export class Membrane {
       p = Object.getPrototypeOf(p)
     ) {
       for (const name of Object.getOwnPropertyNames(p)) {
-        if (name === 'constructor') continue; // replaced with the guest ctor below
+        if (name === 'constructor') continue; // OMITTED — documented residual (see this method's doc)
         if (Object.prototype.hasOwnProperty.call(proto, name)) continue;
         Object.defineProperty(
           proto,

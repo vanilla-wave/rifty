@@ -4,6 +4,32 @@
 
 ### Added
 
+- **`node:vm` QuickJS engine — descriptor fidelity + frozen + prototype/has
+  coherence (T12, ADR-0138).** The OUT object wrapper now reports the GUEST
+  object's REAL descriptors and a coherent prototype/`has` view, and writes
+  host→guest mutations through where Node allows (parity `vm/quickjs-descriptors`,
+  diffed byte-for-byte against real Node). `getOwnPropertyDescriptor` reconstructs
+  the real writable/enumerable/configurable flags (or marshalled get/set for an
+  accessor) via an UNREACHABLE guest reflect closure (no `ctx.getOwnPropertyDescriptor`
+  in the API — the no-forgery discipline, like the id registry). A frozen guest
+  object → `Object.isFrozen(wrapper)` TRUE, sealed → `isSealed` TRUE, writes rejected
+  (loose no-op / strict TypeError); Proxy invariants are satisfied by mirroring a
+  non-configurable prop as a matching non-config own prop on the target and sealing
+  the target non-extensible (with an aligned proto) when the guest is non-extensible,
+  while the empty target otherwise stays extensible. `getPrototypeOf` now returns the
+  WRAPPED GUEST prototype (cross-realm chain of guest-wrappers terminating at the
+  guest Object.prototype whose proto is null) and `has` does a guest-side `key in
+  guest` over that chain — so `'toString' in obj` is TRUE and `obj.toString()` works
+  while `obj instanceof Object` / `obj.constructor === Object` /
+  `Object.getPrototypeOf(obj) === host Object.prototype` stay FALSE (T6 carry-over:
+  the prior null-proto + own-keys-only `has` was self-contradictory). `set`/
+  `deleteProperty`/`defineProperty`/`preventExtensions` WRITE THROUGH to the guest
+  (host mutating a returned guest object writes to the guest; the guest sees it
+  live), replacing the prior loud T9 boundaries. The OUT function wrapper now
+  marshals the `this` receiver, so a returned guest METHOD called as `obj.method()`
+  / `fn.call(obj)` runs with the right guest `this` (needed for proto-chain methods
+  like `obj.hasOwnProperty('x')`). New retained handle: the reflect closure
+  (infra-tracked, disposed at teardown — GC test green under `--expose-gc`).
 - **`node:vm` QuickJS engine — cross-realm Error marshalling + direct-eval
   isolation (T11, ADR-0138).** A guest throw now crosses the membrane as a host
   THROWABLE matching Node's cross-realm shape (parity `vm/quickjs-errors`):
