@@ -39,6 +39,7 @@ import {
   type SerializedResponse,
   setupPreviewBridge,
 } from '@riftydev/service-worker';
+import { Shell } from '@riftydev/shell';
 import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 import type { SqlJsConfig } from 'sql.js';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
@@ -50,7 +51,14 @@ import {
   setupHmrBridge,
 } from '../glue/hmr-bridge.ts';
 import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
+import { createNpmShellCommand } from '../glue/npm-shell-command.ts';
 import { ensureProjectDependencies } from '../glue/project-deps.ts';
+import {
+  type OwnerToPageFrame,
+  PTY_IPC_TYPE,
+  isPageToOwner,
+  isPtyIpcMessage,
+} from '../glue/pty-protocol.ts';
 import { proxiedRegistryFetch } from '../glue/registry-fetch.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { collectSnapshot, publishVfsSnapshot } from '../glue/vfs-snapshot-port.ts';
@@ -62,6 +70,8 @@ import {
   resolveBootstrapConfig,
 } from '../templates/project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
+import { createOwnerBinExecutor } from './owner-bin-executor.ts';
+import { createPtyServer } from './pty-server.ts';
 import { type ViteModuleGraph, invalidateViteModule } from './real-vite-invalidation.ts';
 
 const enc = new TextEncoder();
@@ -101,10 +111,13 @@ interface ProcStdio {
   stderr?: { write?: unknown };
   env?: Record<string, string | undefined>;
   on?(event: 'message', handler: (message: unknown) => void): unknown;
+  send?(message: unknown): unknown;
 }
 
 interface KernelIpc {
   onMessage?(handler: (message: unknown) => void): void;
+  /** Fork-IPC send back to the page (ADR-0045); absent when no IPC channel. */
+  send?(message: unknown): void;
 }
 
 interface VfsWriteIpcMessage {
@@ -136,6 +149,15 @@ function installRuntimeGlobals(): KernelIpc {
           prev.on?.('message', handler);
         }
       : undefined;
+  // The fork-IPC `send` lives on the kernel pre-entry process shim; the
+  // installProcessGlobals swap below drops it, so capture it (bound) BEFORE the
+  // swap — the pty server posts owner→page frames through it (ADR-0146).
+  const kSend =
+    typeof prev?.send === 'function'
+      ? (message: unknown) => {
+          prev.send?.(message);
+        }
+      : undefined;
   installProcessGlobals();
   installTimerGlobals();
   (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
@@ -143,7 +165,7 @@ function installRuntimeGlobals(): KernelIpc {
   if (kStdout && typeof kStdout.write === 'function') proc.stdout = kStdout;
   if (kStderr && typeof kStderr.write === 'function') proc.stderr = kStderr;
   if (kEnv) proc.env = kEnv;
-  return { onMessage: kOnMessage };
+  return { onMessage: kOnMessage, send: kSend };
 }
 
 function seedProject(cfg: BootstrapConfig): void {
@@ -280,11 +302,88 @@ async function bootNodeServer(cfg: NodeServerBootstrapConfig, loader: Loader): P
   log(`[real-vite/worker] server is listening on internal port ${cfg.port}\n`);
 }
 
+/**
+ * Shell-mode workspace owner (ADR-0146 P2): this realm hosts the resident
+ * `Shell` per terminal session and dispatches the page's `pty:*` frames against
+ * it. npm + the in-realm `.bin` executor run HERE against this realm's
+ * `syncMirror()` (the tree the install writes), closing the ADR-0143 gap where a
+ * page-side bin saw an empty worker store. The vite/node-server tail is SKIPPED;
+ * the realm stays alive on `serve:true` via its open IPC channel + served bridges.
+ */
+async function bootShellOwner(opts: {
+  readonly cfg: BootstrapConfig;
+  readonly port: number;
+  readonly kernelIpc: KernelIpc;
+  readonly publishSnapshot: () => void;
+}): Promise<void> {
+  const { cfg, port, kernelIpc, publishSnapshot } = opts;
+
+  seedProject(cfg);
+  publishSnapshot();
+  for (const delay of [300, 1200, 3000]) setTimeout(publishSnapshot, delay);
+
+  // Editor writes still land via the vfs-write bridge; the shell owner serves
+  // its own (the preview HMR/vite tail is skipped entirely in shell mode).
+  const tearVfsBridge = serveVfsWrites(port, { onWrite: () => publishSnapshot() });
+
+  // npm + bin both write/read this realm's tree (the install lands here, so a
+  // resolved `.bin` shim is real — ADR-0143). The npm command refreshes the
+  // page explorer after a successful install via the snapshot republish.
+  const vfs = new SyncMirrorVfs();
+  const registry = new RegistryClient({ fetch: proxiedRegistryFetch() });
+  const npmCommand = createNpmShellCommand({
+    vfs,
+    registry,
+    flush: flushSyncMirror,
+  });
+  const ownerBinExecutor = createOwnerBinExecutor();
+
+  const makeShell = (): Shell => {
+    const shell = new Shell({ cwd: cfg.root, env: {}, execBin: ownerBinExecutor });
+    shell.registerCommand('npm', async (args, ctx) => {
+      const code = await npmCommand(args, ctx);
+      // node_modules now present (or changed) — refresh the page's view.
+      publishSnapshot();
+      return code;
+    });
+    return shell;
+  };
+
+  const send = (frame: OwnerToPageFrame): void => {
+    kernelIpc.send?.({ type: PTY_IPC_TYPE, frame });
+  };
+  const server = createPtyServer({ send, makeShell });
+
+  kernelIpc.onMessage?.((message) => {
+    if (isPtyIpcMessage(message)) {
+      // Only page→owner frames are inbound here; ignore a stray owner→page echo.
+      if (isPageToOwner(message.frame)) void server.handleFrame(message.frame);
+      return;
+    }
+    if (isVfsWriteIpcMessage(message)) {
+      applyVfsWriteFrame(message.frame, { onWrite: () => publishSnapshot() });
+    }
+  });
+
+  // node_modules read bridge (ADR-0080): the page explorer reads the installed
+  // tree against this realm's syncMirror. Kept live by the serve:true realm.
+  const tearNodeModulesBridge = serveNodeModulesReads(port);
+  log('[shell-owner/worker] pty server ready; node_modules read bridge live\n');
+
+  // Referenced so the served bridges + server aren't GC'd while the realm serves.
+  void tearVfsBridge;
+  void tearNodeModulesBridge;
+  void server;
+}
+
 async function bootstrap(): Promise<void> {
   // Defaults match the page-realm path so non-overriding callers behave the same.
   const env = globalThis.process.env;
   const port = Number.parseInt(env.RIFTY_RFV_PORT ?? '5174', 10);
   const root = env.RIFTY_RFV_ROOT ?? '/workspace';
+  // Owner mode (ADR-0146): 'preview' is the legacy vite/node-server worker
+  // (back-compat default); 'shell' is the resident pty-channel workspace owner.
+  const ownerMode = env.RIFTY_OWNER_MODE === 'shell' ? 'shell' : 'preview';
   const ownerToken = env.RIFTY_PREVIEW_OWNER_TOKEN;
   const spec = resolveProjectSpec(env.RIFTY_RFV_TEMPLATE ?? DEFAULT_TEMPLATE_ID);
   // Sandbox setup kind (ADR-0135): from-scratch runs the visible, honest install
@@ -308,6 +407,11 @@ async function bootstrap(): Promise<void> {
   const publishSnapshot = (): void => {
     publishVfsSnapshot(port, collectSnapshot(syncMirror(), root));
   };
+
+  if (ownerMode === 'shell') {
+    await bootShellOwner({ cfg, port, kernelIpc, publishSnapshot });
+    return;
+  }
 
   const hmrBridgeRef: { current?: HmrBridgeHandle } = {};
   let activeServer: ViteDevServer | null = null;

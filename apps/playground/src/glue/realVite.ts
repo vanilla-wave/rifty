@@ -19,6 +19,8 @@ import type { ProjectSpec } from '../templates/project-spec.ts';
 import { defaultProjectSpec } from '../templates/registry.ts';
 import bootstrapWorkerUrl from '../workers/real-vite-bootstrap.ts?worker&url';
 import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
+import { type ExecOptions, type PtySessionSnapshot, createPtyClient } from './pty-client.ts';
+import { PTY_IPC_TYPE, isOwnerToPage, isPtyIpcMessage } from './pty-protocol.ts';
 import { sendVfsWrite } from './vfs-write-port.ts';
 
 export interface RealViteHandle {
@@ -192,5 +194,166 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
       updateFile(entryPath, content);
     },
     updateFile,
+  };
+}
+
+/**
+ * Page-side handle to the persistent workspace-owner worker (ADR-0146 P2).
+ *
+ * The owner hosts the realm-resident `Shell` instances keyed by session id;
+ * this handle is the PAGE pty client surface (`createPtyClient`) wired to the
+ * kernel fork-IPC channel. Unlike {@link RealViteHandle} it owns no preview
+ * bridge — vite/preview stays in the separate preview worker (P4 will fold it
+ * into the owner). `close()` kills the worker; `closed` settles on exit.
+ */
+export interface WorkspaceOwnerHandle {
+  /** Stable id carried to the owner over `RIFTY_WORKSPACE_ID`. */
+  readonly workspaceId: string;
+  readonly closed: Promise<number | null>;
+  /** Open a pty session in the owner; resolves on `pty:ready`. */
+  openSession(sid: string): Promise<void>;
+  /** Run one line in `sid`; streams chunks to `onChunk`, resolves exit code. */
+  exec(sid: string, line: string, opts: ExecOptions): Promise<number>;
+  writeStdin(sid: string, rid: string, data: Uint8Array): void;
+  signal(sid: string, rid: string): void;
+  resize(sid: string, rid: string, cols: number, rows: number): void;
+  closeSession(sid: string): void;
+  /** Cached cwd/env for a session (from the latest `pty:exit`). */
+  snapshot(sid: string): PtySessionSnapshot;
+  /** Terminate the owner worker; idempotent. */
+  close(): void;
+}
+
+export interface WorkspaceOwnerOptions {
+  /** Workspace root (cwd of the owner + its shells). Defaults to `/workspace`. */
+  root?: string;
+  /** Stable workspace id; defaults to a generated token. */
+  workspaceId?: string;
+  /** Template to mount in the owner realm; defaults to the registered default. */
+  template?: ProjectSpec;
+  /** Sandbox setup kind (ADR-0135), carried over `RIFTY_RFV_SETUP`. */
+  setup?: 'instant' | 'from-scratch';
+  /** Install-stamp reuse key, carried over `RIFTY_RFV_SLUG`. */
+  slug?: string;
+  onLog?(line: string): void;
+}
+
+/**
+ * Spawn the persistent workspace-owner worker in shell mode (ADR-0146 P2) and
+ * return its PAGE pty client surface.
+ *
+ * The worker runs `real-vite-bootstrap` with `RIFTY_OWNER_MODE='shell'`: it
+ * builds the realm-resident `Shell` factory (owner npm + in-realm bin) and a
+ * `createPtyServer` wired to the same kernel IPC channel this handle posts on.
+ * Frames travel as `{ type: PTY_IPC_TYPE, frame }`; this side filters owner→page
+ * envelopes via `isPtyIpcMessage` and feeds `client.onFrame`. On worker exit
+ * `client.disconnect()` resolves any in-flight `exec` nonzero so the terminal
+ * never hangs.
+ *
+ * @throws NotImplementedError when SAB IPC is unavailable — cross-origin
+ *   isolation is the gate (ADR-0002 / D-001), same as {@link startRealVite}.
+ */
+export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): WorkspaceOwnerHandle {
+  const template = opts.template ?? defaultProjectSpec();
+  const root = opts.root ?? '/workspace';
+  const setup = opts.setup ?? 'instant';
+  const slug = opts.slug ?? template.id;
+  const workspaceId = opts.workspaceId ?? createPreviewOwnerToken();
+  const log = opts.onLog ?? (() => {});
+
+  if (!isSabIpcSupported()) {
+    throw new NotImplementedError(
+      'startWorkspaceOwner',
+      'requires SAB IPC (cross-origin isolation) — toggle the host headers ' +
+        'or run inside the playground dev server (vite.config.ts ships them).',
+    );
+  }
+
+  log(`[workspace-owner] spawning shell-mode owner (workspace ${workspaceId})\n`);
+
+  const handle = globalProcessManager.spawnWorker(
+    'workspace-owner',
+    {
+      entry: { kind: 'url', url: bootstrapWorkerUrl },
+      argv: ['rifty', 'workspace-owner'],
+      env: {
+        RIFTY_OWNER_MODE: 'shell',
+        RIFTY_WORKSPACE_ID: workspaceId,
+        RIFTY_RFV_ROOT: root,
+        RIFTY_RFV_TEMPLATE: template.id,
+        RIFTY_RFV_SETUP: setup,
+        RIFTY_RFV_SLUG: slug,
+      },
+      cwd: root,
+      // ADR-0144: long-lived owner — the realm stays alive past the bootstrap
+      // entry; the open IPC channel keeps the shells resident until close().
+      serve: true,
+    },
+    /* ppid */ 1,
+    { cwd: root },
+  );
+
+  if (handle.kind !== 'worker') {
+    throw new NotImplementedError(
+      'startWorkspaceOwner',
+      `globalProcessManager.spawnWorker returned kind=${handle.kind}; expected 'worker'`,
+    );
+  }
+  const worker = handle;
+
+  const client = createPtyClient({
+    send: (frame) => {
+      worker.send({ type: PTY_IPC_TYPE, frame });
+    },
+  });
+
+  // Mirror startRealVite's tolerant decode — surface owner boot/install logs.
+  const decodeChunk = (chunk: unknown): string => {
+    if (chunk instanceof Uint8Array) return dec.decode(chunk);
+    if (chunk instanceof ArrayBuffer) return dec.decode(new Uint8Array(chunk));
+    if (ArrayBuffer.isView(chunk)) {
+      return dec.decode(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+    }
+    return typeof chunk === 'string' ? chunk : '';
+  };
+  worker.stdout().on('data', (chunk: unknown) => {
+    const text = decodeChunk(chunk);
+    if (text) log(text);
+  });
+  worker.stderr().on('data', (chunk: unknown) => {
+    const text = decodeChunk(chunk);
+    if (text) log(text);
+  });
+
+  worker.on('message', (message: unknown) => {
+    if (!isPtyIpcMessage(message)) return;
+    // Only owner→page frames are actionable here; drop any echoed page→owner.
+    if (isOwnerToPage(message.frame)) client.onFrame(message.frame);
+  });
+
+  let exited = false;
+  let resolveClosed: (code: number | null) => void = () => {};
+  const closed = new Promise<number | null>((resolve) => {
+    resolveClosed = resolve;
+  });
+  worker.on('exit', (code?: unknown) => {
+    exited = true;
+    client.disconnect(); // resolve in-flight runs nonzero — never hang
+    resolveClosed(typeof code === 'number' ? code : null);
+  });
+
+  return {
+    workspaceId,
+    closed,
+    openSession: (sid) => client.openSession(sid),
+    exec: (sid, line, execOpts) => client.exec(sid, line, execOpts),
+    writeStdin: (sid, rid, data) => client.writeStdin(sid, rid, data),
+    signal: (sid, rid) => client.signal(sid, rid),
+    resize: (sid, rid, cols, rows) => client.resize(sid, rid, cols, rows),
+    closeSession: (sid) => client.closeSession(sid),
+    snapshot: (sid) => client.snapshot(sid),
+    close() {
+      if (!exited) handle.kill('SIGTERM');
+    },
   };
 }

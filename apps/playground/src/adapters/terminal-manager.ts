@@ -1,5 +1,20 @@
-import { type BinExecutor, type CommandContext, Shell, type StdinReader } from '@riftydev/shell';
+/**
+ * Terminal session manager — PAGE-side pty port client (ADR-0146 P2).
+ *
+ * The `Shell`, cwd/env, npm-install and bin/`execSync` all live in the
+ * persistent workspace-owner worker now; this manager keeps only PAGE-local UI
+ * state per session (title, status, exit code, the attached terminal writer)
+ * and forwards run/stdin/signal over the {@link WorkspaceOwnerHandle} pty
+ * channel. cwd/env in snapshots are read from the owner's per-session cache
+ * (populated from `pty:exit`), so the explorer/prompt scope stays correct
+ * without the page hosting a shell.
+ *
+ * The session id (`terminal-N`) doubles as the owner pty `sid`: `openSession`
+ * on create, `closeSession` on dispose. The active run's `rid` is tracked per
+ * session so `writeStdin`/`stop` route to the in-flight run.
+ */
 import type { TerminalRawInput } from '@riftydev/terminal';
+import type { WorkspaceOwnerHandle } from '../glue/realVite.ts';
 
 export type TerminalStatus = 'idle' | 'running';
 
@@ -11,12 +26,6 @@ export interface TerminalSessionSnapshot {
   readonly status: TerminalStatus;
   readonly exitCode?: number;
 }
-
-export interface TerminalCommandContext extends CommandContext {
-  readonly sessionId: string;
-}
-
-export type TerminalCommand = (args: string[], ctx: TerminalCommandContext) => Promise<number>;
 
 export interface TerminalRunDimensions {
   readonly cols?: number;
@@ -46,29 +55,23 @@ interface TerminalSession {
   title: string;
   status: TerminalStatus;
   exitCode?: number;
-  shell: Shell;
   writer: TerminalWriter | null;
-  active: AbortController | null;
-  activeStdin: StdinQueue | null;
-  activeRunToken: symbol | null;
-  commandError: TerminalCommandError | null;
-}
-
-interface TerminalCommandError {
-  readonly token: symbol;
-  readonly error: unknown;
+  /** `rid` of the run currently owning the foreground; null when idle. */
+  activeRid: string | null;
+  /** Resolves once the owner replies `pty:ready` for this session. */
+  ready: Promise<void>;
 }
 
 const DISPOSED_ERROR = 'Terminal manager is disposed';
+const enc = new TextEncoder();
 
-export function createTerminalManager(opts: {
-  cwd: string;
-  env?: Record<string, string>;
-  commands?: Record<string, TerminalCommand>;
-  /** Runs a resolved `node_modules/.bin/<name>` shim (ADR-0137); per session. */
-  execBin?: BinExecutor;
-}): TerminalManager {
-  const commands = opts.commands ?? {};
+export interface TerminalManagerOptions {
+  /** The persistent workspace owner hosting the realm-resident shells. */
+  owner: WorkspaceOwnerHandle;
+}
+
+export function createTerminalManager(opts: TerminalManagerOptions): TerminalManager {
+  const owner = opts.owner;
   const sessions = new Map<string, TerminalSession>();
   let nextSessionNumber = 1;
   let nextDefaultTitleNumber = 1;
@@ -83,26 +86,10 @@ export function createTerminalManager(opts: {
       id,
       title: displayTitle,
       status: 'idle',
-      shell: new Shell({ cwd: opts.cwd, env: opts.env, execBin: opts.execBin }),
       writer: null,
-      active: null,
-      activeStdin: null,
-      activeRunToken: null,
-      commandError: null,
+      activeRid: null,
+      ready: owner.openSession(id),
     };
-    for (const [name, command] of Object.entries(commands)) {
-      session.shell.registerCommand(name, async (args, ctx) => {
-        const runToken = session.activeRunToken;
-        try {
-          return await command(args, { ...ctx, sessionId: session.id });
-        } catch (err) {
-          if (runToken && session.activeRunToken === runToken) {
-            session.commandError = { token: runToken, error: err };
-          }
-          throw err;
-        }
-      });
-    }
     sessions.set(id, session);
     return session;
   };
@@ -122,11 +109,12 @@ export function createTerminalManager(opts: {
   }
 
   function toSnapshot(session: TerminalSession): TerminalSessionSnapshot {
+    const { cwd, env } = owner.snapshot(session.id);
     return {
       id: session.id,
       title: session.title,
-      cwd: session.shell.cwd,
-      env: session.shell.envSnapshot(),
+      cwd,
+      env,
       status: session.status,
       ...(session.exitCode === undefined ? {} : { exitCode: session.exitCode }),
     };
@@ -140,13 +128,9 @@ export function createTerminalManager(opts: {
     session.writer?.(chunk, stream);
   }
 
-  function commandError(session: TerminalSession): TerminalCommandError | null {
-    return session.commandError;
-  }
-
   async function runLine(id: string, input: string, dims?: TerminalRunDimensions): Promise<number> {
     const session = getSession(id);
-    if (session.active) {
+    if (session.activeRid) {
       write(session, 'terminal is busy\n', 'stderr');
       return 1;
     }
@@ -154,38 +138,26 @@ export function createTerminalManager(opts: {
     const trimmed = input.trim();
     if (trimmed.length === 0) return 0;
 
-    const controller = new AbortController();
-    const stdin = new StdinQueue();
-    const runToken = Symbol(session.id);
-    session.active = controller;
-    session.activeStdin = stdin;
-    session.activeRunToken = runToken;
     session.status = 'running';
     session.exitCode = undefined;
-    session.commandError = null;
 
+    await session.ready;
     try {
-      const result = await session.shell.run(input, {
+      const exitCode = await owner.exec(id, input, {
+        cols: dims?.cols ?? 80,
+        rows: dims?.rows ?? 24,
+        isTTY: true,
         onChunk: (chunk, stream) => {
           write(session, chunk, stream);
         },
-        signal: controller.signal,
-        isTTY: true,
-        cols: dims?.cols,
-        rows: dims?.rows,
-        stdin,
+        onStart: (rid) => {
+          session.activeRid = rid;
+        },
       });
-      const error = commandError(session);
-      if (error?.token === runToken) throw error.error;
-      const exitCode = result.exitCode;
       session.exitCode = exitCode;
       return exitCode;
     } finally {
-      if (session.active === controller) session.active = null;
-      if (session.activeStdin === stdin) session.activeStdin = null;
-      if (session.activeRunToken === runToken) session.activeRunToken = null;
-      if (commandError(session)?.token === runToken) session.commandError = null;
-      stdin.close();
+      session.activeRid = null;
       session.status = 'idle';
     }
   }
@@ -219,7 +191,10 @@ export function createTerminalManager(opts: {
       write(getSession(id), '\x1b[2J\x1b[3J\x1b[H');
     },
     writeStdin(id: string, data: TerminalRawInput): void {
-      getSession(id).activeStdin?.write(data);
+      const session = getSession(id);
+      if (!session.activeRid) return;
+      const bytes = typeof data === 'string' ? enc.encode(data) : data;
+      owner.writeStdin(id, session.activeRid, bytes);
     },
     runLine,
     async runSequence(
@@ -237,53 +212,18 @@ export function createTerminalManager(opts: {
       return exitCode;
     },
     stop(id: string): void {
-      getSession(id).active?.abort();
+      const session = getSession(id);
+      if (session.activeRid) owner.signal(id, session.activeRid);
     },
     dispose(): void {
+      if (disposed) return; // idempotent — don't double-close owner sessions
       disposed = true;
       for (const session of sessions.values()) {
-        const active = session.active;
-        session.active = null;
-        session.activeStdin?.close();
-        session.activeStdin = null;
-        session.activeRunToken = null;
-        session.commandError = null;
+        if (session.activeRid) owner.signal(session.id, session.activeRid);
+        session.activeRid = null;
         session.writer = null;
-        active?.abort();
+        owner.closeSession(session.id);
       }
     },
   };
-}
-
-class StdinQueue implements StdinReader {
-  readonly #enc = new TextEncoder();
-  readonly #chunks: Uint8Array[] = [];
-  readonly #readers: Array<(chunk: Uint8Array | null) => void> = [];
-  #closed = false;
-
-  write(data: TerminalRawInput): void {
-    if (this.#closed) return;
-    const chunk = typeof data === 'string' ? this.#enc.encode(data) : data;
-    const reader = this.#readers.shift();
-    if (reader) {
-      reader(chunk);
-      return;
-    }
-    this.#chunks.push(chunk);
-  }
-
-  read(): Promise<Uint8Array | null> {
-    const chunk = this.#chunks.shift();
-    if (chunk) return Promise.resolve(chunk);
-    if (this.#closed) return Promise.resolve(null);
-    return new Promise((resolve) => {
-      this.#readers.push(resolve);
-    });
-  }
-
-  close(): void {
-    if (this.#closed) return;
-    this.#closed = true;
-    for (const reader of this.#readers.splice(0)) reader(null);
-  }
 }
