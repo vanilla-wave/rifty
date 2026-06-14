@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Editable project files in real-vite mode (ADR-0076 §Decision-4, corrected).**
+  Editing a seeded source tab (e.g. `src/project-summary.js`) while the dev
+  server ran threw `writeFileSync: "…" is read-only — it lives in the Vite
+  worker realm`: the editor wrote through `activeVfs()`, which flips to the
+  read-only worker `SnapshotFs` once Vite boots, and a tab opened before the
+  flip kept a stale write path. The editor now splits its READ view (the
+  snapshot) from its WRITE target (the always-writable page `syncMirror()`, new
+  `EditorHost` `writeVfs` prop + `glue/editor-write-router.ts`): a file is
+  editable iff the page mirror owns it, and the edit rides the existing
+  `onFileWritten` → `syncWorkspaceFileToWorker` → write port (ADR-0043) to the
+  worker (Vite watcher → HMR). Worker-only files (`node_modules`,
+  worker-generated) stay read-only. ADR-0076's original view-only-for-file-tabs
+  decision was wrong (a read-only sandbox is nonsense) and is corrected in place;
+  its snapshot bridge is unchanged. Regression test: `glue/editor-write-router.test.ts`.
+
 ### Added
 
 - **Wire installed-CLI execution to the node-entry loader bootstrap (ADR-0137,

@@ -28,6 +28,7 @@ import {
   setDirty,
   setProgramTitle,
 } from '../glue/editor-tabs.ts';
+import { isEditorPathWritable, writeEditorFile } from '../glue/editor-write-router.ts';
 import { MONO_FONT_STACK } from '../glue/fonts.ts';
 import { type FsOpsTarget, looksBinary } from '../glue/fs-ops.ts';
 // Side-effect: wires MonacoEnvironment.getWorker before the first editor.
@@ -50,7 +51,14 @@ export interface EditorHostProps {
   readonly programValue: Accessor<string>;
   readonly programTitle: Accessor<string>;
   onProgramChange(value: string): void;
+  /** READ view (real-vite: the read-only worker snapshot, ADR-0076). Files open
+   *  from here; never written to. */
   readonly vfs: FsOpsTarget;
+  /** WRITE target — the always-writable page mirror. Edits land here, then
+   *  {@link onFileWritten} propagates them to the worker over the write port
+   *  (ADR-0043). Separate from {@link vfs} so a tab opened while writable cannot
+   *  flush into the read-only snapshot once the dev server flips the read view. */
+  readonly writeVfs: FsOpsTarget;
   registerApi(api: EditorApi): void;
   onActive(info: { label: string; language: string; path?: string }): void;
   onFileWritten?(path: string): void;
@@ -125,7 +133,6 @@ function languageForPath(path: string): string {
 }
 
 const dec = new TextDecoder();
-const enc = new TextEncoder();
 
 export function EditorHost(props: EditorHostProps) {
   let container: HTMLDivElement | undefined;
@@ -144,7 +151,7 @@ export function EditorHost(props: EditorHostProps) {
     const m = models.get(path);
     if (!m) return;
     try {
-      props.vfs.writeFileSync(path, enc.encode(m.getValue()));
+      writeEditorFile(props.writeVfs, path, m.getValue());
       setTabs((t) => setDirty(t, path, false));
       props.onFileWritten?.(path);
     } catch (err) {
@@ -241,9 +248,10 @@ export function EditorHost(props: EditorHostProps) {
       );
     } else {
       model = monaco.editor.createModel(dec.decode(bytes), languageForPath(path));
-      // Read-only source (e.g. real-vite worker mirror, ADR-0076): view-only,
-      // no write path back to the worker realm.
-      if (props.vfs.readOnly) readOnlyPaths.add(path);
+      // Editable iff the page mirror owns this file: page-seeded source files
+      // flush to the writable mirror and propagate to the worker over the write
+      // port; worker-only files (absent from the mirror) stay view-only (ADR-0076).
+      if (!isEditorPathWritable(props.writeVfs, path)) readOnlyPaths.add(path);
     }
     models.set(path, model);
     setTabs((t) => openFileTab(t, path, basename(path)));

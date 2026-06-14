@@ -1078,6 +1078,7 @@ export function App(props: AppProps) {
                 programTitle={programTitle}
                 onProgramChange={onProgramChange}
                 vfs={activeVfs()}
+                writeVfs={vfs}
                 registerApi={(api) => {
                   editorApi = api;
                 }}
