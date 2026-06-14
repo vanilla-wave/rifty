@@ -37,7 +37,10 @@ const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 1
 describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
   it('exposes parent ipc:message frames as process "message" events', async () => {
     const ipc = new MessageChannel();
-    const process = installNodeProcessShim({ ...spec(), stdio: { ...spec().stdio, ipc: ipc.port1 } });
+    const process = installNodeProcessShim({
+      ...spec(),
+      stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
 
     const received = new Promise((resolve) => process.on('message', resolve));
     ipc.port2.postMessage({ kind: 'ipc:message', payload: { hello: 'world' } });
@@ -52,7 +55,10 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
     // the early frame and flush it on the first listener — exactly as the stdin
     // reader already does — instead of dropping it on an emit with no listeners.
     const ipc = new MessageChannel();
-    const process = installNodeProcessShim({ ...spec(), stdio: { ...spec().stdio, ipc: ipc.port1 } });
+    const process = installNodeProcessShim({
+      ...spec(),
+      stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
 
     ipc.port2.postMessage({ kind: 'ipc:message', payload: { early: true } });
     // Force port delivery (shim onmessage fires) BEFORE any listener exists.
@@ -64,7 +70,10 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
 
   it('preserves order across messages buffered before the first listener', async () => {
     const ipc = new MessageChannel();
-    const process = installNodeProcessShim({ ...spec(), stdio: { ...spec().stdio, ipc: ipc.port1 } });
+    const process = installNodeProcessShim({
+      ...spec(),
+      stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
 
     ipc.port2.postMessage({ kind: 'ipc:message', payload: 1 });
     ipc.port2.postMessage({ kind: 'ipc:message', payload: 2 });

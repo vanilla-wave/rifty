@@ -484,7 +484,9 @@ export function App(props: AppProps) {
   ): TerminalSessionSnapshot[] {
     const id = devServerSessionId;
     if (!devServerRunning() || id === null) return [...snaps];
-    return snaps.map((s) => (s.id === id && s.status !== 'running' ? { ...s, status: 'running' } : s));
+    return snaps.map((s) =>
+      s.id === id && s.status !== 'running' ? { ...s, status: 'running' } : s,
+    );
   }
 
   function refreshTerminalState(): void {
