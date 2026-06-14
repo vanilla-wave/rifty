@@ -39,6 +39,7 @@ export interface RuntimeSessionStartOptions {
 export interface RuntimeSessionStartHandle {
   close(): Promise<void>;
   updateFile?(path: string, content: string): void;
+  applyVfsFrame?(frame: VfsWriteFrame): void;
   readonly closed?: Promise<number | null>;
   readonly ready?: Promise<void>;
 }
@@ -96,6 +97,7 @@ export interface RuntimeSession {
   readonly closed: Promise<number | null>;
   updateEntry(content: string): void;
   updateFile(path: string, content: string): void;
+  applyVfsFrame(frame: VfsWriteFrame): void;
   close(): Promise<void>;
 }
 
@@ -136,6 +138,9 @@ export async function createRuntimeSession(
     },
     updateFile(path, content) {
       handle.updateFile?.(path, content);
+    },
+    applyVfsFrame(frame) {
+      handle.applyVfsFrame?.(frame);
     },
     close() {
       return handle.close();
@@ -266,6 +271,11 @@ async function startRuntimeSession(
   opts.onLog(`[workbench] page-side preview-port bridge ready (port ${opts.port})\n`);
 
   let closedByHost = false;
+  const applyVfsFrame = (frame: VfsWriteFrame): void => {
+    if (!handle.send?.({ type: 'rifty:vfs-write', frame })) {
+      sendVfsWrite(opts.port, frame);
+    }
+  };
   return {
     closed,
     ready,
@@ -277,15 +287,13 @@ async function startRuntimeSession(
       previewBridge.dispose();
       if (!exited) handle.kill('SIGTERM');
     },
+    applyVfsFrame,
     updateFile(path, content) {
-      const frame = {
-        type: 'write' as const,
+      applyVfsFrame({
+        type: 'write',
         path,
         data: enc.encode(content),
-      };
-      if (!handle.send?.({ type: 'rifty:vfs-write', frame })) {
-        sendVfsWrite(opts.port, frame);
-      }
+      });
     },
   };
 }

@@ -80,6 +80,7 @@ describe('App terminal startup wiring', () => {
   it('restarts the existing dev-server terminal when changing presets while Vite is running', () => {
     expect(source).toContain('function restartDevServer(sessionId: string)');
     expect(source).toContain('if (restartSessionId) void restartDevServer(restartSessionId)');
+    expect(source).toContain('if (isVisibleTerminalSession(sessionId)) manager.stop(sessionId);');
     expect(source).toContain('devServerSessionId = session.id');
     expect(source).toContain(
       'await runTerminalSequence(\n      targetSessionId,\n      presetBootLines(presetForId(activePreset()), WORKSPACE),\n    );',

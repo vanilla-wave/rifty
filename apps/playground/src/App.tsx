@@ -666,6 +666,7 @@ export function App(props: AppProps) {
 
   async function restartDevServer(sessionId: string): Promise<void> {
     const generation = ++devServerRestartGeneration;
+    if (isVisibleTerminalSession(sessionId)) manager.stop(sessionId);
     try {
       await realViteHandle?.close();
     } catch {

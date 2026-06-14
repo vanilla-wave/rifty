@@ -1,5 +1,3 @@
-import type { IconName } from './components/icons.tsx';
-import { MONO_FONT_STACK } from './glue/fonts.ts';
 import {
   EXPRESS_SQLITE_SERVER_SOURCE,
   EXPRESS_SQLITE_TEMPLATE,
@@ -7,6 +5,8 @@ import {
   resolveProjectSpec,
   terminalDevLine,
 } from '@riftydev/workbench';
+import type { IconName } from './components/icons.tsx';
+import { MONO_FONT_STACK } from './glue/fonts.ts';
 
 export type PresetMode = 'dev' | 'real-vite';
 
