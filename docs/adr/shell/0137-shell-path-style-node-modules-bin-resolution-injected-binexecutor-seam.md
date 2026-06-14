@@ -3,7 +3,7 @@
 Status: Accepted (2026-06-13)
 Date: 2026-06
 
-> TL;DR: A shell command miss walks up to the nearest `node_modules/.bin/<name>` shim and runs it through an injected `BinExecutor`; the shim is spawned as a `kind:'source'` kernel Worker so installed CLIs (`eslint`, `tsc`, …) are invokable by name.
+> TL;DR: A shell command miss walks up to the nearest `node_modules/.bin/<name>` shim and runs it through an injected `BinExecutor`; the host runs the shim via a `kind:'url'` node-entry bootstrap that imports the launcher target through the module loader (Opt-Y), so installed CLIs (`eslint`, `tsc`, …) are invokable by name. `child_process.spawn('node', …)` shares the same bootstrap.
 
 ## Context
 
@@ -19,11 +19,19 @@ Executing a Node program needs a Worker realm; the shell layer's deps are only `
 
 **Exit codes:** shim found + no `execBin` → 126 ("installed, cannot execute here"), distinct from the 127 miss — never a silent stub. Executor exit code is the segment exit code.
 
-**Host executor (playground):** `createBinExecutor` reads shim bytes and spawns `{ kind:'source', code, sourceUrl:<shimPath> }` via `globalProcessManager.spawnWorker` (the execSync/realVite pattern). `sourceUrl` anchors the shim's relative import; ESM `import()` already strips the shebang (`allowHashBang`). stdout/stderr stream to the context; `ctx.signal` kills the worker. SAB-IPC-gated (`NotImplementedError` when COI is absent).
+**Host executor (playground), Opt-Y:** `createBinExecutor` spawns the `kind:'url'` **node-entry bootstrap** (`workers/node-entry-bootstrap.ts`) via `globalProcessManager.spawnWorker`, passing the shim path as `argv[1]` and `RIFTY_BIN=1`. In the worker the bootstrap calls runtime-js `runNodeEntry`: it reads the shim, pulls its launcher target (`import('../<pkg>/<bin>')`), and imports THAT through `createModuleLoader` — so the bin runs with relative imports resolved against the VFS. stdout/stderr stream to the context; `ctx.signal` kills the worker. SAB-IPC-gated (`NotImplementedError` when COI is absent).
+
+> Rejected (and the original mistake): spawning the shim TEXT as a `kind:'source'` worker. The kernel runs `kind:'source'` via `new AsyncFunction`, which (a) throws `SyntaxError` on the shim's `#!/usr/bin/env node` line, and (b) never routes the shim's dynamic `import()` to the VFS loader — so it cannot run a real shim. `sourceUrl` is only a `//# sourceURL=` stack-trace pragma, NOT an import anchor; `allowHashBang` lives in the ESM AST path this never reaches. The execSync/realVite precedents use `kind:'url'`, so they did not transfer.
+
+**Loader shebang (Node parity):** the module loader did not strip a leading `#!` — the CJS path threw, and the ESM executor re-wrapped the shebang too (`allowHashBang` only helped the parse). Both now strip it at source read (`resolver.ts`), matching Node's `Module._compile`. This is the shared fix every Node-entry path needs (parity cases `modules/{cjs,esm}-shebang`), and the reason a launcher target (CJS or ESM) now runs.
+
+**child_process consistency:** the worker path of `child_process.spawn('node', [script])` routes through the SAME node-entry bootstrap (injected via `setNodeEntryWorkerUrl`, mirroring the kernel's `setKernelWorkerUrl`), so a spawned `node <script>` with a shebang / relative import runs via the loader too. `execSync`'s recursive runner stays on `kind:'source'` for now (its conformance runner executes the spec in Node, where the `kind:'url'` bootstrap can't load) — tracked in the backlog.
 
 ## Consequences
 
 - Installed CLIs invokable by name at the prompt; `which <cli>` resolves; background (`cli &`) threads `execBin` to the clone.
 - Registered commands still shadow same-named shims — the playground keeps `vite` lifecycle ownership.
-- New public API: `BinExecutor` type + `ShellOptions.execBin` (IRREVERSIBLE per checkpoint 1). Additive — existing `new Shell(...)` callers unchanged.
-- Follow-ups (parked, gated on M6 real-worker maturity): real-Worker e2e of arbitrary `.bin` execution; routing `npm run` script lines through shell `.bin` resolution (replacing the hardcoded vite/dev switch). Tracked in `docs/backlog/shell/node-modules-bin-execution.md`.
+- New public API (IRREVERSIBLE): shell `BinExecutor` type + `ShellOptions.execBin`; runtime-js `setNodeEntryWorkerUrl`/`getNodeEntryWorkerUrl` host-wiring seam (mirrors `setKernelWorkerUrl`) + the `runNodeEntry` primitive. Additive — existing callers unchanged.
+- The module loader now strips a leading shebang (CJS + ESM) — Node parity; benefits every "run a VFS Node entry" path.
+- Verification split (honest): the execution MECHANISM (`runNodeEntry` + loader + launcher-target resolve) is proven by node unit tests + parity, runnable in CI without a browser. The real-Worker TRANSPORT (VFS-in-worker, stdio, exit over MessagePort) is COI-only — Playwright e2e, like `execsync-sab`.
+- Follow-ups (tracked in `docs/backlog/shell/node-modules-bin-execution.md`): a dedicated COI bin-exec e2e harness; `execSync` shebang/relative via the node-entry bootstrap (blocked by the Node conformance recursive-runner); routing `npm run` script lines through `.bin` (replacing the hardcoded vite/dev switch).

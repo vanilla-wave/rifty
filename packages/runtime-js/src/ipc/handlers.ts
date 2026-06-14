@@ -78,6 +78,11 @@ export function installRuntimeJsExecSyncHandler(
         code: 'ENOENT',
       });
     }
+    // TODO(backlog: runtime-js/execsync-node-entry-loader) — route this child
+    // through the node-entry bootstrap (ADR-0137) like child_process.spawn, so
+    // a shebang'd / relative-import `node <script>` runs via the module loader.
+    // Blocked: the conformance recursive-runner executes this spec in Node (no
+    // kernel Worker / `kind:'url'` bootstrap), so the kind can't simply flip.
     const source = new TextDecoder().decode(sourceBytes);
     const result = await runWorker({
       entry: { kind: 'source', code: source, sourceUrl: scriptPath },

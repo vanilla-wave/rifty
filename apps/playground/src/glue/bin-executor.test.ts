@@ -1,17 +1,18 @@
 /**
- * Unit tests for the playground `BinExecutor` glue (ADR-0137) — the host side
- * that runs a shell-resolved `node_modules/.bin/<name>` shim as a Node entry.
+ * Unit tests for the playground `BinExecutor` glue (ADR-0137, Opt-Y) — the host
+ * side that spawns the `kind:'url'` node-entry bootstrap for a shell-resolved
+ * `node_modules/.bin/<name>` shim.
  *
  * The real spawn target is a kernel Worker (an unavoidable external boundary,
- * e2e-only). Here the spawn is injected as a fake handle, so these tests pin
- * MY glue: the 'source' spec built from the shim bytes, stdout/stderr piping to
- * the command context, abort→kill, exit-code propagation, and the missing-shim
- * guard. No rifty sibling package is mocked.
+ * e2e-only). Here the spawn is injected as a fake handle, so these tests pin MY
+ * glue: the spawn request built from the shim path + args + ctx, stdout/stderr
+ * piping to the command context, abort→kill + trailing-output mute, and
+ * exit-code propagation. No rifty sibling package is mocked.
  */
 
 import type { CommandContext } from '@riftydev/shell';
 import { describe, expect, it } from 'vitest';
-import { type BinSpawnSpec, type BinWorkerHandle, createBinExecutor } from './bin-executor.ts';
+import { type BinSpawnRequest, type BinWorkerHandle, createBinExecutor } from './bin-executor.ts';
 
 const enc = new TextEncoder();
 
@@ -42,15 +43,15 @@ function makeCtx(over: Partial<CommandContext> = {}): {
 
 /** Controllable fake worker handle + spawn recorder. */
 function makeFakeSpawn(): {
-  spawn: (spec: BinSpawnSpec) => BinWorkerHandle;
-  spec: () => BinSpawnSpec | null;
+  spawn: (req: BinSpawnRequest) => BinWorkerHandle;
+  req: () => BinSpawnRequest | null;
   emitStdout: (chunk: Uint8Array) => void;
   emitStderr: (chunk: Uint8Array) => void;
   emitExit: (code: number | null) => void;
   killedWith: () => string | null;
   spawnCount: () => number;
 } {
-  let captured: BinSpawnSpec | null = null;
+  let captured: BinSpawnRequest | null = null;
   let count = 0;
   let onOut: (c: unknown) => void = () => {};
   let onErr: (c: unknown) => void = () => {};
@@ -75,12 +76,12 @@ function makeFakeSpawn(): {
     },
   };
   return {
-    spawn: (spec) => {
-      captured = spec;
+    spawn: (req) => {
+      captured = req;
       count++;
       return handle;
     },
-    spec: () => captured,
+    req: () => captured,
     emitStdout: (c) => onOut(c),
     emitStderr: (c) => onErr(c),
     emitExit: (code) => onExit(code),
@@ -90,13 +91,9 @@ function makeFakeSpawn(): {
 }
 
 describe('createBinExecutor', () => {
-  it('spawns a source-entry worker from the shim and streams stdout, propagating exit 0', async () => {
+  it('spawns the node-entry worker for the shim and streams stdout, propagating exit 0', async () => {
     const fake = makeFakeSpawn();
-    const shim = "#!/usr/bin/env node\nimport('../cli/bin.js');\n";
-    const exec = createBinExecutor({
-      readShim: () => enc.encode(shim),
-      spawn: fake.spawn,
-    });
+    const exec = createBinExecutor({ spawn: fake.spawn });
     const { ctx, out } = makeCtx();
 
     const p = exec('/proj/node_modules/.bin/cli', ['--flag', 'x'], ctx);
@@ -106,17 +103,16 @@ describe('createBinExecutor', () => {
 
     expect(code).toBe(0);
     expect(out()).toBe('hello\n');
-    const spec = fake.spec();
-    expect(spec?.code).toBe(shim);
-    expect(spec?.sourceUrl).toBe('/proj/node_modules/.bin/cli');
-    expect(spec?.argv).toEqual(['rifty', '/proj/node_modules/.bin/cli', '--flag', 'x']);
-    expect(spec?.cwd).toBe('/proj');
-    expect(spec?.env).toEqual({ FOO: 'bar' });
+    const req = fake.req();
+    expect(req?.shimPath).toBe('/proj/node_modules/.bin/cli');
+    expect(req?.args).toEqual(['--flag', 'x']);
+    expect(req?.cwd).toBe('/proj');
+    expect(req?.env).toEqual({ FOO: 'bar' });
   });
 
   it('propagates a non-zero exit code', async () => {
     const fake = makeFakeSpawn();
-    const exec = createBinExecutor({ readShim: () => enc.encode('x'), spawn: fake.spawn });
+    const exec = createBinExecutor({ spawn: fake.spawn });
     const { ctx } = makeCtx();
     const p = exec('/proj/node_modules/.bin/tsc', [], ctx);
     fake.emitExit(3);
@@ -125,7 +121,7 @@ describe('createBinExecutor', () => {
 
   it('streams stderr to ctx.stderr', async () => {
     const fake = makeFakeSpawn();
-    const exec = createBinExecutor({ readShim: () => enc.encode('x'), spawn: fake.spawn });
+    const exec = createBinExecutor({ spawn: fake.spawn });
     const { ctx, err } = makeCtx();
     const p = exec('/proj/node_modules/.bin/cli', [], ctx);
     fake.emitStderr(enc.encode('boom\n'));
@@ -136,7 +132,7 @@ describe('createBinExecutor', () => {
 
   it('kills the worker when ctx.signal aborts', async () => {
     const fake = makeFakeSpawn();
-    const exec = createBinExecutor({ readShim: () => enc.encode('x'), spawn: fake.spawn });
+    const exec = createBinExecutor({ spawn: fake.spawn });
     const controller = new AbortController();
     const { ctx } = makeCtx({ signal: controller.signal });
     const p = exec('/proj/node_modules/.bin/dev', [], ctx);
@@ -146,19 +142,21 @@ describe('createBinExecutor', () => {
     await p;
   });
 
-  it('reports exit 126 and never spawns when the shim cannot be read', async () => {
+  it('kills the worker when ctx.signal is ALREADY aborted at exec entry', async () => {
     const fake = makeFakeSpawn();
-    const exec = createBinExecutor({ readShim: () => null, spawn: fake.spawn });
-    const { ctx, err } = makeCtx();
-    const code = await exec('/proj/node_modules/.bin/gone', [], ctx);
-    expect(code).toBe(126);
-    expect(err()).toMatch(/gone/);
-    expect(fake.spawnCount()).toBe(0);
+    const exec = createBinExecutor({ spawn: fake.spawn });
+    const controller = new AbortController();
+    controller.abort(); // aborted BEFORE exec — exercises the synchronous branch
+    const { ctx } = makeCtx({ signal: controller.signal });
+    const p = exec('/proj/node_modules/.bin/dev', [], ctx);
+    expect(fake.killedWith()).toBe('SIGTERM');
+    fake.emitExit(null);
+    await p;
   });
 
   it('mutes worker output buffered after an abort', async () => {
     const fake = makeFakeSpawn();
-    const exec = createBinExecutor({ readShim: () => enc.encode('x'), spawn: fake.spawn });
+    const exec = createBinExecutor({ spawn: fake.spawn });
     const controller = new AbortController();
     const { ctx, out } = makeCtx({ signal: controller.signal });
 
@@ -174,7 +172,6 @@ describe('createBinExecutor', () => {
 
   it('rejects when spawn throws, so the host boundary error surfaces to the shell', async () => {
     const exec = createBinExecutor({
-      readShim: () => enc.encode('x'),
       spawn: () => {
         throw new Error('SAB IPC gated');
       },

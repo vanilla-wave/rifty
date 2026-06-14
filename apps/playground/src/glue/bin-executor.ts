@@ -1,14 +1,15 @@
 /**
- * Playground `BinExecutor` (ADR-0137) — runs a shell-resolved
+ * Playground `BinExecutor` (ADR-0137, Opt-Y) — runs a shell-resolved
  * `node_modules/.bin/<name>` launcher shim as a Node entry in a kernel Worker.
  *
  * The shell layer resolves a bare command to its `.bin` shim path and hands it
- * here. The shim is the linker's launcher format (`#!/usr/bin/env node` +
- * `import('../<pkg>/<bin>')`); we read its bytes and spawn a `kind: 'source'`
- * worker whose `sourceUrl` is the shim's path, so the worker's module loader
- * resolves the shim's relative import from the shim's location (same mechanism
- * runtime-js `execSync` uses for `node <script>`). stdout/stderr stream to the
- * command context; Ctrl+C (`ctx.signal`) kills the worker.
+ * here. We spawn the `kind:'url'` node-entry bootstrap (which runs
+ * `runNodeEntry` in the worker): it reads the shim, pulls its launcher target,
+ * and imports THAT through the runtime-js module loader — shebang stripped,
+ * relative import resolved against the VFS. (The kernel's raw `kind:'source'`
+ * path compiles via `new AsyncFunction`, which chokes on the shim's `#!` line
+ * and never routes its `import()` to the loader — so it could not run a shim.)
+ * stdout/stderr stream to the command context; Ctrl+C (`ctx.signal`) kills it.
  *
  * Spawn is injected so the host wires the real `globalProcessManager` while
  * unit tests drive a fake handle — the real Worker is an e2e-only boundary.
@@ -30,21 +31,17 @@ export interface BinWorkerHandle {
 }
 
 /** Spawn request: the executor builds this; the host maps it to a Worker spec. */
-export interface BinSpawnSpec {
-  /** Shim source text (becomes the `kind: 'source'` entry's `code`). */
-  readonly code: string;
-  /** Shim path — the entry's `sourceUrl`, anchoring relative-import resolution. */
-  readonly sourceUrl: string;
-  readonly argv: readonly string[];
+export interface BinSpawnRequest {
+  /** Absolute `.bin` shim path — the worker's entry (`argv[1]`, `RIFTY_BIN=1`). */
+  readonly shimPath: string;
+  readonly args: readonly string[];
   readonly env: Record<string, string>;
   readonly cwd: string;
 }
 
 export interface BinExecutorDeps {
-  /** Shim bytes from the host VFS, or `null` when absent (raced removal). */
-  readonly readShim: (binPath: string) => Uint8Array | null;
-  /** Spawns the Node entry and returns its handle. */
-  readonly spawn: (spec: BinSpawnSpec) => BinWorkerHandle;
+  /** Spawns the node-entry worker for the shim and returns its handle. */
+  readonly spawn: (req: BinSpawnRequest) => BinWorkerHandle;
 }
 
 const decoder = new TextDecoder();
@@ -58,23 +55,16 @@ function decodeChunk(chunk: unknown): string {
   return typeof chunk === 'string' ? chunk : '';
 }
 
-/** Build a {@link BinExecutor} over an injected spawn + shim reader. */
+/** Build a {@link BinExecutor} over an injected node-entry worker spawn. */
 export function createBinExecutor(deps: BinExecutorDeps): BinExecutor {
   return (binPath, args, ctx) =>
     new Promise<number>((resolve) => {
-      const bytes = deps.readShim(binPath);
-      if (bytes === null) {
-        // The shell resolved this shim a moment ago; a null here means it was
-        // removed mid-flight. Surface it (exit 126), never a silent 0.
-        ctx.stderr.write(`${binPath}: cannot execute: shim disappeared\n`);
-        resolve(126);
-        return;
-      }
-
+      // The worker reads the shim via the VFS sync mirror (runNodeEntry); a shim
+      // removed mid-flight surfaces there as a loud worker error (exit 1 +
+      // stderr), never a silent 0.
       const handle = deps.spawn({
-        code: decoder.decode(bytes),
-        sourceUrl: binPath,
-        argv: ['rifty', binPath, ...args],
+        shimPath: binPath,
+        args,
         env: ctx.env,
         cwd: ctx.cwd,
       });

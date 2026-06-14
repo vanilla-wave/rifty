@@ -2,7 +2,25 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Run a VFS Node entry through the module loader (ADR-0137).** New
+  `runNodeEntry` primitive (`builtins/node-entry.ts`) + `node-entry-url.ts` host
+  seam (`setNodeEntryWorkerUrl`/`getNodeEntryWorkerUrl`, mirrors the kernel's
+  `setKernelWorkerUrl`). The playground node-entry bootstrap calls it to run a
+  shell-resolved `.bin` launcher (resolve target → import via loader) or a plain
+  `node <script>`. `child_process.spawn('node', [script])` (worker path) now
+  spawns this bootstrap instead of a raw `kind:'source'` worker, so a spawned
+  script with a shebang / relative import runs via the loader.
+
 ### Fixed
+
+- **Module loader strips a leading `#!` shebang (CJS + ESM) — Node parity.**
+  Node's `Module._compile` / ESM loader drop a leading shebang line before
+  compiling; rifty's loader did not (CJS `new Function` threw; the ESM executor
+  re-wrapped it). Now stripped at source read (`module-loader/resolver.ts`),
+  keeping line numbers. Required to run `node_modules/.bin` launcher shims and
+  any shebang'd entry. Parity: `cases/modules/{cjs,esm}-shebang.case.ts`.
 
 - **PR #21 review fixes (fs/os/fs-RPC contract).**
   - `fs.readSync`/`writeSync`/`read`/`write` treat position `-1` as "current

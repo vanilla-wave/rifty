@@ -4,13 +4,18 @@
 
 ### Added
 
-- **Run installed CLIs from the terminal (ADR-0137).** `createBinExecutor`
-  spawns a shell-resolved `node_modules/.bin/<name>` shim as a `kind:'source'`
-  kernel Worker — streams stdout/stderr to the terminal, `ctx.signal` (Ctrl+C)
-  kills it — wired into the terminal shell via
-  `createTerminalManager({ execBin })`. SAB-IPC-gated (`NotImplementedError`
-  when cross-origin isolation is absent). Registered commands (`vite`) still
-  win, so the playground keeps that dev-server lifecycle.
+- **Run installed CLIs from the terminal (ADR-0137, Opt-Y).** `createBinExecutor`
+  spawns the `kind:'url'` node-entry bootstrap (`workers/node-entry-bootstrap.ts`)
+  for a shell-resolved `node_modules/.bin/<name>` shim; in the worker it reads the
+  shim, resolves its launcher target, and runs THAT through the module loader
+  (shebang stripped, relative imports resolved vs VFS) — streams stdout/stderr to
+  the terminal, `ctx.signal` (Ctrl+C) kills it. Wired via
+  `createTerminalManager({ execBin })`; `main.tsx` injects the bootstrap URL for
+  runtime-js (`setNodeEntryWorkerUrl`). SAB-IPC-gated (`NotImplementedError` when
+  cross-origin isolation is absent). Registered commands (`vite`) still win.
+  (Replaces the earlier `kind:'source'` approach, which threw on the shim's
+  shebang — ADR-0137 §Rejected. Worker-transport e2e is COI-only; the mechanism
+  is node-tested + parity.)
 
 ### Changed
 

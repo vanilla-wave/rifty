@@ -33,7 +33,9 @@
     "./builtins/buffer": "./src/builtins/buffer.ts",
     "./builtins/console": "./src/builtins/console.ts",
     "./builtins/module": "./src/builtins/module.ts",
-    "./builtins/child_process": "./src/builtins/child_process.ts"
+    "./builtins/child_process": "./src/builtins/child_process.ts",
+    "./builtins/node-entry": "./src/builtins/node-entry.ts",
+    "./builtins/node-entry-url": "./src/builtins/node-entry-url.ts"
   },
   "files": ["dist", "CHANGELOG.md"],
   "publishConfig": {

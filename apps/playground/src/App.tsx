@@ -53,6 +53,7 @@ import {
   terminalDevLine,
 } from './templates/project-spec.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
+import nodeEntryBootstrapUrl from './workers/node-entry-bootstrap.ts?worker&url';
 
 const WORKSPACE = '/workspace';
 
@@ -342,27 +343,27 @@ export function App(props: AppProps) {
   // kernel Worker, so `eslint` / `tsc` / any installed CLI is invokable by name.
   // Registered commands (`vite`) still win — the playground owns that lifecycle.
   const terminalBinExecutor = createBinExecutor({
-    readShim: (binPath) => {
-      const fs = syncMirror();
-      return fs.statSyncOrNull(binPath)?.isFile ? fs.readFileBytesSync(binPath) : null;
-    },
-    spawn: (spec) => {
+    spawn: (req) => {
       if (!isSabIpcSupported()) {
         throw new NotImplementedError(
           'shell.bin-exec',
           'running an installed CLI needs SAB IPC (cross-origin isolation)',
         );
       }
+      // Spawn the `kind:'url'` node-entry bootstrap: it reads the shim from the
+      // worker's sync mirror and runs its launcher target through the module
+      // loader (`RIFTY_BIN=1`). argv[1] = the shim path the bootstrap loads.
+      const binName = req.shimPath.slice(req.shimPath.lastIndexOf('/') + 1) || 'bin';
       const handle = globalProcessManager.spawnWorker(
-        spec.argv[1] ?? 'bin',
+        binName,
         {
-          entry: { kind: 'source', code: spec.code, sourceUrl: spec.sourceUrl },
-          argv: [...spec.argv],
-          env: spec.env,
-          cwd: spec.cwd,
+          entry: { kind: 'url', url: nodeEntryBootstrapUrl },
+          argv: ['rifty', req.shimPath, ...req.args],
+          env: { ...req.env, RIFTY_BIN: '1' },
+          cwd: req.cwd,
         },
         /* ppid */ 1,
-        { cwd: spec.cwd },
+        { cwd: req.cwd },
       );
       if (handle.kind !== 'worker') {
         throw new NotImplementedError(

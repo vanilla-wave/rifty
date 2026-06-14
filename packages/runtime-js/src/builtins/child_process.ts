@@ -29,6 +29,7 @@ import { execScript } from './child_process-exec.ts';
 import { execSync } from './child_process-sync.ts';
 import { spawnWorkerChild } from './child_process-worker.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+import { getNodeEntryWorkerUrl } from './node-entry-url.ts';
 
 // ADR-0011 phase 3 / ADR-0039: the runtime-js `'execSync'` handler. Kernel ships
 // no default handlers after ADR-0039 — execSync is Node-API knowledge and lives
@@ -219,7 +220,8 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
     command === 'node' &&
     args[0] !== undefined &&
     isSabIpcSupported() &&
-    getKernelWorkerUrl() !== null
+    getKernelWorkerUrl() !== null &&
+    getNodeEntryWorkerUrl() !== null
   ) {
     return spawnViaWorker(command, args, opts);
   }
