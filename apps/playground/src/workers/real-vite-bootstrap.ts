@@ -338,8 +338,14 @@ async function bootShellOwner(opts: {
   });
   const ownerBinExecutor = createOwnerBinExecutor();
 
-  const makeShell = (): Shell => {
-    const shell = new Shell({ cwd: cfg.root, env: {}, execBin: ownerBinExecutor });
+  const makeShell = (seed?: { cwd?: string; env?: Record<string, string> }): Shell => {
+    // Seed restores persisted terminal cwd/env on reload (ADR-0146); falls back
+    // to the workspace root + empty env for a fresh session.
+    const shell = new Shell({
+      cwd: seed?.cwd ?? cfg.root,
+      env: seed?.env ?? {},
+      execBin: ownerBinExecutor,
+    });
     shell.registerCommand('npm', async (args, ctx) => {
       const code = await npmCommand(args, ctx);
       // node_modules now present (or changed) — refresh the page's view.

@@ -68,6 +68,12 @@ const enc = new TextEncoder();
 export interface TerminalManagerOptions {
   /** The persistent workspace owner hosting the realm-resident shells. */
   owner: WorkspaceOwnerHandle;
+  /**
+   * Persisted cwd/env restored into each opened owner session (ADR-0146). The
+   * shell is owner-resident, so the seed travels to it over `pty:open`; the PAGE
+   * snapshot cache reflects it immediately for the prompt/explorer.
+   */
+  initialState?: { readonly cwd: string; readonly env: Record<string, string> };
 }
 
 export function createTerminalManager(opts: TerminalManagerOptions): TerminalManager {
@@ -88,7 +94,7 @@ export function createTerminalManager(opts: TerminalManagerOptions): TerminalMan
       status: 'idle',
       writer: null,
       activeRid: null,
-      ready: owner.openSession(id),
+      ready: owner.openSession(id, opts.initialState),
     };
     sessions.set(id, session);
     return session;

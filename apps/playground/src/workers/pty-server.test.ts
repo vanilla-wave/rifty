@@ -94,4 +94,25 @@ describe('pty-server', () => {
     const exit = out.find((f) => f.type === 'pty:exit' && f.rid === 'r1');
     expect(exit && exit.type === 'pty:exit' && exit.env.FOO).toBe('bar');
   });
+
+  it('pty:open seed makes the session shell start at the restored cwd/env (reload restore)', async () => {
+    const out: OwnerToPageFrame[] = [];
+    const server = createPtyServer({
+      send: (f) => out.push(f),
+      makeShell: (seed) => new Shell({ cwd: seed?.cwd ?? '/', env: seed?.env ?? {} }),
+    });
+    server.handleFrame({ type: 'pty:open', sid: 's1', cwd: '/work', env: { FOO: 'bar' } });
+    await server.handleFrame({
+      type: 'pty:exec',
+      sid: 's1',
+      rid: 'r1',
+      line: 'echo seeded',
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+    const exit = out.find((f) => f.type === 'pty:exit' && f.rid === 'r1');
+    expect(exit && exit.type === 'pty:exit' && exit.cwd).toBe('/work');
+    expect(exit && exit.type === 'pty:exit' && exit.env.FOO).toBe('bar');
+  });
 });

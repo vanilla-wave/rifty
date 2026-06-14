@@ -2,7 +2,14 @@
 // { type:'rifty:pty', frame } alongside rifty:vfs-write. Structured-clone-safe only.
 export type PtyStream = 'stdout' | 'stderr';
 
-export type PtyOpen = { type: 'pty:open'; sid: string };
+export type PtyOpen = {
+  type: 'pty:open';
+  sid: string;
+  /** Seed cwd for the session's shell (restored persisted terminal state, ADR-0146). */
+  cwd?: string;
+  /** Seed env for the session's shell (restored persisted terminal state, ADR-0146). */
+  env?: Record<string, string>;
+};
 export type PtyExec = {
   type: 'pty:exec';
   sid: string;

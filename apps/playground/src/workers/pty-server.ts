@@ -63,11 +63,17 @@ interface Session {
   readonly runs: Map<string, RunState>;
 }
 
+/** Seed cwd/env for a session's Shell (restored persisted terminal state). */
+export interface ShellSeed {
+  readonly cwd?: string;
+  readonly env?: Record<string, string>;
+}
+
 export interface PtyServerDeps {
   /** Wired to the kernel fork-IPC channel by the bootstrap. */
   readonly send: (frame: OwnerToPageFrame) => void;
-  /** Builds a session Shell (owner npm builtin + in-realm execBin). */
-  readonly makeShell: () => Shell;
+  /** Builds a session Shell (owner npm builtin + in-realm execBin), seeded with cwd/env. */
+  readonly makeShell: (seed?: ShellSeed) => Shell;
 }
 
 export interface PtyServer {
@@ -132,7 +138,10 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
     switch (frame.type) {
       case 'pty:open': {
         if (!sessions.has(frame.sid)) {
-          sessions.set(frame.sid, { shell: deps.makeShell(), runs: new Map() });
+          sessions.set(frame.sid, {
+            shell: deps.makeShell({ cwd: frame.cwd, env: frame.env }),
+            runs: new Map(),
+          });
         }
         deps.send({ type: 'pty:ready', sid: frame.sid });
         return;

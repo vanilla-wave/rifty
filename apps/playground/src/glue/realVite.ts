@@ -19,7 +19,12 @@ import type { ProjectSpec } from '../templates/project-spec.ts';
 import { defaultProjectSpec } from '../templates/registry.ts';
 import bootstrapWorkerUrl from '../workers/real-vite-bootstrap.ts?worker&url';
 import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
-import { type ExecOptions, type PtySessionSnapshot, createPtyClient } from './pty-client.ts';
+import {
+  type ExecOptions,
+  type PtyOpenSeed,
+  type PtySessionSnapshot,
+  createPtyClient,
+} from './pty-client.ts';
 import { PTY_IPC_TYPE, isOwnerToPage, isPtyIpcMessage } from './pty-protocol.ts';
 import { sendVfsWrite } from './vfs-write-port.ts';
 
@@ -218,8 +223,11 @@ export interface WorkspaceOwnerHandle {
    */
   readonly snapshotPort: number;
   readonly closed: Promise<number | null>;
-  /** Open a pty session in the owner; resolves on `pty:ready`. */
-  openSession(sid: string): Promise<void>;
+  /**
+   * Open a pty session in the owner; resolves on `pty:ready`. An optional `seed`
+   * (persisted cwd/env) restores terminal state into the owner shell on reload.
+   */
+  openSession(sid: string, seed?: PtyOpenSeed): Promise<void>;
   /** Run one line in `sid`; streams chunks to `onChunk`, resolves exit code. */
   exec(sid: string, line: string, opts: ExecOptions): Promise<number>;
   writeStdin(sid: string, rid: string, data: Uint8Array): void;
@@ -367,7 +375,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     workspaceId,
     snapshotPort,
     closed,
-    openSession: (sid) => client.openSession(sid),
+    openSession: (sid, seed) => client.openSession(sid, seed),
     exec: (sid, line, execOpts) => client.exec(sid, line, execOpts),
     writeStdin: (sid, rid, data) => client.writeStdin(sid, rid, data),
     signal: (sid, rid) => client.signal(sid, rid),

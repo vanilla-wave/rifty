@@ -46,9 +46,19 @@ export interface PtyClientDeps {
   send: (frame: PageToOwnerFrame) => void;
 }
 
+/** Seed cwd/env for a session (restored persisted terminal state, ADR-0146). */
+export interface PtyOpenSeed {
+  readonly cwd?: string;
+  readonly env?: Record<string, string>;
+}
+
 export interface PtyClient {
-  /** Open a session; resolves once the owner replies `pty:ready`. */
-  openSession(sid: string): Promise<void>;
+  /**
+   * Open a session; resolves once the owner replies `pty:ready`. An optional
+   * `seed` (persisted cwd/env) is carried to the owner's shell AND cached
+   * immediately so {@link PtyClient.snapshot} is truthful before the first run.
+   */
+  openSession(sid: string, seed?: PtyOpenSeed): Promise<void>;
   /** Run one line; streams chunks to `onChunk`, resolves the exit code. */
   exec(sid: string, line: string, opts: ExecOptions): Promise<number>;
   writeStdin(sid: string, rid: string, data: Uint8Array): void;
@@ -77,9 +87,13 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
   }
 
   return {
-    openSession(sid: string): Promise<void> {
+    openSession(sid: string, seed?: PtyOpenSeed): Promise<void> {
       const s = session(sid);
-      deps.send({ type: 'pty:open', sid });
+      // Cache the seed so snapshot() reflects persisted cwd/env before the first
+      // command resolves (terminal-state restore on reload, ADR-0146).
+      if (seed?.cwd !== undefined) s.cwd = seed.cwd;
+      if (seed?.env !== undefined) s.env = seed.env;
+      deps.send({ type: 'pty:open', sid, cwd: seed?.cwd, env: seed?.env });
       return new Promise((res) => s.readyResolvers.push(res));
     },
     exec(sid: string, line: string, opts: ExecOptions): Promise<number> {

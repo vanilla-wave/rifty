@@ -106,6 +106,19 @@ describe('pty-client', () => {
     expect(client.snapshot('s1')).toEqual({ cwd: '/work', env: { PATH: '/bin' } });
   });
 
+  it('openSession seed caches cwd/env immediately + carries them on pty:open (reload restore)', () => {
+    const { client, sent } = harness();
+    void client.openSession('s1', { cwd: '/restored', env: { TERM: 'xterm' } });
+    expect(sent[0]).toEqual({
+      type: 'pty:open',
+      sid: 's1',
+      cwd: '/restored',
+      env: { TERM: 'xterm' },
+    });
+    // snapshot reflects the seed BEFORE any command runs (no pty:exit yet)
+    expect(client.snapshot('s1')).toEqual({ cwd: '/restored', env: { TERM: 'xterm' } });
+  });
+
   it('synthetic disconnect resolves a hung exec so onInput never hangs', async () => {
     const { client } = harness();
     const p = client.exec('s1', 'sleep 9', { cols: 80, rows: 24, isTTY: true, onChunk: () => {} });

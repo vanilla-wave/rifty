@@ -367,7 +367,15 @@ export function App(props: AppProps) {
 
   // The terminal shell + cwd/env + npm + bin all live in the persistent
   // workspace owner now (ADR-0146 P2); the manager is a thin pty-channel client.
-  const manager = createTerminalManager({ owner: workspaceOwner });
+  const manager = createTerminalManager({
+    owner: workspaceOwner,
+    // Restore persisted terminal state on load (ADR-0146): the shell is
+    // owner-resident, so the seed travels to it over `pty:open`.
+    initialState: {
+      cwd: props.terminalPersistence.initialState.cwd,
+      env: props.terminalPersistence.initialState.env,
+    },
+  });
 
   // PAGE-side terminal writers per session, captured when the panel attaches.
   // The dev-server path (which runs at the App level, NOT through the owner pty

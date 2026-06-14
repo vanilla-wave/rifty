@@ -100,11 +100,15 @@ describe('App terminal startup wiring', () => {
     );
   });
 
+  // ADR-0146 (P2): the PAGE no longer hosts shell commands — npm/shell relocated
+  // to the owner pty channel; only the lifecycle-owning dev line stays PAGE-driven
+  // (`dispatchDevServerLine`). The ORIGINAL intent — manually starting vite records
+  // that terminal as the dev-server owner — is preserved via the dispatch + runViteCommand.
   it('records manually started vite as the dev-server terminal owner', () => {
-    expect(source).toContain('async function runViteCommand(ctx: TerminalCommandContext)');
+    expect(source).toContain('async function runViteCommand(ctx: DevServerContext)');
     expect(source).toContain('devServerSessionId = ctx.sessionId;');
-    expect(source).toContain('const viteCommand: TerminalCommand');
-    expect(source).toContain('commands: { npm: npmCommand, vite: viteCommand }');
+    expect(source).toContain('if (isDevServerLine(line)) return dispatchDevServerLine(');
+    expect(source).toContain('return await runViteCommand(ctx);');
   });
 
   it('routes npm run scripts through the same visible dev-server terminal command', () => {
@@ -117,7 +121,11 @@ describe('App terminal startup wiring', () => {
       'if (command.trim() === devScriptCommand(activeTemplate())) return runViteCommand(ctx);',
     );
     expect(source).not.toContain("'node src/main.js'");
-    expect(source).toContain('runScript: async (scriptName, command) =>');
+    // ADR-0146 (P2): the dev line reaches runTerminalScript via the PAGE dispatch
+    // (the old PAGE npm `runScript` callback is gone — npm runs in the owner now).
+    expect(source).toContain(
+      'return await runTerminalScript(devScriptCommand(activeTemplate()), ctx);',
+    );
   });
 
   it('loads and persists terminal environment state', () => {
