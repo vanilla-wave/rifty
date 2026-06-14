@@ -24,6 +24,24 @@
 
 ### Added
 
+- **`node:vm` disposal/lifetime STRESS tests (T18).** New
+  `src/builtins/vm/quickjs-disposal-stress.test.ts` validates the `ContextLifetime`
+  FinalizationRegistry + refcount net under churn — the guarantee that a leaked guest
+  handle never aborts the WASM runtime (`Assertion failed: list_empty(&rt->gc_obj_list)`)
+  and that growth is bounded. Five scenarios, split DETERMINISTIC (default `test:run`, via
+  the `releaseWrapper`/`markPending` seam) vs GC-GATED (`--expose-gc` only, else skipped):
+  (1) long-lived context, 5000 runs — primitive completions leave 0 live wrappers; fresh-
+  object completions released each run stay ≤1; (2) 500 contexts churned — deterministic
+  GC-ordering simulation disposes each exactly once (no abort/double-dispose), GC-gated
+  500/500 abandoned contexts collected; (3) adversarial release/markPending ordering (the
+  core no-ordering-guarantee invariant) — disposes only on the last release in either
+  order, plus churn-while-pending; (4) hot host-fn loop (carried T9) — confirmed
+  GC-bounded (peak 1000 → post-gc 0), documented why eager arg-wrapper release is unsafe
+  (cannot distinguish a discarded arg from a stored callback → use-after-free); (5)
+  delete-reflection churn (carried T17) — 2000 reseed/sweep cycles leave `#preRunSandboxKeys`
+  and sandbox keys bounded, deep write-back holds inbound identity. No leak/abort found —
+  the net holds; no hardening required.
+
 - **Public telemetry data types (T16).** `TelemetryEntry`, `TelemetryKind`, `TelemetrySnapshot`
   are now type-only exports of `src/index.ts` (also re-exported from `@riftydev/rifty` next to
   the runtime event surface), so an SDK consumer can type the `diagnostic` RuntimeEvent/
