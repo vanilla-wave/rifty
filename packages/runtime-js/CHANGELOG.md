@@ -22,8 +22,31 @@
   of a sandbox is V8-internal, not spec). The rewrite engine stays a shippable opt-in,
   guarded by the `rewrite-optin-*` parity cases.
 
+### Fixed
+
+- **`node:vm` (quickjs) inbound prototype-method fidelity (T19).** A host array/object seeded
+  into a context now carries its PROTOTYPE METHODS in the guest (`items.map`/`join`,
+  `obj.hasOwnProperty`) while staying `instanceof Array`/`Object` FALSE and `Array.isArray` TRUE —
+  matching real Node. The membrane previously severed the seed's proto to `null`, which kept the
+  `instanceof`-FALSE half but STRIPPED every inherited method (calling one threw
+  `not a function`); replaced with a cross-realm FLAT proto carrying the kind's full method chain
+  (`GENERIC_REBRAND_BOOTSTRAP`, the inbound mirror of the exotic rebrand). Surfaced by a realistic
+  template-engine parity case; pinned by `vm/quickjs-inbound-methods` + conformance.
+- **`node:vm` non-object context-arg error message fidelity (T19).** `describeNonObject` now
+  byte-matches Node's `ERR_INVALID_ARG_TYPE` per type: `undefined`/`null` render BARE (was
+  `type undefined (undefined)`), a bigint keeps its `n` suffix (`0n`, was `0`), `-0` stays `-0`,
+  strings are quote-selected + truncated >28 to 25 + `...`. Pinned by `vm/quickjs-context-arg-errors`
+  + conformance.
+
 ### Added
 
+- **`node:vm` realistic parity corpus + ES2023-vs-V8 divergence list (T19).** Four real-world-usage
+  parity cases on the default quickjs engine (config/plugin loader, template-engine closure,
+  structured-result compute, two-runs-share-state), byte-matched vs real Node, plus the
+  inbound-methods + context-arg-errors regression cases. The HONEST ES2023≠V8 divergence list
+  (`function undefined(){}` error type; explicit `var x = undefined` not propagated; sandbox key
+  enumeration order; `delete` of a context var) is documented in `docs/public/compat/modules.md`
+  with the `rewrite` opt-in as the V8-correct workaround — feeds the T20 ADR.
 - **`node:vm` disposal/lifetime STRESS tests (T18).** New
   `src/builtins/vm/quickjs-disposal-stress.test.ts` validates the `ContextLifetime`
   FinalizationRegistry + refcount net under churn — the guarantee that a leaked guest
