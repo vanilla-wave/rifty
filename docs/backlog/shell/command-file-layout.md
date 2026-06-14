@@ -4,6 +4,7 @@ status: active
 title: Shell command-file layout — commands/<cmd>.ts + _shared.ts + builtins.ts barrel
 created: 2026-06-08
 why: convention every new builtin depends on; a live TODO(backlog: shell/command-file-layout) marker points here at builtins.ts:1
+user_story: As a rifty contributor adding a shell builtin, I want every command in its own `commands/<cmd>.ts` for conflict-free parallel work, but today the original ~9 builtins still sit in the monolithic `builtins.ts`.
 sources: [Q-2026-06-07-407, adr/shell/0088-coreutils-pure-js-builtins-strategy.md]
 code: [packages/shell/src/builtins.ts, packages/shell/src/commands/_shared.ts]
 ---

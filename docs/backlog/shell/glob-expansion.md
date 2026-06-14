@@ -4,6 +4,7 @@ status: parked
 title: Shell glob expansion (`*`, `?`, `[abc]`)
 created: 2026-06-08
 why: not parsed — wildcards pass through literally, no pathname expansion
+user_story: As a developer at the rifty shell prompt, I want `rm *.log` or `ls src/*.ts` to expand against my VFS dir, but today `*`/`?`/`[abc]` reach the command as literal chars — tokenizer deliberately skips pathname expansion.
 sources: []
 ---
 ## Context

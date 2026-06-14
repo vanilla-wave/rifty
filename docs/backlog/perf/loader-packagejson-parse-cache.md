@@ -5,6 +5,7 @@ status: active
 title: loader-internal package.json parse cache (key + invalidation)
 created: 2026-06-08
 why: readPackageJson has no cache — N modules from one package = N decode+parse of its package.json; invalidation-coherence is the risk; the backlog item is this file
+user_story: As a dev importing N files from one package, I want its `package.json` parsed once, but today `readPackageJson` has no cache so each import re-decodes+`JSON.parse`s the same file — N times the parse cost
 sources: [perf-audit #5, adr-plan C]
 ---
 ## Context

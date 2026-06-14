@@ -4,6 +4,7 @@ status: parked
 title: Ecosystem Sweep — quarterly checklist + cron-issue (docs/processes/ecosystem-sweep.md)
 created: 2026-06-08
 why: D-005/ADR-0006 define a recurring quarterly maintenance process with a named checklist file, but docs/processes/ecosystem-sweep.md does not exist — an uncaptured standing task
+user_story: As a maintainer running the quarterly Ecosystem Sweep, I want a runnable checklist (re-check incompatible-packages vs new WASM/WASI builds; bump `unenv`/`e18e` then re-run parity), but today the named checklist file and cron-issue don't exist so the process is fictional.
 sources: [D-005, ADR-0006, PROJECT_PLAN §"Process: Ecosystem Sweep"]
 ---
 ## Context

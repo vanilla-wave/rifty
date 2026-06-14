@@ -4,6 +4,7 @@ status: parked
 title: http.Server WS/SSE upgrade (server.on('upgrade'), res.assignSocket)
 created: 2026-06-08
 why: Port-registry bridge carries buffered+chunked HTTP only; no socket hijack — owned by feature 07
+user_story: As a developer wiring a WebSocket server, I want `server.on('upgrade')` + `res.assignSocket` to hijack the socket, but currently the port-registry bridge carries buffered HTTP only — no socket hijack, upgrade/`ws` shim refused.
 sources: [feature-07-ws-sse-bridge, ADR-0040, ADR-0048]
 ---
 ## Context

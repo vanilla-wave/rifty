@@ -5,6 +5,7 @@ status: parked
 title: ADR-0090 — kernel worker pre-warm pool (amortize spawn latency; gated on a measured spawn spike)
 created: 2026-06-08
 why: pre-warm pool is the biggest spawn-latency lever but build is gated on a measured spawn spike (inflection gate, CLAUDE.md) — design now, build later
+user_story: As a dev spawning processes, I want `spawnKernelWorker` to claim a pre-warmed idle worker instead of paying full cold-spawn latency, but today there is no pool — every spawn cold-starts SAB/port alloc; build is parked behind a measured spawn spike
 sources: [perf-audit pre-warm/§5, adr-plan A/ADR-0090, ADR-0011]
 ---
 ## Context

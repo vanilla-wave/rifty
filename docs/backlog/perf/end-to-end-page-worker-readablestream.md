@@ -5,6 +5,7 @@ status: blocked
 title: ADR-0093 — supersede ADR-0048 for end-to-end page<->worker ReadableStream (#22 fix b)
 created: 2026-06-08
 why: real page↔worker streaming overturns recorded M12/page-buffered deferral (ADR-0017 / ADR-0048 D2 / ADR-0055); bumps PREVIEW_PORT_FRAME_VERSION 2->3; REQUIRES a decision subagent
+user_story: As a dev serving a streamed response from the preview, I want the first bytes to reach the page immediately, but today the page accumulates and concatenates every `≤64 KiB` frame before responding so I eat full head-of-line latency; true end-to-end `ReadableStream` is deferred to M12
 sources: [perf-audit #22 fix(b)/§5, adr-plan B/ADR-0093, ADR-0048, ADR-0017, ADR-0055, draft ADR-0060]
 ---
 ## Context

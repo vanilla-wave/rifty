@@ -4,6 +4,7 @@ status: parked
 title: Host-operator resource enforcement policy
 created: 2026-06-12
 why: hard resource controls need a kernel public-behavior design, separate from the shipped trust-model documentation
+user_story: As a dev fanning out many child processes/Workers (test-runner, build), I want a cap that queues or throttles excess spawns plus a wall-clock watchdog to kill runaways, but today `ProcessManager` enforces no concurrency cap, queue, timeout, or memory/egress policy.
 sources: [docs/public/trust-model.md, docs/research/open-webcontainers-alternative-2026-06.md, ADR-0011, ADR-0045]
 code: [packages/kernel/src/spawn-worker.ts, packages/kernel/src/process-manager.ts]
 ---

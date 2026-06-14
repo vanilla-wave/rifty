@@ -4,6 +4,7 @@ status: active
 title: Rename RIFTY_RFV_* env prefix → RIFTY_RT_* + Mode token 'real-vite' → 'project'
 created: 2026-06-08
 why: ADR-0078 made the real-vite worker template-agnostic but left two Vite-branded names; generic surface still carries "RFV" / "real-vite"
+user_story: As a developer using the rifty web playground, I want a generic project runner whose env keys and mode token aren't Vite-branded, but today the template-agnostic surface still reads `RIFTY_RFV_PORT/ROOT/ENTRY` and `Mode 'real-vite'`, falsely implying Vite-only and confusing non-Vite project setups.
 sources: [ADR-0078, ADR-0076, ADR-0043, ADR-0080]
 ---
 ## Context

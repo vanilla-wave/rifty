@@ -4,6 +4,7 @@ status: parked
 title: node:sqlite inert options (readOnly/allowExtension/timeout) + DQS toggle made effective
 created: 2026-06-08
 why: Options accepted-but-inert and DQS can't be toggled in prebuilt sql.js WASM — needs custom rebuild
+user_story: As a dev passing `DatabaseSync` `readOnly`/`timeout` or expecting `INSERT INTO t VALUES ("x",1)` to throw like Node, I want those enforced, but today the options are accepted-but-inert and DQS stays ON since prebuilt sql.js exposes no runtime toggle — so the double-quoted string is silently accepted.
 sources: [ADR-0065]
 ---
 ## Context

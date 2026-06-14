@@ -4,6 +4,7 @@ status: active
 title: Consumer Ready follow-up cutline
 created: 2026-06-12
 why: The current branch delivers a large adoption slice, but full Consumer Ready still has tracked future work across areas
+user_story: As a maintainer planning post-branch work, I want one durable index of every remaining Consumer-Ready follow-up (`Sandbox.exec` streaming, snapshot/restore, `create-rifty` scaffold, `node:zlib` subset…), but today that list lives only in temporary Superpowers spec notes that vanish with the branch.
 sources: [docs/ROADMAP.md, docs/backlog/distribution/README.md]
 ---
 
@@ -65,8 +66,10 @@ index is complete):
   realms (port registry is realm-local).
 - `shell/node-modules-bin-execution` — PATH-style `.bin` launcher execution by
   command name.
-- `runtime-js/vm-sandbox-residual-gaps` — documented `node:vm` write-rewrite
-  gaps (direct eval, top-level function hoisting, completion values).
+
+(`runtime-js/vm-sandbox-residual-gaps` closed in M11: function hoisting,
+completion values, destructuring `var` patterns, and post-run persistence fixed;
+direct `eval` recorded as permanent in ADR-0138.)
 
 Pull public API and new-package items only with ADRs. Pull outward deploy smoke
 only after explicit approval.

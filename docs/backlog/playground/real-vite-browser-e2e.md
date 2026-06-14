@@ -4,6 +4,7 @@ status: active
 title: Full browser e2e — real-vite worker-realm + HMR + iframe-preview + SW preview-routing via default/CI verification
 created: 2026-06-08
 why: M10 open acceptance — real upstream vite@5.4 runs headless and opt-in browser e2e exists, but the cross-origin-isolated browser wiring is not yet part of default/CI verification
+user_story: As a developer using the rifty web playground, I want to trust that `vite` worker-boot + iframe-preview + SW routing + HMR reload stays green on every push, but today that full browser flow runs only behind `RIFTY_E2E_HMR=1` so a regression in cross-origin-isolated wiring can land without CI catching it.
 sources: [TASKS M10, ADR-0050, ADR-0043, ADR-0048, ADR-0047]
 ---
 ## Context

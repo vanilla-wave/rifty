@@ -4,6 +4,7 @@ status: active
 title: Live registry roundtrip manual smoke (registry.npmjs.org via Vite proxy)
 created: 2026-06-08
 why: mock-based install pipeline verified; live registry.npmjs.org-through-Vite-proxy path needs a manual smoke, not captured done anywhere
+user_story: As a developer running `npm install` against live `registry.npmjs.org` through the dev `/npm-registry` proxy, I want confidence metadata + tarballs actually resolve that way, but currently only the opt-in Fetcher live tests are recorded — the Vite-proxy roundtrip itself has no captured smoke.
 sources: [TASKS Follow-ups, D-004, ADR-0005]
 ---
 ## Context

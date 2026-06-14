@@ -5,6 +5,7 @@ status: active
 title: ADR-0081 — bytesToString decode helper on @riftydev/io public surface
 created: 2026-06-08
 why: fs text reads do Buffer.from(bytes).toString(enc) — full-buffer copy then decode; needs cross-package export, write-before-code
+user_story: As a dev doing `readFileSync(path, 'utf8')` on big text files, I want the read to skip wasted work, but today every encoded fs read does `Buffer.from(bytes).toString(enc)` — a full-buffer copy then decode — and no `bytesToString(bytes, enc)` helper exists to decode in place
 sources: [perf-audit #12, adr-plan A/ADR-0081, ADR-0029, ADR-0041]
 ---
 ## Context

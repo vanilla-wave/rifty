@@ -4,6 +4,7 @@ status: active
 title: Wire capabilities-detection (single source of truth) into startup + e2e logging
 created: 2026-06-08
 why: D-006 specifies a data-driven capabilities source for the browser-compat report; ambiguous whether detectCapabilities is wired into startup + e2e logging
+user_story: As a developer checking whether my browser can run the playground, I want startup to log my real `crossOriginIsolated`/`SharedArrayBuffer`/`FileSystemSyncAccessHandle`/`Atomics.waitAsync` support, but today it is unverified whether `detectCapabilities` is wired into boot logging + the e2e harness, so each run may record nothing.
 sources: [D-006, ADR-0007, audit-digest missedLive]
 ---
 ## Context

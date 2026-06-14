@@ -4,6 +4,7 @@ status: active
 title: node:sqlite Node-vs-rifty head-to-head parity case (sequenced to DatabaseSync shim)
 created: 2026-06-08
 why: Parity case was deferred to the shim task; confirm the now-landed sqlite cases satisfy ADR-0065's mandate
+user_story: As a dev relying on `node:sqlite` behaving like real Node, I want the `kind:'sqlite'` parity cases to prove construct/exec/close, prepare/all/get/run/iterate, named params and bigint-overflow refusal all match, but today that coverage is unconfirmed — pending an M12 audit that the landed cases span the full mandated surface.
 sources: [ADR-0065 Consequences]
 ---
 ## Context

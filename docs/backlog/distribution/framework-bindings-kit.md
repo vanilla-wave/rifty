@@ -4,6 +4,7 @@ status: parked
 title: EPIC D — framework bindings + atomic component kit (D1-D5)
 created: 2026-06-08
 why: drop-in per-framework atoms (<RiftyIDE/>, react/vue bindings) over the workbench — deferred, depends-on EPIC C
+user_story: As a dev embedding rifty in my React/Vue app, I want to drop in `<RiftyIDE/>` or `@riftydev/react` atoms (`RiftyEditor`/`Terminal`/`Preview`/`RiftyFileTree`) with my own layout/theming, but today only the Solid playground exists — no framework-binding packages, blocked on the workbench split.
 sources: [DD-3, DD-4, EPIC D]
 ---
 ## Context

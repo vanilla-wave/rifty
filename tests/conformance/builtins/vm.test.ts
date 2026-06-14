@@ -335,6 +335,126 @@ describe('node:vm subset', () => {
     expect(() => vm.runInNewContext('missing', {})).toThrow(ReferenceError);
   });
 
+  it('hoists top-level function declarations so they are callable before their text', () => {
+    const ctx: Record<string, unknown> = {};
+    expect(vm.runInNewContext('var r = f(); function f() { return 9; } r;', ctx)).toBe(9);
+    expect(ctx.f).toBeTypeOf('function');
+
+    expect(
+      vm.runInNewContext(
+        'function a(n) { return n <= 0 ? 0 : b(n - 1); } function b(n) { return a(n) + 1; } a(3);',
+        {},
+      ),
+    ).toBe(3);
+
+    const reassigned: Record<string, unknown> = {};
+    expect(vm.runInNewContext('function f() { return 1; } f = 5; f;', reassigned)).toBe(5);
+    expect(reassigned.f).toBe(5);
+  });
+
+  it('gives declaration statements an empty completion value like Node', () => {
+    expect(vm.runInNewContext('var q = 5;', {})).toBeUndefined();
+    expect(vm.runInNewContext('1; var w = 7;', {})).toBe(1);
+    expect(vm.runInNewContext('9; var z;', {})).toBe(9);
+    expect(vm.runInNewContext('var a = 1, b = 2;', {})).toBeUndefined();
+    expect(vm.runInNewContext('function f() {}', {})).toBeUndefined();
+    expect(vm.runInNewContext('5; function f() {}', {})).toBe(5);
+    expect(vm.runInNewContext('var x = 5; x;', {})).toBe(5);
+  });
+
+  it('runs a top-level var as the unbraced body of if/else/do-while (completion wrapper consumes the source ;)', () => {
+    // Regression (PR #30): the `{ let T = (…); }` completion-neutraliser left the
+    // source `;` dangling, ending the if-consequent / loop body early.
+    expect(vm.runInNewContext('if (false) var x = 1; else 2;', {})).toBe(2);
+    expect(vm.runInNewContext('if (false) var a = 1; else var b = 2; b', {})).toBe(2);
+    expect(vm.runInNewContext('if (false) var x = 1; else if (true) 2;', {})).toBe(2);
+    expect(vm.runInNewContext('if (true) { if (false) var x = 1; else 2; }', {})).toBe(2);
+    expect(vm.runInNewContext('do var x = 1; while (false); x', {})).toBe(1);
+    expect(vm.runInNewContext('var i = 0; do var x; while (i++ < 2); i', {})).toBe(3);
+    expect(
+      vm.runInNewContext('if (false) var { a } = { a: 1 }; else var { b } = { b: 2 }; b', {}),
+    ).toBe(2);
+    // braced bodies + statement-list position unchanged
+    expect(vm.runInNewContext('if (false) { var x = 1; } else 2;', {})).toBe(2);
+    expect(vm.runInNewContext('var a = 1, b = 2; a + b', {})).toBe(3);
+  });
+
+  it('leaves a writable intrinsic intact for a declaration-only var of the same name', () => {
+    // Regression (PR #30): a no-init `var Map;` registered the name and shadowed the
+    // real Map to undefined; Node leaves the writable intrinsic until it is assigned.
+    expect(vm.runInNewContext('var Map; var m = new Map(); m.set("k", 1); m.get("k")', {})).toBe(1);
+    expect(vm.runInNewContext('var JSON; JSON.stringify({ a: 1 })', {})).toBe('{"a":1}');
+    expect(vm.runInNewContext('var Array; typeof Array', {})).toBe('function');
+    // assigning the name still shadows the intrinsic (own property wins)
+    expect(vm.runInNewContext('var Map; Map = 7; Map', {})).toBe(7);
+    expect(vm.runInNewContext('var Map; Map = undefined; typeof Map', {})).toBe('undefined');
+    expect(() => vm.runInNewContext('var Map; Map = undefined; new Map()', {})).toThrow(TypeError);
+    // a non-intrinsic no-init var still reads undefined
+    expect(vm.runInNewContext('var foo; typeof foo', {})).toBe('undefined');
+  });
+
+  it('lands statement-position var destructuring patterns on the context', () => {
+    const ctx: Record<string, unknown> = {};
+    expect(
+      vm.runInNewContext(
+        'var { a, b = 2, ...rest } = { a: 1, c: 3, d: 4 }; var [x, , y = 9] = [10]; ({ a, b, rest, x, y });',
+        ctx,
+      ),
+    ).toEqual({ a: 1, b: 2, rest: { c: 3, d: 4 }, x: 10, y: 9 });
+    expect(Object.keys(ctx).sort()).toEqual(['a', 'b', 'rest', 'x', 'y']);
+
+    const nested: Record<string, unknown> = {};
+    expect(vm.runInNewContext('var { p: { q } } = { p: { q: 5 } }; ({ q });', nested)).toEqual({
+      q: 5,
+    });
+    expect('q' in nested).toBe(true);
+    expect('p' in nested).toBe(false);
+  });
+
+  it('rewrites a parenthesised last var initializer without corrupting the source', () => {
+    // acorn strips wrapping parens from the init node, so the completion-neutral
+    // `{ let T = (…); }` closer must use the declarator's end, not init.end.
+    expect(vm.runInNewContext('var c = (1, 2, 3); c', {})).toBe(3);
+    expect(vm.runInNewContext('var x = (5); x', {})).toBe(5);
+    expect(vm.runInNewContext('var x = ((7)); x', {})).toBe(7);
+    expect(vm.runInNewContext('var z = (9)', {})).toBeUndefined();
+    expect(vm.runInNewContext('var f = (a => a + 1); f(4)', {})).toBe(5);
+    expect(vm.runInNewContext('var o = ({ a: 1 }); o.a', {})).toBe(1);
+    expect(vm.runInNewContext('var a = 1, b = (2); a + b', {})).toBe(3);
+
+    const ctx: Record<string, unknown> = {};
+    expect(vm.runInNewContext('var { a } = ({ a: 1 }); var [b] = ([2]); ({ a, b });', ctx)).toEqual(
+      {
+        a: 1,
+        b: 2,
+      },
+    );
+    expect(Object.keys(ctx).sort()).toEqual(['a', 'b']);
+  });
+
+  it('keeps context var bindings readable after the run instead of leaking to the host', () => {
+    type HostGlobals = typeof globalThis & Record<string, unknown>;
+    const ctx: Record<string, unknown> = {};
+    vm.runInNewContext('var unset; this.read = function () { return unset; };', ctx);
+    expect((ctx.read as () => unknown)()).toBeUndefined();
+
+    (globalThis as HostGlobals).__riftyVmGapShadow = 'HOST';
+    try {
+      const shadowed: Record<string, unknown> = {};
+      vm.runInNewContext(
+        'var __riftyVmGapShadow; this.read = function () { return __riftyVmGapShadow; };',
+        shadowed,
+      );
+      expect((shadowed.read as () => unknown)()).toBeUndefined();
+    } finally {
+      Reflect.deleteProperty(globalThis, '__riftyVmGapShadow');
+    }
+
+    const persistent = vm.createContext({});
+    vm.runInContext('var later;', persistent);
+    expect(vm.runInContext('typeof later;', persistent)).toBe('undefined');
+  });
+
   it('compiles functions with parameters', () => {
     const add = vm.compileFunction('return a + b;', ['a', 'b']);
     expect(add(2, 5)).toBe(7);

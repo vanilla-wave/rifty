@@ -63,6 +63,23 @@ export interface InstallOptions {
    * disable caching (e.g. `{ get: async () => null, put: async () => '' }`).
    */
   tarballCache?: TarballCache;
+  /**
+   * Per-package progress hook (ADR-0134). Fires once per unique (name,
+   * version) when its tarball resolves (cache or network), on both the
+   * lockfile fast path and live resolve; failed fetches (incl. skipped
+   * optionals) never fire. Order is fetch-completion order, not dependency
+   * order. A throw is caught + warned — a progress sink must not abort an
+   * install.
+   */
+  onPackage?: (event: InstallProgressEvent) => void;
+}
+
+/** Payload for {@link InstallOptions.onPackage}. */
+export interface InstallProgressEvent {
+  readonly name: string;
+  readonly version: string;
+  /** True when the tarball came from the tarball cache, false from network. */
+  readonly cacheHit: boolean;
 }
 
 /** ResolvedPackage + lockfile provenance + peer-dep metadata for the warn pass.
@@ -197,6 +214,7 @@ export async function install(
     plan.optionalDependencies,
     rootName,
     fetchCtx,
+    opts.onPackage,
   );
   const packages = [...resolved.values()];
 
@@ -454,6 +472,7 @@ async function walkAndPin(
   topLevelOptionalDependencies: Record<string, string>,
   rootName: string,
   fetchCtx: FetchAndUnpackCtx,
+  onPackage?: (event: InstallProgressEvent) => void,
 ): Promise<Map<string, PinnedPackage>> {
   // Determinism-vs-throughput invariant (#24, perf-audit 2026-06-05): the
   // placement walk (resolve -> choosePlacement -> flatByName claim -> recurse)
@@ -538,6 +557,25 @@ async function walkAndPin(
             fetchCtx,
           ),
         );
+        if (onPackage) {
+          // Fire on the dedup'd promise: once per unique (name, version), only
+          // on success (ADR-0134). `inFlight` stores the hooked promise so a
+          // second visitor of the same key never double-fires.
+          const hook = onPackage;
+          const { name: pinName, version: pinVersion } = pin;
+          p = p.then((result) => {
+            try {
+              hook({ name: pinName, version: pinVersion, cacheHit: result.cacheHit });
+            } catch (err) {
+              console.warn(
+                `install onPackage hook threw for ${pinName}@${pinVersion}: ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
+              );
+            }
+            return result;
+          });
+        }
         inFlight.set(key, p);
       }
 

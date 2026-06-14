@@ -32,6 +32,8 @@ export interface TerminalManager {
   createSession(title?: string): TerminalSessionSnapshot;
   select(id: string): void;
   attachWriter(id: string, writer: TerminalWriter): void;
+  /** Wipe the session's screen + scrollback (e.g. when switching projects). */
+  clear(id: string): void;
   writeStdin(id: string, data: TerminalRawInput): void;
   runLine(id: string, input: string, dims?: TerminalRunDimensions): Promise<number>;
   runSequence(id: string, lines: readonly string[], dims?: TerminalRunDimensions): Promise<number>;
@@ -210,6 +212,11 @@ export function createTerminalManager(opts: {
     },
     attachWriter(id: string, writer: TerminalWriter): void {
       getSession(id).writer = writer;
+    },
+    clear(id: string): void {
+      // ANSI: erase display (2J) + scrollback (3J) + cursor home (H). A no-op
+      // when no writer is attached yet (the boot's first clear may race mount).
+      write(getSession(id), '\x1b[2J\x1b[3J\x1b[H');
     },
     writeStdin(id: string, data: TerminalRawInput): void {
       getSession(id).activeStdin?.write(data);

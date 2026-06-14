@@ -4,6 +4,7 @@ status: parked
 title: In-browser TS language service over VFS (diagnostics/hover/defs)
 created: 2026-06-13
 why: M12 AI-IDE wants an agent `typecheck` tool + real editor squiggles; needs TS SEMANTIC diagnostics in-browser, distinct from the existing esbuild type-STRIP transform
+user_story: As a rifty maintainer wiring the M12 agent IDE, I want `getSemanticDiagnostics`/`getQuickInfo`/`getDefinitionAtPosition` over the VFS for a `typecheck`/`hover`/`goto` tool and editor squiggles, but today rifty only type-STRIPS via esbuild.wasm — no `typescript` Language Service, so the agent edits blind and there are no real type errors
 sources: [M12, docs/research/open-webcontainers-alternative-2026-06.md, docs/backlog/playground/problems-tab-bottom-panel.md, docs/backlog/runtime-js/ts-strip-transform-cache.md]
 ---
 

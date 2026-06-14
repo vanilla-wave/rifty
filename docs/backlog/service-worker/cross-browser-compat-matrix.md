@@ -4,6 +4,7 @@ status: parked
 title: browsers.md cross-browser capability/compat matrix (first cross-browser CI run)
 created: 2026-06-08
 why: docs/public/compat/README.md lists browsers.md as "coming with first cross-browser CI run"; the matrix and the run that generates it are both unfinished
+user_story: As a developer previewing my app, I want a per-engine `browsers.md` matrix telling me whether transferable streams (SSE fast path) and COI/SAB work in my Firefox/WebKit target, but today only Chrome is characterized and the cross-browser cron that would generate the matrix has not run.
 sources: [docs/public/compat/README.md, A-6, A6 (backlog-distribution-and-ide), D-006, ADR-0007]
 ---
 ## Context

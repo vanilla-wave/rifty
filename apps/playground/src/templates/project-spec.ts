@@ -44,6 +44,13 @@ interface ProjectSpecBase {
   readonly entry: ProjectEntry;
   readonly defaultPort: number;
   readonly estimatedBootSeconds: number;
+  /**
+   * Same-origin URL of the baked node_modules snapshot (ADR-0135), produced by
+   * `pnpm snapshots:bake`. When set and no install stamp matches, the worker
+   * restores this tree instead of running `install()` — the first-ever boot of
+   * an instant preset is truly instant. Absent → install as usual.
+   */
+  readonly bakedNodeModulesUrl?: string;
 }
 
 /** Template whose worker boots a Vite-shaped dev server from an npm package. */
@@ -83,6 +90,8 @@ interface BootstrapConfigBase {
   readonly packageJson: string;
   /** Absolute-path → contents map the worker seeds idempotently. */
   readonly seedFiles: Readonly<Record<string, string>>;
+  /** Carried from {@link ProjectSpecBase.bakedNodeModulesUrl}. */
+  readonly bakedNodeModulesUrl?: string;
 }
 
 export interface ViteBootstrapConfig extends BootstrapConfigBase {
@@ -184,6 +193,7 @@ export function resolveBootstrapConfig(
     packageVersion: pkg.version,
     installDeps: spec.install,
     packageJson: pkg.json,
+    ...(spec.bakedNodeModulesUrl ? { bakedNodeModulesUrl: spec.bakedNodeModulesUrl } : {}),
   };
   if (spec.runtime === 'node-server') {
     const seedFiles: Record<string, string> = {

@@ -120,6 +120,22 @@ describe('createTerminalManager', () => {
     manager.dispose();
   });
 
+  it('clears a session by writing the ANSI screen + scrollback reset to its writer', () => {
+    const manager = createTerminalManager({ cwd: '/' });
+    const session = manager.sessions()[0]!;
+    const writer = makeWriter();
+    manager.attachWriter(session.id, writer.write);
+
+    manager.clear(session.id);
+    expect(writer.calls).toEqual([{ chunk: '\x1b[2J\x1b[3J\x1b[H', stream: 'stdout' }]);
+
+    // a session with no writer attached yet clears silently (no throw).
+    const second = manager.createSession('Second');
+    expect(() => manager.clear(second.id)).not.toThrow();
+
+    manager.dispose();
+  });
+
   it('does nothing for empty input', async () => {
     const manager = createTerminalManager({ cwd: '/' });
     const session = manager.sessions()[0]!;
@@ -358,6 +374,7 @@ describe('createTerminalManager', () => {
     expect(() => manager.attachWriter(session.id, () => {})).toThrow(
       'Terminal manager is disposed',
     );
+    expect(() => manager.clear(session.id)).toThrow('Terminal manager is disposed');
     expect(() => manager.writeStdin(session.id, 'x')).toThrow('Terminal manager is disposed');
     expect(() => manager.stop(session.id)).toThrow('Terminal manager is disposed');
     await expect(manager.runLine(session.id, 'echo nope')).rejects.toThrow(

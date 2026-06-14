@@ -4,6 +4,7 @@ status: parked
 title: Dev-server ESM rewriting for bare specifiers (+ esbuild TS/JSX transform)
 created: 2026-06-08
 why: bare-specifier rewrite + esbuild.wasm TS/JSX transform are both unimplemented in the example dev-server — compat rows ❌ Pending
+user_story: As a developer serving a Vite-like app from rifty, want `import x from 'pkg'` plus `.ts`/`.tsx` modules to load in the browser — but the dev-server neither rewrites bare specifiers to served URLs nor runs the esbuild.wasm TS/JSX transform, so the npm module graph won't resolve.
 sources: [compat/m10-tooling.md]
 ---
 ## Context

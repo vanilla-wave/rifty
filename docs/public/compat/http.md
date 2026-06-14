@@ -17,6 +17,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Missing port dispatch | ✅ | Returns 502 through registry dispatch |
 | `http.get` loopback | ✅ | Client request to own registered port |
 | Streaming responses | ✅ | SSE chunks, long-poll delay, one chunk per `write()` |
+| SSE over preview bridge | ⚠️ | Delivered only where transferable `ReadableStream` exists (SW bridge); the no-transfer SW path and the cross-realm worker bridge both fail loud (HTTP 502 naming the ceiling) instead of hanging on an unending body |
 | Header reassignment / status codes | ✅ | Pinned by parity cases |
 | `https` module surface | ❌ | Import resolves, but `createServer`, `request`, `get`, and `Agent` throw `NotImplementedError` |
 | Real OS sockets | ❌ | Browser runtime uses port registry, not kernel TCP sockets |
@@ -29,8 +30,11 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `tests/conformance/builtins/https.test.ts`
 - `tools/node-parity-runner/cases/http/*.case.ts`
 - `tools/node-parity-runner/cases/http2/surface.case.ts`
+- `packages/service-worker/src/body-transport.test.ts`
+- `packages/net/src/cross-realm/preview-port.test.ts`
 
 ## Known Limitations
 
 - Networking is browser-local: servers bind a rifty port registry and preview dispatch, not native sockets.
+- SSE preview delivery needs browser `ReadableStream` transfer over `postMessage` (SW bridge); the cross-realm worker bridge buffers until end (true end-to-end stream is M12). Paths without it fail loud (HTTP 502 naming the ceiling) rather than silently buffering an unending body forever.
 - `node:https` cannot promise real TLS egress inside the local runtime without host integration.

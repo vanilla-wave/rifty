@@ -4,6 +4,7 @@ status: parked
 title: git command + capability over VFS (isomorphic-git)
 created: 2026-06-13
 why: M12 AI-IDE wants git-aware agent tools (status/diff/commit) and a human `git` command; rifty has no git anywhere, and native git is a spawned binary (browser ceiling)
+user_story: As a developer at the rifty shell prompt, I want `git status`/`git diff`/`git commit`/`git clone` over my VFS project, but today no git exists anywhere and native git can't be spawned in-browser.
 sources: [M12, docs/research/open-webcontainers-alternative-2026-06.md, docs/backlog/shell/grep-find-frozen-gnu-fixtures.md]
 ---
 

@@ -5,6 +5,7 @@ status: active
 title: ADR-0087 — Dispatcher Atomics.waitAsync responder + SAB ring capacity + SyncRpc v2 binary frame (consolidates #17/#18/#19/#23)
 created: 2026-06-08
 why: single biggest blast radius — versioned SAB+SyncRpc wire across kernel<->runtime-js, 6 files, proto 1->2; dispatcher busy-polls setInterval(1ms) adding ~2-4ms/syscall; write-before-code
+user_story: As a dev whose code makes many sync syscalls (`fs.readFileSync`, `execSync`), I want each to return in microseconds without busy-poll lag, but today the dispatcher `setInterval(1ms)` polls adds ~2-4ms/syscall and `Atomics.waitAsync` + zero-copy ring + the v2 binary frame are unbuilt.
 sources: [perf-audit #17/#18/#19/#23, adr-plan A/ADR-0087, ADR-0011, ADR-0032 (cite, not supersede), A-021]
 ---
 ## Context

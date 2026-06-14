@@ -5,13 +5,14 @@ import { describe, expect, it } from 'vitest';
 const source = readFileSync(fileURLToPath(new URL('./App.tsx', import.meta.url)), 'utf8');
 
 describe('App terminal startup wiring', () => {
-  // Revised pins (see the node-server template ADR): the boot line is
-  // template-dispatched via terminalDevLine(); the ORIGINAL intent — boot goes
-  // through the visible command that owns the worker lifecycle, never cosmetic
-  // terminal theater — stays enforced for both runtimes.
-  it('auto-starts the active template through the command that owns the real worker lifecycle', () => {
+  // Revised pins (ADR-0135, prev. node-server template ADR): boot lines are
+  // preset-dispatched via presetBootLines() (from-scratch presets prepend the
+  // visible `npm install`); the ORIGINAL intent — boot goes through the visible
+  // command that owns the worker lifecycle, never cosmetic terminal theater —
+  // stays enforced for both runtimes and both setup kinds.
+  it('auto-starts the active preset through the command that owns the real worker lifecycle', () => {
     expect(source).toContain(
-      'await runTerminalSequence(session.id, [terminalDevLine(activeTemplate(), WORKSPACE)])',
+      'await runTerminalSequence(session.id, presetBootLines(preset, WORKSPACE))',
     );
     expect(source).not.toContain("['npm install', 'npm run dev']");
     // hardcoded boot literals bypassing the dispatch helper are banned
@@ -79,8 +80,17 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('if (restartSessionId) void restartDevServer(restartSessionId)');
     expect(source).toContain('devServerSessionId = session.id');
     expect(source).toContain(
-      'await runTerminalSequence(targetSessionId, [terminalDevLine(activeTemplate(), WORKSPACE)])',
+      'await runTerminalSequence(\n      targetSessionId,\n      presetBootLines(presetForId(activePreset()), WORKSPACE),\n    );',
     );
+  });
+
+  it('tags the worker with the project slug and clears the console on a project switch', () => {
+    // slug → worker install-stamp reuse key (distinct presets on the same
+    // template must not reuse each other's tree, ADR-0135); clear → fresh
+    // console for the switched-in project.
+    expect(source).toContain('slug: activePreset(),');
+    expect(source).toContain('manager.clear(targetSessionId)');
+    expect(source).toContain('manager.clear(session.id)');
   });
 
   it('does not restart Vite inside a hidden stale terminal session', () => {

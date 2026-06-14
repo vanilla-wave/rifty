@@ -4,6 +4,7 @@ status: active
 title: NotImplementedError hit telemetry (dev console/statusbar counter of stubs real consumers touch)
 created: 2026-06-12
 why: cheap; stub-priority is currently guesswork — a hit counter from real playground sessions turns backlog prioritization into data
+user_story: As a playground developer hitting unimplemented features, I want a dev-console/statusbar counter of which `NotImplementedError` `module.method` stubs my session actually touches, but today nothing aggregates the hits so I discover them one crash at a time.
 sources: [ADR-0130, fullstack-demo feedback 2026-06-12]
 code: [packages/io/src/errors.ts, packages/vfs/src/errors.ts, apps/playground/src]
 ---

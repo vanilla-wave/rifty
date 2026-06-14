@@ -4,6 +4,7 @@ status: parked
 title: Postinstall (lifecycle) scripts in npm-client
 created: 2026-06-08
 why: postinstall execution unimplemented; deferred — most packages don't need it, no verified consumer need
+user_story: As a developer installing a package with a `postinstall`/`preinstall`/`install` hook, I want those lifecycle scripts to run, but today npm-client silently skips them so any JS-only setup step never executes (native-build hooks stay blocked by the spawn ceiling)
 sources: [TASKS Follow-ups]
 ---
 ## Context

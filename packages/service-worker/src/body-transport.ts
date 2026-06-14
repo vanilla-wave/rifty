@@ -6,6 +6,7 @@
  * message so the SW side can verify the peer protocol matches.
  */
 
+import { NotImplementedError } from '@riftydev/io';
 import { SW_FRAME_VERSION, SW_ROUTING_VERSION, type SerializedResponse } from './protocol.ts';
 
 export type { SerializedResponse };
@@ -59,6 +60,17 @@ export async function packSerializedResponse(resp: SerializedResponse): Promise<
         transfer: [body as unknown as Transferable],
       };
     }
+    // `drainStream` below awaits the body to completion — it is the hang source.
+    // This packer is the only site that knows both (a) transfer is unavailable
+    // and (b) we are about to enter that unbounded drain, so the unending-body
+    // guard lives here. Content-type is the proxy for "unending": `text/event-
+    // stream` is the known case. Fail loud naming the ceiling instead of hanging.
+    if (isEventStream(resp.headers)) {
+      throw new NotImplementedError(
+        'service-worker.preview.sse-drain-fallback',
+        'text/event-stream requires transferable ReadableStream support',
+      );
+    }
     const buffered = await drainStream(body);
     return {
       message: { ...resp, body: buffered, ...stamp },
@@ -66,6 +78,14 @@ export async function packSerializedResponse(resp: SerializedResponse): Promise<
     };
   }
   return { message: { ...resp, ...stamp }, transfer: [] };
+}
+
+function isEventStream(headers: Record<string, string>): boolean {
+  for (const [name, value] of Object.entries(headers)) {
+    if (name.toLowerCase() !== 'content-type') continue;
+    return value.split(';', 1)[0]?.trim().toLowerCase() === 'text/event-stream';
+  }
+  return false;
 }
 
 async function drainStream(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {

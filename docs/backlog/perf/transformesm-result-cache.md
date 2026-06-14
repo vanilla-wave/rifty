@@ -5,6 +5,7 @@ status: active
 title: transformEsm result cache + optional transformEsm hook on EsmLoaderDeps
 created: 2026-06-08
 why: transformEsm (acorn parse + AST walk) — heaviest per-module CPU step — never cached; editor-save invalidate() loop re-parses every byte-identical module
+user_story: As a dev iterating in the playground, I want save-and-rerun to skip reparsing modules I never touched, but today `transformEsm` (acorn parse + AST walk) is uncached so every `invalidate()` re-parses every byte-identical module — laggy edit loop.
 sources: [perf-audit #16, adr-plan D, ADR-0052 (not governing — internal EsmLoaderDeps)]
 ---
 ## Context

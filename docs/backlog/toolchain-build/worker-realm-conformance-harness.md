@@ -4,6 +4,7 @@ status: active
 title: Worker-realm conformance harness (run conformance subset inside a real kernel worker via Playwright)
 created: 2026-06-12
 why: node:sqlite passed conformance in vitest/Node realm yet first-ever run in the target kernel-worker realm (ADR-0130 demo) broke — "tested" ≠ "runs where it ships"
+user_story: As a rifty maintainer trusting green CI, I want every builtin's conformance subset to also run inside the real kernel web worker via Playwright (post `installWorkerEntry`/`installProcessGlobals`), but today conformance only executes in the Node/vitest realm — so realm-sensitive breaks like `node:sqlite`'s Node-detection stay invisible until they ship
 sources: [ADR-0130, fullstack-demo feedback 2026-06-12]
 code: [tests/conformance, tests/e2e/helpers, packages/kernel/src/worker-entry.ts]
 ---

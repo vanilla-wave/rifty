@@ -4,6 +4,7 @@ status: active
 title: Node-server templates do not restart on entry edits (no nodemon equivalent)
 created: 2026-06-12
 why: editing src/main.js in the express-sqlite demo updates the VFS but the running server keeps the old code; user must re-run `npm run dev` by hand
+user_story: As a playground developer editing `src/main.js` in the express-sqlite demo, I want the running Node server to auto-restart like nodemon, but today the entry is `loader.import`-ed once so my change only lands in the VFS and I must hand-re-run `npm run dev` to see it.
 sources: [ADR-0130]
 code: [apps/playground/src/workers/real-vite-bootstrap.ts]
 ---

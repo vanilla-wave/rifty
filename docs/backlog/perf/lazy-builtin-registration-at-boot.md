@@ -5,6 +5,7 @@ status: active
 title: ADR-0089 — lazy builtin registration at worker boot (names-only split + deferred execSync handler install, hot-core eager)
 created: 2026-06-08
 why: worker boot eagerly evaluates 40+ builtin module bodies; a log-only worker drags whole builtin surface; child_process barrel pulls kernel/worker-spawn; write-before-code
+user_story: As a dev whose worker only does `console.log`, I want boot to skip the 40+ builtin bodies it never touches, but today boot eagerly evals the whole surface and `child_process` drags in kernel/worker-spawn, slowing every cold start
 sources: [perf-audit #26, adr-plan A/ADR-0089, ADR-0035 (not superseded — boundary, not timing)]
 ---
 ## Context

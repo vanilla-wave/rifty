@@ -5,6 +5,7 @@ status: active
 title: resolver-internal resolution cache (key, full-clear on invalidate, never cache not-found)
 created: 2026-06-08
 why: no resolution cache — react from 200 files = 200 node_modules walks + pkg-json parses; invalidation is the whole risk; the backlog item is this file
+user_story: As a dev whose app pulls a big dep like `react`, I want repeat `require`/`import` of the same specifier to skip re-walking `node_modules` + reparsing `package.json`, but today `resolveSpecifierToFile` is unmemoized so every one of 200 files re-walks — slow rebuilds.
 sources: [perf-audit #15, adr-plan C, ADR-0004 (not contradicted)]
 ---
 ## Context

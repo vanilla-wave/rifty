@@ -4,6 +4,7 @@ status: parked
 title: Nightly live-package smoke farm (install + require + one call for top-N pure-JS packages)
 created: 2026-06-12
 why: express demo norm — ~5-7 bugs per new real-package consumer; a farm turns per-consumer surprises into a pipeline feeding compat-matrix
+user_story: As a developer installing a top-N pure-JS package (`zod`, `dayjs`, `commander`, `nanoid`, `semver`), I want to trust it installs+requires+runs in rifty, but today only `express`/`vite` are smoke-tested so each new package surprises me with ~5-7 unflagged bugs
 sources: [ADR-0130, D-004, fullstack-demo feedback 2026-06-12]
 code: [tests/integration, tools/shadow-registry]
 ---

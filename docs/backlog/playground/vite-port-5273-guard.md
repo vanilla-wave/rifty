@@ -4,6 +4,7 @@ status: active
 title: No test asserts the playground dev-server port / strictPort (5273)
 created: 2026-06-08
 why: War-story — Vite dev port 5173 collided with an unrelated local project; pinned strictPort 5273, but nothing guards the regression
+user_story: As a developer running the playground locally, I want the dev server to always own a non-colliding port, but today nothing locks `port: 5273` + `strictPort: true` so a silent revert to 5173 (or dropped `strictPort`) re-introduces the cross-app collision.
 sources: [TASKS war-stories, audit-digest "Real bugs caught M1–M9"]
 ---
 ## Context

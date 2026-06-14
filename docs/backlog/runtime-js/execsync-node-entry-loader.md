@@ -4,6 +4,7 @@ status: active
 title: Route execSync's child through the node-entry bootstrap (shebang + relative imports)
 created: 2026-06-14
 why: child_process.spawn('node', …) runs its worker child through the node-entry bootstrap (ADR-0137) so a shebang'd / relative-import script runs via the module loader; execSync's recursive runner still builds a raw kind:'source' spec, so the same script breaks under execSync — inconsistent
+user_story: As a developer whose code calls `execSync('node script.js')` on a script with a shebang or relative imports, I want it to run like `child_process.spawn` does (via the module loader), but today execSync's recursive runner still uses the raw kind:'source' path so it breaks on the shebang.
 sources: [ADR-0137, M11]
 code: [packages/runtime-js/src/ipc/handlers.ts, packages/runtime-js/src/ipc/recursive-runner.ts]
 ---

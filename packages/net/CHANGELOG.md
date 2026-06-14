@@ -4,6 +4,14 @@
 
 ### Fixed
 
+- **SSE bodies fail loud over the cross-realm preview bridge.**
+  `serveCrossRealmPreview` refuses to drain a `text/event-stream` body
+  (the page↔worker hop buffers until `reply-stream-end`, so an unending SSE
+  body never resolves — ADR-0048). It now posts a loud `error` frame naming
+  the ceiling (`net.preview.cross-realm-sse-drain`), which the page maps to a
+  502, instead of hanging forever. Mirrors the SW-bridge guard in
+  `@riftydev/service-worker`. Non-SSE unbounded bodies still drain — see
+  `docs/backlog/net/cross-realm-preview-unbounded-body.md`.
 - **`register-builtins` modules now expose idempotent callable registrars.**
   `registerNetBuiltins()` and `registerSqliteBuiltin()` preserve the old
   side-effect import behavior while letting production workers call the

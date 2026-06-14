@@ -4,6 +4,7 @@ status: active
 title: VFS change events on the write path (replace explorer bounded poll)
 created: 2026-06-08
 why: "@riftydev/vfs emits no change events; playground file explorer falls back to a 1.5s poll of expanded dirs"
+user_story: As a developer watching files my rifty program writes, I want the explorer to refresh the instant a `write`/`mkdir`/`rm`/`rename` lands, but today `@riftydev/vfs` emits no change events so the explorer lags up to 1.5s on a poll of expanded dirs.
 sources: [ADR-0075]
 code: [apps/playground/src/components/FileExplorer.tsx:152]
 ---

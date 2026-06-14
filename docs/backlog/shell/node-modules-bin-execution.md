@@ -4,6 +4,7 @@ status: parked
 title: Execute node_modules/.bin launcher shims by command name (PATH lookup)
 created: 2026-06-12
 why: shell PATH-style `.bin` resolution + dispatch + a WORKING host executor landed (ADR-0137, Opt-Y); residual is COI-only e2e + execSync consistency + the `npm run` integration nicety
+user_story: As a developer at the rifty shell prompt, I type a bare `vite`/`tsc` and the installed CLI runs (delivered, ADR-0137); the residual is a COI browser e2e of the worker transport plus running the same CLI inside `npm run` script lines.
 sources: [M11, ADR-0137, ADR-0050]
 code: [packages/shell/src/bin-resolver.ts, apps/playground/src/glue/bin-executor.ts, apps/playground/src/workers/node-entry-bootstrap.ts, packages/runtime-js/src/builtins/node-entry.ts, packages/runtime-js/src/module-loader/resolver.ts]
 ---

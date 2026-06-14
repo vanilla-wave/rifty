@@ -4,6 +4,7 @@ status: parked
 title: Go-runtime (gojs) bridge for non-esbuild Go-WASM guests
 created: 2026-06-08
 why: deferred per ADR-0044 D3; moot for esbuild (ADR-0047 runs the real WASIp1 build) — needed only if another gojs guest with no WASI build appears
+user_story: As a dev wanting to run a Go-WASM binary built for `js/wasm` (`gojs.runtime.*` / `syscall/js`, no WASIp1 build), I want it to execute in rifty, but today there's no `wasm_exec.js`-equivalent host shim — only WASIp1 guests run
 sources: [ADR-0044 D3, ADR-0047 D3, TASKS Follow-ups, REVIEW_ACTIONS A-008]
 ---
 ## Context

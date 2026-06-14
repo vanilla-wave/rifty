@@ -4,6 +4,7 @@ status: parked
 title: Kernel native support for long-running (server-shaped) worker processes
 created: 2026-06-08
 why: installWorkerEntry tears the realm down on top-level-await resolve; servers survive only via a never-resolving-promise hack
+user_story: As a developer running a long-lived dev server (Vite-in-Worker) in rifty, I want my worker to keep listening after setup and shut down gracefully on kill, but today `installWorkerEntry` posts `exit` + `self.close()` the moment top-level await resolves so the realm dies a beat after `listen()` — every later request hits a dead worker (502) unless I add a never-resolving promise hack.
 sources: [ADR-0077, ADR-0080, PROJECT_PLAN §2]
 ---
 ## Context

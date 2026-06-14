@@ -4,6 +4,7 @@ status: active
 title: Playground sidebar boot default — Explorer vs Presets
 created: 2026-06-08
 why: VSCode shell puts Explorer + Presets behind an activity bar; one must be the boot default — choice carries a live TODO(ADR) marker
+user_story: As a developer using the rifty web playground, I want the sidebar to open on the view that best fits first-touch (Presets gallery vs Explorer), but today the Explorer-vs-Presets boot default is an unratified `useLayout` initializer carrying a live `TODO(ADR)`, not yet confirmed against real first-use.
 sources: [ADR-0075]
 code: [apps/playground/src/glue/layout-store.ts:38]
 ---

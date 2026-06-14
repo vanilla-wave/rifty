@@ -4,6 +4,7 @@ status: parked
 title: Import attributes (with { type: 'json' })
 created: 2026-06-08
 why: import attributes syntax unsupported — compat row ❌ Deferred until needed
+user_story: As a developer writing `import data from './x.json' with { type: 'json' }` (or the dynamic `import(spec, { with: { type } })` form), I want it to load, but the ESM rewriter doesn't parse the `with`/`assert` attribute clause; plain JSON import works only without the clause.
 sources: [compat/modules.md]
 ---
 ## Context

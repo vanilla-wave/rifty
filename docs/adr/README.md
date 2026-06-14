@@ -45,6 +45,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0068 | `with { type: "file" }` file-loader import attribute (asset → path) |
 | 0069 | `Readable.setEncoding(encoding)` — emit decoded strings |
 | 0136 | Transformed-module stack remapping via scoped prepareStackTrace |
+| 0138 | node:vm direct eval not intercepted (permanent compat divergence) |
 
 ### runtime-wasi
 
@@ -86,6 +87,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0042 | M11 nested install — first-wins flat + nest-on-conflict |
 | 0051 | Native-dependency install policy — loud `ENATIVEUNSUPPORTED`, optional natives skipped |
 | 0133 | Netlify npm-registry proxy v2 — netlify-build deploys, pre-SPA function redirects, runtime site env, buffered bodies, CI deploy smoke |
+| 0134 | install() per-package progress hook (onPackage) |
 
 ### playground
 
@@ -104,6 +106,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0124 | Soft Panels visual redesign adopts the Gravity UI handoff |
 | 0126 | Preview reloads are HMR-client-driven; snapshot-driven iframe reload removed |
 | 0130 | Node-server project template runtime (Express + node:sqlite demo) |
+| 0135 | Sandbox setup kinds: instant vs from-scratch |
 
 ### toolchain-build
 

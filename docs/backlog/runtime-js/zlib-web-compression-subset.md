@@ -4,6 +4,7 @@ status: parked
 title: node:zlib web-compression subset
 created: 2026-06-12
 why: Consumer Ready roadmap calls out zlib as a high-frequency runtime wall, but node:zlib is still a loud stub
+user_story: As a developer running an npm package that calls `zlib.gzip`/`gunzip` for registry, asset, or HTTP flows in rifty, I want compression to work, but today every `node:zlib` member throws `NotImplementedError` so any package touching it dies.
 sources: [docs/ROADMAP.md, docs/research/open-webcontainers-alternative-2026-06.md]
 code: [packages/runtime-js/src/builtins/null-net-stubs.ts]
 ---

@@ -71,6 +71,15 @@ export function exportWorkspaceArchive(
   root: string,
   options: ExportWorkspaceArchiveOptions = {},
 ): string {
+  return JSON.stringify(buildWorkspaceArchive(fs, root, options));
+}
+
+/** Object-form export — dep snapshots (ADR-0135) embed the archive directly. */
+export function buildWorkspaceArchive(
+  fs: Pick<WorkspaceArchiveFs, 'readdirSync' | 'readFileBytesSync'>,
+  root: string,
+  options: ExportWorkspaceArchiveOptions = {},
+): WorkspaceArchiveV1 {
   const normalizedRoot = normalizePath(root);
   const exclude = new Set(options.exclude ?? SNAPSHOT_EXCLUDE_DIRS);
   const files: WorkspaceArchiveFile[] = [];
@@ -101,8 +110,7 @@ export function exportWorkspaceArchive(
   };
 
   walk(normalizedRoot);
-  const archive: WorkspaceArchiveV1 = { version: 1, root: normalizedRoot, files };
-  return JSON.stringify(archive);
+  return { version: 1, root: normalizedRoot, files };
 }
 
 export function importWorkspaceArchive(
@@ -110,7 +118,15 @@ export function importWorkspaceArchive(
   archiveJson: string,
   options: ImportWorkspaceArchiveOptions = {},
 ): void {
-  const archive = JSON.parse(archiveJson) as WorkspaceArchiveV1;
+  applyWorkspaceArchive(fs, JSON.parse(archiveJson) as WorkspaceArchiveV1, options);
+}
+
+/** Object-form import — dep snapshots (ADR-0135) embed the archive directly. */
+export function applyWorkspaceArchive(
+  fs: WorkspaceArchiveFs,
+  archive: WorkspaceArchiveV1,
+  options: ImportWorkspaceArchiveOptions = {},
+): void {
   assertArchive(archive);
   const root = normalizePath(options.root ?? archive.root);
   const archiveRoot = normalizePath(archive.root);

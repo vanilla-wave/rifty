@@ -4,6 +4,7 @@ status: parked
 title: Audit in-repo callers of bridgeCrossRealmPreview before v3 ships (resolve-on-end → resolve-on-start)
 created: 2026-06-08
 why: v3 changes resolution semantics; a caller assuming a fully-buffered Response on resolve breaks silently
+user_story: As a maintainer about to cut the v3 preview frame bump, I want every `bridgeCrossRealmPreview` call site checked for `.arrayBuffer()`-on-a-buffered-`Response` assumptions before resolve flips to resolve-on-start — can't yet, no caller audited so the v3 cutover risks a silent stream regression.
 sources: [feature-07-ws-sse-bridge T5/Risks, ADR-0048, ADR-0017]
 ---
 ## Context

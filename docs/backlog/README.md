@@ -16,6 +16,7 @@ Between the first two `---` lines. Required keys:
 - `created` — `YYYY-MM-DD`
 - `why` — one line: why this is on the backlog
 
+Recommended: `user_story` (line right after `why`) — `As <persona>, I want <X>, but today <blocker>`: the capability this item unlocks, in user terms.
 Optional: `sources` (refs), `code` (paths). Arrays as `[a, b]`.
 
 See `TEMPLATE.md`.
