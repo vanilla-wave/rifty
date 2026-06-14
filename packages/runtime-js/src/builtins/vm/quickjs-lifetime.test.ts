@@ -113,18 +113,24 @@ describe('ContextLifetime — GC-driven reclaim (needs --expose-gc)', () => {
 
 describe('ContextLifetime — leak-safe wrapper construction (review regression)', () => {
   // The array wrapper DUPs the guest handle, then EAGERLY marshals every element
-  // into the host target. A guest array holding a Symbol hits the loud T10
-  // boundary MID-construction. Before the fix the dup'd handle was tracked only
-  // AFTER the element loop, so a throw left an UNTRACKED live handle: `#live`
-  // stayed 0, and a later `markPending` → `ctx.dispose()` aborted the WASM runtime
-  // (`Assertion failed: list_empty(&rt->gc_obj_list)`). After the fix the throw
-  // must leave NO leaked live handle, so disposal completes cleanly.
-  it('a throwing OUT-marshal of [Symbol] leaks no live handle (no abort on dispose)', () => {
+  // into the host target. If an element's OUT-marshal THROWS mid-construction
+  // (here a guest element whose `Symbol.toStringTag` getter throws — surfaced when
+  // the membrane probes its brand for exotic detection), the dup must already be
+  // TRACKED. Before the leak-safe fix it was tracked only AFTER the element loop,
+  // so a throw left an UNTRACKED live handle: `#live` stayed 0, and a later
+  // `markPending` → `ctx.dispose()` aborted the WASM runtime (`Assertion failed:
+  // list_empty(&rt->gc_obj_list)`). After the fix the throw must leave NO leaked
+  // live handle, so disposal completes cleanly. (Originally triggered via the
+  // since-implemented T10 symbol boundary; the throwing-getter trigger exercises
+  // the SAME track-before-throwable-work path without an unimplemented boundary.)
+  const THROWING_ELEMENT = '{ get [Symbol.toStringTag]() { throw new Error("boom") } }';
+
+  it('a throwing OUT-marshal element leaks no live handle (no abort on dispose)', () => {
     const ctx = freshContext();
     const membrane = new Membrane(ctx);
-    const h = ctx.unwrapResult(ctx.evalCode('[Symbol("x")]'));
-    // Marshalling OUT must throw the loud T10 boundary (correct behavior).
-    expect(() => membrane.wrapGuestToHost(h)).toThrow(/symbol marshalling not implemented/);
+    const h = ctx.unwrapResult(ctx.evalCode(`[ ${THROWING_ELEMENT} ]`));
+    // Marshalling OUT must throw (the element's brand probe throws).
+    expect(() => membrane.wrapGuestToHost(h)).toThrow(/boom/);
     h.dispose();
     // INVARIANT: the throw must not leave an untracked live guest handle. Either it
     // was tracked (refcount reflects it) or disposed on the throw path — but no
@@ -134,18 +140,96 @@ describe('ContextLifetime — leak-safe wrapper construction (review regression)
     expect(membrane.lifetime.disposed).toBe(true); // no abort
   });
 
-  it('a throwing OUT-marshal of nested [[Symbol]] leaks no live handle (no abort)', () => {
+  it('a throwing OUT-marshal of a nested array element leaks no live handle (no abort)', () => {
     const ctx = freshContext();
     const membrane = new Membrane(ctx);
-    const h = ctx.unwrapResult(ctx.evalCode('[[Symbol("x")]]'));
+    const h = ctx.unwrapResult(ctx.evalCode(`[ [ ${THROWING_ELEMENT} ] ]`));
     // The OUTER array marshals its element (the inner array) → the inner array
-    // marshals its Symbol element → throws. Both wrapper constructions are in
+    // marshals its throwing element → throws. Both wrapper constructions are in
     // flight; neither may leak an untracked handle.
-    expect(() => membrane.wrapGuestToHost(h)).toThrow(/symbol marshalling not implemented/);
+    expect(() => membrane.wrapGuestToHost(h)).toThrow(/boom/);
     h.dispose();
     expect(membrane.lifetime.liveWrapperCount).toBe(0);
     membrane.lifetime.markPending();
     expect(membrane.lifetime.disposed).toBe(true); // no abort
+  });
+});
+
+describe('exotic mirroring + symbols — identity & disposal (T10)', () => {
+  it('same guest Date returned twice → same host wrapper; release tears down clean', () => {
+    const ctx = freshContext();
+    const membrane = new Membrane(ctx);
+    ctx.unwrapResult(ctx.evalCode('globalThis.D = new Date(5)')).dispose();
+    const h1 = ctx.unwrapResult(ctx.evalCode('D'));
+    const h2 = ctx.unwrapResult(ctx.evalCode('D'));
+    const w1 = membrane.wrapGuestToHost(h1) as Date;
+    const w2 = membrane.wrapGuestToHost(h2);
+    expect(w1 === w2).toBe(true); // identity-cached by guest id
+    expect(w1.getTime()).toBe(5);
+    expect(w1 instanceof Date).toBe(false); // cross-realm
+    expect(Object.prototype.toString.call(w1)).toBe('[object Date]');
+    h1.dispose();
+    h2.dispose();
+    expect(membrane.lifetime.liveWrapperCount).toBe(1); // one backing handle
+    membrane.lifetime.markPending();
+    expect(membrane.lifetime.disposed).toBe(false); // wrapper live → deferred
+    membrane.lifetime.releaseWrapper(w1);
+    expect(membrane.lifetime.disposed).toBe(true); // no abort
+  });
+
+  it('host Date round-trips IN then OUT to the SAME host object (#14)', () => {
+    const ctx = freshContext();
+    const membrane = new Membrane(ctx);
+    const hostDate = new Date(1000);
+    const seed = membrane.marshalHostToGuest(hostDate);
+    ctx.setProp(ctx.global, 'hd', seed);
+    seed.dispose();
+    const back = ctx.unwrapResult(ctx.evalCode('hd'));
+    expect(membrane.wrapGuestToHost(back)).toBe(hostDate); // original host ref
+    back.dispose();
+    membrane.lifetime.markPending();
+    expect(membrane.lifetime.disposed).toBe(true);
+  });
+
+  it('guest unique symbol OUT: same symbol → same host symbol, fresh (not ===), desc preserved', () => {
+    const ctx = freshContext();
+    const membrane = new Membrane(ctx);
+    ctx.unwrapResult(ctx.evalCode('globalThis.S = Symbol("x")')).dispose();
+    const h1 = ctx.unwrapResult(ctx.evalCode('S'));
+    const h2 = ctx.unwrapResult(ctx.evalCode('S'));
+    const s1 = membrane.wrapGuestToHost(h1) as symbol;
+    const s2 = membrane.wrapGuestToHost(h2) as symbol;
+    expect(typeof s1).toBe('symbol');
+    expect(s1).toBe(s2); // identity-cached
+    expect(s1.description).toBe('x');
+    h1.dispose();
+    h2.dispose();
+    membrane.lifetime.markPending();
+    expect(membrane.lifetime.disposed).toBe(true);
+  });
+
+  it('well-known symbol OUT is the SHARED host symbol (=== Symbol.iterator)', () => {
+    const ctx = freshContext();
+    const membrane = new Membrane(ctx);
+    const h = ctx.unwrapResult(ctx.evalCode('Symbol.iterator'));
+    expect(membrane.wrapGuestToHost(h)).toBe(Symbol.iterator);
+    h.dispose();
+    membrane.lifetime.markPending();
+    expect(membrane.lifetime.disposed).toBe(true);
+  });
+
+  it('host symbol round-trips IN then OUT to the SAME host symbol', () => {
+    const ctx = freshContext();
+    const membrane = new Membrane(ctx);
+    const hostSym = Symbol('hs');
+    const seed = membrane.marshalHostToGuest(hostSym);
+    ctx.setProp(ctx.global, 's', seed);
+    seed.dispose();
+    const back = ctx.unwrapResult(ctx.evalCode('s'));
+    expect(membrane.wrapGuestToHost(back)).toBe(hostSym);
+    back.dispose();
+    membrane.lifetime.markPending();
+    expect(membrane.lifetime.disposed).toBe(true);
   });
 });
 

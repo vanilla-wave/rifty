@@ -40,6 +40,21 @@ const ctx = QuickJS.newContext();                                 // QuickJSCont
 - `ctx.newError(msg) | newError({name,message}) | newError()`
 - `ctx.newPromise()` → `QuickJSDeferredPromise` (`.handle`, `.resolve(h)`, `.reject(h)`, `.dispose()`)
 - Host-object opaque ref: `ctx.newHostRef(obj)`, `ctx.toHostRef(h)`, `ctx.unwrapHostRef(h)` — guest can't read it.
+- **NO `ctx.callConstructor`** (verified — not in the d.ts). To `new X(...)` in the guest, eval a factory once and `callFunction` it: `const f = ctx.evalCode('(t)=>new Date(t)')`; `callFunction(f, undefined, tH)`. Used by T10 exotic IN (`#exoticFactory`).
+
+## Exotics (T10) — detect / construct / read (VERIFIED)
+- **Detect** (cross-realm-reliable): `Object.prototype.toString.call(o)` via a guest helper → `"[object Date]"`/`"[object RegExp]"`/`"[object Uint8Array]"` etc. (`dump`/`typeof` are NOT reliable for exotics).
+- **Date**: read `Date.prototype.getTime.call(h)`; construct `(t)=>new Date(t)`.
+- **RegExp**: read `getProp(h,'source')`/`'flags'` (strings); construct `(s,f)=>new RegExp(s,f)`.
+- **TypedArray**: kind via `o.constructor.name`; read `getProp(h,'length')` + indexed `getProp(h,i)` (`getNumber`, or `getBigInt` for Big(U)Int64); construct `(len)=>new <Kind>(len)` then `setProp(ta,i,elemH)`. NOTE: TypedArray methods + `Symbol.toStringTag`/`Symbol.iterator` (driving brand + `Array.from`) live on `%TypedArray%.prototype` (the PARENT of `<Kind>.prototype`), NOT on the per-kind prototype — flatten the whole chain.
+- **Cross-realm mirror technique** (matches Node): a REAL exotic backing carries the internal slot (brand + methods); set its [[Prototype]] to a null-based FLAT proto carrying the prototype-CHAIN methods (NOT the intrinsic prototype) → `instanceof <ctor>` FALSE while methods/brand resolve. A NULL proto would strip the methods — only the generic-object seed uses null.
+
+## Symbols (T10) — VERIFIED cross-realm rules
+- `ctx.getSymbol(h)` → a host symbol with the right `.description`, but for WELL-KNOWN it is NOT the host's (`getSymbol(guest Symbol.iterator) !== host Symbol.iterator`) and for two reads of the same UNIQUE symbol it returns DIFFERENT host symbols (so identity-cache uniques by the registry id). For REGISTRY symbols it DOES return `host Symbol.for(k)` (`===`).
+- **Well-known detection**: compare via `ctx.eq(h, ctx.getWellKnownSymbol(name))` over the 13 ES names (all supported, all `eq` the guest's). Map → `Symbol[name]` (shared, `===` host) on OUT; `ctx.getWellKnownSymbol(name)` on IN.
+- **Registry detection**: `Symbol.keyFor` returns a string for registry symbols, `undefined` for unique AND well-known. OUT → `Symbol.for(key)`; IN → `ctx.newSymbolFor(key)`.
+- **Unique**: OUT mint `Symbol(desc)` (identity-cached by guest id); IN `ctx.newUniqueSymbol(desc)`.
+- Symbol-keyed own props: `getOwnPropertyNames(h, {symbols:true})` → key handles; `getProp(h, symKeyHandle)` reads the value.
 
 ## Value extraction (guest → host)
 - `ctx.typeof(h) : string` — NOTE: non-standard, mishandles BigInt. Returns "object"/"function"/"symbol"/"string"/"number"/"undefined" etc.

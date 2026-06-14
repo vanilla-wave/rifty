@@ -4,6 +4,29 @@
 
 ### Added
 
+- **`node:vm` QuickJS engine — exotic mirroring (Date/RegExp/TypedArray) + fn
+  name/length + symbols (T10, ADR-0138).** Exotics now cross the membrane both ways
+  matching Node's cross-realm behavior (parity `vm/quickjs-exotic`): `instanceof
+  <ctor>` FALSE but correct brand (`Object.prototype.toString`), working methods
+  (`getTime`/`toISOString`/`test`/`source`/`flags`), and faithful data
+  (indexing/`.length`/`Array.from`/`ArrayBuffer.isView`/JSON). OUT mirrors back the
+  guest exotic with a REAL host Date/RegExp/TypedArray (the internal slot carries
+  the brand + methods) under a per-kind null-based FLAT proto carrying the
+  prototype-CHAIN methods (TypedArrays need the chain — brand + `Symbol.iterator`
+  live on `%TypedArray%.prototype`); IN builds a REAL guest exotic (via cached
+  factory fns — the API has no `callConstructor`) then rebrands it with a guest-side
+  flat proto (the mirror of the OUT technique). Both directions are identity-cached
+  and round-trip to the same reference. **Symbols** marshal both ways (parity
+  `vm/quickjs-symbols`): well-known (`Symbol.iterator`) + registry (`Symbol.for`)
+  symbols are SHARED across realms (`===`); unique symbols are cross-realm (fresh,
+  same `.description`, identity-cached). Symbol-keyed own props are surfaced by the
+  object wrapper (`Object.getOwnPropertySymbols` + `obj[sym]` + well-known iteration
+  via `[...obj]`). **Function fidelity**: a returned guest fn now reports the GUEST
+  fn's `name`/`length` (parity `vm/quickjs-fn-name-length`). Residual: an OUT exotic
+  mirror's `.constructor` is `undefined` (Node returns the guest ctor; faithfully
+  mirroring it would pin a wrapper-backed handle for the context's life, defeating
+  GC-driven teardown). The since-implemented symbol loud boundary is removed; the
+  leak-safe-construction regression now triggers via a throwing element getter.
 - **`node:vm` QuickJS engine — bidirectional callable membrane + handle lifetime
   (T9, ADR-0138).** Host functions seeded into a context are now callable from
   guest code: `marshalHostToGuest` of a host fn builds a `ctx.newFunction` whose

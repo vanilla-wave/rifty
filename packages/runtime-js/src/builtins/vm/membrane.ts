@@ -57,7 +57,35 @@
  * the host can store the callback and call it AFTER the synchronous run (the
  * QuickJSContext stays alive — Node has no vm-context teardown). Identity is
  * symmetric: same host fn → same guest fn (and round-trips back to the host fn);
- * same guest fn → same host wrapper. Inbound symbols are T10 (loud boundary).
+ * same guest fn → same host wrapper.
+ *
+ * Exotic mirroring (T10, Date / RegExp / TypedArray, both directions) + carried
+ * fidelity. Node cross-realm truth (parity `vm/quickjs-exotic`): an exotic across
+ * the membrane is `instanceof <ctor>` FALSE but has the correct brand
+ * (`Object.prototype.toString`), working methods, and faithful data both ways.
+ *   - OUT: a guest exotic → a REAL host Date/RegExp/TypedArray BACKING (carries the
+ *     internal slot → brand + methods) whose [[Prototype]] is a per-kind null-based
+ *     FLAT proto carrying that kind's prototype-CHAIN methods (`#exoticProtoFor`;
+ *     TypedArrays need the chain — brand/`Symbol.iterator` live on
+ *     `%TypedArray%.prototype`). The flat proto is NOT the host ctor's prototype, so
+ *     `instanceof` is FALSE while methods/brand resolve off the backing's slot. The
+ *     mirror is the wrapper (identity-cached, GC-tracked like object wrappers); the
+ *     guest handle backs it for round-trip identity. `.constructor` is omitted
+ *     (documented residual — see `#exoticProtoFor`).
+ *   - IN: a host exotic → a REAL GUEST Date/RegExp/TypedArray (built via cached
+ *     factory fns — no `callConstructor` in the API) then REBRANDED with a
+ *     guest-side flat proto (`#rebrandGuestExotic` / `EXOTIC_REBRAND_BOOTSTRAP` — the
+ *     MIRROR of the OUT technique, NOT a null proto, which would strip methods).
+ *     Identity-cached + host-origin recorded (round-trips OUT to the same host ref).
+ *   - Symbols (both directions): WELL-KNOWN + REGISTRY symbols are SHARED across
+ *     realms (`Symbol.iterator` OUT `=== host Symbol.iterator`; `Symbol.for(k)` ↔
+ *     guest `Symbol.for(k)`); UNIQUE symbols are cross-realm (fresh, same
+ *     `.description`, NOT `===`), identity-cached so the same symbol round-trips to
+ *     itself. Symbol-keyed OWN props are surfaced by the object wrapper
+ *     (`ownKeys`/`get`/`has` route host symbols back to guest symbol keys), so
+ *     `Object.getOwnPropertySymbols` + `obj[sym]` + well-known iteration work.
+ *   - Function name/length: the OUT fn wrapper copies the GUEST fn's `name`/`length`
+ *     onto the host thunk (`#copyFnNameLength`) so a returned guest fn reports them.
  *
  * Write-back / reconciliation (T8, Option A — post-run sweep + per-run reseed).
  * vm runs are SYNCHRONOUS: the host cannot observe the sandbox DURING a run, so a
@@ -158,6 +186,82 @@ const ID_REGISTRY_BOOTSTRAP = `
 })();
 `;
 
+/**
+ * Guest-side exotic rebrand helper as an UNREACHABLE closure (like the id
+ * registry). Given `(value, kindName)` it sets `value`'s [[Prototype]] to a
+ * null-based FLAT proto carrying that kind's prototype-chain methods (own
+ * descriptors, subclass wins, excluding Object.prototype + `constructor`). Result:
+ * a host exotic seeded INTO the guest has `instanceof guestCtor` FALSE (the flat
+ * proto is NOT the guest intrinsic prototype) but brand/methods/data faithful (the
+ * methods + `Symbol.toStringTag`/`Symbol.iterator` operate on the REAL guest exotic
+ * backing's internal slot) — symmetric with the OUT host-side mirror + Node's
+ * cross-realm IN behavior. Protos are cached per kind. The closure is retained
+ * host-side and NEVER exposed on the guest global (guest code cannot reach it).
+ */
+const EXOTIC_REBRAND_BOOTSTRAP = `
+(() => {
+  const cache = new Map();
+  const flatProtoFor = (kind) => {
+    let fp = cache.get(kind);
+    if (fp) return fp;
+    fp = Object.create(null);
+    const proto = globalThis[kind] && globalThis[kind].prototype;
+    for (let p = proto; p && p !== Object.prototype; p = Object.getPrototypeOf(p)) {
+      for (const n of Object.getOwnPropertyNames(p)) {
+        if (n === 'constructor') continue;
+        if (Object.prototype.hasOwnProperty.call(fp, n)) continue;
+        Object.defineProperty(fp, n, Object.getOwnPropertyDescriptor(p, n));
+      }
+      for (const s of Object.getOwnPropertySymbols(p)) {
+        if (Object.prototype.hasOwnProperty.call(fp, s)) continue;
+        Object.defineProperty(fp, s, Object.getOwnPropertyDescriptor(p, s));
+      }
+    }
+    cache.set(kind, fp);
+    return fp;
+  };
+  return (value, kind) => { Object.setPrototypeOf(value, flatProtoFor(kind)); return value; };
+})();
+`;
+
+/** Host TypedArray constructors keyed by `Object.prototype.toString` brand tag. */
+const TYPED_ARRAY_CTORS = {
+  Int8Array,
+  Uint8Array,
+  Uint8ClampedArray,
+  Int16Array,
+  Uint16Array,
+  Int32Array,
+  Uint32Array,
+  Float32Array,
+  Float64Array,
+  BigInt64Array,
+  BigUint64Array,
+} as const;
+type TypedArrayKind = keyof typeof TYPED_ARRAY_CTORS;
+type TypedArrayInstance = InstanceType<(typeof TYPED_ARRAY_CTORS)[TypedArrayKind]>;
+/** brand tag (e.g. "Uint8Array") → kind, for OUT detection via the brand. */
+const TYPED_ARRAY_BRANDS = new Map<string, TypedArrayKind>(
+  (Object.keys(TYPED_ARRAY_CTORS) as TypedArrayKind[]).map((k) => [k, k]),
+);
+
+/** The 13 well-known symbols (ES). OUT detection compares a guest symbol to each. */
+const WELL_KNOWN_SYMBOL_NAMES = [
+  'asyncIterator',
+  'hasInstance',
+  'isConcatSpreadable',
+  'iterator',
+  'match',
+  'matchAll',
+  'replace',
+  'search',
+  'species',
+  'split',
+  'toPrimitive',
+  'toStringTag',
+  'unscopables',
+] as const;
+
 export class Membrane {
   readonly #ctx: QuickJSContext;
   /**
@@ -195,6 +299,50 @@ export class Membrane {
    * retains (tracked by the lifetime controller), so no extra lifetime.
    */
   readonly #outWrapperGuest = new WeakMap<object, QuickJSHandle>();
+
+  // --- Symbol identity caches (T10) ---
+  /**
+   * guest UNIQUE-symbol id → its single host mirror symbol. Unique symbols are
+   * cross-realm (NOT `===` any host symbol) so we mint a fresh host symbol with
+   * the same description; the id cache keeps the SAME host symbol per guest symbol
+   * (so a symbol returned twice is `===`). Well-known + registry symbols are SHARED
+   * and bypass this cache (`Symbol.for`/`Symbol[name]`). Symbols are NOT GC-tracked
+   * wrappers (no backing handle retained), so a plain Map is fine.
+   */
+  readonly #outSymbols = new Map<number, symbol>();
+  /** host UNIQUE symbol → its single guest mirror handle (inbound symbol identity). */
+  readonly #inboundSymbols = new WeakMap<symbol, QuickJSHandle>();
+  /**
+   * guest UNIQUE-symbol id → the ORIGINAL host symbol it was seeded from, so the
+   * round-trip OUT (`#wrapSymbol`) recovers THAT host symbol (`=== hostSym`). The
+   * symbol analogue of `#hostOrigins` (which is object-only).
+   */
+  readonly #symbolOrigins = new Map<number, symbol>();
+  /**
+   * host OUT-mirror symbol → a RETAINED dup of the original guest symbol handle, so
+   * a host symbol used as a KEY back into the guest (`obj[sym]` on an OUT object
+   * wrapper) resolves to the SAME guest symbol (not a freshly-minted one). The dup
+   * is infra-tracked (disposed at teardown).
+   */
+  readonly #outSymbolGuest = new WeakMap<symbol, QuickJSHandle>();
+
+  // --- Exotic-mirror prototype cache (T10, OUT) ---
+  /**
+   * Per-exotic-kind shared host prototype carrying that kind's methods but NOT
+   * inheriting the host ctor's prototype — so a mirror's `instanceof hostCtor` is
+   * FALSE (cross-realm) while `getTime()`/`test()`/typed-array indexing resolve and
+   * the brand stays correct (the brand comes from the REAL host exotic backing's
+   * internal slot, not the proto). One proto per kind, reused across mirrors.
+   */
+  readonly #exoticProtos = new Map<string, object>();
+  /**
+   * Cached guest factory functions for IN exotic construction (the API has no
+   * `callConstructor` — QUICKJS_API.md). Keyed by factory source; each is an
+   * infra-tracked guest fn handle (disposed at teardown), so re-marshalling is cheap.
+   */
+  readonly #exoticFactories = new Map<string, QuickJSHandle>();
+  /** Lazily-installed guest exotic rebrand closure (`EXOTIC_REBRAND_BOOTSTRAP`), infra-tracked. */
+  #rebrandHandle: QuickJSHandle | undefined;
 
   constructor(ctx: QuickJSContext) {
     this.#ctx = ctx;
@@ -257,8 +405,7 @@ export class Membrane {
       case 'bigint':
         return ctx.dump(handle) as bigint;
       case 'symbol':
-        // Symbol completion values are exotic mirroring — T10.
-        throw new Error('vm: symbol marshalling not implemented (Task 10)');
+        return this.#wrapSymbol(handle);
       case 'function': {
         // Compute the guest id ONCE — reused for the host-origin round-trip
         // check and the wrapper identity cache. NO guest property is read, so
@@ -278,6 +425,18 @@ export class Membrane {
         // from the unreachable registry, never a guest-readable/writable marker.
         const origin = this.#hostOrigins.get(id);
         if (origin !== undefined) return origin;
+        // Exotic OUT (T10): a guest Date/RegExp/TypedArray must mirror Node's
+        // cross-realm behavior — `instanceof hostCtor` FALSE, but correct brand
+        // (`Object.prototype.toString`), working methods, and faithful data. We
+        // detect via the object's brand and build a REAL host exotic backing with a
+        // severed-but-method-bearing prototype (`#exoticProtoFor`).
+        const brand = this.#brandOf(handle);
+        if (brand === 'Date') return this.#wrapCached(id, () => this.#wrapDate(handle, id));
+        if (brand === 'RegExp') return this.#wrapCached(id, () => this.#wrapRegExp(handle, id));
+        const taKind = TYPED_ARRAY_BRANDS.get(brand);
+        if (taKind !== undefined) {
+          return this.#wrapCached(id, () => this.#wrapTypedArray(handle, id, taKind));
+        }
         if (this.#isArray(handle)) {
           return this.#wrapCached(id, () => this.#wrapArray(handle, id));
         }
@@ -324,14 +483,21 @@ export class Membrane {
         return ctx.newBigInt(value);
       case 'object': {
         if (value === null) return ctx.null;
+        // Exotic IN (T10): a host Date/RegExp/TypedArray must mirror as a REAL
+        // guest exotic (correct brand/methods/data) with a SEVERED prototype so
+        // `instanceof guestCtor` is FALSE — symmetric with the OUT mirror + the
+        // existing inbound null-proto technique. Detected via the host brand.
+        const exotic = this.#marshalInboundExotic(value);
+        if (exotic !== undefined) return exotic;
         return this.#marshalInboundObject(value);
       }
       case 'function':
         // A genuine HOST function entering the guest (guest-callable host fn, T9).
         return this.#marshalInboundFunction(value as (...args: unknown[]) => unknown);
+      case 'symbol':
+        return this.#marshalInboundSymbol(value as symbol);
       default:
-        // symbol host→guest is exotic mirroring — T10.
-        throw new Error(`vm: host→guest ${typeof value} marshalling not implemented (Task 10)`);
+        throw new Error(`vm: host→guest ${typeof value} marshalling not implemented (Task 11)`);
     }
   }
 
@@ -657,10 +823,15 @@ export class Membrane {
    * getOwnPropertyDescriptor drive `Object.keys`/JSON. Descriptors are reported
    * `configurable:true` to satisfy Proxy invariants over an empty target (faithful
    * frozen/non-config mirroring is T12).
+   *
+   * Symbol-keyed props (T10): `ownKeys` also lists the guest's own SYMBOL keys
+   * (marshalled OUT to host symbols → `Object.getOwnPropertySymbols` works), and
+   * `get`/`has`/`getOwnPropertyDescriptor` route a host symbol key BACK to a guest
+   * symbol handle (`#guestSymbolHandleFor`) so `obj[sym]` reads and well-known
+   * iteration (`[...obj]` via `Symbol.iterator`) resolve to the guest member.
    */
   #wrapObject(handle: QuickJSHandle, id: number): unknown {
     const ctx = this.#ctx;
-    const membrane = this;
     const target: Record<PropertyKey, unknown> = {};
     // `guest` is the tracked dup the traps read; assigned after the Proxy exists
     // (traps only fire post-construction, so the late binding is safe). Must be
@@ -674,35 +845,52 @@ export class Membrane {
         return names.map((k) => ctx.getString(k));
       });
     };
+    // Own SYMBOL keys marshalled OUT to host symbols (for `ownKeys` /
+    // `getOwnPropertySymbols`). Each guest symbol-key handle is wrapped via the
+    // identity-cached symbol path so the same guest symbol → the same host symbol.
+    const ownSymbolKeys = (): symbol[] => {
+      return Scope.withScope((scope) => {
+        const names = scope.manage(ctx.getOwnPropertyNames(guest, { symbols: true }).unwrap());
+        return names.map((k) => this.#wrapSymbol(k));
+      });
+    };
+    // Read a guest prop by a host KEY (string or symbol) → host value. Symbol keys
+    // convert back to a transient guest symbol handle.
+    const readProp = (key: string | symbol): unknown => {
+      const keyH = typeof key === 'symbol' ? this.#guestSymbolHandleFor(key) : undefined;
+      try {
+        const valueH = ctx.getProp(guest, keyH ?? (key as string));
+        try {
+          return this.wrapGuestToHost(valueH);
+        } finally {
+          valueH.dispose();
+        }
+      } finally {
+        keyH?.dispose();
+      }
+    };
+    const hasSymbolKey = (key: symbol): boolean => ownSymbolKeys().includes(key);
 
     const wrapper = new Proxy(target, {
       getPrototypeOf: () => null,
       get(_t, key) {
-        if (typeof key === 'symbol') return undefined; // symbol keys are T10
-        const valueH = ctx.getProp(guest, key);
-        try {
-          return membrane.wrapGuestToHost(valueH);
-        } finally {
-          valueH.dispose();
-        }
+        if (typeof key === 'symbol' && !hasSymbolKey(key)) return undefined;
+        return readProp(key);
       },
       has(_t, key) {
-        if (typeof key === 'symbol') return false;
+        if (typeof key === 'symbol') return hasSymbolKey(key);
         return ownStringKeys().includes(key);
       },
       ownKeys() {
-        return ownStringKeys();
+        return [...ownStringKeys(), ...ownSymbolKeys()];
       },
       getOwnPropertyDescriptor(_t, key) {
-        if (typeof key === 'symbol') return undefined;
-        if (!ownStringKeys().includes(key)) return undefined;
-        const valueH = ctx.getProp(guest, key);
-        let value: unknown;
-        try {
-          value = membrane.wrapGuestToHost(valueH);
-        } finally {
-          valueH.dispose();
+        if (typeof key === 'symbol') {
+          if (!hasSymbolKey(key)) return undefined;
+        } else if (!ownStringKeys().includes(key)) {
+          return undefined;
         }
+        const value = readProp(key);
         // configurable:true REQUIRED over an empty target (Proxy invariant). T12
         // reconstructs the real writable/enumerable/configurable flags.
         return { value, writable: true, enumerable: true, configurable: true };
@@ -756,6 +944,11 @@ export class Membrane {
       });
     };
 
+    // Fidelity (T10): a returned guest fn must report the GUEST fn's `name` and
+    // `length`, not the host thunk's (`'thunk'`/0). Read them off the guest handle
+    // and redefine the thunk's own `name`/`length` (both configurable on a fn) so
+    // the Proxy surfaces them. Done BEFORE the Proxy so the wrapper is final.
+    this.#copyFnNameLength(handle, thunk);
     const wrapper = new Proxy(thunk, { getPrototypeOf: () => null });
     // dup+track the guest handle (and record the OUT round-trip) via the shared
     // leak-safe path. While the host HOLDS the wrapper (e.g. `stored = cb`), the
@@ -763,6 +956,415 @@ export class Membrane {
     // still-valid handle (T9).
     guest = this.#retainForWrapper(wrapper, handle, id);
     return wrapper;
+  }
+
+  // ===========================================================================
+  // Exotic mirroring (T10): Date / RegExp / TypedArray, both directions.
+  // ===========================================================================
+
+  /**
+   * `Object.prototype.toString.call(handle)` brand tag of a guest object, sliced
+   * to the bare tag (`"[object Date]"` → `"Date"`). The reliable cross-realm brand
+   * probe (QUICKJS_API.md: `dump`/`typeof` are not). Used to detect guest exotics.
+   */
+  #brandOf(handle: QuickJSHandle): string {
+    const ctx = this.#ctx;
+    return Scope.withScope((scope) => {
+      const objectCtor = scope.manage(ctx.getProp(ctx.global, 'Object'));
+      const proto = scope.manage(ctx.getProp(objectCtor, 'prototype'));
+      const toStr = scope.manage(ctx.getProp(proto, 'toString'));
+      const r = scope.manage(ctx.unwrapResult(ctx.callFunction(toStr, handle)));
+      const tag = ctx.getString(r); // "[object Date]"
+      return tag.slice(8, -1);
+    });
+  }
+
+  /**
+   * Shared host prototype for an exotic KIND — carries the host ctor.prototype's
+   * methods (copied as own descriptors) but a `null` [[Prototype]] so it is NOT in
+   * the host ctor's chain → a mirror's `instanceof hostCtor` is FALSE (cross-realm,
+   * like Node). Methods operate on the REAL host exotic backing (which carries the
+   * internal slot + brand), so `getTime()`/`test()`/typed-array indexing work.
+   *
+   * `constructor` is intentionally OMITTED (the flat proto's null base → a mirror's
+   * `.constructor` is `undefined`). Node returns the GUEST ctor here (name e.g.
+   * "Date", `!== host Date`); faithfully mirroring that would require RETAINING a
+   * guest-fn wrapper on the shared (membrane-lived) proto, which would pin a
+   * wrapper-backed handle for the context's life and defeat the GC-driven teardown
+   * (the live-wrapper refcount would never reach 0). Documented residual — the
+   * tested cross-realm behaviors (instanceof/brand/methods/data/JSON) are faithful.
+   */
+  #exoticProtoFor(kind: string, hostProto: object): object {
+    const cached = this.#exoticProtos.get(kind);
+    if (cached) return cached;
+    const proto = Object.create(null) as object;
+    // Flatten the host prototype CHAIN (up to but EXCLUDING Object.prototype) onto
+    // one null-based proto. TypedArrays need this: their methods + the
+    // `Symbol.toStringTag`/`Symbol.iterator` (driving brand + `Array.from`) live on
+    // `%TypedArray%.prototype` (the PARENT of `Uint8Array.prototype`), not on the
+    // per-kind prototype. Date/RegExp methods sit directly on their prototype whose
+    // parent IS Object.prototype, so the walk copies exactly their own props.
+    // A subclass's descriptor wins over a superclass's (define only first-seen).
+    for (
+      let p: object | null = hostProto;
+      p !== null && p !== Object.prototype;
+      p = Object.getPrototypeOf(p)
+    ) {
+      for (const name of Object.getOwnPropertyNames(p)) {
+        if (name === 'constructor') continue; // replaced with the guest ctor below
+        if (Object.prototype.hasOwnProperty.call(proto, name)) continue;
+        Object.defineProperty(
+          proto,
+          name,
+          Object.getOwnPropertyDescriptor(p, name) as PropertyDescriptor,
+        );
+      }
+      for (const sym of Object.getOwnPropertySymbols(p)) {
+        if (Object.prototype.hasOwnProperty.call(proto, sym)) continue;
+        Object.defineProperty(
+          proto,
+          sym,
+          Object.getOwnPropertyDescriptor(p, sym) as PropertyDescriptor,
+        );
+      }
+    }
+    this.#exoticProtos.set(kind, proto);
+    return proto;
+  }
+
+  /**
+   * OUT Date mirror — a REAL host Date (same epoch, so it carries the [[DateValue]]
+   * slot → brand `[object Date]` + working methods) with the shared severed proto
+   * (`instanceof Date` FALSE). The guest handle is retained for identity/round-trip.
+   */
+  #wrapDate(handle: QuickJSHandle, id: number): unknown {
+    const ctx = this.#ctx;
+    const time = Scope.withScope((scope) => {
+      const proto = scope.manage(ctx.getProp(ctx.global, 'Date'));
+      const protoObj = scope.manage(ctx.getProp(proto, 'prototype'));
+      const getTime = scope.manage(ctx.getProp(protoObj, 'getTime'));
+      const r = scope.manage(ctx.unwrapResult(ctx.callFunction(getTime, handle)));
+      return ctx.getNumber(r);
+    });
+    const mirror = new Date(time);
+    Object.setPrototypeOf(mirror, this.#exoticProtoFor('Date', Date.prototype));
+    this.#retainForWrapper(mirror, handle, id);
+    return mirror;
+  }
+
+  /**
+   * OUT RegExp mirror — a REAL host RegExp built from the guest's `source`/`flags`
+   * (carries the [[RegExpMatcher]] slot → brand `[object RegExp]` + working
+   * `test`/`exec`) with the shared severed proto (`instanceof RegExp` FALSE).
+   */
+  #wrapRegExp(handle: QuickJSHandle, id: number): unknown {
+    const ctx = this.#ctx;
+    const source = Scope.withScope((scope) =>
+      ctx.getString(scope.manage(ctx.getProp(handle, 'source'))),
+    );
+    const flags = Scope.withScope((scope) =>
+      ctx.getString(scope.manage(ctx.getProp(handle, 'flags'))),
+    );
+    const mirror = new RegExp(source, flags);
+    Object.setPrototypeOf(mirror, this.#exoticProtoFor('RegExp', RegExp.prototype));
+    this.#retainForWrapper(mirror, handle, id);
+    return mirror;
+  }
+
+  /**
+   * OUT TypedArray mirror — a REAL host typed array of the matching kind + values
+   * (carries the [[TypedArrayName]] slot → brand `[object Uint8Array]`, indexing,
+   * `.length`, `Array.from`, `ArrayBuffer.isView` TRUE) with the shared severed
+   * proto (`instanceof Uint8Array`/`Object` FALSE). Built leak-safe: the guest
+   * handle is tracked BEFORE the throwable element reads (`#retainForWrapper`).
+   */
+  #wrapTypedArray(handle: QuickJSHandle, id: number, kind: TypedArrayKind): unknown {
+    const ctx = this.#ctx;
+    const length = ctx.getLength(handle) ?? 0;
+    const Ctor = TYPED_ARRAY_CTORS[kind];
+    const isBig = kind === 'BigInt64Array' || kind === 'BigUint64Array';
+    const mirror = new Ctor(length) as TypedArrayInstance;
+    // Use the kind's flat proto on the host: severed from the host ctor chain so
+    // `instanceof` is FALSE, but TypedArray index/length come from the internal
+    // slot on the REAL backing, not the proto.
+    Object.setPrototypeOf(mirror, this.#exoticProtoFor(kind, Ctor.prototype));
+    this.#retainForWrapper(mirror, handle, id);
+    try {
+      for (let i = 0; i < length; i++) {
+        const elemH = ctx.getProp(handle, i);
+        try {
+          // Index assignment bypasses the severed proto (it is a [[Set]] on the
+          // exotic integer-indexed slot) — works on the real backing.
+          (mirror as unknown as Record<number, number | bigint>)[i] = isBig
+            ? ctx.getBigInt(elemH)
+            : ctx.getNumber(elemH);
+        } finally {
+          elemH.dispose();
+        }
+      }
+    } catch (err) {
+      this.#lifetime.releaseWrapper(mirror);
+      throw err;
+    }
+    return mirror;
+  }
+
+  /**
+   * Marshal a host Date/RegExp/TypedArray INTO the guest as a REAL guest exotic with
+   * a SEVERED prototype (so `instanceof guestCtor` is FALSE — cross-realm, like
+   * Node) but correct brand/methods/data. Returns undefined for a non-exotic host
+   * object (caller falls through to the generic seed). Identity-cached + host-origin
+   * recorded, exactly like `#marshalInboundObject`, so round-trip + re-marshal hold.
+   */
+  #marshalInboundExotic(value: object): QuickJSHandle | undefined {
+    const tag = Object.prototype.toString.call(value).slice(8, -1);
+    // Cache lookup BEFORE constructing a fresh guest exotic (avoid the throwaway).
+    const cached = this.#inboundGuest.get(value);
+    if (cached) {
+      // Re-marshal of a previously-seeded host exotic: hand back the cached guest
+      // identity. Exotic VALUE refresh between runs is the documented residual
+      // (matches the object seed's structural-removal residual) — data is
+      // snapshotted at first seed; deep value-mutation refresh is revisited if a
+      // parity case demands it (see file doc).
+      return cached.dup();
+    }
+    let seed: QuickJSHandle | undefined;
+    if (tag === 'Date') seed = this.#guestDateFromHost(value as Date);
+    else if (tag === 'RegExp') seed = this.#guestRegExpFromHost(value as RegExp);
+    else if (TYPED_ARRAY_BRANDS.has(tag)) {
+      seed = this.#guestTypedArrayFromHost(
+        value as TypedArrayInstance,
+        TYPED_ARRAY_BRANDS.get(tag) as TypedArrayKind,
+      );
+    }
+    if (seed === undefined) return undefined;
+    this.#hostOrigins.set(this.#idOf(seed), value);
+    // Rebrand: a FLAT guest proto (not the guest intrinsic prototype) so
+    // `instanceof guestCtor` is FALSE while brand/methods stay faithful — symmetric
+    // with the OUT host-side mirror + Node's cross-realm IN behavior. (NOT a null
+    // proto — that would strip the methods, unlike a generic seed.)
+    this.#rebrandGuestExotic(seed, tag);
+    this.#inboundGuest.set(value, seed);
+    this.#lifetime.trackInfra(seed);
+    return seed.dup();
+  }
+
+  /**
+   * Set a guest exotic seed's [[Prototype]] to a null-based flat proto carrying the
+   * `kind`'s prototype-chain methods (via the unreachable `EXOTIC_REBRAND_BOOTSTRAP`
+   * closure) so `instanceof guestCtor` is FALSE but methods/brand/data work.
+   */
+  #rebrandGuestExotic(handle: QuickJSHandle, kind: string): void {
+    const ctx = this.#ctx;
+    if (!this.#rebrandHandle) {
+      this.#rebrandHandle = ctx.unwrapResult(ctx.evalCode(EXOTIC_REBRAND_BOOTSTRAP));
+      this.#lifetime.trackInfra(this.#rebrandHandle);
+    }
+    Scope.withScope((scope) => {
+      const kindH = scope.manage(ctx.newString(kind));
+      scope.manage(
+        ctx.unwrapResult(
+          ctx.callFunction(this.#rebrandHandle as QuickJSHandle, ctx.undefined, handle, kindH),
+        ),
+      );
+    });
+  }
+
+  /**
+   * Cached guest factory fn for IN exotic construction (no `callConstructor` in the
+   * API). Evals `source` once → an infra-tracked guest fn handle, reused thereafter.
+   */
+  #exoticFactory(source: string): QuickJSHandle {
+    const cached = this.#exoticFactories.get(source);
+    if (cached) return cached;
+    const ctx = this.#ctx;
+    const fn = ctx.unwrapResult(ctx.evalCode(source));
+    this.#exoticFactories.set(source, fn);
+    this.#lifetime.trackInfra(fn);
+    return fn;
+  }
+
+  /** Build a guest Date with the host Date's epoch. Caller owns the returned handle. */
+  #guestDateFromHost(value: Date): QuickJSHandle {
+    const ctx = this.#ctx;
+    const factory = this.#exoticFactory('(t) => new Date(t)');
+    return Scope.withScope((scope) => {
+      const t = scope.manage(ctx.newNumber(value.getTime()));
+      return ctx.unwrapResult(ctx.callFunction(factory, ctx.undefined, t));
+    });
+  }
+
+  /** Build a guest RegExp from the host RegExp's source/flags. Caller owns the handle. */
+  #guestRegExpFromHost(value: RegExp): QuickJSHandle {
+    const ctx = this.#ctx;
+    const factory = this.#exoticFactory('(s, f) => new RegExp(s, f)');
+    return Scope.withScope((scope) => {
+      const src = scope.manage(ctx.newString(value.source));
+      const flags = scope.manage(ctx.newString(value.flags));
+      return ctx.unwrapResult(ctx.callFunction(factory, ctx.undefined, src, flags));
+    });
+  }
+
+  /** Build a guest TypedArray of the matching kind + values. Caller owns the handle. */
+  #guestTypedArrayFromHost(value: TypedArrayInstance, kind: TypedArrayKind): QuickJSHandle {
+    const ctx = this.#ctx;
+    const isBig = kind === 'BigInt64Array' || kind === 'BigUint64Array';
+    const factory = this.#exoticFactory(`(len) => new ${kind}(len)`);
+    const len = ctx.newNumber(value.length);
+    let ta: QuickJSHandle;
+    try {
+      ta = ctx.unwrapResult(ctx.callFunction(factory, ctx.undefined, len));
+    } finally {
+      len.dispose();
+    }
+    try {
+      for (let i = 0; i < value.length; i++) {
+        const elem = value[i] as number | bigint;
+        const elemH = isBig ? ctx.newBigInt(elem as bigint) : ctx.newNumber(elem as number);
+        try {
+          ctx.setProp(ta, i, elemH);
+        } finally {
+          elemH.dispose();
+        }
+      }
+    } catch (err) {
+      ta.dispose();
+      throw err;
+    }
+    return ta;
+  }
+
+  // ===========================================================================
+  // Symbol marshalling (T10), both directions.
+  // ===========================================================================
+
+  /**
+   * Marshal a guest symbol OUT to a host symbol matching Node's cross-realm rules:
+   *   - WELL-KNOWN (`Symbol.iterator` …) → the HOST well-known (SHARED, `===`);
+   *   - REGISTRY (`Symbol.for(k)`) → `Symbol.for(k)` (SHARED, `===`);
+   *   - UNIQUE → a fresh host symbol with the same description, identity-cached by
+   *     the guest symbol's registry id (same guest symbol → same host symbol), and
+   *     recorded for the round-trip IN (`#outSymbolOrigin`).
+   */
+  #wrapSymbol(handle: QuickJSHandle): symbol {
+    const ctx = this.#ctx;
+    // Well-known: compare against each host well-known via `ctx.eq`.
+    const wk = this.#wellKnownNameOf(handle);
+    if (wk !== undefined) return Symbol[wk];
+    // Registry: `Symbol.keyFor` returns a string for registry symbols, else undefined.
+    const regKey = this.#symbolRegistryKey(handle);
+    if (regKey !== undefined) return Symbol.for(regKey);
+    // Unique: identity-cache by the guest symbol id.
+    const id = this.#idOf(handle);
+    // Round-trip: a guest unique symbol we seeded FROM a host symbol → that host
+    // symbol (so a host symbol → guest → host is `=== hostSym`).
+    const origin = this.#symbolOrigins.get(id);
+    if (origin !== undefined) return origin;
+    const cached = this.#outSymbols.get(id);
+    if (cached) return cached;
+    const desc = Scope.withScope((scope) => {
+      const d = scope.manage(ctx.getProp(handle, 'description'));
+      return ctx.typeof(d) === 'string' ? ctx.getString(d) : undefined;
+    });
+    const mirror = Symbol(desc);
+    this.#outSymbols.set(id, mirror);
+    // Retain the guest handle so the host mirror symbol can be used as a KEY back
+    // into the guest (`#guestSymbolHandleFor`) and resolve to THIS guest symbol.
+    const dup = handle.dup();
+    this.#outSymbolGuest.set(mirror, dup);
+    this.#lifetime.trackInfra(dup);
+    return mirror;
+  }
+
+  /** Well-known symbol NAME a guest symbol matches (via `ctx.eq` vs each host well-known), or undefined. */
+  #wellKnownNameOf(handle: QuickJSHandle): (typeof WELL_KNOWN_SYMBOL_NAMES)[number] | undefined {
+    const ctx = this.#ctx;
+    for (const name of WELL_KNOWN_SYMBOL_NAMES) {
+      const wk = ctx.getWellKnownSymbol(name);
+      try {
+        if (ctx.eq(handle, wk)) return name;
+      } finally {
+        wk.dispose();
+      }
+    }
+    return undefined;
+  }
+
+  /** `Symbol.keyFor(handle)` → registry key string, or undefined for non-registry symbols. */
+  #symbolRegistryKey(handle: QuickJSHandle): string | undefined {
+    const ctx = this.#ctx;
+    return Scope.withScope((scope) => {
+      const symbolCtor = scope.manage(ctx.getProp(ctx.global, 'Symbol'));
+      const keyFor = scope.manage(ctx.getProp(symbolCtor, 'keyFor'));
+      const r = scope.manage(ctx.unwrapResult(ctx.callFunction(keyFor, ctx.undefined, handle)));
+      return ctx.typeof(r) === 'string' ? ctx.getString(r) : undefined;
+    });
+  }
+
+  /**
+   * Marshal a host symbol INTO the guest matching Node's rules:
+   *   - a host mirror symbol we minted OUT round-trips to its ORIGINAL guest symbol
+   *     (`#outSymbolOrigin` → the guest handle, so `=== hostSym` holds back in host);
+   *   - WELL-KNOWN host symbol → the guest well-known (`getWellKnownSymbol`, SHARED);
+   *   - REGISTRY host symbol → `newSymbolFor(key)` (SHARED);
+   *   - UNIQUE host symbol → a fresh guest unique symbol with the same description,
+   *     identity-cached + host-origin recorded so the guest symbol round-trips back
+   *     to THIS host symbol.
+   */
+  #marshalInboundSymbol(value: symbol): QuickJSHandle {
+    const ctx = this.#ctx;
+    // Identity: the same host unique symbol → the same guest handle (so a round-trip
+    // OUT recovers this host symbol via `#symbolOrigins`).
+    const cached = this.#inboundSymbols.get(value);
+    if (cached) return cached.dup();
+    // Well-known: a host well-known symbol → the guest's (shared identity).
+    const wkName = WELL_KNOWN_SYMBOL_NAMES.find((n) => Symbol[n] === value);
+    if (wkName !== undefined) return ctx.getWellKnownSymbol(wkName);
+    // Registry: `Symbol.keyFor` on the host → guest `newSymbolFor` (shared).
+    const regKey = Symbol.keyFor(value);
+    if (regKey !== undefined) return ctx.newSymbolFor(regKey);
+    // Unique: mint a guest unique symbol, identity-cache + record host origin so the
+    // round-trip OUT (`#wrapSymbol`) recovers THIS host symbol.
+    const guestSym = ctx.newUniqueSymbol(value.description ?? '');
+    this.#symbolOrigins.set(this.#idOf(guestSym), value);
+    this.#inboundSymbols.set(value, guestSym);
+    this.#lifetime.trackInfra(guestSym);
+    return guestSym.dup();
+  }
+
+  /**
+   * Host symbol → a TRANSIENT guest symbol handle for a symbol-keyed READ (the
+   * object wrapper's traps). Caller OWNS + disposes it. Reuses the inbound symbol
+   * marshaller; for unique symbols already seeded it returns a dup of the cached
+   * guest handle.
+   */
+  #guestSymbolHandleFor(value: symbol): QuickJSHandle {
+    // A host mirror symbol we minted OUT (a guest symbol key surfaced to the host)
+    // → a dup of the ORIGINAL guest symbol handle, so the read hits the right key.
+    const out = this.#outSymbolGuest.get(value);
+    if (out) return out.dup();
+    // Otherwise it is a genuine host symbol (well-known/registry/unique) → marshal IN.
+    return this.#marshalInboundSymbol(value);
+  }
+
+  /**
+   * Copy the guest fn's `name`/`length` onto the host thunk so the OUT function
+   * wrapper reports the GUEST fn's values (Node: a returned guest fn has the guest
+   * fn's name + length, not the thunk's `'thunk'`/0). Both are own configurable
+   * properties on a function — `defineProperty` overrides them.
+   */
+  #copyFnNameLength(handle: QuickJSHandle, thunk: (...args: unknown[]) => unknown): void {
+    const ctx = this.#ctx;
+    const name = Scope.withScope((scope) => {
+      const n = scope.manage(ctx.getProp(handle, 'name'));
+      return ctx.typeof(n) === 'string' ? ctx.getString(n) : '';
+    });
+    const length = Scope.withScope((scope) => {
+      const l = scope.manage(ctx.getProp(handle, 'length'));
+      return ctx.typeof(l) === 'number' ? ctx.getNumber(l) : 0;
+    });
+    Object.defineProperty(thunk, 'name', { value: name, configurable: true });
+    Object.defineProperty(thunk, 'length', { value: length, configurable: true });
   }
 
   /** True for context-owned constant handles that must NOT be disposed. */
