@@ -4,6 +4,14 @@
 
 ### Added
 
+- **Public telemetry data types (T16).** `TelemetryEntry`, `TelemetryKind`, `TelemetrySnapshot`
+  are now type-only exports of `src/index.ts` (also re-exported from `@riftydev/rifty` next to
+  the runtime event surface), so an SDK consumer can type the `diagnostic` RuntimeEvent/
+  WorkerMessage payload without a forbidden deep import. Sink mutation fns (recordX/snapshot/
+  reset) stay internal. The dev-only playground divergence PANEL is deferred —
+  `docs/backlog/playground/divergence-telemetry-panel.md` (guest runs the kernel/shell path,
+  not `RuntimeController`, so a panel needs telemetry bridged through the kernel first).
+
 - **`node:vm` divergence telemetry wiring + `vmEngine` host option + loud opt-in (T15,
   ADR-0138).** Five wirings: (1) the QuickJS preload (`ensureVmEngineReady`) joins the
   worker `boot` promise so a synchronous `vm.*` sandbox call in an early eval always
