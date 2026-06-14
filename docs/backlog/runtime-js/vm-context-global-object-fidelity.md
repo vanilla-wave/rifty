@@ -4,6 +4,7 @@ status: parked
 title: node:vm context lacks real global-object property-attribute + strict-mode fidelity
 created: 2026-06-13
 why: adversarial parity sweep (closing vm-sandbox-residual-gaps) surfaced a NEW divergence class — the context is a plain-object property bag, so it has none of Node's vm global-object descriptor/lexical/strict semantics
+user_story: As a dev running config/template code in a vm context that redeclares an intrinsic (`var undefined`/`NaN`), deletes a global, reads `globalThis`/`eval`, or runs `"use strict"` top-level writes, I want Node-identical behaviour; currently the context is a plain-object property bag with none of a real vm global object's attribute/lexical/strict semantics.
 sources: [M11, "vm-sandbox-residual-gaps adversarial review", ADR-0138]
 code:
   [
@@ -45,6 +46,19 @@ Node (`tools/vm-diff-probe.ts` during review; harness removed):
 - **Strict-mode undeclared writes.** `"use strict"; x = 1` throws `ReferenceError`
   in Node; rifty unconditionally rewrites the undeclared write to `helper.x = 1`
   (the rewrite assumes sloppy mode) so it silently succeeds.
+- **Declaration-only `var` own-property attributes.** A top-level `var z;` makes a
+  non-configurable, enumerable own property `z` (value `undefined`) on Node's vm
+  global; rifty records the name only in the `activeContextVarBindings` side table,
+  so `Object.keys(this)` / `getOwnPropertyDescriptor(this,'z')` / `hasOwnProperty`
+  all diverge (rifty has no own key until the var is assigned). The READ value
+  (`undefined`) and the `in` operator already match — this is the property-attribute
+  slice only. (Assigned `var z = 1` matches: a real own key appears both sides.)
+- **Cross-run lexical persistence.** Top-level `let`/`const`/`class` persist as the
+  context's global lexical bindings across `runInContext` calls in Node (readable
+  next run; a re-declaration next run is a redeclaration `SyntaxError`). rifty runs
+  each call as an isolated `with(proxy)+eval`, so lexical bindings vanish after the
+  run and a later re-declaration never collides. (`var` persistence IS closed — it
+  is registered on the context; this is the lexical-binding analogue.)
 
 ## Options or Next
 

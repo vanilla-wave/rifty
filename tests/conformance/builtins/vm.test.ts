@@ -362,6 +362,37 @@ describe('node:vm subset', () => {
     expect(vm.runInNewContext('var x = 5; x;', {})).toBe(5);
   });
 
+  it('runs a top-level var as the unbraced body of if/else/do-while (completion wrapper consumes the source ;)', () => {
+    // Regression (PR #30): the `{ let T = (…); }` completion-neutraliser left the
+    // source `;` dangling, ending the if-consequent / loop body early.
+    expect(vm.runInNewContext('if (false) var x = 1; else 2;', {})).toBe(2);
+    expect(vm.runInNewContext('if (false) var a = 1; else var b = 2; b', {})).toBe(2);
+    expect(vm.runInNewContext('if (false) var x = 1; else if (true) 2;', {})).toBe(2);
+    expect(vm.runInNewContext('if (true) { if (false) var x = 1; else 2; }', {})).toBe(2);
+    expect(vm.runInNewContext('do var x = 1; while (false); x', {})).toBe(1);
+    expect(vm.runInNewContext('var i = 0; do var x; while (i++ < 2); i', {})).toBe(3);
+    expect(
+      vm.runInNewContext('if (false) var { a } = { a: 1 }; else var { b } = { b: 2 }; b', {}),
+    ).toBe(2);
+    // braced bodies + statement-list position unchanged
+    expect(vm.runInNewContext('if (false) { var x = 1; } else 2;', {})).toBe(2);
+    expect(vm.runInNewContext('var a = 1, b = 2; a + b', {})).toBe(3);
+  });
+
+  it('leaves a writable intrinsic intact for a declaration-only var of the same name', () => {
+    // Regression (PR #30): a no-init `var Map;` registered the name and shadowed the
+    // real Map to undefined; Node leaves the writable intrinsic until it is assigned.
+    expect(vm.runInNewContext('var Map; var m = new Map(); m.set("k", 1); m.get("k")', {})).toBe(1);
+    expect(vm.runInNewContext('var JSON; JSON.stringify({ a: 1 })', {})).toBe('{"a":1}');
+    expect(vm.runInNewContext('var Array; typeof Array', {})).toBe('function');
+    // assigning the name still shadows the intrinsic (own property wins)
+    expect(vm.runInNewContext('var Map; Map = 7; Map', {})).toBe(7);
+    expect(vm.runInNewContext('var Map; Map = undefined; typeof Map', {})).toBe('undefined');
+    expect(() => vm.runInNewContext('var Map; Map = undefined; new Map()', {})).toThrow(TypeError);
+    // a non-intrinsic no-init var still reads undefined
+    expect(vm.runInNewContext('var foo; typeof foo', {})).toBe('undefined');
+  });
+
   it('lands statement-position var destructuring patterns on the context', () => {
     const ctx: Record<string, unknown> = {};
     expect(

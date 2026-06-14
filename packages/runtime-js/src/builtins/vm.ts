@@ -272,8 +272,12 @@ function contextProxy(context: ContextObject): ContextProxy {
       if (prop === Symbol.unscopables) return undefined;
       if (prop === 'globalThis') return proxy;
       if (Reflect.has(target, prop)) return Reflect.get(target, prop, receiver) as unknown;
-      if (isActiveContextVarBinding(target, prop)) return undefined;
+      // A no-init `var X;` registers X as a context-var binding but creates NO own
+      // property until assigned. Node leaves an existing writable intrinsic (Map,
+      // JSON, …) intact for a bare `var X;`, so intrinsics resolve BEFORE the
+      // bare-binding `undefined`; once X is assigned the own-prop branch above wins.
       if (INTRINSIC_GLOBALS.has(prop)) return Reflect.get(globalThis, prop);
+      if (isActiveContextVarBinding(target, prop)) return undefined;
       return undefined;
     },
     set(target, prop, value) {
@@ -312,8 +316,10 @@ function isActiveContextVarBinding(context: ContextObject, prop: PropertyKey): b
 // Once a `var` / top-level-function name is declared in a context it stays a known
 // global of that context for its lifetime (Node parity): reads after the run — and
 // in later runs of the same context — resolve to `undefined` instead of falling
-// through to the host realm. The name is NOT an own property until something
-// assigns it, so `name in rawContext` stays false like Node's `var x;`.
+// through to the host realm. rifty records the name in this side table rather than
+// as an own property; Node DOES make `var x;` a (non-configurable, enumerable) own
+// property of its global — that property-attribute gap is tracked in
+// `docs/backlog/runtime-js/vm-context-global-object-fidelity`.
 function registerContextVarBindings(context: ContextObject, names: readonly string[]): void {
   if (names.length === 0) return;
   let bindings = activeContextVarBindings.get(context);
@@ -500,7 +506,7 @@ function emitContextVarDeclaratorWrite(
   // initializer's outer `)` from the init node, so init.end would land inside the
   // user's parens.
   ctx.edits.push({ start: declarator.id.start, end: declarator.id.start, text: '(' });
-  rewriteAssignmentTargetPattern(declarator.id as unknown as Pattern, ctx);
+  rewriteAssignmentTargetPattern(declarator.id, ctx);
   ctx.edits.push({ start: declarator.end, end: declarator.end, text: ')' });
   if (declarator.init) walkContextNode(declarator.init, ctx);
 }
@@ -522,11 +528,14 @@ function emitContextVarStatement(ctx: RewriteContext, declaration: VariableDecla
     text: `{ let ${ctx.tempName} = (`,
   });
   for (const declarator of declarators) emitContextVarDeclaratorWrite(ctx, declarator);
-  // Close at the last declarator's end, which includes any wrapping parens acorn
-  // strips from the init node (`var c = (1, 2, 3)` — init.end is before the `)`).
-  const last = declarators[declarators.length - 1];
-  const closeAt = last?.end ?? declaration.end;
-  ctx.edits.push({ start: closeAt, end: closeAt, text: '); }' });
+  // Close at the declaration's END, consuming the source `;`. `last.end` (the last
+  // declarator's end — includes wrapping parens acorn strips from the init node,
+  // `var c = (1, 2, 3)`) is where the value text stops; [last.end, declaration.end)
+  // is just the trailing `;`. Leaving that `;` outside the block would turn
+  // `var x = 1;` into `{ … }; ` (block + empty stmt), which breaks an unbraced
+  // if/else/do-while body whose `;`/keyword boundary is grammatically load-bearing.
+  const last = declarators.at(-1) ?? first;
+  ctx.edits.push({ start: last.end, end: declaration.end, text: '); }' });
 }
 
 // Top-level `var` as a for-loop INIT (expression position: no completion to
@@ -760,7 +769,7 @@ function walkForInOfStatement(
           // target pattern must NOT be parenthesised, so just strip `var ` and
           // redirect the pattern's ids in place (mirrors the no-`var` case below).
           ctx.edits.push({ start: declaration.start, end: declarator.id.start, text: '' });
-          rewriteAssignmentTargetPattern(declarator.id as unknown as Pattern, ctx);
+          rewriteAssignmentTargetPattern(declarator.id, ctx);
         }
       }
     } else {

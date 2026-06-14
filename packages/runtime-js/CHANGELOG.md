@@ -4,6 +4,19 @@
 
 ### Fixed
 
+- **PR #30 review fixes (`node:vm` statement-position var + intrinsic shadow).**
+  Two divergences inside the just-closed `vm-sandbox-residual-gaps` work:
+  - A top-level `var` used as the UNBRACED body of `if`/`else`/`do-while` threw
+    `SyntaxError` — the completion-neutralising `{ let T = (…); }` block closed at
+    the last declarator's end, leaving the source `;` dangling (`if(false) var x=1;
+    else 2;` → block + stray `;` orphaned the `else`). The wrapper now closes at the
+    declaration's end, consuming the `;`.
+  - A declaration-only `var <writable-intrinsic>;` (e.g. `var Map; new Map()`)
+    shadowed the real intrinsic to `undefined` — the registered no-init name
+    resolved ahead of `INTRINSIC_GLOBALS` in the context proxy `get`. Intrinsics now
+    resolve before a bare (own-property-less) var binding; an assigned `var Map = …`
+    still shadows via its own property. Parity:
+    `cases/vm/statement-position-var.case.ts`.
 - **PR #21 review fixes (fs/os/fs-RPC contract).**
   - `fs.readSync`/`writeSync`/`read`/`write` treat position `-1` as "current
     position" like Node (was: `RangeError`). Parity:
