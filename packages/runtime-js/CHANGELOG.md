@@ -12,6 +12,14 @@
   `node <script>`. `child_process.spawn('node', [script])` (worker path) now
   spawns this bootstrap instead of a raw `kind:'source'` worker, so a spawned
   script with a shebang / relative import runs via the loader.
+### Changed
+
+- **`node:vm` split behind a `VmEngine` interface (no behavior change).** `vm.ts`
+  became a `vm/` module: `types.ts` (shared types + `VmEngine`), `rewrite-engine.ts`
+  (the AST-rewrite sandbox, now `rewriteEngine: VmEngine`, Script memoisation moved
+  to a per-`CompiledScript` WeakMap), `engine-config.ts` (selector — default stays
+  `rewrite`; `__RIFTY_VM_ENGINE` override), `index.ts` (public dispatcher).
+  `runInThisContext` stays host-realm. Prep for the QuickJS engine (ADR-0138 / T17).
 
 ### Fixed
 

@@ -45,7 +45,7 @@ import ttyModule from './tty.ts';
 import urlModule from './url.ts';
 import utilTypesModule from './util-types.ts';
 import utilModule from './util.ts';
-import vmModule from './vm.ts';
+import vmModule from './vm/index.ts';
 import workerThreadsModule from './worker_threads.ts';
 
 // Re-export the registry surface so existing consumers
