@@ -28,6 +28,10 @@ describe('loadLayout', () => {
     expect(loadLayout(undefined)).toEqual(LAYOUT_DEFAULTS);
   });
 
+  it('defaults the preview pane wider than the original Soft Panels mockup', () => {
+    expect(LAYOUT_DEFAULTS.previewW).toBeGreaterThan(464);
+  });
+
   it('round-trips a saved layout', () => {
     const storage = fakeStorage();
     const state: LayoutState = {

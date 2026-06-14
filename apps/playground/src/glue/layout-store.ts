@@ -31,12 +31,12 @@ export interface StorageLike {
 // recovery UI once the activity bar was removed.
 export const LAYOUT_KEY = 'rf.layout.v2';
 
-/* Soft Panels mockup sizes (files 232 · preview 464); terminal raised to 280
-   over the mockup's 212 — more useful log depth (2026-06-11 feedback). */
+/* Soft Panels mockup sizes started at files 232 · preview 464; preview widened
+   for main's default browser, terminal raised to 280 for useful log depth. */
 export const LAYOUT_DEFAULTS: LayoutState = {
   sidebarW: 232,
   consoleH: 280,
-  previewW: 464,
+  previewW: 560,
   sidebarCollapsed: false,
   consoleCollapsed: false,
   // Explorer is the boot default — the file manager is the headline feature.

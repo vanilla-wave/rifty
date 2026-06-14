@@ -3,8 +3,9 @@
  *
  * Dark UI built from rounded card-panels (#1D1F26) separated by 12px gaps on a
  * #131419 page — borders, not shadows; one lime accent (#C7F05A) for selection
- * / running / brand. Sans (Inter) for UI, mono (JetBrains Mono) for code, paths,
- * terminal, chips. Tokens mirror docs in the design handoff README.
+ * / running / brand. JetBrains Mono is the single visible font for UI, code,
+ * paths, terminal, chips, and seeded previews. Tokens mirror docs in the design
+ * handoff README.
  *
  * Fonts self-hosted under /fonts (variable woff2, latin + cyrillic subsets) —
  * no runtime CDN, COEP-credentialless friendly.
@@ -12,24 +13,6 @@
  * Splitters live inside the 12px panel gaps: invisible until hover/drag.
  */
 
-@font-face {
-  font-family: "Inter";
-  src: url("/fonts/inter.woff2") format("woff2");
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-  unicode-range:
-    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
-    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: "Inter";
-  src: url("/fonts/inter-cyr.woff2") format("woff2");
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
-}
 @font-face {
   font-family: "JetBrains Mono";
   src: url("/fonts/jetbrains-mono.woff2") format("woff2");
@@ -106,7 +89,7 @@
   --rf-r-lg: 10px;
   --rf-r-pill: 999px;
 
-  --rf-font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --rf-font-sans: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --rf-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   --rf-shadow-pop: 0 24px 60px rgba(0, 0, 0, 0.6);

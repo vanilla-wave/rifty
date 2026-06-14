@@ -1,4 +1,5 @@
 import type { IconName } from './components/icons.tsx';
+import { MONO_FONT_STACK } from './glue/fonts.ts';
 import {
   EXPRESS_SQLITE_SERVER_SOURCE,
   EXPRESS_SQLITE_TEMPLATE,
@@ -61,7 +62,7 @@ const { describeProject, formatFileList } = await import(/* @vite-ignore */ summ
 const project = (await import(/* @vite-ignore */ projectUrl)).default;
 
 const style = document.createElement('style');
-style.textContent = 'body{margin:0;background:#101218;color:rgba(255,255,255,.85);font-family:Inter,ui-sans-serif,system-ui,sans-serif}.workspace-shell{max-width:720px;padding:28px}.eyebrow{color:#c7f05a;font:600 10px/12px \\'Roboto Mono\\',monospace;letter-spacing:.2em;margin:0 0 10px;text-transform:uppercase}h1{font:600 26px/32px Inter,ui-sans-serif,sans-serif;letter-spacing:-.01em;color:rgba(255,255,255,.92);margin:0 0 8px}h2{font:600 15px/20px Inter,ui-sans-serif,sans-serif;color:rgba(255,255,255,.85);margin:24px 0 0}.lede{color:rgba(255,255,255,.55);font-size:13px;line-height:19px;max-width:520px;margin:0}.file-list{display:grid;gap:8px;list-style:none;padding:0;margin:14px 0 0}.file-list li{border:1px solid rgba(255,255,255,.09);border-radius:8px;display:grid;gap:2px;padding:11px 13px}.file-list span{color:rgba(255,255,255,.5);font-size:11.5px;line-height:16px}code{color:#dff7ad;font:400 12px/16px \\'Roboto Mono\\',monospace}';
+style.textContent = 'body{margin:0;background:#101218;color:rgba(255,255,255,.85);font-family:${MONO_FONT_STACK}}.workspace-shell{max-width:720px;padding:28px}.eyebrow{color:#c7f05a;font:600 10px/12px ${MONO_FONT_STACK};letter-spacing:.2em;margin:0 0 10px;text-transform:uppercase}h1{font:600 26px/32px ${MONO_FONT_STACK};letter-spacing:0;color:rgba(255,255,255,.92);margin:0 0 8px}h2{font:600 15px/20px ${MONO_FONT_STACK};color:rgba(255,255,255,.85);margin:24px 0 0}.lede{color:rgba(255,255,255,.55);font-size:13px;line-height:19px;max-width:520px;margin:0}.file-list{display:grid;gap:8px;list-style:none;padding:0;margin:14px 0 0}.file-list li{border:1px solid rgba(255,255,255,.09);border-radius:8px;display:grid;gap:2px;padding:11px 13px}.file-list span{color:rgba(255,255,255,.5);font-size:11.5px;line-height:16px}code{color:#dff7ad;font:400 12px/16px ${MONO_FONT_STACK}}';
 document.head.append(style);
 
 const app = document.getElementById('app');
@@ -118,7 +119,7 @@ body {
   margin: 0;
   background: #101218;
   color: rgba(255, 255, 255, 0.85);
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-family: ${MONO_FONT_STACK};
 }
 
 .workspace-shell {
@@ -128,21 +129,21 @@ body {
 
 .eyebrow {
   color: #c7f05a;
-  font: 600 10px/12px 'Roboto Mono', monospace;
+  font: 600 10px/12px ${MONO_FONT_STACK};
   letter-spacing: 0.2em;
   margin: 0 0 10px;
   text-transform: uppercase;
 }
 
 h1 {
-  font: 600 26px/32px Inter, ui-sans-serif, sans-serif;
-  letter-spacing: -0.01em;
+  font: 600 26px/32px ${MONO_FONT_STACK};
+  letter-spacing: 0;
   color: rgba(255, 255, 255, 0.92);
   margin: 0 0 8px;
 }
 
 h2 {
-  font: 600 15px/20px Inter, ui-sans-serif, sans-serif;
+  font: 600 15px/20px ${MONO_FONT_STACK};
   color: rgba(255, 255, 255, 0.85);
   margin: 24px 0 0;
 }
@@ -179,7 +180,7 @@ h2 {
 
 code {
   color: #dff7ad;
-  font: 400 12px/16px 'Roboto Mono', monospace;
+  font: 400 12px/16px ${MONO_FONT_STACK};
 }
 `;
 
@@ -187,7 +188,7 @@ const NODE_WORKER_SOURCE = `const notesUrl = new URL('src/runtime-notes.js', win
 const { runtimeNotes, renderRuntimeNotes } = await import(/* @vite-ignore */ notesUrl);
 
 const style = document.createElement('style');
-style.textContent = 'body{margin:0;background:#101218;color:rgba(255,255,255,.85);font-family:Inter,ui-sans-serif,system-ui,sans-serif}.workspace-shell{max-width:720px;padding:28px}.eyebrow{color:#c7f05a;font:600 10px/12px \\'Roboto Mono\\',monospace;letter-spacing:.2em;margin:0 0 10px;text-transform:uppercase}h1{font:600 26px/32px Inter,ui-sans-serif,sans-serif;letter-spacing:-.01em;color:rgba(255,255,255,.92);margin:0 0 8px}h2{font:600 15px/20px Inter,ui-sans-serif,sans-serif;color:rgba(255,255,255,.85);margin:24px 0 0}.lede{color:rgba(255,255,255,.55);font-size:13px;line-height:19px;max-width:520px;margin:0}.file-list{display:grid;gap:8px;list-style:none;padding:0;margin:14px 0 0}.file-list li{border:1px solid rgba(255,255,255,.09);border-radius:8px;display:grid;gap:2px;padding:11px 13px}.file-list span{color:rgba(255,255,255,.5);font-size:11.5px;line-height:16px}code{color:#dff7ad;font:400 12px/16px \\'Roboto Mono\\',monospace}';
+style.textContent = 'body{margin:0;background:#101218;color:rgba(255,255,255,.85);font-family:${MONO_FONT_STACK}}.workspace-shell{max-width:720px;padding:28px}.eyebrow{color:#c7f05a;font:600 10px/12px ${MONO_FONT_STACK};letter-spacing:.2em;margin:0 0 10px;text-transform:uppercase}h1{font:600 26px/32px ${MONO_FONT_STACK};letter-spacing:0;color:rgba(255,255,255,.92);margin:0 0 8px}h2{font:600 15px/20px ${MONO_FONT_STACK};color:rgba(255,255,255,.85);margin:24px 0 0}.lede{color:rgba(255,255,255,.55);font-size:13px;line-height:19px;max-width:520px;margin:0}.file-list{display:grid;gap:8px;list-style:none;padding:0;margin:14px 0 0}.file-list li{border:1px solid rgba(255,255,255,.09);border-radius:8px;display:grid;gap:2px;padding:11px 13px}.file-list span{color:rgba(255,255,255,.5);font-size:11.5px;line-height:16px}code{color:#dff7ad;font:400 12px/16px ${MONO_FONT_STACK}}';
 document.head.append(style);
 
 const app = document.getElementById('app');
@@ -262,7 +263,7 @@ document.body.style.margin = '0';
 document.body.style.padding = '3rem';
 document.body.style.background = '#101218';
 document.body.style.color = '#e6e6e6';
-document.body.style.fontFamily = 'ui-monospace, monospace';
+document.body.style.fontFamily = ${JSON.stringify(MONO_FONT_STACK)};
 `;
 
 const PROJECT_FILES_PRESET: Preset = {

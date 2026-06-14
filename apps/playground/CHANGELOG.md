@@ -36,12 +36,15 @@
 ### Changed
 
 - **Mono font → JetBrains Mono.** Code surfaces (Monaco editor, xterm terminal,
-  code chips, `--rf-font-mono`) now use self-hosted JetBrains Mono (OFL, variable
-  woff2, latin + cyrillic subsets) in place of Roboto Mono; `index.html` preload
-  and `public/fonts/LICENSE.md` updated, Roboto Mono woff2 removed. Editor +
-  terminal share a single `glue/fonts.ts` `MONO_FONT_STACK` constant. Refines the
-  mono token recorded in ADR-0124 (Inter UI font unchanged). Sample-template CSS
-  in `presets.ts` keeps its own font and is unaffected.
+  code chips, seeded sandbox preview CSS, `--rf-font-mono`) now use self-hosted
+  JetBrains Mono (OFL, variable woff2, latin + cyrillic subsets) in place of
+  Roboto Mono; `index.html` preload and `public/fonts/LICENSE.md` updated,
+  Roboto Mono woff2 removed. Editor, terminal, and sandbox preview templates
+  share a single `glue/fonts.ts` `MONO_FONT_STACK` constant.
+
+- **JetBrains Mono throughout the playground (ADR-0140).** Playground chrome now
+  points `--rf-font-sans` at the same JetBrains Mono stack as code surfaces, and
+  critical `index.html` styles preload/use JetBrains Mono instead of Inter.
 
 - **Netlify deploy automation.** GitHub Actions now deploys `main` to the
   production site and same-repo PRs to stable `pr-<number>` preview aliases;
@@ -55,18 +58,26 @@
 
 - **"Soft Panels" visual redesign (ADR-0124).** UI rebuilt to the Gravity-UI
   design handoff: rounded card panels (`#1D1F26`) with 12px gaps on a
-  `#131419` page, rifty lime `#C7F05A` accent, Inter (UI) + Roboto Mono
-  (code/terminal) self-hosted variable fonts (latin + cyrillic). Top bar now
+  `#131419` page, rifty lime `#C7F05A` accent, originally Inter (UI) + Roboto
+  Mono (code/terminal), now superseded by ADR-0140's single JetBrains Mono
+  stack. Top bar now
   hosts the template switcher (dropdown; replaces the activity bar + sidebar
   gallery, same e2e selectors), a LIVE/STARTING/STOPPED status pill, a ⌘K
   command bar, a GitHub link, and a Share button (copies the URL, success
   toast). Preview pane gained browser-frame chrome (address bar with editable
   port, phase pill, reload / open-in-tab). Monaco and xterm re-themed to the
   panel surface with handoff syntax colors; splitters now live invisibly in
-  the panel gaps. Layout defaults follow the mockup (files 232 / terminal 212
-  / preview 464).
+  the panel gaps. Layout defaults follow the mockup, with later feedback
+  widening preview and raising the terminal.
+
+- **Default preview pane is wider.** Fresh layout state now starts the browser
+  preview at 560px instead of the original Soft Panels 464px.
 
 ### Fixed
+
+- **Seeded sandbox previews now use JetBrains Mono.** The playground chrome,
+  Monaco, and xterm had already switched, but the project preview templates
+  still carried Roboto/system monospace literals.
 
 - **Netlify npm registry proxy deploy (ADR-0133, supersedes ADR-0028).** CI and
   one-off Netlify deploy docs now run `netlify build` before artifact deploys
