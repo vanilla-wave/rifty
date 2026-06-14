@@ -64,6 +64,7 @@ function makeFakeOwner() {
 
   const owner: WorkspaceOwnerHandle = {
     workspaceId: 'ws-test',
+    snapshotPort: 59124,
     closed: Promise.resolve(null),
     openSession(sid: string): Promise<void> {
       opened.push(sid);

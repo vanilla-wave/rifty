@@ -209,6 +209,14 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
 export interface WorkspaceOwnerHandle {
   /** Stable id carried to the owner over `RIFTY_WORKSPACE_ID`. */
   readonly workspaceId: string;
+  /**
+   * BroadcastChannel addressing key for the owner's snapshot + node_modules
+   * read bridges (ADR-0076/0080). The bridges are still port-keyed; the owner
+   * serves on this dedicated number (distinct from any dev-server port, so the
+   * per-run preview worker's channels never cross-talk). The page subscribes on
+   * it so the explorer reflects the owner tree before/after any vite run.
+   */
+  readonly snapshotPort: number;
   readonly closed: Promise<number | null>;
   /** Open a pty session in the owner; resolves on `pty:ready`. */
   openSession(sid: string): Promise<void>;
@@ -223,6 +231,15 @@ export interface WorkspaceOwnerHandle {
   /** Terminate the owner worker; idempotent. */
   close(): void;
 }
+
+/**
+ * Dedicated BroadcastChannel port for the persistent owner's serve bridges.
+ * High, fixed, and outside the template default-port range (vite 5174, express
+ * 3210) so the owner's `vfs-snapshot.local:<n>` / `vfs-nodemods.local:<n>`
+ * channels never collide with a per-run preview worker's. This is a synthetic
+ * channel key, never a real network port (the owner runs no dev server).
+ */
+const WORKSPACE_OWNER_SNAPSHOT_PORT = 59124;
 
 export interface WorkspaceOwnerOptions {
   /** Workspace root (cwd of the owner + its shells). Defaults to `/workspace`. */
@@ -259,6 +276,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   const setup = opts.setup ?? 'instant';
   const slug = opts.slug ?? template.id;
   const workspaceId = opts.workspaceId ?? createPreviewOwnerToken();
+  const snapshotPort = WORKSPACE_OWNER_SNAPSHOT_PORT;
   const log = opts.onLog ?? (() => {});
 
   if (!isSabIpcSupported()) {
@@ -283,6 +301,9 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
         RIFTY_RFV_TEMPLATE: template.id,
         RIFTY_RFV_SETUP: setup,
         RIFTY_RFV_SLUG: slug,
+        // Dedicated snapshot/nm BroadcastChannel key (not a dev-server port);
+        // the page subscribes on `handle.snapshotPort` to read the owner tree.
+        RIFTY_RFV_PORT: String(snapshotPort),
       },
       cwd: root,
       // ADR-0144: long-lived owner — the realm stays alive past the bootstrap
@@ -344,6 +365,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
 
   return {
     workspaceId,
+    snapshotPort,
     closed,
     openSession: (sid) => client.openSession(sid),
     exec: (sid, line, execOpts) => client.exec(sid, line, execOpts),

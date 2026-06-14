@@ -1,5 +1,4 @@
-import { globalProcessManager, isSabIpcSupported } from '@riftydev/kernel';
-import { RegistryClient } from '@riftydev/npm-client';
+import { isSabIpcSupported } from '@riftydev/kernel';
 import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
 import type { TerminalRawInput } from '@riftydev/terminal';
 import {
@@ -7,11 +6,9 @@ import {
   type TerminalHistoryRecord,
   addTerminalHistoryRecord,
 } from '@riftydev/terminal/history';
-import { NotImplementedError, normalizePath, syncMirror } from '@riftydev/vfs';
+import { normalizePath, syncMirror } from '@riftydev/vfs';
 import { Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import {
-  type TerminalCommand,
-  type TerminalCommandContext,
   type TerminalRunDimensions,
   type TerminalSessionSnapshot,
   createTerminalManager,
@@ -30,17 +27,18 @@ import { StatusBar } from './components/StatusBar.tsx';
 import { TemplateSwitcher } from './components/TemplateSwitcher.tsx';
 import type { TerminalModeHint } from './components/TerminalPanel.tsx';
 import { Icon } from './components/icons.tsx';
-import { createBinExecutor } from './glue/bin-executor.ts';
 import { copyToClipboard } from './glue/clipboard.ts';
 import { readChildren } from './glue/file-tree.ts';
 import { writeText } from './glue/fs-ops.ts';
 import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
-import { createNpmShellCommand } from './glue/npm-shell-command.ts';
-import { type RealViteHandle, startRealVite } from './glue/realVite.ts';
-import { proxiedRegistryFetch } from './glue/registry-fetch.ts';
+import {
+  type RealViteHandle,
+  type WorkspaceOwnerHandle,
+  startRealVite,
+  startWorkspaceOwner,
+} from './glue/realVite.ts';
 import { SnapshotFs } from './glue/snapshot-fs.ts';
-import { SyncMirrorVfs } from './glue/sync-mirror-vfs.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
 import { subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
@@ -53,9 +51,38 @@ import {
   terminalDevLine,
 } from './templates/project-spec.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
-import nodeEntryBootstrapUrl from './workers/node-entry-bootstrap.ts?worker&url';
 
 const WORKSPACE = '/workspace';
+
+/** BroadcastChannel key the unavailable-owner stub reports; never served. */
+const UNAVAILABLE_OWNER_PORT = -1;
+const OWNER_UNAVAILABLE_MSG =
+  'shell needs cross-origin isolation (SAB IPC) — serve the playground with COOP/COEP headers (vite.config.ts ships them)\n';
+
+/**
+ * Fail-loud {@link WorkspaceOwnerHandle} for a non-isolated host (ADR-0146:
+ * no PAGE shell fallback under D). `openSession` resolves so the terminal
+ * manager never hangs; `exec` writes the requirement to stderr and exits 1.
+ * No worker is spawned and no bridges are served.
+ */
+function createUnavailableOwner(): WorkspaceOwnerHandle {
+  return {
+    workspaceId: 'unavailable',
+    snapshotPort: UNAVAILABLE_OWNER_PORT,
+    closed: Promise.resolve(0),
+    openSession: () => Promise.resolve(),
+    exec: (_sid, _line, opts) => {
+      opts.onChunk(OWNER_UNAVAILABLE_MSG, 'stderr');
+      return Promise.resolve(1);
+    },
+    writeStdin: () => {},
+    signal: () => {},
+    resize: () => {},
+    closeSession: () => {},
+    snapshot: () => ({ cwd: WORKSPACE, env: {} }),
+    close: () => {},
+  };
+}
 
 export interface AppProps {
   /**
@@ -171,9 +198,23 @@ export function App(props: AppProps) {
     const preset = presetForId(activePreset());
     return preset.templateId ? resolveProjectSpec(preset.templateId) : defaultProjectSpec();
   };
-  const npmVfs = new SyncMirrorVfs();
-  const npmRegistry = new RegistryClient({ fetch: proxiedRegistryFetch() });
   let realViteHandle: RealViteHandle | null = null;
+
+  // Persistent workspace owner (ADR-0146 P2): hosts the resident `Shell` per
+  // session + cwd/env, runs `npm install` and bin/`execSync` in-realm against
+  // ITS `syncMirror()` — the tree the explorer/editor read over the snapshot/nm
+  // bridges. Spawned once at setup, killed on cleanup. Gated on SAB IPC: under D
+  // there is no PAGE shell fallback, so a non-isolated host gets a fail-loud stub
+  // owner that surfaces the requirement per command (rather than crashing the app
+  // tree at setup). The per-`vite`-run preview worker stays page-driven and
+  // separate until P4 folds it into this owner.
+  const workspaceOwner: WorkspaceOwnerHandle = isSabIpcSupported()
+    ? startWorkspaceOwner({
+        root: WORKSPACE,
+        template: activeTemplate(),
+        onLog: (line) => console.info(line),
+      })
+    : createUnavailableOwner();
 
   // Mode state machine owns UI state only. Real server lifetime belongs to the
   // visible `vite` terminal command.
@@ -188,7 +229,19 @@ export function App(props: AppProps) {
   let devServerSessionId: string | null = null;
   let devServerRestartGeneration = 0;
 
-  async function runViteCommand(ctx: TerminalCommandContext): Promise<number> {
+  // The dev-server (`vite` / `npm run dev`) path stays PAGE-driven and separate
+  // from the owner pty channel (ADR-0146: P4 folds the preview worker into the
+  // owner). `runViteCommand` runs at the App level, so it needs only this thin
+  // context — a writer pair, an abort signal, and the session id — synthesized
+  // by `dispatchDevServerLine` from the terminal session's attached writer.
+  interface DevServerContext {
+    readonly sessionId: string;
+    readonly stdout: { write(chunk: string): void };
+    readonly stderr: { write(chunk: string): void };
+    readonly signal?: AbortSignal;
+  }
+
+  async function runViteCommand(ctx: DevServerContext): Promise<number> {
     const template = activeTemplate();
     // 'vite' keeps its historical terminal tag (e2e-pinned); node servers log as 'dev'.
     const bootTag = template.runtime === 'vite' ? 'vite' : 'dev';
@@ -303,94 +356,77 @@ export function App(props: AppProps) {
     return stopResult.code ?? 1;
   }
 
-  async function runTerminalScript(
-    scriptName: string,
-    command: string,
-    ctx: TerminalCommandContext,
-  ): Promise<number> {
+  async function runTerminalScript(command: string, ctx: DevServerContext): Promise<number> {
     if (command.trim() === 'vite') return runViteCommand(ctx);
     // The active template's own dev script (e.g. `node src/main.js`) routes to
     // the SAME lifecycle-owning command, so `npm run dev` boots node servers.
     if (command.trim() === devScriptCommand(activeTemplate())) return runViteCommand(ctx);
-    ctx.stderr.write(`npm: script '${scriptName}' uses unsupported command '${command}'\n`);
+    ctx.stderr.write(`dev: unsupported dev command '${command}'\n`);
     return 1;
   }
 
-  // Drains the OPFS write-through so the install stamp lands after the tree
-  // (ADR-0135) and the next worker spawn preloads a complete node_modules.
-  async function flushSyncMirror(): Promise<void> {
-    const mirror = vfs as { flush?: () => Promise<void> };
-    if (typeof mirror.flush === 'function') await mirror.flush();
+  // The terminal shell + cwd/env + npm + bin all live in the persistent
+  // workspace owner now (ADR-0146 P2); the manager is a thin pty-channel client.
+  const manager = createTerminalManager({ owner: workspaceOwner });
+
+  // PAGE-side terminal writers per session, captured when the panel attaches.
+  // The dev-server path (which runs at the App level, NOT through the owner pty
+  // channel) writes the preview worker's logs to the session through these.
+  const terminalWriters = new Map<string, (chunk: string, stream?: 'stdout' | 'stderr') => void>();
+  // Per-session AbortController for the in-flight PAGE-driven dev-server run, so
+  // a Ctrl-C / stop on the dev line aborts the preview boot (mirrors the owner's
+  // cooperative SIGINT for ordinary commands).
+  const devRunControllers = new Map<string, AbortController>();
+
+  /** Recognise the lines the PAGE intercepts to drive the preview worker. */
+  function isDevServerLine(line: string): boolean {
+    const trimmed = line.trim();
+    const template = activeTemplate();
+    return (
+      trimmed === 'vite' ||
+      trimmed === devScriptCommand(template) ||
+      trimmed === terminalDevLine(template, WORKSPACE)
+    );
   }
 
-  const npmCommand: TerminalCommand = async (args, ctx) =>
-    createNpmShellCommand({
-      vfs: npmVfs,
-      registry: npmRegistry,
-      runScript: async (scriptName, command) => runTerminalScript(scriptName, command, ctx),
-      flush: flushSyncMirror,
-    })(args, ctx);
-
-  const viteCommand: TerminalCommand = async (args, ctx) => {
-    if (args.length > 0) {
-      ctx.stderr.write(
-        `vite: arguments are not supported in the playground yet: ${args.join(' ')}\n`,
-      );
-      return 1;
-    }
-    const template = activeTemplate();
-    if (template.runtime !== 'vite') {
-      ctx.stderr.write(
-        `vite: the active project is ${template.displayName}; run \`${terminalDevLine(template, WORKSPACE)}\` instead\n`,
-      );
-      return 1;
-    }
-    return runViteCommand(ctx);
-  };
-
-  // Runs a shell-resolved `node_modules/.bin/<name>` shim as a Node entry
-  // (ADR-0137). The shell resolves the bare name; this spawns the shim in a
-  // kernel Worker, so `eslint` / `tsc` / any installed CLI is invokable by name.
-  // Registered commands (`vite`) still win — the playground owns that lifecycle.
-  const terminalBinExecutor = createBinExecutor({
-    spawn: (req) => {
-      if (!isSabIpcSupported()) {
-        throw new NotImplementedError(
-          'shell.bin-exec',
-          'running an installed CLI needs SAB IPC (cross-origin isolation)',
-        );
+  /**
+   * Run a recognised dev-server line PAGE-side (spawns the preview worker via
+   * `startRealVite`), writing its output to the session's terminal. Ordinary
+   * lines go to the owner shell over the pty channel — only the lifecycle-owning
+   * dev line is intercepted here (ADR-0146; P4 folds this into the owner).
+   */
+  async function dispatchDevServerLine(
+    id: string,
+    line: string,
+    _dims?: TerminalRunDimensions,
+  ): Promise<number> {
+    const write = terminalWriters.get(id) ?? (() => {});
+    const controller = new AbortController();
+    devRunControllers.set(id, controller);
+    const ctx: DevServerContext = {
+      sessionId: id,
+      stdout: { write: (chunk) => write(chunk, 'stdout') },
+      stderr: { write: (chunk) => write(chunk, 'stderr') },
+      signal: controller.signal,
+    };
+    const trimmed = line.trim();
+    try {
+      if (trimmed === 'vite') {
+        const template = activeTemplate();
+        if (template.runtime !== 'vite') {
+          ctx.stderr.write(
+            `vite: the active project is ${template.displayName}; run \`${terminalDevLine(template, WORKSPACE)}\` instead\n`,
+          );
+          return 1;
+        }
+        return await runViteCommand(ctx);
       }
-      // Spawn the `kind:'url'` node-entry bootstrap: it reads the shim from the
-      // worker's sync mirror and runs its launcher target through the module
-      // loader (`RIFTY_BIN=1`). argv[1] = the shim path the bootstrap loads.
-      const binName = req.shimPath.slice(req.shimPath.lastIndexOf('/') + 1) || 'bin';
-      const handle = globalProcessManager.spawnWorker(
-        binName,
-        {
-          entry: { kind: 'url', url: nodeEntryBootstrapUrl },
-          argv: ['rifty', req.shimPath, ...req.args],
-          env: { ...req.env, RIFTY_BIN: '1' },
-          cwd: req.cwd,
-        },
-        /* ppid */ 1,
-        { cwd: req.cwd },
-      );
-      if (handle.kind !== 'worker') {
-        throw new NotImplementedError(
-          'shell.bin-exec',
-          `spawnWorker returned kind=${handle.kind}; expected 'worker'`,
-        );
-      }
-      return handle;
-    },
-  });
-
-  const manager = createTerminalManager({
-    cwd: props.terminalPersistence.initialState.cwd,
-    env: props.terminalPersistence.initialState.env,
-    commands: { npm: npmCommand, vite: viteCommand },
-    execBin: terminalBinExecutor,
-  });
+      // `cd <root> && npm run dev` / `node <entry>` — the template's dev script.
+      return await runTerminalScript(devScriptCommand(activeTemplate()), ctx);
+    } finally {
+      if (devRunControllers.get(id) === controller) devRunControllers.delete(id);
+    }
+  }
   const hiddenSessionIds = new Set<string>();
   const visibleSessions = (): TerminalSessionSnapshot[] =>
     manager.sessions().filter((session) => !hiddenSessionIds.has(session.id));
@@ -450,6 +486,19 @@ export function App(props: AppProps) {
     write: (chunk: string, stream?: 'stdout' | 'stderr') => void,
   ): void {
     manager.attachWriter(id, write);
+    // Also held PAGE-side so the dev-server path (App-level, off the pty channel)
+    // can write the preview worker's logs to this session's terminal.
+    terminalWriters.set(id, write);
+  }
+
+  /**
+   * Run one terminal line: the PAGE intercepts the lifecycle-owning dev-server
+   * line (spawns the preview worker), everything else goes to the owner shell
+   * over the pty channel (ADR-0146 P2).
+   */
+  function dispatchLine(id: string, line: string, dims?: TerminalRunDimensions): Promise<number> {
+    if (isDevServerLine(line)) return dispatchDevServerLine(id, line, dims);
+    return manager.runLine(id, line, dims);
   }
 
   async function runTerminalLine(
@@ -462,7 +511,7 @@ export function App(props: AppProps) {
     let exitCode: number | undefined;
     const cwd = manager.snapshot(id).cwd;
     const mode = machine.mode() as TerminalHistoryMode;
-    const run = manager.runLine(id, line, dims);
+    const run = dispatchLine(id, line, dims);
     refreshTerminalState();
     try {
       exitCode = await run;
@@ -495,10 +544,16 @@ export function App(props: AppProps) {
     lines: readonly string[],
     dims?: TerminalRunDimensions,
   ): Promise<void> {
-    const run = manager.runSequence(id, lines, dims);
+    // Page-level loop (not manager.runSequence) so a dev-server line in the boot
+    // sequence is intercepted by `dispatchLine` like an interactively-typed one.
     refreshTerminalState();
     try {
-      await run;
+      const write = terminalWriters.get(id);
+      for (const line of lines) {
+        write?.(`$ ${line}\n`, 'stdout');
+        const exitCode = await dispatchLine(id, line, dims);
+        if (exitCode !== 0) break;
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -507,7 +562,11 @@ export function App(props: AppProps) {
   }
 
   function stopSession(id: string): void {
-    manager.stop(id);
+    // A PAGE-driven dev-server run owns its own AbortController; abort it.
+    // Ordinary commands run in the owner — forward the cooperative SIGINT.
+    const devController = devRunControllers.get(id);
+    if (devController) devController.abort();
+    else manager.stop(id);
     refreshTerminalState();
   }
 
@@ -519,30 +578,25 @@ export function App(props: AppProps) {
   // contents but flags presence, gating the lazy row.
   const [nodeModulesPresent, setNodeModulesPresent] = createSignal(false);
 
-  // Subscribe while the worker is starting/running so we do not miss its early
-  // snapshot frames, but only render that mirror once Vite is actually ready.
+  // ADR-0146 P2: the snapshot + node_modules bridges are re-scoped from the
+  // per-`vite`-run dev port to the PERSISTENT workspace owner's port, so the
+  // explorer reflects the owner tree (where `npm install` lands) before AND
+  // after any vite run — not just while a dev server is up. Subscribed once at
+  // setup (no signal dependency), torn down on unmount. P4 collapses the
+  // separate preview worker into this owner.
   createEffect(() => {
-    if (devServerStatus() === 'stopped') {
-      snapshotFs.clear();
-      setNodeModulesPresent(false);
-      return;
-    }
-    const unsubscribe = subscribeVfsSnapshot(machine.realVitePort(), (frame) => {
+    const unsubscribe = subscribeVfsSnapshot(workspaceOwner.snapshotPort, (frame) => {
       snapshotFs.update(frame);
       setNodeModulesPresent(frame.nodeModulesPresent);
     });
     onCleanup(unsubscribe);
   });
 
-  // Lazy node_modules read bridge + cache (ADR-0080), scoped to one worker
-  // on-cycle. The UI only exposes it once the worker server is ready.
+  // Lazy node_modules read bridge + cache (ADR-0080), against the persistent
+  // owner. Available for the whole session (the owner serves it on `serve:true`).
   const [nmCache, setNmCache] = createSignal<NodeModulesCache | null>(null);
   createEffect(() => {
-    if (devServerStatus() === 'stopped') {
-      setNmCache(null);
-      return;
-    }
-    const cache = new NodeModulesCache(bridgeNodeModulesReads(machine.realVitePort()));
+    const cache = new NodeModulesCache(bridgeNodeModulesReads(workspaceOwner.snapshotPort));
     setNmCache(cache);
     onCleanup(() => {
       cache.dispose();
@@ -714,6 +768,7 @@ export function App(props: AppProps) {
     if (toastTimer) clearTimeout(toastTimer);
     void realViteHandle?.close();
     manager.dispose();
+    workspaceOwner.close(); // terminate the persistent owner worker (ADR-0146)
   });
 
   function onSelectPreset(preset: Preset): void {
