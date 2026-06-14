@@ -91,9 +91,9 @@ function direntsDirsFirst(
  * `syncMirror()` (which holds the installed tree — the exclusion is only in
  * `collectSnapshot`, never in the mirror). Returns an idempotent teardown.
  *
- * The worker must stay alive to answer reads — it relies on the ADR-0077 /
- * Q-2026-06-05-317 keep-alive (`await new Promise<never>(() => {})`); this is a
- * second consumer of that workaround.
+ * The worker must stay alive to answer reads — the owner is spawned as an
+ * ADR-0144 `serve` process (the kernel keeps the realm alive until the handle
+ * is killed), which retired the old ADR-0077 keep-alive promise.
  */
 export function serveNodeModulesReads(port: number): () => void {
   const channel = new BroadcastChannel(channelNameFor(nodeModulesChannelUrl(port)));

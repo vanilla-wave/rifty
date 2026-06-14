@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   production and same-repo PRs to stable `pr-<number>` preview aliases, with
   the latest preview URL written back to the PR.
 
+### Changed
+
+- **Kernel server-process model (`serve`) — ADR-0143 "D" phase P1 (ADR-0144).** The kernel gains a `serve` spawn flag so a long-lived owner-worker is NOT reaped when its entry settles cleanly (`finalizeWorkerEntry`); the real-vite preview owner drops its `await new Promise<never>(() => {})` keep-alive hack. First landed phase of the ADR-0143 owner-worker execution model (one worker owns `node_modules` + runs the shell/CLI/`execSync` in-realm, PAGE = viewer — retiring the bin-worker ENOENT class). Phased plan + status: `docs/backlog/shell/d-owner-worker-milestone.md`.
+
 ### Documented
 
 - **Bin/shell + `execSync` worker-VFS transport decided → D (owner-worker), ADR-0143.** Resolves why an installed CLI (`cowsay`) ENOENTs from the shell: the spawned worker passes its own empty `MemoryFsSync`; the shell's `node_modules` live in PAGE memory (no shared OPFS). Fork B (SAB fs-proxy to PAGE) vs D (single owner-worker holds files + execution, PAGE = viewer) settled as **D** — milestone-scale, IRREVERSIBLE, gated on a kernel server-process model (ADR-0077 follow-up). Premises re-verified; ADR-0137's wrong root-cause sentence corrected in place; `node-entry-bootstrap.ts`'s stale "SAB-backed sync mirror" comment fixed. Verified finding folded in: the `execSync` entry-kind flip is NOT a safe standalone increment (it regresses the passing COI e2e `tests/e2e/execsync-sab.spec.ts`) — it lands WITH D. Pre-ADR analysis: `docs/backlog/shell/bin-worker-vfs-transport-b-vs-d.md`.

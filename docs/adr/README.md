@@ -25,6 +25,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0019 | `cwd` lives in `kernel.ProcessRecord` |
 | 0039 | Lift Node-API knowledge from kernel to runtime-js |
 | 0045 | Worker-process IPC — fork-mode `send` / `'message'` / `disconnect` over a parent↔child MessagePort |
+| 0144 | Kernel server-process model: persistent worker processes (serve) replacing the keep-alive hack |
 
 ### runtime-js
 

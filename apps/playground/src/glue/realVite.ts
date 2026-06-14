@@ -104,6 +104,10 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
         PORT: String(port),
       },
       cwd: root,
+      // ADR-0144: long-lived owner — the kernel keeps the realm alive after the
+      // bootstrap entry settles (until handle.kill()), replacing the worker's
+      // old `await new Promise<never>(() => {})` keep-alive hack.
+      serve: true,
     },
     /* ppid */ 1,
     { cwd: root },

@@ -95,6 +95,16 @@ export interface WorkerSpawnSpec {
   readonly payloadCapacity?: number;
   readonly pid: number;
   readonly ppid: number;
+  /**
+   * Server-process flag (ADR-0144). When `true`, a worker whose entry finishes
+   * setup WITHOUT throwing is NOT reaped: the kernel skips the exit message,
+   * port close, and `self.close()`, leaving the realm alive (its open ports /
+   * timers keep it live) until the parent terminates it. A run-to-completion
+   * process (`serve` absent/false) reaps the instant its entry settles, as
+   * before. Replaces the `await new Promise<never>(() => {})` keep-alive hack
+   * (the ADR-0077 follow-up; P1 gate for ADR-0143 "D").
+   */
+  readonly serve?: boolean;
 }
 
 /** Init wire message. The parent posts exactly one of these per worker. */
@@ -223,6 +233,38 @@ function closePorts(ports: WorkerStdioPorts): void {
   }
 }
 
+/** Outcome of running a worker entry: did it throw, and the resolved exit code. */
+export interface WorkerEntryOutcome {
+  readonly threw: boolean;
+  readonly code: number;
+}
+
+/**
+ * Post-entry teardown decision (ADR-0144 — kernel server-process model). A
+ * `serve` process that finished its entry WITHOUT throwing stays ALIVE — the
+ * realm is kept live by its own open MessagePorts / timers until the parent
+ * terminates it — so we skip the exit message, the port close, and
+ * `self.close()`. Everything else (a run-to-completion process, or a `serve`
+ * entry that THREW during setup — including `process.exit` →
+ * `RIFTY_PROCESS_EXIT`) posts the exit message, closes the stdio ports, and
+ * closes the realm, exactly as before.
+ *
+ * Pure + exported so the serve/reap decision is unit-testable without a Worker
+ * realm (the full SAB `onMessage` path still needs COI). Replaces the
+ * `await new Promise<never>(() => {})` keep-alive hack (ADR-0077 follow-up).
+ */
+export function finalizeWorkerEntry(
+  target: { postMessage(message: unknown): void; close(): void },
+  spec: WorkerSpawnSpec,
+  outcome: WorkerEntryOutcome,
+): void {
+  if (spec.serve === true && !outcome.threw) return;
+  const exitMessage: WorkerExitMessage = { type: 'exit', code: outcome.code };
+  target.postMessage(exitMessage);
+  closePorts(spec.stdio);
+  target.close();
+}
+
 /**
  * Internal bootstrap entry. Exported (instead of running on import) so the
  * conformance test can drive a stub host without spinning up a full Worker.
@@ -256,11 +298,13 @@ export function installWorkerEntry(
     publishProcessSpec(spec);
 
     let code = 0;
+    let threw = false;
     try {
       const hook = preEntryHook;
       if (hook !== null) hook(spec);
       await runEntry(spec.entry);
     } catch (err) {
+      threw = true;
       if (isRiftyProcessExit(err)) {
         code = err.exitCode;
       } else {
@@ -274,11 +318,10 @@ export function installWorkerEntry(
       }
     }
 
-    const exitMessage: WorkerExitMessage = { type: 'exit', code };
-    target.postMessage(exitMessage);
-    closePorts(spec.stdio);
-    // Let the parent observe exit before the realm dies.
-    target.close();
+    // ADR-0144: a `serve` worker that finished setup cleanly stays alive; every
+    // other case posts exit + closes the realm. (Lets the parent observe exit
+    // before the realm dies.)
+    finalizeWorkerEntry(target, spec, { threw, code });
   };
 
   target.addEventListener('message', onMessage as unknown as EventListener);

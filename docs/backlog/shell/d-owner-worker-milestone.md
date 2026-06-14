@@ -1,0 +1,39 @@
+---
+area: shell
+status: active
+title: D owner-worker execution model — milestone tracker (P1-P6)
+created: 2026-06-14
+why: ADR-0143 decided D (one owner-worker holds node_modules + runs the shell/CLI/execSync in-realm; PAGE = viewer). It is milestone-scale + multi-ADR; this tracks the phases, decided forks, ordering, and per-phase status so the work is explicit, not silent backlog.
+user_story: As a developer at the rifty prompt, I `npm install cowsay` then run `cowsay hi` and want the CLI to actually run (and the editor/explorer to reflect the same tree) — today the bin worker can't see the shell's node_modules (ENOENT). Delivered when one owner-worker runs install + CLIs in-realm and the PAGE is a thin viewer.
+sources: [ADR-0143, ADR-0144, ADR-0077, ADR-0011, ADR-0080, ADR-0072, M11]
+code: [packages/kernel/src/worker-entry.ts, packages/kernel/src/spawn-worker.ts, apps/playground/src/workers/real-vite-bootstrap.ts, apps/playground/src/glue/realVite.ts, apps/playground/src/adapters/terminal-manager.ts, packages/shell/src/shell.ts, apps/playground/src/App.tsx]
+---
+
+## Context
+
+ADR-0143 chose **D (owner-worker)** over B (SAB fs-proxy). D is milestone-scale (blast radius kernel + shell + terminal + playground + net) with several IRREVERSIBLE sub-decisions → its own ADRs. Subsystem map (verified 2026-06-14): kernel process model is mature (`WorkerProcessHandle` already has stdin/stdout/stderr streams + kill + IPC); the real-vite preview worker is the working "owner" prototype (owns its install, serves the page over snapshot/nm-read/write ports, stays alive). Most of D = generalize that owner into the shell's home + give the kernel a real persistent-process lifecycle.
+
+### Decided forks (recorded; do not re-litigate)
+
+- **One owner per workspace** hosts BOTH the shell and the preview (ADR-0143 destination; separate owners = the two-owners trap). The dev server is **co-resident** in the owner realm for v1; true concurrency ("shell responsive while `vite` runs") needs P6 (SAB sync-views, worker→worker).
+- **P2 pty channel** = the existing structured line/chunk/signal/stdin/exit protocol (matches the current terminal contract), NOT a raw-byte pty.
+- **Whole Shell moves** into the owner-worker (`packages/shell` is realm-agnostic — io+vfs only); the PAGE terminal keeps local line-editing (it already fires one line per Enter) and becomes a thin client; cwd/env/execution live in the owner.
+
+## Phases (ordering: P1 gate → P2 + P3 → P4 → P5 → P6)
+
+- **P1 — kernel server-process model. ✅ LANDED (ADR-0144).** `serve` flag on `WorkerSpawnSpec`/`SpawnWorkerSpec`; the kernel no longer reaps a `serve` worker when its entry settles cleanly (`finalizeWorkerEntry`). real-vite migrated off the `await new Promise<never>(()=>{})` keep-alive hack. Unit-tested (`worker-entry-serve.test.ts`); real-vite COI e2e re-verify pending a COI run.
+- **P2 — PAGE terminal → thin client over a pty-like channel.** Move the `Shell` instance + cwd/env into the owner-worker; `terminal-manager.ts` becomes a port client (line in → chunk/exit out; stdin frames; SIGINT signal). Needs its own ADR (pty channel shape). Gated on P1. Relocate npm-install writes + bin/execSync execution into the SAME owner (else ENOENT returns).
+- **P3 — generalize the owner-served ports** (snapshot / nm-read / vfs-write) so the PAGE editor/explorer read+write the owner store the same way the thin terminal does. Reuses shipped machinery; widen node_modules-scope → general read; add write-coherence (owner = source of truth). Sibling of P2.
+- **P4 — unify with the real-vite preview owner.** `vite`/dev runs in the SAME owner that holds node_modules + the shell (not a separate worker), so the dev server reads just-installed deps directly. Depends on P1+P2. The headline risk (two-owners trap) lives here.
+- **P5 — OPFS persistence in the one owner.** Wire `initBackend`/`OpfsFsSync` into the owner (memory-backed today); accept the ADR-0072 `O(total bytes)` preload cost; add graceful stop (drain/flush) to the P1 server-process model.
+- **P6 — SAB sync-views for concurrent spawned processes** (worker→worker, B's mechanism served the right direction) — restores "shell usable while a CLI/dev-server runs" by giving each foreground process its own realm sharing the owned store. Needed because the single owner realm is one JS thread.
+
+## Open design forks (resolve at the owning phase)
+
+- P2: per-session isolation — N in-realm Shells in one owner (shared thread) vs one worker-process per session (needs P6). v1 = shared; isolation at P6.
+- P2: cwd/prompt ownership — owner is source of truth, pushes cwd snapshots to PAGE for the prompt + persistence.
+- P4: is the dev server a co-resident task or a child worker-process the owner supervises? v1 co-resident; supervisor at P6.
+
+## Reversibility
+
+IRREVERSIBLE milestone. P1 recorded in ADR-0144; P2/P4 (and P6) will each get their own ADR at their phase. P3/P5 are largely REVERSIBLE extensions of shipped ports/persistence (CHANGELOG unless a wire-format/contract change makes them IRREVERSIBLE).

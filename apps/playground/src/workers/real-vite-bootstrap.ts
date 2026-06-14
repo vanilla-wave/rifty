@@ -488,19 +488,18 @@ async function bootstrap(): Promise<void> {
   const tearNodeModulesBridge = serveNodeModulesReads(port);
   log('[real-vite/worker] node_modules read bridge ready\n');
 
-  // Keep the worker realm alive (ADR-0077). The kernel's `worker-entry`
-  // terminates the realm (`closePorts()` + `self.close()`) the instant the
-  // entry's top-level `await` resolves — correct for a run-to-completion program
-  // or CLI, but THIS is a long-running dev server: returning would kill it
-  // the moment it started listening, so every preview request hits a dead worker
-  // (502 bridge-timeout) and the iframe never renders. Suspend forever; the realm
-  // stays live until the page-side handle `.kill()`s it (`worker.terminate()`),
-  // which doesn't depend on this promise.
+  // Long-lived owner (ADR-0144 server-process model). This worker is spawned
+  // with `serve: true` (realVite.ts), so the kernel's `worker-entry` does NOT
+  // reap the realm when this entry settles — it stays alive (its ports/timers
+  // keep it live) until the page-side handle `.kill()`s it (`worker.terminate()`).
+  // This replaces the old ADR-0077 keep-alive hack (`await new Promise<never>(()
+  // => {})`) that parked the top-level await forever to dodge `self.close()`.
+  // The teardown handles are referenced so the served bridges aren't GC'd while
+  // the realm serves.
   void tearVfsBridge;
   void tearDirectSwBridge;
   void tearPreviewBridge;
   void tearNodeModulesBridge;
-  await new Promise<never>(() => {});
 }
 
 await bootstrap();
