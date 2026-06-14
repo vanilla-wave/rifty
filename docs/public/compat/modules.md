@@ -53,7 +53,7 @@ default):
   user `var eval`, `"use strict"` undeclared-write `ReferenceError`).
 - **`rewrite` (loud opt-in floor)** — the host-realm `with(proxy) + eval(AST-rewrite)` engine; emits
   ONE stderr warning per process when used. Native-V8-leaning where QuickJS diverges (below), but
-  carries the rewrite fragility class (ADR-0138) — it is the floor, not the default.
+  carries the rewrite fragility class (ADR-0142) — it is the floor, not the default.
 
 Shared, faithful on both engines: writes from context code (assignments incl.
 compound/update/destructuring, `var`/function declarations incl. statement-position destructuring
@@ -78,9 +78,8 @@ by conformance + parity cases; workaround = the `rewrite` opt-in, which is V8-co
    non-configurable global binding, so `delete v` is a no-op (`v` survives, sandbox keeps `v`); V8's
    contextify reports the binding gone (`Object.keys` ⇒ `[]`, `v` undefined).
 
-Recorded: ADR-0138 (rewrite direct-eval permanent divergence) + backlog
-`docs/backlog/runtime-js/vm-quickjs-realm-engine` (dual-engine spec, supersedes ADR-0138) and
-`docs/backlog/runtime-js/vm-context-global-object-fidelity`. The superseding ADR is T20.
+Recorded: ADR-0142 (node:vm dual-engine — QuickJS real realm default, hardened-rewrite loud
+opt-in; supersedes ADR-0138, which had recorded the rewrite direct-eval leak as permanent).
 - `package.json` `imports` (subpath imports starting with `#`) is not yet wired.
 - The in-Worker VFS is in-memory only (M4 adds OPFS).
 - A `.ts`/`.tsx` module that classifies as CJS (its nearest package scope is not `type:module`) cannot be `require()`d: the TS type-strip is the async esbuild-via-`runWasi` `transformSource` hook and a synchronous `require()` cannot await it (ADR-0052 D1 alt-C). It throws `NotImplementedError('module-loader.ts-via-require')` rather than feeding raw TypeScript to `new Function`. A `.ts` under a `type:module` scope loads as ESM via `import()`, where the async strip runs.
