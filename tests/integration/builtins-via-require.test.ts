@@ -5,7 +5,10 @@ import { MemoryFsSync } from '@riftydev/vfs/internal';
  * to access built-ins. This is the actual user surface — the unit tests
  * import the modules directly, while these tests prove the loader plumbing.
  */
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
+// Relative source path (no public subpath export for the vm loader; same precedent
+// as the parity/conformance harnesses) — preloads the default QuickJS vm engine.
+import { ensureVmEngineReady } from '../../packages/runtime-js/src/builtins/vm/quickjs-loader.ts';
 
 function loader(files: Record<string, string>) {
   const vfs = new MemoryFsSync();
@@ -14,6 +17,14 @@ function loader(files: Record<string, string>) {
 }
 
 describe('built-ins via loader', () => {
+  // The default vm engine is the QuickJS real realm (T17 cutover); its synchronous
+  // sandbox API reads a preloaded WASM module. The real worker boot joins this
+  // preload (`worker-entry.ts`); these loader-only tests boot no worker, so preload
+  // here (idempotent) to mirror that boot guarantee.
+  beforeAll(async () => {
+    await ensureVmEngineReady();
+  });
+
   it('require("node:path") gives the path module', () => {
     const l = loader({
       '/app/m.js': "module.exports = require('node:path').join('/a', 'b', 'c');",

@@ -2,6 +2,340 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`node:vm` dual-engine cutover (ADR-0142, supersedes ADR-0138).** `node:vm` sandbox APIs
+  (`runInNewContext`/`runInContext`/`Script.*`) now run in a REAL QuickJS-WASM realm by
+  DEFAULT; the host-realm `with(proxy)+eval(AST-rewrite)` engine is a LOUD opt-in (`vmEngine`
+  host option / `__RIFTY_VM_ENGINE`, one-time stderr warning + `vm.engine.rewrite-active`
+  telemetry). `runInThisContext` stays host-realm `(0,eval)` (it IS the worker realm —
+  Node-correct). The real realm closes the ADR-0138 direct-`eval` leak by construction and
+  gives Node-correct cross-realm identity + real global-object semantics (a behavior change vs
+  the old rewrite, which is the V8-correct floor). Cost: new deps
+  (`@jitl/quickjs-wasmfile-release-sync` + `quickjs-emscripten-core`, ~503 KB env-config
+  `.wasm`) + ~6× eval + per-property membrane crossing. Four ES2023≠V8 residuals documented in
+  `docs/public/compat/modules.md`. The per-task entries below (T5–T19) are the implementation
+  log; ADR-0142 is the decision record. This consolidates and ratifies that work.
+
+- **`node:vm` CUTOVER — QuickJS real realm is now the DEFAULT engine (T17, ADR-0142).**
+  `resolveVmEngineName()` defaults to `'quickjs'`; the hardened-rewrite engine is now a
+  LOUD opt-in (`__RIFTY_VM_ENGINE='rewrite'` / `vmEngine` host option → one-time stderr
+  warning + `vm.engine.rewrite-active` telemetry). BEHAVIOR CHANGE: sandbox semantics are
+  now Node-correct where the rewrite engine was Node-WRONG — (1) **cross-realm identity**:
+  a guest throw/value crosses the membrane as a cross-realm mirror, so `instanceof`/
+  `constructor ===` against a HOST constructor is now FALSE (matching real Node; `.name`/
+  `.constructor.name` stay faithful); (2) **realm isolation**: a fresh context no longer
+  inherits host globals (rewrite's `with(proxy)` leaked them); (3) **direct eval** stays in
+  the guest realm (no host leak); (4) real global-object attribute/lexical/strict semantics.
+  Shared dispatcher guard: `runInContext`/`Script.runInContext` now reject a
+  non-contextified object with a Node-faithful `TypeError` (both engines). Membrane sweep
+  now reflects a guest `delete` of a seeded sandbox key back to the sandbox object (Node's
+  live contextified object). Known residual (T19): contextified-sandbox key ENUMERATION
+  order differs from V8 (QuickJS creation order vs V8's setter order — `Object.keys` order
+  of a sandbox is V8-internal, not spec). The rewrite engine stays a shippable opt-in,
+  guarded by the `rewrite-optin-*` parity cases.
+
+- **`node:vm` review follow-ups (doc + test hardening, no behavior change).** Fixed two stale
+  `membrane.ts` doc-comments (host-fn marshalling + the function-wrapper arg path are IMPLEMENTED,
+  not "loud boundary"/"primitives only"); documented the inbound (host→guest) seed retention + the
+  two membrane reconciliation caveats on the public compat surface; clarified that engine selection
+  is process-global (not per-context); strengthened the GC-gated disposal-stress assertions to
+  require FULL reclaim (`toBe(0)` + unconditional dispose). Tracked two defined-but-unwired vm seams
+  (wasm-URL env-config, explicit `disposeContext`) and the remaining vm test-pinning gaps in
+  `docs/backlog/runtime-js/vm-unwired-seams` + `vm-test-pinning`.
+
+### Fixed
+
+- **`node:vm` (quickjs) inbound prototype-method fidelity (T19).** A host array/object seeded
+  into a context now carries its PROTOTYPE METHODS in the guest (`items.map`/`join`,
+  `obj.hasOwnProperty`) while staying `instanceof Array`/`Object` FALSE and `Array.isArray` TRUE —
+  matching real Node. The membrane previously severed the seed's proto to `null`, which kept the
+  `instanceof`-FALSE half but STRIPPED every inherited method (calling one threw
+  `not a function`); replaced with a cross-realm FLAT proto carrying the kind's full method chain
+  (`GENERIC_REBRAND_BOOTSTRAP`, the inbound mirror of the exotic rebrand). Surfaced by a realistic
+  template-engine parity case; pinned by `vm/quickjs-inbound-methods` + conformance.
+- **`node:vm` non-object context-arg error message fidelity (T19).** `describeNonObject` now
+  byte-matches Node's `ERR_INVALID_ARG_TYPE` per type: `undefined`/`null` render BARE (was
+  `type undefined (undefined)`), a bigint keeps its `n` suffix (`0n`, was `0`), `-0` stays `-0`,
+  strings are quote-selected + truncated >28 to 25 + `...`. Pinned by `vm/quickjs-context-arg-errors`
+  + conformance.
+
+### Added
+
+- **`node:vm` realistic parity corpus + ES2023-vs-V8 divergence list (T19).** Four real-world-usage
+  parity cases on the default quickjs engine (config/plugin loader, template-engine closure,
+  structured-result compute, two-runs-share-state), byte-matched vs real Node, plus the
+  inbound-methods + context-arg-errors regression cases. The HONEST ES2023≠V8 divergence list
+  (`function undefined(){}` error type; explicit `var x = undefined` not propagated; sandbox key
+  enumeration order; `delete` of a context var) is documented in `docs/public/compat/modules.md`
+  with the `rewrite` opt-in as the V8-correct workaround — feeds the T20 ADR.
+- **`node:vm` disposal/lifetime STRESS tests (T18).** New
+  `src/builtins/vm/quickjs-disposal-stress.test.ts` validates the `ContextLifetime`
+  FinalizationRegistry + refcount net under churn — the guarantee that a leaked guest
+  handle never aborts the WASM runtime (`Assertion failed: list_empty(&rt->gc_obj_list)`)
+  and that growth is bounded. Five scenarios, split DETERMINISTIC (default `test:run`, via
+  the `releaseWrapper`/`markPending` seam) vs GC-GATED (`--expose-gc` only, else skipped):
+  (1) long-lived context, 5000 runs — primitive completions leave 0 live wrappers; fresh-
+  object completions released each run stay ≤1; (2) 500 contexts churned — deterministic
+  GC-ordering simulation disposes each exactly once (no abort/double-dispose), GC-gated
+  500/500 abandoned contexts collected; (3) adversarial release/markPending ordering (the
+  core no-ordering-guarantee invariant) — disposes only on the last release in either
+  order, plus churn-while-pending; (4) hot host-fn loop (carried T9) — confirmed
+  GC-bounded (peak 1000 → post-gc 0), documented why eager arg-wrapper release is unsafe
+  (cannot distinguish a discarded arg from a stored callback → use-after-free); (5)
+  delete-reflection churn (carried T17) — 2000 reseed/sweep cycles leave `#preRunSandboxKeys`
+  and sandbox keys bounded, deep write-back holds inbound identity. No leak/abort found —
+  the net holds; no hardening required.
+
+- **Public telemetry data types (T16).** `TelemetryEntry`, `TelemetryKind`, `TelemetrySnapshot`
+  are now type-only exports of `src/index.ts` (also re-exported from `@riftydev/rifty` next to
+  the runtime event surface), so an SDK consumer can type the `diagnostic` RuntimeEvent/
+  WorkerMessage payload without a forbidden deep import. Sink mutation fns (recordX/snapshot/
+  reset) stay internal. The dev-only playground divergence PANEL is deferred —
+  `docs/backlog/playground/divergence-telemetry-panel.md` (guest runs the kernel/shell path,
+  not `RuntimeController`, so a panel needs telemetry bridged through the kernel first).
+
+- **`node:vm` divergence telemetry wiring + `vmEngine` host option + loud opt-in (T15,
+  ADR-0142).** Five wirings: (1) the QuickJS preload (`ensureVmEngineReady`) joins the
+  worker `boot` promise so a synchronous `vm.*` sandbox call in an early eval always
+  finds the engine ready (preload failure → `[rifty]` stderr line + continue on the
+  rewrite engine). (2) The worker error boundary calls `captureNotImplemented(err)` —
+  matched by `error.name === 'NotImplementedError'` (NOT instanceof; io + vfs each
+  define the class), recording `error.feature` in the telemetry sink. (3) A sandbox RUN
+  resolving to the opt-in rewrite engine records `vm.engine.rewrite-active` and emits ONE
+  loud `[rifty]` warning per process/worker via `process.stderr.write` (real fd 2 in
+  Node, the worker stderr bridge in the worker) — the parity runner diffs STDOUT and only
+  intercepts `console.*`, so the warning never pollutes parity stdout. (4) New
+  `RuntimeOptions.vmEngine?: 'quickjs' | 'rewrite'` (host) → `vm-config` HostMessage sent
+  on worker `ready` → worker applies `setVmEngineOverride` (programmatic path; the
+  `__RIFTY_VM_ENGINE` env fallback is unchanged). Default behavior unchanged when absent.
+  (5) New `diagnostic` WorkerMessage carrying a `TelemetrySnapshot`, posted after each
+  eval only when the snapshot CHANGED; the host surfaces it as a `diagnostic`
+  RuntimeEvent for the playground panel (T16). `captureNotImplemented` is exported from
+  the telemetry sink (pure, name-matched, no-op for non-NotImplemented values).
+
+- **Divergence / NotImplemented telemetry sink (T14).** Leaf module
+  `src/telemetry/divergence-sink.ts` — dependency-free, session-scoped, dev-only
+  in-process hit counter. `recordNotImplemented(feature)` / `recordDivergence(feature)`
+  increment per-feature counts; `snapshotTelemetry()` returns `TelemetryEntry[]` sorted
+  by count desc (ties stable by insertion order); `resetTelemetry()` clears. Both
+  recorders accept `{ warnOnce: true }`, returning `true` only the first time per
+  feature (warned-set, also cleared by reset) so a caller can emit a one-time loud
+  warning. No network, no persistence (T16 playground may persist; sink stays pure).
+  T15 wires boundary capture (`error.name === 'NotImplementedError'`) + a `diagnostic`
+  WorkerMessage + the rewrite-engine opt-in warning.
+
+- **`node:vm` QuickJS engine — real global-object fidelity (T13, ADR-0142).** The
+  QuickJS real realm reproduces a real vm global object's attribute/lexical/strict
+  semantics that the rewrite engine (a `with(proxy)+eval` over a plain property bag)
+  could not — mostly BY CONSTRUCTION (real intrinsics, strict mode, lexical scope,
+  real global). Verified byte-for-byte vs real Node (parity `vm/quickjs-global-object`)
+  + locked in conformance: redeclared intrinsics (`var undefined/NaN/Infinity`, bare
+  `NaN = 1`) are silent no-ops; `var`/`function` bindings are non-configurable so
+  `delete d`/`delete f` are no-ops returning `false`; `let undefined` is a
+  redeclaration `SyntaxError`; a written `globalThis` and a context var named `eval`
+  read back; a `"use strict"` undeclared write throws `ReferenceError`; top-level
+  `let`/`const`/`class` persist across `runInContext` calls (re-declaration next run
+  is a `SyntaxError`) via the reused per-context `QuickJSContext`. The membrane sweep
+  was fixed so a declaration-only `var z;` no longer leaks to the contextified
+  sandbox object (it is an enumerable own prop of the vm GLOBAL only — matching V8
+  contextify, which copies a global to the sandbox only when an assignment fired): a
+  swept key whose value is `undefined` AND whose global binding is non-configurable is
+  recognised as a declaration-only `var`/`function` and skipped, while assigned
+  values, `this.x =`/bare writes (configurable), and a later assignment to a declared
+  var still propagate. Residuals (documented, not faked): an explicit `var x =
+  undefined` initializer is post-run indistinguishable from `var x;` so it is also
+  skipped; and `function undefined(){}` raises QuickJS's spec-literal runtime
+  `TypeError` ("cannot define variable") vs V8's early `SyntaxError` — the one genuine
+  ES2023-vs-V8 divergence (T19 triage; the conformance test pins both).
+
+- **`node:vm` QuickJS engine — descriptor fidelity + frozen + prototype/has
+  coherence (T12, ADR-0142).** The OUT object wrapper now reports the GUEST
+  object's REAL descriptors and a coherent prototype/`has` view, and writes
+  host→guest mutations through where Node allows (parity `vm/quickjs-descriptors`,
+  diffed byte-for-byte against real Node). `getOwnPropertyDescriptor` reconstructs
+  the real writable/enumerable/configurable flags (or marshalled get/set for an
+  accessor) via an UNREACHABLE guest reflect closure (no `ctx.getOwnPropertyDescriptor`
+  in the API — the no-forgery discipline, like the id registry). A frozen guest
+  object → `Object.isFrozen(wrapper)` TRUE, sealed → `isSealed` TRUE, writes rejected
+  (loose no-op / strict TypeError); Proxy invariants are satisfied by mirroring a
+  non-configurable prop as a matching non-config own prop on the target and sealing
+  the target non-extensible (with an aligned proto) when the guest is non-extensible,
+  while the empty target otherwise stays extensible. `getPrototypeOf` now returns the
+  WRAPPED GUEST prototype (cross-realm chain of guest-wrappers terminating at the
+  guest Object.prototype whose proto is null) and `has` does a guest-side `key in
+  guest` over that chain — so `'toString' in obj` is TRUE and `obj.toString()` works
+  while `obj instanceof Object` / `obj.constructor === Object` /
+  `Object.getPrototypeOf(obj) === host Object.prototype` stay FALSE (T6 carry-over:
+  the prior null-proto + own-keys-only `has` was self-contradictory). `set`/
+  `deleteProperty`/`defineProperty`/`preventExtensions` WRITE THROUGH to the guest
+  (host mutating a returned guest object writes to the guest; the guest sees it
+  live), replacing the prior loud T9 boundaries. The OUT function wrapper now
+  marshals the `this` receiver, so a returned guest METHOD called as `obj.method()`
+  / `fn.call(obj)` runs with the right guest `this` (needed for proto-chain methods
+  like `obj.hasOwnProperty('x')`). New retained handle: the reflect closure
+  (infra-tracked, disposed at teardown — GC test green under `--expose-gc`).
+- **`node:vm` QuickJS engine — cross-realm Error marshalling + direct-eval
+  isolation (T11, ADR-0142).** A guest throw now crosses the membrane as a host
+  THROWABLE matching Node's cross-realm shape (parity `vm/quickjs-errors`):
+  `instanceof Error`/`TypeError` FALSE but `.constructor.name`/`.name`/`.message`/
+  `.stack`/`toString()` faithful, and the value is genuinely catchable/rethrowable.
+  OUT builds a REAL host Error backing (the `.stack` slot) with the guest's own
+  `name`/`message`/`stack` under a per-ctor-name flat null-based proto carrying the
+  host `Error.prototype` methods + a synthetic `constructor` (right `.name`) — same
+  technique as the exotic mirrors, identity-cached + GC-tracked. The engine inspects
+  the `{error}` handle directly (NOT `unwrapResult`, which threw the wrong shape and
+  disposed the handle), marshals, disposes once, then throws. A non-Error throw
+  (`throw 42`) marshals as the raw primitive. IN: a host fn that throws raises the
+  error INTO the guest as a real guest exception of the matching ctor (so guest
+  `try/catch` sees the right `e.constructor.name`/`e.message`). **Direct `eval`**
+  inside the guest stays in the guest realm (parity `vm/quickjs-direct-eval`,
+  `typeof globalThis.leaked === 'undefined'`) — falsifies the ADR-0138 premise that
+  direct eval leaks to the host (T20 supersedes ADR-0138 with ADR-0142).
+- **`node:vm` QuickJS engine — exotic mirroring (Date/RegExp/TypedArray) + fn
+  name/length + symbols (T10, ADR-0142).** Exotics now cross the membrane both ways
+  matching Node's cross-realm behavior (parity `vm/quickjs-exotic`): `instanceof
+  <ctor>` FALSE but correct brand (`Object.prototype.toString`), working methods
+  (`getTime`/`toISOString`/`test`/`source`/`flags`), and faithful data
+  (indexing/`.length`/`Array.from`/`ArrayBuffer.isView`/JSON). OUT mirrors back the
+  guest exotic with a REAL host Date/RegExp/TypedArray (the internal slot carries
+  the brand + methods) under a per-kind null-based FLAT proto carrying the
+  prototype-CHAIN methods (TypedArrays need the chain — brand + `Symbol.iterator`
+  live on `%TypedArray%.prototype`); IN builds a REAL guest exotic (via cached
+  factory fns — the API has no `callConstructor`) then rebrands it with a guest-side
+  flat proto (the mirror of the OUT technique). Both directions are identity-cached
+  and round-trip to the same reference. **Symbols** marshal both ways (parity
+  `vm/quickjs-symbols`): well-known (`Symbol.iterator`) + registry (`Symbol.for`)
+  symbols are SHARED across realms (`===`); unique symbols are cross-realm (fresh,
+  same `.description`, identity-cached). Symbol-keyed own props are surfaced by the
+  object wrapper (`Object.getOwnPropertySymbols` + `obj[sym]` + well-known iteration
+  via `[...obj]`). **Function fidelity**: a returned guest fn now reports the GUEST
+  fn's `name`/`length` (parity `vm/quickjs-fn-name-length`). Residual: an OUT exotic
+  mirror's `.constructor` is `undefined` (Node returns the guest ctor; faithfully
+  mirroring it would pin a wrapper-backed handle for the context's life, defeating
+  GC-driven teardown). The since-implemented symbol loud boundary is removed; the
+  leak-safe-construction regression now triggers via a throwing element getter.
+- **`node:vm` QuickJS engine — bidirectional callable membrane + handle lifetime
+  (T9, ADR-0142).** Host functions seeded into a context are now callable from
+  guest code: `marshalHostToGuest` of a host fn builds a `ctx.newFunction` whose
+  impl marshals the guest arg handles OUT (`wrapGuestToHost` — a guest array arg
+  is seen in the host with the guest prototype, so `x instanceof hostArray` is
+  FALSE, #16), calls the host fn, and marshals the host result back IN. Variadic
+  host fns work (`log(...a)`). Identity is symmetric: the same host fn → the same
+  guest fn (and round-trips back to the host fn via the registry id); the same
+  guest fn → the same host wrapper. A GUEST callback passed to a host fn is HELD
+  by the host and callable AFTER the synchronous run (`keep(cb); stored()`): the
+  outbound function wrapper DUPS+RETAINS the guest handle, and the QuickJSContext
+  is never torn down by a normal run (Node has no vm-context teardown), so a later
+  `callFunction` lands on a live handle.
+- **`node:vm` QuickJS engine — handle lifetime via FinalizationRegistry +
+  refcount (T9).** A new `ContextLifetime` controller bounds handle growth and
+  makes teardown abort-safe (QUICKJS_API.md: `ctx.dispose()` ABORTS if any guest
+  handle is alive). Every cross-realm WRAPPER (object/array/function Proxy) backs
+  a retained guest handle registered in a FinalizationRegistry — GC'ing the
+  wrapper disposes its handle and evicts the identity-cache entry, so growth is
+  BOUNDED. The wrapper identity cache now holds WeakRefs (a strong Map would pin
+  every wrapper and defeat finalization). Infrastructure handles (the id-registry
+  closure, inbound seeds, inbound host-fn handles) live for the context's life and
+  are disposed only at teardown. The QuickJSContext is disposed ONLY when it is
+  pending-dispose AND no wrapper-backed handle is live (a refcount, NOT
+  finalizer ordering — FinalizationRegistry gives no ordering guarantee), so
+  `ctx.dispose()` never sees a live handle. Normal runs never dispose the context;
+  the `ContextObject` is registered in a FinalizationRegistry that marks the
+  controller pending on GC, and `disposeContext` likewise marks pending (deferring
+  the real `ctx.dispose()` until wrappers are GC'd) instead of an eager
+  dispose-while-alive abort.
+
+- **`node:vm` QuickJS engine — guest→host write-back / reconciliation (T8,
+  ADR-0142, Option A).** Guest writes are now reconciled to the host
+  contextObject. vm runs are SYNCHRONOUS (the host can't observe the sandbox
+  mid-run), so a post-run sweep + per-run reseed is observationally equivalent to
+  a live contextObject for sync code — chosen over a live inbound Proxy (Option B:
+  a retained host trap fn per seeded object, disposal grief deferred to T9). The
+  engine brackets every run with `membrane.reseedContext` (host→guest BEFORE —
+  picks up between-run host mutations; host objects reuse the cached seed but its
+  props are REFRESHED from current host state) and `membrane.sweepContext`
+  (guest→host AFTER). The sweep walks the guest global's OWN ENUMERABLE keys
+  (`Object.keys(global)` — the 61 intrinsics are non-enumerable, so this is
+  exactly seeded keys + guest `var`/bare-assignment globals) and, per key, either
+  RECURSES into a still-host-origin seed (deep write-back into the SAME host
+  object: `shared.count = 42`, `module.exports = {…}`) or writes the
+  marshalled-out value (new global `newGlobal = 99`; reassigned global). The OUT
+  identity cache makes a swept-back slot the SAME wrapper as a value the run also
+  returned, so `this.shared = {tag:1}; this.shared` gives `ret === sb.shared`
+  (#21); a written guest object read from the host is membrane-wrapped, so
+  `sb.module.exports instanceof Object` is FALSE (cross-realm), matching Node.
+  An OUT wrapper round-tripping back IN (a value a prior run returned, stored by
+  the host, seen by a later run) now recovers its ORIGINAL guest handle via a new
+  `#outWrapperGuest` reverse map (object/array/function) instead of being copied
+  in and then rejected on the next sweep's write-through. Sweep-after +
+  reseed-before keeps host & guest consistent (the host already reflects prior
+  guest writes by the next reseed, so reseed-from-host never clobbers them).
+  Parity: `cases/vm/quickjs-writeback.case.ts` (nested write #18, identity #21,
+  new global), `cases/vm/quickjs-shared-mutation.case.ts` (Node-captured: deep
+  mutation of a pre-existing shared host object visible to host with same ref;
+  between-run host mutation visible to the next run). Documented residual (not in
+  the 27 probes): structurally REMOVING a key from a *host object* (not the
+  top-level context) between runs is not reflected (overwrite/add only); a guest
+  CALLBACK that mutates the sandbox AFTER the sync run is seen only at the NEXT
+  reconciliation (or never) — both flagged for T9. Disposal unchanged: sweep/
+  reseed use only transient handles (Scope / explicit dispose); no `ctx.dispose`
+  on the run path; retained wrapper/seed handles still leak until T9.
+
+### Fixed
+
+- **`node:vm` QuickJS membrane — leak-safe wrapper construction (T9 review,
+  ADR-0142).** `#wrapArray` DUP'd the guest handle, then EAGERLY marshalled every
+  element into the host target, and only THEN tracked the wrapper. A guest array
+  holding a value that throws mid-marshal (e.g. a `Symbol` → the loud T10
+  boundary) left the dup'd handle UNTRACKED: the lifetime refcount stayed 0, so a
+  later `markPending`/`ctx.dispose()` (ContextObject GC) ran with that handle
+  still alive → WASM `Aborted(list_empty(&rt->gc_obj_list))`, killing the whole
+  runtime. Confirmed for `[Symbol('x')]` and nested `[[Symbol('x')]]`. Now all
+  three wrappers (array/object/function) route their dup+track through the shared
+  `#retainForWrapper` (was dead code), and `#wrapArray` tracks the wrapper BEFORE
+  the throwable element loop and releases it (disposing the handle) if marshalling
+  throws — so a throw never leaves an untracked live handle and disposal is clean.
+  Regression: `quickjs-lifetime.test.ts` (throwing OUT-marshal of `[Symbol]` /
+  `[[Symbol]]` → no leaked handle, `markPending` disposes without abort).
+- **`node:vm` QuickJS engine — sweep on throw (T8 review, ADR-0142).** A run that
+  THREW skipped the write-back sweep (it sat after `unwrapResult`, which throws on
+  a guest error), so pre-throw host writes were lost — and the next run's
+  reseed-from-host then clobbered any deep pre-throw mutation entirely. But Node's
+  contextObject is LIVE: writes made BEFORE a throw ARE observable to the host
+  (verified probe — `this.a=1; throw` → `sb.a===1`; `o.n=99; throw` →
+  `sb.o.n===99`). `sweepContext` now runs in a `finally` so it reconciles on BOTH
+  the success and throw paths; the QuickJSContext stays alive after `unwrapResult`
+  throws (only the error handle is freed — no double-dispose) and the sweep walks
+  `ctx.global` needing no completion handle. The raw guest error still propagates
+  (faithful error marshalling is T11). Removed the false comment claiming "Node
+  likewise does not reconcile a sandbox after a thrown run" / "no observable host
+  write on throw" (it documented a real divergence as conformance) and its
+  unfinished fragment. Parity: `cases/vm/quickjs-throw-writeback.case.ts`
+  (Node-captured: pre-throw new globals + deep mutation visible to host, next run
+  reads the reconciled state).
+- **`node:vm` QuickJS membrane — unforgeable host-origin tracking (T7 review,
+  ADR-0142).** The host→guest round-trip identity (#14) previously tagged each
+  inbound seed with a guest-visible, guest-WRITABLE marker symbol
+  (`Symbol.for('rifty.vm.hostOrigin')`) carrying a predictable sequential id, and
+  the OUT path read that property to recover the original host object. Guest code
+  could FORGE the marker (`f[Symbol.for('rifty.vm.hostOrigin')] = 0`) and
+  exfiltrate a real host reference it was never given — breaking cross-realm
+  isolation (Node never lets guest code obtain such a reference). The marker was
+  also an observable guest own-symbol (`Object.getOwnPropertySymbols(hostObj)`
+  length 1 vs Node's 0), contradicting the prior "(verified)" no-leak claim.
+  FIX: removed the guest tag entirely; host-origin is now keyed on the seed's id
+  from an UNREACHABLE-closure registry — `#idOf` evals `(() => { const m = new
+  WeakMap(); let n = 0; return o => {…}; })()` and RETAINS the returned function
+  handle HOST-SIDE only (never `setProp`-ed onto the guest global), so guest code
+  has no reference to the WeakMap and cannot pre-seed/read ids. `wrapGuestToHost`
+  computes `idOf(handle)` and returns the original iff it is a known host-origin
+  id — NO guest property read. The outbound wrapper identity cache shares the same
+  hardened registry (previously the reachable `globalThis[Symbol.for(
+  'rifty.vm.idOf')]` form — also forgery-capable — now the closure form). Parity:
+  `cases/vm/quickjs-sandbox-isolation.case.ts` (forgery `false`, own-symbols `0`,
+  legit round-trip `true`).
+
 ### Added
 
 - **Run a VFS Node entry through the module loader (ADR-0137).** New
@@ -12,6 +346,61 @@
   `node <script>`. `child_process.spawn('node', [script])` (worker path) now
   spawns this bootstrap instead of a raw `kind:'source'` worker, so a spawned
   script with a shebang / relative import runs via the loader.
+- **`node:vm` QuickJS engine — host→guest membrane: live contextObject read path
+  (T7, ADR-0142).** `Membrane.seedContext` seeds each own enumerable key of the
+  live contextObject INTO the guest realm before any run; the engine seeds at
+  context creation. Primitives by value; host objects/arrays via the extended
+  `marshalHostToGuest` as a host-origin guest SNAPSHOT — a real guest
+  array/object (recursively marshalled) with its prototype severed
+  (`Object.setPrototypeOf(v,null)`), the MIRROR of the outbound null-proto trick:
+  `Array.isArray` TRUE (real guest brand) but `instanceof Array`/`Object` FALSE
+  (cross-realm). Round-trip identity (#14): host origin is tracked by the seed's
+  UNFORGEABLE registry id → host `Map<id, originalHostObject>` (see the Fixed
+  entry above — NO guest-visible marker); `wrapGuestToHost` returns the ORIGINAL
+  host reference for a known host-origin id. Inbound
+  identity cached host-side (`WeakMap<hostObject, guestSeed>`). SNAPSHOT only —
+  guest writes to a shared object aren't seen by the host yet; host-side re-sync +
+  guest→host write-back is T8, guest-callable host functions T9, inbound symbols
+  T10 (loud boundaries). Disposal: inbound seeds RETAINED (back live globals),
+  per-call dups disposed; never `ctx.dispose()` on the run path. Parity:
+  `cases/vm/quickjs-sandbox-read.case.ts`.
+- **`node:vm` QuickJS engine — guest→host membrane for OBJECT/ARRAY/FUNCTION
+  completion values + identity cache (T6, ADR-0142).** New `Membrane`
+  (`vm/membrane.ts`), one per `QuickJSContext`. Cross-realm-faithful host
+  wrappers (Node oracle): ARRAY → `Proxy(realHostArray,{getPrototypeOf:()=>null})`
+  (`Array.isArray` TRUE, `instanceof Array` FALSE, recursively-marshalled
+  elements); OBJECT → `Proxy({}, traps)` routing reads (incl. `constructor`) to
+  the guest handle so `constructor !== host Object` and `instanceof Object` FALSE,
+  `Object.keys`/JSON via ownKeys+getOwnPropertyDescriptor; FUNCTION → callable
+  `Proxy(thunk,{getPrototypeOf:()=>null})` (`typeof 'function'`, callable,
+  `instanceof Function` FALSE) marshalling primitive args in / result out.
+  Identity cache: an UNREACHABLE-closure guest `WeakMap` id registry (retained
+  host-side, never exposed on the guest global — see the Fixed entry) → host
+  `Map<id, wrapper>`, so the same guest object yields the same host wrapper
+  (handles aren't stable keys). Disposal bounded for T6: per-run completion
+  handles disposed; wrapper-retained guest handles persist (wrapper lifetime is
+  T9). Engine now routes object/function/array through the membrane instead of
+  throwing. Parity: `cases/vm/quickjs-returns-objects.case.ts`,
+  `cases/vm/quickjs-returns-identity.case.ts`.
+- **`node:vm` QuickJS engine — primitive completion values (T5, ADR-0142).**
+  New `quickjsEngine: VmEngine` (`vm/quickjs-engine.ts`): one persistent
+  `QuickJSContext` per `vm.Context` (WeakMap, reused across runs for later
+  cross-run persistence), `evalCode` + `unwrapResult`, marshalling guest
+  completion values that are PRIMITIVES (number/string/boolean/bigint/null/
+  undefined) back to the host; object/function throw a loud Task-6 boundary.
+  Every per-run handle is disposed (a leak aborts the WASM runtime); constants
+  never are. `selectEngine()` now returns it when `__RIFTY_VM_ENGINE === 'quickjs'`
+  (default stays `rewrite`). Parity: `cases/vm/quickjs-returns.case.ts`. The
+  parity runner + vm conformance now preload via `ensureVmEngineReady()`.
+
+### Changed
+
+- **`node:vm` split behind a `VmEngine` interface (no behavior change).** `vm.ts`
+  became a `vm/` module: `types.ts` (shared types + `VmEngine`), `rewrite-engine.ts`
+  (the AST-rewrite sandbox, now `rewriteEngine: VmEngine`, Script memoisation moved
+  to a per-`CompiledScript` WeakMap), `engine-config.ts` (selector — default stays
+  `rewrite`; `__RIFTY_VM_ENGINE` override), `index.ts` (public dispatcher).
+  `runInThisContext` stays host-realm. Prep for the QuickJS engine (ADR-0142 / T17).
 
 ### Fixed
 
@@ -22,6 +411,10 @@
   keeping line numbers. Required to run `node_modules/.bin` launcher shims and
   any shebang'd entry. Parity: `cases/modules/{cjs,esm}-shebang.case.ts`.
 
+- **REPL/console inspector rendered bigints without the trailing `n`.** `inspect`
+  printed `3n` as `3` (and `{ a: 3n }` as `{ a: 3 }`) — `String(3n)` drops the
+  suffix Node keeps at every depth. Surfaced by the QuickJS vm parity case
+  (`vm.runInNewContext('1n + 2n')` → `3n`). Regression: `repl/inspect.test.ts`.
 - **PR #30 review fixes (`node:vm` statement-position var + intrinsic shadow).**
   Two divergences inside the just-closed `vm-sandbox-residual-gaps` work:
   - A top-level `var` used as the UNBRACED body of `if`/`else`/`do-while` threw
@@ -60,6 +453,15 @@
 
 ### Added
 
+- **QuickJS vm-engine loader (`builtins/vm/quickjs-loader.ts`).**
+  `getQuickjsWasmUrl()` resolves the QuickJS `.wasm` URL via tiered env-config
+  (bootstrap global → Vite build env → Node env → `/quickjs.wasm`) per D-004 /
+  ADR-0005 — never hardcoded elsewhere. `ensureVmEngineReady()` is a one-time
+  idempotent async preload of the release-sync WASM module returning a single
+  shared `QuickJSWASMModule`; `getQuickJsModuleSync()` then serves it
+  synchronously to the membrane (throws with guidance if not yet preloaded),
+  and `isVmEngineReady()` reports readiness. Mirrors the WASI worker-boot
+  preload pattern.
 - **`./builtins/console` subpath export** — the Node-compatible `Console`
   class over writable streams, so embedders (playground node-server bootstrap)
   can route a guest program's console into kernel stdio.
@@ -112,7 +514,7 @@
   unbound names all land on the context. `switch` cases get a lexical scope;
   `for (var k in o)` no longer rewrites into a SyntaxError. Reads of unbound
   names stay loud (`ReferenceError`) / fall through to host globals by design.
-  The remaining `eval` divergence is recorded in ADR-0138.
+  The remaining `eval` divergence is recorded in ADR-0138 (superseded by ADR-0142).
 - **`node:vm` residual sandbox gaps closed.** Top-level function declarations are
   hoisted (callable before their text, incl. mutual recursion; a later `f = …`
   reassignment is visible), declaration statements keep Node's EMPTY completion
@@ -123,7 +525,7 @@
   known global of the context — readable as `undefined` after the run and in later
   runs — instead of leaking to the host realm afterwards. `vm.Script` memoises its
   AST rewrite (parse + rewrite once, reuse across runs). Direct `eval(...)` remains
-  a permanent divergence (ADR-0138). Closes the
+  a permanent divergence (ADR-0138, superseded by ADR-0142). Closes the
   `runtime-js/vm-sandbox-residual-gaps` backlog item; parity
   `cases/vm/sandbox-residual-gaps.case.ts`.
 - **Source-map decoding: 1-field VLQ segments advance the running generated

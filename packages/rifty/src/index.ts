@@ -37,4 +37,8 @@ export type {
   RuntimeController,
   RuntimeEvent,
   RuntimeFs,
+  // Payload of the `diagnostic` RuntimeEvent — SDK consumers type it without a deep import.
+  TelemetryEntry,
+  TelemetryKind,
+  TelemetrySnapshot,
 } from '@riftydev/runtime-js';

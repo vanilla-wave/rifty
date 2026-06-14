@@ -1,6 +1,7 @@
 import type { ParityCase } from '../../src/types.ts';
 
-// Closes the runtime-js/vm-sandbox-residual-gaps backlog item (ADR-0138): top-level
+// Closes the runtime-js/vm-sandbox-residual-gaps backlog item (ADR-0138, superseded
+// by ADR-0142): top-level
 // function hoisting, declaration-statement completion values, statement-position
 // `var` destructuring patterns, and post-run persistence of context `var` bindings.
 const c: ParityCase = {

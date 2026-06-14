@@ -45,7 +45,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0068 | `with { type: "file" }` file-loader import attribute (asset → path) |
 | 0069 | `Readable.setEncoding(encoding)` — emit decoded strings |
 | 0136 | Transformed-module stack remapping via scoped prepareStackTrace |
-| 0138 | node:vm direct eval not intercepted (permanent compat divergence) |
+| 0142 | node:vm dual-engine — QuickJS real realm default, hardened-rewrite loud opt-in |
 
 ### runtime-wasi
 
@@ -180,6 +180,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0055 | n/a | retired opencode facade ADR; integration cancelled |
 | 0074 | 0077 | SW preview-nav routing; ported into ADR-0077 |
 | 0092 | n/a | retired opencode facade ADR; integration cancelled |
+| 0138 | 0142 | eval interception now feasible via QuickJS real realm; context grafted |
 
 ## Appendix A — Q→ADR provenance
 

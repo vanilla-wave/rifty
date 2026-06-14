@@ -5,6 +5,8 @@ import type {
   FsResult,
   HostMessage,
   SerializedRuntimeError,
+  TelemetrySnapshot,
+  VmEngineName,
   WorkerMessage,
 } from './protocol.ts';
 
@@ -13,6 +15,13 @@ export interface RuntimeOptions {
   readonly workerUrl: string;
   /** Optional pre-populated fixture for the in-Worker VFS (path → source). */
   readonly fixture?: Readonly<Record<string, string>>;
+  /**
+   * Programmatic `node:vm` sandbox engine override (ADR-0142). When set, the host
+   * sends a `vm-config` message on worker readiness so the worker applies it via
+   * `setVmEngineOverride`. When absent, behavior is unchanged — the worker
+   * resolves the engine itself (`resolveVmEngineName`: env-config / default).
+   */
+  readonly vmEngine?: VmEngineName;
 }
 
 export type RuntimeEvent =
@@ -20,7 +29,10 @@ export type RuntimeEvent =
   | { readonly type: 'stdout'; readonly chunk: string }
   | { readonly type: 'stderr'; readonly chunk: string }
   | { readonly type: 'result'; readonly result: EvalResult }
-  | { readonly type: 'exit'; readonly reason: 'reset' | 'error' };
+  | { readonly type: 'exit'; readonly reason: 'reset' | 'error' }
+  /** Divergence / NotImplemented telemetry snapshot from the worker (T15) — the
+   * playground divergence panel (T16) subscribes via {@link RuntimeController.on}. */
+  | { readonly type: 'diagnostic'; readonly payload: TelemetrySnapshot };
 
 /**
  * Per-call options for {@link RuntimeController.eval}. Optional today —
@@ -186,6 +198,9 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
       switch (msg.type) {
         case 'ready':
           ready = true;
+          // Apply the programmatic vm-engine override (ADR-0142) before anything
+          // runs, so the first eval already sees the chosen engine.
+          if (opts.vmEngine) send({ type: 'vm-config', engine: opts.vmEngine });
           if (opts.fixture) send({ type: 'load-fixture', files: opts.fixture });
           emit({ type: 'ready' });
           break;
@@ -212,6 +227,9 @@ export function spawnRuntime(opts: RuntimeOptions): RuntimeController {
           }
           break;
         }
+        case 'diagnostic':
+          emit({ type: 'diagnostic', payload: msg.payload });
+          break;
         case 'pong':
           break;
       }

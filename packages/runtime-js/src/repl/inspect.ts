@@ -14,7 +14,9 @@ export function inspect(value: unknown, depth = 0, seen: WeakSet<object> = new W
   if (value === null) return 'null';
   const type = typeof value;
   if (type === 'string') return formatString(value as string);
-  if (type === 'number' || type === 'boolean' || type === 'bigint') return String(value);
+  if (type === 'number' || type === 'boolean') return String(value);
+  // Node renders bigints with a trailing `n` at every depth (`3n`, `{ a: 3n }`).
+  if (type === 'bigint') return `${String(value)}n`;
   if (type === 'symbol') return (value as symbol).toString();
   if (type === 'function') return formatFunction(value as (...args: unknown[]) => unknown);
   if (value instanceof Error) return formatError(value);

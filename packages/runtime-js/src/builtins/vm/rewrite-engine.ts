@@ -1,4 +1,15 @@
-import { NotImplementedError } from '@riftydev/io';
+/**
+ * Rewrite engine: the original `node:vm` AST-rewrite sandbox implementation,
+ * moved here verbatim behind the {@link VmEngine} interface (Task 4 split — no
+ * behavior change). Source is parsed with acorn, top-level free writes/`var`/
+ * function declarations are redirected onto the contextified object, then run in
+ * the host realm under a `with (proxy) { eval(...) }` membrane.
+ *
+ * Rewrite-engine divergences (direct `eval`, global-object property attributes) are
+ * recorded in ADR-0138 (superseded by ADR-0142) and
+ * `docs/backlog/runtime-js/vm-context-global-object-fidelity`.
+ */
+
 import type {
   Function as AcornFunction,
   AssignmentExpression,
@@ -19,10 +30,8 @@ import type {
   VariableDeclaration,
 } from 'acorn';
 import { parse as acornParse } from 'acorn';
+import { type CompiledScript, type ContextObject, type VmEngine, isVmContext } from './types.ts';
 
-const VM_CONTEXT = Symbol.for('rifty.vm.context');
-
-type ContextObject = Record<string, unknown> & { [VM_CONTEXT]?: true };
 type ContextProxy = ContextObject;
 interface SourceEdit {
   readonly start: number;
@@ -56,47 +65,11 @@ interface ContextRewrite {
   readonly helperName: string;
 }
 
-export interface RunningScriptOptions {
-  filename?: string;
-  displayErrors?: boolean;
-  timeout?: number;
-  breakOnSigint?: boolean;
-  microtaskMode?: string;
-  contextExtensions?: object[];
-}
-
-export interface ScriptOptions extends RunningScriptOptions {
-  lineOffset?: number;
-  columnOffset?: number;
-  cachedData?: Uint8Array;
-  produceCachedData?: boolean;
-  importModuleDynamically?: unknown;
-}
-
-export interface CompileFunctionOptions extends ScriptOptions {
-  parsingContext?: object;
-}
-
-export interface CreateContextOptions {
-  name?: string;
-  origin?: string;
-  codeGeneration?: {
-    strings?: boolean;
-    wasm?: boolean;
-  };
-  microtaskMode?: string;
-}
-
-type VmOptions = string | ScriptOptions | undefined;
-
-const runGlobalScript = new Function('source', 'return (0, eval)(source);') as (
-  source: string,
-) => unknown;
-
 // Direct `eval(...)` in vm code evaluates UNREWRITTEN source, so writes to
 // undeclared names inside it leak to the host realm. Faithful interception needs
 // realm-level support this host-realm `with(proxy)+eval` design cannot provide —
-// a permanent divergence recorded in ADR-0138. `eval` is a helper binding so the
+// a rewrite-engine divergence recorded in ADR-0138 (superseded by ADR-0142;
+// the quickjs default closes this leak). `eval` is a helper binding so the
 // `with` proxy never shadows the host `eval` the rewritten code calls.
 const HELPER_BINDINGS = new Set<PropertyKey>(['__riftyVmContext', '__riftyVmSource', 'eval']);
 const activeHelperBindings = new Map<PropertyKey, number>();
@@ -165,82 +138,6 @@ const INTRINSIC_GLOBALS = new Set<PropertyKey>([
 ]);
 
 const contextProxies = new WeakMap<ContextObject, ContextProxy>();
-
-function asSource(code: string): string {
-  if (typeof code !== 'string') {
-    throw new TypeError('The "code" argument must be of type string.');
-  }
-  return code;
-}
-
-function normalizeOptions(options?: VmOptions): ScriptOptions {
-  if (options === undefined) return {};
-  if (typeof options === 'string') return { filename: options };
-  if (typeof options !== 'object' || options === null) {
-    throw new TypeError('The "options" argument must be a string or object.');
-  }
-  return options;
-}
-
-function assertSupportedRunOptions(options: RunningScriptOptions, feature: string): void {
-  if (options.displayErrors !== undefined) {
-    throw new NotImplementedError(`${feature}.displayErrors`);
-  }
-  if (options.timeout !== undefined) {
-    throw new NotImplementedError(`${feature}.timeout`);
-  }
-  if (options.breakOnSigint) {
-    throw new NotImplementedError(`${feature}.breakOnSigint`);
-  }
-  if (options.microtaskMode !== undefined) {
-    throw new NotImplementedError(`${feature}.microtaskMode`);
-  }
-  if (options.contextExtensions !== undefined && options.contextExtensions.length > 0) {
-    throw new NotImplementedError(`${feature}.contextExtensions`);
-  }
-}
-
-function assertSupportedScriptOptions(options: ScriptOptions, feature: string): void {
-  assertSupportedRunOptions(options, feature);
-  if (options.lineOffset !== undefined && options.lineOffset !== 0) {
-    throw new NotImplementedError(`${feature}.lineOffset`);
-  }
-  if (options.columnOffset !== undefined && options.columnOffset !== 0) {
-    throw new NotImplementedError(`${feature}.columnOffset`);
-  }
-  if (options.cachedData !== undefined) {
-    throw new NotImplementedError(`${feature}.cachedData`);
-  }
-  if (options.produceCachedData) {
-    throw new NotImplementedError(`${feature}.produceCachedData`);
-  }
-  if (options.importModuleDynamically !== undefined) {
-    throw new NotImplementedError(`${feature}.importModuleDynamically`);
-  }
-}
-
-function assertSupportedCompileOptions(options: CompileFunctionOptions): void {
-  assertSupportedScriptOptions(options, 'vm.compileFunction');
-  if (options.parsingContext !== undefined) {
-    throw new NotImplementedError('vm.compileFunction.parsingContext');
-  }
-}
-
-function assertSupportedContextOptions(options?: CreateContextOptions): void {
-  if (!options) return;
-  if (options.name !== undefined) {
-    throw new NotImplementedError('vm.createContext.name');
-  }
-  if (options.origin !== undefined) {
-    throw new NotImplementedError('vm.createContext.origin');
-  }
-  if (options.codeGeneration !== undefined) {
-    throw new NotImplementedError('vm.createContext.codeGeneration');
-  }
-  if (options.microtaskMode !== undefined) {
-    throw new NotImplementedError('vm.createContext.microtaskMode');
-  }
-}
 
 function withSourceURL(code: string, filename?: string): string {
   if (!filename) return code;
@@ -1067,37 +964,6 @@ function rewriteContextSource(source: string): ContextRewrite {
   };
 }
 
-export function createContext<T extends Record<string, unknown> = Record<string, unknown>>(
-  contextObject?: T,
-  options?: CreateContextOptions,
-): T {
-  assertSupportedContextOptions(options);
-  if (contextObject === null) {
-    throw new TypeError('The "object" argument must be of type object. Received null');
-  }
-  const context = (contextObject === undefined ? {} : contextObject) as T & ContextObject;
-  Object.defineProperty(context, VM_CONTEXT, {
-    configurable: false,
-    enumerable: false,
-    value: true,
-  });
-  return context;
-}
-
-export function isContext(value: unknown): boolean {
-  return (
-    (typeof value === 'object' || typeof value === 'function') &&
-    value !== null &&
-    (value as ContextObject)[VM_CONTEXT] === true
-  );
-}
-
-export function runInThisContext(code: string, options?: VmOptions): unknown {
-  const normalized = normalizeOptions(options);
-  assertSupportedScriptOptions(normalized, 'vm.runInThisContext');
-  return runGlobalScript(withSourceURL(asSource(code), normalized.filename));
-}
-
 // Run an already-rewritten script against a contextified object. The rewrite is
 // context-independent, so `vm.Script` computes it once and reuses it here.
 function runRewrittenInContext(
@@ -1106,7 +972,7 @@ function runRewrittenInContext(
   filename?: string,
 ): unknown {
   assertObjectContext(contextifiedObject);
-  if (!isContext(contextifiedObject)) {
+  if (!isVmContext(contextifiedObject)) {
     throw new TypeError('The "contextifiedObject" argument must be a vm.Context.');
   }
   const context = contextifiedObject as ContextObject;
@@ -1118,94 +984,37 @@ function runRewrittenInContext(
   return runContextScript(proxy, withSourceURL(rewritten.source, filename), rewritten.helperName);
 }
 
-export function runInContext(
-  code: string,
-  contextifiedObject: Record<string, unknown>,
-  options?: VmOptions,
-): unknown {
-  const normalized = normalizeOptions(options);
-  assertSupportedScriptOptions(normalized, 'vm.runInContext');
-  return runRewrittenInContext(
-    rewriteContextSource(asSource(code)),
-    contextifiedObject,
-    normalized.filename,
-  );
+// Memoised AST rewrite per CompiledScript — parse + rewrite once, reuse across
+// every run of the same script (the rewrite does not depend on the target
+// context). Preserves the old `vm.Script.#rewrite` optimization through the
+// engine boundary: `compile` returns the `{code, filename}` payload, and the
+// first `runCompiled` computes + caches the rewrite keyed on that payload.
+const compiledRewrites = new WeakMap<CompiledScript, ContextRewrite>();
+
+function getCompiledRewrite(script: CompiledScript): ContextRewrite {
+  let rewrite = compiledRewrites.get(script);
+  if (!rewrite) {
+    rewrite = rewriteContextSource(script.code);
+    compiledRewrites.set(script, rewrite);
+  }
+  return rewrite;
 }
 
-export function runInNewContext(
-  code: string,
-  contextObject?: Record<string, unknown>,
-  options?: VmOptions,
-): unknown {
-  if (contextObject === null) {
-    throw new TypeError('The "object" argument must be of type object. Received null');
-  }
-  const context = createContext(contextObject === undefined ? {} : contextObject);
-  return runInContext(code, context, options);
-}
-
-export class Script {
-  readonly #code: string;
-  readonly #filename?: string;
-  // Memoised AST rewrite — parse + rewrite once, reuse across every run of this
-  // Script instance (the rewrite does not depend on the target context).
-  #rewrite?: ContextRewrite;
-
-  constructor(code: string, options?: VmOptions) {
-    const normalized = normalizeOptions(options);
-    assertSupportedScriptOptions(normalized, 'vm.Script');
-    this.#code = asSource(code);
-    this.#filename = normalized.filename;
-  }
-
-  #getRewrite(): ContextRewrite {
-    if (!this.#rewrite) this.#rewrite = rewriteContextSource(this.#code);
-    return this.#rewrite;
-  }
-
-  runInThisContext(options?: VmOptions): unknown {
-    return runInThisContext(this.#code, { ...normalizeOptions(options), filename: this.#filename });
-  }
-
-  runInContext(contextifiedObject: Record<string, unknown>, options?: VmOptions): unknown {
-    const normalized = { ...normalizeOptions(options), filename: this.#filename };
-    assertSupportedScriptOptions(normalized, 'vm.Script');
-    return runRewrittenInContext(this.#getRewrite(), contextifiedObject, normalized.filename);
-  }
-
-  runInNewContext(contextObject?: Record<string, unknown>, options?: VmOptions): unknown {
-    if (contextObject === null) {
-      throw new TypeError('The "object" argument must be of type object. Received null');
-    }
-    const normalized = { ...normalizeOptions(options), filename: this.#filename };
-    assertSupportedScriptOptions(normalized, 'vm.Script');
-    const context = createContext(contextObject === undefined ? {} : contextObject);
-    return runRewrittenInContext(this.#getRewrite(), context, normalized.filename);
-  }
-}
-
-export function compileFunction(
-  code: string,
-  params: string[] = [],
-  options?: CompileFunctionOptions,
-): (...args: unknown[]) => unknown {
-  assertSupportedCompileOptions(options ?? {});
-  for (const param of params) {
-    if (typeof param !== 'string') {
-      throw new TypeError('Function parameters must be strings.');
-    }
-  }
-  return new Function(...params, asSource(code)) as (...args: unknown[]) => unknown;
-}
-
-const vmModule = {
-  Script,
-  compileFunction,
-  createContext,
-  isContext,
-  runInContext,
-  runInNewContext,
-  runInThisContext,
+export const rewriteEngine: VmEngine = {
+  name: 'rewrite',
+  initContext() {
+    // no-op: rewrite uses a lazy contextProxy created on first run.
+  },
+  runInContext(code, context, filename) {
+    return runRewrittenInContext(rewriteContextSource(code), context, filename);
+  },
+  compile(code, filename) {
+    return { code, filename };
+  },
+  runCompiled(script, context) {
+    return runRewrittenInContext(getCompiledRewrite(script), context, script.filename);
+  },
+  disposeContext() {
+    // no-op: rewrite holds context state in WeakMaps reclaimed with the context.
+  },
 };
-
-export default vmModule;
