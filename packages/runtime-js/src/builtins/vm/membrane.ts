@@ -583,9 +583,18 @@ export class Membrane {
    * Retain a dup of the guest handle so the wrapper's traps stay valid, and
    * register the wrapper with the lifetime controller so GC'ing the wrapper
    * disposes this dup (bounding growth) and evicts the identity-cache entry.
+   * Also records the dup for the OUT-wrapper round-trip (`#outWrapperGuest`).
+   *
+   * Leak-safe: the dup is TRACKED before any throwable wrapper-construction work
+   * (e.g. `#wrapArray`'s eager element marshalling, which can throw the loud T10
+   * boundary). If construction throws AFTER this returns, the handle is already
+   * counted in `#live`, so a later `markPending`/`dispose` either defers (no
+   * abort) or disposes it via GC/`releaseWrapper` — never a silently-leaked live
+   * handle that trips the `ctx.dispose()` leaked-handle abort.
    */
   #retainForWrapper(wrapper: object, handle: QuickJSHandle, id: number): QuickJSHandle {
     const dup = handle.dup();
+    this.#outWrapperGuest.set(wrapper, dup);
     this.#lifetime.trackWrapper(wrapper, dup, id);
     return dup;
   }
@@ -610,23 +619,34 @@ export class Membrane {
    */
   #wrapArray(handle: QuickJSHandle, id: number): unknown {
     const ctx = this.#ctx;
-    const guest = handle.dup();
     const length = ctx.getLength(handle) ?? 0;
+    // Build the empty target + Proxy and TRACK the dup'd guest handle (+ record
+    // the OUT round-trip) BEFORE the throwable element marshalling. Element
+    // marshalling can hit the loud T10 boundary (e.g. a guest `Symbol` element);
+    // tracking first means a throw leaves the dup counted in `#live` (disposed by
+    // GC/`releaseWrapper`) instead of an untracked live handle that would later
+    // abort `ctx.dispose()`. See `#retainForWrapper`.
     const target: unknown[] = [];
-    for (let i = 0; i < length; i++) {
-      const elem = ctx.getProp(handle, i);
-      try {
-        target.push(this.wrapGuestToHost(elem));
-      } finally {
-        elem.dispose();
-      }
-    }
     const wrapper = new Proxy(target, { getPrototypeOf: () => null });
-    // Remember the guest handle so re-marshalling this wrapper INTO the guest
-    // (T8 reseed) recovers the original guest object instead of seeding a copy.
-    this.#outWrapperGuest.set(wrapper, guest);
-    // GC'ing the wrapper disposes `guest` + evicts the cache entry (T9).
-    this.#lifetime.trackWrapper(wrapper, guest, id);
+    this.#retainForWrapper(wrapper, handle, id);
+    try {
+      for (let i = 0; i < length; i++) {
+        const elem = ctx.getProp(handle, i);
+        try {
+          target.push(this.wrapGuestToHost(elem));
+        } finally {
+          elem.dispose();
+        }
+      }
+    } catch (err) {
+      // Element marshalling threw (e.g. a guest `Symbol` element, T10). The
+      // wrapper is never returned/cached, so release its tracked dup NOW
+      // (disposing the handle + decrementing `#live`) rather than waiting for GC
+      // of an unreachable Proxy — leaves no outstanding handle for this failed
+      // wrapper, so a later `markPending`/`dispose` is clean.
+      this.#lifetime.releaseWrapper(wrapper);
+      throw err;
+    }
     return wrapper;
   }
 
@@ -640,9 +660,13 @@ export class Membrane {
    */
   #wrapObject(handle: QuickJSHandle, id: number): unknown {
     const ctx = this.#ctx;
-    const guest = handle.dup();
     const membrane = this;
     const target: Record<PropertyKey, unknown> = {};
+    // `guest` is the tracked dup the traps read; assigned after the Proxy exists
+    // (traps only fire post-construction, so the late binding is safe). Must be
+    // `let` — declared before the Proxy, captured by the traps, assigned below.
+    // biome-ignore lint/style/useConst: late-bound across the trap closure — see above.
+    let guest!: QuickJSHandle;
 
     const ownStringKeys = (): string[] => {
       return Scope.withScope((scope) => {
@@ -694,11 +718,10 @@ export class Membrane {
         throw new Error('vm: host delete on returned guest object not implemented (Task 9)');
       },
     });
-    // Remember the guest handle so re-marshalling this wrapper INTO the guest
-    // (T8 reseed) recovers the original guest object instead of seeding a copy.
-    this.#outWrapperGuest.set(wrapper, guest);
-    // GC'ing the wrapper disposes `guest` + evicts the cache entry (T9).
-    this.#lifetime.trackWrapper(wrapper, guest, id);
+    // dup+track the guest handle (and record the OUT round-trip) via the shared
+    // leak-safe path. Object traps are lazy (no construct-time marshal), so no
+    // throwable work follows — but this keeps all three wrappers on one path.
+    guest = this.#retainForWrapper(wrapper, handle, id);
     return wrapper;
   }
 
@@ -712,7 +735,11 @@ export class Membrane {
    */
   #wrapFunction(handle: QuickJSHandle, id: number): unknown {
     const ctx = this.#ctx;
-    const guest = handle.dup();
+    // `guest` is the tracked dup the thunk calls; assigned after the Proxy exists
+    // (the thunk only runs post-construction, so the late binding is safe). Must
+    // be `let` — declared before the thunk, captured by it, assigned below.
+    // biome-ignore lint/style/useConst: late-bound across the thunk closure — see above.
+    let guest!: QuickJSHandle;
 
     const thunk = (...args: unknown[]): unknown => {
       return Scope.withScope((scope) => {
@@ -730,14 +757,11 @@ export class Membrane {
     };
 
     const wrapper = new Proxy(thunk, { getPrototypeOf: () => null });
-    // Remember the guest handle so re-marshalling this wrapper INTO the guest
-    // (T8 reseed) recovers the original guest function instead of throwing on the
-    // host→guest function boundary (T9).
-    this.#outWrapperGuest.set(wrapper, guest);
-    // GC'ing the wrapper disposes `guest` + evicts the cache entry. While the host
-    // HOLDS the wrapper (e.g. `stored = cb`), the dup stays alive, so calling it
-    // AFTER the run does `callFunction` on a still-valid handle (T9).
-    this.#lifetime.trackWrapper(wrapper, guest, id);
+    // dup+track the guest handle (and record the OUT round-trip) via the shared
+    // leak-safe path. While the host HOLDS the wrapper (e.g. `stored = cb`), the
+    // dup stays alive, so calling it AFTER the run does `callFunction` on a
+    // still-valid handle (T9).
+    guest = this.#retainForWrapper(wrapper, handle, id);
     return wrapper;
   }
 

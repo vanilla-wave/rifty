@@ -73,6 +73,20 @@
 
 ### Fixed
 
+- **`node:vm` QuickJS membrane — leak-safe wrapper construction (T9 review,
+  ADR-0138).** `#wrapArray` DUP'd the guest handle, then EAGERLY marshalled every
+  element into the host target, and only THEN tracked the wrapper. A guest array
+  holding a value that throws mid-marshal (e.g. a `Symbol` → the loud T10
+  boundary) left the dup'd handle UNTRACKED: the lifetime refcount stayed 0, so a
+  later `markPending`/`ctx.dispose()` (ContextObject GC) ran with that handle
+  still alive → WASM `Aborted(list_empty(&rt->gc_obj_list))`, killing the whole
+  runtime. Confirmed for `[Symbol('x')]` and nested `[[Symbol('x')]]`. Now all
+  three wrappers (array/object/function) route their dup+track through the shared
+  `#retainForWrapper` (was dead code), and `#wrapArray` tracks the wrapper BEFORE
+  the throwable element loop and releases it (disposing the handle) if marshalling
+  throws — so a throw never leaves an untracked live handle and disposal is clean.
+  Regression: `quickjs-lifetime.test.ts` (throwing OUT-marshal of `[Symbol]` /
+  `[[Symbol]]` → no leaked handle, `markPending` disposes without abort).
 - **`node:vm` QuickJS engine — sweep on throw (T8 review, ADR-0138).** A run that
   THREW skipped the write-back sweep (it sat after `unwrapResult`, which throws on
   a guest error), so pre-throw host writes were lost — and the next run's

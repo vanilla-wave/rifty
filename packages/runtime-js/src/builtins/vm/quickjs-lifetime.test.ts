@@ -111,6 +111,44 @@ describe('ContextLifetime — GC-driven reclaim (needs --expose-gc)', () => {
   });
 });
 
+describe('ContextLifetime — leak-safe wrapper construction (review regression)', () => {
+  // The array wrapper DUPs the guest handle, then EAGERLY marshals every element
+  // into the host target. A guest array holding a Symbol hits the loud T10
+  // boundary MID-construction. Before the fix the dup'd handle was tracked only
+  // AFTER the element loop, so a throw left an UNTRACKED live handle: `#live`
+  // stayed 0, and a later `markPending` → `ctx.dispose()` aborted the WASM runtime
+  // (`Assertion failed: list_empty(&rt->gc_obj_list)`). After the fix the throw
+  // must leave NO leaked live handle, so disposal completes cleanly.
+  it('a throwing OUT-marshal of [Symbol] leaks no live handle (no abort on dispose)', () => {
+    const ctx = freshContext();
+    const membrane = new Membrane(ctx);
+    const h = ctx.unwrapResult(ctx.evalCode('[Symbol("x")]'));
+    // Marshalling OUT must throw the loud T10 boundary (correct behavior).
+    expect(() => membrane.wrapGuestToHost(h)).toThrow(/symbol marshalling not implemented/);
+    h.dispose();
+    // INVARIANT: the throw must not leave an untracked live guest handle. Either it
+    // was tracked (refcount reflects it) or disposed on the throw path — but no
+    // SILENTLY-LEAKED handle. With zero outstanding wrappers, teardown is clean.
+    expect(membrane.lifetime.liveWrapperCount).toBe(0);
+    membrane.lifetime.markPending();
+    expect(membrane.lifetime.disposed).toBe(true); // no abort
+  });
+
+  it('a throwing OUT-marshal of nested [[Symbol]] leaks no live handle (no abort)', () => {
+    const ctx = freshContext();
+    const membrane = new Membrane(ctx);
+    const h = ctx.unwrapResult(ctx.evalCode('[[Symbol("x")]]'));
+    // The OUTER array marshals its element (the inner array) → the inner array
+    // marshals its Symbol element → throws. Both wrapper constructions are in
+    // flight; neither may leak an untracked handle.
+    expect(() => membrane.wrapGuestToHost(h)).toThrow(/symbol marshalling not implemented/);
+    h.dispose();
+    expect(membrane.lifetime.liveWrapperCount).toBe(0);
+    membrane.lifetime.markPending();
+    expect(membrane.lifetime.disposed).toBe(true); // no abort
+  });
+});
+
 describe('bidirectional callables (T9)', () => {
   it('host fn seeded into the guest is callable; args marshal OUT, result marshals IN', () => {
     const ctx = freshContext();
