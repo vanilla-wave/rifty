@@ -41,13 +41,16 @@ NOT the earlier broken approach: spawning the shim TEXT as `kind:'source'`
   `node-entry-bootstrap.ts` / share the install realm's VFS" CANNOT fix the shell
   flow — it conflated this with the preview/install flow (different owner). The
   real fork (B: SAB fs-proxy to PAGE vs D: single owner-worker), analysis, and
-  recommendation (lean D, separate milestone) live in
-  `shell/bin-worker-vfs-transport-b-vs-d.md`. The MECHANISM beneath (`runNodeEntry`
-  + loader) is already node-tested + parity; only the TRANSPORT is dead.
+  recommendation live in `shell/bin-worker-vfs-transport-b-vs-d.md`. The MECHANISM
+  beneath (`runNodeEntry` + loader) is already node-tested + parity; only the
+  TRANSPORT is dead. **DECIDED → D (owner-worker), ADR-0143 (2026-06-14)** —
+  milestone-scale, its P1 gate is a kernel server-process model (ADR-0077 follow-up).
 - `execSync` shebang/relative-import via the node-entry bootstrap: `child_process.spawn`
   routes through it, but `execSync`'s recursive runner executes its spec in Node
   (conformance), where the `kind:'url'` bootstrap can't load — so the handler
   stays on `kind:'source'`. See `// TODO(backlog: runtime-js/execsync-node-entry-loader)`.
+  The standalone flip is NOT safe — it regresses the passing COI e2e
+  `tests/e2e/execsync-sab.spec.ts`; it lands WITH D (ADR-0143).
 - `npm run` script lines: route the script `command` through the shell so its
   argv-0 gets `.bin` resolution (npm semantics), replacing the host runner's
   hardcoded `vite`/dev-script switch in `App.tsx runTerminalScript`.

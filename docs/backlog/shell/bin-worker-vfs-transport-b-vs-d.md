@@ -1,6 +1,6 @@
 ---
 area: shell
-status: active
+status: parked
 title: Bin/shell worker VFS transport — B (SAB fs-proxy to PAGE) vs D (single owner-worker)
 created: 2026-06-14
 why: ADR-0137 bin execution ENOENTs end-to-end — the spawned bin worker's syncMirror() is its own empty in-worker store; the shell's node_modules live in PAGE memory, not a shared OPFS realm, so node-modules-bin-execution's "read the install realm's OPFS VFS" next-step rests on a false premise (ADR-0135: no page↔worker shared OPFS). Forks B vs D.
@@ -8,6 +8,16 @@ user_story: As a developer at the rifty prompt, I `npm install cowsay` then run 
 sources: [ADR-0137, ADR-0135, ADR-0080, ADR-0072, shell/node-modules-bin-execution, runtime-js/execsync-node-entry-loader]
 code: [apps/playground/src/App.tsx, apps/playground/src/glue/bin-executor.ts, apps/playground/src/workers/node-entry-bootstrap.ts, packages/runtime-js/src/builtins/node-entry.ts, packages/runtime-js/src/ipc/recursive-runner.ts]
 ---
+
+## DECIDED → D (ADR-0143, 2026-06-14)
+
+Fork settled: **D (owner-worker)**. Decision + phasing live in `docs/adr/shell/0143-bin-shell-execution-model-owner-worker-vs-sab-fs-proxy.md`. All premises below re-verified 2026-06-14 (file:line drift ≤2; the "Entry points" map holds). Three refinements from the verification pass, folded into the ADR:
+
+1. **D is two stacked irreversibles.** D's "reuse the real-vite owner" rests on a worker with no process lifecycle (ADR-0077 keep-alive hack, per-preview, killed on mode-leave; the kernel lifetime fix was rejected as IRREVERSIBLE+broad). D's real **P1 gate** is a kernel server-process model (ADR-0077 follow-up), not the transport itself.
+2. **B was framed as more novel than it is** — it extends the already-shipped ADR-0087 worker→PAGE SAB `execSync` responder with `fs.read` handlers (ADR-0080's anti-SAB lean is scoped to the file *browser*). Still: B-on-PAGE janks, and the worker→PAGE direction is throwaway under D. B stays a deletable stepping stone, not the destination.
+3. **The `execSync` entry-kind flip is NOT a safe standalone increment** (this doc's §Recommendation overstated it). Flipping `execSync` to `kind:'url'` regresses the passing COI e2e `tests/e2e/execsync-sab.spec.ts`: today it works because `kind:'source'` carries the script bytes in the spec (the child never reads a file); `kind:'url'` makes the child read from its own empty store → ENOENT. The flip lands WITH D's owner-worker. See `docs/backlog/runtime-js/execsync-node-entry-loader.md`.
+
+The analysis below is the pre-ADR record; superseding analysis lives in ADR-0143.
 
 ## Actors (the confusion lives here)
 
