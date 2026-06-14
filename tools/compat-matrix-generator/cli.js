@@ -139,6 +139,11 @@ const matrices = [
       ['Missing port dispatch', '✅', 'Returns 502 through registry dispatch'],
       ['`http.get` loopback', '✅', 'Client request to own registered port'],
       ['Streaming responses', '✅', 'SSE chunks, long-poll delay, one chunk per `write()`'],
+      [
+        'SSE over preview bridge',
+        '⚠️',
+        'Requires transferable `ReadableStream`; no-transfer fallback throws `NotImplementedError` instead of hanging',
+      ],
       ['Header reassignment / status codes', '✅', 'Pinned by parity cases'],
       [
         '`https` module surface',
@@ -154,9 +159,11 @@ const matrices = [
       '`tests/conformance/builtins/https.test.ts`',
       '`tools/node-parity-runner/cases/http/*.case.ts`',
       '`tools/node-parity-runner/cases/http2/surface.case.ts`',
+      '`packages/service-worker/src/body-transport.test.ts`',
     ],
     limitations: [
       'Networking is browser-local: servers bind a rifty port registry and preview dispatch, not native sockets.',
+      'SSE preview delivery depends on browser `ReadableStream` transfer over `postMessage`; old realms fail loud rather than silently buffering forever.',
       '`node:https` cannot promise real TLS egress inside the local runtime without host integration.',
     ],
   },

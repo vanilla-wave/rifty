@@ -33,7 +33,9 @@ otherwise routing falls back to the historical first controlled window bridge.
 Safari ≥ 16.4) or drain it into a `Uint8Array` first (older Safari, some
 Workers). `canTransferReadableStream()` is the runtime probe; the result is
 cached after the first call. The protocol-version stamp is added to the
-packed message envelope.
+packed message envelope. If transfer is unavailable, `text/event-stream`
+responses throw `NotImplementedError('service-worker.preview.sse-drain-fallback')`
+instead of buffering an unending SSE body forever.
 
 ### Owner binding / resolver
 
