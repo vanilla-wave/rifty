@@ -58,25 +58,51 @@ export interface Preset {
 
 const PROJECT_FILES_SOURCE = `const projectUrl = new URL('src/project.json?import', window.location.href).href;
 const summaryUrl = new URL('src/project-summary.js', window.location.href).href;
-const { describeProject, formatFileList } = await import(/* @vite-ignore */ summaryUrl);
-const project = (await import(/* @vite-ignore */ projectUrl)).default;
+let renderVersion = 0;
 
-const style = document.createElement('style');
-style.textContent = 'body{margin:0;background:#101218;color:rgba(255,255,255,.85);font-family:${MONO_FONT_STACK}}.workspace-shell{max-width:720px;padding:28px}.eyebrow{color:#c7f05a;font:600 10px/12px ${MONO_FONT_STACK};letter-spacing:.2em;margin:0 0 10px;text-transform:uppercase}h1{font:600 26px/32px ${MONO_FONT_STACK};letter-spacing:0;color:rgba(255,255,255,.92);margin:0 0 8px}h2{font:600 15px/20px ${MONO_FONT_STACK};color:rgba(255,255,255,.85);margin:24px 0 0}.lede{color:rgba(255,255,255,.55);font-size:13px;line-height:19px;max-width:520px;margin:0}.file-list{display:grid;gap:8px;list-style:none;padding:0;margin:14px 0 0}.file-list li{border:1px solid rgba(255,255,255,.09);border-radius:8px;display:grid;gap:2px;padding:11px 13px}.file-list span{color:rgba(255,255,255,.5);font-size:11.5px;line-height:16px}code{color:#dff7ad;font:400 12px/16px ${MONO_FONT_STACK}}';
-document.head.append(style);
+function freshUrl(url) {
+  if (!import.meta.hot) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return url + separator + 't=' + Date.now() + '-' + renderVersion;
+}
 
-const app = document.getElementById('app');
-const fileItems = formatFileList(project.files)
-  .map((file) => '<li><code>' + file.path + '</code><span>' + file.reason + '</span></li>')
-  .join('');
+function ensureStyle() {
+  const styleId = 'rifty-project-files-style';
+  const style = document.getElementById(styleId) ?? document.createElement('style');
+  style.id = styleId;
+  style.textContent = 'body{margin:0;background:#101218;color:rgba(255,255,255,.85);font-family:${MONO_FONT_STACK}}.workspace-shell{max-width:720px;padding:28px}.eyebrow{color:#c7f05a;font:600 10px/12px ${MONO_FONT_STACK};letter-spacing:.2em;margin:0 0 10px;text-transform:uppercase}h1{font:600 26px/32px ${MONO_FONT_STACK};letter-spacing:0;color:rgba(255,255,255,.92);margin:0 0 8px}h2{font:600 15px/20px ${MONO_FONT_STACK};color:rgba(255,255,255,.85);margin:24px 0 0}.lede{color:rgba(255,255,255,.55);font-size:13px;line-height:19px;max-width:520px;margin:0}.file-list{display:grid;gap:8px;list-style:none;padding:0;margin:14px 0 0}.file-list li{border:1px solid rgba(255,255,255,.09);border-radius:8px;display:grid;gap:2px;padding:11px 13px}.file-list span{color:rgba(255,255,255,.5);font-size:11.5px;line-height:16px}code{color:#dff7ad;font:400 12px/16px ${MONO_FONT_STACK}}';
+  document.head.append(style);
+}
 
-app.innerHTML = '<main class="workspace-shell">'
-  + '<p class="eyebrow">Project files</p>'
-  + '<h1>' + project.name + '</h1>'
-  + '<p class="lede">' + describeProject(project) + '</p>'
-  + '<section><h2>Open these in Explorer</h2>'
-  + '<ul class="file-list">' + fileItems + '</ul></section>'
-  + '</main>';
+export async function render() {
+  renderVersion += 1;
+  const { describeProject, formatFileList } = await import(/* @vite-ignore */ freshUrl(summaryUrl));
+  const project = (await import(/* @vite-ignore */ freshUrl(projectUrl))).default;
+  const app = document.getElementById('app');
+  if (!app) throw new Error('Missing #app root');
+
+  ensureStyle();
+  const fileItems = formatFileList(project.files)
+    .map((file) => '<li><code>' + file.path + '</code><span>' + file.reason + '</span></li>')
+    .join('');
+
+  app.innerHTML = '<main class="workspace-shell">'
+    + '<p class="eyebrow">Project files</p>'
+    + '<h1>' + project.name + '</h1>'
+    + '<p class="lede">' + describeProject(project) + '</p>'
+    + '<section><h2>Open these in Explorer</h2>'
+    + '<ul class="file-list">' + fileItems + '</ul></section>'
+    + '</main>';
+}
+
+await render();
+
+if (import.meta.hot) {
+  import.meta.hot.accept();
+  import.meta.hot.accept(['./project-summary.js', './project.json'], () => {
+    void render();
+  });
+}
 `;
 
 const PROJECT_SUMMARY_SOURCE = `export function describeProject(project) {
@@ -185,20 +211,46 @@ code {
 `;
 
 const NODE_WORKER_SOURCE = `const notesUrl = new URL('src/runtime-notes.js', window.location.href).href;
-const { runtimeNotes, renderRuntimeNotes } = await import(/* @vite-ignore */ notesUrl);
+let renderVersion = 0;
 
-const style = document.createElement('style');
-style.textContent = 'body{margin:0;background:#101218;color:rgba(255,255,255,.85);font-family:${MONO_FONT_STACK}}.workspace-shell{max-width:720px;padding:28px}.eyebrow{color:#c7f05a;font:600 10px/12px ${MONO_FONT_STACK};letter-spacing:.2em;margin:0 0 10px;text-transform:uppercase}h1{font:600 26px/32px ${MONO_FONT_STACK};letter-spacing:0;color:rgba(255,255,255,.92);margin:0 0 8px}h2{font:600 15px/20px ${MONO_FONT_STACK};color:rgba(255,255,255,.85);margin:24px 0 0}.lede{color:rgba(255,255,255,.55);font-size:13px;line-height:19px;max-width:520px;margin:0}.file-list{display:grid;gap:8px;list-style:none;padding:0;margin:14px 0 0}.file-list li{border:1px solid rgba(255,255,255,.09);border-radius:8px;display:grid;gap:2px;padding:11px 13px}.file-list span{color:rgba(255,255,255,.5);font-size:11.5px;line-height:16px}code{color:#dff7ad;font:400 12px/16px ${MONO_FONT_STACK}}';
-document.head.append(style);
+function freshUrl(url) {
+  if (!import.meta.hot) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return url + separator + 't=' + Date.now() + '-' + renderVersion;
+}
 
-const app = document.getElementById('app');
-app.innerHTML = '<main class="workspace-shell">'
-  + '<p class="eyebrow">Node-shaped project</p>'
-  + '<h1>Worker runtime map</h1>'
-  + '<p class="lede">This example points at the Node-style pieces Rifty uses while the preview stays an ordinary browser render.</p>'
-  + '<section><h2>What to inspect</h2>'
-  + '<ul class="file-list">' + renderRuntimeNotes(runtimeNotes) + '</ul></section>'
-  + '</main>';
+function ensureStyle() {
+  const styleId = 'rifty-node-worker-style';
+  const style = document.getElementById(styleId) ?? document.createElement('style');
+  style.id = styleId;
+  style.textContent = 'body{margin:0;background:#101218;color:rgba(255,255,255,.85);font-family:${MONO_FONT_STACK}}.workspace-shell{max-width:720px;padding:28px}.eyebrow{color:#c7f05a;font:600 10px/12px ${MONO_FONT_STACK};letter-spacing:.2em;margin:0 0 10px;text-transform:uppercase}h1{font:600 26px/32px ${MONO_FONT_STACK};letter-spacing:0;color:rgba(255,255,255,.92);margin:0 0 8px}h2{font:600 15px/20px ${MONO_FONT_STACK};color:rgba(255,255,255,.85);margin:24px 0 0}.lede{color:rgba(255,255,255,.55);font-size:13px;line-height:19px;max-width:520px;margin:0}.file-list{display:grid;gap:8px;list-style:none;padding:0;margin:14px 0 0}.file-list li{border:1px solid rgba(255,255,255,.09);border-radius:8px;display:grid;gap:2px;padding:11px 13px}.file-list span{color:rgba(255,255,255,.5);font-size:11.5px;line-height:16px}code{color:#dff7ad;font:400 12px/16px ${MONO_FONT_STACK}}';
+  document.head.append(style);
+}
+
+export async function render() {
+  renderVersion += 1;
+  const { runtimeNotes, renderRuntimeNotes } = await import(/* @vite-ignore */ freshUrl(notesUrl));
+  const app = document.getElementById('app');
+  if (!app) throw new Error('Missing #app root');
+
+  ensureStyle();
+  app.innerHTML = '<main class="workspace-shell">'
+    + '<p class="eyebrow">Node-shaped project</p>'
+    + '<h1>Worker runtime map</h1>'
+    + '<p class="lede">This example points at the Node-style pieces Rifty uses while the preview stays an ordinary browser render.</p>'
+    + '<section><h2>What to inspect</h2>'
+    + '<ul class="file-list">' + renderRuntimeNotes(runtimeNotes) + '</ul></section>'
+    + '</main>';
+}
+
+await render();
+
+if (import.meta.hot) {
+  import.meta.hot.accept();
+  import.meta.hot.accept('./runtime-notes.js', () => {
+    void render();
+  });
+}
 `;
 
 const RUNTIME_NOTES_SOURCE = `export const runtimeNotes = [
@@ -254,16 +306,27 @@ const REAL_VITE_SOURCE = `// Real npm project mode builds the project from scrat
 //
 // This is your app entry, served by the dev server at /src/main.js.
 
-document.getElementById('app').innerHTML =
-  '<h1>A real npm project, in your browser.</h1>' +
-  '<p>This page is served by an actual dev server - its packages installed from' +
-  ' npm, running in a Worker, previewed through the rifty SW bridge.</p>';
+export function render() {
+  const app = document.getElementById('app');
+  if (!app) throw new Error('Missing #app root');
 
-document.body.style.margin = '0';
-document.body.style.padding = '3rem';
-document.body.style.background = '#101218';
-document.body.style.color = '#e6e6e6';
-document.body.style.fontFamily = ${JSON.stringify(MONO_FONT_STACK)};
+  app.innerHTML =
+    '<h1>A real npm project, in your browser.</h1>' +
+    '<p>This page is served by an actual dev server - its packages installed from' +
+    ' npm, running in a Worker, previewed through the rifty SW bridge.</p>';
+
+  document.body.style.margin = '0';
+  document.body.style.padding = '3rem';
+  document.body.style.background = '#101218';
+  document.body.style.color = '#e6e6e6';
+  document.body.style.fontFamily = ${JSON.stringify(MONO_FONT_STACK)};
+}
+
+render();
+
+if (import.meta.hot) {
+  import.meta.hot.accept();
+}
 `;
 
 const PROJECT_FILES_PRESET: Preset = {

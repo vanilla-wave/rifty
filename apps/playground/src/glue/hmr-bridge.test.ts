@@ -15,24 +15,27 @@
  * `BridgedWebSocket` client suffices to prove the wire format the inlined
  * iframe script speaks (both ride the same `BroadcastChannel`).
  */
+import { PREVIEW_LOCAL_HOST } from '@riftydev/io';
 import { BridgedWebSocket, channelNameFor } from '@riftydev/net';
 import { describe, expect, it } from 'vitest';
 import {
   createHmrBridgeToken,
   createHmrBridgeVitePlugin,
+  createViteHmrBridgeChannel,
   hmrBridgeUrl,
   hmrClientScript,
   setupHmrBridge,
+  viteHmrClientScript,
 } from './hmr-bridge.ts';
 
 describe('hmrBridgeUrl', () => {
   it('returns a deterministic ws URL keyed by port', () => {
-    expect(hmrBridgeUrl(3000)).toBe('ws://preview.local:3000/__hmr');
-    expect(hmrBridgeUrl(5174)).toBe('ws://preview.local:5174/__hmr');
+    expect(hmrBridgeUrl(3000)).toBe(`ws://${PREVIEW_LOCAL_HOST}:3000/__hmr`);
+    expect(hmrBridgeUrl(5174)).toBe(`ws://${PREVIEW_LOCAL_HOST}:5174/__hmr`);
   });
 
   it('scopes the ws URL by nonce when supplied', () => {
-    expect(hmrBridgeUrl(3000, 'nonce-1')).toBe('ws://preview.local:3000/__hmr/nonce-1');
+    expect(hmrBridgeUrl(3000, 'nonce-1')).toBe(`ws://${PREVIEW_LOCAL_HOST}:3000/__hmr/nonce-1`);
     expect(channelNameFor(hmrBridgeUrl(3000, 'nonce-1'))).not.toBe(
       channelNameFor(hmrBridgeUrl(3000)),
     );
@@ -109,18 +112,91 @@ describe('setupHmrBridge', () => {
   });
 });
 
+describe('createViteHmrBridgeChannel', () => {
+  it('speaks Vite HMR payloads over the cross-realm bridge', async () => {
+    const channel = createViteHmrBridgeChannel({ port: 3150, token: 'vite' });
+    channel.listen();
+    try {
+      const client = new BridgedWebSocket(hmrBridgeUrl(3150, 'vite'));
+      const seen: string[] = [];
+      client.addEventListener('message', (e) => seen.push(String((e as MessageEvent).data)));
+      await new Promise<void>((r) => client.addEventListener('open', () => r(), { once: true }));
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(seen.map((payload) => JSON.parse(payload) as { type?: string })).toContainEqual({
+        type: 'connected',
+      });
+
+      channel.send({
+        type: 'update',
+        updates: [
+          {
+            type: 'js-update',
+            path: '/src/main.js',
+            acceptedPath: '/src/main.js',
+            timestamp: 1,
+            explicitImportRequired: false,
+            isWithinCircularImport: false,
+          },
+        ],
+      });
+      await new Promise((r) => setTimeout(r, 20));
+
+      const update = seen
+        .map((payload) => JSON.parse(payload) as { type?: string; updates?: unknown[] })
+        .find((payload) => payload.type === 'update');
+      expect(update?.updates).toHaveLength(1);
+      client.close();
+    } finally {
+      await channel.close();
+    }
+  });
+
+  it('emits Vite custom events sent by the iframe client', async () => {
+    const channel = createViteHmrBridgeChannel({ port: 3151, token: 'vite' });
+    const invalidations: unknown[] = [];
+    channel.on('vite:invalidate', (data) => invalidations.push(data));
+    channel.listen();
+    try {
+      const client = new BridgedWebSocket(hmrBridgeUrl(3151, 'vite'));
+      await new Promise<void>((r) => client.addEventListener('open', () => r(), { once: true }));
+      client.send(
+        JSON.stringify({
+          type: 'custom',
+          event: 'vite:invalidate',
+          data: { path: '/src/main.js', message: 'accept boundary declined' },
+        }),
+      );
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(invalidations).toEqual([
+        { path: '/src/main.js', message: 'accept boundary declined' },
+      ]);
+      client.close();
+    } finally {
+      await channel.close();
+    }
+  });
+});
+
 describe('createHmrBridgeVitePlugin', () => {
-  it('injects the HMR client script before </body>', () => {
+  it('injects the Vite HMR transport before @vite/client runs', () => {
     const plugin = createHmrBridgeVitePlugin({ port: 3200, token: 'plugin-token' });
     const html = '<!doctype html><html><body><div id="app"></div></body></html>';
     const transformed = plugin.transformIndexHtml(html);
-    expect(transformed).toContain('data-rifty-hmr-bridge');
-    expect(transformed).toContain(channelNameFor(hmrBridgeUrl(3200, 'plugin-token')));
-    // Body content preserved.
-    expect(transformed).toContain('<div id="app"></div>');
-    // Script lands inside the body, just before </body>.
-    expect(transformed.indexOf('data-rifty-hmr-bridge')).toBeLessThan(
-      transformed.indexOf('</body>'),
+    if (typeof transformed === 'string' || Array.isArray(transformed)) {
+      throw new Error('expected a Vite tag transform object');
+    }
+    expect(transformed.html).toBe(html);
+    expect(transformed.tags).toEqual([
+      expect.objectContaining({
+        tag: 'script',
+        injectTo: 'head-prepend',
+        attrs: expect.objectContaining({ 'data-rifty-hmr-bridge': '' }),
+      }),
+    ]);
+    expect(String(transformed.tags?.[0]?.children)).toContain(
+      channelNameFor(hmrBridgeUrl(3200, 'plugin-token')),
     );
   });
 
@@ -128,18 +204,21 @@ describe('createHmrBridgeVitePlugin', () => {
     const plugin = createHmrBridgeVitePlugin({ port: 3201 });
     const html = '<html><body></body></html>';
     const once = plugin.transformIndexHtml(html);
-    const twice = plugin.transformIndexHtml(once);
-    expect(twice).toBe(once);
-    // Single occurrence of the marker attribute.
-    expect(twice.match(/data-rifty-hmr-bridge/g)?.length).toBe(1);
+    const renderedOnce =
+      typeof once === 'string' || Array.isArray(once)
+        ? String(once)
+        : `${once.html}<script data-rifty-hmr-bridge>${once.tags?.[0]?.children}</script>`;
+    const twice = plugin.transformIndexHtml(renderedOnce);
+    expect(twice).toBe(renderedOnce);
   });
 
-  it('appends the script when no </body> exists (fragment HTML)', () => {
+  it('does not ship the reload-only client for real Vite', () => {
     const plugin = createHmrBridgeVitePlugin({ port: 3202 });
-    const fragment = '<div id="app"></div>';
-    const transformed = plugin.transformIndexHtml(fragment);
-    expect(transformed.startsWith('<div id="app"></div>')).toBe(true);
-    expect(transformed).toContain('data-rifty-hmr-bridge');
+    const transformed = plugin.transformIndexHtml('<div id="app"></div>');
+    if (typeof transformed === 'string' || Array.isArray(transformed)) {
+      throw new Error('expected a Vite tag transform object');
+    }
+    expect(String(transformed.tags?.[0]?.children)).not.toContain('location.reload()');
   });
 });
 
@@ -161,5 +240,17 @@ describe('hmrClientScript', () => {
     const script = hmrClientScript(3302);
     expect(script).not.toContain("f.type === 'broadcast'");
     expect(script).toContain("f.type === 'msg' && open");
+  });
+});
+
+describe('viteHmrClientScript', () => {
+  it('produces valid JS that installs a targeted vite-hmr WebSocket shim', () => {
+    const script = viteHmrClientScript(3303, 'vite-token');
+    expect(() => new Function(script)).not.toThrow();
+    expect(script).toContain('window.WebSocket');
+    expect(script).toContain("'vite-hmr'");
+    expect(script).toContain('this.OPEN = RiftyViteHmrWebSocket.OPEN');
+    expect(script).toContain(channelNameFor(hmrBridgeUrl(3303, 'vite-token')));
+    expect(script).not.toContain('location.reload()');
   });
 });

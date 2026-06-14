@@ -1,11 +1,12 @@
 /**
- * M10 — HMR through the cross-realm bridge (ADR-0017 phase 1 acceptance).
+ * M10 — real Vite HMR through the cross-realm bridge.
  *
  * What this verifies end-to-end (when enabled):
  *   1. The playground enters Real Vite mode.
  *   2. The preview iframe loads.
- *   3. An edit to `src/main.js` propagates through `BridgedWebSocketServer` →
- *      iframe HMR client (via `BroadcastChannel`) → iframe reload signal.
+ *   3. An HMR-able edit to `src/main.js` propagates through Vite's real HMR
+ *      channel over `BridgedWebSocketServer` and patches the module without a
+ *      full iframe reload.
  *
  * Why this spec is skipped by default at agent-runtime time:
  *   - Real Vite mode bootstraps by installing Vite from the npm registry
@@ -15,7 +16,7 @@
  *     suite. The unit test in
  *     `apps/playground/src/glue/hmr-bridge.test.ts` already exercises
  *     the wiring contract (server accepts iframe-shaped clients, broadcasts
- *     reach them, `transformIndexHtml` injects the client script
+ *     reach them, `transformIndexHtml` injects the Vite transport shim
  *     idempotently).
  *   - Set `RIFTY_E2E_HMR=1` to opt-in locally once you've warmed the
  *     install cache and want to validate the full roundtrip against a real
@@ -32,21 +33,21 @@
  *      iframe; in its Console run
  *         document.querySelector('script[data-rifty-hmr-bridge]') !== null
  *      and confirm it is `true`. That proves
- *      {@link createHmrBridgeVitePlugin} injected the inline HMR client.
+ *      {@link createHmrBridgeVitePlugin} injected the inline Vite transport.
  *   5. Edit the editor pane to change the body text. Save (Cmd/Ctrl-S in
  *      the editor or wait the implicit auto-update).
- *   6. The iframe should reload within the file-watcher poll interval; the
- *      terminal logs no errors.
+ *   6. The iframe should update within the file-watcher poll interval without
+ *      losing `globalThis` state; the terminal logs no errors.
  */
 import { expect, test } from '@playwright/test';
 
 const enabled = process.env.RIFTY_E2E_HMR === '1';
 const HMR_EVENT_KEY = '__rifty_e2e_hmr';
 
-test.describe('M10 — HMR over cross-realm bridge (ADR-0017 phase 1)', () => {
+test.describe('M10 — real Vite HMR over cross-realm bridge', () => {
   test.skip(!enabled, 'set RIFTY_E2E_HMR=1 to run; bootstraps a real Vite install (~20s)');
 
-  test('preview iframe receives HMR update when src/main.js changes', async ({ page }) => {
+  test('preview iframe patches src/main.js without a full reload', async ({ page }) => {
     test.setTimeout(120_000);
     await page.goto('/');
 
@@ -61,6 +62,14 @@ test.describe('M10 — HMR over cross-realm bridge (ADR-0017 phase 1)', () => {
     });
     await page.evaluate((key) => localStorage.removeItem(key), HMR_EVENT_KEY);
     await previewFrame.locator('body').evaluate((_, key) => {
+      const marker = `survive-${Date.now()}`;
+      (globalThis as typeof globalThis & { __riftyHmrSentinel?: string }).__riftyHmrSentinel =
+        marker;
+      localStorage.setItem(`${key}:sentinel`, marker);
+      localStorage.removeItem(`${key}:beforeunload`);
+      globalThis.addEventListener('beforeunload', () => {
+        localStorage.setItem(`${key}:beforeunload`, '1');
+      });
       globalThis.addEventListener('rifty:hmr:message', (event: Event) => {
         const detail = (event as CustomEvent<unknown>).detail;
         localStorage.setItem(key, JSON.stringify(detail));
@@ -114,11 +123,27 @@ test.describe('M10 — HMR over cross-realm bridge (ADR-0017 phase 1)', () => {
       .toContain('/src/main.js');
     const hmrPayload = JSON.parse(
       (await page.evaluate((key) => localStorage.getItem(key), HMR_EVENT_KEY)) ?? 'null',
-    ) as { type?: unknown; path?: unknown };
-    expect(hmrPayload).toMatchObject({ type: 'update', path: '/src/main.js' });
+    ) as { type?: unknown; updates?: Array<{ path?: unknown; acceptedPath?: unknown }> };
+    expect(hmrPayload).toMatchObject({
+      type: 'update',
+      updates: [expect.objectContaining({ path: '/src/main.js', acceptedPath: '/src/main.js' })],
+    });
 
-    // The iframe reloads as part of the HMR update path; wait for the new
-    // body content.
     await expect(previewFrame.locator('#app')).toHaveText(marker, { timeout: 30_000 });
+    await expect
+      .poll(
+        () =>
+          previewFrame.locator('body').evaluate(() => {
+            const global = globalThis as typeof globalThis & { __riftyHmrSentinel?: string };
+            return global.__riftyHmrSentinel;
+          }),
+        { timeout: 10_000 },
+      )
+      .toBe(await page.evaluate((key) => localStorage.getItem(`${key}:sentinel`), HMR_EVENT_KEY));
+    await expect
+      .poll(() =>
+        page.evaluate((key) => localStorage.getItem(`${key}:beforeunload`), HMR_EVENT_KEY),
+      )
+      .toBeNull();
   });
 });

@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@rifty-examples/vite-like-dev": "workspace:*",
+    "@riftydev/io": "workspace:*",
     "@riftydev/kernel": "workspace:*",
     "@riftydev/net": "workspace:*",
     "@riftydev/npm-client": "workspace:*",

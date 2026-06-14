@@ -111,6 +111,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0130 | Node-server project template runtime (Express + node:sqlite demo) |
 | 0135 | Sandbox setup kinds: instant vs from-scratch |
 | 0140 | JetBrains Mono throughout playground |
+| 0145 | Real Vite module HMR over server.hmr.channels |
 
 ### toolchain-build
 

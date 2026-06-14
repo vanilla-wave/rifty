@@ -32,6 +32,22 @@ describe('playground presets', () => {
     expect(CATEGORY_ORDER).toEqual(['Files + modules', 'Live preview']);
   });
 
+  it('keeps browser Vite presets as HMR accept boundaries', () => {
+    const browserVitePresets = PRESETS.filter(
+      (preset) => preset.mode === 'real-vite' && (preset.templateId ?? 'vite') === 'vite',
+    );
+
+    expect(browserVitePresets.map((preset) => preset.id)).toEqual([
+      'project-files',
+      'node-worker',
+      'real-vite',
+    ]);
+    for (const preset of browserVitePresets) {
+      expect(preset.source).toContain('import.meta.hot.accept');
+      expect(preset.source).not.toContain('location.reload');
+    }
+  });
+
   // Revised pin (node-server template ADR): the honesty invariant — preset
   // prose must not teach a boot line its terminal does not run — now scoped
   // per runtime instead of a global 'npm run dev' ban.
