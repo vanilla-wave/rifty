@@ -4,7 +4,20 @@
 
 ### Changed
 
-- **`node:vm` CUTOVER — QuickJS real realm is now the DEFAULT engine (T17, ADR-0138).**
+- **`node:vm` dual-engine cutover (ADR-0142, supersedes ADR-0138).** `node:vm` sandbox APIs
+  (`runInNewContext`/`runInContext`/`Script.*`) now run in a REAL QuickJS-WASM realm by
+  DEFAULT; the host-realm `with(proxy)+eval(AST-rewrite)` engine is a LOUD opt-in (`vmEngine`
+  host option / `__RIFTY_VM_ENGINE`, one-time stderr warning + `vm.engine.rewrite-active`
+  telemetry). `runInThisContext` stays host-realm `(0,eval)` (it IS the worker realm —
+  Node-correct). The real realm closes the ADR-0138 direct-`eval` leak by construction and
+  gives Node-correct cross-realm identity + real global-object semantics (a behavior change vs
+  the old rewrite, which is the V8-correct floor). Cost: new deps
+  (`@jitl/quickjs-wasmfile-release-sync` + `quickjs-emscripten-core`, ~503 KB env-config
+  `.wasm`) + ~6× eval + per-property membrane crossing. Four ES2023≠V8 residuals documented in
+  `docs/public/compat/modules.md`. The per-task entries below (T5–T19) are the implementation
+  log; ADR-0142 is the decision record. This consolidates and ratifies that work.
+
+- **`node:vm` CUTOVER — QuickJS real realm is now the DEFAULT engine (T17, ADR-0142).**
   `resolveVmEngineName()` defaults to `'quickjs'`; the hardened-rewrite engine is now a
   LOUD opt-in (`__RIFTY_VM_ENGINE='rewrite'` / `vmEngine` host option → one-time stderr
   warning + `vm.engine.rewrite-active` telemetry). BEHAVIOR CHANGE: sandbox semantics are
@@ -74,7 +87,7 @@
   not `RuntimeController`, so a panel needs telemetry bridged through the kernel first).
 
 - **`node:vm` divergence telemetry wiring + `vmEngine` host option + loud opt-in (T15,
-  ADR-0138).** Five wirings: (1) the QuickJS preload (`ensureVmEngineReady`) joins the
+  ADR-0142).** Five wirings: (1) the QuickJS preload (`ensureVmEngineReady`) joins the
   worker `boot` promise so a synchronous `vm.*` sandbox call in an early eval always
   finds the engine ready (preload failure → `[rifty]` stderr line + continue on the
   rewrite engine). (2) The worker error boundary calls `captureNotImplemented(err)` —
@@ -103,7 +116,7 @@
   T15 wires boundary capture (`error.name === 'NotImplementedError'`) + a `diagnostic`
   WorkerMessage + the rewrite-engine opt-in warning.
 
-- **`node:vm` QuickJS engine — real global-object fidelity (T13, ADR-0138).** The
+- **`node:vm` QuickJS engine — real global-object fidelity (T13, ADR-0142).** The
   QuickJS real realm reproduces a real vm global object's attribute/lexical/strict
   semantics that the rewrite engine (a `with(proxy)+eval` over a plain property bag)
   could not — mostly BY CONSTRUCTION (real intrinsics, strict mode, lexical scope,
@@ -128,7 +141,7 @@
   ES2023-vs-V8 divergence (T19 triage; the conformance test pins both).
 
 - **`node:vm` QuickJS engine — descriptor fidelity + frozen + prototype/has
-  coherence (T12, ADR-0138).** The OUT object wrapper now reports the GUEST
+  coherence (T12, ADR-0142).** The OUT object wrapper now reports the GUEST
   object's REAL descriptors and a coherent prototype/`has` view, and writes
   host→guest mutations through where Node allows (parity `vm/quickjs-descriptors`,
   diffed byte-for-byte against real Node). `getOwnPropertyDescriptor` reconstructs
@@ -154,7 +167,7 @@
   like `obj.hasOwnProperty('x')`). New retained handle: the reflect closure
   (infra-tracked, disposed at teardown — GC test green under `--expose-gc`).
 - **`node:vm` QuickJS engine — cross-realm Error marshalling + direct-eval
-  isolation (T11, ADR-0138).** A guest throw now crosses the membrane as a host
+  isolation (T11, ADR-0142).** A guest throw now crosses the membrane as a host
   THROWABLE matching Node's cross-realm shape (parity `vm/quickjs-errors`):
   `instanceof Error`/`TypeError` FALSE but `.constructor.name`/`.name`/`.message`/
   `.stack`/`toString()` faithful, and the value is genuinely catchable/rethrowable.
@@ -168,10 +181,10 @@
   error INTO the guest as a real guest exception of the matching ctor (so guest
   `try/catch` sees the right `e.constructor.name`/`e.message`). **Direct `eval`**
   inside the guest stays in the guest realm (parity `vm/quickjs-direct-eval`,
-  `typeof globalThis.leaked === 'undefined'`) — falsifies the ADR-0138 premise that
+  `typeof globalThis.leaked === 'undefined'`) — falsifies the ADR-0142 premise that
   direct eval leaks to the host (T20 supersedes the ADR).
 - **`node:vm` QuickJS engine — exotic mirroring (Date/RegExp/TypedArray) + fn
-  name/length + symbols (T10, ADR-0138).** Exotics now cross the membrane both ways
+  name/length + symbols (T10, ADR-0142).** Exotics now cross the membrane both ways
   matching Node's cross-realm behavior (parity `vm/quickjs-exotic`): `instanceof
   <ctor>` FALSE but correct brand (`Object.prototype.toString`), working methods
   (`getTime`/`toISOString`/`test`/`source`/`flags`), and faithful data
@@ -194,7 +207,7 @@
   GC-driven teardown). The since-implemented symbol loud boundary is removed; the
   leak-safe-construction regression now triggers via a throwing element getter.
 - **`node:vm` QuickJS engine — bidirectional callable membrane + handle lifetime
-  (T9, ADR-0138).** Host functions seeded into a context are now callable from
+  (T9, ADR-0142).** Host functions seeded into a context are now callable from
   guest code: `marshalHostToGuest` of a host fn builds a `ctx.newFunction` whose
   impl marshals the guest arg handles OUT (`wrapGuestToHost` — a guest array arg
   is seen in the host with the guest prototype, so `x instanceof hostArray` is
@@ -225,7 +238,7 @@
   dispose-while-alive abort.
 
 - **`node:vm` QuickJS engine — guest→host write-back / reconciliation (T8,
-  ADR-0138, Option A).** Guest writes are now reconciled to the host
+  ADR-0142, Option A).** Guest writes are now reconciled to the host
   contextObject. vm runs are SYNCHRONOUS (the host can't observe the sandbox
   mid-run), so a post-run sweep + per-run reseed is observationally equivalent to
   a live contextObject for sync code — chosen over a live inbound Proxy (Option B:
@@ -263,7 +276,7 @@
 ### Fixed
 
 - **`node:vm` QuickJS membrane — leak-safe wrapper construction (T9 review,
-  ADR-0138).** `#wrapArray` DUP'd the guest handle, then EAGERLY marshalled every
+  ADR-0142).** `#wrapArray` DUP'd the guest handle, then EAGERLY marshalled every
   element into the host target, and only THEN tracked the wrapper. A guest array
   holding a value that throws mid-marshal (e.g. a `Symbol` → the loud T10
   boundary) left the dup'd handle UNTRACKED: the lifetime refcount stayed 0, so a
@@ -276,7 +289,7 @@
   throws — so a throw never leaves an untracked live handle and disposal is clean.
   Regression: `quickjs-lifetime.test.ts` (throwing OUT-marshal of `[Symbol]` /
   `[[Symbol]]` → no leaked handle, `markPending` disposes without abort).
-- **`node:vm` QuickJS engine — sweep on throw (T8 review, ADR-0138).** A run that
+- **`node:vm` QuickJS engine — sweep on throw (T8 review, ADR-0142).** A run that
   THREW skipped the write-back sweep (it sat after `unwrapResult`, which throws on
   a guest error), so pre-throw host writes were lost — and the next run's
   reseed-from-host then clobbered any deep pre-throw mutation entirely. But Node's
@@ -293,7 +306,7 @@
   (Node-captured: pre-throw new globals + deep mutation visible to host, next run
   reads the reconciled state).
 - **`node:vm` QuickJS membrane — unforgeable host-origin tracking (T7 review,
-  ADR-0138).** The host→guest round-trip identity (#14) previously tagged each
+  ADR-0142).** The host→guest round-trip identity (#14) previously tagged each
   inbound seed with a guest-visible, guest-WRITABLE marker symbol
   (`Symbol.for('rifty.vm.hostOrigin')`) carrying a predictable sequential id, and
   the OUT path read that property to recover the original host object. Guest code
@@ -325,7 +338,7 @@
   spawns this bootstrap instead of a raw `kind:'source'` worker, so a spawned
   script with a shebang / relative import runs via the loader.
 - **`node:vm` QuickJS engine — host→guest membrane: live contextObject read path
-  (T7, ADR-0138).** `Membrane.seedContext` seeds each own enumerable key of the
+  (T7, ADR-0142).** `Membrane.seedContext` seeds each own enumerable key of the
   live contextObject INTO the guest realm before any run; the engine seeds at
   context creation. Primitives by value; host objects/arrays via the extended
   `marshalHostToGuest` as a host-origin guest SNAPSHOT — a real guest
@@ -343,7 +356,7 @@
   per-call dups disposed; never `ctx.dispose()` on the run path. Parity:
   `cases/vm/quickjs-sandbox-read.case.ts`.
 - **`node:vm` QuickJS engine — guest→host membrane for OBJECT/ARRAY/FUNCTION
-  completion values + identity cache (T6, ADR-0138).** New `Membrane`
+  completion values + identity cache (T6, ADR-0142).** New `Membrane`
   (`vm/membrane.ts`), one per `QuickJSContext`. Cross-realm-faithful host
   wrappers (Node oracle): ARRAY → `Proxy(realHostArray,{getPrototypeOf:()=>null})`
   (`Array.isArray` TRUE, `instanceof Array` FALSE, recursively-marshalled
@@ -360,7 +373,7 @@
   T9). Engine now routes object/function/array through the membrane instead of
   throwing. Parity: `cases/vm/quickjs-returns-objects.case.ts`,
   `cases/vm/quickjs-returns-identity.case.ts`.
-- **`node:vm` QuickJS engine — primitive completion values (T5, ADR-0138).**
+- **`node:vm` QuickJS engine — primitive completion values (T5, ADR-0142).**
   New `quickjsEngine: VmEngine` (`vm/quickjs-engine.ts`): one persistent
   `QuickJSContext` per `vm.Context` (WeakMap, reused across runs for later
   cross-run persistence), `evalCode` + `unwrapResult`, marshalling guest
@@ -378,7 +391,7 @@
   (the AST-rewrite sandbox, now `rewriteEngine: VmEngine`, Script memoisation moved
   to a per-`CompiledScript` WeakMap), `engine-config.ts` (selector — default stays
   `rewrite`; `__RIFTY_VM_ENGINE` override), `index.ts` (public dispatcher).
-  `runInThisContext` stays host-realm. Prep for the QuickJS engine (ADR-0138 / T17).
+  `runInThisContext` stays host-realm. Prep for the QuickJS engine (ADR-0142 / T17).
 
 ### Fixed
 
@@ -492,7 +505,7 @@
   unbound names all land on the context. `switch` cases get a lexical scope;
   `for (var k in o)` no longer rewrites into a SyntaxError. Reads of unbound
   names stay loud (`ReferenceError`) / fall through to host globals by design.
-  The remaining `eval` divergence is recorded in ADR-0138.
+  The remaining `eval` divergence is recorded in ADR-0142.
 - **`node:vm` residual sandbox gaps closed.** Top-level function declarations are
   hoisted (callable before their text, incl. mutual recursion; a later `f = …`
   reassignment is visible), declaration statements keep Node's EMPTY completion
@@ -503,7 +516,7 @@
   known global of the context — readable as `undefined` after the run and in later
   runs — instead of leaking to the host realm afterwards. `vm.Script` memoises its
   AST rewrite (parse + rewrite once, reuse across runs). Direct `eval(...)` remains
-  a permanent divergence (ADR-0138). Closes the
+  a permanent divergence (ADR-0142). Closes the
   `runtime-js/vm-sandbox-residual-gaps` backlog item; parity
   `cases/vm/sandbox-residual-gaps.case.ts`.
 - **Source-map decoding: 1-field VLQ segments advance the running generated

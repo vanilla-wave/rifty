@@ -69,7 +69,8 @@ index is complete):
 
 (`runtime-js/vm-sandbox-residual-gaps` closed in M11: function hoisting,
 completion values, destructuring `var` patterns, and post-run persistence fixed;
-direct `eval` recorded as permanent in ADR-0138.)
+direct `eval` was recorded as permanent in ADR-0138, since SUPERSEDED by ADR-0142
+— the QuickJS real-realm default closes the eval leak by construction.)
 
 Pull public API and new-package items only with ADRs. Pull outward deploy smoke
 only after explicit approval.

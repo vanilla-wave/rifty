@@ -5,7 +5,7 @@ title: dev-only playground divergence/NotImplemented telemetry panel (sorted hit
 created: 2026-06-14
 why: telemetry channel is built (sink + boundary capture + loud stderr warning + host diagnostic event) but the playground guest path never reaches a page-side listener, so a panel today would be a silent-stub empty box
 user_story: As a playground developer, I want a panel showing sorted divergence/NotImplemented hit counts (`snapshotTelemetry()` output) for my session, but today the guest runs via the kernel/shell path so the worker's `diagnostic` postMessage has no page listener and any panel would always be empty.
-sources: [M11, vm-quickjs-realm-engine, ADR-0138, playground/notimplemented-stub-telemetry]
+sources: [M11, ADR-0142, playground/notimplemented-stub-telemetry]
 code:
   [
     apps/playground/src/glue/realVite.ts,
