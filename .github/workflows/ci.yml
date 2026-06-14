@@ -19,8 +19,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm build:libs # publish build must stay green (ADR-0070)
-      - run: pnpm check:deps
-      - run: pnpm check:isolation
+      - run: pnpm check:arch # layer direction + cycles + foreign-internal + solid (D-002)
       - run: pnpm check:parity-coverage
       - run: pnpm check:e2e-coverage
       - run: node tools/backlog/check.mjs # blocking: frontmatter + TODO(backlog:) integrity
