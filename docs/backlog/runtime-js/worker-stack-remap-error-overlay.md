@@ -4,6 +4,7 @@ status: parked
 title: Worker stack remap and playground error overlay
 created: 2026-06-12
 why: loader-local TypeScript stack remapping now covers guest module execution, but spawned Worker errors and a visual playground overlay need separate host/worker plumbing
+user_story: As a developer debugging TS in rifty, I want a throw from a `worker_threads` Worker or a request-time route handler to show original `.ts` line numbers (and surface in a playground overlay), but today remap only wraps top-level module eval — Worker-originated and runtime-phase frames stay unmapped and reporting is terminal-only.
 sources: [docs/research/open-webcontainers-alternative-2026-06.md, ADR-0052]
 code:
   [

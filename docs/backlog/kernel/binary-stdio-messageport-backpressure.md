@@ -4,6 +4,7 @@ status: active
 title: Binary stdio over MessagePort with backpressure (replace JSON-over-UTF-8 framing)
 created: 2026-06-08
 why: only JSON sync-RPC framing landed; raw-byte inter-process stdio with backpressure left as a separate pass, no closing ADR
+user_story: As a dev piping a fast producer into a slow child (`a | b`, `child.stdin.write(bigBuffer)`), I want byte-stream stdio honouring Writable `drain`, but today child stdio is JSON-framed over the `MessagePort` with no flow control so a fast producer unbounded-buffers.
 sources: [A-021, ADR-0011, TASKS M6]
 ---
 ## Context

@@ -4,6 +4,7 @@ status: <active|parked|blocked>
 title: <short label>
 created: <YYYY-MM-DD>
 why: <one line — why this is on the backlog>
+user_story: As <persona>, I want <concrete action>, but today <concrete blocker> — what a user can't do until this lands
 sources: [<ref>, <ref>]
 code: [<path>, <path>]
 ---

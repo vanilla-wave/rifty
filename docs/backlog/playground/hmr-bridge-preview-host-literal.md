@@ -4,6 +4,7 @@ status: active
 title: Wire apps/playground hmr-bridge.ts to PREVIEW_LOCAL_HOST instead of inlining `preview.local`
 created: 2026-06-13
 why: ADR-0036 exported PREVIEW_LOCAL_HOST for a one-line swap, but hmrBridgeUrl still inlines the host, so it sits outside the SW_ROUTING_VERSION pin (ADR-0040) and a host rename would silently desync the HMR WS URL from SW routing.
+user_story: As a developer relying on live HMR reloads in the playground preview, I want the HMR WebSocket host to track the canonical `PREVIEW_LOCAL_HOST`, but today `hmr-bridge.ts` inlines the `preview.local` literal so a host rename would silently desync the HMR WS URL from service-worker routing and break reloads.
 sources: [ADR-0036, ADR-0040]
 code: [apps/playground/src/glue/hmr-bridge.ts, packages/io/src/preview-protocol.ts, apps/playground/src/glue/hmr-bridge.test.ts]
 ---

@@ -4,6 +4,7 @@ status: active
 title: package.json imports field (#name internal subpath imports)
 created: 2026-06-08
 why: #-prefixed internal subpath imports are unsupported — compat row ❌ Pending
+user_story: As a dev importing a `#name` internal subpath (or `#name/*` wildcard) declared in a package's `imports` map, I want it to resolve like `exports` does — but today only `exports` is wired so any `#`-prefixed specifier fails to resolve.
 sources: [compat/modules.md, TASKS M2/M3 follow-up]
 ---
 ## Context

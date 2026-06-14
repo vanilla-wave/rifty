@@ -4,6 +4,7 @@ status: parked
 title: EPIC C — @riftydev/workbench headless UI controllers (C1-C3)
 created: 2026-06-08
 why: playground glue/* is already framework-agnostic but locked inside the app; lifting it into a package would let non-Solid consumers reuse the logic (DD-3) — deferred until a non-Solid consumer is concretely pulled
+user_story: As a dev embedding rifty in a non-Solid app, I want headless controllers (`createEditorSync`/`createPreviewBinding`/`createRuntimeSession`) from `@riftydev/workbench` to wire editor-sync, HMR, npm-shell and preview myself, but today that glue is locked inside the Solid playground app — no reusable package.
 sources: [DD-3, EPIC C, ADR-0003 (D-002)]
 ---
 ## Context

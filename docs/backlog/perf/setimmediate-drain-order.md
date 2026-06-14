@@ -5,6 +5,7 @@ status: active
 title: ADR-0092 — setImmediate/clearImmediate Map + head-cursor + check-phase tail-snapshot drain order
 created: 2026-06-08
 why: setImmediate/clearImmediate O(n) array ops; observable drain-order change on public ./builtins/timers (ADR-0018); parity cases must be written FIRST
+user_story: As a dev scheduling many `setImmediate`/`clearImmediate` callbacks, I want O(1) clear and Node-matching nested drain order, but today array ops are O(n) and the head-cursor + check-phase tail-snapshot rewrite is deferred behind parity cases not yet written.
 sources: [perf-audit #28, adr-plan A/ADR-0092, ADR-0018, ADR-0026 (downgraded)]
 ---
 ## Context

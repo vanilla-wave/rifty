@@ -4,6 +4,7 @@ status: active
 title: Enforce the no-reverse-imports layer rule in CI (madge catches cycles, not direction)
 created: 2026-06-08
 why: the "No reverse imports" hard rule is UNENFORCED — `check:deps` (madge --circular) only catches cycles; a one-way net→runtime-js edge slips past CI
+user_story: As a maintainer relying on CI to guard layering, I want a one-way reverse edge like `net`→`runtime-js` to fail the build, but today `madge --circular` only flags cycles so an acyclic upward import lands green.
 sources: [CLAUDE.md hard rules, ADR-0035, ADR-0012, A-013, A-014]
 ---
 ## Context

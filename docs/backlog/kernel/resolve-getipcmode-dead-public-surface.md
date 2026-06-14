@@ -4,6 +4,7 @@ status: active
 title: Resolve getIpcMode/forceFallback dead surface — wire RIFTY_FALLBACK_NO_SAB seam or remove the unused export
 created: 2026-06-13
 why: getIpcMode() + IpcModeOptions.forceFallback are exported from kernel's public index with zero production callers; the RIFTY_FALLBACK_NO_SAB override they were built to serve (ADR-0039 P2-2) never landed, so both are dead surface and a false signal that the fallback override works.
+user_story: As a developer testing rifty's non-SAB fallback path, I want `RIFTY_FALLBACK_NO_SAB` to force the no-SharedArrayBuffer IPC mode via `forceFallback`, but today nothing reads that override and `getIpcMode()` is dead surface — the gate always uses `isSabIpcSupported()`, so I can't simulate the fallback.
 sources: [ADR-0011, ADR-0039]
 code: [packages/kernel/src/ipc/capabilities.ts, packages/kernel/src/index.ts, packages/runtime-js/src/builtins/worker_threads.ts, packages/runtime-js/src/builtins/child_process.ts, packages/runtime-js/src/builtins/child_process-sync.ts, packages/kernel/tests/capabilities.test.ts]
 ---

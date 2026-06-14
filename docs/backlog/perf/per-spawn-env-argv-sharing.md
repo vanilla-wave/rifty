@@ -5,6 +5,7 @@ status: active
 title: per-spawn env/argv sharing (freeze a canonical env vs ship a diff)
 created: 2026-06-08
 why: per-spawn full env record + argv structured-cloned every spawn regardless of ring use; the backlog item is this file
+user_story: As a dev with a high spawn rate (test runners, `worker_threads` fan-out), I want a shared frozen canonical env reused across spawns — but today `spawn-worker.ts` structured-clones the full env record + argv on every spawn, so each one re-pays that cost.
 sources: [perf-audit #20, adr-plan C]
 ---
 ## Context

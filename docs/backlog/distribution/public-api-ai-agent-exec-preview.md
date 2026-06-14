@@ -4,6 +4,7 @@ status: parked
 title: Residual AI-agent sandbox exec streaming + preview URL API
 created: 2026-06-12
 why: ADR-0131 landed only public FS read/write; agent contract still needs streamed exec results and a normalized preview URL surface
+user_story: As a dev embedding rifty as my AI-agent backend, I want `sandbox.exec()` to stream `{ stdout, stderr, exitCode }` and hand me a normalized preview URL, but today the public SDK only offers `runtime.eval()` plus events — no command-shaped streamed exec, and preview wiring stays SW/host-route specific.
 sources: [docs/research/open-webcontainers-alternative-2026-06.md, ADR-0071, ADR-0131, ADR-0048, ADR-0123]
 code: [packages/rifty/src/sandbox.ts, packages/runtime-js/src/host.ts]
 ---

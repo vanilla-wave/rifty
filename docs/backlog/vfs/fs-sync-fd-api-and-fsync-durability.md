@@ -4,6 +4,7 @@ status: parked
 title: Lower-layer FsSync fd API + honest fsync durability contract
 created: 2026-06-12
 why: runtime-local node:fs fds and WASI positional fd syscalls landed without changing the public FsSync contract; true inode-like open-unlink/rename semantics and sync durability need a lower VFS fd design and ADR
+user_story: As a dev keeping an `openSync` fd valid across `unlinkSync`/`renameSync` and calling `fsyncSync` to durably flush to OPFS, I want Node-like inode-bound fds, but today fds resolve by path and `fsyncSync` on OPFS would be a fake durability guarantee
 sources: [docs/research/open-webcontainers-alternative-2026-06.md, ADR-0072, ADR-0090]
 code: [packages/vfs/src/fs-sync.ts, packages/vfs/src/sync-mirror.ts, packages/vfs/src/opfs-sync.ts]
 ---

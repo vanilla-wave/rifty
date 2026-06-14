@@ -4,6 +4,7 @@ status: parked
 title: TS-on-import decorator lowering (esbuild flag vs acorn plugin vs gap)
 created: 2026-06-08
 why: esbuild leaves stage-3 @decorator un-lowered and the post-strip acorn parse rejects it; left as a documented gap
+user_story: As a developer importing a `.ts` file that uses a `@decorator`, I want it to run like `tsx` lowers it, but today esbuild passes the `@decorator` through un-lowered and the acorn parse throws SyntaxError
 sources: [docs/public/compat/modules.md]
 ---
 ## Context

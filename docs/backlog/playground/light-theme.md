@@ -4,6 +4,7 @@ status: parked
 title: Light theme for playground (currently dark-only)
 created: 2026-06-08
 why: Chosen direction is a polished dark IDE; a light/dark toggle is a deferred non-goal
+user_story: As a playground developer in a bright room, I want a light/dark toggle so the editor, `rifty-dark` Monaco theme and terminal aren't blinding, but today the playground ships dark-only and no `[data-theme="light"]` token layer exists.
 sources: [ADR-0073]
 ---
 ## Context

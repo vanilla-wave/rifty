@@ -5,6 +5,7 @@ status: active
 title: Open verification gaps — unresolved correctness gates + missing parity coverage (parity-first)
 created: 2026-06-08
 why: §7 lists correctness gates not independently re-verified + parity cases that must exist (parity-first hard rule) BEFORE the dependent perf changes land
+user_story: As a dev waiting on faster boot/install, I want the OPFS-slice, stream-batching, transform-cache, and concurrent-fetch wins shipped — but today their gating parity cases (non-UTF-8 `execSync` stdout, int-accessor OOB, ascii mask, `setImmediate`/`nextTick` order) don't exist, so each speedup is blocked.
 sources: [perf-audit §7 + §6, adr-plan G]
 ---
 ## Context

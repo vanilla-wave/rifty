@@ -4,6 +4,7 @@ status: active
 title: Preview URL unusable outside playground-opened tabs
 created: 2026-06-11
 why: Copied /preview/<port>/ URL 503s/COEP-blocks in a manually opened tab — port is scoped to its owner window
+user_story: As a developer previewing my app, I want to paste a copied `/preview/<port>/` URL into a fresh tab and see it load, but today the foreign tab's `clientId` resolves to a window that never posted `rifty:preview:ready` so subresources 503 and the COEP-less error frame is `ERR_BLOCKED_BY_RESPONSE`.
 sources: [docs/adr/playground/0124-soft-panels-visual-redesign-adopts-the-gravity-ui-handoff.md]
 code: [apps/playground/src/components/PreviewPanel.tsx, packages/service-worker/src/owner-resolver.ts]
 ---

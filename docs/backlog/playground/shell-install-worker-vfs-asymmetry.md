@@ -4,6 +4,7 @@ status: active
 title: Terminal npm install writes the page-realm VFS, never the Real Vite worker's VFS — installs invisible to the preview
 created: 2026-06-13
 why: The terminal `npm install` writes a page-realm SyncMirrorVfs, but Real Vite runs in a worker realm with its own syncMirror, so packages installed from the shell never reach the realm the preview reads — and the only tracked remediation (bidirectional Editor↔Worker sync) is M12-gated; the narrower shell-write gap has no standalone item.
+user_story: As a developer using the rifty web playground, I want `npm install express` in the visible terminal to be importable by the running preview, but today the install lands in the page-realm VFS while Real Vite reads its own worker mirror, so the new module never resolves and HMR can't pick it up until restart.
 sources: [ADR-0043]
 code: [apps/playground/src/App.ts, apps/playground/src/glue/npm-shell-command.ts, apps/playground/src/glue/vfs-write-port.ts, apps/playground/src/glue/sync-mirror-vfs.ts, apps/playground/src/workers/real-vite-bootstrap.ts]
 ---

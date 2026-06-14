@@ -4,6 +4,7 @@ status: active
 title: Per-package CHANGELOG.md for all @riftydev/* packages
 created: 2026-06-08
 why: DoD requires a CHANGELOG.md per affected package, but only root + npm-client have one
+user_story: As a rifty maintainer ticking the DoD "CHANGELOG.md updated in affected packages" box, I want every published `@riftydev/*` package (io, kernel, vfs, runtime-js, net, shell, …) to carry one, but today only root + npm-client have a CHANGELOG so the per-package check can't be honestly ticked.
 sources: [A5, ADR-0070, CLAUDE.md DoD]
 ---
 ## Context

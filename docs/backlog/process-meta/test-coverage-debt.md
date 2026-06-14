@@ -4,6 +4,7 @@ status: active
 title: Test-coverage debt ledger — missing parity/regression guards for already-wired seams
 created: 2026-06-13
 why: Several shipped or ADR-claimed behaviors have no test (and some ADRs cite test files that do not exist), so a regression in a live seam passes CI; consolidated into one ledger of missing-coverage entries — each a distinct, articulable failure mode — instead of one tiny file each.
+user_story: As a rifty contributor, I want CI to catch regressions in live seams like subpath `exports` symbol sets, `EvalRequest.cwd`, time-delayed SSE streaming, and `bcrypt→bcryptjs` surface-equivalence, but today these have no guarding test (and some ADRs cite test files that do not exist) so a break ships green.
 sources: [ADR-0018, ADR-0017, ADR-0019, ADR-0006]
 code: [packages/runtime-js/package.json, packages/net/src/http/response.ts, packages/runtime-js/src/host.ts, tools/shadow-registry/src/index.ts]
 ---

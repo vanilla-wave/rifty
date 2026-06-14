@@ -4,6 +4,7 @@ status: parked
 title: fs.promises.open() and FileHandle API
 created: 2026-06-12
 why: callback/sync fd APIs plus promises mkdtemp/opendir/truncate are covered, but the richer FileHandle object surface is larger than the high-frequency fd wall and should not be faked
+user_story: As a developer using `await fs.promises.open(path)` and the returned `FileHandle` (`fh.readFile`/`fh.write`/`fh.close`), I want it to work in rifty, but `fs.promises.open()` is deliberately unexposed (no FileHandle object, lifetime, or use-after-close semantics yet).
 sources: [docs/research/open-webcontainers-alternative-2026-06.md]
 code: [packages/runtime-js/src/builtins/fs.ts]
 ---

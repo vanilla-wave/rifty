@@ -4,6 +4,7 @@ status: active
 title: fd_readdir flattens a throwing readdirSync to E_BADF instead of errToWasiErrno
 created: 2026-06-13
 why: A valid dir fd whose backend readdirSync throws a non-BADF error (EACCES on OPFS permission revocation, ENOTDIR/ENOENT on a concurrent rmSync race) returns a misleading 'bad file number' to the guest — the same lie-to-guest class ADR-0049 D4 fixed for the file-fd case.
+user_story: As a dev whose WASI guest lists a dir when an OPFS permission is revoked mid-run, I want the real `EACCES` errno, but today `fd_readdir` hard-codes `E_BADF` so the guest sees a bogus 'bad file number'
 sources: [ADR-0049, CLAUDE.md no-silent-stubs]
 code: [packages/runtime-wasi/src/syscalls/fd.ts, packages/runtime-wasi/src/syscalls/path.ts, packages/runtime-wasi/src/syscalls/shared.ts]
 ---

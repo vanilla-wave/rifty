@@ -4,6 +4,7 @@ status: parked
 title: True parallel Web Workers for worker_threads.Worker
 created: 2026-06-08
 why: worker_threads falls back to same-realm execution when the kernel spawnWorker capability is unavailable — not truly parallel
+user_story: As a dev spawning `worker_threads.Worker` for CPU-parallel work, I want a real isolated realm with its own module loader — but today without COI/SAB + `kernelWorkerUrl` it falls back to same-realm execution (no `globalThis` isolation, shares the parent's `require()`), not truly parallel.
 sources: [TASKS M6 follow-up, compat/m10-tooling.md Known-limitations]
 ---
 ## Context

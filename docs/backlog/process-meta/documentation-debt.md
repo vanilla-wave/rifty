@@ -4,6 +4,7 @@ status: active
 title: Documentation debt ledger — ADR/backlog/compat record drift where docs outran code
 created: 2026-06-13
 why: A cluster of low-effort record-honesty drifts (ADR prose, backlog status, compat narrative, ADR numbering) where the documentation no longer matches shipped code; consolidated into one ledger instead of one tiny backlog file each.
+user_story: As a maintainer trusting the records to reflect reality, I want shipped items (`import.meta.url`, `#`-imports field, perf wins) shown as done and stale ADR prose reconciled, but today they still read open/unimplemented and ADR bodies cite phantom files so the docs lie about what code does.
 sources: [ADR-0070, ADR-0017, ADR-0090, ADR-0125, ADR-0009, ADR-0030, ADR-0082, docs/adr/README.md]
 code: [docs/adr/README.md, packages/runtime-js/src/module-loader/resolver.ts, .github/workflows/release.yml]
 ---

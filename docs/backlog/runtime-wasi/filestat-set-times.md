@@ -4,6 +4,7 @@ status: parked
 title: fd_filestat_set_times / path_filestat_set_times — atime/mtime mutation (E_NOSYS)
 created: 2026-06-08
 why: both times-set syscalls return E_NOSYS; FsSync.utimes now exists (ADR-0029) so wiring is feasible, but no verified WASI guest need yet
+user_story: As a dev whose WASI guest sets a file's atime/mtime (build-stamp / `touch`-like), I want it to persist, but today `fd_filestat_set_times` and `path_filestat_set_times` return `E_NOSYS` — never wired to `FsSync.utimes`
 sources: [docs/public/compat/wasi.md, Q-2026-05-25-touch-utimes (→ADR-0029)]
 ---
 ## Context

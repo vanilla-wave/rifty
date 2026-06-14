@@ -4,6 +4,7 @@ status: parked
 title: Buffer pending statics — poolSize / constants / transcode / kStringMaxLength / kMaxLength
 created: 2026-06-08
 why: unimplemented Buffer surface awaiting a real consumer — compat rows ❌ Pending
+user_story: As a dev using a lib that reads `Buffer.poolSize`/`Buffer.constants`/`kMaxLength`/`kStringMaxLength` or calls `Buffer.transcode(buf, fromEnc, toEnc)`, I want those to work; currently they are unimplemented (compat ❌, transcode would loud-throw).
 sources: [compat/buffer.md]
 ---
 ## Context

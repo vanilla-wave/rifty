@@ -5,6 +5,7 @@ status: active
 title: ADR-0085 — FsSync.statSyncOrNull non-throwing stat to collapse existsSync+statSync double-probe
 created: 2026-06-08
 why: resolver does existsSync THEN statSync at 7 sites — two normalize + two lookups per logical "is this a file?"; new cross-package FsSync method, write-before-code
+user_story: As a dev whose `require`/`import` resolves through deep node_modules, I want module lookup to feel fast, but today the resolver does `existsSync` THEN `statSync` at 7 sites — two normalize + two VFS lookups per "is this a file?" — and no non-throwing `statSyncOrNull` exists to collapse them
 sources: [perf-audit #11, adr-plan A/ADR-0085, ADR-0029, ADR-0041, ADR-0037]
 ---
 ## Context

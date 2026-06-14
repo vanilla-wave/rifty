@@ -4,6 +4,7 @@ status: active
 title: New templates as whole-stack e2e consumers (Hono/Koa, WebSocket chat, CLI demo, markdown-SSG)
 created: 2026-06-12
 why: express demo norm — ~5-7 stack bugs per new real consumer; after ADR-0130 a third template is a data change, so each template is a near-free e2e consumer of the whole stack
+user_story: As a developer in the playground, I want to pick a Hono/Koa, WebSocket-chat, CLI, or markdown-SSG starter, but today only the express demo template exists so those stack styles (`ctx`/middleware, WS bridge, run-to-completion exit code, fs-heavy SSG) are unreachable.
 sources: [ADR-0130, ADR-0078, fullstack-demo feedback 2026-06-12]
 code: [apps/playground/src, tests/e2e/fullstack-demo.spec.ts]
 ---

@@ -4,6 +4,7 @@ status: active
 title: worker_threads real-Worker branch never wires parentPort — cross-isolated host loses message passing, degrades to stdout-only
 created: 2026-06-13
 why: startViaKernel() (the isSabIpcSupported() real-Worker branch) spawns the kernel Worker but never wires worker-side parentPort/workerData, so in a properly cross-origin-isolated host (the production target) worker_threads silently loses its core feature; only the same-realm dev fallback does real parentPort round-trips.
+user_story: As a developer using `worker_threads` `parentPort.postMessage` / `worker.postMessage` + `workerData` in a cross-origin-isolated rifty host, I want messages to round-trip both directions, but today the real-Worker branch (`startViaKernel`) never wires worker-side `parentPort`/`workerData` and degrades to stdout-only — only the same-realm dev fallback delivers messages.
 sources: [ADR-0011, ADR-0019]
 code: [packages/runtime-js/src/builtins/worker_threads.ts]
 ---

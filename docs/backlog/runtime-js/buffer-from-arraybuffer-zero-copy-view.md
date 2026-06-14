@@ -4,6 +4,7 @@ status: parked
 title: Buffer.from(arrayBuffer) copies instead of aliasing the backing ArrayBuffer (Node view-semantics divergence, untracked)
 created: 2026-06-13
 why: Buffer.from(arrayBuffer) copies while Node returns a Buffer that views the same backing ArrayBuffer — a silent behavioral divergence flagged deferred in ADR-0030 with no consumer hit yet; the compat row is a bare ✅ that masks it.
+user_story: As a dev whose code does `Buffer.from(arrayBuffer)` then mutates the source `ArrayBuffer` expecting the Buffer to see it (Node view-semantics), I want that aliasing; currently rifty copies, so writes through one are invisible to the other.
 sources: [ADR-0030, docs/public/compat/buffer.md:14]
 code: [packages/io/src/buffer.ts, packages/runtime-js/src/builtins/buffer.ts]
 ---

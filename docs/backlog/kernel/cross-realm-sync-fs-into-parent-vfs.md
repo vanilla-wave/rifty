@@ -4,6 +4,7 @@ status: active
 title: Cross-realm sync fs (readFileSync/existsSync/statSync) from a kernel-spawned child Worker into the parent's live VFS
 created: 2026-06-13
 why: A kernel-spawned child Worker's fs.*Sync hit a realm-local, freshly-empty syncMirror() — never the parent's MemoryVfs — so a child cannot read files the parent created; it only works in prod because the playground hand-copies VFS snapshots.
+user_story: As a dev whose forked Worker calls `fs.readFileSync`/`existsSync`/`statSync` on a file the parent just wrote, I want it to see the parent's live VFS, but today the child hits a fresh empty realm-local `syncMirror()` and gets ENOENT unless the playground hand-copies a snapshot.
 sources: [ADR-0011, ADR-0072, ROADMAP M6]
 code: [packages/vfs/src/sync-mirror.ts, packages/runtime-js/src/builtins/fs.ts, packages/kernel/src/shared-globals.ts, packages/runtime-js/src/builtins/child_process-sync.ts, apps/playground/src/workers/real-vite-bootstrap.ts]
 ---

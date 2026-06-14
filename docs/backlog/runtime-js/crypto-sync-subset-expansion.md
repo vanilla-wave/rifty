@@ -4,6 +4,7 @@ status: parked
 title: node:crypto beyond the sync-hash subset (ciphers/KDF/sign)
 created: 2026-06-11
 why: crypto is a deliberate sync subset (sha256/sha1/md5 + HMAC + random); auth/JWT/cookie-signing libs need pbkdf2/scrypt/createCipheriv/sign — recorded so the deliberate limit is auditable, with the real cost (SubtleCrypto is async-only) noted
+user_story: As a dev running a JWT/auth/session lib in rifty, I want `crypto.pbkdf2`/`scrypt`/`createCipheriv`/`sign` (AES-GCM, sha512); currently `node:crypto` is a sync subset (sha256/sha1/md5 + HMAC + random) and everything else loud-throws by design.
 sources: [docs/research/open-webcontainers-alternative-2026-06.md, ADR-0010]
 code: [packages/runtime-js/src/builtins/crypto.ts]
 ---

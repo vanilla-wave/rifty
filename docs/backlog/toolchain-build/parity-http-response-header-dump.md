@@ -4,6 +4,7 @@ status: active
 title: Parity http mode — dump full response status+headers+body, not stdout-only
 created: 2026-06-12
 why: all three ADR-0130 http bugs (204 body, content-length, chunked) are response-framing bugs invisible to the current http parity driver, which exposes only {status, statusText, contentType, body}
+user_story: As a rifty maintainer pinning the 204-body and `content-length`/chunked http fixes with parity cases, I want the http parity driver to dump full status+headers+body, but today it normalizes to `{status, statusText, contentType, body}` and drops every header except `content-type`, so the framing bugs are invisible.
 sources: [ADR-0130, fullstack-demo feedback 2026-06-12]
 code: [tools/node-parity-runner/src/run-in-node.ts, tools/node-parity-runner/src/run-in-rifty.ts, tools/node-parity-runner/cases/http]
 ---

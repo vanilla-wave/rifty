@@ -4,6 +4,7 @@ status: parked
 title: node:sqlite setReadBigInts(true) BigInt INTEGER read mode
 created: 2026-06-08
 why: Prebuilt sql.js WASM stores INTEGER as JS number; no bigint read mode — needs custom WASM rebuild
+user_story: As a dev reading 64-bit INTEGER columns via `node:sqlite`, I want `StatementSync.setReadBigInts(true)` to return exact `BigInt` values past `Number.MAX_SAFE_INTEGER`, but today it throws `NotImplementedError` since prebuilt sql.js coerces every INTEGER to a lossy JS `number`.
 sources: [ADR-0065 D4]
 ---
 ## Context

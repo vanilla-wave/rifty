@@ -4,6 +4,7 @@ status: parked
 title: Background & / job control deferred (distinct from ADR-0089 cancellation)
 created: 2026-06-08
 why: Shell.run rejects bare & with NotImplementedError('shell.background'); true backgrounding needs a job model, not subsumed by ADR-0089's Ctrl-C cancellation contract
+user_story: As a developer at the rifty shell prompt, I want to launch `vite &` in the background and keep typing, but today a bare `&` throws `NotImplementedError('shell.background')` — no job table exists.
 sources: [Q-2026-06-06-405, kernel/server-shaped-worker-process-lifecycle, adr/shell/0089-commandcontext-stdin-istty-cancellation.md]
 code: [packages/shell/src/shell.ts]
 ---

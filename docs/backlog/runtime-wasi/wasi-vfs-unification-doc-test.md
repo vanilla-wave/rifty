@@ -4,6 +4,7 @@ status: parked
 title: M8 — generalize WASI↔main-VFS unification + preopen visibility (tick boxes + real-binary read-through-preopen test)
 created: 2026-06-08
 why: two M8 acceptance boxes (WASI VFS unified with main VFS; binary sees preopens e.g. /workspace) stay unchecked — proven for esbuild via ADR-0049 but never generalized/asserted as a standalone contract
+user_story: As a dev writing a file via `fs.writeFileSync` then running a WASI binary that reads it through a `/workspace` preopen (and back), I want to trust that round-trip, but today only esbuild's own conformance exercises it — no standalone test pins the unified single-source VFS, so general read-through-preopen parity is unproven.
 sources: [PROJECT_PLAN M8 acceptance, ADR-0014, ADR-0049, audit-digest missedLive]
 ---
 ## Context

@@ -4,6 +4,7 @@ status: active
 title: node:constants is an empty object — every key (O_RDONLY/signals/errno) silently reads undefined
 created: 2026-06-13
 why: node:constants is registered as a literal empty {} so require('node:constants').O_RDONLY and every fs/errno/signal key returns undefined silently — a direct violation of the no-placeholder rule and the lone non-loudProxy among misc-stubs; it even diverges from node:fs.constants.O_RDONLY===0 in the same repo.
+user_story: As a dev whose code reads `require('node:constants').O_RDONLY` (or any errno/signal key), I want the real numeric value — but today `node:constants` is an empty `{}` so every key silently reads `undefined`.
 sources: [CLAUDE.md no-silent-stubs]
 code: [packages/runtime-js/src/builtins/misc-stubs.ts, packages/runtime-js/src/builtins/index.ts, packages/runtime-js/src/builtins/os.ts, packages/runtime-js/src/builtins/fs.ts]
 ---

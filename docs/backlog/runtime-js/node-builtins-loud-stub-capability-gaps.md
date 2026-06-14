@@ -4,6 +4,7 @@ status: parked
 title: node-builtin loud-stub capability gaps — tls/dns(non-localhost)/readline/perf_hooks/v8/vm/dgram/tty/string_decoder/os.setPriority/crypto.Hash.copy/fs O_SYNC throw
 created: 2026-06-13
 why: These node: builtin features throw NotImplementedError — a real runtime capability absence a consumer hits when running ordinary npm code; tracked here as the capability limitation itself, distinct from the compat-visibility item which only proposes ❌ matrix rows.
+user_story: As a dev running an npm package that reaches `tls.createServer`, `dns.resolve`, `readline.createInterface`, `v8.serialize` or `dgram.createSocket`, I want it to run — but today these `node:` builtins throw `NotImplementedError` (honest loud stubs, parked by design).
 sources: [ADR-0010, ARCHITECTURE.md]
 code: [packages/runtime-js/src/builtins/tty.ts, packages/runtime-js/src/builtins/os.ts, packages/runtime-js/src/builtins/perf_hooks.ts, packages/runtime-js/src/builtins/vm.ts, packages/runtime-js/src/builtins/string_decoder.ts, packages/runtime-js/src/builtins/misc-stubs.ts, packages/runtime-js/src/builtins/null-net-stubs.ts, packages/runtime-js/src/builtins/crypto.ts, packages/runtime-js/src/builtins/fs.ts]
 ---

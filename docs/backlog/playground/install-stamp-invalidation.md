@@ -4,6 +4,7 @@ status: active
 title: Install-stamp invalidation strategy
 created: 2026-06-12
 why: stamp trusts node_modules wholesale; a corrupted-but-stamped tree boots a broken dev server with no self-heal
+user_story: As a playground dev with OPFS `node_modules` truncated by a crash mid-flush, want boot to re-install the corrupt-but-stamped tree, but `installStampSatisfied` skips `install()` on matching `.rifty-install-stamp.json` so dev server boots broken till I hand-run `npm install`.
 sources: [docs/adr/playground/0135-sandbox-setup-kinds-instant-vs-from-scratch.md]
 code: [apps/playground/src/glue/install-stamp.ts]
 ---

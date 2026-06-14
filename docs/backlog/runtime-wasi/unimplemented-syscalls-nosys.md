@@ -4,6 +4,7 @@ status: parked
 title: Remaining E_NOSYS preview1 syscalls (fd_allocate, fd_fdstat_set_rights, poll_oneoff, proc_raise, sock_*)
 created: 2026-06-08
 why: a band of preview1 syscalls are present-in-link-table but E_NOSYS; each is either platform-impossible or unneeded by current toolchain guests — documented-honest non-implementations
+user_story: As a dev running a WASI guest that calls `poll_oneoff`, `sock_send`/`sock_recv`, `proc_raise`, `fd_allocate` or `fd_fdstat_set_rights`, I want those to work, but today each returns `E_NOSYS` (sockets/signals/poll are browser-impossible; `fd_allocate`/`fd_fdstat_set_rights` unwired pending a real guest need).
 sources: [docs/public/compat/wasi.md]
 ---
 ## Context

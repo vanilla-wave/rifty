@@ -4,6 +4,7 @@ status: active
 title: ADR-0122 deferred items (tty.setRawMode, literal ETX raw mode, terminal process-group ownership) have no backlog home
 created: 2026-06-13
 why: ADR-0122's Decision explicitly defers tty.setRawMode/literal-ETX-raw-mode/richer process-group ownership to 'future backlog', but none of these exist in docs/backlog and setRawMode/isRaw are absent from packages/ — a real, untracked deferral.
+user_story: As a user typing into the rifty terminal running an interactive Node TUI (inquirer/blessed), I want `process.stdin.setRawMode(true)` plus literal `Ctrl+C`/`\x03` reaching the program; today `setRawMode`/`isRaw` are absent and `Ctrl+C` is hardwired to SIGINT, so raw-mode prompts and key-by-key capture cannot work.
 sources: [ADR-0122]
 code: [packages/runtime-js/src/builtins/process.ts]
 ---

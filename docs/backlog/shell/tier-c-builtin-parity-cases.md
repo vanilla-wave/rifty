@@ -4,6 +4,7 @@ status: active
 title: Tier-c builtin node-parity cases tracked for the DoD closer
 created: 2026-06-08
 why: ADR-0093(c) mandates a node-parity case per tier-c builtin; landed builtins ship vitest units but no parity cases yet
+user_story: As a rifty contributor, I want each tier-c builtin (`wc`/`head`/`tail`/`cat`, `renameSync`/`cpSync` via `node:fs`) verified by a node-parity case before the milestone-DoD closer, but today they ship only vitest units — no parity coverage diffing against real Node.
 sources: [Q-2026-06-07-410, adr/shell/0093-shell-command-parity-harness.md, adr/vfs/0090-vfs-copy-rename-sync-primitives.md]
 ---
 

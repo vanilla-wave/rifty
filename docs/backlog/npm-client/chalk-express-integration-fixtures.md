@@ -4,6 +4,7 @@ status: active
 title: Vendored chalk + full-express tarball fixtures + integration-fixtures refresh tool
 created: 2026-06-08
 why: ADR-0021 mandates offline vendored-tarball tests; picocolors/ms/kleur + diamond landed, chalk/express + refresh script still open
+user_story: Dev wants `npm install chalk express` proven offline end-to-end, but only zero-dep tarballs vendored — multi-tarball chalk/express fixtures + the refresh pack tool don't exist yet.
 sources: [A-027, ADR-0021, TASKS M9, large-targets-readiness-2026-05-27]
 ---
 ## Context

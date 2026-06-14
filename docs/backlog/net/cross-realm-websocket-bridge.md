@@ -4,6 +4,7 @@ status: parked
 title: Cross-realm WebSocket bridge (real-TCP WebSocket; current layer is in-process only)
 created: 2026-06-08
 why: WebSocket/WebSocketServer are in-process URL-routed only; real-socket wiring is an explicit follow-up
+user_story: As a developer running an iframe HMR client over a real `WebSocket` to a `WebSocketServer` in a Worker realm, I want the connection to cross realms — but today `WebSocket`/`WebSocketServer` are in-process same-realm URL-routed only, so any cross-context hop forces running the dev server on the main thread.
 sources: [TASKS M7, A-025, ADR-0017]
 ---
 ## Context

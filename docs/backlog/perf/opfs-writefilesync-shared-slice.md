@@ -5,6 +5,7 @@ status: active
 title: OPFS writeFileSync single shared slice + WASI fd_write aliasing gate
 created: 2026-06-08
 why: OPFS writeFileSync copies the buffer twice (cache + write-through); 2N->N — but safety disputed by cross-cutting #44 (WASI fd_write in-place mutation); the backlog item is this file
+user_story: As a dev doing write-heavy OPFS `writeFileSync`, I want one shared slice instead of 2N bytes copied (cache + write-through) — but today it still copies twice, pending a WASI `fd_write` aliasing gate and regression test before sharing is proven safe.
 sources: [perf-audit #3 + #44, adr-plan C, ADR-0072 (not superseded)]
 ---
 ## Context

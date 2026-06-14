@@ -4,6 +4,7 @@ status: active
 title: Window-owner readiness is unauthenticated (preview iframe can claim ready)
 created: 2026-06-12
 why: window binding accepts ready/ownerToken frames from ANY window client; a previewed app could self-register as bridge owner
+user_story: As a developer previewing a running app, I want its same-origin JS isolated from the SW bridge, but today `owner-binding-window.ts` keys `rifty:preview:ready` on `ev.source.id` with no ownerToken — so a malicious previewed app posts a fake ready, dodges the URL filter via `history.pushState`, wins first-window fallback for clientId-null fetches, and reads request frames / fabricates responses
 sources: [ADR-0130 review, ADR-0046, ADR-0123]
 code: [packages/service-worker/src/owner-binding-window.ts, packages/service-worker/src/owner-resolver.ts]
 ---

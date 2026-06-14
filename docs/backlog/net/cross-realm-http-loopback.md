@@ -4,6 +4,7 @@ status: active
 title: http.request loopback across Worker realms (port registry is realm-local)
 created: 2026-06-12
 why: loopback routing (PR #21) only reaches servers registered in the SAME Worker realm; service-to-service calls between two sandbox processes get ECONNREFUSED even though the port is live in another Worker
+user_story: As a developer making service-to-service `http.request('http://localhost:3001')` calls between two sandbox processes, I want the request to reach a server listening in another Worker — but today the port registry is realm-local so it fails fast with `ECONNREFUSED` even though that port is live in a different realm.
 sources: [M11, "net/http-request-loopback-own-ports (closed, PR #21)", ADR-0043]
 code: [packages/net/src/registry.ts, packages/net/src/http/server.ts]
 ---

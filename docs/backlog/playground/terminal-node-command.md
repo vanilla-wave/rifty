@@ -4,6 +4,7 @@ status: parked
 title: Terminal cannot run `node <file>` directly
 created: 2026-06-12
 why: node-server templates boot only via `npm run dev` routed to the registered dev-server command; a bare `node src/main.js` in the terminal is "command not found"
+user_story: As a developer in the playground terminal, I want to run `node src/main.js` on any entry file, but today only `npm run dev` for the active template boots a worker — a bare `node <file>` is "command not found".
 sources: [ADR-0130]
 code: [apps/playground/src/App.tsx]
 ---

@@ -4,6 +4,7 @@ status: parked
 title: EPIC E — create-rifty starter template (E1-E3)
 created: 2026-06-08
 why: host config that CANNOT be packaged into a library — COOP/COEP headers, module-worker config, sw.js build, WASM copy, worker URLs — only templated; this is exactly the bundler-bit boundary the SDK facade can't hide
+user_story: As a dev standing up a rifty host, I want `npm create rifty-app` to scaffold the un-packageable wiring — Vite COOP/COEP headers, module-worker config, `sw.js` build, WASM asset copy, worker URLs (plus a bundled Monaco/CodeMirror IDE shell), but today no template exists; I must hand-wire every host bit `createSandbox` can't hide.
 sources: [EPIC E, ADR-0071 (B2 honest limit)]
 ---
 ## Context

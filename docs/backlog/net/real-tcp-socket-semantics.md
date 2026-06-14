@@ -4,6 +4,7 @@ status: parked
 title: Real-TCP net.Socket semantics (current Socket is HTTP-only)
 created: 2026-06-08
 why: No raw TCP socket behavior — Socket only backs the HTTP path; M7 open acceptance
+user_story: As a developer opening a raw `net.Socket` for byte-stream TCP, I want full Socket semantics beyond HTTP, but today `net.Socket` is HTTP-only — no raw socket transport in the browser/SW model, and unemulable members (`localAddress`, half-open) throw `NotImplementedError`.
 sources: [TASKS M7, ADR-0017, A-024]
 ---
 ## Context

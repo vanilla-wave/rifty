@@ -4,6 +4,7 @@ status: blocked
 title: Ctrl+D always forward-deletes; no EOF-on-empty-line, diverging from readline/Node line discipline
 created: 2026-06-13
 why: keys.ts:63 maps \x04 (Ctrl+D) unconditionally to {kind:'delete'} routed straight to handleDelete() with no empty-line branch, so the editor can never emit EOF — an interactive REPL/shell reading via the line editor cannot be closed with Ctrl+D, unlike readline/Node where Ctrl+D on an empty line signals EOF.
+user_story: As a user at a `node` REPL in the rifty terminal, I want `Ctrl+D` on an empty line to send EOF and exit the prompt like real Node; today `\x04` always forward-deletes so the REPL/shell can never be closed.
 sources: [ADR-0096, ADR-0122]
 code: [packages/terminal/src/keys.ts, packages/terminal/src/terminal.ts, packages/terminal/src/keys.test.ts, docs/backlog/terminal/reference/terminal-ux-research-2026-06-08.md]
 ---
