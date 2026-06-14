@@ -4,6 +4,7 @@ status: parked
 title: installProcessGlobals() in-process under vitest leaks IPC deserialize noise
 created: 2026-06-12
 why: fullstack-demo-live-run.opt-in passes 8/8 but vitest's worker IPC logs "Unable to deserialize cloned data" unhandled rejections after the suite
+user_story: As a rifty contributor running the fullstack-demo opt-in suite, I want clean output, but running `installProcessGlobals` in-process inside a vitest worker leaks "Unable to deserialize cloned data" rejections post-suite because the smoke isn't spawned as a separate tsx child.
 sources: [ADR-0130]
 code: [tests/integration/fullstack-demo-live-run.opt-in.test.ts]
 ---

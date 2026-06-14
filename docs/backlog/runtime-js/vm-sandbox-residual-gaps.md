@@ -4,6 +4,7 @@ status: active
 title: node:vm context rewrite — residual gaps after write-leak fixes
 created: 2026-06-13
 why: PR #26 closed the write-leak class (var initializers, compound/update ops, destructuring, for-in/of targets, delete, switch scope) but four documented gaps remain in the AST-rewrite sandbox
+user_story: As a developer running a config loader via `vm.runInNewContext`, I want `f(); function f(){}` hoisting and `var q = 5` completion values to match Node, but today the AST-rewrite sandbox throws ReferenceError on the hoist and yields `5` where Node yields `undefined`
 sources: [M11, "PR #26 review", ADR-0123]
 code:
   [

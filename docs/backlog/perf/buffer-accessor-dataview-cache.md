@@ -5,6 +5,7 @@ status: active
 title: ADR-0082 — per-instance cached DataView for Buffer int/float accessors
 created: 2026-06-08
 why: every readUInt*/writeUInt* allocates a throwaway DataView; ~30 accessors; needs OOB parity cases; write-before-code
+user_story: As a dev parsing binary in a hot loop, I want `buf.readUInt32LE` / `writeUInt32LE` to not stall on GC, but today each accessor does `new DataView` per call so tight loops thrash the allocator
 sources: [perf-audit #13, adr-plan A/ADR-0082, ADR-0030 (downgraded, not superseded)]
 ---
 ## Context

@@ -4,6 +4,7 @@ status: parked
 title: Minor GNU usage-error fidelity in find/ls (polish)
 created: 2026-06-08
 why: 3 usage-error fidelity nits in find/ls — all loud/safe, not silent stubs, just mis-shaped vs GNU
+user_story: As a developer at the rifty shell prompt, I want `find -name` with no value or `ls --color=BOGUS` to report a GNU-style usage error (exit 2), but today they silently match nothing or throw `NotImplementedError` instead.
 sources: [Q-2026-06-07-412]
 ---
 

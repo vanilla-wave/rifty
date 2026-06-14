@@ -4,6 +4,7 @@ status: active
 title: Real worker_threads.Worker via kernel spawnWorker / SAB IPC (drop same-realm fallback)
 created: 2026-06-08
 why: same-realm Worker fallback has no globalThis isolation; real Workers need COI + kernel.setKernelWorkerUrl
+user_story: As a dev using `worker_threads.Worker` for an isolated parallel thread, I want it routed through `kernel.spawnWorker` with its own `globalThis`, but today without COI + `kernel.setKernelWorkerUrl` it runs the worker body same-realm sharing the parent's globals.
 sources: [ADR-0011, TASKS M6]
 ---
 ## Context

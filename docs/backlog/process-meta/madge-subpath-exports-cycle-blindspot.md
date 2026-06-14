@@ -4,6 +4,7 @@ status: active
 title: check:deps (madge --circular) drops all @riftydev/* subpath-export imports, so cross-package cycles routed through a subpath are invisible to the only CI cycle guard
 created: 2026-06-13
 why: `pnpm check:deps` is the sole CI cycle guard but with no .madgerc and no tsconfig paths madge resolves only bare @riftydev/<pkg> -> src/index.ts and silently skips every package.json exports subpath (29 files skipped, 0 non-index cross-pkg edges in the graph), so a future cycle whose path crosses any subpath export would be acyclic to madge and pass CI undetected.
+user_story: As a rifty contributor, I want `pnpm check:deps` to fail when a cross-package cycle routes through a `@riftydev/<pkg>/<sub>` subpath import, but today madge skips all 29 subpath exports so such a cycle passes CI silently.
 sources: [ADR-0018, ADR-0035, docs/backlog/process-meta/directional-layer-boundary-check.md]
 code: [package.js, tools/refs/check.mjs, packages/vfs/package.js, packages/net/package.js, packages/runtime-js/package.js, packages/terminal/package.js, packages/kernel/package.js]
 ---

@@ -4,6 +4,7 @@ status: parked
 title: ServerResponse pipe-sink + @riftydev/io Readable.fromWeb (Effect web-stream response path)
 created: 2026-06-08
 why: Effect's Readable.fromWeb(body).pipe(res) path unsupported until Readable.fromWeb lands in @riftydev/io (no owner); broader residual ask is full node↔WHATWG stream interop (toWeb/fromWeb both ways + node:stream/web)
+user_story: As a developer serving a FormData/web-stream response body, I want `Readable.fromWeb(webStream).pipe(res)`, but today `@riftydev/io.Readable` has no static `fromWeb` and `ServerResponse` is no `Writable` pipe target — full node↔WHATWG interop (`toWeb`/`fromWeb`, `node:stream/web`) is deferred.
 sources: [docs/research/open-webcontainers-alternative-2026-06.md, Q-2026-05-30-109, Q-2026-05-30-103, feature-05-effect-http-bridge T4]
 ---
 ## Context

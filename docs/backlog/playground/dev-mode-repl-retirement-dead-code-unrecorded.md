@@ -4,6 +4,7 @@ status: active
 title: Dev Mode path is dead/unreachable and unrecorded; ADR-0095 still Accepted, ADR-0073 REPL claims stranded
 created: 2026-06-13
 why: Commit f03ac50a ('replace repl with visible terminals', shipped with no ADR) made Dev Mode unreachable and left startDevMode dead, but ADR-0095 (whose deliverable was live dev-mode preview via startDevMode) remains Accepted with no superseded pointer and ADR-0073's REPL-preset claims are stranded — overturning a recorded decision requires a superseding ADR.
+user_story: As a rifty contributor reading the decision record, I want it to match the shipped playground, but today the `Dev · port 3000` mode and `startDevMode` are dead/unreachable while the records still describe live dev-mode preview and auto-running REPL presets that no longer exist.
 sources: [ADR-0095, ADR-0073, ADR-0126, commit f03ac50a]
 code: [apps/playground/src/glue/devMode.ts, apps/playground/src/App.ts, apps/playground/src/presets.ts, apps/playground/src/adapters/useMode.ts, tests/e2e/m10-dev-hmr.spec.ts, docs/adr/README.md]
 ---

@@ -4,6 +4,7 @@ status: parked
 title: WASI symlink syscalls (path_symlink / path_readlink / path_link) — needs VFS symlink layer (M12)
 created: 2026-06-08
 why: VFS has no symlink layer, so all three return E_NOSYS; intentionally deferred to M12 until a real use case appears
+user_story: As a dev running a compiled binary that creates or follows symlinks via `path_symlink`/`path_readlink`/`path_link` (or relies on `path_open` symlink-follow `dirflags`), I want them resolved, but today all three return `E_NOSYS` — the VFS has no symlink layer (deferred) so links and `lstat`/`realpath` divergence don't exist.
 sources: [docs/public/compat/wasi.md, ADR-0050, PROJECT_PLAN M9 acceptance / M12]
 ---
 ## Context

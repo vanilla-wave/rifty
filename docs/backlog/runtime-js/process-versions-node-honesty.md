@@ -4,6 +4,7 @@ status: active
 title: Reconcile process.versions.node='22.0.0' impersonation with ADR-0026 honesty
 created: 2026-06-08
 why: platform/arch are honest ('rifty'/'wasm') but version/versions.node lie; the inconsistency has no ADR carve-out
+user_story: As a developer running a package that gates Node code paths on `process.versions.node`, I want that gate to stay enabled, but the honesty principle means it could be dropped to `versions.rifty`-only — then the package silently takes its "no Node" branch
 sources: [ADR-0026, audit P1-4]
 code: [packages/runtime-js/src/builtins/process.ts:82]
 ---

@@ -4,6 +4,7 @@ status: active
 title: stdin-filter modes unbuilt: no builtin consumes ctx.stdin (wc/cat/head/tail/grep + sort/uniq/cut/tr)
 created: 2026-06-13
 why: ADR-0089 added ctx.stdin specifically to make stdin-filter coreutils buildable, but only mouse-demo reads it and every filter hard-rejects stdin mode — so once pipes (|) and input-redirect (<) land their RHS/redirect targets have nothing that consumes the stream; this is the missing third leg those two backlog items implicitly depend on but do not cover.
+user_story: As a developer at the rifty shell prompt, I want `printf 'a\nb\n' | wc -l`, `cat < f`, or `grep PAT` with no FILE to read piped/redirected input, but today every filter rejects stdin mode (`grep` exit-2, `wc` exit-1) since none consume `ctx.stdin`.
 sources: [ADR-0089]
 code: [packages/shell/src/commands/grep.ts, packages/shell/src/commands/cat.ts, packages/shell/src/commands/wc.ts, packages/shell/src/commands/head.ts, packages/shell/src/commands/tail.ts, packages/shell/src/types.ts, packages/shell/src/shell.ts]
 ---

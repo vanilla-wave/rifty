@@ -5,6 +5,7 @@ status: active
 title: ADR-0091 — optional dispatchStruct({url,method,headers,body}) fast-path on CrossRealmPortHandler
 created: 2026-06-08
 why: per-request body copied 5-6x across realms (no Transferables); skip one O(N) copy + arrayBuffer() drain + Request rebuild; write-before-code
+user_story: As a dev POSTing large bodies through the preview server, I want page→worker requests to feel snappy, but today each request body is copied 5-6x across realms with an extra `arrayBuffer()` drain + `new Request` rebuild and no `dispatchStruct` fast-path exists
 sources: [perf-audit #21, adr-plan A/ADR-0091, ADR-0043/0048 (not contradicted)]
 ---
 ## Context

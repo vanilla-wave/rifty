@@ -4,6 +4,7 @@ status: active
 title: Output-redirect targets bypass glob/quote pipeline — diverges from ADR-0091 §40
 created: 2026-06-13
 why: ADR-0091 §40 ratifies that a redirect target like `> *.log` follows the same unquoted-expand rule as argv, but shell.ts captures the target verbatim and splices it out of `rest` BEFORE the glob/quote pass runs, so an unquoted glob target writes a literal `*.log` file and a quoted target's provenance is silently ignored.
+user_story: As a developer at the rifty shell prompt, I want `echo hi > *.log` to expand the target like argv does (and `> '*.log'` to stay literal), but today the redirect target skips the glob/quote pass and writes a literal `*.log` file.
 sources: [ADR-0091]
 code: [packages/shell/src/shell.ts]
 ---

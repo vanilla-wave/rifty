@@ -4,6 +4,7 @@ status: active
 title: ADR-0125 §2 promises a multi-window anonymous-embedded heuristic warn in owner-resolver.ts that does not distinctly exist
 created: 2026-06-13
 why: ADR-0125 §2's 'honest residual' promises an observable warn-once for the multi-window anonymous-embedded ('') routing heuristic, but the sole warn is the generic no-clientId fallback and the code path that actually applies the ready-window heuristic emits no warn — so the documented operator diagnostic is misleading.
+user_story: As a developer with two preview windows open whose `''` anonymous-embedded fetch lands on the wrong one, I want a console warn naming the most-recently-focused-ready-window heuristic so I know which window served me, but today only the generic `no clientId; falling back to first controlled window` warn fires and mislabels the case.
 sources: [ADR-0125]
 code: [packages/service-worker/src/owner-resolver.ts, packages/service-worker/src/owner-binding-window.ts]
 ---

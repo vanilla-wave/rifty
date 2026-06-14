@@ -4,6 +4,7 @@ status: active
 title: Exact node:sqlite builtin registration module path
 created: 2026-06-08
 why: Harness-local side-effect registration is provisional; TODO(backlog: net/sqlite-registration-path) marker still open
+user_story: As a developer importing `node:sqlite` in a rifty app, I want it resolvable like `node:net`/`node:https` without a side-effect import, but today the builtin only registers if I first import `@riftydev/net/sqlite/register-builtins` — module path still provisional.
 sources: [ADR-0065 D3, ADR-0035]
 code: [packages/net/src/sqlite/register-builtins.ts:19]
 ---

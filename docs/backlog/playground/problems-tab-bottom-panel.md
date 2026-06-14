@@ -4,6 +4,7 @@ status: parked
 title: PROBLEMS tab in playground bottom panel (Monaco markers)
 created: 2026-06-08
 why: VSCode-faithful proposal included a PROBLEMS tab but it was not one of the four asks; v1 ships Console-only
+user_story: As a developer using the rifty web playground, I want a PROBLEMS tab listing Monaco diagnostics from `getModelMarkers`, but today the bottom panel ships Console-only so type/lint errors are scattered across editor gutters with no aggregated view.
 sources: [ADR-0075]
 ---
 ## Context

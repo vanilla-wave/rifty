@@ -4,6 +4,7 @@ status: parked
 title: Automatic tsconfig discovery for path aliases (vs explicit paths option)
 created: 2026-06-08
 why: ADR-0066 ships explicit caller-supplied paths; auto-discovery deferred until a consumer needs zero-wiring
+user_story: As a dev opening a TS project in rifty, I want `@/utils` style path aliases to resolve straight from my `tsconfig.json` (with `extends` chain and `baseUrl`); currently the runtime only matches a `paths` map I must read and supply by hand — no auto-discovery.
 sources: [ADR-0066]
 ---
 ## Context

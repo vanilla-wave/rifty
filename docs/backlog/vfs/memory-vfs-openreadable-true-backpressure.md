@@ -4,6 +4,7 @@ status: active
 title: True backpressured MemoryVfs.openReadable (await drain) + 50 MiB heap-delta benchmark
 created: 2026-06-13
 why: MemoryVfs.openReadable pull() enqueues each chunk without awaiting any drain, so the TL;DR 'true backpressured streaming' overstates the memory backend; the heap-delta benchmark is also unbuilt.
+user_story: As a dev piping a large MemoryVfs file through a slow consumer expecting real flow control, I want `openReadable` to pause until the sink drains, but today `pull()` enqueues every chunk eagerly so memory balloons instead of backpressuring
 sources: [ADR-0020]
 code: [packages/vfs/src/memory.ts, packages/vfs/src/opfs.ts]
 ---

@@ -4,6 +4,7 @@ status: parked
 title: grep/find frozen-GNU byte-fixtures deferred; ls --color/-l not byte-fixtured
 created: 2026-06-08
 why: ADR-0093(b) wants frozen-GNU golden fixtures as the oracle for ls/grep/find; ggrep/gfind not installed on the box, so grep/find ride hand-asserted conformance tests instead
+user_story: As a rifty contributor, I want `grep`/`find` output byte-checked against real GNU like `ls` already is, but today ggrep/gfind aren't on the box so they ride hand-asserted conformance tests, no golden oracle.
 sources: [Q-2026-06-07-411, adr/shell/0093-shell-command-parity-harness.md, adr/runtime-js/0050-no-symlink-fs-realpath-fs-lstat-semantics.md]
 code: [packages/shell/fixtures/ls/]
 ---

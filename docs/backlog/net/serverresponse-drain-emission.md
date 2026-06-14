@@ -4,6 +4,7 @@ status: active
 title: ServerResponse Node-style 'drain' emission (gated by _needDrain) — confirm and promote
 created: 2026-06-08
 why: Shipped Node-parity widening still carries a TODO(backlog: net/serverresponse-drain-emission) marker; needs confirm→promote, not new work
+user_story: As a developer streaming a large response via `res.on('drain')` after a backpressured `write()`, I want the `'drain'` event to fire like Node, but the gated emission ships under a `TODO(backlog)` marker awaiting confirm→promote — not yet ratified as guaranteed.
 sources: [Q-2026-05-30-102, feature-05-effect-http-bridge T3, ADR-0054]
 code: [packages/net/src/http/response.ts:51, packages/net/src/http/response.ts:74]
 ---

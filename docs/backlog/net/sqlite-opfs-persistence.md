@@ -4,6 +4,7 @@ status: active
 title: node:sqlite OPFS durable persistence (vs in-memory-first sql.js)
 created: 2026-06-08
 why: Every DatabaseSync is a fresh in-memory db regardless of path; no cross-reload durability
+user_story: As a dev opening `new DatabaseSync('./app.db')`, I want my writes to survive a page reload, but today every `DatabaseSync` is a fresh in-memory sql.js handle regardless of `#filename` — no OPFS backing, so data vanishes on reload.
 sources: [ADR-0065 D2]
 code: [packages/net/src/sqlite/database-sync.ts:107]
 ---

@@ -4,6 +4,7 @@ status: parked
 title: Shell command substitution `$(…)` / `` `…` ``
 created: 2026-06-08
 why: not parsed — tokenizer emits the literal characters
+user_story: As a developer at the rifty shell prompt, I want `echo $(date)` or `` `pwd` `` to splice a sub-command's stdout into my line, but today the tokenizer passes `$(…)`/backticks through as literal characters with no inner evaluation.
 sources: []
 ---
 ## Context

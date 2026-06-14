@@ -4,6 +4,7 @@ status: active
 title: Worker-per-process residuals — worker-side process.stdin Readable + un-run conformance
 created: 2026-06-08
 why: SAB-Worker stdin write path landed but worker-side process.stdin Readable + the SAB-only conformance suites stay unverified in Node
+user_story: As a developer whose worker child reads its own `process.stdin` as a Node Readable in rifty, I want it to consume bytes the parent writes via `child.stdin.write/end`, but today only the write path is wired — the worker side has no `process.stdin` Readable and the SAB-only suites are skipped under Node, so the round-trip is never exercised in CI.
 sources: [TASKS M6, ADR-0045, ADR-0011]
 ---
 ## Context

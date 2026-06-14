@@ -4,6 +4,7 @@ status: active
 title: "Process = Web Worker" for every child (drop the in-realm new Function fallback)
 created: 2026-06-08
 why: M6 open acceptance — some child_process paths still run as new Function in the parent realm, not a real Worker per child
+user_story: As a dev expecting `child_process.spawn`/`fork` to give each child its own isolated `globalThis`, I want every child in a separate Worker, but today without the SAB+worker-url gate it falls back to `new Function` in the parent realm so children share the parent's globals.
 sources: [A-002, ADR-0011, TASKS M6]
 ---
 ## Context

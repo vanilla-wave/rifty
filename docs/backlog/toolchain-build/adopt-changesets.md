@@ -4,6 +4,7 @@ status: parked
 title: (opt) Adopt changesets for versioning + changelogs
 created: 2026-06-08
 why: nicer release ergonomics over hand-maintained lockstep versions + changelogs; optional, not yet justified
+user_story: As a rifty maintainer cutting a release, I want `@changesets/cli` to bump versions + generate per-package changelogs automatically, but today versions move lockstep by hand and every CHANGELOG is hand-edited.
 sources: [A8, ADR-0070]
 ---
 ## Context

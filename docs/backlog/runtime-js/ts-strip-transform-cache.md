@@ -4,6 +4,7 @@ status: active
 title: Loader-internal TS-strip transform cache — key + invalidation
 created: 2026-06-08
 why: id-keyed cache shipped; content-hash keying deferred until a live in-place HMR edit layer exists
+user_story: As a developer live-editing a `.ts` file in place under an HMR layer, I want re-import to pick up my edit, but today the strip cache keys by resolved id (not content) so a mutated source serves the stale transform until explicit `invalidate(id)`
 sources: [ADR-0052 D4]
 code: [packages/runtime-js/src/module-loader/loader.ts:81]
 ---

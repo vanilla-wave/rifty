@@ -5,6 +5,7 @@ status: active
 title: NONE-items quick-wins batch (E) — internal byte-identical perf fixes, no ADR/Q
 created: 2026-06-08
 why: a batch of byte-identical internal micro-fixes that ship immediately with no ADR/Q; not yet implemented (ascii-mask needs a failing parity case first)
+user_story: As a dev paying repeated overhead in `require('express')`, I want hoisted UTF8 codec singletons, EventEmitter single-listener fast path, and dir-dedup linker writes — but today these micro-wins (and the `& 0x7f` ascii mask) are unimplemented, so every call re-pays the cost.
 sources: [perf-audit §4/§3, adr-plan E (#1/#2/#4/#6/#7/#9/#22a/#27/ascii-mask)]
 ---
 ## Context

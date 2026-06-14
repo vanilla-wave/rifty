@@ -4,6 +4,7 @@ status: parked
 title: Lazy per-file OPFS content preload (vs eager full preload at init)
 created: 2026-06-08
 why: OpfsFsSync.init eagerly preloads all persisted bytes — O(total bytes) memory + O(files) reads at boot
+user_story: As a dev reloading a page with a large persisted OPFS tree (real `node_modules`), I want a fast boot, but today `init()` reads every file's bytes into memory up front so startup is O(total bytes)
 sources: [ADR-0072]
 ---
 ## Context

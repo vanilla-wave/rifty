@@ -4,6 +4,7 @@ status: parked
 title: Shell parameter expansion (`${VAR:-default}`, `${#VAR}`, `${VAR%suf}` …)
 created: 2026-06-08
 why: only plain `${NAME}` supported; advanced POSIX forms throw from tokenizer
+user_story: As a developer at the rifty shell prompt, I want `${VAR:-default}`, `${#VAR}`, `${VAR%suf}` in my scripts/package.json commands, but today any non-bare `${…}` throws `unsupported variable expansion form` from the tokenizer.
 sources: []
 ---
 ## Context

@@ -4,6 +4,7 @@ status: active
 title: Re-anchor the per-milestone document/backlog review ritual after PROJECT_PLAN retires
 created: 2026-06-08
 why: PROJECT_PLAN's closing "living document / review-each-milestone" ritual loses its home when the file retires; the explicit per-milestone promote/rollback loop must re-anchor to ROADMAP/CLAUDE
+user_story: As a rifty maintainer closing a milestone, I want a canonical promote/rollback ritual to sweep backlog, run `compat:generate`, and flag entries idle >2 milestones as debt, but today that loop only lived in the retired PROJECT_PLAN so it has no home.
 sources: [PROJECT_PLAN closing ritual, CLAUDE.md footer]
 ---
 ## Context

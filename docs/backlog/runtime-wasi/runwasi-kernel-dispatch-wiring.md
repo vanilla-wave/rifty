@@ -4,6 +4,7 @@ status: parked
 title: runWasi → kernel ProcessHandle dispatch wiring (ADR-0038 left as TODO)
 created: 2026-06-08
 why: ADR-0038 bridges runWasi to kernel spawnWorker so big WASI tools don't block the main thread, but the audit records the dispatch wiring was left as a TODO; keep as future runtime-wasi/kernel wiring work
+user_story: As a dev running a heavy WASI tool (20 MB esbuild/tsc/swc) that reads source from stdin, I want it off the main thread without freezing the UI, but today `runWasi` runs inline on the caller stack and the worker entry never pumps stdin into guest fd 0
 sources: [docs/research/open-webcontainers-alternative-2026-06.md, ADR-0038, audit-digest ADR records line 45]
 ---
 ## Context

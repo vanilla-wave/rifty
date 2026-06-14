@@ -5,6 +5,7 @@ status: active
 title: ADR-0088 — bounded-concurrency tarball fetch in npm install (placement walk stays serial + deterministic)
 created: 2026-06-08
 why: npm install fully serial — Σ of every packument+tarball RTT; biggest structural throughput lever; write-before-code
+user_story: As a dev running a cold `npm install`, I want tarball fetches to overlap so wall-time isn't Σ of every packument+tarball RTT — but today `installer.ts` awaits each `visit` serially with no `Promise.all`, so I wait for one round-trip at a time.
 sources: [perf-audit #24, adr-plan A/ADR-0088, ADR-0028, ADR-0042/0023 (downgraded), installer.test.ts:225/269-274]
 ---
 ## Context

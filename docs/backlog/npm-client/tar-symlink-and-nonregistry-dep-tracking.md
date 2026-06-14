@@ -4,6 +4,7 @@ status: active
 title: Unpacker tar-symlink + installer non-registry dep-spec throws lack a backlog item enumerating the supported-install contract
 created: 2026-06-13
 why: The tar-symlink throw cites 'M12' with no tracking file, and the dependency-spec throws (file/workspace/git/http-tarball/npm-alias) plus the nested/non-string package.json throw have no backlog item enumerating the supported-install contract or a compat entry.
+user_story: As a developer installing a dep via `file:`/`workspace:`/`git+`/`npm:` alias or a tarball with symlinks, I want a clear statement of what npm-client supports, but today each just throws `NotImplementedError` with no documented contract telling me only registry semver/tag installs work
 sources: [ADR-0042, ADR-0051]
 code: [packages/npm-client/src/unpacker.ts, packages/npm-client/src/installer.ts, packages/npm-client/src/unpacker.test.ts, packages/npm-client/src/installer.test.ts]
 ---

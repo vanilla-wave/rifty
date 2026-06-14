@@ -4,6 +4,7 @@ status: parked
 title: node:sqlite StatementSync.columns() column metadata
 created: 2026-06-08
 why: sql.js compiled without SQLITE_ENABLE_COLUMN_METADATA; faithful shape unavailable — needs custom WASM rebuild
+user_story: As a dev introspecting a `node:sqlite` query, I want `StatementSync.columns()` to give me each column's `{column, database, name, table, type}`, but today it throws `NotImplementedError` since prebuilt sql.js lacks `SQLITE_ENABLE_COLUMN_METADATA` and only exposes the column name.
 sources: [ADR-0065]
 ---
 ## Context

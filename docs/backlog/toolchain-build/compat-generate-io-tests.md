@@ -4,6 +4,7 @@ status: parked
 title: Source @riftydev/io tests into pnpm compat:generate (Buffer matrix hand-maintained)
 created: 2026-06-08
 why: docs/public/compat/buffer.md is hand-maintained because compat:generate can't yet read @riftydev/io test results — an unfinished tooling gap
+user_story: As a rifty maintainer regenerating the Buffer compat matrix, I want `pnpm compat:generate` to source the 33 `packages/io/src/buffer.test.ts` cases, but today it ingests only conformance/integration results so I hand-edit the matrix and it drifts.
 sources: [docs/public/compat/buffer.md header, A-033]
 ---
 ## Context

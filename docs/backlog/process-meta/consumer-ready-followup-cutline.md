@@ -4,6 +4,7 @@ status: active
 title: Consumer Ready follow-up cutline
 created: 2026-06-12
 why: The current branch delivers a large adoption slice, but full Consumer Ready still has tracked future work across areas
+user_story: As a maintainer planning post-branch work, I want one durable index of every remaining Consumer-Ready follow-up (`Sandbox.exec` streaming, snapshot/restore, `create-rifty` scaffold, `node:zlib` subset…), but today that list lives only in temporary Superpowers spec notes that vanish with the branch.
 sources: [docs/ROADMAP.md, docs/backlog/distribution/README.md]
 ---
 

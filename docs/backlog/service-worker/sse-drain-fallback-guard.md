@@ -4,6 +4,7 @@ status: parked
 title: No-transferable-stream realm drains an unending SSE body forever (guard the drain fallback)
 created: 2026-06-08
 why: packSerializedResponse's drain fallback buffers to Uint8Array — on an unending text/event-stream body in a realm without transferable streams it hangs forever, delivering SSE never and silently
+user_story: As a dev whose rifty-previewed app streams Server-Sent Events (`text/event-stream`), I want it to deliver — or fail loud — in browsers without transferable `ReadableStream`s, but today `packSerializedResponse` drains the unending body to a `Uint8Array` and hangs forever, delivering SSE never and silently.
 sources: [feature-07-ws-sse-bridge (T3/Risks), ADR-0055, ADR-0048]
 ---
 ## Context

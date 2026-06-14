@@ -4,6 +4,7 @@ status: active
 title: OPFS persistence — write→reload round-trip in a real browser session
 created: 2026-06-08
 why: M4 open acceptance — sync backend + conformance exist, but real-browser write→reload persistence is unverified end-to-end
+user_story: As a developer with a rifty app on OPFS, I want edits to `/workspace/*.txt` to survive a `page.reload()` in a `crossOriginIsolated` tab, but today only a bootstrap smoke covers it — the full `OpfsFsSync` init→preload→read round-trip is unverified e2e.
 sources: [TASKS M4, ADR-0013, ADR-0072, A-004]
 ---
 ## Context

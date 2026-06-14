@@ -4,6 +4,7 @@ status: parked
 title: node:test built-in runner
 created: 2026-06-12
 why: package-authored test suites increasingly use node:test, but a runner commits to scheduling, reporter, mock, and TestContext semantics; keep that contract separate from the minimal vm subset
+user_story: As a dev running a package's `node:test` suite (nested tests, skip/todo/only, `TestContext`, mocking), I want it to execute — but today `node:test` is unregistered so any `import 'node:test'` fails.
 sources: [docs/research/open-webcontainers-alternative-2026-06.md]
 code: [packages/runtime-js/src/builtins/index.ts]
 ---

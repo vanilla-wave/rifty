@@ -5,6 +5,7 @@ status: active
 title: ADR-0086 — carry ResolvedModule to execution (loadResolved) — drop second resolve+read+scope-walk
 created: 2026-06-08
 why: every module resolved twice + read+scope-walked twice per load; resolve() drops .source/.packageRoot then loadAsync re-resolves; write-before-code
+user_story: As a dev loading modules, I want each one resolved+read+scope-walked once, but today `resolve()` throws away `.source`/`.packageRoot` so `loadAsync` redoes the whole resolve per module — doubling load latency
 sources: [perf-audit #14, adr-plan A/ADR-0086, ADR-0052 (downgraded — public ModuleLoaderOptions, not internal EsmLoaderDeps)]
 ---
 ## Context

@@ -4,6 +4,7 @@ status: active
 title: worker_threads child cwd hardcoded `/workspace` — does not inherit the parent ProcessRecord cwd
 created: 2026-06-13
 why: The worker_threads real-Worker branch hardcodes spec.cwd `/workspace` instead of inheriting the spawning process's cwd, so a guest's process.cwd() is wrong after a parent chdir and relative fs paths resolve from the wrong root.
+user_story: As a developer that calls `process.chdir('/foo')` then spawns a `new Worker(...)` in rifty, I want the worker to inherit my cwd like Node does so its `process.cwd()` and relative `fs`/`require` paths resolve from `/foo`, but today `startViaKernel` hardcodes `spec.cwd = '/workspace'` so the worker always sees `/workspace`.
 sources: [ADR-0019, ADR-0011]
 code: [packages/runtime-js/src/builtins/worker_threads.ts, packages/kernel/src/process-manager.ts]
 ---

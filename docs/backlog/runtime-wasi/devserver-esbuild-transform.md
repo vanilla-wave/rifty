@@ -4,6 +4,7 @@ status: parked
 title: examples/vite-like-dev — TS/JSX transform + bare-specifier ESM rewriting via esbuild.wasm
 created: 2026-06-08
 why: the mini dev-server's TS/JSX transform and bare-specifier rewriting rows are ❌ Pending in the m10 matrix — superseded in spirit by real Vite (ADR-0050) but the example server itself never got esbuild wired
+user_story: As a dev running the bundled `vite-like-dev` example, I want it to serve `.ts`/`.tsx` and rewrite bare `import` specifiers via `esbuild.wasm`, but today the example never calls `transformWithEsbuild()` so those requests stay untranspiled
 sources: [TASKS M10]
 ---
 ## Context

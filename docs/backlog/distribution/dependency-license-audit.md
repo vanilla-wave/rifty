@@ -4,6 +4,7 @@ status: parked
 title: Dependency licence audit for published install surface
 created: 2026-06-12
 why: first-party MIT position is documented, but transitive dependency licence audit is broader compliance work and should not block the open-runtime positioning page
+user_story: As a dev shipping rifty inside a commercial product, I want a direct/transitive licence inventory of the published packages and shipped browser assets that flags copyleft/source-available/missing terms, but today only the first-party MIT position is recorded; the wider install-surface licences are unverified.
 sources: [docs/public/open-runtime-position.md, docs/research/open-webcontainers-alternative-2026-06.md]
 code: [package.json, pnpm-lock.yaml, packages, tools/shadow-registry]
 ---

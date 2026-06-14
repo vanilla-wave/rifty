@@ -4,6 +4,7 @@ status: active
 title: Shadow-registry substitution has no debug-disable flag promised by ADR-0006
 created: 2026-06-13
 why: ADR-0006 Mechanism promises 'A flag disables it for debugging' but no such flag exists — InstallOptions has no disable/bypass field, resolveOverride is consulted unconditionally, and RIFTY_*SHADOW/disableOverrides finds nothing repo-wide; the ADR claims an escape hatch that does not exist.
+user_story: As a developer debugging a misbehaving baked shadow-registry substitution, I want a `disableShadowRegistry` switch to install the real package and compare, but today `InstallOptions` has no such flag so my only workaround is editing the baked table or a per-entry self-map
 sources: [ADR-0006]
 code: [packages/npm-client/src/installer.ts, packages/npm-client/src/overrides.ts]
 ---

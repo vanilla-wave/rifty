@@ -4,6 +4,7 @@ status: active
 title: HttpServer.listen options-object overload — confirm and promote to ADR
 created: 2026-06-08
 why: Shipped Node-parity widening still carries a TODO(backlog: net/http-listen-options-overload) marker; needs confirm→promote, not new work
+user_story: As a maintainer, I want the shipped `server.listen({port,host}, cb)` options-overload widening (the `@effect/platform-node` silent-bind fix) backed by a ratified decision — can't close it out, it still rides a live `net/http-listen-options-overload` TODO marker at server.ts:52 awaiting confirm-then-promote.
 sources: [Q-2026-05-30-101, feature-05-effect-http-bridge T1, ADR-0054]
 code: [packages/net/src/http/server.ts:52]
 ---

@@ -4,6 +4,7 @@ status: active
 title: Baked snapshot regeneration policy + git size pressure
 created: 2026-06-13
 why: the ~9 MB committed snapshot drifts silently when a baked template's install map changes, and every re-bake permanently grows git history
+user_story: As a developer picking an instant playground template, I want its baked `node_modules` snapshot to boot instantly with the deps it advertises, but today drift silently falls back to a real install with no CI guard so I lose the instant-boot win unannounced.
 sources: [docs/adr/playground/0135-sandbox-setup-kinds-instant-vs-from-scratch.md]
 code: [apps/playground/tools/bake-dep-snapshots.ts]
 ---

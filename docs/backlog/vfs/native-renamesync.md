@@ -4,6 +4,7 @@ status: parked
 title: Native renameSync on the sync VFS mirror (replace copyTree+rm)
 created: 2026-06-08
 why: FsSync has no renameSync; directory rename copies subtrees via copyTree+rmSync instead of moving in place
+user_story: As a dev `renameSync`-ing a big directory (e.g. a `node_modules` subtree), I want a cheap in-place move, but today it deep-copies every file via copyTree then `rmSync` the old path
 sources: [ADR-0075]
 code: [apps/playground/src/glue/fs-ops.ts:73]
 ---

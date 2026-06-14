@@ -4,6 +4,7 @@ status: active
 title: Execute node_modules/.bin launcher shims by command name (PATH lookup)
 created: 2026-06-12
 why: install() now writes .bin launcher shims (PR #21 + review fix), but nothing in the shell resolves a bare `vite`/`tsc` to them — "installed CLIs invokable by name" is still NOT delivered; `npm run` relies on the host script runner special-casing commands
+user_story: As a developer at the rifty shell prompt, I want to type a bare `vite`/`tsc` and run the installed CLI, but today the shell has no PATH-style walk-up to `node_modules/.bin/<name>` so the shims never get resolved.
 sources: [M11, "npm-client/packagejson-driven-install-and-bin-linking (closed, PR #21)", ADR-0050]
 code: [packages/shell/src/shell.ts, packages/npm-client/src/linker.ts]
 ---

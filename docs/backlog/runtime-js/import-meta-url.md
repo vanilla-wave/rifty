@@ -4,6 +4,7 @@ status: active
 title: import.meta.url support in the ESM loader
 created: 2026-06-08
 why: import.meta.url is unimplemented — compat row ❌ Pending
+user_story: As a developer using `new URL('./x', import.meta.url)` to compute a module-relative path in ESM, I want a usable value, but the ESM loader doesn't populate `import.meta.url` so the idiom yields nothing.
 sources: [compat/modules.md, TASKS M3 follow-up]
 ---
 ## Context

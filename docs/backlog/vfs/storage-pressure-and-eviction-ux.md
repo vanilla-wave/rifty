@@ -4,6 +4,7 @@ status: parked
 title: Browser storage pressure and eviction UX
 created: 2026-06-12
 why: the playground now requests persistent storage, surfaces quota, and can export/import a JSON workspace archive, but browser-specific eviction and out-of-space flows still need user-tested UX
+user_story: As a developer whose rifty app fills OPFS, I want a clear recovery surface when a write hits `EDQUOT`/quota or Safari evicts my origin, but today there is no dedicated out-of-space flow — write-through quota errors surface as ordinary operation errors with no archive-rescue UX.
 sources: [ADR-0072]
 code: [apps/playground/src/glue/storage-status.ts, packages/vfs/src/opfs-sync.ts]
 ---

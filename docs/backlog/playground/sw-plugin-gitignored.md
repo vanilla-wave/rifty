@@ -4,6 +4,7 @@ status: active
 title: apps/playground/build/sw-plugin.ts swallowed by .gitignore (build/) — fresh-checkout CI red
 created: 2026-06-08
 why: The sw-plugin source lives under build/, which .gitignore swallows; a fresh checkout has no file → playground typecheck/CI goes red
+user_story: As a developer cloning the playground fresh, I want `pnpm install` then `vite build`/`pnpm typecheck` green out of the box, but today `.gitignore` swallows `build/sw-plugin.ts` so a clean clone is missing the file and CI goes red.
 sources: [A4, EPIC A, ADR-0016]
 ---
 ## Context

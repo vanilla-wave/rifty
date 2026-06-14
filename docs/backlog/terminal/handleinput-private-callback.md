@@ -4,6 +4,7 @@ status: active
 title: Make RiftyTerminal.handleInput private + add onHandleInput callback
 created: 2026-06-08
 why: handleInput still public async (terminal.ts:104, TSDoc "production callers must not call this"); no test-observability callback; ~30 tests call it directly
+user_story: As a user typing into the rifty terminal, I want every keystroke to flow through one real input path so the editor can't desync; today `handleInput` is `public async` — a stray external call can inject a keypress out of band, and there's no `onHandleInput` hook to watch it.
 sources: [A-041, REVIEW_ACTIONS.md]
 ---
 ## Context

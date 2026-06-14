@@ -4,6 +4,7 @@ status: parked
 title: Configurable loader map + binary (.wasm) asset loader (vs fixed text-extension set)
 created: 2026-06-08
 why: ADR-0067 ships a fixed text-extension loader set; configurability + binary loader need real requirements
+user_story: As a dev who wants to `import` a `.wasm` binary or wire a custom ext->loader map like esbuild's `loader`, I want that; currently only the fixed text set (`.txt`/`.sql`/`.md`/`.prompt`) is served and there is no binary loader or configurable map.
 sources: [ADR-0067]
 ---
 ## Context
