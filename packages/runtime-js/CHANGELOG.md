@@ -2,6 +2,44 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`node:vm` QuickJS engine — guest→host write-back / reconciliation (T8,
+  ADR-0138, Option A).** Guest writes are now reconciled to the host
+  contextObject. vm runs are SYNCHRONOUS (the host can't observe the sandbox
+  mid-run), so a post-run sweep + per-run reseed is observationally equivalent to
+  a live contextObject for sync code — chosen over a live inbound Proxy (Option B:
+  a retained host trap fn per seeded object, disposal grief deferred to T9). The
+  engine brackets every run with `membrane.reseedContext` (host→guest BEFORE —
+  picks up between-run host mutations; host objects reuse the cached seed but its
+  props are REFRESHED from current host state) and `membrane.sweepContext`
+  (guest→host AFTER). The sweep walks the guest global's OWN ENUMERABLE keys
+  (`Object.keys(global)` — the 61 intrinsics are non-enumerable, so this is
+  exactly seeded keys + guest `var`/bare-assignment globals) and, per key, either
+  RECURSES into a still-host-origin seed (deep write-back into the SAME host
+  object: `shared.count = 42`, `module.exports = {…}`) or writes the
+  marshalled-out value (new global `newGlobal = 99`; reassigned global). The OUT
+  identity cache makes a swept-back slot the SAME wrapper as a value the run also
+  returned, so `this.shared = {tag:1}; this.shared` gives `ret === sb.shared`
+  (#21); a written guest object read from the host is membrane-wrapped, so
+  `sb.module.exports instanceof Object` is FALSE (cross-realm), matching Node.
+  An OUT wrapper round-tripping back IN (a value a prior run returned, stored by
+  the host, seen by a later run) now recovers its ORIGINAL guest handle via a new
+  `#outWrapperGuest` reverse map (object/array/function) instead of being copied
+  in and then rejected on the next sweep's write-through. Sweep-after +
+  reseed-before keeps host & guest consistent (the host already reflects prior
+  guest writes by the next reseed, so reseed-from-host never clobbers them).
+  Parity: `cases/vm/quickjs-writeback.case.ts` (nested write #18, identity #21,
+  new global), `cases/vm/quickjs-shared-mutation.case.ts` (Node-captured: deep
+  mutation of a pre-existing shared host object visible to host with same ref;
+  between-run host mutation visible to the next run). Documented residual (not in
+  the 27 probes): structurally REMOVING a key from a *host object* (not the
+  top-level context) between runs is not reflected (overwrite/add only); a guest
+  CALLBACK that mutates the sandbox AFTER the sync run is seen only at the NEXT
+  reconciliation (or never) — both flagged for T9. Disposal unchanged: sweep/
+  reseed use only transient handles (Scope / explicit dispose); no `ctx.dispose`
+  on the run path; retained wrapper/seed handles still leak until T9.
+
 ### Fixed
 
 - **`node:vm` QuickJS membrane — unforgeable host-origin tracking (T7 review,

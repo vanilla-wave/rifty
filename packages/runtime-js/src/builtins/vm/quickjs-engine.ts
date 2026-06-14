@@ -8,11 +8,13 @@
  * only in {@link disposeContext}. Each context also gets one {@link Membrane}
  * (identity cache + wrappers) bound to it.
  *
- * Scope through T7: marshal guest completion values back to the host — primitives
+ * Scope through T8: marshal guest completion values back to the host — primitives
  * directly, OBJECT/ARRAY/FUNCTION through the {@link Membrane} (cross-realm
- * wrappers, identity-cached) — AND seed the live contextObject INTO the guest at
- * context creation (T7 read path, `membrane.seedContext`). Host-side mutation
- * re-sync between runs + guest→host write-back are T8; errors still throw raw
+ * wrappers, identity-cached) — AND reconcile the contextObject around every run.
+ * Each run is bracketed by `membrane.reseedContext` (host→guest, BEFORE — picks up
+ * between-run host mutations) and `membrane.sweepContext` (guest→host, AFTER —
+ * deep write-back + new globals). Sync run semantics make this observationally
+ * equivalent to a live contextObject (ADR-0138, T8). Errors still throw raw
  * (faithful error marshalling is T11).
  *
  * Disposal discipline (QUICKJS_API.md): a single leaked handle ABORTS the whole
@@ -52,27 +54,35 @@ function getOrCreateGuestRuntime(context: ContextObject): GuestRuntime {
     const membrane = new Membrane(qctx);
     rt = { qctx, membrane };
     guestRuntimes.set(context, rt);
-    // Seed the LIVE contextObject INTO the guest realm (T7 read path) BEFORE any
-    // run, so seeded names are readable on first eval. Host-side mutation re-sync
-    // between runs + guest→host write-back is T8.
-    membrane.seedContext(context);
   }
   return rt;
 }
 
-function evalToHost(rt: GuestRuntime, source: string): unknown {
+function evalToHost(rt: GuestRuntime, context: ContextObject, source: string): unknown {
   const { qctx, membrane } = rt;
+  // T7/T8 reconciliation around the SYNC run: reseed the LIVE contextObject INTO
+  // the guest from CURRENT host state (so between-run host mutations are visible),
+  // run, then sweep guest writes BACK to the host (deep mutations + new globals).
+  // Sync semantics make this observationally equivalent to a live contextObject.
+  membrane.reseedContext(context);
   const result = qctx.evalCode(source);
   // unwrapResult returns the success handle (caller owns it) or throws the guest
   // error as a native Error (disposing the error handle itself). A raw throw is
-  // acceptable through T6 — faithful error marshalling is T11.
+  // acceptable through T6 — faithful error marshalling is T11. On throw we skip
+  // the sweep (Node likewise does not reconcile a sandbox after a thrown run for
+  // the completion value — partial mutations that occurred still live in the
+  // guest and surface on the NEXT run's reseed-from-host? no: they are guest-side
+  // until a successful sweep; matching Node's "no observable host write on throw"
+  // for these cases is T11's error-path concern).
   const handle = qctx.unwrapResult(result);
   try {
     // Primitives are marshalled by value; OBJECT/ARRAY/FUNCTION become membrane
     // wrappers that RETAIN an internal dup of the guest handle. Disposing this
     // per-run completion handle afterwards is therefore safe — the wrapper holds
     // its own retained dup, not this handle.
-    return membrane.wrapGuestToHost(handle);
+    const out = membrane.wrapGuestToHost(handle);
+    membrane.sweepContext(context);
+    return out;
   } finally {
     handle.dispose();
   }
@@ -83,10 +93,12 @@ export const quickjsEngine: VmEngine = {
   initContext(context) {
     // Create the persistent guest context+membrane eagerly so contextify cost is
     // paid at createContext time, not on first run. Idempotent via the WeakMap.
+    // Seeding is deferred to the per-run `reseedContext` (T8) so reads always
+    // reflect the CURRENT host state, not a stale create-time snapshot.
     getOrCreateGuestRuntime(context);
   },
   runInContext(code, context, filename) {
-    return evalToHost(getOrCreateGuestRuntime(context), withSourceURL(code, filename));
+    return evalToHost(getOrCreateGuestRuntime(context), context, withSourceURL(code, filename));
   },
   compile(code, filename) {
     return { code, filename };
@@ -94,6 +106,7 @@ export const quickjsEngine: VmEngine = {
   runCompiled(script: CompiledScript, context) {
     return evalToHost(
       getOrCreateGuestRuntime(context),
+      context,
       withSourceURL(script.code, script.filename),
     );
   },
