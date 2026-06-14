@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { PRESETS } from '../presets.ts';
+import { EXPRESS_SQLITE_TEMPLATE } from '../templates/express-sqlite.ts';
 import { MONO_FONT_STACK } from './fonts.ts';
 
 const themeCss = readFileSync(
@@ -38,5 +40,21 @@ describe('playground mono font', () => {
   it('preloads the JetBrains Mono subset, not the removed Roboto Mono', () => {
     expect(indexHtml).toContain('/fonts/jetbrains-mono.woff2');
     expect(indexHtml).not.toContain('roboto-mono');
+  });
+
+  it('uses JetBrains Mono in seeded sandbox preview sources', () => {
+    const seededSources = [
+      ...PRESETS.flatMap((preset) => [
+        preset.source,
+        ...(preset.files?.map((file) => file.content) ?? []),
+      ]),
+      EXPRESS_SQLITE_TEMPLATE.entry.content,
+      ...Object.values(EXPRESS_SQLITE_TEMPLATE.extraFiles),
+    ].join('\n');
+
+    expect(seededSources).toContain('JetBrains Mono');
+    expect(seededSources).not.toContain('Roboto Mono');
+    expect(seededSources).not.toContain("fontFamily = 'ui-monospace, monospace'");
+    expect(seededSources).not.toMatch(/font:\s*14px\/1\.55 ui-monospace/);
   });
 });

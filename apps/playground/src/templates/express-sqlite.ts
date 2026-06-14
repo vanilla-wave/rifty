@@ -1,3 +1,4 @@
+import { MONO_FONT_STACK } from '../glue/fonts.ts';
 /**
  * The Express + SQLite template — a full client-server app as the second
  * registered {@link ProjectSpec} (ADR-0078's "data change, not a worker fork").
@@ -232,7 +233,7 @@ body {
     repeating-linear-gradient(0deg, transparent 0 2px, rgba(255, 255, 255, 0.012) 2px 4px),
     var(--bg);
   color: var(--ink);
-  font: 14px/1.55 ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font: 14px/1.55 ${MONO_FONT_STACK};
 }
 
 .term {

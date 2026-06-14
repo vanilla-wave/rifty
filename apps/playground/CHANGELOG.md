@@ -36,12 +36,12 @@
 ### Changed
 
 - **Mono font → JetBrains Mono.** Code surfaces (Monaco editor, xterm terminal,
-  code chips, `--rf-font-mono`) now use self-hosted JetBrains Mono (OFL, variable
-  woff2, latin + cyrillic subsets) in place of Roboto Mono; `index.html` preload
-  and `public/fonts/LICENSE.md` updated, Roboto Mono woff2 removed. Editor +
-  terminal share a single `glue/fonts.ts` `MONO_FONT_STACK` constant. Refines the
-  mono token recorded in ADR-0124 (Inter UI font unchanged). Sample-template CSS
-  in `presets.ts` keeps its own font and is unaffected.
+  code chips, seeded sandbox preview CSS, `--rf-font-mono`) now use self-hosted
+  JetBrains Mono (OFL, variable woff2, latin + cyrillic subsets) in place of
+  Roboto Mono; `index.html` preload and `public/fonts/LICENSE.md` updated,
+  Roboto Mono woff2 removed. Editor, terminal, and sandbox preview templates
+  share a single `glue/fonts.ts` `MONO_FONT_STACK` constant. Refines the mono
+  token recorded in ADR-0124 (Inter UI font unchanged).
 
 - **Netlify deploy automation.** GitHub Actions now deploys `main` to the
   production site and same-repo PRs to stable `pr-<number>` preview aliases;
@@ -63,10 +63,17 @@
   toast). Preview pane gained browser-frame chrome (address bar with editable
   port, phase pill, reload / open-in-tab). Monaco and xterm re-themed to the
   panel surface with handoff syntax colors; splitters now live invisibly in
-  the panel gaps. Layout defaults follow the mockup (files 232 / terminal 212
-  / preview 464).
+  the panel gaps. Layout defaults follow the mockup, with later feedback
+  widening preview and raising the terminal.
+
+- **Default preview pane is wider.** Fresh layout state now starts the browser
+  preview at 560px instead of the original Soft Panels 464px.
 
 ### Fixed
+
+- **Seeded sandbox previews now use JetBrains Mono.** The playground chrome,
+  Monaco, and xterm had already switched, but the project preview templates
+  still carried Roboto/system monospace literals.
 
 - **Netlify npm registry proxy deploy (ADR-0133, supersedes ADR-0028).** CI and
   one-off Netlify deploy docs now run `netlify build` before artifact deploys
