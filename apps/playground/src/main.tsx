@@ -3,10 +3,10 @@
 // isolation. Missing headers must fail loud, not yield a black screen. ADR-0002 / D-001.
 import { setKernelWorkerUrl } from '@riftydev/kernel';
 import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
+import { createTerminalPersistence } from '@riftydev/workbench';
 import { render } from 'solid-js/web';
 import { App } from './App.tsx';
 import { assertCrossOriginIsolated, bootstrapPlayground } from './boot.ts';
-import { createTerminalPersistence } from './glue/terminal-persistence.ts';
 // `?worker&url` bundles the kernel child-worker entry + yields its URL. The bare
 // `new URL(..., import.meta.url)` form isn't emitted as a worker chunk by `vite build`,
 // so child processes failed to spawn in prod.

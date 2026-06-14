@@ -119,6 +119,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0071 | Umbrella `@riftydev/sdk` package — one-install front door |
 | 0131 | Public sandbox filesystem API for AI agents |
 | 0132 | TS ESM parity uses full-transform Node reference |
+| 0139 | Workbench headless controllers package |
 
 ### protocol
 
