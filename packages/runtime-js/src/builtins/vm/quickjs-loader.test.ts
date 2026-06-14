@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   ensureVmEngineReady,
   getQuickJsModuleSync,
@@ -7,11 +7,24 @@ import {
 } from './quickjs-loader.ts';
 
 describe('getQuickjsWasmUrl', () => {
+  const savedEnv = process.env.RIFTY_QUICKJS_WASM_URL;
+
+  beforeEach(() => {
+    (globalThis as Record<string, unknown>).__RIFTY_QUICKJS_WASM_URL = undefined;
+    // biome-ignore lint/performance/noDelete: process.env coerces assignments to strings; only delete truly unsets the key, which the default-fallback test requires.
+    delete process.env.RIFTY_QUICKJS_WASM_URL;
+  });
+
   afterEach(() => {
     // Clear between tests; getQuickjsWasmUrl narrows on `typeof === 'string'`,
-    // so `undefined` falls through to the next tier exactly as an absent key
-    // would. (`delete` is disallowed by biome `noDelete`.)
+    // so `undefined` falls through to the next tier exactly as an absent key.
     (globalThis as Record<string, unknown>).__RIFTY_QUICKJS_WASM_URL = undefined;
+    if (savedEnv === undefined) {
+      // biome-ignore lint/performance/noDelete: restoring "not set" requires delete, not = undefined (which leaves the literal "undefined" string).
+      delete process.env.RIFTY_QUICKJS_WASM_URL;
+    } else {
+      process.env.RIFTY_QUICKJS_WASM_URL = savedEnv;
+    }
   });
   it('prefers the bootstrap global', () => {
     (globalThis as Record<string, unknown>).__RIFTY_QUICKJS_WASM_URL = 'https://x/q.wasm';
