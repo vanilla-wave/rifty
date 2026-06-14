@@ -29,9 +29,17 @@ NOT the earlier broken approach: spawning the shim TEXT as `kind:'source'`
 
 ## Options or Next (residual)
 
-- COI bin-exec e2e harness: prove a `.bin` runs end-to-end in a real COI Worker
-  (the MECHANISM is node-tested + parity; only the Worker TRANSPORT — VFS-in-
-  worker, stdio over MessagePort, exit — is COI-only, like `tests/e2e/execsync-sab`).
+- **Worker VFS transport — the bin worker must see `node_modules` (BLOCKER for
+  real end-to-end).** A draft COI e2e (`#test=bin-exec`, since removed) exposed
+  it: the spawned bin worker's `syncMirror()` is an empty in-worker
+  `MemoryBackend`, so `runNodeEntry` `ENOENT`s on the resolved shim
+  (`/workspace/node_modules/.bin/<name>`). After ADR-0135, `install()` writes
+  `node_modules` in the WORKER/OPFS realm — the bin worker needs to read THAT
+  shared VFS (OPFS-backed `syncMirror`, like the install/real-vite worker), not a
+  fresh memory mirror. Next: init the OPFS backend in `node-entry-bootstrap.ts`
+  (or otherwise share the install realm's VFS), then a real e2e that
+  `npm install <pkg-with-bin>` → runs the bin (NOT page-mirror seeding). The
+  MECHANISM beneath (`runNodeEntry` + loader) is already node-tested + parity.
 - `execSync` shebang/relative-import via the node-entry bootstrap: `child_process.spawn`
   routes through it, but `execSync`'s recursive runner executes its spec in Node
   (conformance), where the `kind:'url'` bootstrap can't load — so the handler

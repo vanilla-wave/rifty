@@ -44,10 +44,6 @@ setNodeEntryWorkerUrl(nodeEntryBootstrapUrl);
 if (location.hash.includes('test=execsync')) {
   const { runExecSyncHarness } = await import('./execsync-harness.ts');
   await runExecSyncHarness();
-} else if (location.hash.includes('test=bin-exec')) {
-  // ADR-0137 — .bin worker-transport harness (tests/e2e/bin-exec.spec.ts).
-  const { runBinExecHarness } = await import('./bin-exec-harness.ts');
-  await runBinExecHarness();
 } else {
   await renderApp();
 }
