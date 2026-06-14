@@ -86,6 +86,11 @@ describe('resolveBootstrapConfig', () => {
     expect(html).not.toContain('src="/src/app.tsx"');
     expect(html).not.toContain('/src/main.js');
 
+    // Dark bg painted from the first frame: a full HMR reload (hmr-bridge naive
+    // reload) of entry code that sets `body` bg via JS would otherwise flash
+    // white between reload and module-eval.
+    expect(html).toContain('background:#101218');
+
     // package.json dependencies stay in lockstep with spec.install
     const pkg = JSON.parse(cfg.seedFiles['/workspace/package.json'] ?? '{}') as {
       dependencies: Record<string, string>;

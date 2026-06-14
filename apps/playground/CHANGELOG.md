@@ -19,6 +19,23 @@
   decision was wrong (a read-only sandbox is nonsense) and is corrected in place;
   its snapshot bridge is unchanged. Regression test: `glue/editor-write-router.test.ts`.
 
+- **Writable file explorer in real-vite mode (ADR-0076 §Decision-6).** The
+  explorer showed a `read-only` badge and hid new/rename/delete while editing
+  worked — inconsistent. It now uses `glue/real-vite-explorer-vfs.ts`
+  (`RealViteExplorerVfs`): reads the worker snapshot, writes the page mirror, and
+  propagates each op to the worker over the write port — which gains an `rm`
+  frame (delete + rename) alongside `write`/`mkdir`, pushed via
+  `RealViteHandle.applyVfsFrame`. `node_modules` rows stay read-only. Badge gone,
+  CRUD controls shown. Tests: `glue/real-vite-explorer-vfs.test.ts`,
+  `glue/vfs-write-port.test.ts` (rm frame).
+
+- **No white flash on preview reload.** HMR does a full iframe reload on every
+  edit (naive `location.reload()`); the worker-seeded `index.html` had no
+  background, so entry code that sets `body` bg via JS flashed white between
+  reload and module-eval. `buildIndexHtml` now seeds
+  `<style>html,body{margin:0;background:#101218}</style>` so the document paints
+  dark from the first frame. Test: `templates/project-spec.test.ts`.
+
 ### Added
 
 - **Wire installed-CLI execution to the node-entry loader bootstrap (ADR-0137,

@@ -57,6 +57,15 @@ export type VfsWriteFrame =
       readonly type: 'mkdir';
       readonly path: string;
       readonly recursive: boolean;
+    }
+  | {
+      // Explorer delete/rename → worker (ADR-0076). Same one-way page→worker
+      // direction as write/mkdir; the worker republishes the snapshot so the
+      // removed path drops out of the page's read-only view.
+      readonly type: 'rm';
+      readonly path: string;
+      readonly recursive: boolean;
+      readonly force: boolean;
     };
 
 export function applyVfsWriteFrame(frame: VfsWriteFrame, opts: VfsWriteServerOptions = {}): void {
@@ -76,6 +85,11 @@ export function applyVfsWriteFrame(frame: VfsWriteFrame, opts: VfsWriteServerOpt
   }
   if (frame.type === 'mkdir') {
     syncMirror().mkdirSync(frame.path, { recursive: frame.recursive });
+    opts.onWrite?.(frame.path);
+    return;
+  }
+  if (frame.type === 'rm') {
+    syncMirror().rmSync(frame.path, { recursive: frame.recursive, force: frame.force });
     opts.onWrite?.(frame.path);
     return;
   }

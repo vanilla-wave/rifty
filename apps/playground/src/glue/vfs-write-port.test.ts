@@ -65,6 +65,36 @@ describe('serveVfsWrites + sendVfsWrite', () => {
     expect(syncMirror().statSync('/workspace/deeply/nested/dir').isDirectory).toBe(true);
   });
 
+  it('applies an rm frame (explorer delete/rename → worker, ADR-0076)', async () => {
+    teardown = serveVfsWrites(7007);
+
+    sendVfsWrite(7007, { type: 'write', path: '/workspace/src/gone.js', data: enc.encode('x') });
+    await tick();
+    expect(syncMirror().existsSync('/workspace/src/gone.js')).toBe(true);
+
+    sendVfsWrite(7007, {
+      type: 'rm',
+      path: '/workspace/src/gone.js',
+      recursive: false,
+      force: true,
+    });
+    await tick();
+
+    expect(syncMirror().existsSync('/workspace/src/gone.js')).toBe(false);
+  });
+
+  it('rm frame removes a directory subtree recursively', async () => {
+    teardown = serveVfsWrites(7008);
+
+    sendVfsWrite(7008, { type: 'write', path: '/workspace/d/a.js', data: enc.encode('a') });
+    await tick();
+    sendVfsWrite(7008, { type: 'rm', path: '/workspace/d', recursive: true, force: true });
+    await tick();
+
+    expect(syncMirror().existsSync('/workspace/d')).toBe(false);
+    expect(syncMirror().existsSync('/workspace/d/a.js')).toBe(false);
+  });
+
   it('subsequent writes overwrite the prior content', async () => {
     teardown = serveVfsWrites(7003);
 

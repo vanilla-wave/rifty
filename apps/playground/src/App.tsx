@@ -37,6 +37,7 @@ import { writeText } from './glue/fs-ops.ts';
 import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
 import { createNpmShellCommand } from './glue/npm-shell-command.ts';
+import { RealViteExplorerVfs } from './glue/real-vite-explorer-vfs.ts';
 import { type RealViteHandle, startRealVite } from './glue/realVite.ts';
 import { proxiedRegistryFetch } from './glue/registry-fetch.ts';
 import { SnapshotFs } from './glue/snapshot-fs.ts';
@@ -568,6 +569,11 @@ export function App(props: AppProps) {
   // Explorer + editor read the worker mirror only once `vite` is really up;
   // during install/start/stop they stay on the writable workspace mirror.
   const activeVfs = () => (devServerRunning() ? snapshotFs : vfs);
+  // Writable file-manager surface for the real-vite explorer (ADR-0076): reads
+  // the worker snapshot, writes the page mirror + propagates CRUD to the worker.
+  const explorerVfs = new RealViteExplorerVfs(snapshotFs, vfs, (frame) =>
+    realViteHandle?.applyVfsFrame(frame),
+  );
   let initialRunTimer: ReturnType<typeof setTimeout> | undefined;
 
   function presetForId(id: string): Preset {
@@ -1046,9 +1052,8 @@ export function App(props: AppProps) {
               }
             >
               <FileExplorer
-                vfs={snapshotFs}
+                vfs={explorerVfs}
                 root={WORKSPACE}
-                readOnly
                 nodeModules={nodeModulesProp()}
                 visible={!layout.sidebarCollapsed()}
                 activePath={activeFilePath()}

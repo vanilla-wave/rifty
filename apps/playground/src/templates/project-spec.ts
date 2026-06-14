@@ -115,9 +115,13 @@ export type BootstrapConfig = ViteBootstrapConfig | NodeServerBootstrapConfig;
  */
 function buildIndexHtml(title: string, entryRelativePath: string): string {
   const scriptSrc = entryRelativePath.replace(/^\/+/, '');
+  // Paint the dark preview bg from the FIRST frame: HMR does a full iframe reload
+  // on every edit (hmr-bridge naive reload), and entry code that sets `body`
+  // background via JS only applies after the module evaluates — so a bg-less
+  // document flashes white between reload and eval. The initial CSS removes that.
   return `<!doctype html>
 <html>
-  <head><meta charset="utf-8"><title>${title}</title></head>
+  <head><meta charset="utf-8"><title>${title}</title><style>html,body{margin:0;background:#101218}</style></head>
   <body>
     <div id="app"></div>
     <script type="module" src="${scriptSrc}"></script>
