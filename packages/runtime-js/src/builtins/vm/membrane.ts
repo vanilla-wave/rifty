@@ -47,14 +47,23 @@
  * (cross-realm proto break). We build a REAL guest array/object holding the
  * recursively-marshalled elements, then sever its prototype in the guest
  * (`Object.setPrototypeOf(v, null)`) — same null-proto trick, in reverse.
- * Guest-callable host FUNCTIONS are T9; inbound symbols are T10 (loud boundaries).
+ *
+ * Bidirectional callables (T9, `#marshalInboundFunction` + `#wrapFunction`). A
+ * HOST fn seeded into the guest becomes a `ctx.newFunction` whose impl marshals
+ * the guest arg handles OUT (`wrapGuestToHost` — so a guest array arg is seen in
+ * the host with the guest prototype, `instanceof hostArray` FALSE, #16), calls the
+ * host fn, and marshals the host result back IN. A GUEST fn passed to such a host
+ * fn marshals OUT through `#wrapFunction`, which DUPS+RETAINS the guest handle so
+ * the host can store the callback and call it AFTER the synchronous run (the
+ * QuickJSContext stays alive — Node has no vm-context teardown). Identity is
+ * symmetric: same host fn → same guest fn (and round-trips back to the host fn);
+ * same guest fn → same host wrapper. Inbound symbols are T10 (loud boundary).
  *
  * Write-back / reconciliation (T8, Option A — post-run sweep + per-run reseed).
  * vm runs are SYNCHRONOUS: the host cannot observe the sandbox DURING a run, so a
  * post-run reconciliation is observationally EQUIVALENT to a live contextObject
  * for synchronous code. We exploit that instead of live inbound Proxies (Option B,
- * which would retain a host trap fn per seeded object — disposal grief deferred to
- * T9). Per run the engine calls:
+ * which would retain a host trap fn per seeded object). Per run the engine calls:
  *   - `reseedContext` BEFORE: (re)sync each host key INTO the guest from CURRENT
  *     host state, so between-run host mutations are visible (`sb.v = 2` before the
  *     2nd run → guest reads 2). Host objects reuse the cached inbound seed (same
@@ -79,8 +88,10 @@
  * the host STRUCTURALLY removes a key from a *host object* (not the top-level
  * context) between runs, reseed overwrites/adds but does not delete the stale guest
  * prop. Top-level key add/remove + all primitive/value refresh ARE faithful. A
- * guest CALLBACK that mutates the sandbox AFTER the sync run (T9) is seen by the
- * host only at the NEXT sync reconciliation (or never) — flagged for T9.
+ * guest callback held by the host CAN be called after the sync run (T9 — the
+ * handle survives); side effects it makes on a seeded sandbox object are seen by
+ * the host only at the NEXT sync reconciliation (no live inbound write-through —
+ * Option A, see above), matching the sync-equivalence model.
  *
  * Round-trip identity (#14): a host object marshalled IN then returned OUT must
  * be the SAME host reference. We track host origin by the guest object's STABLE
@@ -105,20 +116,26 @@
  * `#hostOrigins: Map<id, hostObject>` on it. Chosen over the O(n) `ctx.eq` scan
  * for O(1) lookup and because it works on frozen guest objects (a WeakMap does
  * not mutate them, unlike tagging a hidden property). Trade-off: each tracked
- * guest object is retained by the guest WeakMap for the context's life —
- * acceptable until T9 adds wrapper lifetime management.
+ * guest object is retained by the guest WeakMap for the context's life — bounded
+ * by the {@link ContextLifetime} controller (the whole guest WeakMap goes when the
+ * context is torn down).
  *
- * Disposal (bounded for T6, full lifetime is T9): wrappers RETAIN the guest handle
- * their traps call into — those are NOT disposed here (disposing them breaks the
- * wrapper). Only TRANSIENT handles created inside a trap and immediately consumed
- * are disposed (via `Scope.withScope` / explicit dispose). We NEVER call
- * `ctx.dispose()` on this path; the persistent context lives on. Retained wrapper
- * handles "leak" until T9 — EXPECTED, and does not abort (abort only happens if
- * `ctx.dispose()` runs while handles are alive, which we do not do here).
+ * Disposal / handle lifetime (T9, {@link ContextLifetime}): every WRAPPER-backed
+ * guest handle is registered in a FinalizationRegistry — when the host GC's the
+ * wrapper, its guest handle is disposed and the identity-cache entry evicted, so
+ * growth is BOUNDED (a wrapper no host code holds frees its handle). INFRASTRUCTURE
+ * handles (the id registry closure + inbound seeds + inbound host-fn handles) live
+ * for the context's life and are disposed only at teardown. TRANSIENT handles in a
+ * trap/callback are disposed immediately (Scope / explicit). The QuickJSContext is
+ * disposed ONLY when it is pending-dispose AND no wrapper-backed handle is live
+ * (refcount, NOT finalizer ordering), so `ctx.dispose()` never trips the
+ * leaked-handle abort. Normal runs NEVER dispose the context (Node has no
+ * vm-context teardown — the realm lives until GC).
  */
 
 import type { QuickJSContext, QuickJSHandle } from 'quickjs-emscripten-core';
 import { Scope } from 'quickjs-emscripten-core';
+import { ContextLifetime } from './context-lifetime.ts';
 
 /**
  * Guest id registry as an UNREACHABLE closure. Evaluates to a function that maps
@@ -141,23 +158,26 @@ const ID_REGISTRY_BOOTSTRAP = `
 })();
 `;
 
-/** Marker so the function wrapper can recover its retained guest handle (T7 round-trip). */
-const GUEST_HANDLE = Symbol('rifty.vm.guestHandle');
-
-/** A host callable carrying the guest fn handle it forwards to. */
-interface GuestFunctionThunk {
-  (...args: unknown[]): unknown;
-  [GUEST_HANDLE]?: QuickJSHandle;
-}
-
 export class Membrane {
   readonly #ctx: QuickJSContext;
-  /** guest object id → its single host wrapper (identity cache). */
-  readonly #wrappers = new Map<number, unknown>();
-  /** Retained guest handles backing live wrappers — NOT disposed in T6 (see file doc). */
-  // TODO(Task 9): wrapper handle lifetime via FinalizationRegistry — dispose these
-  // when the host wrapper is GC'd, then the context can tear down without aborting.
-  readonly #retained: QuickJSHandle[] = [];
+  /**
+   * guest object id → a WEAK ref to its single host wrapper (identity cache).
+   * WeakRef so the cache does NOT pin the wrapper — otherwise the wrapper would
+   * never be GC'd and its FinalizationRegistry cleanup (which frees the backing
+   * guest handle) would never fire, defeating the bound on growth (T9). A
+   * collected wrapper derefs to `undefined` → cache MISS → rebuild (the
+   * controller's finalizer also evicts the stale entry).
+   */
+  readonly #wrappers = new Map<number, WeakRef<object>>();
+  /**
+   * Handle-lifetime controller (T9): tracks wrapper-backed handles under a
+   * FinalizationRegistry (GC a wrapper → dispose its guest handle, bounding
+   * growth) and infrastructure handles (id registry, inbound seeds), and disposes
+   * the QuickJSContext ONLY when it is pending AND no wrapper-backed handle is
+   * live — so `ctx.dispose()` never trips the leaked-handle abort. See
+   * `context-lifetime.ts`.
+   */
+  readonly #lifetime: ContextLifetime;
   #idOfHandle: QuickJSHandle | undefined;
 
   // --- Inbound (host→guest) bidirectional identity cache (T7 read path) ---
@@ -171,13 +191,28 @@ export class Membrane {
    * prior run returned, e.g. `this.shared = {…}` then a later run), we must hand
    * the guest back its OWN object — not build a fresh inbound seed and then try to
    * WRITE through the wrapper on the next sweep (which the wrapper rejects). Keyed
-   * by the wrapper (host) object; the handle is one of the `#retained` dups the
-   * wrapper already holds, so no extra lifetime.
+   * (weakly) by the wrapper object; the handle is the SAME dup the wrapper already
+   * retains (tracked by the lifetime controller), so no extra lifetime.
    */
   readonly #outWrapperGuest = new WeakMap<object, QuickJSHandle>();
 
   constructor(ctx: QuickJSContext) {
     this.#ctx = ctx;
+    // Evict the identity-cache entry when a wrapper's handle is released. The
+    // wrapper arg is present only on the EXPLICIT path (`releaseWrapper`, wrapper
+    // still alive but its handle now dead) — delete if the stored ref points to
+    // THIS wrapper or is dead. On the GC path (no wrapper — held values must not
+    // pin the target) delete only if the stored ref is already dead, so a fresh
+    // wrapper that replaced a collected one (same id) is not clobbered.
+    this.#lifetime = new ContextLifetime(ctx, (id, wrapper) => {
+      const current = this.#wrappers.get(id)?.deref();
+      if (current === undefined || current === wrapper) this.#wrappers.delete(id);
+    });
+  }
+
+  /** Handle-lifetime controller (engine wires the ContextObject finalizer to it). */
+  get lifetime(): ContextLifetime {
+    return this.#lifetime;
   }
 
   /**
@@ -190,7 +225,7 @@ export class Membrane {
     if (!this.#idOfHandle) {
       const ctx = this.#ctx;
       this.#idOfHandle = ctx.unwrapResult(ctx.evalCode(ID_REGISTRY_BOOTSTRAP));
-      this.#retained.push(this.#idOfHandle);
+      this.#lifetime.trackInfra(this.#idOfHandle);
     }
     return Scope.withScope((scope) => {
       const result = scope.manage(
@@ -231,7 +266,7 @@ export class Membrane {
         const id = this.#idOf(handle);
         const origin = this.#hostOrigins.get(id);
         if (origin !== undefined) return origin;
-        return this.#wrapCached(id, () => this.#wrapFunction(handle));
+        return this.#wrapCached(id, () => this.#wrapFunction(handle, id));
       }
       case 'object': {
         // null is typeof 'object' in QuickJS too — distinguish via dump (reliable
@@ -244,9 +279,9 @@ export class Membrane {
         const origin = this.#hostOrigins.get(id);
         if (origin !== undefined) return origin;
         if (this.#isArray(handle)) {
-          return this.#wrapCached(id, () => this.#wrapArray(handle));
+          return this.#wrapCached(id, () => this.#wrapArray(handle, id));
         }
-        return this.#wrapCached(id, () => this.#wrapObject(handle));
+        return this.#wrapCached(id, () => this.#wrapObject(handle, id));
       }
       default:
         throw new Error(`vm: ${kind} marshalling not implemented (Task 6)`);
@@ -292,8 +327,8 @@ export class Membrane {
         return this.#marshalInboundObject(value);
       }
       case 'function':
-        // A genuine HOST function entering the guest (guest-callable host fn) is T9.
-        throw new Error('vm: host→guest function marshalling not implemented (Task 9)');
+        // A genuine HOST function entering the guest (guest-callable host fn, T9).
+        return this.#marshalInboundFunction(value as (...args: unknown[]) => unknown);
       default:
         // symbol host→guest is exotic mirroring — T10.
         throw new Error(`vm: host→guest ${typeof value} marshalling not implemented (Task 10)`);
@@ -334,8 +369,54 @@ export class Membrane {
     // the guest Array.prototype) — mirrors the OUTBOUND null-proto technique.
     this.#severPrototype(seed);
     this.#inboundGuest.set(value, seed);
-    this.#retained.push(seed);
+    // Seeds live for the context's life (the seeded global keeps a dup; the host
+    // object may be re-marshalled any run) — track as infra, disposed at teardown.
+    this.#lifetime.trackInfra(seed);
     return seed.dup();
+  }
+
+  /**
+   * Marshal a genuine HOST function INTO the guest as a guest-callable function
+   * (T9). Builds `ctx.newFunction(name, cb)`: when the guest calls it, `cb` gets
+   * the guest arg handles (owned by the call frame, auto-disposed on return); we
+   * marshal each OUT via `wrapGuestToHost` (so a guest array arg is seen in the
+   * host with the guest prototype → `instanceof hostArray` FALSE, #16), call the
+   * host fn, and marshal the host result back IN via `marshalHostToGuest`.
+   *
+   * Identity: the same host fn → the SAME guest fn handle (`#inboundGuest` cache,
+   * shared with objects/arrays). Host-origin is recorded by the guest fn's
+   * registry id, so the round-trip OUT (`wrapGuestToHost` of this guest fn)
+   * recovers the ORIGINAL host fn (reuses the `case 'function'` origin check).
+   *
+   * The guest fn handle is RETAINED as infra (it backs the seeded global / may be
+   * re-marshalled any run); the returned dup is the caller's. Guest CALLBACK args
+   * (a guest fn passed to this host fn, e.g. `keep(cb)`) marshal OUT through
+   * `#wrapFunction`, which DUPS+RETAINS the guest handle so the host can call the
+   * wrapper AFTER the synchronous run.
+   */
+  #marshalInboundFunction(fn: (...args: unknown[]) => unknown): QuickJSHandle {
+    const cached = this.#inboundGuest.get(fn);
+    if (cached) return cached.dup();
+    const ctx = this.#ctx;
+    const name = typeof fn.name === 'string' ? fn.name : '';
+    const guestFn = ctx.newFunction(name, (...argHandles: QuickJSHandle[]): QuickJSHandle => {
+      // argHandles are owned by the call frame (auto-disposed on return).
+      // `wrapGuestToHost` never disposes its arg and dups internally for
+      // objects/functions (so a guest callback survives the run), so we read them
+      // directly without managing disposal here.
+      const args = argHandles.map((h) => this.wrapGuestToHost(h));
+      const result = fn(...args);
+      const resultH = this.marshalHostToGuest(result);
+      // newFunction consumes the returned handle; context constants are
+      // context-owned and must NOT be handed over — return a fresh owned dup.
+      return this.#isContextConstant(resultH) ? resultH.dup() : resultH;
+    });
+    // Host-origin by the guest fn's unforgeable id → round-trip OUT recovers `fn`.
+    this.#hostOrigins.set(this.#idOf(guestFn), fn);
+    this.#inboundGuest.set(fn, guestFn);
+    // The guest fn handle lives for the context's life (seeded global / re-marshal).
+    this.#lifetime.trackInfra(guestFn);
+    return guestFn.dup();
   }
 
   /** Set each own enumerable host key onto the guest seed (recursive marshal). */
@@ -483,19 +564,29 @@ export class Membrane {
     });
   }
 
-  /** Identity-cache wrapper: same guest object id → same host wrapper. `id` is the precomputed `#idOf`. */
+  /**
+   * Identity-cache wrapper: same guest object id → same host wrapper (within its
+   * lifetime). `id` is the precomputed `#idOf`. The cache holds a WEAK ref so a
+   * collected wrapper does not pin its guest handle; a dead/collected ref is a
+   * MISS and `make()` (which calls `#lifetime.trackWrapper`, re-storing the ref)
+   * rebuilds. `make()` MUST return an object (every wrapper is a Proxy).
+   */
   #wrapCached(id: number, make: () => unknown): unknown {
-    const existing = this.#wrappers.get(id);
+    const existing = this.#wrappers.get(id)?.deref();
     if (existing !== undefined) return existing;
-    const wrapper = make();
-    this.#wrappers.set(id, wrapper);
+    const wrapper = make() as object;
+    this.#wrappers.set(id, new WeakRef(wrapper));
     return wrapper;
   }
 
-  /** Retain a dup of the guest handle so the wrapper's traps stay valid. */
-  #retain(handle: QuickJSHandle): QuickJSHandle {
+  /**
+   * Retain a dup of the guest handle so the wrapper's traps stay valid, and
+   * register the wrapper with the lifetime controller so GC'ing the wrapper
+   * disposes this dup (bounding growth) and evicts the identity-cache entry.
+   */
+  #retainForWrapper(wrapper: object, handle: QuickJSHandle, id: number): QuickJSHandle {
     const dup = handle.dup();
-    this.#retained.push(dup);
+    this.#lifetime.trackWrapper(wrapper, dup, id);
     return dup;
   }
 
@@ -517,9 +608,9 @@ export class Membrane {
    * null proto (so `instanceof Array` FALSE). Elements are recursively marshalled
    * (snapshot). The guest handle is retained for future liveness work (T7/T8).
    */
-  #wrapArray(handle: QuickJSHandle): unknown {
+  #wrapArray(handle: QuickJSHandle, id: number): unknown {
     const ctx = this.#ctx;
-    const guest = this.#retain(handle);
+    const guest = handle.dup();
     const length = ctx.getLength(handle) ?? 0;
     const target: unknown[] = [];
     for (let i = 0; i < length; i++) {
@@ -534,6 +625,8 @@ export class Membrane {
     // Remember the guest handle so re-marshalling this wrapper INTO the guest
     // (T8 reseed) recovers the original guest object instead of seeding a copy.
     this.#outWrapperGuest.set(wrapper, guest);
+    // GC'ing the wrapper disposes `guest` + evicts the cache entry (T9).
+    this.#lifetime.trackWrapper(wrapper, guest, id);
     return wrapper;
   }
 
@@ -545,9 +638,9 @@ export class Membrane {
    * `configurable:true` to satisfy Proxy invariants over an empty target (faithful
    * frozen/non-config mirroring is T12).
    */
-  #wrapObject(handle: QuickJSHandle): unknown {
+  #wrapObject(handle: QuickJSHandle, id: number): unknown {
     const ctx = this.#ctx;
-    const guest = this.#retain(handle);
+    const guest = handle.dup();
     const membrane = this;
     const target: Record<PropertyKey, unknown> = {};
 
@@ -604,21 +697,24 @@ export class Membrane {
     // Remember the guest handle so re-marshalling this wrapper INTO the guest
     // (T8 reseed) recovers the original guest object instead of seeding a copy.
     this.#outWrapperGuest.set(wrapper, guest);
+    // GC'ing the wrapper disposes `guest` + evicts the cache entry (T9).
+    this.#lifetime.trackWrapper(wrapper, guest, id);
     return wrapper;
   }
 
   /**
    * FUNCTION wrapper — callable Proxy over a host thunk (target stays a function so
    * the Proxy is callable) with a null proto (so `instanceof Function` FALSE). The
-   * thunk marshals host args → guest (primitives + objects/arrays via T7's extended
-   * `marshalHostToGuest`; host-fn args are T9), calls the guest fn, and marshals
-   * the result back through the membrane.
+   * thunk marshals host args → guest (primitives + objects/arrays + host fns via
+   * `marshalHostToGuest`), calls the guest fn, and marshals the result back. The
+   * guest handle is DUP+RETAINED so the host can call the wrapper AFTER the run —
+   * e.g. a guest callback passed to a host fn and stored (`keep(cb); stored()`).
    */
-  #wrapFunction(handle: QuickJSHandle): unknown {
+  #wrapFunction(handle: QuickJSHandle, id: number): unknown {
     const ctx = this.#ctx;
-    const guest = this.#retain(handle);
+    const guest = handle.dup();
 
-    const thunk: GuestFunctionThunk = (...args: unknown[]): unknown => {
+    const thunk = (...args: unknown[]): unknown => {
       return Scope.withScope((scope) => {
         const argHandles = args.map((a) => {
           const h = this.marshalHostToGuest(a);
@@ -632,13 +728,16 @@ export class Membrane {
         return this.wrapGuestToHost(ret);
       });
     };
-    thunk[GUEST_HANDLE] = guest;
 
     const wrapper = new Proxy(thunk, { getPrototypeOf: () => null });
     // Remember the guest handle so re-marshalling this wrapper INTO the guest
     // (T8 reseed) recovers the original guest function instead of throwing on the
     // host→guest function boundary (T9).
     this.#outWrapperGuest.set(wrapper, guest);
+    // GC'ing the wrapper disposes `guest` + evicts the cache entry. While the host
+    // HOLDS the wrapper (e.g. `stored = cb`), the dup stays alive, so calling it
+    // AFTER the run does `callFunction` on a still-valid handle (T9).
+    this.#lifetime.trackWrapper(wrapper, guest, id);
     return wrapper;
   }
 

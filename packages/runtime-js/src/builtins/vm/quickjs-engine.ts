@@ -21,11 +21,23 @@
  * WASM runtime at context teardown. Every PER-RUN handle (evalCode/unwrapResult)
  * is disposed before returning; context constants (undefined/null/true/false/
  * global) are NEVER disposed. The membrane RETAINS the handles backing live
- * wrappers — those persist until T9 wires wrapper lifetime, and `disposeContext`
- * may abort if called while wrappers are alive (the disposal-stress guard is T18).
+ * wrappers; their lifetime is managed by the membrane's {@link ContextLifetime}
+ * controller (T9) — a FinalizationRegistry disposes a wrapper-backed handle when
+ * the host GC's the wrapper, and the QuickJSContext is torn down ONLY when it is
+ * pending-dispose AND no wrapper-backed handle is live, so `ctx.dispose()` never
+ * trips the leaked-handle abort.
+ *
+ * Context lifetime: Node has NO vm-context teardown — the realm lives until GC. We
+ * mirror that: normal runs NEVER dispose the context. The {@link ContextObject}
+ * is registered in {@link contextRegistry}; when it is GC'd the finalizer marks
+ * the controller pending (which tears the context down once handles are clear).
+ * Explicit {@link disposeContext} also marks pending (deferring the actual
+ * `ctx.dispose()` until wrappers are GC'd) — never an eager dispose-while-alive
+ * abort (the disposal-stress guard is T18).
  */
 
 import type { QuickJSContext } from 'quickjs-emscripten-core';
+import type { ContextLifetime } from './context-lifetime.ts';
 import { Membrane } from './membrane.ts';
 import { getQuickJsModuleSync } from './quickjs-loader.ts';
 import type { CompiledScript, ContextObject, VmEngine } from './types.ts';
@@ -37,10 +49,18 @@ interface GuestRuntime {
 }
 
 // One persistent QuickJSContext + Membrane per vm.Context, reused across runs.
-// Reclaimed by disposeContext (and otherwise lives as long as the ContextObject —
-// the WeakMap drops its entry when the key is GC'd, though the underlying WASM
-// context must be explicitly disposed; full lifetime/GC handling is a later task).
+// The WeakMap drops its entry when the ContextObject is GC'd; the underlying WASM
+// context is torn down via the membrane's ContextLifetime controller (T9) once it
+// is pending AND no wrapper-backed handle is live (never an eager abort).
 const guestRuntimes = new WeakMap<ContextObject, GuestRuntime>();
+
+// Marks the membrane's lifetime controller pending-dispose when the host GC's the
+// ContextObject (Node has no vm-context teardown — the realm lives until GC). The
+// held value is the controller, NOT the ContextObject (which would keep it alive);
+// the controller outlives the membrane so it can finish teardown after GC.
+const contextRegistry = new FinalizationRegistry<ContextLifetime>((lifetime) => {
+  lifetime.markPending();
+});
 
 function withSourceURL(code: string, filename?: string): string {
   if (!filename) return code;
@@ -54,6 +74,11 @@ function getOrCreateGuestRuntime(context: ContextObject): GuestRuntime {
     const membrane = new Membrane(qctx);
     rt = { qctx, membrane };
     guestRuntimes.set(context, rt);
+    // GC'ing the ContextObject marks the controller pending → safe teardown once
+    // wrapper-backed handles are clear. Held value is the controller (not the
+    // ContextObject), unregister-token is the ContextObject so disposeContext can
+    // cancel it before an explicit teardown.
+    contextRegistry.register(context, membrane.lifetime, context);
   }
   return rt;
 }
@@ -121,11 +146,16 @@ export const quickjsEngine: VmEngine = {
     const rt = guestRuntimes.get(context);
     if (rt) {
       guestRuntimes.delete(context);
-      // Disposes the context AND its runtime. Per-run completion handles are
-      // disposed in evalToHost's finally, BUT membrane wrappers retain guest
-      // handles (T6 bounds disposal — wrapper lifetime is T9). If any wrapper is
-      // still alive this aborts the WASM runtime; the disposal-stress guard is T18.
-      rt.qctx.dispose();
+      // The ContextObject GC finalizer is now redundant — cancel it (avoids a
+      // second markPending on an already-pending/disposed controller).
+      contextRegistry.unregister(context);
+      // Mark pending rather than eagerly disposing: the controller tears the
+      // QuickJSContext down ONLY when no wrapper-backed handle is live (each
+      // wrapper finalizer decrements). Disposing while wrappers are alive would
+      // abort the WASM runtime — so when wrappers outstand, teardown is deferred
+      // until they are GC'd. Infra handles (id registry, seeds) are disposed by
+      // the controller immediately before the actual `ctx.dispose()`.
+      rt.membrane.lifetime.markPending();
     }
   },
 };

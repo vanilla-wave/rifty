@@ -4,6 +4,37 @@
 
 ### Added
 
+- **`node:vm` QuickJS engine — bidirectional callable membrane + handle lifetime
+  (T9, ADR-0138).** Host functions seeded into a context are now callable from
+  guest code: `marshalHostToGuest` of a host fn builds a `ctx.newFunction` whose
+  impl marshals the guest arg handles OUT (`wrapGuestToHost` — a guest array arg
+  is seen in the host with the guest prototype, so `x instanceof hostArray` is
+  FALSE, #16), calls the host fn, and marshals the host result back IN. Variadic
+  host fns work (`log(...a)`). Identity is symmetric: the same host fn → the same
+  guest fn (and round-trips back to the host fn via the registry id); the same
+  guest fn → the same host wrapper. A GUEST callback passed to a host fn is HELD
+  by the host and callable AFTER the synchronous run (`keep(cb); stored()`): the
+  outbound function wrapper DUPS+RETAINS the guest handle, and the QuickJSContext
+  is never torn down by a normal run (Node has no vm-context teardown), so a later
+  `callFunction` lands on a live handle.
+- **`node:vm` QuickJS engine — handle lifetime via FinalizationRegistry +
+  refcount (T9).** A new `ContextLifetime` controller bounds handle growth and
+  makes teardown abort-safe (QUICKJS_API.md: `ctx.dispose()` ABORTS if any guest
+  handle is alive). Every cross-realm WRAPPER (object/array/function Proxy) backs
+  a retained guest handle registered in a FinalizationRegistry — GC'ing the
+  wrapper disposes its handle and evicts the identity-cache entry, so growth is
+  BOUNDED. The wrapper identity cache now holds WeakRefs (a strong Map would pin
+  every wrapper and defeat finalization). Infrastructure handles (the id-registry
+  closure, inbound seeds, inbound host-fn handles) live for the context's life and
+  are disposed only at teardown. The QuickJSContext is disposed ONLY when it is
+  pending-dispose AND no wrapper-backed handle is live (a refcount, NOT
+  finalizer ordering — FinalizationRegistry gives no ordering guarantee), so
+  `ctx.dispose()` never sees a live handle. Normal runs never dispose the context;
+  the `ContextObject` is registered in a FinalizationRegistry that marks the
+  controller pending on GC, and `disposeContext` likewise marks pending (deferring
+  the real `ctx.dispose()` until wrappers are GC'd) instead of an eager
+  dispose-while-alive abort.
+
 - **`node:vm` QuickJS engine — guest→host write-back / reconciliation (T8,
   ADR-0138, Option A).** Guest writes are now reconciled to the host
   contextObject. vm runs are SYNCHRONOUS (the host can't observe the sandbox
