@@ -97,7 +97,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0007 | Chrome-first with cross-browser infrastructure from M0 |
 | 0073 | Playground UX overhaul — preset gallery, design system, production worker bundling, honest preview status |
 | 0075 | Playground VSCode-style shell — bottom console panel, resizable/collapsible splitters, VFS file explorer, multi-model editor tabs |
-| 0076 | Cross-realm reverse VFS snapshot — the file explorer reflects the real-vite worker project |
+| 0076 | Cross-realm reverse VFS snapshot — explorer reflects the real-vite worker project; source files editable through the write port |
 | 0077 | Real Vite preview renders — worker lifetime, log surfacing, and SW frame routing |
 | 0078 | Generic ProjectSpec/Template runtime for the playground (Vite as the default template) |
 | 0079 | Single generic project/template switcher; retire the header mode toggles |

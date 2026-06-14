@@ -330,7 +330,13 @@ export function FileExplorer(props: {
                     </span>
                   )}
                   <span class="rf-row__name">{row.name}</span>
-                  <Show when={!props.readOnly && (row.kind === 'file' || row.kind === 'dir')}>
+                  <Show
+                    when={
+                      !props.readOnly &&
+                      !isUnderNodeModules(row.path) &&
+                      (row.kind === 'file' || row.kind === 'dir')
+                    }
+                  >
                     <span class="rf-row__actions">
                       <button
                         type="button"

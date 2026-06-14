@@ -19,7 +19,7 @@ import type { ProjectSpec } from '../templates/project-spec.ts';
 import { defaultProjectSpec } from '../templates/registry.ts';
 import bootstrapWorkerUrl from '../workers/real-vite-bootstrap.ts?worker&url';
 import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
-import { sendVfsWrite } from './vfs-write-port.ts';
+import { type VfsWriteFrame, sendVfsWrite } from './vfs-write-port.ts';
 
 export interface RealViteHandle {
   readonly port: number;
@@ -27,6 +27,10 @@ export interface RealViteHandle {
   close(): Promise<void>;
   updateEntry(content: string): void;
   updateFile(path: string, content: string): void;
+  /** Push any write-port frame (write/mkdir/rm) to the worker — the file
+   *  explorer's CRUD propagation (ADR-0076). IPC fast-path, BroadcastChannel
+   *  fallback (same as {@link updateFile}). */
+  applyVfsFrame(frame: VfsWriteFrame): void;
 }
 
 export interface RealViteOptions {
@@ -161,15 +165,13 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
 
   log(`[real-vite] page-side preview-port bridge ready (port ${port})\n`);
 
-  const updateFile = (path: string, content: string): void => {
-    const frame = {
-      type: 'write' as const,
-      path,
-      data: enc.encode(content),
-    };
+  const applyVfsFrame = (frame: VfsWriteFrame): void => {
     if (!handle.send({ type: 'rifty:vfs-write', frame })) {
       sendVfsWrite(port, frame);
     }
+  };
+  const updateFile = (path: string, content: string): void => {
+    applyVfsFrame({ type: 'write', path, data: enc.encode(content) });
   };
 
   return {
@@ -188,5 +190,6 @@ export async function startRealVite(opts: RealViteOptions = {}): Promise<RealVit
       updateFile(entryPath, content);
     },
     updateFile,
+    applyVfsFrame,
   };
 }
