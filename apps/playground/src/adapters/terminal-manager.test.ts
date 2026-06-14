@@ -58,6 +58,7 @@ function makeFakeOwner() {
   const closed: string[] = [];
   const stdin: Array<{ sid: string; rid: string; data: Uint8Array }> = [];
   const signalled: Array<{ sid: string; rid: string }> = [];
+  const writes: Array<{ path: string; content: string }> = [];
   const execs: ExecCall[] = [];
   const snapshots = new Map<string, PtySessionSnapshot>();
   let ridSeq = 0;
@@ -87,13 +88,16 @@ function makeFakeOwner() {
     closeSession(sid: string): void {
       closed.push(sid);
     },
+    writeFile(path: string, content: string): void {
+      writes.push({ path, content });
+    },
     snapshot(sid: string): PtySessionSnapshot {
       return snapshots.get(sid) ?? { cwd: '/workspace', env: {} };
     },
     close(): void {},
   };
 
-  return { owner, opened, closed, stdin, signalled, execs, snapshots };
+  return { owner, opened, closed, stdin, signalled, writes, execs, snapshots };
 }
 
 describe('createTerminalManager (pty port client)', () => {
