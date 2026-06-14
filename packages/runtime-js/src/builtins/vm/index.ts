@@ -110,11 +110,51 @@ function assertContextified(value: unknown): void {
   }
 }
 
-/** Node ERR_INVALID_ARG_TYPE tail for a non-object value: `null` or `type <t> (<v>)`. */
+/**
+ * Node ERR_INVALID_ARG_TYPE tail for a non-object value. `null`/`undefined`
+ * render BARE; everything else as `type <t> (<inspected>)`. The inspected value
+ * matches `util.inspect` for primitives (verified byte-for-byte vs real Node):
+ * a `bigint` keeps its `n` suffix, `-0` stays `-0`, a `symbol` is its
+ * `toString()`, and a `string` is quote-escaped + truncated like Node's helper.
+ */
 function describeNonObject(value: unknown): string {
   if (value === null) return 'null';
-  const rendered = typeof value === 'string' ? `'${value}'` : String(value);
-  return `type ${typeof value} (${rendered})`;
+  if (value === undefined) return 'undefined';
+  return `type ${typeof value} (${inspectPrimitive(value)})`;
+}
+
+/** `util.inspect`-equivalent rendering of a non-object primitive (Node-exact). */
+function inspectPrimitive(value: unknown): string {
+  switch (typeof value) {
+    case 'bigint':
+      return `${value}n`;
+    case 'number':
+      return Object.is(value, -0) ? '-0' : String(value);
+    case 'string':
+      return quoteString(value);
+    case 'symbol':
+      return (value as symbol).toString();
+    default:
+      // boolean (true/false) and any residual primitive
+      return String(value);
+  }
+}
+
+/**
+ * Node's error-helper string rendering (the part real vm callers can hit): prefer
+ * single quotes, switch to double when the string holds a single quote, escape the
+ * ACTIVE quote char, then truncate the rendered literal to 25 chars + `...` once it
+ * exceeds 28 (matches real Node v24 for plain text). Pathological strings mixing
+ * backslashes / control chars are NOT modelled byte-exact here — that is full
+ * `util.inspect` `strEscape` territory, out of scope for a context-arg-type error
+ * (a non-object context arg is itself a programmer mistake); see the T19 divergence
+ * note. The type rendering (bigint `n`, `-0`, symbol) above IS exact.
+ */
+function quoteString(value: string): string {
+  const quote = value.includes("'") ? '"' : "'";
+  let body = quote === '"' ? value.replaceAll('"', '\\"') : value;
+  if (body.length > 28) body = `${body.slice(0, 25)}...`;
+  return `${quote}${body}${quote}`;
 }
 
 function normalizeOptions(options?: VmOptions): ScriptOptions {

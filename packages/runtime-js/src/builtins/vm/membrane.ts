@@ -257,6 +257,46 @@ const EXOTIC_REBRAND_BOOTSTRAP = `
 `;
 
 /**
+ * Guest-side rebrand for an INBOUND plain object / array seed (T19 fix), the MIRROR
+ * of `EXOTIC_REBRAND_BOOTSTRAP` but walking the FULL prototype chain INCLUDING
+ * `Object.prototype`. A host array/object seen in the guest must (Node oracle):
+ * carry its prototype METHODS (`arr.map`/`join`, `obj.hasOwnProperty`) yet fail
+ * `instanceof Array`/`Object` (its proto is cross-realm, not the guest intrinsic).
+ * A null proto (the old sever-to-null seed) satisfied `instanceof` FALSE but STRIPPED
+ * the methods — the bug this closure fixes. We give the seed a null-based FLAT proto
+ * carrying the kind's whole method chain (Array methods + Object methods for an
+ * array; Object methods for an object), so methods resolve, `Array.isArray` stays
+ * TRUE (a real `newArray` brand, proto-independent), and `instanceof` is FALSE (the
+ * flat proto is NOT `Array.prototype`/`Object.prototype`). Retained host-side, never
+ * exposed on the guest global (no-forgery discipline, like the other closures).
+ */
+const GENERIC_REBRAND_BOOTSTRAP = `
+(() => {
+  const cache = new Map();
+  const flatProtoFor = (kind) => {
+    let fp = cache.get(kind);
+    if (fp) return fp;
+    fp = Object.create(null);
+    const proto = kind === 'Array' ? Array.prototype : Object.prototype;
+    for (let p = proto; p; p = Object.getPrototypeOf(p)) {
+      for (const n of Object.getOwnPropertyNames(p)) {
+        if (n === 'constructor' || n === '__proto__') continue;
+        if (Object.prototype.hasOwnProperty.call(fp, n)) continue;
+        Object.defineProperty(fp, n, Object.getOwnPropertyDescriptor(p, n));
+      }
+      for (const s of Object.getOwnPropertySymbols(p)) {
+        if (Object.prototype.hasOwnProperty.call(fp, s)) continue;
+        Object.defineProperty(fp, s, Object.getOwnPropertyDescriptor(p, s));
+      }
+    }
+    cache.set(kind, fp);
+    return fp;
+  };
+  return (value, kind) => { Object.setPrototypeOf(value, flatProtoFor(kind)); return value; };
+})();
+`;
+
+/**
  * Guest-side reflection helper as an UNREACHABLE closure (like the id registry +
  * exotic rebrand) — the no-forgery discipline: retained host-side, NEVER exposed
  * on the guest global, so guest code cannot reach it to influence the host's view.
@@ -439,6 +479,12 @@ export class Membrane {
   readonly #exoticFactories = new Map<string, QuickJSHandle>();
   /** Lazily-installed guest exotic rebrand closure (`EXOTIC_REBRAND_BOOTSTRAP`), infra-tracked. */
   #rebrandHandle: QuickJSHandle | undefined;
+  /**
+   * Lazily-installed guest INBOUND object/array rebrand closure
+   * (`GENERIC_REBRAND_BOOTSTRAP`, T19), infra-tracked. Gives a seeded host
+   * array/object the kind's full method chain on a cross-realm flat proto.
+   */
+  #genericRebrandHandle: QuickJSHandle | undefined;
   /** Lazily-installed guest reflection closure (`REFLECT_BOOTSTRAP`, T12), infra-tracked. */
   #reflectHandle: QuickJSHandle | undefined;
   /**
@@ -642,10 +688,13 @@ export class Membrane {
     // guest-written marker) so the round-trip OUT returns the exact same host
     // reference. `#idOf` assigns a fresh id to this never-before-seen seed.
     this.#hostOrigins.set(this.#idOf(seed), value);
-    // Sever the prototype: a host array seen in the guest is `Array.isArray`
-    // TRUE (real guest array brand) but `instanceof Array` FALSE (proto is not
-    // the guest Array.prototype) — mirrors the OUTBOUND null-proto technique.
-    this.#severPrototype(seed);
+    // Rebrand to a cross-realm FLAT proto carrying the kind's full method chain
+    // (T19): a host array seen in the guest is `Array.isArray` TRUE (real guest
+    // array brand) and has working methods (`arr.map`/`join`, `obj.hasOwnProperty`)
+    // yet `instanceof Array`/`Object` FALSE (the flat proto is NOT the guest
+    // intrinsic prototype) — the Node oracle. A null proto satisfied the
+    // `instanceof`-FALSE half but STRIPPED the methods (the bug this replaces).
+    this.#rebrandGuestGeneric(seed, isArray ? 'Array' : 'Object');
     this.#inboundGuest.set(value, seed);
     // Seeds live for the context's life (the seeded global keeps a dup; the host
     // object may be re-marshalled any run) — track as infra, disposed at teardown.
@@ -731,13 +780,32 @@ export class Membrane {
     }
   }
 
-  /** `Object.setPrototypeOf(handle, null)` in the guest. */
-  #severPrototype(handle: QuickJSHandle): void {
+  /**
+   * Rebrand an INBOUND object/array seed (T19): set its [[Prototype]] to a
+   * cross-realm flat proto carrying the kind's full method chain (`Array`/`Object`)
+   * via the unreachable `GENERIC_REBRAND_BOOTSTRAP` closure, so methods work
+   * (`arr.map`, `obj.hasOwnProperty`) while `instanceof Array`/`Object` stays FALSE
+   * and `Array.isArray` stays TRUE. Replaces the old null-proto `#severPrototype`,
+   * which stripped the methods.
+   */
+  #rebrandGuestGeneric(handle: QuickJSHandle, kind: 'Array' | 'Object'): void {
     const ctx = this.#ctx;
+    if (!this.#genericRebrandHandle) {
+      this.#genericRebrandHandle = ctx.unwrapResult(ctx.evalCode(GENERIC_REBRAND_BOOTSTRAP));
+      this.#lifetime.trackInfra(this.#genericRebrandHandle);
+    }
     Scope.withScope((scope) => {
-      const objectCtor = scope.manage(ctx.getProp(ctx.global, 'Object'));
-      const setProto = scope.manage(ctx.getProp(objectCtor, 'setPrototypeOf'));
-      ctx.unwrapResult(ctx.callFunction(setProto, ctx.undefined, handle, ctx.null)).dispose();
+      const kindH = scope.manage(ctx.newString(kind));
+      scope.manage(
+        ctx.unwrapResult(
+          ctx.callFunction(
+            this.#genericRebrandHandle as QuickJSHandle,
+            ctx.undefined,
+            handle,
+            kindH,
+          ),
+        ),
+      );
     });
   }
 

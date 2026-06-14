@@ -495,6 +495,50 @@ describe('node:vm subset', () => {
     expect(vm.runInContext('typeof later;', persistent)).toBe('undefined');
   });
 
+  it('gives a seeded host array/object its prototype methods in the guest (T19)', () => {
+    // Regression (T19): the inbound membrane severed a host array/object seed's
+    // proto to null, which kept `instanceof Array/Object` FALSE but STRIPPED every
+    // inherited method (`items.join`/`.map`, `obj.hasOwnProperty` threw "not a
+    // function"). Node gives the seed a cross-realm proto that CARRIES the methods.
+    const ctx = vm.createContext({ items: ['x', 'y', 'z'], obj: { a: 1 } });
+    expect(vm.runInContext('items.join("-")', ctx)).toBe('x-y-z');
+    expect(
+      vm.runInContext('items.map(function (i) { return i.toUpperCase(); }).join(",")', ctx),
+    ).toBe('X,Y,Z');
+    expect(vm.runInContext('typeof items.join', ctx)).toBe('function');
+    expect(vm.runInContext('Array.isArray(items)', ctx)).toBe(true);
+    expect(vm.runInContext('items instanceof Array', ctx)).toBe(false);
+    expect(vm.runInContext('items.hasOwnProperty(0)', ctx)).toBe(true);
+    expect(vm.runInContext('obj.hasOwnProperty("a")', ctx)).toBe(true);
+    expect(vm.runInContext('obj instanceof Object', ctx)).toBe(false);
+    expect(vm.runInContext('Object.prototype.toString.call(obj)', ctx)).toBe('[object Object]');
+  });
+
+  it('renders a non-object context arg with Node-exact ERR_INVALID_ARG_TYPE text (T19)', () => {
+    // describeNonObject fidelity: undefined/null render BARE; a bigint keeps its
+    // `n`; `-0` stays `-0`; a string is quote-selected + truncated >28 to 25+'...'.
+    const msg = (a: unknown): string => {
+      try {
+        vm.runInContext('1', a as Record<string, unknown>);
+        return 'NO THROW';
+      } catch (e) {
+        return (e as Error).message;
+      }
+    };
+    const tail = 'The "object" argument must be of type object. Received ';
+    expect(msg(undefined)).toBe(`${tail}undefined`);
+    expect(msg(null)).toBe(`${tail}null`);
+    expect(msg(42)).toBe(`${tail}type number (42)`);
+    expect(msg(-0)).toBe(`${tail}type number (-0)`);
+    expect(msg(0n)).toBe(`${tail}type bigint (0n)`);
+    expect(msg(-5n)).toBe(`${tail}type bigint (-5n)`);
+    expect(msg('hi')).toBe(`${tail}type string ('hi')`);
+    expect(msg("it's")).toBe(`${tail}type string ("it's")`);
+    expect(msg(true)).toBe(`${tail}type boolean (true)`);
+    expect(msg(Symbol('s'))).toBe(`${tail}type symbol (Symbol(s))`);
+    expect(msg('x'.repeat(40))).toBe(`${tail}type string ('${'x'.repeat(25)}...')`);
+  });
+
   it('compiles functions with parameters', () => {
     const add = vm.compileFunction('return a + b;', ['a', 'b']);
     expect(add(2, 5)).toBe(7);
