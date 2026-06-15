@@ -1,0 +1,52 @@
+# ADR 0148: Unified workspace owner — co-resident dev-server + single source of truth — ADR-0143 P4
+
+Status: Accepted (2026-06-15)
+Date: 2026-06
+
+> TL;DR: The `vite`/dev tail moves CO-RESIDENT into the persistent workspace owner (started on demand by an owner-resident `vite` shell command, stopped via `server.close()` without killing the owner) and the per-run `startRealVite` preview worker + the entire page-driven `dispatchDevServerLine` path are DELETED — so the dev server reads the SAME store `npm install` writes (closes the two-owners transient). The owner store becomes the SINGLE source of truth for the editable tree: page-`vfs`-as-truth + the triple-write retire, the node_modules read-port widens to a general project read (with the editor as consumer), and dev-server status/port flow back over a new structured `pty:dev-server` frame + the P3 request/handshake (no stdout log-match). This is ADR-0143 **P4**, the milestone's last execution-model phase before P5/P6.
+
+## Context
+
+ADR-0146 (P2) put the `Shell` + cwd/env + npm + bin/`execSync` in a persistent workspace owner (`bootShellOwner`, `RIFTY_OWNER_MODE='shell'`, `serve:true`, snapshot/nm-read/vfs-write bridges on a fixed synthetic port 59124) and made the PAGE terminal a thin pty client. P2 left ONE tracked transient (closed here by subsumption): the dev server still spawns a SEPARATE per-run preview owner (`startRealVite` → `real-vite-bootstrap.ts` `ownerMode!=='shell'` tail), driven PAGE-side by `dispatchDevServerLine`/`runViteCommand`. That preview owns its OWN `syncMirror` → it does NOT see terminal-installed deps (`npm install cowsay` lands in the persistent owner; `npm run dev` boots a different realm). P3 likewise DEFERRED owner-as-single-source-of-truth to here (Option B declined for P3): today the project tree is TRIPLE-written (editor→page `vfs`, →preview worker `updateFile`, →owner `writeFile`) and the page swaps `activeVfs()` between a writable page `vfs` and a read-only `snapshotFs` on `devServerRunning()`.
+
+Verified seams (2026-06-15): the vite tail (`real-vite-bootstrap.ts:541-587` create/listen/watcher + `:592-604` preview bridges) runs ONCE at boot ONLY in preview mode, gated at `:428` `if (ownerMode==='shell') { bootShellOwner(); return; }`. The preview head ALSO runs `ensureProjectDependencies` (`:485-513`, stamp/snapshot/install) — `bootShellOwner` does NOT; it installs lazily via the user-typed `npm install`. `presetBootLines` (`presets.ts:371`) = `[terminalDevLine(...)]` only (no install line) — so instant-preset deps arrive TODAY via the preview head's `ensureProjectDependencies`, a path P4 deletes. Page readiness/port come from `machine.setRealVitePort(handle.port)` (`App.tsx:301`) + a `'node_modules read bridge ready'` stdout log-match (`:288`) — both die with `startRealVite`. The pty frame protocol (`pty-protocol.ts:53-66`) has NO control frame for "start dev server". `devMode.ts` (main-thread non-COI Dev Mode) is a SEPARATE adapter using the shared `preview-bridge-wiring.ts`; the COI App flow uses `createUnavailableOwner` (fail-loud) when `!isSabIpcSupported()`.
+
+## Decision
+
+**1. Co-resident dev-server in the ONE owner (subsumption).** The vite/HMR/preview-bridge tail moves INTO `bootShellOwner` as an on-demand, stoppable capability (NOT booted at owner mount). The `ownerMode!=='shell'` per-run branch and the `startRealVite` spawn (`realVite.ts:74-203`, `RealViteHandle`) are DELETED — the persistent owner is the single owner running shell sessions AND the dev server. Start/stop use `vite.createServer().listen()` / `server.close()` + bridge disposal; a single-active-dev-server guard inside the owner replaces the page's `realViteHandle` identity check. The dev server's tear handles live on the dev-server lifecycle object (disposed on stop), NOT in the boot-time keep-alive void block.
+
+**2. Start mechanism = reuse `pty:exec` (no new run protocol).** A co-resident `vite`/dev command is registered in the owner; running it (a) runs `ensureProjectDependencies` against the owner `syncMirror` (idempotent via the install stamp — no-op if `npm install` already ran), (b) boots vite + registers the preview/HMR bridges, (c) BLOCKS the run until SIGINT, (d) on SIGINT → `server.close()` + dispose bridges → `exit 130`. Output streams as `pty:chunk`; Ctrl-C already maps to `pty:signal`→`AbortController`. Terminal parity: `vite` holds its shell session until Ctrl-C (real terminals do this); restart-on-preset-switch = abort the run + re-run the command. This kills the instant-preset dependency-arrival gap (the deleted preview head's job folds into the dev command, against the SAME store).
+
+**3. Owner→page dev-server state = new structured `pty:dev-server` frame + P3 handshake.** Add an owner→page control frame `pty:dev-server{status:'starting'|'running'|'stopped', port, url?}` on the pty IPC channel (symmetric with `pty:exit`), replacing `setRealVitePort(handle.port)` + the stdout log-match. The page derives `devServerStatus()`/`machine.realVitePort()` from it; consumers `previewUrl`/`PreviewPanel`/`livePillLabel`/`hasPreview` keep their signals — only their WRITER flips from `runViteCommand` to the frame handler. The page (re)requests dev-server state on subscribe (P3 readiness discipline) so a state push that predates the listener is recoverable — NOT a one-shot push (the P2 dropped-`pty:open` bug class). The SW `/preview/<port>/` route + `setupPreviewBridge`/`serveCrossRealmPreview` now resolve to the owner worker (which owns the port).
+
+**4. Owner = single source of truth (retire triple-write).** The owner `syncMirror` is the sole truth for the editable tree. `seedViteWorkspace`'s page-`vfs` writes + `seedPresetFiles(vfs)` + `syncWorkspaceFileToWorker` retire; `EditorHost.flushWrite` routes to the owner (`workspaceOwner.writeFile`/a write frame). The `activeVfs()` binary selector + the `snapshotFs`/`vfs` swap retire — explorer/editor ALWAYS read the owner snapshot + read-port (already owner-fed since P2/P3). Writes are ordered write-applied → snapshot republished, reusing the P3 `pty:exit`/vfs-write republish path.
+
+**5. Read-port widening, WITH its consumer.** `isUnderNodeModules` (`node-modules-port.ts:74`) widens to a general workspace-root read guard (the `normalizePath` anti-escape guard already blocks `../`). Its consumer is decision 4's editor opening owner-only project files on demand. Ships together (no silent stub) — the widening and the SSoT consumer land in this PR.
+
+### Scope (v1) + deferred
+
+- **Co-resident, single JS thread (ACCEPTED).** Vite + shell sessions + the snapshot/nm/vfs-write bridge replies share the owner thread. A blocking `vite` run holds its session; a CPU-bound vite phase stalls other sessions + bridge replies. True "shell responsive while `vite` runs" needs **P6** (SAB sync-views, worker→worker) — not a P4 regression, the documented model.
+- **One ADR, both folds.** Vite-unification AND SSoT/triple-write retirement land together (single zero-debt close for D; larger blast radius accepted over a P4a/P4b split).
+- **Deferred:** graceful drain/flush on dev-server stop + owner terminate (hard `server.close()`/kill today) → **P5**; OPFS persistence → **P5**; per-session/per-process isolation → **P6**. `devMode.ts` (non-COI main-thread Dev Mode) is OUT of scope — untouched; its shared `preview-bridge-wiring.ts` seam must survive the `startRealVite` deletion.
+
+### Alternatives
+
+- **Dedicated `pty:dev-start`/`pty:dev-stop` control-frame pair.** Rejected for v1: more protocol surface; the dev server need not outlive its run line — terminal parity says `vite` blocks until Ctrl-C, so `pty:exec` already models start (run) + stop (SIGINT). Revisit only if a session-independent / page-button dev-server control is needed.
+- **Keep two owners / page-driven preview.** Rejected — the two-owners trap: preview can't see terminal-installed deps; defeats D.
+- **Split P4 into P4a (vite-unify) + P4b (SSoT), two ADRs.** Considered (two focused reviewable steps); user chose one ADR — both folds land together for a single zero-debt D close.
+- **Dev-server state on the snapshot BroadcastChannel.** Rejected: the pty IPC channel already carries owner↔page CONTROL symmetric with `pty:exit`; the snapshot channel is data, and a separate-channel push reintroduces the missed-before-listener race the handshake exists to kill.
+- **`presetBootLines` adds an explicit `npm install` line.** Rejected vs. folding `ensureProjectDependencies` into the dev command: the command-owned idempotent install keeps instant-preset UX (no visible install step) and keeps install ownership in one place.
+
+## Consequences
+
+- (+) Closes the two-owners transient at the root — one store; the dev server reads terminal-installed deps; `npm install <pkg>` and `npm run dev` share `node_modules`. **Zero residual execution-model debt at D close** (the milestone's hard requirement).
+- (+) One source of truth for the editable tree — no triple-write coherence window; shell, editor, explorer, and vite all observe one store; `activeVfs()`/`snapshotFs` complexity removed.
+- (+) Readiness via a structured frame + the P3 request/handshake — no stdout log-string match, no one-shot-push drop.
+- (−) Single owner JS thread: vite + shell contend until P6; a blocking `vite` run holds its session (terminal parity, but no background dev server in v1).
+- (−) Larger blast radius in one PR (owner worker + `App.tsx` + `EditorHost` + `FileExplorer` remount + read-port) — mitigated by TDD RED→GREEN per seam + the COI e2e (`owner-shell-cowsay`, preview, explorer-coherence specs updated, not left referencing deleted symbols).
+- (−) Non-COI host has no owner-served preview (consistent with shell since P2; `devMode.ts` remains the separate non-COI adapter).
+- Follow-ups: **P5** (OPFS persistence + graceful dev-server/owner stop — co-resident vite raises the cost of hard-kill), **P6** (SAB sync-views for concurrency).
+
+## Reversibility
+
+IRREVERSIBLE — adds a wire contract (the `pty:dev-server` frame), DELETES the per-run preview spawn + the page-driven dev-server path, changes which realm owns the editable tree (SSoT), and widens a public read-port surface. Builds on ADR-0143 (its P4), ADR-0146 (P2 owner + pty — extends the frame protocol), ADR-0144 (`serve`). Relates: ADR-0072 (OPFS preload cost, P5), ADR-0080 (read bridge), ADR-0135 (per-realm OPFS), ADR-0137 (frozen `BinExecutor`/`runNodeEntry`), ADR-0089 (cooperative SIGINT), ADR-0011 (SAB IPC gate).

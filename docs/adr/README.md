@@ -154,6 +154,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0137 | Shell PATH-style node_modules/.bin resolution + injected BinExecutor seam |
 | 0143 | Bin/shell execution model: owner-worker vs SAB fs-proxy |
 | 0146 | PTY channel and owner-resident shell — ADR-0143 P2 |
+| 0148 | Unified workspace owner co-resident dev-server and single source of truth ADR-0143 P4 |
 
 ### terminal
 
