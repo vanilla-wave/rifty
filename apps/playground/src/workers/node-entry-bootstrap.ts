@@ -10,12 +10,10 @@
  * `import`/`require` resolved against the VFS, which the kernel's raw
  * `kind:'source'` (`new AsyncFunction`) path cannot do.
  *
- * KNOWN GAP (ADR-0143): `syncMirror()` here is this worker realm's OWN empty
- * store — the pre-entry hook installs NO fs mirror, and the shell's installed
- * `node_modules` live in PAGE memory (no shared OPFS), so `runNodeEntry` ENOENTs
- * end-to-end. The worker-VFS transport is settled as D (owner-worker) in
- * ADR-0143, not yet built. (This comment previously claimed a "SAB-backed sync
- * mirror" was installed here — it never was.)
+ * VFS SELECTION (ADR-0150 P6a): when `RIFTY_REMOTE_FS=1` the child reads the
+ * OWNER store over `fs.*` sync-RPC (`SyncRpcFsSync`), closing the ENOENT gap
+ * documented here previously. Without it, falls back to the realm's own (empty)
+ * sync mirror — legacy path for page-side per-bin executor + execSync.
  *
  * `RIFTY_BIN=1` marks a `node_modules/.bin/<name>` launcher shim (run its
  * import target). Run-to-completion: when the entry's top-level settles the
@@ -23,8 +21,10 @@
  * kernel worker-entry, which surfaces it on stderr (exit 1) — never silent.
  */
 
+import { readKernelSyncApi } from '@riftydev/kernel';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { syncMirror } from '@riftydev/vfs';
+import { selectEntryVfs } from './select-entry-vfs.ts';
 
 const proc = globalThis.process;
 const entryPath = proc.argv[1];
@@ -32,8 +32,15 @@ if (typeof entryPath !== 'string' || entryPath === '') {
   throw new Error('node-entry-bootstrap: missing entry path (process.argv[1])');
 }
 
+const syncApi = readKernelSyncApi();
+const vfs = selectEntryVfs({
+  remoteFs: proc.env.RIFTY_REMOTE_FS === '1',
+  call: syncApi ? syncApi.call : null,
+  localVfs: syncMirror,
+});
+
 await runNodeEntry({
-  vfs: syncMirror(),
+  vfs,
   entryPath,
   cwd: proc.cwd(),
   bin: proc.env.RIFTY_BIN === '1',
