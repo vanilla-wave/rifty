@@ -461,9 +461,9 @@ export function App(props: AppProps) {
     return cache ? (path: string) => cache.readFile(path) : undefined;
   };
 
-  // Explorer + editor read the worker mirror only once `vite` is really up;
-  // during install/start/stop they stay on the writable workspace mirror.
-  const activeVfs = () => (devServerRunning() ? snapshotFs : vfs);
+  // SSoT (ADR-0148 P4): explorer + editor ALWAYS read the OWNER snapshot (the one
+  // source of truth) — no `vite`-gated swap. Editor edits write to the owner; the
+  // sync snapshot holds project-file content, the async read-port covers the rest.
   let initialRunTimer: ReturnType<typeof setTimeout> | undefined;
 
   function presetForId(id: string): Preset {
@@ -490,15 +490,15 @@ export function App(props: AppProps) {
     }
   }
 
-  // SSoT (ADR-0148 P4): editor writes flow to the OWNER (the execution truth), so
-  // the co-resident dev server (HMR) + shell see them. The page `vfs` is the
-  // editor's sync working copy; the program tab flows via `onProgramChange`.
-  function syncWorkspaceFileToOwner(path: string): void {
-    if (path === PROGRAM_MIRROR_PATH) return;
+  // SSoT (ADR-0148 P4): editor writes flow to the OWNER (the execution truth) so
+  // the co-resident dev server (HMR) + shell see them; the page `vfs` is kept as a
+  // write-through copy for the workspace archive (not a competing read source).
+  function writeWorkspaceFile(path: string, content: string): void {
+    if (path !== PROGRAM_MIRROR_PATH) workspaceOwner.writeFile(path, content);
     try {
-      workspaceOwner.writeFile(path, new TextDecoder().decode(vfs.readFileBytesSync(path)));
+      writeText(vfs, path, content);
     } catch {
-      /* best-effort live sync for opened text files */
+      /* archive copy is best-effort */
     }
   }
 
@@ -654,8 +654,14 @@ export function App(props: AppProps) {
   function onProgramChange(next: string): void {
     machine.setSource(next);
     // SSoT (ADR-0148 P4): push the program edit to the owner so the co-resident
-    // dev server HMR-updates (the program mirror is the entry vite serves).
+    // dev server HMR-updates (the program mirror is the entry vite serves); the
+    // page `vfs` keeps a write-through copy for the workspace archive.
     workspaceOwner.writeFile(PROGRAM_MIRROR_PATH, next);
+    try {
+      writeText(vfs, PROGRAM_MIRROR_PATH, next);
+    } catch {
+      /* archive copy is best-effort */
+    }
   }
 
   function onTerminalLink(uri: string): void {
@@ -678,7 +684,7 @@ export function App(props: AppProps) {
   function listWorkspaceFiles(limit = 400): { files: string[]; truncated: boolean } {
     const out: string[] = [];
     let truncated = false;
-    const tree = activeVfs();
+    const tree = snapshotFs;
     const walkDir = (dir: string): void => {
       let children: ReturnType<typeof readChildren>;
       try {
@@ -933,33 +939,19 @@ export function App(props: AppProps) {
           }}
         >
           <aside class="rf-sidebar rf-card">
-            {/* real-vite swaps the explorer's backing store. FileExplorer
-                captures `vfs` once, so the mode flip must remount it —
-                Show/fallback does exactly that. */}
-            <Show
-              when={devServerRunning()}
-              fallback={
-                <FileExplorer
-                  vfs={vfs}
-                  root={WORKSPACE}
-                  visible={!layout.sidebarCollapsed()}
-                  activePath={activeFilePath()}
-                  onOpenFile={(path) => editorApi?.openFile(path)}
-                  onError={flashError}
-                />
-              }
-            >
-              <FileExplorer
-                vfs={snapshotFs}
-                root={WORKSPACE}
-                readOnly
-                nodeModules={nodeModulesProp()}
-                visible={!layout.sidebarCollapsed()}
-                activePath={activeFilePath()}
-                onOpenFile={(path) => editorApi?.openFile(path)}
-                onError={flashError}
-              />
-            </Show>
+            {/* SSoT (ADR-0148 P4): the explorer ALWAYS reflects the OWNER snapshot
+                (one source of truth) + the lazy node_modules read-port — no
+                `vite`-gated backing-store swap. */}
+            <FileExplorer
+              vfs={snapshotFs}
+              root={WORKSPACE}
+              readOnly
+              nodeModules={nodeModulesProp()}
+              visible={!layout.sidebarCollapsed()}
+              activePath={activeFilePath()}
+              onOpenFile={(path) => editorApi?.openFile(path)}
+              onError={flashError}
+            />
           </aside>
 
           <Splitter
@@ -981,7 +973,7 @@ export function App(props: AppProps) {
                 programValue={machine.source}
                 programTitle={programTitle}
                 onProgramChange={onProgramChange}
-                vfs={activeVfs()}
+                vfs={snapshotFs}
                 registerApi={(api) => {
                   editorApi = api;
                 }}
@@ -990,7 +982,7 @@ export function App(props: AppProps) {
                   setActiveLang(info.language);
                   setActiveFilePath(info.path);
                 }}
-                onFileWritten={syncWorkspaceFileToOwner}
+                onFileWritten={writeWorkspaceFile}
                 readNodeModulesFile={readNodeModulesFile()}
                 previewUrl={previewUrl}
                 onOpenPreviewTab={openPreviewTab}

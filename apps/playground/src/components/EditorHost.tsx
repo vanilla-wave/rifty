@@ -53,13 +53,16 @@ export interface EditorHostProps {
   readonly vfs: FsOpsTarget;
   registerApi(api: EditorApi): void;
   onActive(info: { label: string; language: string; path?: string }): void;
-  onFileWritten?(path: string): void;
+  /** Editor save → the OWNER store (ADR-0148 P4 SSoT): the owner is the single
+   *  source of truth; `content` is the new file text. */
+  onFileWritten?(path: string, content: string): void;
   onError?(message: string): void;
   readonly previewUrl?: Accessor<string | undefined>;
   onOpenPreviewTab?(): void;
-  /** When set (real-vite mode, ADR-0080), opening a node_modules path reads its
-   *  bytes async from the worker instead of the sync VFS. `content` is null when
-   *  the file exceeds the read cap. */
+  /** Async owner read-port (ADR-0080, widened ADR-0148): opening a file the sync
+   *  `vfs` (owner snapshot) does not hold — node_modules, over-cap, or owner-only
+   *  (shell-written) — reads its bytes from the owner. `content` is null when over
+   *  the read cap. Files read this way are view-only. */
   readNodeModulesFile?(path: string): Promise<{ size: number; content: Uint8Array | null }>;
 }
 
@@ -125,7 +128,6 @@ function languageForPath(path: string): string {
 }
 
 const dec = new TextDecoder();
-const enc = new TextEncoder();
 
 export function EditorHost(props: EditorHostProps) {
   let container: HTMLDivElement | undefined;
@@ -143,13 +145,10 @@ export function EditorHost(props: EditorHostProps) {
   function flushWrite(path: string): void {
     const m = models.get(path);
     if (!m) return;
-    try {
-      props.vfs.writeFileSync(path, enc.encode(m.getValue()));
-      setTabs((t) => setDirty(t, path, false));
-      props.onFileWritten?.(path);
-    } catch (err) {
-      props.onError?.((err as Error).message);
-    }
+    // SSoT (ADR-0148 P4): the OWNER is the single store — the editor writes there,
+    // not the read-only owner-snapshot `vfs` it reads from.
+    setTabs((t) => setDirty(t, path, false));
+    props.onFileWritten?.(path, m.getValue());
   }
 
   function scheduleWrite(path: string): void {
@@ -169,12 +168,13 @@ export function EditorHost(props: EditorHostProps) {
   }
 
   /**
-   * Open a node_modules file (ADR-0080). Bytes live in the worker realm, so the
-   * read is async: open a loading tab, await the remote read, then fill in the
-   * content (or a too-large / binary / error placeholder). Always read-only —
-   * no write path back to the worker's node_modules.
+   * Open a file via the async owner read-port (ADR-0080, widened ADR-0148): bytes
+   * live in the owner realm (node_modules, over-cap, or owner-only files the sync
+   * snapshot does not hold). Open a loading tab, await the remote read, then fill
+   * in the content (or a too-large / binary / error placeholder). Always read-only
+   * — no write path back for these (editable project files take the sync path).
    */
-  function openNodeModulesFile(
+  function openRemoteFile(
     path: string,
     read: (p: string) => Promise<{ size: number; content: Uint8Array | null }>,
     options: EditorOpenFileOptions = {},
@@ -216,9 +216,10 @@ export function EditorHost(props: EditorHostProps) {
       if (shouldActivate) setActiveId(PROGRAM_TAB_ID);
       return;
     }
-    const readNm = props.readNodeModulesFile;
-    if (readNm && isNodeModulesPath(path)) {
-      openNodeModulesFile(path, readNm, options);
+    const readRemote = props.readNodeModulesFile;
+    // node_modules always reads remote (deps are view-only).
+    if (readRemote && isNodeModulesPath(path)) {
+      openRemoteFile(path, readRemote, options);
       return;
     }
     if (models.has(path)) {
@@ -227,8 +228,15 @@ export function EditorHost(props: EditorHostProps) {
     }
     let bytes: Uint8Array;
     try {
+      // Sync read from the owner snapshot (ADR-0148 SSoT): editable project files.
       bytes = props.vfs.readFileBytesSync(path);
     } catch (err) {
+      // Not in the snapshot (over-cap / owner-only / racing the boot publish) →
+      // async owner read-port (view-only); else surface the read error.
+      if (readRemote) {
+        openRemoteFile(path, readRemote, options);
+        return;
+      }
       props.onError?.((err as Error).message);
       return;
     }
@@ -240,10 +248,9 @@ export function EditorHost(props: EditorHostProps) {
         'plaintext',
       );
     } else {
+      // Editable: edits write to the OWNER via `onFileWritten` (the snapshot the
+      // editor reads is owner-published + read-only, but the file itself is not).
       model = monaco.editor.createModel(dec.decode(bytes), languageForPath(path));
-      // Read-only source (e.g. real-vite worker mirror, ADR-0076): view-only,
-      // no write path back to the worker realm.
-      if (props.vfs.readOnly) readOnlyPaths.add(path);
     }
     models.set(path, model);
     setTabs((t) => openFileTab(t, path, basename(path)));

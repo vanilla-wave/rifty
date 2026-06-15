@@ -53,9 +53,11 @@ describe('App terminal startup wiring', () => {
   it('routes editor + program writes to the owner (SSoT, ADR-0148 P4)', () => {
     // The preview worker is gone; editor/program edits flow to the ONE owner so
     // the co-resident dev server HMR-updates against the same store it serves.
-    expect(source).toContain('function syncWorkspaceFileToOwner(path: string)');
-    expect(source).toContain('workspaceOwner.writeFile(path,');
+    expect(source).toContain('function writeWorkspaceFile(path: string, content: string)');
+    expect(source).toContain('workspaceOwner.writeFile(path, content)');
     expect(source).toContain('workspaceOwner.writeFile(PROGRAM_MIRROR_PATH, next)');
+    // explorer + editor read the owner snapshot, not a vite-gated swap
+    expect(source).not.toContain('const activeVfs');
     expect(source).not.toContain('syncPresetFilesToWorker');
     expect(source).not.toContain('.updateEntry(');
   });
