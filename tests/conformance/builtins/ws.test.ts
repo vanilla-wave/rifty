@@ -16,6 +16,7 @@ import {
   WebSocket,
   WebSocketServer,
   createCrossRealmBridge,
+  portChannelNameFor,
 } from '../../../packages/net/src/ws.ts';
 
 describe('WebSocketServer', () => {
@@ -225,6 +226,25 @@ describe('default WebSocket surface crosses realms', () => {
 
     ws.close();
     server.close();
+  });
+
+  it('rejects port-channel bridge opens that omit the target URL', async () => {
+    const server = new WebSocketServer({ port: 9013, path: '/hmr' });
+    let connections = 0;
+    server.on('connection', () => {
+      connections += 1;
+    });
+    const channel = new BroadcastChannel(portChannelNameFor('ws://preview.local:9013/hmr'));
+
+    try {
+      channel.postMessage({ type: 'open', cid: 'missing-url' });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(connections).toBe(0);
+    } finally {
+      channel.close();
+      server.close();
+    }
   });
 
   it('lets an ordinary WebSocket client connect to a bridged server', async () => {

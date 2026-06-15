@@ -14,6 +14,16 @@
 
 ### Fixed
 
+- **WebSocket bridge host matching now honors only configured hosts.**
+  `webSocketBridgeClientScript()` no longer intercepts arbitrary `ws://` URLs
+  on the page's own hostname; same-host application sockets fall through to the
+  native browser `WebSocket` unless the host is explicitly listed.
+- **Cross-realm WebSocket port discovery rejects URL-less opens.** Servers now
+  require the client `url` on port-channel open frames before wildcard
+  host/path matching, so a discovery frame cannot bypass route validation.
+- **Browser bridge `send()` matches native CONNECTING behavior.** Calling
+  `send()` before the bridge reaches `OPEN` throws `InvalidStateError` instead
+  of silently dropping data.
 - **SSE bodies fail loud over the cross-realm preview bridge.**
   `serveCrossRealmPreview` refuses to drain a `text/event-stream` body
   (the page↔worker hop buffers until `reply-stream-end`, so an unending SSE

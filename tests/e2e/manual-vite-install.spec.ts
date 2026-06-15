@@ -1,10 +1,12 @@
 /**
  * Manual ecosystem path: a user creates/owns package.json, runs
- * `npm install vite`, then starts the project through `npm run dev`.
+ * `npm install vite@^5.4.0`, then starts the project through `npm run dev`.
  *
  * This is intentionally distinct from the built-in real-Vite preset. The
  * preset proves rifty can boot a prepared template; this spec proves the
  * terminal install/run path still reaches the same honest HMR transport.
+ * Newer Vite majors are rejected by the worker version guard until their HMR
+ * channel contract is proven.
  */
 import { expect, test } from '@playwright/test';
 import {
@@ -23,7 +25,9 @@ test.describe('manual Vite install path', () => {
     'set RIFTY_E2E_MANUAL_VITE=1 to run; installs Vite through the browser terminal',
   );
 
-  test('npm install vite + npm run dev gets real HMR in the preview iframe', async ({ page }) => {
+  test('npm install vite@^5.4.0 + npm run dev gets real HMR in the preview iframe', async ({
+    page,
+  }) => {
     test.setTimeout(180_000);
     await page.goto('/');
 
@@ -33,7 +37,7 @@ test.describe('manual Vite install path', () => {
     await openShellTerminal(page);
     await runTerminalLine(
       page,
-      'rm -rf node_modules package-lock.json package.json && printf \'{"name":"manual-vite","private":true,"type":"module","scripts":{"dev":"vite"},"dependencies":{}}\\n\' > package.json && npm install vite',
+      'rm -rf node_modules package-lock.json package.json && printf \'{"name":"manual-vite","private":true,"type":"module","scripts":{"dev":"vite"},"dependencies":{}}\\n\' > package.json && npm install vite@^5.4.0',
     );
     await expectTerminalContains(page, 'npm: installing vite', 20_000);
     await expectTerminalContains(page, /npm: installed \d+ package\(s\)/, 120_000);

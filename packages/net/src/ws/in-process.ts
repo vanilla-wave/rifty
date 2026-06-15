@@ -210,8 +210,10 @@ export class WebSocketServer extends EventEmitter {
     const channel = this.channelFromEvent(e);
     if (!channel) return;
     if (frame.type === 'open') {
+      const isPortChannel = this.bridgePortChannels.has(channel);
+      if (isPortChannel && frame.url === undefined) return;
       if (frame.url !== undefined) {
-        if (!this.bridgePortChannels.has(channel)) return;
+        if (!isPortChannel) return;
         if (!this.matchesBridgeUrl(frame.url)) return;
       }
       this._acceptBridge(frame.cid, channel);

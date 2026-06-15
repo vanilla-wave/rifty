@@ -191,6 +191,16 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0092 | n/a | retired opencode facade ADR; integration cancelled |
 | 0138 | 0142 | eval interception now feasible via QuickJS real realm; context grafted |
 
+## Corrections (active)
+
+Active ADRs below carry in-place correction notes; only the named clause is
+superseded.
+
+| ADR | corrected by | note |
+|---|---|---|
+| 0017 A-025 deferral clause | 0147 | cross-realm WebSocket reachability shipped; M12 still owns streaming/raw TCP/backpressure |
+| 0145 browser transport clause | 0147 | Vite `server.hmr.channels` payload path remains; browser shim is now the generic WebSocket bridge |
+
 ## Appendix A — Q→ADR provenance
 
 Promoted `OPEN_QUESTIONS` ids → ADRs.

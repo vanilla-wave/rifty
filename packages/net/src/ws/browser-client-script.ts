@@ -48,8 +48,6 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
   }
   function shouldBridge(url) {
     if (url.protocol !== 'ws:' && url.protocol !== 'wss:') return false;
-    var pageHost = window.location && window.location.hostname ? window.location.hostname : '';
-    if (url.hostname === pageHost) return true;
     return bridgeHosts.indexOf(url.hostname) !== -1;
   }
   function makeCloseEvent(code, reason, wasClean) {
@@ -61,6 +59,15 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
       ev.reason = reason;
       ev.wasClean = wasClean;
       return ev;
+    }
+  }
+  function makeInvalidStateError(message) {
+    try {
+      return new DOMException(message, 'InvalidStateError');
+    } catch (_) {
+      var err = new Error(message);
+      err.name = 'InvalidStateError';
+      return err;
     }
   }
   function emit(socket, event) {
@@ -175,6 +182,9 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
       }
     }
     send(data) {
+      if (this.readyState === RiftyBridgeWebSocket.CONNECTING) {
+        throw makeInvalidStateError("Failed to execute 'send' on 'WebSocket': Still in CONNECTING state.");
+      }
       if (this.readyState !== RiftyBridgeWebSocket.OPEN) return;
       if (this.__activeChannel) this.__activeChannel.postMessage({ type: 'msg', cid: this.__cid, data: data });
     }
