@@ -32,4 +32,19 @@ describe('pty-protocol', () => {
     expect(f.data).toBeInstanceOf(Uint8Array);
     expect(isOwnerToPage(f)).toBe(true);
   });
+  it('routes pty:dev-server as owner→page', () => {
+    const f: PtyFrame = {
+      type: 'pty:dev-server',
+      status: 'running',
+      port: 5174,
+      url: '/preview/5174/',
+    };
+    expect(isOwnerToPage(f)).toBe(true);
+    expect(isPageToOwner(f)).toBe(false);
+  });
+  it('routes pty:dev-server-req as page→owner', () => {
+    const f: PtyFrame = { type: 'pty:dev-server-req' };
+    expect(isPageToOwner(f)).toBe(true);
+    expect(isOwnerToPage(f)).toBe(false);
+  });
 });

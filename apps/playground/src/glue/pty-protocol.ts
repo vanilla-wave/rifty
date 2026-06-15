@@ -50,6 +50,21 @@ export type PtyExit = {
   error?: string;
 };
 
+/** Co-resident dev-server lifecycle (ADR-0148 P4): not tied to a run/`rid`. */
+export type DevServerStatus = 'starting' | 'running' | 'stopped';
+export type PtyDevServer = {
+  type: 'pty:dev-server';
+  status: DevServerStatus;
+  /** Internal listen port — defined once `status` reaches 'running'. */
+  port?: number;
+  /** Preview URL the iframe loads — defined once 'running'. */
+  url?: string;
+  /** Non-fatal start failure surfaced to the page pill (`status` stays 'stopped'). */
+  error?: string;
+};
+/** Page asks the owner to re-publish dev-server state (P3 handshake discipline). */
+export type PtyDevServerReq = { type: 'pty:dev-server-req' };
+
 export type PageToOwnerFrame =
   | PtyOpen
   | PtyExec
@@ -57,8 +72,9 @@ export type PageToOwnerFrame =
   | PtyStdinEof
   | PtySignal
   | PtyResize
-  | PtyClose;
-export type OwnerToPageFrame = PtyReady | PtyChunk | PtyExit;
+  | PtyClose
+  | PtyDevServerReq;
+export type OwnerToPageFrame = PtyReady | PtyChunk | PtyExit | PtyDevServer;
 export type PtyFrame = PageToOwnerFrame | OwnerToPageFrame;
 
 /** kernel fork-IPC envelope discriminator (sits beside 'rifty:vfs-write'). */
@@ -76,8 +92,9 @@ const PAGE_TO_OWNER = new Set([
   'pty:signal',
   'pty:resize',
   'pty:close',
+  'pty:dev-server-req',
 ]);
-const OWNER_TO_PAGE = new Set(['pty:ready', 'pty:chunk', 'pty:exit']);
+const OWNER_TO_PAGE = new Set(['pty:ready', 'pty:chunk', 'pty:exit', 'pty:dev-server']);
 export function isPageToOwner(f: PtyFrame): f is PageToOwnerFrame {
   return PAGE_TO_OWNER.has(f.type);
 }
