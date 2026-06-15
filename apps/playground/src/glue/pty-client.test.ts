@@ -129,7 +129,12 @@ describe('pty-client', () => {
   it('routes pty:dev-server to onDevServer (ADR-0148)', () => {
     const seen: unknown[] = [];
     const client = createPtyClient({ send: () => {}, onDevServer: (f) => seen.push(f) });
-    client.onFrame({ type: 'pty:dev-server', status: 'running', port: 5174, url: '/preview/5174/' });
+    client.onFrame({
+      type: 'pty:dev-server',
+      status: 'running',
+      port: 5174,
+      url: '/preview/5174/',
+    });
     expect(seen).toEqual([
       { type: 'pty:dev-server', status: 'running', port: 5174, url: '/preview/5174/' },
     ]);

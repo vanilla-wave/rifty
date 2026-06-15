@@ -17,24 +17,36 @@ export interface DevServerHandle {
   readonly port: number;
   /** `server.close()` + bridge disposal; idempotent. */
   stop(): Promise<void>;
+  /**
+   * Invalidate a changed file + broadcast HMR (vite only; no-op for a node
+   * server). The owner's single vfs-write handler forwards editor writes here so
+   * the preview live-updates — the virtual FS fires no real watcher events.
+   */
+  onFileChanged?(path: string): void;
 }
 
 export interface DevServerControllerDeps {
   /** Emits owner→page frames (wired to the owner `send`). */
   readonly send: (frame: OwnerToPageFrame) => void;
-  /** Boots the real dev server + bridges; honours `signal` for early-abort. */
-  readonly boot: (signal: AbortSignal) => Promise<DevServerHandle>;
+  /**
+   * Boots the real dev server + bridges; honours `signal` for early-abort. `log`
+   * streams install/boot progress to the session terminal (the dev command's
+   * `ctx.stdout`).
+   */
+  readonly boot: (signal: AbortSignal, log: (chunk: string) => void) => Promise<DevServerHandle>;
 }
 
 export interface DevServerController {
   /**
    * Run the dev server: emits starting→running, then BLOCKS until `signal`
    * aborts, then stops the server and emits stopped. A second concurrent run
-   * throws (single active server per owner).
+   * throws (single active server per owner). `log` streams boot progress.
    */
-  run(signal: AbortSignal): Promise<void>;
+  run(signal: AbortSignal, log?: (chunk: string) => void): Promise<void>;
   /** Re-emit current state — answers the `pty:dev-server-req` handshake. */
   publish(): void;
+  /** Forward an editor write to the running server's HMR (no-op when stopped). */
+  notifyFileChanged(path: string): void;
   readonly status: DevServerStatus;
 }
 
@@ -66,12 +78,15 @@ export function createDevServerController(deps: DevServerControllerDeps): DevSer
     publish(): void {
       emit();
     },
-    async run(signal: AbortSignal): Promise<void> {
+    notifyFileChanged(path: string): void {
+      if (status === 'running' && active) active.onFileChanged?.(path);
+    },
+    async run(signal: AbortSignal, log: (chunk: string) => void = () => {}): Promise<void> {
       if (status !== 'stopped') throw new Error('dev server already running');
       status = 'starting';
       emit();
       try {
-        active = await deps.boot(signal);
+        active = await deps.boot(signal, log);
         status = 'running';
         emit();
         await onceAborted(signal);

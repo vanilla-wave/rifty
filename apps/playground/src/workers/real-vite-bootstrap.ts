@@ -39,7 +39,7 @@ import {
   type SerializedResponse,
   setupPreviewBridge,
 } from '@riftydev/service-worker';
-import { Shell } from '@riftydev/shell';
+import { type CommandContext, Shell } from '@riftydev/shell';
 import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 import type { SqlJsConfig } from 'sql.js';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
@@ -74,6 +74,7 @@ import {
   resolveBootstrapConfig,
 } from '../templates/project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
+import { type DevServerHandle, createDevServerController } from './dev-server-controller.ts';
 import { createOwnerBinExecutor } from './owner-bin-executor.ts';
 import { createPtyServer } from './pty-server.ts';
 import { type ViteModuleGraph, invalidateViteModule } from './real-vite-invalidation.ts';
@@ -307,43 +308,260 @@ async function bootNodeServer(cfg: NodeServerBootstrapConfig, loader: Loader): P
 }
 
 /**
- * Shell-mode workspace owner (ADR-0146 P2): this realm hosts the resident
- * `Shell` per terminal session and dispatches the page's `pty:*` frames against
- * it. npm + the in-realm `.bin` executor run HERE against this realm's
- * `syncMirror()` (the tree the install writes), closing the ADR-0143 gap where a
- * page-side bin saw an empty worker store. The vite/node-server tail is SKIPPED;
- * the realm stays alive on `serve:true` via its open IPC channel + served bridges.
+ * Boot the co-resident dev server (ADR-0148 P4) INSIDE the workspace owner: run
+ * the idempotent dependency-arrival (against THIS realm's tree — the one the
+ * shell installs into, so vite sees terminal-installed deps), build the module
+ * loader, start vite / the node server, and register the preview + HMR bridges.
+ * Returns a stop handle (`server.close()` + bridge disposal) so Ctrl-C stops the
+ * dev server WITHOUT killing the owner. `log` streams progress to the session.
+ *
+ * node-server stop is best-effort: the entry IS the server (an ESM module,
+ * evaluated once), so stop tears the preview bridges but the program keeps
+ * running — a graceful server stop is P5 (the ADR-0144 model is hard-kill today).
+ */
+async function bootDevServer(opts: {
+  readonly cfg: BootstrapConfig;
+  readonly port: number;
+  readonly root: string;
+  readonly spec: ProjectSpec;
+  readonly slug: string;
+  readonly fromScratch: boolean;
+  readonly ownerToken: string | undefined;
+  readonly publishSnapshot: () => void;
+  readonly log: (chunk: string) => void;
+}): Promise<DevServerHandle> {
+  const { cfg, port, root, spec, slug, fromScratch, ownerToken, publishSnapshot, log } = opts;
+
+  // Dependency arrival (ADR-0135): idempotent via the install stamp — a no-op if
+  // the user already ran `npm install`. instant reuses the baked snapshot quietly;
+  // from-scratch streams a real install to the terminal.
+  const vfs = new SyncMirrorVfs();
+  await ensureProjectDependencies({
+    vfs,
+    fsSync: syncMirror(),
+    root,
+    templateId: spec.id,
+    slug,
+    snapshotUrl: fromScratch ? undefined : cfg.bakedNodeModulesUrl,
+    install: async () => {
+      log(`installing ${spec.displayName} into ${root}/node_modules…\n`);
+      const registry = new RegistryClient({ fetch: proxiedRegistryFetch() });
+      const result = await install({
+        vfs,
+        cwd: root,
+        registry,
+        onPackage: fromScratch
+          ? (event) => log(`+ ${event.name}@${event.version}${event.cacheHit ? ' (cached)' : ''}\n`)
+          : undefined,
+      });
+      log(`installed ${result.packages.length} packages (${result.conflicts.length} conflicts)\n`);
+      return { packages: result.packages.length };
+    },
+    flush: flushSyncMirror,
+    log,
+  });
+  publishSnapshot();
+
+  const loader = createModuleLoader(syncMirror(), { cwd: root });
+  __setCreateRequireImpl((from: string) => {
+    const fromPath = from.startsWith('file://')
+      ? decodeURIComponent(from.slice('file://'.length))
+      : from;
+    const req = ((id: string) => loader.require(id, fromPath)) as ((id: string) => unknown) & {
+      resolve: (id: string) => string;
+      cache: Record<string, unknown>;
+      extensions: Record<string, unknown>;
+      main: undefined;
+    };
+    req.resolve = (id: string) =>
+      loader.resolver.resolve(id, { fromFile: fromPath, esm: false }).id;
+    req.cache = {};
+    req.extensions = {};
+    req.main = undefined;
+    return req;
+  });
+
+  const hmrBridgeRef: { current?: HmrBridgeHandle } = {};
+  let activeServer: ViteDevServer | null = null;
+  function broadcastFileUpdate(path: string): void {
+    const modulePath = normalizePath(path);
+    if (activeServer) {
+      try {
+        invalidateViteModule(activeServer, modulePath);
+      } catch (err) {
+        log(`module invalidation failed for ${modulePath}: ${(err as Error).message}\n`);
+      }
+    }
+    hmrBridgeRef.current?.broadcast(
+      JSON.stringify({
+        type: 'update',
+        event: 'change',
+        path: toRootRelativePath(root, modulePath),
+      }),
+    );
+  }
+
+  if (cfg.runtime === 'node-server') {
+    await bootNodeServer(cfg, loader);
+    publishSnapshot();
+  }
+
+  if (cfg.runtime === 'vite') {
+    overlayShims();
+    log(`importing ${cfg.runtimeSpecifier}…\n`);
+    const viteNs = (await loader.import(
+      cfg.runtimeSpecifier,
+      `${root}/__entry__.mjs`,
+    )) as unknown as {
+      createServer: (config: ViteUserConfig) => Promise<ViteDevServer>;
+    };
+    const hmrBridgeToken = createHmrBridgeToken();
+    hmrBridgeRef.current = setupHmrBridge({ port, token: hmrBridgeToken });
+    log(`starting dev server on port ${port}…\n`);
+    const server = await viteNs.createServer({
+      root,
+      base: './',
+      server: {
+        port,
+        strictPort: cfg.server.strictPort,
+        middlewareMode: false,
+        hmr: false,
+        host: cfg.server.host,
+        allowedHosts: cfg.server.allowedHosts,
+      } as unknown as ViteUserConfig['server'],
+      appType: cfg.server.appType,
+      clearScreen: false,
+      optimizeDeps: {
+        disabled: cfg.server.optimizeDepsDisabled,
+      } as unknown as ViteUserConfig['optimizeDeps'],
+      plugins: cfg.hmrEnabled ? [createHmrBridgeVitePlugin({ port, token: hmrBridgeToken })] : [],
+    });
+    await server.listen();
+    activeServer = server;
+    log(`vite is listening on internal port ${port}\n`);
+    publishSnapshot();
+    server.watcher?.on('change', (file) => {
+      broadcastFileUpdate(file);
+      publishSnapshot();
+    });
+  }
+
+  // Direct SW→Worker preview route (A-023) + cross-realm fallback. The page wires
+  // its side on the `pty:dev-server{running,port}` frame (ADR-0148).
+  const tearDirectSwBridge = setupPreviewBridge(dispatchSerializedPreview, {
+    ports: [port],
+    ownerToken,
+  });
+  const tearPreviewBridge = serveCrossRealmPreview(port, async (request) =>
+    dispatchToPort(port, request),
+  );
+  log('[real-vite/worker] preview bridges ready\n');
+
+  return {
+    port,
+    onFileChanged: broadcastFileUpdate,
+    async stop() {
+      try {
+        await activeServer?.close();
+      } catch {
+        /* idempotent: double stop / a server that never listened */
+      }
+      tearDirectSwBridge();
+      tearPreviewBridge();
+      hmrBridgeRef.current?.close();
+    },
+  };
+}
+
+/**
+ * Unified workspace owner (ADR-0146 P2 + ADR-0148 P4): this realm hosts the
+ * resident `Shell` per session AND the co-resident dev server. npm + the in-realm
+ * `.bin` executor + vite/node all run HERE against this realm's `syncMirror()`
+ * (the tree the install writes) — one store, no two-owners gap. The dev server
+ * starts on demand (`vite` / `npm run <script>`), blocks its run until Ctrl-C,
+ * and stops via `server.close()` WITHOUT killing the owner. The realm stays alive
+ * on `serve:true` via its IPC channel + served bridges.
  */
 async function bootShellOwner(opts: {
   readonly cfg: BootstrapConfig;
   readonly port: number;
   readonly kernelIpc: KernelIpc;
   readonly publishSnapshot: () => void;
+  readonly spec: ProjectSpec;
+  readonly slug: string;
+  readonly fromScratch: boolean;
+  readonly ownerToken: string | undefined;
 }): Promise<void> {
-  const { cfg, port, kernelIpc, publishSnapshot } = opts;
+  const { cfg, port, kernelIpc, publishSnapshot, spec, slug, fromScratch, ownerToken } = opts;
 
   seedProject(cfg);
   publishSnapshot();
-  // Readiness handshake (ADR-0146 P3): the page replies-via-request rather than
-  // us blind-republishing on a retry-storm. Startup publish above covers a page
-  // already subscribed; this covers a page that subscribes/reloads after us.
+  // Readiness handshake (ADR-0146 P3): the page replies-via-request rather than a
+  // blind retry-storm. Startup publish covers a subscribed page; this covers a
+  // page that subscribes/reloads after us.
   const tearSnapReq = serveSnapshotRequests(port, publishSnapshot);
 
-  // Editor writes still land via the vfs-write bridge; the shell owner serves
-  // its own (the preview HMR/vite tail is skipped entirely in shell mode).
-  const tearVfsBridge = serveVfsWrites(port, { onWrite: () => publishSnapshot() });
+  // Owner→page frames (pty + dev-server status). republish on `pty:exit` since a
+  // finished command may have mutated the tree (ADR-0146 P3).
+  const send = (frame: OwnerToPageFrame): void => {
+    kernelIpc.send?.({ type: PTY_IPC_TYPE, frame });
+    if (frame.type === 'pty:exit') publishSnapshot();
+  };
 
-  // npm + bin both write/read this realm's tree (the install lands here, so a
-  // resolved `.bin` shim is real — ADR-0143). The npm command refreshes the
-  // page explorer after a successful install via the snapshot republish.
+  // Co-resident dev server (ADR-0148 P4): the vite/node tail runs in THIS realm,
+  // on demand, reading the realm's installed tree → it sees terminal-installed deps.
+  const devServer = createDevServerController({
+    send,
+    // v1: boot runs to completion; a Ctrl-C mid-boot takes effect right after
+    // (the controller stops the server once `signal` aborts) — not mid-install.
+    boot: (_signal, devLog) =>
+      bootDevServer({
+        cfg,
+        port,
+        root: cfg.root,
+        spec,
+        slug,
+        fromScratch,
+        ownerToken,
+        publishSnapshot,
+        log: devLog,
+      }),
+  });
+
+  // Editor writes land via the vfs-write bridge; forward them to the running dev
+  // server's HMR (the virtual FS fires no real watcher events) + republish.
+  const onVfsWrite = (path: string): void => {
+    publishSnapshot();
+    devServer.notifyFileChanged(path);
+  };
+  const tearVfsBridge = serveVfsWrites(port, { onWrite: onVfsWrite });
+
   const vfs = new SyncMirrorVfs();
   const registry = new RegistryClient({ fetch: proxiedRegistryFetch() });
+  const ownerBinExecutor = createOwnerBinExecutor();
+
+  // Both `vite` (vite templates' dev line) and `npm run <script>` (node templates,
+  // via package.json) boot the co-resident dev server and BLOCK the run until
+  // Ctrl-C (`ctx.signal` → exit 130). Single active server per owner.
+  const runDevServer = async (ctx: CommandContext): Promise<number> => {
+    const signal = ctx.signal ?? new AbortController().signal;
+    try {
+      await devServer.run(signal, (chunk) => ctx.stdout.write(chunk));
+      return 130; // resolves only when `signal` aborts (Ctrl-C)
+    } catch (err) {
+      if (signal.aborted) return 130;
+      ctx.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
+      return 1;
+    }
+  };
+
   const npmCommand = createNpmShellCommand({
     vfs,
     registry,
     flush: flushSyncMirror,
+    // Every package.json script boots the dev server (projectScripts).
+    runScript: (_name, _command, ctx) => runDevServer(ctx),
   });
-  const ownerBinExecutor = createOwnerBinExecutor();
 
   const makeShell = (seed?: { cwd?: string; env?: Record<string, string> }): Shell => {
     // Seed restores persisted terminal cwd/env on reload (ADR-0146); falls back
@@ -355,20 +573,14 @@ async function bootShellOwner(opts: {
     });
     shell.registerCommand('npm', async (args, ctx) => {
       const code = await npmCommand(args, ctx);
-      // node_modules now present (or changed) — refresh the page's view.
-      publishSnapshot();
+      publishSnapshot(); // node_modules may have changed — refresh the page's view
       return code;
     });
+    shell.registerCommand('vite', (_args, ctx) => runDevServer(ctx));
     return shell;
   };
 
-  const send = (frame: OwnerToPageFrame): void => {
-    kernelIpc.send?.({ type: PTY_IPC_TYPE, frame });
-    // A finished command may have mutated the tree (e.g. `echo > f`, a program
-    // writing files); republish so the page explorer reflects it (ADR-0146 P3).
-    if (frame.type === 'pty:exit') publishSnapshot();
-  };
-  const server = createPtyServer({ send, makeShell });
+  const server = createPtyServer({ send, makeShell, onDevServerReq: () => devServer.publish() });
 
   kernelIpc.onMessage?.((message) => {
     if (isPtyIpcMessage(message)) {
@@ -377,12 +589,12 @@ async function bootShellOwner(opts: {
       return;
     }
     if (isVfsWriteIpcMessage(message)) {
-      applyVfsWriteFrame(message.frame, { onWrite: () => publishSnapshot() });
+      applyVfsWriteFrame(message.frame, { onWrite: onVfsWrite });
     }
   });
 
-  // node_modules read bridge (ADR-0080): the page explorer reads the installed
-  // tree against this realm's syncMirror. Kept live by the serve:true realm.
+  // Workspace read bridge (ADR-0080 + ADR-0148): the page reads the installed +
+  // project tree against this realm's syncMirror. Kept live by the serve:true realm.
   const tearNodeModulesBridge = serveNodeModulesReads(port, cfg.root);
   log('[shell-owner/worker] pty server ready; workspace read bridge live\n');
 
@@ -398,9 +610,10 @@ async function bootstrap(): Promise<void> {
   const env = globalThis.process.env;
   const port = Number.parseInt(env.RIFTY_RFV_PORT ?? '5174', 10);
   const root = env.RIFTY_RFV_ROOT ?? '/workspace';
-  // Owner mode (ADR-0146): 'preview' is the legacy vite/node-server worker
-  // (back-compat default); 'shell' is the resident pty-channel workspace owner.
-  const ownerMode = env.RIFTY_OWNER_MODE === 'shell' ? 'shell' : 'preview';
+  // ADR-0148 P4: ONE owner — the unified shell + co-resident dev server. The
+  // legacy per-run 'preview' worker is gone (no spawner sets RIFTY_OWNER_MODE
+  // anymore). `ownerToken` keys the preview SW route (page wires its side on the
+  // pty:dev-server frame).
   const ownerToken = env.RIFTY_PREVIEW_OWNER_TOKEN;
   const spec = resolveProjectSpec(env.RIFTY_RFV_TEMPLATE ?? DEFAULT_TEMPLATE_ID);
   // Sandbox setup kind (ADR-0135): from-scratch runs the visible, honest install
@@ -425,202 +638,20 @@ async function bootstrap(): Promise<void> {
     publishVfsSnapshot(port, collectSnapshot(syncMirror(), root));
   };
 
-  if (ownerMode === 'shell') {
-    await bootShellOwner({ cfg, port, kernelIpc, publishSnapshot });
-    return;
-  }
-
-  const hmrBridgeRef: { current?: HmrBridgeHandle } = {};
-  let activeServer: ViteDevServer | null = null;
-  function broadcastFileUpdate(path: string): void {
-    const modulePath = normalizePath(path);
-    if (activeServer) {
-      try {
-        invalidateViteModule(activeServer, modulePath);
-      } catch (err) {
-        log(
-          `[real-vite/worker] module invalidation failed for ${modulePath}: ${
-            (err as Error).message
-          }\n`,
-        );
-      }
-    }
-    hmrBridgeRef.current?.broadcast(
-      JSON.stringify({
-        type: 'update',
-        event: 'change',
-        path: toRootRelativePath(root, modulePath),
-      }),
-    );
-  }
-
-  function handleVfsWrite(path: string): void {
-    log(`[real-vite/worker] editor write applied ${normalizePath(path)}\n`);
-    publishSnapshot();
-    broadcastFileUpdate(path);
-  }
-
-  kernelIpc.onMessage?.((message) => {
-    if (!isVfsWriteIpcMessage(message)) return;
-    applyVfsWriteFrame(message.frame, { onWrite: handleVfsWrite });
-  });
-
-  // Opens BEFORE seeding so an edit racing the install lands in the right realm.
-  const tearVfsBridge = serveVfsWrites(port, { onWrite: handleVfsWrite });
-
-  seedProject(cfg);
-  // Retry a few times: the page may not have subscribed when this first fires
-  // (one-way BroadcastChannel, no buffer).
-  publishSnapshot();
-  for (const delay of [300, 1200, 3000]) setTimeout(publishSnapshot, delay);
-
-  const vfs = new SyncMirrorVfs();
-  // Dependency arrival (ADR-0135): stamp(slug) → baked snapshot → install. The
-  // visible install runs HERE — the worker realm owns the OPFS tree the preview
-  // is served from, and the page realm is memory-backed (sync OPFS is
-  // worker-only), so a page-side install never reaches this tree. Reuse is keyed
-  // on the project slug; from-scratch additionally disables the snapshot so a
-  // slug miss runs the honest, streamed install (not a silent restore). instant
-  // keeps the quiet stamp → snapshot → install reuse path.
-  await ensureProjectDependencies({
-    vfs,
-    fsSync: syncMirror(),
-    root,
-    templateId: spec.id,
+  // ADR-0148 P4: ONE unified owner — shell sessions + the co-resident dev server
+  // (started on demand by `vite` / `npm run <script>`), all against this realm's
+  // installed tree. The legacy per-run preview tail is gone (folded into
+  // `bootDevServer`, invoked from the owner's dev command).
+  await bootShellOwner({
+    cfg,
+    port,
+    kernelIpc,
+    publishSnapshot,
+    spec,
     slug,
-    snapshotUrl: fromScratch ? undefined : cfg.bakedNodeModulesUrl,
-    install: async () => {
-      log(`[real-vite/worker] installing ${spec.displayName} into ${root}/node_modules…\n`);
-      const registry = new RegistryClient({ fetch: proxiedRegistryFetch() });
-      const result = await install({
-        vfs,
-        cwd: root,
-        registry,
-        // from-scratch streams what it installs (ADR-0134 hook); instant is quiet.
-        onPackage: fromScratch
-          ? (event) =>
-              log(`npm: + ${event.name}@${event.version}${event.cacheHit ? ' (cached)' : ''}\n`)
-          : undefined,
-      });
-      log(
-        `[real-vite/worker] installed ${result.packages.length} packages (${result.conflicts.length} conflicts)\n`,
-      );
-      return { packages: result.packages.length };
-    },
-    flush: flushSyncMirror,
-    log,
-  });
-  publishSnapshot(); // node_modules now present — refresh the page's view
-
-  const loader = createModuleLoader(syncMirror(), { cwd: root });
-  __setCreateRequireImpl((from: string) => {
-    const fromPath = from.startsWith('file://')
-      ? decodeURIComponent(from.slice('file://'.length))
-      : from;
-    const req = ((id: string) => loader.require(id, fromPath)) as ((id: string) => unknown) & {
-      resolve: (id: string) => string;
-      cache: Record<string, unknown>;
-      extensions: Record<string, unknown>;
-      main: undefined;
-    };
-    req.resolve = (id: string) => {
-      const resolved = loader.resolver.resolve(id, { fromFile: fromPath, esm: false });
-      return resolved.id;
-    };
-    req.cache = {};
-    req.extensions = {};
-    req.main = undefined;
-    return req;
-  });
-
-  if (cfg.runtime === 'node-server') {
-    await bootNodeServer(cfg, loader);
-    publishSnapshot();
-  }
-
-  if (cfg.runtime === 'vite') {
-    overlayShims();
-    log('[real-vite/worker] esbuild + rollup-native shims overlaid\n');
-
-    log(`[real-vite/worker] importing ${cfg.runtimeSpecifier}…\n`);
-    const viteNs = (await loader.import(
-      cfg.runtimeSpecifier,
-      `${root}/__entry__.mjs`,
-    )) as unknown as {
-      createServer: (config: ViteUserConfig) => Promise<ViteDevServer>;
-    };
-
-    // HMR bridge in THIS realm; iframe-side BroadcastChannel client reaches it
-    // regardless of which realm hosts the server.
-    const hmrBridgeToken = createHmrBridgeToken();
-    hmrBridgeRef.current = setupHmrBridge({ port, token: hmrBridgeToken });
-    log(`[real-vite/worker] hmr bridge ready at ${hmrBridgeRef.current.url}\n`);
-
-    log(`[real-vite/worker] starting dev server on port ${port}…\n`);
-    const server = await viteNs.createServer({
-      root,
-      base: './',
-      server: {
-        port,
-        strictPort: cfg.server.strictPort,
-        middlewareMode: false,
-        hmr: false,
-        host: cfg.server.host,
-        allowedHosts: cfg.server.allowedHosts,
-      } as unknown as ViteUserConfig['server'],
-      appType: cfg.server.appType,
-      clearScreen: false,
-      optimizeDeps: {
-        disabled: cfg.server.optimizeDepsDisabled,
-      } as unknown as ViteUserConfig['optimizeDeps'],
-      plugins: cfg.hmrEnabled ? [createHmrBridgeVitePlugin({ port, token: hmrBridgeToken })] : [],
-    });
-    await server.listen();
-    activeServer = server;
-    log(`[real-vite/worker] vite is listening on internal port ${port}\n`);
-    publishSnapshot(); // vite may have written config/cache during boot
-
-    server.watcher?.on('change', (file) => {
-      broadcastFileUpdate(file);
-      publishSnapshot(); // keep the page's explorer in sync with edits
-    });
-  }
-
-  // Direct SW→Worker preview route (A-023): the Worker owns this port, so
-  // advertise it to the SW. The page-side bridge below stays as fallback for
-  // legacy window-owned paths and for browsers without Worker SW messaging.
-  const tearDirectSwBridge = setupPreviewBridge(dispatchSerializedPreview, {
-    ports: [port],
+    fromScratch,
     ownerToken,
   });
-  log('[real-vite/worker] direct service-worker preview bridge ready\n');
-
-  // Page-realm `bridgeCrossRealmPreview` posts each SW preview request over
-  // BroadcastChannel and awaits our reply; we dispatch through the WORKER-LOCAL
-  // `@riftydev/net` registry (the server registered `port` when it listened).
-  const tearPreviewBridge = serveCrossRealmPreview(port, async (request) =>
-    dispatchToPort(port, request),
-  );
-  log('[real-vite/worker] cross-realm preview port bridge ready\n');
-
-  // Lazy node_modules read bridge (ADR-0080): answers the page explorer's reads
-  // against this realm's syncMirror (holds the installed tree — snapshot exclusion
-  // never touched the mirror). Relies on the keep-alive below to answer reads.
-  const tearNodeModulesBridge = serveNodeModulesReads(port, root);
-  log('[real-vite/worker] node_modules read bridge ready\n');
-
-  // Long-lived owner (ADR-0144 server-process model). This worker is spawned
-  // with `serve: true` (realVite.ts), so the kernel's `worker-entry` does NOT
-  // reap the realm when this entry settles — it stays alive (its ports/timers
-  // keep it live) until the page-side handle `.kill()`s it (`worker.terminate()`).
-  // This replaces the old ADR-0077 keep-alive hack (`await new Promise<never>(()
-  // => {})`) that parked the top-level await forever to dodge `self.close()`.
-  // The teardown handles are referenced so the served bridges aren't GC'd while
-  // the realm serves.
-  void tearVfsBridge;
-  void tearDirectSwBridge;
-  void tearPreviewBridge;
-  void tearNodeModulesBridge;
 }
 
 await bootstrap();
