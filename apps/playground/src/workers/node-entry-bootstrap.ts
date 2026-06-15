@@ -26,7 +26,7 @@
  */
 
 import { readKernelSyncApi } from '@riftydev/kernel';
-import { installRemoteSyncFs } from '@riftydev/runtime-js';
+import { installConsole, installRemoteSyncFs } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { syncMirror } from '@riftydev/vfs';
 
@@ -35,6 +35,14 @@ const entryPath = proc.argv[1];
 if (typeof entryPath !== 'string' || entryPath === '') {
   throw new Error('node-entry-bootstrap: missing entry path (process.argv[1])');
 }
+
+// A spawned Node CLI's console.log belongs on its stdout (kernel stdio port →
+// owner pty → terminal). Without this, console output vanishes into the worker
+// realm's devtools console (ADR-0150 P6a — cowsay etc. print via console.log).
+installConsole({
+  stdout: (chunk) => proc.stdout.write(chunk),
+  stderr: (chunk) => proc.stderr.write(chunk),
+});
 
 // ADR-0150 P6a: when spawned as a supervised child (RIFTY_REMOTE_FS=1), make the
 // owner store this realm's sync mirror — both the module loader AND node:fs read it.
