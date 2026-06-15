@@ -129,6 +129,13 @@
 - **Saved projects now re-root the workspace owner after Save.** A plain
   Save-as-project respawns the owner at `/projects/<id>`, so Explorer, GIT, git
   gutters, terminal cwd, and dev-server reads agree on the saved project root.
+- **Vite 7 `vite preview` serves the production build through the real CLI.**
+  The CLI source patch now adjusts Vite's preview inline config directly instead
+  of loading the dev wrapper config through esbuild, binds preview to the
+  synthetic preview-local host, and keeps the remaining CORS-middleware parity
+  gap explicit in `backlog/playground/vite-preview-cors-middleware-parity`.
+  `tests/e2e/vite7-build-preview.spec.ts` pins `vite build` -> `vite preview`
+  -> `/preview/4173/`.
 - **Terminal Problems stays pinned to the left.** The Problems tab sits before
   terminal session tabs, and empty Enter in running/idle terminals submits a
   blank shell line without showing `terminal is busy` or extra blank prompt rows.
@@ -1036,6 +1043,27 @@
     tests + parity. The historical worker-VFS transport residual was later
     closed by the owner-worker child executor; real package CLIs now run through
     the owner store.
+    tests + parity. NOT YET working end-to-end in the browser: the spawned bin
+    worker's `syncMirror` is a separate in-worker realm that does not yet hold
+  the installed `node_modules` (after ADR-0135 `install()` runs in the
+  worker/OPFS realm) — a real CLI `ENOENT`s on its shim. Tracked in
+  `docs/backlog/shell/node-modules-bin-execution.md`.
+
+- **Playground stack-consumer templates: Hono API, Koa API, CLI report,
+  Markdown SSG.** The template registry now ships four new from-scratch presets:
+  `hono-api` (Hono middleware/ctx through the standard `@hono/node-server`
+  adapter), `koa-api` (Koa `app.callback()` through `node:http`, router params,
+  cookies, JSON body reads), `cli-report` (`node-cli` run-to-completion worker
+  lifecycle, stdout + exit code, no preview), and `markdown-ssg` (`marked` + fs
+  read/write/walk into generated `dist/` HTML served through `node:http`). Each
+  has a focused Chromium e2e spec under `tests/e2e/`. Hono/Koa/Markdown SSG use
+  the shared seeded-preview mono font stack rather than local font strings.
+
+- **`node-cli` playground project runtime.** `ProjectSpec` now distinguishes
+  run-to-completion Node entries from long-running `node-server` entries. CLI
+  presets still seed package.json/files and install real npm dependencies in
+  the worker realm, but exit normally instead of waiting for `listen(port)` or
+  mounting a preview iframe.
 
 - **Baked node_modules snapshots — instant presets are instant on the FIRST
   boot too (ADR-0135 item 6).** `pnpm snapshots:bake` runs a real `install()`

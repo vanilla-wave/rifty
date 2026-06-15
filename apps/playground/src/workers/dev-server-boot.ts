@@ -279,6 +279,10 @@ export async function bootDevServer(opts: {
   // re-assert it defensively so the entry always listens on the routed port.
   globalThis.process.env.PORT = String(port);
 
+  if (cfg.runtime === 'node-cli') {
+    throw new Error('[real-vite/worker] node-cli templates run through the owner node executor');
+  }
+
   if (cfg.runtime === 'node-server') {
     await bootNodeServer(cfg, loader, log);
     publishSnapshot();

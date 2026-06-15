@@ -129,6 +129,32 @@
   `IncomingMessage` sees chunk boundaries before `end()`. `write()` returns
   `false` when the stream queue is full and emits `drain` after the consumer
   pulls.
+- **`node:http` covers more server-request shapes used by real adapters.**
+  `createServer({}, listener)` now registers the listener overload used by
+  adapter packages; non-empty `ServerOptions` throw `NotImplementedError`
+  rather than being silently ignored. `IncomingMessage` materialises `host` plus
+  Node-style `rawHeaders` from preview requests. Surfaced by the Hono playground
+  template; zero-body requests keep `end` observable for listeners attached
+  after handler return and update `complete`/`socket.readable` on body end.
+  `IncomingMessage` bodies are also covered through `Readable.toWeb()`
+  for `@hono/node-server` POST parsing. Guarded by `http/server.test.ts`,
+  `http/request.test.ts`, and parity cases `http/create-server-options-listener.case.ts` +
+  `http/server-host-rawheaders.case.ts`.
+
+- **Preview bridge no longer forwards browser-managed `accept-encoding`.**
+  Cross-realm preview requests preserve user headers but drop
+  `accept-encoding` before rebuilding the worker-side `Request`, so Vite/sirv
+  compression middleware does not observe a browser-owned compression negotiation
+  header that the virtual Node server cannot fulfill directly.
+
+- **SSE bodies fail loud over the cross-realm preview bridge.**
+  `serveCrossRealmPreview` refuses to drain a `text/event-stream` body
+  (the page↔worker hop buffers until `reply-stream-end`, so an unending SSE
+  body never resolves — ADR-0048). It now posts a loud `error` frame naming
+  the ceiling (`net.preview.cross-realm-sse-drain`), which the page maps to a
+  502, instead of hanging forever. Mirrors the SW-bridge guard in
+  `@riftydev/service-worker`. Non-SSE unbounded bodies still drain — see
+  `docs/backlog/net/cross-realm-preview-unbounded-body.md`.
 - **`register-builtins` modules now expose idempotent callable registrars.**
   `registerNetBuiltins()` and `registerSqliteBuiltin()` preserve the old
   side-effect import behavior while letting production workers call the

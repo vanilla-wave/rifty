@@ -12,6 +12,7 @@ import {
   openShellTerminal,
   runTerminalLine,
   terminalBuffer,
+  viteDevReadyPattern,
 } from './helpers/playground.ts';
 
 const enabled = process.env.RIFTY_E2E_MANUAL_VITE === '1';
@@ -27,7 +28,9 @@ test.describe('manual Vite install path', () => {
     test.setTimeout(180_000);
     await page.goto('/');
 
-    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+    await expect
+      .poll(() => terminalBuffer(page), { timeout: 10_000 })
+      .toMatch(viteDevReadyPattern());
     await expectTerminalContains(page, '[vite] dev server ready on port 5174', 60_000);
 
     await openShellTerminal(page);

@@ -1,9 +1,13 @@
 import type { IconName } from './components/icons.tsx';
 import { MONO_FONT_STACK } from './glue/fonts.ts';
+import { CLI_REPORT_SOURCE, CLI_REPORT_TEMPLATE } from './templates/cli-report.ts';
 import {
   EXPRESS_SQLITE_SERVER_SOURCE,
   EXPRESS_SQLITE_TEMPLATE,
 } from './templates/express-sqlite.ts';
+import { HONO_API_SERVER_SOURCE, HONO_API_TEMPLATE } from './templates/hono-api.ts';
+import { KOA_API_SERVER_SOURCE, KOA_API_TEMPLATE } from './templates/koa-api.ts';
+import { MARKDOWN_SSG_SOURCE, MARKDOWN_SSG_TEMPLATE } from './templates/markdown-ssg.ts';
 import { terminalDevLine } from './templates/project-spec.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
 import { SOCKET_LAB_SERVER_SOURCE, SOCKET_LAB_TEMPLATE } from './templates/socket-lab.ts';
@@ -474,6 +478,82 @@ const SOCKET_LAB_PRESET: Preset = {
   ],
 };
 
+const HONO_API_PRESET: Preset = {
+  id: 'hono-api',
+  label: 'Hono API',
+  category: 'Live preview',
+  icon: 'terminal',
+  mode: 'real-vite',
+  setup: 'from-scratch',
+  templateId: HONO_API_TEMPLATE.id,
+  blurb: 'A middleware-style API: Hono ctx routes, JSON bodies, and VFS-served assets.',
+  glyph: { text: 'HN', color: '#F6C768' },
+  tag: { text: 'npm install', tone: 'slow' },
+  source: HONO_API_SERVER_SOURCE,
+  openFiles: ['public/index.html', 'public/client.js'],
+  files: Object.entries(HONO_API_TEMPLATE.extraFiles).map(([path, content]) => ({
+    path: path.replace(/^\/+/, ''),
+    content,
+  })),
+};
+
+const KOA_API_PRESET: Preset = {
+  id: 'koa-api',
+  label: 'Koa API',
+  category: 'Live preview',
+  icon: 'terminal',
+  mode: 'real-vite',
+  setup: 'from-scratch',
+  templateId: KOA_API_TEMPLATE.id,
+  blurb: 'A ctx-first API: Koa middleware, router params, cookies, and JSON bodies.',
+  glyph: { text: 'KOA', color: '#93E08F' },
+  tag: { text: 'npm install', tone: 'slow' },
+  source: KOA_API_SERVER_SOURCE,
+  openFiles: ['public/index.html', 'public/client.js'],
+  files: Object.entries(KOA_API_TEMPLATE.extraFiles).map(([path, content]) => ({
+    path: path.replace(/^\/+/, ''),
+    content,
+  })),
+};
+
+const CLI_REPORT_PRESET: Preset = {
+  id: 'cli-report',
+  label: 'CLI report',
+  category: 'Live preview',
+  icon: 'terminal',
+  mode: 'real-vite',
+  setup: 'from-scratch',
+  templateId: CLI_REPORT_TEMPLATE.id,
+  blurb: 'A run-to-completion Node CLI: npm dependency, VFS input, stdout, exit code.',
+  glyph: { text: 'CLI', color: '#9BD060' },
+  tag: { text: 'npm install', tone: 'slow' },
+  source: CLI_REPORT_SOURCE,
+  openFiles: ['data/packages.yml', 'README.md'],
+  files: Object.entries(CLI_REPORT_TEMPLATE.extraFiles).map(([path, content]) => ({
+    path: path.replace(/^\/+/, ''),
+    content,
+  })),
+};
+
+const MARKDOWN_SSG_PRESET: Preset = {
+  id: 'markdown-ssg',
+  label: 'Markdown SSG',
+  category: 'Live preview',
+  icon: 'file-output',
+  mode: 'real-vite',
+  setup: 'from-scratch',
+  templateId: MARKDOWN_SSG_TEMPLATE.id,
+  blurb: 'A filesystem-heavy static-site build: markdown in, generated HTML out.',
+  glyph: { text: 'MD', color: '#8BD3FF' },
+  tag: { text: 'npm install', tone: 'slow' },
+  source: MARKDOWN_SSG_SOURCE,
+  openFiles: ['content/intro.md', 'content/runtime.md'],
+  files: Object.entries(MARKDOWN_SSG_TEMPLATE.extraFiles).map(([path, content]) => ({
+    path: path.replace(/^\/+/, ''),
+    content,
+  })),
+};
+
 export const PRESETS: readonly Preset[] = [
   PROJECT_FILES_PRESET,
   NODE_WORKER_PRESET,
@@ -482,6 +562,10 @@ export const PRESETS: readonly Preset[] = [
   VITE8_PRESET,
   EXPRESS_SQLITE_PRESET,
   SOCKET_LAB_PRESET,
+  HONO_API_PRESET,
+  KOA_API_PRESET,
+  CLI_REPORT_PRESET,
+  MARKDOWN_SSG_PRESET,
 ];
 
 /** The preset selected at boot. Its files/openFiles seed the initial workspace tabs. */

@@ -4,6 +4,13 @@
 
 ### Added
 
+- **`node:zlib` gzip Transform subset (ADR-0178).** `createGzip()` and
+  `new Gzip()` now return a real `Transform` backed by
+  `CompressionStream('gzip')`, producing gzip bytes readable by Node's native
+  zlib. This unblocks Vite preview compression middleware without pretending the
+  whole stream surface is done: `createGunzip`, deflate/inflate stream factories,
+  unzip, brotli/zstd, and sync APIs remain loud ceilings.
+
 - **Auto-discovered tsconfig path aliases** (ADR-0170). `ModuleLoaderOptions`
   gains `autoDiscoverTsconfigPaths`; when enabled and no explicit `paths` map is
   supplied, the resolver uses TypeScript's real config parser over the VFS to
@@ -714,6 +721,20 @@
     resolve before a bare (own-property-less) var binding; an assigned `var Map = …`
     still shadows via its own property. Parity:
     `cases/vm/statement-position-var.case.ts`.
+
+- **`node:http2` exposes constructible request/response classes.** The loud
+  browser-ceiling facade now includes `Http2ServerRequest` and
+  `Http2ServerResponse`, matching Node's import surface so HTTP/1 adapters that
+  probe `incoming instanceof Http2ServerRequest` do not throw before their
+  normal path. Surfaced by `@hono/node-server`; guarded by
+  `http2/surface.case.ts`.
+
+- **Process globals now include Node's `global` alias.** Worker-installed
+  `process` shims set `globalThis.global = globalThis`, matching Node code that
+  reads `global.Request` / `global.Buffer` instead of `globalThis.*`. Surfaced
+  by the Hono playground template; guarded by `process-globals.test.ts` and the
+  IPC process install test.
+
 - **PR #21 review fixes (fs/os/fs-RPC contract).**
   - `fs.readSync`/`writeSync`/`read`/`write` treat position `-1` as "current
     position" like Node (was: `RangeError`). Parity:

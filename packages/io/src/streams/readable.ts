@@ -76,6 +76,15 @@ export function chunkSize(chunk: unknown): number {
   return 1;
 }
 
+function toWebChunk(chunk: unknown): unknown {
+  if (chunk instanceof Uint8Array) return chunk;
+  if (chunk instanceof ArrayBuffer) return new Uint8Array(chunk);
+  if (ArrayBuffer.isView(chunk)) {
+    return new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+  }
+  return chunk;
+}
+
 /**
  * Per-instance decode state set by `setEncoding(enc)`. The text encodings that
  * `TextDecoder` covers are decoded with a single persistent decoder in
@@ -223,6 +232,24 @@ interface PipeableWritable extends EventEmitter {
 }
 
 export class Readable extends EventEmitter implements AsyncIterable<unknown> {
+  static toWeb(stream: Readable): ReadableStream {
+    if (!(stream instanceof Readable)) {
+      throw new TypeError('Readable.toWeb() expects a Readable stream');
+    }
+    return new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of stream) {
+            controller.enqueue(toWebChunk(chunk));
+          }
+          controller.close();
+        } catch (err) {
+          controller.error(err);
+        }
+      },
+    });
+  }
+
   readonly _readableState: ReadableState;
   private readImpl?: (this: Readable, size: number) => void;
   /** Set by `setEncoding(enc)`; `null` means emit raw bytes (the default). */

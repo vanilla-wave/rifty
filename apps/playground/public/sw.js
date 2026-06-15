@@ -2,8 +2,9 @@
 // ../../packages/io/src/preview-protocol.ts
 var PREVIEW_PREFIX_RE = /^\/preview\/(\d+)(\/.*)?$/;
 var PREVIEW_LOCAL_HOST = "preview.local";
-function synthesizePreviewUrl(path) {
-  return `http://${PREVIEW_LOCAL_HOST}${path}`;
+function synthesizePreviewUrl(path, port) {
+  const host = port === void 0 ? PREVIEW_LOCAL_HOST : `${PREVIEW_LOCAL_HOST}:${port}`;
+  return `http://${host}${path}`;
 }
 function parsePreviewPath(path) {
   const m = PREVIEW_PREFIX_RE.exec(path);
@@ -621,7 +622,7 @@ async function routePreview(scope, request, match, readiness, timeoutMs, clientI
   }
   const serialised = {
     port: match.port,
-    url: `${synthesizePreviewUrl(match.path)}${new URL(request.url).search}`,
+    url: `${synthesizePreviewUrl(match.path, match.port)}${new URL(request.url).search}`,
     method: request.method,
     headers,
     body: bodyBytes

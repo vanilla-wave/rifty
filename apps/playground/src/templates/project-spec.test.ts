@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  type NodeCliProjectSpec,
   type NodeServerProjectSpec,
   type ProjectSpec,
   buildProjectPackageJson,
@@ -24,6 +25,19 @@ const NODE_FIXTURE: NodeServerProjectSpec = {
   extraFiles: {
     '/public/index.html': '<!doctype html><title>fixture</title>\n',
     '/public/client.js': 'console.log("client")\n',
+  },
+};
+
+const CLI_FIXTURE: NodeCliProjectSpec = {
+  id: 'cli-fixture',
+  displayName: 'CLI fixture',
+  runtime: 'node-cli',
+  install: { yaml: '^2.5.0' },
+  entry: { relativePath: '/src/cli.js', content: 'console.log("cli")\n' },
+  defaultPort: 0,
+  estimatedBootSeconds: 5,
+  extraFiles: {
+    '/data/input.yml': 'items:\n  - one\n',
   },
 };
 
@@ -223,6 +237,33 @@ describe('vite8 opt-in preset', () => {
   });
 });
 
+describe('resolveBootstrapConfig (node-cli runtime)', () => {
+  it('seeds entry + package.json + extraFiles and carries the cli discriminant', () => {
+    const cfg = resolveBootstrapConfig(CLI_FIXTURE, 0, '/workspace');
+
+    expect(cfg.runtime).toBe('node-cli');
+    if (cfg.runtime !== 'node-cli') throw new Error('unreachable');
+    expect(cfg.seedFiles['/workspace/src/cli.js']).toBe(CLI_FIXTURE.entry.content);
+    expect(cfg.seedFiles['/workspace/package.json']).toBe(cfg.packageJson);
+    expect(cfg.seedFiles['/workspace/data/input.yml']).toBe(
+      CLI_FIXTURE.extraFiles['/data/input.yml'],
+    );
+    expect(cfg.seedFiles['/workspace/index.html']).toBeUndefined();
+  });
+
+  it('builds package.json with a run-to-completion node script derived from the entry path', () => {
+    const cfg = resolveBootstrapConfig(CLI_FIXTURE, 0, '/workspace');
+    const pkg = JSON.parse(cfg.packageJson) as {
+      scripts: Record<string, string>;
+      dependencies: Record<string, string>;
+      type: string;
+    };
+    expect(pkg.scripts).toEqual({ dev: 'node src/cli.js', start: 'node src/cli.js' });
+    expect(pkg.dependencies).toEqual(CLI_FIXTURE.install);
+    expect(pkg.type).toBe('module');
+  });
+});
+
 describe('terminal dev command derivation', () => {
   it('boots vite templates through the real vite CLI pinned to the template port', () => {
     expect(terminalDevLine(VITE_TEMPLATE, '/workspace')).toBe(
@@ -238,7 +279,12 @@ describe('terminal dev command derivation', () => {
 
   it('derives the package.json dev script from the entry for node-server', () => {
     expect(devScriptCommand(NODE_FIXTURE)).toBe('node src/main.js');
+    expect(devScriptCommand(CLI_FIXTURE)).toBe('node src/cli.js');
     expect(devScriptCommand(VITE_TEMPLATE)).toBe('vite');
+  });
+
+  it("boots node-cli templates through 'npm run dev' pinned to the project root", () => {
+    expect(terminalDevLine(CLI_FIXTURE, '/workspace')).toBe('cd /workspace && npm run dev');
   });
 });
 

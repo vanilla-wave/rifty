@@ -42,7 +42,7 @@ export const SW_FRAME_VERSION = '1';
  * Pins:
  *   - The URL convention exported from `@riftydev/io/preview-protocol`:
  *     `PREVIEW_PREFIX_RE`, `PREVIEW_LOCAL_HOST`, the shape of
- *     `synthesizePreviewUrl(path)`, and the shape of `parsePreviewPath`.
+ *     `synthesizePreviewUrl(path, port?)`, and the shape of `parsePreviewPath`.
  *   - The owner-fallback and owner-scoping rules in the preview owner bindings:
  *     prefer `FetchEvent.clientId`, fall back to a controlled window, prefer an
  *     already-ready window for no-clientId copied preview URLs, and let Worker

@@ -58,13 +58,27 @@ export interface ListenOptions {
   exclusive?: boolean;
 }
 
+export type RequestListener = (req: IncomingMessage, res: ServerResponse) => void;
+
+export type ServerOptions = Record<string, unknown>;
+
+function assertSupportedServerOptions(options: ServerOptions | undefined): void {
+  if (options === undefined) return;
+  const unsupported = Object.keys(options);
+  if (unsupported.length === 0) return;
+  throw new NotImplementedError(
+    `http.createServer.options.${unsupported[0]}`,
+    'non-empty ServerOptions are not implemented',
+  );
+}
+
 export class HttpServer extends EventEmitter {
   private port: number | null = null;
-  private readonly handler: (req: IncomingMessage, res: ServerResponse) => void;
+  private readonly handler: RequestListener;
   private readonly upgradeChannels: BroadcastChannel[] = [];
   private readonly upgradeSockets: Map<string, WebSocketUpgradeSocket> = new Map();
 
-  constructor(handler: (req: IncomingMessage, res: ServerResponse) => void = () => {}) {
+  constructor(handler: RequestListener = () => {}) {
     super();
     this.handler = handler;
   }
@@ -228,9 +242,14 @@ export class HttpServer extends EventEmitter {
   }
 }
 
+export function createServer(handler?: RequestListener): HttpServer;
+export function createServer(options: ServerOptions, handler?: RequestListener): HttpServer;
 export function createServer(
-  handler?: (req: IncomingMessage, res: ServerResponse) => void,
+  optionsOrHandler?: ServerOptions | RequestListener,
+  maybeHandler?: RequestListener,
 ): HttpServer {
+  const handler = typeof optionsOrHandler === 'function' ? optionsOrHandler : maybeHandler;
+  if (typeof optionsOrHandler !== 'function') assertSupportedServerOptions(optionsOrHandler);
   return new HttpServer(handler);
 }
 

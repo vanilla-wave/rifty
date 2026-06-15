@@ -32,7 +32,7 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     // ADR-0150 P6b: the dev server runs in a supervised child that reads the owner
     // store over fs.* RPC; the default vite preset boots it on first load. The 30s
     // wait absorbs the child spawn + over-RPC dep walk (backlog: perf/fs-rpc-chunk-perf).
-    await expectTerminalContains(page, 'starting dev server on port', 30_000);
+    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 30_000);
 
     // Select the demo preset. ADR-0165 §9 moved the gallery into the launcher
     // modal: open the chip, switch to the Starters tab, then pick the card. The

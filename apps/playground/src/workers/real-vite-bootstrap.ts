@@ -24,6 +24,7 @@
  */
 
 import { makeGit, vfsToGitFs } from '@riftydev/git';
+import { PREVIEW_LOCAL_HOST } from '@riftydev/io';
 import {
   type SpawnWorkerSpec,
   type WorkerProcessHandle,
@@ -327,7 +328,12 @@ function resolveCliPath(cwd: string, path: string): string {
 }
 
 function withViteCliArgs(binPath: string, args: readonly string[], ctx: CommandContext): string[] {
-  if (binNameOf(binPath) !== 'vite' || viteCliMode(args) !== 'dev') return [...args];
+  if (binNameOf(binPath) !== 'vite') return [...args];
+  const mode = viteCliMode(args);
+  if (mode === 'preview') {
+    return [...args, '--host', PREVIEW_LOCAL_HOST];
+  }
+  if (mode !== 'dev') return [...args];
   return [
     ...withoutViteConfigArgs(args),
     '--config',
@@ -739,6 +745,17 @@ async function bootShellOwner(opts: {
     }
   };
 
+  const runNodeCliTemplate = async (ctx: CommandContext): Promise<number> => {
+    ctx.stdout.write(`cli: running ${devSpec.displayName}\n`);
+    const code = await ownerNodeExecutor(devCfg.entryPath, [], ctx, {
+      sid: `node-cli-${++nodeRunSeq}`,
+      onListening: () => {},
+      onExit: () => {},
+    });
+    ctx.stdout.write(`[cli] completed with exit code ${code}\n`);
+    return code;
+  };
+
   const makeShell = (seed?: { cwd?: string; env?: Record<string, string> }): Shell => {
     // Seed restores persisted terminal cwd/env on reload (ADR-0146); falls back
     // to the workspace root + empty env for a fresh session. The cwd is validated
@@ -758,7 +775,10 @@ async function bootShellOwner(opts: {
       // Node-server dev aliases still drive the lifecycle-owned preview state.
       // Vite scripts run through the real shell/bin path so `npm run vite` is as
       // honest as typing `vite` directly.
-      if (devSpec.runtime !== 'vite' && isDevScriptName(devSpec, name)) {
+      if (devSpec.runtime === 'node-cli' && isDevScriptName(devSpec, name)) {
+        return runNodeCliTemplate(ctx);
+      }
+      if (devSpec.runtime === 'node-server' && isDevScriptName(devSpec, name)) {
         return runDevServer(ctx);
       }
       const scriptShell = makeShell({ cwd: ctx.cwd, env: ctx.env });

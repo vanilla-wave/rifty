@@ -4,6 +4,7 @@ import {
   openShellTerminal,
   runTerminalLine,
   terminalBuffer,
+  viteDevReadyPattern,
 } from './helpers/playground.ts';
 
 /**
@@ -41,7 +42,9 @@ test.describe('single source of truth: page viewer and exec read identical bytes
 
     // The explorer renders the owner snapshot from boot — wait for the shell to be
     // ready (the boot sequence echoed the dev line).
-    await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
+    await expect
+      .poll(() => terminalBuffer(page), { timeout: 30_000 })
+      .toMatch(viteDevReadyPattern());
 
     await openShellTerminal(page);
 

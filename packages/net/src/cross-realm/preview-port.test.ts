@@ -114,6 +114,29 @@ describe('cross-realm preview port — happy path', () => {
     for (const b of payload) expectedSum = (expectedSum + b) & 0xff;
     expect(parsed.checksum).toBe(expectedSum);
   });
+
+  it('does not forward browser-managed accept-encoding into the worker Request', async () => {
+    cleanup.add(
+      serveCrossRealmPreview(5105, async (req) => {
+        return Response.json({
+          acceptEncoding: req.headers.get('accept-encoding'),
+          xTrace: req.headers.get('x-trace'),
+        });
+      }),
+    );
+    const handler = bridgeCrossRealmPreview(5105);
+    cleanup.add(handler.dispose);
+
+    const response = await handler.dispatchStruct({
+      url: 'http://preview.local/headers',
+      method: 'GET',
+      headers: { 'accept-encoding': 'gzip, br', 'x-trace': 'kept' },
+      body: null,
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ acceptEncoding: null, xTrace: 'kept' });
+  });
 });
 
 describe('cross-realm preview port — error paths', () => {

@@ -13,6 +13,7 @@
 import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { NotImplementedError } from '@riftydev/io';
 import { afterEach, describe, expect, it } from 'vitest';
 import { dispatchToPort, listPorts, unregisterPort } from '../registry.ts';
 import { BridgedWebSocket } from '../ws/bridge.ts';
@@ -179,6 +180,28 @@ describe('HttpServer.listen — options-object overload (Q-2026-05-30-101)', () 
     ]);
     expect(fired).toBe(true);
     s.close();
+  });
+});
+
+describe('createServer — options plus request listener', () => {
+  it('accepts createServer(options, requestListener) and dispatches the listener', async () => {
+    const port = 4102;
+    const s = createServer({}, (_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.end('ok');
+    });
+    s.listen({ port });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const resp = await dispatchToPort(port, new Request(`http://preview.local:${port}/`));
+    expect(resp.status).toBe(200);
+    expect(resp.headers.get('content-type')).toBe('text/plain');
+    expect(await resp.text()).toBe('ok');
+  });
+
+  it('throws NotImplementedError for non-empty ServerOptions instead of silently ignoring them', () => {
+    expect(() => createServer({ keepAliveTimeout: 1234 }, () => {})).toThrow(NotImplementedError);
   });
 });
 

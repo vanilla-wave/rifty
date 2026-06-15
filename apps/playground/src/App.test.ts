@@ -148,6 +148,57 @@ describe('App terminal startup wiring', () => {
     );
   });
 
+  it('stops an active dev server before writing picked starter files', () => {
+    const runPresetStart = source.indexOf('async function runVitePreset(preset: Preset');
+    const runPresetEnd = source.indexOf('  // ADR-0165 §3 switch', runPresetStart);
+    const runPreset = source.slice(runPresetStart, runPresetEnd);
+    expect(runPresetStart).toBeGreaterThan(-1);
+    expect(runPresetEnd).toBeGreaterThan(runPresetStart);
+    expect(source).toContain('async function stopDevServerSession(sessionId: string | null)');
+    expect(runPreset.indexOf('if (restartNeeded) await stopDevServerSession')).toBeLessThan(
+      runPreset.indexOf('await seedViteWorkspace(preset);'),
+    );
+    expect(runPreset.indexOf('await seedViteWorkspace(preset);')).toBeLessThan(
+      runPreset.indexOf(
+        'await startDevServerSession(restartSessionId, restartGeneration, preset);',
+      ),
+    );
+    expect(source).toContain('async function stopRunningTerminalSessions(): Promise<void>');
+    expect(runPreset.indexOf('if (restartNeeded) await stopDevServerSession')).toBeLessThan(
+      runPreset.indexOf('seedViteWorkspace(preset);'),
+    );
+    expect(source).toContain('await stopRunningTerminalSessions();');
+    expect(source).toContain('setPreviewPorts([])');
+  });
+
+  it('shows a preset-switching loader until the picked starter has booted or failed', () => {
+    const runPresetStart = source.indexOf('async function runVitePreset(preset: Preset');
+    const runPresetEnd = source.indexOf('  // ADR-0165 §3 switch', runPresetStart);
+    const runPreset = source.slice(runPresetStart, runPresetEnd);
+    const switchToStart = source.indexOf('async function switchTo(nextActiveId: ActiveId)');
+    const switchToEnd = source.indexOf('  onMount(() =>', switchToStart);
+    const switchTo = source.slice(switchToStart, switchToEnd);
+    expect(source).toContain(
+      'const [presetTransitioning, setPresetTransitioning] = createSignal(false)',
+    );
+    expect(runPreset).toMatch(
+      /setPresetTransitioning\(true\);[\s\S]*?setActivePreset\(preset\.id\);/,
+    );
+    expect(runPreset).toMatch(
+      /finally \{[\s\S]*?setPresetTransitioning\(false\);[\s\S]*?tsGate\?\.resolve\(\);[\s\S]*?\}/,
+    );
+    expect(source).toContain("presetTransitioning() ? 'switching' : devServerStatus()");
+    expect(source).toMatch(/presetTransitioning\(\)\s*\?\s*'SWITCHING'/);
+    expect(source).toMatch(
+      /presetTransitioning\(\)\s*\?\s*`\$\{activeTemplate\(\)\.displayName\} · switching`/,
+    );
+    expect(switchTo).toMatch(
+      /try \{[\s\S]*?setPresetTransitioning\(true\);[\s\S]*?const switched = await requestSwitch/,
+    );
+    expect(switchTo).toMatch(/if \(switched\) \{[\s\S]*?resetEditorToActiveInitialFiles\(\);/);
+    expect(switchTo).toMatch(/finally \{[\s\S]*?setPresetTransitioning\(false\);[\s\S]*?\}/);
+  });
+
   it('drives dev-server readiness from the owner pty:dev-server frame, not a stdout log-match', () => {
     // ADR-0148 (co-resident dev server in the owner): the owner reports
     // start/stop + port via a structured frame (owner-tree republish handshake
@@ -155,6 +206,15 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('workspaceOwner().onDevServer(');
     expect(source).toContain('setDevServerStatus(frame.status)');
     expect(source).not.toContain('node_modules read bridge ready');
+  });
+
+  it('waits for node-cli presets to finish as terminal commands, not preview servers', () => {
+    expect(source).toContain('async function waitForPresetBoot(');
+    expect(source).toContain("if (spec.runtime === 'node-cli')");
+    expect(source).toContain('await waitForTerminalIdle(sessionId)');
+    expect(source).toContain(
+      'await waitForPresetBoot(session.id, generation, templateForPreset(preset))',
+    );
   });
 
   it('starts Vite in an ordinary active terminal instead of a named vite tab', () => {
@@ -167,19 +227,23 @@ describe('App terminal startup wiring', () => {
 
   it('waits for the existing dev-server terminal to reboot without awaiting the long-running dev line', () => {
     expect(source).toContain('function restartDevServer(sessionId: string)');
-    expect(source).toContain('if (restartSessionId) await restartDevServer(restartSessionId)');
-    expect(source).not.toContain('if (restartSessionId) void restartDevServer(restartSessionId)');
-    expect(source).toContain('await waitForTerminalIdle(devServerSessionId)');
-    expect(source).toContain('await waitForDevServerBoot(targetSessionId, generation)');
+    expect(source).toContain('await stopDevServerSession(devServerSessionId)');
+    expect(source).toContain('await waitForTerminalIdle(sessionId)');
     expect(source).toContain(
-      "devServerStatus() !== 'stopped' || terminalStatus(devServerSessionId) === 'running'",
+      'await startDevServerSession(sessionId, generation, presetForId(activeStarterId()))',
+    );
+    expect(source).toMatch(
+      /await waitForPresetBoot\(\s*targetSessionId,\s*generation,\s*templateForPreset\(preset\)\s*\)/,
+    );
+    expect(source).toContain(
+      "devServerStatus() !== 'stopped' ||\n        terminalStatus(devServerSessionId) === 'running' ||\n        anyTerminalRunning()",
     );
     expect(source).toContain('if (restartNeeded)');
     expect(source).toContain('devServerSessionId = session.id');
     // ADR-0165 §4: boot lines follow the STORE-derived active starter, not the
     // interim activePreset signal — so a switch boots the destination's template.
     expect(source).toContain(
-      'void runTerminalSequence(\n      targetSessionId,\n      presetBootLines(presetForId(activeStarterId()), activeRoot()),\n    );',
+      'await startDevServerSession(sessionId, generation, presetForId(activeStarterId()))',
     );
   });
 
@@ -310,10 +374,10 @@ describe('App terminal startup wiring', () => {
       /session = await ensureReservedDevServerSession\(session\);\s*devServerSessionId = session\.id;\s*manager\.clear\(session\.id\);/,
     );
     expect(runPreset).toMatch(
-      /await workspaceOwner\(\)\.setDevConfig\([\s\S]*?await restartDevServer\(restartSessionId\);[\s\S]*?reinitializeTsForPickedPreset\(\);[\s\S]*?return;/,
+      /await workspaceOwner\(\)\.setDevConfig\([\s\S]*?await startDevServerSession\(restartSessionId, restartGeneration, preset\);[\s\S]*?reinitializeTsForPickedPreset\(\);[\s\S]*?return;/,
     );
     expect(runPreset).toMatch(
-      /void runTerminalSequence\(session\.id, presetBootLines\(preset, activeRoot\(\)\)\);[\s\S]*?await waitForDevServerBoot\(session\.id, generation\);[\s\S]*?reinitializeTsForPickedPreset\(\);/,
+      /void runTerminalSequence\(session\.id, presetBootLines\(preset, activeRoot\(\)\)\);[\s\S]*?await waitForPresetBoot\(session\.id, generation, templateForPreset\(preset\)\);[\s\S]*?reinitializeTsForPickedPreset\(\);/,
     );
   });
 
@@ -326,7 +390,7 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain("id: 'act:export-workspace'");
     expect(source).toContain("id: 'act:import-workspace'");
     expect(source).toContain('function workspaceArchiveBlocked(): boolean');
-    expect(source).toContain("return devServerStatus() !== 'stopped';");
+    expect(source).toContain("return presetTransitioning() || devServerStatus() !== 'stopped';");
     expect(source).toContain('Stop the dev server to archive the editable workspace');
   });
 
@@ -430,7 +494,9 @@ describe('App threads the dynamic root (ADR-0165 §4) — WORKSPACE deleted', ()
   it('threads activeRoot() through the owner spawn, seed, writes, explorer, and boot lines', () => {
     expect(source).toContain('root: activeRoot()'); // startWorkspaceOwner spawn
     // ADR-0165 §4: the restart path's boot lines follow the store-derived starter.
-    expect(source).toContain('presetBootLines(presetForId(activeStarterId()), activeRoot())');
+    expect(source).toContain(
+      'await startDevServerSession(sessionId, generation, presetForId(activeStarterId()))',
+    );
     expect(source).toContain('presetBootLines(preset, activeRoot())');
     expect(source).toContain('root={activeRoot()}'); // FileExplorer prop
     // node_modules prop + preset-path seeding read the dynamic root

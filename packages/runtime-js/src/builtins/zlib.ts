@@ -21,7 +21,7 @@
  * `constants`/`codes` are the real Node table (`./zlib-constants.ts`); Node also
  * mirrors every non-`BROTLI_` constant onto the module top level (legacy shape).
  */
-import { NotImplementedError } from '@riftydev/io';
+import { NotImplementedError, Transform } from '@riftydev/io';
 import { Buffer } from './buffer.ts';
 import { ZLIB_CODES, ZLIB_CONSTANTS } from './zlib-constants.ts';
 
@@ -89,8 +89,12 @@ function assertSupportedOptions(feature: string, options: ZlibOptions | undefine
 }
 
 function toBytes(input: ZlibInput): Uint8Array<ArrayBuffer> {
+  return toBytesWithEncoding(input, 'utf8');
+}
+
+function toBytesWithEncoding(input: unknown, encoding: string): Uint8Array<ArrayBuffer> {
   let view: Uint8Array;
-  if (typeof input === 'string') view = new TextEncoder().encode(input);
+  if (typeof input === 'string') view = Buffer.from(input, encoding as BufferEncoding);
   else if (input instanceof Uint8Array) view = input;
   else if (input instanceof ArrayBuffer) view = new Uint8Array(input);
   else if (ArrayBuffer.isView(input)) {
@@ -106,6 +110,10 @@ function toBytes(input: ZlibInput): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(view.byteLength);
   out.set(view);
   return out;
+}
+
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 function parseArgs(
@@ -203,6 +211,80 @@ const inflate = makeAsync('zlib.inflate', 'deflate', 'decompress');
 const deflateRaw = makeAsync('zlib.deflateRaw', 'deflate-raw', 'compress');
 const inflateRaw = makeAsync('zlib.inflateRaw', 'deflate-raw', 'decompress');
 
+class Gzip extends Transform {
+  constructor(options?: ZlibOptions) {
+    assertSupportedOptions('zlib.createGzip', options);
+    if (typeof CompressionStream !== 'function') {
+      throw new NotImplementedError(
+        'zlib.createGzip',
+        'CompressionStream unavailable in this realm',
+      );
+    }
+    let writer: WritableStreamDefaultWriter<BufferSource> | null = null;
+    let drainDone: Promise<void> | null = null;
+    const pendingWrites = new Set<Promise<void>>();
+    super({
+      transform(chunk, encoding, cb): void {
+        let bytes: Uint8Array<ArrayBuffer>;
+        try {
+          bytes = toBytesWithEncoding(chunk, encoding);
+        } catch (err) {
+          cb(toError(err));
+          return;
+        }
+        if (writer === null) {
+          cb(new Error('zlib.createGzip writer not initialized'));
+          return;
+        }
+        const writeDone = writer.write(bytes);
+        pendingWrites.add(writeDone);
+        void writeDone.then(
+          () => pendingWrites.delete(writeDone),
+          () => pendingWrites.delete(writeDone),
+        );
+        void writeDone.catch(() => {});
+        cb();
+      },
+      flush(cb): void {
+        const currentWriter = writer;
+        if (currentWriter === null) {
+          cb(new Error('zlib.createGzip writer not initialized'));
+          return;
+        }
+        void Promise.all([...pendingWrites])
+          .then(() => currentWriter.close())
+          .then(() => drainDone)
+          .then(
+            () => cb(),
+            (err: unknown) => cb(toError(err)),
+          );
+      },
+    });
+    const stream = new CompressionStream('gzip');
+    writer = stream.writable.getWriter();
+    drainDone = this.drainCompressed(stream.readable as ReadableStream<Uint8Array>);
+  }
+
+  private async drainCompressed(readable: ReadableStream<Uint8Array>): Promise<void> {
+    const reader = readable.getReader();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) return;
+        if (value && value.byteLength > 0) {
+          this.push(Buffer.from(value));
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+}
+
+function createGzip(options?: ZlibOptions): Gzip {
+  return new Gzip(options);
+}
+
 // Node mirrors every non-`BROTLI_` constant onto the module top level (legacy,
 // deprecated) as a NON-enumerable, read-only data property — defined below so
 // `Object.keys(zlib)` / `for…in` match Node, which excludes these aliases.
@@ -246,10 +328,10 @@ const zlibModule = {
   // CRC-32 — deferred (not part of the compression subset).
   crc32: notImpl('zlib.crc32'),
 
-  // Transform-stream surface — bridging CompressionStream to a Node Transform
-  // (flush opcodes, backpressure, chunk-boundary parity) is gated behind a
-  // future ADR (recorded in backlog runtime-js/zlib-web-compression-subset).
-  createGzip: notImpl('zlib.createGzip'),
+  // Gzip Transform stream — enough for compression middleware such as Vite
+  // preview's sirv path. Flush-opcode variants and the remaining factories stay
+  // loud ceilings until their own parity surface lands.
+  createGzip,
   createGunzip: notImpl('zlib.createGunzip'),
   createDeflate: notImpl('zlib.createDeflate'),
   createInflate: notImpl('zlib.createInflate'),
@@ -262,7 +344,7 @@ const zlibModule = {
   createZstdDecompress: notImpl('zlib.createZstdDecompress'),
 
   // Stream classes — throw on construct (same ceiling as the create* factories).
-  Gzip: unsupportedClass('zlib.Gzip'),
+  Gzip,
   Gunzip: unsupportedClass('zlib.Gunzip'),
   Deflate: unsupportedClass('zlib.Deflate'),
   Inflate: unsupportedClass('zlib.Inflate'),

@@ -107,4 +107,32 @@ describe('Readable.from(iter, options?)', () => {
 
     expect(out.map((chunk) => Buffer.from(chunk).toString('utf8'))).toEqual(['aa', 'bb']);
   });
+
+  it('toWeb preserves object-mode chunks instead of stringifying them', async () => {
+    const first = { a: 1 };
+    const stream = Readable.toWeb(Readable.from([first, { a: 2 }]));
+    const reader = stream.getReader();
+
+    await expect(reader.read()).resolves.toEqual({ done: false, value: first });
+    await expect(reader.read()).resolves.toEqual({ done: false, value: { a: 2 } });
+    await expect(reader.read()).resolves.toEqual({ done: true, value: undefined });
+  });
+
+  it('toWeb preserves string chunks as strings', async () => {
+    const stream = Readable.toWeb(Readable.from(['x']));
+    const reader = stream.getReader();
+
+    await expect(reader.read()).resolves.toEqual({ done: false, value: 'x' });
+    await expect(reader.read()).resolves.toEqual({ done: true, value: undefined });
+  });
+
+  it('toWeb rejects arbitrary async iterables instead of widening the Node surface', () => {
+    const iterable = {
+      async *[Symbol.asyncIterator]() {
+        yield 'x';
+      },
+    };
+
+    expect(() => Readable.toWeb(iterable as unknown as Readable)).toThrow(TypeError);
+  });
 });

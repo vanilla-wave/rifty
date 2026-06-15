@@ -62,6 +62,12 @@ export function installNodeProcessShim(spec: KernelProcessSpec): NodeProcess {
     configurable: true,
     enumerable: false,
   });
+  Object.defineProperty(globalThis, 'global', {
+    value: globalThis,
+    writable: true,
+    configurable: true,
+    enumerable: false,
+  });
   return shim;
 }
 

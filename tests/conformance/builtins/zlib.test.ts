@@ -11,6 +11,7 @@
 import { promisify } from 'node:util';
 import nodeZlib from 'node:zlib';
 import { describe, expect, it } from 'vitest';
+import { ServerResponse } from '../../../packages/net/src/http/response.ts';
 import { Buffer } from '../../../packages/runtime-js/src/builtins/buffer.ts';
 import zlib from '../../../packages/runtime-js/src/builtins/zlib.ts';
 
@@ -150,14 +151,99 @@ describe('node:zlib — loud ceilings (sync / brotli / streams / unzip)', () => 
       notImpl('zlib.brotliDecompressSync'),
     );
   });
-  it('createGzip throws NotImplementedError (streams deferred)', () => {
-    expect(() => zlib.createGzip()).toThrowError(notImpl('zlib.createGzip'));
-  });
-  it('Gzip class throws on construct', () => {
-    expect(() => new zlib.Gzip()).toThrowError(notImpl('zlib.Gzip'));
+  it('remaining stream factories throw NotImplementedError', () => {
+    expect(() => zlib.createGunzip()).toThrowError(notImpl('zlib.createGunzip'));
+    expect(() => zlib.createDeflate()).toThrowError(notImpl('zlib.createDeflate'));
   });
   it('unzip throws NotImplementedError (auto-detect deferred)', () => {
     expect(() => zlib.unzip(Buffer.from(text), () => {})).toThrowError(notImpl('zlib.unzip'));
+  });
+});
+
+describe('node:zlib — gzip Transform stream', () => {
+  async function collect(stream: {
+    on(event: 'data', cb: (chunk: Uint8Array) => void): unknown;
+    on(event: 'end', cb: () => void): unknown;
+    on(event: 'error', cb: (err: Error) => void): unknown;
+  }): Promise<Buffer> {
+    const chunks: Uint8Array[] = [];
+    await new Promise<void>((resolve, reject) => {
+      stream.on('data', (chunk) => chunks.push(chunk));
+      stream.on('end', resolve);
+      stream.on('error', reject);
+    });
+    return Buffer.concat(chunks);
+  }
+
+  it('createGzip emits gzip bytes readable by real Node zlib', async () => {
+    const stream = zlib.createGzip();
+    const output = collect(stream);
+
+    stream.write(Buffer.from('hello '));
+    stream.end('stream');
+
+    const compressed = await output;
+    expect(nodeZlib.gunzipSync(compressed).toString('utf8')).toBe('hello stream');
+  });
+
+  it('Gzip class is constructible and has the same stream behavior', async () => {
+    const stream = new zlib.Gzip();
+    const output = collect(stream);
+
+    stream.end(text);
+
+    const compressed = await output;
+    expect(nodeZlib.gunzipSync(compressed).toString('utf8')).toBe(text);
+  });
+
+  it('supports Vite compression middleware shape over ServerResponse', async () => {
+    const res = new ServerResponse();
+    const originalEnd = res.end;
+    const originalWrite = res.write;
+    const originalOn = res.on;
+    const originalWriteHead = res.writeHead;
+    let pendingStatus = 0;
+    let started = false;
+    let gzipStream: ReturnType<(typeof zlib)['createGzip']> | undefined;
+
+    const start = (): void => {
+      started = true;
+      gzipStream = zlib.createGzip();
+      res.setHeader('Content-Encoding', 'gzip');
+      gzipStream.on('data', (chunk: Uint8Array) => {
+        originalWrite.call(res, chunk);
+      });
+      gzipStream.on('end', () => {
+        originalEnd.call(res);
+      });
+      originalOn.call(res, 'drain', () => gzipStream?.resume());
+      originalWriteHead.call(res, pendingStatus || res.statusCode);
+    };
+
+    res.writeHead = function writeHead(status, reasonOrHeaders, maybeHeaders) {
+      const headers = typeof reasonOrHeaders === 'string' ? maybeHeaders : reasonOrHeaders;
+      if (headers) for (const key in headers) res.setHeader(key, headers[key]!);
+      pendingStatus = status;
+      return this;
+    };
+    res.write = function write(...args) {
+      if (!started) start();
+      if (!gzipStream) return originalWrite.call(this, ...args);
+      return gzipStream.write.call(gzipStream, ...args);
+    };
+    res.end = function end(...args) {
+      if (!started) start();
+      if (!gzipStream) return originalEnd.call(this, ...args);
+      return gzipStream.end.call(gzipStream, ...args);
+    };
+
+    res.setHeader('Content-Type', 'text/html');
+    res.end(`<!doctype html>${'x'.repeat(2048)}`);
+
+    const response = await res.toResponse();
+    const compressed = Buffer.from(await response.arrayBuffer());
+    expect(response.headers.get('content-encoding')).toBe('gzip');
+    expect(nodeZlib.gunzipSync(compressed).toString('utf8')).toContain('x'.repeat(2048));
   });
 });
 

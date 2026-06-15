@@ -10,6 +10,10 @@ Date: 2026-06
 > `maxOutputLength` is honored (early-abort `ERR_BUFFER_TOO_LARGE`), size-only knobs
 > (`level`/`memLevel`/`strategy`/…) are accepted no-ops (`info:false` too).
 
+Correction 2026-06-28: ADR-0178 implements the narrow `createGzip()` / `Gzip`
+Transform subset for the Vite preview compression consumer. The rest of the
+Transform-stream surface remains a loud ceiling as described below.
+
 ## Context
 
 `node:zlib` was a loud stub — every member threw `NotImplementedError` (`null-net-stubs.ts`). Ordinary

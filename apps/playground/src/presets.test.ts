@@ -6,7 +6,11 @@ import {
   type Preset,
   presetBootLines,
 } from './presets.ts';
+import { CLI_REPORT_TEMPLATE } from './templates/cli-report.ts';
 import { EXPRESS_SQLITE_TEMPLATE } from './templates/express-sqlite.ts';
+import { HONO_API_TEMPLATE } from './templates/hono-api.ts';
+import { KOA_API_TEMPLATE } from './templates/koa-api.ts';
+import { MARKDOWN_SSG_TEMPLATE } from './templates/markdown-ssg.ts';
 import { resolveProjectSpec } from './templates/registry.ts';
 import { SOCKET_LAB_TEMPLATE } from './templates/socket-lab.ts';
 import { TYPESCRIPT_TEMPLATE } from './templates/typescript.ts';
@@ -215,6 +219,98 @@ describe('playground presets', () => {
     expect(text).toContain('NotImplementedError');
     expect(text).not.toContain('Node sockets supported');
   });
+
+  it('ships the Hono API demo wired to its node-server template', () => {
+    const demo = PRESETS.find((preset) => preset.id === 'hono-api');
+    expect(demo).toBeDefined();
+    if (!demo) throw new Error('unreachable');
+    expect(demo.templateId).toBe('hono-api');
+    expect(demo.mode).toBe('real-vite');
+    expect(demo.setup).toBe('from-scratch');
+    expect(demo.category).toBe('Live preview');
+
+    expect(demo.source).toBe(HONO_API_TEMPLATE.entry.content);
+
+    const filePaths = new Set((demo.files ?? []).map((file) => file.path));
+    for (const relPath of Object.keys(HONO_API_TEMPLATE.extraFiles)) {
+      expect(filePaths.has(relPath.replace(/^\//, ''))).toBe(true);
+    }
+    for (const file of demo.files ?? []) {
+      expect(HONO_API_TEMPLATE.extraFiles[`/${file.path}`]).toBe(file.content);
+    }
+
+    expect(demo.openFiles?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(demo.openFiles?.every((path) => filePaths.has(path))).toBe(true);
+  });
+
+  it('ships the CLI report demo wired to its run-to-completion template', () => {
+    const demo = PRESETS.find((preset) => preset.id === 'cli-report');
+    expect(demo).toBeDefined();
+    if (!demo) throw new Error('unreachable');
+    expect(demo.templateId).toBe('cli-report');
+    expect(demo.mode).toBe('real-vite');
+    expect(demo.setup).toBe('from-scratch');
+    expect(demo.category).toBe('Live preview');
+
+    expect(demo.source).toBe(CLI_REPORT_TEMPLATE.entry.content);
+
+    const filePaths = new Set((demo.files ?? []).map((file) => file.path));
+    for (const relPath of Object.keys(CLI_REPORT_TEMPLATE.extraFiles)) {
+      expect(filePaths.has(relPath.replace(/^\//, ''))).toBe(true);
+    }
+    for (const file of demo.files ?? []) {
+      expect(CLI_REPORT_TEMPLATE.extraFiles[`/${file.path}`]).toBe(file.content);
+    }
+
+    expect(demo.openFiles?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(demo.openFiles?.every((path) => filePaths.has(path))).toBe(true);
+  });
+
+  it('ships the Koa API demo wired to its node-server template', () => {
+    const demo = PRESETS.find((preset) => preset.id === 'koa-api');
+    expect(demo).toBeDefined();
+    if (!demo) throw new Error('unreachable');
+    expect(demo.templateId).toBe('koa-api');
+    expect(demo.mode).toBe('real-vite');
+    expect(demo.setup).toBe('from-scratch');
+    expect(demo.category).toBe('Live preview');
+
+    expect(demo.source).toBe(KOA_API_TEMPLATE.entry.content);
+
+    const filePaths = new Set((demo.files ?? []).map((file) => file.path));
+    for (const relPath of Object.keys(KOA_API_TEMPLATE.extraFiles)) {
+      expect(filePaths.has(relPath.replace(/^\//, ''))).toBe(true);
+    }
+    for (const file of demo.files ?? []) {
+      expect(KOA_API_TEMPLATE.extraFiles[`/${file.path}`]).toBe(file.content);
+    }
+
+    expect(demo.openFiles?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(demo.openFiles?.every((path) => filePaths.has(path))).toBe(true);
+  });
+
+  it('ships the markdown SSG demo wired to its node-server template', () => {
+    const demo = PRESETS.find((preset) => preset.id === 'markdown-ssg');
+    expect(demo).toBeDefined();
+    if (!demo) throw new Error('unreachable');
+    expect(demo.templateId).toBe('markdown-ssg');
+    expect(demo.mode).toBe('real-vite');
+    expect(demo.setup).toBe('from-scratch');
+    expect(demo.category).toBe('Live preview');
+
+    expect(demo.source).toBe(MARKDOWN_SSG_TEMPLATE.entry.content);
+
+    const filePaths = new Set((demo.files ?? []).map((file) => file.path));
+    for (const relPath of Object.keys(MARKDOWN_SSG_TEMPLATE.extraFiles)) {
+      expect(filePaths.has(relPath.replace(/^\//, ''))).toBe(true);
+    }
+    for (const file of demo.files ?? []) {
+      expect(MARKDOWN_SSG_TEMPLATE.extraFiles[`/${file.path}`]).toBe(file.content);
+    }
+
+    expect(demo.openFiles?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(demo.openFiles?.every((path) => filePaths.has(path))).toBe(true);
+  });
 });
 
 describe('sandbox setup kinds (ADR-0135)', () => {
@@ -257,6 +353,30 @@ describe('sandbox setup kinds (ADR-0135)', () => {
     const socketLab = PRESETS.find((preset) => preset.id === 'socket-lab');
     expect(socketLab?.setup).toBe('from-scratch');
     expect(presetBootLines(socketLab as Preset, '/workspace')).toEqual([
+      'cd /workspace && npm install && npm run dev',
+    ]);
+
+    const hono = PRESETS.find((preset) => preset.id === 'hono-api');
+    expect(hono?.setup).toBe('from-scratch');
+    expect(presetBootLines(hono as Preset, '/workspace')).toEqual([
+      'cd /workspace && npm install && npm run dev',
+    ]);
+
+    const cli = PRESETS.find((preset) => preset.id === 'cli-report');
+    expect(cli?.setup).toBe('from-scratch');
+    expect(presetBootLines(cli as Preset, '/workspace')).toEqual([
+      'cd /workspace && npm install && npm run dev',
+    ]);
+
+    const ssg = PRESETS.find((preset) => preset.id === 'markdown-ssg');
+    expect(ssg?.setup).toBe('from-scratch');
+    expect(presetBootLines(ssg as Preset, '/workspace')).toEqual([
+      'cd /workspace && npm install && npm run dev',
+    ]);
+
+    const koa = PRESETS.find((preset) => preset.id === 'koa-api');
+    expect(koa?.setup).toBe('from-scratch');
+    expect(presetBootLines(koa as Preset, '/workspace')).toEqual([
       'cd /workspace && npm install && npm run dev',
     ]);
   });

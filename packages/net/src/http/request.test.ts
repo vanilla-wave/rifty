@@ -7,6 +7,7 @@
  *     (Item 4 from 2026-05-25 review / ADR-0017 phase 1 reader-side finish).
  */
 
+import { Readable } from '@riftydev/io';
 import { describe, expect, it } from 'vitest';
 import { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
 
@@ -78,11 +79,45 @@ describe('IncomingMessage — streaming body (ADR-0017 phase 1 reader-side)', ()
   it('zero-body request fires end with no data', async () => {
     const req = new IncomingMessage(new Request('http://localhost/x'));
     const chunks: Uint8Array[] = [];
+    expect(req.complete).toBe(false);
+    expect(req.socket.readable).toBe(true);
     await new Promise<void>((resolve) => {
       req.on('data', (c) => chunks.push(c as Uint8Array));
       req.on('end', () => resolve());
     });
     expect(chunks.length).toBe(0);
+    expect(req.complete).toBe(true);
+    expect(req.socket.readable).toBe(false);
+  });
+
+  it('zero-body request end is observable by listeners attached after handler return', async () => {
+    const req = new IncomingMessage(new Request('http://localhost/x'));
+    const chunks: Uint8Array[] = [];
+
+    await new Promise<void>((resolve) => {
+      setTimeout(() => {
+        req.on('data', (c) => chunks.push(c as Uint8Array));
+        req.on('end', () => resolve());
+        req.resume();
+      }, 0);
+    });
+
+    expect(chunks).toEqual([]);
+    expect(req.complete).toBe(true);
+    expect(req.socket.readable).toBe(false);
+  });
+
+  it('can be consumed through Readable.toWeb() for node-server adapters', async () => {
+    const body = JSON.stringify({ author: 'e2e', text: 'hello from hono' });
+    const req = new IncomingMessage(
+      new Request('http://preview.local:3321/api/messages', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body,
+      }),
+    );
+
+    await expect(new Response(Readable.toWeb(req)).text()).resolves.toBe(body);
   });
 });
 
@@ -91,10 +126,17 @@ describe('IncomingMessage — streaming body (ADR-0017 phase 1 reader-side)', ()
 // `req.headers = {...}` (trust-proxy/body-parser), so a getter-only accessor
 // would break it. These pin the writability + lazy-identity invariants.
 describe('IncomingMessage — lazy + writable headers (#9, gate G2)', () => {
-  it('materialises headers on first read equal to Object.fromEntries(request.headers)', () => {
+  it('synthesizes host and rawHeaders from the request URL', () => {
+    const req = new IncomingMessage(new Request('http://preview.local:3320/api/messages'));
+
+    expect(req.headers.host).toBe('preview.local:3320');
+    expect(req.rawHeaders).toEqual(['host', 'preview.local:3320']);
+  });
+
+  it('materialises headers on first read and includes a Node-style host header', () => {
     const src = new Request('http://localhost/x', { headers: { 'x-a': '1' } });
     const req = new IncomingMessage(src);
-    expect(req.headers).toEqual(Object.fromEntries(src.headers));
+    expect(req.headers).toEqual({ ...Object.fromEntries(src.headers), host: 'localhost' });
     expect(req.headers['x-a']).toBe('1');
   });
 

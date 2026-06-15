@@ -57,6 +57,12 @@
   success path. Without them a foreign tab embedding the preview under page COEP
   credentialless (D-001) saw `ERR_BLOCKED_BY_RESPONSE` instead of an honest
   error page.
+- **Preview requests preserve the target port in synthetic upstream URLs.**
+  `synthesizePreviewUrl(path, port)` now lets the SW serialise
+  `http://preview.local:<port>/...`, so Node HTTP adapters deriving
+  `Request.url` from `Host` see the same preview target the route matched.
+  `SW_ROUTING_VERSION` bumps to `4`.
+
 - **SSE bodies fail loud in no-transferable-stream realms.**
   `packSerializedResponse` now refuses to drain `text/event-stream` bodies when
   `ReadableStream` transfer over `postMessage` is unavailable, throwing

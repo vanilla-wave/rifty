@@ -149,5 +149,61 @@ export async function expectTerminalContains(
   text: string | RegExp,
   timeout = 5_000,
 ): Promise<void> {
-  await expect.poll(() => terminalBuffer(page), { timeout }).toMatch(text);
+  await expect.poll(() => terminalBuffer(page), { timeout }).toMatch(terminalPattern(text));
+}
+
+export function viteDevReadyPattern(port = 5174): RegExp {
+  return new RegExp(
+    `(?:\\[vite\\] dev server ready on port ${port}|VITE v[\\s\\S]*?ready in)`,
+    'u',
+  );
+}
+
+export interface CapturedPageProblems {
+  readonly messages: readonly string[];
+  assertNoViteImportErrors(): void;
+}
+
+export function capturePageProblems(page: Page): CapturedPageProblems {
+  const messages: string[] = [];
+  page.on('pageerror', (err) => {
+    messages.push(`[pageerror] ${err.message}`);
+  });
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') messages.push(`[console.error] ${msg.text()}`);
+  });
+  return {
+    messages,
+    assertNoViteImportErrors(): void {
+      expect(messages.join('\n')).not.toMatch(
+        /(?:Pre-transform error|vite:import-analysis|Failed to resolve import)/u,
+      );
+    },
+  };
+}
+
+function terminalPattern(text: string | RegExp): string | RegExp {
+  if (typeof text !== 'string') return text;
+  const match = /^\[vite\] dev server ready on port (\d+)$/u.exec(text);
+  return match ? viteDevReadyPattern(Number(match[1])) : text;
+}
+
+export async function selectPreset(page: Page, id: string): Promise<void> {
+  const trigger = page.locator('[data-action="open-launcher"]');
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await trigger.click();
+    const row = page.locator(`[data-preset="${id}"]`);
+    if (!(await row.isVisible().catch(() => false))) {
+      await page.getByRole('button', { name: 'Starters' }).click();
+    }
+    await expect(row).toBeVisible({ timeout: 10_000 });
+    await row.click({ force: true });
+    try {
+      await expect(page.locator('[data-testid="launcher"]')).toBeHidden({ timeout: 1_000 });
+      return;
+    } catch {
+      await page.waitForTimeout(100);
+    }
+  }
+  await expect(page.locator('[data-testid="launcher"]')).toBeHidden({ timeout: 5_000 });
 }

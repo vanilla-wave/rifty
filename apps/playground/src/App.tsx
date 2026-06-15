@@ -310,7 +310,7 @@ export function App(props: AppProps) {
   }
 
   function workspaceArchiveBlocked(): boolean {
-    return devServerStatus() !== 'stopped';
+    return presetTransitioning() || devServerStatus() !== 'stopped';
   }
 
   async function downloadWorkspaceArchive(): Promise<void> {
@@ -798,6 +798,7 @@ export function App(props: AppProps) {
   const [devServerStatus, setDevServerStatus] = createSignal<'stopped' | 'starting' | 'running'>(
     'stopped',
   );
+  const [presetTransitioning, setPresetTransitioning] = createSignal(false);
   const devServerRunning = (): boolean => devServerStatus() === 'running';
   const [tsProjectRevision, setTsProjectRevision] = createSignal(0);
   interface TsPresetTransitionGate {
@@ -1856,6 +1857,20 @@ export function App(props: AppProps) {
     }
   }
 
+  function anyTerminalRunning(): boolean {
+    return manager.sessions().some((session) => session.status === 'running');
+  }
+
+  async function stopRunningTerminalSessions(): Promise<void> {
+    const runningIds = manager
+      .sessions()
+      .filter((session) => session.status === 'running')
+      .map((session) => session.id);
+    for (const id of runningIds) manager.stop(id);
+    await Promise.all(runningIds.map((id) => waitForTerminalIdle(id)));
+    refreshTerminalState();
+  }
+
   async function waitForDevServerBoot(sessionId: string, generation: number): Promise<void> {
     while (generation === devServerRestartGeneration) {
       if (devServerStatus() === 'running' || terminalStatus(sessionId) === 'idle') return;
@@ -1863,25 +1878,48 @@ export function App(props: AppProps) {
     }
   }
 
+  async function waitForPresetBoot(
+    sessionId: string,
+    generation: number,
+    spec: ProjectSpec,
+  ): Promise<void> {
+    if (spec.runtime === 'node-cli') {
+      await waitForTerminalIdle(sessionId);
+      return;
+    }
+    await waitForDevServerBoot(sessionId, generation);
+  }
+
+  async function stopDevServerSession(sessionId: string | null): Promise<void> {
+    if (sessionId) manager.stop(sessionId);
+    await stopRunningTerminalSessions();
+    await waitForDevServerStop();
+    await waitForTerminalIdle(sessionId);
+    setPreviewPorts([]);
+  }
+
+  async function startDevServerSession(
+    sessionId: string,
+    generation: number,
+    preset: Preset,
+  ): Promise<void> {
+    const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;
+    devServerSessionId = targetSessionId;
+    manager.clear(targetSessionId); // fresh console for the switched-in project
+    void runTerminalSequence(targetSessionId, presetBootLines(preset, activeRoot()));
+    await waitForPresetBoot(targetSessionId, generation, templateForPreset(preset));
+  }
+
   async function restartDevServer(sessionId: string): Promise<void> {
     const generation = ++devServerRestartGeneration;
     // Stop the running dev command in its session (ADR-0148 co-resident dev server): the owner aborts
     // the run → the co-resident dev server stops → `devServerStatus` → 'stopped'.
-    if (devServerSessionId) manager.stop(devServerSessionId);
-    await waitForDevServerStop();
-    await waitForTerminalIdle(devServerSessionId);
+    await stopDevServerSession(devServerSessionId);
     if (generation !== devServerRestartGeneration) return;
-    const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;
-    devServerSessionId = targetSessionId;
-    manager.clear(targetSessionId); // fresh console for the switched-in project
     // Boot lines follow the ACTIVE STARTER (store-derived, ADR-0165 §4): on a
     // switch the store has re-pointed to the destination project's starter, so a
     // restart boots ITS template — never the stale picked-preset starter.
-    void runTerminalSequence(
-      targetSessionId,
-      presetBootLines(presetForId(activeStarterId()), activeRoot()),
-    );
-    await waitForDevServerBoot(targetSessionId, generation);
+    await startDevServerSession(sessionId, generation, presetForId(activeStarterId()));
   }
 
   function reinitializeTsForPickedPreset(): void {
@@ -1890,10 +1928,20 @@ export function App(props: AppProps) {
 
   async function runVitePreset(preset: Preset, tsGate?: TsPresetTransitionGate): Promise<void> {
     try {
+      setPresetTransitioning(true);
       setActivePreset(preset.id);
       const restartNeeded =
-        devServerStatus() !== 'stopped' || terminalStatus(devServerSessionId) === 'running';
-      const restartSessionId = devServerSessionId;
+        devServerStatus() !== 'stopped' ||
+        terminalStatus(devServerSessionId) === 'running' ||
+        anyTerminalRunning();
+      const restartSessionId = restartNeeded
+        ? (devServerSessionId ?? devServerSession().id)
+        : undefined;
+      const restartGeneration = restartNeeded ? ++devServerRestartGeneration : undefined;
+      if (restartNeeded) await stopDevServerSession(restartSessionId ?? null);
+      if (restartGeneration !== undefined && restartGeneration !== devServerRestartGeneration) {
+        return;
+      }
       let session: TerminalSessionSnapshot | undefined;
       if (!restartNeeded) {
         session = devServerSession();
@@ -1921,7 +1969,9 @@ export function App(props: AppProps) {
         setup: preset.setup,
       });
       if (restartNeeded) {
-        if (restartSessionId) await restartDevServer(restartSessionId);
+        if (restartSessionId && restartGeneration !== undefined) {
+          await startDevServerSession(restartSessionId, restartGeneration, preset);
+        }
         reinitializeTsForPickedPreset();
         return;
       }
@@ -1931,9 +1981,10 @@ export function App(props: AppProps) {
       manager.clear(session.id); // fresh console for the switched-in project
       const generation = ++devServerRestartGeneration;
       void runTerminalSequence(session.id, presetBootLines(preset, activeRoot()));
-      await waitForDevServerBoot(session.id, generation);
+      await waitForPresetBoot(session.id, generation, templateForPreset(preset));
       reinitializeTsForPickedPreset();
     } finally {
+      setPresetTransitioning(false);
       tsGate?.resolve();
     }
   }
@@ -1946,80 +1997,86 @@ export function App(props: AppProps) {
   // separately via `onConfirmSave` → the owner `index-save` frame. `awaitReady`
   // uses the snapshot-port handshake as the ready gate (the owner publishes at boot).
   async function switchTo(nextActiveId: ActiveId): Promise<boolean> {
-    // The dirty-scratch confirm already ran in the store (`requestSwitch` opened the
-    // switch dialog), so by the time we get here the switch is committed — the store
-    // has flipped `activeId` to the destination, so `activeTemplate()`/`activeStarterId()`
-    // already describe the NEXT project. Gate stays false (store decided already).
-    // `O` infers from currentOwner (WorkspaceOwnerHandle) — no explicit generic.
+    try {
+      setPresetTransitioning(true);
+      // The dirty-scratch confirm already ran in the store (`requestSwitch` opened the
+      // switch dialog), so by the time we get here the switch is committed — the store
+      // has flipped `activeId` to the destination, so `activeTemplate()`/`activeStarterId()`
+      // already describe the NEXT project. Gate stays false (store decided already).
+      // `O` infers from currentOwner (WorkspaceOwnerHandle) — no explicit generic.
 
-    // ADR-0165 §3: PERSIST the new active root to the durable index BEFORE teardown.
-    // A switch otherwise never updates the on-disk `activeId`, so the respawned
-    // owner re-publishes the STALE activeId and `hydrateIndex` reverts the switch
-    // (a race), and a reload boots the wrong root. Post to the CURRENT owner and
-    // wait for its durable ack, so the new owner boots reading the right id.
-    // Memory mode has no durable index → page-mirror only.
-    if (!saveAffordance(storageMode).ephemeral) {
-      await setActiveIndex(workspaceOwner().snapshotPort, nextActiveId);
+      // ADR-0165 §3: PERSIST the new active root to the durable index BEFORE teardown.
+      // A switch otherwise never updates the on-disk `activeId`, so the respawned
+      // owner re-publishes the STALE activeId and `hydrateIndex` reverts the switch
+      // (a race), and a reload boots the wrong root. Post to the CURRENT owner and
+      // wait for its durable ack, so the new owner boots reading the right id.
+      // Memory mode has no durable index → page-mirror only.
+      if (!saveAffordance(storageMode).ephemeral) {
+        await setActiveIndex(workspaceOwner().snapshotPort, nextActiveId);
+      }
+      const switched = await requestSwitch({
+        currentOwner: workspaceOwner(),
+        nextRoot: rootForId(nextActiveId),
+        nextSlug: nextActiveId,
+        isDirty: () => false,
+        confirmDiscard: async () =>
+          globalThis.confirm?.('Discard unsaved scratch changes?') ?? true,
+        save: async () => {
+          /* unused: the store ran the dirty-confirm; durable Save persists via onConfirmSave → owner index-save */
+        },
+        discard: async () => {
+          /* unused: the store ran the dirty-confirm; durable reset persists via onConfirmReset → owner index-reset */
+        },
+        spawn: ({ root, slug }) =>
+          startWorkspaceOwner({
+            // template/setup follow the active STARTER, which the store already
+            // re-pointed to the destination project (ADR-0165 §4).
+            workspaceId,
+            root,
+            template: activeTemplate(),
+            slug,
+            starter: activeStarterId(),
+            setup: presetForId(activeStarterId()).setup,
+            onLog: (line) => console.info(line),
+          }),
+        awaitReady: (next) =>
+          new Promise<void>((resolve) => {
+            // REAL readiness gate (ADR-0165 §3): resolve on the new owner's FIRST
+            // published snapshot frame — the owner serves the snapshot bridge only
+            // after `bootShellOwner` has wired its pty/fs/index handlers, so a frame
+            // means it is ready to take commands. A bounded timeout fallback prevents
+            // a never-arriving frame from hanging the switch (the page→owner IPC also
+            // buffers, so a late wire still self-recovers via each bridge's re-request).
+            let settled = false;
+            const finish = (): void => {
+              if (settled) return;
+              settled = true;
+              unsub();
+              clearTimeout(timer);
+              resolve();
+            };
+            const unsub = subscribeVfsSnapshot(next.snapshotPort, () => finish());
+            requestVfsSnapshot(next.snapshotPort);
+            const timer = setTimeout(finish, 2000);
+          }),
+        rewireBridges: (next) => setOwnerHandle(next), // signal swap re-runs every bridge effect
+        restartDevServer: async () => {
+          setDevServerStatus('stopped');
+          await manager.rebindOwner(workspaceOwner());
+          if (devServerSessionId) await restartDevServer(devServerSessionId);
+        },
+        clearTerminal: () => {
+          if (devServerSessionId) manager.clear(devServerSessionId);
+        },
+      });
+      if (switched) {
+        await waitForActiveSnapshotFrame();
+        resetEditorToActiveInitialFiles();
+      }
+      return switched;
+    } finally {
+      setPresetTransitioning(false);
     }
-    const switched = await requestSwitch({
-      currentOwner: workspaceOwner(),
-      nextRoot: rootForId(nextActiveId),
-      nextSlug: nextActiveId,
-      isDirty: () => false,
-      confirmDiscard: async () => globalThis.confirm?.('Discard unsaved scratch changes?') ?? true,
-      save: async () => {
-        /* unused: the store ran the dirty-confirm; durable Save persists via onConfirmSave → owner index-save */
-      },
-      discard: async () => {
-        /* unused: the store ran the dirty-confirm; durable reset persists via onConfirmReset → owner index-reset */
-      },
-      spawn: ({ root, slug }) =>
-        startWorkspaceOwner({
-          // template/setup follow the active STARTER, which the store already
-          // re-pointed to the destination project (ADR-0165 §4).
-          workspaceId,
-          root,
-          template: activeTemplate(),
-          slug,
-          starter: activeStarterId(),
-          setup: presetForId(activeStarterId()).setup,
-          onLog: (line) => console.info(line),
-        }),
-      awaitReady: (next) =>
-        new Promise<void>((resolve) => {
-          // REAL readiness gate (ADR-0165 §3): resolve on the new owner's FIRST
-          // published snapshot frame — the owner serves the snapshot bridge only
-          // after `bootShellOwner` has wired its pty/fs/index handlers, so a frame
-          // means it is ready to take commands. A bounded timeout fallback prevents
-          // a never-arriving frame from hanging the switch (the page→owner IPC also
-          // buffers, so a late wire still self-recovers via each bridge's re-request).
-          let settled = false;
-          const finish = (): void => {
-            if (settled) return;
-            settled = true;
-            unsub();
-            clearTimeout(timer);
-            resolve();
-          };
-          const unsub = subscribeVfsSnapshot(next.snapshotPort, () => finish());
-          requestVfsSnapshot(next.snapshotPort);
-          const timer = setTimeout(finish, 2000);
-        }),
-      rewireBridges: (next) => setOwnerHandle(next), // signal swap re-runs every bridge effect
-      restartDevServer: async () => {
-        setDevServerStatus('stopped');
-        await manager.rebindOwner(workspaceOwner());
-        if (devServerSessionId) await restartDevServer(devServerSessionId);
-      },
-      clearTerminal: () => {
-        if (devServerSessionId) manager.clear(devServerSessionId);
-      },
-    });
-    if (switched) {
-      await waitForActiveSnapshotFrame();
-      resetEditorToActiveInitialFiles();
-    }
-    return switched;
   }
 
   onMount(() => {
@@ -2670,19 +2727,23 @@ export function App(props: AppProps) {
   });
 
   const livePillLabel = (): string =>
-    devServerStatus() === 'running'
-      ? `LIVE :${machine.realVitePort()}`
-      : devServerStatus() === 'starting'
-        ? 'STARTING'
-        : 'STOPPED';
+    presetTransitioning()
+      ? 'SWITCHING'
+      : devServerStatus() === 'running'
+        ? `LIVE :${machine.realVitePort()}`
+        : devServerStatus() === 'starting'
+          ? 'STARTING'
+          : 'STOPPED';
 
   const modeLabel = (): string =>
     machine.mode() === 'dev'
       ? 'Dev · port 3000'
       : machine.mode() === 'real-vite'
-        ? devServerStatus() === 'running'
-          ? `${activeTemplate().displayName} · port ${machine.realVitePort()}`
-          : `${activeTemplate().displayName} · ${devServerStatus()}`
+        ? presetTransitioning()
+          ? `${activeTemplate().displayName} · switching`
+          : devServerStatus() === 'running'
+            ? `${activeTemplate().displayName} · port ${machine.realVitePort()}`
+            : `${activeTemplate().displayName} · ${devServerStatus()}`
         : activeTemplate().displayName;
 
   const terminalModeHint = (): TerminalModeHint => ({
@@ -2727,7 +2788,11 @@ export function App(props: AppProps) {
           onOpen={openLauncherAtRememberedTab}
         />
 
-        <span class="rf-livepill" data-state={devServerStatus()} title={modeLabel()}>
+        <span
+          class="rf-livepill"
+          data-state={presetTransitioning() ? 'switching' : devServerStatus()}
+          title={modeLabel()}
+        >
           <span class="rf-livepill__dot" aria-hidden="true" />
           {livePillLabel()}
         </span>

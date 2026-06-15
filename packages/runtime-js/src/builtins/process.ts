@@ -533,6 +533,12 @@ export function installProcessGlobals(): void {
   if ((globalThis as { process?: unknown }).process instanceof NodeProcess) return;
   patchPromiseForNextTick();
   (globalThis as unknown as { process: NodeProcess }).process = riftyProcess;
+  Object.defineProperty(globalThis, 'global', {
+    value: globalThis,
+    writable: true,
+    configurable: true,
+    enumerable: false,
+  });
 }
 
 /**

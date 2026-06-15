@@ -10,20 +10,20 @@ code: [packages/runtime-js/src/builtins/zlib.ts]
 
 ## Context
 
-LANDED (ADR-0159, `docs/public/compat/zlib.md`): async one-shot `gzip`/`gunzip`/
-`deflate`/`inflate`/`deflateRaw`/`inflateRaw` over the host `CompressionStream`/
-`DecompressionStream`, wire-compatible with real Node both directions. The
-all-throwing `node:zlib` stub is gone. This item now tracks the surface
-DELIBERATELY deferred from that PR.
+LANDED (ADR-0159 + ADR-0178, `docs/public/compat/zlib.md`): async one-shot
+`gzip`/`gunzip`/`deflate`/`inflate`/`deflateRaw`/`inflateRaw` over the host
+`CompressionStream`/`DecompressionStream`, wire-compatible with real Node both
+directions, plus the narrow `createGzip()` / `Gzip` Transform subset needed by
+Vite preview compression middleware. The all-throwing `node:zlib` stub is gone.
+This item now tracks the surface DELIBERATELY deferred from those PRs.
 
 ## Options or Next
 
-- **Transform streams** (`createGzip`/`createGunzip`/`createDeflate`/`createInflate`/
-  `createDeflateRaw`/`createInflateRaw`/`createUnzip` + `Gzip`/`Deflate`/… classes):
-  bridge `CompressionStream` ↔ Node `Transform` (flush opcodes, backpressure,
-  chunk-boundary + error-code parity). Broad/IRREVERSIBLE contract — needs its own
-  ADR before implementation (ADR-0159). Gate: a real consumer that pipes through
-  `createGzip()`.
+- **Remaining Transform streams** (`createGunzip`/`createDeflate`/`createInflate`/
+  `createDeflateRaw`/`createInflateRaw`/`createUnzip` + `Gunzip`/`Deflate`/…
+  classes): bridge `CompressionStream`/`DecompressionStream` ↔ Node `Transform`
+  (flush opcodes, backpressure, chunk-boundary + error-code parity). `createGzip`
+  / `Gzip` is landed under ADR-0178; do not infer the rest of the surface from it.
 - **`unzip`/`unzipSync`** (auto-detect gzip vs zlib): header-sniff (0x1f8b → gzip,
   else zlib-deflate) is small but has its own parity surface; add when a consumer
   needs Content-Encoding auto-detect.
@@ -40,7 +40,7 @@ DELIBERATELY deferred from that PR.
 
 ## Reversibility
 
-Landed additive methods were REVERSIBLE (ADR-0159 records the subset boundary +
-options policy). The deferred Transform-stream contract is IRREVERSIBLE and needs a
-superseding/follow-up ADR before implementation; `unzip`/`crc32` are additive
+Landed additive methods were REVERSIBLE (ADR-0159 and ADR-0178 record the subset
+boundaries + options policy). The remaining Transform-stream contract is
+IRREVERSIBLE and needs a superseding/follow-up ADR before implementation; `unzip`/`crc32` are additive
 (REVERSIBLE).

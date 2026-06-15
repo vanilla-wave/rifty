@@ -31,6 +31,12 @@ describe('real Vite bootstrap preview routing', () => {
     expect(source).toContain('withViteCliArgs');
   });
 
+  it('runs real vite preview on the synthetic preview-local host without the dev wrapper config', () => {
+    expect(source).toContain("if (mode === 'preview')");
+    expect(source).toContain("return [...args, '--host', PREVIEW_LOCAL_HOST]");
+    expect(source).toContain("if (mode !== 'dev') return [...args]");
+  });
+
   it('forwards editor writes into the active real vite CLI child', () => {
     expect(source).toContain('let activeViteDevChild');
     expect(source).toContain("type: 'rifty:vite-file-change'");
@@ -73,11 +79,20 @@ describe('vite command — real installed bin routing', () => {
 
   it('routes vite npm scripts through the same shell/bin path as direct commands', () => {
     expect(source).toContain('const runPackageScript = async');
-    expect(source).toContain("devSpec.runtime !== 'vite' && isDevScriptName(devSpec, name)");
+    expect(source).toContain("devSpec.runtime === 'node-server' && isDevScriptName(devSpec, name)");
     expect(source).toContain('execBin: ownerBinExecutor');
     expect(source).toContain('const scriptShell = makeShell({ cwd: ctx.cwd, env: ctx.env })');
     expect(source).toContain('const result = await scriptShell.run(command');
     expect(source).not.toContain('only the dev line boots the co-resident server');
+  });
+
+  it('runs node-cli lifecycle scripts to completion through the node child executor', () => {
+    expect(source).toContain('const runNodeCliTemplate = async');
+    expect(source).toContain("devSpec.runtime === 'node-cli' && isDevScriptName(devSpec, name)");
+    expect(source).toContain('ctx.stdout.write(`cli: running ${devSpec.displayName}\\n`)');
+    expect(source).toContain('ownerNodeExecutor(devCfg.entryPath, [], ctx');
+    expect(source).toContain('onListening: () => {}');
+    expect(source).toContain('ctx.stdout.write(`[cli] completed with exit code ${code}\\n`)');
   });
 
   it('waits for preset dev-config dependency restore before running the next pty command', () => {
