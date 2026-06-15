@@ -366,7 +366,8 @@ async function bootDevServer(opts: {
         cwd: root,
         registry,
         onPackage: fromScratch
-          ? (event) => log(`+ ${event.name}@${event.version}${event.cacheHit ? ' (cached)' : ''}\n`)
+          ? (event) =>
+              log(`npm: + ${event.name}@${event.version}${event.cacheHit ? ' (cached)' : ''}\n`)
           : undefined,
       });
       log(`installed ${result.packages.length} packages (${result.conflicts.length} conflicts)\n`);
