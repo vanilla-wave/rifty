@@ -262,7 +262,11 @@ async function waitForListeningPort(port: number, timeoutMs: number): Promise<vo
  * Node-server tail: optionally bring up the `node:sqlite` engine, then run the
  * ENTRY as the server program and wait for its `listen(port)`.
  */
-async function bootNodeServer(cfg: NodeServerBootstrapConfig, loader: Loader): Promise<void> {
+async function bootNodeServer(
+  cfg: NodeServerBootstrapConfig,
+  loader: Loader,
+  log: (chunk: string) => void,
+): Promise<void> {
   if (cfg.sqlite) {
     // wasmBinary (not locateFile): the bundled same-origin asset is fetched
     // here, so the emscripten glue never walks its Node fs / web fetch
@@ -292,14 +296,18 @@ async function bootNodeServer(cfg: NodeServerBootstrapConfig, loader: Loader): P
     log('[real-vite/worker] node:sqlite engine ready\n');
   }
 
-  // Node parity: console.log IS stdout. Route the server program's console
-  // into the kernel stdio so its request/db logs land in the playground
-  // terminal instead of the worker devtools.
-  const proc = globalThis.process as unknown as {
-    stdout: { write(chunk: string): unknown };
-    stderr: { write(chunk: string): unknown };
+  // Node parity: console.log IS stdout. Route the server program's console into
+  // the dev-run's terminal stream (ADR-0148 P4: the co-resident server's boot AND
+  // async request logs land in the playground terminal, not the worker devtools —
+  // the persistent owner's global stdout goes to the owner diagnostic, so wire to
+  // `log` = the active `npm run dev` run's `ctx.stdout`, live for the whole run).
+  const termWriter = {
+    write(chunk: string): boolean {
+      log(chunk);
+      return true;
+    },
   };
-  (globalThis as { console: unknown }).console = new Console(proc.stdout, proc.stderr);
+  (globalThis as { console: unknown }).console = new Console(termWriter, termWriter);
 
   log(`[real-vite/worker] starting server ${cfg.entryPath} on port ${cfg.port}…\n`);
   await loader.import(cfg.entryPath, `${cfg.root}/__entry__.mjs`);
@@ -423,7 +431,7 @@ async function bootDevServer(opts: {
   globalThis.process.env.PORT = String(port);
 
   if (cfg.runtime === 'node-server') {
-    await bootNodeServer(cfg, loader);
+    await bootNodeServer(cfg, loader, log);
     publishSnapshot();
   }
 
