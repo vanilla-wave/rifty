@@ -515,6 +515,7 @@ async function bootShellOwner(opts: {
   let devCfg = cfg;
   let devSlug = slug;
   let devFromScratch = fromScratch;
+  let lastDevTemplateId: string | null = null;
 
   // Co-resident dev server (ADR-0148 P4): the vite/node tail runs in THIS realm,
   // on demand, reading the realm's installed tree → it sees terminal-installed deps.
@@ -522,8 +523,22 @@ async function bootShellOwner(opts: {
     send,
     // v1: boot runs to completion; a Ctrl-C mid-boot takes effect right after
     // (the controller stops the server once `signal` aborts) — not mid-install.
-    boot: (_signal, devLog) =>
-      bootDevServer({
+    boot: (_signal, devLog) => {
+      if (lastDevTemplateId !== null && lastDevTemplateId !== devSpec.id) {
+        // Template switched: a fresh worker per preset used to keep node_modules
+        // clean; the ONE persistent owner accumulates the prior preset's deps,
+        // which trips the new template's lockfile coverage (EBROKENLOCK). Clear
+        // node_modules + the lockfile so the new template installs cleanly.
+        const fs = syncMirror();
+        try {
+          fs.rmSync(`${devCfg.root}/node_modules`, { recursive: true, force: true });
+          fs.rmSync(`${devCfg.root}/package-lock.json`, { force: true });
+        } catch {
+          /* best-effort clean */
+        }
+      }
+      lastDevTemplateId = devSpec.id;
+      return bootDevServer({
         cfg: devCfg,
         // The dev server listens on the template port (cfg.port), distinct from
         // `port` (the owner's snapshot/nm/vfs-write bridge key).
@@ -535,7 +550,8 @@ async function bootShellOwner(opts: {
         ownerToken,
         publishSnapshot,
         log: devLog,
-      }),
+      });
+    },
   });
 
   // Editor writes land via the vfs-write bridge; forward them to the running dev
