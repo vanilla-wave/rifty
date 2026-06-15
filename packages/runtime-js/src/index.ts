@@ -18,3 +18,7 @@ export type {
 } from './protocol.ts';
 export { registerBuiltin, isBuiltinSpecifier, listBuiltins } from './builtins/index.ts';
 export type { BuiltinFactory } from './builtins/index.ts';
+export { installRuntimeJsFsHandlers } from './ipc/fs-handlers.ts';
+export { SyncRpcFsSync } from './ipc/sync-rpc-fs.ts';
+export type { SyncCall } from './ipc/sync-rpc-fs.ts';
+export { FS_RPC_CHUNK } from './ipc/fs-rpc-protocol.ts';
