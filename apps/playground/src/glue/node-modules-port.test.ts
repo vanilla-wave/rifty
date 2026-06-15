@@ -8,13 +8,14 @@
  * (no fixed-`tick()` timing — the promise settles when the reply arrives).
  */
 
-import { syncMirror } from '@riftydev/vfs';
+import { normalizePath, syncMirror } from '@riftydev/vfs';
 import { resetSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   NODE_MODULES_MAX_CONTENT_BYTES,
   type NodeModulesBridge,
   bridgeNodeModulesReads,
+  isReadablePath,
   serveNodeModulesReads,
 } from './node-modules-port.ts';
 
@@ -24,8 +25,8 @@ const dec = new TextDecoder();
 const teardowns: Array<() => void> = [];
 let bridge: NodeModulesBridge | null = null;
 
-function serve(port: number): void {
-  teardowns.push(serveNodeModulesReads(port));
+function serve(port: number, root = '/workspace'): void {
+  teardowns.push(serveNodeModulesReads(port, root));
 }
 
 function client(port: number, timeoutMs?: number): NodeModulesBridge {
@@ -51,6 +52,17 @@ function seedViteTree(): void {
   fs.writeFileSync('/workspace/node_modules/vite/package.json', enc.encode('{"name":"vite"}'));
   fs.writeFileSync('/workspace/src/main.js', enc.encode('console.log(1)'));
 }
+
+describe('isReadablePath (ADR-0148 SSoT read-port widening)', () => {
+  it('serves any path under the workspace root, blocks escapes', () => {
+    expect(isReadablePath('/workspace/src/main.js', '/workspace')).toBe(true);
+    expect(isReadablePath('/workspace/node_modules/ms/index.js', '/workspace')).toBe(true);
+    expect(isReadablePath('/workspace', '/workspace')).toBe(true);
+    // a "../" escape normalises outside root → refused
+    expect(isReadablePath(normalizePath('/workspace/../etc/passwd'), '/workspace')).toBe(false);
+    expect(isReadablePath('/etc/passwd', '/workspace')).toBe(false);
+  });
+});
 
 describe('node_modules read bridge', () => {
   it('round-trips a readdir: one level of entries, dirs before files, kind + size', async () => {
@@ -87,19 +99,18 @@ describe('node_modules read bridge', () => {
     expect(res.content).toBeNull();
   });
 
-  it('refuses a path outside node_modules (scope guard)', async () => {
+  it('serves a non-node_modules workspace path (SSoT read-port widening, ADR-0148)', async () => {
     seedViteTree();
     serve(8104);
-    await expect(client(8104).readdir('/workspace/src')).rejects.toThrow(/node_modules/);
+    const entries = await client(8104).readdir('/workspace/src');
+    expect(entries.map((e) => e.name)).toEqual(['main.js']);
   });
 
-  it('refuses a "../" traversal escaping node_modules', async () => {
+  it('refuses a "../" traversal escaping the workspace root', async () => {
     seedViteTree();
     serve(8105);
-    // normalises to /workspace/src — outside node_modules → refused
-    await expect(client(8105).readdir('/workspace/node_modules/../src')).rejects.toThrow(
-      /node_modules/,
-    );
+    // normalises to /etc — outside the workspace root → refused
+    await expect(client(8105).readdir('/workspace/../etc')).rejects.toThrow(/workspace root/);
   });
 
   it('surfaces an ENOENT readdir as a rejection carrying the worker message', async () => {

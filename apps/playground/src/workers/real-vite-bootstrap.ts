@@ -383,8 +383,8 @@ async function bootShellOwner(opts: {
 
   // node_modules read bridge (ADR-0080): the page explorer reads the installed
   // tree against this realm's syncMirror. Kept live by the serve:true realm.
-  const tearNodeModulesBridge = serveNodeModulesReads(port);
-  log('[shell-owner/worker] pty server ready; node_modules read bridge live\n');
+  const tearNodeModulesBridge = serveNodeModulesReads(port, cfg.root);
+  log('[shell-owner/worker] pty server ready; workspace read bridge live\n');
 
   // Referenced so the served bridges + server aren't GC'd while the realm serves.
   void tearVfsBridge;
@@ -606,7 +606,7 @@ async function bootstrap(): Promise<void> {
   // Lazy node_modules read bridge (ADR-0080): answers the page explorer's reads
   // against this realm's syncMirror (holds the installed tree — snapshot exclusion
   // never touched the mirror). Relies on the keep-alive below to answer reads.
-  const tearNodeModulesBridge = serveNodeModulesReads(port);
+  const tearNodeModulesBridge = serveNodeModulesReads(port, root);
   log('[real-vite/worker] node_modules read bridge ready\n');
 
   // Long-lived owner (ADR-0144 server-process model). This worker is spawned
