@@ -70,6 +70,11 @@
 
 ### Fixed
 
+- **`node:constants` no longer exports an empty placeholder.** It now exposes a frozen flattened
+  table backed by supported `fs.constants`, rifty's Linux-ABI
+  `os.constants.{signals,errno,priority,dlopen}`, and real `crypto.constants`; unsupported
+  constant keys throw `NotImplementedError('constants.<key>')` instead of silently reading as
+  `undefined`.
 - **`node:vm` (quickjs) inbound prototype-method fidelity (T19).** A host array/object seeded
   into a context now carries its PROTOTYPE METHODS in the guest (`items.map`/`join`,
   `obj.hasOwnProperty`) while staying `instanceof Array`/`Object` FALSE and `Array.isArray` TRUE —

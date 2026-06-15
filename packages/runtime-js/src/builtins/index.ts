@@ -3,6 +3,7 @@ import assertModule, { strict as assertStrict } from './assert.ts';
 import bufferModule, { Buffer } from './buffer.ts';
 import childProcessModule, { ensureExecSyncHandlerInstalled } from './child_process.ts';
 import consoleModule from './console.ts';
+import nodeConstants from './constants.ts';
 import cryptoModule from './crypto.ts';
 import diagnosticsChannelModule from './diagnostics_channel.ts';
 /**
@@ -21,16 +22,7 @@ import diagnosticsChannelModule from './diagnostics_channel.ts';
  */
 import { EventEmitter, once as eventsOnce } from './events.ts';
 import fsModule, { promises as fsPromises } from './fs.ts';
-import {
-  cluster,
-  punycode,
-  repl,
-  sys,
-  async_hooks,
-  inspector,
-  constants as nodeConstants,
-  v8,
-} from './misc-stubs.ts';
+import { cluster, punycode, repl, sys, async_hooks, inspector, v8 } from './misc-stubs.ts';
 import moduleModule from './module.ts';
 import { dgram, dns, readline, tls, zlib, http2 } from './null-net-stubs.ts';
 import osModule from './os.ts';
