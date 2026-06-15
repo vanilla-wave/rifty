@@ -46,11 +46,14 @@ export class SyncRpcFsSync implements FsSync {
       const chunk = this.call(FS_METHODS.readChunk, {
         path,
         offset,
-        length: FS_RPC_CHUNK,
+        length: Math.min(FS_RPC_CHUNK, size - offset),
       }) as Uint8Array;
       if (chunk.length === 0) break; // truncated mid-read; return what we have
-      out.set(chunk, offset);
-      offset += chunk.length;
+      // Defensive clamp: if the owner returns more bytes than requested (concurrent
+      // grow race), copy only what fits the originally-stat'd snapshot (ADR-0150 P6a).
+      const usable = Math.min(chunk.length, size - offset);
+      out.set(chunk.subarray(0, usable), offset);
+      offset += usable;
     }
     return offset === size ? out : out.subarray(0, offset);
   }

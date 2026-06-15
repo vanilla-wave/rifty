@@ -58,13 +58,34 @@ describe('SyncRpcFsSync', () => {
     const big = new Uint8Array(FS_RPC_CHUNK * 2 + 123).map((_, i) => i % 251);
     remote.writeFileSync('/big.bin', big);
     const got = remote.readFileBytesSync('/big.bin');
-    expect(got.length).toBe(big.length);
-    expect(got[0]).toBe(big[0]);
-    expect(got[got.length - 1]).toBe(big[big.length - 1]);
+    expect(got).toEqual(big);
   });
 
   it('statSyncOrNull returns null on a miss', () => {
     const remote = new SyncRpcFsSync(loopback(new MemoryFsSync()));
     expect(remote.statSyncOrNull('/nope')).toBeNull();
+  });
+
+  it('readFileBytesSync does not throw when readChunk returns more bytes than originally stat-d size (concurrent grow)', () => {
+    // Regression: if a concurrent writer grows the file between statOrNull and a
+    // readChunk call the owner may return a chunk larger than `size - offset`,
+    // which caused `out.set(chunk, offset)` to throw RangeError (P6a ADR-0150).
+    const N = 10;
+    const extra = 5; // owner returns N+extra bytes on the first chunk call
+    const fakeCall = (method: string, _payload: unknown): unknown => {
+      if (method === 'fs.statOrNull') return { isFile: true, isDirectory: false, size: N };
+      if (method === 'fs.readChunk') {
+        // Return more bytes than N to simulate the concurrent-grow race.
+        return new Uint8Array(N + extra).fill(0xab);
+      }
+      throw new Error(`unexpected: ${method}`);
+    };
+    const remote = new SyncRpcFsSync(fakeCall);
+    let result: Uint8Array | undefined;
+    expect(() => {
+      result = remote.readFileBytesSync('/f.bin');
+    }).not.toThrow();
+    // Must return exactly N bytes (the originally stat'd snapshot size).
+    expect(result!.length).toBe(N);
   });
 });
