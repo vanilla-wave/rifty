@@ -23,14 +23,17 @@
  * paths (A-026's whole point is the page realm stops paying for them).
  */
 
+import { getKernelDispatcher, setKernelWorkerUrl } from '@riftydev/kernel';
 import { dispatchToPort, listPorts, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { initSqliteEngine } from '@riftydev/net/sqlite/engine';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
 import { RegistryClient, install } from '@riftydev/npm-client';
+import { installRuntimeJsFsHandlers } from '@riftydev/runtime-js';
 import { Buffer } from '@riftydev/runtime-js/builtins/buffer';
 import { Console } from '@riftydev/runtime-js/builtins/console';
 import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
+import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { installProcessGlobals, setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
@@ -75,7 +78,7 @@ import {
 } from '../templates/project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
 import { type DevServerHandle, createDevServerController } from './dev-server-controller.ts';
-import { createOwnerBinExecutor } from './owner-bin-executor.ts';
+import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
 import { createPtyServer } from './pty-server.ts';
 import { type ViteModuleGraph, invalidateViteModule } from './real-vite-invalidation.ts';
 
@@ -520,6 +523,8 @@ async function bootShellOwner(opts: {
   readonly slug: string;
   readonly fromScratch: boolean;
   readonly ownerToken: string | undefined;
+  /** node-entry bootstrap worker URL — the child each CLI runs in (ADR-0150 P6a). */
+  readonly nodeEntryWorkerUrl: string;
 }): Promise<void> {
   const { cfg, port, kernelIpc, publishSnapshot, spec, slug, fromScratch, ownerToken } = opts;
 
@@ -593,7 +598,11 @@ async function bootShellOwner(opts: {
 
   const vfs = new SyncMirrorVfs();
   const registry = new RegistryClient({ fetch: proxiedRegistryFetch() });
-  const ownerBinExecutor = createOwnerBinExecutor();
+  // ADR-0150 P6a: each foreground CLI runs in a supervised child worker-process
+  // (RIFTY_REMOTE_FS=1) reading the owner store over fs.* sync-RPC — the owner
+  // thread stays responsive (blocking work left it). The in-realm
+  // createOwnerBinExecutor stays as a documented fallback (owner-bin-executor.ts).
+  const ownerBinExecutor = createOwnerChildBinExecutor(opts.nodeEntryWorkerUrl);
 
   // Both `vite` (vite templates' dev line) and `npm run <script>` (node templates,
   // via package.json) boot the co-resident dev server and BLOCK the run until
@@ -727,6 +736,20 @@ async function bootstrap(): Promise<void> {
     publishVfsSnapshot(port, collectSnapshot(syncMirror(), root));
   };
 
+  // ADR-0150 P6a: the owner spawns each foreground CLI as a supervised child
+  // worker-process; give this realm the kernel + node-entry worker URLs (recursive
+  // spawn) and serve the child's fs over the kernel dispatcher (owner = SSoT).
+  const kernelWorkerUrl = env.RIFTY_KERNEL_WORKER_URL;
+  const nodeEntryWorkerUrl = env.RIFTY_NODE_ENTRY_WORKER_URL;
+  if (!kernelWorkerUrl || !nodeEntryWorkerUrl) {
+    throw new Error(
+      'workspace-owner: missing RIFTY_KERNEL_WORKER_URL / RIFTY_NODE_ENTRY_WORKER_URL — cannot spawn child CLIs',
+    );
+  }
+  setKernelWorkerUrl(kernelWorkerUrl);
+  setNodeEntryWorkerUrl(nodeEntryWorkerUrl);
+  installRuntimeJsFsHandlers(getKernelDispatcher(), syncMirror);
+
   // ADR-0148 P4: ONE unified owner — shell sessions + the co-resident dev server
   // (started on demand by `vite` / `npm run <script>`), all against this realm's
   // installed tree. The legacy per-run preview tail is gone (folded into
@@ -740,6 +763,7 @@ async function bootstrap(): Promise<void> {
     slug,
     fromScratch,
     ownerToken,
+    nodeEntryWorkerUrl,
   });
 }
 

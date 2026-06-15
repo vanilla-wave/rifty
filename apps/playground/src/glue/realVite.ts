@@ -17,6 +17,8 @@ import { bridgeCrossRealmPreview, registerPort, unregisterPort } from '@riftydev
 import { NotImplementedError } from '@riftydev/vfs';
 import type { ProjectSpec } from '../templates/project-spec.ts';
 import { defaultProjectSpec } from '../templates/registry.ts';
+import kernelWorkerUrl from '../workers/kernel-worker-entry.ts?worker&url';
+import nodeEntryWorkerUrl from '../workers/node-entry-bootstrap.ts?worker&url';
 import bootstrapWorkerUrl from '../workers/real-vite-bootstrap.ts?worker&url';
 import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
 import {
@@ -211,6 +213,10 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
         // Node idiom for node-server template entries (`process.env.PORT`): the
         // co-resident dev server listens on the template's default port.
         PORT: String(template.defaultPort),
+        // ADR-0150 P6a: worker URLs the owner needs to recursively spawn each
+        // foreground CLI as a supervised child (kernel realm + node-entry boot).
+        RIFTY_KERNEL_WORKER_URL: kernelWorkerUrl,
+        RIFTY_NODE_ENTRY_WORKER_URL: nodeEntryWorkerUrl,
       },
       cwd: root,
       // ADR-0144: long-lived owner — the realm stays alive past the bootstrap
