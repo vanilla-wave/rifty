@@ -74,6 +74,12 @@ export interface PtyServerDeps {
   readonly send: (frame: OwnerToPageFrame) => void;
   /** Builds a session Shell (owner npm builtin + in-realm execBin), seeded with cwd/env. */
   readonly makeShell: (seed?: ShellSeed) => Shell;
+  /**
+   * Owner re-publishes dev-server state on a page request (ADR-0148 P4). Wired by
+   * the bootstrap to the dev-server controller; the pty-server stays
+   * dev-server-agnostic (it only forwards the request).
+   */
+  readonly onDevServerReq?: () => void;
 }
 
 export interface PtyServer {
@@ -167,6 +173,10 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
         const session = sessions.get(frame.sid);
         if (session) for (const run of session.runs.values()) run.controller.abort();
         sessions.delete(frame.sid);
+        return;
+      }
+      case 'pty:dev-server-req': {
+        deps.onDevServerReq?.();
         return;
       }
     }

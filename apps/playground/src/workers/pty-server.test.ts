@@ -115,4 +115,17 @@ describe('pty-server', () => {
     expect(exit && exit.type === 'pty:exit' && exit.cwd).toBe('/work');
     expect(exit && exit.type === 'pty:exit' && exit.env.FOO).toBe('bar');
   });
+
+  it('routes pty:dev-server-req to onDevServerReq (ADR-0148)', () => {
+    let reqs = 0;
+    const server = createPtyServer({
+      send: () => {},
+      makeShell: () => new Shell({ cwd: '/', env: {} }),
+      onDevServerReq: () => {
+        reqs++;
+      },
+    });
+    server.handleFrame({ type: 'pty:dev-server-req' });
+    expect(reqs).toBe(1);
+  });
 });
