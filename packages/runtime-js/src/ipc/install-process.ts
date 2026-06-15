@@ -24,6 +24,7 @@
 import { EventEmitter } from '@riftydev/io';
 import { type IpcFrame, type KernelProcessSpec, setKernelPreEntryHook } from '@riftydev/kernel';
 import type { WorkerSpawnSpec } from '@riftydev/kernel';
+import { NODE_PROCESS_IDENTITY } from '../builtins/process-identity.ts';
 
 /**
  * The `process` shim the installer attaches to globalThis.
@@ -39,6 +40,13 @@ export interface NodeProcessShim extends EventEmitter {
   pid: number;
   ppid: number;
   argv: readonly string[];
+  argv0: string;
+  execPath: string;
+  platform: string;
+  arch: string;
+  version: string;
+  versions: Readonly<Record<string, string>>;
+  title: string;
   env: Readonly<Record<string, string>>;
   cwd(): string;
   stdout: { write(chunk: string | Uint8Array): boolean };
@@ -157,6 +165,13 @@ class WorkerNodeProcessShim extends EventEmitter implements NodeProcessShim {
   readonly pid: number;
   readonly ppid: number;
   readonly argv: readonly string[];
+  readonly argv0 = NODE_PROCESS_IDENTITY.argv0;
+  readonly execPath = NODE_PROCESS_IDENTITY.execPath;
+  readonly platform = NODE_PROCESS_IDENTITY.platform;
+  readonly arch = NODE_PROCESS_IDENTITY.arch;
+  readonly version = NODE_PROCESS_IDENTITY.version;
+  readonly versions = NODE_PROCESS_IDENTITY.versions;
+  readonly title = NODE_PROCESS_IDENTITY.title;
   readonly env: Readonly<Record<string, string>>;
   readonly stdout: { write(chunk: string | Uint8Array): boolean };
   readonly stderr: { write(chunk: string | Uint8Array): boolean };

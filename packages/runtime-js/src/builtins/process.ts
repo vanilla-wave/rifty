@@ -13,6 +13,7 @@
 import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+import { NODE_PROCESS_IDENTITY } from './process-identity.ts';
 
 const nextTickQueue: Array<{ fn: (...args: unknown[]) => void; args: unknown[] }> = [];
 // Head cursor instead of shift()-per-item: O(n) drain, not O(n^2) (#27, perf-audit
@@ -85,18 +86,15 @@ function patchPromiseForNextTick(): void {
 class RiftyProcess extends EventEmitter {
   env: Record<string, string | undefined> = Object.create(null);
   argv: string[] = ['rifty', 'repl'];
-  argv0 = 'rifty';
-  execPath = '/usr/local/bin/rifty';
-  platform = 'rifty';
-  arch = 'wasm';
-  // TODO(backlog: runtime-js/process-versions-node-honesty) — `version`/`versions.node` impersonate Node
-  // while `platform`/`arch` follow ADR-0026's honesty principle. Tracked for
-  // human review by M11 close; see docs/backlog/runtime-js/process-versions-node-honesty.md.
-  version = 'v22.0.0';
-  versions = { node: '22.0.0', v8: '12.0.0', rifty: '0.0.0' };
+  readonly argv0 = NODE_PROCESS_IDENTITY.argv0;
+  readonly execPath = NODE_PROCESS_IDENTITY.execPath;
+  readonly platform = NODE_PROCESS_IDENTITY.platform;
+  readonly arch = NODE_PROCESS_IDENTITY.arch;
+  readonly version = NODE_PROCESS_IDENTITY.version;
+  readonly versions = NODE_PROCESS_IDENTITY.versions;
   pid = 1;
   ppid = 0;
-  title = 'rifty';
+  readonly title = NODE_PROCESS_IDENTITY.title;
   exitCode = 0;
   stdout = { write: (chunk: string) => console.log(chunk), isTTY: false, fd: 1 };
   stderr = { write: (chunk: string) => console.error(chunk), isTTY: false, fd: 2 };
