@@ -4,6 +4,19 @@
 
 ### Added
 
+- **Foreground CLIs run in a supervised child worker (P6a of ADR-0150).** Each
+  shell-resolved `.bin`/node CLI now runs in a child worker-process the owner
+  SUPERVISES — resolution stays owner-side, the child reads+writes the owner store
+  over `fs.*` sync-RPC (`RIFTY_REMOTE_FS=1`) instead of running in-realm — so the
+  owner stays a free async supervisor while a CLI runs (ADR-0150 `waitAsync`
+  invariant). `createOwnerChildBinExecutor` (over `globalProcessManager.spawnWorker`)
+  replaces the in-realm `createOwnerBinExecutor` at the frozen `BinExecutor` seam
+  (ADR-0137); the owner registers the `fs.*` handlers + receives the kernel +
+  node-entry worker URLs via env (recursive spawn). New e2e
+  `owner-shell-responsive`: two terminals' children run concurrently + Ctrl-C kills
+  a running child; `owner-shell-cowsay` now exercises the child path. (P6b — the
+  dev server → child — is the remaining D phase.)
+
 - **OPFS persistence in the workspace owner (P5 of ADR-0143 "D").** The owner now
   `await initBackend()` at boot like every other worker realm
   (`runtime-js/worker-entry`, `rifty/sandbox`) — it was the only realm left on

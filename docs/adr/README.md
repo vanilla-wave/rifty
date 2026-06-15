@@ -155,6 +155,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0143 | Bin/shell execution model: owner-worker vs SAB fs-proxy |
 | 0146 | PTY channel and owner-resident shell — ADR-0143 P2 |
 | 0148 | Unified workspace owner co-resident dev-server and single source of truth ADR-0143 P4 |
+| 0150 | Supervised child processes over SAB sync-views (D P6) |
 
 ### terminal
 

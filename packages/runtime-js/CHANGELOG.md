@@ -4,6 +4,15 @@
 
 ### Added
 
+- **`fs.*` sync-RPC surface for supervised child processes (P6a of ADR-0150).**
+  `installRuntimeJsFsHandlers(dispatcher, getVfs)` serves a child's `node:fs` +
+  module-loader reads/writes against the parent's `syncMirror()` over the SAB ring
+  (binary read replies, base64 write requests, both chunked under the 1 MiB ring);
+  `SyncRpcFsSync` is the child-side `FsSync` over `KernelSyncApi.call`;
+  `installRemoteSyncFs(call)` swaps the child realm's GLOBAL mirror so BOTH the
+  loader and `node:fs` route to the owner store (owner = SSoT). `installConsole` /
+  `ConsoleSink` are now public (a spawned CLI wires its `console.*` to its stdout).
+
 - **Run a VFS Node entry through the module loader (ADR-0137).** New
   `runNodeEntry` primitive (`builtins/node-entry.ts`) + `node-entry-url.ts` host
   seam (`setNodeEntryWorkerUrl`/`getNodeEntryWorkerUrl`, mirrors the kernel's
@@ -14,6 +23,13 @@
   script with a shebang / relative import runs via the loader.
 
 ### Fixed
+
+- **Spawned-child `process` exposes Node identity fields (P6a of ADR-0150).** The
+  kernel pre-entry `WorkerNodeProcessShim` lacked `versions`/`version`/`platform`/
+  `arch`/`argv0`/`execPath`/`title` (only the owner-grade `RiftyProcess` had them),
+  so a real CLI in a spawned child threw on `process.versions.*` (yargs →
+  `isElectronApp`). A shared frozen `NODE_PROCESS_IDENTITY` now feeds both — owner
+  and child report identically.
 
 - **`createReadStream` prefers the sync content cache over the async disk surface
   (P5 of ADR-0143 "D", ADR-0148).** On an OPFS-backed realm `OpfsVfs.openReadable`
