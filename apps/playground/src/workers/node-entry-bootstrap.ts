@@ -10,21 +10,25 @@
  * `import`/`require` resolved against the VFS, which the kernel's raw
  * `kind:'source'` (`new AsyncFunction`) path cannot do.
  *
- * VFS SELECTION (ADR-0150 P6a): when `RIFTY_REMOTE_FS=1` the child reads the
- * OWNER store over `fs.*` sync-RPC (`SyncRpcFsSync`), closing the ENOENT gap
- * documented here previously. Without it, falls back to the realm's own (empty)
- * sync mirror — legacy path for page-side per-bin executor + execSync.
+ * VFS SELECTION (ADR-0150 P6a, KNOWN GAP closed): when `RIFTY_REMOTE_FS=1` the
+ * child installs the owner store as its GLOBAL sync mirror via
+ * `installRemoteSyncFs`. This ensures BOTH the module loader AND `node:fs`
+ * builtins (which read `syncMirror()`) route to the owner over RPC — closing the
+ * ENOENT gap that arose when only the loader received the remote VFS.
  *
  * `RIFTY_BIN=1` marks a `node_modules/.bin/<name>` launcher shim (run its
  * import target). Run-to-completion: when the entry's top-level settles the
  * realm exits and the kernel posts the exit code; a throw propagates to the
  * kernel worker-entry, which surfaces it on stderr (exit 1) — never silent.
+ *
+ * NOTE: `initBackend()` is NOT called here — the child reads via RPC, never its
+ * own OPFS, avoiding the concurrent-OPFS-writer hazard.
  */
 
 import { readKernelSyncApi } from '@riftydev/kernel';
+import { installRemoteSyncFs } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { syncMirror } from '@riftydev/vfs';
-import { selectEntryVfs } from './select-entry-vfs.ts';
 
 const proc = globalThis.process;
 const entryPath = proc.argv[1];
@@ -32,15 +36,20 @@ if (typeof entryPath !== 'string' || entryPath === '') {
   throw new Error('node-entry-bootstrap: missing entry path (process.argv[1])');
 }
 
-const syncApi = readKernelSyncApi();
-const vfs = selectEntryVfs({
-  remoteFs: proc.env.RIFTY_REMOTE_FS === '1',
-  call: syncApi ? syncApi.call : null,
-  localVfs: syncMirror,
-});
+// ADR-0150 P6a: when spawned as a supervised child (RIFTY_REMOTE_FS=1), make the
+// owner store this realm's sync mirror — both the module loader AND node:fs read it.
+if (proc.env.RIFTY_REMOTE_FS === '1') {
+  const syncApi = readKernelSyncApi();
+  if (syncApi === null) {
+    throw new Error(
+      'node-entry: RIFTY_REMOTE_FS=1 but no kernel sync call published — cannot reach the owner store',
+    );
+  }
+  installRemoteSyncFs(syncApi.call);
+}
 
 await runNodeEntry({
-  vfs,
+  vfs: syncMirror(),
   entryPath,
   cwd: proc.cwd(),
   bin: proc.env.RIFTY_BIN === '1',

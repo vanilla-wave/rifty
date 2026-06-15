@@ -8,6 +8,7 @@
  */
 
 import type { FsSync, VfsDirent } from '@riftydev/vfs';
+import { setSyncMirror } from '../builtins/fs-sync-mirror.ts';
 import { FS_METHODS, FS_RPC_CHUNK, type FsStatShape, bytesToBase64 } from './fs-rpc-protocol.ts';
 
 /** The published in-Worker sync-call shim (`KernelSyncApi.call`). */
@@ -101,4 +102,16 @@ export class SyncRpcFsSync implements FsSync {
   cpSync(src: string, dst: string, options?: { recursive?: boolean }): void {
     this.call(FS_METHODS.cp, { src, dst, recursive: options?.recursive === true });
   }
+}
+
+/**
+ * Install a {@link SyncRpcFsSync} as this realm's GLOBAL sync mirror (ADR-0150
+ * P6a). A spawned child calls this so BOTH the module loader AND the `node:fs`
+ * builtins (which read `syncMirror()`) resolve against the owner store over
+ * `fs.*` RPC. Returns the installed remote VFS.
+ */
+export function installRemoteSyncFs(call: SyncCall): SyncRpcFsSync {
+  const vfs = new SyncRpcFsSync(call);
+  setSyncMirror(vfs);
+  return vfs;
 }
