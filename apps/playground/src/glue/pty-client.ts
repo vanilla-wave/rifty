@@ -11,7 +11,12 @@
  * for forward-compat loss-detect). cwd/env are cached from `pty:exit` so the
  * PAGE can render prompt/explorer scope without round-tripping the owner.
  */
-import type { OwnerToPageFrame, PageToOwnerFrame, PtyStream } from './pty-protocol.ts';
+import type {
+  OwnerToPageFrame,
+  PageToOwnerFrame,
+  PtyDevServer,
+  PtyStream,
+} from './pty-protocol.ts';
 
 const dec = new TextDecoder();
 let ridCounter = 0;
@@ -44,6 +49,8 @@ type SessionState = { cwd: string; env: Record<string, string>; readyResolvers: 
 export interface PtyClientDeps {
   /** Posts a page→owner frame over the kernel IPC channel (wired by realVite). */
   send: (frame: PageToOwnerFrame) => void;
+  /** Owner→page dev-server state (ADR-0148 P4); the page derives its LIVE pill + preview port. */
+  onDevServer?: (frame: PtyDevServer) => void;
 }
 
 /** Seed cwd/env for a session (restored persisted terminal state, ADR-0146). */
@@ -65,6 +72,8 @@ export interface PtyClient {
   signal(sid: string, rid: string): void;
   resize(sid: string, rid: string, cols: number, rows: number): void;
   closeSession(sid: string): void;
+  /** Ask the owner to re-publish dev-server state (P3 handshake on subscribe/reload). */
+  requestDevServer(): void;
   /** Cached cwd/env for a session (from the last `pty:exit`). */
   snapshot(sid: string): PtySessionSnapshot;
   /** Feed an owner→page frame (from `handle.on('message')`). */
@@ -123,6 +132,9 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       deps.send({ type: 'pty:close', sid });
       sessions.delete(sid);
     },
+    requestDevServer(): void {
+      deps.send({ type: 'pty:dev-server-req' });
+    },
     snapshot(sid: string): PtySessionSnapshot {
       const s = sessions.get(sid);
       return s ? { cwd: s.cwd, env: s.env } : { cwd: '/', env: {} };
@@ -146,6 +158,10 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
             runs.delete(frame.rid);
             run.resolve(frame.code);
           }
+          return;
+        }
+        case 'pty:dev-server': {
+          deps.onDevServer?.(frame);
           return;
         }
       }

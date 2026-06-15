@@ -125,4 +125,19 @@ describe('pty-client', () => {
     client.disconnect(); // owner died
     await expect(p).resolves.toBeGreaterThan(0); // nonzero exit, not a hang
   });
+
+  it('routes pty:dev-server to onDevServer (ADR-0148)', () => {
+    const seen: unknown[] = [];
+    const client = createPtyClient({ send: () => {}, onDevServer: (f) => seen.push(f) });
+    client.onFrame({ type: 'pty:dev-server', status: 'running', port: 5174, url: '/preview/5174/' });
+    expect(seen).toEqual([
+      { type: 'pty:dev-server', status: 'running', port: 5174, url: '/preview/5174/' },
+    ]);
+  });
+
+  it('requestDevServer sends a pty:dev-server-req (P3 handshake)', () => {
+    const { client, sent } = harness();
+    client.requestDevServer();
+    expect(sent).toEqual([{ type: 'pty:dev-server-req' }]);
+  });
 });
