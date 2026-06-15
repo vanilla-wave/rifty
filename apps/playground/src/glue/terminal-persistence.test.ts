@@ -1,4 +1,8 @@
-import type { TerminalHistoryFs, TerminalHistoryVfs } from '@riftydev/terminal/history';
+import type {
+  TerminalHistoryFs,
+  TerminalHistoryRecord,
+  TerminalHistoryVfs,
+} from '@riftydev/terminal/history';
 import type { TerminalStateFs, TerminalStateVfs } from '@riftydev/terminal/state';
 import { describe, expect, it } from 'vitest';
 import { createTerminalPersistence } from './terminal-persistence.ts';
@@ -78,6 +82,58 @@ describe('terminal persistence adapter', () => {
       env: { FOO: 'bar' },
     });
     expect(reloaded.initialHistory.map((item) => item.command)).toEqual(['pwd']);
+  });
+
+  it('serializes saves so a slow earlier write cannot clobber a later one (P5 / OPFS race)', async () => {
+    // Regression (ADR-0148 P5): the OPFS owner's write-through adds OPFS I/O load
+    // that can REORDER the page's fire-and-forget history saves — an earlier
+    // save(records=[a]) landing AFTER a later save(records=[a,b]) drops `b`
+    // (e2e `terminal-persistence … OPFS after reload` flaked, dropping `pwd`).
+    // The adapter must serialize writes so the latest save wins.
+    const opfs = fakeStore();
+    const workspace = fakeStore();
+    // Force the FIRST history write to resolve LAST (the reorder pressure the
+    // owner's OPFS traffic creates in the real browser).
+    const realWrite = opfs.writeFile;
+    let writeCall = 0;
+    opfs.writeFile = (path, data) => {
+      const slow = writeCall++ === 0;
+      return new Promise<void>((resolve) => {
+        setTimeout(
+          () => {
+            void realWrite(path, data);
+            resolve();
+          },
+          slow ? 25 : 0,
+        );
+      });
+    };
+    const persistence = await createTerminalPersistence('/workspace', {
+      createOpfs: async () => opfs,
+      syncFs: () => workspace,
+    });
+    const rec = (command: string): TerminalHistoryRecord => ({
+      command,
+      cwd: '/workspace',
+      mode: 'dev',
+      sessionId: 's',
+      startedAt: '2026-06-15T00:00:00.000Z',
+      finishedAt: '2026-06-15T00:00:00.010Z',
+      durationMs: 10,
+      exitCode: 0,
+    });
+    // Two near-simultaneous fire-and-forget saves (the App.tsx call pattern).
+    const p1 = persistence.saveHistory([rec('first')]);
+    const p2 = persistence.saveHistory([rec('first'), rec('second')]);
+    await Promise.all([p1, p2]);
+
+    const reloaded = await createTerminalPersistence('/workspace', {
+      createOpfs: async () => opfs,
+      syncFs: () => workspace,
+    });
+    // Unserialized: the slow first write (['first']) lands last and clobbers
+    // ['first','second']. Serialized: the latest array survives.
+    expect(reloaded.initialHistory.map((item) => item.command)).toEqual(['first', 'second']);
   });
 
   it('falls back to default cwd when OPFS restores a path absent from the workspace VFS', async () => {

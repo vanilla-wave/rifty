@@ -40,7 +40,7 @@ import {
   setupPreviewBridge,
 } from '@riftydev/service-worker';
 import { type CommandContext, Shell } from '@riftydev/shell';
-import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
+import { dirname, initBackend, normalizePath, syncMirror } from '@riftydev/vfs';
 import type { SqlJsConfig } from 'sql.js';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { esbuildShimFiles, rollupShimFiles } from '../glue/esbuild-shim.ts';
@@ -702,6 +702,24 @@ async function bootstrap(): Promise<void> {
   // Both runtimes resolve relative paths (express.static('public'), tool cwd
   // probes) against the project root, whatever RIFTY_RFV_ROOT says.
   setProcessCwd(cfg.root);
+
+  // P5 (ADR-0013/0072): wire the OPFS-or-memory sync mirror BEFORE seeding so the
+  // owner's tree survives reload. The owner is the workspace source-of-truth
+  // (post-P4) and was the only worker realm not doing this; sibling realms already
+  // do (runtime-js/worker-entry.ts, rifty/sandbox.ts). This realm is a Worker →
+  // OpfsFsSync is supported, and a non-isolated host never spawns the owner.
+  // Degrade to memory on a surprise OPFS failure rather than bricking boot (mirrors
+  // boot.ts). seedProject is idempotent (`if !exists`) → the persisted tree stands.
+  try {
+    const backend = await initBackend();
+    log(`[shell-owner/worker] VFS backend: ${backend}\n`);
+  } catch (err) {
+    log(
+      `[shell-owner/worker] OPFS init failed, using in-memory (no persistence): ${
+        err instanceof Error ? err.message : String(err)
+      }\n`,
+    );
+  }
 
   // Reverse mirror (ADR-0076): publish the project tree (sans node_modules) to
   // the page so its file explorer reflects this worker's real project.

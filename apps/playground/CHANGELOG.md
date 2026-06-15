@@ -4,6 +4,18 @@
 
 ### Added
 
+- **OPFS persistence in the workspace owner (P5 of ADR-0143 "D").** The owner now
+  `await initBackend()` at boot like every other worker realm
+  (`runtime-js/worker-entry`, `rifty/sandbox`) — it was the only realm left on
+  memory, so the workspace (installed `node_modules`, edited + shell-written files)
+  vanished on `page.reload()`. The OPFS content-cache write-through (ADR-0072) is
+  the durability mechanism on its own; there is no per-command flush barrier — an
+  awaited drain coupled command latency to the unrelated boot write-through queue,
+  stalling the shell during boot (graceful drain-on-terminate →
+  `docs/backlog/shell/owner-graceful-drain-on-terminate`). New e2e
+  `owner-persistence-reload`: `echo > /workspace/persist.txt` → `page.reload()` →
+  `cat` survives (honest — fails on the memory backend).
+
 - **Unified workspace owner: co-resident dev-server + single source of truth
   (ADR-0148, P4 of ADR-0143 "D").** The `vite`/dev server now runs CO-RESIDENT
   inside the ONE persistent workspace owner — started on demand by the owner's
@@ -139,6 +151,16 @@
   preview at 560px instead of the original Soft Panels 464px.
 
 ### Fixed
+
+- **Terminal history/state saves serialized (P5 of ADR-0143 "D").** The page
+  persists best-effort (`void saveHistory(...)`) per command; under the now
+  OPFS-backed owner's write-through I/O the fire-and-forget OPFS writes could
+  reorder — an earlier full-array write landing after a later one and dropping the
+  most recent command (`terminal-persistence … OPFS after reload` flaked).
+  `createTerminalPersistence` now queues writes onto one tail so the latest save
+  wins. The reload e2e also waits for a command to finish before typing the next
+  (a command typed while the previous runs lands in its stdin — correct terminal
+  semantics the OPFS-slowed owner boot exposed; owner boot responsiveness → P6).
 
 - **P2 owner regressions caught only by CI e2e (ADR-0146).** Four baseline
   chromium specs broke under the owner-resident shell and are green again:

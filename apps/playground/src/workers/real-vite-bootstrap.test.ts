@@ -94,3 +94,15 @@ describe('node-server runtime branch', () => {
     expect(source.split('setupHmrBridge(').length - 1).toBe(1);
   });
 });
+
+describe('OPFS persistence wiring (P5)', () => {
+  it('wires the OPFS-or-memory backend before serving the owner (initBackend)', () => {
+    // The owner is the workspace source-of-truth post-P4 but was the only worker
+    // realm not calling initBackend() → memory-only, losing the tree on reload.
+    // P5 applies the established OPFS-boot pattern (runtime-js/worker-entry.ts).
+    // OPFS write-through (ADR-0072) is the durability mechanism on its own — no
+    // explicit per-command flush barrier (it only coupled command latency to the
+    // unrelated boot write-through queue).
+    expect(source).toContain('await initBackend()');
+  });
+});

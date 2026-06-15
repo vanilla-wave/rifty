@@ -1,0 +1,63 @@
+import { expect, test } from '@playwright/test';
+import {
+  expectTerminalContains,
+  openShellTerminal,
+  runTerminalLine,
+} from './helpers/playground.ts';
+
+/**
+ * P5 — owner OPFS persistence (chromium only; ADR-0013/0072 + ADR-0143 "D").
+ *
+ * The workspace owner is the single source-of-truth for the project tree
+ * (post-P4), but was the only worker realm not wiring `initBackend()` → it ran
+ * memory-only, so everything vanished on reload. P5 wires OPFS in the owner; the
+ * OPFS content-cache write-through (ADR-0072) then persists shell writes, so a
+ * file written from the shell survives `page.reload()`.
+ *
+ * Load-bearing: write `MARKER > /workspace/persist.txt`, reload (browser
+ * terminates the owner worker), re-open a shell, `cat` → MARKER returns from the
+ * OPFS-preloaded tree. On the memory backend this fails (the reload loses it),
+ * so the assertion is honest, not trivially green.
+ *
+ * Requires cross-origin isolation (the owner is SAB-IPC-gated; the harness serves
+ * COOP/COEP). Unique per-run marker → no dependence on (or pollution of) prior
+ * OPFS state across tests in a worker.
+ *
+ * Timing: the dev server auto-boots in Terminal 1 on mount and grabs terminal
+ * focus while it streams; we wait for the LIVE pill before opening the second
+ * shell so Terminal 2 stays the active session (else the active-terminal read
+ * lands on the dev-server log, not our shell).
+ */
+test.describe('owner workspace persists across reload (P5, OPFS)', () => {
+  test('a shell-written file survives page.reload()', async ({ page }) => {
+    test.setTimeout(120_000);
+    const marker = `persist-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+
+    await page.goto('/');
+    // Deterministic start: OPFS is per-origin and leaks across tests in a worker.
+    // Wipe it, then reload for a clean owner boot on an empty tree.
+    await page.evaluate(async () => {
+      const root = (await navigator.storage.getDirectory()) as FileSystemDirectoryHandle &
+        AsyncIterable<[string, FileSystemHandle]>;
+      for await (const [name] of root) await root.removeEntry(name, { recursive: true });
+    });
+    await page.reload();
+    await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 60_000 });
+    await openShellTerminal(page);
+
+    // Write via the shell → owner syncMirror. The dev server is already LIVE (boot
+    // write-through drained by the install stamp flush), so this small write drains
+    // to OPFS promptly — durable well before the reload below.
+    await runTerminalLine(page, `echo ${marker} > /workspace/persist.txt`);
+    await runTerminalLine(page, 'cat /workspace/persist.txt');
+    await expectTerminalContains(page, marker, 15_000);
+
+    // Reload: the browser terminates the owner worker; on re-boot the owner wires
+    // OPFS (initBackend) and preloads the persisted tree before serving.
+    await page.reload();
+    await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 60_000 });
+    await openShellTerminal(page);
+    await runTerminalLine(page, 'cat /workspace/persist.txt');
+    await expectTerminalContains(page, marker, 20_000);
+  });
+});

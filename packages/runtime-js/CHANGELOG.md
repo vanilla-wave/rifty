@@ -15,6 +15,16 @@
 
 ### Fixed
 
+- **`createReadStream` prefers the sync content cache over the async disk surface
+  (P5 of ADR-0143 "D", ADR-0148).** On an OPFS-backed realm `OpfsVfs.openReadable`
+  (`File.stream()`) stalls under cross-realm preview serving (`express.static` →
+  serve-static → `send`), 502ing static files while a dynamic route on the same
+  port works. The sync mirror's content cache (ADR-0072) is the authoritative,
+  fully-in-memory view, so `createReadStream` now serves from it, falling back to
+  `openReadable` only for paths the cache lacks. True async streaming (ADR-0020
+  phase 2) is restored once the OPFS stream is fixed (backlog:
+  `runtime-js/createreadstream-true-async-streaming`).
+
 - **Fork-IPC shim buffers messages until the first listener (ADR-0045 / ADR-0146
   P2).** `WorkerNodeProcessShim` emitted `'message'` on every inbound
   `ipc:message` frame even with zero `'message'` listeners → the frame dropped. A
