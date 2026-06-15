@@ -36,10 +36,10 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('const activeTemplate = ');
     expect(source).toContain('resolveProjectSpec(');
     expect(source).toContain('.templateId');
-    // the worker spawns with the ACTIVE template, not the registry default:
-    // the dev-server command snapshots it once, then hands it to the spawn
-    expect(source).toContain('const template = activeTemplate();');
-    expect(source).toContain('await startRealVite({\n        template,');
+    // ADR-0148 P4: the ONE workspace owner spawns with the ACTIVE template (it
+    // hosts both the shell and the co-resident dev server) — no per-run spawn.
+    expect(source).toContain('template: activeTemplate()');
+    expect(source).not.toContain('startRealVite');
   });
 
   it('opens preview tabs as an opener-owned iframe wrapper', () => {
@@ -50,10 +50,14 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('<title>rifty preview ${port}</title>');
   });
 
-  it('sends preset files before the entry once Vite is ready', () => {
-    expect(source).toContain(
-      'syncPresetFilesToWorker(handle, presetForId(activePreset()));\n    handle.updateEntry(machine.source());',
-    );
+  it('routes editor + program writes to the owner (SSoT, ADR-0148 P4)', () => {
+    // The preview worker is gone; editor/program edits flow to the ONE owner so
+    // the co-resident dev server HMR-updates against the same store it serves.
+    expect(source).toContain('function syncWorkspaceFileToOwner(path: string)');
+    expect(source).toContain('workspaceOwner.writeFile(path,');
+    expect(source).toContain('workspaceOwner.writeFile(PROGRAM_MIRROR_PATH, next)');
+    expect(source).not.toContain('syncPresetFilesToWorker');
+    expect(source).not.toContain('.updateEntry(');
   });
 
   it('opens configured preset files as inactive editor tabs', () => {
@@ -63,8 +67,12 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('openPresetEditorTabs(preset);');
   });
 
-  it('waits for the worker preview bridges before treating Vite as ready', () => {
-    expect(source).toContain("line.includes('[real-vite/worker] node_modules read bridge ready')");
+  it('drives dev-server readiness from the owner pty:dev-server frame, not a stdout log-match', () => {
+    // ADR-0148 P4: the owner reports start/stop + port via a structured frame
+    // (P3 handshake discipline) — no stdout string-match, no one-shot push.
+    expect(source).toContain('workspaceOwner.onDevServer(');
+    expect(source).toContain('setDevServerStatus(frame.status)');
+    expect(source).not.toContain('node_modules read bridge ready');
   });
 
   it('starts Vite in an ordinary active terminal instead of a named vite tab', () => {
@@ -100,38 +108,25 @@ describe('App terminal startup wiring', () => {
     );
   });
 
-  // ADR-0146 (P2): the PAGE no longer hosts shell commands — npm/shell relocated
-  // to the owner pty channel; only the lifecycle-owning dev line stays PAGE-driven
-  // (`dispatchDevServerLine`). The ORIGINAL intent — manually starting vite records
-  // that terminal as the dev-server owner — is preserved via the dispatch + runViteCommand.
-  it('records manually started vite as the dev-server terminal owner', () => {
-    expect(source).toContain('async function runViteCommand(ctx: DevServerContext)');
-    expect(source).toContain('devServerSessionId = ctx.sessionId;');
-    expect(source).toContain('if (isDevServerLine(line)) return dispatchDevServerLine(');
-    expect(source).toContain('return await runViteCommand(ctx);');
+  // ADR-0148 (P4): the dev server runs IN the owner — EVERY line (npm, vite,
+  // `npm run dev`) goes to the owner pty channel; the page no longer intercepts a
+  // dev line or hosts a per-run preview worker.
+  it('routes every line — including the dev server — to the owner pty channel', () => {
+    expect(source).toContain('return manager.runLine(id, line, dims)');
+    expect(source).not.toContain('dispatchDevServerLine');
+    expect(source).not.toContain('isDevServerLine');
+    expect(source).not.toContain('runViteCommand');
+    expect(source).not.toContain('DevServerContext');
+    // the page wires the preview SW route on the owner-reported port + token
+    expect(source).toContain('wirePreviewBridge(frame.port, workspaceOwner.previewOwnerToken)');
   });
 
-  it('routes npm run scripts through the same visible dev-server terminal command', () => {
-    expect(source).toContain('async function runTerminalScript(');
-    expect(source).toContain("if (command.trim() === 'vite') return runViteCommand(ctx);");
-    // the node-server script body (e.g. 'node src/main.js') reaches the SAME
-    // lifecycle owner, single-sourced from project-spec — no second literal,
-    // and the FULL routing line is pinned so a cosmetic rewrite fails here
-    expect(source).toContain(
-      'if (command.trim() === devScriptCommand(activeTemplate())) return runViteCommand(ctx);',
-    );
-    expect(source).not.toContain("'node src/main.js'");
-    // ADR-0146 (P2): the dev line reaches runTerminalScript via the PAGE dispatch
-    // (the old PAGE npm `runScript` callback is gone — npm runs in the owner now).
-    expect(source).toContain(
-      'return await runTerminalScript(devScriptCommand(activeTemplate()), ctx);',
-    );
-    // `npm run <script>` is still recognised page-side (single-sourced from
-    // project-spec via projectScripts) and its dev-script body routed to the
-    // lifecycle owner — pre-P2 `npm run vite` / `npm run dev` parity.
-    expect(source).toContain('function npmRunDevBody(line: string, template: ProjectSpec)');
-    expect(source).toContain('return projectScripts(template)[name] ?? null;');
-    expect(source).toContain('if (npmBody !== null) return await runTerminalScript(npmBody, ctx);');
+  it('runs npm + dev scripts in the owner (no page-side dev interception)', () => {
+    expect(source).not.toContain('runTerminalScript');
+    expect(source).not.toContain('npmRunDevBody');
+    // dev-server status is owner-reported (frame-driven), not page-flipped
+    expect(source).toContain('setDevServerStatus(frame.status)');
+    expect(source).toContain('const devServerRunning = (): boolean');
   });
 
   it('loads and persists terminal environment state', () => {

@@ -33,10 +33,9 @@ import { writeText } from './glue/fs-ops.ts';
 import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
 import {
-  type RealViteHandle,
   type WorkspaceOwnerHandle,
-  startRealVite,
   startWorkspaceOwner,
+  wirePreviewBridge,
 } from './glue/realVite.ts';
 import { SnapshotFs } from './glue/snapshot-fs.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
@@ -44,13 +43,7 @@ import type { TerminalPersistence } from './glue/terminal-persistence.ts';
 import { requestVfsSnapshot, subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
 import { exportWorkspaceArchive, importWorkspaceArchive } from './glue/workspace-archive.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset, presetBootLines } from './presets.ts';
-import {
-  type ProjectSpec,
-  buildProjectPackageJson,
-  devScriptCommand,
-  projectScripts,
-  terminalDevLine,
-} from './templates/project-spec.ts';
+import { type ProjectSpec, buildProjectPackageJson } from './templates/project-spec.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
 
 const WORKSPACE = '/workspace';
@@ -69,6 +62,7 @@ const OWNER_UNAVAILABLE_MSG =
 function createUnavailableOwner(): WorkspaceOwnerHandle {
   return {
     workspaceId: 'unavailable',
+    previewOwnerToken: 'unavailable',
     snapshotPort: UNAVAILABLE_OWNER_PORT,
     closed: Promise.resolve(0),
     openSession: () => Promise.resolve(),
@@ -82,6 +76,7 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     closeSession: () => {},
     writeFile: () => {},
     snapshot: () => ({ cwd: WORKSPACE, env: {} }),
+    onDevServer: () => () => {},
     close: () => {},
   };
 }
@@ -200,20 +195,20 @@ export function App(props: AppProps) {
     const preset = presetForId(activePreset());
     return preset.templateId ? resolveProjectSpec(preset.templateId) : defaultProjectSpec();
   };
-  let realViteHandle: RealViteHandle | null = null;
 
-  // Persistent workspace owner (ADR-0146 P2): hosts the resident `Shell` per
-  // session + cwd/env, runs `npm install` and bin/`execSync` in-realm against
-  // ITS `syncMirror()` — the tree the explorer/editor read over the snapshot/nm
-  // bridges. Spawned once at setup, killed on cleanup. Gated on SAB IPC: under D
-  // there is no PAGE shell fallback, so a non-isolated host gets a fail-loud stub
-  // owner that surfaces the requirement per command (rather than crashing the app
-  // tree at setup). The per-`vite`-run preview worker stays page-driven and
-  // separate until P4 folds it into this owner.
+  // Persistent workspace owner (ADR-0146 P2 + ADR-0148 P4): hosts the resident
+  // `Shell` per session + cwd/env + the CO-RESIDENT dev server, runs `npm install`
+  // + bin/`execSync` + `vite` in-realm against ITS `syncMirror()` — the one store
+  // the explorer/editor read over the snapshot/nm bridges. Spawned once at setup,
+  // killed on cleanup. Gated on SAB IPC: under D there is no PAGE shell fallback,
+  // so a non-isolated host gets a fail-loud stub owner that surfaces the
+  // requirement per command (rather than crashing the app tree at setup).
   const workspaceOwner: WorkspaceOwnerHandle = isSabIpcSupported()
     ? startWorkspaceOwner({
         root: WORKSPACE,
         template: activeTemplate(),
+        slug: activePreset(),
+        setup: presetForId(activePreset()).setup,
         onLog: (line) => console.info(line),
       })
     : createUnavailableOwner();
@@ -224,148 +219,36 @@ export function App(props: AppProps) {
     sources: { dev: DEFAULT_PRESET.source, realVite: DEFAULT_PRESET.source },
   });
 
-  const [devServerRunning, setDevServerRunning] = createSignal(false);
+  // Dev-server lifecycle is OWNER-driven now (ADR-0148 P4): the `vite` / `npm run
+  // dev` line runs in the owner over the pty channel; the owner reports
+  // start/stop + the listen port via `pty:dev-server` frames. The page only
+  // mirrors that state + (un)wires the preview SW route.
   const [devServerStatus, setDevServerStatus] = createSignal<'stopped' | 'starting' | 'running'>(
     'stopped',
   );
+  const devServerRunning = (): boolean => devServerStatus() === 'running';
   let devServerSessionId: string | null = null;
   let devServerRestartGeneration = 0;
 
-  // The dev-server (`vite` / `npm run dev`) path stays PAGE-driven and separate
-  // from the owner pty channel (ADR-0146: P4 folds the preview worker into the
-  // owner). `runViteCommand` runs at the App level, so it needs only this thin
-  // context — a writer pair, an abort signal, and the session id — synthesized
-  // by `dispatchDevServerLine` from the terminal session's attached writer.
-  interface DevServerContext {
-    readonly sessionId: string;
-    readonly stdout: { write(chunk: string): void };
-    readonly stderr: { write(chunk: string): void };
-    readonly signal?: AbortSignal;
-  }
-
-  async function runViteCommand(ctx: DevServerContext): Promise<number> {
-    const template = activeTemplate();
-    // 'vite' keeps its historical terminal tag (e2e-pinned); node servers log as 'dev'.
-    const bootTag = template.runtime === 'vite' ? 'vite' : 'dev';
-    devServerSessionId = ctx.sessionId;
-    ctx.stdout.write(
-      template.runtime === 'vite'
-        ? 'vite: starting dev server\n'
-        : `dev: starting ${template.displayName} server\n`,
-    );
-    setDevServerStatus('starting');
-    if (ctx.signal?.aborted) {
-      setDevServerStatus('stopped');
-      return 130;
-    }
-    if (realViteHandle) {
-      await realViteHandle.close();
-      realViteHandle = null;
-      setDevServerRunning(false);
-    }
-
-    let handle: RealViteHandle;
-    let resolveReady: (() => void) | undefined;
-    let readySeen = false;
-    const ready = new Promise<'ready'>((resolve) => {
-      resolveReady = () => resolve('ready');
+  // Mirror the owner's dev-server state + wire the page-side preview SW route on
+  // the reported port (ADR-0148 P4). The owner serves `/preview/<port>/`; the
+  // page only (un)registers the matching cross-realm bridge on start/stop.
+  createEffect(() => {
+    let tearPreview: (() => void) | undefined;
+    const unsubscribe = workspaceOwner.onDevServer((frame) => {
+      setDevServerStatus(frame.status);
+      if (frame.port !== undefined) machine.setRealVitePort(frame.port);
+      tearPreview?.();
+      tearPreview =
+        frame.status === 'running' && frame.port !== undefined
+          ? wirePreviewBridge(frame.port, workspaceOwner.previewOwnerToken)
+          : undefined;
     });
-    const aborted = new Promise<'aborted'>((resolve) => {
-      if (ctx.signal?.aborted) {
-        resolve('aborted');
-        return;
-      }
-      ctx.signal?.addEventListener('abort', () => resolve('aborted'), { once: true });
+    onCleanup(() => {
+      tearPreview?.();
+      unsubscribe();
     });
-    try {
-      handle = await startRealVite({
-        template,
-        setup: presetForId(activePreset()).setup,
-        slug: activePreset(),
-        port: machine.realVitePort(),
-        onLog: (line) => {
-          ctx.stdout.write(line);
-          if (line.includes('[real-vite/worker] node_modules read bridge ready')) {
-            readySeen = true;
-            resolveReady?.();
-          }
-        },
-      });
-    } catch (err) {
-      ctx.stderr.write(`${bootTag} failed: ${(err as Error).stack ?? (err as Error).message}\n`);
-      setDevServerStatus('stopped');
-      return 1;
-    }
-
-    realViteHandle = handle;
-    machine.setRealVitePort(handle.port);
-    const closed = handle.closed.then((code) => ({ kind: 'exited' as const, code }));
-    const bootResult = readySeen
-      ? { kind: 'ready' as const }
-      : await Promise.race([
-          ready.then(() => ({ kind: 'ready' as const })),
-          aborted.then(() => ({ kind: 'aborted' as const })),
-          closed,
-        ]);
-    if (bootResult.kind === 'aborted') {
-      if (realViteHandle === handle) realViteHandle = null;
-      try {
-        await handle.close();
-      } catch (err) {
-        ctx.stderr.write(`[${bootTag}] cleanup failed: ${(err as Error).message}\n`);
-      }
-      setDevServerRunning(false);
-      setDevServerStatus('stopped');
-      ctx.stdout.write(`\n[${bootTag}] stopped\n`);
-      return 130;
-    }
-    if (bootResult.kind === 'exited') {
-      if (realViteHandle === handle) realViteHandle = null;
-      setDevServerRunning(false);
-      setDevServerStatus('stopped');
-      ctx.stderr.write(`[${bootTag}] worker exited before the dev server was ready\n`);
-      return bootResult.code ?? 1;
-    }
-
-    // Once Vite is listening, the worker's preview route can accept file writes.
-    // Send dependencies first so the entry never reloads before its imports exist.
-    syncPresetFilesToWorker(handle, presetForId(activePreset()));
-    handle.updateEntry(machine.source());
-    setDevServerRunning(true);
-    setDevServerStatus('running');
-    ctx.stdout.write(`[${bootTag}] dev server ready on port ${handle.port}\n`);
-
-    const stopResult = await Promise.race([
-      aborted.then(() => ({ kind: 'aborted' as const })),
-      closed,
-    ]);
-
-    if (realViteHandle === handle) realViteHandle = null;
-    if (stopResult.kind === 'aborted') {
-      try {
-        await handle.close();
-      } catch (err) {
-        ctx.stderr.write(`[${bootTag}] cleanup failed: ${(err as Error).message}\n`);
-      }
-    }
-    setDevServerRunning(false);
-    setDevServerStatus('stopped');
-    if (stopResult.kind === 'aborted') {
-      ctx.stdout.write(`\n[${bootTag}] stopped\n`);
-      return 130;
-    }
-    ctx.stderr.write(`\n[${bootTag}] worker exited\n`);
-    return stopResult.code ?? 1;
-  }
-
-  async function runTerminalScript(command: string, ctx: DevServerContext): Promise<number> {
-    if (command.trim() === 'vite') return runViteCommand(ctx);
-    // The active template's own dev script (e.g. `node src/main.js`) routes to
-    // the SAME lifecycle-owning command, so `npm run dev` boots node servers.
-    if (command.trim() === devScriptCommand(activeTemplate())) return runViteCommand(ctx);
-    ctx.stderr.write(`dev: unsupported dev command '${command}'\n`);
-    return 1;
-  }
+  });
 
   // The terminal shell + cwd/env + npm + bin all live in the persistent
   // workspace owner now (ADR-0146 P2); the manager is a thin pty-channel client.
@@ -380,81 +263,10 @@ export function App(props: AppProps) {
   });
 
   // PAGE-side terminal writers per session, captured when the panel attaches.
-  // The dev-server path (which runs at the App level, NOT through the owner pty
-  // channel) writes the preview worker's logs to the session through these.
+  // Used by `runTerminalSequence` to echo `$ <line>` for boot sequences (the
+  // owner pty does not echo the programmatic line).
   const terminalWriters = new Map<string, (chunk: string, stream?: 'stdout' | 'stderr') => void>();
-  // Per-session AbortController for the in-flight PAGE-driven dev-server run, so
-  // a Ctrl-C / stop on the dev line aborts the preview boot (mirrors the owner's
-  // cooperative SIGINT for ordinary commands).
-  const devRunControllers = new Map<string, AbortController>();
 
-  /** Recognise the lines the PAGE intercepts to drive the preview worker. */
-  /**
-   * Resolve `npm run <script>` to its dev-server command body from the active
-   * template's scripts, or null when the line isn't an npm-run of a known script.
-   * npm itself runs in the owner now (ADR-0146), but the lifecycle-owning dev
-   * line stays page-driven — so `npm run dev` / `npm run vite` boot the preview
-   * worker, single-sourced from project-spec (restores the pre-P2 runScript route).
-   */
-  function npmRunDevBody(line: string, template: ProjectSpec): string | null {
-    const name = /^npm run (\S+)$/.exec(line.trim())?.[1];
-    if (name === undefined) return null;
-    return projectScripts(template)[name] ?? null;
-  }
-
-  function isDevServerLine(line: string): boolean {
-    const trimmed = line.trim();
-    const template = activeTemplate();
-    return (
-      trimmed === 'vite' ||
-      trimmed === devScriptCommand(template) ||
-      trimmed === terminalDevLine(template, WORKSPACE) ||
-      npmRunDevBody(line, template) !== null
-    );
-  }
-
-  /**
-   * Run a recognised dev-server line PAGE-side (spawns the preview worker via
-   * `startRealVite`), writing its output to the session's terminal. Ordinary
-   * lines go to the owner shell over the pty channel — only the lifecycle-owning
-   * dev line is intercepted here (ADR-0146; P4 folds this into the owner).
-   */
-  async function dispatchDevServerLine(
-    id: string,
-    line: string,
-    _dims?: TerminalRunDimensions,
-  ): Promise<number> {
-    const write = terminalWriters.get(id) ?? (() => {});
-    const controller = new AbortController();
-    devRunControllers.set(id, controller);
-    const ctx: DevServerContext = {
-      sessionId: id,
-      stdout: { write: (chunk) => write(chunk, 'stdout') },
-      stderr: { write: (chunk) => write(chunk, 'stderr') },
-      signal: controller.signal,
-    };
-    const trimmed = line.trim();
-    try {
-      if (trimmed === 'vite') {
-        const template = activeTemplate();
-        if (template.runtime !== 'vite') {
-          ctx.stderr.write(
-            `vite: the active project is ${template.displayName}; run \`${terminalDevLine(template, WORKSPACE)}\` instead\n`,
-          );
-          return 1;
-        }
-        return await runViteCommand(ctx);
-      }
-      // `npm run dev` / `npm run vite` — npm runs in the owner, but the resolved
-      // dev script is routed page-side to the lifecycle owner (pre-P2 parity).
-      const npmBody = npmRunDevBody(line, activeTemplate());
-      if (npmBody !== null) return await runTerminalScript(npmBody, ctx);
-      // `cd <root> && npm run dev` / `node <entry>` — the template's dev script.
-      return await runTerminalScript(devScriptCommand(activeTemplate()), ctx);
-    } finally {
-      if (devRunControllers.get(id) === controller) devRunControllers.delete(id);
-    }
-  }
   const hiddenSessionIds = new Set<string>();
   const visibleSessions = (): TerminalSessionSnapshot[] =>
     manager.sessions().filter((session) => !hiddenSessionIds.has(session.id));
@@ -475,22 +287,11 @@ export function App(props: AppProps) {
     void props.terminalPersistence.saveState({ cwd: session.cwd, env: session.env });
   }
 
-  // The lifecycle-owning dev-server line runs PAGE-side (off the owner pty
-  // channel, ADR-0146), so its session never goes through `manager.runLine` and
-  // the manager reports it idle. Reflect the live dev server as a running tab
-  // (data-running) by overriding the owning session's status for display only.
-  function withDevServerRunning(
-    snaps: readonly TerminalSessionSnapshot[],
-  ): TerminalSessionSnapshot[] {
-    const id = devServerSessionId;
-    if (!devServerRunning() || id === null) return [...snaps];
-    return snaps.map((s) =>
-      s.id === id && s.status !== 'running' ? { ...s, status: 'running' } : s,
-    );
-  }
-
   function refreshTerminalState(): void {
-    const next = withDevServerRunning(visibleSessions());
+    // The dev server runs IN the owner now (ADR-0148 P4), as an ordinary
+    // long-running `manager.runLine` — its session reports `running` natively,
+    // no display-only override needed.
+    const next = visibleSessions();
     setSessions(next);
     const active = manager.activeSessionId();
     if (next.some((session) => session.id === active)) {
@@ -528,18 +329,17 @@ export function App(props: AppProps) {
     write: (chunk: string, stream?: 'stdout' | 'stderr') => void,
   ): void {
     manager.attachWriter(id, write);
-    // Also held PAGE-side so the dev-server path (App-level, off the pty channel)
-    // can write the preview worker's logs to this session's terminal.
+    // Also held PAGE-side so `runTerminalSequence` can echo `$ <line>` for boot
+    // sequences (the owner pty does not echo the programmatic line).
     terminalWriters.set(id, write);
   }
 
   /**
-   * Run one terminal line: the PAGE intercepts the lifecycle-owning dev-server
-   * line (spawns the preview worker), everything else goes to the owner shell
-   * over the pty channel (ADR-0146 P2).
+   * Run one terminal line in the owner shell over the pty channel (ADR-0148 P4):
+   * EVERY line — including the dev-server `vite` / `npm run dev` — runs in the
+   * owner now (the owner hosts the co-resident dev server).
    */
   function dispatchLine(id: string, line: string, dims?: TerminalRunDimensions): Promise<number> {
-    if (isDevServerLine(line)) return dispatchDevServerLine(id, line, dims);
     return manager.runLine(id, line, dims);
   }
 
@@ -604,11 +404,9 @@ export function App(props: AppProps) {
   }
 
   function stopSession(id: string): void {
-    // A PAGE-driven dev-server run owns its own AbortController; abort it.
-    // Ordinary commands run in the owner — forward the cooperative SIGINT.
-    const devController = devRunControllers.get(id);
-    if (devController) devController.abort();
-    else manager.stop(id);
+    // Every command — including the dev server — runs in the owner now (ADR-0148
+    // P4); forward the cooperative SIGINT (Ctrl-C aborts the in-flight run).
+    manager.stop(id);
     refreshTerminalState();
   }
 
@@ -620,12 +418,10 @@ export function App(props: AppProps) {
   // contents but flags presence, gating the lazy row.
   const [nodeModulesPresent, setNodeModulesPresent] = createSignal(false);
 
-  // ADR-0146 P2: the snapshot + node_modules bridges are re-scoped from the
-  // per-`vite`-run dev port to the PERSISTENT workspace owner's port, so the
-  // explorer reflects the owner tree (where `npm install` lands) before AND
-  // after any vite run — not just while a dev server is up. Subscribed once at
-  // setup (no signal dependency), torn down on unmount. P4 collapses the
-  // separate preview worker into this owner.
+  // ADR-0146 P2 + ADR-0148 P4: the snapshot + node_modules bridges are served by
+  // the PERSISTENT workspace owner (which now also runs the dev server), so the
+  // explorer reflects the owner tree (where `npm install` lands) before AND after
+  // any vite run. Subscribed once at setup (no signal dependency), torn on unmount.
   createEffect(() => {
     const unsubscribe = subscribeVfsSnapshot(workspaceOwner.snapshotPort, (frame) => {
       snapshotFs.update(frame);
@@ -648,14 +444,6 @@ export function App(props: AppProps) {
       cache.dispose();
       setNmCache(null);
     });
-  });
-
-  // The PAGE-driven dev server flips `devServerRunning` mid-run (off the owner
-  // pty channel), so re-publish the terminal tabs to reflect its session as
-  // running (data-running) — see `withDevServerRunning`.
-  createEffect(() => {
-    devServerRunning();
-    refreshTerminalState();
   });
 
   /** Prop bundle for the real-vite explorer's lazy node_modules branch. */
@@ -696,24 +484,19 @@ export function App(props: AppProps) {
     }
   }
 
-  function syncPresetFilesToWorker(handle: RealViteHandle | null, preset: Preset): void {
-    if (!handle) return;
-    for (const file of preset.files ?? []) {
-      handle.updateFile(workspacePresetPath(file.path), file.content);
-    }
-  }
-
   function openPresetEditorTabs(preset: Preset): void {
     for (const path of preset.openFiles ?? []) {
       editorApi?.openFile(workspacePresetPath(path), { activate: false });
     }
   }
 
-  function syncWorkspaceFileToWorker(path: string): void {
-    const handle = realViteHandle;
-    if (!handle || path === PROGRAM_MIRROR_PATH) return;
+  // SSoT (ADR-0148 P4): editor writes flow to the OWNER (the execution truth), so
+  // the co-resident dev server (HMR) + shell see them. The page `vfs` is the
+  // editor's sync working copy; the program tab flows via `onProgramChange`.
+  function syncWorkspaceFileToOwner(path: string): void {
+    if (path === PROGRAM_MIRROR_PATH) return;
     try {
-      handle.updateFile(path, new TextDecoder().decode(vfs.readFileBytesSync(path)));
+      workspaceOwner.writeFile(path, new TextDecoder().decode(vfs.readFileBytesSync(path)));
     } catch {
       /* best-effort live sync for opened text files */
     }
@@ -778,11 +561,9 @@ export function App(props: AppProps) {
 
   async function restartDevServer(sessionId: string): Promise<void> {
     const generation = ++devServerRestartGeneration;
-    try {
-      await realViteHandle?.close();
-    } catch {
-      /* terminal command will surface the exit path */
-    }
+    // Stop the running dev command in its session (ADR-0148 P4): the owner aborts
+    // the run → the co-resident dev server stops → `devServerStatus` → 'stopped'.
+    if (devServerSessionId) manager.stop(devServerSessionId);
     await waitForDevServerStop();
     if (generation !== devServerRestartGeneration) return;
     const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;
@@ -799,8 +580,6 @@ export function App(props: AppProps) {
     await machine.loadPreset(preset);
     seedViteWorkspace(preset);
     openPresetEditorTabs(preset);
-    syncPresetFilesToWorker(realViteHandle, preset);
-    realViteHandle?.updateEntry(preset.source);
     if (devServerStatus() !== 'stopped') {
       const restartSessionId = devServerSessionId;
       if (restartSessionId) void restartDevServer(restartSessionId);
@@ -835,7 +614,6 @@ export function App(props: AppProps) {
   onCleanup(() => {
     if (initialRunTimer) clearTimeout(initialRunTimer);
     if (toastTimer) clearTimeout(toastTimer);
-    void realViteHandle?.close();
     manager.dispose();
     workspaceOwner.close(); // terminate the persistent owner worker (ADR-0146)
   });
@@ -875,7 +653,9 @@ export function App(props: AppProps) {
 
   function onProgramChange(next: string): void {
     machine.setSource(next);
-    realViteHandle?.updateEntry(next);
+    // SSoT (ADR-0148 P4): push the program edit to the owner so the co-resident
+    // dev server HMR-updates (the program mirror is the entry vite serves).
+    workspaceOwner.writeFile(PROGRAM_MIRROR_PATH, next);
   }
 
   function onTerminalLink(uri: string): void {
@@ -1210,7 +990,7 @@ export function App(props: AppProps) {
                   setActiveLang(info.language);
                   setActiveFilePath(info.path);
                 }}
-                onFileWritten={syncWorkspaceFileToWorker}
+                onFileWritten={syncWorkspaceFileToOwner}
                 readNodeModulesFile={readNodeModulesFile()}
                 previewUrl={previewUrl}
                 onOpenPreviewTab={openPreviewTab}

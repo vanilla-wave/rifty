@@ -25,35 +25,8 @@ import {
   type PtySessionSnapshot,
   createPtyClient,
 } from './pty-client.ts';
-import { PTY_IPC_TYPE, isOwnerToPage, isPtyIpcMessage } from './pty-protocol.ts';
+import { PTY_IPC_TYPE, type PtyDevServer, isOwnerToPage, isPtyIpcMessage } from './pty-protocol.ts';
 import { sendVfsWrite } from './vfs-write-port.ts';
-
-export interface RealViteHandle {
-  readonly port: number;
-  readonly closed: Promise<number | null>;
-  close(): Promise<void>;
-  updateEntry(content: string): void;
-  updateFile(path: string, content: string): void;
-}
-
-export interface RealViteOptions {
-  root?: string;
-  entry?: string;
-  port?: number;
-  /** Template to run; defaults to the registered default. Carried to the worker
-   *  by id over `RIFTY_RFV_TEMPLATE`; the worker re-resolves the spec. */
-  template?: ProjectSpec;
-  /** Sandbox setup kind (ADR-0135), carried over `RIFTY_RFV_SETUP`. Drives the
-   *  worker's dependency arrival: `from-scratch` skips the baked snapshot and
-   *  streams a real `npm install` to the terminal; `instant` (default) uses the
-   *  quiet snapshot/stamp path. */
-  setup?: 'instant' | 'from-scratch';
-  /** Project slug (preset id), carried over `RIFTY_RFV_SLUG`. The worker's
-   *  install-stamp reuse key — distinct presets on the same template must not
-   *  reuse each other's tree. Defaults to the template id. */
-  slug?: string;
-  onLog?(line: string): void;
-}
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -65,155 +38,48 @@ function createPreviewOwnerToken(): string {
 }
 
 /**
- * Spawn the Real Vite worker realm and wire the cross-realm bridges.
+ * Wire the PAGE side of the co-resident preview (ADR-0148 P4). The owner worker
+ * serves `/preview/<port>/` (its `setupPreviewBridge` + `serveCrossRealmPreview`,
+ * keyed by `ownerToken`); this registers the matching page-side cross-realm
+ * bridge so the SW route reaches the owner. Call it when the owner reports the
+ * dev server running (the `pty:dev-server` frame carries the port + token); the
+ * returned teardown runs on stop.
  *
- * @throws NotImplementedError when SAB IPC is unavailable — cross-origin
- *   isolation is the gate (ADR-0002 / D-001). UI catches and surfaces it in
- *   the playground terminal.
+ * Replaces {@link startRealVite}'s per-run preview wiring — the worker is no
+ * longer spawned per dev run (it IS the persistent owner), only the page-side
+ * route is (un)registered as the dev server starts/stops.
  */
-export async function startRealVite(opts: RealViteOptions = {}): Promise<RealViteHandle> {
-  const template = opts.template ?? defaultProjectSpec();
-  const root = opts.root ?? '/workspace';
-  const entryRel = opts.entry ?? template.entry.relativePath;
-  const port = opts.port ?? template.defaultPort;
-  const setup = opts.setup ?? 'instant';
-  const slug = opts.slug ?? template.id;
-  const ownerToken = createPreviewOwnerToken();
-  const entryPath = `${root}${entryRel}`;
-  const log = opts.onLog ?? (() => {});
-
-  if (!isSabIpcSupported()) {
-    throw new NotImplementedError(
-      'startRealVite',
-      'requires SAB IPC (cross-origin isolation) — toggle the host headers ' +
-        'or run inside the playground dev server (vite.config.ts ships them).',
-    );
-  }
-
-  const bootstrapUrl = bootstrapWorkerUrl;
-
-  log(`[real-vite] spawning ${template.displayName} worker with bootstrap ${bootstrapUrl}\n`);
-
-  const handle = globalProcessManager.spawnWorker(
-    'real-vite',
-    {
-      entry: { kind: 'url', url: bootstrapUrl },
-      argv: ['rifty', 'real-vite'],
-      env: {
-        RIFTY_RFV_PORT: String(port),
-        RIFTY_RFV_ROOT: root,
-        RIFTY_RFV_ENTRY: entryRel,
-        RIFTY_RFV_TEMPLATE: template.id,
-        RIFTY_RFV_SETUP: setup,
-        RIFTY_RFV_SLUG: slug,
-        RIFTY_PREVIEW_OWNER_TOKEN: ownerToken,
-        // Node idiom for node-server template entries (`process.env.PORT`).
-        PORT: String(port),
-      },
-      cwd: root,
-      // ADR-0144: long-lived owner — the kernel keeps the realm alive after the
-      // bootstrap entry settles (until handle.kill()), replacing the worker's
-      // old `await new Promise<never>(() => {})` keep-alive hack.
-      serve: true,
-    },
-    /* ppid */ 1,
-    { cwd: root },
-  );
-
-  if (handle.kind !== 'worker') {
-    throw new NotImplementedError(
-      'startRealVite',
-      `globalProcessManager.spawnWorker returned kind=${handle.kind}; expected 'worker'`,
-    );
-  }
-
-  // The `Readable` payload type is `unknown` (object-mode allowance); decode
-  // whatever the SAB Worker layer hands us. A too-narrow `instanceof
-  // Uint8Array` guard silently swallowed worker logs (install/boot progress
-  // AND error stacks), making a stalled boot look frozen with no feedback.
-  const decodeChunk = (chunk: unknown): string => {
-    if (chunk instanceof Uint8Array) return dec.decode(chunk);
-    if (chunk instanceof ArrayBuffer) return dec.decode(new Uint8Array(chunk));
-    if (ArrayBuffer.isView(chunk)) {
-      return dec.decode(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
-    }
-    return typeof chunk === 'string' ? chunk : '';
-  };
-  handle.stdout().on('data', (chunk: unknown) => {
-    const text = decodeChunk(chunk);
-    if (text) log(text);
-  });
-  handle.stderr().on('data', (chunk: unknown) => {
-    const text = decodeChunk(chunk);
-    if (text) log(text);
-  });
-
-  // Track exit so `close()` stays safe when the worker dies on its own
-  // (install failure, vite crash).
-  let exited = false;
-  let resolveClosed: (code: number | null) => void = () => {};
-  const closed = new Promise<number | null>((resolve) => {
-    resolveClosed = resolve;
-  });
-  handle.on('exit', (code?: unknown) => {
-    exited = true;
-    resolveClosed(typeof code === 'number' ? code : null);
-  });
-
-  // SW dispatches `/preview/<port>/*` to the page; the `@riftydev/net`
-  // registry routes through this handler over `BroadcastChannel` to the
-  // worker's `serveCrossRealmPreview`.
+export function wirePreviewBridge(port: number, ownerToken: string): () => void {
+  // SW dispatches `/preview/<port>/*` to the page; the `@riftydev/net` registry
+  // routes through this handler over BroadcastChannel to the owner's
+  // `serveCrossRealmPreview`.
   const previewBridge = bridgeCrossRealmPreview(port);
   registerPort(port, previewBridge);
-
-  // ADR-0086: pass the typed handle so SW requests take the struct fast-path
-  // (skips the page→worker Request rebuild + arrayBuffer drain).
+  // ADR-0086: typed handle → SW requests take the struct fast-path.
   const tearSwBridge = mountPlaygroundPreviewBridge(previewBridge, { ownerToken });
-
-  log(`[real-vite] page-side preview-port bridge ready (port ${port})\n`);
-
-  const updateFile = (path: string, content: string): void => {
-    const frame = {
-      type: 'write' as const,
-      path,
-      data: enc.encode(content),
-    };
-    if (!handle.send({ type: 'rifty:vfs-write', frame })) {
-      sendVfsWrite(port, frame);
-    }
-  };
-
-  return {
-    port,
-    closed,
-    async close() {
-      tearSwBridge();
-      unregisterPort(port);
-      previewBridge.dispose();
-      if (!exited) {
-        // `kill` is idempotent; kernel teardown closes the SAB ring + stdio.
-        handle.kill('SIGTERM');
-      }
-    },
-    updateEntry(content) {
-      updateFile(entryPath, content);
-    },
-    updateFile,
+  return (): void => {
+    tearSwBridge();
+    unregisterPort(port);
+    previewBridge.dispose();
   };
 }
 
 /**
  * Page-side handle to the persistent workspace-owner worker (ADR-0146 P2).
  *
- * The owner hosts the realm-resident `Shell` instances keyed by session id;
- * this handle is the PAGE pty client surface (`createPtyClient`) wired to the
- * kernel fork-IPC channel. Unlike {@link RealViteHandle} it owns no preview
- * bridge — vite/preview stays in the separate preview worker (P4 will fold it
- * into the owner). `close()` kills the worker; `closed` settles on exit.
+ * The owner hosts the realm-resident `Shell` instances keyed by session id AND
+ * the co-resident dev server (ADR-0148 P4); this handle is the PAGE pty client
+ * surface (`createPtyClient`) wired to the kernel fork-IPC channel. `close()`
+ * kills the worker; `closed` settles on exit.
  */
 export interface WorkspaceOwnerHandle {
   /** Stable id carried to the owner over `RIFTY_WORKSPACE_ID`. */
   readonly workspaceId: string;
+  /**
+   * Token the owner uses to key its `/preview/<port>/` SW route (ADR-0148 P4).
+   * The page passes it to {@link wirePreviewBridge} when the dev server starts.
+   */
+  readonly previewOwnerToken: string;
   /**
    * BroadcastChannel addressing key for the owner's snapshot + node_modules
    * read bridges (ADR-0076/0080). The bridges are still port-keyed; the owner
@@ -244,6 +110,12 @@ export interface WorkspaceOwnerHandle {
   writeFile(path: string, content: string): void;
   /** Cached cwd/env for a session (from the latest `pty:exit`). */
   snapshot(sid: string): PtySessionSnapshot;
+  /**
+   * Subscribe to owner→page dev-server state (ADR-0148 P4): the co-resident
+   * dev server's start/stop + listen port. Returns an unsubscribe. The page
+   * derives its LIVE pill + preview iframe URL from these frames.
+   */
+  onDevServer(cb: (frame: PtyDevServer) => void): () => void;
   /** Terminate the owner worker; idempotent. */
   close(): void;
 }
@@ -293,6 +165,9 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   const slug = opts.slug ?? template.id;
   const workspaceId = opts.workspaceId ?? createPreviewOwnerToken();
   const snapshotPort = WORKSPACE_OWNER_SNAPSHOT_PORT;
+  // Keys the owner's `/preview/<port>/` SW route (ADR-0148 P4); shared with the
+  // worker via env and with the page via `wirePreviewBridge`.
+  const previewOwnerToken = createPreviewOwnerToken();
   const log = opts.onLog ?? (() => {});
 
   if (!isSabIpcSupported()) {
@@ -320,6 +195,12 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
         // Dedicated snapshot/nm BroadcastChannel key (not a dev-server port);
         // the page subscribes on `handle.snapshotPort` to read the owner tree.
         RIFTY_RFV_PORT: String(snapshotPort),
+        // ADR-0148 P4: the owner's co-resident dev server keys its preview SW
+        // route on this token; the page passes it to `wirePreviewBridge`.
+        RIFTY_PREVIEW_OWNER_TOKEN: previewOwnerToken,
+        // Node idiom for node-server template entries (`process.env.PORT`): the
+        // co-resident dev server listens on the template's default port.
+        PORT: String(template.defaultPort),
       },
       cwd: root,
       // ADR-0144: long-lived owner — the realm stays alive past the bootstrap
@@ -338,9 +219,13 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   }
   const worker = handle;
 
+  const devServerListeners = new Set<(frame: PtyDevServer) => void>();
   const client = createPtyClient({
     send: (frame) => {
       worker.send({ type: PTY_IPC_TYPE, frame });
+    },
+    onDevServer: (frame) => {
+      for (const cb of devServerListeners) cb(frame);
     },
   });
 
@@ -368,6 +253,11 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     if (isOwnerToPage(message.frame)) client.onFrame(message.frame);
   });
 
+  // Readiness handshake (ADR-0146 P3 / ADR-0148): request the current dev-server
+  // state on spawn so a `pty:dev-server` push that predates our listener is
+  // recoverable (the dropped-frame class P2 hit) — never a one-shot push.
+  client.requestDevServer();
+
   let exited = false;
   let resolveClosed: (code: number | null) => void = () => {};
   const closed = new Promise<number | null>((resolve) => {
@@ -381,6 +271,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
 
   return {
     workspaceId,
+    previewOwnerToken,
     snapshotPort,
     closed,
     openSession: (sid, seed) => client.openSession(sid, seed),
@@ -398,6 +289,10 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       }
     },
     snapshot: (sid) => client.snapshot(sid),
+    onDevServer(cb) {
+      devServerListeners.add(cb);
+      return () => devServerListeners.delete(cb);
+    },
     close() {
       if (!exited) handle.kill('SIGTERM');
     },

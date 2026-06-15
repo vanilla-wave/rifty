@@ -12,8 +12,11 @@ describe('real Vite bootstrap preview routing', () => {
     expect(source).toContain("base: './'");
   });
 
-  it('broadcasts HMR updates for page-to-worker VFS writes', () => {
-    expect(source).toContain('function handleVfsWrite(path: string): void');
+  it('forwards editor VFS writes to the co-resident dev server HMR + republishes', () => {
+    // ADR-0148 P4: the owner's single vfs-write handler forwards editor writes to
+    // the running dev server's HMR (the virtual FS fires no real watcher events).
+    expect(source).toContain('const onVfsWrite = (path: string): void');
+    expect(source).toContain('devServer.notifyFileChanged(path)');
     expect(source).toContain('const hmrBridgeRef: { current?: HmrBridgeHandle } = {}');
     expect(source).toContain('function broadcastFileUpdate(path: string): void');
     expect(source).toContain('hmrBridgeRef.current?.broadcast(');
@@ -23,15 +26,13 @@ describe('real Vite bootstrap preview routing', () => {
     expect(source).toContain(
       'hmrBridgeRef.current = setupHmrBridge({ port, token: hmrBridgeToken })',
     );
-    expect(source).toContain(
-      'const tearVfsBridge = serveVfsWrites(port, { onWrite: handleVfsWrite })',
-    );
+    expect(source).toContain('const tearVfsBridge = serveVfsWrites(port, { onWrite: onVfsWrite })');
   });
 
   it('accepts VFS write frames over the kernel worker IPC channel', () => {
     expect(source).toContain('const kernelIpc = installRuntimeGlobals()');
     expect(source).toContain('kernelIpc.onMessage?.((message) => {');
-    expect(source).toContain('applyVfsWriteFrame(message.frame, { onWrite: handleVfsWrite })');
+    expect(source).toContain('applyVfsWriteFrame(message.frame, { onWrite: onVfsWrite })');
   });
 
   it('advertises the page owner token on the direct service-worker bridge', () => {

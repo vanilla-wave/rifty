@@ -65,6 +65,7 @@ function makeFakeOwner() {
 
   const owner: WorkspaceOwnerHandle = {
     workspaceId: 'ws-test',
+    previewOwnerToken: 'ws-test-token',
     snapshotPort: 59124,
     closed: Promise.resolve(null),
     openSession(sid: string): Promise<void> {
@@ -93,6 +94,9 @@ function makeFakeOwner() {
     },
     snapshot(sid: string): PtySessionSnapshot {
       return snapshots.get(sid) ?? { cwd: '/workspace', env: {} };
+    },
+    onDevServer(): () => void {
+      return () => {};
     },
     close(): void {},
   };

@@ -517,7 +517,9 @@ async function bootShellOwner(opts: {
     boot: (_signal, devLog) =>
       bootDevServer({
         cfg,
-        port,
+        // The dev server listens on the template port (cfg.port), distinct from
+        // `port` (the owner's snapshot/nm/vfs-write bridge key).
+        port: cfg.port,
         root: cfg.root,
         spec,
         slug,
@@ -625,7 +627,11 @@ async function bootstrap(): Promise<void> {
   // Honour an explicit entry override on the spawn spec (usually a no-op —
   // the orchestrator defaults it to the template's own entry).
   const effectiveSpec = withEntryOverride(spec, env.RIFTY_RFV_ENTRY ?? spec.entry.relativePath);
-  const cfg = resolveBootstrapConfig(effectiveSpec, port, root);
+  // ADR-0148 P4: `port` (RIFTY_RFV_PORT) keys the owner's snapshot/nm/vfs-write
+  // bridges (a dedicated synthetic port, e.g. 59124). The co-resident dev server
+  // listens on the template's own port (`cfg.port`) — a DISTINCT key so vite +
+  // its preview bridges never collide with the owner serve bridges.
+  const cfg = resolveBootstrapConfig(effectiveSpec, effectiveSpec.defaultPort, root);
 
   const kernelIpc = installRuntimeGlobals();
   // Both runtimes resolve relative paths (express.static('public'), tool cwd
