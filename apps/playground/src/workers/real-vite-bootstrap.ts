@@ -417,6 +417,11 @@ async function bootDevServer(opts: {
     );
   }
 
+  // The node-server entry binds `process.env.PORT`; the persistent owner's PORT
+  // env is its SPAWN-time default (the default template), so a preset switch must
+  // point it at the CURRENT template's dev port before the entry listens.
+  globalThis.process.env.PORT = String(port);
+
   if (cfg.runtime === 'node-server') {
     await bootNodeServer(cfg, loader);
     publishSnapshot();
