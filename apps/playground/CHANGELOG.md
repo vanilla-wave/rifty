@@ -4,6 +4,27 @@
 
 ### Added
 
+- **Unified workspace owner: co-resident dev-server + single source of truth
+  (ADR-0148, P4 of ADR-0143 "D").** The `vite`/dev server now runs CO-RESIDENT
+  inside the ONE persistent workspace owner — started on demand by the owner's
+  `vite` / `npm run <script>` shell command, stopped on Ctrl-C via `server.close()`
+  without killing the owner — so it reads the SAME store `npm install` writes
+  (closes the two-owners trap: `npm install <pkg>` then `npm run dev` share
+  `node_modules`). The per-run `startRealVite` preview worker and the entire
+  page-driven dev path (`dispatchDevServerLine`/`runViteCommand`/`isDevServerLine`)
+  are deleted; dev-server start/stop + the listen port flow to the page over a new
+  structured `pty:dev-server` frame + the P3 request handshake (no stdout
+  log-match). The owner becomes the SINGLE SOURCE OF TRUTH: the editor + explorer
+  always read the owner snapshot (the `activeVfs`/`snapshotFs` `vite`-gated swap is
+  retired), editor + program edits write to the owner (HMR against the same store
+  it serves), and the `node_modules` read-port is widened to a general workspace
+  read-port whose consumer is the editor opening owner-only files. New
+  `dev-server-controller` (single-active guard + dev-server frame emit + HMR
+  forward); `wirePreviewBridge` replaces the per-run page preview wiring. COI e2e:
+  co-resident vite preview through the SW (`m7-preview-sw`), node-server
+  (`fullstack-demo`), shell CLI (`owner-shell-cowsay`), explorer coherence
+  (`owner-explorer-coherence`).
+
 - **Owner snapshot coherence + readiness handshake (ADR-0146, P3 of ADR-0143
   "D").** The page file explorer now reflects files the owner-resident shell
   writes: the owner republishes its `syncMirror` snapshot on every command exit

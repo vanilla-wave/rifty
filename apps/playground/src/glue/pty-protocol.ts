@@ -64,6 +64,17 @@ export type PtyDevServer = {
 };
 /** Page asks the owner to re-publish dev-server state (P3 handshake discipline). */
 export type PtyDevServerReq = { type: 'pty:dev-server-req' };
+/**
+ * Page tells the owner the CURRENT preset's dev-server config (ADR-0148 P4). The
+ * persistent owner is spawned once with the default template, so a preset switch
+ * must update which runtime/template the next co-resident dev server boots.
+ */
+export type PtyDevConfig = {
+  type: 'pty:dev-config';
+  templateId: string;
+  slug: string;
+  setup: 'instant' | 'from-scratch';
+};
 
 export type PageToOwnerFrame =
   | PtyOpen
@@ -73,7 +84,8 @@ export type PageToOwnerFrame =
   | PtySignal
   | PtyResize
   | PtyClose
-  | PtyDevServerReq;
+  | PtyDevServerReq
+  | PtyDevConfig;
 export type OwnerToPageFrame = PtyReady | PtyChunk | PtyExit | PtyDevServer;
 export type PtyFrame = PageToOwnerFrame | OwnerToPageFrame;
 
@@ -93,6 +105,7 @@ const PAGE_TO_OWNER = new Set([
   'pty:resize',
   'pty:close',
   'pty:dev-server-req',
+  'pty:dev-config',
 ]);
 const OWNER_TO_PAGE = new Set(['pty:ready', 'pty:chunk', 'pty:exit', 'pty:dev-server']);
 export function isPageToOwner(f: PtyFrame): f is PageToOwnerFrame {

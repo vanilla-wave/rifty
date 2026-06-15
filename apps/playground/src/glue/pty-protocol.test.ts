@@ -47,4 +47,14 @@ describe('pty-protocol', () => {
     expect(isPageToOwner(f)).toBe(true);
     expect(isOwnerToPage(f)).toBe(false);
   });
+  it('routes pty:dev-config as page→owner', () => {
+    const f: PtyFrame = {
+      type: 'pty:dev-config',
+      templateId: 'express-sqlite',
+      slug: 'fullstack',
+      setup: 'from-scratch',
+    };
+    expect(isPageToOwner(f)).toBe(true);
+    expect(isOwnerToPage(f)).toBe(false);
+  });
 });

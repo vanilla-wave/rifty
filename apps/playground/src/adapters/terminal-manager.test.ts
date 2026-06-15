@@ -98,6 +98,7 @@ function makeFakeOwner() {
     onDevServer(): () => void {
       return () => {};
     },
+    setDevConfig(): void {},
     close(): void {},
   };
 

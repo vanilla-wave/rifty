@@ -128,4 +128,22 @@ describe('pty-server', () => {
     server.handleFrame({ type: 'pty:dev-server-req' });
     expect(reqs).toBe(1);
   });
+
+  it('routes pty:dev-config to onDevConfig (ADR-0148 P4 preset switch)', () => {
+    const configs: unknown[] = [];
+    const server = createPtyServer({
+      send: () => {},
+      makeShell: () => new Shell({ cwd: '/', env: {} }),
+      onDevConfig: (c) => configs.push(c),
+    });
+    server.handleFrame({
+      type: 'pty:dev-config',
+      templateId: 'express-sqlite',
+      slug: 'fullstack',
+      setup: 'from-scratch',
+    });
+    expect(configs).toEqual([
+      { templateId: 'express-sqlite', slug: 'fullstack', setup: 'from-scratch' },
+    ]);
+  });
 });

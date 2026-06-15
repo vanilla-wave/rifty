@@ -77,6 +77,7 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     writeFile: () => {},
     snapshot: () => ({ cwd: WORKSPACE, env: {} }),
     onDevServer: () => () => {},
+    setDevConfig: () => {},
     close: () => {},
   };
 }
@@ -580,6 +581,14 @@ export function App(props: AppProps) {
     await machine.loadPreset(preset);
     seedViteWorkspace(preset);
     openPresetEditorTabs(preset);
+    // Tell the owner which template/runtime the next co-resident dev server boots
+    // (ADR-0148 P4): the persistent owner is spawned once, so a node-server preset
+    // must update the runtime before the dev line runs.
+    workspaceOwner.setDevConfig({
+      templateId: activeTemplate().id,
+      slug: preset.id,
+      setup: preset.setup,
+    });
     if (devServerStatus() !== 'stopped') {
       const restartSessionId = devServerSessionId;
       if (restartSessionId) void restartDevServer(restartSessionId);

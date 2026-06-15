@@ -80,6 +80,15 @@ export interface PtyServerDeps {
    * dev-server-agnostic (it only forwards the request).
    */
   readonly onDevServerReq?: () => void;
+  /**
+   * Page updated the current preset's dev-server config (ADR-0148 P4) — the next
+   * co-resident dev server boots this template/runtime. Forwarded to the bootstrap.
+   */
+  readonly onDevConfig?: (config: {
+    templateId: string;
+    slug: string;
+    setup: 'instant' | 'from-scratch';
+  }) => void;
 }
 
 export interface PtyServer {
@@ -177,6 +186,14 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
       }
       case 'pty:dev-server-req': {
         deps.onDevServerReq?.();
+        return;
+      }
+      case 'pty:dev-config': {
+        deps.onDevConfig?.({
+          templateId: frame.templateId,
+          slug: frame.slug,
+          setup: frame.setup,
+        });
         return;
       }
     }

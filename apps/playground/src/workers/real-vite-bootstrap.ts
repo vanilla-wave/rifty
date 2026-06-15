@@ -508,6 +508,14 @@ async function bootShellOwner(opts: {
     if (frame.type === 'pty:exit') publishSnapshot();
   };
 
+  // The persistent owner is spawned once with the default template; a preset
+  // switch updates which template/runtime the NEXT co-resident dev server boots
+  // (ADR-0148 P4 — the page sends `pty:dev-config` before re-running the dev line).
+  let devSpec = spec;
+  let devCfg = cfg;
+  let devSlug = slug;
+  let devFromScratch = fromScratch;
+
   // Co-resident dev server (ADR-0148 P4): the vite/node tail runs in THIS realm,
   // on demand, reading the realm's installed tree → it sees terminal-installed deps.
   const devServer = createDevServerController({
@@ -516,14 +524,14 @@ async function bootShellOwner(opts: {
     // (the controller stops the server once `signal` aborts) — not mid-install.
     boot: (_signal, devLog) =>
       bootDevServer({
-        cfg,
+        cfg: devCfg,
         // The dev server listens on the template port (cfg.port), distinct from
         // `port` (the owner's snapshot/nm/vfs-write bridge key).
-        port: cfg.port,
-        root: cfg.root,
-        spec,
-        slug,
-        fromScratch,
+        port: devCfg.port,
+        root: devCfg.root,
+        spec: devSpec,
+        slug: devSlug,
+        fromScratch: devFromScratch,
         ownerToken,
         publishSnapshot,
         log: devLog,
@@ -582,7 +590,19 @@ async function bootShellOwner(opts: {
     return shell;
   };
 
-  const server = createPtyServer({ send, makeShell, onDevServerReq: () => devServer.publish() });
+  const server = createPtyServer({
+    send,
+    makeShell,
+    onDevServerReq: () => devServer.publish(),
+    // Re-resolve the dev-server config for the current preset (ADR-0148 P4) so a
+    // node-server preset boots its OWN runtime/port, not the spawn-time default.
+    onDevConfig: (config) => {
+      devSpec = resolveProjectSpec(config.templateId);
+      devCfg = resolveBootstrapConfig(devSpec, devSpec.defaultPort, cfg.root);
+      devSlug = config.slug;
+      devFromScratch = config.setup === 'from-scratch';
+    },
+  });
 
   kernelIpc.onMessage?.((message) => {
     if (isPtyIpcMessage(message)) {

@@ -116,6 +116,16 @@ export interface WorkspaceOwnerHandle {
    * derives its LIVE pill + preview iframe URL from these frames.
    */
   onDevServer(cb: (frame: PtyDevServer) => void): () => void;
+  /**
+   * Tell the owner the current preset's dev-server config (ADR-0148 P4) — the
+   * persistent owner is spawned once, so a preset switch must update which
+   * template/runtime the next co-resident dev server boots. Send before the dev line.
+   */
+  setDevConfig(config: {
+    templateId: string;
+    slug: string;
+    setup: 'instant' | 'from-scratch';
+  }): void;
   /** Terminate the owner worker; idempotent. */
   close(): void;
 }
@@ -293,6 +303,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       devServerListeners.add(cb);
       return () => devServerListeners.delete(cb);
     },
+    setDevConfig: (config) => client.setDevConfig(config),
     close() {
       if (!exited) handle.kill('SIGTERM');
     },

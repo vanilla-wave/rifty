@@ -145,4 +145,17 @@ describe('pty-client', () => {
     client.requestDevServer();
     expect(sent).toEqual([{ type: 'pty:dev-server-req' }]);
   });
+
+  it('setDevConfig sends the current preset dev config (ADR-0148 P4)', () => {
+    const { client, sent } = harness();
+    client.setDevConfig({ templateId: 'express-sqlite', slug: 'fullstack', setup: 'from-scratch' });
+    expect(sent).toEqual([
+      {
+        type: 'pty:dev-config',
+        templateId: 'express-sqlite',
+        slug: 'fullstack',
+        setup: 'from-scratch',
+      },
+    ]);
+  });
 });

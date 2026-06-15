@@ -105,14 +105,22 @@ test.describe('M1 - terminal shell', () => {
     expect(gap).toBeLessThanOrEqual(1);
   });
 
-  test('npm run vite starts through the seeded package script', async ({ page }) => {
+  test('npm run vite resolves the seeded script + routes to the co-resident dev server', async ({
+    page,
+  }) => {
     await page.goto('/');
-    await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
+    // ADR-0148 P4: the default preset boots its dev server in the owner — wait up.
+    await expectTerminalContains(page, 'starting dev server on port', 15_000);
 
     await openShellTerminal(page);
     await runTerminalLine(page, 'npm run vite');
 
-    await expectTerminalContains(page, 'vite: starting dev server', 10_000);
-    expect(await terminalBuffer(page)).not.toContain("unknown subcommand 'run'");
+    // The owner npm resolves the `vite` package script and routes it to the
+    // co-resident dev server; one is already running (boot), so the single-active
+    // guard reports it — proving the script resolved (not unknown/missing).
+    await expectTerminalContains(page, 'dev server already running', 10_000);
+    const buf = await terminalBuffer(page);
+    expect(buf).not.toContain("unknown subcommand 'run'");
+    expect(buf).not.toContain('missing script');
   });
 });

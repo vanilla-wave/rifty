@@ -74,6 +74,12 @@ export interface PtyClient {
   closeSession(sid: string): void;
   /** Ask the owner to re-publish dev-server state (P3 handshake on subscribe/reload). */
   requestDevServer(): void;
+  /** Tell the owner the current preset's dev-server config (ADR-0148 P4). */
+  setDevConfig(config: {
+    templateId: string;
+    slug: string;
+    setup: 'instant' | 'from-scratch';
+  }): void;
   /** Cached cwd/env for a session (from the last `pty:exit`). */
   snapshot(sid: string): PtySessionSnapshot;
   /** Feed an owner→page frame (from `handle.on('message')`). */
@@ -134,6 +140,14 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
     },
     requestDevServer(): void {
       deps.send({ type: 'pty:dev-server-req' });
+    },
+    setDevConfig(config): void {
+      deps.send({
+        type: 'pty:dev-config',
+        templateId: config.templateId,
+        slug: config.slug,
+        setup: config.setup,
+      });
     },
     snapshot(sid: string): PtySessionSnapshot {
       const s = sessions.get(sid);
