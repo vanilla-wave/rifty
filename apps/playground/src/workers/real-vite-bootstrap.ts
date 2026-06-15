@@ -332,6 +332,21 @@ async function bootDevServer(opts: {
 }): Promise<DevServerHandle> {
   const { cfg, port, root, spec, slug, fromScratch, ownerToken, publishSnapshot, log } = opts;
 
+  // The persistent owner was seeded with the DEFAULT template at spawn; a preset
+  // switch changed `cfg`, so force the CURRENT template's package.json (overwrite —
+  // the install reads it to resolve deps) + seed any template files not yet present
+  // (node-server `public/*`, config). The user's edited entry is already seeded by
+  // the page; existing files are left alone.
+  const seedFs = syncMirror();
+  seedFs.mkdirSync(root, { recursive: true });
+  seedFs.writeFileSync(`${root}/package.json`, enc.encode(cfg.packageJson));
+  for (const [seedPath, content] of Object.entries(cfg.seedFiles)) {
+    const np = normalizePath(seedPath);
+    if (np === `${root}/package.json`) continue;
+    seedFs.mkdirSync(dirname(np), { recursive: true });
+    if (!seedFs.existsSync(np)) seedFs.writeFileSync(np, enc.encode(content));
+  }
+
   // Dependency arrival (ADR-0135): idempotent via the install stamp — a no-op if
   // the user already ran `npm install`. instant reuses the baked snapshot quietly;
   // from-scratch streams a real install to the terminal.
