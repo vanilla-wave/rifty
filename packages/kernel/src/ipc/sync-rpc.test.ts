@@ -222,6 +222,72 @@ describe('SyncRpc JSON-frame decode over a SharedArrayBuffer view (browser SAB p
   });
 });
 
+describe('SyncRpc error shape — path/errno/syscall fields (P6a of ADR-0150)', () => {
+  // Regression: errorToShape only copied name/message/code — Node ErrnoException
+  // fields (path, errno, syscall) were silently dropped at the dispatcher side,
+  // so fs.readFileSync('/missing') over sync-RPC produced err.path === undefined.
+
+  it('encodeReply/decodeReply round-trips path, errno, syscall in error shape', () => {
+    const frame = encodeReply({
+      ok: false,
+      error: {
+        name: 'Error',
+        message: "ENOENT: no such file or directory, open '/missing'",
+        code: 'ENOENT',
+        errno: -2,
+        syscall: 'open',
+        path: '/missing',
+      },
+    });
+    const reply = decodeReply(frame);
+    expect(reply.ok).toBe(false);
+    expect(reply.error).toEqual({
+      name: 'Error',
+      message: "ENOENT: no such file or directory, open '/missing'",
+      code: 'ENOENT',
+      errno: -2,
+      syscall: 'open',
+      path: '/missing',
+    });
+  });
+
+  it('dispatcher preserves path/errno/syscall from a thrown ErrnoException through the reply', async () => {
+    const { sab, ring } = createSabRing({ payloadCapacity: 512 });
+    const caller = SabRing.attach(sab, 512);
+    const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
+    dispatcher.register('readFile', () => {
+      throw Object.assign(new Error("ENOENT: no such file or directory, open '/missing'"), {
+        code: 'ENOENT',
+        errno: -2,
+        syscall: 'open',
+        path: '/missing',
+      });
+    });
+    dispatcher.attach(ring);
+    caller.writeRequest(encodeRequest({ method: 'readFile', payload: null }));
+    const replyBytes = await caller.waitReplyAsync(2_000);
+    dispatcher.detachAll();
+    const reply = decodeReply(replyBytes);
+    expect(reply.ok).toBe(false);
+    expect(reply.error).toMatchObject({
+      code: 'ENOENT',
+      errno: -2,
+      syscall: 'open',
+      path: '/missing',
+    });
+  });
+
+  it('plain Error (no errno fields) still works — no spurious undefined fields', () => {
+    const frame = encodeReply({ ok: false, error: { name: 'Error', message: 'boom' } });
+    const reply = decodeReply(frame);
+    expect(reply.ok).toBe(false);
+    expect(reply.error).toEqual({ name: 'Error', message: 'boom' });
+    expect((reply.error as Record<string, unknown>).path).toBeUndefined();
+    expect((reply.error as Record<string, unknown>).errno).toBeUndefined();
+    expect((reply.error as Record<string, unknown>).syscall).toBeUndefined();
+  });
+});
+
 /** Local helper: encode a JSON request frame the way the client does. */
 function encodeReqJson(method: string): Uint8Array {
   const body = new TextEncoder().encode(JSON.stringify({ method, payload: null }));

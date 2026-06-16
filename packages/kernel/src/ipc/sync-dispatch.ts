@@ -374,13 +374,21 @@ function isThenable<T>(v: unknown): v is PromiseLike<T> {
   return typeof (v as { then?: unknown }).then === 'function';
 }
 
-function errorToShape(err: unknown): { name: string; message: string; code?: string } {
+function errorToShape(err: unknown): NonNullable<SyncRpcReply['error']> {
   if (err instanceof Error) {
-    const withCode = err as Error & { code?: unknown };
-    const code = typeof withCode.code === 'string' ? withCode.code : undefined;
-    return code === undefined
-      ? { name: err.name, message: err.message }
-      : { name: err.name, message: err.message, code };
+    const e = err as Error & { code?: unknown; errno?: unknown; syscall?: unknown; path?: unknown };
+    const code = typeof e.code === 'string' ? e.code : undefined;
+    const errno = typeof e.errno === 'number' ? e.errno : undefined;
+    const syscall = typeof e.syscall === 'string' ? e.syscall : undefined;
+    const path = typeof e.path === 'string' ? e.path : undefined;
+    return {
+      name: err.name,
+      message: err.message,
+      ...(code !== undefined && { code }),
+      ...(errno !== undefined && { errno }),
+      ...(syscall !== undefined && { syscall }),
+      ...(path !== undefined && { path }),
+    };
   }
   return { name: 'Error', message: String(err) };
 }
