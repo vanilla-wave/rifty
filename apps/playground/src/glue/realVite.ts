@@ -29,6 +29,7 @@ import {
 } from './pty-client.ts';
 import { PTY_IPC_TYPE, type PtyDevServer, isOwnerToPage, isPtyIpcMessage } from './pty-protocol.ts';
 import { sendVfsWrite } from './vfs-write-port.ts';
+import { type WorkspaceArchiveBridge, bridgeWorkspaceArchive } from './workspace-archive-port.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -110,6 +111,14 @@ export interface WorkspaceOwnerHandle {
    * source of truth). Falls back to the snapshot-port vfs-write channel.
    */
   writeFile(path: string, content: string): void;
+  /**
+   * Download: ask the owner to serialize its whole source tree to a workspace
+   * archive JSON (D-acceptance A1/A2 — the PAGE keeps no authoritative store, so
+   * the archive reads the owner's tree, full content, shell/CLI writes included).
+   */
+  exportArchive(): Promise<string>;
+  /** Upload: hand the owner an archive JSON to apply to its tree. */
+  importArchive(archiveJson: string): Promise<void>;
   /** Cached cwd/env for a session (from the latest `pty:exit`). */
   snapshot(sid: string): PtySessionSnapshot;
   /**
@@ -285,6 +294,11 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     resolveClosed(typeof code === 'number' ? code : null);
   });
 
+  // Page-side client for the owner's archive export/import bridge (A1/A2): the
+  // owner serializes/applies the workspace against its OWN syncMirror, so the
+  // page never needs an authoritative store to download/upload a workspace.
+  const archiveBridge: WorkspaceArchiveBridge = bridgeWorkspaceArchive(snapshotPort);
+
   return {
     workspaceId,
     previewOwnerToken,
@@ -304,6 +318,8 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
         sendVfsWrite(snapshotPort, frame);
       }
     },
+    exportArchive: () => archiveBridge.export(),
+    importArchive: (archiveJson) => archiveBridge.import(archiveJson),
     snapshot: (sid) => client.snapshot(sid),
     onDevServer(cb) {
       devServerListeners.add(cb);
@@ -311,6 +327,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     },
     setDevConfig: (config) => client.setDevConfig(config),
     close() {
+      archiveBridge.dispose();
       if (!exited) handle.kill('SIGTERM');
     },
   };

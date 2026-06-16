@@ -136,22 +136,22 @@ describe('terminal persistence adapter', () => {
     expect(reloaded.initialHistory.map((item) => item.command)).toEqual(['first', 'second']);
   });
 
-  it('falls back to default cwd when OPFS restores a path absent from the workspace VFS', async () => {
+  it('passes the persisted cwd through as-is (cwd validation moved to the owner, A1/A2)', async () => {
+    // The PAGE no longer holds a store to validate against; the OWNER resets an
+    // unreachable cwd on session open (see `reachable-cwd` + makeShell). So the
+    // adapter must preserve the persisted cwd verbatim, not pre-reset it.
     const opfs = fakeStore();
-    const workspace = fakeStore();
     const persistence = await createTerminalPersistence('/workspace', {
       createOpfs: async () => opfs,
-      syncFs: () => workspace,
     });
     await persistence.saveState({ cwd: '/workspace/stale', env: { FOO: 'bar' } });
 
     const reloaded = await createTerminalPersistence('/workspace', {
       createOpfs: async () => opfs,
-      syncFs: () => workspace,
     });
 
     expect(reloaded.initialState).toEqual({
-      cwd: '/workspace',
+      cwd: '/workspace/stale',
       env: { FOO: 'bar' },
     });
   });

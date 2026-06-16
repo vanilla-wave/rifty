@@ -39,6 +39,7 @@ export function installRuntimeJsFsHandlers(
   getVfs: VfsAccessor,
 ): void {
   dispatcher.register(FS_METHODS.exists, (p) => getVfs().existsSync(str(obj(p), 'path')));
+  // TODO(backlog: runtime-js/child-remote-fs-fidelity) — gratuitous async; sync statSync left untested by the loopback
   dispatcher.register(
     FS_METHODS.stat,
     async (p) => getVfs().statSync(str(obj(p), 'path')) as FsStatShape,
@@ -52,6 +53,7 @@ export function installRuntimeJsFsHandlers(
   ]);
 
   // Binary reply: ranged slice of the cached buffer (O(1) subarray reference).
+  // TODO(backlog: perf/fs-rpc-chunk-perf) — readFileBytesSync re-reads the whole file per chunk → O(N²)
   dispatcher.register(FS_METHODS.readChunk, (p): Uint8Array => {
     const r = obj(p);
     const path = str(r, 'path');
@@ -63,6 +65,7 @@ export function installRuntimeJsFsHandlers(
   });
 
   // Write: truncate creates/replaces; subsequent chunks append.
+  // TODO(backlog: perf/fs-rpc-chunk-perf) — append reads prev+concat+writes per chunk → O(N²); base64 inflation
   dispatcher.register(FS_METHODS.writeChunk, (p): null => {
     const r = obj(p);
     const path = str(r, 'path');

@@ -116,6 +116,7 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
     frame: Extract<PageToOwnerFrame, { type: 'pty:exec' }>,
   ): Promise<void> {
     const session = sessions.get(sid);
+    // TODO(backlog: shell/pty-server-protocol-honesty) — silent return hangs the page run; emit pty:exit{error}
     if (!session) return;
     const run: RunState = { stdin: new StdinQueue(), controller: new AbortController(), seq: 0 };
     session.runs.set(frame.rid, run);
@@ -177,6 +178,7 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
       }
       case 'pty:resize':
         // Dims are per-exec in v1; live resize is a follow-up.
+        // TODO(backlog: shell/pty-server-protocol-honesty) — wired no-op; implement live resize, throw, or drop the frame
         return;
       case 'pty:close': {
         const session = sessions.get(frame.sid);

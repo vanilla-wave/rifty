@@ -6,7 +6,7 @@ import {
   type TerminalHistoryRecord,
   addTerminalHistoryRecord,
 } from '@riftydev/terminal/history';
-import { normalizePath, syncMirror } from '@riftydev/vfs';
+import { normalizePath } from '@riftydev/vfs';
 import { Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import {
   type TerminalRunDimensions,
@@ -29,7 +29,6 @@ import type { TerminalModeHint } from './components/TerminalPanel.tsx';
 import { Icon } from './components/icons.tsx';
 import { copyToClipboard } from './glue/clipboard.ts';
 import { readChildren } from './glue/file-tree.ts';
-import { writeText } from './glue/fs-ops.ts';
 import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
 import {
@@ -41,9 +40,8 @@ import { SnapshotFs } from './glue/snapshot-fs.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
 import { requestVfsSnapshot, subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
-import { exportWorkspaceArchive, importWorkspaceArchive } from './glue/workspace-archive.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset, presetBootLines } from './presets.ts';
-import { type ProjectSpec, buildProjectPackageJson } from './templates/project-spec.ts';
+import type { ProjectSpec } from './templates/project-spec.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
 
 const WORKSPACE = '/workspace';
@@ -75,6 +73,8 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     resize: () => {},
     closeSession: () => {},
     writeFile: () => {},
+    exportArchive: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
+    importArchive: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     snapshot: () => ({ cwd: WORKSPACE, env: {} }),
     onDevServer: () => () => {},
     setDevConfig: () => {},
@@ -104,9 +104,6 @@ export function App(props: AppProps) {
   const [paletteOpen, setPaletteOpen] = createSignal(false);
 
   const layout = useLayout();
-  // Main-thread sync VFS mirror — same store the shell + `npm install` write to,
-  // so the explorer is honest (ADR-0075). Stable after bootstrap's initBackend().
-  const vfs = syncMirror();
 
   // Read-only mirror of the real-vite worker's project tree (ADR-0076). The
   // worker's VFS is a separate realm the page can't read directly, so it
@@ -135,7 +132,7 @@ export function App(props: AppProps) {
     return devServerStatus() !== 'stopped';
   }
 
-  function downloadWorkspaceArchive(): void {
+  async function downloadWorkspaceArchive(): Promise<void> {
     if (workspaceArchiveBlocked()) {
       flashError('Stop the dev server to archive the editable workspace');
       return;
@@ -145,20 +142,29 @@ export function App(props: AppProps) {
       flashError('Workspace archive download is unavailable here');
       return;
     }
-    const archive = exportWorkspaceArchive(vfs, WORKSPACE);
-    const blob = new Blob([archive], { type: 'application/vnd.rifty.workspace+json' });
-    const url = URL.createObjectURL(blob);
-    const a = doc.createElement('a');
-    a.href = url;
-    a.download = 'rifty-workspace.json';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 0);
-    flashToast('Workspace archive downloaded', 'success');
+    try {
+      // A1/A2: serialize the OWNER tree (the single store), not a page copy — so
+      // the archive includes shell/CLI-authored files, full content (no cap).
+      const archive = await workspaceOwner.exportArchive();
+      const blob = new Blob([archive], { type: 'application/vnd.rifty.workspace+json' });
+      const url = URL.createObjectURL(blob);
+      const a = doc.createElement('a');
+      a.href = url;
+      a.download = 'rifty-workspace.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      flashToast('Workspace archive downloaded', 'success');
+    } catch (err) {
+      flashError(`Archive download failed: ${(err as Error).message}`);
+    }
   }
 
   async function importWorkspaceArchiveFile(file: File): Promise<void> {
     try {
-      importWorkspaceArchive(vfs, await file.text(), { root: WORKSPACE });
+      // A1/A2: apply into the OWNER tree, then pull a fresh snapshot so the
+      // explorer/editor reflect it (no page store to write).
+      await workspaceOwner.importArchive(await file.text());
+      requestVfsSnapshot(workspaceOwner.snapshotPort);
       flashToast('Workspace archive imported', 'success');
     } catch (err) {
       flashError(`Import failed: ${(err as Error).message}`);
@@ -479,36 +485,23 @@ export function App(props: AppProps) {
     return normalized;
   }
 
-  function seedPresetFiles(preset: Preset): void {
-    for (const file of preset.files ?? []) {
-      writeText(vfs, workspacePresetPath(file.path), file.content);
-    }
-  }
-
   function openPresetEditorTabs(preset: Preset): void {
     for (const path of preset.openFiles ?? []) {
       editorApi?.openFile(workspacePresetPath(path), { activate: false });
     }
   }
 
-  // SSoT (ADR-0148 P4): editor writes flow to the OWNER (the execution truth) so
-  // the co-resident dev server (HMR) + shell see them; the page `vfs` is kept as a
-  // write-through copy for the workspace archive (not a competing read source).
+  // SSoT (ADR-0148 P4 + A1/A2): editor writes flow to the OWNER — the single
+  // store the dev server (HMR), shell, and archive export all read. No page copy.
   function writeWorkspaceFile(path: string, content: string): void {
     if (path !== PROGRAM_MIRROR_PATH) workspaceOwner.writeFile(path, content);
-    try {
-      writeText(vfs, path, content);
-    } catch {
-      /* archive copy is best-effort */
-    }
   }
 
   /**
-   * Push the project files into the persistent owner realm (ADR-0146 P2). The
-   * owner-resident shell reads its OWN `syncMirror()`, seeded from the template
-   * only — without this the shell `cat`/`ls` miss preset files (project-summary
-   * etc.) and the editor source. Entry source + preset files only; the owner's
-   * own template package.json stands. P3 makes the owner the single writer.
+   * Push the project files into the persistent owner realm (ADR-0146 P2 + A1/A2:
+   * the owner is the single store owner). The owner-resident shell reads its OWN
+   * `syncMirror()`; the owner's own template package.json + default README stand
+   * (seeded owner-side in `seedProject`). Entry source + preset files only.
    */
   function seedWorkspaceOwner(preset: Preset): void {
     workspaceOwner.writeFile(PROGRAM_MIRROR_PATH, preset.source);
@@ -517,11 +510,8 @@ export function App(props: AppProps) {
     }
   }
 
+  // Seed the workspace for a preset — owner-only (A1/A2): the page holds no store.
   function seedViteWorkspace(preset: Preset): void {
-    const packageJson = buildProjectPackageJson(activeTemplate()).json;
-    writeText(vfs, `${WORKSPACE}/package.json`, packageJson);
-    writeText(vfs, PROGRAM_MIRROR_PATH, preset.source);
-    seedPresetFiles(preset);
     seedWorkspaceOwner(preset);
   }
 
@@ -602,16 +592,10 @@ export function App(props: AppProps) {
   }
 
   onMount(() => {
-    // Seed the workspace (idempotent).
+    // Seed the owner workspace (idempotent). The default README is seeded
+    // owner-side in `seedProject` (A1/A2 — no page store to write).
     try {
       seedViteWorkspace(DEFAULT_PRESET);
-      if (!vfs.existsSync(`${WORKSPACE}/README.md`)) {
-        writeText(
-          vfs,
-          `${WORKSPACE}/README.md`,
-          '# workspace\n\nThis is the in-browser virtual filesystem.\n\n- Edit the program in the `src/main.js` tab.\n- Run `npm install <pkg>` in any terminal; installs land in `node_modules`.\n',
-        );
-      }
     } catch {
       /* best-effort seeding */
     }
@@ -662,15 +646,9 @@ export function App(props: AppProps) {
 
   function onProgramChange(next: string): void {
     machine.setSource(next);
-    // SSoT (ADR-0148 P4): push the program edit to the owner so the co-resident
-    // dev server HMR-updates (the program mirror is the entry vite serves); the
-    // page `vfs` keeps a write-through copy for the workspace archive.
+    // SSoT (ADR-0148 P4 + A1/A2): push the program edit to the OWNER (the single
+    // store) so the co-resident dev server HMR-updates and the archive sees it.
     workspaceOwner.writeFile(PROGRAM_MIRROR_PATH, next);
-    try {
-      writeText(vfs, PROGRAM_MIRROR_PATH, next);
-    } catch {
-      /* archive copy is best-effort */
-    }
   }
 
   function onTerminalLink(uri: string): void {
@@ -803,7 +781,7 @@ export function App(props: AppProps) {
         ? 'Stop the dev server to archive the editable workspace'
         : undefined,
       icon: 'file-output',
-      run: () => downloadWorkspaceArchive(),
+      run: () => void downloadWorkspaceArchive(),
     });
     items.push({
       id: 'act:import-workspace',

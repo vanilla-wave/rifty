@@ -92,6 +92,12 @@ function makeFakeOwner() {
     writeFile(path: string, content: string): void {
       writes.push({ path, content });
     },
+    exportArchive(): Promise<string> {
+      return Promise.resolve('{"version":1,"root":"/workspace","files":[]}');
+    },
+    importArchive(): Promise<void> {
+      return Promise.resolve();
+    },
     snapshot(sid: string): PtySessionSnapshot {
       return snapshots.get(sid) ?? { cwd: '/workspace', env: {} };
     },

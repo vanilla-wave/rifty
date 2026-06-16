@@ -20,15 +20,13 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain("['vite']");
   });
 
-  it('seeds package.json through the shared project-spec builder', () => {
-    // one regex so the builder provably comes from the SHARED project-spec
-    // import block, not a local re-definition
-    expect(source).toMatch(
-      /import \{[^}]*buildProjectPackageJson[^}]*\} from '\.\/templates\/project-spec\.ts'/s,
-    );
-    expect(source).toContain('const packageJson = buildProjectPackageJson(activeTemplate()).json;');
-    expect(source).toContain('writeText(vfs, `${WORKSPACE}/package.json`, packageJson);');
-    expect(source).not.toContain('const packageJson = {');
+  it('holds no page-side authoritative VFS store — the owner is the single store (A1/A2)', () => {
+    // D-acceptance A1/A2 regression guard: the page must not construct or write
+    // a local syncMirror; seeding + archive + editor writes all go to the owner.
+    expect(source).not.toContain('const vfs = syncMirror()');
+    expect(source).not.toContain('writeText(vfs');
+    expect(source).not.toContain("from '@riftydev/vfs/internal'");
+    expect(source).toContain('seedWorkspaceOwner(preset)');
   });
 
   it('follows the active preset template instead of hardcoding the default', () => {
@@ -137,9 +135,11 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain('saveState({ cwd: session.cwd, env: {} })');
   });
 
-  it('offers workspace archive export and import commands', () => {
-    expect(source).toContain('exportWorkspaceArchive');
-    expect(source).toContain('importWorkspaceArchive');
+  it('routes workspace archive export and import through the owner (A1/A2)', () => {
+    // D-acceptance A1/A2: the archive reads/writes the OWNER tree (the single
+    // store), not a page copy.
+    expect(source).toContain('workspaceOwner.exportArchive()');
+    expect(source).toContain('workspaceOwner.importArchive(');
     expect(source).toContain("id: 'act:export-workspace'");
     expect(source).toContain("id: 'act:import-workspace'");
     expect(source).toContain('function workspaceArchiveBlocked(): boolean');

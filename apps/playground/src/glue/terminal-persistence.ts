@@ -26,11 +26,7 @@ export interface TerminalPersistence {
   saveState(state: TerminalState): Promise<void>;
 }
 
-interface CwdValidator {
-  statSync(path: string): { isDirectory: boolean };
-}
-
-type TerminalWorkspaceFs = TerminalHistoryFs & TerminalStateFs & CwdValidator;
+type TerminalWorkspaceFs = TerminalHistoryFs & TerminalStateFs;
 
 export interface TerminalPersistenceDeps {
   createOpfs?: () => Promise<TerminalHistoryVfs & TerminalStateVfs>;
@@ -60,47 +56,32 @@ function createWriteQueue(): (task: () => Promise<void>) => Promise<void> {
   };
 }
 
-function validCwd(fs: CwdValidator, cwd: string): boolean {
-  try {
-    return fs.statSync(cwd).isDirectory;
-  } catch {
-    return false;
-  }
-}
-
-function withReachableCwd(
-  state: TerminalState,
-  defaultCwd: string,
-  fs: CwdValidator,
-): TerminalState {
-  return validCwd(fs, state.cwd) ? state : { ...state, cwd: defaultCwd };
-}
-
 export async function createTerminalPersistence(
   defaultCwd: string,
   deps: TerminalPersistenceDeps = {},
 ): Promise<TerminalPersistence> {
-  const workspaceFs = (deps.syncFs ?? syncMirror)();
   const enqueue = createWriteQueue();
   try {
     const opfs = await (deps.createOpfs ?? createOpfsStore)();
-    const initialState = await loadTerminalStateAsync(opfs, defaultCwd);
     return {
       backend: 'opfs',
       initialHistory: await loadTerminalHistoryAsync(opfs),
-      initialState: withReachableCwd(initialState, defaultCwd, workspaceFs),
+      // cwd is passed through as-is; the OWNER validates it against its tree on
+      // session open (A1/A2: the page holds no store to check — see reachableCwd
+      // in real-vite-bootstrap's makeShell).
+      initialState: await loadTerminalStateAsync(opfs, defaultCwd),
       saveHistory: (records) => enqueue(() => saveTerminalHistoryAsync(opfs, records)),
       saveState: (state) => enqueue(() => saveTerminalStateAsync(opfs, state)),
     };
   } catch {
+    // OPFS unavailable → degraded, session-local history only. The page holds no
+    // authoritative store (A1/A2), so this reads the empty lazy-default mirror;
+    // nothing persists across reload (honestly reported as `backend: 'memory'`).
+    const workspaceFs = (deps.syncFs ?? syncMirror)();
     return {
       backend: 'memory',
       initialHistory: loadTerminalHistory(workspaceFs),
-      initialState: withReachableCwd(
-        loadTerminalState(workspaceFs, defaultCwd),
-        defaultCwd,
-        workspaceFs,
-      ),
+      initialState: loadTerminalState(workspaceFs, defaultCwd),
       saveHistory: (records) => enqueue(async () => saveTerminalHistory(workspaceFs, records)),
       saveState: (state) => enqueue(async () => saveTerminalState(workspaceFs, state)),
     };

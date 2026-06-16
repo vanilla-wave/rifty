@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **The page holds no authoritative VFS store — the owner is the single store
+  owner (D-acceptance A1/A2; `d-owner-worker-milestone`).** P4 left a SECOND
+  authoritative `syncMirror` on the PAGE (`initBackend`) written-through as a
+  workspace-archive copy, so the archive diverged from owner-side (shell/CLI)
+  writes and the "one store owner" invariant held only `partial`. Now retired:
+  workspace archive export/import is owner-served (`glue/workspace-archive-port`,
+  reusing the realm-agnostic `glue/workspace-archive` against the owner
+  `syncMirror` — full content, no 128 KB cap, so a downloaded archive includes
+  shell/CLI-authored files); seeding + the default README are owner-only
+  (`real-vite-bootstrap` `seedProject`); the persisted terminal cwd is validated
+  in the owner (`glue/reachable-cwd` in `makeShell`) instead of against the page
+  store; and the storage badge reads `detectVfsBackend` (the page installs no
+  backend — this also fixes the prior page-main-thread "OPFS-sync-fails → badge
+  shows memory" misreport). Authoritative-store count == 1; A1/A2 hold. Tests:
+  `glue/workspace-archive-port.test.ts`, `glue/reachable-cwd.test.ts`; e2e
+  `owner-*` + `sandbox-fs-rpc` green.
+
 ### Fixed
 
 - **Editable project files in real-vite mode (ADR-0076 §Decision-4, corrected).**

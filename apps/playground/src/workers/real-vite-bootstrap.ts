@@ -62,6 +62,7 @@ import {
   isPageToOwner,
   isPtyIpcMessage,
 } from '../glue/pty-protocol.ts';
+import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { proxiedRegistryFetch } from '../glue/registry-fetch.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import {
@@ -70,6 +71,7 @@ import {
   serveSnapshotRequests,
 } from '../glue/vfs-snapshot-port.ts';
 import { type VfsWriteFrame, applyVfsWriteFrame, serveVfsWrites } from '../glue/vfs-write-port.ts';
+import { serveWorkspaceArchive } from '../glue/workspace-archive-port.ts';
 import {
   type BootstrapConfig,
   type NodeServerBootstrapConfig,
@@ -187,6 +189,18 @@ function seedProject(cfg: BootstrapConfig): void {
     if (!fs.existsSync(np)) {
       fs.writeFileSync(np, enc.encode(content));
     }
+  }
+  // Default welcome README (D-acceptance A1/A2): seeded here, idempotently,
+  // against the owner's own mirror — moved off the PAGE so the page holds no
+  // authoritative store (was App.tsx onMount writing the page `vfs`).
+  const readme = normalizePath(`${cfg.root}/README.md`);
+  if (!fs.existsSync(readme)) {
+    fs.writeFileSync(
+      readme,
+      enc.encode(
+        '# workspace\n\nThis is the in-browser virtual filesystem.\n\n- Edit the program in the `src/main.js` tab.\n- Run `npm install <pkg>` in any terminal; installs land in `node_modules`.\n',
+      ),
+    );
   }
 }
 
@@ -629,9 +643,11 @@ async function bootShellOwner(opts: {
 
   const makeShell = (seed?: { cwd?: string; env?: Record<string, string> }): Shell => {
     // Seed restores persisted terminal cwd/env on reload (ADR-0146); falls back
-    // to the workspace root + empty env for a fresh session.
+    // to the workspace root + empty env for a fresh session. The cwd is validated
+    // HERE against the owner's tree (A1/A2: the page no longer holds a store to
+    // check), resetting to root if the persisted dir was deleted since.
     const shell = new Shell({
-      cwd: seed?.cwd ?? cfg.root,
+      cwd: reachableCwd(syncMirror(), seed?.cwd, cfg.root),
       env: seed?.env ?? {},
       execBin: ownerBinExecutor,
     });
@@ -672,12 +688,16 @@ async function bootShellOwner(opts: {
   // Workspace read bridge (ADR-0080 + ADR-0148): the page reads the installed +
   // project tree against this realm's syncMirror. Kept live by the serve:true realm.
   const tearNodeModulesBridge = serveNodeModulesReads(port, cfg.root);
-  log('[shell-owner/worker] pty server ready; workspace read bridge live\n');
+  // Workspace archive export/import (D-acceptance A1/A2): the owner serializes /
+  // applies its own tree so the PAGE keeps no authoritative store of its own.
+  const tearArchiveBridge = serveWorkspaceArchive(port, cfg.root);
+  log('[shell-owner/worker] pty server ready; workspace read + archive bridges live\n');
 
   // Referenced so the served bridges + server aren't GC'd while the realm serves.
   void tearVfsBridge;
   void tearSnapReq;
   void tearNodeModulesBridge;
+  void tearArchiveBridge;
   void server;
 }
 

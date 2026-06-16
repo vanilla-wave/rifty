@@ -36,6 +36,7 @@ export class SyncRpcFsSync implements FsSync {
   readFileBytesSync(path: string): Uint8Array {
     const stat = this.call(FS_METHODS.statOrNull, { path }) as FsStatShape | null;
     if (stat === null || !stat.isFile) {
+      // TODO(backlog: runtime-js/child-remote-fs-fidelity) — hand-rolled ENOENT diverges from VfsError shape
       throw Object.assign(new Error(`ENOENT: ${path}`), { code: 'ENOENT', path });
     }
     const size = stat.size ?? 0;

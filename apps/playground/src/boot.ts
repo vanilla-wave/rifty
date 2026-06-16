@@ -6,37 +6,30 @@
  * from `main.tsx` so they can be unit-tested without a DOM or Solid renderer.
  */
 import { registerServiceWorker } from '@riftydev/service-worker';
-import { initBackend } from '@riftydev/vfs';
+import { detectVfsBackend } from '@riftydev/vfs';
 import { type StoragePersistenceStatus, probeStoragePersistence } from './glue/storage-status.ts';
 
 export interface VfsBootDescriptor {
   readonly backend: 'opfs' | 'memory';
-  /** Populated only on `initBackend()` failure (then `backend === 'memory'`). */
+  /** Reserved for a backend-init failure cause; unused now the page installs no store. */
   readonly reason?: string;
 }
 
-export type InitBackendFn = () => Promise<'opfs' | 'memory'>;
+export type DetectBackendFn = () => 'opfs' | 'memory';
 
 /**
- * Resolve the VFS backend descriptor. On `initBackend()` failure, falls back to
- * memory and surfaces the cause via `reason`. Never throws.
+ * Resolve the storage-badge descriptor by DETECTING the backend the persistent
+ * workspace owner will use (D-acceptance A1/A2). The PAGE
+ * installs NO VFS store: the owner worker is the single store owner and runs
+ * `initBackend()` itself, so this constructs nothing — it only reports what the
+ * cross-origin-isolated owner realm will pick (OPFS when available, else memory).
  *
- * @param impl - injection seam for tests; defaults to `@riftydev/vfs/initBackend`.
- * @param logger - injection seam for the `console.warn` side effect (tests pass a spy
- *   to assert the fallback log without polluting stderr).
+ * @param detect - injection seam for tests; defaults to `@riftydev/vfs/detectVfsBackend`.
  */
 export async function bootstrap(
-  impl: InitBackendFn = initBackend,
-  logger: Pick<Console, 'warn'> = console,
+  detect: DetectBackendFn = detectVfsBackend,
 ): Promise<VfsBootDescriptor> {
-  try {
-    const backend = await impl();
-    return { backend };
-  } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
-    logger.warn(`[rifty] VFS backend init failed, falling back to memory: ${reason}`);
-    return { backend: 'memory', reason };
-  }
+  return { backend: detect() };
 }
 
 /** Human-readable label for the storage badge in the header. */
@@ -144,7 +137,7 @@ function defaultRenderFatal(message: string): void {
 /** Injection seam for {@link bootstrapPlayground} — tests pass spies for each step. */
 export interface BootstrapPlaygroundDeps {
   readonly assertCoi?: (deps?: CoiGuardDeps) => void;
-  readonly initVfs?: InitBackendFn;
+  readonly detectVfs?: DetectBackendFn;
   readonly probeStorage?: () => Promise<StoragePersistenceStatus>;
   readonly registerSw?: (scriptUrl: string) => Promise<unknown>;
   readonly logger?: Pick<Console, 'warn' | 'error'>;
@@ -159,7 +152,7 @@ export interface BootstrapPlaygroundDeps {
 export async function bootstrapPlayground(deps: BootstrapPlaygroundDeps = {}): Promise<BootResult> {
   const logger = deps.logger ?? console;
   (deps.assertCoi ?? assertCrossOriginIsolated)();
-  const vfsBoot = await bootstrap(deps.initVfs, logger);
+  const vfsBoot = await bootstrap(deps.detectVfs);
   const storage = await (deps.probeStorage ?? (() => probeStoragePersistence()))();
   const swRegister = deps.registerSw ?? ((url: string) => registerServiceWorker(url));
   try {
