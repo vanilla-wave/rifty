@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# One-time FIRST publish of all 13 rifty packages with a token.
+# One-time FIRST publish of all 12 rifty packages with a token.
 #
 # Why a token (just this once): npm OIDC trusted publishing cannot create a
 # package name that does not exist yet (npm/cli#8544). After this initial
@@ -8,7 +8,7 @@
 # (see docs/PUBLISHING.md) and every subsequent release is TOKENLESS via
 # .github/workflows/release.yml on a `v*` tag.
 #
-# The publish set: ./packages/* (12, incl. the umbrella `@riftydev/sdk`) plus
+# The publish set: ./packages/* (11, incl. the umbrella `@riftydev/sdk`) plus
 # @riftydev/shadow-registry. apps/playground + test fixtures stay private and are
 # never matched by the filter.
 #
@@ -58,10 +58,10 @@ NPM_CONFIG_USERCONFIG="$NPMRC" \
   publish --access public --no-git-checks $DRY
 
 if [ -n "$DRY" ]; then
-  echo "✓ dry run complete — all 13 packages packed cleanly."
+  echo "✓ dry run complete — all 12 packages packed cleanly."
 else
   echo "✓ published. Next: on npmjs.com add a GitHub Actions trusted publisher to"
-  echo "  each of the 13 packages (owner=vanilla-wave, repo=rifty,"
+  echo "  each of the 12 packages (owner=vanilla-wave, repo=rifty,"
   echo "  workflow=release.yml). Then 'git tag vX.Y.Z && git push origin vX.Y.Z'"
   echo "  publishes tokenlessly. Revoke this token once that is verified."
 fi

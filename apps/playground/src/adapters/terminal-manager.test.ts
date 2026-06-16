@@ -1,6 +1,6 @@
 import type { ShellCommand } from '@riftydev/shell';
 import { describe, expect, it } from 'vitest';
-import { type TerminalCommand, createTerminalManager } from './terminal-session.ts';
+import { type TerminalCommand, createTerminalManager } from './terminal-manager.ts';
 
 interface WriterChunk {
   readonly chunk: string;

@@ -1,3 +1,4 @@
+import { MONO_FONT_STACK } from '../glue/fonts.ts';
 /**
  * The Express + SQLite template — a full client-server app as the second
  * registered {@link ProjectSpec} (ADR-0078's "data change, not a worker fork").
@@ -14,8 +15,6 @@
  * the page-side explorer through the preset's `files`.
  */
 import type { NodeServerProjectSpec } from './project-spec.ts';
-
-const MONO_FONT_STACK = '"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace';
 
 export const EXPRESS_SQLITE_SERVER_SOURCE = `// Express + SQLite, running in your browser.
 // - express comes from a real npm install (check node_modules in the explorer)

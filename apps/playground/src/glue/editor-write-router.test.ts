@@ -13,9 +13,10 @@
  */
 import { syncMirror } from '@riftydev/vfs';
 import { resetSyncMirror } from '@riftydev/vfs/internal';
-import { SnapshotFs, type VfsSnapshotFrame } from '@riftydev/workbench';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { isEditorPathWritable, writeEditorFile } from './editor-write-router.ts';
+import { SnapshotFs } from './snapshot-fs.ts';
+import type { VfsSnapshotFrame } from './vfs-snapshot-port.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();

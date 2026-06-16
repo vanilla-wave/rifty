@@ -6,9 +6,11 @@
  */
 import { syncMirror } from '@riftydev/vfs';
 import { resetSyncMirror } from '@riftydev/vfs/internal';
-import { SnapshotFs, type VfsSnapshotFrame, type VfsWriteFrame } from '@riftydev/workbench';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { RealViteExplorerVfs } from './real-vite-explorer-vfs.ts';
+import { SnapshotFs } from './snapshot-fs.ts';
+import type { VfsSnapshotFrame } from './vfs-snapshot-port.ts';
+import type { VfsWriteFrame } from './vfs-write-port.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();

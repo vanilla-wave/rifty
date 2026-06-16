@@ -1,4 +1,3 @@
-import { EXPRESS_SQLITE_TEMPLATE } from '@riftydev/workbench';
 import { describe, expect, it } from 'vitest';
 import {
   CATEGORY_ORDER,
@@ -7,6 +6,7 @@ import {
   type Preset,
   presetBootLines,
 } from './presets.ts';
+import { EXPRESS_SQLITE_TEMPLATE } from './templates/express-sqlite.ts';
 
 function presetText(preset: Preset): string {
   return [preset.source, ...(preset.files ?? []).map((file) => file.content)].join('\n');
