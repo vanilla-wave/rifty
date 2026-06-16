@@ -33,10 +33,8 @@ import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { createMemoryFs, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import {
-  EXPRESS_SQLITE_TEMPLATE,
-  resolveBootstrapConfig,
-} from '../../packages/workbench/src/index.ts';
+import { EXPRESS_SQLITE_TEMPLATE } from '../../apps/playground/src/templates/express-sqlite.ts';
+import { resolveBootstrapConfig } from '../../apps/playground/src/templates/project-spec.ts';
 
 // See express-live-run.opt-in.test.ts: packages like `etag` read the GLOBAL
 // Buffer for `Buffer.isBuffer`; it must be the class express builds chunks with.

@@ -13,7 +13,7 @@
  *     on a warm machine, and is wire-bound when the proxy is cold. Running
  *     it as part of every CI invocation would dwarf the rest of the M0..M9
  *     suite. The unit test in
- *     `packages/workbench/src/hmr-bridge.test.ts` already exercises
+ *     `apps/playground/src/glue/hmr-bridge.test.ts` already exercises
  *     the wiring contract (server accepts iframe-shaped clients, broadcasts
  *     reach them, `transformIndexHtml` injects the client script
  *     idempotently).

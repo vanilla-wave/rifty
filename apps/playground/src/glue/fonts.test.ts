@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { EXPRESS_SQLITE_TEMPLATE } from '@riftydev/workbench';
 import { describe, expect, it } from 'vitest';
 import { PRESETS } from '../presets.ts';
+import { EXPRESS_SQLITE_TEMPLATE } from '../templates/express-sqlite.ts';
 import { MONO_FONT_STACK } from './fonts.ts';
 
 const themeCss = readFileSync(

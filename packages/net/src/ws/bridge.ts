@@ -45,7 +45,7 @@ const CHANNEL_PREFIX = 'rifty:ws:';
  * client side of the bridge without depending on this package. Production
  * code in the playground uses `BridgedWebSocket` directly; this helper is
  * the seam for inlined / hand-rolled clients that ride the same protocol.
- * (Closes ADR-0017 phase 1 — see `packages/workbench/src/hmr-bridge.ts`.)
+ * (Closes ADR-0017 phase 1 — see `apps/playground/src/glue/hmr-bridge.ts`.)
  */
 export function channelNameFor(url: string): string {
   // Strip query/fragment so client and server agree on the name.

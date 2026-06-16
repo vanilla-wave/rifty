@@ -16,12 +16,10 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { RegistryClient, install } from '@riftydev/npm-client';
 import { createMemoryFs } from '@riftydev/vfs/internal';
-import {
-  allProjectSpecs,
-  buildDepSnapshot,
-  buildProjectPackageJson,
-  readEffectiveDeps,
-} from '@riftydev/workbench';
+import { buildDepSnapshot } from '../src/glue/dep-snapshot.ts';
+import { readEffectiveDeps } from '../src/glue/install-stamp.ts';
+import { buildProjectPackageJson } from '../src/templates/project-spec.ts';
+import { allProjectSpecs } from '../src/templates/registry.ts';
 
 const ROOT = '/workspace';
 const publicDir = join(dirname(fileURLToPath(import.meta.url)), '../public');

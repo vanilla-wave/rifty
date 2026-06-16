@@ -1,5 +1,5 @@
-import { defaultProjectSpec, resolveProjectSpec } from '@riftydev/workbench';
 import { createSignal, onCleanup } from 'solid-js';
+import { defaultProjectSpec, resolveProjectSpec } from '../templates/registry.ts';
 
 export type Mode = 'dev' | 'real-vite';
 

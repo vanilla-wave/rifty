@@ -8,34 +8,14 @@ import {
   addTerminalHistoryRecord,
 } from '@riftydev/terminal/history';
 import { NotImplementedError, normalizePath, syncMirror } from '@riftydev/vfs';
+import { Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import {
-  NodeModulesCache,
-  type ProjectSpec,
-  type RuntimeSession,
-  SnapshotFs,
-  SyncMirrorVfs,
   type TerminalCommand,
   type TerminalCommandContext,
-  type TerminalPersistence,
   type TerminalRunDimensions,
   type TerminalSessionSnapshot,
-  bridgeNodeModulesReads,
-  buildProjectPackageJson,
-  createNpmShellCommand,
-  createRegistryProxyFetch,
-  createRuntimeSession,
   createTerminalManager,
-  defaultProjectSpec,
-  devScriptCommand,
-  exportWorkspaceArchive,
-  importWorkspaceArchive,
-  readChildren,
-  resolveProjectSpec,
-  subscribeVfsSnapshot,
-  terminalDevLine,
-  writeText,
-} from '@riftydev/workbench';
-import { Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
+} from './adapters/terminal-manager.ts';
 import { useLayout } from './adapters/useLayout.ts';
 import { useMode } from './adapters/useMode.ts';
 import { type BootResult, isCrossOriginIsolated, swErrorBannerMessage } from './boot.ts';
@@ -52,11 +32,29 @@ import type { TerminalModeHint } from './components/TerminalPanel.tsx';
 import { Icon } from './components/icons.tsx';
 import { createBinExecutor } from './glue/bin-executor.ts';
 import { copyToClipboard } from './glue/clipboard.ts';
+import { readChildren } from './glue/file-tree.ts';
+import { writeText } from './glue/fs-ops.ts';
+import { NodeModulesCache } from './glue/node-modules-cache.ts';
+import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
+import { createNpmShellCommand } from './glue/npm-shell-command.ts';
 import { RealViteExplorerVfs } from './glue/real-vite-explorer-vfs.ts';
+import { type RealViteHandle, startRealVite } from './glue/realVite.ts';
+import { proxiedRegistryFetch } from './glue/registry-fetch.ts';
+import { SnapshotFs } from './glue/snapshot-fs.ts';
+import { SyncMirrorVfs } from './glue/sync-mirror-vfs.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
+import type { TerminalPersistence } from './glue/terminal-persistence.ts';
+import { subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
+import { exportWorkspaceArchive, importWorkspaceArchive } from './glue/workspace-archive.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset, presetBootLines } from './presets.ts';
+import {
+  type ProjectSpec,
+  buildProjectPackageJson,
+  devScriptCommand,
+  terminalDevLine,
+} from './templates/project-spec.ts';
+import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
 import nodeEntryBootstrapUrl from './workers/node-entry-bootstrap.ts?worker&url';
-import bootstrapWorkerUrl from './workers/real-vite-bootstrap.ts?worker&url';
 
 const WORKSPACE = '/workspace';
 
@@ -175,10 +173,8 @@ export function App(props: AppProps) {
     return preset.templateId ? resolveProjectSpec(preset.templateId) : defaultProjectSpec();
   };
   const npmVfs = new SyncMirrorVfs();
-  const npmRegistry = new RegistryClient({
-    fetch: createRegistryProxyFetch({ proxyPrefix: '/npm-registry' }),
-  });
-  let realViteHandle: RuntimeSession | null = null;
+  const npmRegistry = new RegistryClient({ fetch: proxiedRegistryFetch() });
+  let realViteHandle: RealViteHandle | null = null;
 
   // Mode state machine owns UI state only. Real server lifetime belongs to the
   // visible `vite` terminal command.
@@ -214,7 +210,7 @@ export function App(props: AppProps) {
       setDevServerRunning(false);
     }
 
-    let handle: RuntimeSession;
+    let handle: RealViteHandle;
     let resolveReady: (() => void) | undefined;
     let readySeen = false;
     const ready = new Promise<'ready'>((resolve) => {
@@ -228,8 +224,7 @@ export function App(props: AppProps) {
       ctx.signal?.addEventListener('abort', () => resolve('aborted'), { once: true });
     });
     try {
-      handle = await createRuntimeSession({
-        bootstrapWorkerUrl,
+      handle = await startRealVite({
         template,
         setup: presetForId(activePreset()).setup,
         slug: activePreset(),
@@ -599,7 +594,7 @@ export function App(props: AppProps) {
     }
   }
 
-  function syncPresetFilesToWorker(handle: RuntimeSession | null, preset: Preset): void {
+  function syncPresetFilesToWorker(handle: RealViteHandle | null, preset: Preset): void {
     if (!handle) return;
     for (const file of preset.files ?? []) {
       handle.updateFile(workspacePresetPath(file.path), file.content);
@@ -666,7 +661,6 @@ export function App(props: AppProps) {
 
   async function restartDevServer(sessionId: string): Promise<void> {
     const generation = ++devServerRestartGeneration;
-    if (isVisibleTerminalSession(sessionId)) manager.stop(sessionId);
     try {
       await realViteHandle?.close();
     } catch {

@@ -43,7 +43,6 @@ const SPEC = {
   '@riftydev/sdk': {
     dir: 'packages/rifty',
     sideEffects: false,
-    addExports: { './workbench': './src/workbench.ts' },
     keywords: ['runtime', 'sdk', 'sandbox', 'node-compatible', 'wasi'],
   },
   '@riftydev/io': {
@@ -113,15 +112,6 @@ const SPEC = {
     sideEffects: ['./dist/sw.js'],
     keywords: ['service-worker', 'preview'],
   },
-  '@riftydev/workbench': {
-    dir: 'packages/workbench',
-    sideEffects: false,
-    addExports: {
-      './project-worker': './src/project-worker.ts',
-      './terminal': './src/terminal.ts',
-    },
-    keywords: ['workbench', 'headless', 'preview', 'editor'],
-  },
   '@riftydev/shadow-registry': {
     dir: 'tools/shadow-registry',
     sideEffects: false,
@@ -150,8 +140,6 @@ const DESCRIPTIONS = {
   '@riftydev/shell': 'Tiny bash-flavoured shell for rifty, backed by @riftydev/vfs.',
   '@riftydev/terminal': 'xterm.js terminal wrapper for rifty.',
   '@riftydev/service-worker': 'Service Worker preview/HMR routing bridge for rifty.',
-  '@riftydev/workbench':
-    'Headless workbench controllers for rifty: editor sync, preview binding, npm shell, and real-project sessions.',
   '@riftydev/shadow-registry': 'Data tables of in-browser npm package substitutions for rifty.',
 };
 

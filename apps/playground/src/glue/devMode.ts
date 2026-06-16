@@ -20,12 +20,8 @@
 
 import { type DevServer, startDevServer } from '@rifty-examples/vite-like-dev';
 import { syncMirror } from '@riftydev/vfs';
-import {
-  createHmrBridgeToken,
-  hmrClientScript,
-  mountPlaygroundPreviewBridge,
-  setupHmrBridge,
-} from '@riftydev/workbench';
+import { createHmrBridgeToken, hmrClientScript, setupHmrBridge } from './hmr-bridge.ts';
+import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
 
 const enc = new TextEncoder();
 

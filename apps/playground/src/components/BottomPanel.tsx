@@ -8,8 +8,8 @@ import type {
   TerminalRawInput,
   TerminalRewriteRule,
 } from '@riftydev/terminal';
-import type { TerminalSessionSnapshot } from '@riftydev/workbench';
 import { For, Show, createMemo } from 'solid-js';
+import type { TerminalSessionSnapshot } from '../adapters/terminal-manager.ts';
 import { type TerminalDims, type TerminalModeHint, TerminalPanel } from './TerminalPanel.tsx';
 
 export function BottomPanel(props: {

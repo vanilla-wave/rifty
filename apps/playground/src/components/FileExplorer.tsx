@@ -6,21 +6,17 @@
  * scroll / an open rename input aren't clobbered.
  */
 import { basename, dirname, joinPath } from '@riftydev/vfs';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import {
-  type FsOpsTarget,
   type NmNodeState,
   type NmRow,
-  type NodeModulesCache,
   type TreeChild,
   composeNodeModulesRows,
-  createDir,
-  createFile,
-  deletePath,
   fileCategory,
   readChildren,
-  renamePath,
-} from '@riftydev/workbench';
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+} from '../glue/file-tree.ts';
+import { type FsOpsTarget, createDir, createFile, deletePath, renamePath } from '../glue/fs-ops.ts';
+import type { NodeModulesCache } from '../glue/node-modules-cache.ts';
 import { Icon, type IconName } from './icons.tsx';
 
 /** Monochrome row icon per file category (Soft Panels: outline icons, no colour badges). */

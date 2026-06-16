@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { type ViteDevServerWithModuleGraph, invalidateViteModule } from './vite-invalidation.ts';
+import {
+  type ViteDevServerWithModuleGraph,
+  invalidateViteModule,
+} from './real-vite-invalidation.ts';
 
 describe('invalidateViteModule', () => {
   it('uses Vite moduleGraph.onFileChange for file-level invalidation', () => {

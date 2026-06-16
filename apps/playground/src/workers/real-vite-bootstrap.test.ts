@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const source = readFileSync(fileURLToPath(new URL('./project-worker.ts', import.meta.url)), 'utf8');
+const source = readFileSync(
+  fileURLToPath(new URL('./real-vite-bootstrap.ts', import.meta.url)),
+  'utf8',
+);
 
 describe('real Vite bootstrap preview routing', () => {
   it('uses a relative Vite base so transformed imports stay under the preview route', () => {
@@ -60,7 +63,7 @@ describe('node-server runtime branch', () => {
     expect(source).toContain('registerSqliteBuiltin()');
     // engine bytes come from the bundled asset (CORP-correct, D-001 — no CDN),
     // passed as wasmBinary so the emscripten glue never probes fs/fetch paths
-    expect(source).toContain('opts.sqlWasmUrl');
+    expect(source).toContain("from 'sql.js/dist/sql-wasm.wasm?url'");
     expect(source).toContain('initSqliteEngine(config)');
     expect(source).toContain('wasmBinary');
   });

@@ -16,7 +16,6 @@ export default defineConfig({
     shell: 'src/shell.ts',
     terminal: 'src/terminal.ts',
     'service-worker': 'src/service-worker.ts',
-    workbench: 'src/workbench.ts',
   },
   format: ['esm'],
   dts: true,

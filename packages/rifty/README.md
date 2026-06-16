@@ -100,11 +100,9 @@ Each subpath re-exports the matching scoped package, so you never need a second
 | `@riftydev/sdk/kernel` | `@riftydev/kernel` | `@riftydev/sdk/shell` | `@riftydev/shell` |
 | `@riftydev/sdk/runtime` | `@riftydev/runtime-js` | `@riftydev/sdk/terminal` | `@riftydev/terminal` |
 | `@riftydev/sdk/wasi` | `@riftydev/runtime-wasi` | `@riftydev/sdk/service-worker` | `@riftydev/service-worker` |
-| `@riftydev/sdk/workbench` | `@riftydev/workbench` |  |  |
 
 ```ts
 import { MemoryVfs } from '@riftydev/sdk/vfs';
-import { createRuntimeSession, createTerminalManager } from '@riftydev/sdk/workbench';
 import { runWasi } from '@riftydev/sdk/wasi';
 ```
 

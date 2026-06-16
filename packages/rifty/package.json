@@ -39,8 +39,7 @@
     "./npm-client": "./src/npm-client.ts",
     "./shell": "./src/shell.ts",
     "./terminal": "./src/terminal.ts",
-    "./service-worker": "./src/service-worker.ts",
-    "./workbench": "./src/workbench.ts"
+    "./service-worker": "./src/service-worker.ts"
   },
   "files": ["dist", "CHANGELOG.md"],
   "publishConfig": {
@@ -92,10 +91,6 @@
       "./service-worker": {
         "types": "./dist/service-worker.d.ts",
         "import": "./dist/service-worker.js"
-      },
-      "./workbench": {
-        "types": "./dist/workbench.d.ts",
-        "import": "./dist/workbench.js"
       }
     }
   },
@@ -113,8 +108,7 @@
     "@riftydev/npm-client": "workspace:*",
     "@riftydev/shell": "workspace:*",
     "@riftydev/terminal": "workspace:*",
-    "@riftydev/service-worker": "workspace:*",
-    "@riftydev/workbench": "workspace:*"
+    "@riftydev/service-worker": "workspace:*"
   },
   "devDependencies": {
     "typescript": "*",

@@ -4,12 +4,6 @@
 
 ### Added
 
-- **ADR-0139 — `@riftydev/sdk/workbench` subpath.** Re-exports
-  `@riftydev/workbench` so one-install consumers can use the headless
-  workbench controllers without adding a second dependency.
-  Includes the project-worker runtime subpath in `@riftydev/workbench` and the
-  terminal session/persistence controllers exposed from the workbench root.
-
 - **ADR-0131 — `sandbox.fs` for AI-agent file IO.** `createSandbox()` now exposes
   the runtime Worker-backed `fs.readFile()` / `fs.writeFile()` surface while
   keeping `sandbox.runtime` unchanged. PR #21 review: TSDoc now states the two
