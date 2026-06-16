@@ -57,6 +57,8 @@ const TOMBSTONES = new Set([
   // root trackers retired into docs/backlog + docs/public
   'PROJECT_PLAN.md',
   'OPEN_QUESTIONS.md',
+  // vision/architecture folded into AGENTS.md §Mission + ADRs (D-001..D-006)
+  'docs/ARCHITECTURE.md',
   'REVIEW_ACTIONS.md',
   'TASKS.md',
   // architecture-review / follow-up ledgers (closed; git history)

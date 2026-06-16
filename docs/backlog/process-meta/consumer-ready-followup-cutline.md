@@ -39,6 +39,11 @@ Runtime/project fidelity follow-ups:
 - `runtime-js/zlib-web-compression-subset` — first honest `node:zlib` subset.
 - `runtime-js/platform-arch-adoption-friction` — ADR-0026 reconsideration gate.
 - `runtime-js/fs-promises-filehandle` — `fs.promises.open()` / FileHandle.
+- `runtime-js/vm-unwired-seams` — wire the `node:vm` wasm-URL env-config into a
+  browser/worker variant loader + expose explicit `disposeContext` (both defined +
+  typed in the ADR-0142 vm work, no production caller yet).
+- `runtime-js/vm-test-pinning` — pin the two membrane reconciliation caveats + backfill
+  parity `expected` baselines on the Node-diff-only quickjs cases.
 - `runtime-wasi/runwasi-kernel-dispatch-wiring` — heavy WASI guest dispatch.
 - `kernel/server-shaped-worker-process-lifecycle` — long-running server worker
   process lifecycle.
@@ -69,7 +74,8 @@ index is complete):
 
 (`runtime-js/vm-sandbox-residual-gaps` closed in M11: function hoisting,
 completion values, destructuring `var` patterns, and post-run persistence fixed;
-direct `eval` recorded as permanent in ADR-0138.)
+direct `eval` was recorded as permanent in ADR-0138, since SUPERSEDED by ADR-0142
+— the QuickJS real-realm default closes the eval leak by construction.)
 
 Pull public API and new-package items only with ADRs. Pull outward deploy smoke
 only after explicit approval.

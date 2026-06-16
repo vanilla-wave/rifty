@@ -46,7 +46,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0068 | `with { type: "file" }` file-loader import attribute (asset → path) |
 | 0069 | `Readable.setEncoding(encoding)` — emit decoded strings |
 | 0136 | Transformed-module stack remapping via scoped prepareStackTrace |
-| 0138 | node:vm direct eval not intercepted (permanent compat divergence) |
+| 0142 | node:vm dual-engine — QuickJS real realm default, hardened-rewrite loud opt-in |
 
 ### runtime-wasi
 
@@ -98,7 +98,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0007 | Chrome-first with cross-browser infrastructure from M0 |
 | 0073 | Playground UX overhaul — preset gallery, design system, production worker bundling, honest preview status |
 | 0075 | Playground VSCode-style shell — bottom console panel, resizable/collapsible splitters, VFS file explorer, multi-model editor tabs |
-| 0076 | Cross-realm reverse VFS snapshot — the file explorer reflects the real-vite worker project |
+| 0076 | Cross-realm reverse VFS snapshot — explorer reflects the real-vite worker project; source files editable through the write port |
 | 0077 | Real Vite preview renders — worker lifetime, log surfacing, and SW frame routing |
 | 0078 | Generic ProjectSpec/Template runtime for the playground (Vite as the default template) |
 | 0079 | Single generic project/template switcher; retire the header mode toggles |
@@ -185,6 +185,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0055 | n/a | retired opencode facade ADR; integration cancelled |
 | 0074 | 0077 | SW preview-nav routing; ported into ADR-0077 |
 | 0092 | n/a | retired opencode facade ADR; integration cancelled |
+| 0138 | 0142 | eval interception now feasible via QuickJS real realm; context grafted |
 
 ## Appendix A — Q→ADR provenance
 
@@ -229,7 +230,8 @@ Moved/removed docs are still cited inside older (immutable) ADRs; their content 
 
 Moved (redirect to the live path):
 
-- `PROJECT_PLAN.md` → `docs/ARCHITECTURE.md` (vision/architecture) + `docs/ROADMAP.md` (milestones)
+- `PROJECT_PLAN.md` → `AGENTS.md` (mission/scope) + `docs/adr/` (architecture decisions) + `docs/ROADMAP.md` (milestones)
+- `docs/ARCHITECTURE.md` → `AGENTS.md` §Mission (vision/scope) + `docs/adr/` (strategic decisions D-001..D-006, isolation, COI)
 - `OPEN_QUESTIONS.md` → `docs/backlog/<area>/`
 - `docs/compat/` → `docs/public/compat/`
 - `docs/perf/` → `docs/backlog/perf/reference/`

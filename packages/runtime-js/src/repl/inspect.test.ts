@@ -8,6 +8,10 @@ describe('inspect', () => {
     expect(inspect(42)).toBe('42');
     expect(inspect(true)).toBe('true');
     expect(inspect('hi')).toBe('"hi"');
+    // Node renders bigints with a trailing `n` at every depth.
+    expect(inspect(3n)).toBe('3n');
+    expect(inspect({ a: 3n })).toBe('{ a: 3n }');
+    expect(inspect([1n, 2n])).toBe('[ 1n, 2n ]');
   });
 
   it('formats arrays', () => {

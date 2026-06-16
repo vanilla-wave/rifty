@@ -1,7 +1,15 @@
 import type { ParityCase } from '../../src/types.ts';
 
+// REWRITE-engine opt-in floor guard (T17 cutover). After the default flipped to
+// quickjs, this case forces `__RIFTY_VM_ENGINE='rewrite'` and asserts the rewrite
+// engine still produces Node-correct output for ordinary sandbox syntax — incl.
+// the V8-contextify SANDBOX KEY ENUMERATION ORDER (functions first, then source
+// order), which the rewrite engine reproduces but the QuickJS real realm does not
+// (the one genuine ES2023-vs-V8 residual — see the conformance "T19" key-order
+// test). This is the "rewrite stays a shippable opt-in" guarantee.
 const c: ParityCase = {
   code: `
+    globalThis.__RIFTY_VM_ENGINE = 'rewrite';
     const vm = require('node:vm');
 
     const sandbox = { count: 1, nested: { label: 'kept' } };

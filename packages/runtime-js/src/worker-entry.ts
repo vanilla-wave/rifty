@@ -20,12 +20,15 @@ import { Buffer } from './builtins/buffer.ts';
 import { __setCreateRequireImpl } from './builtins/module.ts';
 import { installProcessGlobals, setProcessCwd, writeProcessStdin } from './builtins/process.ts';
 import { installTimerGlobals } from './builtins/timers.ts';
+import { setVmEngineOverride } from './builtins/vm/engine-config.ts';
+import { ensureVmEngineReady } from './builtins/vm/quickjs-loader.ts';
 import { publishRuntimeGlobal } from './internal/worker-globals.ts';
 import { createModuleLoader } from './module-loader/index.ts';
 import type { EvalRequest, EvalResult, HostMessage, WorkerMessage } from './protocol.ts';
 import { installConsole } from './repl/console.ts';
 import { evalInRepl } from './repl/eval.ts';
 import { inspect } from './repl/inspect.ts';
+import { captureNotImplemented, snapshotTelemetry } from './telemetry/divergence-sink.ts';
 import { handleWorkerFsRequest } from './worker-fs-rpc.ts';
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -47,6 +50,20 @@ const sink = {
   },
 };
 
+// Post a `diagnostic` telemetry snapshot only when it CHANGED since the last
+// post (T15) — keeps the cadence non-spammy. JSON identity is the cheap
+// change-detector for the small dev-only snapshot; the host surfaces it for the
+// playground divergence panel (T16).
+let lastDiagnostic = '';
+function postDiagnosticIfChanged(): void {
+  const payload = snapshotTelemetry();
+  if (payload.length === 0) return;
+  const serialized = JSON.stringify(payload);
+  if (serialized === lastDiagnostic) return;
+  lastDiagnostic = serialized;
+  post({ type: 'diagnostic', payload });
+}
+
 async function handleEval(req: EvalRequest): Promise<EvalResult> {
   // ADR-0019 — seed the per-Worker cwd cell from the host's eval `cwd` snapshot
   // (kernel's ProcessRecord.cwd) before running user code. `setProcessCwd`
@@ -61,6 +78,9 @@ async function handleEval(req: EvalRequest): Promise<EvalResult> {
     }
     return { id: req.id, ok: true, value: undefined };
   } catch (err) {
+    // Boundary telemetry (T15): a NotImplementedError surfacing here is a real
+    // capability gap — record it (matched by name; io + vfs both define the class).
+    captureNotImplemented(err);
     if (err instanceof Error) {
       post({ type: 'stderr', chunk: `${err.stack ?? `${err.name}: ${err.message}`}\n` });
       const result: EvalResult = {
@@ -103,6 +123,18 @@ const boot = (async () => {
     installMemoryFs();
   }
 
+  // Preload the QuickJS WASM engine into the boot promise (ADR-0142) so a
+  // SYNCHRONOUS `vm.*` sandbox call in evaled code always finds the engine ready
+  // (`getQuickJsModuleSync`). Eval awaits `boot`, so an early eval calling
+  // `vm.runInNewContext` is safe. On preload failure, log + continue — the
+  // opt-in rewrite engine still works without QuickJS.
+  try {
+    await ensureVmEngineReady();
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    post({ type: 'stderr', chunk: `[rifty] QuickJS vm engine preload failed: ${reason}\n` });
+  }
+
   // Build the loader from the active sync mirror (ADR-0014 + ADR-0037 +
   // ADR-0072): `node:fs` reads `syncMirror()` live and the loader captures the
   // same instance, so both see the one OPFS (or memory) tree for this realm.
@@ -141,6 +173,12 @@ self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
     writeProcessStdin(msg.data);
     return;
   }
+  // Programmatic `node:vm` engine override (ADR-0142). Synchronous — no backend
+  // needed; takes precedence over the `__RIFTY_VM_ENGINE` env in resolveVmEngineName.
+  if (msg.type === 'vm-config') {
+    setVmEngineOverride(msg.engine);
+    return;
+  }
   // `eval`/`load-fixture` need the wired backend + loader. Awaiting `boot` lets
   // an eval posted before readiness run against the wired tree instead of being lost.
   const loader = await boot;
@@ -160,6 +198,9 @@ self.addEventListener('message', async (event: MessageEvent<HostMessage>) => {
     case 'eval': {
       const result = await handleEval(msg.request);
       post({ type: 'result', result });
+      // After an eval that may have recorded a divergence (rewrite engine) or a
+      // NotImplemented hit, surface the snapshot — only when it CHANGED (T15).
+      postDiagnosticIfChanged();
       break;
     }
     case 'fs': {

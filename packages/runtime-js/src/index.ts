@@ -14,8 +14,12 @@ export type {
   FsResult,
   HostMessage,
   SerializedRuntimeError,
+  TelemetrySnapshot,
   WorkerMessage,
 } from './protocol.ts';
+// Telemetry DATA types only — the `diagnostic` event/message payload. The sink's
+// mutation fns (recordX/snapshot/reset) stay internal.
+export type { TelemetryEntry, TelemetryKind } from './telemetry/divergence-sink.ts';
 export { registerBuiltin, isBuiltinSpecifier, listBuiltins } from './builtins/index.ts';
 export type { BuiltinFactory } from './builtins/index.ts';
 export { installRuntimeJsFsHandlers } from './ipc/fs-handlers.ts';

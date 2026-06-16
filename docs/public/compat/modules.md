@@ -17,7 +17,7 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 | `package.json` `imports` (`#name`) | ❌ | Pending |
 | JSON modules via `require` | ✅ | |
 | JSON modules via `import` | ✅ | Synthetic default + named keys |
-| `node:` built-ins | ⚠️ | Registry supports `node:` and bare built-ins; each module is a tested subset. `node:vm` covers `Script`, `createContext`, `isContext`, `runInThisContext`, `runInContext`, `runInNewContext`, and `compileFunction` without true isolation or timeout support. |
+| `node:` built-ins | ⚠️ | Registry supports `node:` and bare built-ins; each module is a tested subset. `node:vm` covers `Script`, `createContext`, `isContext`, `runInThisContext`, `runInContext`, `runInNewContext`, and `compileFunction`; default engine is a real QuickJS realm (cross-realm isolation), without timeout/`displayErrors`/`cachedData`/`contextExtensions` support (those throw loudly). See the node:vm section below. |
 | `data:` / `file:` URLs | ❌ | Throws `UNSUPPORTED_PROTOCOL` |
 | ESM static `import` | ✅ | Named, default, namespace, side-effect-only |
 | ESM `export` named / default / re-export | ✅ | |
@@ -38,23 +38,54 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 ## Known limitations (M2)
 
 - Identifier rewriter for live bindings is AST-based (acorn + scope-tracking walker — ADR 0009). Same-name local shadowing of imported bindings is handled correctly.
-- `node:vm` contexts are compatibility property bags, not security sandboxes. Existing context
-  properties are resolved and mutated; unsupported execution controls throw loudly. Writes from
-  context code (assignments incl. compound/update/destructuring, `var`/function declarations incl.
-  statement-position destructuring `var` patterns, for-in/of targets, `delete`) land on the
-  context; top-level function declarations are hoisted (callable before their text); declaration
-  statements keep Node's empty completion value; and a declared `var` stays readable (as
-  `undefined`) after the run and in later runs of the same context. Reads of names absent from the
-  context fall through to host globals BY DESIGN. Two ❌ divergence classes remain. (1) **Direct
-  `eval(...)`** runs unrewritten, so writes to undeclared names inside it leak to the host realm — a
-  permanent divergence for this host-realm `with(proxy) + eval` design, recorded in ADR-0138 (kept
-  loud rather than half-intercepted). (2) The context is a plain-object property bag, so it does NOT
-  model a real vm global object's property attributes / lexical intrinsics / strict mode:
-  non-writable intrinsics (`var undefined = 5` no-ops in Node), non-configurable bindings (`delete`
-  of a `var`/function returns `false` and keeps the value in Node), a pre-declared lexical
-  `undefined`, a writable `globalThis`, a user `var eval`, and `"use strict"` undeclared-write
-  `ReferenceError`s all diverge — tracked in
-  `docs/backlog/runtime-js/vm-context-global-object-fidelity`.
+### `node:vm` — engines + ES2023-vs-V8 divergences
+
+`node:vm` is a compatibility surface, not a security sandbox. Two engines, selectable via
+`vmEngine` option / `__RIFTY_VM_ENGINE` (env or global; precedence: explicit > env > global >
+default):
+
+- **`quickjs` (default)** — runs context code in a REAL QuickJS-WASM realm with a two-way
+  membrane. Gains over the old rewrite engine: cross-realm identity (a returned guest array/object
+  is `instanceof Array/Object` FALSE but `Array.isArray` TRUE and its prototype methods work, both
+  directions — a seeded host array/object also carries its methods in the guest); direct `eval(...)`
+  is realm-isolated (no host leak); real global-object semantics (non-writable intrinsics,
+  non-configurable `var`/function bindings, pre-declared lexical intrinsics, writable `globalThis`,
+  user `var eval`, `"use strict"` undeclared-write `ReferenceError`).
+- **`rewrite` (loud opt-in floor)** — the host-realm `with(proxy) + eval(AST-rewrite)` engine; emits
+  ONE stderr warning per process when used. Native-V8-leaning where QuickJS diverges (below), but
+  carries the rewrite fragility class (ADR-0142) — it is the floor, not the default.
+
+Shared, faithful on both engines: writes from context code (assignments incl.
+compound/update/destructuring, `var`/function declarations incl. statement-position destructuring
+`var`, for-in/of targets, `delete`) land on the context; top-level functions hoist; declaration
+statements keep Node's empty completion value; a declared `var` stays readable after the run and in
+later runs. A non-object context arg throws Node's exact `ERR_INVALID_ARG_TYPE`. Unsupported
+execution controls (`timeout`/`displayErrors`/`cachedData`/`contextExtensions`/…) throw loudly.
+
+The default engine shares the live `contextObject` via a reconcile-based membrane (reseed
+host→guest before each run, sweep guest→host after) — observationally equivalent to Node's live
+context for synchronous code. Two caveats: a guest callback mutating the sandbox AFTER the run is
+seen only at the next run; the host→guest side retains one seed per DISTINCT inbound object/fn for
+the context's life (not GC-evicted), so keep `vm` off a hot loop that streams fresh objects in.
+
+**ES2023 (QuickJS) ≠ V8 residual divergences** (default engine; each verified vs real Node, pinned
+by conformance + parity cases; workaround = the `rewrite` opt-in, which is V8-correct for these):
+
+1. **`function undefined(){}` redeclaration error TYPE** — V8 raises an early `SyntaxError`; QuickJS
+   raises the spec-literal runtime `TypeError` (`cannot define variable 'undefined'`). `let
+   undefined = …` (lexical) matches V8 (`SyntaxError`) on both.
+2. **Explicit `var x = undefined` initializer not propagated** — Node copies `x` to the sandbox
+   (`Object.keys` ⇒ `["x"]`); the QuickJS post-run sweep cannot distinguish `var x = undefined` from
+   a declaration-only `var x;` (same `undefined` value + non-configurable binding), so both skip.
+3. **Sandbox key ENUMERATION order** — V8's contextify setter yields hoisted functions first then
+   source order; the QuickJS sweep walks the guest global in creation order (vars → functions → bare
+   assignments). `Object.keys` order of a contextified sandbox is V8-internal, not a spec guarantee.
+4. **`delete` of a context `var`/function** — in the real realm a top-level `var v`/`function` is a
+   non-configurable global binding, so `delete v` is a no-op (`v` survives, sandbox keeps `v`); V8's
+   contextify reports the binding gone (`Object.keys` ⇒ `[]`, `v` undefined).
+
+Recorded: ADR-0142 (node:vm dual-engine — QuickJS real realm default, hardened-rewrite loud
+opt-in; supersedes ADR-0138, which had recorded the rewrite direct-eval leak as permanent).
 - `package.json` `imports` (subpath imports starting with `#`) is not yet wired.
 - The in-Worker VFS is in-memory only (M4 adds OPFS).
 - A `.ts`/`.tsx` module that classifies as CJS (its nearest package scope is not `type:module`) cannot be `require()`d: the TS type-strip is the async esbuild-via-`runWasi` `transformSource` hook and a synchronous `require()` cannot await it (ADR-0052 D1 alt-C). It throws `NotImplementedError('module-loader.ts-via-require')` rather than feeding raw TypeScript to `new Function`. A `.ts` under a `type:module` scope loads as ESM via `import()`, where the async strip runs.

@@ -152,3 +152,36 @@ describe('spawnRuntime fs controller', () => {
     });
   });
 });
+
+// T15 — vm-config host option + diagnostic surfacing.
+describe('spawnRuntime vm-config + diagnostic', () => {
+  it('sends vm-config on ready when vmEngine is set', () => {
+    installFakeWorker();
+    spawnRuntime({ workerUrl: '/worker.js', vmEngine: 'quickjs' });
+    const worker = fakeWorker(0);
+    worker.emit({ type: 'ready' });
+    expect(worker.sent).toContainEqual({ type: 'vm-config', engine: 'quickjs' });
+  });
+
+  it('does NOT send vm-config when vmEngine is absent', () => {
+    installFakeWorker();
+    spawnRuntime({ workerUrl: '/worker.js' });
+    const worker = fakeWorker(0);
+    worker.emit({ type: 'ready' });
+    expect(worker.sent.some((m) => m.type === 'vm-config')).toBe(false);
+  });
+
+  it('surfaces a diagnostic WorkerMessage as a diagnostic RuntimeEvent', () => {
+    installFakeWorker();
+    const runtime = spawnRuntime({ workerUrl: '/worker.js' });
+    const events: unknown[] = [];
+    runtime.on((e) => {
+      if (e.type === 'diagnostic') events.push(e.payload);
+    });
+    const payload = [
+      { feature: 'vm.engine.rewrite-active', kind: 'divergence', count: 2 },
+    ] as const;
+    fakeWorker(0).emit({ type: 'diagnostic', payload });
+    expect(events).toEqual([payload]);
+  });
+});

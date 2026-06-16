@@ -2,6 +2,40 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Editable project files in real-vite mode (ADR-0076 §Decision-4, corrected).**
+  Editing a seeded source tab (e.g. `src/project-summary.js`) while the dev
+  server ran threw `writeFileSync: "…" is read-only — it lives in the Vite
+  worker realm`: the editor wrote through `activeVfs()`, which flips to the
+  read-only worker `SnapshotFs` once Vite boots, and a tab opened before the
+  flip kept a stale write path. The editor now splits its READ view (the
+  snapshot) from its WRITE target (the always-writable page `syncMirror()`, new
+  `EditorHost` `writeVfs` prop + `glue/editor-write-router.ts`): a file is
+  editable iff the page mirror owns it, and the edit rides the existing
+  `onFileWritten` → `syncWorkspaceFileToWorker` → write port (ADR-0043) to the
+  worker (Vite watcher → HMR). Worker-only files (`node_modules`,
+  worker-generated) stay read-only. ADR-0076's original view-only-for-file-tabs
+  decision was wrong (a read-only sandbox is nonsense) and is corrected in place;
+  its snapshot bridge is unchanged. Regression test: `glue/editor-write-router.test.ts`.
+
+- **Writable file explorer in real-vite mode (ADR-0076 §Decision-6).** The
+  explorer showed a `read-only` badge and hid new/rename/delete while editing
+  worked — inconsistent. It now uses `glue/real-vite-explorer-vfs.ts`
+  (`RealViteExplorerVfs`): reads the worker snapshot, writes the page mirror, and
+  propagates each op to the worker over the write port — which gains an `rm`
+  frame (delete + rename) alongside `write`/`mkdir`, pushed via
+  `RealViteHandle.applyVfsFrame`. `node_modules` rows stay read-only. Badge gone,
+  CRUD controls shown. Tests: `glue/real-vite-explorer-vfs.test.ts`,
+  `glue/vfs-write-port.test.ts` (rm frame).
+
+- **No white flash on preview reload.** HMR does a full iframe reload on every
+  edit (naive `location.reload()`); the worker-seeded `index.html` had no
+  background, so entry code that sets `body` bg via JS flashed white between
+  reload and module-eval. `buildIndexHtml` now seeds
+  `<style>html,body{margin:0;background:#101218}</style>` so the document paints
+  dark from the first frame. Test: `templates/project-spec.test.ts`.
+
 ### Added
 
 - **Foreground CLIs run in a supervised child worker (P6a of ADR-0150).** Each

@@ -5,7 +5,7 @@ title: node-builtin loud-stub capability gaps — tls/dns(non-localhost)/readlin
 created: 2026-06-13
 why: These node: builtin features throw NotImplementedError — a real runtime capability absence a consumer hits when running ordinary npm code; tracked here as the capability limitation itself, distinct from the compat-visibility item which only proposes ❌ matrix rows.
 user_story: As a dev running an npm package that reaches `tls.createServer`, `dns.resolve`, `readline.createInterface`, `v8.serialize` or `dgram.createSocket`, I want it to run — but today these `node:` builtins throw `NotImplementedError` (honest loud stubs, parked by design).
-sources: [ADR-0010, ARCHITECTURE.md]
+sources: [ADR-0010, AGENTS.md]
 code: [packages/runtime-js/src/builtins/tty.ts, packages/runtime-js/src/builtins/os.ts, packages/runtime-js/src/builtins/perf_hooks.ts, packages/runtime-js/src/builtins/vm.ts, packages/runtime-js/src/builtins/string_decoder.ts, packages/runtime-js/src/builtins/misc-stubs.ts, packages/runtime-js/src/builtins/null-net-stubs.ts, packages/runtime-js/src/builtins/crypto.ts, packages/runtime-js/src/builtins/fs.ts]
 ---
 
@@ -17,7 +17,7 @@ Confirmed throwing feature-ids (honest loud stubs per the no-silent-stubs rule):
 
 ## Options or Next
 
-Parked by design: "Full Node compat" and native modules are explicit non-goals (ARCHITECTURE.md). Default is to keep these as honest loud throws, not to build them. Promote a specific feature to its own active impl item only on concrete consumer demand — e.g. a target package needs `readline.Interface`, or in-browser TLS termination / DoH-backed `dns.resolve` (the network ones would need an ADR extending ADR-0010's loud-throw stance). Per feature, write a failing parity/ceiling case pinning the current throw shape first, then implement the subset. Keep the compat ❌ rows (`process-meta/compat-matrix-coverage-debt`) in sync so the public matrix matches these throws.
+Parked by design: "Full Node compat" and native modules are explicit non-goals (`AGENTS.md` §Mission). Default is to keep these as honest loud throws, not to build them. Promote a specific feature to its own active impl item only on concrete consumer demand — e.g. a target package needs `readline.Interface`, or in-browser TLS termination / DoH-backed `dns.resolve` (the network ones would need an ADR extending ADR-0010's loud-throw stance). Per feature, write a failing parity/ceiling case pinning the current throw shape first, then implement the subset. Keep the compat ❌ rows (`process-meta/compat-matrix-coverage-debt`) in sync so the public matrix matches these throws.
 
 ## Reversibility
 

@@ -1,7 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../../packages/runtime-js/src/builtins/index.ts';
 import { loadBuiltin } from '../../../packages/io/src/builtin-registry.ts';
 import { NotImplementedError } from '../../../packages/io/src/errors.ts';
+import { setVmEngineOverride } from '../../../packages/runtime-js/src/builtins/vm/engine-config.ts';
+import { ensureVmEngineReady } from '../../../packages/runtime-js/src/builtins/vm/quickjs-loader.ts';
+import {
+  resetTelemetry,
+  snapshotTelemetry,
+} from '../../../packages/runtime-js/src/telemetry/divergence-sink.ts';
 
 type VmScript = {
   runInThisContext(options?: VmRunOptions): unknown;
@@ -36,7 +42,33 @@ type VmModule = {
 
 const vm = loadBuiltin('node:vm') as unknown as VmModule;
 
+// Preload QuickJS once so the engine runs synchronously (it reads
+// `getQuickJsModuleSync()`). Since the T17 cutover quickjs is the DEFAULT, so the
+// `node:vm subset` block below exercises the real-realm engine; the rewrite opt-in
+// blocks force `setVmEngineOverride('rewrite')`.
+beforeAll(async () => {
+  await ensureVmEngineReady();
+});
+
 describe('node:vm subset', () => {
+  // This block runs on the DEFAULT engine (quickjs since the T17 cutover). A guest
+  // throw crosses the membrane as a cross-realm MIRROR, so host `instanceof` is
+  // FALSE (Node-correct: real Node's vm errors are cross-realm too — verified). We
+  // therefore assert the error NAME, which is faithful on BOTH engines (the rewrite
+  // opt-in runs in-realm so its `instanceof` would be true, but `.name` matches).
+  const expectThrowsNamed = (fn: () => unknown, name: string): void => {
+    let got = 'no-throw';
+    try {
+      fn();
+    } catch (e) {
+      got =
+        e && (e as { constructor?: { name?: string } }).constructor
+          ? ((e as { constructor: { name: string } }).constructor.name as string)
+          : String(e);
+    }
+    expect(got).toBe(name);
+  };
+
   it('runs scripts in this context', () => {
     (
       globalThis as typeof globalThis & { __riftyVmConformanceCount?: number }
@@ -183,29 +215,38 @@ describe('node:vm subset', () => {
   });
 
   it('sandboxes compound assignment and update operators', () => {
+    // The operands are SANDBOX globals (a fresh vm realm does NOT inherit host
+    // globals — verified against real Node). A same-named host global is a separate
+    // realm and stays untouched. An undeclared compound/update target throws a
+    // cross-realm ReferenceError (asserted by name).
     type HostGlobals = typeof globalThis & Record<string, unknown>;
     (globalThis as HostGlobals).__riftyVmCompoundHost = 10;
     (globalThis as HostGlobals).__riftyVmUpdHost = 1;
     try {
-      const globals: Record<string, unknown> = {};
+      const globals: Record<string, unknown> = { compoundCtx: 10, updCtx: 1 };
 
       expect(
         vm.runInNewContext(
           `
-            __riftyVmCompoundHost += 5;
-            const post = __riftyVmUpdHost++;
-            ({ post, compound: __riftyVmCompoundHost, upd: __riftyVmUpdHost });
+            compoundCtx += 5;
+            const post = updCtx++;
+            ({ post, compound: compoundCtx, upd: updCtx });
           `,
           globals,
         ),
       ).toEqual({ post: 1, compound: 15, upd: 2 });
-      expect(globals).toMatchObject({ __riftyVmCompoundHost: 15, __riftyVmUpdHost: 2 });
+      expect(globals).toMatchObject({ compoundCtx: 15, updCtx: 2 });
+      // a same-named HOST global is a different realm — never mutated by the sandbox
       expect((globalThis as HostGlobals).__riftyVmCompoundHost).toBe(10);
       expect((globalThis as HostGlobals).__riftyVmUpdHost).toBe(1);
-      expect(() => vm.runInNewContext('__riftyVmMissingCompound += 1;', {})).toThrow(
-        ReferenceError,
+      expectThrowsNamed(
+        () => vm.runInNewContext('__riftyVmMissingCompound += 1;', {}),
+        'ReferenceError',
       );
-      expect(() => vm.runInNewContext('__riftyVmMissingUpdate++;', {})).toThrow(ReferenceError);
+      expectThrowsNamed(
+        () => vm.runInNewContext('__riftyVmMissingUpdate++;', {}),
+        'ReferenceError',
+      );
     } finally {
       Reflect.deleteProperty(globalThis, '__riftyVmCompoundHost');
       Reflect.deleteProperty(globalThis, '__riftyVmUpdHost');
@@ -213,33 +254,26 @@ describe('node:vm subset', () => {
   });
 
   it('keeps logical assignment short-circuit semantics sandboxed', () => {
-    type HostGlobals = typeof globalThis & Record<string, unknown>;
-    (globalThis as HostGlobals).__riftyVmNullishHost = undefined;
-    (globalThis as HostGlobals).__riftyVmAndHost = 0;
-    try {
-      const globals: Record<string, unknown> = {};
+    // Operands are SANDBOX globals (no host inheritance). `??=` on an undefined
+    // sandbox global assigns; `&&=` on a falsy one short-circuits (no write). An
+    // undeclared `&&=` target throws a cross-realm ReferenceError (by name).
+    const globals: Record<string, unknown> = { nullishCtx: undefined, andCtx: 0 };
 
-      expect(
-        vm.runInNewContext(
-          `
-            __riftyVmNullishHost ??= 'set';
-            __riftyVmAndHost &&= 'no';
-            ({ nullish: __riftyVmNullishHost, and: __riftyVmAndHost });
-          `,
-          globals,
-        ),
-      ).toEqual({ nullish: 'set', and: 0 });
-      expect(globals).toMatchObject({ __riftyVmNullishHost: 'set' });
-      expect('__riftyVmAndHost' in globals).toBe(false);
-      expect((globalThis as HostGlobals).__riftyVmNullishHost).toBeUndefined();
-      expect((globalThis as HostGlobals).__riftyVmAndHost).toBe(0);
-      expect(() => vm.runInNewContext('__riftyVmMissingLogical &&= 1;', {})).toThrow(
-        ReferenceError,
-      );
-    } finally {
-      Reflect.deleteProperty(globalThis, '__riftyVmNullishHost');
-      Reflect.deleteProperty(globalThis, '__riftyVmAndHost');
-    }
+    expect(
+      vm.runInNewContext(
+        `
+          nullishCtx ??= 'set';
+          andCtx &&= 'no';
+          ({ nullish: nullishCtx, and: andCtx });
+        `,
+        globals,
+      ),
+    ).toEqual({ nullish: 'set', and: 0 });
+    expect(globals).toMatchObject({ nullishCtx: 'set', andCtx: 0 });
+    expectThrowsNamed(
+      () => vm.runInNewContext('__riftyVmMissingLogical &&= 1;', {}),
+      'ReferenceError',
+    );
   });
 
   it('sandboxes destructuring assignment targets', () => {
@@ -332,7 +366,9 @@ describe('node:vm subset', () => {
 
     expect(vm.runInNewContext('function f() { return 9; } f();', functions)).toBe(9);
     expect(functions.f).toBeTypeOf('function');
-    expect(() => vm.runInNewContext('missing', {})).toThrow(ReferenceError);
+    // cross-realm: the guest ReferenceError is a mirror (host instanceof FALSE,
+    // matching real Node), so assert the NAME.
+    expectThrowsNamed(() => vm.runInNewContext('missing', {}), 'ReferenceError');
   });
 
   it('hoists top-level function declarations so they are callable before their text', () => {
@@ -388,7 +424,11 @@ describe('node:vm subset', () => {
     // assigning the name still shadows the intrinsic (own property wins)
     expect(vm.runInNewContext('var Map; Map = 7; Map', {})).toBe(7);
     expect(vm.runInNewContext('var Map; Map = undefined; typeof Map', {})).toBe('undefined');
-    expect(() => vm.runInNewContext('var Map; Map = undefined; new Map()', {})).toThrow(TypeError);
+    // cross-realm: the guest TypeError is a mirror (host instanceof FALSE) — assert NAME.
+    expectThrowsNamed(
+      () => vm.runInNewContext('var Map; Map = undefined; new Map()', {}),
+      'TypeError',
+    );
     // a non-intrinsic no-init var still reads undefined
     expect(vm.runInNewContext('var foo; typeof foo', {})).toBe('undefined');
   });
@@ -455,6 +495,50 @@ describe('node:vm subset', () => {
     expect(vm.runInContext('typeof later;', persistent)).toBe('undefined');
   });
 
+  it('gives a seeded host array/object its prototype methods in the guest (T19)', () => {
+    // Regression (T19): the inbound membrane severed a host array/object seed's
+    // proto to null, which kept `instanceof Array/Object` FALSE but STRIPPED every
+    // inherited method (`items.join`/`.map`, `obj.hasOwnProperty` threw "not a
+    // function"). Node gives the seed a cross-realm proto that CARRIES the methods.
+    const ctx = vm.createContext({ items: ['x', 'y', 'z'], obj: { a: 1 } });
+    expect(vm.runInContext('items.join("-")', ctx)).toBe('x-y-z');
+    expect(
+      vm.runInContext('items.map(function (i) { return i.toUpperCase(); }).join(",")', ctx),
+    ).toBe('X,Y,Z');
+    expect(vm.runInContext('typeof items.join', ctx)).toBe('function');
+    expect(vm.runInContext('Array.isArray(items)', ctx)).toBe(true);
+    expect(vm.runInContext('items instanceof Array', ctx)).toBe(false);
+    expect(vm.runInContext('items.hasOwnProperty(0)', ctx)).toBe(true);
+    expect(vm.runInContext('obj.hasOwnProperty("a")', ctx)).toBe(true);
+    expect(vm.runInContext('obj instanceof Object', ctx)).toBe(false);
+    expect(vm.runInContext('Object.prototype.toString.call(obj)', ctx)).toBe('[object Object]');
+  });
+
+  it('renders a non-object context arg with Node-exact ERR_INVALID_ARG_TYPE text (T19)', () => {
+    // describeNonObject fidelity: undefined/null render BARE; a bigint keeps its
+    // `n`; `-0` stays `-0`; a string is quote-selected + truncated >28 to 25+'...'.
+    const msg = (a: unknown): string => {
+      try {
+        vm.runInContext('1', a as Record<string, unknown>);
+        return 'NO THROW';
+      } catch (e) {
+        return (e as Error).message;
+      }
+    };
+    const tail = 'The "object" argument must be of type object. Received ';
+    expect(msg(undefined)).toBe(`${tail}undefined`);
+    expect(msg(null)).toBe(`${tail}null`);
+    expect(msg(42)).toBe(`${tail}type number (42)`);
+    expect(msg(-0)).toBe(`${tail}type number (-0)`);
+    expect(msg(0n)).toBe(`${tail}type bigint (0n)`);
+    expect(msg(-5n)).toBe(`${tail}type bigint (-5n)`);
+    expect(msg('hi')).toBe(`${tail}type string ('hi')`);
+    expect(msg("it's")).toBe(`${tail}type string ("it's")`);
+    expect(msg(true)).toBe(`${tail}type boolean (true)`);
+    expect(msg(Symbol('s'))).toBe(`${tail}type symbol (Symbol(s))`);
+    expect(msg('x'.repeat(40))).toBe(`${tail}type string ('${'x'.repeat(25)}...')`);
+  });
+
   it('compiles functions with parameters', () => {
     const add = vm.compileFunction('return a + b;', ['a', 'b']);
     expect(add(2, 5)).toBe(7);
@@ -479,5 +563,225 @@ describe('node:vm subset', () => {
     expect(() => vm.runInNewContext('1 + 1', null as unknown as Record<string, unknown>)).toThrow(
       TypeError,
     );
+  });
+
+  it('rejects a non-contextified object passed to runInContext (engine-agnostic)', () => {
+    // Regression (T17 cutover GATE): the quickjs engine accepted a plain `{}`
+    // silently; Node throws a TypeError ("must be an vm.Context"). The guard now
+    // lives at the dispatcher so BOTH engines (default + opt-in) reject it.
+    expect(() => vm.runInContext('1 + 1', {})).toThrow(TypeError);
+    expect(() => vm.runInContext('1 + 1', {})).toThrow(/must be an vm\.Context/);
+    expect(() => new vm.Script('1 + 1').runInContext({})).toThrow(TypeError);
+    // a real contextified object is accepted
+    expect(vm.runInContext('1 + 1', vm.createContext({}))).toBe(2);
+  });
+});
+
+// T13 — real global-object fidelity (QuickJS realm). The rewrite engine (with(proxy)
+// over a plain property bag) could not reproduce a real vm global object's
+// attribute/lexical/strict semantics; the QuickJS real realm does — mostly BY
+// CONSTRUCTION (real intrinsics, strict mode, lexical scope, real global). Behaviour
+// is verified byte-for-byte against real Node in the parity case
+// `vm/quickjs-global-object`; this suite locks the same behaviour in-unit and also
+// records the ONE genuine QuickJS-vs-V8 divergence (function-named-intrinsic
+// redeclaration error type) so a regression in either direction is loud (T19).
+describe('node:vm QuickJS global-object fidelity (T13)', () => {
+  // Guest errors cross the membrane as cross-realm MIRRORS: `instanceof`/
+  // `constructor ===` against host constructors are FALSE (different realm), but
+  // `.constructor.name`/`.name` are faithful (T11). So we assert on the name.
+  const ctor = (e: unknown): string =>
+    e && (e as { constructor?: { name?: string } }).constructor
+      ? ((e as { constructor: { name: string } }).constructor.name as string)
+      : String(e);
+  const throwsNamed = (fn: () => unknown, name: string): void => {
+    let got = 'no-throw';
+    try {
+      fn();
+    } catch (e) {
+      got = ctor(e);
+    }
+    expect(got).toBe(name);
+  };
+
+  beforeAll(() => setVmEngineOverride('quickjs'));
+  afterAll(() => setVmEngineOverride(undefined));
+
+  it('treats redeclared intrinsics as non-writable data props (silent no-op)', () => {
+    const sb = vm.createContext({});
+    expect(vm.runInContext('var undefined = 5; undefined', sb)).toBeUndefined();
+    expect(vm.runInContext('var NaN = 1; NaN', sb)).toBeNaN();
+    expect(vm.runInContext('var Infinity = 0; Infinity', sb)).toBe(Number.POSITIVE_INFINITY);
+    expect(vm.runInContext('NaN = 1; NaN', sb)).toBeNaN();
+    // the silent intrinsic redeclaration never surfaces on the sandbox object
+    expect(Object.keys(sb)).toEqual([]);
+  });
+
+  it('makes var/function bindings non-configurable (delete is a no-op returning false)', () => {
+    const sb = vm.createContext({});
+    expect(vm.runInContext('var d = 5; delete d; d', sb)).toBe(5);
+    expect(vm.runInContext('function f(){}; delete f', sb)).toBe(false);
+    expect(vm.runInContext('typeof f', sb)).toBe('function');
+  });
+
+  it('pre-declares the lexical intrinsics so let-redeclaration is a SyntaxError', () => {
+    const sb = vm.createContext({});
+    throwsNamed(() => vm.runInContext('let undefined = 5', sb), 'SyntaxError');
+  });
+
+  it('reads back a written globalThis and a context var named eval', () => {
+    const sb = vm.createContext({});
+    expect(vm.runInContext('var globalThis = 5; globalThis', sb)).toBe(5);
+    const sb2 = vm.createContext({});
+    expect(vm.runInContext('var eval = 5; eval', sb2)).toBe(5);
+  });
+
+  it('throws ReferenceError for a strict-mode undeclared write', () => {
+    const sb = vm.createContext({});
+    throwsNamed(() => vm.runInContext('"use strict"; xxx = 1', sb), 'ReferenceError');
+  });
+
+  it('exposes a declaration-only var on the vm global but NOT on the sandbox object', () => {
+    const sb = vm.createContext({});
+    vm.runInContext('var z;', sb);
+    // sandbox object: no own key (V8 contextify copies a global to the sandbox only
+    // when an assignment fired; a pure `var z;` declaration never sets)
+    expect(Object.keys(sb)).toEqual([]);
+    expect(Object.prototype.hasOwnProperty.call(sb, 'z')).toBe(false);
+    expect(Object.getOwnPropertyDescriptor(sb, 'z')).toBeUndefined();
+    // vm GLOBAL (`this`): a non-configurable, enumerable own prop, value undefined
+    expect(vm.runInContext('JSON.stringify(Object.getOwnPropertyDescriptor(this,"z"))', sb)).toBe(
+      '{"writable":true,"enumerable":true,"configurable":false}',
+    );
+    expect(vm.runInContext('JSON.stringify(Object.keys(this))', sb)).toBe('["z"]');
+    expect(vm.runInContext('this.hasOwnProperty("z")', sb)).toBe(true);
+    expect(vm.runInContext('[String(this.z), "z" in this].join(",")', sb)).toBe('undefined,true');
+    // a later actual assignment surfaces on the sandbox
+    vm.runInContext('z = 42;', sb);
+    expect(sb.z).toBe(42);
+    expect(Object.keys(sb)).toEqual(['z']);
+  });
+
+  it('propagates assigned vars/functions/this-props/bare-assignments to the sandbox', () => {
+    const sb = vm.createContext({});
+    vm.runInContext('var assigned = 5; var declonly; this.tp = 9; bare = 7; function fn(){}', sb);
+    expect(Object.keys(sb).sort()).toEqual(['assigned', 'bare', 'fn', 'tp']);
+    expect(Object.prototype.hasOwnProperty.call(sb, 'declonly')).toBe(false);
+    // configurable undefined writes DO propagate (only declaration-only vars skip)
+    const sb2 = vm.createContext({});
+    vm.runInContext('this.tp = undefined; bare = undefined;', sb2);
+    expect(Object.keys(sb2).sort()).toEqual(['bare', 'tp']);
+    // an existing sandbox key is never wiped by a same-name declaration-only var
+    const sb3 = vm.createContext({ pre: 99 });
+    vm.runInContext('var pre;', sb3);
+    expect(sb3.pre).toBe(99);
+  });
+
+  it('persists top-level let/const/class across runs as the context lexical scope', () => {
+    const sb = vm.createContext({});
+    vm.runInContext('let persist = 7', sb);
+    expect(vm.runInContext('persist', sb)).toBe(7);
+    throwsNamed(() => vm.runInContext('let persist = 8', sb), 'SyntaxError');
+    vm.runInContext('const k = 11', sb);
+    expect(vm.runInContext('k', sb)).toBe(11);
+    throwsNamed(() => vm.runInContext('const k = 12', sb), 'SyntaxError');
+    vm.runInContext('class Cls { m(){ return 42; } }', sb);
+    expect(vm.runInContext('new Cls().m()', sb)).toBe(42);
+    throwsNamed(() => vm.runInContext('class Cls {}', sb), 'SyntaxError');
+    // lexical bindings stay OFF the sandbox object (they are not global props)
+    expect(Object.keys(sb)).toEqual([]);
+    expect(sb.persist).toBeUndefined();
+  });
+
+  it('documents the sandbox key ENUMERATION-order divergence (T19)', () => {
+    // V8 contextify copies a global back to the sandbox via the named-property
+    // SETTER, so the sandbox key order is: hoisted FUNCTIONS first, then everything
+    // else in SOURCE/EXECUTION order (vars + bare assignments interleaved). The
+    // QuickJS real realm has no such interceptor — the post-run sweep walks the
+    // guest global's own-enumerable keys in QuickJS creation order: GLOBAL-INSTANTIATED
+    // var bindings first (decl order), then hoisted functions, then bare assignments.
+    // We faithfully surface the engine's real enumeration rather than reconstruct
+    // V8's setter order (would need source-position parsing the real-realm engine
+    // avoids), so this is a genuine ES2023-vs-V8 residual (T19). `Object.keys` order
+    // of a contextified sandbox is V8-internal, not a spec guarantee. The rewrite
+    // opt-in is V8-correct here (parity case `rewrite-optin-run-in-new-context`).
+    const sb = vm.createContext({});
+    vm.runInContext('a=1; var b=2; c=3; var d=4; function e(){}', sb);
+    // QuickJS order: vars (b,d) → function (e) → bare assignments (a,c).
+    // (V8 would be: e, a, b, c, d.)
+    expect(Object.keys(sb)).toEqual(['b', 'd', 'e', 'a', 'c']);
+  });
+
+  it('documents the function-named-intrinsic redeclaration divergence (T19)', () => {
+    // V8 raises an EARLY SyntaxError ("Identifier 'undefined' has already been
+    // declared"); QuickJS raises the spec-literal RUNTIME TypeError ("cannot define
+    // variable 'undefined'") from GlobalDeclarationInstantiation /
+    // CanDeclareGlobalFunction. We faithfully surface the engine's real error rather
+    // than fake V8's type, so this is the one genuine ES2023-vs-V8 residual (T19);
+    // `let undefined` (lexical) DOES match V8 above. This test pins QuickJS's actual
+    // type so a change is caught.
+    const sb = vm.createContext({});
+    throwsNamed(() => vm.runInContext('function undefined(){}', sb), 'TypeError');
+  });
+});
+
+// T15 — rewrite-engine opt-in is LOUD. A sandbox run under the opt-in `rewrite`
+// engine must emit ONE stderr warning per process AND record a divergence hit, so
+// the gap is never silent. The warning goes to `process.stderr.write` (real fd 2
+// in plain Node, the worker stderr bridge in the worker) — NOT `console.error` —
+// so it never pollutes parity STDOUT (the parity runner diffs stdout and only
+// intercepts console.*). resetTelemetry() in beforeEach re-arms the warnOnce gate.
+describe('node:vm rewrite-engine loud opt-in + telemetry wiring (T15)', () => {
+  const WARNING =
+    '[rifty] node:vm is using the hardened-rewrite engine (opt-in). Known divergences ' +
+    'vs the default QuickJS real realm: cross-realm identity (instanceof across ' +
+    'contexts), direct eval leaks to host, no real global-object semantics. See docs.\n';
+
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    resetTelemetry();
+    setVmEngineOverride('rewrite');
+    stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  });
+  afterEach(() => {
+    stderrSpy.mockRestore();
+    setVmEngineOverride(undefined);
+    resetTelemetry();
+  });
+
+  const warnCalls = (): string[] =>
+    stderrSpy.mock.calls.map((c) => String(c[0])).filter((s) => s.startsWith('[rifty] node:vm'));
+
+  it('emits the loud warning exactly once and records a divergence hit', () => {
+    expect(vm.runInNewContext('1 + 1', {})).toBe(2);
+    // repeated runs (incl. Script + runInContext paths) must NOT re-warn
+    expect(vm.runInNewContext('2 + 2', {})).toBe(4);
+    const ctx = vm.createContext({ x: 1 });
+    expect(vm.runInContext('x + 1', ctx)).toBe(2);
+    expect(new vm.Script('3 + 3').runInContext(vm.createContext({}))).toBe(6);
+
+    const calls = warnCalls();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toBe(WARNING);
+
+    const snap = snapshotTelemetry();
+    const entry = snap.find((e) => e.feature === 'vm.engine.rewrite-active');
+    expect(entry).toBeDefined();
+    expect(entry?.kind).toBe('divergence');
+    // every sandbox RUN counts (4 runs above), but the warning only fires once
+    expect(entry?.count).toBe(4);
+  });
+
+  it('does NOT warn when the quickjs engine is selected', () => {
+    setVmEngineOverride('quickjs');
+    expect(vm.runInNewContext('1 + 1', {})).toBe(2);
+    expect(warnCalls()).toHaveLength(0);
+    expect(snapshotTelemetry().some((e) => e.feature === 'vm.engine.rewrite-active')).toBe(false);
+  });
+
+  it('does NOT warn for createContext alone (contextify is not a run)', () => {
+    vm.createContext({ a: 1 });
+    expect(warnCalls()).toHaveLength(0);
+    expect(snapshotTelemetry()).toEqual([]);
   });
 });

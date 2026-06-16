@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### CI
 
+- **`pnpm pr:check` — one parallel per-PR gate.** New `tools/checks/pr-check.mjs` runs lint, typecheck, build:libs, check:arch, parity/e2e coverage, backlog/refs checks, and unit + parity concurrently with a buffered pass/fail summary; exit ≠ 0 on any failure. `test:e2e` stays separate (its playwright workers + vite server starve the timing-sensitive parity checks when co-scheduled); CI keeps its own e2e job.
+- **`pnpm check:arch` (dependency-cruiser) replaces `check:deps` (madge) and folds in `check:isolation`.** One ruleset (`tools/checks/arch-rules.cjs`) enforces layer top-down direction (previously UNENFORCED — madge caught only cycles, not reverse edges), no cycles, no foreign `src/internal/*`, and solid-js only in playground (D-002). Unlike madge it honors `@riftydev/*` subpath `exports`, so cross-package subpath edges are visible (madge silently skipped 29). `madge` dropped; `no-solid-outside-playground.mjs` removed. Resolves backlog `process-meta/directional-layer-boundary-check` + `process-meta/madge-subpath-exports-cycle-blindspot`.
 - **Netlify playground deploys.** GitHub Actions deploys pushes to `main` to
   production and same-repo PRs to stable `pr-<number>` preview aliases, with
   the latest preview URL written back to the PR.

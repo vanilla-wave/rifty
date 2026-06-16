@@ -9,6 +9,7 @@ build/
 coverage/
 playwright-report/
 test-results/
+.arch-fixtures/
 .env
 .env.local
 .vite/
