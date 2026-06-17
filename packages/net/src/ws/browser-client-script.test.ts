@@ -308,6 +308,34 @@ describe('webSocketBridgeClientScript', () => {
 
       expect(closeEvent.code).toBe(1001);
       expect(closeEvent.reason).toBe('server-going-away');
+      expect(closeEvent.wasClean).toBe(true);
+    } finally {
+      server.close();
+      restore();
+    }
+  });
+
+  it('marks abnormal server close frames as unclean', async () => {
+    const { win, restore } = installWindow();
+    const server = new WebSocketServer({ port: 9027, path: '/hmr' });
+    server.on('connection', (sock) => {
+      const socket = sock as ServerSocketLike;
+      socket.close(1006, 'socket destroyed');
+    });
+
+    try {
+      const script = webSocketBridgeClientScript({ bridgeHosts: ['preview.local'] });
+      expect(() => new Function(script)()).not.toThrow();
+      const BrowserWebSocket = win.WebSocket as BrowserWebSocketConstructor;
+      const ws = new BrowserWebSocket('ws://preview.local:9027/hmr');
+
+      const closeEvent = await new Promise<CloseEvent>((resolve) =>
+        ws.addEventListener('close', (e) => resolve(e as CloseEvent), { once: true }),
+      );
+
+      expect(closeEvent.code).toBe(1006);
+      expect(closeEvent.reason).toBe('socket destroyed');
+      expect(closeEvent.wasClean).toBe(false);
     } finally {
       server.close();
       restore();

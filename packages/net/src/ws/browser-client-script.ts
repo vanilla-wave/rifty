@@ -251,8 +251,10 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
       if (f.type === 'close' && f.from === 'server') {
         if (this.readyState === RiftyBridgeWebSocket.CLOSED) return;
         if (this.readyState === RiftyBridgeWebSocket.CONNECTING) emit(this, new Event('error'));
+        var closeCode = f.code === undefined ? 1000 : f.code;
+        var wasClean = this.readyState === RiftyBridgeWebSocket.OPEN && closeCode !== 1006;
         this.readyState = RiftyBridgeWebSocket.CLOSED;
-        emit(this, makeCloseEvent(f.code || 1000, f.reason || '', true));
+        emit(this, makeCloseEvent(closeCode, f.reason || '', wasClean));
         this.__cleanup();
       }
     }
