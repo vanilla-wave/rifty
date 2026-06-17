@@ -133,7 +133,7 @@ describe('webSocketBridgeClientScript', () => {
       expect(win.__riftyHmrOpen).toBe(true);
 
       ws.send('client-hello');
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await waitFor(() => serverSeen.length === 1);
 
       expect(serverSeen).toEqual(['client-hello']);
       expect(clientSeen).toEqual(['server-hello']);
