@@ -10,10 +10,34 @@
  * unroutable (502) while `'listening'` still fired (the silent-bind trap).
  */
 
+import { Buffer } from 'node:buffer';
+import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { afterEach, describe, expect, it } from 'vitest';
 import { dispatchToPort, listPorts, unregisterPort } from '../registry.ts';
-import { ServerResponse } from './response.ts';
+import { BridgedWebSocket } from '../ws/bridge.ts';
+import type { ServerResponse } from './response.ts';
 import { createServer } from './server.ts';
+
+const requireFromHere = createRequire(import.meta.url);
+
+interface RealWsConnection {
+  on(event: 'message', cb: (data: unknown) => void): void;
+  on(event: 'close', cb: () => void): void;
+  send(data: string): void;
+  terminate(): void;
+}
+
+interface RealWsServer {
+  on(event: 'connection', cb: (socket: RealWsConnection) => void): void;
+  close(cb?: () => void): void;
+}
+
+type RealWsServerCtor = new (options: {
+  server: unknown;
+  path?: string;
+  handleProtocols?: (protocols: Set<string>) => string | false;
+}) => RealWsServer;
 
 afterEach(() => {
   for (const p of listPorts()) unregisterPort(p);
@@ -91,65 +115,327 @@ describe('HttpServer — no-handler createServer + on(request) buffered (P3 firs
   });
 });
 
-/**
- * F05-T5 (NEGATIVE — feature-07 boundary lock): the WS/SSE upgrade path is not
- * silently consumed by feature 05's buffered HTTP surface.
- *
- * `@effect/platform-node` performs a WebSocket/SSE upgrade by listening on
- * `server.on('upgrade', (req, socket, head) => …)` and calling
- * `res.assignSocket(socket)` to hijack the connection. Both depend on a raw
- * socket the cross-realm port-registry bridge does NOT have (ADR-0040/0048:
- * the bridge carries buffered + chunked HTTP request/reply only, no socket
- * hijack). Upgrade/`assignSocket` is therefore a hard-blocker-adjacent path
- * OWNED BY FEATURE 07 and is registered as not-supported in the compat matrix
- * (ADR-0055 — PTY/WS-shaped routes stay stubbed).
- *
- * This test pins the INTENTIONAL ABSENCE so feature 05 cannot silently swallow
- * an upgrade into the buffered path — which would corrupt feature 08's SSE LLM
- * round-trip with no error. It documents the gap today (the plumbing is absent)
- * and goes RED the moment someone wires a fake upgrade entry point: i.e. if
- * `ServerResponse` grows an `assignSocket` sink, or if the server starts
- * routing an upgrade-style request through the normal `'request'` dispatch.
- */
-describe('HttpServer — upgrade path is the feature-07 boundary (NEGATIVE)', () => {
-  it('upgrade path is not silently consumed as a normal request', async () => {
+describe('HttpServer — WebSocket upgrade bridge', () => {
+  it('runs the real ws package in { server } mode over the bridge', async () => {
+    const { WebSocketServer } = requireFromHere('ws') as {
+      WebSocketServer: RealWsServerCtor;
+    };
+    const port = 4103;
+    const httpServer = createServer();
+    const requestArgs: unknown[][] = [];
+    httpServer.on('request', (...args: unknown[]) => requestArgs.push(args));
+    const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+    wss.on('connection', (socket) => {
+      socket.on('message', (data) => socket.send(`echo:${String(data)}`));
+    });
+    httpServer.listen({ port });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const ws = new BridgedWebSocket(`ws://localhost:${port}/ws`, 'probe');
+    const seen: string[] = [];
+    ws.addEventListener('message', (event) => seen.push(String((event as MessageEvent).data)));
+    await new Promise<void>((resolve, reject) => {
+      ws.addEventListener('open', () => resolve(), { once: true });
+      ws.addEventListener('error', () => reject(new Error('real ws bridge failed to open')), {
+        once: true,
+      });
+    });
+    ws.send('hello');
+    await waitFor(() => seen.includes('echo:hello'));
+
+    expect(requestArgs).toHaveLength(0);
+    ws.close();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    wss.close();
+    httpServer.close();
+  });
+
+  it('propagates real ws terminate() to the bridged client', async () => {
+    const { WebSocketServer } = requireFromHere('ws') as {
+      WebSocketServer: RealWsServerCtor;
+    };
+    const port = 4105;
+    const httpServer = createServer();
+    const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+    wss.on('connection', (socket) => {
+      socket.terminate();
+    });
+    httpServer.listen({ port });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const ws = new BridgedWebSocket(`ws://localhost:${port}/ws`);
+    const closeEvent = await new Promise<CloseEvent>((resolve, reject) => {
+      ws.addEventListener('close', (event) => resolve(event as CloseEvent), { once: true });
+      ws.addEventListener(
+        'error',
+        () => reject(new Error('terminate should close after upgrade')),
+        {
+          once: true,
+        },
+      );
+    });
+
+    expect(closeEvent.code).toBe(1006);
+    expect(closeEvent.reason).toContain('socket destroyed');
+    wss.close();
+    httpServer.close();
+  });
+
+  it('lets the real ws server choose the accepted subprotocol', async () => {
+    const { WebSocketServer } = requireFromHere('ws') as {
+      WebSocketServer: RealWsServerCtor;
+    };
+    const port = 4106;
+    const httpServer = createServer();
+    const wss = new WebSocketServer({
+      server: httpServer,
+      path: '/ws',
+      handleProtocols: (protocols) => (protocols.has('b') ? 'b' : false),
+    });
+    wss.on('connection', (socket) => {
+      socket.send('ok');
+    });
+    httpServer.listen({ port });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const ws = new BridgedWebSocket(`ws://localhost:${port}/ws`, ['a', 'b']);
+    const seen: string[] = [];
+    ws.addEventListener('message', (event) => seen.push(String((event as MessageEvent).data)));
+    await new Promise<void>((resolve, reject) => {
+      ws.addEventListener('open', () => resolve(), { once: true });
+      ws.addEventListener('error', () => reject(new Error('subprotocol bridge failed to open')), {
+        once: true,
+      });
+    });
+
+    expect(ws.protocol).toBe('b');
+    await waitFor(() => seen.includes('ok'));
+    ws.close();
+    wss.close();
+    httpServer.close();
+  });
+
+  it('accepts wss bridge opens as encrypted upgrade sockets', async () => {
+    const port = 4109;
+    const s = createServer();
+    s.on('upgrade', (...args: unknown[]) => {
+      const req = args[0] as { headers: Record<string, string> };
+      const socket = args[1] as {
+        encrypted: boolean;
+        write(chunk: string | Uint8Array): boolean;
+      };
+      expect(socket.encrypted).toBe(true);
+      socket.write(
+        [
+          'HTTP/1.1 101 Switching Protocols',
+          'Connection: Upgrade',
+          'Upgrade: websocket',
+          `Sec-WebSocket-Accept: ${acceptKey(req.headers['sec-websocket-key']!)}`,
+          '',
+          '',
+        ].join('\r\n'),
+      );
+    });
+    s.listen({ port });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const ws = new BridgedWebSocket(`wss://localhost:${port}/secure`);
+    await new Promise<void>((resolve, reject) => {
+      ws.addEventListener('open', () => resolve(), { once: true });
+      ws.addEventListener('error', () => reject(new Error('wss bridge failed to open')), {
+        once: true,
+      });
+    });
+
+    ws.close();
+    s.close();
+  });
+
+  it('emits upgrade for bridged WebSocket opens and carries RFC6455 frames', async () => {
     const port = 4101;
     const s = createServer();
-
-    // Feature 05 only ever surfaces normal requests via `'request'`. There is
-    // no rifty code path that detects an `Upgrade:` header and converts it into
-    // a buffered request — but if one were added, this listener would catch it
-    // firing for an upgrade-style invocation.
     const requestArgs: unknown[][] = [];
     s.on('request', (...args: unknown[]) => {
       requestArgs.push(args);
     });
-
-    // Effect attaches its WS hijack here. rifty emits no `'upgrade'` event from
-    // any code path, so this listener must never fire.
     const upgradeArgs: unknown[][] = [];
-    s.on('upgrade', (...args: unknown[]) => {
+    s.on('upgrade', async (...args: unknown[]) => {
       upgradeArgs.push(args);
+      const req = args[0] as { headers: Record<string, string>; url: string };
+      const socket = args[1] as {
+        write(chunk: string | Uint8Array): boolean;
+        on(event: 'data', cb: (chunk: Uint8Array) => void): void;
+      };
+      const head = args[2] as Uint8Array;
+      expect(req.url).toBe('/socket?room=1');
+      expect(req.headers.upgrade).toBe('websocket');
+      const connection = req.headers.connection;
+      expect(connection).toBeDefined();
+      expect(connection?.toLowerCase()).toContain('upgrade');
+      expect(head.byteLength).toBe(0);
+
+      const protocol = req.headers['sec-websocket-protocol']
+        ?.split(',')
+        .map((part) => part.trim())
+        .find((part) => part.length > 0);
+      const headers = [
+        'HTTP/1.1 101 Switching Protocols',
+        'Connection: Upgrade',
+        'Upgrade: websocket',
+        `Sec-WebSocket-Accept: ${acceptKey(req.headers['sec-websocket-key']!)}`,
+      ];
+      if (protocol) headers.push(`Sec-WebSocket-Protocol: ${protocol}`);
+      socket.write(`${headers.join('\r\n')}\r\n\r\n`);
+      socket.on('data', (chunk) => {
+        const frame = parseClientFrame(Buffer.from(chunk));
+        if (frame.opcode === 0x1 && frame.payload.toString('utf8') === 'ping') {
+          socket.write(encodeServerFrame(0x1, Buffer.from('po'), { fin: false }));
+          socket.write(encodeServerFrame(0x0, Buffer.from('ng')));
+        }
+      });
     });
 
     s.listen({ port });
     await Promise.resolve();
     await Promise.resolve();
 
-    // The `assignSocket` sink Effect uses to hijack a connection must be ABSENT
-    // from `ServerResponse`. If it ever appears, the buffered path could be
-    // silently turned into a (broken) upgrade — exactly the corruption this
-    // test guards against. Asserting on a fresh instance pins the class shape.
-    const res = new ServerResponse();
-    expect('assignSocket' in res).toBe(false);
-    expect((res as unknown as { assignSocket?: unknown }).assignSocket).toBeUndefined();
+    const ws = new BridgedWebSocket(`ws://localhost:${port}/socket?room=1`, 'chat');
+    const seen: string[] = [];
+    ws.addEventListener('message', (e) => seen.push(String((e as MessageEvent).data)));
+    await new Promise<void>((resolve) =>
+      ws.addEventListener('open', () => resolve(), { once: true }),
+    );
+    expect(ws.protocol).toBe('chat');
+    ws.send('ping');
+    await waitFor(() => seen.includes('pong'));
 
-    // Likewise the server exposes no upgrade entry point. There is no
-    // `s.emit('upgrade', …)` call site anywhere in feature 05's surface, so an
-    // upgrade can only be reached by FEATURE-07 plumbing that does not exist
-    // yet. Merely having an `'upgrade'` listener registered must not cause any
-    // spurious `'request'` emission.
+    expect(requestArgs).toHaveLength(0);
+    expect(upgradeArgs).toHaveLength(1);
+    ws.close();
+    s.close();
+  });
+
+  it('rejects invalid server-to-client RFC6455 frames loudly', async () => {
+    const port = 4107;
+    const s = createServer();
+    s.on('upgrade', (...args: unknown[]) => {
+      const req = args[0] as { headers: Record<string, string> };
+      const socket = args[1] as {
+        write(chunk: string | Uint8Array): boolean;
+        on(event: 'error', cb: () => void): void;
+      };
+      socket.on('error', () => {});
+      socket.write(
+        [
+          'HTTP/1.1 101 Switching Protocols',
+          'Connection: Upgrade',
+          'Upgrade: websocket',
+          `Sec-WebSocket-Accept: ${acceptKey(req.headers['sec-websocket-key']!)}`,
+          '',
+          '',
+        ].join('\r\n'),
+      );
+      socket.write(encodeServerFrame(0x1, Buffer.from('masked'), { masked: true }));
+    });
+    s.listen({ port });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const ws = new BridgedWebSocket(`ws://localhost:${port}/socket`);
+    const closeEvent = await new Promise<CloseEvent>((resolve) =>
+      ws.addEventListener('close', (event) => resolve(event as CloseEvent), { once: true }),
+    );
+
+    expect(closeEvent.code).toBe(1002);
+    expect(closeEvent.reason).toContain('masked websocket frame from server');
+    s.close();
+  });
+
+  it('does not silently route upgrade-shaped HTTP requests through request', async () => {
+    const port = 4102;
+    const s = createServer();
+    const requestArgs: unknown[][] = [];
+    const upgradeArgs: unknown[][] = [];
+    s.on('request', (...args: unknown[]) => requestArgs.push(args));
+    s.on('upgrade', (...args: unknown[]) => upgradeArgs.push(args));
+    s.listen({ port });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const response = await dispatchToPort(
+      port,
+      new Request(`http://preview.local:${port}/socket`, {
+        headers: {
+          connection: 'Upgrade',
+          upgrade: 'websocket',
+        },
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain('WebSocket upgrade requires');
     expect(requestArgs).toHaveLength(0);
     expect(upgradeArgs).toHaveLength(0);
+    s.close();
   });
 });
+
+function acceptKey(key: string): string {
+  return createHash('sha1').update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64');
+}
+
+function parseClientFrame(buf: Buffer): { opcode: number; payload: Buffer } {
+  const opcode = buf[0]! & 0x0f;
+  const masked = (buf[1]! & 0x80) !== 0;
+  let len = buf[1]! & 0x7f;
+  let off = 2;
+  if (len === 126) {
+    len = (buf[2]! << 8) | buf[3]!;
+    off = 4;
+  } else if (len === 127) {
+    len = Number(buf.readBigUInt64BE(2));
+    off = 10;
+  }
+  const maskOff = off;
+  if (masked) off += 4;
+  const payload = Buffer.from(buf.subarray(off, off + len));
+  if (masked) {
+    for (let i = 0; i < payload.length; i++) payload[i] = payload[i]! ^ buf[maskOff + (i % 4)]!;
+  }
+  return { opcode, payload };
+}
+
+function encodeServerFrame(
+  opcode: number,
+  payload: Buffer,
+  opts: { fin?: boolean; masked?: boolean } = {},
+): Buffer {
+  if (payload.length >= 126) throw new Error('test frame helper only supports short payloads');
+  if (!opts.masked) {
+    return Buffer.concat([
+      Buffer.from([(opts.fin === false ? 0 : 0x80) | opcode, payload.length]),
+      payload,
+    ]);
+  }
+  const mask = Buffer.from([1, 2, 3, 4]);
+  const masked = Buffer.from(payload);
+  for (let i = 0; i < masked.length; i++) masked[i] = masked[i]! ^ mask[i % 4]!;
+  return Buffer.concat([
+    Buffer.from([(opts.fin === false ? 0 : 0x80) | opcode, 0x80 | payload.length]),
+    mask,
+    masked,
+  ]);
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 1000;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('timed out waiting for condition');
+}

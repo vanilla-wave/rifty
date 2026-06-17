@@ -61,14 +61,81 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
       return ev;
     }
   }
-  function makeInvalidStateError(message) {
+  function makeDomException(message, name) {
     try {
-      return new DOMException(message, 'InvalidStateError');
+      return new DOMException(message, name);
     } catch (_) {
       var err = new Error(message);
-      err.name = 'InvalidStateError';
+      err.name = name;
       return err;
     }
+  }
+  function makeInvalidStateError(message) {
+    return makeDomException(message, 'InvalidStateError');
+  }
+  function isValidProtocolToken(protocol) {
+    return /^[!#$%&'*+\\-.^_\`|~0-9A-Za-z]+$/.test(protocol);
+  }
+  function normalizeProtocols(protocols) {
+    var seen = Object.create(null);
+    function add(protocol) {
+      if (typeof protocol !== 'string' || !isValidProtocolToken(protocol)) {
+        throw makeDomException("Failed to construct 'WebSocket': The subprotocol '" + String(protocol) + "' is invalid.", 'SyntaxError');
+      }
+      if (seen[protocol]) {
+        throw makeDomException("Failed to construct 'WebSocket': The subprotocol '" + protocol + "' is duplicated.", 'SyntaxError');
+      }
+      seen[protocol] = true;
+      return protocol;
+    }
+    if (Array.isArray(protocols)) {
+      var out = [];
+      for (var i = 0; i < protocols.length; i++) {
+        out.push(add(protocols[i]));
+      }
+      return out;
+    }
+    if (typeof protocols === 'string') return [add(protocols)];
+    return [];
+  }
+  function validateCloseParams(code, reason) {
+    if (code !== 1000 && (code < 3000 || code > 4999)) {
+      throw makeDomException("Failed to execute 'close' on 'WebSocket': The code must be either 1000, or between 3000 and 4999.", 'InvalidAccessError');
+    }
+    if (new TextEncoder().encode(reason).byteLength > 123) {
+      throw makeDomException("Failed to execute 'close' on 'WebSocket': The message must not be greater than 123 bytes.", 'SyntaxError');
+    }
+  }
+  function arrayBufferFromBinary(data) {
+    if (data instanceof ArrayBuffer) return data;
+    if (ArrayBuffer.isView(data)) {
+      return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+    }
+    return null;
+  }
+  function messageDataForBinaryType(data, binaryType) {
+    var ab = arrayBufferFromBinary(data);
+    if (!ab) return data;
+    if (binaryType === 'arraybuffer') return ab;
+    if (typeof Blob !== 'undefined') return new Blob([ab]);
+    return ab;
+  }
+  function postOutgoingData(socket, data) {
+    if (!socket.__activeChannel) return;
+    if (typeof Blob !== 'undefined' && data instanceof Blob) {
+      data.arrayBuffer().then(function (buffer) {
+        if (socket.readyState !== RiftyBridgeWebSocket.OPEN || !socket.__activeChannel) return;
+        socket.__activeChannel.postMessage({ type: 'msg', cid: socket.__cid, data: buffer });
+      }, function () {
+        if (socket.readyState !== RiftyBridgeWebSocket.OPEN) return;
+        emit(socket, new Event('error'));
+        socket.readyState = RiftyBridgeWebSocket.CLOSED;
+        emit(socket, makeCloseEvent(1006, 'failed to read Blob websocket payload', false));
+        socket.__cleanup();
+      });
+      return;
+    }
+    socket.__activeChannel.postMessage({ type: 'msg', cid: socket.__cid, data: data });
   }
   function emit(socket, event) {
     var handler = socket['on' + event.type];
@@ -107,7 +174,7 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
         return new NativeWebSocket(rawUrl, protocols);
       }
       this.url = target.href;
-      this.protocol = Array.isArray(protocols) ? (protocols[0] || '') : (protocols || '');
+      this.protocol = '';
       this.extensions = '';
       this.binaryType = 'blob';
       this.bufferedAmount = 0;
@@ -121,6 +188,7 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
       this.onerror = null;
       this.onclose = null;
       this.__cid = 'ws-' + Math.random().toString(36).slice(2, 10);
+      this.__protocols = normalizeProtocols(protocols);
       this.__channels = [];
       this.__activeChannel = null;
       this.__onMessage = (e) => this.__handleMessage(e);
@@ -132,7 +200,12 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
         this.__channels.push(channel);
       }
       for (var j = 0; j < this.__channels.length; j++) {
-        this.__channels[j].postMessage({ type: 'open', cid: this.__cid, url: this.url });
+        this.__channels[j].postMessage({
+          type: 'open',
+          cid: this.__cid,
+          url: this.url,
+          protocols: this.__protocols
+        });
       }
       this.__connectTimer = setTimeout(() => {
         if (this.readyState !== RiftyBridgeWebSocket.CONNECTING) return;
@@ -164,6 +237,7 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
         clearTimeout(this.__connectTimer);
         this.__activeChannel = this.__channelFromEvent(e);
         this.__closeInactiveChannels();
+        this.protocol = f.protocol || '';
         this.readyState = RiftyBridgeWebSocket.OPEN;
         publish('open');
         emit(this, new Event('open'));
@@ -171,11 +245,12 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
       }
       if (f.type === 'msg' && this.readyState === RiftyBridgeWebSocket.OPEN) {
         publish('message', f.data);
-        emit(this, new MessageEvent('message', { data: f.data }));
+        emit(this, new MessageEvent('message', { data: messageDataForBinaryType(f.data, this.binaryType) }));
         return;
       }
       if (f.type === 'close' && f.from === 'server') {
         if (this.readyState === RiftyBridgeWebSocket.CLOSED) return;
+        if (this.readyState === RiftyBridgeWebSocket.CONNECTING) emit(this, new Event('error'));
         this.readyState = RiftyBridgeWebSocket.CLOSED;
         emit(this, makeCloseEvent(f.code || 1000, f.reason || '', true));
         this.__cleanup();
@@ -186,27 +261,33 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
         throw makeInvalidStateError("Failed to execute 'send' on 'WebSocket': Still in CONNECTING state.");
       }
       if (this.readyState !== RiftyBridgeWebSocket.OPEN) return;
-      if (this.__activeChannel) this.__activeChannel.postMessage({ type: 'msg', cid: this.__cid, data: data });
+      postOutgoingData(this, data);
     }
     close(code, reason) {
       if (
         this.readyState === RiftyBridgeWebSocket.CLOSED ||
         this.readyState === RiftyBridgeWebSocket.CLOSING
       ) return;
+      code = code === undefined ? 1000 : code;
+      reason = reason === undefined ? '' : String(reason);
+      validateCloseParams(code, reason);
+      var wasConnecting = this.readyState === RiftyBridgeWebSocket.CONNECTING;
       this.readyState = RiftyBridgeWebSocket.CLOSING;
       var targets = this.__activeChannel ? [this.__activeChannel] : this.__channels;
       for (var i = 0; i < targets.length; i++) {
         targets[i].postMessage({
           type: 'close',
           cid: this.__cid,
-          code: code || 1000,
-          reason: reason || '',
+          code: code,
+          reason: reason,
           from: 'client'
         });
       }
-      this.readyState = RiftyBridgeWebSocket.CLOSED;
-      emit(this, makeCloseEvent(code || 1000, reason || '', true));
-      this.__cleanup();
+      if (wasConnecting) {
+        this.readyState = RiftyBridgeWebSocket.CLOSED;
+        emit(this, makeCloseEvent(code, reason, true));
+        this.__cleanup();
+      }
     }
     __cleanup() {
       clearTimeout(this.__connectTimer);

@@ -1,74 +1,53 @@
-# ADR 0145: Real Vite module HMR over server.hmr.channels
+# ADR 0145: Real Vite module HMR
 
-Status: Accepted
+Status: Accepted (corrected by ADR-0147 and ADR-0151)
 Date: 2026-06-14
-
-> Correction 2026-06-16: ADR-0147 supersedes this ADR's browser transport
-> clause. Real-Vite still uses Vite's `server.hmr.channels` payload path, but
-> the injected browser code is the generic configured-host WebSocket bridge, not
-> a Vite-only `"vite-hmr"` shim.
-
-> TL;DR: real-Vite uses Vite's native HMR broadcaster over a rifty
-> `server.hmr.channels` BroadcastChannel transport; the reload-only bridge is
-> no longer the real-Vite update path.
 
 ## Context
 
-The closed honest-Vite-HMR backlog item recorded the gap: real-Vite edits sent a
-hand-rolled `{type:'update', path}` over `hmrClientScript`, whose only effect
-was `location.reload()`. That satisfied "preview refreshes" but lost app state
-and never exercised Vite's module graph HMR.
+Real-Vite edits used to send a hand-rolled `{type:'update', path}` payload to a
+reload-only client. That made the preview change, but it was not Vite HMR:
+module graph invalidation, `update.updates[]`, `prune`, `error`, and app-state
+preservation were bypassed.
 
-ADR-0017 deferred a general cross-realm WebSocket/TCP bridge to M12. ADR-0147
-later shipped the same-origin cross-realm WebSocket part; streaming/backpressure
-hardening remains M12. Vite 5.4.21, however, exposes a
-narrower seam: `server.hmr.channels`. A channel receives the same `HMRPayload`s
-Vite sends to its built-in `ws` server, without requiring the browser iframe to
-open a real socket to the worker realm.
+The first accepted implementation used Vite 5.4's `server.hmr.channels` seam to
+get real Vite payloads without a general HTTP WebSocket upgrade path. That seam
+is now superseded:
+
+- ADR-0147 replaced the Vite-only browser socket patch with the generic
+  configured-host `window.WebSocket` bridge.
+- ADR-0151 made `http.Server.on('upgrade')` work over that bridge, so Real-Vite
+  can use Vite's native `server.ws` path instead of `server.hmr.channels`.
 
 ## Decision
 
-Real-Vite HMR is now:
+Real-Vite HMR must be Vite-owned, not rifty-synthesized:
 
-1. Worker creates `createViteHmrBridgeChannel({ port, token })`, a structural
-   Vite HMR channel backed by the existing tokenized
-   `BridgedWebSocketServer`/`BroadcastChannel` carrier.
-2. Worker starts Vite with `server.hmr = { channels: [channel], ... }` and
-   `server.ws = false`. Vite's watcher and module graph now generate real
-   `connected`, `update`, `full-reload`, `prune`, and `error` payloads; Vite's
-   native `ws` server is not used.
-3. `createHmrBridgeVitePlugin` injects `viteHmrClientScript` as a late
-   `head-prepend` tag. The script installs the generic configured-host
-   WebSocket bridge from ADR-0147, dispatches raw messages to `@vite/client`,
-   and never interprets updates or calls `location.reload()`.
-4. Page-to-worker editor writes trigger Vite's native watcher path (`emit`
-   `'change'`) so Vite runs its own HMR update pipeline. The old manual
-   `broadcastFileUpdate` payload is removed.
-5. The Vite template and browser real-Vite preset entries are self-accepting by
-   default, so the first seeded JS edit can patch in place. Vite still
-   full-reloads non-HMR-able boundaries (HTML/config/non-accepted imports); the
-   dark first-frame background remains useful for those fallback reloads.
+- Vite's watcher/module graph generates `connected`, `update`, `full-reload`,
+  `prune`, and `error` payloads.
+- Page-to-worker editor writes wake Vite's native watcher path.
+- `createHmrBridgeVitePlugin` injects the generic `@riftydev/net` browser
+  WebSocket bridge before `/@vite/client`.
+- Current transport is ADR-0151: Vite native `server.ws` attaches to rifty
+  `http.Server.on('upgrade')`. The old `server.hmr.channels` adapter and
+  `ws:false` config are not part of the current design.
 
 ## Consequences
 
-- (+) Real-Vite JS edits preserve iframe state when the module is HMR-able.
-- (+) The iframe still owns automatic refresh per ADR-0126; parent snapshot
-  reload stays removed.
-- (+) No new external dependency; `PREVIEW_LOCAL_HOST` now comes from
-  `@riftydev/io`, closing the playground host-literal backlog item.
-- (=) ADR-0147 owns arbitrary same-origin cross-realm sockets. ADR-0017's M12
-  work remains open for SSE/streaming, raw TCP, and backpressure hardening.
-- (-) The transport still uses BroadcastChannel: no per-connection isolation or
-  backpressure. Good enough for Vite HMR payloads; not a general socket answer.
+- (+) HMR-able JS edits preserve iframe state.
+- (+) Vite remains the source of HMR semantics; rifty only supplies the browser
+  socket/HTTP-upgrade substrate.
+- (=) Vite can still full-reload non-HMR-able boundaries.
+- (=) Raw TCP/TLS sockets remain ADR-0017 boundaries.
 
 ## Acceptance
 
-- [x] Unit coverage proves the Vite channel sends `connected` + real
-  `update.updates[]` payloads and receives custom events.
-- [x] Unit coverage proves the real-Vite injected script installs the generic
-  configured-host WebSocket bridge and contains no `location.reload()`.
-- [x] Bootstrap coverage pins `server.hmr.channels`, `ws:false`, and removal of
-  the fake `{type:'update', path}` broadcast.
-- [x] Template and preset coverage pins self-accepting browser entries.
+- [x] Browser bridge injection is idempotent and contains no reload-only Vite
+  shim.
+- [x] Bootstrap coverage rejects the old `server.hmr.channels`/`ws:false`
+  config path.
+- [x] Integration coverage starts real Vite against rifty HTTP WebSocket
+  upgrade, emits a watcher change, and sees Vite-generated `update.updates[]`
+  without `full-reload`.
 - [x] Browser e2e asserts an HMR-able edit changes DOM while a `globalThis`
   sentinel survives (opt-in `RIFTY_E2E_HMR=1`).

@@ -95,6 +95,14 @@ export class Writable extends EventEmitter {
     this.finalImpl = opts.final;
   }
 
+  _write(_chunk: unknown, _encoding: string, cb: (err?: Error | null) => void): void {
+    cb();
+  }
+
+  _final(cb: (err?: Error | null) => void): void {
+    cb();
+  }
+
   get writable(): boolean {
     const state = this._writableState;
     return !state.destroyed && !state.ending && !state.finished;
@@ -229,8 +237,8 @@ export class Writable extends EventEmitter {
         if (inSyncWrite) mayContinueSync = true;
         else this.scheduleDrain();
       };
-      if (this.writeImpl) this.writeImpl.call(this, next.chunk, next.encoding, done);
-      else done();
+      const writeImpl = this.writeImpl ?? this._write;
+      writeImpl.call(this, next.chunk, next.encoding, done);
       inSyncWrite = false;
       // Continue only on a clean synchronous completion; stop on async-pending
       // (`done` deferred → re-arms via scheduleDrain), error, or destroy.
@@ -268,8 +276,8 @@ export class Writable extends EventEmitter {
         this.emit('close');
       }
     };
-    if (this.finalImpl) this.finalImpl.call(this, finalize);
-    else finalize();
+    const finalImpl = this.finalImpl ?? this._final;
+    finalImpl.call(this, finalize);
   }
 
   destroy(err?: Error): this {

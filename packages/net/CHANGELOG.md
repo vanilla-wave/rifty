@@ -11,6 +11,11 @@
   wildcard hosts work for preview domains. New `webSocketBridgeClientScript()`
   lets hosts inject a generic browser `window.WebSocket` bridge before framework
   dev clients run.
+- **`http.Server` WebSocket upgrade over the bridge (ADR-0151).**
+  Bridge `open` frames now emit `server.on('upgrade')` with a Node-shaped socket
+  that validates the 101 handshake and translates RFC 6455 frames. The real npm
+  `ws` package in `new WebSocketServer({ server })` mode and client mode is
+  pinned by CI.
 
 ### Fixed
 
@@ -21,9 +26,15 @@
 - **Cross-realm WebSocket port discovery rejects URL-less opens.** Servers now
   require the client `url` on port-channel open frames before wildcard
   host/path matching, so a discovery frame cannot bypass route validation.
-- **Browser bridge `send()` matches native CONNECTING behavior.** Calling
-  `send()` before the bridge reaches `OPEN` throws `InvalidStateError` instead
-  of silently dropping data.
+- **WebSocket clients match native CONNECTING `send()` behavior.** Calling
+  `send()` before the browser shim, default `WebSocket`, or `BridgedWebSocket`
+  reaches `OPEN` throws `InvalidStateError` instead of silently dropping data.
+- **WebSocket bridge close/binary/subprotocol parity tightened.** Client
+  `close()` now waits for the server close frame after `OPEN`, `destroy()` /
+  `terminate()` propagates abnormal close to clients, browser bridge binary
+  messages honor `binaryType`, invalid close codes/reasons and duplicated
+  subprotocols throw, masked server frames are rejected, and `wss://` preview
+  opens reach `server.on('upgrade')` with `socket.encrypted === true`.
 - **SSE bodies fail loud over the cross-realm preview bridge.**
   `serveCrossRealmPreview` refuses to drain a `text/event-stream` body
   (the page↔worker hop buffers until `reply-stream-end`, so an unending SSE
@@ -110,19 +121,6 @@
   `sqlite3_column_type`. Head-to-head parity:
   `tools/node-parity-runner/cases/sqlite/read-bigint-overflow.case.ts`;
   unit-pinned in `packages/net/src/sqlite/database-sync.test.ts`.
-
-### Documented
-
-- **WS/SSE upgrade is the feature-07 boundary (F05-T5, negative lock).** Added a
-  net-only conformance test pinning that feature 05's buffered HTTP surface does
-  NOT silently consume a WebSocket/SSE upgrade: `ServerResponse` exposes no
-  `assignSocket` sink, and the server emits no `'upgrade'` (nor mis-routes an
-  upgrade through the buffered `'request'` dispatch). No new code path — the
-  test documents the intentional gap and goes red if a fake upgrade entry point
-  is wired (protecting feature 08's SSE round-trip from silent corruption).
-  Registered the `http.Server` WS/SSE upgrade path as not-supported (❌) in
-  `docs/compat/m10-tooling.md` (ADR-0055 — PTY/WS-shaped routes stay stubbed).
-  Test: `packages/net/src/http/server.test.ts`.
 
 ### Added
 

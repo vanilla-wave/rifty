@@ -12,6 +12,24 @@ import { describe, expect, it } from 'vitest';
 import { Writable } from './writable.ts';
 
 describe('Writable sync-drain edges (#25)', () => {
+  it('calls subclass _write() when opts.write is absent', async () => {
+    class Sink extends Writable {
+      readonly chunks: string[] = [];
+
+      override _write(chunk: unknown, _encoding: string, cb: (err?: Error | null) => void): void {
+        this.chunks.push(String(chunk));
+        cb();
+      }
+    }
+
+    const sink = new Sink();
+    sink.write('a');
+    sink.write('b');
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(sink.chunks).toEqual(['a', 'b']);
+  });
+
   it('(a) destroy(err) from inside _write errors the still-queued chunks and stops further _write', async () => {
     const boom = new Error('boom');
     const writeOrder: string[] = [];

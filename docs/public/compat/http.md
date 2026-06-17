@@ -9,6 +9,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Feature | Status | Notes |
 |---|---|---|
 | `http.createServer` | ✅ | Request handler, `listen(port)`, registered port dispatch |
+| `server.on('upgrade')` WebSocket | ✅ | Bridge-backed RFC 6455 upgrade socket; real npm `ws` server and client modes tested on registered local ports |
 | Basic GET response | ✅ | `writeHead`, headers, status, body |
 | POST request body | ✅ | Readable request body and `end` |
 | 204 / 304 null-body statuses | ✅ | No invalid fetch `Response` body |
@@ -28,6 +29,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `tests/conformance/builtins/http.test.ts`
 - `tests/conformance/builtins/http-incoming-body.test.ts`
 - `tests/conformance/builtins/https.test.ts`
+- `packages/net/src/http/server.test.ts`
 - `tools/node-parity-runner/cases/http/*.case.ts`
 - `tools/node-parity-runner/cases/http2/surface.case.ts`
 - `packages/service-worker/src/body-transport.test.ts`
@@ -36,5 +38,6 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 ## Known Limitations
 
 - Networking is browser-local: servers bind a rifty port registry and preview dispatch, not native sockets.
+- WebSocket client upgrades are local-port only; arbitrary host TCP/TLS egress remains outside the browser runtime.
 - SSE preview delivery needs browser `ReadableStream` transfer over `postMessage` (SW bridge); the cross-realm worker bridge buffers until end (true end-to-end stream is M12). Paths without it fail loud (HTTP 502 naming the ceiling) rather than silently buffering an unending body forever.
 - `node:https` cannot promise real TLS egress inside the local runtime without host integration.

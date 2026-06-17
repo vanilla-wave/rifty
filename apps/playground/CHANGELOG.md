@@ -207,21 +207,24 @@
   closure alongside the node_modules/lockfile clear). A same-template reload
   reuses the persisted tree (stamp no-op). Caught by `owner-snapshot-restore-exec`
   e2e; unit-guarded in `npm-shell-command.test.ts`.
-- **Honest module HMR for real-Vite previews (ADR-0145).** Real-Vite no longer
-  turns every edit into a hand-rolled `{type:'update', path}` plus
-  `location.reload()`. The worker now registers a rifty
-  `server.hmr.channels` transport, disables Vite's native `ws` server
-  (`ws:false`), and lets Vite generate real HMR payloads (`update.updates[]`,
-  `full-reload`, `prune`, `error`). The injected iframe script installs the
-  generic `@riftydev/net` browser `WebSocket` bridge, so Vite's own
-  `@vite/client` patches self-accepting modules in place without a Vite-only
-  socket shim. The seeded Vite entry is self-accepting, and editor writes wake
-  Vite's native watcher path instead of manually broadcasting a fake update.
-  Tests: `packages/workbench/src/hmr-bridge.test.ts`,
-  `packages/workbench/src/project-worker-source.test.ts`,
-  `packages/workbench/src/vite-invalidation.test.ts`,
-  `packages/workbench/src/project-spec.test.ts`, opt-in browser
-  `tests/e2e/m10-hmr.spec.ts`.
+
+- **Honest module HMR for real-Vite previews (ADR-0145, superseded transport by
+  ADR-0151).** Real-Vite no longer turns every edit into a hand-rolled
+  `{type:'update', path}` plus `location.reload()`. Vite now keeps its native
+  `server.ws` path, attaches to rifty `http.Server.on('upgrade')`, and generates
+  real HMR payloads (`update.updates[]`, `full-reload`, `prune`, `error`). The
+  injected iframe script installs the generic `@riftydev/net` browser
+  `WebSocket` bridge, so Vite's own `@vite/client` patches self-accepting
+  modules in place without a Vite-only socket shim. The seeded Vite entry is
+  self-accepting, and editor writes wake Vite's native watcher path instead of
+  manually broadcasting a fake update.
+  Tests: `apps/playground/src/glue/hmr-bridge.test.ts`,
+  `apps/playground/src/workers/real-vite-bootstrap.test.ts`,
+  `apps/playground/src/workers/real-vite-invalidation.test.ts`,
+  `apps/playground/src/templates/project-spec.test.ts`,
+  `tests/integration/vite-hmr-channel.test.ts`, opt-in browser
+  `tests/e2e/m10-hmr.spec.ts`, and opt-in manual install browser
+  `tests/e2e/manual-vite-install.spec.ts`.
 
 - **Editable project files in real-vite mode (ADR-0076 §Decision-4, corrected).**
   Editing a seeded source tab (e.g. `src/project-summary.js`) while the dev

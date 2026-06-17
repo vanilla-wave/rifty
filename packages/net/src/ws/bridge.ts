@@ -34,6 +34,13 @@ interface BridgeFrame {
   reason?: string;
   from?: 'client' | 'server';
   url?: string;
+  protocols?: readonly string[];
+  protocol?: string;
+}
+
+interface BridgedWebSocketOptions {
+  connectTimeoutMs?: number;
+  protocols?: string | readonly string[];
 }
 
 let connectionCounter = 0;
@@ -108,7 +115,11 @@ export class BridgedWebSocketServer extends EventEmitter {
     if (frame.type === 'open') {
       const conn = new BridgedWebSocketConnection(frame.cid, (f) => this.channel.postMessage(f));
       this.clients.set(frame.cid, conn);
-      this.channel.postMessage({ type: 'open-ack', cid: frame.cid });
+      this.channel.postMessage({
+        type: 'open-ack',
+        cid: frame.cid,
+        protocol: frame.protocols?.[0] ?? '',
+      });
       queueMicrotask(() => this.emit('connection', conn));
       return;
     }
@@ -121,6 +132,13 @@ export class BridgedWebSocketServer extends EventEmitter {
       const conn = this.clients.get(frame.cid);
       if (conn) {
         this.clients.delete(frame.cid);
+        this.channel.postMessage({
+          type: 'close',
+          cid: frame.cid,
+          code: frame.code ?? 1000,
+          reason: frame.reason ?? '',
+          from: 'server',
+        });
         conn._peerClosed(frame.code ?? 1000, frame.reason ?? '');
       }
     }
@@ -161,6 +179,9 @@ export class BridgedWebSocket extends EventTarget {
   static readonly CLOSED = State.CLOSED;
 
   readyState: number = State.CONNECTING;
+  protocol = '';
+  extensions = '';
+  binaryType: BinaryType = 'blob';
   private readonly channels: BroadcastChannel[] = [];
   private activeChannel: BroadcastChannel | null = null;
   private readonly cid: string;
@@ -168,9 +189,13 @@ export class BridgedWebSocket extends EventTarget {
 
   constructor(
     public readonly url: string,
-    options: { connectTimeoutMs?: number } = {},
+    protocolsOrOptions: string | readonly string[] | BridgedWebSocketOptions = {},
   ) {
     super();
+    const options = isBridgedWebSocketOptions(protocolsOrOptions) ? protocolsOrOptions : {};
+    const protocols = isBridgedWebSocketOptions(protocolsOrOptions)
+      ? normaliseProtocols(protocolsOrOptions.protocols)
+      : normaliseProtocols(protocolsOrOptions);
     this.cid = nextCid();
     for (const channelName of new Set([channelNameFor(url), portChannelNameFor(url)])) {
       const channel = new BroadcastChannel(channelName);
@@ -178,7 +203,7 @@ export class BridgedWebSocket extends EventTarget {
       this.channels.push(channel);
     }
     for (const channel of this.channels) {
-      channel.postMessage({ type: 'open', cid: this.cid, url });
+      channel.postMessage({ type: 'open', cid: this.cid, url, protocols });
     }
     this.connectTimeout = setTimeout(() => {
       if (this.readyState !== State.CONNECTING) return;
@@ -196,6 +221,7 @@ export class BridgedWebSocket extends EventTarget {
       clearTimeout(this.connectTimeout);
       this.activeChannel = this.channelFromEvent(e);
       this.closeInactiveChannels();
+      this.protocol = frame.protocol ?? '';
       this.readyState = State.OPEN;
       this.dispatchEvent(new Event('open'));
       return;
@@ -206,6 +232,7 @@ export class BridgedWebSocket extends EventTarget {
     }
     if (frame.type === 'close' && frame.from === 'server') {
       if (this.readyState === State.CLOSED) return;
+      if (this.readyState === State.CONNECTING) this.dispatchEvent(new Event('error'));
       this.readyState = State.CLOSED;
       this.dispatchEvent(
         new CloseEventCtor('close', { code: frame.code ?? 1000, reason: frame.reason ?? '' }),
@@ -215,20 +242,29 @@ export class BridgedWebSocket extends EventTarget {
   };
 
   send(data: WsMessage): void {
+    if (this.readyState === State.CONNECTING) {
+      throw invalidStateError(
+        "Failed to execute 'send' on 'WebSocket': Still in CONNECTING state.",
+      );
+    }
     if (this.readyState !== State.OPEN) return;
     this.activeChannel?.postMessage({ type: 'msg', cid: this.cid, data });
   }
 
   close(code = 1000, reason = ''): void {
     if (this.readyState === State.CLOSED || this.readyState === State.CLOSING) return;
+    validateCloseParams(code, reason);
+    const wasConnecting = this.readyState === State.CONNECTING;
     this.readyState = State.CLOSING;
     const targets = this.activeChannel ? [this.activeChannel] : this.channels;
     for (const channel of targets) {
       channel.postMessage({ type: 'close', cid: this.cid, code, reason, from: 'client' });
     }
-    this.readyState = State.CLOSED;
-    this.dispatchEvent(new CloseEventCtor('close', { code, reason }));
-    this.cleanup();
+    if (wasConnecting) {
+      this.readyState = State.CLOSED;
+      this.dispatchEvent(new CloseEventCtor('close', { code, reason }));
+      this.cleanup();
+    }
   }
 
   private channelFromEvent(e: MessageEvent): BroadcastChannel | null {
@@ -258,6 +294,63 @@ export class BridgedWebSocket extends EventTarget {
     }
     this.channels.length = 0;
     this.activeChannel = null;
+  }
+}
+
+function isBridgedWebSocketOptions(
+  value: string | readonly string[] | BridgedWebSocketOptions,
+): value is BridgedWebSocketOptions {
+  return typeof value === 'object' && !Array.isArray(value);
+}
+
+function normaliseProtocols(protocols: string | readonly string[] | undefined): readonly string[] {
+  if (protocols === undefined) return [];
+  const out = typeof protocols === 'string' ? [protocols] : protocols;
+  const seen = new Set<string>();
+  return out.map((protocol) => {
+    if (!isValidProtocolToken(protocol)) {
+      throw new DOMException(
+        `Failed to construct 'WebSocket': The subprotocol '${protocol}' is invalid.`,
+        'SyntaxError',
+      );
+    }
+    if (seen.has(protocol)) {
+      throw new DOMException(
+        `Failed to construct 'WebSocket': The subprotocol '${protocol}' is duplicated.`,
+        'SyntaxError',
+      );
+    }
+    seen.add(protocol);
+    return protocol;
+  });
+}
+
+function isValidProtocolToken(protocol: string): boolean {
+  return /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(protocol);
+}
+
+function invalidStateError(message: string): Error {
+  try {
+    return new DOMException(message, 'InvalidStateError');
+  } catch {
+    const err = new Error(message);
+    err.name = 'InvalidStateError';
+    return err;
+  }
+}
+
+function validateCloseParams(code: number, reason: string): void {
+  if (code !== 1000 && (code < 3000 || code > 4999)) {
+    throw new DOMException(
+      "Failed to execute 'close' on 'WebSocket': The code must be either 1000, or between 3000 and 4999.",
+      'InvalidAccessError',
+    );
+  }
+  if (new TextEncoder().encode(reason).byteLength > 123) {
+    throw new DOMException(
+      "Failed to execute 'close' on 'WebSocket': The message must not be greater than 123 bytes.",
+      'SyntaxError',
+    );
   }
 }
 

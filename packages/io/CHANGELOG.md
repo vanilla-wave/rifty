@@ -15,6 +15,12 @@ Per `docs/perf/js-runtime-perf-audit-2026-06-05.md` (+ `js-runtime-perf-adr-plan
 
 ### Fixed
 
+- **`Writable` now calls subclass `_write()` / `_final()` methods.** Real stream
+  consumers such as npm `ws` implement `class Receiver extends Writable` and
+  provide `_write()` on the prototype instead of passing `{ write }` options.
+  rifty previously drained the chunk through the default no-op path, so the real
+  `ws` package opened but never emitted `'message'` inside the module loader.
+  Guard: `writable.sync-drain.test.ts` plus `ws-package-loader.test.ts`.
 - **`Buffer.toString('ascii')` masks bytes >= 0x80 to 7-bit (`& 0x7f`).** Node's ascii decode is 7-bit (0x80→U+0000, 0xFF→U+007F); rifty previously emitted the raw byte. `latin1`/`binary` stay unmasked (full 0-255); ascii ENCODE is unchanged (Node does not 7-bit-mask on encode). Also corrects `setEncoding('ascii')` streaming decode (routes through `Buffer.toString('ascii')`). Parity: `buffer/tostring-ascii-mask.case.ts`.
 
 ### Added

@@ -1,17 +1,14 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { createServer as createTcpServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { PREVIEW_LOCAL_HOST } from '@riftydev/io';
-import { BridgedWebSocket } from '@riftydev/net';
 import { afterEach, describe, expect, it } from 'vitest';
-import {
-  createHmrBridgeToken,
-  createViteHmrBridgeChannel,
-  hmrBridgeUrl,
-} from '../../packages/workbench/src/hmr-bridge.ts';
+import { createHmrBridgeToken, hmrBridgeUrl } from '../../apps/playground/src/glue/hmr-bridge.ts';
+import { PREVIEW_LOCAL_HOST } from '../../packages/io/src/index.ts';
+import { createServer as createHttpServer } from '../../packages/net/src/http/server.ts';
+import { BridgedWebSocket } from '../../packages/net/src/ws/bridge.ts';
 
 interface ViteModule {
   createServer(config: ViteInlineConfig): Promise<ViteDevServer>;
@@ -29,9 +26,8 @@ interface ViteInlineConfig {
       host: string;
       clientPort: number;
       path: string;
-      channels: unknown[];
+      server: unknown;
     };
-    ws: false;
     host: string;
     allowedHosts: true;
     watch: { ignored: string[] };
@@ -65,10 +61,10 @@ afterEach(async () => {
   await Promise.all(tmpRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-describe('real Vite HMR channel integration', () => {
-  it('sends Vite-generated js-update payloads over createViteHmrBridgeChannel', async () => {
+describe('real Vite HMR over rifty HTTP WebSocket upgrade', () => {
+  it('sends Vite-generated js-update payloads over Vite native server.ws', async () => {
     const vite = await loadPlaygroundVite();
-    const root = await mkdtemp(join(tmpdir(), 'rifty-vite-hmr-'));
+    const root = await mkdtemp(join(await realpath(tmpdir()), 'rifty-vite-hmr-'));
     tmpRoots.push(root);
     await mkdir(join(root, 'src'), { recursive: true });
     const entry = join(root, 'src/main.js');
@@ -81,7 +77,8 @@ describe('real Vite HMR channel integration', () => {
 
     const port = await getEphemeralPort();
     const token = createHmrBridgeToken();
-    const channel = createViteHmrBridgeChannel({ port, token });
+    const hmrHttpServer = createHttpServer();
+    hmrHttpServer.listen({ port });
     const seen: HmrPayload[] = [];
     let client: BridgedWebSocket | null = null;
     let server: ViteDevServer | null = null;
@@ -99,9 +96,8 @@ describe('real Vite HMR channel integration', () => {
             host: PREVIEW_LOCAL_HOST,
             clientPort: port,
             path: `__hmr/${encodeURIComponent(token)}`,
-            channels: [channel],
+            server: hmrHttpServer,
           },
-          ws: false,
           host: '127.0.0.1',
           allowedHosts: true,
           watch: { ignored: ['**/node_modules/**'] },
@@ -112,7 +108,10 @@ describe('real Vite HMR channel integration', () => {
       });
       await server.listen();
 
-      client = new BridgedWebSocket(hmrBridgeUrl(port, token), { connectTimeoutMs: 250 });
+      client = new BridgedWebSocket(hmrBridgeUrl(port, token), {
+        connectTimeoutMs: 250,
+        protocols: 'vite-hmr',
+      });
       client.addEventListener('message', (e) => {
         seen.push(JSON.parse(String((e as MessageEvent).data)) as HmrPayload);
       });
@@ -141,6 +140,7 @@ describe('real Vite HMR channel integration', () => {
     } finally {
       client?.close();
       await server?.close();
+      hmrHttpServer.close();
     }
   });
 });

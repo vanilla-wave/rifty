@@ -6,13 +6,10 @@
  * cross page/iframe/worker realms (no real TCP, no SW interception for WS
  * upgrade).
  *
- * Both HMR consumers route through this bridge: real-Vite mode (worker realm)
- * and dev mode (in-realm mini Vite under `examples/vite-like-dev`, via its
- * pluggable `hmr` transport — see `devMode.ts`). Dev mode formerly used its own
- * native-`WebSocket` client against its in-process `WebSocketServer`, which the
- * preview iframe (a separate realm) could never reach — leaving dev preview
- * non-live. Real-Vite uses Vite's native HMR payloads over
- * {@link createViteHmrBridgeChannel}; mini-dev keeps its simple reload client.
+ * Both HMR consumers install the browser-side bridge before their dev clients
+ * run. Mini-dev hosts a small reload broadcaster here. Real Vite hosts its own
+ * native `server.ws` on `http.Server.on('upgrade')`; rifty supplies the
+ * cross-realm browser `WebSocket` route.
  *
  * Why a bridge at all: the iframe's native `WebSocket` can't reach an in-process
  * `WebSocketServer` (no real TCP, no SW interception for the WS upgrade);
@@ -22,22 +19,16 @@
  * migration is a realm swap, not a routing rewrite.
  *
  * Server side: {@link setupHmrBridge} owns a token-scoped WS URL for simple
- * broadcasters, while {@link createViteHmrBridgeChannel} exposes the Vite
- * `server.hmr.channels` shape. Client side (iframe): an inlined generic
- * `window.WebSocket` bridge from `@riftydev/net` routes browser constructors
- * to the same server surface.
+ * broadcasters. Client side (iframe): an inlined generic `window.WebSocket`
+ * bridge from `@riftydev/net` routes browser constructors to rifty-hosted
+ * `http.Server`/`WebSocketServer` surfaces.
  *
  * Adapter discipline: no Solid signals here (D-002); caller-driven lifecycle.
  * Doesn't depend on Vite types — the Vite plugin/channel are structural.
  */
 
 import { PREVIEW_LOCAL_HOST } from '@riftydev/io';
-import {
-  type WebSocketConnection,
-  WebSocketServer,
-  type WsMessage,
-  webSocketBridgeClientScript,
-} from '@riftydev/net';
+import { WebSocketServer, type WsMessage, webSocketBridgeClientScript } from '@riftydev/net';
 
 /**
  * Per-server nonce for the HMR bridge URL. This is not a sandbox boundary —
@@ -154,154 +145,6 @@ export function setupHmrBridge(opts: SetupHmrBridgeOptions): HmrBridgeHandle {
     },
     close(): void {
       server.close();
-    },
-  };
-}
-
-export interface ViteHmrPayload {
-  readonly type: string;
-  readonly [key: string]: unknown;
-}
-
-export interface ViteHmrChannelClient {
-  send(payload: ViteHmrPayload | string, data?: unknown): void;
-}
-
-export type ViteHmrChannelListener = (data?: unknown, client?: ViteHmrChannelClient) => void;
-
-export interface ViteHmrBridgeChannel {
-  readonly name: string;
-  readonly url: string;
-  readonly clients: ReadonlySet<ViteHmrChannelClient>;
-  listen(): void;
-  on(event: string, listener: ViteHmrChannelListener): void;
-  off(event: string, listener: ViteHmrChannelListener): void;
-  send(payload: ViteHmrPayload | string, data?: unknown): void;
-  close(): Promise<void>;
-}
-
-const viteHmrTextDecoder = new TextDecoder();
-
-function wsMessageToString(data: WsMessage): string {
-  if (typeof data === 'string') return data;
-  if (data instanceof ArrayBuffer) return viteHmrTextDecoder.decode(new Uint8Array(data));
-  return viteHmrTextDecoder.decode(data);
-}
-
-function toVitePayload(payload: ViteHmrPayload | string, data?: unknown): ViteHmrPayload {
-  if (typeof payload === 'string') return { type: 'custom', event: payload, data };
-  return payload;
-}
-
-function stringifyVitePayload(payload: ViteHmrPayload | string, data?: unknown): string {
-  return JSON.stringify(toVitePayload(payload, data));
-}
-
-function isCustomVitePayload(payload: unknown): payload is {
-  readonly type: 'custom';
-  readonly event: string;
-  readonly data?: unknown;
-} {
-  if (!payload || typeof payload !== 'object') return false;
-  const candidate = payload as { readonly type?: unknown; readonly event?: unknown };
-  return candidate.type === 'custom' && typeof candidate.event === 'string';
-}
-
-/**
- * Vite `server.hmr.channels` adapter backed by the rifty cross-realm bridge.
- * Vite owns module invalidation and HMR payload generation; this channel only
- * carries those real payloads between the Worker dev server and the iframe.
- */
-export function createViteHmrBridgeChannel(opts: SetupHmrBridgeOptions): ViteHmrBridgeChannel {
-  const url = hmrBridgeUrl(opts.port, opts.token);
-  const server = new WebSocketServer({
-    host: PREVIEW_LOCAL_HOST,
-    port: opts.port,
-    path: new URL(url).pathname,
-  });
-  const listeners = new Map<string, Set<ViteHmrChannelListener>>();
-  const sockets = new Set<WebSocketConnection>();
-  const clients = new WeakMap<WebSocketConnection, ViteHmrChannelClient>();
-  let bufferedError: ViteHmrPayload | null = null;
-
-  const emit = (event: string, data?: unknown, client?: ViteHmrChannelClient): void => {
-    const eventListeners = listeners.get(event);
-    if (!eventListeners) return;
-    for (const listener of [...eventListeners]) listener(data, client);
-  };
-
-  const clientFor = (socket: WebSocketConnection): ViteHmrChannelClient => {
-    const existing = clients.get(socket);
-    if (existing) return existing;
-    const client: ViteHmrChannelClient = {
-      send(payload: ViteHmrPayload | string, data?: unknown): void {
-        socket.send(stringifyVitePayload(payload, data));
-      },
-    };
-    clients.set(socket, client);
-    return client;
-  };
-
-  server.on('connection', (conn) => {
-    const socket = conn as WebSocketConnection;
-    const client = clientFor(socket);
-    sockets.add(socket);
-    socket.on('message', (raw) => {
-      let payload: unknown;
-      try {
-        payload = JSON.parse(wsMessageToString(raw as WsMessage));
-      } catch {
-        return;
-      }
-      if (isCustomVitePayload(payload)) {
-        emit(payload.event, payload.data, client);
-      }
-    });
-    socket.on('close', () => {
-      sockets.delete(socket);
-    });
-    client.send({ type: 'connected' });
-    if (bufferedError) {
-      client.send(bufferedError);
-      bufferedError = null;
-    }
-    emit('connection', undefined, client);
-  });
-
-  return {
-    name: 'rifty-vite-hmr',
-    url,
-    get clients(): ReadonlySet<ViteHmrChannelClient> {
-      return new Set([...sockets].map((socket) => clientFor(socket)));
-    },
-    listen(): void {},
-    on(event: string, listener: ViteHmrChannelListener): void {
-      let eventListeners = listeners.get(event);
-      if (!eventListeners) {
-        eventListeners = new Set();
-        listeners.set(event, eventListeners);
-      }
-      eventListeners.add(listener);
-    },
-    off(event: string, listener: ViteHmrChannelListener): void {
-      const eventListeners = listeners.get(event);
-      if (!eventListeners) return;
-      eventListeners.delete(listener);
-      if (eventListeners.size === 0) listeners.delete(event);
-    },
-    send(payload: ViteHmrPayload | string, data?: unknown): void {
-      const vitePayload = toVitePayload(payload, data);
-      if (vitePayload.type === 'error' && sockets.size === 0) {
-        bufferedError = vitePayload;
-        return;
-      }
-      const message = JSON.stringify(vitePayload);
-      for (const socket of sockets) socket.send(message);
-    },
-    close(): Promise<void> {
-      listeners.clear();
-      sockets.clear();
-      return new Promise((resolve) => server.close(resolve));
     },
   };
 }

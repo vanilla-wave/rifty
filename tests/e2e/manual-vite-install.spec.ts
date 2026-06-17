@@ -1,14 +1,12 @@
 /**
  * Manual ecosystem path: a user creates/owns package.json, runs
- * `npm install vite@^5.4.0`, then starts the project through `npm run dev`.
+ * `npm install vite`, then starts the project through `npm run dev`.
  *
  * This is intentionally distinct from the built-in real-Vite preset. The
  * preset proves rifty can boot a prepared template; this spec proves the
  * terminal install/run path still reaches the same honest HMR transport.
- * Newer Vite majors are rejected by the worker version guard until their HMR
- * channel contract is proven.
  */
-import { expect, test } from '@playwright/test';
+import { type Locator, expect, test } from '@playwright/test';
 import {
   expectTerminalContains,
   openShellTerminal,
@@ -25,9 +23,7 @@ test.describe('manual Vite install path', () => {
     'set RIFTY_E2E_MANUAL_VITE=1 to run; installs Vite through the browser terminal',
   );
 
-  test('npm install vite@^5.4.0 + npm run dev gets real HMR in the preview iframe', async ({
-    page,
-  }) => {
+  test('npm install vite + npm run dev gets real HMR in the preview iframe', async ({ page }) => {
     test.setTimeout(180_000);
     await page.goto('/');
 
@@ -37,7 +33,7 @@ test.describe('manual Vite install path', () => {
     await openShellTerminal(page);
     await runTerminalLine(
       page,
-      'rm -rf node_modules package-lock.json package.json && printf \'{"name":"manual-vite","private":true,"type":"module","scripts":{"dev":"vite"},"dependencies":{}}\\n\' > package.json && npm install vite@^5.4.0',
+      'rm -rf node_modules package-lock.json package.json && printf \'{"name":"manual-vite","private":true,"type":"module","scripts":{"dev":"vite"},"dependencies":{}}\\n\' > package.json && npm install vite',
     );
     await expectTerminalContains(page, 'npm: installing vite', 20_000);
     await expectTerminalContains(page, /npm: installed \d+ package\(s\)/, 120_000);
@@ -47,23 +43,28 @@ test.describe('manual Vite install path', () => {
     await expectTerminalContains(page, '[vite] dev server ready on port 5174', 60_000);
 
     const previewFrame = page.frameLocator('iframe').first();
+    const previewBody = previewFrame.locator('body');
     await expect(previewFrame.locator('script[data-rifty-hmr-bridge]')).toHaveCount(1, {
       timeout: 30_000,
     });
 
-    await page.evaluate((key) => localStorage.removeItem(key), HMR_EVENT_KEY);
-    await previewFrame.locator('body').evaluate((_, key) => {
+    await previewBody.evaluate((_, key) => {
       const marker = `manual-survive-${Date.now()}`;
       (
         globalThis as typeof globalThis & { __riftyManualViteSentinel?: string }
       ).__riftyManualViteSentinel = marker;
       localStorage.setItem(`${key}:sentinel`, marker);
       localStorage.removeItem(`${key}:beforeunload`);
+      localStorage.setItem(`${key}:messages`, '[]');
       globalThis.addEventListener('beforeunload', () => {
         localStorage.setItem(`${key}:beforeunload`, '1');
       });
       globalThis.addEventListener('rifty:hmr:message', (event: Event) => {
         const detail = (event as CustomEvent<unknown>).detail;
+        const messagesKey = `${key}:messages`;
+        const messages = JSON.parse(localStorage.getItem(messagesKey) ?? '[]') as unknown[];
+        messages.push(detail);
+        localStorage.setItem(messagesKey, JSON.stringify(messages));
         localStorage.setItem(key, JSON.stringify(detail));
       });
     }, HMR_EVENT_KEY);
@@ -95,17 +96,10 @@ test.describe('manual Vite install path', () => {
       )}; }, 50);\n`,
     );
     await expect(editorLines).toContainText(marker);
-    await expectTerminalContains(
-      page,
-      '[real-vite/worker] editor write applied /workspace/src/main.js',
-      10_000,
-    );
 
     await expect
-      .poll(() => page.evaluate((key) => localStorage.getItem(key), HMR_EVENT_KEY), {
-        timeout: 30_000,
-      })
-      .toContain('/src/main.js');
+      .poll(() => hasNativeUpdatePayload(previewBody, HMR_EVENT_KEY), { timeout: 30_000 })
+      .toBe(true);
     await expect(previewFrame.locator('#app')).toHaveText(marker, { timeout: 30_000 });
     await expect
       .poll(
@@ -118,11 +112,46 @@ test.describe('manual Vite install path', () => {
           }),
         { timeout: 10_000 },
       )
-      .toBe(await page.evaluate((key) => localStorage.getItem(`${key}:sentinel`), HMR_EVENT_KEY));
+      .toBe(
+        await previewBody.evaluate(
+          (_, key) => localStorage.getItem(`${key}:sentinel`),
+          HMR_EVENT_KEY,
+        ),
+      );
     await expect
       .poll(() =>
-        page.evaluate((key) => localStorage.getItem(`${key}:beforeunload`), HMR_EVENT_KEY),
+        previewBody.evaluate(
+          (_, key) => localStorage.getItem(`${key}:beforeunload`),
+          HMR_EVENT_KEY,
+        ),
       )
       .toBeNull();
   });
 });
+
+interface HmrPayload {
+  readonly type?: unknown;
+  readonly updates?: readonly { readonly path?: unknown; readonly acceptedPath?: unknown }[];
+}
+
+async function readHmrMessages(previewBody: Locator, key: string): Promise<HmrPayload[]> {
+  const raw = await previewBody.evaluate(
+    (_, storageKey) => localStorage.getItem(`${storageKey}:messages`) ?? '[]',
+    key,
+  );
+  return JSON.parse(raw) as HmrPayload[];
+}
+
+function isMainJsNativeUpdate(payload: HmrPayload): boolean {
+  return (
+    payload.type === 'update' &&
+    Array.isArray(payload.updates) &&
+    payload.updates.some(
+      (update) => update.path === '/src/main.js' && update.acceptedPath === '/src/main.js',
+    )
+  );
+}
+
+async function hasNativeUpdatePayload(previewBody: Locator, key: string): Promise<boolean> {
+  return (await readHmrMessages(previewBody, key)).some(isMainJsNativeUpdate);
+}

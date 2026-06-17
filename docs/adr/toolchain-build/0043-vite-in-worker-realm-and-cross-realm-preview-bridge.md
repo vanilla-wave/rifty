@@ -77,12 +77,14 @@ The kernel needn't know about the preview hop. ADR-0017's M12 rewrite
 replaces this bridge and the HMR bridge with dedicated `MessagePort` pairs
 together; until then they share one primitive and one trade-off list.
 
-### D3: HMR bridge moves into the Worker realm
+### D3: HMR transport moves into the Worker realm
 
-`BroadcastChannel` is origin-scoped, so `BridgedWebSocketServer` works
-identically from page or worker. The Worker now owns the
-`setupHmrBridge({port})` lifecycle (page no longer instantiates it); the
-iframe-side client is unchanged. Realm swap, as ADR-0017's addendum predicted.
+`BroadcastChannel` is origin-scoped, so the rifty WebSocket bridge works
+identically from page or worker. Corrected 2026-06-17: Real-Vite no longer owns
+a `setupHmrBridge({port})` broadcaster; ADR-0151 moved it to Vite native
+`server.ws` over rifty `http.Server.on('upgrade')`. The Worker still owns the
+tokenized HMR URL and injects the generic browser WebSocket bridge before
+`@vite/client`.
 
 ### D4: Worker VFS is independent of the Page VFS
 

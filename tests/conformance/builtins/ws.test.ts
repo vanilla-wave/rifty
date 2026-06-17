@@ -76,6 +76,32 @@ describe('WebSocketServer', () => {
     server.close();
   });
 
+  it('throws InvalidStateError when send() is called before OPEN', async () => {
+    const server = new WebSocketServer({ port: 9005 });
+    server.on('connection', () => {});
+    const ws = new WebSocket('ws://localhost:9005/');
+
+    expect(() => ws.send('too-early')).toThrow(/CONNECTING|InvalidStateError/);
+
+    await new Promise<void>((r) => ws.addEventListener('open', () => r(), { once: true }));
+    ws.close();
+    server.close();
+  });
+
+  it('validates subprotocol tokens and close parameters', () => {
+    expect(() => new WebSocket('ws://localhost:9006/', ['chat', 'chat'])).toThrow(
+      /duplicated|SyntaxError/,
+    );
+    expect(() => new WebSocket('ws://localhost:9006/', ['bad token'])).toThrow(
+      /invalid|SyntaxError/,
+    );
+
+    const ws = new WebSocket('ws://localhost:9006/');
+    expect(() => ws.close(1006)).toThrow(/code|InvalidAccessError/);
+    expect(() => ws.close(3000, 'x'.repeat(124))).toThrow(/123 bytes|SyntaxError/);
+    ws.close();
+  });
+
   it('fails to connect when no server is listening at that url', async () => {
     const ws = new WebSocket('ws://localhost:9999/missing');
     const err = await new Promise<Event>((r) =>
@@ -174,6 +200,35 @@ describe('cross-realm WebSocket bridge (ADR-0017 phase 1)', () => {
     expect(closeEvent.code).toBe(1001);
     expect(closeEvent.reason).toBe('bye-from-server');
     server2.close();
+  });
+
+  it('throws InvalidStateError when a bridged client sends before OPEN', async () => {
+    const { WebSocket: BWS, WebSocketServer: BWSS } = createCrossRealmBridge();
+    const server = new BWSS('ws://playground/too-early');
+    server.on('connection', () => {});
+    const ws = new BWS('ws://playground/too-early');
+
+    expect(() => ws.send('too-early')).toThrow(/CONNECTING|InvalidStateError/);
+
+    await new Promise<void>((r) => ws.addEventListener('open', () => r(), { once: true }));
+    ws.close();
+    server.close();
+  });
+
+  it('validates bridged subprotocol tokens and close parameters', () => {
+    const { WebSocket: BWS } = createCrossRealmBridge();
+
+    expect(() => new BWS('ws://playground/invalid-protocol', ['chat', 'chat'])).toThrow(
+      /duplicated|SyntaxError/,
+    );
+    expect(() => new BWS('ws://playground/invalid-protocol', ['bad token'])).toThrow(
+      /invalid|SyntaxError/,
+    );
+
+    const ws = new BWS('ws://playground/invalid-close', { connectTimeoutMs: 50 });
+    expect(() => ws.close(1006)).toThrow(/code|InvalidAccessError/);
+    expect(() => ws.close(3000, 'x'.repeat(124))).toThrow(/123 bytes|SyntaxError/);
+    ws.close();
   });
 });
 

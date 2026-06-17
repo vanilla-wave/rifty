@@ -17,7 +17,8 @@ reach a Worker-side or page-side in-process `WebSocketServer`.
 ADR-0145 then got real-Vite HMR working through Vite's `server.hmr.channels`,
 but the browser transport was still a targeted `"vite-hmr"` patch. That fixed
 Vite, not the ecosystem surface: another dev client creating a normal
-same-origin `WebSocket` would still miss rifty's server.
+same-origin `WebSocket` would still miss rifty's server. ADR-0151 later moved
+Real-Vite off `server.hmr.channels` and onto Vite's native `server.ws`.
 
 ## Decision
 
@@ -33,13 +34,13 @@ same-origin `WebSocket` would still miss rifty's server.
 - `webSocketBridgeClientScript()` is public API: hosts inject it before framework
   dev clients run; it patches browser `window.WebSocket` for configured
   same-origin preview hosts and leaves other URLs to native WebSocket.
-- Workbench HMR now hosts ordinary `WebSocketServer` instances. Vite still owns
-  HMR payload generation through `server.hmr.channels`; the browser transport is
-  generic WebSocket bridge, not a Vite-only `"vite-hmr"` shim.
+- Workbench injects the generic browser bridge before framework dev clients run.
+  Mini-dev still hosts an ordinary `WebSocketServer`; Real-Vite reaches Vite's
+  native `server.ws` through ADR-0151's HTTP upgrade bridge.
 
 This supersedes ADR-0017's A-025 deferral and ADR-0145's transport clauses.
-ADR-0017 still owns streaming body/backpressure/raw-TCP work; ADR-0145 still
-owns the Vite `server.hmr.channels` payload path.
+ADR-0017 still owns streaming body/backpressure/raw-TCP work; ADR-0151 owns the
+HTTP WebSocket upgrade path used by Real-Vite.
 
 ## Consequences
 
@@ -60,5 +61,6 @@ owns the Vite `server.hmr.channels` payload path.
   bridged server, and wildcard-host cross-realm routing.
 - [x] Unit coverage proves the generated browser `window.WebSocket` shim reaches
   an ordinary `WebSocketServer`.
-- [x] Workbench HMR unit coverage proves Vite payloads still flow over
-  `server.hmr.channels` and injected HTML uses the generic bridge script.
+- [x] Workbench HMR unit coverage proves injected HTML uses the generic bridge
+  script; ADR-0151 integration coverage proves Vite payloads flow over native
+  `server.ws`.

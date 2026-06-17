@@ -17,11 +17,20 @@
  * docs/backlog/net/cross-realm-http-loopback.
  */
 
-import { EventEmitter } from '@riftydev/io';
+import { Buffer, EventEmitter } from '@riftydev/io';
 import { dispatchToPort, getHandler, registerPort, unregisterPort } from '../registry.ts';
+import { channelNameFor, portChannelNameFor } from '../ws/channel.ts';
 import { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
 import { ServerResponse } from './response.ts';
 import { STATUS_CODES } from './status-codes.ts';
+import {
+  type WebSocketBridgeFrame,
+  WebSocketClientSocket,
+  WebSocketUpgradeSocket,
+  createWebSocketAccept,
+  createWebSocketKey,
+  createWebSocketUpgradeHeaders,
+} from './upgrade-socket.ts';
 
 // Shared one-shot utf8 encoder for request-body string chunks (stateless).
 const UTF8_ENCODER = new TextEncoder();
@@ -42,6 +51,8 @@ export interface ListenOptions {
 export class HttpServer extends EventEmitter {
   private port: number | null = null;
   private readonly handler: (req: IncomingMessage, res: ServerResponse) => void;
+  private readonly upgradeChannels: BroadcastChannel[] = [];
+  private readonly upgradeSockets: Map<string, WebSocketUpgradeSocket> = new Map();
 
   constructor(handler: (req: IncomingMessage, res: ServerResponse) => void = () => {}) {
     super();
@@ -75,12 +86,20 @@ export class HttpServer extends EventEmitter {
       | undefined;
     this.port = port;
     registerPort(port, (request) => {
+      if (isWebSocketUpgradeRequest(request)) {
+        return new Response('WebSocket upgrade requires the rifty WebSocket bridge transport', {
+          status: 400,
+          statusText: 'Bad Request',
+          headers: { 'content-type': 'text/plain' },
+        });
+      }
       const req = new IncomingMessage(request);
       const res = new ServerResponse();
       this.handler(req, res);
       this.emit('request', req, res);
       return res.toResponse();
     });
+    this.listenForWebSocketUpgrades(port);
     queueMicrotask(() => {
       this.emit('listening');
       callback?.();
@@ -97,11 +116,92 @@ export class HttpServer extends EventEmitter {
       unregisterPort(this.port);
       this.port = null;
     }
+    for (const socket of this.upgradeSockets.values()) socket.destroy();
+    this.upgradeSockets.clear();
+    for (const channel of this.upgradeChannels) {
+      channel.removeEventListener('message', this.onWebSocketBridgeMessage);
+      channel.close();
+    }
+    this.upgradeChannels.length = 0;
     queueMicrotask(() => {
       this.emit('close');
       cb?.();
     });
     return this;
+  }
+
+  private listenForWebSocketUpgrades(port: number): void {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const channel = new BroadcastChannel(
+      portChannelNameFor(`ws://websocket-port.local:${port}/__rifty_ws`),
+    );
+    channel.addEventListener('message', this.onWebSocketBridgeMessage);
+    this.upgradeChannels.push(channel);
+  }
+
+  private onWebSocketBridgeMessage = (event: MessageEvent): void => {
+    const frame = event.data as WebSocketBridgeFrame;
+    const channel = this.upgradeChannels.find((candidate) => candidate === event.currentTarget);
+    if (!channel || this.port === null) return;
+    if (frame.type === 'open') {
+      this.acceptUpgradeOpenFrame(channel, frame);
+      return;
+    }
+    const socket = this.upgradeSockets.get(frame.cid);
+    if (!socket) return;
+    if (frame.type === 'msg' && frame.data !== undefined) {
+      socket._receiveBridgeMessage(frame.data, frame.opcode);
+      return;
+    }
+    if (frame.type === 'close' && frame.from === 'client') {
+      socket._receiveBridgeClose(frame.code ?? 1000, frame.reason ?? '');
+    }
+  };
+
+  private acceptUpgradeOpenFrame(channel: BroadcastChannel, frame: WebSocketBridgeFrame): void {
+    if (this.port === null) return;
+    if (this.listenerCount('upgrade') === 0) return;
+    if (frame.url === undefined) return;
+    let url: URL;
+    try {
+      url = new URL(frame.url);
+    } catch {
+      channel.postMessage({
+        type: 'close',
+        cid: frame.cid,
+        code: 1006,
+        reason: 'invalid websocket url',
+        from: 'server',
+      } satisfies WebSocketBridgeFrame);
+      return;
+    }
+    if ((url.protocol !== 'ws:' && url.protocol !== 'wss:') || portForWsUrl(url) !== this.port) {
+      return;
+    }
+    const key = isValidWebSocketKey(frame.key) ? frame.key : createWebSocketKey();
+    const protocols = normaliseProtocols(frame.protocols);
+    const socket = new WebSocketUpgradeSocket({
+      cid: frame.cid,
+      url: frame.url,
+      protocols,
+      encrypted: url.protocol === 'wss:',
+      sendBridgeFrame: (reply) => channel.postMessage(reply),
+    });
+    socket._setRequestKey(key);
+    this.upgradeSockets.set(frame.cid, socket);
+    socket.once('close', () => this.upgradeSockets.delete(frame.cid));
+    const req = new IncomingMessage({
+      method: 'GET',
+      url: `http://${url.host}${url.pathname}${url.search}`,
+      headers: createWebSocketUpgradeHeaders({
+        host: url.host,
+        key,
+        protocols,
+      }),
+      body: null,
+      socket,
+    });
+    this.emit('upgrade', req, socket, Buffer.alloc(0));
   }
 }
 
@@ -124,6 +224,9 @@ interface RequestOptions {
 export type ClientRequest = EventEmitter & {
   write(chunk: Uint8Array | string): boolean;
   end(chunkOrCb?: Uint8Array | string | (() => void), cb?: () => void): void;
+  abort(): void;
+  destroy(err?: Error): void;
+  setTimeout(timeout: number, cb?: () => void): ClientRequest;
 };
 export type ClientResponse = IncomingMessageFromFetch;
 
@@ -200,6 +303,39 @@ function streamWriteAfterEndError(): Error {
   return Object.assign(new Error('write after end'), { code: 'ERR_STREAM_WRITE_AFTER_END' });
 }
 
+function portForWsUrl(url: URL): number {
+  if (url.port !== '') return Number.parseInt(url.port, 10);
+  return url.protocol === 'wss:' ? 443 : 80;
+}
+
+function normaliseProtocols(protocols: readonly string[] | undefined): readonly string[] {
+  if (!protocols) return [];
+  return protocols.filter((protocol) => typeof protocol === 'string' && protocol.length > 0);
+}
+
+function isWebSocketUpgradeRequest(request: Request): boolean {
+  const upgrade = request.headers.get('upgrade');
+  if (upgrade?.toLowerCase() !== 'websocket') return false;
+  const connection = request.headers.get('connection');
+  return connectionHasToken(connection, 'upgrade');
+}
+
+function isWebSocketUpgradeHeaders(headers: Record<string, string>): boolean {
+  return (
+    headerValue(headers, 'upgrade')?.toLowerCase() === 'websocket' &&
+    connectionHasToken(headerValue(headers, 'connection'), 'upgrade')
+  );
+}
+
+function connectionHasToken(value: string | null | undefined, token: string): boolean {
+  return value
+    ? value
+        .split(',')
+        .map((part) => part.trim().toLowerCase())
+        .includes(token)
+    : false;
+}
+
 /**
  * `http.request(url | opts[, opts][, cb])` — registered local loopback ports
  * route through the in-process registry; unregistered loopback ports emit
@@ -229,6 +365,10 @@ export function request(
   const emitter = new EventEmitter();
   const bodyChunks: (Uint8Array | string)[] = [];
   let finished = false;
+  let aborted = false;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  let upgradeCleanup: (() => void) | undefined;
+  let upgradeSocket: WebSocketClientSocket | undefined;
 
   const req = Object.assign(emitter, {
     write(chunk: Uint8Array | string): boolean {
@@ -258,6 +398,34 @@ export function request(
         // Node pattern with http.get(url, cb); req.on('error', …) — still see
         // 'finish'/'error'. Node never emits these synchronously from end().
         await Promise.resolve();
+        emitter.emit('finish');
+        const route = routeClientRequest(url);
+        if (isWebSocketUpgradeHeaders(headers)) {
+          if (route.kind !== 'local') {
+            if (route.kind === 'refused')
+              emitter.emit('error', connRefusedError(route.address, route.port));
+            else
+              emitter.emit(
+                'error',
+                new Error('WebSocket client upgrades require a registered rifty local port'),
+              );
+            return;
+          }
+          try {
+            const opened = openWebSocketClientUpgrade({
+              url,
+              headers,
+              port: route.port,
+              emitter,
+              isAborted: () => aborted,
+            });
+            upgradeCleanup = opened.cleanup;
+            upgradeSocket = opened.socket;
+          } catch (err) {
+            emitter.emit('error', err);
+          }
+          return;
+        }
         const body =
           bodyChunks.length === 0
             ? undefined
@@ -267,8 +435,6 @@ export function request(
           headers,
           body: body ? new Blob(body as unknown as BlobPart[]) : undefined,
         };
-        emitter.emit('finish');
-        const route = routeClientRequest(url);
         if (route.kind === 'refused') {
           emitter.emit('error', connRefusedError(route.address, route.port));
           return;
@@ -286,8 +452,165 @@ export function request(
         }
       })();
     },
+    abort(): void {
+      req.destroy();
+    },
+    destroy(err?: Error): void {
+      if (aborted) return;
+      aborted = true;
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+      upgradeCleanup?.();
+      upgradeSocket?.destroy(err);
+      if (err) queueMicrotask(() => emitter.emit('error', err));
+    },
+    setTimeout(timeout: number, cb?: () => void): ClientRequest {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+      if (cb) emitter.once('timeout', cb);
+      timeoutId = setTimeout(() => {
+        emitter.emit('timeout');
+      }, timeout);
+      return req;
+    },
   });
   return req;
+}
+
+function openWebSocketClientUpgrade(opts: {
+  readonly url: string;
+  readonly headers: Record<string, string>;
+  readonly port: number;
+  readonly emitter: EventEmitter;
+  readonly isAborted: () => boolean;
+}): { readonly socket: WebSocketClientSocket; readonly cleanup: () => void } {
+  const wsUrl = toWebSocketUrl(opts.url);
+  const cid = `http-ws-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const key = headerValue(opts.headers, 'sec-websocket-key');
+  if (!isValidWebSocketKey(key)) {
+    throw new Error('WebSocket client upgrade missing a valid Sec-WebSocket-Key header');
+  }
+  const protocols = splitHeaderList(headerValue(opts.headers, 'sec-websocket-protocol'));
+  const channels = [...new Set([channelNameFor(wsUrl), portChannelNameFor(wsUrl)])].map(
+    (name) => new BroadcastChannel(name),
+  );
+  let activeChannel: BroadcastChannel | null = null;
+  let opened = false;
+  let closed = false;
+  const connectTimer = setTimeout(() => {
+    if (opened || opts.isAborted()) return;
+    cleanup();
+    opts.emitter.emit('error', connRefusedError('127.0.0.1', opts.port));
+  }, 1000);
+
+  const post = (frame: WebSocketBridgeFrame): void => {
+    const targets = activeChannel ? [activeChannel] : channels;
+    for (const channel of targets) channel.postMessage(frame);
+  };
+  const socket = new WebSocketClientSocket({ cid, sendBridgeFrame: post });
+
+  const cleanup = (): void => {
+    if (closed) return;
+    closed = true;
+    clearTimeout(connectTimer);
+    for (const channel of channels) {
+      channel.removeEventListener('message', onMessage);
+      channel.close();
+    }
+  };
+
+  const closeInactiveChannels = (): void => {
+    for (const channel of channels) {
+      if (channel === activeChannel) continue;
+      channel.removeEventListener('message', onMessage);
+      channel.close();
+    }
+  };
+
+  const onMessage = (event: MessageEvent): void => {
+    const frame = event.data as WebSocketBridgeFrame;
+    if (!frame || frame.cid !== cid || opts.isAborted()) return;
+    if (frame.type === 'open-ack' && !opened) {
+      opened = true;
+      clearTimeout(connectTimer);
+      activeChannel =
+        channels.find((channel) => channel === event.currentTarget) ??
+        activeChannel ??
+        channels[0] ??
+        null;
+      closeInactiveChannels();
+      const responseHeaders: Record<string, string> = {
+        connection: 'Upgrade',
+        upgrade: 'websocket',
+        'sec-websocket-accept': createWebSocketAccept(key),
+      };
+      if (frame.protocol) responseHeaders['sec-websocket-protocol'] = frame.protocol;
+      opts.emitter.emit(
+        'upgrade',
+        {
+          statusCode: 101,
+          statusMessage: 'Switching Protocols',
+          headers: responseHeaders,
+        },
+        socket,
+        Buffer.alloc(0),
+      );
+      return;
+    }
+    if (frame.type === 'msg' && opened && frame.data !== undefined) {
+      socket._receiveBridgeMessage(frame.data);
+      return;
+    }
+    if (frame.type === 'close' && frame.from === 'server') {
+      if (!opened) {
+        cleanup();
+        opts.emitter.emit('error', new Error(frame.reason || 'websocket upgrade rejected'));
+        return;
+      }
+      socket._receiveBridgeClose(frame.code ?? 1000, frame.reason ?? '');
+      cleanup();
+    }
+  };
+
+  for (const channel of channels) channel.addEventListener('message', onMessage);
+  post({
+    type: 'open',
+    cid,
+    url: wsUrl,
+    key,
+    protocols,
+  });
+  socket.once('close', cleanup);
+  return { socket, cleanup };
+}
+
+function toWebSocketUrl(url: string): string {
+  const parsed = new URL(url);
+  parsed.protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+  return parsed.href;
+}
+
+function headerValue(headers: Record<string, string>, name: string): string | undefined {
+  const lower = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === lower) return value;
+  }
+  return undefined;
+}
+
+function splitHeaderList(value: string | undefined): readonly string[] {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+function isValidWebSocketKey(key: string | undefined): key is string {
+  if (!key) return false;
+  try {
+    return Buffer.from(key, 'base64').byteLength === 16;
+  } catch {
+    return false;
+  }
 }
 
 function optionsFromUrl(url: string): RequestOptions {

@@ -1,7 +1,7 @@
 /**
  * Opt-in live "RUN real Vite" regression — Phase 2 (Vite-class).
  *
- * Real upstream vite@^5.4 installs + loads through the rifty module loader +
+ * Real upstream Vite installs + loads through the rifty module loader +
  * `createServer` + `listen` + `transformRequest` succeed in-process (the M10
  * "Real Tooling" forcing consumer). Because the smoke replaces `globalThis.process`
  * with rifty's shim — incompatible with vitest's child-process IPC — it runs in a
@@ -12,6 +12,9 @@
  * sandbox disabled:
  *
  *     RIFTY_LIVE_REGISTRY=https://registry.npmjs.org pnpm vitest run vite-live-run.opt-in
+ *
+ * Set `RIFTY_VITE_SPEC=^5.4.0` only when intentionally bisecting the old Vite
+ * line; the default smoke uses `latest`.
  */
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';

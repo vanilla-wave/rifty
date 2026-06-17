@@ -16,8 +16,9 @@ interface BrowserWindowLike {
 interface BrowserWebSocketLike extends EventTarget {
   readonly OPEN: number;
   readonly protocol: string;
+  binaryType: BinaryType;
   readonly readyState: number;
-  send(data: string): void;
+  send(data: unknown): void;
   close(code?: number, reason?: string): void;
 }
 
@@ -28,7 +29,8 @@ interface BrowserWebSocketConstructor {
 
 interface ServerSocketLike {
   on(event: 'message', listener: (data: unknown) => void): void;
-  send(data: string): void;
+  on(event: 'close', listener: () => void): void;
+  send(data: unknown): void;
   close(code?: number, reason?: string): void;
 }
 
@@ -185,6 +187,107 @@ describe('webSocketBridgeClientScript', () => {
     }
   });
 
+  it('waits for the server close frame after client close()', async () => {
+    const { win, restore } = installWindow();
+    const server = new WebSocketServer({ port: 9024, path: '/hmr' });
+    const order: string[] = [];
+    server.on('connection', (sock) => {
+      const socket = sock as ServerSocketLike;
+      socket.on('close', () => order.push('server-close'));
+    });
+
+    try {
+      const script = webSocketBridgeClientScript({ bridgeHosts: ['preview.local'] });
+      expect(() => new Function(script)()).not.toThrow();
+      const BrowserWebSocket = win.WebSocket as BrowserWebSocketConstructor;
+      const ws = new BrowserWebSocket('ws://preview.local:9024/hmr');
+      await new Promise<void>((resolve) =>
+        ws.addEventListener('open', () => resolve(), { once: true }),
+      );
+
+      const closed = new Promise<void>((resolve) =>
+        ws.addEventListener(
+          'close',
+          (event) => {
+            order.push(`client-close:${(event as CloseEvent).code}`);
+            resolve();
+          },
+          { once: true },
+        ),
+      );
+      ws.close(3001, 'client-done');
+      expect(order).toEqual([]);
+      await closed;
+
+      expect(order).toEqual(['server-close', 'client-close:3001']);
+    } finally {
+      server.close();
+      restore();
+    }
+  });
+
+  it('bridges binary frames with browser binaryType semantics', async () => {
+    const { win, restore } = installWindow();
+    const server = new WebSocketServer({ port: 9025, path: '/bytes' });
+    const serverSeen: number[][] = [];
+    server.on('connection', (sock) => {
+      const socket = sock as ServerSocketLike;
+      socket.on('message', (data: unknown) => {
+        serverSeen.push([...new Uint8Array(data as ArrayBuffer)]);
+        socket.send(new Uint8Array([9, 8, 7]));
+      });
+    });
+
+    try {
+      const script = webSocketBridgeClientScript({ bridgeHosts: ['preview.local'] });
+      expect(() => new Function(script)()).not.toThrow();
+      const BrowserWebSocket = win.WebSocket as BrowserWebSocketConstructor;
+      const ws = new BrowserWebSocket('ws://preview.local:9025/bytes');
+      ws.binaryType = 'arraybuffer';
+      const clientSeen: number[][] = [];
+      ws.addEventListener('message', (event) => {
+        clientSeen.push([...new Uint8Array((event as MessageEvent).data as ArrayBuffer)]);
+      });
+      await new Promise<void>((resolve) =>
+        ws.addEventListener('open', () => resolve(), { once: true }),
+      );
+
+      ws.send(new Blob([new Uint8Array([1, 2, 3])]));
+      await waitFor(() => clientSeen.length === 1);
+
+      expect(serverSeen).toEqual([[1, 2, 3]]);
+      expect(clientSeen).toEqual([[9, 8, 7]]);
+      ws.close();
+    } finally {
+      server.close();
+      restore();
+    }
+  });
+
+  it('validates protocols and close parameters like a browser WebSocket', () => {
+    const { win, restore } = installWindow();
+
+    try {
+      const script = webSocketBridgeClientScript({ bridgeHosts: ['preview.local'] });
+      expect(() => new Function(script)()).not.toThrow();
+      const BrowserWebSocket = win.WebSocket as BrowserWebSocketConstructor;
+
+      expect(() => new BrowserWebSocket('ws://preview.local:9026/hmr', ['chat', 'chat'])).toThrow(
+        /duplicated|SyntaxError/,
+      );
+      expect(() => new BrowserWebSocket('ws://preview.local:9026/hmr', ['bad token'])).toThrow(
+        /invalid|SyntaxError/,
+      );
+
+      const ws = new BrowserWebSocket('ws://preview.local:9026/hmr');
+      expect(() => ws.close(1006)).toThrow(/code|InvalidAccessError/);
+      expect(() => ws.close(3000, 'x'.repeat(124))).toThrow(/123 bytes|SyntaxError/);
+      ws.close();
+    } finally {
+      restore();
+    }
+  });
+
   it('propagates server-initiated close frames to the browser WebSocket', async () => {
     const { win, restore } = installWindow();
     const server = new WebSocketServer({ port: 9022, path: '/hmr' });
@@ -211,3 +314,12 @@ describe('webSocketBridgeClientScript', () => {
     }
   });
 });
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 1000;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('timed out waiting for condition');
+}

@@ -5,8 +5,8 @@
  *   1. `setupHmrBridge` exposes the ordinary WebSocketServer surface that a
  *      cross-realm client can connect to using `hmrBridgeUrl(port)`.
  *   2. `broadcast()` from the page side reaches the client.
- *   3. The Vite plugin `transformIndexHtml` injects the client script once
- *      (idempotent across reload cycles).
+ *   3. The Vite plugin `transformIndexHtml` injects the generic browser
+ *      WebSocket bridge once (idempotent across reload cycles).
  *
  * The full browser HMR roundtrip is covered by the e2e spec
  * (`tests/e2e/m10-hmr.spec.ts`), which exercises the iframe-loaded HMR
@@ -20,7 +20,6 @@ import { describe, expect, it } from 'vitest';
 import {
   createHmrBridgeToken,
   createHmrBridgeVitePlugin,
-  createViteHmrBridgeChannel,
   hmrBridgeUrl,
   hmrClientScript,
   setupHmrBridge,
@@ -101,73 +100,6 @@ describe('setupHmrBridge', () => {
     const script = hmrClientScript(port, 'shared');
     expect(script).toContain(`new WebSocket(${JSON.stringify(hmrBridgeUrl(port, 'shared'))})`);
     expect(script).toContain('__riftyWebSocketBridgeInstalled');
-  });
-});
-
-describe('createViteHmrBridgeChannel', () => {
-  it('speaks Vite HMR payloads over the cross-realm bridge', async () => {
-    const channel = createViteHmrBridgeChannel({ port: 3150, token: 'vite' });
-    channel.listen();
-    try {
-      const client = new BridgedWebSocket(hmrBridgeUrl(3150, 'vite'));
-      const seen: string[] = [];
-      client.addEventListener('message', (e) => seen.push(String((e as MessageEvent).data)));
-      await new Promise<void>((r) => client.addEventListener('open', () => r(), { once: true }));
-      await new Promise((r) => setTimeout(r, 20));
-
-      expect(seen.map((payload) => JSON.parse(payload) as { type?: string })).toContainEqual({
-        type: 'connected',
-      });
-
-      channel.send({
-        type: 'update',
-        updates: [
-          {
-            type: 'js-update',
-            path: '/src/main.js',
-            acceptedPath: '/src/main.js',
-            timestamp: 1,
-            explicitImportRequired: false,
-            isWithinCircularImport: false,
-          },
-        ],
-      });
-      await new Promise((r) => setTimeout(r, 20));
-
-      const update = seen
-        .map((payload) => JSON.parse(payload) as { type?: string; updates?: unknown[] })
-        .find((payload) => payload.type === 'update');
-      expect(update?.updates).toHaveLength(1);
-      client.close();
-    } finally {
-      await channel.close();
-    }
-  });
-
-  it('emits Vite custom events sent by the iframe client', async () => {
-    const channel = createViteHmrBridgeChannel({ port: 3151, token: 'vite' });
-    const invalidations: unknown[] = [];
-    channel.on('vite:invalidate', (data) => invalidations.push(data));
-    channel.listen();
-    try {
-      const client = new BridgedWebSocket(hmrBridgeUrl(3151, 'vite'));
-      await new Promise<void>((r) => client.addEventListener('open', () => r(), { once: true }));
-      client.send(
-        JSON.stringify({
-          type: 'custom',
-          event: 'vite:invalidate',
-          data: { path: '/src/main.js', message: 'accept boundary declined' },
-        }),
-      );
-      await new Promise((r) => setTimeout(r, 20));
-
-      expect(invalidations).toEqual([
-        { path: '/src/main.js', message: 'accept boundary declined' },
-      ]);
-      client.close();
-    } finally {
-      await channel.close();
-    }
   });
 });
 

@@ -41,6 +41,8 @@ interface BridgeFrame {
   reason?: string;
   from?: 'client' | 'server';
   url?: string;
+  protocols?: readonly string[];
+  protocol?: string;
 }
 
 function parseWsUrl(url: string): { host: string; port: number; path: string } {
@@ -184,10 +186,14 @@ export class WebSocketServer extends EventEmitter {
   }
 
   /** @internal — accepts a connection arriving over the cross-realm bridge. */
-  private _acceptBridge(cid: string, channel: BroadcastChannel): WebSocketConnection {
+  private _acceptBridge(
+    cid: string,
+    channel: BroadcastChannel,
+    protocols: readonly string[] = [],
+  ): WebSocketConnection {
     const existing = this.bridgeClients.get(cid);
     if (existing) {
-      channel.postMessage({ type: 'open-ack', cid });
+      channel.postMessage({ type: 'open-ack', cid, protocol: protocols[0] ?? '' });
       return existing;
     }
     const conn = new WebSocketConnection();
@@ -199,7 +205,7 @@ export class WebSocketServer extends EventEmitter {
       this.clients.delete(conn);
       this.bridgeClients.delete(cid);
     });
-    channel.postMessage({ type: 'open-ack', cid });
+    channel.postMessage({ type: 'open-ack', cid, protocol: protocols[0] ?? '' });
     queueMicrotask(() => this.emit('connection', conn));
     return conn;
   }
@@ -216,7 +222,7 @@ export class WebSocketServer extends EventEmitter {
         if (!isPortChannel) return;
         if (!this.matchesBridgeUrl(frame.url)) return;
       }
-      this._acceptBridge(frame.cid, channel);
+      this._acceptBridge(frame.cid, channel, frame.protocols);
       return;
     }
     if (frame.type === 'msg') {
@@ -229,6 +235,13 @@ export class WebSocketServer extends EventEmitter {
       if (conn) {
         this.clients.delete(conn);
         this.bridgeClients.delete(frame.cid);
+        channel.postMessage({
+          type: 'close',
+          cid: frame.cid,
+          code: frame.code ?? 1000,
+          reason: frame.reason ?? '',
+          from: 'server',
+        });
         conn._peerClosed(frame.code ?? 1000, frame.reason ?? '');
       }
     }
@@ -282,6 +295,9 @@ export class WebSocket extends EventTarget {
   static readonly CLOSED = State.CLOSED;
 
   readonly url: string;
+  protocol = '';
+  extensions = '';
+  binaryType: BinaryType = 'blob';
   readyState: number = State.CONNECTING;
   /** @internal */
   _server: WebSocketConnection | null = null;
@@ -290,9 +306,10 @@ export class WebSocket extends EventTarget {
   private bridgeCid = '';
   private bridgeConnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(url: string) {
+  constructor(url: string, protocols?: string | readonly string[]) {
     super();
     this.url = url;
+    const protocolList = normaliseProtocols(protocols);
     let parsed: { host: string; port: number; path: string };
     try {
       parsed = parseWsUrl(url);
@@ -305,19 +322,26 @@ export class WebSocket extends EventTarget {
       return;
     }
     queueMicrotask(() => {
+      if (this.readyState !== State.CONNECTING) return;
       const server = findListener(parsed.host, parsed.port, parsed.path);
       if (!server) {
-        this.openBridge(url);
+        this.openBridge(url, protocolList);
         return;
       }
       const conn = server._accept(this);
       this._server = conn;
+      this.protocol = protocolList[0] ?? '';
       this.readyState = State.OPEN;
       this.dispatchEvent(new Event('open'));
     });
   }
 
   send(data: WsMessage): void {
+    if (this.readyState === State.CONNECTING) {
+      throw invalidStateError(
+        "Failed to execute 'send' on 'WebSocket': Still in CONNECTING state.",
+      );
+    }
     if (this.readyState !== State.OPEN) return;
     if (this.activeBridgeChannel) {
       this.activeBridgeChannel.postMessage({ type: 'msg', cid: this.bridgeCid, data });
@@ -330,6 +354,8 @@ export class WebSocket extends EventTarget {
 
   close(code = 1000, reason = ''): void {
     if (this.readyState === State.CLOSED || this.readyState === State.CLOSING) return;
+    validateCloseParams(code, reason);
+    const wasConnecting = this.readyState === State.CONNECTING;
     this.readyState = State.CLOSING;
     if (this.bridgeChannels.length > 0) {
       const targets = this.activeBridgeChannel ? [this.activeBridgeChannel] : this.bridgeChannels;
@@ -342,15 +368,21 @@ export class WebSocket extends EventTarget {
           from: 'client',
         });
       }
+      if (wasConnecting) {
+        this.readyState = State.CLOSED;
+        this.dispatchEvent(new CloseEventCtor('close', { code, reason }));
+        this.cleanupBridge();
+      }
+      return;
+    }
+    if (wasConnecting && this._server === null) {
       this.readyState = State.CLOSED;
       this.dispatchEvent(new CloseEventCtor('close', { code, reason }));
-      this.cleanupBridge();
       return;
     }
     queueMicrotask(() => {
       this._server?._peerClosed(code, reason);
-      this.readyState = State.CLOSED;
-      this.dispatchEvent(new CloseEventCtor('close', { code, reason }));
+      this._peerClosed(code, reason);
     });
   }
 
@@ -366,7 +398,7 @@ export class WebSocket extends EventTarget {
     this.dispatchEvent(new CloseEventCtor('close', { code, reason }));
   }
 
-  private openBridge(url: string): void {
+  private openBridge(url: string, protocols: readonly string[] = []): void {
     if (typeof BroadcastChannel === 'undefined') {
       this.failBridgeConnection();
       return;
@@ -378,7 +410,7 @@ export class WebSocket extends EventTarget {
       this.bridgeChannels.push(channel);
     }
     for (const channel of this.bridgeChannels) {
-      channel.postMessage({ type: 'open', cid: this.bridgeCid, url });
+      channel.postMessage({ type: 'open', cid: this.bridgeCid, url, protocols });
     }
     this.bridgeConnectTimeout = setTimeout(() => {
       if (this.readyState !== State.CONNECTING) return;
@@ -393,6 +425,7 @@ export class WebSocket extends EventTarget {
       this.clearBridgeConnectTimeout();
       this.activeBridgeChannel = this.bridgeChannelFromEvent(e);
       this.closeInactiveBridgeChannels();
+      this.protocol = frame.protocol ?? '';
       this.readyState = State.OPEN;
       this.dispatchEvent(new Event('open'));
       return;
@@ -403,6 +436,7 @@ export class WebSocket extends EventTarget {
     }
     if (frame.type === 'close' && frame.from === 'server') {
       if (this.readyState === State.CLOSED) return;
+      if (this.readyState === State.CONNECTING) this.dispatchEvent(new Event('error'));
       this.readyState = State.CLOSED;
       this.dispatchEvent(
         new CloseEventCtor('close', { code: frame.code ?? 1000, reason: frame.reason ?? '' }),
@@ -451,5 +485,56 @@ export class WebSocket extends EventTarget {
       channel.close();
       this.bridgeChannels.splice(this.bridgeChannels.indexOf(channel), 1);
     }
+  }
+}
+
+function normaliseProtocols(protocols: string | readonly string[] | undefined): readonly string[] {
+  if (protocols === undefined) return [];
+  const out = typeof protocols === 'string' ? [protocols] : protocols;
+  const seen = new Set<string>();
+  return out.map((protocol) => {
+    if (!isValidProtocolToken(protocol)) {
+      throw new DOMException(
+        `Failed to construct 'WebSocket': The subprotocol '${protocol}' is invalid.`,
+        'SyntaxError',
+      );
+    }
+    if (seen.has(protocol)) {
+      throw new DOMException(
+        `Failed to construct 'WebSocket': The subprotocol '${protocol}' is duplicated.`,
+        'SyntaxError',
+      );
+    }
+    seen.add(protocol);
+    return protocol;
+  });
+}
+
+function isValidProtocolToken(protocol: string): boolean {
+  return /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(protocol);
+}
+
+function invalidStateError(message: string): Error {
+  try {
+    return new DOMException(message, 'InvalidStateError');
+  } catch {
+    const err = new Error(message);
+    err.name = 'InvalidStateError';
+    return err;
+  }
+}
+
+function validateCloseParams(code: number, reason: string): void {
+  if (code !== 1000 && (code < 3000 || code > 4999)) {
+    throw new DOMException(
+      "Failed to execute 'close' on 'WebSocket': The code must be either 1000, or between 3000 and 4999.",
+      'InvalidAccessError',
+    );
+  }
+  if (new TextEncoder().encode(reason).byteLength > 123) {
+    throw new DOMException(
+      "Failed to execute 'close' on 'WebSocket': The message must not be greater than 123 bytes.",
+      'SyntaxError',
+    );
   }
 }

@@ -17,4 +17,6 @@ export {
   request,
   default,
   STATUS_CODES,
+  WebSocketUpgradeSocket,
 } from './http/index.ts';
+export type { WebSocketBridgeFrame, WebSocketUpgradeSocketOptions } from './http/index.ts';

@@ -64,20 +64,36 @@ The "iframe-loaded HMR client connects via the cross-realm bridge" criterion is 
 
 ### What landed
 
-- `apps/playground/src/adapters/hmr-bridge.ts` — new adapter. Exports:
-  - `setupHmrBridge({port}): HmrBridgeHandle` — page-realm `BridgedWebSocketServer` on `ws://preview.local:<port>/__hmr`, returns `{ url, broadcast, close }`.
-  - `hmrClientScript(port)` — vanilla-JS string injected into the preview iframe; mirrors the bridge wire protocol (`open` → `open-ack` → `msg` → `close`) over `BroadcastChannel` directly, so the client needs no `@riftydev/net` import.
-  - `createHmrBridgeVitePlugin({port})` — minimal Vite plugin; `transformIndexHtml` idempotently injects the client script before `</body>`.
-- `apps/playground/src/adapters/realVite.ts` — calls `setupHmrBridge({port})` before `vite.createServer(...)` so the plugin sees a stable port. Hooks `server.watcher.on('change', file)` to broadcast `{type: 'update', path: file}` through the bridge. Vite native HMR stays off (`server.hmr: false`); Vite still does module-graph invalidation, the bridge delivers the iframe notification.
-- `packages/net/src/ws/bridge.ts` — `channelNameFor(url)` is now public API (re-exported via `index.ts` / `ws.ts`). Inlined clients need it so server and client agree on the `BroadcastChannel` name without depending on the full surface. Other shapes (`BridgedWebSocket`, `BridgedWebSocketServer`, `BridgedWebSocketConnection`, `createCrossRealmBridge`, `WsMessage`, `CrossRealmBridge`) were already public; only `channelNameFor` graduated.
+Corrected 2026-06-17: the 2026-05-26 phase-1 HMR adapter was later superseded
+by ADR-0147 + ADR-0151. Current Real-Vite uses Vite native `server.ws` over
+rifty `http.Server.on('upgrade')`; it no longer calls `setupHmrBridge`, disables
+Vite HMR, or broadcasts naive `{type:'update'}` payloads.
+
+- `apps/playground/src/glue/hmr-bridge.ts` — still owns the mini-dev
+  `setupHmrBridge` broadcaster and injects the generic browser `WebSocket`
+  bridge before dev clients run.
+- `apps/playground/src/workers/real-vite-bootstrap.ts` — injects the generic
+  browser bridge and lets Vite's native watcher/module graph generate HMR
+  payloads over its own `server.ws`.
+- `packages/net/src/ws/bridge.ts` + `packages/net/src/http/upgrade-socket.ts` —
+  same-origin bridge transport plus RFC6455 HTTP upgrade socket used by real npm
+  `ws` and Real-Vite.
 
 ### Intentionally not in scope
 
-- The M12 deferral for A-022 / A-024 stands. A-025 reachability is closed by ADR-0147; only transport hardening remains here. Transport is still `BroadcastChannel` (no per-connection isolation, no backpressure) — M12 swaps it for dedicated `MessagePort`.
+- The M12 deferral for A-022 / A-024 stands. A-025 reachability is closed by
+  ADR-0147/0151; raw TCP remains out of scope. Transport is still
+  `BroadcastChannel` (no per-connection isolation, no backpressure) — M12 swaps
+  it for dedicated `MessagePort`.
 - `BridgedWebSocket` internals untouched — the wiring closes acceptance with the existing API, no refactor of buffering / backpressure / event-emitter shape.
-- Vite's full HMR module-graph protocol (ESM HMR `update` payloads, `accept`/`dispose`) is out of scope. The bridge delivers a naive `{type:'update'}` payload, the iframe reloads — sufficient for M10 acceptance and M11 A-026 forward compat. Real HMR semantics land with the Vite-in-Worker migration.
+- Vite's full HMR module-graph protocol is no longer deferred here: ADR-0151
+  makes Real-Vite one consumer of the generic HTTP WebSocket upgrade path.
 
 ### Tests
 
-- `apps/playground/src/adapters/hmr-bridge.test.ts` — 9 unit tests: round-trip (client open / broadcast), channel-name contract (server URL ↔ inlined client script), Vite plugin idempotence.
-- `tests/e2e/m10-hmr.spec.ts` — Playwright spec driving the full Real Vite flow → file edit → iframe reload. Gated by `RIFTY_E2E_HMR=1` (Real Vite mode costs ~20 s install on cold cache); the unit test covers the wiring contract for CI.
+- `apps/playground/src/glue/hmr-bridge.test.ts` — mini-dev bridge + generic
+  browser bridge injection.
+- `tests/integration/vite-hmr-channel.test.ts` — Vite native `server.ws`
+  generates `update.updates[]` through rifty `http.Server.on('upgrade')`.
+- `tests/e2e/m10-hmr.spec.ts` — browser flow proves file edit patches without
+  iframe reload. Gated by `RIFTY_E2E_HMR=1`.
