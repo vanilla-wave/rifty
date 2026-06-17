@@ -39,6 +39,15 @@
 
 ### Fixed
 
+- **Dev-server child binds the preset's dev port, not the owner's spawn default** (P6b, ADR-0150).
+  The node-server template entry binds `process.env.PORT`; in the supervised child that env came from
+  the owner's spawn-time default (the default vite port 5174), not the active preset's dev port (e.g.
+  express-sqlite 3210) — so the entry listened on 5174, the harness `waitForListeningPort(3210)` timed
+  out, and `/preview/3210/` 502'd (caught by the `fullstack-demo` gold e2e). The owner's in-realm
+  `globalThis.process.env.PORT` mutation does not reach the child entry (it reads its env from the
+  clobber-safe `KernelProcessSpec`). `buildDevServerChildSpawnSpec` now sets `PORT`=devPort in the
+  child spawn env, the source the entry actually reads. Vite presets are unaffected (vite binds via its
+  config port, not `process.env.PORT`).
 - **`npm run <script>` no longer silently boots the dev server for non-dev scripts.** The owner's
   `runScript` ignored the script command and always ran the dev server, so `npm run build`
   (`vite build`) exited 0 having silently booted dev. It now boots only for the spec's dev-line
