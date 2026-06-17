@@ -152,6 +152,33 @@ export function getKernelPreEntryHook(): KernelPreEntryHook | null {
 }
 
 /**
+ * Optional drain hook (child-realm-async-lifecycle). For a run-to-completion
+ * child (`serve` absent/false) that finished its entry top-level WITHOUT
+ * throwing, the kernel `await`s this BEFORE reaping — letting the realm drain
+ * its event loop (pending timers/immediates/imports) the way real Node exits on
+ * "loop empty", not "top-level resolved". Opaque to the kernel: runtime-js
+ * registers a refcount-backed implementation. Resolve = drained cleanly; reject
+ * = a recorded unhandledrejection or a drain-cap timeout → treated like any
+ * entry failure (stderr + exit 1), preserving "no silent stub".
+ *
+ * NOT awaited for `serve === true` (servers are kept alive by their own
+ * ports, never drain-reaped).
+ */
+export type KernelDrainHook = (spec: WorkerSpawnSpec) => Promise<void>;
+
+let drainHook: KernelDrainHook | null = null;
+
+/** Register the drain hook (idempotent replace; `null` unregisters). */
+export function setKernelDrainHook(hook: KernelDrainHook | null): void {
+  drainHook = hook;
+}
+
+/** Test-only accessor — current drain hook value. */
+export function getKernelDrainHook(): KernelDrainHook | null {
+  return drainHook;
+}
+
+/**
  * Higher-layer exit signal: a thrown `Error` with `code === 'RIFTY_PROCESS_EXIT'`
  * and a numeric `exitCode` field maps to the worker's exit code. This is how
  * `runtime-js`'s `installNodeProcessShim` makes `process.exit(N)` propagate
@@ -303,6 +330,14 @@ export function installWorkerEntry(
       const hook = preEntryHook;
       if (hook !== null) hook(spec);
       await runEntry(spec.entry);
+      // child-realm-async-lifecycle: a run-to-completion child drains its event
+      // loop before reaping (Node "exit on loop empty"). serve workers are kept
+      // alive by their ports — never drained here. A drain rejection (recorded
+      // unhandledrejection / cap timeout) falls through to the catch below →
+      // stderr + exit 1 (no silent stub).
+      if (spec.serve !== true && drainHook !== null) {
+        await drainHook(spec);
+      }
     } catch (err) {
       threw = true;
       if (isRiftyProcessExit(err)) {
