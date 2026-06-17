@@ -402,6 +402,9 @@ export function request(
           if (route.kind !== 'local') {
             if (route.kind === 'refused')
               emitter.emit('error', connRefusedError(route.address, route.port));
+            // TODO(backlog: net/ws-client-external-host) — a non-local host could
+            // open a real native WebSocket here (browser WS egress is a primitive,
+            // unlike raw TCP) instead of loud-erroring; matches the browser shim.
             else
               emitter.emit(
                 'error',
