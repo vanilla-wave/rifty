@@ -65,9 +65,10 @@ describe('installRuntimeJsFsHandlers', () => {
 
   it('propagates ENOENT with code', async () => {
     const t = handlersOf(new MemoryFsSync());
-    await expect(t.get(FS_METHODS.stat)!({ path: '/missing' })).rejects.toMatchObject({
-      code: 'ENOENT',
-    });
+    // stat handler is sync — throws directly (not a rejected Promise)
+    expect(() => t.get(FS_METHODS.stat)!({ path: '/missing' })).toThrow(
+      expect.objectContaining({ code: 'ENOENT' }),
+    );
     expect(await t.get(FS_METHODS.statOrNull)!({ path: '/missing' })).toBeNull();
   });
 });

@@ -41,10 +41,9 @@ export function installRuntimeJsFsHandlers(
   getVfs: VfsAccessor,
 ): void {
   dispatcher.register(FS_METHODS.exists, (p) => getVfs().existsSync(str(obj(p), 'path')));
-  // TODO(backlog: runtime-js/child-remote-fs-fidelity) — gratuitous async; sync statSync left untested by the loopback
   dispatcher.register(
     FS_METHODS.stat,
-    async (p) => getVfs().statSync(str(obj(p), 'path')) as FsStatShape,
+    (p) => getVfs().statSync(str(obj(p), 'path')) as FsStatShape,
   );
   dispatcher.register(
     FS_METHODS.statOrNull,
