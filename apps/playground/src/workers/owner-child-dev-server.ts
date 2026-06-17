@@ -147,6 +147,11 @@ export function createOwnerChildDevServer(
           else if (m.type === 'rifty:dev-snapshot') opts.onSnapshotDirty();
         });
 
+        // Boot-window only: a child exit BEFORE ready rejects boot. A post-ready
+        // exit (mid-run crash) is currently unobserved (the controller parks on
+        // onceAborted) → stale LIVE pill until Ctrl-C. Fixing it needs a
+        // controller transition (left "state machine unchanged" for P6b).
+        // TODO(backlog: shell/dev-server-child-exit-unobserved)
         handle.on('exit', () => {
           finish(() => reject(new Error('dev-server child exited before listening')));
         });
