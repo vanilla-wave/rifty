@@ -14,6 +14,14 @@
 
 import { setKernelDrainHook } from '@riftydev/kernel';
 
+// awaitDrain polls on a macrotask. It MUST use the HOST setTimeout, NOT the
+// global one — installTimerGlobals() replaces global setTimeout with a
+// keepalive-REFCOUNTED wrapper, so polling via the global would make the
+// drain's own poll timer hold a ref it is waiting to release → it could never
+// drain setTimeout-scheduled work (it would hang to the cap). Captured at
+// module-load, before installTimerGlobals runs, so this is the real host timer.
+const hostSetTimeout = globalThis.setTimeout.bind(globalThis);
+
 let refCount = 0;
 let rejection: { reason: unknown } | null = null;
 
@@ -68,7 +76,7 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
   const schedule =
     opts.scheduleMacrotask ??
     ((cb: () => void) => {
-      setTimeout(cb, 0);
+      hostSetTimeout(cb, 0);
     });
   const now = opts.now ?? (() => performance.now());
   const start = now();
