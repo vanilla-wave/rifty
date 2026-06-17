@@ -5,6 +5,7 @@ Browser Node-compatible runtime + WASI runner (WebContainers-like project). `CLA
 # Mission
 Bring the **Node.js stack to the browser, maximally faithful to real Node** — same observable behavior, proven against real Node, never approximated. Roadmap + milestones: `docs/ROADMAP.md`.
 Scope (first year): real Node programs (Express, pure-JS CLIs) + WASI binaries (esbuild/sqlite) on fresh Chromium. **Not goals:** full Node compat, node-gyp/native modules, production perf, non-Chromium browsers, own JS engine — gaps stay honest loud throws (see Fidelity), never silent stubs.
+Anchor every discussion — architecture, bugs, trade-offs — to this goal + user scenarios; that's the tie-breaker.
 
 ## Fidelity — non-negotiable
 Never trade real behavior for speed of delivery; never propose a shortcut, mock, or "do it later". Concretely:
