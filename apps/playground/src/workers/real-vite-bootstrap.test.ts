@@ -12,8 +12,12 @@ describe('real Vite bootstrap preview routing', () => {
     expect(source).toContain("base: './'");
   });
 
-  it('broadcasts HMR updates for page-to-worker VFS writes', () => {
-    expect(source).toContain('function handleVfsWrite(path: string): void');
+  it('forwards editor VFS writes to the co-resident dev server HMR + republishes', () => {
+    // ADR-0148 (co-resident dev server runs inside the store owner): the owner's
+    // single vfs-write handler forwards editor writes to
+    // the running dev server's HMR (the virtual FS fires no real watcher events).
+    expect(source).toContain('const onVfsWrite = (path: string): void');
+    expect(source).toContain('devServer.notifyFileChanged(path)');
     expect(source).toContain('const hmrBridgeRef: { current?: HmrBridgeHandle } = {}');
     expect(source).toContain('function broadcastFileUpdate(path: string): void');
     expect(source).toContain('hmrBridgeRef.current?.broadcast(');
@@ -23,15 +27,13 @@ describe('real Vite bootstrap preview routing', () => {
     expect(source).toContain(
       'hmrBridgeRef.current = setupHmrBridge({ port, token: hmrBridgeToken })',
     );
-    expect(source).toContain(
-      'const tearVfsBridge = serveVfsWrites(port, { onWrite: handleVfsWrite })',
-    );
+    expect(source).toContain('const tearVfsBridge = serveVfsWrites(port, { onWrite: onVfsWrite })');
   });
 
   it('accepts VFS write frames over the kernel worker IPC channel', () => {
     expect(source).toContain('const kernelIpc = installRuntimeGlobals()');
     expect(source).toContain('kernelIpc.onMessage?.((message) => {');
-    expect(source).toContain('applyVfsWriteFrame(message.frame, { onWrite: handleVfsWrite })');
+    expect(source).toContain('applyVfsWriteFrame(message.frame, { onWrite: onVfsWrite })');
   });
 
   it('advertises the page owner token on the direct service-worker bridge', () => {
@@ -91,5 +93,18 @@ describe('node-server runtime branch', () => {
     // setupHmrBridge must not appear in the shared/common path; pin the call
     // count so a node-branch copy fails this test.
     expect(source.split('setupHmrBridge(').length - 1).toBe(1);
+  });
+});
+
+describe('OPFS persistence wiring (owner OPFS persistence)', () => {
+  it('wires the OPFS-or-memory backend before serving the owner (initBackend)', () => {
+    // The owner is the workspace source-of-truth once the dev server is co-resident
+    // in it, but was the only worker realm not calling initBackend() → memory-only,
+    // losing the tree on reload. Owner OPFS persistence applies the established
+    // OPFS-boot pattern (runtime-js/worker-entry.ts).
+    // OPFS write-through (ADR-0072) is the durability mechanism on its own — no
+    // explicit per-command flush barrier (it only coupled command latency to the
+    // unrelated boot write-through queue).
+    expect(source).toContain('await initBackend()');
   });
 });

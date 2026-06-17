@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`SyncRpcFsSync.readFileBytesSync` no longer silently truncates (review #2, ADR-0150).**
+  A 0-length chunk before the stat'd size (owner store shrank mid-read) now THROWS instead of
+  returning the partial buffer as a successful read — honouring ADR-0150's "never
+  silent-truncate". Regression test added (`sync-rpc-fs.test.ts`).
+
+### Removed
+
+- **Generic worker-backed `child_process.spawn('node', …)` / `fork()` throws
+  `NotImplementedError` instead of spawning an empty-mirror child (review #1, ADR-0150).** The
+  generic path never wired `RIFTY_REMOTE_FS`, so a worker it spawned read its OWN empty mirror,
+  not the parent/owner store (only the owner `.bin` executor wires it). Reachable solely from a
+  realm with the kernel + node-entry worker URLs (owner/page); the supervised-child realm keeps
+  the working same-realm fallback. The dead `child_process-worker.ts`
+  (`spawnWorkerChild`/`spawnViaWorker`) is removed. Proper remote-FS wiring →
+  `backlog: runtime-js/generic-spawn-worker-remote-fs`.
+
 ### Changed
 
 - **`node:vm` dual-engine cutover (ADR-0142, supersedes ADR-0138).** `node:vm` sandbox APIs
@@ -338,6 +356,15 @@
 
 ### Added
 
+- **`fs.*` sync-RPC surface for supervised child processes (P6a of ADR-0150).**
+  `installRuntimeJsFsHandlers(dispatcher, getVfs)` serves a child's `node:fs` +
+  module-loader reads/writes against the parent's `syncMirror()` over the SAB ring
+  (binary read replies, base64 write requests, both chunked under the 1 MiB ring);
+  `SyncRpcFsSync` is the child-side `FsSync` over `KernelSyncApi.call`;
+  `installRemoteSyncFs(call)` swaps the child realm's GLOBAL mirror so BOTH the
+  loader and `node:fs` route to the owner store (owner = SSoT). `installConsole` /
+  `ConsoleSink` are now public (a spawned CLI wires its `console.*` to its stdout).
+
 - **Run a VFS Node entry through the module loader (ADR-0137).** New
   `runNodeEntry` primitive (`builtins/node-entry.ts`) + `node-entry-url.ts` host
   seam (`setNodeEntryWorkerUrl`/`getNodeEntryWorkerUrl`, mirrors the kernel's
@@ -403,6 +430,33 @@
   `runInThisContext` stays host-realm. Prep for the QuickJS engine (ADR-0142 / T17).
 
 ### Fixed
+
+- **Spawned-child `process` exposes Node identity fields (P6a of ADR-0150).** The
+  kernel pre-entry `WorkerNodeProcessShim` lacked `versions`/`version`/`platform`/
+  `arch`/`argv0`/`execPath`/`title` (only the owner-grade `RiftyProcess` had them),
+  so a real CLI in a spawned child threw on `process.versions.*` (yargs →
+  `isElectronApp`). A shared frozen `NODE_PROCESS_IDENTITY` now feeds both — owner
+  and child report identically.
+
+- **`createReadStream` prefers the sync content cache over the async disk surface
+  (P5 of ADR-0143 "D", ADR-0148).** On an OPFS-backed realm `OpfsVfs.openReadable`
+  (`File.stream()`) stalls under cross-realm preview serving (`express.static` →
+  serve-static → `send`), 502ing static files while a dynamic route on the same
+  port works. The sync mirror's content cache (ADR-0072) is the authoritative,
+  fully-in-memory view, so `createReadStream` now serves from it, falling back to
+  `openReadable` only for paths the cache lacks. True async streaming (ADR-0020
+  phase 2) is restored once the OPFS stream is fixed (backlog:
+  `runtime-js/createreadstream-true-async-streaming`).
+
+- **Fork-IPC shim buffers messages until the first listener (ADR-0045 / ADR-0146
+  P2).** `WorkerNodeProcessShim` emitted `'message'` on every inbound
+  `ipc:message` frame even with zero `'message'` listeners → the frame dropped. A
+  worker that registers `process.on('message')` only after a slow async module
+  load (the shell owner's heavy bootstrap) lost every frame the parent posted in
+  the gap — `pty:open` never reached the owner, so the thin terminal hung with no
+  output (`vfs-write` masked it with a BroadcastChannel fallback; the pty channel
+  had none). Now buffered and flushed in order on the first listener, mirroring
+  the stdin reader in the same module. Regression: `install-process-ipc.test.ts`.
 
 - **Module loader strips a leading `#!` shebang (CJS + ESM) — Node parity.**
   Node's `Module._compile` / ESM loader drop a leading shebang line before

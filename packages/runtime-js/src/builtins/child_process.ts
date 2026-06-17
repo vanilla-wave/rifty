@@ -27,7 +27,6 @@ import {
 import { installRuntimeJsExecSyncHandler } from '../ipc/handlers.ts';
 import { execScript } from './child_process-exec.ts';
 import { execSync } from './child_process-sync.ts';
-import { spawnWorkerChild } from './child_process-worker.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
 import { getNodeEntryWorkerUrl } from './node-entry-url.ts';
 
@@ -212,10 +211,14 @@ class ChildProcess extends EventEmitter {
  * — `ProcessManager` only sets `exitCode` if still `null` at handler completion.
  */
 export function spawn(command: string, args: string[] = [], opts: SpawnOptions = {}): ChildProcess {
-  // ADR-0011 phase 2: with SAB IPC supported and `setKernelWorkerUrl` wired,
-  // run the child in a real Worker realm. Restricted to `node <script>` —
-  // non-`node` commands (ENOENT) and `node` without a script stay in-realm to
-  // preserve their error semantics (the worker can't model "command not found").
+  // The generic worker-backed spawn never wired RIFTY_REMOTE_FS, so a spawned
+  // worker reads its OWN empty mirror, not the parent/owner store (only the
+  // owner `.bin` executor wires it — ADR-0150). Reachable solely from a realm
+  // with the kernel + node-entry worker URLs (owner/page); fail LOUD there
+  // instead of silently spawning an ENOENT child. The supervised-child realm
+  // (URLs unset) falls through to the working same-realm path below, which reads
+  // the installed remote mirror.
+  // TODO(backlog: runtime-js/generic-spawn-worker-remote-fs)
   if (
     command === 'node' &&
     args[0] !== undefined &&
@@ -223,38 +226,16 @@ export function spawn(command: string, args: string[] = [], opts: SpawnOptions =
     getKernelWorkerUrl() !== null &&
     getNodeEntryWorkerUrl() !== null
   ) {
-    return spawnViaWorker(command, args, opts);
-  }
-  // ADR-0011 fallback: kept for non-isolated test environments and non-`node`
-  // commands that need ENOENT.
-  return spawnViaSameRealm(command, args, opts);
-}
-
-function spawnViaWorker(command: string, args: string[], opts: SpawnOptions): ChildProcess {
-  // ADR-0045: fork-IPC goes over the kernel parent↔child port, so worker-side
-  // `process.send` posts directly and these buses are unused — kept only as a
-  // placeholder argument shape to avoid churning `spawnWorkerChild`'s signature.
-  const outbound = new EventEmitter();
-  const inboundIpc = new EventEmitter();
-  const handle = spawnWorkerChild({
-    command,
-    args,
-    opts,
-    outboundMessages: outbound,
-    inboundIpc,
-  });
-  // Stdio comes from the kernel handle — `handle.stdout()` / `handle.stderr()`
-  // are the supported parent-side accessors (ADR-0011 phase 2 follow-up).
-  if (handle.kind !== 'worker') {
-    throw new Error(
-      `spawnViaWorker: expected a Worker-backed handle from spawnWorkerChild, got kind=${handle.kind}`,
+    throw new NotImplementedError(
+      'child_process.spawn[worker]',
+      'generic worker-backed spawn cannot yet read the parent/owner filesystem ' +
+        '(RIFTY_REMOTE_FS unwired for the generic path, ADR-0150) — wire the remote ' +
+        'sync-FS before routing `node <script>` to a worker child',
     );
   }
-  return new ChildProcess(handle, opts.__fork ?? false, {
-    stdout: handle.stdout(),
-    stderr: handle.stderr(),
-    stdin: handle.stdin(),
-  });
+  // ADR-0011 fallback: kept for non-isolated test environments, the supervised
+  // child realm, and non-`node` commands that need ENOENT.
+  return spawnViaSameRealm(command, args, opts);
 }
 
 function spawnViaSameRealm(command: string, args: string[], opts: SpawnOptions): ChildProcess {

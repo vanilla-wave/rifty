@@ -11,9 +11,12 @@
  * cross-realm preview port, minus streaming — a listing or a ≤128 KB file fits
  * one structured clone).
  *
- * Scope: the worker only serves paths inside a `node_modules` directory (a
- * normalised-segment guard) — this is a package browser, not a general remote
- * FS. Over-cap files reply `content: null` (the page surfaces "too large"),
+ * Scope: the worker serves any path at/under the workspace `root` (ADR-0148, the
+ * co-resident dev server inside the owner, widened this from node_modules-only —
+ * the owner is now the single source of truth, so the editor opens owner-only
+ * project files over this same port).
+ * `normalizePath` collapses `..`, so an escape lands outside `root` and is
+ * refused. Over-cap files reply `content: null` (the page surfaces "too large"),
  * never a silent empty read. Any worker-side throw (ENOENT, scope violation,
  * vanished file) replies `nm-error`, which REJECTS the page promise (the
  * explorer renders an error row) rather than hanging.
@@ -69,10 +72,17 @@ function nextRequestId(): string {
   return `nm${++counter}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** True when `path` lies inside a `node_modules` directory. The normalise
- *  collapses `..`, so `…/node_modules/../src` (which escapes) is refused. */
-function isUnderNodeModules(normalizedPath: string): boolean {
-  return normalizedPath.split('/').includes('node_modules');
+/**
+ * True when `normalizedPath` lies at/under the workspace `root`. Widened from a
+ * node_modules-only segment guard to a general workspace read-port (ADR-0148,
+ * single-source-owner): the editor opens owner-only project files on demand,
+ * not just packages.
+ * `normalizePath` collapses `..`, so an escape (`…/../etc`) lands outside `root`
+ * and is refused — the root boundary is the real anti-escape guard.
+ */
+export function isReadablePath(normalizedPath: string, root: string): boolean {
+  const nr = normalizePath(root);
+  return normalizedPath === nr || normalizedPath.startsWith(`${nr}/`);
 }
 
 function direntsDirsFirst(
@@ -91,11 +101,11 @@ function direntsDirsFirst(
  * `syncMirror()` (which holds the installed tree — the exclusion is only in
  * `collectSnapshot`, never in the mirror). Returns an idempotent teardown.
  *
- * The worker must stay alive to answer reads — it relies on the ADR-0077 /
- * Q-2026-06-05-317 keep-alive (`await new Promise<never>(() => {})`); this is a
- * second consumer of that workaround.
+ * The worker must stay alive to answer reads — the owner is spawned as an
+ * ADR-0144 `serve` process (the kernel keeps the realm alive until the handle
+ * is killed), which retired the old ADR-0077 keep-alive promise.
  */
-export function serveNodeModulesReads(port: number): () => void {
+export function serveNodeModulesReads(port: number, root: string): () => void {
   const channel = new BroadcastChannel(channelNameFor(nodeModulesChannelUrl(port)));
 
   const replyError = (requestId: string, message: string): void => {
@@ -106,8 +116,8 @@ export function serveNodeModulesReads(port: number): () => void {
     const frame = event.data as NodeModulesFrame;
     if (frame.type === 'nm-readdir-req') {
       const np = normalizePath(frame.path);
-      if (!isUnderNodeModules(np)) {
-        replyError(frame.requestId, `refused: ${frame.path} is outside node_modules scope`);
+      if (!isReadablePath(np, root)) {
+        replyError(frame.requestId, `refused: ${frame.path} is outside the workspace root`);
         return;
       }
       try {
@@ -135,8 +145,8 @@ export function serveNodeModulesReads(port: number): () => void {
     }
     if (frame.type === 'nm-readfile-req') {
       const np = normalizePath(frame.path);
-      if (!isUnderNodeModules(np)) {
-        replyError(frame.requestId, `refused: ${frame.path} is outside node_modules scope`);
+      if (!isReadablePath(np, root)) {
+        replyError(frame.requestId, `refused: ${frame.path} is outside the workspace root`);
         return;
       }
       try {

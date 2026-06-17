@@ -64,6 +64,29 @@ describe('SnapshotFs', () => {
     expect(fs.nodeModulesPresent).toBe(false);
   });
 
+  it('notifies subscribers on every applied frame (the seeded-file retry event)', () => {
+    const fs = new SnapshotFs('/workspace');
+    const seen: boolean[] = [];
+    // The seeded file is absent until the next frame lands (the publish race);
+    // the subscriber retries on notify and finds it readable — no polling.
+    const unsubscribe = fs.subscribe(() => seen.push(fs.existsSync('/workspace/src/seeded.js')));
+    fs.update(FRAME);
+    expect(seen).toEqual([false]); // first frame: still absent
+
+    fs.update({
+      ...FRAME,
+      entries: [
+        ...FRAME.entries,
+        { path: '/workspace/src/seeded.js', kind: 'file', size: 2, content: enc.encode('ok') },
+      ],
+    });
+    expect(seen).toEqual([false, true]); // owner publish reflected the seed
+
+    unsubscribe();
+    fs.update(FRAME);
+    expect(seen).toEqual([false, true]); // no further notifications after unsubscribe
+  });
+
   it('a later frame fully replaces the previous tree', () => {
     const fs = new SnapshotFs('/workspace');
     fs.update(FRAME);

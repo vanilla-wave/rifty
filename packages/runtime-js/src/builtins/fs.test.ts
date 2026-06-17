@@ -127,6 +127,39 @@ describe('fs stream classes are exposed for instanceof probes', () => {
   });
 });
 
+describe('createReadStream prefers the authoritative sync mirror (owner OPFS persistence, ADR-0148)', () => {
+  it('serves a file from the sync content cache when the async openReadable surface fails', async () => {
+    // Regression (ADR-0148, owner OPFS persistence): the OPFS owner's async surface
+    // (OpfsVfs.openReadable → File.stream()) stalls under cross-realm serving
+    // (express.static → serve-static → send), 502ing static files, while the
+    // sync content cache (ADR-0072) is the authoritative, complete, in-memory
+    // view. createReadStream must serve from the cache, not the async disk path.
+    const { MemoryFsSync, setSyncMirror } = await import('./fs-sync-mirror.ts');
+    const mirror = new MemoryFsSync();
+    const rejectingAsync = {
+      openReadable: () => Promise.reject(new Error('async openReadable unavailable')),
+    } as unknown as import('@riftydev/vfs').Vfs;
+    setSyncMirror(mirror, { async: rejectingAsync });
+    writeFileSync('/static.html', '<!doctype html>hi');
+
+    const chunks: string[] = [];
+    let errored: unknown;
+    await new Promise<void>((resolve) => {
+      const stream = fs.createReadStream('/static.html', { encoding: 'utf8' }) as {
+        on(ev: string, cb: (arg?: unknown) => void): void;
+      };
+      stream.on('data', (c) => chunks.push(String(c)));
+      stream.on('end', () => resolve());
+      stream.on('error', (e) => {
+        errored = e;
+        resolve();
+      });
+    });
+    expect(errored).toBeUndefined();
+    expect(chunks.join('')).toBe('<!doctype html>hi');
+  });
+});
+
 describe('node:fs fd APIs (M11 runtime-local surface)', () => {
   it('tracks fd position and supports positional read/write without moving it', () => {
     writeFileSync('/fd.txt', 'abcdef');

@@ -141,6 +141,22 @@ export function devScriptCommand(spec: ProjectSpec): string {
 }
 
 /**
+ * Is `name` one of the spec's lifecycle-owning dev-line script aliases (the keys
+ * `projectScripts` seeds — `dev`/`vite` or `dev`/`start`)? The page realm boots
+ * the co-resident dev server ONLY for these names; any other `npm run <script>`
+ * (e.g. `build`/`lint`) is not yet routed and must loud-reject rather than
+ * silently boot dev. Matched by NAME, not command string: the on-disk
+ * package.json command can lag the active preset (a preset switch updates the
+ * owner's spec before the tree's package.json is re-seeded, so `npm run dev` on a
+ * node preset may still read a stale `vite` command) — but the dev-line NAME is
+ * stable, and `runDevServer` boots the owner's CURRENT runtime regardless.
+ * TODO(backlog: shell/node-modules-bin-execution)
+ */
+export function isDevScriptName(spec: ProjectSpec, name: string): boolean {
+  return Object.hasOwn(projectScripts(spec), name);
+}
+
+/**
  * The visible terminal line the playground runs to boot a template — the
  * lifecycle-owning `vite` command for vite templates, `npm run dev` (resolved
  * through the seeded package.json script) for node servers. The node line is
@@ -152,6 +168,17 @@ export function terminalDevLine(spec: ProjectSpec, root: string): string {
   return `cd ${root} && npm run dev`;
 }
 
+/**
+ * package.json `scripts` for a spec. Every alias (`dev`/`vite`/`start`) runs the
+ * dev-server command, so `npm run <any>` here boots the dev server — the single
+ * source the page realm uses to recognise `npm run <script>` dev lines (ADR-0146:
+ * npm runs in the owner, but the lifecycle-owning dev line is intercepted page-side).
+ */
+export function projectScripts(spec: ProjectSpec): Record<string, string> {
+  const body = devScriptCommand(spec);
+  return spec.runtime === 'vite' ? { dev: body, vite: body } : { dev: body, start: body };
+}
+
 export function buildProjectPackageJson(spec: ProjectSpec): {
   readonly name: string;
   readonly version: string;
@@ -159,9 +186,7 @@ export function buildProjectPackageJson(spec: ProjectSpec): {
 } {
   const name = `rifty-${spec.id}-app`;
   const version = '0.0.0';
-  const script = devScriptCommand(spec);
-  const scripts =
-    spec.runtime === 'vite' ? { dev: script, vite: script } : { dev: script, start: script };
+  const scripts = projectScripts(spec);
   const json = `${JSON.stringify(
     {
       name,

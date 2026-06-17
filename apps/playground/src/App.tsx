@@ -1,5 +1,4 @@
-import { globalProcessManager, isSabIpcSupported } from '@riftydev/kernel';
-import { RegistryClient } from '@riftydev/npm-client';
+import { isSabIpcSupported } from '@riftydev/kernel';
 import { detectCapabilities } from '@riftydev/runtime-js/env/capabilities';
 import type { TerminalRawInput } from '@riftydev/terminal';
 import {
@@ -7,11 +6,9 @@ import {
   type TerminalHistoryRecord,
   addTerminalHistoryRecord,
 } from '@riftydev/terminal/history';
-import { NotImplementedError, normalizePath, syncMirror } from '@riftydev/vfs';
+import { normalizePath } from '@riftydev/vfs';
 import { Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import {
-  type TerminalCommand,
-  type TerminalCommandContext,
   type TerminalRunDimensions,
   type TerminalSessionSnapshot,
   createTerminalManager,
@@ -30,33 +27,59 @@ import { StatusBar } from './components/StatusBar.tsx';
 import { TemplateSwitcher } from './components/TemplateSwitcher.tsx';
 import type { TerminalModeHint } from './components/TerminalPanel.tsx';
 import { Icon } from './components/icons.tsx';
-import { createBinExecutor } from './glue/bin-executor.ts';
 import { copyToClipboard } from './glue/clipboard.ts';
 import { readChildren } from './glue/file-tree.ts';
-import { writeText } from './glue/fs-ops.ts';
 import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
-import { createNpmShellCommand } from './glue/npm-shell-command.ts';
-import { RealViteExplorerVfs } from './glue/real-vite-explorer-vfs.ts';
-import { type RealViteHandle, startRealVite } from './glue/realVite.ts';
-import { proxiedRegistryFetch } from './glue/registry-fetch.ts';
+import {
+  type WorkspaceOwnerHandle,
+  startWorkspaceOwner,
+  wirePreviewBridge,
+} from './glue/realVite.ts';
 import { SnapshotFs } from './glue/snapshot-fs.ts';
-import { SyncMirrorVfs } from './glue/sync-mirror-vfs.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
-import { subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
-import { exportWorkspaceArchive, importWorkspaceArchive } from './glue/workspace-archive.ts';
+import { requestVfsSnapshot, subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset, presetBootLines } from './presets.ts';
-import {
-  type ProjectSpec,
-  buildProjectPackageJson,
-  devScriptCommand,
-  terminalDevLine,
-} from './templates/project-spec.ts';
+import type { ProjectSpec } from './templates/project-spec.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
-import nodeEntryBootstrapUrl from './workers/node-entry-bootstrap.ts?worker&url';
 
 const WORKSPACE = '/workspace';
+
+/** BroadcastChannel key the unavailable-owner stub reports; never served. */
+const UNAVAILABLE_OWNER_PORT = -1;
+const OWNER_UNAVAILABLE_MSG =
+  'shell needs cross-origin isolation (SAB IPC) — serve the playground with COOP/COEP headers (vite.config.ts ships them)\n';
+
+/**
+ * Fail-loud {@link WorkspaceOwnerHandle} for a non-isolated host (ADR-0146:
+ * no PAGE shell fallback in the single-store-owner model). `openSession` resolves so the terminal
+ * manager never hangs; `exec` writes the requirement to stderr and exits 1.
+ * No worker is spawned and no bridges are served.
+ */
+function createUnavailableOwner(): WorkspaceOwnerHandle {
+  return {
+    workspaceId: 'unavailable',
+    previewOwnerToken: 'unavailable',
+    snapshotPort: UNAVAILABLE_OWNER_PORT,
+    closed: Promise.resolve(0),
+    openSession: () => Promise.resolve(),
+    exec: (_sid, _line, opts) => {
+      opts.onChunk(OWNER_UNAVAILABLE_MSG, 'stderr');
+      return Promise.resolve(1);
+    },
+    writeStdin: () => {},
+    signal: () => {},
+    closeSession: () => {},
+    writeFile: () => {},
+    exportArchive: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
+    importArchive: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
+    snapshot: () => ({ cwd: WORKSPACE, env: {} }),
+    onDevServer: () => () => {},
+    setDevConfig: () => {},
+    close: () => {},
+  };
+}
 
 export interface AppProps {
   /**
@@ -80,9 +103,6 @@ export function App(props: AppProps) {
   const [paletteOpen, setPaletteOpen] = createSignal(false);
 
   const layout = useLayout();
-  // Main-thread sync VFS mirror — same store the shell + `npm install` write to,
-  // so the explorer is honest (ADR-0075). Stable after bootstrap's initBackend().
-  const vfs = syncMirror();
 
   // Read-only mirror of the real-vite worker's project tree (ADR-0076). The
   // worker's VFS is a separate realm the page can't read directly, so it
@@ -111,7 +131,7 @@ export function App(props: AppProps) {
     return devServerStatus() !== 'stopped';
   }
 
-  function downloadWorkspaceArchive(): void {
+  async function downloadWorkspaceArchive(): Promise<void> {
     if (workspaceArchiveBlocked()) {
       flashError('Stop the dev server to archive the editable workspace');
       return;
@@ -121,20 +141,31 @@ export function App(props: AppProps) {
       flashError('Workspace archive download is unavailable here');
       return;
     }
-    const archive = exportWorkspaceArchive(vfs, WORKSPACE);
-    const blob = new Blob([archive], { type: 'application/vnd.rifty.workspace+json' });
-    const url = URL.createObjectURL(blob);
-    const a = doc.createElement('a');
-    a.href = url;
-    a.download = 'rifty-workspace.json';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 0);
-    flashToast('Workspace archive downloaded', 'success');
+    try {
+      // Single store owner, page holds no authoritative fs: serialize the OWNER
+      // tree (the single store), not a page copy — so the archive includes
+      // shell/CLI-authored files, full content (no cap).
+      const archive = await workspaceOwner.exportArchive();
+      const blob = new Blob([archive], { type: 'application/vnd.rifty.workspace+json' });
+      const url = URL.createObjectURL(blob);
+      const a = doc.createElement('a');
+      a.href = url;
+      a.download = 'rifty-workspace.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      flashToast('Workspace archive downloaded', 'success');
+    } catch (err) {
+      flashError(`Archive download failed: ${(err as Error).message}`);
+    }
   }
 
   async function importWorkspaceArchiveFile(file: File): Promise<void> {
     try {
-      importWorkspaceArchive(vfs, await file.text(), { root: WORKSPACE });
+      // Single store owner, page holds no authoritative fs: apply into the OWNER
+      // tree, then pull a fresh snapshot so the explorer/editor reflect it (no
+      // page store to write).
+      await workspaceOwner.importArchive(await file.text());
+      requestVfsSnapshot(workspaceOwner.snapshotPort);
       flashToast('Workspace archive imported', 'success');
     } catch (err) {
       flashError(`Import failed: ${(err as Error).message}`);
@@ -172,9 +203,24 @@ export function App(props: AppProps) {
     const preset = presetForId(activePreset());
     return preset.templateId ? resolveProjectSpec(preset.templateId) : defaultProjectSpec();
   };
-  const npmVfs = new SyncMirrorVfs();
-  const npmRegistry = new RegistryClient({ fetch: proxiedRegistryFetch() });
-  let realViteHandle: RealViteHandle | null = null;
+
+  // Persistent workspace owner (ADR-0146 owner-resident shell + ADR-0148
+  // co-resident dev server): hosts the resident `Shell` per session + cwd/env +
+  // the CO-RESIDENT dev server, runs `npm install` + bin/`execSync` + `vite`
+  // in-realm against ITS `syncMirror()` — the one store the explorer/editor read
+  // over the snapshot/nm bridges. Spawned once at setup, killed on cleanup. Gated
+  // on SAB IPC: in the single-store-owner model there is no PAGE shell fallback,
+  // so a non-isolated host gets a fail-loud stub owner that surfaces the
+  // requirement per command (rather than crashing the app tree at setup).
+  const workspaceOwner: WorkspaceOwnerHandle = isSabIpcSupported()
+    ? startWorkspaceOwner({
+        root: WORKSPACE,
+        template: activeTemplate(),
+        slug: activePreset(),
+        setup: presetForId(activePreset()).setup,
+        onLog: (line) => console.info(line),
+      })
+    : createUnavailableOwner();
 
   // Mode state machine owns UI state only. Real server lifetime belongs to the
   // visible `vite` terminal command.
@@ -182,216 +228,54 @@ export function App(props: AppProps) {
     sources: { dev: DEFAULT_PRESET.source, realVite: DEFAULT_PRESET.source },
   });
 
-  const [devServerRunning, setDevServerRunning] = createSignal(false);
+  // Dev-server lifecycle is OWNER-driven now (ADR-0148 co-resident dev server):
+  // the `vite` / `npm run dev` line runs in the owner over the pty channel; the owner reports
+  // start/stop + the listen port via `pty:dev-server` frames. The page only
+  // mirrors that state + (un)wires the preview SW route.
   const [devServerStatus, setDevServerStatus] = createSignal<'stopped' | 'starting' | 'running'>(
     'stopped',
   );
+  const devServerRunning = (): boolean => devServerStatus() === 'running';
   let devServerSessionId: string | null = null;
   let devServerRestartGeneration = 0;
 
-  async function runViteCommand(ctx: TerminalCommandContext): Promise<number> {
-    const template = activeTemplate();
-    // 'vite' keeps its historical terminal tag (e2e-pinned); node servers log as 'dev'.
-    const bootTag = template.runtime === 'vite' ? 'vite' : 'dev';
-    devServerSessionId = ctx.sessionId;
-    ctx.stdout.write(
-      template.runtime === 'vite'
-        ? 'vite: starting dev server\n'
-        : `dev: starting ${template.displayName} server\n`,
-    );
-    setDevServerStatus('starting');
-    if (ctx.signal?.aborted) {
-      setDevServerStatus('stopped');
-      return 130;
-    }
-    if (realViteHandle) {
-      await realViteHandle.close();
-      realViteHandle = null;
-      setDevServerRunning(false);
-    }
-
-    let handle: RealViteHandle;
-    let resolveReady: (() => void) | undefined;
-    let readySeen = false;
-    const ready = new Promise<'ready'>((resolve) => {
-      resolveReady = () => resolve('ready');
+  // Mirror the owner's dev-server state + wire the page-side preview SW route on
+  // the reported port (ADR-0148 co-resident dev server). The owner serves `/preview/<port>/`; the
+  // page only (un)registers the matching cross-realm bridge on start/stop.
+  createEffect(() => {
+    let tearPreview: (() => void) | undefined;
+    const unsubscribe = workspaceOwner.onDevServer((frame) => {
+      setDevServerStatus(frame.status);
+      if (frame.port !== undefined) machine.setRealVitePort(frame.port);
+      tearPreview?.();
+      tearPreview =
+        frame.status === 'running' && frame.port !== undefined
+          ? wirePreviewBridge(frame.port, workspaceOwner.previewOwnerToken)
+          : undefined;
     });
-    const aborted = new Promise<'aborted'>((resolve) => {
-      if (ctx.signal?.aborted) {
-        resolve('aborted');
-        return;
-      }
-      ctx.signal?.addEventListener('abort', () => resolve('aborted'), { once: true });
+    onCleanup(() => {
+      tearPreview?.();
+      unsubscribe();
     });
-    try {
-      handle = await startRealVite({
-        template,
-        setup: presetForId(activePreset()).setup,
-        slug: activePreset(),
-        port: machine.realVitePort(),
-        onLog: (line) => {
-          ctx.stdout.write(line);
-          if (line.includes('[real-vite/worker] node_modules read bridge ready')) {
-            readySeen = true;
-            resolveReady?.();
-          }
-        },
-      });
-    } catch (err) {
-      ctx.stderr.write(`${bootTag} failed: ${(err as Error).stack ?? (err as Error).message}\n`);
-      setDevServerStatus('stopped');
-      return 1;
-    }
+  });
 
-    realViteHandle = handle;
-    machine.setRealVitePort(handle.port);
-    const closed = handle.closed.then((code) => ({ kind: 'exited' as const, code }));
-    const bootResult = readySeen
-      ? { kind: 'ready' as const }
-      : await Promise.race([
-          ready.then(() => ({ kind: 'ready' as const })),
-          aborted.then(() => ({ kind: 'aborted' as const })),
-          closed,
-        ]);
-    if (bootResult.kind === 'aborted') {
-      if (realViteHandle === handle) realViteHandle = null;
-      try {
-        await handle.close();
-      } catch (err) {
-        ctx.stderr.write(`[${bootTag}] cleanup failed: ${(err as Error).message}\n`);
-      }
-      setDevServerRunning(false);
-      setDevServerStatus('stopped');
-      ctx.stdout.write(`\n[${bootTag}] stopped\n`);
-      return 130;
-    }
-    if (bootResult.kind === 'exited') {
-      if (realViteHandle === handle) realViteHandle = null;
-      setDevServerRunning(false);
-      setDevServerStatus('stopped');
-      ctx.stderr.write(`[${bootTag}] worker exited before the dev server was ready\n`);
-      return bootResult.code ?? 1;
-    }
-
-    // Once Vite is listening, the worker's preview route can accept file writes.
-    // Send dependencies first so the entry never reloads before its imports exist.
-    syncPresetFilesToWorker(handle, presetForId(activePreset()));
-    handle.updateEntry(machine.source());
-    setDevServerRunning(true);
-    setDevServerStatus('running');
-    ctx.stdout.write(`[${bootTag}] dev server ready on port ${handle.port}\n`);
-
-    const stopResult = await Promise.race([
-      aborted.then(() => ({ kind: 'aborted' as const })),
-      closed,
-    ]);
-
-    if (realViteHandle === handle) realViteHandle = null;
-    if (stopResult.kind === 'aborted') {
-      try {
-        await handle.close();
-      } catch (err) {
-        ctx.stderr.write(`[${bootTag}] cleanup failed: ${(err as Error).message}\n`);
-      }
-    }
-    setDevServerRunning(false);
-    setDevServerStatus('stopped');
-    if (stopResult.kind === 'aborted') {
-      ctx.stdout.write(`\n[${bootTag}] stopped\n`);
-      return 130;
-    }
-    ctx.stderr.write(`\n[${bootTag}] worker exited\n`);
-    return stopResult.code ?? 1;
-  }
-
-  async function runTerminalScript(
-    scriptName: string,
-    command: string,
-    ctx: TerminalCommandContext,
-  ): Promise<number> {
-    if (command.trim() === 'vite') return runViteCommand(ctx);
-    // The active template's own dev script (e.g. `node src/main.js`) routes to
-    // the SAME lifecycle-owning command, so `npm run dev` boots node servers.
-    if (command.trim() === devScriptCommand(activeTemplate())) return runViteCommand(ctx);
-    ctx.stderr.write(`npm: script '${scriptName}' uses unsupported command '${command}'\n`);
-    return 1;
-  }
-
-  // Drains the OPFS write-through so the install stamp lands after the tree
-  // (ADR-0135) and the next worker spawn preloads a complete node_modules.
-  async function flushSyncMirror(): Promise<void> {
-    const mirror = vfs as { flush?: () => Promise<void> };
-    if (typeof mirror.flush === 'function') await mirror.flush();
-  }
-
-  const npmCommand: TerminalCommand = async (args, ctx) =>
-    createNpmShellCommand({
-      vfs: npmVfs,
-      registry: npmRegistry,
-      runScript: async (scriptName, command) => runTerminalScript(scriptName, command, ctx),
-      flush: flushSyncMirror,
-    })(args, ctx);
-
-  const viteCommand: TerminalCommand = async (args, ctx) => {
-    if (args.length > 0) {
-      ctx.stderr.write(
-        `vite: arguments are not supported in the playground yet: ${args.join(' ')}\n`,
-      );
-      return 1;
-    }
-    const template = activeTemplate();
-    if (template.runtime !== 'vite') {
-      ctx.stderr.write(
-        `vite: the active project is ${template.displayName}; run \`${terminalDevLine(template, WORKSPACE)}\` instead\n`,
-      );
-      return 1;
-    }
-    return runViteCommand(ctx);
-  };
-
-  // Runs a shell-resolved `node_modules/.bin/<name>` shim as a Node entry
-  // (ADR-0137). The shell resolves the bare name; this spawns the shim in a
-  // kernel Worker, so `eslint` / `tsc` / any installed CLI is invokable by name.
-  // Registered commands (`vite`) still win — the playground owns that lifecycle.
-  const terminalBinExecutor = createBinExecutor({
-    spawn: (req) => {
-      if (!isSabIpcSupported()) {
-        throw new NotImplementedError(
-          'shell.bin-exec',
-          'running an installed CLI needs SAB IPC (cross-origin isolation)',
-        );
-      }
-      // Spawn the `kind:'url'` node-entry bootstrap: it reads the shim from the
-      // worker's sync mirror and runs its launcher target through the module
-      // loader (`RIFTY_BIN=1`). argv[1] = the shim path the bootstrap loads.
-      const binName = req.shimPath.slice(req.shimPath.lastIndexOf('/') + 1) || 'bin';
-      const handle = globalProcessManager.spawnWorker(
-        binName,
-        {
-          entry: { kind: 'url', url: nodeEntryBootstrapUrl },
-          argv: ['rifty', req.shimPath, ...req.args],
-          env: { ...req.env, RIFTY_BIN: '1' },
-          cwd: req.cwd,
-        },
-        /* ppid */ 1,
-        { cwd: req.cwd },
-      );
-      if (handle.kind !== 'worker') {
-        throw new NotImplementedError(
-          'shell.bin-exec',
-          `spawnWorker returned kind=${handle.kind}; expected 'worker'`,
-        );
-      }
-      return handle;
+  // The terminal shell + cwd/env + npm + bin all live in the persistent
+  // workspace owner now (ADR-0146 owner-resident shell); the manager is a thin pty-channel client.
+  const manager = createTerminalManager({
+    owner: workspaceOwner,
+    // Restore persisted terminal state on load (ADR-0146): the shell is
+    // owner-resident, so the seed travels to it over `pty:open`.
+    initialState: {
+      cwd: props.terminalPersistence.initialState.cwd,
+      env: props.terminalPersistence.initialState.env,
     },
   });
 
-  const manager = createTerminalManager({
-    cwd: props.terminalPersistence.initialState.cwd,
-    env: props.terminalPersistence.initialState.env,
-    commands: { npm: npmCommand, vite: viteCommand },
-    execBin: terminalBinExecutor,
-  });
+  // PAGE-side terminal writers per session, captured when the panel attaches.
+  // Used by `runTerminalSequence` to echo `$ <line>` for boot sequences (the
+  // owner pty does not echo the programmatic line).
+  const terminalWriters = new Map<string, (chunk: string, stream?: 'stdout' | 'stderr') => void>();
+
   const hiddenSessionIds = new Set<string>();
   const visibleSessions = (): TerminalSessionSnapshot[] =>
     manager.sessions().filter((session) => !hiddenSessionIds.has(session.id));
@@ -413,6 +297,9 @@ export function App(props: AppProps) {
   }
 
   function refreshTerminalState(): void {
+    // The dev server runs IN the owner now (ADR-0148 co-resident dev server), as
+    // an ordinary long-running `manager.runLine` — its session reports `running` natively,
+    // no display-only override needed.
     const next = visibleSessions();
     setSessions(next);
     const active = manager.activeSessionId();
@@ -451,6 +338,18 @@ export function App(props: AppProps) {
     write: (chunk: string, stream?: 'stdout' | 'stderr') => void,
   ): void {
     manager.attachWriter(id, write);
+    // Also held PAGE-side so `runTerminalSequence` can echo `$ <line>` for boot
+    // sequences (the owner pty does not echo the programmatic line).
+    terminalWriters.set(id, write);
+  }
+
+  /**
+   * Run one terminal line in the owner shell over the pty channel (ADR-0148
+   * co-resident dev server): EVERY line — including the dev-server `vite` / `npm run dev` — runs in the
+   * owner now (the owner hosts the co-resident dev server).
+   */
+  function dispatchLine(id: string, line: string, dims?: TerminalRunDimensions): Promise<number> {
+    return manager.runLine(id, line, dims);
   }
 
   async function runTerminalLine(
@@ -463,7 +362,7 @@ export function App(props: AppProps) {
     let exitCode: number | undefined;
     const cwd = manager.snapshot(id).cwd;
     const mode = machine.mode() as TerminalHistoryMode;
-    const run = manager.runLine(id, line, dims);
+    const run = dispatchLine(id, line, dims);
     refreshTerminalState();
     try {
       exitCode = await run;
@@ -496,10 +395,16 @@ export function App(props: AppProps) {
     lines: readonly string[],
     dims?: TerminalRunDimensions,
   ): Promise<void> {
-    const run = manager.runSequence(id, lines, dims);
+    // Page-level loop (not manager.runSequence) so a dev-server line in the boot
+    // sequence is intercepted by `dispatchLine` like an interactively-typed one.
     refreshTerminalState();
     try {
-      await run;
+      const write = terminalWriters.get(id);
+      for (const line of lines) {
+        write?.(`$ ${line}\n`, 'stdout');
+        const exitCode = await dispatchLine(id, line, dims);
+        if (exitCode !== 0) break;
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -508,6 +413,8 @@ export function App(props: AppProps) {
   }
 
   function stopSession(id: string): void {
+    // Every command — including the dev server — runs in the owner now (ADR-0148
+    // co-resident dev server); forward the cooperative SIGINT (Ctrl-C aborts the in-flight run).
     manager.stop(id);
     refreshTerminalState();
   }
@@ -520,30 +427,28 @@ export function App(props: AppProps) {
   // contents but flags presence, gating the lazy row.
   const [nodeModulesPresent, setNodeModulesPresent] = createSignal(false);
 
-  // Subscribe while the worker is starting/running so we do not miss its early
-  // snapshot frames, but only render that mirror once Vite is actually ready.
+  // ADR-0146 owner-resident shell + ADR-0148 co-resident dev server: the snapshot
+  // + node_modules bridges are served by
+  // the PERSISTENT workspace owner (which now also runs the dev server), so the
+  // explorer reflects the owner tree (where `npm install` lands) before AND after
+  // any vite run. Subscribed once at setup (no signal dependency), torn on unmount.
   createEffect(() => {
-    if (devServerStatus() === 'stopped') {
-      snapshotFs.clear();
-      setNodeModulesPresent(false);
-      return;
-    }
-    const unsubscribe = subscribeVfsSnapshot(machine.realVitePort(), (frame) => {
+    const unsubscribe = subscribeVfsSnapshot(workspaceOwner.snapshotPort, (frame) => {
       snapshotFs.update(frame);
       setNodeModulesPresent(frame.nodeModulesPresent);
     });
+    // Readiness handshake (ADR-0146 owner republishes its snapshot): ask the owner to publish now — covers
+    // the case where the owner came up before this subscription (its startup
+    // publish would have been missed), replacing the owner-side retry-storm.
+    requestVfsSnapshot(workspaceOwner.snapshotPort);
     onCleanup(unsubscribe);
   });
 
-  // Lazy node_modules read bridge + cache (ADR-0080), scoped to one worker
-  // on-cycle. The UI only exposes it once the worker server is ready.
+  // Lazy node_modules read bridge + cache (ADR-0080), against the persistent
+  // owner. Available for the whole session (the owner serves it on `serve:true`).
   const [nmCache, setNmCache] = createSignal<NodeModulesCache | null>(null);
   createEffect(() => {
-    if (devServerStatus() === 'stopped') {
-      setNmCache(null);
-      return;
-    }
-    const cache = new NodeModulesCache(bridgeNodeModulesReads(machine.realVitePort()));
+    const cache = new NodeModulesCache(bridgeNodeModulesReads(workspaceOwner.snapshotPort));
     setNmCache(cache);
     onCleanup(() => {
       cache.dispose();
@@ -566,14 +471,10 @@ export function App(props: AppProps) {
     return cache ? (path: string) => cache.readFile(path) : undefined;
   };
 
-  // Explorer + editor read the worker mirror only once `vite` is really up;
-  // during install/start/stop they stay on the writable workspace mirror.
-  const activeVfs = () => (devServerRunning() ? snapshotFs : vfs);
-  // Writable file-manager surface for the real-vite explorer (ADR-0076): reads
-  // the worker snapshot, writes the page mirror + propagates CRUD to the worker.
-  const explorerVfs = new RealViteExplorerVfs(snapshotFs, vfs, (frame) =>
-    realViteHandle?.applyVfsFrame(frame),
-  );
+  // SSoT (ADR-0148 co-resident dev server): explorer + editor ALWAYS read the
+  // OWNER snapshot (the one
+  // source of truth) — no `vite`-gated swap. Editor edits write to the owner; the
+  // sync snapshot holds project-file content, the async read-port covers the rest.
   let initialRunTimer: ReturnType<typeof setTimeout> | undefined;
 
   function presetForId(id: string): Preset {
@@ -588,40 +489,36 @@ export function App(props: AppProps) {
     return normalized;
   }
 
-  function seedPresetFiles(preset: Preset): void {
-    for (const file of preset.files ?? []) {
-      writeText(vfs, workspacePresetPath(file.path), file.content);
-    }
-  }
-
-  function syncPresetFilesToWorker(handle: RealViteHandle | null, preset: Preset): void {
-    if (!handle) return;
-    for (const file of preset.files ?? []) {
-      handle.updateFile(workspacePresetPath(file.path), file.content);
-    }
-  }
-
   function openPresetEditorTabs(preset: Preset): void {
     for (const path of preset.openFiles ?? []) {
       editorApi?.openFile(workspacePresetPath(path), { activate: false });
     }
   }
 
-  function syncWorkspaceFileToWorker(path: string): void {
-    const handle = realViteHandle;
-    if (!handle || path === PROGRAM_MIRROR_PATH) return;
-    try {
-      handle.updateFile(path, new TextDecoder().decode(vfs.readFileBytesSync(path)));
-    } catch {
-      /* best-effort live sync for opened text files */
+  // SSoT (ADR-0148 co-resident dev server; single store owner, page holds no
+  // authoritative fs): editor writes flow to the OWNER — the single
+  // store the dev server (HMR), shell, and archive export all read. No page copy.
+  function writeWorkspaceFile(path: string, content: string): void {
+    if (path !== PROGRAM_MIRROR_PATH) workspaceOwner.writeFile(path, content);
+  }
+
+  /**
+   * Push the project files into the persistent owner realm (ADR-0146
+   * owner-resident shell; the owner is the single authoritative store owner and
+   * the page holds no authoritative fs). The owner-resident shell reads its OWN
+   * `syncMirror()`; the owner's own template package.json + default README stand
+   * (seeded owner-side in `seedProject`). Entry source + preset files only.
+   */
+  function seedWorkspaceOwner(preset: Preset): void {
+    workspaceOwner.writeFile(PROGRAM_MIRROR_PATH, preset.source);
+    for (const file of preset.files ?? []) {
+      workspaceOwner.writeFile(workspacePresetPath(file.path), file.content);
     }
   }
 
+  // Seed the workspace for a preset — owner-only (single store owner; the page holds no authoritative fs).
   function seedViteWorkspace(preset: Preset): void {
-    const packageJson = buildProjectPackageJson(activeTemplate()).json;
-    writeText(vfs, `${WORKSPACE}/package.json`, packageJson);
-    writeText(vfs, PROGRAM_MIRROR_PATH, preset.source);
-    seedPresetFiles(preset);
+    seedWorkspaceOwner(preset);
   }
 
   function devServerSession(): TerminalSessionSnapshot {
@@ -661,11 +558,9 @@ export function App(props: AppProps) {
 
   async function restartDevServer(sessionId: string): Promise<void> {
     const generation = ++devServerRestartGeneration;
-    try {
-      await realViteHandle?.close();
-    } catch {
-      /* terminal command will surface the exit path */
-    }
+    // Stop the running dev command in its session (ADR-0148 co-resident dev server): the owner aborts
+    // the run → the co-resident dev server stops → `devServerStatus` → 'stopped'.
+    if (devServerSessionId) manager.stop(devServerSessionId);
     await waitForDevServerStop();
     if (generation !== devServerRestartGeneration) return;
     const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;
@@ -682,8 +577,14 @@ export function App(props: AppProps) {
     await machine.loadPreset(preset);
     seedViteWorkspace(preset);
     openPresetEditorTabs(preset);
-    syncPresetFilesToWorker(realViteHandle, preset);
-    realViteHandle?.updateEntry(preset.source);
+    // Tell the owner which template/runtime the next co-resident dev server boots
+    // (ADR-0148 co-resident dev server): the persistent owner is spawned once, so a node-server preset
+    // must update the runtime before the dev line runs.
+    workspaceOwner.setDevConfig({
+      templateId: activeTemplate().id,
+      slug: preset.id,
+      setup: preset.setup,
+    });
     if (devServerStatus() !== 'stopped') {
       const restartSessionId = devServerSessionId;
       if (restartSessionId) void restartDevServer(restartSessionId);
@@ -697,16 +598,10 @@ export function App(props: AppProps) {
   }
 
   onMount(() => {
-    // Seed the workspace (idempotent).
+    // Seed the owner workspace (idempotent). The default README is seeded
+    // owner-side in `seedProject` (single store owner — no page store to write).
     try {
       seedViteWorkspace(DEFAULT_PRESET);
-      if (!vfs.existsSync(`${WORKSPACE}/README.md`)) {
-        writeText(
-          vfs,
-          `${WORKSPACE}/README.md`,
-          '# workspace\n\nThis is the in-browser virtual filesystem.\n\n- Edit the program in the `src/main.js` tab.\n- Run `npm install <pkg>` in any terminal; installs land in `node_modules`.\n',
-        );
-      }
     } catch {
       /* best-effort seeding */
     }
@@ -718,8 +613,8 @@ export function App(props: AppProps) {
   onCleanup(() => {
     if (initialRunTimer) clearTimeout(initialRunTimer);
     if (toastTimer) clearTimeout(toastTimer);
-    void realViteHandle?.close();
     manager.dispose();
+    workspaceOwner.close(); // terminate the persistent owner worker (ADR-0146)
   });
 
   function onSelectPreset(preset: Preset): void {
@@ -757,7 +652,10 @@ export function App(props: AppProps) {
 
   function onProgramChange(next: string): void {
     machine.setSource(next);
-    realViteHandle?.updateEntry(next);
+    // SSoT (ADR-0148 co-resident dev server; single store owner, page holds no
+    // authoritative fs): push the program edit to the OWNER (the single
+    // store) so the co-resident dev server HMR-updates and the archive sees it.
+    workspaceOwner.writeFile(PROGRAM_MIRROR_PATH, next);
   }
 
   function onTerminalLink(uri: string): void {
@@ -780,7 +678,7 @@ export function App(props: AppProps) {
   function listWorkspaceFiles(limit = 400): { files: string[]; truncated: boolean } {
     const out: string[] = [];
     let truncated = false;
-    const tree = activeVfs();
+    const tree = snapshotFs;
     const walkDir = (dir: string): void => {
       let children: ReturnType<typeof readChildren>;
       try {
@@ -890,7 +788,7 @@ export function App(props: AppProps) {
         ? 'Stop the dev server to archive the editable workspace'
         : undefined,
       icon: 'file-output',
-      run: () => downloadWorkspaceArchive(),
+      run: () => void downloadWorkspaceArchive(),
     });
     items.push({
       id: 'act:import-workspace',
@@ -1035,32 +933,17 @@ export function App(props: AppProps) {
           }}
         >
           <aside class="rf-sidebar rf-card">
-            {/* real-vite swaps the explorer's backing store. FileExplorer
-                captures `vfs` once, so the mode flip must remount it —
-                Show/fallback does exactly that. */}
-            <Show
-              when={devServerRunning()}
-              fallback={
-                <FileExplorer
-                  vfs={vfs}
-                  root={WORKSPACE}
-                  visible={!layout.sidebarCollapsed()}
-                  activePath={activeFilePath()}
-                  onOpenFile={(path) => editorApi?.openFile(path)}
-                  onError={flashError}
-                />
-              }
-            >
-              <FileExplorer
-                vfs={explorerVfs}
-                root={WORKSPACE}
-                nodeModules={nodeModulesProp()}
-                visible={!layout.sidebarCollapsed()}
-                activePath={activeFilePath()}
-                onOpenFile={(path) => editorApi?.openFile(path)}
-                onError={flashError}
-              />
-            </Show>
+            {/* SSoT (ADR-0148 co-resident dev server): the explorer ALWAYS reflects the OWNER snapshot
+                (one source of truth) + the lazy node_modules read-port — no
+                `vite`-gated backing-store swap. */}
+            <FileExplorer
+              vfs={snapshotFs}
+              root={WORKSPACE}
+              nodeModules={nodeModulesProp()}
+              visible={!layout.sidebarCollapsed()}
+              activePath={activeFilePath()}
+              onOpenFile={(path) => editorApi?.openFile(path)}
+            />
           </aside>
 
           <Splitter
@@ -1082,8 +965,7 @@ export function App(props: AppProps) {
                 programValue={machine.source}
                 programTitle={programTitle}
                 onProgramChange={onProgramChange}
-                vfs={activeVfs()}
-                writeVfs={vfs}
+                vfs={snapshotFs}
                 registerApi={(api) => {
                   editorApi = api;
                 }}
@@ -1092,7 +974,7 @@ export function App(props: AppProps) {
                   setActiveLang(info.language);
                   setActiveFilePath(info.path);
                 }}
-                onFileWritten={syncWorkspaceFileToWorker}
+                onFileWritten={writeWorkspaceFile}
                 readNodeModulesFile={readNodeModulesFile()}
                 previewUrl={previewUrl}
                 onOpenPreviewTab={openPreviewTab}

@@ -2,11 +2,12 @@
  * Minimal Node-style `fs.createReadStream` / `fs.createWriteStream`.
  *
  * Built on top of the EventEmitter we already ship — the M5 streams package
- * adds a full Readable/Writable hierarchy. Per ADR-0020 phase 2 the read
- * path now uses `Vfs.openReadable` for true streaming when an async VFS is
- * installed (default in the Worker runtime); otherwise it falls back to the
- * sync mirror's whole-file read, chunked via `queueMicrotask`. Both paths
- * preserve the existing event order (`open` → `data*` → `end` → `close`).
+ * adds a full Readable/Writable hierarchy. The read path prefers the sync
+ * mirror's content cache (ADR-0072 — authoritative + fully in-memory on OPFS;
+ * the async `Vfs.openReadable` disk stream stalls under cross-realm serving,
+ * ADR-0148 owner OPFS persistence), chunked via `queueMicrotask`; `Vfs.openReadable` (ADR-0020
+ * phase 2 true streaming) is the fallback for paths the sync view lacks. Both
+ * paths preserve the existing event order (`open` → `data*` → `end` → `close`).
  */
 
 import { asyncVfs } from '@riftydev/vfs';
@@ -49,9 +50,52 @@ class FileReadStream extends EventEmitter {
       this.emit('data', chunk);
     };
 
+    // Whole-file emit from a byte buffer, chunked across microtasks so the event
+    // loop is not starved. Applies the `start`/`end` window.
+    const emitFromBytes = (data: Uint8Array): void => {
+      if (this.destroyed) return;
+      const start = this.opts.start ?? 0;
+      const end = Math.min(this.opts.end ?? data.length, data.length);
+      let i = start;
+      const emitChunk = (): void => {
+        if (this.destroyed) return;
+        if (i >= end) {
+          this.emit('end');
+          this.emit('close');
+          return;
+        }
+        const slice = data.subarray(i, Math.min(i + hwm, end));
+        i += slice.length;
+        emitChunkBytes(slice);
+        queueMicrotask(emitChunk);
+      };
+      this.emit('open', 0);
+      emitChunk();
+    };
+
+    // Prefer the sync mirror: on OPFS its content cache (ADR-0072) is the
+    // authoritative, fully-in-memory view, while the async disk surface
+    // (OpfsVfs.openReadable → File.stream()) can stall under cross-realm serving
+    // (express.static → serve-static → send) and 502 static files (ADR-0148 owner OPFS persistence).
+    // The cache already holds the whole file, so no streaming benefit is lost.
+    // openReadable streaming stays the fallback for paths the sync view lacks
+    // (e.g. an async-only write).
+    // TODO(backlog: runtime-js/createreadstream-true-async-streaming)
+    let cached: Uint8Array | undefined;
+    try {
+      cached = syncMirror().readFileBytesSync(this.path);
+    } catch {
+      cached = undefined;
+    }
+    if (cached !== undefined) {
+      emitFromBytes(cached);
+      return;
+    }
+
     const vfs = asyncVfs();
     if (vfs) {
-      // ADR-0020 phase 2: true incremental streaming via Vfs.openReadable.
+      // ADR-0020 phase 2: true incremental streaming via Vfs.openReadable — only
+      // reached when the sync mirror can't serve the path.
       vfs
         .openReadable(this.path, {
           chunkSize: hwm,
@@ -85,28 +129,9 @@ class FileReadStream extends EventEmitter {
       return;
     }
 
-    // Fallback: sync mirror only. Loads the whole file but still chunks
-    // emission across microtasks so the event loop is not starved.
+    // No async surface and the sync mirror couldn't read it — surface the cause.
     try {
-      const data = syncMirror().readFileBytesSync(this.path);
-      if (this.destroyed) return;
-      const start = this.opts.start ?? 0;
-      const end = Math.min(this.opts.end ?? data.length, data.length);
-      let i = start;
-      const emitChunk = (): void => {
-        if (this.destroyed) return;
-        if (i >= end) {
-          this.emit('end');
-          this.emit('close');
-          return;
-        }
-        const slice = data.subarray(i, Math.min(i + hwm, end));
-        i += slice.length;
-        emitChunkBytes(slice);
-        queueMicrotask(emitChunk);
-      };
-      this.emit('open', 0);
-      emitChunk();
+      emitFromBytes(syncMirror().readFileBytesSync(this.path));
     } catch (err) {
       this.emit('error', err);
     }

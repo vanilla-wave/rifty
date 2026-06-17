@@ -50,6 +50,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
+      # Prod-artifact smoke: builds the app + serves it with `pnpm preview`
+      # (Netlify COI headers) and asserts the owner boots. Catches prod-only
+      # regressions the dev-server e2e above can't (green-checks-but-broken-deploy).
+      - run: pnpm test:e2e:prod
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

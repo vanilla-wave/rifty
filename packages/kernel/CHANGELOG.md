@@ -4,6 +4,7 @@
 
 ### Added
 
+- **ADR-0144 — kernel server-process model (`serve`).** `WorkerSpawnSpec` + `SpawnWorkerSpec` gain a public `serve?: boolean`. When `true`, a worker whose entry finishes setup WITHOUT throwing is NOT reaped — the kernel skips the exit message, port close, and `self.close()`, leaving the realm alive (its open ports/timers keep it live) until the parent terminates it. A run-to-completion process (`serve` absent/false) reaps the instant its entry settles, as before; a `serve` entry that THREW during setup still reaps. The teardown decision is the pure, exported `finalizeWorkerEntry(target, spec, outcome)` (realm-independent → unit-testable). This retires the `await new Promise<never>(() => {})` keep-alive hack (ADR-0077 follow-up) and is the P1 gate for ADR-0143 "D" (the owner-worker execution model). Hard kill unchanged; graceful stop deferred to ADR-0143 P5.
 - **ADR-0084 — SAB ring + SyncRpc v2 wire (perf wave 4).** Four mechanisms over the
   sync-IPC stack, landed atomically with runtime-js (two-peer recompile):
   - **#18 zero-copy view.** `SabRing.readRequest`/`consumeReply` return a live

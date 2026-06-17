@@ -49,6 +49,13 @@ export interface SpawnWorkerSpec {
    * {@link DEFAULT_PAYLOAD_CAPACITY}. Not lowered this wave (see ADR-0084).
    */
   readonly payloadCapacity?: number;
+  /**
+   * Server-process flag (ADR-0144). When `true`, the kernel does NOT reap this
+   * worker when its entry finishes setup cleanly — it stays alive until the
+   * handle is killed. Use for long-lived owners (the ADR-0143 workspace owner,
+   * the real-vite preview owner). Defaults to run-to-completion.
+   */
+  readonly serve?: boolean;
 }
 
 let kernelWorkerUrl: string | URL | null = null;
@@ -165,6 +172,7 @@ export function spawnKernelWorker(
     payloadCapacity,
     pid,
     ppid,
+    serve: spec.serve,
   };
 
   const worker: WorkerLike = makeKernelWorker(url);

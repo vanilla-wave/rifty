@@ -28,6 +28,7 @@
     "test:conformance": "vitest run --project conformance",
     "test:integration": "vitest run --project integration",
     "test:e2e": "playwright test --project=chromium",
+    "test:e2e:prod": "playwright test --config playwright.prod.config.ts --project=chromium",
     "test:e2e:all": "playwright test",
     "test:e2e:firefox": "playwright test --project=firefox",
     "test:e2e:webkit": "playwright test --project=webkit",

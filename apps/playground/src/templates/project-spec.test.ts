@@ -4,6 +4,7 @@ import {
   type ProjectSpec,
   buildProjectPackageJson,
   devScriptCommand,
+  isDevScriptName,
   resolveBootstrapConfig,
   terminalDevLine,
 } from './project-spec.ts';
@@ -166,5 +167,32 @@ describe('terminal dev command derivation', () => {
   it('derives the package.json dev script from the entry for node-server', () => {
     expect(devScriptCommand(NODE_FIXTURE)).toBe('node src/main.js');
     expect(devScriptCommand(VITE_TEMPLATE)).toBe('vite');
+  });
+});
+
+describe('isDevScriptName (page-realm dev-line matcher)', () => {
+  it('recognises the spec dev-line NAMES so they boot the co-resident dev server', () => {
+    expect(isDevScriptName(VITE_TEMPLATE, 'dev')).toBe(true);
+    expect(isDevScriptName(VITE_TEMPLATE, 'vite')).toBe(true);
+    expect(isDevScriptName(NODE_FIXTURE, 'dev')).toBe(true);
+    expect(isDevScriptName(NODE_FIXTURE, 'start')).toBe(true);
+  });
+
+  it('matches by NAME, not command — `npm run dev` boots even with a stale package.json command', () => {
+    // The e2e regression (fullstack-demo): command-string matching rejected
+    // `npm run dev` on a node preset whose on-disk package.json `dev` was still
+    // the default vite preset's `vite` command — so the node server never booted.
+    // Name-based matching is immune: `dev` is the dev line regardless of command.
+    expect(isDevScriptName(NODE_FIXTURE, 'dev')).toBe(true);
+  });
+
+  it('rejects an arbitrary user script (e.g. `npm run build`) — must not boot dev', () => {
+    // The #1 bug: a user-added script silently booted the dev server and exited 0.
+    // Names the playground never seeds as a dev alias are NOT the dev line.
+    expect(isDevScriptName(VITE_TEMPLATE, 'build')).toBe(false);
+    expect(isDevScriptName(VITE_TEMPLATE, 'lint')).toBe(false);
+    expect(isDevScriptName(VITE_TEMPLATE, 'start')).toBe(false); // vite seeds dev/vite, not start
+    expect(isDevScriptName(NODE_FIXTURE, 'build')).toBe(false);
+    expect(isDevScriptName(NODE_FIXTURE, '')).toBe(false);
   });
 });

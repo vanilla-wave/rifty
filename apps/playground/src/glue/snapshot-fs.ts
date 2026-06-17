@@ -32,11 +32,24 @@ export class SnapshotFs implements FsOpsTarget {
   /** dir path → sorted immediate-child names (dirs before files). */
   #children = new Map<string, VfsDirent[]>();
   #nodeModulesPresent = false;
+  /** Notified after every applied frame — the owner→page publish event. */
+  #listeners = new Set<() => void>();
 
   constructor(root: string) {
     this.#root = root;
     this.#nodes.set(root, { kind: 'dir', size: 0 });
     this.#children.set(root, []);
+  }
+
+  /**
+   * Subscribe to applied snapshot frames (each owner publish). Lets a reader
+   * retry a path that a just-seeded owner write has not reflected yet (the
+   * editor's seeded-file-editable retry) — event-driven, no polling. Returns an
+   * unsubscribe.
+   */
+  subscribe(listener: () => void): () => void {
+    this.#listeners.add(listener);
+    return () => this.#listeners.delete(listener);
   }
 
   get root(): string {
@@ -58,6 +71,7 @@ export class SnapshotFs implements FsOpsTarget {
     }
     this.#nodes = nodes;
     this.#reindex();
+    this.#notify();
   }
 
   /** Drop all entries (called when leaving real-vite, so a stale tree never lingers). */
@@ -65,6 +79,11 @@ export class SnapshotFs implements FsOpsTarget {
     this.#nodes = new Map([[this.#root, { kind: 'dir', size: 0 } as Node]]);
     this.#nodeModulesPresent = false;
     this.#reindex();
+    this.#notify();
+  }
+
+  #notify(): void {
+    for (const listener of this.#listeners) listener();
   }
 
   #reindex(): void {

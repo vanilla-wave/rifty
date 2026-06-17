@@ -514,6 +514,34 @@ describe('npm-shell-command — per-package progress + install stamp (ADR-0134/0
     expect(stamp.packages).toBe(2);
   });
 
+  it('keys the install stamp on the owner project slug so a reload reuses the tree', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj/node_modules', { recursive: true });
+    const { install } = makeStubInstall(() => twoPackageResult());
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        install,
+        projectSlug: () => 'real-vite',
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm install lodash@^4.17.0');
+
+    expect(exitCode).toBe(0);
+    const stamp = JSON.parse(
+      await vfs.readFileText('/proj/node_modules/.rifty-install-stamp.json'),
+    ) as { slug: string };
+    // The old default '' broke post-reload reuse: the boot's
+    // installStampSatisfied(projectSlug) missed on the slug, so the dependency
+    // arrival re-ran and CLOBBERED the user-installed tree. The stamp must carry
+    // the owner's project slug so the reused-tree fast path is taken on reload.
+    expect(stamp.slug).toBe('real-vite');
+  });
+
   it('does not write a stamp when the install fails', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj/node_modules', { recursive: true });

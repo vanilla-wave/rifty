@@ -1,6 +1,7 @@
-import type { ShellCommand } from '@riftydev/shell';
 import { describe, expect, it } from 'vitest';
-import { type TerminalCommand, createTerminalManager } from './terminal-manager.ts';
+import type { ExecOptions, PtySessionSnapshot } from '../glue/pty-client.ts';
+import type { WorkspaceOwnerHandle } from '../glue/realVite.ts';
+import { createTerminalManager } from './terminal-manager.ts';
 
 interface WriterChunk {
   readonly chunk: string;
@@ -34,28 +35,93 @@ function deferred<T>(): {
   return { promise, resolve, reject };
 }
 
-describe('createTerminalManager', () => {
-  it('starts with one default active session and can select a created session', () => {
-    const manager = createTerminalManager({ cwd: '/workspace' });
+/** Flush microtasks until `count` execs have been recorded (or give up). */
+async function waitForExecs(execs: readonly unknown[], count: number): Promise<void> {
+  for (let i = 0; i < 50 && execs.length < count; i++) await Promise.resolve();
+}
 
-    const initial = manager.sessions();
-    expect(initial).toHaveLength(1);
-    expect(initial[0]).toMatchObject({
-      id: 'terminal-1',
-      title: 'Terminal 1',
-      cwd: '/workspace',
-      status: 'idle',
-    });
-    expect(manager.activeSessionId()).toBe(initial[0]?.id);
+interface ExecCall {
+  readonly sid: string;
+  readonly line: string;
+  readonly opts: ExecOptions;
+  readonly rid: string;
+  resolve(code: number): void;
+}
+
+/**
+ * In-memory stand-in for the workspace-owner worker (the external cross-realm
+ * boundary — a fake here, not a mock of the unit). Records frames the manager
+ * pushes and lets the test drive `exec` completion + per-session cwd/env.
+ */
+function makeFakeOwner() {
+  const opened: string[] = [];
+  const closed: string[] = [];
+  const stdin: Array<{ sid: string; rid: string; data: Uint8Array }> = [];
+  const signalled: Array<{ sid: string; rid: string }> = [];
+  const writes: Array<{ path: string; content: string }> = [];
+  const execs: ExecCall[] = [];
+  const snapshots = new Map<string, PtySessionSnapshot>();
+  let ridSeq = 0;
+
+  const owner: WorkspaceOwnerHandle = {
+    workspaceId: 'ws-test',
+    previewOwnerToken: 'ws-test-token',
+    snapshotPort: 59124,
+    closed: Promise.resolve(null),
+    openSession(sid: string): Promise<void> {
+      opened.push(sid);
+      return Promise.resolve();
+    },
+    exec(sid: string, line: string, opts: ExecOptions): Promise<number> {
+      const rid = `r${++ridSeq}`;
+      opts.onStart?.(rid);
+      const done = deferred<number>();
+      execs.push({ sid, line, opts, rid, resolve: done.resolve });
+      return done.promise;
+    },
+    writeStdin(sid: string, rid: string, data: Uint8Array): void {
+      stdin.push({ sid, rid, data });
+    },
+    signal(sid: string, rid: string): void {
+      signalled.push({ sid, rid });
+    },
+    closeSession(sid: string): void {
+      closed.push(sid);
+    },
+    writeFile(path: string, content: string): void {
+      writes.push({ path, content });
+    },
+    exportArchive(): Promise<string> {
+      return Promise.resolve('{"version":1,"root":"/workspace","files":[]}');
+    },
+    importArchive(): Promise<void> {
+      return Promise.resolve();
+    },
+    snapshot(sid: string): PtySessionSnapshot {
+      return snapshots.get(sid) ?? { cwd: '/workspace', env: {} };
+    },
+    onDevServer(): () => void {
+      return () => {};
+    },
+    setDevConfig(): void {},
+    close(): void {},
+  };
+
+  return { owner, opened, closed, stdin, signalled, writes, execs, snapshots };
+}
+
+describe('createTerminalManager (pty port client)', () => {
+  it('opens a pty session for the default terminal and any created session', () => {
+    const fake = makeFakeOwner();
+    const manager = createTerminalManager({ owner: fake.owner });
+
+    expect(manager.sessions()).toHaveLength(1);
+    expect(manager.activeSessionId()).toBe('terminal-1');
+    expect(fake.opened).toEqual(['terminal-1']);
 
     const second = manager.createSession('Tests');
-    expect(second).toMatchObject({
-      id: 'terminal-2',
-      title: 'Tests',
-      cwd: '/workspace',
-      status: 'idle',
-    });
-    expect(manager.sessions().map((session) => session.id)).toEqual(['terminal-1', 'terminal-2']);
+    expect(second).toMatchObject({ id: 'terminal-2', title: 'Tests', status: 'idle' });
+    expect(fake.opened).toEqual(['terminal-1', 'terminal-2']);
 
     manager.select(second.id);
     expect(manager.activeSessionId()).toBe(second.id);
@@ -64,7 +130,8 @@ describe('createTerminalManager', () => {
   });
 
   it('does not count named sessions in default terminal titles', () => {
-    const manager = createTerminalManager({ cwd: '/workspace' });
+    const fake = makeFakeOwner();
+    const manager = createTerminalManager({ owner: fake.owner });
 
     manager.createSession('Server');
     const nextShell = manager.createSession();
@@ -75,33 +142,39 @@ describe('createTerminalManager', () => {
     manager.dispose();
   });
 
-  it('passes the owning terminal session id to registered commands', async () => {
-    const seen: string[] = [];
-    const inspect: TerminalCommand = async (_args, ctx) => {
-      seen.push(ctx.sessionId);
-      return 0;
-    };
-    const manager = createTerminalManager({ cwd: '/', commands: { inspect } });
-    const second = manager.createSession('Second');
+  it('forwards a line to the owner and streams chunks to the session writer', async () => {
+    const fake = makeFakeOwner();
+    const manager = createTerminalManager({ owner: fake.owner });
+    const session = manager.sessions()[0]!;
+    const writer = makeWriter();
+    manager.attachWriter(session.id, writer.write);
 
-    await expect(manager.runLine(second.id, 'inspect')).resolves.toBe(0);
+    const run = manager.runLine(session.id, 'echo hi', { cols: 100, rows: 30 });
+    await waitForExecs(fake.execs, 1);
 
-    expect(seen).toEqual([second.id]);
+    expect(fake.execs).toHaveLength(1);
+    const call = fake.execs[0]!;
+    expect(call).toMatchObject({ sid: session.id, line: 'echo hi' });
+    expect(call.opts).toMatchObject({ cols: 100, rows: 30, isTTY: true });
+    expect(manager.snapshot(session.id).status).toBe('running');
+
+    call.opts.onChunk('hi\n', 'stdout');
+    call.opts.onChunk('warn\n', 'stderr');
+    call.resolve(0);
+
+    await expect(run).resolves.toBe(0);
+    expect(writer.calls).toEqual([
+      { chunk: 'hi\n', stream: 'stdout' },
+      { chunk: 'warn\n', stream: 'stderr' },
+    ]);
+    expect(manager.snapshot(session.id)).toMatchObject({ status: 'idle', exitCode: 0 });
 
     manager.dispose();
   });
 
   it('routes output only to the writer attached to that session', async () => {
-    const manager = createTerminalManager({
-      cwd: '/',
-      commands: {
-        mark: async (_args, ctx) => {
-          ctx.stdout.write('stdout\n');
-          ctx.stderr.write('stderr\n');
-          return 0;
-        },
-      },
-    });
+    const fake = makeFakeOwner();
+    const manager = createTerminalManager({ owner: fake.owner });
     const first = manager.sessions()[0]!;
     const second = manager.createSession('Second');
     const firstWriter = makeWriter();
@@ -109,7 +182,13 @@ describe('createTerminalManager', () => {
     manager.attachWriter(first.id, firstWriter.write);
     manager.attachWriter(second.id, secondWriter.write);
 
-    await manager.runLine(first.id, 'mark');
+    const run = manager.runLine(first.id, 'mark');
+    await waitForExecs(fake.execs, 1);
+    const call = fake.execs.find((e) => e.sid === first.id)!;
+    call.opts.onChunk('stdout\n', 'stdout');
+    call.opts.onChunk('stderr\n', 'stderr');
+    call.resolve(0);
+    await run;
 
     expect(firstWriter.calls).toEqual([
       { chunk: 'stdout\n', stream: 'stdout' },
@@ -120,8 +199,33 @@ describe('createTerminalManager', () => {
     manager.dispose();
   });
 
+  it('does nothing for empty input', async () => {
+    const fake = makeFakeOwner();
+    const manager = createTerminalManager({ owner: fake.owner });
+    const session = manager.sessions()[0]!;
+
+    await expect(manager.runLine(session.id, '   ')).resolves.toBe(0);
+
+    expect(fake.execs).toHaveLength(0);
+    expect(manager.snapshot(session.id).status).toBe('idle');
+
+    manager.dispose();
+  });
+
+  it('reads cwd/env from the owner snapshot cache', () => {
+    const fake = makeFakeOwner();
+    fake.snapshots.set('terminal-1', { cwd: '/work', env: { FOO: 'bar' } });
+    const manager = createTerminalManager({ owner: fake.owner });
+    const session = manager.sessions()[0]!;
+
+    expect(manager.snapshot(session.id)).toMatchObject({ cwd: '/work', env: { FOO: 'bar' } });
+
+    manager.dispose();
+  });
+
   it('clears a session by writing the ANSI screen + scrollback reset to its writer', () => {
-    const manager = createTerminalManager({ cwd: '/' });
+    const fake = makeFakeOwner();
+    const manager = createTerminalManager({ owner: fake.owner });
     const session = manager.sessions()[0]!;
     const writer = makeWriter();
     manager.attachWriter(session.id, writer.write);
@@ -129,51 +233,30 @@ describe('createTerminalManager', () => {
     manager.clear(session.id);
     expect(writer.calls).toEqual([{ chunk: '\x1b[2J\x1b[3J\x1b[H', stream: 'stdout' }]);
 
-    // a session with no writer attached yet clears silently (no throw).
     const second = manager.createSession('Second');
     expect(() => manager.clear(second.id)).not.toThrow();
 
     manager.dispose();
   });
 
-  it('does nothing for empty input', async () => {
-    const manager = createTerminalManager({ cwd: '/' });
+  it('runs command sequences serially with prompts and stops on first failure', async () => {
+    const fake = makeFakeOwner();
+    const manager = createTerminalManager({ owner: fake.owner });
     const session = manager.sessions()[0]!;
     const writer = makeWriter();
     manager.attachWriter(session.id, writer.write);
 
-    await expect(manager.runLine(session.id, '   ')).resolves.toBe(0);
+    const run = manager.runSequence(session.id, ['ok', 'fail', 'ok']);
+    // Resolve each exec as it arrives: first ok (0), then fail (7) → stop.
+    await waitForExecs(fake.execs, 1);
+    fake.execs[0]!.opts.onChunk('ok\n', 'stdout');
+    fake.execs[0]!.resolve(0);
+    await waitForExecs(fake.execs, 2);
+    fake.execs[1]!.opts.onChunk('fail\n', 'stderr');
+    fake.execs[1]!.resolve(7);
 
-    expect(writer.calls).toEqual([]);
-    expect(manager.snapshot(session.id).status).toBe('idle');
-
-    manager.dispose();
-  });
-
-  it('runs command sequences serially with visible prompts and stops on first failure', async () => {
-    const seen: string[] = [];
-    const manager = createTerminalManager({
-      cwd: '/',
-      commands: {
-        ok: async (_args, ctx) => {
-          seen.push('ok');
-          ctx.stdout.write('ok\n');
-          return 0;
-        },
-        fail: async (_args, ctx) => {
-          seen.push('fail');
-          ctx.stderr.write('fail\n');
-          return 7;
-        },
-      },
-    });
-    const session = manager.sessions()[0]!;
-    const writer = makeWriter();
-    manager.attachWriter(session.id, writer.write);
-
-    await expect(manager.runSequence(session.id, ['ok', 'fail', 'ok'])).resolves.toBe(7);
-
-    expect(seen).toEqual(['ok', 'fail']);
+    await expect(run).resolves.toBe(7);
+    expect(fake.execs.map((e) => e.line)).toEqual(['ok', 'fail']);
     expect(writer.calls).toEqual([
       { chunk: '$ ok\n', stream: 'stdout' },
       { chunk: 'ok\n', stream: 'stdout' },
@@ -185,140 +268,15 @@ describe('createTerminalManager', () => {
     manager.dispose();
   });
 
-  it('aborts the active command for a session without affecting idle sessions', async () => {
-    const started = deferred<void>();
-    const manager = createTerminalManager({
-      cwd: '/',
-      commands: {
-        wait: async (_args, ctx) => {
-          started.resolve();
-          return await new Promise<number>((resolve) => {
-            ctx.signal?.addEventListener('abort', () => resolve(130), { once: true });
-          });
-        },
-      },
-    });
-    const session = manager.sessions()[0]!;
-    const other = manager.createSession('Other');
-
-    const run = manager.runLine(session.id, 'wait');
-    await started.promise;
-
-    expect(manager.snapshot(session.id).status).toBe('running');
-    expect(manager.snapshot(other.id).status).toBe('idle');
-
-    manager.stop(other.id);
-    expect(manager.snapshot(session.id).status).toBe('running');
-
-    manager.stop(session.id);
-    await expect(run).resolves.toBe(130);
-    expect(manager.snapshot(session.id)).toMatchObject({ status: 'idle', exitCode: 130 });
-
-    manager.dispose();
-  });
-
-  it('runs commands in different sessions concurrently', async () => {
-    const starts: string[] = [];
-    const gates = new Map<string, ReturnType<typeof deferred<number>>>();
-    const gate: ShellCommand = async (_args, ctx) => {
-      const id = `run-${starts.length + 1}`;
-      starts.push(id);
-      ctx.stdout.write(`${id}:start\n`);
-      const done = deferred<number>();
-      gates.set(id, done);
-      const exitCode = await done.promise;
-      ctx.stdout.write(`${id}:done\n`);
-      return exitCode;
-    };
-    const manager = createTerminalManager({ cwd: '/', commands: { gate } });
-    const first = manager.sessions()[0]!;
-    const second = manager.createSession('Second');
-    const firstWriter = makeWriter();
-    const secondWriter = makeWriter();
-    manager.attachWriter(first.id, firstWriter.write);
-    manager.attachWriter(second.id, secondWriter.write);
-
-    const firstRun = manager.runLine(first.id, 'gate');
-    const secondRun = manager.runLine(second.id, 'gate');
-
-    expect(starts).toEqual(['run-1', 'run-2']);
-    expect(manager.snapshot(first.id).status).toBe('running');
-    expect(manager.snapshot(second.id).status).toBe('running');
-
-    gates.get('run-2')?.resolve(0);
-    await expect(secondRun).resolves.toBe(0);
-    expect(manager.snapshot(second.id).status).toBe('idle');
-    expect(manager.snapshot(first.id).status).toBe('running');
-
-    gates.get('run-1')?.resolve(0);
-    await expect(firstRun).resolves.toBe(0);
-
-    expect(firstWriter.calls.map((call) => call.chunk)).toEqual(['run-1:start\n', 'run-1:done\n']);
-    expect(secondWriter.calls.map((call) => call.chunk)).toEqual(['run-2:start\n', 'run-2:done\n']);
-
-    manager.dispose();
-  });
-
-  it('runs registered commands through shell parsing with args, cwd, and env overrides', async () => {
-    const observed: Array<{ args: string[]; cwd: string; foo: string | undefined }> = [];
-    const inspect: ShellCommand = async (args, ctx) => {
-      observed.push({ args, cwd: ctx.cwd, foo: ctx.env.FOO });
-      ctx.stdout.write(`${ctx.cwd}:${args.join(',')}:${ctx.env.FOO ?? ''}\n`);
-      return 0;
-    };
-    const manager = createTerminalManager({ cwd: '/', commands: { inspect } });
-    const session = manager.sessions()[0]!;
-    const writer = makeWriter();
-    manager.attachWriter(session.id, writer.write);
-
-    await expect(manager.runLine(session.id, 'inspect one two')).resolves.toBe(0);
-    await expect(
-      manager.runLine(session.id, 'mkdir -p /x && cd /x && inspect after-cd'),
-    ).resolves.toBe(0);
-    await expect(manager.runLine(session.id, 'FOO=bar inspect with-env')).resolves.toBe(0);
-
-    expect(observed).toEqual([
-      { args: ['one', 'two'], cwd: '/', foo: undefined },
-      { args: ['after-cd'], cwd: '/x', foo: undefined },
-      { args: ['with-env'], cwd: '/x', foo: 'bar' },
-    ]);
-    expect(writer.calls.map((call) => call.chunk).join('')).toBe(
-      '/:one,two:\n/x:after-cd:\n/x:with-env:bar\n',
-    );
-
-    manager.dispose();
-  });
-
-  it('initializes sessions with persisted env and snapshots later env assignments', async () => {
-    const manager = createTerminalManager({ cwd: '/', env: { FOO: 'bar' } });
-    const session = manager.sessions()[0]!;
-    const writer = makeWriter();
-    manager.attachWriter(session.id, writer.write);
-
-    expect(manager.snapshot(session.id).env).toEqual({ FOO: 'bar' });
-
-    await expect(manager.runLine(session.id, 'BAR=baz')).resolves.toBe(0);
-
-    expect(manager.snapshot(session.id).env).toEqual({ FOO: 'bar', BAR: 'baz' });
-
-    manager.dispose();
-  });
-
   it('refuses a second foreground command in the same session while keeping the first stoppable', async () => {
-    const started = deferred<void>();
-    const wait: ShellCommand = async (_args, ctx) => {
-      started.resolve();
-      return await new Promise<number>((resolve) => {
-        ctx.signal?.addEventListener('abort', () => resolve(130), { once: true });
-      });
-    };
-    const manager = createTerminalManager({ cwd: '/', commands: { wait } });
+    const fake = makeFakeOwner();
+    const manager = createTerminalManager({ owner: fake.owner });
     const session = manager.sessions()[0]!;
     const writer = makeWriter();
     manager.attachWriter(session.id, writer.write);
 
     const firstRun = manager.runLine(session.id, 'wait');
-    await started.promise;
+    await waitForExecs(fake.execs, 1);
     const secondRun = await manager.runLine(session.id, 'echo should-not-run');
 
     expect(secondRun).toBe(1);
@@ -326,45 +284,45 @@ describe('createTerminalManager', () => {
     expect(writer.calls).toEqual([{ chunk: 'terminal is busy\n', stream: 'stderr' }]);
 
     manager.stop(session.id);
+    expect(fake.signalled).toEqual([{ sid: session.id, rid: fake.execs[0]!.rid }]);
+    fake.execs[0]!.resolve(130);
     await expect(firstRun).resolves.toBe(130);
     expect(manager.snapshot(session.id)).toMatchObject({ status: 'idle', exitCode: 130 });
 
     manager.dispose();
   });
 
-  it('forwards raw terminal input to the active command stdin', async () => {
-    const started = deferred<void>();
-    const manager = createTerminalManager({
-      cwd: '/',
-      commands: {
-        read: async (_args, ctx) => {
-          started.resolve();
-          const chunk = await ctx.stdin?.read();
-          ctx.stdout.write(chunk ? new TextDecoder().decode(chunk) : '<eof>');
-          return 0;
-        },
-      },
-    });
+  it('forwards raw terminal input to the active run stdin', async () => {
+    const fake = makeFakeOwner();
+    const manager = createTerminalManager({ owner: fake.owner });
     const session = manager.sessions()[0]!;
-    const writer = makeWriter();
-    manager.attachWriter(session.id, writer.write);
 
     const run = manager.runLine(session.id, 'read');
-    await started.promise;
+    await waitForExecs(fake.execs, 1);
     manager.writeStdin(session.id, 'typed input');
 
-    await expect(run).resolves.toBe(0);
-    expect(writer.calls).toEqual([{ chunk: 'typed input', stream: 'stdout' }]);
+    expect(fake.stdin).toEqual([
+      { sid: session.id, rid: fake.execs[0]!.rid, data: new TextEncoder().encode('typed input') },
+    ]);
+
+    fake.execs[0]!.resolve(0);
+    await run;
+    // After the run ends there's no active rid — stdin is dropped silently.
+    manager.writeStdin(session.id, 'late');
+    expect(fake.stdin).toHaveLength(1);
 
     manager.dispose();
   });
 
-  it('throws for post-dispose public methods and remains idempotent', async () => {
-    const manager = createTerminalManager({ cwd: '/' });
+  it('closes every pty session on dispose and throws for post-dispose methods', async () => {
+    const fake = makeFakeOwner();
+    const manager = createTerminalManager({ owner: fake.owner });
     const session = manager.sessions()[0]!;
+    manager.createSession('Second');
 
     manager.dispose();
     manager.dispose();
+    expect(fake.closed).toEqual(['terminal-1', 'terminal-2']);
 
     expect(() => manager.sessions()).toThrow('Terminal manager is disposed');
     expect(() => manager.snapshot(session.id)).toThrow('Terminal manager is disposed');
@@ -386,85 +344,11 @@ describe('createTerminalManager', () => {
   });
 
   it('throws for unknown session snapshot and stop', () => {
-    const manager = createTerminalManager({ cwd: '/' });
+    const fake = makeFakeOwner();
+    const manager = createTerminalManager({ owner: fake.owner });
 
     expect(() => manager.snapshot('missing')).toThrow('Unknown terminal session: missing');
     expect(() => manager.stop('missing')).toThrow('Unknown terminal session: missing');
-
-    manager.dispose();
-  });
-
-  it('returns idle status after a registered command rejects', async () => {
-    const manager = createTerminalManager({
-      cwd: '/',
-      commands: {
-        explode: async () => {
-          throw new Error('boom');
-        },
-      },
-    });
-    const session = manager.sessions()[0]!;
-
-    await expect(manager.runLine(session.id, 'explode')).rejects.toThrow('boom');
-    expect(manager.snapshot(session.id).status).toBe('idle');
-
-    manager.dispose();
-  });
-
-  it('does not let a stopped command late rejection poison a later run', async () => {
-    const aStarted = deferred<void>();
-    const bStarted = deferred<void>();
-    const finishB = deferred<number>();
-    let rejectA!: (reason: Error) => void;
-    const a: ShellCommand = async () => {
-      aStarted.resolve();
-      return await new Promise<number>((_resolve, reject) => {
-        rejectA = reject;
-      });
-    };
-    const b: ShellCommand = async (_args, ctx) => {
-      bStarted.resolve();
-      const exitCode = await finishB.promise;
-      ctx.stdout.write('b done\n');
-      return exitCode;
-    };
-    const manager = createTerminalManager({ cwd: '/', commands: { a, b } });
-    const session = manager.sessions()[0]!;
-    const writer = makeWriter();
-    manager.attachWriter(session.id, writer.write);
-
-    const firstRun = manager.runLine(session.id, 'a');
-    await aStarted.promise;
-    manager.stop(session.id);
-    await expect(firstRun).resolves.toBe(130);
-
-    const secondRun = manager.runLine(session.id, 'b');
-    await bStarted.promise;
-    rejectA(new Error('late a rejection'));
-    await Promise.resolve();
-    finishB.resolve(0);
-
-    await expect(secondRun).resolves.toBe(0);
-    expect(manager.snapshot(session.id)).toMatchObject({ status: 'idle', exitCode: 0 });
-    expect(writer.calls).toEqual([{ chunk: 'b done\n', stream: 'stdout' }]);
-
-    manager.dispose();
-  });
-
-  it('falls back to the per-session shell when no registered command matches', async () => {
-    const manager = createTerminalManager({ cwd: '/' });
-    const session = manager.sessions()[0]!;
-    const writer = makeWriter();
-    manager.attachWriter(session.id, writer.write);
-
-    await expect(manager.runLine(session.id, 'echo hello')).resolves.toBe(0);
-    await expect(manager.runLine(session.id, 'definitely-not-real')).resolves.toBe(127);
-
-    expect(writer.calls).toEqual([
-      { chunk: 'hello\n', stream: 'stdout' },
-      { chunk: 'definitely-not-real: command not found\n', stream: 'stderr' },
-    ]);
-    expect(manager.snapshot(session.id)).toMatchObject({ status: 'idle', exitCode: 127 });
 
     manager.dispose();
   });

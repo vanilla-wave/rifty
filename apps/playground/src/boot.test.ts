@@ -4,13 +4,13 @@
  * The Solid render path itself isn't exercised here — that's e2e territory.
  * What we lock in is the contract every shipping `main.tsx` depends on:
  *
- *   1. `bootstrap` always awaits the backend installer.
- *   2. `bootstrap` never throws — failures degrade to memory + reason.
- *   3. `backendLabel` produces the user-facing string the badge renders.
+ *   1. `bootstrap` DETECTS the owner's backend, installing no page store
+ *      (single authoritative store owner; page holds no authoritative fs).
+ *   2. `backendLabel` produces the user-facing string the badge renders.
  *
- * Together these guarantee that the UI receives a well-formed descriptor and
- * that `main.tsx`'s `await bootstrap()` is doing real work — not a stub that
- * resolves synchronously to a default.
+ * Together these guarantee the UI receives a well-formed descriptor sourced from
+ * detection (the persistent owner is the single store owner — the page installs
+ * nothing).
  */
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -24,53 +24,16 @@ import {
 } from './boot.ts';
 
 describe('bootstrap', () => {
-  it('awaits initBackend before resolving', async () => {
-    const order: string[] = [];
-    const impl = async () => {
-      order.push('init:start');
-      // Force a microtask boundary so a non-awaited call would race.
-      await Promise.resolve();
-      order.push('init:end');
-      return 'memory' as const;
-    };
-
-    const pending = bootstrap(impl, { warn: () => {} });
-    order.push('after-call');
-    const result = await pending;
-    order.push('awaited');
-
-    expect(result.backend).toBe('memory');
-    expect(order).toEqual(['init:start', 'after-call', 'init:end', 'awaited']);
-  });
-
-  it('surfaces the OPFS choice when initBackend resolves to opfs', async () => {
-    const impl = vi.fn(async () => 'opfs' as const);
-    const result = await bootstrap(impl, { warn: () => {} });
-    expect(impl).toHaveBeenCalledTimes(1);
+  it('reports the detected backend (the owner will use it; the page installs nothing)', async () => {
+    const detect = vi.fn(() => 'opfs' as const);
+    const result = await bootstrap(detect);
+    expect(detect).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ backend: 'opfs' });
   });
 
-  it('falls back to memory and surfaces the cause when initBackend throws', async () => {
-    const warn = vi.fn();
-    const impl = vi.fn(async () => {
-      throw new Error('OPFS quota exceeded');
-    });
-    const result = await bootstrap(impl, { warn });
+  it('reports memory when detection picks memory', async () => {
+    const result = await bootstrap(() => 'memory');
     expect(result.backend).toBe('memory');
-    expect(result.reason).toBe('OPFS quota exceeded');
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0]?.[0]).toMatch(/OPFS quota exceeded/);
-  });
-
-  it('falls back to memory when initBackend throws a non-Error value', async () => {
-    const warn = vi.fn();
-    const impl = vi.fn(async () => {
-      throw 'plain string failure';
-    });
-    const result = await bootstrap(impl, { warn });
-    expect(result.backend).toBe('memory');
-    expect(result.reason).toBe('plain string failure');
-    expect(warn).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -182,7 +145,7 @@ describe('bootstrapPlayground', () => {
     const assertCoi = vi.fn(() => {
       order.push('coi');
     });
-    const initVfs = vi.fn(async () => {
+    const detectVfs = vi.fn(() => {
       order.push('vfs');
       return 'opfs' as const;
     });
@@ -203,7 +166,7 @@ describe('bootstrapPlayground', () => {
 
     const result = await bootstrapPlayground({
       assertCoi,
-      initVfs,
+      detectVfs,
       registerSw,
       probeStorage,
       logger: { warn: () => {}, error: () => {} },
@@ -211,7 +174,7 @@ describe('bootstrapPlayground', () => {
 
     expect(order).toEqual(['coi', 'vfs', 'storage', 'sw:/sw.js']);
     expect(assertCoi).toHaveBeenCalledTimes(1);
-    expect(initVfs).toHaveBeenCalledTimes(1);
+    expect(detectVfs).toHaveBeenCalledTimes(1);
     expect(probeStorage).toHaveBeenCalledTimes(1);
     expect(registerSw).toHaveBeenCalledWith('/sw.js');
     expect(result).toEqual({
@@ -227,7 +190,7 @@ describe('bootstrapPlayground', () => {
   });
 
   it('propagates a COI failure without touching VFS or SW', async () => {
-    const initVfs = vi.fn();
+    const detectVfs = vi.fn();
     const registerSw = vi.fn();
     const assertCoi = vi.fn(() => {
       throw new Error(COI_FATAL_MESSAGE);
@@ -235,12 +198,12 @@ describe('bootstrapPlayground', () => {
     await expect(
       bootstrapPlayground({
         assertCoi,
-        initVfs,
+        detectVfs,
         registerSw,
         logger: { warn: () => {}, error: () => {} },
       }),
     ).rejects.toThrowError(COI_FATAL_MESSAGE);
-    expect(initVfs).not.toHaveBeenCalled();
+    expect(detectVfs).not.toHaveBeenCalled();
     expect(registerSw).not.toHaveBeenCalled();
   });
 
@@ -248,7 +211,7 @@ describe('bootstrapPlayground', () => {
     const warn = vi.fn();
     const result = await bootstrapPlayground({
       assertCoi: () => {},
-      initVfs: async () => 'memory' as const,
+      detectVfs: () => 'memory' as const,
       registerSw: async () => {
         throw new Error('sw 404');
       },
@@ -258,21 +221,5 @@ describe('bootstrapPlayground', () => {
     expect(result.swError).toBe('sw 404');
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0]?.[0]).toMatch(/sw 404/);
-  });
-
-  it('VFS failure degrades to memory but still registers the SW', async () => {
-    const warn = vi.fn();
-    const registerSw = vi.fn(async () => ({ registration: {}, active: {} }));
-    const result = await bootstrapPlayground({
-      assertCoi: () => {},
-      initVfs: async () => {
-        throw new Error('OPFS denied');
-      },
-      registerSw,
-      logger: { warn, error: () => {} },
-    });
-    expect(result.vfsBoot).toEqual({ backend: 'memory', reason: 'OPFS denied' });
-    expect(registerSw).toHaveBeenCalledWith('/sw.js');
-    expect(result.swError).toBeUndefined();
   });
 });

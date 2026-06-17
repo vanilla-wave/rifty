@@ -29,7 +29,9 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     });
     // Let the app settle (terminal wired, initial boot command issued) before
     // interacting — clicks during the mount storm can land on replaced nodes.
-    await expectTerminalContains(page, 'vite: starting dev server', 15_000);
+    // ADR-0148: the co-resident dev server runs inside the owner; the default
+    // vite preset boots its dev server there.
+    await expectTerminalContains(page, 'starting dev server on port', 15_000);
 
     // Select the demo preset from the template switcher and confirm it took:
     // the dropdown unmounts on pick, so assert via the chip's active id.
@@ -39,9 +41,10 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
       timeout: 5_000,
     });
     // From-scratch preset (ADR-0135, revised): the visible `npm install` runs in
-    // the WORKER realm (the OPFS owner that serves the preview), streaming each
-    // package to the terminal — there is no separate page-side install line.
-    await expectTerminalContains(page, 'dev: starting Express + SQLite server', 150_000);
+    // the OWNER realm (which serves the preview), streaming each package to the
+    // terminal — `npm run dev` boots the node server co-resident in the owner
+    // (ADR-0148).
+    await expectTerminalContains(page, 'npm run dev', 150_000);
     await expectTerminalContains(page, 'npm: + express@', 120_000);
 
     // Express + engine boot behind a live npm install — poll the API route.

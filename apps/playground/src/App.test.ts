@@ -20,15 +20,14 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain("['vite']");
   });
 
-  it('seeds package.json through the shared project-spec builder', () => {
-    // one regex so the builder provably comes from the SHARED project-spec
-    // import block, not a local re-definition
-    expect(source).toMatch(
-      /import \{[^}]*buildProjectPackageJson[^}]*\} from '\.\/templates\/project-spec\.ts'/s,
-    );
-    expect(source).toContain('const packageJson = buildProjectPackageJson(activeTemplate()).json;');
-    expect(source).toContain('writeText(vfs, `${WORKSPACE}/package.json`, packageJson);');
-    expect(source).not.toContain('const packageJson = {');
+  it('holds no page-side authoritative VFS store — the owner is the single store (one authoritative owner; page reads through ports)', () => {
+    // Single-store-owner regression guard (exactly one authoritative store; page
+    // holds no authoritative fs): the page must not construct or write a local
+    // syncMirror; seeding + archive + editor writes all go to the owner.
+    expect(source).not.toContain('const vfs = syncMirror()');
+    expect(source).not.toContain('writeText(vfs');
+    expect(source).not.toContain("from '@riftydev/vfs/internal'");
+    expect(source).toContain('seedWorkspaceOwner(preset)');
   });
 
   it('follows the active preset template instead of hardcoding the default', () => {
@@ -36,10 +35,11 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('const activeTemplate = ');
     expect(source).toContain('resolveProjectSpec(');
     expect(source).toContain('.templateId');
-    // the worker spawns with the ACTIVE template, not the registry default:
-    // the dev-server command snapshots it once, then hands it to the spawn
-    expect(source).toContain('const template = activeTemplate();');
-    expect(source).toContain('await startRealVite({\n        template,');
+    // ADR-0148 (co-resident dev server in the owner): the ONE workspace owner
+    // spawns with the ACTIVE template (it hosts both the shell and the
+    // co-resident dev server) — no per-run spawn.
+    expect(source).toContain('template: activeTemplate()');
+    expect(source).not.toContain('startRealVite');
   });
 
   it('opens preview tabs as an opener-owned iframe wrapper', () => {
@@ -50,10 +50,16 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('<title>rifty preview ${port}</title>');
   });
 
-  it('sends preset files before the entry once Vite is ready', () => {
-    expect(source).toContain(
-      'syncPresetFilesToWorker(handle, presetForId(activePreset()));\n    handle.updateEntry(machine.source());',
-    );
+  it('routes editor + program writes to the owner (SSoT, ADR-0148 co-resident dev server in the owner)', () => {
+    // The preview worker is gone; editor/program edits flow to the ONE owner so
+    // the co-resident dev server HMR-updates against the same store it serves.
+    expect(source).toContain('function writeWorkspaceFile(path: string, content: string)');
+    expect(source).toContain('workspaceOwner.writeFile(path, content)');
+    expect(source).toContain('workspaceOwner.writeFile(PROGRAM_MIRROR_PATH, next)');
+    // explorer + editor read the owner snapshot, not a vite-gated swap
+    expect(source).not.toContain('const activeVfs');
+    expect(source).not.toContain('syncPresetFilesToWorker');
+    expect(source).not.toContain('.updateEntry(');
   });
 
   it('opens configured preset files as inactive editor tabs', () => {
@@ -63,8 +69,13 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('openPresetEditorTabs(preset);');
   });
 
-  it('waits for the worker preview bridges before treating Vite as ready', () => {
-    expect(source).toContain("line.includes('[real-vite/worker] node_modules read bridge ready')");
+  it('drives dev-server readiness from the owner pty:dev-server frame, not a stdout log-match', () => {
+    // ADR-0148 (co-resident dev server in the owner): the owner reports
+    // start/stop + port via a structured frame (owner-tree republish handshake
+    // discipline, ADR-0146) — no stdout string-match, no one-shot push.
+    expect(source).toContain('workspaceOwner.onDevServer(');
+    expect(source).toContain('setDevServerStatus(frame.status)');
+    expect(source).not.toContain('node_modules read bridge ready');
   });
 
   it('starts Vite in an ordinary active terminal instead of a named vite tab', () => {
@@ -100,24 +111,25 @@ describe('App terminal startup wiring', () => {
     );
   });
 
-  it('records manually started vite as the dev-server terminal owner', () => {
-    expect(source).toContain('async function runViteCommand(ctx: TerminalCommandContext)');
-    expect(source).toContain('devServerSessionId = ctx.sessionId;');
-    expect(source).toContain('const viteCommand: TerminalCommand');
-    expect(source).toContain('commands: { npm: npmCommand, vite: viteCommand }');
+  // ADR-0148 (co-resident dev server in the owner): the dev server runs IN the
+  // owner — EVERY line (npm, vite, `npm run dev`) goes to the owner pty channel;
+  // the page no longer intercepts a dev line or hosts a per-run preview worker.
+  it('routes every line — including the dev server — to the owner pty channel', () => {
+    expect(source).toContain('return manager.runLine(id, line, dims)');
+    expect(source).not.toContain('dispatchDevServerLine');
+    expect(source).not.toContain('isDevServerLine');
+    expect(source).not.toContain('runViteCommand');
+    expect(source).not.toContain('DevServerContext');
+    // the page wires the preview SW route on the owner-reported port + token
+    expect(source).toContain('wirePreviewBridge(frame.port, workspaceOwner.previewOwnerToken)');
   });
 
-  it('routes npm run scripts through the same visible dev-server terminal command', () => {
-    expect(source).toContain('async function runTerminalScript(');
-    expect(source).toContain("if (command.trim() === 'vite') return runViteCommand(ctx);");
-    // the node-server script body (e.g. 'node src/main.js') reaches the SAME
-    // lifecycle owner, single-sourced from project-spec — no second literal,
-    // and the FULL routing line is pinned so a cosmetic rewrite fails here
-    expect(source).toContain(
-      'if (command.trim() === devScriptCommand(activeTemplate())) return runViteCommand(ctx);',
-    );
-    expect(source).not.toContain("'node src/main.js'");
-    expect(source).toContain('runScript: async (scriptName, command) =>');
+  it('runs npm + dev scripts in the owner (no page-side dev interception)', () => {
+    expect(source).not.toContain('runTerminalScript');
+    expect(source).not.toContain('npmRunDevBody');
+    // dev-server status is owner-reported (frame-driven), not page-flipped
+    expect(source).toContain('setDevServerStatus(frame.status)');
+    expect(source).toContain('const devServerRunning = (): boolean');
   });
 
   it('loads and persists terminal environment state', () => {
@@ -126,9 +138,12 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain('saveState({ cwd: session.cwd, env: {} })');
   });
 
-  it('offers workspace archive export and import commands', () => {
-    expect(source).toContain('exportWorkspaceArchive');
-    expect(source).toContain('importWorkspaceArchive');
+  it('routes workspace archive export and import through the owner (one authoritative owner; page reads through ports)', () => {
+    // Single-store-owner invariant (one authoritative store; page holds no
+    // authoritative fs): the archive reads/writes the OWNER tree (the single
+    // store), not a page copy.
+    expect(source).toContain('workspaceOwner.exportArchive()');
+    expect(source).toContain('workspaceOwner.importArchive(');
     expect(source).toContain("id: 'act:export-workspace'");
     expect(source).toContain("id: 'act:import-workspace'");
     expect(source).toContain('function workspaceArchiveBlocked(): boolean');

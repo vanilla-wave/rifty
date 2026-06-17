@@ -4,6 +4,123 @@
 
 ### Fixed
 
+- **`npm run <script>` no longer silently boots the dev server for non-dev scripts.** The owner's
+  `runScript` ignored the script command and always ran the dev server, so `npm run build`
+  (`vite build`) exited 0 having silently booted dev. It now boots only for the spec's dev-line
+  script NAMES (`dev`/`vite`/`start`, via `isDevScriptName`); any other script loud-rejects to
+  stderr + non-zero. Matched by NAME, not command: a preset switch updates the active spec before
+  the tree's package.json is re-seeded, so a node preset's `npm run dev` can read a stale `vite`
+  command — command-matching wrongly rejected it and broke the node-server boot (fullstack-demo
+  e2e). Interim — full node_modules/.bin routing is backlog `shell/node-modules-bin-execution`.
+- **Owner death no longer leaves a stale LIVE pill + silently drops edits.** On owner-worker exit
+  `realVite` only resolved `closed`, never notifying `onDevServer` listeners — so the UI stayed
+  'running'; and a post-exit `writeFile` fell through `worker.send`'s false return into the
+  snapshot-port channel, which silently drops with no worker listening. Exit now synthesizes a
+  `pty:dev-server` `stopped` frame (UI leaves 'running') and `writeFile` after exit throws loudly
+  instead of vanishing.
+- **Seeded preset files open EDITABLE despite the publish race.** A just-seeded project file
+  opened before the owner snapshot reflected its write classified read-only (sync miss → async
+  owner read-port) and stayed so until close+reopen. `openFile` now routes via a pure
+  `classifyOpen` helper: a non-node_modules snapshot miss is `await-snapshot` — it subscribes to
+  the next `SnapshotFs` publish frame (event, not timer) and opens editable when the file lands.
+  node_modules / present-but-over-cap / binary stay view-only exactly as before.
+- **Workspace owner boots on the PRODUCTION build (broken deploy, green checks).** In the prod
+  bundle a stray top-level `installProcessGlobals()` side-effect (`runtime-js/worker-entry`,
+  pulled into the owner chunk + evaluated at module-eval) swapped `globalThis.process` for a
+  fresh EMPTY-env one AFTER the kernel pre-entry hook set the spawn env, so the owner read
+  undefined worker URLs and threw `missing RIFTY_KERNEL_WORKER_URL / RIFTY_NODE_ENTRY_WORKER_URL`
+  → dev server never came up, explorer stuck "Loading the workspace…". `pnpm dev` never loaded
+  that module in the owner realm, so the dev e2e stayed green while the deploy was dead.
+  `real-vite-bootstrap` now reads its env from the kernel's published process spec
+  (`readKernelProcessSpec()`, a dedicated non-enumerable global the swap can't touch) and
+  re-asserts it onto the live process. Root cause filed:
+  `backlog: runtime-js/worker-entry-process-globals-side-effect`.
+
+### Added
+
+- **Prod-artifact smoke e2e (`playwright.prod.config.ts` + `pnpm test:e2e:prod`, wired into
+  CI).** Builds the app and serves it with `pnpm preview` (the Netlify COOP/COEP headers), then
+  asserts the workspace owner boots — COI is live, the co-resident dev server reaches `LIVE`, and
+  no `missing RIFTY_*_URL` boot error. Closes the green-checks-but-broken-deploy gap: the default
+  e2e runs against `pnpm dev`, so a prod-ONLY regression shipped green before.
+
+- **PTY: no more hung terminal on owner death (review #3a).** `pty-client.disconnect()` now
+  settles EVERY waiter — in-flight runs resolve nonzero (unchanged), pending `openSession()`
+  waiters resolve, and post-death `openSession()`/`exec()` settle immediately — instead of
+  leaving the terminal line / Run button hanging forever (it only resolved in-flight runs
+  before; reload/tab-close/preset-switch/owner-crash fire `disconnect()`).
+- **PTY: `exec` on an unknown session emits `pty:exit{error}` (review #3b).** The owner handler
+  silently `return`ed on a missing session, hanging the page run; it now emits a synthetic
+  error-exit so a protocol-order violation surfaces loud.
+
+### Removed
+
+- **Dropped the wired-no-op `pty:resize` frame (review #3c).** Live terminal resize was
+  advertised (`PtyClient.resize`, `WorkspaceOwnerHandle.resize`, `PtyResize` frame) but the
+  owner silently ignored it (and nothing on the page called it). Removed the whole chain rather
+  than keep advertising an unimplemented capability; dims stay per-exec. Real live-resize →
+  `backlog: shell/pty-live-resize`. With #3b this closes + retires
+  `backlog: shell/pty-server-protocol-honesty`.
+
+### Changed
+
+- **`FileExplorer` is a pure read-only viewer (review #4).** The page never mutates the owner
+  store directly (`snapshotFs` throws on write; owner = SSoT, ADR-0148/0150), so the explorer's
+  disabled create/rename/delete machinery — wired to the throwing snapshot — is removed rather
+  than left hidden behind a `readOnly` prop. Create/rename/delete happen via the editor or
+  terminal (routed to the owner) and reflect on the next poll. Owner-routed in-tree CRUD →
+  `backlog: playground/owner-routed-explorer-crud`.
+
+- **The page holds no authoritative VFS store — the owner is the single store
+  owner (D-acceptance A1/A2; `d-owner-worker-milestone`).** P4 left a SECOND
+  authoritative `syncMirror` on the PAGE (`initBackend`) written-through as a
+  workspace-archive copy, so the archive diverged from owner-side (shell/CLI)
+  writes and the "one store owner" invariant held only `partial`. Now retired:
+  workspace archive export/import is owner-served (`glue/workspace-archive-port`,
+  reusing the realm-agnostic `glue/workspace-archive` against the owner
+  `syncMirror` — full content, no 128 KB cap, so a downloaded archive includes
+  shell/CLI-authored files); seeding + the default README are owner-only
+  (`real-vite-bootstrap` `seedProject`); the persisted terminal cwd is validated
+  in the owner (`glue/reachable-cwd` in `makeShell`) instead of against the page
+  store; and the storage badge reads `detectVfsBackend` (the page installs no
+  backend — this also fixes the prior page-main-thread "OPFS-sync-fails → badge
+  shows memory" misreport). Authoritative-store count == 1; A1/A2 hold. Tests:
+  `glue/workspace-archive-port.test.ts`, `glue/reachable-cwd.test.ts`; e2e
+  `owner-*` + `sandbox-fs-rpc` green.
+
+### Tests
+
+- **Single-store-owner behavioral acceptance — the cross-realm cases parity
+  can't reach.** Four new owner e2e specs:
+  `owner-editor-write-exec-read` (a page editor write is read back by exec in the
+  owner — no stale page store shadows it), `owner-single-source-byte-identity`
+  (the same file reads identical from the page viewer `SnapshotFs` and from
+  `cat`), `owner-snapshot-restore-exec` (install + write → reload → the installed
+  CLI still runs + the file still reads — the spec that caught the reload-persist
+  bug above), and `owner-responsive-under-load` (the page main thread stays
+  responsive during the co-resident dev-server boot). Byte-identity is scoped to
+  in-cap files; over-cap files report an honest "too large to preview", already
+  unit-asserted in `glue/snapshot-fs.test.ts` (the viewer never shows WRONG
+  bytes). All owner/COI specs now carry a `test.skip(browserName!=='chromium')`
+  guard so the firefox/webkit projects skip them instead of failing.
+
+### Fixed
+
+- **A user `npm install` now survives a reload — an installed CLI still runs
+  after teardown/restore.** Two coupled bugs dropped the user's install on every
+  reload: (1) the shell `npm` stamped the tree with slug `''` instead of the
+  owner's project slug, so the boot's `installStampSatisfied(slug)` missed and
+  the dependency arrival re-ran; (2) `bootDevServer` force-overwrote
+  `package.json` with the template default on every boot, reverting the user's
+  added deps — which then failed the stamp's dep check and restored the baked
+  snapshot, REPLACING `node_modules` (the install was already OPFS-persisted, but
+  got clobbered on boot). Now the shell `npm` stamps with the current project
+  slug (`npm-shell-command` `projectSlug`), and `bootDevServer` seeds
+  `package.json` if-absent (a genuine preset switch resets it in the `boot`
+  closure alongside the node_modules/lockfile clear). A same-template reload
+  reuses the persisted tree (stamp no-op). Caught by `owner-snapshot-restore-exec`
+  e2e; unit-guarded in `npm-shell-command.test.ts`.
+
 - **Editable project files in real-vite mode (ADR-0076 §Decision-4, corrected).**
   Editing a seeded source tab (e.g. `src/project-summary.js`) while the dev
   server ran threw `writeFileSync: "…" is read-only — it lives in the Vite
@@ -38,6 +155,79 @@
 
 ### Added
 
+- **Foreground CLIs run in a supervised child worker (P6a of ADR-0150).** Each
+  shell-resolved `.bin`/node CLI now runs in a child worker-process the owner
+  SUPERVISES — resolution stays owner-side, the child reads+writes the owner store
+  over `fs.*` sync-RPC (`RIFTY_REMOTE_FS=1`) instead of running in-realm — so the
+  owner stays a free async supervisor while a CLI runs (ADR-0150 `waitAsync`
+  invariant). `createOwnerChildBinExecutor` (over `globalProcessManager.spawnWorker`)
+  replaces the in-realm `createOwnerBinExecutor` at the frozen `BinExecutor` seam
+  (ADR-0137); the owner registers the `fs.*` handlers + receives the kernel +
+  node-entry worker URLs via env (recursive spawn). New e2e
+  `owner-shell-responsive`: two terminals' children run concurrently + Ctrl-C kills
+  a running child; `owner-shell-cowsay` now exercises the child path. (P6b — the
+  dev server → child — is the remaining D phase.)
+
+- **OPFS persistence in the workspace owner (P5 of ADR-0143 "D").** The owner now
+  `await initBackend()` at boot like every other worker realm
+  (`runtime-js/worker-entry`, `rifty/sandbox`) — it was the only realm left on
+  memory, so the workspace (installed `node_modules`, edited + shell-written files)
+  vanished on `page.reload()`. The OPFS content-cache write-through (ADR-0072) is
+  the durability mechanism on its own; there is no per-command flush barrier — an
+  awaited drain coupled command latency to the unrelated boot write-through queue,
+  stalling the shell during boot (graceful drain-on-terminate →
+  `docs/backlog/shell/owner-graceful-drain-on-terminate`). New e2e
+  `owner-persistence-reload`: `echo > /workspace/persist.txt` → `page.reload()` →
+  `cat` survives (honest — fails on the memory backend).
+
+- **Unified workspace owner: co-resident dev-server + single source of truth
+  (ADR-0148, P4 of ADR-0143 "D").** The `vite`/dev server now runs CO-RESIDENT
+  inside the ONE persistent workspace owner — started on demand by the owner's
+  `vite` / `npm run <script>` shell command, stopped on Ctrl-C via `server.close()`
+  without killing the owner — so it reads the SAME store `npm install` writes
+  (closes the two-owners trap: `npm install <pkg>` then `npm run dev` share
+  `node_modules`). The per-run `startRealVite` preview worker and the entire
+  page-driven dev path (`dispatchDevServerLine`/`runViteCommand`/`isDevServerLine`)
+  are deleted; dev-server start/stop + the listen port flow to the page over a new
+  structured `pty:dev-server` frame + the P3 request handshake (no stdout
+  log-match). The owner becomes the SINGLE SOURCE OF TRUTH: the editor + explorer
+  always read the owner snapshot (the `activeVfs`/`snapshotFs` `vite`-gated swap is
+  retired), editor + program edits write to the owner (HMR against the same store
+  it serves), and the `node_modules` read-port is widened to a general workspace
+  read-port whose consumer is the editor opening owner-only files. New
+  `dev-server-controller` (single-active guard + dev-server frame emit + HMR
+  forward); `wirePreviewBridge` replaces the per-run page preview wiring. COI e2e:
+  co-resident vite preview through the SW (`m7-preview-sw`), node-server
+  (`fullstack-demo`), shell CLI (`owner-shell-cowsay`), explorer coherence
+  (`owner-explorer-coherence`).
+
+- **Owner snapshot coherence + readiness handshake (ADR-0146, P3 of ADR-0143
+  "D").** The page file explorer now reflects files the owner-resident shell
+  writes: the owner republishes its `syncMirror` snapshot on every command exit
+  (`pty:exit`), so a bare `echo > f` / a program's output shows up without a
+  dev-server restart (e2e `owner-explorer-coherence.spec.ts`). The blind
+  owner-side snapshot retry-storm (`[300,1200,3000]ms` re-publish) is replaced by
+  a structured handshake: the page posts `snapshot-req` on subscribe and the
+  owner replies via `serveSnapshotRequests`, so the initial sync is deterministic
+  whichever side comes up first (and survives page reload). Deferred to P4: the
+  general (non-`node_modules`) on-demand read-port widening — it needs an editor
+  consumer for large/owner-only files and lands when the preview owner unifies.
+- **Owner-resident shell + pty channel (ADR-0146, P2 of ADR-0143 "D").** The
+  `Shell`, cwd/env, `npm install`, and bin/`execSync` now run inside ONE
+  persistent workspace-owner worker (the real-vite bootstrap generalized to a
+  mode-parametrized `shell`|`preview` owner, spawned `serve:true` at App-mount,
+  addressed by a stable `workspaceId`); the PAGE terminal is a thin client over a
+  `pty:*` frame channel on the kernel fork-IPC port (control AND stdout/stderr
+  chunks on one ordered channel, `sessionId`+`runId` correlated, cwd/env pushed
+  on `pty:exit`, structured `pty:ready` handshake). npm + bin share the owner's
+  `syncMirror`, so an installed CLI (`cowsay hi`) finally runs end-to-end —
+  closes the ADR-0143 ENOENT dead link. New `pty-protocol`/`pty-server`/
+  `pty-client`/`owner-bin-executor`; `terminal-manager` is now a pty port client;
+  the dead `useShellSession` adapter is removed. Persisted cwd/env restore via the
+  `pty:open` seed; `npm run <dev>` routing stays page-driven. COI e2e
+  `owner-shell-cowsay.spec.ts` (CI-only). The dev-server preview owner stays
+  separate (page-driven) until **P4** folds it into this owner — a tracked
+  two-owners transient (no residual debt at D close).
 - **Wire installed-CLI execution to the node-entry loader bootstrap (ADR-0137,
   Opt-Y).** `createBinExecutor` spawns the `kind:'url'` node-entry bootstrap
   (`workers/node-entry-bootstrap.ts`) for a shell-resolved `node_modules/.bin/<name>`
@@ -125,6 +315,31 @@
   preview at 560px instead of the original Soft Panels 464px.
 
 ### Fixed
+
+- **Terminal history/state saves serialized (P5 of ADR-0143 "D").** The page
+  persists best-effort (`void saveHistory(...)`) per command; under the now
+  OPFS-backed owner's write-through I/O the fire-and-forget OPFS writes could
+  reorder — an earlier full-array write landing after a later one and dropping the
+  most recent command (`terminal-persistence … OPFS after reload` flaked).
+  `createTerminalPersistence` now queues writes onto one tail so the latest save
+  wins. The reload e2e also waits for a command to finish before typing the next
+  (a command typed while the previous runs lands in its stdin — correct terminal
+  semantics the OPFS-slowed owner boot exposed; owner boot responsiveness → P6).
+
+- **P2 owner regressions caught only by CI e2e (ADR-0146).** Four baseline
+  chromium specs broke under the owner-resident shell and are green again:
+  (1) a fork-IPC message-drop race (fixed in `runtime-js`) hung EVERY shell
+  command with no output — `pty:open` was posted before the slow owner bootstrap
+  registered its `process.on('message')`; (2) preset files (`src/project-summary.js`
+  …) reached only the preview worker, so the owner shell `cat`'d ENOENT —
+  `seedViteWorkspace` now pushes them to the owner via the new
+  `WorkspaceOwnerHandle.writeFile` (a `rifty:vfs-write` frame); (3) the
+  PAGE-driven dev-server tab showed `data-running=false` (its session never runs
+  through `manager.runLine`) — the tabs now reflect `devServerRunning` for the
+  owning session; (4) the cowsay e2e matched the mid-stream `+ cowsay@` and typed
+  `cowsay hi` into the still-running install (keystrokes → npm stdin), so it never
+  ran — it now waits for the install-complete summary. These slipped past local
+  green because the owner path is cross-origin-isolation-gated (CI-only).
 
 - **Seeded sandbox previews now use JetBrains Mono.** The playground chrome,
   Monaco, and xterm had already switched, but the project preview templates
