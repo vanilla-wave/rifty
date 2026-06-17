@@ -33,7 +33,10 @@ export type DevServerOwnerMessage = DevFileChangedMessage;
 export function isDevServerChildMessage(m: unknown): m is DevServerChildMessage {
   if (!m || typeof m !== 'object') return false;
   const c = m as { type?: unknown; port?: unknown; message?: unknown };
-  if (c.type === 'rifty:dev-ready') return typeof c.port === 'number';
+  // ready carries the listening port — reject NaN/float (would resolve boot LIVE
+  // on `/preview/NaN/`). error keeps a plain string check: an error frame MUST
+  // reject boot even with a thin message, else dropping it would hang the boot.
+  if (c.type === 'rifty:dev-ready') return Number.isInteger(c.port);
   if (c.type === 'rifty:dev-error') return typeof c.message === 'string';
   return c.type === 'rifty:dev-snapshot';
 }

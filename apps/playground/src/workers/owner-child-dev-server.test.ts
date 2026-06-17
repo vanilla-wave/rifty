@@ -13,7 +13,6 @@ const params: DevServerChildSpawnParams = {
   setup: 'instant',
   root: '/workspace',
   devPort: 5174,
-  ownerToken: 'tok-123',
 };
 
 describe('buildDevServerChildSpawnSpec', () => {
@@ -24,19 +23,12 @@ describe('buildDevServerChildSpawnSpec', () => {
     expect(spec.cwd).toBe('/workspace');
     expect(spec.serve).toBe(true); // long-lived server (vs P6a run-to-completion)
     expect(spec.env.RIFTY_REMOTE_FS).toBe('1');
-    expect(spec.env.RIFTY_DEV_SERVER).toBe('1');
     expect(spec.env.RIFTY_RFV_TEMPLATE).toBe('m7-preview-sw');
     expect(spec.env.RIFTY_RFV_SLUG).toBe('m7-preview-sw');
     expect(spec.env.RIFTY_RFV_SETUP).toBe('instant');
     expect(spec.env.RIFTY_RFV_ROOT).toBe('/workspace');
     expect(spec.env.RIFTY_DEV_PORT).toBe('5174');
     expect(spec.env.PORT).toBe('5174'); // node-server entries bind process.env.PORT
-    expect(spec.env.RIFTY_PREVIEW_OWNER_TOKEN).toBe('tok-123');
-  });
-
-  it('maps an undefined ownerToken to an empty string', () => {
-    const spec = buildDevServerChildSpawnSpec({ ...params, ownerToken: undefined }, 'blob:x');
-    expect(spec.env.RIFTY_PREVIEW_OWNER_TOKEN).toBe('');
   });
 });
 
@@ -44,6 +36,7 @@ describe('buildDevServerChildSpawnSpec', () => {
 class FakeHandle extends EventEmitter implements DevServerChildHandle {
   kind = 'worker' as const;
   killed: string | null = null;
+  exited = false;
   sent: unknown[] = [];
   #out = new EventEmitter();
   #err = new EventEmitter();
@@ -58,7 +51,11 @@ class FakeHandle extends EventEmitter implements DevServerChildHandle {
     return true;
   }
   kill(sig?: string) {
+    // Mirror the real WorkerHandle: kill() on an ALREADY-exited child returns
+    // false and emits NO 'exit' (process-manager.ts kill()).
+    if (this.exited) return false;
     this.killed = sig ?? 'SIGTERM';
+    this.exited = true;
     queueMicrotask(() => this.emit('exit', null));
     return true;
   }
@@ -67,6 +64,11 @@ class FakeHandle extends EventEmitter implements DevServerChildHandle {
   }
   emitMessage(m: unknown) {
     this.emit('message', m);
+  }
+  /** Simulate a post-ready child crash: mark exited + emit. */
+  emitExit(code?: unknown) {
+    this.exited = true;
+    this.emit('exit', code);
   }
 }
 
@@ -86,7 +88,6 @@ describe('createOwnerChildDevServer', () => {
         setup: 'instant',
         root: '/workspace',
         devPort: 5174,
-        ownerToken: 't',
       },
       onSnapshotDirty: () => snapshots.push(1),
     });
@@ -130,7 +131,6 @@ describe('createOwnerChildDevServer', () => {
         setup: 'instant',
         root: '/workspace',
         devPort: 5174,
-        ownerToken: undefined,
       },
       onSnapshotDirty: () => {},
       flush,
@@ -163,7 +163,6 @@ describe('createOwnerChildDevServer', () => {
         setup: 'instant',
         root: '/workspace',
         devPort: 5174,
-        ownerToken: undefined,
       },
       onSnapshotDirty: () => {},
       // no flush
@@ -185,7 +184,6 @@ describe('createOwnerChildDevServer', () => {
         setup: 'instant',
         root: '/workspace',
         devPort: 5174,
-        ownerToken: undefined,
       },
       onSnapshotDirty: () => {},
     });
@@ -205,11 +203,29 @@ describe('createOwnerChildDevServer', () => {
         setup: 'instant',
         root: '/workspace',
         devPort: 5174,
-        ownerToken: undefined,
       },
       onSnapshotDirty: () => {},
     });
     fake.emit('exit', 1);
     await expect(p).rejects.toThrow(/exited before listening/);
+  });
+
+  // Regression (P6b review): a post-ready child crash sets the handle's exitCode,
+  // so the real WorkerHandle.kill() returns false and emits NO 'exit'. stop() must
+  // still resolve — else Ctrl-C recovery after a mid-run crash hangs the dev-run.
+  it('stop() does not hang when the child already exited (post-ready crash)', async () => {
+    const fake = new FakeHandle();
+    const driver = createOwnerChildDevServer('blob:dev-url', () => fake);
+    const bootPromise = driver.boot({
+      signal: new AbortController().signal,
+      log: () => {},
+      params: { templateId: 't', slug: 't', setup: 'instant', root: '/workspace', devPort: 5174 },
+      onSnapshotDirty: () => {},
+    });
+    fake.emitMessage({ type: 'rifty:dev-ready', port: 5174 });
+    const handle = await bootPromise;
+    fake.emitExit(1); // child crashes AFTER ready
+    await handle.stop(); // would hang forever without the kill()-returns-false guard
+    expect(fake.killed).toBeNull(); // kill() short-circuited on the already-exited handle
   });
 });

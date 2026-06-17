@@ -16,7 +16,6 @@ export interface DevServerChildSpawnParams {
   readonly root: string;
   /** The template's real dev port (distinct from the owner's 59124 bridge key). */
   readonly devPort: number;
-  readonly ownerToken: string | undefined;
 }
 
 /** Pure: build the spawn spec for the dev-server child (unit-tested). */
@@ -29,7 +28,6 @@ export function buildDevServerChildSpawnSpec(
     argv: ['rifty', 'dev-server'],
     env: {
       RIFTY_REMOTE_FS: '1',
-      RIFTY_DEV_SERVER: '1',
       RIFTY_RFV_TEMPLATE: params.templateId,
       RIFTY_RFV_SLUG: params.slug,
       RIFTY_RFV_SETUP: params.setup,
@@ -43,7 +41,6 @@ export function buildDevServerChildSpawnSpec(
       // which inherits the OWNER's PORT (the default vite template's 5174) unless
       // we override it here.
       PORT: String(params.devPort),
-      RIFTY_PREVIEW_OWNER_TOKEN: params.ownerToken ?? '',
     },
     cwd: params.root,
     // ADR-0144: serve:true — the kernel does NOT reap the realm when the entry's
@@ -145,7 +142,12 @@ export function createOwnerChildDevServer(
             outputClosed = true;
             await new Promise<void>((res) => {
               handle.on('exit', () => res());
-              handle.kill('SIGTERM');
+              // kill() returns false when the child has ALREADY exited (a
+              // post-ready crash): an already-dead handle emits NO 'exit', so
+              // resolve now instead of awaiting a frame that never comes — else a
+              // Ctrl-C recovery after a mid-run crash hangs the dev-run forever.
+              // TODO(backlog: shell/dev-server-child-exit-unobserved)
+              if (handle.kill('SIGTERM') === false) res();
             });
           },
         });

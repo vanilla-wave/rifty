@@ -1,11 +1,12 @@
 /// <reference lib="webworker" />
 /**
- * Co-resident dev-server boot core (ADR-0148 / ADR-0150 P6b). Extracted from
- * real-vite-bootstrap so it runs in EITHER realm: today the owner imports it,
- * P6b spawns a child realm that imports it. Realm-portable by construction — it
- * only touches `syncMirror()` (the remote mirror in the child), the net registry
- * (the child registers net builtins), the npm client (install over RPC), and the
- * injected `publishSnapshot`/`log` callbacks.
+ * Dev-server boot core (ADR-0148 / ADR-0150 P6b). Extracted from
+ * real-vite-bootstrap so the supervised dev-server CHILD realm can import it
+ * (dev-server-child-bootstrap). Runs ONLY in that child today — the owner is a
+ * pure async supervisor and no longer imports it. Realm-portable by construction
+ * — it only touches `syncMirror()` (the remote mirror in the child), the net
+ * registry (the child registers net builtins), the npm client (install over RPC),
+ * and the injected `publishSnapshot`/`log` callbacks.
  *
  * IMPORTANT: NO top-level side effects (only declarations + `const enc`).
  * `registerNetBuiltins`/`registerSqliteBuiltin` stay in the ENTRY modules, never here.
@@ -16,11 +17,6 @@ import { RegistryClient, install } from '@riftydev/npm-client';
 import { Console } from '@riftydev/runtime-js/builtins/console';
 import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
-import {
-  type SerializedRequest,
-  type SerializedResponse,
-  setupPreviewBridge,
-} from '@riftydev/service-worker';
 import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 import type { SqlJsConfig } from 'sql.js';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
@@ -81,23 +77,6 @@ function overlayShims(): void {
     fs.mkdirSync(dirname(np), { recursive: true });
     fs.writeFileSync(np, enc.encode(content));
   }
-}
-
-async function dispatchSerializedPreview(req: SerializedRequest): Promise<SerializedResponse> {
-  const headers = new Headers(req.headers);
-  const init: RequestInit = { method: req.method, headers };
-  if (req.body && req.method !== 'GET' && req.method !== 'HEAD') {
-    const copy = new ArrayBuffer(req.body.byteLength);
-    new Uint8Array(copy).set(req.body);
-    init.body = copy;
-  }
-  const response = await dispatchToPort(req.port, new Request(req.url, init));
-  return {
-    status: response.status,
-    statusText: response.statusText,
-    headers: Object.fromEntries(response.headers),
-    body: response.body,
-  };
 }
 
 type Loader = ReturnType<typeof createModuleLoader>;
@@ -169,11 +148,10 @@ async function bootNodeServer(
   }
 
   // Node parity: console.log IS stdout. Route the server program's console into
-  // the dev-run's terminal stream (ADR-0148, co-resident dev server in the owner:
-  // the server's boot AND async request logs land in the playground terminal,
-  // not the worker devtools —
-  // the persistent owner's global stdout goes to the owner diagnostic, so wire to
-  // `log` = the active `npm run dev` run's `ctx.stdout`, live for the whole run).
+  // the dev-run's terminal stream (ADR-0148/0150 P6b: the dev server runs in a
+  // supervised child; its boot AND async request logs land in the playground
+  // terminal via `log` = this child's stdout port → the active `npm run dev`
+  // run's `ctx.stdout`, live for the whole run — not the worker devtools).
   const termWriter = {
     write(chunk: string): boolean {
       log(chunk);
@@ -207,11 +185,10 @@ export async function bootDevServer(opts: {
   readonly spec: ProjectSpec;
   readonly slug: string;
   readonly fromScratch: boolean;
-  readonly ownerToken: string | undefined;
   readonly publishSnapshot: () => void;
   readonly log: (chunk: string) => void;
 }): Promise<DevServerHandle> {
-  const { cfg, port, root, spec, slug, fromScratch, ownerToken, publishSnapshot, log } = opts;
+  const { cfg, port, root, spec, slug, fromScratch, publishSnapshot, log } = opts;
 
   // Seed the template's package.json + files IF ABSENT — never overwrite. A
   // force-overwrite here discarded the user's `npm install` additions on every
@@ -302,9 +279,9 @@ export async function bootDevServer(opts: {
     );
   }
 
-  // The node-server entry binds `process.env.PORT`; the persistent owner's PORT
-  // env is its SPAWN-time default (the default template), so a preset switch must
-  // point it at the CURRENT template's dev port before the entry listens.
+  // The node-server entry binds `process.env.PORT`. In the supervised child this
+  // already equals the dev port (the spawn env sets PORT=devPort, ADR-0150 P6b);
+  // re-assert it defensively so the entry always listens on the routed port.
   globalThis.process.env.PORT = String(port);
 
   if (cfg.runtime === 'node-server') {
@@ -352,16 +329,15 @@ export async function bootDevServer(opts: {
     });
   }
 
-  // Direct SW→Worker preview route (A-023) + cross-realm fallback. The page wires
-  // its side on the `pty:dev-server{running,port}` frame (ADR-0148).
-  const tearDirectSwBridge = setupPreviewBridge(dispatchSerializedPreview, {
-    ports: [port],
-    ownerToken,
-  });
+  // Cross-realm preview route (ADR-0150 P6b): the child owns listen() and serves
+  // `/preview/<port>/` over BroadcastChannel. The page wires its side on the
+  // `pty:dev-server{running,port}` frame (ADR-0148) — the SW-direct route is
+  // page-anchored (mountPlaygroundPreviewBridge). `setupPreviewBridge` no-ops in
+  // any worker realm, so it is NOT called here (ADR-0150 corrected).
   const tearPreviewBridge = serveCrossRealmPreview(port, async (request) =>
     dispatchToPort(port, request),
   );
-  log('[real-vite/worker] preview bridges ready\n');
+  log('[real-vite/worker] preview bridge ready\n');
 
   return {
     port,
@@ -372,7 +348,6 @@ export async function bootDevServer(opts: {
       } catch {
         /* idempotent: double stop / a server that never listened */
       }
-      tearDirectSwBridge();
       tearPreviewBridge();
       hmrBridgeRef.current?.close();
     },

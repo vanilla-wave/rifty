@@ -7,8 +7,8 @@
 - **Supervised dev-server child entry + config resolver** (P6b, ADR-0150).
   `workers/dev-server-child-config.ts` is a pure, LIGHT-import resolver
   (`resolveDevServerChildConfig`) that rebuilds the boot config (spec/cfg/port/root/slug/
-  fromScratch/ownerToken) from the spawn env, with loud throws on a missing required var —
-  unit-tested without pulling vite/sql.js. `workers/dev-server-child-bootstrap.ts` is the heavy
+  fromScratch) from the spawn env, with loud throws on a missing required var (and a
+  non-integer port) — unit-tested without pulling vite/sql.js. `workers/dev-server-child-bootstrap.ts` is the heavy
   `kind:'url'` child entry the owner spawns to run the dev server out of the owner thread: it reads
   the owner store over fs.* sync-RPC (`installRemoteSyncFs`, RIFTY_REMOTE_FS=1), boots via
   `bootDevServer`, and talks to the owner over fork-IPC (`rifty:dev-ready`/`-error`/`-snapshot` out,
@@ -31,7 +31,7 @@
   `bootDevServer` (kept only for the child + `flushSyncMirror`).
 - **Extracted the co-resident dev-server boot core into `workers/dev-server-boot.ts`** (P6b prep,
   ADR-0148/0150). `bootDevServer` + the vite/node-server tails (`bootNodeServer`,
-  `waitForListeningPort`, `dispatchSerializedPreview`, `overlayShims`, `toRootRelativePath`,
+  `waitForListeningPort`, `overlayShims`, `toRootRelativePath`,
   `flushSyncMirror`, the Vite interfaces) moved verbatim out of `real-vite-bootstrap.ts` (which has a
   top-level `await bootstrap()` so it can't be imported) into an importable, side-effect-free module
   so a P6b child realm can import it. No behavior change: the owner still imports `bootDevServer` and
@@ -39,6 +39,21 @@
 
 ### Fixed
 
+- **`stop()` no longer hangs after a post-ready dev-server child crash** (P6b review, ADR-0150). The
+  driver's `DevServerHandle.stop()` killed the child then awaited its `'exit'` — but `WorkerHandle.kill()`
+  on an ALREADY-exited child returns `false` and emits NO `'exit'`, so a Ctrl-C after a mid-run child
+  crash awaited a frame that never came and hung the dev-run (and the controller's `stopped`
+  transition) forever. `stop()` now resolves immediately when `kill()` returns `false`, so Ctrl-C
+  recovery works; the remaining AUTOMATIC post-ready-exit observation stays the disclosed follow-up
+  (`backlog: shell/dev-server-child-exit-unobserved`).
+- **Removed the inert `setupPreviewBridge` no-op + dead `ownerToken`/`RIFTY_DEV_SERVER` plumbing from
+  the dev-server child** (P6b review, ADR-0150 corrected). `bootDevServer` runs only in the child
+  realm, where `setupPreviewBridge` no-ops (`!('serviceWorker' in navigator)`) — the ADR's own
+  correction names that placement a forbidden silent no-op. Dropped the call + `dispatchSerializedPreview`
+  + `tearDirectSwBridge` and the whole `ownerToken` chain it fed (`RIFTY_PREVIEW_OWNER_TOKEN` env →
+  resolver → boot opts) and the never-read `RIFTY_DEV_SERVER` env. The live SW-direct preview route is
+  page-anchored (`mountPlaygroundPreviewBridge`); the child serves `/preview/<port>/` via
+  `serveCrossRealmPreview` (keyed by port). No behavior change — only dead code removed.
 - **Owner flushes its OPFS after the dev-server child's install — shell writes survive reload** (P6b
   regression, ADR-0072/0150; caught by `owner-persistence-reload` e2e). Pre-P6b `bootDevServer` ran in
   the owner, so its `ensureProjectDependencies({ flush: flushSyncMirror })` drained the OWNER's OPFS

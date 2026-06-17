@@ -17,7 +17,6 @@ export interface DevServerChildConfig {
   readonly root: string;
   readonly slug: string;
   readonly fromScratch: boolean;
-  readonly ownerToken: string | undefined;
 }
 
 function required(env: Record<string, string | undefined>, key: string): string {
@@ -34,9 +33,14 @@ export function resolveDevServerChildConfig(
 ): DevServerChildConfig {
   const spec = resolveProjectSpec(required(env, 'RIFTY_RFV_TEMPLATE'));
   const root = required(env, 'RIFTY_RFV_ROOT');
-  const port = Number.parseInt(required(env, 'RIFTY_DEV_PORT'), 10);
+  const portRaw = required(env, 'RIFTY_DEV_PORT');
+  const port = Number.parseInt(portRaw, 10);
+  // Loud failure over a silent NaN port (which would bind nowhere / 502 the
+  // preview): a non-numeric RIFTY_DEV_PORT is a spawn-spec bug, not a runtime input.
+  if (!Number.isInteger(port)) {
+    throw new Error(`dev-server-child: RIFTY_DEV_PORT is not an integer: ${portRaw}`);
+  }
   const cfg = resolveBootstrapConfig(spec, port, root);
-  const tokenRaw = env.RIFTY_PREVIEW_OWNER_TOKEN;
   return {
     spec,
     cfg,
@@ -44,6 +48,5 @@ export function resolveDevServerChildConfig(
     root,
     slug: required(env, 'RIFTY_RFV_SLUG'),
     fromScratch: env.RIFTY_RFV_SETUP === 'from-scratch',
-    ownerToken: tokenRaw && tokenRaw !== '' ? tokenRaw : undefined,
   };
 }

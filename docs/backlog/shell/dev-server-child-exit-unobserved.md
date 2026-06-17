@@ -15,6 +15,8 @@ P6b/ADR-0150 introduced a NEW lifecycle state the co-resident model and P6a's ru
 
 Found by the P6b final whole-branch review (non-blocking — happy path + the gold e2e are unaffected; recoverable by Ctrl-C/restart).
 
+**P6b review fix (2026-06-18):** the Ctrl-C recovery itself used to HANG — `stop()` killed the child then awaited `'exit'`, but `WorkerHandle.kill()` on an already-exited child returns `false` and emits no `'exit'`, so the await never resolved (the dev-run + the controller's `stopped` transition hung forever). `stop()` now resolves when `kill()` returns `false`, so Ctrl-C/restart genuinely recovers. The REMAINING gap here is purely the AUTOMATIC observation: nothing transitions the controller on a post-ready child exit, so the LIVE pill stays lit until the user interrupts.
+
 ## Options or Next
 
 A clean fix touches the controller contract (which ADR-0150 deliberately left "state machine unchanged" for P6b), so it is a follow-up, not a P6b in-scope change. Candidates:

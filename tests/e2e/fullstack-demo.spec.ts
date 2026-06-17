@@ -29,8 +29,9 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     });
     // Let the app settle (terminal wired, initial boot command issued) before
     // interacting — clicks during the mount storm can land on replaced nodes.
-    // ADR-0148: the co-resident dev server runs inside the owner; the default
-    // vite preset boots its dev server there.
+    // ADR-0150 P6b: the dev server runs in a supervised child that reads the owner
+    // store over fs.* RPC; the default vite preset boots it on first load. The 30s
+    // wait absorbs the child spawn + over-RPC dep walk (backlog: perf/fs-rpc-chunk-perf).
     await expectTerminalContains(page, 'starting dev server on port', 30_000);
 
     // Select the demo preset from the template switcher and confirm it took:

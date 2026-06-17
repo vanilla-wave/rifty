@@ -64,7 +64,6 @@ async function bootstrapDevServerChild(): Promise<void> {
       spec: c.spec,
       slug: c.slug,
       fromScratch: c.fromScratch,
-      ownerToken: c.ownerToken,
       publishSnapshot: () => send({ type: 'rifty:dev-snapshot' }),
       log: (chunk) => proc.stdout.write(chunk),
     });

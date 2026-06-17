@@ -15,8 +15,8 @@ describe('dev-server boot preview routing', () => {
     expect(source).toContain("base: './'");
   });
 
-  it('forwards editor VFS writes to the co-resident dev server HMR + republishes', () => {
-    // ADR-0148 (co-resident dev server runs inside the store owner): the running
+  it('forwards editor VFS writes to the dev server HMR + republishes', () => {
+    // ADR-0148/0150 P6b (dev server runs in the supervised child): the running
     // dev server's HMR is fed from the virtual FS (it fires no real watcher events).
     expect(source).toContain('const hmrBridgeRef: { current?: HmrBridgeHandle } = {}');
     expect(source).toContain('function broadcastFileUpdate(path: string): void');
@@ -29,9 +29,12 @@ describe('dev-server boot preview routing', () => {
     );
   });
 
-  it('advertises the page owner token on the direct service-worker bridge', () => {
-    expect(source).toContain('setupPreviewBridge(dispatchSerializedPreview, {');
-    expect(source).toContain('ownerToken,');
+  it('serves the cross-realm preview route from the child, not an in-worker SW bridge', () => {
+    // ADR-0150 P6b corrected: the child owns listen() + serveCrossRealmPreview;
+    // setupPreviewBridge no-ops in any worker realm so it is NOT called here (the
+    // SW-direct route is page-anchored via mountPlaygroundPreviewBridge).
+    expect(source).toContain('serveCrossRealmPreview(port');
+    expect(source).not.toContain('setupPreviewBridge(');
   });
 });
 

@@ -190,8 +190,9 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   const slug = opts.slug ?? template.id;
   const workspaceId = opts.workspaceId ?? createPreviewOwnerToken();
   const snapshotPort = WORKSPACE_OWNER_SNAPSHOT_PORT;
-  // Keys the owner's `/preview/<port>/` SW route (ADR-0148); shared with the
-  // worker via env and with the page via `wirePreviewBridge`.
+  // Keys the page's `/preview/<port>/` SW route (ADR-0148/0150 P6b): the page
+  // wires its side via `wirePreviewBridge`. The dev server runs in a supervised
+  // child whose cross-realm route is keyed by port, not this token.
   const previewOwnerToken = createPreviewOwnerToken();
   const log = opts.onLog ?? (() => {});
 
@@ -220,9 +221,6 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
         // Dedicated snapshot/nm BroadcastChannel key (not a dev-server port);
         // the page subscribes on `handle.snapshotPort` to read the owner tree.
         RIFTY_RFV_PORT: String(snapshotPort),
-        // ADR-0148: the owner's co-resident dev server keys its preview SW
-        // route on this token; the page passes it to `wirePreviewBridge`.
-        RIFTY_PREVIEW_OWNER_TOKEN: previewOwnerToken,
         // Node idiom for node-server template entries (`process.env.PORT`): the
         // co-resident dev server listens on the template's default port.
         PORT: String(template.defaultPort),

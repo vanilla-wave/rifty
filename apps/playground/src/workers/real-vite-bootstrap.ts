@@ -137,13 +137,12 @@ async function bootShellOwner(opts: {
   readonly spec: ProjectSpec;
   readonly slug: string;
   readonly fromScratch: boolean;
-  readonly ownerToken: string | undefined;
   /** node-entry bootstrap worker URL — the supervised child each CLI runs in (ADR-0150). */
   readonly nodeEntryWorkerUrl: string;
   /** dev-server child bootstrap worker URL — the supervised serve:true child the owner spawns (ADR-0150 P6b). */
   readonly devServerWorkerUrl: string;
 }): Promise<void> {
-  const { cfg, port, kernelIpc, publishSnapshot, spec, slug, fromScratch, ownerToken } = opts;
+  const { cfg, port, kernelIpc, publishSnapshot, spec, slug, fromScratch } = opts;
 
   seedProject(cfg);
   publishSnapshot();
@@ -212,7 +211,6 @@ async function bootShellOwner(opts: {
           // from `port` (the owner's snapshot/nm/vfs-write bridge key).
           root: devCfg.root,
           devPort: devCfg.port,
-          ownerToken,
         },
         onSnapshotDirty: publishSnapshot,
         // Owner realm → real OWNER OPFS drain. The child's install writes land in
@@ -362,11 +360,10 @@ async function bootstrap(): Promise<void> {
   const env = { ...(readKernelProcessSpec()?.env ?? globalThis.process.env) };
   const port = Number.parseInt(env.RIFTY_RFV_PORT ?? '5174', 10);
   const root = env.RIFTY_RFV_ROOT ?? '/workspace';
-  // ADR-0148: ONE owner — the unified shell + co-resident dev server. The
-  // legacy per-run 'preview' worker is gone (no spawner sets RIFTY_OWNER_MODE
-  // anymore). `ownerToken` keys the preview SW route (page wires its side on the
-  // pty:dev-server frame).
-  const ownerToken = env.RIFTY_PREVIEW_OWNER_TOKEN;
+  // ADR-0148/0150: ONE owner — the unified shell + the dev server it spawns as a
+  // supervised child. The legacy per-run 'preview' worker is gone (no spawner sets
+  // RIFTY_OWNER_MODE anymore). The preview SW route is keyed page-side
+  // (mountPlaygroundPreviewBridge); the owner no longer threads a preview token.
   const spec = resolveProjectSpec(env.RIFTY_RFV_TEMPLATE ?? DEFAULT_TEMPLATE_ID);
   // Sandbox setup kind (ADR-0135): from-scratch runs the visible, honest install
   // HERE (the OPFS-owning realm), streamed to the terminal; instant stays quiet.
@@ -444,7 +441,6 @@ async function bootstrap(): Promise<void> {
     spec,
     slug,
     fromScratch,
-    ownerToken,
     nodeEntryWorkerUrl,
     devServerWorkerUrl,
   });
