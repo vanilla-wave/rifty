@@ -39,6 +39,18 @@
 
 ### Fixed
 
+- **Owner flushes its OPFS after the dev-server child's install — shell writes survive reload** (P6b
+  regression, ADR-0072/0150; caught by `owner-persistence-reload` e2e). Pre-P6b `bootDevServer` ran in
+  the owner, so its `ensureProjectDependencies({ flush: flushSyncMirror })` drained the OWNER's OPFS
+  write-through queue. Post-P6b that flush runs in the CHILD, where `syncMirror()` is the remote
+  `SyncRpcFsSync` (no `flush` → no-op), while the child's node_modules install writes land in the
+  OWNER's write-through queue over fs.* RPC and were never drained. A subsequent small shell write
+  (`echo > persist.txt`) queued behind the undrained node_modules backlog and was lost when the reload
+  terminated the owner worker before the queue reached durable OPFS. Fix: `DevServerChildBootOpts` gains
+  an optional `flush`; the owner driver awaits it on `rifty:dev-ready` BEFORE resolving boot (the
+  controller goes LIVE only once the owner store is durable), and `bootShellOwner` passes
+  `flush: flushSyncMirror` (owner realm → real OWNER OPFS drain). Boot-scoped (once per dev-server
+  boot in the supervisor), NOT the P5-reverted per-`pty:exit` flush stall.
 - **Dev-server child binds the preset's dev port, not the owner's spawn default** (P6b, ADR-0150).
   The node-server template entry binds `process.env.PORT`; in the supervised child that env came from
   the owner's spawn-time default (the default vite port 5174), not the active preset's dev port (e.g.

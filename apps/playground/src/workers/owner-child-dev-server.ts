@@ -74,6 +74,17 @@ export interface DevServerChildBootOpts {
   readonly params: DevServerChildSpawnParams;
   /** Owner re-publishes its snapshot when the child reports its store changed. */
   readonly onSnapshotDirty: () => void;
+  /**
+   * Drain the OWNER realm's OPFS write-through before boot resolves (ADR-0072 /
+   * ADR-0150 P6b). The child writes node_modules into the owner store over fs.*
+   * RPC, filling the owner's async write-through queue; the child's own
+   * `flushSyncMirror` is a no-op (its remote `SyncRpcFsSync` has no `flush`). So
+   * on `rifty:dev-ready` the owner drains ITS queue here — matching the pre-P6b
+   * in-owner install flush — leaving the queue empty for subsequent (small)
+   * shell writes, which then persist to durable OPFS before a reload terminates
+   * the owner worker. Optional: absent on the memory backend (flush no-ops).
+   */
+  readonly flush?: () => Promise<void>;
 }
 
 export interface OwnerChildDevServer {
@@ -142,8 +153,18 @@ export function createOwnerChildDevServer(
         handle.on('message', (message: unknown) => {
           if (!isDevServerChildMessage(message)) return;
           const m = message as DevServerChildMessage;
-          if (m.type === 'rifty:dev-ready') finish(() => resolve(makeHandle(m.port)));
-          else if (m.type === 'rifty:dev-error') finish(() => reject(new Error(m.message)));
+          if (m.type === 'rifty:dev-ready') {
+            // Drain the OWNER's OPFS write-through (the child's install landed in
+            // it over fs.* RPC) BEFORE resolving — so the controller goes LIVE
+            // only once the owner store is durable, matching the pre-P6b in-owner
+            // install flush. `flush` never rejects (flushSyncMirror swallows);
+            // a stray rejection still resolves boot (the server IS listening).
+            const ready = m.port;
+            Promise.resolve(opts.flush?.()).then(
+              () => finish(() => resolve(makeHandle(ready))),
+              () => finish(() => resolve(makeHandle(ready))),
+            );
+          } else if (m.type === 'rifty:dev-error') finish(() => reject(new Error(m.message)));
           else if (m.type === 'rifty:dev-snapshot') opts.onSnapshotDirty();
         });
 

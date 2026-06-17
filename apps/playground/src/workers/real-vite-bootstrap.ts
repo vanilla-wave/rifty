@@ -215,6 +215,12 @@ async function bootShellOwner(opts: {
           ownerToken,
         },
         onSnapshotDirty: publishSnapshot,
+        // Owner realm → real OWNER OPFS drain. The child's install writes land in
+        // THIS realm's write-through queue over fs.* RPC; the child's own flush is
+        // a no-op (remote SyncRpcFsSync has none). Drain here on dev-ready so the
+        // queue is empty for later shell writes (they then persist before a reload
+        // terminates the owner). Replaces the pre-P6b in-owner install flush.
+        flush: flushSyncMirror,
       });
     },
   });

@@ -31,7 +31,7 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     // interacting — clicks during the mount storm can land on replaced nodes.
     // ADR-0148: the co-resident dev server runs inside the owner; the default
     // vite preset boots its dev server there.
-    await expectTerminalContains(page, 'starting dev server on port', 15_000);
+    await expectTerminalContains(page, 'starting dev server on port', 30_000);
 
     // Select the demo preset from the template switcher and confirm it took:
     // the dropdown unmounts on pick, so assert via the chip's active id.

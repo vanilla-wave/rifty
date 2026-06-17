@@ -106,6 +106,73 @@ describe('createOwnerChildDevServer', () => {
     expect(fake.killed).toBe('SIGTERM');
   });
 
+  // P6b regression (owner-persistence-reload): the child's install writes land in
+  // the OWNER's OPFS write-through queue over fs.* RPC; the child's own flush is a
+  // no-op. Boot MUST drain the owner queue (await `flush`) BEFORE resolving — so
+  // the controller goes LIVE only once the owner store is durable, leaving the
+  // queue empty for later shell writes (which then survive a reload).
+  it('awaits flush on rifty:dev-ready before resolving boot', async () => {
+    const fake = new FakeHandle();
+    const driver = createOwnerChildDevServer('blob:dev-url', () => fake);
+    let releaseFlush: (() => void) | undefined;
+    let flushCalls = 0;
+    const flush = () =>
+      new Promise<void>((res) => {
+        flushCalls += 1;
+        releaseFlush = res;
+      });
+    const bootPromise = driver.boot({
+      signal: new AbortController().signal,
+      log: () => {},
+      params: {
+        templateId: 't',
+        slug: 't',
+        setup: 'instant',
+        root: '/workspace',
+        devPort: 5174,
+        ownerToken: undefined,
+      },
+      onSnapshotDirty: () => {},
+      flush,
+    });
+    let settled = false;
+    void bootPromise.then(() => {
+      settled = true;
+    });
+    fake.emitMessage({ type: 'rifty:dev-ready', port: 5174 });
+    // flush invoked, but boot must NOT resolve until it settles.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(flushCalls).toBe(1);
+    expect(settled).toBe(false);
+    releaseFlush?.();
+    const handle = await bootPromise;
+    expect(settled).toBe(true);
+    expect(handle.port).toBe(5174);
+  });
+
+  it('tolerates an absent flush (optional)', async () => {
+    const fake = new FakeHandle();
+    const driver = createOwnerChildDevServer('blob:dev-url', () => fake);
+    const bootPromise = driver.boot({
+      signal: new AbortController().signal,
+      log: () => {},
+      params: {
+        templateId: 't',
+        slug: 't',
+        setup: 'instant',
+        root: '/workspace',
+        devPort: 5174,
+        ownerToken: undefined,
+      },
+      onSnapshotDirty: () => {},
+      // no flush
+    });
+    fake.emitMessage({ type: 'rifty:dev-ready', port: 5174 });
+    const handle = await bootPromise;
+    expect(handle.port).toBe(5174);
+  });
+
   it('rejects boot on rifty:dev-error', async () => {
     const fake = new FakeHandle();
     const driver = createOwnerChildDevServer('blob:dev-url', () => fake);
