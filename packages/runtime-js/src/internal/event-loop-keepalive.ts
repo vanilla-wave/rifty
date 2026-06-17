@@ -12,6 +12,8 @@
  * documented (see ADR + compat matrix).
  */
 
+import { setKernelDrainHook } from '@riftydev/kernel';
+
 let refCount = 0;
 let rejection: { reason: unknown } | null = null;
 
@@ -93,4 +95,39 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
     };
     schedule(tick);
   });
+}
+
+interface RejectionEventLike {
+  reason: unknown;
+  preventDefault?: () => void;
+}
+interface RejectionTarget {
+  addEventListener(type: 'unhandledrejection', cb: (ev: RejectionEventLike) => void): void;
+}
+
+/**
+ * Trap async unhandled rejections in the worker realm. A try/catch around the
+ * entry CANNOT see an async rejection (it's not thrown synchronously); this
+ * listener is the only way to make a detached `promise.then` that rejects fail
+ * LOUDLY. We `preventDefault` (we own the exit) and record the reason so
+ * `awaitDrain` rejects with it → kernel writes the stack to stderr + exit 1.
+ */
+export function installUnhandledRejectionTrap(
+  target: RejectionTarget = self as unknown as RejectionTarget,
+): void {
+  target.addEventListener('unhandledrejection', (ev: RejectionEventLike) => {
+    ev.preventDefault?.();
+    recordRejection(ev.reason);
+  });
+}
+
+/**
+ * Install the full keepalive surface in a worker realm: the unhandledrejection
+ * trap + register the kernel drain hook (the kernel awaits it for
+ * run-to-completion children only). Call once during the worker bootstrap,
+ * alongside the process-shim install.
+ */
+export function installEventLoopKeepalive(): void {
+  installUnhandledRejectionTrap();
+  setKernelDrainHook(() => awaitDrain());
 }

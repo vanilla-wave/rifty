@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   activeRefs,
   awaitDrain,
+  installUnhandledRejectionTrap,
   recordRejection,
   ref,
   resetKeepalive,
@@ -68,5 +69,29 @@ describe('event-loop keepalive', () => {
     const p = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
     queue.shift()!();
     await expect(p).rejects.toThrow('first');
+  });
+});
+
+describe('unhandledrejection trap', () => {
+  it('records the rejection reason and preventDefaults the event', () => {
+    let prevented = false;
+    const listeners: Record<string, (ev: unknown) => void> = {};
+    const target = {
+      addEventListener(type: string, cb: (ev: unknown) => void) {
+        listeners[type] = cb;
+      },
+    };
+    installUnhandledRejectionTrap(target as unknown as typeof self);
+    listeners.unhandledrejection!({
+      reason: new Error('async boom'),
+      preventDefault() {
+        prevented = true;
+      },
+    });
+    expect(prevented).toBe(true);
+    const queue: Array<() => void> = [];
+    const p = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
+    queue.shift()!();
+    return expect(p).rejects.toThrow('async boom');
   });
 });
