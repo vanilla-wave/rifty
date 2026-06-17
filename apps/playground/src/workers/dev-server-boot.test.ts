@@ -1,0 +1,74 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+
+// Co-resident dev-server boot core extracted from real-vite-bootstrap (P6b prep).
+// These guarantees moved here verbatim with the code they pin (bootDevServer +
+// the node-server/vite tails); the behavior is unchanged (pure move).
+const source = readFileSync(
+  fileURLToPath(new URL('./dev-server-boot.ts', import.meta.url)),
+  'utf8',
+);
+
+describe('dev-server boot preview routing', () => {
+  it('uses a relative Vite base so transformed imports stay under the preview route', () => {
+    expect(source).toContain("base: './'");
+  });
+
+  it('forwards editor VFS writes to the co-resident dev server HMR + republishes', () => {
+    // ADR-0148 (co-resident dev server runs inside the store owner): the running
+    // dev server's HMR is fed from the virtual FS (it fires no real watcher events).
+    expect(source).toContain('const hmrBridgeRef: { current?: HmrBridgeHandle } = {}');
+    expect(source).toContain('function broadcastFileUpdate(path: string): void');
+    expect(source).toContain('hmrBridgeRef.current?.broadcast(');
+    expect(source).toContain("type: 'update'");
+    expect(source).toContain("event: 'change'");
+    expect(source).toContain('path: toRootRelativePath(root, modulePath)');
+    expect(source).toContain(
+      'hmrBridgeRef.current = setupHmrBridge({ port, token: hmrBridgeToken })',
+    );
+  });
+
+  it('advertises the page owner token on the direct service-worker bridge', () => {
+    expect(source).toContain('setupPreviewBridge(dispatchSerializedPreview, {');
+    expect(source).toContain('ownerToken,');
+  });
+});
+
+describe('node-server runtime branch', () => {
+  it('dispatches on the bootstrap config runtime discriminant', () => {
+    expect(source).toContain("cfg.runtime === 'node-server'");
+    expect(source).toContain("cfg.runtime === 'vite'");
+  });
+
+  it('brings the node:sqlite WASM engine up from a same-origin asset', () => {
+    // engine bytes come from the bundled asset (CORP-correct, D-001 — no CDN),
+    // passed as wasmBinary so the emscripten glue never probes fs/fetch paths
+    expect(source).toContain("from 'sql.js/dist/sql-wasm.wasm?url'");
+    expect(source).toContain('initSqliteEngine(config)');
+    expect(source).toContain('wasmBinary');
+  });
+
+  it('runs the entry as the server program', () => {
+    expect(source).toContain('await loader.import(cfg.entryPath');
+  });
+
+  it('routes the server program console into kernel stdio (Node parity: console.log IS stdout)', () => {
+    // Without this, server console.log lands in worker devtools, not the
+    // playground terminal — the demo's request/db logs would be invisible.
+    expect(source).toContain('console = new Console(');
+  });
+
+  it('fails loudly when the entry never starts listening on the routed port', () => {
+    expect(source).toContain('listPorts()');
+    expect(source).toContain('never started listening');
+    // the guard must actually gate the boot path, not just exist as a helper
+    expect(source).toContain('await waitForListeningPort(cfg.port');
+  });
+
+  it('keeps the HMR bridge a vite-only concern', () => {
+    // setupHmrBridge must not appear in the shared/common path; pin the call
+    // count so a node-branch copy fails this test.
+    expect(source.split('setupHmrBridge(').length - 1).toBe(1);
+  });
+});

@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Extracted the co-resident dev-server boot core into `workers/dev-server-boot.ts`** (P6b prep,
+  ADR-0148/0150). `bootDevServer` + the vite/node-server tails (`bootNodeServer`,
+  `waitForListeningPort`, `dispatchSerializedPreview`, `overlayShims`, `toRootRelativePath`,
+  `flushSyncMirror`, the Vite interfaces) moved verbatim out of `real-vite-bootstrap.ts` (which has a
+  top-level `await bootstrap()` so it can't be imported) into an importable, side-effect-free module
+  so a P6b child realm can import it. No behavior change: the owner still imports `bootDevServer` and
+  calls it in-realm exactly as before; the spawn-to-child flip is a later task.
+
 ### Fixed
 
 - **`npm run <script>` no longer silently boots the dev server for non-dev scripts.** The owner's
