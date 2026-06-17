@@ -70,7 +70,6 @@ export interface PtyClient {
   exec(sid: string, line: string, opts: ExecOptions): Promise<number>;
   writeStdin(sid: string, rid: string, data: Uint8Array): void;
   signal(sid: string, rid: string): void;
-  resize(sid: string, rid: string, cols: number, rows: number): void;
   closeSession(sid: string): void;
   /** Ask the owner to re-publish dev-server state (explorer-reflects-owner-tree handshake on subscribe/reload). */
   requestDevServer(): void;
@@ -84,13 +83,21 @@ export interface PtyClient {
   snapshot(sid: string): PtySessionSnapshot;
   /** Feed an owner→page frame (from `handle.on('message')`). */
   onFrame(frame: OwnerToPageFrame): void;
-  /** Owner died — resolve every in-flight run nonzero so no caller hangs. */
+  /**
+   * Owner died — settle EVERY waiter so no caller hangs: in-flight runs resolve
+   * nonzero, pending openSession() waiters resolve, and subsequent
+   * openSession()/exec() settle immediately instead of awaiting frames the dead
+   * owner will never send.
+   */
   disconnect(): void;
 }
 
 export function createPtyClient(deps: PtyClientDeps): PtyClient {
   const sessions = new Map<string, SessionState>();
   const runs = new Map<string, PendingRun>();
+  // Flipped by disconnect() on owner death: subsequent openSession/exec settle
+  // immediately instead of awaiting frames the dead owner will never send.
+  let disconnected = false;
 
   function session(sid: string): SessionState {
     let s = sessions.get(sid);
@@ -108,10 +115,16 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       // command resolves (terminal-state restore on reload, ADR-0146).
       if (seed?.cwd !== undefined) s.cwd = seed.cwd;
       if (seed?.env !== undefined) s.env = seed.env;
+      // Owner already dead — no pty:ready will arrive; resolve now so the caller
+      // (`await session.ready`) proceeds to exec(), which fails fast nonzero.
+      if (disconnected) return Promise.resolve();
       deps.send({ type: 'pty:open', sid, cwd: seed?.cwd, env: seed?.env });
       return new Promise((res) => s.readyResolvers.push(res));
     },
     exec(sid: string, line: string, opts: ExecOptions): Promise<number> {
+      // Owner dead — settle nonzero now rather than posting a doomed pty:exec
+      // and registering a run no pty:exit will ever resolve.
+      if (disconnected) return Promise.resolve(OWNER_DIED_EXIT);
       const rid = `r${++ridCounter}`;
       deps.send({
         type: 'pty:exec',
@@ -130,9 +143,6 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
     },
     signal(sid: string, rid: string): void {
       deps.send({ type: 'pty:signal', sid, rid, signal: 'SIGINT' });
-    },
-    resize(sid: string, rid: string, cols: number, rows: number): void {
-      deps.send({ type: 'pty:resize', sid, rid, cols, rows });
     },
     closeSession(sid: string): void {
       deps.send({ type: 'pty:close', sid });
@@ -181,9 +191,15 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       }
     },
     disconnect(): void {
+      disconnected = true;
       for (const [rid, run] of runs) {
         runs.delete(rid);
         run.resolve(OWNER_DIED_EXIT);
+      }
+      // Resolve any openSession() still awaiting pty:ready so a session opened
+      // (but not yet ready) the instant the owner died can't hang its waiter.
+      for (const s of sessions.values()) {
+        for (const res of s.readyResolvers.splice(0)) res();
       }
     },
   };

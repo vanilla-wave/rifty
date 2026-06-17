@@ -2,7 +2,34 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **PTY: no more hung terminal on owner death (review #3a).** `pty-client.disconnect()` now
+  settles EVERY waiter — in-flight runs resolve nonzero (unchanged), pending `openSession()`
+  waiters resolve, and post-death `openSession()`/`exec()` settle immediately — instead of
+  leaving the terminal line / Run button hanging forever (it only resolved in-flight runs
+  before; reload/tab-close/preset-switch/owner-crash fire `disconnect()`).
+- **PTY: `exec` on an unknown session emits `pty:exit{error}` (review #3b).** The owner handler
+  silently `return`ed on a missing session, hanging the page run; it now emits a synthetic
+  error-exit so a protocol-order violation surfaces loud.
+
+### Removed
+
+- **Dropped the wired-no-op `pty:resize` frame (review #3c).** Live terminal resize was
+  advertised (`PtyClient.resize`, `WorkspaceOwnerHandle.resize`, `PtyResize` frame) but the
+  owner silently ignored it (and nothing on the page called it). Removed the whole chain rather
+  than keep advertising an unimplemented capability; dims stay per-exec. Real live-resize →
+  `backlog: shell/pty-live-resize`. With #3b this closes + retires
+  `backlog: shell/pty-server-protocol-honesty`.
+
 ### Changed
+
+- **`FileExplorer` is a pure read-only viewer (review #4).** The page never mutates the owner
+  store directly (`snapshotFs` throws on write; owner = SSoT, ADR-0148/0150), so the explorer's
+  disabled create/rename/delete machinery — wired to the throwing snapshot — is removed rather
+  than left hidden behind a `readOnly` prop. Create/rename/delete happen via the editor or
+  terminal (routed to the owner) and reflect on the next poll. Owner-routed in-tree CRUD →
+  `backlog: playground/owner-routed-explorer-crud`.
 
 - **The page holds no authoritative VFS store — the owner is the single store
   owner (D-acceptance A1/A2; `d-owner-worker-milestone`).** P4 left a SECOND

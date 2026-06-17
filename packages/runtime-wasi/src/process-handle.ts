@@ -84,9 +84,8 @@ export function __setSpawnerForTests(spawn: Spawner | null): void {
 /**
  * Spawn a WASI guest as a kernel process. Returns a `WorkerProcessHandle`
  * (i.e. `handle.kind === 'worker'`, with binary stdio `MessagePort`s on
- * `handle.ports`). Callers wire stdio through any kernel-aware adapter —
- * notably `wireWorkerStdio` from
- * `@riftydev/runtime-js/src/builtins/child_process-worker.ts`.
+ * `handle.ports`). Callers read stdio through the kernel handle's
+ * `stdout()` / `stderr()` accessors.
  */
 export function createWasiProcess(opts: WasiProcessOpts): ProcessHandle {
   const wasmUrl = resolveWasmUrl(opts.wasm);

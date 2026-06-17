@@ -66,6 +66,25 @@ describe('SyncRpcFsSync', () => {
     expect(remote.statSyncOrNull('/nope')).toBeNull();
   });
 
+  it('throws on a short read instead of silently returning a truncated buffer (ADR-0150 never-silent-truncate)', () => {
+    // The owner returns an empty chunk mid-read (file shrank below the offset
+    // after the stat snapshot) — the child MUST fail loudly, not hand the caller
+    // a partial file presented as the whole thing.
+    const N = FS_RPC_CHUNK + 100; // forces a second readChunk call
+    let chunkCalls = 0;
+    const fakeCall = (method: string, _payload: unknown): unknown => {
+      if (method === 'fs.statOrNull') return { isFile: true, isDirectory: false, size: N };
+      if (method === 'fs.readChunk') {
+        chunkCalls += 1;
+        // First chunk full; second chunk empty (concurrent shrink) → short read.
+        return chunkCalls === 1 ? new Uint8Array(FS_RPC_CHUNK).fill(0xcd) : new Uint8Array(0);
+      }
+      throw new Error(`unexpected: ${method}`);
+    };
+    const remote = new SyncRpcFsSync(fakeCall);
+    expect(() => remote.readFileBytesSync('/f.bin')).toThrow(/short read/i);
+  });
+
   it('readFileBytesSync does not throw when readChunk returns more bytes than originally stat-d size (concurrent grow)', () => {
     // Regression: if a concurrent writer grows the file between statOrNull and a
     // readChunk call the owner may return a chunk larger than `size - offset`,

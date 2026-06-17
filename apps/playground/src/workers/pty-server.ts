@@ -119,8 +119,21 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
     frame: Extract<PageToOwnerFrame, { type: 'pty:exec' }>,
   ): Promise<void> {
     const session = sessions.get(sid);
-    // TODO(backlog: shell/pty-server-protocol-honesty) — silent return hangs the page run; emit pty:exit{error}
-    if (!session) return;
+    if (!session) {
+      // No open session for this sid (protocol-order violation / owner restart).
+      // Emit a synthetic error-exit so the page run promise settles LOUD instead
+      // of hanging the terminal line forever (AGENTS.md §Fidelity — no silent stub).
+      deps.send({
+        type: 'pty:exit',
+        sid,
+        rid: frame.rid,
+        code: 1,
+        cwd: '/',
+        env: {},
+        error: `pty:exec for unknown session ${sid} — no pty:open (protocol-order violation)`,
+      });
+      return;
+    }
     const run: RunState = { stdin: new StdinQueue(), controller: new AbortController(), seq: 0 };
     session.runs.set(frame.rid, run);
     let code = 0;
@@ -179,10 +192,6 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
         sessions.get(frame.sid)?.runs.get(frame.rid)?.controller.abort();
         return;
       }
-      case 'pty:resize':
-        // Dims are per-exec in v1; live resize is a follow-up.
-        // TODO(backlog: shell/pty-server-protocol-honesty) — wired no-op; implement live resize, throw, or drop the frame
-        return;
       case 'pty:close': {
         const session = sessions.get(frame.sid);
         if (session) for (const run of session.runs.values()) run.controller.abort();

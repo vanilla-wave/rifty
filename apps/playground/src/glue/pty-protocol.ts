@@ -22,13 +22,6 @@ export type PtyExec = {
 export type PtyStdin = { type: 'pty:stdin'; sid: string; rid: string; data: Uint8Array };
 export type PtyStdinEof = { type: 'pty:stdin-eof'; sid: string; rid: string };
 export type PtySignal = { type: 'pty:signal'; sid: string; rid: string; signal: 'SIGINT' };
-export type PtyResize = {
-  type: 'pty:resize';
-  sid: string;
-  rid: string;
-  cols: number;
-  rows: number;
-};
 export type PtyClose = { type: 'pty:close'; sid: string };
 
 export type PtyReady = { type: 'pty:ready'; sid: string };
@@ -82,7 +75,6 @@ export type PageToOwnerFrame =
   | PtyStdin
   | PtyStdinEof
   | PtySignal
-  | PtyResize
   | PtyClose
   | PtyDevServerReq
   | PtyDevConfig;
@@ -102,7 +94,6 @@ const PAGE_TO_OWNER = new Set([
   'pty:stdin',
   'pty:stdin-eof',
   'pty:signal',
-  'pty:resize',
   'pty:close',
   'pty:dev-server-req',
   'pty:dev-config',

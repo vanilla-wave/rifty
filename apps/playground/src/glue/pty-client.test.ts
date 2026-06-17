@@ -126,6 +126,44 @@ describe('pty-client', () => {
     await expect(p).resolves.toBeGreaterThan(0); // nonzero exit, not a hang
   });
 
+  // Race a promise against a 50ms sentinel so a hang fails fast + deterministically.
+  const settledOr = <T>(p: Promise<T>, pending: T): Promise<T> =>
+    Promise.race([p, new Promise<T>((r) => setTimeout(() => r(pending), 50))]);
+
+  it('disconnect resolves a pending openSession waiter (owner died before pty:ready)', async () => {
+    const { client } = harness();
+    const ready = client.openSession('s1'); // no pty:ready will ever arrive
+    client.disconnect();
+    const settled = await settledOr(
+      ready.then(() => 'resolved' as const),
+      'pending' as const,
+    );
+    expect(settled).toBe('resolved');
+  });
+
+  it('openSession after owner death resolves immediately instead of hanging', async () => {
+    const { client } = harness();
+    client.disconnect();
+    const settled = await settledOr(
+      client.openSession('s2').then(() => 'resolved' as const),
+      'pending' as const,
+    );
+    expect(settled).toBe('resolved');
+  });
+
+  it('exec after owner death resolves nonzero immediately instead of registering a hung run', async () => {
+    const { client, sent } = harness();
+    client.disconnect();
+    const code = await settledOr(
+      client.exec('s1', 'ls', { cols: 80, rows: 24, isTTY: true, onChunk: () => {} }),
+      -999,
+    );
+    expect(code).toBeGreaterThan(0); // OWNER_DIED_EXIT, not the sentinel
+    expect(code).not.toBe(-999);
+    // and it must not post a doomed pty:exec frame into the void
+    expect(sent.some((f) => f.type === 'pty:exec')).toBe(false);
+  });
+
   it('routes pty:dev-server to onDevServer (ADR-0148)', () => {
     const seen: unknown[] = [];
     const client = createPtyClient({ send: () => {}, onDevServer: (f) => seen.push(f) });

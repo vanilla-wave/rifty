@@ -50,14 +50,21 @@ export class SyncRpcFsSync implements FsSync {
         offset,
         length: Math.min(FS_RPC_CHUNK, size - offset),
       }) as Uint8Array;
-      if (chunk.length === 0) break; // truncated mid-read; return what we have
+      // Empty chunk before the stat'd size means the owner store shrank mid-read
+      // (snapshot inconsistent). ADR-0150 forbids silent truncation — fail loud
+      // rather than hand the caller a partial file presented as the whole thing.
+      if (chunk.length === 0) {
+        throw new Error(
+          `sync-rpc-fs: short read for ${path} — got ${offset} of ${size} bytes (owner store changed mid-read)`,
+        );
+      }
       // Defensive clamp: if the owner returns more bytes than requested (concurrent
       // grow race), copy only what fits the originally-stat'd snapshot (ADR-0150).
       const usable = Math.min(chunk.length, size - offset);
       out.set(chunk.subarray(0, usable), offset);
       offset += usable;
     }
-    return offset === size ? out : out.subarray(0, offset);
+    return out;
   }
 
   writeFileSync(path: string, data: Uint8Array): void {

@@ -70,7 +70,6 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     },
     writeStdin: () => {},
     signal: () => {},
-    resize: () => {},
     closeSession: () => {},
     writeFile: () => {},
     exportArchive: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
@@ -940,12 +939,10 @@ export function App(props: AppProps) {
             <FileExplorer
               vfs={snapshotFs}
               root={WORKSPACE}
-              readOnly
               nodeModules={nodeModulesProp()}
               visible={!layout.sidebarCollapsed()}
               activePath={activeFilePath()}
               onOpenFile={(path) => editorApi?.openFile(path)}
-              onError={flashError}
             />
           </aside>
 

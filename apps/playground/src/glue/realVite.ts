@@ -102,7 +102,6 @@ export interface WorkspaceOwnerHandle {
   exec(sid: string, line: string, opts: ExecOptions): Promise<number>;
   writeStdin(sid: string, rid: string, data: Uint8Array): void;
   signal(sid: string, rid: string): void;
-  resize(sid: string, rid: string, cols: number, rows: number): void;
   closeSession(sid: string): void;
   /**
    * Seed/overwrite a file in the owner realm's tree (a `rifty:vfs-write` frame,
@@ -315,7 +314,6 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     exec: (sid, line, execOpts) => client.exec(sid, line, execOpts),
     writeStdin: (sid, rid, data) => client.writeStdin(sid, rid, data),
     signal: (sid, rid) => client.signal(sid, rid),
-    resize: (sid, rid, cols, rows) => client.resize(sid, rid, cols, rows),
     closeSession: (sid) => client.closeSession(sid),
     writeFile(path, content) {
       const frame = { type: 'write' as const, path, data: enc.encode(content) };

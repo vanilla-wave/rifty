@@ -85,7 +85,6 @@ function makeFakeOwner() {
     signal(sid: string, rid: string): void {
       signalled.push({ sid, rid });
     },
-    resize(): void {},
     closeSession(sid: string): void {
       closed.push(sid);
     },

@@ -116,6 +116,24 @@ describe('pty-server', () => {
     expect(exit && exit.type === 'pty:exit' && exit.env.FOO).toBe('bar');
   });
 
+  it('exec on an unknown session emits pty:exit{error} instead of silently hanging the page run', async () => {
+    const { server, out } = harness();
+    // No pty:open for this sid (protocol-order violation / owner restarted).
+    await server.handleFrame({
+      type: 'pty:exec',
+      sid: 's-missing',
+      rid: 'r1',
+      line: 'echo hi',
+      cols: 80,
+      rows: 24,
+      isTTY: true,
+    });
+    const exit = out.find((f) => f.type === 'pty:exit' && f.rid === 'r1');
+    expect(exit && exit.type === 'pty:exit').toBeTruthy();
+    expect(exit && exit.type === 'pty:exit' && exit.code).not.toBe(0);
+    expect(exit && exit.type === 'pty:exit' && exit.error).toBeTruthy();
+  });
+
   it('routes pty:dev-server-req to onDevServerReq (ADR-0148)', () => {
     let reqs = 0;
     const server = createPtyServer({

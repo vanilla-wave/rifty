@@ -57,4 +57,10 @@ describe('pty-protocol', () => {
     expect(isPageToOwner(f)).toBe(true);
     expect(isOwnerToPage(f)).toBe(false);
   });
+  it('does not advertise pty:resize — dropped wired no-op; dims stay per-exec (backlog: live-resize)', () => {
+    // pty:resize was a fully-wired no-op the owner silently ignored. We removed
+    // it from the protocol rather than keep advertising an unimplemented frame.
+    // Cast: pty:resize is no longer part of the PtyFrame union.
+    expect(isPageToOwner({ type: 'pty:resize' } as unknown as PtyFrame)).toBe(false);
+  });
 });

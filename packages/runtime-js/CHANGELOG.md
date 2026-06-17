@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`SyncRpcFsSync.readFileBytesSync` no longer silently truncates (review #2, ADR-0150).**
+  A 0-length chunk before the stat'd size (owner store shrank mid-read) now THROWS instead of
+  returning the partial buffer as a successful read — honouring ADR-0150's "never
+  silent-truncate". Regression test added (`sync-rpc-fs.test.ts`).
+
+### Removed
+
+- **Generic worker-backed `child_process.spawn('node', …)` / `fork()` throws
+  `NotImplementedError` instead of spawning an empty-mirror child (review #1, ADR-0150).** The
+  generic path never wired `RIFTY_REMOTE_FS`, so a worker it spawned read its OWN empty mirror,
+  not the parent/owner store (only the owner `.bin` executor wires it). Reachable solely from a
+  realm with the kernel + node-entry worker URLs (owner/page); the supervised-child realm keeps
+  the working same-realm fallback. The dead `child_process-worker.ts`
+  (`spawnWorkerChild`/`spawnViaWorker`) is removed. Proper remote-FS wiring →
+  `backlog: runtime-js/generic-spawn-worker-remote-fs`.
+
 ### Changed
 
 - **`node:vm` dual-engine cutover (ADR-0142, supersedes ADR-0138).** `node:vm` sandbox APIs
