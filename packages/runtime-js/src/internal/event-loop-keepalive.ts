@@ -99,7 +99,6 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
 
 interface RejectionEventLike {
   reason: unknown;
-  preventDefault?: () => void;
 }
 interface RejectionTarget {
   addEventListener(type: 'unhandledrejection', cb: (ev: RejectionEventLike) => void): void;
@@ -109,14 +108,19 @@ interface RejectionTarget {
  * Trap async unhandled rejections in the worker realm. A try/catch around the
  * entry CANNOT see an async rejection (it's not thrown synchronously); this
  * listener is the only way to make a detached `promise.then` that rejects fail
- * LOUDLY. We `preventDefault` (we own the exit) and record the reason so
- * `awaitDrain` rejects with it → kernel writes the stack to stderr + exit 1.
+ * LOUDLY.
+ *
+ * Record-not-swallow: we record the reason so `awaitDrain` rejects with it
+ * (→ kernel stderr + exit 1 for run-to-completion children). We deliberately do
+ * NOT call `preventDefault` — the browser's default reporting still fires in
+ * every realm, including the long-lived owner (serve:true) whose drain is never
+ * awaited. Calling `preventDefault` on the owner would silently swallow async
+ * rejections, violating the loud-fail Fidelity rule.
  */
 export function installUnhandledRejectionTrap(
   target: RejectionTarget = self as unknown as RejectionTarget,
 ): void {
   target.addEventListener('unhandledrejection', (ev: RejectionEventLike) => {
-    ev.preventDefault?.();
     recordRejection(ev.reason);
   });
 }

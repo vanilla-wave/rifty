@@ -73,8 +73,7 @@ describe('event-loop keepalive', () => {
 });
 
 describe('unhandledrejection trap', () => {
-  it('records the rejection reason and preventDefaults the event', () => {
-    let prevented = false;
+  it('records the rejection reason so awaitDrain surfaces it (does not swallow / preventDefault)', () => {
     const listeners: Record<string, (ev: unknown) => void> = {};
     const target = {
       addEventListener(type: string, cb: (ev: unknown) => void) {
@@ -82,13 +81,7 @@ describe('unhandledrejection trap', () => {
       },
     };
     installUnhandledRejectionTrap(target as unknown as typeof self);
-    listeners.unhandledrejection!({
-      reason: new Error('async boom'),
-      preventDefault() {
-        prevented = true;
-      },
-    });
-    expect(prevented).toBe(true);
+    listeners.unhandledrejection!({ reason: new Error('async boom') });
     const queue: Array<() => void> = [];
     const p = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
     queue.shift()!();
