@@ -18,6 +18,7 @@
 import { basename } from '@riftydev/vfs';
 import * as monaco from 'monaco-editor';
 import { type Accessor, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
+import { classifyOpen } from '../glue/editor-open.ts';
 import {
   type EditorTab,
   PROGRAM_TAB_ID,
@@ -139,6 +140,10 @@ export function EditorHost(props: EditorHostProps) {
   const models = new Map<string, monaco.editor.ITextModel>();
   const readOnlyPaths = new Set<string>();
   const writeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  // path → unsubscribe for an in-flight "await the next snapshot frame" retry
+  // (a seeded project file racing the owner publish). Cleared once the file
+  // opens; torn down on unmount so a never-arriving frame leaks nothing.
+  const snapshotAwaits = new Map<string, () => void>();
 
   const [tabs, setTabs] = createSignal<EditorTab[]>(initialTabs(props.programTitle()));
   const [activeId, setActiveId] = createSignal<string>(PROGRAM_TAB_ID);
@@ -211,36 +216,8 @@ export function EditorHost(props: EditorHostProps) {
     );
   }
 
-  function openFile(path: string, options: EditorOpenFileOptions = {}): void {
-    const shouldActivate = options.activate !== false;
-    if (path === PROGRAM_MIRROR_PATH) {
-      if (shouldActivate) setActiveId(PROGRAM_TAB_ID);
-      return;
-    }
-    const readRemote = props.readNodeModulesFile;
-    // node_modules always reads remote (deps are view-only).
-    if (readRemote && isNodeModulesPath(path)) {
-      openRemoteFile(path, readRemote, options);
-      return;
-    }
-    if (models.has(path)) {
-      if (shouldActivate) setActiveId(path);
-      return;
-    }
-    let bytes: Uint8Array;
-    try {
-      // Sync read from the owner snapshot (ADR-0148 SSoT): editable project files.
-      bytes = props.vfs.readFileBytesSync(path);
-    } catch (err) {
-      // Not in the snapshot (over-cap / owner-only / racing the boot publish) →
-      // async owner read-port (view-only); else surface the read error.
-      if (readRemote) {
-        openRemoteFile(path, readRemote, options);
-        return;
-      }
-      props.onError?.((err as Error).message);
-      return;
-    }
+  /** Open an editable/binary tab from already-read snapshot bytes. */
+  function openSyncFile(path: string, bytes: Uint8Array, shouldActivate: boolean): void {
     let model: monaco.editor.ITextModel;
     if (looksBinary(bytes)) {
       readOnlyPaths.add(path);
@@ -258,7 +235,96 @@ export function EditorHost(props: EditorHostProps) {
     if (shouldActivate) setActiveId(path);
   }
 
+  /**
+   * A seeded/owner-written project file not yet reflected in the snapshot
+   * (seed → owner publish → page `snapshotFs.update` is async): subscribe to the
+   * next applied frame and open EDITABLE when the sync read lands — never the
+   * read-only owner read-port. Race-free: driven by the publish event, no timer.
+   * No `subscribe` (plain mirror, never republishes) → surface the read error.
+   */
+  function awaitSnapshotThenOpen(path: string, err: Error, shouldActivate: boolean): void {
+    const subscribe = props.vfs.subscribe?.bind(props.vfs);
+    if (!subscribe || snapshotAwaits.has(path)) {
+      if (!subscribe) props.onError?.(err.message);
+      return;
+    }
+    const unsubscribe = subscribe(() => {
+      // The tab may have been opened (sync retry won) or closed meanwhile.
+      if (models.has(path)) {
+        clearAwait(path);
+        return;
+      }
+      try {
+        const bytes = props.vfs.readFileBytesSync(path);
+        clearAwait(path);
+        openSyncFile(path, bytes, shouldActivate);
+      } catch {
+        // Still missing — keep waiting for a later frame.
+      }
+    });
+    snapshotAwaits.set(path, unsubscribe);
+  }
+
+  function clearAwait(path: string): void {
+    const unsubscribe = snapshotAwaits.get(path);
+    if (unsubscribe) {
+      unsubscribe();
+      snapshotAwaits.delete(path);
+    }
+  }
+
+  function openFile(path: string, options: EditorOpenFileOptions = {}): void {
+    const shouldActivate = options.activate !== false;
+    const readRemote = props.readNodeModulesFile;
+    let bytes: Uint8Array | undefined;
+    let readErr: Error | undefined;
+    try {
+      // Sync read from the owner snapshot (ADR-0148 SSoT): editable project files.
+      bytes = props.vfs.readFileBytesSync(path);
+    } catch (err) {
+      readErr = err as Error;
+    }
+    switch (
+      classifyOpen(path, {
+        programMirrorPath: PROGRAM_MIRROR_PATH,
+        isNodeModules: isNodeModulesPath(path),
+        // present-but-over-cap (exists, no inlined bytes) stays view-only-remote,
+        // distinct from a racing seed (absent → await the publish).
+        present: props.vfs.existsSync(path),
+        readable: bytes !== undefined,
+        hasRemotePort: Boolean(readRemote),
+      })
+    ) {
+      case 'program':
+        if (shouldActivate) setActiveId(PROGRAM_TAB_ID);
+        return;
+      case 'remote':
+        // 'remote' is only returned when a node_modules path has a read-port.
+        if (readRemote) openRemoteFile(path, readRemote, options);
+        return;
+      case 'sync':
+        if (models.has(path)) {
+          if (shouldActivate) setActiveId(path);
+          return;
+        }
+        // 'sync' is only returned when the snapshot read returned bytes.
+        if (bytes) openSyncFile(path, bytes, shouldActivate);
+        return;
+      case 'await-snapshot':
+        if (models.has(path)) {
+          if (shouldActivate) setActiveId(path);
+          return;
+        }
+        // Non-node_modules path absent from the snapshot — a project file racing
+        // the owner publish (or genuinely owner-only). Wait for the next frame
+        // and open editable; never the read-only owner read-port.
+        awaitSnapshotThenOpen(path, readErr ?? new Error(`ENOENT: "${path}"`), shouldActivate);
+        return;
+    }
+  }
+
   function closeFile(path: string): void {
+    clearAwait(path);
     const timer = writeTimers.get(path);
     if (timer) {
       clearTimeout(timer);
@@ -359,6 +425,8 @@ export function EditorHost(props: EditorHostProps) {
   onCleanup(() => {
     for (const timer of writeTimers.values()) clearTimeout(timer);
     writeTimers.clear();
+    for (const unsubscribe of snapshotAwaits.values()) unsubscribe();
+    snapshotAwaits.clear();
     editor?.dispose();
     for (const m of models.values()) m.dispose();
     models.clear();

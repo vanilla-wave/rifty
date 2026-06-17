@@ -26,6 +26,13 @@ export interface FsOpsTarget {
    * read-only. Absent/false on the writable sync mirror.
    */
   readonly readOnly?: boolean;
+  /**
+   * Owner-snapshot targets ({@link ./snapshot-fs.ts}) notify on every applied
+   * frame so a reader can retry a path a just-seeded owner write has not yet
+   * reflected (editor seeded-file-editable retry). Returns an unsubscribe.
+   * Absent on the plain sync mirror (no async publish to await).
+   */
+  subscribe?(listener: () => void): () => void;
 }
 
 const enc = new TextEncoder();

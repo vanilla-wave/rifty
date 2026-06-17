@@ -76,6 +76,7 @@ import {
   type BootstrapConfig,
   type NodeServerBootstrapConfig,
   type ProjectSpec,
+  isDevScriptCommand,
   resolveBootstrapConfig,
 } from '../templates/project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
@@ -654,8 +655,18 @@ async function bootShellOwner(opts: {
     // this tree — otherwise the arrival re-runs and replaces node_modules,
     // dropping the user's `npm install` (ADR-0135).
     projectSlug: () => devSlug,
-    // Every package.json script boots the dev server (projectScripts).
-    runScript: (_name, _command, ctx) => runDevServer(ctx),
+    // Only the spec's lifecycle-owning dev line boots the co-resident dev server.
+    // Arbitrary `npm run <script>` (e.g. `vite build`) is not yet routed through a
+    // real node_modules/.bin exec; loud-reject it rather than silently boot dev.
+    // `devSpec` is reassigned by onDevConfig on a preset switch, so the matcher
+    // always tracks the active template. TODO(backlog: shell/node-modules-bin-execution)
+    runScript: (name, command, ctx) => {
+      if (isDevScriptCommand(devSpec, command)) return runDevServer(ctx);
+      ctx.stderr.write(
+        `npm: \`npm run ${name}\` (\`${command}\`) is not supported yet; only the dev line boots the co-resident server\n`,
+      );
+      return Promise.resolve(1);
+    },
   });
 
   const makeShell = (seed?: { cwd?: string; env?: Record<string, string> }): Shell => {

@@ -4,6 +4,7 @@ import {
   type ProjectSpec,
   buildProjectPackageJson,
   devScriptCommand,
+  isDevScriptCommand,
   resolveBootstrapConfig,
   terminalDevLine,
 } from './project-spec.ts';
@@ -166,5 +167,21 @@ describe('terminal dev command derivation', () => {
   it('derives the package.json dev script from the entry for node-server', () => {
     expect(devScriptCommand(NODE_FIXTURE)).toBe('node src/main.js');
     expect(devScriptCommand(VITE_TEMPLATE)).toBe('vite');
+  });
+});
+
+describe('isDevScriptCommand (page-realm dev-line matcher)', () => {
+  it('recognises the spec dev line so it boots the co-resident dev server', () => {
+    expect(isDevScriptCommand(VITE_TEMPLATE, 'vite')).toBe(true);
+    expect(isDevScriptCommand(NODE_FIXTURE, 'node src/main.js')).toBe(true);
+  });
+
+  it('rejects an arbitrary user script (e.g. `vite build`) — must not boot dev', () => {
+    // The bug: `npm run build` (command `vite build`) silently booted the dev
+    // server and exited 0. Any non-dev command is NOT the dev line.
+    expect(isDevScriptCommand(VITE_TEMPLATE, 'vite build')).toBe(false);
+    expect(isDevScriptCommand(VITE_TEMPLATE, 'tsc')).toBe(false);
+    expect(isDevScriptCommand(NODE_FIXTURE, 'node dist/build.js')).toBe(false);
+    expect(isDevScriptCommand(NODE_FIXTURE, '')).toBe(false);
   });
 });

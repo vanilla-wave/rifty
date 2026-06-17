@@ -296,7 +296,19 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   worker.on('exit', (code?: unknown) => {
     exited = true;
     client.disconnect(); // resolve in-flight runs nonzero — never hang
-    resolveClosed(typeof code === 'number' ? code : null);
+    // Owner died → the co-resident dev server is gone. Synthesize a stopped
+    // frame to the page so its LIVE pill leaves 'running' (Bug #4: the exit
+    // path used to only resolve `closed`, leaving the UI stale). `error` is
+    // the non-fatal-failure carrier per the frame protocol (status stays
+    // 'stopped'); `port`/`url` are undefined, so the preview iframe tears down.
+    const exitCode = typeof code === 'number' ? code : null;
+    const stopped: PtyDevServer = {
+      type: 'pty:dev-server',
+      status: 'stopped',
+      error: `workspace owner exited (code ${exitCode ?? 'null'})`,
+    };
+    for (const cb of devServerListeners) cb(stopped);
+    resolveClosed(exitCode);
   });
 
   // Page-side client for the owner's archive export/import bridge (single store
@@ -316,6 +328,15 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     signal: (sid, rid) => client.signal(sid, rid),
     closeSession: (sid) => client.closeSession(sid),
     writeFile(path, content) {
+      // Owner dead → a `worker.send` would return false and fall through to the
+      // snapshot-port channel, which SILENTLY DROPS with no worker listening
+      // (vfs-write-port.ts). Bug #4: post-crash edits must FAIL LOUDLY, not
+      // vanish. The fallback below stays for the pre-handler boot window only.
+      if (exited) {
+        throw new Error(
+          `writeFile(${path}): workspace owner has exited — write not applied. Reload to respawn the owner.`,
+        );
+      }
       const frame = { type: 'write' as const, path, data: enc.encode(content) };
       // IPC first (the owner's onMessage applies it to syncMirror); the
       // shim buffers frames sent before the slow entry registers its handler.

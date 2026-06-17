@@ -4,6 +4,23 @@
 
 ### Fixed
 
+- **`npm run <script>` no longer silently boots the dev server for non-dev scripts.** The owner's
+  `runScript` ignored the script command and always ran the dev server, so `npm run build`
+  (`vite build`) exited 0 having silently booted dev. It now boots only when the command equals
+  the active spec's dev line (`isDevScriptCommand`); any other script loud-rejects to stderr +
+  non-zero. Interim — full node_modules/.bin routing is backlog `shell/node-modules-bin-execution`.
+- **Owner death no longer leaves a stale LIVE pill + silently drops edits.** On owner-worker exit
+  `realVite` only resolved `closed`, never notifying `onDevServer` listeners — so the UI stayed
+  'running'; and a post-exit `writeFile` fell through `worker.send`'s false return into the
+  snapshot-port channel, which silently drops with no worker listening. Exit now synthesizes a
+  `pty:dev-server` `stopped` frame (UI leaves 'running') and `writeFile` after exit throws loudly
+  instead of vanishing.
+- **Seeded preset files open EDITABLE despite the publish race.** A just-seeded project file
+  opened before the owner snapshot reflected its write classified read-only (sync miss → async
+  owner read-port) and stayed so until close+reopen. `openFile` now routes via a pure
+  `classifyOpen` helper: a non-node_modules snapshot miss is `await-snapshot` — it subscribes to
+  the next `SnapshotFs` publish frame (event, not timer) and opens editable when the file lands.
+  node_modules / present-but-over-cap / binary stay view-only exactly as before.
 - **Workspace owner boots on the PRODUCTION build (broken deploy, green checks).** In the prod
   bundle a stray top-level `installProcessGlobals()` side-effect (`runtime-js/worker-entry`,
   pulled into the owner chunk + evaluated at module-eval) swapped `globalThis.process` for a

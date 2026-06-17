@@ -141,6 +141,16 @@ export function devScriptCommand(spec: ProjectSpec): string {
 }
 
 /**
+ * Is `command` the spec's lifecycle-owning dev line? The page realm boots the
+ * co-resident dev server ONLY for this exact command; any other `npm run`
+ * script (e.g. `vite build`) is not yet routed and must loud-reject rather than
+ * silently boot dev. TODO(backlog: shell/node-modules-bin-execution)
+ */
+export function isDevScriptCommand(spec: ProjectSpec, command: string): boolean {
+  return command === devScriptCommand(spec);
+}
+
+/**
  * The visible terminal line the playground runs to boot a template — the
  * lifecycle-owning `vite` command for vite templates, `npm run dev` (resolved
  * through the seeded package.json script) for node servers. The node line is
