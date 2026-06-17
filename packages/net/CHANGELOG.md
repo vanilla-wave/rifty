@@ -19,6 +19,18 @@
 
 ### Fixed
 
+- **Graceful WebSocket close no longer puts a reserved code on the wire.** A
+  bodyless `ws.close()` (no status) parses to 1005 and was re-encoded as a
+  2-byte 1005 body, which the real `ws` receiver rejects with
+  `WS_ERR_INVALID_CLOSE_CODE` (aborting 1002). The upgrade socket now emits a
+  bodyless close frame for 1005 and tears the socket without a frame for 1006,
+  so a real `ws` peer concludes 1005/1006 cleanly. Regression: real-ws-client
+  sees a graceful server close as a clean 1005.
+- **Real `ws` `bufferedAmount` reads an honest 0 on server-side upgrade
+  sockets.** The server socket lacked `_writableState.length`, so `ws`'s
+  `bufferedAmount` getter (`_writableState.length + _sender._bufferedBytes`)
+  returned `NaN`; the bridge keeps no send queue, so it now reports 0 (mirroring
+  the client socket).
 - **WebSocket bridge host matching now honors only configured hosts.**
   `webSocketBridgeClientScript()` no longer intercepts arbitrary `ws://` URLs
   on the page's own hostname; same-host application sockets fall through to the

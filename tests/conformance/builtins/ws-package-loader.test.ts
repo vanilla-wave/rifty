@@ -111,6 +111,64 @@ describe('real ws package under the rifty module loader', () => {
     guest.close();
     for (const port of listPorts()) unregisterPort(port);
   });
+
+  it('concludes a graceful server close cleanly on the real ws client (no status -> 1005)', async () => {
+    await import('@riftydev/net/register-builtins');
+    const vfs = new MemoryFsSync();
+    seedInstalledWsPackage(vfs);
+    vfs.loadFixture({
+      // A bodyless `socket.close()` (default ws path, no code) must round-trip as
+      // a bodyless close frame, NOT a 2-byte 1005 body — real ws rejects an
+      // on-wire 1005 with WS_ERR_INVALID_CLOSE_CODE. Asserts the client sees a
+      // clean 1005 close, never an 'error'.
+      '/workspace/guest.js': `
+        const http = require('node:http');
+        const WebSocket = require('ws');
+        const { WebSocketServer } = WebSocket;
+        let resolveResult;
+        let rejectResult;
+        const result = new Promise((resolve, reject) => {
+          resolveResult = resolve;
+          rejectResult = reject;
+        });
+        const server = http.createServer((_req, res) => res.end('http-ok'));
+        const wss = new WebSocketServer({ server, path: '/ws' });
+        let client;
+        wss.on('connection', (socket) => {
+          socket.on('message', () => {
+            socket.send('echo');
+            socket.close();
+          });
+        });
+        server.listen({ port: 4112 }, () => {
+          client = new WebSocket('ws://localhost:4112/ws');
+          client.on('open', () => client.send('hello'));
+          client.on('error', (err) => rejectResult('error:' + (err && err.message)));
+          client.on('close', (code, reason) => resolveResult({ code, reason: String(reason) }));
+        });
+        module.exports = {
+          result,
+          close() {
+            if (client) client.terminate();
+            wss.close();
+            server.close();
+          }
+        };
+      `,
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/workspace' });
+    const guest = loader.require('./guest.js', '/workspace/__entry.js') as {
+      result: Promise<{ code: number; reason: string }>;
+      close(): void;
+    };
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await expect(guest.result).resolves.toEqual({ code: 1005, reason: '' });
+
+    guest.close();
+    for (const port of listPorts()) unregisterPort(port);
+  });
 });
 
 function seedInstalledWsPackage(vfs: MemoryFsSync): void {

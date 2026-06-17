@@ -3,6 +3,11 @@
 Status: Accepted
 Date: 2026-06-14
 
+> Corrected 2026-06-17: ADR-0151 cross-references below were grafted in when
+> 0151 landed (Context + supersession lines). The 0147 decision is unchanged;
+> the per-file date stays 2026-06-14 — see the README Corrections table for the
+> 0147↔0151 edge.
+
 > TL;DR: default `@riftydev/net` WebSocket now crosses same-origin realms via
 > the bridge protocol; HMR uses ordinary WebSocket semantics instead of a
 > Vite-only browser socket patch.

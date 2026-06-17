@@ -52,7 +52,10 @@ export class WebSocketUpgradeSocket extends EventEmitter {
   readable = true;
   destroyed = false;
   _readableState = { endEmitted: false };
-  _writableState = { finished: false, errorEmitted: false };
+  // `length` mirrors the client socket: real ws `bufferedAmount` reads
+  // `_socket._writableState.length` — without it the getter returns NaN. The
+  // bridge keeps no send queue, so an honest 0 is correct.
+  _writableState = { finished: false, errorEmitted: false, length: 0 };
 
   private readonly cid: string;
   private readonly protocols: readonly string[];
@@ -161,6 +164,10 @@ export class WebSocketUpgradeSocket extends EventEmitter {
   }
 
   _acceptKey(): string | null {
+    // null only before _setRequestKey runs. The sole constructor (HttpServer
+    // upgrade) always sets a valid key before any handshake byte, so the
+    // Sec-WebSocket-Accept check in consumeHandshakeBytes is always enforced;
+    // null would skip it, so _setRequestKey is a required precondition.
     const key = this._requestKey;
     if (!key) return null;
     return acceptKey(key);
@@ -174,7 +181,15 @@ export class WebSocketUpgradeSocket extends EventEmitter {
 
   _receiveBridgeClose(code = 1000, reason = ''): void {
     if (this.destroyed) return;
-    this.emit('data', encodeClientFrame(0x8, closePayload(code, reason)));
+    // 1006 (abnormal) has no on-wire close frame: tear the socket so the ws
+    // server concludes 1006 from socket 'close'. closeFrameSent suppresses the
+    // redundant close echo destroy() would otherwise post back to the peer.
+    if (code === 1006) {
+      this.closeFrameSent = true;
+      this.destroy();
+      return;
+    }
+    this.emit('data', encodeClientFrame(0x8, closeFrameBody(code, reason)));
   }
 
   private _requestKey = '';
@@ -447,7 +462,12 @@ export class WebSocketClientSocket extends EventEmitter {
 
   _receiveBridgeClose(code = 1000, reason = ''): void {
     if (this.destroyed) return;
-    this.emit('data', encodeServerFrame(0x8, closePayload(code, reason)));
+    // 1006 (abnormal) has no on-wire close frame: skip the frame and tear down
+    // so the ws client concludes 1006 from socket 'close', never an invalid
+    // 1006 body. 1005/valid codes still flow through closeFrameBody.
+    if (code !== 1006) {
+      this.emit('data', encodeServerFrame(0x8, closeFrameBody(code, reason)));
+    }
     this.destroyed = true;
     this.writable = false;
     this.readable = false;
@@ -783,6 +803,13 @@ function closePayload(code: number, reason: string): Buffer {
   payload[1] = code & 0xff;
   payload.set(reasonBytes, 2);
   return payload;
+}
+
+function closeFrameBody(code: number, reason: string): Buffer {
+  // 1005 ("no status received") is a valid conclusion code but MUST be sent as a
+  // bodyless close frame — a 2-byte 1005 body is rejected by real ws as
+  // WS_ERR_INVALID_CLOSE_CODE. (1006 never reaches here; see _receiveBridgeClose.)
+  return code === 1005 ? Buffer.alloc(0) : closePayload(code, reason);
 }
 
 function parseClosePayload(

@@ -125,7 +125,11 @@ describe('HttpServer — WebSocket upgrade bridge', () => {
     const requestArgs: unknown[][] = [];
     httpServer.on('request', (...args: unknown[]) => requestArgs.push(args));
     const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+    let serverBufferedAmount: number | undefined;
     wss.on('connection', (socket) => {
+      // bufferedAmount reads `_socket._writableState.length`; a missing field
+      // returns NaN. The bridge keeps no send queue, so it must read 0.
+      serverBufferedAmount = (socket as unknown as { bufferedAmount: number }).bufferedAmount;
       socket.on('message', (data) => socket.send(`echo:${String(data)}`));
     });
     httpServer.listen({ port });
@@ -145,6 +149,7 @@ describe('HttpServer — WebSocket upgrade bridge', () => {
     await waitFor(() => seen.includes('echo:hello'));
 
     expect(requestArgs).toHaveLength(0);
+    expect(serverBufferedAmount).toBe(0);
     ws.close();
     await new Promise((resolve) => setTimeout(resolve, 20));
     wss.close();

@@ -19,7 +19,7 @@
 
 import { Buffer, EventEmitter } from '@riftydev/io';
 import { dispatchToPort, getHandler, registerPort, unregisterPort } from '../registry.ts';
-import { channelNameFor, portChannelNameFor } from '../ws/channel.ts';
+import { channelNameFor, portChannelNameFor, portChannelNameForPort } from '../ws/channel.ts';
 import { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
 import { ServerResponse } from './response.ts';
 import { STATUS_CODES } from './status-codes.ts';
@@ -132,9 +132,7 @@ export class HttpServer extends EventEmitter {
 
   private listenForWebSocketUpgrades(port: number): void {
     if (typeof BroadcastChannel === 'undefined') return;
-    const channel = new BroadcastChannel(
-      portChannelNameFor(`ws://websocket-port.local:${port}/__rifty_ws`),
-    );
+    const channel = new BroadcastChannel(portChannelNameForPort(port));
     channel.addEventListener('message', this.onWebSocketBridgeMessage);
     this.upgradeChannels.push(channel);
   }
