@@ -7,27 +7,30 @@ import {
 } from './helpers/playground.ts';
 
 /**
- * Child-realm async-lifecycle e2e (chromium only, COI/SAB-gated).
+ * Child-realm async-lifecycle e2e — TRUE drain observables (chromium only, COI/SAB-gated).
  *
- * Proves two acceptance criteria of the child-realm-async-lifecycle feature:
- *   - Work scheduled AFTER top-level resolve (setTimeout/microtask) runs before
- *     the child is reaped. Pre-fix the child reaped at top-level → the deferred
- *     callbacks never fire and their output never reaches the terminal.
- *   - An async unhandled rejection after top-level fails LOUDLY (its message
- *     surfaces in the terminal via kernel stderr + exit 1). Pre-fix it was a
- *     silent exit-0 no-op that violated the loud-fail Fidelity rule.
+ * WHY console.log-only assertions are insufficient:
+ *   The advisory `self.close()` at the end of a drain (or even at top-level) lets
+ *   a late `console.log` race out BEFORE the close actually fires — so a test that
+ *   only checks for a log line passes even when drain is disabled. The real signal
+ *   that distinguishes "drained cleanly" from "drain disabled / hung on cap" is
+ *   whether the SHELL PROMPT returns promptly so a second command can run. Pre-fix
+ *   the child hangs ~30s on the keepalive drain cap (a bundler-injected HMR timer
+ *   pins the event loop); post-fix the loop drains immediately and the shell is
+ *   free in milliseconds.
  *
- * Shell cannot run bare `node <script>` (commands resolve only via
- * node_modules/.bin). Approach: write the JS file + a hand-crafted .bin shim
- * (same launcher format the linker emits — `import("../../...")`) using echo
- * and file redirect, then invoke the shim name from the shell.
+ * Test A: post-top-level setTimeout work completes AND the child drains promptly.
+ *   The second `cat` command is the load-bearing signal: if the child is still hung
+ *   the shell swallows keystrokes until the cap fires (~30s), so a prompt `cat`
+ *   response proves clean drain. Also asserts no "exceeded keepalive drain cap" in
+ *   the buffer.
  *
- * Requires cross-origin isolation (the owner is SAB-IPC-gated; drain uses the
- * kernel onMessage path) — the e2e harness serves COOP/COEP. Chromium-only,
- * matching the other COI specs.
+ * Test B: an async rejection via setTimeout fails loudly (not silent exit 0).
+ *   A stray infra timer or silent-stub drain would never surface the rejection;
+ *   only a correctly drained realm with unhandledrejection wired to stderr shows it.
  */
-test.describe('child-realm async lifecycle: drain + loud-reject (child-realm-async-lifecycle)', () => {
-  test('work scheduled after top-level runs before the child is reaped', async ({
+test.describe('child-realm async lifecycle: true drain observables (child-realm-async-lifecycle)', () => {
+  test('post-top-level setTimeout work completes AND child drains promptly (no cap hang)', async ({
     page,
     browserName,
   }) => {
@@ -35,36 +38,42 @@ test.describe('child-realm async lifecycle: drain + loud-reject (child-realm-asy
     test.setTimeout(120_000);
     await page.goto('/');
 
-    // Wait for Terminal 1 to confirm the boot + install finished (vite running).
-    // At this point node_modules/.bin exists — safe to write shims there.
     await expect.poll(() => terminalBuffer(page), { timeout: 60_000 }).toMatch(/\$ vite/);
 
     await openShellTerminal(page);
 
-    // Write the JS file: schedules a setTimeout + microtask AFTER top-level.
-    // Pre-fix the child is reaped at top-level → neither callback ever fires.
+    // Write p1.js: schedules a setTimeout that writes a file AND logs after top-level.
     await runTerminalLine(
       page,
-      'echo \'setTimeout(()=>console.log("late-timeout"),0);Promise.resolve().then(()=>console.log("late-microtask"));\' > /workspace/t-drain.js',
+      'echo \'import fs from "node:fs"; setTimeout(function(){ fs.writeFileSync("/workspace/p1.txt","P1DISK"); console.log("P1CB_DONE"); }, 0);\' > /workspace/p1.js',
     );
 
-    // Write the .bin launcher shim pointing to the JS file.
-    // linker format: import() resolved from the shim dir (node_modules/.bin/),
-    // so ../../t-drain.js → /workspace/t-drain.js.
+    // Write the .bin shim (linker format: import() from the shim's dir).
     await runTerminalLine(
       page,
-      'echo \'import("../../t-drain.js");\' > /workspace/node_modules/.bin/drain-test',
+      'echo \'import("../../p1.js");\' > /workspace/node_modules/.bin/p1',
     );
 
-    // Run the shim — both deferred callbacks must have fired before the child exits.
-    await runTerminalLine(page, 'drain-test');
+    // Run p1 — the setTimeout callback must fire before the child is reaped.
+    await runTerminalLine(page, 'p1');
 
-    // Load-bearing assertions: both deferred outputs reached the terminal.
-    await expectTerminalContains(page, 'late-timeout', 20_000);
-    expect(await terminalBuffer(page)).toContain('late-microtask');
+    // Assert the deferred log reached the terminal.
+    await expectTerminalContains(page, 'P1CB_DONE', 20_000);
+
+    // THE DECISIVE SIGNAL: run a second command promptly. Pre-fix the shell is
+    // busy for ~30s (drain cap hang); post-fix the shell is free immediately.
+    // 8s timeout is generous — a drained child returns the prompt in <1s.
+    await runTerminalLine(page, 'cat /workspace/p1.txt');
+    await expectTerminalContains(page, 'P1DISK', 8_000);
+
+    // No cap-exceeded message anywhere in the buffer.
+    expect(await terminalBuffer(page)).not.toContain('exceeded keepalive drain cap');
   });
 
-  test('an async rejection after top-level fails loudly', async ({ page, browserName }) => {
+  test('an async rejection after top-level via setTimeout fails loudly (not silent exit 0)', async ({
+    page,
+    browserName,
+  }) => {
     test.skip(browserName !== 'chromium', 'child drain is COI/SAB-gated — chromium only');
     test.setTimeout(120_000);
     await page.goto('/');
@@ -73,22 +82,23 @@ test.describe('child-realm async lifecycle: drain + loud-reject (child-realm-asy
 
     await openShellTerminal(page);
 
-    // Write the JS file: an unhandled rejection after top-level.
-    // Pre-fix this was a silent exit-0 no-op.
+    // Write p2.js: fires an unhandled rejection inside a setTimeout.
     await runTerminalLine(
       page,
-      'echo \'Promise.reject(new Error("async-boom"));\' > /workspace/t-reject.js',
+      'echo \'setTimeout(function(){ Promise.reject(new Error("ASYNCBOOM")); }, 0);\' > /workspace/p2.js',
     );
 
+    // Write the .bin shim.
     await runTerminalLine(
       page,
-      'echo \'import("../../t-reject.js");\' > /workspace/node_modules/.bin/reject-test',
+      'echo \'import("../../p2.js");\' > /workspace/node_modules/.bin/p2',
     );
 
-    await runTerminalLine(page, 'reject-test');
+    // Run p2 — the rejection must surface in the terminal (not silent exit 0).
+    await runTerminalLine(page, 'p2');
 
-    // Load-bearing: the rejection message surfaces in the terminal (stderr →
-    // terminal). A stub/silent exit would leave the terminal without "async-boom".
-    await expectTerminalContains(page, 'async-boom', 20_000);
+    // Load-bearing: rejection message reaches the terminal via stderr.
+    // A silent exit-0 or stub drain would NOT show "ASYNCBOOM".
+    await expectTerminalContains(page, 'ASYNCBOOM', 20_000);
   });
 });

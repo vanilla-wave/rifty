@@ -218,7 +218,19 @@ function publishProcessSpec(spec: WorkerSpawnSpec): void {
 
 async function runEntry(entry: WorkerEntryDescriptor): Promise<void> {
   if (entry.kind === 'url') {
-    await import(/* @vite-ignore */ entry.url);
+    // Import via an indirectly-eval'd importer so NO bundler's static dynamic-
+    // import analysis sees a literal `import(<var>)` here. The kernel is layer-0
+    // and bundler-agnostic: a literal variable import() lets a bundler/dev-server
+    // inject its OWN client/helper module into this realm (e.g. an HMR ping that
+    // never clears) — but this realm must stay a faithful, infra-free process
+    // realm: it runs run-to-completion children that drain their event loop, and
+    // a stray infra timer would pin the loop forever. The indirect eval is
+    // invisible to static import lexers; behaviour is an identical dynamic import.
+    // (CSP: this realm already permits eval — see the new AsyncFunction below.)
+    // biome-ignore lint/security/noGlobalEval: indirect eval hides the import() literal from bundler static analysis — intentional, see comment above
+    // biome-ignore lint/style/noCommaOperator: (0, eval) is the standard idiom for indirect eval — avoids direct `eval` name which some bundlers still detect
+    const indirectImport = (0, eval)('u => import(u)') as (u: string) => Promise<unknown>;
+    await indirectImport(entry.url);
     return;
   }
   // Compile via `new AsyncFunction(code)` so top-level await works; append a
