@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Supervised dev-server child entry + config resolver** (P6b, ADR-0150).
+  `workers/dev-server-child-config.ts` is a pure, LIGHT-import resolver
+  (`resolveDevServerChildConfig`) that rebuilds the boot config (spec/cfg/port/root/slug/
+  fromScratch/ownerToken) from the spawn env, with loud throws on a missing required var —
+  unit-tested without pulling vite/sql.js. `workers/dev-server-child-bootstrap.ts` is the heavy
+  `kind:'url'` child entry the owner spawns to run the dev server out of the owner thread: it reads
+  the owner store over fs.* sync-RPC (`installRemoteSyncFs`, RIFTY_REMOTE_FS=1), boots via
+  `bootDevServer`, and talks to the owner over fork-IPC (`rifty:dev-ready`/`-error`/`-snapshot` out,
+  `rifty:dev-file-changed` in). `registerNetBuiltins`/`registerSqliteBuiltin` + the boot run INSIDE a
+  guarded entry fn (only when `readKernelProcessSpec() !== null`), so importing the module under
+  vitest has no heavy side effects. The owner spawn-to-child flip is a later task.
+
 ### Changed
 
 - **Extracted the co-resident dev-server boot core into `workers/dev-server-boot.ts`** (P6b prep,
