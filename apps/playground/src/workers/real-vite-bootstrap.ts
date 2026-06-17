@@ -23,7 +23,7 @@
  * paths (A-026's whole point is the page realm stops paying for them).
  */
 
-import { getKernelDispatcher, setKernelWorkerUrl } from '@riftydev/kernel';
+import { getKernelDispatcher, readKernelProcessSpec, setKernelWorkerUrl } from '@riftydev/kernel';
 import { dispatchToPort, listPorts, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { initSqliteEngine } from '@riftydev/net/sqlite/engine';
@@ -722,7 +722,17 @@ async function bootShellOwner(opts: {
 
 async function bootstrap(): Promise<void> {
   // Defaults match the page-realm path so non-overriding callers behave the same.
-  const env = globalThis.process.env;
+  // Read the spawn env from the kernel's PUBLISHED process spec — NOT
+  // `globalThis.process.env`. In the PROD bundle a stray top-level
+  // `installProcessGlobals()` side-effect (runtime-js/worker-entry, pulled into the
+  // owner chunk + evaluated at module-eval) swaps `globalThis.process` for a fresh
+  // EMPTY-env one BEFORE this runs, so process.env reads undefined and the worker
+  // URLs (no default) make the owner throw — green dev e2e, dead deploy. The kernel
+  // spec lives on a dedicated non-enumerable global the swap can't touch (the
+  // canonical source `installNodeProcessShim` itself reads). A copy is mutable +
+  // re-asserted onto the live process after `initBackend` for downstream readers.
+  // TODO(backlog: runtime-js/worker-entry-process-globals-side-effect)
+  const env = { ...(readKernelProcessSpec()?.env ?? globalThis.process.env) };
   const port = Number.parseInt(env.RIFTY_RFV_PORT ?? '5174', 10);
   const root = env.RIFTY_RFV_ROOT ?? '/workspace';
   // ADR-0148: ONE owner — the unified shell + co-resident dev server. The
@@ -768,6 +778,11 @@ async function bootstrap(): Promise<void> {
       }\n`,
     );
   }
+  // Re-assert the spawn env onto the live process: the `await` above is the window
+  // where the stray installProcessGlobals() side-effect can have swapped in a
+  // fresh empty-env process (see the snapshot note). Downstream `process.env`
+  // readers (node-server `process.env.PORT`, programs) must still see it.
+  globalThis.process.env = env;
 
   // Reverse mirror (ADR-0076): publish the project tree (sans node_modules) to
   // the page so its file explorer reflects this worker's real project.

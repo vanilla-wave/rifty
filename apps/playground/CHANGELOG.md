@@ -4,6 +4,26 @@
 
 ### Fixed
 
+- **Workspace owner boots on the PRODUCTION build (broken deploy, green checks).** In the prod
+  bundle a stray top-level `installProcessGlobals()` side-effect (`runtime-js/worker-entry`,
+  pulled into the owner chunk + evaluated at module-eval) swapped `globalThis.process` for a
+  fresh EMPTY-env one AFTER the kernel pre-entry hook set the spawn env, so the owner read
+  undefined worker URLs and threw `missing RIFTY_KERNEL_WORKER_URL / RIFTY_NODE_ENTRY_WORKER_URL`
+  → dev server never came up, explorer stuck "Loading the workspace…". `pnpm dev` never loaded
+  that module in the owner realm, so the dev e2e stayed green while the deploy was dead.
+  `real-vite-bootstrap` now reads its env from the kernel's published process spec
+  (`readKernelProcessSpec()`, a dedicated non-enumerable global the swap can't touch) and
+  re-asserts it onto the live process. Root cause filed:
+  `backlog: runtime-js/worker-entry-process-globals-side-effect`.
+
+### Added
+
+- **Prod-artifact smoke e2e (`playwright.prod.config.ts` + `pnpm test:e2e:prod`, wired into
+  CI).** Builds the app and serves it with `pnpm preview` (the Netlify COOP/COEP headers), then
+  asserts the workspace owner boots — COI is live, the co-resident dev server reaches `LIVE`, and
+  no `missing RIFTY_*_URL` boot error. Closes the green-checks-but-broken-deploy gap: the default
+  e2e runs against `pnpm dev`, so a prod-ONLY regression shipped green before.
+
 - **PTY: no more hung terminal on owner death (review #3a).** `pty-client.disconnect()` now
   settles EVERY waiter — in-flight runs resolve nonzero (unchanged), pending `openSession()`
   waiters resolve, and post-death `openSession()`/`exec()` settle immediately — instead of
