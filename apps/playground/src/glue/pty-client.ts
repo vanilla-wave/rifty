@@ -1,5 +1,5 @@
 /**
- * PAGE-side pty channel client (ADR-0146 P2). Mirror of the owner `pty-server`:
+ * PAGE-side pty channel client (ADR-0146 owner-resident shell). Mirror of the owner `pty-server`:
  * translates terminal-manager calls into `pty:*` page→owner frames over an
  * injected `send`, and correlates owner→page frames back to per-run callbacks
  * by `rid`. Pure — no Worker/kernel coupling; the realVite glue wires `send` to
@@ -49,7 +49,7 @@ type SessionState = { cwd: string; env: Record<string, string>; readyResolvers: 
 export interface PtyClientDeps {
   /** Posts a page→owner frame over the kernel IPC channel (wired by realVite). */
   send: (frame: PageToOwnerFrame) => void;
-  /** Owner→page dev-server state (ADR-0148 P4); the page derives its LIVE pill + preview port. */
+  /** Owner→page dev-server state (ADR-0148 co-resident dev server); the page derives its LIVE pill + preview port. */
   onDevServer?: (frame: PtyDevServer) => void;
 }
 
@@ -72,9 +72,9 @@ export interface PtyClient {
   signal(sid: string, rid: string): void;
   resize(sid: string, rid: string, cols: number, rows: number): void;
   closeSession(sid: string): void;
-  /** Ask the owner to re-publish dev-server state (P3 handshake on subscribe/reload). */
+  /** Ask the owner to re-publish dev-server state (explorer-reflects-owner-tree handshake on subscribe/reload). */
   requestDevServer(): void;
-  /** Tell the owner the current preset's dev-server config (ADR-0148 P4). */
+  /** Tell the owner the current preset's dev-server config (ADR-0148 co-resident dev server). */
   setDevConfig(config: {
     templateId: string;
     slug: string;

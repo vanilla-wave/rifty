@@ -19,7 +19,8 @@ export type DetectBackendFn = () => 'opfs' | 'memory';
 
 /**
  * Resolve the storage-badge descriptor by DETECTING the backend the persistent
- * workspace owner will use (D-acceptance A1/A2). The PAGE
+ * workspace owner will use (single store owner: exactly one realm owns the
+ * authoritative VFS store; the page holds no authoritative fs). The PAGE
  * installs NO VFS store: the owner worker is the single store owner and runs
  * `initBackend()` itself, so this constructs nothing — it only reports what the
  * cross-origin-isolated owner realm will pick (OPFS when available, else memory).

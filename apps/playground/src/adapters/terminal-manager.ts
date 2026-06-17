@@ -1,5 +1,6 @@
 /**
- * Terminal session manager — PAGE-side pty port client (ADR-0146 P2).
+ * Terminal session manager — PAGE-side pty port client; shell/npm/bin are
+ * owner-resident in the persistent workspace owner (ADR-0146).
  *
  * The `Shell`, cwd/env, npm-install and bin/`execSync` all live in the
  * persistent workspace-owner worker now; this manager keeps only PAGE-local UI

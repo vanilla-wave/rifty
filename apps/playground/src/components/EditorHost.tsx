@@ -53,8 +53,9 @@ export interface EditorHostProps {
   readonly vfs: FsOpsTarget;
   registerApi(api: EditorApi): void;
   onActive(info: { label: string; language: string; path?: string }): void;
-  /** Editor save → the OWNER store (ADR-0148 P4 SSoT): the owner is the single
-   *  source of truth; `content` is the new file text. */
+  /** Editor save → the OWNER store (ADR-0148, single-store-owner model): the
+   *  workspace owner is the single authoritative store; `content` is the new file
+   *  text. */
   onFileWritten?(path: string, content: string): void;
   onError?(message: string): void;
   readonly previewUrl?: Accessor<string | undefined>;
@@ -145,8 +146,8 @@ export function EditorHost(props: EditorHostProps) {
   function flushWrite(path: string): void {
     const m = models.get(path);
     if (!m) return;
-    // SSoT (ADR-0148 P4): the OWNER is the single store — the editor writes there,
-    // not the read-only owner-snapshot `vfs` it reads from.
+    // Single-store-owner (ADR-0148): the OWNER is the single authoritative store —
+    // the editor writes there, not the read-only owner-snapshot `vfs` it reads from.
     setTabs((t) => setDirty(t, path, false));
     props.onFileWritten?.(path, m.getValue());
   }

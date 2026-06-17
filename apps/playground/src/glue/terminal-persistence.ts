@@ -43,7 +43,7 @@ async function createOpfsStore(): Promise<TerminalHistoryVfs & TerminalStateVfs>
  * Serialize fire-and-forget writes onto a tail promise so they apply in call
  * order. The page saves history/state best-effort (`void saveHistory(...)`) on
  * every command; without ordering, OPFS I/O load from the co-resident owner
- * (P5, ADR-0148) can land an earlier full-array write AFTER a later one, dropping
+ * (owner OPFS persistence, ADR-0148) can land an earlier full-array write AFTER a later one, dropping
  * the most recent command. Each persistence instance gets one queue so history
  * and state writes (sharing the `.rifty/` dir) never race each other either.
  */
@@ -67,15 +67,17 @@ export async function createTerminalPersistence(
       backend: 'opfs',
       initialHistory: await loadTerminalHistoryAsync(opfs),
       // cwd is passed through as-is; the OWNER validates it against its tree on
-      // session open (A1/A2: the page holds no store to check — see reachableCwd
-      // in real-vite-bootstrap's makeShell).
+      // session open (single store owner; the page holds no authoritative fs to
+      // check, reading through ports — see reachableCwd in real-vite-bootstrap's
+      // makeShell).
       initialState: await loadTerminalStateAsync(opfs, defaultCwd),
       saveHistory: (records) => enqueue(() => saveTerminalHistoryAsync(opfs, records)),
       saveState: (state) => enqueue(() => saveTerminalStateAsync(opfs, state)),
     };
   } catch {
     // OPFS unavailable → degraded, session-local history only. The page holds no
-    // authoritative store (A1/A2), so this reads the empty lazy-default mirror;
+    // authoritative store (single store owner; the page reads through ports), so
+    // this reads the empty lazy-default mirror;
     // nothing persists across reload (honestly reported as `backend: 'memory'`).
     const workspaceFs = (deps.syncFs ?? syncMirror)();
     return {

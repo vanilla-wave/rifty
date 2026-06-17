@@ -4,7 +4,8 @@
  * The Solid render path itself isn't exercised here — that's e2e territory.
  * What we lock in is the contract every shipping `main.tsx` depends on:
  *
- *   1. `bootstrap` DETECTS the owner's backend, installing no page store (A1/A2).
+ *   1. `bootstrap` DETECTS the owner's backend, installing no page store
+ *      (single authoritative store owner; page holds no authoritative fs).
  *   2. `backendLabel` produces the user-facing string the badge renders.
  *
  * Together these guarantee the UI receives a well-formed descriptor sourced from

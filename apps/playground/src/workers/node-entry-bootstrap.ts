@@ -10,7 +10,8 @@
  * `import`/`require` resolved against the VFS, which the kernel's raw
  * `kind:'source'` (`new AsyncFunction`) path cannot do.
  *
- * VFS SELECTION (ADR-0150 P6a, KNOWN GAP closed): when `RIFTY_REMOTE_FS=1` the
+ * VFS SELECTION (ADR-0150 — foreground CLI runs in a supervised child that reads
+ * the owner fs over sync-RPC; KNOWN GAP closed): when `RIFTY_REMOTE_FS=1` the
  * child installs the owner store as its GLOBAL sync mirror via
  * `installRemoteSyncFs`. This ensures BOTH the module loader AND `node:fs`
  * builtins (which read `syncMirror()`) route to the owner over RPC — closing the
@@ -38,14 +39,15 @@ if (typeof entryPath !== 'string' || entryPath === '') {
 
 // A spawned Node CLI's console.log belongs on its stdout (kernel stdio port →
 // owner pty → terminal). Without this, console output vanishes into the worker
-// realm's devtools console (ADR-0150 P6a — cowsay etc. print via console.log).
+// realm's devtools console (ADR-0150 — cowsay etc. print via console.log).
 installConsole({
   stdout: (chunk) => proc.stdout.write(chunk),
   stderr: (chunk) => proc.stderr.write(chunk),
 });
 
-// ADR-0150 P6a: when spawned as a supervised child (RIFTY_REMOTE_FS=1), make the
-// owner store this realm's sync mirror — both the module loader AND node:fs read it.
+// ADR-0150: when spawned as a supervised child (RIFTY_REMOTE_FS=1) that reads the
+// owner fs over sync-RPC, make the owner store this realm's sync mirror — both the
+// module loader AND node:fs read it.
 if (proc.env.RIFTY_REMOTE_FS === '1') {
   const syncApi = readKernelSyncApi();
   if (syncApi === null) {

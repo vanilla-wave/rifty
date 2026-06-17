@@ -140,13 +140,13 @@ describe('pty-client', () => {
     ]);
   });
 
-  it('requestDevServer sends a pty:dev-server-req (P3 handshake)', () => {
+  it('requestDevServer sends a pty:dev-server-req (dev-server handshake)', () => {
     const { client, sent } = harness();
     client.requestDevServer();
     expect(sent).toEqual([{ type: 'pty:dev-server-req' }]);
   });
 
-  it('setDevConfig sends the current preset dev config (ADR-0148 P4)', () => {
+  it('setDevConfig sends the current preset dev config (ADR-0148 co-resident dev server in owner)', () => {
     const { client, sent } = harness();
     client.setDevConfig({ templateId: 'express-sqlite', slug: 'fullstack', setup: 'from-scratch' });
     expect(sent).toEqual([

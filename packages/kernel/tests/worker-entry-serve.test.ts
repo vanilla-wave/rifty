@@ -3,7 +3,7 @@ import { finalizeWorkerEntry } from '../src/worker-entry.ts';
 import type { WorkerSpawnSpec, WorkerStdioPorts } from '../src/worker-entry.ts';
 
 /**
- * ADR-0144 (P1 gate for ADR-0143 "D"): a `serve` worker whose entry finishes
+ * ADR-0144 (the serve-worker gate for ADR-0143 single-store-owner): a `serve` worker whose entry finishes
  * setup WITHOUT throwing must NOT be reaped — no exit message, no port close,
  * no `self.close()`. A run-to-completion worker (no `serve`) reaps as before;
  * a `serve` worker that THREW during setup still reaps (a crash must not

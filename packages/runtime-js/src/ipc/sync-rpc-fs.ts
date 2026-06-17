@@ -1,5 +1,6 @@
 /**
- * Child-side remote `FsSync` (ADR-0150 D P6a). Delegates each call to the owner
+ * Child-side remote `FsSync` (ADR-0150): a supervised child worker reads the
+ * single-store owner's fs over sync-RPC. Delegates each call to the owner
  * over the kernel sync-RPC ring (`KernelSyncApi.call`). Reads pull raw bytes
  * (binary reply) in `FS_RPC_CHUNK` slices keyed by offset; writes push base64
  * chunks. All calls block the child via `Atomics.wait` (inside `call`); legal
@@ -51,7 +52,7 @@ export class SyncRpcFsSync implements FsSync {
       }) as Uint8Array;
       if (chunk.length === 0) break; // truncated mid-read; return what we have
       // Defensive clamp: if the owner returns more bytes than requested (concurrent
-      // grow race), copy only what fits the originally-stat'd snapshot (ADR-0150 P6a).
+      // grow race), copy only what fits the originally-stat'd snapshot (ADR-0150).
       const usable = Math.min(chunk.length, size - offset);
       out.set(chunk.subarray(0, usable), offset);
       offset += usable;
@@ -109,8 +110,8 @@ export class SyncRpcFsSync implements FsSync {
 }
 
 /**
- * Install a {@link SyncRpcFsSync} as this realm's GLOBAL sync mirror (ADR-0150
- * P6a). A spawned child calls this so BOTH the module loader AND the `node:fs`
+ * Install a {@link SyncRpcFsSync} as this realm's GLOBAL sync mirror (ADR-0150).
+ * A spawned child calls this so BOTH the module loader AND the `node:fs`
  * builtins (which read `syncMirror()`) resolve against the owner store over
  * `fs.*` RPC. Returns the installed remote VFS.
  */

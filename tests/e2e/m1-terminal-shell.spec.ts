@@ -109,7 +109,7 @@ test.describe('M1 - terminal shell', () => {
     page,
   }) => {
     await page.goto('/');
-    // ADR-0148 P4: the default preset boots its dev server in the owner — wait up.
+    // ADR-0148: the default preset boots its dev server in the owner — wait up.
     await expectTerminalContains(page, 'starting dev server on port', 15_000);
 
     await openShellTerminal(page);

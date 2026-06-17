@@ -92,7 +92,8 @@ class RiftyProcess extends EventEmitter {
   readonly arch = NODE_PROCESS_IDENTITY.arch;
   readonly version = NODE_PROCESS_IDENTITY.version;
   // Shallow copy so per-process mutation (e.g. process.versions.x = …) works
-  // without throwing and doesn't leak across processes (ADR-0150 P6a).
+  // without throwing and doesn't leak across processes (ADR-0150: each
+  // foreground CLI in its own supervised child worker).
   readonly versions = { ...NODE_PROCESS_IDENTITY.versions };
   pid = 1;
   ppid = 0;

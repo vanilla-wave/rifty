@@ -1,5 +1,5 @@
 /**
- * Owner in-realm `BinExecutor` (ADR-0146 P2 S1) mechanism tests.
+ * Owner in-realm `BinExecutor` (ADR-0146 owner-resident shell, S1) mechanism tests.
  *
  * REAL `MemoryFsSync` + REAL `runNodeEntry` — no mock of the unit. A bin program
  * writes through the realm's global `process.stdout`/`process.stderr` (Node

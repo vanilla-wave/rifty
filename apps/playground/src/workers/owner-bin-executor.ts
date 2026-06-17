@@ -1,5 +1,5 @@
 /**
- * Owner in-realm `BinExecutor` (ADR-0146 P2 S1).
+ * Owner in-realm `BinExecutor` (ADR-0146 owner-resident shell, S1).
  *
  * The persistent workspace owner runs a shell-resolved
  * `node_modules/.bin/<name>` launcher shim IN ITS OWN REALM via `runNodeEntry`

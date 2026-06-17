@@ -122,7 +122,7 @@ const sampleFrame = (root: string): VfsSnapshotFrame => ({
   nodeModulesPresent: false,
 });
 
-describe('snapshot readiness handshake (P3)', () => {
+describe('snapshot readiness handshake', () => {
   it('owner publishes on a page snapshot-req (replaces the blind retry-storm)', async () => {
     const port = 59401;
     let published = 0;

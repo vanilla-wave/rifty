@@ -11,9 +11,10 @@
  * cross-realm preview port, minus streaming — a listing or a ≤128 KB file fits
  * one structured clone).
  *
- * Scope: the worker serves any path at/under the workspace `root` (ADR-0148 P4
- * widened this from node_modules-only — the owner is now the single source of
- * truth, so the editor opens owner-only project files over this same port).
+ * Scope: the worker serves any path at/under the workspace `root` (ADR-0148, the
+ * co-resident dev server inside the owner, widened this from node_modules-only —
+ * the owner is now the single source of truth, so the editor opens owner-only
+ * project files over this same port).
  * `normalizePath` collapses `..`, so an escape lands outside `root` and is
  * refused. Over-cap files reply `content: null` (the page surfaces "too large"),
  * never a silent empty read. Any worker-side throw (ENOENT, scope violation,
@@ -73,8 +74,9 @@ function nextRequestId(): string {
 
 /**
  * True when `normalizedPath` lies at/under the workspace `root`. Widened from a
- * node_modules-only segment guard to a general workspace read-port (ADR-0148 P4
- * SSoT): the editor opens owner-only project files on demand, not just packages.
+ * node_modules-only segment guard to a general workspace read-port (ADR-0148,
+ * single-source-owner): the editor opens owner-only project files on demand,
+ * not just packages.
  * `normalizePath` collapses `..`, so an escape (`…/../etc`) lands outside `root`
  * and is refused — the root boundary is the real anti-escape guard.
  */

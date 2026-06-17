@@ -69,7 +69,8 @@ describe('SyncRpcFsSync', () => {
   it('readFileBytesSync does not throw when readChunk returns more bytes than originally stat-d size (concurrent grow)', () => {
     // Regression: if a concurrent writer grows the file between statOrNull and a
     // readChunk call the owner may return a chunk larger than `size - offset`,
-    // which caused `out.set(chunk, offset)` to throw RangeError (P6a ADR-0150).
+    // which caused `out.set(chunk, offset)` to throw RangeError (child CLI reading
+    // owner fs over sync-RPC, ADR-0150).
     const N = 10;
     const extra = 5; // owner returns N+extra bytes on the first chunk call
     const fakeCall = (method: string, _payload: unknown): unknown => {

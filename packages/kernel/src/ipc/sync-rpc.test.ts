@@ -222,7 +222,7 @@ describe('SyncRpc JSON-frame decode over a SharedArrayBuffer view (browser SAB p
   });
 });
 
-describe('SyncRpc error shape — path/errno/syscall fields (P6a of ADR-0150)', () => {
+describe('SyncRpc error shape — path/errno/syscall fields (child CLI reads owner fs over sync-RPC, ADR-0150)', () => {
   // Regression: errorToShape only copied name/message/code — Node ErrnoException
   // fields (path, errno, syscall) were silently dropped at the dispatcher side,
   // so fs.readFileSync('/missing') over sync-RPC produced err.path === undefined.

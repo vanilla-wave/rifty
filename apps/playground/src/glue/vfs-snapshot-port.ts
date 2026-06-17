@@ -46,7 +46,7 @@ export interface VfsSnapshotFrame {
 }
 
 /**
- * Page→owner readiness handshake frame (ADR-0146 P3). The owner can't know when
+ * Page→owner readiness handshake frame (ADR-0146). The owner can't know when
  * the page has subscribed (one-way BroadcastChannel, no buffer); historically it
  * blind-republished on a `[300,1200,3000]ms` retry-storm. Instead the page posts
  * this once on subscribe and the owner replies with a fresh snapshot — pull, not
@@ -174,7 +174,7 @@ export function subscribeVfsSnapshot(
 
 /**
  * Page side. Ask the owner to (re)publish its snapshot now — the readiness
- * handshake (ADR-0146 P3). Posted once when the page subscribes; pairs with the
+ * handshake (ADR-0146). Posted once when the page subscribes; pairs with the
  * owner's startup publish so the initial sync is deterministic whichever side
  * comes up first, without the old blind-retry timers.
  */

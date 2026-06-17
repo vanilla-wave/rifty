@@ -49,7 +49,7 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
   });
 
   it('delivers an ipc:message that arrives before a message listener attaches', async () => {
-    // Regression (ADR-0146 P2): the shell-owner worker registers its
+    // Regression (ADR-0146, owner-resident shell): the shell-owner worker registers its
     // `process.on('message')` only after its heavy entry module finishes
     // loading, but the page sends `pty:open` immediately. The shim must buffer
     // the early frame and flush it on the first listener — exactly as the stdin

@@ -41,7 +41,7 @@ function createPreviewOwnerToken(): string {
 }
 
 /**
- * Wire the PAGE side of the co-resident preview (ADR-0148 P4). The owner worker
+ * Wire the PAGE side of the co-resident preview (ADR-0148). The owner worker
  * serves `/preview/<port>/` (its `setupPreviewBridge` + `serveCrossRealmPreview`,
  * keyed by `ownerToken`); this registers the matching page-side cross-realm
  * bridge so the SW route reaches the owner. Call it when the owner reports the
@@ -68,10 +68,11 @@ export function wirePreviewBridge(port: number, ownerToken: string): () => void 
 }
 
 /**
- * Page-side handle to the persistent workspace-owner worker (ADR-0146 P2).
+ * Page-side handle to the persistent workspace-owner worker — the owner-resident
+ * shell (ADR-0146).
  *
  * The owner hosts the realm-resident `Shell` instances keyed by session id AND
- * the co-resident dev server (ADR-0148 P4); this handle is the PAGE pty client
+ * the co-resident dev server (ADR-0148); this handle is the PAGE pty client
  * surface (`createPtyClient`) wired to the kernel fork-IPC channel. `close()`
  * kills the worker; `closed` settles on exit.
  */
@@ -79,7 +80,7 @@ export interface WorkspaceOwnerHandle {
   /** Stable id carried to the owner over `RIFTY_WORKSPACE_ID`. */
   readonly workspaceId: string;
   /**
-   * Token the owner uses to key its `/preview/<port>/` SW route (ADR-0148 P4).
+   * Token the owner uses to key its `/preview/<port>/` SW route (ADR-0148).
    * The page passes it to {@link wirePreviewBridge} when the dev server starts.
    */
   readonly previewOwnerToken: string;
@@ -107,14 +108,16 @@ export interface WorkspaceOwnerHandle {
    * Seed/overwrite a file in the owner realm's tree (a `rifty:vfs-write` frame,
    * ADR-0146). The owner-resident shell reads its OWN realm's `syncMirror()`, so
    * project files the page seeds must be pushed here too — else `cat`/`ls` miss
-   * preset files the template seed didn't carry (P3 makes the owner the single
-   * source of truth). Falls back to the snapshot-port vfs-write channel.
+   * preset files the template seed didn't carry (the explorer reflects the owner
+   * tree, so the owner is the single source of truth). Falls back to the
+   * snapshot-port vfs-write channel.
    */
   writeFile(path: string, content: string): void;
   /**
    * Download: ask the owner to serialize its whole source tree to a workspace
-   * archive JSON (D-acceptance A1/A2 — the PAGE keeps no authoritative store, so
-   * the archive reads the owner's tree, full content, shell/CLI writes included).
+   * archive JSON (single-store-owner model: the PAGE keeps no authoritative store
+   * and reads the owner's tree through ports, so the archive reads the owner's
+   * tree, full content, shell/CLI writes included).
    */
   exportArchive(): Promise<string>;
   /** Upload: hand the owner an archive JSON to apply to its tree. */
@@ -122,13 +125,13 @@ export interface WorkspaceOwnerHandle {
   /** Cached cwd/env for a session (from the latest `pty:exit`). */
   snapshot(sid: string): PtySessionSnapshot;
   /**
-   * Subscribe to owner→page dev-server state (ADR-0148 P4): the co-resident
+   * Subscribe to owner→page dev-server state (ADR-0148): the co-resident
    * dev server's start/stop + listen port. Returns an unsubscribe. The page
    * derives its LIVE pill + preview iframe URL from these frames.
    */
   onDevServer(cb: (frame: PtyDevServer) => void): () => void;
   /**
-   * Tell the owner the current preset's dev-server config (ADR-0148 P4) — the
+   * Tell the owner the current preset's dev-server config (ADR-0148) — the
    * persistent owner is spawned once, so a preset switch must update which
    * template/runtime the next co-resident dev server boots. Send before the dev line.
    */
@@ -165,7 +168,8 @@ export interface WorkspaceOwnerOptions {
 }
 
 /**
- * Spawn the persistent workspace-owner worker in shell mode (ADR-0146 P2) and
+ * Spawn the persistent workspace-owner worker in shell mode — owner-resident
+ * shell (ADR-0146) — and
  * return its PAGE pty client surface.
  *
  * The worker runs `real-vite-bootstrap` with `RIFTY_OWNER_MODE='shell'`: it
@@ -186,7 +190,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   const slug = opts.slug ?? template.id;
   const workspaceId = opts.workspaceId ?? createPreviewOwnerToken();
   const snapshotPort = WORKSPACE_OWNER_SNAPSHOT_PORT;
-  // Keys the owner's `/preview/<port>/` SW route (ADR-0148 P4); shared with the
+  // Keys the owner's `/preview/<port>/` SW route (ADR-0148); shared with the
   // worker via env and with the page via `wirePreviewBridge`.
   const previewOwnerToken = createPreviewOwnerToken();
   const log = opts.onLog ?? (() => {});
@@ -216,14 +220,15 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
         // Dedicated snapshot/nm BroadcastChannel key (not a dev-server port);
         // the page subscribes on `handle.snapshotPort` to read the owner tree.
         RIFTY_RFV_PORT: String(snapshotPort),
-        // ADR-0148 P4: the owner's co-resident dev server keys its preview SW
+        // ADR-0148: the owner's co-resident dev server keys its preview SW
         // route on this token; the page passes it to `wirePreviewBridge`.
         RIFTY_PREVIEW_OWNER_TOKEN: previewOwnerToken,
         // Node idiom for node-server template entries (`process.env.PORT`): the
         // co-resident dev server listens on the template's default port.
         PORT: String(template.defaultPort),
-        // ADR-0150 P6a: worker URLs the owner needs to recursively spawn each
-        // foreground CLI as a supervised child (kernel realm + node-entry boot).
+        // ADR-0150: worker URLs the owner needs to recursively spawn each
+        // foreground CLI as a supervised child reading the owner fs over
+        // sync-RPC (kernel realm + node-entry boot).
         RIFTY_KERNEL_WORKER_URL: kernelWorkerUrl,
         RIFTY_NODE_ENTRY_WORKER_URL: nodeEntryWorkerUrl,
       },
@@ -278,9 +283,10 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     if (isOwnerToPage(message.frame)) client.onFrame(message.frame);
   });
 
-  // Readiness handshake (ADR-0146 P3 / ADR-0148): request the current dev-server
+  // Readiness handshake (ADR-0146 / ADR-0148): request the current dev-server
   // state on spawn so a `pty:dev-server` push that predates our listener is
-  // recoverable (the dropped-frame class P2 hit) — never a one-shot push.
+  // recoverable (the dropped-frame class the owner-resident shell hit) — never a
+  // one-shot push.
   client.requestDevServer();
 
   let exited = false;
@@ -294,9 +300,10 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     resolveClosed(typeof code === 'number' ? code : null);
   });
 
-  // Page-side client for the owner's archive export/import bridge (A1/A2): the
-  // owner serializes/applies the workspace against its OWN syncMirror, so the
-  // page never needs an authoritative store to download/upload a workspace.
+  // Page-side client for the owner's archive export/import bridge (single store
+  // owner; the page holds no authoritative fs): the owner serializes/applies the
+  // workspace against its OWN syncMirror, so the page never needs an
+  // authoritative store to download/upload a workspace.
   const archiveBridge: WorkspaceArchiveBridge = bridgeWorkspaceArchive(snapshotPort);
 
   return {

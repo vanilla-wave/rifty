@@ -84,8 +84,8 @@ describe('terminal persistence adapter', () => {
     expect(reloaded.initialHistory.map((item) => item.command)).toEqual(['pwd']);
   });
 
-  it('serializes saves so a slow earlier write cannot clobber a later one (P5 / OPFS race)', async () => {
-    // Regression (ADR-0148 P5): the OPFS owner's write-through adds OPFS I/O load
+  it('serializes saves so a slow earlier write cannot clobber a later one (owner OPFS-persistence race)', async () => {
+    // Regression (ADR-0148, owner OPFS persistence): the OPFS owner's write-through adds OPFS I/O load
     // that can REORDER the page's fire-and-forget history saves — an earlier
     // save(records=[a]) landing AFTER a later save(records=[a,b]) drops `b`
     // (e2e `terminal-persistence … OPFS after reload` flaked, dropping `pwd`).
@@ -136,7 +136,7 @@ describe('terminal persistence adapter', () => {
     expect(reloaded.initialHistory.map((item) => item.command)).toEqual(['first', 'second']);
   });
 
-  it('passes the persisted cwd through as-is (cwd validation moved to the owner, A1/A2)', async () => {
+  it('passes the persisted cwd through as-is (cwd validation moved to the single store owner; page holds no authoritative fs)', async () => {
     // The PAGE no longer holds a store to validate against; the OWNER resets an
     // unreachable cwd on session open (see `reachable-cwd` + makeShell). So the
     // adapter must preserve the persisted cwd verbatim, not pre-reset it.

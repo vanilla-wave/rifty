@@ -171,7 +171,8 @@ class WorkerNodeProcessShim extends EventEmitter implements NodeProcessShim {
   readonly arch = NODE_PROCESS_IDENTITY.arch;
   readonly version = NODE_PROCESS_IDENTITY.version;
   // Shallow copy so per-process mutation (e.g. process.versions.x = …) works
-  // without throwing and doesn't leak across processes (ADR-0150 P6a).
+  // without throwing and doesn't leak across processes — each foreground CLI
+  // runs in its own supervised child worker (ADR-0150).
   readonly versions = { ...NODE_PROCESS_IDENTITY.versions };
   readonly title = NODE_PROCESS_IDENTITY.title;
   readonly env: Readonly<Record<string, string>>;

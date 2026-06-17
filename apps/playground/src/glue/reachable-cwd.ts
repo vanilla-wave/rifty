@@ -1,6 +1,8 @@
 /**
  * Resolve a restored terminal cwd against the tree that actually holds it
- * (D-acceptance A1/A2). The owner realm validates a persisted/seeded cwd against
+ * (single-store-owner model: exactly one authoritative store owner, and the page
+ * reads through ports rather than holding its own authoritative fs). The owner
+ * realm validates a persisted/seeded cwd against
  * its OWN `syncMirror()` and falls back to the workspace root when the path is
  * gone (deleted since the last session) — this replaced the PAGE-side check that
  * read a now-removed page authoritative store.

@@ -1,6 +1,7 @@
 /**
  * Tests for the owner-served workspace-archive export/import bridge
- * (D-acceptance A1/A2 — owner is the single store owner).
+ * (single-store-owner acceptance: exactly one authoritative store owner, and
+ * the page holds no authoritative fs — it reads through ports).
  *
  * Like the sibling request/response bridge (`node-modules-port.test.ts`), both
  * ends run in the same Node realm over distinct `BroadcastChannel` instances

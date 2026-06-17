@@ -1,6 +1,7 @@
 /**
  * Owner-served workspace-archive export/import bridge
- * (D-acceptance A1/A2 — owner is the single store owner).
+ * (single-store-owner model: exactly one authoritative store owner, and the
+ *  page holds no authoritative fs — it reads through this port).
  *
  * Request/response complement to the one-way snapshot push and the sibling
  * read bridge ({@link ./node-modules-port.ts}): the PAGE asks the OWNER to

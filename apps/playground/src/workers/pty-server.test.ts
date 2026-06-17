@@ -129,7 +129,7 @@ describe('pty-server', () => {
     expect(reqs).toBe(1);
   });
 
-  it('routes pty:dev-config to onDevConfig (ADR-0148 P4 preset switch)', () => {
+  it('routes pty:dev-config to onDevConfig (ADR-0148 owner-resident dev server preset switch)', () => {
     const configs: unknown[] = [];
     const server = createPtyServer({
       send: () => {},

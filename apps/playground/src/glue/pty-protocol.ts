@@ -50,7 +50,7 @@ export type PtyExit = {
   error?: string;
 };
 
-/** Co-resident dev-server lifecycle (ADR-0148 P4): not tied to a run/`rid`. */
+/** Co-resident dev-server lifecycle (ADR-0148, dev server runs inside the owner): not tied to a run/`rid`. */
 export type DevServerStatus = 'starting' | 'running' | 'stopped';
 export type PtyDevServer = {
   type: 'pty:dev-server';
@@ -62,10 +62,10 @@ export type PtyDevServer = {
   /** Non-fatal start failure surfaced to the page pill (`status` stays 'stopped'). */
   error?: string;
 };
-/** Page asks the owner to re-publish dev-server state (P3 handshake discipline). */
+/** Page asks the owner to re-publish dev-server state (owner-republishes-on-request handshake discipline). */
 export type PtyDevServerReq = { type: 'pty:dev-server-req' };
 /**
- * Page tells the owner the CURRENT preset's dev-server config (ADR-0148 P4). The
+ * Page tells the owner the CURRENT preset's dev-server config (ADR-0148, dev server runs inside the owner). The
  * persistent owner is spawned once with the default template, so a preset switch
  * must update which runtime/template the next co-resident dev server boots.
  */

@@ -29,7 +29,8 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     });
     // Let the app settle (terminal wired, initial boot command issued) before
     // interacting — clicks during the mount storm can land on replaced nodes.
-    // ADR-0148 P4: the default vite preset boots its dev server in the owner.
+    // ADR-0148: the co-resident dev server runs inside the owner; the default
+    // vite preset boots its dev server there.
     await expectTerminalContains(page, 'starting dev server on port', 15_000);
 
     // Select the demo preset from the template switcher and confirm it took:
@@ -41,7 +42,8 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     });
     // From-scratch preset (ADR-0135, revised): the visible `npm install` runs in
     // the OWNER realm (which serves the preview), streaming each package to the
-    // terminal — `npm run dev` boots the node server co-resident (ADR-0148 P4).
+    // terminal — `npm run dev` boots the node server co-resident in the owner
+    // (ADR-0148).
     await expectTerminalContains(page, 'npm run dev', 150_000);
     await expectTerminalContains(page, 'npm: + express@', 120_000);
 

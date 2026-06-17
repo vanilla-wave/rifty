@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(fileURLToPath(new URL('./realVite.ts', import.meta.url)), 'utf8');
 
-describe('real Vite page-to-owner updates (ADR-0148 P4)', () => {
+describe('real Vite page-to-owner updates (ADR-0148: co-resident dev server runs inside the owner)', () => {
   it('sends VFS updates over kernel worker IPC before falling back to BroadcastChannel', () => {
     // The page seeds/writes the OWNER store via the owner handle's writeFile.
     expect(source).toContain("worker.send({ type: 'rifty:vfs-write', frame })");

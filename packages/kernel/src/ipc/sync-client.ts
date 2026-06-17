@@ -66,7 +66,7 @@ export class SyncRpcClient {
     const errInfo = reply.error ?? { name: 'Error', message: 'unknown error' };
     const err = new Error(errInfo.message);
     err.name = errInfo.name;
-    // Re-attach all ErrnoException fields when present (P6a of ADR-0150).
+    // Re-attach all ErrnoException fields when present (child CLI reads owner fs over sync-RPC, ADR-0150).
     // Object.assign so they land as own enumerable properties, matching Node's ErrnoException.
     const extras: Record<string, string | number> = {};
     if (errInfo.code !== undefined) extras.code = errInfo.code;

@@ -1,8 +1,10 @@
 /**
  * Tests for `reachableCwd` — the owner-side guard that a restored terminal cwd
- * still exists as a directory in the OWNER tree (D-acceptance A1/A2: cwd
- * validation moved off the PAGE store, where it read a now-removed authoritative
- * mirror, into the owner realm that actually holds the tree).
+ * still exists as a directory in the OWNER tree (single-store-owner model:
+ * exactly one realm owns the authoritative store, and the page holds no
+ * authoritative fs — it reads through ports; cwd validation moved off the PAGE
+ * store, where it read a now-removed authoritative mirror, into the owner realm
+ * that actually holds the tree).
  */
 
 import { describe, expect, it } from 'vitest';

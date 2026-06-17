@@ -1,5 +1,6 @@
 /**
- * Co-resident dev-server lifecycle (ADR-0148 P4). Pure state machine: owns the
+ * Co-resident dev-server lifecycle: the dev server runs inside the workspace
+ * owner (ADR-0148). Pure state machine: owns the
  * status transitions, the single-active guard, the owner→page `pty:dev-server`
  * frame emission, and the block-until-SIGINT semantics. The actual worker-realm
  * boot (vite/node `createServer` + preview/HMR bridges) is INJECTED (`boot`) so

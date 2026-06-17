@@ -102,7 +102,7 @@ export interface WorkerSpawnSpec {
    * timers keep it live) until the parent terminates it. A run-to-completion
    * process (`serve` absent/false) reaps the instant its entry settles, as
    * before. Replaces the `await new Promise<never>(() => {})` keep-alive hack
-   * (the ADR-0077 follow-up; P1 gate for ADR-0143 "D").
+   * (the ADR-0077 follow-up; the serve-worker gate for ADR-0143 single-store-owner).
    */
   readonly serve?: boolean;
 }

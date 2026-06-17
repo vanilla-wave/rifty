@@ -5,7 +5,7 @@
  * adds a full Readable/Writable hierarchy. The read path prefers the sync
  * mirror's content cache (ADR-0072 — authoritative + fully in-memory on OPFS;
  * the async `Vfs.openReadable` disk stream stalls under cross-realm serving,
- * ADR-0148 P5), chunked via `queueMicrotask`; `Vfs.openReadable` (ADR-0020
+ * ADR-0148 owner OPFS persistence), chunked via `queueMicrotask`; `Vfs.openReadable` (ADR-0020
  * phase 2 true streaming) is the fallback for paths the sync view lacks. Both
  * paths preserve the existing event order (`open` → `data*` → `end` → `close`).
  */
@@ -76,7 +76,7 @@ class FileReadStream extends EventEmitter {
     // Prefer the sync mirror: on OPFS its content cache (ADR-0072) is the
     // authoritative, fully-in-memory view, while the async disk surface
     // (OpfsVfs.openReadable → File.stream()) can stall under cross-realm serving
-    // (express.static → serve-static → send) and 502 static files (ADR-0148 P5).
+    // (express.static → serve-static → send) and 502 static files (ADR-0148 owner OPFS persistence).
     // The cache already holds the whole file, so no streaming benefit is lost.
     // openReadable streaming stays the fallback for paths the sync view lacks
     // (e.g. an async-only write).

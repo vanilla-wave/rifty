@@ -51,7 +51,7 @@ test.describe('Terminal persistence', () => {
     // owner the boot tree-restore keeps its single thread busy, so a command typed
     // while the previous one is still running lands in that process's stdin and is
     // lost (correct terminal semantics — matches owner-shell-cowsay's install gate;
-    // owner responsiveness during boot is a P6 concern). On the memory backend the
+    // owner responsiveness during boot is a separate concern). On the memory backend the
     // command returned instantly, so back-to-back typing happened to work.
     await expect
       .poll(async () => (await readHistory())?.records.map((record) => record.command) ?? [])

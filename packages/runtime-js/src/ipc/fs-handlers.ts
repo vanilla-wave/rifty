@@ -1,5 +1,7 @@
 /**
- * Owner-side `fs.*` sync-RPC handlers (ADR-0150 D P6a). Mirror of
+ * Owner-side `fs.*` sync-RPC handlers (ADR-0150): supervised child CLIs read
+ * the single owned store over sync-RPC; owner stays a free async supervisor.
+ * Mirror of
  * `installRuntimeJsExecSyncHandler`: register handlers on the kernel dispatcher
  * that read/write the owner's `syncMirror()` so a supervised child reads the
  * one owned store. Reads reply with raw bytes (binary frame); writes accept

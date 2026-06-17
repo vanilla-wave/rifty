@@ -1,7 +1,7 @@
 /**
  * Regression: spawned-child process was missing Node identity fields (versions/platform/…).
  * cowsay → yargs reads `process.versions.electron` → TypeError if versions=undefined.
- * (ADR-0150 P6a)
+ * (ADR-0150: supervised child worker running a foreground CLI)
  */
 import type { KernelProcessSpec } from '@riftydev/kernel';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -37,7 +37,7 @@ afterEach(() => {
   });
 });
 
-describe('installNodeProcessShim identity fields (ADR-0150 P6a)', () => {
+describe('installNodeProcessShim identity fields (ADR-0150: supervised child worker)', () => {
   it('exposes versions object so process.versions.electron is defined-access-safe', () => {
     const proc = installNodeProcessShim(spec());
     // Exact cowsay/yargs trigger: reading .electron on undefined versions → TypeError

@@ -13,7 +13,8 @@ describe('real Vite bootstrap preview routing', () => {
   });
 
   it('forwards editor VFS writes to the co-resident dev server HMR + republishes', () => {
-    // ADR-0148 P4: the owner's single vfs-write handler forwards editor writes to
+    // ADR-0148 (co-resident dev server runs inside the store owner): the owner's
+    // single vfs-write handler forwards editor writes to
     // the running dev server's HMR (the virtual FS fires no real watcher events).
     expect(source).toContain('const onVfsWrite = (path: string): void');
     expect(source).toContain('devServer.notifyFileChanged(path)');
@@ -95,11 +96,12 @@ describe('node-server runtime branch', () => {
   });
 });
 
-describe('OPFS persistence wiring (P5)', () => {
+describe('OPFS persistence wiring (owner OPFS persistence)', () => {
   it('wires the OPFS-or-memory backend before serving the owner (initBackend)', () => {
-    // The owner is the workspace source-of-truth post-P4 but was the only worker
-    // realm not calling initBackend() → memory-only, losing the tree on reload.
-    // P5 applies the established OPFS-boot pattern (runtime-js/worker-entry.ts).
+    // The owner is the workspace source-of-truth once the dev server is co-resident
+    // in it, but was the only worker realm not calling initBackend() → memory-only,
+    // losing the tree on reload. Owner OPFS persistence applies the established
+    // OPFS-boot pattern (runtime-js/worker-entry.ts).
     // OPFS write-through (ADR-0072) is the durability mechanism on its own — no
     // explicit per-command flush barrier (it only coupled command latency to the
     // unrelated boot write-through queue).

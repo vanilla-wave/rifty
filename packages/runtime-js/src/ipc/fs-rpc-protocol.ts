@@ -1,5 +1,6 @@
 /**
- * Shared `fs.*` sync-RPC protocol (ADR-0150 D P6a). Owner serves these methods
+ * Shared `fs.*` sync-RPC protocol (ADR-0150): child CLI worker reads the
+ * store owner's fs over sync-RPC. Owner serves these methods
  * on the kernel dispatcher; the child's SyncRpcFsSync calls them. Reads/writes
  * chunk under the 1 MiB SAB ring (ADR-0084 #19): read replies are raw bytes
  * (binary frame), write requests carry base64 in JSON (the request frame is

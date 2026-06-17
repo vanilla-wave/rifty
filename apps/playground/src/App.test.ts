@@ -20,9 +20,10 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain("['vite']");
   });
 
-  it('holds no page-side authoritative VFS store — the owner is the single store (A1/A2)', () => {
-    // D-acceptance A1/A2 regression guard: the page must not construct or write
-    // a local syncMirror; seeding + archive + editor writes all go to the owner.
+  it('holds no page-side authoritative VFS store — the owner is the single store (one authoritative owner; page reads through ports)', () => {
+    // Single-store-owner regression guard (exactly one authoritative store; page
+    // holds no authoritative fs): the page must not construct or write a local
+    // syncMirror; seeding + archive + editor writes all go to the owner.
     expect(source).not.toContain('const vfs = syncMirror()');
     expect(source).not.toContain('writeText(vfs');
     expect(source).not.toContain("from '@riftydev/vfs/internal'");
@@ -34,8 +35,9 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('const activeTemplate = ');
     expect(source).toContain('resolveProjectSpec(');
     expect(source).toContain('.templateId');
-    // ADR-0148 P4: the ONE workspace owner spawns with the ACTIVE template (it
-    // hosts both the shell and the co-resident dev server) — no per-run spawn.
+    // ADR-0148 (co-resident dev server in the owner): the ONE workspace owner
+    // spawns with the ACTIVE template (it hosts both the shell and the
+    // co-resident dev server) — no per-run spawn.
     expect(source).toContain('template: activeTemplate()');
     expect(source).not.toContain('startRealVite');
   });
@@ -48,7 +50,7 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('<title>rifty preview ${port}</title>');
   });
 
-  it('routes editor + program writes to the owner (SSoT, ADR-0148 P4)', () => {
+  it('routes editor + program writes to the owner (SSoT, ADR-0148 co-resident dev server in the owner)', () => {
     // The preview worker is gone; editor/program edits flow to the ONE owner so
     // the co-resident dev server HMR-updates against the same store it serves.
     expect(source).toContain('function writeWorkspaceFile(path: string, content: string)');
@@ -68,8 +70,9 @@ describe('App terminal startup wiring', () => {
   });
 
   it('drives dev-server readiness from the owner pty:dev-server frame, not a stdout log-match', () => {
-    // ADR-0148 P4: the owner reports start/stop + port via a structured frame
-    // (P3 handshake discipline) — no stdout string-match, no one-shot push.
+    // ADR-0148 (co-resident dev server in the owner): the owner reports
+    // start/stop + port via a structured frame (owner-tree republish handshake
+    // discipline, ADR-0146) — no stdout string-match, no one-shot push.
     expect(source).toContain('workspaceOwner.onDevServer(');
     expect(source).toContain('setDevServerStatus(frame.status)');
     expect(source).not.toContain('node_modules read bridge ready');
@@ -108,9 +111,9 @@ describe('App terminal startup wiring', () => {
     );
   });
 
-  // ADR-0148 (P4): the dev server runs IN the owner — EVERY line (npm, vite,
-  // `npm run dev`) goes to the owner pty channel; the page no longer intercepts a
-  // dev line or hosts a per-run preview worker.
+  // ADR-0148 (co-resident dev server in the owner): the dev server runs IN the
+  // owner — EVERY line (npm, vite, `npm run dev`) goes to the owner pty channel;
+  // the page no longer intercepts a dev line or hosts a per-run preview worker.
   it('routes every line — including the dev server — to the owner pty channel', () => {
     expect(source).toContain('return manager.runLine(id, line, dims)');
     expect(source).not.toContain('dispatchDevServerLine');
@@ -135,8 +138,9 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain('saveState({ cwd: session.cwd, env: {} })');
   });
 
-  it('routes workspace archive export and import through the owner (A1/A2)', () => {
-    // D-acceptance A1/A2: the archive reads/writes the OWNER tree (the single
+  it('routes workspace archive export and import through the owner (one authoritative owner; page reads through ports)', () => {
+    // Single-store-owner invariant (one authoritative store; page holds no
+    // authoritative fs): the archive reads/writes the OWNER tree (the single
     // store), not a page copy.
     expect(source).toContain('workspaceOwner.exportArchive()');
     expect(source).toContain('workspaceOwner.importArchive(');

@@ -1,5 +1,6 @@
 /**
- * Owner-side pty server (ADR-0146 P2). Hosts a `Shell` per session in the
+ * Owner-side pty server (ADR-0146 — shell/npm/bin co-resident in the owner).
+ * Hosts a `Shell` per session in the
  * persistent workspace-owner worker and dispatches the page's `pty:*` frames
  * against it. Streams stdout/stderr back as `pty:chunk` frames, then a single
  * `pty:exit` (carrying the post-run cwd/env so the page's prompt cache stays
@@ -75,13 +76,15 @@ export interface PtyServerDeps {
   /** Builds a session Shell (owner npm builtin + in-realm execBin), seeded with cwd/env. */
   readonly makeShell: (seed?: ShellSeed) => Shell;
   /**
-   * Owner re-publishes dev-server state on a page request (ADR-0148 P4). Wired by
+   * Owner re-publishes dev-server state on a page request (ADR-0148 — co-resident
+   * dev server runs inside the owner). Wired by
    * the bootstrap to the dev-server controller; the pty-server stays
    * dev-server-agnostic (it only forwards the request).
    */
   readonly onDevServerReq?: () => void;
   /**
-   * Page updated the current preset's dev-server config (ADR-0148 P4) — the next
+   * Page updated the current preset's dev-server config (ADR-0148 — owner-resident
+   * dev server) — the next
    * co-resident dev server boots this template/runtime. Forwarded to the bootstrap.
    */
   readonly onDevConfig?: (config: {

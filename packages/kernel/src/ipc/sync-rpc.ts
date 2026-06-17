@@ -79,7 +79,7 @@ export interface SyncRpcReply {
     readonly name: string;
     readonly message: string;
     readonly code?: string;
-    /** Node ErrnoException fields — present only when the source error has them (P6a of ADR-0150). */
+    /** Node ErrnoException fields — present only when the source error has them; child CLI reads the owner fs over sync-RPC, so fs errno detail must survive the wire (ADR-0150). */
     readonly errno?: number;
     readonly syscall?: string;
     readonly path?: string;
