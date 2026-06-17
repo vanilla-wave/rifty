@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 import {
   expectTerminalContains,
@@ -5,6 +6,10 @@ import {
   runTerminalLine,
   terminalBuffer,
 } from './helpers/playground.ts';
+
+// Repo root for the Vite `/@fs/<abs>` dev-server transform URL Test C fetches.
+// Same idiom as sandbox-fs-rpc.spec.ts.
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url)).replace(/\/$/, '');
 
 /**
  * Child-realm async-lifecycle e2e — TRUE drain observables (chromium only, COI/SAB-gated).
@@ -39,11 +44,19 @@ import {
  *   stderr shows it.
  *
  * Test C (deterministic contamination guard — cache-robust): fetches the LIVE
- *   Vite dev-server transform of the kernel worker-entry chunk and asserts it
- *   contains NO `/@vite/client` import and NO `__vite__injectQuery` helper.
- *   Deterministic: reverting the fix re-introduces both markers on a fresh server →
- *   this test goes RED regardless of transform cache state (it reads the live
- *   transform, not a cached one). Immune to the timing-window in Test A.
+ *   Vite dev-server transform of `@riftydev/kernel`'s `worker-entry.ts` — the
+ *   module Vite ACTUALLY injects `@vite/client` into when its runEntry holds a
+ *   statically-analyzable `import(<var>)`. Asserts the transform contains NO
+ *   `/@vite/client` import and NO `__vite__injectQuery` helper. Deterministic:
+ *   reverting the fix re-introduces both markers on a fresh server → this test
+ *   goes RED regardless of transform cache state (it reads the live transform,
+ *   not a cached one). Immune to the timing-window in Test A.
+ *
+ *   TARGET: kernel is a workspace package OUTSIDE the playground Vite root, so
+ *   Vite serves its source via `/@fs/<abs>/packages/kernel/src/worker-entry.ts`.
+ *   The injection lands in the IMPORTED module's transform, not the playground
+ *   importer (`/src/workers/kernel-worker-entry.ts`) — fetching the importer is
+ *   a FALSE guard (it never carries the markers, fix or no fix).
  */
 test.describe('child-realm async lifecycle: true drain observables (child-realm-async-lifecycle)', () => {
   test('post-top-level setTimeout work completes AND child drains promptly (no cap hang)', async ({
@@ -118,7 +131,7 @@ test.describe('child-realm async lifecycle: true drain observables (child-realm-
     await expectTerminalContains(page, 'ASYNCBOOM', 20_000);
   });
 
-  test('kernel worker-entry chunk served by dev server contains no @vite/client injection (contamination guard)', async ({
+  test('kernel worker-entry transform served by dev server contains no @vite/client injection (contamination guard)', async ({
     page,
     request,
     browserName,
@@ -129,16 +142,21 @@ test.describe('child-realm async lifecycle: true drain observables (child-realm-
     await page.goto('/');
     await expect.poll(() => terminalBuffer(page), { timeout: 60_000 }).toMatch(/\$ vite/);
 
-    // Fetch the Vite dev-server transform of the kernel worker-entry module.
-    // `kernel-worker-entry.ts` is the playground's worker entry chunk — it lives
-    // inside the Vite root (apps/playground) so it is served at the root-relative
-    // path below. Vite transforms it on GET; the response is the processed source.
+    // Fetch the LIVE Vite dev-server transform of the KERNEL worker-entry module —
+    // the one Vite injects `@vite/client` into. Kernel is a workspace package
+    // outside the playground Vite root, so Vite serves its source via the absolute
+    // `/@fs/<abs>` path (same idiom as sandbox-fs-rpc.spec.ts). Vite transforms it
+    // on GET; the response body is the processed source.
     //
-    // If @vite/client is injected (pre-fix: literal `import(entry.url)` in
-    // worker-entry.ts), the transform contains `import "/@vite/client"` and the
-    // `__vite__injectQuery` helper. The indirect-eval fix makes the lexer blind to
-    // that import() — no injection → neither marker appears.
-    const res = await request.get('/src/workers/kernel-worker-entry.ts');
+    // Pre-fix (literal `import(entry.url)` in worker-entry.ts runEntry) Vite's
+    // static lexer sees the dynamic import and injects `import "/@vite/client"` +
+    // wraps the specifier in `__vite__injectQuery(...)`. The indirect-eval fix
+    // hides the `import(` from the lexer → no injection → neither marker appears.
+    //
+    // NOTE: the playground importer `/src/workers/kernel-worker-entry.ts` never
+    // carries these markers (the injection lands in the IMPORTED kernel module,
+    // not the importer) — asserting against it would be a FALSE guard.
+    const res = await request.get(`/@fs${repoRoot}/packages/kernel/src/worker-entry.ts`);
     expect(res.status()).toBe(200);
     const src = await res.text();
 
