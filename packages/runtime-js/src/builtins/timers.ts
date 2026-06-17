@@ -18,6 +18,11 @@ const hostClearInterval = globalThis.clearInterval.bind(globalThis);
 const activeTimeouts = new Set<unknown>();
 const activeIntervals = new Set<unknown>();
 
+// KEEPALIVE GAP (explicit, not silent): these wrappers ref EVERY timer, but do
+// NOT yet honor a Node Timeout's .unref()/.ref() — an .unref()'d refed timer that
+// Node lets the loop exit through will instead hold the realm alive until the
+// drain cap. Faithful fix (Node-shape Timeout handle) tracked:
+// TODO(backlog: runtime-js/timer-unref-keepalive)
 function keepaliveSetTimeout(
   fn: (...a: unknown[]) => void,
   ms?: number,
