@@ -63,7 +63,11 @@ export interface DrainOptions {
  */
 export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
   const capMs = opts.capMs ?? DEFAULT_DRAIN_CAP_MS;
-  const schedule = opts.scheduleMacrotask ?? ((cb: () => void) => { setTimeout(cb, 0); });
+  const schedule =
+    opts.scheduleMacrotask ??
+    ((cb: () => void) => {
+      setTimeout(cb, 0);
+    });
   const now = opts.now ?? (() => performance.now());
   const start = now();
   return new Promise<void>((resolve, reject) => {

@@ -1,12 +1,20 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { activeRefs, awaitDrain, ref, recordRejection, resetKeepalive, unref } from './event-loop-keepalive.ts';
+import {
+  activeRefs,
+  awaitDrain,
+  recordRejection,
+  ref,
+  resetKeepalive,
+  unref,
+} from './event-loop-keepalive.ts';
 
 afterEach(() => resetKeepalive());
 
 describe('event-loop keepalive', () => {
   it('ref/unref tracks active handles', () => {
     expect(activeRefs()).toBe(0);
-    ref(); ref();
+    ref();
+    ref();
     expect(activeRefs()).toBe(2);
     unref();
     expect(activeRefs()).toBe(1);
@@ -40,5 +48,25 @@ describe('event-loop keepalive', () => {
     t = 50;
     queue.shift()!(); // past cap → reject
     await expect(p).rejects.toThrow(/exceeded keepalive drain cap/);
+  });
+
+  it('awaitDrain resolves on the first tick when already drained (refCount 0)', async () => {
+    // No ref() — refCount stays 0
+    const queue: Array<() => void> = [];
+    const p = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
+    expect(queue.length).toBe(1);
+    queue.shift()!(); // first tick: refCount=0 → resolves immediately
+    expect(queue.length).toBe(0); // no second tick queued
+    await expect(p).resolves.toBeUndefined();
+  });
+
+  it('recordRejection keeps the FIRST reason', async () => {
+    ref();
+    recordRejection(new Error('first'));
+    recordRejection(new Error('second'));
+    const queue: Array<() => void> = [];
+    const p = awaitDrain({ scheduleMacrotask: (cb) => queue.push(cb) });
+    queue.shift()!();
+    await expect(p).rejects.toThrow('first');
   });
 });
