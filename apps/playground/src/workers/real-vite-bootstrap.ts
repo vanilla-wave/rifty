@@ -76,7 +76,7 @@ import {
   type BootstrapConfig,
   type NodeServerBootstrapConfig,
   type ProjectSpec,
-  isDevScriptCommand,
+  isDevScriptName,
   resolveBootstrapConfig,
 } from '../templates/project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
@@ -655,13 +655,15 @@ async function bootShellOwner(opts: {
     // this tree — otherwise the arrival re-runs and replaces node_modules,
     // dropping the user's `npm install` (ADR-0135).
     projectSlug: () => devSlug,
-    // Only the spec's lifecycle-owning dev line boots the co-resident dev server.
-    // Arbitrary `npm run <script>` (e.g. `vite build`) is not yet routed through a
-    // real node_modules/.bin exec; loud-reject it rather than silently boot dev.
-    // `devSpec` is reassigned by onDevConfig on a preset switch, so the matcher
-    // always tracks the active template. TODO(backlog: shell/node-modules-bin-execution)
+    // Only the spec's lifecycle-owning dev-line NAME (dev/vite/start) boots the
+    // co-resident dev server. Arbitrary `npm run <script>` (e.g. `build`/`lint`)
+    // is not yet routed through a real node_modules/.bin exec; loud-reject it
+    // rather than silently boot dev. Matched by NAME, not command: a preset
+    // switch updates `devSpec` before the tree's package.json is re-seeded, so the
+    // on-disk `dev` command can be stale (vite on a node preset) while the dev line
+    // must still boot the owner's CURRENT runtime. TODO(backlog: shell/node-modules-bin-execution)
     runScript: (name, command, ctx) => {
-      if (isDevScriptCommand(devSpec, command)) return runDevServer(ctx);
+      if (isDevScriptName(devSpec, name)) return runDevServer(ctx);
       ctx.stderr.write(
         `npm: \`npm run ${name}\` (\`${command}\`) is not supported yet; only the dev line boots the co-resident server\n`,
       );

@@ -141,13 +141,19 @@ export function devScriptCommand(spec: ProjectSpec): string {
 }
 
 /**
- * Is `command` the spec's lifecycle-owning dev line? The page realm boots the
- * co-resident dev server ONLY for this exact command; any other `npm run`
- * script (e.g. `vite build`) is not yet routed and must loud-reject rather than
- * silently boot dev. TODO(backlog: shell/node-modules-bin-execution)
+ * Is `name` one of the spec's lifecycle-owning dev-line script aliases (the keys
+ * `projectScripts` seeds — `dev`/`vite` or `dev`/`start`)? The page realm boots
+ * the co-resident dev server ONLY for these names; any other `npm run <script>`
+ * (e.g. `build`/`lint`) is not yet routed and must loud-reject rather than
+ * silently boot dev. Matched by NAME, not command string: the on-disk
+ * package.json command can lag the active preset (a preset switch updates the
+ * owner's spec before the tree's package.json is re-seeded, so `npm run dev` on a
+ * node preset may still read a stale `vite` command) — but the dev-line NAME is
+ * stable, and `runDevServer` boots the owner's CURRENT runtime regardless.
+ * TODO(backlog: shell/node-modules-bin-execution)
  */
-export function isDevScriptCommand(spec: ProjectSpec, command: string): boolean {
-  return command === devScriptCommand(spec);
+export function isDevScriptName(spec: ProjectSpec, name: string): boolean {
+  return Object.hasOwn(projectScripts(spec), name);
 }
 
 /**

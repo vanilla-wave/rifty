@@ -6,9 +6,12 @@
 
 - **`npm run <script>` no longer silently boots the dev server for non-dev scripts.** The owner's
   `runScript` ignored the script command and always ran the dev server, so `npm run build`
-  (`vite build`) exited 0 having silently booted dev. It now boots only when the command equals
-  the active spec's dev line (`isDevScriptCommand`); any other script loud-rejects to stderr +
-  non-zero. Interim — full node_modules/.bin routing is backlog `shell/node-modules-bin-execution`.
+  (`vite build`) exited 0 having silently booted dev. It now boots only for the spec's dev-line
+  script NAMES (`dev`/`vite`/`start`, via `isDevScriptName`); any other script loud-rejects to
+  stderr + non-zero. Matched by NAME, not command: a preset switch updates the active spec before
+  the tree's package.json is re-seeded, so a node preset's `npm run dev` can read a stale `vite`
+  command — command-matching wrongly rejected it and broke the node-server boot (fullstack-demo
+  e2e). Interim — full node_modules/.bin routing is backlog `shell/node-modules-bin-execution`.
 - **Owner death no longer leaves a stale LIVE pill + silently drops edits.** On owner-worker exit
   `realVite` only resolved `closed`, never notifying `onDevServer` listeners — so the UI stayed
   'running'; and a post-exit `writeFile` fell through `worker.send`'s false return into the
