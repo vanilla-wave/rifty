@@ -5,7 +5,9 @@
  * (vite transform/install) left its thread. Mirrors owner-child-bin-executor.ts,
  * but the child is a long-lived SERVER (serve:true), not run-to-completion.
  */
-import type { SpawnWorkerSpec } from '@riftydev/kernel';
+import { type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
+import { type DevServerChildMessage, isDevServerChildMessage } from '../glue/dev-server-ipc.ts';
+import type { DevServerHandle } from './dev-server-controller.ts';
 
 export interface DevServerChildSpawnParams {
   readonly templateId: string;
@@ -39,5 +41,108 @@ export function buildDevServerChildSpawnSpec(
     // ADR-0144: serve:true — the kernel does NOT reap the realm when the entry's
     // setup finishes; the dev server stays listening until the owner kills it.
     serve: true,
+  };
+}
+
+/** Read-side stream subset (matches WorkerProcessHandle.stdout()/stderr()). */
+interface DevReadable {
+  on(event: 'data', listener: (chunk: unknown) => void): unknown;
+}
+
+/** WorkerProcessHandle surface the dev-server driver needs. */
+export interface DevServerChildHandle {
+  readonly kind: string;
+  stdout(): DevReadable;
+  stderr(): DevReadable;
+  on(event: 'exit', listener: (code?: unknown) => void): unknown;
+  on(event: 'message', listener: (message: unknown) => void): unknown;
+  send(message: unknown): unknown;
+  kill(signal?: string): unknown;
+}
+
+export interface DevServerChildBootOpts {
+  readonly signal: AbortSignal;
+  readonly log: (chunk: string) => void;
+  readonly params: DevServerChildSpawnParams;
+  /** Owner re-publishes its snapshot when the child reports its store changed. */
+  readonly onSnapshotDirty: () => void;
+}
+
+export interface OwnerChildDevServer {
+  boot(opts: DevServerChildBootOpts): Promise<DevServerHandle>;
+}
+
+const decoder = new TextDecoder();
+function decodeChunk(chunk: unknown): string {
+  if (chunk instanceof Uint8Array) return decoder.decode(chunk);
+  if (chunk instanceof ArrayBuffer) return decoder.decode(new Uint8Array(chunk));
+  if (ArrayBuffer.isView(chunk)) {
+    return decoder.decode(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+  }
+  return typeof chunk === 'string' ? chunk : '';
+}
+
+/**
+ * Build the owner's dev-server child driver. `spawn` is injected so the host
+ * wires `globalProcessManager.spawnWorker` while unit tests drive a fake handle
+ * (the real Worker is an e2e-only boundary, like owner-child-bin-executor).
+ */
+export function createOwnerChildDevServer(
+  devServerWorkerUrl: string,
+  spawn: (spec: SpawnWorkerSpec) => DevServerChildHandle = (spec) => {
+    const h = globalProcessManager.spawnWorker('dev-server', spec, 1);
+    if (h.kind !== 'worker') {
+      throw new Error(`owner-child-dev-server: expected worker handle, got ${h.kind}`);
+    }
+    return h as unknown as DevServerChildHandle;
+  },
+): OwnerChildDevServer {
+  return {
+    boot(opts: DevServerChildBootOpts): Promise<DevServerHandle> {
+      return new Promise<DevServerHandle>((resolve, reject) => {
+        const handle = spawn(buildDevServerChildSpawnSpec(opts.params, devServerWorkerUrl));
+        let outputClosed = false;
+        const writeLog = (chunk: unknown): void => {
+          if (outputClosed) return;
+          const text = decodeChunk(chunk);
+          if (text) opts.log(text);
+        };
+        handle.stdout().on('data', writeLog);
+        handle.stderr().on('data', writeLog);
+
+        let settled = false;
+        const finish = (fn: () => void): void => {
+          if (settled) return;
+          settled = true;
+          fn();
+        };
+
+        const makeHandle = (port: number): DevServerHandle => ({
+          port,
+          onFileChanged(path: string) {
+            handle.send({ type: 'rifty:dev-file-changed', path });
+          },
+          async stop() {
+            outputClosed = true;
+            await new Promise<void>((res) => {
+              handle.on('exit', () => res());
+              handle.kill('SIGTERM');
+            });
+          },
+        });
+
+        handle.on('message', (message: unknown) => {
+          if (!isDevServerChildMessage(message)) return;
+          const m = message as DevServerChildMessage;
+          if (m.type === 'rifty:dev-ready') finish(() => resolve(makeHandle(m.port)));
+          else if (m.type === 'rifty:dev-error') finish(() => reject(new Error(m.message)));
+          else if (m.type === 'rifty:dev-snapshot') opts.onSnapshotDirty();
+        });
+
+        handle.on('exit', () => {
+          finish(() => reject(new Error('dev-server child exited before listening')));
+        });
+      });
+    },
   };
 }
