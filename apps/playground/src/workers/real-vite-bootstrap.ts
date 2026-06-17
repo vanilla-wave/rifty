@@ -57,9 +57,10 @@ import {
   resolveBootstrapConfig,
 } from '../templates/project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
-import { bootDevServer, flushSyncMirror } from './dev-server-boot.ts';
+import { flushSyncMirror } from './dev-server-boot.ts';
 import { createDevServerController } from './dev-server-controller.ts';
 import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
+import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createPtyServer } from './pty-server.ts';
 import { type KernelIpc, installRuntimeGlobals } from './worker-runtime-globals.ts';
 
@@ -139,6 +140,8 @@ async function bootShellOwner(opts: {
   readonly ownerToken: string | undefined;
   /** node-entry bootstrap worker URL — the supervised child each CLI runs in (ADR-0150). */
   readonly nodeEntryWorkerUrl: string;
+  /** dev-server child bootstrap worker URL — the supervised serve:true child the owner spawns (ADR-0150 P6b). */
+  readonly devServerWorkerUrl: string;
 }): Promise<void> {
   const { cfg, port, kernelIpc, publishSnapshot, spec, slug, fromScratch, ownerToken } = opts;
 
@@ -172,15 +175,16 @@ async function bootShellOwner(opts: {
     send,
     // v1: boot runs to completion; a Ctrl-C mid-boot takes effect right after
     // (the controller stops the server once `signal` aborts) — not mid-install.
-    boot: (_signal, devLog) => {
+    boot: (signal, devLog) => {
       if (lastDevTemplateId !== null && lastDevTemplateId !== devSpec.id) {
         // Template switched: a fresh worker per preset used to keep node_modules
         // clean; the ONE persistent owner accumulates the prior preset's deps,
         // which trips the new template's lockfile coverage (EBROKENLOCK). Clear
         // node_modules + the lockfile + package.json so the new template seeds its
-        // own package.json (seedProject/bootDevServer seed it back if-absent) and
-        // installs cleanly. A same-template reload skips this — preserving the
-        // user's package.json + installed tree.
+        // own package.json (the child seeds it back if-absent) and installs
+        // cleanly. A same-template reload skips this — preserving the user's
+        // package.json + installed tree. Owner-realm stateful across runs: the
+        // clean runs HERE on the owner store the child reads over fs.* RPC.
         const fs = syncMirror();
         try {
           fs.rmSync(`${devCfg.root}/node_modules`, { recursive: true, force: true });
@@ -191,18 +195,26 @@ async function bootShellOwner(opts: {
         }
       }
       lastDevTemplateId = devSpec.id;
-      return bootDevServer({
-        cfg: devCfg,
-        // The dev server listens on the template port (cfg.port), distinct from
-        // `port` (the owner's snapshot/nm/vfs-write bridge key).
-        port: devCfg.port,
-        root: devCfg.root,
-        spec: devSpec,
-        slug: devSlug,
-        fromScratch: devFromScratch,
-        ownerToken,
-        publishSnapshot,
+      // ADR-0150 P6b: spawn the dev server in a supervised serve:true child that
+      // reads the owner store over fs.* RPC. The owner stays a free async
+      // supervisor. The driver resolves when the child reports listening; stop()
+      // kills the child (re-listen-on-restart via a fresh child per run). `signal`
+      // is forwarded for the contract; v1 boot runs to completion (a Ctrl-C
+      // mid-boot takes effect right after, via the controller's stop()).
+      return devServerChild.boot({
+        signal,
         log: devLog,
+        params: {
+          templateId: devSpec.id,
+          slug: devSlug,
+          setup: devFromScratch ? 'from-scratch' : 'instant',
+          // The dev server listens on the template port (devCfg.port), distinct
+          // from `port` (the owner's snapshot/nm/vfs-write bridge key).
+          root: devCfg.root,
+          devPort: devCfg.port,
+          ownerToken,
+        },
+        onSnapshotDirty: publishSnapshot,
       });
     },
   });
@@ -222,6 +234,10 @@ async function bootShellOwner(opts: {
   // stays a free async supervisor (blocking work left it). The in-realm
   // createOwnerBinExecutor stays as a documented fallback (owner-bin-executor.ts).
   const ownerBinExecutor = createOwnerChildBinExecutor(opts.nodeEntryWorkerUrl);
+  // ADR-0150 P6b: the dev server also runs in a supervised serve:true child that
+  // reads the owner store over fs.* RPC. Built once; the boot closure spawns a
+  // fresh child per run (re-listen-on-restart), the controller's stop() kills it.
+  const devServerChild = createOwnerChildDevServer(opts.devServerWorkerUrl);
 
   // Both `vite` (vite templates' dev line) and `npm run <script>` (node templates,
   // via package.json) boot the co-resident dev server and BLOCK the run until
@@ -400,19 +416,20 @@ async function bootstrap(): Promise<void> {
   // spawn) and serve the child's fs over the kernel dispatcher (owner = SSoT).
   const kernelWorkerUrl = env.RIFTY_KERNEL_WORKER_URL;
   const nodeEntryWorkerUrl = env.RIFTY_NODE_ENTRY_WORKER_URL;
-  if (!kernelWorkerUrl || !nodeEntryWorkerUrl) {
+  const devServerWorkerUrl = env.RIFTY_DEV_SERVER_WORKER_URL;
+  if (!kernelWorkerUrl || !nodeEntryWorkerUrl || !devServerWorkerUrl) {
     throw new Error(
-      'workspace-owner: missing RIFTY_KERNEL_WORKER_URL / RIFTY_NODE_ENTRY_WORKER_URL — cannot spawn child CLIs',
+      'workspace-owner: missing RIFTY_KERNEL_WORKER_URL / RIFTY_NODE_ENTRY_WORKER_URL / RIFTY_DEV_SERVER_WORKER_URL — cannot spawn child CLIs or the dev server',
     );
   }
   setKernelWorkerUrl(kernelWorkerUrl);
   setNodeEntryWorkerUrl(nodeEntryWorkerUrl);
   installRuntimeJsFsHandlers(getKernelDispatcher(), syncMirror);
 
-  // ADR-0148: ONE unified owner — shell sessions + the co-resident dev server
-  // (started on demand by `vite` / `npm run <script>`), all against this realm's
-  // installed tree. The legacy per-run preview tail is gone (folded into
-  // `bootDevServer`, invoked from the owner's dev command).
+  // ADR-0148/0150: ONE unified owner — shell sessions + the dev server it spawns
+  // on demand (`vite` / `npm run <script>`) as a supervised serve:true child that
+  // reads this realm's installed tree over fs.* RPC. The legacy per-run preview
+  // tail is gone; the owner stays a free async supervisor.
   await bootShellOwner({
     cfg,
     port,
@@ -423,6 +440,7 @@ async function bootstrap(): Promise<void> {
     fromScratch,
     ownerToken,
     nodeEntryWorkerUrl,
+    devServerWorkerUrl,
   });
 }
 

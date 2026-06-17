@@ -18,6 +18,17 @@
 
 ### Changed
 
+- **Owner spawns the dev server as a supervised child instead of booting it in-realm** (P6b flip,
+  ADR-0150). The owner's dev-line boot closure (`real-vite-bootstrap.ts`) no longer calls
+  `bootDevServer` in its own thread; it now spawns the dev server through
+  `createOwnerChildDevServer(devServerWorkerUrl)` — a serve:true child (`dev-server-child-bootstrap`)
+  that reads+writes the owner store over fs.* sync-RPC. The owner stays a free async supervisor; the
+  driver resolves when the child reports listening, and the controller's stop() kills the child (a
+  fresh child per run → re-listen on restart). The new child entry URL threads page→owner over
+  `RIFTY_DEV_SERVER_WORKER_URL` (`realVite.ts` spawn env → owner bootstrap guard → `bootShellOwner`).
+  The owner-realm template-switch clean (rm node_modules/lockfile/package.json on a preset switch)
+  and the editor-write→HMR + snapshot wiring are unchanged. The owner no longer imports/calls
+  `bootDevServer` (kept only for the child + `flushSyncMirror`).
 - **Extracted the co-resident dev-server boot core into `workers/dev-server-boot.ts`** (P6b prep,
   ADR-0148/0150). `bootDevServer` + the vite/node-server tails (`bootNodeServer`,
   `waitForListeningPort`, `dispatchSerializedPreview`, `overlayShims`, `toRootRelativePath`,

@@ -17,6 +17,7 @@ import { bridgeCrossRealmPreview, registerPort, unregisterPort } from '@riftydev
 import { NotImplementedError } from '@riftydev/vfs';
 import type { ProjectSpec } from '../templates/project-spec.ts';
 import { defaultProjectSpec } from '../templates/registry.ts';
+import devServerWorkerUrl from '../workers/dev-server-child-bootstrap.ts?worker&url';
 import kernelWorkerUrl from '../workers/kernel-worker-entry.ts?worker&url';
 import nodeEntryWorkerUrl from '../workers/node-entry-bootstrap.ts?worker&url';
 import bootstrapWorkerUrl from '../workers/real-vite-bootstrap.ts?worker&url';
@@ -230,6 +231,8 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
         // sync-RPC (kernel realm + node-entry boot).
         RIFTY_KERNEL_WORKER_URL: kernelWorkerUrl,
         RIFTY_NODE_ENTRY_WORKER_URL: nodeEntryWorkerUrl,
+        // ADR-0150 P6b — child entry the owner spawns for the dev server.
+        RIFTY_DEV_SERVER_WORKER_URL: devServerWorkerUrl,
       },
       cwd: root,
       // ADR-0144: long-lived owner — the realm stays alive past the bootstrap
