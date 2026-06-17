@@ -30,12 +30,10 @@ import { initSqliteEngine } from '@riftydev/net/sqlite/engine';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
 import { RegistryClient, install } from '@riftydev/npm-client';
 import { installRuntimeJsFsHandlers } from '@riftydev/runtime-js';
-import { Buffer } from '@riftydev/runtime-js/builtins/buffer';
 import { Console } from '@riftydev/runtime-js/builtins/console';
 import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
 import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
-import { installProcessGlobals, setProcessCwd } from '@riftydev/runtime-js/builtins/process';
-import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
+import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import {
   type SerializedRequest,
@@ -84,6 +82,7 @@ import { type DevServerHandle, createDevServerController } from './dev-server-co
 import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
 import { createPtyServer } from './pty-server.ts';
 import { type ViteModuleGraph, invalidateViteModule } from './real-vite-invalidation.ts';
+import { type KernelIpc, installRuntimeGlobals } from './worker-runtime-globals.ts';
 
 const enc = new TextEncoder();
 
@@ -117,20 +116,6 @@ function log(line: string): void {
   globalThis.process.stdout.write(line);
 }
 
-interface ProcStdio {
-  stdout?: { write?: unknown };
-  stderr?: { write?: unknown };
-  env?: Record<string, string | undefined>;
-  on?(event: 'message', handler: (message: unknown) => void): unknown;
-  send?(message: unknown): unknown;
-}
-
-interface KernelIpc {
-  onMessage?(handler: (message: unknown) => void): void;
-  /** Fork-IPC send back to the page (ADR-0045); absent when no IPC channel. */
-  send?(message: unknown): void;
-}
-
 interface VfsWriteIpcMessage {
   readonly type: 'rifty:vfs-write';
   readonly frame: VfsWriteFrame;
@@ -140,43 +125,6 @@ function isVfsWriteIpcMessage(message: unknown): message is VfsWriteIpcMessage {
   if (!message || typeof message !== 'object') return false;
   const candidate = message as { readonly type?: unknown; readonly frame?: unknown };
   return candidate.type === 'rifty:vfs-write' && !!candidate.frame;
-}
-
-function installRuntimeGlobals(): KernelIpc {
-  // Gotcha: the kernel pre-entry hook's `process` posts stdout/stderr to the
-  // page over MessagePorts (the only reason the terminal sees worker output).
-  // `installProcessGlobals` swaps in runtime-js's richer shim, but its stdout/
-  // stderr default to `console.*` (worker console, NOT page terminal) and env
-  // is empty — clobbering the wiring made all worker logs (boot progress AND
-  // error stacks) vanish, so a stalled boot looked frozen. Preserve kernel
-  // stdio + env across the swap.
-  const prev = globalThis.process as unknown as ProcStdio | undefined;
-  const kStdout = prev?.stdout;
-  const kStderr = prev?.stderr;
-  const kEnv = prev?.env;
-  const kOnMessage =
-    typeof prev?.on === 'function'
-      ? (handler: (message: unknown) => void) => {
-          prev.on?.('message', handler);
-        }
-      : undefined;
-  // The fork-IPC `send` lives on the kernel pre-entry process shim; the
-  // installProcessGlobals swap below drops it, so capture it (bound) BEFORE the
-  // swap — the pty server posts owner→page frames through it (ADR-0146).
-  const kSend =
-    typeof prev?.send === 'function'
-      ? (message: unknown) => {
-          prev.send?.(message);
-        }
-      : undefined;
-  installProcessGlobals();
-  installTimerGlobals();
-  (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
-  const proc = globalThis.process as unknown as ProcStdio;
-  if (kStdout && typeof kStdout.write === 'function') proc.stdout = kStdout;
-  if (kStderr && typeof kStderr.write === 'function') proc.stderr = kStderr;
-  if (kEnv) proc.env = kEnv;
-  return { onMessage: kOnMessage, send: kSend };
 }
 
 function seedProject(cfg: BootstrapConfig): void {
