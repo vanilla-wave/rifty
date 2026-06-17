@@ -7,9 +7,10 @@ import {
 } from './helpers/playground.ts';
 
 /**
- * SESSION-CONCURRENCY + child-kill e2e for P6a (ADR-0150), chromium/COI only.
+ * SESSION-CONCURRENCY + child-kill e2e for the supervised-child-CLI model
+ * (ADR-0150), chromium/COI only.
  *
- * P6a runs each shell-resolved `.bin` CLI in a SUPERVISED CHILD worker that
+ * Each shell-resolved `.bin` CLI runs in a SUPERVISED CHILD worker that
  * reads the owner filesystem over `fs.*` sync-RPC; the owner stays a free async
  * SUPERVISOR. `owner-shell-cowsay.spec.ts` already proves a child runs + draws.
  * This proves the supervisor serves MANY children at once and can KILL one:
@@ -32,10 +33,12 @@ import {
  * Requires cross-origin isolation (owner is SAB-IPC-gated, no PAGE fallback);
  * the e2e harness serves COOP/COEP. Chromium-only, matching the other COI specs.
  */
-test.describe('owner supervisor serves concurrent child CLIs + Ctrl-C kills a child (P6a, ADR-0150)', () => {
+test.describe('owner supervisor serves concurrent child CLIs + Ctrl-C kills a child (supervised child-CLI model, ADR-0150)', () => {
   test('Terminal 3 draws while Terminal 2 child blocks; Ctrl-C recovers Terminal 2', async ({
     page,
+    browserName,
   }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(180_000);
     await page.goto('/');
 

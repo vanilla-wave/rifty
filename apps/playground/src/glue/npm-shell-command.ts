@@ -56,6 +56,12 @@ export interface NpmShellCommandDeps {
   /** Drains the VFS write-through (page wires the OPFS sync-mirror flush) so
    *  the install stamp lands durably AFTER the tree (ADR-0135). */
   readonly flush?: () => Promise<void>;
+  /** The owner's project slug (preset id) the install stamp is keyed on so the
+   *  next boot's `installStampSatisfied(slug)` REUSES this tree instead of
+   *  re-running its dependency arrival (which replaces node_modules, dropping the
+   *  user install). A getter — the active preset can change. Defaults to `''`
+   *  (page-side ad-hoc installs no boot reuses). */
+  readonly projectSlug?: () => string;
 }
 
 interface ProjectPackageJson {
@@ -297,7 +303,7 @@ async function stampInstalledTree(
 ): Promise<void> {
   try {
     await deps.flush?.();
-    await writeInstallStamp(deps.vfs, cwd, packages);
+    await writeInstallStamp(deps.vfs, cwd, packages, deps.projectSlug?.() ?? '');
     await deps.flush?.();
   } catch (err) {
     console.warn(`npm: install stamp write failed: ${(err as Error).message}`);

@@ -24,7 +24,9 @@ import { expect, test } from '@playwright/test';
 test.describe('execSync over SAB (real COI Worker + v2 binary frame)', () => {
   test('guest execSync returns byte-exact non-UTF-8 stdout + a blocking result', async ({
     page,
+    browserName,
   }) => {
+    test.skip(browserName !== 'chromium', 'execSync over SAB needs a COI Worker — chromium only');
     const errors: string[] = [];
     page.on('pageerror', (err) => {
       // Benign worker-stdout teardown race: after the guest exits, the kernel's

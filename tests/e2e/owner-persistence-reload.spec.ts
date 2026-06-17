@@ -6,11 +6,11 @@ import {
 } from './helpers/playground.ts';
 
 /**
- * P5 — owner OPFS persistence (chromium only; ADR-0013/0072 + ADR-0143 "D").
+ * Owner OPFS persistence (chromium only; ADR-0013/0072 + ADR-0143 single-store-owner).
  *
- * The workspace owner is the single source-of-truth for the project tree
- * (post-P4), but was the only worker realm not wiring `initBackend()` → it ran
- * memory-only, so everything vanished on reload. P5 wires OPFS in the owner; the
+ * The workspace owner is the single source-of-truth for the project tree, but
+ * was the only worker realm not wiring `initBackend()` → it ran
+ * memory-only, so everything vanished on reload. OPFS is now wired in the owner; the
  * OPFS content-cache write-through (ADR-0072) then persists shell writes, so a
  * file written from the shell survives `page.reload()`.
  *
@@ -28,8 +28,9 @@ import {
  * shell so Terminal 2 stays the active session (else the active-terminal read
  * lands on the dev-server log, not our shell).
  */
-test.describe('owner workspace persists across reload (P5, OPFS)', () => {
-  test('a shell-written file survives page.reload()', async ({ page }) => {
+test.describe('owner workspace persists across reload (OPFS)', () => {
+  test('a shell-written file survives page.reload()', async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(120_000);
     const marker = `persist-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 

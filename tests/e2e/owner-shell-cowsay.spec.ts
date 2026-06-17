@@ -7,12 +7,13 @@ import {
 } from './helpers/playground.ts';
 
 /**
- * HONEST owner-resident-shell e2e (chromium only, ADR-0146 P2).
+ * HONEST owner-resident-shell e2e (chromium only, ADR-0146 owner-resident shell).
  *
- * The headline acceptance of ADR-0143 "D": an installed CLI run from the shell
- * ACTUALLY RUNS. Before P2 this ENOENT'd — the shell + `npm install` lived in
- * the PAGE realm while each `.bin` invocation spawned a worker with its OWN
- * empty store. P2 moves the `Shell` + npm + bin into one persistent workspace
+ * The headline acceptance of ADR-0143 single-store-owner model: an installed
+ * CLI run from the shell ACTUALLY RUNS. Before the shell moved into the owner
+ * this ENOENT'd — the shell + `npm install` lived in the PAGE realm while each
+ * `.bin` invocation spawned a worker with its OWN empty store. Moving the
+ * `Shell` + npm + bin into one persistent workspace
  * owner whose `syncMirror` holds `node_modules`, so `npm install cowsay` then
  * `cowsay hi` resolve the same in-realm tree.
  *
@@ -25,13 +26,16 @@ import {
  *                            (over the snapshot port) holds the installed dep.
  *
  * Requires cross-origin isolation (the owner is SAB-IPC-gated; no PAGE shell
- * fallback under D) — the e2e harness serves COOP/COEP. Chromium-only, matching
+ * fallback under the single-store-owner model) — the e2e harness serves
+ * COOP/COEP. Chromium-only, matching
  * the other COI specs (execsync-sab.spec.ts).
  */
-test.describe('owner-resident shell runs an installed CLI end-to-end (ADR-0146 P2)', () => {
+test.describe('owner-resident shell runs an installed CLI end-to-end (ADR-0146)', () => {
   test('npm install cowsay → cowsay hi draws the cow from the owner node_modules', async ({
     page,
+    browserName,
   }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(180_000);
     await page.goto('/');
 

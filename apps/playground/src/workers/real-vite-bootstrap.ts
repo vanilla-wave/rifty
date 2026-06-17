@@ -190,7 +190,8 @@ function seedProject(cfg: BootstrapConfig): void {
       fs.writeFileSync(np, enc.encode(content));
     }
   }
-  // Default welcome README (D-acceptance A1/A2): seeded here, idempotently,
+  // Default welcome README (single-store-owner: exactly one authoritative store
+  // owner, the page holds no authoritative fs): seeded here, idempotently,
   // against the owner's own mirror — moved off the PAGE so the page holds no
   // authoritative store (was App.tsx onMount writing the page `vfs`).
   const readme = normalizePath(`${cfg.root}/README.md`);
@@ -314,8 +315,9 @@ async function bootNodeServer(
   }
 
   // Node parity: console.log IS stdout. Route the server program's console into
-  // the dev-run's terminal stream (ADR-0148 P4: the co-resident server's boot AND
-  // async request logs land in the playground terminal, not the worker devtools —
+  // the dev-run's terminal stream (ADR-0148, co-resident dev server in the owner:
+  // the server's boot AND async request logs land in the playground terminal,
+  // not the worker devtools —
   // the persistent owner's global stdout goes to the owner diagnostic, so wire to
   // `log` = the active `npm run dev` run's `ctx.stdout`, live for the whole run).
   const termWriter = {
@@ -333,7 +335,7 @@ async function bootNodeServer(
 }
 
 /**
- * Boot the co-resident dev server (ADR-0148 P4) INSIDE the workspace owner: run
+ * Boot the co-resident dev server (ADR-0148) INSIDE the workspace owner: run
  * the idempotent dependency-arrival (against THIS realm's tree — the one the
  * shell installs into, so vite sees terminal-installed deps), build the module
  * loader, start vite / the node server, and register the preview + HMR bridges.
@@ -342,7 +344,7 @@ async function bootNodeServer(
  *
  * node-server stop is best-effort: the entry IS the server (an ESM module,
  * evaluated once), so stop tears the preview bridges but the program keeps
- * running — a graceful server stop is P5 (the ADR-0144 model is hard-kill today).
+ * running — a graceful server stop is deferred (the ADR-0144 model is hard-kill today).
  */
 async function bootDevServer(opts: {
   readonly cfg: BootstrapConfig;
@@ -357,14 +359,18 @@ async function bootDevServer(opts: {
 }): Promise<DevServerHandle> {
   const { cfg, port, root, spec, slug, fromScratch, ownerToken, publishSnapshot, log } = opts;
 
-  // The persistent owner was seeded with the DEFAULT template at spawn; a preset
-  // switch changed `cfg`, so force the CURRENT template's package.json (overwrite —
-  // the install reads it to resolve deps) + seed any template files not yet present
-  // (node-server `public/*`, config). The user's edited entry is already seeded by
-  // the page; existing files are left alone.
+  // Seed the template's package.json + files IF ABSENT — never overwrite. A
+  // force-overwrite here discarded the user's `npm install` additions on every
+  // boot (package.json reverted to the template deps → the stamp's dep check
+  // failed → the baked snapshot replaced node_modules, dropping the install), so
+  // an installed CLI never survived a reload. A genuine preset switch resets
+  // package.json in the `boot` closure (alongside the node_modules/lockfile
+  // clear); a same-template reload preserves the user's tree.
   const seedFs = syncMirror();
   seedFs.mkdirSync(root, { recursive: true });
-  seedFs.writeFileSync(`${root}/package.json`, enc.encode(cfg.packageJson));
+  if (!seedFs.existsSync(`${root}/package.json`)) {
+    seedFs.writeFileSync(`${root}/package.json`, enc.encode(cfg.packageJson));
+  }
   for (const [seedPath, content] of Object.entries(cfg.seedFiles)) {
     const np = normalizePath(seedPath);
     if (np === `${root}/package.json`) continue;
@@ -520,7 +526,8 @@ async function bootDevServer(opts: {
 }
 
 /**
- * Unified workspace owner (ADR-0146 P2 + ADR-0148 P4): this realm hosts the
+ * Unified workspace owner (ADR-0146 owner-resident shell + ADR-0148 co-resident
+ * dev server): this realm hosts the
  * resident `Shell` per session AND the co-resident dev server. npm + the in-realm
  * `.bin` executor + vite/node all run HERE against this realm's `syncMirror()`
  * (the tree the install writes) — one store, no two-owners gap. The dev server
@@ -537,20 +544,21 @@ async function bootShellOwner(opts: {
   readonly slug: string;
   readonly fromScratch: boolean;
   readonly ownerToken: string | undefined;
-  /** node-entry bootstrap worker URL — the child each CLI runs in (ADR-0150 P6a). */
+  /** node-entry bootstrap worker URL — the supervised child each CLI runs in (ADR-0150). */
   readonly nodeEntryWorkerUrl: string;
 }): Promise<void> {
   const { cfg, port, kernelIpc, publishSnapshot, spec, slug, fromScratch, ownerToken } = opts;
 
   seedProject(cfg);
   publishSnapshot();
-  // Readiness handshake (ADR-0146 P3): the page replies-via-request rather than a
-  // blind retry-storm. Startup publish covers a subscribed page; this covers a
-  // page that subscribes/reloads after us.
+  // Readiness handshake (ADR-0146, explorer reflects the owner tree): the page
+  // replies-via-request rather than a blind retry-storm. Startup publish covers a
+  // subscribed page; this covers a page that subscribes/reloads after us.
   const tearSnapReq = serveSnapshotRequests(port, publishSnapshot);
 
   // Owner→page frames (pty + dev-server status). republish on `pty:exit` since a
-  // finished command may have mutated the tree (ADR-0146 P3).
+  // finished command may have mutated the tree (ADR-0146: owner republishes its
+  // snapshot on command exit so the explorer reflects the owner tree).
   const send = (frame: OwnerToPageFrame): void => {
     kernelIpc.send?.({ type: PTY_IPC_TYPE, frame });
     if (frame.type === 'pty:exit') publishSnapshot();
@@ -558,14 +566,14 @@ async function bootShellOwner(opts: {
 
   // The persistent owner is spawned once with the default template; a preset
   // switch updates which template/runtime the NEXT co-resident dev server boots
-  // (ADR-0148 P4 — the page sends `pty:dev-config` before re-running the dev line).
+  // (ADR-0148 — the page sends `pty:dev-config` before re-running the dev line).
   let devSpec = spec;
   let devCfg = cfg;
   let devSlug = slug;
   let devFromScratch = fromScratch;
   let lastDevTemplateId: string | null = null;
 
-  // Co-resident dev server (ADR-0148 P4): the vite/node tail runs in THIS realm,
+  // Co-resident dev server (ADR-0148): the vite/node tail runs in THIS realm,
   // on demand, reading the realm's installed tree → it sees terminal-installed deps.
   const devServer = createDevServerController({
     send,
@@ -576,11 +584,15 @@ async function bootShellOwner(opts: {
         // Template switched: a fresh worker per preset used to keep node_modules
         // clean; the ONE persistent owner accumulates the prior preset's deps,
         // which trips the new template's lockfile coverage (EBROKENLOCK). Clear
-        // node_modules + the lockfile so the new template installs cleanly.
+        // node_modules + the lockfile + package.json so the new template seeds its
+        // own package.json (seedProject/bootDevServer seed it back if-absent) and
+        // installs cleanly. A same-template reload skips this — preserving the
+        // user's package.json + installed tree.
         const fs = syncMirror();
         try {
           fs.rmSync(`${devCfg.root}/node_modules`, { recursive: true, force: true });
           fs.rmSync(`${devCfg.root}/package-lock.json`, { force: true });
+          fs.rmSync(`${devCfg.root}/package.json`, { force: true });
         } catch {
           /* best-effort clean */
         }
@@ -612,9 +624,9 @@ async function bootShellOwner(opts: {
 
   const vfs = new SyncMirrorVfs();
   const registry = new RegistryClient({ fetch: proxiedRegistryFetch() });
-  // ADR-0150 P6a: each foreground CLI runs in a supervised child worker-process
+  // ADR-0150: each foreground CLI runs in a supervised child worker-process
   // (RIFTY_REMOTE_FS=1) reading the owner store over fs.* sync-RPC — the owner
-  // thread stays responsive (blocking work left it). The in-realm
+  // stays a free async supervisor (blocking work left it). The in-realm
   // createOwnerBinExecutor stays as a documented fallback (owner-bin-executor.ts).
   const ownerBinExecutor = createOwnerChildBinExecutor(opts.nodeEntryWorkerUrl);
 
@@ -637,6 +649,11 @@ async function bootShellOwner(opts: {
     vfs,
     registry,
     flush: flushSyncMirror,
+    // Stamp the install for the CURRENT project slug (same key the dev-server
+    // dependency arrival uses) so a reload's `installStampSatisfied(slug)` reuses
+    // this tree — otherwise the arrival re-runs and replaces node_modules,
+    // dropping the user's `npm install` (ADR-0135).
+    projectSlug: () => devSlug,
     // Every package.json script boots the dev server (projectScripts).
     runScript: (_name, _command, ctx) => runDevServer(ctx),
   });
@@ -644,8 +661,9 @@ async function bootShellOwner(opts: {
   const makeShell = (seed?: { cwd?: string; env?: Record<string, string> }): Shell => {
     // Seed restores persisted terminal cwd/env on reload (ADR-0146); falls back
     // to the workspace root + empty env for a fresh session. The cwd is validated
-    // HERE against the owner's tree (A1/A2: the page no longer holds a store to
-    // check), resetting to root if the persisted dir was deleted since.
+    // HERE against the owner's tree (single-store-owner: the page holds no
+    // authoritative store to check), resetting to root if the persisted dir was
+    // deleted since.
     const shell = new Shell({
       cwd: reachableCwd(syncMirror(), seed?.cwd, cfg.root),
       env: seed?.env ?? {},
@@ -664,7 +682,7 @@ async function bootShellOwner(opts: {
     send,
     makeShell,
     onDevServerReq: () => devServer.publish(),
-    // Re-resolve the dev-server config for the current preset (ADR-0148 P4) so a
+    // Re-resolve the dev-server config for the current preset (ADR-0148) so a
     // node-server preset boots its OWN runtime/port, not the spawn-time default.
     onDevConfig: (config) => {
       devSpec = resolveProjectSpec(config.templateId);
@@ -688,7 +706,8 @@ async function bootShellOwner(opts: {
   // Workspace read bridge (ADR-0080 + ADR-0148): the page reads the installed +
   // project tree against this realm's syncMirror. Kept live by the serve:true realm.
   const tearNodeModulesBridge = serveNodeModulesReads(port, cfg.root);
-  // Workspace archive export/import (D-acceptance A1/A2): the owner serializes /
+  // Workspace archive export/import (single-store-owner: one authoritative store
+  // owner, the page holds no authoritative fs): the owner serializes /
   // applies its own tree so the PAGE keeps no authoritative store of its own.
   const tearArchiveBridge = serveWorkspaceArchive(port, cfg.root);
   log('[shell-owner/worker] pty server ready; workspace read + archive bridges live\n');
@@ -706,7 +725,7 @@ async function bootstrap(): Promise<void> {
   const env = globalThis.process.env;
   const port = Number.parseInt(env.RIFTY_RFV_PORT ?? '5174', 10);
   const root = env.RIFTY_RFV_ROOT ?? '/workspace';
-  // ADR-0148 P4: ONE owner — the unified shell + co-resident dev server. The
+  // ADR-0148: ONE owner — the unified shell + co-resident dev server. The
   // legacy per-run 'preview' worker is gone (no spawner sets RIFTY_OWNER_MODE
   // anymore). `ownerToken` keys the preview SW route (page wires its side on the
   // pty:dev-server frame).
@@ -721,7 +740,7 @@ async function bootstrap(): Promise<void> {
   // Honour an explicit entry override on the spawn spec (usually a no-op —
   // the orchestrator defaults it to the template's own entry).
   const effectiveSpec = withEntryOverride(spec, env.RIFTY_RFV_ENTRY ?? spec.entry.relativePath);
-  // ADR-0148 P4: `port` (RIFTY_RFV_PORT) keys the owner's snapshot/nm/vfs-write
+  // ADR-0148: `port` (RIFTY_RFV_PORT) keys the owner's snapshot/nm/vfs-write
   // bridges (a dedicated synthetic port, e.g. 59124). The co-resident dev server
   // listens on the template's own port (`cfg.port`) — a DISTINCT key so vite +
   // its preview bridges never collide with the owner serve bridges.
@@ -732,9 +751,9 @@ async function bootstrap(): Promise<void> {
   // probes) against the project root, whatever RIFTY_RFV_ROOT says.
   setProcessCwd(cfg.root);
 
-  // P5 (ADR-0013/0072): wire the OPFS-or-memory sync mirror BEFORE seeding so the
-  // owner's tree survives reload. The owner is the workspace source-of-truth
-  // (post-P4) and was the only worker realm not doing this; sibling realms already
+  // Owner OPFS persistence (ADR-0013/0072): wire the OPFS-or-memory sync mirror
+  // BEFORE seeding so the owner's tree survives reload. The owner is the workspace
+  // source-of-truth and was the only worker realm not doing this; sibling realms already
   // do (runtime-js/worker-entry.ts, rifty/sandbox.ts). This realm is a Worker →
   // OpfsFsSync is supported, and a non-isolated host never spawns the owner.
   // Degrade to memory on a surprise OPFS failure rather than bricking boot (mirrors
@@ -756,7 +775,7 @@ async function bootstrap(): Promise<void> {
     publishVfsSnapshot(port, collectSnapshot(syncMirror(), root));
   };
 
-  // ADR-0150 P6a: the owner spawns each foreground CLI as a supervised child
+  // ADR-0150: the owner spawns each foreground CLI as a supervised child
   // worker-process; give this realm the kernel + node-entry worker URLs (recursive
   // spawn) and serve the child's fs over the kernel dispatcher (owner = SSoT).
   const kernelWorkerUrl = env.RIFTY_KERNEL_WORKER_URL;
@@ -770,7 +789,7 @@ async function bootstrap(): Promise<void> {
   setNodeEntryWorkerUrl(nodeEntryWorkerUrl);
   installRuntimeJsFsHandlers(getKernelDispatcher(), syncMirror);
 
-  // ADR-0148 P4: ONE unified owner — shell sessions + the co-resident dev server
+  // ADR-0148: ONE unified owner — shell sessions + the co-resident dev server
   // (started on demand by `vite` / `npm run <script>`), all against this realm's
   // installed tree. The legacy per-run preview tail is gone (folded into
   // `bootDevServer`, invoked from the owner's dev command).

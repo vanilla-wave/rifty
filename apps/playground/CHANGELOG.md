@@ -21,7 +21,38 @@
   `glue/workspace-archive-port.test.ts`, `glue/reachable-cwd.test.ts`; e2e
   `owner-*` + `sandbox-fs-rpc` green.
 
+### Tests
+
+- **Single-store-owner behavioral acceptance — the cross-realm cases parity
+  can't reach.** Four new owner e2e specs:
+  `owner-editor-write-exec-read` (a page editor write is read back by exec in the
+  owner — no stale page store shadows it), `owner-single-source-byte-identity`
+  (the same file reads identical from the page viewer `SnapshotFs` and from
+  `cat`), `owner-snapshot-restore-exec` (install + write → reload → the installed
+  CLI still runs + the file still reads — the spec that caught the reload-persist
+  bug above), and `owner-responsive-under-load` (the page main thread stays
+  responsive during the co-resident dev-server boot). Byte-identity is scoped to
+  in-cap files; over-cap files report an honest "too large to preview", already
+  unit-asserted in `glue/snapshot-fs.test.ts` (the viewer never shows WRONG
+  bytes). All owner/COI specs now carry a `test.skip(browserName!=='chromium')`
+  guard so the firefox/webkit projects skip them instead of failing.
+
 ### Fixed
+
+- **A user `npm install` now survives a reload — an installed CLI still runs
+  after teardown/restore.** Two coupled bugs dropped the user's install on every
+  reload: (1) the shell `npm` stamped the tree with slug `''` instead of the
+  owner's project slug, so the boot's `installStampSatisfied(slug)` missed and
+  the dependency arrival re-ran; (2) `bootDevServer` force-overwrote
+  `package.json` with the template default on every boot, reverting the user's
+  added deps — which then failed the stamp's dep check and restored the baked
+  snapshot, REPLACING `node_modules` (the install was already OPFS-persisted, but
+  got clobbered on boot). Now the shell `npm` stamps with the current project
+  slug (`npm-shell-command` `projectSlug`), and `bootDevServer` seeds
+  `package.json` if-absent (a genuine preset switch resets it in the `boot`
+  closure alongside the node_modules/lockfile clear). A same-template reload
+  reuses the persisted tree (stamp no-op). Caught by `owner-snapshot-restore-exec`
+  e2e; unit-guarded in `npm-shell-command.test.ts`.
 
 - **Editable project files in real-vite mode (ADR-0076 §Decision-4, corrected).**
   Editing a seeded source tab (e.g. `src/project-summary.js`) while the dev
