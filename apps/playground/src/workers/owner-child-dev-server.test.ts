@@ -30,6 +30,7 @@ describe('buildDevServerChildSpawnSpec', () => {
     expect(spec.env.RIFTY_RFV_SETUP).toBe('instant');
     expect(spec.env.RIFTY_RFV_ROOT).toBe('/workspace');
     expect(spec.env.RIFTY_DEV_PORT).toBe('5174');
+    expect(spec.env.PORT).toBe('5174'); // node-server entries bind process.env.PORT
     expect(spec.env.RIFTY_PREVIEW_OWNER_TOKEN).toBe('tok-123');
   });
 

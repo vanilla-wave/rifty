@@ -35,6 +35,14 @@ export function buildDevServerChildSpawnSpec(
       RIFTY_RFV_SETUP: params.setup,
       RIFTY_RFV_ROOT: params.root,
       RIFTY_DEV_PORT: String(params.devPort),
+      // node-server template entries bind `process.env.PORT`; set it to the dev
+      // port so the child's entry listens where the owner expects (ADR-0150 P6b).
+      // The in-realm `process.env.PORT` mutation in dev-server-boot doesn't reach
+      // the entry across the PROD process-globals clobber — the entry reads its
+      // env from the spawn-time KernelProcessSpec.env (the clobber-safe source),
+      // which inherits the OWNER's PORT (the default vite template's 5174) unless
+      // we override it here.
+      PORT: String(params.devPort),
       RIFTY_PREVIEW_OWNER_TOKEN: params.ownerToken ?? '',
     },
     cwd: params.root,
