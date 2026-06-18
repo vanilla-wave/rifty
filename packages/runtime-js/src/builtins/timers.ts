@@ -5,7 +5,64 @@
  * Node tests use a `setTimeout(fn, 0)` fallback).
  */
 
+import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
+
 type ImmediateHandle = { readonly id: number };
+
+// Capture host timers BEFORE installTimerGlobals can overwrite globals.
+const hostSetTimeout = globalThis.setTimeout.bind(globalThis);
+const hostClearTimeout = globalThis.clearTimeout.bind(globalThis);
+const hostSetInterval = globalThis.setInterval.bind(globalThis);
+const hostClearInterval = globalThis.clearInterval.bind(globalThis);
+
+const activeTimeouts = new Set<unknown>();
+const activeIntervals = new Set<unknown>();
+
+// KEEPALIVE GAP (explicit, not silent): these wrappers ref EVERY timer, but do
+// NOT yet honor a Node Timeout's .unref()/.ref() — an .unref()'d refed timer that
+// Node lets the loop exit through will instead hold the realm alive until the
+// drain cap. Faithful fix (Node-shape Timeout handle) tracked:
+// TODO(backlog: runtime-js/timer-unref-keepalive)
+function keepaliveSetTimeout(
+  fn: (...a: unknown[]) => void,
+  ms?: number,
+  ...args: unknown[]
+): unknown {
+  // Use a box so the inner callback can reference the handle (self-ref timeout pattern).
+  const box: { handle: unknown } = { handle: undefined };
+  box.handle = hostSetTimeout(
+    (...a: unknown[]) => {
+      if (activeTimeouts.delete(box.handle)) keepaliveUnref();
+      fn(...a);
+    },
+    ms,
+    ...args,
+  );
+  activeTimeouts.add(box.handle);
+  keepaliveRef();
+  return box.handle;
+}
+
+function keepaliveClearTimeout(handle: unknown): void {
+  if (activeTimeouts.delete(handle)) keepaliveUnref();
+  hostClearTimeout(handle as Parameters<typeof clearTimeout>[0]);
+}
+
+function keepaliveSetInterval(
+  fn: (...a: unknown[]) => void,
+  ms?: number,
+  ...args: unknown[]
+): unknown {
+  const handle = hostSetInterval(fn, ms, ...args);
+  activeIntervals.add(handle);
+  keepaliveRef();
+  return handle;
+}
+
+function keepaliveClearInterval(handle: unknown): void {
+  if (activeIntervals.delete(handle)) keepaliveUnref();
+  hostClearInterval(handle as Parameters<typeof clearInterval>[0]);
+}
 
 // ADR-0085: setImmediate queue rep + check-phase drain-order contract.
 // `./builtins/timers` is a PUBLIC cross-package subpath export (ADR-0018), so
@@ -40,6 +97,7 @@ if (channel) {
     const item = immediates.get(id);
     if (item === undefined) return; // cleared between message post and dispatch
     immediates.delete(id);
+    keepaliveUnref();
     try {
       item.fn(...item.args);
     } catch (err) {
@@ -54,12 +112,14 @@ export function setImmediate(
 ): ImmediateHandle {
   const id = nextImmediateId++;
   immediates.set(id, { fn, args });
+  keepaliveRef();
   if (channel) channel.port2.postMessage(null);
   else
-    setTimeout(() => {
+    hostSetTimeout(() => {
       const item = immediates.get(id);
       if (!item) return; // cleared before its timer fired
       immediates.delete(id);
+      keepaliveUnref();
       item.fn(...item.args);
     }, 0);
   return { id };
@@ -67,7 +127,7 @@ export function setImmediate(
 
 export function clearImmediate(handle: ImmediateHandle | undefined): void {
   if (!handle) return;
-  immediates.delete(handle.id);
+  if (immediates.delete(handle.id)) keepaliveUnref();
 }
 
 export const timers = {
@@ -175,11 +235,15 @@ export const timersPromises = {
   },
 };
 
-/** Install setImmediate / clearImmediate on globalThis (Node-style). */
+/** Install setImmediate / clearImmediate + keepalive-wrapped setTimeout/setInterval on globalThis. */
 export function installTimerGlobals(): void {
-  (globalThis as unknown as { setImmediate: typeof setImmediate }).setImmediate = setImmediate;
-  (globalThis as unknown as { clearImmediate: typeof clearImmediate }).clearImmediate =
-    clearImmediate;
+  const g = globalThis as unknown as Record<string, unknown>;
+  g.setImmediate = setImmediate;
+  g.clearImmediate = clearImmediate;
+  g.setTimeout = keepaliveSetTimeout;
+  g.clearTimeout = keepaliveClearTimeout;
+  g.setInterval = keepaliveSetInterval;
+  g.clearInterval = keepaliveClearInterval;
 }
 
 export default timers;

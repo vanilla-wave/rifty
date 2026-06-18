@@ -47,6 +47,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0069 | `Readable.setEncoding(encoding)` — emit decoded strings |
 | 0136 | Transformed-module stack remapping via scoped prepareStackTrace |
 | 0142 | node:vm dual-engine — QuickJS real realm default, hardened-rewrite loud opt-in |
+| 0152 | Child realm event-loop drain + loud-fail exit contract |
 
 ### runtime-wasi
 

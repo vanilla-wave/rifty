@@ -1,4 +1,5 @@
 import { dirname } from '@riftydev/vfs';
+import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 import { publishRuntimeGlobal, readRuntimeGlobal } from '../internal/worker-globals.ts';
 import { ModuleLoadError } from './errors.ts';
 import { RUNTIME_OBJECT_BINDING, type TransformResult, transformEsm } from './esm-ast.ts';
@@ -209,10 +210,23 @@ export async function executeEsm(
     return ns;
   };
 
+  // This is the routed dynamic import: a user-code `import()` rewritten to
+  // `__import`. It MUST hold a keepalive ref while in flight, symmetric with
+  // `loader.import` (loader.ts) — otherwise a detached `import('./x').then(run)`
+  // whose load spans a macrotask (esbuild strip) lets the run-to-completion
+  // realm drain to refCount 0 and reap before `run` arms its work → silent drop
+  // (child-realm-async-lifecycle; review M2). `keepaliveRef()` runs synchronously
+  // at call time (before the first await), so the ref is held the instant user
+  // code invokes `import()`. finally unrefs on both resolve and reject.
   const dynamicImport = async (spec: string): Promise<Record<string, unknown>> => {
-    const dep = deps.resolve(spec, resolved.id, true);
-    // Carry the resolved record — `loadAsyncResolved` skips re-resolving it (#14).
-    return deps.loadAsyncResolved(dep);
+    keepaliveRef();
+    try {
+      const dep = deps.resolve(spec, resolved.id, true);
+      // Carry the resolved record — `loadAsyncResolved` skips re-resolving it (#14).
+      return await deps.loadAsyncResolved(dep);
+    } finally {
+      keepaliveUnref();
+    }
   };
 
   // `with { type: "file" }` file loader (ADR-0068): resolve to absolute path

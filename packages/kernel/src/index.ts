@@ -37,8 +37,11 @@ export type {
 // just exposes the setter and calls it after publishing `KernelProcessSpec`.
 export {
   type KernelPreEntryHook,
+  type KernelDrainHook,
   getKernelPreEntryHook,
   setKernelPreEntryHook,
+  getKernelDrainHook,
+  setKernelDrainHook,
 } from './worker-entry.ts';
 
 // ADR-0011 phase 2 — kernel.spawnWorker allocator + host-side URL setter.

@@ -15,6 +15,8 @@ The ESM transform (`esm.ts`, ADR-0009) rewrites `import()` to a routed `dynamicI
 
 HARD CEILING (sub-case, do NOT chase): a CLI that builds its importer at RUNTIME — `new Function("module","return import(module)")` (prettier@3 bin) — evades even a source transform (the import lives in a runtime string). Such CLIs are unsupportable without the tool's cooperation — a WebContainers/StackBlitz-class compat ceiling. Document in the compat matrix, don't fix.
 
+CORRECTED 2026-06-18: "evades even a source transform" holds only for a LOAD-TIME transform. A `Function`-CONSTRUCTOR-time transform DOES reach it — see `[[patch-function-import-routing]]` (feasibility: CONDITIONAL-GO). This sub-case is reclassified from "do NOT fix" to "tracked, own ADR".
+
 ## Options or Next
 
 Mirror `esm.ts`: a CJS source transform rewriting static `import(x)` → a routed call, plus inject `__riftyDynamicImport = (s) => loader.import(s, __filename)` into the CJS factory params. Covers normal CJS→ESM dynamic import; NOT the new-Function ceiling. Pairs with `runtime-js/child-realm-async-lifecycle` (the import is usually awaited in a detached promise).

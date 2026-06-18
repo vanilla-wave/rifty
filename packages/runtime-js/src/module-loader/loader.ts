@@ -1,5 +1,6 @@
 import type { FsSync } from '@riftydev/vfs';
 import { loadBuiltin } from '../builtins/index.ts';
+import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 import { executeCjs } from './cjs.ts';
 import { ModuleLoadError } from './errors.ts';
 import { type TransformResult, transformEsm } from './esm-ast.ts';
@@ -224,8 +225,13 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
       return executeCjs(resolved, { ...deps });
     },
     async import(specifier, from = cwd) {
-      const resolved = resolver.resolve(specifier, { fromFile: from, esm: true });
-      return deps.loadAsyncResolved(resolved);
+      keepaliveRef();
+      try {
+        const resolved = resolver.resolve(specifier, { fromFile: from, esm: true });
+        return await deps.loadAsyncResolved(resolved);
+      } finally {
+        keepaliveUnref();
+      }
     },
     loadById(id, esm = false) {
       const resolved = resolver.resolve(id, { fromFile: id, esm });

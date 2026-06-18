@@ -20,6 +20,8 @@ import type { WorkerSpawnSpec } from '@riftydev/kernel/worker-entry';
 // We keep this as a separate, near-empty module so Vite can resolve it via
 // `new URL('./kernel-worker-entry.ts', import.meta.url)` and bundle the
 // dependencies into a worker chunk.
+import { installEventLoopKeepalive } from '@riftydev/runtime-js';
+import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import { installNodeProcessShim } from '@riftydev/runtime-js/install-process';
 
 setKernelPreEntryHook((spec: WorkerSpawnSpec) => {
@@ -33,4 +35,6 @@ setKernelPreEntryHook((spec: WorkerSpawnSpec) => {
   });
 });
 
+installTimerGlobals();
+installEventLoopKeepalive();
 installWorkerEntry();
