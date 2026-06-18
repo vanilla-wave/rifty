@@ -24,7 +24,7 @@
 import { EventEmitter } from '@riftydev/io';
 import { channelNameFor, portChannelNameFor } from './channel.ts';
 import { CloseEventCtor } from './close-event.ts';
-import { State, type WsMessage } from './in-process.ts';
+import { State, type WsMessage, messageDataForBinaryType } from './in-process.ts';
 
 interface BridgeFrame {
   type: 'open' | 'open-ack' | 'msg' | 'close';
@@ -182,6 +182,8 @@ export class BridgedWebSocket extends EventTarget {
   protocol = '';
   extensions = '';
   binaryType: BinaryType = 'blob';
+  // No JS-side send queue over BroadcastChannel, so bufferedAmount is honestly 0.
+  bufferedAmount = 0;
   private readonly channels: BroadcastChannel[] = [];
   private activeChannel: BroadcastChannel | null = null;
   private readonly cid: string;
@@ -232,7 +234,9 @@ export class BridgedWebSocket extends EventTarget {
       return;
     }
     if (frame.type === 'msg' && this.readyState === State.OPEN && frame.data !== undefined) {
-      this.dispatchEvent(new MessageEvent('message', { data: frame.data }));
+      this.dispatchEvent(
+        new MessageEvent('message', { data: messageDataForBinaryType(frame.data, this.binaryType) }),
+      );
       return;
     }
     if (frame.type === 'close' && frame.from === 'server') {

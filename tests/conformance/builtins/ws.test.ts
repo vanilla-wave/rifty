@@ -403,6 +403,35 @@ async function raceCloseEvent(target: EventTarget): Promise<CloseEvent | null> {
   ]);
 }
 
+describe('clients expose bufferedAmount and honor binaryType', () => {
+  it('default WebSocket exposes bufferedAmount === 0', async () => {
+    const server = new WebSocketServer({ port: 9092 });
+    server.on('connection', () => {});
+    const ws = new WebSocket('ws://localhost:9092/');
+    expect(ws.bufferedAmount).toBe(0);
+    await new Promise<void>((r) => ws.addEventListener('open', () => r(), { once: true }));
+    expect(ws.bufferedAmount).toBe(0);
+    ws.close();
+    server.close();
+  });
+
+  it('BridgedWebSocket exposes bufferedAmount === 0 and honors binaryType', async () => {
+    const { WebSocket: BWS, WebSocketServer: BWSS } = createCrossRealmBridge();
+    const server = new BWSS('ws://playground/bin');
+    server.on('connection', (sock) => sock.send(new Uint8Array([7, 8, 9])));
+    const ws = new BWS('ws://playground/bin');
+    ws.binaryType = 'arraybuffer';
+    expect(ws.bufferedAmount).toBe(0);
+    const msg = await new Promise<MessageEvent>((r) =>
+      ws.addEventListener('message', (e) => r(e as MessageEvent), { once: true }),
+    );
+    expect(msg.data).toBeInstanceOf(ArrayBuffer);
+    expect([...new Uint8Array(msg.data as ArrayBuffer)]).toEqual([7, 8, 9]);
+    ws.close();
+    server.close();
+  });
+});
+
 describe('close events carry a faithful wasClean flag', () => {
   it('default WebSocket: a clean server-initiated close reports wasClean=true', async () => {
     const server = new WebSocketServer({ port: 9096 });

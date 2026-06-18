@@ -314,6 +314,9 @@ export class WebSocket extends EventTarget {
   protocol = '';
   extensions = '';
   binaryType: BinaryType = 'blob';
+  // Same-realm/bridge sends post directly with no JS-side queue, so an honest
+  // bufferedAmount is always 0 (the browser property is always present).
+  bufferedAmount = 0;
   readyState: number = State.CONNECTING;
 
   private readonly _handlers = new Map<string, EventListener>();
@@ -638,7 +641,7 @@ function arrayBufferFromBinary(data: WsMessage): ArrayBuffer | null {
 }
 
 /** Coerce a delivered binary frame to the client's `binaryType`, like the browser. */
-function messageDataForBinaryType(data: WsMessage, binaryType: BinaryType): WsMessage | Blob {
+export function messageDataForBinaryType(data: WsMessage, binaryType: BinaryType): WsMessage | Blob {
   const ab = arrayBufferFromBinary(data);
   if (!ab) return data;
   if (binaryType === 'arraybuffer') return ab;
