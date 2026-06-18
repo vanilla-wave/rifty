@@ -59,8 +59,11 @@ import {
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
 import { flushSyncMirror } from './dev-server-boot.ts';
 import { createDevServerController } from './dev-server-controller.ts';
+import { resolveNodeEntry } from './node-entry-resolve.ts';
 import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
 import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
+import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
+import { type PreviewRegistry, createPreviewRegistry } from './preview-registry.ts';
 import { createPtyServer } from './pty-server.ts';
 import { type KernelIpc, installRuntimeGlobals } from './worker-runtime-globals.ts';
 
@@ -153,11 +156,29 @@ async function bootShellOwner(opts: {
 
   // Owner→page frames (pty + dev-server status). republish on `pty:exit` since a
   // finished command may have mutated the tree (ADR-0146: owner republishes its
-  // snapshot on command exit so the explorer reflects the owner tree).
-  const send = (frame: OwnerToPageFrame): void => {
+  // snapshot on command exit so the explorer reflects the owner tree). Mirror the
+  // dev-server preview slot by observing the dev-server status frames flowing
+  // through here (ADR-0154 — the registry's dev slot tracks the SAME `pty:dev-server`
+  // running/stopped frames the page pill already consumes; this ADDS the mirror, it
+  // does not replace the status path).
+  //
+  // A hoisted function declaration (not a const arrow) so it can reference the
+  // `const previews` below without a use-before-init: `send` is visible at the
+  // `createPreviewRegistry({ send })` call site (hoisting), and `previews` is
+  // initialized before `send` ever runs — both stay `const`-clean (no `let`).
+  function send(frame: OwnerToPageFrame): void {
     kernelIpc.send?.({ type: PTY_IPC_TYPE, frame });
     if (frame.type === 'pty:exit') publishSnapshot();
-  };
+    if (frame.type === 'pty:dev-server') {
+      if (frame.status === 'running' && frame.port !== undefined) previews.setDevServer(frame.port);
+      else if (frame.status === 'stopped') previews.clearDevServer();
+    }
+  }
+
+  // Multi-port preview registry (ADR-0154): one set of previewable ports — the
+  // co-resident dev server's slot (mirrored in `send` above) + each running
+  // `node <file>` server.
+  const previews: PreviewRegistry = createPreviewRegistry({ send });
 
   // The persistent owner is spawned once with the default template; a preset
   // switch updates which template/runtime the NEXT co-resident dev server boots
@@ -242,6 +263,12 @@ async function bootShellOwner(opts: {
   // reads the owner store over fs.* RPC. Built once; the boot closure spawns a
   // fresh child per run (re-listen-on-restart), the controller's stop() kills it.
   const devServerChild = createOwnerChildDevServer(opts.devServerWorkerUrl);
+  // ADR-0154: `node <file>` runs in a supervised child like the bin executor, but
+  // a server entry (it called `listen()`) posts its ports back so the owner adds a
+  // preview slot. A monotonic run-seq keys each run's registry entries (teardown
+  // correlation): node-1, node-2, …
+  const ownerNodeExecutor = createOwnerChildNodeExecutor(opts.nodeEntryWorkerUrl);
+  let nodeRunSeq = 0;
 
   // Both `vite` (vite templates' dev line) and `npm run <script>` (node templates,
   // via package.json) boot the co-resident dev server and BLOCK the run until
@@ -300,6 +327,23 @@ async function bootShellOwner(opts: {
       return code;
     });
     shell.registerCommand('vite', (_args, ctx) => runDevServer(ctx));
+    // `node <file> [args]` (ADR-0154): resolve the entry against the owner store,
+    // then run it in a supervised child. A long-running server child registers a
+    // preview slot via `onListening`; the slot is dropped on exit. A clean Node
+    // diagnostic (exit 1) on a missing/absent entry — never a silent stub.
+    shell.registerCommand('node', (args, ctx) => {
+      const r = resolveNodeEntry(syncMirror(), ctx.cwd, args[0]);
+      if (!r.ok) {
+        ctx.stderr.write(r.message);
+        return Promise.resolve(1);
+      }
+      const sid = `node-${++nodeRunSeq}`;
+      return ownerNodeExecutor(r.path, args.slice(1), ctx, {
+        sid,
+        onListening: (id, ports) => previews.addNode(id, ports),
+        onExit: (id) => previews.removeBySid(id),
+      });
+    });
     return shell;
   };
 
@@ -307,6 +351,8 @@ async function bootShellOwner(opts: {
     send,
     makeShell,
     onDevServerReq: () => devServer.publish(),
+    // ADR-0154: answer a page subscribe by re-emitting the full preview-port set.
+    onPreviewReq: () => previews.publish(),
     // Re-resolve the dev-server config for the current preset (ADR-0148) so a
     // node-server preset boots its OWN runtime/port, not the spawn-time default.
     onDevConfig: (config) => {
