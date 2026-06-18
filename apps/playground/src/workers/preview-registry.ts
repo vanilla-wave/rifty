@@ -20,15 +20,18 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
   let dev: PreviewPortEntry | null = null;
   const node = new Map<string, PreviewPortEntry[]>();
 
-  const snapshot = (): PreviewPortEntry[] => [
-    ...(dev ? [dev] : []),
-    ...[...node.values()].flat(),
-  ];
+  const snapshot = (): PreviewPortEntry[] => [...(dev ? [dev] : []), ...[...node.values()].flat()];
   const emit = (): void => deps.send({ type: 'pty:preview', ports: snapshot() });
 
   return {
     setDevServer(port) {
-      dev = { port, url: `/preview/${port}/`, label: 'npm run dev', source: 'dev-server', sid: DEV_SID };
+      dev = {
+        port,
+        url: `/preview/${port}/`,
+        label: 'npm run dev',
+        source: 'dev-server',
+        sid: DEV_SID,
+      };
       emit();
     },
     clearDevServer() {
@@ -38,7 +41,13 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
     addNode(sid, ports) {
       node.set(
         sid,
-        ports.map((port) => ({ port, url: `/preview/${port}/`, label: `node :${port}`, source: 'node', sid })),
+        ports.map((port) => ({
+          port,
+          url: `/preview/${port}/`,
+          label: `node :${port}`,
+          source: 'node',
+          sid,
+        })),
       );
       emit();
     },

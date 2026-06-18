@@ -68,7 +68,8 @@ export function createOwnerChildNodeExecutor(
   nodeEntryUrl: string,
   spawn: (spec: SpawnWorkerSpec) => NodeChildHandle = (spec) => {
     const h = globalProcessManager.spawnWorker('node', spec, 1);
-    if (h.kind !== 'worker') throw new Error(`owner-child-node-executor: expected worker, got ${h.kind}`);
+    if (h.kind !== 'worker')
+      throw new Error(`owner-child-node-executor: expected worker, got ${h.kind}`);
     return h as unknown as NodeChildHandle;
   },
 ): OwnerNodeExecutor {

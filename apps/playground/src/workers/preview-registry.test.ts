@@ -14,7 +14,9 @@ describe('preview-registry', () => {
     reg.addNode('s1', [3000]);
     expect(sent.at(-1)).toEqual({
       type: 'pty:preview',
-      ports: [{ port: 3000, url: '/preview/3000/', label: 'node :3000', source: 'node', sid: 's1' }],
+      ports: [
+        { port: 3000, url: '/preview/3000/', label: 'node :3000', source: 'node', sid: 's1' },
+      ],
     });
     reg.removeBySid('s1');
     expect(sent.at(-1)).toEqual({ type: 'pty:preview', ports: [] });
@@ -25,8 +27,18 @@ describe('preview-registry', () => {
     const reg = createPreviewRegistry({ send });
     reg.setDevServer(5174);
     reg.setDevServer(5175);
-    expect((sent.at(-1) as Extract<OwnerToPageFrame, { type: 'pty:preview' }>).ports.filter((p) => p.source === 'dev-server')).toEqual([
-      { port: 5175, url: '/preview/5175/', label: 'npm run dev', source: 'dev-server', sid: 'dev-server' },
+    expect(
+      (sent.at(-1) as Extract<OwnerToPageFrame, { type: 'pty:preview' }>).ports.filter(
+        (p) => p.source === 'dev-server',
+      ),
+    ).toEqual([
+      {
+        port: 5175,
+        url: '/preview/5175/',
+        label: 'npm run dev',
+        source: 'dev-server',
+        sid: 'dev-server',
+      },
     ]);
     reg.clearDevServer();
     expect((sent.at(-1) as Extract<OwnerToPageFrame, { type: 'pty:preview' }>).ports).toEqual([]);
@@ -48,6 +60,8 @@ describe('preview-registry', () => {
     reg.setDevServer(5174);
     reg.addNode('s1', [3000]);
     reg.addNode('s2', [8080, 8081]);
-    expect((sent.at(-1) as Extract<OwnerToPageFrame, { type: 'pty:preview' }>).ports.map((p) => p.port)).toEqual([5174, 3000, 8080, 8081]);
+    expect(
+      (sent.at(-1) as Extract<OwnerToPageFrame, { type: 'pty:preview' }>).ports.map((p) => p.port),
+    ).toEqual([5174, 3000, 8080, 8081]);
   });
 });
