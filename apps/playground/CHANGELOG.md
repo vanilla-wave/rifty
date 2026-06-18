@@ -4,6 +4,21 @@
 
 ### Added
 
+- **Terminal `node <file>` command** (ADR-0154). Runs an arbitrary entry as a supervised child of
+  the workspace owner — the symmetric twin of the `.bin` child (`runNodeEntry`, ADR-0137), NOT the
+  template dev-server. A run-to-completion script streams stdout/stderr and exits on event-loop drain
+  (ADR-0152) with its code; a script that calls `listen()` stays alive (`serve:true`), registers its
+  port for preview, and is stopped by Ctrl-C — server-vs-script decided by what the program does, not
+  a flag. New `workers/owner-child-node-executor.ts` (spawn spec `RIFTY_BIN=0`/`RIFTY_NODE_SERVE=1`/
+  `serve:true` + stream/SIGINT-kill/exit + `rifty:node-listening` IPC), `workers/node-program-lifecycle.ts`
+  (run-vs-serve decision), `workers/node-entry-resolve.ts` (cwd-resolve + `node: cannot find module`),
+  `workers/preview-registry.ts` (multi-port set), `glue/node-child-ipc.ts`; `node-entry-bootstrap.ts`
+  gains the `RIFTY_NODE_SERVE` serve branch (net builtins always); `real-vite-bootstrap.ts` registers
+  the `node` command + the preview registry; `PreviewPanel.tsx` gains a multi-port switcher;
+  `pty-protocol.ts` gains `pty:preview`/`pty:preview-req`. Loud gaps (interactive stdin, background
+  `&`, bare-node `node:sqlite`, cross-realm loopback) are backlogged, not silent. E2E:
+  `tests/e2e/node-command.spec.ts`.
+
 - **Page preview-port registry + per-node-port preview bridge** (ADR-0154). `glue/pty-client.ts`
   gains `onPreview`/`requestPreview` mirroring the `onDevServer`/`requestDevServer` discipline:
   routes owner→page `pty:preview{ports}` snapshots to subscribers + sends `pty:preview-req`.

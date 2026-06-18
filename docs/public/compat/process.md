@@ -23,6 +23,30 @@ never drain-reaped (kept alive by its own ports). Backing tests:
 | Timer `.unref()` / `.ref()` / `.hasRef()` | ❌ | Not implemented → an `.unref()`'d timer can't opt out of keepalive (drains to cap). `backlog/runtime-js/timer-unref-keepalive` |
 | `process.exit(N)` propagates the exit code | ✅ | Via the `RIFTY_PROCESS_EXIT` shape (ADR-0039) |
 
+## Terminal `node <file>` command (ADR-0154)
+
+The playground terminal runs an arbitrary entry as a supervised child of the workspace owner
+(the `.bin`/`runNodeEntry` seam, ADR-0137 — NOT the template dev-server). Server-vs-script is
+decided by what the program DOES (it called `listen()`), not a flag — Node-faithful. Backing tests:
+`tests/e2e/node-command.spec.ts`, `apps/playground/src/workers/node-program-lifecycle.test.ts`,
+`apps/playground/src/workers/owner-child-node-executor.test.ts`,
+`apps/playground/src/workers/preview-registry.test.ts`. Run-to-completion loader parity (shebang,
+relative `import`/`require`, exit codes) reuses the existing node-entry/resolver conformance
+(`packages/runtime-js/src/builtins/node-entry.test.ts`, `tests/conformance/modules/resolver.test.ts`,
+`tests/conformance/builtins/child_process.test.ts`) — `node <file>` is the second consumer of an
+unchanged loader, so it adds no duplicate parity case.
+
+| Feature | Status | Notes |
+|---|---|---|
+| `node <file> [args]` run-to-completion | ✅ | Streams stdout/stderr; exits on event-loop drain (the model above) with the program's code; Ctrl-C → exit 130 |
+| `node <server.js>` long-running server | ✅ | A `listen()` keeps the child alive (`serve:true`); the listened port is registered for preview; Ctrl-C stops it |
+| Multi-port preview + switcher | ✅ | Each live server (and `npm run dev`) appears in the preview-panel port switcher; routed via `/preview/<port>/` |
+| `node: cannot find module` for a missing entry | ✅ | Clean Node-shape diagnostic + exit 1, resolved against the owner store (not a raw worker throw) |
+| Interactive stdin (`readline` / `process.stdin` Readable) | ❌ | Worker-side `process.stdin` Readable not wired; loud. `backlog/kernel/worker-per-process-residuals` |
+| Background `node x.js &` | ❌ | No job table; loud. `backlog/shell/background-job-model` |
+| `node:sqlite` (`DatabaseSync`) in a bare `node <file>` | ❌ | The 30 s WASM engine is brought up eagerly only for the template path (`cfg.sqlite`); a bare-node lazy bring-up is deferred + loud. `backlog/net/node-bare-sqlite-lazy-bringup` |
+| A bare node server reachable from ANOTHER child (loopback) | ❌ | Reachable via `/preview/<port>/` only; cross-realm HTTP loopback is `backlog/net/cross-realm-http-loopback` |
+
 ## Known limitations
 
 - The drain cap uses wall-clock (`performance.now()`), so a CPU-busy worker could in principle trip

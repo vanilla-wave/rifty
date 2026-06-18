@@ -1,0 +1,39 @@
+# ADR 0154: Terminal node-file command: arbitrary-entry supervised child + multi-port preview
+
+Status: Accepted (2026-06-18)
+Date: 2026-06
+
+> TL;DR: A terminal `node <file>` command runs an ARBITRARY entry as the symmetric twin of the `.bin` child (ADR-0137 `runNodeEntry`, NOT the template dev-server bootstrap): a supervised `serve:true` child whose `node-entry-bootstrap` OWNS the run-vs-serve decision — run-to-completion drains+exits (ADR-0152), a child that calls `listen()` stays alive + serves preview; multiple listening servers (plus `npm run dev`) surface through a new owner→page `pty:preview{ports:[...]}` registry frame + a preview-panel port switcher, generalizing ADR-0148's single-active dev-server preview to a multi-port set.
+
+## Context
+
+`docs/backlog/playground/terminal-node-command.md` (parked 2026-06-12, pre-P6) wanted a bare `node <file>` but its frame ("spawn a fresh kernel worker for an arbitrary entry") is now the two-owners ENOENT bug P6 killed. ADR-0130 rejected a top-level `node` that FAKED the active template's entry; the honest version runs an arbitrary entry through the real module loader. Since then the D-milestone shipped: owner-resident shell (ADR-0146), owner=SSoT + co-resident dev server + single-active `pty:dev-server` (ADR-0148), supervised CHILD per foreground CLI/dev-server over `fs.*` RPC (ADR-0150), child run-to-completion = event-loop drain, `serve:true` = forever (ADR-0152). ADR-0137's `runNodeEntry` comment already names `child_process (\`node <script>\`)` as the intended second consumer — `node <file>` IS it.
+
+Two genuine forks resolved by the user (2026-06-18): (1) SCOPE = full (run-to-completion + long-running server + preview), not run-to-completion-only; (2) preview semantics = MULTI-PORT + switcher (several previewable servers at once), not single-active-with-refuse. Faithful-to-Node + Fidelity (no fake/silent-divergence) + zero-debt-at-close govern; servers that legitimately run forever already use `serve:true` per ADR-0152.
+
+## Decision
+
+**1. `node <file>` = the `.bin` child's twin, NOT the template bootstrap.** Register `node` in the owner `makeShell` (`real-vite-bootstrap.ts`, beside `vite`/`npm`); resolve `args[0]` vs `ctx.cwd`, ENOENT-check `syncMirror()` → clean `node: cannot find module` (exit 1) over a raw worker throw. Dispatch to `createOwnerChildNodeExecutor(nodeEntryWorkerUrl)` — twin of `createOwnerChildBinExecutor`, reusing `glue/bin-executor.ts createBinExecutor` verbatim (stream / SIGINT-kill→130 / exit-code). Only the spawn spec differs: `RIFTY_BIN=0`, `argv=['rifty', resolvedEntry, ...args]`, `serve:true`, `RIFTY_NODE_SERVE=1`. `dev-server-boot.ts` is NOT generalized — it is welded to `ProjectSpec`/sqlite/HMR/seedFiles; pulling those into a generic command re-introduces the template coupling ADR-0130 warns against. `npm run dev` (template) and `node <file>` (arbitrary) stay two distinct honest paths.
+
+**2. The child bootstrap OWNS the run-vs-serve lifecycle (extends ADR-0152).** The child spawns `serve:true` (kernel keeps it alive, no drain-cap). `node-entry-bootstrap.ts`, gated on `RIFTY_NODE_SERVE` (the `.bin`/`execSync` path is unchanged): `registerNetBuiltins()` always (http/net needed by servers AND client scripts) → `await runNodeEntry({bin:false})` → inspect `listPorts()`. EMPTY → run-to-completion: `await awaitDrain()` (the same ADR-0152 keepalive — timers/immediates/imports + `unhandledrejection`→stderr/exit1) then `process.exit(code)` (the bootstrap drives the drain the kernel would have, because `serve:true` skips the kernel drain hook). NON-EMPTY → server: `serveCrossRealmPreview(port)` per port + post `rifty:node-listening{ports}` to the owner over fork-IPC, then stay alive; Ctrl-C → parent `handle.kill` → 130. Server-vs-script is decided by what the program DOES (it listened), not a flag — Node-faithful, no fake.
+
+**3. Multi-port preview registry + `pty:preview` frame (generalizes ADR-0148).** The owner keeps a preview registry = the dev-server port (if running, via its `DevServerController`) ∪ each live `node`-server child's ports; add on `rifty:node-listening`, remove on child exit/kill. A new owner→page frame `pty:preview{ports:[{port,url,label,source:'dev-server'|'node',sid}]}` is a SNAPSHOT, republished on change AND on a new `pty:preview-req` (the P3 request/handshake discipline — recoverable if it predates the page listener; not a one-shot push). `pty:dev-server` is retained for dev-server STATUS; the preview LIST is its own frame. The page derives `previewPorts()` from it and `wirePreviewBridge(port,token)` per entry — the SW `PortAwareOwnerBinding` is already multi-port (worker posts `{ownerToken, ports:[...]}`, routes `/preview/<port>/` per port). `PreviewPanel` replaces the manual port `<input>` primary control with a switcher over `previewPorts()` (default = most-recently-added; manual entry kept as fallback).
+
+**4. Reversible sub-decisions (recorded, not ADR-gated).** Auto-detect server via `listen()`; no `PORT` env injection (the program picks; preview routes to the real listened port); net builtins always-on in the node child; the switcher unifies dev-server + node ports; bare `node` with no file → usage error (no REPL). `node:sqlite` in bare node: lazy bring-up on first `require('node:sqlite')`/`DatabaseSync` if cheaply triggerable from the builtin, else loud defer + backlog.
+
+**5. Loud gaps (Fidelity — never silent).** Interactive stdin (`process.stdin` Readable not wired worker-side) → `NotImplementedError` + compat ❌ + `backlog: kernel/worker-per-process-residuals`. Background `node x.js &` → loud (`backlog: shell/background-job-model`). Bare-node `node:sqlite` if lazy infeasible → loud defer. Compat matrix: `node <file>` ✅ (run-to-completion + listening server + preview), the three gaps ❌ with backlog links.
+
+## Consequences
+
+- (+) Meets the parked user story — run any entry file; pure-JS CLIs (run-to-completion) AND arbitrary servers (preview), distinct from template `npm run dev`.
+- (+) Minimal new infra: run-to-completion reuses the proven `.bin` child + ADR-0152 drain; the server path reuses `serveCrossRealmPreview` + the already-multi-port SW binding. No kernel change.
+- (+) Server-vs-script is runtime-decided (it listened) — Node-faithful, no flag, no fake.
+- (−) New wire surface: `pty:preview`/`pty:preview-req` frames + `rifty:node-listening` owner-child control → IRREVERSIBLE. Page preview state gains a multi-entry registry (the single `realVitePort` mirror widens).
+- (−) The bootstrap now owns run-to-completion drain for `serve:true` node children (duplicates the kernel's drain decision for this one consumer) — the price of one command with runtime-decided lifecycle.
+- (−) Generalizes ADR-0148's single-active dev-server preview to a multi-port set (switcher UI + per-port bridge wiring). Does not supersede ADR-0148 (dev-server status path intact); extends it.
+- (−) Loud gaps remain (stdin / `&` / bare-node sqlite-if-lazy-infeasible) — explicit, backlogged, never silent.
+- Follow-ups: cross-realm HTTP loopback (a node server reachable from another child, `net/cross-realm-http-loopback`); lazy `node:sqlite` engine bring-up if deferred; interactive stdin; background job table.
+
+## Reversibility
+
+IRREVERSIBLE — adds wire contracts (`pty:preview`, `pty:preview-req`, `rifty:node-listening`), a new public terminal command, and widens the page preview model to multi-port. Builds on (does NOT supersede) ADR-0137 (`runNodeEntry`/`BinExecutor` seam), ADR-0150 (supervised child + `fs.*` RPC), ADR-0152 (drain + `serve:true`), ADR-0148 (dev-server preview + single-active → generalized), ADR-0130 (honest-not-fake `node`), ADR-0144 (`serve`). Closes `docs/backlog/playground/terminal-node-command.md`.
