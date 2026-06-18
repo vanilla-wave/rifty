@@ -17,7 +17,7 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 | `package.json` `imports` (`#name`) | ❌ | Pending |
 | JSON modules via `require` | ✅ | |
 | JSON modules via `import` | ✅ | Synthetic default + named keys |
-| `node:` built-ins | ⚠️ | Registry supports `node:` and bare built-ins; each module is a tested subset. `node:vm` covers `Script`, `createContext`, `isContext`, `runInThisContext`, `runInContext`, `runInNewContext`, and `compileFunction`; default engine is a real QuickJS realm (cross-realm isolation), without timeout/`displayErrors`/`cachedData`/`contextExtensions` support (those throw loudly). See the node:vm section below. |
+| `node:` built-ins | ⚠️ | Registry supports `node:` and bare built-ins; each module is a tested subset. `node:constants` is the faithful flattened union of `fs` + Linux-ABI `os` + `crypto.constants` (ADR-0153): real Node numeric values for known keys, `undefined` for absent keys — Node's shape. Reading a constant never throws; the unimplemented-behavior gap surfaces at the syscall (e.g. `fs.openSync` throws `NotImplementedError` for `O_SYNC`/`O_DSYNC` durability, `copyFileSync` for `COPYFILE_FICLONE_FORCE`). `node:vm` covers `Script`, `createContext`, `isContext`, `runInThisContext`, `runInContext`, `runInNewContext`, and `compileFunction`; default engine is a real QuickJS realm (cross-realm isolation), without timeout/`displayErrors`/`cachedData`/`contextExtensions` support (those throw loudly). See the node:vm section below. |
 | `data:` / `file:` URLs | ❌ | Throws `UNSUPPORTED_PROTOCOL` |
 | ESM static `import` | ✅ | Named, default, namespace, side-effect-only |
 | ESM `export` named / default / re-export | ✅ | |

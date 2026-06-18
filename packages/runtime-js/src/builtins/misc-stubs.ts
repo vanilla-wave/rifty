@@ -109,7 +109,6 @@ export const async_hooks = {
 };
 export const inspector = loudProxy('inspector');
 export const repl = loudProxy('repl');
-export const constants = {} as Record<string, number>;
 export const punycode = loudProxy('punycode');
 export const sys = loudProxy('sys');
 export const cluster = loudProxy('cluster');

@@ -7,6 +7,7 @@ import { resetSyncMirror } from '../../../packages/runtime-js/src/builtins/fs-sy
 import fs, {
   closeSync,
   constants,
+  copyFileSync,
   existsSync,
   fstatSync,
   ftruncateSync,
@@ -186,7 +187,9 @@ describe('node:fs fd API', () => {
     closeSync(fd);
   });
 
-  it('rejects unsupported numeric open flags and exposes supported constants only', () => {
+  it('exposes the faithful Linux-ABI constant set and rejects only garbage open flags (ADR-0153)', () => {
+    // ADR-0153: fs.constants now carries the real Node Linux-ABI values; the behavioral gap
+    // lives at the syscall, not by omitting the constant. Linux-ABI excludes macOS-only O_SYMLINK.
     expect(constants).toMatchObject({
       O_RDONLY: 0,
       O_WRONLY: 1,
@@ -196,12 +199,39 @@ describe('node:fs fd API', () => {
       O_TRUNC: 512,
       O_APPEND: 1024,
       O_DIRECTORY: 65536,
+      O_SYNC: 1052672,
+      O_DSYNC: 4096,
+      O_NONBLOCK: 2048,
+      O_NOFOLLOW: 131072,
+      S_IFMT: 61440,
+      S_IFDIR: 16384,
+      S_IFREG: 32768,
       COPYFILE_EXCL: 1,
+      COPYFILE_FICLONE: 2,
+      COPYFILE_FICLONE_FORCE: 4,
     });
-    expect('O_SYNC' in constants).toBe(false);
-    expect('O_DSYNC' in constants).toBe(false);
-    expect('COPYFILE_FICLONE' in constants).toBe(false);
+    expect('O_SYMLINK' in constants).toBe(false); // macOS-only — rifty is Linux-ABI
+    // A bit that maps to no real flag is still an invalid argument.
     expect(codeOf(() => openSync('/bad.txt', constants.O_WRONLY | 0x40000000))).toBe('EINVAL');
+  });
+
+  it('open: durability flags are a loud gap; inert flags are accepted no-ops (ADR-0153)', () => {
+    writeFileSync('/flagged.txt', 'hi');
+    // O_SYNC/O_DSYNC durability can't be honored (async OPFS flush) → loud at the syscall.
+    expect(() => openSync('/flagged.txt', constants.O_SYNC)).toThrow('fs.openSync.O_SYNC');
+    expect(() => openSync('/flagged.txt', constants.O_DSYNC)).toThrow('fs.openSync.O_SYNC');
+    // Inert-on-a-regular-VFS-file flags open successfully, matching Node.
+    const fd = openSync('/flagged.txt', constants.O_NONBLOCK | constants.O_NOFOLLOW);
+    closeSync(fd);
+  });
+
+  it('copyFile: FICLONE degrades to a plain copy; FICLONE_FORCE is a loud gap (ADR-0153)', () => {
+    writeFileSync('/cf-src.txt', 'payload');
+    copyFileSync('/cf-src.txt', '/cf-ficlone.txt', constants.COPYFILE_FICLONE);
+    expect(readFileSync('/cf-ficlone.txt', 'utf8')).toBe('payload');
+    expect(() =>
+      copyFileSync('/cf-src.txt', '/cf-force.txt', constants.COPYFILE_FICLONE_FORCE),
+    ).toThrow('COPYFILE_FICLONE_FORCE');
   });
 });
 
