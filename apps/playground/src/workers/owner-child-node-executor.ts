@@ -89,16 +89,16 @@ export function createOwnerChildNodeExecutor(
         if (isNodeChildMessage(m)) hooks.onListening(hooks.sid, m.ports);
       });
 
+      const signal = ctx.signal;
       const onAbort = (): void => {
         outputClosed = true;
         handle.kill('SIGTERM');
       };
-      const signal = ctx.signal;
-      if (signal) {
-        if (signal.aborted) onAbort();
-        else signal.addEventListener('abort', onAbort, { once: true });
-      }
 
+      // Register the exit listener BEFORE acting on an already-aborted signal:
+      // `kill()` emits 'exit' synchronously, so a pre-aborted run would otherwise
+      // lose the event → the promise never resolves + onExit (registry remove)
+      // never fires.
       let settled = false;
       handle.on('exit', (code) => {
         if (settled) return;
@@ -108,5 +108,10 @@ export function createOwnerChildNodeExecutor(
         hooks.onExit(hooks.sid);
         resolve(typeof code === 'number' ? code : 0);
       });
+
+      if (signal) {
+        if (signal.aborted) onAbort();
+        else signal.addEventListener('abort', onAbort, { once: true });
+      }
     });
 }

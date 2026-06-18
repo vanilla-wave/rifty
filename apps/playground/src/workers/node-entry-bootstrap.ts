@@ -33,6 +33,7 @@ import { awaitDrain, installConsole, installRemoteSyncFs } from '@riftydev/runti
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { syncMirror } from '@riftydev/vfs';
 import { runNodeProgramLifecycle } from './node-program-lifecycle.ts';
+import { installLoudStdin } from './node-stdin-guard.ts';
 import { installRuntimeGlobals } from './worker-runtime-globals.ts';
 
 const proc = globalThis.process;
@@ -69,15 +70,22 @@ if (proc.env.RIFTY_REMOTE_FS === '1') {
 // drain-exit vs stay-alive from whether the entry registered a port.
 //
 // The unhandledrejection trap + drain hook are ALREADY installed in this realm by
-// kernel-worker-entry.ts (`installEventLoopKeepalive()` in the pre-entry), so a
-// detached async rejection in the served entry surfaces loudly via `awaitDrain`
-// — no extra trap install needed here.
+// kernel-worker-entry.ts (`installEventLoopKeepalive()` in the pre-entry). For a
+// run-to-completion script (no listen) `awaitDrain` surfaces a detached async
+// rejection loudly (stderr + exit 1). A served entry returns without awaiting the
+// drain, so its detached rejection surfaces via the realm's default
+// `unhandledrejection` reporting (the keepalive trap deliberately does not
+// preventDefault) — never silently swallowed either way.
 //
 // Gated on RIFTY_NODE_SERVE so the shared `.bin`/`execSync` path (else-branch) is
-// byte-for-byte unchanged: installRuntimeGlobals()/net builtins never run there.
+// byte-for-byte unchanged: installRuntimeGlobals()/net builtins/stdin-guard never run there.
 if (proc.env.RIFTY_NODE_SERVE === '1') {
   registerNetBuiltins();
   const kernelIpc = installRuntimeGlobals();
+  // Interactive stdin is not forwarded to a `node <file>` child (ADR-0154 §5):
+  // make the consume surface throw loudly instead of hanging on input that never
+  // arrives (Fidelity — no silent divergence). backlog/kernel/worker-per-process-residuals.
+  installLoudStdin(proc);
   await runNodeProgramLifecycle({
     runEntry: () => runNodeEntry({ vfs: syncMirror(), entryPath, cwd: proc.cwd(), bin: false }),
     listPorts: () => listPorts(),

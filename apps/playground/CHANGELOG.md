@@ -15,9 +15,11 @@
   `workers/preview-registry.ts` (multi-port set), `glue/node-child-ipc.ts`; `node-entry-bootstrap.ts`
   gains the `RIFTY_NODE_SERVE` serve branch (net builtins always); `real-vite-bootstrap.ts` registers
   the `node` command + the preview registry; `PreviewPanel.tsx` gains a multi-port switcher;
-  `pty-protocol.ts` gains `pty:preview`/`pty:preview-req`. Loud gaps (interactive stdin, background
-  `&`, bare-node `node:sqlite`, cross-realm loopback) are backlogged, not silent. E2E:
-  `tests/e2e/node-command.spec.ts`.
+  `pty-protocol.ts` gains `pty:preview`/`pty:preview-req`. Interactive stdin is not forwarded — the
+  child's `process.stdin` consume surface throws `NotImplementedError` (`node-stdin-guard.ts`) rather
+  than hanging (Fidelity). Other gaps (bare-node `node:sqlite`, cross-realm loopback) are backlogged;
+  trailing `node x.js &` runs via the shell's generic background path (job-control builtins are the
+  gap). E2E: `tests/e2e/node-command.spec.ts`.
 
 - **Page preview-port registry + per-node-port preview bridge** (ADR-0154). `glue/pty-client.ts`
   gains `onPreview`/`requestPreview` mirroring the `onDevServer`/`requestDevServer` discipline:
