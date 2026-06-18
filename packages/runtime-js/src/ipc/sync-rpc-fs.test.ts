@@ -1,3 +1,4 @@
+import { VfsError } from '@riftydev/vfs';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
 import { resetSyncMirror, syncMirror } from '../builtins/fs-sync-mirror.ts';
@@ -107,5 +108,45 @@ describe('SyncRpcFsSync', () => {
     }).not.toThrow();
     // Must return exactly N bytes (the originally stat'd snapshot size).
     expect(result!.length).toBe(N);
+  });
+
+  it('statSync round-trips over loopback — returns correct stat for a file and a dir', () => {
+    // RED: fs.stat handler is async → over sync loopback call returns a Promise,
+    // not FsStatShape. This test FAILS pre-fix.
+    const vfs = new MemoryFsSync();
+    vfs.writeFileSync('/hello.txt', new TextEncoder().encode('world'));
+    vfs.mkdirSync('/mydir', { recursive: false });
+    const remote = new SyncRpcFsSync(loopback(vfs));
+    const fileStat = remote.statSync('/hello.txt');
+    expect(fileStat.isFile).toBe(true);
+    expect(fileStat.isDirectory).toBe(false);
+    expect(fileStat.size).toBe(5);
+    const dirStat = remote.statSync('/mydir');
+    expect(dirStat.isFile).toBe(false);
+    expect(dirStat.isDirectory).toBe(true);
+  });
+
+  it('readFileBytesSync on a missing path throws VfsError with code ENOENT (matches MemoryFsSync shape)', () => {
+    // RED: current impl throws a hand-rolled Error{code:'ENOENT'}, not VfsError.
+    // This test FAILS pre-fix because instanceof VfsError is false.
+    const vfs = new MemoryFsSync();
+    const remote = new SyncRpcFsSync(loopback(vfs));
+    let remoteErr: unknown;
+    let backendErr: unknown;
+    try {
+      remote.readFileBytesSync('/no-such-file.txt');
+    } catch (e) {
+      remoteErr = e;
+    }
+    try {
+      vfs.readFileBytesSync('/no-such-file.txt');
+    } catch (e) {
+      backendErr = e;
+    }
+    expect(remoteErr).toBeInstanceOf(VfsError);
+    expect(backendErr).toBeInstanceOf(VfsError);
+    expect((remoteErr as VfsError).code).toBe('ENOENT');
+    expect((remoteErr as VfsError).name).toBe((backendErr as VfsError).name);
+    expect((remoteErr as VfsError).code).toBe((backendErr as VfsError).code);
   });
 });

@@ -24,38 +24,16 @@
  */
 
 import { getKernelDispatcher, readKernelProcessSpec, setKernelWorkerUrl } from '@riftydev/kernel';
-import { dispatchToPort, listPorts, serveCrossRealmPreview } from '@riftydev/net';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
-import { initSqliteEngine } from '@riftydev/net/sqlite/engine';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
-import { RegistryClient, install } from '@riftydev/npm-client';
+import { RegistryClient } from '@riftydev/npm-client';
 import { installRuntimeJsFsHandlers } from '@riftydev/runtime-js';
-import { Buffer } from '@riftydev/runtime-js/builtins/buffer';
-import { Console } from '@riftydev/runtime-js/builtins/console';
-import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
 import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
-import { installProcessGlobals, setProcessCwd } from '@riftydev/runtime-js/builtins/process';
-import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
-import { createModuleLoader } from '@riftydev/runtime-js/loader';
-import {
-  type SerializedRequest,
-  type SerializedResponse,
-  setupPreviewBridge,
-} from '@riftydev/service-worker';
+import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { type CommandContext, Shell } from '@riftydev/shell';
 import { dirname, initBackend, normalizePath, syncMirror } from '@riftydev/vfs';
-import type { SqlJsConfig } from 'sql.js';
-import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
-import { esbuildShimFiles, rollupShimFiles } from '../glue/esbuild-shim.ts';
-import {
-  type HmrBridgeHandle,
-  createHmrBridgeToken,
-  createHmrBridgeVitePlugin,
-  setupHmrBridge,
-} from '../glue/hmr-bridge.ts';
 import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
 import { createNpmShellCommand } from '../glue/npm-shell-command.ts';
-import { ensureProjectDependencies } from '../glue/project-deps.ts';
 import {
   type OwnerToPageFrame,
   PTY_IPC_TYPE,
@@ -74,61 +52,27 @@ import { type VfsWriteFrame, applyVfsWriteFrame, serveVfsWrites } from '../glue/
 import { serveWorkspaceArchive } from '../glue/workspace-archive-port.ts';
 import {
   type BootstrapConfig,
-  type NodeServerBootstrapConfig,
   type ProjectSpec,
   isDevScriptName,
   resolveBootstrapConfig,
 } from '../templates/project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
-import { type DevServerHandle, createDevServerController } from './dev-server-controller.ts';
+import { flushSyncMirror } from './dev-server-boot.ts';
+import { createDevServerController } from './dev-server-controller.ts';
 import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
+import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createPtyServer } from './pty-server.ts';
-import { type ViteModuleGraph, invalidateViteModule } from './real-vite-invalidation.ts';
+import { type KernelIpc, installRuntimeGlobals } from './worker-runtime-globals.ts';
 
 const enc = new TextEncoder();
 
 registerNetBuiltins();
 registerSqliteBuiltin();
 
-interface ViteUserConfig {
-  root?: string;
-  base?: string;
-  server?: { port?: number; strictPort?: boolean; middlewareMode?: boolean; hmr?: boolean };
-  appType?: string;
-  clearScreen?: boolean;
-  optimizeDeps?: { disabled?: boolean };
-  plugins?: unknown[];
-}
-
-interface ViteWatcher {
-  on(event: 'change', cb: (file: string) => void): void;
-}
-
-interface ViteDevServer {
-  listen(): Promise<unknown>;
-  close(): Promise<void>;
-  watcher?: ViteWatcher;
-  moduleGraph?: ViteModuleGraph;
-}
-
 function log(line: string): void {
   // Kernel pre-entry hook wired process.stdout.write -> stdout MessagePort;
   // page-side WorkerProcessHandle.stdout() emits each chunk, realVite.ts -> onLog.
   globalThis.process.stdout.write(line);
-}
-
-interface ProcStdio {
-  stdout?: { write?: unknown };
-  stderr?: { write?: unknown };
-  env?: Record<string, string | undefined>;
-  on?(event: 'message', handler: (message: unknown) => void): unknown;
-  send?(message: unknown): unknown;
-}
-
-interface KernelIpc {
-  onMessage?(handler: (message: unknown) => void): void;
-  /** Fork-IPC send back to the page (ADR-0045); absent when no IPC channel. */
-  send?(message: unknown): void;
 }
 
 interface VfsWriteIpcMessage {
@@ -140,43 +84,6 @@ function isVfsWriteIpcMessage(message: unknown): message is VfsWriteIpcMessage {
   if (!message || typeof message !== 'object') return false;
   const candidate = message as { readonly type?: unknown; readonly frame?: unknown };
   return candidate.type === 'rifty:vfs-write' && !!candidate.frame;
-}
-
-function installRuntimeGlobals(): KernelIpc {
-  // Gotcha: the kernel pre-entry hook's `process` posts stdout/stderr to the
-  // page over MessagePorts (the only reason the terminal sees worker output).
-  // `installProcessGlobals` swaps in runtime-js's richer shim, but its stdout/
-  // stderr default to `console.*` (worker console, NOT page terminal) and env
-  // is empty — clobbering the wiring made all worker logs (boot progress AND
-  // error stacks) vanish, so a stalled boot looked frozen. Preserve kernel
-  // stdio + env across the swap.
-  const prev = globalThis.process as unknown as ProcStdio | undefined;
-  const kStdout = prev?.stdout;
-  const kStderr = prev?.stderr;
-  const kEnv = prev?.env;
-  const kOnMessage =
-    typeof prev?.on === 'function'
-      ? (handler: (message: unknown) => void) => {
-          prev.on?.('message', handler);
-        }
-      : undefined;
-  // The fork-IPC `send` lives on the kernel pre-entry process shim; the
-  // installProcessGlobals swap below drops it, so capture it (bound) BEFORE the
-  // swap — the pty server posts owner→page frames through it (ADR-0146).
-  const kSend =
-    typeof prev?.send === 'function'
-      ? (message: unknown) => {
-          prev.send?.(message);
-        }
-      : undefined;
-  installProcessGlobals();
-  installTimerGlobals();
-  (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
-  const proc = globalThis.process as unknown as ProcStdio;
-  if (kStdout && typeof kStdout.write === 'function') proc.stdout = kStdout;
-  if (kStderr && typeof kStderr.write === 'function') proc.stderr = kStderr;
-  if (kEnv) proc.env = kEnv;
-  return { onMessage: kOnMessage, send: kSend };
 }
 
 function seedProject(cfg: BootstrapConfig): void {
@@ -206,324 +113,10 @@ function seedProject(cfg: BootstrapConfig): void {
   }
 }
 
-/** Drain this realm's OPFS write-through (no-op on the memory backend). */
-async function flushSyncMirror(): Promise<void> {
-  const mirror = syncMirror() as { flush?: () => Promise<void> };
-  if (typeof mirror.flush === 'function') await mirror.flush();
-}
-
-function overlayShims(): void {
-  const fs = syncMirror();
-  for (const [path, content] of [
-    ...Object.entries(esbuildShimFiles),
-    ...Object.entries(rollupShimFiles),
-  ]) {
-    const np = normalizePath(path);
-    fs.mkdirSync(dirname(np), { recursive: true });
-    fs.writeFileSync(np, enc.encode(content));
-  }
-}
-
 /** Apply the optional `RIFTY_RFV_ENTRY` override. */
 function withEntryOverride(spec: ProjectSpec, entryRel: string): ProjectSpec {
   if (entryRel === spec.entry.relativePath) return spec;
   return { ...spec, entry: { ...spec.entry, relativePath: entryRel } };
-}
-
-async function dispatchSerializedPreview(req: SerializedRequest): Promise<SerializedResponse> {
-  const headers = new Headers(req.headers);
-  const init: RequestInit = { method: req.method, headers };
-  if (req.body && req.method !== 'GET' && req.method !== 'HEAD') {
-    const copy = new ArrayBuffer(req.body.byteLength);
-    new Uint8Array(copy).set(req.body);
-    init.body = copy;
-  }
-  const response = await dispatchToPort(req.port, new Request(req.url, init));
-  return {
-    status: response.status,
-    statusText: response.statusText,
-    headers: Object.fromEntries(response.headers),
-    body: response.body,
-  };
-}
-
-type Loader = ReturnType<typeof createModuleLoader>;
-
-function toRootRelativePath(root: string, path: string): string {
-  const normalizedRoot = normalizePath(root);
-  const normalizedPath = normalizePath(path);
-  if (normalizedPath === normalizedRoot) return '/';
-  if (normalizedPath.startsWith(`${normalizedRoot}/`)) {
-    return normalizedPath.slice(normalizedRoot.length);
-  }
-  return normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`;
-}
-
-/**
- * Wait for the entry to register `port` with the net registry (its
- * `listen(port)` call). Polled briefly: a top-level `await` in the entry may
- * defer the listen past the import's resolution.
- */
-async function waitForListeningPort(port: number, timeoutMs: number): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (listPorts().includes(port)) return;
-    await new Promise<void>((resolve) => setTimeout(resolve, 50));
-  }
-  // A listen() landing during the final sleep must not read as a dead server.
-  if (listPorts().includes(port)) return;
-  throw new Error(
-    `[real-vite/worker] entry never started listening on port ${port} — a node-server template entry must call listen(process.env.PORT)`,
-  );
-}
-
-/**
- * Node-server tail: optionally bring up the `node:sqlite` engine, then run the
- * ENTRY as the server program and wait for its `listen(port)`.
- */
-async function bootNodeServer(
-  cfg: NodeServerBootstrapConfig,
-  loader: Loader,
-  log: (chunk: string) => void,
-): Promise<void> {
-  if (cfg.sqlite) {
-    // wasmBinary (not locateFile): the bundled same-origin asset is fetched
-    // here, so the emscripten glue never walks its Node fs / web fetch
-    // environment-detection paths inside the worker realm.
-    log('[real-vite/worker] bringing up the node:sqlite WASM engine…\n');
-    const wasmResponse = await fetch(sqlWasmUrl);
-    if (!wasmResponse.ok) {
-      throw new Error(`[real-vite/worker] sql.js wasm fetch failed: HTTP ${wasmResponse.status}`);
-    }
-    const wasmBinary = await wasmResponse.arrayBuffer();
-    log(`[real-vite/worker] sql.js wasm fetched: ${wasmBinary.byteLength} bytes\n`);
-    // locateFile must ALSO be pinned: the emscripten glue computes the wasm
-    // path eagerly even when wasmBinary is provided, and the engine's default
-    // (import.meta.resolve on a bare specifier) throws inside a bundled worker.
-    const config: SqlJsConfig & { readonly wasmBinary: ArrayBuffer } = {
-      wasmBinary,
-      locateFile: () => sqlWasmUrl,
-    };
-    // Diagnosable failure over a silent stall: surface WHERE the engine died.
-    const engineTimeout = new Promise<never>((_, reject) => {
-      setTimeout(
-        () => reject(new Error('[real-vite/worker] node:sqlite engine bring-up timed out (30s)')),
-        30_000,
-      );
-    });
-    await Promise.race([initSqliteEngine(config), engineTimeout]);
-    log('[real-vite/worker] node:sqlite engine ready\n');
-  }
-
-  // Node parity: console.log IS stdout. Route the server program's console into
-  // the dev-run's terminal stream (ADR-0148, co-resident dev server in the owner:
-  // the server's boot AND async request logs land in the playground terminal,
-  // not the worker devtools —
-  // the persistent owner's global stdout goes to the owner diagnostic, so wire to
-  // `log` = the active `npm run dev` run's `ctx.stdout`, live for the whole run).
-  const termWriter = {
-    write(chunk: string): boolean {
-      log(chunk);
-      return true;
-    },
-  };
-  (globalThis as { console: unknown }).console = new Console(termWriter, termWriter);
-
-  log(`[real-vite/worker] starting server ${cfg.entryPath} on port ${cfg.port}…\n`);
-  await loader.import(cfg.entryPath, `${cfg.root}/__entry__.mjs`);
-  await waitForListeningPort(cfg.port, 10_000);
-  log(`[real-vite/worker] server is listening on internal port ${cfg.port}\n`);
-}
-
-/**
- * Boot the co-resident dev server (ADR-0148) INSIDE the workspace owner: run
- * the idempotent dependency-arrival (against THIS realm's tree — the one the
- * shell installs into, so vite sees terminal-installed deps), build the module
- * loader, start vite / the node server, and register the preview + HMR bridges.
- * Returns a stop handle (`server.close()` + bridge disposal) so Ctrl-C stops the
- * dev server WITHOUT killing the owner. `log` streams progress to the session.
- *
- * node-server stop is best-effort: the entry IS the server (an ESM module,
- * evaluated once), so stop tears the preview bridges but the program keeps
- * running — a graceful server stop is deferred (the ADR-0144 model is hard-kill today).
- */
-async function bootDevServer(opts: {
-  readonly cfg: BootstrapConfig;
-  readonly port: number;
-  readonly root: string;
-  readonly spec: ProjectSpec;
-  readonly slug: string;
-  readonly fromScratch: boolean;
-  readonly ownerToken: string | undefined;
-  readonly publishSnapshot: () => void;
-  readonly log: (chunk: string) => void;
-}): Promise<DevServerHandle> {
-  const { cfg, port, root, spec, slug, fromScratch, ownerToken, publishSnapshot, log } = opts;
-
-  // Seed the template's package.json + files IF ABSENT — never overwrite. A
-  // force-overwrite here discarded the user's `npm install` additions on every
-  // boot (package.json reverted to the template deps → the stamp's dep check
-  // failed → the baked snapshot replaced node_modules, dropping the install), so
-  // an installed CLI never survived a reload. A genuine preset switch resets
-  // package.json in the `boot` closure (alongside the node_modules/lockfile
-  // clear); a same-template reload preserves the user's tree.
-  const seedFs = syncMirror();
-  seedFs.mkdirSync(root, { recursive: true });
-  if (!seedFs.existsSync(`${root}/package.json`)) {
-    seedFs.writeFileSync(`${root}/package.json`, enc.encode(cfg.packageJson));
-  }
-  for (const [seedPath, content] of Object.entries(cfg.seedFiles)) {
-    const np = normalizePath(seedPath);
-    if (np === `${root}/package.json`) continue;
-    seedFs.mkdirSync(dirname(np), { recursive: true });
-    if (!seedFs.existsSync(np)) seedFs.writeFileSync(np, enc.encode(content));
-  }
-
-  // Dependency arrival (ADR-0135): idempotent via the install stamp — a no-op if
-  // the user already ran `npm install`. instant reuses the baked snapshot quietly;
-  // from-scratch streams a real install to the terminal.
-  const vfs = new SyncMirrorVfs();
-  await ensureProjectDependencies({
-    vfs,
-    fsSync: syncMirror(),
-    root,
-    templateId: spec.id,
-    slug,
-    snapshotUrl: fromScratch ? undefined : cfg.bakedNodeModulesUrl,
-    install: async () => {
-      log(`installing ${spec.displayName} into ${root}/node_modules…\n`);
-      const registry = new RegistryClient({ fetch: proxiedRegistryFetch() });
-      const result = await install({
-        vfs,
-        cwd: root,
-        registry,
-        onPackage: fromScratch
-          ? (event) =>
-              log(`npm: + ${event.name}@${event.version}${event.cacheHit ? ' (cached)' : ''}\n`)
-          : undefined,
-      });
-      log(`installed ${result.packages.length} packages (${result.conflicts.length} conflicts)\n`);
-      return { packages: result.packages.length };
-    },
-    flush: flushSyncMirror,
-    log,
-  });
-  publishSnapshot();
-
-  const loader = createModuleLoader(syncMirror(), { cwd: root });
-  __setCreateRequireImpl((from: string) => {
-    const fromPath = from.startsWith('file://')
-      ? decodeURIComponent(from.slice('file://'.length))
-      : from;
-    const req = ((id: string) => loader.require(id, fromPath)) as ((id: string) => unknown) & {
-      resolve: (id: string) => string;
-      cache: Record<string, unknown>;
-      extensions: Record<string, unknown>;
-      main: undefined;
-    };
-    req.resolve = (id: string) =>
-      loader.resolver.resolve(id, { fromFile: fromPath, esm: false }).id;
-    req.cache = {};
-    req.extensions = {};
-    req.main = undefined;
-    return req;
-  });
-
-  const hmrBridgeRef: { current?: HmrBridgeHandle } = {};
-  let activeServer: ViteDevServer | null = null;
-  function broadcastFileUpdate(path: string): void {
-    const modulePath = normalizePath(path);
-    if (activeServer) {
-      try {
-        invalidateViteModule(activeServer, modulePath);
-      } catch (err) {
-        log(`module invalidation failed for ${modulePath}: ${(err as Error).message}\n`);
-      }
-    }
-    hmrBridgeRef.current?.broadcast(
-      JSON.stringify({
-        type: 'update',
-        event: 'change',
-        path: toRootRelativePath(root, modulePath),
-      }),
-    );
-  }
-
-  // The node-server entry binds `process.env.PORT`; the persistent owner's PORT
-  // env is its SPAWN-time default (the default template), so a preset switch must
-  // point it at the CURRENT template's dev port before the entry listens.
-  globalThis.process.env.PORT = String(port);
-
-  if (cfg.runtime === 'node-server') {
-    await bootNodeServer(cfg, loader, log);
-    publishSnapshot();
-  }
-
-  if (cfg.runtime === 'vite') {
-    overlayShims();
-    log(`importing ${cfg.runtimeSpecifier}…\n`);
-    const viteNs = (await loader.import(
-      cfg.runtimeSpecifier,
-      `${root}/__entry__.mjs`,
-    )) as unknown as {
-      createServer: (config: ViteUserConfig) => Promise<ViteDevServer>;
-    };
-    const hmrBridgeToken = createHmrBridgeToken();
-    hmrBridgeRef.current = setupHmrBridge({ port, token: hmrBridgeToken });
-    log(`starting dev server on port ${port}…\n`);
-    const server = await viteNs.createServer({
-      root,
-      base: './',
-      server: {
-        port,
-        strictPort: cfg.server.strictPort,
-        middlewareMode: false,
-        hmr: false,
-        host: cfg.server.host,
-        allowedHosts: cfg.server.allowedHosts,
-      } as unknown as ViteUserConfig['server'],
-      appType: cfg.server.appType,
-      clearScreen: false,
-      optimizeDeps: {
-        disabled: cfg.server.optimizeDepsDisabled,
-      } as unknown as ViteUserConfig['optimizeDeps'],
-      plugins: cfg.hmrEnabled ? [createHmrBridgeVitePlugin({ port, token: hmrBridgeToken })] : [],
-    });
-    await server.listen();
-    activeServer = server;
-    log(`vite is listening on internal port ${port}\n`);
-    publishSnapshot();
-    server.watcher?.on('change', (file) => {
-      broadcastFileUpdate(file);
-      publishSnapshot();
-    });
-  }
-
-  // Direct SW→Worker preview route (A-023) + cross-realm fallback. The page wires
-  // its side on the `pty:dev-server{running,port}` frame (ADR-0148).
-  const tearDirectSwBridge = setupPreviewBridge(dispatchSerializedPreview, {
-    ports: [port],
-    ownerToken,
-  });
-  const tearPreviewBridge = serveCrossRealmPreview(port, async (request) =>
-    dispatchToPort(port, request),
-  );
-  log('[real-vite/worker] preview bridges ready\n');
-
-  return {
-    port,
-    onFileChanged: broadcastFileUpdate,
-    async stop() {
-      try {
-        await activeServer?.close();
-      } catch {
-        /* idempotent: double stop / a server that never listened */
-      }
-      tearDirectSwBridge();
-      tearPreviewBridge();
-      hmrBridgeRef.current?.close();
-    },
-  };
 }
 
 /**
@@ -544,11 +137,12 @@ async function bootShellOwner(opts: {
   readonly spec: ProjectSpec;
   readonly slug: string;
   readonly fromScratch: boolean;
-  readonly ownerToken: string | undefined;
   /** node-entry bootstrap worker URL — the supervised child each CLI runs in (ADR-0150). */
   readonly nodeEntryWorkerUrl: string;
+  /** dev-server child bootstrap worker URL — the supervised serve:true child the owner spawns (ADR-0150 P6b). */
+  readonly devServerWorkerUrl: string;
 }): Promise<void> {
-  const { cfg, port, kernelIpc, publishSnapshot, spec, slug, fromScratch, ownerToken } = opts;
+  const { cfg, port, kernelIpc, publishSnapshot, spec, slug, fromScratch } = opts;
 
   seedProject(cfg);
   publishSnapshot();
@@ -580,15 +174,16 @@ async function bootShellOwner(opts: {
     send,
     // v1: boot runs to completion; a Ctrl-C mid-boot takes effect right after
     // (the controller stops the server once `signal` aborts) — not mid-install.
-    boot: (_signal, devLog) => {
+    boot: (signal, devLog) => {
       if (lastDevTemplateId !== null && lastDevTemplateId !== devSpec.id) {
         // Template switched: a fresh worker per preset used to keep node_modules
         // clean; the ONE persistent owner accumulates the prior preset's deps,
         // which trips the new template's lockfile coverage (EBROKENLOCK). Clear
         // node_modules + the lockfile + package.json so the new template seeds its
-        // own package.json (seedProject/bootDevServer seed it back if-absent) and
-        // installs cleanly. A same-template reload skips this — preserving the
-        // user's package.json + installed tree.
+        // own package.json (the child seeds it back if-absent) and installs
+        // cleanly. A same-template reload skips this — preserving the user's
+        // package.json + installed tree. Owner-realm stateful across runs: the
+        // clean runs HERE on the owner store the child reads over fs.* RPC.
         const fs = syncMirror();
         try {
           fs.rmSync(`${devCfg.root}/node_modules`, { recursive: true, force: true });
@@ -599,18 +194,31 @@ async function bootShellOwner(opts: {
         }
       }
       lastDevTemplateId = devSpec.id;
-      return bootDevServer({
-        cfg: devCfg,
-        // The dev server listens on the template port (cfg.port), distinct from
-        // `port` (the owner's snapshot/nm/vfs-write bridge key).
-        port: devCfg.port,
-        root: devCfg.root,
-        spec: devSpec,
-        slug: devSlug,
-        fromScratch: devFromScratch,
-        ownerToken,
-        publishSnapshot,
+      // ADR-0150 P6b: spawn the dev server in a supervised serve:true child that
+      // reads the owner store over fs.* RPC. The owner stays a free async
+      // supervisor. The driver resolves when the child reports listening; stop()
+      // kills the child (re-listen-on-restart via a fresh child per run). `signal`
+      // is forwarded for the contract; v1 boot runs to completion (a Ctrl-C
+      // mid-boot takes effect right after, via the controller's stop()).
+      return devServerChild.boot({
+        signal,
         log: devLog,
+        params: {
+          templateId: devSpec.id,
+          slug: devSlug,
+          setup: devFromScratch ? 'from-scratch' : 'instant',
+          // The dev server listens on the template port (devCfg.port), distinct
+          // from `port` (the owner's snapshot/nm/vfs-write bridge key).
+          root: devCfg.root,
+          devPort: devCfg.port,
+        },
+        onSnapshotDirty: publishSnapshot,
+        // Owner realm → real OWNER OPFS drain. The child's install writes land in
+        // THIS realm's write-through queue over fs.* RPC; the child's own flush is
+        // a no-op (remote SyncRpcFsSync has none). Drain here on dev-ready so the
+        // queue is empty for later shell writes (they then persist before a reload
+        // terminates the owner). Replaces the pre-P6b in-owner install flush.
+        flush: flushSyncMirror,
       });
     },
   });
@@ -630,6 +238,10 @@ async function bootShellOwner(opts: {
   // stays a free async supervisor (blocking work left it). The in-realm
   // createOwnerBinExecutor stays as a documented fallback (owner-bin-executor.ts).
   const ownerBinExecutor = createOwnerChildBinExecutor(opts.nodeEntryWorkerUrl);
+  // ADR-0150 P6b: the dev server also runs in a supervised serve:true child that
+  // reads the owner store over fs.* RPC. Built once; the boot closure spawns a
+  // fresh child per run (re-listen-on-restart), the controller's stop() kills it.
+  const devServerChild = createOwnerChildDevServer(opts.devServerWorkerUrl);
 
   // Both `vite` (vite templates' dev line) and `npm run <script>` (node templates,
   // via package.json) boot the co-resident dev server and BLOCK the run until
@@ -748,11 +360,10 @@ async function bootstrap(): Promise<void> {
   const env = { ...(readKernelProcessSpec()?.env ?? globalThis.process.env) };
   const port = Number.parseInt(env.RIFTY_RFV_PORT ?? '5174', 10);
   const root = env.RIFTY_RFV_ROOT ?? '/workspace';
-  // ADR-0148: ONE owner — the unified shell + co-resident dev server. The
-  // legacy per-run 'preview' worker is gone (no spawner sets RIFTY_OWNER_MODE
-  // anymore). `ownerToken` keys the preview SW route (page wires its side on the
-  // pty:dev-server frame).
-  const ownerToken = env.RIFTY_PREVIEW_OWNER_TOKEN;
+  // ADR-0148/0150: ONE owner — the unified shell + the dev server it spawns as a
+  // supervised child. The legacy per-run 'preview' worker is gone (no spawner sets
+  // RIFTY_OWNER_MODE anymore). The preview SW route is keyed page-side
+  // (mountPlaygroundPreviewBridge); the owner no longer threads a preview token.
   const spec = resolveProjectSpec(env.RIFTY_RFV_TEMPLATE ?? DEFAULT_TEMPLATE_ID);
   // Sandbox setup kind (ADR-0135): from-scratch runs the visible, honest install
   // HERE (the OPFS-owning realm), streamed to the terminal; instant stays quiet.
@@ -808,19 +419,20 @@ async function bootstrap(): Promise<void> {
   // spawn) and serve the child's fs over the kernel dispatcher (owner = SSoT).
   const kernelWorkerUrl = env.RIFTY_KERNEL_WORKER_URL;
   const nodeEntryWorkerUrl = env.RIFTY_NODE_ENTRY_WORKER_URL;
-  if (!kernelWorkerUrl || !nodeEntryWorkerUrl) {
+  const devServerWorkerUrl = env.RIFTY_DEV_SERVER_WORKER_URL;
+  if (!kernelWorkerUrl || !nodeEntryWorkerUrl || !devServerWorkerUrl) {
     throw new Error(
-      'workspace-owner: missing RIFTY_KERNEL_WORKER_URL / RIFTY_NODE_ENTRY_WORKER_URL — cannot spawn child CLIs',
+      'workspace-owner: missing RIFTY_KERNEL_WORKER_URL / RIFTY_NODE_ENTRY_WORKER_URL / RIFTY_DEV_SERVER_WORKER_URL — cannot spawn child CLIs or the dev server',
     );
   }
   setKernelWorkerUrl(kernelWorkerUrl);
   setNodeEntryWorkerUrl(nodeEntryWorkerUrl);
   installRuntimeJsFsHandlers(getKernelDispatcher(), syncMirror);
 
-  // ADR-0148: ONE unified owner — shell sessions + the co-resident dev server
-  // (started on demand by `vite` / `npm run <script>`), all against this realm's
-  // installed tree. The legacy per-run preview tail is gone (folded into
-  // `bootDevServer`, invoked from the owner's dev command).
+  // ADR-0148/0150: ONE unified owner — shell sessions + the dev server it spawns
+  // on demand (`vite` / `npm run <script>`) as a supervised serve:true child that
+  // reads this realm's installed tree over fs.* RPC. The legacy per-run preview
+  // tail is gone; the owner stays a free async supervisor.
   await bootShellOwner({
     cfg,
     port,
@@ -829,8 +441,8 @@ async function bootstrap(): Promise<void> {
     spec,
     slug,
     fromScratch,
-    ownerToken,
     nodeEntryWorkerUrl,
+    devServerWorkerUrl,
   });
 }
 

@@ -2,8 +2,79 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Supervised dev-server child entry + config resolver** (P6b, ADR-0150).
+  `workers/dev-server-child-config.ts` is a pure, LIGHT-import resolver
+  (`resolveDevServerChildConfig`) that rebuilds the boot config (spec/cfg/port/root/slug/
+  fromScratch) from the spawn env, with loud throws on a missing required var (and a
+  non-integer port) — unit-tested without pulling vite/sql.js. `workers/dev-server-child-bootstrap.ts` is the heavy
+  `kind:'url'` child entry the owner spawns to run the dev server out of the owner thread: it reads
+  the owner store over fs.* sync-RPC (`installRemoteSyncFs`, RIFTY_REMOTE_FS=1), boots via
+  `bootDevServer`, and talks to the owner over fork-IPC (`rifty:dev-ready`/`-error`/`-snapshot` out,
+  `rifty:dev-file-changed` in). `registerNetBuiltins`/`registerSqliteBuiltin` + the boot run INSIDE a
+  guarded entry fn (only when `readKernelProcessSpec() !== null`), so importing the module under
+  vitest has no heavy side effects. The owner spawn-to-child flip is a later task.
+
+### Changed
+
+- **Owner spawns the dev server as a supervised child instead of booting it in-realm** (P6b flip,
+  ADR-0150). The owner's dev-line boot closure (`real-vite-bootstrap.ts`) no longer calls
+  `bootDevServer` in its own thread; it now spawns the dev server through
+  `createOwnerChildDevServer(devServerWorkerUrl)` — a serve:true child (`dev-server-child-bootstrap`)
+  that reads+writes the owner store over fs.* sync-RPC. The owner stays a free async supervisor; the
+  driver resolves when the child reports listening, and the controller's stop() kills the child (a
+  fresh child per run → re-listen on restart). The new child entry URL threads page→owner over
+  `RIFTY_DEV_SERVER_WORKER_URL` (`realVite.ts` spawn env → owner bootstrap guard → `bootShellOwner`).
+  The owner-realm template-switch clean (rm node_modules/lockfile/package.json on a preset switch)
+  and the editor-write→HMR + snapshot wiring are unchanged. The owner no longer imports/calls
+  `bootDevServer` (kept only for the child + `flushSyncMirror`).
+- **Extracted the co-resident dev-server boot core into `workers/dev-server-boot.ts`** (P6b prep,
+  ADR-0148/0150). `bootDevServer` + the vite/node-server tails (`bootNodeServer`,
+  `waitForListeningPort`, `overlayShims`, `toRootRelativePath`,
+  `flushSyncMirror`, the Vite interfaces) moved verbatim out of `real-vite-bootstrap.ts` (which has a
+  top-level `await bootstrap()` so it can't be imported) into an importable, side-effect-free module
+  so a P6b child realm can import it. No behavior change: the owner still imports `bootDevServer` and
+  calls it in-realm exactly as before; the spawn-to-child flip is a later task.
+
 ### Fixed
 
+- **`stop()` no longer hangs after a post-ready dev-server child crash** (P6b review, ADR-0150). The
+  driver's `DevServerHandle.stop()` killed the child then awaited its `'exit'` — but `WorkerHandle.kill()`
+  on an ALREADY-exited child returns `false` and emits NO `'exit'`, so a Ctrl-C after a mid-run child
+  crash awaited a frame that never came and hung the dev-run (and the controller's `stopped`
+  transition) forever. `stop()` now resolves immediately when `kill()` returns `false`, so Ctrl-C
+  recovery works; the remaining AUTOMATIC post-ready-exit observation stays the disclosed follow-up
+  (`backlog: shell/dev-server-child-exit-unobserved`).
+- **Removed the inert `setupPreviewBridge` no-op + dead `ownerToken`/`RIFTY_DEV_SERVER` plumbing from
+  the dev-server child** (P6b review, ADR-0150 corrected). `bootDevServer` runs only in the child
+  realm, where `setupPreviewBridge` no-ops (`!('serviceWorker' in navigator)`) — the ADR's own
+  correction names that placement a forbidden silent no-op. Dropped the call + `dispatchSerializedPreview`
+  + `tearDirectSwBridge` and the whole `ownerToken` chain it fed (`RIFTY_PREVIEW_OWNER_TOKEN` env →
+  resolver → boot opts) and the never-read `RIFTY_DEV_SERVER` env. The live SW-direct preview route is
+  page-anchored (`mountPlaygroundPreviewBridge`); the child serves `/preview/<port>/` via
+  `serveCrossRealmPreview` (keyed by port). No behavior change — only dead code removed.
+- **Owner flushes its OPFS after the dev-server child's install — shell writes survive reload** (P6b
+  regression, ADR-0072/0150; caught by `owner-persistence-reload` e2e). Pre-P6b `bootDevServer` ran in
+  the owner, so its `ensureProjectDependencies({ flush: flushSyncMirror })` drained the OWNER's OPFS
+  write-through queue. Post-P6b that flush runs in the CHILD, where `syncMirror()` is the remote
+  `SyncRpcFsSync` (no `flush` → no-op), while the child's node_modules install writes land in the
+  OWNER's write-through queue over fs.* RPC and were never drained. A subsequent small shell write
+  (`echo > persist.txt`) queued behind the undrained node_modules backlog and was lost when the reload
+  terminated the owner worker before the queue reached durable OPFS. Fix: `DevServerChildBootOpts` gains
+  an optional `flush`; the owner driver awaits it on `rifty:dev-ready` BEFORE resolving boot (the
+  controller goes LIVE only once the owner store is durable), and `bootShellOwner` passes
+  `flush: flushSyncMirror` (owner realm → real OWNER OPFS drain). Boot-scoped (once per dev-server
+  boot in the supervisor), NOT the P5-reverted per-`pty:exit` flush stall.
+- **Dev-server child binds the preset's dev port, not the owner's spawn default** (P6b, ADR-0150).
+  The node-server template entry binds `process.env.PORT`; in the supervised child that env came from
+  the owner's spawn-time default (the default vite port 5174), not the active preset's dev port (e.g.
+  express-sqlite 3210) — so the entry listened on 5174, the harness `waitForListeningPort(3210)` timed
+  out, and `/preview/3210/` 502'd (caught by the `fullstack-demo` gold e2e). The owner's in-realm
+  `globalThis.process.env.PORT` mutation does not reach the child entry (it reads its env from the
+  clobber-safe `KernelProcessSpec`). `buildDevServerChildSpawnSpec` now sets `PORT`=devPort in the
+  child spawn env, the source the entry actually reads. Vite presets are unaffected (vite binds via its
+  config port, not `process.env.PORT`).
 - **`npm run <script>` no longer silently boots the dev server for non-dev scripts.** The owner's
   `runScript` ignored the script command and always ran the dev server, so `npm run build`
   (`vite build`) exited 0 having silently booted dev. It now boots only for the spec's dev-line

@@ -11,11 +11,11 @@ describe('real Vite page-to-owner updates (ADR-0148: co-resident dev server runs
     expect(source).toContain('sendVfsWrite(snapshotPort, frame)');
   });
 
-  it('shares a preview owner token between the page bridge and worker bridge', () => {
-    // The owner generates the token, carries it to the worker via env, and the
-    // page wires its preview bridge side with the SAME token (`wirePreviewBridge`).
+  it('keys the page-side preview bridge on a generated owner token', () => {
+    // ADR-0150 P6b: the dev server runs in a supervised child whose cross-realm
+    // route is keyed by port, so the preview SW token is generated + wired
+    // page-side only (no longer threaded to the owner/worker via env).
     expect(source).toContain('const previewOwnerToken = createPreviewOwnerToken()');
-    expect(source).toContain('RIFTY_PREVIEW_OWNER_TOKEN: previewOwnerToken');
     expect(source).toContain('mountPlaygroundPreviewBridge(previewBridge, { ownerToken })');
   });
 

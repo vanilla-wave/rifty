@@ -8,6 +8,7 @@
  * fdTable) — this implements only the 13 `FsSync` methods.
  */
 
+import { VfsError } from '@riftydev/vfs';
 import type { FsSync, VfsDirent } from '@riftydev/vfs';
 import { setSyncMirror } from '../builtins/fs-sync-mirror.ts';
 import { FS_METHODS, FS_RPC_CHUNK, type FsStatShape, bytesToBase64 } from './fs-rpc-protocol.ts';
@@ -37,8 +38,7 @@ export class SyncRpcFsSync implements FsSync {
   readFileBytesSync(path: string): Uint8Array {
     const stat = this.call(FS_METHODS.statOrNull, { path }) as FsStatShape | null;
     if (stat === null || !stat.isFile) {
-      // TODO(backlog: runtime-js/child-remote-fs-fidelity) — hand-rolled ENOENT diverges from VfsError shape
-      throw Object.assign(new Error(`ENOENT: ${path}`), { code: 'ENOENT', path });
+      throw new VfsError('ENOENT', path);
     }
     const size = stat.size ?? 0;
     if (size === 0) return new Uint8Array(0);
