@@ -1,5 +1,10 @@
+import type { CommandContext } from '@riftydev/shell';
 import { describe, expect, it, vi } from 'vitest';
-import { type NodeChildHandle, buildNodeChildSpawnSpec, createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
+import {
+  type NodeChildHandle,
+  buildNodeChildSpawnSpec,
+  createOwnerChildNodeExecutor,
+} from './owner-child-node-executor.ts';
 
 function fakeHandle() {
   const listeners: Record<string, ((arg?: unknown) => void)[]> = {};
@@ -9,20 +14,33 @@ function fakeHandle() {
     stdout: () => ({ on: (_: 'data', cb: (c: unknown) => void) => dataCbs.stdout.push(cb) }),
     stderr: () => ({ on: (_: 'data', cb: (c: unknown) => void) => dataCbs.stderr.push(cb) }),
     on: (ev: string, cb: (arg?: unknown) => void) => {
-      (listeners[ev] ??= []).push(cb);
+      const list = listeners[ev] ?? [];
+      listeners[ev] = list;
+      list.push(cb);
     },
     send: vi.fn(),
     kill: vi.fn(() => true),
   } as unknown as NodeChildHandle;
   return {
     h,
-    emit: (ev: string, arg?: unknown) => (listeners[ev] ?? []).forEach((cb) => cb(arg)),
-    out: (c: unknown) => dataCbs.stdout.forEach((cb) => cb(c)),
+    emit: (ev: string, arg?: unknown) => {
+      for (const cb of listeners[ev] ?? []) cb(arg);
+    },
+    out: (c: unknown) => {
+      for (const cb of dataCbs.stdout) cb(c);
+    },
   };
 }
 
-function makeCtx(over: Record<string, unknown> = {}) {
-  return { cwd: '/w', env: {}, stdout: { write: vi.fn() }, stderr: { write: vi.fn() }, signal: undefined, ...over } as any;
+function makeCtx(over: Record<string, unknown> = {}): CommandContext {
+  return {
+    cwd: '/w',
+    env: {},
+    stdout: { write: vi.fn() },
+    stderr: { write: vi.fn() },
+    signal: undefined,
+    ...over,
+  } as unknown as CommandContext;
 }
 
 describe('owner-child-node-executor', () => {

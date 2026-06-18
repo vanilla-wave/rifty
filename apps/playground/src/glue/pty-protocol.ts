@@ -118,7 +118,13 @@ const PAGE_TO_OWNER = new Set([
   'pty:dev-config',
   'pty:preview-req',
 ]);
-const OWNER_TO_PAGE = new Set(['pty:ready', 'pty:chunk', 'pty:exit', 'pty:dev-server', 'pty:preview']);
+const OWNER_TO_PAGE = new Set([
+  'pty:ready',
+  'pty:chunk',
+  'pty:exit',
+  'pty:dev-server',
+  'pty:preview',
+]);
 export function isPageToOwner(f: PtyFrame): f is PageToOwnerFrame {
   return PAGE_TO_OWNER.has(f.type);
 }

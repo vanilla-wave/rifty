@@ -37,7 +37,11 @@ describe('runNodeProgramLifecycle', () => {
 
   it('entry process.exit code propagates (drain + preview skipped)', async () => {
     const err = Object.assign(new Error('x'), { code: 'RIFTY_PROCESS_EXIT', exitCode: 3 });
-    const d = deps({ runEntry: vi.fn(async () => { throw err; }) });
+    const d = deps({
+      runEntry: vi.fn(async () => {
+        throw err;
+      }),
+    });
     await runNodeProgramLifecycle(d);
     expect(d.exit).toHaveBeenCalledWith(3);
     expect(d.servePreview).not.toHaveBeenCalled();
@@ -45,7 +49,11 @@ describe('runNodeProgramLifecycle', () => {
   });
 
   it('a non-exit throw propagates (surfaced by kernel worker-entry)', async () => {
-    const d = deps({ runEntry: vi.fn(async () => { throw new Error('boom'); }) });
+    const d = deps({
+      runEntry: vi.fn(async () => {
+        throw new Error('boom');
+      }),
+    });
     await expect(runNodeProgramLifecycle(d)).rejects.toThrow('boom');
     expect(d.exit).not.toHaveBeenCalled();
   });
