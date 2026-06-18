@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Event-loop keepalive (libuv-style refcount over timers/immediates/pending dynamic imports) + `unhandledrejection` loud-fail:** run-to-completion children now drain async work scheduled after top-level (Node-parity) and fail loudly on a rejection or a never-draining loop (generous cap, documented divergence) instead of silently exiting 0. See ADR.
+
 ### Fixed
 
 - **`SyncRpcFsSync.readFileBytesSync` ENOENT shape matches `VfsError` (closes backlog runtime-js/child-remote-fs-fidelity).** Hand-rolled `Error{code:'ENOENT'}` replaced with `new VfsError('ENOENT', path)` — same `name`/`code`/`instanceof` as every other VFS backend. `statSync` over the sync-RPC loopback is now round-trip-tested (the `fs.stat` owner handler was gratuitously `async`, leaving `statSync` as the one unexercised remote method).
