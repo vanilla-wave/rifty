@@ -150,7 +150,7 @@ describe('Readable.pipe / Readable.unpipe', () => {
 
   it('destroys the source when a promise-returning sink rejects a write', async () => {
     // A sink whose write() returns a rejecting promise (the promise-sink seam
-    // ADR-0153 leaves open). On rejection the source must be torn down, not left
+    // ADR-0154 leaves open). On rejection the source must be torn down, not left
     // paused-and-undestroyed leaking the producer.
     class RejectingSink extends EventEmitter {
       write(): Promise<boolean> {
