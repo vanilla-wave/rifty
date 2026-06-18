@@ -24,7 +24,7 @@
  * Manual verification steps (no env flag needed):
  *   1. `pnpm dev` → open `http://localhost:5273`.
  *   2. Wait for the visible terminal's `vite` command to print
- *      `[vite] dev server ready on port 5174`.
+ *      `[real-vite/worker] vite is listening on internal port 5174`.
  *   3. Confirm the preview iframe shows the seeded "Hello from real Vite"
  *      message.
  *   4. Open DevTools → `Application` → `Frames` → drill into the preview
@@ -50,8 +50,10 @@ test.describe('M10 — real Vite HMR over cross-realm bridge', () => {
     await page.goto('/');
 
     const term = page.locator('[data-testid="terminal"]');
-    await expect(term).toContainText('vite: starting dev server', { timeout: 10_000 });
-    await expect(term).toContainText('[vite] dev server ready on port 5174', { timeout: 60_000 });
+    await expect(term).toContainText('importing vite', { timeout: 30_000 });
+    await expect(term).toContainText('[real-vite/worker] vite is listening on internal port 5174', {
+      timeout: 60_000,
+    });
 
     // The preview iframe must mount and load the bridge client.
     const previewFrame = page.frameLocator('iframe').first();
