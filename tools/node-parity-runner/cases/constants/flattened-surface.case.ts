@@ -27,7 +27,14 @@ const c: ParityCase = {
       constants.TLS1_2_VERSION,
       constants.TLS1_3_VERSION,
     );
-    console.log('links', constants.O_RDONLY === fs.constants.O_RDONLY, constants.SIGTERM === os.constants.signals.SIGTERM);
+    // POSIX file-mode bits + libuv dirent/copyfile constants are cross-platform/cross-build
+    // stable, so printing the actual values fails a bad hardcoded table against the Node oracle.
+    console.log('mode-bits', constants.S_IFMT, constants.S_IFDIR, constants.S_IFREG, constants.S_IFLNK);
+    console.log('copyfile', constants.COPYFILE_FICLONE, constants.COPYFILE_FICLONE_FORCE);
+    console.log('dirent', constants.UV_DIRENT_FILE, constants.UV_DIRENT_DIR, constants.UV_DIRENT_LINK);
+    // O_SYNC's VALUE is Linux-ABI (diverges from a darwin dev host), so verify the single-source
+    // FLATTEN linkage here (stable bool on every host); the Linux value itself is conformance-pinned.
+    console.log('links', constants.O_RDONLY === fs.constants.O_RDONLY, constants.SIGTERM === os.constants.signals.SIGTERM, constants.O_SYNC === fs.constants.O_SYNC);
     const desc = Object.getOwnPropertyDescriptor(constants, 'O_RDONLY');
     console.log('shape', Object.isFrozen(constants), desc.enumerable, desc.writable, desc.configurable);
   `,

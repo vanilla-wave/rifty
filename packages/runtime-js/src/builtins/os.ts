@@ -223,6 +223,9 @@ export const constants = {
     RTLD_LOCAL: 0,
     RTLD_DEEPBIND: 8,
   },
+  // Node exposes UV_UDP_REUSEADDR at the TOP level of os.constants (alongside the sub-tables);
+  // node:constants flattens it in (ADR-0153).
+  UV_UDP_REUSEADDR: 4,
 } as const;
 
 export function availableParallelism(): number {

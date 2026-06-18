@@ -70,11 +70,23 @@
 
 ### Fixed
 
-- **`node:constants` no longer exports an empty placeholder.** It now exposes a frozen flattened
-  table backed by supported `fs.constants`, rifty's Linux-ABI
-  `os.constants.{signals,errno,priority,dlopen}`, and real `crypto.constants`; unsupported
-  constant keys throw `NotImplementedError('constants.<key>')` instead of silently reading as
-  `undefined`.
+- **`node:constants` / `fs.constants` — faithful static data, syscall-boundary gap (ADR-0153).**
+  `node:constants` is no longer an empty placeholder: it is a frozen flattened union of `fs` +
+  `os.{signals,errno,priority,dlopen,UV_UDP_REUSEADDR}` + `crypto.constants` that returns the REAL
+  Node Linux-ABI number for a known key and `undefined` for an absent one — exactly Node's shape
+  (single-source spread, so the surfaces never drift). `fs.constants` gained the full Node Linux
+  set: the `O_*` flags (`O_SYNC`, `O_DSYNC`, `O_DIRECT`, `O_NOATIME`, `O_NOFOLLOW`, `O_NONBLOCK`,
+  `O_NOCTTY`), POSIX mode bits (`S_IF*`, `S_IR*`/`S_IW*`/`S_IX*`), `COPYFILE_FICLONE*`, `UV_FS_*`,
+  `UV_DIRENT_*`. Reading a constant never throws (mode-bit math, bitmasks, logging,
+  `JSON.stringify`, feature-detection behave like Node); the honest unimplemented-BEHAVIOR gap
+  moved to the syscall — see the `fs.open`/`copyFile` entry below.
+- **`fs.openSync`/`copyFileSync` surface unsupported flags loudly at the syscall (ADR-0153).**
+  `openSync` throws `NotImplementedError('fs.openSync.O_SYNC')` when `O_SYNC`/`O_DSYNC` durability
+  is requested (OPFS flush is async/batched); inert-on-a-regular-VFS-file flags (`O_NONBLOCK`,
+  `O_NOFOLLOW`, `O_NOCTTY`, `O_DIRECT`, `O_NOATIME`) open successfully as no-ops, matching Node;
+  a bit mapping to no real flag is still `EINVAL`. `copyFileSync` accepts `COPYFILE_FICLONE`
+  (best-effort → plain copy, like Node on a non-reflink fs) and throws
+  `NotImplementedError('fs.copyFileSync.COPYFILE_FICLONE_FORCE')` for the forced variant.
 - **`node:vm` (quickjs) inbound prototype-method fidelity (T19).** A host array/object seeded
   into a context now carries its PROTOTYPE METHODS in the guest (`items.map`/`join`,
   `obj.hasOwnProperty`) while staying `instanceof Array`/`Object` FALSE and `Array.isArray` TRUE —

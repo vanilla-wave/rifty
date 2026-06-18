@@ -312,7 +312,10 @@ function parseOpenFlags(flags: OpenFlags): ParsedOpenFlags {
   const numeric = typeof flags === 'number' ? flags : openFlagsFromString(flags);
   if (!Number.isInteger(numeric) || numeric < 0) throw fsError('EINVAL', undefined, 'open');
 
-  const supported =
+  // ADR-0153: classify flag bits. Behavioral flags rifty implements; inert flags are no-ops
+  // on a regular VFS file (accepted, like Node); durability flags can't be honored (OPFS flush
+  // is async/batched) → loud NotImplementedError at the syscall; anything else → EINVAL.
+  const behavioral =
     constants.O_WRONLY |
     constants.O_RDWR |
     constants.O_CREAT |
@@ -320,7 +323,16 @@ function parseOpenFlags(flags: OpenFlags): ParsedOpenFlags {
     constants.O_TRUNC |
     constants.O_APPEND |
     constants.O_DIRECTORY;
-  if ((numeric & ~supported) !== 0) throw fsError('EINVAL', undefined, 'open');
+  const inert =
+    constants.O_NOCTTY |
+    constants.O_NONBLOCK |
+    constants.O_NOFOLLOW |
+    constants.O_DIRECT |
+    constants.O_NOATIME;
+  const durability = constants.O_SYNC; // O_SYNC's bit pattern subsumes the O_DSYNC bit
+  if ((numeric & ~(behavioral | inert | durability)) !== 0)
+    throw fsError('EINVAL', undefined, 'open');
+  if ((numeric & durability) !== 0) throw new NotImplementedError('fs.openSync.O_SYNC');
 
   const access = numeric & 3;
   if (access === 3) throw fsError('EINVAL', undefined, 'open');
@@ -599,13 +611,20 @@ export const realpathSync: ((p: string) => string) & { native: (p: string) => st
   Object.assign(_realpathSyncImpl, { native: _realpathSyncImpl });
 
 export function copyFileSync(src: string, dst: string, mode = 0): void {
-  if (!Number.isInteger(mode) || mode < 0 || (mode & ~constants.COPYFILE_EXCL) !== 0) {
+  const knownModes =
+    constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE | constants.COPYFILE_FICLONE_FORCE;
+  if (!Number.isInteger(mode) || mode < 0 || (mode & ~knownModes) !== 0) {
     throw fsError('EINVAL', undefined, 'copyfile');
+  }
+  // ADR-0153: FICLONE is best-effort — falls back to a plain copy (like Node on a non-reflink
+  // fs); FICLONE_FORCE demands a reflink the VFS can't provide → loud gap at the syscall.
+  if ((mode & constants.COPYFILE_FICLONE_FORCE) !== 0) {
+    throw new NotImplementedError('fs.copyFileSync.COPYFILE_FICLONE_FORCE');
   }
   if ((mode & constants.COPYFILE_EXCL) !== 0 && existsSync(dst)) {
     throw fsError('EEXIST', resolvePath(dst), 'copyfile');
   }
-  // ADR-0090: native VFS copy (single regular file; dst mtime=now).
+  // ADR-0090: native VFS copy (single regular file; dst mtime=now). FICLONE degrades here.
   syncMirror().copyFileSync(resolvePath(src), resolvePath(dst));
 }
 
@@ -1165,6 +1184,11 @@ export function opendir(
     );
 }
 
+// ADR-0153: faithful Node Linux-ABI fs constants (real numeric values; gap lives at the
+// syscall boundary in `parseOpenFlags`/`copyFileSync`, not on a constant read). Linux-ABI
+// to match the Linux-pinned `os.constants` — excludes macOS-only `O_SYMLINK`. O_* values
+// mirror asm-generic/fcntl.h; mode bits / UV_* are POSIX/libuv (cross-platform). Verified
+// against the Node oracle by the constants parity case (CI-Linux for the divergent O_*).
 export const constants = {
   F_OK: 0,
   R_OK: 4,
@@ -1175,10 +1199,53 @@ export const constants = {
   O_RDWR: 2,
   O_CREAT: 64,
   O_EXCL: 128,
+  O_NOCTTY: 256,
   O_TRUNC: 512,
   O_APPEND: 1024,
+  O_NONBLOCK: 2048,
+  O_DSYNC: 4096,
+  O_DIRECT: 16384,
   O_DIRECTORY: 65536,
+  O_NOFOLLOW: 131072,
+  O_NOATIME: 262144,
+  O_SYNC: 1052672,
+  S_IFMT: 61440,
+  S_IFREG: 32768,
+  S_IFDIR: 16384,
+  S_IFCHR: 8192,
+  S_IFBLK: 24576,
+  S_IFIFO: 4096,
+  S_IFLNK: 40960,
+  S_IFSOCK: 49152,
+  S_IRWXU: 448,
+  S_IRUSR: 256,
+  S_IWUSR: 128,
+  S_IXUSR: 64,
+  S_IRWXG: 56,
+  S_IRGRP: 32,
+  S_IWGRP: 16,
+  S_IXGRP: 8,
+  S_IRWXO: 7,
+  S_IROTH: 4,
+  S_IWOTH: 2,
+  S_IXOTH: 1,
   COPYFILE_EXCL: 1,
+  COPYFILE_FICLONE: 2,
+  COPYFILE_FICLONE_FORCE: 4,
+  UV_FS_O_FILEMAP: 0,
+  UV_FS_SYMLINK_DIR: 1,
+  UV_FS_SYMLINK_JUNCTION: 2,
+  UV_FS_COPYFILE_EXCL: 1,
+  UV_FS_COPYFILE_FICLONE: 2,
+  UV_FS_COPYFILE_FICLONE_FORCE: 4,
+  UV_DIRENT_UNKNOWN: 0,
+  UV_DIRENT_FILE: 1,
+  UV_DIRENT_DIR: 2,
+  UV_DIRENT_LINK: 3,
+  UV_DIRENT_FIFO: 4,
+  UV_DIRENT_SOCKET: 5,
+  UV_DIRENT_CHAR: 6,
+  UV_DIRENT_BLOCK: 7,
 } as const;
 
 export { Stats, Dirent, Dir };
