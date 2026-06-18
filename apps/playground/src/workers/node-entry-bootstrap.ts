@@ -27,9 +27,13 @@
  */
 
 import { readKernelSyncApi } from '@riftydev/kernel';
-import { installConsole, installRemoteSyncFs } from '@riftydev/runtime-js';
+import { dispatchToPort, listPorts, serveCrossRealmPreview } from '@riftydev/net';
+import { registerNetBuiltins } from '@riftydev/net/register-builtins';
+import { awaitDrain, installConsole, installRemoteSyncFs } from '@riftydev/runtime-js';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { syncMirror } from '@riftydev/vfs';
+import { runNodeProgramLifecycle } from './node-program-lifecycle.ts';
+import { installRuntimeGlobals } from './worker-runtime-globals.ts';
 
 const proc = globalThis.process;
 const entryPath = proc.argv[1];
@@ -58,9 +62,36 @@ if (proc.env.RIFTY_REMOTE_FS === '1') {
   installRemoteSyncFs(syncApi.call);
 }
 
-await runNodeEntry({
-  vfs: syncMirror(),
-  entryPath,
-  cwd: proc.cwd(),
-  bin: proc.env.RIFTY_BIN === '1',
-});
+// `node <file>` server-capable path (ADR-0154): the child spawns serve:true, so
+// the bootstrap (not the kernel drain hook) owns the run-vs-serve decision. Net
+// builtins are registered unconditionally here — http/net are needed both for
+// servers AND for client scripts that import them; the lifecycle decides
+// drain-exit vs stay-alive from whether the entry registered a port.
+//
+// The unhandledrejection trap + drain hook are ALREADY installed in this realm by
+// kernel-worker-entry.ts (`installEventLoopKeepalive()` in the pre-entry), so a
+// detached async rejection in the served entry surfaces loudly via `awaitDrain`
+// — no extra trap install needed here.
+//
+// Gated on RIFTY_NODE_SERVE so the shared `.bin`/`execSync` path (else-branch) is
+// byte-for-byte unchanged: installRuntimeGlobals()/net builtins never run there.
+if (proc.env.RIFTY_NODE_SERVE === '1') {
+  registerNetBuiltins();
+  const kernelIpc = installRuntimeGlobals();
+  await runNodeProgramLifecycle({
+    runEntry: () => runNodeEntry({ vfs: syncMirror(), entryPath, cwd: proc.cwd(), bin: false }),
+    listPorts: () => listPorts(),
+    awaitDrain: () => awaitDrain(),
+    servePreview: (port) =>
+      serveCrossRealmPreview(port, async (request) => dispatchToPort(port, request)),
+    postListening: (ports) => kernelIpc.send?.({ type: 'rifty:node-listening', ports }),
+    exit: (code) => proc.exit(code),
+  });
+} else {
+  await runNodeEntry({
+    vfs: syncMirror(),
+    entryPath,
+    cwd: proc.cwd(),
+    bin: proc.env.RIFTY_BIN === '1',
+  });
+}
