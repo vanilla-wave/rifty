@@ -16,6 +16,13 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+        # Skip the postinstall Playwright browser download on EVERY install — it's
+        # uncached + externally-variable (CDN), the dominant CI cost. With the
+        # `--with-deps` apt dropped from the root postinstall, this env makes
+        # postinstall a true no-op. lint/unit need no browser; the e2e job installs
+        # chromium (with apt deps) via the explicit step below. Mirrors netlify.toml.
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm build:libs # publish build must stay green (ADR-0070)
@@ -35,6 +42,13 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+        # Skip the postinstall Playwright browser download on EVERY install — it's
+        # uncached + externally-variable (CDN), the dominant CI cost. With the
+        # `--with-deps` apt dropped from the root postinstall, this env makes
+        # postinstall a true no-op. lint/unit need no browser; the e2e job installs
+        # chromium (with apt deps) via the explicit step below. Mirrors netlify.toml.
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - run: pnpm test:run
       - run: pnpm test:parity
 
@@ -48,6 +62,13 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+        # Skip the postinstall Playwright browser download on EVERY install — it's
+        # uncached + externally-variable (CDN), the dominant CI cost. With the
+        # `--with-deps` apt dropped from the root postinstall, this env makes
+        # postinstall a true no-op. lint/unit need no browser; the e2e job installs
+        # chromium (with apt deps) via the explicit step below. Mirrors netlify.toml.
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
       # Prod-artifact smoke: builds the app + serves it with `pnpm preview`

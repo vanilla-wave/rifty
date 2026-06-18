@@ -39,7 +39,7 @@
     "refs:check": "node tools/refs/check.mjs",
     "docs:check": "pnpm backlog:check && pnpm refs:check",
     "pr:check": "node tools/checks/pr-check.mjs",
-    "postinstall": "playwright install --with-deps chromium firefox webkit || true",
+    "postinstall": "playwright install chromium firefox webkit || true",
     "snapshots:bake": "pnpm --filter @riftydev/playground snapshots:bake"
   },
   "devDependencies": {

@@ -20,6 +20,10 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+        # Skip the postinstall 3-browser download; the matrix installs only its
+        # own engine via the explicit step below.
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - run: pnpm exec playwright install --with-deps ${{ matrix.engine }}
       - run: pnpm test:e2e:${{ matrix.engine == 'chromium' && '' || matrix.engine }}
       - if: failure()
