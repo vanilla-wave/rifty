@@ -191,6 +191,7 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
       this.__protocols = normalizeProtocols(protocols);
       this.__channels = [];
       this.__activeChannel = null;
+      this.__closeTimer = null;
       this.__onMessage = (e) => this.__handleMessage(e);
       var names = [channelNameFor(target), portChannelNameFor(target)];
       for (var i = 0; i < names.length; i++) {
@@ -252,7 +253,7 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
         if (this.readyState === RiftyBridgeWebSocket.CLOSED) return;
         if (this.readyState === RiftyBridgeWebSocket.CONNECTING) emit(this, new Event('error'));
         var closeCode = f.code === undefined ? 1000 : f.code;
-        var wasClean = this.readyState === RiftyBridgeWebSocket.OPEN && closeCode !== 1006;
+        var wasClean = closeCode !== 1006 && this.readyState !== RiftyBridgeWebSocket.CONNECTING;
         this.readyState = RiftyBridgeWebSocket.CLOSED;
         emit(this, makeCloseEvent(closeCode, f.reason || '', wasClean));
         this.__cleanup();
@@ -289,10 +290,22 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
         this.readyState = RiftyBridgeWebSocket.CLOSED;
         emit(this, makeCloseEvent(code, reason, true));
         this.__cleanup();
+        return;
       }
+      // OPEN → CLOSING: a real WebSocket always finishes the closing handshake —
+      // the server echoes the close, or the UA gives up and fires 1006. Mirror
+      // the connect timeout so a vanished peer realm can't strand us in CLOSING
+      // forever (which would never fire 'close' and leak the BroadcastChannels).
+      this.__closeTimer = setTimeout(() => {
+        if (this.readyState !== RiftyBridgeWebSocket.CLOSING) return;
+        this.readyState = RiftyBridgeWebSocket.CLOSED;
+        emit(this, makeCloseEvent(1006, 'close handshake timeout', false));
+        this.__cleanup();
+      }, 1000);
     }
     __cleanup() {
       clearTimeout(this.__connectTimer);
+      clearTimeout(this.__closeTimer);
       for (var i = 0; i < this.__channels.length; i++) {
         this.__channels[i].removeEventListener('message', this.__onMessage);
         this.__channels[i].close();

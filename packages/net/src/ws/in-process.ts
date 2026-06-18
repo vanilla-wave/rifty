@@ -31,7 +31,13 @@ interface ListenerEntry {
 }
 
 const listeners: ListenerEntry[] = [];
-const BRIDGE_CONNECT_TIMEOUT_MS = 100;
+// Matches the browser shim and BridgedWebSocket defaults (1000 ms). A shorter
+// window raced a slow page↔worker open into a false 1006 "connection refused".
+const BRIDGE_CONNECT_TIMEOUT_MS = 1000;
+// A client `close()` after OPEN waits for the server echo; if the peer realm is
+// gone the echo never comes, so we mirror the connect timeout and end the
+// handshake locally with 1006 instead of hanging in CLOSING forever.
+const BRIDGE_CLOSE_TIMEOUT_MS = 1000;
 
 interface BridgeFrame {
   type: 'open' | 'open-ack' | 'msg' | 'close';
@@ -305,6 +311,7 @@ export class WebSocket extends EventTarget {
   private activeBridgeChannel: BroadcastChannel | null = null;
   private bridgeCid = '';
   private bridgeConnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  private bridgeCloseTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(url: string, protocols?: string | readonly string[]) {
     super();
@@ -317,7 +324,9 @@ export class WebSocket extends EventTarget {
       queueMicrotask(() => {
         this.readyState = State.CLOSED;
         this.dispatchEvent(new Event('error'));
-        this.dispatchEvent(new CloseEventCtor('close', { code: 1006, reason: String(err) }));
+        this.dispatchEvent(
+          new CloseEventCtor('close', { code: 1006, reason: String(err), wasClean: false }),
+        );
       });
       return;
     }
@@ -370,14 +379,29 @@ export class WebSocket extends EventTarget {
       }
       if (wasConnecting) {
         this.readyState = State.CLOSED;
-        this.dispatchEvent(new CloseEventCtor('close', { code, reason }));
+        this.dispatchEvent(new CloseEventCtor('close', { code, reason, wasClean: false }));
         this.cleanupBridge();
+        return;
       }
+      // Wait for the server's close echo, but never indefinitely: a vanished
+      // peer realm would otherwise strand us in CLOSING and leak the channels.
+      this.bridgeCloseTimeout = setTimeout(() => {
+        if (this.readyState !== State.CLOSING) return;
+        this.readyState = State.CLOSED;
+        this.dispatchEvent(
+          new CloseEventCtor('close', {
+            code: 1006,
+            reason: 'close handshake timeout',
+            wasClean: false,
+          }),
+        );
+        this.cleanupBridge();
+      }, BRIDGE_CLOSE_TIMEOUT_MS);
       return;
     }
     if (wasConnecting && this._server === null) {
       this.readyState = State.CLOSED;
-      this.dispatchEvent(new CloseEventCtor('close', { code, reason }));
+      this.dispatchEvent(new CloseEventCtor('close', { code, reason, wasClean: false }));
       return;
     }
     queueMicrotask(() => {
@@ -394,8 +418,9 @@ export class WebSocket extends EventTarget {
   /** @internal — peer (server) closed first. */
   _peerClosed(code: number, reason: string): void {
     if (this.readyState === State.CLOSED) return;
+    const wasClean = code !== 1006 && this.readyState !== State.CONNECTING;
     this.readyState = State.CLOSED;
-    this.dispatchEvent(new CloseEventCtor('close', { code, reason }));
+    this.dispatchEvent(new CloseEventCtor('close', { code, reason, wasClean }));
   }
 
   private openBridge(url: string, protocols: readonly string[] = []): void {
@@ -436,11 +461,11 @@ export class WebSocket extends EventTarget {
     }
     if (frame.type === 'close' && frame.from === 'server') {
       if (this.readyState === State.CLOSED) return;
+      const code = frame.code ?? 1000;
+      const wasClean = code !== 1006 && this.readyState !== State.CONNECTING;
       if (this.readyState === State.CONNECTING) this.dispatchEvent(new Event('error'));
       this.readyState = State.CLOSED;
-      this.dispatchEvent(
-        new CloseEventCtor('close', { code: frame.code ?? 1000, reason: frame.reason ?? '' }),
-      );
+      this.dispatchEvent(new CloseEventCtor('close', { code, reason: frame.reason ?? '', wasClean }));
       this.cleanupBridge();
     }
   };
@@ -448,7 +473,9 @@ export class WebSocket extends EventTarget {
   private failBridgeConnection(): void {
     this.readyState = State.CLOSED;
     this.dispatchEvent(new Event('error'));
-    this.dispatchEvent(new CloseEventCtor('close', { code: 1006, reason: 'connection refused' }));
+    this.dispatchEvent(
+      new CloseEventCtor('close', { code: 1006, reason: 'connection refused', wasClean: false }),
+    );
     this.cleanupBridge();
   }
 
@@ -460,6 +487,10 @@ export class WebSocket extends EventTarget {
 
   private cleanupBridge(): void {
     this.clearBridgeConnectTimeout();
+    if (this.bridgeCloseTimeout) {
+      clearTimeout(this.bridgeCloseTimeout);
+      this.bridgeCloseTimeout = null;
+    }
     for (const channel of this.bridgeChannels) {
       channel.removeEventListener('message', this.onBridgeMessage);
       channel.close();

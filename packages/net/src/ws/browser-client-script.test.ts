@@ -205,11 +205,13 @@ describe('webSocketBridgeClientScript', () => {
         ws.addEventListener('open', () => resolve(), { once: true }),
       );
 
+      let clientCloseWasClean: boolean | undefined;
       const closed = new Promise<void>((resolve) =>
         ws.addEventListener(
           'close',
           (event) => {
             order.push(`client-close:${(event as CloseEvent).code}`);
+            clientCloseWasClean = (event as CloseEvent).wasClean;
             resolve();
           },
           { once: true },
@@ -220,6 +222,9 @@ describe('webSocketBridgeClientScript', () => {
       await closed;
 
       expect(order).toEqual(['server-close', 'client-close:3001']);
+      // A client-initiated close completed by the server echo is a clean
+      // handshake — wasClean must be true even though readyState was CLOSING.
+      expect(clientCloseWasClean).toBe(true);
     } finally {
       server.close();
       restore();
@@ -311,6 +316,49 @@ describe('webSocketBridgeClientScript', () => {
       expect(closeEvent.wasClean).toBe(true);
     } finally {
       server.close();
+      restore();
+    }
+  });
+
+  it('client close() resolves with 1006 when the peer realm never echoes the close frame', async () => {
+    // Models a terminated peer realm (navigated-away iframe, killed Real-Vite
+    // worker): it acks the open handshake, then vanishes — the client close
+    // frame is never echoed. A real WebSocket always ends up firing `close`;
+    // the shim must too, via a close-handshake timeout, instead of hanging in
+    // CLOSING forever and leaking its BroadcastChannels.
+    const { win, restore } = installWindow();
+    const peer = new BroadcastChannel('rifty:ws:preview.local:9028/hmr');
+    const onPeer = (e: MessageEvent): void => {
+      const f = e.data as { type?: string; cid?: string };
+      if (f?.type === 'open') peer.postMessage({ type: 'open-ack', cid: f.cid, protocol: '' });
+      // deliberately ignore 'close' — the peer realm is gone
+    };
+    peer.addEventListener('message', onPeer);
+
+    try {
+      const script = webSocketBridgeClientScript({ bridgeHosts: ['preview.local'] });
+      expect(() => new Function(script)()).not.toThrow();
+      const BrowserWebSocket = win.WebSocket as BrowserWebSocketConstructor;
+      const ws = new BrowserWebSocket('ws://preview.local:9028/hmr');
+      await new Promise<void>((resolve) =>
+        ws.addEventListener('open', () => resolve(), { once: true }),
+      );
+
+      ws.close(3001, 'client-done');
+      const closeEvent = await Promise.race([
+        new Promise<CloseEvent | null>((resolve) =>
+          ws.addEventListener('close', (e) => resolve(e as CloseEvent), { once: true }),
+        ),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+      ]);
+
+      expect(closeEvent, 'close must fire even when the peer never echoes').not.toBeNull();
+      expect((closeEvent as CloseEvent).code).toBe(1006);
+      expect((closeEvent as CloseEvent).wasClean).toBe(false);
+      expect(ws.readyState).toBe(3); // CLOSED
+    } finally {
+      peer.removeEventListener('message', onPeer);
+      peer.close();
       restore();
     }
   });

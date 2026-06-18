@@ -327,3 +327,115 @@ describe('default WebSocket surface crosses realms', () => {
     server.close();
   });
 });
+
+/**
+ * A cross-realm peer that completes the open handshake and then goes silent —
+ * it never echoes the client's close frame. Models a terminated realm (closed
+ * iframe / killed worker). Without a close-handshake timeout the client would
+ * sit in CLOSING forever, never fire `close`, and leak its channels.
+ */
+function spawnSilentClosePeer(channelName: string): { dispose(): void } {
+  const peer = new BroadcastChannel(channelName);
+  const onMessage = (e: MessageEvent): void => {
+    const frame = e.data as { type?: string; cid?: string };
+    if (frame?.type === 'open') {
+      peer.postMessage({ type: 'open-ack', cid: frame.cid, protocol: '' });
+    }
+    // intentionally no 'close' handling — the peer realm is gone
+  };
+  peer.addEventListener('message', onMessage);
+  return {
+    dispose(): void {
+      peer.removeEventListener('message', onMessage);
+      peer.close();
+    },
+  };
+}
+
+async function raceCloseEvent(target: EventTarget): Promise<CloseEvent | null> {
+  return Promise.race([
+    new Promise<CloseEvent | null>((resolve) =>
+      target.addEventListener('close', (e) => resolve(e as CloseEvent), { once: true }),
+    ),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+  ]);
+}
+
+describe('close events carry a faithful wasClean flag', () => {
+  it('default WebSocket: a clean server-initiated close reports wasClean=true', async () => {
+    const server = new WebSocketServer({ port: 9096 });
+    server.on('connection', (sock) => sock.close(1001, 'going away'));
+    const ws = new WebSocket('ws://localhost:9096/');
+    const closeEvent = await new Promise<CloseEvent>((resolve) =>
+      ws.addEventListener('close', (e) => resolve(e as CloseEvent), { once: true }),
+    );
+    expect(closeEvent.code).toBe(1001);
+    expect(closeEvent.wasClean).toBe(true);
+    server.close();
+  });
+
+  it('default WebSocket: an abnormal (1006) close reports wasClean=false', async () => {
+    const ws = new WebSocket('ws://localhost:9095/missing');
+    const closeEvent = await new Promise<CloseEvent>((resolve) =>
+      ws.addEventListener('close', (e) => resolve(e as CloseEvent), { once: true }),
+    );
+    expect(closeEvent.code).toBe(1006);
+    expect(closeEvent.wasClean).toBe(false);
+  });
+
+  it('BridgedWebSocket: a clean server-initiated close reports wasClean=true', async () => {
+    const { WebSocket: BWS, WebSocketServer: BWSS } = createCrossRealmBridge();
+    const server = new BWSS('ws://playground/clean-close');
+    server.on('connection', (sock) => setTimeout(() => sock.close(1000, 'bye'), 5));
+    const ws = new BWS('ws://playground/clean-close');
+    const closeEvent = await new Promise<CloseEvent>((resolve) =>
+      ws.addEventListener('close', (e) => resolve(e as CloseEvent), { once: true }),
+    );
+    expect(closeEvent.code).toBe(1000);
+    expect(closeEvent.wasClean).toBe(true);
+    server.close();
+  });
+});
+
+describe('client close() never hangs when the peer realm disappears', () => {
+  it('default WebSocket client fires close(1006) after the close handshake times out', async () => {
+    const peer = spawnSilentClosePeer('rifty:ws:localhost:9098/dead');
+    try {
+      const ws = new WebSocket('ws://localhost:9098/dead');
+      await new Promise<void>((resolve) =>
+        ws.addEventListener('open', () => resolve(), { once: true }),
+      );
+
+      ws.close(3002, 'client-done');
+      const closeEvent = await raceCloseEvent(ws);
+
+      expect(closeEvent, 'close must fire even when the peer never echoes').not.toBeNull();
+      expect((closeEvent as CloseEvent).code).toBe(1006);
+      expect((closeEvent as CloseEvent).wasClean).toBe(false);
+      expect(ws.readyState).toBe(WebSocket.CLOSED);
+    } finally {
+      peer.dispose();
+    }
+  });
+
+  it('BridgedWebSocket client fires close(1006) after the close handshake times out', async () => {
+    const { WebSocket: BWS } = createCrossRealmBridge();
+    const peer = spawnSilentClosePeer('rifty:ws:playground/dead-bridge');
+    try {
+      const ws = new BWS('ws://playground/dead-bridge');
+      await new Promise<void>((resolve) =>
+        ws.addEventListener('open', () => resolve(), { once: true }),
+      );
+
+      ws.close(3003, 'client-done');
+      const closeEvent = await raceCloseEvent(ws);
+
+      expect(closeEvent, 'close must fire even when the peer never echoes').not.toBeNull();
+      expect((closeEvent as CloseEvent).code).toBe(1006);
+      expect((closeEvent as CloseEvent).wasClean).toBe(false);
+      expect(ws.readyState).toBe(BWS.CLOSED);
+    } finally {
+      peer.dispose();
+    }
+  });
+});
