@@ -111,6 +111,48 @@ describe('WebSocketServer', () => {
     expect(ws.readyState).toBe(WebSocket.CLOSED);
   });
 
+  it('honors binaryType when delivering binary frames', async () => {
+    const server = new WebSocketServer({ port: 9094 });
+    server.on('connection', (sock) => sock.send(new Uint8Array([4, 5, 6])));
+
+    const wsBlob = new WebSocket('ws://localhost:9094/');
+    const blobMsg = await new Promise<MessageEvent>((r) =>
+      wsBlob.addEventListener('message', (e) => r(e as MessageEvent), { once: true }),
+    );
+    expect(blobMsg.data).toBeInstanceOf(Blob);
+    wsBlob.close();
+
+    const wsAb = new WebSocket('ws://localhost:9094/');
+    wsAb.binaryType = 'arraybuffer';
+    const abMsg = await new Promise<MessageEvent>((r) =>
+      wsAb.addEventListener('message', (e) => r(e as MessageEvent), { once: true }),
+    );
+    expect(abMsg.data).toBeInstanceOf(ArrayBuffer);
+    expect([...new Uint8Array(abMsg.data as ArrayBuffer)]).toEqual([4, 5, 6]);
+    wsAb.close();
+    server.close();
+  });
+
+  it('exposes instance readyState constants and on* handler properties', async () => {
+    const server = new WebSocketServer({ port: 9093 });
+    server.on('connection', (sock) => sock.send('hi'));
+    const ws = new WebSocket('ws://localhost:9093/');
+    expect(ws.CONNECTING).toBe(0);
+    expect(ws.OPEN).toBe(1);
+    expect(ws.CLOSING).toBe(2);
+    expect(ws.CLOSED).toBe(3);
+
+    const got: string[] = [];
+    ws.onopen = () => got.push('open');
+    ws.onmessage = (e) => got.push(`msg:${(e as MessageEvent).data}`);
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(got[0]).toBe('open');
+    expect(got).toContain('msg:hi');
+    ws.close();
+    server.close();
+  });
+
   it('broadcasts to all connected clients', async () => {
     const server = new WebSocketServer({ port: 9004 });
     server.on('connection', () => {});

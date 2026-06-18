@@ -98,8 +98,9 @@ function nextCid(): string {
 /**
  * Server-side endpoint for a single connected client.
  *
- * Emits `message`, `close`, `error`. Mirrors the subset of the `ws` library
- * API that real dev servers (Vite, Express ws middleware) actually use.
+ * Emits `message`, `close`. Mirrors the subset of the `ws` library API that
+ * real dev servers (Vite, Express ws middleware) actually use. There is no
+ * wire, so no transport `'error'` is ever emitted.
  */
 export class WebSocketConnection extends EventEmitter {
   state: State = State.OPEN;
@@ -115,6 +116,9 @@ export class WebSocketConnection extends EventEmitter {
   _bridgeCid = '';
 
   send(data: WsMessage): void {
+    // Not OPEN → drop. There is no wire to surface an error on, and the only
+    // caller path (server→client) never sends to a half-closed peer in
+    // practice; mirrors a closed browser socket discarding the frame.
     if (this.state !== State.OPEN) return;
     if (this._bridgeSend) {
       this._bridgeSend({ type: 'msg', cid: this._bridgeCid, data });
@@ -300,11 +304,53 @@ export class WebSocket extends EventTarget {
   static readonly CLOSING = State.CLOSING;
   static readonly CLOSED = State.CLOSED;
 
+  // Instance copies of the readyState constants, like the browser `WebSocket`.
+  readonly CONNECTING = State.CONNECTING;
+  readonly OPEN = State.OPEN;
+  readonly CLOSING = State.CLOSING;
+  readonly CLOSED = State.CLOSED;
+
   readonly url: string;
   protocol = '';
   extensions = '';
   binaryType: BinaryType = 'blob';
   readyState: number = State.CONNECTING;
+
+  private readonly _handlers = new Map<string, EventListener>();
+  get onopen(): EventListener | null {
+    return this._handlers.get('open') ?? null;
+  }
+  set onopen(fn: EventListener | null) {
+    this._setHandler('open', fn);
+  }
+  get onmessage(): EventListener | null {
+    return this._handlers.get('message') ?? null;
+  }
+  set onmessage(fn: EventListener | null) {
+    this._setHandler('message', fn);
+  }
+  get onclose(): EventListener | null {
+    return this._handlers.get('close') ?? null;
+  }
+  set onclose(fn: EventListener | null) {
+    this._setHandler('close', fn);
+  }
+  get onerror(): EventListener | null {
+    return this._handlers.get('error') ?? null;
+  }
+  set onerror(fn: EventListener | null) {
+    this._setHandler('error', fn);
+  }
+  private _setHandler(type: string, fn: EventListener | null): void {
+    const prev = this._handlers.get(type);
+    if (prev) this.removeEventListener(type, prev);
+    if (fn) {
+      this._handlers.set(type, fn);
+      this.addEventListener(type, fn);
+    } else {
+      this._handlers.delete(type);
+    }
+  }
   /** @internal */
   _server: WebSocketConnection | null = null;
   private readonly bridgeChannels: BroadcastChannel[] = [];
@@ -351,6 +397,8 @@ export class WebSocket extends EventTarget {
         "Failed to execute 'send' on 'WebSocket': Still in CONNECTING state.",
       );
     }
+    // CLOSING/CLOSED: the WHATWG WebSocket spec discards the frame silently
+    // (only CONNECTING throws), so we intentionally drop it here too.
     if (this.readyState !== State.OPEN) return;
     if (this.activeBridgeChannel) {
       this.activeBridgeChannel.postMessage({ type: 'msg', cid: this.bridgeCid, data });
@@ -412,7 +460,9 @@ export class WebSocket extends EventTarget {
 
   /** @internal — server delivered a message */
   _deliver(data: WsMessage): void {
-    this.dispatchEvent(new MessageEvent('message', { data }));
+    this.dispatchEvent(
+      new MessageEvent('message', { data: messageDataForBinaryType(data, this.binaryType) }),
+    );
   }
 
   /** @internal — peer (server) closed first. */
@@ -456,7 +506,9 @@ export class WebSocket extends EventTarget {
       return;
     }
     if (frame.type === 'msg' && this.readyState === State.OPEN && frame.data !== undefined) {
-      this.dispatchEvent(new MessageEvent('message', { data: frame.data }));
+      this.dispatchEvent(
+        new MessageEvent('message', { data: messageDataForBinaryType(frame.data, this.binaryType) }),
+      );
       return;
     }
     if (frame.type === 'close' && frame.from === 'server') {
@@ -568,4 +620,24 @@ function validateCloseParams(code: number, reason: string): void {
       'SyntaxError',
     );
   }
+}
+
+function arrayBufferFromBinary(data: WsMessage): ArrayBuffer | null {
+  if (data instanceof ArrayBuffer) return data;
+  if (ArrayBuffer.isView(data)) {
+    // Copy into a fresh ArrayBuffer (not the possibly-shared backing buffer).
+    const copy = new Uint8Array(data.byteLength);
+    copy.set(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+    return copy.buffer;
+  }
+  return null;
+}
+
+/** Coerce a delivered binary frame to the client's `binaryType`, like the browser. */
+function messageDataForBinaryType(data: WsMessage, binaryType: BinaryType): WsMessage | Blob {
+  const ab = arrayBufferFromBinary(data);
+  if (!ab) return data;
+  if (binaryType === 'arraybuffer') return ab;
+  if (typeof Blob !== 'undefined') return new Blob([ab]);
+  return ab;
 }

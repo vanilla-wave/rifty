@@ -18,6 +18,7 @@ interface BrowserWebSocketLike extends EventTarget {
   readonly protocol: string;
   binaryType: BinaryType;
   readonly readyState: number;
+  readonly bufferedAmount: number;
   send(data: unknown): void;
   close(code?: number, reason?: string): void;
 }
