@@ -38,4 +38,22 @@ describe('resolveProjectSpec', () => {
     // demo must not collide with the vite template's port
     expect(spec.defaultPort).not.toBe(resolveProjectSpec('vite').defaultPort);
   });
+
+  it('resolves the socket-lab node-server template', () => {
+    const spec = resolveProjectSpec('socket-lab');
+    expect(spec.runtime).toBe('node-server');
+    if (spec.runtime !== 'node-server') throw new Error('unreachable');
+    expect(spec.install).toEqual({ ws: '^8.18.3' });
+    expect(spec.sqlite).toBe(false);
+    expect(spec.entry.relativePath).toBe('/src/main.js');
+    expect(spec.entry.content).toContain("from 'node:http'");
+    expect(spec.entry.content).toContain("from 'node:module'");
+    expect(spec.entry.content).toContain("require('ws')");
+    expect(spec.entry.content).toContain('net.connect');
+    expect(Object.keys(spec.extraFiles)).toEqual(
+      expect.arrayContaining(['/public/index.html', '/public/client.js', '/public/styles.css']),
+    );
+    expect(spec.defaultPort).not.toBe(resolveProjectSpec('vite').defaultPort);
+    expect(spec.defaultPort).not.toBe(resolveProjectSpec('express-sqlite').defaultPort);
+  });
 });

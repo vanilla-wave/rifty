@@ -6,6 +6,7 @@ import {
 } from './templates/express-sqlite.ts';
 import { terminalDevLine } from './templates/project-spec.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
+import { SOCKET_LAB_SERVER_SOURCE, SOCKET_LAB_TEMPLATE } from './templates/socket-lab.ts';
 
 export type PresetMode = 'dev' | 'real-vite';
 
@@ -409,11 +410,36 @@ const EXPRESS_SQLITE_PRESET: Preset = {
   })),
 };
 
+/**
+ * Socket Lab: runnable capability matrix for the browser socket stack. Passing
+ * rows exercise real HTTP/WebSocket/stream semantics; ceiling rows pass only by
+ * surfacing the directed loud error.
+ */
+const SOCKET_LAB_PRESET: Preset = {
+  id: 'socket-lab',
+  label: 'Socket Lab',
+  category: 'Live preview',
+  icon: 'terminal',
+  mode: 'real-vite',
+  setup: 'from-scratch',
+  templateId: SOCKET_LAB_TEMPLATE.id,
+  blurb: 'HTTP/WebSocket lab over the browser port registry, with raw-socket ceilings marked.',
+  glyph: { text: 'SO', color: '#80C7FF' },
+  tag: { text: 'npm install', tone: 'slow' },
+  source: SOCKET_LAB_SERVER_SOURCE,
+  openFiles: ['public/client.js', 'README.md'],
+  files: Object.entries(SOCKET_LAB_TEMPLATE.extraFiles).map(([path, content]) => ({
+    path: path.replace(/^\/+/, ''),
+    content,
+  })),
+};
+
 export const PRESETS: readonly Preset[] = [
   PROJECT_FILES_PRESET,
   NODE_WORKER_PRESET,
   REAL_VITE_PRESET,
   EXPRESS_SQLITE_PRESET,
+  SOCKET_LAB_PRESET,
 ];
 
 /** The preset selected at boot. Its source is the default editor content. */

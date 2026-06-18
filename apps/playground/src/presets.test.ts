@@ -7,6 +7,7 @@ import {
   presetBootLines,
 } from './presets.ts';
 import { EXPRESS_SQLITE_TEMPLATE } from './templates/express-sqlite.ts';
+import { SOCKET_LAB_TEMPLATE } from './templates/socket-lab.ts';
 
 function presetText(preset: Preset): string {
   return [preset.source, ...(preset.files ?? []).map((file) => file.content)].join('\n');
@@ -90,6 +91,49 @@ describe('playground presets', () => {
     expect(demo.openFiles?.length ?? 0).toBeGreaterThanOrEqual(2);
     expect(demo.openFiles?.every((path) => filePaths.has(path))).toBe(true);
   });
+
+  it('ships Socket Lab wired to its node-server template and socket matrix rows', () => {
+    const demo = PRESETS.find((preset) => preset.id === 'socket-lab');
+    expect(demo).toBeDefined();
+    if (!demo) throw new Error('unreachable');
+    expect(demo.templateId).toBe('socket-lab');
+    expect(demo.mode).toBe('real-vite');
+    expect(demo.category).toBe('Live preview');
+    expect(demo.source).toBe(SOCKET_LAB_TEMPLATE.entry.content);
+
+    const filePaths = new Set((demo.files ?? []).map((file) => file.path));
+    for (const relPath of Object.keys(SOCKET_LAB_TEMPLATE.extraFiles)) {
+      expect(filePaths.has(relPath.replace(/^\//, ''))).toBe(true);
+    }
+    for (const file of demo.files ?? []) {
+      expect(SOCKET_LAB_TEMPLATE.extraFiles[`/${file.path}`]).toBe(file.content);
+    }
+    expect(demo.openFiles?.every((path) => filePaths.has(path))).toBe(true);
+
+    const text = presetText(demo);
+    const scenarioIds = [
+      'http-server-loopback',
+      'client-request-body-streaming',
+      'serverresponse-drain-emission',
+      'readable-fromweb-pipe-sink',
+      'ws-server-local-upgrade',
+      'net-http-framed-server',
+      'net/ws-client-external-host',
+      'browser-preview-websocket',
+      'net-real-tcp-socket-semantics',
+      'udp-dgram-surface',
+      'tls-https-surface',
+      'tls-raw-socket-surface',
+      'http2-surface',
+      'stream-web-bridge-surface',
+      'cross-realm-preview-unbounded-body',
+      'cross-realm-http-loopback',
+      'wasi-socket-syscalls',
+    ];
+    for (const id of scenarioIds) expect(text).toContain(id);
+    expect(text).toContain('NotImplementedError');
+    expect(text).not.toContain('Node sockets supported');
+  });
 });
 
 describe('sandbox setup kinds (ADR-0135)', () => {
@@ -124,6 +168,12 @@ describe('sandbox setup kinds (ADR-0135)', () => {
     const fullstack = PRESETS.find((preset) => preset.id === 'express-sqlite');
     expect(fullstack?.setup).toBe('from-scratch');
     expect(presetBootLines(fullstack as Preset, '/workspace')).toEqual([
+      'cd /workspace && npm run dev',
+    ]);
+
+    const socketLab = PRESETS.find((preset) => preset.id === 'socket-lab');
+    expect(socketLab?.setup).toBe('from-scratch');
+    expect(presetBootLines(socketLab as Preset, '/workspace')).toEqual([
       'cd /workspace && npm run dev',
     ]);
   });

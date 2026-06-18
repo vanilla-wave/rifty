@@ -125,6 +125,14 @@
 
 ### Added
 
+- **Socket Lab preset.** Adds a node-server sandbox template that runs a live
+  socket capability matrix: HTTP request body streaming, `ServerResponse`
+  drain, `Readable.fromWeb(...).pipe(res)`, npm `ws` over `http.Server`
+  upgrade, optional external `ws` egress, and loud ceiling checks for raw
+  TCP/UDP/TLS/HTTP2/unbounded cross-realm cases. A dedicated Playwright e2e
+  selects the preset and fails CI if the supported probes stop passing or the
+  ceiling probes stop failing loudly.
+
 - **Prod-artifact smoke e2e (`playwright.prod.config.ts` + `pnpm test:e2e:prod`, wired into
   CI).** Builds the app and serves it with `pnpm preview` (the Netlify COOP/COEP headers), then
   asserts the workspace owner boots — COI is live, the co-resident dev server reaches `LIVE`, and
