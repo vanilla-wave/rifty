@@ -120,22 +120,55 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
     if (typeof Blob !== 'undefined') return new Blob([ab]);
     return ab;
   }
+  function byteLengthOf(data) {
+    if (typeof data === 'string') return new TextEncoder().encode(data).byteLength;
+    if (typeof Blob !== 'undefined' && data instanceof Blob) return data.size;
+    if (data instanceof ArrayBuffer) return data.byteLength;
+    if (ArrayBuffer.isView(data)) return data.byteLength;
+    return 0;
+  }
   function postOutgoingData(socket, data) {
     if (!socket.__activeChannel) return;
-    if (typeof Blob !== 'undefined' && data instanceof Blob) {
-      data.arrayBuffer().then(function (buffer) {
-        if (socket.readyState !== RiftyBridgeWebSocket.OPEN || !socket.__activeChannel) return;
-        socket.__activeChannel.postMessage({ type: 'msg', cid: socket.__cid, data: buffer });
-      }, function () {
-        if (socket.readyState !== RiftyBridgeWebSocket.OPEN) return;
-        emit(socket, new Event('error'));
-        socket.readyState = RiftyBridgeWebSocket.CLOSED;
-        emit(socket, makeCloseEvent(1006, 'failed to read Blob websocket payload', false));
-        socket.__cleanup();
-      });
-      return;
+    // FIFO queue: Blob payloads must be read async (arrayBuffer()), but a real
+    // WebSocket still delivers frames in call order. Buffering every frame
+    // behind a pending Blob keeps that order and makes bufferedAmount honest.
+    socket.bufferedAmount += byteLengthOf(data);
+    socket.__sendQueue.push(data);
+    drainSendQueue(socket);
+  }
+  function drainSendQueue(socket) {
+    if (socket.__sendPumping) return;
+    socket.__sendPumping = true;
+    while (socket.__sendQueue.length) {
+      if (socket.readyState !== RiftyBridgeWebSocket.OPEN || !socket.__activeChannel) {
+        socket.__sendPumping = false;
+        return;
+      }
+      var item = socket.__sendQueue[0];
+      if (typeof Blob !== 'undefined' && item instanceof Blob) {
+        item.arrayBuffer().then(function (buffer) {
+          socket.__sendQueue.shift();
+          socket.bufferedAmount -= item.size;
+          socket.__sendPumping = false;
+          if (socket.readyState === RiftyBridgeWebSocket.OPEN && socket.__activeChannel) {
+            socket.__activeChannel.postMessage({ type: 'msg', cid: socket.__cid, data: buffer });
+          }
+          drainSendQueue(socket);
+        }, function () {
+          socket.__sendPumping = false;
+          if (socket.readyState !== RiftyBridgeWebSocket.OPEN) return;
+          emit(socket, new Event('error'));
+          socket.readyState = RiftyBridgeWebSocket.CLOSED;
+          emit(socket, makeCloseEvent(1006, 'failed to read Blob websocket payload', false));
+          socket.__cleanup();
+        });
+        return;
+      }
+      socket.__sendQueue.shift();
+      socket.bufferedAmount -= byteLengthOf(item);
+      socket.__activeChannel.postMessage({ type: 'msg', cid: socket.__cid, data: item });
     }
-    socket.__activeChannel.postMessage({ type: 'msg', cid: socket.__cid, data: data });
+    socket.__sendPumping = false;
   }
   function emit(socket, event) {
     var handler = socket['on' + event.type];
@@ -192,6 +225,8 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
       this.__channels = [];
       this.__activeChannel = null;
       this.__closeTimer = null;
+      this.__sendQueue = [];
+      this.__sendPumping = false;
       this.__onMessage = (e) => this.__handleMessage(e);
       var names = [channelNameFor(target), portChannelNameFor(target)];
       for (var i = 0; i < names.length; i++) {
@@ -312,6 +347,8 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
       }
       this.__channels = [];
       this.__activeChannel = null;
+      this.__sendQueue = [];
+      this.__sendPumping = false;
     }
   }
   RiftyBridgeWebSocket.CONNECTING = NativeWebSocket ? NativeWebSocket.CONNECTING : 0;

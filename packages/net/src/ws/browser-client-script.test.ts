@@ -269,6 +269,44 @@ describe('webSocketBridgeClientScript', () => {
     }
   });
 
+  it('preserves frame order when a Blob is sent before a string (FIFO)', async () => {
+    const { win, restore } = installWindow();
+    const server = new WebSocketServer({ port: 9029, path: '/order' });
+    const serverSeen: string[] = [];
+    server.on('connection', (sock) => {
+      const socket = sock as ServerSocketLike;
+      socket.on('message', (data: unknown) => {
+        if (typeof data === 'string') serverSeen.push(`text:${data}`);
+        else serverSeen.push(`bin:${[...new Uint8Array(data as ArrayBuffer)].join(',')}`);
+      });
+    });
+
+    try {
+      const script = webSocketBridgeClientScript({ bridgeHosts: ['preview.local'] });
+      expect(() => new Function(script)()).not.toThrow();
+      const BrowserWebSocket = win.WebSocket as BrowserWebSocketConstructor;
+      const ws = new BrowserWebSocket('ws://preview.local:9029/order');
+      await new Promise<void>((resolve) =>
+        ws.addEventListener('open', () => resolve(), { once: true }),
+      );
+
+      // Blob reads are async; a real WebSocket still delivers in call order.
+      ws.send(new Blob([new Uint8Array([1, 2, 3])]));
+      ws.send('after-blob');
+      // The Blob is still being read, so its bytes are buffered, not yet sent.
+      expect(ws.bufferedAmount).toBeGreaterThan(0);
+
+      await waitFor(() => serverSeen.length === 2);
+
+      expect(serverSeen).toEqual(['bin:1,2,3', 'text:after-blob']);
+      expect(ws.bufferedAmount).toBe(0);
+      ws.close();
+    } finally {
+      server.close();
+      restore();
+    }
+  });
+
   it('validates protocols and close parameters like a browser WebSocket', () => {
     const { win, restore } = installWindow();
 
