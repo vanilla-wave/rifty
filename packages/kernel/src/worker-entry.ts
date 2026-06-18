@@ -227,6 +227,8 @@ async function runEntry(entry: WorkerEntryDescriptor): Promise<void> {
     // a stray infra timer would pin the loop forever. The indirect eval is
     // invisible to static import lexers; behaviour is an identical dynamic import.
     // (CSP: this realm already permits eval — see the new AsyncFunction below.)
+    // Cost: the eval'd importer carries no source map for this one import call —
+    // acceptable, the imported entry is the realm bootstrap (infra), not user code.
     // biome-ignore lint/security/noGlobalEval: indirect eval hides the import() literal from bundler static analysis — intentional, see comment above
     // biome-ignore lint/style/noCommaOperator: (0, eval) is the standard idiom for indirect eval — avoids direct `eval` name which some bundlers still detect
     const indirectImport = (0, eval)('u => import(u)') as (u: string) => Promise<unknown>;
@@ -276,6 +278,62 @@ function closePorts(ports: WorkerStdioPorts): void {
 export interface WorkerEntryOutcome {
   readonly threw: boolean;
   readonly code: number;
+}
+
+/**
+ * Realm-independent seam for {@link runEntryLifecycle}: the pieces of the
+ * bootstrap that the realm-gated `onMessage` wires in (the registered hooks, the
+ * entry runner, and the worker's stderr sink). Extracting them lets the
+ * serve-skip / await-drain / reject→exit1 decision be unit-tested without a
+ * Worker realm or the COI-gated SAB path (mirrors {@link finalizeWorkerEntry}).
+ */
+export interface EntryLifecycleDeps {
+  readonly preEntryHook: KernelPreEntryHook | null;
+  readonly drainHook: KernelDrainHook | null;
+  runEntry(entry: WorkerEntryDescriptor): Promise<void>;
+  /** Sink for the failure stack/message — the worker's stderr port. */
+  writeStderr(bytes: Uint8Array): void;
+}
+
+/**
+ * Run the pre-entry hook + entry, drain a run-to-completion child's event loop,
+ * and compute the exit outcome — the realm-independent core of the bootstrap.
+ *
+ *  - `serve!==true` child: after the entry resolves, `await`s the drain hook
+ *    (when registered) so it exits on loop-empty like Node, not at top-level
+ *    resolve. A `serve` child never drains here (kept alive by its ports).
+ *  - Any throw — from the pre-entry hook, the entry, OR a drain rejection
+ *    (recorded `unhandledrejection` / cap timeout) — is exit 1 + the stack on
+ *    stderr (no silent stub), EXCEPT a `RIFTY_PROCESS_EXIT` shape, which carries
+ *    its own `process.exit(N)` code with no stderr write.
+ */
+export async function runEntryLifecycle(
+  spec: WorkerSpawnSpec,
+  deps: EntryLifecycleDeps,
+): Promise<WorkerEntryOutcome> {
+  let code = 0;
+  let threw = false;
+  try {
+    if (deps.preEntryHook !== null) deps.preEntryHook(spec);
+    await deps.runEntry(spec.entry);
+    if (spec.serve !== true && deps.drainHook !== null) {
+      await deps.drainHook(spec);
+    }
+  } catch (err) {
+    threw = true;
+    if (isRiftyProcessExit(err)) {
+      code = err.exitCode;
+    } else {
+      code = 1;
+      const message = err instanceof Error ? `${err.stack ?? err.message}\n` : `${String(err)}\n`;
+      try {
+        deps.writeStderr(STDIO_ENCODER.encode(message));
+      } catch {
+        /* stderr may already be closed */
+      }
+    }
+  }
+  return { threw, code };
 }
 
 /**
@@ -336,39 +394,24 @@ export function installWorkerEntry(
     // reads it to install whatever process surface its runtime needs.
     publishProcessSpec(spec);
 
-    let code = 0;
-    let threw = false;
-    try {
-      const hook = preEntryHook;
-      if (hook !== null) hook(spec);
-      await runEntry(spec.entry);
-      // child-realm-async-lifecycle: a run-to-completion child drains its event
-      // loop before reaping (Node "exit on loop empty"). serve workers are kept
-      // alive by their ports — never drained here. A drain rejection (recorded
-      // unhandledrejection / cap timeout) falls through to the catch below →
-      // stderr + exit 1 (no silent stub).
-      if (spec.serve !== true && drainHook !== null) {
-        await drainHook(spec);
-      }
-    } catch (err) {
-      threw = true;
-      if (isRiftyProcessExit(err)) {
-        code = err.exitCode;
-      } else {
-        code = 1;
-        const message = err instanceof Error ? `${err.stack ?? err.message}\n` : `${String(err)}\n`;
-        try {
-          spec.stdio.stderr.postMessage(STDIO_ENCODER.encode(message));
-        } catch {
-          /* stderr may already be closed */
-        }
-      }
-    }
+    // Run pre-entry hook + entry, drain a run-to-completion child's loop, and
+    // compute the outcome — the realm-independent core (unit-tested via
+    // runEntryLifecycle). child-realm-async-lifecycle: serve workers are kept
+    // alive by their ports (never drained here); a drain rejection (recorded
+    // unhandledrejection / cap timeout) becomes stderr + exit 1 (no silent stub).
+    const outcome = await runEntryLifecycle(spec, {
+      preEntryHook,
+      drainHook,
+      runEntry,
+      writeStderr: (bytes) => {
+        spec.stdio.stderr.postMessage(bytes);
+      },
+    });
 
     // ADR-0144: a `serve` worker that finished setup cleanly stays alive; every
     // other case posts exit + closes the realm. (Lets the parent observe exit
     // before the realm dies.)
-    finalizeWorkerEntry(target, spec, { threw, code });
+    finalizeWorkerEntry(target, spec, outcome);
   };
 
   target.addEventListener('message', onMessage as unknown as EventListener);

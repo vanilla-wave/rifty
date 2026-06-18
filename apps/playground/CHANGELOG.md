@@ -4,6 +4,12 @@
 
 ### Added
 
+- **Event-loop keepalive + drain wired into the kernel worker** (child-realm-async-lifecycle,
+  ADR-0152). `workers/kernel-worker-entry.ts` now calls `installEventLoopKeepalive()` (right after
+  `installTimerGlobals()`), so a run-to-completion child drains its event loop before reaping —
+  post-top-level async (timers, detached `import().then(run)`) completes — and fails loudly (stderr +
+  exit 1) on an unhandled rejection or a never-draining loop, instead of silently exiting 0.
+
 - **Supervised dev-server child entry + config resolver** (P6b, ADR-0150).
   `workers/dev-server-child-config.ts` is a pure, LIGHT-import resolver
   (`resolveDevServerChildConfig`) that rebuilds the boot config (spec/cfg/port/root/slug/
