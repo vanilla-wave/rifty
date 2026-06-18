@@ -581,4 +581,46 @@ describe('cross-realm preview port — SSE ceiling (ADR-0048)', () => {
     expect(settled.r.status).toBe(502);
     expect(await settled.r.text()).toContain('net.preview.cross-realm-sse-drain');
   });
+
+  it('fails loud for an unending non-SSE body even while chunks keep arriving', async () => {
+    cleanup.add(
+      serveCrossRealmPreview(
+        5210,
+        async () => {
+          let timer: ReturnType<typeof setInterval> | undefined;
+          const stream = new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array([123, 34, 110, 34, 58, 48, 125, 10]));
+              timer = setInterval(() => {
+                controller.enqueue(new Uint8Array([123, 34, 110, 34, 58, 49, 125, 10]));
+              }, 10);
+            },
+            cancel() {
+              if (timer !== undefined) clearInterval(timer);
+            },
+          });
+          return new Response(stream, {
+            status: 200,
+            headers: { 'Content-Type': 'application/x-ndjson' },
+          });
+        },
+        { streamDrainTimeoutMs: 80 },
+      ),
+    );
+    const handler = bridgeCrossRealmPreview(5210, { timeoutMs: 1000 });
+    cleanup.add(handler.dispose);
+
+    const settled = await Promise.race([
+      Promise.resolve(handler(new Request('http://preview.local/feed'))).then((r) => ({
+        kind: 'response' as const,
+        r,
+      })),
+      delay(500).then(() => ({ kind: 'pending' as const })),
+    ]);
+
+    expect(settled.kind).toBe('response');
+    if (settled.kind !== 'response') return;
+    expect(settled.r.status).toBe(502);
+    expect(await settled.r.text()).toContain('net.preview.cross-realm-unbounded-body');
+  });
 });

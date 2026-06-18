@@ -16,6 +16,13 @@
   that validates the 101 handshake and translates RFC 6455 frames. The real npm
   `ws` package in `new WebSocketServer({ server })` mode and client mode is
   pinned by CI.
+- **External `ws` clients use native WebSocket egress.** Non-local WebSocket
+  client upgrades no longer fail with the local-port bridge error; the worker
+  opens a real browser `WebSocket` and adapts it to the RFC6455 client socket
+  used by npm `ws`. Local registered ports stay on the in-process bridge.
+- **Raw TCP connect APIs are explicit loud ceilings.** `net.connect`,
+  `net.createConnection`, and `Socket.connect` throw directed
+  `NotImplementedError`s instead of leaving missing/ambiguous raw TCP surface.
 
 ### Fixed
 
@@ -47,14 +54,17 @@
   messages honor `binaryType`, invalid close codes/reasons and duplicated
   subprotocols throw, masked server frames are rejected, and `wss://` preview
   opens reach `server.on('upgrade')` with `socket.encrypted === true`.
-- **SSE bodies fail loud over the cross-realm preview bridge.**
-  `serveCrossRealmPreview` refuses to drain a `text/event-stream` body
-  (the page↔worker hop buffers until `reply-stream-end`, so an unending SSE
-  body never resolves — ADR-0048). It now posts a loud `error` frame naming
-  the ceiling (`net.preview.cross-realm-sse-drain`), which the page maps to a
-  502, instead of hanging forever. Mirrors the SW-bridge guard in
-  `@riftydev/service-worker`. Non-SSE unbounded bodies still drain — see
-  `docs/backlog/net/cross-realm-preview-unbounded-body.md`.
+- **Unbounded preview bodies fail loud over the cross-realm preview bridge.**
+  `serveCrossRealmPreview` still refuses `text/event-stream` immediately, and
+  now also bounds every other body drain with `streamDrainTimeoutMs`; an active
+  but never-ending NDJSON/log-tail stream returns a 502 naming
+  `net.preview.cross-realm-unbounded-body` instead of keeping the page
+  accumulator alive forever.
+- **`http.request` bodies stream through local loopback.** `req.write()` chunks
+  feed a live `ReadableStream` instead of a final `Blob`, so server-side
+  `IncomingMessage` sees chunk boundaries before `end()`. `write()` returns
+  `false` when the stream queue is full and emits `drain` after the consumer
+  pulls.
 - **`register-builtins` modules now expose idempotent callable registrars.**
   `registerNetBuiltins()` and `registerSqliteBuiltin()` preserve the old
   side-effect import behavior while letting production workers call the
@@ -105,11 +115,10 @@
   not reachable either way (`docs/backlog/net/cross-realm-http-loopback`).
 - **`http.request` client matches more Node `ClientRequest` shapes.** 3-arg
   `request(url, options, cb)` (options override URL parts), `end(callback)` as
-  finish callback (was: callback sent as body), `'finish'` event, `write()`
-  returns `true` (in-memory buffering — no backpressure; request body is
-  buffered whole, `docs/backlog/net/client-request-body-streaming`), repeated
-  bare `end()` no longer double-dispatches, and `write()`/`end(chunk)` after
-  end emit `ERR_STREAM_WRITE_AFTER_END`. Guards: `http/client.test.ts`.
+  finish callback (was: callback sent as body), `'finish'` event, repeated bare
+  `end()` no longer double-dispatches, and `write()`/`end(chunk)` after end emit
+  `ERR_STREAM_WRITE_AFTER_END`. Request body streaming/backpressure is covered
+  by the newer Unreleased entry above. Guards: `http/client.test.ts`.
 - **WebSocket `'close'` no longer depends on a global `CloseEvent`.** `ws/bridge.ts`
   and `ws/in-process.ts` constructed `new CloseEvent(...)`, a global only present in
   browsers and Node ≥23 — under a `node` test env on Node 22 (our `engines` floor)

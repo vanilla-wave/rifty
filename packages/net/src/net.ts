@@ -10,8 +10,8 @@
  * one-shot `console.warn` on instantiation.
  *
  * Calling `.connect()` (which only makes sense for a TCP socket) throws
- * `NotImplementedError` — raw byte streaming over TCP is deferred to ADR-0017
- * phase 2 / M12.
+ * `NotImplementedError` — raw OS TCP sockets are a browser ceiling, not a
+ * feature this package can faithfully emulate.
  */
 
 import { EventEmitter, NotImplementedError } from '@riftydev/io';
@@ -52,10 +52,10 @@ export class HttpFramedSocket extends EventEmitter {
    * Raw TCP connect is not supported — the port registry routes via HTTP
    * `Request`/`Response`, not byte streams. Use `fetch()` for client traffic.
    */
-  connect(_port: number, _host?: string): never {
+  connect(..._args: unknown[]): never {
     throw new NotImplementedError(
       'net.Socket.connect',
-      'rifty net.Socket only supports HTTP framing — use fetch()',
+      'browser runtimes cannot open raw TCP sockets; use http/fetch/WebSocket transports',
     );
   }
 
@@ -197,5 +197,14 @@ export function createServer(handler?: (socket: HttpFramedSocket) => void): Serv
   return new Server(handler);
 }
 
-const net = { createServer, Server, Socket, HttpFramedSocket };
+export function connect(..._args: unknown[]): never {
+  throw new NotImplementedError(
+    'net.connect',
+    'browser runtimes cannot open raw TCP sockets; use http/fetch/WebSocket transports',
+  );
+}
+
+export const createConnection = connect;
+
+const net = { createServer, connect, createConnection, Server, Socket, HttpFramedSocket };
 export default net;

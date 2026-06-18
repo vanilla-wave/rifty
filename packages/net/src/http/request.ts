@@ -101,7 +101,9 @@ async function pipeBodyStream(
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      if (value && value.byteLength > 0) target.push(value);
+      if (value && value.byteLength > 0 && !target.push(value)) {
+        await waitForReadableDemand(target);
+      }
     }
     target.push(null);
   } catch (err) {
@@ -109,6 +111,47 @@ async function pipeBodyStream(
   } finally {
     reader.releaseLock();
   }
+}
+
+function waitForReadableDemand(target: Readable): Promise<void> {
+  if (target.destroyed || target.readableLength < target.readableHighWaterMark) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const cleanup = (): void => {
+      target.off('data', onProgress);
+      target.off('readable', onProgress);
+      target.off('end', onProgress);
+      target.off('close', onClose);
+      target.off('error', onError);
+    };
+    const done = (): void => {
+      cleanup();
+      resolve();
+    };
+    const onProgress = (): void => {
+      if (
+        target.destroyed ||
+        target.readableLength < target.readableHighWaterMark ||
+        target.readableEnded
+      ) {
+        done();
+      }
+    };
+    const onClose = (): void => {
+      done();
+    };
+    const onError = (err: unknown): void => {
+      cleanup();
+      reject(err);
+    };
+    target.on('data', onProgress);
+    target.on('readable', onProgress);
+    target.on('end', onProgress);
+    target.on('close', onClose);
+    target.on('error', onError);
+    queueMicrotask(onProgress);
+  });
 }
 
 export class IncomingMessage extends Readable {

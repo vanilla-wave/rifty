@@ -51,6 +51,8 @@ export const PREVIEW_PORT_FRAME_VERSION = '2';
 
 /** Max bytes per `reply-stream-chunk` — bounds a single structured clone. */
 const MAX_CHUNK_BYTES = 64 * 1024;
+const DEFAULT_STREAM_DRAIN_TIMEOUT_MS = 30_000;
+const STREAM_DRAIN_TIMEOUT = Symbol('preview-port-stream-drain-timeout');
 
 /**
  * Synthetic URL used as the keyed input to {@link channelNameFor} for the
@@ -164,9 +166,11 @@ function nextRequestId(): string {
 export function serveCrossRealmPreview(
   port: number,
   dispatch: (request: Request) => Promise<Response>,
+  opts: { readonly streamDrainTimeoutMs?: number } = {},
 ): () => void {
   const channelName = channelNameFor(previewPortChannelUrl(port));
   const channel = new BroadcastChannel(channelName);
+  const streamDrainTimeoutMs = opts.streamDrainTimeoutMs ?? DEFAULT_STREAM_DRAIN_TIMEOUT_MS;
 
   const onMessage = async (event: MessageEvent): Promise<void> => {
     const frame = event.data as PreviewPortFrame;
@@ -195,17 +199,12 @@ export function serveCrossRealmPreview(
       return;
     }
 
-    // SSE ceiling (ADR-0048): this hop is buffered-until-`end` — the page concats
+    // Unbounded-body ceiling (ADR-0048): this hop is buffered-until-`end` — the page concats
     // chunks on `reply-stream-end` (true end-to-end `ReadableStream` is M12,
-    // ADR-0017), and the buffered path below awaits `arrayBuffer()`. An unending
-    // `text/event-stream` body therefore resolves on NEITHER path: the page would
-    // hang forever, delivering SSE never and silently. Fail loud naming the
-    // ceiling instead — mirrors the SW-bridge guard (`@riftydev/service-worker`
-    // body-transport.ts). Posted on the legacy `error` frame so a pre-ADR-0048
-    // page understands it (→ page maps to a 502 carrying the message).
-    // TODO(backlog: net/cross-realm-preview-unbounded-body) — a non-SSE unending
-    // body (chunked log-tail, NDJSON feed) still drains forever below; only
-    // `text/event-stream` is guarded here.
+    // ADR-0017), and the buffered path below drains the body too. A known
+    // unending media type is refused immediately; every other body is bounded by
+    // `streamDrainTimeoutMs` so a chunked log tail / NDJSON feed fails loud
+    // instead of keeping the page accumulator alive forever.
     if (response.body !== null && isEventStream(response.headers)) {
       const ceiling = new NotImplementedError(
         'net.preview.cross-realm-sse-drain',
@@ -224,8 +223,20 @@ export function serveCrossRealmPreview(
 
     // Buffered path: null body, or a peer that didn't request streaming.
     if (!wantsStream || response.body === null) {
-      const bodyBytes =
-        response.body === null ? null : new Uint8Array(await response.arrayBuffer());
+      let bodyBytes: Uint8Array | null;
+      try {
+        bodyBytes =
+          response.body === null
+            ? null
+            : await drainBodyWithDeadline(response.body, streamDrainTimeoutMs);
+      } catch (err) {
+        channel.postMessage({
+          type: 'error',
+          requestId,
+          message: err instanceof Error ? err.message : String(err),
+        } satisfies PreviewPortFrame);
+        return;
+      }
       channel.postMessage({
         type: 'reply',
         v: PREVIEW_PORT_FRAME_VERSION,
@@ -250,10 +261,17 @@ export function serveCrossRealmPreview(
     } satisfies PreviewPortFrame);
 
     const reader = response.body.getReader();
+    const deadline = createDrainDeadline(streamDrainTimeoutMs);
     let seq = 0;
     try {
       for (;;) {
-        const { done, value } = await reader.read();
+        const read = await Promise.race([reader.read(), deadline.promise]);
+        if (read === STREAM_DRAIN_TIMEOUT) {
+          const ceiling = unboundedBodyError(streamDrainTimeoutMs);
+          await reader.cancel(ceiling).catch(() => {});
+          throw ceiling;
+        }
+        const { done, value } = read;
         if (done) break;
         if (!value || value.byteLength === 0) continue;
         for (let off = 0; off < value.byteLength; off += MAX_CHUNK_BYTES) {
@@ -284,6 +302,7 @@ export function serveCrossRealmPreview(
         message: err instanceof Error ? err.message : String(err),
       } satisfies PreviewPortFrame);
     } finally {
+      deadline.clear();
       reader.releaseLock();
     }
   };
@@ -297,6 +316,65 @@ export function serveCrossRealmPreview(
     channel.removeEventListener('message', onMessage as unknown as EventListener);
     channel.close();
   };
+}
+
+async function drainBodyWithDeadline(
+  body: ReadableStream<Uint8Array>,
+  timeoutMs: number,
+): Promise<Uint8Array> {
+  const reader = body.getReader();
+  const deadline = createDrainDeadline(timeoutMs);
+  const parts: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const read = await Promise.race([reader.read(), deadline.promise]);
+      if (read === STREAM_DRAIN_TIMEOUT) {
+        const ceiling = unboundedBodyError(timeoutMs);
+        await reader.cancel(ceiling).catch(() => {});
+        throw ceiling;
+      }
+      const { done, value } = read;
+      if (done) break;
+      if (!value || value.byteLength === 0) continue;
+      parts.push(value);
+      total += value.byteLength;
+    }
+  } finally {
+    deadline.clear();
+    reader.releaseLock();
+  }
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const part of parts) {
+    out.set(part, off);
+    off += part.byteLength;
+  }
+  return out;
+}
+
+function createDrainDeadline(timeoutMs: number): {
+  readonly promise: Promise<typeof STREAM_DRAIN_TIMEOUT>;
+  clear(): void;
+} {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const promise = new Promise<typeof STREAM_DRAIN_TIMEOUT>((resolve) => {
+    timer = setTimeout(() => resolve(STREAM_DRAIN_TIMEOUT), timeoutMs);
+  });
+  return {
+    promise,
+    clear(): void {
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
+    },
+  };
+}
+
+function unboundedBodyError(timeoutMs: number): NotImplementedError {
+  return new NotImplementedError(
+    'net.preview.cross-realm-unbounded-body',
+    `cross-realm preview buffers response bodies until end; body did not finish within ${timeoutMs}ms`,
+  );
 }
 
 /**

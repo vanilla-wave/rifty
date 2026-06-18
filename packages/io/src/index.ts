@@ -35,6 +35,7 @@ export {
   pipeline,
   finished,
   type ReadableOptions,
+  type ReadableFromWebOptions,
   type WritableOptions,
   type TransformOptions,
 } from './streams/index.ts';

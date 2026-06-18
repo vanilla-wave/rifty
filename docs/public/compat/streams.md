@@ -19,14 +19,17 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `destroy` / cleanup | ✅ | Writable destroy and async-iterator cleanup parity |
 | `stream/consumers` | ✅ | Text/buffer/json-style consumers covered |
 | Legacy pipe/unpipe | ✅ | Pipe/unpipe and backpressure parity cases |
+| `Readable.fromWeb` | ✅ | WHATWG ReadableStream → Node Readable; chunk boundaries + pipe sink tested |
 | `node:stream/web` export | ❌ | WHATWG stream interop tracked separately |
-| `Readable.fromWeb` / `toWeb` | ❌ | Tracked by `net/readable-fromweb-pipe-sink` residual |
+| `Readable.toWeb` / `Writable.toWeb` | ❌ | Full WHATWG bridge surface is not claimed |
 
 ## Test Sources
 
 - `tests/conformance/builtins/stream.test.ts`
 - `tests/conformance/builtins/stream-legacy.test.ts`
 - `tests/conformance/builtins/stream-consumers.test.ts`
+- `packages/io/src/streams/readable.from.test.ts`
+- `packages/net/src/http/response.test.ts`
 - `tools/node-parity-runner/cases/stream/*.case.ts`
 
 ## Known Limitations

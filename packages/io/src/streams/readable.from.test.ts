@@ -91,4 +91,20 @@ describe('Readable.from(iter, options?)', () => {
     const r = Readable.from([new Uint8Array([1, 2]), new Uint8Array([3])]);
     expect(r.readableObjectMode).toBe(false);
   });
+
+  it('fromWeb preserves web-stream chunk boundaries as byte-mode data', async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(Buffer.from('aa'));
+        controller.enqueue(Buffer.from('bb'));
+        controller.close();
+      },
+    });
+
+    const r = Readable.fromWeb(stream);
+    expect(r.readableObjectMode).toBe(false);
+    const out = await drainObjectMode<Uint8Array>(r);
+
+    expect(out.map((chunk) => Buffer.from(chunk).toString('utf8'))).toEqual(['aa', 'bb']);
+  });
 });

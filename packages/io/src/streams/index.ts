@@ -11,7 +11,7 @@ import { Readable } from './readable.ts';
 import { Transform } from './transform.ts';
 import { Writable } from './writable.ts';
 
-export { Readable, type ReadableOptions } from './readable.ts';
+export { Readable, type ReadableFromWebOptions, type ReadableOptions } from './readable.ts';
 export { Writable, type WritableOptions } from './writable.ts';
 export { Duplex } from './duplex.ts';
 export { Transform, type TransformOptions } from './transform.ts';

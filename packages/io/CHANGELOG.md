@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`Readable.fromWeb()` plus Promise-aware `pipe()` backpressure (ADR-0152).**
+  WHATWG `ReadableStream` bodies can now become Node-shape `Readable`s while
+  preserving chunk boundaries, and `Readable.pipe()` pauses when a sink's
+  `write()` returns a Promise. This makes `Readable.fromWeb(body).pipe(res)`
+  work with `@riftydev/net` `ServerResponse` without an adapter.
+
 ### Performance
 
 Per `docs/perf/js-runtime-perf-audit-2026-06-05.md` (+ `js-runtime-perf-adr-plan-2026-06-06.md`). All behavior-preserving except where noted; parity + unit suites green.

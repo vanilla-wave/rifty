@@ -1,3 +1,5 @@
+import { Buffer } from 'node:buffer';
+import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { STATUS_CODES as HTTP_STATUS_CODES } from '../http.ts';
 import { STATUS_CODES as ROOT_STATUS_CODES } from '../index.ts';
@@ -32,6 +34,7 @@ function readClientResponse(opts: Parameters<typeof request>[0]): Promise<{
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   for (const port of listPorts()) unregisterPort(port);
 });
 
@@ -293,4 +296,212 @@ describe('http.request — Node ClientRequest call shapes', () => {
       'ERR_STREAM_WRITE_AFTER_END',
     ]);
   });
+
+  it('streams local request body writes before end and preserves chunk boundaries', async () => {
+    const port = 4314;
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));
+    const observed: string[] = [];
+    createServer((req, res) => {
+      req.on('data', (chunk) => observed.push(decoder.decode(chunk as Uint8Array)));
+      req.on('end', () => res.end(observed.join('|')));
+    }).listen(port);
+
+    const response = new Promise<{ statusCode: number; body: string }>((resolve, reject) => {
+      const req = request(
+        { hostname: 'localhost', port, method: 'POST', path: '/stream' },
+        (res) => {
+          const chunks: string[] = [];
+          res.on('data', (chunk) => chunks.push(decoder.decode(chunk as Uint8Array)));
+          res.on('end', () => resolve({ statusCode: res.statusCode, body: chunks.join('') }));
+          res.on('error', reject);
+        },
+      );
+      req.on('error', reject);
+      expect(req.write('a')).toBe(true);
+      void waitFor(() => observed.length === 1)
+        .then(() => {
+          req.write('b');
+          req.end('c');
+        })
+        .catch(reject);
+    });
+
+    expect(await response).toEqual({ statusCode: 200, body: 'a|b|c' });
+  });
+
+  it('returns false while the live request body stream is full and emits drain after pull', async () => {
+    const port = 4315;
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch must not handle loopback'));
+    createServer((req, res) => {
+      req.on('data', () => {});
+      req.on('end', () => res.end('ok'));
+    }).listen(port);
+
+    const drains: string[] = [];
+    await new Promise<void>((resolve, reject) => {
+      const req = request(
+        { hostname: 'localhost', port, method: 'POST', path: '/drain' },
+        (res) => {
+          res.on('data', () => {});
+          res.on('end', () => resolve());
+          res.on('error', reject);
+        },
+      );
+      req.on('error', reject);
+      req.on('drain', () => drains.push('drain'));
+      expect(req.write('a')).toBe(true);
+      expect(req.write('b')).toBe(false);
+      void waitFor(() => drains.length === 1)
+        .then(() => req.end())
+        .catch(reject);
+    });
+
+    expect(drains).toEqual(['drain']);
+  });
 });
+
+describe('http.request — external WebSocket client upgrade', () => {
+  it('opens a native WebSocket for non-local hosts and bridges RFC6455 data frames', async () => {
+    FakeNativeWebSocket.instances.length = 0;
+    vi.stubGlobal('WebSocket', FakeNativeWebSocket);
+    const key = 'AQIDBAUGBwgJCgsMDQ4PEA==';
+
+    const upgraded = new Promise<WebSocketClientShape>((resolve, reject) => {
+      const req = request({
+        hostname: 'example.com',
+        path: '/socket',
+        headers: {
+          connection: 'Upgrade',
+          upgrade: 'websocket',
+          'sec-websocket-version': '13',
+          'sec-websocket-key': key,
+          'sec-websocket-protocol': 'chat',
+        },
+      });
+      req.on('upgrade', (res: unknown, socket: unknown) => {
+        const response = res as {
+          statusCode: number;
+          headers: Record<string, string>;
+        };
+        expect(response.statusCode).toBe(101);
+        expect(response.headers['sec-websocket-accept']).toBe(acceptKey(key));
+        expect(response.headers['sec-websocket-protocol']).toBe('chat');
+        resolve(socket as WebSocketClientShape);
+      });
+      req.on('error', reject);
+      req.end();
+    });
+
+    await waitFor(() => FakeNativeWebSocket.instances.length === 1);
+    const native = FakeNativeWebSocket.instances[0]!;
+    expect(native.url).toBe('ws://example.com/socket');
+    expect(native.protocols).toEqual(['chat']);
+    native.open('chat');
+
+    const socket = await upgraded;
+    const inbound: string[] = [];
+    socket.on('data', (chunk) => {
+      inbound.push(parseServerFrame(Buffer.from(chunk)).payload.toString('utf8'));
+    });
+    expect(socket.write(encodeClientFrame(0x1, Buffer.from('hello')))).toBe(true);
+    await waitFor(() => native.sent.length === 1);
+    expect(native.sent[0]).toBe('hello');
+
+    native.receive('world');
+    await waitFor(() => inbound.includes('world'));
+    socket.destroy();
+  });
+});
+
+interface WebSocketClientShape {
+  write(chunk: Uint8Array): boolean;
+  destroy(): void;
+  on(event: 'data', cb: (chunk: Uint8Array) => void): void;
+}
+
+class FakeNativeWebSocket extends EventTarget {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSING = 2;
+  static readonly CLOSED = 3;
+  static readonly instances: FakeNativeWebSocket[] = [];
+
+  readonly url: string;
+  readonly protocols: readonly string[];
+  readyState = FakeNativeWebSocket.CONNECTING;
+  binaryType: BinaryType = 'blob';
+  protocol = '';
+  readonly sent: Array<string | ArrayBufferLike | Blob | ArrayBufferView> = [];
+
+  constructor(url: string, protocols?: string | readonly string[]) {
+    super();
+    this.url = url;
+    this.protocols =
+      typeof protocols === 'string' ? [protocols] : protocols === undefined ? [] : [...protocols];
+    FakeNativeWebSocket.instances.push(this);
+  }
+
+  send(data: string | ArrayBufferLike | Blob | ArrayBufferView): void {
+    this.sent.push(data);
+  }
+
+  close(code?: number, reason?: string): void {
+    if (this.readyState === FakeNativeWebSocket.CLOSED) return;
+    this.readyState = FakeNativeWebSocket.CLOSED;
+    this.dispatchEvent(closeEvent(code ?? 1005, reason ?? ''));
+  }
+
+  open(protocol = ''): void {
+    this.protocol = protocol;
+    this.readyState = FakeNativeWebSocket.OPEN;
+    this.dispatchEvent(new Event('open'));
+  }
+
+  receive(data: string | ArrayBuffer): void {
+    this.dispatchEvent(messageEvent(data));
+  }
+}
+
+function messageEvent(data: string | ArrayBuffer): MessageEvent {
+  if (typeof MessageEvent !== 'undefined') return new MessageEvent('message', { data });
+  const event = new Event('message') as MessageEvent & { data: string | ArrayBuffer };
+  Object.defineProperty(event, 'data', { value: data });
+  return event;
+}
+
+function closeEvent(code: number, reason: string): CloseEvent {
+  if (typeof CloseEvent !== 'undefined') return new CloseEvent('close', { code, reason });
+  const event = new Event('close') as CloseEvent & { code: number; reason: string };
+  Object.defineProperties(event, {
+    code: { value: code },
+    reason: { value: reason },
+  });
+  return event;
+}
+
+function acceptKey(key: string): string {
+  return createHash('sha1').update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64');
+}
+
+function encodeClientFrame(opcode: number, payload: Buffer): Buffer {
+  if (payload.length >= 126) throw new Error('test frame helper only supports short payloads');
+  const mask = Buffer.from([1, 2, 3, 4]);
+  const masked = Buffer.from(payload);
+  for (let i = 0; i < masked.length; i++) masked[i] = masked[i]! ^ mask[i % 4]!;
+  return Buffer.concat([Buffer.from([0x80 | opcode, 0x80 | payload.length]), mask, masked]);
+}
+
+function parseServerFrame(buf: Buffer): { opcode: number; payload: Buffer } {
+  const opcode = buf[0]! & 0x0f;
+  const len = buf[1]! & 0x7f;
+  return { opcode, payload: Buffer.from(buf.subarray(2, 2 + len)) };
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 1000;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('timed out waiting for condition');
+}

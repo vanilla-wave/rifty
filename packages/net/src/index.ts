@@ -1,6 +1,8 @@
 export {
   default as net,
   createServer as createNetServer,
+  connect as netConnect,
+  createConnection as createNetConnection,
   Server as NetServer,
   HttpFramedSocket,
   Socket,

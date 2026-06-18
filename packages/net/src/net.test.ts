@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import net, { HttpFramedSocket, Socket } from './net.ts';
+import net, { HttpFramedSocket, Socket, connect, createConnection } from './net.ts';
 
 describe('HttpFramedSocket — Item 2', () => {
   it('is exported under the new name', () => {
@@ -63,7 +63,15 @@ describe('HttpFramedSocket.connect — non-HTTP usage is loud', () => {
   it('throws NotImplementedError on connect()', () => {
     const s = new HttpFramedSocket();
     expect(() => s.connect(80, 'localhost')).toThrowError(
-      /net\.Socket\.connect.*HTTP framing.*fetch/i,
+      /net\.Socket\.connect.*raw TCP sockets.*http\/fetch\/WebSocket/i,
     );
+  });
+
+  it('throws directed NotImplementedError for net.connect/createConnection', () => {
+    expect(() => connect(80, 'localhost')).toThrowError(/net\.connect.*raw TCP sockets/i);
+    expect(() => createConnection({ port: 80, host: 'localhost' })).toThrowError(
+      /net\.connect.*raw TCP sockets/i,
+    );
+    expect(() => net.connect(80, 'localhost')).toThrowError(/net\.connect.*raw TCP sockets/i);
   });
 });

@@ -47,9 +47,7 @@ open:
 ## M7 — Network
 
 **PARTIAL.**
-`net`/`http` servers, `IncomingMessage` Readable, `http.request`/`http.get` loopback over the port registry plus fetch egress, SW preview round-trip, chunked streaming; real `express@4` runs end-to-end. ADR-0010, ADR-0017, ADR-0048, ADR-0123.
-open:
-- `docs/backlog/net/real-tcp-socket-semantics` — real-TCP `net.Socket` (HTTP-only today).
+`net`/`http` servers, `IncomingMessage` Readable, `http.request`/`http.get` loopback over the port registry plus fetch/WebSocket egress, SW preview round-trip, chunked streaming; real `express@4` runs end-to-end. Raw OS TCP connect APIs are a loud browser ceiling, not a fake socket. ADR-0010, ADR-0017, ADR-0048, ADR-0123, ADR-0152.
 
 ## M8 — WASI Runner
 

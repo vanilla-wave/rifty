@@ -17,9 +17,10 @@
  * docs/backlog/net/cross-realm-http-loopback.
  */
 
-import { Buffer, EventEmitter } from '@riftydev/io';
+import { Buffer, EventEmitter, NotImplementedError } from '@riftydev/io';
 import { dispatchToPort, getHandler, registerPort, unregisterPort } from '../registry.ts';
 import { channelNameFor, portChannelNameFor, portChannelNameForPort } from '../ws/channel.ts';
+import type { WsMessage } from '../ws/in-process.ts';
 import { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
 import { ServerResponse } from './response.ts';
 import { STATUS_CODES } from './status-codes.ts';
@@ -338,9 +339,9 @@ function connectionHasToken(value: string | null | undefined, token: string): bo
  * `http.request(url | opts[, opts][, cb])` — registered local loopback ports
  * route through the in-process registry; unregistered loopback ports emit
  * `ECONNREFUSED`; everything else falls through to the host's `fetch`. The
- * callback receives an `IncomingMessage` once the response arrives. Outgoing
- * body is sent via `req.write()` / `req.end()` (buffered whole — see
- * docs/backlog/net/client-request-body-streaming).
+ * callback receives an `IncomingMessage` once the response arrives. Local
+ * outgoing bodies are sent as a live `ReadableStream`, so `req.write()` chunk
+ * boundaries are preserved through to the server-side `IncomingMessage`.
  */
 export function request(
   urlOrOpts: string | RequestOptions,
@@ -361,57 +362,79 @@ export function request(
   const headers = overrides?.headers ?? base?.headers ?? {};
 
   const emitter = new EventEmitter();
-  const bodyChunks: (Uint8Array | string)[] = [];
   let finished = false;
   let aborted = false;
+  let dispatchStarted = false;
+  let bodyClosed = false;
+  let bodyController: ReadableStreamDefaultController<Uint8Array> | null = null;
+  let requestBody: ReadableStream<Uint8Array> | null = null;
+  let needDrain = false;
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   let upgradeCleanup: (() => void) | undefined;
   let upgradeSocket: WebSocketClientSocket | undefined;
+  const abortController = new AbortController();
 
-  const req = Object.assign(emitter, {
-    write(chunk: Uint8Array | string): boolean {
-      if (finished) {
-        queueMicrotask(() => emitter.emit('error', streamWriteAfterEndError()));
-        return false;
-      }
-      bodyChunks.push(chunk);
-      // Buffered in memory — no backpressure, so never ask the caller to wait.
-      return true;
-    },
-    end(chunkOrCb?: Uint8Array | string | (() => void), endCb?: () => void): void {
-      const finishCb = typeof chunkOrCb === 'function' ? chunkOrCb : endCb;
-      const chunk = typeof chunkOrCb === 'function' ? undefined : chunkOrCb;
-      if (finished) {
-        // Node: data after end errors; a bare repeated end() is a no-op.
-        if (chunk !== undefined) {
-          queueMicrotask(() => emitter.emit('error', streamWriteAfterEndError()));
-        }
-        return;
-      }
-      finished = true;
-      if (chunk !== undefined) bodyChunks.push(chunk);
-      if (finishCb) emitter.once('finish', finishCb);
-      void (async () => {
-        // Defer one microtask so listeners attached AFTER end() — the standard
-        // Node pattern with http.get(url, cb); req.on('error', …) — still see
-        // 'finish'/'error'. Node never emits these synchronously from end().
-        await Promise.resolve();
-        emitter.emit('finish');
-        const route = routeClientRequest(url);
-        if (isWebSocketUpgradeHeaders(headers)) {
-          if (route.kind !== 'local') {
-            if (route.kind === 'refused')
-              emitter.emit('error', connRefusedError(route.address, route.port));
-            // TODO(backlog: net/ws-client-external-host) — a non-local host could
-            // open a real native WebSocket here (browser WS egress is a primitive,
-            // unlike raw TCP) instead of loud-erroring; matches the browser shim.
-            else
-              emitter.emit(
-                'error',
-                new Error('WebSocket client upgrades require a registered rifty local port'),
-              );
-            return;
-          }
+  const ensureBodyStream = (): ReadableStream<Uint8Array> => {
+    if (requestBody !== null) return requestBody;
+    requestBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        bodyController = controller;
+      },
+      pull() {
+        if (!needDrain) return;
+        needDrain = false;
+        queueMicrotask(() => emitter.emit('drain'));
+      },
+      cancel() {
+        bodyClosed = true;
+      },
+    });
+    return requestBody;
+  };
+
+  const enqueueBodyChunk = (chunk: Uint8Array | string): boolean => {
+    const stream = ensureBodyStream();
+    void stream;
+    const ctrl = bodyController;
+    if (ctrl === null || bodyClosed) return false;
+    const buf = typeof chunk === 'string' ? UTF8_ENCODER.encode(chunk) : chunk;
+    if (buf.byteLength === 0) return true;
+    const desiredSize = ctrl.desiredSize;
+    ctrl.enqueue(buf);
+    if (desiredSize !== null && desiredSize <= 0) {
+      needDrain = true;
+      return false;
+    }
+    return true;
+  };
+
+  const closeBodyStream = (): void => {
+    if (bodyClosed) return;
+    bodyClosed = true;
+    bodyController?.close();
+  };
+
+  const failBodyStream = (err: Error): void => {
+    if (bodyClosed) return;
+    bodyClosed = true;
+    try {
+      bodyController?.error(err);
+    } catch {
+      /* controller already closed */
+    }
+  };
+
+  const startDispatch = (): void => {
+    if (dispatchStarted) return;
+    dispatchStarted = true;
+    void (async () => {
+      // Defer one microtask so listeners attached AFTER write()/end() — the
+      // standard Node pattern — still see 'finish'/'error'/'response'.
+      await Promise.resolve();
+      if (aborted) return;
+      const route = routeClientRequest(url);
+      if (isWebSocketUpgradeHeaders(headers)) {
+        if (route.kind === 'local') {
           try {
             const opened = openWebSocketClientUpgrade({
               url,
@@ -427,31 +450,83 @@ export function request(
           }
           return;
         }
-        const body =
-          bodyChunks.length === 0
-            ? undefined
-            : bodyChunks.map((c) => (typeof c === 'string' ? UTF8_ENCODER.encode(c) : c));
-        const init = {
-          method,
-          headers,
-          body: body ? new Blob(body as unknown as BlobPart[]) : undefined,
-        };
         if (route.kind === 'refused') {
           emitter.emit('error', connRefusedError(route.address, route.port));
           return;
         }
         try {
-          const response =
-            route.kind === 'local'
-              ? await dispatchToPort(route.port, new Request(url, init))
-              : await fetch(url, init);
-          const incoming = new IncomingMessageFromFetch(response);
-          cb?.(incoming);
-          emitter.emit('response', incoming);
+          const opened = openNativeWebSocketClientUpgrade({
+            url,
+            headers,
+            emitter,
+            isAborted: () => aborted,
+          });
+          upgradeCleanup = opened.cleanup;
+          upgradeSocket = opened.socket;
         } catch (err) {
           emitter.emit('error', err);
         }
-      })();
+        return;
+      }
+      if (requestBody !== null && (method === 'GET' || method === 'HEAD')) {
+        const err = new TypeError(`Request with ${method} method cannot have a body`);
+        failBodyStream(err);
+        emitter.emit('error', err);
+        return;
+      }
+      const init: RequestInit & { duplex?: 'half' } = {
+        method,
+        headers,
+        signal: abortController.signal,
+      };
+      if (requestBody !== null) {
+        init.body = requestBody as unknown as BodyInit;
+        init.duplex = 'half';
+      }
+      if (route.kind === 'refused') {
+        emitter.emit('error', connRefusedError(route.address, route.port));
+        return;
+      }
+      try {
+        const response =
+          route.kind === 'local'
+            ? await dispatchToPort(route.port, new Request(url, init))
+            : await fetch(url, init);
+        const incoming = new IncomingMessageFromFetch(response);
+        cb?.(incoming);
+        emitter.emit('response', incoming);
+      } catch (err) {
+        emitter.emit('error', err);
+      }
+    })();
+  };
+
+  const req = Object.assign(emitter, {
+    write(chunk: Uint8Array | string): boolean {
+      if (finished) {
+        queueMicrotask(() => emitter.emit('error', streamWriteAfterEndError()));
+        return false;
+      }
+      const ok = enqueueBodyChunk(chunk);
+      startDispatch();
+      return ok;
+    },
+    end(chunkOrCb?: Uint8Array | string | (() => void), endCb?: () => void): void {
+      const finishCb = typeof chunkOrCb === 'function' ? chunkOrCb : endCb;
+      const chunk = typeof chunkOrCb === 'function' ? undefined : chunkOrCb;
+      if (finished) {
+        // Node: data after end errors; a bare repeated end() is a no-op.
+        if (chunk !== undefined) {
+          queueMicrotask(() => emitter.emit('error', streamWriteAfterEndError()));
+        }
+        return;
+      }
+      finished = true;
+      if (chunk !== undefined) enqueueBodyChunk(chunk);
+      closeBodyStream();
+      if (finishCb) emitter.once('finish', finishCb);
+      void Promise.resolve().then(() => emitter.emit('finish'));
+      startDispatch();
     },
     abort(): void {
       req.destroy();
@@ -460,6 +535,8 @@ export function request(
       if (aborted) return;
       aborted = true;
       if (timeoutId !== undefined) clearTimeout(timeoutId);
+      abortController.abort();
+      failBodyStream(err ?? new Error('request destroyed'));
       upgradeCleanup?.();
       upgradeSocket?.destroy(err);
       if (err) queueMicrotask(() => emitter.emit('error', err));
@@ -581,6 +658,146 @@ function openWebSocketClientUpgrade(opts: {
   });
   socket.once('close', cleanup);
   return { socket, cleanup };
+}
+
+function openNativeWebSocketClientUpgrade(opts: {
+  readonly url: string;
+  readonly headers: Record<string, string>;
+  readonly emitter: EventEmitter;
+  readonly isAborted: () => boolean;
+}): { readonly socket: WebSocketClientSocket; readonly cleanup: () => void } {
+  if (typeof WebSocket === 'undefined') {
+    throw new NotImplementedError(
+      'net.websocket.native-client',
+      'external WebSocket egress requires the browser/worker WebSocket primitive',
+    );
+  }
+  const wsUrl = toWebSocketUrl(opts.url);
+  const key = headerValue(opts.headers, 'sec-websocket-key');
+  if (!isValidWebSocketKey(key)) {
+    throw new Error('WebSocket client upgrade missing a valid Sec-WebSocket-Key header');
+  }
+  const protocols = splitHeaderList(headerValue(opts.headers, 'sec-websocket-protocol'));
+  const cid = `http-native-ws-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  let opened = false;
+  let closed = false;
+  const native = new WebSocket(wsUrl, [...protocols]);
+  native.binaryType = 'arraybuffer';
+
+  const sendNative = (frame: WebSocketBridgeFrame): void => {
+    if (closed) return;
+    if (frame.type === 'msg') {
+      if (frame.opcode === 0x9 || frame.opcode === 0xa) {
+        const err = new NotImplementedError(
+          'net.websocket.native-client-control-frame',
+          'browser WebSocket egress cannot originate ping/pong control frames',
+        );
+        queueMicrotask(() => socket.destroy(err));
+        return;
+      }
+      if (native.readyState !== WebSocket.OPEN) return;
+      if (frame.data !== undefined) native.send(toNativeWebSocketPayload(frame.data));
+      return;
+    }
+    if (frame.type === 'close' && frame.from === 'client') {
+      try {
+        if (frame.code === undefined || frame.code === 1005 || frame.code === 1006) {
+          native.close();
+        } else {
+          native.close(frame.code, frame.reason ?? '');
+        }
+      } catch (err) {
+        queueMicrotask(() => socket.destroy(err as Error));
+      }
+    }
+  };
+  const socket = new WebSocketClientSocket({ cid, sendBridgeFrame: sendNative });
+
+  const cleanup = (): void => {
+    if (closed) return;
+    closed = true;
+    native.removeEventListener('open', onOpen);
+    native.removeEventListener('message', onMessage);
+    native.removeEventListener('close', onClose);
+    native.removeEventListener('error', onError);
+    if (native.readyState === WebSocket.CONNECTING || native.readyState === WebSocket.OPEN) {
+      try {
+        native.close();
+      } catch {
+        /* already closing/closed */
+      }
+    }
+  };
+
+  const onOpen = (): void => {
+    if (opts.isAborted()) {
+      cleanup();
+      return;
+    }
+    opened = true;
+    const responseHeaders: Record<string, string> = {
+      connection: 'Upgrade',
+      upgrade: 'websocket',
+      'sec-websocket-accept': createWebSocketAccept(key),
+    };
+    if (native.protocol) responseHeaders['sec-websocket-protocol'] = native.protocol;
+    opts.emitter.emit(
+      'upgrade',
+      {
+        statusCode: 101,
+        statusMessage: 'Switching Protocols',
+        headers: responseHeaders,
+      },
+      socket,
+      Buffer.alloc(0),
+    );
+  };
+
+  const onMessage = (event: MessageEvent): void => {
+    if (opts.isAborted()) return;
+    void normaliseNativeWebSocketMessage(event.data).then(
+      (data) => socket._receiveBridgeMessage(data),
+      (err) => socket.destroy(err as Error),
+    );
+  };
+
+  const onClose = (event: CloseEvent): void => {
+    socket._receiveBridgeClose(event.code, event.reason);
+    cleanup();
+  };
+
+  const onError = (): void => {
+    const err = new Error('WebSocket connection failed');
+    if (!opened) {
+      cleanup();
+      opts.emitter.emit('error', err);
+      return;
+    }
+    socket.destroy(err);
+  };
+
+  native.addEventListener('open', onOpen);
+  native.addEventListener('message', onMessage);
+  native.addEventListener('close', onClose);
+  native.addEventListener('error', onError);
+  socket.once('close', cleanup);
+  return { socket, cleanup };
+}
+
+function toNativeWebSocketPayload(data: WsMessage): string | ArrayBuffer {
+  if (typeof data === 'string') return data;
+  if (data instanceof ArrayBuffer) return data;
+  return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+}
+
+async function normaliseNativeWebSocketMessage(data: unknown): Promise<WsMessage> {
+  if (typeof data === 'string' || data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
+    return data as WsMessage;
+  }
+  if (typeof Blob !== 'undefined' && data instanceof Blob) {
+    return await data.arrayBuffer();
+  }
+  return String(data);
 }
 
 function toWebSocketUrl(url: string): string {

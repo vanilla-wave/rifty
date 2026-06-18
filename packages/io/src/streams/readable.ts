@@ -217,7 +217,7 @@ function takeAll(state: ReadableState): unknown {
  * readable.ts would invert the dep). The duck-type matches Node's pipe API.
  */
 interface PipeableWritable extends EventEmitter {
-  write(chunk: unknown): boolean;
+  write(chunk: unknown): boolean | Promise<boolean>;
   end(): unknown;
   emit: EventEmitter['emit'];
 }
@@ -581,7 +581,18 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
 
     const endOnFinish = opts.end ?? true;
     const onData = (chunk: unknown): void => {
-      if (!dest.write(chunk)) this.pause();
+      const writeResult = dest.write(chunk);
+      if (writeResult === false) {
+        this.pause();
+        return;
+      }
+      if (isPromiseLike(writeResult)) {
+        this.pause();
+        void writeResult.then(
+          () => this.resume(),
+          (err) => dest.emit('error', err),
+        );
+      }
     };
     const onDrain = (): void => {
       this.resume();
@@ -870,4 +881,116 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
     })();
     return r;
   }
+
+  /**
+   * Convert a WHATWG `ReadableStream` into this Node-shape `Readable`.
+   *
+   * The reader pump preserves each web-stream chunk boundary and stops reading
+   * when `push()` reports backpressure, resuming only after the Node-readable
+   * buffer has drained below its high-water mark.
+   */
+  static fromWeb(stream: ReadableStream<unknown>, options: ReadableFromWebOptions = {}): Readable {
+    if (!stream || typeof (stream as { getReader?: unknown }).getReader !== 'function') {
+      throw new TypeError(
+        'Readable.fromWeb: the "readableStream" argument must be a ReadableStream',
+      );
+    }
+    if (options.signal?.aborted) {
+      const r = new Readable(options);
+      queueMicrotask(() => r.destroy(abortError()));
+      return r;
+    }
+
+    const reader = stream.getReader();
+    const r = new Readable(options);
+    let closed = false;
+
+    const abort = (): void => {
+      r.destroy(abortError());
+    };
+    options.signal?.addEventListener('abort', abort, { once: true });
+
+    r.once('close', () => {
+      if (closed) return;
+      closed = true;
+      options.signal?.removeEventListener('abort', abort);
+      void reader.cancel().catch(() => {});
+    });
+
+    void (async () => {
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value === undefined) continue;
+          if (!r.push(value)) await waitForReadableDemand(r);
+        }
+        closed = true;
+        options.signal?.removeEventListener('abort', abort);
+        reader.releaseLock();
+        r.push(null);
+      } catch (err) {
+        closed = true;
+        options.signal?.removeEventListener('abort', abort);
+        try {
+          reader.releaseLock();
+        } catch {
+          /* already released/cancelled */
+        }
+        r.destroy(err as Error);
+      }
+    })();
+    return r;
+  }
+}
+
+export interface ReadableFromWebOptions extends ReadableOptions {
+  signal?: AbortSignal;
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return (
+    value !== null &&
+    (typeof value === 'object' || typeof value === 'function') &&
+    typeof (value as { then?: unknown }).then === 'function'
+  );
+}
+
+function waitForReadableDemand(r: Readable): Promise<void> {
+  if (r.destroyed || r.readableLength < r.readableHighWaterMark) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const cleanup = (): void => {
+      r.off('data', onProgress);
+      r.off('readable', onProgress);
+      r.off('end', onProgress);
+      r.off('close', onClose);
+      r.off('error', onError);
+    };
+    const done = (): void => {
+      cleanup();
+      resolve();
+    };
+    const onProgress = (): void => {
+      if (r.destroyed || r.readableLength < r.readableHighWaterMark || r.readableEnded) done();
+    };
+    const onClose = (): void => {
+      done();
+    };
+    const onError = (err: unknown): void => {
+      cleanup();
+      reject(err);
+    };
+    r.on('data', onProgress);
+    r.on('readable', onProgress);
+    r.on('end', onProgress);
+    r.on('close', onClose);
+    r.on('error', onError);
+    queueMicrotask(onProgress);
+  });
+}
+
+function abortError(): Error {
+  const err = new Error('The operation was aborted');
+  err.name = 'AbortError';
+  return err;
 }
