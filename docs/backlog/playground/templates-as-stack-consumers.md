@@ -11,12 +11,13 @@ code: [apps/playground/src, tests/e2e/fullstack-demo.spec.ts]
 ## Context
 ADR-0130 wired `preset.templateId` and made node-server templates data ("third template = data change for real this time"). The express demo surfaced 7 runtime bugs en route — the expected norm for any new real consumer. Each candidate template targets a stack axis nothing currently covers:
 - **Hono or Koa** — different server style (ctx/middleware vs express); exercises `node:http` surface differently; cheapest (pure data change).
-- **WebSocket chat** — forces `net/cross-realm-websocket-bridge` (parked, "no current consumer" — this IS the consumer).
+- **WebSocket chat** — consumes ADR-0147's default cross-realm WebSocket bridge
+  with app-level bidirectional messages, not just dev-server HMR.
 - **CLI demo** — run-to-completion worker path through the playground: servers live forever; exit-with-code (terminal showing exit status, no preview) is never exercised end-to-end. Flip side of `kernel/server-shaped-worker-process-lifecycle`.
 - **markdown-SSG** — fs-intensive (read/write/walk many files), then static preview of output.
 
 ## Options / Next
-Order by gap-value vs cost: Hono first (data change, immediate worker-realm load) → CLI demo (needs run-to-completion UX decision: what does preview pane show, where does exit code surface) → markdown-SSG → WebSocket chat (gated on the bridge, or pulled forward as its driving consumer). Each green template pinned with an e2e spec per `tests/e2e/fullstack-demo.spec.ts` pattern. Expect bugs; budget per-template fix time, file findings to owning areas.
+Order by gap-value vs cost: Hono first (data change, immediate worker-realm load) → CLI demo (needs run-to-completion UX decision: what does preview pane show, where does exit code surface) → WebSocket chat (ADR-0147 bridge consumer) → markdown-SSG. Each green template pinned with an e2e spec per `tests/e2e/fullstack-demo.spec.ts` pattern. Expect bugs; budget per-template fix time, file findings to owning areas.
 
 ## Reversibility
-REVERSIBLE per template (data change per ADR-0130). WebSocket bridge transport itself IRREVERSIBLE — own ADR when taken (already noted in `net/cross-realm-websocket-bridge`). CLI run-to-completion may pull the kernel lifecycle item — IRREVERSIBLE there, not here.
+REVERSIBLE per template (data change per ADR-0130). WebSocket bridge transport is already ratified by ADR-0147; this item only adds consumers. CLI run-to-completion may pull the kernel lifecycle item — IRREVERSIBLE there, not here.

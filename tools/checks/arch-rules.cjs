@@ -25,9 +25,11 @@ const ALL = TIERS.flat();
 const options = {
   tsConfig: { fileName: 'tsconfig.base.json' },
   doNotFollow: { path: 'node_modules' },
-  // skip build output, coverage, type decls and tests — layering applies to source only
+  // skip build output, coverage, type decls and tests — layering applies to
+  // source only. Also skip the transient temp configs tsup/vitest write next to
+  // their config (they appear mid-run and would race depcruise to an ENOENT).
   exclude: {
-    path: '(^|/)(dist|build|coverage|playwright-report|test-results)/|/tests?/|/__tests__/|/__mocks__/|\\.test\\.[tj]sx?$|\\.d\\.ts$',
+    path: '(^|/)(dist|build|coverage|playwright-report|test-results)/|/tests?/|/__tests__/|/__mocks__/|\\.test\\.[tj]sx?$|\\.d\\.ts$|(^|/)tsup\\.config\\.bundled_[^/]+\\.mjs$|(^|/)vitest\\.config\\.[tj]s\\.timestamp-[^/]+\\.mjs$',
   },
   enhancedResolveOptions: {
     exportsFields: ['exports'],

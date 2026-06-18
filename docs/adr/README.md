@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history); its load-bearing context is grafted into the successor. New decisions get new ADRs via `pnpm adr:new <area> "Title"`.
+ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps history) and its load-bearing context grafted into the successor. When only a single *wrong/evolved clause* of an otherwise-active ADR is overtaken, it is corrected in place with a dated note and listed in [Corrections (active)](#corrections-active) — never a silent edit, never a remove of the still-active remainder. New decisions get new ADRs via `pnpm adr:new <area> "Title"`.
 
 ## Index
 
@@ -66,6 +66,9 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0017 | `@riftydev/net` scope statement and streaming rewrite deferral |
 | 0054 | Effect `@effect/platform-node` consumes rifty `node:http` AS-IS via additive shape-widening |
 | 0065 | `node:sqlite` `DatabaseSync` WASM shim — sql.js, in-memory-first (P2 boot prerequisite) |
+| 0147 | Default cross-realm WebSocket bridge |
+| 0151 | HTTP WebSocket upgrade over bridge |
+| 0154 | HTTP stream interop and drain contract |
 
 ### service-worker
 
@@ -111,6 +114,7 @@ ADRs are immutable while active. A superseded ADR is REMOVED (git keeps history)
 | 0130 | Node-server project template runtime (Express + node:sqlite demo) |
 | 0135 | Sandbox setup kinds: instant vs from-scratch |
 | 0140 | JetBrains Mono throughout playground |
+| 0145 | Real Vite module HMR (server.hmr.channels path superseded) |
 
 ### toolchain-build
 
@@ -188,6 +192,20 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0074 | 0077 | SW preview-nav routing; ported into ADR-0077 |
 | 0092 | n/a | retired opencode facade ADR; integration cancelled |
 | 0138 | 0142 | eval interception now feasible via QuickJS real realm; context grafted |
+
+## Corrections (active)
+
+Active ADRs below carry in-place correction notes; only the named clause is
+superseded.
+
+| ADR | corrected by | note |
+|---|---|---|
+| 0017 A-025 deferral clause | 0147 | cross-realm WebSocket reachability shipped; M12 still owns streaming/backpressure |
+| 0017 A-024 raw TCP clause | 0017 note 2026-06-18 | raw OS TCP is a final browser ceiling; connect APIs throw directed `NotImplementedError`s |
+| 0145 browser transport clause | 0147 | browser shim is now the generic WebSocket bridge |
+| 0145 `server.hmr.channels` payload path | 0151 | Real-Vite now uses Vite native `server.ws` over rifty `http.Server.on('upgrade')` |
+| 0054 WS/SSE upgrade risk note | 0151 | WebSocket `server.on('upgrade')` now works over the bridge; SSE stays streaming HTTP |
+| 0054 pipe-sink deferral | 0154 | `Readable.fromWeb(webStream).pipe(res)` is implemented; full `node:stream/web` remains unclaimed |
 
 ## Appendix A — Q→ADR provenance
 

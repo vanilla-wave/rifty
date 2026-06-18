@@ -9,8 +9,20 @@
  */
 import type { ViteProjectSpec } from './project-spec.ts';
 
-const INITIAL_MAIN_JS = `document.getElementById('app').textContent =
+const INITIAL_MAIN_JS = `const message =
   'Hello from real Vite running inside a kernel-spawned Worker — edit me, save.';
+
+export function render() {
+  document.getElementById('app').textContent = message;
+}
+
+render();
+
+if (import.meta.hot) {
+  import.meta.hot.accept((next) => {
+    next?.render();
+  });
+}
 `;
 
 export const VITE_TEMPLATE: ViteProjectSpec = {

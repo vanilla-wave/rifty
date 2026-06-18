@@ -102,17 +102,20 @@ const matrices = [
       ['`destroy` / cleanup', '✅', 'Writable destroy and async-iterator cleanup parity'],
       ['`stream/consumers`', '✅', 'Text/buffer/json-style consumers covered'],
       ['Legacy pipe/unpipe', '✅', 'Pipe/unpipe and backpressure parity cases'],
-      ['`node:stream/web` export', '❌', 'WHATWG stream interop tracked separately'],
       [
-        '`Readable.fromWeb` / `toWeb`',
-        '❌',
-        'Tracked by `net/readable-fromweb-pipe-sink` residual',
+        '`Readable.fromWeb`',
+        '✅',
+        'WHATWG ReadableStream → Node Readable; chunk boundaries + pipe sink tested',
       ],
+      ['`node:stream/web` export', '❌', 'WHATWG stream interop tracked separately'],
+      ['`Readable.toWeb` / `Writable.toWeb`', '❌', 'Full WHATWG bridge surface is not claimed'],
     ],
     tests: [
       '`tests/conformance/builtins/stream.test.ts`',
       '`tests/conformance/builtins/stream-legacy.test.ts`',
       '`tests/conformance/builtins/stream-consumers.test.ts`',
+      '`packages/io/src/streams/readable.from.test.ts`',
+      '`packages/net/src/http/response.test.ts`',
       '`tools/node-parity-runner/cases/stream/*.case.ts`',
     ],
     limitations: [
@@ -127,8 +130,17 @@ const matrices = [
       'Public claim surface for rifty HTTP in-browser servers and client loopback via the port registry.',
     rows: [
       ['`http.createServer`', '✅', 'Request handler, `listen(port)`, registered port dispatch'],
+      [
+        "`server.on('upgrade')` WebSocket",
+        '✅',
+        'Bridge-backed RFC 6455 upgrade socket; real npm `ws` server and client modes tested on registered local ports',
+      ],
       ['Basic GET response', '✅', '`writeHead`, headers, status, body'],
-      ['POST request body', '✅', 'Readable request body and `end`'],
+      [
+        'POST request body',
+        '✅',
+        'Readable streaming request body, chunk boundaries, `drain`, and `end`',
+      ],
       ['204 / 304 null-body statuses', '✅', 'No invalid fetch `Response` body'],
       [
         'Length-less bodied request framing',
@@ -138,11 +150,16 @@ const matrices = [
       ['`server.close()`', '✅', 'Unregisters port and callback fires'],
       ['Missing port dispatch', '✅', 'Returns 502 through registry dispatch'],
       ['`http.get` loopback', '✅', 'Client request to own registered port'],
+      [
+        'External WebSocket client egress',
+        '✅',
+        'Non-local `ws` client upgrades use the native worker/browser `WebSocket` primitive',
+      ],
       ['Streaming responses', '✅', 'SSE chunks, long-poll delay, one chunk per `write()`'],
       [
-        'SSE over preview bridge',
+        'Unbounded preview bodies',
         '⚠️',
-        'Delivered only where transferable `ReadableStream` exists (SW bridge); the no-transfer SW path and the cross-realm worker bridge both fail loud (HTTP 502 naming the ceiling) instead of hanging on an unending body',
+        'Delivered only where true stream transfer exists; buffered cross-realm paths fail loud (HTTP 502 naming the ceiling) instead of hanging on unending SSE/NDJSON bodies',
       ],
       ['Header reassignment / status codes', '✅', 'Pinned by parity cases'],
       [
@@ -159,12 +176,14 @@ const matrices = [
       '`tests/conformance/builtins/https.test.ts`',
       '`tools/node-parity-runner/cases/http/*.case.ts`',
       '`tools/node-parity-runner/cases/http2/surface.case.ts`',
+      '`packages/net/src/http/client.test.ts`',
       '`packages/service-worker/src/body-transport.test.ts`',
       '`packages/net/src/cross-realm/preview-port.test.ts`',
     ],
     limitations: [
       'Networking is browser-local: servers bind a rifty port registry and preview dispatch, not native sockets.',
-      'SSE preview delivery needs browser `ReadableStream` transfer over `postMessage` (SW bridge); the cross-realm worker bridge buffers until end (true end-to-end stream is M12). Paths without it fail loud (HTTP 502 naming the ceiling) rather than silently buffering an unending body forever.',
+      'Raw TCP connect APIs throw directed `NotImplementedError`s; external WebSocket egress is supported through the browser WebSocket primitive, not TCP.',
+      'Preview delivery needs true `ReadableStream` transfer for unbounded bodies. Buffered cross-realm paths fail loud (HTTP 502 naming the ceiling) rather than silently buffering forever.',
       '`node:https` cannot promise real TLS egress inside the local runtime without host integration.',
     ],
   },

@@ -15,18 +15,27 @@ describe('dev-server boot preview routing', () => {
     expect(source).toContain("base: './'");
   });
 
-  it('forwards editor VFS writes to the dev server HMR + republishes', () => {
+  it('routes owner VFS writes through Vite native HMR', () => {
     // ADR-0148/0150 P6b (dev server runs in the supervised child): the running
     // dev server's HMR is fed from the virtual FS (it fires no real watcher events).
-    expect(source).toContain('const hmrBridgeRef: { current?: HmrBridgeHandle } = {}');
-    expect(source).toContain('function broadcastFileUpdate(path: string): void');
-    expect(source).toContain('hmrBridgeRef.current?.broadcast(');
-    expect(source).toContain("type: 'update'");
-    expect(source).toContain("event: 'change'");
-    expect(source).toContain('path: toRootRelativePath(root, modulePath)');
+    expect(source).toContain('function handleViteFileChange(path: string): void');
+    expect(source).toContain('invalidateViteModule(activeServer, modulePath)');
+    expect(source).not.toContain('function broadcastFileUpdate(path: string): void');
+    expect(source).not.toContain('hmrBridgeRef.current?.broadcast(');
     expect(source).toContain(
-      'hmrBridgeRef.current = setupHmrBridge({ port, token: hmrBridgeToken })',
+      'plugins: cfg.hmrEnabled ? [createHmrBridgeVitePlugin({ port, token: hmrBridgeToken })] : []',
     );
+    expect(source).toContain('host: PREVIEW_LOCAL_HOST');
+    expect(source).toContain('path: `__hmr/${encodeURIComponent(hmrBridgeToken)}`');
+    expect(source).not.toContain('channels:');
+    expect(source).not.toContain('ws: false');
+  });
+
+  it('does not pin Vite to the old server.hmr.channels seam', () => {
+    expect(source).not.toContain('readResolvedPackageVersion(');
+    expect(source).not.toContain('assertSupportedViteHmrVersion');
+    expect(source).not.toContain('createViteHmrBridgeChannel');
+    expect(source).not.toContain('server.hmr.channels');
   });
 
   it('serves the cross-realm preview route from the child, not an in-worker SW bridge', () => {
@@ -70,8 +79,8 @@ describe('node-server runtime branch', () => {
   });
 
   it('keeps the HMR bridge a vite-only concern', () => {
-    // setupHmrBridge must not appear in the shared/common path; pin the call
-    // count so a node-branch copy fails this test.
-    expect(source.split('setupHmrBridge(').length - 1).toBe(1);
+    // The browser WebSocket bridge injection must not leak into node-server boot.
+    expect(source).not.toContain('setupHmrBridge(');
+    expect(source.split('createHmrBridgeVitePlugin(').length - 1).toBe(1);
   });
 });

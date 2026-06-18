@@ -5,14 +5,29 @@ import {
 } from './real-vite-invalidation.ts';
 
 describe('invalidateViteModule', () => {
-  it('uses Vite moduleGraph.onFileChange for file-level invalidation', () => {
+  it('emits a Vite watcher change so Vite builds native HMR payloads', () => {
+    const emit = vi.fn();
     const onFileChange = vi.fn();
-    const getModuleById = vi.fn();
-    const invalidateAll = vi.fn();
     const moduleGraph = {
       onFileChange,
-      getModuleById,
-      invalidateAll,
+    };
+
+    invalidateViteModule(
+      {
+        watcher: { emit },
+        moduleGraph,
+      },
+      '/workspace/src/main.js',
+    );
+
+    expect(emit).toHaveBeenCalledWith('change', '/workspace/src/main.js');
+    expect(onFileChange).not.toHaveBeenCalled();
+  });
+
+  it('falls back to moduleGraph.onFileChange when the watcher is not emitter-shaped', () => {
+    const onFileChange = vi.fn();
+    const moduleGraph = {
+      onFileChange,
     };
 
     invalidateViteModule(
@@ -23,8 +38,6 @@ describe('invalidateViteModule', () => {
     );
 
     expect(onFileChange).toHaveBeenCalledWith('/workspace/src/main.js');
-    expect(getModuleById).not.toHaveBeenCalled();
-    expect(invalidateAll).not.toHaveBeenCalled();
   });
 
   it('does not fall back to invalidating the whole graph', () => {

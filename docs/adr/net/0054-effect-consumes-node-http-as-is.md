@@ -5,6 +5,10 @@ Date: 2026-05-30
 
 > TL;DR: Effect's `@effect/platform-node` consumes rifty `node:http` as-is via additive Node-parity widening; no Effect-coupled export added to `packages/net`
 
+Correction 2026-06-17: ADR-0151 supersedes the WS/SSE upgrade risk note below
+for WebSocket. `server.on('upgrade')` now works for WebSocket over the bridge;
+SSE remains streaming HTTP.
+
 ## Context
 
 The opencode facade serves HTTP via Effect's `@effect/platform-node` `NodeHttpServer.layer`. The fork: HOW Effect reaches rifty's HTTP surface — consume `node:http` AS-IS (widening additively), OR ship a new Effect-coupled public symbol in `packages/net`.
@@ -38,7 +42,8 @@ IRREVERSIBLE (reversibility rule 1 — alternative B/C adds cross-package public
 
 - `@effect/platform-node` beta drift: `internal/httpServer.ts` behaviour (parks on `'drain'`, ignores `write()` return) is beta-version-sensitive; pin the version in the integration fixture (T6).
 - Pipe-sink/`Readable.fromWeb` gap is the documented compat ceiling; register with an owning ticket (review minor).
-- WS/SSE upgrade (`assignSocket`/`server.on('upgrade')`) is HARD-blocker-adjacent, owned by feature 07; T5 negative-locks that this feature does not silently swallow an upgrade into the buffered path (commit faaaf8f).
+- SSE remains streaming HTTP. WebSocket `server.on('upgrade')` moved to
+  ADR-0151 and is no longer a negative boundary.
 
 ## References
 

@@ -52,8 +52,6 @@ Runtime/project fidelity follow-ups:
 - `vfs/fs-sync-fd-api-and-fsync-durability` — lower VFS fd/durability contract.
 - `vfs/storage-pressure-and-eviction-ux` — browser quota/eviction recovery UX.
 - `vfs/workspace-archive-scalability` — streaming/large-project archive path.
-- `net/readable-fromweb-pipe-sink` — broader web-stream interop when a consumer
-  needs it.
 - `runtime-js/crypto-sync-subset-expansion` — sync crypto subset by verified
   consumer need.
 

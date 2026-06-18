@@ -2,16 +2,99 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Default WebSocket surface crosses same-origin realms (ADR-0147).**
+  `WebSocket` / `WebSocketServer` keep the same-realm fast path and fall back to
+  the bridge protocol when client and server live in different realms. Servers
+  listen on URL + port-discovery channels and validate the requested URL, so
+  wildcard hosts work for preview domains. New `webSocketBridgeClientScript()`
+  lets hosts inject a generic browser `window.WebSocket` bridge before framework
+  dev clients run.
+- **`http.Server` WebSocket upgrade over the bridge (ADR-0151).**
+  Bridge `open` frames now emit `server.on('upgrade')` with a Node-shaped socket
+  that validates the 101 handshake and translates RFC 6455 frames. The real npm
+  `ws` package in `new WebSocketServer({ server })` mode and client mode is
+  pinned by CI.
+- **External `ws` clients use native WebSocket egress.** Non-local WebSocket
+  client upgrades no longer fail with the local-port bridge error; the worker
+  opens a real browser `WebSocket` and adapts it to the RFC6455 client socket
+  used by npm `ws`. Local registered ports stay on the in-process bridge.
+- **Raw TCP connect APIs are explicit loud ceilings.** `net.connect`,
+  `net.createConnection`, and `Socket.connect` throw directed
+  `NotImplementedError`s instead of leaving missing/ambiguous raw TCP surface.
+
 ### Fixed
 
-- **SSE bodies fail loud over the cross-realm preview bridge.**
-  `serveCrossRealmPreview` refuses to drain a `text/event-stream` body
-  (the page↔worker hop buffers until `reply-stream-end`, so an unending SSE
-  body never resolves — ADR-0048). It now posts a loud `error` frame naming
-  the ceiling (`net.preview.cross-realm-sse-drain`), which the page maps to a
-  502, instead of hanging forever. Mirrors the SW-bridge guard in
-  `@riftydev/service-worker`. Non-SSE unbounded bodies still drain — see
-  `docs/backlog/net/cross-realm-preview-unbounded-body.md`.
+- **WebSocket `close()` never hangs when the peer realm disappears.** After
+  `OPEN`, all three clients (browser shim, default `WebSocket`, `BridgedWebSocket`)
+  waited for the server close echo with no fallback — a terminated peer realm
+  (navigated iframe, killed worker) stranded them in `CLOSING` forever, never
+  firing `'close'` and leaking their `BroadcastChannel`s. They now mirror the
+  connect timeout and end the handshake locally with 1006. Regression: dead-peer
+  `close()` still fires `'close'` across all three clients.
+- **`CloseEvent.wasClean` is honest on every client.** The in-process `WebSocket`
+  and `BridgedWebSocket` built close events without `wasClean` (defaulting
+  `false`), so even a clean 1000/1001 read as unclean; all three clients now
+  compute `wasClean = code !== 1006 && state !== CONNECTING` (incl. a
+  client-initiated close completed by the server echo).
+- **In-process bridge connect timeout unified to 1000 ms.** The default
+  `WebSocket`'s 100 ms open-ack window raced a slow page↔worker open into a false
+  1006; now matches the shim and `BridgedWebSocket`.
+- **Browser shim sends frames FIFO across async Blob reads.** `send(blob)`
+  deferred its `postMessage` to a microtask while string/ArrayBuffer frames went
+  synchronously, silently reordering `send(blob); send(text)`. A per-socket send
+  queue preserves call order and `bufferedAmount` now tracks queued-but-unsent
+  bytes instead of a static 0.
+- **In-process `WebSocket` honors `binaryType` and exposes the full surface.**
+  Binary frames are delivered as `Blob`/`ArrayBuffer` per `binaryType` (was raw
+  bytes), and the client gains instance readyState constants +
+  `onopen`/`onmessage`/`onclose`/`onerror` handler properties.
+- **WebSocket egress collapses reserved close codes to a bodyless frame.** A
+  browser `CloseEvent` on the native external-host path could surface 1015 (TLS)
+  or 1004, which were re-encoded as a 2-byte body and rejected by real `ws` as
+  `WS_ERR_INVALID_CLOSE_CODE`; any non-sendable reserved code now sends a bodyless
+  close. The upgrade socket also echoes a Close back to the `ws` server on a
+  server-initiated close so its `'close'` reports the negotiated code, not 1006.
+- **Graceful WebSocket close no longer puts a reserved code on the wire.** A
+  bodyless `ws.close()` (no status) parses to 1005 and was re-encoded as a
+  2-byte 1005 body, which the real `ws` receiver rejects with
+  `WS_ERR_INVALID_CLOSE_CODE` (aborting 1002). The upgrade socket now emits a
+  bodyless close frame for 1005 and tears the socket without a frame for 1006,
+  so a real `ws` peer concludes 1005/1006 cleanly. Regression: real-ws-client
+  sees a graceful server close as a clean 1005.
+- **Real `ws` `bufferedAmount` reads an honest 0 on server-side upgrade
+  sockets.** The server socket lacked `_writableState.length`, so `ws`'s
+  `bufferedAmount` getter (`_writableState.length + _sender._bufferedBytes`)
+  returned `NaN`; the bridge keeps no send queue, so it now reports 0 (mirroring
+  the client socket).
+- **WebSocket bridge host matching now honors only configured hosts.**
+  `webSocketBridgeClientScript()` no longer intercepts arbitrary `ws://` URLs
+  on the page's own hostname; same-host application sockets fall through to the
+  native browser `WebSocket` unless the host is explicitly listed.
+- **Cross-realm WebSocket port discovery rejects URL-less opens.** Servers now
+  require the client `url` on port-channel open frames before wildcard
+  host/path matching, so a discovery frame cannot bypass route validation.
+- **WebSocket clients match native CONNECTING `send()` behavior.** Calling
+  `send()` before the browser shim, default `WebSocket`, or `BridgedWebSocket`
+  reaches `OPEN` throws `InvalidStateError` instead of silently dropping data.
+- **WebSocket bridge close/binary/subprotocol parity tightened.** Client
+  `close()` now waits for the server close frame after `OPEN`, `destroy()` /
+  `terminate()` propagates abnormal close to clients, browser bridge binary
+  messages honor `binaryType`, invalid close codes/reasons and duplicated
+  subprotocols throw, masked server frames are rejected, and `wss://` preview
+  opens reach `server.on('upgrade')` with `socket.encrypted === true`.
+- **Unbounded preview bodies fail loud over the cross-realm preview bridge.**
+  `serveCrossRealmPreview` still refuses `text/event-stream` immediately, and
+  now also bounds every other body drain with `streamDrainTimeoutMs`; an active
+  but never-ending NDJSON/log-tail stream returns a 502 naming
+  `net.preview.cross-realm-unbounded-body` instead of keeping the page
+  accumulator alive forever.
+- **`http.request` bodies stream through local loopback.** `req.write()` chunks
+  feed a live `ReadableStream` instead of a final `Blob`, so server-side
+  `IncomingMessage` sees chunk boundaries before `end()`. `write()` returns
+  `false` when the stream queue is full and emits `drain` after the consumer
+  pulls.
 - **`register-builtins` modules now expose idempotent callable registrars.**
   `registerNetBuiltins()` and `registerSqliteBuiltin()` preserve the old
   side-effect import behavior while letting production workers call the
@@ -62,11 +145,10 @@
   not reachable either way (`docs/backlog/net/cross-realm-http-loopback`).
 - **`http.request` client matches more Node `ClientRequest` shapes.** 3-arg
   `request(url, options, cb)` (options override URL parts), `end(callback)` as
-  finish callback (was: callback sent as body), `'finish'` event, `write()`
-  returns `true` (in-memory buffering — no backpressure; request body is
-  buffered whole, `docs/backlog/net/client-request-body-streaming`), repeated
-  bare `end()` no longer double-dispatches, and `write()`/`end(chunk)` after
-  end emit `ERR_STREAM_WRITE_AFTER_END`. Guards: `http/client.test.ts`.
+  finish callback (was: callback sent as body), `'finish'` event, repeated bare
+  `end()` no longer double-dispatches, and `write()`/`end(chunk)` after end emit
+  `ERR_STREAM_WRITE_AFTER_END`. Request body streaming/backpressure is covered
+  by the newer Unreleased entry above. Guards: `http/client.test.ts`.
 - **WebSocket `'close'` no longer depends on a global `CloseEvent`.** `ws/bridge.ts`
   and `ws/in-process.ts` constructed `new CloseEvent(...)`, a global only present in
   browsers and Node ≥23 — under a `node` test env on Node 22 (our `engines` floor)
@@ -90,19 +172,6 @@
   `sqlite3_column_type`. Head-to-head parity:
   `tools/node-parity-runner/cases/sqlite/read-bigint-overflow.case.ts`;
   unit-pinned in `packages/net/src/sqlite/database-sync.test.ts`.
-
-### Documented
-
-- **WS/SSE upgrade is the feature-07 boundary (F05-T5, negative lock).** Added a
-  net-only conformance test pinning that feature 05's buffered HTTP surface does
-  NOT silently consume a WebSocket/SSE upgrade: `ServerResponse` exposes no
-  `assignSocket` sink, and the server emits no `'upgrade'` (nor mis-routes an
-  upgrade through the buffered `'request'` dispatch). No new code path — the
-  test documents the intentional gap and goes red if a fake upgrade entry point
-  is wired (protecting feature 08's SSE round-trip from silent corruption).
-  Registered the `http.Server` WS/SSE upgrade path as not-supported (❌) in
-  `docs/compat/m10-tooling.md` (ADR-0055 — PTY/WS-shaped routes stay stubbed).
-  Test: `packages/net/src/http/server.test.ts`.
 
 ### Added
 

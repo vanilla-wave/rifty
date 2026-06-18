@@ -12,8 +12,8 @@
  *
  * HMR transport: the preview iframe is a separate realm reached via the SW, so
  * its native `WebSocket` can't reach the dev server's in-process
- * `WebSocketServer`. We route HMR through the same cross-realm
- * `BroadcastChannel` bridge real-Vite uses (`setupHmrBridge` + `hmrClientScript`,
+ * `WebSocketServer`. We route HMR through the same cross-realm WebSocket bridge
+ * real-Vite uses (`setupHmrBridge` + `hmrClientScript`,
  * see `hmr-bridge.ts`) — closing the dev-mode/real-Vite asymmetry that left dev
  * preview non-live (Q-2026-06-07-325).
  */
@@ -73,9 +73,8 @@ export async function startDevMode(options: DevModeOptions = {}): Promise<DevMod
     fs.writeFileSync(entryPath, enc.encode(INITIAL_MAIN_JS));
   }
 
-  // Cross-realm HMR bridge in THIS realm; the iframe-side BroadcastChannel client
-  // (injected via `clientScript`) reaches it where a native WS to the in-process
-  // `WebSocketServer` cannot.
+  // Cross-realm HMR bridge in THIS realm; the injected browser WebSocket bridge
+  // reaches it where a native WS to the in-process `WebSocketServer` cannot.
   const hmrToken = createHmrBridgeToken();
   const hmr = setupHmrBridge({ port, token: hmrToken });
   const devServer = await startDevServer({

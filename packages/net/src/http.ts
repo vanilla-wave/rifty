@@ -1,8 +1,8 @@
 /**
  * `node:http` over the registry — compatibility re-export.
  *
- * The implementation lives in `http/` (split per ADR-0024 file-size budget
- * after the streaming rewrite landed). This module keeps the historical
+ * The implementation lives in `http/` (split for the file-size budget in
+ * decision-workflow.md after the streaming rewrite landed). This module keeps the historical
  * import path stable for `index.ts`, `register-builtins.ts`, and any
  * downstream consumer.
  */
@@ -17,4 +17,6 @@ export {
   request,
   default,
   STATUS_CODES,
+  WebSocketUpgradeSocket,
 } from './http/index.ts';
+export type { WebSocketBridgeFrame, WebSocketUpgradeSocketOptions } from './http/index.ts';

@@ -125,6 +125,14 @@
 
 ### Added
 
+- **Socket Lab preset.** Adds a node-server sandbox template that runs a live
+  socket capability matrix: HTTP request body streaming, `ServerResponse`
+  drain, `Readable.fromWeb(...).pipe(res)`, npm `ws` over `http.Server`
+  upgrade, optional external `ws` egress, and loud ceiling checks for raw
+  TCP/UDP/TLS/HTTP2/unbounded cross-realm cases. A dedicated Playwright e2e
+  selects the preset and fails CI if the supported probes stop passing or the
+  ceiling probes stop failing loudly.
+
 - **Prod-artifact smoke e2e (`playwright.prod.config.ts` + `pnpm test:e2e:prod`, wired into
   CI).** Builds the app and serves it with `pnpm preview` (the Netlify COOP/COEP headers), then
   asserts the workspace owner boots — COI is live, the co-resident dev server reaches `LIVE`, and
@@ -208,6 +216,24 @@
   reuses the persisted tree (stamp no-op). Caught by `owner-snapshot-restore-exec`
   e2e; unit-guarded in `npm-shell-command.test.ts`.
 
+- **Honest module HMR for real-Vite previews (ADR-0145, superseded transport by
+  ADR-0151).** Real-Vite no longer turns every edit into a hand-rolled
+  `{type:'update', path}` plus `location.reload()`. Vite now keeps its native
+  `server.ws` path, attaches to rifty `http.Server.on('upgrade')`, and generates
+  real HMR payloads (`update.updates[]`, `full-reload`, `prune`, `error`). The
+  injected iframe script installs the generic `@riftydev/net` browser
+  `WebSocket` bridge, so Vite's own `@vite/client` patches self-accepting
+  modules in place without a Vite-only socket shim. The seeded Vite entry is
+  self-accepting, and editor writes wake Vite's native watcher path instead of
+  manually broadcasting a fake update.
+  Tests: `apps/playground/src/glue/hmr-bridge.test.ts`,
+  `apps/playground/src/workers/real-vite-bootstrap.test.ts`,
+  `apps/playground/src/workers/real-vite-invalidation.test.ts`,
+  `apps/playground/src/templates/project-spec.test.ts`,
+  `tests/integration/vite-hmr-channel.test.ts`, opt-in browser
+  `tests/e2e/m10-hmr.spec.ts`, and opt-in manual install browser
+  `tests/e2e/manual-vite-install.spec.ts`.
+
 - **Editable project files in real-vite mode (ADR-0076 §Decision-4, corrected).**
   Editing a seeded source tab (e.g. `src/project-summary.js`) while the dev
   server ran threw `writeFileSync: "…" is read-only — it lives in the Vite
@@ -233,8 +259,8 @@
   CRUD controls shown. Tests: `glue/real-vite-explorer-vfs.test.ts`,
   `glue/vfs-write-port.test.ts` (rm frame).
 
-- **No white flash on preview reload.** HMR does a full iframe reload on every
-  edit (naive `location.reload()`); the worker-seeded `index.html` had no
+- **No white flash on preview full-reload fallbacks.** Vite still full-reloads
+  for HTML/config/non-accepted boundaries; the worker-seeded `index.html` had no
   background, so entry code that sets `body` bg via JS flashed white between
   reload and module-eval. `buildIndexHtml` now seeds
   `<style>html,body{margin:0;background:#101218}</style>` so the document paints

@@ -11,6 +11,7 @@
  * IMPORTANT: NO top-level side effects (only declarations + `const enc`).
  * `registerNetBuiltins`/`registerSqliteBuiltin` stay in the ENTRY modules, never here.
  */
+import { PREVIEW_LOCAL_HOST } from '@riftydev/io';
 import { dispatchToPort, listPorts, serveCrossRealmPreview } from '@riftydev/net';
 import { initSqliteEngine } from '@riftydev/net/sqlite/engine';
 import { RegistryClient, install } from '@riftydev/npm-client';
@@ -22,10 +23,9 @@ import type { SqlJsConfig } from 'sql.js';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import { esbuildShimFiles, rollupShimFiles } from '../glue/esbuild-shim.ts';
 import {
-  type HmrBridgeHandle,
   createHmrBridgeToken,
   createHmrBridgeVitePlugin,
-  setupHmrBridge,
+  hmrBridgeUrl,
 } from '../glue/hmr-bridge.ts';
 import { ensureProjectDependencies } from '../glue/project-deps.ts';
 import { proxiedRegistryFetch } from '../glue/registry-fetch.ts';
@@ -43,7 +43,21 @@ const enc = new TextEncoder();
 interface ViteUserConfig {
   root?: string;
   base?: string;
-  server?: { port?: number; strictPort?: boolean; middlewareMode?: boolean; hmr?: boolean };
+  server?: {
+    port?: number;
+    strictPort?: boolean;
+    middlewareMode?: boolean;
+    hmr?:
+      | false
+      | {
+          protocol: 'ws';
+          host: string;
+          clientPort: number;
+          path: string;
+        };
+    host?: boolean;
+    allowedHosts?: boolean;
+  };
   appType?: string;
   clearScreen?: boolean;
   optimizeDeps?: { disabled?: boolean };
@@ -52,6 +66,7 @@ interface ViteUserConfig {
 
 interface ViteWatcher {
   on(event: 'change', cb: (file: string) => void): void;
+  emit?(event: 'change', file: string): unknown;
 }
 
 interface ViteDevServer {
@@ -80,16 +95,6 @@ function overlayShims(): void {
 }
 
 type Loader = ReturnType<typeof createModuleLoader>;
-
-function toRootRelativePath(root: string, path: string): string {
-  const normalizedRoot = normalizePath(root);
-  const normalizedPath = normalizePath(path);
-  if (normalizedPath === normalizedRoot) return '/';
-  if (normalizedPath.startsWith(`${normalizedRoot}/`)) {
-    return normalizedPath.slice(normalizedRoot.length);
-  }
-  return normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`;
-}
 
 /**
  * Wait for the entry to register `port` with the net registry (its
@@ -259,9 +264,8 @@ export async function bootDevServer(opts: {
     return req;
   });
 
-  const hmrBridgeRef: { current?: HmrBridgeHandle } = {};
   let activeServer: ViteDevServer | null = null;
-  function broadcastFileUpdate(path: string): void {
+  function handleViteFileChange(path: string): void {
     const modulePath = normalizePath(path);
     if (activeServer) {
       try {
@@ -270,13 +274,6 @@ export async function bootDevServer(opts: {
         log(`module invalidation failed for ${modulePath}: ${(err as Error).message}\n`);
       }
     }
-    hmrBridgeRef.current?.broadcast(
-      JSON.stringify({
-        type: 'update',
-        event: 'change',
-        path: toRootRelativePath(root, modulePath),
-      }),
-    );
   }
 
   // The node-server entry binds `process.env.PORT`. In the supervised child this
@@ -299,8 +296,8 @@ export async function bootDevServer(opts: {
       createServer: (config: ViteUserConfig) => Promise<ViteDevServer>;
     };
     const hmrBridgeToken = createHmrBridgeToken();
-    hmrBridgeRef.current = setupHmrBridge({ port, token: hmrBridgeToken });
-    log(`starting dev server on port ${port}…\n`);
+    log(`[real-vite/worker] hmr bridge ready at ${hmrBridgeUrl(port, hmrBridgeToken)}\n`);
+    log(`[real-vite/worker] starting dev server on port ${port}…\n`);
     const server = await viteNs.createServer({
       root,
       base: './',
@@ -308,10 +305,17 @@ export async function bootDevServer(opts: {
         port,
         strictPort: cfg.server.strictPort,
         middlewareMode: false,
-        hmr: false,
+        hmr: cfg.hmrEnabled
+          ? {
+              protocol: 'ws',
+              host: PREVIEW_LOCAL_HOST,
+              clientPort: port,
+              path: `__hmr/${encodeURIComponent(hmrBridgeToken)}`,
+            }
+          : false,
         host: cfg.server.host,
         allowedHosts: cfg.server.allowedHosts,
-      } as unknown as ViteUserConfig['server'],
+      },
       appType: cfg.server.appType,
       clearScreen: false,
       optimizeDeps: {
@@ -321,10 +325,10 @@ export async function bootDevServer(opts: {
     });
     await server.listen();
     activeServer = server;
-    log(`vite is listening on internal port ${port}\n`);
+    log(`[real-vite/worker] vite is listening on internal port ${port}\n`);
     publishSnapshot();
     server.watcher?.on('change', (file) => {
-      broadcastFileUpdate(file);
+      handleViteFileChange(file);
       publishSnapshot();
     });
   }
@@ -341,7 +345,7 @@ export async function bootDevServer(opts: {
 
   return {
     port,
-    onFileChanged: broadcastFileUpdate,
+    onFileChanged: handleViteFileChange,
     async stop() {
       try {
         await activeServer?.close();
@@ -349,7 +353,6 @@ export async function bootDevServer(opts: {
         /* idempotent: double stop / a server that never listened */
       }
       tearPreviewBridge();
-      hmrBridgeRef.current?.close();
     },
   };
 }

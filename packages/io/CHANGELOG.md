@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`Readable.fromWeb()` plus Promise-aware `pipe()` backpressure (ADR-0154).**
+  WHATWG `ReadableStream` bodies can now become Node-shape `Readable`s while
+  preserving chunk boundaries, and `Readable.pipe()` pauses when a sink's
+  `write()` returns a Promise. This makes `Readable.fromWeb(body).pipe(res)`
+  work with `@riftydev/net` `ServerResponse` without an adapter.
+
 ### Performance
 
 Per `docs/perf/js-runtime-perf-audit-2026-06-05.md` (+ `js-runtime-perf-adr-plan-2026-06-06.md`). All behavior-preserving except where noted; parity + unit suites green.
@@ -15,6 +23,21 @@ Per `docs/perf/js-runtime-perf-audit-2026-06-05.md` (+ `js-runtime-perf-adr-plan
 
 ### Fixed
 
+- **`Writable` destroys and errors every buffered callback on a `_write` error.**
+  A failing `_write` callback errored only the in-flight chunk and stopped,
+  leaving still-queued writes' callbacks uncalled and `destroyed === false`. It
+  now destroys the stream (Node semantics): the failing callback gets the error,
+  every buffered callback is errored, and `'error'`+`'close'` fire. Parity:
+  `stream/writable-write-error.case.ts`.
+- **`Readable.pipe()` destroys the source when a promise sink rejects.** On a
+  rejected `write()` promise the source was left paused-and-undestroyed (producer
+  leak); it now tears the source down after surfacing the error to the dest.
+- **`Writable` now calls subclass `_write()` / `_final()` methods.** Real stream
+  consumers such as npm `ws` implement `class Receiver extends Writable` and
+  provide `_write()` on the prototype instead of passing `{ write }` options.
+  rifty previously drained the chunk through the default no-op path, so the real
+  `ws` package opened but never emitted `'message'` inside the module loader.
+  Guard: `writable.sync-drain.test.ts` plus `ws-package-loader.test.ts`.
 - **`Buffer.toString('ascii')` masks bytes >= 0x80 to 7-bit (`& 0x7f`).** Node's ascii decode is 7-bit (0x80→U+0000, 0xFF→U+007F); rifty previously emitted the raw byte. `latin1`/`binary` stay unmasked (full 0-255); ascii ENCODE is unchanged (Node does not 7-bit-mask on encode). Also corrects `setEncoding('ascii')` streaming decode (routes through `Buffer.toString('ascii')`). Parity: `buffer/tostring-ascii-mask.case.ts`.
 
 ### Added

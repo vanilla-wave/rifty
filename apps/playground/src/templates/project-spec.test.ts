@@ -68,6 +68,11 @@ describe('resolveBootstrapConfig', () => {
     expect(cfg.seedFiles['/workspace/index.html']).not.toContain('Hello from rifty');
   });
 
+  it('seeds a self-accepting entry so real Vite can patch the module in place', () => {
+    expect(VITE_TEMPLATE.entry.content).toContain('import.meta.hot.accept');
+    expect(VITE_TEMPLATE.entry.content).toContain('next?.render()');
+  });
+
   it('seeds index.html + entry + package.json, with index.html script src DERIVED from the entry', () => {
     // A non-default entry path exercises the drift failure mode: a hardcoded
     // '/src/main.js' in index.html would slip through; the seeded HTML must
@@ -87,9 +92,8 @@ describe('resolveBootstrapConfig', () => {
     expect(html).not.toContain('src="/src/app.tsx"');
     expect(html).not.toContain('/src/main.js');
 
-    // Dark bg painted from the first frame: a full HMR reload (hmr-bridge naive
-    // reload) of entry code that sets `body` bg via JS would otherwise flash
-    // white between reload and module-eval.
+    // Dark bg painted from the first frame: Vite can still full-reload
+    // non-HMR-able boundaries before entry JS gets to style the body.
     expect(html).toContain('background:#101218');
 
     // package.json dependencies stay in lockstep with spec.install

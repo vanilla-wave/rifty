@@ -2,10 +2,12 @@
  * Real Vite smoke — standalone (run via `tsx`), NOT a vitest test.
  *
  * Mirrors `apps/playground/src/workers/real-vite-bootstrap.ts` steps 1-6
- * in-process: install real vite@^5.4 from the live registry, overlay the
+ * in-process: install real Vite from the live registry, overlay the
  * esbuild/rollup shims, build the loader, `import('vite')`, `createServer`,
  * `listen`, `transformRequest`. The Worker/HMR/preview bridges are browser-only
- * and omitted — the runtime API gaps are realm-independent.
+ * and omitted; HMR is disabled in this smoke only because it never opens a
+ * browser WebSocket client. Native HMR is covered by
+ * `tests/integration/vite-hmr-channel.test.ts`.
  *
  * It replaces `globalThis.process` with rifty's shim (matching the worker
  * realm), which is incompatible with vitest's child-process IPC — hence a
@@ -52,6 +54,7 @@ async function main(): Promise<void> {
     realExit(0);
     return;
   }
+  const viteSpec = realEnv.RIFTY_VITE_SPEC ?? 'latest';
 
   const { vfs, fsSync } = createMemoryFs();
   setSyncMirror(fsSync, { async: vfs });
@@ -81,17 +84,17 @@ async function main(): Promise<void> {
         version: '0.0.0',
         private: true,
         type: 'module',
-        dependencies: { vite: '^5.4.0' },
+        dependencies: { vite: viteSpec },
       }),
     ),
   );
 
-  log('installing vite@^5.4.0 ...');
+  log(`installing vite@${viteSpec} ...`);
   const registry = new RegistryClient({
     baseUrl: realEnv.RIFTY_LIVE_REGISTRY,
     fetch: globalThis.fetch,
   });
-  const result = await install('app', '0.0.0', { vite: '^5.4.0' }, { vfs, cwd: ROOT, registry });
+  const result = await install('app', '0.0.0', { vite: viteSpec }, { vfs, cwd: ROOT, registry });
   log(`installed ${result.packages.length} packages`);
 
   for (const [path, content] of [
@@ -122,7 +125,13 @@ async function main(): Promise<void> {
 
   const server = await ns.createServer({
     root: ROOT,
-    server: { port: 5174, strictPort: true, middlewareMode: false, hmr: false, host: true },
+    server: {
+      port: 5174,
+      strictPort: true,
+      middlewareMode: false,
+      hmr: false,
+      host: true,
+    },
     appType: 'spa',
     clearScreen: false,
     optimizeDeps: { noDiscovery: true, include: [] },

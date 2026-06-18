@@ -70,6 +70,18 @@ function makeSocket(): IncomingMessageSocket {
   };
 }
 
+export interface IncomingMessageInit {
+  readonly method: string;
+  readonly url: string;
+  readonly headers?: HeadersInit;
+  readonly body?: ReadableStream<Uint8Array> | null;
+  readonly socket?: IncomingMessageSocket;
+}
+
+function isIncomingMessageInit(value: Request | IncomingMessageInit): value is IncomingMessageInit {
+  return !(value instanceof Request);
+}
+
 /**
  * Drain a fetch `ReadableStream<Uint8Array>` into a Node-shape `Readable`,
  * pushing each chunk separately. The `Readable.from`-style coalescing path is
@@ -89,7 +101,9 @@ async function pipeBodyStream(
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      if (value && value.byteLength > 0) target.push(value);
+      if (value && value.byteLength > 0 && !target.push(value)) {
+        await waitForReadableDemand(target);
+      }
     }
     target.push(null);
   } catch (err) {
@@ -97,6 +111,47 @@ async function pipeBodyStream(
   } finally {
     reader.releaseLock();
   }
+}
+
+function waitForReadableDemand(target: Readable): Promise<void> {
+  if (target.destroyed || target.readableLength < target.readableHighWaterMark) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const cleanup = (): void => {
+      target.off('data', onProgress);
+      target.off('readable', onProgress);
+      target.off('end', onProgress);
+      target.off('close', onClose);
+      target.off('error', onError);
+    };
+    const done = (): void => {
+      cleanup();
+      resolve();
+    };
+    const onProgress = (): void => {
+      if (
+        target.destroyed ||
+        target.readableLength < target.readableHighWaterMark ||
+        target.readableEnded
+      ) {
+        done();
+      }
+    };
+    const onClose = (): void => {
+      done();
+    };
+    const onError = (err: unknown): void => {
+      cleanup();
+      reject(err);
+    };
+    target.on('data', onProgress);
+    target.on('readable', onProgress);
+    target.on('end', onProgress);
+    target.on('close', onClose);
+    target.on('error', onError);
+    queueMicrotask(onProgress);
+  });
 }
 
 export class IncomingMessage extends Readable {
@@ -107,23 +162,32 @@ export class IncomingMessage extends Readable {
   declare headers: Record<string, string>;
   httpVersion = '1.1';
   socket: IncomingMessageSocket = makeSocket();
-  constructor(request: Request) {
+  constructor(request: Request | IncomingMessageInit) {
     super({ objectMode: false });
-    const u = new URL(request.url);
-    this.method = request.method;
+    const init = isIncomingMessageInit(request)
+      ? request
+      : {
+          method: request.method,
+          url: request.url,
+          headers: request.headers,
+          body: request.body,
+        };
+    const u = new URL(init.url, 'http://localhost/');
+    this.method = init.method;
     this.url = u.pathname + u.search;
+    if (init.socket) this.socket = init.socket;
     // Node never delivers a bodied request with NEITHER content-length NOR
     // transfer-encoding, but fetch Requests rebuilt across the preview bridge
     // lose content-length (forbidden request header in browsers). Present the
     // honest equivalent — chunked (length unknown, body present) — so
     // typeis-style hasBody() checks (express.json) read the body.
-    let headers = request.headers;
-    if (request.body && !headers.has('content-length') && !headers.has('transfer-encoding')) {
+    let headers = new Headers(init.headers);
+    if (init.body && !headers.has('content-length') && !headers.has('transfer-encoding')) {
       headers = new Headers(headers);
       headers.set('transfer-encoding', 'chunked');
     }
     defineLazyHeaders(this, headers);
-    void pipeBodyStream(request.body, this);
+    void pipeBodyStream(init.body ?? null, this);
   }
 }
 

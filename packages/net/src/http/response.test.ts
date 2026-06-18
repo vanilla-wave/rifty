@@ -6,6 +6,7 @@
  * should pause until `pull()` is invoked by the consumer.
  */
 
+import { Buffer, Readable } from '@riftydev/io';
 import { describe, expect, it } from 'vitest';
 import { ServerResponse } from './response.ts';
 
@@ -153,5 +154,24 @@ describe("ServerResponse — Node-style 'drain' (F05-T3, Q-2026-05-30-102)", () 
     await new Promise<void>((r) => setTimeout(r, 20));
 
     expect(drains).toBe(0);
+  });
+});
+
+describe('ServerResponse — pipe sink for Readable.fromWeb', () => {
+  it('serves a WHATWG stream piped through the Node Readable adapter', async () => {
+    const res = new ServerResponse();
+    res.writeHead(200, { 'content-type': 'text/plain' });
+    const web = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(Buffer.from('web-'));
+        controller.enqueue(Buffer.from('stream'));
+        controller.close();
+      },
+    });
+
+    Readable.fromWeb(web).pipe(res);
+
+    const response = await res.toResponse();
+    expect(await response.text()).toBe('web-stream');
   });
 });

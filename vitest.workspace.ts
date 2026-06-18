@@ -9,6 +9,7 @@ export default defineWorkspace([
         'packages/*/src/**/*.test.ts',
         'packages/*/tests/**/*.test.ts',
         'tools/*/src/**/*.test.ts',
+        'tools/checks/**/*.test.ts',
       ],
       environment: 'node',
     },
