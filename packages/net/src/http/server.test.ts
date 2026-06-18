@@ -76,6 +76,16 @@ describe('HttpServer.listen — options-object overload (Q-2026-05-30-101)', () 
     s.listen({ port: 4099 });
     expect(s.address()).toEqual({ port: 4099 });
   });
+
+  it('listen(port, host, backlog, cb) fires the callback (npm ws { port } 4-arg form)', async () => {
+    const s = createServer();
+    const fired = await Promise.race([
+      new Promise<boolean>((resolve) => s.listen(4096, '127.0.0.1', 511, () => resolve(true))),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 200)),
+    ]);
+    expect(fired).toBe(true);
+    s.close();
+  });
 });
 
 /**
@@ -321,6 +331,60 @@ describe('HttpServer — WebSocket upgrade bridge', () => {
     expect(requestArgs).toHaveLength(0);
     expect(upgradeArgs).toHaveLength(1);
     ws.close();
+    s.close();
+  });
+
+  it('routes concurrent upgrade connections to one server without cross-talk', async () => {
+    const port = 4109;
+    const s = createServer();
+    // Per-connection echo: each upgrade gets its own socket; the server's
+    // cid-keyed upgradeSockets map must keep the two clients' frames apart.
+    s.on('upgrade', (...args: unknown[]) => {
+      const req = args[0] as { headers: Record<string, string> };
+      const socket = args[1] as {
+        write(chunk: string | Uint8Array): boolean;
+        on(event: 'data', cb: (chunk: Uint8Array) => void): void;
+      };
+      socket.write(
+        [
+          'HTTP/1.1 101 Switching Protocols',
+          'Connection: Upgrade',
+          'Upgrade: websocket',
+          `Sec-WebSocket-Accept: ${acceptKey(req.headers['sec-websocket-key']!)}`,
+          '',
+          '',
+        ].join('\r\n'),
+      );
+      socket.on('data', (chunk) => {
+        const frame = parseClientFrame(Buffer.from(chunk));
+        if (frame.opcode === 0x1) {
+          socket.write(encodeServerFrame(0x1, Buffer.from(`echo:${frame.payload.toString('utf8')}`)));
+        }
+      });
+    });
+    s.listen({ port });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const a = new BridgedWebSocket(`ws://localhost:${port}/a`);
+    const b = new BridgedWebSocket(`ws://localhost:${port}/b`);
+    const aSeen: string[] = [];
+    const bSeen: string[] = [];
+    a.addEventListener('message', (e) => aSeen.push(String((e as MessageEvent).data)));
+    b.addEventListener('message', (e) => bSeen.push(String((e as MessageEvent).data)));
+    await Promise.all([
+      new Promise<void>((r) => a.addEventListener('open', () => r(), { once: true })),
+      new Promise<void>((r) => b.addEventListener('open', () => r(), { once: true })),
+    ]);
+
+    a.send('aaa');
+    b.send('bbb');
+    await waitFor(() => aSeen.length > 0 && bSeen.length > 0);
+
+    expect(aSeen).toEqual(['echo:aaa']);
+    expect(bSeen).toEqual(['echo:bbb']);
+    a.close();
+    b.close();
     s.close();
   });
 
