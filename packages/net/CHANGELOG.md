@@ -26,6 +26,36 @@
 
 ### Fixed
 
+- **WebSocket `close()` never hangs when the peer realm disappears.** After
+  `OPEN`, all three clients (browser shim, default `WebSocket`, `BridgedWebSocket`)
+  waited for the server close echo with no fallback — a terminated peer realm
+  (navigated iframe, killed worker) stranded them in `CLOSING` forever, never
+  firing `'close'` and leaking their `BroadcastChannel`s. They now mirror the
+  connect timeout and end the handshake locally with 1006. Regression: dead-peer
+  `close()` still fires `'close'` across all three clients.
+- **`CloseEvent.wasClean` is honest on every client.** The in-process `WebSocket`
+  and `BridgedWebSocket` built close events without `wasClean` (defaulting
+  `false`), so even a clean 1000/1001 read as unclean; all three clients now
+  compute `wasClean = code !== 1006 && state !== CONNECTING` (incl. a
+  client-initiated close completed by the server echo).
+- **In-process bridge connect timeout unified to 1000 ms.** The default
+  `WebSocket`'s 100 ms open-ack window raced a slow page↔worker open into a false
+  1006; now matches the shim and `BridgedWebSocket`.
+- **Browser shim sends frames FIFO across async Blob reads.** `send(blob)`
+  deferred its `postMessage` to a microtask while string/ArrayBuffer frames went
+  synchronously, silently reordering `send(blob); send(text)`. A per-socket send
+  queue preserves call order and `bufferedAmount` now tracks queued-but-unsent
+  bytes instead of a static 0.
+- **In-process `WebSocket` honors `binaryType` and exposes the full surface.**
+  Binary frames are delivered as `Blob`/`ArrayBuffer` per `binaryType` (was raw
+  bytes), and the client gains instance readyState constants +
+  `onopen`/`onmessage`/`onclose`/`onerror` handler properties.
+- **WebSocket egress collapses reserved close codes to a bodyless frame.** A
+  browser `CloseEvent` on the native external-host path could surface 1015 (TLS)
+  or 1004, which were re-encoded as a 2-byte body and rejected by real `ws` as
+  `WS_ERR_INVALID_CLOSE_CODE`; any non-sendable reserved code now sends a bodyless
+  close. The upgrade socket also echoes a Close back to the `ws` server on a
+  server-initiated close so its `'close'` reports the negotiated code, not 1006.
 - **Graceful WebSocket close no longer puts a reserved code on the wire.** A
   bodyless `ws.close()` (no status) parses to 1005 and was re-encoded as a
   2-byte 1005 body, which the real `ws` receiver rejects with

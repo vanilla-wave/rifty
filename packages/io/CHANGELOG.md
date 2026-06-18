@@ -23,6 +23,15 @@ Per `docs/perf/js-runtime-perf-audit-2026-06-05.md` (+ `js-runtime-perf-adr-plan
 
 ### Fixed
 
+- **`Writable` destroys and errors every buffered callback on a `_write` error.**
+  A failing `_write` callback errored only the in-flight chunk and stopped,
+  leaving still-queued writes' callbacks uncalled and `destroyed === false`. It
+  now destroys the stream (Node semantics): the failing callback gets the error,
+  every buffered callback is errored, and `'error'`+`'close'` fire. Parity:
+  `stream/writable-write-error.case.ts`.
+- **`Readable.pipe()` destroys the source when a promise sink rejects.** On a
+  rejected `write()` promise the source was left paused-and-undestroyed (producer
+  leak); it now tears the source down after surfacing the error to the dest.
 - **`Writable` now calls subclass `_write()` / `_final()` methods.** Real stream
   consumers such as npm `ws` implement `class Receiver extends Writable` and
   provide `_write()` on the prototype instead of passing `{ write }` options.
