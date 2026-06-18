@@ -64,3 +64,19 @@ describe('pty-protocol', () => {
     expect(isPageToOwner({ type: 'pty:resize' } as unknown as PtyFrame)).toBe(false);
   });
 });
+
+describe('pty:preview frames', () => {
+  it('classifies pty:preview as owner→page', () => {
+    const f: PtyFrame = {
+      type: 'pty:preview',
+      ports: [{ port: 3000, url: '/preview/3000/', label: 'server.js', source: 'node', sid: 's1' }],
+    };
+    expect(isOwnerToPage(f)).toBe(true);
+    expect(isPageToOwner(f)).toBe(false);
+  });
+  it('classifies pty:preview-req as page→owner', () => {
+    const f: PtyFrame = { type: 'pty:preview-req' };
+    expect(isPageToOwner(f)).toBe(true);
+    expect(isOwnerToPage(f)).toBe(false);
+  });
+});
