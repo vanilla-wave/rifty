@@ -67,6 +67,7 @@ export class WebSocketUpgradeSocket extends EventEmitter {
   private closeEmitted = false;
   private closeFrameSent = false;
   private fragmentedMessage: FragmentedMessage | null = null;
+  private timeoutTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(opts: WebSocketUpgradeSocketOptions) {
     super();
@@ -76,8 +77,16 @@ export class WebSocketUpgradeSocket extends EventEmitter {
     this.sendBridgeFrame = opts.sendBridgeFrame;
   }
 
-  setTimeout(_timeout: number, cb?: () => void): this {
+  setTimeout(timeout: number, cb?: () => void): this {
     if (cb) this.once('timeout', cb);
+    if (this.timeoutTimer) {
+      clearTimeout(this.timeoutTimer);
+      this.timeoutTimer = null;
+    }
+    // 0 disables the timeout (Node semantics). For ms>0 we arm a coarse one-shot
+    // timer (mirrors ClientRequest.setTimeout) — not a full inactivity-reset, but
+    // it actually fires 'timeout' instead of silently never firing.
+    if (timeout > 0) this.timeoutTimer = setTimeout(() => this.emit('timeout'), timeout);
     return this;
   }
 
@@ -141,6 +150,7 @@ export class WebSocketUpgradeSocket extends EventEmitter {
 
   destroy(err?: Error): this {
     if (this.destroyed) return this;
+    if (this.timeoutTimer) clearTimeout(this.timeoutTimer);
     if (this.handshakeState === 'accepted' && !this.closeFrameSent) {
       this.sendBridgeClose(1006, err?.message ?? 'socket destroyed');
     }
@@ -365,6 +375,7 @@ export class WebSocketClientSocket extends EventEmitter {
   private clientFrameBuffer = Buffer.alloc(0);
   private fragmentedMessage: FragmentedMessage | null = null;
   private closeEmitted = false;
+  private timeoutTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(opts: WebSocketClientSocketOptions) {
     super();
@@ -372,8 +383,15 @@ export class WebSocketClientSocket extends EventEmitter {
     this.sendBridgeFrame = opts.sendBridgeFrame;
   }
 
-  setTimeout(_timeout: number, cb?: () => void): this {
+  setTimeout(timeout: number, cb?: () => void): this {
     if (cb) this.once('timeout', cb);
+    if (this.timeoutTimer) {
+      clearTimeout(this.timeoutTimer);
+      this.timeoutTimer = null;
+    }
+    // 0 disables (Node semantics); ms>0 arms a coarse one-shot timer that fires
+    // 'timeout' instead of the previous silent no-op.
+    if (timeout > 0) this.timeoutTimer = setTimeout(() => this.emit('timeout'), timeout);
     return this;
   }
 
@@ -436,6 +454,7 @@ export class WebSocketClientSocket extends EventEmitter {
 
   destroy(err?: Error): this {
     if (this.destroyed) return this;
+    if (this.timeoutTimer) clearTimeout(this.timeoutTimer);
     this.destroyed = true;
     this.writable = false;
     this.readable = false;
@@ -789,7 +808,10 @@ function encodeFrame(opcode: number, payload: Uint8Array, masked: boolean): Buff
 function fillRandom(bytes: Uint8Array): void {
   const webCrypto = globalThis.crypto;
   if (!webCrypto?.getRandomValues) {
-    throw new NotImplementedError('websocket.crypto.getRandomValues');
+    throw new NotImplementedError(
+      'net.websocket.client-mask-randomness',
+      'masking client WebSocket frames needs WebCrypto getRandomValues, absent in this realm',
+    );
   }
   webCrypto.getRandomValues(bytes);
 }

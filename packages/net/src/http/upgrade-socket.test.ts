@@ -72,3 +72,74 @@ describe('WebSocketUpgradeSocket completes the closing handshake with the ws ser
     expect((echo![1]! & 0x80) !== 0).toBe(true); // client→server frames are masked
   });
 });
+
+/**
+ * Round-trip a text message through encodeFrame (server side) and parseFrame
+ * (client side) so the 126/127 extended-length math is exercised on real bytes:
+ * upgrade._receiveBridgeMessage → masked text frame → clientSocket.write parses
+ * it → bridge 'msg'. Guards the off-by-one boundaries (125/126, 0xffff/0x10000).
+ */
+function roundTripText(message: string): string | undefined {
+  const up = new WebSocketUpgradeSocket({
+    cid: 'u',
+    url: 'ws://example/socket',
+    protocols: [],
+    sendBridgeFrame: () => {},
+  });
+  const frames: Buffer[] = [];
+  up.on('data', (d) => frames.push(d as Buffer));
+  up._receiveBridgeMessage(message);
+
+  let received: WebSocketBridgeFrame | undefined;
+  const client = new WebSocketClientSocket({
+    cid: 'c',
+    sendBridgeFrame: (f) => {
+      received = f;
+    },
+  });
+  for (const f of frames) client.write(f);
+  return received?.type === 'msg' ? (received.data as string) : undefined;
+}
+
+describe('RFC6455 extended payload length (126/127) round-trips', () => {
+  for (const size of [125, 126, 65535, 65536, 70000]) {
+    it(`round-trips a ${size}-byte text frame through encode + parse`, () => {
+      const message = 'x'.repeat(size);
+      expect(roundTripText(message)).toBe(message);
+    });
+  }
+});
+
+describe('WebSocketUpgradeSocket.setTimeout', () => {
+  it('fires a timeout event for a non-zero timeout', async () => {
+    const s = new WebSocketUpgradeSocket({
+      cid: 'u',
+      url: 'ws://example/socket',
+      protocols: [],
+      sendBridgeFrame: () => {},
+    });
+    const fired = await Promise.race([
+      new Promise<boolean>((resolve) => s.setTimeout(15, () => resolve(true))),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 300)),
+    ]);
+    expect(fired).toBe(true);
+    s.destroy();
+  });
+
+  it('setTimeout(0) disables the timer (no timeout event)', async () => {
+    const s = new WebSocketUpgradeSocket({
+      cid: 'u',
+      url: 'ws://example/socket',
+      protocols: [],
+      sendBridgeFrame: () => {},
+    });
+    let fired = false;
+    s.on('timeout', () => {
+      fired = true;
+    });
+    s.setTimeout(0);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(fired).toBe(false);
+    s.destroy();
+  });
+});
