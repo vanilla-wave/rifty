@@ -1,6 +1,6 @@
 import { Shell } from '@riftydev/shell';
 import { resetSyncMirror } from '@riftydev/vfs/internal';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
 import { createPtyServer } from './pty-server.ts';
 
@@ -145,6 +145,17 @@ describe('pty-server', () => {
     });
     server.handleFrame({ type: 'pty:dev-server-req' });
     expect(reqs).toBe(1);
+  });
+
+  it('forwards pty:preview-req to onPreviewReq', () => {
+    const onPreviewReq = vi.fn();
+    const server = createPtyServer({
+      send: () => {},
+      makeShell: () => new Shell({ cwd: '/', env: {} }),
+      onPreviewReq,
+    });
+    server.handleFrame({ type: 'pty:preview-req' });
+    expect(onPreviewReq).toHaveBeenCalledOnce();
   });
 
   it('routes pty:dev-config to onDevConfig (ADR-0148 owner-resident dev server preset switch)', () => {
