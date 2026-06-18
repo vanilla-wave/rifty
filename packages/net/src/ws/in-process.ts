@@ -101,6 +101,10 @@ function nextCid(): string {
  * Emits `message`, `close`. Mirrors the subset of the `ws` library API that
  * real dev servers (Vite, Express ws middleware) actually use. There is no
  * wire, so no transport `'error'` is ever emitted.
+ *
+ * Reduced same-realm shim, NOT a full `ws` connection: no `terminate`/`ping`/
+ * `pong`/`pause`/`resume`/`bufferedAmount`, and `send(data)` takes no completion
+ * callback. Guest code that loads the real npm `ws` gets the real class instead.
  */
 export class WebSocketConnection extends EventEmitter {
   state: State = State.OPEN;

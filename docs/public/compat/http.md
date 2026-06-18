@@ -9,7 +9,8 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Feature | Status | Notes |
 |---|---|---|
 | `http.createServer` | ✅ | Request handler, `listen(port)`, registered port dispatch |
-| `server.on('upgrade')` WebSocket | ✅ | Bridge-backed RFC 6455 upgrade socket; real npm `ws` server and client modes tested on registered local ports |
+| `server.on('upgrade')` WebSocket | ⚠️ | Bridge-backed RFC 6455 data/close/binary upgrade; real npm `ws` server and client modes tested on registered local ports. Caveats: server-origin ping/pong is answered in the transport and not relayed end-to-end (`backlog/net/ws-end-to-end-control-frames`); permessage-deflate not negotiated (`ws-permessage-deflate`); no aggregate `maxPayload` cap yet (`ws-max-payload`) |
+| WebSocket permessage-deflate (RFC7692) | ❌ | Compression is never negotiated; a client `Sec-WebSocket-Extensions` offer is dropped (faithful only when the guest server leaves compression off, which is the `ws` default) — `backlog/net/ws-permessage-deflate` |
 | Basic GET response | ✅ | `writeHead`, headers, status, body |
 | POST request body | ✅ | Readable streaming request body, chunk boundaries, `drain`, and `end` |
 | 204 / 304 null-body statuses | ✅ | No invalid fetch `Response` body |
@@ -17,7 +18,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `server.close()` | ✅ | Unregisters port and callback fires |
 | Missing port dispatch | ✅ | Returns 502 through registry dispatch |
 | `http.get` loopback | ✅ | Client request to own registered port |
-| External WebSocket client egress | ✅ | Non-local `ws` client upgrades use the native worker/browser `WebSocket` primitive |
+| External WebSocket client egress | ⚠️ | Non-local `ws` client upgrades use the native worker/browser `WebSocket` primitive for data + close; a client cannot originate ping/pong (the browser primitive has no `.ping()` — throws `NotImplementedError`), and the path's only test mocks the native socket |
 | Streaming responses | ✅ | SSE chunks, long-poll delay, one chunk per `write()` |
 | Unbounded preview bodies | ⚠️ | Delivered only where true stream transfer exists; buffered cross-realm paths fail loud (HTTP 502 naming the ceiling) instead of hanging on unending SSE/NDJSON bodies |
 | Header reassignment / status codes | ✅ | Pinned by parity cases |
@@ -41,5 +42,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 
 - Networking is browser-local: servers bind a rifty port registry and preview dispatch, not native sockets.
 - Raw TCP connect APIs throw directed `NotImplementedError`s; external WebSocket egress is supported through the browser WebSocket primitive, not TCP.
+- WebSocket control-frame keepalive is per-hop, not end-to-end: server-origin ping/pong is answered in the transport and a real `ws` client's `ping()`/`on('pong')` does not round-trip across the bridge (`backlog/net/ws-end-to-end-control-frames`). External egress cannot originate ping/pong at all (browser `WebSocket` has no `.ping()`).
+- WebSocket permessage-deflate (RFC7692) is not negotiated; there is no aggregate `maxPayload` cap on fragmented reassembly yet (`backlog/net/ws-permessage-deflate`, `ws-max-payload`).
 - Preview delivery needs true `ReadableStream` transfer for unbounded bodies. Buffered cross-realm paths fail loud (HTTP 502 naming the ceiling) rather than silently buffering forever.
 - `node:https` cannot promise real TLS egress inside the local runtime without host integration.
