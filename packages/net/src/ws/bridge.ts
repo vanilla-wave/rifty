@@ -235,7 +235,9 @@ export class BridgedWebSocket extends EventTarget {
     }
     if (frame.type === 'msg' && this.readyState === State.OPEN && frame.data !== undefined) {
       this.dispatchEvent(
-        new MessageEvent('message', { data: messageDataForBinaryType(frame.data, this.binaryType) }),
+        new MessageEvent('message', {
+          data: messageDataForBinaryType(frame.data, this.binaryType),
+        }),
       );
       return;
     }

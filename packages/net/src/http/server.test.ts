@@ -358,7 +358,9 @@ describe('HttpServer — WebSocket upgrade bridge', () => {
       socket.on('data', (chunk) => {
         const frame = parseClientFrame(Buffer.from(chunk));
         if (frame.opcode === 0x1) {
-          socket.write(encodeServerFrame(0x1, Buffer.from(`echo:${frame.payload.toString('utf8')}`)));
+          socket.write(
+            encodeServerFrame(0x1, Buffer.from(`echo:${frame.payload.toString('utf8')}`)),
+          );
         }
       });
     });

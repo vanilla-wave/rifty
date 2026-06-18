@@ -645,7 +645,10 @@ function arrayBufferFromBinary(data: WsMessage): ArrayBuffer | null {
 }
 
 /** Coerce a delivered binary frame to the client's `binaryType`, like the browser. */
-export function messageDataForBinaryType(data: WsMessage, binaryType: BinaryType): WsMessage | Blob {
+export function messageDataForBinaryType(
+  data: WsMessage,
+  binaryType: BinaryType,
+): WsMessage | Blob {
   const ab = arrayBufferFromBinary(data);
   if (!ab) return data;
   if (binaryType === 'arraybuffer') return ab;
