@@ -66,6 +66,7 @@ interface ViteUserConfig {
 
 interface ViteWatcher {
   on(event: 'change', cb: (file: string) => void): void;
+  emit?(event: 'change', file: string): unknown;
 }
 
 interface ViteDevServer {

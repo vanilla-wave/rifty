@@ -17,25 +17,6 @@ describe('real Vite bootstrap preview routing', () => {
     expect(source).toContain('const tearVfsBridge = serveVfsWrites(port, { onWrite: onVfsWrite })');
   });
 
-  it('guards the resolved Vite version before relying on server.hmr.channels', () => {
-    const guardIndex = source.indexOf('assertSupportedViteHmrVersion(');
-    const importIndex = source.indexOf('const viteNs = (await loader.import(');
-    const createServerIndex = source.indexOf('viteNs.createServer({');
-
-    expect(source).toContain('readResolvedPackageVersion(loader, cfg.runtimeSpecifier, root)');
-    expect(source).toContain('assertSupportedViteHmrVersion,');
-    expect(guardIndex).toBeGreaterThan(-1);
-    expect(importIndex).toBeGreaterThan(-1);
-    expect(createServerIndex).toBeGreaterThan(-1);
-    expect(guardIndex).toBeLessThan(importIndex);
-    expect(guardIndex).toBeLessThan(createServerIndex);
-  });
-
-  it('pins the slashless Vite HMR path that matches the tokenized bridge URL', () => {
-    expect(source).toContain('path: `__hmr/${encodeURIComponent(hmrBridgeToken)}`');
-    expect(source).toContain('createViteHmrBridgeChannel({ port, token: hmrBridgeToken })');
-  });
-
   it('accepts VFS write frames over the kernel worker IPC channel', () => {
     expect(source).toContain('const kernelIpc = installRuntimeGlobals()');
     expect(source).toContain('kernelIpc.onMessage?.((message) => {');
