@@ -270,6 +270,10 @@ export class WebSocketUpgradeSocket extends EventEmitter {
       }
       const { code, reason } = close;
       this.sendBridgeClose(code, reason);
+      // Echo a Close back so the ws server finishes the handshake (RFC6455
+      // §5.5.1) and its 'close' fires with the negotiated code, not 1006 from
+      // socket EOF.
+      this.emit('data', encodeClientFrame(0x8, closeFrameBody(code, reason)));
       this.destroy();
       return;
     }
@@ -277,6 +281,10 @@ export class WebSocketUpgradeSocket extends EventEmitter {
       this.emit('data', encodeClientFrame(0xa, payload));
       return;
     }
+    // Server pong: RFC6455 §5.5.3 expects no response, and the bridge transport
+    // answers server pings locally (ADR-0151), so an unsolicited server pong has
+    // no downstream consumer. Dropped intentionally — not silently.
+    // TODO(backlog: net/ws-end-to-end-control-frames) end-to-end ping/pong relay
     if (opcode === 0xa) return;
     this.sendBridgeClose(1002, `unsupported websocket opcode ${opcode}`);
     this.destroy();
@@ -806,10 +814,12 @@ function closePayload(code: number, reason: string): Buffer {
 }
 
 function closeFrameBody(code: number, reason: string): Buffer {
-  // 1005 ("no status received") is a valid conclusion code but MUST be sent as a
-  // bodyless close frame — a 2-byte 1005 body is rejected by real ws as
-  // WS_ERR_INVALID_CLOSE_CODE. (1006 never reaches here; see _receiveBridgeClose.)
-  return code === 1005 ? Buffer.alloc(0) : closePayload(code, reason);
+  // Reserved codes (1004/1005/1006/1015 and any out-of-range) MUST NOT appear on
+  // the wire as a 2-byte status (RFC6455 §7.4.1) — real `ws` rejects them as
+  // WS_ERR_INVALID_CLOSE_CODE. A browser CloseEvent can surface 1015 (TLS) or
+  // 1005 on the native egress path, so collapse any non-sendable code to a
+  // bodyless close. (1006 is short-circuited earlier; see _receiveBridgeClose.)
+  return isValidReceivedCloseCode(code) ? closePayload(code, reason) : Buffer.alloc(0);
 }
 
 function parseClosePayload(
