@@ -69,6 +69,24 @@ export type PtyDevConfig = {
   setup: 'instant' | 'from-scratch';
 };
 
+/** One previewable listening port (dev server or a `node <file>` server). */
+export type PreviewPortEntry = {
+  port: number;
+  url: string;
+  label: string;
+  source: 'dev-server' | 'node';
+  /** Owning session/run id (for label + teardown correlation). */
+  sid: string;
+};
+/**
+ * Owner→page snapshot of ALL live previewable ports (ADR-0154 — generalizes the
+ * single-active dev-server preview to a set). Republished on change + on
+ * `pty:preview-req`; never a one-shot push (P3 missed-before-listener discipline).
+ */
+export type PtyPreview = { type: 'pty:preview'; ports: PreviewPortEntry[] };
+/** Page asks the owner to re-publish the preview-port set (subscribe handshake). */
+export type PtyPreviewReq = { type: 'pty:preview-req' };
+
 export type PageToOwnerFrame =
   | PtyOpen
   | PtyExec
@@ -77,8 +95,9 @@ export type PageToOwnerFrame =
   | PtySignal
   | PtyClose
   | PtyDevServerReq
-  | PtyDevConfig;
-export type OwnerToPageFrame = PtyReady | PtyChunk | PtyExit | PtyDevServer;
+  | PtyDevConfig
+  | PtyPreviewReq;
+export type OwnerToPageFrame = PtyReady | PtyChunk | PtyExit | PtyDevServer | PtyPreview;
 export type PtyFrame = PageToOwnerFrame | OwnerToPageFrame;
 
 /** kernel fork-IPC envelope discriminator (sits beside 'rifty:vfs-write'). */
@@ -97,8 +116,9 @@ const PAGE_TO_OWNER = new Set([
   'pty:close',
   'pty:dev-server-req',
   'pty:dev-config',
+  'pty:preview-req',
 ]);
-const OWNER_TO_PAGE = new Set(['pty:ready', 'pty:chunk', 'pty:exit', 'pty:dev-server']);
+const OWNER_TO_PAGE = new Set(['pty:ready', 'pty:chunk', 'pty:exit', 'pty:dev-server', 'pty:preview']);
 export function isPageToOwner(f: PtyFrame): f is PageToOwnerFrame {
   return PAGE_TO_OWNER.has(f.type);
 }
