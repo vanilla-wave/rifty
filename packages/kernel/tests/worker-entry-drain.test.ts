@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  type KernelDrainHook,
   getKernelDrainHook,
   setKernelDrainHook,
-  type KernelDrainHook,
 } from '../src/worker-entry.ts';
 
 describe('kernel drain hook', () => {
