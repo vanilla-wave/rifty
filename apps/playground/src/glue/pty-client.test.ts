@@ -184,6 +184,39 @@ describe('pty-client', () => {
     expect(sent).toEqual([{ type: 'pty:dev-server-req' }]);
   });
 
+  it('routes pty:preview to onPreview (ADR-0154 preview-port set)', () => {
+    const seen: unknown[] = [];
+    const client = createPtyClient({ send: () => {}, onPreview: (f) => seen.push(f) });
+    client.onFrame({
+      type: 'pty:preview',
+      ports: [
+        { port: 5174, url: '/preview/5174/', label: 'dev server', source: 'dev-server', sid: 's1' },
+        { port: 3210, url: '/preview/3210/', label: 'node server.js', source: 'node', sid: 's2' },
+      ],
+    });
+    expect(seen).toEqual([
+      {
+        type: 'pty:preview',
+        ports: [
+          {
+            port: 5174,
+            url: '/preview/5174/',
+            label: 'dev server',
+            source: 'dev-server',
+            sid: 's1',
+          },
+          { port: 3210, url: '/preview/3210/', label: 'node server.js', source: 'node', sid: 's2' },
+        ],
+      },
+    ]);
+  });
+
+  it('requestPreview sends a pty:preview-req (preview handshake)', () => {
+    const { client, sent } = harness();
+    client.requestPreview();
+    expect(sent).toEqual([{ type: 'pty:preview-req' }]);
+  });
+
   it('setDevConfig sends the current preset dev config (ADR-0148 co-resident dev server in owner)', () => {
     const { client, sent } = harness();
     client.setDevConfig({ templateId: 'express-sqlite', slug: 'fullstack', setup: 'from-scratch' });

@@ -28,7 +28,13 @@ import {
   type PtySessionSnapshot,
   createPtyClient,
 } from './pty-client.ts';
-import { PTY_IPC_TYPE, type PtyDevServer, isOwnerToPage, isPtyIpcMessage } from './pty-protocol.ts';
+import {
+  PTY_IPC_TYPE,
+  type PtyDevServer,
+  type PtyPreview,
+  isOwnerToPage,
+  isPtyIpcMessage,
+} from './pty-protocol.ts';
 import { sendVfsWrite } from './vfs-write-port.ts';
 import { type WorkspaceArchiveBridge, bridgeWorkspaceArchive } from './workspace-archive-port.ts';
 
@@ -130,6 +136,19 @@ export interface WorkspaceOwnerHandle {
    * derives its LIVE pill + preview iframe URL from these frames.
    */
   onDevServer(cb: (frame: PtyDevServer) => void): () => void;
+  /**
+   * Subscribe to owner→page preview-port snapshots (ADR-0154): ALL live
+   * previewable ports (the dev-server port + each `node <file>` server's
+   * ports). Returns an unsubscribe. The page derives its preview switcher set +
+   * per-node-port SW bridges from these frames.
+   */
+  onPreview(cb: (frame: PtyPreview) => void): () => void;
+  /**
+   * Ask the owner to re-publish the preview-port set (ADR-0154 subscribe
+   * handshake) — recovers a `pty:preview` push that predates the page's listener
+   * (never a one-shot push). Mirrors {@link requestDevServer}'s discipline.
+   */
+  requestPreview(): void;
   /**
    * Tell the owner the current preset's dev-server config (ADR-0148) — the
    * persistent owner is spawned once, so a preset switch must update which
@@ -250,12 +269,16 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   const worker = handle;
 
   const devServerListeners = new Set<(frame: PtyDevServer) => void>();
+  const previewListeners = new Set<(frame: PtyPreview) => void>();
   const client = createPtyClient({
     send: (frame) => {
       worker.send({ type: PTY_IPC_TYPE, frame });
     },
     onDevServer: (frame) => {
       for (const cb of devServerListeners) cb(frame);
+    },
+    onPreview: (frame) => {
+      for (const cb of previewListeners) cb(frame);
     },
   });
 
@@ -283,11 +306,12 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     if (isOwnerToPage(message.frame)) client.onFrame(message.frame);
   });
 
-  // Readiness handshake (ADR-0146 / ADR-0148): request the current dev-server
-  // state on spawn so a `pty:dev-server` push that predates our listener is
-  // recoverable (the dropped-frame class the owner-resident shell hit) — never a
-  // one-shot push.
+  // Readiness handshake (ADR-0146 / ADR-0148 / ADR-0154): request the current
+  // dev-server state AND preview-port set on spawn so a `pty:dev-server` /
+  // `pty:preview` push that predates our listener is recoverable (the
+  // dropped-frame class the owner-resident shell hit) — never a one-shot push.
   client.requestDevServer();
+  client.requestPreview();
 
   let exited = false;
   let resolveClosed: (code: number | null) => void = () => {};
@@ -309,6 +333,11 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       error: `workspace owner exited (code ${exitCode ?? 'null'})`,
     };
     for (const cb of devServerListeners) cb(stopped);
+    // Owner died → every previewable server is gone. Publish an empty set so the
+    // page tears down all per-node-port bridges + falls back from the switcher
+    // (mirrors the synthesized stopped dev-server frame above).
+    const noPreviews: PtyPreview = { type: 'pty:preview', ports: [] };
+    for (const cb of previewListeners) cb(noPreviews);
     resolveClosed(exitCode);
   });
 
@@ -352,6 +381,11 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       devServerListeners.add(cb);
       return () => devServerListeners.delete(cb);
     },
+    onPreview(cb) {
+      previewListeners.add(cb);
+      return () => previewListeners.delete(cb);
+    },
+    requestPreview: () => client.requestPreview(),
     setDevConfig: (config) => client.setDevConfig(config),
     close() {
       archiveBridge.dispose();

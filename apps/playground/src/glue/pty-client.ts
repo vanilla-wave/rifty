@@ -15,6 +15,7 @@ import type {
   OwnerToPageFrame,
   PageToOwnerFrame,
   PtyDevServer,
+  PtyPreview,
   PtyStream,
 } from './pty-protocol.ts';
 
@@ -51,6 +52,8 @@ export interface PtyClientDeps {
   send: (frame: PageToOwnerFrame) => void;
   /** Owner→page dev-server state (ADR-0148 co-resident dev server); the page derives its LIVE pill + preview port. */
   onDevServer?: (frame: PtyDevServer) => void;
+  /** Owner→page snapshot of ALL live previewable ports (ADR-0154); the page derives its preview switcher + per-port bridges. */
+  onPreview?: (frame: PtyPreview) => void;
 }
 
 /** Seed cwd/env for a session (restored persisted terminal state, ADR-0146). */
@@ -73,6 +76,8 @@ export interface PtyClient {
   closeSession(sid: string): void;
   /** Ask the owner to re-publish dev-server state (explorer-reflects-owner-tree handshake on subscribe/reload). */
   requestDevServer(): void;
+  /** Ask the owner to re-publish the preview-port set (subscribe handshake, ADR-0154; never a one-shot push). */
+  requestPreview(): void;
   /** Tell the owner the current preset's dev-server config (ADR-0148 co-resident dev server). */
   setDevConfig(config: {
     templateId: string;
@@ -151,6 +156,9 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
     requestDevServer(): void {
       deps.send({ type: 'pty:dev-server-req' });
     },
+    requestPreview(): void {
+      deps.send({ type: 'pty:preview-req' });
+    },
     setDevConfig(config): void {
       deps.send({
         type: 'pty:dev-config',
@@ -186,6 +194,10 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
         }
         case 'pty:dev-server': {
           deps.onDevServer?.(frame);
+          return;
+        }
+        case 'pty:preview': {
+          deps.onPreview?.(frame);
           return;
         }
       }

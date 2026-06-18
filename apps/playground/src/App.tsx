@@ -31,6 +31,7 @@ import { copyToClipboard } from './glue/clipboard.ts';
 import { readChildren } from './glue/file-tree.ts';
 import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
+import type { PreviewPortEntry } from './glue/pty-protocol.ts';
 import {
   type WorkspaceOwnerHandle,
   startWorkspaceOwner,
@@ -76,6 +77,8 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     importArchive: () => Promise.reject(new Error(OWNER_UNAVAILABLE_MSG)),
     snapshot: () => ({ cwd: WORKSPACE, env: {} }),
     onDevServer: () => () => {},
+    onPreview: () => () => {},
+    requestPreview: () => {},
     setDevConfig: () => {},
     close: () => {},
   };
@@ -236,6 +239,12 @@ export function App(props: AppProps) {
     'stopped',
   );
   const devServerRunning = (): boolean => devServerStatus() === 'running';
+
+  // ALL live previewable ports (ADR-0154): the dev-server port + each `node
+  // <file>` server's ports, pushed by the owner as a `pty:preview` snapshot. Feeds
+  // the PreviewPanel switcher. The dev-server port's SW bridge is wired by the
+  // `onDevServer` path above; this set drives the per-node-port bridges (below).
+  const [previewPorts, setPreviewPorts] = createSignal<PreviewPortEntry[]>([]);
   let devServerSessionId: string | null = null;
   let devServerRestartGeneration = 0;
 
@@ -257,6 +266,44 @@ export function App(props: AppProps) {
       tearPreview?.();
       unsubscribe();
     });
+  });
+
+  // Mirror the owner's full preview-port set (ADR-0154) + (re)request it on
+  // subscribe — recovers a `pty:preview` push that predates this listener (same
+  // handshake discipline as the dev-server-req above; never a one-shot push).
+  createEffect(() => {
+    const unsubscribe = workspaceOwner.onPreview((frame) => setPreviewPorts(frame.ports));
+    workspaceOwner.requestPreview();
+    onCleanup(unsubscribe);
+  });
+
+  // Per-port SW preview bridge for NODE servers only (ADR-0154). The dev-server
+  // port keeps its existing bridge from the `onDevServer` path above — never
+  // double-wire it. Diff the live node ports against active teardowns: wire a
+  // newly-present port, tear down + drop one that left the set. `onCleanup` tears
+  // down all.
+  const nodePortBridges = new Map<number, () => void>();
+  createEffect(() => {
+    const live = new Set(
+      previewPorts()
+        .filter((p) => p.source === 'node')
+        .map((p) => p.port),
+    );
+    for (const port of live) {
+      if (!nodePortBridges.has(port)) {
+        nodePortBridges.set(port, wirePreviewBridge(port, workspaceOwner.previewOwnerToken));
+      }
+    }
+    for (const [port, tear] of nodePortBridges) {
+      if (!live.has(port)) {
+        tear();
+        nodePortBridges.delete(port);
+      }
+    }
+  });
+  onCleanup(() => {
+    for (const tear of nodePortBridges.values()) tear();
+    nodePortBridges.clear();
   });
 
   // The terminal shell + cwd/env + npm + bin all live in the persistent
@@ -1001,6 +1048,7 @@ export function App(props: AppProps) {
                     initialPort={port}
                     onOpenTab={openPreviewTab}
                     onNotify={flashToast}
+                    ports={previewPorts}
                   />
                 )}
               </Show>
