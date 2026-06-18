@@ -42,8 +42,8 @@ unchanged loader, so it adds no duplicate parity case.
 | `node <server.js>` long-running server | ✅ | A `listen()` keeps the child alive (`serve:true`); the listened port is registered for preview; Ctrl-C stops it |
 | Multi-port preview + switcher | ✅ | Each live server (and `npm run dev`) appears in the preview-panel port switcher; routed via `/preview/<port>/` |
 | `node: cannot find module` for a missing entry | ✅ | Clean Node-shape diagnostic + exit 1, resolved against the owner store (not a raw worker throw) |
-| Interactive stdin (`readline` / `process.stdin` Readable) | ❌ | Worker-side `process.stdin` Readable not wired; loud. `backlog/kernel/worker-per-process-residuals` |
-| Background `node x.js &` | ❌ | No job table; loud. `backlog/shell/background-job-model` |
+| Interactive stdin (`readline` / `process.stdin`) | ❌ | The session's stdin is NOT forwarded to the child; its `process.stdin` consume surface (`on`/`read`/`resume`/`pipe`) throws `NotImplementedError` — loud, never a silent hang. `backlog/kernel/worker-per-process-residuals` (+ `backlog/terminal/raw-stdin-deferred-items`) |
+| `node x.js &` (trailing background) | ✅ | Runs in a background job via the shell's generic trailing-`&` path; job-control builtins (`jobs`/`fg`/`bg`) are the gap — `backlog/shell/background-job-model` |
 | `node:sqlite` (`DatabaseSync`) in a bare `node <file>` | ❌ | The 30 s WASM engine is brought up eagerly only for the template path (`cfg.sqlite`); a bare-node lazy bring-up is deferred + loud. `backlog/net/node-bare-sqlite-lazy-bringup` |
 | A bare node server reachable from ANOTHER child (loopback) | ❌ | Reachable via `/preview/<port>/` only; cross-realm HTTP loopback is `backlog/net/cross-realm-http-loopback` |
 

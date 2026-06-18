@@ -19,7 +19,12 @@ function fakeHandle() {
       list.push(cb);
     },
     send: vi.fn(),
-    kill: vi.fn(() => true),
+    // Real WorkerHandle.kill() emits 'exit' synchronously — mirror that so the
+    // executor's pre-abort listener ordering is exercised.
+    kill: vi.fn((_signal?: string) => {
+      for (const cb of listeners.exit ?? []) cb(130);
+      return true;
+    }),
   } as unknown as NodeChildHandle;
   return {
     h,
@@ -85,5 +90,20 @@ describe('owner-child-node-executor', () => {
     fake.emit('exit', 130);
     expect(await p).toBe(130);
     expect(stdout.join('')).toBe('');
+  });
+
+  it('a pre-aborted signal still resolves + removes (exit listener registered before abort)', async () => {
+    const fake = fakeHandle();
+    const onExit = vi.fn();
+    const ac = new AbortController();
+    ac.abort();
+    const exec = createOwnerChildNodeExecutor('URL', () => fake.h);
+    const ctx = makeCtx({ signal: ac.signal });
+    // kill() fires synchronously on the already-aborted signal; without the
+    // listener-before-abort ordering the 'exit' would be lost and this hangs.
+    const code = await exec('/w/server.js', [], ctx, { sid: 's1', onListening: () => {}, onExit });
+    expect(fake.h.kill).toHaveBeenCalledWith('SIGTERM');
+    expect(code).toBe(130);
+    expect(onExit).toHaveBeenCalledWith('s1');
   });
 });
