@@ -28,7 +28,8 @@ describe('e2e-coverage spec classification', () => {
       {
         milestone: 10,
         name: 'm10-hmr.spec.ts',
-        content: "const enabled = process.env.RIFTY_E2E_HMR === '1'; test.skip(!enabled,'x'); test('t',()=>{});",
+        content:
+          "const enabled = process.env.RIFTY_E2E_HMR === '1'; test.skip(!enabled,'x'); test('t',()=>{});",
       },
       { milestone: 10, name: 'm10-dev-hmr.spec.ts', content: "test.skip('retired', ()=>{});" },
       { milestone: 0, name: 'm0-boot.spec.ts', content: "test('boots', ()=>{});" },

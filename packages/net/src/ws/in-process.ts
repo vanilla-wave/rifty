@@ -507,7 +507,9 @@ export class WebSocket extends EventTarget {
     }
     if (frame.type === 'msg' && this.readyState === State.OPEN && frame.data !== undefined) {
       this.dispatchEvent(
-        new MessageEvent('message', { data: messageDataForBinaryType(frame.data, this.binaryType) }),
+        new MessageEvent('message', {
+          data: messageDataForBinaryType(frame.data, this.binaryType),
+        }),
       );
       return;
     }
@@ -517,7 +519,9 @@ export class WebSocket extends EventTarget {
       const wasClean = code !== 1006 && this.readyState !== State.CONNECTING;
       if (this.readyState === State.CONNECTING) this.dispatchEvent(new Event('error'));
       this.readyState = State.CLOSED;
-      this.dispatchEvent(new CloseEventCtor('close', { code, reason: frame.reason ?? '', wasClean }));
+      this.dispatchEvent(
+        new CloseEventCtor('close', { code, reason: frame.reason ?? '', wasClean }),
+      );
       this.cleanupBridge();
     }
   };

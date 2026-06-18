@@ -241,7 +241,9 @@ export class BridgedWebSocket extends EventTarget {
       const wasClean = code !== 1006 && this.readyState !== State.CONNECTING;
       if (this.readyState === State.CONNECTING) this.dispatchEvent(new Event('error'));
       this.readyState = State.CLOSED;
-      this.dispatchEvent(new CloseEventCtor('close', { code, reason: frame.reason ?? '', wasClean }));
+      this.dispatchEvent(
+        new CloseEventCtor('close', { code, reason: frame.reason ?? '', wasClean }),
+      );
       this.cleanup();
     }
   };

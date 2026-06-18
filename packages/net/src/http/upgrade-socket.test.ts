@@ -62,9 +62,9 @@ describe('WebSocketUpgradeSocket completes the closing handshake with the ws ser
     // Server sends Close 1001 (unmasked, no reason): [0x88, 0x02, 0x03, 0xE9].
     socket.write(Buffer.from([0x88, 0x02, 0x03, 0xe9]));
 
-    expect(
-      bridge.some((f) => f.type === 'close' && f.from === 'server' && f.code === 1001),
-    ).toBe(true);
+    expect(bridge.some((f) => f.type === 'close' && f.from === 'server' && f.code === 1001)).toBe(
+      true,
+    );
     // Without a Close echo the ws server would conclude 1006 from socket EOF;
     // the transport must send a Close back to finish the handshake cleanly.
     const echo = data.find((d) => (d[0]! & 0x0f) === 0x8);
