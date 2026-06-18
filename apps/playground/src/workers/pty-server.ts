@@ -82,6 +82,8 @@ export interface PtyServerDeps {
    * dev-server-agnostic (it only forwards the request).
    */
   readonly onDevServerReq?: () => void;
+  /** Owner re-publishes the multi-port preview registry on a page request (ADR-0154). */
+  readonly onPreviewReq?: () => void;
   /**
    * Page updated the current preset's dev-server config (ADR-0148 — owner-resident
    * dev server) — the next
@@ -200,6 +202,10 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
       }
       case 'pty:dev-server-req': {
         deps.onDevServerReq?.();
+        return;
+      }
+      case 'pty:preview-req': {
+        deps.onPreviewReq?.();
         return;
       }
       case 'pty:dev-config': {
