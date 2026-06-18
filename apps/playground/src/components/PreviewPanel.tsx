@@ -25,8 +25,17 @@
  * refreshed by the iframe HMR client itself, not by parent snapshot updates
  * (ADR-0126).
  */
-import { type Accessor, createEffect, createSignal, onCleanup } from 'solid-js';
+import {
+  type Accessor,
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+} from 'solid-js';
 import { copyToClipboard } from '../glue/clipboard.ts';
+import type { PreviewPortEntry } from '../glue/pty-protocol.ts';
 import { Icon } from './icons.tsx';
 
 type Phase = 'starting' | 'live' | 'error';
@@ -41,11 +50,24 @@ const WARMUP_FETCH_TIMEOUT_MS = 4_000;
 const COMMIT_TIMEOUT_MS = 4_000;
 const COMMIT_INTERVAL_MS = 200;
 
+// Which port the switcher should show given the live set + current selection
+// (ADR-0154). Empty set → keep current (manual-input fallback owns it). Current
+// still live → keep it. Otherwise snap to the LAST (most-recently-added) entry,
+// so a fresh server auto-selects and a removed one falls back.
+export function reconcileSelectedPort(entries: PreviewPortEntry[], current: number): number {
+  const last = entries.at(-1);
+  if (!last) return current;
+  if (entries.some((e) => e.port === current)) return current;
+  return last.port;
+}
+
 export function PreviewPanel(props: {
   initialPort?: number;
   onOpenTab?: (port: number) => void;
   /** Toast bridge for copy-URL feedback. */
   onNotify?: (message: string, tone: 'error' | 'success') => void;
+  /** Live previewable ports (ADR-0154). Non-empty → switcher; empty → manual port input. */
+  ports?: Accessor<PreviewPortEntry[]>;
 }) {
   const [port, setPort] = createSignal(props.initialPort ?? 3000);
   const [phase, setPhase] = createSignal<Phase>('starting');
@@ -53,6 +75,17 @@ export function PreviewPanel(props: {
   let frame: HTMLIFrameElement | undefined;
 
   const previewUrl = (): string => `/preview/${port()}/`;
+
+  const entries = createMemo<PreviewPortEntry[]>(() => props.ports?.() ?? []);
+
+  // Keep the selected port valid against the live set: when ports exist and the
+  // current selection isn't one of them, snap to the LAST entry — so a freshly
+  // added server auto-selects and a removed one falls back. The warm-up effect +
+  // iframe stay keyed off `port()`, so the switch flows through unchanged.
+  createEffect(() => {
+    const next = reconcileSelectedPort(entries(), port());
+    if (next !== port()) setPort(next);
+  });
 
   function openTab(): void {
     if (props.onOpenTab) {
@@ -160,15 +193,31 @@ export function PreviewPanel(props: {
             <Icon name="lock" size={11} />
             <span class="rf-preview__host">localhost:</span>
           </button>
-          <input
-            class="rf-preview__port"
-            type="number"
-            value={port()}
-            min={1}
-            max={65535}
-            onChange={(e) => setPort(Number.parseInt(e.currentTarget.value, 10) || 3000)}
-            aria-label="Preview port"
-          />
+          <Show
+            when={entries().length > 0}
+            fallback={
+              <input
+                class="rf-preview__port"
+                type="number"
+                value={port()}
+                min={1}
+                max={65535}
+                onChange={(e) => setPort(Number.parseInt(e.currentTarget.value, 10) || 3000)}
+                aria-label="Preview port"
+              />
+            }
+          >
+            <select
+              class="rf-preview__switcher"
+              aria-label="Preview server"
+              value={port()}
+              onChange={(e) => setPort(Number(e.currentTarget.value))}
+            >
+              <For each={entries()}>
+                {(e) => <option value={e.port}>{`${e.label} (:${e.port})`}</option>}
+              </For>
+            </select>
+          </Show>
           <PhasePill phase={phase} />
         </div>
         <button
