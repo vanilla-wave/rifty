@@ -103,6 +103,10 @@ function makeFakeOwner() {
     onDevServer(): () => void {
       return () => {};
     },
+    onPreview(): () => void {
+      return () => {};
+    },
+    requestPreview(): void {},
     setDevConfig(): void {},
     close(): void {},
   };

@@ -4,6 +4,15 @@
 
 ### Added
 
+- **Page preview-port registry + per-node-port preview bridge** (ADR-0154). `glue/pty-client.ts`
+  gains `onPreview`/`requestPreview` mirroring the `onDevServer`/`requestDevServer` discipline:
+  routes owner→page `pty:preview{ports}` snapshots to subscribers + sends `pty:preview-req`.
+  `glue/realVite.ts` exposes them on `WorkspaceOwnerHandle` (preview listener set, spawn-time
+  handshake beside the dev-server one, empty-set publish on owner exit). `App.tsx` keeps a
+  `previewPorts()` signal fed to `PreviewPanel`'s switcher, requests a re-publish on subscribe, and
+  wires a per-port SW preview bridge for NODE-source ports ONLY (the dev-server port keeps its
+  existing `onDevServer` bridge — never double-wired) via a diffing effect over a port→teardown Map.
+
 - **Event-loop keepalive + drain wired into the kernel worker** (child-realm-async-lifecycle,
   ADR-0152). `workers/kernel-worker-entry.ts` now calls `installEventLoopKeepalive()` (right after
   `installTimerGlobals()`), so a run-to-completion child drains its event loop before reaping —
