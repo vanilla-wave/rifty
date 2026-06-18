@@ -222,8 +222,12 @@ export class Writable extends EventEmitter {
           return;
         }
         if (err) {
+          // Node destroys the stream on a `_write` error: the failing chunk's
+          // callback gets the error, then destroy() errors every still-buffered
+          // callback and emits 'error'+'close'. Previously the queued chunks'
+          // callbacks were left uncalled and `destroyed` stayed false.
           next.cb(err);
-          this.emit('error', err);
+          this.destroy(err);
           return;
         }
         next.cb();

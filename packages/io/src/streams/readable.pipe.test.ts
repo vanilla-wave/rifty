@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { EventEmitter } from '../event-emitter.ts';
 import { Readable } from './readable.ts';
 import { Writable } from './writable.ts';
 
@@ -145,6 +146,27 @@ describe('Readable.pipe / Readable.unpipe', () => {
     r.push(null);
     await new Promise<void>((resolve) => w.once('finish', () => resolve()));
     expect(ended).toBe(true);
+  });
+
+  it('destroys the source when a promise-returning sink rejects a write', async () => {
+    // A sink whose write() returns a rejecting promise (the promise-sink seam
+    // ADR-0153 leaves open). On rejection the source must be torn down, not left
+    // paused-and-undestroyed leaking the producer.
+    class RejectingSink extends EventEmitter {
+      write(): Promise<boolean> {
+        return Promise.reject(new Error('sink-failed'));
+      }
+      end(): void {}
+    }
+    const r = Readable.from(['a']);
+    r.on('error', () => {}); // absorb the destroy-error re-emit
+    const sink = new RejectingSink();
+    sink.on('error', () => {});
+
+    r.pipe(sink);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    expect(r.destroyed).toBe(true);
   });
 
   it('still propagates data end-to-end after the new wiring', async () => {

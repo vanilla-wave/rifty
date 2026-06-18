@@ -74,7 +74,7 @@ describe('Writable sync-drain edges (#25)', () => {
     expect(emittedError).toBe(boom);
   });
 
-  it('(b) a synchronously-erroring _write stops the drain loop and surfaces the error (no silent continue)', async () => {
+  it('(b) a synchronously-erroring _write destroys the stream and errors every buffered callback', async () => {
     const fail = new Error('write-failed');
     const writeOrder: string[] = [];
     const cbErrors = new Map<string, Error | null | undefined>();
@@ -98,13 +98,15 @@ describe('Writable sync-drain edges (#25)', () => {
 
     await new Promise<void>((r) => setTimeout(r, 0));
 
-    // The loop STOPS after the erroring chunk — c2 is NOT drained behind it.
+    // No more _write calls after the failure — c2 is never written.
     expect(writeOrder).toEqual(['c1']);
-    // The error surfaces: the failing chunk's cb gets it AND 'error' is emitted.
+    // Node destroys the stream on a `_write` error: the failing chunk's cb gets
+    // the error, 'error' is emitted, the stream is destroyed, and EVERY still-
+    // buffered callback is errored — never silently dropped.
     expect(cbErrors.get('c1')).toBe(fail);
     expect(emittedError).toBe(fail);
-    // c2 stays queued (its cb never fired) — the loop did not silently continue.
-    expect(cbErrors.has('c2')).toBe(false);
+    expect(w.destroyed).toBe(true);
+    expect(cbErrors.get('c2')).toBeInstanceOf(Error);
   });
 
   it('(c) a re-entrant write() from within a _write is buffered and drained, not lost or double-drained', async () => {

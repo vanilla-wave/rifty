@@ -590,7 +590,12 @@ export class Readable extends EventEmitter implements AsyncIterable<unknown> {
         this.pause();
         void writeResult.then(
           () => this.resume(),
-          (err) => dest.emit('error', err),
+          (err) => {
+            // Surface to dest, then tear the source down — otherwise it stays
+            // paused-and-undestroyed and the producer leaks.
+            dest.emit('error', err);
+            this.destroy(err instanceof Error ? err : new Error(String(err)));
+          },
         );
       }
     };
