@@ -85,6 +85,42 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect((await installStampSatisfied(vfs, ROOT, 'real-vite'))?.packages).toBe(8);
   });
 
+  it('clears a foreign preset tree + lockfile BEFORE the from-scratch install (no EBROKENLOCK)', async () => {
+    // project-files (instant) restored a baked snapshot: node_modules/vite + a
+    // package-lock.json that omits the shimmed esbuild. Selecting real-vite
+    // (from-scratch, same `vite` template → the owner's templateId-keyed clean
+    // skips it) must NOT install over that tree — the stale lockfile trips the
+    // installer's coverage check (EBROKENLOCK). The arrival clears the foreign
+    // tree first so install() sees a truly from-scratch base.
+    const { vfs, fsSync, logFn } = project();
+    fsSync.mkdirSync(`${ROOT}/node_modules/vite`, { recursive: true });
+    fsSync.writeFileSync(`${ROOT}/node_modules/vite/package.json`, enc.encode('{"name":"vite"}'));
+    fsSync.writeFileSync(`${ROOT}/package-lock.json`, enc.encode('{"lockfileVersion":3}'));
+    await writeInstallStamp(vfs, ROOT, 8, 'project-files'); // a DIFFERENT slug's stamp
+
+    let treeAtInstall: { lockfile: boolean; viteDir: boolean } | null = null;
+    const result = await ensureProjectDependencies({
+      vfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'real-vite', // from-scratch: no snapshotUrl
+      install: async () => {
+        treeAtInstall = {
+          lockfile: fsSync.existsSync(`${ROOT}/package-lock.json`),
+          viteDir: fsSync.existsSync(`${ROOT}/node_modules/vite`),
+        };
+        return { packages: 8 };
+      },
+      flush: async () => {},
+      log: logFn,
+    });
+
+    expect(result.source).toBe('install');
+    // The foreign tree is gone at install time — a clean from-scratch base.
+    expect(treeAtInstall).toEqual({ lockfile: false, viteDir: false });
+  });
+
   it('restores the baked snapshot on a stampless boot and stamps the tree', async () => {
     const { vfs, fsSync, log, logFn } = project();
     let installed = false;

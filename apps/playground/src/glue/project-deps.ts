@@ -6,7 +6,9 @@
  *      yet must not reuse each other's tree) → do nothing;
  *   2. **snapshot** — a baked asset matching the template AND the current
  *      package.json deps → restore it (no network, no resolver);
- *   3. **install** — real `install()` through the registry.
+ *   3. **install** — clear any foreign node_modules + lockfile (a prior preset's
+ *      tree poisons a from-scratch install — EBROKENLOCK), then real `install()`
+ *      through the registry.
  *
  * from-scratch presets pass no `snapshotUrl`, so on a slug miss they run the
  * visible install (never a silent snapshot restore). Because the slug differs
@@ -19,7 +21,7 @@
  * the boot. Extracted from the worker bootstrap so the priority logic is
  * unit-testable outside a worker realm.
  */
-import type { Vfs } from '@riftydev/vfs';
+import { type Vfs, joinPath } from '@riftydev/vfs';
 import {
   type DepSnapshotV1,
   fetchDepSnapshot as realFetchDepSnapshot,
@@ -77,9 +79,27 @@ export async function ensureProjectDependencies(
     if (restored) return restored;
   }
 
+  // Reaching install() means NO stamp matched this slug and NO snapshot applied —
+  // so any node_modules + lockfile on disk belong to a DIFFERENT preset (e.g.
+  // project-files' instant baked snapshot, whose lockfile omits the shimmed
+  // esbuild). A from-scratch install over that tree trips the installer's
+  // lockfile-coverage check (EBROKENLOCK) — and the owner's preset-switch clean is
+  // keyed on templateId, so it skips presets that share one (project-files /
+  // node-worker / real-vite are all `vite`). Clear the foreign tree HERE so the
+  // install is truly from-scratch — independent of the owner's in-memory switch
+  // state, so it also holds across a reload that re-boots a from-scratch preset.
+  clearProjectTree(opts.fsSync, opts.root);
+
   const result = await opts.install();
   await stampTree(opts, result.packages);
   return { source: 'install', packages: result.packages };
+}
+
+/** Drop a foreign/stale node_modules + lockfile so a from-scratch install starts
+ *  clean (best-effort: a fresh boot has nothing to remove). */
+function clearProjectTree(fsSync: WorkspaceArchiveFs, root: string): void {
+  fsSync.rmSync(joinPath(root, 'node_modules'), { recursive: true, force: true });
+  fsSync.rmSync(joinPath(root, 'package-lock.json'), { force: true });
 }
 
 async function tryRestoreSnapshot(
