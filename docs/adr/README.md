@@ -68,7 +68,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0065 | `node:sqlite` `DatabaseSync` WASM shim — sql.js, in-memory-first (P2 boot prerequisite) |
 | 0147 | Default cross-realm WebSocket bridge |
 | 0151 | HTTP WebSocket upgrade over bridge |
-| 0152 | HTTP stream interop and drain contract |
+| 0153 | HTTP stream interop and drain contract |
 
 ### service-worker
 
@@ -205,7 +205,7 @@ superseded.
 | 0145 browser transport clause | 0147 | browser shim is now the generic WebSocket bridge |
 | 0145 `server.hmr.channels` payload path | 0151 | Real-Vite now uses Vite native `server.ws` over rifty `http.Server.on('upgrade')` |
 | 0054 WS/SSE upgrade risk note | 0151 | WebSocket `server.on('upgrade')` now works over the bridge; SSE stays streaming HTTP |
-| 0054 pipe-sink deferral | 0152 | `Readable.fromWeb(webStream).pipe(res)` is implemented; full `node:stream/web` remains unclaimed |
+| 0054 pipe-sink deferral | 0153 | `Readable.fromWeb(webStream).pipe(res)` is implemented; full `node:stream/web` remains unclaimed |
 
 ## Appendix A — Q→ADR provenance
 

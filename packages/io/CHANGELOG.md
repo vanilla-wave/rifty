@@ -4,7 +4,7 @@
 
 ### Added
 
-- **`Readable.fromWeb()` plus Promise-aware `pipe()` backpressure (ADR-0152).**
+- **`Readable.fromWeb()` plus Promise-aware `pipe()` backpressure (ADR-0153).**
   WHATWG `ReadableStream` bodies can now become Node-shape `Readable`s while
   preserving chunk boundaries, and `Readable.pipe()` pauses when a sink's
   `write()` returns a Promise. This makes `Readable.fromWeb(body).pipe(res)`

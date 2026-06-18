@@ -1,4 +1,4 @@
-# ADR 0152: HTTP stream interop and drain contract
+# ADR 0153: HTTP stream interop and drain contract
 
 Status: Accepted
 Date: 2026-06-18

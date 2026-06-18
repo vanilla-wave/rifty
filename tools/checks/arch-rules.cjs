@@ -27,7 +27,7 @@ const options = {
   doNotFollow: { path: 'node_modules' },
   // skip build output, coverage, type decls and tests — layering applies to source only
   exclude: {
-    path: '(^|/)(dist|build|coverage|playwright-report|test-results)/|/tests?/|/__tests__/|/__mocks__/|\\.test\\.[tj]sx?$|\\.d\\.ts$',
+    path: '(^|/)(dist|build|coverage|playwright-report|test-results)/|/tests?/|/__tests__/|/__mocks__/|\\.test\\.[tj]sx?$|\\.d\\.ts$|(^|/)tsup\\.config\\.bundled_[^/]+\\.mjs$',
   },
   enhancedResolveOptions: {
     exportsFields: ['exports'],
