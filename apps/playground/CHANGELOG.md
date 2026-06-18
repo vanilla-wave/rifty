@@ -45,6 +45,16 @@
 
 ### Fixed
 
+- **From-scratch preset boots clean over a prior preset's tree — no more EBROKENLOCK** (ADR-0135).
+  Selecting a from-scratch vite preset (`real-vite`) after an instant one (`project-files` /
+  `node-worker`) installed over the instant preset's baked-snapshot tree: its `package-lock.json`
+  omits the boot-overlaid esbuild shim, so the installer's lockfile-coverage check threw
+  `EBROKENLOCK` and the dev server stopped (or, on a partial tree, `Cannot find module 'vite'`).
+  The owner's preset-switch clean is keyed on `templateId`, so it skipped switches that share one
+  (all three presets are `vite`). `ensureProjectDependencies` now clears a foreign `node_modules` +
+  lockfile right before the `install()` fallback (reaching it means no stamp matched this slug and
+  no snapshot applied → the on-disk tree is another preset's), so a from-scratch install is always
+  truly clean — independent of the owner's in-memory switch state, so it holds across a reload too.
 - **`stop()` no longer hangs after a post-ready dev-server child crash** (P6b review, ADR-0150). The
   driver's `DevServerHandle.stop()` killed the child then awaited its `'exit'` — but `WorkerHandle.kill()`
   on an ALREADY-exited child returns `false` and emits NO `'exit'`, so a Ctrl-C after a mid-run child
