@@ -27,4 +27,4 @@ export { SyncRpcFsSync, installRemoteSyncFs } from './ipc/sync-rpc-fs.ts';
 export type { SyncCall } from './ipc/sync-rpc-fs.ts';
 export { FS_RPC_CHUNK } from './ipc/fs-rpc-protocol.ts';
 export { installConsole, type ConsoleSink } from './repl/console.ts';
-export { installEventLoopKeepalive } from './internal/event-loop-keepalive.ts';
+export { awaitDrain, installEventLoopKeepalive } from './internal/event-loop-keepalive.ts';
