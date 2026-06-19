@@ -5,6 +5,12 @@ Date: 2026-06-17
 
 > TL;DR: `http.Server` emits WebSocket `'upgrade'` over the same-origin bridge; no raw TCP claim.
 
+> Correction 2026-06-18: control frames now relay where a real `ws` peer can
+> consume them. Browser-like clients still do not surface ping/pong as
+> `message`; local real `ws` clients can `ping()` and receive the server's actual
+> `pong()` over the bridge, while server pings are still answered in the
+> transport.
+
 ## Context
 
 ADR-0147 made browser `new WebSocket()` reach `@riftydev/net.WebSocketServer`
@@ -44,8 +50,9 @@ raw TCP boundary: `net.Socket.connect` remains a loud `NotImplementedError`.
   channel.
 - Fetch/preview HTTP semantics stay intact; there is still no fake HTTP 101
   `Response`.
-- Browser-native ping frames are not exposed to app code, matching browser
-  `WebSocket`; server pings are answered in the transport.
+- Browser-like clients do not expose ping/pong to app code, matching browser
+  `WebSocket`. Local real `ws` peers can exchange control frames through the
+  bridge; server pings are still answered in the transport.
 - Raw TCP and arbitrary host egress remain outside `node:http` WebSocket upgrade
   support; preview-local `wss://` maps to the same bridge with
   `socket.encrypted`.

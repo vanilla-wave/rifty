@@ -280,6 +280,7 @@ export function webSocketBridgeClientScript(opts: WebSocketBridgeClientScriptOpt
         return;
       }
       if (f.type === 'msg' && this.readyState === RiftyBridgeWebSocket.OPEN) {
+        if (f.opcode === 9 || f.opcode === 10) return;
         publish('message', f.data);
         emit(this, new MessageEvent('message', { data: messageDataForBinaryType(f.data, this.binaryType) }));
         return;

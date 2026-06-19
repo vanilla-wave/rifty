@@ -9,7 +9,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Feature | Status | Notes |
 |---|---|---|
 | `http.createServer` | ✅ | Request handler, `listen(port)`, registered port dispatch |
-| `server.on('upgrade')` WebSocket | ⚠️ | Bridge-backed RFC 6455 data/close/binary upgrade; real npm `ws` server and client modes tested on registered local ports. Caveats: server-origin ping/pong is answered in the transport and not relayed end-to-end (`backlog/net/ws-end-to-end-control-frames`); permessage-deflate not negotiated (`ws-permessage-deflate`); no aggregate `maxPayload` cap yet (`ws-max-payload`) |
+| `server.on('upgrade')` WebSocket | ⚠️ | Bridge-backed RFC 6455 data/control/close/binary upgrade; real npm `ws` server and client modes tested on registered local ports; malformed frames close loudly (1002/1007/1009). Caveat: permessage-deflate not negotiated (`ws-permessage-deflate`) |
 | WebSocket permessage-deflate (RFC7692) | ❌ | Compression is never negotiated; a client `Sec-WebSocket-Extensions` offer is dropped (faithful only when the guest server leaves compression off, which is the `ws` default) — `backlog/net/ws-permessage-deflate` |
 | Basic GET response | ✅ | `writeHead`, headers, status, body |
 | POST request body | ✅ | Readable streaming request body, chunk boundaries, `drain`, and `end` |
@@ -30,8 +30,10 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 
 - `tests/conformance/builtins/http.test.ts`
 - `tests/conformance/builtins/http-incoming-body.test.ts`
+- `tests/conformance/builtins/ws-package-loader.test.ts`
 - `tests/conformance/builtins/https.test.ts`
 - `packages/net/src/http/server.test.ts`
+- `packages/net/src/http/upgrade-socket.test.ts`
 - `tools/node-parity-runner/cases/http/*.case.ts`
 - `tools/node-parity-runner/cases/http2/surface.case.ts`
 - `packages/net/src/http/client.test.ts`
@@ -42,7 +44,8 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 
 - Networking is browser-local: servers bind a rifty port registry and preview dispatch, not native sockets.
 - Raw TCP connect APIs throw directed `NotImplementedError`s; external WebSocket egress is supported through the browser WebSocket primitive, not TCP.
-- WebSocket control-frame keepalive is per-hop, not end-to-end: server-origin ping/pong is answered in the transport and a real `ws` client's `ping()`/`on('pong')` does not round-trip across the bridge (`backlog/net/ws-end-to-end-control-frames`). External egress cannot originate ping/pong at all (browser `WebSocket` has no `.ping()`).
-- WebSocket permessage-deflate (RFC7692) is not negotiated; there is no aggregate `maxPayload` cap on fragmented reassembly yet (`backlog/net/ws-permessage-deflate`, `ws-max-payload`).
+- Browser-like WebSocket clients do not surface ping/pong control frames as `message` events. Local real `ws` clients can `ping()` and receive the server's actual `pong()` through the bridge; server-origin pings are also answered in the transport so keepalive stays satisfied.
+- External WebSocket egress cannot originate ping/pong at all (browser `WebSocket` has no `.ping()`); that path throws `NotImplementedError` for control-frame sends.
+- WebSocket permessage-deflate (RFC7692) is not negotiated (`backlog/net/ws-permessage-deflate`).
 - Preview delivery needs true `ReadableStream` transfer for unbounded bodies. Buffered cross-realm paths fail loud (HTTP 502 naming the ceiling) rather than silently buffering forever.
 - `node:https` cannot promise real TLS egress inside the local runtime without host integration.

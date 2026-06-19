@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest';
 import {
   WebSocket,
   WebSocketServer,
+  channelNameFor,
   createCrossRealmBridge,
   portChannelNameFor,
 } from '../../../packages/net/src/ws.ts';
@@ -203,6 +204,95 @@ describe('cross-realm WebSocket bridge (ADR-0017 phase 1)', () => {
     expect(clientSeen).toEqual(['server-hello']);
 
     ws.close();
+    server.close();
+  });
+
+  it('default WebSocket bridge fallback ignores control-opcode msg frames', async () => {
+    const url = 'ws://localhost:9127/control-guard';
+    const channel = new BroadcastChannel(portChannelNameFor(url));
+    let cid = '';
+    channel.addEventListener('message', (event) => {
+      const frame = event.data as { type?: string; cid?: string };
+      if (frame.type !== 'open' || frame.cid === undefined) return;
+      cid = frame.cid;
+      channel.postMessage({ type: 'open-ack', cid, protocol: '' });
+    });
+    const ws = new WebSocket(url);
+    const seen: unknown[] = [];
+    ws.addEventListener('message', (event) => seen.push((event as MessageEvent).data));
+
+    await new Promise<void>((resolve) =>
+      ws.addEventListener('open', () => resolve(), { once: true }),
+    );
+    channel.postMessage({
+      type: 'msg',
+      cid,
+      data: new Uint8Array([1]),
+      opcode: 0x9,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(seen).toEqual([]);
+
+    ws.close();
+    channel.close();
+  });
+
+  it('BridgedWebSocket ignores control-opcode msg frames', async () => {
+    const { WebSocket: BWS, WebSocketServer: BWSS } = createCrossRealmBridge();
+    const url = 'ws://playground/control-guard';
+    const server = new BWSS(url);
+    server.on('connection', () => {});
+    const ws = new BWS(url);
+    const seen: unknown[] = [];
+    ws.addEventListener('message', (event) => seen.push((event as MessageEvent).data));
+    await new Promise<void>((resolve) =>
+      ws.addEventListener('open', () => resolve(), { once: true }),
+    );
+
+    const cid = (ws as unknown as { readonly cid: string }).cid;
+    const channel = new BroadcastChannel(channelNameFor(url));
+    channel.postMessage({
+      type: 'msg',
+      cid,
+      data: new Uint8Array([1]),
+      opcode: 0xa,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(seen).toEqual([]);
+
+    channel.close();
+    ws.close();
+    server.close();
+  });
+
+  it('BridgedWebSocketServer treats duplicate open frames for a cid as one connection', async () => {
+    const { WebSocketServer: BWSS } = createCrossRealmBridge();
+    const url = 'ws://playground/idempotent-open';
+    const server = new BWSS(url);
+    let connections = 0;
+    server.on('connection', () => {
+      connections++;
+    });
+    const channel = new BroadcastChannel(channelNameFor(url));
+    const acks: unknown[] = [];
+    channel.addEventListener('message', (event) => {
+      const frame = event.data as { type?: string };
+      if (frame.type === 'open-ack') acks.push(frame);
+    });
+
+    channel.postMessage({ type: 'open', cid: 'same-cid', protocols: ['chat'] });
+    channel.postMessage({ type: 'open', cid: 'same-cid', protocols: ['chat'] });
+    await waitFor(
+      () => acks.length >= 2,
+      () => `acks=${acks.length}`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(connections).toBe(1);
+
+    channel.close();
     server.close();
   });
 
@@ -401,6 +491,15 @@ async function raceCloseEvent(target: EventTarget): Promise<CloseEvent | null> {
     ),
     new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
   ]);
+}
+
+async function waitFor(predicate: () => boolean, describeState: () => string): Promise<void> {
+  const deadline = Date.now() + 1000;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`timed out waiting for condition: ${describeState()}`);
 }
 
 describe('clients expose bufferedAmount and honor binaryType', () => {

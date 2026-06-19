@@ -1,16 +1,16 @@
 ---
 area: net
-status: active
+status: blocked
 title: WebSocket permessage-deflate (RFC7692) — negotiate or honestly decline the client offer
 created: 2026-06-18
-why: a client `Sec-WebSocket-Extensions: permessage-deflate` offer is silently stripped at the bridge upgrade boundary, never reaching the guest ws-server — divergent only when the guest enables compression, but undocumented
-sources: [PR#42 ws-honesty-audit ws-client-deflate-offer-dropped-silently, RFC7692]
+why: full RFC7692 fidelity needs real deflate/inflate support; current bridge explicitly declines compression and compat marks it ❌ instead of silently claiming support
+sources: [PR#42 ws-honesty-audit ws-client-deflate-offer-dropped-silently, RFC7692, backlog/runtime-js/zlib-web-compression-subset]
 ---
 ## Context
-`server.ts acceptUpgradeOpenFrame` + `upgrade-socket.ts createWebSocketUpgradeHeaders` build the guest `IncomingMessage` headers without forwarding the client's `Sec-WebSocket-Extensions`; the bridge `open` frame does not carry it. With BOTH ends at default config this is byte-for-byte faithful (npm `ws` server defaults `perMessageDeflate: false` → negotiates nothing). It diverges only when the guest server sets `perMessageDeflate: true`: real Node compresses, rifty silently does not. The RSV1 guard in the frame parser is a loud backstop against stray compressed frames. There is currently NO mention of permessage-deflate in net source/CHANGELOG/ADR/compat — so the gap is silent-absence, not yet honest.
+`server.ts acceptUpgradeOpenFrame` + `upgrade-socket.ts createWebSocketUpgradeHeaders` intentionally do not forward the client's `Sec-WebSocket-Extensions` offer into the guest `IncomingMessage`. With both ends at default config this matches npm `ws` (`WebSocketServer` defaults `perMessageDeflate: false` → negotiates nothing). When guest code enables `perMessageDeflate: true`, real Node would negotiate RFC7692 and compress; rifty cannot honestly do that while `node:zlib` is still a loud stub and no RFC7692 codec exists in `@riftydev/net`. The RSV1 guard remains a loud protocol close for stray compressed frames, and `docs/public/compat/http.md` advertises the gap as ❌.
 
 ## Options / Next
-Either (a) forward the client extensions offer through the bridge and implement RFC7692 deflate, or (b) explicitly decline and document it. Minimum honest step: a compat ❌ row for permessage-deflate + this backlog. Full fidelity needs the deflate/inflate codec + negotiation.
+Unblock by landing either `runtime-js/zlib-web-compression-subset` with the raw deflate/inflate operations RFC7692 needs, or a zero-dependency RFC7692 codec local to `@riftydev/net`. Then forward the extension offer through the bridge, negotiate parameters, decompress RSV1 frames, compress outbound frames, and replace the compat ❌ with parity coverage. Until then the bridge declines compression; do not forward the offer without the codec, because that would negotiate an extension the frame path cannot decode.
 
 ## Reversibility
 REVERSIBLE — additive negotiation; the compat ❌ + backlog record is the immediate honesty fix.

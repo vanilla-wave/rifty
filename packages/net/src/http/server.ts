@@ -637,7 +637,7 @@ function openWebSocketClientUpgrade(opts: {
       return;
     }
     if (frame.type === 'msg' && opened && frame.data !== undefined) {
-      socket._receiveBridgeMessage(frame.data);
+      socket._receiveBridgeMessage(frame.data, frame.opcode);
       return;
     }
     if (frame.type === 'close' && frame.from === 'server') {

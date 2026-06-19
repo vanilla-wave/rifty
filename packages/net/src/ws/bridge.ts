@@ -30,6 +30,7 @@ interface BridgeFrame {
   type: 'open' | 'open-ack' | 'msg' | 'close';
   cid: string;
   data?: WsMessage;
+  opcode?: number;
   code?: number;
   reason?: string;
   from?: 'client' | 'server';
@@ -113,6 +114,15 @@ export class BridgedWebSocketServer extends EventEmitter {
   private onMessage = (e: MessageEvent): void => {
     const frame = e.data as BridgeFrame;
     if (frame.type === 'open') {
+      const existing = this.clients.get(frame.cid);
+      if (existing) {
+        this.channel.postMessage({
+          type: 'open-ack',
+          cid: frame.cid,
+          protocol: frame.protocols?.[0] ?? '',
+        });
+        return;
+      }
       const conn = new BridgedWebSocketConnection(frame.cid, (f) => this.channel.postMessage(f));
       this.clients.set(frame.cid, conn);
       this.channel.postMessage({
@@ -125,7 +135,9 @@ export class BridgedWebSocketServer extends EventEmitter {
     }
     if (frame.type === 'msg') {
       const conn = this.clients.get(frame.cid);
-      if (conn && frame.data !== undefined) conn.emit('message', frame.data);
+      if (conn && frame.data !== undefined && !isControlOpcode(frame.opcode)) {
+        conn.emit('message', frame.data);
+      }
       return;
     }
     if (frame.type === 'close' && frame.from === 'client') {
@@ -233,7 +245,12 @@ export class BridgedWebSocket extends EventTarget {
       this.dispatchEvent(new Event('open'));
       return;
     }
-    if (frame.type === 'msg' && this.readyState === State.OPEN && frame.data !== undefined) {
+    if (
+      frame.type === 'msg' &&
+      this.readyState === State.OPEN &&
+      frame.data !== undefined &&
+      !isControlOpcode(frame.opcode)
+    ) {
       this.dispatchEvent(
         new MessageEvent('message', {
           data: messageDataForBinaryType(frame.data, this.binaryType),
@@ -359,6 +376,10 @@ function normaliseProtocols(protocols: string | readonly string[] | undefined): 
 
 function isValidProtocolToken(protocol: string): boolean {
   return /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(protocol);
+}
+
+function isControlOpcode(opcode: number | undefined): boolean {
+  return opcode === 0x9 || opcode === 0xa;
 }
 
 function invalidStateError(message: string): Error {

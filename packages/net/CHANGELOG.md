@@ -26,6 +26,16 @@
 
 ### Fixed
 
+- **WebSocket upgrade fidelity backlog tightened.** Upgrade sockets now enforce a
+  100 MiB default `maxPayload` (configurable internally) and close 1009 on
+  oversized single frames or fragmented reassembly; malformed RFC6455 edges are
+  pinned (RSV, masking, invalid UTF-8, invalid close payload/code, oversized or
+  fragmented control frames, mid-fragment data). Local real `ws` clients can
+  `ping()` and receive the server's actual `pong()` across the bridge, while
+  browser-like clients ignore bridge control opcodes instead of surfacing them as
+  `message`. Duplicate bridge `open` frames for the same cid re-ack without
+  emitting a phantom second connection, and portless `wss://` default-443
+  discovery is regression-covered.
 - **`BridgedWebSocket` honors `binaryType`; `bufferedAmount` is present on every
   client.** The cross-realm `BridgedWebSocket` delivered binary frames raw
   (never Blob/ArrayBuffer per `binaryType`); it now coerces like the in-process

@@ -112,6 +112,63 @@ describe('real ws package under the rifty module loader', () => {
     for (const port of listPorts()) unregisterPort(port);
   });
 
+  it('round-trips a real ws client ping to a real ws server pong over the bridge', async () => {
+    await import('@riftydev/net/register-builtins');
+    const vfs = new MemoryFsSync();
+    seedInstalledWsPackage(vfs);
+    vfs.loadFixture({
+      '/workspace/guest.js': `
+        const http = require('node:http');
+        const WebSocket = require('ws');
+        const { WebSocketServer } = WebSocket;
+        let resolveResult;
+        let rejectResult;
+        const result = new Promise((resolve, reject) => {
+          resolveResult = resolve;
+          rejectResult = reject;
+        });
+        const server = http.createServer((_req, res) => res.end('http-ok'));
+        const wss = new WebSocketServer({ server, path: '/ws' });
+        let client;
+        let timer;
+        wss.on('connection', () => {});
+        server.listen({ port: 4114 }, () => {
+          client = new WebSocket('ws://localhost:4114/ws');
+          client.on('open', () => {
+            timer = setTimeout(() => rejectResult(new Error('pong timeout')), 300);
+            client.ping('probe');
+          });
+          client.on('pong', (data) => {
+            clearTimeout(timer);
+            resolveResult(Buffer.from(data).toString('utf8'));
+          });
+          client.on('error', rejectResult);
+        });
+        module.exports = {
+          result,
+          close() {
+            clearTimeout(timer);
+            if (client) client.terminate();
+            wss.close();
+            server.close();
+          }
+        };
+      `,
+    });
+    const loader = createModuleLoader(vfs, { cwd: '/workspace' });
+    const guest = loader.require('./guest.js', '/workspace/__entry.js') as {
+      result: Promise<string>;
+      close(): void;
+    };
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await expect(guest.result).resolves.toBe('probe');
+
+    guest.close();
+    for (const port of listPorts()) unregisterPort(port);
+  });
+
   it('concludes a graceful server close cleanly on the real ws client (no status -> 1005)', async () => {
     await import('@riftydev/net/register-builtins');
     const vfs = new MemoryFsSync();
