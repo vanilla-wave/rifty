@@ -28,7 +28,7 @@ import { dgram, dns, readline, tls, zlib, http2 } from './null-net-stubs.ts';
 import osModule from './os.ts';
 import pathModule from './path.ts';
 import perfHooksModule from './perf_hooks.ts';
-import { riftyProcess } from './process.ts';
+import { NodeProcess, riftyProcess } from './process.ts';
 import querystringModule from './querystring.ts';
 import streamModule, { streamConsumers } from './stream.ts';
 import stringDecoderModule from './string_decoder.ts';
@@ -76,9 +76,14 @@ export function ensureRuntimeJsBuiltinsRegistered(): void {
     return exports;
   });
   // `require('process')` returns the LIVE realm process (the spec-seeded one in a
-  // kernel child, ADR-0157) so it === globalThis.process, like Node. Falls back to
-  // the no-spec singleton before install / in the in-process harness.
-  registerBuiltin('process', () => (globalThis as { process?: unknown }).process ?? riftyProcess);
+  // kernel child, ADR-0157) so it === globalThis.process, like Node — but ONLY when
+  // that is a rifty NodeProcess. In the in-process harness / parity runner
+  // `globalThis.process` is the REAL Node process (wrong platform/arch), so fall
+  // back to the rifty no-spec singleton there.
+  registerBuiltin('process', () => {
+    const live = (globalThis as { process?: unknown }).process;
+    return live instanceof NodeProcess ? live : riftyProcess;
+  });
   registerBuiltin('timers', () => timersModule);
   registerBuiltin('timers/promises', () => timersPromises);
   registerBuiltin('fs', () => fsModule);
