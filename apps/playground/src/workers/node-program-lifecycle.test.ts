@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { type NodeLifecycleDeps, runNodeProgramLifecycle } from './node-program-lifecycle.ts';
+import {
+  type NodeLifecycleDeps,
+  normalizeExitCode,
+  runNodeProgramLifecycle,
+} from './node-program-lifecycle.ts';
 
 function deps(over: Partial<NodeLifecycleDeps> = {}): NodeLifecycleDeps {
   return {
@@ -8,6 +12,7 @@ function deps(over: Partial<NodeLifecycleDeps> = {}): NodeLifecycleDeps {
     awaitDrain: vi.fn(async () => {}),
     servePreview: vi.fn(() => () => {}),
     postListening: vi.fn(),
+    readExitCode: vi.fn(() => 0),
     exit: vi.fn(),
     ...over,
   };
@@ -56,5 +61,54 @@ describe('runNodeProgramLifecycle', () => {
     });
     await expect(runNodeProgramLifecycle(d)).rejects.toThrow('boom');
     expect(d.exit).not.toHaveBeenCalled();
+  });
+
+  // D3 (ADR-0157 review): a server that listen()s THEN throws must NOT post a
+  // preview slot — the throw short-circuits before listPorts/servePreview, so the
+  // owner never adds (and never has to clean up) a slot for a realm that died.
+  it('a listen()-then-throw never serves a preview or posts ports', async () => {
+    const d = deps({
+      listPorts: vi.fn(() => [3000]), // it DID listen…
+      runEntry: vi.fn(async () => {
+        throw new Error('late'); // …then threw
+      }),
+    });
+    await expect(runNodeProgramLifecycle(d)).rejects.toThrow('late');
+    expect(d.servePreview).not.toHaveBeenCalled();
+    expect(d.postListening).not.toHaveBeenCalled();
+    expect(d.exit).not.toHaveBeenCalled();
+  });
+
+  // D4 (ADR-0157 review): natural exit honours process.exitCode (Node parity).
+  it('natural exit exits with process.exitCode, not a hardcoded 0', async () => {
+    const d = deps({ readExitCode: vi.fn(() => 7) });
+    await runNodeProgramLifecycle(d);
+    expect(d.awaitDrain).toHaveBeenCalledOnce();
+    expect(d.exit).toHaveBeenCalledWith(7);
+  });
+
+  it('a listened server ignores process.exitCode (stays alive, no exit)', async () => {
+    const d = deps({ listPorts: vi.fn(() => [3000]), readExitCode: vi.fn(() => 7) });
+    await runNodeProgramLifecycle(d);
+    expect(d.exit).not.toHaveBeenCalled();
+  });
+});
+
+describe('normalizeExitCode (Node uint8 coercion)', () => {
+  it('passes through an in-range integer', () => {
+    expect(normalizeExitCode(7)).toBe(7);
+    expect(normalizeExitCode(0)).toBe(0);
+    expect(normalizeExitCode(255)).toBe(255);
+  });
+  it('wraps out-of-range integers to 8 bits like Node', () => {
+    expect(normalizeExitCode(256)).toBe(0);
+    expect(normalizeExitCode(257)).toBe(1);
+    expect(normalizeExitCode(-1)).toBe(255);
+  });
+  it('treats undefined / non-numbers / NaN as 0', () => {
+    expect(normalizeExitCode(undefined)).toBe(0);
+    expect(normalizeExitCode('7')).toBe(0);
+    expect(normalizeExitCode(Number.NaN)).toBe(0);
+    expect(normalizeExitCode(null)).toBe(0);
   });
 });
