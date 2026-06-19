@@ -25,6 +25,14 @@ const hostClearInterval = globalThis.clearInterval.bind(globalThis);
 
 let nextTimerId = 1;
 
+// primitiveId -> handle, so `clearTimeout(Number(handle))` resolves the live
+// handle the way Node does (its Timeout exposes a [Symbol.toPrimitive] id that
+// clear* honors). Without this, a coerced numeric id would miss the `instanceof`
+// branch and be forwarded to the host clear as an unrelated integer — a no-op
+// clear + a leaked keepalive ref (and a possible cross-clear of a host timer
+// whose id collides). One-shot timeouts deregister on fire; intervals on clear.
+const handlesById = new Map<number, KeepaliveTimerHandle>();
+
 class KeepaliveTimerHandle {
   private active = true;
   private refed = true;
@@ -35,11 +43,13 @@ class KeepaliveTimerHandle {
     private readonly clearRaw: HostTimerClear,
   ) {
     keepaliveRef();
+    handlesById.set(this.primitiveId, this);
   }
 
   fireTimeout(): boolean {
     if (!this.active) return false;
     this.active = false;
+    handlesById.delete(this.primitiveId);
     if (this.refed) keepaliveUnref();
     return true;
   }
@@ -53,6 +63,7 @@ class KeepaliveTimerHandle {
       this.active = false;
       if (this.refed) keepaliveUnref();
     }
+    handlesById.delete(this.primitiveId);
     this.clearRaw(this.raw);
   }
 
@@ -105,9 +116,17 @@ export function setTimeout(
   return handle;
 }
 
+/** Resolve a clear* argument (handle object OR coerced numeric id) to its handle. */
+function resolveHandle(handle: unknown): KeepaliveTimerHandle | undefined {
+  if (handle instanceof KeepaliveTimerHandle) return handle;
+  if (typeof handle === 'number') return handlesById.get(handle);
+  return undefined;
+}
+
 export function clearTimeout(handle: unknown): void {
-  if (handle instanceof KeepaliveTimerHandle) {
-    handle.clear();
+  const tracked = resolveHandle(handle);
+  if (tracked) {
+    tracked.clear();
     return;
   }
   hostClearTimeout(handle as HostTimeout);
@@ -133,8 +152,9 @@ export function setInterval(
 }
 
 export function clearInterval(handle: unknown): void {
-  if (handle instanceof KeepaliveTimerHandle) {
-    handle.clear();
+  const tracked = resolveHandle(handle);
+  if (tracked) {
+    tracked.clear();
     return;
   }
   hostClearInterval(handle as HostInterval);
@@ -289,10 +309,12 @@ async function* setIntervalPromise<T = void>(
   value?: T,
   options: TimerPromiseOptions = {},
 ): AsyncGenerator<T> {
-  const { signal } = options;
+  // Forward `ref` so `{ref:false}` opts the between-iterations timer out of
+  // keepalive (Node parity); `signal` aborts the iterator.
+  const { signal, ref } = options;
   while (true) {
     if (signal?.aborted) throw abortError(signal);
-    await setTimeoutPromise(delay, undefined, { signal });
+    await setTimeoutPromise(delay, undefined, { signal, ref });
     yield value as T;
   }
 }

@@ -11,7 +11,7 @@ code: [packages/vfs/src/memory.ts, packages/vfs/src/opfs.ts]
 
 ## Context
 
-MemoryVfs.openReadable's pull() synchronously controller.enqueue(...) with no await on writer.ready/drain — a slow consumer can only pause within the ReadableStream's internal queue, not via real flow control. ADR-0020 names the follow-up verbatim ('reader currently pulls eagerly; follow-up wraps the read loop in await writer.ready'). Scope is the MEMORY backend only: OpfsVfs.openReadable returns slice.stream() (real File.stream() backpressure). Second half is the missing 50 MiB heap-delta regression benchmark (ADR-0020) — none exists in packages/ or tools/. Today only a structural conformance test (>=4 data events on a 256 KiB file) guards regressions. No vfs backlog item covers openReadable/streaming-read.
+MemoryVfs.openReadable's pull() synchronously controller.enqueue(...) with no await on writer.ready/drain — a slow consumer can only pause within the ReadableStream's internal queue, not via real flow control. ADR-0020 names the follow-up verbatim ('reader currently pulls eagerly; follow-up wraps the read loop in await writer.ready'). Scope is the MEMORY backend only: OpfsVfs.openReadable returns a chunked `File.slice(...).arrayBuffer()` stream (no `File.stream()`; PR #56) — same eager-pull shape, so the same backpressure follow-up applies to it too. Second half is the missing 50 MiB heap-delta regression benchmark (ADR-0020) — none exists in packages/ or tools/. Today only a structural conformance test (>=4 data events on a 256 KiB file) guards regressions. No vfs backlog item covers openReadable/streaming-read.
 
 ## Options or Next
 

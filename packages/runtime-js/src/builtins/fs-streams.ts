@@ -39,6 +39,10 @@ class FileReadStream extends EventEmitter {
 
   private start(): void {
     const hwm = this.opts.highWaterMark ?? 64 * 1024;
+    // Node's `createReadStream` byte range is INCLUSIVE of `end`; the half-open
+    // `Vfs.openReadable` / sync-slice surfaces are exclusive — convert here so the
+    // last byte is delivered (parity: {start,end} reads end-start+1 bytes).
+    const exclusiveEnd = this.opts.end !== undefined ? this.opts.end + 1 : undefined;
     const emitChunkBytes = (bytes: Uint8Array): void => {
       const chunk = this.opts.encoding
         ? (Buffer.from(bytes) as Uint8Array & { toString(e?: string): string }).toString(
@@ -53,7 +57,7 @@ class FileReadStream extends EventEmitter {
     const emitFromBytes = (data: Uint8Array): void => {
       if (this.destroyed) return;
       const start = this.opts.start ?? 0;
-      const end = Math.min(this.opts.end ?? data.length, data.length);
+      const end = Math.min(exclusiveEnd ?? data.length, data.length);
       let i = start;
       const emitChunk = (): void => {
         if (this.destroyed) return;
@@ -77,7 +81,7 @@ class FileReadStream extends EventEmitter {
         .openReadable(this.path, {
           chunkSize: hwm,
           start: this.opts.start,
-          end: this.opts.end,
+          end: exclusiveEnd,
         })
         .then(async (stream) => {
           if (this.destroyed) {

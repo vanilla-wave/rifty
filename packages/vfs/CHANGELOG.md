@@ -12,7 +12,13 @@
 - **`OpfsVfs.openReadable` no longer depends on `File.stream()`.** It now serves a
   chunked `ReadableStream` by pulling `File.slice(...).arrayBuffer()` ranges, preserving
   `start`/`end` and `chunkSize` while avoiding the worker/cross-realm stall that forced
-  runtime-js `createReadStream` to prefer the sync content cache.
+  runtime-js `createReadStream` to prefer the sync content cache. The chunking logic is
+  extracted to an exported `chunkedFileStream(blob, opts)` helper now covered by unit tests
+  (chunk boundaries, half-open `[start, end)` window, end-clamp, empty range) — OPFS itself is
+  Node-untestable, but the helper runs head-to-head on a `Blob`. `end` is clamped to the blob
+  size (`Math.min`), matching `MemoryVfs`/`SyncMirrorVfs`, so an out-of-range `end` no longer
+  enqueues trailing empty chunks. The `Vfs.openReadable` window is documented as half-open
+  `[start, end)` (the Node-inclusive `createReadStream` `end` is converted in runtime-js).
 
 - **`OpfsFsSync.flush()` now drains directory-shape persistence, not just file writes/deletes.**
   `mkdirSync` directory creation is tracked in the pending queue, so a flush boundary awaits the

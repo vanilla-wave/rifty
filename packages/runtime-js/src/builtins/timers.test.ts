@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { activeRefs, resetKeepalive } from '../internal/event-loop-keepalive.ts';
-import { timers, clearImmediate, installTimerGlobals, setImmediate } from './timers.ts';
+import {
+  timers,
+  clearImmediate,
+  installTimerGlobals,
+  setImmediate,
+  timersPromises,
+} from './timers.ts';
 
 afterEach(() => resetKeepalive());
 
@@ -103,5 +109,37 @@ describe('timers keepalive refcount', () => {
     expect(activeRefs()).toBe(1);
     timers.clearTimeout(handle);
     expect(activeRefs()).toBe(0);
+  });
+
+  it('clearTimeout honors the numeric primitive id (Node accepts the coerced id)', () => {
+    const handle = timers.setTimeout(() => {}, 1000);
+    expect(activeRefs()).toBe(1);
+    timers.clearTimeout(Number(handle));
+    expect(activeRefs()).toBe(0);
+  });
+
+  it('clearInterval honors the numeric primitive id (clears + releases keepalive)', () => {
+    const handle = timers.setInterval(() => {}, 1000);
+    expect(activeRefs()).toBe(1);
+    timers.clearInterval(Number(handle));
+    expect(activeRefs()).toBe(0);
+  });
+
+  it('timers/promises setInterval honors {ref:false} (between-iterations timer uncounted)', () => {
+    const ac = new AbortController();
+    const iter = timersPromises.setInterval(1000, undefined, { ref: false, signal: ac.signal });
+    const pending = iter.next();
+    expect(activeRefs()).toBe(0);
+    ac.abort();
+    return pending.catch(() => {});
+  });
+
+  it('timers/promises setInterval is keepalive-counted by default', () => {
+    const ac = new AbortController();
+    const iter = timersPromises.setInterval(1000, undefined, { signal: ac.signal });
+    const pending = iter.next();
+    expect(activeRefs()).toBe(1);
+    ac.abort();
+    return pending.catch(() => {});
   });
 });

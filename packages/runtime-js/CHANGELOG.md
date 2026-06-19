@@ -14,6 +14,26 @@
 
 ### Fixed
 
+- **`clearTimeout`/`clearInterval` honor the numeric primitive id (Node parity).** A timer handle
+  exposes a `[Symbol.toPrimitive]` id; Node's `clear*` accept that coerced number. The handles are
+  now tracked in a `primitiveId → handle` registry so `clearInterval(Number(handle))` resolves the
+  live handle — previously it missed the `instanceof` branch, forwarding the id to the host clear as
+  an unrelated integer (no-op clear + leaked keepalive ref + possible cross-clear of a host timer).
+  One-shot timeouts deregister on fire, intervals on clear. Parity case `timers/clear-by-primitive-id`.
+
+- **`node:timers/promises` `setInterval` honors `{ ref: false }`.** The between-iterations timer was
+  armed without forwarding `ref`, so an explicitly-unrefed async-iterator interval still held a
+  run-to-completion child alive; the option now threads through to the keepalive handle (Node parity).
+
+- **`fs.watch`/`fs.watchFile` `FSWatcher.ref()`/`.unref()` are no longer no-op stubs.** They delegate
+  to the poll `setInterval`'s keepalive handle, so an unrefed active watcher no longer pins the realm
+  to the drain cap (Node parity).
+
+- **`fs.createReadStream` byte range `end` is INCLUSIVE (Node parity).** `{ start, end }` now reads
+  `end - start + 1` bytes — the Node-inclusive `end` is converted to the half-open `[start, end)`
+  `Vfs.openReadable` / sync-slice window at the `createReadStream` boundary (`+1`). Previously the last
+  byte was dropped. Parity case `fs/createreadstream-byte-range`; conformance corrected to the Node value.
+
 - **Timer handles honor `.unref()` / `.ref()` / `.hasRef()` in the keepalive model.**
   `setTimeout`/`setInterval` now return Node-shape handles whose ref state drives the child-realm
   active-handle count; `node:timers` exports the same wrappers as the installed globals, closing the
