@@ -18,7 +18,14 @@
  */
 
 import { Buffer, EventEmitter, NotImplementedError } from '@riftydev/io';
-import { dispatchToPort, getHandler, registerPort, unregisterPort } from '../registry.ts';
+import {
+  addrInUseError,
+  dispatchToPort,
+  getHandler,
+  isPortBound,
+  registerPort,
+  unregisterPort,
+} from '../registry.ts';
 import { channelNameFor, portChannelNameFor, portChannelNameForPort } from '../ws/channel.ts';
 import type { WsMessage } from '../ws/in-process.ts';
 import { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
@@ -85,6 +92,13 @@ export class HttpServer extends EventEmitter {
     const callback = (typeof hostnameOrCb === 'function' ? hostnameOrCb : cb) as
       | (() => void)
       | undefined;
+    // Port already bound in this realm → Node emits an async `'error'` EADDRINUSE
+    // (NOT a sync throw): the server is returned, `'listening'` never fires, and an
+    // unhandled `'error'` on an EventEmitter throws (faithful, ADR-0157 review C3).
+    if (isPortBound(port)) {
+      queueMicrotask(() => this.emit('error', addrInUseError('127.0.0.1', port)));
+      return this;
+    }
     this.port = port;
     registerPort(port, (request) => {
       if (isWebSocketUpgradeRequest(request)) {

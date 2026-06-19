@@ -100,6 +100,10 @@
 - **`.bin`/`execSync` children now get `Buffer` + `process.nextTick` ordering** (ADR-0157) — the
   else-branch previously skipped `installRuntimeGlobals`, so a `.bin` tool using `Buffer` threw
   ReferenceError and `process.nextTick` threw TypeError; the gated rich pre-entry install closes the gap.
+- **A `node` server that picks the live dev-server port no longer deletes the shared preview route**
+  (ADR-0157 review C3). `preview-registry` dedups by port (dev slot wins) and `App.tsx` never wires a
+  second SW bridge for the active dev port — previously both the `onDevServer` and node-port paths
+  registered the same `/preview/<port>/`, and a teardown of either dropped the other's route (502).
 - **From-scratch preset boots clean over a prior preset's tree — no more EBROKENLOCK** (ADR-0135).
   Selecting a from-scratch vite preset (`real-vite`) after an instant one (`project-files` /
   `node-worker`) installed over the instant preset's baked-snapshot tree: its `package-lock.json`

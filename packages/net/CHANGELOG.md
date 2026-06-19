@@ -122,6 +122,15 @@
 
 ### Added
 
+- **Loud `EADDRINUSE` on a double `listen()` (ADR-0157 review C3).** `registry.ts`
+  gains `isPortBound(port)` + `addrInUseError(address, port)` (libuv-shaped: `code:
+  'EADDRINUSE'`, `errno: -98`, `syscall: 'listen'`, `address`, `port`). `http.Server.listen`
+  and `net.Server.listen` now emit an asynchronous `'error'` `EADDRINUSE` when the port
+  is already bound in the realm (server NOT bound, `'listening'` never fires) — Node-faithful,
+  replacing the prior SILENT registry overwrite. The registry is realm-local, so this catches
+  an intra-realm double-listen; the cross-realm dev-server-vs-`node`-server same-port clash is
+  deduped owner-side in `preview-registry` (playground). `registerPort` itself stays an
+  idempotent overwrite (the page preview bridge relies on it).
 - **`node:http.STATUS_CODES`** — the standard status-code → reason-phrase map
   (faithful copy of Node v24). Real packages read `STATUS_CODES[code]` to format
   messages; opencode's provider error path (`provider/error.ts`) does

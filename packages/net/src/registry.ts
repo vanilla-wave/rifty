@@ -33,6 +33,29 @@ export function getHandler(port: number): PortHandler | null {
   return handlers.get(port) ?? null;
 }
 
+/** Is a server already listening on `port` in THIS realm? (occupancy check) */
+export function isPortBound(port: number): boolean {
+  return handlers.has(port);
+}
+
+/**
+ * libuv-shaped `EADDRINUSE` for a double `listen()` on an already-bound port —
+ * mirrors the `connect ECONNREFUSED` precedent (`http/server.ts`). errno is the
+ * NEGATIVE libuv code (`-os.constants.errno.EADDRINUSE` = -98); hardcoded because
+ * `@riftydev/net` is below runtime-js and cannot import `node:os`. Real Node
+ * emits this as an asynchronous `'error'` event (NOT a sync throw), so callers
+ * surface it via `emit('error', …)` and return the server.
+ */
+export function addrInUseError(address: string, port: number): Error {
+  return Object.assign(new Error(`listen EADDRINUSE: address already in use ${address}:${port}`), {
+    code: 'EADDRINUSE',
+    errno: -98,
+    syscall: 'listen',
+    address,
+    port,
+  });
+}
+
 export function listPorts(): number[] {
   return [...handlers.keys()].sort((a, b) => a - b);
 }
