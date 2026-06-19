@@ -9,3 +9,4 @@ Especially interested in:
 - Completeness of the implementation and absence of deferred/unresolved tasks
 - Conformance to the project goal and architecture
 - Absence of bugs
+- No regressions to existing functionality
