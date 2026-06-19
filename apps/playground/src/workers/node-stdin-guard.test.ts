@@ -35,6 +35,7 @@ interface LoudStdin {
   once(event: string, cb: () => void): unknown;
   addListener(event: string, cb: () => void): unknown;
   prependListener(event: string, cb: () => void): unknown;
+  prependOnceListener(event: string, cb: () => void): unknown;
   read(): unknown;
   resume(): unknown;
   pause(): unknown;
@@ -49,11 +50,13 @@ describe('installLoudStdin (real seeded process.stdin)', () => {
     const proc = realSeededProcess();
     installLoudStdin(proc);
     const s = proc.stdin as LoudStdin;
-    // data-listener-add
+    // consume-event listener-add: BOTH 'data' and 'readable' (the pull idiom).
     expect(() => s.on('data', () => {})).toThrow(NotImplementedError);
+    expect(() => s.on('readable', () => {})).toThrow(NotImplementedError);
     expect(() => s.once('data', () => {})).toThrow(NotImplementedError);
     expect(() => s.addListener('data', () => {})).toThrow(NotImplementedError);
     expect(() => s.prependListener('data', () => {})).toThrow(NotImplementedError);
+    expect(() => s.prependOnceListener('readable', () => {})).toThrow(NotImplementedError);
     // readable
     expect(() => s.read()).toThrow(/process\.stdin/);
     expect(() => s.pipe({})).toThrow(NotImplementedError);
@@ -61,17 +64,19 @@ describe('installLoudStdin (real seeded process.stdin)', () => {
     // flow/encoding controls that the real reader implements as working no-ops
     // (former silent-success surface): MUST be loud too.
     expect(() => s.resume()).toThrow(NotImplementedError);
-    expect(() => s.pause()).toThrow(NotImplementedError);
     expect(() => s.setEncoding('utf8')).toThrow(NotImplementedError);
     expect(() => s.setRawMode(true)).toThrow(NotImplementedError);
   });
 
-  it('keeps non-data listeners + passive isTTY safe', () => {
+  it('keeps non-consume listeners, passive isTTY, and a defensive pause() safe', () => {
     const proc = realSeededProcess();
     installLoudStdin(proc);
     const s = proc.stdin as LoudStdin;
     // 'end'/'close' etc. must still register (the reader's own end-handler relies on it).
     expect(() => s.on('end', () => {})).not.toThrow();
     expect(s.isTTY).toBe(false);
+    // pause() on an unread stream is a Node no-op a non-reading CLI uses to exit —
+    // must NOT throw (else it kills a legit program that never reads stdin).
+    expect(() => s.pause()).not.toThrow();
   });
 });

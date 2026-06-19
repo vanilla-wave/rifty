@@ -105,9 +105,12 @@ describe('normalizeExitCode (Node uint8 coercion)', () => {
     expect(normalizeExitCode(257)).toBe(1);
     expect(normalizeExitCode(-1)).toBe(255);
   });
-  it('treats undefined / non-numbers / NaN as 0', () => {
+  // normalizeExitCode is ONLY the final uint8 wrap — Node's string coercion +
+  // loud validation lives in the process.exitCode SETTER (see install-process-gate
+  // test). A raw non-number here is a defensive default to 0, NOT a parity claim
+  // that this function coerces strings (the setter turns '7' into 7 first).
+  it('defensively defaults a non-number to 0 (strings are coerced by the setter, not here)', () => {
     expect(normalizeExitCode(undefined)).toBe(0);
-    expect(normalizeExitCode('7')).toBe(0);
     expect(normalizeExitCode(Number.NaN)).toBe(0);
     expect(normalizeExitCode(null)).toBe(0);
   });

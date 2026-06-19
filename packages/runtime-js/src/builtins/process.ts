@@ -105,14 +105,17 @@ function encodeChunk(chunk: string | Uint8Array): Uint8Array {
 }
 
 /** Spec stdout/stderr writer: postMessage bytes to the child's stdio port. */
-function makeStdioWriter(port: MessagePort): {
+function makeStdioWriter(
+  port: MessagePort,
+  fd: number,
+): {
   write(chunk: string | Uint8Array): boolean;
   isTTY: boolean;
   fd: number;
 } {
   return {
     isTTY: false,
-    fd: 1,
+    fd,
     write(chunk) {
       const bytes = encodeChunk(chunk);
       // Transfer the buffer only when we own it (TextEncoder output). A passed-in
@@ -212,6 +215,40 @@ function makeStdinReader(port?: MessagePort): {
   return { stdin, push };
 }
 
+/** Wrap an exit code to Node's unsigned 8-bit range (e.g. 257 → 1, -1 → 255). */
+export function toUint8ExitCode(n: number): number {
+  return ((Math.trunc(n) % 256) + 256) % 256;
+}
+
+/**
+ * Node's `process.exitCode`/`process.exit(code)` coercion contract: a numeric
+ * string coerces to its number; a non-integer number or a non-coercible value
+ * throws LOUDLY (Fidelity — never silently swallow an invalid exit code, which is
+ * what real Node does at the setter). undefined/null reset to 0.
+ */
+export function coerceExitCode(v: unknown): number {
+  if (v === undefined || v === null) return 0;
+  if (typeof v === 'number') {
+    if (Number.isInteger(v)) return v;
+    throw Object.assign(
+      new RangeError(`The value of "code" is out of range. It must be an integer. Received ${v}`),
+      { code: 'ERR_OUT_OF_RANGE' },
+    );
+  }
+  if (typeof v === 'string') {
+    const n = Number(v);
+    if (v.trim() !== '' && Number.isInteger(n)) return n;
+    throw Object.assign(
+      new RangeError(`The value of "code" is out of range. It must be an integer. Received '${v}'`),
+      { code: 'ERR_OUT_OF_RANGE' },
+    );
+  }
+  throw Object.assign(
+    new TypeError(`The "code" argument must be of type number or string. Received ${typeof v}`),
+    { code: 'ERR_INVALID_ARG_TYPE' },
+  );
+}
+
 /**
  * The unified Node `process`. `instanceof EventEmitter` holds so user code doing
  * `process instanceof require('events')` keeps working.
@@ -232,7 +269,15 @@ export class NodeProcess extends EventEmitter {
   readonly versions: Record<string, string> = { ...NODE_PROCESS_IDENTITY.versions };
   readonly title = NODE_PROCESS_IDENTITY.title;
   env: Record<string, string | undefined>;
-  exitCode = 0;
+  // Node-faithful: assigning an invalid exit code throws at the SETTER (loud),
+  // a numeric string coerces; reads return the validated integer.
+  #exitCode = 0;
+  get exitCode(): number {
+    return this.#exitCode;
+  }
+  set exitCode(v: unknown) {
+    this.#exitCode = coerceExitCode(v);
+  }
   stdout: { write(chunk: string | Uint8Array): boolean; isTTY?: boolean; fd?: number };
   stderr: { write(chunk: string | Uint8Array): boolean; isTTY?: boolean; fd?: number };
   stdin: NodeStdin;
@@ -259,8 +304,8 @@ export class NodeProcess extends EventEmitter {
       // Readonly spec (the kernel threads spec.env by reference).
       this.env = { ...spec.env };
       currentCwd = spec.cwd;
-      this.stdout = makeStdioWriter(spec.stdio.stdout);
-      this.stderr = makeStdioWriter(spec.stdio.stderr);
+      this.stdout = makeStdioWriter(spec.stdio.stdout, 1);
+      this.stderr = makeStdioWriter(spec.stdio.stderr, 2);
       const reader = makeStdinReader(spec.stdio.stdin);
       this.stdin = reader.stdin;
       this.#stdinPush = reader.push;
@@ -337,11 +382,12 @@ export class NodeProcess extends EventEmitter {
     return performance.now() / 1000;
   }
 
-  exit(code = 0): never {
-    this.exitCode = code;
-    throw Object.assign(new Error(`process.exit(${code})`), {
+  exit(code: unknown = 0): never {
+    const c = coerceExitCode(code); // coerce string / throw on invalid (Node parity)
+    this.#exitCode = c;
+    throw Object.assign(new Error(`process.exit(${c})`), {
       code: 'RIFTY_PROCESS_EXIT',
-      exitCode: code,
+      exitCode: toUint8ExitCode(c), // OS-style uint8 wrap (process.exit(257) → 1)
     });
   }
 

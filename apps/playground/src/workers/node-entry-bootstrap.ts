@@ -110,4 +110,9 @@ if (proc.env.RIFTY_NODE_SERVE === '1') {
     cwd: proc.cwd(),
     bin: proc.env.RIFTY_BIN === '1',
   });
+  // Honor process.exitCode on a clean return (Node parity, ADR-0157 D4): the kernel
+  // reaps a no-throw return as exit 0, so a `.bin`/execSync CLI that set a non-zero
+  // process.exitCode must surface it (proc.exit throws RIFTY_PROCESS_EXIT → kernel
+  // maps the code). exitCode 0 stays a clean exit 0.
+  if (proc.exitCode) proc.exit(proc.exitCode);
 }

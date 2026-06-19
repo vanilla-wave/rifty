@@ -394,14 +394,15 @@ async function bootShellOwner(opts: {
 async function bootstrap(): Promise<void> {
   // Defaults match the page-realm path so non-overriding callers behave the same.
   // Read the spawn env from the kernel's PUBLISHED process spec — NOT
-  // `globalThis.process.env`. In the PROD bundle a stray top-level
-  // `installProcessGlobals()` side-effect (runtime-js/worker-entry, pulled into the
-  // owner chunk + evaluated at module-eval) swaps `globalThis.process` for a fresh
-  // EMPTY-env one BEFORE this runs, so process.env reads undefined and the worker
-  // URLs (no default) make the owner throw — green dev e2e, dead deploy. The kernel
-  // spec lives on a dedicated non-enumerable global the swap can't touch (the
-  // canonical source `installNodeProcessShim` itself reads). A copy is mutable +
-  // re-asserted onto the live process after `initBackend` for downstream readers.
+  // `globalThis.process.env`. Historically a stray top-level `installProcessGlobals()`
+  // (runtime-js/worker-entry, pulled into the owner chunk + evaluated at module-eval)
+  // could swap `globalThis.process` for a fresh EMPTY-env one, blanking process.env.
+  // ADR-0157 made `installProcessGlobals` idempotent (it no-ops when globalThis.process
+  // is already a NodeProcess — which the pre-entry seam installed BEFORE this entry is
+  // imported), so the clobber can no longer happen. These reads + the re-assert after
+  // `initBackend` are RETAINED as belt-and-suspenders only because the chunk-graph leak
+  // ROOT is still open; the kernel spec is the canonical source on a non-enumerable
+  // global the swap could never touch.
   // TODO(backlog: runtime-js/worker-entry-process-globals-side-effect)
   const env = { ...(readKernelProcessSpec()?.env ?? globalThis.process.env) };
   const port = Number.parseInt(env.RIFTY_RFV_PORT ?? '5174', 10);

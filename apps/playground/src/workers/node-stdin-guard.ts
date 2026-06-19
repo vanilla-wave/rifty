@@ -14,11 +14,17 @@
  * (+ `backlog/terminal/raw-stdin-deferred-items` for setRawMode/raw-mode).
  *
  * Throwers cover the FULL consume surface so nothing silently no-ops then hangs:
- * data-listener-add (on/once/addListener/prependListener/prependOnceListener — only
- * for the `'data'` event, so `'end'`/`'close'`/defensive listeners stay live),
- * read/pipe/[Symbol.asyncIterator], and the flow/encoding controls resume/pause/
- * setEncoding/setRawMode (which the real reader implements as working no-ops/flushers
- * — they would otherwise APPEAR to work). Passive `isTTY`/`fd`/`readable` stay safe.
+ * data-listener-add (on/once/addListener/prependListener/prependOnceListener — for
+ * the `'data'` AND `'readable'` events, the two consume idioms; `'end'`/`'close'`/
+ * defensive listeners stay live), read/pipe/[Symbol.asyncIterator], and the
+ * flow/encoding controls resume/setEncoding/setRawMode (the real reader implements
+ * them as working no-ops/flushers — they would otherwise APPEAR to work).
+ *
+ * `pause()` is deliberately NOT loud: in Node `process.stdin` starts paused and a
+ * defensive `process.stdin.pause()` on an unread stream is a no-op that lets the
+ * process exit — a common CLI idiom; throwing there would kill a legit non-reading
+ * program (the real reader's pause is already a no-op, so we leave it). Passive
+ * `isTTY`/`fd`/`readable` (property) stay safe.
  */
 import { NotImplementedError } from '@riftydev/vfs';
 
@@ -42,7 +48,12 @@ const LISTENER_ADD = [
   'prependOnceListener',
 ] as const;
 
-const ALWAYS_LOUD = ['read', 'pipe', 'resume', 'pause', 'setEncoding', 'setRawMode'] as const;
+// Note: 'pause' is intentionally absent — a defensive pause() on an unread stream
+// is a Node no-op that lets a non-reading program exit (see header).
+const ALWAYS_LOUD = ['read', 'pipe', 'resume', 'setEncoding', 'setRawMode'] as const;
+// The two stdin CONSUME events: registering either implies the program will block
+// on input that never arrives, so the listener-add must throw loudly.
+const CONSUME_EVENTS = new Set(['data', 'readable']);
 
 export function installLoudStdin(proc: ProcessWithStdin): void {
   const loud = (): never => {
@@ -68,14 +79,14 @@ export function installLoudStdin(proc: ProcessWithStdin): void {
     return;
   }
 
-  // Listener-add methods: throw only for the consume event `'data'`; delegate other
-  // events to the original so `'end'`/`'close'`/`'error'` listeners keep working.
+  // Listener-add methods: throw for the consume events `'data'`/`'readable'`;
+  // delegate other events so `'end'`/`'close'`/`'error'` listeners keep working.
   for (const method of LISTENER_ADD) {
     const orig = stdin[method];
     if (typeof orig !== 'function') continue;
     const bound = orig.bind(stdin);
     stdin[method] = (event: string, ...args: unknown[]): unknown => {
-      if (event === 'data') return loud();
+      if (CONSUME_EVENTS.has(event)) return loud();
       return bound(event, ...(args as [(...a: unknown[]) => void]));
     };
   }

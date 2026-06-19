@@ -34,8 +34,8 @@ function pathToString(p: PathLike): string {
 
 /**
  * Resolve a user-facing fs path: relative names anchor at the runtime's cwd
- * (process.cwd(), default '/'); absolute paths are normalised directly. The
- * syncMirror always sees absolute paths.
+ * (process.cwd(), default '/workspace'); absolute paths are normalised directly.
+ * The syncMirror always sees absolute paths.
  */
 function resolvePath(p: PathLike): string {
   const str = pathToString(p);

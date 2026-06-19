@@ -151,10 +151,17 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('Stop the dev server to archive the editable workspace');
   });
 
-  it('shows the preview pane while Vite is starting but opens tabs only once running', () => {
-    expect(source).toContain("const hasPreview = (): boolean => devServerStatus() !== 'stopped'");
+  it('mounts the preview for a node-only port (dev stopped) + un-gates previewUrl (ADR-0157 C1)', () => {
+    // C1: hasPreview ORs the node-server port set, so `node server.js` shows a
+    // preview even with the dev server stopped.
     expect(source).toContain(
-      'const previewUrl = (port = machine.realVitePort()): string | undefined',
+      "const hasPreview = (): boolean => devServerStatus() !== 'stopped' || previewPorts().length > 0;",
+    );
+    // C1: previewUrl is membership-gated (any registered preview port), not gated on
+    // devServerRunning() — so a node-only "open in new tab" no longer silently no-ops.
+    expect(source).toContain('previewPorts().some((p) => p.port === port)');
+    expect(source).toContain(
+      'const previewUrl = (port = machine.realVitePort()): string | undefined =>',
     );
   });
 
