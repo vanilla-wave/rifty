@@ -325,8 +325,9 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     });
     await expect(editorArea).toHaveAttribute('data-preview', 'on', { timeout: 30_000 });
 
-    // And "open in new tab" / the iframe route works for the node-only preview
-    // (the C1 change also un-gated previewUrl from devServerRunning).
+    // The SW `/preview/<port>/` route — what the iframe loads and "open in new tab"
+    // opens — resolves for a node-only port (dev stopped). (The previewUrl/openPreviewTab
+    // un-gating itself is unit-pinned in App.test.ts; this asserts the live route.)
     const fetchOnly = async (): Promise<string> =>
       page.evaluate(async () => {
         const ac = new AbortController();

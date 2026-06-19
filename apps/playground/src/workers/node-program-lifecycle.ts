@@ -18,9 +18,12 @@ function exitCodeOf(err: unknown): number | null {
 }
 
 /**
- * Coerce `process.exitCode` to an exit code like Node: a finite number truncated
- * to an unsigned 8-bit value; anything else → 0. So a clean `return` after
- * `process.exitCode = 7` exits 7 (ADR-0157 review D4), not the old hardcoded 0.
+ * Uint8-wrap a (validated) exit code to Node's 0–255 range; a non-number defaults
+ * to 0 defensively. So a clean `return` after `process.exitCode = 7` exits 7
+ * (ADR-0157 review D4), not the old hardcoded 0. NOTE: Node's string-coercion +
+ * loud validation of an invalid exit code lives in the `process.exitCode` SETTER
+ * (builtins/process.ts `coerceExitCode`); by the time a value reaches here it is
+ * already a validated integer — this is only the final uint8 wrap.
  */
 export function normalizeExitCode(v: unknown): number {
   if (typeof v !== 'number' || !Number.isFinite(v)) return 0;

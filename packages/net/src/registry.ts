@@ -45,6 +45,12 @@ export function isPortBound(port: number): boolean {
  * `@riftydev/net` is below runtime-js and cannot import `node:os`. Real Node
  * emits this as an asynchronous `'error'` event (NOT a sync throw), so callers
  * surface it via `emit('error', …)` and return the server.
+ *
+ * DELIBERATE divergence: rifty is loopback-only (host is ignored, see `request.ts`),
+ * so this always reports `address: '127.0.0.1'`; real Node's default-host EADDRINUSE
+ * reports `'::'`/`'0.0.0.0'`. An unhandled `'error'` exits the worker 1, but its
+ * MESSAGE reaches the child stderr only via the kernel worker-error path (currently
+ * exit-1 without text — `backlog: kernel/worker-global-error-to-stderr`).
  */
 export function addrInUseError(address: string, port: number): Error {
   return Object.assign(new Error(`listen EADDRINUSE: address already in use ${address}:${port}`), {

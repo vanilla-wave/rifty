@@ -95,7 +95,9 @@ export class HttpServer extends EventEmitter {
     // Port already bound in this realm → Node emits an async `'error'` EADDRINUSE
     // (NOT a sync throw): the server is returned, `'listening'` never fires, and an
     // unhandled `'error'` on an EventEmitter throws (faithful, ADR-0157 review C3).
-    if (isPortBound(port)) {
+    // Port 0 means "ephemeral / any free port" in Node, so it never collides — skip
+    // the occupancy check for it (a distinct ephemeral-port assignment is backlog).
+    if (port !== 0 && isPortBound(port)) {
       queueMicrotask(() => this.emit('error', addrInUseError('127.0.0.1', port)));
       return this;
     }

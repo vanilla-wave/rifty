@@ -673,11 +673,12 @@ export function App(props: AppProps) {
     void runVitePreset(preset);
   }
 
-  // A port is previewable when the dev server is up OR it is a registered node
-  // server port (ADR-0154 multi-port): otherwise a node-only preview's "open in
-  // new tab" would silently no-op even though the panel is visible (Fidelity).
-  const isLivePreviewPort = (port: number): boolean =>
-    devServerRunning() || previewPorts().some((p) => p.port === port);
+  // A port is previewable iff it is a registered preview port (ADR-0154 multi-port:
+  // the dev-server port is itself a registry entry when running, and each node
+  // server's port is added on listen). Membership-only — a non-registered port
+  // never yields a URL — while still un-gating from devServerRunning() so a
+  // node-only preview's "open in new tab" no longer silently no-ops (Fidelity).
+  const isLivePreviewPort = (port: number): boolean => previewPorts().some((p) => p.port === port);
   const previewUrl = (port = machine.realVitePort()): string | undefined =>
     isLivePreviewPort(port) ? `/preview/${port}/` : undefined;
 
@@ -920,10 +921,6 @@ export function App(props: AppProps) {
     detail: 'Commands run in /workspace; running programs own stdin.',
   });
   const programTitle = (): string => activeTemplate().entry.relativePath.replace(/^\/+/, '');
-  // Mount the preview when the dev server is up/starting OR any node server
-  // registered a port (ADR-0154 §3 / ADR-0157 review C1): a `node server.js` with
-  // the dev server stopped must still show its preview. Keep the `!== 'stopped'`
-  // disjunct so the panel shows during the dev 'starting' window (before the slot lands).
   // Mount the preview when the dev server is up/starting OR any node server
   // registered a port (ADR-0154 §3 / ADR-0157 review C1): a `node server.js` with
   // the dev server stopped must still show its preview. Keep the `!== 'stopped'`

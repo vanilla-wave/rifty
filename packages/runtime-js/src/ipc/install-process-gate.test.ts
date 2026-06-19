@@ -87,6 +87,9 @@ describe('seeded NodeProcess by construction (ADR-0157)', () => {
     // RED-check: drop `currentCwd = spec.cwd` in the NodeProcess ctor → this stays
     // '/workspace' and a child's fs.readFileSync('./x') resolves to the wrong dir.
     expect(getProcessCwd()).toBe('/workspace/app');
+    // Node-faithful fds: stdout is 1, stderr is 2 (not both 1).
+    expect(proc.stdout.fd).toBe(1);
+    expect(proc.stderr.fd).toBe(2);
     expect(proc.env.FOO).toBe('bar');
     proc.env.FOO = 'mutated';
     expect(proc.env.FOO).toBe('mutated');
@@ -105,5 +108,42 @@ describe('seeded NodeProcess by construction (ADR-0157)', () => {
     expect(() => proc.exit(2)).toThrow(
       expect.objectContaining({ code: 'RIFTY_PROCESS_EXIT', exitCode: 2 }),
     );
+  });
+});
+
+describe('process.exitCode / exit coercion is Node-faithful (ADR-0157 review)', () => {
+  it('the exitCode setter coerces a numeric string (like Node)', () => {
+    const proc = installNodeProcessShim(spec());
+    proc.exitCode = '7' as unknown as number;
+    expect(proc.exitCode).toBe(7);
+    proc.exitCode = '0x10' as unknown as number;
+    expect(proc.exitCode).toBe(16);
+    proc.exitCode = 256; // stored as-is; uint8 wrap happens only at exit
+    expect(proc.exitCode).toBe(256);
+  });
+
+  it('the exitCode setter THROWS loudly on an invalid value (never silently 0)', () => {
+    const proc = installNodeProcessShim(spec());
+    expect(() => {
+      proc.exitCode = 1.9;
+    }).toThrow(expect.objectContaining({ code: 'ERR_OUT_OF_RANGE' }));
+    expect(() => {
+      proc.exitCode = 'abc' as unknown as number;
+    }).toThrow(expect.objectContaining({ code: 'ERR_OUT_OF_RANGE' }));
+    expect(() => {
+      proc.exitCode = true as unknown as number;
+    }).toThrow(expect.objectContaining({ code: 'ERR_INVALID_ARG_TYPE' }));
+  });
+
+  it('exit() coerces a string code and uint8-wraps an out-of-range one', () => {
+    const proc = installNodeProcessShim(spec());
+    expect(() => proc.exit('7' as unknown as number)).toThrow(
+      expect.objectContaining({ code: 'RIFTY_PROCESS_EXIT', exitCode: 7 }),
+    );
+    expect(() => proc.exit(257)).toThrow(
+      expect.objectContaining({ code: 'RIFTY_PROCESS_EXIT', exitCode: 1 }),
+    );
+    // An invalid exit() arg throws the coercion error, NOT a RIFTY_PROCESS_EXIT.
+    expect(() => proc.exit(1.9)).toThrow(expect.objectContaining({ code: 'ERR_OUT_OF_RANGE' }));
   });
 });

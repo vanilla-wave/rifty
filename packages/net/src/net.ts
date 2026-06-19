@@ -114,8 +114,9 @@ export class Server extends EventEmitter {
       | (() => void)
       | undefined;
     // Port already bound in this realm → async `'error'` EADDRINUSE, like Node
-    // (server returned, no `'listening'`; ADR-0157 review C3).
-    if (isPortBound(port)) {
+    // (server returned, no `'listening'`; ADR-0157 review C3). Port 0 = ephemeral,
+    // never collides — skip the check for it.
+    if (port !== 0 && isPortBound(port)) {
       queueMicrotask(() => this.emit('error', addrInUseError('127.0.0.1', port)));
       return this;
     }
