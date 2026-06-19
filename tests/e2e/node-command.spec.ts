@@ -280,4 +280,68 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
       timeout: 30_000,
     });
   });
+
+  // SCENARIO 4 — node-only preview: stop the dev server, then `node server.js`
+  // lights the preview on its own (ADR-0157 review C1). RED guard: under the old
+  // `hasPreview = devServerStatus() !== 'stopped'` the panel/switcher would NEVER
+  // re-appear once the dev server is stopped, even with a live node port.
+  test('a node server lights the preview even when the dev server is stopped', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
+    test.setTimeout(180_000);
+    page.on('pageerror', (err) => console.log('[pageerror]', err.message));
+    await page.goto('/');
+
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
+      timeout: 15_000,
+    });
+
+    // Dev server boots in Terminal 1 → preview is on.
+    await expect.poll(() => terminalBuffer(page), { timeout: 90_000 }).toMatch(/\$ vite/);
+    const editorArea = page.locator('.rf-editorarea');
+    await expect(editorArea).toHaveAttribute('data-preview', 'on', { timeout: 60_000 });
+
+    // Ctrl-C the dev server (Terminal 1 foreground) → devServerStatus 'stopped'.
+    // With no node ports yet, the preview panel hides (data-preview flips off).
+    await page.locator('[data-testid="terminal"]').click();
+    await page.keyboard.press('Control+c');
+    await expect(editorArea).toHaveAttribute('data-preview', 'off', { timeout: 60_000 });
+
+    // Now run a node:http server in the (freed) Terminal 1 — no dev server up.
+    await runLineConfirmed(
+      page,
+      'echo \'import http from "node:http"; http.createServer((_req, res) => res.end("NODE-ONLY-OK")).listen(4003);\' > /workspace/only.js',
+    );
+    await runLineConfirmed(page, 'node only.js');
+
+    // THE C1 SIGNAL: the preview comes back on a node-only port — the switcher
+    // appears with :4003 and the editor area flips data-preview back on.
+    const switcher = page.locator('.rf-preview__switcher');
+    await expect(switcher).toBeVisible({ timeout: 60_000 });
+    await expect(switcher.locator('option', { hasText: ':4003' })).toHaveCount(1, {
+      timeout: 30_000,
+    });
+    await expect(editorArea).toHaveAttribute('data-preview', 'on', { timeout: 30_000 });
+
+    // And "open in new tab" / the iframe route works for the node-only preview
+    // (the C1 change also un-gated previewUrl from devServerRunning).
+    const fetchOnly = async (): Promise<string> =>
+      page.evaluate(async () => {
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), 4_000);
+        try {
+          const r = await fetch('/preview/4003/', { cache: 'no-store', signal: ac.signal });
+          return await r.text();
+        } catch (err) {
+          return String((err as Error).message ?? err);
+        } finally {
+          clearTimeout(timer);
+        }
+      });
+    await expect
+      .poll(fetchOnly, { timeout: 90_000, intervals: [1_000, 2_000, 4_000] })
+      .toContain('NODE-ONLY-OK');
+  });
 });

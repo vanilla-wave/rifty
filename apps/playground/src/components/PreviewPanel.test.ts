@@ -60,14 +60,12 @@ describe('PreviewPanel port switcher (ADR-0154)', () => {
     expect(html).toContain('title="Preview port 5174"');
   });
 
-  it('wires the switcher onChange to setPort from the option value', () => {
-    // SSR can't fire a real <select> change; assert the change handler that
-    // drives the existing port() signal is wired (event util used: none — node
-    // SSR has no DOM events, so the wiring is asserted via source + the
-    // reconcile unit test below covers the selection logic).
-    expect(source).toContain('class="rf-preview__switcher"');
-    expect(source).toContain('onChange={(e) => setPort(Number(e.currentTarget.value))}');
-  });
+  // onChange→setPort wiring is covered behaviorally: the SSR render asserts the
+  // <select class="rf-preview__switcher"> exists with value tracking the selection,
+  // reconcileSelectedPort (below) covers the selection logic, and
+  // tests/e2e/node-command.spec.ts (selectOption → /preview/<port>/) covers the live
+  // onChange→setPort→iframe path. A source-grep of the exact handler string was
+  // dropped (ADR-0157 review C8) — it broke on cosmetic rewrites with no behavior change.
 
   it('falls back to the manual port <input> when there are no known ports', () => {
     const empty = renderToString(() => PreviewPanel({ ports: () => [] }));

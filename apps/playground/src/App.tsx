@@ -668,8 +668,13 @@ export function App(props: AppProps) {
     void runVitePreset(preset);
   }
 
+  // A port is previewable when the dev server is up OR it is a registered node
+  // server port (ADR-0154 multi-port): otherwise a node-only preview's "open in
+  // new tab" would silently no-op even though the panel is visible (Fidelity).
+  const isLivePreviewPort = (port: number): boolean =>
+    devServerRunning() || previewPorts().some((p) => p.port === port);
   const previewUrl = (port = machine.realVitePort()): string | undefined =>
-    devServerRunning() ? `/preview/${port}/` : undefined;
+    isLivePreviewPort(port) ? `/preview/${port}/` : undefined;
 
   function escapeHtmlAttr(value: string): string {
     return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
@@ -910,7 +915,15 @@ export function App(props: AppProps) {
     detail: 'Commands run in /workspace; running programs own stdin.',
   });
   const programTitle = (): string => activeTemplate().entry.relativePath.replace(/^\/+/, '');
-  const hasPreview = (): boolean => devServerStatus() !== 'stopped';
+  // Mount the preview when the dev server is up/starting OR any node server
+  // registered a port (ADR-0154 §3 / ADR-0157 review C1): a `node server.js` with
+  // the dev server stopped must still show its preview. Keep the `!== 'stopped'`
+  // disjunct so the panel shows during the dev 'starting' window (before the slot lands).
+  // Mount the preview when the dev server is up/starting OR any node server
+  // registered a port (ADR-0154 §3 / ADR-0157 review C1): a `node server.js` with
+  // the dev server stopped must still show its preview. Keep the `!== 'stopped'`
+  // disjunct so the panel shows during the dev 'starting' window (before the slot lands).
+  const hasPreview = (): boolean => devServerStatus() !== 'stopped' || previewPorts().length > 0;
   const isOpfs = props.boot.vfsBoot.backend === 'opfs';
 
   return (
@@ -1042,15 +1055,18 @@ export function App(props: AppProps) {
                   onReset={() => layout.resetPreviewW()}
                 />
               </Show>
-              <Show when={hasPreview() ? machine.realVitePort() : false} keyed>
-                {(port) => (
-                  <PreviewPanel
-                    initialPort={port}
-                    onOpenTab={openPreviewTab}
-                    onNotify={flashToast}
-                    ports={previewPorts}
-                  />
-                )}
+              {/* Non-keyed (ADR-0157 review C5): one long-lived PreviewPanel that
+                  self-reconciles its selection against `ports` — a dev-port change
+                  (preset switch) no longer re-mounts and discards the chosen node
+                  port. `initialPort` is read once at mount: most-recent live port,
+                  else the dev port. */}
+              <Show when={hasPreview()}>
+                <PreviewPanel
+                  initialPort={previewPorts().at(-1)?.port ?? machine.realVitePort()}
+                  onOpenTab={openPreviewTab}
+                  onNotify={flashToast}
+                  ports={previewPorts}
+                />
               </Show>
             </div>
 
