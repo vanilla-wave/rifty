@@ -515,12 +515,19 @@ export class WebSocket extends EventTarget {
       this.dispatchEvent(new Event('open'));
       return;
     }
-    if (
-      frame.type === 'msg' &&
-      this.readyState === State.OPEN &&
-      frame.data !== undefined &&
-      !isControlOpcode(frame.opcode)
-    ) {
+    if (frame.type === 'msg' && this.readyState === State.OPEN && frame.data !== undefined) {
+      if (frame.opcode === 0x9) {
+        // Browser WebSocket answers a server ping at the protocol layer without
+        // exposing it; mirror that — pong back over the bridge, surface nothing.
+        this.activeBridgeChannel?.postMessage({
+          type: 'msg',
+          cid: this.bridgeCid,
+          data: frame.data,
+          opcode: 0xa,
+        });
+        return;
+      }
+      if (isControlOpcode(frame.opcode)) return;
       this.dispatchEvent(
         new MessageEvent('message', {
           data: messageDataForBinaryType(frame.data, this.binaryType),
@@ -616,7 +623,7 @@ function isValidProtocolToken(protocol: string): boolean {
   return /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(protocol);
 }
 
-function isControlOpcode(opcode: number | undefined): boolean {
+export function isControlOpcode(opcode: number | undefined): boolean {
   return opcode === 0x9 || opcode === 0xa;
 }
 

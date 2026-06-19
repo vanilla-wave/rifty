@@ -9,7 +9,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Feature | Status | Notes |
 |---|---|---|
 | `http.createServer` | ✅ | Request handler, `listen(port)`, registered port dispatch |
-| `server.on('upgrade')` WebSocket | ⚠️ | Bridge-backed RFC 6455 data/control/close/binary upgrade; real npm `ws` server and client modes tested on registered local ports; malformed frames close loudly (1002/1007/1009). Caveat: permessage-deflate not negotiated (`ws-permessage-deflate`) |
+| `server.on('upgrade')` WebSocket | ⚠️ | Bridge-backed RFC 6455 data/control/close/binary upgrade; real npm `ws` server and client modes tested on registered local ports; malformed frames close loudly (1002/1007/1009); control frames relay end-to-end (one pong per server ping). Caveats: permessage-deflate not negotiated (`ws-permessage-deflate`); the upgrade transcoder caps a frame at a fixed 100 MiB (`ws-max-payload`) |
 | WebSocket permessage-deflate (RFC7692) | ❌ | Compression is never negotiated; a client `Sec-WebSocket-Extensions` offer is dropped (faithful only when the guest server leaves compression off, which is the `ws` default) — `backlog/net/ws-permessage-deflate` |
 | Basic GET response | ✅ | `writeHead`, headers, status, body |
 | POST request body | ✅ | Readable streaming request body, chunk boundaries, `drain`, and `end` |
@@ -44,8 +44,9 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 
 - Networking is browser-local: servers bind a rifty port registry and preview dispatch, not native sockets.
 - Raw TCP connect APIs throw directed `NotImplementedError`s; external WebSocket egress is supported through the browser WebSocket primitive, not TCP.
-- Browser-like WebSocket clients do not surface ping/pong control frames as `message` events. Local real `ws` clients can `ping()` and receive the server's actual `pong()` through the bridge; server-origin pings are also answered in the transport so keepalive stays satisfied.
+- Browser-like WebSocket clients do not surface ping/pong control frames as `message` events but still pong a server ping in transit so keepalive works. Real `ws` peers exchange control frames end-to-end (`ping()`, `on('pong')`, `on('ping')`); the transport does not auto-pong, so a server `ping()` yields exactly one `'pong'` (keepalive can still detect a vanished peer).
 - External WebSocket egress cannot originate ping/pong at all (browser `WebSocket` has no `.ping()`); that path throws `NotImplementedError` for control-frame sends.
 - WebSocket permessage-deflate (RFC7692) is not negotiated (`backlog/net/ws-permessage-deflate`).
+- The bridge upgrade transcoder caps a single reassembled frame at a fixed 100 MiB (the `ws` default) and closes 1009 past it; a guest `ws` `maxPayload` is enforced by the `ws` receiver itself, but the transport bound is not separately configurable (`backlog/net/ws-max-payload`).
 - Preview delivery needs true `ReadableStream` transfer for unbounded bodies. Buffered cross-realm paths fail loud (HTTP 502 naming the ceiling) rather than silently buffering forever.
 - `node:https` cannot promise real TLS egress inside the local runtime without host integration.

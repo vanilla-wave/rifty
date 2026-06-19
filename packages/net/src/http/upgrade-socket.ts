@@ -297,12 +297,12 @@ export class WebSocketUpgradeSocket extends EventEmitter {
       this.destroy();
       return;
     }
-    if (opcode === 0x9) {
-      this.emit('data', encodeClientFrame(0xa, payload));
-      this.sendBridgeFrame({ type: 'msg', cid: this.cid, data: payload, opcode });
-      return;
-    }
-    if (opcode === 0xa) {
+    if (opcode === 0x9 || opcode === 0xa) {
+      // Relay control frames to the peer end-to-end; the peer answers the ping
+      // itself. A real `ws` client auto-pongs and surfaces 'ping'; a browser-like
+      // bridge client silently pongs (browser WebSocket can't expose control
+      // frames). The transport no longer auto-pongs, so the ws server sees exactly
+      // one pong per ping and keepalive can still detect a vanished peer.
       this.sendBridgeFrame({ type: 'msg', cid: this.cid, data: payload, opcode });
       return;
     }
@@ -841,6 +841,8 @@ function fillRandom(bytes: Uint8Array): void {
 
 function normaliseMaxPayload(value: number | undefined): number {
   if (value === undefined) return DEFAULT_MAX_PAYLOAD;
+  // ws semantics: maxPayload 0 disables the cap. `len > Infinity` is always false.
+  if (value === 0) return Number.POSITIVE_INFINITY;
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new RangeError('websocket maxPayload must be a non-negative safe integer');
   }

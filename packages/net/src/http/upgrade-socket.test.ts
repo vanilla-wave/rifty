@@ -244,6 +244,16 @@ describe('WebSocket upgrade sockets maxPayload', () => {
     expect(close?.code).toBe(1009);
     expect(close?.reason).toContain('websocket message too big');
   });
+
+  it('treats maxPayload 0 as unlimited (ws semantics), not reject-everything', () => {
+    // Real `ws` Receiver: maxPayload 0 disables the cap. A bare `len > 0` check
+    // would invert this and close 1009 on any non-empty frame.
+    const close = bridgeCloseFromServerFrames([encodeTestFrame(0x2, Buffer.alloc(64))], {
+      maxPayload: 0,
+    });
+
+    expect(close).toBeUndefined();
+  });
 });
 
 /**

@@ -24,7 +24,7 @@
 import { EventEmitter } from '@riftydev/io';
 import { channelNameFor, portChannelNameFor } from './channel.ts';
 import { CloseEventCtor } from './close-event.ts';
-import { State, type WsMessage, messageDataForBinaryType } from './in-process.ts';
+import { State, type WsMessage, isControlOpcode, messageDataForBinaryType } from './in-process.ts';
 
 interface BridgeFrame {
   type: 'open' | 'open-ack' | 'msg' | 'close';
@@ -245,12 +245,19 @@ export class BridgedWebSocket extends EventTarget {
       this.dispatchEvent(new Event('open'));
       return;
     }
-    if (
-      frame.type === 'msg' &&
-      this.readyState === State.OPEN &&
-      frame.data !== undefined &&
-      !isControlOpcode(frame.opcode)
-    ) {
+    if (frame.type === 'msg' && this.readyState === State.OPEN && frame.data !== undefined) {
+      if (frame.opcode === 0x9) {
+        // Silently pong a server ping in transit (browser WebSocket never exposes
+        // control frames); surface nothing.
+        this.activeChannel?.postMessage({
+          type: 'msg',
+          cid: this.cid,
+          data: frame.data,
+          opcode: 0xa,
+        });
+        return;
+      }
+      if (isControlOpcode(frame.opcode)) return;
       this.dispatchEvent(
         new MessageEvent('message', {
           data: messageDataForBinaryType(frame.data, this.binaryType),
@@ -376,10 +383,6 @@ function normaliseProtocols(protocols: string | readonly string[] | undefined): 
 
 function isValidProtocolToken(protocol: string): boolean {
   return /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(protocol);
-}
-
-function isControlOpcode(opcode: number | undefined): boolean {
-  return opcode === 0x9 || opcode === 0xa;
 }
 
 function invalidStateError(message: string): Error {

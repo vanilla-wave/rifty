@@ -26,16 +26,20 @@
 
 ### Fixed
 
-- **WebSocket upgrade fidelity backlog tightened.** Upgrade sockets now enforce a
-  100 MiB default `maxPayload` (configurable internally) and close 1009 on
+- **WebSocket upgrade fidelity backlog tightened.** Upgrade sockets enforce a
+  100 MiB `maxPayload` (`0` = unlimited, matching `ws`) and close 1009 on
   oversized single frames or fragmented reassembly; malformed RFC6455 edges are
   pinned (RSV, masking, invalid UTF-8, invalid close payload/code, oversized or
-  fragmented control frames, mid-fragment data). Local real `ws` clients can
-  `ping()` and receive the server's actual `pong()` across the bridge, while
-  browser-like clients ignore bridge control opcodes instead of surfacing them as
-  `message`. Duplicate bridge `open` frames for the same cid re-ack without
-  emitting a phantom second connection, and portless `wss://` default-443
-  discovery is regression-covered.
+  fragmented control frames, mid-fragment data). Control frames relay end-to-end
+  and the *peer* answers a ping — a real `ws` client auto-pongs and fires
+  `'ping'`, a browser-like bridge client silently pongs — while the transport no
+  longer auto-pongs, so a server `ping()` yields exactly one `'pong'` (was two)
+  and keepalive can still detect a vanished peer. Duplicate bridge `open` frames
+  for the same cid re-ack without emitting a phantom second connection, and
+  portless `wss://` default-443 discovery is regression-covered. The transcode
+  bound stays a fixed 100 MiB (a guest `ws` `maxPayload` above that is capped —
+  `backlog/net/ws-max-payload`), and a real-`ws` Autobahn interop pass remains
+  open (`backlog/net/ws-rfc6455-real-ws-interop`).
 - **`BridgedWebSocket` honors `binaryType`; `bufferedAmount` is present on every
   client.** The cross-realm `BridgedWebSocket` delivered binary frames raw
   (never Blob/ArrayBuffer per `binaryType`); it now coerces like the in-process
