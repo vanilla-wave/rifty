@@ -8,6 +8,14 @@
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 
 type ImmediateHandle = { readonly id: number };
+type HostTimeout = ReturnType<typeof globalThis.setTimeout>;
+type HostInterval = ReturnType<typeof globalThis.setInterval>;
+type HostTimer = HostTimeout | HostInterval;
+type HostTimerClear = (handle: HostTimer) => void;
+interface HostTimerRefHooks {
+  ref?: () => unknown;
+  unref?: () => unknown;
+}
 
 // Capture host timers BEFORE installTimerGlobals can overwrite globals.
 const hostSetTimeout = globalThis.setTimeout.bind(globalThis);
@@ -15,53 +23,121 @@ const hostClearTimeout = globalThis.clearTimeout.bind(globalThis);
 const hostSetInterval = globalThis.setInterval.bind(globalThis);
 const hostClearInterval = globalThis.clearInterval.bind(globalThis);
 
-const activeTimeouts = new Set<unknown>();
-const activeIntervals = new Set<unknown>();
+let nextTimerId = 1;
 
-// KEEPALIVE GAP (explicit, not silent): these wrappers ref EVERY timer, but do
-// NOT yet honor a Node Timeout's .unref()/.ref() — an .unref()'d refed timer that
-// Node lets the loop exit through will instead hold the realm alive until the
-// drain cap. Faithful fix (Node-shape Timeout handle) tracked:
-// TODO(backlog: runtime-js/timer-unref-keepalive)
-function keepaliveSetTimeout(
+class KeepaliveTimerHandle {
+  private active = true;
+  private refed = true;
+  private readonly primitiveId = nextTimerId++;
+
+  constructor(
+    private readonly raw: HostTimer,
+    private readonly clearRaw: HostTimerClear,
+  ) {
+    keepaliveRef();
+  }
+
+  fireTimeout(): boolean {
+    if (!this.active) return false;
+    this.active = false;
+    if (this.refed) keepaliveUnref();
+    return true;
+  }
+
+  shouldRunInterval(): boolean {
+    return this.active;
+  }
+
+  clear(): void {
+    if (this.active) {
+      this.active = false;
+      if (this.refed) keepaliveUnref();
+    }
+    this.clearRaw(this.raw);
+  }
+
+  ref(): this {
+    if (!this.refed) {
+      this.refed = true;
+      if (this.active) keepaliveRef();
+    }
+    const hostRef = (this.raw as HostTimerRefHooks).ref;
+    if (typeof hostRef === 'function') hostRef.call(this.raw);
+    return this;
+  }
+
+  unref(): this {
+    if (this.refed) {
+      this.refed = false;
+      if (this.active) keepaliveUnref();
+    }
+    const hostUnref = (this.raw as HostTimerRefHooks).unref;
+    if (typeof hostUnref === 'function') hostUnref.call(this.raw);
+    return this;
+  }
+
+  hasRef(): boolean {
+    return this.refed;
+  }
+
+  [Symbol.toPrimitive](): number {
+    return this.primitiveId;
+  }
+}
+
+export function setTimeout(
   fn: (...a: unknown[]) => void,
   ms?: number,
   ...args: unknown[]
-): unknown {
+): KeepaliveTimerHandle {
   // Use a box so the inner callback can reference the handle (self-ref timeout pattern).
-  const box: { handle: unknown } = { handle: undefined };
-  box.handle = hostSetTimeout(
+  const box: { handle: KeepaliveTimerHandle | null } = { handle: null };
+  const raw = hostSetTimeout(
     (...a: unknown[]) => {
-      if (activeTimeouts.delete(box.handle)) keepaliveUnref();
+      if (!box.handle?.fireTimeout()) return;
       fn(...a);
     },
     ms,
     ...args,
   );
-  activeTimeouts.add(box.handle);
-  keepaliveRef();
-  return box.handle;
-}
-
-function keepaliveClearTimeout(handle: unknown): void {
-  if (activeTimeouts.delete(handle)) keepaliveUnref();
-  hostClearTimeout(handle as Parameters<typeof clearTimeout>[0]);
-}
-
-function keepaliveSetInterval(
-  fn: (...a: unknown[]) => void,
-  ms?: number,
-  ...args: unknown[]
-): unknown {
-  const handle = hostSetInterval(fn, ms, ...args);
-  activeIntervals.add(handle);
-  keepaliveRef();
+  const handle = new KeepaliveTimerHandle(raw, hostClearTimeout as HostTimerClear);
+  box.handle = handle;
   return handle;
 }
 
-function keepaliveClearInterval(handle: unknown): void {
-  if (activeIntervals.delete(handle)) keepaliveUnref();
-  hostClearInterval(handle as Parameters<typeof clearInterval>[0]);
+export function clearTimeout(handle: unknown): void {
+  if (handle instanceof KeepaliveTimerHandle) {
+    handle.clear();
+    return;
+  }
+  hostClearTimeout(handle as HostTimeout);
+}
+
+export function setInterval(
+  fn: (...a: unknown[]) => void,
+  ms?: number,
+  ...args: unknown[]
+): KeepaliveTimerHandle {
+  const box: { handle: KeepaliveTimerHandle | null } = { handle: null };
+  const raw = hostSetInterval(
+    (...a: unknown[]) => {
+      if (!box.handle?.shouldRunInterval()) return;
+      fn(...a);
+    },
+    ms,
+    ...args,
+  );
+  const handle = new KeepaliveTimerHandle(raw, hostClearInterval as HostTimerClear);
+  box.handle = handle;
+  return handle;
+}
+
+export function clearInterval(handle: unknown): void {
+  if (handle instanceof KeepaliveTimerHandle) {
+    handle.clear();
+    return;
+  }
+  hostClearInterval(handle as HostInterval);
 }
 
 // ADR-0085: setImmediate queue rep + check-phase drain-order contract.
@@ -240,10 +316,10 @@ export function installTimerGlobals(): void {
   const g = globalThis as unknown as Record<string, unknown>;
   g.setImmediate = setImmediate;
   g.clearImmediate = clearImmediate;
-  g.setTimeout = keepaliveSetTimeout;
-  g.clearTimeout = keepaliveClearTimeout;
-  g.setInterval = keepaliveSetInterval;
-  g.clearInterval = keepaliveClearInterval;
+  g.setTimeout = setTimeout;
+  g.clearTimeout = clearTimeout;
+  g.setInterval = setInterval;
+  g.clearInterval = clearInterval;
 }
 
 export default timers;

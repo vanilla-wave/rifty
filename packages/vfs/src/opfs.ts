@@ -223,10 +223,6 @@ export class OpfsVfs implements Vfs {
     path: string,
     opts?: { chunkSize?: number; start?: number; end?: number },
   ): Promise<ReadableStream<Uint8Array>> {
-    // ADR-0020 phase 2: wrap `File.stream()`. `start`/`end` via `File.slice`;
-    // `chunkSize` is informational — the browser stream picks its own
-    // boundaries (~64 KiB), already satisfying the "no whole-file buffering"
-    // goal for `createReadStream` on big files.
     const handle = await this.getFileHandle(path);
     let file: File;
     try {
@@ -236,8 +232,20 @@ export class OpfsVfs implements Vfs {
     }
     const start = opts?.start ?? 0;
     const end = opts?.end ?? file.size;
-    const slice = start === 0 && end === file.size ? file : file.slice(start, end);
-    return slice.stream() as ReadableStream<Uint8Array>;
+    const chunkSize = opts?.chunkSize ?? 64 * 1024;
+    let offset = start;
+    return new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        if (offset >= end) {
+          controller.close();
+          return;
+        }
+        const next = Math.min(offset + chunkSize, end);
+        const bytes = new Uint8Array(await file.slice(offset, next).arrayBuffer());
+        offset = next;
+        controller.enqueue(bytes);
+      },
+    });
   }
 }
 

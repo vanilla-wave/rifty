@@ -18,9 +18,9 @@ never drain-reaped (kept alive by its own ports). Backing tests:
 | Keepalive counts pending dynamic `import()` | ✅ | Both `loader.import` and routed user-code `import()` (`__import`) |
 | `unhandledrejection` → stderr + non-zero exit | ✅ | Record-not-swallow; never silent `exit 0`. Node parity (default warn + non-zero) |
 | **Drain cap: a refed loop that never drains is force-killed** | ⚠️ | **Deliberate non-Node divergence.** At 30 s the worker exits 1 + a self-explanatory stderr line, where Node runs forever. Browser-worker safety-net against a genuine hang/leak — generous + loud. Legit-forever programs use `serve:true` (the cap never fires there). See ADR-0152 §4 |
-| Detached `fetch()` / network keepalive | ❌ | NOT counted — network in flight after top-level can be reaped early. `backlog/runtime-js/timer-unref-keepalive` (network path) |
+| Detached `fetch()` / network keepalive | ❌ | NOT counted — network in flight after top-level can be reaped early |
 | `fs.watch` / `fs.watchFile` keepalive | ⚠️ | The poll `setInterval` IS counted → an active watcher with no `.unref()` force-exits at the cap, where Node runs forever |
-| Timer `.unref()` / `.ref()` / `.hasRef()` | ❌ | Not implemented → an `.unref()`'d timer can't opt out of keepalive (drains to cap). `backlog/runtime-js/timer-unref-keepalive` |
+| Timer `.unref()` / `.ref()` / `.hasRef()` | ✅ | `setTimeout`/`setInterval` handles can opt out of and back into keepalive; `node:timers` uses the same wrapper as globals |
 | `process.exit(N)` propagates the exit code | ✅ | Via the `RIFTY_PROCESS_EXIT` shape (ADR-0039) |
 
 ## Terminal `node <file>` command (ADR-0155)

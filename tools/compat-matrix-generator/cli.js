@@ -56,7 +56,11 @@ const matrices = [
       ],
       ['`truncate` / zero fill', '✅', 'Sync and promises paths'],
       ['`mkdtemp` / `opendir`', '✅', 'Sync and promises; async directory iteration'],
-      ['`createReadStream` / `createWriteStream`', '✅', 'Pipe and `end` smoke tests'],
+      [
+        '`createReadStream` / `createWriteStream`',
+        '✅',
+        'Async `Vfs.openReadable` first, chunked reads, pipe and `end` smoke tests',
+      ],
       [
         '`fs.watch`',
         '⚠️',
@@ -77,6 +81,7 @@ const matrices = [
       '`tests/conformance/builtins/fs.test.ts`',
       '`tests/conformance/builtins/fs-realpath-readdir.test.ts`',
       '`tests/conformance/builtins/fs-streams.test.ts`',
+      '`tests/conformance/builtins/shared-vfs.test.ts`',
       '`tests/conformance/builtins/fs-watch.test.ts`',
       '`tools/node-parity-runner/cases/fs/*.case.ts`',
     ],
