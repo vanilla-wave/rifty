@@ -104,6 +104,11 @@
   (ADR-0157 review C3). `preview-registry` dedups by port (dev slot wins) and `App.tsx` never wires a
   second SW bridge for the active dev port — previously both the `onDevServer` and node-port paths
   registered the same `/preview/<port>/`, and a teardown of either dropped the other's route (502).
+- **`node <file>` natural exit honours `process.exitCode`** (ADR-0157 review D4). A clean return after
+  `process.exitCode = N` now exits N (Node uint8 coercion) instead of a hardcoded 0; an uncaught tail
+  throw still maps to exit 1 (uncaught wins). `node-program-lifecycle` reads the exit code at the
+  drain-then-exit step. (D1: relative `node:fs` reads + `process.cwd()` now agree at a non-`/workspace`
+  cwd — the seeded process backs both the loader and `node:fs`/`path`, guarded by a unit at a subdir cwd.)
 - **From-scratch preset boots clean over a prior preset's tree — no more EBROKENLOCK** (ADR-0135).
   Selecting a from-scratch vite preset (`real-vite`) after an instant one (`project-files` /
   `node-worker`) installed over the instant preset's baked-snapshot tree: its `package-lock.json`

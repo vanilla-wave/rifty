@@ -14,7 +14,7 @@
 import type { WorkerSpawnSpec } from '@riftydev/kernel';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Buffer as RiftyBuffer } from '../builtins/buffer.ts';
-import { NodeProcess } from '../builtins/process.ts';
+import { NodeProcess, getProcessCwd } from '../builtins/process.ts';
 import { installNodeProcessShim, installNodeRuntime } from './install-process.ts';
 
 const NATIVE_THEN = Promise.prototype.then;
@@ -61,7 +61,7 @@ describe('pre-entry gate (ADR-0157)', () => {
 
   it('Node worker: process.nextTick beats Promise.then (Node ordering)', async () => {
     installNodeRuntime(spec());
-    const proc = (globalThis as { process: NodeProcess }).process;
+    const proc = (globalThis as { process?: unknown }).process as NodeProcess;
     const order: string[] = [];
     await new Promise<void>((resolve) => {
       // .then registered FIRST; nextTick must still run before it.
@@ -81,6 +81,12 @@ describe('seeded NodeProcess by construction (ADR-0157)', () => {
     const proc = installNodeProcessShim(s);
     expect(proc.argv).toEqual(['rifty', '/srv.js', '--port', '4000']);
     expect(proc.cwd()).toBe('/workspace/app');
+    // D1 (ADR-0157 review): the fs/path cwd SOURCE (getProcessCwd, read by
+    // builtins/fs + path.resolve) is seeded from spec.cwd too — so the loader
+    // (process.cwd()) and node:fs relative reads agree at a NON-/workspace cwd.
+    // RED-check: drop `currentCwd = spec.cwd` in the NodeProcess ctor → this stays
+    // '/workspace' and a child's fs.readFileSync('./x') resolves to the wrong dir.
+    expect(getProcessCwd()).toBe('/workspace/app');
     expect(proc.env.FOO).toBe('bar');
     proc.env.FOO = 'mutated';
     expect(proc.env.FOO).toBe('mutated');

@@ -22,8 +22,12 @@
  * realm exits and the kernel posts the exit code; a throw propagates to the
  * kernel worker-entry, which surfaces it on stderr (exit 1) — never silent.
  *
- * NOTE: `initBackend()` is NOT called here — the child reads via RPC, never its
- * own OPFS, avoiding the concurrent-OPFS-writer hazard.
+ * NOTE: `initBackend()` is NOT called here — the child reads AND WRITES the owner
+ * store via fs.* sync-RPC (each handler atomic, serialized on the owner's single
+ * JS thread), never opening its OWN OPFS handle. So the single-OPFS-writer
+ * invariant holds (the owner is the only OPFS writer); the hazard avoided is a
+ * SECOND OPFS handle, not all writes — a `node x.js` calling fs.writeFileSync does
+ * write, over RPC.
  */
 
 import { readKernelSyncApi } from '@riftydev/kernel';
@@ -96,6 +100,7 @@ if (proc.env.RIFTY_NODE_SERVE === '1') {
     servePreview: (port) =>
       serveCrossRealmPreview(port, async (request) => dispatchToPort(port, request)),
     postListening: (ports) => proc.send?.({ type: 'rifty:node-listening', ports }),
+    readExitCode: () => proc.exitCode,
     exit: (code) => proc.exit(code),
   });
 } else {
