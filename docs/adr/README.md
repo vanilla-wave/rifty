@@ -116,6 +116,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0140 | JetBrains Mono throughout playground |
 | 0145 | Real Vite module HMR (server.hmr.channels path superseded) |
 | 0154 | Terminal node-file command: arbitrary-entry supervised child + multi-port preview |
+| 0157 | Unified spec-seeded mutable Node process at pre-entry gated to Node workers |
 
 ### toolchain-build
 

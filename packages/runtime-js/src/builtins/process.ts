@@ -1,15 +1,23 @@
 /**
- * Node-compatible `process` global (subset).
+ * Node-compatible `process` global — the ONE `NodeProcess` class (ADR-0157).
+ *
+ * Spec-seeded (pid/ppid/argv/env/cwd + stdio MessagePorts + ADR-0045 fork-IPC)
+ * AND mutable (chdir/nextTick/hrtime/uptime/exitCode). Built once: the kernel
+ * pre-entry seam constructs `new NodeProcess(spec)` for kernel-spawned children
+ * (see `ipc/install-process.ts`); the REPL worker uses the no-spec singleton
+ * `riftyProcess`. No post-spawn `globalThis.process` swap.
  *
  * `nextTick` is queued via `queueMicrotask`. To match Node's ordering (nextTick
- * always wins over `Promise.then`), we patch `Promise.prototype.then` in the
- * Worker so every then-callback drains pending nextTicks before firing.
- * Intrusive but contained: runs once at Worker boot.
+ * always wins over `Promise.then`), `patchPromiseForNextTick` patches
+ * `Promise.prototype.then` in the realm so every then-callback drains pending
+ * nextTicks before firing — gated to Node workers at the pre-entry seam (WASI
+ * realms leave `then` native).
  *
  * Limitation: code that captured the original `.then` before our patch (via
  * `bind`/closure on boot) bypasses the drain. Acceptable for M3; revisit if a
  * real package breaks.
  */
+import type { IpcFrame, KernelProcessSpec } from '@riftydev/kernel';
 import { isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -23,9 +31,9 @@ let promisePatched = false;
 
 /**
  * Per-Worker cwd cell (ADR-0019), a snapshot of the active `ProcessRecord.cwd`.
- * Once ADR-0011's worker-as-process model lands, this becomes a
- * SharedArrayBuffer-mirrored slot tied to the kernel-side record; today the
- * Worker hosts a single process realm, so the cell suffices.
+ * Realm-local module state: one process realm per Worker, so the cell is the
+ * single source of truth read by `cwd()`/`getProcessCwd()` and written by
+ * `chdir`/`setProcessCwd` AND seeded from `spec.cwd` at construction.
  * Default `/workspace` matches the runtime VFS bootstrap convention.
  */
 let currentCwd = '/workspace';
@@ -40,7 +48,11 @@ function drainNextTicks(): void {
     try {
       item.fn(...item.args);
     } catch (err) {
-      (riftyProcess as unknown as EventEmitter).emit('uncaughtException', err);
+      // Surface on the ACTIVE realm process (the one user code attached handlers
+      // to): the seeded NodeProcess in a kernel child, else the REPL singleton.
+      const active = (globalThis as { process?: unknown }).process;
+      const target = active instanceof NodeProcess ? active : riftyProcess;
+      (target as unknown as EventEmitter).emit('uncaughtException', err);
     }
   }
   // Fully drained: clear the array + cursor so the next nextTick sees length
@@ -60,7 +72,8 @@ function nextTick(fn: (...args: unknown[]) => void, ...args: unknown[]): void {
   ensureDrainScheduled();
 }
 
-function patchPromiseForNextTick(): void {
+/** Patch `Promise.prototype.then` so nextTick beats `.then` (Node ordering). */
+export function patchPromiseForNextTick(): void {
   if (promisePatched) return;
   promisePatched = true;
   const origThen = Promise.prototype.then;
@@ -83,9 +96,130 @@ function patchPromiseForNextTick(): void {
   } as typeof Promise.prototype.then;
 }
 
-class RiftyProcess extends EventEmitter {
-  env: Record<string, string | undefined> = Object.create(null);
-  argv: string[] = ['rifty', 'repl'];
+// --- stdio plumbing (shared by spec + no-spec processes) ---
+
+const STDIO_ENCODER = new TextEncoder();
+
+function encodeChunk(chunk: string | Uint8Array): Uint8Array {
+  return typeof chunk === 'string' ? STDIO_ENCODER.encode(chunk) : chunk;
+}
+
+/** Spec stdout/stderr writer: postMessage bytes to the child's stdio port. */
+function makeStdioWriter(port: MessagePort): {
+  write(chunk: string | Uint8Array): boolean;
+  isTTY: boolean;
+  fd: number;
+} {
+  return {
+    isTTY: false,
+    fd: 1,
+    write(chunk) {
+      const bytes = encodeChunk(chunk);
+      // Transfer the buffer only when we own it (TextEncoder output). A passed-in
+      // Uint8Array may share its backing buffer with the caller, so copy instead.
+      if (typeof chunk === 'string') {
+        port.postMessage(bytes, [bytes.buffer]);
+      } else {
+        const copy = new Uint8Array(bytes);
+        port.postMessage(copy, [copy.buffer]);
+      }
+      return true;
+    },
+  };
+}
+
+export interface NodeStdin extends EventEmitter {
+  isTTY: boolean;
+  fd: number;
+  setEncoding(encoding: string | null): void;
+  resume(): void;
+  pause(): void;
+}
+
+/**
+ * Build a `process.stdin` Readable-ish EventEmitter fed by either a kernel
+ * stdin MessagePort (spec child) or the host bridge (`writeProcessStdin`, REPL).
+ * Returns the stdin + a `push(data)` the host source calls. Pre-listener
+ * buffering + utf8 stream-decoding match Node's encoding semantics.
+ */
+function makeStdinReader(port?: MessagePort): {
+  stdin: NodeStdin;
+  push(data: string | Uint8Array): void;
+} {
+  const stdin = new EventEmitter() as NodeStdin;
+  let encoding: string | null = null;
+  const pending: Array<string | Uint8Array> = [];
+  let decoder = new TextDecoder();
+
+  const normalize = (data: string | Uint8Array): string | Uint8Array | null => {
+    if (typeof data === 'string') return data;
+    if (encoding && /^utf-?8$/iu.test(encoding)) {
+      const text = decoder.decode(data, { stream: true });
+      return text.length === 0 ? null : text;
+    }
+    return data;
+  };
+  const flush = (): void => {
+    if (stdin.listenerCount('data') === 0) return;
+    while (pending.length > 0) {
+      const chunk = pending.shift();
+      if (chunk !== undefined) stdin.emit('data', chunk);
+    }
+  };
+  const push = (data: string | Uint8Array): void => {
+    const chunk = normalize(data);
+    if (chunk == null) return;
+    if (stdin.listenerCount('data') === 0) {
+      pending.push(chunk);
+      return;
+    }
+    stdin.emit('data', chunk);
+  };
+
+  Object.assign(stdin, {
+    isTTY: false,
+    fd: 0,
+    setEncoding(next: string | null) {
+      encoding = next;
+      decoder = new TextDecoder();
+    },
+    resume() {
+      flush();
+    },
+    pause() {},
+  });
+  stdin.on('newListener', (event) => {
+    if (event === 'data') queueMicrotask(flush);
+  });
+  stdin.on('end', () => {
+    if (!encoding || !/^utf-?8$/iu.test(encoding)) return;
+    const tail = decoder.decode();
+    if (tail.length === 0) return;
+    if (stdin.listenerCount('data') === 0) {
+      pending.push(tail);
+      return;
+    }
+    stdin.emit('data', tail);
+  });
+
+  if (port) {
+    port.onmessage = (ev: MessageEvent): void => {
+      const data = ev.data;
+      if (typeof data === 'string' || data instanceof Uint8Array) push(data);
+    };
+    port.start();
+  }
+  return { stdin, push };
+}
+
+/**
+ * The unified Node `process`. `instanceof EventEmitter` holds so user code doing
+ * `process instanceof require('events')` keeps working.
+ */
+export class NodeProcess extends EventEmitter {
+  pid: number;
+  ppid: number;
+  argv: string[];
   readonly argv0 = NODE_PROCESS_IDENTITY.argv0;
   readonly execPath = NODE_PROCESS_IDENTITY.execPath;
   readonly platform = NODE_PROCESS_IDENTITY.platform;
@@ -93,26 +227,75 @@ class RiftyProcess extends EventEmitter {
   readonly version = NODE_PROCESS_IDENTITY.version;
   // Shallow copy so per-process mutation (e.g. process.versions.x = …) works
   // without throwing and doesn't leak across processes (ADR-0150: each
-  // foreground CLI in its own supervised child worker).
-  readonly versions = { ...NODE_PROCESS_IDENTITY.versions };
-  pid = 1;
-  ppid = 0;
+  // foreground CLI in its own supervised child worker). `Record` (not the narrow
+  // literal) so reads of absent keys (e.g. `versions.electron` — yargs) type-check.
+  readonly versions: Record<string, string> = { ...NODE_PROCESS_IDENTITY.versions };
   readonly title = NODE_PROCESS_IDENTITY.title;
+  env: Record<string, string | undefined>;
   exitCode = 0;
-  stdout = { write: (chunk: string) => console.log(chunk), isTTY: false, fd: 1 };
-  stderr = { write: (chunk: string) => console.error(chunk), isTTY: false, fd: 2 };
-  // No real stdin in browser; EventEmitter shell so `.on('end',…)`/`.off(…)` don't blow up.
-  stdin = new EventEmitter() as EventEmitter & {
-    isTTY: boolean;
-    fd: number;
-    setEncoding(encoding: string | null): void;
-    resume(): void;
-    pause(): void;
-  };
+  stdout: { write(chunk: string | Uint8Array): boolean; isTTY?: boolean; fd?: number };
+  stderr: { write(chunk: string | Uint8Array): boolean; isTTY?: boolean; fd?: number };
+  stdin: NodeStdin;
+  nextTick = nextTick;
+
+  /** Fork-IPC (ADR-0045) — present only when seeded with a spec ipc port. */
+  send?: (message: unknown) => boolean;
+  disconnect?: () => void;
+
+  readonly #stdinPush: (data: string | Uint8Array) => void;
+  #ipcPort: MessagePort | null = null;
+  #ipcDisconnected = false;
+  // Frames received before any `'message'` listener attaches (ADR-0045) — flushed
+  // in order on the first listener; mirrors makeStdinReader's pending buffer.
+  readonly #ipcBacklog: unknown[] = [];
+
+  constructor(spec?: KernelProcessSpec) {
+    super();
+    if (spec) {
+      this.pid = spec.pid;
+      this.ppid = spec.ppid;
+      this.argv = [...spec.argv];
+      // Copy so per-process env mutation does not leak into the published
+      // Readonly spec (the kernel threads spec.env by reference).
+      this.env = { ...spec.env };
+      currentCwd = spec.cwd;
+      this.stdout = makeStdioWriter(spec.stdio.stdout);
+      this.stderr = makeStdioWriter(spec.stdio.stderr);
+      const reader = makeStdinReader(spec.stdio.stdin);
+      this.stdin = reader.stdin;
+      this.#stdinPush = reader.push;
+      this.#wireIpc(spec.stdio.ipc);
+    } else {
+      this.pid = 1;
+      this.ppid = 0;
+      this.argv = ['rifty', 'repl'];
+      this.env = Object.create(null);
+      this.stdout = {
+        write: (chunk) => {
+          console.log(chunk);
+          return true;
+        },
+        isTTY: false,
+        fd: 1,
+      };
+      this.stderr = {
+        write: (chunk) => {
+          console.error(chunk);
+          return true;
+        },
+        isTTY: false,
+        fd: 2,
+      };
+      const reader = makeStdinReader();
+      this.stdin = reader.stdin;
+      this.#stdinPush = reader.push;
+    }
+  }
 
   cwd(): string {
     return currentCwd;
   }
+
   chdir(dir: string): void {
     if (typeof dir !== 'string') {
       throw Object.assign(new TypeError('chdir: path must be a string'), {
@@ -140,6 +323,7 @@ class RiftyProcess extends EventEmitter {
     }
     currentCwd = target;
   }
+
   hrtime(time?: [number, number]): [number, number] {
     const ms = performance.now();
     const secs = Math.floor(ms / 1000);
@@ -148,90 +332,110 @@ class RiftyProcess extends EventEmitter {
     const [s0, n0] = time;
     return [secs - s0, ns - n0];
   }
+
   uptime(): number {
     return performance.now() / 1000;
   }
-  nextTick = nextTick;
-  exit(code = 0): void {
+
+  exit(code = 0): never {
     this.exitCode = code;
     throw Object.assign(new Error(`process.exit(${code})`), {
       code: 'RIFTY_PROCESS_EXIT',
       exitCode: code,
     });
   }
+
+  /** Host bridge: deliver terminal/process stdin into this realm's process. */
+  pushStdin(data: string | Uint8Array): void {
+    this.#stdinPush(data);
+  }
+
+  #wireIpc(port: MessagePort): void {
+    this.#ipcPort = port;
+    // Browsers auto-start a port only with `addEventListener('message')`; using
+    // `onmessage = …` requires an explicit `start()` (called below).
+    port.onmessage = (ev: MessageEvent): void => {
+      const frame = ev.data as IpcFrame | undefined;
+      if (!frame || typeof frame !== 'object' || typeof frame.kind !== 'string') return;
+      if (frame.kind === 'ipc:message') {
+        if (this.listenerCount('message') === 0) {
+          this.#ipcBacklog.push(frame.payload);
+        } else {
+          this.emit('message', frame.payload);
+        }
+      } else if (frame.kind === 'ipc:disconnect') {
+        this.#tearDownIpc();
+      }
+    };
+    port.start();
+
+    // Flush frames buffered before the first listener. `newListener` fires BEFORE
+    // the listener is added, so defer to a microtask so the flush reaches it.
+    this.on('newListener', (event) => {
+      if (event !== 'message' || this.#ipcBacklog.length === 0) return;
+      queueMicrotask(() => {
+        for (const payload of this.#ipcBacklog.splice(0)) this.emit('message', payload);
+      });
+    });
+
+    this.send = (message: unknown): boolean => {
+      if (this.#ipcDisconnected) return false;
+      try {
+        const frame: IpcFrame = { kind: 'ipc:message', payload: message };
+        port.postMessage(frame);
+        return true;
+      } catch {
+        // Port may have been detached by the parent — treat as disconnect.
+        this.#tearDownIpc();
+        return false;
+      }
+    };
+
+    this.disconnect = (): void => {
+      if (this.#ipcDisconnected) return;
+      try {
+        port.postMessage({ kind: 'ipc:disconnect' } satisfies IpcFrame);
+      } catch {
+        /* peer may have closed already */
+      }
+      this.#tearDownIpc();
+    };
+  }
+
+  #tearDownIpc(): void {
+    if (this.#ipcDisconnected) return;
+    this.#ipcDisconnected = true;
+    try {
+      this.#ipcPort?.close();
+    } catch {
+      /* peer may have closed */
+    }
+    this.emit('disconnect');
+  }
 }
 
-(RiftyProcess.prototype as unknown as { hrtime: { bigint: () => bigint } }).hrtime.bigint = () =>
+(NodeProcess.prototype as unknown as { hrtime: { bigint: () => bigint } }).hrtime.bigint = () =>
   BigInt(Math.floor(performance.now() * 1e6));
 
-export const riftyProcess = new RiftyProcess();
-// TTY-ish properties + no-op resume/pause that don't belong on the class itself.
-let stdinEncoding: string | null = null;
-const pendingStdin: Array<string | Uint8Array> = [];
-let stdinDecoder = new TextDecoder();
-
-function flushPendingStdin(): void {
-  if ((riftyProcess.stdin as EventEmitter).listenerCount('data') === 0) return;
-  while (pendingStdin.length > 0) {
-    const chunk = pendingStdin.shift();
-    if (chunk === undefined) continue;
-    (riftyProcess.stdin as EventEmitter).emit('data', chunk);
-  }
-}
-
-(riftyProcess.stdin as EventEmitter).on('newListener', (event) => {
-  if (event !== 'data') return;
-  queueMicrotask(flushPendingStdin);
-});
-
-Object.assign(riftyProcess.stdin as object, {
-  isTTY: false,
-  fd: 0,
-  setEncoding(encoding: string | null) {
-    stdinEncoding = encoding;
-    stdinDecoder = new TextDecoder();
-  },
-  resume() {},
-  pause() {},
-});
-
-function normalizeStdinChunk(data: string | Uint8Array): string | Uint8Array | null {
-  if (typeof data === 'string') return data;
-  if (stdinEncoding && /^utf-?8$/iu.test(stdinEncoding)) {
-    const text = stdinDecoder.decode(data, { stream: true });
-    return text.length === 0 ? null : text;
-  }
-  return data;
-}
-
-function flushStdinDecoder(): void {
-  if (!stdinEncoding || !/^utf-?8$/iu.test(stdinEncoding)) return;
-  const tail = stdinDecoder.decode();
-  if (tail.length === 0) return;
-  if ((riftyProcess.stdin as EventEmitter).listenerCount('data') === 0) {
-    pendingStdin.push(tail);
-    return;
-  }
-  (riftyProcess.stdin as EventEmitter).emit('data', tail);
-}
-
-(riftyProcess.stdin as EventEmitter).on('end', flushStdinDecoder);
+/** REPL/default singleton (no spec). Kernel children get their own seeded one. */
+export const riftyProcess = new NodeProcess();
 
 /** Host bridge: deliver terminal/process stdin into the REPL Worker process. */
 export function writeProcessStdin(data: string | Uint8Array): void {
-  const chunk = normalizeStdinChunk(data);
-  if (chunk == null) return;
-  if ((riftyProcess.stdin as EventEmitter).listenerCount('data') === 0) {
-    pendingStdin.push(chunk);
-    return;
-  }
-  (riftyProcess.stdin as EventEmitter).emit('data', chunk);
+  riftyProcess.pushStdin(data);
 }
 
-/** Install the global `process`, patch Promise for nextTick ordering. */
+/**
+ * Install the no-spec REPL `process` on `globalThis` + patch Promise for nextTick
+ * ordering. Idempotent: skips when `globalThis.process` is already a `NodeProcess`
+ * (the kernel pre-entry seam already installed the seeded one), so a stray
+ * top-level call in a co-bundled chunk cannot clobber it (ADR-0157;
+ * backlog: runtime-js/worker-entry-process-globals-side-effect).
+ */
 export function installProcessGlobals(): void {
+  if ((globalThis as { process?: unknown }).process instanceof NodeProcess) return;
   patchPromiseForNextTick();
-  (globalThis as unknown as { process: RiftyProcess }).process = riftyProcess;
+  (globalThis as unknown as { process: NodeProcess }).process = riftyProcess;
 }
 
 /**

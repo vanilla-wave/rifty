@@ -3,10 +3,18 @@
  * inspector; `format` shims the printf-style %s/%d/%j specifiers.
  */
 import { inspect as inspectImpl } from '../repl/inspect.ts';
-import { riftyProcess } from './process.ts';
+import { NodeProcess, riftyProcess } from './process.ts';
 import { types as utilTypes } from './util-types.ts';
 
 export const inspect = inspectImpl;
+
+// Read the ACTIVE realm process (the spec-seeded one in a kernel child, ADR-0157)
+// so `debuglog` honours NODE_DEBUG / pid / stderr of THIS process — not the
+// no-spec singleton. Falls back to `riftyProcess` (REPL / in-process harness).
+function activeProcess(): NodeProcess {
+  const proc = (globalThis as { process?: unknown }).process;
+  return proc instanceof NodeProcess ? proc : riftyProcess;
+}
 
 export function format(fmt: unknown, ...args: unknown[]): string {
   if (typeof fmt !== 'string') {
@@ -94,7 +102,7 @@ export interface DebugLogFunction {
  * case-insensitively — mirrors Node's `lib/internal/util/debuglog.js`.
  */
 function debuglogEnabledFor(section: string): boolean {
-  const raw = riftyProcess.env.NODE_DEBUG;
+  const raw = activeProcess().env.NODE_DEBUG;
   if (!raw) return false;
   const target = section.toUpperCase();
   for (const token of raw.split(/[ ,]+/)) {
@@ -142,7 +150,8 @@ export function debuglog(
       return;
     }
     const [fmt, ...rest] = args;
-    riftyProcess.stderr.write(`${upper} ${riftyProcess.pid}: ${format(fmt, ...rest)}\n`);
+    const proc = activeProcess();
+    proc.stderr.write(`${upper} ${proc.pid}: ${format(fmt, ...rest)}\n`);
   }) as DebugLogFunction;
 
   Object.defineProperty(logger, 'enabled', {

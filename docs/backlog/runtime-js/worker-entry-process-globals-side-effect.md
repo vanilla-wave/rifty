@@ -25,6 +25,16 @@ The owner is now robust (env from the kernel spec, which lives on a dedicated no
 global the swap can't touch), but the clobber still replaces `globalThis.process` in the owner —
 a latent hazard for anything else that holds a process reference.
 
+## Mitigation (ADR-0157, 2026-06-20)
+
+Partially mitigated, NOT closed. ADR-0157 (a) removed the in-entry `installProcessGlobals` swap, so
+the pre-entry spec process is the canonical one user code reads (the pre-entry hook runs AFTER
+worker-chunk module-eval, so a stray top-level install is overwritten); and (b) made
+`installProcessGlobals()` idempotent (skips when `globalThis.process` is already a `NodeProcess`) as
+defense-in-depth. The ROOT (a sandbox-worker entry's global side-effect leaking into the owner chunk)
+remains: the chunk-graph isolation + the cause-level unit test below are still open, and the
+owner/dev-server `readKernelProcessSpec()` env reads are retained as belt-and-suspenders.
+
 ## Options or Next
 
 - Make `installProcessGlobals()` NOT a bare top-level side-effect in `worker-entry.ts` — guard it

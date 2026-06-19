@@ -34,7 +34,6 @@ import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { syncMirror } from '@riftydev/vfs';
 import { runNodeProgramLifecycle } from './node-program-lifecycle.ts';
 import { installLoudStdin } from './node-stdin-guard.ts';
-import { installRuntimeGlobals } from './worker-runtime-globals.ts';
 
 const proc = globalThis.process;
 const entryPath = proc.argv[1];
@@ -69,22 +68,26 @@ if (proc.env.RIFTY_REMOTE_FS === '1') {
 // servers AND for client scripts that import them; the lifecycle decides
 // drain-exit vs stay-alive from whether the entry registered a port.
 //
-// The unhandledrejection trap + drain hook are ALREADY installed in this realm by
-// kernel-worker-entry.ts (`installEventLoopKeepalive()` in the pre-entry). For a
-// run-to-completion script (no listen) `awaitDrain` surfaces a detached async
-// rejection loudly (stderr + exit 1). A served entry returns without awaiting the
-// drain, so its detached rejection surfaces via the realm's default
+// The unhandledrejection trap + drain hook are ALREADY installed in this realm at
+// module top-level in kernel-worker-entry.ts (`installEventLoopKeepalive()`, beside
+// `installTimerGlobals()` — runs at worker module load, before any spawn; NOT in the
+// pre-entry hook). For a run-to-completion script (no listen) `awaitDrain` surfaces a
+// detached async rejection loudly (stderr + exit 1). A served entry returns without
+// awaiting the drain, so its detached rejection surfaces via the realm's default
 // `unhandledrejection` reporting (the keepalive trap deliberately does not
 // preventDefault) — never silently swallowed either way.
 //
-// Gated on RIFTY_NODE_SERVE so the shared `.bin`/`execSync` path (else-branch) is
-// byte-for-byte unchanged: installRuntimeGlobals()/net builtins/stdin-guard never run there.
+// `proc` is the ONE spec-seeded rich process the pre-entry seam installed (ADR-0157):
+// correct argv/cwd/stdin + fork-IPC `send`. No swap, so `installLoudStdin(proc)` and
+// `proc.cwd()` act on the SAME object user code reads. The else-branch (.bin/execSync)
+// already has Buffer + nextTick from the gated pre-entry install; the RIFTY_NODE_SERVE
+// branch additionally registers net builtins + the stdin guard (not needed there).
 if (proc.env.RIFTY_NODE_SERVE === '1') {
   registerNetBuiltins();
-  const kernelIpc = installRuntimeGlobals();
-  // Interactive stdin is not forwarded to a `node <file>` child (ADR-0154 §5):
-  // make the consume surface throw loudly instead of hanging on input that never
-  // arrives (Fidelity — no silent divergence). backlog/kernel/worker-per-process-residuals.
+  // Interactive stdin is not forwarded to a `node <file>` child (ADR-0154 §5,
+  // ADR-0157 §4): make the consume surface throw loudly instead of hanging on
+  // input that never arrives (Fidelity — no silent divergence).
+  // backlog/kernel/worker-per-process-residuals + terminal/raw-stdin-deferred-items.
   installLoudStdin(proc);
   await runNodeProgramLifecycle({
     runEntry: () => runNodeEntry({ vfs: syncMirror(), entryPath, cwd: proc.cwd(), bin: false }),
@@ -92,7 +95,7 @@ if (proc.env.RIFTY_NODE_SERVE === '1') {
     awaitDrain: () => awaitDrain(),
     servePreview: (port) =>
       serveCrossRealmPreview(port, async (request) => dispatchToPort(port, request)),
-    postListening: (ports) => kernelIpc.send?.({ type: 'rifty:node-listening', ports }),
+    postListening: (ports) => proc.send?.({ type: 'rifty:node-listening', ports }),
     exit: (code) => proc.exit(code),
   });
 } else {

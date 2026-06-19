@@ -29,6 +29,20 @@
 
 ### Changed
 
+- **Unified spec-seeded mutable `NodeProcess` + gated rich pre-entry install (ADR-0157).** The
+  kernel pre-entry shim (`WorkerNodeProcessShim`) and the REPL `RiftyProcess` are now ONE
+  `NodeProcess extends EventEmitter` (`builtins/process.ts`): spec-seeded (pid/ppid/argv/env/cwd +
+  stdio MessagePorts + ADR-0045 fork-IPC) AND mutable (chdir/nextTick/hrtime/uptime/exitCode). The
+  pre-entry installer (`ipc/install-process.ts`) builds it once and, gated to Node workers
+  (`isNode = spec.env.__RIFTY_WASI_WASM_URL === undefined`), also runs `patchPromiseForNextTick()`
+  + installs `globalThis.Buffer` — so kernel-spawned Node CLIs gain `nextTick`/`hrtime`/`Buffer` they
+  previously lacked, while a WASI realm leaves `Promise.prototype.then` native and gets no `Buffer`.
+  `installProcessGlobals()` is now idempotent (skips when `globalThis.process` is already a
+  `NodeProcess`), which — together with removing the in-entry swap so the pre-entry spec process is
+  canonical — MITIGATES `backlog: runtime-js/worker-entry-process-globals-side-effect` (chunk-graph
+  isolation still tracked there). Public subpath exports
+  (`./install-process`, `./builtins/process`) and their helpers (`riftyProcess`, `setProcessCwd`,
+  `getProcessCwd`, `writeProcessStdin`) are preserved as delegates over the unified class.
 - **`node:vm` dual-engine cutover (ADR-0142, supersedes ADR-0138).** `node:vm` sandbox APIs
   (`runInNewContext`/`runInContext`/`Script.*`) now run in a REAL QuickJS-WASM realm by
   DEFAULT; the host-realm `with(proxy)+eval(AST-rewrite)` engine is a LOUD opt-in (`vmEngine`

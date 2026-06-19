@@ -68,9 +68,38 @@
   top-level `await bootstrap()` so it can't be imported) into an importable, side-effect-free module
   so a P6b child realm can import it. No behavior change: the owner still imports `bootDevServer` and
   calls it in-realm exactly as before; the spawn-to-child flip is a later task.
+- **One spec-seeded mutable Node `process` at the pre-entry seam; removed the post-spawn
+  `globalThis.process` swap** (ADR-0157). `node-entry-bootstrap.ts` no longer calls
+  `installRuntimeGlobals()` (the `installProcessGlobals` swap that orphaned argv/cwd/stdin);
+  `proc = globalThis.process` is the rich seeded process throughout (`postListening` uses
+  `proc.send`). `worker-runtime-globals.ts installRuntimeGlobals()` degrades to a thin fork-IPC
+  handle accessor (no process/Buffer/timers swap) — still used by `dev-server-child-bootstrap` +
+  `real-vite-bootstrap` for `{send,onMessage}`; `setProcessCwd(root)` retained where the realm
+  overrides cwd. The pre-entry hook (`kernel-worker-entry.ts`) installs the rich process gated to
+  Node workers (`isNode = no __RIFTY_WASI_WASM_URL`). Brittle `real-vite-bootstrap.test.ts`
+  source-greps for `installRuntimeGlobals()` replaced with behavioral assertions.
+- **Preview panel mounts on node-server ports even when the dev server is stopped** (ADR-0154 §3
+  follow-up). `hasPreview()` now ORs `previewPorts().length > 0`, the `<Show>` no longer re-keys on
+  `realVitePort()` (PreviewPanel self-reconciles its selection — a dev-port change no longer resets
+  the chosen node port), and `previewUrl`/`openPreviewTab` accept any registered preview port (not
+  only when the dev server runs) so "open in new tab" no longer silently no-ops for a node-only preview.
 
 ### Fixed
 
+- **`node <file>` server now sees its real `process.argv`/`process.cwd()`/`process.stdin`** (ADR-0157).
+  The `RIFTY_NODE_SERVE` bootstrap previously read `proc = globalThis.process` (the seeded shim) then
+  swapped `globalThis.process` to the default `riftyProcess` (`argv=['rifty','repl']`, `cwd='/workspace'`,
+  bare stdin), so user code saw the wrong argv/cwd and the stdin loud-guard was installed on the
+  ORPHANED old object. The unified seeded process eliminates the swap → argv/cwd/stdin are correct by
+  construction and the loud-guard patches the object user code actually reads.
+- **`node-stdin-guard.test.ts` was false-green** (ADR-0157) — it asserted against a synthetic
+  `{ stdin: {} }` the guard fully replaced, so it never exercised the real `makeStdinReader`
+  EventEmitter and missed that `setRawMode`/`setEncoding`/`pause`/`resume` were not neutralized. The
+  guard now patches the real seeded stdin in place (every consume method throws `NotImplementedError`,
+  `'data'`-listener-add gated, `isTTY`/`'end'` passive) and the test runs against a real seeded process.
+- **`.bin`/`execSync` children now get `Buffer` + `process.nextTick` ordering** (ADR-0157) — the
+  else-branch previously skipped `installRuntimeGlobals`, so a `.bin` tool using `Buffer` threw
+  ReferenceError and `process.nextTick` threw TypeError; the gated rich pre-entry install closes the gap.
 - **From-scratch preset boots clean over a prior preset's tree — no more EBROKENLOCK** (ADR-0135).
   Selecting a from-scratch vite preset (`real-vite`) after an instant one (`project-files` /
   `node-worker`) installed over the instant preset's baked-snapshot tree: its `package-lock.json`
