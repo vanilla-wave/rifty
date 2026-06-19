@@ -15,7 +15,7 @@
  */
 
 import { EventEmitter, NotImplementedError } from '@riftydev/io';
-import { registerPort, unregisterPort } from './registry.ts';
+import { addrInUseError, isPortBound, registerPort, unregisterPort } from './registry.ts';
 
 // Shared one-shot codecs (default config, non-fatal). One-shot utf8
 // encode/decode is stateless, so a module singleton is byte-identical and
@@ -113,6 +113,12 @@ export class Server extends EventEmitter {
     const callback = (typeof hostnameOrCb === 'function' ? hostnameOrCb : cb) as
       | (() => void)
       | undefined;
+    // Port already bound in this realm → async `'error'` EADDRINUSE, like Node
+    // (server returned, no `'listening'`; ADR-0157 review C3).
+    if (isPortBound(port)) {
+      queueMicrotask(() => this.emit('error', addrInUseError('127.0.0.1', port)));
+      return this;
+    }
     this.listenedPort = port;
     registerPort(port, async (request) => {
       const socket = new HttpFramedSocket();

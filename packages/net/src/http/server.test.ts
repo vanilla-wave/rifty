@@ -76,6 +76,34 @@ describe('HttpServer.listen — options-object overload (Q-2026-05-30-101)', () 
     s.listen({ port: 4099 });
     expect(s.address()).toEqual({ port: 4099 });
   });
+
+  // ADR-0157 review C3: a second listen on a bound port emits an async `'error'`
+  // EADDRINUSE (Node-faithful — NOT a sync throw, the server is returned and
+  // `'listening'` never fires) instead of silently overwriting the registry.
+  it('second listen on a bound port emits an EADDRINUSE error, not a silent overwrite', async () => {
+    const first = createServer();
+    first.listen({ port: 4110 });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const second = createServer();
+    let secondListened = false;
+    second.on('listening', () => {
+      secondListened = true;
+    });
+    const error = await new Promise<Error & Record<string, unknown>>((resolve) => {
+      second.on('error', (...args: unknown[]) =>
+        resolve(args[0] as Error & Record<string, unknown>),
+      );
+      second.listen({ port: 4110 });
+    });
+    expect(error.code).toBe('EADDRINUSE');
+    expect(error.syscall).toBe('listen');
+    expect(error.port).toBe(4110);
+    expect(secondListened).toBe(false);
+    // The original handler still owns the port (not clobbered).
+    expect(listPorts().filter((p) => p === 4110)).toEqual([4110]);
+  });
 });
 
 /**

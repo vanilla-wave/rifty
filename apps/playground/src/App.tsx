@@ -284,9 +284,14 @@ export function App(props: AppProps) {
   // down all.
   const nodePortBridges = new Map<number, () => void>();
   createEffect(() => {
+    // Never wire a node bridge for the ACTIVE dev-server port (ADR-0157 review C3):
+    // the `onDevServer` path already owns that `/preview/<port>/` route, so a node
+    // server that picked the same port must not register a second (clobbering)
+    // bridge whose teardown would delete the shared route.
+    const devPort = devServerRunning() ? machine.realVitePort() : null;
     const live = new Set(
       previewPorts()
-        .filter((p) => p.source === 'node')
+        .filter((p) => p.source === 'node' && p.port !== devPort)
         .map((p) => p.port),
     );
     for (const port of live) {

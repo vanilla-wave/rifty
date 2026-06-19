@@ -15,6 +15,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | 204 / 304 null-body statuses | ✅ | No invalid fetch `Response` body |
 | Length-less bodied request framing | ✅ | Adds Node-shaped body framing for body parsers |
 | `server.close()` | ✅ | Unregisters port and callback fires |
+| `listen` on a bound port | ✅ | Emits an async `error` `EADDRINUSE` (errno -98, syscall `listen`) — server not bound, no `listening`; realm-local registry, so this catches an intra-realm double-listen (ADR-0157) |
 | Missing port dispatch | ✅ | Returns 502 through registry dispatch |
 | `http.get` loopback | ✅ | Client request to own registered port |
 | External WebSocket client egress | ✅ | Non-local `ws` client upgrades use the native worker/browser `WebSocket` primitive |

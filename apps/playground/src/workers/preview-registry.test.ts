@@ -64,4 +64,18 @@ describe('preview-registry', () => {
       (sent.at(-1) as Extract<OwnerToPageFrame, { type: 'pty:preview' }>).ports.map((p) => p.port),
     ).toEqual([5174, 3000, 8080, 8081]);
   });
+
+  it('dedups a node port that collides with the dev-server port — dev wins (C3)', () => {
+    const { send, sent } = frames();
+    const reg = createPreviewRegistry({ send });
+    reg.setDevServer(5174);
+    // A `node server.js` that picked the SAME port (no PORT injection, ADR-0154 §4)
+    // must NOT be double-listed: the SW routes one /preview/5174/, so two entries
+    // would make the page wire two clobbering bridges whose teardown deletes the
+    // shared route. The dev slot wins; the distinct node port stays.
+    reg.addNode('s1', [5174, 4001]);
+    const ports = (sent.at(-1) as Extract<OwnerToPageFrame, { type: 'pty:preview' }>).ports;
+    expect(ports.map((p) => p.port)).toEqual([5174, 4001]);
+    expect(ports.find((p) => p.port === 5174)?.source).toBe('dev-server');
+  });
 });
