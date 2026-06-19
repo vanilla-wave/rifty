@@ -84,6 +84,8 @@ const TOMBSTONES = new Set([
   'docs/compat/opencode-tool-ceiling.md',
   'docs/compat/browsers.md',
   'docs/public/compat/browsers.md',
+  // completed backlog items removed on close (record = the ADR + code; ADR bodies still cite them)
+  'docs/backlog/playground/terminal-node-command.md', // done → ADR-0154
 ]);
 
 const errors = [];
