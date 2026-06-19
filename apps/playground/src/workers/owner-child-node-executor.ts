@@ -70,7 +70,12 @@ export function createOwnerChildNodeExecutor(
     const h = globalProcessManager.spawnWorker('node', spec, 1);
     if (h.kind !== 'worker')
       throw new Error(`owner-child-node-executor: expected worker, got ${h.kind}`);
-    return h as unknown as NodeChildHandle;
+    // After the kind guard TS narrows to WorkerProcessHandle, which structurally
+    // satisfies NodeChildHandle: stdout()/stderr() are Readable; on(event,listener)
+    // (wide EventEmitter sig) covers the narrowed 'exit'/'message' overloads;
+    // send()/kill() return values are assignable to `unknown`. No cast needed
+    // (mirrors owner-child-bin-executor).
+    return h;
   },
 ): OwnerNodeExecutor {
   return (entry, args, ctx, hooks) =>
