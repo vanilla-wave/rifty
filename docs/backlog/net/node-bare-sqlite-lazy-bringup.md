@@ -14,7 +14,10 @@ code: [apps/playground/src/workers/node-entry-bootstrap.ts, apps/playground/src/
 ADR-0154 lands `node <file>` registering net builtins always (http/net), but NOT the `node:sqlite`
 engine — `dev-server-boot.ts` `bootNodeServer` fetches the bundled `sql-wasm.wasm` + `initSqliteEngine`
 eagerly under `cfg.sqlite` (template-gated). A bare-node entry importing `node:sqlite` therefore has
-the builtin registered but no engine. Per Fidelity this stays a loud gap, not a silent stub.
+NO `node:sqlite` builtin registered at all: `node-entry-bootstrap.ts` calls only `registerNetBuiltins()`
+(net/http/https), while the `node:sqlite` builtin lives in a separate `packages/net/src/sqlite/
+register-builtins.ts` that the node-entry path never imports. Per Fidelity this stays a loud gap, not a
+silent stub.
 
 ## Options or Next
 
@@ -22,7 +25,10 @@ Make the `node:sqlite` builtin bring up the engine LAZILY on first `DatabaseSync
 `initSqliteEngine`, memoised) so a bare `node seed.js` works like Node, without paying the 30 s cost
 on every `node <file>` run. Reuse the `wasmBinary` + pinned `locateFile` shape from
 `dev-server-boot.ts` (D-001 — bundled same-origin asset, no CDN). Until then a bare-node
-`require('node:sqlite')`/`DatabaseSync` must fail LOUD (NotImplementedError), never a silent stub.
+`require('node:sqlite')` fails LOUD as `ModuleLoadError(code:'MODULE_NOT_FOUND')` ("Built-in
+'node:sqlite' is not implemented") from the resolver's unknown-builtin path (`module-loader/
+resolver.ts`) — NOT a `NotImplementedError`, and never a silent stub. (Once the builtin is wired but
+the engine is lazy, the failure class shifts to the engine-not-initialised throw.)
 
 ## Reversibility
 

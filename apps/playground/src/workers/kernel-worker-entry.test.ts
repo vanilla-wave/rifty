@@ -10,7 +10,7 @@ const source = readFileSync(
 describe('kernel worker entry bundle wrapper', () => {
   it('uses explicit installer bindings so Vite cannot erase the worker setup chunk', () => {
     expect(source).toContain(
-      "import { installNodeProcessShim } from '@riftydev/runtime-js/install-process'",
+      "import { installNodeRuntime } from '@riftydev/runtime-js/install-process'",
     );
     expect(source).toContain(
       "import { installWorkerEntry, setKernelPreEntryHook } from '@riftydev/kernel/worker-entry'",

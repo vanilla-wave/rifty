@@ -75,7 +75,10 @@ export function ensureRuntimeJsBuiltinsRegistered(): void {
     Object.assign(exports, bufferModule);
     return exports;
   });
-  registerBuiltin('process', () => riftyProcess);
+  // `require('process')` returns the LIVE realm process (the spec-seeded one in a
+  // kernel child, ADR-0157) so it === globalThis.process, like Node. Falls back to
+  // the no-spec singleton before install / in the in-process harness.
+  registerBuiltin('process', () => (globalThis as { process?: unknown }).process ?? riftyProcess);
   registerBuiltin('timers', () => timersModule);
   registerBuiltin('timers/promises', () => timersPromises);
   registerBuiltin('fs', () => fsModule);

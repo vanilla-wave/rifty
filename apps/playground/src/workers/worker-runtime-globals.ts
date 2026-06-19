@@ -1,14 +1,17 @@
 // apps/playground/src/workers/worker-runtime-globals.ts
 /**
- * Shared worker-realm runtime-globals install (extracted from real-vite-bootstrap
- * so the dev-server child bootstrap can reuse it without importing the owner
- * entry module). Preserves kernel pre-entry stdio + env + fork-IPC across the
- * installProcessGlobals() swap — else all worker logs (boot progress AND error
- * stacks) vanish into the worker devtools console and a stalled boot looks frozen.
+ * Fork-IPC handle accessor for worker realms (ADR-0157).
+ *
+ * Under ADR-0157 the kernel pre-entry seam installs ONE spec-seeded rich
+ * `process` (correct stdout/stderr/env + ADR-0045 fork-IPC `send`/`on`) before
+ * any bootstrap runs — there is no longer a `globalThis.process` swap to undo.
+ * So this no longer installs anything: it just reads the fork-IPC `send`/`on`
+ * surface off the already-installed `globalThis.process` and returns it as the
+ * `KernelIpc` handle the owner + dev-server bootstraps post page frames over.
+ *
+ * Name kept (callers: real-vite-bootstrap, dev-server-child-bootstrap) — the
+ * swap-then-re-patch dance it used to perform is gone.
  */
-import { Buffer } from '@riftydev/runtime-js/builtins/buffer';
-import { installProcessGlobals } from '@riftydev/runtime-js/builtins/process';
-import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 
 export interface ProcStdio {
   stdout?: { write?: unknown };
@@ -25,38 +28,18 @@ export interface KernelIpc {
 }
 
 export function installRuntimeGlobals(): KernelIpc {
-  // Gotcha: the kernel pre-entry hook's `process` posts stdout/stderr to the
-  // page over MessagePorts (the only reason the terminal sees worker output).
-  // `installProcessGlobals` swaps in runtime-js's richer shim, but its stdout/
-  // stderr default to `console.*` (worker console, NOT page terminal) and env
-  // is empty — clobbering the wiring made all worker logs (boot progress AND
-  // error stacks) vanish, so a stalled boot looked frozen. Preserve kernel
-  // stdio + env across the swap.
-  const prev = globalThis.process as unknown as ProcStdio | undefined;
-  const kStdout = prev?.stdout;
-  const kStderr = prev?.stderr;
-  const kEnv = prev?.env;
-  const kOnMessage =
-    typeof prev?.on === 'function'
+  const proc = globalThis.process as unknown as ProcStdio | undefined;
+  const onMessage =
+    typeof proc?.on === 'function'
       ? (handler: (message: unknown) => void) => {
-          prev.on?.('message', handler);
+          proc.on?.('message', handler);
         }
       : undefined;
-  // The fork-IPC `send` lives on the kernel pre-entry process shim; the
-  // installProcessGlobals swap below drops it, so capture it (bound) BEFORE the
-  // swap — the pty server posts owner→page frames through it (ADR-0146).
-  const kSend =
-    typeof prev?.send === 'function'
+  const send =
+    typeof proc?.send === 'function'
       ? (message: unknown) => {
-          prev.send?.(message);
+          proc.send?.(message);
         }
       : undefined;
-  installProcessGlobals();
-  installTimerGlobals();
-  (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
-  const proc = globalThis.process as unknown as ProcStdio;
-  if (kStdout && typeof kStdout.write === 'function') proc.stdout = kStdout;
-  if (kStderr && typeof kStderr.write === 'function') proc.stderr = kStderr;
-  if (kEnv) proc.env = kEnv;
-  return { onMessage: kOnMessage, send: kSend };
+  return { onMessage, send };
 }
