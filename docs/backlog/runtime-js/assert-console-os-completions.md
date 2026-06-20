@@ -5,7 +5,7 @@ title: node:assert/console/os completions
 created: 2026-06-20
 why: test-staple assert matchers reuse existing AssertionError/deepEqualImpl/matchesExpected; os constants are fictional-ABI-consistent strings; none in any catch-all (lists only os.setPriority)
 user_story: As a dev running a Node test suite / build tool in rifty, I want assert.match/ifError/rejects + assert.throws(fn,{code}) + os.machine/devNull/version, but today they're absent and the test crashes ReferenceError
-sources: [research/node-parity-gaps-unbacklogged-2026-06-20.md §9, docs/adr/0026-*]
+sources: [research/node-parity-gaps-unbacklogged-2026-06-20.md §9, docs/adr/runtime-js/0026-*]
 code: [packages/runtime-js/src/builtins/assert.ts, packages/runtime-js/src/builtins/console.ts, packages/runtime-js/src/builtins/os.ts]
 ---
 
