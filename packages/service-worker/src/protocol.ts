@@ -50,6 +50,16 @@ export const SW_FRAME_VERSION = '1';
  *     window or when a copied top-level preview URL has exactly one live Worker
  *     owner for that port. The warn/mismatch dedup key shapes are part of the
  *     contract.
+ *   - Window owners advertise an additive `ports` field and are resolved
+ *     port-keyed for falsy-clientId preview traffic (ADR-0160, extends ADR-0040;
+ *     relates ADR-0123/0125): a unique ready window owning the port -> route;
+ *     multiple -> 503 isolation, symmetric with the existing worker
+ *     `(ownerToken, port)` scoping. A window advertising no ports keeps the
+ *     legacy ready-window fallback.
+ *   - Window `rifty:preview:ready` frames are rejected when the SW has served
+ *     that clientId a `/preview/<port>/` document (ADR-0160 anti-hijack; keyed
+ *     on the SW-served-nav fact, not `client.url`, so `history.pushState`
+ *     cannot defeat it).
  *   - Preview-frame port context in `./preview-bridge.ts` (ADR-0097): once an
  *     iframe commits `/preview/<port>/`, same-origin root requests from that
  *     iframe's `FetchEvent.clientId` (or a same-origin `/preview/<port>/`
@@ -57,13 +67,14 @@ export const SW_FRAME_VERSION = '1';
  *
  * Bump on: changes to the URL regex shape, the synthetic host literal, the
  * `synthesizePreviewUrl` return shape, the resolver fallback order, the Worker
- * claim scope, the preview-frame port context, or the mismatch /
- * first-window-warn dedup key shape.
+ * or window port claim scope, the window anti-hijack rejection, the
+ * preview-frame port context, or the mismatch / first-window-warn dedup key
+ * shape.
  *
  * Does NOT cover wire-frame data shapes — those are pinned by
  * {@link SW_FRAME_VERSION}.
  */
-export const SW_ROUTING_VERSION = '3';
+export const SW_ROUTING_VERSION = '4';
 
 export const SW_PING = '__rifty_sw_ping__';
 export const SW_PONG = '__rifty_sw_pong__';

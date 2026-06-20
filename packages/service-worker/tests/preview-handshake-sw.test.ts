@@ -342,6 +342,223 @@ describe('SW-side handshake state machine', () => {
     interceptor.teardown();
   });
 
+  it('routes a copied top-level preview URL to the window that advertised the port, not an arbitrary ready window', async () => {
+    // Two ready windows. matchAll() returns B first; only A advertised port
+    // 5174. The SW must route to A — picking matchAll()[0] (B) is the misroute
+    // ADR-0160 closes (window owners are now port-keyed for falsy-clientId
+    // preview traffic).
+    const windowB = makeMockClient('window-B');
+    const windowA = makeMockClient('window-A');
+    const scope = makeMockScope([windowB, windowA]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ports: [8080],
+      },
+      windowB,
+    );
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ports: [5174],
+      },
+      windowA,
+    );
+
+    const responsePromise = scope.fetch('http://x/preview/5174/', {
+      requestMode: 'navigate',
+      destination: 'document',
+      resultingClientId: 'fresh-tab',
+    });
+    await flushPreviewDispatch();
+    expect(windowB.postMessage).not.toHaveBeenCalled();
+    expect(windowA.postMessage).toHaveBeenCalledTimes(1);
+    const call = windowA.postMessage.mock.calls[0]!;
+    const message = call[0] as { request?: { port: number } };
+    expect(message.request?.port).toBe(5174);
+    const replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
+    expect((await responsePromise).status).toBe(200);
+    interceptor.teardown();
+  });
+
+  it('returns 503 when multiple ready windows advertise the same port (isolation)', async () => {
+    // Both windows advertise port 5174 — ambiguous, so route-preview 503s
+    // before picking either, symmetric with the multi-worker isolation
+    // (ADR-0123, now extended to windows by ADR-0160).
+    const windowA = makeMockClient('window-A');
+    const windowB = makeMockClient('window-B');
+    const scope = makeMockScope([windowA, windowB]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    for (const w of [windowA, windowB]) {
+      scope.postMessage(
+        {
+          type: SW_PREVIEW_READY,
+          frameVersion: SW_FRAME_VERSION,
+          routingVersion: SW_ROUTING_VERSION,
+          ports: [5174],
+        },
+        w,
+      );
+    }
+
+    const response = await scope.fetch('http://x/preview/5174/', {
+      requestMode: 'navigate',
+      destination: 'document',
+      resultingClientId: 'fresh-tab',
+    });
+    expect(response.status).toBe(503);
+    expect(windowA.postMessage).not.toHaveBeenCalled();
+    expect(windowB.postMessage).not.toHaveBeenCalled();
+    interceptor.teardown();
+  });
+
+  it('routes to the sole ready window that advertised no ports (back-compat)', async () => {
+    // Legacy page-owned dev mode posts ready with NO ports — the binding keeps
+    // the legacy ready-preferring fallback (ADR-0160 keeps the no-ports path
+    // unchanged).
+    const windowClient = makeMockClient('window-A');
+    const scope = makeMockScope([windowClient]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+      },
+      windowClient,
+    );
+
+    const responsePromise = scope.fetch('http://x/preview/5174/', {
+      requestMode: 'navigate',
+      destination: 'document',
+      resultingClientId: 'fresh-tab',
+    });
+    await flushPreviewDispatch();
+    expect(windowClient.postMessage).toHaveBeenCalledTimes(1);
+    const call = windowClient.postMessage.mock.calls[0]!;
+    const message = call[0] as { request?: { port: number } };
+    expect(message.request?.port).toBe(5174);
+    const replyPort = (call[1] as MessagePort[])[0]!;
+    replyPort.postMessage({ status: 200, statusText: 'OK', headers: {}, body: null });
+    expect((await responsePromise).status).toBe(200);
+    interceptor.teardown();
+  });
+
+  it('rejects rifty:preview:ready from a clientId the SW served a preview document to (anti-hijack)', async () => {
+    // A previewed app's window IS in the interceptor's previewFrameContexts map
+    // (the SW served its /preview nav). Its ready frame must be rejected so it
+    // cannot hijack the bridge (ADR-0160 anti-hijack, keyed on the SW-served-nav
+    // fact, not client.url).
+    const evil = makeMockClient('evil');
+    const scope = makeMockScope([evil]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // FIRST: a preview navigation served to `evil` records it as a
+    // preview-document client. No owner yet, so it never resolves — do NOT
+    // await it.
+    scope.fetch('http://x/preview/5174/', {
+      requestMode: 'navigate',
+      destination: 'document',
+      resultingClientId: 'evil',
+    });
+    await flushPreviewDispatch();
+
+    // THEN: evil tries to become the bridge owner for port 5174.
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ports: [5174],
+      },
+      evil,
+    );
+
+    // A fresh preview fetch must NOT route to evil (its ready was rejected) and
+    // must 503 — no legit ready owner exists. Evil is never port-keyed and is
+    // not in the ready set, so route-preview can only fall through to the
+    // unready-window path and 503 on the handshake timeout.
+    const responsePromise = scope.fetch('http://x/preview/5174/', {
+      requestMode: 'navigate',
+      destination: 'document',
+      resultingClientId: 'other',
+    });
+    await vi.advanceTimersByTimeAsync(3_001);
+    const response = await responsePromise;
+    expect(response.status).toBe(503);
+    expect(evil.postMessage).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+    interceptor.teardown();
+  });
+
+  it('keeps rejecting ready from an evicted-but-live preview-document client (anti-hijack survives frame-context eviction)', async () => {
+    // ADR-0160: the anti-hijack membership must NOT depend on the routing
+    // frame-context LRU (cap 256, insertion-order eviction). Evict `evil` from
+    // that LRU with unrelated preview navigations, then let `evil` — still a
+    // live client — post ready. It must STILL be rejected; otherwise eviction
+    // re-exposes the hijack (preview-owner-window-auth residual).
+    const evil = makeMockClient('evil');
+    const scope = makeMockScope([evil]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // SW serves `evil` a preview document — records it as a preview-document client.
+    void scope.fetch('http://x/preview/5174/', {
+      requestMode: 'navigate',
+      destination: 'document',
+      resultingClientId: 'evil',
+    });
+    // Evict `evil` from the routing frame-context LRU (cap 256) with unrelated navs.
+    for (let i = 0; i < 260; i += 1) {
+      void scope.fetch('http://x/preview/5174/', {
+        requestMode: 'navigate',
+        destination: 'document',
+        resultingClientId: `tab-${i}`,
+      });
+    }
+    await flushPreviewDispatch();
+
+    // `evil` tries to claim the bridge after eviction.
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ports: [5174],
+      },
+      evil,
+    );
+
+    const responsePromise = scope.fetch('http://x/preview/5174/', {
+      requestMode: 'navigate',
+      destination: 'document',
+      resultingClientId: 'probe',
+    });
+    await vi.advanceTimersByTimeAsync(3_001);
+    const response = await responsePromise;
+    expect(response.status).toBe(503);
+    expect(evil.postMessage).not.toHaveBeenCalled();
+    warnSpy.mockRestore();
+    interceptor.teardown();
+  });
+
   it('does not let a Worker claim the same port for another window owner', async () => {
     const windowA = makeMockClient('window-A');
     const windowB = makeMockClient('window-B');

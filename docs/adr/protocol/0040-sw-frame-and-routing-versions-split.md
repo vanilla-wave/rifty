@@ -61,3 +61,7 @@ The host inspects `expected.frame !== got.frame` vs `expected.routing !== got.ro
 - **ADR-0031** — Per-frame version validation. Stays in effect for the frame-shape side; this ADR builds on it (the validated constant is now two). The "refuse mismatched peers" rule is unchanged.
 - **ADR-0036** — Preview-protocol addressing in `@riftydev/io`. The routing version pins the shape of its addressing primitives.
 - **2026-05-26 service-worker audit (F2)** — recorded the gap this ADR fixes; F2's widen-or-split recommendation is resolved in favour of the split.
+
+### Cited by
+
+- **ADR-0160** extends the routing version to window port-keying + anti-hijack ready frames (`SW_ROUTING_VERSION` `3`→`4`).

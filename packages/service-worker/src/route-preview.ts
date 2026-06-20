@@ -29,6 +29,17 @@ import {
   type SwProtocolVersionMismatchError,
 } from './protocol.ts';
 
+// Error responses need the same CORP+COEP as the success path
+// (route-preview.ts ~118-127) or the iframe blocks them under page COEP
+// credentialless (D-001). 503/502 honesty: a foreign tab sees the page, not
+// ERR_BLOCKED_BY_RESPONSE.
+function previewErrorResponse(body: string, status: number): Response {
+  const headers = new Headers();
+  headers.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  headers.set('Cross-Origin-Embedder-Policy', 'credentialless');
+  return new Response(body, { status, headers });
+}
+
 /**
  * Forward a matched preview fetch to the owning client and translate the
  * reply back into a {@link Response}. Returns 503 when the owner cannot be
@@ -51,23 +62,23 @@ export async function routePreview(
 ): Promise<Response> {
   const client = await binding.resolveOwner(scope, request, clientId, match.port);
   if (!client) {
-    return new Response(`No client to serve preview port ${match.port}`, { status: 503 });
+    return previewErrorResponse(`No client to serve preview port ${match.port}`, 503);
   }
   if (readiness.isMismatched(client.id)) {
-    return new Response('protocol version mismatch', { status: 503 });
+    return previewErrorResponse('protocol version mismatch', 503);
   }
   const outcome = await readiness.waitForReady(client.id, timeoutMs);
   if (outcome === 'mismatch') {
-    return new Response('protocol version mismatch', { status: 503 });
+    return previewErrorResponse('protocol version mismatch', 503);
   }
   if (outcome === 'gone') {
-    return new Response(`preview owner ${client.id} departed before handshake`, { status: 503 });
+    return previewErrorResponse(`preview owner ${client.id} departed before handshake`, 503);
   }
   if (outcome === 'timeout') {
     if (readiness.isMismatched(client.id)) {
-      return new Response('protocol version mismatch', { status: 503 });
+      return previewErrorResponse('protocol version mismatch', 503);
     }
-    return new Response(`preview-bridge not ready within ${timeoutMs}ms`, { status: 503 });
+    return previewErrorResponse(`preview-bridge not ready within ${timeoutMs}ms`, 503);
   }
 
   const channel = new MessageChannel();
@@ -109,10 +120,10 @@ export async function routePreview(
             expected: err.expected,
             got: err.got,
           });
-          resolve(new Response(err.message, { status: 503 }));
+          resolve(previewErrorResponse(err.message, 503));
           return;
         }
-        resolve(new Response(typeof err === 'string' ? err : err.message, { status: 502 }));
+        resolve(previewErrorResponse(typeof err === 'string' ? err : err.message, 502));
         return;
       }
       const headers = new Headers(data.headers);

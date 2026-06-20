@@ -148,10 +148,15 @@ function matchPreviewReferrer(request: Request, origin: string): { port: number 
 
 function rememberPreviewFrameContext(
   contexts: Map<string, PreviewFrameContext>,
+  docClients: Set<string>,
   clientId: string | null,
   context: PreviewFrameContext,
 ): void {
   if (!clientId) return;
+  // ADR-0160 anti-hijack: membership lives in `docClients` (pruned by liveness,
+  // never insertion-evicted) so eviction of the routing `contexts` below cannot
+  // re-expose a live preview document as a trustable bridge owner.
+  docClients.add(clientId);
   // TODO(backlog: service-worker/preview-frame-context-lifecycle): replace the
   // fixed cap with explicit client-lifetime cleanup once browser support is
   // mapped. Until then, insertion-order eviction bounds reload churn.
@@ -225,13 +230,38 @@ export function createPreviewInterceptor(
   hooks: MessageHandlerHooks = {},
 ): PreviewInterceptor {
   const timeoutMs = hooks.timeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
+  // ADR-0160: routing frame-context (LRU-bounded) — recovers a preview iframe's
+  // port for its subresources.
+  const previewFrameContexts = new Map<string, PreviewFrameContext>();
+  // ADR-0160 anti-hijack: clientIds the SW has served a `/preview/<port>/`
+  // document to. SEPARATE from the routing LRU and pruned by LIVENESS (below),
+  // not insertion order — a live preview document is NEVER dropped, so it can
+  // never reclaim the bridge after churn (closes preview-owner-window-auth).
+  // Declared above `binding` so the predicate can close over it.
+  const previewDocumentClients = new Set<string>();
+  let pruningDocClients = false;
+  const prunePreviewDocumentClients = async (): Promise<void> => {
+    if (pruningDocClients) return;
+    pruningDocClients = true;
+    try {
+      const live = await scope.clients.matchAll({ type: 'window', includeUncontrolled: false });
+      const liveIds = new Set(live.map((c) => c.id));
+      for (const id of previewDocumentClients) {
+        if (!liveIds.has(id)) previewDocumentClients.delete(id);
+      }
+    } finally {
+      pruningDocClients = false;
+    }
+  };
   const binding =
     hooks.binding ??
     new PortAwareOwnerBinding({
-      window: hooks.resolver !== undefined ? { resolver: hooks.resolver } : undefined,
+      window: {
+        ...(hooks.resolver !== undefined ? { resolver: hooks.resolver } : {}),
+        isUntrustedSource: (id: string) => previewDocumentClients.has(id),
+      },
     });
   const subscription = binding.subscribeReadiness(scope);
-  const previewFrameContexts = new Map<string, PreviewFrameContext>();
 
   const fetchHandler = (event: FetchEvent): void => {
     const url = new URL(event.request.url);
@@ -256,7 +286,12 @@ export function createPreviewInterceptor(
           }
         : knownPreviewContext;
       if (createsFrameContext && context) {
-        rememberPreviewFrameContext(previewFrameContexts, frameClientId, context);
+        rememberPreviewFrameContext(
+          previewFrameContexts,
+          previewDocumentClients,
+          frameClientId,
+          context,
+        );
       }
       // ADR-0097 extends ADR-0074: remember the iframe's port context, then
       // route this navigation through the controlling window. Some browsers do
@@ -271,7 +306,12 @@ export function createPreviewInterceptor(
         port = matchPreviewReferrer(event.request, scopeOrigin)?.port;
         if (port !== undefined && frameClientId) {
           context = { port, copiedTopLevel: false };
-          rememberPreviewFrameContext(previewFrameContexts, frameClientId, context);
+          rememberPreviewFrameContext(
+            previewFrameContexts,
+            previewDocumentClients,
+            frameClientId,
+            context,
+          );
         }
       }
       if (port === undefined) return;
@@ -279,6 +319,7 @@ export function createPreviewInterceptor(
       if (nextFrameClientId) {
         rememberPreviewFrameContext(
           previewFrameContexts,
+          previewDocumentClients,
           nextFrameClientId,
           context ?? { port, copiedTopLevel: false },
         );
@@ -287,6 +328,11 @@ export function createPreviewInterceptor(
       clientId = context?.copiedTopLevel ? null : '';
     }
 
+    // ADR-0160: bound the anti-hijack set to live clients — a liveness prune
+    // never drops a live preview document, so the rejection holds under churn.
+    if (previewDocumentClients.size > MAX_PREVIEW_FRAME_CONTEXTS) {
+      void prunePreviewDocumentClients();
+    }
     if (!match) return;
     event.respondWith(
       routePreview(

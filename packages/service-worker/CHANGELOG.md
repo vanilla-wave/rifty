@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+### Added
+
+- **ADR-0160:** window owners advertise an additive-optional `ports` field on
+  `rifty:preview:ready`/`goodbye`; falsy-clientId preview traffic resolves
+  port-keyed over the READY windows owning the port — unique window → route,
+  multiple → 503 (multi-window isolation, symmetric with ADR-0123's worker
+  `(ownerToken, port)` scoping), a no-`ports` window keeps the legacy
+  ready-window fallback (ADR-0125, back-compat). Real cross-tab preview: a
+  copied `/preview/<port>/` tab resolves to the single window owning the port.
+
+### Fixed
+
+- **ADR-0160 (anti-hijack):** the SW rejects `rifty:preview:ready` from any
+  client it has served a `/preview/<port>/` document to — a dedicated
+  `previewDocumentClients` set pruned by LIVENESS (`clients.matchAll`), never
+  insertion-evicted, so a live preview document is never dropped and cannot
+  reclaim the bridge under churn. Keyed on the SW-served-navigation fact, not
+  the mutable `client.url`, so `history.pushState` cannot defeat it. **Fully
+  closes preview-owner-window-auth** (a previewed app self-registering as bridge
+  owner), independent of the routing frame-context eviction policy. The
+  COEP-on-error fix below is the third leg of ADR-0160.
+
+### Changed
+
+- **ADR-0160:** `SW_ROUTING_VERSION` `3`→`4` — window port-keying and the
+  anti-hijack ready rejection are wire-observable routing rules.
+  `SW_FRAME_VERSION` stays `1` (window `ports` is additive-optional). A stale
+  peer 503s via the existing structured `(frame, routing)` mismatch (ADR-0040).
+
 ### Changed
 
 - **ADR-0125 supersedes ADR-0046 (removed).** Records the previously
@@ -15,6 +44,13 @@
 
 ### Fixed
 
+- **Preview error responses (503/502) carry CORP+COEP (ADR-0160).** Every route-preview
+  error path (no owner, version mismatch, owner gone, handshake timeout, reply
+  protocol mismatch, reply error) now sets `Cross-Origin-Resource-Policy:
+  cross-origin` + `Cross-Origin-Embedder-Policy: credentialless`, matching the
+  success path. Without them a foreign tab embedding the preview under page COEP
+  credentialless (D-001) saw `ERR_BLOCKED_BY_RESPONSE` instead of an honest
+  error page.
 - **SSE bodies fail loud in no-transferable-stream realms.**
   `packSerializedResponse` now refuses to drain `text/event-stream` bodies when
   `ReadableStream` transfer over `postMessage` is unavailable, throwing

@@ -4,6 +4,11 @@
 
 ### Added
 
+- **Page preview bridge advertises served ports** (ADR-0160). The window-owner
+  `rifty:preview:ready`/`goodbye` frames now carry the `ports` the page owns, so
+  the SW routes copied-tab (`/preview/<port>/`) traffic port-keyed to the owning
+  window instead of misrouting across multiple playground windows.
+
 - **Terminal `node <file>` command** (ADR-0155). Runs an arbitrary entry as a supervised child of
   the workspace owner — the symmetric twin of the `.bin` child (`runNodeEntry`, ADR-0137), NOT the
   template dev-server. A run-to-completion script streams stdout/stderr and exits on event-loop drain
