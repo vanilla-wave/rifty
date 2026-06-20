@@ -151,6 +151,24 @@ describe.skipIf(!hasWaitAsync)('SyncRpcDispatcher — event-driven responder (AD
   });
 });
 
+describe('SyncRpcDispatcher — backstop is uncounted infra (ADR-0152 §5, keepalive gap-e)', () => {
+  it('arms the backstop with the module-load host timer, not the live (keepalive-wrapped) global setInterval', () => {
+    // The backstop is pure infra: it must NEVER enter runtime-js's keepalive count
+    // (ADR-0152 §5). A worker realm replaces global setInterval with a keepalive-
+    // counted wrapper (installTimerGlobals); a nested child (depth-2) whose parent
+    // realm did that would have its drain PINNED if the backstop read the live
+    // wrapped global. The module captures the host setInterval at load, so a global
+    // swapped in AFTERWARDS must not change which timer the backstop arms.
+    const spy = vi.spyOn(globalThis, 'setInterval');
+    const dispatcher = new SyncRpcDispatcher({ pollIntervalMs: 60_000 });
+    const { ring } = createSabRing({ payloadCapacity: 64 });
+    dispatcher.attach(ring); // arms the single backstop timer
+    expect(dispatcher.getActiveTimerCount()).toBe(1);
+    expect(spy).not.toHaveBeenCalled();
+    dispatcher.detachAll();
+  });
+});
+
 describe('SyncRpcDispatcher — busy-poll fallback when waitAsync is absent (ADR-0084 #17)', () => {
   it('falls back to setInterval poll and still round-trips a request/reply', async () => {
     // Stub waitAsync away so the dispatcher constructs in busy-poll mode.

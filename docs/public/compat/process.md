@@ -18,7 +18,7 @@ never drain-reaped (kept alive by its own ports). Backing tests:
 | Keepalive counts pending dynamic `import()` | ✅ | Both `loader.import` and routed user-code `import()` (`__import`) |
 | `unhandledrejection` → stderr + non-zero exit | ✅ | Record-not-swallow; never silent `exit 0`. Node parity (default warn + non-zero) |
 | **Drain cap: a refed loop that never drains is force-killed** | ⚠️ | **Deliberate non-Node divergence.** At 30 s the worker exits 1 + a self-explanatory stderr line, where Node runs forever. Browser-worker safety-net against a genuine hang/leak — generous + loud. Legit-forever programs use `serve:true` (the cap never fires there). See ADR-0152 §4 |
-| Detached `fetch()` / network keepalive | ❌ | NOT counted — network in flight after top-level can be reaped early. `docs/backlog/runtime-js/keepalive-residual-gaps.md` (network path) |
+| Detached `fetch()` / network keepalive | ✅ | The global `fetch` is keepalive-counted: ref on dispatch, held until the response BODY is consumed (Node keeps the socket refed until the body is read). `http.request` to an external host routes through `fetch` (covered); loopback `http.request` is in-process (no socket); `https`/`net.connect` are loud-throws. A never-consumed body holds the realm to the drain cap (loud). ADR-0158 |
 | `fs.watch` / `fs.watchFile` keepalive | ✅ | The poll `setInterval` is keepalive-counted; `FSWatcher.ref()`/`.unref()` opt the realm in/out via the poll handle (Node parity) — an unrefed watcher no longer holds the realm to the drain cap |
 | Timer `.unref()` / `.ref()` / `.hasRef()` | ✅ | `setTimeout`/`setInterval` handles can opt out of and back into keepalive; `node:timers` uses the same wrapper as globals |
 | `process.exit(N)` propagates the exit code | ✅ | Via the `RIFTY_PROCESS_EXIT` shape (ADR-0039) |
@@ -51,5 +51,7 @@ unchanged loader, so it adds no duplicate parity case.
 
 - The drain cap uses wall-clock (`performance.now()`), so a CPU-busy worker could in principle trip
   the 30 s cap; the cap is generous, so the risk is low.
-- The keepalive model is honestly the count of timers/immediates/pending imports — NOT the full
-  libuv handle set (see the `fetch`/`fs.watch`/`.unref()` rows above and ADR-0152 "Explicit gaps").
+- The keepalive model is honestly the count of timers/immediates/pending imports + global `fetch`
+  + `fs.watch` polls — NOT the full libuv handle set. The reachable network/timer/import surface is
+  now covered (rows above); other libuv handle classes are not browser-reachable. ADR-0152 §1 (set
+  shape) + ADR-0158 (fetch added).
