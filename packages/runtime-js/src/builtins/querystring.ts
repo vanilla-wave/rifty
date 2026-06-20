@@ -18,9 +18,15 @@ export function unescape(s: string): string {
   }
 }
 
-/** Replace literal `+` with a space — Node `querystring.parse`'s structural step. */
+/**
+ * Replace a literal `+` with `%20` BEFORE decoding — Node `querystring.parse`'s
+ * structural step. It must be `%20`, not a space: the (default OR custom)
+ * `decodeURIComponent` then runs on the result, so a custom decoder sees `%20`
+ * exactly as Node passes it (the default decoder turns `%20` into a space). A
+ * literal space here would feed the custom decoder the wrong byte.
+ */
 function plusToSpace(s: string): string {
-  return s.indexOf('+') === -1 ? s : s.replace(/\+/g, ' ');
+  return s.indexOf('+') === -1 ? s : s.replace(/\+/g, '%20');
 }
 
 export function parse(

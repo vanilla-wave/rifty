@@ -33,7 +33,7 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 | `require()` of a `.ts`/`.tsx` module (CJS scope) | ❌ | Throws `NotImplementedError('module-loader.ts-via-require')`; the esbuild type-strip is async, so a sync `require()` cannot transform it — load `.ts` as ESM via `import()` under a `type:module` scope (ADR-0052) |
 | `require.resolve` | ✅ | |
 | `import.meta.url` | ✅ | File URL for the resolved ESM module id; supports `new URL('./x', import.meta.url)` |
-| `import.meta.resolve(spec)` | ✅ | Real loader resolution (v20.6, sync). `node:` builtins → `node:` id; files → `file://<abs>`; a miss throws the resolver's `MODULE_NOT_FOUND`. Was a stub returning a wrong `file://` URL for bare/`node:` specifiers |
+| `import.meta.resolve(spec)` | ✅ | Real loader resolution (v20.6, sync). Any `node:` specifier returned verbatim (not validated at resolve time); files → `file://<abs>`; a bare/relative miss throws the resolver's `MODULE_NOT_FOUND`. Was a stub returning a wrong `file://` URL for bare specifiers |
 | Import attributes (`with { type: 'json' }`) | ❌ | Deferred until needed |
 
 ## Known limitations (M2)

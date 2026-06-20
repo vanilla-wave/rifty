@@ -9,7 +9,7 @@
 ### Added
 
 - **`getInspectMaxBytes` / `setInspectMaxBytes`** — a live cell backing Node's mutable `buffer.INSPECT_MAX_BYTES` (default 50), read by the runtime-js inspector's `<Buffer …>` hex renderer so `buffer.INSPECT_MAX_BYTES = N` actually changes truncation. (backlog/runtime-js/web-globals-and-buffer-exports)
-- **Variable-width `Buffer` integer accessors** `read{U}IntLE/BE(offset, byteLength)` + `write{U}IntLE/BE(value, offset, byteLength)` (1–6 byte, ≤48-bit; signed forms sign-extend; writers return `offset+byteLength`), **`buf.toJSON()`** (`{ type: 'Buffer', data: [...] }`), **`Buffer.copyBytesFrom(view[, offset[, length]])`** (explicit element-window copy of a TypedArray), and **`isUtf8` / `isAscii`** byte predicates (`node:buffer`). Parity-pinned vs Node v24. (backlog/runtime-js/web-globals-and-buffer-exports)
+- **Variable-width `Buffer` integer accessors** `read{U}IntLE/BE(offset, byteLength)` + `write{U}IntLE/BE(value, offset, byteLength)` (1–6 byte, ≤48-bit; signed forms sign-extend; writers return `offset+byteLength`), **`buf.toJSON()`** (`{ type: 'Buffer', data: [...] }`), **`Buffer.copyBytesFrom(view[, offset[, length]])`** (explicit element-window copy of a TypedArray), and **`isUtf8` / `isAscii`** byte predicates (`node:buffer`). `copyBytesFrom`/`isUtf8`/`isAscii` reject a DataView with `ERR_INVALID_ARG_TYPE` like Node (a DataView is an ArrayBufferView but not a TypedArray). Parity-pinned vs Node v24. (backlog/runtime-js/web-globals-and-buffer-exports)
 
 - **`Readable.fromWeb()` plus Promise-aware `pipe()` backpressure (ADR-0154).**
   WHATWG `ReadableStream` bodies can now become Node-shape `Readable`s while

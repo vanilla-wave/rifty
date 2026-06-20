@@ -242,6 +242,11 @@ export async function executeEsm(
   // miss propagates the resolver's MODULE_NOT_FOUND throw (Node throws
   // ERR_MODULE_NOT_FOUND). Feature ownership: process-module-loader-surface.
   const metaResolve = (spec: string): string => {
+    // Node returns ANY `node:`-prefixed specifier VERBATIM from import.meta.resolve
+    // without validating the builtin exists (existence is enforced only at import
+    // time) — `import.meta.resolve('node:zlibbbb')` → `'node:zlibbbb'`. So don't
+    // route `node:` through the resolver, which throws on an unregistered builtin.
+    if (spec.startsWith('node:')) return spec;
     const dep = deps.resolve(spec, resolved.id, true);
     return dep.kind === 'builtin' ? dep.id : `file://${dep.id}`;
   };

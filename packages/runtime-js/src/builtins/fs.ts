@@ -551,9 +551,12 @@ export function readdirSync(
     const queue: Array<{ absDir: string; relPrefix: string; displayDir: string }> = [
       { absDir: root, relPrefix: '', displayDir: p },
     ];
-    while (queue.length > 0) {
-      // biome-ignore lint/style/noNonNullAssertion: guarded by queue.length.
-      const { absDir, relPrefix, displayDir } = queue.shift()!;
+    for (let i = 0; i < queue.length; i++) {
+      const { absDir, relPrefix, displayDir } = queue[i] as {
+        absDir: string;
+        relPrefix: string;
+        displayDir: string;
+      };
       for (const d of syncMirror().readdirSync(absDir)) {
         const childRel = relPrefix ? `${relPrefix}/${d.name}` : d.name;
         if (opts.withFileTypes) {
@@ -955,7 +958,16 @@ export function futimes(
  * lazy read for an in-memory VFS within one program. `Blob` is a realm global.
  */
 export async function openAsBlob(p: PathLike, options?: { type?: string }): Promise<Blob> {
-  const bytes = syncMirror().readFileBytesSync(resolvePath(p));
+  let bytes: Uint8Array;
+  try {
+    bytes = syncMirror().readFileBytesSync(resolvePath(p));
+  } catch {
+    // Node wraps an unopenable path (missing file / directory) as a generic
+    // ERR_INVALID_ARG_VALUE, NOT the raw ENOENT — match that observable rejection.
+    throw Object.assign(new Error('Unable to open file as blob'), {
+      code: 'ERR_INVALID_ARG_VALUE',
+    });
+  }
   // Copy into a fresh ArrayBuffer-backed view: the VFS bytes may be SharedArrayBuffer-
   // backed (OPFS mode), which `Blob` cannot hold (Blob copies the bytes regardless).
   return new Blob([new Uint8Array(bytes)], { type: options?.type ?? '' });

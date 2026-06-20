@@ -266,10 +266,15 @@ export class Buffer extends Uint8Array {
     offset = 0,
     length?: number,
   ): Buffer {
-    if (!ArrayBuffer.isView(view)) {
-      throw new TypeError('The "view" argument must be an instance of TypedArray');
+    // Node requires a TypedArray and explicitly REJECTS a DataView (which is an
+    // ArrayBufferView but has no BYTES_PER_ELEMENT) — match that, never silently
+    // treat a DataView as 1 byte/element.
+    if (!ArrayBuffer.isView(view) || view.BYTES_PER_ELEMENT === undefined) {
+      const e = new TypeError('The "view" argument must be an instance of TypedArray.');
+      (e as { code?: string }).code = 'ERR_INVALID_ARG_TYPE';
+      throw e;
     }
-    const bpe = view.BYTES_PER_ELEMENT ?? 1;
+    const bpe = view.BYTES_PER_ELEMENT;
     const elementCount = view.length ?? view.byteLength;
     const len = length ?? elementCount - offset;
     const src = new Uint8Array(view.buffer, view.byteOffset + offset * bpe, len * bpe);
@@ -299,16 +304,26 @@ export function setInspectMaxBytes(n: number): void {
   inspectMaxBytes = n;
 }
 
-/** Coerce a Buffer / TypedArray / DataView / ArrayBuffer to a byte view (no copy). */
+/**
+ * Coerce a Buffer / TypedArray / ArrayBuffer to a byte view (no copy). Node's
+ * `isUtf8`/`isAscii` accept exactly those and REJECT a DataView (an ArrayBufferView
+ * with no `BYTES_PER_ELEMENT`) with `ERR_INVALID_ARG_TYPE` — match that.
+ */
 function asByteView(input: unknown): Uint8Array {
   if (input instanceof Uint8Array) return input;
   if (input instanceof ArrayBuffer) return new Uint8Array(input);
-  if (ArrayBuffer.isView(input)) {
-    return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
+  if (
+    ArrayBuffer.isView(input) &&
+    (input as { BYTES_PER_ELEMENT?: number }).BYTES_PER_ELEMENT !== undefined
+  ) {
+    const v = input as ArrayBufferView;
+    return new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
   }
-  throw new TypeError(
-    'The "input" argument must be an instance of Buffer, TypedArray, or DataView',
+  const e = new TypeError(
+    'The "input" argument must be an instance of ArrayBuffer, Buffer, or TypedArray.',
   );
+  (e as { code?: string }).code = 'ERR_INVALID_ARG_TYPE';
+  throw e;
 }
 
 /** `node:buffer.isUtf8` — true iff the bytes are well-formed UTF-8 (fatal decode round-trip). */

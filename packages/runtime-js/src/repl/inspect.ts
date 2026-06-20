@@ -112,7 +112,14 @@ function formatBuffer(buf: Uint8Array): string {
     hex += (i ? ' ' : '') + (buf[i] ?? 0).toString(16).padStart(2, '0');
   }
   const more = buf.length > max ? `${hex ? ' ' : ''}... ${buf.length - max} more bytes` : '';
-  return `<Buffer ${hex}${more}>`;
+  // Node appends own ENUMERABLE non-index properties after the hex
+  // (`<Buffer 01 02, foo: 'bar'>`); the integer indices are not shown.
+  const rec = buf as unknown as Record<string, unknown>;
+  const extra = Object.keys(buf)
+    .filter((k) => !/^\d+$/.test(k))
+    .map((k) => `${k}: ${inspect(rec[k])}`);
+  const props = extra.length > 0 ? `, ${extra.join(', ')}` : '';
+  return `<Buffer ${hex}${more}${props}>`;
 }
 
 function formatFunction(fn: (...args: unknown[]) => unknown): string {
@@ -131,7 +138,7 @@ function formatArray(
   maxDepth: number,
 ): string {
   if (seen.has(arr)) return '[Circular]';
-  if (depth > maxDepth) return `[Array(${arr.length})]`;
+  if (depth > maxDepth) return '[Array]';
   seen.add(arr);
   const items = arr
     .slice(0, MAX_ARRAY_ITEMS)
@@ -164,7 +171,7 @@ function formatMap(
   maxDepth: number,
 ): string {
   if (seen.has(map)) return '[Circular]';
-  if (depth > maxDepth) return `Map(${map.size})`;
+  if (depth > maxDepth) return '[Map]';
   seen.add(map);
   const items: string[] = [];
   let i = 0;
@@ -189,7 +196,7 @@ function formatSet(
   maxDepth: number,
 ): string {
   if (seen.has(set)) return '[Circular]';
-  if (depth > maxDepth) return `Set(${set.size})`;
+  if (depth > maxDepth) return '[Set]';
   seen.add(set);
   const items: string[] = [];
   let i = 0;

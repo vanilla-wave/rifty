@@ -13,6 +13,9 @@ const c: ParityCase = {
       console.log('IS_BLOB', b instanceof Blob);
       const b2 = await fs.openAsBlob('f.txt');
       console.log('DEFAULT_TYPE', JSON.stringify(b2.type));
+      // Missing file → Node's generic ERR_INVALID_ARG_VALUE, not the raw ENOENT.
+      try { await fs.openAsBlob('nope.txt'); console.log('MISSING', 'NO_THROW'); }
+      catch (e) { console.log('MISSING', e.code); }
     })();
   `,
 };

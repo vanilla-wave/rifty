@@ -19,6 +19,9 @@ const c: ParityCase = {
     console.log(util.inspect({ a: { b: { c: 1 } } }, { depth: 0 }));
     console.log(util.inspect({ a: { b: { c: 1 } } }, { depth: 1 }));
     console.log(util.inspect({ a: { b: { c: 1 } } }, { depth: null }));
+    // Depth-exceeded containers use Node's bracket placeholders (no element count).
+    console.log(util.inspect([[1, 2]], { depth: 0 }));
+    console.log(util.inspect({ m: new Map([['k', 1]]), s: new Set([1]) }, { depth: 0 }));
   `,
 };
 

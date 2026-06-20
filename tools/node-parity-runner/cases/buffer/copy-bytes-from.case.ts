@@ -15,6 +15,12 @@ const c: ParityCase = {
     console.log(full.length, full.toString('hex'));
     u16[1] = 0xffff; // explicit-copy: must NOT affect cb
     console.log(cb.toString('hex'));
+    // A DataView is an ArrayBufferView but NOT a TypedArray — Node rejects it.
+    try { Buffer.copyBytesFrom(new DataView(new ArrayBuffer(4)), 0, 2); console.log('DV', 'NO_THROW'); }
+    catch (e) { console.log('DV', e.constructor.name, e.code); }
+    // A wider-element TypedArray (Float64Array, BYTES_PER_ELEMENT=8).
+    const f64 = Float64Array.from([1.5, 2.5]);
+    console.log('F64', Buffer.copyBytesFrom(f64, 1).length);
   `,
 };
 

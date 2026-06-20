@@ -19,6 +19,9 @@ const c: ParityCase = {
   },
   code: `
     console.log(import.meta.resolve('node:fs'));
+    // Any node: specifier is returned VERBATIM — Node does not validate the
+    // builtin exists at resolve time (only at import time).
+    console.log(import.meta.resolve('node:zlibbbb'));
     const lodashUrl = import.meta.resolve('lodashy');
     console.log(lodashUrl.startsWith('file://'), lodashUrl.endsWith('/node_modules/lodashy/index.js'));
     const rel = import.meta.resolve('./other.mjs');

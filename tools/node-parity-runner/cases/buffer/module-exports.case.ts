@@ -15,6 +15,10 @@ const c: ParityCase = {
     console.log(buf.btoa('hi'), buf.atob('aGk='));
     console.log(buf.isUtf8(Buffer.from('héllo')), buf.isUtf8(Buffer.from([0xff, 0xfe])));
     console.log(buf.isAscii(Buffer.from('abc')), buf.isAscii(Buffer.from('héllo')));
+    console.log(buf.isUtf8(new ArrayBuffer(0))); // ArrayBuffer accepted
+    // DataView rejected (Node parity), unlike a TypedArray.
+    try { buf.isUtf8(new DataView(new ArrayBuffer(4))); console.log('DV', 'NO_THROW'); }
+    catch (e) { console.log('DV', e.constructor.name); }
     console.log(buf.SlowBuffer(3).length, Buffer.isBuffer(buf.SlowBuffer(3)));
     console.log(buf.INSPECT_MAX_BYTES);
   `,

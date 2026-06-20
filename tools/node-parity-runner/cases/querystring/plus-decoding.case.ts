@@ -11,6 +11,9 @@ const c: ParityCase = {
     const qs = require('node:querystring');
     console.log(JSON.stringify(qs.parse('a=b+c&d=e%20f&k=%2Bplus&e+f=1')));
     console.log(JSON.stringify(qs.unescape('a+b%20c')));
+    // A custom decoder must receive '+' pre-replaced with '%20' (NOT a literal
+    // space) — structural, before the decoder runs.
+    console.log(JSON.stringify(qs.parse('a=b+c', '&', '=', { decodeURIComponent: (s) => '[' + s + ']' })));
   `,
 };
 

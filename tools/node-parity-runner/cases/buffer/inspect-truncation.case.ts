@@ -18,6 +18,11 @@ const c: ParityCase = {
     buf.INSPECT_MAX_BYTES = 4;
     console.log(util.inspect(Buffer.from([1, 2, 3, 4, 5, 6])));
     buf.INSPECT_MAX_BYTES = 50;
+    // Own enumerable (non-index) props are appended after the hex (Node parity).
+    const withProps = Buffer.from([1, 2, 3]);
+    withProps.foo = 'bar';
+    withProps.num = 42;
+    console.log(util.inspect(withProps));
   `,
 };
 
