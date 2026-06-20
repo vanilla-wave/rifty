@@ -113,6 +113,7 @@ describe('HttpServer.listen — options-object overload (Q-2026-05-30-101)', () 
     ]);
     expect(fired).toBe(true);
     s.close();
+  });
 });
 
 /**
