@@ -69,7 +69,7 @@ describe('preview-registry', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });
     reg.setDevServer(5174);
-    // A `node server.js` that picked the SAME port (no PORT injection, ADR-0154 §4)
+    // A `node server.js` that picked the SAME port (no PORT injection, ADR-0155 §4)
     // must NOT be double-listed: the SW routes one /preview/5174/, so two entries
     // would make the page wire two clobbering bridges whose teardown deletes the
     // shared route. The dev slot wins; the distinct node port stays.

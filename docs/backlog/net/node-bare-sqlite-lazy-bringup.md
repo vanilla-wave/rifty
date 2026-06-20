@@ -5,13 +5,13 @@ title: Lazy `node:sqlite` engine bring-up for a bare `node <file>`
 created: 2026-06-18
 why: the 30 s sql.js WASM engine is brought up eagerly only on the template path (`cfg.sqlite`); a bare `node <file>` that imports `node:sqlite` has no engine, so `DatabaseSync` is unavailable until lazily wired
 user_story: As a developer running `node seed.js` that uses `node:sqlite`, I want the WASM engine to come up on first `DatabaseSync` use, but today only the express-sqlite template path initialises it (eagerly, via `cfg.sqlite`) — a bare `node <file>` does not.
-sources: [ADR-0154, ADR-0065]
+sources: [ADR-0155, ADR-0065]
 code: [apps/playground/src/workers/node-entry-bootstrap.ts, apps/playground/src/workers/dev-server-boot.ts, packages/net/src/sqlite/engine.ts]
 ---
 
 ## Context
 
-ADR-0154 lands `node <file>` registering net builtins always (http/net), but NOT the `node:sqlite`
+ADR-0155 lands `node <file>` registering net builtins always (http/net), but NOT the `node:sqlite`
 engine — `dev-server-boot.ts` `bootNodeServer` fetches the bundled `sql-wasm.wasm` + `initSqliteEngine`
 eagerly under `cfg.sqlite` (template-gated). A bare-node entry importing `node:sqlite` therefore has
 NO `node:sqlite` builtin registered at all: `node-entry-bootstrap.ts` calls only `registerNetBuiltins()`

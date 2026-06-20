@@ -66,7 +66,7 @@ if (proc.env.RIFTY_REMOTE_FS === '1') {
   installRemoteSyncFs(syncApi.call);
 }
 
-// `node <file>` server-capable path (ADR-0154): the child spawns serve:true, so
+// `node <file>` server-capable path (ADR-0155): the child spawns serve:true, so
 // the bootstrap (not the kernel drain hook) owns the run-vs-serve decision. Net
 // builtins are registered unconditionally here — http/net are needed both for
 // servers AND for client scripts that import them; the lifecycle decides
@@ -88,7 +88,7 @@ if (proc.env.RIFTY_REMOTE_FS === '1') {
 // branch additionally registers net builtins + the stdin guard (not needed there).
 if (proc.env.RIFTY_NODE_SERVE === '1') {
   registerNetBuiltins();
-  // Interactive stdin is not forwarded to a `node <file>` child (ADR-0154 §5,
+  // Interactive stdin is not forwarded to a `node <file>` child (ADR-0155 §5,
   // ADR-0157 §4): make the consume surface throw loudly instead of hanging on
   // input that never arrives (Fidelity — no silent divergence).
   // backlog/kernel/worker-per-process-residuals + terminal/raw-stdin-deferred-items.

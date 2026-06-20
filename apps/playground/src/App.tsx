@@ -240,7 +240,7 @@ export function App(props: AppProps) {
   );
   const devServerRunning = (): boolean => devServerStatus() === 'running';
 
-  // ALL live previewable ports (ADR-0154): the dev-server port + each `node
+  // ALL live previewable ports (ADR-0155): the dev-server port + each `node
   // <file>` server's ports, pushed by the owner as a `pty:preview` snapshot. Feeds
   // the PreviewPanel switcher. The dev-server port's SW bridge is wired by the
   // `onDevServer` path above; this set drives the per-node-port bridges (below).
@@ -268,7 +268,7 @@ export function App(props: AppProps) {
     });
   });
 
-  // Mirror the owner's full preview-port set (ADR-0154) + (re)request it on
+  // Mirror the owner's full preview-port set (ADR-0155) + (re)request it on
   // subscribe — recovers a `pty:preview` push that predates this listener (same
   // handshake discipline as the dev-server-req above; never a one-shot push).
   createEffect(() => {
@@ -277,7 +277,7 @@ export function App(props: AppProps) {
     onCleanup(unsubscribe);
   });
 
-  // Per-port SW preview bridge for NODE servers only (ADR-0154). The dev-server
+  // Per-port SW preview bridge for NODE servers only (ADR-0155). The dev-server
   // port keeps its existing bridge from the `onDevServer` path above — never
   // double-wire it. Diff the live node ports against active teardowns: wire a
   // newly-present port, tear down + drop one that left the set. `onCleanup` tears
@@ -673,7 +673,7 @@ export function App(props: AppProps) {
     void runVitePreset(preset);
   }
 
-  // A port is previewable iff it is a registered preview port (ADR-0154 multi-port:
+  // A port is previewable iff it is a registered preview port (ADR-0155 multi-port:
   // the dev-server port is itself a registry entry when running, and each node
   // server's port is added on listen). Membership-only — a non-registered port
   // never yields a URL — while still un-gating from devServerRunning() so a
@@ -922,7 +922,7 @@ export function App(props: AppProps) {
   });
   const programTitle = (): string => activeTemplate().entry.relativePath.replace(/^\/+/, '');
   // Mount the preview when the dev server is up/starting OR any node server
-  // registered a port (ADR-0154 §3 / ADR-0157 review C1): a `node server.js` with
+  // registered a port (ADR-0155 §3 / ADR-0157 review C1): a `node server.js` with
   // the dev server stopped must still show its preview. Keep the `!== 'stopped'`
   // disjunct so the panel shows during the dev 'starting' window (before the slot lands).
   const hasPreview = (): boolean => devServerStatus() !== 'stopped' || previewPorts().length > 0;

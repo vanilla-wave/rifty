@@ -52,7 +52,7 @@ export interface PtyClientDeps {
   send: (frame: PageToOwnerFrame) => void;
   /** Owner→page dev-server state (ADR-0148 co-resident dev server); the page derives its LIVE pill + preview port. */
   onDevServer?: (frame: PtyDevServer) => void;
-  /** Owner→page snapshot of ALL live previewable ports (ADR-0154); the page derives its preview switcher + per-port bridges. */
+  /** Owner→page snapshot of ALL live previewable ports (ADR-0155); the page derives its preview switcher + per-port bridges. */
   onPreview?: (frame: PtyPreview) => void;
 }
 
@@ -76,7 +76,7 @@ export interface PtyClient {
   closeSession(sid: string): void;
   /** Ask the owner to re-publish dev-server state (explorer-reflects-owner-tree handshake on subscribe/reload). */
   requestDevServer(): void;
-  /** Ask the owner to re-publish the preview-port set (subscribe handshake, ADR-0154; never a one-shot push). */
+  /** Ask the owner to re-publish the preview-port set (subscribe handshake, ADR-0155; never a one-shot push). */
   requestPreview(): void;
   /** Tell the owner the current preset's dev-server config (ADR-0148 co-resident dev server). */
   setDevConfig(config: {

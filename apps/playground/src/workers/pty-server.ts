@@ -82,7 +82,7 @@ export interface PtyServerDeps {
    * dev-server-agnostic (it only forwards the request).
    */
   readonly onDevServerReq?: () => void;
-  /** Owner re-publishes the multi-port preview registry on a page request (ADR-0154). */
+  /** Owner re-publishes the multi-port preview registry on a page request (ADR-0155). */
   readonly onPreviewReq?: () => void;
   /**
    * Page updated the current preset's dev-server config (ADR-0148 — owner-resident

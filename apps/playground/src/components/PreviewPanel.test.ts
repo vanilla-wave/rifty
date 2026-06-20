@@ -32,7 +32,7 @@ describe('PreviewPanel refresh contract', () => {
   });
 });
 
-describe('PreviewPanel port switcher (ADR-0154)', () => {
+describe('PreviewPanel port switcher (ADR-0155)', () => {
   it('renders a <select> switcher with one option per live port', () => {
     const html = renderToString(() => PreviewPanel({ ports: () => TWO_PORTS }));
     expect(html).toContain('class="rf-preview__switcher"');

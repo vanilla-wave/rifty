@@ -23,7 +23,7 @@ never drain-reaped (kept alive by its own ports). Backing tests:
 | Timer `.unref()` / `.ref()` / `.hasRef()` | ❌ | Not implemented → an `.unref()`'d timer can't opt out of keepalive (drains to cap). `backlog/runtime-js/timer-unref-keepalive` |
 | `process.exit(N)` propagates the exit code | ✅ | Via the `RIFTY_PROCESS_EXIT` shape (ADR-0039) |
 
-## Terminal `node <file>` command (ADR-0154)
+## Terminal `node <file>` command (ADR-0155)
 
 The playground terminal runs an arbitrary entry as a supervised child of the workspace owner
 (the `.bin`/`runNodeEntry` seam, ADR-0137 — NOT the template dev-server). Server-vs-script is

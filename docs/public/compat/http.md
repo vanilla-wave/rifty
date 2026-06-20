@@ -31,7 +31,6 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `tests/conformance/builtins/http.test.ts`
 - `tests/conformance/builtins/http-incoming-body.test.ts`
 - `tests/conformance/builtins/https.test.ts`
-- `packages/net/src/http/server.test.ts`
 - `tools/node-parity-runner/cases/http/*.case.ts`
 - `tools/node-parity-runner/cases/http2/surface.case.ts`
 - `packages/net/src/http/client.test.ts`

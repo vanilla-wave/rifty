@@ -4,7 +4,7 @@
 
 ### Added
 
-- **Terminal `node <file>` command** (ADR-0154). Runs an arbitrary entry as a supervised child of
+- **Terminal `node <file>` command** (ADR-0155). Runs an arbitrary entry as a supervised child of
   the workspace owner — the symmetric twin of the `.bin` child (`runNodeEntry`, ADR-0137), NOT the
   template dev-server. A run-to-completion script streams stdout/stderr and exits on event-loop drain
   (ADR-0152) with its code; a script that calls `listen()` stays alive (`serve:true`), registers its
@@ -21,7 +21,7 @@
   trailing `node x.js &` runs via the shell's generic background path (job-control builtins are the
   gap). E2E: `tests/e2e/node-command.spec.ts`.
 
-- **Page preview-port registry + per-node-port preview bridge** (ADR-0154). `glue/pty-client.ts`
+- **Page preview-port registry + per-node-port preview bridge** (ADR-0155). `glue/pty-client.ts`
   gains `onPreview`/`requestPreview` mirroring the `onDevServer`/`requestDevServer` discipline:
   routes owner→page `pty:preview{ports}` snapshots to subscribers + sends `pty:preview-req`.
   `glue/realVite.ts` exposes them on `WorkspaceOwnerHandle` (preview listener set, spawn-time
@@ -78,7 +78,7 @@
   overrides cwd. The pre-entry hook (`kernel-worker-entry.ts`) installs the rich process gated to
   Node workers (`isNode = no __RIFTY_WASI_WASM_URL`). Brittle `real-vite-bootstrap.test.ts`
   source-greps for `installRuntimeGlobals()` replaced with behavioral assertions.
-- **Preview panel mounts on node-server ports even when the dev server is stopped** (ADR-0154 §3
+- **Preview panel mounts on node-server ports even when the dev server is stopped** (ADR-0155 §3
   follow-up). `hasPreview()` now ORs `previewPorts().length > 0`, the `<Show>` no longer re-keys on
   `realVitePort()` (PreviewPanel self-reconciles its selection — a dev-port change no longer resets
   the chosen node port), and `previewUrl`/`openPreviewTab` accept any registered preview port (not

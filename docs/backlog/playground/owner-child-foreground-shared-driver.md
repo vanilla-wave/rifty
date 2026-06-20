@@ -5,13 +5,13 @@ title: Extract a shared `runForegroundChild` driver across the owner-child execu
 created: 2026-06-20
 why: owner-child-node-executor.ts and glue/bin-executor.ts duplicate the same foreground machinery (decodeChunk + stream-with-outputClosed + SIGTERM-on-abort + settle-on-exit); the node executor can't reuse createBinExecutor because the listening-server case needs a wider seam (on('message')→onListening + onExit registry-remove + 'exit'-before-pre-abort listener order). owner-child-dev-server.ts shares only the stream block.
 user_story: As a rifty maintainer I want ONE foreground-child driver so the node/bin/dev-server executors don't re-implement stream/abort/exit and drift.
-sources: [ADR-0137, ADR-0154]
+sources: [ADR-0137, ADR-0155]
 code: [apps/playground/src/workers/owner-child-node-executor.ts, apps/playground/src/glue/bin-executor.ts, apps/playground/src/workers/owner-child-dev-server.ts]
 ---
 
 ## Context
 
-ADR-0154 §1 (Corrected 2026-06-20) records that `createOwnerChildNodeExecutor` MIRRORS — not reuses —
+ADR-0155 §1 (Corrected 2026-06-20) records that `createOwnerChildNodeExecutor` MIRRORS — not reuses —
 `createBinExecutor`: it needs a `rifty:node-listening` `on('message')`→`onListening` hook + an `onExit`
 registry-remove + the reverse `'exit'`-before-pre-abort listener order (kill() emits `'exit'`
 synchronously). So `createBinExecutor`'s `(binPath,args,ctx)=>Promise<number>` seam can't carry it, and
