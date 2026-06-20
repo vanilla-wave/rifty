@@ -10,10 +10,12 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 |---|---|---|
 | `readFileSync` / `writeFileSync` | ✅ | utf8 strings and binary `Uint8Array`/Buffer-like reads |
 | `mkdirSync({ recursive })` | ✅ | Creates parent directories |
-| `readdirSync` / `Dirent[]` | ✅ | Sorted names; `withFileTypes` supported |
+| `readdirSync` / `Dirent[]` | ✅ | Sorted names; `withFileTypes`; `{ recursive: true }` BFS walk + `Dirent.parentPath` (no removed-in-v24 `path` alias) |
 | `existsSync` / `statSync` | ✅ | `Stats` shape plus `throwIfNoEntry: false` parity |
 | `rmSync({ recursive })` | ✅ | Tree removal |
-| `copyFileSync` / `renameSync` / `cpSync` | ✅ | `COPYFILE_EXCL`, recursive copy, mtime-preserving rename parity |
+| `copyFileSync` / `renameSync` / `cpSync` | ✅ | `COPYFILE_EXCL`, recursive copy, mtime-preserving rename; `cp` `{ filter, force, errorOnExist, preserveTimestamps }`; `dereference` loud-throws (no-symlink, ADR-0050) |
+| `openAsBlob(path[, { type }])` | ✅ | Reads VFS bytes into a resolved Blob (default type `""`) |
+| `lutimesSync` / `futimesSync` / `futimes` | ✅ | lutimes ≡ utimes (no-symlink); futimes resolves fd→path, `EBADF` (syscall `futime`) on a bad fd |
 | Encoding reads | ✅ | utf8, utf16le, latin1/ascii, hex parity cases |
 | Path resolution with `process.cwd()` | ✅ | Relative fs paths anchor at runtime cwd |
 | Callback `readFile` / `writeFile` | ✅ | Node-style error-first callbacks |

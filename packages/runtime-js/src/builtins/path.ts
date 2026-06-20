@@ -105,6 +105,13 @@ export function format(o: Partial<ParsedPath>): string {
   return `${dir}/${base}`;
 }
 
+// `path.toNamespacedPath` (v9) — POSIX identity no-op. Windows namespacing
+// (`\\?\C:\…`) is the only non-identity case, and rifty is POSIX-only
+// (`win32 === posix`), so returning the input verbatim is faithful Node behaviour.
+export function toNamespacedPath(p: string): string {
+  return p;
+}
+
 export const posix = {
   sep,
   delimiter,
@@ -118,6 +125,7 @@ export const posix = {
   relative,
   parse,
   format,
+  toNamespacedPath,
 };
 
 // We don't ship `win32` — pet project, POSIX only.
@@ -136,6 +144,7 @@ const path = {
   relative,
   parse,
   format,
+  toNamespacedPath,
   posix,
   win32,
 };
