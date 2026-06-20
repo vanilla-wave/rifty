@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { webSocketBridgeClientScript } from './browser-client-script.ts';
+import { channelNameFor, portChannelNameFor } from './channel.ts';
 import { WebSocketServer } from './in-process.ts';
 
 interface BrowserWindowLike {
@@ -139,6 +140,81 @@ describe('webSocketBridgeClientScript', () => {
       expect(serverSeen).toEqual(['client-hello']);
       expect(clientSeen).toEqual(['server-hello']);
       expect(win.__riftyHmrLastMessage).toBe('server-hello');
+
+      ws.close();
+    } finally {
+      server.close();
+      restore();
+    }
+  });
+
+  it('does not surface bridge control-opcode msg frames to the browser WebSocket', async () => {
+    const { win, restore } = installWindow();
+    const server = new WebSocketServer({ port: 9030, path: '/control' });
+    server.on('connection', () => {});
+
+    try {
+      const script = webSocketBridgeClientScript({ bridgeHosts: ['preview.local'] });
+      expect(() => new Function(script)()).not.toThrow();
+      const BrowserWebSocket = win.WebSocket as BrowserWebSocketConstructor;
+      const url = 'ws://preview.local:9030/control';
+      const ws = new BrowserWebSocket(url);
+      const clientSeen: unknown[] = [];
+      ws.addEventListener('message', (event) => clientSeen.push((event as MessageEvent).data));
+      await new Promise<void>((resolve) =>
+        ws.addEventListener('open', () => resolve(), { once: true }),
+      );
+
+      const cid = (ws as unknown as { readonly __cid: string }).__cid;
+      const channels = [
+        new BroadcastChannel(channelNameFor(url)),
+        new BroadcastChannel(portChannelNameFor(url)),
+      ];
+      for (const channel of channels) {
+        channel.postMessage({
+          type: 'msg',
+          cid,
+          data: new Uint8Array([1]),
+          opcode: 0x9,
+        });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(clientSeen).toEqual([]);
+
+      for (const channel of channels) channel.close();
+      ws.close();
+    } finally {
+      server.close();
+      restore();
+    }
+  });
+
+  it('bridges a portless wss URL to a server listening on the default 443 port', async () => {
+    const { win, restore } = installWindow();
+    const server = new WebSocketServer({ port: 443, path: '/secure' });
+    server.on('connection', (sock) => {
+      const socket = sock as ServerSocketLike;
+      socket.send('secure-ok');
+    });
+
+    try {
+      const script = webSocketBridgeClientScript({ bridgeHosts: ['preview.local'] });
+      expect(() => new Function(script)()).not.toThrow();
+      const BrowserWebSocket = win.WebSocket as BrowserWebSocketConstructor;
+      const ws = new BrowserWebSocket('wss://preview.local/secure');
+      const seen: string[] = [];
+      ws.addEventListener('message', (event) => seen.push(String((event as MessageEvent).data)));
+
+      await new Promise<void>((resolve, reject) => {
+        ws.addEventListener('open', () => resolve(), { once: true });
+        ws.addEventListener('error', () => reject(new Error('portless wss bridge failed')), {
+          once: true,
+        });
+      });
+      await waitFor(() => seen.length === 1);
+
+      expect(seen).toEqual(['secure-ok']);
 
       ws.close();
     } finally {

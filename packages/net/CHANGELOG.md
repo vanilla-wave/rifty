@@ -26,8 +26,37 @@
 
 ### Fixed
 
-- **WebSocket `close()` never hangs when the peer realm disappears.** After
-  `OPEN`, all three clients (browser shim, default `WebSocket`, `BridgedWebSocket`)
+- **WebSocket upgrade fidelity backlog tightened.** Upgrade sockets enforce a
+  100 MiB `maxPayload` (`0` = unlimited, matching `ws`) and close 1009 on
+  oversized single frames or fragmented reassembly; malformed RFC6455 edges are
+  pinned (RSV, masking, invalid UTF-8, invalid close payload/code, oversized or
+  fragmented control frames, mid-fragment data). Control frames relay end-to-end
+  and the *peer* answers a ping — a real `ws` client auto-pongs and fires
+  `'ping'`, a browser-like bridge client silently pongs — while the transport no
+  longer auto-pongs, so a server `ping()` yields exactly one `'pong'` (was two)
+  and keepalive can still detect a vanished peer. Duplicate bridge `open` frames
+  for the same cid re-ack without emitting a phantom second connection, and
+  portless `wss://` default-443 discovery is regression-covered. The transcode
+  bound stays a fixed 100 MiB (a guest `ws` `maxPayload` above that is capped —
+  `backlog/net/ws-max-payload`), and a real-`ws` Autobahn interop pass remains
+  open (`backlog/net/ws-rfc6455-real-ws-interop`).
+- **`BridgedWebSocket` honors `binaryType`; `bufferedAmount` is present on every
+  client.** The cross-realm `BridgedWebSocket` delivered binary frames raw
+  (never Blob/ArrayBuffer per `binaryType`); it now coerces like the in-process
+  client and browser shim. Both the default `WebSocket` and `BridgedWebSocket`
+  also gained the always-present `bufferedAmount` (honest `0` — no JS-side send
+  queue) instead of `undefined` (which broke `bufferedAmount > n` backpressure).
+- **`http.Server.listen` honors the 4-arg `(port, host, backlog, cb)` form.** npm
+  `ws` `{ port }` mode calls `listen(port, host, backlog, callback)`; the callback
+  (4th arg) was dropped. `listen` now takes the last function argument as the
+  callback across every overload shape.
+- **WebSocket upgrade sockets arm a real `setTimeout('timeout')` timer.** Both
+  upgrade sockets ignored the duration and never fired `'timeout'`; they now arm a
+  one-shot timer for `ms > 0` (mirroring `ClientRequest.setTimeout`) and treat
+  `0` as "disable" per Node, instead of silently never firing.
+- **Client-mask randomness `NotImplementedError` is namespaced + directed.** Was a
+  bare `websocket.crypto.getRandomValues`; now `net.websocket.client-mask-randomness`
+  with a hint, matching the rest of the net error surface.
   waited for the server close echo with no fallback — a terminated peer realm
   (navigated iframe, killed worker) stranded them in `CLOSING` forever, never
   firing `'close'` and leaking their `BroadcastChannel`s. They now mirror the
