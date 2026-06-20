@@ -48,9 +48,9 @@ export function isPortBound(port: number): boolean {
  *
  * DELIBERATE divergence: rifty is loopback-only (host is ignored, see `request.ts`),
  * so this always reports `address: '127.0.0.1'`; real Node's default-host EADDRINUSE
- * reports `'::'`/`'0.0.0.0'`. An unhandled `'error'` exits the worker 1, but its
- * MESSAGE reaches the child stderr only via the kernel worker-error path (currently
- * exit-1 without text — `backlog: kernel/worker-global-error-to-stderr`).
+ * reports `'::'`/`'0.0.0.0'`. An unhandled `'error'` exits the worker 1; its MESSAGE
+ * now reaches the child stderr via the kernel worker-error forward (spawn-worker
+ * `onUncaughtError` → `handle.stderr()`), so the terminal sees the EADDRINUSE text.
  */
 export function addrInUseError(address: string, port: number): Error {
   return Object.assign(new Error(`listen EADDRINUSE: address already in use ${address}:${port}`), {

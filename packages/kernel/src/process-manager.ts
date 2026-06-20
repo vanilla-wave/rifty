@@ -162,6 +162,9 @@ export interface SpawnOptions {
 /** Root cwd for processes that have no parent. */
 export const DEFAULT_CWD = '/workspace';
 
+/** Encoder for forwarded worker-error text pushed onto a child's stderr stream. */
+const STDERR_ENCODER = new TextEncoder();
+
 export class ProcessManager {
   private nextPid = 2; // PID 1 is reserved for the main worker.
   private readonly table: Map<number, ProcessRecord> = new Map();
@@ -462,6 +465,14 @@ export class ProcessManager {
     // to reach into `SpawnWorkerResult` (review §1.10).
     spawnResult.onMessageError((ev) => {
       handle.emit('messageerror', ev);
+    });
+
+    // backlog/kernel/worker-global-error-to-stderr: a worker error that escaped
+    // worker-entry's try/catch left NO text on the child stderr — forward its
+    // message onto the stderr stream here (BEFORE the onExit handler above EOFs
+    // it) so `handle.stderr().on('data')` sees the diagnostic, not just exit 1.
+    spawnResult.onUncaughtError((message) => {
+      handle.stderr().push(STDERR_ENCODER.encode(message));
     });
 
     return handle;
