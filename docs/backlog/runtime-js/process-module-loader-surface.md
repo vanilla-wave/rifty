@@ -5,7 +5,7 @@ title: process/module/loader surface (emitWarning, --env-file, isBuiltin, Source
 created: 2026-06-20
 why: Self-contained process/module/loader methods absent — libs surface deprecations via emitWarning (gone → vanish/crash), bundlers externalize via module.isBuiltin, CLIs load env via --env-file; all pure-JS over existing EventEmitter/registry/VFS/loader.
 user_story: As an author running a real-Node lib or CLI, I want emitWarning/--env-file/isBuiltin/SourceMap/data:-import to behave like Node, but today deprecation warnings vanish, --env-file is unparsed, isBuiltin is missing, and data: import hard-throws.
-sources: [docs/research/node-parity-gaps-unbacklogged-2026-06-20.md §6, docs/adr/0026-*]
+sources: [docs/research/node-parity-gaps-unbacklogged-2026-06-20.md §6, docs/adr/runtime-js/0026-*]
 code: [packages/runtime-js/src/builtins/process.ts, packages/runtime-js/src/builtins/module.ts, packages/runtime-js/src/builtins/node-entry.ts, packages/runtime-js/src/module-loader/resolver.ts, packages/runtime-js/src/module-loader/source-maps.ts, packages/net/src/sqlite/engine.ts]
 ---
 

@@ -5,7 +5,7 @@ title: node:stream WHATWG bridge + modern statics
 created: 2026-06-20
 why: node:stream/web + Node<->WHATWG bridge + modern static surface honestly unclaimed (ADR-0154); all pure-JS adapters over Chromium ReadableStream/WritableStream + existing EventEmitter lifecycle.
 user_story: As a dev running a lib that `import {…} from 'node:stream/web'` or calls Readable.toWeb / .map() / stream.compose, I want them to work, but today the module is unregistered and the statics throw/are absent.
-sources: [docs/adr/0154-*, docs/adr/0034, docs/adr/0035, docs/adr/0069, docs/research/node-parity-gaps-unbacklogged-2026-06-20.md §2, docs/public/compat/streams.md]
+sources: [docs/adr/net/0154-*, docs/adr/runtime-js/0034-*, docs/adr/runtime-js/0035-*, docs/adr/runtime-js/0069-*, docs/research/node-parity-gaps-unbacklogged-2026-06-20.md §2, docs/public/compat/streams.md]
 code: [packages/io/src/streams/readable.ts, packages/io/src/streams/writable.ts, packages/io/src/streams/duplex.ts, packages/io/src/streams/index.ts, packages/runtime-js/src/builtins/stream.ts, packages/runtime-js/src/builtins/index.ts]
 ---
 
