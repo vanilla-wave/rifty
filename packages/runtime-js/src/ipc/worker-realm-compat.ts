@@ -3,11 +3,13 @@
  *
  * Separate from the `process` shim ({@link ./install-process.ts}): these patch
  * the *realm globals* a Node-built CJS bundle expects, independent of any
- * `process` shape. Installed by the kernel pre-entry hook (the host's
- * `kernel-worker-entry` chunk AND the default `preEntryInstaller`) so EVERY
- * worker realm — owner shell, dev-server child, node-entry CLI, AND the
- * worker_threads pthread children Rolldown's `@emnapi/*` WASI binding spawns —
- * is shaped before the entry evaluates.
+ * `process` shape. Installed by `installNodeRuntime` — which the host's
+ * `kernel-worker-entry` registers as the kernel pre-entry hook
+ * (`setKernelPreEntryHook`; the kernel ships no default) — and gated to NODE
+ * worker realms (a raw WASI guest skips all three). So every Node worker realm —
+ * owner shell, dev-server child, node-entry CLI, AND the worker_threads pthread
+ * children Rolldown's `@emnapi/*` WASI binding spawns — is shaped before the
+ * entry evaluates.
  *
  * Three shims, all forced by running real Rolldown-in-browser:
  *   - `global === globalThis` — Node parity; `@emnapi/*` references bare `global`

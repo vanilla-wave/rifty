@@ -124,6 +124,13 @@ export class Worker extends EventEmitter {
         argv: ['rifty', this.script],
         env,
         cwd: getProcessCwd(),
+        // serve:true keeps a message-driven Worker alive (Node parity, and the
+        // shape Rolldown's pthread pool needs) — the kernel never drain-reaps a
+        // serve child. Cost: a run-to-completion Worker (no live handle after the
+        // entry resolves) does NOT auto-emit 'exit' here like Node; the
+        // same-realm path does (keepsAlive -> terminate(0)). Explicit, tracked
+        // divergence (not a silent hang):
+        // TODO(backlog: runtime-js/worker-threads-kernel-run-to-completion-exit).
         serve: true,
       };
       const handle = globalProcessManager.spawnWorker('node', spec);
@@ -515,7 +522,13 @@ function assertJsonCloneSafeWorkerData(value: unknown, seen: Set<object>): void 
     value === null ||
     typeof value === 'string' ||
     typeof value === 'boolean' ||
-    (typeof value === 'number' && Number.isFinite(value))
+    // -0 is loud-rejected, NOT accepted: JSON.stringify(-0) === '0' would
+    // SILENTLY drop the sign over the wire (Node's structuredClone preserves
+    // -0). Honest throw over silent corruption. NaN/Infinity already fall
+    // through to the throw below (Number.isFinite is false). Full structuredClone
+    // workerData is the tracked gap:
+    // TODO(backlog: runtime-js/worker-threads-kernel-workerdata-structured-clone).
+    (typeof value === 'number' && Number.isFinite(value) && !Object.is(value, -0))
   ) {
     return;
   }

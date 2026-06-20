@@ -212,6 +212,31 @@ globalThis.onmessage = ({ data }) => {
     expect(globalProcessManager.spawnWorker).not.toHaveBeenCalled();
   });
 
+  it('loud-rejects -0 workerData instead of silently dropping the sign (JSON would)', async () => {
+    // JSON.stringify(-0) === '0' — a silent sign loss vs Node's structuredClone
+    // (which preserves -0). The guard must throw, not corrupt + spawn.
+    vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation((_command, _spec) =>
+      makeFakeWorkerHandle([]),
+    );
+
+    (globalThis as Coi).crossOriginIsolated = true;
+    setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
+    setNodeEntryWorkerUrl('https://rifty.test/node-entry.js');
+
+    const worker = new Worker('/workspace/w.mjs', { workerData: { z: -0 } });
+    const error = await new Promise<unknown>((resolve) => {
+      worker.once('error', resolve);
+    });
+
+    expect(error).toEqual(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'worker_threads.workerData.structuredClone',
+      }),
+    );
+    expect(globalProcessManager.spawnWorker).not.toHaveBeenCalled();
+  });
+
   it('exposes parentPort and workerData inside a kernel-backed worker child', () => {
     const proc = globalThis.process as ProcessWithWorkerIpc;
     const originalSend = proc.send;
