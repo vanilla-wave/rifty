@@ -18,6 +18,11 @@ export function unescape(s: string): string {
   }
 }
 
+/** Replace literal `+` with a space — Node `querystring.parse`'s structural step. */
+function plusToSpace(s: string): string {
+  return s.indexOf('+') === -1 ? s : s.replace(/\+/g, ' ');
+}
+
 export function parse(
   qs: string,
   sep = '&',
@@ -34,12 +39,16 @@ export function parse(
     const idx = raw.indexOf(eq);
     let key: string;
     let value: string;
+    // Node's `parse` tokenizer turns a literal `+` into a space BEFORE percent-
+    // decoding (it's structural, not part of `unescape` — `querystring.unescape`
+    // alone leaves `+` intact). `%2B` survives because the replace runs on the
+    // still-encoded segment, before `decode`.
     if (idx === -1) {
-      key = decode(raw);
+      key = decode(plusToSpace(raw));
       value = '';
     } else {
-      key = decode(raw.slice(0, idx));
-      value = decode(raw.slice(idx + 1));
+      key = decode(plusToSpace(raw.slice(0, idx)));
+      value = decode(plusToSpace(raw.slice(idx + 1)));
     }
     if (Object.hasOwn(out, key)) {
       const existing = out[key];

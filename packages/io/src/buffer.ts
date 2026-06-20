@@ -254,4 +254,16 @@ installExtraMethods(Buffer);
 
 export type BufferLike = Buffer;
 
+// `node:buffer.INSPECT_MAX_BYTES` — the live truncation threshold the inspector
+// (`runtime-js/repl/inspect.ts` `<Buffer …>` renderer) reads. Mutable so user
+// code's `buffer.INSPECT_MAX_BYTES = N` actually changes truncation (Node
+// parity); the `node:buffer` export is a getter/setter over this cell.
+let inspectMaxBytes = 50;
+export function getInspectMaxBytes(): number {
+  return inspectMaxBytes;
+}
+export function setInspectMaxBytes(n: number): void {
+  inspectMaxBytes = n;
+}
+
 export default { Buffer };

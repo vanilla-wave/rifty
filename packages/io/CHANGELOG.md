@@ -2,7 +2,13 @@
 
 ## [Unreleased]
 
+### Removed
+
+- **Dead type-only `writev?` option on `WritableOptions`** (backlog/runtime-js/silent-node-divergences). It was declared but used NOWHERE — `drainBuffer` always calls `_write` per chunk — so the type silently lied that batching was wired (no-silent-stub rule). Behaviour-preserving (no consumer passed it). Real cork/uncork/`_writev` batching is owned by `whatwg-stream-bridge-and-statics`, which re-adds the option when it lands.
+
 ### Added
+
+- **`getInspectMaxBytes` / `setInspectMaxBytes`** — a live cell backing Node's mutable `buffer.INSPECT_MAX_BYTES` (default 50), read by the runtime-js inspector's `<Buffer …>` hex renderer so `buffer.INSPECT_MAX_BYTES = N` actually changes truncation. (backlog/runtime-js/web-globals-and-buffer-exports)
 
 - **`Readable.fromWeb()` plus Promise-aware `pipe()` backpressure (ADR-0154).**
   WHATWG `ReadableStream` bodies can now become Node-shape `Readable`s while

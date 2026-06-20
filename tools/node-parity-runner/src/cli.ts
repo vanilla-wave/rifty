@@ -68,8 +68,13 @@ async function runOne(file: string): Promise<CaseRun> {
   }
 }
 
-const files = await walk(casesDir);
-console.log(`node-parity-runner: ${files.length} case(s)`);
+const allFiles = await walk(casesDir);
+// Optional substring filter (dev ergonomics): `tsx cli.ts <substr>` runs only
+// cases whose path contains <substr>. No arg = the full suite (CI path). Filters
+// nothing on a non-match-all so a typo'd filter visibly runs 0 cases.
+const filter = process.argv[2];
+const files = filter ? allFiles.filter((f) => f.includes(filter)) : allFiles;
+console.log(`node-parity-runner: ${files.length} case(s)${filter ? ` matching '${filter}'` : ''}`);
 
 let failures = 0;
 for (const file of files) {

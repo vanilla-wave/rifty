@@ -28,7 +28,7 @@ code: [packages/io/src/streams/readable.ts, packages/io/src/streams/writable.ts,
 | get/setDefaultHighWaterMark | v19.9 | 2 module vars (16384B/16 obj) read by ctors (hardcode `?? 16*1024` today) | index.ts |
 | cork/uncork batching | v0.11 | corked counter defers drain; uncork flushes via `_writev` | writable.ts |
 
-EXCLUDE: the lying `writev?` type-only option (writable.ts:20, used nowhere) — that no-silent-stub bug is owned by → docs/backlog/runtime-js/silent-node-divergences.md. cork/uncork's real batching needs `_writev` working, so the two land together.
+NOTE: the lying `writev?` type-only option (writable.ts, used nowhere) was already REMOVED (silent-node-divergences, closed). When cork/uncork batching lands here, re-add `writev?` to `WritableOptions` and wire `_writev` for real — cork/uncork's batching needs `_writev` working, so they land together.
 
 ## Options or Next
 

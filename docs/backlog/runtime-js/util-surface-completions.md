@@ -26,7 +26,7 @@ All pure-JS, no platform dep. `process.stdout.isTTY=false` (process.ts:102) → 
 | toUSVString v11 | lone-surrogate→U+FFFD regex | low |
 | isArray/_extend v0.6 (deprecated) | Array.isArray / own-enum copy; warn via deprecate() (util.ts:184) | low |
 
-**Excluded** (silent divergences, owned elsewhere): util.inspect option-fidelity, util.format %c. **formatWithOptions** blocked on inspect-options (would silently drop opts → lying stub) — defer with them. Cross-link: docs/backlog/runtime-js/silent-node-divergences.md.
+**Excluded** (the silent-divergence BUGS — inspect options-misread + single-quote, util.format %c — are already fixed; that item is closed). This item still owns the inspect option-fidelity SURFACE: Node-default depth (2), colors, getters, sorted, breakLength, numericSeparator, maxArrayLength, inspect.custom, defaultOptions. **formatWithOptions** stays blocked on inspect-options (would silently drop opts → lying stub) — land with them.
 
 ## Options or Next
 
