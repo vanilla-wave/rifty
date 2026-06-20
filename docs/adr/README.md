@@ -49,6 +49,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0142 | node:vm dual-engine — QuickJS real realm default, hardened-rewrite loud opt-in |
 | 0152 | Child realm event-loop drain + loud-fail exit contract |
 | 0153 | node:constants hybrid faithful static data syscall boundary gap |
+| 0158 | Count detached fetch in child-realm event-loop keepalive |
 | 0159 | node:zlib web-compression-backed async subset |
 
 ### runtime-wasi
@@ -209,6 +210,8 @@ superseded.
 | 0145 `server.hmr.channels` payload path | 0151 | Real-Vite now uses Vite native `server.ws` over rifty `http.Server.on('upgrade')` |
 | 0054 WS/SSE upgrade risk note | 0151 | WebSocket `server.on('upgrade')` now works over the bridge; SSE stays streaming HTTP |
 | 0054 pipe-sink deferral | 0154 | `Readable.fromWeb(webStream).pipe(res)` is implemented; full `node:stream/web` remains unclaimed |
+| 0151 control-frame keepalive clause | 0151 note 2026-06-19 | control frames relay end-to-end; the peer answers pings (real `ws` auto-pongs + `'ping'`, browser-like clients silently pong), transport no longer auto-pongs |
+| 0152 §1 narrow-set / network gap | 0158 | global `fetch` now counted (ref on dispatch, held until body consumed); dispatcher backstop moved to an uncounted host timer; §1 shape unchanged, named set grew |
 
 ## Appendix A — Q→ADR provenance
 

@@ -5,6 +5,12 @@ Date: 2026-06-17
 
 > TL;DR: `http.Server` emits WebSocket `'upgrade'` over the same-origin bridge; no raw TCP claim.
 
+> Correction 2026-06-19: control frames relay end-to-end and the *peer* answers a
+> ping — a real `ws` client auto-pongs and fires `'ping'`; a browser-like bridge
+> client silently pongs (browser `WebSocket` can't surface control frames). The
+> transport no longer auto-pongs, so one server `ping()` yields exactly one
+> `'pong'` and keepalive can still detect a vanished peer.
+
 ## Context
 
 ADR-0147 made browser `new WebSocket()` reach `@riftydev/net.WebSocketServer`
@@ -44,8 +50,11 @@ raw TCP boundary: `net.Socket.connect` remains a loud `NotImplementedError`.
   channel.
 - Fetch/preview HTTP semantics stay intact; there is still no fake HTTP 101
   `Response`.
-- Browser-native ping frames are not exposed to app code, matching browser
-  `WebSocket`; server pings are answered in the transport.
+- Browser-like clients do not expose ping/pong to app code, matching browser
+  `WebSocket`, but still pong a server ping in transit so keepalive works. Real
+  `ws` peers exchange control frames end-to-end (`ping()` / `on('pong')` /
+  `on('ping')`); the transport does not auto-pong, so the server sees exactly one
+  pong per ping.
 - Raw TCP and arbitrary host egress remain outside `node:http` WebSocket upgrade
   support; preview-local `wss://` maps to the same bridge with
   `socket.encrypted`.

@@ -41,7 +41,7 @@ The web API is async-only and exposes no compression-level / dictionary / window
   ignored. Output stays VALID and round-trips; Node guarantees no specific bytes for a given level
   across versions either, so this is a ratio/perf gap, not a correctness lie.
 - Wire/shape-affecting — `windowBits` (sets the encoder window, encoded in the RFC-1950 zlib header;
-  see the Corrected note), `dictionary` (a preset dict changes the compressed wire bytes and needs the
+  see the Design notes), `dictionary` (a preset dict changes the compressed wire bytes and needs the
   same dict to inflate), truthy `info` (changes the return shape to `{buffer,engine}`; no engine handle
   exists) — throw `NotImplementedError('zlib.<fn> option: <name>')`. Silently ignoring these WOULD lie
   about the wire format / return contract. `info: false` (the default) is a no-op.
@@ -70,31 +70,27 @@ The web API is async-only and exposes no compression-level / dictionary / window
 `Error` (error-first handling works), but its `code`/`errno` are the browser stream's, not Node's
 `Z_DATA_ERROR`/`errno`. Exact zlib error codes are out of parity reach (no zlib engine in-realm).
 
-## Corrected (2026-06)
+## Design notes — options policy (empirical, Node 24)
 
-Refinements after empirical re-check against Node 24 (behavior corrected in place; the strategic subset
-boundary is unchanged):
+Why the option handling is exactly this, verified against Node 24 — so a later change does not regress it:
 
-1. **`windowBits` stays a throw, but for the correct reason** — and `info` / `codes` are tightened. The
-   original draft justified the `windowBits` throw as "selects raw/gzip framing"; that is false for the
-   one-shot named functions (Node validates `windowBits` to each function's own framing range —
-   `deflate` 8-15, `gzip`/`deflateRaw`/`gunzip`/`inflate`/`inflateRaw` 8/9-15, `ERR_OUT_OF_RANGE`
-   outside — so it never changes framing here, only window SIZE). The throw was briefly relaxed to an
-   ignored knob on that basis, then **reverted**: an adversarial check proved ignoring it is a SILENT
-   wire-lie. `CompressionStream` always emits a max-window (window-15) stream; the RFC-1950 zlib header
-   (CINFO) encodes that window, and a strict real-Node consumer that pins a smaller `windowBits` rejects
-   the larger-window stream with `Z_DATA_ERROR` — while `rifty.deflate(data,{windowBits:9},cb)` reports
-   SUCCESS. (gzip/raw framings carry no window field and would survive, but we reject `windowBits`
-   uniformly: the producer can't know the consumer's framing, and a loud throw beats a per-format
-   silent-lie gamble.) Per Fidelity a loud ceiling outranks a silent lie, so `windowBits` is a hard
-   `NotImplementedError` for all six functions.
+1. **`windowBits` is a hard throw — DO NOT relax it to an ignored knob.** It is tempting: Node validates
+   `windowBits` to each one-shot function's own framing range (`deflate` 8-15;
+   `gzip`/`deflateRaw`/`gunzip`/`inflate`/`inflateRaw` 8/9-15; `ERR_OUT_OF_RANGE` outside), so it never
+   changes framing here — only window SIZE, which looks like a ratio knob like `level`. But ignoring it
+   is a SILENT wire-lie: `CompressionStream` always emits a max-window (window-15) stream; the RFC-1950
+   zlib header (CINFO) encodes that window, and a strict real-Node consumer pinning a smaller
+   `windowBits` rejects the larger-window stream with `Z_DATA_ERROR` — while `rifty.deflate(data,
+   {windowBits:9},cb)` would report SUCCESS. (gzip/raw framings carry no window field and would survive,
+   but we reject `windowBits` uniformly: the producer can't know the consumer's framing, and a loud
+   throw beats a per-format silent-lie gamble.) Per Fidelity a loud ceiling outranks a silent lie.
 2. **`info` throws on any truthy value, not just `true`.** Node returns `{buffer,engine}` for ANY truthy
    `info` (`1`, `'x'`, `{}`), so a `=== true` guard would silently return a bare Buffer (wrong shape) for
    `info: 1`. The guard is `if (options.info)` — truthy throws, `info: false`/falsy (the default) is a
    no-op, matching Node's branch exactly.
 3. **`zlib.codes` is frozen to match Node** (`Object.isFrozen(zlib.codes) === true`); `zlib.constants`
    is NOT frozen in Node, so it is left unfrozen too.
-4. **Cross-engine verification scope made precise.** "Conformance-pinned" = the WHATWG
+4. **Cross-engine verification scope.** "Conformance-pinned" = the WHATWG
    `CompressionStream`/`DecompressionStream` (the SAME spec primitive in the in-process test harness and
    in Chromium) round-trips against native `node:zlib` both directions. The harness runs in-process, so
    it drives Node's global stream, not Chromium's; the Chromium gunzip path is additionally covered by

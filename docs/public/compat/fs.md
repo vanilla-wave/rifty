@@ -21,7 +21,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | fd table | ✅ | `open`/`close`/`read`/`write`/`fstat`/`ftruncate`; sequential and positional IO |
 | `truncate` / zero fill | ✅ | Sync and promises paths |
 | `mkdtemp` / `opendir` | ✅ | Sync and promises; async directory iteration |
-| `createReadStream` / `createWriteStream` | ✅ | Pipe and `end` smoke tests |
+| `createReadStream` / `createWriteStream` | ✅ | Async `Vfs.openReadable` first, chunked reads, pipe and `end` smoke tests |
 | `fs.watch` | ⚠️ | Conformance covered as cooperative VFS watch subset, not OS-native watcher semantics |
 | Durable `fsync` / inode-like open-unlink semantics | ❌ | Tracked as VFS fd durability residual |
 | Full `FileHandle` object API | ❌ | Tracked separately; high-frequency fd wall covered first |
@@ -31,6 +31,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 - `tests/conformance/builtins/fs.test.ts`
 - `tests/conformance/builtins/fs-realpath-readdir.test.ts`
 - `tests/conformance/builtins/fs-streams.test.ts`
+- `tests/conformance/builtins/shared-vfs.test.ts`
 - `tests/conformance/builtins/fs-watch.test.ts`
 - `tools/node-parity-runner/cases/fs/*.case.ts`
 

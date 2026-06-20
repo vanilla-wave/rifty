@@ -71,7 +71,9 @@ describe('createReadStream — true streaming via openReadable (ADR-0020 phase 2
     expect(total).toBe(payload.length);
   });
 
-  it('honours start/end byte offsets', async () => {
+  it('honours start/end byte offsets (Node end is inclusive)', async () => {
+    // Node's `createReadStream` byte range is INCLUSIVE of `end`: {start:2,end:7}
+    // over 'abcdefghij' yields bytes 2..7 = 'cdefgh' (6 bytes), not 'cdefg'.
     const payload = new TextEncoder().encode('abcdefghij');
     syncMirror().writeFileSync('/r.txt', payload);
     const chunks: Uint8Array[] = [];
@@ -87,6 +89,6 @@ describe('createReadStream — true streaming via openReadable (ADR-0020 phase 2
       joined.set(c, off);
       off += c.byteLength;
     }
-    expect(new TextDecoder().decode(joined)).toBe('cdefg');
+    expect(new TextDecoder().decode(joined)).toBe('cdefgh');
   });
 });

@@ -1,21 +1,22 @@
-/**
- * Unit test for `SyncMirrorVfs.openReadable` — pinned to throw
- * `NotImplementedError` (and never a bare `Error`) so the gap is loud and
- * matches the CLAUDE.md "no silent stubs" hard rule.
- *
- * Streaming through the sync mirror is blocked on ADR-0014 (split VFS); the
- * unimplemented call MUST surface as a structured error so callers can branch.
- */
-import { NotImplementedError } from '@riftydev/vfs';
+import { syncMirror } from '@riftydev/vfs';
+import { resetSyncMirror } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { SyncMirrorVfs } from './sync-mirror-vfs.ts';
 
 describe('SyncMirrorVfs.openReadable', () => {
-  it('throws NotImplementedError tagged with the feature name', async () => {
+  it('streams bytes from the sync mirror in highWaterMark-sized chunks', async () => {
+    resetSyncMirror();
+    syncMirror().writeFileSync('/anything', new TextEncoder().encode('abcdef'));
     const vfs = new SyncMirrorVfs();
-    await expect(vfs.openReadable('/anything')).rejects.toBeInstanceOf(NotImplementedError);
-    await expect(vfs.openReadable('/anything')).rejects.toMatchObject({
-      feature: 'SyncMirrorVfs.openReadable',
-    });
+    const stream = await vfs.openReadable('/anything', { chunkSize: 2, start: 1, end: 5 });
+    const reader = stream.getReader();
+
+    const chunks: string[] = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(new TextDecoder().decode(value));
+    }
+    expect(chunks).toEqual(['bc', 'de']);
   });
 });

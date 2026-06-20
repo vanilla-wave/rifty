@@ -31,10 +31,14 @@ The `awaitDrain` poll resolves at refCount=0 OR at a generous timeout cap. Node 
 The Vite HMR client `setInterval` was injected by the bundler into the entry chunk. Fix: `runEntry` in `worker-entry.ts` builds the importer through an INDIRECT eval — `(0, eval)('u => import(u)')` returns an importer arrow which is then called with the entry url — so no bundler's static lexer sees a literal `import(<var>)` to analyse and inject into the child's entry module. Generic + bundler-agnostic, not Vite-specific. (Cost: that import loses its source map — acceptable; the realm is infra, not user code.) rifty's own internal drain-poll timer uses a host-side `setTimeout` (uncounted — mirrors Node's internal unref'd timers).
 
 **Explicit gaps (Fidelity — gaps are explicit, never hidden).** The narrow handle set (Decision 1) has two-sided divergence — under-counts some live work, over-counts other:
-- Detached `fetch()`/network after top-level is NOT counted → an in-flight request can be reaped before it settles (silent drop). The honest claim is "counts timers/immediates/imports", not "all handles". Tracked: `backlog/runtime-js/timer-unref-keepalive.md`.
+- Detached `fetch()`/network after top-level is NOT counted → an in-flight request can be reaped before it settles (silent drop). The honest claim is "counts timers/immediates/imports", not "all handles". Tracked: `docs/backlog/runtime-js/keepalive-residual-gaps.md`. → **SHIPPED (ADR-0158):** the global `fetch` is now counted (ref on dispatch, held until the body is consumed); §1's set is "timers/immediates/imports + global fetch".
 - `fs.watch`/`fs.watchFile` poll `setInterval` IS counted (and their `FSWatcher.ref()`/`.unref()` are no-op stubs) → an active watcher force-exits at the drain cap, where Node runs forever. Same backlog item.
 - `.unref()`/`.ref()`/`.hasRef()` on public `Timeout`/`Immediate` objects not implemented → a user program calling `.unref()` on a timer cannot opt out of keepalive (would drain to cap). In the browser-worker environment `host setTimeout` returns a number, so `.unref()` already throws loudly on the host handle; the silent-ignore risk is node-env only. Same backlog item.
-- A nested child (depth≥2) arms its sync-RPC dispatcher backstop `setInterval` (keepalive-counted) → would pin the drain. Not reachable today (`execSync` of a node command is `EUNSUPPORTED`); fix when reachable = use an uncounted host timer for the dispatcher backstop. Same backlog item.
+- A nested child (depth≥2) arms its sync-RPC dispatcher backstop `setInterval` (keepalive-counted) → would pin the drain. Not reachable today (`execSync` of a node command is `EUNSUPPORTED`); fix when reachable = use an uncounted host timer for the dispatcher backstop. Same backlog item. → **SHIPPED (ADR-0158):** the backstop now captures the host `setInterval` at module load (uncounted by construction — §5 precedent).
+
+**Corrected (2026-06-20):** the tracking backlog `timer-unref-keepalive.md` was closed + replaced by `docs/backlog/runtime-js/keepalive-residual-gaps.md` (repointed above). Three of the four gaps above are now SHIPPED, superseding their present-tense wording: timer `.unref()`/`.ref()`/`.hasRef()` + `node:timers` namespace symmetry + `clearTimeout/clearInterval(Number(handle))` by primitive id (bullets 2-3), and `FSWatcher.ref()`/`.unref()` now delegate to the keepalive poll handle (bullet 1's no-op-stub clause) — all compat ✅. RESIDUAL = detached `fetch()`/network uncounted + the nested-spawn dispatcher backstop only. The narrow-handle-set Decision (1) is unchanged; widening it to network is a future superseding ADR, not a silent change.
+
+**Extended (2026-06-20):** both RESIDUAL gaps are now CLOSED by **ADR-0158** — Decision §1's counted set is extended to the global `fetch` (ref on dispatch, held until the body is consumed; gap-d), and the dispatcher backstop moved off the counted globals to a module-load host timer (gap-e). §1's shape (narrow, libuv-style refcount over a named set — NOT all handles) is unchanged; only the named set grew. Listed in README "Corrections (active)".
 
 ## Consequences
 
@@ -51,6 +55,6 @@ The Vite HMR client `setInterval` was injected by the bundler into the entry chu
 
 - `packages/runtime-js/src/internal/event-loop-keepalive.ts` — refcount + `awaitDrain()`
 - `packages/kernel/src/worker-entry.ts` — `setKernelDrainHook`, `finalizeWorkerEntry`
-- `backlog/runtime-js/timer-unref-keepalive.md` — `.unref()` + nested-child backstop gap
+- `docs/backlog/runtime-js/keepalive-residual-gaps.md` — residual keepalive gaps (detached fetch + nested-child backstop); supersedes the closed `timer-unref-keepalive.md`
 - `docs/public/compat/process.md` — drain-cap divergence row + keepalive scope
 - ADR-0150, ADR-0144, ADR-0085, ADR-0039

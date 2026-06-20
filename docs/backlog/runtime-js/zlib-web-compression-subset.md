@@ -32,7 +32,7 @@ DELIBERATELY deferred from that PR.
 - Brotli / zstd / `*Sync` stay loud ceilings — no honest browser path (no Web API
   for brotli/zstd; async-only stream API can't back a sync facade). Promote only if
   a browser primitive appears.
-- **Cross-engine e2e** (residual risk, low — ADR-0159 Corrected note): conformance +
+- **Cross-engine e2e** (residual risk, low — ADR-0159 Design notes): conformance +
   parity drive the WHATWG `CompressionStream` via Node's in-process global, not
   Chromium's; only the gunzip path rides on the npm-install e2e (`unpacker.ts`). A
   small in-runtime e2e exercising compress + deflate/raw in real Chromium would close

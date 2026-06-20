@@ -14,7 +14,7 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 | `package.json` `exports` (subpaths) | ✅ | |
 | `package.json` `exports` (conditional: node/import/require/default) | ✅ | |
 | `package.json` `exports` (wildcards `*`) | ✅ | |
-| `package.json` `imports` (`#name`) | ❌ | Pending |
+| `package.json` `imports` (`#name`) | ✅ | Exact, wildcard, and conditional `imports` map entries |
 | JSON modules via `require` | ✅ | |
 | JSON modules via `import` | ✅ | Synthetic default + named keys |
 | `node:` built-ins | ⚠️ | Registry supports `node:` and bare built-ins; each module is a tested subset. `node:constants` is the faithful flattened union of `fs` + Linux-ABI `os` + `crypto.constants` (ADR-0153): real Node numeric values for known keys, `undefined` for absent keys — Node's shape. Reading a constant never throws; the unimplemented-behavior gap surfaces at the syscall (e.g. `fs.openSync` throws `NotImplementedError` for `O_SYNC`/`O_DSYNC` durability, `copyFileSync` for `COPYFILE_FICLONE_FORCE`). `node:vm` covers `Script`, `createContext`, `isContext`, `runInThisContext`, `runInContext`, `runInNewContext`, and `compileFunction`; default engine is a real QuickJS realm (cross-realm isolation), without timeout/`displayErrors`/`cachedData`/`contextExtensions` support (those throw loudly). See the node:vm section below. |
@@ -32,7 +32,7 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 | CJS ↔ ESM interop (CJS requiring ESM) | ⚠️ | Throws — use `import()` (Node parity) |
 | `require()` of a `.ts`/`.tsx` module (CJS scope) | ❌ | Throws `NotImplementedError('module-loader.ts-via-require')`; the esbuild type-strip is async, so a sync `require()` cannot transform it — load `.ts` as ESM via `import()` under a `type:module` scope (ADR-0052) |
 | `require.resolve` | ✅ | |
-| `import.meta.url` | ❌ | Pending |
+| `import.meta.url` | ✅ | File URL for the resolved ESM module id; supports `new URL('./x', import.meta.url)` |
 | Import attributes (`with { type: 'json' }`) | ❌ | Deferred until needed |
 
 ## Known limitations (M2)
@@ -86,7 +86,6 @@ by conformance + parity cases; workaround = the `rewrite` opt-in, which is V8-co
 
 Recorded: ADR-0142 (node:vm dual-engine — QuickJS real realm default, hardened-rewrite loud
 opt-in; supersedes ADR-0138, which had recorded the rewrite direct-eval leak as permanent).
-- `package.json` `imports` (subpath imports starting with `#`) is not yet wired.
 - The in-Worker VFS is in-memory only (M4 adds OPFS).
 - A `.ts`/`.tsx` module that classifies as CJS (its nearest package scope is not `type:module`) cannot be `require()`d: the TS type-strip is the async esbuild-via-`runWasi` `transformSource` hook and a synchronous `require()` cannot await it (ADR-0052 D1 alt-C). It throws `NotImplementedError('module-loader.ts-via-require')` rather than feeding raw TypeScript to `new Function`. A `.ts` under a `type:module` scope loads as ESM via `import()`, where the async strip runs.
 - **TS-on-import covers `import type`, `const enum`, `satisfies` but NOT decorators.** The `transformSource` esbuild WASI hook runs with `--loader=ts` and no tsconfig, so `import type`/inline `type`-import, `const enum` (lowered to a runtime object, not inlined), `interface`, `enum`, and `satisfies` all strip/lower correctly and round-trip a cross-file `.ts` graph (parity case `modules/ts-effect-syntax-cross-file`, head-to-head against `tsx`). Stage-3 `@decorator` syntax is the exception: esbuild leaves it UN-lowered (passthrough) without `experimentalDecorators`, and the post-strip acorn parse (`ecmaVersion:'latest'`, no decorators plugin) then rejects it — whereas the Node-side `tsx` reference fully lowers it. This is a rifty-pipeline asymmetry, NOT on opencode's source path (no decorators in the vendored tree), tracked in `docs/backlog/runtime-js/ts-import-decorator-lowering`. Wiring esbuild's decorator lowering (a tsconfig/flag pass-through) or an acorn decorators plugin would close it.

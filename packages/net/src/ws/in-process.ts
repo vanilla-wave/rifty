@@ -43,6 +43,7 @@ interface BridgeFrame {
   type: 'open' | 'open-ack' | 'msg' | 'close';
   cid: string;
   data?: WsMessage;
+  opcode?: number;
   code?: number;
   reason?: string;
   from?: 'client' | 'server';
@@ -101,6 +102,10 @@ function nextCid(): string {
  * Emits `message`, `close`. Mirrors the subset of the `ws` library API that
  * real dev servers (Vite, Express ws middleware) actually use. There is no
  * wire, so no transport `'error'` is ever emitted.
+ *
+ * Reduced same-realm shim, NOT a full `ws` connection: no `terminate`/`ping`/
+ * `pong`/`pause`/`resume`/`bufferedAmount`, and `send(data)` takes no completion
+ * callback. Guest code that loads the real npm `ws` gets the real class instead.
  */
 export class WebSocketConnection extends EventEmitter {
   state: State = State.OPEN;
@@ -237,7 +242,9 @@ export class WebSocketServer extends EventEmitter {
     }
     if (frame.type === 'msg') {
       const conn = this.bridgeClients.get(frame.cid);
-      if (conn && frame.data !== undefined) conn.emit('message', frame.data);
+      if (conn && frame.data !== undefined && !isControlOpcode(frame.opcode)) {
+        conn.emit('message', frame.data);
+      }
       return;
     }
     if (frame.type === 'close' && frame.from === 'client') {
@@ -314,6 +321,9 @@ export class WebSocket extends EventTarget {
   protocol = '';
   extensions = '';
   binaryType: BinaryType = 'blob';
+  // Same-realm/bridge sends post directly with no JS-side queue, so an honest
+  // bufferedAmount is always 0 (the browser property is always present).
+  bufferedAmount = 0;
   readyState: number = State.CONNECTING;
 
   private readonly _handlers = new Map<string, EventListener>();
@@ -506,6 +516,18 @@ export class WebSocket extends EventTarget {
       return;
     }
     if (frame.type === 'msg' && this.readyState === State.OPEN && frame.data !== undefined) {
+      if (frame.opcode === 0x9) {
+        // Browser WebSocket answers a server ping at the protocol layer without
+        // exposing it; mirror that — pong back over the bridge, surface nothing.
+        this.activeBridgeChannel?.postMessage({
+          type: 'msg',
+          cid: this.bridgeCid,
+          data: frame.data,
+          opcode: 0xa,
+        });
+        return;
+      }
+      if (isControlOpcode(frame.opcode)) return;
       this.dispatchEvent(
         new MessageEvent('message', {
           data: messageDataForBinaryType(frame.data, this.binaryType),
@@ -601,6 +623,10 @@ function isValidProtocolToken(protocol: string): boolean {
   return /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(protocol);
 }
 
+export function isControlOpcode(opcode: number | undefined): boolean {
+  return opcode === 0x9 || opcode === 0xa;
+}
+
 function invalidStateError(message: string): Error {
   try {
     return new DOMException(message, 'InvalidStateError');
@@ -638,7 +664,10 @@ function arrayBufferFromBinary(data: WsMessage): ArrayBuffer | null {
 }
 
 /** Coerce a delivered binary frame to the client's `binaryType`, like the browser. */
-function messageDataForBinaryType(data: WsMessage, binaryType: BinaryType): WsMessage | Blob {
+export function messageDataForBinaryType(
+  data: WsMessage,
+  binaryType: BinaryType,
+): WsMessage | Blob {
   const ab = arrayBufferFromBinary(data);
   if (!ab) return data;
   if (binaryType === 'arraybuffer') return ab;

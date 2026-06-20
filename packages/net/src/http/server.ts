@@ -80,16 +80,19 @@ export class HttpServer extends EventEmitter {
    *
    * TODO(backlog: net/http-listen-options-overload)
    */
-  listen(port: number, hostnameOrCb?: string | (() => void), cb?: () => void): this;
-  listen(options: ListenOptions, cb?: () => void): this;
   listen(
-    portOrOptions: number | ListenOptions,
+    port: number,
     hostnameOrCb?: string | (() => void),
+    backlogOrCb?: number | (() => void),
     cb?: () => void,
-  ): this {
+  ): this;
+  listen(options: ListenOptions, cb?: () => void): this;
+  listen(portOrOptions: number | ListenOptions, ...rest: unknown[]): this {
     const port = typeof portOrOptions === 'number' ? portOrOptions : (portOrOptions.port ?? 0);
-    // Both call shapes: callback is whichever of the two trailing args is a function.
-    const callback = (typeof hostnameOrCb === 'function' ? hostnameOrCb : cb) as
+    // Node ignores positional host/backlog here (loopback-only). The callback is
+    // the LAST function argument in any overload shape — including the 4-arg
+    // `listen(port, host, backlog, cb)` that npm `ws` { port } mode uses.
+    const callback = rest.filter((arg) => typeof arg === 'function').pop() as
       | (() => void)
       | undefined;
     // Port already bound in this realm → Node emits an async `'error'` EADDRINUSE
@@ -650,7 +653,7 @@ function openWebSocketClientUpgrade(opts: {
       return;
     }
     if (frame.type === 'msg' && opened && frame.data !== undefined) {
-      socket._receiveBridgeMessage(frame.data);
+      socket._receiveBridgeMessage(frame.data, frame.opcode);
       return;
     }
     if (frame.type === 'close' && frame.from === 'server') {

@@ -20,25 +20,30 @@ export interface WebSocketUpgradeSocketOptions {
   readonly url: string;
   readonly protocols: readonly string[];
   readonly encrypted?: boolean;
+  readonly maxPayload?: number;
   readonly sendBridgeFrame: (frame: WebSocketBridgeFrame) => void;
 }
 
 export interface WebSocketClientSocketOptions {
   readonly cid: string;
+  readonly maxPayload?: number;
   readonly sendBridgeFrame: (frame: WebSocketBridgeFrame) => void;
 }
 
 const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+const DEFAULT_MAX_PAYLOAD = 100 * 1024 * 1024;
+const MESSAGE_TOO_BIG_REASON = 'websocket message too big';
 const textEncoder = new TextEncoder();
 
 type ParsedFrame =
   | { kind: 'frame'; fin: boolean; opcode: number; payload: Buffer; byteLength: number }
   | { kind: 'need-more' }
-  | { kind: 'protocol-error'; reason: string };
+  | { kind: 'protocol-error'; reason: string; code?: number };
 
 type FragmentedMessage = {
   opcode: 0x1 | 0x2;
   chunks: Buffer[];
+  size: number;
 };
 
 export class WebSocketUpgradeSocket extends EventEmitter {
@@ -59,6 +64,7 @@ export class WebSocketUpgradeSocket extends EventEmitter {
 
   private readonly cid: string;
   private readonly protocols: readonly string[];
+  private readonly maxPayload: number;
   private readonly sendBridgeFrame: (frame: WebSocketBridgeFrame) => void;
   private handshakeBuffer = Buffer.alloc(0);
   private serverFrameBuffer = Buffer.alloc(0);
@@ -67,17 +73,27 @@ export class WebSocketUpgradeSocket extends EventEmitter {
   private closeEmitted = false;
   private closeFrameSent = false;
   private fragmentedMessage: FragmentedMessage | null = null;
+  private timeoutTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(opts: WebSocketUpgradeSocketOptions) {
     super();
     this.cid = opts.cid;
     this.protocols = opts.protocols;
     this.encrypted = opts.encrypted ?? false;
+    this.maxPayload = normaliseMaxPayload(opts.maxPayload);
     this.sendBridgeFrame = opts.sendBridgeFrame;
   }
 
-  setTimeout(_timeout: number, cb?: () => void): this {
+  setTimeout(timeout: number, cb?: () => void): this {
     if (cb) this.once('timeout', cb);
+    if (this.timeoutTimer) {
+      clearTimeout(this.timeoutTimer);
+      this.timeoutTimer = null;
+    }
+    // 0 disables the timeout (Node semantics). For ms>0 we arm a coarse one-shot
+    // timer (mirrors ClientRequest.setTimeout) — not a full inactivity-reset, but
+    // it actually fires 'timeout' instead of silently never firing.
+    if (timeout > 0) this.timeoutTimer = setTimeout(() => this.emit('timeout'), timeout);
     return this;
   }
 
@@ -141,6 +157,7 @@ export class WebSocketUpgradeSocket extends EventEmitter {
 
   destroy(err?: Error): this {
     if (this.destroyed) return this;
+    if (this.timeoutTimer) clearTimeout(this.timeoutTimer);
     if (this.handshakeState === 'accepted' && !this.closeFrameSent) {
       this.sendBridgeClose(1006, err?.message ?? 'socket destroyed');
     }
@@ -237,10 +254,13 @@ export class WebSocketUpgradeSocket extends EventEmitter {
   private consumeServerFrameBytes(bytes: Buffer): void {
     this.serverFrameBuffer = Buffer.concat([this.serverFrameBuffer, bytes]);
     for (;;) {
-      const parsed = parseFrame(this.serverFrameBuffer, { mask: 'forbidden' });
+      const parsed = parseFrame(this.serverFrameBuffer, {
+        mask: 'forbidden',
+        maxPayload: this.maxPayload,
+      });
       if (parsed.kind === 'need-more') return;
       if (parsed.kind === 'protocol-error') {
-        this.sendBridgeClose(1002, parsed.reason);
+        this.sendBridgeClose(parsed.code ?? 1002, parsed.reason);
         this.destroy(new Error(parsed.reason));
         return;
       }
@@ -277,15 +297,15 @@ export class WebSocketUpgradeSocket extends EventEmitter {
       this.destroy();
       return;
     }
-    if (opcode === 0x9) {
-      this.emit('data', encodeClientFrame(0xa, payload));
+    if (opcode === 0x9 || opcode === 0xa) {
+      // Relay control frames to the peer end-to-end; the peer answers the ping
+      // itself. A real `ws` client auto-pongs and surfaces 'ping'; a browser-like
+      // bridge client silently pongs (browser WebSocket can't expose control
+      // frames). The transport no longer auto-pongs, so the ws server sees exactly
+      // one pong per ping and keepalive can still detect a vanished peer.
+      this.sendBridgeFrame({ type: 'msg', cid: this.cid, data: payload, opcode });
       return;
     }
-    // Server pong: RFC6455 §5.5.3 expects no response, and the bridge transport
-    // answers server pings locally (ADR-0151), so an unsolicited server pong has
-    // no downstream consumer. Dropped intentionally — not silently.
-    // TODO(backlog: net/ws-end-to-end-control-frames) end-to-end ping/pong relay
-    if (opcode === 0xa) return;
     this.sendBridgeClose(1002, `unsupported websocket opcode ${opcode}`);
     this.destroy();
   }
@@ -295,8 +315,12 @@ export class WebSocketUpgradeSocket extends EventEmitter {
       this.closeWithProtocolError('new websocket data frame before fragmented message completed');
       return;
     }
+    if (payload.byteLength > this.maxPayload) {
+      this.closeWithMessageTooBig();
+      return;
+    }
     if (!fin) {
-      this.fragmentedMessage = { opcode, chunks: [payload] };
+      this.fragmentedMessage = { opcode, chunks: [payload], size: payload.byteLength };
       return;
     }
     this.sendServerMessage(opcode, payload);
@@ -307,7 +331,14 @@ export class WebSocketUpgradeSocket extends EventEmitter {
       this.closeWithProtocolError('unexpected websocket continuation frame');
       return;
     }
+    const nextSize = this.fragmentedMessage.size + payload.byteLength;
+    if (nextSize > this.maxPayload) {
+      this.fragmentedMessage = null;
+      this.closeWithMessageTooBig();
+      return;
+    }
     this.fragmentedMessage.chunks.push(payload);
+    this.fragmentedMessage.size = nextSize;
     if (!fin) return;
     const message = this.fragmentedMessage;
     this.fragmentedMessage = null;
@@ -332,6 +363,10 @@ export class WebSocketUpgradeSocket extends EventEmitter {
   private closeWithProtocolError(reason: string, code = 1002): void {
     this.sendBridgeClose(code, reason);
     this.destroy(new Error(reason));
+  }
+
+  private closeWithMessageTooBig(): void {
+    this.closeWithProtocolError(MESSAGE_TOO_BIG_REASON, 1009);
   }
 
   private sendBridgeClose(code: number, reason: string): void {
@@ -361,19 +396,30 @@ export class WebSocketClientSocket extends EventEmitter {
   _writableState = { finished: false, errorEmitted: false, length: 0 };
 
   private readonly cid: string;
+  private readonly maxPayload: number;
   private readonly sendBridgeFrame: (frame: WebSocketBridgeFrame) => void;
   private clientFrameBuffer = Buffer.alloc(0);
   private fragmentedMessage: FragmentedMessage | null = null;
   private closeEmitted = false;
+  private closeFrameSent = false;
+  private timeoutTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(opts: WebSocketClientSocketOptions) {
     super();
     this.cid = opts.cid;
+    this.maxPayload = normaliseMaxPayload(opts.maxPayload);
     this.sendBridgeFrame = opts.sendBridgeFrame;
   }
 
-  setTimeout(_timeout: number, cb?: () => void): this {
+  setTimeout(timeout: number, cb?: () => void): this {
     if (cb) this.once('timeout', cb);
+    if (this.timeoutTimer) {
+      clearTimeout(this.timeoutTimer);
+      this.timeoutTimer = null;
+    }
+    // 0 disables (Node semantics); ms>0 arms a coarse one-shot timer that fires
+    // 'timeout' instead of the previous silent no-op.
+    if (timeout > 0) this.timeoutTimer = setTimeout(() => this.emit('timeout'), timeout);
     return this;
   }
 
@@ -436,6 +482,7 @@ export class WebSocketClientSocket extends EventEmitter {
 
   destroy(err?: Error): this {
     if (this.destroyed) return this;
+    if (this.timeoutTimer) clearTimeout(this.timeoutTimer);
     this.destroyed = true;
     this.writable = false;
     this.readable = false;
@@ -443,13 +490,7 @@ export class WebSocketClientSocket extends EventEmitter {
     this._writableState.finished = true;
     if (err) this._writableState.errorEmitted = true;
     if (err) this.emit('error', err);
-    this.sendBridgeFrame({
-      type: 'close',
-      cid: this.cid,
-      code: 1006,
-      reason: err?.message ?? 'socket destroyed',
-      from: 'client',
-    });
+    this.sendBridgeClose(1006, err?.message ?? 'socket destroyed');
     this.emitClose();
     return this;
   }
@@ -462,10 +503,10 @@ export class WebSocketClientSocket extends EventEmitter {
     return { address: this.localAddress, family: 'IPv4', port: this.localPort };
   }
 
-  _receiveBridgeMessage(data: WsMessage): void {
+  _receiveBridgeMessage(data: WsMessage, opcode?: number): void {
     if (this.destroyed) return;
-    const opcode = typeof data === 'string' ? 0x1 : 0x2;
-    this.emit('data', encodeServerFrame(opcode, normalisePayload(data)));
+    const frameOpcode = opcode ?? (typeof data === 'string' ? 0x1 : 0x2);
+    this.emit('data', encodeServerFrame(frameOpcode, normalisePayload(data)));
   }
 
   _receiveBridgeClose(code = 1000, reason = ''): void {
@@ -487,16 +528,13 @@ export class WebSocketClientSocket extends EventEmitter {
   private consumeClientFrameBytes(bytes: Buffer): void {
     this.clientFrameBuffer = Buffer.concat([this.clientFrameBuffer, bytes]);
     for (;;) {
-      const parsed = parseFrame(this.clientFrameBuffer, { mask: 'required' });
+      const parsed = parseFrame(this.clientFrameBuffer, {
+        mask: 'required',
+        maxPayload: this.maxPayload,
+      });
       if (parsed.kind === 'need-more') return;
       if (parsed.kind === 'protocol-error') {
-        this.sendBridgeFrame({
-          type: 'close',
-          cid: this.cid,
-          code: 1002,
-          reason: parsed.reason,
-          from: 'client',
-        });
+        this.sendBridgeClose(parsed.code ?? 1002, parsed.reason);
         this.destroy(new Error(parsed.reason));
         return;
       }
@@ -521,23 +559,11 @@ export class WebSocketClientSocket extends EventEmitter {
     if (opcode === 0x8) {
       const close = parseClosePayload(payload);
       if (close.kind === 'protocol-error') {
-        this.sendBridgeFrame({
-          type: 'close',
-          cid: this.cid,
-          code: close.code,
-          reason: close.reason,
-          from: 'client',
-        });
+        this.sendBridgeClose(close.code, close.reason);
         this.destroy(new Error(close.reason));
         return;
       }
-      this.sendBridgeFrame({
-        type: 'close',
-        cid: this.cid,
-        code: close.code,
-        reason: close.reason,
-        from: 'client',
-      });
+      this.sendBridgeClose(close.code, close.reason);
       return;
     }
     if (opcode === 0x9 || opcode === 0xa) {
@@ -549,13 +575,7 @@ export class WebSocketClientSocket extends EventEmitter {
       });
       return;
     }
-    this.sendBridgeFrame({
-      type: 'close',
-      cid: this.cid,
-      code: 1002,
-      reason: `unsupported websocket opcode ${opcode}`,
-      from: 'client',
-    });
+    this.sendBridgeClose(1002, `unsupported websocket opcode ${opcode}`);
     this.destroy(new Error(`unsupported websocket opcode ${opcode}`));
   }
 
@@ -564,8 +584,12 @@ export class WebSocketClientSocket extends EventEmitter {
       this.destroy(new Error('new websocket data frame before fragmented message completed'));
       return;
     }
+    if (payload.byteLength > this.maxPayload) {
+      this.closeClientWithProtocolError(MESSAGE_TOO_BIG_REASON, 1009);
+      return;
+    }
     if (!fin) {
-      this.fragmentedMessage = { opcode, chunks: [payload] };
+      this.fragmentedMessage = { opcode, chunks: [payload], size: payload.byteLength };
       return;
     }
     this.sendClientMessage(opcode, payload);
@@ -576,7 +600,14 @@ export class WebSocketClientSocket extends EventEmitter {
       this.destroy(new Error('unexpected websocket continuation frame'));
       return;
     }
+    const nextSize = this.fragmentedMessage.size + payload.byteLength;
+    if (nextSize > this.maxPayload) {
+      this.fragmentedMessage = null;
+      this.closeClientWithProtocolError(MESSAGE_TOO_BIG_REASON, 1009);
+      return;
+    }
     this.fragmentedMessage.chunks.push(payload);
+    this.fragmentedMessage.size = nextSize;
     if (!fin) return;
     const message = this.fragmentedMessage;
     this.fragmentedMessage = null;
@@ -589,13 +620,7 @@ export class WebSocketClientSocket extends EventEmitter {
       try {
         text = decodeFatalUtf8(payload);
       } catch {
-        this.sendBridgeFrame({
-          type: 'close',
-          cid: this.cid,
-          code: 1007,
-          reason: 'invalid utf-8 websocket text frame',
-          from: 'client',
-        });
+        this.sendBridgeClose(1007, 'invalid utf-8 websocket text frame');
         this.destroy(new Error('invalid utf-8 websocket text frame'));
         return;
       }
@@ -603,6 +628,17 @@ export class WebSocketClientSocket extends EventEmitter {
       return;
     }
     this.sendBridgeFrame({ type: 'msg', cid: this.cid, data: payload });
+  }
+
+  private closeClientWithProtocolError(reason: string, code: number): void {
+    this.sendBridgeClose(code, reason);
+    this.destroy(new Error(reason));
+  }
+
+  private sendBridgeClose(code: number, reason: string): void {
+    if (this.closeFrameSent) return;
+    this.closeFrameSent = true;
+    this.sendBridgeFrame({ type: 'close', cid: this.cid, code, reason, from: 'client' });
   }
 
   private emitClose(): void {
@@ -680,7 +716,10 @@ function connectionHasUpgrade(value: string | undefined): boolean {
     : false;
 }
 
-function parseFrame(buf: Buffer, opts: { readonly mask: 'forbidden' | 'required' }): ParsedFrame {
+function parseFrame(
+  buf: Buffer,
+  opts: { readonly mask: 'forbidden' | 'required'; readonly maxPayload: number },
+): ParsedFrame {
   if (buf.byteLength < 2) return { kind: 'need-more' };
   const b0 = buf[0]!;
   const b1 = buf[1]!;
@@ -728,6 +767,9 @@ function parseFrame(buf: Buffer, opts: { readonly mask: 'forbidden' | 'required'
       return { kind: 'protocol-error', reason: 'websocket control frame too large' };
     }
     off += 8;
+  }
+  if (len > opts.maxPayload) {
+    return { kind: 'protocol-error', code: 1009, reason: MESSAGE_TOO_BIG_REASON };
   }
   const maskOff = off;
   if (masked) off += 4;
@@ -789,9 +831,22 @@ function encodeFrame(opcode: number, payload: Uint8Array, masked: boolean): Buff
 function fillRandom(bytes: Uint8Array): void {
   const webCrypto = globalThis.crypto;
   if (!webCrypto?.getRandomValues) {
-    throw new NotImplementedError('websocket.crypto.getRandomValues');
+    throw new NotImplementedError(
+      'net.websocket.client-mask-randomness',
+      'masking client WebSocket frames needs WebCrypto getRandomValues, absent in this realm',
+    );
   }
   webCrypto.getRandomValues(bytes);
+}
+
+function normaliseMaxPayload(value: number | undefined): number {
+  if (value === undefined) return DEFAULT_MAX_PAYLOAD;
+  // ws semantics: maxPayload 0 disables the cap. `len > Infinity` is always false.
+  if (value === 0) return Number.POSITIVE_INFINITY;
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new RangeError('websocket maxPayload must be a non-negative safe integer');
+  }
+  return value;
 }
 
 function decodeFatalUtf8(bytes: Uint8Array): string {
@@ -827,7 +882,7 @@ function parseClosePayload(
 ):
   | { kind: 'ok'; code: number; reason: string }
   | { kind: 'protocol-error'; code: number; reason: string } {
-  if (payload.byteLength < 2) return { kind: 'ok', code: 1005, reason: '' };
+  if (payload.byteLength === 0) return { kind: 'ok', code: 1005, reason: '' };
   if (payload.byteLength === 1) {
     return { kind: 'protocol-error', code: 1002, reason: 'invalid websocket close payload' };
   }
