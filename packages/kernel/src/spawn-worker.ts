@@ -111,6 +111,16 @@ export interface SpawnWorkerResult {
    * `postMessage`). Listeners receive the raw event; the worker is NOT
    * terminated (matches browser semantics). Review fix §1.10. */
   onMessageError(cb: (ev: MessageEvent) => void): () => void;
+  /**
+   * Subscribe to a worker's uncaught GLOBAL error message — an error that
+   * ESCAPED worker-entry's top-level try/catch (thrown in a queueMicrotask /
+   * timer, or an unhandled EventEmitter `'error'` re-throw like EADDRINUSE) and
+   * surfaced via the worker's `error` event. Fires once, just before the exit-1
+   * dispatch, with a newline-terminated message. The process manager forwards
+   * it onto the child's stderr stream so the diagnostic is not lost behind the
+   * opaque exit 1 (backlog/kernel/worker-global-error-to-stderr).
+   */
+  onUncaughtError(cb: (message: string) => void): () => void;
   /** Forcibly terminate the worker. Idempotent. */
   terminate(): void;
 }
@@ -193,6 +203,7 @@ export function spawnKernelWorker(
   let terminated = false;
   const exitListeners: ((code: number) => void)[] = [];
   const messageErrorListeners: ((ev: MessageEvent) => void)[] = [];
+  const uncaughtErrorListeners: ((message: string) => void)[] = [];
 
   const dispatchExit = (code: number): void => {
     // Snapshot so a handler that unsubscribes itself doesn't skip a peer.
@@ -201,6 +212,10 @@ export function spawnKernelWorker(
 
   const dispatchMessageError = (ev: MessageEvent): void => {
     for (const cb of [...messageErrorListeners]) cb(ev);
+  };
+
+  const dispatchUncaughtError = (message: string): void => {
+    for (const cb of [...uncaughtErrorListeners]) cb(message);
   };
 
   /**
@@ -225,6 +240,7 @@ export function spawnKernelWorker(
   function clearSubscribers(): void {
     exitListeners.length = 0;
     messageErrorListeners.length = 0;
+    uncaughtErrorListeners.length = 0;
   }
 
   // Named handlers so `tearDownWorker` can `removeEventListener` them;
@@ -241,13 +257,37 @@ export function spawnKernelWorker(
 
   // `ErrorEvent` is DOM-only; structurally it arrives as `MessageEvent`.
   // Map uncaught worker errors to a code-1 exit — catches module parse
-  // failures (worker-entry already maps top-level throws to exit-1).
+  // failures AND errors that escaped worker-entry's top-level try/catch (thrown
+  // in a queueMicrotask / timer, or an unhandled EventEmitter `'error'`
+  // re-throw like EADDRINUSE). worker-entry already wrote a top-level throw's
+  // stack to the child stderr before its normal exit, so that path never
+  // reaches here; an ESCAPED error left NO stderr text behind, so forward the
+  // event's message to the child stderr (mirrors host.ts's `[worker error]`)
+  // before the exit-1 dispatch — keeping the diagnostic from vanishing behind
+  // the opaque exit 1 (backlog/kernel/worker-global-error-to-stderr).
   const onError = (ev: MessageEvent): void => {
     if (terminated) return;
+    const e = ev as unknown as { message?: unknown; filename?: unknown; lineno?: unknown };
+    const message =
+      typeof e.message === 'string' && e.message.length > 0
+        ? e.message
+        : 'Worker terminated by an uncaught error';
+    const loc =
+      typeof e.filename === 'string' && e.filename.length > 0
+        ? ` (${e.filename}:${typeof e.lineno === 'number' ? e.lineno : 0})`
+        : '';
     tearDownWorker();
-    void ev;
-    dispatchExit(1);
-    clearSubscribers();
+    dispatchUncaughtError(`${message}${loc}\n`);
+    // Defer the exit one microtask so the forwarded stderr `'data'` (the
+    // `@riftydev/io` Readable flushes on a queueMicrotask) is delivered BEFORE
+    // the exit fires. A foreground consumer (owner-child-node-executor /
+    // bin-executor) mutes output synchronously in its `'exit'` handler, so a
+    // same-tick exit would drop the diagnostic. The push above enqueues its
+    // flush microtask first, so this one runs after it (FIFO).
+    queueMicrotask(() => {
+      dispatchExit(1);
+      clearSubscribers();
+    });
   };
 
   // `messageerror` fires when the browser fails to structured-clone an
@@ -285,6 +325,13 @@ export function spawnKernelWorker(
       return () => {
         const idx = messageErrorListeners.indexOf(cb);
         if (idx !== -1) messageErrorListeners.splice(idx, 1);
+      };
+    },
+    onUncaughtError(cb) {
+      uncaughtErrorListeners.push(cb);
+      return () => {
+        const idx = uncaughtErrorListeners.indexOf(cb);
+        if (idx !== -1) uncaughtErrorListeners.splice(idx, 1);
       };
     },
     terminate() {

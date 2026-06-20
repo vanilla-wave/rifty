@@ -8,6 +8,7 @@
 import { type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
 import type { CommandContext } from '@riftydev/shell';
 import { isNodeChildMessage } from '../glue/node-child-ipc.ts';
+import { runForegroundChild } from '../glue/run-foreground-child.ts';
 
 export function buildNodeChildSpawnSpec(
   entry: string,
@@ -54,16 +55,6 @@ export type OwnerNodeExecutor = (
   hooks: NodeRunHooks,
 ) => Promise<number>;
 
-const decoder = new TextDecoder();
-function decodeChunk(chunk: unknown): string {
-  if (chunk instanceof Uint8Array) return decoder.decode(chunk);
-  if (chunk instanceof ArrayBuffer) return decoder.decode(new Uint8Array(chunk));
-  if (ArrayBuffer.isView(chunk)) {
-    return decoder.decode(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
-  }
-  return typeof chunk === 'string' ? chunk : '';
-}
-
 export function createOwnerChildNodeExecutor(
   nodeEntryUrl: string,
   spawn: (spec: SpawnWorkerSpec) => NodeChildHandle = (spec) => {
@@ -78,45 +69,19 @@ export function createOwnerChildNodeExecutor(
     return h;
   },
 ): OwnerNodeExecutor {
-  return (entry, args, ctx, hooks) =>
-    new Promise<number>((resolve) => {
-      const handle = spawn(buildNodeChildSpawnSpec(entry, args, ctx.env, ctx.cwd, nodeEntryUrl));
-      let outputClosed = false;
-      const stream = (chunk: unknown, w: { write(s: string): void }): void => {
-        if (outputClosed) return;
-        const text = decodeChunk(chunk);
-        if (text) w.write(text);
-      };
-      handle.stdout().on('data', (c) => stream(c, ctx.stdout));
-      handle.stderr().on('data', (c) => stream(c, ctx.stderr));
-
-      handle.on('message', (m: unknown) => {
+  // `async` so a synchronous `spawn` throw (the kind guard / host-boundary
+  // failure) surfaces as a rejected promise, not a sync throw. The spawn + the
+  // shared driver's listener registration run before the first suspension.
+  return async (entry, args, ctx, hooks) => {
+    const handle = spawn(buildNodeChildSpawnSpec(entry, args, ctx.env, ctx.cwd, nodeEntryUrl));
+    // Shared foreground driver (stream/abort/exit). A server child posts
+    // `rifty:node-listening` → register a preview slot; the slot is removed on
+    // exit. (run-foreground-child owns the exit-before-pre-abort ordering.)
+    return runForegroundChild(handle, ctx, {
+      onMessage: (m) => {
         if (isNodeChildMessage(m)) hooks.onListening(hooks.sid, m.ports);
-      });
-
-      const signal = ctx.signal;
-      const onAbort = (): void => {
-        outputClosed = true;
-        handle.kill('SIGTERM');
-      };
-
-      // Register the exit listener BEFORE acting on an already-aborted signal:
-      // `kill()` emits 'exit' synchronously, so a pre-aborted run would otherwise
-      // lose the event → the promise never resolves + onExit (registry remove)
-      // never fires.
-      let settled = false;
-      handle.on('exit', (code) => {
-        if (settled) return;
-        settled = true;
-        outputClosed = true;
-        signal?.removeEventListener('abort', onAbort);
-        hooks.onExit(hooks.sid);
-        resolve(typeof code === 'number' ? code : 0);
-      });
-
-      if (signal) {
-        if (signal.aborted) onAbort();
-        else signal.addEventListener('abort', onAbort, { once: true });
-      }
+      },
+      onExit: () => hooks.onExit(hooks.sid),
     });
+  };
 }

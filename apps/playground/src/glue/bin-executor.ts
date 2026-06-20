@@ -16,17 +16,24 @@
  */
 
 import type { BinExecutor } from '@riftydev/shell';
+import { runForegroundChild } from './run-foreground-child.ts';
 
 /** Read-side of a worker stdio stream (subset of `@riftydev/io` `Readable`). */
 export interface BinReadable {
   on(event: 'data', listener: (chunk: unknown) => void): unknown;
 }
 
-/** Worker handle surface the executor needs (subset of `WorkerProcessHandle`). */
+/**
+ * Worker handle surface the executor needs (subset of `WorkerProcessHandle`).
+ * `on('message')` is part of the shared `ForegroundChildHandle` contract (the
+ * real handle has it); a bin child never sends messages, so the driver never
+ * subscribes — it is declared only to satisfy the shared type.
+ */
 export interface BinWorkerHandle {
   stdout(): BinReadable;
   stderr(): BinReadable;
   on(event: 'exit', listener: (code?: unknown) => void): unknown;
+  on(event: 'message', listener: (message: unknown) => void): unknown;
   kill(signal?: string): unknown;
 }
 
@@ -44,66 +51,20 @@ export interface BinExecutorDeps {
   readonly spawn: (req: BinSpawnRequest) => BinWorkerHandle;
 }
 
-const decoder = new TextDecoder();
-
-function decodeChunk(chunk: unknown): string {
-  if (chunk instanceof Uint8Array) return decoder.decode(chunk);
-  if (chunk instanceof ArrayBuffer) return decoder.decode(new Uint8Array(chunk));
-  if (ArrayBuffer.isView(chunk)) {
-    return decoder.decode(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
-  }
-  return typeof chunk === 'string' ? chunk : '';
-}
-
 /** Build a {@link BinExecutor} over an injected node-entry worker spawn. */
 export function createBinExecutor(deps: BinExecutorDeps): BinExecutor {
-  return (binPath, args, ctx) =>
-    new Promise<number>((resolve) => {
-      // The worker reads the shim via the VFS sync mirror (runNodeEntry); a shim
-      // removed mid-flight surfaces there as a loud worker error (exit 1 +
-      // stderr), never a silent 0.
-      const handle = deps.spawn({
-        shimPath: binPath,
-        args,
-        env: ctx.env,
-        cwd: ctx.cwd,
-      });
-
-      // Stop surfacing output once the worker is aborted OR has exited: chunks
-      // the kernel buffers between `kill` and teardown must not land in the
-      // terminal AFTER the foreground run already resolved (shell exit 130).
-      let outputClosed = false;
-      handle.stdout().on('data', (chunk) => {
-        if (outputClosed) return;
-        const text = decodeChunk(chunk);
-        if (text) ctx.stdout.write(text);
-      });
-      handle.stderr().on('data', (chunk) => {
-        if (outputClosed) return;
-        const text = decodeChunk(chunk);
-        if (text) ctx.stderr.write(text);
-      });
-
-      // Ctrl+C: kill the worker AND mute its trailing output. The shell's abort
-      // race already resolves the run at exit 130; the worker's own exit still
-      // settles this promise (no leak), so abort does NOT resolve here.
-      const signal = ctx.signal;
-      const onAbort = (): void => {
-        outputClosed = true;
-        handle.kill('SIGTERM');
-      };
-      if (signal) {
-        if (signal.aborted) onAbort();
-        else signal.addEventListener('abort', onAbort, { once: true });
-      }
-
-      let settled = false;
-      handle.on('exit', (code) => {
-        if (settled) return;
-        settled = true;
-        outputClosed = true;
-        signal?.removeEventListener('abort', onAbort);
-        resolve(typeof code === 'number' ? code : 0);
-      });
-    });
+  // `async` so a synchronous `spawn` throw (a host-boundary failure) surfaces as
+  // a rejected promise to the shell, not a sync throw. The spawn + the shared
+  // driver's listener registration both run before the first suspension, so a
+  // caller racing stdout/exit right after the call still sees them wired.
+  return async (binPath, args, ctx) => {
+    // The worker reads the shim via the VFS sync mirror (runNodeEntry); a shim
+    // removed mid-flight surfaces there as a loud worker error (exit 1 + stderr),
+    // never a silent 0. Foreground machinery (decode + stream + Ctrl+C kill/mute
+    // + settle-on-exit, incl. the exit-before-pre-abort ordering) is shared with
+    // the owner `node <file>` executor via run-foreground-child — a bin child is
+    // run-to-completion, so it wires no `onMessage`/`onExit`.
+    const handle = deps.spawn({ shimPath: binPath, args, env: ctx.env, cwd: ctx.cwd });
+    return runForegroundChild(handle, ctx);
+  };
 }

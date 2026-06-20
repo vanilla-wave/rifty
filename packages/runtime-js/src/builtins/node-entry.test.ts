@@ -77,4 +77,80 @@ describe('runNodeEntry', () => {
       runNodeEntry({ vfs, entryPath: '/proj/node_modules/.bin/weird', cwd: '/proj', bin: true }),
     ).rejects.toThrow(/launcher/);
   });
+
+  it('reshapes a missing ENTRY into a Node-faithful MODULE_NOT_FOUND (requireStack [], printed form)', async () => {
+    // backlog/runtime-js/node-entry-miss-node-shape: `node ./nope.js` must emit
+    // real Node's multi-line `Error: Cannot find module '<abs>'` + `{ code,
+    // requireStack: [] }` on the child stderr (the kernel worker-entry writes
+    // `err.stack`), NOT rifty's `ModuleLoadError` name + internal frames. The
+    // entry has no requirer, so requireStack is empty (no `Require stack:` block).
+    const vfs = new MemoryFsSync();
+    vfs.mkdirSync('/w', { recursive: true });
+
+    let thrown: unknown;
+    try {
+      await runNodeEntry({ vfs, entryPath: '/w/nope.js', cwd: '/w' });
+    } catch (e) {
+      thrown = e;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    const err = thrown as Error & { code?: string; requireStack?: readonly string[] };
+    expect(err.code).toBe('MODULE_NOT_FOUND');
+    expect(err.requireStack).toEqual([]);
+    expect(err.stack).toBe(
+      "Error: Cannot find module '/w/nope.js'\n{\n  code: 'MODULE_NOT_FOUND',\n  requireStack: []\n}",
+    );
+  });
+
+  it('does NOT fake-shape an ESM import() miss into the CJS form (Node uses ERR_MODULE_NOT_FOUND)', async () => {
+    // A nested ESM `import` miss is a DIFFERENT Node error than CJS — real Node
+    // emits `Error [ERR_MODULE_NOT_FOUND]: Cannot find module '<abs>' imported
+    // from <parent>` (no requireStack, a `url` prop), NOT the CJS MODULE_NOT_FOUND
+    // form. rifty does not emit that shape yet, so the honest rifty ModuleLoadError
+    // must surface unchanged here — never masquerade as a (wrong) CJS Node error.
+    // The entry-miss reshape stays correct: Node runs a missing `.mjs` entry
+    // through the CJS loader (MODULE_NOT_FOUND), tested above.
+    // TODO(backlog: runtime-js/esm-import-miss-err-module-not-found)
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({ '/w/app.mjs': "import './missing.mjs';\n" });
+
+    let thrown: unknown;
+    try {
+      await runNodeEntry({ vfs, entryPath: '/w/app.mjs', cwd: '/w' });
+    } catch (e) {
+      thrown = e;
+    }
+
+    const err = thrown as Error & { code?: string; requireStack?: readonly string[] };
+    expect(err.code).toBe('MODULE_NOT_FOUND');
+    expect(err.name).toBe('ModuleLoadError');
+    expect(err.requireStack).toBeUndefined();
+    expect(err.stack ?? '').not.toMatch(/^Error: Cannot find module/);
+  });
+
+  it('reshapes a NESTED require miss with a Node-faithful Require-stack block + populated requireStack', async () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({ '/w/app.js': "require('./gone.js');\n" });
+
+    let thrown: unknown;
+    try {
+      await runNodeEntry({ vfs, entryPath: '/w/app.js', cwd: '/w' });
+    } catch (e) {
+      thrown = e;
+    }
+
+    const err = thrown as Error & { code?: string; requireStack?: readonly string[] };
+    expect(err.code).toBe('MODULE_NOT_FOUND');
+    expect(err.requireStack).toEqual(['/w/app.js']);
+    expect(err.stack).toBe(
+      "Error: Cannot find module './gone.js'\n" +
+        'Require stack:\n' +
+        '- /w/app.js\n' +
+        '{\n' +
+        "  code: 'MODULE_NOT_FOUND',\n" +
+        "  requireStack: [ '/w/app.js' ]\n" +
+        '}',
+    );
+  });
 });
