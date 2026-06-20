@@ -332,7 +332,7 @@ async function bootShellOwner(opts: {
     // preview slot via `onListening`; the slot is dropped on exit. A clean Node
     // diagnostic (exit 1) on a missing/absent entry — never a silent stub.
     shell.registerCommand('node', (args, ctx) => {
-      const r = resolveNodeEntry(syncMirror(), ctx.cwd, args[0]);
+      const r = resolveNodeEntry(ctx.cwd, args[0]);
       if (!r.ok) {
         ctx.stderr.write(r.message);
         return Promise.resolve(1);

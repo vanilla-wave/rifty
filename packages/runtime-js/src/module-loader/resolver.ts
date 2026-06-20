@@ -168,17 +168,58 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
 
       const filePath = resolveSpecifierToFile(vfs, pkgCache, specifier, fromDir, opts.esm);
       if (filePath === null) {
-        throw new ModuleLoadError(
-          'MODULE_NOT_FOUND',
-          specifier,
-          `Cannot find module '${specifier}' (imported from '${opts.fromFile}')`,
-          opts.fromFile,
-        );
+        throw moduleNotFound(specifier, opts.fromFile, opts.esm);
       }
       resolveCache.set(resolveKey, filePath);
       return readResolved(vfs, pkgCache, filePath, opts.esm);
     },
   };
+}
+
+/**
+ * Build a `MODULE_NOT_FOUND` for a missing file resolution. Node uses TWO
+ * different shapes and rifty matches the one Node actually emits:
+ *
+ *  - CJS-loader shape — for a missing ENTRY (Node runs even a `.mjs` entry
+ *    through the CJS loader → `MODULE_NOT_FOUND`, `requireStack: []`) and a
+ *    nested `require()` miss. Message `Cannot find module '<specifier>'` + a
+ *    `Require stack:` block (non-empty stack only), byte-faithful to Node's
+ *    `cjs/loader`; `requireStack` lists the requiring module. The entry is
+ *    detected as a self-reference (`runNodeEntry` loads it via
+ *    `loader.import(entryPath, entryPath)`, so the resolver sees
+ *    `specifier === fromFile` and the top-level entry has no requirer). Deeper
+ *    ancestors collapse to the immediate requirer (compat note).
+ *  - ESM `import()` miss — Node emits a DIFFERENT error here
+ *    (`ERR_MODULE_NOT_FOUND`, `Cannot find module '<abs>' imported from <parent>`,
+ *    a `url` prop, NO requireStack). rifty does not produce that shape yet, so an
+ *    ESM (non-entry) miss keeps the honest, clearly-rifty form — NO `requireStack`
+ *    (its absence is the signal that the worker-entry seam must NOT reshape it
+ *    into the CJS form and masquerade as Node parity).
+ *    TODO(backlog: runtime-js/esm-import-miss-err-module-not-found)
+ */
+function moduleNotFound(specifier: string, fromFile: string, esm: boolean): ModuleLoadError {
+  const isEntrySelfRef =
+    isAbsolute(specifier) && normalizePath(specifier) === normalizePath(fromFile);
+  if (!esm || isEntrySelfRef) {
+    const requireStack = isEntrySelfRef ? [] : [fromFile];
+    const block =
+      requireStack.length === 0
+        ? ''
+        : `\nRequire stack:\n${requireStack.map((p) => `- ${p}`).join('\n')}`;
+    return new ModuleLoadError(
+      'MODULE_NOT_FOUND',
+      specifier,
+      `Cannot find module '${specifier}'${block}`,
+      fromFile,
+      requireStack,
+    );
+  }
+  return new ModuleLoadError(
+    'MODULE_NOT_FOUND',
+    specifier,
+    `Cannot find module '${specifier}' (imported from '${fromFile}')`,
+    fromFile,
+  );
 }
 
 /** A relative specifier (`./x`, `../x`, `.`, `..`) — never alias- or bare-resolved. */
