@@ -1,5 +1,5 @@
 /**
- * Pure resolver for a `node <file>` argument (ADR-0154). Absolutizes the arg
+ * Pure resolver for a `node <file>` argument (ADR-0155). Absolutizes the arg
  * against the shell cwd + confirms the file exists in the owner store, returning
  * a clean Node-shaped diagnostic on a miss (no throw, no silent stub).
  *

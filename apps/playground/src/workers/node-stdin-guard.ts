@@ -1,5 +1,5 @@
 /**
- * Loud `process.stdin` for a `node <file>` child (ADR-0154 §5, ADR-0157 §4,
+ * Loud `process.stdin` for a `node <file>` child (ADR-0155 §5, ADR-0157 §4,
  * Fidelity rule).
  *
  * The pre-entry seam gives the child ONE spec-seeded `process` whose `process.stdin`

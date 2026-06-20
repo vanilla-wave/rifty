@@ -79,7 +79,7 @@ export type PreviewPortEntry = {
   sid: string;
 };
 /**
- * Owner→page snapshot of ALL live previewable ports (ADR-0154 — generalizes the
+ * Owner→page snapshot of ALL live previewable ports (ADR-0155 — generalizes the
  * single-active dev-server preview to a set). Republished on change + on
  * `pty:preview-req`; never a one-shot push (P3 missed-before-listener discipline).
  */

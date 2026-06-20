@@ -21,7 +21,7 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
   const node = new Map<string, PreviewPortEntry[]>();
 
   // Dedup by port so a `node server.js` that picks the SAME port as the live dev
-  // server (no PORT injection, ADR-0154 §4) is not double-listed (ADR-0157 review
+  // server (no PORT injection, ADR-0155 §4) is not double-listed (ADR-0157 review
   // C3): the SW routes one `/preview/<port>/` per port, so two entries would make
   // the page wire two bridges on it and a teardown of either delete the shared
   // route. Dev slot wins (it was there first); first node sid wins among nodes.

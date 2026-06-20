@@ -1,4 +1,4 @@
-# ADR 0154: Terminal node-file command: arbitrary-entry supervised child + multi-port preview
+# ADR 0155: Terminal node-file command: arbitrary-entry supervised child + multi-port preview
 
 Status: Accepted (2026-06-18)
 Date: 2026-06

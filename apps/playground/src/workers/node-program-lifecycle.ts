@@ -1,5 +1,5 @@
 /**
- * Run-vs-serve lifecycle for a `node <file>` supervised child (ADR-0154). The
+ * Run-vs-serve lifecycle for a `node <file>` supervised child (ADR-0155). The
  * child spawns serve:true (kernel never reaps it), so the bootstrap OWNS the
  * decision the kernel drain hook would make for a run-to-completion child:
  *  - the entry listened (registered a port) → it is a SERVER: serve each port's

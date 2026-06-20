@@ -41,9 +41,9 @@ async function runLineConfirmed(page: Page, line: string): Promise<void> {
 }
 
 /**
- * `node <file>` terminal-command e2e (ADR-0154), chromium/COI only.
+ * `node <file>` terminal-command e2e (ADR-0155), chromium/COI only.
  *
- * The headline acceptance of ADR-0154: an arbitrary entry runs in a SUPERVISED
+ * The headline acceptance of ADR-0155: an arbitrary entry runs in a SUPERVISED
  * CHILD of the owner. `owner-shell-cowsay.spec.ts` proves a resolved `.bin`
  * launcher runs in a child; this proves the bare `node <file>` command does the
  * same for a user script AND brings a server's port into the preview registry:
@@ -75,7 +75,7 @@ async function runLineConfirmed(page: Page, line: string): Promise<void> {
  * fallback) — the e2e harness serves COOP/COEP. Chromium-only, matching the
  * other COI specs.
  */
-test.describe('terminal `node <file>` runs scripts + servers in a supervised child (ADR-0154)', () => {
+test.describe('terminal `node <file>` runs scripts + servers in a supervised child (ADR-0155)', () => {
   // SCENARIO 1 — run-to-completion + a throwing script.
   test('a script streams stdout, exits, and frees the session; a throw surfaces on stderr', async ({
     page,

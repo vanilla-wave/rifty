@@ -158,7 +158,7 @@ async function bootShellOwner(opts: {
   // finished command may have mutated the tree (ADR-0146: owner republishes its
   // snapshot on command exit so the explorer reflects the owner tree). Mirror the
   // dev-server preview slot by observing the dev-server status frames flowing
-  // through here (ADR-0154 — the registry's dev slot tracks the SAME `pty:dev-server`
+  // through here (ADR-0155 — the registry's dev slot tracks the SAME `pty:dev-server`
   // running/stopped frames the page pill already consumes; this ADDS the mirror, it
   // does not replace the status path).
   //
@@ -175,7 +175,7 @@ async function bootShellOwner(opts: {
     }
   }
 
-  // Multi-port preview registry (ADR-0154): one set of previewable ports — the
+  // Multi-port preview registry (ADR-0155): one set of previewable ports — the
   // co-resident dev server's slot (mirrored in `send` above) + each running
   // `node <file>` server.
   const previews: PreviewRegistry = createPreviewRegistry({ send });
@@ -263,7 +263,7 @@ async function bootShellOwner(opts: {
   // reads the owner store over fs.* RPC. Built once; the boot closure spawns a
   // fresh child per run (re-listen-on-restart), the controller's stop() kills it.
   const devServerChild = createOwnerChildDevServer(opts.devServerWorkerUrl);
-  // ADR-0154: `node <file>` runs in a supervised child like the bin executor, but
+  // ADR-0155: `node <file>` runs in a supervised child like the bin executor, but
   // a server entry (it called `listen()`) posts its ports back so the owner adds a
   // preview slot. A monotonic run-seq keys each run's registry entries (teardown
   // correlation): node-1, node-2, …
@@ -327,7 +327,7 @@ async function bootShellOwner(opts: {
       return code;
     });
     shell.registerCommand('vite', (_args, ctx) => runDevServer(ctx));
-    // `node <file> [args]` (ADR-0154): resolve the entry against the owner store,
+    // `node <file> [args]` (ADR-0155): resolve the entry against the owner store,
     // then run it in a supervised child. A long-running server child registers a
     // preview slot via `onListening`; the slot is dropped on exit. A clean Node
     // diagnostic (exit 1) on a missing/absent entry — never a silent stub.
@@ -351,7 +351,7 @@ async function bootShellOwner(opts: {
     send,
     makeShell,
     onDevServerReq: () => devServer.publish(),
-    // ADR-0154: answer a page subscribe by re-emitting the full preview-port set.
+    // ADR-0155: answer a page subscribe by re-emitting the full preview-port set.
     onPreviewReq: () => previews.publish(),
     // Re-resolve the dev-server config for the current preset (ADR-0148) so a
     // node-server preset boots its OWN runtime/port, not the spawn-time default.

@@ -294,7 +294,7 @@ from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-tes
 - [fs.md](./fs.md) — \`node:fs\` runtime VFS subset
 - [streams.md](./streams.md) — \`node:stream\` subset
 - [http.md](./http.md) — \`node:http\` / browser-local port registry subset
-- [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal \`node <file>\` command + its gaps (ADR-0154/0157)
+- [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal \`node <file>\` command + its gaps (ADR-0155/0157)
 - [wasi.md](./wasi.md) — WASI preview1 syscall surface (\`@riftydev/runtime-wasi\`)
 - [incompatible-packages.md](./incompatible-packages.md) — packages rifty can't run (native deps)
 - (sqlite.md — coming with the \`node:sqlite\` \`DatabaseSync\` shim, ADR-0065)

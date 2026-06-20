@@ -51,7 +51,7 @@ const COMMIT_TIMEOUT_MS = 4_000;
 const COMMIT_INTERVAL_MS = 200;
 
 // Which port the switcher should show given the live set + current selection
-// (ADR-0154). Empty set → keep current (manual-input fallback owns it). Current
+// (ADR-0155). Empty set → keep current (manual-input fallback owns it). Current
 // still live → keep it. Otherwise snap to the LAST (most-recently-added) entry,
 // so a fresh server auto-selects and a removed one falls back.
 export function reconcileSelectedPort(entries: PreviewPortEntry[], current: number): number {
@@ -66,7 +66,7 @@ export function PreviewPanel(props: {
   onOpenTab?: (port: number) => void;
   /** Toast bridge for copy-URL feedback. */
   onNotify?: (message: string, tone: 'error' | 'success') => void;
-  /** Live previewable ports (ADR-0154). Non-empty → switcher; empty → manual port input. */
+  /** Live previewable ports (ADR-0155). Non-empty → switcher; empty → manual port input. */
   ports?: Accessor<PreviewPortEntry[]>;
 }) {
   const [port, setPort] = createSignal(props.initialPort ?? 3000);

@@ -5,7 +5,7 @@ title: Real-Node `MODULE_NOT_FOUND` shape for a missing `node <file>` entry
 created: 2026-06-20
 why: a missing entry is pre-checked by resolveNodeEntry (existsSync) which returns a terse single-line `node: cannot find module '<abs>'`; real Node prints a multi-line `Error: Cannot find module '<abs>' … { code:'MODULE_NOT_FOUND', requireStack: [] }` (exit 1). The terse form is honest (compat ⚠️) but not byte-faithful.
 user_story: As a developer running `node ./nope.js`, I want the same multi-line MODULE_NOT_FOUND error + code that real Node emits, so error-matching tooling behaves identically.
-sources: [ADR-0154, ADR-0157]
+sources: [ADR-0155, ADR-0157]
 code: [apps/playground/src/workers/node-entry-resolve.ts, packages/runtime-js/src/builtins/node-entry.ts, packages/runtime-js/src/module-loader/resolver.ts, packages/kernel/src/worker-entry.ts]
 ---
 

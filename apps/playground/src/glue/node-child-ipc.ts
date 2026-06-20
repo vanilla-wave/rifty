@@ -1,5 +1,5 @@
 /**
- * Owner↔node-child fork-IPC (ADR-0154). The supervised `node <file>` server
+ * Owner↔node-child fork-IPC (ADR-0155). The supervised `node <file>` server
  * child posts `rifty:node-listening{ports}` once its entry called `listen()`, so
  * the owner adds the ports to the preview registry. Mirrors `dev-server-ipc.ts`.
  */

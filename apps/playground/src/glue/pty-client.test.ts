@@ -184,7 +184,7 @@ describe('pty-client', () => {
     expect(sent).toEqual([{ type: 'pty:dev-server-req' }]);
   });
 
-  it('routes pty:preview to onPreview (ADR-0154 preview-port set)', () => {
+  it('routes pty:preview to onPreview (ADR-0155 preview-port set)', () => {
     const seen: unknown[] = [];
     const client = createPtyClient({ send: () => {}, onPreview: (f) => seen.push(f) });
     client.onFrame({

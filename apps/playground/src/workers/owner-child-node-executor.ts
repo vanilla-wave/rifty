@@ -1,5 +1,5 @@
 /**
- * Owner-realm `node <file>` child driver (ADR-0154). Foreground run like the bin
+ * Owner-realm `node <file>` child driver (ADR-0155). Foreground run like the bin
  * executor (stream stdout/stderr, Ctrl-C kill→mute, resolve on exit code) PLUS
  * the dev-server child's fork-IPC: a server child posts `rifty:node-listening`
  * which the owner forwards into the preview registry. Spawn injected (real
@@ -21,7 +21,7 @@ export function buildNodeChildSpawnSpec(
     argv: ['rifty', entry, ...args],
     // RIFTY_BIN=0 → runNodeEntry(bin:false) imports the entry directly (not a
     // .bin shim). serve:true → kernel keeps it alive; the bootstrap owns the
-    // run-vs-serve decision (ADR-0154). RIFTY_NODE_SERVE gates the new path.
+    // run-vs-serve decision (ADR-0155). RIFTY_NODE_SERVE gates the new path.
     env: { ...env, RIFTY_BIN: '0', RIFTY_REMOTE_FS: '1', RIFTY_NODE_SERVE: '1' },
     cwd,
     serve: true,

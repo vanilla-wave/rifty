@@ -137,14 +137,14 @@ export interface WorkspaceOwnerHandle {
    */
   onDevServer(cb: (frame: PtyDevServer) => void): () => void;
   /**
-   * Subscribe to owner→page preview-port snapshots (ADR-0154): ALL live
+   * Subscribe to owner→page preview-port snapshots (ADR-0155): ALL live
    * previewable ports (the dev-server port + each `node <file>` server's
    * ports). Returns an unsubscribe. The page derives its preview switcher set +
    * per-node-port SW bridges from these frames.
    */
   onPreview(cb: (frame: PtyPreview) => void): () => void;
   /**
-   * Ask the owner to re-publish the preview-port set (ADR-0154 subscribe
+   * Ask the owner to re-publish the preview-port set (ADR-0155 subscribe
    * handshake) — recovers a `pty:preview` push that predates the page's listener
    * (never a one-shot push). Mirrors {@link requestDevServer}'s discipline.
    */
@@ -306,7 +306,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     if (isOwnerToPage(message.frame)) client.onFrame(message.frame);
   });
 
-  // Readiness handshake (ADR-0146 / ADR-0148 / ADR-0154): request the current
+  // Readiness handshake (ADR-0146 / ADR-0148 / ADR-0155): request the current
   // dev-server state AND preview-port set on spawn so a `pty:dev-server` /
   // `pty:preview` push that predates our listener is recoverable (the
   // dropped-frame class the owner-resident shell hit) — never a one-shot push.
