@@ -1,8 +1,9 @@
 /**
- * Loud stubs for `node:dns`, `node:tls`, `node:readline`, `node:zlib`. Exist so
- * `import` succeeds (Vite static-imports them all); every method call throws
+ * Loud stubs for `node:dns`, `node:tls`, `node:readline`. Exist so `import`
+ * succeeds (Vite static-imports them all); every method call throws
  * NotImplementedError rather than silently corrupting behaviour. `node:https`
- * lives in `@riftydev/net/https.ts` (ADR-0010 loud-throw stub).
+ * lives in `@riftydev/net/https.ts` (ADR-0010 loud-throw stub); `node:zlib` is a
+ * real web-compression-backed subset in `./zlib.ts` (ADR-0159).
  */
 import { NotImplementedError } from '@riftydev/io';
 import { HTTP2_CONSTANTS } from './http2-constants.ts';
@@ -68,7 +69,7 @@ export const tls = {
 // `node:dgram` raw UDP sockets: no UDP socket API exists in the browser
 // (WebSocket/fetch/WebTransport are all stream/connection-oriented, none expose
 // `recvfrom`/`sendto`), a genuine browser/WASI capability ceiling — socket ops
-// throw, like `tls`/`zlib`.
+// throw, like `tls`.
 //
 // The surface must still RESOLVE: `multicast-dns/index.js` does top-level
 // `var dgram = require('dgram')` and only calls `createSocket()` later in its
@@ -122,34 +123,4 @@ export const readline = {
   clearLine: notImpl('readline.clearLine'),
   clearScreenDown: notImpl('readline.clearScreenDown'),
   emitKeypressEvents: notImpl('readline.emitKeypressEvents'),
-};
-
-class ZlibUnsupported {
-  constructor() {
-    throw new NotImplementedError('zlib');
-  }
-}
-
-export const zlib = {
-  createGzip: notImpl('zlib.createGzip'),
-  createDeflate: notImpl('zlib.createDeflate'),
-  createBrotliCompress: notImpl('zlib.createBrotliCompress'),
-  createBrotliDecompress: notImpl('zlib.createBrotliDecompress'),
-  gzip: notImpl('zlib.gzip'),
-  gzipSync: notImpl('zlib.gzipSync'),
-  gunzip: notImpl('zlib.gunzip'),
-  gunzipSync: notImpl('zlib.gunzipSync'),
-  deflate: notImpl('zlib.deflate'),
-  deflateSync: notImpl('zlib.deflateSync'),
-  inflate: notImpl('zlib.inflate'),
-  inflateSync: notImpl('zlib.inflateSync'),
-  Gzip: ZlibUnsupported,
-  Deflate: ZlibUnsupported,
-  constants: {
-    Z_NO_FLUSH: 0,
-    Z_PARTIAL_FLUSH: 1,
-    Z_SYNC_FLUSH: 2,
-    Z_FULL_FLUSH: 3,
-    Z_FINISH: 4,
-  },
 };

@@ -197,6 +197,83 @@ const matrices = [
       '`node:https` cannot promise real TLS egress inside the local runtime without host integration.',
     ],
   },
+  {
+    file: 'zlib.md',
+    title: 'Compatibility matrix — `node:zlib`',
+    intro:
+      'Public claim surface for the `node:zlib` web-compression-backed async subset (ADR-0159): one-shot gzip/deflate over the host `CompressionStream`/`DecompressionStream`, wire-compatible with real Node both directions (conformance-pinned).',
+    rows: [
+      [
+        '`gzip` / `gunzip` (async)',
+        '✅',
+        "`CompressionStream('gzip')` — RFC-1952; rifty output reads in Node and vice versa",
+      ],
+      [
+        '`deflate` / `inflate` (async)',
+        '✅',
+        "`'deflate'` — RFC-1950 zlib-wrapped; both-direction wire-compat",
+      ],
+      [
+        '`deflateRaw` / `inflateRaw` (async)',
+        '✅',
+        "`'deflate-raw'` — RFC-1951 raw; both-direction wire-compat",
+      ],
+      ['`util.promisify(zlib.gzip)`', '✅', 'Standard `(err, Buffer)` callback convention'],
+      [
+        'String / Buffer / TypedArray / ArrayBuffer input',
+        '✅',
+        'Normalised to bytes, utf-8 for strings',
+      ],
+      [
+        '`constants` / `codes`',
+        '✅',
+        'Full real Node table; legacy top-level aliases are non-enumerable; `codes` frozen (Node shape)',
+      ],
+      [
+        '`maxOutputLength` option',
+        '✅',
+        'Honored — output reader aborts early and throws `RangeError [ERR_BUFFER_TOO_LARGE]` (decompression-bomb guard, matches Node)',
+      ],
+      [
+        'Compression `level` / `strategy` options',
+        '⚠️',
+        'Accepted but not applied (Web API has no level control); output stays valid and round-trips, bytes differ from Node',
+      ],
+      [
+        'Decompression error `code` / `errno`',
+        '⚠️',
+        "Corrupt input rejects with an `Error` (error-first holds), but codes are the browser stream's, not Node's `Z_DATA_ERROR`",
+      ],
+      [
+        '`gzipSync` / `gunzipSync` / `*Sync`',
+        '❌',
+        'Web compression is async-only; no honest sync path',
+      ],
+      ['Brotli (`brotliCompress` / …)', '❌', 'No Web API for brotli in the realm'],
+      ['Zstd (`zstdCompress` / …)', '❌', 'No Web API for zstd in the realm'],
+      ['`crc32`', '❌', 'Deferred — not part of the compression subset'],
+      [
+        'Transform streams (`createGzip` / `Gzip` …)',
+        '❌',
+        'Bridging CompressionStream to a Node `Transform` (flush/backpressure/chunk parity) gated behind a future ADR',
+      ],
+      ['`unzip` (gzip/zlib auto-detect)', '❌', 'Header-sniff deferred to its own parity surface'],
+      [
+        '`windowBits` / `dictionary` / truthy `info` options',
+        '❌',
+        'Throw `NotImplementedError`. `CompressionStream` emits a fixed max window — honoring a smaller `windowBits` would emit window-15 bytes a strict zlib consumer rejects (`Z_DATA_ERROR`); a preset `dictionary` changes the wire bytes; truthy `info` changes the return shape. `info:false` is a no-op',
+      ],
+    ],
+    tests: [
+      '`tests/conformance/builtins/zlib.test.ts`',
+      '`tools/node-parity-runner/cases/zlib/*.case.ts`',
+    ],
+    limitations: [
+      'Web compression is async-only and exposes no level/window/dictionary control: sync variants throw, size-only knobs (`level`/`strategy`/…) are inert no-ops, `windowBits`/`dictionary`/truthy-`info` throw rather than silently lie (ADR-0159).',
+      'Brotli and zstd have no browser primitive — loud `NotImplementedError`.',
+      'The Transform-stream surface is gated behind a future ADR; one-shot async covers the registry/asset/HTTP flows the Consumer-Ready roadmap targets.',
+    ],
+  },
 ];
 
 async function listFilesRecursive(dir) {
@@ -290,8 +367,8 @@ undocumented, not supported. The point is honest fit: tested support, visible ca
 unsupported rows.
 
 Each markdown here cites the covering tests in \`tests/conformance/\` and \`tests/integration/\` for a
-Node-compatible area. \`fs.md\`/\`streams.md\`/\`http.md\` are rendered by \`pnpm compat:generate\` from
-static inventories whose cited test files are existence-checked, not re-run — deriving statuses
+Node-compatible area. \`fs.md\`/\`streams.md\`/\`http.md\`/\`zlib.md\` are rendered by \`pnpm compat:generate\`
+from static inventories whose cited test files are existence-checked, not re-run — deriving statuses
 from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-test-result-sink\`.
 
 - [modules.md](./modules.md) — M2 (Modules)
@@ -299,6 +376,7 @@ from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-tes
 - [fs.md](./fs.md) — \`node:fs\` runtime VFS subset
 - [streams.md](./streams.md) — \`node:stream\` subset
 - [http.md](./http.md) — \`node:http\` / browser-local port registry subset
+- [zlib.md](./zlib.md) — \`node:zlib\` web-compression-backed async subset (ADR-0159)
 - [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal \`node <file>\` command + its gaps (ADR-0155/0157)
 - [wasi.md](./wasi.md) — WASI preview1 syscall surface (\`@riftydev/runtime-wasi\`)
 - [incompatible-packages.md](./incompatible-packages.md) — packages rifty can't run (native deps)

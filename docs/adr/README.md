@@ -50,6 +50,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0152 | Child realm event-loop drain + loud-fail exit contract |
 | 0153 | node:constants hybrid faithful static data syscall boundary gap |
 | 0158 | Count detached fetch in child-realm event-loop keepalive |
+| 0159 | node:zlib web-compression-backed async subset |
 
 ### runtime-wasi
 

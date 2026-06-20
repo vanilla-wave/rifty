@@ -3,32 +3,44 @@ area: runtime-js
 status: parked
 title: node:zlib web-compression subset
 created: 2026-06-12
-why: Consumer Ready roadmap calls out zlib as a high-frequency runtime wall, but node:zlib is still a loud stub
-user_story: As a developer running an npm package that calls `zlib.gzip`/`gunzip` for registry, asset, or HTTP flows in rifty, I want compression to work, but today every `node:zlib` member throws `NotImplementedError` so any package touching it dies.
+why: Consumer Ready roadmap calls out zlib as a high-frequency runtime wall; the web-backed async one-shot subset landed (ADR-0159), remaining surface is the deferred follow-ups below
 sources: [docs/ROADMAP.md, docs/research/open-webcontainers-alternative-2026-06.md]
-code: [packages/runtime-js/src/builtins/null-net-stubs.ts]
+code: [packages/runtime-js/src/builtins/zlib.ts]
 ---
 
 ## Context
 
-`node:zlib` is registered, but every member throws `NotImplementedError`. That
-is honest, but ordinary npm packages often touch `gzip`/`gunzip` for registry,
-asset, and HTTP-style flows. The Consumer Ready roadmap names zlib as one of the
-runtime walls to knock down for "real-ish projects"; the current PR does not do
-that work.
+LANDED (ADR-0159, `docs/public/compat/zlib.md`): async one-shot `gzip`/`gunzip`/
+`deflate`/`inflate`/`deflateRaw`/`inflateRaw` over the host `CompressionStream`/
+`DecompressionStream`, wire-compatible with real Node both directions. The
+all-throwing `node:zlib` stub is gone. This item now tracks the surface
+DELIBERATELY deferred from that PR.
 
 ## Options or Next
 
-- Gate: identify the first real consumer path that needs zlib, then add a parity
-  case for that exact method/shape.
-- Prefer a small web-platform-backed subset first: `gzip`/`gunzip`; sync variants
-  only if they can be implemented honestly without pretending browser async
-  compression is synchronous.
-- Keep unsupported members as loud `NotImplementedError('zlib.<feature>')` and
-  update the compat matrix per landed method.
+- **Transform streams** (`createGzip`/`createGunzip`/`createDeflate`/`createInflate`/
+  `createDeflateRaw`/`createInflateRaw`/`createUnzip` + `Gzip`/`Deflate`/… classes):
+  bridge `CompressionStream` ↔ Node `Transform` (flush opcodes, backpressure,
+  chunk-boundary + error-code parity). Broad/IRREVERSIBLE contract — needs its own
+  ADR before implementation (ADR-0159). Gate: a real consumer that pipes through
+  `createGzip()`.
+- **`unzip`/`unzipSync`** (auto-detect gzip vs zlib): header-sniff (0x1f8b → gzip,
+  else zlib-deflate) is small but has its own parity surface; add when a consumer
+  needs Content-Encoding auto-detect.
+- **`crc32`**: pure-sync, honestly implementable (~15 lines) — out of the
+  compression subset, parked until a consumer reads it.
+- Brotli / zstd / `*Sync` stay loud ceilings — no honest browser path (no Web API
+  for brotli/zstd; async-only stream API can't back a sync facade). Promote only if
+  a browser primitive appears.
+- **Cross-engine e2e** (residual risk, low — ADR-0159 Design notes): conformance +
+  parity drive the WHATWG `CompressionStream` via Node's in-process global, not
+  Chromium's; only the gunzip path rides on the npm-install e2e (`unpacker.ts`). A
+  small in-runtime e2e exercising compress + deflate/raw in real Chromium would close
+  the last verification gap. Gate: any zlib-touching e2e flow worth pinning in-browser.
 
 ## Reversibility
 
-REVERSIBLE for additive method implementations. A new dependency, broad stream
-contract, or sync-compression emulation policy would be IRREVERSIBLE and needs
-an ADR before implementation.
+Landed additive methods were REVERSIBLE (ADR-0159 records the subset boundary +
+options policy). The deferred Transform-stream contract is IRREVERSIBLE and needs a
+superseding/follow-up ADR before implementation; `unzip`/`crc32` are additive
+(REVERSIBLE).
