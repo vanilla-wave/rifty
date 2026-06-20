@@ -36,6 +36,15 @@ import {
   encodeReply,
 } from './sync-rpc.ts';
 
+// Capture host timers at module load — BEFORE a worker realm's installTimerGlobals
+// can replace the globals with runtime-js's keepalive-counted wrappers. The
+// backstop is pure infra (ADR-0152 §5: rifty's own infra timers must never enter
+// the keepalive count), so it MUST arm on the host timer directly — else a nested
+// child (depth-2) whose parent realm wrapped setInterval would have its event-loop
+// drain pinned by the backstop. Mirrors timers.ts / event-loop-keepalive.ts.
+const hostSetInterval = globalThis.setInterval.bind(globalThis);
+const hostClearInterval = globalThis.clearInterval.bind(globalThis);
+
 /**
  * Handler signature for a registered RPC method. Returning a thenable
  * defers the reply until the promise settles; rejections become
@@ -192,7 +201,7 @@ export class SyncRpcDispatcher {
 
   private ensureTimer(): void {
     if (this.timer !== null) return;
-    const timer = setInterval(() => {
+    const timer = hostSetInterval(() => {
       // Backstop: re-pump every ring to recover any missed notify / recursive-
       // attach window (and the sole liveness mechanism in busy-poll fallback).
       // Snapshot so a handler that detaches its own ring doesn't trip the iterator.
@@ -259,7 +268,7 @@ export class SyncRpcDispatcher {
 
   private stopTimer(): void {
     if (this.timer === null) return;
-    clearInterval(this.timer);
+    hostClearInterval(this.timer);
     this.timer = null;
   }
 

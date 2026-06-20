@@ -49,10 +49,15 @@ export class FSWatcher extends EventEmitter {
     this.emit('close');
   }
 
+  // Delegate to the poll timer's handle: after installTimerGlobals the poll
+  // `setInterval` returns a keepalive-counted handle whose ref()/unref() opt the
+  // realm in/out of staying alive for the watcher — Node parity, not a no-op.
   ref(): this {
+    (this.timer as { ref?: () => unknown } | null)?.ref?.();
     return this;
   }
   unref(): this {
+    (this.timer as { unref?: () => unknown } | null)?.unref?.();
     return this;
   }
 }

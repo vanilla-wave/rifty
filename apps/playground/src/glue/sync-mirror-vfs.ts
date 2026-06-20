@@ -8,7 +8,7 @@
  * `fs.readFileSync` sees them.
  */
 import type { Vfs, VfsDirent, VfsStat } from '@riftydev/vfs';
-import { NotImplementedError, dirname, normalizePath, syncMirror } from '@riftydev/vfs';
+import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -51,13 +51,23 @@ export class SyncMirrorVfs implements Vfs {
   }
   async openReadable(
     path: string,
-    _opts?: { chunkSize?: number; start?: number; end?: number },
+    opts?: { chunkSize?: number; start?: number; end?: number },
   ): Promise<ReadableStream<Uint8Array>> {
-    // ADR 0020 phase 2 (M11): blocked on ADR 0014 split-VFS fix. The sync
-    // mirror cannot stream incrementally until the shared-backend issue is
-    // resolved; an interim "load-then-chunk" would defeat the purpose. The
-    // gap surfaces as a loud `NotImplementedError` (no-silent-stubs) and the
-    // hint carries the offending path for diagnostics.
-    throw new NotImplementedError('SyncMirrorVfs.openReadable', path);
+    const data = syncMirror().readFileBytesSync(normalizePath(path));
+    const start = opts?.start ?? 0;
+    const end = Math.min(opts?.end ?? data.byteLength, data.byteLength);
+    const chunkSize = opts?.chunkSize ?? 64 * 1024;
+    let offset = start;
+    return new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (offset >= end) {
+          controller.close();
+          return;
+        }
+        const next = Math.min(offset + chunkSize, end);
+        controller.enqueue(data.subarray(offset, next));
+        offset = next;
+      },
+    });
   }
 }

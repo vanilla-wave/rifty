@@ -4,9 +4,9 @@ status: active
 title: Documentation debt ledger — ADR/backlog/compat record drift where docs outran code
 created: 2026-06-13
 why: A cluster of low-effort record-honesty drifts (ADR prose, backlog status, compat narrative, ADR numbering) where the documentation no longer matches shipped code; consolidated into one ledger instead of one tiny backlog file each.
-user_story: As a maintainer trusting the records to reflect reality, I want shipped items (`import.meta.url`, `#`-imports field, perf wins) shown as done and stale ADR prose reconciled, but today they still read open/unimplemented and ADR bodies cite phantom files so the docs lie about what code does.
+user_story: As a maintainer trusting the records to reflect reality, I want shipped perf wins shown as done and stale ADR prose reconciled, but today they still read open/unimplemented and ADR bodies cite phantom files so the docs lie about what code does.
 sources: [ADR-0070, ADR-0017, ADR-0090, ADR-0125, ADR-0009, ADR-0030, ADR-0082, docs/adr/README.md]
-code: [docs/adr/README.md, packages/runtime-js/src/module-loader/resolver.ts, .github/workflows/release.yml]
+code: [docs/adr/README.md, .github/workflows/release.yml]
 ---
 
 ## Context
@@ -16,7 +16,6 @@ Each line is a record that disagrees with the code. Two kinds:
 **(A) ADR-process** — touches an active (immutable) ADR; reconcile via `docs/adr/README.md` "Historical references" / a superseding ADR, never by rewriting the ADR body.
 
 - **(E) Shipped perf items still `status:active`.** io-bytes-to-string, fssync-statsync-or-null, syncrpc-v2-waitasync-binary-ring, setimmediate-drain-order, cross-realm-dispatchstruct-fast-path, buffer-accessor-dataview-cache, none-items-quick-wins all shipped but read open. Flip to done / point at the real ADR (ADR-0082..ADR-0086).
-- **(E) Shipped features marked unimplemented.** `package-json-imports-field` + `import-meta-url` backlog items (and their compat rows) claim unimplemented; both ship (resolver.ts:138 `#`-imports; esm.ts:179 `import.meta.url`) with passing conformance. Correct/close them.
 - **(E) ADR README band overstated.** `docs/adr/README.md` Numbering says the provisional 0081–0093 band "materialised … 0082–0093 as ADRs"; only ADR-0082..ADR-0087 exist. Correct to 0082–0087.
 - **(E) ADR-number pre-claim collision.** Parked 0048-successor item (`end-to-end-page-worker-readablestream`) pre-claims "ADR-0093", already assigned to the shell parity harness. Drop the pre-claim; let `adr:new` allocate when the supersession is authored.
 - **(E) terminal-features.md overclaim.** Reference doc claims in-package exit-code / overview-ruler decorations; `@riftydev/terminal` renders none (host-owned). Correct the doc.

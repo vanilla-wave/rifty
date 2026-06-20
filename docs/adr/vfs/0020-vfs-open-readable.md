@@ -3,6 +3,8 @@
 Status: Phase 1 Implemented (2026-05-24). Phase 2 deferred to **post-A-006** (after ADR-0014 shared backing tree lands in M11).
 Date: 2026-05
 
+**Corrected (2026-06-20):** Phase 2 has LANDED — ADR-0014 (shared backing tree) is `Implemented`, `Vfs.openReadable` is implemented by `MemoryVfs`/`OpfsVfs`, and `createReadStream` is async-first over `asyncVfs().openReadable(...)` (Acceptance criteria below all ✅); the "Phase 2 deferred … M11" status line is superseded. MECHANISM CORRECTION: `OpfsVfs.openReadable` does NOT use `File.stream()` (nor a Safari feature-detect — supersedes the lines 6/8/20/29 wording). It pulls a chunked `ReadableStream` via `File.slice(offset, next).arrayBuffer()` (PR #56), which honors `chunkSize` and avoids the `File.stream()` stall under cross-realm Worker serving. `createReadStream`'s Node-inclusive `end` is converted to the half-open `[start, end)` `openReadable` window at the runtime-js boundary.
+
 **Decision (2026-05-26):** Phase 2 (real `OpfsVfs.openReadable` wrapping `File.stream()` with optional `slice` for byte ranges; rewrite `createReadStream` on `asyncVfs().openReadable(...)`) is **gated on ADR-0014 (shared VFS backing tree) landing first**. Until `Vfs` and `FsSync` views share one backend, `openReadable` streaming from one tree while `createReadStream`'s fallback uses another would surface as a "single source of truth" violation in M4/M8 acceptance. Order: ADR-0014 → ADR-0020 phase 2; both land in M11.
 
 > TL;DR: `Vfs.openReadable(path, opts?)` returns a `ReadableStream<Uint8Array>` (64 KiB chunks / `File.stream()`+`slice`); `createReadStream` rebuilds on it for true backpressured streaming

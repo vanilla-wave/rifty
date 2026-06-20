@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Dispatcher backstop is uncounted infra (ADR-0158, keepalive gap-e).** `SyncRpcDispatcher` now captures the HOST `setInterval`/`clearInterval` at module load and arms its backstop timer on them, instead of the realm's global `setInterval` (which a worker realm replaces with runtime-js's keepalive-counted wrapper). The infra timer therefore never enters the event-loop keepalive count, by construction (ADR-0152 §5 precedent) — removing the prior depth-1 count-then-`.unref()` coupling and any risk of pinning a nested child's (depth-2) drain. Guard: `sync-dispatch.test.ts` asserts the backstop arms the host timer, not the wrapped global.
+
 ### Added
 
 - **Drain-hook seam:** a run-to-completion child (`serve!==true`) awaits an optional event-loop drain (`setKernelDrainHook`) before reaping, so it exits on loop-empty like Node, not at top-level resolve; kernel stays Node-API-agnostic (ADR-0039). Child realm de-contaminated: `worker-entry.ts` runEntry uses an indirect dynamic import so bundlers don't inject infra (a dev HMR-client ping) that would pin the drain. The entry-run + drain + exit-outcome logic is the realm-independent `runEntryLifecycle` (pure, unit-testable for the serve-skip / await-drain / reject→exit1 paths without the COI-gated SAB realm — mirrors `finalizeWorkerEntry`).

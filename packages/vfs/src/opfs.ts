@@ -223,10 +223,6 @@ export class OpfsVfs implements Vfs {
     path: string,
     opts?: { chunkSize?: number; start?: number; end?: number },
   ): Promise<ReadableStream<Uint8Array>> {
-    // ADR-0020 phase 2: wrap `File.stream()`. `start`/`end` via `File.slice`;
-    // `chunkSize` is informational — the browser stream picks its own
-    // boundaries (~64 KiB), already satisfying the "no whole-file buffering"
-    // goal for `createReadStream` on big files.
     const handle = await this.getFileHandle(path);
     let file: File;
     try {
@@ -234,11 +230,37 @@ export class OpfsVfs implements Vfs {
     } catch (err) {
       throw mapOpfsError(err, path, 'file');
     }
-    const start = opts?.start ?? 0;
-    const end = opts?.end ?? file.size;
-    const slice = start === 0 && end === file.size ? file : file.slice(start, end);
-    return slice.stream() as ReadableStream<Uint8Array>;
+    return chunkedFileStream(file, opts);
   }
+}
+
+/**
+ * Chunked `ReadableStream` over a `Blob`/`File` — pulls `chunkSize` ranges via
+ * `slice(...).arrayBuffer()` instead of `File.stream()` (which stalls in a Worker
+ * under cross-realm serving). Half-open `[start, end)` window, `end` clamped to
+ * the blob size so an out-of-range `end` never enqueues trailing empty chunks
+ * (parity with `MemoryVfs`/`SyncMirrorVfs`).
+ */
+export function chunkedFileStream(
+  file: Blob,
+  opts?: { chunkSize?: number; start?: number; end?: number },
+): ReadableStream<Uint8Array> {
+  const start = opts?.start ?? 0;
+  const end = Math.min(opts?.end ?? file.size, file.size);
+  const chunkSize = opts?.chunkSize ?? 64 * 1024;
+  let offset = start;
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (offset >= end) {
+        controller.close();
+        return;
+      }
+      const next = Math.min(offset + chunkSize, end);
+      const bytes = new Uint8Array(await file.slice(offset, next).arrayBuffer());
+      offset = next;
+      controller.enqueue(bytes);
+    },
+  });
 }
 
 /** Re-exported to keep call sites that catch and wrap OPFS errors uniform. */

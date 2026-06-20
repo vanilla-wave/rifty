@@ -58,7 +58,9 @@ export interface Vfs {
   /**
    * Open `path` as a `ReadableStream<Uint8Array>` for incremental reading.
    * `chunkSize` controls the default chunk size (default 64 KiB). `start`/`end`
-   * are byte offsets (Node `createReadStream` semantics).
+   * are byte offsets over a HALF-OPEN `[start, end)` window (`end` exclusive,
+   * `slice`-like, default file size). Node's `fs.createReadStream` `end` is
+   * inclusive — the `createReadStream` layer adds the `+1` conversion.
    *
    * Throws `VfsError('ENOENT', path)` if the file does not exist.
    * Throws `VfsError('EISDIR', path)` if `path` is a directory.

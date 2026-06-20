@@ -5,9 +5,42 @@
 ### Added
 
 - **`awaitDrain` re-exported from the package root** — the serve-capable `node <file>` child bootstrap (ADR-0155) awaits event-loop drain via the public API.
-- **Event-loop keepalive (libuv-style refcount over timers/immediates/pending dynamic imports) + `unhandledrejection` loud-fail:** run-to-completion children now drain async work scheduled after top-level (Node-parity) and fail loudly on a rejection or a never-draining loop (generous cap, documented divergence) instead of silently exiting 0. The pending-import ref is held on BOTH paths — the public `loader.import` AND the routed user-code `import()` (`esm.ts dynamicImport`, reached via the `__import` rewrite) — so a detached `import('./x').then(run)` whose load spans a macrotask reaches `run` before the realm reaps (the prettier-class scenario). The keepalive counts a deliberately NARROW handle set (timers/immediates/imports), not all libuv handles — see ADR-0152 + `docs/public/compat/process.md` for the explicit gaps (detached `fetch`/network uncounted; `fs.watch` over-counted).
+
+- **ESM module parity guards:** `import.meta.url` and `package.json#imports` (`#name` exact,
+  wildcard, and conditional maps) now have node-parity cases. Both features were already wired in
+  the loader; the stale backlog/compat records are closed.
+
+- **Event-loop keepalive (libuv-style refcount over timers/immediates/pending dynamic imports) + `unhandledrejection` loud-fail:** run-to-completion children now drain async work scheduled after top-level (Node-parity) and fail loudly on a rejection or a never-draining loop (generous cap, documented divergence) instead of silently exiting 0. The pending-import ref is held on BOTH paths — the public `loader.import` AND the routed user-code `import()` (`esm.ts dynamicImport`, reached via the `__import` rewrite) — so a detached `import('./x').then(run)` whose load spans a macrotask reaches `run` before the realm reaps (the prettier-class scenario). The keepalive counts a deliberately NARROW handle set, not all libuv handles — see ADR-0152 + `docs/public/compat/process.md` for the shape. (The detached-`fetch`/network and `fs.watch` gaps noted here at first light are now closed — `fs.watch` is counted with working `FSWatcher.ref()/.unref()`, and the global `fetch` is counted per the fetch-keepalive entry below + ADR-0158.)
+
+- **Detached `fetch()` keepalive (ADR-0158):** the child realm's global `fetch` is now keepalive-counted — `keepaliveRef()` on dispatch, held until the response BODY is consumed (any Body-mixin consumer or the `body` stream closing/cancelling), released on reject or when there is no body. A detached `fetch(u).then(r=>r.text()).then(write)` after top-level now completes before a run-to-completion realm drains, instead of being dropped silently. Held until the body (not headers) because Node keeps the socket refed until the body is read. The counted boundary is the global `fetch` — the realm's sole real network egress: `http.request`-to-external routes through it (covered), loopback `http.request` is in-process (no socket), `https`/`net.connect` are loud-throws. `installFetchKeepalive` ships in the child-realm bootstrap next to the timer/keepalive installs. compat `process.md` Detached `fetch()` ❌→✅.
 
 ### Fixed
+
+- **`clearTimeout`/`clearInterval` honor the numeric primitive id (Node parity).** A timer handle
+  exposes a `[Symbol.toPrimitive]` id; Node's `clear*` accept that coerced number. The handles are
+  now tracked in a `primitiveId → handle` registry so `clearInterval(Number(handle))` resolves the
+  live handle — previously it missed the `instanceof` branch, forwarding the id to the host clear as
+  an unrelated integer (no-op clear + leaked keepalive ref + possible cross-clear of a host timer).
+  One-shot timeouts deregister on fire, intervals on clear. Parity case `timers/clear-by-primitive-id`.
+
+- **`node:timers/promises` `setInterval` honors `{ ref: false }`.** The between-iterations timer was
+  armed without forwarding `ref`, so an explicitly-unrefed async-iterator interval still held a
+  run-to-completion child alive; the option now threads through to the keepalive handle (Node parity).
+
+- **`fs.watch`/`fs.watchFile` `FSWatcher.ref()`/`.unref()` are no longer no-op stubs.** They delegate
+  to the poll `setInterval`'s keepalive handle, so an unrefed active watcher no longer pins the realm
+  to the drain cap (Node parity).
+
+- **`fs.createReadStream` byte range `end` is INCLUSIVE (Node parity).** `{ start, end }` now reads
+  `end - start + 1` bytes — the Node-inclusive `end` is converted to the half-open `[start, end)`
+  `Vfs.openReadable` / sync-slice window at the `createReadStream` boundary (`+1`). Previously the last
+  byte was dropped. Parity case `fs/createreadstream-byte-range`; conformance corrected to the Node value.
+
+- **Timer handles honor `.unref()` / `.ref()` / `.hasRef()` in the keepalive model.**
+  `setTimeout`/`setInterval` now return Node-shape handles whose ref state drives the child-realm
+  active-handle count; `node:timers` exports the same wrappers as the installed globals, closing the
+  namespace asymmetry. An unrefed timer no longer holds a run-to-completion child alive to the drain
+  cap, and `.ref()` opts it back in.
 
 - **`SyncRpcFsSync.readFileBytesSync` ENOENT shape matches `VfsError` (closes backlog runtime-js/child-remote-fs-fidelity).** Hand-rolled `Error{code:'ENOENT'}` replaced with `new VfsError('ENOENT', path)` — same `name`/`code`/`instanceof` as every other VFS backend. `statSync` over the sync-RPC loopback is now round-trip-tested (the `fs.stat` owner handler was gratuitously `async`, leaving `statSync` as the one unexercised remote method).
 
@@ -476,15 +509,13 @@
   `isElectronApp`). A shared frozen `NODE_PROCESS_IDENTITY` now feeds both — owner
   and child report identically.
 
-- **`createReadStream` prefers the sync content cache over the async disk surface
-  (P5 of ADR-0143 "D", ADR-0148).** On an OPFS-backed realm `OpfsVfs.openReadable`
-  (`File.stream()`) stalls under cross-realm preview serving (`express.static` →
-  serve-static → `send`), 502ing static files while a dynamic route on the same
-  port works. The sync mirror's content cache (ADR-0072) is the authoritative,
-  fully-in-memory view, so `createReadStream` now serves from it, falling back to
-  `openReadable` only for paths the cache lacks. True async streaming (ADR-0020
-  phase 2) is restored once the OPFS stream is fixed (backlog:
-  `runtime-js/createreadstream-true-async-streaming`).
+- **`createReadStream` uses the async `Vfs.openReadable` surface first again
+  (ADR-0020 phase 2).** The temporary P5 sync-content-cache preference is removed:
+  Memory/shared VFS streams now flow through `openReadable`, and the owner
+  `SyncMirrorVfs` adapter supplies a real chunked `ReadableStream` over the
+  sync mirror bytes instead of throwing. OPFS stream safety is fixed in
+  `@riftydev/vfs` by replacing the stalling `File.stream()` path with chunked
+  `File.slice(...).arrayBuffer()` pulls.
 
 - **Fork-IPC shim buffers messages until the first listener (ADR-0045 / ADR-0146
   P2).** `WorkerNodeProcessShim` emitted `'message'` on every inbound

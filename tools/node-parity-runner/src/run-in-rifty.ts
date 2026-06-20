@@ -27,6 +27,10 @@ import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/inte
 // `getQuickJsModuleSync()`). Both are memoised/idempotent — one-time cost.
 import { setVmEngineOverride } from '../../../packages/runtime-js/src/builtins/vm/engine-config.ts';
 import { ensureVmEngineReady } from '../../../packages/runtime-js/src/builtins/vm/quickjs-loader.ts';
+import {
+  awaitDrain,
+  resetKeepalive,
+} from '../../../packages/runtime-js/src/internal/event-loop-keepalive.ts';
 import { formatArgs } from '../../../packages/runtime-js/src/repl/inspect.ts';
 // The runner is a `tools/` harness, so reaching into `@riftydev/runtime-wasi` and
 // the shadow-registry esbuild binding is layer-legal (same precedent as the
@@ -401,9 +405,10 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
         await new Promise((r) => setTimeout(r, 5));
       }
     } else {
-      // Drain microtasks + short setTimeout used in async cases. 25ms covers
-      // any 1ms setTimeout in cases; a real bug here wouldn't be hidden by
-      // waiting longer.
+      // Drain keepalive-backed runtime work before restoring console capture.
+      // Then keep the legacy host-timer grace for parity cases that call the
+      // harness realm's global setTimeout/setImmediate directly.
+      await awaitDrain({ capMs: 1000 });
       await new Promise((r) => setTimeout(r, 25));
     }
   } finally {
@@ -413,6 +418,7 @@ export async function runInRifty(testCase: ParityCase): Promise<string> {
     console.warn = original.warn;
     console.error = original.error;
     resetSyncMirror();
+    resetKeepalive();
     setProcessCwd('/workspace');
     if (testCase.stdin) {
       riftyProcess.stdin.removeAllListeners('data');

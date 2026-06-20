@@ -127,20 +127,25 @@ describe('fs stream classes are exposed for instanceof probes', () => {
   });
 });
 
-describe('createReadStream prefers the authoritative sync mirror (owner OPFS persistence, ADR-0148)', () => {
-  it('serves a file from the sync content cache when the async openReadable surface fails', async () => {
-    // Regression (ADR-0148, owner OPFS persistence): the OPFS owner's async surface
-    // (OpfsVfs.openReadable → File.stream()) stalls under cross-realm serving
-    // (express.static → serve-static → send), 502ing static files, while the
-    // sync content cache (ADR-0072) is the authoritative, complete, in-memory
-    // view. createReadStream must serve from the cache, not the async disk path.
+describe('createReadStream true async streaming path', () => {
+  it('uses async openReadable before the sync content cache when both surfaces can read', async () => {
     const { MemoryFsSync, setSyncMirror } = await import('./fs-sync-mirror.ts');
     const mirror = new MemoryFsSync();
-    const rejectingAsync = {
-      openReadable: () => Promise.reject(new Error('async openReadable unavailable')),
+    const asyncBytes = new TextEncoder().encode('async-stream');
+    const asyncSurface = {
+      openReadable: () =>
+        Promise.resolve(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(asyncBytes.subarray(0, 6));
+              controller.enqueue(asyncBytes.subarray(6));
+              controller.close();
+            },
+          }),
+        ),
     } as unknown as import('@riftydev/vfs').Vfs;
-    setSyncMirror(mirror, { async: rejectingAsync });
-    writeFileSync('/static.html', '<!doctype html>hi');
+    setSyncMirror(mirror, { async: asyncSurface });
+    writeFileSync('/static.html', 'sync-cache');
 
     const chunks: string[] = [];
     let errored: unknown;
@@ -156,7 +161,7 @@ describe('createReadStream prefers the authoritative sync mirror (owner OPFS per
       });
     });
     expect(errored).toBeUndefined();
-    expect(chunks.join('')).toBe('<!doctype html>hi');
+    expect(chunks.join('')).toBe('async-stream');
   });
 });
 
