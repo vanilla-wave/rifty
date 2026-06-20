@@ -19,8 +19,8 @@ HTTP_NODE_PREAMBLE unref()s servers but never closes them.
 - Inject `__riftyParityPort` alongside `__riftyHttpRequest`: Node side probes a free
   ephemeral port in the preamble; rifty side picks any free virtual port. Cases use the
   injected value.
-- Or support `listen({ port: 0 })` + `server.address().port` in @riftydev/net and rewrite
-  both cases.
+- Or consume the dedicated runtime feature in `net/listen-zero-ephemeral-ports`
+  once it lands, then rewrite both cases around `server.address().port`.
 
 ## Reversibility
 
