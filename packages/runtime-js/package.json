@@ -110,6 +110,7 @@
     "@jitl/quickjs-wasmfile-release-sync": "^0.32.0",
     "@riftydev/io": "workspace:*",
     "@riftydev/kernel": "workspace:*",
+    "@riftydev/runtime-wasi": "workspace:*",
     "@riftydev/vfs": "workspace:*",
     "acorn": "^8.14.0",
     "quickjs-emscripten-core": "^0.32.0"

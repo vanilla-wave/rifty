@@ -11,10 +11,20 @@
  * Env is read from readKernelProcessSpec() (the installProcessGlobals clobber-safe
  * source), never globalThis.process.env.
  */
-import { readKernelProcessSpec, readKernelSyncApi } from '@riftydev/kernel';
+import {
+  getKernelDispatcher,
+  readKernelProcessSpec,
+  readKernelSyncApi,
+  setKernelWorkerUrl,
+} from '@riftydev/kernel';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
-import { installConsole, installRemoteSyncFs } from '@riftydev/runtime-js';
+import {
+  installConsole,
+  installRemoteSyncFs,
+  installRuntimeJsFsHandlers,
+} from '@riftydev/runtime-js';
+import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { isDevServerOwnerMessage } from '../glue/dev-server-ipc.ts';
 import { bootDevServer } from './dev-server-boot.ts';
@@ -30,6 +40,16 @@ async function bootstrapDevServerChild(): Promise<void> {
   const kernelIpc: KernelIpc = installRuntimeGlobals();
   globalThis.process.env = env;
 
+  const kernelWorkerUrl = env.RIFTY_KERNEL_WORKER_URL;
+  const nodeEntryWorkerUrl = env.RIFTY_NODE_ENTRY_WORKER_URL;
+  if (!kernelWorkerUrl || !nodeEntryWorkerUrl) {
+    throw new Error(
+      'dev-server-child: missing RIFTY_KERNEL_WORKER_URL / RIFTY_NODE_ENTRY_WORKER_URL — cannot spawn worker_threads children',
+    );
+  }
+  setKernelWorkerUrl(kernelWorkerUrl);
+  setNodeEntryWorkerUrl(nodeEntryWorkerUrl);
+
   const proc = globalThis.process;
   installConsole({
     stdout: (chunk) => proc.stdout.write(chunk),
@@ -42,7 +62,16 @@ async function bootstrapDevServerChild(): Promise<void> {
       'dev-server-child: no kernel sync call published — cannot reach the owner store',
     );
   }
-  installRemoteSyncFs(syncApi.call);
+  const remoteFs = installRemoteSyncFs(syncApi.call);
+  // The dev-server child SPAWNS nested workers — Rolldown's WASI pthread pool
+  // (`@rolldown/binding-wasm32-wasi`, RIFTY_REMOTE_FS=1) — whose `fs.*` sync-RPC
+  // calls land on THIS realm's dispatcher. The child has no OPFS of its own
+  // (single-writer is the owner), so register the fs handlers backed by our own
+  // remote view: the child becomes a fs RELAY that forwards a nested worker's
+  // `fs.statOrNull`/reads to the owner store. Without this the Rolldown pthread
+  // crashed with "SyncRpcDispatcher: no handler for 'fs.statOrNull'" and Vite
+  // hung serving the first request.
+  installRuntimeJsFsHandlers(getKernelDispatcher(), () => remoteFs);
 
   const c = resolveDevServerChildConfig(env);
   setProcessCwd(c.root);

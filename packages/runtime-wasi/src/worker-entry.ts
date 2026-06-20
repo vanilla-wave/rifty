@@ -39,17 +39,13 @@
  */
 
 import { readKernelProcessSpec } from '@riftydev/kernel';
+import { WASI_PREOPENS_ENV, WASI_WASM_URL_ENV } from './wasi-channel-env.ts';
 import { Wasi, WasiExit } from './wasi.ts';
 
-/** Env-key carrying the URL of the WASM module to fetch. */
-export const WASI_WASM_URL_ENV = '__RIFTY_WASI_WASM_URL' as const;
-
-/**
- * Env-key carrying the JSON-encoded preopens map. Optional; when absent the
- * guest gets no preopens (a typical M8 toolchain spawn would set it to
- * `{ '/': '/' }` so the guest's `/` aliases the host VFS root).
- */
-export const WASI_PREOPENS_ENV = '__RIFTY_WASI_PREOPENS' as const;
+// Channel env keys live in their own side-effect-free module so the parent-side
+// `process-handle` can read them WITHOUT pulling this side-effectful entry in.
+// Re-exported here for the subpath consumers (the wasi worker bundle + tests).
+export { WASI_PREOPENS_ENV, WASI_WASM_URL_ENV };
 
 /**
  * Minimal process surface the WASI runner reads inside the worker. Built
@@ -211,11 +207,33 @@ const isWorkerRealm =
   typeof (globalThis as unknown as { postMessage?: unknown }).postMessage === 'function' &&
   typeof (globalThis as unknown as { window?: unknown }).window === 'undefined';
 
-// Top-level await: under the kernel's `await import(entry.url)`, block until
-// the guest exits so the kernel's bootstrap posts `{type:'exit', code}` when
-// the module resolves. In a non-worker realm (tests), skip the side-effect;
-// callers drive `runWasiInWorker` directly.
+/**
+ * Run the WASI guest IFF the kernel published a wasi-guest spec — one that
+ * carries the {@link WASI_WASM_URL_ENV} channel key. Returns whether it ran.
+ *
+ * The gate is the WASM-URL signature, NOT merely "are we in a worker". This
+ * module is re-exported from the package index (for the env-key constants +
+ * {@link runWasiInWorker}), so `@riftydev/runtime-js`'s `node:wasi` builtin pulls
+ * it into EVERY runtime-js worker's static import graph (owner shell, dev-server
+ * child, the worker_threads pthread children Rolldown's WASI binding spawns, …).
+ * Those graphs eval BEFORE the kernel `'init'` publishes any spec, so
+ * `readKernelProcessSpec()` is null there; an unguarded `buildWasiProcess()`
+ * threw "KernelProcessSpec is missing" and crashed the host worker on boot. The
+ * genuine wasi-guest entry is the only realm where the spec is BOTH published
+ * (the kernel `await import(entry.url)`s after publishing) AND carries the WASM
+ * URL key. Exported so the gate is unit-testable without a real worker realm.
+ */
+export async function runWasiGuestEntryIfActive(): Promise<boolean> {
+  const spec = readKernelProcessSpec();
+  if (spec === null || typeof spec.env[WASI_WASM_URL_ENV] !== 'string') return false;
+  await runWasiInWorker(buildWasiProcess());
+  return true;
+}
+
+// Top-level await: in a worker realm, block until the guest exits so the kernel's
+// bootstrap posts `{type:'exit', code}` when the module resolves. In a non-worker
+// realm (tests) the side-effect is skipped; callers drive `runWasiInWorker`
+// directly.
 if (isWorkerRealm) {
-  const proc = buildWasiProcess();
-  await runWasiInWorker(proc);
+  await runWasiGuestEntryIfActive();
 }

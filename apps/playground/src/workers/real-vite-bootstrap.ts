@@ -139,6 +139,8 @@ async function bootShellOwner(opts: {
   readonly spec: ProjectSpec;
   readonly slug: string;
   readonly fromScratch: boolean;
+  /** kernel worker URL — threaded to the dev-server child so Rolldown's WASI worker pool can spawn worker_threads children (Vite 8). */
+  readonly kernelWorkerUrl: string;
   /** node-entry bootstrap worker URL — the supervised child each CLI runs in (ADR-0150). */
   readonly nodeEntryWorkerUrl: string;
   /** dev-server child bootstrap worker URL — the supervised serve:true child the owner spawns (ADR-0150 P6b). */
@@ -261,7 +263,12 @@ async function bootShellOwner(opts: {
   // ADR-0150 P6b: the dev server also runs in a supervised serve:true child that
   // reads the owner store over fs.* RPC. Built once; the boot closure spawns a
   // fresh child per run (re-listen-on-restart), the controller's stop() kills it.
-  const devServerChild = createOwnerChildDevServer(opts.devServerWorkerUrl);
+  const devServerChild = createOwnerChildDevServer(opts.devServerWorkerUrl, {
+    // Thread the recursive worker URLs so the dev-server child can spawn
+    // Rolldown's WASI worker_threads pool (Vite 8).
+    kernelWorkerUrl: opts.kernelWorkerUrl,
+    nodeEntryWorkerUrl: opts.nodeEntryWorkerUrl,
+  });
   // ADR-0155: `node <file>` runs in a supervised child like the bin executor, but
   // a server entry (it called `listen()`) posts its ports back so the owner adds a
   // preview slot. A monotonic run-seq keys each run's registry entries (teardown
@@ -487,6 +494,7 @@ async function bootstrap(): Promise<void> {
     spec,
     slug,
     fromScratch,
+    kernelWorkerUrl,
     nodeEntryWorkerUrl,
     devServerWorkerUrl,
   });

@@ -8,6 +8,29 @@
 
 - **`node <file>` missing-entry diagnostic is now real Node's `MODULE_NOT_FOUND`** (closes backlog/runtime-js/node-entry-miss-node-shape). `resolveNodeEntry` no longer pre-checks existence (it just absolutizes the arg); a missing entry flows into `runNodeEntry` → the module loader, which emits Node's `Error: Cannot find module '<abs>' … { code:'MODULE_NOT_FOUND', requireStack: [] }` on the child stderr (exit 1) instead of the old terse `node: cannot find module '<abs>'`. The empty-arg usage error is the only owner-side `ok:false` left.
 
+### Fixed
+
+- **Vite 8 preview boot — Rolldown WASI pthread pool now serves end-to-end.**
+  (a) Force the WASI path for Rolldown's napi-rs loader via `NAPI_RS_FORCE_WASI=1`
+  in the dev-server child env — rifty has no native bindings by construction
+  (ADR-0051/0156), and the loader otherwise SWALLOWED its
+  `@rolldown/binding-wasm32-wasi` load error, surfacing only the generic
+  `Cannot find native binding`. (b) Vite 8 removed `optimizeDeps.disabled`
+  (Vite 5.1) and warns+ignores it, then ran dep discovery on the first request
+  (driving Rolldown's WASI bundler and holding the request to a 30s timeout) —
+  switched to the supported `noDiscovery: true` + empty `include`. (c) The
+  dev-server child now registers `fs.*` sync-RPC HANDLERS (not just the client),
+  so it RELAYS its nested Rolldown pthread workers' `fs.statOrNull`/reads to the
+  owner store — they crashed with "no handler for 'fs.statOrNull'" otherwise.
+  (d) Emit a `[vite] dev server ready on port N` readiness line on listen.
+  (e) Re-baked the `vite@8.0.16` node_modules snapshot and restored
+  `bakedNodeModulesUrl` on the template, so the default (instant) preset boots
+  from the snapshot again (ADR-0135) instead of a cold install; the snapshot now
+  carries `@rolldown/binding-wasm32-wasi` (14.3 MB gz, up from 9 MB — tracked by
+  the baked-snapshot-regeneration backlog). Net result: `m1` (instant boot,
+  baked-snapshot restore) and `m7-preview-sw` (from-scratch cold install →
+  Rolldown WASI bundle → SW-routed `/preview/5174/`) are both CI-active and pass.
+
 ### Added
 
 - **Page preview bridge advertises served ports** (ADR-0160). The window-owner
@@ -40,6 +63,13 @@
   `previewPorts()` signal fed to `PreviewPanel`'s switcher, requests a re-publish on subscribe, and
   wires a per-port SW preview bridge for NODE-source ports ONLY (the dev-server port keeps its
   existing `onDevServer` bridge — never double-wired) via a diffing effect over a port→teardown Map.
+
+- **Vite 8 template/runtime wiring.** The Vite project spec now installs
+  `vite@8.0.16`, overlays the LightningCSS WASM shim, and threads
+  `RIFTY_KERNEL_WORKER_URL` / `RIFTY_NODE_ENTRY_WORKER_URL` into the supervised
+  dev-server child so Rolldown's WASI worker pool can spawn real kernel-backed
+  worker_threads children. HMR remains disabled here by the Vite 8 HMR-scope ADR;
+  sockets/HMR are tracked outside this change.
 
 - **Event-loop keepalive + drain wired into the kernel worker** (child-realm-async-lifecycle,
   ADR-0152). `workers/kernel-worker-entry.ts` now calls `installEventLoopKeepalive()` (right after

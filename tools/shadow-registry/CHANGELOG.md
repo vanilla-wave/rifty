@@ -4,6 +4,12 @@
 
 ### Added
 
+- `bakedOverrides` now redirects `lightningcss` to `lightningcss-wasm@1.32.0`,
+  and exports a `lightningcssShimFiles` overlay that preserves the package name
+  while delegating both ESM and CJS entrypoints to the real WASM implementation.
+- Added `browserShimFileSets`, `collectBrowserShimFiles`, and
+  `viteBrowserShimFiles` (ADR-0156) so Vite-class overlays are selected by typed
+  shim-set name instead of hand-spelling every package at each call site.
 - `bakedOverrides` now redirects `esbuild` to `@esbuild/wasi-preview1@0.28.0`,
   so Vite installs avoid the real package's native-binary `postinstall`; the
   playground still overlays `node_modules/esbuild` with the browser-safe shim.

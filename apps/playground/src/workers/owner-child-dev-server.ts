@@ -18,10 +18,16 @@ export interface DevServerChildSpawnParams {
   readonly devPort: number;
 }
 
+export interface RecursiveWorkerUrls {
+  readonly kernelWorkerUrl?: string;
+  readonly nodeEntryWorkerUrl?: string;
+}
+
 /** Pure: build the spawn spec for the dev-server child (unit-tested). */
 export function buildDevServerChildSpawnSpec(
   params: DevServerChildSpawnParams,
   devServerWorkerUrl: string,
+  workerUrls: RecursiveWorkerUrls = {},
 ): SpawnWorkerSpec {
   return {
     entry: { kind: 'url', url: devServerWorkerUrl },
@@ -33,6 +39,20 @@ export function buildDevServerChildSpawnSpec(
       RIFTY_RFV_SETUP: params.setup,
       RIFTY_RFV_ROOT: params.root,
       RIFTY_DEV_PORT: String(params.devPort),
+      // Rolldown (Vite 8 bundler) ships a napi-rs loader that tries every native
+      // `@rolldown/binding-<platform>` first; in rifty those all throw
+      // ENATIVEUNSUPPORTED, then its `@rolldown/binding-wasm32-wasi` attempt is
+      // made but its error is SWALLOWED unless this is set — so a failed WASI
+      // load surfaced only as the generic "Cannot find native binding". rifty has
+      // no native bindings by construction, so force the WASI path and make its
+      // load errors loud (ADR-0156 / ADR-0051 WASI policy).
+      NAPI_RS_FORCE_WASI: '1',
+      ...(workerUrls.kernelWorkerUrl
+        ? { RIFTY_KERNEL_WORKER_URL: workerUrls.kernelWorkerUrl }
+        : {}),
+      ...(workerUrls.nodeEntryWorkerUrl
+        ? { RIFTY_NODE_ENTRY_WORKER_URL: workerUrls.nodeEntryWorkerUrl }
+        : {}),
       // node-server template entries bind `process.env.PORT`; set it to the dev
       // port so the child's entry listens where the owner expects (ADR-0150 P6b).
       // The in-realm `process.env.PORT` mutation in dev-server-boot doesn't reach
@@ -105,18 +125,27 @@ function decodeChunk(chunk: unknown): string {
  */
 export function createOwnerChildDevServer(
   devServerWorkerUrl: string,
-  spawn: (spec: SpawnWorkerSpec) => DevServerChildHandle = (spec) => {
-    const h = globalProcessManager.spawnWorker('dev-server', spec, 1);
-    if (h.kind !== 'worker') {
-      throw new Error(`owner-child-dev-server: expected worker handle, got ${h.kind}`);
-    }
-    return h as unknown as DevServerChildHandle;
-  },
+  workerUrlsOrSpawn: RecursiveWorkerUrls | ((spec: SpawnWorkerSpec) => DevServerChildHandle) = {},
+  maybeSpawn?: (spec: SpawnWorkerSpec) => DevServerChildHandle,
 ): OwnerChildDevServer {
+  const workerUrls = typeof workerUrlsOrSpawn === 'function' ? {} : workerUrlsOrSpawn;
+  const spawn =
+    typeof workerUrlsOrSpawn === 'function'
+      ? workerUrlsOrSpawn
+      : (maybeSpawn ??
+        ((spec: SpawnWorkerSpec) => {
+          const h = globalProcessManager.spawnWorker('dev-server', spec, 1);
+          if (h.kind !== 'worker') {
+            throw new Error(`owner-child-dev-server: expected worker handle, got ${h.kind}`);
+          }
+          return h as unknown as DevServerChildHandle;
+        }));
   return {
     boot(opts: DevServerChildBootOpts): Promise<DevServerHandle> {
       return new Promise<DevServerHandle>((resolve, reject) => {
-        const handle = spawn(buildDevServerChildSpawnSpec(opts.params, devServerWorkerUrl));
+        const handle = spawn(
+          buildDevServerChildSpawnSpec(opts.params, devServerWorkerUrl, workerUrls),
+        );
         let outputClosed = false;
         const writeLog = (chunk: unknown): void => {
           if (outputClosed) return;

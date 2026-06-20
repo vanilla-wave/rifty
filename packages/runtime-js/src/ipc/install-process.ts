@@ -32,6 +32,7 @@ import {
 } from '@riftydev/kernel';
 import { Buffer } from '../builtins/buffer.ts';
 import { NodeProcess, patchPromiseForNextTick } from '../builtins/process.ts';
+import { installWorkerRealmCompat } from './worker-realm-compat.ts';
 
 /**
  * The `process` shim installed for kernel-spawned children. Alias of the unified
@@ -84,6 +85,11 @@ export function installNodeRuntime(spec: WorkerSpawnSpec): void {
   if (isNode) {
     patchPromiseForNextTick();
     (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
+    // Node-CJS realm-compat globals (`global`/writable `self`/shared-memory
+    // `TextDecoder`) that Rolldown's emnapi pthread worker needs — see
+    // `worker-realm-compat.ts`. Node workers only (a WASI guest runs raw WASI,
+    // no JS realm-compat); folded here so the host pre-entry hook needs no change.
+    installWorkerRealmCompat();
   }
 }
 

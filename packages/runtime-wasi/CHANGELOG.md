@@ -2,7 +2,33 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Node `wasi` shape for Vite 8/Rolldown:** `Wasi` now exposes `wasiImport`,
+  `getImportObject()`, and `initialize(instance)` aliases matching Node's
+  `node:wasi` contract while preserving the existing preview1 syscall surface.
+  Node-style `options.version` validation is enforced by runtime-js's
+  `node:wasi.WASI` wrapper; this package's `Wasi` class remains the low-level
+  runner used by `runWasi`.
+
 ### Fixed
+
+- **Vite 8 browser boot — two WASI faithfulness fixes.** (a) `worker-entry`'s
+  top-level guest-run is gated on the kernel having published a *wasi-guest* spec
+  (one carrying the WASM-URL key), not merely "in a worker"; the gate is the
+  extracted, unit-tested `runWasiGuestEntryIfActive()`. Root cause now removed
+  structurally: the channel env keys moved to a side-effect-free
+  `wasi-channel-env.ts`, `process-handle` reads them from there, and the package
+  index no longer re-exports the side-effectful `worker-entry`. So `node:wasi`
+  (imports only `Wasi` from the index) no longer drags `worker-entry`'s top-level
+  guest-run into EVERY runtime-js worker's static graph, where its unguarded
+  `buildWasiProcess()` threw `KernelProcessSpec is missing` and crashed the host
+  worker on boot — hanging the playground at `$ vite`. `worker-entry` /
+  `runWasiInWorker` are reachable only via the `@riftydev/runtime-wasi/worker-entry`
+  subpath now (a public-surface trim of the index — env keys stay). (b) `random_get` fills a private buffer then
+  copies into wasm memory: `crypto.getRandomValues` REJECTS a SharedArrayBuffer-
+  backed view (threaded wasm memory, e.g. Rolldown's emnapi pthread build), and
+  it chunks by 65536 (the per-call cap).
 
 - **PR #21 review fixes (preview1 contract).** (a) Rights violations now return
   the spec errno `E_NOTCAPABLE` (76), not `E_PERM` — fd_read/fd_write/fd_seek/

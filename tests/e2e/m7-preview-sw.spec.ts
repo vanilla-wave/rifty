@@ -3,9 +3,11 @@
  *
  * The playground now starts a real Vite terminal on load. This spec probes the
  * same-origin `/preview/<port>/` URL through the Service Worker and waits for
- * the worker-owned Vite route to become reachable.
+ * the worker-owned Vite route to become reachable. ADR-0161 disables HMR in
+ * the Vite 8 template, so this is a serve/preview smoke, not HMR coverage.
  */
 import { expect, test } from '@playwright/test';
+import { expectTerminalContains } from './helpers/playground.ts';
 
 test.describe('M7 — HTTP through the Service Worker preview bridge', () => {
   test('GET /preview/5174/ returns worker-owned Vite HTML round-tripped through the SW', async ({
@@ -17,6 +19,15 @@ test.describe('M7 — HTTP through the Service Worker preview bridge', () => {
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });
+    await expectTerminalContains(page, 'starting dev server on port', 30_000);
+
+    await page.click('[data-action="view-templates"]');
+    await page.click('[data-preset="real-vite"]');
+    await expect(page.locator('[data-action="view-templates"]')).toContainText('real-vite', {
+      timeout: 5_000,
+    });
+    await expectTerminalContains(page, 'npm: + vite@8.0.16', 120_000);
+    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 60_000);
 
     const fetchPreview = async () =>
       page.evaluate(async () => {
@@ -53,6 +64,6 @@ test.describe('M7 — HTTP through the Service Worker preview bridge', () => {
     expect(probe.contentType).toContain('text/html');
     expect(probe.body).toContain('rifty + real Vite (worker)');
     expect(probe.body).toContain('src/main.js');
-    expect(probe.body).toContain('data-rifty-hmr-bridge');
+    expect(probe.body).not.toContain('data-rifty-hmr-bridge');
   });
 });

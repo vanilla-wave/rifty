@@ -4,6 +4,10 @@
 
 ### Added
 
+- **Native policy accepts WASI packages (`cpu: ["wasm32"]`, ADR-0156).** Rolldown's
+  `@rolldown/binding-wasm32-wasi` optional dependency is now installable while
+  platform-native siblings still skip/abort via `ENATIVEUNSUPPORTED`.
+
 - **`InstallOptions.onPackage` per-package progress hook (ADR-0134).** Optional
   callback firing once per unique `(name, version)` when its tarball resolves
   (cache or network), with `cacheHit`; fires on both the lockfile fast path and

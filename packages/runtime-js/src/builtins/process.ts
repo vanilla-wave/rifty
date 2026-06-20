@@ -416,12 +416,20 @@ export class NodeProcess extends EventEmitter {
     port.start();
 
     // Flush frames buffered before the first listener. `newListener` fires BEFORE
-    // the listener is added, so defer to a microtask so the flush reaches it.
+    // the listener is added; defer to a MACROTASK (not a microtask) so the flush
+    // lands AFTER the entry module finishes evaluating — Node delivers IPC on the
+    // event loop, never mid-eval. A microtask delivered the buffered
+    // `{__emnapi__:load}` frame in the gap between Rolldown's `wasi-worker.mjs`
+    // attaching `parentPort.on('message')` (top) and setting `globalThis.onmessage`
+    // (last line), crashing with "globalThis.onmessage is not a function".
+    // TODO(backlog: runtime-js/ipc-backlog-flush-entry-resolution): setTimeout(0)
+    // is robust only while the entry body fits one macrotask; the Node-correct
+    // release is a kernel post-entry hook firing after the entry module resolves.
     this.on('newListener', (event) => {
       if (event !== 'message' || this.#ipcBacklog.length === 0) return;
-      queueMicrotask(() => {
+      setTimeout(() => {
         for (const payload of this.#ipcBacklog.splice(0)) this.emit('message', payload);
-      });
+      }, 0);
     });
 
     this.send = (message: unknown): boolean => {

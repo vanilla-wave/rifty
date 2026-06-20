@@ -148,6 +148,19 @@ describe('install — native-dependency policy (ADR-0051)', () => {
     expect(result.packages.map((p) => p.name)).toContain('wasm-pkg');
   });
 
+  it('does NOT reject a `cpu: ["wasm32"]` package', async () => {
+    const registry = new FakeRegistry(
+      db([await entry('wasm32-pkg', '1.0.0', { cpu: ['wasm32'] })]),
+    );
+    const result = await install(
+      'root',
+      '1.0.0',
+      { 'wasm32-pkg': '1.0.0' },
+      { vfs: new MemoryVfs(), cwd: '/app', registry },
+    );
+    expect(result.packages.map((p) => p.name)).toContain('wasm32-pkg');
+  });
+
   it('a baked override (bcrypt → bcryptjs) pre-empts the native check', async () => {
     // `bcrypt` is in bakedOverrides → bcryptjs; the native bcrypt is never even
     // fetched (the override redirects before the manifest read). bcryptjs is

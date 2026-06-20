@@ -51,6 +51,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0153 | node:constants hybrid faithful static data syscall boundary gap |
 | 0158 | Count detached fetch in child-realm event-loop keepalive |
 | 0159 | node:zlib web-compression-backed async subset |
+| 0162 | Vite 8 Rolldown WASI browser-boot runtime surface |
 
 ### runtime-wasi
 
@@ -96,6 +97,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0042 | M11 nested install — first-wins flat + nest-on-conflict |
 | 0051 | Native-dependency install policy — loud `ENATIVEUNSUPPORTED`, optional natives skipped |
 | 0134 | install() per-package progress hook (onPackage) |
+| 0156 | Typed browser shim registry and wasm32 native policy |
 | 0163 | Yandex Cloud streaming npm-registry proxy |
 
 ### playground
@@ -120,6 +122,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0145 | Real Vite module HMR (server.hmr.channels path superseded) |
 | 0155 | Terminal node-file command: arbitrary-entry supervised child + multi-port preview |
 | 0157 | Unified spec-seeded mutable Node process at pre-entry gated to Node workers |
+| 0161 | Vite 8 disables HMR pending socket parity |
 
 ### toolchain-build
 
@@ -209,8 +212,11 @@ superseded.
 |---|---|---|
 | 0017 A-025 deferral clause | 0147 | cross-realm WebSocket reachability shipped; M12 still owns streaming/backpressure |
 | 0017 A-024 raw TCP clause | 0017 note 2026-06-18 | raw OS TCP is a final browser ceiling; connect APIs throw directed `NotImplementedError`s |
+| 0027 third-shim promotion trigger | 0156 | Vite browser shims now use the typed `browserShimFileSets` registry |
+| 0051 accepted WebAssembly CPU targets | 0156 | `wasm32` is admitted alongside `wasm`; native platform packages remain unsupported |
 | 0145 browser transport clause | 0147 | browser shim is now the generic WebSocket bridge |
 | 0145 `server.hmr.channels` payload path | 0151 | Real-Vite now uses Vite native `server.ws` over rifty `http.Server.on('upgrade')` |
+| 0145 Vite 8 default HMR scope | 0161 | Vite 8 template disables HMR until socket/HMR parity is re-proven for the Rolldown WASI path |
 | 0054 WS/SSE upgrade risk note | 0151 | WebSocket `server.on('upgrade')` now works over the bridge; SSE stays streaming HTTP |
 | 0054 pipe-sink deferral | 0154 | `Readable.fromWeb(webStream).pipe(res)` is implemented; full `node:stream/web` remains unclaimed |
 | 0151 control-frame keepalive clause | 0151 note 2026-06-19 | control frames relay end-to-end; the peer answers pings (real `ws` auto-pongs + `'ping'`, browser-like clients silently pong), transport no longer auto-pongs |

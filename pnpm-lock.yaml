@@ -215,6 +215,9 @@ importers:
       '@riftydev/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@riftydev/runtime-wasi':
+        specifier: workspace:*
+        version: link:../runtime-wasi
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../vfs

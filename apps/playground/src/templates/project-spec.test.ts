@@ -31,11 +31,11 @@ describe('resolveBootstrapConfig', () => {
     if (cfg.runtime !== 'vite') throw new Error('expected a vite bootstrap config');
 
     expect(cfg.entryPath).toBe('/workspace/src/main.js');
-    expect(cfg.installDeps).toEqual({ vite: '^5.4.0' });
+    expect(cfg.installDeps).toEqual({ vite: '8.0.16' });
     expect(cfg.runtimeSpecifier).toBe('vite');
     expect(cfg.server.appType).toBe('spa');
     expect(cfg.server.optimizeDepsDisabled).toBe(true);
-    expect(cfg.hmrEnabled).toBe(true);
+    expect(cfg.hmrEnabled).toBe(false);
 
     const pkg = JSON.parse(cfg.packageJson) as {
       dependencies: Record<string, string>;

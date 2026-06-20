@@ -1,7 +1,13 @@
 # ADR 0145: Real Vite module HMR
 
-Status: Accepted (corrected by ADR-0147 and ADR-0151)
+Status: Accepted (corrected by ADR-0147, ADR-0151, and ADR-0161)
 Date: 2026-06-14
+
+> Correction 2026-06-20: ADR-0161 scopes the Vite 8 template default — HMR is
+> DISABLED there until the native socket/`server.ws` path is re-proven against
+> Rolldown's WASI worker pool. This ADR's "Vite owns HMR over the browser
+> WebSocket bridge" architecture still stands; only the Vite 8 default-on scope
+> is superseded (transport corrections to ADR-0147/0151 are already in Context).
 
 ## Context
 

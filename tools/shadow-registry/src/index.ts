@@ -10,9 +10,9 @@
  *
  *   - `bakedOverrides` — full-package substitutions consumed by the npm
  *     installer's override hook (D-005).
- *   - `esbuildShimFiles` / `rollupShimFiles` — VFS-path-keyed source bundles
- *     overlaid by the playground after install, replacing packages whose
- *     native binaries cannot run in a browser realm.
+ *   - `browserShimFileSets` / `collectBrowserShimFiles` — typed VFS-path-keyed
+ *     source bundles overlaid by the playground after install, replacing
+ *     packages whose native binaries cannot run in a browser realm.
  *
  * The `OverrideMap` type is structurally identical to the one re-exported
  * from `@riftydev/npm-client` (an open `Record<string, string>`). It is declared
@@ -39,6 +39,9 @@ export const bakedOverrides: OverrideMap = {
   // Real esbuild's registry package runs a native-binary postinstall. The
   // playground overlays node_modules/esbuild with a browser-safe shim later.
   esbuild: '@esbuild/wasi-preview1@0.28.0',
+  // Vite 8 imports lightningcss lazily. The native package loads `.node`
+  // bindings; lightningcss-wasm ships the same NAPI surface backed by WASM.
+  lightningcss: 'lightningcss-wasm@1.32.0',
 };
 
 const SHIM_ESBUILD_VERSION = '0.21.5';
@@ -163,6 +166,54 @@ export const esbuildShimFiles: Record<string, string> = {
   '/workspace/node_modules/esbuild/lib/main.js': SHIM_ESBUILD_SOURCE,
 };
 
+const SHIM_LIGHTNINGCSS_VERSION = '1.32.0';
+
+const SHIM_LIGHTNINGCSS_PACKAGE_JSON = JSON.stringify(
+  {
+    name: 'lightningcss',
+    version: SHIM_LIGHTNINGCSS_VERSION,
+    main: './index.cjs',
+    module: './index.mjs',
+    type: 'module',
+    exports: {
+      '.': {
+        import: './index.mjs',
+        require: './index.cjs',
+        default: './index.mjs',
+      },
+    },
+  },
+  null,
+  2,
+);
+
+const SHIM_LIGHTNINGCSS_ESM = `export {
+  Features,
+  browserslistToTargets,
+  bundle,
+  bundleAsync,
+  composeVisitors,
+  transform,
+  transformStyleAttribute,
+} from 'lightningcss-wasm';
+
+import * as lightningcss from 'lightningcss-wasm';
+export default lightningcss;
+`;
+
+const SHIM_LIGHTNINGCSS_CJS = `module.exports = require('lightningcss-wasm');
+`;
+
+/**
+ * VFS overlay for the `lightningcss` npm package. Vite imports the native
+ * package name, while the actual implementation comes from lightningcss-wasm.
+ */
+export const lightningcssShimFiles: Record<string, string> = {
+  '/workspace/node_modules/lightningcss/package.json': SHIM_LIGHTNINGCSS_PACKAGE_JSON,
+  '/workspace/node_modules/lightningcss/index.mjs': SHIM_LIGHTNINGCSS_ESM,
+  '/workspace/node_modules/lightningcss/index.cjs': SHIM_LIGHTNINGCSS_CJS,
+};
+
 const ROLLUP_NATIVE_SHIM = `// rifty: rollup native bindings shim
 function emptyProgram(code) {
   return {
@@ -224,3 +275,24 @@ exports.xxhashBase16 = function xxhashBase16(input) {
 export const rollupShimFiles: Record<string, string> = {
   '/workspace/node_modules/rollup/dist/native.js': ROLLUP_NATIVE_SHIM,
 };
+
+export interface BrowserShimFileSet {
+  readonly packageName: string;
+  readonly files: Record<string, string>;
+}
+
+export const browserShimFileSets = {
+  esbuild: { packageName: 'esbuild', files: esbuildShimFiles },
+  lightningcss: { packageName: 'lightningcss', files: lightningcssShimFiles },
+  rollup: { packageName: 'rollup', files: rollupShimFiles },
+} satisfies Record<string, BrowserShimFileSet>;
+
+export type BrowserShimName = keyof typeof browserShimFileSets;
+
+export function collectBrowserShimFiles(names: readonly BrowserShimName[]): Record<string, string> {
+  const files: Record<string, string> = {};
+  for (const name of names) Object.assign(files, browserShimFileSets[name].files);
+  return files;
+}
+
+export const viteBrowserShimFiles = collectBrowserShimFiles(['esbuild', 'lightningcss', 'rollup']);

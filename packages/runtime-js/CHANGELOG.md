@@ -12,6 +12,51 @@
 - **Silent Node divergences — failing-parity-first fixes** (closes backlog/runtime-js/silent-node-divergences). Four `node:` builtins returned WRONG values with no throw (worse than a loud gap); each pinned by a RED-then-GREEN parity case vs Node v24. (1) `util.inspect(value, options)` — the 2nd positional is now an OPTIONS object, not the internal depth counter, so `util.inspect(obj, { depth: null })` renders unlimited (was misread as `depth = NaN`) and `{ depth: 0 }` collapses containers to Node's `[Object]`/`[Array]`/`[Map]`/`[Set]` placeholders; strings inside structures use SINGLE quotes with Node's dynamic `"`/`` ` `` fallback (was `JSON.stringify` double-quotes). Default nesting depth + colors/getters/sorted remain `util-surface-completions`. (2) `querystring.parse` decodes a literal `+` → space (express/formidable) — structural, parse-only (`+`→`%20` BEFORE the decoder so a custom `decodeURIComponent` sees `%20` like Node; `%2B` survives; `querystring.unescape` still leaves `+`). (3) `util.format('%c', arg)` consumes its arg and emits nothing (was keeping the literal `%c` AND leaking the arg). (4) `import.meta.resolve` does real loader resolution (see `docs/public/compat/modules.md`): any `node:` specifier returned verbatim (Node doesn't validate the builtin at resolve time), files → `file://<abs>`, a bare/relative miss throws the resolver's `MODULE_NOT_FOUND` — replaced the inline `new URL(s, baseUrl).href` stub that returned a wrong `file://` URL for bare/`node:` specifiers. `repl/inspect.ts` also gained Node's `<Buffer …>` hex rendering driven by the live `buffer.INSPECT_MAX_BYTES`.
 - **Real-Node `MODULE_NOT_FOUND` shape for a missing CJS entry / `require()`** (closes backlog/runtime-js/node-entry-miss-node-shape). The resolver throws Node's faithful `Cannot find module '<spec>'` message (with a `Require stack:` block when non-empty) + `err.requireStack` for a missing ENTRY (incl. `.mjs`, which Node runs through the CJS loader) and a nested `require()` — parity-proven head-to-head vs real Node v24. `runNodeEntry` surfaces these to the child stderr as Node's CJS printed form (`Error: Cannot find module … { code, requireStack }`, no rifty `ModuleLoadError` name / frames), so `node ./nope.js` matches Node. Honest deltas: ALL stack frames are dropped (Node-internal frames have no in-browser equivalent; the user call-site frame isn't synthesized either), the `Node.js vX` trailer is omitted, `requireStack` uses the inline inspect form (long paths don't wrap), and deeper ancestors collapse to the immediate requirer. A nested ESM `import()` miss is Node's DIFFERENT `ERR_MODULE_NOT_FOUND` — it is left as an honest, non-masquerading rifty `ModuleLoadError` (NOT fake-shaped as CJS): `backlog/runtime-js/esm-import-miss-err-module-not-found`. See `docs/public/compat/process.md`.
 
+- **Vite 8 / Rolldown WASI pthread boot — runtime-side fixes** (all needed for
+  `@rolldown/binding-wasm32-wasi`'s emnapi worker to load + run in a kernel
+  worker realm):
+  - **Node `global` realm alias.** The kernel pre-entry hook installs
+    `global === globalThis` (Node parity) via `installWorkerRealmCompat`, folded
+    into `installNodeRuntime`'s Node-worker branch. CJS packages built for Node
+    reference bare `global` — `@emnapi/*` died with `global is not defined`.
+  - **`createRequire` wiring for node entries.** `runNodeEntry` now publishes a
+    `createRequire` impl backed by its module loader, so a Node entry run in a
+    worker_threads pthread realm (Rolldown's `wasi-worker.mjs`) can call
+    `createRequire(import.meta.url)` instead of throwing "no loader registered".
+  - **IPC backlog flush is a macrotask, not a microtask.** Worker IPC messages
+    buffered before a `'message'` listener now flush on the next event-loop turn
+    (Node parity) — a microtask delivered the `{__emnapi__:load}` frame mid-eval,
+    before `wasi-worker.mjs` set `globalThis.onmessage` (TypeError).
+  - **Writable `self` + shared-memory-tolerant `TextDecoder`** in the worker
+    realm: emnapi assigns `globalThis.self` (a getter-only `WorkerGlobalScope`
+    accessor) and `TextDecoder.decode`s strings straight out of shared wasm
+    memory, which older Chromium rejects ("must not be shared") — the shim copies
+    a shared-backed view first. These realm-compat shims (plus the `global` alias)
+    live in `ipc/worker-realm-compat.ts` (`installWorkerRealmCompat`) and are
+    folded into `installNodeRuntime`'s Node-worker branch (ADR-0157), so every
+    Node worker realm (incl. Rolldown's emnapi pthread children) is shaped; a WASI
+    guest (raw WASI, not Node CJS) skips them.
+    The `TextDecoder` patch stays UNCONDITIONAL: the copy is a cheap no-op where
+    the realm accepts shared views, whereas a feature-detect probe (a tiny shared
+    decode) is not representative of emnapi's real decode and false-negatives,
+    skipping the patch the guest needs (m7 regression).
+
+- **`worker_threads` + `node:wasi` Node-parity fixes.**
+  - `worker_threads`: `threadId` numbers the main thread `0` and Workers `1, 2, …`
+    (was main `1` / first worker `2`); a `'online'` event fires before `'exit'`
+    on both the kernel and same-realm paths; `worker.terminate()` with no argument
+    resolves with exit code `1` (Node's forced-termination code), while internal
+    callers keep their explicit code (`0` for a natural same-realm completion).
+    The kernel-path `'error'` event for a worker-runtime uncaught throw is the one
+    remaining gap — explicit `backlog: runtime-js/worker-threads-kernel-error-event`
+    (needs real cross-realm Error propagation; faking it from the exit code would
+    lie). Same-realm path already emits `'error'`.
+  - `node:wasi.WASI`: `start()`/`initialize()` are single-entry (a second call
+    throws `ERR_WASI_ALREADY_STARTED`) and require an exported
+    `WebAssembly.Memory` (`ERR_INVALID_ARG_TYPE`), matching Node. The lower-level
+    `@riftydev/runtime-wasi` `Wasi` runner stays lenient (it backs `runWasi` and
+    the gate's memory-less `proc_exit` probe).
+
 ### Added
 
 - **`node:crypto` async/one-shot randoms over the shipped sync cores** (closes backlog/runtime-js/crypto-random-and-oneshot). Adds the callback overload `randomBytes(size, cb)` + async `randomFill(buf[, offset, size], cb)` (deferred `cb(null, buf)`), `randomInt([min, ]max[, cb])` with **unbiased rejection sampling** (48-bit draw, biased-tail rejection — no modulo bias near power-of-two-adjacent ranges; async form is `cb(undefined, n)`), and one-shot `crypto.hash(algorithm, data[, outputEncoding])` (default `hex` string, `'buffer'` output mode, string + any ArrayBufferView input — a raw `ArrayBuffer`/number/null is rejected with `ERR_INVALID_ARG_TYPE`, matching Node). Faithful size/bounds contract vs real Node v24: `randomBytes` floors non-integer sizes and throws `ERR_OUT_OF_RANGE` outside `[0, 2^31-1]` (incl. `NaN`, since it is a number — not a type error); `randomInt` throws `ERR_OUT_OF_RANGE`/`ERR_INVALID_ARG_TYPE` and validates SYNCHRONOUSLY even in the callback form. `randomFill`/`randomFillSync` likewise floor a non-integer offset/size and throw `ERR_OUT_OF_RANGE` for a negative/`NaN`/out-of-window offset or size (incl. `offset + size > length`) or `ERR_INVALID_ARG_TYPE` for a buffer that is neither an `ArrayBufferView` nor a raw `ArrayBuffer` (Node accepts both for `randomFill`, and fills them in place) — synchronously, even in the async form. `hash` honours the `latin1`/`binary` output-encoding alias. The shared fill core now CHUNKS under the 65536-byte Web Crypto `getRandomValues` cap, so big `randomBytes`/`randomFill` sizes Node allows no longer throw `QuotaExceededError`. Unsupported hash algos stay a loud `NotImplementedError` (honest gap). 5 parity cases + a deterministic rejection-sampling unit proof.
@@ -28,6 +73,17 @@
 - **Event-loop keepalive (libuv-style refcount over timers/immediates/pending dynamic imports) + `unhandledrejection` loud-fail:** run-to-completion children now drain async work scheduled after top-level (Node-parity) and fail loudly on a rejection or a never-draining loop (generous cap, documented divergence) instead of silently exiting 0. The pending-import ref is held on BOTH paths — the public `loader.import` AND the routed user-code `import()` (`esm.ts dynamicImport`, reached via the `__import` rewrite) — so a detached `import('./x').then(run)` whose load spans a macrotask reaches `run` before the realm reaps (the prettier-class scenario). The keepalive counts a deliberately NARROW handle set, not all libuv handles — see ADR-0152 + `docs/public/compat/process.md` for the shape. (The detached-`fetch`/network and `fs.watch` gaps noted here at first light are now closed — `fs.watch` is counted with working `FSWatcher.ref()/.unref()`, and the global `fetch` is counted per the fetch-keepalive entry below + ADR-0158.)
 
 - **Detached `fetch()` keepalive (ADR-0158):** the child realm's global `fetch` is now keepalive-counted — `keepaliveRef()` on dispatch, held until the response BODY is consumed (any Body-mixin consumer or the `body` stream closing/cancelling), released on reject or when there is no body. A detached `fetch(u).then(r=>r.text()).then(write)` after top-level now completes before a run-to-completion realm drains, instead of being dropped silently. Held until the body (not headers) because Node keeps the socket refed until the body is read. The counted boundary is the global `fetch` — the realm's sole real network egress: `http.request`-to-external routes through it (covered), loopback `http.request` is in-process (no socket), `https`/`net.connect` are loud-throws. `installFetchKeepalive` ships in the child-realm bootstrap next to the timer/keepalive installs. compat `process.md` Detached `fetch()` ❌→✅.
+- **Vite 8 support surface (ADR-0162):** added `node:wasi` backed by the new
+  `@riftydev/runtime-wasi` dependency, `util.styleText`, and a real
+  `worker_threads.Worker` kernel path for ESM worker
+  scripts used by Rolldown's WASI pthread pool. The kernel-backed path now wires
+  worker-side `parentPort`/`workerData`, inherits the parent `process.cwd()`,
+  rejects non-JSON-safe `workerData` with `NotImplementedError` instead of
+  silently reshaping it, and buffers parent messages posted before the script
+  installs handlers, matching Node's early `postMessage` behavior instead of
+  dropping `emnapi` load frames. The `node:wasi.WASI` wrapper validates
+  `options.version` like Node; the lower-level runtime-wasi `Wasi` runner keeps
+  its existing convenience constructor.
 
 ### Fixed
 

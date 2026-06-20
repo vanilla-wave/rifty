@@ -38,6 +38,7 @@ import urlModule from './url.ts';
 import utilTypesModule from './util-types.ts';
 import utilModule from './util.ts';
 import vmModule from './vm/index.ts';
+import wasiModule from './wasi.ts';
 import workerThreadsModule from './worker_threads.ts';
 import zlibModule from './zlib.ts';
 
@@ -117,6 +118,7 @@ export function ensureRuntimeJsBuiltinsRegistered(): void {
   registerBuiltin('readline', () => readline);
   registerBuiltin('v8', () => v8);
   registerBuiltin('vm', () => vmModule);
+  registerBuiltin('wasi', () => wasiModule);
   registerBuiltin('async_hooks', () => async_hooks);
   registerBuiltin('inspector', () => inspector);
   registerBuiltin('repl', () => repl);

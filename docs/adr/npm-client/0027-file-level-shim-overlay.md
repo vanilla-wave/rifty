@@ -1,9 +1,15 @@
 # ADR 0027: Per-file shim overlays live in the consuming adapter
 
-Status: Accepted (promoted from Q-2026-05-23-004)
+Status: Accepted (promoted from Q-2026-05-23-004; corrected by ADR-0156)
 Date: 2026-05
 
 > TL;DR: per-file shims are overlaid into the VFS by the consuming adapter post-`install()`, not the npm-client layer; promote to a typed `shims/` registry at 3 sites
+
+> Correction 2026-06-20: ADR-0156 satisfies the three-site promotion trigger —
+> LightningCSS (Vite 8) is the third per-file shim site after esbuild and Rollup,
+> so Vite browser shims now declare through the typed `browserShimFileSets`
+> registry in `@riftydev/shadow-registry`. The per-file-overlay-post-`install()`
+> model stands; only the "ad-hoc overlay list until 3 sites" clause is superseded.
 
 ## Context
 

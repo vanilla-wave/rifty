@@ -1,9 +1,15 @@
 # ADR 0051: Native-dependency install policy — loud `ENATIVEUNSUPPORTED`, optional natives skipped
 
-Status: Accepted (promotes Q-2026-05-30-001)
+Status: Accepted (promotes Q-2026-05-30-001; corrected by ADR-0156)
 Date: 2026-05-30
 
 > TL;DR: Installer loud-throws `ENATIVEUNSUPPORTED` for `cpu`-pinned (non-`wasm`) required natives at registry resolve; optional natives skip+warn, overrides exempt
+
+> Correction 2026-06-20: ADR-0156 widens the accepted WebAssembly CPU targets —
+> `cpu:["wasm32"]` is admitted alongside `wasm` (Rolldown's WASI binding is a
+> wasm32 WebAssembly target, not a native platform package). Native platform
+> packages (`.node`/ELF/Mach-O/PE) remain loud-`ENATIVEUNSUPPORTED`; only the
+> "`wasm`-only accepted CPU target" clause is superseded.
 
 ## Context
 

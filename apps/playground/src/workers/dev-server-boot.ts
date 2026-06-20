@@ -21,7 +21,7 @@ import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 import type { SqlJsConfig } from 'sql.js';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
-import { esbuildShimFiles, rollupShimFiles } from '../glue/esbuild-shim.ts';
+import { viteBrowserShimFiles } from '../glue/esbuild-shim.ts';
 import {
   createHmrBridgeToken,
   createHmrBridgeVitePlugin,
@@ -84,10 +84,7 @@ export async function flushSyncMirror(): Promise<void> {
 
 function overlayShims(): void {
   const fs = syncMirror();
-  for (const [path, content] of [
-    ...Object.entries(esbuildShimFiles),
-    ...Object.entries(rollupShimFiles),
-  ]) {
+  for (const [path, content] of Object.entries(viteBrowserShimFiles)) {
     const np = normalizePath(path);
     fs.mkdirSync(dirname(np), { recursive: true });
     fs.writeFileSync(np, enc.encode(content));
@@ -318,14 +315,21 @@ export async function bootDevServer(opts: {
       },
       appType: cfg.server.appType,
       clearScreen: false,
-      optimizeDeps: {
-        disabled: cfg.server.optimizeDepsDisabled,
-      } as unknown as ViteUserConfig['optimizeDeps'],
+      // Vite 8 REMOVED `optimizeDeps.disabled` (Vite 5.1) — it warns and ignores
+      // it, then runs dep discovery on the first request, which drives Rolldown's
+      // WASI bundler and HELD the request until a 30s preview-bridge timeout. The
+      // supported off-switch is `noDiscovery: true` + empty `include`.
+      optimizeDeps: (cfg.server.optimizeDepsDisabled
+        ? { noDiscovery: true, include: [] }
+        : {}) as unknown as ViteUserConfig['optimizeDeps'],
       plugins: cfg.hmrEnabled ? [createHmrBridgeVitePlugin({ port, token: hmrBridgeToken })] : [],
     });
     await server.listen();
     activeServer = server;
     log(`[real-vite/worker] vite is listening on internal port ${port}\n`);
+    // User-facing readiness line (the terminal/e2e wait on it): the server is up
+    // and the preview route is about to be served on the public port.
+    log(`[vite] dev server ready on port ${port}\n`);
     publishSnapshot();
     server.watcher?.on('change', (file) => {
       handleViteFileChange(file);

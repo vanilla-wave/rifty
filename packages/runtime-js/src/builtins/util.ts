@@ -4,6 +4,7 @@
  */
 import { inspect as inspectImpl } from '../repl/inspect.ts';
 import { NodeProcess, riftyProcess } from './process.ts';
+import { Stream } from './stream.ts';
 import { types as utilTypes } from './util-types.ts';
 
 export const inspect = inspectImpl;
@@ -14,6 +15,177 @@ export const inspect = inspectImpl;
 function activeProcess(): NodeProcess {
   const proc = (globalThis as { process?: unknown }).process;
   return proc instanceof NodeProcess ? proc : riftyProcess;
+}
+
+interface StyleTextOptions {
+  readonly validateStream?: boolean;
+  readonly stream?: unknown;
+}
+
+const STYLE_CODES: Readonly<Record<string, readonly [number, number]>> = Object.freeze({
+  reset: [0, 0],
+  bold: [1, 22],
+  dim: [2, 22],
+  faint: [2, 22],
+  italic: [3, 23],
+  underline: [4, 24],
+  doubleunderline: [21, 24],
+  doubleUnderline: [21, 24],
+  blink: [5, 25],
+  inverse: [7, 27],
+  swapColors: [7, 27],
+  swapcolors: [7, 27],
+  hidden: [8, 28],
+  conceal: [8, 28],
+  strikethrough: [9, 29],
+  strikeThrough: [9, 29],
+  crossedout: [9, 29],
+  crossedOut: [9, 29],
+  framed: [51, 54],
+  overlined: [53, 55],
+  black: [30, 39],
+  red: [31, 39],
+  green: [32, 39],
+  yellow: [33, 39],
+  blue: [34, 39],
+  magenta: [35, 39],
+  cyan: [36, 39],
+  white: [37, 39],
+  gray: [90, 39],
+  grey: [90, 39],
+  blackBright: [90, 39],
+  redBright: [91, 39],
+  greenBright: [92, 39],
+  yellowBright: [93, 39],
+  blueBright: [94, 39],
+  magentaBright: [95, 39],
+  cyanBright: [96, 39],
+  whiteBright: [97, 39],
+  bgBlack: [40, 49],
+  bgRed: [41, 49],
+  bgGreen: [42, 49],
+  bgYellow: [43, 49],
+  bgBlue: [44, 49],
+  bgMagenta: [45, 49],
+  bgCyan: [46, 49],
+  bgWhite: [47, 49],
+  bgGray: [100, 49],
+  bgGrey: [100, 49],
+  bgBlackBright: [100, 49],
+  bgRedBright: [101, 49],
+  bgGreenBright: [102, 49],
+  bgYellowBright: [103, 49],
+  bgBlueBright: [104, 49],
+  bgMagentaBright: [105, 49],
+  bgCyanBright: [106, 49],
+  bgWhiteBright: [107, 49],
+});
+
+function normalizeStyleFormats(format: unknown): readonly unknown[] {
+  if (typeof format === 'string') return [format];
+  if (Array.isArray(format)) return format;
+  throw Object.assign(
+    new TypeError(`The argument 'format' must be a known style. Received ${String(format)}`),
+    {
+      code: 'ERR_INVALID_ARG_VALUE',
+    },
+  );
+}
+
+function styleCode(format: unknown): readonly [number, number] | null {
+  if (format === 'none') return null;
+  if (typeof format !== 'string') {
+    throw Object.assign(
+      new TypeError(`The argument 'format' must be a known style. Received ${String(format)}`),
+      {
+        code: 'ERR_INVALID_ARG_VALUE',
+      },
+    );
+  }
+  const code = STYLE_CODES[format];
+  if (code) return code;
+  throw Object.assign(
+    new TypeError(`The argument 'format' must be a known style. Received '${format}'`),
+    {
+      code: 'ERR_INVALID_ARG_VALUE',
+    },
+  );
+}
+
+function invalidStream(stream: unknown): TypeError {
+  const received =
+    stream === null
+      ? 'null'
+      : typeof stream === 'object'
+        ? `an instance of ${(stream as object).constructor?.name ?? 'Object'}`
+        : `type ${typeof stream}`;
+  return Object.assign(
+    new TypeError(
+      `The "stream" argument must be an instance of ReadableStream, WritableStream, or Stream. Received ${received}`,
+    ),
+    { code: 'ERR_INVALID_ARG_TYPE' },
+  );
+}
+
+function isStyleTextStream(stream: unknown): boolean {
+  if (stream === riftyProcess.stderr || stream === riftyProcess.stdout) return true;
+  if (stream instanceof Stream) return true;
+  const webStreams = globalThis as {
+    ReadableStream?: { new (...args: never[]): unknown };
+    WritableStream?: { new (...args: never[]): unknown };
+  };
+  return (
+    (webStreams.ReadableStream !== undefined && stream instanceof webStreams.ReadableStream) ||
+    (webStreams.WritableStream !== undefined && stream instanceof webStreams.WritableStream)
+  );
+}
+
+function streamSupportsColor(stream: unknown, explicit: boolean): boolean {
+  if (stream === null || (typeof stream !== 'object' && typeof stream !== 'function')) {
+    if (explicit) throw invalidStream(stream);
+    return false;
+  }
+  if (!isStyleTextStream(stream)) {
+    if (explicit) throw invalidStream(stream);
+    return false;
+  }
+  const candidate = stream as { isTTY?: unknown; hasColors?: unknown; getColorDepth?: unknown };
+  if (typeof candidate.hasColors === 'function') return Boolean(candidate.hasColors());
+  if (typeof candidate.getColorDepth === 'function') return Number(candidate.getColorDepth()) > 1;
+  return candidate.isTTY === true;
+}
+
+export function styleText(
+  format: string | readonly string[],
+  text: string,
+  options: StyleTextOptions = {},
+): string {
+  if (typeof text !== 'string') {
+    throw Object.assign(
+      new TypeError(`The "text" argument must be of type string. Received type ${typeof text}`),
+      { code: 'ERR_INVALID_ARG_TYPE' },
+    );
+  }
+  const formats = normalizeStyleFormats(format);
+  const codes = formats
+    .map(styleCode)
+    .filter((code): code is readonly [number, number] => Array.isArray(code));
+  if (
+    options.validateStream !== false &&
+    !streamSupportsColor(
+      options.stream ?? riftyProcess.stderr,
+      Object.prototype.hasOwnProperty.call(options, 'stream'),
+    )
+  ) {
+    return text;
+  }
+  if (codes.length === 0) return text;
+  const open = codes.map(([start]) => `\u001b[${start}m`).join('');
+  const close = [...codes]
+    .reverse()
+    .map(([, end]) => `\u001b[${end}m`)
+    .join('');
+  return `${open}${text}${close}`;
 }
 
 export function format(fmt: unknown, ...args: unknown[]): string {
@@ -232,6 +404,7 @@ const util = {
   callbackify,
   deprecate,
   inherits,
+  styleText,
   types: utilTypes,
   TextEncoder,
   TextDecoder,

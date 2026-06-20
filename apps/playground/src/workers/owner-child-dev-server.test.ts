@@ -30,6 +30,25 @@ describe('buildDevServerChildSpawnSpec', () => {
     expect(spec.env.RIFTY_DEV_PORT).toBe('5174');
     expect(spec.env.PORT).toBe('5174'); // node-server entries bind process.env.PORT
   });
+
+  it('threads recursive worker URLs so Vite 8 can spawn Rolldown workers', () => {
+    const spec = buildDevServerChildSpawnSpec(params, 'blob:dev-server-url', {
+      kernelWorkerUrl: 'blob:kernel-url',
+      nodeEntryWorkerUrl: 'blob:node-entry-url',
+    });
+
+    expect(spec.env.RIFTY_KERNEL_WORKER_URL).toBe('blob:kernel-url');
+    expect(spec.env.RIFTY_NODE_ENTRY_WORKER_URL).toBe('blob:node-entry-url');
+  });
+
+  it('forces the WASI path for napi-rs bindings (Rolldown) — never native', () => {
+    // Rolldown's napi-rs loader tries every native `@rolldown/binding-<platform>`
+    // (all ENATIVEUNSUPPORTED in rifty), then SWALLOWS its wasm32-wasi load error
+    // unless NAPI_RS_FORCE_WASI is set — surfacing only "Cannot find native
+    // binding". rifty has no native bindings by construction (ADR-0051/0156).
+    const spec = buildDevServerChildSpawnSpec(params, 'blob:dev-server-url');
+    expect(spec.env.NAPI_RS_FORCE_WASI).toBe('1');
+  });
 });
 
 /** Minimal fake of the WorkerProcessHandle surface the driver needs. */

@@ -29,13 +29,13 @@ export const VITE_TEMPLATE: ViteProjectSpec = {
   id: 'vite',
   displayName: 'Vite dev server',
   runtime: 'vite',
-  install: { vite: '^5.4.0' },
+  install: { vite: '8.0.16' },
   // Regenerate with `pnpm snapshots:bake` after changing `install` (ADR-0135).
   bakedNodeModulesUrl: '/snapshots/vite-node-modules.json.gz',
   runtimeSpecifier: 'vite',
   entry: { relativePath: '/src/main.js', content: INITIAL_MAIN_JS },
   defaultPort: 5174,
-  estimatedBootSeconds: 20,
+  estimatedBootSeconds: 25,
   htmlTitle: 'rifty + real Vite (worker)',
   server: {
     appType: 'spa',
@@ -44,5 +44,5 @@ export const VITE_TEMPLATE: ViteProjectSpec = {
     host: true,
     allowedHosts: true,
   },
-  hmr: { enabled: true },
+  hmr: { enabled: false },
 };

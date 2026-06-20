@@ -1,6 +1,10 @@
 /**
  * M10 — real Vite HMR through the cross-realm bridge.
  *
+ * Note: ADR-0161 disables HMR in the Vite 8 template until the Rolldown WASI
+ * worker path has its own SAB/kernel-worker browser proof. This spec remains
+ * the opt-in native-HMR harness shape, not evidence for Vite 8 support.
+ *
  * What this verifies end-to-end (when enabled):
  *   1. The playground enters Real Vite mode.
  *   2. The preview iframe loads.
