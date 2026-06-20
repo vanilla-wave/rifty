@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Shared `runForegroundChild` driver** (closes backlog/playground/owner-child-foreground-shared-driver). The owner `node <file>` executor and the `.bin` executor no longer each re-implement decode + stream + Ctrl-C-kill/mute + settle-on-exit (ADR-0155 §1 recorded the drift risk) — both ride `glue/run-foreground-child.ts`. The node executor passes its `rifty:node-listening` hook + preview-registry remove; the bin executor passes neither. Side benefit: the bin executor inherits the exit-listener-before-pre-abort ordering its inline copy lacked, so a `node_modules/.bin/<cmd>` launched with an already-aborted signal no longer hangs (kill() emits `'exit'` synchronously). The dev-server child keeps its own driver (resolves on a `rifty:dev-ready` message, not exit).
+
+- **`node <file>` missing-entry diagnostic is now real Node's `MODULE_NOT_FOUND`** (closes backlog/runtime-js/node-entry-miss-node-shape). `resolveNodeEntry` no longer pre-checks existence (it just absolutizes the arg); a missing entry flows into `runNodeEntry` → the module loader, which emits Node's `Error: Cannot find module '<abs>' … { code:'MODULE_NOT_FOUND', requireStack: [] }` on the child stderr (exit 1) instead of the old terse `node: cannot find module '<abs>'`. The empty-arg usage error is the only owner-side `ok:false` left.
+
 ### Added
 
 - **Page preview bridge advertises served ports** (ADR-0160). The window-owner

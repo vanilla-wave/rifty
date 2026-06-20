@@ -179,4 +179,28 @@ describe('createBinExecutor', () => {
     const { ctx } = makeCtx();
     await expect(exec('/proj/node_modules/.bin/cli', [], ctx)).rejects.toThrow('SAB IPC gated');
   });
+
+  it('a pre-aborted signal still resolves when kill() emits exit synchronously', async () => {
+    // The real WorkerHandle.kill() emits 'exit' synchronously. The shared
+    // run-foreground-child driver registers the exit listener BEFORE acting on an
+    // already-aborted signal; with the old inline bin ordering (signal handling
+    // first) that synchronous exit would be lost and this would hang forever.
+    let exitCb: ((code?: unknown) => void) | undefined;
+    const handle: BinWorkerHandle = {
+      stdout: () => ({ on: () => {} }),
+      stderr: () => ({ on: () => {} }),
+      on: (ev, l) => {
+        if (ev === 'exit') exitCb = l as (code?: unknown) => void;
+      },
+      kill: () => {
+        exitCb?.(130); // synchronous, like the real handle
+      },
+    };
+    const exec = createBinExecutor({ spawn: () => handle });
+    const controller = new AbortController();
+    controller.abort();
+    const { ctx } = makeCtx({ signal: controller.signal });
+
+    expect(await exec('/proj/node_modules/.bin/dev', [], ctx)).toBe(130);
+  });
 });
