@@ -69,6 +69,15 @@ export class Buffer extends Uint8Array {
   declare writeBigUInt64LE: (value: bigint, offset?: number) => number;
   declare writeBigInt64BE: (value: bigint, offset?: number) => number;
   declare writeBigInt64LE: (value: bigint, offset?: number) => number;
+  declare readUIntLE: (offset: number, byteLength: number) => number;
+  declare readUIntBE: (offset: number, byteLength: number) => number;
+  declare readIntLE: (offset: number, byteLength: number) => number;
+  declare readIntBE: (offset: number, byteLength: number) => number;
+  declare writeUIntLE: (value: number, offset: number, byteLength: number) => number;
+  declare writeUIntBE: (value: number, offset: number, byteLength: number) => number;
+  declare writeIntLE: (value: number, offset: number, byteLength: number) => number;
+  declare writeIntBE: (value: number, offset: number, byteLength: number) => number;
+  declare toJSON: () => { type: 'Buffer'; data: number[] };
   declare readFloatBE: (offset?: number) => number;
   declare readFloatLE: (offset?: number) => number;
   declare readDoubleBE: (offset?: number) => number;
@@ -244,6 +253,30 @@ export class Buffer extends Uint8Array {
   ): -1 | 0 | 1 {
     return compareSlices(a.subarray(sourceStart, sourceEnd), b.subarray(targetStart, targetEnd));
   }
+
+  /**
+   * `Buffer.copyBytesFrom(view[, offset[, length]])` (v18.16) — copies a window
+   * of a TypedArray's underlying bytes into a NEW Buffer (explicit copy, NOT the
+   * aliasing `Buffer.from(arrayBuffer)`). `offset`/`length` are in the view's
+   * ELEMENTS, so the byte window is `byteOffset + offset*BYTES_PER_ELEMENT`,
+   * `length*BYTES_PER_ELEMENT` bytes.
+   */
+  static copyBytesFrom(
+    view: ArrayBufferView & { BYTES_PER_ELEMENT?: number; length?: number },
+    offset = 0,
+    length?: number,
+  ): Buffer {
+    if (!ArrayBuffer.isView(view)) {
+      throw new TypeError('The "view" argument must be an instance of TypedArray');
+    }
+    const bpe = view.BYTES_PER_ELEMENT ?? 1;
+    const elementCount = view.length ?? view.byteLength;
+    const len = length ?? elementCount - offset;
+    const src = new Uint8Array(view.buffer, view.byteOffset + offset * bpe, len * bpe);
+    const out = new Buffer(len * bpe);
+    out.set(src);
+    return out;
+  }
 }
 
 // Installers take the class as an opaque constructor (no type-back imports)
@@ -264,6 +297,38 @@ export function getInspectMaxBytes(): number {
 }
 export function setInspectMaxBytes(n: number): void {
   inspectMaxBytes = n;
+}
+
+/** Coerce a Buffer / TypedArray / DataView / ArrayBuffer to a byte view (no copy). */
+function asByteView(input: unknown): Uint8Array {
+  if (input instanceof Uint8Array) return input;
+  if (input instanceof ArrayBuffer) return new Uint8Array(input);
+  if (ArrayBuffer.isView(input)) {
+    return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
+  }
+  throw new TypeError(
+    'The "input" argument must be an instance of Buffer, TypedArray, or DataView',
+  );
+}
+
+/** `node:buffer.isUtf8` — true iff the bytes are well-formed UTF-8 (fatal decode round-trip). */
+export function isUtf8(input: unknown): boolean {
+  const bytes = asByteView(input);
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** `node:buffer.isAscii` — true iff every byte is 7-bit ASCII (< 0x80). */
+export function isAscii(input: unknown): boolean {
+  const bytes = asByteView(input);
+  for (let i = 0; i < bytes.length; i++) {
+    if ((bytes[i] ?? 0) > 0x7f) return false;
+  }
+  return true;
 }
 
 export default { Buffer };

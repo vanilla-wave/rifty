@@ -22,6 +22,7 @@ import { installProcessGlobals, setProcessCwd, writeProcessStdin } from './built
 import { installTimerGlobals } from './builtins/timers.ts';
 import { setVmEngineOverride } from './builtins/vm/engine-config.ts';
 import { ensureVmEngineReady } from './builtins/vm/quickjs-loader.ts';
+import { installWebGlobals } from './builtins/web-globals.ts';
 import { publishRuntimeGlobal } from './internal/worker-globals.ts';
 import { createModuleLoader } from './module-loader/index.ts';
 import type { EvalRequest, EvalResult, HostMessage, WorkerMessage } from './protocol.ts';
@@ -35,6 +36,7 @@ declare const self: DedicatedWorkerGlobalScope;
 
 installProcessGlobals();
 installTimerGlobals();
+installWebGlobals();
 (globalThis as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
 
 function post(msg: WorkerMessage): void {

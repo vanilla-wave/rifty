@@ -259,6 +259,97 @@ export function installIntMethods(BufferClass: BufferLikeCtor): void {
     dvFor(this).setBigInt64(offset, value, true);
     return offset + 8;
   };
+
+  // Variable-width (1–6 byte, ≤48-bit safe-integer) integer accessors. Node's
+  // `installIntMethods` fixed-width set only covers 8/16/32; these read/write an
+  // arbitrary byte length LE or BE, sign-extending the signed forms. Byte loop
+  // over `dvFor` (same cached full-range DataView as the fixed-width accessors).
+  const assertByteLength = (byteLength: number): void => {
+    if (!Number.isInteger(byteLength) || byteLength < 1 || byteLength > 6) {
+      throw new RangeError(
+        `The value of "byteLength" is out of range. It must be >= 1 && <= 6. Received ${byteLength}`,
+      );
+    }
+  };
+  const readUInt = (u8: Uint8Array, offset: number, byteLength: number, le: boolean): number => {
+    assertByteLength(byteLength);
+    const dv = dvFor(u8);
+    let val = 0;
+    let mul = 1;
+    if (le) {
+      for (let i = 0; i < byteLength; i++) {
+        val += dv.getUint8(offset + i) * mul;
+        mul *= 0x100;
+      }
+    } else {
+      for (let i = byteLength - 1; i >= 0; i--) {
+        val += dv.getUint8(offset + i) * mul;
+        mul *= 0x100;
+      }
+    }
+    return val;
+  };
+  const readInt = (u8: Uint8Array, offset: number, byteLength: number, le: boolean): number => {
+    const val = readUInt(u8, offset, byteLength, le);
+    const sub = 0x100 ** byteLength;
+    return val >= sub / 2 ? val - sub : val;
+  };
+  const writeInt = (
+    u8: Uint8Array,
+    value: number,
+    offset: number,
+    byteLength: number,
+    le: boolean,
+  ): number => {
+    assertByteLength(byteLength);
+    const dv = dvFor(u8);
+    let v = value;
+    if (le) {
+      for (let i = 0; i < byteLength; i++) {
+        dv.setUint8(offset + i, v & 0xff);
+        v = Math.floor(v / 0x100);
+      }
+    } else {
+      for (let i = byteLength - 1; i >= 0; i--) {
+        dv.setUint8(offset + i, v & 0xff);
+        v = Math.floor(v / 0x100);
+      }
+    }
+    return offset + byteLength;
+  };
+
+  p.readUIntLE = function (this: Uint8Array, offset = 0, byteLength = 0) {
+    return readUInt(this, offset, byteLength, true);
+  };
+  p.readUIntBE = function (this: Uint8Array, offset = 0, byteLength = 0) {
+    return readUInt(this, offset, byteLength, false);
+  };
+  p.readIntLE = function (this: Uint8Array, offset = 0, byteLength = 0) {
+    return readInt(this, offset, byteLength, true);
+  };
+  p.readIntBE = function (this: Uint8Array, offset = 0, byteLength = 0) {
+    return readInt(this, offset, byteLength, false);
+  };
+  // Signed/unsigned writers share the byte loop: `& 0xff` + `Math.floor(v/256)`
+  // already two's-complements a negative value (matches Node's writeIntLE/BE).
+  p.writeUIntLE = function (this: Uint8Array, value: number, offset = 0, byteLength = 0) {
+    return writeInt(this, value, offset, byteLength, true);
+  };
+  p.writeUIntBE = function (this: Uint8Array, value: number, offset = 0, byteLength = 0) {
+    return writeInt(this, value, offset, byteLength, false);
+  };
+  p.writeIntLE = function (this: Uint8Array, value: number, offset = 0, byteLength = 0) {
+    return writeInt(this, value, offset, byteLength, true);
+  };
+  p.writeIntBE = function (this: Uint8Array, value: number, offset = 0, byteLength = 0) {
+    return writeInt(this, value, offset, byteLength, false);
+  };
+
+  // `buf.toJSON()` — the `{ type: 'Buffer', data: [...] }` round-trip shape
+  // `JSON.stringify(buf)` emits and `Buffer.from(json.data)` reverses.
+  p.toJSON = function (this: Uint8Array) {
+    return { type: 'Buffer', data: Array.from(this) };
+  };
 }
 
 /** Normalise an `indexOf`/`lastIndexOf` value to a searchable byte sequence. */
