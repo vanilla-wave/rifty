@@ -3,14 +3,14 @@ area: runtime-js
 status: parked
 title: node:zlib web-compression subset
 created: 2026-06-12
-why: Consumer Ready roadmap calls out zlib as a high-frequency runtime wall; the web-backed async one-shot subset landed (ADR-0158), remaining surface is the deferred follow-ups below
+why: Consumer Ready roadmap calls out zlib as a high-frequency runtime wall; the web-backed async one-shot subset landed (ADR-0159), remaining surface is the deferred follow-ups below
 sources: [docs/ROADMAP.md, docs/research/open-webcontainers-alternative-2026-06.md]
 code: [packages/runtime-js/src/builtins/zlib.ts]
 ---
 
 ## Context
 
-LANDED (ADR-0158, `docs/public/compat/zlib.md`): async one-shot `gzip`/`gunzip`/
+LANDED (ADR-0159, `docs/public/compat/zlib.md`): async one-shot `gzip`/`gunzip`/
 `deflate`/`inflate`/`deflateRaw`/`inflateRaw` over the host `CompressionStream`/
 `DecompressionStream`, wire-compatible with real Node both directions. The
 all-throwing `node:zlib` stub is gone. This item now tracks the surface
@@ -22,7 +22,7 @@ DELIBERATELY deferred from that PR.
   `createDeflateRaw`/`createInflateRaw`/`createUnzip` + `Gzip`/`Deflate`/… classes):
   bridge `CompressionStream` ↔ Node `Transform` (flush opcodes, backpressure,
   chunk-boundary + error-code parity). Broad/IRREVERSIBLE contract — needs its own
-  ADR before implementation (ADR-0158). Gate: a real consumer that pipes through
+  ADR before implementation (ADR-0159). Gate: a real consumer that pipes through
   `createGzip()`.
 - **`unzip`/`unzipSync`** (auto-detect gzip vs zlib): header-sniff (0x1f8b → gzip,
   else zlib-deflate) is small but has its own parity surface; add when a consumer
@@ -32,7 +32,7 @@ DELIBERATELY deferred from that PR.
 - Brotli / zstd / `*Sync` stay loud ceilings — no honest browser path (no Web API
   for brotli/zstd; async-only stream API can't back a sync facade). Promote only if
   a browser primitive appears.
-- **Cross-engine e2e** (residual risk, low — ADR-0158 Corrected note): conformance +
+- **Cross-engine e2e** (residual risk, low — ADR-0159 Corrected note): conformance +
   parity drive the WHATWG `CompressionStream` via Node's in-process global, not
   Chromium's; only the gunzip path rides on the npm-install e2e (`unpacker.ts`). A
   small in-runtime e2e exercising compress + deflate/raw in real Chromium would close
@@ -40,7 +40,7 @@ DELIBERATELY deferred from that PR.
 
 ## Reversibility
 
-Landed additive methods were REVERSIBLE (ADR-0158 records the subset boundary +
+Landed additive methods were REVERSIBLE (ADR-0159 records the subset boundary +
 options policy). The deferred Transform-stream contract is IRREVERSIBLE and needs a
 superseding/follow-up ADR before implementation; `unzip`/`crc32` are additive
 (REVERSIBLE).

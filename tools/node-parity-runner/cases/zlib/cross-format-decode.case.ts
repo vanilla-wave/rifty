@@ -4,7 +4,7 @@ import type { ParityCase } from '../../src/types.ts';
 // hex below, from `zlib.gzipSync`/`deflateSync`/`deflateRawSync`). Node decodes its
 // own bytes natively; rifty decodes them via DecompressionStream. Both must yield
 // the same original string — so rifty genuinely reads Node's RFC-1952/1950/1951
-// wire format (ADR-0158), not just its own round-trip.
+// wire format (ADR-0159), not just its own round-trip.
 const c: ParityCase = {
   kind: 'esm',
   code: `

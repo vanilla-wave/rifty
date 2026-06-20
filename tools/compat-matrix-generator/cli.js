@@ -196,7 +196,7 @@ const matrices = [
     file: 'zlib.md',
     title: 'Compatibility matrix — `node:zlib`',
     intro:
-      'Public claim surface for the `node:zlib` web-compression-backed async subset (ADR-0158): one-shot gzip/deflate over the host `CompressionStream`/`DecompressionStream`, wire-compatible with real Node both directions (conformance-pinned).',
+      'Public claim surface for the `node:zlib` web-compression-backed async subset (ADR-0159): one-shot gzip/deflate over the host `CompressionStream`/`DecompressionStream`, wire-compatible with real Node both directions (conformance-pinned).',
     rows: [
       [
         '`gzip` / `gunzip` (async)',
@@ -264,7 +264,7 @@ const matrices = [
       '`tools/node-parity-runner/cases/zlib/*.case.ts`',
     ],
     limitations: [
-      'Web compression is async-only and exposes no level/window/dictionary control: sync variants throw, size-only knobs (`level`/`strategy`/…) are inert no-ops, `windowBits`/`dictionary`/truthy-`info` throw rather than silently lie (ADR-0158).',
+      'Web compression is async-only and exposes no level/window/dictionary control: sync variants throw, size-only knobs (`level`/`strategy`/…) are inert no-ops, `windowBits`/`dictionary`/truthy-`info` throw rather than silently lie (ADR-0159).',
       'Brotli and zstd have no browser primitive — loud `NotImplementedError`.',
       'The Transform-stream surface is gated behind a future ADR; one-shot async covers the registry/asset/HTTP flows the Consumer-Ready roadmap targets.',
     ],
@@ -371,7 +371,7 @@ from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-tes
 - [fs.md](./fs.md) — \`node:fs\` runtime VFS subset
 - [streams.md](./streams.md) — \`node:stream\` subset
 - [http.md](./http.md) — \`node:http\` / browser-local port registry subset
-- [zlib.md](./zlib.md) — \`node:zlib\` web-compression-backed async subset (ADR-0158)
+- [zlib.md](./zlib.md) — \`node:zlib\` web-compression-backed async subset (ADR-0159)
 - [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal \`node <file>\` command + its gaps (ADR-0155/0157)
 - [wasi.md](./wasi.md) — WASI preview1 syscall surface (\`@riftydev/runtime-wasi\`)
 - [incompatible-packages.md](./incompatible-packages.md) — packages rifty can't run (native deps)

@@ -1,7 +1,7 @@
 import type { ParityCase } from '../../src/types.ts';
 
 // Pins `zlib.constants` / `zlib.codes` (pure data) + the legacy top-level
-// constant aliases byte-for-byte against real Node (ADR-0158). A deterministic
+// constant aliases byte-for-byte against real Node (ADR-0159). A deterministic
 // sorted dump so a single missing/wrong constant value diverges loudly.
 const c: ParityCase = {
   code: `

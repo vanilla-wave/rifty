@@ -1,5 +1,5 @@
 /**
- * `node:zlib` — web-compression-backed async subset (ADR-0158).
+ * `node:zlib` — web-compression-backed async subset (ADR-0159).
  *
  * Real `gzip`/`gunzip`/`deflate`/`inflate`/`deflateRaw`/`inflateRaw` over the
  * host `CompressionStream`/`DecompressionStream` (`'gzip'` / `'deflate'` /

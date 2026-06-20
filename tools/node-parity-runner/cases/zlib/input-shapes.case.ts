@@ -1,7 +1,7 @@
 import type { ParityCase } from '../../src/types.ts';
 
 // The async one-shot accepts string / Buffer / Uint8Array / empty input — pinned
-// identical across Node and rifty (ADR-0158). Prints decoded text + lengths so a
+// identical across Node and rifty (ADR-0159). Prints decoded text + lengths so a
 // divergent input-normalisation path shows up loud.
 const c: ParityCase = {
   kind: 'esm',

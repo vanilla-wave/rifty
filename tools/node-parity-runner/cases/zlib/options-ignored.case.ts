@@ -1,7 +1,7 @@
 import type { ParityCase } from '../../src/types.ts';
 
 // Size/perf knobs (`level`/`memLevel`/`strategy`/`chunkSize`) + `info:false` are
-// accepted no-ops in BOTH runtimes (ADR-0158): real Node applies them, rifty
+// accepted no-ops in BOTH runtimes (ADR-0159): real Node applies them, rifty
 // ignores them, but both emit a VALID stream that round-trips. Pinning the
 // round-trip — NOT the bytes, which legitimately differ like `level` already
 // does — proves rifty does not throw where Node accepts these and that the output

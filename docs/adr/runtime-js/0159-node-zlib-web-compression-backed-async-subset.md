@@ -1,4 +1,4 @@
-# ADR 0158: node:zlib web-compression-backed async subset
+# ADR 0159: node:zlib web-compression-backed async subset
 
 Status: Accepted
 Date: 2026-06

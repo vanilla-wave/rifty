@@ -1,6 +1,6 @@
 import type { ParityCase } from '../../src/types.ts';
 
-// Pins the requireable `node:zlib` surface (ADR-0158): every member RESOLVES and
+// Pins the requireable `node:zlib` surface (ADR-0159): every member RESOLVES and
 // is the right typeof in both runtimes. Implemented members (gzip/gunzip/…) and
 // loud-ceiling members (gzipSync/brotli*/create*/classes) are all `function`; the
 // *invocation* divergence (rifty's ceilings throw NotImplementedError where Node

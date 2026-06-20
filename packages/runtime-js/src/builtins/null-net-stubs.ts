@@ -3,7 +3,7 @@
  * succeeds (Vite static-imports them all); every method call throws
  * NotImplementedError rather than silently corrupting behaviour. `node:https`
  * lives in `@riftydev/net/https.ts` (ADR-0010 loud-throw stub); `node:zlib` is a
- * real web-compression-backed subset in `./zlib.ts` (ADR-0158).
+ * real web-compression-backed subset in `./zlib.ts` (ADR-0159).
  */
 import { NotImplementedError } from '@riftydev/io';
 import { HTTP2_CONSTANTS } from './http2-constants.ts';

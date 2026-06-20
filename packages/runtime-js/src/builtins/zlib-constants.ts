@@ -1,5 +1,5 @@
 /**
- * Real Node `zlib.constants` table + `zlib.codes` (pure data, ADR-0158).
+ * Real Node `zlib.constants` table + `zlib.codes` (pure data, ADR-0159).
  *
  * Verbatim from Node 24's `require('node:zlib').constants` / `.codes` — read by
  * packages (`Z_BEST_COMPRESSION`, `BROTLI_PARAM_QUALITY`, …) regardless of which
