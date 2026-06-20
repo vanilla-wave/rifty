@@ -24,7 +24,7 @@ import { EventEmitter, once as eventsOnce } from './events.ts';
 import fsModule, { promises as fsPromises } from './fs.ts';
 import { cluster, punycode, repl, sys, async_hooks, inspector, v8 } from './misc-stubs.ts';
 import moduleModule from './module.ts';
-import { dgram, dns, readline, tls, zlib, http2 } from './null-net-stubs.ts';
+import { dgram, dns, readline, tls, http2 } from './null-net-stubs.ts';
 import osModule from './os.ts';
 import pathModule from './path.ts';
 import perfHooksModule from './perf_hooks.ts';
@@ -39,6 +39,7 @@ import utilTypesModule from './util-types.ts';
 import utilModule from './util.ts';
 import vmModule from './vm/index.ts';
 import workerThreadsModule from './worker_threads.ts';
+import zlibModule from './zlib.ts';
 
 // Re-export the registry surface so existing consumers
 // (`@riftydev/runtime-js` public index, the module loader/resolver,
@@ -113,7 +114,7 @@ export function ensureRuntimeJsBuiltinsRegistered(): void {
   registerBuiltin('tls', () => tls);
   registerBuiltin('dgram', () => dgram);
   registerBuiltin('http2', () => http2);
-  registerBuiltin('zlib', () => zlib);
+  registerBuiltin('zlib', () => zlibModule);
   registerBuiltin('readline', () => readline);
   registerBuiltin('v8', () => v8);
   registerBuiltin('vm', () => vmModule);

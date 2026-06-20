@@ -49,6 +49,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0142 | node:vm dual-engine — QuickJS real realm default, hardened-rewrite loud opt-in |
 | 0152 | Child realm event-loop drain + loud-fail exit contract |
 | 0153 | node:constants hybrid faithful static data syscall boundary gap |
+| 0158 | node:zlib web-compression-backed async subset |
 
 ### runtime-wasi
 
