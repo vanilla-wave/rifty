@@ -24,12 +24,13 @@
 import { EventEmitter } from '@riftydev/io';
 import { channelNameFor, portChannelNameFor } from './channel.ts';
 import { CloseEventCtor } from './close-event.ts';
-import { State, type WsMessage } from './in-process.ts';
+import { State, type WsMessage, isControlOpcode, messageDataForBinaryType } from './in-process.ts';
 
 interface BridgeFrame {
   type: 'open' | 'open-ack' | 'msg' | 'close';
   cid: string;
   data?: WsMessage;
+  opcode?: number;
   code?: number;
   reason?: string;
   from?: 'client' | 'server';
@@ -113,6 +114,15 @@ export class BridgedWebSocketServer extends EventEmitter {
   private onMessage = (e: MessageEvent): void => {
     const frame = e.data as BridgeFrame;
     if (frame.type === 'open') {
+      const existing = this.clients.get(frame.cid);
+      if (existing) {
+        this.channel.postMessage({
+          type: 'open-ack',
+          cid: frame.cid,
+          protocol: frame.protocols?.[0] ?? '',
+        });
+        return;
+      }
       const conn = new BridgedWebSocketConnection(frame.cid, (f) => this.channel.postMessage(f));
       this.clients.set(frame.cid, conn);
       this.channel.postMessage({
@@ -125,7 +135,9 @@ export class BridgedWebSocketServer extends EventEmitter {
     }
     if (frame.type === 'msg') {
       const conn = this.clients.get(frame.cid);
-      if (conn && frame.data !== undefined) conn.emit('message', frame.data);
+      if (conn && frame.data !== undefined && !isControlOpcode(frame.opcode)) {
+        conn.emit('message', frame.data);
+      }
       return;
     }
     if (frame.type === 'close' && frame.from === 'client') {
@@ -182,6 +194,8 @@ export class BridgedWebSocket extends EventTarget {
   protocol = '';
   extensions = '';
   binaryType: BinaryType = 'blob';
+  // No JS-side send queue over BroadcastChannel, so bufferedAmount is honestly 0.
+  bufferedAmount = 0;
   private readonly channels: BroadcastChannel[] = [];
   private activeChannel: BroadcastChannel | null = null;
   private readonly cid: string;
@@ -232,7 +246,23 @@ export class BridgedWebSocket extends EventTarget {
       return;
     }
     if (frame.type === 'msg' && this.readyState === State.OPEN && frame.data !== undefined) {
-      this.dispatchEvent(new MessageEvent('message', { data: frame.data }));
+      if (frame.opcode === 0x9) {
+        // Silently pong a server ping in transit (browser WebSocket never exposes
+        // control frames); surface nothing.
+        this.activeChannel?.postMessage({
+          type: 'msg',
+          cid: this.cid,
+          data: frame.data,
+          opcode: 0xa,
+        });
+        return;
+      }
+      if (isControlOpcode(frame.opcode)) return;
+      this.dispatchEvent(
+        new MessageEvent('message', {
+          data: messageDataForBinaryType(frame.data, this.binaryType),
+        }),
+      );
       return;
     }
     if (frame.type === 'close' && frame.from === 'server') {
