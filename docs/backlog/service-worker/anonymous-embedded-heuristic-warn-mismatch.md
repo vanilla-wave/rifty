@@ -11,7 +11,7 @@ code: [packages/service-worker/src/owner-resolver.ts, packages/service-worker/sr
 
 ## Context
 
-For the '' anonymous-embedded sentinel: '' is falsy, so FirstWindowOwnerResolver takes the `if (clientId)` false branch and fires the generic warn 'preview fetch had no clientId; falling back to first controlled window', then returns all[0]. The ready-window preference the ADR describes ('most-recently-focused ready window via clients.matchAll order') is applied in owner-binding-window.ts:55-82, which emits NO warn. So the generic message names neither the ready-window preference nor the focus-order heuristic and mislabels the '' case as 'no clientId'. Note: the ready-window logic lives in the binding, not owner-resolver.ts as the ADR implies. Nearest backlog (preview-owner-window-auth.md = security; cross-tab-preview-routing.md = foreign-tab 503/COEP) are distinct.
+For the '' anonymous-embedded sentinel: '' is falsy, so FirstWindowOwnerResolver takes the `if (clientId)` false branch and fires the generic warn 'preview fetch had no clientId; falling back to first controlled window', then returns all[0]. The ready-window preference the ADR describes ('most-recently-focused ready window via clients.matchAll order') is applied in owner-binding-window.ts:55-82, which emits NO warn. So the generic message names neither the ready-window preference nor the focus-order heuristic and mislabels the '' case as 'no clientId'. Note: the ready-window logic lives in the binding, not owner-resolver.ts as the ADR implies. The nearby security + foreign-tab concerns (window-owner ready-frame auth, foreign-tab 503/COEP) were closed by ADR-0160 and are distinct from this warn-message gap.
 
 ## Options or Next
 

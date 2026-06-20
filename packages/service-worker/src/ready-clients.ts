@@ -32,6 +32,12 @@ export interface ReadyClientsRegistry {
   /** Stable owner token declared by the client, if any. */
   ownerToken(id: string): string | undefined;
   /**
+   * Ready window clientIds whose advertised `ports` set includes `port`
+   * (ADR-0160). Used to port-key falsy-clientId preview traffic to the window
+   * that owns the port.
+   */
+  readyOwnersOfPort(port: number): string[];
+  /**
    * Wait until the given client is ready, or until `timeoutMs` elapses.
    * Resolves with `'ready'` on success, `'timeout'` when the timer fires,
    * and `'mismatch'` if the client posted a mismatched protocol version
@@ -50,6 +56,7 @@ export interface ReadyClientsRegistry {
       frameVersion?: unknown;
       routingVersion?: unknown;
       ownerToken?: unknown;
+      ports?: unknown;
     },
   ): void;
   /**
@@ -84,6 +91,9 @@ export function createReadyClientsRegistry(
   const mismatched = new Set<string>();
   const warned = new Set<string>();
   const ownerTokens = new Map<string, string>();
+  // ADR-0160: per-clientId advertised preview ports, so falsy-clientId traffic
+  // routes to the window owning the requested port.
+  const portsByClient = new Map<string, Set<number>>();
   let nextRequestIdCounter = 1;
 
   function markReady(id: string): void {
@@ -98,6 +108,7 @@ export function createReadyClientsRegistry(
   function markGoodbye(id: string): void {
     ready.delete(id);
     ownerTokens.delete(id);
+    portsByClient.delete(id);
     const waiterSet = waiters.get(id);
     if (waiterSet) {
       for (const w of waiterSet) {
@@ -124,6 +135,13 @@ export function createReadyClientsRegistry(
     },
     ownerToken(id): string | undefined {
       return ownerTokens.get(id);
+    },
+    readyOwnersOfPort(port): string[] {
+      const owners: string[] = [];
+      for (const [id, ports] of portsByClient) {
+        if (ready.has(id) && ports.has(port)) owners.push(id);
+      }
+      return owners;
     },
     waitForReady(id, timeoutMs): Promise<'ready' | 'timeout' | 'mismatch'> {
       if (mismatched.has(id)) return Promise.resolve('mismatch');
@@ -179,12 +197,28 @@ export function createReadyClientsRegistry(
         failWaitersWithMismatch(clientId);
         return;
       }
+      const ports = Array.isArray(data.ports)
+        ? data.ports.filter((p): p is number => Number.isInteger(p))
+        : [];
       if (type === SW_PREVIEW_READY) {
         if (typeof data.ownerToken === 'string' && data.ownerToken.length > 0) {
           ownerTokens.set(clientId, data.ownerToken);
         }
+        if (ports.length > 0) {
+          const set = portsByClient.get(clientId) ?? new Set<number>();
+          for (const p of ports) set.add(p);
+          portsByClient.set(clientId, set);
+        }
         markReady(clientId);
+      } else if (ports.length > 0) {
+        // Partial goodbye: drop named ports; full eviction once none remain.
+        const set = portsByClient.get(clientId);
+        if (set) {
+          for (const p of ports) set.delete(p);
+        }
+        if (!set || set.size === 0) markGoodbye(clientId);
       } else {
+        // Legacy goodbye (no ports) — full eviction, unchanged.
         markGoodbye(clientId);
       }
     },

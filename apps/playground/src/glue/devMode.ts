@@ -89,7 +89,10 @@ export async function startDevMode(options: DevModeOptions = {}): Promise<DevMod
 
   // Shared adapter wiring — see `preview-bridge-wiring.ts`. ADR-0017 phase 1
   // streaming flows through as a `ReadableStream` when supported.
-  const tearBridge = mountPlaygroundPreviewBridge();
+  // ADR-0160: advertise the served port so the SW routes /preview/<port>/ by
+  // port to THIS window (multi-window isolation). No ownerToken in mock mode —
+  // window port-keying needs only ports.
+  const tearBridge = mountPlaygroundPreviewBridge(undefined, { ports: [port] });
 
   return {
     devServer,

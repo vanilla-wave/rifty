@@ -66,7 +66,9 @@ export function wirePreviewBridge(port: number, ownerToken: string): () => void 
   const previewBridge = bridgeCrossRealmPreview(port);
   registerPort(port, previewBridge);
   // ADR-0086: typed handle → SW requests take the struct fast-path.
-  const tearSwBridge = mountPlaygroundPreviewBridge(previewBridge, { ownerToken });
+  // ADR-0160: advertise the served port so the SW routes /preview/<port>/ by
+  // port to THIS window (multi-window isolation).
+  const tearSwBridge = mountPlaygroundPreviewBridge(previewBridge, { ownerToken, ports: [port] });
   return (): void => {
     tearSwBridge();
     unregisterPort(port);

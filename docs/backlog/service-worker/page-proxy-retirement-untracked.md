@@ -11,7 +11,7 @@ code: [apps/playground/src/glue/preview-bridge-wiring.ts, apps/playground/src/gl
 
 ## Context
 
-ADR-0123 Consequences: 'two bridge paths coexist until the page proxy is retired' and 'retire the page proxy only after deployed old-SW/new-page skew is no longer a concern.' The dual path is live: preview-bridge-wiring.ts mounts the page-side handler with a window-bridge dispatchToPort else-branch; realVite.ts:147 calls mountPlaygroundPreviewBridge; owner-resolver.ts keeps FirstWindowOwnerResolver as the documented window fallback. No backlog item and no code TODO gate the retirement. Compounds the separately-tracked window-owner-auth gap (preview-owner-window-auth.md) since the page proxy is the second readiness/auth path.
+ADR-0123 Consequences: 'two bridge paths coexist until the page proxy is retired' and 'retire the page proxy only after deployed old-SW/new-page skew is no longer a concern.' The dual path is live: preview-bridge-wiring.ts mounts the page-side handler with a window-bridge dispatchToPort else-branch; realVite.ts:147 calls mountPlaygroundPreviewBridge; owner-resolver.ts keeps FirstWindowOwnerResolver as the documented window fallback. No backlog item and no code TODO gate the retirement. The window ready-frame auth gap that the page proxy shared is now closed by ADR-0160's anti-hijack (same window-binding readiness path); retirement is the only remaining concern here.
 
 ## Options or Next
 

@@ -23,10 +23,12 @@
  *
  * `resolveOwner` carries `port` because the Worker binding routes by
  * `(ownerToken, port)` (multiple Workers may host different preview ports on one
- * page); the window binding ignores it (the window owns every port it registers via
- * `setupPreviewBridge`). `subscribeReadiness` returns a {@link ReadinessSignal}
- * that MUST be safe across concurrent in-flight fetches (no shared mutable
- * cursor beyond the monotonic `nextRequestId`).
+ * page); the window binding ALSO routes by `port` for falsy-clientId preview
+ * traffic (ADR-0160) — a unique ready window advertising the port wins, multiple
+ * -> 503 — while a window advertising no ports keeps the legacy ready-window
+ * fallback. `subscribeReadiness` returns a {@link ReadinessSignal} that MUST be
+ * safe across concurrent in-flight fetches (no shared mutable cursor beyond the
+ * monotonic `nextRequestId`).
  *
  * Both consumers expose the SAME shape; the interceptor stays
  * binding-agnostic. The default {@link PortAwareOwnerBinding} composes both:
@@ -124,10 +126,14 @@ export interface PreviewOwnerBinding {
    * @param clientId - Owner-attribution sentinel synthesized by the
    *   interceptor, NOT the raw event id (ADR-0125): a real client id = direct
    *   attribution; `''` = anonymous-but-embedded preview traffic (window
-   *   fallback + ready-window preference); `null` = copied top-level / unknown
-   *   frame context (unique-worker fast path, 503 on ambiguity).
+   *   port-key, then fallback + ready-window preference); `null` = copied
+   *   top-level / unknown frame context (unique worker OR window owner of the
+   *   port, 503 on ambiguity). ADR-0160: a window whose clientId the SW served a
+   *   `/preview/<port>/` document is anti-hijack-rejected from the ready set, so
+   *   it can never become a port owner here.
    * @param port - Preview port from the matched URL (`/preview/<port>/…`).
-   *   Worker binding routes by it; window binding ignores it.
+   *   Worker binding routes by it; window binding port-keys falsy-clientId
+   *   preview traffic by it too (ADR-0160).
    * @returns Owning client, or `null` if none resolved (route-preview turns
    *   `null` into HTTP 503).
    */

@@ -104,10 +104,12 @@ export function PreviewPanel(props: {
   }
 
   // The displayed `localhost:<port>` host is virtual (no real TCP listener) —
-  // the real route is this origin's SW-routed /preview/<port>/ path. It only
-  // serves tabs the playground opens itself (SW routing scopes the port to
-  // its owner window, ADR-0040) — hence the ↗ hint in the toast.
-  // TODO(backlog: service-worker/cross-tab-preview-routing)
+  // the real route is this origin's SW-routed /preview/<port>/ path. Since
+  // ADR-0160 the SW routes a foreign tab's preview requests port-keyed to the
+  // playground window that owns the port, so a copied URL loads in a separate
+  // tab while that playground tab stays open (the dev server lives in its owner
+  // worker); a missing owner renders an honest 503. The ↗ wrapper stays the
+  // most robust path (inherits opener context).
   async function copyUrl(): Promise<void> {
     const url = new URL(previewUrl(), globalThis.location?.href).href;
     const ok = await copyToClipboard(url);

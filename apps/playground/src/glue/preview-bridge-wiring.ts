@@ -35,6 +35,13 @@ import {
  */
 export interface PlaygroundPreviewBridgeOptions {
   readonly ownerToken?: string;
+  /**
+   * Ports this window serves (ADR-0160). Advertised in the
+   * `rifty:preview:ready` frame so the SW routes `/preview/<port>/` by port to
+   * THIS window — multi-window isolation. Flows through `opts` into
+   * `setupPreviewBridge`'s `PreviewBridgeOptions.ports`.
+   */
+  readonly ports?: readonly number[];
 }
 
 export function mountPlaygroundPreviewBridge(

@@ -14,6 +14,11 @@
  * `/preview/<port>` can route SW -> Worker directly without letting a Worker
  * from another playground tab steal the same port. Legacy page-owned dev mode
  * posts no owner token, so it keeps the FirstWindowOwnerBinding path.
+ *
+ * ADR-0160: the window binding now port-keys falsy-clientId preview traffic too
+ * — a unique ready window owning the port wins; ambiguous same-port window
+ * owners 503 (window.resolveOwner returns null -> the `window` guard yields null
+ * -> resolveOwner returns null), symmetric with the worker isolation above.
  */
 
 import {
