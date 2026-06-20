@@ -11,8 +11,12 @@
  *   stay loud `NotImplementedError` ceilings (no honest browser path; streams
  *   gated behind a future ADR — see backlog runtime-js/zlib-web-compression-subset).
  * - Size/perf options (`level`/`memLevel`/`strategy`/…) are accepted no-ops
- *   (output stays valid + round-trips); wire/shape-affecting options
- *   (`windowBits`/`dictionary`/`info`) throw — silently ignoring them would lie.
+ *   (output stays valid + round-trips). `windowBits`, `dictionary`, and a truthy
+ *   `info` throw: we can't set the encoder window/dict over `CompressionStream`,
+ *   so silently ignoring `windowBits` would emit a max-window (window-15) zlib
+ *   stream that a strict small-window consumer rejects (`Z_DATA_ERROR`), and a
+ *   truthy `info` would fake the `{buffer,engine}` return shape. `info:false`
+ *   (the default) is a no-op, matching Node.
  *
  * `constants`/`codes` are the real Node table (`./zlib-constants.ts`); Node also
  * mirrors every non-`BROTLI_` constant onto the module top level (legacy shape).
@@ -60,15 +64,28 @@ function unsupportedClass(feature: string) {
 /** Web compression formats `CompressionStream`/`DecompressionStream` accept. */
 type WebFormat = 'gzip' | 'deflate' | 'deflate-raw';
 
-// Options that change the wire format / return shape — `CompressionStream` can't
-// honor them, so silently ignoring would corrupt interop. Thrown, not faked.
-const WIRE_OPTIONS = ['windowBits', 'dictionary', 'info'] as const;
-
+// Options we genuinely cannot honor over `CompressionStream` — silently ignoring
+// would corrupt interop / change the return shape, so they throw (not faked):
+//   - `windowBits`: sets the encoder window, encoded in the RFC-1950 zlib header
+//     (CINFO). `CompressionStream` always emits a max-window (window-15) stream;
+//     ignoring a smaller requested `windowBits` would emit window-15 bytes that a
+//     strict real-Node consumer pinning that smaller `windowBits` rejects with
+//     `Z_DATA_ERROR` — a silent wire-lie. (gzip/raw carry no window field, but we
+//     reject uniformly: the producer can't know which framing the caller decodes
+//     with, and a loud throw beats a per-format silent-lie gamble.)
+//   - `dictionary`: a preset dict changes the compressed wire bytes and needs the
+//     same dict to inflate; the stream API takes no dictionary.
+//   - `info` (truthy): Node returns `{ buffer, engine }` for ANY truthy `info`;
+//     there is no engine handle to return. `info: false` (the default) is a no-op.
 function assertSupportedOptions(feature: string, options: ZlibOptions | undefined): void {
   if (!options) return;
-  for (const key of WIRE_OPTIONS) {
-    if (options[key] !== undefined) throw new NotImplementedError(`${feature} option: ${key}`);
+  if (options.windowBits !== undefined) {
+    throw new NotImplementedError(`${feature} option: windowBits`);
   }
+  if (options.dictionary !== undefined) {
+    throw new NotImplementedError(`${feature} option: dictionary`);
+  }
+  if (options.info) throw new NotImplementedError(`${feature} option: info`);
 }
 
 function toBytes(input: ZlibInput): Uint8Array<ArrayBuffer> {

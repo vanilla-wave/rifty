@@ -222,7 +222,7 @@ const matrices = [
       [
         '`constants` / `codes`',
         '✅',
-        'Full real Node table; legacy top-level aliases are non-enumerable (Node shape)',
+        'Full real Node table; legacy top-level aliases are non-enumerable; `codes` frozen (Node shape)',
       ],
       [
         '`maxOutputLength` option',
@@ -254,9 +254,9 @@ const matrices = [
       ],
       ['`unzip` (gzip/zlib auto-detect)', '❌', 'Header-sniff deferred to its own parity surface'],
       [
-        '`windowBits` / `dictionary` / `info` options',
+        '`windowBits` / `dictionary` / truthy `info` options',
         '❌',
-        'Throw `NotImplementedError` — silently ignoring would change the wire format / return shape',
+        'Throw `NotImplementedError`. `CompressionStream` emits a fixed max window — honoring a smaller `windowBits` would emit window-15 bytes a strict zlib consumer rejects (`Z_DATA_ERROR`); a preset `dictionary` changes the wire bytes; truthy `info` changes the return shape. `info:false` is a no-op',
       ],
     ],
     tests: [
@@ -264,7 +264,7 @@ const matrices = [
       '`tools/node-parity-runner/cases/zlib/*.case.ts`',
     ],
     limitations: [
-      'Web compression is async-only and exposes no level/dictionary/windowBits control: sync variants throw, size-only options are inert no-ops, wire/shape-affecting options throw rather than silently lie (ADR-0158).',
+      'Web compression is async-only and exposes no level/window/dictionary control: sync variants throw, size-only knobs (`level`/`strategy`/…) are inert no-ops, `windowBits`/`dictionary`/truthy-`info` throw rather than silently lie (ADR-0158).',
       'Brotli and zstd have no browser primitive — loud `NotImplementedError`.',
       'The Transform-stream surface is gated behind a future ADR; one-shot async covers the registry/asset/HTTP flows the Consumer-Ready roadmap targets.',
     ],

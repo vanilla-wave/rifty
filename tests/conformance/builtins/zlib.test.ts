@@ -92,6 +92,14 @@ describe('node:zlib — input shapes & callback contract', () => {
     });
     expect(nodeZlib.gunzipSync(compressed).toString()).toBe(text);
   });
+  it('accepts info:false (the default) as a no-op — does not throw, round-trips', async () => {
+    const compressed = await new Promise<Uint8Array>((resolve, reject) => {
+      zlib.deflate(text, { info: false }, (err: Error | null, out: Uint8Array) =>
+        err ? reject(err) : resolve(out),
+      );
+    });
+    expect(nodeZlib.inflateSync(compressed).toString()).toBe(text);
+  });
 });
 
 describe('node:zlib — corrupt input rejects with an Error (error-first holds)', () => {
@@ -101,20 +109,27 @@ describe('node:zlib — corrupt input rejects with an Error (error-first holds)'
 });
 
 describe('node:zlib — wire/shape-affecting options throw (no silent lie)', () => {
-  it('dictionary throws', () => {
+  it('windowBits throws (CompressionStream emits a fixed max window; honoring a smaller request would emit window-15 bytes a strict zlib consumer rejects with Z_DATA_ERROR)', () => {
+    expect(() => zlib.gzip(text, { windowBits: 9 }, () => {})).toThrowError(
+      notImpl('zlib.gzip option: windowBits'),
+    );
+  });
+  it('dictionary throws (preset dict changes the wire bytes — cannot honor)', () => {
     expect(() => zlib.deflate(text, { dictionary: Buffer.from('x') }, () => {})).toThrowError(
       notImpl('zlib.deflate option: dictionary'),
     );
   });
-  it('windowBits throws', () => {
-    expect(() => zlib.gzip(text, { windowBits: 15 }, () => {})).toThrowError(
-      notImpl('zlib.gzip option: windowBits'),
-    );
-  });
-  it('info throws', () => {
+  it('info:true throws (changes return shape to {buffer,engine})', () => {
     expect(() => zlib.gzip(text, { info: true }, () => {})).toThrowError(
       notImpl('zlib.gzip option: info'),
     );
+  });
+  it('any truthy info throws too — Node returns {buffer,engine} for any truthy info, not just true', () => {
+    // `info: 1` is caller misuse of the boolean option, but Node still takes the
+    // engine-shape branch; rifty must throw, not silently return a bare Buffer.
+    expect(() =>
+      zlib.gzip(text, { info: 1 } as unknown as Parameters<typeof zlib.gzip>[1], () => {}),
+    ).toThrowError(notImpl('zlib.gzip option: info'));
   });
 });
 
@@ -203,5 +218,10 @@ describe('node:zlib — constants (full real Node table + legacy aliases)', () =
   it('exposes the codes map', () => {
     expect(zlib.codes.Z_OK).toBe(0);
     expect(zlib.codes['0']).toBe('Z_OK');
+  });
+  it('codes is frozen, matching Node (constants is NOT frozen in Node — matched too)', () => {
+    expect(Object.isFrozen(zlib.codes)).toBe(true);
+    expect(Object.isFrozen(zlib.codes)).toBe(Object.isFrozen(nodeZlib.codes));
+    expect(Object.isFrozen(zlib.constants)).toBe(Object.isFrozen(nodeZlib.constants));
   });
 });

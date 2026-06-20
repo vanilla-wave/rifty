@@ -180,7 +180,9 @@ export const ZLIB_CONSTANTS = {
   Z_VERSION_ERROR: -6,
 } as const;
 
-export const ZLIB_CODES: Readonly<Record<string, string | number>> = {
+// Frozen to match Node (`Object.isFrozen(zlib.codes) === true`); `zlib.constants`
+// is NOT frozen in Node, so `ZLIB_CONSTANTS` is left unfrozen on purpose.
+export const ZLIB_CODES: Readonly<Record<string, string | number>> = Object.freeze({
   '0': 'Z_OK',
   '1': 'Z_STREAM_END',
   '2': 'Z_NEED_DICT',
@@ -199,4 +201,4 @@ export const ZLIB_CODES: Readonly<Record<string, string | number>> = {
   '-4': 'Z_MEM_ERROR',
   '-5': 'Z_BUF_ERROR',
   '-6': 'Z_VERSION_ERROR',
-};
+});

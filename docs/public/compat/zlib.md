@@ -13,7 +13,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `deflateRaw` / `inflateRaw` (async) | ✅ | `'deflate-raw'` — RFC-1951 raw; both-direction wire-compat |
 | `util.promisify(zlib.gzip)` | ✅ | Standard `(err, Buffer)` callback convention |
 | String / Buffer / TypedArray / ArrayBuffer input | ✅ | Normalised to bytes, utf-8 for strings |
-| `constants` / `codes` | ✅ | Full real Node table; legacy top-level aliases are non-enumerable (Node shape) |
+| `constants` / `codes` | ✅ | Full real Node table; legacy top-level aliases are non-enumerable; `codes` frozen (Node shape) |
 | `maxOutputLength` option | ✅ | Honored — output reader aborts early and throws `RangeError [ERR_BUFFER_TOO_LARGE]` (decompression-bomb guard, matches Node) |
 | Compression `level` / `strategy` options | ⚠️ | Accepted but not applied (Web API has no level control); output stays valid and round-trips, bytes differ from Node |
 | Decompression error `code` / `errno` | ⚠️ | Corrupt input rejects with an `Error` (error-first holds), but codes are the browser stream's, not Node's `Z_DATA_ERROR` |
@@ -23,7 +23,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `crc32` | ❌ | Deferred — not part of the compression subset |
 | Transform streams (`createGzip` / `Gzip` …) | ❌ | Bridging CompressionStream to a Node `Transform` (flush/backpressure/chunk parity) gated behind a future ADR |
 | `unzip` (gzip/zlib auto-detect) | ❌ | Header-sniff deferred to its own parity surface |
-| `windowBits` / `dictionary` / `info` options | ❌ | Throw `NotImplementedError` — silently ignoring would change the wire format / return shape |
+| `windowBits` / `dictionary` / truthy `info` options | ❌ | Throw `NotImplementedError`. `CompressionStream` emits a fixed max window — honoring a smaller `windowBits` would emit window-15 bytes a strict zlib consumer rejects (`Z_DATA_ERROR`); a preset `dictionary` changes the wire bytes; truthy `info` changes the return shape. `info:false` is a no-op |
 
 ## Test Sources
 
@@ -32,6 +32,6 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 
 ## Known Limitations
 
-- Web compression is async-only and exposes no level/dictionary/windowBits control: sync variants throw, size-only options are inert no-ops, wire/shape-affecting options throw rather than silently lie (ADR-0158).
+- Web compression is async-only and exposes no level/window/dictionary control: sync variants throw, size-only knobs (`level`/`strategy`/…) are inert no-ops, `windowBits`/`dictionary`/truthy-`info` throw rather than silently lie (ADR-0158).
 - Brotli and zstd have no browser primitive — loud `NotImplementedError`.
 - The Transform-stream surface is gated behind a future ADR; one-shot async covers the registry/asset/HTTP flows the Consumer-Ready roadmap targets.
