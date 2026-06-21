@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getTsLibUrl, loadLibDts } from './lib-dts.js';
-
-const TS_LIB_URL_ENV = '__RIFTY_TS_LIB_URL';
+import { TS_LIB_URL_ENV, getTsLibUrl, loadLibDts } from './lib-dts.js';
 
 describe('loadLibDts (Node-direct read)', () => {
   it('returns a Map of lib.*.d.ts → contents from the installed compiler', async () => {

@@ -56,9 +56,10 @@ function main() {
 
   mkdirSync(OUT_DIR, { recursive: true });
   // Stable key order (entries are pre-sorted) for deterministic diffs.
-  writeFileSync(OUT_FILE, `${JSON.stringify(bundle, null, 0)}\n`, 'utf8');
+  const out = `${JSON.stringify(bundle, null, 0)}\n`;
+  writeFileSync(OUT_FILE, out, 'utf8');
 
-  const bytes = Buffer.byteLength(JSON.stringify(bundle));
+  const bytes = Buffer.byteLength(out);
   process.stdout.write(
     `Wrote ${OUT_FILE}: ${entries.length} lib files, ${(bytes / 1024 / 1024).toFixed(2)} MB\n`,
   );
