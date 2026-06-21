@@ -36,7 +36,14 @@ importers:
         specifier: 8.18.3
         version: 8.18.3
 
-  apps/landing: {}
+  apps/landing:
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.4.0
+        version: 5.4.21(@types/node@22.19.19)
 
   apps/playground:
     dependencies:

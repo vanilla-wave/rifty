@@ -1,0 +1,1335 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --ac: #C7F05A; --ac-ink: #15170B; --warn: #F5B544; --no: #FF6B6B; }
+  * { box-sizing: border-box; }
+  ::selection { background: rgb(from var(--ac) r g b / 0.28); color: #fff; }
+  @keyframes rfPulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+  @keyframes rfBlink { 0%,50% { opacity: 1; } 50.01%,100% { opacity: 0; } }
+  @keyframes rfDash { to { stroke-dashoffset: -16; } }
+  @keyframes rfFlow { to { stroke-dashoffset: -14; } }
+  @keyframes rfBoundary { 0%,100% { opacity: 0.12; } 50% { opacity: 0.5; } }
+  @keyframes rfNodePulse { 0%,100% { box-shadow: 0 0 0 1px var(--ac), 0 0 0 0 rgb(from var(--ac) r g b / 0.5); } 50% { box-shadow: 0 0 0 1px var(--ac), 0 0 0 7px rgb(from var(--ac) r g b / 0); } }
+  @keyframes rfReached { 0% { transform: translate(-50%,-50%) scale(0.9); } 60% { transform: translate(-50%,-50%) scale(1.05); } 100% { transform: translate(-50%,-50%) scale(1); } }
+</style>
+</helmet>
+
+<div data-arch-root style="font-family:'Inter',sans-serif; background:#15171D; color:rgba(255,255,255,0.92); min-height:100vh; padding:26px 30px 116px; overflow-x:hidden;">
+
+  <!-- inline view switcher (embedded mode only) -->
+  <div data-impl-inline style="display:none; align-items:center; gap:5px; max-width:1180px; margin:0 auto 16px; flex-wrap:wrap;">
+    <span style="font-family:'Roboto Mono',monospace; font-size:10px; letter-spacing:0.08em; color:rgba(255,255,255,0.34); text-transform:uppercase; white-space:nowrap; padding:0 8px 0 0;">view</span>
+    <button data-impl-btn="1" onClick="{{ h.impl1 }}" style="display:flex; align-items:center; gap:7px; cursor:pointer; border:1px solid rgba(255,255,255,0.12); border-radius:9px; padding:7px 13px; font-family:'Inter',sans-serif; font-size:13px; background:transparent; color:rgba(255,255,255,0.62); white-space:nowrap; transition:all 0.15s linear;"><span style="font-family:'Roboto Mono',monospace; font-size:11px; opacity:0.5;">01</span>Schema</button>
+    <button data-impl-btn="2" onClick="{{ h.impl2 }}" style="display:flex; align-items:center; gap:7px; cursor:pointer; border:1px solid rgba(255,255,255,0.12); border-radius:9px; padding:7px 13px; font-family:'Inter',sans-serif; font-size:13px; background:transparent; color:rgba(255,255,255,0.62); white-space:nowrap; transition:all 0.15s linear;"><span style="font-family:'Roboto Mono',monospace; font-size:11px; opacity:0.5;">02</span>Realms</button>
+    <button data-impl-btn="3" onClick="{{ h.impl3 }}" style="display:flex; align-items:center; gap:7px; cursor:pointer; border:1px solid rgba(255,255,255,0.12); border-radius:9px; padding:7px 13px; font-family:'Inter',sans-serif; font-size:13px; background:transparent; color:rgba(255,255,255,0.62); white-space:nowrap; transition:all 0.15s linear;"><span style="font-family:'Roboto Mono',monospace; font-size:11px; opacity:0.5;">03</span>Hybrid</button>
+  </div>
+
+  <!-- header -->
+  <div data-arch-header style="display:flex; align-items:center; gap:16px; max-width:1180px; margin:0 auto 18px;">
+    <div style="display:flex; align-items:center; gap:11px;">
+      <svg width="20" height="20" viewBox="0 0 24 24"><path d="M4 5 H11 V15 H4 Z" fill="var(--ac)"></path><path d="M13 9 H20 V19 H13 Z" fill="var(--ac)" opacity="0.55"></path></svg>
+      <span style="font-size:17px; font-weight:700; letter-spacing:-0.02em; color:#fff;">rifty</span>
+      <span style="font-family:'Roboto Mono',monospace; font-size:11px; color:rgba(255,255,255,0.34); border:1px solid rgba(255,255,255,0.1); border-radius:5px; padding:2px 8px;">architecture</span>
+    </div>
+    <div data-impl-name style="font-size:13px; color:rgba(255,255,255,0.5); margin-left:2px;">Layered flow map</div>
+  </div>
+
+  <!-- GLOBAL control bar (scenario player) -->
+  <div data-player-bar style="max-width:1180px; margin:0 auto 22px; background:#1A1D24; border:1px solid rgba(255,255,255,0.1); border-radius:12px; overflow:hidden;">
+    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:13px 16px; border-bottom:1px solid rgba(255,255,255,0.08);">
+      <span style="font-family:'Roboto Mono',monospace; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:rgba(255,255,255,0.34); margin-right:4px;">scenario</span>
+      <button data-scn="none" onClick="{{ h.scn_none }}" style="cursor:pointer; display:flex; align-items:center; gap:7px; border:1px solid rgba(255,255,255,0.12); background:transparent; border-radius:7px; padding:7px 13px; font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500; color:rgba(255,255,255,0.62); transition:all 0.15s linear;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg>Whole schema</button>
+      <span style="width:1px; height:22px; background:rgba(255,255,255,0.1); margin:0 2px;"></span>
+      <button data-scn="boot" onClick="{{ h.scn_boot }}" style="cursor:pointer; display:flex; align-items:center; gap:7px; border:1px solid rgba(255,255,255,0.12); background:transparent; border-radius:7px; padding:7px 13px; font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500; color:rgba(255,255,255,0.62); transition:all 0.15s linear;"><span data-scn-dot style="width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.3); flex:none;"></span>Boot</button>
+      <button data-scn="npm" onClick="{{ h.scn_npm }}" style="cursor:pointer; display:flex; align-items:center; gap:7px; border:1px solid rgba(255,255,255,0.12); background:transparent; border-radius:7px; padding:7px 13px; font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500; color:rgba(255,255,255,0.62); transition:all 0.15s linear;"><span data-scn-dot style="width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.3); flex:none;"></span>npm install</button>
+      <button data-scn="express" onClick="{{ h.scn_express }}" style="cursor:pointer; display:flex; align-items:center; gap:7px; border:1px solid rgba(255,255,255,0.12); background:transparent; border-radius:7px; padding:7px 13px; font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500; color:rgba(255,255,255,0.62); transition:all 0.15s linear;"><span data-scn-dot style="width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.3); flex:none;"></span>Express + preview</button>
+      <button data-scn="vite" onClick="{{ h.scn_vite }}" style="cursor:pointer; display:flex; align-items:center; gap:7px; border:1px solid rgba(255,255,255,0.12); background:transparent; border-radius:7px; padding:7px 13px; font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500; color:rgba(255,255,255,0.62); transition:all 0.15s linear;"><span data-scn-dot style="width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.3); flex:none;"></span>Vite HMR</button>
+      <button data-scn="wasi" onClick="{{ h.scn_wasi }}" style="cursor:pointer; display:flex; align-items:center; gap:7px; border:1px solid rgba(255,255,255,0.12); background:transparent; border-radius:7px; padding:7px 13px; font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500; color:rgba(255,255,255,0.62); transition:all 0.15s linear;"><span data-scn-dot style="width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.3); flex:none;"></span>WASI esbuild</button>
+      <button data-scn="sync" onClick="{{ h.scn_sync }}" style="cursor:pointer; display:flex; align-items:center; gap:7px; border:1px solid rgba(255,255,255,0.12); background:transparent; border-radius:7px; padding:7px 13px; font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500; color:rgba(255,255,255,0.62); transition:all 0.15s linear;"><span data-scn-dot style="width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,0.3); flex:none;"></span>Sync fs (SAB)</button>
+    </div>
+    <div style="display:flex; align-items:center; gap:14px; padding:13px 16px;">
+      <div style="flex:1; min-width:0;">
+        <div style="display:flex; align-items:baseline; gap:10px;">
+          <span data-scn-title style="font-size:13px; font-weight:600; color:#fff;">Express server + live preview</span>
+          <span data-step-num style="font-family:'Roboto Mono',monospace; font-size:11px; color:var(--ac);">1 / 6</span>
+        </div>
+        <div data-step-caption style="font-size:13px; line-height:1.4; color:rgba(255,255,255,0.6); margin-top:2px; text-wrap:pretty;">&nbsp;</div>
+      </div>
+    </div>
+    <div style="height:3px; background:rgba(255,255,255,0.06);"><div data-progress style="height:100%; width:0%; background:var(--ac); transition:width 0.25s linear;"></div></div>
+  </div>
+
+  <!-- ============ IMPL 1 — LAYERED FLOW MAP ============ -->
+  <sc-if value="{{ show1 }}" hint-placeholder-val="{{ true }}">
+  <div data-impl="1" style="position:relative; max-width:1180px; margin:0 auto;">
+    <div style="display:flex; flex-wrap:wrap; align-items:center; gap:16px; margin-bottom:12px; font-size:11.5px; color:rgba(255,255,255,0.5);">
+      <div data-legend-bar style="display:flex; flex-wrap:wrap; align-items:center; gap:7px 14px;"></div>
+      <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+        <span style="color:rgba(255,255,255,0.38);">drag nodes · drag canvas to pan · scroll to zoom</span>
+        <button data-sch-zout style="cursor:pointer; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.14); background:#1A1D24; border-radius:7px; color:rgba(255,255,255,0.75); font-size:18px; line-height:1;">&#8722;</button>
+        <button data-sch-zin style="cursor:pointer; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.14); background:#1A1D24; border-radius:7px; color:rgba(255,255,255,0.75); font-size:18px; line-height:1;">+</button>
+        <button data-sch-reset style="cursor:pointer; height:30px; padding:0 13px; border:1px solid rgba(255,255,255,0.14); background:#1A1D24; border-radius:7px; color:rgba(255,255,255,0.75); font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500;">Reset</button>
+      </div>
+    </div>
+    <div data-sch-viewport style="position:relative; height:600px; background:#0E1014; background-image:radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px); background-size:26px 26px; border:1px solid rgba(255,255,255,0.08); border-radius:12px; overflow:hidden; cursor:grab;">
+      <div data-sch-world style="position:absolute; top:0; left:0; width:1120px; height:640px; transform-origin:0 0;"></div>
+      <div data-sch-inspect style="position:absolute; left:14px; bottom:14px; width:296px; max-width:calc(100% - 28px); background:rgba(18,20,25,0.95); border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:14px; pointer-events:none; z-index:10;"></div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ IMPL 2 — REALM SWIMLANES ============ -->
+  <sc-if value="{{ show2 }}" hint-placeholder-val="{{ false }}">
+  <div data-impl="2" style="position:relative; max-width:1180px; margin:0 auto;">
+    <div data-viz2-lanes style="position:relative; display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; align-items:start;"></div>
+    <div data-packet style="position:absolute; top:0; left:0; width:13px; height:13px; border-radius:50%; background:var(--ac); box-shadow:0 0 16px 3px rgb(from var(--ac) r g b / 0.7); opacity:0; transform:translate(-50%,-50%); pointer-events:none; z-index:30;"></div>
+  </div>
+  </sc-if>
+
+  <!-- ============ IMPL 3 — SCHEMA + REALMS (HYBRID) ============ -->
+  <sc-if value="{{ show3 }}" hint-placeholder-val="{{ false }}">
+  <div data-impl="3" style="position:relative; max-width:1180px; margin:0 auto;">
+    <div style="display:flex; flex-wrap:wrap; align-items:center; gap:16px; margin-bottom:12px; font-size:11.5px; color:rgba(255,255,255,0.5);">
+      <div data-legend-bar style="display:flex; flex-wrap:wrap; align-items:center; gap:7px 14px;"></div>
+      <div style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+        <span style="color:rgba(255,255,255,0.38);">grouped by realm · drag · pan · scroll to zoom</span>
+        <button data-sch-zout style="cursor:pointer; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.14); background:#1A1D24; border-radius:7px; color:rgba(255,255,255,0.75); font-size:18px; line-height:1;">&#8722;</button>
+        <button data-sch-zin style="cursor:pointer; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border:1px solid rgba(255,255,255,0.14); background:#1A1D24; border-radius:7px; color:rgba(255,255,255,0.75); font-size:18px; line-height:1;">+</button>
+        <button data-sch-reset style="cursor:pointer; height:30px; padding:0 13px; border:1px solid rgba(255,255,255,0.14); background:#1A1D24; border-radius:7px; color:rgba(255,255,255,0.75); font-family:'Inter',sans-serif; font-size:12.5px; font-weight:500;">Reset</button>
+      </div>
+    </div>
+    <div data-sch-viewport style="position:relative; height:600px; background:#0E1014; border:1px solid rgba(255,255,255,0.08); border-radius:12px; overflow:hidden; cursor:grab;">
+      <div data-sch-world style="position:absolute; top:0; left:0; width:1120px; height:690px; transform-origin:0 0;"></div>
+      <div data-sch-inspect style="position:absolute; left:14px; bottom:14px; width:296px; max-width:calc(100% - 28px); background:rgba(18,20,25,0.96); border:1px solid rgba(255,255,255,0.12); border-radius:10px; padding:14px; pointer-events:none; z-index:10;"></div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- fixed implementation dock -->
+  <div data-impl-dock style="position:fixed; bottom:18px; left:50%; transform:translateX(-50%); z-index:120; display:flex; align-items:center; gap:5px; padding:6px; background:rgba(13,15,19,0.92); backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); border:1px solid rgba(255,255,255,0.12); border-radius:13px; box-shadow:0 16px 48px rgba(0,0,0,0.6); max-width:calc(100vw - 24px); flex-wrap:wrap; justify-content:center;">
+    <span style="font-family:'Roboto Mono',monospace; font-size:10px; letter-spacing:0.08em; color:rgba(255,255,255,0.34); text-transform:uppercase; white-space:nowrap; padding:0 8px 0 10px;">view</span>
+    <button data-impl-btn="1" onClick="{{ h.impl1 }}" style="display:flex; align-items:center; gap:7px; cursor:pointer; border:none; border-radius:9px; padding:8px 13px; font-family:'Inter',sans-serif; font-size:13px; background:transparent; color:rgba(255,255,255,0.62); white-space:nowrap; transition:all 0.15s linear;"><span style="font-family:'Roboto Mono',monospace; font-size:11px; opacity:0.5;">01</span>Schema</button>
+    <button data-impl-btn="2" onClick="{{ h.impl2 }}" style="display:flex; align-items:center; gap:7px; cursor:pointer; border:none; border-radius:9px; padding:8px 13px; font-family:'Inter',sans-serif; font-size:13px; background:transparent; color:rgba(255,255,255,0.62); white-space:nowrap; transition:all 0.15s linear;"><span style="font-family:'Roboto Mono',monospace; font-size:11px; opacity:0.5;">02</span>Realms</button>
+    <button data-impl-btn="3" onClick="{{ h.impl3 }}" style="display:flex; align-items:center; gap:7px; cursor:pointer; border:none; border-radius:9px; padding:8px 13px; font-family:'Inter',sans-serif; font-size:13px; background:transparent; color:rgba(255,255,255,0.62); white-space:nowrap; transition:all 0.15s linear;"><span style="font-family:'Roboto Mono',monospace; font-size:11px; opacity:0.5;">03</span>Hybrid</button>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1240,&quot;height&quot;:760},&quot;embedded&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false}}">
+class Component extends DCLogic {
+  state = { impl: 1, scn: 'none', step: 0, playing: false, honesty: false, inspect: 'kernel' };
+
+  IMPL_NAMES = { 1: 'Interactive schema', 2: 'Realm swimlanes', 3: 'Schema + realms (hybrid)' };
+
+  NODES = {
+    playground:  { label: 'Playground UI', realm: 'page',   compat: 'ok',   role: 'SolidJS + Monaco + xterm IDE-in-a-tab. The demo product; the only place solid-js may appear.' },
+    sdk:         { label: '@riftydev/sdk', realm: 'page',   compat: 'ok',   role: 'Umbrella front door. createSandbox() + a 6-feature capability probe. Framework-free.' },
+    terminal:    { label: 'terminal',      realm: 'page',   compat: 'ok',   role: 'xterm.js wrapper — line editor, history, AI ghost suggestions. Dispatches to the shell.' },
+    shell:       { label: 'shell',         realm: 'page',   compat: 'ok',   role: 'Bash-flavoured shell. Pure-JS coreutils over the VFS; .bin PATH; PTY.' },
+    npm:         { label: 'npm-client',    realm: 'page',   compat: 'ok',   role: 'In-browser npm: semver resolve, registry fetch, gunzip + tar, SHA verify, link.' },
+    runtimejs:   { label: 'runtime-js',    realm: 'worker', compat: 'ok',   role: 'Node-compatible JS runtime — CJS/ESM loader + ~50 node: builtins, driven in a Worker.' },
+    runtimewasi: { label: 'runtime-wasi',  realm: 'worker', compat: 'ok',   role: 'WASI preview1 runner. Runs .wasm guests against the shared VFS; kernel ProcessHandle.' },
+    esbuild:     { label: 'esbuild.wasm',  realm: 'worker', compat: 'ok',   role: 'Vendored 19 MB Go-compiled WASI binary — the real WASI-forcing consumer.' },
+    vite:        { label: 'vite dev server', realm: 'worker', compat: 'ok', role: 'The unmodified vite@5.4 in a Worker. Real module graph + native HMR payloads.' },
+    kernel:      { label: 'kernel',        realm: 'page',   compat: 'ok',   role: 'Process / scheduling / IPC core. Worker-as-process over SAB + Atomics. Node-API-agnostic.' },
+    sab:         { label: 'SAB ring + Atomics', realm: 'worker', compat: 'ok', role: 'SharedArrayBuffer ring + Atomics.wait/notify — the synchronous cross-thread substrate.' },
+    vfs:         { label: 'virtual FS',    realm: 'page',   compat: 'ok',   role: 'Memory + OPFS backends with a synchronous mirror. One filesystem, one source of truth.' },
+    net:         { label: 'net + port registry', realm: 'page', compat: 'ok', role: 'node:net/http/ws over a per-realm port registry. HTTP servers/clients, WS bridge.' },
+    httpserver:  { label: 'http server',  realm: 'worker', compat: 'ok',   role: 'http.createServer/listen — registers a port handler, emits request/upgrade/close.' },
+    sw:          { label: 'service worker', realm: 'sw',    compat: 'ok',   role: 'Preview/HMR fetch-routing bridge. Intercepts /preview/<port>/ and routes to the in-tab server.' },
+    preview:     { label: 'preview iframe', realm: 'iframe', compat: 'ok',  role: 'The sandboxed preview pane. Loads /preview/<port>/; renders the in-tab server response.' },
+    registry:    { label: 'npmjs registry', realm: 'ext', compat: 'ok',   role: 'The real npm registry, reached through a same-origin proxy (egress).' },
+  };
+
+  CEIL = [
+    { id: 'c_https',  label: 'node:https',      compat: 'no',   role: 'Imports fine — every call throws. No in-browser TLS stack.' },
+    { id: 'c_tcp',    label: 'net.connect (raw TCP)', compat: 'no', role: 'Raw sockets throw. The HttpFramedSocket is HTTP-framed only.' },
+    { id: 'c_native', label: 'native modules',  compat: 'no',   role: 'cpu-pinned non-WASM aborts with ENATIVEUNSUPPORTED. e.g. better-sqlite3 → use sql.js.' },
+    { id: 'c_sqlite', label: 'node:sqlite',     compat: 'warn', role: 'DatabaseSync over sql.js WASM — works, but in-memory only.' },
+    { id: 'c_vm',     label: 'node:vm',         compat: 'warn', role: 'Real realm via QuickJS-WASM — about ES2023, not V8 parity.' },
+    { id: 'c_drain',  label: 'event-loop drain', compat: 'warn', role: '30s wall-clock force-kill — the one deliberate, disclosed divergence from Node.' },
+    { id: 'c_preview', label: 'cross-realm preview', compat: 'warn', role: 'Buffered (M12). Streaming over SSE loud-throws rather than faking it.' },
+  ];
+
+  LAYERS = [
+    { id: 'playground', name: 'Playground · SDK', nodes: ['playground', 'sdk'] },
+    { id: 'tools',      name: 'Tools',            nodes: ['terminal', 'shell', 'npm'] },
+    { id: 'runtimes',   name: 'Runtimes',         nodes: ['runtimejs', 'runtimewasi', 'esbuild', 'vite'] },
+    { id: 'kernel',     name: 'Kernel',           nodes: ['kernel', 'sab'] },
+    { id: 'primitives', name: 'vfs / io / net',   nodes: ['vfs', 'net', 'httpserver'] },
+  ];
+
+  REALMS = [
+    { id: 'page',   name: 'PAGE', sub: 'main thread · owner',   nodes: ['playground', 'sdk', 'terminal', 'shell', 'npm', 'kernel', 'vfs', 'net', 'registry'] },
+    { id: 'worker', name: 'WORKERS', sub: 'Worker-as-process',  nodes: ['runtimejs', 'runtimewasi', 'esbuild', 'vite', 'httpserver', 'sab'] },
+    { id: 'sw',     name: 'SERVICE WORKER', sub: 'fetch router', nodes: ['sw'] },
+    { id: 'iframe', name: 'PREVIEW IFRAME', sub: 'sandboxed',   nodes: ['preview'] },
+  ];
+
+  // structural dependency graph (persistent edges, drawn at all times)
+  EDGES = [
+    { from: 'playground',  to: 'sdk',         kind: 'import' },
+    { from: 'playground',  to: 'terminal',    kind: 'import' },
+    { from: 'sdk',         to: 'kernel',      kind: 'control' },
+    { from: 'terminal',    to: 'shell',       kind: 'control' },
+    { from: 'shell',       to: 'npm',         kind: 'control' },
+    { from: 'shell',       to: 'vfs',         kind: 'import' },
+    { from: 'npm',         to: 'vfs',         kind: 'data' },
+    { from: 'npm',         to: 'registry',    kind: 'data' },
+    { from: 'runtimejs',   to: 'kernel',      kind: 'import' },
+    { from: 'runtimejs',   to: 'net',         kind: 'import' },
+    { from: 'runtimejs',   to: 'vfs',         kind: 'import' },
+    { from: 'runtimejs',   to: 'sab',         kind: 'ipc' },
+    { from: 'runtimewasi', to: 'kernel',      kind: 'import' },
+    { from: 'runtimewasi', to: 'vfs',         kind: 'data' },
+    { from: 'esbuild',     to: 'runtimewasi', kind: 'ipc' },
+    { from: 'vite',        to: 'esbuild',     kind: 'control' },
+    { from: 'vite',        to: 'net',         kind: 'data' },
+    { from: 'kernel',      to: 'sab',         kind: 'data' },
+    { from: 'net',         to: 'httpserver',  kind: 'control' },
+    { from: 'net',         to: 'registry',    kind: 'data' },
+    { from: 'preview',     to: 'sw',          kind: 'data' },
+    { from: 'sw',          to: 'net',         kind: 'ipc' },
+  ];
+
+  SCN = {
+    boot: { label: 'Boot a sandbox', cmd: 'await createSandbox({ workerUrl, serviceWorkerUrl })', steps: [
+      { node: 'sdk',       t: 'createSandbox() probes capabilities — COI, SAB, OPFS-sync, Atomics, Service Worker' },
+      { node: 'vfs',       t: 'Bring up the VFS — OPFS storage, non-fatally falling back to memory' },
+      { node: 'sw',        t: 'Register the service worker (skippable; a failure is non-fatal)' },
+      { node: 'kernel',    t: 'Spawn the runtime worker over SharedArrayBuffer + Atomics' },
+      { node: 'runtimejs', t: 'The worker posts ready → a live RuntimeController is returned' },
+    ] },
+    npm: { label: 'npm install express', cmd: 'npm install express', steps: [
+      { node: 'terminal',  t: 'Type npm install express in the terminal' },
+      { node: 'npm',       t: 'Resolve the graph — semver picks the best version per package' },
+      { node: 'registry',  t: 'Fetch packuments + tarballs from npmjs through the same-origin proxy' },
+      { node: 'npm',       t: 'gunzip (DecompressionStream) + JS tar extract + SHA integrity verify' },
+      { node: 'vfs',       t: 'Link 86 packages onto the VFS — flat-first-wins, nested on conflict' },
+    ] },
+    express: { label: 'Express server + live preview', cmd: 'node server.js', steps: [
+      { node: 'runtimejs', t: 'node server.js runs — app.listen(3000)' },
+      { node: 'net',       t: 'http.createServer registers port 3000 in the port registry' },
+      { node: 'preview',   t: 'The preview iframe requests /preview/3000/' },
+      { node: 'sw',        t: 'The service worker intercepts the fetch and resolves the owning realm' },
+      { node: 'httpserver', t: 'Routed to the in-tab HTTP server → Express writes the HTML' },
+      { node: 'preview',   t: 'Body stream transferred with CORP/COEP → the site renders live' },
+    ] },
+    vite: { label: 'Vite dev server + HMR', cmd: 'vite  (then edit src/main.js)', steps: [
+      { node: 'playground', t: 'Edit src/main.js in Monaco and save' },
+      { node: 'vite',      t: 'The real vite@5.4 worker re-transforms the changed module' },
+      { node: 'esbuild',   t: 'esbuild.wasm bundles it; Vite computes the module-graph delta' },
+      { node: 'net',       t: 'HMR payload rides RFC6455 frames over the BroadcastChannel WS bridge' },
+      { node: 'preview',   t: '@vite/client applies the update — the module hot-swaps, state survives' },
+    ] },
+    wasi: { label: 'Run esbuild.wasm (WASI)', cmd: 'esbuild entry.ts --bundle', steps: [
+      { node: 'shell',     t: 'A build invokes esbuild — shadow-registry already redirected it to WASI' },
+      { node: 'runtimewasi', t: 'createWasiProcess spawns a WASI worker (a kernel ProcessHandle)' },
+      { node: 'esbuild',   t: 'esbuild.wasm runs syscall-faithfully against the WASI shim' },
+      { node: 'sab',       t: 'Synchronous fd reads ride the SAB ring — Atomics.wait on the worker' },
+      { node: 'vfs',       t: 'Syscalls write through to the same VFS your JS code sees → exit 0' },
+    ] },
+    sync: { label: 'Synchronous fs call (SAB)', cmd: 'fs.readFileSync("/app.js")', steps: [
+      { node: 'runtimejs', t: 'Guest code calls fs.readFileSync — a blocking syscall' },
+      { node: 'sab',       t: 'sync-client writes the request; Atomics.wait freezes the worker thread' },
+      { node: 'kernel',    t: 'The owner dispatcher wakes sub-millisecond via Atomics.notify' },
+      { node: 'vfs',       t: 'Reads the bytes from the synchronous FS mirror' },
+      { node: 'runtimejs', t: 'Atomics.wait returns — the worker unblocks and returns synchronously' },
+    ] },
+  };
+
+  COMPAT_COL = { ok: 'var(--ac)', warn: 'var(--warn)', no: 'var(--no)' };
+
+  SCN_NONE = { label: 'Whole schema', cmd: '', steps: [] };
+  isOverview() { return this.state.scn === 'none' || !this.SCN[this.state.scn]; }
+  curScn() { return this.isOverview() ? this.SCN_NONE : this.SCN[this.state.scn]; }
+  trace() { return this.curScn().steps; }
+
+  componentDidMount() {
+    this.applyEmbed();
+    this.applyView();
+    this._onResize = () => this.forceUpdate();
+    window.addEventListener('resize', this._onResize);
+    this._mm = (e) => {
+      if (this._drag) {
+        const im = this._drag.impl;
+        const s = this.view[im].scale;
+        const dx = (e.clientX - this._drag.x) / s, dy = (e.clientY - this._drag.y) / s;
+        if (Math.abs(dx) > 1 || Math.abs(dy) > 1) this._drag.moved = true;
+        this._drag.x = e.clientX; this._drag.y = e.clientY;
+        this._schImpl = im;
+        const P = this.POS[im][this._drag.id]; P[0] += dx; P[1] += dy;
+        this.layoutSchema(); this.drawSchemaEdges();
+      } else if (this._pan) {
+        const im = this._pan.impl; const v = this.view[im];
+        v.tx += e.clientX - this._pan.x; v.ty += e.clientY - this._pan.y;
+        this._pan.x = e.clientX; this._pan.y = e.clientY;
+        this._schImpl = im; this.applyTransform();
+      }
+    };
+    this._mu = () => {
+      if (this._drag) { const w = this.world(); const el = w && w.querySelector('[data-node="' + this._drag.id + '"]'); if (el) el.style.cursor = 'grab'; }
+      const vps = document.querySelectorAll('[data-sch-viewport]'); vps.forEach((v) => v.style.cursor = 'grab');
+      this._drag = null; this._pan = null;
+    };
+    window.addEventListener('mousemove', this._mm);
+    window.addEventListener('mouseup', this._mu);
+    this._rt = setTimeout(() => this.forceUpdate(), 380);
+  }
+  componentDidUpdate() { this.applyView(); }
+  componentWillUnmount() {
+    clearTimeout(this._t); clearTimeout(this._rt);
+    if (this._onResize) window.removeEventListener('resize', this._onResize);
+    if (this._mm) window.removeEventListener('mousemove', this._mm);
+    if (this._mu) window.removeEventListener('mouseup', this._mu);
+  }
+
+  setImpl(n) { this.hover = null; this.setState({ impl: n }); }
+  setScn(id) {
+    clearTimeout(this._t);
+    this.hover = null;
+    if (id === 'none') { this.setState({ scn: 'none', step: 0, playing: false }); return; }
+    // click a scenario → reset to start and auto-play
+    this.setState({ scn: id, step: 0, playing: true }, () => this.tick());
+  }
+  replay() {
+    clearTimeout(this._t);
+    this.hover = null;
+    this.setState({ step: 0, playing: true }, () => this.tick());
+  }
+  stepTo(i) {
+    clearTimeout(this._t);
+    this.hover = null;
+    const max = this.trace().length - 1;
+    this.setState({ step: Math.max(0, Math.min(max, i)), playing: false });
+  }
+  tick() {
+    this._t = setTimeout(() => {
+      if (!this.state.playing) return;
+      if (this.state.step >= this.trace().length - 1) { this.setState({ playing: false }); return; }
+      this.setState({ step: this.state.step + 1 }, () => { if (this.state.playing) this.tick(); });
+    }, 1150);
+  }
+
+  // ---------- node element factory ----------
+  makeNodeEl(id, meta, opts) {
+    opts = opts || {};
+    const el = document.createElement('div');
+    el.setAttribute('data-node', id);
+    el.style.cssText = 'position:relative; display:flex; align-items:center; gap:8px; padding:9px 12px; background:#1A1D24; border:1px solid rgba(255,255,255,0.1); border-radius:8px; font-size:12.5px; font-weight:500; color:rgba(255,255,255,0.82); white-space:nowrap; transition:all 0.2s linear;';
+    if (opts.dot) {
+      const d = document.createElement('span');
+      d.style.cssText = 'width:8px; height:8px; border-radius:50%; flex:none; background:' + (this.COMPAT_COL[meta.compat] || 'var(--ac)') + ';';
+      el.appendChild(d);
+    }
+    const t = document.createElement('span');
+    t.textContent = meta.label;
+    el.appendChild(t);
+    if (opts.clickable) {
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', () => this.setState({ inspect: id }));
+    }
+    return el;
+  }
+
+  buildLayered() {
+    const root = document.querySelector('[data-impl="1"]');
+    if (!root) return;
+    const lc = root.querySelector('[data-viz1-layers]');
+    if (lc && !lc.dataset.built) {
+      lc.dataset.built = '1';
+      this.LAYERS.forEach((ly, li) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:grid; grid-template-columns:92px 1fr; gap:14px; align-items:center; padding:14px 0;' + (li < this.LAYERS.length - 1 ? ' border-bottom:1px solid rgba(255,255,255,0.05);' : '');
+        const lbl = document.createElement('div');
+        lbl.style.cssText = "font-family:'Roboto Mono',monospace; font-size:10.5px; letter-spacing:0.02em; color:rgba(255,255,255,0.4); text-align:right; line-height:1.35;";
+        lbl.textContent = ly.name;
+        const cards = document.createElement('div');
+        cards.style.cssText = 'display:flex; flex-wrap:wrap; gap:30px;';
+        ly.nodes.forEach((id) => cards.appendChild(this.makeNodeEl(id, this.NODES[id], {})));
+        row.appendChild(lbl); row.appendChild(cards);
+        lc.appendChild(row);
+      });
+    }
+    const rc = root.querySelector('[data-viz1-rail]');
+    if (rc && !rc.dataset.built) {
+      rc.dataset.built = '1';
+      const head = document.createElement('div');
+      head.style.cssText = "font-family:'Roboto Mono',monospace; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:rgba(255,255,255,0.3); margin-bottom:4px; padding-bottom:10px; border-bottom:1px solid rgba(255,255,255,0.05);";
+      head.textContent = 'cross-cutting';
+      rc.appendChild(head);
+      ['sw', 'preview', 'registry'].forEach((id) => {
+        rc.appendChild(this.makeNodeEl(id, this.NODES[id], {}));
+      });
+    }
+  }
+
+  buildRealms() {
+    const root = document.querySelector('[data-impl="2"]');
+    if (!root) return;
+    const lanes = root.querySelector('[data-viz2-lanes]');
+    if (!lanes || lanes.dataset.built) return;
+    lanes.dataset.built = '1';
+    this.REALMS.forEach((rm) => {
+      const lane = document.createElement('div');
+      lane.setAttribute('data-realm', rm.id);
+      lane.style.cssText = 'position:relative; z-index:1; background:rgba(255,255,255,0.016); border:1px solid rgba(255,255,255,0.1); border-radius:12px; padding:14px; min-height:380px; transition:all 0.2s linear;';
+      const head = document.createElement('div');
+      head.style.cssText = 'margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid rgba(255,255,255,0.08);';
+      head.innerHTML = "<div style=\"font-family:'Roboto Mono',monospace; font-size:12px; font-weight:600; letter-spacing:0.06em; color:#fff;\">" + rm.name + "</div><div style=\"font-size:11px; color:rgba(255,255,255,0.4); margin-top:3px;\">" + rm.sub + "</div>";
+      lane.appendChild(head);
+      const cards = document.createElement('div');
+      cards.style.cssText = 'display:flex; flex-direction:column; gap:8px;';
+      rm.nodes.forEach((id) => cards.appendChild(this.makeNodeEl(id, this.NODES[id], {})));
+      lane.appendChild(cards);
+      lanes.appendChild(lane);
+    });
+  }
+
+  buildCompat() {
+    const root = document.querySelector('[data-impl="5"]');
+    if (!root) return;
+    const grid = root.querySelector('[data-viz5-grid]');
+    if (grid && !grid.dataset.built) {
+      grid.dataset.built = '1';
+      this.LAYERS.forEach((ly) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'background:#101218; border:1px solid rgba(255,255,255,0.07); border-radius:10px; padding:12px 14px;';
+        const lbl = document.createElement('div');
+        lbl.style.cssText = "font-family:'Roboto Mono',monospace; font-size:10px; letter-spacing:0.06em; text-transform:uppercase; color:rgba(255,255,255,0.36); margin-bottom:10px;";
+        lbl.textContent = ly.name;
+        const cards = document.createElement('div');
+        cards.style.cssText = 'display:flex; flex-wrap:wrap; gap:8px;';
+        ly.nodes.forEach((id) => cards.appendChild(this.makeNodeEl(id, this.NODES[id], { dot: true, clickable: true })));
+        row.appendChild(lbl); row.appendChild(cards);
+        grid.appendChild(row);
+      });
+      const crow = document.createElement('div');
+      crow.style.cssText = 'background:#101218; border:1px solid rgb(from var(--no) r g b / 0.25); border-radius:10px; padding:12px 14px;';
+      const clbl = document.createElement('div');
+      clbl.style.cssText = "font-family:'Roboto Mono',monospace; font-size:10px; letter-spacing:0.06em; text-transform:uppercase; color:var(--no); margin-bottom:10px;";
+      clbl.textContent = 'Honest ceilings — gaps are loud throws, never silent stubs';
+      const ccards = document.createElement('div');
+      ccards.style.cssText = 'display:flex; flex-wrap:wrap; gap:8px;';
+      this.CEIL.forEach((c) => ccards.appendChild(this.makeNodeEl(c.id, c, { dot: true, clickable: true })));
+      crow.appendChild(clbl); crow.appendChild(ccards);
+      grid.appendChild(crow);
+    }
+  }
+
+  metaFor(id) { return this.NODES[id] || this.CEIL.find((c) => c.id === id); }
+
+  // ---------- the master view sync ----------
+  applyEmbed() {
+    const emb = !!this.props.embedded;
+    const root = document.querySelector('[data-arch-root]');
+    if (!root) return;
+    root.style.minHeight = emb ? '0' : '100vh';
+    root.style.padding = emb ? '0' : '26px 30px 116px';
+    root.style.background = emb ? 'transparent' : '#15171D';
+    const header = root.querySelector('[data-arch-header]');
+    if (header) header.style.display = emb ? 'none' : 'flex';
+    const fixed = root.querySelector('[data-impl-dock]');
+    if (fixed) fixed.style.display = emb ? 'none' : 'flex';
+    const inline = root.querySelector('[data-impl-inline]');
+    if (inline) inline.style.display = emb ? 'flex' : 'none';
+  }
+
+  applyView() {
+    this.applyEmbed();
+    const impl = this.state.impl;
+    const steps = this.trace();
+    const cur = this.state.step;
+    const curNode = steps[cur] ? steps[cur].node : null;
+    const prevNode = cur > 0 ? steps[cur - 1].node : null;
+    const touched = new Set(steps.slice(0, cur + 1).map((s) => s.node));
+    const inScn = new Set(steps.map((s) => s.node));
+    const player = impl <= 3;
+
+    // header / chrome
+    const nameEl = document.querySelector('[data-impl-name]');
+    if (nameEl) nameEl.textContent = this.IMPL_NAMES[impl];
+    const bar = document.querySelector('[data-player-bar]');
+    if (bar) bar.style.display = player ? '' : 'none';
+
+    // dock active
+    document.querySelectorAll('[data-impl-btn]').forEach((b) => {
+      const on = Number(b.dataset.implBtn) === impl;
+      b.style.background = on ? 'var(--ac)' : 'transparent';
+      b.style.color = on ? 'var(--ac-ink)' : 'rgba(255,255,255,0.62)';
+      b.style.fontWeight = on ? '600' : '400';
+      const num = b.querySelector('span'); if (num) num.style.opacity = on ? '0.7' : '0.5';
+    });
+
+    if (player) {
+      // scenario chips
+      document.querySelectorAll('[data-scn]').forEach((c) => {
+        const on = c.dataset.scn === this.state.scn;
+        c.style.background = on ? 'rgb(from var(--ac) r g b / 0.16)' : 'transparent';
+        c.style.borderColor = on ? 'var(--ac)' : 'rgba(255,255,255,0.12)';
+        c.style.color = on ? '#fff' : 'rgba(255,255,255,0.62)';
+        const dot = c.querySelector('[data-scn-dot]');
+        if (dot) {
+          dot.style.background = on ? 'var(--ac)' : 'rgba(255,255,255,0.3)';
+          dot.style.animation = (on && this.state.playing) ? 'rfPulse 1.1s ease-in-out infinite' : 'none';
+        }
+      });
+      // caption
+      const overview = this.isOverview();
+      const st = steps[cur] || { t: '' };
+      const cap = document.querySelector('[data-step-caption]');
+      if (cap) cap.textContent = overview ? 'The full runtime graph. Hover a module to see its links, drag to rearrange — or pick a scenario to watch a request flow through it.' : st.t;
+      const num = document.querySelector('[data-step-num]');
+      if (num) { num.style.display = overview ? 'none' : ''; num.textContent = (cur + 1) + ' / ' + steps.length; }
+      const title = document.querySelector('[data-scn-title]'); if (title) title.textContent = this.curScn().label;
+      const prog = document.querySelector('[data-progress]'); if (prog) prog.style.width = overview ? '0%' : ((((cur + 1) / steps.length) * 100) + '%');
+    }
+
+    // build + style per impl
+    if (impl === 2) this.buildRealms();
+
+    if (impl === 1) this.renderSchema(1);
+    if (impl === 3) this.renderSchema(3);
+    if (impl === 2) {
+      this.styleGraphNodes(inScn, touched, curNode);
+      this.drawEdges(2, '[data-viz2-lanes]', touched, curNode);
+      this.styleRealmLanes(curNode);
+      this.movePacket(2, prevNode, curNode);
+    }
+  }
+
+  drawEdges(impl, wrapSel, touched, curNode) {
+    const root = document.querySelector('[data-impl="' + impl + '"]');
+    if (!root) return;
+    const wrap = root.querySelector(wrapSel);
+    if (!wrap) return;
+    const NS = 'http://www.w3.org/2000/svg';
+    let svg = wrap.querySelector('[data-edges-svg]');
+    if (!svg) {
+      svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('data-edges-svg', '');
+      svg.style.cssText = 'position:absolute; top:0; left:0; z-index:0; pointer-events:none; overflow:visible;';
+      const defs = document.createElementNS(NS, 'defs');
+      const mk = (id, col) => '<marker id="' + id + '" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="' + col + '"></path></marker>';
+      defs.innerHTML = mk('aF' + impl, 'rgba(255,255,255,0.42)') + mk('aA' + impl, 'rgb(from var(--ac) r g b / 0.7)') + mk('aC' + impl, 'var(--ac)');
+      svg.appendChild(defs);
+      wrap.insertBefore(svg, wrap.firstChild);
+    }
+    const W = wrap.clientWidth, H = wrap.scrollHeight || wrap.clientHeight;
+    svg.setAttribute('width', W); svg.setAttribute('height', H);
+    svg.querySelectorAll('[data-edge]').forEach((p) => p.remove());
+    const cont = wrap.getBoundingClientRect();
+    const box = (id) => {
+      const e = wrap.querySelector('[data-node="' + id + '"]');
+      if (!e) return null;
+      const r = e.getBoundingClientRect();
+      return { l: r.left - cont.left, t: r.top - cont.top, w: r.width, h: r.height, cx: r.left - cont.left + r.width / 2, cy: r.top - cont.top + r.height / 2 };
+    };
+    // current-step edge: the structural edge linking the two most recent touched nodes
+    this.EDGES.forEach((ed) => {
+      const a = box(ed.from), b = box(ed.to);
+      if (!a || !b) return;
+      const dx = b.cx - a.cx, dy = b.cy - a.cy;
+      let sx, sy, tx, ty, c1x, c1y, c2x, c2y;
+      if (Math.abs(dy) >= Math.abs(dx) - 8) {
+        sx = a.cx; tx = b.cx;
+        if (dy > 0) { sy = a.t + a.h; ty = b.t; } else { sy = a.t; ty = b.t + b.h; }
+        c1x = sx; c1y = sy + (ty - sy) * 0.5; c2x = tx; c2y = ty - (ty - sy) * 0.5;
+      } else {
+        sy = a.cy; ty = b.cy;
+        if (dx > 0) { sx = a.l + a.w; tx = b.l; } else { sx = a.l; tx = b.l + b.w; }
+        c1x = sx + (tx - sx) * 0.5; c1y = sy; c2x = tx - (tx - sx) * 0.5; c2y = ty;
+      }
+      const active = touched.has(ed.from) && touched.has(ed.to);
+      const cur = active && (ed.from === curNode || ed.to === curNode);
+      const p = document.createElementNS(NS, 'path');
+      p.setAttribute('data-edge', '');
+      p.setAttribute('d', 'M' + sx + ' ' + sy + ' C ' + c1x + ' ' + c1y + ' ' + c2x + ' ' + c2y + ' ' + tx + ' ' + ty);
+      p.setAttribute('fill', 'none');
+      let stroke = 'rgba(255,255,255,0.13)', width = '1.4', marker = 'aF' + impl;
+      if (ed.kind === 'control') p.setAttribute('stroke-dasharray', '5 4');
+      if (ed.kind === 'ipc') p.setAttribute('stroke-dasharray', '4 4');
+      if (active) { stroke = 'rgb(from var(--ac) r g b / 0.5)'; width = '1.8'; marker = 'aA' + impl; }
+      if (cur) { stroke = 'var(--ac)'; width = '2.4'; marker = 'aC' + impl; }
+      p.setAttribute('stroke', stroke);
+      p.setAttribute('stroke-width', width);
+      if (ed.kind !== 'import') p.setAttribute('marker-end', 'url(#' + marker + ')');
+      if (cur && ed.kind === 'ipc') p.style.animation = 'rfDash 0.6s linear infinite';
+      svg.appendChild(p);
+    });
+  }
+
+  styleGraphNodes(inScn, touched, curNode) {
+    document.querySelectorAll('[data-impl="' + this.state.impl + '"] [data-node]').forEach((el) => {
+      const id = el.getAttribute('data-node');
+      el.style.boxShadow = 'none';
+      if (id === curNode) {
+        el.style.opacity = '1';
+        el.style.background = 'rgb(from var(--ac) r g b / 0.16)';
+        el.style.borderColor = 'var(--ac)';
+        el.style.color = '#fff';
+        el.style.boxShadow = '0 0 0 1px var(--ac), 0 0 26px rgb(from var(--ac) r g b / 0.4)';
+      } else if (touched.has(id)) {
+        el.style.opacity = '1';
+        el.style.background = 'rgb(from var(--ac) r g b / 0.07)';
+        el.style.borderColor = 'rgb(from var(--ac) r g b / 0.4)';
+        el.style.color = '#fff';
+      } else if (inScn.has(id)) {
+        el.style.opacity = '0.92';
+        el.style.background = '#1A1D24';
+        el.style.borderColor = 'rgba(255,255,255,0.16)';
+        el.style.color = 'rgba(255,255,255,0.82)';
+      } else {
+        el.style.opacity = '0.28';
+        el.style.background = '#16181d';
+        el.style.borderColor = 'rgba(255,255,255,0.07)';
+        el.style.color = 'rgba(255,255,255,0.5)';
+      }
+    });
+  }
+
+  styleRealmLanes(curNode) {
+    const realm = curNode ? this.NODES[curNode].realm : null;
+    document.querySelectorAll('[data-realm]').forEach((lane) => {
+      const on = lane.dataset.realm === realm;
+      lane.style.borderColor = on ? 'rgb(from var(--ac) r g b / 0.5)' : 'rgba(255,255,255,0.1)';
+      lane.style.boxShadow = on ? '0 0 30px rgb(from var(--ac) r g b / 0.12)' : 'none';
+    });
+  }
+
+  movePacket(impl, prevId, curId) {
+    const root = document.querySelector('[data-impl="' + impl + '"]');
+    if (!root) return;
+    const packet = root.querySelector('[data-packet]');
+    if (!packet) return;
+    if (!curId) { packet.style.opacity = '0'; return; }
+    const host = packet.parentElement;
+    const cont = host.getBoundingClientRect();
+    const center = (sel) => {
+      const e = host.querySelector('[data-node="' + sel + '"]') || root.querySelector('[data-node="' + sel + '"]');
+      if (!e) return null;
+      const r = e.getBoundingClientRect();
+      return { x: r.left - cont.left + r.width / 2, y: r.top - cont.top + r.height / 2 };
+    };
+    const to = center(curId);
+    if (!to) { packet.style.opacity = '0'; return; }
+    const from = prevId ? center(prevId) : null;
+    const start = from || to;
+    packet.style.transition = 'none';
+    packet.style.left = start.x + 'px';
+    packet.style.top = start.y + 'px';
+    packet.style.opacity = from ? '1' : '0';
+    // force reflow
+    void packet.offsetWidth;
+    packet.style.transition = 'left 0.55s cubic-bezier(0.4,0,0.2,1), top 0.55s cubic-bezier(0.4,0,0.2,1), opacity 0.3s linear';
+    packet.style.left = to.x + 'px';
+    packet.style.top = to.y + 'px';
+    packet.style.opacity = '1';
+  }
+
+  // ================= impl 1 : INTERACTIVE SCHEMA =================
+  REALM_COL = { page: '#7AA2FF', worker: '#3BD6C6', sw: '#B58BFF', iframe: '#F2B95C', ext: '#8A93A6' };
+  realmText(r) { return r === 'page' ? 'page' : (r === 'worker' ? 'worker' : (r === 'sw' ? 'service-worker' : (r === 'iframe' ? 'preview iframe' : 'registry · egress'))); }
+
+  // second axis: WHAT a node is (orthogonal to WHERE it runs)
+  KIND_OF = {
+    playground: 'surface', sdk: 'package', terminal: 'surface', shell: 'tool', npm: 'tool',
+    runtimejs: 'runtime', runtimewasi: 'runtime', esbuild: 'runtime', vite: 'runtime',
+    kernel: 'core', sab: 'core', vfs: 'io', net: 'io', httpserver: 'io',
+    sw: 'edge', preview: 'surface', registry: 'edge',
+  };
+  KINDS = {
+    surface: { label: 'UI surface', icon: '<rect x="3" y="5" width="18" height="11" rx="1.5"/><path d="M9 20h6M12 16v4"/>' },
+    package: { label: 'package · API', icon: '<path d="M12 3l8 4v8l-8 4-8-4V7z"/><path d="M4 7l8 4 8-4M12 11v8"/>' },
+    tool: { label: 'dev tool', icon: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/>' },
+    runtime: { label: 'runtime engine', icon: '<rect x="6" y="6" width="12" height="12" rx="1.5"/><path d="M10 2v3M14 2v3M10 19v3M14 19v3M2 10h3M2 14h3M19 10h3M19 14h3"/>' },
+    core: { label: 'kernel core', icon: '<rect x="3.5" y="3.5" width="11" height="11" rx="1.5"/><rect x="9.5" y="9.5" width="11" height="11" rx="1.5"/>' },
+    io: { label: 'fs / net I/O', icon: '<ellipse cx="12" cy="5.5" rx="7" ry="2.8"/><path d="M5 5.5v13c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-13M5 12c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8"/>' },
+    edge: { label: 'bridge · external', icon: '<path d="M9 15l6-6"/><path d="M11 6l1-1a4 4 0 1 1 6 6l-1 1"/><path d="M13 18l-1 1a4 4 0 1 1-6-6l1-1"/>' },
+  };
+  kindOf(id) { return this.KINDS[this.KIND_OF[id]] || this.KINDS.tool; }
+  kindSvg(paths, s) { return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + paths + '</svg>'; }
+
+  // free-form layout (view 1) — world 1120 x 640
+  DEFPOS = {
+    playground: [320, 96], sdk: [548, 74],
+    terminal: [150, 208], shell: [348, 208], npm: [548, 208], registry: [980, 110],
+    runtimejs: [256, 332], runtimewasi: [482, 332], esbuild: [672, 332], vite: [846, 332],
+    sw: [998, 322],
+    kernel: [348, 452], sab: [566, 452],
+    preview: [998, 478],
+    vfs: [228, 578], net: [472, 578], httpserver: [692, 578],
+  };
+
+  // realm-grouped layout (view 3 hybrid) — world 1120 x 680
+  HPOS = {
+    playground: [150, 116], sdk: [322, 96],
+    terminal: [86, 218], shell: [242, 218], npm: [112, 304], registry: [302, 304],
+    kernel: [196, 414],
+    vfs: [102, 556], net: [292, 556],
+    runtimejs: [492, 132], runtimewasi: [666, 132],
+    esbuild: [492, 252], vite: [672, 252],
+    sab: [582, 384], httpserver: [582, 512],
+    sw: [857, 300],
+    preview: [1032, 432],
+  };
+
+  ZONES = [
+    { id: 'page', name: 'PAGE', sub: 'main thread · owner', x: 0, w: 402, col: '#7AA2FF' },
+    { id: 'worker', name: 'WORKERS', sub: 'Worker-as-process', x: 402, w: 368, col: '#3BD6C6' },
+    { id: 'sw', name: 'SERVICE WORKER', sub: 'fetch router', x: 770, w: 175, col: '#B58BFF' },
+    { id: 'iframe', name: 'PREVIEW IFRAME', sub: 'sandboxed', x: 945, w: 175, col: '#F2B95C' },
+  ];
+
+  boards = {
+    1: { defKey: 'DEFPOS', zones: false },
+    3: { defKey: 'HPOS', zones: true },
+  };
+
+  adj(id) {
+    if (!this._adj) {
+      this._adj = {};
+      this.EDGES.forEach((e) => {
+        (this._adj[e.from] = this._adj[e.from] || new Set()).add(e.to);
+        (this._adj[e.to] = this._adj[e.to] || new Set()).add(e.from);
+      });
+    }
+    return this._adj[id] || new Set();
+  }
+
+  edgeBetween(a, b) {
+    if (!this._edgeMap) {
+      this._edgeMap = {};
+      this.EDGES.forEach((e) => { this._edgeMap[e.from + '|' + e.to] = e; this._edgeMap[e.to + '|' + e.from] = e; });
+    }
+    return this._edgeMap[a + '|' + b] || null;
+  }
+
+  bfsPath(a, b) {
+    if (a === b) return [a];
+    const prev = { [a]: null };
+    const q = [a];
+    while (q.length) {
+      const n = q.shift();
+      if (n === b) break;
+      this.adj(n).forEach((m) => { if (!(m in prev)) { prev[m] = n; q.push(m); } });
+    }
+    if (!(b in prev)) return [a, b]; // disconnected fallback
+    const path = [];
+    let c = b;
+    while (c != null) { path.unshift(c); c = prev[c]; }
+    return path;
+  }
+
+  // for each scenario step, the real edge-path from the previous milestone
+  scnPath(scn) {
+    if (!this._paths) this._paths = {};
+    if (this._paths[scn]) return this._paths[scn];
+    const steps = this.SCN[scn].steps;
+    const per = [{ nodes: [steps[0].node], edges: [] }];
+    for (let i = 1; i < steps.length; i++) {
+      const path = this.bfsPath(steps[i - 1].node, steps[i].node);
+      const nodes = [], edges = [];
+      for (let j = 1; j < path.length; j++) { nodes.push(path[j]); edges.push({ from: path[j - 1], to: path[j] }); }
+      per.push({ nodes: nodes, edges: edges });
+    }
+    this._paths[scn] = per;
+    return per;
+  }
+
+  // edges/nodes touched up to & including step `cur`, plus the live segment
+  pathState() {
+    if (this.isOverview()) { return { touched: new Set(), doneEdges: new Set(), segEdges: new Set(), segNodes: new Set(), allNodes: new Set(), allEdges: new Set(), curNode: null, overview: true }; }
+    const per = this.scnPath(this.state.scn);
+    const cur = this.state.step;
+    const touched = new Set();
+    const doneEdges = new Set();
+    for (let i = 0; i <= cur && i < per.length; i++) {
+      per[i].nodes.forEach((n) => touched.add(n));
+      per[i].edges.forEach((e) => doneEdges.add(e.from + '|' + e.to));
+    }
+    const seg = per[cur] || { nodes: [], edges: [] };
+    const segEdges = new Set(seg.edges.map((e) => e.from + '|' + e.to));
+    const segNodes = new Set(seg.nodes);
+    const allNodes = new Set(), allEdges = new Set();
+    per.forEach((p) => { p.nodes.forEach((n) => allNodes.add(n)); p.edges.forEach((e) => allEdges.add(e.from + '|' + e.to)); });
+    return { touched, doneEdges, segEdges, segNodes, allNodes, allEdges, curNode: this.SCN[this.state.scn].steps[cur].node };
+  }
+
+  im() { return this._schImpl || 1; }
+  world() { return document.querySelector('[data-impl="' + this.im() + '"] [data-sch-world]'); }
+
+  applyTransform() {
+    const world = this.world(); const v = this.view[this.im()];
+    if (world && v) world.style.transform = 'translate(' + v.tx + 'px,' + v.ty + 'px) scale(' + v.scale + ')';
+  }
+  zoomAt(cx, cy, f) {
+    const v = this.view[this.im()];
+    const s0 = v.scale;
+    const s = Math.max(0.45, Math.min(1.9, s0 * f));
+    const k = s / s0;
+    v.tx = cx - (cx - v.tx) * k;
+    v.ty = cy - (cy - v.ty) * k;
+    v.scale = s;
+    this.applyTransform();
+  }
+  resetSchema() {
+    const im = this.im();
+    this.POS[im] = JSON.parse(JSON.stringify(this[this.boards[im].defKey]));
+    this.view[im] = { tx: 20, ty: 12, scale: 1 };
+    this.layoutSchema(); this.drawSchemaEdges(); this.styleZones();
+  }
+
+  buildSchema(impl) {
+    const root = document.querySelector('[data-impl="' + impl + '"]');
+    if (!root) return;
+    const world = root.querySelector('[data-sch-world]');
+    const vp = root.querySelector('[data-sch-viewport]');
+    if (!world || !vp || world.dataset.built) return;
+    world.dataset.built = '1';
+    const cfg = this.boards[impl];
+    if (!this.POS) this.POS = {};
+    if (!this.view) this.view = {};
+    if (!this.POS[impl]) this.POS[impl] = JSON.parse(JSON.stringify(this[cfg.defKey]));
+    if (!this.view[impl]) this.view[impl] = { tx: 20, ty: 12, scale: 1 };
+
+    // realm zones (hybrid)
+    if (cfg.zones) {
+      this.ZONES.forEach((z) => {
+        const zd = document.createElement('div');
+        zd.setAttribute('data-zone', z.id);
+        zd.style.cssText = 'position:absolute; top:6px; height:672px; left:' + z.x + 'px; width:' + z.w + 'px; background:rgb(from ' + z.col + ' r g b / 0.05); border:1px solid rgb(from ' + z.col + ' r g b / 0.2); border-radius:12px; z-index:0; transition:border-color 0.2s linear, background 0.2s linear, box-shadow 0.2s linear;';
+        zd.innerHTML = '<div style="position:absolute; top:12px; left:15px;"><div style="font-family:\'Roboto Mono\',monospace; font-size:11px; font-weight:600; letter-spacing:0.06em; color:' + z.col + ';">' + z.name + '</div><div style="font-size:10px; color:rgba(255,255,255,0.36); margin-top:2px;">' + z.sub + '</div></div>';
+        world.appendChild(zd);
+      });
+    }
+
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('data-sch-svg', '');
+    svg.setAttribute('width', '1120'); svg.setAttribute('height', '660');
+    svg.style.cssText = 'position:absolute; top:0; left:0; overflow:visible; z-index:1;';
+    const defs = document.createElementNS(NS, 'defs');
+    const mk = (id, col) => '<marker id="' + id + '" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="' + col + '"></path></marker>';
+    defs.innerHTML = mk('sF' + impl, 'rgba(255,255,255,0.45)') + mk('sA' + impl, 'var(--ac)');
+    svg.appendChild(defs);
+    world.appendChild(svg);
+
+    Object.keys(this.NODES).forEach((id) => {
+      const meta = this.NODES[id];
+      const rc = this.REALM_COL[meta.realm] || '#8A93A6';
+      const el = document.createElement('div');
+      el.setAttribute('data-node', id);
+      const kind = this.kindOf(id);
+      const rich = (id === 'playground' || id === 'preview');
+      if (rich) {
+        el.style.cssText = 'position:absolute; transform:translate(-50%,-50%); display:flex; flex-direction:column; width:' + (id === 'playground' ? 200 : 156) + 'px; background:#1A1D24; border:1px solid rgba(255,255,255,0.14); border-left:3px solid ' + rc + '; border-radius:9px; overflow:hidden; cursor:grab; user-select:none; z-index:3; transition:border-color 0.15s linear, opacity 0.15s linear, box-shadow 0.15s linear;';
+        el.innerHTML = id === 'playground' ? this.editorShell(rc) : this.previewShell(rc);
+      } else {
+        el.style.cssText = 'position:absolute; transform:translate(-50%,-50%); display:flex; align-items:center; gap:8px; padding:8px 13px 8px 12px; background:#1A1D24; border:1px solid rgba(255,255,255,0.14); border-left:3px solid ' + rc + '; border-radius:9px; white-space:nowrap; cursor:grab; user-select:none; z-index:2; transition:border-color 0.15s linear, background 0.15s linear, opacity 0.15s linear, box-shadow 0.15s linear;';
+        const ico = document.createElement('span');
+        ico.style.cssText = 'color:' + rc + '; flex:none; display:flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:6px; background:rgb(from ' + rc + ' r g b / 0.12);';
+        ico.innerHTML = this.kindSvg(kind.icon, 15);
+        const txt = document.createElement('div');
+        txt.style.cssText = 'display:flex; flex-direction:column; gap:1px;';
+        txt.innerHTML = '<div style="font-size:12.5px; font-weight:600; color:#fff; line-height:1.15;">' + meta.label + '</div><div style="font-family:\'Roboto Mono\',monospace; font-size:9.5px; letter-spacing:0.03em; color:rgba(255,255,255,0.42); line-height:1.1;">' + kind.label + '</div>';
+        el.appendChild(ico); el.appendChild(txt);
+      }
+      el.addEventListener('mousedown', (e) => { e.stopPropagation(); this._drag = { impl: impl, id: id, x: e.clientX, y: e.clientY, moved: false }; el.style.cursor = 'grabbing'; });
+      el.addEventListener('mouseenter', () => { if (!this._drag && !this._pan) { this._schImpl = impl; this.hover = id; this.styleSchemaNodes(); this.drawSchemaEdges(); this.updateInspector(); } });
+      el.addEventListener('mouseleave', () => { if (this.hover === id) { this._schImpl = impl; this.hover = null; this.styleSchemaNodes(); this.drawSchemaEdges(); this.updateInspector(); } });
+      el.addEventListener('click', (e) => { e.stopPropagation(); if (!(this._drag && this._drag.moved)) this.setState({ inspect: id }); });
+      world.appendChild(el);
+    });
+
+    vp.addEventListener('mousedown', (e) => { this._pan = { impl: impl, x: e.clientX, y: e.clientY }; vp.style.cursor = 'grabbing'; });
+    vp.addEventListener('wheel', (e) => { e.preventDefault(); this._schImpl = impl; const r = vp.getBoundingClientRect(); this.zoomAt(e.clientX - r.left, e.clientY - r.top, e.deltaY < 0 ? 1.12 : 0.89); }, { passive: false });
+
+    const zi = root.querySelector('[data-sch-zin]'); if (zi) zi.onclick = () => { this._schImpl = impl; const r = vp.getBoundingClientRect(); this.zoomAt(r.width / 2, r.height / 2, 1.15); };
+    const zo = root.querySelector('[data-sch-zout]'); if (zo) zo.onclick = () => { this._schImpl = impl; const r = vp.getBoundingClientRect(); this.zoomAt(r.width / 2, r.height / 2, 0.87); };
+    const rs = root.querySelector('[data-sch-reset]'); if (rs) rs.onclick = () => { this._schImpl = impl; this.resetSchema(); };
+    this.buildLegend(root);
+  }
+
+  editorShell(rc) {
+    return '' +
+      '<div style="display:flex; align-items:center; gap:6px; padding:6px 9px; background:#14161B; border-bottom:1px solid rgba(255,255,255,0.08);">' +
+        '<span style="display:flex; gap:4px;"><span style="width:7px;height:7px;border-radius:50%;background:#FF5F57;"></span><span style="width:7px;height:7px;border-radius:50%;background:#FEBC2E;"></span><span style="width:7px;height:7px;border-radius:50%;background:#28C840;"></span></span>' +
+        '<span data-ed-file style="font-family:\'Roboto Mono\',monospace; font-size:10px; color:rgba(255,255,255,0.62); margin-left:3px;">server.js</span>' +
+        '<span style="margin-left:auto; color:' + rc + '; display:flex;">' + this.kindSvg(this.KINDS.surface.icon, 13) + '</span>' +
+      '</div>' +
+      '<div style="padding:8px 10px;">' +
+        '<div style="font-size:11.5px; font-weight:600; color:#fff; margin-bottom:5px;">Playground · editor</div>' +
+        '<pre data-ed-code style="margin:0; font-family:\'Roboto Mono\',monospace; font-size:9.5px; line-height:14.5px; white-space:pre; overflow:hidden; color:rgba(255,255,255,0.7);"></pre>' +
+      '</div>';
+  }
+
+  previewShell(rc) {
+    return '' +
+      '<div style="display:flex; align-items:center; gap:6px; padding:6px 8px; background:#14161B; border-bottom:1px solid rgba(255,255,255,0.08);">' +
+        '<span style="display:flex; gap:3px;"><span style="width:6px;height:6px;border-radius:50%;background:#3a3f4b;"></span><span style="width:6px;height:6px;border-radius:50%;background:#3a3f4b;"></span></span>' +
+        '<span style="flex:1; text-align:center; font-family:\'Roboto Mono\',monospace; font-size:9px; color:rgba(255,255,255,0.55); background:#0E1014; border:1px solid rgba(255,255,255,0.1); border-radius:4px; padding:2px 0;">localhost:3000</span>' +
+      '</div>' +
+      '<div data-pv-body style="padding:11px 12px; background:#F4F6F8; color:#15171D; min-height:50px;"></div>';
+  }
+
+  SURF = {
+    express: {
+      file: 'server.js',
+      code: '<span style="color:#C79BF0">const</span> app = <span style="color:#7CC5F5">express</span>()\napp.<span style="color:#7CC5F5">get</span>(<span style="color:#9DD98F">\'/\'</span>, (req, res) =>\n  res.<span style="color:#7CC5F5">send</span>(<span style="color:#9DD98F">\'It works.\'</span>))\napp.<span style="color:#7CC5F5">listen</span>(<span style="color:#F2B95C">3000</span>)',
+      pv: '<div style="font-weight:700; font-size:14px;">It works.</div><div style="font-size:9.5px; color:#6b7280; margin-top:3px;">Served by Express · in this tab</div>',
+    },
+    vite: {
+      file: 'main.js',
+      code: '<span style="color:#C79BF0">import</span> <span style="color:#9DD98F">\'./style.css\'</span>\n<span style="color:#C79BF0">export function</span> <span style="color:#7CC5F5">App</span>() {\n  count++\n  <span style="color:#C79BF0">return</span> <span style="color:#9DD98F">`Counter: ${count}`</span>\n}',
+      pv: '<div style="font-weight:700; font-size:14px;">Counter: 3</div><div style="font-size:9.5px; color:#16a34a; margin-top:3px;">● HMR applied · state kept</div>',
+    },
+    wasi: {
+      file: 'build.sh',
+      code: '<span style="color:rgba(255,255,255,0.4)">$</span> esbuild entry.ts \\\n  --bundle --outfile=out.js\n<span style="color:#8FD98F">✓</span> built 41ms <span style="color:rgba(255,255,255,0.4)">(WASI)</span>',
+      pv: '<div style="font-weight:700; font-size:13px;">out.js · 18 kb</div><div style="font-size:9.5px; color:#6b7280; margin-top:3px;">esbuild.wasm bundled in-tab</div>',
+    },
+    boot: {
+      file: 'sandbox.js',
+      code: '<span style="color:#C79BF0">const</span> box = <span style="color:#C79BF0">await</span>\n  <span style="color:#7CC5F5">createSandbox</span>({\n    workerUrl,\n    serviceWorkerUrl })',
+      pv: '<div style="font-size:12px; color:#9ca3af;">localhost:3000</div><div style="font-size:9.5px; color:#cbd5e1; margin-top:3px;">runtime ready — start a server</div>',
+    },
+    npm: {
+      file: 'package.json',
+      code: '{\n  <span style="color:#9DD98F">"dependencies"</span>: {\n    <span style="color:#9DD98F">"express"</span>: <span style="color:#9DD98F">"^4"</span>\n  } }',
+      pv: '<div style="font-size:12px; color:#15171D; font-weight:600;">node_modules/</div><div style="font-size:9.5px; color:#6b7280; margin-top:3px;">86 packages linked to the VFS</div>',
+    },
+    sync: {
+      file: 'app.js',
+      code: '<span style="color:#C79BF0">const</span> buf =\n  fs.<span style="color:#7CC5F5">readFileSync</span>(\n    <span style="color:#9DD98F">\'/app.js\'</span>)\n<span style="color:rgba(255,255,255,0.4)">// blocks via SAB</span>',
+      pv: '<div style="font-weight:700; font-size:13px;">It works.</div><div style="font-size:9.5px; color:#6b7280; margin-top:3px;">sync fs over SharedArrayBuffer</div>',
+    },
+  };
+
+  updateSurfaces() {
+    const world = this.world();
+    if (!world) return;
+    const s = this.SURF[this.state.scn] || this.SURF.express;
+    const ed = world.querySelector('[data-node="playground"]');
+    if (ed) {
+      const f = ed.querySelector('[data-ed-file]'); if (f) f.textContent = s.file;
+      const c = ed.querySelector('[data-ed-code]'); if (c) c.innerHTML = s.code;
+    }
+    const pv = world.querySelector('[data-node="preview"] [data-pv-body]');
+    if (pv) pv.innerHTML = s.pv;
+  }
+
+  buildLegend(root) {
+    const bar = root.querySelector('[data-legend-bar]');
+    if (!bar || bar.dataset.built) return;
+    bar.dataset.built = '1';
+    const grp = (lbl) => '<span style="font-family:\'Roboto Mono\',monospace; font-size:9.5px; letter-spacing:0.07em; text-transform:uppercase; color:rgba(255,255,255,0.32);">' + lbl + '</span>';
+    const div = '<span style="width:1px; height:15px; background:rgba(255,255,255,0.12);"></span>';
+    const item = (inner) => '<span style="display:flex; align-items:center; gap:6px; font-size:11.5px; color:rgba(255,255,255,0.66);">' + inner + '</span>';
+    let h = grp('type');
+    Object.keys(this.KINDS).forEach((k) => {
+      const kd = this.KINDS[k];
+      h += item('<span style="color:rgba(255,255,255,0.62); display:flex;">' + this.kindSvg(kd.icon, 14) + '</span>' + kd.label);
+    });
+    h += div + grp('realm');
+    [['page', 'page'], ['worker', 'worker'], ['sw', 'service worker'], ['iframe', 'iframe'], ['ext', 'external']].forEach((r) => {
+      h += item('<span style="width:9px; height:9px; border-radius:2px; background:' + this.REALM_COL[r[0]] + ';"></span>' + r[1]);
+    });
+    h += div + grp('edge');
+    h += item('<svg width="24" height="8"><line x1="0" y1="4" x2="24" y2="4" stroke="rgba(255,255,255,0.45)" stroke-width="1.5"></line></svg>import');
+    h += item('<svg width="24" height="8"><line x1="0" y1="4" x2="19" y2="4" stroke="rgba(255,255,255,0.55)" stroke-width="1.5"></line><path d="M19 1 L24 4 L19 7 Z" fill="rgba(255,255,255,0.55)"></path></svg>data');
+    h += item('<svg width="24" height="8"><line x1="0" y1="4" x2="19" y2="4" stroke="rgba(255,255,255,0.55)" stroke-width="1.5" stroke-dasharray="5 4"></line><path d="M19 1 L24 4 L19 7 Z" fill="rgba(255,255,255,0.55)"></path></svg>control');
+    h += item('<svg width="24" height="8"><line x1="0" y1="4" x2="19" y2="4" stroke="var(--ac)" stroke-width="1.5" stroke-dasharray="4 4"></line><path d="M19 1 L24 4 L19 7 Z" fill="var(--ac)"></path></svg>ipc');
+    bar.innerHTML = h;
+  }
+
+  layoutSchema() {
+    const world = this.world(); const POS = this.POS[this.im()];
+    if (!world || !POS) return;
+    Object.keys(POS).forEach((id) => {
+      const el = world.querySelector('[data-node="' + id + '"]');
+      if (el) { el.style.left = POS[id][0] + 'px'; el.style.top = POS[id][1] + 'px'; }
+    });
+    this.applyTransform();
+  }
+
+  schemaSizes() {
+    const world = this.world(); const POS = this.POS[this.im()];
+    const sz = {};
+    Object.keys(POS).forEach((id) => {
+      const el = world.querySelector('[data-node="' + id + '"]');
+      sz[id] = el ? { hw: el.offsetWidth / 2, hh: el.offsetHeight / 2 } : { hw: 40, hh: 18 };
+    });
+    return sz;
+  }
+
+  drawSchemaEdges() {
+    const im = this.im();
+    const world = this.world();
+    if (!world) return;
+    const svg = world.querySelector('[data-sch-svg]');
+    if (!svg) return;
+    const POS = this.POS[im];
+    svg.querySelectorAll('[data-edge]').forEach((p) => p.remove());
+    const sz = this.schemaSizes();
+    const ps = this.pathState();
+    const hov = this.hover;
+    const NS = 'http://www.w3.org/2000/svg';
+    const bnd = (C, T, s) => {
+      const dx = T[0] - C[0], dy = T[1] - C[1];
+      if (!dx && !dy) return { x: C[0], y: C[1] };
+      const k = 1 / Math.max(Math.abs(dx) / (s.hw + 7), Math.abs(dy) / (s.hh + 7));
+      return { x: C[0] + dx * k, y: C[1] + dy * k };
+    };
+    this.EDGES.forEach((ed) => {
+      const A = POS[ed.from], B = POS[ed.to];
+      if (!A || !B) return;
+      const p1 = bnd(A, B, sz[ed.from]), p2 = bnd(B, A, sz[ed.to]);
+      const k1 = ed.from + '|' + ed.to, k2 = ed.to + '|' + ed.from;
+      const done = ps.doneEdges.has(k1) || ps.doneEdges.has(k2);
+      const seg = ps.segEdges.has(k1) || ps.segEdges.has(k2);
+      const all = ps.allEdges.has(k1) || ps.allEdges.has(k2);
+      const onHover = hov && (ed.from === hov || ed.to === hov);
+      const p = document.createElementNS(NS, 'path');
+      p.setAttribute('data-edge', '');
+      p.setAttribute('d', 'M' + p1.x + ' ' + p1.y + ' L' + p2.x + ' ' + p2.y);
+      p.setAttribute('fill', 'none');
+      let stroke = 'rgba(255,255,255,0.16)', width = '1.4', marker = 'sF' + im, op = '1';
+      const dash = ed.kind === 'control' ? '5 4' : (ed.kind === 'ipc' ? '4 4' : null);
+      if (dash) p.setAttribute('stroke-dasharray', dash);
+      if (hov) {
+        if (onHover) { stroke = 'rgb(from var(--ac) r g b / 0.85)'; width = '2'; marker = 'sA' + im; }
+        else { op = '0.14'; }
+      } else if (seg) {
+        stroke = 'var(--ac)'; width = '2.8'; marker = 'sA' + im;
+        p.setAttribute('stroke-dasharray', '7 5');
+        p.style.animation = 'rfFlow 0.45s linear infinite';
+      } else if (done) {
+        stroke = 'rgb(from var(--ac) r g b / 0.55)'; width = '1.9'; marker = 'sA' + im;
+      } else if (all) {
+        stroke = 'rgb(from var(--ac) r g b / 0.32)'; width = '1.7'; marker = 'sA' + im;
+      } else {
+        op = ps.overview ? '1' : '0.14';
+      }
+      p.setAttribute('stroke', stroke); p.setAttribute('stroke-width', width); p.setAttribute('opacity', op);
+      if (ed.kind !== 'import' || all || seg || done) p.setAttribute('marker-end', 'url(#' + marker + ')');
+      svg.appendChild(p);
+    });
+  }
+
+  styleZones() {
+    const im = this.im();
+    if (!this.boards[im] || !this.boards[im].zones) return;
+    const world = this.world();
+    if (!world) return;
+    const steps = this.trace();
+    const cur = this.state.step;
+    let realm = steps[cur] ? this.NODES[steps[cur].node].realm : null;
+    if (realm === 'ext') realm = 'page';
+    world.querySelectorAll('[data-zone]').forEach((zd) => {
+      const z = this.ZONES.find((x) => x.id === zd.dataset.zone);
+      const on = z && z.id === realm;
+      zd.style.borderColor = on ? z.col : 'rgb(from ' + z.col + ' r g b / 0.2)';
+      zd.style.background = on ? 'rgb(from ' + z.col + ' r g b / 0.1)' : 'rgb(from ' + z.col + ' r g b / 0.05)';
+      zd.style.boxShadow = on ? '0 0 34px rgb(from ' + z.col + ' r g b / 0.18) inset' : 'none';
+    });
+  }
+
+  styleSchemaNodes() {
+    const world = this.world();
+    if (!world) return;
+    const steps = this.trace();
+    const cur = this.state.step;
+    const curNode = steps[cur] ? steps[cur].node : null;
+    const ps = this.pathState();
+    const hov = this.hover;
+    const nb = hov ? this.adj(hov) : null;
+    world.querySelectorAll('[data-node]').forEach((el) => {
+      const id = el.getAttribute('data-node');
+      const rich = (id === 'playground' || id === 'preview');
+      el.style.boxShadow = 'none';
+      el.style.animation = '';
+      let bg = '#1A1D24', bd = 'rgba(255,255,255,0.14)', op = '1';
+      if (hov) {
+        if (id === hov) { bg = 'rgb(from var(--ac) r g b / 0.16)'; bd = 'var(--ac)'; el.style.boxShadow = '0 0 0 1px var(--ac)'; }
+        else if (nb.has(id)) { bd = 'rgb(from var(--ac) r g b / 0.5)'; }
+        else { op = '0.28'; }
+      } else if (id === ps.curNode) {
+        bg = 'rgb(from var(--ac) r g b / 0.18)'; bd = 'var(--ac)';
+        el.style.boxShadow = '0 0 0 1px var(--ac)';
+        el.style.animation = 'rfNodePulse 1.4s ease-out infinite';
+      } else if (ps.segNodes.has(id)) {
+        bg = 'rgb(from var(--ac) r g b / 0.11)'; bd = 'var(--ac)';
+      } else if (ps.touched.has(id)) {
+        bg = 'rgb(from var(--ac) r g b / 0.08)'; bd = 'rgb(from var(--ac) r g b / 0.5)';
+      } else if (ps.allNodes.has(id)) {
+        // participant not yet reached — visible as part of the scenario
+        bg = 'rgb(from var(--ac) r g b / 0.035)'; bd = 'rgb(from var(--ac) r g b / 0.34)';
+      } else {
+        // overview: full structural graph; scenario: dim non-participants
+        op = ps.overview ? '1' : '0.26';
+      }
+      el.style.opacity = op;
+      if (!rich) el.style.background = bg;
+      el.style.borderTopColor = bd; el.style.borderRightColor = bd; el.style.borderBottomColor = bd;
+    });
+  }
+
+  movePacketSchema() {
+    const world = this.world();
+    if (!world) return;
+    const packet = world.querySelector('[data-packet]');
+    if (!packet) return;
+    const POS = this.POS[this.im()];
+    const steps = this.trace();
+    const cur = this.state.step;
+    const curNode = steps[cur] ? steps[cur].node : null;
+    if (!curNode || !POS[curNode]) { packet.style.opacity = '0'; return; }
+    packet.style.left = POS[curNode][0] + 'px';
+    packet.style.top = POS[curNode][1] + 'px';
+    packet.style.opacity = '1';
+  }
+
+  updateInspector() {
+    const ins = document.querySelector('[data-impl="' + this.im() + '"] [data-sch-inspect]');
+    if (!ins) return;
+    const id = this.hover || this.state.inspect;
+    const meta = this.NODES[id];
+    if (!meta) { ins.style.display = 'none'; return; }
+    const rc = this.REALM_COL[meta.realm] || '#8A93A6';
+    const kind = this.kindOf(id);
+    ins.style.display = 'block';
+    const outs = this.EDGES.filter((e) => e.from === id).map((e) => this.NODES[e.to].label + ' (' + e.kind + ')');
+    const ins2 = this.EDGES.filter((e) => e.to === id).map((e) => this.NODES[e.from].label);
+    const row = (lbl, arr) => arr.length ? '<div style="margin-top:8px;"><span style="font-family:\'Roboto Mono\',monospace; font-size:9.5px; letter-spacing:0.06em; text-transform:uppercase; color:rgba(255,255,255,0.34);">' + lbl + '</span><div style="font-size:11.5px; color:rgba(255,255,255,0.66); line-height:1.5; margin-top:2px;">' + arr.join(', ') + '</div></div>' : '';
+    ins.innerHTML =
+      '<div style="display:flex; align-items:center; gap:9px;"><span style="color:' + rc + '; display:flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:7px; background:rgb(from ' + rc + ' r g b / 0.14); flex:none;">' + this.kindSvg(kind.icon, 16) + '</span><div><div style="font-family:\'Roboto Mono\',monospace; font-size:13px; font-weight:600; color:#fff; line-height:1.2;">' + meta.label + '</div><div style="font-size:11px; color:rgba(255,255,255,0.55); line-height:1.2; margin-top:1px;">' + kind.label + ' · runs in ' + this.realmText(meta.realm) + '</div></div></div>' +
+      '<div style="font-size:12px; line-height:1.5; color:rgba(255,255,255,0.6); margin-top:9px; white-space:normal; text-wrap:pretty;">' + meta.role + '</div>' +
+      row('depends on', outs) + row('used by', ins2);
+  }
+
+  renderSchema(impl) {
+    this._schImpl = impl;
+    this.buildSchema(impl);
+    this.layoutSchema();
+    this.updateSurfaces();
+    this.styleSchemaNodes();
+    this.drawSchemaEdges();
+    this.updateInspector();
+    this.styleZones();
+  }
+
+  // ---------- impl 3 : sequence ----------
+  renderSequence(steps, cur) {
+    const canvas = document.querySelector('[data-viz3]');
+    if (!canvas) return;
+    const sig = this.state.scn;
+    const parts = [];
+    steps.forEach((s) => { if (parts.indexOf(s.node) < 0) parts.push(s.node); });
+    if (canvas.dataset.sig !== sig) {
+      canvas.dataset.sig = sig;
+      canvas.innerHTML = '';
+      const W = Math.max(parts.length * 150, 600);
+      const rowH = 52, top = 64, H = top + steps.length * rowH + 16;
+      const colX = (i) => Math.round((i + 0.5) * (W / parts.length));
+      // headers + lifelines
+      const head = document.createElement('div');
+      head.style.cssText = 'position:relative; height:' + H + 'px; width:' + W + 'px;';
+      parts.forEach((id, i) => {
+        const hd = document.createElement('div');
+        hd.setAttribute('data-seq-head', id);
+        hd.style.cssText = 'position:absolute; top:0; transform:translateX(-50%); left:' + colX(i) + 'px; display:flex; align-items:center; gap:7px; padding:7px 11px; background:#1A1D24; border:1px solid rgba(255,255,255,0.12); border-radius:8px; font-size:12px; font-weight:500; color:rgba(255,255,255,0.82); white-space:nowrap; transition:all 0.2s linear;';
+        hd.textContent = this.NODES[id].label;
+        head.appendChild(hd);
+        const life = document.createElement('div');
+        life.setAttribute('data-seq-life', id);
+        life.style.cssText = 'position:absolute; top:40px; bottom:8px; width:0; left:' + colX(i) + 'px; border-left:1px dashed rgba(255,255,255,0.16);';
+        head.appendChild(life);
+      });
+      // svg arrows
+      const svgNS = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(svgNS, 'svg');
+      svg.setAttribute('width', W); svg.setAttribute('height', H);
+      svg.style.cssText = 'position:absolute; top:0; left:0; overflow:visible;';
+      const defs = document.createElementNS(svgNS, 'defs');
+      defs.innerHTML = '<marker id="rfArrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="var(--ac)"></path></marker><marker id="rfArrowDim" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0 0 L7 3 L0 6 Z" fill="rgba(255,255,255,0.3)"></path></marker>';
+      svg.appendChild(defs);
+      steps.forEach((s, i) => {
+        const fromId = i === 0 ? s.node : steps[i - 1].node;
+        const toId = s.node;
+        const y = top + i * rowH;
+        let fx = colX(parts.indexOf(fromId)), tx = colX(parts.indexOf(toId));
+        const g = document.createElementNS(svgNS, 'g');
+        g.setAttribute('data-seq-step', i);
+        if (fromId === toId) {
+          const d = 'M' + fx + ' ' + y + ' h26 v14 h-26';
+          const p = document.createElementNS(svgNS, 'path');
+          p.setAttribute('d', d); p.setAttribute('fill', 'none');
+          p.setAttribute('stroke', 'var(--ac)'); p.setAttribute('stroke-width', '1.5');
+          p.setAttribute('marker-end', 'url(#rfArrow)');
+          g.appendChild(p);
+        } else {
+          const ln = document.createElementNS(svgNS, 'line');
+          ln.setAttribute('x1', fx + (tx > fx ? 6 : -6)); ln.setAttribute('y1', y);
+          ln.setAttribute('x2', tx + (tx > fx ? -8 : 8)); ln.setAttribute('y2', y);
+          ln.setAttribute('stroke-width', '1.5');
+          ln.setAttribute('marker-end', tx > fx ? 'url(#rfArrow)' : 'url(#rfArrow)');
+          g.appendChild(ln);
+        }
+        const lblX = fromId === toId ? fx + 34 : (fx + tx) / 2;
+        const txt = document.createElementNS(svgNS, 'text');
+        txt.setAttribute('x', lblX); txt.setAttribute('y', y - 8);
+        txt.setAttribute('text-anchor', 'middle');
+        txt.setAttribute('font-family', 'Inter, sans-serif'); txt.setAttribute('font-size', '11.5');
+        txt.textContent = (i + 1) + '. ' + s.t;
+        g.appendChild(txt);
+        svg.appendChild(g);
+      });
+      head.appendChild(svg);
+      canvas.appendChild(head);
+    }
+    // style by cur
+    canvas.querySelectorAll('[data-seq-step]').forEach((g) => {
+      const i = Number(g.dataset.seqStep);
+      const done = i <= cur, isCur = i === cur;
+      const line = g.querySelector('line, path');
+      const txt = g.querySelector('text');
+      const col = isCur ? 'var(--ac)' : (done ? 'rgb(from var(--ac) r g b / 0.5)' : 'rgba(255,255,255,0.18)');
+      if (line) {
+        line.setAttribute('stroke', col);
+        line.setAttribute('marker-end', isCur || done ? 'url(#rfArrow)' : 'url(#rfArrowDim)');
+        line.setAttribute('stroke-width', isCur ? '2.4' : '1.5');
+      }
+      if (txt) {
+        txt.setAttribute('fill', isCur ? '#fff' : (done ? 'rgba(255,255,255,0.6)' : 'rgba(255,255,255,0.28)'));
+        txt.setAttribute('font-weight', isCur ? '600' : '400');
+      }
+      g.style.opacity = (done || isCur) ? '1' : '0.5';
+    });
+    const curNode = steps[cur] ? steps[cur].node : null;
+    canvas.querySelectorAll('[data-seq-head]').forEach((hd) => {
+      const on = hd.dataset.seqHead === curNode;
+      hd.style.borderColor = on ? 'var(--ac)' : 'rgba(255,255,255,0.12)';
+      hd.style.background = on ? 'rgb(from var(--ac) r g b / 0.16)' : '#1A1D24';
+      hd.style.color = on ? '#fff' : 'rgba(255,255,255,0.82)';
+    });
+    canvas.querySelectorAll('[data-seq-life]').forEach((lf) => {
+      lf.style.borderColor = lf.dataset.seqLife === curNode ? 'rgb(from var(--ac) r g b / 0.5)' : 'rgba(255,255,255,0.16)';
+    });
+  }
+
+  // ---------- impl 4 : terminal ----------
+  renderTerminal(steps, cur) {
+    const body = document.querySelector('[data-term-body]');
+    const map = document.querySelector('[data-term-map]');
+    if (!body) return;
+    const scn = this.curScn();
+    body.innerHTML = '';
+    const line = (html, color) => {
+      const d = document.createElement('div');
+      d.style.cssText = 'white-space:pre-wrap; word-break:break-word; color:' + (color || '#E8EAF0') + ';';
+      d.innerHTML = html;
+      body.appendChild(d);
+    };
+    line('<span style="color:rgba(255,255,255,0.32)">rifty@tab</span> <span style="color:var(--ac)">~/app</span> <span style="color:rgba(255,255,255,0.32)">$</span> ' + scn.cmd, '#fff');
+    for (let i = 0; i <= cur && i < steps.length; i++) {
+      const s = steps[i];
+      const tag = this.NODES[s.node].label;
+      const isCur = i === cur;
+      line('<span style="color:' + (isCur ? 'var(--ac)' : 'rgba(255,255,255,0.3)') + '">' + (isCur ? '▸' : '·') + '</span> <span style="color:rgba(255,255,255,0.78)">' + s.t + '</span>  <span style="color:rgba(255,255,255,0.34); font-size:11px;">[' + tag + ']</span>', isCur ? '#fff' : 'rgba(255,255,255,0.6)');
+    }
+    if (cur >= steps.length - 1) {
+      line('<span style="color:var(--ac)">✓ done</span>  <span style="color:rgba(255,255,255,0.4)">— ' + scn.label.toLowerCase() + ', entirely in this tab</span>', 'var(--ac)');
+    }
+    const car = document.createElement('div');
+    car.innerHTML = '<span style="color:rgba(255,255,255,0.32)">$</span> <span style="display:inline-block; width:8px; height:15px; background:var(--ac); transform:translateY(3px); animation:rfBlink 1.1s steps(1) infinite;"></span>';
+    body.appendChild(car);
+
+    if (map) {
+      const sig = this.state.scn;
+      if (map.dataset.sig !== sig) {
+        map.dataset.sig = sig;
+        map.innerHTML = '';
+        const order = [];
+        steps.forEach((s) => { if (order.indexOf(s.node) < 0) order.push(s.node); });
+        order.forEach((id) => {
+          const chip = document.createElement('div');
+          chip.setAttribute('data-map-node', id);
+          chip.style.cssText = 'display:flex; align-items:center; gap:9px; padding:9px 11px; border:1px solid rgba(255,255,255,0.1); border-radius:8px; font-size:12.5px; color:rgba(255,255,255,0.6); transition:all 0.2s linear;';
+          chip.innerHTML = '<span data-map-dot style="width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,0.25); flex:none;"></span>' + this.NODES[id].label;
+          map.appendChild(chip);
+        });
+      }
+      const curNode = steps[cur] ? steps[cur].node : null;
+      const touched = new Set(steps.slice(0, cur + 1).map((s) => s.node));
+      map.querySelectorAll('[data-map-node]').forEach((chip) => {
+        const id = chip.dataset.mapNode;
+        const on = id === curNode, done = touched.has(id);
+        const dot = chip.querySelector('[data-map-dot]');
+        chip.style.borderColor = on ? 'var(--ac)' : (done ? 'rgb(from var(--ac) r g b / 0.35)' : 'rgba(255,255,255,0.1)');
+        chip.style.background = on ? 'rgb(from var(--ac) r g b / 0.14)' : 'transparent';
+        chip.style.color = (on || done) ? '#fff' : 'rgba(255,255,255,0.55)';
+        if (dot) dot.style.background = (on || done) ? 'var(--ac)' : 'rgba(255,255,255,0.25)';
+      });
+    }
+  }
+
+  // ---------- impl 5 : compat lens ----------
+  renderCompat() {
+    const honesty = this.state.honesty;
+    const hon = document.querySelector('[data-honesty]');
+    if (hon) {
+      hon.style.borderColor = honesty ? 'var(--no)' : 'rgba(255,255,255,0.14)';
+      hon.style.background = honesty ? 'rgb(from var(--no) r g b / 0.12)' : '#1A1D24';
+      const dot = hon.querySelector('[data-honesty-dot]');
+      if (dot) dot.style.background = honesty ? 'var(--no)' : 'rgba(255,255,255,0.3)';
+    }
+    document.querySelectorAll('[data-impl="5"] [data-node]').forEach((el) => {
+      const id = el.getAttribute('data-node');
+      const meta = this.metaFor(id);
+      const isCeil = meta && meta.compat !== 'ok';
+      const sel = id === this.state.inspect;
+      let dim = false;
+      if (honesty && !isCeil) dim = true;
+      el.style.opacity = dim ? '0.25' : '1';
+      el.style.borderColor = sel ? 'var(--ac)' : (isCeil && honesty ? (meta.compat === 'no' ? 'var(--no)' : 'var(--warn)') : 'rgba(255,255,255,0.1)');
+      el.style.background = sel ? 'rgb(from var(--ac) r g b / 0.1)' : (isCeil && honesty ? (meta.compat === 'no' ? 'rgb(from var(--no) r g b / 0.1)' : 'rgb(from var(--warn) r g b / 0.1)') : '#1A1D24');
+      el.style.boxShadow = sel ? '0 0 0 1px var(--ac)' : 'none';
+    });
+    const ins = document.querySelector('[data-inspector]');
+    if (ins) {
+      const meta = this.metaFor(this.state.inspect) || this.NODES.kernel;
+      const col = this.COMPAT_COL[meta.compat] || 'var(--ac)';
+      const tag = meta.compat === 'ok' ? 'runs today' : (meta.compat === 'warn' ? 'partial — honest ceiling' : 'loud throw');
+      ins.innerHTML =
+        '<div style="display:flex; align-items:center; gap:9px; margin-bottom:12px;"><span style="width:10px; height:10px; border-radius:50%; background:' + col + ';"></span><span style="font-family:\'Roboto Mono\',monospace; font-size:14px; font-weight:600; color:#fff;">' + meta.label + '</span></div>' +
+        '<div style="display:inline-block; font-size:10.5px; letter-spacing:0.04em; text-transform:uppercase; color:' + col + '; border:1px solid ' + col + '; border-radius:5px; padding:2px 8px; margin-bottom:12px;">' + tag + '</div>' +
+        '<div style="font-size:13px; line-height:1.55; color:rgba(255,255,255,0.62); text-wrap:pretty;">' + meta.role + '</div>';
+    }
+  }
+
+  renderVals() {
+    const h = {};
+    [1, 2, 3].forEach((n) => { h['impl' + n] = () => this.setImpl(n); });
+    Object.keys(this.SCN).forEach((id) => { h['scn_' + id] = () => this.setScn(id); });
+    h.scn_none = () => this.setScn('none');
+    return {
+      show1: this.state.impl === 1,
+      show2: this.state.impl === 2,
+      show3: this.state.impl === 3,
+      h: h,
+    };
+  }
+}
+</script>
+</body>
+</html>
