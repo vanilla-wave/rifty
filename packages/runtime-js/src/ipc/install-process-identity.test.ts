@@ -42,13 +42,13 @@ describe('installNodeProcessShim identity fields (ADR-0150: supervised child wor
     const proc = installNodeProcessShim(spec());
     // Exact cowsay/yargs trigger: reading .electron on undefined versions → TypeError
     expect(proc.versions).toBeDefined();
-    expect(proc.versions.node).toBe('22.0.0');
+    expect(proc.versions.node).toBe('24.0.0');
     expect(proc.versions.electron).toBeUndefined();
   });
 
   it('exposes all Node identity fields', () => {
     const proc = installNodeProcessShim(spec());
-    expect(proc.version).toBe('v22.0.0');
+    expect(proc.version).toBe('v24.0.0');
     expect(proc.platform).toBe('rifty');
     expect(proc.arch).toBe('wasm');
     expect(proc.argv0).toBe('rifty');

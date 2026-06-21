@@ -280,6 +280,7 @@ function isErrorClass(fn: unknown): boolean {
 }
 
 function throws(fn: () => unknown, expected?: unknown, message?: string): void {
+  if (typeof fn !== 'function') throw invalidArgType('fn', 'function', fn);
   try {
     fn();
   } catch (err) {
@@ -303,6 +304,7 @@ function throws(fn: () => unknown, expected?: unknown, message?: string): void {
  *   unchanged (Node's "rethrow on mismatch" contract).
  */
 function doesNotThrow(fn: () => unknown, expectedOrMessage?: unknown, message?: string): void {
+  if (typeof fn !== 'function') throw invalidArgType('fn', 'function', fn);
   // Disambiguate message vs expected as Node does: a plain string is a message.
   let expected: unknown;
   let msg: string | undefined;
@@ -376,14 +378,47 @@ function splitErrorMessage(
   return { expected: expectedOrMessage, msg: message };
 }
 
+function isThenable(v: unknown): boolean {
+  return v != null && typeof (v as { then?: unknown }).then === 'function';
+}
+
+/**
+ * Resolve the `rejects`/`doesNotReject` first arg to a thenable, matching Node's two
+ * guards: a non-function-non-thenable arg is `ERR_INVALID_ARG_TYPE`; a function whose
+ * return is not a thenable is `ERR_INVALID_RETURN_VALUE` (never silently await a
+ * non-promise — that would resolve and mis-report "Missing expected rejection").
+ */
+function toPromise(promiseOrFn: unknown): Promise<unknown> {
+  if (typeof promiseOrFn === 'function') {
+    const ret = (promiseOrFn as () => unknown)();
+    if (!isThenable(ret)) {
+      const e = new TypeError(
+        `Expected instance of Promise to be returned from the "promiseFn" function but got ${ret === null ? 'null' : typeof ret === 'string' ? `type string ('${ret}')` : `type ${typeof ret}`}.`,
+      );
+      (e as { code?: string }).code = 'ERR_INVALID_RETURN_VALUE';
+      throw e;
+    }
+    return ret as Promise<unknown>;
+  }
+  if (isThenable(promiseOrFn)) return promiseOrFn as Promise<unknown>;
+  const e = new TypeError(
+    `The "promiseFn" argument must be of type function or an instance of Promise. Received ${promiseOrFn === null ? 'null' : `type ${typeof promiseOrFn}`}`,
+  );
+  (e as { code?: string }).code = 'ERR_INVALID_ARG_TYPE';
+  throw e;
+}
+
 async function rejects(
   promiseOrFn: Promise<unknown> | (() => Promise<unknown>),
   expectedOrMessage?: unknown,
   message?: string,
 ): Promise<void> {
+  // `toPromise` runs the fn + validates arg/return OUTSIDE the try, so its
+  // ERR_INVALID_ARG_TYPE / ERR_INVALID_RETURN_VALUE isn't swallowed as "the rejection".
+  const p = toPromise(promiseOrFn);
   const { expected, msg } = splitErrorMessage(expectedOrMessage, message);
   try {
-    await (typeof promiseOrFn === 'function' ? promiseOrFn() : promiseOrFn);
+    await p;
   } catch (err) {
     if (expected !== undefined && !matchesExpected(err, expected)) {
       throw new AssertionError({ message: msg, actual: err, expected, operator: 'rejects' });
@@ -401,9 +436,10 @@ async function doesNotReject(
   expectedOrMessage?: unknown,
   message?: string,
 ): Promise<void> {
+  const p = toPromise(promiseOrFn);
   const { expected, msg } = splitErrorMessage(expectedOrMessage, message);
   try {
-    await (typeof promiseOrFn === 'function' ? promiseOrFn() : promiseOrFn);
+    await p;
   } catch (err) {
     // Re-throw a non-matching rejection unchanged (Node spec); else it's a failure.
     if (expected !== undefined && !matchesExpected(err, expected)) throw err;

@@ -13,7 +13,7 @@ export const NODE_PROCESS_IDENTITY = Object.freeze({
   execPath: '/usr/local/bin/rifty',
   platform: 'rifty',
   arch: 'wasm',
-  version: 'v22.0.0',
-  versions: Object.freeze({ node: '22.0.0', v8: '12.0.0', rifty: '0.0.0' }),
+  version: 'v24.0.0',
+  versions: Object.freeze({ node: '24.0.0', v8: '13.6.0', rifty: '0.0.0' }),
   title: 'rifty',
 } as const);

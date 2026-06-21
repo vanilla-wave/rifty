@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`Buffer` variable-width int accessors + `copyBytesFrom` + `INSPECT_MAX_BYTES` now validate like Node** (PR #62 review hardening; parity RED-then-GREEN vs Node 24). `write{U}IntLE/BE` throw `ERR_OUT_OF_RANGE` for an out-of-range/negative `value` (was a SILENT `& 0xff` wrap — a wrong-answer stub); `read{U}IntLE/BE` + the writers throw `ERR_OUT_OF_RANGE` for an out-of-bounds / non-integer `offset` or `byteLength ∉ [1,6]` (was a bare DataView `RangeError` with no `.code`). `Buffer.copyBytesFrom(view, offset, length)` validates `offset`/`length` — `ERR_INVALID_ARG_TYPE` (non-number) / `ERR_OUT_OF_RANGE` (non-integer or negative) — instead of silently coercing a string/float/NaN/negative through the `Uint8Array` ctor. `buffer.INSPECT_MAX_BYTES = N` rejects a non-number (`ERR_INVALID_ARG_TYPE`) / negative (`ERR_OUT_OF_RANGE`). The pre-existing FIXED-width accessors (`readUInt8`/`writeUInt8`/…) share the same gap — tracked in `backlog/runtime-js/buffer-fixed-width-int-validation`.
+
 ### Removed
 
 - **Dead type-only `writev?` option on `WritableOptions`** (backlog/runtime-js/silent-node-divergences). It was declared but used NOWHERE — `drainBuffer` always calls `_write` per chunk — so the type silently lied that batching was wired (no-silent-stub rule). Behaviour-preserving (no consumer passed it). Real cork/uncork/`_writev` batching is owned by `whatwg-stream-bridge-and-statics`, which re-adds the option when it lands.

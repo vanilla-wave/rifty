@@ -159,6 +159,10 @@ export function installCoreMethods(BufferClass: BufferLikeCtor): void {
 export function installIntMethods(BufferClass: BufferLikeCtor): void {
   const p = BufferClass.prototype as Record<string, unknown>;
 
+  // TODO(backlog: runtime-js/buffer-fixed-width-int-validation) — these fixed-width
+  // accessors silently truncate an out-of-range value (DataView `setX` modulo) and
+  // throw a bare RangeError on OOB; Node throws ERR_OUT_OF_RANGE / ERR_BUFFER_OUT_OF_BOUNDS
+  // (the var-width accessors below already do — same helpers to reuse).
   p.readUInt8 = function (this: Uint8Array, offset = 0) {
     return dvFor(this).getUint8(offset);
   };
@@ -264,15 +268,56 @@ export function installIntMethods(BufferClass: BufferLikeCtor): void {
   // `installIntMethods` fixed-width set only covers 8/16/32; these read/write an
   // arbitrary byte length LE or BE, sign-extending the signed forms. Byte loop
   // over `dvFor` (same cached full-range DataView as the fixed-width accessors).
-  const assertByteLength = (byteLength: number): void => {
+  // Node-faithful validation: byteLength 1..6, integer `offset` in [0, len-byteLength],
+  // `value` within the signed/unsigned range — each an `ERR_OUT_OF_RANGE` throw, never
+  // the bare DataView RangeError on OOB nor the silent `& 0xff` wrap on an out-of-range
+  // value. Message wording mirrors Node's buffer `boundsError`/`checkInt` ("and", not "&&").
+  const oor = (name: string, detail: string): RangeError => {
+    const e = new RangeError(`The value of "${name}" is out of range. ${detail}`);
+    (e as { code?: string }).code = 'ERR_OUT_OF_RANGE';
+    return e;
+  };
+  // Node validates offset/byteLength TYPE first (a non-number — incl. `undefined`, since
+  // these args are required — is ERR_INVALID_ARG_TYPE), then range (ERR_OUT_OF_RANGE).
+  const argType = (name: string, v: unknown): TypeError => {
+    const received =
+      v === undefined
+        ? 'undefined'
+        : v === null
+          ? 'null'
+          : typeof v === 'string'
+            ? `type string ('${v}')`
+            : `type ${typeof v}`;
+    const e = new TypeError(`The "${name}" argument must be of type number. Received ${received}`);
+    (e as { code?: string }).code = 'ERR_INVALID_ARG_TYPE';
+    return e;
+  };
+  const checkByteLength = (byteLength: number): void => {
+    if (typeof byteLength !== 'number') throw argType('byteLength', byteLength);
     if (!Number.isInteger(byteLength) || byteLength < 1 || byteLength > 6) {
-      throw new RangeError(
-        `The value of "byteLength" is out of range. It must be >= 1 && <= 6. Received ${byteLength}`,
-      );
+      throw oor('byteLength', `It must be >= 1 and <= 6. Received ${byteLength}`);
+    }
+  };
+  const checkOffset = (offset: number, byteLength: number, len: number): void => {
+    if (typeof offset !== 'number') throw argType('offset', offset);
+    if (!Number.isInteger(offset)) throw oor('offset', `It must be an integer. Received ${offset}`);
+    const max = len - byteLength;
+    if (offset < 0 || offset > max) {
+      throw oor('offset', `It must be >= 0 and <= ${max}. Received ${offset}`);
+    }
+  };
+  // Node only RANGE-checks the value (loose comparison coerces a float/numeric-string
+  // exactly as the byte-loop write would) — no integer or type assertion on `value`.
+  const checkValue = (value: number, byteLength: number, signed: boolean): void => {
+    const min = signed ? -(2 ** (8 * byteLength - 1)) : 0;
+    const max = signed ? 2 ** (8 * byteLength - 1) - 1 : 2 ** (8 * byteLength) - 1;
+    if (value < min || value > max) {
+      throw oor('value', `It must be >= ${min} and <= ${max}. Received ${value}`);
     }
   };
   const readUInt = (u8: Uint8Array, offset: number, byteLength: number, le: boolean): number => {
-    assertByteLength(byteLength);
+    checkByteLength(byteLength);
+    checkOffset(offset, byteLength, u8.length);
     const dv = dvFor(u8);
     let val = 0;
     let mul = 1;
@@ -300,8 +345,11 @@ export function installIntMethods(BufferClass: BufferLikeCtor): void {
     offset: number,
     byteLength: number,
     le: boolean,
+    signed: boolean,
   ): number => {
-    assertByteLength(byteLength);
+    checkByteLength(byteLength);
+    checkOffset(offset, byteLength, u8.length);
+    checkValue(value, byteLength, signed);
     const dv = dvFor(u8);
     let v = value;
     if (le) {
@@ -318,31 +366,32 @@ export function installIntMethods(BufferClass: BufferLikeCtor): void {
     return offset + byteLength;
   };
 
-  p.readUIntLE = function (this: Uint8Array, offset = 0, byteLength = 0) {
+  p.readUIntLE = function (this: Uint8Array, offset: number, byteLength: number) {
     return readUInt(this, offset, byteLength, true);
   };
-  p.readUIntBE = function (this: Uint8Array, offset = 0, byteLength = 0) {
+  p.readUIntBE = function (this: Uint8Array, offset: number, byteLength: number) {
     return readUInt(this, offset, byteLength, false);
   };
-  p.readIntLE = function (this: Uint8Array, offset = 0, byteLength = 0) {
+  p.readIntLE = function (this: Uint8Array, offset: number, byteLength: number) {
     return readInt(this, offset, byteLength, true);
   };
-  p.readIntBE = function (this: Uint8Array, offset = 0, byteLength = 0) {
+  p.readIntBE = function (this: Uint8Array, offset: number, byteLength: number) {
     return readInt(this, offset, byteLength, false);
   };
   // Signed/unsigned writers share the byte loop: `& 0xff` + `Math.floor(v/256)`
-  // already two's-complements a negative value (matches Node's writeIntLE/BE).
-  p.writeUIntLE = function (this: Uint8Array, value: number, offset = 0, byteLength = 0) {
-    return writeInt(this, value, offset, byteLength, true);
+  // already two's-complements a negative value (matches Node's writeIntLE/BE). The
+  // `signed` flag only selects the value-range bounds (unsigned 0.., signed ±half).
+  p.writeUIntLE = function (this: Uint8Array, value: number, offset: number, byteLength: number) {
+    return writeInt(this, value, offset, byteLength, true, false);
   };
-  p.writeUIntBE = function (this: Uint8Array, value: number, offset = 0, byteLength = 0) {
-    return writeInt(this, value, offset, byteLength, false);
+  p.writeUIntBE = function (this: Uint8Array, value: number, offset: number, byteLength: number) {
+    return writeInt(this, value, offset, byteLength, false, false);
   };
-  p.writeIntLE = function (this: Uint8Array, value: number, offset = 0, byteLength = 0) {
-    return writeInt(this, value, offset, byteLength, true);
+  p.writeIntLE = function (this: Uint8Array, value: number, offset: number, byteLength: number) {
+    return writeInt(this, value, offset, byteLength, true, true);
   };
-  p.writeIntBE = function (this: Uint8Array, value: number, offset = 0, byteLength = 0) {
-    return writeInt(this, value, offset, byteLength, false);
+  p.writeIntBE = function (this: Uint8Array, value: number, offset: number, byteLength: number) {
+    return writeInt(this, value, offset, byteLength, false, true);
   };
 
   // `buf.toJSON()` — the `{ type: 'Buffer', data: [...] }` round-trip shape

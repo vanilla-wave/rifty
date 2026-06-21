@@ -3,8 +3,8 @@ import { CloseEventCtor } from './close-event.ts';
 
 describe('CloseEventCtor', () => {
   // Contract is identical whether this resolved to the native global (browsers,
-  // Node >=23) or the Event-subclass fallback (Node 22, our `engines` floor) —
-  // both must produce a dispatchable `close` Event carrying code + reason.
+  // Node ≥23 — incl. our Node ≥24 `engines` floor) or the defensive Event-subclass
+  // fallback — both must produce a dispatchable `close` Event carrying code + reason.
   it('builds a dispatchable close Event carrying code and reason', () => {
     const e = new CloseEventCtor('close', { code: 1001, reason: 'bye-from-server' });
     expect(e).toBeInstanceOf(Event);

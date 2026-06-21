@@ -21,6 +21,20 @@ const c: ParityCase = {
     // A wider-element TypedArray (Float64Array, BYTES_PER_ELEMENT=8).
     const f64 = Float64Array.from([1.5, 2.5]);
     console.log('F64', Buffer.copyBytesFrom(f64, 1).length);
+    // offset/length validation — Node throws (never silent-coerces through Uint8Array).
+    const v = (n, fn) => { try { fn(); console.log(n, 'NO_THROW'); } catch (e) { console.log(n, e.code); } };
+    v('off.neg',  () => Buffer.copyBytesFrom(u16, -1));
+    v('off.str',  () => Buffer.copyBytesFrom(u16, '1'));
+    v('off.frac', () => Buffer.copyBytesFrom(u16, 0.5));
+    v('off.nan',  () => Buffer.copyBytesFrom(u16, NaN));
+    v('len.neg',  () => Buffer.copyBytesFrom(u16, 0, -1));
+    v('len.str',  () => Buffer.copyBytesFrom(u16, 0, '2'));
+    v('len.frac', () => Buffer.copyBytesFrom(u16, 0, 1.5));
+    v('off.nan',  () => Buffer.copyBytesFrom(u16, NaN));
+    // valid-but-out-of-window offsets/lengths CLAMP (Node), not throw
+    const u3 = new Uint16Array([1, 2, 3]);
+    console.log('off>cnt', Buffer.copyBytesFrom(u3, 5).length);
+    console.log('len>avail', Buffer.copyBytesFrom(u3, 1, 99).length, Buffer.copyBytesFrom(u3, 1, 99).toString('hex'));
   `,
 };
 

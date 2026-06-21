@@ -274,11 +274,37 @@ export class Buffer extends Uint8Array {
       (e as { code?: string }).code = 'ERR_INVALID_ARG_TYPE';
       throw e;
     }
-    const bpe = view.BYTES_PER_ELEMENT;
-    const elementCount = view.length ?? view.byteLength;
-    const len = length ?? elementCount - offset;
-    const src = new Uint8Array(view.buffer, view.byteOffset + offset * bpe, len * bpe);
-    const out = new Buffer(len * bpe);
+    // Node validates offset/length with the generic integer validator (ERR_INVALID_ARG_TYPE
+    // for a non-number, ERR_OUT_OF_RANGE for non-integer / out of [0, MAX_SAFE_INTEGER]) —
+    // never silently coerce a string/float/NaN/negative through the Uint8Array ctor.
+    const checkInt = (v: unknown, name: string): void => {
+      if (typeof v !== 'number') {
+        const e = new TypeError(
+          `The "${name}" argument must be of type number. Received ${v === null ? 'null' : `type ${typeof v}`}`,
+        );
+        (e as { code?: string }).code = 'ERR_INVALID_ARG_TYPE';
+        throw e;
+      }
+      const rng = (detail: string): RangeError => {
+        const e = new RangeError(`The value of "${name}" is out of range. ${detail}`);
+        (e as { code?: string }).code = 'ERR_OUT_OF_RANGE';
+        return e;
+      };
+      if (!Number.isInteger(v)) throw rng(`It must be an integer. Received ${v}`);
+      if (v < 0 || v > Number.MAX_SAFE_INTEGER) {
+        throw rng(`It must be >= 0 && <= ${Number.MAX_SAFE_INTEGER}. Received ${v}`);
+      }
+    };
+    checkInt(offset, 'offset');
+    if (length !== undefined) checkInt(length, 'length');
+    // Node CLAMPS the element window to the view's bounds (offset > count → empty;
+    // length > remaining → truncated). Use subarray (which clamps) rather than a
+    // hand-computed byte window that would throw "Invalid typed array length".
+    const win = (
+      view as unknown as { subarray(begin: number, end?: number): ArrayBufferView }
+    ).subarray(offset, length === undefined ? undefined : offset + length);
+    const src = new Uint8Array(win.buffer as ArrayBuffer, win.byteOffset, win.byteLength);
+    const out = new Buffer(src.length);
     out.set(src);
     return out;
   }
@@ -301,6 +327,24 @@ export function getInspectMaxBytes(): number {
   return inspectMaxBytes;
 }
 export function setInspectMaxBytes(n: number): void {
+  // Node validates the assignment: number-typed (ERR_INVALID_ARG_TYPE) and >= 0
+  // (ERR_OUT_OF_RANGE) — never silently store a string/null/negative.
+  if (typeof n !== 'number') {
+    const e = new TypeError(
+      `The "INSPECT_MAX_BYTES" argument must be of type number. Received ${n === null ? 'null' : `type ${typeof n}`}`,
+    );
+    (e as { code?: string }).code = 'ERR_INVALID_ARG_TYPE';
+    throw e;
+  }
+  // `!(n >= 0)` rejects negatives AND NaN (Node's `>= 0` validator throws ERR_OUT_OF_RANGE
+  // for NaN too — `n < 0` alone would silently store NaN).
+  if (!(n >= 0)) {
+    const e = new RangeError(
+      `The value of "INSPECT_MAX_BYTES" is out of range. It must be >= 0. Received ${n}`,
+    );
+    (e as { code?: string }).code = 'ERR_OUT_OF_RANGE';
+    throw e;
+  }
   inspectMaxBytes = n;
 }
 

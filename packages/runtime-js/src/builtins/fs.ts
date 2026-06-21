@@ -708,6 +708,9 @@ export function cpSync(src: string, dst: string, opts?: CpOptions): void {
       !!opts.errorOnExist ||
       !!opts.preserveTimestamps);
   if (!hasEdge) {
+    // TODO(backlog: runtime-js/fs-cp-type-mismatch-error-codes) — VFS cpSync surfaces
+    // EISDIR/EEXIST for file→dir / dir→file overwrites; Node uses ERR_FS_CP_NON_DIR_TO_DIR
+    // / ERR_FS_CP_DIR_TO_NON_DIR.
     syncMirror().cpSync(resolvePath(src), resolvePath(dst), { recursive: opts?.recursive });
     return;
   }
@@ -741,9 +744,10 @@ function cpEntry(
   if (syncMirror().existsSync(dstAbs) && opts.force === false) {
     if (opts.errorOnExist) {
       throw Object.assign(
-        new Error(
-          `[ERR_FS_CP_EEXIST]: Target already exists: cp returned EEXIST (${dstDisplay} already exists)`,
-        ),
+        // Node's message: no `[CODE]:` prefix, the resolved path inside the parens AND a
+        // trailing SystemError path suffix — `Target already exists: cp returned EEXIST
+        // (<abs> already exists) <abs>`; the code lives on `.code`.
+        new Error(`Target already exists: cp returned EEXIST (${dstAbs} already exists) ${dstAbs}`),
         { code: 'ERR_FS_CP_EEXIST', path: dstAbs },
       );
     }
@@ -913,10 +917,18 @@ export function opendirSync(
  * semantics) or `Date`. The VFS sync surface stores ms, so we convert.
  * (ADR-0029)
  */
-function toMs(t: number | Date): number {
+function toMs(t: number | string | Date): number {
   if (t instanceof Date) return t.getTime();
-  // Node treats numeric args as seconds since the epoch.
-  return Math.floor(t * 1000);
+  // Node's `toUnixTimestamp`: a numeric string coerces, a finite number is seconds
+  // since the epoch; anything else (NaN/Infinity/non-numeric string/null/…) is a loud
+  // ERR_INVALID_ARG_TYPE — never a silent NaN handed to the VFS.
+  const n = typeof t === 'string' ? Number(t) : t;
+  if (typeof n !== 'number' || !Number.isFinite(n)) {
+    const e = new TypeError('The "time" argument must be of type number, string, or Date.');
+    (e as { code?: string }).code = 'ERR_INVALID_ARG_TYPE';
+    throw e;
+  }
+  return Math.floor(n * 1000);
 }
 
 export function utimesSync(p: string, atime: number | Date, mtime: number | Date): void {
