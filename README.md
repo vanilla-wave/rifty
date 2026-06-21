@@ -6,6 +6,8 @@ Browser-based, Node-compatible runtime + WASI runner — a WebContainers-like sy
 
 > **Position:** open, self-hostable, browser-local runtime infrastructure. See [`docs/public/open-runtime-position.md`](./docs/public/open-runtime-position.md) and the [`trust model`](./docs/public/trust-model.md); compatibility claims live in [`docs/public/compat/`](./docs/public/compat/).
 
+Live site: [`rifty.dev`](https://rifty.dev). Public sandbox: [`play.rifty.dev`](https://play.rifty.dev).
+
 ## Packages
 
 **`npm i @riftydev/sdk`** is the umbrella front door ([`packages/rifty`](./packages/rifty)): framework-free `createSandbox()` plus every layer below on a subpath (`@riftydev/sdk/vfs`, `@riftydev/sdk/runtime`, `@riftydev/sdk/net`, …). Each layer is also its own package. All are ESM, ship `.d.ts`, released in lockstep under the `@riftydev` scope.
@@ -50,7 +52,7 @@ matchesRange('1.4.2', '^1.2.0');                              // true
 pickBestVersion(['1.0.0', '1.4.2', '2.0.0'], '^1.2.0');       // "1.4.2"
 ```
 
-More runnable examples in [`examples/standalone-usage`](./examples/standalone-usage) (`pnpm --filter @rifty-examples/standalone start`). Full product demo: the [playground](./apps/playground) (`pnpm dev`).
+More runnable examples in [`examples/standalone-usage`](./examples/standalone-usage) (`pnpm --filter @rifty-examples/standalone start`). Full product demo: the [public sandbox](https://play.rifty.dev) or the local [playground](./apps/playground) (`pnpm dev`).
 
 ## Consuming rifty in your own app — read this first
 

@@ -9,6 +9,17 @@ if (baseUrl === undefined || baseUrl.length === 0) {
 const smokeUrl = new URL('/npm-registry/vite', baseUrl);
 let lastError = new Error('smoke did not run');
 
+function assertProxyHeaders(response, label) {
+  const allowOrigin = response.headers.get('access-control-allow-origin');
+  const corp = response.headers.get('cross-origin-resource-policy');
+  if (allowOrigin !== '*') {
+    throw new Error(`${label}: expected access-control-allow-origin "*", got ${allowOrigin}`);
+  }
+  if (corp !== 'cross-origin') {
+    throw new Error(`${label}: expected cross-origin-resource-policy "cross-origin", got ${corp}`);
+  }
+}
+
 for (let attempt = 1; attempt <= 6; attempt += 1) {
   try {
     const response = await fetch(smokeUrl, {
@@ -20,6 +31,7 @@ for (let attempt = 1; attempt <= 6; attempt += 1) {
     if (!response.ok) {
       throw new Error(`${response.status} ${response.statusText}: ${text.slice(0, 300)}`);
     }
+    assertProxyHeaders(response, String(smokeUrl));
 
     if (!contentType.includes('application/json')) {
       throw new Error(`expected JSON response, got ${contentType}: ${text.slice(0, 300)}`);
@@ -40,12 +52,14 @@ for (let attempt = 1; attempt <= 6; attempt += 1) {
     if (!tarball.ok) {
       throw new Error(`tarball ${tarball.status} ${tarball.statusText}: ${tarballUrl}`);
     }
+    assertProxyHeaders(tarball, String(tarballUrl));
+
     const bytes = new Uint8Array(await tarball.arrayBuffer());
     if (bytes.length < 2 || bytes[0] !== 0x1f || bytes[1] !== 0x8b) {
       throw new Error(`expected gzip tarball from ${tarballUrl}`);
     }
 
-    console.log(`Netlify npm registry smoke ok: ${smokeUrl} + vite-${latest}.tgz`);
+    console.log(`npm registry proxy smoke ok: ${smokeUrl} + vite-${latest}.tgz`);
     process.exit(0);
   } catch (err) {
     lastError = err instanceof Error ? err : new Error(String(err));
@@ -55,5 +69,5 @@ for (let attempt = 1; attempt <= 6; attempt += 1) {
   }
 }
 
-console.error(`Netlify npm registry smoke failed: ${lastError.message}`);
+console.error(`npm registry proxy smoke failed: ${lastError.message}`);
 process.exit(1);

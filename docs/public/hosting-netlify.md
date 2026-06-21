@@ -5,11 +5,10 @@ The playground is a static SPA that **must** be served cross-origin-isolated
 (D-001 / ADR-0002). GitHub Pages can't set those headers; Netlify can — hence
 the target (ADR-0073).
 
-Config: `netlify.toml` (repo root), `apps/playground/public/_headers`,
-`apps/playground/public/_redirects` (both copied to `dist/` by Vite), and
-`netlify/functions/npm-registry.mts`. Netlify build creates the static artifact
-plus function metadata from the same config; deploys then publish that build
-state so `/npm-registry/*` reaches the proxy function before the SPA fallback.
+Config: `netlify.toml` (repo root), `apps/playground/public/_headers`, and
+`apps/playground/public/_redirects` (both copied to `dist/` by Vite). Netlify
+only serves the static playground artifact; production npm registry traffic is
+sent to `https://registry.rifty.dev/npm-registry` (Yandex Cloud, ADR-0163).
 
 ## What gets built
 
@@ -33,9 +32,9 @@ imported with `?worker&url` (ADR-0073). A deployed REPL crashing with
   `https://pr-<number>--rifty-playground.netlify.app`;
 - each Netlify deploy still has its own immutable deploy URL, and the workflow
   writes the latest preview URL back to the PR comment.
-- both preview and production deploy jobs smoke-test `/npm-registry/vite`
-  metadata and its latest tarball on the live URL so the production npm proxy
-  cannot silently fall back to the SPA.
+- both preview and production deploy jobs smoke-test
+  `https://registry.rifty.dev/npm-registry/vite` metadata and its latest
+  tarball so the production npm proxy cannot silently regress.
 
 Required GitHub configuration:
 
@@ -44,12 +43,6 @@ Required GitHub configuration:
   checked-in `rifty-playground` site id;
 - `NETLIFY_SITE_NAME` repository variable, only if overriding the
   checked-in `rifty-playground` site name used for PR alias comments.
-
-Required Netlify site environment:
-
-- `RIFTY_NPM_REGISTRY_UPSTREAM=https://registry.npmjs.org`, non-secret,
-  available to Functions/runtime. The value in `[build.environment]` is only a
-  build-time mirror; the live proxy reads the Netlify site env at runtime.
 
 Fork PRs do not run Netlify deploys because GitHub withholds repository
 secrets from untrusted code.

@@ -26,7 +26,6 @@
 import { getKernelDispatcher, readKernelProcessSpec, setKernelWorkerUrl } from '@riftydev/kernel';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
-import { RegistryClient } from '@riftydev/npm-client';
 import { installRuntimeJsFsHandlers } from '@riftydev/runtime-js';
 import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
@@ -41,7 +40,7 @@ import {
   isPtyIpcMessage,
 } from '../glue/pty-protocol.ts';
 import { reachableCwd } from '../glue/reachable-cwd.ts';
-import { proxiedRegistryFetch } from '../glue/registry-fetch.ts';
+import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import {
   collectSnapshot,
@@ -253,7 +252,7 @@ async function bootShellOwner(opts: {
   const tearVfsBridge = serveVfsWrites(port, { onWrite: onVfsWrite });
 
   const vfs = new SyncMirrorVfs();
-  const registry = new RegistryClient({ fetch: proxiedRegistryFetch() });
+  const registry = createProxiedRegistryClient();
   // ADR-0150: each foreground CLI runs in a supervised child worker-process
   // (RIFTY_REMOTE_FS=1) reading the owner store over fs.* sync-RPC — the owner
   // stays a free async supervisor (blocking work left it). The in-realm

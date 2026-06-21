@@ -85,11 +85,9 @@ jobs:
           echo "alias_url=$alias_url" >> "$GITHUB_OUTPUT"
           echo "logs_url=$logs_url" >> "$GITHUB_OUTPUT"
 
-      - name: Smoke PR preview npm registry proxy
+      - name: Smoke PR preview registry proxy
         if: github.event_name == 'pull_request'
-        env:
-          ALIAS_URL: ${{ steps.preview.outputs.alias_url }}
-        run: node tools/netlify/smoke-npm-registry.mjs "$ALIAS_URL"
+        run: node tools/registry/smoke-npm-registry.mjs "https://registry.rifty.dev"
 
       - name: Comment PR preview URL
         if: github.event_name == 'pull_request'
@@ -144,6 +142,77 @@ jobs:
             --auth="$NETLIFY_AUTH_TOKEN" \
             --message="main ${GITHUB_SHA}"
 
-      - name: Smoke production npm registry proxy
+      - name: Smoke production registry proxy
         if: github.event_name == 'push'
-        run: node tools/netlify/smoke-npm-registry.mjs "https://${NETLIFY_SITE_NAME}.netlify.app"
+        run: node tools/registry/smoke-npm-registry.mjs "https://registry.rifty.dev"
+
+  deploy-landing:
+    name: Deploy landing
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      NETLIFY_LANDING_SITE_ID: ${{ vars.NETLIFY_LANDING_SITE_ID || secrets.NETLIFY_LANDING_SITE_ID || '823ea64a-160a-4892-b0f4-24eab1424dce' }}
+      NETLIFY_LANDING_SITE_NAME: ${{ vars.NETLIFY_LANDING_SITE_NAME || 'rifty-landing' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Validate landing Netlify configuration
+        run: |
+          set -euo pipefail
+          if [ -z "$NETLIFY_AUTH_TOKEN" ]; then
+            echo "::error::Set the NETLIFY_AUTH_TOKEN repository secret before Netlify deploys can run."
+            exit 1
+          fi
+          if [ -z "$NETLIFY_LANDING_SITE_ID" ]; then
+            echo "::error::Set NETLIFY_LANDING_SITE_ID as a repository variable or secret."
+            exit 1
+          fi
+
+      - name: Deploy landing PR preview
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          pnpm dlx netlify@26.0.2 deploy \
+            --no-build \
+            --filter="@riftydev/landing" \
+            --dir="$GITHUB_WORKSPACE/apps/landing" \
+            --site="$NETLIFY_LANDING_SITE_ID" \
+            --auth="$NETLIFY_AUTH_TOKEN" \
+            --alias="landing-pr-${{ github.event.pull_request.number }}" \
+            --message="landing PR #${{ github.event.pull_request.number }} ${GITHUB_SHA}"
+
+      - name: Smoke landing PR preview
+        if: github.event_name == 'pull_request'
+        env:
+          LANDING_URL: https://landing-pr-${{ github.event.pull_request.number }}--${{ env.NETLIFY_LANDING_SITE_NAME }}.netlify.app
+        run: |
+          set -euo pipefail
+          node -e 'const url = process.env.LANDING_URL; fetch(url).then(async (r) => { const text = await r.text(); if (!r.ok || !text.includes("Open, self-hostable browser runtime infrastructure")) throw new Error(`landing smoke failed: ${r.status}`); }).catch((err) => { console.error(err); process.exit(1); })'
+
+      - name: Deploy landing production
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          pnpm dlx netlify@26.0.2 deploy \
+            --prod \
+            --no-build \
+            --filter="@riftydev/landing" \
+            --dir="$GITHUB_WORKSPACE/apps/landing" \
+            --site="$NETLIFY_LANDING_SITE_ID" \
+            --auth="$NETLIFY_AUTH_TOKEN" \
+            --message="landing main ${GITHUB_SHA}"
+
+      - name: Smoke landing production
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          export LANDING_URL="https://${NETLIFY_LANDING_SITE_NAME}.netlify.app"
+          node -e 'const url = process.env.LANDING_URL; fetch(url).then(async (r) => { const text = await r.text(); if (!r.ok || !text.includes("Open, self-hostable browser runtime infrastructure")) throw new Error(`landing smoke failed: ${r.status}`); }).catch((err) => { console.error(err); process.exit(1); })'

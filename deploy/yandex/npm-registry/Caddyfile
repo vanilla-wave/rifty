@@ -1,0 +1,34 @@
+{
+	admin off
+}
+
+registry.rifty.dev {
+	header {
+		>Access-Control-Allow-Origin "*"
+		>Access-Control-Allow-Methods "GET, HEAD, OPTIONS"
+		>Access-Control-Allow-Headers "accept, content-type"
+		>Cross-Origin-Resource-Policy "cross-origin"
+	}
+
+	@options method OPTIONS
+	respond @options "" 204
+
+	@unsupported not method GET HEAD OPTIONS
+	header @unsupported Allow "GET, HEAD, OPTIONS"
+	respond @unsupported "Method Not Allowed" 405
+
+	handle /npm-registry {
+		rewrite * /
+		reverse_proxy https://registry.npmjs.org {
+			header_up Host registry.npmjs.org
+		}
+	}
+
+	handle_path /npm-registry/* {
+		reverse_proxy https://registry.npmjs.org {
+			header_up Host registry.npmjs.org
+		}
+	}
+
+	respond "Not Found" 404
+}

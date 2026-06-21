@@ -464,6 +464,13 @@
 
 ### Changed
 
+- **Production npm registry proxy moved to Yandex Cloud (ADR-0163).** Netlify
+  now deploys only the static playground artifact; production builds set
+  `VITE_RIFTY_REGISTRY_URL=https://registry.rifty.dev/npm-registry`, and
+  tarball URL rewriting uses that configured proxy origin. The old Netlify
+  Function source and `/npm-registry` redirects are removed; CI smoke tests the
+  Yandex Cloud streaming proxy directly.
+
 - **Mono font → JetBrains Mono.** Code surfaces (Monaco editor, xterm terminal,
   code chips, seeded sandbox preview CSS, `--rf-font-mono`) now use self-hosted
   JetBrains Mono (OFL, variable woff2, latin + cyrillic subsets) in place of
