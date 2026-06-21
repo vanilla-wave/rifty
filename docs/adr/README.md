@@ -95,8 +95,8 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0027 | Per-file shim overlays live in the consuming adapter |
 | 0042 | M11 nested install — first-wins flat + nest-on-conflict |
 | 0051 | Native-dependency install policy — loud `ENATIVEUNSUPPORTED`, optional natives skipped |
-| 0133 | Netlify npm-registry proxy v2 — netlify-build deploys, pre-SPA function redirects, runtime site env, buffered bodies, CI deploy smoke |
 | 0134 | install() per-package progress hook (onPackage) |
+| 0161 | Yandex Cloud streaming npm-registry proxy |
 
 ### playground
 
@@ -191,6 +191,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0013 | 0072 | OPFS hot path; context grafted |
 | 0025 | 0043 | dev-server realm; page-realm globals-guard grafted |
 | 0028 | 0133 | prod npm-registry proxy; deploy/routing/env contract reshaped, context grafted |
+| 0133 | 0161 | prod npm-registry proxy moved from Netlify Function to Yandex Cloud streaming Compute proxy; context grafted |
 | 0044 | 0047 | esbuild WASI |
 | 0046 | 0125 | owner-binding seam; microtask invariant dropped, context grafted |
 | 0055 | n/a | retired opencode facade ADR; integration cancelled |

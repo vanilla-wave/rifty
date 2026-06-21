@@ -14,9 +14,6 @@
   command = "pnpm install --frozen-lockfile && pnpm build"
   publish = "apps/playground/dist"
 
-[functions]
-  directory = "netlify/functions"
-
 [build.environment]
   NODE_VERSION = "22"
   PNPM_VERSION = "11.5.1"
@@ -25,8 +22,9 @@
   PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
   # Monaco's worker bundle is memory-hungry under Vite/Rollup.
   NODE_OPTIONS = "--max-old-space-size=4096"
-  # Build-time mirror. Runtime Functions read this from Netlify site env.
-  RIFTY_NPM_REGISTRY_UPSTREAM = "https://registry.npmjs.org"
+  # Production registry proxy is Yandex Cloud Compute; local dev keeps the Vite
+  # `/npm-registry` proxy from apps/playground/vite.config.ts.
+  VITE_RIFTY_REGISTRY_URL = "https://registry.rifty.dev/npm-registry"
 
 # Cross-origin isolation headers (mirror of apps/playground/public/_headers).
 [[headers]]
@@ -40,16 +38,6 @@
 # any other unmatched path falls back to the single-page app shell. (Netlify
 # only applies a 200-rewrite when no static file matches, so /sw.js, /fonts/*,
 # and hashed assets are unaffected.)
-[[redirects]]
-  from = "/npm-registry/*"
-  to = "/.netlify/functions/npm-registry/:splat"
-  status = 200
-
-[[redirects]]
-  from = "/npm-registry"
-  to = "/.netlify/functions/npm-registry"
-  status = 200
-
 [[redirects]]
   from = "/*"
   to = "/index.html"

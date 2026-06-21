@@ -8,7 +8,7 @@ The browser-side playground for rifty. SolidJS + Monaco + xterm.js.
 - `src/adapters/useRuntime.ts` — thin Solid adapter over `@riftydev/runtime-js`'s framework-agnostic controller.
 - `src/workers/worker-entry.ts` — module Worker entry; re-exports `@riftydev/runtime-js/worker`.
 - `public/sw.js` — Service Worker (static for M0; rebuilds from `@riftydev/service-worker` arrive in M7).
-- `vite.config.ts` — sets COOP/COEP headers required for cross-origin isolation (D-001) and proxies `/npm-registry` to npmjs.org (D-004).
+- `vite.config.ts` — sets COOP/COEP headers required for cross-origin isolation (D-001) and proxies local-dev `/npm-registry` to npmjs.org (D-004). Production builds use `VITE_RIFTY_REGISTRY_URL=https://registry.rifty.dev/npm-registry`.
 
 ## Constraints
 

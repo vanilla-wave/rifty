@@ -45,7 +45,8 @@ export type Fetcher = (url: string, init?: RequestInit) => Promise<Response>;
  *   1. `globalThis.__RIFTY_REGISTRY_URL__` (playground bootstrap),
  *   2. `globalThis.import.meta.env.RIFTY_REGISTRY_URL` (Vite-style build env),
  *   3. `process.env.REGISTRY_BASE_URL` (Node-side test harness),
- *   4. `/npm-registry` (default — Vite proxy in dev, Netlify Function in prod).
+ *   4. `/npm-registry` (default — Vite proxy in dev; production consumers can
+ *      set a full proxy URL).
  *
  * Never hardcode a registry URL elsewhere (D-004 / ADR-0028).
  */

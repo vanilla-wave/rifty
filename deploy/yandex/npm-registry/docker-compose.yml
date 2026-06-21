@@ -1,0 +1,54 @@
+services:
+  registry-proxy:
+    image: caddy:2.10.2-alpine
+    container_name: rifty-npm-registry-proxy
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    command:
+      - /bin/sh
+      - -c
+      - |
+        cat >/etc/caddy/Caddyfile <<'CADDY'
+        {
+        	admin off
+        }
+
+        registry.rifty.dev {
+        	header {
+        		>Access-Control-Allow-Origin "*"
+        		>Access-Control-Allow-Methods "GET, HEAD, OPTIONS"
+        		>Access-Control-Allow-Headers "accept, content-type"
+        		>Cross-Origin-Resource-Policy "cross-origin"
+        	}
+
+        	@options method OPTIONS
+        	respond @options "" 204
+
+        	@unsupported not method GET HEAD OPTIONS
+        	header @unsupported Allow "GET, HEAD, OPTIONS"
+        	respond @unsupported "Method Not Allowed" 405
+
+        	handle /npm-registry {
+        		rewrite * /
+        		reverse_proxy https://registry.npmjs.org {
+        			header_up Host registry.npmjs.org
+        		}
+        	}
+
+        	handle_path /npm-registry/* {
+        		reverse_proxy https://registry.npmjs.org {
+        			header_up Host registry.npmjs.org
+        		}
+        	}
+
+        	respond "Not Found" 404
+        }
+        CADDY
+        exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -7,7 +7,7 @@
 | `rifty.dev` | Netlify (`rifty-landing`) | Static public landing page from `apps/landing` |
 | `www.rifty.dev` | Netlify (`rifty-landing`) | Redirect to `https://rifty.dev/` |
 | `play.rifty.dev` | Netlify (`rifty-playground`) | Cross-origin-isolated playground |
-| `registry.rifty.dev` | Yandex Cloud (planned) | npm registry proxy/cache once moved from Netlify |
+| `registry.rifty.dev` | Yandex Cloud | npm registry proxy |
 | `api.rifty.dev` | Yandex Cloud (planned) | Future project APIs |
 
 Yandex Cloud DNS owns the public zone. Netlify remains the deploy surface for
@@ -21,7 +21,10 @@ Expected DNS records:
 rifty.dev.       ANAME  apex-loadbalancer.netlify.com.
 www.rifty.dev.   CNAME  rifty-landing.netlify.app.
 play.rifty.dev.  CNAME  rifty-playground.netlify.app.
+registry.rifty.dev.  A  93.77.177.79
 ```
 
-The playground still serves `/npm-registry/*` through the Netlify Function
-recorded in ADR-0133 until `registry.rifty.dev` is implemented and accepted.
+The playground production build uses
+`VITE_RIFTY_REGISTRY_URL=https://registry.rifty.dev/npm-registry`, so npm
+metadata and tarballs go through the Yandex Cloud streaming proxy recorded in
+ADR-0161. Local dev still uses the relative `/npm-registry` Vite proxy.
