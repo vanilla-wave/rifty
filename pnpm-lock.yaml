@@ -36,6 +36,8 @@ importers:
         specifier: 8.18.3
         version: 8.18.3
 
+  apps/landing: {}
+
   apps/playground:
     dependencies:
       '@rifty-examples/vite-like-dev':

@@ -1,0 +1,20 @@
+# Netlify deploy config for the rifty.dev landing site.
+#
+# This file deliberately does NOT set COOP/COEP. Those headers belong to the
+# playground site only; the landing deploy must not inherit the root
+# playground-oriented netlify.toml.
+
+[build]
+  publish = "."
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
+
+[[headers]]
+  for = "/styles.css"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
