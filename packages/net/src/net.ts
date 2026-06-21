@@ -15,7 +15,13 @@
  */
 
 import { EventEmitter, NotImplementedError } from '@riftydev/io';
-import { addrInUseError, isPortBound, registerPort, unregisterPort } from './registry.ts';
+import {
+  addrInUseError,
+  allocateEphemeralPort,
+  isPortBound,
+  registerPort,
+  unregisterPort,
+} from './registry.ts';
 
 // Shared one-shot codecs (default config, non-fatal). One-shot utf8
 // encode/decode is stateless, so a module singleton is byte-identical and
@@ -100,6 +106,20 @@ export class Socket extends HttpFramedSocket {
   }
 }
 
+/**
+ * Subset of Node's `net.ListenOptions` honoured by {@link Server.listen}. Only
+ * `port` is read; `host`/`backlog`/`exclusive` are accepted-but-unused for
+ * Node-shape parity (rifty is loopback-only — see `request.ts`). Mirrors the
+ * `node:http` server's `ListenOptions` so `listen({ port: 0 })` is ephemeral on
+ * both surfaces.
+ */
+export interface NetListenOptions {
+  port?: number;
+  host?: string;
+  backlog?: number;
+  exclusive?: boolean;
+}
+
 export class Server extends EventEmitter {
   private listenedPort: number | null = null;
   private readonly connectionHandler?: (socket: HttpFramedSocket) => void;
@@ -109,19 +129,32 @@ export class Server extends EventEmitter {
     this.connectionHandler = connectionHandler;
   }
 
-  listen(port: number, hostnameOrCb?: string | (() => void), cb?: () => void): this {
+  listen(port: number, hostnameOrCb?: string | (() => void), cb?: () => void): this;
+  listen(options: NetListenOptions, cb?: () => void): this;
+  listen(
+    portOrOptions: number | NetListenOptions,
+    hostnameOrCb?: string | (() => void),
+    cb?: () => void,
+  ): this {
+    // Accept Node's two `Server.listen` shapes: a bare number, or an options
+    // object (`listen({ port }, cb)`). Both extract a numeric port; host is
+    // ignored (loopback-only).
+    const requested = typeof portOrOptions === 'number' ? portOrOptions : (portOrOptions.port ?? 0);
     const callback = (typeof hostnameOrCb === 'function' ? hostnameOrCb : cb) as
       | (() => void)
       | undefined;
     // Port already bound in this realm → async `'error'` EADDRINUSE, like Node
     // (server returned, no `'listening'`; ADR-0157 review C3). Port 0 = ephemeral,
     // never collides — skip the check for it.
-    if (port !== 0 && isPortBound(port)) {
-      queueMicrotask(() => this.emit('error', addrInUseError('127.0.0.1', port)));
+    if (requested !== 0 && isPortBound(requested)) {
+      queueMicrotask(() => this.emit('error', addrInUseError('127.0.0.1', requested)));
       return this;
     }
-    this.listenedPort = port;
-    registerPort(port, async (request) => {
+    // `listen(0)` / `listen({ port: 0 })` allocates a virtual ephemeral port from
+    // the realm registry, exposed via `address().port` until close (no OS socket).
+    const resolvedPort = requested === 0 ? allocateEphemeralPort() : requested;
+    this.listenedPort = resolvedPort;
+    registerPort(resolvedPort, async (request) => {
       const socket = new HttpFramedSocket();
       this.emit('connection', socket);
       this.connectionHandler?.(socket);

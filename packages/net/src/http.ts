@@ -17,6 +17,8 @@ export {
   request,
   default,
   STATUS_CODES,
+  METHODS,
+  maxHeaderSize,
   WebSocketUpgradeSocket,
 } from './http/index.ts';
 export type { WebSocketBridgeFrame, WebSocketUpgradeSocketOptions } from './http/index.ts';

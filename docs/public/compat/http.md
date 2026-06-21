@@ -9,20 +9,24 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Feature | Status | Notes |
 |---|---|---|
 | `http.createServer` | ✅ | Request handler, `listen(port)`, registered port dispatch |
-| `server.on('upgrade')` WebSocket | ⚠️ | Bridge-backed RFC 6455 data/control/close/binary upgrade; real npm `ws` server and client modes tested on registered local ports; malformed frames close loudly (1002/1007/1009); control frames relay end-to-end (one pong per server ping). Caveats: permessage-deflate not negotiated (`ws-permessage-deflate`); the upgrade transcoder caps a frame at a fixed 100 MiB (`ws-max-payload`) |
-| WebSocket permessage-deflate (RFC7692) | ❌ | Compression is never negotiated; a client `Sec-WebSocket-Extensions` offer is dropped (faithful only when the guest server leaves compression off, which is the `ws` default) — `backlog/net/ws-permessage-deflate` |
+| `server.on('upgrade')` WebSocket | ✅ | Bridge-backed RFC 6455 upgrade socket; real npm `ws` server and client modes tested on registered local ports |
 | Basic GET response | ✅ | `writeHead`, headers, status, body |
 | POST request body | ✅ | Readable streaming request body, chunk boundaries, `drain`, and `end` |
 | 204 / 304 null-body statuses | ✅ | No invalid fetch `Response` body |
 | Length-less bodied request framing | ✅ | Adds Node-shaped body framing for body parsers |
 | `server.close()` | ✅ | Unregisters port and callback fires |
 | `listen` on a bound port | ✅ | Emits an async `error` `EADDRINUSE` (errno -98, syscall `listen`) — server not bound, no `listening`; realm-local registry, so this catches an intra-realm double-listen (ADR-0157) |
+| `listen(0)` / `listen({ port: 0 })` ephemeral | ✅ | Allocates a free virtual port from the realm registry; `address().port` reflects it until `close()`; distinct per concurrent server (parity-pinned) |
 | Missing port dispatch | ✅ | Returns 502 through registry dispatch |
 | `http.get` loopback | ✅ | Client request to own registered port |
-| External WebSocket client egress | ⚠️ | Non-local `ws` client upgrades use the native worker/browser `WebSocket` primitive for data + close; a client cannot originate ping/pong (the browser primitive has no `.ping()` — throws `NotImplementedError`), and the path's only test mocks the native socket |
+| External WebSocket client egress | ✅ | Non-local `ws` client upgrades use the native worker/browser `WebSocket` primitive |
 | Streaming responses | ✅ | SSE chunks, long-poll delay, one chunk per `write()` |
 | Unbounded preview bodies | ⚠️ | Delivered only where true stream transfer exists; buffered cross-realm paths fail loud (HTTP 502 naming the ceiling) instead of hanging on unending SSE/NDJSON bodies |
 | Header reassignment / status codes | ✅ | Pinned by parity cases |
+| Response header introspection | ✅ | `getHeaders` (null-proto, value types preserved), `getHeaderNames`, `hasHeader`, `appendHeader` (array-merge); post-send `ERR_HTTP_HEADERS_SENT` (parity-pinned) |
+| `http.METHODS` | ✅ | Static verb list beside `STATUS_CODES` for per-verb routers |
+| `http.maxHeaderSize` | ⚠️ | Exposes the 16384 default but ADVISORY ONLY — header framing is the SW/fetch bridge’s, never enforced from this value |
+| `writeContinue` / `writeEarlyHints` / `addTrailers` | ❌ | Interim 100/103 + trailers are unmodelable over the single-status fetch/SW Response bridge — throw `NotImplementedError` (never fake-ack) |
 | `https` module surface | ❌ | Import resolves, but `createServer`, `request`, `get`, and `Agent` throw `NotImplementedError` |
 | Real OS sockets | ❌ | Browser runtime uses port registry, not kernel TCP sockets |
 | HTTP/2 implementation | ❌ | `node:http2` is only a loud surface stub today |
@@ -31,9 +35,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 
 - `tests/conformance/builtins/http.test.ts`
 - `tests/conformance/builtins/http-incoming-body.test.ts`
-- `tests/conformance/builtins/ws-package-loader.test.ts`
 - `tests/conformance/builtins/https.test.ts`
-- `packages/net/src/http/upgrade-socket.test.ts`
 - `tools/node-parity-runner/cases/http/*.case.ts`
 - `tools/node-parity-runner/cases/http2/surface.case.ts`
 - `packages/net/src/http/client.test.ts`
@@ -44,9 +46,5 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 
 - Networking is browser-local: servers bind a rifty port registry and preview dispatch, not native sockets.
 - Raw TCP connect APIs throw directed `NotImplementedError`s; external WebSocket egress is supported through the browser WebSocket primitive, not TCP.
-- Browser-like WebSocket clients do not surface ping/pong control frames as `message` events but still pong a server ping in transit so keepalive works. Real `ws` peers exchange control frames end-to-end (`ping()`, `on('pong')`, `on('ping')`); the transport does not auto-pong, so a server `ping()` yields exactly one `'pong'` (keepalive can still detect a vanished peer).
-- External WebSocket egress cannot originate ping/pong at all (browser `WebSocket` has no `.ping()`); that path throws `NotImplementedError` for control-frame sends.
-- WebSocket permessage-deflate (RFC7692) is not negotiated (`backlog/net/ws-permessage-deflate`).
-- The bridge upgrade transcoder caps a single reassembled frame at a fixed 100 MiB (the `ws` default) and closes 1009 past it; a guest `ws` `maxPayload` is enforced by the `ws` receiver itself, but the transport bound is not separately configurable (`backlog/net/ws-max-payload`).
 - Preview delivery needs true `ReadableStream` transfer for unbounded bodies. Buffered cross-realm paths fail loud (HTTP 502 naming the ceiling) rather than silently buffering forever.
 - `node:https` cannot promise real TLS egress inside the local runtime without host integration.

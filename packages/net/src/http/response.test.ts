@@ -6,9 +6,18 @@
  * should pause until `pull()` is invoked by the consumer.
  */
 
-import { Buffer, Readable } from '@riftydev/io';
+import { Buffer, NotImplementedError, Readable } from '@riftydev/io';
 import { describe, expect, it } from 'vitest';
 import { ServerResponse } from './response.ts';
+
+const codeOf = (fn: () => unknown): string | undefined => {
+  try {
+    fn();
+  } catch (e) {
+    return (e as { code?: string }).code;
+  }
+  return undefined;
+};
 
 describe('ServerResponse — backpressure (Item 5)', () => {
   it('pauses write() when desiredSize <= 0 and resumes on pull()', async () => {
@@ -154,6 +163,77 @@ describe("ServerResponse — Node-style 'drain' (F05-T3, Q-2026-05-30-102)", () 
     await new Promise<void>((r) => setTimeout(r, 20));
 
     expect(drains).toBe(0);
+  });
+});
+
+describe('ServerResponse — header introspection (backlog net/http-server-introspection)', () => {
+  it('getHeaders returns a null-proto clone preserving value types', () => {
+    const res = new ServerResponse();
+    res.setHeader('Content-Type', 'text/plain');
+    res.setHeader('X-Num', 5);
+    const h = res.getHeaders();
+    expect(Object.getPrototypeOf(h)).toBeNull();
+    expect(h['content-type']).toBe('text/plain');
+    expect(h['x-num']).toBe(5); // number type preserved, like Node
+  });
+
+  it('getHeader preserves a numeric value', () => {
+    const res = new ServerResponse();
+    res.setHeader('X-Num', 5);
+    expect(res.getHeader('X-NUM')).toBe(5);
+  });
+
+  it('getHeaderNames returns lowercased names in insertion order', () => {
+    const res = new ServerResponse();
+    res.setHeader('Content-Type', 'text/plain');
+    res.setHeader('X-A', '1');
+    res.setHeader('X-B', '2');
+    expect(res.getHeaderNames()).toEqual(['content-type', 'x-a', 'x-b']);
+  });
+
+  it('hasHeader is case-insensitive', () => {
+    const res = new ServerResponse();
+    res.setHeader('Content-Type', 'text/plain');
+    expect(res.hasHeader('CONTENT-TYPE')).toBe(true);
+    expect(res.hasHeader('x-absent')).toBe(false);
+  });
+
+  it('appendHeader array-merges repeated values (case-insensitive)', () => {
+    const res = new ServerResponse();
+    res.appendHeader('Set-Cookie', 'a=1');
+    res.appendHeader('set-cookie', 'b=2');
+    expect(res.getHeader('set-cookie')).toEqual(['a=1', 'b=2']);
+    // Name stays in its original insertion slot.
+    expect(res.getHeaderNames()).toEqual(['set-cookie']);
+  });
+
+  it('appendHeader on a fresh name behaves like setHeader', () => {
+    const res = new ServerResponse();
+    res.appendHeader('X-One', 'v');
+    expect(res.getHeader('x-one')).toBe('v');
+  });
+
+  it('appendHeader accepts an array value', () => {
+    const res = new ServerResponse();
+    res.appendHeader('Set-Cookie', ['a=1', 'b=2']);
+    res.appendHeader('Set-Cookie', 'c=3');
+    expect(res.getHeader('set-cookie')).toEqual(['a=1', 'b=2', 'c=3']);
+  });
+
+  it('setHeader/appendHeader/removeHeader throw ERR_HTTP_HEADERS_SENT after flush', () => {
+    const res = new ServerResponse();
+    res.setHeader('content-type', 'text/plain');
+    res.flushHeaders();
+    expect(codeOf(() => res.appendHeader('late', '1'))).toBe('ERR_HTTP_HEADERS_SENT');
+    expect(codeOf(() => res.setHeader('late', '1'))).toBe('ERR_HTTP_HEADERS_SENT');
+    expect(codeOf(() => res.removeHeader('content-type'))).toBe('ERR_HTTP_HEADERS_SENT');
+  });
+
+  it('interim/trailer methods loud-throw NotImplementedError', () => {
+    const res = new ServerResponse();
+    expect(() => res.writeContinue()).toThrow(NotImplementedError);
+    expect(() => res.writeEarlyHints({})).toThrow(NotImplementedError);
+    expect(() => res.addTrailers({ 'x-trailer': '1' })).toThrow(NotImplementedError);
   });
 });
 

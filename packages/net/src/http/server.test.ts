@@ -17,7 +17,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { dispatchToPort, listPorts, unregisterPort } from '../registry.ts';
 import { BridgedWebSocket } from '../ws/bridge.ts';
 import type { ServerResponse } from './response.ts';
-import { createServer } from './server.ts';
+import httpDefault, { createServer } from './server.ts';
 
 const requireFromHere = createRequire(import.meta.url);
 
@@ -41,6 +41,72 @@ type RealWsServerCtor = new (options: {
 
 afterEach(() => {
   for (const p of listPorts()) unregisterPort(p);
+});
+
+const listenZero = (s: ReturnType<typeof createServer>): Promise<void> =>
+  new Promise<void>((resolve) => s.listen(0, () => resolve()));
+
+describe('http module static surface (backlog net/http-server-introspection)', () => {
+  it('exposes http.METHODS as a sorted array including the common verbs', () => {
+    expect(Array.isArray(httpDefault.METHODS)).toBe(true);
+    expect(httpDefault.METHODS).toContain('GET');
+    expect(httpDefault.METHODS).toContain('POST');
+    expect(httpDefault.METHODS).toContain('DELETE');
+    expect([...httpDefault.METHODS]).toEqual([...httpDefault.METHODS].sort());
+  });
+
+  it('exposes http.maxHeaderSize as the Node default (advisory, not enforced)', () => {
+    expect(httpDefault.maxHeaderSize).toBe(16384);
+  });
+});
+
+describe('HttpServer.listen(0) — virtual ephemeral ports (backlog net/listen-zero-ephemeral-ports)', () => {
+  it('listen(0) allocates a virtual ephemeral port reachable via address().port', async () => {
+    const s = createServer((_req, res) => res.end('zero'));
+    await listenZero(s);
+    const port = s.address()?.port as number;
+    expect(port).toBeGreaterThanOrEqual(49152);
+    expect(port).toBeLessThanOrEqual(65535);
+    expect(listPorts()).toContain(port);
+    const resp = await dispatchToPort(port, new Request(`http://preview.local:${port}/`));
+    expect(await resp.text()).toBe('zero');
+  });
+
+  it('listen({ port: 0 }) also allocates a virtual ephemeral port', async () => {
+    const s = createServer((_req, res) => res.end('obj-zero'));
+    await new Promise<void>((resolve) => s.listen({ port: 0 }, () => resolve()));
+    const port = s.address()?.port as number;
+    expect(port).toBeGreaterThanOrEqual(49152);
+    const resp = await dispatchToPort(port, new Request(`http://preview.local:${port}/`));
+    expect(await resp.text()).toBe('obj-zero');
+  });
+
+  it('two concurrent listen(0) servers get distinct, independently routable ports', async () => {
+    const a = createServer((_req, res) => res.end('A'));
+    const b = createServer((_req, res) => res.end('B'));
+    await listenZero(a);
+    await listenZero(b);
+    const pa = a.address()?.port as number;
+    const pb = b.address()?.port as number;
+    expect(pa).not.toBe(pb);
+    expect(await (await dispatchToPort(pa, new Request(`http://x:${pa}/`))).text()).toBe('A');
+    expect(await (await dispatchToPort(pb, new Request(`http://x:${pb}/`))).text()).toBe('B');
+  });
+
+  it('close() frees the ephemeral port; a relisten(0) succeeds', async () => {
+    const s = createServer((_req, res) => res.end('x'));
+    await listenZero(s);
+    const first = s.address()?.port as number;
+    await new Promise<void>((resolve) => s.close(() => resolve()));
+    expect(listPorts()).not.toContain(first);
+    expect(s.address()).toBeNull();
+
+    const s2 = createServer((_req, res) => res.end('y'));
+    await listenZero(s2);
+    const second = s2.address()?.port as number;
+    expect(second).toBeGreaterThanOrEqual(49152);
+    expect(listPorts()).toContain(second);
+  });
 });
 
 describe('HttpServer.listen — options-object overload (Q-2026-05-30-101)', () => {

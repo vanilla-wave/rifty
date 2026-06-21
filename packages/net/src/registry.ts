@@ -66,6 +66,26 @@ export function listPorts(): number[] {
   return [...handlers.keys()].sort((a, b) => a - b);
 }
 
+// IANA dynamic/private port range — what a real OS draws ephemeral ports from.
+const EPHEMERAL_MIN = 49152;
+const EPHEMERAL_MAX = 65535;
+
+/**
+ * Allocate a free virtual ephemeral port for `listen(0)` (Node's "any free
+ * port"). The registry is realm-local with no OS sockets, so this scans the
+ * ephemeral range for the first port not currently registered: deterministic
+ * from a clean registry, collision-free against live ports. Allocation does NOT
+ * reserve — the caller (`server.listen`) registers the returned port
+ * synchronously, before any other code can run, so two `listen(0)` calls get
+ * distinct ports.
+ */
+export function allocateEphemeralPort(): number {
+  for (let port = EPHEMERAL_MIN; port <= EPHEMERAL_MAX; port++) {
+    if (!handlers.has(port)) return port;
+  }
+  throw new Error('listen EADDRINUSE: no free virtual ephemeral port available');
+}
+
 export async function dispatchToPort(port: number, request: Request): Promise<Response> {
   const handler = handlers.get(port);
   if (!handler) {

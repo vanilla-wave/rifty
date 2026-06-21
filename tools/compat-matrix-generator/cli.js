@@ -158,6 +158,11 @@ const matrices = [
         '✅',
         'Emits an async `error` `EADDRINUSE` (errno -98, syscall `listen`) — server not bound, no `listening`; realm-local registry, so this catches an intra-realm double-listen (ADR-0157)',
       ],
+      [
+        '`listen(0)` / `listen({ port: 0 })` ephemeral',
+        '✅',
+        'Allocates a free virtual port from the realm registry; `address().port` reflects it until `close()`; distinct per concurrent server (parity-pinned)',
+      ],
       ['Missing port dispatch', '✅', 'Returns 502 through registry dispatch'],
       ['`http.get` loopback', '✅', 'Client request to own registered port'],
       [
@@ -172,6 +177,22 @@ const matrices = [
         'Delivered only where true stream transfer exists; buffered cross-realm paths fail loud (HTTP 502 naming the ceiling) instead of hanging on unending SSE/NDJSON bodies',
       ],
       ['Header reassignment / status codes', '✅', 'Pinned by parity cases'],
+      [
+        'Response header introspection',
+        '✅',
+        '`getHeaders` (null-proto, value types preserved), `getHeaderNames`, `hasHeader`, `appendHeader` (array-merge); post-send `ERR_HTTP_HEADERS_SENT` (parity-pinned)',
+      ],
+      ['`http.METHODS`', '✅', 'Static verb list beside `STATUS_CODES` for per-verb routers'],
+      [
+        '`http.maxHeaderSize`',
+        '⚠️',
+        'Exposes the 16384 default but ADVISORY ONLY — header framing is the SW/fetch bridge’s, never enforced from this value',
+      ],
+      [
+        '`writeContinue` / `writeEarlyHints` / `addTrailers`',
+        '❌',
+        'Interim 100/103 + trailers are unmodelable over the single-status fetch/SW Response bridge — throw `NotImplementedError` (never fake-ack)',
+      ],
       [
         '`https` module surface',
         '❌',
