@@ -6,7 +6,11 @@ import { createVfsLanguageServiceHost } from './host.ts';
 import { loadLibDts } from './lib-dts.ts';
 import { createDocumentOverlay } from './overlay.ts';
 
-function writeFile(fsSync: ReturnType<typeof createMemoryFs>['fsSync'], path: string, text: string) {
+function writeFile(
+  fsSync: ReturnType<typeof createMemoryFs>['fsSync'],
+  path: string,
+  text: string,
+) {
   const dir = path.slice(0, path.lastIndexOf('/')) || '/';
   fsSync.mkdirSync(dir, { recursive: true });
   fsSync.writeFileSync(path, new TextEncoder().encode(text));

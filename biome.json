@@ -21,7 +21,8 @@
       "apps/playground/public/sw.js",
       "tools/integration-fixtures/**",
       ".arch-fixtures/**",
-      ".claude/**"
+      ".claude/**",
+      "packages/ts-language-service/vendor/**"
     ]
   },
   "formatter": {
