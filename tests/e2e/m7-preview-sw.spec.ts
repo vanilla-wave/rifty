@@ -66,4 +66,36 @@ test.describe('M7 — HTTP through the Service Worker preview bridge', () => {
     expect(probe.body).toContain('src/main.js');
     expect(probe.body).not.toContain('data-rifty-hmr-bridge');
   });
+
+  // Regression: the test above proves the dev server SERVES the shell HTML, but a
+  // black-screen preview (the entry module fails to transform/execute) serves the
+  // exact same shell and would pass it. This test drives the real preview iframe and
+  // asserts the module graph actually RENDERED — Vite/Rolldown transformed main.js +
+  // its JS+JSON imports and the app wrote DOM. Guards the project-files black screen
+  // (a `?t=`-busted JSON import served raw → "Unexpected token ':'" → empty #app).
+  test('default project-files preview iframe RENDERS the JS+JSON module graph', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const pageErrors: string[] = [];
+    page.on('pageerror', (e) => pageErrors.push(e.message));
+
+    await page.goto('/');
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
+      timeout: 15_000,
+    });
+    // The default preset (project-files) boots a Vite dev server on load.
+    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 60_000);
+
+    const frame = page.frameLocator('iframe[title="Preview port 5174"]');
+    // `<h1>Workspace anatomy</h1>` is produced by main.js after it imports the
+    // transformed JSON (`project.json`) + the JS summary module — proof the graph ran.
+    await expect(frame.locator('.workspace-shell h1')).toHaveText('Workspace anatomy', {
+      timeout: 60_000,
+    });
+    await expect(frame.locator('.file-list li').first()).toBeVisible();
+
+    // A raw-JSON-as-ESM regression surfaces as a SyntaxError inside the iframe.
+    expect(pageErrors.join('\n')).not.toMatch(/Unexpected token|SyntaxError/);
+  });
 });

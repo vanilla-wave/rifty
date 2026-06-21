@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Registry client retries transient failures (429 / 5xx / network).** `RegistryClient`
+  now retries a rate-limited or transiently-failing fetch with exponential backoff,
+  honoring a `Retry-After` header (real-npm behavior). A single 429 from the shared
+  registry proxy no longer hard-aborts a many-package cold install (the express+sqlite
+  "Failed to fetch packument … 429"). Permanent 4xx (e.g. 404) never retries; bounded
+  by `maxRetries` (default 3); `sleep` is injectable for tests.
+- **Expected native-platform optional skips read as skips, not errors.** An optional
+  `@rolldown/binding-<platform>` (or any `cpu`/`os`-pinned native sibling) that
+  `ENATIVEUNSUPPORTED`-skips per ADR-0051 now logs a calm
+  `npm: skipped optional native dependency <name> (expected — rifty runs JS+WASI only)`
+  instead of `… could not be installed: ENATIVEUNSUPPORTED …` — a pack of platform
+  bindings no longer looks like a wall of install failures. Genuine optional failures
+  (network/missing) keep the louder "could not be installed" wording.
+
 ### Added
 
 - **Native policy accepts WASI packages (`cpu: ["wasm32"]`, ADR-0156).** Rolldown's

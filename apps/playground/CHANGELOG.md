@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Project-files preview no longer black-screens on Vite 8.** The `project-files`
+  preset rendered a blank `#app` (`Unexpected token ':'`): its `freshUrl()` appended a
+  `?t=` cache-bust to the `project.json?import` URL, and Vite 8 serves a QUERIED `.json`
+  raw (only a bare specifier / `?import` is JSON-transformed — verified head-to-head vs
+  real `vite@8.0.16`), so the entry imported raw JSON as an ES module and threw. The
+  JSON import is no longer cache-busted (Vite 5 masked this because `import.meta.hot` was
+  falsy with HMR off; Vite 8 always injects it). rifty stays faithful to Vite 8 — the bug
+  was in the demo source. New CI-active regression in `tests/e2e/m7-preview-sw.spec.ts`
+  drives the real preview iframe and asserts the JS+JSON module graph RENDERED (the prior
+  m7 only checked the served shell HTML, so a black screen passed).
+
 ### Changed
 
 - **Shared `runForegroundChild` driver** (closes backlog/playground/owner-child-foreground-shared-driver). The owner `node <file>` executor and the `.bin` executor no longer each re-implement decode + stream + Ctrl-C-kill/mute + settle-on-exit (ADR-0155 §1 recorded the drift risk) — both ride `glue/run-foreground-child.ts`. The node executor passes its `rifty:node-listening` hook + preview-registry remove; the bin executor passes neither. Side benefit: the bin executor inherits the exit-listener-before-pre-abort ordering its inline copy lacked, so a `node_modules/.bin/<cmd>` launched with an already-aborted signal no longer hangs (kill() emits `'exit'` synchronously). The dev-server child keeps its own driver (resolves on a `rifty:dev-ready` message, not exit).

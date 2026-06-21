@@ -78,7 +78,10 @@ function ensureStyle() {
 export async function render() {
   renderVersion += 1;
   const { describeProject, formatFileList } = await import(/* @vite-ignore */ freshUrl(summaryUrl));
-  const project = (await import(/* @vite-ignore */ freshUrl(projectUrl))).default;
+  // Vite 8 serves a QUERIED .json raw — only a bare specifier or '?import' is JSON-transformed;
+  // any '?t=' cache-bust yields raw JSON, which loaded as ESM throws "Unexpected token ':'"
+  // (the project-files black screen). JS modules tolerate '?t=' (above); the JSON must not be busted.
+  const project = (await import(/* @vite-ignore */ projectUrl)).default;
   const app = document.getElementById('app');
   if (!app) throw new Error('Missing #app root');
 

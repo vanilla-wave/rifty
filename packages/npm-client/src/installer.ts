@@ -685,6 +685,17 @@ function warnOptional(
   desc: { depName: string; depRange: string; parentName: string },
   err: unknown,
 ): void {
+  // A platform-native optional sibling (e.g. one of Rolldown's
+  // `@rolldown/binding-<platform>` packages) is EXPECTED to be skipped — rifty's
+  // JS+WASI runtime can never run a native binary (ADR-0051), and the matching
+  // wasm/WASI sibling is the one that installs. Phrase it as an expected skip so a
+  // pack of these does not read as a wall of install errors (it is not a failure).
+  if ((err as { code?: unknown })?.code === 'ENATIVEUNSUPPORTED') {
+    console.warn(
+      `npm: skipped optional native dependency ${desc.depName}@${desc.depRange} (expected — rifty runs JS+WASI only, ADR-0051)`,
+    );
+    return;
+  }
   const reason = err instanceof Error ? err.message : String(err);
   console.warn(
     `optional dependency ${desc.depName}@${desc.depRange} of ${desc.parentName} could not be installed: ${reason}`,

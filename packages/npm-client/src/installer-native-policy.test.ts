@@ -123,7 +123,32 @@ describe('install — native-dependency policy (ADR-0051)', () => {
     const names = result.packages.map((p) => p.name);
     expect(names).toContain('app');
     expect(names).not.toContain('native-opt');
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('native-opt'));
+    // Expected native skip reads as a calm "skipped (expected)" line, NOT a
+    // "could not be installed: ENATIVEUNSUPPORTED ..." wall-of-error (UX: a pack of
+    // Rolldown platform bindings must not look like install failures).
+    const msg = warn.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(msg).toMatch(/skipped optional native dependency native-opt@1\.0\.0 \(expected/);
+    expect(msg).not.toContain('could not be installed');
+    expect(msg).not.toContain('ENATIVEUNSUPPORTED');
+  });
+
+  it('a GENUINE optional failure (not native) still warns "could not be installed"', async () => {
+    // `ghost-opt` is declared optional but absent from the registry → its fetch
+    // throws a non-native error. That path keeps the louder wording (a real,
+    // worth-surfacing failure), distinct from the expected native skip above.
+    const registry = new FakeRegistry(
+      db([await entry('app', '1.0.0', { optionalDependencies: { 'ghost-opt': '1.0.0' } })]),
+    );
+    const result = await install(
+      'root',
+      '1.0.0',
+      { app: '1.0.0' },
+      { vfs: new MemoryVfs(), cwd: '/app', registry },
+    );
+    expect(result.packages.map((p) => p.name)).not.toContain('ghost-opt');
+    const msg = warn.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(msg).toMatch(/optional dependency ghost-opt@1\.0\.0 of app could not be installed/);
+    expect(msg).not.toMatch(/skipped optional native/);
   });
 
   it('does NOT reject a pure-JS package that pins only `os` (no `cpu`)', async () => {
