@@ -82,12 +82,14 @@ export function renderNav(): HTMLElement {
   wireCopy(copyChip, copyIcon);
 
   const star = document.createElement('a');
-  star.className = 'nav-star';
+  star.className = 'nav-star nav-star-icononly';
   star.href = GITHUB_URL;
+  star.setAttribute('aria-label', 'GitHub repository');
+  star.title = 'GitHub';
   const starIcon = document.createElement('span');
   starIcon.className = 'nav-star-icon';
-  starIcon.innerHTML = icon('github', 15);
-  star.append(starIcon, document.createTextNode('Star'));
+  starIcon.innerHTML = icon('github', 16);
+  star.append(starIcon);
 
   right.append(copyChip, star);
 

@@ -836,7 +836,8 @@ export function mountExplorer(root: HTMLElement): () => void {
 
   function onNodeClick(board: Board, id: NodeId): void {
     if (drag?.moved) return;
-    inspect = id;
+    // toggle the pin: click a pinned node again to release it.
+    inspect = inspect === id ? null : id;
     updateInspectorFor(board);
   }
 
@@ -854,7 +855,7 @@ export function mountExplorer(root: HTMLElement): () => void {
   }
 
   function onLaneClick(id: NodeId): void {
-    inspect = id;
+    inspect = inspect === id ? null : id;
     renderRealms();
   }
 
@@ -867,6 +868,11 @@ export function mountExplorer(root: HTMLElement): () => void {
   function beginPan(board: Board, e: PointerEvent): void {
     pan = { board, x: e.clientX, y: e.clientY };
     board.viewport.classList.add('exp-grabbing');
+    // click on empty canvas dismisses a pinned inspector.
+    if (inspect !== null && hover === null) {
+      inspect = null;
+      updateInspectorFor(board);
+    }
   }
 
   function onPointerMove(e: PointerEvent): void {

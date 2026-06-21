@@ -128,3 +128,14 @@
 .nav-star-icon {
   display: inline-flex;
 }
+
+.nav-star-icononly {
+  padding: 7px;
+  color: var(--t2);
+  transition: color 0.15s linear, border-color 0.15s linear;
+}
+
+.nav-star-icononly:hover {
+  color: var(--t1);
+  border-color: rgba(255, 255, 255, 0.28);
+}

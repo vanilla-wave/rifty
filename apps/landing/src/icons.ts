@@ -59,7 +59,7 @@ export function icon(name: IconName, size = 16): string {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 }
 
-// The "rift" logo mark (Rifty.dc.html mark set L238): two offset slabs split by a rift.
+// The "diamond" logo mark (Rifty.dc.html mark set L239): a rounded square rotated 45°.
 // fill currentColor so callers theme it via color (accent lime on the landing).
 export const logoMark: string =
-  '<svg width="100%" height="100%" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 5 H11 V15 H4 Z" /><path d="M13 9 H20 V19 H13 Z" opacity="0.58" /></svg>';
+  '<svg width="100%" height="100%" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="5.5" y="5.5" width="13" height="13" rx="3" transform="rotate(45 12 12)" /></svg>';
