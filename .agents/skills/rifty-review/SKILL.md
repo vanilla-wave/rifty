@@ -10,3 +10,4 @@ Especially interested in:
 - Conformance to the project goal and architecture
 - Absence of bugs
 - No regressions to existing functionality
+- Feature's user experience matches the real ecosystem (Node parity)
