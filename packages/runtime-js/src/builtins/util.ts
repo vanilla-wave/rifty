@@ -81,35 +81,34 @@ const STYLE_CODES: Readonly<Record<string, readonly [number, number]>> = Object.
   bgWhiteBright: [107, 49],
 });
 
+// Node rejects an unknown style via `validateOneOf` → `ERR_INVALID_ARG_VALUE`
+// shaped `The argument 'format' must be one of: '<name>', … . Received <value>`.
+// Node lists the styled names (Object.keys(inspect.colors)) and renders Received
+// via inspect; 'none' is accepted but NOT listed. The list CONTENT here is rifty's
+// own style set (not byte-identical to Node), but the shape/code/rendering match.
+const KNOWN_STYLE_FORMATS: readonly string[] = Object.keys(STYLE_CODES);
+
+function unknownStyleFormat(value: unknown): TypeError {
+  const received = typeof value === 'string' ? `'${value}'` : inspect(value);
+  const allowed = KNOWN_STYLE_FORMATS.map((name) => `'${name}'`).join(', ');
+  return Object.assign(
+    new TypeError(`The argument 'format' must be one of: ${allowed}. Received ${received}`),
+    { code: 'ERR_INVALID_ARG_VALUE' },
+  );
+}
+
 function normalizeStyleFormats(format: unknown): readonly unknown[] {
   if (typeof format === 'string') return [format];
   if (Array.isArray(format)) return format;
-  throw Object.assign(
-    new TypeError(`The argument 'format' must be a known style. Received ${String(format)}`),
-    {
-      code: 'ERR_INVALID_ARG_VALUE',
-    },
-  );
+  throw unknownStyleFormat(format);
 }
 
 function styleCode(format: unknown): readonly [number, number] | null {
   if (format === 'none') return null;
-  if (typeof format !== 'string') {
-    throw Object.assign(
-      new TypeError(`The argument 'format' must be a known style. Received ${String(format)}`),
-      {
-        code: 'ERR_INVALID_ARG_VALUE',
-      },
-    );
-  }
+  if (typeof format !== 'string') throw unknownStyleFormat(format);
   const code = STYLE_CODES[format];
   if (code) return code;
-  throw Object.assign(
-    new TypeError(`The argument 'format' must be a known style. Received '${format}'`),
-    {
-      code: 'ERR_INVALID_ARG_VALUE',
-    },
-  );
+  throw unknownStyleFormat(format);
 }
 
 function invalidStream(stream: unknown): TypeError {

@@ -296,4 +296,12 @@ describe('Buffer.isBuffer / instanceof — bundling-robust brand', () => {
     expect(Buffer.isBuffer(fromOtherCopy)).toBe(true);
     expect(fromOtherCopy instanceof Buffer).toBe(true);
   });
+
+  it('rejects a bare branded plain object that is not a Uint8Array (Node returns false)', () => {
+    // The `Symbol.for` brand is a global-registry key; a non-Uint8Array object
+    // carrying it must NOT be mis-recognized as a Buffer (the `Uint8Array` guard).
+    const branded = { [Symbol.for('@riftydev/io.Buffer')]: true } as Record<symbol, unknown>;
+    expect(Buffer.isBuffer(branded)).toBe(false);
+    expect(branded instanceof Buffer).toBe(false);
+  });
 });

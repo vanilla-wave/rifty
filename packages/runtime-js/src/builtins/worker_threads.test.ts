@@ -333,6 +333,16 @@ describe('worker_threads Node parity (threadId / online / terminate)', () => {
     expect(code).toBe(1);
     expect(await exited).toBe(1);
   });
+
+  it('a post-exit terminate() resolves with undefined (Node: the worker handle is gone)', async () => {
+    // Verified vs Node v24: terminate() on an already-exited worker resolves
+    // `undefined` (PromiseResolve() when kHandle === null) — NOT the exit code and
+    // NOT the caller's argument. The natural exit still fires 'exit' 0 first.
+    writeFileSync('/w-natural-exit.js', 'parentPort.postMessage("ok");');
+    const w = new Worker('/w-natural-exit.js');
+    expect(await onceEvent<number>(w, 'exit')).toBe(0);
+    expect(await w.terminate()).toBeUndefined();
+  });
 });
 
 function makeFakeWorkerHandle(sent: unknown[]): WorkerProcessHandle {

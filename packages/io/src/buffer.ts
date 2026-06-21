@@ -40,10 +40,15 @@ export class Buffer extends Uint8Array {
   /**
    * Brand-based `instanceof` so `x instanceof Buffer` holds across DUPLICATE
    * class copies in the prod bundle (see {@link BUFFER_BRAND}). A plain
-   * `Uint8Array` (no brand) is still not a Buffer.
+   * `Uint8Array` (no brand) is still not a Buffer. The `Uint8Array` guard keeps
+   * a bare branded plain object from being mis-recognized (Node returns `false`);
+   * every real rifty Buffer is `instanceof` the shared global `Uint8Array`.
    */
   static override [Symbol.hasInstance](value: unknown): boolean {
-    return value != null && (value as Record<symbol, unknown>)[BUFFER_BRAND] === true;
+    return (
+      value instanceof Uint8Array &&
+      (value as unknown as Record<symbol, unknown>)[BUFFER_BRAND] === true
+    );
   }
 
   declare toString: (encoding?: Encoding, start?: number, end?: number) => string;
@@ -235,7 +240,9 @@ export class Buffer extends Uint8Array {
   }
 
   static isBuffer(v: unknown): boolean {
-    return v != null && (v as Record<symbol, unknown>)[BUFFER_BRAND] === true;
+    return (
+      v instanceof Uint8Array && (v as unknown as Record<symbol, unknown>)[BUFFER_BRAND] === true
+    );
   }
 
   private static readonly ENCODINGS: ReadonlySet<string> = new Set([

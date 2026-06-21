@@ -69,11 +69,16 @@ describe('node:util.styleText', () => {
     expect(util.styleText('none', 'x', { validateStream: false })).toBe('x');
   });
 
-  it('throws ERR_INVALID_ARG_VALUE for unknown formats', () => {
-    expect(() => util.styleText('bogus', 'x')).toThrow(/format/);
+  it('throws ERR_INVALID_ARG_VALUE for unknown formats (Node validateOneOf shape)', () => {
+    // Node: `The argument 'format' must be one of: '…', … . Received 'bogus'`.
+    expect(() => util.styleText('bogus', 'x')).toThrow(
+      /The argument 'format' must be one of: .*\. Received 'bogus'/,
+    );
     expect(() => util.styleText('bogus', 'x')).toThrow(
       expect.objectContaining({ code: 'ERR_INVALID_ARG_VALUE' }),
     );
+    // A non-string format renders the received value unquoted, like Node's inspect.
+    expect(() => util.styleText(123 as never, 'x')).toThrow(/Received 123$/);
     expect(() => util.styleText(123 as never, 'x')).toThrow(
       expect.objectContaining({ code: 'ERR_INVALID_ARG_VALUE' }),
     );

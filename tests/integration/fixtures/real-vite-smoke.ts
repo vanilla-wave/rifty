@@ -161,7 +161,9 @@ async function main(): Promise<void> {
       server: { port: 5174, strictPort: true, middlewareMode: false, hmr: false, host: true },
       appType: 'spa',
       clearScreen: false,
-      optimizeDeps: { disabled: true, noDiscovery: true, include: [] },
+      // Vite 8 dropped `optimizeDeps.disabled` (warns + ignores it); the supported
+      // off-switch is `noDiscovery` + empty `include` — match production boot.
+      optimizeDeps: { noDiscovery: true, include: [] },
       logLevel: 'silent',
     }),
   );

@@ -235,10 +235,12 @@ export class Worker extends EventEmitter {
     });
   }
 
-  async terminate(code = 1): Promise<number> {
-    // Node: a forced `worker.terminate()` resolves with exit code 1. Internal
-    // callers pass an explicit code (0 for a natural same-realm completion).
-    if (this.exited) return code;
+  async terminate(code = 1): Promise<number | undefined> {
+    // Node: terminate() takes no exit-code argument. On a STILL-RUNNING worker it
+    // resolves the forced-stop exit-event code (1); on an ALREADY-EXITED worker the
+    // handle is gone so it resolves `undefined` (verified vs Node v24). Internal
+    // callers pass `code` only to drive the synthesized 'exit' event.
+    if (this.exited) return undefined;
     if (this.workerHandle) {
       this.workerHandle.kill('SIGTERM');
     }

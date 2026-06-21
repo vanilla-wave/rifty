@@ -289,7 +289,7 @@ export async function bootDevServer(opts: {
       clearScreen: false,
       // Vite 8 REMOVED `optimizeDeps.disabled` (Vite 5.1) — it warns and ignores
       // it, then runs dep discovery on the first request, which drives Rolldown's
-      // WASI bundler and HELD the request until a 30s preview-bridge timeout. The
+      // WASI bundler and hung the preview request past the readiness window. The
       // supported off-switch is `noDiscovery: true` + empty `include`.
       optimizeDeps: (cfg.server.optimizeDepsDisabled
         ? { noDiscovery: true, include: [] }

@@ -37,7 +37,12 @@ describe('node:wasi builtin', () => {
     expect(() => new WASI({ version: 'preview2' })).toThrow(
       expect.objectContaining({ code: 'ERR_INVALID_ARG_VALUE' }),
     );
-    expect(() => new WASI({ version: 'unstable' })).not.toThrow();
+    // 'unstable' (snapshot0) is a Node-valid version rifty does not implement (the
+    // runner only serves the preview1 namespace) — an honest loud gap, not a
+    // silent flatten to preview1.
+    expect(() => new WASI({ version: 'unstable' })).toThrow(
+      expect.objectContaining({ name: 'NotImplementedError' }),
+    );
   });
 });
 
@@ -100,5 +105,46 @@ describe('node:wasi WASI single-entry + memory guards (Node parity)', () => {
     expect(() =>
       new WASI({ version: 'preview1' }).initialize(instanceWith({ _initialize: () => {} })),
     ).toThrow(expected);
+  });
+
+  it('a memory-validation failure does NOT latch — retryable (Node: kSetMemory runs before kStarted)', () => {
+    // Verified vs Node v24 lib/wasi.js: memory is validated before `started` is
+    // latched, so a missing-memory start() is retryable (the retry surfaces the
+    // same memory error, NOT ERR_WASI_ALREADY_STARTED).
+    const WASI = loadWasiCtor();
+    const wasi = new WASI({ version: 'preview1' });
+    const noMemory = instanceWith({ _start: () => {} });
+    expect(() => wasi.start(noMemory)).toThrow(
+      expect.objectContaining({ code: 'ERR_INVALID_ARG_TYPE' }),
+    );
+    expect(() => wasi.start(noMemory)).toThrow(
+      expect.objectContaining({ code: 'ERR_INVALID_ARG_TYPE' }),
+    );
+  });
+
+  it('start() latches BEFORE the _start shape check (Node finalizeBindings) — a missing-_start retry throws ERR_WASI_ALREADY_STARTED', () => {
+    // Verified vs Node v24: kStarted is set inside finalizeBindings, before
+    // validateFunction(_start). So a missing-_start failure is already latched and
+    // the retry is ERR_WASI_ALREADY_STARTED (NOT the underlying _start error).
+    const WASI = loadWasiCtor();
+    const wasi = new WASI({ version: 'preview1' });
+    const noStart = instanceWith({ memory: new WebAssembly.Memory({ initial: 1 }) });
+    expect(() => wasi.start(noStart)).toThrow(/has no _start export/);
+    expect(() => wasi.start(noStart)).toThrow(
+      expect.objectContaining({ code: 'ERR_WASI_ALREADY_STARTED' }),
+    );
+  });
+
+  it('initialize() latches BEFORE the module-shape check — a has-_start retry throws ERR_WASI_ALREADY_STARTED', () => {
+    const WASI = loadWasiCtor();
+    const wasi = new WASI({ version: 'preview1' });
+    const command = instanceWith({
+      memory: new WebAssembly.Memory({ initial: 1 }),
+      _start: () => {},
+    });
+    expect(() => wasi.initialize(command)).toThrow(/without _start export/);
+    expect(() => wasi.initialize(command)).toThrow(
+      expect.objectContaining({ code: 'ERR_WASI_ALREADY_STARTED' }),
+    );
   });
 });

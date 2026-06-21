@@ -130,6 +130,48 @@ describe('RegistryClient — transient-failure retry (429/5xx/network)', () => {
     expect(s.delays).toEqual([2000]);
   });
 
+  it('honors an HTTP-date Retry-After header (clamped to the cap; past dates → 0)', async () => {
+    // A far-future date clamps to MAX_RETRY_DELAY_MS (8s); a past date floors to 0.
+    // Both are deterministic regardless of the current wall clock.
+    const future = makeFetch([
+      { status: 429, headers: { 'retry-after': 'Wed, 01 Jan 2099 00:00:00 GMT' } },
+      { status: 200, body: { name: 'x', versions: {} } },
+    ]);
+    const sFuture = sleepSpy();
+    await new RegistryClient({
+      baseUrl: 'https://r',
+      fetch: future.fetch,
+      sleep: sFuture.sleep,
+    }).getPackument('x');
+    expect(sFuture.delays).toEqual([8000]);
+
+    const past = makeFetch([
+      { status: 429, headers: { 'retry-after': 'Thu, 01 Jan 1970 00:00:00 GMT' } },
+      { status: 200, body: { name: 'x', versions: {} } },
+    ]);
+    const sPast = sleepSpy();
+    await new RegistryClient({
+      baseUrl: 'https://r',
+      fetch: past.fetch,
+      sleep: sPast.sleep,
+    }).getPackument('x');
+    expect(sPast.delays).toEqual([0]);
+  });
+
+  it('maxRetries: 0 disables retry — a 429 throws immediately, no sleep', async () => {
+    const { fetch, count } = makeFetch([{ status: 429 }]);
+    const s = sleepSpy();
+    const client = new RegistryClient({
+      baseUrl: 'https://r',
+      fetch,
+      sleep: s.sleep,
+      maxRetries: 0,
+    });
+    await expect(client.getPackument('x')).rejects.toThrow('Failed to fetch packument x: 429');
+    expect(count()).toBe(1);
+    expect(s.delays).toEqual([]);
+  });
+
   it('gives up after maxRetries and throws the status-shaped error', async () => {
     const { fetch, count } = makeFetch([{ status: 429 }]);
     const s = sleepSpy();
