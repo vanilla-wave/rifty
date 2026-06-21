@@ -99,6 +99,14 @@
       "./builtins/child_process": {
         "types": "./dist/builtins/child_process.d.ts",
         "import": "./dist/builtins/child_process.js"
+      },
+      "./builtins/node-entry": {
+        "types": "./dist/builtins/node-entry.d.ts",
+        "import": "./dist/builtins/node-entry.js"
+      },
+      "./builtins/node-entry-url": {
+        "types": "./dist/builtins/node-entry-url.d.ts",
+        "import": "./dist/builtins/node-entry-url.js"
       }
     }
   },
