@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Node-faithful boot — the dev line no longer installs (ADR-0135 corrected).** `vite`
+  / `npm run dev` now RUN the program; they never fetch deps as a side effect (real
+  npm's `npm run dev` does not install — a missing `node_modules` is a loud
+  `Cannot find module`). `node_modules` is a precondition, settled before the dev line:
+  from-scratch presets boot `cd /workspace && npm install && <dev>` — an explicit,
+  honest `npm install` is the only dep source (a fresh preset starts clean → real cold
+  install, no EBROKENLOCK); instant presets pre-seed deps from the baked snapshot into
+  the owner store at project-seed (`restoreInstantDeps`, a RESTORE not an install), so
+  the dev line just runs. Removed the dev-server-boot's auto-`install()`/restore and the
+  template-keyed clean; the from-scratch cold-start lives in the `npm install` command,
+  the instant restore in `restoreInstantDeps`. m1 (instant: no install line) + m7 +
+  fullstack-demo (from-scratch: explicit `npm install`) all green.
+
 ### Fixed
 
 - **Project-files preview no longer black-screens on Vite 8.** The `project-files`

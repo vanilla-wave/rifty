@@ -35,7 +35,7 @@ import {
 } from './install-stamp.ts';
 import type { WorkspaceArchiveFs } from './workspace-archive.ts';
 
-export type ProjectDepsSource = 'stamp' | 'snapshot' | 'install';
+export type ProjectDepsSource = 'stamp' | 'snapshot' | 'install' | 'none';
 
 export interface EnsureProjectDepsResult {
   readonly source: ProjectDepsSource;
@@ -52,10 +52,16 @@ export interface EnsureProjectDepsOptions {
   /** Project identity (preset slug) — the install-stamp reuse key. A stamp from
    *  a different slug never suppresses this project's install. */
   readonly slug: string;
-  /** Baked snapshot URL; absent → straight to install on a stampless boot. */
+  /** Baked snapshot URL; absent → no snapshot restore. */
   readonly snapshotUrl?: string;
-  /** Runs the real installer; returns the installed package count. */
-  readonly install: () => Promise<{ readonly packages: number }>;
+  /**
+   * Runs the real installer; returns the installed package count. OPTIONAL:
+   * omit for a RESTORE-ONLY call (instant preset at owner-seed) — then a stampless,
+   * snapshotless tree resolves to `'none'` (deps left absent) instead of a
+   * network install. The faithful from-scratch install is the explicit `npm install`
+   * command, never a dev-line side effect.
+   */
+  readonly install?: () => Promise<{ readonly packages: number }>;
   /** Drains the VFS write-through (stamp durability ordering). */
   readonly flush: () => Promise<void>;
   readonly log: (line: string) => void;
@@ -79,6 +85,14 @@ export async function ensureProjectDependencies(
     if (restored) return restored;
   }
 
+  // Restore-only mode (no `install` provided): instant deps come SOLELY from the
+  // baked snapshot. A stampless, snapshotless (or drifted) tree leaves node_modules
+  // ABSENT — the dev line never installs as a side effect; from-scratch uses the
+  // explicit `npm install` command. (Real Node: a missing dep is a loud failure.)
+  if (!opts.install) {
+    return { source: 'none', packages: 0 };
+  }
+
   // Reaching install() means NO stamp matched this slug and NO snapshot applied —
   // so any node_modules + lockfile on disk belong to a DIFFERENT preset (e.g.
   // project-files' instant baked snapshot, whose lockfile omits the shimmed
@@ -97,7 +111,7 @@ export async function ensureProjectDependencies(
 
 /** Drop a foreign/stale node_modules + lockfile so a from-scratch install starts
  *  clean (best-effort: a fresh boot has nothing to remove). */
-function clearProjectTree(fsSync: WorkspaceArchiveFs, root: string): void {
+export function clearProjectTree(fsSync: WorkspaceArchiveFs, root: string): void {
   fsSync.rmSync(joinPath(root, 'node_modules'), { recursive: true, force: true });
   fsSync.rmSync(joinPath(root, 'package-lock.json'), { force: true });
 }

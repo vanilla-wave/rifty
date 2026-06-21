@@ -462,7 +462,15 @@ export const DEFAULT_PRESET: Preset = PROJECT_FILES_PRESET;
  */
 export function presetBootLines(preset: Preset, root: string): readonly string[] {
   const spec = preset.templateId ? resolveProjectSpec(preset.templateId) : defaultProjectSpec();
-  return [terminalDevLine(spec, root)];
+  const dev = terminalDevLine(spec, root);
+  // instant: node_modules is pre-seeded from the baked snapshot (owner-seed), so the
+  // dev line just runs. from-scratch is Node-faithful — an EXPLICIT `npm install`
+  // populates node_modules first (the dev line never installs as a side effect; a
+  // bare `npm run dev` without it fails with a real "Cannot find module"). `dev` may
+  // carry a leading `cd <root> &&` (node templates) — strip it; cwd is pinned once.
+  if (preset.setup !== 'from-scratch') return [dev];
+  const bareDev = dev.replace(/^cd \S+ && /, '');
+  return [`cd ${root} && npm install && ${bareDev}`];
 }
 
 /** Category render order in the gallery. */

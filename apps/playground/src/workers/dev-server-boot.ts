@@ -14,7 +14,6 @@
 import { PREVIEW_LOCAL_HOST } from '@riftydev/io';
 import { dispatchToPort, listPorts, serveCrossRealmPreview } from '@riftydev/net';
 import { initSqliteEngine } from '@riftydev/net/sqlite/engine';
-import { install } from '@riftydev/npm-client';
 import { Console } from '@riftydev/runtime-js/builtins/console';
 import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
@@ -27,9 +26,6 @@ import {
   createHmrBridgeVitePlugin,
   hmrBridgeUrl,
 } from '../glue/hmr-bridge.ts';
-import { ensureProjectDependencies } from '../glue/project-deps.ts';
-import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
-import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import type {
   BootstrapConfig,
   NodeServerBootstrapConfig,
@@ -190,7 +186,7 @@ export async function bootDevServer(opts: {
   readonly publishSnapshot: () => void;
   readonly log: (chunk: string) => void;
 }): Promise<DevServerHandle> {
-  const { cfg, port, root, spec, slug, fromScratch, publishSnapshot, log } = opts;
+  const { cfg, port, root, publishSnapshot, log } = opts;
 
   // Seed the template's package.json + files IF ABSENT — never overwrite. A
   // force-overwrite here discarded the user's `npm install` additions on every
@@ -211,35 +207,11 @@ export async function bootDevServer(opts: {
     if (!seedFs.existsSync(np)) seedFs.writeFileSync(np, enc.encode(content));
   }
 
-  // Dependency arrival (ADR-0135): idempotent via the install stamp — a no-op if
-  // the user already ran `npm install`. instant reuses the baked snapshot quietly;
-  // from-scratch streams a real install to the terminal.
-  const vfs = new SyncMirrorVfs();
-  await ensureProjectDependencies({
-    vfs,
-    fsSync: syncMirror(),
-    root,
-    templateId: spec.id,
-    slug,
-    snapshotUrl: fromScratch ? undefined : cfg.bakedNodeModulesUrl,
-    install: async () => {
-      log(`installing ${spec.displayName} into ${root}/node_modules…\n`);
-      const registry = createProxiedRegistryClient();
-      const result = await install({
-        vfs,
-        cwd: root,
-        registry,
-        onPackage: fromScratch
-          ? (event) =>
-              log(`npm: + ${event.name}@${event.version}${event.cacheHit ? ' (cached)' : ''}\n`)
-          : undefined,
-      });
-      log(`installed ${result.packages.length} packages (${result.conflicts.length} conflicts)\n`);
-      return { packages: result.packages.length };
-    },
-    flush: flushSyncMirror,
-    log,
-  });
+  // node_modules is a PRECONDITION of the dev line, never a side effect — faithful
+  // to real npm (`npm run dev` / `vite` runs the program; it does NOT install). The
+  // owner pre-seeds instant deps from the baked snapshot at project-seed; from-scratch
+  // deps come from the explicit `npm install` boot step (or the user). A missing tree
+  // → vite/node fails loudly with a real "Cannot find module" (the honest gap).
   publishSnapshot();
 
   const loader = createModuleLoader(syncMirror(), { cwd: root });

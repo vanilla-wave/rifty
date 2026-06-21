@@ -154,27 +154,27 @@ describe('sandbox setup kinds (ADR-0135)', () => {
     }
   });
 
-  it('boots from-scratch presets straight to the dev line — the visible install runs in the worker', () => {
-    // ADR-0135 (revised): the honest `npm install` lives in the WORKER realm (the
-    // OPFS owner that serves the preview), streamed to the terminal — not a
-    // page-side boot line. The page realm is memory-backed (sync OPFS is
-    // worker-only), so a page-side install would never reach the served tree.
-    // from-scratch differs from instant only inside the worker (snapshot off +
-    // per-package stream), never in the page boot lines.
+  it('boots from-scratch presets with an EXPLICIT `npm install` before the dev line (Node-faithful)', () => {
+    // The dev line never installs as a side effect (faithful: `vite` / `npm run dev`
+    // runs the program, it does not fetch deps). A from-scratch preset therefore
+    // boots `npm install && <dev>` — the install is a real, visible, honest command;
+    // a bare dev line without it fails with a real "Cannot find module".
     const realVite = PRESETS.find((preset) => preset.id === 'real-vite');
     expect(realVite?.setup).toBe('from-scratch');
-    expect(presetBootLines(realVite as Preset, '/workspace')).toEqual(['vite']);
+    expect(presetBootLines(realVite as Preset, '/workspace')).toEqual([
+      'cd /workspace && npm install && vite',
+    ]);
 
     const fullstack = PRESETS.find((preset) => preset.id === 'express-sqlite');
     expect(fullstack?.setup).toBe('from-scratch');
     expect(presetBootLines(fullstack as Preset, '/workspace')).toEqual([
-      'cd /workspace && npm run dev',
+      'cd /workspace && npm install && npm run dev',
     ]);
 
     const socketLab = PRESETS.find((preset) => preset.id === 'socket-lab');
     expect(socketLab?.setup).toBe('from-scratch');
     expect(presetBootLines(socketLab as Preset, '/workspace')).toEqual([
-      'cd /workspace && npm run dev',
+      'cd /workspace && npm install && npm run dev',
     ]);
   });
 

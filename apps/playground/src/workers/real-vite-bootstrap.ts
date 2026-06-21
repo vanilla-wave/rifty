@@ -31,8 +31,10 @@ import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-
 import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { type CommandContext, Shell } from '@riftydev/shell';
 import { dirname, initBackend, normalizePath, syncMirror } from '@riftydev/vfs';
+import { installStampSatisfied } from '../glue/install-stamp.ts';
 import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
 import { createNpmShellCommand } from '../glue/npm-shell-command.ts';
+import { clearProjectTree, ensureProjectDependencies } from '../glue/project-deps.ts';
 import {
   type OwnerToPageFrame,
   PTY_IPC_TYPE,
@@ -115,6 +117,54 @@ function seedProject(cfg: BootstrapConfig): void {
   }
 }
 
+/**
+ * INSTANT preset deps: restore the baked snapshot into the owner store — a
+ * RESTORE, never a network install (the dev line stays faithful: `vite` /
+ * `npm run dev` runs the program, it does not fetch deps). Idempotent via the slug
+ * install-stamp: a reload / an already-restored tree is a no-op (so a user's edits
+ * survive). On a STAMPLESS boot (fresh project / preset switch) it cleans any prior
+ * preset's tree and re-seeds THIS preset's package.json so the snapshot matches,
+ * then restores it. A missing/drifted snapshot leaves deps absent (vite fails
+ * loudly — re-bake needed), never a silent boot-time install. from-scratch deps do
+ * NOT come here: the explicit `npm install` boot step is their only source.
+ */
+async function restoreInstantDeps(
+  cfg: BootstrapConfig,
+  templateId: string,
+  slug: string,
+): Promise<void> {
+  if (!cfg.bakedNodeModulesUrl) return;
+  const vfs = new SyncMirrorVfs();
+  if (await installStampSatisfied(vfs, cfg.root, slug)) return;
+  const fs = syncMirror();
+  clearProjectTree(fs, cfg.root);
+  fs.writeFileSync(normalizePath(`${cfg.root}/package.json`), enc.encode(cfg.packageJson));
+  const result = await ensureProjectDependencies({
+    vfs,
+    fsSync: fs,
+    root: cfg.root,
+    templateId,
+    slug,
+    snapshotUrl: cfg.bakedNodeModulesUrl,
+    // No `install`: RESTORE-ONLY. Deps never arrive via a boot-time install.
+    flush: flushSyncMirror,
+    log: (line) => console.log(line.trimEnd()),
+  });
+  if (result.source === 'none') {
+    console.warn(
+      `[shell-owner/worker] instant snapshot unavailable/stale for ${templateId} — node_modules absent (re-run \`pnpm snapshots:bake\`)`,
+    );
+  }
+}
+
+/** `npm install` / `npm i` with NO package specs (install-all from package.json) —
+ *  the from-scratch boot's cold-install trigger. `npm install <pkg>` (an add) is not. */
+function isFullInstall(args: readonly string[]): boolean {
+  const sub = args[0];
+  if (sub !== 'install' && sub !== 'i') return false;
+  return args.slice(1).every((a) => a.startsWith('-'));
+}
+
 /** Apply the optional `RIFTY_RFV_ENTRY` override. */
 function withEntryOverride(spec: ProjectSpec, entryRel: string): ProjectSpec {
   if (entryRel === spec.entry.relativePath) return spec;
@@ -149,6 +199,10 @@ async function bootShellOwner(opts: {
   const { cfg, port, kernelIpc, publishSnapshot, spec, slug, fromScratch } = opts;
 
   seedProject(cfg);
+  // Instant presets: pre-seed node_modules from the baked snapshot into the owner
+  // store NOW, before any dev line (the full fs is already present). from-scratch
+  // deps come from the explicit `npm install` boot step — nothing to do here.
+  if (!fromScratch) await restoreInstantDeps(cfg, spec.id, slug);
   publishSnapshot();
   // Readiness handshake (ADR-0146, explorer reflects the owner tree): the page
   // replies-via-request rather than a blind retry-storm. Startup publish covers a
@@ -188,34 +242,20 @@ async function bootShellOwner(opts: {
   let devCfg = cfg;
   let devSlug = slug;
   let devFromScratch = fromScratch;
-  let lastDevTemplateId: string | null = null;
-
   // Co-resident dev server (ADR-0148): the vite/node tail runs in THIS realm,
   // on demand, reading the realm's installed tree → it sees terminal-installed deps.
   const devServer = createDevServerController({
     send,
     // v1: boot runs to completion; a Ctrl-C mid-boot takes effect right after
     // (the controller stops the server once `signal` aborts) — not mid-install.
-    boot: (signal, devLog) => {
-      if (lastDevTemplateId !== null && lastDevTemplateId !== devSpec.id) {
-        // Template switched: a fresh worker per preset used to keep node_modules
-        // clean; the ONE persistent owner accumulates the prior preset's deps,
-        // which trips the new template's lockfile coverage (EBROKENLOCK). Clear
-        // node_modules + the lockfile + package.json so the new template seeds its
-        // own package.json (the child seeds it back if-absent) and installs
-        // cleanly. A same-template reload skips this — preserving the user's
-        // package.json + installed tree. Owner-realm stateful across runs: the
-        // clean runs HERE on the owner store the child reads over fs.* RPC.
-        const fs = syncMirror();
-        try {
-          fs.rmSync(`${devCfg.root}/node_modules`, { recursive: true, force: true });
-          fs.rmSync(`${devCfg.root}/package-lock.json`, { force: true });
-          fs.rmSync(`${devCfg.root}/package.json`, { force: true });
-        } catch {
-          /* best-effort clean */
-        }
-      }
-      lastDevTemplateId = devSpec.id;
+    boot: async (signal, devLog) => {
+      // instant: restore the baked snapshot before booting (stamp-checked, no-op if
+      // the owner pre-seed / a prior boot already did it; it cleans a prior preset's
+      // tree + re-seeds package.json so the snapshot matches). from-scratch deps come
+      // SOLELY from the explicit `npm install` boot step — the dev line never installs
+      // (and never clears, so it can't wipe that install). A missing tree → vite/node
+      // fails loudly with a real "Cannot find module".
+      if (!devFromScratch) await restoreInstantDeps(devCfg, devSpec.id, devSlug);
       // ADR-0150 P6b: spawn the dev server in a supervised serve:true child that
       // reads the owner store over fs.* RPC. The owner stays a free async
       // supervisor. The driver resolves when the child reports listening; stop()
@@ -328,6 +368,24 @@ async function bootShellOwner(opts: {
       execBin: ownerBinExecutor,
     });
     shell.registerCommand('npm', async (args, ctx) => {
+      // Faithful from-scratch: the FIRST `npm install` of a from-scratch preset (no
+      // slug stamp yet) starts CLEAN — clear any prior preset's node_modules +
+      // lockfile and re-seed THIS preset's package.json — so it is a real COLD
+      // install, not an EBROKENLOCK over a foreign (e.g. instant-snapshot) tree. A
+      // reload (slug stamped) installs over the existing tree (npm-faithful no-op),
+      // preserving the user's edits. Runs in the owner, ATOMIC with the install (the
+      // `npm install && <dev>` boot line never races it).
+      if (devFromScratch && isFullInstall(args)) {
+        const stamped = await installStampSatisfied(new SyncMirrorVfs(), devCfg.root, devSlug);
+        if (!stamped) {
+          const fs = syncMirror();
+          clearProjectTree(fs, devCfg.root);
+          fs.writeFileSync(
+            normalizePath(`${devCfg.root}/package.json`),
+            enc.encode(devCfg.packageJson),
+          );
+        }
+      }
       const code = await npmCommand(args, ctx);
       publishSnapshot(); // node_modules may have changed — refresh the page's view
       return code;

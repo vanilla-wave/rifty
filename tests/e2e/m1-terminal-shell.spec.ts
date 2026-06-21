@@ -22,17 +22,20 @@ test.describe('M1 - terminal shell', () => {
     );
   });
 
-  test('first boot restores the baked node_modules snapshot instead of installing (ADR-0135)', async ({
+  test('instant preset boots straight to vite — deps pre-seeded, NO install (ADR-0135)', async ({
     page,
   }) => {
     test.setTimeout(120_000);
     await page.goto('/');
     await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
 
-    // Fresh browser context = empty OPFS = no install stamp: the instant
-    // preset's worker must take the baked-snapshot path, not the installer.
-    await expectTerminalContains(page, 'baked node_modules restored', 60_000);
-    expect(await terminalBuffer(page)).not.toContain('installing Vite dev server into');
+    // Fresh browser context = empty OPFS = no stamp: an instant preset's deps are
+    // PRE-SEEDED from the baked snapshot (owner-seed), so the dev line just runs.
+    // Faithful: `vite` does NOT install — no `npm: +` lines ever — and serves.
+    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 60_000);
+    const buf = await terminalBuffer(page);
+    expect(buf).not.toMatch(/npm: \+ /);
+    expect(buf).not.toContain('installing');
   });
 
   test('new terminal opens a separate idle shell while Vite keeps running', async ({ page }) => {
