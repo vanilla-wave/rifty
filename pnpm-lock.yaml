@@ -283,7 +283,11 @@ importers:
         specifier: ^5.5.0
         version: 5.5.0
 
-  packages/ts-language-service: {}
+  packages/ts-language-service:
+    dependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
 
   packages/vfs:
     devDependencies:
