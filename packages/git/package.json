@@ -14,7 +14,13 @@
   "bugs": {
     "url": "https://github.com/vanilla-wave/rifty/issues"
   },
-  "keywords": ["rifty", "browser", "webcontainer", "git", "vcs"],
+  "keywords": [
+    "rifty",
+    "browser",
+    "webcontainer",
+    "git",
+    "vcs"
+  ],
   "sideEffects": false,
   "main": "./src/index.ts",
   "module": "./src/index.ts",
@@ -22,7 +28,10 @@
   "exports": {
     ".": "./src/index.ts"
   },
-  "files": ["dist", "CHANGELOG.md"],
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
   "publishConfig": {
     "access": "public",
     "main": "./dist/index.js",
@@ -41,7 +50,8 @@
   },
   "dependencies": {
     "@riftydev/io": "workspace:*",
+    "@riftydev/net": "workspace:*",
     "@riftydev/vfs": "workspace:*",
-    "@riftydev/net": "workspace:*"
+    "isomorphic-git": "^1.38.5"
   }
 }
