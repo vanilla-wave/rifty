@@ -3,6 +3,7 @@
  */
 
 export { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
+export { METHODS, maxHeaderSize } from './methods.ts';
 export { ServerResponse } from './response.ts';
 export { HttpServer, createServer, get, request } from './server.ts';
 export { STATUS_CODES } from './status-codes.ts';

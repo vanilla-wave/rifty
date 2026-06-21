@@ -22,15 +22,26 @@
  * waits for `end()`.
  */
 
-import { Buffer, EventEmitter } from '@riftydev/io';
+import { Buffer, EventEmitter, NotImplementedError } from '@riftydev/io';
 
 type Chunk = Uint8Array | string;
+
+// Header values are stored with their ORIGINAL type (numbers stay numbers for
+// `getHeader`/`getHeaders` parity); stringified only when the wire `Headers` are
+// built in `flushHeaders`. Arrays hold the appended/multi values.
+type HeaderValue = string | number | Array<string | number>;
+
+function headersSentError(): Error {
+  return Object.assign(new Error('Cannot set headers after they are sent to the client'), {
+    code: 'ERR_HTTP_HEADERS_SENT',
+  });
+}
 
 export class ServerResponse extends EventEmitter {
   statusCode = 200;
   statusMessage = 'OK';
 
-  private readonly _headers: Record<string, string | string[]> = {};
+  private readonly _headers: Record<string, HeaderValue> = {};
   private _headersSent = false;
   private _finished = false;
 
@@ -90,22 +101,86 @@ export class ServerResponse extends EventEmitter {
   }
 
   setHeader(name: string, value: string | string[] | number): this {
-    if (this._headersSent) {
-      throw new Error(`Cannot set headers after they are sent: ${name}`);
-    }
-    this._headers[name.toLowerCase()] = typeof value === 'number' ? String(value) : value;
+    if (this._headersSent) throw headersSentError();
+    this._headers[name.toLowerCase()] = value;
     return this;
   }
 
-  getHeader(name: string): string | string[] | undefined {
+  getHeader(name: string): HeaderValue | undefined {
     return this._headers[name.toLowerCase()];
   }
 
   removeHeader(name: string): void {
-    if (this._headersSent) {
-      throw new Error(`Cannot remove headers after they are sent: ${name}`);
-    }
+    if (this._headersSent) throw headersSentError();
     delete this._headers[name.toLowerCase()];
+  }
+
+  /**
+   * Shallow clone of the outgoing headers as a NULL-prototype object (Node
+   * shape — does not inherit `Object.prototype`), keyed by lowercased name and
+   * preserving each value's original type. Adding/removing keys on the result
+   * does not affect the response; array values (from `appendHeader`) are shared
+   * by reference, exactly as in Node's `getHeaders()`.
+   */
+  getHeaders(): Record<string, HeaderValue> {
+    return Object.assign(Object.create(null), this._headers);
+  }
+
+  /** Lowercased outgoing header names, in insertion order. */
+  getHeaderNames(): string[] {
+    return Object.keys(this._headers);
+  }
+
+  /** Case-insensitive presence check for an outgoing header. */
+  hasHeader(name: string): boolean {
+    return name.toLowerCase() in this._headers;
+  }
+
+  /**
+   * Append a value to an outgoing header (Node `appendHeader`). First write of a
+   * name behaves like `setHeader`; a repeat merges into an array, preserving
+   * insertion slot. Throws `ERR_HTTP_HEADERS_SENT` once headers are flushed.
+   */
+  appendHeader(name: string, value: string | string[] | number): this {
+    if (this._headersSent) throw headersSentError();
+    const key = name.toLowerCase();
+    const existing = this._headers[key];
+    if (existing === undefined) {
+      this._headers[key] = value;
+      return this;
+    }
+    const merged: Array<string | number> = Array.isArray(existing) ? [...existing] : [existing];
+    if (Array.isArray(value)) merged.push(...value);
+    else merged.push(value);
+    this._headers[key] = merged;
+    return this;
+  }
+
+  /**
+   * Interim/trailer surfaces (`100 Continue` / `103 Early Hints` / trailing
+   * headers) are unmodelable over the single-final-status fetch/SW Response
+   * bridge — loud-throw rather than fake-ack the interim or silently drop the
+   * trailer (compat ❌, backlog `net/http-server-introspection`).
+   */
+  writeContinue(): void {
+    throw new NotImplementedError(
+      'http.ServerResponse.writeContinue',
+      'interim 100 Continue is unmodelable over the single-status fetch/SW Response bridge',
+    );
+  }
+
+  writeEarlyHints(_hints?: Record<string, string | string[]>, _callback?: () => void): void {
+    throw new NotImplementedError(
+      'http.ServerResponse.writeEarlyHints',
+      'interim 103 Early Hints is unmodelable over the single-status fetch/SW Response bridge',
+    );
+  }
+
+  addTrailers(_headers: Record<string, string> | Array<[string, string]>): void {
+    throw new NotImplementedError(
+      'http.ServerResponse.addTrailers',
+      'trailing headers are unmodelable over the fetch/SW Response bridge',
+    );
   }
 
   writeHead(
@@ -137,8 +212,8 @@ export class ServerResponse extends EventEmitter {
     this._headersSent = true;
     const headers = new Headers();
     for (const [k, v] of Object.entries(this._headers)) {
-      if (Array.isArray(v)) for (const item of v) headers.append(k, item);
-      else headers.set(k, v);
+      if (Array.isArray(v)) for (const item of v) headers.append(k, String(item));
+      else headers.set(k, String(v));
     }
     // Null-body statuses (RFC 9110: 204/205/304; fetch spec list incl. 1xx):
     // the Response constructor THROWS on any body, and Node sends none — drop

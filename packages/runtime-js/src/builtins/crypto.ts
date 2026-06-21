@@ -6,12 +6,15 @@ import { NotImplementedError } from '@riftydev/io';
  * relies on (sha256, sha1, md5) using a pure-JS hash core — SubtleCrypto
  * cannot be used because it is async-only.
  *
- * `randomUUID` / `randomBytes` route through `crypto.getRandomValues` in the
- * browser realm. Anything else is loud: `NotImplementedError`.
+ * Randoms route through `crypto.getRandomValues`: `randomUUID`, sync/async
+ * `randomBytes`/`randomFill`, and `randomInt` (unbiased rejection sampling).
+ * `hash` is a one-shot over the sync hash cores. Unimplemented algos/APIs stay
+ * loud: `NotImplementedError`.
  */
 import { Buffer } from './buffer.ts';
 
-type Encoding = 'hex' | 'base64' | 'base64url' | 'binary' | 'utf8';
+// `latin1` is Node's alias for `binary` (identical single-byte codec).
+type Encoding = 'hex' | 'base64' | 'base64url' | 'binary' | 'latin1' | 'utf8';
 
 interface Hasher {
   update(bytes: Uint8Array): void;
@@ -111,17 +114,261 @@ export function createHmac(algorithm: string, key: string | Uint8Array | Buffer)
   return new Hmac(algorithm.toLowerCase(), key);
 }
 
-export function randomBytes(size: number): Buffer {
-  const bytes = new Uint8Array(size);
-  crypto.getRandomValues(bytes);
-  return Buffer.from(bytes);
+function toBytes(data: unknown): Uint8Array {
+  if (typeof data === 'string') return new TextEncoder().encode(data);
+  // Any ArrayBufferView (Buffer / TypedArray / DataView). A RAW `ArrayBuffer` is
+  // NOT accepted — Node rejects it (and non-views like number/null) with
+  // ERR_INVALID_ARG_TYPE.
+  if (ArrayBuffer.isView(data)) {
+    return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  }
+  throw invalidArgType('data', 'an instance of string or ArrayBufferView', data);
+}
+
+/**
+ * One-shot `crypto.hash(algorithm, data[, outputEncoding])` (Node v20.12/21.7) —
+ * sync wrapper over the shipped hash cores. Default output is a `hex` string;
+ * `'buffer'` returns a `Buffer`. Unsupported algorithms loud-throw via
+ * `createHasher` (honest capability gap, compat ❌).
+ */
+export function hash(
+  algorithm: string,
+  data: string | ArrayBufferView,
+  outputEncoding: Encoding | 'buffer' = 'hex',
+): string | Buffer {
+  const hasher = createHasher(algorithm.toLowerCase());
+  hasher.update(toBytes(data));
+  const digest = hasher.digest();
+  if (outputEncoding === 'buffer') return Buffer.from(digest);
+  return encodeBytes(digest, outputEncoding);
+}
+
+// Largest `randomBytes` size Node accepts (INT32_MAX); larger throws
+// ERR_OUT_OF_RANGE. The Web Crypto `getRandomValues` cap is far lower (65536
+// bytes/call), so the fill core below chunks to stay faithful for big sizes.
+const MAX_RANDOM_BYTES = 2 ** 31 - 1;
+const MAX_RANDOM_CHUNK = 65536;
+
+/**
+ * Fill `view` with CSPRNG bytes, chunked under the Web Crypto 65536-byte
+ * `getRandomValues` ceiling so sizes Node allows (but the browser API rejects)
+ * still succeed. Shared by every sync/async random surface.
+ */
+function fillRandom(view: ArrayBufferView): void {
+  const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+  for (let off = 0; off < bytes.length; off += MAX_RANDOM_CHUNK) {
+    crypto.getRandomValues(bytes.subarray(off, Math.min(off + MAX_RANDOM_CHUNK, bytes.length)));
+  }
+}
+
+function outOfRange(name: string, expected: string, value: unknown): RangeError {
+  const e = new RangeError(
+    `The value of "${name}" is out of range. It must be ${expected}. Received ${String(value)}`,
+  );
+  (e as RangeError & { code: string }).code = 'ERR_OUT_OF_RANGE';
+  return e;
+}
+
+function invalidArgType(name: string, expected: string, value: unknown): TypeError {
+  const e = new TypeError(
+    `The "${name}" argument must be ${expected}. Received type ${typeof value} (${String(value)})`,
+  );
+  (e as TypeError & { code: string }).code = 'ERR_INVALID_ARG_TYPE';
+  return e;
+}
+
+// Floor + range-validate a `randomBytes`/`randomFill` size like Node: non-integer
+// truncates (`randomBytes(1.5).length === 1`), out-of-range throws ERR_OUT_OF_RANGE.
+function validateByteSize(size: number): number {
+  // Node shape: a non-number is ERR_INVALID_ARG_TYPE, but `NaN` (which IS a
+  // number) and out-of-range values are ERR_OUT_OF_RANGE. The range check runs
+  // on the RAW value (before truncation) so a negative fraction like `-0.5`
+  // throws — `Math.trunc(-0.5)` is `-0`, which would slip a post-trunc `< 0` test.
+  if (typeof size !== 'number') {
+    throw invalidArgType('size', 'of type number', size);
+  }
+  if (Number.isNaN(size) || size < 0 || size > MAX_RANDOM_BYTES) {
+    throw outOfRange('size', `>= 0 && <= ${MAX_RANDOM_BYTES}`, size);
+  }
+  return Math.trunc(size);
+}
+
+// Floor + window-validate a `randomFill`/`randomFillSync` offset/size like Node:
+// `buf` must be an ArrayBufferView OR a raw `ArrayBuffer` — Node accepts BOTH for
+// randomFill (UNLIKE `hash`, which rejects a raw `ArrayBuffer`); anything else is
+// ERR_INVALID_ARG_TYPE. offset/size floor non-integers but throw ERR_OUT_OF_RANGE
+// for NaN/negative/out-of-window. Range checks run on the RAW values; truncation
+// (Node's `>>> 0`) happens after.
+function resolveFillWindow(
+  buf: unknown,
+  offset: number,
+  size: number | undefined,
+): { offset: number; size: number } {
+  const isView = ArrayBuffer.isView(buf);
+  if (!isView && !(buf instanceof ArrayBuffer)) {
+    throw invalidArgType('buf', 'an instance of ArrayBuffer, Buffer, TypedArray, or DataView', buf);
+  }
+  const length = isView ? (buf as ArrayBufferView).byteLength : (buf as ArrayBuffer).byteLength;
+  if (typeof offset !== 'number') throw invalidArgType('offset', 'of type number', offset);
+  if (Number.isNaN(offset) || offset < 0 || offset > length) {
+    throw outOfRange('offset', `>= 0 && <= ${length}`, offset);
+  }
+  const off = Math.trunc(offset);
+  if (size === undefined) return { offset: off, size: length - off };
+  if (typeof size !== 'number') throw invalidArgType('size', 'of type number', size);
+  if (Number.isNaN(size) || size < 0 || size > MAX_RANDOM_BYTES) {
+    throw outOfRange('size', `>= 0 && <= ${MAX_RANDOM_BYTES}`, size);
+  }
+  if (size + off > length) {
+    throw outOfRange('size + offset', `<= ${length}`, size + off);
+  }
+  return { offset: off, size: Math.trunc(size) };
+}
+
+// Build the Uint8Array fill window over either an ArrayBufferView (honouring its
+// own byteOffset) or a raw ArrayBuffer. Shared by sync + async randomFill.
+function fillTargetView(
+  buf: ArrayBufferView | ArrayBuffer,
+  offset: number,
+  size: number,
+): Uint8Array {
+  return ArrayBuffer.isView(buf)
+    ? new Uint8Array(buf.buffer, buf.byteOffset + offset, size)
+    : new Uint8Array(buf, offset, size);
+}
+
+export function randomBytes(size: number): Buffer;
+export function randomBytes(size: number, callback: (err: Error | null, buf: Buffer) => void): void;
+export function randomBytes(
+  size: number,
+  callback?: (err: Error | null, buf: Buffer) => void,
+): Buffer | undefined {
+  // Size is validated synchronously in BOTH forms (Node throws, never `cb(err)`).
+  const len = validateByteSize(size);
+  if (callback === undefined) {
+    const buf = Buffer.alloc(len);
+    fillRandom(buf);
+    return buf;
+  }
+  queueMicrotask(() => {
+    const buf = Buffer.alloc(len);
+    fillRandom(buf);
+    callback(null, buf);
+  });
 }
 
 export function randomFillSync<T extends Uint8Array>(buf: T, offset = 0, size?: number): T {
-  const end = size === undefined ? buf.length : offset + size;
-  const view = buf.subarray(offset, end);
-  crypto.getRandomValues(view);
+  const win = resolveFillWindow(buf, offset, size);
+  fillRandom(fillTargetView(buf, win.offset, win.size));
   return buf;
+}
+
+/**
+ * Async `randomFill(buf[, offset][, size], callback)` (Node v7.10). Reuses the
+ * sync fill then defers `cb(null, buf)` — pairs with `randomBytes`'s callback
+ * overload over the shared microtask seam.
+ */
+export function randomFill<T extends Uint8Array>(
+  buf: T,
+  offsetOrCb: number | ((err: Error | null, buf: T) => void),
+  sizeOrCb?: number | ((err: Error | null, buf: T) => void),
+  cb?: (err: Error | null, buf: T) => void,
+): void {
+  let offset = 0;
+  let size: number | undefined;
+  let callback: ((err: Error | null, buf: T) => void) | undefined;
+  if (typeof offsetOrCb === 'function') {
+    callback = offsetOrCb;
+  } else {
+    offset = offsetOrCb;
+    if (typeof sizeOrCb === 'function') {
+      callback = sizeOrCb;
+    } else {
+      size = sizeOrCb;
+      callback = cb;
+    }
+  }
+  if (typeof callback !== 'function') {
+    throw invalidArgType('callback', 'of type function', callback);
+  }
+  // Window is validated SYNCHRONOUSLY (Node throws here, never `cb(err)`); only
+  // the fill itself is deferred over the shared microtask seam.
+  const win = resolveFillWindow(buf, offset, size);
+  const fn = callback;
+  queueMicrotask(() => {
+    fillRandom(fillTargetView(buf, win.offset, win.size));
+    fn(null, buf);
+  });
+}
+
+// `randomInt` reads a 48-bit uniform draw; RAND_MAX is the largest value (2^48-1)
+// and also the largest range Node allows (`max - min <= RAND_MAX`).
+const RAND_MAX = 2 ** 48 - 1;
+
+function random48(): number {
+  const b = new Uint8Array(6);
+  crypto.getRandomValues(b);
+  return (
+    b[0]! * 2 ** 40 + b[1]! * 2 ** 32 + b[2]! * 2 ** 24 + b[3]! * 2 ** 16 + b[4]! * 2 ** 8 + b[5]!
+  );
+}
+
+/**
+ * Uniform integer in `[0, range)` via rejection sampling — discard the biased
+ * tail above `floor(2^48 / range) * range` so there is no modulo bias near
+ * power-of-two-adjacent ranges. `range <= RAND_MAX` keeps the window non-empty.
+ */
+function sampleBelow(range: number): number {
+  const N = 2 ** 48;
+  const limit = N - (N % range);
+  for (;;) {
+    const v = random48();
+    if (v < limit) return v % range;
+  }
+}
+
+export function randomInt(max: number): number;
+export function randomInt(min: number, max: number): number;
+export function randomInt(max: number, callback: (err: undefined, value: number) => void): void;
+export function randomInt(
+  min: number,
+  max: number,
+  callback: (err: undefined, value: number) => void,
+): void;
+export function randomInt(
+  arg1: number,
+  arg2?: number | ((err: undefined, value: number) => void),
+  arg3?: (err: undefined, value: number) => void,
+): number | undefined {
+  let min: number;
+  let max: number;
+  let callback: ((err: undefined, value: number) => void) | undefined;
+  if (typeof arg2 === 'function') {
+    min = 0;
+    max = arg1;
+    callback = arg2;
+  } else if (arg2 === undefined) {
+    min = 0;
+    max = arg1;
+  } else {
+    min = arg1;
+    max = arg2;
+    callback = arg3;
+  }
+  // Validate synchronously in BOTH forms (Node throws, never `cb(err)`).
+  if (!Number.isSafeInteger(min)) throw invalidArgType('min', 'a safe integer', min);
+  if (!Number.isSafeInteger(max)) throw invalidArgType('max', 'a safe integer', max);
+  if (max <= min) {
+    throw outOfRange('max', `greater than the value of "min" (${min})`, max);
+  }
+  const range = max - min;
+  if (range > RAND_MAX) {
+    throw outOfRange('max - min', `<= ${RAND_MAX}`, range);
+  }
+  if (callback === undefined) return min + sampleBelow(range);
+  const fn = callback;
+  const base = min;
+  queueMicrotask(() => fn(undefined, base + sampleBelow(range)));
 }
 
 export function randomUUID(): string {
@@ -244,8 +491,11 @@ const cryptoModule = {
   constants,
   createHash,
   createHmac,
+  hash,
   randomBytes,
+  randomFill,
   randomFillSync,
+  randomInt,
   randomUUID,
   getRandomValues,
   getHashes,
@@ -304,7 +554,7 @@ function encodeString(str: string, encoding: Encoding): Uint8Array {
     for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
     return out;
   }
-  if (encoding === 'binary') {
+  if (encoding === 'binary' || encoding === 'latin1') {
     const out = new Uint8Array(str.length);
     for (let i = 0; i < str.length; i++) out[i] = str.charCodeAt(i) & 0xff;
     return out;
@@ -329,7 +579,7 @@ function encodeBytes(bytes: Uint8Array, encoding: Encoding): string {
   if (encoding === 'utf8') {
     return new TextDecoder().decode(bytes);
   }
-  if (encoding === 'binary') {
+  if (encoding === 'binary' || encoding === 'latin1') {
     let s = '';
     for (const b of bytes) s += String.fromCharCode(b);
     return s;

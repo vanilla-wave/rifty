@@ -9,6 +9,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   addrInUseError,
+  allocateEphemeralPort,
   dispatchToPort,
   isPortBound,
   listPorts,
@@ -37,6 +38,31 @@ describe('port occupancy (ADR-0157 review C3)', () => {
     expect(err.syscall).toBe('listen');
     expect(err.address).toBe('127.0.0.1');
     expect(err.port).toBe(3000);
+  });
+});
+
+describe('allocateEphemeralPort — virtual ephemeral allocator', () => {
+  it('returns an unbound port in the ephemeral range without reserving it', () => {
+    const p = allocateEphemeralPort();
+    expect(p).toBeGreaterThanOrEqual(49152);
+    expect(p).toBeLessThanOrEqual(65535);
+    // Allocation alone does not register — the caller (listen) registers.
+    expect(isPortBound(p)).toBe(false);
+  });
+
+  it('skips ports already registered in the realm', () => {
+    const first = allocateEphemeralPort();
+    registerPort(first, () => new Response('ok'));
+    const second = allocateEphemeralPort();
+    expect(second).not.toBe(first);
+    expect(isPortBound(second)).toBe(false);
+  });
+
+  it('is deterministic from a clean registry (scans from the range base)', () => {
+    const a = allocateEphemeralPort();
+    const b = allocateEphemeralPort();
+    // No registration between calls → same free port each time (no hidden state).
+    expect(a).toBe(b);
   });
 });
 

@@ -20,6 +20,7 @@
 import { Buffer, EventEmitter, NotImplementedError } from '@riftydev/io';
 import {
   addrInUseError,
+  allocateEphemeralPort,
   dispatchToPort,
   getHandler,
   isPortBound,
@@ -28,6 +29,7 @@ import {
 } from '../registry.ts';
 import { channelNameFor, portChannelNameFor, portChannelNameForPort } from '../ws/channel.ts';
 import type { WsMessage } from '../ws/in-process.ts';
+import { METHODS, maxHeaderSize } from './methods.ts';
 import { IncomingMessage, IncomingMessageFromFetch } from './request.ts';
 import { ServerResponse } from './response.ts';
 import { STATUS_CODES } from './status-codes.ts';
@@ -88,7 +90,7 @@ export class HttpServer extends EventEmitter {
   ): this;
   listen(options: ListenOptions, cb?: () => void): this;
   listen(portOrOptions: number | ListenOptions, ...rest: unknown[]): this {
-    const port = typeof portOrOptions === 'number' ? portOrOptions : (portOrOptions.port ?? 0);
+    const requested = typeof portOrOptions === 'number' ? portOrOptions : (portOrOptions.port ?? 0);
     // Node ignores positional host/backlog here (loopback-only). The callback is
     // the LAST function argument in any overload shape — including the 4-arg
     // `listen(port, host, backlog, cb)` that npm `ws` { port } mode uses.
@@ -98,12 +100,15 @@ export class HttpServer extends EventEmitter {
     // Port already bound in this realm → Node emits an async `'error'` EADDRINUSE
     // (NOT a sync throw): the server is returned, `'listening'` never fires, and an
     // unhandled `'error'` on an EventEmitter throws (faithful, ADR-0157 review C3).
-    // Port 0 means "ephemeral / any free port" in Node, so it never collides — skip
-    // the occupancy check for it (a distinct ephemeral-port assignment is backlog).
-    if (port !== 0 && isPortBound(port)) {
-      queueMicrotask(() => this.emit('error', addrInUseError('127.0.0.1', port)));
+    // Port 0 means "ephemeral / any free port" in Node, so it never collides — the
+    // occupancy check is skipped for it.
+    if (requested !== 0 && isPortBound(requested)) {
+      queueMicrotask(() => this.emit('error', addrInUseError('127.0.0.1', requested)));
       return this;
     }
+    // `listen(0)` / `listen({ port: 0 })` allocates a virtual ephemeral port from
+    // the realm registry (no OS socket), exposed via `address().port` until close.
+    const port = requested === 0 ? allocateEphemeralPort() : requested;
     this.port = port;
     registerPort(port, (request) => {
       if (isWebSocketUpgradeRequest(request)) {
@@ -882,5 +887,7 @@ const http = {
   IncomingMessage,
   ServerResponse,
   STATUS_CODES,
+  METHODS,
+  maxHeaderSize,
 };
 export default http;

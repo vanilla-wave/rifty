@@ -16,6 +16,8 @@ export {
   IncomingMessage,
   ServerResponse,
   STATUS_CODES,
+  METHODS,
+  maxHeaderSize,
 } from './http.ts';
 export {
   registerPort,

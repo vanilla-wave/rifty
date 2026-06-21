@@ -9,7 +9,8 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import net, { HttpFramedSocket, Socket, connect, createConnection } from './net.ts';
+import net, { HttpFramedSocket, Socket, connect, createConnection, createServer } from './net.ts';
+import { isPortBound } from './registry.ts';
 
 describe('HttpFramedSocket — Item 2', () => {
   it('is exported under the new name', () => {
@@ -73,5 +74,29 @@ describe('HttpFramedSocket.connect — non-HTTP usage is loud', () => {
       /net\.connect.*raw TCP sockets/i,
     );
     expect(() => net.connect(80, 'localhost')).toThrowError(/net\.connect.*raw TCP sockets/i);
+  });
+});
+
+describe('net.Server.listen(0) — virtual ephemeral ports', () => {
+  it('assigns a virtual ephemeral port exposed via address().port', async () => {
+    const srv = createServer();
+    await new Promise<void>((resolve) => srv.listen(0, () => resolve()));
+    const port = srv.address()?.port as number;
+    expect(port).toBeGreaterThanOrEqual(49152);
+    expect(port).toBeLessThanOrEqual(65535);
+    expect(isPortBound(port)).toBe(true);
+    await new Promise<void>((resolve) => srv.close(() => resolve()));
+    expect(isPortBound(port)).toBe(false);
+  });
+
+  it('listen({ port: 0 }) options form also allocates a virtual ephemeral port', async () => {
+    const srv = createServer();
+    await new Promise<void>((resolve) => srv.listen({ port: 0 }, () => resolve()));
+    const port = srv.address()?.port as number;
+    expect(port).toBeGreaterThanOrEqual(49152);
+    expect(port).toBeLessThanOrEqual(65535);
+    expect(isPortBound(port)).toBe(true);
+    await new Promise<void>((resolve) => srv.close(() => resolve()));
+    expect(isPortBound(port)).toBe(false);
   });
 });
