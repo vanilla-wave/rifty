@@ -35,6 +35,16 @@ export interface VfsLanguageServiceHostDeps {
   /** Std-lib `.d.ts` by file name (e.g. `lib.es2024.d.ts` → contents). */
   readonly libMap: ReadonlyMap<string, string>;
   readonly overlay: DocumentOverlay;
+  /**
+   * Observer fired for each module literal resolved by
+   * `resolveModuleNameLiterals` (`to` = the resolved file, or undefined on a
+   * miss). Test/diagnostic seam; production wiring leaves it unset.
+   */
+  readonly onModuleResolved?: (
+    name: string,
+    containingFile: string,
+    to: string | undefined,
+  ) => void;
 }
 
 function basename(p: string): string {
@@ -45,10 +55,34 @@ function basename(p: string): string {
 export function createVfsLanguageServiceHost(
   deps: VfsLanguageServiceHostDeps,
 ): ts.LanguageServiceHost {
-  const { fsSync, projectRoot, compilerOptions, fileNames, libMap, overlay } = deps;
+  const { fsSync, projectRoot, compilerOptions, fileNames, libMap, overlay, onModuleResolved } =
+    deps;
 
   /** Lib contents if `fileName`'s basename is a std-lib file, else undefined. */
   const libContents = (fileName: string): string | undefined => libMap.get(basename(fileName));
+
+  /**
+   * VFS-backed `ModuleResolutionHost` for `ts.resolveModuleName`. Lib files are
+   * intercepted by basename so a `.d.ts` that imports a std-lib name still
+   * resolves. `realpath` is identity — the Memory VFS has no symlinks.
+   */
+  const moduleResolutionHost: ts.ModuleResolutionHost = {
+    fileExists: (fileName) => libContents(fileName) !== undefined || fileExists(fsSync, fileName),
+    readFile: (fileName) => libContents(fileName) ?? readFileUtf8(fsSync, fileName),
+    directoryExists: (dirName) => dirName === LIB_DIR || directoryExists(fsSync, dirName),
+    getDirectories: (dirName) => getDirectories(fsSync, dirName),
+    realpath: (p) => p,
+    getCurrentDirectory: () => projectRoot,
+    useCaseSensitiveFileNames: true,
+  };
+
+  // Shared across the program's resolutions so node_modules walks are cached
+  // (and resolution is deterministic — the parity gold standard).
+  const resolutionCache = ts.createModuleResolutionCache(
+    projectRoot,
+    (s) => s, // case-sensitive: canonical name is the name
+    compilerOptions,
+  );
 
   /**
    * VFS-derived version (content-independent change token): mtime+size. Changes
@@ -123,5 +157,35 @@ export function createVfsLanguageServiceHost(
     getDirectories: (dirName) => getDirectories(fsSync, dirName),
 
     useCaseSensitiveFileNames: () => true,
+
+    // Explicit, VFS-backed, mode-aware resolution. Mirrors what TS's internal
+    // fallback would do — but pinned to the VFS host + shared cache, and never
+    // able to slip through to ts.sys. Mode comes from getModeForUsageLocation so
+    // nodenext import/require conditions resolve like real tsc.
+    resolveModuleNameLiterals: (
+      literals,
+      containingFile,
+      redirectedReference,
+      options,
+      containingSourceFile,
+    ) =>
+      literals.map((literal) => {
+        const mode = ts.getModeForUsageLocation(containingSourceFile, literal, options);
+        const result = ts.resolveModuleName(
+          literal.text,
+          containingFile,
+          options,
+          moduleResolutionHost,
+          resolutionCache,
+          redirectedReference,
+          mode,
+        );
+        onModuleResolved?.(literal.text, containingFile, result.resolvedModule?.resolvedFileName);
+        return result;
+      }),
+
+    // Let TS reuse our cache for incidental (non-import) lookups.
+    getResolvedModuleWithFailedLookupLocationsFromCache: (moduleName, containingFile, mode) =>
+      ts.resolveModuleNameFromCache(moduleName, containingFile, resolutionCache, mode),
   };
 }
