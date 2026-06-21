@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Layout fixes: the explorer canvas grows to the world height so the bottom row no longer clips;
+  the graph auto-fits + centres on both axes (responsive, recentres on resize) so it never spills off
+  one edge with empty space on the other; the legend is laid out one group per row (type / realm /
+  edge); the footer drops the "pet project" tagline. Removed the now-unused zoom-button + legend
+  divider styles.
 - Explorer review fixes: Realms view is now interactive — lane cards hover/click to highlight
   node + neighbours and drive a Realms inspector (hover wins over pin); active realm lane highlights
   in realm color during scenario playback (ext→page); per-realm lane tint + bounded scroll viewport

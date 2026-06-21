@@ -353,6 +353,9 @@ export function mountExplorer(root: HTMLElement): () => void {
     const viewport = document.createElement('div');
     viewport.className = 'exp-viewport';
     if (cfg.zones) viewport.classList.add('exp-viewport-plain');
+    // Zoom is gone (it hijacked page scroll), so the viewport must be tall enough
+    // to show the whole world at scale 1 — otherwise the bottom row clips.
+    viewport.style.height = `${cfg.worldH}px`;
     const world = document.createElement('div');
     world.className = 'exp-world';
     world.style.width = `${WORLD_W}px`;
@@ -480,43 +483,45 @@ export function mountExplorer(root: HTMLElement): () => void {
 
   // ---- legend ----
   function buildLegendHtml(): string {
-    const grp = (lbl: string): string => `<span class="exp-legend-grp">${lbl}</span>`;
-    const div = '<span class="exp-legend-div"></span>';
     const item = (inner: string): string => `<span class="exp-legend-item">${inner}</span>`;
-    let h = '<div class="exp-legend-bar">';
-    h += grp('type');
+    const line = (lbl: string, items: string): string =>
+      `<div class="exp-legend-line"><span class="exp-legend-grp">${lbl}</span>${items}</div>`;
+
+    let typeItems = '';
     for (const k of Object.keys(KINDS) as (keyof typeof KINDS)[]) {
       const kd = KINDS[k];
-      h += item(`<span class="exp-legend-ico">${kindSvg(kd.icon, 14)}</span>${kd.label}`);
+      typeItems += item(`<span class="exp-legend-ico">${kindSvg(kd.icon, 14)}</span>${kd.label}`);
     }
-    h += div + grp('realm');
+
+    let realmItems = '';
     for (const r of REALM_LABELS) {
-      h += item(
+      realmItems += item(
         `<span class="exp-legend-sq" style="background:${REALM_COL[r.id]}"></span>${r.name}`,
       );
     }
-    h += div + grp('edge');
-    h += item(
-      '<svg width="24" height="8" aria-hidden="true"><line x1="0" y1="4" x2="24" y2="4" ' +
-        'stroke="rgba(255,255,255,0.45)" stroke-width="1.5"/></svg>import',
-    );
-    h += item(
-      '<svg width="24" height="8" aria-hidden="true"><line x1="0" y1="4" x2="19" y2="4" ' +
-        'stroke="rgba(255,255,255,0.55)" stroke-width="1.5"/>' +
-        '<path d="M19 1 L24 4 L19 7 Z" fill="rgba(255,255,255,0.55)"/></svg>data',
-    );
-    h += item(
-      '<svg width="24" height="8" aria-hidden="true"><line x1="0" y1="4" x2="19" y2="4" ' +
-        'stroke="rgba(255,255,255,0.55)" stroke-width="1.5" stroke-dasharray="5 4"/>' +
-        '<path d="M19 1 L24 4 L19 7 Z" fill="rgba(255,255,255,0.55)"/></svg>control',
-    );
-    h += item(
-      '<svg width="24" height="8" aria-hidden="true"><line x1="0" y1="4" x2="19" y2="4" ' +
-        'stroke="var(--ac)" stroke-width="1.5" stroke-dasharray="4 4"/>' +
-        '<path d="M19 1 L24 4 L19 7 Z" fill="var(--ac)"/></svg>ipc',
-    );
-    h += '</div>';
-    return h;
+
+    const edgeItems =
+      item(
+        '<svg width="24" height="8" aria-hidden="true"><line x1="0" y1="4" x2="24" y2="4" ' +
+          'stroke="rgba(255,255,255,0.45)" stroke-width="1.5"/></svg>import',
+      ) +
+      item(
+        '<svg width="24" height="8" aria-hidden="true"><line x1="0" y1="4" x2="19" y2="4" ' +
+          'stroke="rgba(255,255,255,0.55)" stroke-width="1.5"/>' +
+          '<path d="M19 1 L24 4 L19 7 Z" fill="rgba(255,255,255,0.55)"/></svg>data',
+      ) +
+      item(
+        '<svg width="24" height="8" aria-hidden="true"><line x1="0" y1="4" x2="19" y2="4" ' +
+          'stroke="rgba(255,255,255,0.55)" stroke-width="1.5" stroke-dasharray="5 4"/>' +
+          '<path d="M19 1 L24 4 L19 7 Z" fill="rgba(255,255,255,0.55)"/></svg>control',
+      ) +
+      item(
+        '<svg width="24" height="8" aria-hidden="true"><line x1="0" y1="4" x2="19" y2="4" ' +
+          'stroke="var(--ac)" stroke-width="1.5" stroke-dasharray="4 4"/>' +
+          '<path d="M19 1 L24 4 L19 7 Z" fill="var(--ac)"/></svg>ipc',
+      );
+
+    return `<div class="exp-legend-bar">${line('type', typeItems)}${line('realm', realmItems)}${line('edge', edgeItems)}</div>`;
   }
 
   function mkCtrlBtn(cls: string, label: string): HTMLButtonElement {
@@ -533,11 +538,69 @@ export function mountExplorer(root: HTMLElement): () => void {
     resetBoard(impl);
   });
 
-  // ---- transform / zoom ----
+  // ---- transform / centering ----
   function applyTransform(boardImpl: 1 | 3): void {
     const board = boards[boardImpl];
     const v = view[boardImpl];
     board.world.style.transform = `translate(${v.tx}px,${v.ty}px) scale(${v.scale})`;
+  }
+
+  // boards whose pan has been auto-centred for the current viewport width.
+  const centered = new Set<1 | 3>();
+
+  // Approximate node box per id. DETERMINISTIC (not read from the DOM): centring
+  // must not depend on offsetWidth, which is briefly wrong in dev while Vite is
+  // still injecting CSS (the fixed-width rich cards measure huge unstyled) — that
+  // race left the graph mis-centred on some loads.
+  function nodeBox(id: NodeId): { w: number; h: number } {
+    if (id === 'playground') return { w: 210, h: 150 };
+    if (id === 'preview') return { w: 160, h: 120 };
+    return { w: 162, h: 50 };
+  }
+
+  // Fit the node cluster into the viewport and centre it on both axes. Zoom is
+  // gone (it hijacked page scroll), so this initial fit-scale is what keeps the
+  // graph from clipping on narrow screens — it is not interactive zoom.
+  function centerBoard(board: Board): void {
+    const vpW = board.viewport.clientWidth;
+    const vpH = board.viewport.clientHeight;
+    if (vpW === 0) return; // hidden board — measure once it is shown
+    let minX = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    // Nodes are centre-anchored on their position (CSS translate(-50%,-50%)),
+    // so each spans pos ± half-size. Prefer the real measured size, but fall back
+    // to the deterministic box when offsetWidth is missing or absurd — in dev the
+    // fixed-width rich cards briefly measure huge before Vite injects their CSS.
+    for (const id of NODE_IDS) {
+      const p = board.pos[id];
+      if (!p) continue;
+      const def = nodeBox(id);
+      const el = board.nodeEls.get(id);
+      const mw = el?.offsetWidth ?? 0;
+      const mh = el?.offsetHeight ?? 0;
+      const w = mw >= 60 && mw <= 280 ? mw : def.w;
+      const h = mh >= 24 && mh <= 220 ? mh : def.h;
+      minX = Math.min(minX, p[0] - w / 2);
+      maxX = Math.max(maxX, p[0] + w / 2);
+      minY = Math.min(minY, p[1] - h / 2);
+      maxY = Math.max(maxY, p[1] + h / 2);
+    }
+    if (!Number.isFinite(minX)) return;
+    const PAD = 24;
+    const contentW = maxX - minX;
+    const s = Math.max(0.5, Math.min(1, (vpW - PAD * 2) / contentW));
+    const v = view[board.impl];
+    v.scale = s;
+    v.tx = vpW / 2 - ((minX + maxX) / 2) * s;
+    v.ty = vpH / 2 - ((minY + maxY) / 2) * s;
+    applyTransform(board.impl);
+    centered.add(board.impl);
+  }
+
+  function ensureCentered(boardImpl: 1 | 3): void {
+    if (!centered.has(boardImpl)) centerBoard(boards[boardImpl]);
   }
 
   function resetBoard(boardImpl: 1 | 3): void {
@@ -545,6 +608,7 @@ export function mountExplorer(root: HTMLElement): () => void {
     board.pos = clonePos(BOARDS[boardImpl].defKey);
     view[boardImpl] = defaultView();
     layoutBoard(board);
+    centerBoard(board);
     drawBoardEdges(board);
     styleZones(board);
   }
@@ -740,9 +804,15 @@ export function mountExplorer(root: HTMLElement): () => void {
     boards[1].root.style.display = impl === 1 ? '' : 'none';
     realms.root.style.display = impl === 2 ? '' : 'none';
     boards[3].root.style.display = impl === 3 ? '' : 'none';
-    if (impl === 1) renderBoard(boards[1]);
-    else if (impl === 3) renderBoard(boards[3]);
-    else renderRealms();
+    if (impl === 1) {
+      ensureCentered(1);
+      renderBoard(boards[1]);
+    } else if (impl === 3) {
+      ensureCentered(3);
+      renderBoard(boards[3]);
+    } else {
+      renderRealms();
+    }
   }
 
   // ---- interactions: state setters ----
@@ -917,16 +987,24 @@ export function mountExplorer(root: HTMLElement): () => void {
   layoutBoard(boards[3]);
   applyView();
 
-  // After fonts/layout settle, re-measure node sizes so edge border-clips are
-  // accurate (offsetWidth is 0 before the element is laid out).
-  const rafId = requestAnimationFrame(() => {
+  // After fonts/layout settle, re-measure node sizes so centering + edge
+  // border-clips are accurate (offsetWidth is 0 before the element is laid out).
+  function recenterActive(): void {
     const board = activeBoard();
-    if (board) drawBoardEdges(board);
-  });
-  const remeasureTimer = setTimeout(() => {
-    const board = activeBoard();
-    if (board) drawBoardEdges(board);
-  }, 380);
+    if (!board) return;
+    centered.delete(board.impl);
+    centerBoard(board);
+    drawBoardEdges(board);
+  }
+  const rafId = requestAnimationFrame(recenterActive);
+  const remeasureTimer = setTimeout(recenterActive, 380);
+
+  // Re-centre on width change (responsive); drops any manual pan, which is fine.
+  function onResize(): void {
+    centered.clear();
+    recenterActive();
+  }
+  window.addEventListener('resize', onResize);
 
   // ---- cleanup ----
   return () => {
@@ -935,5 +1013,6 @@ export function mountExplorer(root: HTMLElement): () => void {
     clearTimeout(remeasureTimer);
     window.removeEventListener('pointermove', onPointerMove);
     window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('resize', onResize);
   };
 }

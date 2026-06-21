@@ -51,14 +51,11 @@ function buildFooter(): HTMLElement {
   name.className = 'cta-footer-name';
   name.textContent = 'rifty';
 
-  const note = document.createElement('span');
-  note.textContent = '— a pet project about understanding how these systems work.';
-
   const stamp = document.createElement('span');
   stamp.className = 'cta-footer-stamp';
   stamp.textContent = 'M11 · Consumer Ready';
 
-  footer.append(mark, name, note, stamp);
+  footer.append(mark, name, stamp);
   return footer;
 }
 
