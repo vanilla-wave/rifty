@@ -13,7 +13,7 @@ const TIERS = [
   ['vfs', 'io', 'net', 'service-worker'],
   ['kernel'],
   ['runtime-js', 'runtime-wasi'],
-  ['shell', 'terminal', 'npm-client'],
+  ['shell', 'terminal', 'npm-client', 'ts-language-service'],
   ['playground'],
 ];
 
