@@ -390,7 +390,21 @@ async function bootShellOwner(opts: {
       publishSnapshot(); // node_modules may have changed — refresh the page's view
       return code;
     });
-    shell.registerCommand('vite', (_args, ctx) => runDevServer(ctx));
+    // The sandbox is dev-server-only (ADR-0162): `vite build`/`preview`/`optimize`
+    // have no production-bundle path yet, so LOUD-reject them instead of silently
+    // booting the dev server (which would produce no dist + no error). Bare `vite`,
+    // `vite dev`/`serve`, and flags still boot the dev line.
+    // TODO(backlog: playground/vite8-production-build-preview)
+    shell.registerCommand('vite', (args, ctx) => {
+      const sub = args[0];
+      if (sub === 'build' || sub === 'preview' || sub === 'optimize') {
+        ctx.stderr.write(
+          `vite: \`vite ${sub}\` is not supported yet — the rifty sandbox is dev-server-only (no production build/preview). Run \`vite\` to start the dev server.\n`,
+        );
+        return Promise.resolve(1);
+      }
+      return runDevServer(ctx);
+    });
     // `node <file> [args]` (ADR-0155): resolve the entry against the owner store,
     // then run it in a supervised child. A long-running server child registers a
     // preview slot via `onListening`; the slot is dropped on exit. A clean Node

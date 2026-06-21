@@ -22,8 +22,14 @@ describe('dev-server boot preview routing', () => {
     expect(source).toContain('invalidateViteModule(activeServer, modulePath)');
     expect(source).not.toContain('function broadcastFileUpdate(path: string): void');
     expect(source).not.toContain('hmrBridgeRef.current?.broadcast(');
+    // The bridge token + plugin + "bridge ready" log are gated on HMR being
+    // enabled — no token minted and no false "bridge ready" signal when HMR is off
+    // (Vite 8 template, ADR-0161).
     expect(source).toContain(
-      'plugins: cfg.hmrEnabled ? [createHmrBridgeVitePlugin({ port, token: hmrBridgeToken })] : []',
+      'const hmrBridgeToken = cfg.hmrEnabled ? createHmrBridgeToken() : null',
+    );
+    expect(source).toContain(
+      'plugins: hmrBridgeToken ? [createHmrBridgeVitePlugin({ port, token: hmrBridgeToken })] : []',
     );
     expect(source).toContain('host: PREVIEW_LOCAL_HOST');
     expect(source).toContain('path: `__hmr/${encodeURIComponent(hmrBridgeToken)}`');

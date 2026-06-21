@@ -264,8 +264,13 @@ export async function bootDevServer(opts: {
     )) as unknown as {
       createServer: (config: ViteUserConfig) => Promise<ViteDevServer>;
     };
-    const hmrBridgeToken = createHmrBridgeToken();
-    log(`[real-vite/worker] hmr bridge ready at ${hmrBridgeUrl(port, hmrBridgeToken)}\n`);
+    // Only wire (and announce) the HMR bridge when HMR is actually enabled. With
+    // the Vite 8 template HMR is OFF (ADR-0161), so don't mint a token or log a
+    // "bridge ready" line for a bridge that is never installed (no false signal).
+    const hmrBridgeToken = cfg.hmrEnabled ? createHmrBridgeToken() : null;
+    if (hmrBridgeToken !== null) {
+      log(`[real-vite/worker] hmr bridge ready at ${hmrBridgeUrl(port, hmrBridgeToken)}\n`);
+    }
     log(`[real-vite/worker] starting dev server on port ${port}…\n`);
     const server = await viteNs.createServer({
       root,
@@ -274,7 +279,7 @@ export async function bootDevServer(opts: {
         port,
         strictPort: cfg.server.strictPort,
         middlewareMode: false,
-        hmr: cfg.hmrEnabled
+        hmr: hmrBridgeToken
           ? {
               protocol: 'ws',
               host: PREVIEW_LOCAL_HOST,
@@ -294,7 +299,7 @@ export async function bootDevServer(opts: {
       optimizeDeps: (cfg.server.optimizeDepsDisabled
         ? { noDiscovery: true, include: [] }
         : {}) as unknown as ViteUserConfig['optimizeDeps'],
-      plugins: cfg.hmrEnabled ? [createHmrBridgeVitePlugin({ port, token: hmrBridgeToken })] : [],
+      plugins: hmrBridgeToken ? [createHmrBridgeVitePlugin({ port, token: hmrBridgeToken })] : [],
     });
     await server.listen();
     activeServer = server;

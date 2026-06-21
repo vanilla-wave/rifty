@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Vite 8 sandbox honesty follow-ups (PR #55 audit).** (a) `vite build`/`preview`/`optimize` now LOUD-reject (`not supported yet — the rifty sandbox is dev-server-only`) instead of silently booting the dev server (no dist, no error); tracked `backlog/playground/vite8-production-build-preview`. (b) The `[real-vite/worker] hmr bridge ready` log + the bridge token are no longer emitted when HMR is disabled (Vite 8 template) — no false "bridge ready" signal for a bridge that is never installed. (c) `PreviewPanel` header comment corrected — with HMR off (ADR-0161) an editor save re-transforms on next fetch but pushes nothing and non-editor changes aren't watched, so seeing an edit needs a manual Reload (was: "file edits are refreshed by the iframe HMR client itself"). (d) compat `incompatible-packages.md` esbuild/rollup rows corrected — Vite 8 transforms via oxc and parses via `rolldown/parseAst`, so those shim overlays are off the Vite 8 path. New `vite8-*` backlog items track the remaining divergences (watcher-over-VFS, TS/JSX parity coverage, dead esbuild/rollup overlays, lightningcss-wasm init, dev-server UX parity).
+
 ### Changed
 
 - **Node-faithful boot — the dev line no longer installs (ADR-0135 corrected).** `vite`

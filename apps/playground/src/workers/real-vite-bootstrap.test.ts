@@ -24,6 +24,15 @@ describe('real Vite bootstrap preview routing', () => {
   });
 });
 
+describe('vite command — dev-server-only (no production build/preview)', () => {
+  it('loud-rejects `vite build`/`preview`/`optimize` instead of silently booting the dev server', () => {
+    // The sandbox has no production-bundle path (ADR-0162); these subcommands must
+    // not silently fall through to runDevServer (no dist + no error).
+    expect(source).toContain("if (sub === 'build' || sub === 'preview' || sub === 'optimize')");
+    expect(source).toContain('is not supported yet — the rifty sandbox is dev-server-only');
+  });
+});
+
 describe('node-server runtime branch', () => {
   it('calls builtin registrars explicitly so production bundling cannot drop them', () => {
     expect(source).toContain(
