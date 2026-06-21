@@ -132,6 +132,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0131 | Public sandbox filesystem API for AI agents |
 | 0132 | TS ESM parity uses full-transform Node reference |
 | 0164 | Node 24 as the supported and parity-target version |
+| 0166 | In-browser TS language service over VFS |
 
 ### protocol
 
