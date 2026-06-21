@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { DiagnosticSeverity } from './lsp-types.ts';
 import { createTsLanguageService } from './service.ts';
 
-function writeFile(fsSync: ReturnType<typeof createMemoryFs>['fsSync'], path: string, text: string) {
+function writeFile(
+  fsSync: ReturnType<typeof createMemoryFs>['fsSync'],
+  path: string,
+  text: string,
+) {
   const dir = path.slice(0, path.lastIndexOf('/')) || '/';
   fsSync.mkdirSync(dir, { recursive: true });
   fsSync.writeFileSync(path, new TextEncoder().encode(text));
