@@ -61,8 +61,8 @@ function buildLeft(): HTMLElement {
   cta.className = 'hero-cta';
   const primary = document.createElement('a');
   primary.className = 'hero-btn hero-btn-primary';
-  primary.href = '#start';
-  primary.append(document.createTextNode('Get started'));
+  primary.href = 'https://play.rifty.dev/';
+  primary.append(document.createTextNode('Open playground'));
   const arrow = document.createElement('span');
   arrow.className = 'hero-btn-icon';
   arrow.innerHTML = icon('arrow-right', 15);

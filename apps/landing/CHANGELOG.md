@@ -12,8 +12,11 @@
   explorer (drag/pan/zoom graph, 6 BFS-animated scenarios, Schema/Realms/Hybrid views). Lime accent
   + rift mark hardcoded. Honest copy: preview buffered (M12), Chromium-first, CEIL gaps visible.
   Netlify build moved to the monorepo-root Vite build; headers/redirects shipped via `public/`.
-- Nav gains an "Open playground" accent exit → `play.rifty.dev` (restores the funnel the old static
-  page had). Netlify CI now installs + runs the Vite build and deploys `apps/landing/dist`
-  (`--no-build`); the landing smoke check targets the new page title. Integration test
+- Review polish: hero primary CTA now opens the live playground (`play.rifty.dev`); the explorer
+  drops wheel + −/+ zoom (it hijacked landing scroll — drag-to-pan and node-drag stay); the
+  `service worker` node moved out of the runtimes row (no overlap); the inspector is hidden at rest
+  and appears on hover/pin so it never covers the graph.
+- Netlify CI now installs + runs the Vite build and deploys `apps/landing/dist` (`--no-build`); the
+  landing smoke check targets the new page title. Integration test
   `tests/integration/landing-static.test.ts` updated for the Vite SPA shell + `public/_headers`.
 - (prev) Added the static `rifty.dev` landing page and Netlify headers/redirects.

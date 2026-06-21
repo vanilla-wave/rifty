@@ -40,8 +40,6 @@ const ADJ = buildAdjacency(EDGES);
 const NODE_IDS = Object.keys(NODES) as NodeId[];
 
 const STEP_MS = 1150;
-const ZOOM_MIN = 0.45;
-const ZOOM_MAX = 1.9;
 const WORLD_W = 1120;
 const SCHEMA_H = 660;
 const HYBRID_H = 690;
@@ -148,7 +146,8 @@ export function mountExplorer(root: HTMLElement): () => void {
   let step = 0;
   let playing = false;
   let hover: NodeId | null = null;
-  let inspect: NodeId = 'kernel';
+  // null = nothing pinned → inspector hidden at rest so it never covers the graph.
+  let inspect: NodeId | null = null;
 
   const view: Record<1 | 3, ViewTransform> = {
     1: defaultView(),
@@ -329,13 +328,8 @@ export function mountExplorer(root: HTMLElement): () => void {
   legendRow.innerHTML = buildLegendHtml();
   const controls = document.createElement('div');
   controls.className = 'exp-controls';
-  controls.innerHTML =
-    '<span class="exp-hint">drag nodes · drag canvas to pan · scroll to zoom</span>';
-  const zoomOut = mkCtrlBtn('exp-zoom-btn', '−');
-  const zoomIn = mkCtrlBtn('exp-zoom-btn', '+');
+  controls.innerHTML = '<span class="exp-hint">drag nodes · drag canvas to pan</span>';
   const resetBtn = mkCtrlBtn('exp-reset-btn', 'Reset');
-  controls.appendChild(zoomOut);
-  controls.appendChild(zoomIn);
   controls.appendChild(resetBtn);
   legendRow.appendChild(controls);
   root.appendChild(legendRow);
@@ -408,15 +402,6 @@ export function mountExplorer(root: HTMLElement): () => void {
     container.appendChild(viewport);
 
     viewport.addEventListener('pointerdown', (e) => beginPan(board, e));
-    viewport.addEventListener(
-      'wheel',
-      (e) => {
-        e.preventDefault();
-        const r = viewport.getBoundingClientRect();
-        zoomAt(boardImpl, e.clientX - r.left, e.clientY - r.top, e.deltaY < 0 ? 1.12 : 0.89);
-      },
-      { passive: false },
-    );
 
     return board;
   }
@@ -543,18 +528,6 @@ export function mountExplorer(root: HTMLElement): () => void {
   }
 
   // ---- controls wiring ----
-  zoomIn.addEventListener('click', () => {
-    if (impl === 2) return;
-    const board = boards[impl];
-    const r = board.viewport.getBoundingClientRect();
-    zoomAt(impl, r.width / 2, r.height / 2, 1.15);
-  });
-  zoomOut.addEventListener('click', () => {
-    if (impl === 2) return;
-    const board = boards[impl];
-    const r = board.viewport.getBoundingClientRect();
-    zoomAt(impl, r.width / 2, r.height / 2, 0.87);
-  });
   resetBtn.addEventListener('click', () => {
     if (impl === 2) return;
     resetBoard(impl);
@@ -565,17 +538,6 @@ export function mountExplorer(root: HTMLElement): () => void {
     const board = boards[boardImpl];
     const v = view[boardImpl];
     board.world.style.transform = `translate(${v.tx}px,${v.ty}px) scale(${v.scale})`;
-  }
-
-  function zoomAt(boardImpl: 1 | 3, cx: number, cy: number, factor: number): void {
-    const v = view[boardImpl];
-    const s0 = v.scale;
-    const s = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, s0 * factor));
-    const k = s / s0;
-    v.tx = cx - (cx - v.tx) * k;
-    v.ty = cy - (cy - v.ty) * k;
-    v.scale = s;
-    applyTransform(boardImpl);
   }
 
   function resetBoard(boardImpl: 1 | 3): void {

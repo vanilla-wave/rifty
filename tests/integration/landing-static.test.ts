@@ -9,6 +9,7 @@ const LANDING_NETLIFY_CONFIG = 'apps/landing/netlify.toml';
 const LANDING_PACKAGE = 'apps/landing/package.json';
 const NETLIFY_WORKFLOW = '.github/workflows/netlify.yml';
 const NAV = 'apps/landing/src/sections/nav.ts';
+const HERO = 'apps/landing/src/sections/hero.ts';
 
 describe('landing static site', () => {
   it('publishes the rifty.dev landing entry (Vite SPA shell)', () => {
@@ -26,9 +27,10 @@ describe('landing static site', () => {
     // /play → live playground (its own origin) survives as a redirect…
     const redirects = readFileSync(REDIRECTS, 'utf8');
     expect(redirects).toContain('https://play.rifty.dev/');
-    // …and the nav links out to both the playground and the repo.
+    // …the hero primary CTA opens the playground; the nav links out to the repo.
+    const hero = readFileSync(HERO, 'utf8');
+    expect(hero).toContain('https://play.rifty.dev/');
     const nav = readFileSync(NAV, 'utf8');
-    expect(nav).toContain('https://play.rifty.dev/');
     expect(nav).toContain('https://github.com/vanilla-wave/rifty');
   });
 

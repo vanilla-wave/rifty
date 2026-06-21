@@ -128,25 +128,3 @@
 .nav-star-icon {
   display: inline-flex;
 }
-
-.nav-play {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ac-ink);
-  background: var(--ac);
-  text-decoration: none;
-  border-radius: var(--r-btn);
-  padding: 7px 12px;
-  transition: filter 0.15s linear;
-}
-
-.nav-play:hover {
-  filter: brightness(1.06);
-}
-
-.nav-play-icon {
-  display: inline-flex;
-}

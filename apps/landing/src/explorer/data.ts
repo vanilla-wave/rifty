@@ -446,7 +446,7 @@ export const DEFPOS: Record<NodeId, Pos> = {
   runtimewasi: [482, 332],
   esbuild: [672, 332],
   vite: [846, 332],
-  sw: [998, 322],
+  sw: [998, 240],
   kernel: [348, 452],
   sab: [566, 452],
   preview: [998, 478],

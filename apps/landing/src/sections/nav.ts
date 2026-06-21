@@ -3,7 +3,6 @@ import './nav.css';
 
 const NPM_CMD = 'npm i @riftydev/sdk';
 const GITHUB_URL = 'https://github.com/vanilla-wave/rifty';
-const PLAYGROUND_URL = 'https://play.rifty.dev/';
 
 // Wire the npm copy chip: copy command, flip to a check icon briefly.
 function wireCopy(chip: HTMLButtonElement, iconHost: HTMLElement): void {
@@ -82,16 +81,6 @@ export function renderNav(): HTMLElement {
   copyChip.append(dollar, cmd, copyIcon);
   wireCopy(copyChip, copyIcon);
 
-  // primary exit to the live playground (play.rifty.dev — its own origin)
-  const play = document.createElement('a');
-  play.className = 'nav-play';
-  play.href = PLAYGROUND_URL;
-  play.append(document.createTextNode('Open playground'));
-  const playIcon = document.createElement('span');
-  playIcon.className = 'nav-play-icon';
-  playIcon.innerHTML = icon('arrow-right', 14);
-  play.append(playIcon);
-
   const star = document.createElement('a');
   star.className = 'nav-star';
   star.href = GITHUB_URL;
@@ -100,7 +89,7 @@ export function renderNav(): HTMLElement {
   starIcon.innerHTML = icon('github', 15);
   star.append(starIcon, document.createTextNode('Star'));
 
-  right.append(copyChip, play, star);
+  right.append(copyChip, star);
 
   inner.append(brand, version, links, right);
   header.append(inner);
