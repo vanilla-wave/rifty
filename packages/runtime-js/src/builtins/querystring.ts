@@ -18,6 +18,17 @@ export function unescape(s: string): string {
   }
 }
 
+/**
+ * Replace a literal `+` with `%20` BEFORE decoding — Node `querystring.parse`'s
+ * structural step. It must be `%20`, not a space: the (default OR custom)
+ * `decodeURIComponent` then runs on the result, so a custom decoder sees `%20`
+ * exactly as Node passes it (the default decoder turns `%20` into a space). A
+ * literal space here would feed the custom decoder the wrong byte.
+ */
+function plusToSpace(s: string): string {
+  return s.indexOf('+') === -1 ? s : s.replace(/\+/g, '%20');
+}
+
 export function parse(
   qs: string,
   sep = '&',
@@ -34,12 +45,16 @@ export function parse(
     const idx = raw.indexOf(eq);
     let key: string;
     let value: string;
+    // Node's `parse` tokenizer turns a literal `+` into a space BEFORE percent-
+    // decoding (it's structural, not part of `unescape` — `querystring.unescape`
+    // alone leaves `+` intact). `%2B` survives because the replace runs on the
+    // still-encoded segment, before `decode`.
     if (idx === -1) {
-      key = decode(raw);
+      key = decode(plusToSpace(raw));
       value = '';
     } else {
-      key = decode(raw.slice(0, idx));
-      value = decode(raw.slice(idx + 1));
+      key = decode(plusToSpace(raw.slice(0, idx)));
+      value = decode(plusToSpace(raw.slice(idx + 1)));
     }
     if (Object.hasOwn(out, key)) {
       const existing = out[key];

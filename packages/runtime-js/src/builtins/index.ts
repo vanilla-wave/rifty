@@ -1,6 +1,6 @@
 import { registerBuiltin } from '@riftydev/io';
 import assertModule, { strict as assertStrict } from './assert.ts';
-import bufferModule, { Buffer } from './buffer.ts';
+import bufferModule from './buffer.ts';
 import childProcessModule, { ensureExecSyncHandlerInstalled } from './child_process.ts';
 import consoleModule from './console.ts';
 import nodeConstants from './constants.ts';
@@ -71,11 +71,10 @@ export function ensureRuntimeJsBuiltinsRegistered(): void {
   registerBuiltin('url', () => urlModule);
   registerBuiltin('assert', () => assertModule);
   registerBuiltin('assert/strict', () => assertStrict);
-  registerBuiltin('buffer', () => {
-    const exports = { Buffer } as Record<string, unknown>;
-    Object.assign(exports, bufferModule);
-    return exports;
-  });
+  // Return the assembled module object directly (NOT Object.assign'd into a fresh
+  // object) so the live `INSPECT_MAX_BYTES` getter/setter survives — copying it
+  // would snapshot the getter's value and drop the setter.
+  registerBuiltin('buffer', () => bufferModule);
   // `require('process')` returns the LIVE realm process (the spec-seeded one in a
   // kernel child, ADR-0157) so it === globalThis.process, like Node — but ONLY when
   // that is a rifty NodeProcess. In the in-process harness / parity runner

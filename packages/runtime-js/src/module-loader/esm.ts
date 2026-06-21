@@ -158,6 +158,7 @@ export async function executeEsm(
     __metaDirname: string,
     __metaFilename: string,
     __assetPath: (s: string) => string,
+    __metaResolve: (s: string) => string,
   ) => Promise<void>;
   try {
     factory = new Function(
@@ -170,6 +171,7 @@ export async function executeEsm(
       '__metaDirname',
       '__metaFilename',
       '__assetPath',
+      '__metaResolve',
       // Bind the genuine global `Object` to a mangled name at FUNCTION scope
       // (`new Function` body runs in global scope), outside the user-body arrow.
       // The generated body reaches its export `Object.defineProperty`/`Object.keys`
@@ -177,7 +179,7 @@ export async function executeEsm(
       // module shadowing the global with `export const Object = …` (opencode's
       // config/permission.ts) can't break codegen. Kept on the `return` line so
       // body line numbering (snippetForBody) is unchanged.
-      `const ${RUNTIME_OBJECT_BINDING} = Object; return (async () => {\nconst import_meta = { url: __importMetaUrl, dirname: __metaDirname, filename: __metaFilename, resolve: (s) => new URL(s, __importMetaUrl).href };\n${transformed.body}\n})();\n//# sourceURL=${resolved.id}`,
+      `const ${RUNTIME_OBJECT_BINDING} = Object; return (async () => {\nconst import_meta = { url: __importMetaUrl, dirname: __metaDirname, filename: __metaFilename, resolve: __metaResolve };\n${transformed.body}\n})();\n//# sourceURL=${resolved.id}`,
     ) as typeof factory;
   } catch (err) {
     const msg = (err as Error).message ?? String(err);
@@ -233,6 +235,22 @@ export async function executeEsm(
   // without loading as a module — the asset may be binary.
   const assetPath = (spec: string): string => deps.resolve(spec, resolved.id, true).id;
 
+  // `import.meta.resolve(spec)` (Node v20.6, synchronous): real resolution via
+  // the loader's resolver — replaces the inline `new URL(s, baseUrl).href` stub
+  // that returned a WRONG `file://` URL for bare ('lodash') and `node:` specifiers.
+  // node: builtins keep their `node:` id; files become `file://<abs>`; a genuine
+  // miss propagates the resolver's MODULE_NOT_FOUND throw (Node throws
+  // ERR_MODULE_NOT_FOUND). Feature ownership: process-module-loader-surface.
+  const metaResolve = (spec: string): string => {
+    // Node returns ANY `node:`-prefixed specifier VERBATIM from import.meta.resolve
+    // without validating the builtin exists (existence is enforced only at import
+    // time) — `import.meta.resolve('node:zlibbbb')` → `'node:zlibbbb'`. So don't
+    // route `node:` through the resolver, which throws on an unregistered builtin.
+    if (spec.startsWith('node:')) return spec;
+    const dep = deps.resolve(spec, resolved.id, true);
+    return dep.kind === 'builtin' ? dep.id : `file://${dep.id}`;
+  };
+
   try {
     await withStackRemapping(deps.sourceMaps, resolved.id, ESM_STACK_LINE_OFFSET, () =>
       factory(
@@ -245,6 +263,7 @@ export async function executeEsm(
         __metaDirname,
         __metaFilename,
         assetPath,
+        metaResolve,
       ),
     );
   } catch (err) {

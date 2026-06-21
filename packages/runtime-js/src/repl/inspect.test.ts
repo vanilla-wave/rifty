@@ -7,7 +7,7 @@ describe('inspect', () => {
     expect(inspect(null)).toBe('null');
     expect(inspect(42)).toBe('42');
     expect(inspect(true)).toBe('true');
-    expect(inspect('hi')).toBe('"hi"');
+    expect(inspect('hi')).toBe("'hi'");
     // Node renders bigints with a trailing `n` at every depth.
     expect(inspect(3n)).toBe('3n');
     expect(inspect({ a: 3n })).toBe('{ a: 3n }');
@@ -19,7 +19,7 @@ describe('inspect', () => {
   });
 
   it('formats objects', () => {
-    expect(inspect({ a: 1, b: 'two' })).toBe('{ a: 1, b: "two" }');
+    expect(inspect({ a: 1, b: 'two' })).toBe("{ a: 1, b: 'two' }");
   });
 
   it('handles circular refs', () => {

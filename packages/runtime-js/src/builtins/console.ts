@@ -178,6 +178,11 @@ export class Console {
     this.#writeOut(`${inspect(value)}\n`);
   };
 
+  // Node's `console.dirxml(...data)` for non-DOM data is exactly `this.log(...data)`.
+  dirxml = (...args: unknown[]): void => {
+    this.log(...args);
+  };
+
   warn = (...args: unknown[]): void => {
     this.#writeErr(`${formatLine(args)}\n`);
   };

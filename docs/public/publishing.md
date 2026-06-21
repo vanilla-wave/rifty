@@ -49,7 +49,7 @@ Tokenless OIDC has exact minimums, all satisfied by the repo + workflow:
 |---|---|---|
 | pnpm | **≥ 11.1.3** | Pinned **`pnpm@11.5.2`** via `packageManager`; `11.0.x` (old `11.0.8` pin) 404s on OIDC publish ([pnpm#11513]). CI reads the version from `packageManager`. |
 | npm CLI | **≥ 11.5.1** | GitHub runners ship older, so `release.yml` runs `npm install -g npm@latest`. |
-| Node | **≥ 22.14.0** | `node-version: 22` resolves to it. |
+| Node | **≥ 24.0.0** | `engines` floor; `node-version: 24` resolves to it (≥ npm OIDC's 22.14.0). |
 
 setup-node uses **no `registry-url`** (it would write an `${NODE_AUTH_TOKEN}` placeholder `.npmrc` that fights the OIDC fallback) and **no `NODE_AUTH_TOKEN`**.
 

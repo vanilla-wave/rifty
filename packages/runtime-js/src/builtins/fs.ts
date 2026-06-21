@@ -83,6 +83,18 @@ interface RmOptions {
   force?: boolean;
 }
 
+interface CpOptions {
+  recursive?: boolean;
+  /** Called per entry with the src/dest paths AS PASSED (relative stays relative); falsy → skip. */
+  filter?: (src: string, dest: string) => boolean;
+  /** Overwrite an existing dest (Node default true); `false` skips it (or errors with errorOnExist). */
+  force?: boolean;
+  errorOnExist?: boolean;
+  preserveTimestamps?: boolean;
+  /** Follow symlinks — N/A under the no-symlink VFS (ADR-0050); loud-throws. */
+  dereference?: boolean;
+}
+
 interface FdRecord {
   path: string;
   readable: boolean;
@@ -188,10 +200,18 @@ class Stats {
 
 class Dirent {
   readonly name: string;
+  /**
+   * Directory this entry lives in, echoing the path ARG passed to `readdir`
+   * (relative stays relative); for `{ recursive: true }` it's the arg joined with
+   * the subdirectory. Node v24 REMOVED the deprecated `path` alias, so it's
+   * absent here too.
+   */
+  readonly parentPath: string;
   private readonly _isFile: boolean;
   private readonly _isDirectory: boolean;
-  constructor(d: { name: string; isFile: boolean; isDirectory: boolean }) {
+  constructor(d: { name: string; isFile: boolean; isDirectory: boolean; parentPath: string }) {
     this.name = d.name;
+    this.parentPath = d.parentPath;
     this._isFile = d.isFile;
     this._isDirectory = d.isDirectory;
   }
@@ -517,11 +537,56 @@ export function appendFileSync(
   syncMirror().writeFileSync(np, merged);
 }
 
-export function readdirSync(p: string, opts?: { withFileTypes?: boolean }): string[] | Dirent[] {
-  const entries = syncMirror().readdirSync(resolvePath(p));
+export function readdirSync(
+  p: string,
+  opts?: { withFileTypes?: boolean; recursive?: boolean },
+): string[] | Dirent[] {
+  const root = resolvePath(p);
+  if (opts?.recursive) {
+    // Breadth-first full-tree walk (Node-identical ordering): each directory's
+    // sorted children, level by level. `names` collect the relative path from the
+    // arg; `Dirent.parentPath` echoes the arg joined with the containing subdir.
+    const names: string[] = [];
+    const dirents: Dirent[] = [];
+    const queue: Array<{ absDir: string; relPrefix: string; displayDir: string }> = [
+      { absDir: root, relPrefix: '', displayDir: p },
+    ];
+    for (let i = 0; i < queue.length; i++) {
+      const { absDir, relPrefix, displayDir } = queue[i] as {
+        absDir: string;
+        relPrefix: string;
+        displayDir: string;
+      };
+      for (const d of syncMirror().readdirSync(absDir)) {
+        const childRel = relPrefix ? `${relPrefix}/${d.name}` : d.name;
+        if (opts.withFileTypes) {
+          dirents.push(
+            new Dirent({
+              name: d.name,
+              isFile: d.isFile,
+              isDirectory: d.isDirectory,
+              parentPath: displayDir,
+            }),
+          );
+        } else {
+          names.push(childRel);
+        }
+        if (d.isDirectory) {
+          queue.push({
+            absDir: `${absDir}/${d.name}`,
+            relPrefix: childRel,
+            displayDir: `${displayDir}/${d.name}`,
+          });
+        }
+      }
+    }
+    return opts.withFileTypes ? dirents : names;
+  }
+  const entries = syncMirror().readdirSync(root);
   if (opts?.withFileTypes) {
     return entries.map(
-      (d) => new Dirent({ name: d.name, isFile: d.isFile, isDirectory: d.isDirectory }),
+      (d) =>
+        new Dirent({ name: d.name, isFile: d.isFile, isDirectory: d.isDirectory, parentPath: p }),
     );
   }
   return entries.map((d) => d.name);
@@ -628,9 +693,71 @@ export function copyFileSync(src: string, dst: string, mode = 0): void {
   syncMirror().copyFileSync(resolvePath(src), resolvePath(dst));
 }
 
-export function cpSync(src: string, dst: string, opts?: { recursive?: boolean }): void {
-  // ADR-0090: `node:fs.cpSync` — recursive-aware, best-effort fail-fast.
-  syncMirror().cpSync(resolvePath(src), resolvePath(dst), { recursive: opts?.recursive });
+export function cpSync(src: string, dst: string, opts?: CpOptions): void {
+  if (opts?.dereference) {
+    // Node SUPPORTS dereference; rifty has no symlinks (ADR-0050) so there's
+    // nothing to follow — loud gap, never a silent same-as-without.
+    throw new NotImplementedError('fs.cpSync.dereference');
+  }
+  // Fast path (preserves ADR-0090 + the VFS cpSync guards) when no edge option
+  // changes behaviour: a plain (possibly recursive) overwrite copy.
+  const hasEdge =
+    !!opts &&
+    (opts.filter !== undefined ||
+      opts.force === false ||
+      !!opts.errorOnExist ||
+      !!opts.preserveTimestamps);
+  if (!hasEdge) {
+    // TODO(backlog: runtime-js/fs-cp-type-mismatch-error-codes) — VFS cpSync surfaces
+    // EISDIR/EEXIST for file→dir / dir→file overwrites; Node uses ERR_FS_CP_NON_DIR_TO_DIR
+    // / ERR_FS_CP_DIR_TO_NON_DIR.
+    syncMirror().cpSync(resolvePath(src), resolvePath(dst), { recursive: opts?.recursive });
+    return;
+  }
+  cpEntry(resolvePath(src), resolvePath(dst), src, dst, opts as CpOptions);
+}
+
+/** Recursive copy honoring the cp edge options, in the runtime-js layer over VFS sync primitives. */
+function cpEntry(
+  srcAbs: string,
+  dstAbs: string,
+  srcDisplay: string,
+  dstDisplay: string,
+  opts: CpOptions,
+): void {
+  if (opts.filter && !opts.filter(srcDisplay, dstDisplay)) return; // skip entry (+ subtree for a dir)
+  const st = syncMirror().statSync(srcAbs);
+  if (st.isDirectory) {
+    if (!opts.recursive) throw fsError('EISDIR', srcAbs, 'cp');
+    syncMirror().mkdirSync(dstAbs, { recursive: true });
+    for (const child of syncMirror().readdirSync(srcAbs)) {
+      cpEntry(
+        `${srcAbs}/${child.name}`,
+        `${dstAbs}/${child.name}`,
+        `${srcDisplay}/${child.name}`,
+        `${dstDisplay}/${child.name}`,
+        opts,
+      );
+    }
+    return;
+  }
+  if (syncMirror().existsSync(dstAbs) && opts.force === false) {
+    if (opts.errorOnExist) {
+      throw Object.assign(
+        // Node's message: no `[CODE]:` prefix, the resolved path inside the parens AND a
+        // trailing SystemError path suffix — `Target already exists: cp returned EEXIST
+        // (<abs> already exists) <abs>`; the code lives on `.code`.
+        new Error(`Target already exists: cp returned EEXIST (${dstAbs} already exists) ${dstAbs}`),
+        { code: 'ERR_FS_CP_EEXIST', path: dstAbs },
+      );
+    }
+    return; // force:false → skip an existing file
+  }
+  syncMirror().copyFileSync(srcAbs, dstAbs);
+  if (opts.preserveTimestamps) {
+    const m = syncMirror().statSync(srcAbs).mtime ?? 0;
+    syncMirror().utimes(dstAbs, m, m);
+  }
 }
 
 export function openSync(p: PathLike, flags: OpenFlags = 'r', _mode?: number): number {
@@ -790,14 +917,72 @@ export function opendirSync(
  * semantics) or `Date`. The VFS sync surface stores ms, so we convert.
  * (ADR-0029)
  */
-function toMs(t: number | Date): number {
+function toMs(t: number | string | Date): number {
   if (t instanceof Date) return t.getTime();
-  // Node treats numeric args as seconds since the epoch.
-  return Math.floor(t * 1000);
+  // Node's `toUnixTimestamp`: a numeric string coerces, a finite number is seconds
+  // since the epoch; anything else (NaN/Infinity/non-numeric string/null/…) is a loud
+  // ERR_INVALID_ARG_TYPE — never a silent NaN handed to the VFS.
+  const n = typeof t === 'string' ? Number(t) : t;
+  if (typeof n !== 'number' || !Number.isFinite(n)) {
+    const e = new TypeError('The "time" argument must be of type number, string, or Date.');
+    (e as { code?: string }).code = 'ERR_INVALID_ARG_TYPE';
+    throw e;
+  }
+  return Math.floor(n * 1000);
 }
 
 export function utimesSync(p: string, atime: number | Date, mtime: number | Date): void {
   syncMirror().utimes(resolvePath(p), toMs(atime), toMs(mtime));
+}
+
+// `fs.lutimesSync` — under the no-symlink VFS model (ADR-0050) a path is never a
+// link, so setting "the link's" times is exactly setting the file's (same
+// precedent as `lstatSync === statSync`).
+export function lutimesSync(p: string, atime: number | Date, mtime: number | Date): void {
+  utimesSync(p, atime, mtime);
+}
+
+// `fs.futimesSync` — resolve the fd → path via the fd table and delegate to VFS
+// utimes. `EBADF` (syscall `futime`, matching Node) on an unknown fd.
+export function futimesSync(fd: number, atime: number | Date, mtime: number | Date): void {
+  if (!fdTable.has(fd)) throw fsError('EBADF', undefined, 'futime');
+  const record = getFd(fd);
+  syncMirror().utimes(record.path, toMs(atime), toMs(mtime));
+}
+
+export function futimes(
+  fd: number,
+  atime: number | Date,
+  mtime: number | Date,
+  cb: VoidCallback,
+): void {
+  Promise.resolve()
+    .then(() => futimesSync(fd, atime, mtime))
+    .then(
+      () => cb(null),
+      (e) => cb(e as NodeJS.ErrnoException),
+    );
+}
+
+/**
+ * `fs.openAsBlob(path[, options])` (v19.8) — read the VFS bytes into a resolved
+ * `Blob` (default `type` is `''`). Eager read: observably identical to Node's
+ * lazy read for an in-memory VFS within one program. `Blob` is a realm global.
+ */
+export async function openAsBlob(p: PathLike, options?: { type?: string }): Promise<Blob> {
+  let bytes: Uint8Array;
+  try {
+    bytes = syncMirror().readFileBytesSync(resolvePath(p));
+  } catch {
+    // Node wraps an unopenable path (missing file / directory) as a generic
+    // ERR_INVALID_ARG_VALUE, NOT the raw ENOENT — match that observable rejection.
+    throw Object.assign(new Error('Unable to open file as blob'), {
+      code: 'ERR_INVALID_ARG_VALUE',
+    });
+  }
+  // Copy into a fresh ArrayBuffer-backed view: the VFS bytes may be SharedArrayBuffer-
+  // backed (OPFS mode), which `Blob` cannot hold (Blob copies the bytes regardless).
+  return new Blob([new Uint8Array(bytes)], { type: options?.type ?? '' });
 }
 
 export const promises = {
@@ -821,7 +1006,10 @@ export const promises = {
   ): Promise<void> {
     appendFileSync(p, data, opts);
   },
-  async readdir(p: string, opts?: { withFileTypes?: boolean }): Promise<string[] | Dirent[]> {
+  async readdir(
+    p: string,
+    opts?: { withFileTypes?: boolean; recursive?: boolean },
+  ): Promise<string[] | Dirent[]> {
     return readdirSync(p, opts);
   },
   async mkdir(p: string, opts?: MkdirOptions): Promise<void> {
@@ -859,7 +1047,7 @@ export const promises = {
   async rename(src: string, dst: string): Promise<void> {
     renameSync(src, dst);
   },
-  async cp(src: string, dst: string, opts?: { recursive?: boolean }): Promise<void> {
+  async cp(src: string, dst: string, opts?: CpOptions): Promise<void> {
     cpSync(src, dst, opts);
   },
   async truncate(p: PathLike, len = 0): Promise<void> {
@@ -876,6 +1064,9 @@ export const promises = {
   },
   async utimes(p: string, atime: number | Date, mtime: number | Date): Promise<void> {
     utimesSync(p, atime, mtime);
+  },
+  async lutimes(p: string, atime: number | Date, mtime: number | Date): Promise<void> {
+    lutimesSync(p, atime, mtime);
   },
 };
 
@@ -1050,7 +1241,7 @@ export function writeFile(
 
 export function readdir(
   p: string,
-  optsOrCb: { withFileTypes?: boolean } | Callback<string[] | Dirent[]>,
+  optsOrCb: { withFileTypes?: boolean; recursive?: boolean } | Callback<string[] | Dirent[]>,
   cb?: Callback<string[] | Dirent[]>,
 ): void {
   const opts = typeof optsOrCb === 'function' ? undefined : optsOrCb;
@@ -1305,6 +1496,10 @@ const fs = {
   mkdtempSync,
   opendirSync,
   utimesSync,
+  lutimesSync,
+  futimesSync,
+  futimes,
+  openAsBlob,
   lstatSync,
   readlinkSync,
   realpathSync,

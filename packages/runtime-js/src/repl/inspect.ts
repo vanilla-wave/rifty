@@ -1,19 +1,53 @@
 /**
  * Minimal Node-style inspector for REPL output. Not as comprehensive as
  * `util.inspect`, but covers the common cases: primitives, objects, arrays,
- * functions, Errors, and circular references.
+ * functions, Errors, Buffers, and circular references.
  */
 
-const MAX_DEPTH = 4;
+import { Buffer, getInspectMaxBytes } from '@riftydev/io';
+
+// rifty's historical default nesting cap. Node's own default is 2; matching that
+// (plus colors/getters/sorted/breakLength) is the broader inspect-options work
+// owned by `util-surface-completions` — this module honours an explicit
+// `options.depth` (the active divergence fixed here) and keeps the prior default.
+const DEFAULT_DEPTH = 3;
 const MAX_ARRAY_ITEMS = 30;
 const MAX_OBJECT_KEYS = 30;
 const MAX_STRING_LEN = 120;
 
-export function inspect(value: unknown, depth = 0, seen: WeakSet<object> = new WeakSet()): string {
+export interface InspectOptions {
+  /** Nesting levels to render before collapsing to `[Object]`/`[Array]`. `null` = unlimited. */
+  depth?: number | null;
+}
+
+/**
+ * `util.inspect(value[, options])`. The 2nd argument is an OPTIONS object, NOT
+ * the internal recursion counter — `util.inspect(obj, { depth: null })` no
+ * longer misreads `{ depth: null }` as `depth = NaN`. `depth: null` = unlimited.
+ * Other options (colors/getters/sorted/breakLength/…) are tracked separately in
+ * `util-surface-completions`.
+ */
+export function inspect(value: unknown, options?: InspectOptions): string {
+  const depthOpt = options?.depth;
+  const maxDepth =
+    depthOpt === null
+      ? Number.POSITIVE_INFINITY
+      : typeof depthOpt === 'number'
+        ? depthOpt
+        : DEFAULT_DEPTH;
+  return inspectValue(value, 0, new WeakSet(), maxDepth);
+}
+
+function inspectValue(
+  value: unknown,
+  depth: number,
+  seen: WeakSet<object>,
+  maxDepth: number,
+): string {
   if (value === undefined) return 'undefined';
   if (value === null) return 'null';
   const type = typeof value;
-  if (type === 'string') return formatString(value as string);
+  if (type === 'string') return quoteString(value as string);
   if (type === 'number' || type === 'boolean') return String(value);
   // Node renders bigints with a trailing `n` at every depth (`3n`, `{ a: 3n }`).
   if (type === 'bigint') return `${String(value)}n`;
@@ -23,16 +57,69 @@ export function inspect(value: unknown, depth = 0, seen: WeakSet<object> = new W
   if (value instanceof Date) return value.toISOString();
   if (value instanceof RegExp) return value.toString();
   if (value instanceof Promise) return 'Promise { <pending> }';
-  if (value instanceof Map) return formatMap(value, depth, seen);
-  if (value instanceof Set) return formatSet(value, depth, seen);
-  if (Array.isArray(value)) return formatArray(value, depth, seen);
-  if (type === 'object') return formatObject(value as object, depth, seen);
+  // Buffer renders as Node's `<Buffer 01 02 …>` hex, truncated at the live
+  // `buffer.INSPECT_MAX_BYTES`. Checked before the generic Uint8Array/object
+  // paths so a Buffer never falls through to a key dump.
+  if (Buffer.isBuffer(value)) return formatBuffer(value as Uint8Array);
+  if (value instanceof Map) return formatMap(value, depth, seen, maxDepth);
+  if (value instanceof Set) return formatSet(value, depth, seen, maxDepth);
+  if (Array.isArray(value)) return formatArray(value, depth, seen, maxDepth);
+  if (type === 'object') return formatObject(value as object, depth, seen, maxDepth);
   return String(value);
 }
 
-function formatString(s: string): string {
-  const truncated = s.length > MAX_STRING_LEN ? `${s.slice(0, MAX_STRING_LEN)}…` : s;
-  return JSON.stringify(truncated);
+// Per-codepoint control-character escapes, matching Node's `strEscape` meta map.
+const CONTROL_ESCAPES: Record<number, string> = {
+  8: '\\b',
+  9: '\\t',
+  10: '\\n',
+  12: '\\f',
+  13: '\\r',
+};
+
+/**
+ * Quote a string the way Node's inspector does: single quotes by default; double
+ * quotes when the string holds a `'` but no `"`; backticks when it holds both
+ * but no backtick; otherwise single quotes with `'` escaped. Backslash and
+ * control characters are escaped.
+ */
+function quoteString(raw: string): string {
+  const s = raw.length > MAX_STRING_LEN ? `${raw.slice(0, MAX_STRING_LEN)}…` : raw;
+  let quote = "'";
+  if (s.includes("'")) {
+    if (!s.includes('"')) quote = '"';
+    else if (!s.includes('`')) quote = '`';
+  }
+  let out = quote;
+  for (const ch of s) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (ch === '\\') out += '\\\\';
+    else if (ch === quote) out += `\\${quote}`;
+    else if (CONTROL_ESCAPES[code] !== undefined) out += CONTROL_ESCAPES[code];
+    else if (code < 0x20 || (code >= 0x7f && code <= 0x9f))
+      out += `\\x${code.toString(16).toUpperCase().padStart(2, '0')}`;
+    else out += ch;
+  }
+  return out + quote;
+}
+
+/** `<Buffer 01 02 …>` hex dump, truncated at the live `buffer.INSPECT_MAX_BYTES`. */
+function formatBuffer(buf: Uint8Array): string {
+  const max = getInspectMaxBytes();
+  const shown = Math.min(buf.length, max);
+  let hex = '';
+  for (let i = 0; i < shown; i++) {
+    hex += (i ? ' ' : '') + (buf[i] ?? 0).toString(16).padStart(2, '0');
+  }
+  const more = buf.length > max ? `${hex ? ' ' : ''}... ${buf.length - max} more bytes` : '';
+  // Node appends own ENUMERABLE non-index properties after the hex
+  // (`<Buffer 01 02, foo: 'bar'>`); the integer indices are not shown.
+  const rec = buf as unknown as Record<string, unknown>;
+  const extra = Object.keys(buf)
+    .filter((k) => !/^\d+$/.test(k))
+    .map((k) => `${k}: ${inspect(rec[k])}`);
+  const props = extra.length > 0 ? `, ${extra.join(', ')}` : '';
+  return `<Buffer ${hex}${more}${props}>`;
 }
 
 function formatFunction(fn: (...args: unknown[]) => unknown): string {
@@ -44,25 +131,32 @@ function formatError(err: Error): string {
   return err.stack ?? `${err.name}: ${err.message}`;
 }
 
-function formatArray(arr: readonly unknown[], depth: number, seen: WeakSet<object>): string {
+function formatArray(
+  arr: readonly unknown[],
+  depth: number,
+  seen: WeakSet<object>,
+  maxDepth: number,
+): string {
   if (seen.has(arr)) return '[Circular]';
-  if (depth >= MAX_DEPTH) return `[Array(${arr.length})]`;
+  if (depth > maxDepth) return '[Array]';
   seen.add(arr);
-  const items = arr.slice(0, MAX_ARRAY_ITEMS).map((v) => inspect(v, depth + 1, seen));
+  const items = arr
+    .slice(0, MAX_ARRAY_ITEMS)
+    .map((v) => inspectValue(v, depth + 1, seen, maxDepth));
   if (arr.length > MAX_ARRAY_ITEMS) items.push(`... ${arr.length - MAX_ARRAY_ITEMS} more items`);
   seen.delete(arr);
   return `[ ${items.join(', ')} ]`;
 }
 
-function formatObject(obj: object, depth: number, seen: WeakSet<object>): string {
+function formatObject(obj: object, depth: number, seen: WeakSet<object>, maxDepth: number): string {
   if (seen.has(obj)) return '[Circular]';
-  if (depth >= MAX_DEPTH) return '[Object]';
+  if (depth > maxDepth) return '[Object]';
   seen.add(obj);
   const keys = Object.keys(obj);
   const ctor = obj.constructor && obj.constructor.name !== 'Object' ? obj.constructor.name : '';
   const items = keys.slice(0, MAX_OBJECT_KEYS).map((k) => {
     const v = (obj as Record<string, unknown>)[k];
-    return `${k}: ${inspect(v, depth + 1, seen)}`;
+    return `${k}: ${inspectValue(v, depth + 1, seen, maxDepth)}`;
   });
   if (keys.length > MAX_OBJECT_KEYS) items.push(`... ${keys.length - MAX_OBJECT_KEYS} more keys`);
   seen.delete(obj);
@@ -70,9 +164,14 @@ function formatObject(obj: object, depth: number, seen: WeakSet<object>): string
   return `${prefix}{ ${items.join(', ')} }`;
 }
 
-function formatMap(map: Map<unknown, unknown>, depth: number, seen: WeakSet<object>): string {
+function formatMap(
+  map: Map<unknown, unknown>,
+  depth: number,
+  seen: WeakSet<object>,
+  maxDepth: number,
+): string {
   if (seen.has(map)) return '[Circular]';
-  if (depth >= MAX_DEPTH) return `Map(${map.size})`;
+  if (depth > maxDepth) return '[Map]';
   seen.add(map);
   const items: string[] = [];
   let i = 0;
@@ -81,16 +180,23 @@ function formatMap(map: Map<unknown, unknown>, depth: number, seen: WeakSet<obje
       items.push(`... ${map.size - MAX_ARRAY_ITEMS} more`);
       break;
     }
-    items.push(`${inspect(k, depth + 1, seen)} => ${inspect(v, depth + 1, seen)}`);
+    items.push(
+      `${inspectValue(k, depth + 1, seen, maxDepth)} => ${inspectValue(v, depth + 1, seen, maxDepth)}`,
+    );
     i += 1;
   }
   seen.delete(map);
   return `Map(${map.size}) { ${items.join(', ')} }`;
 }
 
-function formatSet(set: Set<unknown>, depth: number, seen: WeakSet<object>): string {
+function formatSet(
+  set: Set<unknown>,
+  depth: number,
+  seen: WeakSet<object>,
+  maxDepth: number,
+): string {
   if (seen.has(set)) return '[Circular]';
-  if (depth >= MAX_DEPTH) return `Set(${set.size})`;
+  if (depth > maxDepth) return '[Set]';
   seen.add(set);
   const items: string[] = [];
   let i = 0;
@@ -99,7 +205,7 @@ function formatSet(set: Set<unknown>, depth: number, seen: WeakSet<object>): str
       items.push(`... ${set.size - MAX_ARRAY_ITEMS} more`);
       break;
     }
-    items.push(inspect(v, depth + 1, seen));
+    items.push(inspectValue(v, depth + 1, seen, maxDepth));
     i += 1;
   }
   seen.delete(set);

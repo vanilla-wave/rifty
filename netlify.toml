@@ -15,7 +15,7 @@
   publish = "apps/playground/dist"
 
 [build.environment]
-  NODE_VERSION = "22"
+  NODE_VERSION = "24"
   PNPM_VERSION = "11.5.1"
   # The repo's postinstall runs `playwright install` (for local e2e). Skip the
   # ~400 MB browser download on the build box — Netlify never runs Playwright.

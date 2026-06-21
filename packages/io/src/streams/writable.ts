@@ -17,11 +17,10 @@ export interface WritableOptions {
   objectMode?: boolean;
   decodeStrings?: boolean;
   write?(this: Writable, chunk: unknown, encoding: string, cb: (err?: Error | null) => void): void;
-  writev?(
-    this: Writable,
-    chunks: { chunk: unknown; encoding: string }[],
-    cb: (err?: Error | null) => void,
-  ): void;
+  // No `writev?` here: it was a type-only placeholder used NOWHERE (drainBuffer
+  // always calls `_write` per chunk), i.e. a silent lie that the option did
+  // something (no-silent-stub rule). Real cork/uncork/`_writev` batching is owned
+  // by whatwg-stream-bridge-and-statics; it re-adds the option when it lands.
   final?(this: Writable, cb: (err?: Error | null) => void): void;
 }
 

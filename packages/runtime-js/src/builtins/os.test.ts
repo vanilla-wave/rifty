@@ -3,7 +3,7 @@
  * (`os.platform()` / `os.arch()` mirror `process.platform` / `process.arch`).
  */
 import { describe, expect, it } from 'vitest';
-import { constants, arch, platform } from './os.ts';
+import { constants, arch, devNull, machine, platform, release, type, version } from './os.ts';
 import { riftyProcess } from './process.ts';
 
 describe('node:os ABI (ADR-0026)', () => {
@@ -21,6 +21,17 @@ describe('node:os ABI (ADR-0026)', () => {
 
   it('arch() matches process.arch exactly', () => {
     expect(arch()).toBe(riftyProcess.arch);
+  });
+
+  it('machine() mirrors arch() (fictional wasm ABI); version()/devNull are consistent', () => {
+    // Host-divergent in real Node (returns the host's machine/version), so these
+    // are pinned here rather than via the parity runner.
+    expect(machine()).toBe('wasm');
+    expect(machine()).toBe(arch());
+    expect(devNull).toBe('/dev/null'); // type()==='Linux' → posix path
+    expect(type()).toBe('Linux');
+    expect(typeof version()).toBe('string');
+    expect(version()).toContain(release());
   });
 
   it('exposes scoped signal and errno integer constants', () => {

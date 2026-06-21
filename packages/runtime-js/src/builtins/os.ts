@@ -41,6 +41,22 @@ export function release(): string {
   return '0.0.0';
 }
 
+// `os.machine()` mirrors `arch()` ('wasm', ADR-0026) — a fictional but
+// internally-consistent ABI. `os.version()` is a fixed kernel string consistent
+// with `release()`/`type()`. These are host-divergent (real Node returns the
+// host's), so they're pinned by unit tests, not parity.
+export function machine(): string {
+  return 'wasm';
+}
+
+export function version(): string {
+  return 'rifty 0.0.0';
+}
+
+// `os.devNull` — Node's null-device PATH string (no VFS routing). `type()` is
+// 'Linux', so the POSIX value is faithful.
+export const devNull = '/dev/null';
+
 export function endianness(): 'BE' | 'LE' {
   const u16 = new Uint16Array([0xabcd]);
   const u8 = new Uint8Array(u16.buffer);
@@ -244,6 +260,7 @@ export function setPriority(_pidOrPriority: number, _priority?: number): void {
 
 const osModule = {
   EOL,
+  devNull,
   tmpdir,
   homedir,
   hostname,
@@ -251,6 +268,8 @@ const osModule = {
   arch,
   type,
   release,
+  machine,
+  version,
   endianness,
   cpus,
   totalmem,

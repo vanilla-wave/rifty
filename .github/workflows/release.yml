@@ -41,7 +41,7 @@ jobs:
       # entirely — the OIDC exchange does not depend on setup-node's registry-url.
       - uses: actions/setup-node@v4
         with:
-          node-version: 22 # resolves to >= 22.14.0 (npm OIDC minimum)
+          node-version: 24 # ≥ npm OIDC minimum 22.14.0; matches engines >=24
 
       # GitHub runners ship npm below the 11.5.1 OIDC floor — upgrade it.
       - run: npm install -g npm@latest

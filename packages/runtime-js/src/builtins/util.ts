@@ -71,6 +71,11 @@ export function format(fmt: unknown, ...args: unknown[]): string {
       case 'O':
         result += inspectImpl(arg);
         break;
+      case 'c':
+        // CSS directive: outside a browser console Node CONSUMES the arg (already
+        // taken via `args[i++]`) and emits nothing. Was falling through to
+        // `default`, which kept the literal `%c` AND un-consumed the arg.
+        break;
       default:
         result += `%${spec}`;
         i--; // unknown spec consumed no arg

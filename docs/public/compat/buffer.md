@@ -30,8 +30,12 @@ implemented (throws `NotImplementedError` or `TypeError`).
 | `buf.includes(value, byteOffset?, encoding?)` | ✅ | |
 | `buf.readUInt8/16/32/Int8/16/32 {BE,LE}` | ✅ | Via `DataView` |
 | `buf.writeUInt8/16/32/Int8/16/32 {BE,LE}` | ✅ | Returns post-write offset (Node parity) |
+| `buf.read{U}IntLE/BE(offset, byteLength)` | ✅ | Variable-width 1–6 byte (≤48-bit); signed forms sign-extend |
+| `buf.write{U}IntLE/BE(value, offset, byteLength)` | ✅ | 1–6 byte; returns offset+byteLength |
 | `buf.readBig{U}Int64{BE,LE}` | ✅ | |
 | `buf.writeBig{U}Int64{BE,LE}` | ✅ | |
+| `buf.toJSON()` | ✅ | `{ type: 'Buffer', data: [...] }` round-trip |
+| `Buffer.copyBytesFrom(view, offset?, length?)` | ✅ | Explicit byte-window copy (elements) of a TypedArray |
 | `buf.readFloat{BE,LE}` / `buf.writeFloat{BE,LE}` | ✅ | |
 | `buf.readDouble{BE,LE}` / `buf.writeDouble{BE,LE}` | ✅ | |
 | `buf.swap16/32/64` | ✅ | |
@@ -40,6 +44,11 @@ implemented (throws `NotImplementedError` or `TypeError`).
 | `Buffer.poolSize`, `Buffer.constants` | ❌ | Pending — no real consumer hit yet |
 | `Buffer.transcode(buffer, fromEnc, toEnc)` | ❌ | Pending |
 | `kStringMaxLength` / `kMaxLength` | ❌ | Pending |
+| `node:buffer` `Blob` / `File` / `atob` / `btoa` | ✅ | Browser-native re-exports |
+| `node:buffer` `SlowBuffer(size)` | ✅ | = `allocUnsafeSlow` (no pool) |
+| `node:buffer` `isUtf8` / `isAscii` | ✅ | Byte-scan / fatal-decode predicates |
+| `node:buffer` `INSPECT_MAX_BYTES` | ✅ | Live getter/setter; drives `util.inspect(buf)` `<Buffer …>` truncation (default 50) |
+| `node:buffer` `resolveObjectURL(id)` | ❌ | `NotImplementedError` — no introspectable cross-realm blob registry |
 
 ## Encoding support
 

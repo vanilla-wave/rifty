@@ -9,12 +9,14 @@
  * loud-throw contract this replaces was moved forward by the Real Vite forcing
  * consumer (chokidar/readdirp call these on the happy path).
  */
+import { NotImplementedError } from '@riftydev/io';
 import { afterEach, describe, expect, it } from 'vitest';
 import { resetSyncMirror } from './fs-sync-mirror.ts';
 import fs, {
   closeSync,
   constants,
   copyFileSync,
+  cpSync,
   fstatSync,
   ftruncateSync,
   lstatSync,
@@ -46,6 +48,22 @@ function codeOf(fn: () => void): string | undefined {
   }
   return undefined;
 }
+
+describe('node:fs.cp dereference (loud gap under no-symlink, ADR-0050)', () => {
+  it('cpSync({ dereference: true }) throws NotImplementedError (Node supports it)', () => {
+    writeFileSync('/d_src.txt', 'x');
+    expect(() => cpSync('/d_src.txt', '/d_dst.txt', { dereference: true })).toThrow(
+      NotImplementedError,
+    );
+  });
+
+  it('promises.cp({ dereference: true }) rejects with NotImplementedError', async () => {
+    writeFileSync('/d_src2.txt', 'x');
+    await expect(
+      fs.promises.cp('/d_src2.txt', '/d_dst2.txt', { dereference: true }),
+    ).rejects.toThrow(NotImplementedError);
+  });
+});
 
 describe('node:fs symlink-shaped APIs (no-symlink VFS semantics, ADR-0050)', () => {
   it('lstatSync is identical to statSync and reports no symlink', () => {
