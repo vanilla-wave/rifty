@@ -106,16 +106,19 @@ export function createVfsLanguageServiceHost(
   return {
     getCompilationSettings: () => compilerOptions,
     getCurrentDirectory: () => projectRoot,
-    getScriptFileNames: () => [...fileNames],
+    // Root files = the program's files plus any open buffer (an untitled/new
+    // doc has no VFS entry yet but must still be type-checked).
+    getScriptFileNames: () => [...new Set([...fileNames, ...overlay.openPaths()])],
 
     getDefaultLibFileName: (options) => `${LIB_DIR}/${ts.getDefaultLibFileName(options)}`,
 
     getScriptVersion: (fileName) => {
-      // Overlay (open buffer or external invalidate) wins; else VFS token.
-      const v = overlay.versionOf(fileName);
-      if (v !== undefined) return v;
+      // Open buffer wins. Once closed, the version reverts to the VFS token (so
+      // TS re-reads disk) folded with the external-invalidation counter.
+      const open = overlay.versionOf(fileName);
+      if (open !== undefined) return open;
       if (libContents(fileName) !== undefined) return 'lib'; // libs are immutable
-      return vfsVersion(fileName);
+      return `${vfsVersion(fileName)}#${overlay.invalidationOf(fileName)}`;
     },
 
     getScriptSnapshot: (fileName) => {

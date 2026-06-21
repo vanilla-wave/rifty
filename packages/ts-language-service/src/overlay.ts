@@ -21,53 +21,74 @@ export interface DocumentOverlay {
   update(path: string, text: string): void;
   close(path: string): void;
   get(path: string): DocumentEntry | undefined;
+  /** Paths of all currently-open buffers (for `getScriptFileNames`). */
+  openPaths(): readonly string[];
   /**
-   * Bump `path`'s version without recording text — forces TS to re-read the
-   * file (e.g. after an external VFS write to a non-open file). Returns the new
-   * version so a host can fold it into its own version string.
+   * Bump `path`'s invalidation counter — forces TS to re-read the file from the
+   * VFS (e.g. after an external write to a non-open file). Returns the new
+   * counter so a host can fold it into its own version string.
    */
-  invalidate(path: string): string;
-  /** Current version string for `path` (open text version or last invalidate). */
+  invalidate(path: string): number;
+  /**
+   * Version string for an OPEN buffer (open/update bump it). `undefined` when no
+   * buffer is open — the host then derives the version from the VFS + the
+   * {@link invalidationOf} counter, so closing reverts the version (and content)
+   * to disk.
+   */
   versionOf(path: string): string | undefined;
+  /** Monotonic external-invalidation counter for `path` (0 if never bumped). */
+  invalidationOf(path: string): number;
 }
 
 export function createDocumentOverlay(): DocumentOverlay {
   // Open buffers (text + version). `close` removes from here.
   const open = new Map<string, DocumentEntry>();
-  // Monotonic counter per path, persists across close so versions never reuse.
-  const versions = new Map<string, number>();
+  // Per-path open-edit counter; monotonic across re-open so a version is never
+  // reused for different content.
+  const editSeq = new Map<string, number>();
+  // Per-path external-invalidation counter (independent of open buffers).
+  const invalidations = new Map<string, number>();
 
-  const bump = (path: string): string => {
-    const next = (versions.get(path) ?? 0) + 1;
-    versions.set(path, next);
-    return String(next);
+  // Open version carries the invalidation counter too, so an external write to
+  // an open file (rare) still moves the version.
+  const openVersion = (path: string): string =>
+    `o${editSeq.get(path) ?? 0}:${invalidations.get(path) ?? 0}`;
+
+  const setBuffer = (path: string, text: string): void => {
+    editSeq.set(path, (editSeq.get(path) ?? 0) + 1);
+    open.set(path, { version: openVersion(path), text });
   };
 
   return {
     open(path, text) {
-      open.set(path, { version: bump(path), text });
+      setBuffer(path, text);
     },
     update(path, text) {
-      open.set(path, { version: bump(path), text });
+      setBuffer(path, text);
     },
     close(path) {
+      // Drop the buffer; counters persist so versions stay monotonic.
       open.delete(path);
     },
     get(path) {
       return open.get(path);
     },
+    openPaths() {
+      return [...open.keys()];
+    },
     invalidate(path) {
-      const version = bump(path);
+      const next = (invalidations.get(path) ?? 0) + 1;
+      invalidations.set(path, next);
+      // An open buffer keeps its text; its version moves to reflect the bump.
       const entry = open.get(path);
-      // Keep an open buffer's text; only its version moves.
-      if (entry) open.set(path, { version, text: entry.text });
-      return version;
+      if (entry) open.set(path, { version: openVersion(path), text: entry.text });
+      return next;
     },
     versionOf(path) {
-      const entry = open.get(path);
-      if (entry) return entry.version;
-      const n = versions.get(path);
-      return n === undefined ? undefined : String(n);
+      return open.get(path)?.version;
+    },
+    invalidationOf(path) {
+      return invalidations.get(path) ?? 0;
     },
   };
 }
