@@ -1,0 +1,78 @@
+/* rifty design tokens — single source of truth. Accent hardcoded to lime + rift.
+   Accent stays one var (--ac / --ac-ink) so re-theming is trivial. Relative-color
+   rgb(from var(--ac) r g b / a) is used throughout (Chromium-first). */
+:root {
+  /* accent (lime) */
+  --ac: #c7f05a;
+  --ac-ink: #15170b;
+
+  /* compat semantics */
+  --warn: #f5b544;
+  --no: #ff6b6b;
+
+  /* surfaces */
+  --bg: #15171d;
+  --bg-alt: #121319;
+  --bg-alt2: #101218;
+  --panel: #1a1d24;
+  --deep: #0e1014;
+  --deep2: #0b0d11;
+  --titlebar: #14161b;
+
+  /* glass */
+  --nav-bg: rgba(21, 23, 29, 0.82);
+  --dock-bg: rgba(13, 15, 19, 0.92);
+  --inspector-bg: rgba(18, 20, 25, 0.95);
+
+  /* text (white alphas) */
+  --t1: #fff;
+  --t2: rgba(255, 255, 255, 0.6);
+  --t3: rgba(255, 255, 255, 0.5);
+  --t4: rgba(255, 255, 255, 0.4);
+  --t5: rgba(255, 255, 255, 0.34);
+  --t6: rgba(255, 255, 255, 0.3);
+
+  /* hairlines / borders */
+  --bd: rgba(255, 255, 255, 0.08);
+  --bd2: rgba(255, 255, 255, 0.1);
+  --bd3: rgba(255, 255, 255, 0.12);
+  --bd4: rgba(255, 255, 255, 0.16);
+
+  /* realm colors */
+  --realm-page: #7aa2ff;
+  --realm-worker: #3bd6c6;
+  --realm-sw: #b58bff;
+  --realm-iframe: #f2b95c;
+  --realm-ext: #8a93a6;
+
+  /* code syntax */
+  --syn-kw: #c79bf0;
+  --syn-fn: #7cc5f5;
+  --syn-str: #9dd98f;
+  --syn-num: #f2b95c;
+  --syn-punc: rgba(255, 255, 255, 0.55);
+  --syn-com: rgba(255, 255, 255, 0.3);
+
+  /* warning callout */
+  --callout: #e0a45c;
+
+  /* type */
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Roboto Mono", ui-monospace, "SF Mono", "Menlo", monospace;
+
+  /* radii */
+  --r-pill: 14px;
+  --r-card: 12px;
+  --r-sm: 10px;
+  --r-chip: 8px;
+  --r-btn: 6px;
+  --r-code: 4px;
+
+  /* shadows (sparse — borders do the work) */
+  --sh-window: 0 24px 60px rgba(0, 0, 0, 0.5);
+  --sh-dock: 0 16px 48px rgba(0, 0, 0, 0.6);
+
+  /* layout */
+  --maxw: 1200px;
+  --gutter: 32px;
+}

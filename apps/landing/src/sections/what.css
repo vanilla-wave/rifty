@@ -1,0 +1,81 @@
+.what {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 48px var(--gutter) 24px;
+}
+
+.what-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 28px;
+}
+
+.what-index {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ac);
+}
+
+.what-label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--t3);
+  margin: 0;
+}
+
+.what-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--bd);
+  border: 1px solid var(--bd);
+  border-radius: var(--r-card);
+  overflow: hidden;
+}
+
+.what-cell {
+  background: var(--panel);
+  padding: 24px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.what-tile {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-chip);
+  background: rgb(from var(--ac) r g b / 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ac);
+}
+
+.what-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--t1);
+  letter-spacing: -0.01em;
+}
+
+.what-body {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--t3);
+}
+
+@media (max-width: 880px) {
+  .what-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .what-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,93 @@
+import { describe, expect, it } from 'vitest';
+import { EDGES, SCN } from './data';
+import type { EdgeDef, NodeId, ScenarioId } from './data';
+import { type Adjacency, bfsPath, buildAdjacency } from './graph';
+
+const adj = buildAdjacency(EDGES);
+
+function hasEdge(edges: readonly EdgeDef[], a: NodeId, b: NodeId): boolean {
+  return edges.some((e) => (e.from === a && e.to === b) || (e.from === b && e.to === a));
+}
+
+function isEdgeAdjacentPath(edges: readonly EdgeDef[], path: readonly NodeId[]): boolean {
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i];
+    const b = path[i + 1];
+    if (a === undefined || b === undefined) return false;
+    if (!hasEdge(edges, a, b)) return false;
+  }
+  return true;
+}
+
+describe('buildAdjacency', () => {
+  it('is symmetric — every neighbour relation goes both ways', () => {
+    const built: Adjacency = buildAdjacency(EDGES);
+    for (const [node, neighbours] of built) {
+      for (const m of neighbours) {
+        expect(built.get(m)?.has(node)).toBe(true);
+      }
+    }
+  });
+
+  it('contains exactly the nodes referenced by edges', () => {
+    const built = buildAdjacency(EDGES);
+    for (const e of EDGES) {
+      expect(built.has(e.from)).toBe(true);
+      expect(built.has(e.to)).toBe(true);
+      expect(built.get(e.from)?.has(e.to)).toBe(true);
+      expect(built.get(e.to)?.has(e.from)).toBe(true);
+    }
+  });
+});
+
+describe('bfsPath', () => {
+  it('returns [node] for the same-node case', () => {
+    expect(bfsPath(adj, 'kernel', 'kernel')).toEqual(['kernel']);
+  });
+
+  it('returns [] when no path exists (disconnected node)', () => {
+    // An isolated node has no adjacency entry; nothing reaches it.
+    const lonely = buildAdjacency([{ from: 'kernel', to: 'sab', kind: 'data' }]);
+    expect(bfsPath(lonely, 'kernel', 'vfs')).toEqual([]);
+  });
+
+  it('every BFS path is edge-adjacent with correct endpoints', () => {
+    // direct edge → length-2 path
+    const p = bfsPath(adj, 'playground', 'sdk');
+    expect(p[0]).toBe('playground');
+    expect(p[p.length - 1]).toBe('sdk');
+    expect(isEdgeAdjacentPath(EDGES, p)).toBe(true);
+  });
+
+  it('routes every consecutive step pair across ALL scenarios over real edges', () => {
+    const ids = Object.keys(SCN) as ScenarioId[];
+    expect(ids.length).toBeGreaterThan(0);
+    for (const id of ids) {
+      const steps = SCN[id].steps;
+      expect(steps.length).toBeGreaterThan(0);
+      for (let i = 0; i < steps.length - 1; i++) {
+        const from = steps[i]?.node;
+        const to = steps[i + 1]?.node;
+        expect(from).toBeDefined();
+        expect(to).toBeDefined();
+        if (from === undefined || to === undefined) continue;
+        const path = bfsPath(adj, from, to);
+        // connected: a real path exists between every consecutive milestone
+        expect(path.length).toBeGreaterThan(0);
+        // correct endpoints
+        expect(path[0]).toBe(from);
+        expect(path[path.length - 1]).toBe(to);
+        // every hop is a real edge
+        expect(isEdgeAdjacentPath(EDGES, path)).toBe(true);
+      }
+    }
+  });
+
+  it('is deterministic — repeated calls yield identical paths', () => {
+    const a = bfsPath(adj, 'preview', 'vfs');
+    const b = bfsPath(adj, 'preview', 'vfs');
+    expect(a).toEqual(b);
+    expect(a.length).toBeGreaterThan(0);
+    expect(isEdgeAdjacentPath(EDGES, a)).toBe(true);
+  });
+});
