@@ -14,7 +14,7 @@
 import { PREVIEW_LOCAL_HOST } from '@riftydev/io';
 import { dispatchToPort, listPorts, serveCrossRealmPreview } from '@riftydev/net';
 import { initSqliteEngine } from '@riftydev/net/sqlite/engine';
-import { RegistryClient, install } from '@riftydev/npm-client';
+import { install } from '@riftydev/npm-client';
 import { Console } from '@riftydev/runtime-js/builtins/console';
 import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
@@ -28,7 +28,7 @@ import {
   hmrBridgeUrl,
 } from '../glue/hmr-bridge.ts';
 import { ensureProjectDependencies } from '../glue/project-deps.ts';
-import { proxiedRegistryFetch } from '../glue/registry-fetch.ts';
+import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import type {
   BootstrapConfig,
@@ -227,7 +227,7 @@ export async function bootDevServer(opts: {
     snapshotUrl: fromScratch ? undefined : cfg.bakedNodeModulesUrl,
     install: async () => {
       log(`installing ${spec.displayName} into ${root}/node_modules…\n`);
-      const registry = new RegistryClient({ fetch: proxiedRegistryFetch() });
+      const registry = createProxiedRegistryClient();
       const result = await install({
         vfs,
         cwd: root,

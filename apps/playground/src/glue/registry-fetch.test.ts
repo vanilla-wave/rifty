@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { proxiedRegistryFetch } from './registry-fetch.ts';
+import { createProxiedRegistryClient, proxiedRegistryFetch } from './registry-fetch.ts';
 
 interface RiftyGlobals {
   __RIFTY_REGISTRY_URL__?: string | undefined;
@@ -41,5 +41,31 @@ describe('proxiedRegistryFetch', () => {
     await fetcher('https://registry.npmjs.org/@scope/pkg/-/pkg-1.0.0.tgz');
 
     expect(calls).toEqual(['https://registry.rifty.dev/npm-registry/@scope/pkg/-/pkg-1.0.0.tgz']);
+  });
+
+  it('creates a RegistryClient whose metadata and tarballs share the configured proxy', async () => {
+    const calls: string[] = [];
+    g.__RIFTY_REGISTRY_URL__ = 'https://registry.rifty.dev/npm-registry';
+    const registry = createProxiedRegistryClient({
+      async fetcher(url) {
+        calls.push(url);
+        if (url.endsWith('/vite')) {
+          return Response.json({
+            name: 'vite',
+            versions: {},
+          });
+        }
+        return new Response(new Uint8Array([0x1f, 0x8b]));
+      },
+    });
+
+    await registry.getPackument('vite');
+    await registry.getTarball('https://registry.npmjs.org/vite/-/vite-8.0.0.tgz');
+
+    expect(registry.baseUrl).toBe('https://registry.rifty.dev/npm-registry');
+    expect(calls).toEqual([
+      'https://registry.rifty.dev/npm-registry/vite',
+      'https://registry.rifty.dev/npm-registry/vite/-/vite-8.0.0.tgz',
+    ]);
   });
 });

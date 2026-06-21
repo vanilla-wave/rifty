@@ -7,11 +7,16 @@
  * succeeds for the packument (CORS-friendly JSON), but routing both metadata
  * and tarballs through one configured proxy keeps COEP/CORP behavior explicit.
  */
-import { type Fetcher, getRegistryBaseUrl } from '@riftydev/npm-client';
+import { type Fetcher, RegistryClient, getRegistryBaseUrl } from '@riftydev/npm-client';
 
 const UPSTREAM_PREFIX = 'https://registry.npmjs.org';
 
 interface ProxiedRegistryFetchOptions {
+  readonly proxyPrefix?: string;
+  readonly fetcher?: Fetcher;
+}
+
+interface ProxiedRegistryClientOptions {
   readonly proxyPrefix?: string;
   readonly fetcher?: Fetcher;
 }
@@ -36,4 +41,14 @@ export function proxiedRegistryFetch(options: ProxiedRegistryFetchOptions = {}):
       : url;
     return fetcher(rewritten, init);
   };
+}
+
+export function createProxiedRegistryClient(
+  options: ProxiedRegistryClientOptions = {},
+): RegistryClient {
+  const proxyPrefix = registryProxyPrefix(options.proxyPrefix);
+  return new RegistryClient({
+    baseUrl: proxyPrefix,
+    fetch: proxiedRegistryFetch({ proxyPrefix, fetcher: options.fetcher }),
+  });
 }
