@@ -37,6 +37,11 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "vendor:ts-lib": "node scripts/vendor-ts-lib.mjs",
+    "prebuild": "pnpm vendor:ts-lib",
     "build": "tsup"
+  },
+  "dependencies": {
+    "typescript": "5.9.3"
   }
 }
