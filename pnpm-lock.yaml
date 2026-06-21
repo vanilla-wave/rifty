@@ -134,6 +134,18 @@ importers:
         specifier: workspace:*
         version: link:../../packages/vfs
 
+  packages/git:
+    dependencies:
+      '@riftydev/io':
+        specifier: workspace:*
+        version: link:../io
+      '@riftydev/net':
+        specifier: workspace:*
+        version: link:../net
+      '@riftydev/vfs':
+        specifier: workspace:*
+        version: link:../vfs
+
   packages/io:
     devDependencies:
       typescript:
@@ -176,6 +188,9 @@ importers:
 
   packages/rifty:
     dependencies:
+      '@riftydev/git':
+        specifier: workspace:*
+        version: link:../git
       '@riftydev/io':
         specifier: workspace:*
         version: link:../io
@@ -255,6 +270,9 @@ importers:
 
   packages/shell:
     dependencies:
+      '@riftydev/git':
+        specifier: workspace:*
+        version: link:../git
       '@riftydev/io':
         specifier: workspace:*
         version: link:../io

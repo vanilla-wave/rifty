@@ -10,7 +10,7 @@
 
 // Layer tiers, low → high. A lower tier importing a strictly-higher tier = reverse (forbidden).
 const TIERS = [
-  ['vfs', 'io', 'net', 'service-worker'],
+  ['vfs', 'io', 'net', 'service-worker', 'git'],
   ['kernel'],
   ['runtime-js', 'runtime-wasi'],
   ['shell', 'terminal', 'npm-client', 'ts-language-service'],

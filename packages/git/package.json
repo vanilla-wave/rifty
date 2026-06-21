@@ -1,20 +1,20 @@
 {
-  "name": "@riftydev/shell",
+  "name": "@riftydev/git",
   "version": "0.1.0",
-  "description": "Tiny bash-flavoured shell for rifty, backed by @riftydev/vfs.",
+  "description": "Git client for rifty: version control over @riftydev/vfs (isomorphic-git).",
   "type": "module",
   "license": "MIT",
   "author": "vanilla-wave <vizetmail@gmail.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/vanilla-wave/rifty.git",
-    "directory": "packages/shell"
+    "directory": "packages/git"
   },
   "homepage": "https://github.com/vanilla-wave/rifty#readme",
   "bugs": {
     "url": "https://github.com/vanilla-wave/rifty/issues"
   },
-  "keywords": ["rifty", "browser", "webcontainer", "shell", "bash"],
+  "keywords": ["rifty", "browser", "webcontainer", "git", "vcs"],
   "sideEffects": false,
   "main": "./src/index.ts",
   "module": "./src/index.ts",
@@ -37,12 +37,11 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:run": "vitest run tests/",
     "build": "tsup"
   },
   "dependencies": {
     "@riftydev/io": "workspace:*",
     "@riftydev/vfs": "workspace:*",
-    "@riftydev/git": "workspace:*"
+    "@riftydev/net": "workspace:*"
   }
 }

@@ -6,18 +6,6 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
-    vfs: 'src/vfs.ts',
-    io: 'src/io.ts',
-    kernel: 'src/kernel.ts',
-    runtime: 'src/runtime.ts',
-    wasi: 'src/wasi.ts',
-    net: 'src/net.ts',
-    git: 'src/git.ts',
-    'npm-client': 'src/npm-client.ts',
-    shell: 'src/shell.ts',
-    terminal: 'src/terminal.ts',
-    'service-worker': 'src/service-worker.ts',
-    'ts-language-service': 'src/ts-language-service.ts',
   },
   format: ['esm'],
   dts: true,

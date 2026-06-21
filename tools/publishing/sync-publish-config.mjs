@@ -65,6 +65,7 @@ const SPEC = {
     sideEffects: ['./dist/register-builtins.js', './dist/sqlite/register-builtins.js'],
     keywords: ['http', 'net', 'websocket', 'sqlite'],
   },
+  '@riftydev/git': { dir: 'packages/git', sideEffects: false, keywords: ['git', 'vcs'] },
   '@riftydev/runtime-js': {
     dir: 'packages/runtime-js',
     sideEffects: ['./dist/index.js', './dist/worker.js'],
@@ -165,6 +166,7 @@ const DESCRIPTIONS = {
   '@riftydev/kernel':
     'Process/scheduling/IPC kernel for rifty: Worker-as-process model over SharedArrayBuffer + Atomics.',
   '@riftydev/net': 'Browser node:net/node:http/node:https/ws + node:sqlite (sql.js) for rifty.',
+  '@riftydev/git': 'Git client for rifty: version control over @riftydev/vfs (isomorphic-git).',
   '@riftydev/runtime-js':
     'Node-compatible JS runtime for rifty: CJS/ESM module loader and node: builtins, in a Worker.',
   '@riftydev/runtime-wasi': 'WASI (preview1) runner for rifty: run .wasm guests in a Web Worker.',
