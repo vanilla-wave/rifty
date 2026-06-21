@@ -27,4 +27,4 @@ registry.rifty.dev.  A  93.77.177.79
 The playground production build uses
 `VITE_RIFTY_REGISTRY_URL=https://registry.rifty.dev/npm-registry`, so npm
 metadata and tarballs go through the Yandex Cloud streaming proxy recorded in
-ADR-0161. Local dev still uses the relative `/npm-registry` Vite proxy.
+ADR-0163. Local dev still uses the relative `/npm-registry` Vite proxy.

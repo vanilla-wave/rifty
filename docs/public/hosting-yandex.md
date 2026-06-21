@@ -6,7 +6,7 @@ static Netlify deploys.
 ## npm registry proxy
 
 `registry.rifty.dev` is a streaming Caddy reverse proxy on Yandex Cloud Compute
-(ADR-0161). Source config:
+(ADR-0163). Source config:
 
 ```text
 deploy/yandex/npm-registry/Caddyfile

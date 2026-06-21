@@ -8,7 +8,7 @@ the target (ADR-0073).
 Config: `netlify.toml` (repo root), `apps/playground/public/_headers`, and
 `apps/playground/public/_redirects` (both copied to `dist/` by Vite). Netlify
 only serves the static playground artifact; production npm registry traffic is
-sent to `https://registry.rifty.dev/npm-registry` (Yandex Cloud, ADR-0161).
+sent to `https://registry.rifty.dev/npm-registry` (Yandex Cloud, ADR-0163).
 
 ## What gets built
 

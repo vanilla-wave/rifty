@@ -464,7 +464,7 @@
 
 ### Changed
 
-- **Production npm registry proxy moved to Yandex Cloud (ADR-0161).** Netlify
+- **Production npm registry proxy moved to Yandex Cloud (ADR-0163).** Netlify
   now deploys only the static playground artifact; production builds set
   `VITE_RIFTY_REGISTRY_URL=https://registry.rifty.dev/npm-registry`, and
   tarball URL rewriting uses that configured proxy origin. The old Netlify

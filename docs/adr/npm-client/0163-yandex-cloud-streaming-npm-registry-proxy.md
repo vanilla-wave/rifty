@@ -1,4 +1,4 @@
-# ADR 0161: Yandex Cloud streaming npm-registry proxy
+# ADR 0163: Yandex Cloud streaming npm-registry proxy
 
 Status: Accepted
 Date: 2026-06

@@ -60,7 +60,7 @@ open:
 ## M9 — npm install
 
 **PARTIAL.**
-Semver, RegistryClient, gzip+tar, linker, lockfile, shadow registry, nested install (first-wins-flat + nest-on-conflict) with lockfile replay; deployed prod registry proxy round-trip smoked in CI. ADR-0005, ADR-0006, ADR-0015, ADR-0021, ADR-0023, ADR-0027, ADR-0042, ADR-0051, ADR-0161.
+Semver, RegistryClient, gzip+tar, linker, lockfile, shadow registry, nested install (first-wins-flat + nest-on-conflict) with lockfile replay; deployed prod registry proxy round-trip smoked in CI. ADR-0005, ADR-0006, ADR-0015, ADR-0021, ADR-0023, ADR-0027, ADR-0042, ADR-0051, ADR-0163.
 open:
 - `docs/backlog/npm-client/chalk-express-integration-fixtures` — chalk + full express real-tarball fixtures.
 - `docs/backlog/npm-client/live-registry-roundtrip-smoke` — live `registry.npmjs.org` through the Vite proxy.
