@@ -122,15 +122,22 @@ interface Pending {
 }
 
 /**
- * Build the client. `timeoutMs` arms a per-request reject (default 15s — generous:
- * a cold first `init` builds the whole `ts.LanguageService` + lib.d.ts over fs.*
- * RPC, and the page→owner→LS relay adds an async hop).
+ * Build the client. `timeoutMs` arms a per-request reject (default 60s). The
+ * ceiling is dominated by the COLD path: the LS endpoint serializes every frame
+ * behind the first `ts:init`, which builds the whole `ts.LanguageService` +
+ * fetches the ~3 MB lib.d.ts and parses tsconfig over fs.* sync-RPC — slow on a
+ * constrained CI runner co-resident with the dev-server child, plus the
+ * page→owner→LS relay hop. So an `open`/diagnostics frame sent right after init
+ * may legitimately wait tens of seconds for the build; 15s rejected it
+ * prematurely (the page never re-sends → no diagnostics). Warm requests resolve
+ * in <1s, so this ceiling only bites a genuinely dropped frame — which then
+ * rejects loud (Fidelity: eventual, never a silent hang).
  */
 export function createTsLanguageServiceClient(
   relay: TsLspRelay,
   opts: { readonly timeoutMs?: number } = {},
 ): TsLanguageServiceClient {
-  const timeoutMs = opts.timeoutMs ?? 15_000;
+  const timeoutMs = opts.timeoutMs ?? 60_000;
   const pending = new Map<number, Pending>();
   let counter = 0;
   let torn = false;

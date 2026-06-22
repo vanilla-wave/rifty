@@ -48,6 +48,12 @@ export interface CreateTsLanguageServiceDeps {
   readonly fsSync: FsSync;
   /** Project root (POSIX-absolute); tsconfig is discovered from here. */
   readonly projectRoot: string;
+  /**
+   * Optional phase logger (worker stdout). The cold build awaits the ~3 MB
+   * std-lib over the owner relay then parses tsconfig over fs.* sync-RPC — slow
+   * under contention; these lines make each phase boundary observable on CI.
+   */
+  readonly log?: (message: string) => void;
 }
 
 export interface TsLanguageService {
@@ -177,9 +183,12 @@ function toLspDiagnostic(d: ts.Diagnostic): Diagnostic {
 export async function createTsLanguageService(
   deps: CreateTsLanguageServiceDeps,
 ): Promise<TsLanguageService> {
-  const { fsSync, projectRoot } = deps;
+  const { fsSync, projectRoot, log } = deps;
+  const startedAt = log ? Date.now() : 0;
   const libMap = await loadLibDts();
+  log?.(`init: std-lib loaded (+${Date.now() - startedAt}ms, ${libMap.size} files)`);
   const parsed = loadTsConfig(fsSync, projectRoot);
+  log?.(`init: tsconfig parsed (+${Date.now() - startedAt}ms, ${parsed.fileNames.length} roots)`);
   const overlay = createDocumentOverlay();
 
   const host = createVfsLanguageServiceHost({
@@ -191,6 +200,20 @@ export async function createTsLanguageService(
     overlay,
   });
   const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+  log?.(`init: language service created (+${Date.now() - startedAt}ms)`);
+
+  /**
+   * Whether `path` has a SourceFile in the current program. A query/diagnostic
+   * for a path the program never admitted — a `.js` file with `allowJs` off, an
+   * untitled buffer, a path outside every tsconfig — makes the raw
+   * `ts.LanguageService` THROW "Could not find source file". Real tsserver
+   * answers nothing for such a file (it lives in no project here), so the
+   * methods below gate on this and return an honest empty, never a crash. NOT a
+   * lying empty: a file outside the program genuinely has no program-level
+   * result. `getProgram()` is the same (cached) program the queries use.
+   */
+  const inProgram = (path: string): boolean =>
+    service.getProgram()?.getSourceFile(path) !== undefined;
 
   // tsc routes config-file errors (unknown options, bad option values, bad
   // include/extends) onto the ParsedCommandLine — captured once at build, mapped
@@ -225,18 +248,26 @@ export async function createTsLanguageService(
     }));
 
   return {
-    getSemanticDiagnostics: (path) => service.getSemanticDiagnostics(path).map(toLspDiagnostic),
-    getSyntacticDiagnostics: (path) => service.getSyntacticDiagnostics(path).map(toLspDiagnostic),
+    getSemanticDiagnostics: (path) =>
+      inProgram(path) ? service.getSemanticDiagnostics(path).map(toLspDiagnostic) : [],
+    getSyntacticDiagnostics: (path) =>
+      inProgram(path) ? service.getSyntacticDiagnostics(path).map(toLspDiagnostic) : [],
     getConfigFileDiagnostics: () => [...configDiagnostics],
     getQuickInfo: (path, position) => {
+      if (!inProgram(path)) return null;
       const info = service.getQuickInfoAtPosition(path, offsetAt(path, position));
       return info ? quickInfoToHover(info, readText(path)) : null;
     },
     getDefinition: (path, position) =>
-      toLocations(service.getDefinitionAtPosition(path, offsetAt(path, position))),
+      inProgram(path)
+        ? toLocations(service.getDefinitionAtPosition(path, offsetAt(path, position)))
+        : [],
     getTypeDefinition: (path, position) =>
-      toLocations(service.getTypeDefinitionAtPosition(path, offsetAt(path, position))),
+      inProgram(path)
+        ? toLocations(service.getTypeDefinitionAtPosition(path, offsetAt(path, position)))
+        : [],
     getCompletions: (path, position) => {
+      if (!inProgram(path)) return { isIncomplete: false, items: [] };
       const info = service.getCompletionsAtPosition(path, offsetAt(path, position), undefined);
       return {
         isIncomplete: info?.isIncomplete === true,
@@ -244,6 +275,7 @@ export async function createTsLanguageService(
       };
     },
     getCompletionDetails: (path, position, label) => {
+      if (!inProgram(path)) return null;
       const offset = offsetAt(path, position);
       // The resolve frame carries only `label`, but getCompletionEntryDetails
       // needs the entry's `source`/`data` to be exact. So re-query the list and
@@ -273,6 +305,7 @@ export async function createTsLanguageService(
       return item;
     },
     getReferences: (path, position, context) => {
+      if (!inProgram(path)) return [];
       // findReferences (NOT getReferencesAtPosition): the flattened entries carry
       // `isDefinition`, which is what `includeDeclaration: false` filters on. Each
       // entry's span maps against ITS OWN file's text (cross-file safe).
@@ -287,6 +320,7 @@ export async function createTsLanguageService(
       return out;
     },
     prepareRename: (path, position) => {
+      if (!inProgram(path)) return null;
       const info = service.getRenameInfo(path, offsetAt(path, position), {
         allowRenameOfImportPath: false,
       });
@@ -298,6 +332,7 @@ export async function createTsLanguageService(
       return result;
     },
     getRenameEdits: (path, position, newName) => {
+      if (!inProgram(path)) return { changes: {} };
       const locations =
         service.findRenameLocations(path, offsetAt(path, position), false, false, {
           providePrefixAndSuffixTextForRename: true,
@@ -311,10 +346,12 @@ export async function createTsLanguageService(
       return { changes };
     },
     getSignatureHelp: (path, position) => {
+      if (!inProgram(path)) return null;
       const items = service.getSignatureHelpItems(path, offsetAt(path, position), undefined);
       return items ? signatureHelpItemsToSignatureHelp(items) : null;
     },
     getCodeFixes: (path, range, errorCodes) => {
+      if (!inProgram(path)) return [];
       // getCodeFixesAtPosition takes a [start,end) OFFSET span; the LSP Range
       // maps through the file's current text (same bytes the program sees). The
       // shared format settings are tsc's defaults (fmt only affects the edits'
@@ -332,15 +369,18 @@ export async function createTsLanguageService(
       );
     },
     organizeImports: (path) => {
+      if (!inProgram(path)) return { changes: {} };
       const changes = service.organizeImports({ type: 'file', fileName: path }, fmtSettings, {});
       return fileTextChangesToWorkspaceEdit(changes, readText);
     },
     getFormattingEdits: (path, options) => {
+      if (!inProgram(path)) return [];
       const settings = formattingOptionsToFormatCodeSettings(options);
       const changes = service.getFormattingEditsForDocument(path, settings);
       return textChangesToTextEdits(changes, readText(path));
     },
     getRangeFormattingEdits: (path, range, options) => {
+      if (!inProgram(path)) return [];
       const settings = formattingOptionsToFormatCodeSettings(options);
       const text = readText(path);
       const start = positionToOffset(text, range.start);

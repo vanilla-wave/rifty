@@ -2,7 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Endpoint serializes frames behind the in-flight `ts:init`** (ADR-0166; fixes the chromium e2e `received a request before ts:init` race). The fork-IPC pump dispatches each frame independently, and `ts:init` is async (it awaits the ~3 MB std-lib over the owner relay + parses tsconfig over fs.* sync-RPC), so an `open`/diagnostics frame the page sent right after init reached the endpoint while the service was still building and FAILED with a misleading "before ts:init" — which the page never re-sent, so no diagnostics ever appeared on a slow (2-core CI) cold boot. The endpoint now stores the build promise synchronously and every later frame `await`s it (ordering preserved, no barrier), so a frame racing a slow cold init WAITS instead of failing. A *failed* init now surfaces the REAL cause on the failing frame AND every queued frame (e.g. an owner-store error), never the misleading "before ts:init". Only a frame with NO `ts:init` ever sent still errors. New endpoint tests (concurrent-frame-before-init-resolves; real-init-error-surfacing).
+- **Out-of-program paths are honest-empty, never a "Could not find source file" throw** (fixes the chromium e2e `Could not find source file: '/workspace/src/main.js'` crash). The raw `ts.LanguageService` throws for any path it has no `SourceFile` for — e.g. the default playground's `.js` entry, opened in the editor but excluded from the program because `allowJs` is off and there is no tsconfig. Every path-taking query/diagnostic now gates on `getProgram().getSourceFile(path)` and returns an honest empty (`[]`/`null`/empty edit) for a file outside the program — what real tsserver answers for a file in no project — instead of crashing. NOT a lying empty: such a file genuinely has no program-level result.
+
 ### Added
+
+- **`ts:init` phase-timing logs** (`CreateTsLanguageServiceDeps.log`, wired from the worker entry to stdout → owner → page console): std-lib loaded / tsconfig parsed / language service created, each with elapsed ms, so a slow or wedged cold boot is observable end-to-end on CI.
 
 - **Quick-fixes / organize-imports / formatting** (ADR-0166 task 4.1).
   `TsLanguageService` gains `getCodeFixes(path, range, errorCodes)` (→ LSP

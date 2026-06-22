@@ -16,6 +16,7 @@ import type {
   TsCompletionItemResponse,
   TsCompletionsResponse,
   TsDiagnosticsResponse,
+  TsErrorResponse,
   TsHoverResponse,
   TsLocationsResponse,
   TsPrepareRenameResponse,
@@ -497,5 +498,62 @@ describe('createServiceEndpoint', () => {
     });
     expect(r.ok).toBe(false);
     expect(r.kind).toBe('error');
+  });
+
+  it('a frame arriving while ts:init is still in flight WAITS for it (no "before ts:init" race)', async () => {
+    // The fork-IPC pump dispatches each frame independently; `ts:init` is async
+    // (it awaits the std-lib load), so an open/query frame the page sends right
+    // after init lands at the endpoint while the service is still building. It
+    // MUST queue behind the in-flight init (the page never re-sends), not fail.
+    const endpoint = createServiceEndpoint({
+      buildFsSync: (call) => createRpcFsSync(call),
+      call: makeFakeCall(buildFixture()),
+    });
+    // Fire init WITHOUT awaiting it, then a query in the SAME tick — the query's
+    // dispatch runs before init's build promise resolves.
+    const initP = endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+    const queryP = endpoint.dispatch({
+      id: 2,
+      type: 'ts:getSemanticDiagnostics',
+      path: '/proj/a.ts',
+    });
+    const openP = endpoint.dispatch({
+      id: 3,
+      type: 'ts:open',
+      path: '/proj/a.ts',
+      text: 'export const x: number = "bad";\n',
+    });
+    const [init, query, open] = await Promise.all([initP, queryP, openP]);
+    expect(init).toEqual({ id: 1, ok: true, kind: 'ack' });
+    expect(query.ok).toBe(true);
+    expect(query.kind).toBe('diagnostics');
+    expect(open).toEqual({ id: 3, ok: true, kind: 'ack' });
+  });
+
+  it('a query after a FAILED init surfaces the real init error (not "before ts:init")', async () => {
+    // Init fails (the owner store is unreachable). The failing frame AND every
+    // frame queued behind it must carry the REAL cause — never the misleading
+    // "before ts:init" (Fidelity: loud, accurate gaps).
+    const boom = new Error('owner fs.* RPC unreachable');
+    const failingCall = (): never => {
+      throw boom;
+    };
+    const endpoint = createServiceEndpoint({
+      buildFsSync: (call) => createRpcFsSync(call),
+      call: failingCall,
+    });
+    const initP = endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+    const queryP = endpoint.dispatch({
+      id: 2,
+      type: 'ts:getSemanticDiagnostics',
+      path: '/proj/a.ts',
+    });
+    const [init, query] = await Promise.all([initP, queryP]);
+    expect(init.ok).toBe(false);
+    expect(query.ok).toBe(false);
+    for (const r of [init, query]) {
+      expect(r.kind).toBe('error');
+      expect((r as TsErrorResponse).error.message).toContain('owner fs.* RPC unreachable');
+    }
   });
 });

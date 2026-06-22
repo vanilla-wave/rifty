@@ -7,10 +7,18 @@
  * Lifecycle: the first `ts:init` frame builds the service (async — the engine
  * awaits the std-lib load up front) bound to `projectRoot`; later frames mutate
  * the overlay (`open`/`update`/`close`/`invalidate`) or query diagnostics
- * (`getSemantic`/`getSyntactic`/`getConfigFile`). A query/mutation arriving
- * before `ts:init` is an ERROR frame, never a silent empty (Fidelity — no lying
- * happy path). Any thrown error is surfaced as a `TsErrorResponse`, never
- * swallowed.
+ * (`getSemantic`/`getSyntactic`/`getConfigFile`).
+ *
+ * Init serialization (the fork-IPC pump dispatches every frame independently —
+ * it does NOT await one before the next): a frame that arrives while `ts:init`
+ * is still building the service QUEUES behind the in-flight build by awaiting
+ * the shared `servicePromise`, then runs. The page never re-sends, so racing a
+ * just-sent `open`/query against a slow cold init (the TS engine + the ~3 MB
+ * std-lib over the owner relay) must wait, NOT fail. A frame arriving with NO
+ * `ts:init` ever sent is still an ERROR frame (Fidelity — no lying happy path).
+ * A failed init makes the failing frame AND every queued frame carry the REAL
+ * cause (e.g. the owner-store error), never the misleading "before ts:init".
+ * Any thrown error is surfaced as a `TsErrorResponse`, never swallowed.
  */
 
 import type { FsSync } from '@riftydev/vfs';
@@ -27,6 +35,13 @@ export interface ServiceEndpointDeps {
   buildFsSync(call: (method: string, payload: unknown) => unknown): FsSync;
   /** The in-Worker sync-call shim (`readKernelSyncApi().call`). */
   call(method: string, payload: unknown): unknown;
+  /**
+   * Optional phase logger (worker stdout). The cold `ts:init` can be slow under
+   * contention (a 2-core CI runner co-resident with the dev-server child); these
+   * lines make a slow/wedged build observable end-to-end (worker → owner → page
+   * console). Absent in unit tests.
+   */
+  log?: (message: string) => void;
 }
 
 /** A protocol endpoint: one method, `dispatch(frame) → response frame`. */
@@ -41,162 +56,170 @@ function errResponse(id: number, err: unknown): TsResponse {
 }
 
 export function createServiceEndpoint(deps: ServiceEndpointDeps): ServiceEndpoint {
-  let service: TsLanguageService | null = null;
+  // The in-flight (or settled) service build. Set SYNCHRONOUSLY in the `ts:init`
+  // branch so a frame the pump dispatches right after — while the build is still
+  // awaiting the std-lib load — awaits THIS promise and runs in order, instead of
+  // racing a null `service`. `null` until the first `ts:init`.
+  let servicePromise: Promise<TsLanguageService> | null = null;
 
-  const requireService = (): TsLanguageService => {
-    if (service === null) {
-      throw new Error('ts language-service endpoint: received a request before ts:init');
+  // Resolve the service for a non-init frame: queue behind the in-flight build,
+  // or REJECT with the real init error if the build failed (never a misleading
+  // "before ts:init"). Only a frame with NO `ts:init` ever sent hits that throw.
+  const awaitService = (): Promise<TsLanguageService> => {
+    if (servicePromise === null) {
+      return Promise.reject(
+        new Error('ts language-service endpoint: received a request before ts:init'),
+      );
     }
-    return service;
+    return servicePromise;
   };
 
   const dispatch = async (request: TsRequest): Promise<TsResponse> => {
     const { id } = request;
     try {
+      if (request.type === 'ts:init') {
+        // Idempotent re-init rebuilds the service against the new root (the page
+        // owns one service per worker, but a project-root switch must not wedge
+        // the worker). Store the build promise BEFORE awaiting it so a racing
+        // frame queues behind this exact build.
+        const startedAt = deps.log ? Date.now() : 0;
+        deps.log?.(`init: building service (root=${request.projectRoot})`);
+        const built = createTsLanguageService({
+          fsSync: deps.buildFsSync(deps.call),
+          projectRoot: request.projectRoot,
+          ...(deps.log ? { log: deps.log } : {}),
+        });
+        servicePromise = built;
+        await built;
+        deps.log?.(`init: service ready (+${Date.now() - startedAt}ms)`);
+        return { id, ok: true, kind: 'ack' };
+      }
+
+      const service = await awaitService();
       switch (request.type) {
-        case 'ts:init': {
-          // Idempotent re-init rebuilds the service against the new root (the
-          // page owns one service per worker, but a project-root switch must not
-          // wedge the worker).
-          const fsSync = deps.buildFsSync(deps.call);
-          service = await createTsLanguageService({ fsSync, projectRoot: request.projectRoot });
-          return { id, ok: true, kind: 'ack' };
-        }
         case 'ts:open':
-          requireService().openDocument(request.path, request.text);
+          service.openDocument(request.path, request.text);
           return { id, ok: true, kind: 'ack' };
         case 'ts:update':
-          requireService().updateDocument(request.path, request.text);
+          service.updateDocument(request.path, request.text);
           return { id, ok: true, kind: 'ack' };
         case 'ts:close':
-          requireService().closeDocument(request.path);
+          service.closeDocument(request.path);
           return { id, ok: true, kind: 'ack' };
         case 'ts:invalidate':
-          requireService().invalidate(request.path);
+          service.invalidate(request.path);
           return { id, ok: true, kind: 'ack' };
         case 'ts:getSemanticDiagnostics':
           return {
             id,
             ok: true,
             kind: 'diagnostics',
-            diagnostics: requireService().getSemanticDiagnostics(request.path),
+            diagnostics: service.getSemanticDiagnostics(request.path),
           };
         case 'ts:getSyntacticDiagnostics':
           return {
             id,
             ok: true,
             kind: 'diagnostics',
-            diagnostics: requireService().getSyntacticDiagnostics(request.path),
+            diagnostics: service.getSyntacticDiagnostics(request.path),
           };
         case 'ts:getConfigFileDiagnostics':
           return {
             id,
             ok: true,
             kind: 'diagnostics',
-            diagnostics: requireService().getConfigFileDiagnostics(),
+            diagnostics: service.getConfigFileDiagnostics(),
           };
         case 'ts:getQuickInfo':
           return {
             id,
             ok: true,
             kind: 'hover',
-            hover: requireService().getQuickInfo(request.path, request.position),
+            hover: service.getQuickInfo(request.path, request.position),
           };
         case 'ts:getDefinition':
           return {
             id,
             ok: true,
             kind: 'locations',
-            locations: requireService().getDefinition(request.path, request.position),
+            locations: service.getDefinition(request.path, request.position),
           };
         case 'ts:getTypeDefinition':
           return {
             id,
             ok: true,
             kind: 'locations',
-            locations: requireService().getTypeDefinition(request.path, request.position),
+            locations: service.getTypeDefinition(request.path, request.position),
           };
         case 'ts:getCompletions':
           return {
             id,
             ok: true,
             kind: 'completions',
-            completions: requireService().getCompletions(request.path, request.position),
+            completions: service.getCompletions(request.path, request.position),
           };
         case 'ts:getCompletionDetails':
           return {
             id,
             ok: true,
             kind: 'completionItem',
-            item: requireService().getCompletionDetails(
-              request.path,
-              request.position,
-              request.label,
-            ),
+            item: service.getCompletionDetails(request.path, request.position, request.label),
           };
         case 'ts:getReferences':
           return {
             id,
             ok: true,
             kind: 'locations',
-            locations: requireService().getReferences(
-              request.path,
-              request.position,
-              request.context,
-            ),
+            locations: service.getReferences(request.path, request.position, request.context),
           };
         case 'ts:prepareRename':
           return {
             id,
             ok: true,
             kind: 'prepareRename',
-            result: requireService().prepareRename(request.path, request.position),
+            result: service.prepareRename(request.path, request.position),
           };
         case 'ts:getRenameEdits':
           return {
             id,
             ok: true,
             kind: 'workspaceEdit',
-            edit: requireService().getRenameEdits(request.path, request.position, request.newName),
+            edit: service.getRenameEdits(request.path, request.position, request.newName),
           };
         case 'ts:getSignatureHelp':
           return {
             id,
             ok: true,
             kind: 'signatureHelp',
-            signatureHelp: requireService().getSignatureHelp(request.path, request.position),
+            signatureHelp: service.getSignatureHelp(request.path, request.position),
           };
         case 'ts:getCodeFixes':
           return {
             id,
             ok: true,
             kind: 'codeActions',
-            codeActions: requireService().getCodeFixes(
-              request.path,
-              request.range,
-              request.errorCodes,
-            ),
+            codeActions: service.getCodeFixes(request.path, request.range, request.errorCodes),
           };
         case 'ts:organizeImports':
           return {
             id,
             ok: true,
             kind: 'workspaceEdit',
-            edit: requireService().organizeImports(request.path),
+            edit: service.organizeImports(request.path),
           };
         case 'ts:getFormattingEdits':
           return {
             id,
             ok: true,
             kind: 'textEdits',
-            textEdits: requireService().getFormattingEdits(request.path, request.options),
+            textEdits: service.getFormattingEdits(request.path, request.options),
           };
         case 'ts:getRangeFormattingEdits':
           return {
             id,
             ok: true,
             kind: 'textEdits',
-            textEdits: requireService().getRangeFormattingEdits(
+            textEdits: service.getRangeFormattingEdits(
               request.path,
               request.range,
               request.options,

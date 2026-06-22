@@ -74,4 +74,29 @@ describe('createTsLanguageService → LSP diagnostics', () => {
       'export const x: number = 1;\n',
     );
   });
+
+  it('a path outside the program is honest-empty, never a "Could not find source file" throw', async () => {
+    const { fsSync } = createMemoryFs();
+    // The default playground project: a `.js` entry, NO tsconfig — so `allowJs`
+    // defaults to false and `main.js` is OPENED in the editor but never enters
+    // the TS program. The raw `ts.LanguageService` throws "Could not find source
+    // file" for a path it has no SourceFile for; the editor wants what real
+    // tsserver gives a file outside the project — nothing — NOT a crash.
+    writeFile(fsSync, '/workspace/src/main.js', 'export const x = 1;\n');
+
+    const svc = await createTsLanguageService({ fsSync, projectRoot: '/workspace' });
+    svc.openDocument('/workspace/src/main.js', 'export const x = 1;\n');
+
+    // Diagnostics: empty, not a throw (the exact CI crash on `/workspace/src/main.js`).
+    expect(svc.getSemanticDiagnostics('/workspace/src/main.js')).toEqual([]);
+    expect(svc.getSyntacticDiagnostics('/workspace/src/main.js')).toEqual([]);
+    // A path neither opened nor in any tsconfig: also empty, not a throw.
+    expect(svc.getSemanticDiagnostics('/workspace/never-seen.ts')).toEqual([]);
+    // Position queries on an out-of-program file are honest-empty too.
+    expect(svc.getQuickInfo('/workspace/src/main.js', { line: 0, character: 13 })).toBeNull();
+    expect(svc.getDefinition('/workspace/src/main.js', { line: 0, character: 13 })).toEqual([]);
+    expect(svc.getCompletions('/workspace/src/main.js', { line: 0, character: 0 }).items).toEqual(
+      [],
+    );
+  });
 });

@@ -927,9 +927,11 @@ export function App(props: AppProps) {
       scheduleSync(ev);
     });
 
-    // Init the project root the owner runs with (cwd = WORKSPACE). Fire-and-await:
-    // open/update requests queue behind it on the LS endpoint (each frame is
-    // independently dispatched; init builds the service lazily on first frame).
+    // Init the project root the owner runs with (cwd = WORKSPACE). Fire-and-forget:
+    // the LS endpoint SERIALIZES every later frame behind this in-flight build, so
+    // an open/update/diagnostics frame sent before the (slow, cold) service is
+    // ready WAITS for it rather than racing a not-yet-built service. A failed init
+    // is surfaced on each queued frame (loud), not swallowed.
     void client.init(WORKSPACE).catch((err: unknown) => {
       if (!disposed) console.warn('[ts-lsp] init', (err as Error).message);
     });
