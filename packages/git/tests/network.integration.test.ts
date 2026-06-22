@@ -144,9 +144,12 @@ describe.skipIf(!AVAILABLE)('git smart-HTTP clone integration', () => {
   let expectedSha: string;
 
   beforeAll(async () => {
-    // Bare repo the server will serve.
+    // Bare repo the server will serve. `-b main` pins its symbolic HEAD to
+    // refs/heads/main REGARDLESS of the host's `init.defaultBranch` — without it
+    // a box defaulting to `master` (CI) leaves HEAD → refs/heads/master while only
+    // `main` is pushed, so the clone follows a danging HEAD → "Could not find HEAD".
     reposDir = mkdtempSync(join(tmpdir(), 'rifty-git-srv-'));
-    execFileSync('git', ['init', '--bare', 'repo.git'], { cwd: reposDir });
+    execFileSync('git', ['init', '--bare', '-b', 'main', 'repo.git'], { cwd: reposDir });
 
     // Working repo: one deterministic commit, pushed to the bare repo.
     workDir = mkdtempSync(join(tmpdir(), 'rifty-git-work-'));
