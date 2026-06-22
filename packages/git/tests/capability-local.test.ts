@@ -1,8 +1,7 @@
 /**
  * makeGit facade — LOCAL porcelain proven over a real {@link MemoryVfs} (no
- * mocks). init→add→commit→log round-trips, status reflects untracked/staged,
- * and the NETWORK verbs (clone/fetch/pull/push) loud-throw NotImplementedError
- * (transport lands in a later phase).
+ * mocks). init→add→commit→log round-trips and status reflects untracked/staged.
+ * (Network-verb transport/CORS loud-throws live in `loud-throws.test.ts`.)
  */
 import { MemoryVfs } from '@riftydev/vfs';
 import { expect, it } from 'vitest';
@@ -46,12 +45,11 @@ it('status reflects an untracked then staged file', async () => {
   expect(after.find((e) => e.filepath === 'n.txt')).toBeTruthy();
 });
 
-it('clone/fetch/pull/push throw NotImplementedError', async () => {
+it('clone over a non-smart-HTTP transport loud-throws NotImplementedError', async () => {
   const vfs = new MemoryVfs();
   await vfs.mkdir('/r', { recursive: true });
-  const g = makeGit({ fs: vfsToGitFs(vfs), dir: '/r' });
-  const net = g as unknown as Record<string, () => unknown>;
-  for (const verb of ['clone', 'fetch', 'pull', 'push'] as const) {
-    expect(() => net[verb]?.()).toThrow(/Not implemented: git\./);
-  }
+  const g = makeGit({ fs: vfsToGitFs(vfs), dir: '/r', corsProxy: '' });
+  await expect(g.clone({ url: 'ssh://github.com/x/y.git' })).rejects.toThrow(
+    /Not implemented: git\.transport\.ssh/,
+  );
 });

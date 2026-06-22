@@ -1,15 +1,28 @@
 /**
  * `makeGit` — typed facade over isomorphic-git, bound to one VFS-backed repo
- * (`{ fs, dir }`). Exposes LOCAL porcelain only; the NETWORK verbs
- * (clone/fetch/pull/push) loud-throw {@link NotImplementedError} — real
- * smart-HTTP transport lands in a later phase, never a silent stub.
+ * (`{ fs, dir }`). LOCAL porcelain + the NETWORK verbs (clone/fetch/pull/push)
+ * over smart-HTTP via `@riftydev/net`. Non-smart-HTTP transports (ssh/git/…) and
+ * the browser cross-origin-without-proxy wall loud-throw {@link NotImplementedError}
+ * (see {@link assertSupportedTransport} / {@link assertCorsReachable}) — never a
+ * silent stub. Underlying isomorphic-git network errors surface via
+ * {@link mapGitNetworkError} (rethrown, never swallowed).
  */
-import { NotImplementedError } from '@riftydev/io';
-import git, { type FsClient, type WalkerEntry } from 'isomorphic-git';
+import git, { type FsClient, type HttpClient, type WalkerEntry } from 'isomorphic-git';
+import { getGitCorsProxyUrl } from './cors-proxy.ts';
+import { assertCorsReachable, assertSupportedTransport, mapGitNetworkError } from './errors.ts';
+import { riftyGitHttp } from './http-plugin.ts';
 import { lineDiff } from './line-diff.ts';
-import type { DiffEntry, GitIdentity, LogEntry, MakeGitOptions, StatusEntry } from './types.ts';
-
-const NETWORK_HINT = 'network transport lands in a later phase';
+import type {
+  CloneArgs,
+  DiffEntry,
+  FetchArgs,
+  GitIdentity,
+  LogEntry,
+  MakeGitOptions,
+  PullArgs,
+  PushArgs,
+  StatusEntry,
+} from './types.ts';
 
 /** Args for {@link Git.commit} — committer defaults to author. */
 export interface CommitArgs {
@@ -31,10 +44,14 @@ export interface Git {
   resolveRef(ref: string): Promise<string>;
   hashBlob(object: Uint8Array | string): Promise<string>;
   diff(): Promise<DiffEntry[]>;
-  clone(): never;
-  fetch(): never;
-  pull(): never;
-  push(): never;
+  /** Clone a smart-HTTP remote into `dir`. ssh/git/… → NotImplementedError. */
+  clone(args: CloneArgs): Promise<void>;
+  /** Fetch from a remote (`url` optional → remote config). */
+  fetch(args?: FetchArgs): Promise<void>;
+  /** Fetch + merge into the current branch (`url` optional → remote config). */
+  pull(args: PullArgs & { author: GitIdentity }): Promise<void>;
+  /** Push refs to a remote (`url`/`remote` optional → remote config). */
+  push(args?: PushArgs): Promise<void>;
 }
 
 export function makeGit(opts: MakeGitOptions): Git {
@@ -43,6 +60,16 @@ export function makeGit(opts: MakeGitOptions): Git {
   // (internal), keeping `opts.fs: GitFs` type-safe at the package boundary.
   const fs = opts.fs as unknown as FsClient;
   const dir = opts.dir;
+  // Resolve the network transport once: http plugin, CORS proxy (D-004), and an
+  // onAuth bridge from our narrowed GitAuthProvider to isomorphic-git's callback.
+  // The plugin's `request.signal` is typed `AbortSignal` (narrower + more correct
+  // than isomorphic-git's `signal?: object`); param-contravariance rejects the
+  // narrowing, so cast once here at the boundary (same pattern as `fs` above).
+  const http = (opts.http ?? riftyGitHttp()) as unknown as HttpClient;
+  const corsProxy = opts.corsProxy ?? getGitCorsProxyUrl();
+  const onAuth = opts.onAuth
+    ? (url: string): { username: string; password?: string } | undefined => opts.onAuth?.(url)
+    : undefined;
 
   return {
     async init() {
@@ -139,17 +166,88 @@ export function makeGit(opts: MakeGitOptions): Git {
       });
       return entries as DiffEntry[];
     },
-    clone(): never {
-      throw new NotImplementedError('git.clone', NETWORK_HINT);
+    async clone(args) {
+      assertSupportedTransport(args.url);
+      assertCorsReachable(args.url, corsProxy);
+      try {
+        await git.clone({
+          fs,
+          http,
+          dir,
+          url: args.url,
+          corsProxy,
+          ref: args.ref,
+          singleBranch: args.singleBranch,
+          depth: args.depth,
+          noCheckout: args.noCheckout,
+          onAuth,
+        });
+      } catch (e) {
+        mapGitNetworkError(e);
+      }
     },
-    fetch(): never {
-      throw new NotImplementedError('git.fetch', NETWORK_HINT);
+    async fetch(args = {}) {
+      if (args.url !== undefined) {
+        assertSupportedTransport(args.url);
+        assertCorsReachable(args.url, corsProxy);
+      }
+      try {
+        await git.fetch({
+          fs,
+          http,
+          dir,
+          url: args.url,
+          corsProxy,
+          ref: args.ref,
+          singleBranch: args.singleBranch,
+          depth: args.depth,
+          onAuth,
+        });
+      } catch (e) {
+        mapGitNetworkError(e);
+      }
     },
-    pull(): never {
-      throw new NotImplementedError('git.pull', NETWORK_HINT);
+    async pull(args) {
+      if (args.url !== undefined) {
+        assertSupportedTransport(args.url);
+        assertCorsReachable(args.url, corsProxy);
+      }
+      try {
+        await git.pull({
+          fs,
+          http,
+          dir,
+          url: args.url,
+          corsProxy,
+          ref: args.ref,
+          singleBranch: args.singleBranch,
+          author: args.author,
+          onAuth,
+        });
+      } catch (e) {
+        mapGitNetworkError(e);
+      }
     },
-    push(): never {
-      throw new NotImplementedError('git.push', NETWORK_HINT);
+    async push(args = {}) {
+      if (args.url !== undefined) {
+        assertSupportedTransport(args.url);
+        assertCorsReachable(args.url, corsProxy);
+      }
+      try {
+        await git.push({
+          fs,
+          http,
+          dir,
+          url: args.url,
+          corsProxy,
+          remote: args.remote,
+          ref: args.ref,
+          force: args.force,
+          onAuth,
+        });
+      } catch (e) {
+        mapGitNetworkError(e);
+      }
     },
   };
 }

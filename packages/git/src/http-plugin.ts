@@ -106,6 +106,9 @@ function drainResponse(res: NetResponse): AsyncIterableIterator<Uint8Array> {
  * Build the isomorphic-git http plugin. `opts.request` injects an alternate net
  * `request` (the network boundary) for tests; default is the real one.
  */
+/** The isomorphic-git `http` plugin shape {@link riftyGitHttp} returns. */
+export type GitHttp = ReturnType<typeof riftyGitHttp>;
+
 export function riftyGitHttp(opts: { request?: typeof netRequest } = {}): {
   request: (req: GitHttpRequest) => Promise<GitHttpResponse>;
 } {

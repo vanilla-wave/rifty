@@ -21,10 +21,58 @@ export interface LogEntry {
   author: GitIdentity;
 }
 
-/** What {@link makeGit} binds to: the VFS-backed fs + the repo working dir. */
+/**
+ * Resolve git credentials for a smart-HTTP `url` (basic auth). Returns
+ * `undefined` to decline (anonymous / let the server 401). Mirrors
+ * isomorphic-git's `onAuth`, narrowed to the fields rifty drives.
+ */
+export type GitAuthProvider = (url: string) => { username: string; password?: string } | undefined;
+
+/**
+ * What {@link makeGit} binds to: the VFS-backed fs + the repo working dir, plus
+ * the network transport knobs the verbs (clone/fetch/pull/push) use.
+ *  - `http`     — isomorphic-git http plugin; defaults to `riftyGitHttp()`.
+ *  - `corsProxy`— CORS proxy base URL; defaults to `getGitCorsProxyUrl()` (D-004).
+ *  - `onAuth`   — credential provider for smart-HTTP basic auth.
+ */
 export interface MakeGitOptions {
   fs: import('./fs-adapter.ts').GitFs;
   dir: string;
+  http?: import('./http-plugin.ts').GitHttp;
+  corsProxy?: string;
+  onAuth?: GitAuthProvider;
+}
+
+/** Args for `clone()` — smart-HTTP only (transport guarded). */
+export interface CloneArgs {
+  url: string;
+  ref?: string;
+  singleBranch?: boolean;
+  depth?: number;
+  noCheckout?: boolean;
+}
+
+/** Args for `fetch()` — `url` optional (falls back to the remote's config). */
+export interface FetchArgs {
+  url?: string;
+  ref?: string;
+  singleBranch?: boolean;
+  depth?: number;
+}
+
+/** Args for `pull()` — `url` optional (falls back to the remote's config). */
+export interface PullArgs {
+  url?: string;
+  ref?: string;
+  singleBranch?: boolean;
+}
+
+/** Args for `push()` — `url`/`remote` optional (config fallback). */
+export interface PushArgs {
+  url?: string;
+  remote?: string;
+  ref?: string;
+  force?: boolean;
 }
 
 /** Per-file change class reported by `diff()` (HEAD tree vs working dir). */

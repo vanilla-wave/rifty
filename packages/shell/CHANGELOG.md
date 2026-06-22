@@ -10,8 +10,11 @@
   `diff` (structured unified-diff text), `branch`. Identity/dates derive from
   `GIT_AUTHOR_*` / `GIT_COMMITTER_*` env (fallback `rifty`/`rifty@localhost`).
   Porcelain `XY` mapping cross-checked against real git 2.50.1. Network verbs
-  (`clone`/`fetch`/`pull`/`push`) surface the facade's real
-  `NotImplementedError` as exit 128 — no silent stub. Unknown subcommand → exit
+  (`clone <url>`/`fetch`/`pull`/`push`) drive smart-HTTP via the facade; any
+  failure — unsupported-transport / cross-origin `NotImplementedError`, or a real
+  network/protocol error — surfaces as exit 128 with its message on stderr
+  (`pull` commits the merge under the shell-env identity; `clone` without a
+  `<url>` → exit 128). Unknown subcommand → exit
   1; no ambient filesystem → exit 128. Conformance-locked: `git-fixtures.test.ts`
   byte-asserts `status --porcelain` (untracked / staged / mixed) + `log
   --oneline` against frozen real-git 2.50.1 golden fixtures

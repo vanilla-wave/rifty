@@ -89,9 +89,17 @@ it('unknown subcommand exits 1 and reports it is not a git command', async () =>
   expect(err()).toContain('not a git command');
 });
 
-it('clone surfaces the real NotImplementedError (exit 128)', async () => {
+it('clone over an unsupported transport surfaces NotImplementedError (exit 128)', async () => {
   await seedRepoDir();
   const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
-  expect(await git(['clone', 'http://x'], ctx)).toBe(128);
-  expect(err()).toContain('Not implemented: git.clone');
+  // ssh:// has no browser transport (no raw TCP) → loud-throw at exit 128.
+  expect(await git(['clone', 'ssh://github.com/x/y.git'], ctx)).toBe(128);
+  expect(err()).toContain('Not implemented: git.transport.ssh');
+});
+
+it('clone without a <url> fails loudly (exit 128)', async () => {
+  await seedRepoDir();
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['clone'], ctx)).toBe(128);
+  expect(err()).toContain('clone requires a <url>');
 });

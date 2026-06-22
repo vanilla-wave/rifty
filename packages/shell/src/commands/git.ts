@@ -1,9 +1,9 @@
 /**
  * `git` builtin — a thin CLI over the {@link makeGit} facade (`@riftydev/git`),
  * bound to the ambient async VFS (`asyncVfs()`), so it operates on the SAME tree
- * the shell + runtime see. LOCAL porcelain only; the network verbs
- * (clone/fetch/pull/push) surface the facade's real NotImplementedError as a
- * loud exit-128, never a fake success.
+ * the shell + runtime see. LOCAL porcelain + network verbs (clone/fetch/pull/
+ * push) over smart-HTTP; unsupported transports, the browser cross-origin wall,
+ * and real network errors all surface as a loud exit-128, never a fake success.
  *
  * `status --porcelain` maps isomorphic-git's 3-char statusMatrix code
  * (`${head}${workdir}${stage}`) to git's two-column `XY` porcelain-v1 output.
@@ -11,7 +11,6 @@
  * {@link porcelainXY}.
  */
 import { type StatusEntry, makeGit, vfsToGitFs } from '@riftydev/git';
-import { NotImplementedError } from '@riftydev/io';
 import { asyncVfs } from '@riftydev/vfs';
 import type { CommandContext, ShellCommand } from '../types.ts';
 
@@ -232,28 +231,54 @@ async function doBranch(g: Git, ctx: CommandContext): Promise<number> {
   return 0;
 }
 
-/** Run a network verb; its NotImplementedError is surfaced as exit 128. */
-function doNetwork(g: Git, verb: 'clone' | 'fetch' | 'pull' | 'push', ctx: CommandContext): number {
-  try {
-    g[verb]();
-    // The facade verbs are typed `never` — reaching here means the contract
-    // changed under us; treat as a loud failure, not a silent success.
-    ctx.stderr.write(`git: ${verb} returned unexpectedly\n`);
+/**
+ * Run a network verb over smart-HTTP. Any failure — an unsupported-transport /
+ * cross-origin NotImplementedError, or a real network/protocol error from
+ * isomorphic-git — is surfaced as a loud exit-128 with its message on stderr
+ * (never a fake success). `clone` requires a `<url>` positional; `fetch`/`pull`/
+ * `push` take an optional one (else the remote config is used). `pull` commits
+ * the merge under the shell-env identity.
+ */
+async function doNetwork(
+  g: Git,
+  verb: 'clone' | 'fetch' | 'pull' | 'push',
+  args: string[],
+  ctx: CommandContext,
+): Promise<number> {
+  const url = args[1];
+  if (verb === 'clone' && url === undefined) {
+    ctx.stderr.write('git: clone requires a <url>\n');
     return 128;
-  } catch (e) {
-    if (e instanceof NotImplementedError) {
-      ctx.stderr.write(`${e.message}\n`);
-      return 128;
+  }
+  try {
+    switch (verb) {
+      case 'clone':
+        await g.clone({ url: url as string });
+        break;
+      case 'fetch':
+        await g.fetch(url === undefined ? {} : { url });
+        break;
+      case 'pull':
+        await g.pull({ ...(url === undefined ? {} : { url }), author: identityFrom(ctx.env) });
+        break;
+      case 'push':
+        await g.push(url === undefined ? {} : { url });
+        break;
     }
-    throw e;
+    return 0;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    ctx.stderr.write(`${message}\n`);
+    return 128;
   }
 }
 
 /**
  * `git <subcommand> ...` — version control over `@riftydev/git` (isomorphic-git)
  * on the ambient VFS. Local verbs (init/status/add/commit/log/diff/branch) run;
- * network verbs (clone/fetch/pull/push) surface the real NotImplementedError as
- * exit 128. Unknown/missing subcommand → exit 1.
+ * network verbs (clone/fetch/pull/push) drive smart-HTTP and surface any failure
+ * (unsupported transport, CORS wall, network error) as exit 128. Unknown/missing
+ * subcommand → exit 1.
  */
 export const git: ShellCommand = async (args, ctx) => {
   if (ctx.signal?.aborted) return 130;
@@ -287,7 +312,7 @@ export const git: ShellCommand = async (args, ctx) => {
     case 'fetch':
     case 'pull':
     case 'push':
-      return doNetwork(g, sub, ctx);
+      return doNetwork(g, sub, args, ctx);
     default:
       ctx.stderr.write(`git: '${sub ?? ''}' is not a git command\n`);
       return 1;
