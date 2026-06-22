@@ -399,6 +399,31 @@ const matrices = [
         '❌',
         'Vendored `typescript` for v1 — `toolchain-build/ts-language-service-workspace-version`',
       ],
+      [
+        'Go-to-implementation · suggestion diagnostics · definition-bound-span',
+        '❌',
+        '`getImplementationAtPosition` / `getSuggestionDiagnostics` / `getDefinitionAndBoundSpan` — `toolchain-build/ts-language-service-long-tail-remainder`',
+      ],
+      [
+        'Fix-all · update-imports-on-rename · selection range · file references',
+        '❌',
+        '`getCombinedCodeFix` / `getEditsForFileRename` / `getSmartSelectionRange` / `getFileReferences` — `toolchain-build/ts-language-service-long-tail-remainder`',
+      ],
+      [
+        'JSX close-tag completion + linked editing',
+        '❌',
+        '`getJsxClosingTagAtPosition` / `getLinkedEditingRangeAtPosition` — `toolchain-build/ts-language-service-long-tail-remainder`',
+      ],
+      [
+        'Paste-with-imports · JSDoc template · TODO comments · compiler-options diagnostics',
+        '❌',
+        '`getPasteEdits` / `getDocCommentTemplateAtPosition` / `getTodoComments` / `getCompilerOptionsDiagnostics` — `toolchain-build/ts-language-service-long-tail-remainder`',
+      ],
+      [
+        'Brace matching · comment toggling · indentation',
+        '❌',
+        'Editor-native — Monaco owns these via language config; intentionally NOT LS-backed (no `getBraceMatchingAtPosition`/`toggleLineComment`/`getIndentationAtPosition` provider), out of the deferred long tail',
+      ],
     ],
     tests: [
       '`packages/ts-language-service/src/parity.test.ts`',
@@ -410,6 +435,7 @@ const matrices = [
       'Editor capability, not a Node API module: rows are `ts.LanguageService` queries (LSP-shaped), backed by the playground Monaco providers — not `node:*` surface.',
       'TS/JS only. Other languages (Python/Go) need native language servers — a browser ceiling, out of scope (ADR-0166).',
       'The deferred long tail (refactorings, inlay hints, document highlights, semantic highlighting, call hierarchy, navigation/outline/folding/workspace symbols, on-type formatting) exposes NO engine method — an honest absence, each tracked by a named backlog item, never a silent stub.',
+      'The remaining achievable `ts.LanguageService` surface (go-to-implementation, suggestion diagnostics, definition-bound-span, fix-all, update-imports-on-rename, selection range, file references, JSX close-tag/linked-editing, paste-with-imports, JSDoc template, TODO comments, compiler-options diagnostics) is likewise unimplemented-but-tracked (`toolchain-build/ts-language-service-long-tail-remainder`). Brace matching / comment toggling / indentation are intentionally editor-native (Monaco), not an LS gap. The full `ts.LanguageService` interface is otherwise either shipped or one of these rows — no untracked achievable feature remains.',
       'v1 vendors a fixed `typescript`; the project\'s installed TS version (VSCode "Use Workspace Version") is deferred (`toolchain-build/ts-language-service-workspace-version`).',
     ],
   },

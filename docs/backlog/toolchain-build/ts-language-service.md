@@ -43,6 +43,7 @@ never a silent stub; ADR-0166 §Scope):
 - `playground/ts-ls-on-type-formatting` — on-type formatting (doc + range shipped; on-type not).
 - `protocol/ts-completion-resolve-by-label` — same-name auto-import completion-resolve collision (label-only resolve).
 - `toolchain-build/ts-language-service-workspace-version` — use the project's installed TS version (VSCode "Use Workspace Version").
+- `toolchain-build/ts-language-service-long-tail-remainder` — the rest of the achievable `ts.LanguageService` surface found by a full interface audit: go-to-implementation, suggestion diagnostics, definition-bound-span, fix-all, update-imports-on-rename, selection range, file references, JSX close-tag/linked-editing, paste-with-imports, JSDoc template, TODO comments, compiler-options diagnostics. (Brace matching / comment toggling / indentation are intentionally editor-native, not an LS gap.)
 
 ## Reversibility
 
