@@ -447,9 +447,14 @@ const matrices = [
     rows: [
       ['`init` / `add` / `remove`', '✅', 'Local index + object writes over the Memory VFS'],
       [
-        '`commit`',
+        '`commit` / `commit --amend`',
         '✅',
-        'Canonical git objects — **identical 40-hex SHA-1 to real git** for identical inputs (author+committer identity/timestamp/tz explicit); parity-pinned',
+        'Canonical git objects — **identical 40-hex SHA-1 to real git** for identical inputs (author+committer identity/timestamp/tz explicit); parity-pinned. `--amend` replaces HEAD (reuses prior message when no `-m`)',
+      ],
+      [
+        'Author identity from config',
+        '✅',
+        '`GIT_AUTHOR_*` env → `user.name`/`user.email` config → built-in default; `git config user.email x` then `git commit` (no env) authors as x',
       ],
       [
         '`status --porcelain`',
@@ -477,6 +482,21 @@ const matrices = [
         'checkout `--orphan` / `-B` / `--patch` / `--merge` / `--ours`·`--theirs` / `--track` / `-` / glob pathspec / revspec (`HEAD~1`/`^`/`@{…}`)',
         '❌',
         "`NotImplementedError('git.checkout.<x>')` (exit 128) — out of the v1 checkout subset, never a leaked plumbing error, never mislabeled as a typo",
+      ],
+      [
+        '`switch <branch>` / `-c [<start>]` / `--detach <commit>`',
+        '✅',
+        "Branch-only switch / create+switch / detach; byte-exact stderr vs git 2.50.1 (frozen fixtures). `switch --detach` prints the HEAD-line ONLY (no advisory). A non-`--detach` commit → git's `fatal: a branch is expected, got commit` (exit 128); `switch -` (previous branch) → `NotImplementedError('git.switch.previous')` (no reflog)",
+      ],
+      [
+        '`restore [--staged] [--source=<tree>] <pathspec>`',
+        '✅',
+        "Restore worktree from index/tree, or `--staged` unstage (index ← HEAD); silent like git. `--staged --source` → `NotImplementedError('git.restore.staged-source')`; revspec source reuses the checkout revspec ceiling; no-match → pathspec-miss (exit 1)",
+      ],
+      [
+        '`config <key>` / `config <key> <value>`',
+        '⚠️',
+        "Bounded get/set on `.git/config`: `<key>` prints the value (unset → exit 1, silent), `<key> <value>` writes it. `--list`/`--get-all`/`--unset`/other flags → `NotImplementedError('git.config.<flag>')` (exit 128) — no full-dump in iso-git",
       ],
       [
         '`clone` / `fetch` / `pull` / `push` (smart HTTP)',

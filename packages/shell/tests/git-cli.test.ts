@@ -213,3 +213,136 @@ it('checkout <name> that is both a branch and a tracked file → switches to the
   const g = makeGit({ fs: vfsToGitFs(vfs), dir: '/repo' });
   expect(await g.currentBranch()).toBe('dev');
 });
+
+// --- `git config` (bounded v1: get / set; full-dump flags are loud) ----------
+
+it('config set then get round-trips (set: silent exit 0; get: value + exit 0)', async () => {
+  await seedCommittedRepo();
+  const set = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['config', 'user.email', 'ada@x'], set.ctx)).toBe(0);
+  expect(set.out()).toBe('');
+  const get = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['config', 'user.email'], get.ctx)).toBe(0);
+  expect(get.out()).toBe('ada@x\n');
+});
+
+it('config of an unset key → exit 1, empty stdout (git behavior)', async () => {
+  await seedCommittedRepo();
+  const { ctx, out } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['config', 'no.such'], ctx)).toBe(1);
+  expect(out()).toBe('');
+});
+
+it('config --list (full dump) → exit 128, loud Not implemented ceiling', async () => {
+  await seedCommittedRepo();
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['config', '--list'], ctx)).toBe(128);
+  expect(err()).toContain('Not implemented: git.config');
+});
+
+// --- identity from config: `user.email` config drives a no-env commit's author
+
+it('config user.email then commit (no env GIT_AUTHOR_EMAIL) authors as the configured email', async () => {
+  await seedRepoDir();
+  await writeFile('/repo/a.txt', 'hi\n');
+  await git(['init'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  // Configure identity, NO author email in env on the commit call.
+  await git(['config', 'user.email', 'ada@x'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await git(['config', 'user.name', 'Ada'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await git(['add', 'a.txt'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  // Env WITHOUT GIT_AUTHOR_* — author must fall back to git config.
+  const commitEnv = { GIT_AUTHOR_DATE: '1600000000', GIT_COMMITTER_DATE: '1600000000' };
+  expect(await git(['commit', '-m', 'm'], makeCtx({ cwd: '/repo', env: commitEnv }).ctx)).toBe(0);
+  // Verify the recorded author via the facade (robust: read the commit object).
+  const { makeGit, vfsToGitFs } = await import('@riftydev/git');
+  const vfs = asyncVfs();
+  if (!vfs) throw new Error('no async vfs');
+  const g = makeGit({ fs: vfsToGitFs(vfs), dir: '/repo' });
+  const head = (await g.log())[0];
+  expect(head?.author.email).toBe('ada@x');
+  expect(head?.author.name).toBe('Ada');
+});
+
+// --- `commit --amend` --------------------------------------------------------
+
+it('commit --amend -m new replaces HEAD message; log stays ONE commit', async () => {
+  await seedCommittedRepo(); // one commit, message 'first'
+  await writeFile('/repo/a.txt', 'edited\n');
+  await git(['add', 'a.txt'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  const amend = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['commit', '--amend', '-m', 'new'], amend.ctx)).toBe(0);
+  const log = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['log', '--oneline'], log.ctx)).toBe(0);
+  const lines = log
+    .out()
+    .split('\n')
+    .filter((l) => l.length > 0);
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toMatch(/ new$/);
+});
+
+it('commit --amend (no -m) reuses the previous commit message; stays ONE commit', async () => {
+  await seedCommittedRepo(); // one commit, message 'first'
+  await writeFile('/repo/a.txt', 'edited\n');
+  await git(['add', 'a.txt'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  expect(await git(['commit', '--amend'], makeCtx({ cwd: '/repo', env: ENV }).ctx)).toBe(0);
+  const log = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['log', '--oneline'], log.ctx)).toBe(0);
+  const lines = log
+    .out()
+    .split('\n')
+    .filter((l) => l.length > 0);
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toMatch(/ first$/);
+});
+
+// --- `git switch` behavioral (error paths the fixtures don't cover) ----------
+
+it('switch <full-sha> WITHOUT --detach → exit 128, "a branch is expected, got commit"', async () => {
+  await seedCommittedRepo();
+  const { makeGit, vfsToGitFs } = await import('@riftydev/git');
+  const vfs = asyncVfs();
+  if (!vfs) throw new Error('no async vfs');
+  const g = makeGit({ fs: vfsToGitFs(vfs), dir: '/repo' });
+  const sha = await g.resolveRef('HEAD');
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['switch', sha], ctx)).toBe(128);
+  expect(err()).toContain(`a branch is expected, got commit '${sha}'`);
+});
+
+it('switch -c <existing> → exit 128, "a branch named ... already exists"', async () => {
+  await seedCommittedRepo();
+  await git(['switch', '-c', 'feat'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await git(['switch', 'main'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['switch', '-c', 'feat'], ctx)).toBe(128);
+  expect(err()).toContain("a branch named 'feat' already exists");
+});
+
+it('switch - (previous-branch) → exit 128, Not implemented: git.switch.previous', async () => {
+  await seedCommittedRepo();
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['switch', '-'], ctx)).toBe(128);
+  expect(err()).toContain('Not implemented: git.switch.previous');
+});
+
+// --- `git restore --staged` behavioral --------------------------------------
+
+it('restore --staged <file> after staging → exit 0; status shows it untracked not staged', async () => {
+  await seedCommittedRepo(); // a.txt committed
+  await writeFile('/repo/b.txt', 'bee\n');
+  await git(['add', 'b.txt'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  const { ctx } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['restore', '--staged', 'b.txt'], ctx)).toBe(0);
+  const st = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['status', '--porcelain'], st.ctx)).toBe(0);
+  expect(st.out()).toContain('?? b.txt');
+  expect(st.out()).not.toContain('A  b.txt');
+});
+
+it('restore --source combined with --staged → exit 128, loud ceiling', async () => {
+  await seedCommittedRepo();
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['restore', '--staged', '--source=HEAD', 'a.txt'], ctx)).toBe(128);
+  expect(err()).toContain('Not implemented: git.restore.staged-source');
+});

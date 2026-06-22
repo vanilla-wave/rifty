@@ -9,7 +9,8 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Feature | Status | Notes |
 |---|---|---|
 | `init` / `add` / `remove` | ✅ | Local index + object writes over the Memory VFS |
-| `commit` | ✅ | Canonical git objects — **identical 40-hex SHA-1 to real git** for identical inputs (author+committer identity/timestamp/tz explicit); parity-pinned |
+| `commit` / `commit --amend` | ✅ | Canonical git objects — **identical 40-hex SHA-1 to real git** for identical inputs (author+committer identity/timestamp/tz explicit); parity-pinned. `--amend` replaces HEAD (reuses prior message when no `-m`) |
+| Author identity from config | ✅ | `GIT_AUTHOR_*` env → `user.name`/`user.email` config → built-in default; `git config user.email x` then `git commit` (no env) authors as x |
 | `status --porcelain` | ✅ | Byte-exact vs git 2.50.1 (frozen golden fixtures); path-sorted XY codes |
 | `log` / `log --oneline` | ✅ | Byte-exact short-oid + subject (frozen fixtures) |
 | `diff` (HEAD ↔ workdir) | ⚠️ | Structured per-file hunks via `walk()` + LCS line-diff; structured data, NOT byte-exact `git diff` text |
@@ -17,6 +18,9 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `checkout <branch>` / `-b [<start>]` / `<commit>` (detached) | ✅ | Branch switch, create+switch, detached HEAD; byte-exact stderr vs git 2.50.1 (frozen fixtures); dirty-tree conflict refused with git's exact `error:…Aborting` message (exit 1) |
 | `checkout [--] <pathspec>` / `<tree-ish> -- <pathspec>` (restore) | ✅ | Restore worktree from the index (or from a tree-ish, +index); HEAD untouched; silent like git |
 | checkout `--orphan` / `-B` / `--patch` / `--merge` / `--ours`·`--theirs` / `--track` / `-` / glob pathspec / revspec (`HEAD~1`/`^`/`@{…}`) | ❌ | `NotImplementedError('git.checkout.<x>')` (exit 128) — out of the v1 checkout subset, never a leaked plumbing error, never mislabeled as a typo |
+| `switch <branch>` / `-c [<start>]` / `--detach <commit>` | ✅ | Branch-only switch / create+switch / detach; byte-exact stderr vs git 2.50.1 (frozen fixtures). `switch --detach` prints the HEAD-line ONLY (no advisory). A non-`--detach` commit → git's `fatal: a branch is expected, got commit` (exit 128); `switch -` (previous branch) → `NotImplementedError('git.switch.previous')` (no reflog) |
+| `restore [--staged] [--source=<tree>] <pathspec>` | ✅ | Restore worktree from index/tree, or `--staged` unstage (index ← HEAD); silent like git. `--staged --source` → `NotImplementedError('git.restore.staged-source')`; revspec source reuses the checkout revspec ceiling; no-match → pathspec-miss (exit 1) |
+| `config <key>` / `config <key> <value>` | ⚠️ | Bounded get/set on `.git/config`: `<key>` prints the value (unset → exit 1, silent), `<key> <value>` writes it. `--list`/`--get-all`/`--unset`/other flags → `NotImplementedError('git.config.<flag>')` (exit 128) — no full-dump in iso-git |
 | `clone` / `fetch` / `pull` / `push` (smart HTTP) | ✅ | Over rifty `node:http` egress; real `git http-backend` clone integration-tested (canonical objects end-to-end) |
 | `corsProxy` | ✅ | Env-config `RIFTY_GIT_CORS_PROXY` (D-004) — never hardcoded; unset → cross-origin clone throws |
 | `onAuth` (HTTPS Basic / PAT) | ✅ | Injected token provider for private repos + push |

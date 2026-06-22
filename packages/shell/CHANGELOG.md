@@ -37,6 +37,24 @@
   conflict/detached/restore (both streams) against frozen real-git fixtures
   (`packages/git/fixtures/checkout-*`); the detached test pins the canonical SHA
   `7fdebb4…`.
+- **`git switch` / `restore` / `config` + `commit --amend` + identity from
+  config.** `switch <branch>` / `-c [<start>]` / `--detach <commit>` (branch-only,
+  reuses the checkout engine; byte-exact stderr vs git 2.50.1 — `switch --detach`
+  prints the HEAD-line ONLY, no advisory block; a non-`--detach` commit →
+  `fatal: a branch is expected, got commit` exit 128; `switch -` →
+  `NotImplementedError('git.switch.previous')`). `restore [--staged]
+  [--source=<tree>] <pathspec…>` (worktree from index/tree, or `--staged`
+  unstage via `resetIndex`; silent like git; `--staged --source` →
+  `git.restore.staged-source`; revspec source reuses the checkout revspec
+  ceiling; no-match → pathspec-miss exit 1). `config <key>` / `config <key>
+  <value>` (bounded get/set on `.git/config`; unset key → exit 1 silent;
+  `--list`/other flags → `git.config.<flag>` exit 128). `commit --amend`
+  replaces HEAD (reuses the prior message when no `-m`). Author identity now
+  resolves `GIT_AUTHOR_*` env → `user.name`/`user.email` config → built-in
+  default, so `git config user.email x` then `git commit` (no env) authors as x.
+  Conformance-locked: `git-fixtures.test.ts` byte-asserts switch
+  (existing/create/already/detached) + restore (worktree/staged) against frozen
+  real-git 2.50.1 fixtures (`packages/git/fixtures/{switch,restore}-*`).
 - **Installed CLIs invokable by name — PATH-style `node_modules/.bin` lookup
   (ADR-0137).** A command miss now walks up to the nearest
   `node_modules/.bin/<name>` launcher shim (resolution order: registered

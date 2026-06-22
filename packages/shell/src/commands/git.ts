@@ -14,6 +14,9 @@ import { type StatusEntry, makeGit, vfsToGitFs } from '@riftydev/git';
 import { asyncVfs } from '@riftydev/vfs';
 import type { CommandContext, ShellCommand } from '../types.ts';
 import { doCheckout } from './_git-checkout.ts';
+import { doConfig } from './_git-config.ts';
+import { doRestore } from './_git-restore.ts';
+import { doSwitch } from './_git-switch.ts';
 
 /**
  * The facade returned by {@link makeGit}. Its named interface (`Git`) is not on
@@ -99,25 +102,29 @@ function renderStatusSummary(branch: string | undefined, entries: StatusEntry[])
   return `${lines.join('\n')}\n`;
 }
 
-/** Resolve author/committer identity + timestamp from the shell env. */
-function identityFrom(env: Record<string, string>): {
+/** Author/committer identity — timestamp seconds, offset minutes (git canon). */
+interface Identity {
   name: string;
   email: string;
   timestamp: number;
   timezoneOffset: number;
-} {
-  const name = env.GIT_AUTHOR_NAME ?? DEFAULT_AUTHOR_NAME;
-  const email = env.GIT_AUTHOR_EMAIL ?? DEFAULT_AUTHOR_EMAIL;
+}
+
+/**
+ * Resolve author identity + timestamp. Name/email precedence: `GIT_AUTHOR_*` env
+ * → git config (`user.name`/`user.email`) → built-in default. (This is the real
+ * payoff: `git config user.email x` then `git commit` with no env authors as x.)
+ */
+async function identityFrom(g: Git, env: Record<string, string>): Promise<Identity> {
+  const name = env.GIT_AUTHOR_NAME ?? (await g.getConfig('user.name')) ?? DEFAULT_AUTHOR_NAME;
+  const email = env.GIT_AUTHOR_EMAIL ?? (await g.getConfig('user.email')) ?? DEFAULT_AUTHOR_EMAIL;
   const date = env.GIT_AUTHOR_DATE;
   const timestamp =
     date !== undefined && /^\d+$/.test(date) ? Number(date) : Math.floor(Date.now() / 1000);
   return { name, email, timestamp, timezoneOffset: 0 };
 }
 
-function committerFrom(
-  env: Record<string, string>,
-  author: ReturnType<typeof identityFrom>,
-): ReturnType<typeof identityFrom> {
+function committerFrom(env: Record<string, string>, author: Identity): Identity {
   const name = env.GIT_COMMITTER_NAME ?? author.name;
   const email = env.GIT_COMMITTER_EMAIL ?? author.email;
   const date = env.GIT_COMMITTER_DATE;
@@ -181,14 +188,19 @@ async function doAdd(g: Git, args: string[], ctx: CommandContext): Promise<numbe
 }
 
 async function doCommit(g: Git, args: string[], ctx: CommandContext): Promise<number> {
-  const message = parseCommitMessage(args);
+  const amend = args.includes('--amend');
+  let message = parseCommitMessage(args);
+  if (message === null && amend) {
+    // `--amend` with no `-m` reuses the previous commit's message.
+    message = (await g.log())[0]?.message ?? null;
+  }
   if (message === null) {
     ctx.stderr.write('git: commit requires -m <message>\n');
     return 1;
   }
-  const author = identityFrom(ctx.env);
+  const author = await identityFrom(g, ctx.env);
   const committer = committerFrom(ctx.env, author);
-  const oid = await g.commit({ message, author, committer });
+  const oid = await g.commit({ message, author, committer, ...(amend ? { amend: true } : {}) });
   const branch = (await g.currentBranch()) ?? 'HEAD';
   ctx.stdout.write(`[${branch} ${short(oid)}] ${message}\n`);
   return 0;
@@ -260,7 +272,10 @@ async function doNetwork(
         await g.fetch(url === undefined ? {} : { url });
         break;
       case 'pull':
-        await g.pull({ ...(url === undefined ? {} : { url }), author: identityFrom(ctx.env) });
+        await g.pull({
+          ...(url === undefined ? {} : { url }),
+          author: await identityFrom(g, ctx.env),
+        });
         break;
       case 'push':
         await g.push(url === undefined ? {} : { url });
@@ -296,15 +311,12 @@ const UNIMPLEMENTED_SUBCOMMANDS = new Set([
   'cherry-pick',
   'tag',
   'remote',
-  'config',
   'show',
   'reflog',
   'bisect',
   'blame',
   'submodule',
   'worktree',
-  'switch',
-  'restore',
   'clean',
   'rm',
   'mv',
@@ -355,6 +367,12 @@ export const git: ShellCommand = async (args, ctx) => {
       return doBranch(g, ctx);
     case 'checkout':
       return doCheckout(g, args, ctx);
+    case 'switch':
+      return doSwitch(g, args, ctx);
+    case 'restore':
+      return doRestore(g, args, ctx);
+    case 'config':
+      return doConfig(g, args, ctx);
     case 'clone':
     case 'fetch':
     case 'pull':
