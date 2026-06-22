@@ -55,7 +55,6 @@
     "build": "tsup"
   },
   "dependencies": {
-    "@riftydev/io": "workspace:*",
     "@riftydev/kernel": "workspace:*",
     "@riftydev/runtime-js": "workspace:*",
     "@riftydev/vfs": "workspace:*",

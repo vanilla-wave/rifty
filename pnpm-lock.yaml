@@ -288,9 +288,6 @@ importers:
 
   packages/ts-language-service:
     dependencies:
-      '@riftydev/io':
-        specifier: workspace:*
-        version: link:../io
       '@riftydev/kernel':
         specifier: workspace:*
         version: link:../kernel

@@ -40,19 +40,23 @@ export function loadTsConfig(fsSync: FsSync, projectRoot: string): ts.ParsedComm
   }
 
   const read = ts.readConfigFile(configPath, (p) => readFileUtf8(fsSync, p));
-  // readConfigFile only surfaces JSON syntax errors here; semantic option
-  // errors come back on the ParsedCommandLine below. A syntax error → fall back
-  // to the raw (possibly empty) config so parsing still yields a command line
-  // carrying the diagnostics rather than throwing.
+  // readConfigFile surfaces JSON syntax errors here; semantic option errors come
+  // back on the ParsedCommandLine below. On a syntax error fall back to the raw
+  // (possibly empty) config so parsing still yields a command line, then FOLD the
+  // syntax error into its diagnostics — real tsserver surfaces it too (Fidelity).
   const json = read.config ?? {};
   // POSIX dir of the (absolute) config path; tsc resolves include/extends
   // relative to this.
   const configDir = configPath.slice(0, configPath.lastIndexOf('/')) || '/';
-  return ts.parseJsonConfigFileContent(
+  const parsed = ts.parseJsonConfigFileContent(
     json,
     host,
     configDir,
     /* existingOptions */ undefined,
     configPath,
   );
+  if (read.error) {
+    return { ...parsed, errors: [read.error, ...parsed.errors] };
+  }
+  return parsed;
 }

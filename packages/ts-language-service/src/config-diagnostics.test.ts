@@ -65,6 +65,28 @@ describe('getConfigFileDiagnostics → invalid tsconfig option', () => {
     }
   });
 
+  it('surfaces a tsconfig JSON syntax error, matching real tsc', async () => {
+    const { fsSync } = createMemoryFs();
+    // Genuinely malformed JSON (unterminated object) — a syntax error, not an
+    // option-value error. tsconfig allows comments/trailing commas, so use a
+    // hard structural break.
+    const badText = '{ "compilerOptions": { "strict": true ';
+    writeFile(fsSync, '/proj/tsconfig.json', badText);
+    writeFile(fsSync, '/proj/a.ts', 'export const x = 1;\n');
+
+    // Gold: tsc's own readConfigFile reports the syntax error. No rifty code.
+    const gold = ts.readConfigFile('/proj/tsconfig.json', () => badText);
+    expect(gold.error, 'malformed tsconfig must error in real tsc').toBeDefined();
+    const goldCode = gold.error?.code;
+
+    const svc = await createTsLanguageService({ fsSync, projectRoot: '/proj' });
+    const diags = svc.getConfigFileDiagnostics();
+
+    expect(diags.length).toBeGreaterThanOrEqual(1);
+    expect(diags.some((d) => d.code === goldCode)).toBe(true);
+    for (const d of diags) expect(d.source).toBe('ts');
+  });
+
   it('returns no config diagnostics for a valid tsconfig', async () => {
     const { fsSync } = createMemoryFs();
     writeFile(fsSync, '/proj/tsconfig.json', JSON.stringify({ compilerOptions: { strict: true } }));
