@@ -474,9 +474,9 @@ const matrices = [
         'Restore worktree from the index (or from a tree-ish, +index); HEAD untouched; silent like git',
       ],
       [
-        'checkout `--orphan` / `-B` / `--patch` / `--merge` / `--ours`·`--theirs` / `--track` / `-` / glob pathspec',
+        'checkout `--orphan` / `-B` / `--patch` / `--merge` / `--ours`·`--theirs` / `--track` / `-` / glob pathspec / revspec (`HEAD~1`/`^`/`@{…}`)',
         '❌',
-        "`NotImplementedError('git.checkout.<x>')` (exit 128) — out of the v1 checkout subset, never mislabeled as a typo",
+        "`NotImplementedError('git.checkout.<x>')` (exit 128) — out of the v1 checkout subset, never a leaked plumbing error, never mislabeled as a typo",
       ],
       [
         '`clone` / `fetch` / `pull` / `push` (smart HTTP)',

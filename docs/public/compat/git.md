@@ -16,7 +16,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | `branch` / `listBranches` / `currentBranch` / `resolveRef` | ✅ | Local refs |
 | `checkout <branch>` / `-b [<start>]` / `<commit>` (detached) | ✅ | Branch switch, create+switch, detached HEAD; byte-exact stderr vs git 2.50.1 (frozen fixtures); dirty-tree conflict refused with git's exact `error:…Aborting` message (exit 1) |
 | `checkout [--] <pathspec>` / `<tree-ish> -- <pathspec>` (restore) | ✅ | Restore worktree from the index (or from a tree-ish, +index); HEAD untouched; silent like git |
-| checkout `--orphan` / `-B` / `--patch` / `--merge` / `--ours`·`--theirs` / `--track` / `-` / glob pathspec | ❌ | `NotImplementedError('git.checkout.<x>')` (exit 128) — out of the v1 checkout subset, never mislabeled as a typo |
+| checkout `--orphan` / `-B` / `--patch` / `--merge` / `--ours`·`--theirs` / `--track` / `-` / glob pathspec / revspec (`HEAD~1`/`^`/`@{…}`) | ❌ | `NotImplementedError('git.checkout.<x>')` (exit 128) — out of the v1 checkout subset, never a leaked plumbing error, never mislabeled as a typo |
 | `clone` / `fetch` / `pull` / `push` (smart HTTP) | ✅ | Over rifty `node:http` egress; real `git http-backend` clone integration-tested (canonical objects end-to-end) |
 | `corsProxy` | ✅ | Env-config `RIFTY_GIT_CORS_PROXY` (D-004) — never hardcoded; unset → cross-origin clone throws |
 | `onAuth` (HTTPS Basic / PAT) | ✅ | Injected token provider for private repos + push |
