@@ -95,6 +95,15 @@ const SPEC = {
     keywords: ['npm', 'semver', 'install'],
   },
   '@riftydev/shell': { dir: 'packages/shell', sideEffects: false, keywords: ['shell', 'bash'] },
+  '@riftydev/ts-language-service': {
+    dir: 'packages/ts-language-service',
+    // The kernel `serve`-worker boot self-installs on load (auto-boot guard) —
+    // mark it side-effecting so tree-shaking can't drop it (mirrors kernel/
+    // runtime-wasi worker-entry).
+    sideEffects: ['./dist/worker/entry.js'],
+    addExports: { './worker/entry': './src/worker/entry.ts' },
+    keywords: ['typescript', 'language-service', 'lsp', 'diagnostics'],
+  },
   '@riftydev/terminal': {
     dir: 'packages/terminal',
     sideEffects: false,
@@ -138,6 +147,8 @@ const DESCRIPTIONS = {
   '@riftydev/npm-client':
     'In-browser npm client for rifty: semver, registry, tarball extract, link, install.',
   '@riftydev/shell': 'Tiny bash-flavoured shell for rifty, backed by @riftydev/vfs.',
+  '@riftydev/ts-language-service':
+    'TypeScript language service over the rifty VFS: LSP-shaped diagnostics, hostable in a kernel worker.',
   '@riftydev/terminal': 'xterm.js terminal wrapper for rifty.',
   '@riftydev/service-worker': 'Service Worker preview/HMR routing bridge for rifty.',
   '@riftydev/shadow-registry': 'Data tables of in-browser npm package substitutions for rifty.',
