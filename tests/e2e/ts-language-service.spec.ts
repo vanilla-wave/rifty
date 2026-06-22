@@ -1,6 +1,13 @@
 import { type Page, expect, test } from '@playwright/test';
 import { openShellTerminal, runTerminalLine, terminalBuffer } from './helpers/playground.ts';
 
+// Run this file's tests SERIALLY (override the config's fullyParallel): each test
+// cold-boots its OWN workspace owner + LS grandchild and fetches the ~3 MB
+// vendored lib.d.ts. Two such cold-boots in parallel starve CPU/memory and the
+// (already generous) per-poll budgets time out — a contention artefact, not a
+// product bug. Serial keeps each cold-boot isolated on one worker.
+test.describe.configure({ mode: 'serial' });
+
 /**
  * The rifty worker-resident TS language service surfaces REAL semantic
  * diagnostics in the playground (ADR-0166 P1.9) — squiggles in Monaco + rows in
@@ -53,6 +60,93 @@ async function setModelValue(page: Page, path: string, text: string): Promise<bo
     },
     { p: path, t: text },
   );
+}
+
+/** Hover contents (markdown) at a 1-based Monaco position via the registered provider (phase 2 hook). */
+async function tsHover(
+  page: Page,
+  path: string,
+  line: number,
+  col: number,
+): Promise<string | null> {
+  return page.evaluate(
+    ({ p, l, c }) => {
+      const fn = (
+        globalThis as {
+          __riftyTsHover?: (path: string, line: number, col: number) => Promise<string | null>;
+        }
+      ).__riftyTsHover;
+      return fn ? fn(p, l, c) : Promise.resolve('__no_hook__');
+    },
+    { p: path, l: line, c: col },
+  );
+}
+
+/** Definition locations at a 1-based Monaco position via the registered provider (phase 2 hook). */
+async function tsDefinition(
+  page: Page,
+  path: string,
+  line: number,
+  col: number,
+): Promise<{ uri: string; line: number; column: number }[] | null> {
+  return page.evaluate(
+    ({ p, l, c }) => {
+      const fn = (
+        globalThis as {
+          __riftyTsDefinition?: (
+            path: string,
+            line: number,
+            col: number,
+          ) => Promise<{ uri: string; line: number; column: number }[] | null>;
+        }
+      ).__riftyTsDefinition;
+      return fn ? fn(p, l, c) : Promise.resolve(null);
+    },
+    { p: path, l: line, c: col },
+  );
+}
+
+/** Completion labels at a 1-based Monaco position via the registered provider (phase 2 hook). */
+async function tsCompletions(
+  page: Page,
+  path: string,
+  line: number,
+  col: number,
+): Promise<string[] | null> {
+  return page.evaluate(
+    ({ p, l, c }) => {
+      const fn = (
+        globalThis as {
+          __riftyTsCompletions?: (
+            path: string,
+            line: number,
+            col: number,
+          ) => Promise<string[] | null>;
+        }
+      ).__riftyTsCompletions;
+      return fn ? fn(p, l, c) : Promise.resolve(null);
+    },
+    { p: path, l: line, c: col },
+  );
+}
+
+/** Rebuild the LS against the current owner VFS + tsconfig (idempotent ts:init; phase 2 hook). */
+async function tsReinit(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const fn = (globalThis as { __riftyTsReinit?: () => Promise<boolean> }).__riftyTsReinit;
+    return fn ? fn() : Promise.resolve(false);
+  });
+}
+
+/**
+ * Write a file in the owner store via a real `printf > path` (the SSoT the LS
+ * reads). `content` is sent with real newlines folded to `\n` escapes; it must
+ * contain no single-quote or `%` (printf format chars) — the project fixtures
+ * below use double-quoted TS strings to honor that.
+ */
+async function writeOwnerFile(page: Page, path: string, content: string): Promise<void> {
+  const escaped = content.replace(/\\/g, '\\\\').replace(/\n/g, '\\n');
+  await runTerminalLine(page, `printf '${escaped}' > ${path}`);
 }
 
 /** Open a workspace file through the real command palette (Ctrl/Cmd-K → type → click). */
@@ -142,5 +236,173 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     await expect
       .poll(() => page.locator('[data-testid="problem-row"]').count(), { timeout: 30_000 })
       .toBe(0);
+  });
+});
+
+/**
+ * Phase-2 (ADR-0166 task 2.2): hover / go-to-definition / completions now come
+ * from the REAL rifty LS over the page→owner→LS relay, NOT Monaco's built-in
+ * `ts.worker` (retired via `setModeConfiguration`). These assertions exercise
+ * REAL project + dependency knowledge the isolated lib.d.ts-only worker could
+ * never have: a type that comes from a CROSS-FILE module and from a node_modules
+ * `.d.ts`, a go-to-def that jumps into a sibling file AND into a dependency's
+ * `.d.ts`, and a member completion whose candidates depend on tsconfig +
+ * node_modules resolution.
+ *
+ * RED-checkable: the assertions drive the EXACT registered Monaco providers (via
+ * the DEV `__riftyTs*` hooks that call `provider.provideHover/Definition/…`). Two
+ * independent RED checks confirm they bind to the real pipeline:
+ *  (a) unregister a provider (delete its entry in `registerTsLanguageServiceProviders`)
+ *      → the corresponding hook returns null/[] → the assertion fails;
+ *  (b) re-enable the built-in worker (drop `setModeConfiguration` /
+ *      `disableBuiltinTsDiagnostics` won't change these — the hooks bypass the
+ *      built-in worker entirely, so this suite specifically guards the rifty path).
+ * Additionally, neither the cross-file type nor the node_modules symbol exists in
+ * lib.d.ts, so a hover/def/completion built on the isolated worker could not
+ * produce them at all.
+ */
+const PROJECT_DIR = '/workspace/src';
+const USES_DEP = `${PROJECT_DIR}/uses-dep.ts`;
+const DEP_TS = `${PROJECT_DIR}/dep.ts`;
+const DEP_DTS = '/workspace/node_modules/cool-dep/index.d.ts';
+
+test.describe('rifty TS language service: real hover/def/completions (not Monaco built-in)', () => {
+  test('hover shows cross-file + node_modules types; def jumps to file + dep .d.ts; completions list dep members', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
+    test.setTimeout(120_000);
+    await page.goto('/');
+
+    await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
+    await openShellTerminal(page);
+
+    // Build a small REAL project in the owner store (the SSoT the LS reads):
+    //  - tsconfig with BUNDLER module resolution so node_modules .d.ts resolves;
+    //  - a fake `cool-dep` package (package.json + index.d.ts) — TS resolves it
+    //    through the owner VFS node_modules, which Monaco's isolated worker can't;
+    //  - a sibling `dep.ts` (cross-file types);
+    //  - `uses-dep.ts` importing both.
+    await writeOwnerFile(
+      page,
+      '/workspace/tsconfig.json',
+      [
+        '{',
+        '  "compilerOptions": {',
+        '    "target": "es2022",',
+        '    "module": "esnext",',
+        '    "moduleResolution": "bundler",',
+        '    "strict": true,',
+        '    "allowImportingTsExtensions": true,',
+        '    "noEmit": true',
+        '  }',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    await runTerminalLine(page, 'mkdir -p /workspace/node_modules/cool-dep');
+    await writeOwnerFile(
+      page,
+      '/workspace/node_modules/cool-dep/package.json',
+      ['{', '  "name": "cool-dep",', '  "types": "index.d.ts"', '}', ''].join('\n'),
+    );
+    await writeOwnerFile(
+      page,
+      DEP_DTS,
+      [
+        'export declare const coolValue: number;',
+        'export declare function coolHelper(input: string): string;',
+        'export declare const cool: { readonly helper: (x: string) => string; readonly value: number };',
+        '',
+      ].join('\n'),
+    );
+    await writeOwnerFile(
+      page,
+      DEP_TS,
+      [
+        'export function localGreet(name: string): string {',
+        '  return "hi " + name;',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    // uses-dep.ts — 1-based lines used by the position assertions below:
+    //  L1 import from "cool-dep"; L2 import from "./dep.ts";
+    //  L3 `const a = coolValue;`           coolValue starts col 11
+    //  L4 `const b = coolHelper("x");`
+    //  L5 `const c = localGreet("y");`     localGreet starts col 11
+    //  L6 `const d = cool.`                cursor after the dot = col 16
+    await writeOwnerFile(
+      page,
+      USES_DEP,
+      [
+        'import { coolValue, coolHelper, cool } from "cool-dep";',
+        'import { localGreet } from "./dep.ts";',
+        'const a = coolValue;',
+        'const b = coolHelper("x");',
+        'const c = localGreet("y");',
+        'const d = cool.',
+        '',
+      ].join('\n'),
+    );
+    await runTerminalLine(page, 'ls /workspace/src');
+    await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('uses-dep.ts');
+
+    // Open uses-dep.ts so a Monaco model exists (providers resolve a model→path).
+    await openFileViaPalette(page, 'uses-dep.ts');
+    await expect
+      .poll(() => tsMarkerCount(page, USES_DEP), { timeout: 15_000 })
+      .toBeGreaterThanOrEqual(0);
+
+    // Rebuild the service against the project we just wrote (the boot build used
+    // tsc default options before these files / this tsconfig existed). Idempotent
+    // ts:init — a real supported operation, not a test backdoor.
+    expect(await tsReinit(page)).toBe(true);
+
+    // (1) HOVER over `coolValue` (L3, col 12). Its type comes from the
+    // node_modules `.d.ts`, so the rendered hover must carry the REAL type
+    // (`(alias) const coolValue: number`) — lib.d.ts alone has no `coolValue`,
+    // proving project/dep knowledge. The FIRST query cold-boots the engine + ~3 MB
+    // lib.d.ts over the relay AND warms the rebuilt program (the cold program's
+    // first quick-info can transiently elide the alias type), so poll with a
+    // spaced interval until the full type appears (1.5s spacing avoids hammering
+    // the warming program; 90s headroom for the one-time lib.d.ts fetch).
+    await expect
+      .poll(() => tsHover(page, USES_DEP, 3, 12), { timeout: 90_000, intervals: [1500] })
+      .toMatch(/coolValue[\s\S]*number/);
+
+    // (2) GO-TO-DEFINITION of `localGreet` (L5, col 12) → the sibling dep.ts (the
+    // hook round-trips the target Location.uri back to its VFS path). Cross-file
+    // resolution Monaco's isolated worker can't do.
+    await expect
+      .poll(async () => (await tsDefinition(page, USES_DEP, 5, 12))?.[0]?.uri ?? '', {
+        timeout: 30_000,
+        intervals: [1500],
+      })
+      .toContain(DEP_TS);
+    const localDefs = await tsDefinition(page, USES_DEP, 5, 12);
+    expect(localDefs?.[0]?.uri).not.toContain('uses-dep.ts');
+    // jumps to the declaration line (dep.ts L1, `export function localGreet`).
+    expect(localDefs?.[0]?.line).toBe(1);
+
+    // (2b) GO-TO-DEFINITION of `coolValue` (L3, col 12) → the dependency's
+    // `.d.ts` under node_modules (opened read-only by `ensureModel`, path
+    // recovered via `pathForModel`) — the dep-jump the isolated worker can't do.
+    await expect
+      .poll(async () => (await tsDefinition(page, USES_DEP, 3, 12))?.[0]?.uri ?? '', {
+        timeout: 30_000,
+        intervals: [1500],
+      })
+      .toContain(DEP_DTS);
+
+    // (3) COMPLETIONS at the member access `cool.` (L6, col 16) — the members
+    // come from the node_modules `.d.ts` type, gated on tsconfig resolution.
+    await expect
+      .poll(async () => (await tsCompletions(page, USES_DEP, 6, 16)) ?? [], {
+        timeout: 30_000,
+        intervals: [1500],
+      })
+      .toEqual(expect.arrayContaining(['helper', 'value']));
   });
 });

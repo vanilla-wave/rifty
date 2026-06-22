@@ -73,6 +73,23 @@ export interface EditorApi {
    * unsubscribe. The program tab reports {@link PROGRAM_MIRROR_PATH}.
    */
   onDocument(cb: (ev: EditorDocumentEvent) => void): () => void;
+  /**
+   * VFS path for an open Monaco model (ADR-0166 phase 2): the inverse of the
+   * private model map, so an LS provider handed a `model` can query the service
+   * by path (the program tab's model maps back to {@link PROGRAM_MIRROR_PATH}).
+   * `undefined` if the model is not one of ours (e.g. a foreign/disposed model).
+   */
+  pathForModel(model: monaco.editor.ITextModel): string | undefined;
+  /**
+   * Ensure a Monaco model exists for `path` and return its `Uri` (ADR-0166 phase
+   * 2 go-to-definition): a definition can target a file not currently open — a
+   * sibling workspace file or a node_modules `.d.ts`. Opens it read-only (via the
+   * same owner read-port path the explorer uses) WITHOUT activating its tab, so
+   * Monaco can resolve the `Location` to a real model + reveal range. `undefined`
+   * when no model can be made for `path` (no bytes anywhere — e.g. the synthetic
+   * `/ts-lib/` std-lib whose text lives only inside the LS worker).
+   */
+  ensureModel(path: string): monaco.Uri | undefined;
 }
 
 export interface EditorHostProps {
@@ -130,27 +147,52 @@ function ensureTheme(): void {
   themeDefined = true;
 }
 
-let builtinTsDisabled = false;
+let builtinTsRetired = false;
 /**
  * Make the rifty worker-resident TS language service the SINGLE source of truth
- * for JS/TS diagnostics (ADR-0166 P1.9b): turn OFF Monaco's bundled TS worker
- * validation. Otherwise the page would show TWO squiggle sets — Monaco's
- * lib.d.ts-only guess AND rifty's real-VFS+tsconfig diagnostics — and they
- * disagree (Monaco can't see the owner's node_modules / tsconfig). One-time,
+ * for ALL JS/TS intelligence (ADR-0166 P1.9b diagnostics + phase 2 hover /
+ * completion / go-to-definition): retire Monaco's bundled `ts.worker`. One-time,
  * before the first `monaco.editor.create`.
  *
- * TODO(backlog: playground/ts-ls-hover-completion-monaco-transient): only
- * DIAGNOSTICS move to the rifty LS in P1.9. Monaco's built-in TS worker still
- * serves hover + completion from its isolated lib.d.ts-only model (no VFS /
- * tsconfig / node_modules) — an approximation that diverges from real tsc, kept
- * transiently until the LS exposes hover/completion providers (ADR-0166 phase 2).
+ * Two narrowings:
+ *  1. `setDiagnosticsOptions(off)` — no built-in validation (rifty owns squiggles).
+ *  2. `setModeConfiguration(...)` — turn OFF every PROJECT-AWARE built-in provider
+ *     (completionItems / hovers / definitions / references / documentHighlights /
+ *     rename / signatureHelp / codeActions / inlayHints). Monaco's worker only
+ *     sees its isolated lib.d.ts (no VFS / tsconfig / node_modules) — the
+ *     "isolated approximation that lies" ADR-0166 rejects. rifty's relay-backed
+ *     providers (`glue/ts-ls-monaco-providers.ts`) serve hover/completion/goto;
+ *     the rest stay honestly absent rather than guessing.
+ *
+ * KEPT ON: the purely SYNTACTIC built-ins that need no project knowledge —
+ * `documentSymbols` (outline), `documentRangeFormattingEdits` /
+ * `onTypeFormattingEdits` (formatting). Syntax highlighting is the Monarch
+ * tokenizer, independent of the worker, so it is unaffected either way.
  */
-function disableBuiltinTsDiagnostics(): void {
-  if (builtinTsDisabled) return;
+function retireBuiltinTsIntelligence(): void {
+  if (builtinTsRetired) return;
   const off = { noSemanticValidation: true, noSyntacticValidation: true };
+  const modeOff = {
+    completionItems: false,
+    hovers: false,
+    definitions: false,
+    references: false,
+    documentHighlights: false,
+    rename: false,
+    signatureHelp: false,
+    codeActions: false,
+    inlayHints: false,
+    diagnostics: false,
+    // syntactic-only built-ins rifty does not (yet) own — kept honest, not faked:
+    documentSymbols: true,
+    documentRangeFormattingEdits: true,
+    onTypeFormattingEdits: true,
+  };
   monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions(off);
   monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions(off);
-  builtinTsDisabled = true;
+  monaco.languages.typescript.typescriptDefaults.setModeConfiguration(modeOff);
+  monaco.languages.typescript.javascriptDefaults.setModeConfiguration(modeOff);
+  builtinTsRetired = true;
 }
 
 function languageForPath(path: string): string {
@@ -193,6 +235,11 @@ export function EditorHost(props: EditorHostProps) {
   let pendingReveal: { id: string; line: number; column: number } | undefined;
 
   const models = new Map<string, monaco.editor.ITextModel>();
+  // Reverse index `model.uri.toString() → tab id` (ADR-0166 phase 2): an LS
+  // provider is handed a Monaco `model`, but the service is keyed by VFS path —
+  // this resolves the model back to its tab id (→ path via {@link docPathForTab}).
+  // Kept in lockstep with `models` on every create/dispose.
+  const modelUriToTabId = new Map<string, string>();
   const readOnlyPaths = new Set<string>();
   const writeTimers = new Map<string, ReturnType<typeof setTimeout>>();
   // path → unsubscribe for an in-flight "await the next snapshot frame" retry
@@ -210,6 +257,18 @@ export function EditorHost(props: EditorHostProps) {
   /** Inverse of {@link docPathForTab} — the model key for a VFS path. */
   function tabIdForPath(path: string): string {
     return path === PROGRAM_MIRROR_PATH ? PROGRAM_TAB_ID : path;
+  }
+  /** Track a model under its tab id + index its uri (keeps `modelUriToTabId` in sync). */
+  function registerModel(id: string, model: monaco.editor.ITextModel): void {
+    models.set(id, model);
+    modelUriToTabId.set(model.uri.toString(), id);
+  }
+  /** Drop a model from both maps; returns it for disposal. */
+  function unregisterModel(id: string): monaco.editor.ITextModel | undefined {
+    const model = models.get(id);
+    if (model) modelUriToTabId.delete(model.uri.toString());
+    models.delete(id);
+    return model;
   }
   function emitDocument(id: string, kind: EditorDocumentEvent['kind']): void {
     if (documentListeners.size === 0) return;
@@ -279,7 +338,7 @@ export function EditorHost(props: EditorHostProps) {
     }
     readOnlyPaths.add(path);
     const model = monaco.editor.createModel('// loading…', languageForPath(path));
-    models.set(path, model);
+    registerModel(path, model);
     setTabs((t) => openFileTab(t, path, basename(path)));
     if (shouldActivate) setActiveId(path);
     read(path).then(
@@ -320,7 +379,7 @@ export function EditorHost(props: EditorHostProps) {
       // editor reads is owner-published + read-only, but the file itself is not).
       model = monaco.editor.createModel(dec.decode(bytes), languageForPath(path));
     }
-    models.set(path, model);
+    registerModel(path, model);
     setTabs((t) => openFileTab(t, path, basename(path)));
     if (shouldActivate) setActiveId(path);
     emitDocument(path, 'open');
@@ -435,8 +494,7 @@ export function EditorHost(props: EditorHostProps) {
     const next = nextActiveAfterClose(tabs(), path, activeId());
     emitDocument(path, 'close');
     setTabs((t) => closeTab(t, path));
-    const m = models.get(path);
-    models.delete(path);
+    const m = unregisterModel(path);
     readOnlyPaths.delete(path);
     setActiveId(next);
     // Dispose after the activeId effect has switched the editor off this model.
@@ -446,9 +504,9 @@ export function EditorHost(props: EditorHostProps) {
   onMount(() => {
     if (!container) return;
     ensureTheme();
-    disableBuiltinTsDiagnostics();
+    retireBuiltinTsIntelligence();
     programModel = monaco.editor.createModel(props.programValue(), 'javascript');
-    models.set(PROGRAM_TAB_ID, programModel);
+    registerModel(PROGRAM_TAB_ID, programModel);
     editor = monaco.editor.create(container, {
       model: programModel,
       theme: 'rifty-dark',
@@ -510,6 +568,22 @@ export function EditorHost(props: EditorHostProps) {
           cb({ path: docPathForTab(id), text: model.getValue(), kind: 'open' });
         }
         return () => documentListeners.delete(cb);
+      },
+      pathForModel(model) {
+        const id = modelUriToTabId.get(model.uri.toString());
+        return id === undefined ? undefined : docPathForTab(id);
+      },
+      ensureModel(path) {
+        const id = tabIdForPath(path);
+        const existing = models.get(id);
+        if (existing) return existing.uri;
+        // Not open yet: open it WITHOUT activating (a go-to-def target the user
+        // didn't pick). The sync/remote/program branches create the model
+        // synchronously; only `await-snapshot` (a racing seed) defers — that path
+        // returns no model now, so the jump simply can't resolve this tick rather
+        // than fake one. node_modules `.d.ts` go through the read-port (read-only).
+        openFile(path, { activate: false });
+        return models.get(id)?.uri;
       },
     });
 
@@ -587,6 +661,7 @@ export function EditorHost(props: EditorHostProps) {
     editor?.dispose();
     for (const m of models.values()) m.dispose();
     models.clear();
+    modelUriToTabId.clear();
   });
 
   return (
