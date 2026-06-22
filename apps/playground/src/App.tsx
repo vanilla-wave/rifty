@@ -578,6 +578,30 @@ export function App(props: AppProps) {
           line: number,
           col: number,
         ) => Promise<string[] | null>;
+        __riftyTsReferences?: (
+          path: string,
+          line: number,
+          col: number,
+          includeDeclaration: boolean,
+        ) => Promise<{ uri: string; line: number; column: number }[] | null>;
+        __riftyTsPrepareRename?: (
+          path: string,
+          line: number,
+          col: number,
+        ) => Promise<
+          { text: string; line: number; column: number } | { rejectReason: string } | null
+        >;
+        __riftyTsRenameEdits?: (
+          path: string,
+          line: number,
+          col: number,
+          newName: string,
+        ) => Promise<{ uri: string; text: string; line: number; column: number }[] | null>;
+        __riftyTsSignatureHelp?: (
+          path: string,
+          line: number,
+          col: number,
+        ) => Promise<{ label: string; activeSignature: number; activeParameter: number } | null>;
         __riftyTsReinit?: () => Promise<boolean>;
       };
       // Re-init the service against the CURRENT owner VFS (ADR-0166: `ts:init` is
@@ -641,6 +665,90 @@ export function App(props: AppProps) {
         return result.suggestions.map((s) =>
           typeof s.label === 'string' ? s.label : s.label.label,
         );
+      };
+      // Round-trip a provider-returned target Uri back to its VFS path (proves the
+      // Location.uri → model → path resolution incl. an opened sibling/dep buffer);
+      // falls back to the raw uri string for a foreign model.
+      const pathForUri = (uri: monaco.Uri): string => {
+        const target = monaco.editor.getModel(uri);
+        const targetPath = target ? api.pathForModel(target) : undefined;
+        return targetPath ?? uri.toString();
+      };
+      g.__riftyTsReferences = async (path, line, col, includeDeclaration) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const refs = await providers.providers.reference.provideReferences(
+          model,
+          pos(line, col),
+          { includeDeclaration },
+          NEVER_CANCEL,
+        );
+        if (!refs) return null;
+        return refs.map((r) => ({
+          uri: pathForUri(r.uri),
+          line: r.range.startLineNumber,
+          column: r.range.startColumn,
+        }));
+      };
+      g.__riftyTsPrepareRename = async (path, line, col) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const resolve = providers.providers.rename.resolveRenameLocation;
+        if (!resolve) return null;
+        const result = await resolve(model, pos(line, col), NEVER_CANCEL);
+        if (!result) return null;
+        if ('rejectReason' in result && result.rejectReason !== undefined) {
+          return { rejectReason: result.rejectReason };
+        }
+        const loc = result as monaco.languages.RenameLocation;
+        return { text: loc.text, line: loc.range.startLineNumber, column: loc.range.startColumn };
+      };
+      g.__riftyTsRenameEdits = async (path, line, col, newName) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const edit = await providers.providers.rename.provideRenameEdits(
+          model,
+          pos(line, col),
+          newName,
+          NEVER_CANCEL,
+        );
+        if (!edit) return null;
+        const out: { uri: string; text: string; line: number; column: number }[] = [];
+        for (const e of edit.edits) {
+          // Only text edits (the rename provider emits IWorkspaceTextEdit only).
+          if (!('textEdit' in e)) continue;
+          const te = e as monaco.languages.IWorkspaceTextEdit;
+          out.push({
+            uri: pathForUri(te.resource),
+            text: te.textEdit.text,
+            line: te.textEdit.range.startLineNumber,
+            column: te.textEdit.range.startColumn,
+          });
+        }
+        return out;
+      };
+      g.__riftyTsSignatureHelp = async (path, line, col) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const result = await providers.providers.signatureHelp.provideSignatureHelp(
+          model,
+          pos(line, col),
+          NEVER_CANCEL,
+          {
+            triggerKind: monaco.languages.SignatureHelpTriggerKind.Invoke,
+            isRetrigger: false,
+          },
+        );
+        if (!result) return null;
+        const { value } = result;
+        const sig = value.signatures[value.activeSignature];
+        result.dispose();
+        if (!sig) return null;
+        return {
+          label: sig.label,
+          activeSignature: value.activeSignature,
+          activeParameter: value.activeParameter,
+        };
       };
     }
 
@@ -739,6 +847,10 @@ export function App(props: AppProps) {
         g.__riftyTsHover = undefined;
         g.__riftyTsDefinition = undefined;
         g.__riftyTsCompletions = undefined;
+        g.__riftyTsReferences = undefined;
+        g.__riftyTsPrepareRename = undefined;
+        g.__riftyTsRenameEdits = undefined;
+        g.__riftyTsSignatureHelp = undefined;
         g.__riftyTsReinit = undefined;
       }
     });

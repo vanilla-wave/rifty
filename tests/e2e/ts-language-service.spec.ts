@@ -130,6 +130,108 @@ async function tsCompletions(
   );
 }
 
+/** Find-references at a 1-based Monaco position via the registered provider (phase 3 hook). */
+async function tsReferences(
+  page: Page,
+  path: string,
+  line: number,
+  col: number,
+  includeDeclaration: boolean,
+): Promise<{ uri: string; line: number; column: number }[] | null> {
+  return page.evaluate(
+    ({ p, l, c, incl }) => {
+      const fn = (
+        globalThis as {
+          __riftyTsReferences?: (
+            path: string,
+            line: number,
+            col: number,
+            includeDeclaration: boolean,
+          ) => Promise<{ uri: string; line: number; column: number }[] | null>;
+        }
+      ).__riftyTsReferences;
+      return fn ? fn(p, l, c, incl) : Promise.resolve(null);
+    },
+    { p: path, l: line, c: col, incl: includeDeclaration },
+  );
+}
+
+/** Prepare-rename probe at a 1-based Monaco position via the registered provider (phase 3 hook). */
+async function tsPrepareRename(
+  page: Page,
+  path: string,
+  line: number,
+  col: number,
+): Promise<{ text: string; line: number; column: number } | { rejectReason: string } | null> {
+  return page.evaluate(
+    ({ p, l, c }) => {
+      const fn = (
+        globalThis as {
+          __riftyTsPrepareRename?: (
+            path: string,
+            line: number,
+            col: number,
+          ) => Promise<
+            { text: string; line: number; column: number } | { rejectReason: string } | null
+          >;
+        }
+      ).__riftyTsPrepareRename;
+      return fn ? fn(p, l, c) : Promise.resolve(null);
+    },
+    { p: path, l: line, c: col },
+  );
+}
+
+/** Rename-edits at a 1-based Monaco position via the registered provider (phase 3 hook). */
+async function tsRenameEdits(
+  page: Page,
+  path: string,
+  line: number,
+  col: number,
+  newName: string,
+): Promise<{ uri: string; text: string; line: number; column: number }[] | null> {
+  return page.evaluate(
+    ({ p, l, c, n }) => {
+      const fn = (
+        globalThis as {
+          __riftyTsRenameEdits?: (
+            path: string,
+            line: number,
+            col: number,
+            newName: string,
+          ) => Promise<{ uri: string; text: string; line: number; column: number }[] | null>;
+        }
+      ).__riftyTsRenameEdits;
+      return fn ? fn(p, l, c, n) : Promise.resolve(null);
+    },
+    { p: path, l: line, c: col, n: newName },
+  );
+}
+
+/** Signature-help at a 1-based Monaco position via the registered provider (phase 3 hook). */
+async function tsSignatureHelp(
+  page: Page,
+  path: string,
+  line: number,
+  col: number,
+): Promise<{ label: string; activeSignature: number; activeParameter: number } | null> {
+  return page.evaluate(
+    ({ p, l, c }) => {
+      const fn = (
+        globalThis as {
+          __riftyTsSignatureHelp?: (
+            path: string,
+            line: number,
+            col: number,
+          ) => Promise<{ label: string; activeSignature: number; activeParameter: number } | null>;
+        }
+      ).__riftyTsSignatureHelp;
+      return fn ? fn(p, l, c) : Promise.resolve(null);
+    },
+    { p: path, l: line, c: col },
+  );
+}
+
 /** Rebuild the LS against the current owner VFS + tsconfig (idempotent ts:init; phase 2 hook). */
 async function tsReinit(page: Page): Promise<boolean> {
   return page.evaluate(() => {
@@ -404,5 +506,172 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
         intervals: [1500],
       })
       .toEqual(expect.arrayContaining(['helper', 'value']));
+  });
+});
+
+/**
+ * Phase-3 (ADR-0166 task 3.2): find-references / rename / signature-help now come
+ * from the REAL rifty LS over the page→owner→LS relay, NOT Monaco's built-in
+ * `ts.worker` (whose references/rename/signatureHelp are retired via
+ * `setModeConfiguration`). These assertions exercise CROSS-FILE project knowledge
+ * the isolated lib.d.ts-only worker could never have: references that span two
+ * files, a rename whose WorkspaceEdit touches both files with the new text, and
+ * signature help at a call site mid-args.
+ *
+ * RED-checkable: the assertions drive the EXACT registered Monaco providers (via
+ * the DEV `__riftyTs{References,PrepareRename,RenameEdits,SignatureHelp}` hooks
+ * that call `provider.provideReferences/provideRenameEdits/resolveRenameLocation/
+ * provideSignatureHelp`). Each binds to the real pipeline:
+ *  - references: unregister the provider (delete `reference` from
+ *    `registerTsLanguageServiceProviders`) → the hook returns null → the
+ *    cross-file count assertion fails; a single-file-only result (no app.ts uses)
+ *    also fails the `>= 2 files` assertion;
+ *  - rename: a stub that edited only the active file would fail the `both files
+ *    touched` assertion; a wrong newText would fail the text assertion;
+ *  - signature-help: the label / activeParameter come from the real overload
+ *    resolution; an empty/absent provider returns null and the assertion fails.
+ * None of `greet`/`localGreet` exist in lib.d.ts, so a built-in-worker reference/
+ * rename/signature built on the isolated model could not produce them at all.
+ */
+const GREETER_TS = `${PROJECT_DIR}/greeter.ts`;
+const APP_TS = `${PROJECT_DIR}/app.ts`;
+
+test.describe('rifty TS language service: real references/rename/signature-help (not Monaco built-in)', () => {
+  test('references span two files (declaration drop honored); rename edits both files; signature help at a call site', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
+    test.setTimeout(120_000);
+    await page.goto('/');
+
+    await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
+    await openShellTerminal(page);
+
+    // Build a small REAL cross-file project in the owner store (the SSoT the LS
+    // reads): a tsconfig (bundler resolution + ts-extension imports), a `greeter.ts`
+    // declaring `localGreet`, and an `app.ts` importing + calling it twice. So the
+    // symbol `localGreet` has uses in TWO files — references the isolated worker,
+    // which sees neither file, could never surface.
+    await writeOwnerFile(
+      page,
+      '/workspace/tsconfig.json',
+      [
+        '{',
+        '  "compilerOptions": {',
+        '    "target": "es2022",',
+        '    "module": "esnext",',
+        '    "moduleResolution": "bundler",',
+        '    "strict": true,',
+        '    "allowImportingTsExtensions": true,',
+        '    "noEmit": true',
+        '  }',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    // greeter.ts — 1-based:
+    //  L1 `export function localGreet(name: string): string {`  localGreet @ col 17
+    await writeOwnerFile(
+      page,
+      GREETER_TS,
+      [
+        'export function localGreet(name: string): string {',
+        '  return "hi " + name;',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    // app.ts — 1-based lines used by the position assertions below:
+    //  L1 `import { localGreet } from "./greeter.ts";`  localGreet @ col 10
+    //  L2 `const a = localGreet("ann");`                localGreet @ col 11; "(" @ col 21
+    //  L3 `const b = localGreet("bob");`                localGreet @ col 11
+    await writeOwnerFile(
+      page,
+      APP_TS,
+      [
+        'import { localGreet } from "./greeter.ts";',
+        'const a = localGreet("ann");',
+        'const b = localGreet("bob");',
+        'export const both = a + b;',
+        '',
+      ].join('\n'),
+    );
+    await runTerminalLine(page, 'ls /workspace/src');
+    await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('app.ts');
+
+    // Open BOTH files so a Monaco model exists for each (providers resolve a
+    // model→path; a reference/rename target in the other file resolves via
+    // ensureModel, but opening both makes the round-trip path deterministic).
+    await openFileViaPalette(page, 'greeter.ts');
+    await openFileViaPalette(page, 'app.ts');
+    await expect
+      .poll(() => tsMarkerCount(page, APP_TS), { timeout: 15_000 })
+      .toBeGreaterThanOrEqual(0);
+
+    // Rebuild the service against the project we just wrote (the boot build used
+    // tsc default options before these files / this tsconfig existed). Idempotent.
+    expect(await tsReinit(page)).toBe(true);
+
+    // (1) FIND-REFERENCES of `localGreet` from its declaration in greeter.ts
+    // (L1, col 17), includeDeclaration:true. The FIRST query cold-boots the engine
+    // + ~3 MB lib.d.ts over the relay AND warms the rebuilt program, so poll with a
+    // spaced interval until references from BOTH files appear (90s headroom).
+    await expect
+      .poll(
+        async () => {
+          const refs = (await tsReferences(page, GREETER_TS, 1, 17, true)) ?? [];
+          return new Set(refs.map((r) => r.uri.replace(/^.*\/src\//, 'src/'))).size;
+        },
+        { timeout: 90_000, intervals: [1500] },
+      )
+      .toBeGreaterThanOrEqual(2);
+
+    // The references include uses in BOTH greeter.ts and app.ts (cross-file).
+    const withDecl = (await tsReferences(page, GREETER_TS, 1, 17, true)) ?? [];
+    const declFiles = new Set(withDecl.map((r) => r.uri));
+    expect([...declFiles].some((u) => u.includes('greeter.ts'))).toBe(true);
+    expect([...declFiles].some((u) => u.includes('app.ts'))).toBe(true);
+    // app.ts has 3 uses (import + 2 calls); greeter.ts has the declaration ⇒ >= 4.
+    const declCount = withDecl.length;
+    expect(declCount).toBeGreaterThanOrEqual(4);
+
+    // includeDeclaration:false drops the declaration site (greeter.ts L1): strictly
+    // fewer results, and none of them is the declaration line in greeter.ts.
+    const noDecl = (await tsReferences(page, GREETER_TS, 1, 17, false)) ?? [];
+    expect(noDecl.length).toBe(declCount - 1);
+    expect(noDecl.some((r) => r.uri.includes('greeter.ts') && r.line === 1)).toBe(false);
+    // app.ts uses survive the declaration drop (cross-file refs are NOT the decl).
+    expect(noDecl.some((r) => r.uri.includes('app.ts'))).toBe(true);
+
+    // (2) PREPARE-RENAME at a use site in app.ts (L2, col 11) → renameable, the box
+    // seeds with the current symbol name.
+    const prepared = await tsPrepareRename(page, APP_TS, 2, 11);
+    expect(prepared).not.toBeNull();
+    expect(prepared && 'text' in prepared ? prepared.text : '').toBe('localGreet');
+
+    // (2b) RENAME `localGreet` → `greetUser` from its DECLARATION in greeter.ts
+    // (L1, col 17). Renaming the export updates the declaration AND every importer,
+    // so the returned WorkspaceEdit must touch BOTH files, each edit carrying the
+    // new text — cross-file rename the isolated worker can't do. (Renaming from a
+    // *use* site instead would, per real TS, rewrite only the importing file's
+    // local binding to `localGreet as greetUser` — the export rename is the genuine
+    // cross-file edit.)
+    const edits = (await tsRenameEdits(page, GREETER_TS, 1, 17, 'greetUser')) ?? [];
+    const editFiles = new Set(edits.map((e) => e.uri));
+    expect([...editFiles].some((u) => u.includes('greeter.ts'))).toBe(true);
+    expect([...editFiles].some((u) => u.includes('app.ts'))).toBe(true);
+    // Every edit replaces the old span with the new name (declaration + 3 app.ts
+    // uses ⇒ >= 4).
+    expect(edits.length).toBeGreaterThanOrEqual(4);
+    expect(edits.every((e) => e.text === 'greetUser')).toBe(true);
+
+    // (3) SIGNATURE-HELP at the call site `localGreet(` in app.ts (L2, col 22 — just
+    // inside the open paren, on the first argument). The signature label carries the
+    // real parameter (`name: string`) from greeter.ts, and activeParameter is 0.
+    const help = await tsSignatureHelp(page, APP_TS, 2, 22);
+    expect(help).not.toBeNull();
+    expect(help?.label).toMatch(/name:\s*string/);
+    expect(help?.activeParameter).toBe(0);
   });
 });
