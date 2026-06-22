@@ -10,7 +10,9 @@ test.describe('M1 - terminal shell', () => {
   test('bottom panel is a shell terminal and prestarts Vite visibly', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page.getByRole('button', { name: 'Collapse terminal' })).toContainText('Terminal');
+    // Bottom panel header shows the Terminal view tab (ADR-0166 P1.9c added the
+    // Terminal|Problems view switcher; the collapse control is now a chevron).
+    await expect(page.getByRole('tab', { name: 'Terminal', exact: true })).toBeVisible();
     await expect(page.locator('[data-testid="terminal-mode-hint"]')).toContainText(
       'Commands run in /workspace',
     );

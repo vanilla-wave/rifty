@@ -15,7 +15,7 @@ function parsePreviewPath(path) {
 
 // ../../packages/service-worker/src/protocol.ts
 var SW_FRAME_VERSION = "1";
-var SW_ROUTING_VERSION = "3";
+var SW_ROUTING_VERSION = "4";
 var SW_PING = "__rifty_sw_ping__";
 var SW_PONG = "__rifty_sw_pong__";
 var SW_PREVIEW_READY = "rifty:preview:ready";
@@ -58,6 +58,7 @@ function createReadyClientsRegistry(logger = defaultLogger) {
   const mismatched = /* @__PURE__ */ new Set();
   const warned = /* @__PURE__ */ new Set();
   const ownerTokens = /* @__PURE__ */ new Map();
+  const portsByClient = /* @__PURE__ */ new Map();
   let nextRequestIdCounter = 1;
   function markReady(id) {
     ready.add(id);
@@ -70,6 +71,7 @@ function createReadyClientsRegistry(logger = defaultLogger) {
   function markGoodbye(id) {
     ready.delete(id);
     ownerTokens.delete(id);
+    portsByClient.delete(id);
     const waiterSet = waiters.get(id);
     if (waiterSet) {
       for (const w of waiterSet) {
@@ -94,6 +96,13 @@ function createReadyClientsRegistry(logger = defaultLogger) {
     },
     ownerToken(id) {
       return ownerTokens.get(id);
+    },
+    readyOwnersOfPort(port) {
+      const owners = [];
+      for (const [id, ports] of portsByClient) {
+        if (ready.has(id) && ports.has(port)) owners.push(id);
+      }
+      return owners;
     },
     waitForReady(id, timeoutMs) {
       if (mismatched.has(id)) return Promise.resolve("mismatch");
@@ -146,11 +155,23 @@ function createReadyClientsRegistry(logger = defaultLogger) {
         failWaitersWithMismatch(clientId);
         return;
       }
+      const ports = Array.isArray(data.ports) ? data.ports.filter((p) => Number.isInteger(p)) : [];
       if (type === SW_PREVIEW_READY) {
         if (typeof data.ownerToken === "string" && data.ownerToken.length > 0) {
           ownerTokens.set(clientId, data.ownerToken);
         }
+        if (ports.length > 0) {
+          const set = portsByClient.get(clientId) ?? /* @__PURE__ */ new Set();
+          for (const p of ports) set.add(p);
+          portsByClient.set(clientId, set);
+        }
         markReady(clientId);
+      } else if (ports.length > 0) {
+        const set = portsByClient.get(clientId);
+        if (set) {
+          for (const p of ports) set.delete(p);
+        }
+        if (!set || set.size === 0) markGoodbye(clientId);
       } else {
         markGoodbye(clientId);
       }
@@ -165,14 +186,20 @@ function createReadyClientsRegistry(logger = defaultLogger) {
 var FirstWindowOwnerBinding = class {
   #resolver;
   #logger;
+  #isUntrustedSource;
   #readiness = /* @__PURE__ */ new WeakMap();
+  #registries = /* @__PURE__ */ new WeakMap();
   constructor(opts = {}) {
     this.#resolver = opts.resolver ?? new FirstWindowOwnerResolver();
     this.#logger = opts.logger;
+    this.#isUntrustedSource = opts.isUntrustedSource;
   }
-  async resolveOwner(scope, request, clientId, _port) {
+  async resolveOwner(scope, request, clientId, port) {
     const owner = await this.#resolver.resolveOwner(scope, request, clientId);
     if (clientId || !owner) return owner;
+    const portRes = await this.#resolvePortWindows(scope, port);
+    if (portRes.kind === "unique") return portRes.client;
+    if (portRes.kind === "multiple") return null;
     const readiness = this.#readiness.get(scope);
     if (!readiness || readiness.isReady(owner.id) || readiness.isMismatched(owner.id)) {
       return owner;
@@ -185,8 +212,26 @@ var FirstWindowOwnerBinding = class {
       (candidate) => (!("type" in candidate) || candidate.type === "window") && readiness.isReady(candidate.id)
     ) ?? owner;
   }
+  // ADR-0160: which ready windows advertised `port`. 'unique' carries the only
+  // live one; 'multiple' = ambiguous (503); 'none' = no port-keyed owner ->
+  // legacy fallback.
+  async #resolvePortWindows(scope, port) {
+    const registry = this.#registries.get(scope);
+    if (!registry) return { kind: "none" };
+    const ids = registry.readyOwnersOfPort(port);
+    if (ids.length === 0) return { kind: "none" };
+    const windows = await scope.clients.matchAll({ type: "window", includeUncontrolled: false });
+    const byId = new Map(windows.map((w) => [w.id, w]));
+    const live = ids.map((id) => byId.get(id)).filter((c) => !!c && (!("type" in c) || c.type === "window"));
+    if (live.length === 0) return { kind: "none" };
+    if (live.length === 1) return { kind: "unique", client: live[0] };
+    return { kind: "multiple" };
+  }
   subscribeReadiness(scope) {
     const registry = this.#logger !== void 0 ? createReadyClientsRegistry(this.#logger) : createReadyClientsRegistry();
+    this.#registries.set(scope, registry);
+    const authWarned = /* @__PURE__ */ new Set();
+    const logger = this.#logger;
     const messageHandler = (event) => {
       const ev = event;
       const data = ev.data;
@@ -195,6 +240,15 @@ var FirstWindowOwnerBinding = class {
       const source = ev.source;
       const sourceId = source && "id" in source ? source.id : null;
       if (!sourceId) return;
+      if (this.#isUntrustedSource?.(sourceId)) {
+        if (!authWarned.has(sourceId)) {
+          authWarned.add(sourceId);
+          logger?.warn(
+            `[rifty/service-worker] rejected preview handshake from preview-document client ${sourceId} (anti-hijack)`
+          );
+        }
+        return;
+      }
       registry.handleMessage(sourceId, data);
     };
     scope.addEventListener("message", messageHandler);
@@ -217,11 +271,13 @@ var FirstWindowOwnerBinding = class {
     };
     this.#readiness.set(scope, readiness);
     const readinessByScope = this.#readiness;
+    const registriesByScope = this.#registries;
     return {
       readiness,
       teardown() {
         scope.removeEventListener("message", messageHandler);
         readinessByScope.delete(scope);
+        registriesByScope.delete(scope);
       }
     };
   }
@@ -516,26 +572,32 @@ var PortAwareOwnerBinding = class {
 };
 
 // ../../packages/service-worker/src/route-preview.ts
+function previewErrorResponse(body, status) {
+  const headers = new Headers();
+  headers.set("Cross-Origin-Resource-Policy", "cross-origin");
+  headers.set("Cross-Origin-Embedder-Policy", "credentialless");
+  return new Response(body, { status, headers });
+}
 async function routePreview(scope, request, match, readiness, timeoutMs, clientId, binding) {
   const client = await binding.resolveOwner(scope, request, clientId, match.port);
   if (!client) {
-    return new Response(`No client to serve preview port ${match.port}`, { status: 503 });
+    return previewErrorResponse(`No client to serve preview port ${match.port}`, 503);
   }
   if (readiness.isMismatched(client.id)) {
-    return new Response("protocol version mismatch", { status: 503 });
+    return previewErrorResponse("protocol version mismatch", 503);
   }
   const outcome = await readiness.waitForReady(client.id, timeoutMs);
   if (outcome === "mismatch") {
-    return new Response("protocol version mismatch", { status: 503 });
+    return previewErrorResponse("protocol version mismatch", 503);
   }
   if (outcome === "gone") {
-    return new Response(`preview owner ${client.id} departed before handshake`, { status: 503 });
+    return previewErrorResponse(`preview owner ${client.id} departed before handshake`, 503);
   }
   if (outcome === "timeout") {
     if (readiness.isMismatched(client.id)) {
-      return new Response("protocol version mismatch", { status: 503 });
+      return previewErrorResponse("protocol version mismatch", 503);
     }
-    return new Response(`preview-bridge not ready within ${timeoutMs}ms`, { status: 503 });
+    return previewErrorResponse(`preview-bridge not ready within ${timeoutMs}ms`, 503);
   }
   const channel = new MessageChannel();
   const bodyBytes = request.method === "GET" || request.method === "HEAD" ? null : new Uint8Array(await request.arrayBuffer());
@@ -561,10 +623,10 @@ async function routePreview(scope, request, match, readiness, timeoutMs, clientI
             expected: err.expected,
             got: err.got
           });
-          resolve(new Response(err.message, { status: 503 }));
+          resolve(previewErrorResponse(err.message, 503));
           return;
         }
-        resolve(new Response(typeof err === "string" ? err : err.message, { status: 502 }));
+        resolve(previewErrorResponse(typeof err === "string" ? err : err.message, 502));
         return;
       }
       const headers2 = new Headers(data.headers);
@@ -619,8 +681,9 @@ function matchPreviewReferrer(request, origin) {
   if (referrer.origin !== origin) return null;
   return matchPreviewUrl(referrer.pathname);
 }
-function rememberPreviewFrameContext(contexts, clientId, context) {
+function rememberPreviewFrameContext(contexts, docClients, clientId, context) {
   if (!clientId) return;
+  docClients.add(clientId);
   if (contexts.has(clientId)) contexts.delete(clientId);
   contexts.set(clientId, context);
   while (contexts.size > MAX_PREVIEW_FRAME_CONTEXTS) {
@@ -639,11 +702,29 @@ function getScopeOrigin(scope, requestUrl) {
 var DEFAULT_READY_TIMEOUT_MS = 3e3;
 function createPreviewInterceptor(scope, hooks = {}) {
   const timeoutMs = hooks.timeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
+  const previewFrameContexts = /* @__PURE__ */ new Map();
+  const previewDocumentClients = /* @__PURE__ */ new Set();
+  let pruningDocClients = false;
+  const prunePreviewDocumentClients = async () => {
+    if (pruningDocClients) return;
+    pruningDocClients = true;
+    try {
+      const live = await scope.clients.matchAll({ type: "window", includeUncontrolled: false });
+      const liveIds = new Set(live.map((c) => c.id));
+      for (const id of previewDocumentClients) {
+        if (!liveIds.has(id)) previewDocumentClients.delete(id);
+      }
+    } finally {
+      pruningDocClients = false;
+    }
+  };
   const binding = hooks.binding ?? new PortAwareOwnerBinding({
-    window: hooks.resolver !== void 0 ? { resolver: hooks.resolver } : void 0
+    window: {
+      ...hooks.resolver !== void 0 ? { resolver: hooks.resolver } : {},
+      isUntrustedSource: (id) => previewDocumentClients.has(id)
+    }
   });
   const subscription = binding.subscribeReadiness(scope);
-  const previewFrameContexts = /* @__PURE__ */ new Map();
   const fetchHandler = (event) => {
     const url = new URL(event.request.url);
     const scopeOrigin = getScopeOrigin(scope, url);
@@ -662,7 +743,12 @@ function createPreviewInterceptor(scope, hooks = {}) {
         copiedTopLevel: isTopLevelPreviewNavigation(event.request)
       } : knownPreviewContext;
       if (createsFrameContext && context) {
-        rememberPreviewFrameContext(previewFrameContexts, frameClientId, context);
+        rememberPreviewFrameContext(
+          previewFrameContexts,
+          previewDocumentClients,
+          frameClientId,
+          context
+        );
       }
       clientId = context ? context.copiedTopLevel ? null : "" : null;
     } else if (!directMatch && sameOrigin) {
@@ -673,7 +759,12 @@ function createPreviewInterceptor(scope, hooks = {}) {
         port = matchPreviewReferrer(event.request, scopeOrigin)?.port;
         if (port !== void 0 && frameClientId) {
           context = { port, copiedTopLevel: false };
-          rememberPreviewFrameContext(previewFrameContexts, frameClientId, context);
+          rememberPreviewFrameContext(
+            previewFrameContexts,
+            previewDocumentClients,
+            frameClientId,
+            context
+          );
         }
       }
       if (port === void 0) return;
@@ -681,12 +772,16 @@ function createPreviewInterceptor(scope, hooks = {}) {
       if (nextFrameClientId) {
         rememberPreviewFrameContext(
           previewFrameContexts,
+          previewDocumentClients,
           nextFrameClientId,
           context ?? { port, copiedTopLevel: false }
         );
       }
       match = { port, path: url.pathname };
       clientId = context?.copiedTopLevel ? null : "";
+    }
+    if (previewDocumentClients.size > MAX_PREVIEW_FRAME_CONTEXTS) {
+      void prunePreviewDocumentClients();
     }
     if (!match) return;
     event.respondWith(
