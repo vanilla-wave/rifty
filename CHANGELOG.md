@@ -45,6 +45,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **git over the VFS (`@riftydev/git`, ADR-0167).** New tier-0 package + a shell `git` builtin + SDK `@riftydev/sdk/git`: git on isomorphic-git over the Memory VFS. Offline porcelain (init/add/status/commit/log/diff/branch/checkout) is byte-faithful to canonical git — a commit with fixed identity/dates yields the **identical 40-hex SHA-1** as real git (`commit-sha-parity.test.ts`); `status --porcelain` + `log --oneline` are byte-exact vs git 2.50.1 frozen golden fixtures. Network (clone/fetch/pull/push) routes over rifty's `node:http` egress with a D-004 env-config corsProxy (`RIFTY_GIT_CORS_PROXY`) + `onAuth`; a real `git http-backend` clone is integration-tested end-to-end (`network.integration.test.ts`). The browser ceiling throws loud, never stubs: ssh/`git://`/dumb-HTTP → `NotImplementedError('git.transport.*')`, cross-origin-without-proxy → `git.cors`, unimplemented git subcommands → exit 128. Compat: `docs/public/compat/git.md`. Residual fidelity gaps (CRLF/`.gitattributes`, exec-bit/symlink tree-SHA, large-repo streaming) tracked in `docs/backlog/shell/git-command-isomorphic`.
 - M0 Foundation: pnpm workspace, TypeScript strict, Biome, Vitest, Playwright (three engines), GitHub Actions.
 - Playground app (Vite + SolidJS) with Monaco editor and xterm.js terminal, COOP/COEP cross-origin isolation, Run button.
 - Service Worker skeleton, runtime-js worker entry stub.
