@@ -166,6 +166,42 @@ export function createServiceEndpoint(deps: ServiceEndpointDeps): ServiceEndpoin
             kind: 'signatureHelp',
             signatureHelp: requireService().getSignatureHelp(request.path, request.position),
           };
+        case 'ts:getCodeFixes':
+          return {
+            id,
+            ok: true,
+            kind: 'codeActions',
+            codeActions: requireService().getCodeFixes(
+              request.path,
+              request.range,
+              request.errorCodes,
+            ),
+          };
+        case 'ts:organizeImports':
+          return {
+            id,
+            ok: true,
+            kind: 'workspaceEdit',
+            edit: requireService().organizeImports(request.path),
+          };
+        case 'ts:getFormattingEdits':
+          return {
+            id,
+            ok: true,
+            kind: 'textEdits',
+            textEdits: requireService().getFormattingEdits(request.path, request.options),
+          };
+        case 'ts:getRangeFormattingEdits':
+          return {
+            id,
+            ok: true,
+            kind: 'textEdits',
+            textEdits: requireService().getRangeFormattingEdits(
+              request.path,
+              request.range,
+              request.options,
+            ),
+          };
         default: {
           // Exhaustive over TsRequest; a malformed-but-typed frame is a loud
           // error, never an undefined response (Fidelity).

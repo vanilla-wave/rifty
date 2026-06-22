@@ -15,6 +15,7 @@ import ts from 'typescript';
 import {
   type CompletionItem,
   CompletionItemKind,
+  type FormattingOptions,
   type Hover,
   type MarkupContent,
   type ParameterInformation,
@@ -22,6 +23,7 @@ import {
   type SignatureHelp,
   type SignatureInformation,
   type TextEdit,
+  type WorkspaceEdit,
 } from './lsp-types.ts';
 import { offsetToPosition } from './position.ts';
 
@@ -233,4 +235,72 @@ export function completionEntryToItem(entry: ts.CompletionEntry): CompletionItem
   if (entry.insertText !== undefined) item.insertText = entry.insertText;
   if (entry.filterText !== undefined) item.filterText = entry.filterText;
   return item;
+}
+
+/**
+ * Map a `ts.TextChange[]` (one file's edits) → LSP {@link TextEdit}[] against
+ * that file's `text`. Each `TextChange.span` becomes a Range; `newText` passes
+ * through verbatim (an empty `newText` is a deletion; an empty span an insert).
+ * Order is preserved — tsc already emits non-overlapping edits in apply order.
+ */
+export function textChangesToTextEdits(
+  changes: readonly ts.TextChange[],
+  text: string,
+): TextEdit[] {
+  return changes.map((c) => ({ range: spanToRange(text, c.span), newText: c.newText }));
+}
+
+/**
+ * Map a `ts.FileTextChanges[]` (the multi-file edit shape returned by code-fixes
+ * and organize-imports) → an LSP {@link WorkspaceEdit}. Grouped by `fileName`;
+ * each file's `textChanges` map against THAT file's current `text` (supplied by
+ * `readText`, the program's own view of the bytes). Shared by both code-fixes
+ * and organize-imports so the ts→LSP edit shape is identical for both.
+ *
+ * `isNewFile` changes (tsc proposing a brand-new file) still key on `fileName`;
+ * `readText` returns `''` for an absent file → spans collapse to document start,
+ * which is correct for an all-insert new-file change.
+ */
+export function fileTextChangesToWorkspaceEdit(
+  fileChanges: readonly ts.FileTextChanges[],
+  readText: (fileName: string) => string,
+): WorkspaceEdit {
+  const changes: Record<string, TextEdit[]> = {};
+  for (const fc of fileChanges) {
+    const edits = changes[fc.fileName] ?? [];
+    edits.push(...textChangesToTextEdits(fc.textChanges, readText(fc.fileName)));
+    changes[fc.fileName] = edits;
+  }
+  return { changes };
+}
+
+/**
+ * Derive a full `ts.FormatCodeSettings` from the LSP {@link FormattingOptions}
+ * the editor sends, so rifty formatting is byte-identical to a real
+ * `ts.LanguageService`. The base is `ts.getDefaultFormatCodeSettings('\n')` —
+ * the EXACT seed tsserver uses (newline `'\n'`; `indentStyle` Smart;
+ * `trimTrailingWhitespace` + `indentSwitchCase` true; `insertSpaceAfterComma
+ * Delimiter`/`…AfterSemicolonInForStatements`/`…BeforeAndAfterBinaryOperators`/
+ * `…AfterKeywordsInControlFlowStatements` true; `…AfterFunctionKeywordForAnonymous
+ * Functions` false; `…NonemptyBraces` true, the other `…Nonempty*` false;
+ * `placeOpenBraceOnNewLineFor*` false; `semicolons` Ignore = keep source style).
+ * We delegate to that helper (rather than spelling the flags out) so we can never
+ * silently drift from tsserver's defaults across a typescript bump. Then ONLY the
+ * editor-driven fields are overridden:
+ *   - `tabSize` / `indentSize` ← `options.tabSize` (indent width = tab width)
+ *   - `convertTabsToSpaces` ← `options.insertSpaces`
+ *
+ * Parity NB: the parity test imports THIS function and feeds its result to both
+ * sides, so both run identical settings — a drift here would change the emitted
+ * spacing and break parity rather than hide.
+ */
+export function formattingOptionsToFormatCodeSettings(
+  options: FormattingOptions,
+): ts.FormatCodeSettings {
+  return {
+    ...ts.getDefaultFormatCodeSettings('\n'),
+    tabSize: options.tabSize,
+    indentSize: options.tabSize,
+    convertTabsToSpaces: options.insertSpaces,
+  };
 }

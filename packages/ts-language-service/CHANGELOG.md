@@ -4,6 +4,35 @@
 
 ### Added
 
+- **Quick-fixes / organize-imports / formatting** (ADR-0166 task 4.1).
+  `TsLanguageService` gains `getCodeFixes(path, range, errorCodes)` (→ LSP
+  `CodeAction[]` from `getCodeFixesAtPosition`; each `CodeFixAction` → `{ title:
+  description, kind: 'quickfix', edit: WorkspaceEdit }`. NB tsc only returns a fix
+  when the request span lies WITHIN the diagnostic span, so an editor passes a
+  diagnostic's own range + that diagnostic's `code`s), `organizeImports(path)` (→
+  `WorkspaceEdit` from `organizeImports({type:'file'})`; sorts + de-dups + drops
+  unused imports; empty `changes` on an already-organized file — an honest no-op),
+  `getFormattingEdits(path, options)` (→ `TextEdit[]` from
+  `getFormattingEditsForDocument`), and `getRangeFormattingEdits(path, range,
+  options)` (→ `TextEdit[]` from `getFormattingEditsForRange`). New LSP shapes
+  `CodeAction` (string `kind`) + `FormattingOptions` (`{tabSize, insertSpaces}`).
+  Two shared `mapping.ts` helpers: `fileTextChangesToWorkspaceEdit` (ts
+  `FileTextChanges[]` → `WorkspaceEdit`, grouped by fileName, each span mapped
+  against that file's text — reused by code-fixes AND organize-imports) and
+  `formattingOptionsToFormatCodeSettings` (a full `ts.FormatCodeSettings` from
+  `ts.getDefaultFormatCodeSettings('\n')` — tsserver's exact defaults — overriding
+  only `tabSize`/`indentSize`←`options.tabSize` and `convertTabsToSpaces`←
+  `options.insertSpaces`; code-fixes + organize-imports use the tabSize-4/spaces
+  default). New worker frames `ts:getCodeFixes`/`ts:organizeImports`/
+  `ts:getFormattingEdits`/`ts:getRangeFormattingEdits` → `codeActions` / reused
+  `workspaceEdit` / `textEdits` responses. Every query is parity-checked against
+  the real `ts.LanguageService` (gold standard, IDENTICAL FormatCodeSettings on
+  both sides — the same `formattingOptionsToFormatCodeSettings` feeds both):
+  missing-import quick-fix (TS2304: import + decl fixes); organize-imports on an
+  unsorted+unused import set; formatting a badly-spaced + wrongly-INDENTED file
+  (whole-doc + a scoped range; the indentation makes the edits depend on `tabSize`
+  so a divergent setting would break parity, not hide).
+
 - **Find-references / rename (+prepare-rename) / signature-help** (ADR-0166 task 3.1).
   `TsLanguageService` gains `getReferences` (→ LSP `Location[]` from
   `findReferences` flattened; honors `ReferenceContext.includeDeclaration` by

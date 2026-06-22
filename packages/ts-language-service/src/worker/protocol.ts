@@ -15,15 +15,19 @@
  */
 
 import type {
+  CodeAction,
   CompletionItem,
   CompletionList,
   Diagnostic,
+  FormattingOptions,
   Hover,
   Location,
   Position,
   PrepareRenameResult,
+  Range,
   ReferenceContext,
   SignatureHelp,
+  TextEdit,
   WorkspaceEdit,
 } from '../lsp-types.ts';
 
@@ -45,7 +49,11 @@ export type TsRequestType =
   | 'ts:getReferences'
   | 'ts:prepareRename'
   | 'ts:getRenameEdits'
-  | 'ts:getSignatureHelp';
+  | 'ts:getSignatureHelp'
+  | 'ts:getCodeFixes'
+  | 'ts:organizeImports'
+  | 'ts:getFormattingEdits'
+  | 'ts:getRangeFormattingEdits';
 
 interface BaseRequest {
   /** Correlation id echoed on the response. */
@@ -151,6 +159,31 @@ export interface TsSignatureHelpRequest extends BaseRequest {
   readonly path: string;
   readonly position: Position;
 }
+/** Quick-fixes intersecting `range` in `path` for the diagnostics `errorCodes`. */
+export interface TsCodeFixesRequest extends BaseRequest {
+  readonly type: 'ts:getCodeFixes';
+  readonly path: string;
+  readonly range: Range;
+  readonly errorCodes: number[];
+}
+/** Organize-imports for `path`. */
+export interface TsOrganizeImportsRequest extends BaseRequest {
+  readonly type: 'ts:organizeImports';
+  readonly path: string;
+}
+/** Whole-document format for `path` with editor `options`. */
+export interface TsFormattingEditsRequest extends BaseRequest {
+  readonly type: 'ts:getFormattingEdits';
+  readonly path: string;
+  readonly options: FormattingOptions;
+}
+/** Range format for `[start,end)` `range` in `path` with editor `options`. */
+export interface TsRangeFormattingEditsRequest extends BaseRequest {
+  readonly type: 'ts:getRangeFormattingEdits';
+  readonly path: string;
+  readonly range: Range;
+  readonly options: FormattingOptions;
+}
 
 export type TsRequest =
   | TsInitRequest
@@ -169,7 +202,11 @@ export type TsRequest =
   | TsReferencesRequest
   | TsPrepareRenameRequest
   | TsRenameEditsRequest
-  | TsSignatureHelpRequest;
+  | TsSignatureHelpRequest
+  | TsCodeFixesRequest
+  | TsOrganizeImportsRequest
+  | TsFormattingEditsRequest
+  | TsRangeFormattingEditsRequest;
 
 /** Acknowledgement for a mutation/init request (no payload). */
 export interface TsAckResponse {
@@ -233,6 +270,20 @@ export interface TsSignatureHelpResponse {
   readonly kind: 'signatureHelp';
   readonly signatureHelp: SignatureHelp | null;
 }
+/** Code-action payload for `ts:getCodeFixes` (empty when nothing fixable). */
+export interface TsCodeActionsResponse {
+  readonly id: number;
+  readonly ok: true;
+  readonly kind: 'codeActions';
+  readonly codeActions: readonly CodeAction[];
+}
+/** Text-edit payload for `ts:getFormattingEdits` / `ts:getRangeFormattingEdits`. */
+export interface TsTextEditsResponse {
+  readonly id: number;
+  readonly ok: true;
+  readonly kind: 'textEdits';
+  readonly textEdits: readonly TextEdit[];
+}
 /** Failure response — a thrown error surfaced to the caller (never swallowed). */
 export interface TsErrorResponse {
   readonly id: number;
@@ -251,6 +302,8 @@ export type TsResponse =
   | TsPrepareRenameResponse
   | TsWorkspaceEditResponse
   | TsSignatureHelpResponse
+  | TsCodeActionsResponse
+  | TsTextEditsResponse
   | TsErrorResponse;
 
 /** kernel fork-IPC envelope discriminator (sits beside `rifty:vfs-write`/`rifty:pty`). */
