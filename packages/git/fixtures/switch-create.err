@@ -1,0 +1,2 @@
+# git 2.50.1 | LC_ALL=C | git switch -c feat | tree: create + switch (stderr)
+Switched to a new branch 'feat'

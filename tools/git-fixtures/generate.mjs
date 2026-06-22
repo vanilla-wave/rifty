@@ -268,6 +268,68 @@ function main() {
         ['checkout', '--', 'a.txt'],
       );
     }
+
+    // --- switch / restore (modern porcelain — same engine as checkout) ---
+    {
+      const { dir } = twoBranchRepo();
+      tmps.push(dir);
+      writeCheckout(version, 'switch-existing', 'git switch other', 'switch existing branch', dir, [
+        'switch',
+        'other',
+      ]);
+    }
+    {
+      const { dir } = twoBranchRepo();
+      tmps.push(dir);
+      writeCheckout(version, 'switch-create', 'git switch -c feat', 'create + switch', dir, [
+        'switch',
+        '-c',
+        'feat',
+      ]);
+    }
+    {
+      const { dir } = twoBranchRepo();
+      tmps.push(dir);
+      writeCheckout(version, 'switch-already', 'git switch main', 'already on branch', dir, [
+        'switch',
+        'main',
+      ]);
+    }
+    {
+      const { dir, headOther } = twoBranchRepo();
+      tmps.push(dir);
+      writeCheckout(
+        version,
+        'switch-detached',
+        `git switch --detach ${headOther}`,
+        'detached HEAD',
+        dir,
+        ['switch', '--detach', headOther],
+      );
+    }
+    {
+      const { dir } = twoBranchRepo();
+      tmps.push(dir);
+      writeFileSync(join(dir, 'a.txt'), 'dirty\n'); // restore worktree from index
+      writeCheckout(version, 'restore-worktree', 'git restore a.txt', 'restore worktree', dir, [
+        'restore',
+        'a.txt',
+      ]);
+    }
+    {
+      const { dir } = twoBranchRepo();
+      tmps.push(dir);
+      writeFileSync(join(dir, 'c.txt'), 'staged\n');
+      git(dir, ['add', 'c.txt']); // staged → restore --staged unstages
+      writeCheckout(
+        version,
+        'restore-staged',
+        'git restore --staged c.txt',
+        'unstage via restore --staged',
+        dir,
+        ['restore', '--staged', 'c.txt'],
+      );
+    }
   } finally {
     for (const dir of tmps) rmSync(dir, { recursive: true, force: true });
   }
