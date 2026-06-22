@@ -4,6 +4,21 @@
 
 ### Added
 
+- `src/parity.test.ts`: parity harness (gold standard, ADR-0166). Per fixture:
+  Side A builds a real `ts.LanguageService` over real Node fs (tmp dir + `ts.sys`,
+  pinned `typescript@5.9.3`, NO rifty code) and computes expected semantic
+  diagnostics at runtime; Side B loads the SAME bytes into a `createMemoryFs()`
+  and runs `createTsLanguageService`. The SAME symmetric normalization (file,
+  code, range, message; deterministic sort) is applied to both and Side B must
+  deep-equal Side A. 8 divergence-prone fixtures: cross-file wrong-typed arg
+  (TS2345); strict + noUnusedLocals (TS7006/6133/18047); no-tsconfig loose
+  defaults (strict-only diagnostics suppressed, plain TS2322 kept);
+  node_modules `.d.ts` used wrongly (TS2345, not "cannot find module");
+  multiple errors per file (ordering + flatten); re-export barrel chain (TS2345);
+  extensionless relative import under bundler (TS2345, no TS5097); `paths`/
+  `baseUrl` alias (TS2345). All match real TS on the first run — no host bug
+  surfaced. Harness teeth verified: a deliberate Side-B code mutation fails all
+  fixtures with a precise gold-vs-rifty diff.
 - Package skeleton for `@riftydev/ts-language-service`.
 - Pinned `typescript@5.9.3` as a prod dependency (ADR-0166: the vendored fixed
   compiler is the single source of truth for both the compiler and its lib files).
