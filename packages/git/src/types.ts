@@ -26,3 +26,23 @@ export interface MakeGitOptions {
   fs: import('./fs-adapter.ts').GitFs;
   dir: string;
 }
+
+/** Per-file change class reported by `diff()` (HEAD tree vs working dir). */
+export type DiffChange = 'add' | 'modify' | 'delete';
+
+/** One unified-diff hunk: `@@ -oldStart,oldLines +newStart,newLines @@`. */
+export interface DiffHunk {
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  /** Lines prefixed `' '` (context) | `'-'` (removed) | `'+'` (added). */
+  lines: string[];
+}
+
+/** One file's diff: structured data, not byte-exact `git diff` text. */
+export interface DiffEntry {
+  filepath: string;
+  change: DiffChange;
+  hunks: DiffHunk[];
+}

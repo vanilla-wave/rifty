@@ -5,8 +5,9 @@
  * smart-HTTP transport lands in a later phase, never a silent stub.
  */
 import { NotImplementedError } from '@riftydev/io';
-import git, { type FsClient } from 'isomorphic-git';
-import type { GitIdentity, LogEntry, MakeGitOptions, StatusEntry } from './types.ts';
+import git, { type FsClient, type WalkerEntry } from 'isomorphic-git';
+import { lineDiff } from './line-diff.ts';
+import type { DiffEntry, GitIdentity, LogEntry, MakeGitOptions, StatusEntry } from './types.ts';
 
 const NETWORK_HINT = 'network transport lands in a later phase';
 
@@ -29,6 +30,7 @@ export interface Git {
   listBranches(): Promise<string[]>;
   resolveRef(ref: string): Promise<string>;
   hashBlob(object: Uint8Array | string): Promise<string>;
+  diff(): Promise<DiffEntry[]>;
   clone(): never;
   fetch(): never;
   pull(): never;
@@ -87,6 +89,55 @@ export function makeGit(opts: MakeGitOptions): Git {
       const blob = typeof object === 'string' ? new TextEncoder().encode(object) : object;
       const { oid } = await git.hashBlob({ object: blob });
       return oid;
+    },
+    async diff() {
+      // No `git.diff` exists — walk HEAD tree (left) vs WORKDIR (right) and
+      // classify each path. walk() semantics: returning `null` from map PRUNES
+      // the subtree (children unwalked); returning `undefined` skips just this
+      // path but still descends. So trees / unchanged blobs → `undefined`
+      // (descend, contribute nothing); `.git` → `null` (prune, never recurse).
+      const decoder = new TextDecoder();
+      const decode = async (entry: WalkerEntry | null): Promise<string> => {
+        if (!entry) return '';
+        if ((await entry.type()) !== 'blob') return '';
+        const content = await entry.content();
+        return content ? decoder.decode(content) : '';
+      };
+
+      const entries = await git.walk({
+        fs,
+        dir,
+        trees: [git.TREE({ ref: 'HEAD' }), git.WORKDIR()],
+        map: async (filepath, walkEntries): Promise<DiffEntry | undefined | null> => {
+          if (filepath === '.') return undefined; // root — descend, emit nothing
+          if (filepath === '.git') return null; // prune the repo metadata subtree
+          const head = walkEntries[0] ?? null;
+          const work = walkEntries[1] ?? null;
+          const headBlob = head && (await head.type()) === 'blob';
+          const workBlob = work && (await work.type()) === 'blob';
+
+          // Both blobs: compare oids; equal → unchanged (descend nothing).
+          if (headBlob && workBlob) {
+            const [headOid, workOid] = await Promise.all([head.oid(), work.oid()]);
+            if (headOid === workOid) return undefined;
+            const [oldText, newText] = await Promise.all([decode(head), decode(work)]);
+            return { filepath, change: 'modify', hunks: lineDiff(oldText, newText) };
+          }
+          // HEAD-only blob → deleted from workdir (all old lines removed).
+          if (headBlob && !workBlob) {
+            const oldText = await decode(head);
+            return { filepath, change: 'delete', hunks: lineDiff(oldText, '') };
+          }
+          // WORKDIR-only blob → added (all new lines added).
+          if (!headBlob && workBlob) {
+            const newText = await decode(work);
+            return { filepath, change: 'add', hunks: lineDiff('', newText) };
+          }
+          // Trees (descend into children) or non-blob specials — emit nothing.
+          return undefined;
+        },
+      });
+      return entries as DiffEntry[];
     },
     clone(): never {
       throw new NotImplementedError('git.clone', NETWORK_HINT);
