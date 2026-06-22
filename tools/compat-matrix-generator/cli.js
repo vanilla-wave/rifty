@@ -464,6 +464,21 @@ const matrices = [
       ],
       ['`branch` / `listBranches` / `currentBranch` / `resolveRef`', '✅', 'Local refs'],
       [
+        '`checkout <branch>` / `-b [<start>]` / `<commit>` (detached)',
+        '✅',
+        "Branch switch, create+switch, detached HEAD; byte-exact stderr vs git 2.50.1 (frozen fixtures); dirty-tree conflict refused with git's exact `error:…Aborting` message (exit 1)",
+      ],
+      [
+        '`checkout [--] <pathspec>` / `<tree-ish> -- <pathspec>` (restore)',
+        '✅',
+        'Restore worktree from the index (or from a tree-ish, +index); HEAD untouched; silent like git',
+      ],
+      [
+        'checkout `--orphan` / `-B` / `--patch` / `--merge` / `--ours`·`--theirs` / `--track` / `-` / glob pathspec',
+        '❌',
+        "`NotImplementedError('git.checkout.<x>')` (exit 128) — out of the v1 checkout subset, never mislabeled as a typo",
+      ],
+      [
         '`clone` / `fetch` / `pull` / `push` (smart HTTP)',
         '✅',
         'Over rifty `node:http` egress; real `git http-backend` clone integration-tested (canonical objects end-to-end)',
@@ -521,6 +536,7 @@ const matrices = [
       '`packages/git/tests/commit-sha-parity.test.ts`',
       '`packages/git/tests/fs-adapter.test.ts`',
       '`packages/git/tests/capability-local.test.ts`',
+      '`packages/git/tests/checkout.test.ts`',
       '`packages/git/tests/diff.test.ts`',
       '`packages/git/tests/cors-proxy.test.ts`',
       '`packages/git/tests/http-plugin.test.ts`',

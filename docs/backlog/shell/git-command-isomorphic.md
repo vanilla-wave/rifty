@@ -13,7 +13,7 @@ code: [packages/git/src/git.ts, packages/git/src/fs-adapter.ts, packages/git/src
 
 Shipped as `@riftydev/git` (tier-0) + a shell `git` builtin + SDK `@riftydev/sdk/git`:
 
-- **Offline porcelain, fully faithful:** init/add/remove/status/commit/log/diff/branch/checkout/resolveRef/config over the VFS. **commit-SHA is byte-identical to canonical git** (`commit-sha-parity.test.ts`).
+- **Offline porcelain, fully faithful:** init/add/remove/status/commit/log/diff/branch/checkout/resolveRef over the VFS. `checkout` = branch-switch (existing/`-b`/detached HEAD) + file-restore (from index or a tree-ish), byte-exact stderr vs git 2.50.1 (`checkout-*` fixtures, `checkout.test.ts`). **commit-SHA is byte-identical to canonical git** (`commit-sha-parity.test.ts`). (`config` is NOT a delivered porcelain verb — it loud-throws, see below.)
 - **Byte-exact conformance** vs real git 2.50.1 (frozen golden fixtures): `status --porcelain`, `log --oneline` (`packages/git/fixtures/`, `git-fixtures.test.ts`).
 - **Network (smart-HTTP):** clone/fetch/pull/push over rifty net egress; real `git http-backend` clone integration-tested end-to-end (`network.integration.test.ts`). corsProxy via D-004 env-config (`RIFTY_GIT_CORS_PROXY`), `onAuth` token provider.
 - **Loud-throw ceiling:** ssh/`git://`/dumb-HTTP → `NotImplementedError('git.transport.*')`; cross-origin-without-proxy → `git.cors` (browser); unimplemented git subcommands → loud exit-128. Compat: `docs/public/compat/git.md`.
@@ -27,6 +27,7 @@ Each is a genuine fidelity gap, **recorded loud** (compat ❌ + note), never a s
 - **Push-from-shallow hardening.** isomorphic-git can't push from a shallow clone (`GitPushError`); currently surfaced loud — a deepen-then-push path is future work.
 - **Large-repo packfile streaming.** isomorphic-git buffers packfiles in memory → OOM on large repos; default singleBranch+depth mitigates. Streaming parse is future work.
 - **Long-format byte-exactness.** Default `git status` / `git log` / `git diff` are human-readable (not byte-exact git); `diff` is structured hunks, not byte-exact `git diff` text. Byte-exact long formats deferred.
+- **`checkout` ceilings.** `--orphan` / `-B` / `--patch` / `--merge` / `--ours`·`--theirs` / `--track` / `checkout -` (previous branch, needs reflog `@{-1}`) / glob-magic pathspecs / `-q` all loud-throw `NotImplementedError('git.checkout.<x>')` (exit 128). `git restore` / `git switch` remain separate unimplemented commands (the detached-HEAD advisory still quotes git's verbatim `git switch` hint — fidelity to git's text).
 - **Broader iso-git surface.** tag/stash/merge/cherry-pick/reset/remote/config-CLI etc. are not in the v1 subset (the shell reports them as not-implemented, exit 128).
 
 ## Reversibility
