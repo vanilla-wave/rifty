@@ -29,47 +29,58 @@ const hasSab =
 
 const fixtureUrl = new URL('./fixtures/sab-ring-echo.js', import.meta.url);
 
+// Real-Worker lifecycle (spawn + 4 cross-thread Atomics round-trips + join) is
+// load-sensitive: under a fully-loaded CI runner the worker's startup/exit can
+// stall past vitest's 5000ms default, yielding a flaky bare test-timeout (no
+// assertion). Protocol correctness stays bounded by the inner waitReplyAsync(2000)
+// — a genuine SAB deadlock still throws RingTimeoutError at 2s, not here.
+const REAL_WORKER_TIMEOUT_MS = 30_000;
+
 describe.skipIf(!hasSab)('SabRing — real Worker round-trip (ADR-0011 phase 1)', () => {
-  it('parent writes requests; worker echoes via Atomics.wait/notify on the SAB ring', async () => {
-    const payloadCapacity = 1024;
-    const { sab, ring } = createSabRing({ payloadCapacity });
-    expect(sab.byteLength).toBe(SAB_RING_HEADER_BYTES + payloadCapacity * 2);
+  it(
+    'parent writes requests; worker echoes via Atomics.wait/notify on the SAB ring',
+    async () => {
+      const payloadCapacity = 1024;
+      const { sab, ring } = createSabRing({ payloadCapacity });
+      expect(sab.byteLength).toBe(SAB_RING_HEADER_BYTES + payloadCapacity * 2);
 
-    const worker = new Worker(fileURLToPath(fixtureUrl), {
-      workerData: { sab, payloadCapacity, protocolVersion: SYNC_RPC_PROTOCOL_VERSION },
-    });
-
-    // Wait for the fixture to signal it's installed and looping.
-    await new Promise<void>((resolve, reject) => {
-      worker.once('message', (msg) => {
-        if (msg?.type === 'ready') resolve();
-        else reject(new Error(`unexpected worker message: ${JSON.stringify(msg)}`));
+      const worker = new Worker(fileURLToPath(fixtureUrl), {
+        workerData: { sab, payloadCapacity, protocolVersion: SYNC_RPC_PROTOCOL_VERSION },
       });
-      worker.once('error', reject);
-    });
 
-    // Three sequential request/reply cycles.
-    const payloads = [
-      new Uint8Array([1, 2, 3]),
-      new Uint8Array([42]),
-      new Uint8Array([0xff, 0x00, 0x10, 0x20, 0x40]),
-    ];
-    for (const payload of payloads) {
-      ring.writeRequest(payload);
-      const reply = await ring.waitReplyAsync(2000);
-      expect(Array.from(reply)).toEqual(Array.from(payload));
-    }
+      // Wait for the fixture to signal it's installed and looping.
+      await new Promise<void>((resolve, reject) => {
+        worker.once('message', (msg) => {
+          if (msg?.type === 'ready') resolve();
+          else reject(new Error(`unexpected worker message: ${JSON.stringify(msg)}`));
+        });
+        worker.once('error', reject);
+      });
 
-    // Shutdown handshake: empty payload tells the fixture to exit.
-    ring.writeRequest(new Uint8Array(0));
-    const finalReply = await ring.waitReplyAsync(2000);
-    expect(finalReply.byteLength).toBe(0);
+      // Three sequential request/reply cycles.
+      const payloads = [
+        new Uint8Array([1, 2, 3]),
+        new Uint8Array([42]),
+        new Uint8Array([0xff, 0x00, 0x10, 0x20, 0x40]),
+      ];
+      for (const payload of payloads) {
+        ring.writeRequest(payload);
+        const reply = await ring.waitReplyAsync(2000);
+        expect(Array.from(reply)).toEqual(Array.from(payload));
+      }
 
-    await new Promise<void>((resolve, reject) => {
-      worker.once('exit', () => resolve());
-      worker.once('error', reject);
-    });
-  });
+      // Shutdown handshake: empty payload tells the fixture to exit.
+      ring.writeRequest(new Uint8Array(0));
+      const finalReply = await ring.waitReplyAsync(2000);
+      expect(finalReply.byteLength).toBe(0);
+
+      await new Promise<void>((resolve, reject) => {
+        worker.once('exit', () => resolve());
+        worker.once('error', reject);
+      });
+    },
+    REAL_WORKER_TIMEOUT_MS,
+  );
 
   it('responder side: parent attaches a SabRing peer, polls, and replies', () => {
     // Pure in-realm sanity round-trip — the conformance test above already
