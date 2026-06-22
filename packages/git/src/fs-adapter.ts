@@ -9,9 +9,13 @@
  *  - `symlink` loud-throws `EPERM`, `readlink` loud-throws `ENOENT`,
  *  - `chmod` is a no-op (nothing to mutate).
  *
- * `ino` is synthesised per path (stable within an adapter instance) — the VFS
- * has no inode concept; isomorphic-git only needs a stable identity for its
- * stat cache.
+ * `ino` is derived from the file's mtime (the VFS has no inode concept). This is
+ * load-bearing for change-detection: isomorphic-git's racy-clean index shortcut
+ * (`compareStats`) compares mtime only at SECOND granularity but compares `ino`
+ * EXACTLY — so deriving `ino` from the full-precision mtime makes a sub-second
+ * content edit visible (paired with the VFS's strictly-monotonic write mtime),
+ * instead of being silently trusted as unchanged. See ADR-0167 +
+ * packages/vfs/src/mtime-monotonic.test.ts.
  */
 import type { Vfs } from '@riftydev/vfs';
 
@@ -79,22 +83,18 @@ function enoent(p: string): Error & { code: string } {
   return makeError(`ENOENT: no such file or directory, '${p}'`, 'ENOENT');
 }
 
-export function vfsToGitFs(vfs: Vfs): GitFs {
-  const inos = new Map<string, number>();
-  let nextIno = 1;
-  const inoFor = (p: string): number => {
-    let i = inos.get(p);
-    if (i === undefined) {
-      i = nextIno++;
-      inos.set(p, i);
-    }
-    return i;
-  };
+const MAX_UINT32 = 2 ** 32;
 
+/** ino derived from mtime — changes whenever content is (over)written. */
+function mtimeToIno(mtime: number): number {
+  return Math.floor(mtime) % MAX_UINT32;
+}
+
+export function vfsToGitFs(vfs: Vfs): GitFs {
   const stat = async (p: string): Promise<GitStat> => {
     if (!(await vfs.exists(p))) throw enoent(p);
     const s = await vfs.stat(p);
-    return makeStat(s.isDirectory, s.size, s.mtime, inoFor(p));
+    return makeStat(s.isDirectory, s.size, s.mtime, mtimeToIno(s.mtime));
   };
 
   return {

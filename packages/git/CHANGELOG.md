@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **fs-adapter `ino` is derived from mtime — same-size content edits are no longer silently trusted as unchanged.** isomorphic-git's `compareStats` compares mtime only at second granularity but `ino` exactly; deriving `ino` from the full-precision (strictly-monotonic) VFS mtime makes a sub-second, same-byte-length edit visible to `git status`/`diff` (was a silent-data-loss Fidelity bug — ADR-0167). Guards: `same-size-edit-fidelity.test.ts` + `@riftydev/vfs` `mtime-monotonic.test.ts`.
+
 ### Added
 
 - Initial `@riftydev/git`: git capability over the VFS (isomorphic-git).
