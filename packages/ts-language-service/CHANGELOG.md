@@ -4,6 +4,21 @@
 
 ### Added
 
+- **Hover / go-to-definition (+type-definition) / completions** (ADR-0166 task 2.1).
+  `TsLanguageService` gains `getQuickInfo` (→ LSP `Hover`: signature as a
+  `typescript` code block + rendered JSDoc/tags, range from the symbol span),
+  `getDefinition`/`getTypeDefinition` (→ `Location[]`, target span mapped against
+  the target file's own text via the host), `getCompletions` (→ `CompletionList`;
+  `ts.ScriptElementKind` → LSP `CompletionItemKind`), and `getCompletionDetails`
+  (resolves one entry's `detail`+`documentation`, threading the entry's real
+  `source`/`data` so uniquely-named auto-imports resolve exactly — same-name
+  collisions tracked: backlog `protocol/ts-completion-resolve-by-label`). New LSP
+  shapes (`MarkupContent`, `Hover`, `Location`, `CompletionItemKind`,
+  `CompletionItem`, `CompletionList`) + worker frames (`ts:getQuickInfo`,
+  `ts:getDefinition`, `ts:getTypeDefinition`, `ts:getCompletions`,
+  `ts:getCompletionDetails` → `hover`/`locations`/`completions`/`completionItem`
+  responses). Every query is parity-checked against the real `ts.LanguageService`
+  (gold standard) for cross-file + node_modules symbols.
 - **Light browser-host subpaths `./protocol` + `./lsp-types`** (ADR-0166 task 1.9).
   The playground page + owner relay need the `rifty:ts-lsp` frame guards
   (`isTs{Request,Response}Message`, `TS_IPC_TYPE`, the request/response types) and

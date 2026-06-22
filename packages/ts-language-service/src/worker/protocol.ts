@@ -14,7 +14,14 @@
  * overlay; the three `get*Diagnostics` queries read it.
  */
 
-import type { Diagnostic } from '../lsp-types.ts';
+import type {
+  CompletionItem,
+  CompletionList,
+  Diagnostic,
+  Hover,
+  Location,
+  Position,
+} from '../lsp-types.ts';
 
 /** Request frame discriminators. */
 export type TsRequestType =
@@ -25,7 +32,12 @@ export type TsRequestType =
   | 'ts:invalidate'
   | 'ts:getSemanticDiagnostics'
   | 'ts:getSyntacticDiagnostics'
-  | 'ts:getConfigFileDiagnostics';
+  | 'ts:getConfigFileDiagnostics'
+  | 'ts:getQuickInfo'
+  | 'ts:getDefinition'
+  | 'ts:getTypeDefinition'
+  | 'ts:getCompletions'
+  | 'ts:getCompletionDetails';
 
 interface BaseRequest {
   /** Correlation id echoed on the response. */
@@ -74,6 +86,37 @@ export interface TsSyntacticRequest extends BaseRequest {
 export interface TsConfigDiagnosticsRequest extends BaseRequest {
   readonly type: 'ts:getConfigFileDiagnostics';
 }
+/** Quick-info (hover) at `position` in `path`. */
+export interface TsQuickInfoRequest extends BaseRequest {
+  readonly type: 'ts:getQuickInfo';
+  readonly path: string;
+  readonly position: Position;
+}
+/** Go-to-definition at `position` in `path`. */
+export interface TsDefinitionRequest extends BaseRequest {
+  readonly type: 'ts:getDefinition';
+  readonly path: string;
+  readonly position: Position;
+}
+/** Go-to-type-definition at `position` in `path`. */
+export interface TsTypeDefinitionRequest extends BaseRequest {
+  readonly type: 'ts:getTypeDefinition';
+  readonly path: string;
+  readonly position: Position;
+}
+/** Completion candidates at `position` in `path`. */
+export interface TsCompletionsRequest extends BaseRequest {
+  readonly type: 'ts:getCompletions';
+  readonly path: string;
+  readonly position: Position;
+}
+/** Resolve one completion entry (`label`) at `position` in `path`. */
+export interface TsCompletionDetailsRequest extends BaseRequest {
+  readonly type: 'ts:getCompletionDetails';
+  readonly path: string;
+  readonly position: Position;
+  readonly label: string;
+}
 
 export type TsRequest =
   | TsInitRequest
@@ -83,7 +126,12 @@ export type TsRequest =
   | TsInvalidateRequest
   | TsSemanticRequest
   | TsSyntacticRequest
-  | TsConfigDiagnosticsRequest;
+  | TsConfigDiagnosticsRequest
+  | TsQuickInfoRequest
+  | TsDefinitionRequest
+  | TsTypeDefinitionRequest
+  | TsCompletionsRequest
+  | TsCompletionDetailsRequest;
 
 /** Acknowledgement for a mutation/init request (no payload). */
 export interface TsAckResponse {
@@ -98,6 +146,34 @@ export interface TsDiagnosticsResponse {
   readonly kind: 'diagnostics';
   readonly diagnostics: readonly Diagnostic[];
 }
+/** Hover payload for `ts:getQuickInfo` (`null` when nothing to hover). */
+export interface TsHoverResponse {
+  readonly id: number;
+  readonly ok: true;
+  readonly kind: 'hover';
+  readonly hover: Hover | null;
+}
+/** Location payload for `ts:getDefinition` / `ts:getTypeDefinition`. */
+export interface TsLocationsResponse {
+  readonly id: number;
+  readonly ok: true;
+  readonly kind: 'locations';
+  readonly locations: readonly Location[];
+}
+/** Completion-list payload for `ts:getCompletions`. */
+export interface TsCompletionsResponse {
+  readonly id: number;
+  readonly ok: true;
+  readonly kind: 'completions';
+  readonly completions: CompletionList;
+}
+/** Resolved-entry payload for `ts:getCompletionDetails` (`null` if unknown). */
+export interface TsCompletionItemResponse {
+  readonly id: number;
+  readonly ok: true;
+  readonly kind: 'completionItem';
+  readonly item: CompletionItem | null;
+}
 /** Failure response — a thrown error surfaced to the caller (never swallowed). */
 export interface TsErrorResponse {
   readonly id: number;
@@ -106,7 +182,14 @@ export interface TsErrorResponse {
   readonly error: { readonly name: string; readonly message: string };
 }
 
-export type TsResponse = TsAckResponse | TsDiagnosticsResponse | TsErrorResponse;
+export type TsResponse =
+  | TsAckResponse
+  | TsDiagnosticsResponse
+  | TsHoverResponse
+  | TsLocationsResponse
+  | TsCompletionsResponse
+  | TsCompletionItemResponse
+  | TsErrorResponse;
 
 /** kernel fork-IPC envelope discriminator (sits beside `rifty:vfs-write`/`rifty:pty`). */
 export const TS_IPC_TYPE = 'rifty:ts-lsp' as const;

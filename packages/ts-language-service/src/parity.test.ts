@@ -35,6 +35,14 @@ import * as nodePath from 'node:path';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import ts from 'typescript';
 import { afterAll, describe, expect, it } from 'vitest';
+import type { Position, Range } from './lsp-types.ts';
+import {
+  partsToString,
+  quickInfoToHover,
+  scriptElementKindToCompletionKind,
+  spanToRange,
+} from './mapping.ts';
+import { offsetToPosition, positionToOffset } from './position.ts';
 import { createTsLanguageService } from './service.ts';
 
 const require = createRequire(import.meta.url);
@@ -140,11 +148,16 @@ function writeFixtureToTmp(fixture: Fixture): string {
 }
 
 /**
- * Build a real `ts.LanguageService` over real Node fs for `root`, parse the
- * tsconfig with tsc's own machinery (`ts.sys`), and collect semantic
- * diagnostics for the requested files. Pure tsc — no rifty code.
+ * Build a real `ts.LanguageService` over real Node fs for `root`, parsing the
+ * tsconfig with tsc's own machinery (`ts.sys`). Pure tsc — no rifty code. The
+ * host is returned too so the query tests can read a target file's text (to map
+ * a definition span into a Range) the same way the service does.
  */
-function goldDiagnostics(fixture: Fixture, root: string): NormDiagnostic[] {
+function buildGoldService(root: string): {
+  service: ts.LanguageService;
+  host: ts.LanguageServiceHost;
+  rel: (abs: string) => string;
+} {
   const configPath = ts.findConfigFile(root, ts.sys.fileExists, 'tsconfig.json');
   let parsed: ts.ParsedCommandLine;
   if (configPath) {
@@ -190,8 +203,13 @@ function goldDiagnostics(fixture: Fixture, root: string): NormDiagnostic[] {
   };
 
   const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+  return { service, host, rel: (abs: string) => toPosixRel(root, abs) };
+}
+
+/** Collect semantic diagnostics for the requested files (gold side). */
+function goldDiagnostics(fixture: Fixture, root: string): NormDiagnostic[] {
+  const { service, rel } = buildGoldService(root);
   const out: NormDiagnostic[] = [];
-  const rel = (abs: string) => toPosixRel(root, abs);
   for (const relPath of fixture.diagnose) {
     const abs = nodePath.join(root, relPath);
     for (const d of service.getSemanticDiagnostics(abs)) out.push(normalizeTsDiagnostic(d, rel));
@@ -223,9 +241,18 @@ function writeFixtureToVfs(fixture: Fixture): ReturnType<typeof createMemoryFs>[
   return fsSync;
 }
 
-async function riftyDiagnostics(fixture: Fixture): Promise<NormDiagnostic[]> {
+/** Build the rifty service over the fixture, returning the service + its fsSync. */
+async function buildRiftyService(fixture: Fixture): Promise<{
+  svc: import('./service.ts').TsLanguageService;
+  fsSync: ReturnType<typeof writeFixtureToVfs>;
+}> {
   const fsSync = writeFixtureToVfs(fixture);
   const svc = await createTsLanguageService({ fsSync, projectRoot: RIFTY_ROOT });
+  return { svc, fsSync };
+}
+
+async function riftyDiagnostics(fixture: Fixture): Promise<NormDiagnostic[]> {
+  const { svc } = await buildRiftyService(fixture);
   const out: NormDiagnostic[] = [];
   for (const relPath of fixture.diagnose) {
     const abs = `${RIFTY_ROOT}/${relPath}`;
@@ -421,4 +448,269 @@ describe('parity: rifty TS language service vs real ts.LanguageService (gold sta
       expect(rifty).toEqual(gold);
     });
   }
+});
+
+// ===========================================================================
+// Phase 2 queries: hover / definition / type-definition / completions.
+//
+// Same gold-standard discipline: Side A calls the RAW `ts.LanguageService`
+// (getQuickInfoAtPosition / getDefinitionAtPosition / … ) over the real-fs host
+// and reduces the result with the SAME `mapping.ts` renderer the rifty service
+// uses (so the comparison is rendered-vs-rendered, never renderer-vs-raw — a
+// symmetric normalization that hides nothing). Side B calls rifty's new
+// methods. Positions are located by an unambiguous `needle` substring so the
+// fixtures stay readable.
+// ===========================================================================
+
+/** Locate the position to query: offset = (index of `needle`) + `inner`. */
+interface Probe {
+  readonly file: string;
+  /** Unambiguous substring whose start anchors the position. */
+  readonly needle: string;
+  /** Offset INTO the needle (e.g. just past `.` for a member completion). */
+  readonly inner: number;
+}
+
+function probePosition(text: string, probe: Probe): Position {
+  const at = text.indexOf(probe.needle);
+  if (at === -1) throw new Error(`probe needle not found: ${JSON.stringify(probe.needle)}`);
+  if (text.indexOf(probe.needle, at + 1) !== -1)
+    throw new Error(`probe needle is ambiguous: ${JSON.stringify(probe.needle)}`);
+  return offsetToPosition(text, at + probe.inner);
+}
+
+/** Side A hover for a probe — RAW ts.QuickInfo rendered via the shared mapper. */
+function goldHover(
+  svc: ts.LanguageService,
+  host: ts.LanguageServiceHost,
+  abs: string,
+  probe: Probe,
+) {
+  const text = host.readFile?.(abs) ?? '';
+  const offset = positionToOffset(text, probePosition(text, probe));
+  const info = svc.getQuickInfoAtPosition(abs, offset);
+  return info ? quickInfoToHover(info, text) : null;
+}
+
+/** Side A definition/type-definition — map each DefinitionInfo to a Location. */
+function goldDefinitions(
+  defs: readonly ts.DefinitionInfo[] | undefined,
+  host: ts.LanguageServiceHost,
+  rel: (abs: string) => string,
+): { uri: string; range: Range }[] {
+  return (defs ?? []).map((d) => {
+    const text = host.readFile?.(d.fileName) ?? '';
+    return { uri: rel(d.fileName), range: spanToRange(text, d.textSpan) };
+  });
+}
+
+/** Normalize a rifty Location[] to relative-uri for comparison with Side A. */
+function relLocations(
+  locs: readonly { uri: string; range: Range }[],
+  riftyRel: (abs: string) => string,
+): { uri: string; range: Range }[] {
+  return locs.map((l) => ({ uri: riftyRel(l.uri), range: l.range }));
+}
+
+function sortLocations(locs: { uri: string; range: Range }[]): { uri: string; range: Range }[] {
+  return [...locs].sort(
+    (a, b) =>
+      a.uri.localeCompare(b.uri) ||
+      a.range.start.line - b.range.start.line ||
+      a.range.start.character - b.range.start.character,
+  );
+}
+
+const TS_LIB_DIR = tsLibDir();
+/**
+ * Gold target paths point at the real ts lib dir / tmp root; rifty's at /ts-lib
+ * + /proj. Strip both to a stable tail. `ts.sys.realpath` may canonicalize the
+ * tmp root (macOS `/var` → `/private/var`), so relativize against BOTH the raw
+ * and realpath'd root — whichever yields a non-`..` (in-tree) result wins.
+ */
+function goldRel(root: string): (abs: string) => string {
+  const realRoot = ts.sys.realpath ? ts.sys.realpath(root) : root;
+  return (abs) => {
+    if (abs.startsWith(TS_LIB_DIR)) return `lib:${nodePath.basename(abs)}`;
+    for (const base of [root, realRoot]) {
+      const r = toPosixRel(base, abs);
+      if (!r.startsWith('..')) return r;
+    }
+    return toPosixRel(root, abs);
+  };
+}
+function riftyRel(abs: string): string {
+  if (abs.startsWith('/ts-lib/')) return `lib:${abs.slice('/ts-lib/'.length)}`;
+  if (abs.startsWith(`${RIFTY_ROOT}/`)) return abs.slice(`${RIFTY_ROOT}/`.length);
+  return abs;
+}
+
+// --- Shared fixture for the query tests (one program, many probes) ----------
+const QUERY_FIXTURE: Fixture = {
+  name: 'queries: hover / definition / completions',
+  probes: 'cross-file + node_modules symbols for quick-info / definition / completions',
+  files: {
+    'tsconfig.json': JSON.stringify({
+      compilerOptions: {
+        strict: true,
+        module: 'esnext',
+        target: 'es2022',
+        moduleResolution: 'bundler',
+      },
+    }),
+    'math.ts':
+      '/** Adds two numbers. */\nexport function add(a: number, b: number): number {\n  return a + b;\n}\n',
+    'node_modules/leftpad/package.json': JSON.stringify({
+      name: 'leftpad',
+      version: '1.0.0',
+      types: 'index.d.ts',
+    }),
+    'node_modules/leftpad/index.d.ts':
+      'export interface Padder {\n  pad(s: string, n: number): string;\n}\nexport declare const padder: Padder;\n',
+    'main.ts':
+      "import { add } from './math.ts';\n" +
+      "import { padder } from 'leftpad';\n" +
+      'const total = add(1, 2);\n' +
+      'padder.pad("x", 3);\n' +
+      'const arr = [1, 2, 3];\n' +
+      'arr.map((n) => n);\n',
+  },
+  diagnose: [],
+};
+
+describe('parity: phase-2 queries vs real ts.LanguageService (gold standard)', () => {
+  it('hover (quick-info) matches real TS — cross-file fn + node_modules symbol', async () => {
+    const root = writeFixtureToTmp(QUERY_FIXTURE);
+    const { service: gsvc, host: ghost } = buildGoldService(root);
+    const { svc } = await buildRiftyService(QUERY_FIXTURE);
+
+    // (1) cross-file function `add` at its call site; (2) node_modules `padder`.
+    const probes: Probe[] = [
+      { file: 'main.ts', needle: 'add(1, 2)', inner: 1 }, // cursor on `add`
+      { file: 'main.ts', needle: 'padder.pad', inner: 1 }, // cursor on `padder`
+    ];
+    for (const probe of probes) {
+      const gold = goldHover(gsvc, ghost, nodePath.join(root, probe.file), probe);
+      const text = QUERY_FIXTURE.files[probe.file] ?? '';
+      const pos = probePosition(text, probe);
+      const rifty = svc.getQuickInfo(`${RIFTY_ROOT}/${probe.file}`, pos);
+      expect(gold).not.toBeNull(); // non-vacuous: there IS quick-info here
+      expect(rifty).toEqual(gold);
+    }
+  });
+
+  it('definition matches real TS — cross-file + into node_modules .d.ts', async () => {
+    const root = writeFixtureToTmp(QUERY_FIXTURE);
+    const { service: gsvc, host: ghost } = buildGoldService(root);
+    const { svc } = await buildRiftyService(QUERY_FIXTURE);
+    const grel = goldRel(root);
+
+    const probes: Probe[] = [
+      { file: 'main.ts', needle: 'add(1, 2)', inner: 1 }, // → math.ts add
+      { file: 'main.ts', needle: 'padder.pad', inner: 1 }, // → node_modules leftpad
+    ];
+    for (const probe of probes) {
+      const text = QUERY_FIXTURE.files[probe.file] ?? '';
+      const offset = positionToOffset(text, probePosition(text, probe));
+      const goldDefs = sortLocations(
+        goldDefinitions(
+          gsvc.getDefinitionAtPosition(nodePath.join(root, probe.file), offset),
+          ghost,
+          grel,
+        ),
+      );
+      const riftyDefs = sortLocations(
+        relLocations(
+          svc.getDefinition(`${RIFTY_ROOT}/${probe.file}`, probePosition(text, probe)),
+          riftyRel,
+        ),
+      );
+      expect(goldDefs.length).toBeGreaterThan(0); // non-vacuous
+      expect(riftyDefs).toEqual(goldDefs);
+    }
+  });
+
+  it('type-definition matches real TS — node_modules interface', async () => {
+    const root = writeFixtureToTmp(QUERY_FIXTURE);
+    const { service: gsvc, host: ghost } = buildGoldService(root);
+    const { svc } = await buildRiftyService(QUERY_FIXTURE);
+    const grel = goldRel(root);
+
+    // `padder`'s TYPE is `Padder` (the interface in node_modules) — different
+    // location from go-to-definition (which lands on the `padder` const).
+    const probe: Probe = { file: 'main.ts', needle: 'padder.pad', inner: 1 };
+    const text = QUERY_FIXTURE.files[probe.file] ?? '';
+    const offset = positionToOffset(text, probePosition(text, probe));
+    const goldDefs = sortLocations(
+      goldDefinitions(
+        gsvc.getTypeDefinitionAtPosition(nodePath.join(root, probe.file), offset),
+        ghost,
+        grel,
+      ),
+    );
+    const riftyDefs = sortLocations(
+      relLocations(
+        svc.getTypeDefinition(`${RIFTY_ROOT}/${probe.file}`, probePosition(text, probe)),
+        riftyRel,
+      ),
+    );
+    expect(goldDefs.length).toBeGreaterThan(0);
+    expect(riftyDefs).toEqual(goldDefs);
+  });
+
+  it('completions match real TS — member access + global, names+kinds as sets', async () => {
+    const root = writeFixtureToTmp(QUERY_FIXTURE);
+    const { service: gsvc } = buildGoldService(root);
+    const { svc } = await buildRiftyService(QUERY_FIXTURE);
+
+    // Member access `arr.|` and a global position (start of an expression line).
+    const probes: Probe[] = [
+      { file: 'main.ts', needle: 'arr.map', inner: 4 }, // after `arr.`
+      { file: 'main.ts', needle: 'const total = add', inner: 14 }, // global, at `add`
+    ];
+    for (const probe of probes) {
+      const text = QUERY_FIXTURE.files[probe.file] ?? '';
+      const offset = positionToOffset(text, probePosition(text, probe));
+      const goldInfo = gsvc.getCompletionsAtPosition(
+        nodePath.join(root, probe.file),
+        offset,
+        undefined,
+      );
+      const riftyList = svc.getCompletions(
+        `${RIFTY_ROOT}/${probe.file}`,
+        probePosition(text, probe),
+      );
+
+      // Compare as sorted (name, kind) SETS — order-independent, no truncation.
+      const goldSet = (goldInfo?.entries ?? [])
+        .map((e) => `${e.name}\t${scriptElementKindToCompletionKind(e.kind)}`)
+        .sort();
+      const riftySet = riftyList.items.map((i) => `${i.label}\t${i.kind}`).sort();
+      expect(goldSet.length).toBeGreaterThan(0); // non-vacuous
+      expect(riftySet).toEqual(goldSet);
+      expect(riftyList.isIncomplete).toBe(goldInfo?.isIncomplete === true);
+    }
+
+    // getCompletionEntryDetails probe: resolve ONE member entry's detail.
+    const probe: Probe = { file: 'main.ts', needle: 'arr.map', inner: 4 };
+    const text = QUERY_FIXTURE.files[probe.file] ?? '';
+    const offset = positionToOffset(text, probePosition(text, probe));
+    const goldDetail = gsvc.getCompletionEntryDetails(
+      nodePath.join(root, probe.file),
+      offset,
+      'map',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
+    const riftyDetail = svc.getCompletionDetails(
+      `${RIFTY_ROOT}/${probe.file}`,
+      probePosition(text, probe),
+      'map',
+    );
+    expect(goldDetail).not.toBeUndefined();
+    expect(riftyDetail?.detail).toBe(partsToString(goldDetail?.displayParts));
+    expect(riftyDetail?.label).toBe('map');
+  });
 });

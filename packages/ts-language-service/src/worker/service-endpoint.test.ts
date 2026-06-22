@@ -9,8 +9,15 @@
 
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
+import { CompletionItemKind } from '../lsp-types.ts';
 import { createRpcFsSync } from './host-fs-rpc.ts';
-import type { TsDiagnosticsResponse } from './protocol.ts';
+import type {
+  TsCompletionItemResponse,
+  TsCompletionsResponse,
+  TsDiagnosticsResponse,
+  TsHoverResponse,
+  TsLocationsResponse,
+} from './protocol.ts';
 import { createServiceEndpoint } from './service-endpoint.ts';
 
 const enc = (s: string) => new TextEncoder().encode(s);
@@ -179,6 +186,100 @@ describe('createServiceEndpoint', () => {
     await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
     const r = await endpoint.dispatch({ id: 2, type: 'ts:getConfigFileDiagnostics' });
     expect(diags(r).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('hover / definition / completions / completion-details flow through the endpoint', async () => {
+    const { fsSync: mem } = createMemoryFs();
+    mem.mkdirSync('/proj', { recursive: true });
+    mem.writeFileSync(
+      '/proj/tsconfig.json',
+      enc(
+        JSON.stringify({ compilerOptions: { strict: true, module: 'esnext', target: 'es2022' } }),
+      ),
+    );
+    mem.writeFileSync(
+      '/proj/math.ts',
+      enc('export function add(a: number, b: number): number {\n  return a + b;\n}\n'),
+    );
+    mem.writeFileSync(
+      '/proj/main.ts',
+      enc(
+        "import { add } from './math.ts';\nconst total = add(1, 2);\nconst arr = [1];\narr.map((n) => n);\n",
+      ),
+    );
+    const files = new Map<string, Uint8Array>();
+    for (const p of ['/proj/tsconfig.json', '/proj/math.ts', '/proj/main.ts'])
+      files.set(p, mem.readFileBytesSync(p));
+
+    const endpoint = createServiceEndpoint({
+      buildFsSync: (call) => createRpcFsSync(call),
+      call: makeFakeCall(files),
+    });
+    await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+
+    // hover on `add` at its call site (line 1, char 14 = the `a` of `add(`).
+    const hoverR = await endpoint.dispatch({
+      id: 2,
+      type: 'ts:getQuickInfo',
+      path: '/proj/main.ts',
+      position: { line: 1, character: 14 },
+    });
+    expect(hoverR.ok).toBe(true);
+    expect(hoverR.kind).toBe('hover');
+    const hover = (hoverR as TsHoverResponse).hover;
+    expect(hover?.contents.kind).toBe('markdown');
+    // Rendered as a `typescript` code block; at the call site `add` is an
+    // alias-import so the signature reads `(alias) add(a: number, b: number)`.
+    expect(hover?.contents.value).toContain('```typescript');
+    expect(hover?.contents.value).toContain('add(a: number, b: number): number');
+
+    // definition of `add` → math.ts.
+    const defR = await endpoint.dispatch({
+      id: 3,
+      type: 'ts:getDefinition',
+      path: '/proj/main.ts',
+      position: { line: 1, character: 14 },
+    });
+    expect(defR.kind).toBe('locations');
+    const defs = (defR as TsLocationsResponse).locations;
+    expect(defs.length).toBeGreaterThan(0);
+    expect(defs[0]?.uri).toBe('/proj/math.ts');
+
+    // type-definition of `arr` (number[]) → a lib .d.ts location.
+    const typeDefR = await endpoint.dispatch({
+      id: 4,
+      type: 'ts:getTypeDefinition',
+      path: '/proj/main.ts',
+      position: { line: 3, character: 0 }, // `arr.map` line, on `arr`
+    });
+    expect(typeDefR.kind).toBe('locations');
+    expect((typeDefR as TsLocationsResponse).locations.length).toBeGreaterThan(0);
+
+    // completions at member access `arr.|` (line 3, char 4).
+    const compR = await endpoint.dispatch({
+      id: 5,
+      type: 'ts:getCompletions',
+      path: '/proj/main.ts',
+      position: { line: 3, character: 4 },
+    });
+    expect(compR.kind).toBe('completions');
+    const list = (compR as TsCompletionsResponse).completions;
+    const map = list.items.find((i) => i.label === 'map');
+    expect(map).toBeDefined();
+    expect(map?.kind).toBe(CompletionItemKind.Method);
+
+    // completion details for `map`.
+    const detailR = await endpoint.dispatch({
+      id: 6,
+      type: 'ts:getCompletionDetails',
+      path: '/proj/main.ts',
+      position: { line: 3, character: 4 },
+      label: 'map',
+    });
+    expect(detailR.kind).toBe('completionItem');
+    const item = (detailR as TsCompletionItemResponse).item;
+    expect(item?.label).toBe('map');
+    expect(item?.detail).toContain('map');
   });
 
   it('a query before init returns an error frame (not a silent empty)', async () => {
