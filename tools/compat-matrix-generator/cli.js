@@ -439,6 +439,103 @@ const matrices = [
       'v1 vendors a fixed `typescript`; the project\'s installed TS version (VSCode "Use Workspace Version") is deferred (`toolchain-build/ts-language-service-workspace-version`).',
     ],
   },
+  {
+    file: 'git.md',
+    title: 'Compatibility matrix — git (`@riftydev/git`)',
+    intro:
+      'Public claim surface for git over the VFS (isomorphic-git, ADR-0167). Local porcelain is byte-identical to canonical git (same object SHA-1s); the network is smart-HTTP only — every browser-ceiling gap throws `NotImplementedError`, never a silent stub.',
+    rows: [
+      ['`init` / `add` / `remove`', '✅', 'Local index + object writes over the Memory VFS'],
+      [
+        '`commit`',
+        '✅',
+        'Canonical git objects — **identical 40-hex SHA-1 to real git** for identical inputs (author+committer identity/timestamp/tz explicit); parity-pinned',
+      ],
+      [
+        '`status --porcelain`',
+        '✅',
+        'Byte-exact vs git 2.50.1 (frozen golden fixtures); path-sorted XY codes',
+      ],
+      ['`log` / `log --oneline`', '✅', 'Byte-exact short-oid + subject (frozen fixtures)'],
+      [
+        '`diff` (HEAD ↔ workdir)',
+        '⚠️',
+        'Structured per-file hunks via `walk()` + LCS line-diff; structured data, NOT byte-exact `git diff` text',
+      ],
+      ['`branch` / `listBranches` / `currentBranch` / `resolveRef`', '✅', 'Local refs'],
+      [
+        '`clone` / `fetch` / `pull` / `push` (smart HTTP)',
+        '✅',
+        'Over rifty `node:http` egress; real `git http-backend` clone integration-tested (canonical objects end-to-end)',
+      ],
+      [
+        '`corsProxy`',
+        '✅',
+        'Env-config `RIFTY_GIT_CORS_PROXY` (D-004) — never hardcoded; unset → cross-origin clone throws',
+      ],
+      ['`onAuth` (HTTPS Basic / PAT)', '✅', 'Injected token provider for private repos + push'],
+      ['Shallow `depth` / `singleBranch`', '✅', 'Passed through to clone/fetch'],
+      [
+        'SSH (`ssh://`, `git@host:`)',
+        '❌',
+        "`NotImplementedError('git.transport.ssh')` — no raw TCP/SSH in the browser",
+      ],
+      [
+        'Native `git://` / dumb-HTTP',
+        '❌',
+        "`NotImplementedError('git.transport.git')` — smart-HTTP is the only in-browser transport",
+      ],
+      [
+        'Cross-origin smart-HTTP without a proxy',
+        '❌',
+        "`NotImplementedError('git.cors')` in the browser (same-origin ceiling) — set `RIFTY_GIT_CORS_PROXY`; GitHub/GitLab/Bitbucket send no CORS headers",
+      ],
+      [
+        'Executable bit (`100755`) & symlinks',
+        '❌',
+        'VFS has no exec-bit/symlink layer (ADR-0050/0167) → file mode fixed `100644`; tree-SHA diverges from canonical git for such repos — recorded, never silently wrong',
+      ],
+      [
+        'CRLF / `.gitattributes` / clean-smudge filters',
+        '❌',
+        'No line-ending normalization — a known SHA-divergence source for repos that rely on it',
+      ],
+      [
+        'GPG commit signing',
+        '❌',
+        'Unsigned only — `user.signingkey`/`commit.gpgsign` not honored',
+      ],
+      [
+        'Push from a shallow clone',
+        '❌',
+        'Surfaced loud (isomorphic-git `GitPushError`), no silent retry',
+      ],
+      [
+        'rebase / submodules / worktrees / sparse + partial clone',
+        '❌',
+        'Out of the v1 subset — throw `NotImplementedError`',
+      ],
+      ['gc / repack / prune / reflog / bisect / blame / hooks', '❌', 'Out of the v1 subset'],
+    ],
+    tests: [
+      '`packages/git/tests/commit-sha-parity.test.ts`',
+      '`packages/git/tests/fs-adapter.test.ts`',
+      '`packages/git/tests/capability-local.test.ts`',
+      '`packages/git/tests/diff.test.ts`',
+      '`packages/git/tests/cors-proxy.test.ts`',
+      '`packages/git/tests/http-plugin.test.ts`',
+      '`packages/git/tests/loud-throws.test.ts`',
+      '`packages/git/tests/network.integration.test.ts`',
+      '`packages/shell/tests/git-cli.test.ts`',
+      '`packages/shell/tests/git-fixtures.test.ts`',
+    ],
+    limitations: [
+      'git runs as pure JS (isomorphic-git) over the Memory VFS — local porcelain writes canonical git objects, so commit/tree/blob SHA-1s match real git exactly; the network is smart-HTTP only.',
+      'Browser same-origin ceiling: GitHub/GitLab/Bitbucket smart-HTTP endpoints send no CORS headers, so cross-origin clone/fetch/push need `RIFTY_GIT_CORS_PROXY` (D-004) or a CORS-enabled host; SSH and `git://` need raw TCP that the browser has not. All throw `NotImplementedError` — never a silent network failure.',
+      'The VFS has no exec-bit or symlink layer (ADR-0050/0167): file mode is fixed `100644`, so repos containing executable files or symlinks diverge in tree-SHA from canonical git. Recorded as a loud limitation, not a silent lie.',
+      'Exotic plumbing (rebase, submodules, worktrees, sparse/partial clone, gc, reflog, bisect, blame, hooks, `.gitattributes`/CRLF filters, GPG signing) is out of the v1 subset and throws `NotImplementedError`.',
+    ],
+  },
 ];
 
 async function listFilesRecursive(dir) {
@@ -532,7 +629,7 @@ undocumented, not supported. The point is honest fit: tested support, visible ca
 unsupported rows.
 
 Each markdown here cites the covering tests in \`tests/conformance/\` and \`tests/integration/\` for a
-Node-compatible area. \`fs.md\`/\`streams.md\`/\`http.md\`/\`zlib.md\` are rendered by \`pnpm compat:generate\`
+Node-compatible area. \`fs.md\`/\`streams.md\`/\`http.md\`/\`zlib.md\`/\`git.md\` are rendered by \`pnpm compat:generate\`
 from static inventories whose cited test files are existence-checked, not re-run — deriving statuses
 from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-test-result-sink\`.
 
@@ -543,6 +640,7 @@ from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-tes
 - [http.md](./http.md) — \`node:http\` / browser-local port registry subset
 - [zlib.md](./zlib.md) — \`node:zlib\` web-compression-backed async subset (ADR-0159)
 - [ts-language-service.md](./ts-language-service.md) — in-browser \`ts.LanguageService\` over the VFS (\`@riftydev/ts-language-service\`, ADR-0166)
+- [git.md](./git.md) — git over the VFS (isomorphic-git, ADR-0167); offline-faithful porcelain + smart-HTTP network ceiling
 - [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal \`node <file>\` command + its gaps (ADR-0155/0157)
 - [wasi.md](./wasi.md) — WASI preview1 syscall surface (\`@riftydev/runtime-wasi\`)
 - [incompatible-packages.md](./incompatible-packages.md) — packages rifty can't run (native deps)
