@@ -12,6 +12,7 @@ export default defineConfig({
     runtime: 'src/runtime.ts',
     wasi: 'src/wasi.ts',
     net: 'src/net.ts',
+    git: 'src/git.ts',
     'npm-client': 'src/npm-client.ts',
     shell: 'src/shell.ts',
     terminal: 'src/terminal.ts',

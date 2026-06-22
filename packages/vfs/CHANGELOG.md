@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`MemoryBackend.writeFile` mtime is now strictly monotonic on overwrite.** Two writes to the same file within one clock tick previously shared the same `Date.now()` mtime; an overwrite now bumps mtime to at least `prev + 1`. Closes a silent-data-loss hole for mtime-trusting stat caches: isomorphic-git's racy-clean index shortcut (`compareStats`) compares mtime only at SECOND granularity but `ino` exactly, so a same-byte-length edit was invisible to `git status`/`diff`. Deterministic guard: `mtime-monotonic.test.ts`. Pairs with the `@riftydev/git` fs-adapter's mtime-derived `ino` (ADR-0167).
+
 ### Performance
 
 - **`normalizePath` already-normalized fast-path + internal `dirnameNormalized`/`basenameNormalized` helpers (#10).** An already-normalized ABSOLUTE path now returns from `normalizePath` untouched (no split/stack allocation); relative inputs still take the slow path. Two new INTERNAL helpers (`dirnameNormalized`/`basenameNormalized`) skip the redundant `normalizePath` pass `dirname`/`basename` run, threaded only into provably-normalized call sites (`MemoryBackend.writeFile`/`rm`; `OpfsFsSync` `ensureHandle`/`attachChild`/`detachChild`/`writeFileSync`/`loadFixture`). Byte-identical to the prior `normalizePath`/`dirname`/`basename` across the full edge set (`/a/..`, `/a/.`, `/a//b`, relative, `''`, dotted names, trailing slash) — proven by unit-parity (helper === public fn) + a node-parity case (`cases/path/normalize-fastpath.case.ts`). Helpers stay INTERNAL (NOT exported from `src/index.ts`) so the public `@riftydev/vfs` surface is unchanged; preserves the ADR-0037 normalisation invariant. Behavior-preserving / contract-stable (ADR-0081 rule 5; CHANGELOG-only). Per `docs/perf/js-runtime-perf-audit-2026-06-05.md` + `…-adr-plan-2026-06-06.md` (#10).

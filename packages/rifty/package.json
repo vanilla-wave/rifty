@@ -36,6 +36,7 @@
     "./runtime": "./src/runtime.ts",
     "./wasi": "./src/wasi.ts",
     "./net": "./src/net.ts",
+    "./git": "./src/git.ts",
     "./npm-client": "./src/npm-client.ts",
     "./shell": "./src/shell.ts",
     "./terminal": "./src/terminal.ts",
@@ -77,6 +78,10 @@
         "types": "./dist/net.d.ts",
         "import": "./dist/net.js"
       },
+      "./git": {
+        "types": "./dist/git.d.ts",
+        "import": "./dist/git.js"
+      },
       "./npm-client": {
         "types": "./dist/npm-client.d.ts",
         "import": "./dist/npm-client.js"
@@ -110,6 +115,7 @@
     "@riftydev/runtime-js": "workspace:*",
     "@riftydev/runtime-wasi": "workspace:*",
     "@riftydev/net": "workspace:*",
+    "@riftydev/git": "workspace:*",
     "@riftydev/npm-client": "workspace:*",
     "@riftydev/shell": "workspace:*",
     "@riftydev/terminal": "workspace:*",
