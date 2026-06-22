@@ -74,7 +74,9 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     browserName,
   }) => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
-    test.setTimeout(90_000);
+    // Generous: the FIRST LS request cold-boots the `typescript` engine + fetches
+    // the ~3 MB vendored lib.d.ts bundle over the relay (one-time). 120s headroom.
+    test.setTimeout(120_000);
     await page.goto('/');
 
     // Owner shell ready: terminal 1 echoes the boot dev line (same gate the
@@ -110,12 +112,14 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     await expect(input).toBeFocused();
     await page.keyboard.insertText('export const bad: number = "not a number";');
 
-    // (1) a rifty-TS Monaco marker appears (generous: page→owner→LS async hop).
-    await expect.poll(() => tsMarkerCount(page, TS_PATH), { timeout: 30_000 }).toBeGreaterThan(0);
+    // (1) a rifty-TS Monaco marker appears. VERY generous: the FIRST request cold-
+    // boots the `typescript` engine in the LS worker AND fetches the ~3 MB vendored
+    // lib.d.ts bundle over the relay — one-time, slow; once warm the rest is fast.
+    await expect.poll(() => tsMarkerCount(page, TS_PATH), { timeout: 70_000 }).toBeGreaterThan(0);
 
     // (1b) and a real error squiggle is rendered on the active model.
     await expect(page.locator('.monaco-editor .squiggly-error').first()).toBeVisible({
-      timeout: 30_000,
+      timeout: 15_000,
     });
 
     // (2) a row appears in the Problems tab.
