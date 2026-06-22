@@ -4,6 +4,28 @@
 
 ### Added
 
+- **Find-references / rename (+prepare-rename) / signature-help** (ADR-0166 task 3.1).
+  `TsLanguageService` gains `getReferences` (→ LSP `Location[]` from
+  `findReferences` flattened; honors `ReferenceContext.includeDeclaration` by
+  filtering `isDefinition` entries — note tsc only flags definitions when the
+  query originates at the declaration), `prepareRename` (→ `PrepareRenameResult |
+  null` from `getRenameInfo`; `null` on keywords/string-literals/non-renameable
+  import paths, `allowRenameOfImportPath: false`), `getRenameEdits` (→
+  `WorkspaceEdit` keyed by VFS path from `findRenameLocations` with
+  `providePrefixAndSuffixTextForRename`, honoring each location's prefix/suffix
+  text so property-shorthand `{ x }` → `{ x: newName }` is correct; empty
+  `changes` when not renameable), and `getSignatureHelp` (→ `SignatureHelp | null`
+  from `getSignatureHelpItems`; label = prefix + params joined by separator +
+  suffix, `activeSignature` = selectedItemIndex, `activeParameter` =
+  argumentIndex). New LSP shapes (`ReferenceContext`, `TextEdit`, `WorkspaceEdit`,
+  `PrepareRenameResult`, `SignatureHelp`, `SignatureInformation`,
+  `ParameterInformation`) + worker frames (`ts:getReferences`, `ts:prepareRename`,
+  `ts:getRenameEdits`, `ts:getSignatureHelp` → `locations` / `prepareRename` /
+  `workspaceEdit` / `signatureHelp` responses). Every query is parity-checked
+  against the real `ts.LanguageService` (gold standard) for cross-file symbols
+  (references with includeDeclaration both ways, cross-file rename incl. shorthand
+  prefix, prepareRename true/null, signature-help between args).
+
 - **Hover / go-to-definition (+type-definition) / completions** (ADR-0166 task 2.1).
   `TsLanguageService` gains `getQuickInfo` (→ LSP `Hover`: signature as a
   `typescript` code block + rendered JSDoc/tags, range from the symbol span),

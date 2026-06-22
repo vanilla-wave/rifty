@@ -134,6 +134,38 @@ export function createServiceEndpoint(deps: ServiceEndpointDeps): ServiceEndpoin
               request.label,
             ),
           };
+        case 'ts:getReferences':
+          return {
+            id,
+            ok: true,
+            kind: 'locations',
+            locations: requireService().getReferences(
+              request.path,
+              request.position,
+              request.context,
+            ),
+          };
+        case 'ts:prepareRename':
+          return {
+            id,
+            ok: true,
+            kind: 'prepareRename',
+            result: requireService().prepareRename(request.path, request.position),
+          };
+        case 'ts:getRenameEdits':
+          return {
+            id,
+            ok: true,
+            kind: 'workspaceEdit',
+            edit: requireService().getRenameEdits(request.path, request.position, request.newName),
+          };
+        case 'ts:getSignatureHelp':
+          return {
+            id,
+            ok: true,
+            kind: 'signatureHelp',
+            signatureHelp: requireService().getSignatureHelp(request.path, request.position),
+          };
         default: {
           // Exhaustive over TsRequest; a malformed-but-typed frame is a loud
           // error, never an undefined response (Fidelity).

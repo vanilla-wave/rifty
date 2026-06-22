@@ -17,6 +17,9 @@ import type {
   TsDiagnosticsResponse,
   TsHoverResponse,
   TsLocationsResponse,
+  TsPrepareRenameResponse,
+  TsSignatureHelpResponse,
+  TsWorkspaceEditResponse,
 } from './protocol.ts';
 import { createServiceEndpoint } from './service-endpoint.ts';
 
@@ -280,6 +283,104 @@ describe('createServiceEndpoint', () => {
     const item = (detailR as TsCompletionItemResponse).item;
     expect(item?.label).toBe('map');
     expect(item?.detail).toContain('map');
+  });
+
+  it('references / prepareRename / renameEdits / signatureHelp flow through the endpoint', async () => {
+    const { fsSync: mem } = createMemoryFs();
+    mem.mkdirSync('/proj', { recursive: true });
+    mem.writeFileSync(
+      '/proj/tsconfig.json',
+      enc(
+        JSON.stringify({
+          compilerOptions: {
+            strict: true,
+            module: 'esnext',
+            target: 'es2022',
+            moduleResolution: 'bundler',
+          },
+        }),
+      ),
+    );
+    mem.writeFileSync(
+      '/proj/math.ts',
+      enc('export function add(a: number, b: number): number {\n  return a + b;\n}\n'),
+    );
+    mem.writeFileSync(
+      '/proj/main.ts',
+      enc("import { add } from './math';\nconst total = add(1, 2);\nadd(total, 3);\n"),
+    );
+    const files = new Map<string, Uint8Array>();
+    for (const p of ['/proj/tsconfig.json', '/proj/math.ts', '/proj/main.ts'])
+      files.set(p, mem.readFileBytesSync(p));
+
+    const endpoint = createServiceEndpoint({
+      buildFsSync: (call) => createRpcFsSync(call),
+      call: makeFakeCall(files),
+    });
+    await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+
+    // references on the `add` DEFINITION (math.ts, line 0, char 16) — cross-file
+    // set. ts only flags `isDefinition` when the query originates at the decl, so
+    // includeDeclaration:false meaningfully drops a result only from here.
+    const refR = await endpoint.dispatch({
+      id: 2,
+      type: 'ts:getReferences',
+      path: '/proj/math.ts',
+      position: { line: 0, character: 16 },
+      context: { includeDeclaration: true },
+    });
+    expect(refR.kind).toBe('locations');
+    const refs = (refR as TsLocationsResponse).locations;
+    expect(refs.some((l) => l.uri === '/proj/math.ts')).toBe(true);
+    expect(refs.some((l) => l.uri === '/proj/main.ts')).toBe(true);
+
+    // excluding the declaration drops the math.ts definition site.
+    const refNoDecl = await endpoint.dispatch({
+      id: 3,
+      type: 'ts:getReferences',
+      path: '/proj/math.ts',
+      position: { line: 0, character: 16 },
+      context: { includeDeclaration: false },
+    });
+    expect((refNoDecl as TsLocationsResponse).locations.length).toBeLessThan(refs.length);
+
+    // prepareRename on the same `add` → canRename (placeholder `add`).
+    const prepR = await endpoint.dispatch({
+      id: 4,
+      type: 'ts:prepareRename',
+      path: '/proj/main.ts',
+      position: { line: 1, character: 14 },
+    });
+    expect(prepR.kind).toBe('prepareRename');
+    expect((prepR as TsPrepareRenameResponse).result?.placeholder).toBe('add');
+
+    // renameEdits from the DEFINITION `add` → `sum`: edits in BOTH files, newText
+    // `sum` (renaming from the def propagates cross-file; from an import alias it
+    // would only touch main.ts).
+    const renR = await endpoint.dispatch({
+      id: 5,
+      type: 'ts:getRenameEdits',
+      path: '/proj/math.ts',
+      position: { line: 0, character: 16 },
+      newName: 'sum',
+    });
+    expect(renR.kind).toBe('workspaceEdit');
+    const changes = (renR as TsWorkspaceEditResponse).edit.changes;
+    expect(Object.keys(changes)).toContain('/proj/math.ts');
+    expect(Object.keys(changes)).toContain('/proj/main.ts');
+    expect(changes['/proj/math.ts']?.[0]?.newText).toBe('sum');
+
+    // signatureHelp inside `add(total, |3)` (line 2, char 11) → 2nd parameter.
+    const sigR = await endpoint.dispatch({
+      id: 6,
+      type: 'ts:getSignatureHelp',
+      path: '/proj/main.ts',
+      position: { line: 2, character: 11 },
+    });
+    expect(sigR.kind).toBe('signatureHelp');
+    const sig = (sigR as TsSignatureHelpResponse).signatureHelp;
+    expect(sig?.signatures[0]?.label).toContain('add(a: number, b: number): number');
+    expect(sig?.activeParameter).toBe(1);
   });
 
   it('a query before init returns an error frame (not a silent empty)', async () => {

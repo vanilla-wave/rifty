@@ -17,7 +17,11 @@ import {
   CompletionItemKind,
   type Hover,
   type MarkupContent,
+  type ParameterInformation,
   type Range,
+  type SignatureHelp,
+  type SignatureInformation,
+  type TextEdit,
 } from './lsp-types.ts';
 import { offsetToPosition } from './position.ts';
 
@@ -146,6 +150,67 @@ export function scriptElementKindToCompletionKind(kind: ts.ScriptElementKind): C
     default:
       return CompletionItemKind.Text;
   }
+}
+
+/**
+ * Map a `ts.RenameLocation` → LSP {@link TextEdit} against the target file's
+ * `text`. The replaced `range` is the location's `textSpan`; `newText` is the
+ * new name wrapped in any `prefixText`/`suffixText` tsc attaches. Those carry
+ * the property-shorthand expansion (`{ x }` → `{ x: newName }` yields
+ * `prefixText: "x: "`, span over `x`) and similar — so we MUST honor them or the
+ * resulting source is wrong (parity catches drift).
+ */
+export function renameLocationToTextEdit(
+  loc: ts.RenameLocation,
+  newName: string,
+  text: string,
+): TextEdit {
+  return {
+    range: spanToRange(text, loc.textSpan),
+    newText: `${loc.prefixText ?? ''}${newName}${loc.suffixText ?? ''}`,
+  };
+}
+
+/**
+ * Map a `ts.SignatureHelpItem` → LSP {@link SignatureInformation}. The label is
+ * `prefix + params.join(separator) + suffix` (e.g. `add(a: number, b: number):
+ * number`) — the canonical tsserver→LSP rendering; each parameter's label is its
+ * own `displayParts` (e.g. `a: number`), so an editor can highlight the active
+ * one. Per-signature/param JSDoc is rendered to markdown when present.
+ */
+export function signatureHelpItemToSignatureInformation(
+  item: ts.SignatureHelpItem,
+): SignatureInformation {
+  const prefix = partsToString(item.prefixDisplayParts);
+  const suffix = partsToString(item.suffixDisplayParts);
+  const separator = partsToString(item.separatorDisplayParts);
+  const parameters: ParameterInformation[] = item.parameters.map((p) => {
+    const docs = renderDocumentation(p.documentation, undefined);
+    const param: { label: string; documentation?: MarkupContent } = {
+      label: partsToString(p.displayParts),
+    };
+    if (docs) param.documentation = { kind: 'markdown', value: docs };
+    return param;
+  });
+  const label = `${prefix}${parameters.map((p) => p.label).join(separator)}${suffix}`;
+  const docs = renderDocumentation(item.documentation, item.tags);
+  const info: { label: string; documentation?: MarkupContent; parameters: ParameterInformation[] } =
+    { label, parameters };
+  if (docs) info.documentation = { kind: 'markdown', value: docs };
+  return info;
+}
+
+/**
+ * Map raw `ts.SignatureHelpItems` → LSP {@link SignatureHelp}. `activeSignature`
+ * = the selected overload (`selectedItemIndex`); `activeParameter` = the
+ * argument the cursor sits in (`argumentIndex`).
+ */
+export function signatureHelpItemsToSignatureHelp(items: ts.SignatureHelpItems): SignatureHelp {
+  return {
+    signatures: items.items.map(signatureHelpItemToSignatureInformation),
+    activeSignature: items.selectedItemIndex,
+    activeParameter: items.argumentIndex,
+  };
 }
 
 /**

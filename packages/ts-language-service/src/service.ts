@@ -19,12 +19,19 @@ import {
   type Hover,
   type Location,
   type Position,
+  type PrepareRenameResult,
+  type ReferenceContext,
+  type SignatureHelp,
+  type TextEdit,
+  type WorkspaceEdit,
 } from './lsp-types.ts';
 import {
   completionEntryToItem,
   partsToString,
   quickInfoToHover,
+  renameLocationToTextEdit,
   renderDocumentation,
+  signatureHelpItemsToSignatureHelp,
   spanToRange,
 } from './mapping.ts';
 import { createDocumentOverlay } from './overlay.ts';
@@ -65,6 +72,33 @@ export interface TsLanguageService {
    * only — see the method body for the source/data limitation note.
    */
   getCompletionDetails(path: string, position: Position, label: string): CompletionItem | null;
+  /**
+   * Find-references for the symbol at `position`. Every occurrence (across files)
+   * as a {@link Location}. When `context.includeDeclaration` is false the
+   * declaration sites (`isDefinition`) are filtered out — so this needs
+   * `findReferences` (which flags definitions), not the flatter
+   * `getReferencesAtPosition`.
+   */
+  getReferences(path: string, position: Position, context: ReferenceContext): Location[];
+  /**
+   * Prepare-rename probe at `position`: the span to rename + the seed text, or
+   * `null` when the element there cannot be renamed (keyword, string literal,
+   * non-renameable import path). Mirrors `ls.getRenameInfo`.
+   */
+  prepareRename(path: string, position: Position): PrepareRenameResult | null;
+  /**
+   * Compute the cross-file edits to rename the symbol at `position` to `newName`.
+   * Returns a {@link WorkspaceEdit} keyed by VFS path; empty `changes` when the
+   * element cannot be renamed (no lying — an empty edit set, not a thrown happy
+   * path). Honors tsc's prefix/suffix text (property-shorthand expansion etc.).
+   */
+  getRenameEdits(path: string, position: Position, newName: string): WorkspaceEdit;
+  /**
+   * Signature help at `position` (typically inside a call's argument list): the
+   * applicable signatures + the active signature/parameter, or `null` when there
+   * is no call context. Mirrors `ls.getSignatureHelpItems`.
+   */
+  getSignatureHelp(path: string, position: Position): SignatureHelp | null;
   openDocument(path: string, text: string): void;
   updateDocument(path: string, text: string): void;
   closeDocument(path: string): void;
@@ -197,6 +231,48 @@ export async function createTsLanguageService(
         ...(documentation ? { documentation: { kind: 'markdown', value: documentation } } : {}),
       };
       return item;
+    },
+    getReferences: (path, position, context) => {
+      // findReferences (NOT getReferencesAtPosition): the flattened entries carry
+      // `isDefinition`, which is what `includeDeclaration: false` filters on. Each
+      // entry's span maps against ITS OWN file's text (cross-file safe).
+      const symbols = service.findReferences(path, offsetAt(path, position)) ?? [];
+      const out: Location[] = [];
+      for (const sym of symbols) {
+        for (const ref of sym.references) {
+          if (context.includeDeclaration === false && ref.isDefinition === true) continue;
+          out.push({ uri: ref.fileName, range: spanToRange(readText(ref.fileName), ref.textSpan) });
+        }
+      }
+      return out;
+    },
+    prepareRename: (path, position) => {
+      const info = service.getRenameInfo(path, offsetAt(path, position), {
+        allowRenameOfImportPath: false,
+      });
+      if (!info.canRename) return null;
+      const result: PrepareRenameResult = {
+        range: spanToRange(readText(path), info.triggerSpan),
+        placeholder: info.displayName,
+      };
+      return result;
+    },
+    getRenameEdits: (path, position, newName) => {
+      const locations =
+        service.findRenameLocations(path, offsetAt(path, position), false, false, {
+          providePrefixAndSuffixTextForRename: true,
+        }) ?? [];
+      const changes: Record<string, TextEdit[]> = {};
+      for (const loc of locations) {
+        const edits = changes[loc.fileName] ?? [];
+        edits.push(renameLocationToTextEdit(loc, newName, readText(loc.fileName)));
+        changes[loc.fileName] = edits;
+      }
+      return { changes };
+    },
+    getSignatureHelp: (path, position) => {
+      const items = service.getSignatureHelpItems(path, offsetAt(path, position), undefined);
+      return items ? signatureHelpItemsToSignatureHelp(items) : null;
     },
     openDocument: (path, text) => overlay.open(path, text),
     updateDocument: (path, text) => overlay.update(path, text),

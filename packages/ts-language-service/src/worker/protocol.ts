@@ -21,6 +21,10 @@ import type {
   Hover,
   Location,
   Position,
+  PrepareRenameResult,
+  ReferenceContext,
+  SignatureHelp,
+  WorkspaceEdit,
 } from '../lsp-types.ts';
 
 /** Request frame discriminators. */
@@ -37,7 +41,11 @@ export type TsRequestType =
   | 'ts:getDefinition'
   | 'ts:getTypeDefinition'
   | 'ts:getCompletions'
-  | 'ts:getCompletionDetails';
+  | 'ts:getCompletionDetails'
+  | 'ts:getReferences'
+  | 'ts:prepareRename'
+  | 'ts:getRenameEdits'
+  | 'ts:getSignatureHelp';
 
 interface BaseRequest {
   /** Correlation id echoed on the response. */
@@ -117,6 +125,32 @@ export interface TsCompletionDetailsRequest extends BaseRequest {
   readonly position: Position;
   readonly label: string;
 }
+/** Find-references at `position` in `path` (honors `context.includeDeclaration`). */
+export interface TsReferencesRequest extends BaseRequest {
+  readonly type: 'ts:getReferences';
+  readonly path: string;
+  readonly position: Position;
+  readonly context: ReferenceContext;
+}
+/** Prepare-rename probe at `position` in `path`. */
+export interface TsPrepareRenameRequest extends BaseRequest {
+  readonly type: 'ts:prepareRename';
+  readonly path: string;
+  readonly position: Position;
+}
+/** Compute rename edits for the symbol at `position` in `path` → `newName`. */
+export interface TsRenameEditsRequest extends BaseRequest {
+  readonly type: 'ts:getRenameEdits';
+  readonly path: string;
+  readonly position: Position;
+  readonly newName: string;
+}
+/** Signature help at `position` in `path`. */
+export interface TsSignatureHelpRequest extends BaseRequest {
+  readonly type: 'ts:getSignatureHelp';
+  readonly path: string;
+  readonly position: Position;
+}
 
 export type TsRequest =
   | TsInitRequest
@@ -131,7 +165,11 @@ export type TsRequest =
   | TsDefinitionRequest
   | TsTypeDefinitionRequest
   | TsCompletionsRequest
-  | TsCompletionDetailsRequest;
+  | TsCompletionDetailsRequest
+  | TsReferencesRequest
+  | TsPrepareRenameRequest
+  | TsRenameEditsRequest
+  | TsSignatureHelpRequest;
 
 /** Acknowledgement for a mutation/init request (no payload). */
 export interface TsAckResponse {
@@ -174,6 +212,27 @@ export interface TsCompletionItemResponse {
   readonly kind: 'completionItem';
   readonly item: CompletionItem | null;
 }
+/** Prepare-rename payload for `ts:prepareRename` (`null` when not renameable). */
+export interface TsPrepareRenameResponse {
+  readonly id: number;
+  readonly ok: true;
+  readonly kind: 'prepareRename';
+  readonly result: PrepareRenameResult | null;
+}
+/** Workspace-edit payload for `ts:getRenameEdits` (empty `changes` if none). */
+export interface TsWorkspaceEditResponse {
+  readonly id: number;
+  readonly ok: true;
+  readonly kind: 'workspaceEdit';
+  readonly edit: WorkspaceEdit;
+}
+/** Signature-help payload for `ts:getSignatureHelp` (`null` when no call context). */
+export interface TsSignatureHelpResponse {
+  readonly id: number;
+  readonly ok: true;
+  readonly kind: 'signatureHelp';
+  readonly signatureHelp: SignatureHelp | null;
+}
 /** Failure response — a thrown error surfaced to the caller (never swallowed). */
 export interface TsErrorResponse {
   readonly id: number;
@@ -189,6 +248,9 @@ export type TsResponse =
   | TsLocationsResponse
   | TsCompletionsResponse
   | TsCompletionItemResponse
+  | TsPrepareRenameResponse
+  | TsWorkspaceEditResponse
+  | TsSignatureHelpResponse
   | TsErrorResponse;
 
 /** kernel fork-IPC envelope discriminator (sits beside `rifty:vfs-write`/`rifty:pty`). */

@@ -106,3 +106,63 @@ export interface CompletionList {
   readonly isIncomplete: boolean;
   readonly items: readonly CompletionItem[];
 }
+
+/** LSP `ReferenceContext` — whether find-references includes the declaration. */
+export interface ReferenceContext {
+  /** Include the declaration site itself among the results. */
+  readonly includeDeclaration: boolean;
+}
+
+/** LSP `TextEdit` — replace `range` with `newText` (insert when range is empty). */
+export interface TextEdit {
+  readonly range: Range;
+  readonly newText: string;
+}
+
+/**
+ * LSP `WorkspaceEdit` (the `changes` form): per-document edit lists. The key is
+ * the document uri — here the VFS absolute path verbatim (e.g. `/proj/a.ts`),
+ * matching {@link Location.uri}.
+ */
+export interface WorkspaceEdit {
+  readonly changes: Record<string, TextEdit[]>;
+}
+
+/**
+ * LSP `prepareRename` result: the span that will be renamed plus the initial
+ * text to seed the rename box. `null` (at the call site) when the element at the
+ * position cannot be renamed.
+ */
+export interface PrepareRenameResult {
+  readonly range: Range;
+  /** Initial rename text (the symbol's display name). */
+  readonly placeholder: string;
+}
+
+/** LSP `ParameterInformation` — one parameter shown in signature help. */
+export interface ParameterInformation {
+  /** The parameter's display label (e.g. `a: number`). */
+  readonly label: string;
+  readonly documentation?: string | MarkupContent;
+}
+
+/** LSP `SignatureInformation` — one callable signature in signature help. */
+export interface SignatureInformation {
+  /** The full signature label (prefix + params joined + suffix). */
+  readonly label: string;
+  readonly documentation?: string | MarkupContent;
+  readonly parameters: readonly ParameterInformation[];
+}
+
+/**
+ * LSP `SignatureHelp` — the set of applicable signatures at a call site, plus
+ * which signature (`activeSignature`) and which parameter (`activeParameter`)
+ * are currently active.
+ */
+export interface SignatureHelp {
+  readonly signatures: readonly SignatureInformation[];
+  /** Index into `signatures` of the active overload. */
+  readonly activeSignature: number;
+  /** Index into the active signature's `parameters` of the active argument. */
+  readonly activeParameter: number;
+}

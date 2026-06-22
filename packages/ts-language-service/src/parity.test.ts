@@ -35,11 +35,13 @@ import * as nodePath from 'node:path';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import ts from 'typescript';
 import { afterAll, describe, expect, it } from 'vitest';
-import type { Position, Range } from './lsp-types.ts';
+import type { Position, Range, TextEdit } from './lsp-types.ts';
 import {
   partsToString,
   quickInfoToHover,
+  renameLocationToTextEdit,
   scriptElementKindToCompletionKind,
+  signatureHelpItemsToSignatureHelp,
   spanToRange,
 } from './mapping.ts';
 import { offsetToPosition, positionToOffset } from './position.ts';
@@ -712,5 +714,224 @@ describe('parity: phase-2 queries vs real ts.LanguageService (gold standard)', (
     expect(goldDetail).not.toBeUndefined();
     expect(riftyDetail?.detail).toBe(partsToString(goldDetail?.displayParts));
     expect(riftyDetail?.label).toBe('map');
+  });
+});
+
+// ===========================================================================
+// Phase 3 queries: references / rename (+ prepareRename) / signature-help.
+//
+// Same gold-standard discipline as phase 2: Side A calls the RAW
+// `ts.LanguageService` (findReferences / getRenameInfo / findRenameLocations /
+// getSignatureHelpItems) over the real-fs host and reduces with the SAME
+// renderer the rifty service uses (rename → renameLocationToTextEdit, signature
+// → signatureHelpItemsToSignatureHelp). Side B calls rifty's new methods. Each
+// fixture is cross-file and engineered to be non-vacuous (≥1 result).
+// ===========================================================================
+
+/** A WorkspaceEdit reduced to a relative-uri-keyed, sorted shape for deep-equal. */
+type NormWorkspaceEdit = Record<string, TextEdit[]>;
+
+function sortTextEdits(edits: TextEdit[]): TextEdit[] {
+  return [...edits].sort(
+    (a, b) =>
+      a.range.start.line - b.range.start.line ||
+      a.range.start.character - b.range.start.character ||
+      a.newText.localeCompare(b.newText),
+  );
+}
+
+/** Re-key a WorkspaceEdit's changes onto relative uris + sort each list. */
+function normWorkspaceEdit(
+  changes: Record<string, TextEdit[]>,
+  rel: (abs: string) => string,
+): NormWorkspaceEdit {
+  const out: NormWorkspaceEdit = {};
+  for (const [uri, edits] of Object.entries(changes)) out[rel(uri)] = sortTextEdits(edits);
+  return out;
+}
+
+// Shared cross-file fixture: `add` is defined in math.ts, imported + referenced
+// several times in main.ts (incl. a property-shorthand `{ add }` so rename
+// prefix/suffix text is exercised), and called so a signature-help site exists.
+const PHASE3_FIXTURE: Fixture = {
+  name: 'phase3: references / rename / signature-help',
+  probes: 'cross-file symbol: find-references, rename (with shorthand prefix), signature-help',
+  files: {
+    'tsconfig.json': JSON.stringify({
+      compilerOptions: {
+        strict: true,
+        module: 'esnext',
+        target: 'es2022',
+        moduleResolution: 'bundler',
+      },
+    }),
+    'math.ts':
+      '/** Adds two numbers. */\nexport function add(a: number, b: number): number {\n  return a + b;\n}\n',
+    'main.ts':
+      "import { add } from './math';\n" +
+      'const total = add(1, 2);\n' +
+      'add(total, 3);\n' +
+      'const bag = { add };\n' +
+      'export { bag };\n',
+  },
+  diagnose: [],
+};
+
+describe('parity: phase-3 queries vs real ts.LanguageService (gold standard)', () => {
+  it('references match real TS — cross-file, includeDeclaration true AND false', async () => {
+    const root = writeFixtureToTmp(PHASE3_FIXTURE);
+    const { service: gsvc, host: ghost } = buildGoldService(root);
+    const { svc } = await buildRiftyService(PHASE3_FIXTURE);
+    const grel = goldRel(root);
+
+    // Cursor on `add` at its definition (math.ts) — references span both files.
+    const probe: Probe = { file: 'math.ts', needle: 'export function add', inner: 16 };
+    const text = PHASE3_FIXTURE.files[probe.file] ?? '';
+    const offset = positionToOffset(text, probePosition(text, probe));
+
+    // Side A: findReferences flattened to {uri,range}, honoring includeDeclaration.
+    const goldRefs = (include: boolean) => {
+      const syms = gsvc.findReferences(nodePath.join(root, probe.file), offset) ?? [];
+      const out: { uri: string; range: Range }[] = [];
+      for (const sym of syms)
+        for (const ref of sym.references) {
+          if (!include && ref.isDefinition === true) continue;
+          const t = ghost.readFile?.(ref.fileName) ?? '';
+          out.push({ uri: grel(ref.fileName), range: spanToRange(t, ref.textSpan) });
+        }
+      return sortLocations(out);
+    };
+
+    for (const include of [true, false]) {
+      const gold = goldRefs(include);
+      const rifty = sortLocations(
+        relLocations(
+          svc.getReferences(`${RIFTY_ROOT}/${probe.file}`, probePosition(text, probe), {
+            includeDeclaration: include,
+          }),
+          riftyRel,
+        ),
+      );
+      expect(gold.length).toBeGreaterThan(0); // non-vacuous
+      expect(rifty).toEqual(gold);
+    }
+
+    // Sanity: excluding the declaration drops ≥1 result vs including it (so the
+    // includeDeclaration:false path is genuinely tested, not a no-op equality).
+    expect(goldRefs(false).length).toBeLessThan(goldRefs(true).length);
+  });
+
+  it('rename edits match real TS — cross-file + property-shorthand prefix', async () => {
+    const root = writeFixtureToTmp(PHASE3_FIXTURE);
+    const { service: gsvc, host: ghost } = buildGoldService(root);
+    const { svc } = await buildRiftyService(PHASE3_FIXTURE);
+    const grel = goldRel(root);
+    const NEW_NAME = 'sum';
+
+    // Rename from the DEFINITION site (math.ts `add`): this propagates across BOTH
+    // files (def + import + every use, incl. the `{ add }` shorthand). NB renaming
+    // from an imported alias instead would only touch main.ts and add an
+    // `import { add as sum }` binding — also faithful, but not the cross-file case.
+    const probe: Probe = { file: 'math.ts', needle: 'export function add', inner: 16 };
+    const text = PHASE3_FIXTURE.files[probe.file] ?? '';
+    const offset = positionToOffset(text, probePosition(text, probe));
+
+    // Side A: findRenameLocations → WorkspaceEdit via the SAME mapper.
+    const goldLocs =
+      gsvc.findRenameLocations(nodePath.join(root, probe.file), offset, false, false, {
+        providePrefixAndSuffixTextForRename: true,
+      }) ?? [];
+    const goldChanges: Record<string, TextEdit[]> = {};
+    for (const loc of goldLocs) {
+      const t = ghost.readFile?.(loc.fileName) ?? '';
+      const edits = goldChanges[loc.fileName] ?? [];
+      edits.push(renameLocationToTextEdit(loc, NEW_NAME, t));
+      goldChanges[loc.fileName] = edits;
+    }
+    const goldEdit = normWorkspaceEdit(goldChanges, grel);
+
+    const riftyEdit = normWorkspaceEdit(
+      svc.getRenameEdits(`${RIFTY_ROOT}/${probe.file}`, probePosition(text, probe), NEW_NAME)
+        .changes,
+      riftyRel,
+    );
+
+    // Non-vacuous: rename spans BOTH files (math.ts def + main.ts uses).
+    expect(Object.keys(goldEdit).length).toBeGreaterThanOrEqual(2);
+    expect(riftyEdit).toEqual(goldEdit);
+    // The shorthand `{ add }` rewrite carries prefix text in BOTH sides (proves
+    // prefix handling is real, not coincidentally absent).
+    const allNewTexts = Object.values(goldEdit)
+      .flat()
+      .map((e) => e.newText);
+    expect(allNewTexts).toContain(`add: ${NEW_NAME}`);
+  });
+
+  it('prepareRename matches real TS — true on a symbol, null on a string literal', async () => {
+    const root = writeFixtureToTmp(PHASE3_FIXTURE);
+    const { service: gsvc, host: ghost } = buildGoldService(root);
+    const { svc } = await buildRiftyService(PHASE3_FIXTURE);
+
+    // (1) on the `add` symbol → canRename.
+    const symProbe: Probe = { file: 'main.ts', needle: 'add(1, 2)', inner: 1 };
+    const symText = PHASE3_FIXTURE.files[symProbe.file] ?? '';
+    const symOffset = positionToOffset(symText, probePosition(symText, symProbe));
+    const goldInfo = gsvc.getRenameInfo(nodePath.join(root, symProbe.file), symOffset, {
+      allowRenameOfImportPath: false,
+    });
+    expect(goldInfo.canRename).toBe(true); // non-vacuous: it IS renameable
+    const goldPrepare = goldInfo.canRename
+      ? {
+          range: spanToRange(
+            ghost.readFile?.(nodePath.join(root, symProbe.file)) ?? '',
+            goldInfo.triggerSpan,
+          ),
+          placeholder: goldInfo.displayName,
+        }
+      : null;
+    const riftyPrepare = svc.prepareRename(
+      `${RIFTY_ROOT}/${symProbe.file}`,
+      probePosition(symText, symProbe),
+    );
+    expect(riftyPrepare).toEqual(goldPrepare);
+
+    // (2) inside the import string literal `'./math'` → not renameable → null
+    // (both sides; allowRenameOfImportPath:false matches the service).
+    const strProbe: Probe = { file: 'main.ts', needle: "'./math'", inner: 3 };
+    const strText = PHASE3_FIXTURE.files[strProbe.file] ?? '';
+    const strOffset = positionToOffset(strText, probePosition(strText, strProbe));
+    const goldStr = gsvc.getRenameInfo(nodePath.join(root, strProbe.file), strOffset, {
+      allowRenameOfImportPath: false,
+    });
+    expect(goldStr.canRename).toBe(false); // non-vacuous: it really is not renameable
+    const riftyStr = svc.prepareRename(
+      `${RIFTY_ROOT}/${strProbe.file}`,
+      probePosition(strText, strProbe),
+    );
+    expect(riftyStr).toBeNull();
+  });
+
+  it('signature-help matches real TS — at a call site between args', async () => {
+    const root = writeFixtureToTmp(PHASE3_FIXTURE);
+    const { service: gsvc } = buildGoldService(root);
+    const { svc } = await buildRiftyService(PHASE3_FIXTURE);
+
+    // `add(total, |3)` — cursor on the 2nd argument (`3`) so argumentIndex = 1.
+    const probe: Probe = { file: 'main.ts', needle: 'add(total, 3)', inner: 11 };
+    const text = PHASE3_FIXTURE.files[probe.file] ?? '';
+    const offset = positionToOffset(text, probePosition(text, probe));
+
+    const goldItems = gsvc.getSignatureHelpItems(
+      nodePath.join(root, probe.file),
+      offset,
+      undefined,
+    );
+    expect(goldItems).not.toBeUndefined(); // non-vacuous: there IS a call context
+    const gold = goldItems ? signatureHelpItemsToSignatureHelp(goldItems) : null;
+    const rifty = svc.getSignatureHelp(`${RIFTY_ROOT}/${probe.file}`, probePosition(text, probe));
+    expect(rifty).toEqual(gold);
+    // Spot-check the rendering is meaningful (label + active param), not empty.
+    expect(rifty?.signatures[0]?.label).toContain('add(a: number, b: number): number');
+    expect(rifty?.activeParameter).toBe(1);
   });
 });
