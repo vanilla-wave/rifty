@@ -1,7 +1,8 @@
 /**
  * rifty-LS-backed Monaco providers — hover / definition / type-definition /
  * completions (ADR-0166 phase 2) + find-references / rename / signature-help
- * (ADR-0166 phase 3) for `javascript` + `typescript`.
+ * (ADR-0166 phase 3) + code-actions/quick-fixes / organize-imports / formatting
+ * (ADR-0166 phase 4) for `javascript` + `typescript`.
  *
  * These RETIRE Monaco's built-in TS approximation (the isolated lib.d.ts-only
  * `ts.worker` that can't see the owner VFS / tsconfig / node_modules — the "stub
@@ -23,6 +24,7 @@
  */
 
 import type {
+  CodeAction as LspCodeAction,
   CompletionItem as LspCompletionItem,
   CompletionList as LspCompletionList,
   Hover as LspHover,
@@ -35,8 +37,13 @@ import type {
 } from '@riftydev/ts-language-service/lsp-types';
 import { CompletionItemKind as LspCompletionItemKind } from '@riftydev/ts-language-service/lsp-types';
 import * as monaco from 'monaco-editor';
-import { lspToMonacoRange, monacoToLspPosition } from './lsp-position.ts';
+import { lspToMonacoRange, monacoToLspPosition, monacoToLspRange } from './lsp-position.ts';
 import type { TsLanguageServiceClient } from './ts-ls-client.ts';
+
+/** The marker owner the rifty diagnostics pass sets (mirrors `EditorHost.setMarkers`). */
+const RIFTY_MARKER_OWNER = 'rifty-ts';
+/** LSP `CodeActionKind` for the organize-imports source action. */
+const ORGANIZE_IMPORTS_KIND = 'source.organizeImports';
 
 /** The minimal editor seam the providers need (subset of `EditorApi`). */
 export interface EditorPathBridge {
@@ -174,6 +181,63 @@ function toMonacoTextEdit(e: LspTextEdit): monaco.languages.TextEdit {
 }
 
 /**
+ * Flatten an LSP `WorkspaceEdit` (`changes` keyed by document uri → `TextEdit[]`)
+ * into Monaco's flat `IWorkspaceTextEdit[]`. Each uri is resolved to a model `Uri`
+ * via {@link EditorPathBridge.ensureModel} (opening a sibling/dep buffer read-only
+ * if needed). A file whose model can't be made is dropped — never an edit applied
+ * to a phantom resource. `versionId: undefined` — the edit applies to the current
+ * model version (the type permits it; no version is held across the relay).
+ */
+function toMonacoWorkspaceTextEdits(
+  changes: Readonly<Record<string, LspTextEdit[]>>,
+  bridge: EditorPathBridge,
+): monaco.languages.IWorkspaceTextEdit[] {
+  const edits: monaco.languages.IWorkspaceTextEdit[] = [];
+  for (const [uri, textEdits] of Object.entries(changes)) {
+    const resource = bridge.ensureModel(uri);
+    if (!resource) continue;
+    for (const textEdit of textEdits) {
+      edits.push({ resource, textEdit: toMonacoTextEdit(textEdit), versionId: undefined });
+    }
+  }
+  return edits;
+}
+
+/**
+ * Map an LSP {@link LspCodeAction} → a Monaco `CodeAction`, resolving its
+ * `edit.changes` uris to model Uris (so the action applies real edits). The
+ * optional `diagnostics` ties a quick-fix to the markers it addresses (Monaco
+ * groups/labels it under them). An action whose edit resolves to no resources is
+ * still returned (its title can carry a command-less hint), but here every rifty
+ * action carries an edit.
+ */
+function toMonacoCodeAction(
+  action: LspCodeAction,
+  bridge: EditorPathBridge,
+  diagnostics?: monaco.editor.IMarkerData[],
+): monaco.languages.CodeAction {
+  const out: monaco.languages.CodeAction = { title: action.title };
+  if (action.kind !== undefined) out.kind = action.kind;
+  if (action.isPreferred !== undefined) out.isPreferred = action.isPreferred;
+  if (action.edit) out.edit = { edits: toMonacoWorkspaceTextEdits(action.edit.changes, bridge) };
+  if (diagnostics && diagnostics.length > 0) out.diagnostics = diagnostics;
+  return out;
+}
+
+/**
+ * Parse a Monaco marker `code` (string, or `{value,target}`) to the numeric TS
+ * error number the service keys code-fixes by — `undefined` if non-numeric. The
+ * rifty diagnostics pass stringifies the LSP `Diagnostic.code` (the TS error
+ * number) into the marker, so this reverses that.
+ */
+function markerErrorCode(code: monaco.editor.IMarkerData['code']): number | undefined {
+  const raw = typeof code === 'string' ? code : code?.value;
+  if (raw === undefined) return undefined;
+  const n = Number(raw);
+  return Number.isInteger(n) ? n : undefined;
+}
+
+/**
  * A `resolveRenameLocation` rejection. Monaco types the return as the intersection
  * `RenameLocation & Rejection` (so range/text are nominally required), yet its
  * runtime keys on `rejectReason` first and a real rejection carries no span — the
@@ -202,6 +266,9 @@ export interface TsLanguageServiceProvidersHandle {
     readonly reference: monaco.languages.ReferenceProvider;
     readonly rename: monaco.languages.RenameProvider;
     readonly signatureHelp: monaco.languages.SignatureHelpProvider;
+    readonly codeAction: monaco.languages.CodeActionProvider;
+    readonly documentFormatting: monaco.languages.DocumentFormattingEditProvider;
+    readonly documentRangeFormatting: monaco.languages.DocumentRangeFormattingEditProvider;
   };
 }
 
@@ -342,21 +409,10 @@ export function registerTsLanguageServiceProviders(
       if (!path) return { edits: [], rejectReason: 'Not a rifty TypeScript document' };
       const edit = await client.getRenameEdits(path, monacoToLspPosition(position), newName);
       if (token.isCancellationRequested) return { edits: [], rejectReason: 'Rename cancelled' };
-      // WorkspaceEdit.changes is keyed by document uri (the VFS path verbatim).
-      // Resolve each uri → model Uri (open it read-only if needed) and flatten its
-      // TextEdit[] into Monaco's flat `edits: IWorkspaceTextEdit[]`. A file whose
-      // model can't be made is dropped — never apply an edit to a phantom resource.
-      const edits: monaco.languages.IWorkspaceTextEdit[] = [];
-      for (const [uri, textEdits] of Object.entries(edit.changes)) {
-        const resource = bridge.ensureModel(uri);
-        if (!resource) continue;
-        // versionId undefined: the edit applies to the current model version (the
-        // type permits it; we hold no version to assert against across the relay).
-        for (const textEdit of textEdits) {
-          edits.push({ resource, textEdit: toMonacoTextEdit(textEdit), versionId: undefined });
-        }
-      }
-      return { edits };
+      // WorkspaceEdit.changes is keyed by document uri (the VFS path verbatim);
+      // flatten it into Monaco's `edits: IWorkspaceTextEdit[]`, resolving each uri
+      // → model Uri (a file whose model can't be made is dropped, never faked).
+      return { edits: toMonacoWorkspaceTextEdits(edit.changes, bridge) };
     },
   };
 
@@ -374,6 +430,86 @@ export function registerTsLanguageServiceProviders(
     },
   };
 
+  const codeActionProvider: monaco.languages.CodeActionProvider = {
+    async provideCodeActions(model, range, _context, token) {
+      const path = bridge.pathForModel(model);
+      if (!path) return undefined;
+      const actions: monaco.languages.CodeAction[] = [];
+
+      // Quick-fixes: tsc only returns a fix when the request span lies WITHIN the
+      // diagnostic span, so query per rifty-TS diagnostic OVERLAPPING `range` using
+      // THAT diagnostic's own span + code (not the user's selection). Source the
+      // diagnostics from the rifty marker owner (Monaco's `context.markers` are not
+      // owner-tagged), intersected with `range`. Coalesce duplicate fix titles
+      // across diagnostics so the menu doesn't list the same fix twice.
+      const markers = monaco.editor
+        .getModelMarkers({ resource: model.uri, owner: RIFTY_MARKER_OWNER })
+        .filter((m) => monaco.Range.areIntersectingOrTouching(range, m as monaco.IRange));
+      const seenFixTitles = new Set<string>();
+      for (const marker of markers) {
+        const code = markerErrorCode(marker.code);
+        if (code === undefined) continue;
+        const fixes = await client.getCodeFixes(path, monacoToLspRange(marker), [code]);
+        if (token.isCancellationRequested) return { actions: [], dispose() {} };
+        for (const fix of fixes) {
+          if (seenFixTitles.has(fix.title)) continue;
+          seenFixTitles.add(fix.title);
+          actions.push(toMonacoCodeAction(fix, bridge, [marker]));
+        }
+      }
+
+      // Organize-imports: ALWAYS offered (a source action, independent of the
+      // selection). An already-organized file yields an empty `changes` → an action
+      // with no resources; only push it when it carries real edits so the menu
+      // doesn't show a no-op entry.
+      const organize = await client.organizeImports(path);
+      if (token.isCancellationRequested) return { actions: [], dispose() {} };
+      const organizeEdits = toMonacoWorkspaceTextEdits(organize.changes, bridge);
+      if (organizeEdits.length > 0) {
+        actions.push({
+          title: 'Organize imports',
+          kind: ORGANIZE_IMPORTS_KIND,
+          edit: { edits: organizeEdits },
+        });
+      }
+
+      return { actions, dispose() {} };
+    },
+  };
+
+  const documentFormattingProvider: monaco.languages.DocumentFormattingEditProvider = {
+    displayName: 'rifty TypeScript',
+    async provideDocumentFormattingEdits(model, options, token) {
+      const path = bridge.pathForModel(model);
+      if (!path) return undefined;
+      // Pull the EDITOR's indent settings (the `options` Monaco passes derive from
+      // the model's resolved options too, but read the model directly so the source
+      // is unambiguous): tabSize + insertSpaces feed the service's FormatCodeSettings.
+      const modelOptions = model.getOptions();
+      const edits = await client.getFormattingEdits(path, {
+        tabSize: options.tabSize ?? modelOptions.tabSize,
+        insertSpaces: options.insertSpaces ?? modelOptions.insertSpaces,
+      });
+      if (token.isCancellationRequested) return undefined;
+      return edits.map(toMonacoTextEdit);
+    },
+  };
+
+  const documentRangeFormattingProvider: monaco.languages.DocumentRangeFormattingEditProvider = {
+    displayName: 'rifty TypeScript',
+    async provideDocumentRangeFormattingEdits(model, range, options, token) {
+      const path = bridge.pathForModel(model);
+      if (!path) return undefined;
+      const modelOptions = model.getOptions();
+      const edits = await client.getRangeFormattingEdits(path, monacoToLspRange(range), {
+        tabSize: options.tabSize ?? modelOptions.tabSize,
+        insertSpaces: options.insertSpaces ?? modelOptions.insertSpaces,
+      });
+      if (token.isCancellationRequested) return undefined;
+      return edits.map(toMonacoTextEdit);
+    },
+  };
+
   for (const language of LANGUAGES) {
     disposables.push(monaco.languages.registerHoverProvider(language, hoverProvider));
     disposables.push(monaco.languages.registerDefinitionProvider(language, definitionProvider));
@@ -385,6 +521,22 @@ export function registerTsLanguageServiceProviders(
     disposables.push(monaco.languages.registerRenameProvider(language, renameProvider));
     disposables.push(
       monaco.languages.registerSignatureHelpProvider(language, signatureHelpProvider),
+    );
+    // `providedCodeActionKinds` lets Monaco skip the provider when only a
+    // non-matching kind is requested; we serve quickfixes + organize-imports.
+    disposables.push(
+      monaco.languages.registerCodeActionProvider(language, codeActionProvider, {
+        providedCodeActionKinds: ['quickfix', ORGANIZE_IMPORTS_KIND],
+      }),
+    );
+    disposables.push(
+      monaco.languages.registerDocumentFormattingEditProvider(language, documentFormattingProvider),
+    );
+    disposables.push(
+      monaco.languages.registerDocumentRangeFormattingEditProvider(
+        language,
+        documentRangeFormattingProvider,
+      ),
     );
   }
 
@@ -401,6 +553,9 @@ export function registerTsLanguageServiceProviders(
       reference: referenceProvider,
       rename: renameProvider,
       signatureHelp: signatureHelpProvider,
+      codeAction: codeActionProvider,
+      documentFormatting: documentFormattingProvider,
+      documentRangeFormatting: documentRangeFormattingProvider,
     },
   };
 }

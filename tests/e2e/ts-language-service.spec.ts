@@ -232,6 +232,72 @@ async function tsSignatureHelp(
   );
 }
 
+/** Quick-fixes over a 1-based Monaco range via the registered code-action provider (phase 4 hook). */
+async function tsCodeFixes(
+  page: Page,
+  path: string,
+  startLine: number,
+  startCol: number,
+  endLine: number,
+  endCol: number,
+): Promise<{ title: string; kind?: string; edits: { uri: string; text: string }[] }[]> {
+  return page.evaluate(
+    ({ p, sl, sc, el, ec }) => {
+      const fn = (
+        globalThis as {
+          __riftyTsCodeFixes?: (
+            path: string,
+            startLine: number,
+            startCol: number,
+            endLine: number,
+            endCol: number,
+          ) => Promise<{ title: string; kind?: string; edits: { uri: string; text: string }[] }[]>;
+        }
+      ).__riftyTsCodeFixes;
+      return fn ? fn(p, sl, sc, el, ec) : Promise.resolve([]);
+    },
+    { p: path, sl: startLine, sc: startCol, el: endLine, ec: endCol },
+  );
+}
+
+/** Organize-imports source action via the registered code-action provider (phase 4 hook). */
+async function tsOrganizeImports(
+  page: Page,
+  path: string,
+): Promise<{ title: string; kind?: string; edits: { uri: string; text: string }[] } | null> {
+  return page.evaluate((p) => {
+    const fn = (
+      globalThis as {
+        __riftyTsOrganizeImports?: (path: string) => Promise<{
+          title: string;
+          kind?: string;
+          edits: { uri: string; text: string }[];
+        } | null>;
+      }
+    ).__riftyTsOrganizeImports;
+    return fn ? fn(p) : Promise.resolve(null);
+  }, path);
+}
+
+/**
+ * Whole-document format via the registered formatting provider (phase 4 hook).
+ * Returns the edit count + the text AFTER applying the edits (tsserver returns
+ * span edits, not a whole-doc replace, so the applied result is asserted on).
+ */
+async function tsFormat(
+  page: Page,
+  path: string,
+): Promise<{ editCount: number; applied: string } | null> {
+  return page.evaluate((p) => {
+    const fn = (
+      globalThis as {
+        __riftyTsFormat?: (path: string) => Promise<{ editCount: number; applied: string } | null>;
+      }
+    ).__riftyTsFormat;
+    return fn ? fn(p) : Promise.resolve(null);
+  }, path);
+}
+
 /** Rebuild the LS against the current owner VFS + tsconfig (idempotent ts:init; phase 2 hook). */
 async function tsReinit(page: Page): Promise<boolean> {
   return page.evaluate(() => {
@@ -673,5 +739,186 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     expect(help).not.toBeNull();
     expect(help?.label).toMatch(/name:\s*string/);
     expect(help?.activeParameter).toBe(0);
+  });
+});
+
+/**
+ * Phase-4 (ADR-0166 task 4.2): code-actions/quick-fixes, organize-imports, and
+ * formatting now come from the REAL rifty LS over the page→owner→LS relay, NOT
+ * Monaco's built-in `ts.worker` (whose formatting is retired in EditorHost via
+ * `setModeConfiguration`, and whose code-actions were already off). These
+ * assertions exercise CROSS-FILE / project knowledge the isolated lib.d.ts-only
+ * worker could never have: a missing-import quick-fix that adds an import from a
+ * SIBLING file, an organize-imports that sorts + drops an unused import, and a
+ * whole-document format that rewrites bad spacing per tsserver defaults.
+ *
+ * RED-checkable: the assertions drive the EXACT registered Monaco providers (via
+ * the DEV `__riftyTs{CodeFixes,OrganizeImports,Format}` hooks that call
+ * `provider.provideCodeActions / provideDocumentFormattingEdits`). Each binds to
+ * the real pipeline:
+ *  - quick-fix: unregister the `codeAction` provider (delete it in
+ *    `registerTsLanguageServiceProviders`) → the hook returns [] → the
+ *    non-empty-edit assertion fails; a stub that ignored the marker's errorCodes
+ *    would return no add-import fix (the `quickfix` kind + the './greeter' edit
+ *    text would be absent); the import target (`./greeter`) only exists because
+ *    the LS sees the sibling file — the isolated worker can't.
+ *  - organize-imports: a stub returning an empty edit fails the `>0 edits`
+ *    assertion; the sorted/unused-dropped result text proves the real source action.
+ *  - format: disable the `documentFormatting` provider → the hook returns null →
+ *    the `>0 edits` assertion fails; the rewritten spacing proves the real edits.
+ * None of `localGreet`/`coolGreet` exist in lib.d.ts, so a built-in-worker fix
+ * built on the isolated model could not produce the cross-file import at all.
+ */
+const FIX_DIR = '/workspace/src';
+const FIX_GREETER = `${FIX_DIR}/greeter.ts`;
+const FIX_APP = `${FIX_DIR}/app.ts`;
+const ORGANIZE_TS = `${FIX_DIR}/organize.ts`;
+const FORMAT_TS = `${FIX_DIR}/format.ts`;
+
+test.describe('rifty TS language service: real quick-fixes/organize-imports/formatting (not Monaco built-in)', () => {
+  test('missing-import quick-fix adds an import from a sibling; organize-imports sorts+drops unused; format-document fixes spacing', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
+    test.setTimeout(120_000);
+    await page.goto('/');
+
+    await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
+    await openShellTerminal(page);
+
+    // A small REAL cross-file project in the owner store (the SSoT the LS reads):
+    //  - tsconfig (bundler resolution + ts-extension imports);
+    //  - greeter.ts exporting `localGreet` (the missing-import target);
+    //  - app.ts using `localGreet` WITHOUT importing it → TS "Cannot find name"
+    //    diagnostic whose quick-fix is "add import from './greeter'";
+    //  - organize.ts with an UNSORTED + partly-unused import set;
+    //  - format.ts with deliberately bad spacing.
+    await writeOwnerFile(
+      page,
+      '/workspace/tsconfig.json',
+      [
+        '{',
+        '  "compilerOptions": {',
+        '    "target": "es2022",',
+        '    "module": "esnext",',
+        '    "moduleResolution": "bundler",',
+        '    "strict": true,',
+        '    "allowImportingTsExtensions": true,',
+        '    "noUnusedLocals": true,',
+        '    "noEmit": true',
+        '  }',
+        '}',
+        '',
+      ].join('\n'),
+    );
+    await writeOwnerFile(
+      page,
+      FIX_GREETER,
+      [
+        'export function localGreet(name: string): string {',
+        '  return "hi " + name;',
+        '}',
+        'export const VERSION = 1;',
+        '',
+      ].join('\n'),
+    );
+    // app.ts — `localGreet` is used (L1) but never imported ⇒ TS2304/TS2552.
+    //  L1 `const a = localGreet("x");`  localGreet @ col 11
+    await writeOwnerFile(
+      page,
+      FIX_APP,
+      ['const a = localGreet("x");', 'export const out = a;', ''].join('\n'),
+    );
+    // organize.ts — imports out of order (VERSION before localGreet) and one
+    // unused (`VERSION` is never referenced) ⇒ organize sorts + drops it.
+    await writeOwnerFile(
+      page,
+      ORGANIZE_TS,
+      [
+        'import { VERSION, localGreet } from "./greeter.ts";',
+        'export const g = localGreet("y");',
+        '',
+      ].join('\n'),
+    );
+    // format.ts — bad spacing (collapsed operators / no space after comma) that
+    // tsserver's default format settings rewrite.
+    await writeOwnerFile(
+      page,
+      FORMAT_TS,
+      ['export const sum=(a:number,b:number)=>a+b;', 'export const v=sum(1,2);', ''].join('\n'),
+    );
+    await runTerminalLine(page, 'ls /workspace/src');
+    await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('app.ts');
+
+    // Open all four files so a Monaco model exists for each (providers resolve a
+    // model→path; the add-import target resolves via ensureModel).
+    await openFileViaPalette(page, 'greeter.ts');
+    await openFileViaPalette(page, 'app.ts');
+    await openFileViaPalette(page, 'organize.ts');
+    await openFileViaPalette(page, 'format.ts');
+    await expect
+      .poll(() => tsMarkerCount(page, FIX_APP), { timeout: 15_000 })
+      .toBeGreaterThanOrEqual(0);
+
+    // Rebuild the service against the project we just wrote (the boot build used
+    // tsc default options before these files / this tsconfig existed). Idempotent.
+    expect(await tsReinit(page)).toBe(true);
+
+    // The "Cannot find name 'localGreet'" diagnostic must land first — the
+    // quick-fix is sourced from THAT marker's code (FIRST request cold-boots the
+    // engine + ~3 MB lib.d.ts; 90s headroom).
+    await expect.poll(() => tsMarkerCount(page, FIX_APP), { timeout: 90_000 }).toBeGreaterThan(0);
+
+    // (1) QUICK-FIX over the `localGreet` use in app.ts (L1, cols 11..21). The
+    // provider sources the errorCodes from the overlapping rifty marker, so an
+    // "add import" quick-fix appears whose edit inserts an import of `localGreet`
+    // from the sibling './greeter'. Cross-file fix the isolated worker can't do.
+    await expect
+      .poll(
+        async () => {
+          const fixes = await tsCodeFixes(page, FIX_APP, 1, 11, 1, 21);
+          return fixes.some(
+            (f) =>
+              f.kind === 'quickfix' &&
+              f.edits.length > 0 &&
+              f.edits.some((e) => /localGreet/.test(e.text) && /\.\/greeter/.test(e.text)),
+          );
+        },
+        { timeout: 30_000, intervals: [1500] },
+      )
+      .toBe(true);
+    // The returned fix carries a NON-EMPTY edit (load-bearing: not a lying no-op fix).
+    const fixes = await tsCodeFixes(page, FIX_APP, 1, 11, 1, 21);
+    const addImport = fixes.find(
+      (f) => f.kind === 'quickfix' && f.edits.some((e) => /import/.test(e.text)),
+    );
+    expect(addImport).toBeDefined();
+    expect(addImport?.edits.length).toBeGreaterThan(0);
+    expect(addImport?.edits.some((e) => e.uri.includes('app.ts'))).toBe(true);
+
+    // (2) ORGANIZE-IMPORTS on organize.ts (unsorted + unused `VERSION`): the
+    // source action returns a non-empty edit. The new import text sorts the names
+    // and DROPS the unused `VERSION` (only `localGreet` survives) — the real
+    // tsc organize, not a no-op.
+    const organize = await tsOrganizeImports(page, ORGANIZE_TS);
+    expect(organize).not.toBeNull();
+    expect(organize?.kind).toBe('source.organizeImports');
+    expect(organize?.edits.length ?? 0).toBeGreaterThan(0);
+    const organizeText = (organize?.edits ?? []).map((e) => e.text).join('');
+    expect(organizeText).toContain('localGreet');
+    expect(organizeText).not.toContain('VERSION');
+
+    // (3) FORMAT-DOCUMENT on format.ts (bad spacing): the whole-document formatter
+    // returns a non-empty edit set; APPLIED, the text restores spacing around the
+    // operators / after commas (`a: number, b: number`, `a + b`, `const sum =`)
+    // per tsserver defaults — the real formatter, not a pass-through.
+    const formatResult = await tsFormat(page, FORMAT_TS);
+    expect(formatResult).not.toBeNull();
+    expect(formatResult?.editCount ?? 0).toBeGreaterThan(0);
+    const formatted = formatResult?.applied ?? '';
+    expect(formatted).toMatch(/a:\s*number,\s+b:\s*number/);
+    expect(formatted).toMatch(/a\s+\+\s+b/);
+    expect(formatted).toMatch(/sum\s*=/);
   });
 });

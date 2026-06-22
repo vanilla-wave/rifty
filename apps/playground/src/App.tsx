@@ -602,6 +602,25 @@ export function App(props: AppProps) {
           line: number,
           col: number,
         ) => Promise<{ label: string; activeSignature: number; activeParameter: number } | null>;
+        __riftyTsCodeFixes?: (
+          path: string,
+          startLine: number,
+          startCol: number,
+          endLine: number,
+          endCol: number,
+        ) => Promise<
+          {
+            title: string;
+            kind?: string;
+            edits: { uri: string; text: string }[];
+          }[]
+        >;
+        __riftyTsOrganizeImports?: (path: string) => Promise<{
+          title: string;
+          kind?: string;
+          edits: { uri: string; text: string }[];
+        } | null>;
+        __riftyTsFormat?: (path: string) => Promise<{ editCount: number; applied: string } | null>;
         __riftyTsReinit?: () => Promise<boolean>;
       };
       // Re-init the service against the CURRENT owner VFS (ADR-0166: `ts:init` is
@@ -750,6 +769,86 @@ export function App(props: AppProps) {
           activeParameter: value.activeParameter,
         };
       };
+      // Flatten a Monaco CodeAction's WorkspaceEdit into {uri, text} pairs (uri
+      // round-tripped to its VFS path) for assertions. Only text edits.
+      const codeActionEdits = (
+        action: monaco.languages.CodeAction,
+      ): { uri: string; text: string }[] => {
+        const out: { uri: string; text: string }[] = [];
+        for (const e of action.edit?.edits ?? []) {
+          if (!('textEdit' in e)) continue;
+          const te = e as monaco.languages.IWorkspaceTextEdit;
+          out.push({ uri: pathForUri(te.resource), text: te.textEdit.text });
+        }
+        return out;
+      };
+      // Drive the registered code-action provider over a 1-based Monaco range
+      // (sources errorCodes from the rifty markers internally). Returns each
+      // action's title/kind + flattened edits — proves quick-fixes carry a real edit.
+      g.__riftyTsCodeFixes = async (path, startLine, startCol, endLine, endCol) => {
+        const model = modelFor(path);
+        if (!model) return [];
+        const range = new monaco.Range(startLine, startCol, endLine, endCol);
+        const list = await providers.providers.codeAction.provideCodeActions(
+          model,
+          range,
+          { markers: [], trigger: monaco.languages.CodeActionTriggerType.Invoke },
+          NEVER_CANCEL,
+        );
+        if (!list) return [];
+        const actions = list.actions.map((a) => ({
+          title: a.title,
+          ...(a.kind !== undefined ? { kind: a.kind } : {}),
+          edits: codeActionEdits(a),
+        }));
+        list.dispose();
+        return actions;
+      };
+      // Drive the registered code-action provider for the organize-imports source
+      // action only (filtered by kind). Returns it (title/kind + edits) or null.
+      g.__riftyTsOrganizeImports = async (path) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const list = await providers.providers.codeAction.provideCodeActions(
+          model,
+          model.getFullModelRange(),
+          { markers: [], trigger: monaco.languages.CodeActionTriggerType.Invoke },
+          NEVER_CANCEL,
+        );
+        if (!list) return null;
+        const organize = list.actions.find((a) => a.kind === 'source.organizeImports');
+        const result = organize
+          ? {
+              title: organize.title,
+              ...(organize.kind !== undefined ? { kind: organize.kind } : {}),
+              edits: codeActionEdits(organize),
+            }
+          : null;
+        list.dispose();
+        return result;
+      };
+      // Drive the registered whole-document formatting provider with the model's
+      // own indent options. tsserver returns SPAN edits (small inserts/replaces),
+      // not a whole-doc replace, so apply them to a scratch model to return the
+      // resulting formatted text (deterministic to assert on) + the edit count.
+      g.__riftyTsFormat = async (path) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const opts = model.getOptions();
+        const edits = await providers.providers.documentFormatting.provideDocumentFormattingEdits(
+          model,
+          { tabSize: opts.tabSize, insertSpaces: opts.insertSpaces },
+          NEVER_CANCEL,
+        );
+        if (!edits) return null;
+        const scratch = monaco.editor.createModel(model.getValue(), model.getLanguageId());
+        try {
+          scratch.applyEdits(edits.map((e) => ({ range: e.range, text: e.text })));
+          return { editCount: edits.length, applied: scratch.getValue() };
+        } finally {
+          scratch.dispose();
+        }
+      };
     }
 
     // Per-path debounce so a burst of keystrokes pushes ONE update (~300ms idle).
@@ -851,6 +950,9 @@ export function App(props: AppProps) {
         g.__riftyTsPrepareRename = undefined;
         g.__riftyTsRenameEdits = undefined;
         g.__riftyTsSignatureHelp = undefined;
+        g.__riftyTsCodeFixes = undefined;
+        g.__riftyTsOrganizeImports = undefined;
+        g.__riftyTsFormat = undefined;
         g.__riftyTsReinit = undefined;
       }
     });

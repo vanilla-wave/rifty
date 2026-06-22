@@ -47,3 +47,11 @@ export function lspToMonacoRange(r: Range): MonacoRange {
     endColumn: r.end.character + 1,
   };
 }
+
+/** Monaco 1-based range → LSP 0-based range (inverse of {@link lspToMonacoRange}). */
+export function monacoToLspRange(r: MonacoRange): Range {
+  return {
+    start: { line: r.startLineNumber - 1, character: r.startColumn - 1 },
+    end: { line: r.endLineNumber - 1, character: r.endColumn - 1 },
+  };
+}

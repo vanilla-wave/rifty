@@ -158,16 +158,18 @@ let builtinTsRetired = false;
  *  1. `setDiagnosticsOptions(off)` — no built-in validation (rifty owns squiggles).
  *  2. `setModeConfiguration(...)` — turn OFF every PROJECT-AWARE built-in provider
  *     (completionItems / hovers / definitions / references / documentHighlights /
- *     rename / signatureHelp / codeActions / inlayHints). Monaco's worker only
+ *     rename / signatureHelp / codeActions / inlayHints) AND formatting
+ *     (documentFormattingEdits / documentRangeFormattingEdits / onTypeFormattingEdits,
+ *     ADR-0166 phase 4 — rifty now owns formatting too). Monaco's worker only
  *     sees its isolated lib.d.ts (no VFS / tsconfig / node_modules) — the
  *     "isolated approximation that lies" ADR-0166 rejects. rifty's relay-backed
- *     providers (`glue/ts-ls-monaco-providers.ts`) serve hover/completion/goto;
- *     the rest stay honestly absent rather than guessing.
+ *     providers (`glue/ts-ls-monaco-providers.ts`) serve hover/completion/goto/
+ *     code-actions/organize-imports/formatting; the rest stay honestly absent
+ *     rather than guessing.
  *
  * KEPT ON: the purely SYNTACTIC built-ins that need no project knowledge —
- * `documentSymbols` (outline), `documentRangeFormattingEdits` /
- * `onTypeFormattingEdits` (formatting). Syntax highlighting is the Monarch
- * tokenizer, independent of the worker, so it is unaffected either way.
+ * `documentSymbols` (outline). Syntax highlighting is the Monarch tokenizer,
+ * independent of the worker, so it is unaffected either way.
  */
 function retireBuiltinTsIntelligence(): void {
   if (builtinTsRetired) return;
@@ -183,10 +185,13 @@ function retireBuiltinTsIntelligence(): void {
     codeActions: false,
     inlayHints: false,
     diagnostics: false,
-    // syntactic-only built-ins rifty does not (yet) own — kept honest, not faked:
+    // ADR-0166 phase 4: rifty now owns formatting (no competing built-in) — its
+    // relay-backed document/range formatters serve real tsserver-default edits.
+    documentFormattingEdits: false,
+    documentRangeFormattingEdits: false,
+    onTypeFormattingEdits: false,
+    // syntactic-only built-in rifty does not own — kept honest, not faked:
     documentSymbols: true,
-    documentRangeFormattingEdits: true,
-    onTypeFormattingEdits: true,
   };
   monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions(off);
   monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions(off);
