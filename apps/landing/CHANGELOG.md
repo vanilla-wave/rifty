@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Favicon still invisible: the SVG comment carried CSS-var token names (`--deep`, `--ac`), and a
+  literal `--` inside an XML comment is illegal — browsers parse SVG as strict XML and reject the
+  whole document ("Double hyphen within comment"), so the asset served 200 `image/svg+xml` yet the
+  tab rendered nothing. Rewrote the comment without `--`; the regression now parses comment bodies
+  (`tests/integration/landing-static.test.ts`) so a malformed favicon can't ship green again.
 - Browser-tab favicon: the page shipped no `<link rel="icon">` so the tab was iconless. Added
   `public/favicon.svg` (lime diamond on `--deep`, matching the on-page `logoMark` + tokens) and the
   head link; guarded by `tests/integration/landing-static.test.ts`.
