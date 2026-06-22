@@ -201,6 +201,12 @@ export interface WorkspaceOwnerOptions {
   setup?: 'instant' | 'from-scratch';
   /** Install-stamp reuse key, carried over `RIFTY_RFV_SLUG`. */
   slug?: string;
+  /**
+   * Active STARTER id (preset id), carried over `RIFTY_RFV_STARTER` (ADR-0165 §4).
+   * The slug is the active ROOT id ('scratch'|projectId); the owner needs the
+   * starter to synthesize a scratch index entry. Defaults to the template id.
+   */
+  starter?: string;
   onLog?(line: string): void;
 }
 
@@ -222,9 +228,13 @@ export interface WorkspaceOwnerOptions {
  */
 export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): WorkspaceOwnerHandle {
   const template = opts.template ?? defaultProjectSpec();
-  const root = opts.root ?? '/workspace';
+  // ADR-0165 §4: the active root is `/scratch` or `/projects/<id>`; App always
+  // passes it via rootForId(activeId). Fallback is the default scratch root (the
+  // legacy single `/workspace` is deleted).
+  const root = opts.root ?? '/scratch';
   const setup = opts.setup ?? 'instant';
   const slug = opts.slug ?? template.id;
+  const starter = opts.starter ?? template.id;
   const workspaceId = opts.workspaceId ?? createPreviewOwnerToken();
   const snapshotPort = WORKSPACE_OWNER_SNAPSHOT_PORT;
   // Keys the page's `/preview/<port>/` SW route (ADR-0148/0150 P6b): the page
@@ -255,6 +265,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
         RIFTY_RFV_TEMPLATE: template.id,
         RIFTY_RFV_SETUP: setup,
         RIFTY_RFV_SLUG: slug,
+        RIFTY_RFV_STARTER: starter,
         // Dedicated snapshot/nm BroadcastChannel key (not a dev-server port);
         // the page subscribes on `handle.snapshotPort` to read the owner tree.
         RIFTY_RFV_PORT: String(snapshotPort),

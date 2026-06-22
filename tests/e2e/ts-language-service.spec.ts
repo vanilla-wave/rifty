@@ -40,7 +40,7 @@ test.describe.configure({ mode: 'serial' });
  * the e2e harness serves COOP/COEP. Chromium-only, matching the other owner specs.
  */
 
-const TS_PATH = '/workspace/src/lsp-check.ts';
+const TS_PATH = '/scratch/src/lsp-check.ts';
 
 /** rifty-TS marker count for a VFS path via the EditorHost e2e hook (ADR-0166 P1.9d). */
 async function tsMarkerCount(page: Page, path: string): Promise<number> {
@@ -352,7 +352,7 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     // content (nothing to mangle). The owner republishes its snapshot on command
     // exit, so the palette then lists it.
     await runTerminalLine(page, `printf '' > ${TS_PATH}`);
-    await runTerminalLine(page, 'ls /workspace/src');
+    await runTerminalLine(page, 'ls /scratch/src');
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('lsp-check.ts');
 
     // Open it in the editor through the real palette → an editable .ts tab. This
@@ -429,10 +429,10 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
  * lib.d.ts, so a hover/def/completion built on the isolated worker could not
  * produce them at all.
  */
-const PROJECT_DIR = '/workspace/src';
+const PROJECT_DIR = '/scratch/src';
 const USES_DEP = `${PROJECT_DIR}/uses-dep.ts`;
 const DEP_TS = `${PROJECT_DIR}/dep.ts`;
-const DEP_DTS = '/workspace/node_modules/cool-dep/index.d.ts';
+const DEP_DTS = '/scratch/node_modules/cool-dep/index.d.ts';
 
 test.describe('rifty TS language service: real hover/def/completions (not Monaco built-in)', () => {
   test('hover shows cross-file + node_modules types; def jumps to file + dep .d.ts; completions list dep members', async ({
@@ -454,7 +454,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     //  - `uses-dep.ts` importing both.
     await writeOwnerFile(
       page,
-      '/workspace/tsconfig.json',
+      '/scratch/tsconfig.json',
       [
         '{',
         '  "compilerOptions": {',
@@ -469,10 +469,10 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
         '',
       ].join('\n'),
     );
-    await runTerminalLine(page, 'mkdir -p /workspace/node_modules/cool-dep');
+    await runTerminalLine(page, 'mkdir -p /scratch/node_modules/cool-dep');
     await writeOwnerFile(
       page,
-      '/workspace/node_modules/cool-dep/package.json',
+      '/scratch/node_modules/cool-dep/package.json',
       ['{', '  "name": "cool-dep",', '  "types": "index.d.ts"', '}', ''].join('\n'),
     );
     await writeOwnerFile(
@@ -514,7 +514,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
         '',
       ].join('\n'),
     );
-    await runTerminalLine(page, 'ls /workspace/src');
+    await runTerminalLine(page, 'ls /scratch/src');
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('uses-dep.ts');
 
     // Open uses-dep.ts so a Monaco model exists (providers resolve a model→path).
@@ -621,7 +621,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     // which sees neither file, could never surface.
     await writeOwnerFile(
       page,
-      '/workspace/tsconfig.json',
+      '/scratch/tsconfig.json',
       [
         '{',
         '  "compilerOptions": {',
@@ -663,7 +663,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
         '',
       ].join('\n'),
     );
-    await runTerminalLine(page, 'ls /workspace/src');
+    await runTerminalLine(page, 'ls /scratch/src');
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('app.ts');
 
     // Open BOTH files so a Monaco model exists for each (providers resolve a
@@ -769,7 +769,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
  * None of `localGreet`/`coolGreet` exist in lib.d.ts, so a built-in-worker fix
  * built on the isolated model could not produce the cross-file import at all.
  */
-const FIX_DIR = '/workspace/src';
+const FIX_DIR = '/scratch/src';
 const FIX_GREETER = `${FIX_DIR}/greeter.ts`;
 const FIX_APP = `${FIX_DIR}/app.ts`;
 const ORGANIZE_TS = `${FIX_DIR}/organize.ts`;
@@ -796,7 +796,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     //  - format.ts with deliberately bad spacing.
     await writeOwnerFile(
       page,
-      '/workspace/tsconfig.json',
+      '/scratch/tsconfig.json',
       [
         '{',
         '  "compilerOptions": {',
@@ -848,7 +848,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
       FORMAT_TS,
       ['export const sum=(a:number,b:number)=>a+b;', 'export const v=sum(1,2);', ''].join('\n'),
     );
-    await runTerminalLine(page, 'ls /workspace/src');
+    await runTerminalLine(page, 'ls /scratch/src');
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('app.ts');
 
     // Open all four files so a Monaco model exists for each (providers resolve a

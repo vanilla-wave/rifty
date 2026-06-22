@@ -121,3 +121,17 @@ open:
 - `docs/backlog/distribution/ai-ide-product-ui` — chat + streamed tool-call/diff/approve UI over the IDE-kit.
 - `docs/backlog/toolchain-build/ts-language-service` — in-browser TS diagnostics/hover/defs over VFS (agent `typecheck` + editor squiggles).
 - `docs/backlog/shell/git-command-isomorphic` — git over VFS (isomorphic-git) for git-aware tools.
+
+## M13 — Sharing & import
+
+**PROPOSED.**
+The sharing layer ON TOP of multi-project management (ADR-0165). Multi-project itself (Starter →
+durable Scratch → named Projects, switch = owner respawn, reset-to-Starter) lands under M11's
+"Durable & portable" theme; M13 opens those projects up: user-authored **Starters** ("save project
+as Starter"), **share-by-link**, and **importing** external projects/stands. ADR-0165 keeps the
+export/import engine live (owner-resident, ADR-0146) and the baseline = re-derivable Starter bundle
+artifact intentionally reusable for export-as-Starter — only the launcher/status-bar Export SURFACES
+ship disabled with a `soon` pill until here. Maps to M12's AI-agent sandbox contract (a shared
+project IS an agent stand).
+open:
+- `docs/backlog/distribution/export-project-as-starter-m13` — project bundle → Starter / share-by-link / import; reuses the ADR-0165 baseline artifact. Links `create-rifty-template`.

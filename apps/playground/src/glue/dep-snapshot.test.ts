@@ -57,6 +57,32 @@ describe('dep snapshot (ADR-0135)', () => {
     expect(reparsed.deps).toEqual({ vite: '^5.4.0' });
   });
 
+  it('restores the baked tree into a DIFFERENT root (multi-project dynamic root, ADR-0165)', () => {
+    // Baked at /workspace, restored into a per-project root. Archive paths are
+    // root-RELATIVE, so the restore must RE-ROOT, not throw "Archive root mismatch"
+    // — the multi-project active root is /scratch or /projects/<id>, never the
+    // bake root, so a strict root-equality check would force a slow install on
+    // every boot (the instant-boot contract, ADR-0135, would be lost).
+    const snapshot = buildDepSnapshot(bakedFs(), ROOT, {
+      templateId: 'vite',
+      deps: { vite: '^5.4.0' },
+      packages: 8,
+    });
+    const target = new MemoryFsSync();
+    const projectRoot = '/projects/p1';
+    restoreDepSnapshot(target, projectRoot, snapshot);
+
+    expect(
+      dec.decode(target.readFileBytesSync(`${projectRoot}/node_modules/vite/package.json`)),
+    ).toBe('{"name":"vite"}');
+    expect(target.existsSync(`${projectRoot}/node_modules/a/node_modules/ms/index.js`)).toBe(true);
+    expect(dec.decode(target.readFileBytesSync(`${projectRoot}/package-lock.json`))).toBe(
+      '{"lockfileVersion":3}',
+    );
+    // and NOT leaked at the bake root
+    expect(target.existsSync(`${ROOT}/node_modules/vite/package.json`)).toBe(false);
+  });
+
   it('restore REPLACES a stale node_modules instead of merging over it', () => {
     const snapshot = buildDepSnapshot(bakedFs(), ROOT, {
       templateId: 'vite',

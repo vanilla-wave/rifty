@@ -45,6 +45,17 @@ describe('dev-server boot preview routing', () => {
     expect(source).toContain('serveCrossRealmPreview(port');
     expect(source).not.toContain('setupPreviewBridge(');
   });
+
+  it('re-roots the esbuild/rollup shim overlay onto the active root, not /workspace (ADR-0165 §4)', () => {
+    // The shim files are keyed on the historical `/workspace/node_modules/...`
+    // path; ADR-0165 moved the dev root to `/scratch` | `/projects/<id>`. The
+    // overlay MUST re-root onto the active root, else the REAL native rollup loads
+    // (Rollup throws on the rifty/wasm platform) and every Vite dev boot breaks.
+    expect(source).toContain('overlayShims(root)'); // passes the active root
+    expect(source).toContain('reRootShimPath'); // and re-roots the /workspace key
+    // overlayShims writes the RE-ROOTED path, never the verbatim /workspace key.
+    expect(source).toContain('reRootShimPath(path, root)');
+  });
 });
 
 describe('node-server runtime branch', () => {

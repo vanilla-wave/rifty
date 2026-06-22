@@ -14,7 +14,7 @@ test.describe('M1 - terminal shell', () => {
     // Terminal|Problems view switcher; the collapse control is now a chevron).
     await expect(page.getByRole('tab', { name: 'Terminal', exact: true })).toBeVisible();
     await expect(page.locator('[data-testid="terminal-mode-hint"]')).toContainText(
-      'Commands run in /workspace',
+      'Commands run in /scratch',
     );
     await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
     await expect(page.locator('.rf-terminal-tab')).toHaveCount(1);

@@ -41,6 +41,8 @@ import { isTsRequestMessage, isTsResponseMessage } from '@riftydev/ts-language-s
 import { dirname, initBackend, normalizePath, syncMirror } from '@riftydev/vfs';
 import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
 import { createNpmShellCommand } from '../glue/npm-shell-command.ts';
+import { serveProjectIndex } from '../glue/project-index-port.ts';
+import { reconcileOwnerIndexAtBoot } from '../glue/project-index.ts';
 import {
   type OwnerToPageFrame,
   PTY_IPC_TYPE,
@@ -64,6 +66,7 @@ import {
   resolveBootstrapConfig,
 } from '../templates/project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
+import { shouldCleanForDevBoot } from './dev-boot-clean.ts';
 import { flushSyncMirror } from './dev-server-boot.ts';
 import { createDevServerController } from './dev-server-controller.ts';
 import { resolveNodeEntry } from './node-entry-resolve.ts';
@@ -161,6 +164,8 @@ async function bootShellOwner(opts: {
   readonly publishSnapshot: () => void;
   readonly spec: ProjectSpec;
   readonly slug: string;
+  /** Active STARTER id (preset id) for the spawn — keys a synthesized scratch entry (ADR-0165 §4). */
+  readonly starter: string;
   readonly fromScratch: boolean;
   /** node-entry bootstrap worker URL — the supervised child each CLI runs in (ADR-0150). */
   readonly nodeEntryWorkerUrl: string;
@@ -169,7 +174,7 @@ async function bootShellOwner(opts: {
   /** ts-lsp child bootstrap worker URL — the supervised serve:true LS child the owner spawns (ADR-0166 P1.9a). */
   readonly tsLspWorkerUrl: string;
 }): Promise<void> {
-  const { cfg, port, kernelIpc, publishSnapshot, spec, slug, fromScratch } = opts;
+  const { cfg, port, kernelIpc, publishSnapshot, spec, slug, starter, fromScratch } = opts;
 
   seedProject(cfg);
   publishSnapshot();
@@ -212,6 +217,7 @@ async function bootShellOwner(opts: {
   let devSlug = slug;
   let devFromScratch = fromScratch;
   let lastDevTemplateId: string | null = null;
+  let lastDevRoot: string | null = null;
 
   // Co-resident dev server (ADR-0148): the vite/node tail runs in THIS realm,
   // on demand, reading the realm's installed tree → it sees terminal-installed deps.
@@ -220,15 +226,24 @@ async function bootShellOwner(opts: {
     // v1: boot runs to completion; a Ctrl-C mid-boot takes effect right after
     // (the controller stops the server once `signal` aborts) — not mid-install.
     boot: (signal, devLog) => {
-      if (lastDevTemplateId !== null && lastDevTemplateId !== devSpec.id) {
-        // Template switched: a fresh worker per preset used to keep node_modules
-        // clean; the ONE persistent owner accumulates the prior preset's deps,
-        // which trips the new template's lockfile coverage (EBROKENLOCK). Clear
+      if (
+        shouldCleanForDevBoot({
+          lastTemplateId: lastDevTemplateId,
+          lastRoot: lastDevRoot,
+          nextTemplateId: devSpec.id,
+          nextRoot: devCfg.root,
+        })
+      ) {
+        // Root OR template switched (ADR-0165 §5): a fresh worker per preset used
+        // to keep node_modules clean; the ONE persistent owner accumulates the
+        // prior project's deps, which trips the new template's lockfile coverage
+        // (EBROKENLOCK). Two projects from the SAME starter share templateId but
+        // must NOT share node_modules, so a root change also cleans. Clear
         // node_modules + the lockfile + package.json so the new template seeds its
         // own package.json (the child seeds it back if-absent) and installs
-        // cleanly. A same-template reload skips this — preserving the user's
-        // package.json + installed tree. Owner-realm stateful across runs: the
-        // clean runs HERE on the owner store the child reads over fs.* RPC.
+        // cleanly. A same-template + same-root reload skips this — preserving the
+        // user's package.json + installed tree. Owner-realm stateful across runs:
+        // the clean runs HERE on the owner store the child reads over fs.* RPC.
         const fs = syncMirror();
         try {
           fs.rmSync(`${devCfg.root}/node_modules`, { recursive: true, force: true });
@@ -239,6 +254,7 @@ async function bootShellOwner(opts: {
         }
       }
       lastDevTemplateId = devSpec.id;
+      lastDevRoot = devCfg.root;
       // ADR-0150 P6b: spawn the dev server in a supervised serve:true child that
       // reads the owner store over fs.* RPC. The owner stays a free async
       // supervisor. The driver resolves when the child reports listening; stop()
@@ -458,6 +474,25 @@ async function bootShellOwner(opts: {
   // owner, the page holds no authoritative fs): the owner serializes /
   // applies its own tree so the PAGE keeps no authoritative store of its own.
   const tearArchiveBridge = serveWorkspaceArchive(port, cfg.root);
+  // ADR-0165 §7 boot reconcile + scratch synthesis (BEFORE serving the index):
+  // finish/roll back a half-completed Save and synthesize a scratch entry keyed on
+  // the spawn STARTER when /scratch exists but the index is a cold-boot empty — so
+  // the owner index is the REAL hydrate source AND saveScratchAsProject's
+  // `if(!index.scratch) throw` precondition holds. See reconcileOwnerIndexAtBoot.
+  reconcileOwnerIndexAtBoot(syncMirror(), starter);
+  // ADR-0165: the OPFS project index is worker-writable only; serve it so the page
+  // launcher hydrates an in-memory mirror across owner respawns. Read against THIS
+  // realm's syncMirror (the owner owns the index); base '/' = the OPFS root.
+  // `publishSnapshot` is the reset-refresh hook (ADR-0165 §6): an in-place re-seed
+  // bypasses onVfsWrite, so the index bridge republishes the file snapshot itself
+  // — the page editor/explorer reflect the restored tree.
+  const tearIndexBridge = serveProjectIndex(
+    port,
+    syncMirror(),
+    '/',
+    flushSyncMirror,
+    publishSnapshot,
+  );
   log('[shell-owner/worker] pty server ready; workspace read + archive bridges live\n');
 
   // Referenced so the served bridges + server aren't GC'd while the realm serves.
@@ -465,6 +500,7 @@ async function bootShellOwner(opts: {
   void tearSnapReq;
   void tearNodeModulesBridge;
   void tearArchiveBridge;
+  void tearIndexBridge;
   void server;
 }
 
@@ -483,7 +519,10 @@ async function bootstrap(): Promise<void> {
   // TODO(backlog: runtime-js/worker-entry-process-globals-side-effect)
   const env = { ...(readKernelProcessSpec()?.env ?? globalThis.process.env) };
   const port = Number.parseInt(env.RIFTY_RFV_PORT ?? '5174', 10);
-  const root = env.RIFTY_RFV_ROOT ?? '/workspace';
+  // ADR-0165 §4: the active root is `/scratch` or `/projects/<id>` — the page
+  // always sets RIFTY_RFV_ROOT via rootForId(activeId); the fallback is the
+  // default scratch root (the legacy single `/workspace` no longer exists).
+  const root = env.RIFTY_RFV_ROOT ?? '/scratch';
   // ADR-0148/0150: ONE owner — the unified shell + the dev server it spawns as a
   // supervised child. The legacy per-run 'preview' worker is gone (no spawner sets
   // RIFTY_OWNER_MODE anymore). The preview SW route is keyed page-side
@@ -495,6 +534,11 @@ async function bootstrap(): Promise<void> {
   // Project slug (preset id) — the install-stamp reuse key, so a from-scratch
   // preset isn't silenced by a stamp an instant preset on the same template left.
   const slug = env.RIFTY_RFV_SLUG ?? spec.id;
+  // Active STARTER (preset id) for a synthesized scratch entry (ADR-0165 §4): the
+  // slug is the active ROOT id ('scratch' or a projectId), not the starter, so the
+  // page sends the real starter over RIFTY_RFV_STARTER. Fall back to the spawn
+  // template id (a fresh boot before the page picks anything).
+  const starter = env.RIFTY_RFV_STARTER ?? spec.id;
   // Honour an explicit entry override on the spawn spec (usually a no-op —
   // the orchestrator defaults it to the template's own entry).
   const effectiveSpec = withEntryOverride(spec, env.RIFTY_RFV_ENTRY ?? spec.entry.relativePath);
@@ -571,6 +615,7 @@ async function bootstrap(): Promise<void> {
     publishSnapshot,
     spec,
     slug,
+    starter,
     fromScratch,
     nodeEntryWorkerUrl,
     devServerWorkerUrl,
