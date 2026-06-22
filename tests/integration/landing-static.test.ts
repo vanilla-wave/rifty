@@ -10,6 +10,7 @@ const LANDING_PACKAGE = 'apps/landing/package.json';
 const NETLIFY_WORKFLOW = '.github/workflows/netlify.yml';
 const NAV = 'apps/landing/src/sections/nav.ts';
 const HERO = 'apps/landing/src/sections/hero.ts';
+const FAVICON = 'apps/landing/public/favicon.svg';
 
 describe('landing static site', () => {
   it('publishes the rifty.dev landing entry (Vite SPA shell)', () => {
@@ -21,6 +22,13 @@ describe('landing static site', () => {
     expect(html).toContain('<link rel="canonical" href="https://rifty.dev/" />');
     expect(html).toContain('id="app"');
     expect(html).toContain('/src/main.ts');
+  });
+
+  it('shows a browser-tab favicon (rel=icon → existing svg)', () => {
+    // The tab was iconless: no <link rel="icon"> + no asset shipped from public/.
+    const html = readFileSync(INDEX, 'utf8');
+    expect(html).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml" />');
+    expect(existsSync(FAVICON)).toBe(true);
   });
 
   it('keeps a playground and GitHub exit', () => {
