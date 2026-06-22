@@ -30,6 +30,41 @@ Each is a genuine fidelity gap, **recorded loud** (compat ❌ + note), never a s
 - **`checkout` ceilings.** `--orphan` / `-B` / `--patch` / `--merge` / `--ours`·`--theirs` / `--track` / `checkout -` (previous branch, needs reflog `@{-1}`) / glob-magic pathspecs / `-q` / revspec arithmetic (`HEAD~1`/`main^`/`@{-1}`/`HEAD@{1}` → `git.checkout.revspec`, iso-git resolveRef can't parse it) all loud-throw `NotImplementedError('git.checkout.<x>')` (exit 128). The genuine 2-arg `<revision> <path>` ambiguity refusal (`checkout dev dev` where `dev` is both a branch and a tracked file) is DEFERRED — single-arg follows git's branch precedence (ref wins), but the rare 2-arg ambiguous case is not yet rejected. `git restore` / `git switch` remain separate unimplemented commands (the detached-HEAD advisory still quotes git's verbatim `git switch` hint — fidelity to git's text).
 - **Broader iso-git surface.** tag/stash/merge/cherry-pick/reset/remote/config-CLI etc. are not in the v1 subset (the shell reports them as not-implemented, exit 128).
 
+## Useful capabilities not yet implemented (gap analysis 2026-06-22)
+
+First cluster (switch/restore/config/`commit --amend`) being implemented NOW — not listed here. Format: capability — feasibility — value (agent/dev) — rationale.
+
+### Tier: medium (after the cheap native verbs)
+
+- `reset` — SPLIT: `git reset <file>` (unstage) + `git restore --staged` iso-git-native (`resetIndex`, filepath REQUIRED); but `reset --soft/--mixed HEAD~1` (move branch ref / rebuild index) own-impl (writeRef + index rebuild), iso-git `resetIndex` never moves HEAD — agent=high dev=medium.
+- revspec arithmetic parser (`HEAD~n`, `^`, `@{-1}`) — own-impl (small) — agent=high — multiplier: unblocks reset/diff/checkout/show/log-range/`checkout -` at once; iso-git `expandRef`/`expandOid` do abbreviations only, not arithmetic.
+- `diff --staged`/`--cached` + diff between two refs — iso-git native (`walk(TREE(HEAD),STAGE())` / `walk(TREE(a),TREE(b))`, same line-diff backend) — agent=high.
+- byte-exact `git diff` unified-patch text (mode/index/`\ No newline` headers) — own-impl (small), pairs with `apply` — agent=medium.
+- `show <object>` — iso-git native (readCommit/readTree/readBlob) — agent=high.
+- `tag` (lightweight + annotated) / list / delete — iso-git native — dev=high.
+- `remote` add/list/remove + `ls-remote` (getRemoteInfo/listServerRefs) — iso-git native — dev=high — complements clone/fetch/push.
+- `log` flags `-n`/depth, `--format`, path-filter (native via `log({depth,ref,filepath})`) + range `a..b` (small own-impl two-walk set-diff) — agent=high.
+- `merge` (3-way + conflict markers) — iso-git `merge()` native; but `--continue`/conflict-completion UX own glue (iso-git merge has no `--continue`, caller does add+commit) — agent=high.
+- `stash` push/pop/apply/list/drop — iso-git native (`stash()`) — agent=high — needs careful VFS-workdir interaction tests.
+- `cherry-pick` — iso-git native; `revert` — own-impl (small, inverse-patch atop cherry-pick) — agent=medium.
+- `rm` / `mv` — iso-git native composition (remove + writeFile) — low (achievable via remove+add today).
+
+### Tier: high agent-value but large
+
+- `git apply` / `am` (unified-diff patch application) — own-impl (large): no iso-git API; needs a real unified-diff parser + 3-way context application. Single highest-leverage verb for the M12 AI coding tool (apply a generated patch vs rewriting whole files).
+
+### Tier: low / niche
+
+- `clean -fd` (own-impl small, destructive, rare in ephemeral VFS); `reflog` (own-impl large — iso-git keeps no reflog; needs ref-update history on every HEAD move; gates `@{-1}`/undo-bad-reset); `blame` (own-impl large); `bisect`; `notes`/`describe`/`shortlog`/`archive`/`bundle`/`grep` (notes/archive native, rest thin); sparse/partial-clone (own-impl large, VFS+singleBranch+depth already mitigate).
+
+### NOT a gap — record as positive (so nobody "fixes" a non-bug)
+
+- `.gitignore` is ALREADY honored: `git.statusMatrix({fs,dir})` defaults `ignored:false` → ignored files (node_modules/build) excluded from `git status` and `git add .` (addAll). Only residual is ABSENCE of a regression test asserting this — add a test, not a capability. (iso-git also ships `isIgnored()` for explicit checks if ever wanted.)
+
+### Browser-ceiling — permanent ceilings, NOT backlog work (already loud-throw)
+
+SSH/`git://` (raw TCP), cross-origin smart-HTTP without CORS-proxy, exec-bit/symlink canonical tree-SHA (needs VFS POSIX-mode/symlink layer — ADR-0050 follow-up), GPG signing, hooks/gc/repack/fsck — all correctly `NotImplementedError`, none scenario-blocking.
+
 ## Reversibility
 
 - v1 core: landed, **IRREVERSIBLE** — recorded in ADR-0167 (new dep isomorphic-git, `@riftydev/git` package + `@riftydev/sdk/git` subpath, corsProxy/onAuth contract).
