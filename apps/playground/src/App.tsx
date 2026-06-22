@@ -6,6 +6,7 @@ import {
   type TerminalHistoryRecord,
   addTerminalHistoryRecord,
 } from '@riftydev/terminal/history';
+import type { Diagnostic } from '@riftydev/ts-language-service';
 import { normalizePath } from '@riftydev/vfs';
 import { Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import {
@@ -19,7 +20,12 @@ import { type BootResult, isCrossOriginIsolated, swErrorBannerMessage } from './
 import { BottomPanel } from './components/BottomPanel.tsx';
 import { CapabilitiesPanel } from './components/CapabilitiesPanel.tsx';
 import { CommandPalette, type PaletteItem } from './components/CommandPalette.tsx';
-import { type EditorApi, EditorHost, PROGRAM_MIRROR_PATH } from './components/EditorHost.tsx';
+import {
+  type EditorApi,
+  type EditorDocumentEvent,
+  EditorHost,
+  PROGRAM_MIRROR_PATH,
+} from './components/EditorHost.tsx';
 import { FileExplorer } from './components/FileExplorer.tsx';
 import { PreviewPanel } from './components/PreviewPanel.tsx';
 import { Splitter } from './components/Splitter.tsx';
@@ -40,6 +46,7 @@ import {
 import { SnapshotFs } from './glue/snapshot-fs.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
+import { createTsLanguageServiceClient, lspToMonacoMarkers } from './glue/ts-ls-client.ts';
 import { requestVfsSnapshot, subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset, presetBootLines } from './presets.ts';
 import type { ProjectSpec } from './templates/project-spec.ts';
@@ -115,6 +122,9 @@ export function App(props: AppProps) {
   const snapshotFs = new SnapshotFs(WORKSPACE);
 
   let editorApi: EditorApi | undefined;
+  // Reactive mirror so the LS-wiring effect (ADR-0166 P1.9b) reacts when the
+  // editor registers its imperative api (captured during EditorHost mount).
+  const [editorApiSig, setEditorApiSig] = createSignal<EditorApi | undefined>(undefined);
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   function flashToast(message: string, tone: 'error' | 'success'): void {
     setToast({ message, tone });
@@ -507,6 +517,119 @@ export function App(props: AppProps) {
     onCleanup(() => {
       cache.dispose();
       setNmCache(null);
+    });
+  });
+
+  // Aggregated TS diagnostics per open file (ADR-0166 P1.9b), keyed by absolute
+  // VFS path. Feeds the editor squiggles (per-file `setMarkers`) AND the Problems
+  // panel (flattened across files). A new Map per update so solid sees a change.
+  const [diagnostics, setDiagnostics] = createSignal<ReadonlyMap<string, readonly Diagnostic[]>>(
+    new Map(),
+  );
+
+  // TS language service wiring (ADR-0166 P1.9b): once the editor registers its api
+  // AND the owner is available, create the id-correlated LS client over the
+  // page↔owner↔LS relay, init the project root, and bridge editor document
+  // events → `ts:open`/`ts:update`/`ts:close` (debounced) → diagnostics →
+  // `setMarkers` + the aggregated signal. The LS is JS/TS-only (Monaco's builtin
+  // TS diagnostics are disabled in EditorHost so rifty is the single source).
+  createEffect(() => {
+    const maybeApi = editorApiSig();
+    if (!maybeApi) return;
+    const api: EditorApi = maybeApi;
+    // The unavailable-owner stub's sendTsLsp/onTsLsp are no-ops → init/requests
+    // time out and reject; we swallow (no owner = no diagnostics, surfaced loud
+    // in the terminal already). A real owner serves the LS child.
+    const client = createTsLanguageServiceClient(workspaceOwner);
+    // Per-path debounce so a burst of keystrokes pushes ONE update (~300ms idle).
+    const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    const openPaths = new Set<string>();
+    let disposed = false;
+
+    const isJsTs = (path: string): boolean => /\.(ts|tsx|js|jsx|cjs|mjs)$/.test(path);
+
+    async function refreshDiagnostics(path: string): Promise<void> {
+      if (disposed) return;
+      try {
+        const [semantic, syntactic] = await Promise.all([
+          client.getSemanticDiagnostics(path),
+          client.getSyntacticDiagnostics(path),
+        ]);
+        if (disposed) return;
+        const diags = [...syntactic, ...semantic];
+        api.setMarkers(path, lspToMonacoMarkers(diags));
+        setDiagnostics((prev) => {
+          const next = new Map(prev);
+          if (diags.length === 0) next.delete(path);
+          else next.set(path, diags);
+          return next;
+        });
+      } catch (err) {
+        // A real LS error (or a relay timeout) — surface it, never fake green
+        // squiggles. The owner-unavailable stub also lands here (init rejects).
+        if (!disposed) console.warn('[ts-lsp]', (err as Error).message);
+      }
+    }
+
+    function scheduleSync(ev: EditorDocumentEvent): void {
+      const prev = debounceTimers.get(ev.path);
+      if (prev) clearTimeout(prev);
+      debounceTimers.set(
+        ev.path,
+        setTimeout(() => {
+          debounceTimers.delete(ev.path);
+          let push: Promise<void>;
+          if (openPaths.has(ev.path)) {
+            push = client.update(ev.path, ev.text);
+          } else {
+            openPaths.add(ev.path);
+            push = client.open(ev.path, ev.text);
+          }
+          void push.then(
+            () => refreshDiagnostics(ev.path),
+            (err: unknown) => {
+              if (!disposed) console.warn('[ts-lsp]', (err as Error).message);
+            },
+          );
+        }, 300),
+      );
+    }
+
+    const unsubscribe = api.onDocument((ev) => {
+      if (!isJsTs(ev.path)) return; // LS is JS/TS-only
+      if (ev.kind === 'close') {
+        const t = debounceTimers.get(ev.path);
+        if (t) {
+          clearTimeout(t);
+          debounceTimers.delete(ev.path);
+        }
+        if (openPaths.delete(ev.path)) void client.close(ev.path);
+        api.setMarkers(ev.path, []);
+        setDiagnostics((prev) => {
+          if (!prev.has(ev.path)) return prev;
+          const next = new Map(prev);
+          next.delete(ev.path);
+          return next;
+        });
+        return;
+      }
+      // open | change: debounce → open/update → diagnostics.
+      scheduleSync(ev);
+    });
+
+    // Init the project root the owner runs with (cwd = WORKSPACE). Fire-and-await:
+    // open/update requests queue behind it on the LS endpoint (each frame is
+    // independently dispatched; init builds the service lazily on first frame).
+    void client.init(WORKSPACE).catch((err: unknown) => {
+      if (!disposed) console.warn('[ts-lsp] init', (err as Error).message);
+    });
+
+    onCleanup(() => {
+      disposed = true;
+      for (const t of debounceTimers.values()) clearTimeout(t);
+      debounceTimers.clear();
+      unsubscribe();
+      client.dispose();
     });
   });
 
@@ -1032,6 +1155,7 @@ export function App(props: AppProps) {
                 vfs={snapshotFs}
                 registerApi={(api) => {
                   editorApi = api;
+                  setEditorApiSig(() => api);
                 }}
                 onActive={(info) => {
                   setActiveFile(info.label);
@@ -1102,6 +1226,10 @@ export function App(props: AppProps) {
               onSignal={stopSession}
               onRawInput={writeTerminalStdin}
               onLine={(id, line, dims) => runTerminalLine(id, line, dims)}
+              diagnostics={diagnostics()}
+              onOpenProblem={(path, line, column) =>
+                editorApi?.openFile(path, { reveal: { line, column } })
+              }
             />
           </main>
         </div>
