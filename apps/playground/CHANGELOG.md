@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Express `res.json`/`res.send` no longer crash with `TypeError: argument entity must be string, Buffer, or fs.Stats`** (express + sqlite preset, PROD build only). Each `?worker&url` child entry is self-contained, so it carries its OWN `@riftydev/io` `Buffer` copy; the kernel pre-entry hook had set `globalThis.Buffer` from the kernel-worker-entry copy, so `etag` (reads the global) rejected a buffer express built via `require('buffer')` (the child copy). The `kind:'url'` child bootstraps (dev-server-child, node-entry, real-vite owner) now call `installBundleLocalBuffer()` to pin the global to THIS bundle's copy — mirrors `runtime-js/worker-entry.ts`. DEV was unaffected (one shared ESM module instance), which is why the dev e2e never caught it; new PROD-build guard `tests/e2e-prod/buffer-realm-identity.spec.ts` + unit `bundle-local-buffer.test.ts`. Root (shared runtime classes duplicated per worker bundle) tracked in backlog/toolchain-build/worker-bundle-shared-runtime-dedup.
+
 ### Changed
 
 - **Shared `runForegroundChild` driver** (closes backlog/playground/owner-child-foreground-shared-driver). The owner `node <file>` executor and the `.bin` executor no longer each re-implement decode + stream + Ctrl-C-kill/mute + settle-on-exit (ADR-0155 §1 recorded the drift risk) — both ride `glue/run-foreground-child.ts`. The node executor passes its `rifty:node-listening` hook + preview-registry remove; the bin executor passes neither. Side benefit: the bin executor inherits the exit-listener-before-pre-abort ordering its inline copy lacked, so a `node_modules/.bin/<cmd>` launched with an already-aborted signal no longer hangs (kill() emits `'exit'` synchronously). The dev-server child keeps its own driver (resolves on a `rifty:dev-ready` message, not exit).

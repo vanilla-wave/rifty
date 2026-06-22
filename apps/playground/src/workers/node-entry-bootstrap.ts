@@ -38,12 +38,19 @@ import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import { syncMirror } from '@riftydev/vfs';
 import { runNodeProgramLifecycle } from './node-program-lifecycle.ts';
 import { installLoudStdin } from './node-stdin-guard.ts';
+import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
 
 const proc = globalThis.process;
 const entryPath = proc.argv[1];
 if (typeof entryPath !== 'string' || entryPath === '') {
   throw new Error('node-entry-bootstrap: missing entry path (process.argv[1])');
 }
+
+// Realign globalThis.Buffer with THIS bundle's `require('buffer')` so a `node x.js`
+// server using express/etag (which reads the GLOBAL Buffer) doesn't trip the
+// dual-copy `Buffer.isBuffer` mismatch in a production build — the kernel pre-entry
+// hook installed the kernel-worker-entry bundle's copy. See installBundleLocalBuffer.
+installBundleLocalBuffer();
 
 // A spawned Node CLI's console.log belongs on its stdout (kernel stdio port →
 // owner pty → terminal). Without this, console output vanishes into the worker
