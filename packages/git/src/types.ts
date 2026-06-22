@@ -75,6 +75,25 @@ export interface PushArgs {
   force?: boolean;
 }
 
+/** Discriminated input for {@link Git.checkout}. `restore.source` undefined = from INDEX. */
+export type CheckoutInput =
+  | { op: 'switch'; ref: string; create?: boolean; startPoint?: string; force?: boolean }
+  | { op: 'restore'; pathspecs: string[]; source?: string; force?: boolean };
+
+/** Structured result of {@link Git.checkout} — the shell renders byte-exact git text from this. */
+export type CheckoutResult =
+  | {
+      op: 'switch';
+      target: string | undefined;
+      oid: string;
+      detached: boolean;
+      created: boolean;
+      alreadyOn: boolean;
+      previousRef: string | undefined;
+      headSubject: string;
+    }
+  | { op: 'restore'; restored: string[] };
+
 /** Per-file change class reported by `diff()` (HEAD tree vs working dir). */
 export type DiffChange = 'add' | 'modify' | 'delete';
 

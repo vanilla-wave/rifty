@@ -8,6 +8,52 @@
 import { NotImplementedError } from '@riftydev/io';
 
 /**
+ * Typed git USER errors (normal git failures, NOT NotImplementedError ceilings).
+ * The shell maps each to git's exact stderr + exit code — they carry the
+ * structured data (files/branch/pathspec/arg) the renderer needs.
+ */
+
+/** A switch/checkout would overwrite uncommitted local changes. */
+export class CheckoutConflictError extends Error {
+  readonly files: string[];
+  constructor(files: string[]) {
+    super('checkout would overwrite local changes');
+    this.name = 'CheckoutConflictError';
+    this.files = files;
+  }
+}
+
+/** `checkout -b <branch>` where `<branch>` already exists. */
+export class BranchExistsError extends Error {
+  readonly branch: string;
+  constructor(branch: string) {
+    super(`a branch named '${branch}' already exists`);
+    this.name = 'BranchExistsError';
+    this.branch = branch;
+  }
+}
+
+/** A restore pathspec matched no known file. */
+export class PathspecError extends Error {
+  readonly pathspec: string;
+  constructor(pathspec: string) {
+    super(`pathspec '${pathspec}' did not match any file(s) known to git`);
+    this.name = 'PathspecError';
+    this.pathspec = pathspec;
+  }
+}
+
+/** An arg is ambiguous between a revision and a path. */
+export class AmbiguousArgError extends Error {
+  readonly arg: string;
+  constructor(arg: string) {
+    super(`'${arg}' could be both a revision and a path`);
+    this.name = 'AmbiguousArgError';
+    this.arg = arg;
+  }
+}
+
+/**
  * Reject any non-smart-HTTP transport. `http:`/`https:` pass; `ssh:`/`git:`/etc.
  * throw `git.transport.<scheme>` since they need raw TCP/SSH we don't have in a
  * browser. scp-like syntax (`git@host:path` or `host:path` with no scheme) is
