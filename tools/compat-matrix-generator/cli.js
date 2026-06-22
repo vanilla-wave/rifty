@@ -309,6 +309,110 @@ const matrices = [
       'The Transform-stream surface is gated behind a future ADR; one-shot async covers the registry/asset/HTTP flows the Consumer-Ready roadmap targets.',
     ],
   },
+  {
+    file: 'ts-language-service.md',
+    title: 'Compatibility matrix — TS language service (`@riftydev/ts-language-service`)',
+    intro:
+      "Public claim surface for the in-browser `ts.LanguageService` over the rifty VFS (ADR-0166): a real `typescript` LanguageService in a kernel worker, LSP-shaped, wired as real Monaco providers in the playground (Monaco's built-in TS intelligence retired for every ✅ row). Every ✅ is parity-checked head-to-head against the real `ts.LanguageService` (gold standard, same vendored `typescript` both sides). ❌ rows are the deferred long tail — the engine exposes NO method (no silent stub) and the named backlog item tracks them.",
+    rows: [
+      [
+        'Diagnostics (semantic / syntactic / tsconfig-config)',
+        '✅',
+        '`getSemanticDiagnostics` / `getSyntacticDiagnostics` / config-file diagnostics over the project tsconfig + VFS',
+      ],
+      ['Hover / quick-info', '✅', '`getQuickInfo` — cross-file + `node_modules` symbol types'],
+      [
+        'Go-to-definition / type-definition',
+        '✅',
+        '`getDefinitionAtPosition` / `getTypeDefinitionAtPosition` — cross-file + into `node_modules` `.d.ts`',
+      ],
+      [
+        'Completions (+ resolve)',
+        '✅',
+        '`getCompletionsAtPosition` + lazy `getCompletionEntryDetails` (label-keyed resolve; same-name auto-import collision tracked: `protocol/ts-completion-resolve-by-label`)',
+      ],
+      ['Find-references', '✅', '`findReferences` flattened; honors `includeDeclaration`'],
+      [
+        'Rename (+ prepare-rename)',
+        '✅',
+        '`getRenameInfo` + `findRenameLocations` → cross-file `WorkspaceEdit`; non-renameable element rejected',
+      ],
+      ['Signature help', '✅', '`getSignatureHelpItems` — real overloads at a call site'],
+      [
+        'Quick-fixes / code-actions',
+        '✅',
+        '`getCodeFixesAtPosition` → `CodeAction[]` (kind `quickfix`); request span within the diagnostic span',
+      ],
+      ['Organize imports', '✅', "`organizeImports({type:'file'})` — sort + de-dup + drop unused"],
+      [
+        'Document + range formatting',
+        '✅',
+        "`getFormattingEditsForDocument` / `getFormattingEditsForRange` — tsserver's real `FormatCodeSettings`",
+      ],
+      [
+        'Refactorings',
+        '❌',
+        '`getApplicableRefactors` / `getEditsForRefactor` (+ Monaco `refactor.*`) — `toolchain-build/ts-language-service-refactorings`',
+      ],
+      [
+        'Inlay hints',
+        '❌',
+        '`provideInlayHints` — `toolchain-build/ts-language-service-editor-decorations`',
+      ],
+      [
+        'Document highlights',
+        '❌',
+        '`getDocumentHighlights` — `toolchain-build/ts-language-service-editor-decorations`',
+      ],
+      [
+        'Semantic highlighting (classification)',
+        '❌',
+        '`getEncodedSemantic`/`SyntacticClassifications` — `toolchain-build/ts-language-service-editor-decorations`',
+      ],
+      [
+        'Call hierarchy',
+        '❌',
+        '`prepareCallHierarchy` / `provideCallHierarchy{Incoming,Outgoing}Calls` — `toolchain-build/ts-language-service-call-hierarchy`',
+      ],
+      [
+        'Document symbols / outline + folding + workspace symbols',
+        '❌',
+        '`getNavigationTree` / `getOutliningSpans` / `getNavigateToItems` — `toolchain-build/ts-language-service-navigation`',
+      ],
+      [
+        'On-type formatting',
+        '❌',
+        '`getFormattingEditsAfterKeystroke` (doc + range shipped; on-type not) — `playground/ts-ls-on-type-formatting`',
+      ],
+      [
+        'Code lens',
+        '❌',
+        'Editor-only convenience, not a tsserver primitive — out of the deferred long tail',
+      ],
+      [
+        'Non-TS/JS LSP (Python / Go native servers)',
+        '❌',
+        'A browser ceiling (no native language servers) — out of scope (ADR-0166)',
+      ],
+      [
+        "Project's installed TS version (workspace version)",
+        '❌',
+        'Vendored `typescript` for v1 — `toolchain-build/ts-language-service-workspace-version`',
+      ],
+    ],
+    tests: [
+      '`packages/ts-language-service/src/parity.test.ts`',
+      '`packages/ts-language-service/src/service.test.ts`',
+      '`packages/ts-language-service/src/config-diagnostics.test.ts`',
+      '`tests/e2e/ts-language-service.spec.ts`',
+    ],
+    limitations: [
+      'Editor capability, not a Node API module: rows are `ts.LanguageService` queries (LSP-shaped), backed by the playground Monaco providers — not `node:*` surface.',
+      'TS/JS only. Other languages (Python/Go) need native language servers — a browser ceiling, out of scope (ADR-0166).',
+      'The deferred long tail (refactorings, inlay hints, document highlights, semantic highlighting, call hierarchy, navigation/outline/folding/workspace symbols, on-type formatting) exposes NO engine method — an honest absence, each tracked by a named backlog item, never a silent stub.',
+      'v1 vendors a fixed `typescript`; the project\'s installed TS version (VSCode "Use Workspace Version") is deferred (`toolchain-build/ts-language-service-workspace-version`).',
+    ],
+  },
 ];
 
 async function listFilesRecursive(dir) {
@@ -412,6 +516,7 @@ from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-tes
 - [streams.md](./streams.md) — \`node:stream\` subset
 - [http.md](./http.md) — \`node:http\` / browser-local port registry subset
 - [zlib.md](./zlib.md) — \`node:zlib\` web-compression-backed async subset (ADR-0159)
+- [ts-language-service.md](./ts-language-service.md) — in-browser \`ts.LanguageService\` over the VFS (\`@riftydev/ts-language-service\`, ADR-0166)
 - [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal \`node <file>\` command + its gaps (ADR-0155/0157)
 - [wasi.md](./wasi.md) — WASI preview1 syscall surface (\`@riftydev/runtime-wasi\`)
 - [incompatible-packages.md](./incompatible-packages.md) — packages rifty can't run (native deps)
