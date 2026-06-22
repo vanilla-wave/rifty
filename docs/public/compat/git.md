@@ -9,19 +9,20 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | Feature | Status | Notes |
 |---|---|---|
 | `init` / `add` / `remove` | ✅ | Local index + object writes over the Memory VFS |
-| `commit` / `commit --amend` | ✅ | Canonical git objects — **identical 40-hex SHA-1 to real git** for identical inputs (author+committer identity/timestamp/tz explicit); parity-pinned. `--amend` replaces HEAD (reuses prior message when no `-m`) |
+| Repository guard | ✅ | Every verb but `init`/`clone` verifies a repo governs the cwd first (real git discovery, walking up for `.git`). NON-repo → `fatal: not a git repository (or any of the parent directories): .git` (exit 128) — never a silent false-success |
+| `commit` / `commit -a` / `commit --amend` | ✅ | Canonical git objects — **identical 40-hex SHA-1 to real git** for identical inputs (author+committer identity/timestamp/tz explicit); parity-pinned. `-a`/`-am` stage tracked modifications+deletions (`git add -u`). REFUSES an empty commit (real git exit 1, `nothing to commit…`), never fabricates one. Unknown `commit` flag → `NotImplementedError('git.commit.<flag>')` (exit 128). `--amend` replaces HEAD (reuses prior message when no `-m`) |
 | Author identity from config | ✅ | `GIT_AUTHOR_*` env → `user.name`/`user.email` config → built-in default; `git config user.email x` then `git commit` (no env) authors as x |
 | `status --porcelain` | ✅ | Byte-exact vs git 2.50.1 (frozen golden fixtures); path-sorted XY codes |
 | `log` / `log --oneline` | ✅ | Byte-exact short-oid + subject (frozen fixtures) |
-| `diff` (HEAD ↔ workdir) | ⚠️ | Structured per-file hunks via `walk()` + LCS line-diff; structured data, NOT byte-exact `git diff` text |
+| `diff` (index ↔ workdir, unstaged) | ⚠️ | Bare `git diff` semantics — the UNSTAGED delta (`walk(STAGE, WORKDIR)`) for tracked files; untracked + `.gitignore`-ignored files are NOT shown (real git never shows them). Structured per-file hunks via LCS line-diff; structured data, NOT byte-exact `git diff` text. `--staged`/`diff HEAD`/two-ref diff deferred (backlog) |
 | `branch` / `listBranches` / `currentBranch` / `resolveRef` | ✅ | Local refs |
 | `checkout <branch>` / `-b [<start>]` / `<commit>` (detached) | ✅ | Branch switch, create+switch, detached HEAD; byte-exact stderr vs git 2.50.1 (frozen fixtures); dirty-tree conflict refused with git's exact `error:…Aborting` message (exit 1) |
 | `checkout [--] <pathspec>` / `<tree-ish> -- <pathspec>` (restore) | ✅ | Restore worktree from the index (or from a tree-ish, +index); HEAD untouched; silent like git |
 | checkout `--orphan` / `-B` / `--patch` / `--merge` / `--ours`·`--theirs` / `--track` / `-` / glob pathspec / revspec (`HEAD~1`/`^`/`@{…}`) | ❌ | `NotImplementedError('git.checkout.<x>')` (exit 128) — out of the v1 checkout subset, never a leaked plumbing error, never mislabeled as a typo |
-| `switch <branch>` / `-c [<start>]` / `--detach <commit>` | ✅ | Branch-only switch / create+switch / detach; byte-exact stderr vs git 2.50.1 (frozen fixtures). `switch --detach` prints the HEAD-line ONLY (no advisory). A non-`--detach` commit → git's `fatal: a branch is expected, got commit` (exit 128); `switch -` (previous branch) → `NotImplementedError('git.switch.previous')` (no reflog) |
+| `switch <branch>` / `-c [<start>]` / `--detach <commit>` | ✅ | Branch-only switch / create+switch / detach; byte-exact stderr vs git 2.50.1 (frozen fixtures). `switch --detach` prints the HEAD-line ONLY (no advisory). A non-`--detach` commit → git's `fatal: a branch is expected, got commit` (exit 128); a name that is neither a branch nor any ref → `fatal: invalid reference: <name>` (exit 128); `switch -` (previous branch) → `NotImplementedError('git.switch.previous')` (no reflog) |
 | `restore [--staged] [--source=<tree>] <pathspec>` | ✅ | Restore worktree from index/tree, or `--staged` unstage (index ← HEAD); silent like git. `--staged --source` → `NotImplementedError('git.restore.staged-source')`; revspec source reuses the checkout revspec ceiling; no-match → pathspec-miss (exit 1) |
 | `config <key>` / `config <key> <value>` | ⚠️ | Bounded get/set on `.git/config`: `<key>` prints the value (unset → exit 1, silent), `<key> <value>` writes it. `--list`/`--get-all`/`--unset`/other flags → `NotImplementedError('git.config.<flag>')` (exit 128) — no full-dump in iso-git |
-| `clone` / `fetch` / `pull` / `push` (smart HTTP) | ✅ | Over rifty `node:http` egress; real `git http-backend` clone integration-tested (canonical objects end-to-end) |
+| `clone <url> [<dir>]` / `fetch` / `pull` / `push` (smart HTTP) | ✅ | Over rifty `node:http` egress; real `git http-backend` clone integration-tested (canonical objects end-to-end). `clone` writes a NEW subdirectory (url basename or explicit `<dir>`), not the cwd; a non-empty destination is refused (`fatal: destination path … already exists…`, exit 128) |
 | `corsProxy` | ✅ | Env-config `RIFTY_GIT_CORS_PROXY` (D-004) — never hardcoded; unset → cross-origin clone throws |
 | `onAuth` (HTTPS Basic / PAT) | ✅ | Injected token provider for private repos + push |
 | Shallow `depth` / `singleBranch` | ✅ | Passed through to clone/fetch |
@@ -32,6 +33,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 | CRLF / `.gitattributes` / clean-smudge filters | ❌ | No line-ending normalization — a known SHA-divergence source for repos that rely on it |
 | GPG commit signing | ❌ | Unsigned only — `user.signingkey`/`commit.gpgsign` not honored |
 | Push from a shallow clone | ❌ | Surfaced loud (isomorphic-git `GitPushError`), no silent retry |
+| Verb from a subdirectory of the repo | ❌ | `git.subdir` ceiling (exit 128) — cwd-relative pathspec prefixing not implemented yet; run git from the repository root. Loud, never a silent wrong-tree result |
 | rebase / submodules / worktrees / sparse + partial clone | ❌ | Out of the v1 subset — throw `NotImplementedError` |
 | gc / repack / prune / reflog / bisect / blame / hooks | ❌ | Out of the v1 subset |
 

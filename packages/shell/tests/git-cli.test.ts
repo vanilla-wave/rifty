@@ -10,7 +10,7 @@
 import { asyncVfs } from '@riftydev/vfs';
 import { installMemoryFs, resetSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { git } from '../src/commands/git.ts';
+import { cloneDestination, git } from '../src/commands/git.ts';
 import { makeCtx } from './_ctx.ts';
 
 /** Fixed identity + dates → reproducible oids. */
@@ -370,4 +370,166 @@ it('restore with no pathspec → exit 128, restore ceiling (not a leaked exit-1)
   expect(await git(['restore'], ctx)).toBe(128);
   expect(err()).toContain('git.restore.no-pathspec');
   expect(err()).not.toContain('git: ');
+});
+
+// --- repository guard (real git verifies a repo exists before any verb) -------
+
+it('status in a NON-repo → exit 128, "not a git repository" (no silent false-success)', async () => {
+  await seedRepoDir(); // /repo exists but NO `git init` → no .git
+  const { ctx, out, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['status', '--porcelain'], ctx)).toBe(128);
+  expect(out()).toBe('');
+  expect(err()).toContain('fatal: not a git repository (or any of the parent directories): .git');
+});
+
+it('log/diff/branch/add in a NON-repo all surface "not a git repository" (exit 128)', async () => {
+  await seedRepoDir();
+  for (const verb of [['log'], ['diff'], ['branch'], ['add', 'a.txt']]) {
+    const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+    expect(await git(verb, ctx)).toBe(128);
+    expect(err()).toContain('not a git repository');
+  }
+});
+
+it('a verb from a SUBDIRECTORY of a repo → loud git.subdir ceiling (exit 128), not silent-wrong', async () => {
+  await seedCommittedRepo(); // .git lives at /repo
+  const vfs = asyncVfs();
+  if (!vfs) throw new Error('no async vfs');
+  await vfs.mkdir('/repo/sub', { recursive: true });
+  const { ctx, err } = makeCtx({ cwd: '/repo/sub', env: ENV });
+  expect(await git(['status', '--porcelain'], ctx)).toBe(128);
+  expect(err()).toContain('git.subdir');
+});
+
+// --- core-verb error fidelity (no leaked iso-git plumbing, correct exit 128) --
+
+it('log on an unborn HEAD → exit 128, "does not have any commits yet" (not "Could not find")', async () => {
+  await seedRepoDir();
+  await git(['init'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['log'], ctx)).toBe(128);
+  expect(err()).toContain('does not have any commits yet');
+  expect(err()).not.toContain('Could not find');
+});
+
+it('add of a missing pathspec → exit 128, "did not match any files" (not leaked plumbing)', async () => {
+  await seedRepoDir();
+  await git(['init'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['add', 'missing.txt'], ctx)).toBe(128);
+  expect(err()).toContain("pathspec 'missing.txt' did not match any files");
+  expect(err()).not.toContain('Could not find');
+});
+
+// --- commit refuses to fabricate an empty commit (real git: exit 1) ----------
+
+it('commit with a clean tree (nothing staged) → exit 1, "nothing to commit", NO new commit', async () => {
+  await seedCommittedRepo(); // one commit, clean
+  const { ctx, out } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['commit', '-m', 'x'], ctx)).toBe(1);
+  expect(out()).toContain('nothing to commit, working tree clean');
+  // still exactly one commit — no empty commit fabricated.
+  const log = makeCtx({ cwd: '/repo', env: ENV });
+  await git(['log', '--oneline'], log.ctx);
+  expect(
+    log
+      .out()
+      .split('\n')
+      .filter((l) => l.length > 0),
+  ).toHaveLength(1);
+});
+
+it('commit with only untracked files (nothing staged) → exit 1, untracked-present message', async () => {
+  await seedCommittedRepo();
+  await writeFile('/repo/u.txt', 'untracked\n'); // never added
+  const { ctx, out } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['commit', '-m', 'x'], ctx)).toBe(1);
+  expect(out()).toContain('nothing added to commit but untracked files present');
+});
+
+// --- commit -a / -am (stage tracked modifications, NOT untracked) ------------
+
+it('commit -a -m stages tracked modifications (not untracked) and commits', async () => {
+  await seedCommittedRepo(); // a.txt committed
+  await writeFile('/repo/a.txt', 'edited\n'); // tracked, modified, NOT staged
+  await writeFile('/repo/u.txt', 'untracked\n'); // untracked
+  const { ctx } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['commit', '-a', '-m', 'amsg'], ctx)).toBe(0);
+  // two commits now; the untracked file is still untracked.
+  const log = makeCtx({ cwd: '/repo', env: ENV });
+  await git(['log', '--oneline'], log.ctx);
+  expect(
+    log
+      .out()
+      .split('\n')
+      .filter((l) => l.length > 0),
+  ).toHaveLength(2);
+  const st = makeCtx({ cwd: '/repo', env: ENV });
+  await git(['status', '--porcelain'], st.ctx);
+  expect(st.out()).toContain('?? u.txt');
+  expect(st.out()).not.toContain('a.txt');
+});
+
+it('commit -am <msg> (combined short flags) behaves as -a -m', async () => {
+  await seedCommittedRepo();
+  await writeFile('/repo/a.txt', 'edited2\n');
+  const { ctx } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['commit', '-am', 'combined'], ctx)).toBe(0);
+  const log = makeCtx({ cwd: '/repo', env: ENV });
+  await git(['log', '--oneline'], log.ctx);
+  expect(log.out()).toMatch(/ combined$/m);
+});
+
+it('commit with an unknown flag → exit 128, loud (never silently ignored)', async () => {
+  await seedCommittedRepo();
+  await writeFile('/repo/a.txt', 'edited3\n');
+  await git(['add', 'a.txt'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['commit', '-z', '-m', 'x'], ctx)).toBe(128);
+  expect(err()).toContain('git.commit.z');
+});
+
+// --- switch to a name that is neither a branch nor any ref -------------------
+
+it('switch <nonexistent> (not a branch, not a ref) → exit 128, "invalid reference"', async () => {
+  await seedCommittedRepo();
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['switch', 'nope'], ctx)).toBe(128);
+  expect(err()).toContain('fatal: invalid reference: nope');
+});
+
+// --- clone destination directory (real git: subdir from url basename / arg) --
+
+it('cloneDestination: no arg → repo-basename subdir under cwd (strips .git)', () => {
+  expect(cloneDestination('https://host/foo.git', undefined, '/work')).toEqual({
+    display: 'foo',
+    target: '/work/foo',
+  });
+  expect(cloneDestination('https://host/a/b/bar', undefined, '/work')).toEqual({
+    display: 'bar',
+    target: '/work/bar',
+  });
+});
+
+it('cloneDestination: explicit relative + absolute target dir', () => {
+  expect(cloneDestination('https://host/foo.git', 'mydir', '/work')).toEqual({
+    display: 'mydir',
+    target: '/work/mydir',
+  });
+  expect(cloneDestination('https://host/foo.git', '/abs/dir', '/work')).toEqual({
+    display: '/abs/dir',
+    target: '/abs/dir',
+  });
+});
+
+it('clone into an existing non-empty directory → exit 128, "already exists" (before any network)', async () => {
+  await seedRepoDir();
+  await git(['init'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  const vfs = asyncVfs();
+  if (!vfs) throw new Error('no async vfs');
+  await vfs.mkdir('/repo/dest', { recursive: true });
+  await writeFile('/repo/dest/keep.txt', 'x\n'); // dest exists + non-empty
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['clone', 'https://host/foo.git', 'dest'], ctx)).toBe(128);
+  expect(err()).toContain("destination path 'dest' already exists and is not an empty directory");
 });

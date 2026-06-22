@@ -447,9 +447,14 @@ const matrices = [
     rows: [
       ['`init` / `add` / `remove`', '✅', 'Local index + object writes over the Memory VFS'],
       [
-        '`commit` / `commit --amend`',
+        'Repository guard',
         '✅',
-        'Canonical git objects — **identical 40-hex SHA-1 to real git** for identical inputs (author+committer identity/timestamp/tz explicit); parity-pinned. `--amend` replaces HEAD (reuses prior message when no `-m`)',
+        'Every verb but `init`/`clone` verifies a repo governs the cwd first (real git discovery, walking up for `.git`). NON-repo → `fatal: not a git repository (or any of the parent directories): .git` (exit 128) — never a silent false-success',
+      ],
+      [
+        '`commit` / `commit -a` / `commit --amend`',
+        '✅',
+        "Canonical git objects — **identical 40-hex SHA-1 to real git** for identical inputs (author+committer identity/timestamp/tz explicit); parity-pinned. `-a`/`-am` stage tracked modifications+deletions (`git add -u`). REFUSES an empty commit (real git exit 1, `nothing to commit…`), never fabricates one. Unknown `commit` flag → `NotImplementedError('git.commit.<flag>')` (exit 128). `--amend` replaces HEAD (reuses prior message when no `-m`)",
       ],
       [
         'Author identity from config',
@@ -463,9 +468,9 @@ const matrices = [
       ],
       ['`log` / `log --oneline`', '✅', 'Byte-exact short-oid + subject (frozen fixtures)'],
       [
-        '`diff` (HEAD ↔ workdir)',
+        '`diff` (index ↔ workdir, unstaged)',
         '⚠️',
-        'Structured per-file hunks via `walk()` + LCS line-diff; structured data, NOT byte-exact `git diff` text',
+        'Bare `git diff` semantics — the UNSTAGED delta (`walk(STAGE, WORKDIR)`) for tracked files; untracked + `.gitignore`-ignored files are NOT shown (real git never shows them). Structured per-file hunks via LCS line-diff; structured data, NOT byte-exact `git diff` text. `--staged`/`diff HEAD`/two-ref diff deferred (backlog)',
       ],
       ['`branch` / `listBranches` / `currentBranch` / `resolveRef`', '✅', 'Local refs'],
       [
@@ -486,7 +491,7 @@ const matrices = [
       [
         '`switch <branch>` / `-c [<start>]` / `--detach <commit>`',
         '✅',
-        "Branch-only switch / create+switch / detach; byte-exact stderr vs git 2.50.1 (frozen fixtures). `switch --detach` prints the HEAD-line ONLY (no advisory). A non-`--detach` commit → git's `fatal: a branch is expected, got commit` (exit 128); `switch -` (previous branch) → `NotImplementedError('git.switch.previous')` (no reflog)",
+        "Branch-only switch / create+switch / detach; byte-exact stderr vs git 2.50.1 (frozen fixtures). `switch --detach` prints the HEAD-line ONLY (no advisory). A non-`--detach` commit → git's `fatal: a branch is expected, got commit` (exit 128); a name that is neither a branch nor any ref → `fatal: invalid reference: <name>` (exit 128); `switch -` (previous branch) → `NotImplementedError('git.switch.previous')` (no reflog)",
       ],
       [
         '`restore [--staged] [--source=<tree>] <pathspec>`',
@@ -499,9 +504,9 @@ const matrices = [
         "Bounded get/set on `.git/config`: `<key>` prints the value (unset → exit 1, silent), `<key> <value>` writes it. `--list`/`--get-all`/`--unset`/other flags → `NotImplementedError('git.config.<flag>')` (exit 128) — no full-dump in iso-git",
       ],
       [
-        '`clone` / `fetch` / `pull` / `push` (smart HTTP)',
+        '`clone <url> [<dir>]` / `fetch` / `pull` / `push` (smart HTTP)',
         '✅',
-        'Over rifty `node:http` egress; real `git http-backend` clone integration-tested (canonical objects end-to-end)',
+        'Over rifty `node:http` egress; real `git http-backend` clone integration-tested (canonical objects end-to-end). `clone` writes a NEW subdirectory (url basename or explicit `<dir>`), not the cwd; a non-empty destination is refused (`fatal: destination path … already exists…`, exit 128)',
       ],
       [
         '`corsProxy`',
@@ -544,6 +549,11 @@ const matrices = [
         'Push from a shallow clone',
         '❌',
         'Surfaced loud (isomorphic-git `GitPushError`), no silent retry',
+      ],
+      [
+        'Verb from a subdirectory of the repo',
+        '❌',
+        '`git.subdir` ceiling (exit 128) — cwd-relative pathspec prefixing not implemented yet; run git from the repository root. Loud, never a silent wrong-tree result',
       ],
       [
         'rebase / submodules / worktrees / sparse + partial clone',

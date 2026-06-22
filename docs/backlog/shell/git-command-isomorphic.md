@@ -26,7 +26,8 @@ Each is a genuine fidelity gap, **recorded loud** (compat ❌ + note), never a s
 - **Exec-bit + symlinks (tree-SHA fidelity).** The VFS has no POSIX mode/symlink layer (ADR-0050) → file mode is fixed `100644`, so repos with executable files or symlinks diverge in tree-SHA. Gated on a VFS mode/symlink layer (ADR-0050 follow-up).
 - **Push-from-shallow hardening.** isomorphic-git can't push from a shallow clone (`GitPushError`); currently surfaced loud — a deepen-then-push path is future work.
 - **Large-repo packfile streaming.** isomorphic-git buffers packfiles in memory → OOM on large repos; default singleBranch+depth mitigates. Streaming parse is future work.
-- **Long-format byte-exactness.** Default `git status` / `git log` / `git diff` are human-readable (not byte-exact git); `diff` is structured hunks, not byte-exact `git diff` text. Byte-exact long formats deferred.
+- **Long-format byte-exactness.** Default `git status` / `git log` are human-readable (not byte-exact git); `diff` is now bare-`git diff` semantics (index ↔ workdir, untracked/ignored excluded) but structured hunks, not byte-exact `git diff` text. `--staged`/`diff HEAD`/two-ref diff also deferred (see gap analysis below). Byte-exact long formats deferred.
+- **Subdirectory operations (`git.subdir`).** A verb run from a SUBDIRECTORY of the repo loud-throws `git.subdir` (exit 128) — the repo is discovered (walk-up for `.git`) but cwd-relative pathspec prefixing (`git add foo` → `sub/foo`), cwd-scoped `git add .`, and cwd-relative status/diff output paths are not implemented. Run git from the repo root meanwhile. Gated on the pathspec-prefix translation layer; until then loud, never a silent wrong-tree result.
 - **`checkout` ceilings.** `--orphan` / `-B` / `--patch` / `--merge` / `--ours`·`--theirs` / `--track` / `checkout -` (previous branch, needs reflog `@{-1}`) / glob-magic pathspecs / `-q` / revspec arithmetic (`HEAD~1`/`main^`/`@{-1}`/`HEAD@{1}` → `git.checkout.revspec`, iso-git resolveRef can't parse it) all loud-throw `NotImplementedError('git.checkout.<x>')` (exit 128). The genuine 2-arg `<revision> <path>` ambiguity refusal (`checkout dev dev` where `dev` is both a branch and a tracked file) is DEFERRED — single-arg follows git's branch precedence (ref wins), but the rare 2-arg ambiguous case is not yet rejected. `git restore` / `git switch` remain separate unimplemented commands (the detached-HEAD advisory still quotes git's verbatim `git switch` hint — fidelity to git's text).
 - **Broader iso-git surface.** tag/stash/merge/cherry-pick/reset/remote/config-CLI etc. are not in the v1 subset (the shell reports them as not-implemented, exit 128).
 
@@ -59,7 +60,7 @@ First cluster (switch/restore/config/`commit --amend`) being implemented NOW —
 
 ### NOT a gap — record as positive (so nobody "fixes" a non-bug)
 
-- `.gitignore` is ALREADY honored: `git.statusMatrix({fs,dir})` defaults `ignored:false` → ignored files (node_modules/build) excluded from `git status` and `git add .` (addAll). Only residual is ABSENCE of a regression test asserting this — add a test, not a capability. (iso-git also ships `isIgnored()` for explicit checks if ever wanted.)
+- `.gitignore` is ALREADY honored: `git.statusMatrix({fs,dir})` defaults `ignored:false` → ignored files (node_modules/build) excluded from `git status` and `git add .` (addAll); `diff()` excludes them too (index-membership + `isIgnored` directory pruning). Only residual is ABSENCE of a regression test asserting status/add — `diff` is guarded (`diff.test.ts` "does NOT show a .gitignore-ignored file").
 
 ### Browser-ceiling — permanent ceilings, NOT backlog work (already loud-throw)
 

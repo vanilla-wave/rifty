@@ -105,7 +105,8 @@ export async function doSwitch(g: Git, args: string[], ctx: CommandContext): Pro
     }
 
     // `git switch <arg>`: must be a BRANCH. A bare commit (resolvable ref that is
-    // NOT a branch) is real git's `fatal: a branch is expected, got commit`.
+    // NOT a branch) is real git's `fatal: a branch is expected, got commit`; a
+    // name that is neither a branch nor any ref is `fatal: invalid reference`.
     const branches = await g.listBranches();
     if (!branches.includes(plan.ref)) {
       const isRef = await g
@@ -116,7 +117,10 @@ export async function doSwitch(g: Git, args: string[], ctx: CommandContext): Pro
         ctx.stderr.write(`fatal: a branch is expected, got commit '${plan.ref}'\n`);
         return 128;
       }
-      // Not a branch and not a ref at all → let the engine surface the real error.
+      // Neither a branch nor a ref → git's `fatal: invalid reference: <arg>`
+      // (exit 128), never a leaked iso-git plumbing error.
+      ctx.stderr.write(`fatal: invalid reference: ${plan.ref}\n`);
+      return 128;
     }
     const res = await g.checkout({ op: 'switch', ref: plan.ref });
     if (res.op === 'switch') renderSwitch(res, plan.ref, ctx, 'switch');

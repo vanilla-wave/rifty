@@ -1,7 +1,8 @@
 /**
- * diff() — per-file changes between the HEAD tree and the working dir, proven
- * over a real {@link MemoryVfs} (no mocks). Structured (not byte-exact git-diff
- * text). lineDiff is exercised directly as a pure string→hunks unit.
+ * diff() — unstaged per-file changes (index ↔ working dir, like bare `git diff`),
+ * proven over a real {@link MemoryVfs} (no mocks). Structured (not byte-exact
+ * git-diff text). UNTRACKED and IGNORED files are NOT shown (real git diff never
+ * shows them). lineDiff is exercised directly as a pure string→hunks unit.
  */
 import { MemoryVfs } from '@riftydev/vfs';
 import { expect, it } from 'vitest';
@@ -44,7 +45,7 @@ it('reports a modified file with line-level changes + context', async () => {
   expect(lines).toContain(' one');
 });
 
-it('reports an added (committed-then-new) file as all + lines', async () => {
+it('does NOT show an untracked file (bare git diff = index ↔ workdir)', async () => {
   const vfs = new MemoryVfs();
   await vfs.mkdir('/repo', { recursive: true });
   const g = makeGit({ fs: vfsToGitFs(vfs), dir: '/repo' });
@@ -53,13 +54,51 @@ it('reports an added (committed-then-new) file as all + lines', async () => {
   await g.add('base.txt');
   await g.commit({ message: 'first', author: AUTHOR });
 
+  // A brand-new file that was never `git add`ed is untracked → real `git diff`
+  // shows nothing for it.
   await vfs.writeFile('/repo/new.txt', 'alpha\nbeta\n');
 
   const d = await g.diff();
-  const added = d.find((e) => e.filepath === 'new.txt');
-  expect(added?.change).toBe('add');
-  const lines = allLines(added?.hunks ?? []);
-  expect(lines).toEqual(['+alpha', '+beta']);
+  expect(d.find((e) => e.filepath === 'new.txt')).toBeUndefined();
+});
+
+it('does NOT show a .gitignore-ignored file', async () => {
+  const vfs = new MemoryVfs();
+  await vfs.mkdir('/repo', { recursive: true });
+  const g = makeGit({ fs: vfsToGitFs(vfs), dir: '/repo' });
+  await g.init();
+  await vfs.writeFile('/repo/.gitignore', 'node_modules/\n');
+  await g.add('.gitignore');
+  await g.commit({ message: 'first', author: AUTHOR });
+
+  await vfs.mkdir('/repo/node_modules', { recursive: true });
+  await vfs.writeFile('/repo/node_modules/dep.js', 'module.exports = 1\n');
+
+  const d = await g.diff();
+  expect(d.some((e) => e.filepath.startsWith('node_modules/'))).toBe(false);
+});
+
+it('shows a staged-then-further-edited file as the UNSTAGED delta only', async () => {
+  const vfs = new MemoryVfs();
+  await vfs.mkdir('/repo', { recursive: true });
+  const g = makeGit({ fs: vfsToGitFs(vfs), dir: '/repo' });
+  await g.init();
+  await vfs.writeFile('/repo/f.txt', 'v1\n');
+  await g.add('f.txt');
+  await g.commit({ message: 'first', author: AUTHOR });
+
+  // stage v2, then edit the worktree to v3 — bare git diff = index(v2) ↔ workdir(v3).
+  await vfs.writeFile('/repo/f.txt', 'v2\n');
+  await g.add('f.txt');
+  await vfs.writeFile('/repo/f.txt', 'v3\n');
+
+  const d = await g.diff();
+  const entry = d.find((e) => e.filepath === 'f.txt');
+  expect(entry?.change).toBe('modify');
+  const lines = allLines(entry?.hunks ?? []);
+  expect(lines).toContain('-v2');
+  expect(lines).toContain('+v3');
+  expect(lines).not.toContain('-v1'); // v1 is committed+staged-over — not in the unstaged delta
 });
 
 it('reports a deleted (committed-then-removed) file as all - lines', async () => {

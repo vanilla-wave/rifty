@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`git` fidelity hardening — no silent false-successes, faithful error surfaces (ADR-0167).**
+  - **Repository guard.** Every verb except `init`/`clone` now verifies a repo governs the cwd first (real git's discovery, walking up for `.git`). A NON-repo → `fatal: not a git repository (or any of the parent directories): .git` (exit 128) instead of a silent false-success (`status` had reported a clean tree, `commit` fabricated a root commit). A verb from a SUBDIRECTORY → loud `git.subdir` ceiling (exit 128) — never a silent wrong-tree result (cwd-relative pathspec prefixing is deferred, see backlog).
+  - **`commit` no longer fabricates an empty commit.** Nothing staged → real git's exit-1 summary to stdout (`nothing to commit, working tree clean` / `… untracked files present` / `nothing to commit (create/copy files…)`), no commit written; `--amend` still allowed.
+  - **`commit -a`/`--all` + `-am`** stage tracked modifications + deletions (not untracked) before committing (`git add -u` semantics); combined short clusters expand correctly. Any UNKNOWN `commit` flag now loud-throws (`git.commit.<flag>`, exit 128) instead of being silently ignored.
+  - **`diff`** is the unstaged delta (index ↔ workdir, like bare `git diff`); untracked + ignored files are no longer shown.
+  - **Core-verb error fidelity.** `log` on an unborn HEAD → `fatal: your current branch '<b>' does not have any commits yet` (128); `add` of a missing path → `fatal: pathspec '<x>' did not match any files` (128) — no leaked iso-git "Could not find …" exit-1.
+  - **`clone <url> [<dir>]`** clones into a NEW subdirectory (url basename, or the explicit `<dir>`), not the cwd; a non-empty destination is refused with git's `fatal: destination path '<x>' already exists and is not an empty directory.` (128).
+  - **`switch <name>`** that is neither a branch nor any ref → `fatal: invalid reference: <name>` (128), not a leaked plumbing error.
+
 ### Added
 
 - **`git` builtin over `@riftydev/git` (isomorphic-git on the ambient VFS).**
