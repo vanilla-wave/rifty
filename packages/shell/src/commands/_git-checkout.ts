@@ -7,7 +7,6 @@
  * shell's generic handler).
  */
 import {
-  AmbiguousArgError,
   BranchExistsError,
   CheckoutConflictError,
   type CheckoutResult,
@@ -101,10 +100,6 @@ function renderCheckoutError(e: unknown, ctx: CommandContext): number {
     ctx.stderr.write(`fatal: a branch named '${e.branch}' already exists\n`);
     return 128;
   }
-  if (e instanceof AmbiguousArgError) {
-    ctx.stderr.write(`fatal: '${e.arg}' could be both a revision and a path\n`);
-    return 128;
-  }
   if (e instanceof NotImplementedError) {
     ctx.stderr.write(`${e.message}\n`);
     return 128;
@@ -121,6 +116,15 @@ type CheckoutPlan =
   | { kind: 'create'; name: string; startPoint?: string; force: boolean }
   | { kind: 'restore-explicit'; pathspecs: string[]; source?: string }
   | { kind: 'positional'; positionals: string[]; force: boolean };
+
+/**
+ * Revspec arithmetic markers (`HEAD~1`, `main^`, `@{-1}`, `HEAD@{1}`). iso-git's
+ * resolveRef parses only plain ref names — not `~`/`^`/`@{` navigation — so a
+ * ref/source token carrying one is a CEILING: loud-throw rather than leak the raw
+ * "Could not find HEAD~1" plumbing error. (`~`/`^`/`@{` never appear in real ref
+ * names — git forbids them, see git-check-ref-format.)
+ */
+const REVSPEC_MARKER = /[~^]|@\{/;
 
 /**
  * Ceiling flags rejected during parse → `NotImplementedError('git.checkout.<slug>')`
@@ -175,6 +179,18 @@ function parseCheckout(args: string[]): CheckoutPlan {
     positionals.push(t);
   }
 
+  // Revspec arithmetic on any ref/source token (a positional, or `-b`'s start
+  // point) is a ceiling — loud-throw before dispatch (else iso-git leaks raw).
+  const refTokens = createName !== undefined ? positionals.slice(0, 1) : positionals;
+  for (const t of refTokens) {
+    if (REVSPEC_MARKER.test(t)) {
+      throw new NotImplementedError(
+        'git.checkout.revspec',
+        'rev arithmetic (HEAD~1, main^, @{-1}, HEAD@{1}) is not supported',
+      );
+    }
+  }
+
   if (createName !== undefined) {
     startPoint = positionals[0];
     return { kind: 'create', name: createName, startPoint, force };
@@ -221,9 +237,11 @@ export async function doCheckout(g: Git, args: string[], ctx: CommandContext): P
 
     if (plan.kind === 'restore-explicit') {
       if (plan.pathspecs.length === 0) {
-        // `git checkout -- ` with no pathspecs (or `git checkout <ref> --`).
-        ctx.stderr.write('error: you must specify path(s) to restore\n');
-        return 1;
+        // `git checkout --` / `git checkout <ref> --` with no pathspecs. Real git
+        // 2.50.1 treats this as a no-op (exit 0, silent on a clean tree) — the
+        // "you must specify path(s) to restore" fatal belongs to `git restore`,
+        // NOT `checkout`. A revspec source was already rejected during parse.
+        return 0;
       }
       await g.checkout({
         op: 'restore',
@@ -242,9 +260,10 @@ export async function doCheckout(g: Git, args: string[], ctx: CommandContext): P
 
 /**
  * `git checkout` with no `--` and no `-b`: disambiguate positionals (git's
- * ref-vs-path rules). Zero → "must specify path(s)". One → ref/path/both/neither.
- * Many → `<ref> <pathspec...>` restore-from-tree if the first resolves, else all
- * are index pathspecs.
+ * ref-vs-path rules). Zero → no-op (clean-tree exit 0, silent). One →
+ * ref-FIRST (branch precedence), else tracked path, else pathspec miss. Many →
+ * `<ref> <pathspec...>` restore-from-tree if the first resolves, else all are
+ * index pathspecs.
  */
 async function doCheckoutPositional(
   g: Git,
@@ -253,25 +272,28 @@ async function doCheckoutPositional(
   ctx: CommandContext,
 ): Promise<number> {
   if (positionals.length === 0) {
-    ctx.stderr.write('error: you must specify path(s) to restore\n');
-    return 1;
+    // Bare `git checkout`: real git 2.50.1 is a no-op (exit 0, silent on a clean
+    // tree) — not the `git restore` "must specify path(s)" fatal.
+    return 0;
   }
 
   if (positionals.length === 1) {
     const x = positionals[0] as string;
+    // Ref FIRST: a single arg that is BOTH a branch and a tracked file switches
+    // to the BRANCH (real git's ref-vs-path precedence for one arg). Only when it
+    // is NOT a ref do we treat it as an index pathspec. (The genuine 2-arg
+    // revision==path ambiguity refusal is deferred — see backlog.)
     const isRef = await g
       .resolveRef(x)
       .then(() => true)
       .catch(() => false);
-    const tracked = await g.listFiles();
-    const isPath = tracked.some((p) => pathspecMatch(p, x));
-    if (isRef && isPath) throw new AmbiguousArgError(x);
     if (isRef) {
       const res = await g.checkout({ op: 'switch', ref: x, force });
       if (res.op === 'switch') renderSwitch(res, x, ctx);
       return 0;
     }
-    if (isPath) {
+    const tracked = await g.listFiles();
+    if (tracked.some((p) => pathspecMatch(p, x))) {
       await g.checkout({ op: 'restore', pathspecs: [x] });
       return 0;
     }

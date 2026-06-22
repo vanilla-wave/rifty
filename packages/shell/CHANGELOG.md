@@ -23,11 +23,14 @@
   2.50.1.** `checkout <branch>` (switch / already-on), `-b <name> [<start>]`
   (create+switch), `-f`/`--force`, `<full-sha>` (detached HEAD + advisory),
   `-- <pathspec…>` and `<tree-ish> -- <pathspec…>` (restore from index / tree),
-  bare-positional ref↔path disambiguation (both → ambiguous, neither →
-  pathspec-miss). EVERY message goes to stderr (stdout stays empty); restore is
+  bare-positional ref↔path disambiguation (single arg: ref wins — branch
+  precedence, matching real git; neither → pathspec-miss). Bare `git checkout`
+  (and `git checkout --` with no pathspecs) is a clean-tree no-op (exit 0,
+  silent). EVERY message goes to stderr (stdout stays empty); restore is
   silent. Typed git user-errors map to git's exact stderr: conflict refusal +
-  pathspec-miss (exit 1), branch-exists + ambiguous-arg (exit 128). Ceiling
+  pathspec-miss (exit 1), branch-exists (exit 128). Ceiling
   flags/args (`-B`, `--orphan`, `-p`, `-m`, `--ours`/`--theirs`, `-t`, bare `-`,
+  revspec arithmetic (`HEAD~1`/`main^`/`@{-1}`/`HEAD@{1}` → `git.checkout.revspec`),
   any unrecognized flag) and glob/magic pathspecs throw
   `NotImplementedError('git.checkout.<x>')` exit 128 — loud, never silent.
   Conformance-locked: `git-fixtures.test.ts` byte-asserts switch/create/already/

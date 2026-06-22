@@ -162,3 +162,54 @@ it('a clean switch prints to STDERR not stdout', async () => {
   expect(out()).toBe('');
   expect(err()).toContain('Switched to branch');
 });
+
+// C4 — revspec arithmetic (`HEAD~1`, `main^`, `@{-1}`, `HEAD@{1}`) is a ceiling:
+// iso-git's resolveRef can't parse it, so we loud-throw rather than leak the raw
+// plumbing error ("Could not find HEAD~1").
+it('checkout HEAD~1 → exit 128, revspec ceiling (loud, not a leaked plumbing error)', async () => {
+  await seedCommittedRepo();
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['checkout', 'HEAD~1'], ctx)).toBe(128);
+  expect(err()).toContain('git.checkout.revspec');
+  expect(err()).not.toContain('Could not find');
+});
+
+it('checkout HEAD~1 -- f (revspec source) → exit 128, revspec ceiling', async () => {
+  await seedCommittedRepo();
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['checkout', 'HEAD~1', '--', 'a.txt'], ctx)).toBe(128);
+  expect(err()).toContain('git.checkout.revspec');
+});
+
+// I1 — bare `git checkout` (no positionals, no `-b`, no `--`) on a clean tree is a
+// no-op: exit 0, both streams empty (matches real git 2.50.1).
+it('bare git checkout on a clean repo → exit 0, empty stdout+stderr', async () => {
+  await seedCommittedRepo();
+  const { ctx, out, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['checkout'], ctx)).toBe(0);
+  expect(out()).toBe('');
+  expect(err()).toBe('');
+});
+
+// I2 — a single arg that is BOTH a branch and a tracked file → switch to the
+// BRANCH (ref precedence, real git 2.50.1: exit 0 "Switched to branch 'dev'").
+it('checkout <name> that is both a branch and a tracked file → switches to the branch', async () => {
+  await seedRepoDir();
+  await writeFile('/repo/dev', 'one\n');
+  await git(['init'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await git(['add', 'dev'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await git(['commit', '-m', 'first'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  // Create branch `dev` WITHOUT switching (a branch + a tracked file both named 'dev').
+  await git(['checkout', '-b', 'dev'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await git(['checkout', 'main'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  const { ctx, out, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['checkout', 'dev'], ctx)).toBe(0);
+  expect(out()).toBe('');
+  expect(err()).toContain("Switched to branch 'dev'");
+  // currentBranch is now 'dev'.
+  const { makeGit, vfsToGitFs } = await import('@riftydev/git');
+  const vfs = asyncVfs();
+  if (!vfs) throw new Error('no async vfs');
+  const g = makeGit({ fs: vfsToGitFs(vfs), dir: '/repo' });
+  expect(await g.currentBranch()).toBe('dev');
+});
