@@ -138,6 +138,12 @@ let builtinTsDisabled = false;
  * lib.d.ts-only guess AND rifty's real-VFS+tsconfig diagnostics — and they
  * disagree (Monaco can't see the owner's node_modules / tsconfig). One-time,
  * before the first `monaco.editor.create`.
+ *
+ * TODO(backlog: playground/ts-ls-hover-completion-monaco-transient): only
+ * DIAGNOSTICS move to the rifty LS in P1.9. Monaco's built-in TS worker still
+ * serves hover + completion from its isolated lib.d.ts-only model (no VFS /
+ * tsconfig / node_modules) — an approximation that diverges from real tsc, kept
+ * transiently until the LS exposes hover/completion providers (ADR-0166 phase 2).
  */
 function disableBuiltinTsDiagnostics(): void {
   if (builtinTsDisabled) return;
@@ -507,32 +513,34 @@ export function EditorHost(props: EditorHostProps) {
       },
     });
 
-    // E2E-only read hook (ADR-0166 P1.9d): the rifty-TS markers for a VFS path —
-    // deterministic proof for the language-service e2e (a CSS `.squiggly-error`
-    // query is render-timing-flaky). Read-only, no behaviour; the spec calls it
-    // through `window`. Harmless in prod (an unused getter).
-    (globalThis as unknown as { __riftyTsMarkers?: (path: string) => number }).__riftyTsMarkers = (
-      path: string,
-    ): number => {
-      const model = models.get(tabIdForPath(path));
-      if (!model) return -1; // no model open for this path
-      return monaco.editor.getModelMarkers({ resource: model.uri, owner: 'rifty-ts' }).length;
-    };
-    // E2E-only write hook (ADR-0166 P1.9d): set an open model's whole content.
-    // Drives the EXACT same `onDidChangeModelContent` the keyboard fires (→
-    // emitDocument('change') → debounced ts:update → the real LS relay → real
-    // diagnostics), so the pipeline under test is 100% real — only the text
-    // delivery is deterministic (Monaco's Cmd/Ctrl-A select-all is unreliable
-    // under Playwright, so a full-replace via keystrokes is flaky). Returns false
-    // if no model is open. Harmless in prod (unused).
-    (
-      globalThis as unknown as { __riftySetEditorValue?: (path: string, text: string) => boolean }
-    ).__riftySetEditorValue = (path: string, text: string): boolean => {
-      const model = models.get(tabIdForPath(path));
-      if (!model) return false;
-      model.setValue(text);
-      return true;
-    };
+    // E2E-only window hooks (ADR-0166 P1.9d) — DEV-only: `import.meta.env.DEV`
+    // gates them so Vite strips them from the production bundle entirely (mirrors
+    // the `#test=execsync` harness gate in main.tsx). The e2e runs against
+    // `pnpm dev` (DEV=true), so it still sees them; prod never exposes them.
+    if (import.meta.env.DEV) {
+      // Read hook: rifty-TS marker count for a VFS path — deterministic proof for
+      // the LS e2e (a CSS `.squiggly-error` query is render-timing-flaky).
+      (globalThis as unknown as { __riftyTsMarkers?: (path: string) => number }).__riftyTsMarkers =
+        (path: string): number => {
+          const model = models.get(tabIdForPath(path));
+          if (!model) return -1; // no model open for this path
+          return monaco.editor.getModelMarkers({ resource: model.uri, owner: 'rifty-ts' }).length;
+        };
+      // Write hook: set an open model's whole content. Drives the EXACT same
+      // `onDidChangeModelContent` the keyboard fires (→ emitDocument('change') →
+      // debounced ts:update → the real LS relay → real diagnostics), so the
+      // pipeline under test is 100% real — only the text delivery is
+      // deterministic (Monaco's Cmd/Ctrl-A select-all is unreliable under
+      // Playwright). Returns false if no model is open.
+      (
+        globalThis as unknown as { __riftySetEditorValue?: (path: string, text: string) => boolean }
+      ).__riftySetEditorValue = (path: string, text: string): boolean => {
+        const model = models.get(tabIdForPath(path));
+        if (!model) return false;
+        model.setValue(text);
+        return true;
+      };
+    }
 
     // External program-source sync (presets / mode transitions): the one guarded
     // programmatic write; the change listener skips the echo.

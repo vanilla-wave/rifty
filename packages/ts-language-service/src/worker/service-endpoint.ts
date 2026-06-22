@@ -95,6 +95,12 @@ export function createServiceEndpoint(deps: ServiceEndpointDeps): ServiceEndpoin
             kind: 'diagnostics',
             diagnostics: requireService().getConfigFileDiagnostics(),
           };
+        default: {
+          // Exhaustive over TsRequest; a malformed-but-typed frame is a loud
+          // error, never an undefined response (Fidelity).
+          const bad = request as { type?: unknown };
+          return errResponse(id, new Error(`unknown request type: ${String(bad.type)}`));
+        }
       }
     } catch (err) {
       return errResponse(id, err);
