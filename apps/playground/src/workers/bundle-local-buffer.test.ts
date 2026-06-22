@@ -1,0 +1,81 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { Buffer as RuntimeJsBuffer } from '@riftydev/runtime-js/builtins/buffer';
+import { afterEach, describe, expect, it } from 'vitest';
+import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
+
+/**
+ * Regression guard for the dual-copy `Buffer` etag crash (express + sqlite preset:
+ * `res.json` → `TypeError: argument entity must be string, Buffer, or fs.Stats`).
+ *
+ * ROOT: in a PRODUCTION build every `?worker&url` child entry is self-contained, so
+ * each carries its OWN `@riftydev/io` `Buffer` copy. The kernel pre-entry hook
+ * (kernel-worker-entry.ts) sets `globalThis.Buffer` from the kernel-worker-entry
+ * bundle's copy; a child's `import()` runs AFTER that and never realigned the global,
+ * so etag (reads the GLOBAL Buffer) and express (`require('buffer')` = the child copy)
+ * disagreed → `Buffer.isBuffer` false. DEV hid it (one shared ESM module instance).
+ *
+ * The fix: each child bootstrap calls `installBundleLocalBuffer()` to pin the global
+ * to ITS bundle's copy. These tests pin BOTH the helper behaviour AND the wiring —
+ * the wiring assertion is the one that would have caught the original miss (the
+ * dev-mode e2e cannot; it never sees the duplicated copies).
+ */
+
+const dir = new URL('.', import.meta.url);
+const read = (name: string): string => readFileSync(fileURLToPath(new URL(name, dir)), 'utf8');
+
+describe('installBundleLocalBuffer — dual-copy Buffer realignment', () => {
+  const saved = (globalThis as { Buffer?: unknown }).Buffer;
+  afterEach(() => {
+    (globalThis as { Buffer?: unknown }).Buffer = saved;
+  });
+
+  it('realigns globalThis.Buffer to the module loader Buffer even over a foreign copy', () => {
+    // Simulate the pre-entry hook having installed a DIFFERENT Buffer class (the
+    // kernel-worker-entry bundle copy): a foreign global whose isBuffer rejects a
+    // loader-built buffer, exactly as the etag throw observed.
+    class ForeignBuffer extends Uint8Array {
+      static isBuffer(_v: unknown): boolean {
+        return false;
+      }
+    }
+    (globalThis as { Buffer: unknown }).Buffer = ForeignBuffer;
+    const loaderBuffer = RuntimeJsBuffer.from('hello', 'utf8');
+    const foreignRejects = (
+      globalThis as unknown as { Buffer: typeof ForeignBuffer }
+    ).Buffer.isBuffer(loaderBuffer);
+
+    installBundleLocalBuffer();
+
+    // Capture results, then restore the global BEFORE asserting — a broken global
+    // Buffer wrecks vitest's own IPC serialization on assertion failure.
+    const realignedGlobal = (globalThis as { Buffer: unknown }).Buffer;
+    const realignedAcceptsLoaderBuffer = (
+      globalThis as unknown as { Buffer: typeof RuntimeJsBuffer }
+    ).Buffer.isBuffer(loaderBuffer);
+    (globalThis as { Buffer?: unknown }).Buffer = saved;
+
+    expect(foreignRejects).toBe(false);
+    // After realignment the GLOBAL Buffer is the loader's Buffer, so etag's
+    // `Buffer.isBuffer(chunk)` (chunk built by the same loader) is true again.
+    expect(realignedGlobal).toBe(RuntimeJsBuffer);
+    expect(realignedAcceptsLoaderBuffer).toBe(true);
+  });
+});
+
+describe('kind:url child bootstraps reinstall the bundle-local global Buffer', () => {
+  // Each child entry is `import()`ed into the kernel worker realm AFTER the pre-entry
+  // hook set a foreign-bundle Buffer global; it MUST reinstall its own copy or a
+  // package reading the global Buffer (etag) crashes in a production build.
+  for (const file of [
+    'dev-server-child-bootstrap.ts',
+    'node-entry-bootstrap.ts',
+    'real-vite-bootstrap.ts',
+  ]) {
+    it(`${file} imports and calls installBundleLocalBuffer`, () => {
+      const src = read(file);
+      expect(src).toContain('installBundleLocalBuffer');
+      expect(src).toMatch(/installBundleLocalBuffer\(\)/);
+    });
+  }
+});

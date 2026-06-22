@@ -64,7 +64,11 @@ import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
 import { type PreviewRegistry, createPreviewRegistry } from './preview-registry.ts';
 import { createPtyServer } from './pty-server.ts';
-import { type KernelIpc, installRuntimeGlobals } from './worker-runtime-globals.ts';
+import {
+  type KernelIpc,
+  installBundleLocalBuffer,
+  installRuntimeGlobals,
+} from './worker-runtime-globals.ts';
 
 const enc = new TextEncoder();
 
@@ -427,6 +431,11 @@ async function bootstrap(): Promise<void> {
   const cfg = resolveBootstrapConfig(effectiveSpec, effectiveSpec.defaultPort, root);
 
   const kernelIpc = installRuntimeGlobals();
+  // Same root as the process.env "chunk-graph leak" note above: this self-contained
+  // owner bundle carries its OWN `@riftydev/io` Buffer copy, but the pre-entry hook
+  // set globalThis.Buffer from the kernel-worker-entry copy. Realign so the owner's
+  // module loader (`require('buffer')`) and the global agree. See installBundleLocalBuffer.
+  installBundleLocalBuffer();
   // Both runtimes resolve relative paths (express.static('public'), tool cwd
   // probes) against the project root, whatever RIFTY_RFV_ROOT says.
   setProcessCwd(cfg.root);
