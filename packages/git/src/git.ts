@@ -9,10 +9,19 @@
  */
 import git, { type FsClient, type HttpClient, type WalkerEntry } from 'isomorphic-git';
 import { getGitCorsProxyUrl } from './cors-proxy.ts';
-import { assertCorsReachable, assertSupportedTransport, mapGitNetworkError } from './errors.ts';
+import {
+  BranchExistsError,
+  CheckoutConflictError,
+  PathspecError,
+  assertCorsReachable,
+  assertSupportedTransport,
+  mapGitNetworkError,
+} from './errors.ts';
 import { riftyGitHttp } from './http-plugin.ts';
 import { lineDiff } from './line-diff.ts';
 import type {
+  CheckoutInput,
+  CheckoutResult,
   CloneArgs,
   DiffEntry,
   FetchArgs,
@@ -31,6 +40,11 @@ export interface CommitArgs {
   committer?: GitIdentity;
 }
 
+/** First pathspec matching no path in `files` (for the PathspecError message). */
+function firstUnmatched(specs: string[], files: string[]): string {
+  return specs.find((s) => !files.some((p) => p === s || p.startsWith(`${s}/`))) ?? specs[0] ?? '';
+}
+
 /** The facade surface returned by {@link makeGit}. */
 export interface Git {
   init(): Promise<void>;
@@ -43,6 +57,10 @@ export interface Git {
   listBranches(): Promise<string[]>;
   resolveRef(ref: string): Promise<string>;
   hashBlob(object: Uint8Array | string): Promise<string>;
+  /** Paths tracked in the index (or in `ref`'s tree, unused here). */
+  listFiles(): Promise<string[]>;
+  /** Switch branch / detach HEAD, or restore worktree paths. See {@link CheckoutInput}. */
+  checkout(input: CheckoutInput): Promise<CheckoutResult>;
   diff(): Promise<DiffEntry[]>;
   /** Clone a smart-HTTP remote into `dir`. ssh/git/… → NotImplementedError. */
   clone(args: CloneArgs): Promise<void>;
@@ -70,6 +88,95 @@ export function makeGit(opts: MakeGitOptions): Git {
   const onAuth = opts.onAuth
     ? (url: string): { username: string; password?: string } | undefined => opts.onAuth?.(url)
     : undefined;
+
+  const curBranch = (): Promise<string | undefined> =>
+    git.currentBranch({ fs, dir }).then((b) => b || undefined);
+
+  /** Worktree absolute path for a repo-relative `path` (single-slash join). */
+  const abs = (path: string): string => `${dir}/${path}`.replace(/\/+/g, '/');
+
+  /** A pathspec matches `path` exactly or as a directory prefix (`<spec>/…`). */
+  const specMatches = (path: string, specs: string[]): boolean =>
+    specs.some((s) => path === s || path.startsWith(`${s}/`));
+
+  async function switchRef(
+    input: Extract<CheckoutInput, { op: 'switch' }>,
+  ): Promise<CheckoutResult> {
+    const { ref, create, startPoint, force } = input;
+    // previousRef: branch name, else the detached oid (best-effort; undefined if no HEAD yet).
+    const prevBranch = await curBranch();
+    const previousRef =
+      prevBranch ?? (await git.resolveRef({ fs, dir, ref: 'HEAD' }).catch(() => undefined));
+
+    let created = false;
+    let alreadyOn = false;
+    if (create) {
+      if ((await git.listBranches({ fs, dir })).includes(ref)) throw new BranchExistsError(ref);
+      await git.branch({
+        fs,
+        dir,
+        ref,
+        checkout: true,
+        ...(startPoint ? { object: startPoint } : {}),
+      });
+      created = true;
+    } else {
+      alreadyOn = ref === (await curBranch());
+      try {
+        await git.checkout({ fs, dir, ref, force });
+      } catch (err) {
+        if ((err as { name?: string })?.name === 'CheckoutConflictError') {
+          throw new CheckoutConflictError(
+            (err as { data?: { filepaths?: string[] } }).data?.filepaths ?? [],
+          );
+        }
+        throw err;
+      }
+    }
+
+    const oid = await git.resolveRef({ fs, dir, ref: 'HEAD' });
+    const after = await curBranch();
+    const detached = after === undefined;
+    const target = detached ? undefined : created ? ref : after;
+    const headSubject =
+      (await git.log({ fs, dir, depth: 1 }))[0]?.commit.message.split('\n', 1)[0] ?? '';
+    return { op: 'switch', target, oid, detached, created, alreadyOn, previousRef, headSubject };
+  }
+
+  async function restore(
+    input: Extract<CheckoutInput, { op: 'restore' }>,
+  ): Promise<CheckoutResult> {
+    const { pathspecs, source } = input;
+    if (source !== undefined) {
+      // From a tree-ish: match the tree's file list, write blobs, sync the index.
+      const treeFiles = await git.listFiles({ fs, dir, ref: source });
+      const restored = treeFiles.filter((p) => specMatches(p, pathspecs));
+      if (restored.length === 0) throw new PathspecError(firstUnmatched(pathspecs, treeFiles));
+      for (const filepath of restored) {
+        const { blob } = await git.readBlob({ fs, dir, oid: source, filepath });
+        await opts.fs.promises.writeFile(abs(filepath), blob);
+        await git.add({ fs, dir, filepath });
+      }
+      return { op: 'restore', restored };
+    }
+    // From the INDEX (no iso-git primitive): walk STAGE, read each staged blob,
+    // write to the worktree. HEAD + index untouched.
+    const restored: string[] = [];
+    await git.walk({
+      fs,
+      dir,
+      trees: [git.STAGE()],
+      map: async (filepath, [entry]): Promise<void> => {
+        if (!entry || !specMatches(filepath, pathspecs)) return;
+        const oid = await entry.oid();
+        const { blob } = await git.readBlob({ fs, dir, oid });
+        await opts.fs.promises.writeFile(abs(filepath), blob);
+        restored.push(filepath);
+      },
+    });
+    if (restored.length === 0) throw new PathspecError(pathspecs[0] ?? '');
+    return { op: 'restore', restored };
+  }
 
   return {
     async init() {
@@ -116,6 +223,13 @@ export function makeGit(opts: MakeGitOptions): Git {
       const blob = typeof object === 'string' ? new TextEncoder().encode(object) : object;
       const { oid } = await git.hashBlob({ object: blob });
       return oid;
+    },
+    listFiles() {
+      return git.listFiles({ fs, dir });
+    },
+    async checkout(input): Promise<CheckoutResult> {
+      if (input.op === 'switch') return switchRef(input);
+      return restore(input);
     },
     async diff() {
       // No `git.diff` exists — walk HEAD tree (left) vs WORKDIR (right) and
