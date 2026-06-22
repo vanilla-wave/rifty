@@ -110,7 +110,11 @@ export async function doRestore(g: Git, args: string[], ctx: CommandContext): Pr
   if (plan.pathspecs.length === 0) {
     // Real git: `fatal: you must specify path(s) to restore` (exit 128). Bounded
     // — loud rather than a silent no-op (that would lie about doing nothing).
-    throw new NotImplementedError('git.restore.no-pathspec', 'you must specify path(s) to restore');
+    // Render here (exit 128) so it never leaks as the shell's generic `git: ` exit-1.
+    return renderCheckoutError(
+      new NotImplementedError('git.restore.no-pathspec', 'you must specify path(s) to restore'),
+      ctx,
+    );
   }
 
   try {

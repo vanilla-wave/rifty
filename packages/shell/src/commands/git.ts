@@ -190,9 +190,17 @@ async function doAdd(g: Git, args: string[], ctx: CommandContext): Promise<numbe
 async function doCommit(g: Git, args: string[], ctx: CommandContext): Promise<number> {
   const amend = args.includes('--amend');
   let message = parseCommitMessage(args);
-  if (message === null && amend) {
+  if (amend) {
+    // `--amend` reads the prior commit defensively: an UNBORN HEAD (fresh repo,
+    // no commit) makes g.log() throw "Could not find HEAD" → real git's
+    // "fatal: You have nothing to amend." (exit 128), never a leaked exit-1.
+    const prior = (await g.log().catch(() => []))[0];
+    if (prior === undefined) {
+      ctx.stderr.write('fatal: You have nothing to amend.\n');
+      return 128;
+    }
     // `--amend` with no `-m` reuses the previous commit's message.
-    message = (await g.log())[0]?.message ?? null;
+    if (message === null) message = prior.message;
   }
   if (message === null) {
     ctx.stderr.write('git: commit requires -m <message>\n');

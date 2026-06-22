@@ -7,7 +7,9 @@
  * {@link NotImplementedError} (exit 128). Bounded v1, never a silent partial.
  */
 import type { makeGit } from '@riftydev/git';
+import { NotImplementedError } from '@riftydev/io';
 import type { CommandContext } from '../types.ts';
+import { renderCheckoutError } from './_git-checkout.ts';
 
 /**
  * The facade returned by {@link makeGit}. Its named interface (`Git`) is not on
@@ -22,6 +24,16 @@ type Git = ReturnType<typeof makeGit>;
  * has no full-dump primitive.
  */
 export async function doConfig(g: Git, args: string[], ctx: CommandContext): Promise<number> {
+  try {
+    return await runConfig(g, args, ctx);
+  } catch (e) {
+    // Ceilings throw the typed NotImplementedError → exit 128 + bare message
+    // (cluster-consistent with checkout/restore), never a leaked generic exit-1.
+    return renderCheckoutError(e, ctx);
+  }
+}
+
+async function runConfig(g: Git, args: string[], ctx: CommandContext): Promise<number> {
   const rest = args.slice(1);
   // `--get <key>` is the one supported flag; everything else loud-throws.
   let getFlag = false;
@@ -32,8 +44,7 @@ export async function doConfig(g: Git, args: string[], ctx: CommandContext): Pro
       continue;
     }
     if (t.startsWith('-')) {
-      ctx.stderr.write(`Not implemented: git.config.${t.replace(/^-+/, '')}\n`);
-      return 128;
+      throw new NotImplementedError(`git.config.${t.replace(/^-+/, '')}`);
     }
     positionals.push(t);
   }
@@ -41,13 +52,12 @@ export async function doConfig(g: Git, args: string[], ctx: CommandContext): Pro
   const key = positionals[0];
   if (key === undefined) {
     // Bare `git config` (no key) — not a get/set; loud ceiling, never silent.
-    ctx.stderr.write('Not implemented: git.config (no key)\n');
-    return 128;
+    throw new NotImplementedError('git.config', 'no key');
   }
 
   // `<key> <value>` → set (silent, exit 0). `--get <key> <value>` is a misuse;
-  // git rejects it, but the `--get` + 2 positionals path is not a v1 target —
-  // treat a value as a set only without `--get`.
+  // real git errors on it, but here it silently degrades to a plain get — a known
+  // v1 divergence, not a v1 target. Treat a value as a set only without `--get`.
   if (positionals.length >= 2 && !getFlag) {
     await g.setConfig(key, positionals.slice(1).join(' '));
     return 0;

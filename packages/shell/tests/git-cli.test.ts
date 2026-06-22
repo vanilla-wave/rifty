@@ -296,6 +296,20 @@ it('commit --amend (no -m) reuses the previous commit message; stays ONE commit'
   expect(lines[0]).toMatch(/ first$/);
 });
 
+// M1 — `commit --amend` on an UNBORN HEAD (fresh repo, no commit) must surface
+// real git's "fatal: You have nothing to amend." exit 128 — never leak the raw
+// iso-git "Could not find HEAD" as a generic exit-1.
+it('commit --amend on a repo with no commit → exit 128, "nothing to amend"', async () => {
+  await seedRepoDir();
+  await writeFile('/repo/a.txt', 'hi\n');
+  await git(['init'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await git(['add', 'a.txt'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['commit', '--amend', '-m', 'x'], ctx)).toBe(128);
+  expect(err()).toContain('nothing to amend');
+  expect(err()).not.toContain('Could not find');
+});
+
 // --- `git switch` behavioral (error paths the fixtures don't cover) ----------
 
 it('switch <full-sha> WITHOUT --detach → exit 128, "a branch is expected, got commit"', async () => {
@@ -345,4 +359,15 @@ it('restore --source combined with --staged → exit 128, loud ceiling', async (
   const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
   expect(await git(['restore', '--staged', '--source=HEAD', 'a.txt'], ctx)).toBe(128);
   expect(err()).toContain('Not implemented: git.restore.staged-source');
+});
+
+// I1 — `git restore` with NO pathspec is a bounded ceiling (real git: exit 128
+// "you must specify path(s) to restore"). It must surface LOUD at 128 via the
+// restore error renderer, never leak as the shell's generic `git: ` exit-1.
+it('restore with no pathspec → exit 128, restore ceiling (not a leaked exit-1)', async () => {
+  await seedCommittedRepo();
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['restore'], ctx)).toBe(128);
+  expect(err()).toContain('git.restore.no-pathspec');
+  expect(err()).not.toContain('git: ');
 });

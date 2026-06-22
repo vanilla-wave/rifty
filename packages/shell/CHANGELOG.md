@@ -68,6 +68,15 @@
 
 ### Fixed
 
+- **`git` restore/config/amend ceilings now throw LOUD at exit 128, never leak as
+  a generic exit-1.** `git restore` with no pathspec renders via the restore error
+  renderer (`git.restore.no-pathspec`, exit 128) instead of escaping uncaught to
+  the shell handler. `git config` flag/no-key ceilings use the typed
+  `NotImplementedError('git.config.<flag>')` (message-format parity with the
+  compat matrix; `--list` etc. stay byte-identical at exit 128). `commit --amend`
+  on an unborn HEAD (fresh repo, no commit) now prints `fatal: You have nothing
+  to amend.` exit 128, not the leaked iso-git `Could not find HEAD` exit-1.
+
 - **Trailing `&` after a compound separator now backgrounds only the final
   segment.** `echo a ; slow &` runs `echo a` in the foreground and starts only
   `slow` as a background job; `&&`/`||` short-circuit semantics are preserved.
