@@ -28,6 +28,15 @@
  * this call performs it). Belt-and-suspenders against the dev tree-shake.
  */
 
+// The vendored TS std-lib bundle (lib*.d.ts as a JSON map). The package fetches
+// it from `getTsLibUrl()` in the browser; point that at the Vite-served asset URL
+// (D-004: no hardcoded URL — the bootstrap global is the published seam). MUST be
+// set BEFORE the package entry's lazy `loadLibDts` runs (first `ts:init`); setting
+// it at module top, before importing the entry, satisfies that ordering.
+import tsLibBundleUrl from '@riftydev/ts-language-service/vendor/lib-bundle.json?url';
+
+(globalThis as unknown as { __RIFTY_TS_LIB_URL?: string }).__RIFTY_TS_LIB_URL = tsLibBundleUrl;
+
 import { bootTsLanguageServiceWorker } from '@riftydev/ts-language-service/worker/entry';
 
 // The bottom-of-module auto-boot already ran on import (worker realm + sync API).

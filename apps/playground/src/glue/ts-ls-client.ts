@@ -17,14 +17,13 @@
  * line/column, `MarkerSeverity`).
  */
 
+import { type Diagnostic, DiagnosticSeverity } from '@riftydev/ts-language-service/lsp-types';
 import {
-  type Diagnostic,
-  DiagnosticSeverity,
   TS_IPC_TYPE,
   type TsRequest,
   type TsResponse,
   isTsResponseMessage,
-} from '@riftydev/ts-language-service';
+} from '@riftydev/ts-language-service/protocol';
 import type * as monaco from 'monaco-editor';
 import { MarkerSeverity } from 'monaco-editor';
 

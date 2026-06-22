@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { type Diagnostic, DiagnosticSeverity } from '@riftydev/ts-language-service';
+import { type Diagnostic, DiagnosticSeverity } from '@riftydev/ts-language-service/lsp-types';
 import { renderToString } from 'solid-js/web';
 import { describe, expect, it, vi } from 'vitest';
 import { BottomPanel } from './BottomPanel.tsx';

@@ -10,7 +10,7 @@
  * `data-severity` so CSS colours it without an icon-set addition.
  */
 
-import { type Diagnostic, DiagnosticSeverity } from '@riftydev/ts-language-service';
+import { type Diagnostic, DiagnosticSeverity } from '@riftydev/ts-language-service/lsp-types';
 import { basename } from '@riftydev/vfs';
 import { For, Show, createMemo } from 'solid-js';
 

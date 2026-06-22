@@ -14,7 +14,7 @@
  */
 import { globalProcessManager, isSabIpcSupported } from '@riftydev/kernel';
 import { bridgeCrossRealmPreview, registerPort, unregisterPort } from '@riftydev/net';
-import { isTsResponseMessage } from '@riftydev/ts-language-service';
+import { isTsResponseMessage } from '@riftydev/ts-language-service/protocol';
 import { NotImplementedError } from '@riftydev/vfs';
 import type { ProjectSpec } from '../templates/project-spec.ts';
 import { defaultProjectSpec } from '../templates/registry.ts';

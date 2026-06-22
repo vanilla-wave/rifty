@@ -8,7 +8,7 @@ import type {
   TerminalRawInput,
   TerminalRewriteRule,
 } from '@riftydev/terminal';
-import type { Diagnostic } from '@riftydev/ts-language-service';
+import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
 import { For, Show, createMemo, createSignal } from 'solid-js';
 import type { TerminalSessionSnapshot } from '../adapters/terminal-manager.ts';
 import { ProblemsPanel } from './ProblemsPanel.tsx';

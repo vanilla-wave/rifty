@@ -6,7 +6,10 @@ import { defineConfig } from 'tsup';
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
+    protocol: 'src/worker/protocol.ts',
+    'lsp-types': 'src/lsp-types.ts',
     'worker/entry': 'src/worker/entry.ts',
+    'vendor/lib-bundle.json': 'vendor/lib-bundle.json',
   },
   format: ['esm'],
   dts: true,

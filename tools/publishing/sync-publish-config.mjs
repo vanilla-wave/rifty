@@ -80,6 +80,16 @@ const SPEC = {
       // so a kernel-spawned guest entry (kind:'url', no module loader) can call
       // the genuine execSync client without re-implementing the SAB gate.
       './builtins/child_process': './src/builtins/child_process.ts',
+      // node:os / node:path faithful shims (ADR-0026) exposed so a Vite bundle
+      // containing a heavy node-targeting dep (the `typescript` engine in the
+      // ts-language-service worker, ADR-0166) can ALIAS the bare `os`/`path`
+      // specifiers to the REAL rifty shims instead of Vite's empty browser stub
+      // (`os.platform is not a function` at the dep's module-eval). Not a new
+      // mechanism — the same modules already back the `require('os')` registry.
+      './builtins/os': './src/builtins/os.ts',
+      './builtins/path': './src/builtins/path.ts',
+      './builtins/perf_hooks': './src/builtins/perf_hooks.ts',
+      './builtins/fs': './src/builtins/fs.ts',
     },
     keywords: ['runtime', 'node-compatible', 'module-loader'],
   },
@@ -101,7 +111,21 @@ const SPEC = {
     // mark it side-effecting so tree-shaking can't drop it (mirrors kernel/
     // runtime-wasi worker-entry).
     sideEffects: ['./dist/worker/entry.js'],
-    addExports: { './worker/entry': './src/worker/entry.ts' },
+    // `./protocol` + `./lsp-types` are LIGHT subpaths (pure types/constants, NO
+    // `typescript` engine) the playground page + owner relay import — so they get
+    // the `rifty:ts-lsp` frame guards + LSP shapes WITHOUT pulling the whole TS
+    // language service (the index re-exports service.ts → typescript) into the
+    // page/owner bundle (ADR-0166 P1.9).
+    addExports: {
+      './protocol': './src/worker/protocol.ts',
+      './lsp-types': './src/lsp-types.ts',
+      './worker/entry': './src/worker/entry.ts',
+    },
+    // The vendored TS std-lib bundle the browser host fetches by URL (ADR-0166 —
+    // `getTsLibUrl()`); an asset, not a JS entry, so no tsup bundling / .d.ts.
+    // The playground LS worker imports it `?url` to seed `__RIFTY_TS_LIB_URL`.
+    assetExports: { './vendor/lib-bundle.json': './vendor/lib-bundle.json' },
+    extraFiles: ['vendor'],
     keywords: ['typescript', 'language-service', 'lsp', 'diagnostics'],
   },
   '@riftydev/terminal': {
@@ -166,12 +190,21 @@ function buildExportsAndEntries(orig, spec) {
     entries[distKey] = val.replace(/^\.\//, '');
     pubExports[key] = { types: `./dist/${distKey}.d.ts`, import: `./dist/${distKey}.js` };
   }
+  // assetExports: dev + published static-asset subpaths that are NOT JS entries
+  // (no tsup bundling, no .d.ts) — e.g. a vendored JSON the consumer fetches by
+  // URL. Same committed path in dev and the published tarball (the file is listed
+  // in `files`). Added to both export maps AFTER the JS entries so it never
+  // becomes a tsup entry.
+  for (const [key, val] of Object.entries(spec.assetExports ?? {})) {
+    devExports[key] = val;
+    pubExports[key] = val;
+  }
   return { devExports, pubExports, entries };
 }
 
 function rebuildPkg(orig, name, spec) {
   const { devExports, pubExports } = buildExportsAndEntries(orig, spec);
-  const files = ['dist'];
+  const files = ['dist', ...(spec.extraFiles ?? [])];
   if (existsSync(join(ROOT, spec.dir, 'CHANGELOG.md'))) files.push('CHANGELOG.md');
 
   const out = {
