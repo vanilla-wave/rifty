@@ -47,19 +47,34 @@ Or undo this operation with:
 Turn off this advice by setting config variable advice.detachedHead to false`;
 
 /**
- * Render a `switch`-result to stderr (stdout stays empty, matching real git —
- * every checkout message is stderr). `arg` is the verbatim ref the user typed,
- * needed for the detached advisory's `Note: switching to '<ARG>'.` line.
+ * Detached-HEAD render style. `checkout` prints the full advisory block
+ * (`Note: switching to '<arg>'.` + body + HEAD-line); `switch --detach` prints
+ * ONLY the `HEAD is now at <oid> <subject>` line (no advisory) — verbatim real
+ * git 2.50.1 (see packages/git/fixtures/{checkout,switch}-detached.err).
  */
-function renderSwitch(
+export type DetachedStyle = 'checkout' | 'switch';
+
+/**
+ * Render a `switch`-result to stderr (stdout stays empty, matching real git —
+ * every checkout/switch message is stderr). `arg` is the verbatim ref the user
+ * typed, needed for the detached advisory's `Note: switching to '<ARG>'.` line.
+ * `detachedStyle` picks the detached text: `checkout` = full advisory,
+ * `switch` = HEAD-line only.
+ */
+export function renderSwitch(
   res: Extract<CheckoutResult, { op: 'switch' }>,
   arg: string,
   ctx: CommandContext,
+  detachedStyle: DetachedStyle = 'checkout',
 ): void {
   if (res.detached) {
-    ctx.stderr.write(
-      `Note: switching to '${arg}'.\n\n${DETACHED_ADVISORY_BODY}\n\nHEAD is now at ${res.oid.slice(0, 7)} ${res.headSubject}\n`,
-    );
+    const headLine = `HEAD is now at ${res.oid.slice(0, 7)} ${res.headSubject}\n`;
+    if (detachedStyle === 'switch') {
+      // `git switch --detach` prints ONLY the HEAD-line — NO advisory block.
+      ctx.stderr.write(headLine);
+      return;
+    }
+    ctx.stderr.write(`Note: switching to '${arg}'.\n\n${DETACHED_ADVISORY_BODY}\n\n${headLine}`);
     return;
   }
   // Facade contract: a non-detached switch always has a `target` (the detached
@@ -83,7 +98,7 @@ function renderSwitch(
  * {@link doCheckout} so it never reaches the shell's generic handler. Returns
  * the exit code; rethrows anything unrecognized (a real bug, not a git error).
  */
-function renderCheckoutError(e: unknown, ctx: CommandContext): number {
+export function renderCheckoutError(e: unknown, ctx: CommandContext): number {
   if (e instanceof CheckoutConflictError) {
     let msg =
       'error: Your local changes to the following files would be overwritten by checkout:\n';
@@ -124,7 +139,7 @@ type CheckoutPlan =
  * "Could not find HEAD~1" plumbing error. (`~`/`^`/`@{` never appear in real ref
  * names — git forbids them, see git-check-ref-format.)
  */
-const REVSPEC_MARKER = /[~^]|@\{/;
+export const REVSPEC_MARKER = /[~^]|@\{/;
 
 /**
  * Ceiling flags rejected during parse → `NotImplementedError('git.checkout.<slug>')`

@@ -225,3 +225,72 @@ async function otherTipSha(): Promise<string> {
   const g = makeGit({ fs: vfsToGitFs(vfs), dir: REPO });
   return g.resolveRef('other');
 }
+
+// --- `git switch` (branch-only) — byte-exact vs real git 2.50.1 -------------
+// Reuses the same `twoBranchRepo` so SHAs are canonical (detached pins 7fdebb4…).
+// All switch messages are STDERR (stdout empty), same as checkout.
+
+it('switch <branch>: existing — byte-exact stderr (stdout empty)', async () => {
+  await twoBranchRepo();
+  const { out, err, code } = await runGitFull(['switch', 'other']);
+  expect(code).toBe(0);
+  expect(out).toBe(fixtureBody('switch-existing.out'));
+  expect(err).toBe(fixtureBody('switch-existing.err'));
+});
+
+it('switch -c <name>: create + switch — byte-exact stderr (stdout empty)', async () => {
+  await twoBranchRepo();
+  const { out, err, code } = await runGitFull(['switch', '-c', 'feat']);
+  expect(code).toBe(0);
+  expect(out).toBe(fixtureBody('switch-create.out'));
+  expect(err).toBe(fixtureBody('switch-create.err'));
+});
+
+it('switch <current>: already on branch — byte-exact stderr (stdout empty)', async () => {
+  await twoBranchRepo();
+  const { out, err, code } = await runGitFull(['switch', 'main']);
+  expect(code).toBe(0);
+  expect(out).toBe(fixtureBody('switch-already.out'));
+  expect(err).toBe(fixtureBody('switch-already.err'));
+});
+
+it('switch --detach <sha>: HEAD-line ONLY (no advisory block) — byte-exact (7fdebb4)', async () => {
+  await twoBranchRepo();
+  const sha = await otherTipSha();
+  const { out, err, code } = await runGitFull(['switch', '--detach', sha]);
+  expect(code).toBe(0);
+  expect(out).toBe(fixtureBody('switch-detached.out'));
+  // ⚠️ `git switch --detach` prints ONLY `HEAD is now at 7fdebb4 second\n` — NO
+  // advisory block (unlike `checkout <sha>`). Assert the exact frozen body.
+  expect(err).toBe(fixtureBody('switch-detached.err'));
+  expect(err).toBe('HEAD is now at 7fdebb4 second\n');
+});
+
+// --- `git restore` — silent (both streams empty), real-effect asserted ------
+
+it('restore <path>: worktree from index — silent (both empty), reverts content', async () => {
+  await twoBranchRepo();
+  // On main a.txt='one'; dirty it, then `restore` from index → back to 'one'.
+  await writeFile(`${REPO}/a.txt`, 'dirty\n');
+  const { out, err, code } = await runGitFull(['restore', 'a.txt']);
+  expect(code).toBe(0);
+  expect(out).toBe(fixtureBody('restore-worktree.out'));
+  expect(err).toBe(fixtureBody('restore-worktree.err'));
+  expect(await readFile(`${REPO}/a.txt`)).toBe('one\n');
+});
+
+it('restore --staged <path>: unstage — silent (both empty), path now unstaged', async () => {
+  await initRepo();
+  await writeFile(`${REPO}/a.txt`, 'one\n');
+  await runGit(['add', 'a.txt']);
+  await runGit(['commit', '-m', 'first']);
+  // Stage a fresh file, then `restore --staged` it → back to untracked.
+  await writeFile(`${REPO}/c.txt`, 'see\n');
+  await runGit(['add', 'c.txt']);
+  const { out, err, code } = await runGitFull(['restore', '--staged', 'c.txt']);
+  expect(code).toBe(0);
+  expect(out).toBe(fixtureBody('restore-staged.out'));
+  expect(err).toBe(fixtureBody('restore-staged.err'));
+  // c.txt is now untracked (`??`), not staged-new (`A `).
+  expect(await runGit(['status', '--porcelain'])).toBe('?? c.txt\n');
+});
