@@ -17,7 +17,15 @@
  * line/column, `MarkerSeverity`).
  */
 
-import { type Diagnostic, DiagnosticSeverity } from '@riftydev/ts-language-service/lsp-types';
+import {
+  type CompletionItem,
+  type CompletionList,
+  type Diagnostic,
+  DiagnosticSeverity,
+  type Hover,
+  type Location,
+  type Position,
+} from '@riftydev/ts-language-service/lsp-types';
 import {
   TS_IPC_TYPE,
   type TsRequest,
@@ -52,6 +60,20 @@ export interface TsLanguageServiceClient {
   getSyntacticDiagnostics(path: string): Promise<readonly Diagnostic[]>;
   /** tsconfig (config-file) diagnostics. */
   getConfigFileDiagnostics(): Promise<readonly Diagnostic[]>;
+  /** Quick-info (hover) at `position` (LSP 0-based) in `path`; `null` when nothing to hover. */
+  getQuickInfo(path: string, position: Position): Promise<Hover | null>;
+  /** Go-to-definition sites for the symbol at `position` (LSP 0-based). */
+  getDefinition(path: string, position: Position): Promise<readonly Location[]>;
+  /** Go-to-type-definition sites for the TYPE of the symbol at `position` (LSP 0-based). */
+  getTypeDefinition(path: string, position: Position): Promise<readonly Location[]>;
+  /** Completion candidates at `position` (LSP 0-based). Details resolved lazily. */
+  getCompletions(path: string, position: Position): Promise<CompletionList>;
+  /** Resolve one completion entry (`label`) at `position` (LSP 0-based) to detail + docs. */
+  getCompletionDetails(
+    path: string,
+    position: Position,
+    label: string,
+  ): Promise<CompletionItem | null>;
   /** Reject every in-flight request and detach the relay listener. Idempotent. */
   dispose(): void;
 }
@@ -116,6 +138,46 @@ export function createTsLanguageServiceClient(
     return response.diagnostics;
   }
 
+  /** A hover query: resolves the `Hover|null` payload, rejects on a service error. */
+  async function hover(build: (id: number) => TsRequest): Promise<Hover | null> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'hover') {
+      throw new Error(`ts-lsp: expected hover response, got kind=${response.kind}`);
+    }
+    return response.hover;
+  }
+
+  /** A definition/type-definition query: resolves the `Location[]`, rejects on a service error. */
+  async function locations(build: (id: number) => TsRequest): Promise<readonly Location[]> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'locations') {
+      throw new Error(`ts-lsp: expected locations response, got kind=${response.kind}`);
+    }
+    return response.locations;
+  }
+
+  /** A completion-list query: resolves the `CompletionList`, rejects on a service error. */
+  async function completions(build: (id: number) => TsRequest): Promise<CompletionList> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'completions') {
+      throw new Error(`ts-lsp: expected completions response, got kind=${response.kind}`);
+    }
+    return response.completions;
+  }
+
+  /** A completion-resolve query: resolves the `CompletionItem|null`, rejects on a service error. */
+  async function completionItem(build: (id: number) => TsRequest): Promise<CompletionItem | null> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'completionItem') {
+      throw new Error(`ts-lsp: expected completionItem response, got kind=${response.kind}`);
+    }
+    return response.item;
+  }
+
   return {
     init: (projectRoot) => ack((id) => ({ id, type: 'ts:init', projectRoot })),
     open: (path, text) => ack((id) => ({ id, type: 'ts:open', path, text })),
@@ -128,6 +190,16 @@ export function createTsLanguageServiceClient(
       diagnostics((id) => ({ id, type: 'ts:getSyntacticDiagnostics', path })),
     getConfigFileDiagnostics: () =>
       diagnostics((id) => ({ id, type: 'ts:getConfigFileDiagnostics' })),
+    getQuickInfo: (path, position) =>
+      hover((id) => ({ id, type: 'ts:getQuickInfo', path, position })),
+    getDefinition: (path, position) =>
+      locations((id) => ({ id, type: 'ts:getDefinition', path, position })),
+    getTypeDefinition: (path, position) =>
+      locations((id) => ({ id, type: 'ts:getTypeDefinition', path, position })),
+    getCompletions: (path, position) =>
+      completions((id) => ({ id, type: 'ts:getCompletions', path, position })),
+    getCompletionDetails: (path, position, label) =>
+      completionItem((id) => ({ id, type: 'ts:getCompletionDetails', path, position, label })),
     dispose() {
       if (torn) return;
       torn = true;

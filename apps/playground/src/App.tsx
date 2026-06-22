@@ -8,6 +8,7 @@ import {
 } from '@riftydev/terminal/history';
 import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
 import { normalizePath } from '@riftydev/vfs';
+import * as monaco from 'monaco-editor';
 import { Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import {
   type TerminalRunDimensions,
@@ -47,6 +48,7 @@ import { SnapshotFs } from './glue/snapshot-fs.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
 import { createTsLanguageServiceClient, lspToMonacoMarkers } from './glue/ts-ls-client.ts';
+import { registerTsLanguageServiceProviders } from './glue/ts-ls-monaco-providers.ts';
 import { requestVfsSnapshot, subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset, presetBootLines } from './presets.ts';
 import type { ProjectSpec } from './templates/project-spec.ts';
@@ -541,6 +543,107 @@ export function App(props: AppProps) {
     // time out and reject; we swallow (no owner = no diagnostics, surfaced loud
     // in the terminal already). A real owner serves the LS child.
     const client = createTsLanguageServiceClient(workspaceOwner);
+    // Register the rifty-LS Monaco providers (ADR-0166 phase 2): hover / def /
+    // type-def / completions now come from the REAL service over the relay, not
+    // Monaco's isolated lib.d.ts worker (whose hover/completion/goto are turned
+    // OFF in EditorHost). Same lifetime as the client — disposed on cleanup.
+    const providers = registerTsLanguageServiceProviders(client, api);
+
+    // E2E-only window hooks (ADR-0166 phase 2) — DEV-only (`import.meta.env.DEV`,
+    // mirroring the EditorHost `__riftyTs*` hooks): drive the EXACT registered
+    // providers (no flaky hover-widget / suggest-dropdown rendering). Each builds
+    // a Monaco model+position from a VFS path + 1-based coords and calls the
+    // registered provider function, then serializes the result for assertions.
+    // Returns null when no model is open for the path (provider can't run yet).
+    if (import.meta.env.DEV) {
+      const NEVER_CANCEL: monaco.CancellationToken = {
+        isCancellationRequested: false,
+        onCancellationRequested: () => ({ dispose() {} }),
+      };
+      const modelFor = (path: string): monaco.editor.ITextModel | null => {
+        const uri = api.ensureModel(path);
+        return uri ? monaco.editor.getModel(uri) : null;
+      };
+      const pos = (line: number, column: number): monaco.Position =>
+        new monaco.Position(line, column);
+      const g = globalThis as unknown as {
+        __riftyTsHover?: (path: string, line: number, col: number) => Promise<string | null>;
+        __riftyTsDefinition?: (
+          path: string,
+          line: number,
+          col: number,
+        ) => Promise<{ uri: string; line: number; column: number }[] | null>;
+        __riftyTsCompletions?: (
+          path: string,
+          line: number,
+          col: number,
+        ) => Promise<string[] | null>;
+        __riftyTsReinit?: () => Promise<boolean>;
+      };
+      // Re-init the service against the CURRENT owner VFS (ADR-0166: `ts:init` is
+      // idempotent and rebuilds with a fresh tsconfig). The e2e writes a project
+      // — tsconfig (bundler resolution) + a fake node_modules dep + sibling files
+      // — then calls this so the rebuilt service sees them (the boot build used
+      // tsc default options before those files existed). Resolves true on a clean
+      // rebuild, false on error (e.g. owner unavailable).
+      g.__riftyTsReinit = async () => {
+        try {
+          await client.init(WORKSPACE);
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      g.__riftyTsHover = async (path, line, col) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const hover = await providers.providers.hover.provideHover(
+          model,
+          pos(line, col),
+          NEVER_CANCEL,
+        );
+        if (!hover) return null;
+        return hover.contents.map((c) => c.value).join('\n');
+      };
+      g.__riftyTsDefinition = async (path, line, col) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const def = await providers.providers.definition.provideDefinition(
+          model,
+          pos(line, col),
+          NEVER_CANCEL,
+        );
+        if (!def) return null;
+        const arr = Array.isArray(def) ? def : [def];
+        return arr.map((d) => {
+          // Round-trip the target uri back to its VFS path (proves the full
+          // Location.uri → model → path resolution, incl. an opened node_modules
+          // `.d.ts`). Falls back to the raw uri string if the model is foreign.
+          const target = monaco.editor.getModel(d.uri);
+          const targetPath = target ? api.pathForModel(target) : undefined;
+          return {
+            uri: targetPath ?? d.uri.toString(),
+            line: d.range.startLineNumber,
+            column: d.range.startColumn,
+          };
+        });
+      };
+      g.__riftyTsCompletions = async (path, line, col) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const result = await providers.providers.completion.provideCompletionItems(
+          model,
+          pos(line, col),
+          { triggerKind: 0 } as monaco.languages.CompletionContext,
+          NEVER_CANCEL,
+        );
+        if (!result) return null;
+        return result.suggestions.map((s) =>
+          typeof s.label === 'string' ? s.label : s.label.label,
+        );
+      };
+    }
+
     // Per-path debounce so a burst of keystrokes pushes ONE update (~300ms idle).
     const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
     const openPaths = new Set<string>();
@@ -629,7 +732,15 @@ export function App(props: AppProps) {
       for (const t of debounceTimers.values()) clearTimeout(t);
       debounceTimers.clear();
       unsubscribe();
+      providers.dispose();
       client.dispose();
+      if (import.meta.env.DEV) {
+        const g = globalThis as unknown as Record<string, unknown>;
+        g.__riftyTsHover = undefined;
+        g.__riftyTsDefinition = undefined;
+        g.__riftyTsCompletions = undefined;
+        g.__riftyTsReinit = undefined;
+      }
     });
   });
 
