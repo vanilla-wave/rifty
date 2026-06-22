@@ -80,6 +80,8 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     onPreview: () => () => {},
     requestPreview: () => {},
     setDevConfig: () => {},
+    sendTsLsp: () => {},
+    onTsLsp: () => () => {},
     close: () => {},
   };
 }

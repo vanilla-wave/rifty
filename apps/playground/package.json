@@ -23,6 +23,7 @@
     "@riftydev/shadow-registry": "workspace:*",
     "@riftydev/shell": "workspace:*",
     "@riftydev/terminal": "workspace:*",
+    "@riftydev/ts-language-service": "workspace:*",
     "@riftydev/vfs": "workspace:*",
     "@xterm/xterm": "^5.5.0",
     "monaco-editor": "^0.52.0",

@@ -108,6 +108,10 @@ function makeFakeOwner() {
     },
     requestPreview(): void {},
     setDevConfig(): void {},
+    sendTsLsp(): void {},
+    onTsLsp(): () => void {
+      return () => {};
+    },
     close(): void {},
   };
 
