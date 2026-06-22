@@ -25,6 +25,13 @@ export interface CreateTsLanguageServiceDeps {
 export interface TsLanguageService {
   getSemanticDiagnostics(path: string): Diagnostic[];
   getSyntacticDiagnostics(path: string): Diagnostic[];
+  /**
+   * Config-level diagnostics from parsing `tsconfig.json` (e.g. an unknown
+   * `compilerOptions` value) — what real tsserver surfaces for a broken config.
+   * Empty when the config parsed clean. A config error often has no `file`/
+   * position; it then collapses to the document start (see {@link toLspDiagnostic}).
+   */
+  getConfigFileDiagnostics(): Diagnostic[];
   openDocument(path: string, text: string): void;
   updateDocument(path: string, text: string): void;
   closeDocument(path: string): void;
@@ -85,9 +92,16 @@ export async function createTsLanguageService(
   });
   const service = ts.createLanguageService(host, ts.createDocumentRegistry());
 
+  // tsc routes config-file errors (unknown options, bad option values, bad
+  // include/extends) onto the ParsedCommandLine — captured once at build, mapped
+  // through the SAME LSP mapper as program diagnostics (real tsserver surfaces
+  // these for a broken tsconfig).
+  const configDiagnostics = parsed.errors.map(toLspDiagnostic);
+
   return {
     getSemanticDiagnostics: (path) => service.getSemanticDiagnostics(path).map(toLspDiagnostic),
     getSyntacticDiagnostics: (path) => service.getSyntacticDiagnostics(path).map(toLspDiagnostic),
+    getConfigFileDiagnostics: () => [...configDiagnostics],
     openDocument: (path, text) => overlay.open(path, text),
     updateDocument: (path, text) => overlay.update(path, text),
     closeDocument: (path) => overlay.close(path),

@@ -4,6 +4,43 @@
 
 ### Added
 
+- Worker hosting (ADR-0166 task 1.8): host the proven engine in a kernel-spawned
+  `serve:true` worker that reads the authoritative VFS over the EXISTING `fs.*`
+  sync-RPC seam (ADR-0150) — one shared instance for both consumers (the page
+  editor and the out-of-rifty M12 agent). No parallel FS channel.
+  - `src/worker/host-fs-rpc.ts`: `createRpcFsSync(call): FsSync` — the engine's
+    FsSync over the owner store, delegating to the parity-tested `SyncRpcFsSync`
+    from `@riftydev/runtime-js` (one impl of the `fs.*` contract, not two:
+    chunked `fs.readChunk` reassembly keyed by offset, `fs.statOrNull`
+    null-on-ENOENT, `fs.readdir`, `fs.exists`). Construction is side-effect-free
+    (NOT the `installRemoteSyncFs` global-mirror install). Node-proven over a
+    fake `call` incl. a >256 KiB multi-chunk file + the real service end-to-end.
+  - `src/worker/protocol.ts`: discriminated request/response frame union
+    (`ts:init`/`ts:open`/`ts:update`/`ts:close`/`ts:invalidate`/`ts:get{Semantic,
+    Syntactic,ConfigFile}Diagnostics`), fork-IPC envelope `rifty:ts-lsp` + type
+    guards. Pure types/constants (modelled on the playground pty-protocol).
+  - `src/worker/service-endpoint.ts`: `createServiceEndpoint` — the pure,
+    Node-tested core mapping a request frame → response frame against a
+    `TsLanguageService`. First `ts:init` builds the service (async lib load);
+    a query before init is an ERROR frame, not a silent empty (Fidelity).
+  - `src/worker/entry.ts`: the THIN, guarded boot — reads `readKernelSyncApi().call`
+    to build the RPC FsSync, builds the endpoint, wires it to the page over
+    fork-IPC (`process.send`/`process.on('message')`, ADR-0045/0157). Auto-boot
+    is gated to a real Worker realm with the sync API present, so a type-only
+    import spawns nothing (worker-entry side-effect trap). Worker logging routes
+    through `process.stdout` (console is not captured). Validated by the
+    playground e2e in the next task (worker globals are browser-only).
+  - Public exports (`src/index.ts`): `createRpcFsSync`, `createServiceEndpoint`,
+    the protocol types + guards + `TS_IPC_TYPE`; the worker boot is the
+    `./worker/entry` subpath (referenced by URL, mirrors kernel/runtime-wasi).
+- `getConfigFileDiagnostics()` on `TsLanguageService` (ADR-0166): surfaces
+  tsconfig config-file errors (e.g. an unknown `compilerOptions` value) real
+  tsserver reports, mapped through the same LSP mapper. Parity-tested vs
+  `ts.parseJsonConfigFileContent` (`src/config-diagnostics.test.ts`).
+- Added `@riftydev/io`, `@riftydev/kernel`, `@riftydev/runtime-js` workspace deps
+  (lower tiers; the worker host reaches the kernel sync API + the proven
+  `SyncRpcFsSync`). Registered the package in the publish-config generator
+  (`tools/publishing/sync-publish-config.mjs`) with the `./worker/entry` export.
 - `src/parity.test.ts`: parity harness (gold standard, ADR-0166). Per fixture:
   Side A builds a real `ts.LanguageService` over real Node fs (tmp dir + `ts.sys`,
   pinned `typescript@5.9.3`, NO rifty code) and computes expected semantic
