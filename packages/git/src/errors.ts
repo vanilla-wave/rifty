@@ -43,16 +43,6 @@ export class PathspecError extends Error {
   }
 }
 
-/** An arg is ambiguous between a revision and a path. */
-export class AmbiguousArgError extends Error {
-  readonly arg: string;
-  constructor(arg: string) {
-    super(`'${arg}' could be both a revision and a path`);
-    this.name = 'AmbiguousArgError';
-    this.arg = arg;
-  }
-}
-
 /**
  * Reject any non-smart-HTTP transport. `http:`/`https:` pass; `ssh:`/`git:`/etc.
  * throw `git.transport.<scheme>` since they need raw TCP/SSH we don't have in a

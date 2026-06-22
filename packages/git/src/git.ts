@@ -145,39 +145,56 @@ export function makeGit(opts: MakeGitOptions): Git {
     return { op: 'switch', target, oid, detached, created, alreadyOn, previousRef, headSubject };
   }
 
+  /** Every pathspec must match ≥1 file, else PathspecError (all-or-nothing, real git). */
+  const assertAllMatched = (specs: string[], files: string[]): void => {
+    if (specs.some((s) => !files.some((p) => pathspecMatch(p, s)))) {
+      throw new PathspecError(firstUnmatched(specs, files));
+    }
+  };
+
   async function restore(
     input: Extract<CheckoutInput, { op: 'restore' }>,
   ): Promise<CheckoutResult> {
     const { pathspecs, source } = input;
     if (source !== undefined) {
-      // From a tree-ish: match the tree's file list, write blobs, sync the index.
+      // From a tree-ish: resolve the SYMBOLIC source (branch/tag/HEAD) to an oid —
+      // readBlob doesn't resolve refs, only resolveRef does. Validate every
+      // pathspec matched (all-or-nothing) BEFORE writing, then write + sync index.
+      const oid = await git.resolveRef({ fs, dir, ref: source });
       const treeFiles = await git.listFiles({ fs, dir, ref: source });
+      assertAllMatched(pathspecs, treeFiles);
       const restored = treeFiles.filter((p) => specMatches(p, pathspecs));
-      if (restored.length === 0) throw new PathspecError(firstUnmatched(pathspecs, treeFiles));
       for (const filepath of restored) {
-        const { blob } = await git.readBlob({ fs, dir, oid: source, filepath });
+        const { blob } = await git.readBlob({ fs, dir, oid, filepath });
         await opts.fs.promises.writeFile(abs(filepath), blob);
         await git.add({ fs, dir, filepath });
       }
       return { op: 'restore', restored };
     }
-    // From the INDEX (no iso-git primitive): walk STAGE, read each staged blob,
-    // write to the worktree. HEAD + index untouched.
-    const restored: string[] = [];
+    // From the INDEX (no iso-git primitive): walk STAGE for matched BLOBs (a dir
+    // pathspec descends into the tree, restoring each child). Two passes —
+    // collect+validate (all-or-nothing) BEFORE writing. HEAD + index untouched.
+    const staged: { filepath: string; oid: string }[] = [];
     await git.walk({
       fs,
       dir,
       trees: [git.STAGE()],
       map: async (filepath, [entry]): Promise<void> => {
-        if (!entry || !specMatches(filepath, pathspecs)) return;
-        const oid = await entry.oid();
-        const { blob } = await git.readBlob({ fs, dir, oid });
-        await opts.fs.promises.writeFile(abs(filepath), blob);
-        restored.push(filepath);
+        // Non-blob (tree) → return undefined to DESCEND; blob children match via
+        // the `<spec>/` dir-prefix rule. Only blobs carry an oid to restore.
+        if (!entry || (await entry.type()) !== 'blob' || !specMatches(filepath, pathspecs)) return;
+        staged.push({ filepath, oid: await entry.oid() });
       },
     });
-    if (restored.length === 0) throw new PathspecError(pathspecs[0] ?? '');
-    return { op: 'restore', restored };
+    assertAllMatched(
+      pathspecs,
+      staged.map((s) => s.filepath),
+    );
+    for (const { filepath, oid } of staged) {
+      const { blob } = await git.readBlob({ fs, dir, oid });
+      await opts.fs.promises.writeFile(abs(filepath), blob);
+    }
+    return { op: 'restore', restored: staged.map((s) => s.filepath) };
   }
 
   return {

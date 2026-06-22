@@ -1,6 +1,5 @@
 export { getGitCorsProxyUrl } from './cors-proxy.ts';
 export {
-  AmbiguousArgError,
   assertCorsReachable,
   assertSupportedTransport,
   BranchExistsError,
