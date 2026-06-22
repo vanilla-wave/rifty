@@ -12,6 +12,24 @@ const NAV = 'apps/landing/src/sections/nav.ts';
 const HERO = 'apps/landing/src/sections/hero.ts';
 const FAVICON = 'apps/landing/public/favicon.svg';
 
+// Bodies between every <!-- … --> in an XML/SVG document (open-ended last comment included).
+function commentBodies(xml: string): string[] {
+  const bodies: string[] = [];
+  let i = 0;
+  for (;;) {
+    const start = xml.indexOf('<!--', i);
+    if (start === -1) break;
+    const end = xml.indexOf('-->', start + 4);
+    if (end === -1) {
+      bodies.push(xml.slice(start + 4));
+      break;
+    }
+    bodies.push(xml.slice(start + 4, end));
+    i = end + 3;
+  }
+  return bodies;
+}
+
 describe('landing static site', () => {
   it('publishes the rifty.dev landing entry (Vite SPA shell)', () => {
     expect(existsSync(INDEX)).toBe(true);
@@ -29,6 +47,24 @@ describe('landing static site', () => {
     const html = readFileSync(INDEX, 'utf8');
     expect(html).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml" />');
     expect(existsSync(FAVICON)).toBe(true);
+  });
+
+  it('ships a favicon browsers can actually render (well-formed SVG/XML)', () => {
+    // Regression: the asset shipped + was served 200 image/svg+xml, but the tab stayed
+    // iconless. Cause — the comment carried CSS-var token names (--deep, --ac), and `--`
+    // inside an XML comment is illegal; browsers parse SVG as strict XML and reject it
+    // ("Double hyphen within comment"). The fetch succeeds, the render does not.
+    const svg = readFileSync(FAVICON, 'utf8');
+    for (const body of commentBodies(svg)) {
+      expect(body, 'XML comment must not contain "--" (browsers reject the SVG)').not.toContain(
+        '--',
+      );
+    }
+    // …and it must still draw the mark, not degrade to a blank icon.
+    expect(svg).toContain('<svg');
+    expect(svg).toContain('</svg>');
+    expect(svg).toContain('#0e1014'); // deep surface
+    expect(svg).toContain('#c7f05a'); // lime diamond
   });
 
   it('keeps a playground and GitHub exit', () => {

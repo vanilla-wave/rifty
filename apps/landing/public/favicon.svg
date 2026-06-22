@@ -1,6 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="rifty">
-  <!-- Matches the on-page logo mark (src/icons.ts logoMark) + design tokens:
-       deep surface --deep #0e1014, lime accent --ac #c7f05a, diamond = rounded square rotated 45°. -->
+  <!-- rifty logo mark (mirrors src/icons.ts logoMark): deep #0e1014 surface, lime #c7f05a diamond. -->
   <rect width="32" height="32" rx="7" fill="#0e1014"/>
   <rect x="7.5" y="7.5" width="17" height="17" rx="4" transform="rotate(45 16 16)" fill="#c7f05a"/>
 </svg>
