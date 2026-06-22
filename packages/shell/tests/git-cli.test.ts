@@ -113,3 +113,52 @@ it('clone without a <url> fails loudly (exit 128)', async () => {
   expect(await git(['clone'], ctx)).toBe(128);
   expect(err()).toContain('clone requires a <url>');
 });
+
+/** Seed a single-commit repo on `main` with a.txt committed. */
+async function seedCommittedRepo(): Promise<void> {
+  await seedRepoDir();
+  await writeFile('/repo/a.txt', 'hi\n');
+  await git(['init'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await git(['add', 'a.txt'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await git(['commit', '-m', 'first'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+}
+
+it('checkout -b <existing> → exit 128, "a branch named ... already exists"', async () => {
+  await seedCommittedRepo();
+  await git(['checkout', '-b', 'feat'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  // Back to main, then try to recreate `feat`.
+  await git(['checkout', 'main'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['checkout', '-b', 'feat'], ctx)).toBe(128);
+  expect(err()).toContain("a branch named 'feat' already exists");
+});
+
+it('checkout <nonexistent> (not a ref, not a path) → exit 1, pathspec did not match', async () => {
+  await seedCommittedRepo();
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['checkout', 'nonexistent'], ctx)).toBe(1);
+  expect(err()).toContain("pathspec 'nonexistent' did not match");
+});
+
+it('checkout --orphan x → exit 128, Not implemented: git.checkout.orphan', async () => {
+  await seedCommittedRepo();
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['checkout', '--orphan', 'x'], ctx)).toBe(128);
+  expect(err()).toContain('Not implemented: git.checkout.orphan');
+});
+
+it('checkout glob pathspec (not a literal path) → exit 128, glob-pathspec ceiling', async () => {
+  await seedCommittedRepo();
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['checkout', 'a*'], ctx)).toBe(128);
+  expect(err()).toContain('Not implemented: git.checkout.glob-pathspec');
+});
+
+it('a clean switch prints to STDERR not stdout', async () => {
+  await seedCommittedRepo();
+  await git(['checkout', '-b', 'other'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  const { ctx, out, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['checkout', 'main'], ctx)).toBe(0);
+  expect(out()).toBe('');
+  expect(err()).toContain('Switched to branch');
+});

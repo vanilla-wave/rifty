@@ -19,6 +19,21 @@
   byte-asserts `status --porcelain` (untracked / staged / mixed) + `log
   --oneline` against frozen real-git 2.50.1 golden fixtures
   (`packages/git/fixtures/`, ADR-0093) — never spawns git at test time.
+- **`git checkout` — branch-switch + file-restore, byte-exact to real git
+  2.50.1.** `checkout <branch>` (switch / already-on), `-b <name> [<start>]`
+  (create+switch), `-f`/`--force`, `<full-sha>` (detached HEAD + advisory),
+  `-- <pathspec…>` and `<tree-ish> -- <pathspec…>` (restore from index / tree),
+  bare-positional ref↔path disambiguation (both → ambiguous, neither →
+  pathspec-miss). EVERY message goes to stderr (stdout stays empty); restore is
+  silent. Typed git user-errors map to git's exact stderr: conflict refusal +
+  pathspec-miss (exit 1), branch-exists + ambiguous-arg (exit 128). Ceiling
+  flags/args (`-B`, `--orphan`, `-p`, `-m`, `--ours`/`--theirs`, `-t`, bare `-`,
+  any unrecognized flag) and glob/magic pathspecs throw
+  `NotImplementedError('git.checkout.<x>')` exit 128 — loud, never silent.
+  Conformance-locked: `git-fixtures.test.ts` byte-asserts switch/create/already/
+  conflict/detached/restore (both streams) against frozen real-git fixtures
+  (`packages/git/fixtures/checkout-*`); the detached test pins the canonical SHA
+  `7fdebb4…`.
 - **Installed CLIs invokable by name — PATH-style `node_modules/.bin` lookup
   (ADR-0137).** A command miss now walks up to the nearest
   `node_modules/.bin/<name>` launcher shim (resolution order: registered

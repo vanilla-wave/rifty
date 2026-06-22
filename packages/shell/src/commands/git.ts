@@ -10,7 +10,17 @@
  * The mapping was cross-checked against real git 2.50.1 (host) — see
  * {@link porcelainXY}.
  */
-import { type StatusEntry, makeGit, vfsToGitFs } from '@riftydev/git';
+import {
+  AmbiguousArgError,
+  BranchExistsError,
+  CheckoutConflictError,
+  type CheckoutResult,
+  PathspecError,
+  type StatusEntry,
+  makeGit,
+  vfsToGitFs,
+} from '@riftydev/git';
+import { NotImplementedError } from '@riftydev/io';
 import { asyncVfs } from '@riftydev/vfs';
 import type { CommandContext, ShellCommand } from '../types.ts';
 
@@ -274,6 +284,266 @@ async function doNetwork(
 }
 
 /**
+ * Static middle of git's detached-HEAD advisory (verbatim from real git 2.50.1,
+ * see packages/git/fixtures/checkout-detached.err). The two `git switch ...`
+ * lines are git's own words — reproduced verbatim for fidelity to git's text
+ * even though rifty's `switch` builtin is itself unimplemented.
+ */
+const DETACHED_ADVISORY_BODY = `You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false`;
+
+/** git's glob/magic pathspec chars — unsupported (loud ceiling, not silent). */
+function hasGlobMagic(spec: string): boolean {
+  return /[*?[]/.test(spec);
+}
+
+/**
+ * Render a `switch`-result to stderr (stdout stays empty, matching real git —
+ * every checkout message is stderr). `arg` is the verbatim ref the user typed,
+ * needed for the detached advisory's `Note: switching to '<ARG>'.` line.
+ */
+function renderSwitch(
+  res: Extract<CheckoutResult, { op: 'switch' }>,
+  arg: string,
+  ctx: CommandContext,
+): void {
+  if (res.detached) {
+    ctx.stderr.write(
+      `Note: switching to '${arg}'.\n\n${DETACHED_ADVISORY_BODY}\n\nHEAD is now at ${res.oid.slice(0, 7)} ${res.headSubject}\n`,
+    );
+    return;
+  }
+  const target = res.target ?? '';
+  if (res.created) {
+    ctx.stderr.write(`Switched to a new branch '${target}'\n`);
+  } else if (res.alreadyOn) {
+    ctx.stderr.write(`Already on '${target}'\n`);
+  } else {
+    ctx.stderr.write(`Switched to branch '${target}'\n`);
+  }
+}
+
+/**
+ * Map a typed checkout error to git's exact stderr + exit code. Caught INSIDE
+ * {@link doCheckout} so it never reaches the shell's generic handler. Returns
+ * the exit code; rethrows anything unrecognized (a real bug, not a git error).
+ */
+function renderCheckoutError(e: unknown, ctx: CommandContext): number {
+  if (e instanceof CheckoutConflictError) {
+    let msg =
+      'error: Your local changes to the following files would be overwritten by checkout:\n';
+    for (const f of e.files) msg += `\t${f}\n`;
+    msg += 'Please commit your changes or stash them before you switch branches.\nAborting\n';
+    ctx.stderr.write(msg);
+    return 1;
+  }
+  if (e instanceof PathspecError) {
+    ctx.stderr.write(`error: pathspec '${e.pathspec}' did not match any file(s) known to git\n`);
+    return 1;
+  }
+  if (e instanceof BranchExistsError) {
+    ctx.stderr.write(`fatal: a branch named '${e.branch}' already exists\n`);
+    return 128;
+  }
+  if (e instanceof AmbiguousArgError) {
+    ctx.stderr.write(`fatal: '${e.arg}' could be both a revision and a path\n`);
+    return 128;
+  }
+  if (e instanceof NotImplementedError) {
+    ctx.stderr.write(`${e.message}\n`);
+    return 128;
+  }
+  throw e; // not a git user-error — a real bug, surface it.
+}
+
+/**
+ * Parsed `git checkout` invocation: a `-b` create, a `--`-delimited restore, or
+ * raw positionals to disambiguate (ref vs path). Ceiling flags are rejected
+ * during parse (loud {@link NotImplementedError}), never silently ignored.
+ */
+type CheckoutPlan =
+  | { kind: 'create'; name: string; startPoint?: string; force: boolean }
+  | { kind: 'restore-explicit'; pathspecs: string[]; source?: string }
+  | { kind: 'positional'; positionals: string[]; force: boolean };
+
+/**
+ * Parse `args` (args[0]==='checkout'). Throws {@link NotImplementedError} for any
+ * ceiling flag/arg so the gap is loud (exit 128). `--` splits tree-ish source
+ * (before, ≤1) from pathspecs (after). `-b <name> [<start>]` → create.
+ */
+function parseCheckout(args: string[]): CheckoutPlan {
+  const rest = args.slice(1);
+  const dashDash = rest.indexOf('--');
+  const flagTokens = dashDash === -1 ? rest : rest.slice(0, dashDash);
+  const afterDashDash = dashDash === -1 ? [] : rest.slice(dashDash + 1);
+
+  let force = false;
+  let createName: string | undefined;
+  let startPoint: string | undefined;
+  const positionals: string[] = [];
+
+  for (let i = 0; i < flagTokens.length; i++) {
+    const t = flagTokens[i] as string;
+    if (t === '-b') {
+      createName = flagTokens[++i];
+      if (createName === undefined) throw new NotImplementedError('git.checkout.b-missing-name');
+      continue;
+    }
+    if (t === '-f' || t === '--force') {
+      force = true;
+      continue;
+    }
+    // Ceiling flags + the bare `-` (previous-branch) arg → loud throw.
+    if (t === '-B') throw new NotImplementedError('git.checkout.B');
+    if (t === '--orphan') throw new NotImplementedError('git.checkout.orphan');
+    if (t === '-p' || t === '--patch') throw new NotImplementedError('git.checkout.patch');
+    if (t === '-m' || t === '--merge') throw new NotImplementedError('git.checkout.merge');
+    if (t === '--ours') throw new NotImplementedError('git.checkout.ours');
+    if (t === '--theirs') throw new NotImplementedError('git.checkout.theirs');
+    if (t === '-t' || t === '--track') throw new NotImplementedError('git.checkout.track');
+    if (t === '-') throw new NotImplementedError('git.checkout.previous');
+    if (t.startsWith('-')) throw new NotImplementedError(`git.checkout.${t.replace(/^-+/, '')}`);
+    positionals.push(t);
+  }
+
+  if (createName !== undefined) {
+    startPoint = positionals[0];
+    return { kind: 'create', name: createName, startPoint, force };
+  }
+  if (dashDash !== -1) {
+    for (const p of afterDashDash) {
+      if (hasGlobMagic(p)) throw new NotImplementedError('git.checkout.glob-pathspec');
+    }
+    return {
+      kind: 'restore-explicit',
+      pathspecs: afterDashDash,
+      source: positionals[0],
+    };
+  }
+  return { kind: 'positional', positionals, force };
+}
+
+/**
+ * `git checkout` — branch-switch + file-restore over the {@link makeGit} facade,
+ * byte-exact to real git 2.50.1. ALL messages go to stderr; stdout stays empty.
+ * Ceiling flags/globs throw loud (exit 128); typed git user-errors map to git's
+ * exact stderr (caught here, never reaching the generic handler).
+ */
+async function doCheckout(g: Git, args: string[], ctx: CommandContext): Promise<number> {
+  let plan: CheckoutPlan;
+  try {
+    plan = parseCheckout(args);
+  } catch (e) {
+    return renderCheckoutError(e, ctx);
+  }
+
+  try {
+    if (plan.kind === 'create') {
+      const res = await g.checkout({
+        op: 'switch',
+        ref: plan.name,
+        create: true,
+        ...(plan.startPoint !== undefined ? { startPoint: plan.startPoint } : {}),
+        force: plan.force,
+      });
+      if (res.op === 'switch') renderSwitch(res, plan.name, ctx);
+      return 0;
+    }
+
+    if (plan.kind === 'restore-explicit') {
+      if (plan.pathspecs.length === 0) {
+        // `git checkout -- ` with no pathspecs (or `git checkout <ref> --`).
+        ctx.stderr.write('error: you must specify path(s) to restore\n');
+        return 1;
+      }
+      await g.checkout({
+        op: 'restore',
+        pathspecs: plan.pathspecs,
+        ...(plan.source !== undefined ? { source: plan.source } : {}),
+      });
+      return 0; // restore is silent
+    }
+
+    // `await` so a rejection lands in THIS try/catch (not returned unawaited).
+    return await doCheckoutPositional(g, plan.positionals, plan.force, ctx);
+  } catch (e) {
+    return renderCheckoutError(e, ctx);
+  }
+}
+
+/**
+ * `git checkout` with no `--` and no `-b`: disambiguate positionals (git's
+ * ref-vs-path rules). Zero → "must specify path(s)". One → ref/path/both/neither.
+ * Many → `<ref> <pathspec...>` restore-from-tree if the first resolves, else all
+ * are index pathspecs.
+ */
+async function doCheckoutPositional(
+  g: Git,
+  positionals: string[],
+  force: boolean,
+  ctx: CommandContext,
+): Promise<number> {
+  if (positionals.length === 0) {
+    ctx.stderr.write('error: you must specify path(s) to restore\n');
+    return 1;
+  }
+
+  if (positionals.length === 1) {
+    const x = positionals[0] as string;
+    const isRef = await g
+      .resolveRef(x)
+      .then(() => true)
+      .catch(() => false);
+    const tracked = await g.listFiles();
+    const isPath = tracked.some((p) => p === x || p.startsWith(`${x}/`));
+    if (isRef && isPath) throw new AmbiguousArgError(x);
+    if (isRef) {
+      const res = await g.checkout({ op: 'switch', ref: x, force });
+      if (res.op === 'switch') renderSwitch(res, x, ctx);
+      return 0;
+    }
+    if (isPath) {
+      await g.checkout({ op: 'restore', pathspecs: [x] });
+      return 0;
+    }
+    // Neither a ref nor a tracked path — glob-magic is a ceiling, else pathspec miss.
+    if (hasGlobMagic(x)) throw new NotImplementedError('git.checkout.glob-pathspec');
+    throw new PathspecError(x);
+  }
+
+  // Multiple positionals: `<tree-ish> <pathspec...>` if the first resolves.
+  const first = positionals[0] as string;
+  const restSpecs = positionals.slice(1);
+  for (const p of restSpecs) {
+    if (hasGlobMagic(p)) throw new NotImplementedError('git.checkout.glob-pathspec');
+  }
+  const firstIsRef = await g
+    .resolveRef(first)
+    .then(() => true)
+    .catch(() => false);
+  if (firstIsRef) {
+    await g.checkout({ op: 'restore', pathspecs: restSpecs, source: first });
+    return 0;
+  }
+  // First isn't a ref → treat ALL positionals as index pathspecs.
+  if (hasGlobMagic(first)) throw new NotImplementedError('git.checkout.glob-pathspec');
+  await g.checkout({ op: 'restore', pathspecs: positionals });
+  return 0;
+}
+
+/**
  * `git <subcommand> ...` — version control over `@riftydev/git` (isomorphic-git)
  * on the ambient VFS. Local verbs (init/status/add/commit/log/diff/branch) run;
  * network verbs (clone/fetch/pull/push) drive smart-HTTP and surface any failure
@@ -352,6 +622,8 @@ export const git: ShellCommand = async (args, ctx) => {
       return doDiff(g, ctx);
     case 'branch':
       return doBranch(g, ctx);
+    case 'checkout':
+      return doCheckout(g, args, ctx);
     case 'clone':
     case 'fetch':
     case 'pull':

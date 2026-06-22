@@ -64,12 +64,26 @@ async function rm(path: string): Promise<void> {
   await vfs.rm(path);
 }
 
+async function readFile(path: string): Promise<string> {
+  const vfs = asyncVfs();
+  if (!vfs) throw new Error('no async vfs');
+  const buf = await vfs.readFile(path);
+  return typeof buf === 'string' ? buf : new TextDecoder().decode(buf);
+}
+
 /** Run a `git` subcommand against REPO, return captured stdout, assert exit 0. */
 async function runGit(args: string[]): Promise<string> {
   const { ctx, out } = makeCtx({ cwd: REPO, env: ENV });
   const code = await git(args, ctx);
   expect(code).toBe(0);
   return out();
+}
+
+/** Run a `git` subcommand, return BOTH streams + exit (no exit assertion). */
+async function runGitFull(args: string[]): Promise<{ out: string; err: string; code: number }> {
+  const { ctx, out, err } = makeCtx({ cwd: REPO, env: ENV });
+  const code = await git(args, ctx);
+  return { out: out(), err: err(), code };
 }
 
 async function initRepo(): Promise<void> {
@@ -130,3 +144,86 @@ it('log --oneline: 2 commits matches real git byte-for-byte (canonical SHAs)', a
   await runGit(['commit', '-m', 'second']);
   expect(await runGit(['log', '--oneline'])).toBe(fixtureBody('log-oneline.txt'));
 });
+
+/**
+ * Build the SAME repo real git used to capture the checkout fixtures, so commit
+ * SHAs are bit-identical (the detached fixture pins 7fdebb4...). main holds
+ * a.txt='one'; `other` adds a.txt='two' ('second' commit); HEAD back on main.
+ * If the canonical SHA drifts the detached test fails loudly — that's correct.
+ */
+async function twoBranchRepo(): Promise<void> {
+  await initRepo();
+  await writeFile(`${REPO}/a.txt`, 'one\n');
+  await runGit(['add', 'a.txt']);
+  await runGit(['commit', '-m', 'first']);
+  await runGit(['checkout', '-b', 'other']);
+  await writeFile(`${REPO}/a.txt`, 'two\n');
+  await runGit(['add', 'a.txt']);
+  await runGit(['commit', '-m', 'second']);
+  await runGit(['checkout', 'main']);
+}
+
+it('checkout <branch>: switch to existing branch — byte-exact stderr (stdout empty)', async () => {
+  await twoBranchRepo();
+  const { out, err, code } = await runGitFull(['checkout', 'other']);
+  expect(code).toBe(0);
+  expect(out).toBe(fixtureBody('checkout-switch.out'));
+  expect(err).toBe(fixtureBody('checkout-switch.err'));
+});
+
+it('checkout -b <name>: create + switch — byte-exact stderr (stdout empty)', async () => {
+  await twoBranchRepo();
+  const { out, err, code } = await runGitFull(['checkout', '-b', 'feature']);
+  expect(code).toBe(0);
+  expect(out).toBe(fixtureBody('checkout-create.out'));
+  expect(err).toBe(fixtureBody('checkout-create.err'));
+});
+
+it('checkout <current>: already on branch — byte-exact stderr (stdout empty)', async () => {
+  await twoBranchRepo();
+  const { out, err, code } = await runGitFull(['checkout', 'main']);
+  expect(code).toBe(0);
+  expect(out).toBe(fixtureBody('checkout-already.out'));
+  expect(err).toBe(fixtureBody('checkout-already.err'));
+});
+
+it('checkout <branch>: dirty-tree conflict refusal — byte-exact stderr, exit 1', async () => {
+  await twoBranchRepo();
+  await writeFile(`${REPO}/a.txt`, 'dirty\n');
+  const { out, err, code } = await runGitFull(['checkout', 'other']);
+  expect(code).toBe(1);
+  expect(out).toBe(fixtureBody('checkout-conflict.out'));
+  expect(err).toBe(fixtureBody('checkout-conflict.err'));
+});
+
+it('checkout <full-sha>: detached HEAD advisory — byte-exact (canonical SHA 7fdebb4...)', async () => {
+  await twoBranchRepo();
+  // other's tip = the 'second' commit; resolve its FULL sha via the facade-backed CLI.
+  const { ctx } = makeCtx({ cwd: REPO, env: ENV });
+  void ctx; // resolve via the public git package facade through the shell's makeGit path
+  const sha = await otherTipSha();
+  const { out, err, code } = await runGitFull(['checkout', sha]);
+  expect(code).toBe(0);
+  expect(out).toBe(fixtureBody('checkout-detached.out'));
+  expect(err).toBe(fixtureBody('checkout-detached.err'));
+});
+
+it('checkout -- <path>: restore from index — silent (both streams empty), reverts content', async () => {
+  await twoBranchRepo();
+  // On main a.txt='one'; dirty it, then restore from index → back to 'one'.
+  await writeFile(`${REPO}/a.txt`, 'dirty\n');
+  const { out, err, code } = await runGitFull(['checkout', '--', 'a.txt']);
+  expect(code).toBe(0);
+  expect(out).toBe(fixtureBody('checkout-restore.out'));
+  expect(err).toBe(fixtureBody('checkout-restore.err'));
+  expect(await readFile(`${REPO}/a.txt`)).toBe('one\n');
+});
+
+/** Full sha of `other`'s tip (the 'second' commit) via the git facade. */
+async function otherTipSha(): Promise<string> {
+  const { makeGit, vfsToGitFs } = await import('@riftydev/git');
+  const vfs = asyncVfs();
+  if (!vfs) throw new Error('no async vfs');
+  const g = makeGit({ fs: vfsToGitFs(vfs), dir: REPO });
+  return g.resolveRef('other');
+}
