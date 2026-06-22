@@ -40,9 +40,13 @@ export interface CommitArgs {
   committer?: GitIdentity;
 }
 
+/** A pathspec `spec` matches `path` exactly or as a directory prefix (`<spec>/…`). */
+const pathspecMatch = (path: string, spec: string): boolean =>
+  path === spec || path.startsWith(`${spec}/`);
+
 /** First pathspec matching no path in `files` (for the PathspecError message). */
 function firstUnmatched(specs: string[], files: string[]): string {
-  return specs.find((s) => !files.some((p) => p === s || p.startsWith(`${s}/`))) ?? specs[0] ?? '';
+  return specs.find((s) => !files.some((p) => pathspecMatch(p, s))) ?? specs[0] ?? '';
 }
 
 /** The facade surface returned by {@link makeGit}. */
@@ -95,9 +99,9 @@ export function makeGit(opts: MakeGitOptions): Git {
   /** Worktree absolute path for a repo-relative `path` (single-slash join). */
   const abs = (path: string): string => `${dir}/${path}`.replace(/\/+/g, '/');
 
-  /** A pathspec matches `path` exactly or as a directory prefix (`<spec>/…`). */
+  /** `path` matches any of `specs` (exact or directory-prefix). */
   const specMatches = (path: string, specs: string[]): boolean =>
-    specs.some((s) => path === s || path.startsWith(`${s}/`));
+    specs.some((s) => pathspecMatch(path, s));
 
   async function switchRef(
     input: Extract<CheckoutInput, { op: 'switch' }>,
@@ -124,13 +128,11 @@ export function makeGit(opts: MakeGitOptions): Git {
       alreadyOn = ref === (await curBranch());
       try {
         await git.checkout({ fs, dir, ref, force });
-      } catch (err) {
-        if ((err as { name?: string })?.name === 'CheckoutConflictError') {
-          throw new CheckoutConflictError(
-            (err as { data?: { filepaths?: string[] } }).data?.filepaths ?? [],
-          );
+      } catch (e) {
+        if (e instanceof git.Errors.CheckoutConflictError) {
+          throw new CheckoutConflictError(e.data.filepaths);
         }
-        throw err;
+        throw e;
       }
     }
 
@@ -211,7 +213,7 @@ export function makeGit(opts: MakeGitOptions): Git {
       );
     },
     currentBranch() {
-      return git.currentBranch({ fs, dir }).then((b) => b || undefined);
+      return curBranch();
     },
     listBranches() {
       return git.listBranches({ fs, dir });

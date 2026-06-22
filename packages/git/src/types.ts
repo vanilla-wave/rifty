@@ -78,7 +78,7 @@ export interface PushArgs {
 /** Discriminated input for {@link Git.checkout}. `restore.source` undefined = from INDEX. */
 export type CheckoutInput =
   | { op: 'switch'; ref: string; create?: boolean; startPoint?: string; force?: boolean }
-  | { op: 'restore'; pathspecs: string[]; source?: string; force?: boolean };
+  | { op: 'restore'; pathspecs: string[]; source?: string };
 
 /** Structured result of {@link Git.checkout} — the shell renders byte-exact git text from this. */
 export type CheckoutResult =
