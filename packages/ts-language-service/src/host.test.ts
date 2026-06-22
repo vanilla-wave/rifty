@@ -60,4 +60,26 @@ describe('createVfsLanguageServiceHost', () => {
 
     expect(service.getSemanticDiagnostics('/proj/a.ts')).toHaveLength(0);
   });
+
+  it('does not shadow a project file whose basename collides with a std-lib name', async () => {
+    const { fsSync } = createMemoryFs();
+    // A project file named like a std lib must be served from the VFS, never
+    // from the lib map — lib serving is scoped to the synthetic /ts-lib/ dir.
+    const projLib = '/proj/lib.dom.d.ts';
+    writeFile(fsSync, projLib, 'export const RIFTY_PROJECT_MARKER = 1;\n');
+    const libMap = await loadLibDts();
+
+    const host = createVfsLanguageServiceHost({
+      fsSync,
+      projectRoot: '/proj',
+      compilerOptions: ts.getDefaultCompilerOptions(),
+      fileNames: [projLib],
+      libMap,
+      overlay: createDocumentOverlay(),
+    });
+
+    expect(host.readFile?.(projLib)).toContain('RIFTY_PROJECT_MARKER');
+    // The real std lib is still served under the synthetic dir.
+    expect(host.readFile?.('/ts-lib/lib.es5.d.ts')).toContain('interface Array<T>');
+  });
 });
