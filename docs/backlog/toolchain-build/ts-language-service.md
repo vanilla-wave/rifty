@@ -5,7 +5,7 @@ title: In-browser TS language service over VFS (diagnostics/hover/defs)
 created: 2026-06-13
 why: M12 AI-IDE wants an agent `typecheck` tool + real editor squiggles; needs TS SEMANTIC diagnostics in-browser, distinct from the existing esbuild type-STRIP transform
 user_story: As a rifty maintainer wiring the M12 agent IDE, I want `getSemanticDiagnostics`/`getQuickInfo`/`getDefinitionAtPosition` over the VFS for a `typecheck`/`hover`/`goto` tool and editor squiggles, but today rifty only type-STRIPS via esbuild.wasm — no `typescript` Language Service, so the agent edits blind and there are no real type errors
-sources: [M12, docs/research/open-webcontainers-alternative-2026-06.md, docs/backlog/playground/problems-tab-bottom-panel.md, docs/backlog/runtime-js/ts-strip-transform-cache.md]
+sources: [M12, docs/research/open-webcontainers-alternative-2026-06.md, docs/backlog/runtime-js/ts-strip-transform-cache.md]
 ---
 
 ## Context
@@ -15,8 +15,10 @@ errors, hover types, go-to-def. M12's agent edits code blind without it; the edi
 has no real squiggles. `typescript` is pure JS and its Language Service runs in a
 Worker (Monaco / vscode.dev / `@typescript/vfs` precedent), host reading the rifty
 VFS. One service feeds BOTH an agent `typecheck`/`hover`/`goto` tool AND the
-`playground/problems-tab-bottom-panel`. AI-agnostic — a reusable rifty capability,
-not an agent concern.
+playground editor diagnostics + Problems tab (DELIVERED — ADR-0166 task 1.9, see
+apps/playground/CHANGELOG.md; the originally-cited
+`playground/problems-tab-bottom-panel` backlog item shipped with it). AI-agnostic
+— a reusable rifty capability, not an agent concern.
 
 ## Options or Next
 

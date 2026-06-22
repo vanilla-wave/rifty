@@ -6,7 +6,7 @@ import {
   type TerminalHistoryRecord,
   addTerminalHistoryRecord,
 } from '@riftydev/terminal/history';
-import type { Diagnostic } from '@riftydev/ts-language-service';
+import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
 import { normalizePath } from '@riftydev/vfs';
 import { Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import {

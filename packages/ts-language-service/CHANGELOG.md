@@ -4,6 +4,29 @@
 
 ### Added
 
+- **Light browser-host subpaths `./protocol` + `./lsp-types`** (ADR-0166 task 1.9).
+  The playground page + owner relay need the `rifty:ts-lsp` frame guards
+  (`isTs{Request,Response}Message`, `TS_IPC_TYPE`, the request/response types) and
+  the LSP shapes (`Diagnostic`, `DiagnosticSeverity`) WITHOUT pulling the whole TS
+  language service — the `.` index re-exports `service.ts` → `typescript`, so
+  importing it into a page/owner bundle would drag the entire compiler in. The two
+  subpaths are pure types/constants (zero `typescript` import), so the editor +
+  relay stay lean; only the LS worker bundle carries the engine.
+- **`./vendor/lib-bundle.json` asset export** (ADR-0166 task 1.9). The browser
+  host fetches the vendored TS std-lib bundle by URL (`getTsLibUrl()`); exposing it
+  as a published asset lets the playground LS worker import it `?url` and seed
+  `__RIFTY_TS_LIB_URL`. An asset, not a JS entry (no tsup bundling / `.d.ts`).
+
+### Fixed
+
+- **`isNode()` no longer mistakes a rifty worker for real Node** (ADR-0166 task
+  1.9). rifty's in-worker `process` shim impersonates Node (`process.versions.node`
+  is set — see the `process-versions-node-honesty` backlog), so the lib-d.ts loader
+  wrongly took the Node path (`import('node:fs')` → Vite's empty browser stub →
+  crash) in a kernel-spawned LS worker. Gate on the ABSENCE of a browser/worker
+  realm too (`window`/`WorkerGlobalScope`/`importScripts`), routing the browser
+  worker to the vendored-bundle fetch. Node (vitest/parity) is unaffected.
+
 - Worker hosting (ADR-0166 task 1.8): host the proven engine in a kernel-spawned
   `serve:true` worker that reads the authoritative VFS over the EXISTING `fs.*`
   sync-RPC seam (ADR-0150) — one shared instance for both consumers (the page

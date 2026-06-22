@@ -29,9 +29,12 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./worker/entry": "./src/worker/entry.ts"
+    "./protocol": "./src/worker/protocol.ts",
+    "./lsp-types": "./src/lsp-types.ts",
+    "./worker/entry": "./src/worker/entry.ts",
+    "./vendor/lib-bundle.json": "./vendor/lib-bundle.json"
   },
-  "files": ["dist", "CHANGELOG.md"],
+  "files": ["dist", "vendor", "CHANGELOG.md"],
   "publishConfig": {
     "access": "public",
     "main": "./dist/index.js",
@@ -42,10 +45,19 @@
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
       },
+      "./protocol": {
+        "types": "./dist/protocol.d.ts",
+        "import": "./dist/protocol.js"
+      },
+      "./lsp-types": {
+        "types": "./dist/lsp-types.d.ts",
+        "import": "./dist/lsp-types.js"
+      },
       "./worker/entry": {
         "types": "./dist/worker/entry.d.ts",
         "import": "./dist/worker/entry.js"
-      }
+      },
+      "./vendor/lib-bundle.json": "./vendor/lib-bundle.json"
     }
   },
   "scripts": {

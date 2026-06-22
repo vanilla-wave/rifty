@@ -58,9 +58,30 @@ export function getTsLibUrl(): string {
 
 let libsPromise: Promise<ReadonlyMap<string, string>> | undefined;
 
-/** True when running under a real Node.js (vitest/parity), not the browser. */
+/**
+ * True when running under a REAL Node.js (vitest/parity), not the browser.
+ *
+ * `process.versions.node` alone is NOT enough: rifty's in-worker `process` shim
+ * impersonates Node (`versions.node` is set — see runtime-js process-identity /
+ * the `process-versions-node-honesty` backlog), so a kernel-spawned LS worker
+ * would wrongly take the Node lib-load path (`import('node:fs')` → Vite's empty
+ * browser stub → crash). Gate on the ABSENCE of a browser/worker realm too: real
+ * Node has no `window`, no `WorkerGlobalScope`, and no `importScripts`. The LS
+ * runs in a DedicatedWorker in the browser, which has `importScripts` — so this
+ * correctly routes it to the vendored-bundle fetch (ADR-0166 P1.9).
+ */
 function isNode(): boolean {
+  const g = globalThis as {
+    window?: unknown;
+    WorkerGlobalScope?: unknown;
+    importScripts?: unknown;
+  };
+  const isBrowserRealm =
+    typeof g.window !== 'undefined' ||
+    typeof g.WorkerGlobalScope !== 'undefined' ||
+    typeof g.importScripts === 'function';
   return (
+    !isBrowserRealm &&
     typeof process !== 'undefined' &&
     typeof process.versions === 'object' &&
     typeof process.versions.node === 'string'
