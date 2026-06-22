@@ -89,6 +89,16 @@ it('unknown subcommand exits 1 and reports it is not a git command', async () =>
   expect(err()).toContain('not a git command');
 });
 
+it('a known-but-unimplemented git subcommand throws loud (exit 128, not implemented)', async () => {
+  await seedRepoDir();
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  // `rebase` is a real git command rifty does not implement (browser subset) — it
+  // must say "not implemented" (loud ceiling), NOT "not a git command" (typo).
+  expect(await git(['rebase'], ctx)).toBe(128);
+  expect(err()).toContain('not implemented in rifty');
+  expect(err()).not.toContain('not a git command');
+});
+
 it('clone over an unsupported transport surfaces NotImplementedError (exit 128)', async () => {
   await seedRepoDir();
   const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });

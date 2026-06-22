@@ -280,6 +280,50 @@ async function doNetwork(
  * (unsupported transport, CORS wall, network error) as exit 128. Unknown/missing
  * subcommand → exit 1.
  */
+/**
+ * Real git subcommands rifty does NOT implement (browser git subset, ADR-0167).
+ * These throw a directed "not implemented" (exit 128) — never silently absent and
+ * never mislabeled as a typo. A subcommand outside both this set and the dispatch
+ * below is a genuine "not a git command" (exit 1, matching real git's wording).
+ */
+const UNIMPLEMENTED_SUBCOMMANDS = new Set([
+  'rebase',
+  'merge',
+  'reset',
+  'revert',
+  'stash',
+  'cherry-pick',
+  'tag',
+  'remote',
+  'config',
+  'show',
+  'reflog',
+  'bisect',
+  'blame',
+  'submodule',
+  'worktree',
+  'switch',
+  'restore',
+  'clean',
+  'rm',
+  'mv',
+  'gc',
+  'prune',
+  'repack',
+  'fsck',
+  'apply',
+  'am',
+  'format-patch',
+  'notes',
+  'describe',
+  'shortlog',
+  'mergetool',
+  'sparse-checkout',
+  'archive',
+  'bundle',
+  'grep',
+]);
+
 export const git: ShellCommand = async (args, ctx) => {
   if (ctx.signal?.aborted) return 130;
 
@@ -314,6 +358,12 @@ export const git: ShellCommand = async (args, ctx) => {
     case 'push':
       return doNetwork(g, sub, args, ctx);
     default:
+      if (sub && UNIMPLEMENTED_SUBCOMMANDS.has(sub)) {
+        ctx.stderr.write(
+          `git: '${sub}' is not implemented in rifty (browser git subset — see docs/public/compat/git.md)\n`,
+        );
+        return 128;
+      }
       ctx.stderr.write(`git: '${sub ?? ''}' is not a git command\n`);
       return 1;
   }
