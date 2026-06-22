@@ -204,10 +204,14 @@ function main() {
     {
       const { dir } = twoBranchRepo();
       tmps.push(dir);
-      writeCheckout(version, 'checkout-switch', 'git checkout other', 'switch to existing branch', dir, [
-        'checkout',
-        'other',
-      ]);
+      writeCheckout(
+        version,
+        'checkout-switch',
+        'git checkout other',
+        'switch to existing branch',
+        dir,
+        ['checkout', 'other'],
+      );
     }
     {
       const { dir } = twoBranchRepo();
@@ -230,28 +234,39 @@ function main() {
       const { dir } = twoBranchRepo();
       tmps.push(dir);
       writeFileSync(join(dir, 'a.txt'), 'dirty\n'); // differs from `other` → conflict
-      writeCheckout(version, 'checkout-conflict', 'git checkout other', 'dirty-tree conflict refusal', dir, [
-        'checkout',
-        'other',
-      ]);
+      writeCheckout(
+        version,
+        'checkout-conflict',
+        'git checkout other',
+        'dirty-tree conflict refusal',
+        dir,
+        ['checkout', 'other'],
+      );
     }
     {
       const { dir, headOther } = twoBranchRepo();
       tmps.push(dir);
-      writeCheckout(version, 'checkout-detached', `git checkout ${headOther}`, 'detached HEAD', dir, [
-        'checkout',
-        headOther,
-      ]);
+      writeCheckout(
+        version,
+        'checkout-detached',
+        `git checkout ${headOther}`,
+        'detached HEAD',
+        dir,
+        ['checkout', headOther],
+      );
     }
     {
       const { dir } = twoBranchRepo();
       tmps.push(dir);
       writeFileSync(join(dir, 'a.txt'), 'dirty\n'); // restore reverts to index (== HEAD here)
-      writeCheckout(version, 'checkout-restore', 'git checkout -- a.txt', 'restore from index', dir, [
-        'checkout',
-        '--',
-        'a.txt',
-      ]);
+      writeCheckout(
+        version,
+        'checkout-restore',
+        'git checkout -- a.txt',
+        'restore from index',
+        dir,
+        ['checkout', '--', 'a.txt'],
+      );
     }
   } finally {
     for (const dir of tmps) rmSync(dir, { recursive: true, force: true });
