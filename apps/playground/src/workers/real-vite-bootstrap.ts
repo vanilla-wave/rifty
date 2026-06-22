@@ -23,9 +23,17 @@
  * paths (A-026's whole point is the page realm stops paying for them).
  */
 
-import { getKernelDispatcher, readKernelProcessSpec, setKernelWorkerUrl } from '@riftydev/kernel';
+import {
+  type SpawnWorkerSpec,
+  type WorkerProcessHandle,
+  getKernelDispatcher,
+  globalProcessManager,
+  readKernelProcessSpec,
+  setKernelWorkerUrl,
+} from '@riftydev/kernel';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
+import { isTsRequestMessage, isTsResponseMessage } from '@riftydev/ts-language-service';
 import { installRuntimeJsFsHandlers } from '@riftydev/runtime-js';
 import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
@@ -71,6 +79,7 @@ import {
 } from './worker-runtime-globals.ts';
 
 const enc = new TextEncoder();
+const dec = new TextDecoder();
 
 registerNetBuiltins();
 registerSqliteBuiltin();
@@ -79,6 +88,16 @@ function log(line: string): void {
   // Kernel pre-entry hook wired process.stdout.write -> stdout MessagePort;
   // page-side WorkerProcessHandle.stdout() emits each chunk, realVite.ts -> onLog.
   globalThis.process.stdout.write(line);
+}
+
+/** Decode an LS-child stdout/stderr chunk for the owner log (tolerant, like realVite). */
+function decodeLsChunk(chunk: unknown): string {
+  if (chunk instanceof Uint8Array) return dec.decode(chunk);
+  if (chunk instanceof ArrayBuffer) return dec.decode(new Uint8Array(chunk));
+  if (ArrayBuffer.isView(chunk)) {
+    return dec.decode(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+  }
+  return typeof chunk === 'string' ? chunk : '';
 }
 
 interface VfsWriteIpcMessage {
@@ -147,6 +166,8 @@ async function bootShellOwner(opts: {
   readonly nodeEntryWorkerUrl: string;
   /** dev-server child bootstrap worker URL — the supervised serve:true child the owner spawns (ADR-0150 P6b). */
   readonly devServerWorkerUrl: string;
+  /** ts-lsp child bootstrap worker URL — the supervised serve:true LS child the owner spawns (ADR-0166 P1.9a). */
+  readonly tsLspWorkerUrl: string;
 }): Promise<void> {
   const { cfg, port, kernelIpc, publishSnapshot, spec, slug, fromScratch } = opts;
 
@@ -366,6 +387,53 @@ async function bootShellOwner(opts: {
     },
   });
 
+  // ADR-0166 P1.9a — TS language-service child + page↔LS relay. There is no
+  // direct page→grandchild channel, so page↔LS `rifty:ts-lsp` frames flow:
+  //   page →(page↔owner fork-IPC)→ owner → lsChild.send →(owner↔LS fork-IPC)→ LS
+  //   LS →process.send→ owner → kernelIpc.send →(owner↔page fork-IPC)→ page
+  // The LS child is spawned lazily on the FIRST inbound request (the page only
+  // talks to it once the editor opens a file), reading the owner store over fs.*
+  // sync-RPC (RIFTY_REMOTE_FS=1) — exactly the dev-server child's spawn shape.
+  // It is serve:true (a long-lived service); the owner stays a free supervisor.
+  let lsChild: WorkerProcessHandle | null = null;
+  function spawnTsLspChild(): WorkerProcessHandle {
+    const tsSpec: SpawnWorkerSpec = {
+      entry: { kind: 'url', url: opts.tsLspWorkerUrl },
+      argv: ['rifty', 'ts-lsp'],
+      env: {
+        RIFTY_REMOTE_FS: '1',
+        RIFTY_RFV_ROOT: cfg.root,
+      },
+      cwd: cfg.root,
+      serve: true,
+    };
+    const h = globalProcessManager.spawnWorker('ts-lsp', tsSpec, 1);
+    if (h.kind !== 'worker') {
+      throw new Error(`ts-lsp child: expected worker handle, got ${h.kind}`);
+    }
+    // LS child → owner → page: forward only RESPONSE envelopes back to the page.
+    h.on('message', (response: unknown) => {
+      if (isTsResponseMessage(response)) kernelIpc.send?.(response);
+    });
+    // A crashed LS child must not leave the page hanging: drop the handle so the
+    // next request respawns. In-flight page requests reject on their own timeout
+    // (the page LS client arms one) — never a silent hang (Fidelity: loud gaps).
+    h.on('exit', (code?: unknown) => {
+      log(`[shell-owner/worker] ts-lsp child exited (code ${String(code)})\n`);
+      if (lsChild === h) lsChild = null;
+    });
+    // Surface LS-child stdout/stderr into the owner log (e2e debugging: a worker
+    // console is not captured, so the package routes its logs through stdout).
+    h.stdout().on('data', (chunk: unknown) => log(decodeLsChunk(chunk)));
+    h.stderr().on('data', (chunk: unknown) => log(decodeLsChunk(chunk)));
+    return h;
+  }
+  function relayTsLspRequest(message: unknown): void {
+    if (lsChild === null) lsChild = spawnTsLspChild();
+    // Pass the envelope through untouched (id preserved end-to-end).
+    lsChild.send(message);
+  }
+
   kernelIpc.onMessage?.((message) => {
     if (isPtyIpcMessage(message)) {
       // Only page→owner frames are inbound here; ignore a stray owner→page echo.
@@ -374,6 +442,12 @@ async function bootShellOwner(opts: {
     }
     if (isVfsWriteIpcMessage(message)) {
       applyVfsWriteFrame(message.frame, { onWrite: onVfsWrite });
+      return;
+    }
+    // ADR-0166 P1.9a: a page→LS request envelope — relay to the LS child (lazy
+    // spawn on first frame). Only REQUEST envelopes are inbound from the page.
+    if (isTsRequestMessage(message)) {
+      relayTsLspRequest(message);
     }
   });
 
@@ -475,9 +549,11 @@ async function bootstrap(): Promise<void> {
   const kernelWorkerUrl = env.RIFTY_KERNEL_WORKER_URL;
   const nodeEntryWorkerUrl = env.RIFTY_NODE_ENTRY_WORKER_URL;
   const devServerWorkerUrl = env.RIFTY_DEV_SERVER_WORKER_URL;
-  if (!kernelWorkerUrl || !nodeEntryWorkerUrl || !devServerWorkerUrl) {
+  // ADR-0166 P1.9a: child entry for the TS language service (serve:true grandchild).
+  const tsLspWorkerUrl = env.RIFTY_TS_LSP_WORKER_URL;
+  if (!kernelWorkerUrl || !nodeEntryWorkerUrl || !devServerWorkerUrl || !tsLspWorkerUrl) {
     throw new Error(
-      'workspace-owner: missing RIFTY_KERNEL_WORKER_URL / RIFTY_NODE_ENTRY_WORKER_URL / RIFTY_DEV_SERVER_WORKER_URL — cannot spawn child CLIs or the dev server',
+      'workspace-owner: missing RIFTY_KERNEL_WORKER_URL / RIFTY_NODE_ENTRY_WORKER_URL / RIFTY_DEV_SERVER_WORKER_URL / RIFTY_TS_LSP_WORKER_URL — cannot spawn child CLIs, the dev server, or the language service',
     );
   }
   setKernelWorkerUrl(kernelWorkerUrl);
@@ -498,6 +574,7 @@ async function bootstrap(): Promise<void> {
     fromScratch,
     nodeEntryWorkerUrl,
     devServerWorkerUrl,
+    tsLspWorkerUrl,
   });
 }
 

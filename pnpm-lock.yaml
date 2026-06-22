@@ -77,6 +77,9 @@ importers:
       '@riftydev/terminal':
         specifier: workspace:*
         version: link:../../packages/terminal
+      '@riftydev/ts-language-service':
+        specifier: workspace:*
+        version: link:../../packages/ts-language-service
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../../packages/vfs
