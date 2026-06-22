@@ -33,11 +33,13 @@ import type {
   StatusEntry,
 } from './types.ts';
 
-/** Args for {@link Git.commit} — committer defaults to author. */
+/** Args for {@link Git.commit} — committer defaults to author; `amend` replaces HEAD. */
 export interface CommitArgs {
   message: string;
   author: GitIdentity;
   committer?: GitIdentity;
+  /** Replace HEAD instead of adding a child (parent preserved). For `commit --amend`. */
+  amend?: boolean;
 }
 
 /** A pathspec `spec` matches `path` exactly or as a directory prefix (`<spec>/…`). */
@@ -57,6 +59,12 @@ export interface Git {
   status(): Promise<StatusEntry[]>;
   commit(args: CommitArgs): Promise<string>;
   log(): Promise<LogEntry[]>;
+  /** Read a local git config value (`getConfig`), undefined if unset. */
+  getConfig(path: string): Promise<string | undefined>;
+  /** Write a local git config value into `.git/config`. */
+  setConfig(path: string, value: string): Promise<void>;
+  /** Unstage one file (index stage 2→0), HEAD untouched. For `restore --staged`/`reset <file>`. */
+  unstage(filepath: string): Promise<void>;
   currentBranch(): Promise<string | undefined>;
   listBranches(): Promise<string[]>;
   resolveRef(ref: string): Promise<string>;
@@ -216,8 +224,24 @@ export function makeGit(opts: MakeGitOptions): Git {
         }),
       );
     },
-    async commit({ message, author, committer }) {
-      return git.commit({ fs, dir, message, author, committer: committer ?? author });
+    async commit({ message, author, committer, amend }) {
+      return git.commit({
+        fs,
+        dir,
+        message,
+        author,
+        committer: committer ?? author,
+        ...(amend ? { amend } : {}),
+      });
+    },
+    getConfig(path) {
+      return git.getConfig({ fs, dir, path });
+    },
+    async setConfig(path, value) {
+      await git.setConfig({ fs, dir, path, value });
+    },
+    async unstage(filepath) {
+      await git.resetIndex({ fs, dir, filepath });
     },
     async log() {
       const entries = await git.log({ fs, dir });
