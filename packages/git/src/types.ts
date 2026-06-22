@@ -52,17 +52,19 @@ export interface CloneArgs {
   noCheckout?: boolean;
 }
 
-/** Args for `fetch()` — `url` optional (falls back to the remote's config). */
+/** Args for `fetch()` — `url`/`remote` optional (fall back to the remote's config). */
 export interface FetchArgs {
   url?: string;
+  remote?: string;
   ref?: string;
   singleBranch?: boolean;
   depth?: number;
 }
 
-/** Args for `pull()` — `url` optional (falls back to the remote's config). */
+/** Args for `pull()` — `url`/`remote` optional (fall back to the remote's config). */
 export interface PullArgs {
   url?: string;
+  remote?: string;
   ref?: string;
   singleBranch?: boolean;
 }
@@ -112,4 +114,6 @@ export interface DiffEntry {
   filepath: string;
   change: DiffChange;
   hunks: DiffHunk[];
+  /** Binary content — rendered as git's `Binary files … differ` (no text hunks). */
+  binary?: boolean;
 }

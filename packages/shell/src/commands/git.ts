@@ -10,7 +10,13 @@
  * The mapping was cross-checked against real git 2.50.1 (host) — see
  * {@link porcelainXY}.
  */
-import { type StatusEntry, assertSupportedTransport, makeGit, vfsToGitFs } from '@riftydev/git';
+import {
+  type StatusEntry,
+  assertSupportedTransport,
+  makeGit,
+  pathspecMatch,
+  vfsToGitFs,
+} from '@riftydev/git';
 import { NotImplementedError } from '@riftydev/io';
 import { asyncVfs, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import type { CommandContext, ShellCommand } from '../types.ts';
@@ -167,11 +173,22 @@ async function stageTrackedChanges(g: Git): Promise<void> {
   }
 }
 
-/** Parsed `git commit`. `message === null` = none supplied. */
+/** Parsed `git commit`. `messages` is one entry per `-m` (git joins them as paragraphs). */
 interface CommitPlan {
   amend: boolean;
   all: boolean;
-  message: string | null;
+  messages: string[];
+}
+
+/**
+ * Join repeated `-m` values the way git does: each is a paragraph, blank-line
+ * separated, and empty values are dropped. Returns `null` if no `-m` was given,
+ * `''` if every `-m` was empty (→ "Aborting commit due to empty commit message.").
+ */
+function joinCommitMessages(messages: string[]): string | null {
+  if (messages.length === 0) return null;
+  const nonEmpty = messages.filter((m) => m !== '');
+  return nonEmpty.length === 0 ? '' : nonEmpty.join('\n\n');
 }
 
 /**
@@ -209,7 +226,7 @@ function parseCommit(args: string[]): CommitPlan {
   const rest = expandShortFlags(args.slice(1));
   let amend = false;
   let all = false;
-  let message: string | null = null;
+  const messages: string[] = [];
   for (let i = 0; i < rest.length; i++) {
     const t = rest[i] as string;
     if (t === '--amend') {
@@ -217,9 +234,9 @@ function parseCommit(args: string[]): CommitPlan {
     } else if (t === '-a' || t === '--all') {
       all = true;
     } else if (t === '-m' || t === '--message') {
-      message = rest[++i] ?? null;
+      messages.push(rest[++i] ?? '');
     } else if (t.startsWith('--message=')) {
-      message = t.slice('--message='.length);
+      messages.push(t.slice('--message='.length));
     } else if (t.startsWith('-')) {
       throw new NotImplementedError(`git.commit.${t.replace(/^-+/, '')}`);
     } else {
@@ -229,7 +246,7 @@ function parseCommit(args: string[]): CommitPlan {
       );
     }
   }
-  return { amend, all, message };
+  return { amend, all, messages };
 }
 
 /**
@@ -262,14 +279,24 @@ async function nothingToCommit(g: Git): Promise<string | null> {
 
 async function doStatus(g: Git, args: string[], ctx: CommandContext): Promise<number> {
   const porcelain = args.includes('--porcelain') || args.includes('-s');
-  const entries = await g.status();
-  if (porcelain) {
-    ctx.stdout.write(renderPorcelain(entries));
-  } else {
-    const branch = await g.currentBranch();
-    ctx.stdout.write(renderStatusSummary(branch, entries));
+  try {
+    const entries = await g.status();
+    if (porcelain) {
+      ctx.stdout.write(renderPorcelain(entries));
+    } else {
+      const branch = await g.currentBranch();
+      ctx.stdout.write(renderStatusSummary(branch, entries));
+    }
+    return 0;
+  } catch (e) {
+    // Defense-in-depth: a corrupt repo throws iso-git NotFoundError — map to a
+    // `fatal:` exit 128 rather than leak it as the shell's generic exit-1.
+    if (isNotFound(e)) {
+      ctx.stderr.write(`fatal: ${e instanceof Error ? e.message : String(e)}\n`);
+      return 128;
+    }
+    throw e;
   }
-  return 0;
 }
 
 /** True when an iso-git error is a "not found" plumbing error (vs a real bug). */
@@ -278,29 +305,114 @@ function isNotFound(e: unknown): boolean {
   return (e as { name?: string })?.name === 'NotFoundError' || /could not find/i.test(msg);
 }
 
-async function doAdd(g: Git, args: string[], ctx: CommandContext): Promise<number> {
-  const specs = args.slice(1);
-  if (specs.length === 0) {
-    ctx.stderr.write('git: nothing specified, nothing added\n');
-    return 1;
+/** Parsed `git add`: the recognized flags + the pathspecs. */
+interface AddPlan {
+  all: boolean;
+  update: boolean;
+  force: boolean;
+  pathspecs: string[];
+}
+
+/**
+ * Parse `git add` flags. Recognizes `-A`/`--all`, `-u`/`--update`, `-f`/`--force`
+ * (incl. combined short clusters `-Af`). Any OTHER flag loud-throws
+ * `git.add.<flag>` (exit 128) — never silently dropped (the flag discipline
+ * commit/switch/restore enforce). `--` separates flags from pathspecs.
+ */
+function parseAdd(args: string[]): AddPlan {
+  let all = false;
+  let update = false;
+  let force = false;
+  const pathspecs: string[] = [];
+  let flagsDone = false;
+  for (const t of args.slice(1)) {
+    if (flagsDone) {
+      pathspecs.push(t);
+      continue;
+    }
+    if (t === '--') {
+      flagsDone = true;
+    } else if (t === '--all') {
+      all = true;
+    } else if (t === '--update') {
+      update = true;
+    } else if (t === '--force') {
+      force = true;
+    } else if (t.startsWith('--')) {
+      throw new NotImplementedError(`git.add.${t.replace(/^-+/, '')}`);
+    } else if (t.length > 1 && t.startsWith('-')) {
+      for (const c of t.slice(1)) {
+        if (c === 'A') all = true;
+        else if (c === 'u') update = true;
+        else if (c === 'f') force = true;
+        else throw new NotImplementedError(`git.add.${c}`);
+      }
+    } else {
+      pathspecs.push(t);
+    }
   }
-  if (specs.includes('.') || specs.includes('-A') || specs.includes('--all')) {
+  return { all, update, force, pathspecs };
+}
+
+async function doAdd(
+  g: Git,
+  args: string[],
+  ctx: CommandContext,
+  vfs: Vfs,
+  dir: string,
+): Promise<number> {
+  let plan: AddPlan;
+  try {
+    plan = parseAdd(args);
+  } catch (e) {
+    return renderCheckoutError(e, ctx); // unknown flag → loud exit 128
+  }
+
+  // `-A`/`--all`/`.` → stage every change (incl. untracked, excl. .gitignore'd).
+  if (plan.all || plan.pathspecs.includes('.')) {
     await addAll(g);
     return 0;
   }
-  for (const spec of specs) {
-    if (spec.startsWith('-')) continue; // ignore unknown flags here (e.g. -v)
-    try {
-      await g.add(spec);
-    } catch (e) {
-      // A missing path is real git's `fatal: pathspec '<x>' did not match any
-      // files` (exit 128) — never the leaked iso-git "Could not find <x>." exit-1.
-      if (isNotFound(e)) {
-        ctx.stderr.write(`fatal: pathspec '${spec}' did not match any files\n`);
-        return 128;
-      }
-      throw e;
+  // `git add -u` (no pathspec) → stage tracked modifications + deletions only.
+  if (plan.update && plan.pathspecs.length === 0) {
+    await stageTrackedChanges(g);
+    return 0;
+  }
+  if (plan.pathspecs.length === 0) {
+    // Real git: advisory to stderr, exit 0 (NOT an error).
+    ctx.stderr.write('Nothing specified, nothing added.\n');
+    ctx.stderr.write("hint: Maybe you wanted to say 'git add .'?\n");
+    return 0;
+  }
+
+  // Explicit pathspecs: ALL-OR-NOTHING (real git validates every pathspec before
+  // touching the index — a single miss stages nothing). A path absent from both
+  // the worktree and the index → `fatal: pathspec … did not match`. An untracked
+  // path matched only by .gitignore → refuse unless `-f` (real git). Ignored
+  // detection is via statusMatrix, which excludes .gitignore'd paths: a worktree
+  // path that is neither tracked NOR surfaced as a status change IS ignored.
+  const [tracked, changed] = await Promise.all([g.listFiles(), g.status()]);
+  const surfaced = (spec: string): boolean => changed.some((e) => pathspecMatch(e.filepath, spec));
+  const resolved: { spec: string; exists: boolean }[] = [];
+  for (const spec of plan.pathspecs) {
+    const exists = await vfs.exists(normalizePath(joinPath(dir, spec)));
+    const isTracked = tracked.some((p) => pathspecMatch(p, spec));
+    if (!exists && !isTracked) {
+      ctx.stderr.write(`fatal: pathspec '${spec}' did not match any files\n`);
+      return 128;
     }
+    if (exists && !isTracked && !plan.force && !surfaced(spec)) {
+      ctx.stderr.write('The following paths are ignored by one of your .gitignore files:\n');
+      ctx.stderr.write(`${spec}\n`);
+      ctx.stderr.write('hint: Use -f if you really want to add them.\n');
+      return 1;
+    }
+    resolved.push({ spec, exists });
+  }
+  for (const { spec, exists } of resolved) {
+    // Present → stage content; gone-but-tracked → stage the deletion (real git).
+    if (exists) await g.add(spec);
+    else await g.remove(spec);
   }
   return 0;
 }
@@ -316,7 +428,14 @@ async function doCommit(g: Git, args: string[], ctx: CommandContext): Promise<nu
   // `-a`/`--all`: stage tracked modifications + deletions BEFORE the empty-check.
   if (plan.all) await stageTrackedChanges(g);
 
-  let message = plan.message;
+  let message = joinCommitMessages(plan.messages);
+  // An explicit empty `-m ''` is git's `Aborting commit due to empty commit
+  // message.` (exit 1) — not a leaked iso-git MissingParameterError. `--amend`
+  // with an empty `-m` still aborts; with no `-m` it reuses the prior message.
+  if (message === '' && !plan.amend) {
+    ctx.stderr.write('Aborting commit due to empty commit message.\n');
+    return 1;
+  }
   if (plan.amend) {
     // `--amend` reads the prior commit defensively: an UNBORN HEAD (fresh repo,
     // no commit) makes g.log() throw "Could not find HEAD" → real git's
@@ -325,6 +444,10 @@ async function doCommit(g: Git, args: string[], ctx: CommandContext): Promise<nu
     if (prior === undefined) {
       ctx.stderr.write('fatal: You have nothing to amend.\n');
       return 128;
+    }
+    if (message === '') {
+      ctx.stderr.write('Aborting commit due to empty commit message.\n');
+      return 1;
     }
     // `--amend` with no `-m` reuses the previous commit's message.
     if (message === null) message = prior.message;
@@ -349,7 +472,9 @@ async function doCommit(g: Git, args: string[], ctx: CommandContext): Promise<nu
     ...(plan.amend ? { amend: true } : {}),
   });
   const branch = (await g.currentBranch()) ?? 'HEAD';
-  ctx.stdout.write(`[${branch} ${short(oid)}] ${message}\n`);
+  // git's one-line summary shows only the first line of the message.
+  const subject = message.split('\n', 1)[0] ?? '';
+  ctx.stdout.write(`[${branch} ${short(oid)}] ${subject}\n`);
   return 0;
 }
 
@@ -385,10 +510,28 @@ async function doLog(g: Git, args: string[], ctx: CommandContext): Promise<numbe
   return 0;
 }
 
-async function doDiff(g: Git, ctx: CommandContext): Promise<number> {
+async function doDiff(g: Git, args: string[], ctx: CommandContext): Promise<number> {
+  // Only bare `git diff` (unstaged, index↔workdir) is implemented. `--staged`/
+  // `--cached`/`HEAD`/two-ref/pathspec forms select DIFFERENT content — surfacing
+  // the bare diff for them would be a SILENT-WRONG result, so loud-throw instead.
+  const extra = args.slice(1).filter((a) => a !== '--');
+  if (extra.length > 0) {
+    return renderCheckoutError(
+      new NotImplementedError(
+        `git.diff.${extra[0]?.replace(/^-+/, '') || 'args'}`,
+        'only bare `git diff` (unstaged, index↔workdir) is supported',
+      ),
+      ctx,
+    );
+  }
   const entries = await g.diff();
   for (const e of entries) {
     ctx.stdout.write(`diff --git a/${e.filepath} b/${e.filepath}\n`);
+    if (e.binary) {
+      // git renders binary changes as a single marker line, never a text hunk.
+      ctx.stdout.write(`Binary files a/${e.filepath} and b/${e.filepath} differ\n`);
+      continue;
+    }
     for (const h of e.hunks) {
       ctx.stdout.write(`@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@\n`);
       for (const line of h.lines) ctx.stdout.write(`${line}\n`);
@@ -398,11 +541,21 @@ async function doDiff(g: Git, ctx: CommandContext): Promise<number> {
 }
 
 async function doBranch(g: Git, ctx: CommandContext): Promise<number> {
-  const [branches, current] = await Promise.all([g.listBranches(), g.currentBranch()]);
-  for (const b of branches) {
-    ctx.stdout.write(`${b === current ? '* ' : '  '}${b}\n`);
+  try {
+    const [branches, current] = await Promise.all([g.listBranches(), g.currentBranch()]);
+    for (const b of branches) {
+      ctx.stdout.write(`${b === current ? '* ' : '  '}${b}\n`);
+    }
+    return 0;
+  } catch (e) {
+    // Defense-in-depth (corrupt repo): map iso-git NotFoundError to fatal 128
+    // rather than leak it as the shell's generic exit-1.
+    if (isNotFound(e)) {
+      ctx.stderr.write(`fatal: ${e instanceof Error ? e.message : String(e)}\n`);
+      return 128;
+    }
+    throw e;
   }
-  return 0;
 }
 
 /**
@@ -413,26 +566,58 @@ async function doBranch(g: Git, ctx: CommandContext): Promise<number> {
  * optional (else the remote config is used). `pull` commits the merge under the
  * shell-env identity. (`clone` is separate — see {@link doClone}.)
  */
+/** True if a token is a clone/remote URL (has a scheme, is scp-like, or a path) vs a remote NAME. */
+function isUrlLike(s: string): boolean {
+  return (
+    /:\/\//.test(s) ||
+    /^([^@/]+@)?[A-Za-z0-9._-]+:(?![/0-9])/.test(s) ||
+    s.startsWith('/') ||
+    s.startsWith('.')
+  );
+}
+
 async function doNetwork(
   g: Git,
   verb: 'fetch' | 'pull' | 'push',
   args: string[],
   ctx: CommandContext,
 ): Promise<number> {
-  const url = args[1];
+  // The first positional is a URL only if it LOOKS like one; otherwise it is a
+  // remote NAME (`git push origin main`) — passing a bare name as `url` would
+  // wrongly hit the transport ceiling. A second positional is the refspec.
+  const positionals: string[] = [];
+  let force = false;
+  for (const t of args.slice(1)) {
+    if (t === '-f' || t === '--force') {
+      force = true;
+    } else if (t.startsWith('-')) {
+      return renderCheckoutError(
+        new NotImplementedError(`git.${verb}.${t.replace(/^-+/, '')}`),
+        ctx,
+      );
+    } else {
+      positionals.push(t);
+    }
+  }
+  const first = positionals[0];
+  const url = first !== undefined && isUrlLike(first) ? first : undefined;
+  const remote = first !== undefined && !isUrlLike(first) ? first : undefined;
+  const ref = positionals[1];
+  const target = {
+    ...(url !== undefined ? { url } : {}),
+    ...(remote !== undefined ? { remote } : {}),
+    ...(ref !== undefined ? { ref } : {}),
+  };
   try {
     switch (verb) {
       case 'fetch':
-        await g.fetch(url === undefined ? {} : { url });
+        await g.fetch(target);
         break;
       case 'pull':
-        await g.pull({
-          ...(url === undefined ? {} : { url }),
-          author: await identityFrom(g, ctx.env),
-        });
+        await g.pull({ ...target, author: await identityFrom(g, ctx.env) });
         break;
       case 'push':
-        await g.push(url === undefined ? {} : { url });
+        await g.push({ ...target, ...(force ? { force: true } : {}) });
         break;
     }
     return 0;
@@ -442,10 +627,20 @@ async function doNetwork(
   }
 }
 
-/** Repo name from a clone URL: last path segment, trailing slashes + `.git` stripped. */
+/**
+ * Repo name from a clone URL: last path segment, trailing slashes + `.git`
+ * stripped. Falls back to the URL host when the path segment is empty (e.g.
+ * `https://host/.git`) so the destination is never an empty string (real git).
+ */
 function basenameFromUrl(url: string): string {
   const trimmed = url.replace(/\/+$/, '');
-  return trimmed.slice(trimmed.lastIndexOf('/') + 1).replace(/\.git$/, '');
+  const seg = trimmed.slice(trimmed.lastIndexOf('/') + 1).replace(/\.git$/, '');
+  if (seg) return seg;
+  try {
+    return new URL(url).hostname || 'repo';
+  } catch {
+    return 'repo';
+  }
 }
 
 /**
@@ -475,12 +670,14 @@ export function cloneDestination(
 async function doClone(vfs: Vfs, args: string[], ctx: CommandContext): Promise<number> {
   const url = args[1];
   if (url === undefined) {
-    ctx.stderr.write('git: clone requires a <url>\n');
+    ctx.stderr.write('fatal: You must specify a repository to clone.\n');
     return 128;
   }
   const { display, target } = cloneDestination(url, args[2], ctx.cwd);
   try {
-    assertSupportedTransport(url); // ssh/git/… → loud before any "Cloning into".
+    // Real git's order: the destination-exists guard fires BEFORE transport
+    // handling, so an ssh url + a non-empty dest reports the dest fatal (not the
+    // transport ceiling).
     if (await vfs.exists(target)) {
       const entries = await vfs.readdir(target);
       if (entries.length > 0) {
@@ -490,6 +687,7 @@ async function doClone(vfs: Vfs, args: string[], ctx: CommandContext): Promise<n
         return 128;
       }
     }
+    assertSupportedTransport(url); // ssh/git/… → loud, before any "Cloning into".
     await vfs.mkdir(target, { recursive: true });
     ctx.stderr.write(`Cloning into '${display}'...\n`);
     const g = makeGit({ fs: vfsToGitFs(vfs), dir: target });
@@ -508,15 +706,18 @@ function parentDir(p: string): string {
 }
 
 /**
- * Walk up from `start` for the directory that holds `.git` (real git's repository
- * discovery). Returns the repo root, or `null` if no repository governs `start`.
+ * Walk up from `start` for the directory that holds a VALID `.git` (real git's
+ * repository discovery). Validity = `.git/HEAD` exists — a bare `mkdir .git`,
+ * an empty/partial `.git`, or a `.git` FILE (gitlink, which rifty never creates)
+ * is NOT a repo, so discovery keeps walking up (else a stray `.git` would make a
+ * non-repo falsely look clean). Returns the repo root, or `null` if none governs.
  */
 async function findRepoRoot(vfs: Vfs, start: string): Promise<string | null> {
   let dir = normalizePath(start);
   for (;;) {
-    if (await vfs.exists(joinPath(dir, '.git'))) return dir;
+    if (await vfs.exists(joinPath(dir, '.git/HEAD'))) return dir;
     const parent = parentDir(dir);
-    if (parent === dir) return null; // reached `/` without finding `.git`
+    if (parent === dir) return null; // reached `/` without finding a valid `.git`
     dir = parent;
   }
 }
@@ -627,13 +828,13 @@ export const git: ShellCommand = async (args, ctx) => {
       case 'status':
         return doStatus(g, args, ctx);
       case 'add':
-        return doAdd(g, args, ctx);
+        return doAdd(g, args, ctx, vfs, root);
       case 'commit':
         return doCommit(g, args, ctx);
       case 'log':
         return doLog(g, args, ctx);
       case 'diff':
-        return doDiff(g, ctx);
+        return doDiff(g, args, ctx);
       case 'branch':
         return doBranch(g, ctx);
       case 'checkout':

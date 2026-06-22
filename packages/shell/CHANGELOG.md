@@ -12,6 +12,14 @@
   - **Core-verb error fidelity.** `log` on an unborn HEAD → `fatal: your current branch '<b>' does not have any commits yet` (128); `add` of a missing path → `fatal: pathspec '<x>' did not match any files` (128) — no leaked iso-git "Could not find …" exit-1.
   - **`clone <url> [<dir>]`** clones into a NEW subdirectory (url basename, or the explicit `<dir>`), not the cwd; a non-empty destination is refused with git's `fatal: destination path '<x>' already exists and is not an empty directory.` (128).
   - **`switch <name>`** that is neither a branch nor any ref → `fatal: invalid reference: <name>` (128), not a leaked plumbing error.
+- **`git` fidelity hardening, round 2 (adversarial audit follow-ups).**
+  - **Repository guard validates `.git/HEAD`**, not just a `.git` entry — a bare `mkdir .git` / empty / partial `.git` (or a `.git` FILE) is no longer accepted as a repo (was a silent false-success: `status` reported clean). Discovery keeps walking up, ending in the `not a git repository` fatal.
+  - **`commit -m a -m b`** joins paragraphs (`a\n\nb`) instead of silently dropping the first; **`commit -m ''`** → git's `Aborting commit due to empty commit message.` (exit 1), not a leaked iso-git `MissingParameterError`. The one-line summary shows only the message's first line.
+  - **`git add` flag discipline + all-or-nothing.** Unknown flags loud-throw `git.add.<flag>` (was silently dropped); recognizes `-A`/`--all`/`-u`/`--update`/`-f`/`--force`. Pathspecs are validated before staging (a single miss stages nothing); a gone-but-tracked path stages its deletion; an explicit ignored path is refused unless `-f`; no pathspec → git's `Nothing specified, nothing added.` advisory (exit 0, was a spurious exit 1).
+  - **`git diff` rejects unsupported forms** (`--cached`/`--staged`/`HEAD`/two-ref/pathspec) with a loud `git.diff.<x>` ceiling instead of silently returning the bare index↔workdir diff; **binary** changes render `Binary files … differ`.
+  - **`git fetch`/`pull`/`push` with a remote NAME** (`git push origin main`) resolve the remote from config instead of mistaking it for a URL transport ceiling; `-f`/`--force` honored on push; other network flags loud-throw.
+  - **`git clone`**: the destination-exists guard runs before transport (so ssh + non-empty dest reports the dest fatal, not the transport ceiling); no `<url>` → git's `fatal: You must specify a repository to clone.`; a `…/.git` URL falls back to the host so the destination is never empty.
+  - **Defensive error mapping** for `status`/`branch`: a corrupt-repo iso-git `NotFoundError` maps to `fatal:` exit 128 rather than leaking as the shell's generic exit 1.
 
 ### Added
 

@@ -30,6 +30,14 @@ Each is a genuine fidelity gap, **recorded loud** (compat ❌ + note), never a s
 - **Subdirectory operations (`git.subdir`).** A verb run from a SUBDIRECTORY of the repo loud-throws `git.subdir` (exit 128) — the repo is discovered (walk-up for `.git`) but cwd-relative pathspec prefixing (`git add foo` → `sub/foo`), cwd-scoped `git add .`, and cwd-relative status/diff output paths are not implemented. Run git from the repo root meanwhile. Gated on the pathspec-prefix translation layer; until then loud, never a silent wrong-tree result.
 - **`checkout` ceilings.** `--orphan` / `-B` / `--patch` / `--merge` / `--ours`·`--theirs` / `--track` / `checkout -` (previous branch, needs reflog `@{-1}`) / glob-magic pathspecs / `-q` / revspec arithmetic (`HEAD~1`/`main^`/`@{-1}`/`HEAD@{1}` → `git.checkout.revspec`, iso-git resolveRef can't parse it) all loud-throw `NotImplementedError('git.checkout.<x>')` (exit 128). The genuine 2-arg `<revision> <path>` ambiguity refusal (`checkout dev dev` where `dev` is both a branch and a tracked file) is DEFERRED — single-arg follows git's branch precedence (ref wins), but the rare 2-arg ambiguous case is not yet rejected. `git restore` / `git switch` remain separate unimplemented commands (the detached-HEAD advisory still quotes git's verbatim `git switch` hint — fidelity to git's text).
 - **Broader iso-git surface.** tag/stash/merge/cherry-pick/reset/remote/config-CLI etc. are not in the v1 subset (the shell reports them as not-implemented, exit 128).
+- **Byte-exact stderr niceties (round-2 audit; all LOUD + correct exit today, only wording differs).**
+  - `git switch <short-sha>` → `fatal: invalid reference` (real git resolves the abbrev oid → `a branch is expected, got commit`); `switch <tag>`/`HEAD` report the object-type word as `commit`; the `switch <full-sha>` detach `hint:` line is omitted. Needs `expandOid` + object-type classification.
+  - a newline-only change renders an empty hunk (header, no body) — the `\ No newline at end of file` marker is the byte-exact-diff-text item; until then a trailing-newline-only edit shows nothing under its header.
+  - `git diff` OUTSIDE a repo → generic `fatal: not a git repository` (exit 128) rather than real git's `--no-index` usage (exit 129); `--no-index` is unimplemented.
+  - `git config <key>` read OUTSIDE a repo → `not a git repository` (rifty has no global/system config in the VFS — nothing to read).
+  - bare `git` prints `is not a git command` (no usage stub); unknown subcommand omits the trailing `. See 'git --help'.`.
+  - real git flags rifty loud-ceilings rather than implements: `commit -q`/`-v`/`-s`/`--allow-empty`/`--allow-empty-message`, `git diff --no-index`.
+  - `isNotFound` could mis-map a corrupt commit object (valid HEAD, missing object) to "no commits yet" — rare (VFS corruption); tighten by confirming the branch ref is genuinely unborn.
 
 ## Useful capabilities not yet implemented (gap analysis 2026-06-22)
 

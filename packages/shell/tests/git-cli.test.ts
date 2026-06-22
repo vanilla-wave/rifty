@@ -107,11 +107,11 @@ it('clone over an unsupported transport surfaces NotImplementedError (exit 128)'
   expect(err()).toContain('Not implemented: git.transport.ssh');
 });
 
-it('clone without a <url> fails loudly (exit 128)', async () => {
+it('clone without a <url> fails loudly (exit 128, git wording)', async () => {
   await seedRepoDir();
   const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
   expect(await git(['clone'], ctx)).toBe(128);
-  expect(err()).toContain('clone requires a <url>');
+  expect(err()).toContain('You must specify a repository to clone.');
 });
 
 /** Seed a single-commit repo on `main` with a.txt committed. */
@@ -485,8 +485,34 @@ it('commit with an unknown flag → exit 128, loud (never silently ignored)', as
   await writeFile('/repo/a.txt', 'edited3\n');
   await git(['add', 'a.txt'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
   const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
-  expect(await git(['commit', '-z', '-m', 'x'], ctx)).toBe(128);
-  expect(err()).toContain('git.commit.z');
+  // `--bogus` is a genuinely-unknown flag (NOT a real git flag like -z/-q/-v).
+  expect(await git(['commit', '--bogus', '-m', 'x'], ctx)).toBe(128);
+  expect(err()).toContain('git.commit.bogus');
+});
+
+it('commit -m one -m two joins paragraphs (does not drop the first)', async () => {
+  await seedCommittedRepo();
+  await writeFile('/repo/a.txt', 'multi\n');
+  await git(['add', 'a.txt'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  expect(
+    await git(['commit', '-m', 'one', '-m', 'two'], makeCtx({ cwd: '/repo', env: ENV }).ctx),
+  ).toBe(0);
+  const { makeGit, vfsToGitFs } = await import('@riftydev/git');
+  const vfs = asyncVfs();
+  if (!vfs) throw new Error('no async vfs');
+  const head = (await makeGit({ fs: vfsToGitFs(vfs), dir: '/repo' }).log())[0];
+  // git stores the paragraph-joined message (with its canonical trailing newline).
+  expect(head?.message).toBe('one\n\ntwo\n');
+});
+
+it("commit -m '' (empty message) → exit 1, git's abort message (not leaked plumbing)", async () => {
+  await seedCommittedRepo();
+  await writeFile('/repo/a.txt', 'edited4\n');
+  await git(['add', 'a.txt'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['commit', '-m', ''], ctx)).toBe(1);
+  expect(err()).toContain('Aborting commit due to empty commit message.');
+  expect(err()).not.toContain('parameter');
 });
 
 // --- switch to a name that is neither a branch nor any ref -------------------
@@ -520,6 +546,102 @@ it('cloneDestination: explicit relative + absolute target dir', () => {
     display: '/abs/dir',
     target: '/abs/dir',
   });
+});
+
+// --- second-round fidelity hardening (adversarial audit) --------------------
+
+it('a bare `mkdir .git` (empty/invalid repo) is NOT treated as a repo → "not a git repository"', async () => {
+  await seedRepoDir();
+  const vfs = asyncVfs();
+  if (!vfs) throw new Error('no async vfs');
+  await vfs.mkdir('/repo/.git', { recursive: true }); // .git dir, but no HEAD
+  const { ctx, out, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['status', '--porcelain'], ctx)).toBe(128);
+  expect(out()).toBe('');
+  expect(err()).toContain('not a git repository');
+});
+
+it('git add silently drops nothing: an unknown flag → exit 128 loud', async () => {
+  await seedCommittedRepo();
+  await writeFile('/repo/b.txt', 'b\n');
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['add', '--patch', 'b.txt'], ctx)).toBe(128);
+  expect(err()).toContain('git.add.patch');
+});
+
+it('git add is ALL-OR-NOTHING: a missing pathspec stages nothing (good.txt stays untracked)', async () => {
+  await seedCommittedRepo();
+  await writeFile('/repo/good.txt', 'good\n');
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['add', 'good.txt', 'missing.txt'], ctx)).toBe(128);
+  expect(err()).toContain("pathspec 'missing.txt' did not match any files");
+  // good.txt must NOT have been staged (real git validates all first).
+  const st = makeCtx({ cwd: '/repo', env: ENV });
+  await git(['status', '--porcelain'], st.ctx);
+  expect(st.out()).toContain('?? good.txt');
+  expect(st.out()).not.toContain('A  good.txt');
+});
+
+it('git add with no pathspec → exit 0 with advisory (not exit 1)', async () => {
+  await seedCommittedRepo();
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['add'], ctx)).toBe(0);
+  expect(err()).toContain('Nothing specified, nothing added.');
+});
+
+it('git add of a .gitignore-ignored file → refused (exit 1) unless -f', async () => {
+  await seedCommittedRepo();
+  await writeFile('/repo/.gitignore', 'secret.txt\n');
+  await git(['add', '.gitignore'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await git(['commit', '-m', 'ignore'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await writeFile('/repo/secret.txt', 'shh\n');
+  const refused = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['add', 'secret.txt'], refused.ctx)).toBe(1);
+  expect(refused.err()).toContain('ignored by one of your .gitignore files');
+  // -f overrides.
+  const forced = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['add', '-f', 'secret.txt'], forced.ctx)).toBe(0);
+});
+
+it('status --porcelain and `add .` honor .gitignore (node_modules not surfaced/staged)', async () => {
+  await seedCommittedRepo();
+  await writeFile('/repo/.gitignore', 'node_modules/\n');
+  await git(['add', '.gitignore'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await git(['commit', '-m', 'ignore'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  const vfs = asyncVfs();
+  if (!vfs) throw new Error('no async vfs');
+  await vfs.mkdir('/repo/node_modules', { recursive: true });
+  await writeFile('/repo/node_modules/dep.js', 'x\n');
+  await writeFile('/repo/tracked.txt', 'x\n');
+
+  const st = makeCtx({ cwd: '/repo', env: ENV });
+  await git(['status', '--porcelain'], st.ctx);
+  expect(st.out()).toContain('?? tracked.txt');
+  expect(st.out()).not.toContain('node_modules');
+
+  await git(['add', '.'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  const st2 = makeCtx({ cwd: '/repo', env: ENV });
+  await git(['status', '--porcelain'], st2.ctx);
+  expect(st2.out()).not.toContain('node_modules'); // never staged
+});
+
+it('git diff --cached / HEAD → loud git.diff ceiling (never the bare diff silently)', async () => {
+  await seedCommittedRepo();
+  await writeFile('/repo/a.txt', 'changed\n');
+  for (const flag of ['--cached', '--staged', 'HEAD']) {
+    const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+    expect(await git(['diff', flag], ctx)).toBe(128);
+    expect(err()).toContain('git.diff');
+  }
+});
+
+it('push/fetch with a remote NAME (origin) is not mistaken for a URL transport ceiling', async () => {
+  await seedCommittedRepo();
+  // No remote 'origin' configured → real git errors on the missing remote, NOT
+  // a transport-scheme ceiling. The key assertion: it must NOT say git.transport.unknown.
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['push', 'origin', 'main'], ctx)).toBe(128);
+  expect(err()).not.toContain('git.transport.unknown');
 });
 
 it('clone into an existing non-empty directory → exit 128, "already exists" (before any network)', async () => {

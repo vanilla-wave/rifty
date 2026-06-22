@@ -38,7 +38,11 @@ export interface GitStat {
 /** The `fs` object isomorphic-git binds to (`.promises` API only). */
 export interface GitFs {
   promises: {
-    readFile(p: string, opts?: { encoding?: 'utf8' }): Promise<Uint8Array | string>;
+    // Node's fs.readFile accepts the encoding as EITHER a string (`'utf8'`) or an
+    // options object (`{ encoding: 'utf8' }`); isomorphic-git's gitignore manager
+    // uses the string form, so both must be honored (else ignore rules silently
+    // never parse → `.gitignore` is ignored). See readFile impl below.
+    readFile(p: string, opts?: { encoding?: 'utf8' } | 'utf8'): Promise<Uint8Array | string>;
     writeFile(p: string, data: Uint8Array | string, opts?: unknown): Promise<void>;
     unlink(p: string): Promise<void>;
     readdir(p: string): Promise<string[]>;
@@ -102,7 +106,10 @@ export function vfsToGitFs(vfs: Vfs): GitFs {
       async readFile(p, opts) {
         if (!(await vfs.exists(p))) throw enoent(p);
         const bytes = await vfs.readFile(p);
-        return opts?.encoding === 'utf8' ? new TextDecoder().decode(bytes) : bytes;
+        // Encoding may arrive as `'utf8'` OR `{ encoding: 'utf8' }` (both are valid
+        // Node fs.readFile calls); iso-git's ignore manager passes the string form.
+        const encoding = typeof opts === 'string' ? opts : opts?.encoding;
+        return encoding === 'utf8' ? new TextDecoder().decode(bytes) : bytes;
       },
       async writeFile(p, data) {
         await vfs.writeFile(p, data);

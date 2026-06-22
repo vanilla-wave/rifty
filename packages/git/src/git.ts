@@ -46,6 +46,13 @@ export interface CommitArgs {
 export const pathspecMatch = (path: string, spec: string): boolean =>
   path === spec || path.startsWith(`${spec}/`);
 
+/** git's binary heuristic: a NUL byte in the first 8000 bytes ⇒ binary. */
+function isBinary(bytes: Uint8Array): boolean {
+  const n = Math.min(bytes.length, 8000);
+  for (let i = 0; i < n; i++) if (bytes[i] === 0) return true;
+  return false;
+}
+
 /** First pathspec matching no path in `files` (for the PathspecError message). */
 function firstUnmatched(specs: string[], files: string[]): string {
   return specs.find((s) => !files.some((p) => pathspecMatch(p, s))) ?? specs[0] ?? '';
@@ -283,13 +290,12 @@ export function makeGit(opts: MakeGitOptions): Git {
       // walk() semantics: returning `null` PRUNES the subtree (children
       // unwalked); `undefined` skips this path but still descends.
       const decoder = new TextDecoder();
-      const stageText = async (oid: string): Promise<string> => {
+      const stageBytes = async (oid: string): Promise<Uint8Array> => {
         const { blob } = await git.readBlob({ fs, dir, oid });
-        return decoder.decode(blob);
+        return blob;
       };
-      const workText = async (entry: WalkerEntry): Promise<string> => {
-        const content = await entry.content();
-        return content ? decoder.decode(content) : '';
+      const workBytes = async (entry: WalkerEntry): Promise<Uint8Array> => {
+        return (await entry.content()) ?? new Uint8Array();
       };
 
       const entries = await git.walk({
@@ -308,13 +314,24 @@ export function makeGit(opts: MakeGitOptions): Git {
           if (stageBlob && workBlob) {
             const [stageOid, workOid] = await Promise.all([stage.oid(), work.oid()]);
             if (stageOid === workOid) return undefined;
-            const [oldText, newText] = await Promise.all([stageText(stageOid), workText(work)]);
-            return { filepath, change: 'modify', hunks: lineDiff(oldText, newText) };
+            const [oldBytes, newBytes] = await Promise.all([stageBytes(stageOid), workBytes(work)]);
+            // Binary content (NUL byte, git's heuristic) is never line-diffed —
+            // decoding would mojibake it. Emit a binary marker (git's `Binary
+            // files … differ`), not a lossy text hunk.
+            if (isBinary(oldBytes) || isBinary(newBytes)) {
+              return { filepath, change: 'modify', hunks: [], binary: true };
+            }
+            return {
+              filepath,
+              change: 'modify',
+              hunks: lineDiff(decoder.decode(oldBytes), decoder.decode(newBytes)),
+            };
           }
           // Tracked but gone from workdir → unstaged deletion.
           if (stageBlob && !workBlob) {
-            const oldText = await stageText(await stage.oid());
-            return { filepath, change: 'delete', hunks: lineDiff(oldText, '') };
+            const oldBytes = await stageBytes(await stage.oid());
+            if (isBinary(oldBytes)) return { filepath, change: 'delete', hunks: [], binary: true };
+            return { filepath, change: 'delete', hunks: lineDiff(decoder.decode(oldBytes), '') };
           }
           // Workdir-only directory: descend, but PRUNE if .gitignore-ignored so a
           // huge ignored tree (node_modules) is not walked (correctness + perf).
@@ -360,6 +377,7 @@ export function makeGit(opts: MakeGitOptions): Git {
           http,
           dir,
           url: args.url,
+          remote: args.remote,
           corsProxy,
           ref: args.ref,
           singleBranch: args.singleBranch,
@@ -381,6 +399,7 @@ export function makeGit(opts: MakeGitOptions): Git {
           http,
           dir,
           url: args.url,
+          remote: args.remote,
           corsProxy,
           ref: args.ref,
           singleBranch: args.singleBranch,

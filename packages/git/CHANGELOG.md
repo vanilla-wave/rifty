@@ -4,7 +4,10 @@
 
 ### Fixed
 
+- **fs-adapter `readFile` honors the STRING encoding form (`'utf8'`), not just `{ encoding: 'utf8' }` — `.gitignore` is now actually honored.** isomorphic-git's ignore manager reads `.gitignore` via `fs.readFile(path, 'utf8')`; the adapter previously returned raw bytes for that call, so ignore rules never parsed and ignored files (`node_modules`, build output, `*.log`) leaked into `git status`, `git add .`, and `isIgnored`. Now excluded. Guard: `gitignore.test.ts` (RED-checked).
+- **`diff()` detects binary content** (NUL-byte heuristic) and emits a `binary: true` marker (rendered as git's `Binary files … differ`) instead of a lossy UTF-8 line-diff of mojibake. Guard: `diff.test.ts`.
 - **fs-adapter `ino` is derived from mtime — same-size content edits are no longer silently trusted as unchanged.** isomorphic-git's `compareStats` compares mtime only at second granularity but `ino` exactly; deriving `ino` from the full-precision (strictly-monotonic) VFS mtime makes a sub-second, same-byte-length edit visible to `git status`/`diff` (was a silent-data-loss Fidelity bug — ADR-0167). Guards: `same-size-edit-fidelity.test.ts` + `@riftydev/vfs` `mtime-monotonic.test.ts`.
+- **`fetch`/`pull` accept a `remote` name** (`FetchArgs`/`PullArgs` gain `remote?`), so the shell's `git fetch origin` / `git pull origin main` resolve the remote from config instead of mistaking the name for a URL transport.
 
 ### Added
 

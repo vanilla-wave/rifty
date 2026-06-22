@@ -445,16 +445,26 @@ const matrices = [
     intro:
       'Public claim surface for git over the VFS (isomorphic-git, ADR-0167). Local porcelain is byte-identical to canonical git (same object SHA-1s); the network is smart-HTTP only — every browser-ceiling gap throws `NotImplementedError`, never a silent stub.',
     rows: [
-      ['`init` / `add` / `remove`', '✅', 'Local index + object writes over the Memory VFS'],
+      ['`init` / `remove`', '✅', 'Local index + object writes over the Memory VFS'],
+      [
+        '`add <pathspec…>` / `add .` / `-A` / `-u` / `-f`',
+        '✅',
+        "ALL-OR-NOTHING (a single unmatched pathspec stages nothing → `fatal: pathspec … did not match`); a gone-but-tracked path stages its deletion; an explicit `.gitignore`-ignored path is refused (`-f` overrides); no pathspec → git's `Nothing specified, nothing added.` (exit 0). Unknown flag → `NotImplementedError('git.add.<flag>')` (exit 128), never silently dropped",
+      ],
+      [
+        '`.gitignore` honored',
+        '✅',
+        "Ignored paths (`node_modules/`, build output, `*.log`) are excluded from `git status`, `git add .`, and `git diff` — the fs-adapter reads `.gitignore` via the string-encoding `readFile` form iso-git's ignore manager uses",
+      ],
       [
         'Repository guard',
         '✅',
-        'Every verb but `init`/`clone` verifies a repo governs the cwd first (real git discovery, walking up for `.git`). NON-repo → `fatal: not a git repository (or any of the parent directories): .git` (exit 128) — never a silent false-success',
+        'Every verb but `init`/`clone` verifies a VALID repo governs the cwd first — real git discovery (walking up) requiring `.git/HEAD`, so a bare/empty/partial `.git` is rejected. NON-repo → `fatal: not a git repository (or any of the parent directories): .git` (exit 128) — never a silent false-success',
       ],
       [
         '`commit` / `commit -a` / `commit --amend`',
         '✅',
-        "Canonical git objects — **identical 40-hex SHA-1 to real git** for identical inputs (author+committer identity/timestamp/tz explicit); parity-pinned. `-a`/`-am` stage tracked modifications+deletions (`git add -u`). REFUSES an empty commit (real git exit 1, `nothing to commit…`), never fabricates one. Unknown `commit` flag → `NotImplementedError('git.commit.<flag>')` (exit 128). `--amend` replaces HEAD (reuses prior message when no `-m`)",
+        "Canonical git objects — **identical 40-hex SHA-1 to real git** for identical inputs (author+committer identity/timestamp/tz explicit); parity-pinned. `-a`/`-am` stage tracked modifications+deletions (`git add -u`); repeated `-m` join as paragraphs; an empty `-m ''` → `Aborting commit due to empty commit message.` (exit 1). REFUSES an empty commit (real git exit 1, `nothing to commit…`), never fabricates one. Unknown `commit` flag → `NotImplementedError('git.commit.<flag>')` (exit 128). `--amend` replaces HEAD (reuses prior message when no `-m`)",
       ],
       [
         'Author identity from config',
@@ -470,7 +480,7 @@ const matrices = [
       [
         '`diff` (index ↔ workdir, unstaged)',
         '⚠️',
-        'Bare `git diff` semantics — the UNSTAGED delta (`walk(STAGE, WORKDIR)`) for tracked files; untracked + `.gitignore`-ignored files are NOT shown (real git never shows them). Structured per-file hunks via LCS line-diff; structured data, NOT byte-exact `git diff` text. `--staged`/`diff HEAD`/two-ref diff deferred (backlog)',
+        'Bare `git diff` semantics — the UNSTAGED delta (`walk(STAGE, WORKDIR)`) for tracked files; untracked + `.gitignore`-ignored files are NOT shown (real git never shows them). Binary changes render `Binary files … differ` (never a mojibake hunk). Structured per-file hunks via LCS line-diff; structured data, NOT byte-exact `git diff` text. `--staged`/`--cached`/`diff HEAD`/two-ref/pathspec forms → loud `git.diff.<x>` ceiling (exit 128), never the bare diff silently',
       ],
       ['`branch` / `listBranches` / `currentBranch` / `resolveRef`', '✅', 'Local refs'],
       [
@@ -504,9 +514,9 @@ const matrices = [
         "Bounded get/set on `.git/config`: `<key>` prints the value (unset → exit 1, silent), `<key> <value>` writes it. `--list`/`--get-all`/`--unset`/other flags → `NotImplementedError('git.config.<flag>')` (exit 128) — no full-dump in iso-git",
       ],
       [
-        '`clone <url> [<dir>]` / `fetch` / `pull` / `push` (smart HTTP)',
+        '`clone <url> [<dir>]` / `fetch [<remote>]` / `pull [<remote> <ref>]` / `push [<remote> <ref>]` (smart HTTP)',
         '✅',
-        'Over rifty `node:http` egress; real `git http-backend` clone integration-tested (canonical objects end-to-end). `clone` writes a NEW subdirectory (url basename or explicit `<dir>`), not the cwd; a non-empty destination is refused (`fatal: destination path … already exists…`, exit 128)',
+        'Over rifty `node:http` egress; real `git http-backend` clone integration-tested (canonical objects end-to-end). `clone` writes a NEW subdirectory (url basename or explicit `<dir>`), not the cwd; a non-empty destination is refused (`fatal: destination path … already exists…`, exit 128). `fetch`/`pull`/`push` accept a remote NAME (`git push origin main`) resolved from config — not mistaken for a URL transport; `-f`/`--force` honored on push',
       ],
       [
         '`corsProxy`',

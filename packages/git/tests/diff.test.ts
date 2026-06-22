@@ -132,6 +132,24 @@ it('emits no entry for an unchanged committed file', async () => {
   expect(d).toHaveLength(0);
 });
 
+it('reports a changed BINARY file as binary (no mojibake line-diff)', async () => {
+  const vfs = new MemoryVfs();
+  await vfs.mkdir('/repo', { recursive: true });
+  const g = makeGit({ fs: vfsToGitFs(vfs), dir: '/repo' });
+  await g.init();
+  // A blob with a NUL byte is binary (git's heuristic).
+  await vfs.writeFile('/repo/img.bin', new Uint8Array([0x89, 0x50, 0x00, 0x01, 0xff]));
+  await g.add('img.bin');
+  await g.commit({ message: 'first', author: AUTHOR });
+  await vfs.writeFile('/repo/img.bin', new Uint8Array([0x89, 0x50, 0x00, 0x02, 0xfe]));
+
+  const d = await g.diff();
+  const entry = d.find((e) => e.filepath === 'img.bin');
+  expect(entry?.change).toBe('modify');
+  expect(entry?.binary).toBe(true);
+  expect(entry?.hunks).toEqual([]); // never a lossy text hunk
+});
+
 // --- lineDiff unit: pure string → hunks ---
 
 it('lineDiff distinguishes a changed middle line from surrounding context', () => {
