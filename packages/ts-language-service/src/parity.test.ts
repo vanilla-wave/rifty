@@ -35,14 +35,17 @@ import * as nodePath from 'node:path';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import ts from 'typescript';
 import { afterAll, describe, expect, it } from 'vitest';
-import type { Position, Range, TextEdit } from './lsp-types.ts';
+import type { CodeAction, FormattingOptions, Position, Range, TextEdit } from './lsp-types.ts';
 import {
+  fileTextChangesToWorkspaceEdit,
+  formattingOptionsToFormatCodeSettings,
   partsToString,
   quickInfoToHover,
   renameLocationToTextEdit,
   scriptElementKindToCompletionKind,
   signatureHelpItemsToSignatureHelp,
   spanToRange,
+  textChangesToTextEdits,
 } from './mapping.ts';
 import { offsetToPosition, positionToOffset } from './position.ts';
 import { createTsLanguageService } from './service.ts';
@@ -933,5 +936,226 @@ describe('parity: phase-3 queries vs real ts.LanguageService (gold standard)', (
     // Spot-check the rendering is meaningful (label + active param), not empty.
     expect(rifty?.signatures[0]?.label).toContain('add(a: number, b: number): number');
     expect(rifty?.activeParameter).toBe(1);
+  });
+});
+
+// ===========================================================================
+// Phase 4 queries: code-fixes / organize-imports / formatting.
+//
+// Same gold-standard discipline: Side A calls the RAW `ts.LanguageService`
+// (getCodeFixesAtPosition / organizeImports / getFormattingEditsForDocument /
+// getFormattingEditsForRange) over the real-fs host and reduces with the SAME
+// `mapping.ts` helpers the rifty service uses (fileTextChangesToWorkspaceEdit /
+// textChangesToTextEdits). CRUCIAL: both sides MUST pass the IDENTICAL
+// FormatCodeSettings — the format settings shape the emitted whitespace (e.g. a
+// code-fix's inserted indentation, the format edits' spacing), so a mismatch
+// would diverge. We import the SAME `formattingOptionsToFormatCodeSettings` the
+// service uses and feed it to both sides.
+// ===========================================================================
+
+/** Re-key a WorkspaceEdit's changes onto relative uris (no sort — edit order is meaningful). */
+function relWorkspaceEdit(
+  changes: Record<string, TextEdit[]>,
+  rel: (abs: string) => string,
+): Record<string, TextEdit[]> {
+  const out: Record<string, TextEdit[]> = {};
+  for (const [uri, edits] of Object.entries(changes)) out[rel(uri)] = edits;
+  return out;
+}
+
+/** Normalize a CodeAction[] (re-key each edit's uris) for cross-side deep-equal. */
+function relCodeActions(
+  actions: readonly CodeAction[],
+  rel: (abs: string) => string,
+): CodeAction[] {
+  return actions.map((a) => ({
+    ...a,
+    ...(a.edit ? { edit: { changes: relWorkspaceEdit(a.edit.changes, rel) } } : {}),
+  }));
+}
+
+// The default fmtSettings the service uses for code-fixes + organize-imports
+// (tabSize 4 / spaces — see service.ts `fmtSettings`). Both sides use THIS.
+const DEFAULT_FMT = formattingOptionsToFormatCodeSettings({ tabSize: 4, insertSpaces: true });
+
+// (h) code-fix: a used symbol with NO import → TS2304; the in-range fix set
+// includes "Add import from ./helper". Exercises FileTextChanges→WorkspaceEdit
+// AND format-settings sensitivity (the fixMissingFunctionDeclaration fix's
+// inserted body is indented per the settings — so both sides must agree).
+const CODEFIX_FIXTURE: Fixture = {
+  name: 'phase4: code-fix (missing import, TS2304)',
+  probes: 'getCodeFixesAtPosition over an in-range diagnostic → CodeAction[] (import + decl fixes)',
+  files: {
+    'tsconfig.json': JSON.stringify({
+      compilerOptions: {
+        strict: true,
+        module: 'esnext',
+        target: 'es2022',
+        moduleResolution: 'bundler',
+      },
+    }),
+    'helper.ts': 'export function greet(name: string): string {\n  return `hi ${name}`;\n}\n',
+    'main.ts': 'const msg = greet("world");\nconsole.log(msg);\n',
+  },
+  diagnose: ['main.ts'],
+};
+
+// (i) organize-imports: unsorted + unused imports across two modules.
+const ORGANIZE_FIXTURE: Fixture = {
+  name: 'phase4: organize-imports (unsorted + unused)',
+  probes: 'organizeImports → WorkspaceEdit: sort import specifiers, drop the unused import',
+  files: {
+    'tsconfig.json': JSON.stringify({
+      compilerOptions: {
+        strict: true,
+        module: 'esnext',
+        target: 'es2022',
+        moduleResolution: 'bundler',
+      },
+    }),
+    'a.ts': 'export const aa = 1;\nexport const ab = 2;\n',
+    'b.ts': 'export const ba = 1;\n',
+    'main.ts': "import { ba } from './b';\nimport { ab, aa } from './a';\nconsole.log(aa);\n",
+  },
+  diagnose: [],
+};
+
+// (j) formatting: a badly-spaced AND wrongly-INDENTED file. The unindented
+// nested block makes the emitted edits depend on `tabSize` (a `tabSize:2` indent
+// is `"  "`, a `tabSize:4` indent `"    "`), so the test genuinely exercises the
+// FormatCodeSettings derivation — a divergent setting on one side would change
+// the indentation and break parity (settings sensitivity, not just spacing).
+const FORMAT_FIXTURE: Fixture = {
+  name: 'phase4: formatting (badly-spaced + wrongly-indented document)',
+  probes: 'getFormattingEditsForDocument / …ForRange → TextEdit[] (reindent per tabSize + spacing)',
+  files: {
+    'tsconfig.json': JSON.stringify({
+      compilerOptions: {
+        strict: true,
+        module: 'esnext',
+        target: 'es2022',
+        moduleResolution: 'bundler',
+      },
+    }),
+    'fmt.ts': 'function f() {\nconst a=1;\nif(a){\nreturn a;\n}\n}\n',
+  },
+  diagnose: [],
+};
+
+describe('parity: phase-4 queries vs real ts.LanguageService (gold standard)', () => {
+  it('code-fixes match real TS — missing-import diagnostic (TS2304)', async () => {
+    const root = writeFixtureToTmp(CODEFIX_FIXTURE);
+    const { service: gsvc, host: ghost } = buildGoldService(root);
+    const { svc } = await buildRiftyService(CODEFIX_FIXTURE);
+    const grel = goldRel(root);
+    const goldRead = (f: string) => ghost.readFile?.(f) ?? '';
+
+    const text = CODEFIX_FIXTURE.files['main.ts'] ?? '';
+    const abs = nodePath.join(root, 'main.ts');
+
+    // The editor requests code-actions for a diagnostic's OWN span (tsc only
+    // surfaces a fix when the request span lies within the error span — a
+    // whole-line span yields nothing). So anchor the range + codes on the first
+    // TS2304 diagnostic (the unimported `greet`), exactly as an editor would.
+    const targetDiag = gsvc
+      .getSemanticDiagnostics(abs)
+      .find((d) => d.code === 2304 && d.start !== undefined);
+    expect(targetDiag).toBeDefined(); // non-vacuous: there IS a fixable diagnostic
+    const dStart = targetDiag?.start ?? 0;
+    const dEnd = dStart + (targetDiag?.length ?? 0);
+    const range: Range = {
+      start: offsetToPosition(text, dStart),
+      end: offsetToPosition(text, dEnd),
+    };
+    const start = dStart;
+    const end = dEnd;
+    const inRangeCodes = [2304];
+
+    // Side A: raw getCodeFixesAtPosition → CodeAction[] via the SAME mapper +
+    // the SAME DEFAULT_FMT the service uses.
+    const goldActions = relCodeActions(
+      gsvc.getCodeFixesAtPosition(abs, start, end, inRangeCodes, DEFAULT_FMT, {}).map(
+        (fix): CodeAction => ({
+          title: fix.description,
+          kind: 'quickfix',
+          edit: fileTextChangesToWorkspaceEdit(fix.changes, goldRead),
+        }),
+      ),
+      grel,
+    );
+
+    const riftyActions = relCodeActions(
+      svc.getCodeFixes(`${RIFTY_ROOT}/main.ts`, range, inRangeCodes),
+      riftyRel,
+    );
+
+    expect(goldActions.length).toBeGreaterThan(0); // non-vacuous
+    expect(riftyActions).toEqual(goldActions);
+    // Spot-check the headline fix is the import fix (proves it's meaningful).
+    expect(goldActions.map((a) => a.title)).toContain('Add import from "./helper"');
+  });
+
+  it('organize-imports matches real TS — sort + drop unused', async () => {
+    const root = writeFixtureToTmp(ORGANIZE_FIXTURE);
+    const { service: gsvc, host: ghost } = buildGoldService(root);
+    const { svc } = await buildRiftyService(ORGANIZE_FIXTURE);
+    const grel = goldRel(root);
+    const goldRead = (f: string) => ghost.readFile?.(f) ?? '';
+    const abs = nodePath.join(root, 'main.ts');
+
+    const goldEdit = relWorkspaceEdit(
+      fileTextChangesToWorkspaceEdit(
+        gsvc.organizeImports({ type: 'file', fileName: abs }, DEFAULT_FMT, {}),
+        goldRead,
+      ).changes,
+      grel,
+    );
+    const riftyEdit = relWorkspaceEdit(
+      svc.organizeImports(`${RIFTY_ROOT}/main.ts`).changes,
+      riftyRel,
+    );
+
+    // Non-vacuous: organize actually produces edits (the imports ARE unsorted/unused).
+    expect(Object.keys(goldEdit).length).toBeGreaterThan(0);
+    expect(goldEdit['main.ts']?.length).toBeGreaterThan(0);
+    expect(riftyEdit).toEqual(goldEdit);
+    // Spot-check: the surviving import keeps only `aa` (the used one), sorted.
+    expect(goldEdit['main.ts']?.[0]?.newText).toContain("import { aa } from './a';");
+  });
+
+  it('formatting matches real TS — whole document + a range', async () => {
+    const root = writeFixtureToTmp(FORMAT_FIXTURE);
+    const { service: gsvc } = buildGoldService(root);
+    const { svc } = await buildRiftyService(FORMAT_FIXTURE);
+    const abs = nodePath.join(root, 'fmt.ts');
+    const text = FORMAT_FIXTURE.files['fmt.ts'] ?? '';
+    const options: FormattingOptions = { tabSize: 2, insertSpaces: true };
+    // BOTH sides derive the SAME FormatCodeSettings from `options` (else diverge).
+    const settings = formattingOptionsToFormatCodeSettings(options);
+
+    // Whole document.
+    const goldDoc = textChangesToTextEdits(gsvc.getFormattingEditsForDocument(abs, settings), text);
+    const riftyDoc = svc.getFormattingEdits(`${RIFTY_ROOT}/fmt.ts`, options);
+    expect(goldDoc.length).toBeGreaterThan(0); // non-vacuous: it IS badly spaced
+    expect(riftyDoc).toEqual(goldDoc);
+
+    // A range covering only the `const a=1;` line (line 1) — wrongly indented +
+    // missing spaces, so it yields edits, but FEWER than the whole document.
+    const l1Start = text.indexOf('const a=1;');
+    const l1End = text.indexOf('\n', l1Start);
+    const range: Range = {
+      start: offsetToPosition(text, l1Start),
+      end: offsetToPosition(text, l1End),
+    };
+    const goldRange = textChangesToTextEdits(
+      gsvc.getFormattingEditsForRange(abs, l1Start, l1End, settings),
+      text,
+    );
+    const riftyRange = svc.getRangeFormattingEdits(`${RIFTY_ROOT}/fmt.ts`, range, options);
+    expect(goldRange.length).toBeGreaterThan(0); // non-vacuous
+    expect(riftyRange).toEqual(goldRange);
+    // The range result is a STRICT subset of the whole-document result (range
+    // formatting only touches inside the range), proving it's genuinely scoped.
+    expect(goldRange.length).toBeLessThan(goldDoc.length);
   });
 });

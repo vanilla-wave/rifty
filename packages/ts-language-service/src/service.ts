@@ -12,14 +12,17 @@ import ts from 'typescript';
 import { createVfsLanguageServiceHost } from './host.ts';
 import { loadLibDts } from './lib-dts.ts';
 import {
+  type CodeAction,
   type CompletionItem,
   type CompletionList,
   type Diagnostic,
   DiagnosticSeverity,
+  type FormattingOptions,
   type Hover,
   type Location,
   type Position,
   type PrepareRenameResult,
+  type Range,
   type ReferenceContext,
   type SignatureHelp,
   type TextEdit,
@@ -27,12 +30,15 @@ import {
 } from './lsp-types.ts';
 import {
   completionEntryToItem,
+  fileTextChangesToWorkspaceEdit,
+  formattingOptionsToFormatCodeSettings,
   partsToString,
   quickInfoToHover,
   renameLocationToTextEdit,
   renderDocumentation,
   signatureHelpItemsToSignatureHelp,
   spanToRange,
+  textChangesToTextEdits,
 } from './mapping.ts';
 import { createDocumentOverlay } from './overlay.ts';
 import { offsetToPosition, positionToOffset } from './position.ts';
@@ -99,6 +105,33 @@ export interface TsLanguageService {
    * is no call context. Mirrors `ls.getSignatureHelpItems`.
    */
   getSignatureHelp(path: string, position: Position): SignatureHelp | null;
+  /**
+   * Quick-fixes for the diagnostics whose codes are `errorCodes`, intersecting
+   * the `[start, end)` `range` in `path`. Each `ts.CodeFixAction` becomes a
+   * {@link CodeAction} (`title` = the fix description, `kind` `'quickfix'`,
+   * `edit` = the fix's `FileTextChanges` as a {@link WorkspaceEdit}). The caller
+   * supplies `errorCodes` (typically the in-range diagnostics' `code`s); an empty
+   * list yields no fixes (tsc fixes are keyed by error code). Empty array when
+   * nothing is fixable — an honest empty, not a lying placeholder.
+   */
+  getCodeFixes(path: string, range: Range, errorCodes: number[]): CodeAction[];
+  /**
+   * Organize-imports for `path`: sort + de-duplicate + drop unused imports, as a
+   * {@link WorkspaceEdit} (tsc's own `organizeImports`). Empty `changes` when the
+   * imports are already organized (a real no-op, not a fabricated edit).
+   */
+  organizeImports(path: string): WorkspaceEdit;
+  /**
+   * Whole-document format for `path` → the {@link TextEdit}[] tsc would apply,
+   * using a `ts.FormatCodeSettings` derived from `options` + tsserver defaults
+   * (see `formattingOptionsToFormatCodeSettings`). Empty when already formatted.
+   */
+  getFormattingEdits(path: string, options: FormattingOptions): TextEdit[];
+  /**
+   * Format just the `[start, end)` `range` in `path` → the {@link TextEdit}[]
+   * tsc would apply (same settings derivation as {@link getFormattingEdits}).
+   */
+  getRangeFormattingEdits(path: string, range: Range, options: FormattingOptions): TextEdit[];
   openDocument(path: string, text: string): void;
   updateDocument(path: string, text: string): void;
   closeDocument(path: string): void;
@@ -176,6 +209,13 @@ export async function createTsLanguageService(
   /** Map a `position` in `path` to a TS offset using the file's current text. */
   const offsetAt = (path: string, position: Position): number =>
     positionToOffset(readText(path), position);
+
+  // Default format settings for code-fixes + organize-imports (which carry no
+  // editor FormattingOptions of their own): tsserver's defaults at tabSize 4 /
+  // spaces. These shape only the WHITESPACE of the emitted edits, but the parity
+  // gold side MUST pass the SAME settings or the edits' indentation diverges —
+  // hence the shared `formattingOptionsToFormatCodeSettings` (imported by both).
+  const fmtSettings = formattingOptionsToFormatCodeSettings({ tabSize: 4, insertSpaces: true });
 
   /** Map ts.DefinitionInfo[] → Location[] (each target's own text → Range). */
   const toLocations = (defs: readonly ts.DefinitionInfo[] | undefined): Location[] =>
@@ -273,6 +313,40 @@ export async function createTsLanguageService(
     getSignatureHelp: (path, position) => {
       const items = service.getSignatureHelpItems(path, offsetAt(path, position), undefined);
       return items ? signatureHelpItemsToSignatureHelp(items) : null;
+    },
+    getCodeFixes: (path, range, errorCodes) => {
+      // getCodeFixesAtPosition takes a [start,end) OFFSET span; the LSP Range
+      // maps through the file's current text (same bytes the program sees). The
+      // shared format settings are tsc's defaults (fmt only affects the edits'
+      // whitespace — but it MUST match what the parity gold side passes).
+      const text = readText(path);
+      const start = positionToOffset(text, range.start);
+      const end = positionToOffset(text, range.end);
+      const fixes = service.getCodeFixesAtPosition(path, start, end, errorCodes, fmtSettings, {});
+      return fixes.map(
+        (fix): CodeAction => ({
+          title: fix.description,
+          kind: 'quickfix',
+          edit: fileTextChangesToWorkspaceEdit(fix.changes, readText),
+        }),
+      );
+    },
+    organizeImports: (path) => {
+      const changes = service.organizeImports({ type: 'file', fileName: path }, fmtSettings, {});
+      return fileTextChangesToWorkspaceEdit(changes, readText);
+    },
+    getFormattingEdits: (path, options) => {
+      const settings = formattingOptionsToFormatCodeSettings(options);
+      const changes = service.getFormattingEditsForDocument(path, settings);
+      return textChangesToTextEdits(changes, readText(path));
+    },
+    getRangeFormattingEdits: (path, range, options) => {
+      const settings = formattingOptionsToFormatCodeSettings(options);
+      const text = readText(path);
+      const start = positionToOffset(text, range.start);
+      const end = positionToOffset(text, range.end);
+      const changes = service.getFormattingEditsForRange(path, start, end, settings);
+      return textChangesToTextEdits(changes, text);
     },
     openDocument: (path, text) => overlay.open(path, text),
     updateDocument: (path, text) => overlay.update(path, text),

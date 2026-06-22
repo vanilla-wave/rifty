@@ -10,9 +10,11 @@ export { createTsLanguageService } from './service.ts';
 export type { CreateTsLanguageServiceDeps, TsLanguageService } from './service.ts';
 export { CompletionItemKind, DiagnosticSeverity } from './lsp-types.ts';
 export type {
+  CodeAction,
   CompletionItem,
   CompletionList,
   Diagnostic,
+  FormattingOptions,
   Hover,
   Location,
   MarkupContent,
@@ -64,6 +66,10 @@ export type {
   TsPrepareRenameRequest,
   TsRenameEditsRequest,
   TsSignatureHelpRequest,
+  TsCodeFixesRequest,
+  TsOrganizeImportsRequest,
+  TsFormattingEditsRequest,
+  TsRangeFormattingEditsRequest,
   TsAckResponse,
   TsDiagnosticsResponse,
   TsHoverResponse,
@@ -73,5 +79,7 @@ export type {
   TsPrepareRenameResponse,
   TsWorkspaceEditResponse,
   TsSignatureHelpResponse,
+  TsCodeActionsResponse,
+  TsTextEditsResponse,
   TsErrorResponse,
 } from './worker/protocol.ts';

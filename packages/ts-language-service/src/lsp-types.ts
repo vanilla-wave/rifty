@@ -129,6 +129,33 @@ export interface WorkspaceEdit {
 }
 
 /**
+ * LSP `CodeAction` — a quick-fix or source-action the editor can apply. `kind`
+ * is a hierarchical dotted string (LSP `CodeActionKind`): quick-fixes are
+ * `'quickfix'`; organize-imports source-actions are `'source.organizeImports'`.
+ * `edit` is the workspace mutation to apply. `isPreferred` marks the default fix.
+ */
+export interface CodeAction {
+  readonly title: string;
+  /** Hierarchical kind (e.g. `'quickfix'`, `'source.organizeImports'`). */
+  readonly kind?: string;
+  readonly edit?: WorkspaceEdit;
+  /** The action editors should auto-apply / show first (LSP `isPreferred`). */
+  readonly isPreferred?: boolean;
+}
+
+/**
+ * LSP `FormattingOptions` (the subset we honor): the editor's indent settings.
+ * The service derives a full `ts.FormatCodeSettings` from these + TS defaults
+ * (see `formattingOptionsToFormatCodeSettings` in `mapping.ts`).
+ */
+export interface FormattingOptions {
+  /** Spaces (or tab-width) per indentation level. */
+  readonly tabSize: number;
+  /** Indent with spaces (`true`) or hard tabs (`false`). */
+  readonly insertSpaces: boolean;
+}
+
+/**
  * LSP `prepareRename` result: the span that will be renamed plus the initial
  * text to seed the rename box. `null` (at the call site) when the element at the
  * position cannot be renamed.

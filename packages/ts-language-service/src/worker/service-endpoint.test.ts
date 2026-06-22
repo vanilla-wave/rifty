@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { CompletionItemKind } from '../lsp-types.ts';
 import { createRpcFsSync } from './host-fs-rpc.ts';
 import type {
+  TsCodeActionsResponse,
   TsCompletionItemResponse,
   TsCompletionsResponse,
   TsDiagnosticsResponse,
@@ -19,6 +20,7 @@ import type {
   TsLocationsResponse,
   TsPrepareRenameResponse,
   TsSignatureHelpResponse,
+  TsTextEditsResponse,
   TsWorkspaceEditResponse,
 } from './protocol.ts';
 import { createServiceEndpoint } from './service-endpoint.ts';
@@ -381,6 +383,106 @@ describe('createServiceEndpoint', () => {
     const sig = (sigR as TsSignatureHelpResponse).signatureHelp;
     expect(sig?.signatures[0]?.label).toContain('add(a: number, b: number): number');
     expect(sig?.activeParameter).toBe(1);
+  });
+
+  it('codeFixes / organizeImports / formatting flow through the endpoint', async () => {
+    const { fsSync: mem } = createMemoryFs();
+    mem.mkdirSync('/proj', { recursive: true });
+    mem.writeFileSync(
+      '/proj/tsconfig.json',
+      enc(
+        JSON.stringify({
+          compilerOptions: {
+            strict: true,
+            module: 'esnext',
+            target: 'es2022',
+            moduleResolution: 'bundler',
+          },
+        }),
+      ),
+    );
+    mem.writeFileSync(
+      '/proj/helper.ts',
+      enc('export function greet(name: string): string {\n  return `hi ${name}`;\n}\n'),
+    );
+    // main.ts: a missing-import (TS2304) for code-fix, unsorted/unused imports
+    // for organize-imports, and bad spacing for formatting — one file, 3 probes.
+    mem.writeFileSync(
+      '/proj/main.ts',
+      enc("import { greet } from './helper';\nconst x=1;\nconsole.log(greet('a'),x);\n"),
+    );
+    const files = new Map<string, Uint8Array>();
+    for (const p of ['/proj/tsconfig.json', '/proj/helper.ts', '/proj/main.ts'])
+      files.set(p, mem.readFileBytesSync(p));
+
+    const endpoint = createServiceEndpoint({
+      buildFsSync: (call) => createRpcFsSync(call),
+      call: makeFakeCall(files),
+    });
+    await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+
+    // formatting: the whole document → ≥1 edit (the `x=1` needs spaces).
+    const fmtR = await endpoint.dispatch({
+      id: 2,
+      type: 'ts:getFormattingEdits',
+      path: '/proj/main.ts',
+      options: { tabSize: 2, insertSpaces: true },
+    });
+    expect(fmtR.ok).toBe(true);
+    expect(fmtR.kind).toBe('textEdits');
+    expect((fmtR as TsTextEditsResponse).textEdits.length).toBeGreaterThan(0);
+
+    // range formatting: just the `const x=1;` line (line 1).
+    const rngR = await endpoint.dispatch({
+      id: 3,
+      type: 'ts:getRangeFormattingEdits',
+      path: '/proj/main.ts',
+      range: { start: { line: 1, character: 0 }, end: { line: 1, character: 10 } },
+      options: { tabSize: 2, insertSpaces: true },
+    });
+    expect(rngR.kind).toBe('textEdits');
+    expect((rngR as TsTextEditsResponse).textEdits.length).toBeGreaterThan(0);
+
+    // organize-imports: a no-op here (single, already-sorted, used import) →
+    // empty changes (an honest no-op WorkspaceEdit, not a fabricated edit).
+    const orgR = await endpoint.dispatch({
+      id: 4,
+      type: 'ts:organizeImports',
+      path: '/proj/main.ts',
+    });
+    expect(orgR.kind).toBe('workspaceEdit');
+    expect((orgR as TsWorkspaceEditResponse).edit.changes).toEqual({});
+
+    // code-fixes: open a buffer with a missing import (TS2304 for `missing`), then
+    // request fixes for the in-range code → an "Add import" CodeAction.
+    await endpoint.dispatch({
+      id: 5,
+      type: 'ts:open',
+      path: '/proj/main.ts',
+      text: 'const m = greet("x");\nconsole.log(m);\n',
+    });
+    const diagR = await endpoint.dispatch({
+      id: 6,
+      type: 'ts:getSemanticDiagnostics',
+      path: '/proj/main.ts',
+    });
+    const codes = [...new Set(diags(diagR).map((d) => d.code))].filter(
+      (c): c is number => typeof c === 'number',
+    );
+    expect(codes).toContain(2304); // `greet` is now unimported
+    const fixR = await endpoint.dispatch({
+      id: 7,
+      type: 'ts:getCodeFixes',
+      path: '/proj/main.ts',
+      range: { start: { line: 0, character: 10 }, end: { line: 0, character: 15 } },
+      errorCodes: codes,
+    });
+    expect(fixR.ok).toBe(true);
+    expect(fixR.kind).toBe('codeActions');
+    const actions = (fixR as TsCodeActionsResponse).codeActions;
+    expect(actions.length).toBeGreaterThan(0);
+    expect(actions[0]?.kind).toBe('quickfix');
+    expect(actions.some((a) => a.title.includes('Add import'))).toBe(true);
   });
 
   it('a query before init returns an error frame (not a silent empty)', async () => {
