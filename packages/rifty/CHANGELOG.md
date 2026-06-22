@@ -4,6 +4,8 @@
 
 ### Added
 
+- **`@riftydev/sdk/ts-language-service`** — subpath re-export for `@riftydev/ts-language-service`.
+
 - **ADR-0131 — `sandbox.fs` for AI-agent file IO.** `createSandbox()` now exposes
   the runtime Worker-backed `fs.readFile()` / `fs.writeFile()` surface while
   keeping `sandbox.runtime` unchanged. PR #21 review: TSDoc now states the two

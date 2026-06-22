@@ -77,6 +77,9 @@ importers:
       '@riftydev/terminal':
         specifier: workspace:*
         version: link:../../packages/terminal
+      '@riftydev/ts-language-service':
+        specifier: workspace:*
+        version: link:../../packages/ts-language-service
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../../packages/vfs
@@ -200,6 +203,9 @@ importers:
       '@riftydev/terminal':
         specifier: workspace:*
         version: link:../terminal
+      '@riftydev/ts-language-service':
+        specifier: workspace:*
+        version: link:../ts-language-service
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../vfs
@@ -282,6 +288,21 @@ importers:
       '@xterm/xterm':
         specifier: ^5.5.0
         version: 5.5.0
+
+  packages/ts-language-service:
+    dependencies:
+      '@riftydev/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@riftydev/runtime-js':
+        specifier: workspace:*
+        version: link:../runtime-js
+      '@riftydev/vfs':
+        specifier: workspace:*
+        version: link:../vfs
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
 
   packages/vfs:
     devDependencies:

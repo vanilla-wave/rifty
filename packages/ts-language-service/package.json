@@ -1,0 +1,75 @@
+{
+  "name": "@riftydev/ts-language-service",
+  "version": "0.1.0",
+  "description": "TypeScript Language Service over the rifty VFS.",
+  "type": "module",
+  "license": "MIT",
+  "author": "vanilla-wave <vizetmail@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vanilla-wave/rifty.git",
+    "directory": "packages/ts-language-service"
+  },
+  "homepage": "https://github.com/vanilla-wave/rifty#readme",
+  "bugs": {
+    "url": "https://github.com/vanilla-wave/rifty/issues"
+  },
+  "keywords": [
+    "rifty",
+    "browser",
+    "webcontainer",
+    "typescript",
+    "language-service",
+    "lsp",
+    "diagnostics"
+  ],
+  "sideEffects": ["./dist/worker/entry.js"],
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./protocol": "./src/worker/protocol.ts",
+    "./lsp-types": "./src/lsp-types.ts",
+    "./worker/entry": "./src/worker/entry.ts",
+    "./vendor/lib-bundle.json": "./vendor/lib-bundle.json"
+  },
+  "files": ["dist", "vendor", "CHANGELOG.md"],
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./protocol": {
+        "types": "./dist/protocol.d.ts",
+        "import": "./dist/protocol.js"
+      },
+      "./lsp-types": {
+        "types": "./dist/lsp-types.d.ts",
+        "import": "./dist/lsp-types.js"
+      },
+      "./worker/entry": {
+        "types": "./dist/worker/entry.d.ts",
+        "import": "./dist/worker/entry.js"
+      },
+      "./vendor/lib-bundle.json": "./vendor/lib-bundle.json"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "vendor:ts-lib": "node scripts/vendor-ts-lib.mjs",
+    "prebuild": "pnpm vendor:ts-lib",
+    "build": "tsup"
+  },
+  "dependencies": {
+    "@riftydev/kernel": "workspace:*",
+    "@riftydev/runtime-js": "workspace:*",
+    "@riftydev/vfs": "workspace:*",
+    "typescript": "5.9.3"
+  }
+}

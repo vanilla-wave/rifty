@@ -35,7 +35,11 @@
     "./builtins/module": "./src/builtins/module.ts",
     "./builtins/child_process": "./src/builtins/child_process.ts",
     "./builtins/node-entry": "./src/builtins/node-entry.ts",
-    "./builtins/node-entry-url": "./src/builtins/node-entry-url.ts"
+    "./builtins/node-entry-url": "./src/builtins/node-entry-url.ts",
+    "./builtins/os": "./src/builtins/os.ts",
+    "./builtins/path": "./src/builtins/path.ts",
+    "./builtins/perf_hooks": "./src/builtins/perf_hooks.ts",
+    "./builtins/fs": "./src/builtins/fs.ts"
   },
   "files": ["dist", "CHANGELOG.md"],
   "publishConfig": {
@@ -99,6 +103,30 @@
       "./builtins/child_process": {
         "types": "./dist/builtins/child_process.d.ts",
         "import": "./dist/builtins/child_process.js"
+      },
+      "./builtins/node-entry": {
+        "types": "./dist/builtins/node-entry.d.ts",
+        "import": "./dist/builtins/node-entry.js"
+      },
+      "./builtins/node-entry-url": {
+        "types": "./dist/builtins/node-entry-url.d.ts",
+        "import": "./dist/builtins/node-entry-url.js"
+      },
+      "./builtins/os": {
+        "types": "./dist/builtins/os.d.ts",
+        "import": "./dist/builtins/os.js"
+      },
+      "./builtins/path": {
+        "types": "./dist/builtins/path.d.ts",
+        "import": "./dist/builtins/path.js"
+      },
+      "./builtins/perf_hooks": {
+        "types": "./dist/builtins/perf_hooks.d.ts",
+        "import": "./dist/builtins/perf_hooks.js"
+      },
+      "./builtins/fs": {
+        "types": "./dist/builtins/fs.d.ts",
+        "import": "./dist/builtins/fs.js"
       }
     }
   },

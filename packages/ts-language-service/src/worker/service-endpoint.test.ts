@@ -1,0 +1,559 @@
+/**
+ * Protocol endpoint over a REAL service (RPC-or-memory FsSync fixture). Drives
+ * the endpoint with `ts:init`/`ts:open`/`ts:getSemanticDiagnostics`/`ts:update`/
+ * … frames and asserts the response frames carry the right diagnostics and that
+ * open/update flow works — the Node-testable core of the worker (no worker
+ * globals, no kernel). The boundary is mocked only at the `fs.*` RPC seam (a
+ * fake `call` serving an in-memory fixture, exactly as host-fs-rpc.test.ts).
+ */
+
+import { createMemoryFs } from '@riftydev/vfs/internal';
+import { describe, expect, it } from 'vitest';
+import { CompletionItemKind } from '../lsp-types.ts';
+import { createRpcFsSync } from './host-fs-rpc.ts';
+import type {
+  TsCodeActionsResponse,
+  TsCompletionItemResponse,
+  TsCompletionsResponse,
+  TsDiagnosticsResponse,
+  TsErrorResponse,
+  TsHoverResponse,
+  TsLocationsResponse,
+  TsPrepareRenameResponse,
+  TsSignatureHelpResponse,
+  TsTextEditsResponse,
+  TsWorkspaceEditResponse,
+} from './protocol.ts';
+import { createServiceEndpoint } from './service-endpoint.ts';
+
+const enc = (s: string) => new TextEncoder().encode(s);
+
+/** Fake fs.* call serving `files` (path → bytes); mirrors the owner handlers. */
+function makeFakeCall(files: Map<string, Uint8Array>): (m: string, p: unknown) => unknown {
+  const dirs = new Set<string>(['/']);
+  for (const path of files.keys()) {
+    let d = path.slice(0, path.lastIndexOf('/')) || '/';
+    while (d !== '/' && !dirs.has(d)) {
+      dirs.add(d);
+      d = d.slice(0, d.lastIndexOf('/')) || '/';
+    }
+  }
+  const stat = (path: string) => {
+    const b = files.get(path);
+    if (b) return { isFile: true, isDirectory: false, size: b.length, mtime: 1 };
+    if (dirs.has(path)) return { isFile: false, isDirectory: true, size: 0, mtime: 1 };
+    return null;
+  };
+  return (method, payload) => {
+    const p = payload as Record<string, unknown>;
+    switch (method) {
+      case 'fs.exists':
+        return stat(p.path as string) !== null;
+      case 'fs.statOrNull':
+        return stat(p.path as string);
+      case 'fs.readdir': {
+        const dir = p.path as string;
+        const prefix = dir === '/' ? '/' : `${dir}/`;
+        const seen = new Map<string, { name: string; isFile: boolean; isDirectory: boolean }>();
+        for (const fp of files.keys()) {
+          if (!fp.startsWith(prefix)) continue;
+          const rest = fp.slice(prefix.length);
+          const slash = rest.indexOf('/');
+          if (slash === -1) seen.set(rest, { name: rest, isFile: true, isDirectory: false });
+          else {
+            const n = rest.slice(0, slash);
+            if (!seen.has(n)) seen.set(n, { name: n, isFile: false, isDirectory: true });
+          }
+        }
+        return [...seen.values()];
+      }
+      case 'fs.readChunk': {
+        const b = files.get(p.path as string) ?? new Uint8Array(0);
+        const offset = p.offset as number;
+        const length = p.length as number;
+        if (offset >= b.length) return new Uint8Array(0);
+        return b.subarray(offset, Math.min(b.length, offset + length));
+      }
+      default:
+        throw new Error(`fake fs.* call: unexpected method ${method}`);
+    }
+  };
+}
+
+function buildFixture(): Map<string, Uint8Array> {
+  const { fsSync: mem } = createMemoryFs();
+  mem.mkdirSync('/proj', { recursive: true });
+  mem.writeFileSync(
+    '/proj/tsconfig.json',
+    enc(JSON.stringify({ compilerOptions: { strict: true } })),
+  );
+  mem.writeFileSync('/proj/a.ts', enc('export const x: number = 1;\n'));
+  const files = new Map<string, Uint8Array>();
+  for (const path of ['/proj/tsconfig.json', '/proj/a.ts'])
+    files.set(path, mem.readFileBytesSync(path));
+  return files;
+}
+
+function diags(r: Awaited<ReturnType<ReturnType<typeof createServiceEndpoint>['dispatch']>>) {
+  expect(r.ok).toBe(true);
+  expect(r.kind).toBe('diagnostics');
+  return (r as TsDiagnosticsResponse).diagnostics;
+}
+
+describe('createServiceEndpoint', () => {
+  it('init → query → open/update flow drives diagnostics through response frames', async () => {
+    const endpoint = createServiceEndpoint({
+      buildFsSync: (call) => createRpcFsSync(call),
+      call: makeFakeCall(buildFixture()),
+    });
+
+    // init
+    const init = await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+    expect(init).toEqual({ id: 1, ok: true, kind: 'ack' });
+
+    // clean on disk
+    const clean = await endpoint.dispatch({
+      id: 2,
+      type: 'ts:getSemanticDiagnostics',
+      path: '/proj/a.ts',
+    });
+    expect(diags(clean)).toHaveLength(0);
+
+    // open a buffer with a type error
+    const open = await endpoint.dispatch({
+      id: 3,
+      type: 'ts:open',
+      path: '/proj/a.ts',
+      text: 'export const x: number = "bad";\n',
+    });
+    expect(open.ok).toBe(true);
+    const withErr = await endpoint.dispatch({
+      id: 4,
+      type: 'ts:getSemanticDiagnostics',
+      path: '/proj/a.ts',
+    });
+    const errs = diags(withErr);
+    expect(errs).toHaveLength(1);
+    expect(errs[0]?.code).toBe(2322);
+
+    // update fixes it
+    await endpoint.dispatch({
+      id: 5,
+      type: 'ts:update',
+      path: '/proj/a.ts',
+      text: 'export const x: number = 2;\n',
+    });
+    const fixed = await endpoint.dispatch({
+      id: 6,
+      type: 'ts:getSemanticDiagnostics',
+      path: '/proj/a.ts',
+    });
+    expect(diags(fixed)).toHaveLength(0);
+
+    // close
+    const close = await endpoint.dispatch({ id: 7, type: 'ts:close', path: '/proj/a.ts' });
+    expect(close.ok).toBe(true);
+  });
+
+  it('syntactic diagnostics flow through the endpoint', async () => {
+    const { fsSync: mem } = createMemoryFs();
+    mem.mkdirSync('/proj', { recursive: true });
+    mem.writeFileSync('/proj/bad.ts', enc('const x = ;\n'));
+    const files = new Map([['/proj/bad.ts', mem.readFileBytesSync('/proj/bad.ts')]]);
+
+    const endpoint = createServiceEndpoint({
+      buildFsSync: (call) => createRpcFsSync(call),
+      call: makeFakeCall(files),
+    });
+    await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+    const r = await endpoint.dispatch({
+      id: 2,
+      type: 'ts:getSyntacticDiagnostics',
+      path: '/proj/bad.ts',
+    });
+    expect(diags(r).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('config-file diagnostics flow through the endpoint', async () => {
+    const { fsSync: mem } = createMemoryFs();
+    mem.mkdirSync('/proj', { recursive: true });
+    mem.writeFileSync(
+      '/proj/tsconfig.json',
+      enc(JSON.stringify({ compilerOptions: { target: 'not-a-real-target' } })),
+    );
+    mem.writeFileSync('/proj/a.ts', enc('export const x = 1;\n'));
+    const files = new Map<string, Uint8Array>();
+    for (const p of ['/proj/tsconfig.json', '/proj/a.ts']) files.set(p, mem.readFileBytesSync(p));
+
+    const endpoint = createServiceEndpoint({
+      buildFsSync: (call) => createRpcFsSync(call),
+      call: makeFakeCall(files),
+    });
+    await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+    const r = await endpoint.dispatch({ id: 2, type: 'ts:getConfigFileDiagnostics' });
+    expect(diags(r).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('hover / definition / completions / completion-details flow through the endpoint', async () => {
+    const { fsSync: mem } = createMemoryFs();
+    mem.mkdirSync('/proj', { recursive: true });
+    mem.writeFileSync(
+      '/proj/tsconfig.json',
+      enc(
+        JSON.stringify({ compilerOptions: { strict: true, module: 'esnext', target: 'es2022' } }),
+      ),
+    );
+    mem.writeFileSync(
+      '/proj/math.ts',
+      enc('export function add(a: number, b: number): number {\n  return a + b;\n}\n'),
+    );
+    mem.writeFileSync(
+      '/proj/main.ts',
+      enc(
+        "import { add } from './math.ts';\nconst total = add(1, 2);\nconst arr = [1];\narr.map((n) => n);\n",
+      ),
+    );
+    const files = new Map<string, Uint8Array>();
+    for (const p of ['/proj/tsconfig.json', '/proj/math.ts', '/proj/main.ts'])
+      files.set(p, mem.readFileBytesSync(p));
+
+    const endpoint = createServiceEndpoint({
+      buildFsSync: (call) => createRpcFsSync(call),
+      call: makeFakeCall(files),
+    });
+    await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+
+    // hover on `add` at its call site (line 1, char 14 = the `a` of `add(`).
+    const hoverR = await endpoint.dispatch({
+      id: 2,
+      type: 'ts:getQuickInfo',
+      path: '/proj/main.ts',
+      position: { line: 1, character: 14 },
+    });
+    expect(hoverR.ok).toBe(true);
+    expect(hoverR.kind).toBe('hover');
+    const hover = (hoverR as TsHoverResponse).hover;
+    expect(hover?.contents.kind).toBe('markdown');
+    // Rendered as a `typescript` code block; at the call site `add` is an
+    // alias-import so the signature reads `(alias) add(a: number, b: number)`.
+    expect(hover?.contents.value).toContain('```typescript');
+    expect(hover?.contents.value).toContain('add(a: number, b: number): number');
+
+    // definition of `add` → math.ts.
+    const defR = await endpoint.dispatch({
+      id: 3,
+      type: 'ts:getDefinition',
+      path: '/proj/main.ts',
+      position: { line: 1, character: 14 },
+    });
+    expect(defR.kind).toBe('locations');
+    const defs = (defR as TsLocationsResponse).locations;
+    expect(defs.length).toBeGreaterThan(0);
+    expect(defs[0]?.uri).toBe('/proj/math.ts');
+
+    // type-definition of `arr` (number[]) → a lib .d.ts location.
+    const typeDefR = await endpoint.dispatch({
+      id: 4,
+      type: 'ts:getTypeDefinition',
+      path: '/proj/main.ts',
+      position: { line: 3, character: 0 }, // `arr.map` line, on `arr`
+    });
+    expect(typeDefR.kind).toBe('locations');
+    expect((typeDefR as TsLocationsResponse).locations.length).toBeGreaterThan(0);
+
+    // completions at member access `arr.|` (line 3, char 4).
+    const compR = await endpoint.dispatch({
+      id: 5,
+      type: 'ts:getCompletions',
+      path: '/proj/main.ts',
+      position: { line: 3, character: 4 },
+    });
+    expect(compR.kind).toBe('completions');
+    const list = (compR as TsCompletionsResponse).completions;
+    const map = list.items.find((i) => i.label === 'map');
+    expect(map).toBeDefined();
+    expect(map?.kind).toBe(CompletionItemKind.Method);
+
+    // completion details for `map`.
+    const detailR = await endpoint.dispatch({
+      id: 6,
+      type: 'ts:getCompletionDetails',
+      path: '/proj/main.ts',
+      position: { line: 3, character: 4 },
+      label: 'map',
+    });
+    expect(detailR.kind).toBe('completionItem');
+    const item = (detailR as TsCompletionItemResponse).item;
+    expect(item?.label).toBe('map');
+    expect(item?.detail).toContain('map');
+  });
+
+  it('references / prepareRename / renameEdits / signatureHelp flow through the endpoint', async () => {
+    const { fsSync: mem } = createMemoryFs();
+    mem.mkdirSync('/proj', { recursive: true });
+    mem.writeFileSync(
+      '/proj/tsconfig.json',
+      enc(
+        JSON.stringify({
+          compilerOptions: {
+            strict: true,
+            module: 'esnext',
+            target: 'es2022',
+            moduleResolution: 'bundler',
+          },
+        }),
+      ),
+    );
+    mem.writeFileSync(
+      '/proj/math.ts',
+      enc('export function add(a: number, b: number): number {\n  return a + b;\n}\n'),
+    );
+    mem.writeFileSync(
+      '/proj/main.ts',
+      enc("import { add } from './math';\nconst total = add(1, 2);\nadd(total, 3);\n"),
+    );
+    const files = new Map<string, Uint8Array>();
+    for (const p of ['/proj/tsconfig.json', '/proj/math.ts', '/proj/main.ts'])
+      files.set(p, mem.readFileBytesSync(p));
+
+    const endpoint = createServiceEndpoint({
+      buildFsSync: (call) => createRpcFsSync(call),
+      call: makeFakeCall(files),
+    });
+    await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+
+    // references on the `add` DEFINITION (math.ts, line 0, char 16) — cross-file
+    // set. ts only flags `isDefinition` when the query originates at the decl, so
+    // includeDeclaration:false meaningfully drops a result only from here.
+    const refR = await endpoint.dispatch({
+      id: 2,
+      type: 'ts:getReferences',
+      path: '/proj/math.ts',
+      position: { line: 0, character: 16 },
+      context: { includeDeclaration: true },
+    });
+    expect(refR.kind).toBe('locations');
+    const refs = (refR as TsLocationsResponse).locations;
+    expect(refs.some((l) => l.uri === '/proj/math.ts')).toBe(true);
+    expect(refs.some((l) => l.uri === '/proj/main.ts')).toBe(true);
+
+    // excluding the declaration drops the math.ts definition site.
+    const refNoDecl = await endpoint.dispatch({
+      id: 3,
+      type: 'ts:getReferences',
+      path: '/proj/math.ts',
+      position: { line: 0, character: 16 },
+      context: { includeDeclaration: false },
+    });
+    expect((refNoDecl as TsLocationsResponse).locations.length).toBeLessThan(refs.length);
+
+    // prepareRename on the same `add` → canRename (placeholder `add`).
+    const prepR = await endpoint.dispatch({
+      id: 4,
+      type: 'ts:prepareRename',
+      path: '/proj/main.ts',
+      position: { line: 1, character: 14 },
+    });
+    expect(prepR.kind).toBe('prepareRename');
+    expect((prepR as TsPrepareRenameResponse).result?.placeholder).toBe('add');
+
+    // renameEdits from the DEFINITION `add` → `sum`: edits in BOTH files, newText
+    // `sum` (renaming from the def propagates cross-file; from an import alias it
+    // would only touch main.ts).
+    const renR = await endpoint.dispatch({
+      id: 5,
+      type: 'ts:getRenameEdits',
+      path: '/proj/math.ts',
+      position: { line: 0, character: 16 },
+      newName: 'sum',
+    });
+    expect(renR.kind).toBe('workspaceEdit');
+    const changes = (renR as TsWorkspaceEditResponse).edit.changes;
+    expect(Object.keys(changes)).toContain('/proj/math.ts');
+    expect(Object.keys(changes)).toContain('/proj/main.ts');
+    expect(changes['/proj/math.ts']?.[0]?.newText).toBe('sum');
+
+    // signatureHelp inside `add(total, |3)` (line 2, char 11) → 2nd parameter.
+    const sigR = await endpoint.dispatch({
+      id: 6,
+      type: 'ts:getSignatureHelp',
+      path: '/proj/main.ts',
+      position: { line: 2, character: 11 },
+    });
+    expect(sigR.kind).toBe('signatureHelp');
+    const sig = (sigR as TsSignatureHelpResponse).signatureHelp;
+    expect(sig?.signatures[0]?.label).toContain('add(a: number, b: number): number');
+    expect(sig?.activeParameter).toBe(1);
+  });
+
+  it('codeFixes / organizeImports / formatting flow through the endpoint', async () => {
+    const { fsSync: mem } = createMemoryFs();
+    mem.mkdirSync('/proj', { recursive: true });
+    mem.writeFileSync(
+      '/proj/tsconfig.json',
+      enc(
+        JSON.stringify({
+          compilerOptions: {
+            strict: true,
+            module: 'esnext',
+            target: 'es2022',
+            moduleResolution: 'bundler',
+          },
+        }),
+      ),
+    );
+    mem.writeFileSync(
+      '/proj/helper.ts',
+      enc('export function greet(name: string): string {\n  return `hi ${name}`;\n}\n'),
+    );
+    // main.ts: a missing-import (TS2304) for code-fix, unsorted/unused imports
+    // for organize-imports, and bad spacing for formatting — one file, 3 probes.
+    mem.writeFileSync(
+      '/proj/main.ts',
+      enc("import { greet } from './helper';\nconst x=1;\nconsole.log(greet('a'),x);\n"),
+    );
+    const files = new Map<string, Uint8Array>();
+    for (const p of ['/proj/tsconfig.json', '/proj/helper.ts', '/proj/main.ts'])
+      files.set(p, mem.readFileBytesSync(p));
+
+    const endpoint = createServiceEndpoint({
+      buildFsSync: (call) => createRpcFsSync(call),
+      call: makeFakeCall(files),
+    });
+    await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+
+    // formatting: the whole document → ≥1 edit (the `x=1` needs spaces).
+    const fmtR = await endpoint.dispatch({
+      id: 2,
+      type: 'ts:getFormattingEdits',
+      path: '/proj/main.ts',
+      options: { tabSize: 2, insertSpaces: true },
+    });
+    expect(fmtR.ok).toBe(true);
+    expect(fmtR.kind).toBe('textEdits');
+    expect((fmtR as TsTextEditsResponse).textEdits.length).toBeGreaterThan(0);
+
+    // range formatting: just the `const x=1;` line (line 1).
+    const rngR = await endpoint.dispatch({
+      id: 3,
+      type: 'ts:getRangeFormattingEdits',
+      path: '/proj/main.ts',
+      range: { start: { line: 1, character: 0 }, end: { line: 1, character: 10 } },
+      options: { tabSize: 2, insertSpaces: true },
+    });
+    expect(rngR.kind).toBe('textEdits');
+    expect((rngR as TsTextEditsResponse).textEdits.length).toBeGreaterThan(0);
+
+    // organize-imports: a no-op here (single, already-sorted, used import) →
+    // empty changes (an honest no-op WorkspaceEdit, not a fabricated edit).
+    const orgR = await endpoint.dispatch({
+      id: 4,
+      type: 'ts:organizeImports',
+      path: '/proj/main.ts',
+    });
+    expect(orgR.kind).toBe('workspaceEdit');
+    expect((orgR as TsWorkspaceEditResponse).edit.changes).toEqual({});
+
+    // code-fixes: open a buffer with a missing import (TS2304 for `missing`), then
+    // request fixes for the in-range code → an "Add import" CodeAction.
+    await endpoint.dispatch({
+      id: 5,
+      type: 'ts:open',
+      path: '/proj/main.ts',
+      text: 'const m = greet("x");\nconsole.log(m);\n',
+    });
+    const diagR = await endpoint.dispatch({
+      id: 6,
+      type: 'ts:getSemanticDiagnostics',
+      path: '/proj/main.ts',
+    });
+    const codes = [...new Set(diags(diagR).map((d) => d.code))].filter(
+      (c): c is number => typeof c === 'number',
+    );
+    expect(codes).toContain(2304); // `greet` is now unimported
+    const fixR = await endpoint.dispatch({
+      id: 7,
+      type: 'ts:getCodeFixes',
+      path: '/proj/main.ts',
+      range: { start: { line: 0, character: 10 }, end: { line: 0, character: 15 } },
+      errorCodes: codes,
+    });
+    expect(fixR.ok).toBe(true);
+    expect(fixR.kind).toBe('codeActions');
+    const actions = (fixR as TsCodeActionsResponse).codeActions;
+    expect(actions.length).toBeGreaterThan(0);
+    expect(actions[0]?.kind).toBe('quickfix');
+    expect(actions.some((a) => a.title.includes('Add import'))).toBe(true);
+  });
+
+  it('a query before init returns an error frame (not a silent empty)', async () => {
+    const endpoint = createServiceEndpoint({
+      buildFsSync: (call) => createRpcFsSync(call),
+      call: makeFakeCall(buildFixture()),
+    });
+    const r = await endpoint.dispatch({
+      id: 1,
+      type: 'ts:getSemanticDiagnostics',
+      path: '/proj/a.ts',
+    });
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe('error');
+  });
+
+  it('a frame arriving while ts:init is still in flight WAITS for it (no "before ts:init" race)', async () => {
+    // The fork-IPC pump dispatches each frame independently; `ts:init` is async
+    // (it awaits the std-lib load), so an open/query frame the page sends right
+    // after init lands at the endpoint while the service is still building. It
+    // MUST queue behind the in-flight init (the page never re-sends), not fail.
+    const endpoint = createServiceEndpoint({
+      buildFsSync: (call) => createRpcFsSync(call),
+      call: makeFakeCall(buildFixture()),
+    });
+    // Fire init WITHOUT awaiting it, then a query in the SAME tick — the query's
+    // dispatch runs before init's build promise resolves.
+    const initP = endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+    const queryP = endpoint.dispatch({
+      id: 2,
+      type: 'ts:getSemanticDiagnostics',
+      path: '/proj/a.ts',
+    });
+    const openP = endpoint.dispatch({
+      id: 3,
+      type: 'ts:open',
+      path: '/proj/a.ts',
+      text: 'export const x: number = "bad";\n',
+    });
+    const [init, query, open] = await Promise.all([initP, queryP, openP]);
+    expect(init).toEqual({ id: 1, ok: true, kind: 'ack' });
+    expect(query.ok).toBe(true);
+    expect(query.kind).toBe('diagnostics');
+    expect(open).toEqual({ id: 3, ok: true, kind: 'ack' });
+  });
+
+  it('a query after a FAILED init surfaces the real init error (not "before ts:init")', async () => {
+    // Init fails (the owner store is unreachable). The failing frame AND every
+    // frame queued behind it must carry the REAL cause — never the misleading
+    // "before ts:init" (Fidelity: loud, accurate gaps).
+    const boom = new Error('owner fs.* RPC unreachable');
+    const failingCall = (): never => {
+      throw boom;
+    };
+    const endpoint = createServiceEndpoint({
+      buildFsSync: (call) => createRpcFsSync(call),
+      call: failingCall,
+    });
+    const initP = endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+    const queryP = endpoint.dispatch({
+      id: 2,
+      type: 'ts:getSemanticDiagnostics',
+      path: '/proj/a.ts',
+    });
+    const [init, query] = await Promise.all([initP, queryP]);
+    expect(init.ok).toBe(false);
+    expect(query.ok).toBe(false);
+    for (const r of [init, query]) {
+      expect(r.kind).toBe('error');
+      expect((r as TsErrorResponse).error.message).toContain('owner fs.* RPC unreachable');
+    }
+  });
+});

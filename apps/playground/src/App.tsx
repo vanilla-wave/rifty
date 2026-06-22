@@ -6,7 +6,9 @@ import {
   type TerminalHistoryRecord,
   addTerminalHistoryRecord,
 } from '@riftydev/terminal/history';
+import type { Diagnostic } from '@riftydev/ts-language-service/lsp-types';
 import { normalizePath } from '@riftydev/vfs';
+import * as monaco from 'monaco-editor';
 import { Show, createEffect, createSignal, onCleanup, onMount } from 'solid-js';
 import {
   type TerminalRunDimensions,
@@ -19,7 +21,12 @@ import { type BootResult, isCrossOriginIsolated, swErrorBannerMessage } from './
 import { BottomPanel } from './components/BottomPanel.tsx';
 import { CapabilitiesPanel } from './components/CapabilitiesPanel.tsx';
 import { CommandPalette, type PaletteItem } from './components/CommandPalette.tsx';
-import { type EditorApi, EditorHost, PROGRAM_MIRROR_PATH } from './components/EditorHost.tsx';
+import {
+  type EditorApi,
+  type EditorDocumentEvent,
+  EditorHost,
+  PROGRAM_MIRROR_PATH,
+} from './components/EditorHost.tsx';
 import { FileExplorer } from './components/FileExplorer.tsx';
 import { PreviewPanel } from './components/PreviewPanel.tsx';
 import { Splitter } from './components/Splitter.tsx';
@@ -40,6 +47,8 @@ import {
 import { SnapshotFs } from './glue/snapshot-fs.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
+import { createTsLanguageServiceClient, lspToMonacoMarkers } from './glue/ts-ls-client.ts';
+import { registerTsLanguageServiceProviders } from './glue/ts-ls-monaco-providers.ts';
 import { requestVfsSnapshot, subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset, presetBootLines } from './presets.ts';
 import type { ProjectSpec } from './templates/project-spec.ts';
@@ -80,6 +89,8 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     onPreview: () => () => {},
     requestPreview: () => {},
     setDevConfig: () => {},
+    sendTsLsp: () => {},
+    onTsLsp: () => () => {},
     close: () => {},
   };
 }
@@ -113,6 +124,9 @@ export function App(props: AppProps) {
   const snapshotFs = new SnapshotFs(WORKSPACE);
 
   let editorApi: EditorApi | undefined;
+  // Reactive mirror so the LS-wiring effect (ADR-0166 P1.9b) reacts when the
+  // editor registers its imperative api (captured during EditorHost mount).
+  const [editorApiSig, setEditorApiSig] = createSignal<EditorApi | undefined>(undefined);
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   function flashToast(message: string, tone: 'error' | 'success'): void {
     setToast({ message, tone });
@@ -505,6 +519,444 @@ export function App(props: AppProps) {
     onCleanup(() => {
       cache.dispose();
       setNmCache(null);
+    });
+  });
+
+  // Aggregated TS diagnostics per open file (ADR-0166 P1.9b), keyed by absolute
+  // VFS path. Feeds the editor squiggles (per-file `setMarkers`) AND the Problems
+  // panel (flattened across files). A new Map per update so solid sees a change.
+  const [diagnostics, setDiagnostics] = createSignal<ReadonlyMap<string, readonly Diagnostic[]>>(
+    new Map(),
+  );
+
+  // TS language service wiring (ADR-0166 P1.9b): once the editor registers its api
+  // AND the owner is available, create the id-correlated LS client over the
+  // page↔owner↔LS relay, init the project root, and bridge editor document
+  // events → `ts:open`/`ts:update`/`ts:close` (debounced) → diagnostics →
+  // `setMarkers` + the aggregated signal. The LS is JS/TS-only (Monaco's builtin
+  // TS diagnostics are disabled in EditorHost so rifty is the single source).
+  createEffect(() => {
+    const maybeApi = editorApiSig();
+    if (!maybeApi) return;
+    const api: EditorApi = maybeApi;
+    // The unavailable-owner stub's sendTsLsp/onTsLsp are no-ops → init/requests
+    // time out and reject; we swallow (no owner = no diagnostics, surfaced loud
+    // in the terminal already). A real owner serves the LS child.
+    const client = createTsLanguageServiceClient(workspaceOwner);
+    // Register the rifty-LS Monaco providers (ADR-0166 phase 2): hover / def /
+    // type-def / completions now come from the REAL service over the relay, not
+    // Monaco's isolated lib.d.ts worker (whose hover/completion/goto are turned
+    // OFF in EditorHost). Same lifetime as the client — disposed on cleanup.
+    const providers = registerTsLanguageServiceProviders(client, api);
+
+    // E2E-only window hooks (ADR-0166 phase 2) — DEV-only (`import.meta.env.DEV`,
+    // mirroring the EditorHost `__riftyTs*` hooks): drive the EXACT registered
+    // providers (no flaky hover-widget / suggest-dropdown rendering). Each builds
+    // a Monaco model+position from a VFS path + 1-based coords and calls the
+    // registered provider function, then serializes the result for assertions.
+    // Returns null when no model is open for the path (provider can't run yet).
+    if (import.meta.env.DEV) {
+      const NEVER_CANCEL: monaco.CancellationToken = {
+        isCancellationRequested: false,
+        onCancellationRequested: () => ({ dispose() {} }),
+      };
+      const modelFor = (path: string): monaco.editor.ITextModel | null => {
+        const uri = api.ensureModel(path);
+        return uri ? monaco.editor.getModel(uri) : null;
+      };
+      const pos = (line: number, column: number): monaco.Position =>
+        new monaco.Position(line, column);
+      const g = globalThis as unknown as {
+        __riftyTsHover?: (path: string, line: number, col: number) => Promise<string | null>;
+        __riftyTsDefinition?: (
+          path: string,
+          line: number,
+          col: number,
+        ) => Promise<{ uri: string; line: number; column: number }[] | null>;
+        __riftyTsCompletions?: (
+          path: string,
+          line: number,
+          col: number,
+        ) => Promise<string[] | null>;
+        __riftyTsReferences?: (
+          path: string,
+          line: number,
+          col: number,
+          includeDeclaration: boolean,
+        ) => Promise<{ uri: string; line: number; column: number }[] | null>;
+        __riftyTsPrepareRename?: (
+          path: string,
+          line: number,
+          col: number,
+        ) => Promise<
+          { text: string; line: number; column: number } | { rejectReason: string } | null
+        >;
+        __riftyTsRenameEdits?: (
+          path: string,
+          line: number,
+          col: number,
+          newName: string,
+        ) => Promise<{ uri: string; text: string; line: number; column: number }[] | null>;
+        __riftyTsSignatureHelp?: (
+          path: string,
+          line: number,
+          col: number,
+        ) => Promise<{ label: string; activeSignature: number; activeParameter: number } | null>;
+        __riftyTsCodeFixes?: (
+          path: string,
+          startLine: number,
+          startCol: number,
+          endLine: number,
+          endCol: number,
+        ) => Promise<
+          {
+            title: string;
+            kind?: string;
+            edits: { uri: string; text: string }[];
+          }[]
+        >;
+        __riftyTsOrganizeImports?: (path: string) => Promise<{
+          title: string;
+          kind?: string;
+          edits: { uri: string; text: string }[];
+        } | null>;
+        __riftyTsFormat?: (path: string) => Promise<{ editCount: number; applied: string } | null>;
+        __riftyTsReinit?: () => Promise<boolean>;
+      };
+      // Re-init the service against the CURRENT owner VFS (ADR-0166: `ts:init` is
+      // idempotent and rebuilds with a fresh tsconfig). The e2e writes a project
+      // — tsconfig (bundler resolution) + a fake node_modules dep + sibling files
+      // — then calls this so the rebuilt service sees them (the boot build used
+      // tsc default options before those files existed). Resolves true on a clean
+      // rebuild, false on error (e.g. owner unavailable).
+      g.__riftyTsReinit = async () => {
+        try {
+          await client.init(WORKSPACE);
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      g.__riftyTsHover = async (path, line, col) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const hover = await providers.providers.hover.provideHover(
+          model,
+          pos(line, col),
+          NEVER_CANCEL,
+        );
+        if (!hover) return null;
+        return hover.contents.map((c) => c.value).join('\n');
+      };
+      g.__riftyTsDefinition = async (path, line, col) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const def = await providers.providers.definition.provideDefinition(
+          model,
+          pos(line, col),
+          NEVER_CANCEL,
+        );
+        if (!def) return null;
+        const arr = Array.isArray(def) ? def : [def];
+        return arr.map((d) => {
+          // Round-trip the target uri back to its VFS path (proves the full
+          // Location.uri → model → path resolution, incl. an opened node_modules
+          // `.d.ts`). Falls back to the raw uri string if the model is foreign.
+          const target = monaco.editor.getModel(d.uri);
+          const targetPath = target ? api.pathForModel(target) : undefined;
+          return {
+            uri: targetPath ?? d.uri.toString(),
+            line: d.range.startLineNumber,
+            column: d.range.startColumn,
+          };
+        });
+      };
+      g.__riftyTsCompletions = async (path, line, col) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const result = await providers.providers.completion.provideCompletionItems(
+          model,
+          pos(line, col),
+          { triggerKind: 0 } as monaco.languages.CompletionContext,
+          NEVER_CANCEL,
+        );
+        if (!result) return null;
+        return result.suggestions.map((s) =>
+          typeof s.label === 'string' ? s.label : s.label.label,
+        );
+      };
+      // Round-trip a provider-returned target Uri back to its VFS path (proves the
+      // Location.uri → model → path resolution incl. an opened sibling/dep buffer);
+      // falls back to the raw uri string for a foreign model.
+      const pathForUri = (uri: monaco.Uri): string => {
+        const target = monaco.editor.getModel(uri);
+        const targetPath = target ? api.pathForModel(target) : undefined;
+        return targetPath ?? uri.toString();
+      };
+      g.__riftyTsReferences = async (path, line, col, includeDeclaration) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const refs = await providers.providers.reference.provideReferences(
+          model,
+          pos(line, col),
+          { includeDeclaration },
+          NEVER_CANCEL,
+        );
+        if (!refs) return null;
+        return refs.map((r) => ({
+          uri: pathForUri(r.uri),
+          line: r.range.startLineNumber,
+          column: r.range.startColumn,
+        }));
+      };
+      g.__riftyTsPrepareRename = async (path, line, col) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const resolve = providers.providers.rename.resolveRenameLocation;
+        if (!resolve) return null;
+        const result = await resolve(model, pos(line, col), NEVER_CANCEL);
+        if (!result) return null;
+        if ('rejectReason' in result && result.rejectReason !== undefined) {
+          return { rejectReason: result.rejectReason };
+        }
+        const loc = result as monaco.languages.RenameLocation;
+        return { text: loc.text, line: loc.range.startLineNumber, column: loc.range.startColumn };
+      };
+      g.__riftyTsRenameEdits = async (path, line, col, newName) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const edit = await providers.providers.rename.provideRenameEdits(
+          model,
+          pos(line, col),
+          newName,
+          NEVER_CANCEL,
+        );
+        if (!edit) return null;
+        const out: { uri: string; text: string; line: number; column: number }[] = [];
+        for (const e of edit.edits) {
+          // Only text edits (the rename provider emits IWorkspaceTextEdit only).
+          if (!('textEdit' in e)) continue;
+          const te = e as monaco.languages.IWorkspaceTextEdit;
+          out.push({
+            uri: pathForUri(te.resource),
+            text: te.textEdit.text,
+            line: te.textEdit.range.startLineNumber,
+            column: te.textEdit.range.startColumn,
+          });
+        }
+        return out;
+      };
+      g.__riftyTsSignatureHelp = async (path, line, col) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const result = await providers.providers.signatureHelp.provideSignatureHelp(
+          model,
+          pos(line, col),
+          NEVER_CANCEL,
+          {
+            triggerKind: monaco.languages.SignatureHelpTriggerKind.Invoke,
+            isRetrigger: false,
+          },
+        );
+        if (!result) return null;
+        const { value } = result;
+        const sig = value.signatures[value.activeSignature];
+        result.dispose();
+        if (!sig) return null;
+        return {
+          label: sig.label,
+          activeSignature: value.activeSignature,
+          activeParameter: value.activeParameter,
+        };
+      };
+      // Flatten a Monaco CodeAction's WorkspaceEdit into {uri, text} pairs (uri
+      // round-tripped to its VFS path) for assertions. Only text edits.
+      const codeActionEdits = (
+        action: monaco.languages.CodeAction,
+      ): { uri: string; text: string }[] => {
+        const out: { uri: string; text: string }[] = [];
+        for (const e of action.edit?.edits ?? []) {
+          if (!('textEdit' in e)) continue;
+          const te = e as monaco.languages.IWorkspaceTextEdit;
+          out.push({ uri: pathForUri(te.resource), text: te.textEdit.text });
+        }
+        return out;
+      };
+      // Drive the registered code-action provider over a 1-based Monaco range
+      // (sources errorCodes from the rifty markers internally). Returns each
+      // action's title/kind + flattened edits — proves quick-fixes carry a real edit.
+      g.__riftyTsCodeFixes = async (path, startLine, startCol, endLine, endCol) => {
+        const model = modelFor(path);
+        if (!model) return [];
+        const range = new monaco.Range(startLine, startCol, endLine, endCol);
+        const list = await providers.providers.codeAction.provideCodeActions(
+          model,
+          range,
+          { markers: [], trigger: monaco.languages.CodeActionTriggerType.Invoke },
+          NEVER_CANCEL,
+        );
+        if (!list) return [];
+        const actions = list.actions.map((a) => ({
+          title: a.title,
+          ...(a.kind !== undefined ? { kind: a.kind } : {}),
+          edits: codeActionEdits(a),
+        }));
+        list.dispose();
+        return actions;
+      };
+      // Drive the registered code-action provider for the organize-imports source
+      // action only (filtered by kind). Returns it (title/kind + edits) or null.
+      g.__riftyTsOrganizeImports = async (path) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const list = await providers.providers.codeAction.provideCodeActions(
+          model,
+          model.getFullModelRange(),
+          { markers: [], trigger: monaco.languages.CodeActionTriggerType.Invoke },
+          NEVER_CANCEL,
+        );
+        if (!list) return null;
+        const organize = list.actions.find((a) => a.kind === 'source.organizeImports');
+        const result = organize
+          ? {
+              title: organize.title,
+              ...(organize.kind !== undefined ? { kind: organize.kind } : {}),
+              edits: codeActionEdits(organize),
+            }
+          : null;
+        list.dispose();
+        return result;
+      };
+      // Drive the registered whole-document formatting provider with the model's
+      // own indent options. tsserver returns SPAN edits (small inserts/replaces),
+      // not a whole-doc replace, so apply them to a scratch model to return the
+      // resulting formatted text (deterministic to assert on) + the edit count.
+      g.__riftyTsFormat = async (path) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const opts = model.getOptions();
+        const edits = await providers.providers.documentFormatting.provideDocumentFormattingEdits(
+          model,
+          { tabSize: opts.tabSize, insertSpaces: opts.insertSpaces },
+          NEVER_CANCEL,
+        );
+        if (!edits) return null;
+        const scratch = monaco.editor.createModel(model.getValue(), model.getLanguageId());
+        try {
+          scratch.applyEdits(edits.map((e) => ({ range: e.range, text: e.text })));
+          return { editCount: edits.length, applied: scratch.getValue() };
+        } finally {
+          scratch.dispose();
+        }
+      };
+    }
+
+    // Per-path debounce so a burst of keystrokes pushes ONE update (~300ms idle).
+    const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    const openPaths = new Set<string>();
+    let disposed = false;
+
+    const isJsTs = (path: string): boolean => /\.(ts|tsx|js|jsx|cjs|mjs)$/.test(path);
+
+    async function refreshDiagnostics(path: string): Promise<void> {
+      if (disposed) return;
+      try {
+        const [semantic, syntactic] = await Promise.all([
+          client.getSemanticDiagnostics(path),
+          client.getSyntacticDiagnostics(path),
+        ]);
+        if (disposed) return;
+        const diags = [...syntactic, ...semantic];
+        api.setMarkers(path, lspToMonacoMarkers(diags));
+        setDiagnostics((prev) => {
+          const next = new Map(prev);
+          if (diags.length === 0) next.delete(path);
+          else next.set(path, diags);
+          return next;
+        });
+      } catch (err) {
+        // A real LS error (or a relay timeout) — surface it, never fake green
+        // squiggles. The owner-unavailable stub also lands here (init rejects).
+        if (!disposed) console.warn('[ts-lsp]', (err as Error).message);
+      }
+    }
+
+    function scheduleSync(ev: EditorDocumentEvent): void {
+      const prev = debounceTimers.get(ev.path);
+      if (prev) clearTimeout(prev);
+      debounceTimers.set(
+        ev.path,
+        setTimeout(() => {
+          debounceTimers.delete(ev.path);
+          let push: Promise<void>;
+          if (openPaths.has(ev.path)) {
+            push = client.update(ev.path, ev.text);
+          } else {
+            openPaths.add(ev.path);
+            push = client.open(ev.path, ev.text);
+          }
+          void push.then(
+            () => refreshDiagnostics(ev.path),
+            (err: unknown) => {
+              if (!disposed) console.warn('[ts-lsp]', (err as Error).message);
+            },
+          );
+        }, 300),
+      );
+    }
+
+    const unsubscribe = api.onDocument((ev) => {
+      if (!isJsTs(ev.path)) return; // LS is JS/TS-only
+      if (ev.kind === 'close') {
+        const t = debounceTimers.get(ev.path);
+        if (t) {
+          clearTimeout(t);
+          debounceTimers.delete(ev.path);
+        }
+        if (openPaths.delete(ev.path)) void client.close(ev.path);
+        api.setMarkers(ev.path, []);
+        setDiagnostics((prev) => {
+          if (!prev.has(ev.path)) return prev;
+          const next = new Map(prev);
+          next.delete(ev.path);
+          return next;
+        });
+        return;
+      }
+      // open | change: debounce → open/update → diagnostics.
+      scheduleSync(ev);
+    });
+
+    // Init the project root the owner runs with (cwd = WORKSPACE). Fire-and-forget:
+    // the LS endpoint SERIALIZES every later frame behind this in-flight build, so
+    // an open/update/diagnostics frame sent before the (slow, cold) service is
+    // ready WAITS for it rather than racing a not-yet-built service. A failed init
+    // is surfaced on each queued frame (loud), not swallowed.
+    void client.init(WORKSPACE).catch((err: unknown) => {
+      if (!disposed) console.warn('[ts-lsp] init', (err as Error).message);
+    });
+
+    onCleanup(() => {
+      disposed = true;
+      for (const t of debounceTimers.values()) clearTimeout(t);
+      debounceTimers.clear();
+      unsubscribe();
+      providers.dispose();
+      client.dispose();
+      if (import.meta.env.DEV) {
+        const g = globalThis as unknown as Record<string, unknown>;
+        g.__riftyTsHover = undefined;
+        g.__riftyTsDefinition = undefined;
+        g.__riftyTsCompletions = undefined;
+        g.__riftyTsReferences = undefined;
+        g.__riftyTsPrepareRename = undefined;
+        g.__riftyTsRenameEdits = undefined;
+        g.__riftyTsSignatureHelp = undefined;
+        g.__riftyTsCodeFixes = undefined;
+        g.__riftyTsOrganizeImports = undefined;
+        g.__riftyTsFormat = undefined;
+        g.__riftyTsReinit = undefined;
+      }
     });
   });
 
@@ -1030,6 +1482,7 @@ export function App(props: AppProps) {
                 vfs={snapshotFs}
                 registerApi={(api) => {
                   editorApi = api;
+                  setEditorApiSig(() => api);
                 }}
                 onActive={(info) => {
                   setActiveFile(info.label);
@@ -1100,6 +1553,10 @@ export function App(props: AppProps) {
               onSignal={stopSession}
               onRawInput={writeTerminalStdin}
               onLine={(id, line, dims) => runTerminalLine(id, line, dims)}
+              diagnostics={diagnostics()}
+              onOpenProblem={(path, line, column) =>
+                editorApi?.openFile(path, { reveal: { line, column } })
+              }
             />
           </main>
         </div>
