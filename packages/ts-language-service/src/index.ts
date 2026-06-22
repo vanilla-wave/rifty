@@ -8,8 +8,17 @@
 
 export { createTsLanguageService } from './service.ts';
 export type { CreateTsLanguageServiceDeps, TsLanguageService } from './service.ts';
-export { DiagnosticSeverity } from './lsp-types.ts';
-export type { Diagnostic, Position, Range } from './lsp-types.ts';
+export { CompletionItemKind, DiagnosticSeverity } from './lsp-types.ts';
+export type {
+  CompletionItem,
+  CompletionList,
+  Diagnostic,
+  Hover,
+  Location,
+  MarkupContent,
+  Position,
+  Range,
+} from './lsp-types.ts';
 
 // Worker hosting (ADR-0166): the page editor + the M12 agent reach ONE shared
 // service instance running in a kernel `serve` worker that reads the
@@ -39,7 +48,16 @@ export type {
   TsSemanticRequest,
   TsSyntacticRequest,
   TsConfigDiagnosticsRequest,
+  TsQuickInfoRequest,
+  TsDefinitionRequest,
+  TsTypeDefinitionRequest,
+  TsCompletionsRequest,
+  TsCompletionDetailsRequest,
   TsAckResponse,
   TsDiagnosticsResponse,
+  TsHoverResponse,
+  TsLocationsResponse,
+  TsCompletionsResponse,
+  TsCompletionItemResponse,
   TsErrorResponse,
 } from './worker/protocol.ts';

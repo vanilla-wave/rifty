@@ -95,6 +95,45 @@ export function createServiceEndpoint(deps: ServiceEndpointDeps): ServiceEndpoin
             kind: 'diagnostics',
             diagnostics: requireService().getConfigFileDiagnostics(),
           };
+        case 'ts:getQuickInfo':
+          return {
+            id,
+            ok: true,
+            kind: 'hover',
+            hover: requireService().getQuickInfo(request.path, request.position),
+          };
+        case 'ts:getDefinition':
+          return {
+            id,
+            ok: true,
+            kind: 'locations',
+            locations: requireService().getDefinition(request.path, request.position),
+          };
+        case 'ts:getTypeDefinition':
+          return {
+            id,
+            ok: true,
+            kind: 'locations',
+            locations: requireService().getTypeDefinition(request.path, request.position),
+          };
+        case 'ts:getCompletions':
+          return {
+            id,
+            ok: true,
+            kind: 'completions',
+            completions: requireService().getCompletions(request.path, request.position),
+          };
+        case 'ts:getCompletionDetails':
+          return {
+            id,
+            ok: true,
+            kind: 'completionItem',
+            item: requireService().getCompletionDetails(
+              request.path,
+              request.position,
+              request.label,
+            ),
+          };
         default: {
           // Exhaustive over TsRequest; a malformed-but-typed frame is a loud
           // error, never an undefined response (Fidelity).

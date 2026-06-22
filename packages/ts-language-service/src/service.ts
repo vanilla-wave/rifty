@@ -11,9 +11,24 @@ import type { FsSync } from '@riftydev/vfs';
 import ts from 'typescript';
 import { createVfsLanguageServiceHost } from './host.ts';
 import { loadLibDts } from './lib-dts.ts';
-import { type Diagnostic, DiagnosticSeverity } from './lsp-types.ts';
+import {
+  type CompletionItem,
+  type CompletionList,
+  type Diagnostic,
+  DiagnosticSeverity,
+  type Hover,
+  type Location,
+  type Position,
+} from './lsp-types.ts';
+import {
+  completionEntryToItem,
+  partsToString,
+  quickInfoToHover,
+  renderDocumentation,
+  spanToRange,
+} from './mapping.ts';
 import { createDocumentOverlay } from './overlay.ts';
-import { offsetToPosition } from './position.ts';
+import { offsetToPosition, positionToOffset } from './position.ts';
 import { loadTsConfig } from './tsconfig.ts';
 
 export interface CreateTsLanguageServiceDeps {
@@ -32,6 +47,24 @@ export interface TsLanguageService {
    * position; it then collapses to the document start (see {@link toLspDiagnostic}).
    */
   getConfigFileDiagnostics(): Diagnostic[];
+  /**
+   * Quick-info (hover) at `position` in `path`: the symbol signature as a
+   * `typescript` code block + rendered JSDoc, with the symbol's span as `range`.
+   * `null` when there is nothing to hover (no symbol/whitespace).
+   */
+  getQuickInfo(path: string, position: Position): Hover | null;
+  /** Go-to-definition: the declaration sites for the symbol at `position`. */
+  getDefinition(path: string, position: Position): Location[];
+  /** Go-to-type-definition: the declaration sites of the TYPE of the symbol. */
+  getTypeDefinition(path: string, position: Position): Location[];
+  /** Completion candidates at `position` (labels + kinds; details on demand). */
+  getCompletions(path: string, position: Position): CompletionList;
+  /**
+   * Resolve one completion entry (by `label`) to its full detail (signature +
+   * docs). `null` when the entry is unknown at that position. v1 keys on `label`
+   * only — see the method body for the source/data limitation note.
+   */
+  getCompletionDetails(path: string, position: Position, label: string): CompletionItem | null;
   openDocument(path: string, text: string): void;
   updateDocument(path: string, text: string): void;
   closeDocument(path: string): void;
@@ -98,10 +131,73 @@ export async function createTsLanguageService(
   // these for a broken tsconfig).
   const configDiagnostics = parsed.errors.map(toLspDiagnostic);
 
+  /**
+   * Text of `path` as the program sees it (overlay buffer → std-lib → VFS) —
+   * the host's own `readFile` does exactly that resolution, so definition/hover
+   * spans map against the SAME bytes TS computed them from. `''` if absent (a
+   * missing target collapses spans to the document start, like diagnostics).
+   */
+  const readText = (path: string): string => host.readFile?.(path) ?? '';
+
+  /** Map a `position` in `path` to a TS offset using the file's current text. */
+  const offsetAt = (path: string, position: Position): number =>
+    positionToOffset(readText(path), position);
+
+  /** Map ts.DefinitionInfo[] → Location[] (each target's own text → Range). */
+  const toLocations = (defs: readonly ts.DefinitionInfo[] | undefined): Location[] =>
+    (defs ?? []).map((d) => ({
+      uri: d.fileName,
+      range: spanToRange(readText(d.fileName), d.textSpan),
+    }));
+
   return {
     getSemanticDiagnostics: (path) => service.getSemanticDiagnostics(path).map(toLspDiagnostic),
     getSyntacticDiagnostics: (path) => service.getSyntacticDiagnostics(path).map(toLspDiagnostic),
     getConfigFileDiagnostics: () => [...configDiagnostics],
+    getQuickInfo: (path, position) => {
+      const info = service.getQuickInfoAtPosition(path, offsetAt(path, position));
+      return info ? quickInfoToHover(info, readText(path)) : null;
+    },
+    getDefinition: (path, position) =>
+      toLocations(service.getDefinitionAtPosition(path, offsetAt(path, position))),
+    getTypeDefinition: (path, position) =>
+      toLocations(service.getTypeDefinitionAtPosition(path, offsetAt(path, position))),
+    getCompletions: (path, position) => {
+      const info = service.getCompletionsAtPosition(path, offsetAt(path, position), undefined);
+      return {
+        isIncomplete: info?.isIncomplete === true,
+        items: (info?.entries ?? []).map(completionEntryToItem),
+      };
+    },
+    getCompletionDetails: (path, position, label) => {
+      const offset = offsetAt(path, position);
+      // The resolve frame carries only `label`, but getCompletionEntryDetails
+      // needs the entry's `source`/`data` to be exact. So re-query the list and
+      // thread the real `source`/`data` through — members, locals, globals AND a
+      // uniquely-named auto-import all resolve correctly (no lying bare-label
+      // resolve). Residual gap: two SAME-named candidates → first wins.
+      // TODO(backlog: protocol/ts-completion-resolve-by-label)
+      const list = service.getCompletionsAtPosition(path, offset, undefined);
+      const entry = list?.entries.find((e) => e.name === label);
+      const details = service.getCompletionEntryDetails(
+        path,
+        offset,
+        label,
+        undefined,
+        entry?.source,
+        undefined,
+        entry?.data,
+      );
+      if (!details) return null;
+      const documentation = renderDocumentation(details.documentation, details.tags);
+      const item: CompletionItem = {
+        label: details.name,
+        kind: entry ? completionEntryToItem(entry).kind : undefined,
+        detail: partsToString(details.displayParts),
+        ...(documentation ? { documentation: { kind: 'markdown', value: documentation } } : {}),
+      };
+      return item;
+    },
     openDocument: (path, text) => overlay.open(path, text),
     updateDocument: (path, text) => overlay.update(path, text),
     closeDocument: (path) => overlay.close(path),
