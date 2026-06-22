@@ -41,39 +41,58 @@ half was reverted with the rest of the build/preview wiring.
 
 ### Wall 2 — Rolldown WASI production bundle crashes (UPSTREAM-class; the blocker)
 
-With the lifecycle held open (proven by running `vite.build()` via the Node API so
-the entry AWAITS it), the Rolldown WASI pool **starts real work and then crashes
-non-deterministically** in a pthread worker:
-- run A: `RuntimeError: operation does not support unaligned accesses`
-- run B: `RuntimeError: memory access out of bounds`
-both at `@emnapi/core` during bundling. These are V8 **WASM** memory traps.
+With the lifecycle held open (proven by driving `viteNs.build()` / `rolldown.build()`
+inside the dev-server child realm, which already has the Rolldown WASI plumbing), the
+Rolldown WASI pool **starts real work and crashes NON-DETERMINISTICALLY** in a pthread
+worker — three distinct V8 **WASM** memory traps, all at `@emnapi/core` during bundling:
+`operation does not support unaligned accesses`, `memory access out of bounds`,
+`unreachable`.
 
-Ruled out by experiment (each a single-variable test):
+**It is a RACE, not always-broken, and the crash rate scales with bundling WORK**
+(measured, instant vite preset, dev-child realm):
+- trivial `rolldown.build()` (1-file input): ~1/6 crash (mostly OK).
+- real `viteNs.build()` (seed project + Vite pipeline): ~3/4 crash (1/4 OK).
+- real `viteNs.build()` with `os.availableParallelism()=1` (one pthread): ~4/5 crash.
+
+So a real project's build is effectively unusable (mostly crashes), and **a retry/lower-
+parallelism mitigation does NOT work** (single-thread is no better — it is a main↔worker
+shared-memory race present even with one worker, not multi-thread contention).
+
+Ruled out by experiment (single-variable):
 - **Not the CLI** — the Vite Node API (`await vite.build()`) hits the SAME crash.
 - **Not message-delivery timing** — ongoing fork-IPC delivery is already immediate
   (`process.ts` emits on `onmessage`, no defer); delaying the initial `__emnapi__:load`
-  backlog flush 0→200ms did not change the crash; `wasi-worker.mjs` self-bridges
+  backlog flush 0→200ms did not change it; `wasi-worker.mjs` self-bridges
   `parentPort.on('message') → globalThis.onmessage`, so parentPort delivery suffices.
-- **Not multi-thread contention** — forcing `os.availableParallelism()=1` (one
-  pthread) still crashes.
-- **Not broken SAB sharing** — a direct probe (create a `SharedArrayBuffer`,
-  `postMessage` it into a NESTED `worker_threads` worker, worker `Atomics.store(…,42)`,
-  parent reads back `42`) confirms rifty shares SAB into nested workers correctly.
+- **Not multi-thread contention** — `os.availableParallelism()=1` still crashes (~80%).
+- **Not broken SAB sharing** — a direct probe (`SharedArrayBuffer` `postMessage`'d into a
+  NESTED `worker_threads` worker, worker `Atomics.store(…,42)`, parent reads `42`)
+  confirms rifty shares SAB into nested workers correctly.
+- **Not a stale guest runtime** — the snapshot ALREADY pins the latest runtime:
+  `@napi-rs/wasm-runtime@1.1.4` + `@emnapi/core`/`@emnapi/runtime@1.10.0` (binding 1.0.3
+  and binding 1.1.0 both depend on these exact versions). So no runtime-version bump is
+  available. The only newer Rolldown **.wasm** is `@rolldown/binding-wasm32-wasi@1.1.0`
+  (= `rolldown@1.1.0`, ABI-coupled), but **no released Vite uses it** — `vite@latest`
+  (8.0.16) pins `rolldown@1.0.3`. Testing 1.1.0 directly needs a from-scratch install
+  (untried here) and is not adoptable until Vite ships a rolldown ≥1.1.0.
 
-ROOT (most likely): **stale WASM memory views after `memory.grow()`** inside
-`@napi-rs/wasm-runtime`/emnapi — when the main thread grows the shared memory, the
-pthread's cached typed-array views are not refreshed, so it accesses out-of-bounds /
-unaligned. This lives in the GUEST WASM-runtime (emnapi/@napi-rs/wasm-runtime/
-Rolldown), not in rifty's IPC or memory sharing. Non-deterministic, even with a
-single worker thread. Not fixable in rifty without patching guest-package internals
-or upstream Rolldown/emnapi/napi-rs.
+ROOT (most likely): **stale WASM memory views after `memory.grow()`** inside the
+Rolldown WASI / emnapi pool — the main thread grows the shared memory and a worker's
+cached typed-array views are not refreshed before it reads, so it hits out-of-bounds /
+unaligned / unreachable. This lives in the GUEST WASM-runtime (Rolldown `.wasm` +
+emnapi/@napi-rs/wasm-runtime), not in rifty's IPC or memory sharing. A race; more work
+= higher hit rate. Not fixable in rifty without patching guest-package internals or an
+upstream Rolldown/emnapi/napi-rs fix.
 
 ## Options or Next (the real fix)
 
-1. **Upstream / guest-runtime**: engage Rolldown / `@napi-rs/wasm-runtime` / emnapi
-   on the shared-memory-growth view-refresh in the browser WASM-threads pool, or
-   pin a binding version whose bundle path is browser-clean. Re-verify with a
-   `vite.build()` Node-API smoke before re-wiring the CLI.
+1. **Upstream / guest-runtime** (the race lives there): engage Rolldown /
+   `@napi-rs/wasm-runtime` / emnapi on the shared-memory-growth view-refresh in the
+   browser WASM-threads pool. A runtime bump is NOT available (already latest); the
+   only lever is a newer Rolldown `.wasm` — re-test once Vite ships a `rolldown ≥1.1.0`
+   (or smoke `rolldown@1.1.0` directly via a from-scratch install). Re-verify with a
+   repeated `viteNs.build()` smoke (it is a RACE — one green run is not proof; need a
+   high pass rate across N runs) before re-wiring the CLI.
 2. **Then** re-wire the router (real `.bin/vite` via `createOwnerChildBinExecutor`
    for build/optimize; `createOwnerChildNodeExecutor(…, /*bin*/ true)` for preview)
    + re-thread the Phase-1 bin-lane Rolldown enabler (worker URLs + fs-relay in
