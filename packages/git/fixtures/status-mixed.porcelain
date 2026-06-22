@@ -1,0 +1,5 @@
+# git 2.50.1 | LC_ALL=C | git status --porcelain | tree: committed+modified(tracked.txt), staged-new(staged-new.txt), untracked(untracked.txt), deleted(doomed.txt)
+ D doomed.txt
+A  staged-new.txt
+ M tracked.txt
+?? untracked.txt

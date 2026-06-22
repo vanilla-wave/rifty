@@ -12,7 +12,10 @@
   Porcelain `XY` mapping cross-checked against real git 2.50.1. Network verbs
   (`clone`/`fetch`/`pull`/`push`) surface the facade's real
   `NotImplementedError` as exit 128 — no silent stub. Unknown subcommand → exit
-  1; no ambient filesystem → exit 128.
+  1; no ambient filesystem → exit 128. Conformance-locked: `git-fixtures.test.ts`
+  byte-asserts `status --porcelain` (untracked / staged / mixed) + `log
+  --oneline` against frozen real-git 2.50.1 golden fixtures
+  (`packages/git/fixtures/`, ADR-0093) — never spawns git at test time.
 - **Installed CLIs invokable by name — PATH-style `node_modules/.bin` lookup
   (ADR-0137).** A command miss now walks up to the nearest
   `node_modules/.bin/<name>` launcher shim (resolution order: registered

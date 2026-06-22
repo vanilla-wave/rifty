@@ -1,0 +1,3 @@
+# git 2.50.1 | LC_ALL=C | git status --porcelain | tree: 2 staged-new files (a.txt,b.txt)
+A  a.txt
+A  b.txt
