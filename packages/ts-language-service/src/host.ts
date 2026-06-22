@@ -6,9 +6,11 @@
  *
  * Lib serving: TS asks for the default lib plus every `lib` the options imply by
  * file name. `getDefaultLibFileName` hands back a synthetic `/ts-lib/<name>`
- * path so its basename is a key in {@link libMap}; `getScriptSnapshot`,
- * `fileExists` and `readFile` intercept by basename and serve from the map
- * (never touching the VFS) — that is how `Array`, `Promise`, DOM, etc. resolve.
+ * path, and TS resolves the `lib`-option files relative to that dir, so every
+ * std-lib request arrives under `/ts-lib/`. `getScriptSnapshot`, `fileExists`
+ * and `readFile` intercept paths under that dir and serve from {@link libMap}
+ * (never touching the VFS) — that is how `Array`, `Promise`, DOM, etc. resolve,
+ * without shadowing a project file whose basename happens to collide.
  */
 
 import type { FsSync } from '@riftydev/vfs';
@@ -47,19 +49,24 @@ export interface VfsLanguageServiceHostDeps {
   ) => void;
 }
 
-function basename(p: string): string {
-  const i = p.lastIndexOf('/');
-  return i === -1 ? p : p.slice(i + 1);
-}
-
 export function createVfsLanguageServiceHost(
   deps: VfsLanguageServiceHostDeps,
 ): ts.LanguageServiceHost {
   const { fsSync, projectRoot, compilerOptions, fileNames, libMap, overlay, onModuleResolved } =
     deps;
 
-  /** Lib contents if `fileName`'s basename is a std-lib file, else undefined. */
-  const libContents = (fileName: string): string | undefined => libMap.get(basename(fileName));
+  /**
+   * Lib contents if `fileName` is a std-lib file UNDER the synthetic `/ts-lib/`
+   * dir, else undefined. Scoping to the dir (not bare basename) stops a project
+   * file whose basename collides (e.g. `/proj/lib.dom.d.ts`) from being shadowed
+   * by the std lib. TS asks for the default lib AND every `lib`-option file under
+   * this dir (lib files resolve relative to `getDefaultLibFileName`'s directory).
+   */
+  const libContents = (fileName: string): string | undefined => {
+    const i = fileName.lastIndexOf('/');
+    if (i === -1 || fileName.slice(0, i) !== LIB_DIR) return undefined;
+    return libMap.get(fileName.slice(i + 1));
+  };
 
   /**
    * VFS-backed `ModuleResolutionHost` for `ts.resolveModuleName`. Lib files are
