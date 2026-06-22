@@ -46,6 +46,15 @@ directly). The fix needs the recursive runner to own the entry-kind decision
   `kind:'source'` (no behavior change) and shebang/relative `execSync` remains the gap.
 - The shebang/relative-import gap is loud, not silent: `// TODO` at `ipc/handlers.ts`
   (the `kind:'source'` spec-build site), this item, and ADR-0143's phasing.
+- **RE-CONFIRMED (2026-06-22):** the flip was re-attempted (runner owns the kind
+  decision via `getNodeEntryWorkerUrl()`) and reverted — `execsync-sab.spec.ts` went
+  RED (`Command failed with exit code 1: node /blocked.js`). The missing piece is
+  NOT the kind decision but the TRANSPORT: `makeRecursiveRunner`/`spawnKernelWorker`
+  publish NO kernel sync API, so a `kind:'url'` child with `RIFTY_REMOTE_FS=1` throws
+  "no kernel sync call published" (or ENOENTs its own empty store). The recursive
+  runner must serve the caller realm's `syncMirror()` to the child (owner-worker-style)
+  before the flip is safe — exactly the "lands WITH D" coupling above. Conformance
+  (Node, URL unset → `kind:'source'`) cannot catch this; the COI e2e is the only guard.
 
 ## Reversibility
 

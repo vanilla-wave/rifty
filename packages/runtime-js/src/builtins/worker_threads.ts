@@ -16,6 +16,7 @@ import {
   isSabIpcSupported,
 } from '@riftydev/kernel';
 import { type FsSync, dirname } from '@riftydev/vfs';
+import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
@@ -74,6 +75,29 @@ export class Worker extends EventEmitter {
   /** ADR-0011 phase 2: when present, backed by a real `kernel.spawnWorker`
    * realm and `terminate` routes through it. */
   private workerHandle: ProcessHandle | null = null;
+  /** Node parity (child-realm-async-lifecycle): a LIVE kernel-backed Worker keeps
+   * the spawning realm's event loop alive — its pending message-driven work is a
+   * libuv-style handle. `refed` follows Node's `ref()`/`unref()` (default refed);
+   * `keepaliveHeld` tracks whether we currently hold the realm-keepalive ref so it
+   * is released exactly once (on exit/terminate/unref). Only the kernel path
+   * counts — the same-realm fallback shares the parent loop already. */
+  private refed = true;
+  private keepaliveHeld = false;
+
+  /** Hold one realm-keepalive ref while a kernel worker is alive AND refed.
+   *  Idempotent (the `keepaliveHeld` latch). */
+  private acquireKeepalive(): void {
+    if (this.keepaliveHeld || this.exited || !this.refed || this.workerHandle === null) return;
+    keepaliveRef();
+    this.keepaliveHeld = true;
+  }
+
+  /** Release the realm-keepalive ref if held (worker exited / terminated / unref). */
+  private releaseKeepalive(): void {
+    if (!this.keepaliveHeld) return;
+    keepaliveUnref();
+    this.keepaliveHeld = false;
+  }
 
   constructor(script: WorkerScript, opts: WorkerOptions = {}) {
     super();
@@ -135,6 +159,10 @@ export class Worker extends EventEmitter {
       };
       const handle = globalProcessManager.spawnWorker('node', spec);
       this.workerHandle = handle;
+      // A live kernel worker keeps the spawning realm's loop alive (Node parity):
+      // a run-to-completion parent (e.g. `vite build` driving Rolldown's WASI
+      // pthread pool) must not drain-reap while its workers are still bundling.
+      this.acquireKeepalive();
       if (handle.kind === 'worker') {
         // Node emits 'online' once the worker thread is up; the kernel realm now
         // exists, so signal it before wiring stdio/messages.
@@ -150,6 +178,7 @@ export class Worker extends EventEmitter {
         // but Node also emits 'error' (the real Error) first. Needs a child-side
         // uncaught handler posting an IPC error frame; faking an Error from the
         // exit code would lie. Same-realm path already emits 'error'.
+        this.releaseKeepalive();
         this.finish(typeof code === 'number' ? code : 1);
       });
     } catch (err) {
@@ -241,6 +270,7 @@ export class Worker extends EventEmitter {
     // handle is gone so it resolves `undefined` (verified vs Node v24). Internal
     // callers pass `code` only to drive the synthesized 'exit' event.
     if (this.exited) return undefined;
+    this.releaseKeepalive();
     if (this.workerHandle) {
       this.workerHandle.kill('SIGTERM');
     }
@@ -253,10 +283,18 @@ export class Worker extends EventEmitter {
   }
 
   ref(): this {
+    // Node: a refed Worker keeps the parent loop alive (the default). Re-acquire
+    // the realm-keepalive ref if the worker is still live.
+    this.refed = true;
+    this.acquireKeepalive();
     return this;
   }
 
   unref(): this {
+    // Node: an unrefed Worker no longer keeps the parent loop alive — release the
+    // realm-keepalive ref (the worker keeps running; it just stops blocking exit).
+    this.refed = false;
+    this.releaseKeepalive();
     return this;
   }
 

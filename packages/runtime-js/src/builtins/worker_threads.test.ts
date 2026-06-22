@@ -15,6 +15,7 @@ import {
   setKernelWorkerUrl,
 } from '@riftydev/kernel';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { activeRefs, resetKeepalive } from '../internal/event-loop-keepalive.ts';
 import { EventEmitter } from './events.ts';
 import { resetSyncMirror } from './fs-sync-mirror.ts';
 import { writeFileSync } from './fs.ts';
@@ -46,6 +47,7 @@ afterEach(() => {
   resetNodeEntryWorkerUrl();
   setProcessCwd('/workspace');
   resetSyncMirror();
+  resetKeepalive();
 });
 
 describe('worker_threads same-realm fallback warning (no silent stubs)', () => {
@@ -187,6 +189,33 @@ globalThis.onmessage = ({ data }) => {
     expect(sent).toEqual([{ __emnapi__: { type: 'load' } }]);
 
     await worker.terminate();
+  });
+
+  it('a live kernel-backed Worker holds an event-loop keepalive ref, released on exit/unref (Node parity)', async () => {
+    // A live Worker keeps the spawning realm's loop alive (a run-to-completion
+    // parent — e.g. a `node <file>` driving worker_threads — must not drain-reap
+    // while its worker is still running). ref()/unref() toggle it like Node.
+    resetKeepalive();
+    vi.spyOn(globalProcessManager, 'spawnWorker').mockImplementation((_command, _spec) =>
+      makeFakeWorkerHandle([]),
+    );
+    (globalThis as Coi).crossOriginIsolated = true;
+    setKernelWorkerUrl('https://rifty.test/kernel-worker.js');
+    setNodeEntryWorkerUrl('https://rifty.test/node-entry.js');
+
+    expect(activeRefs()).toBe(0);
+    const worker = new Worker('/workspace/w.mjs');
+    // start() is queued as a microtask; let it spawn the kernel worker.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(activeRefs()).toBe(1); // a live kernel worker holds one ref
+
+    worker.unref(); // Node: an unrefed worker no longer blocks exit
+    expect(activeRefs()).toBe(0);
+    worker.ref(); // re-acquires while still live
+    expect(activeRefs()).toBe(1);
+
+    await worker.terminate(); // exit releases the ref (idempotent)
+    expect(activeRefs()).toBe(0);
   });
 
   it('throws loudly instead of JSON-shaping non-plain workerData on the kernel path', async () => {
