@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Browser-tab favicon: the page shipped no `<link rel="icon">` so the tab was iconless. Added
+  `public/favicon.svg` (lime diamond on `--deep`, matching the on-page `logoMark` + tokens) and the
+  head link; guarded by `tests/integration/landing-static.test.ts`.
 - Layout fixes: the explorer canvas grows to the world height so the bottom row no longer clips;
   the graph auto-fits + centres on both axes (responsive, recentres on resize) so it never spills off
   one edge with empty space on the other; the legend is laid out one group per row (type / realm /
