@@ -41,7 +41,7 @@ export interface CommitArgs {
 }
 
 /** A pathspec `spec` matches `path` exactly or as a directory prefix (`<spec>/…`). */
-const pathspecMatch = (path: string, spec: string): boolean =>
+export const pathspecMatch = (path: string, spec: string): boolean =>
   path === spec || path.startsWith(`${spec}/`);
 
 /** First pathspec matching no path in `files` (for the PathspecError message). */

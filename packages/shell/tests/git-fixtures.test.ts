@@ -199,8 +199,6 @@ it('checkout <branch>: dirty-tree conflict refusal — byte-exact stderr, exit 1
 it('checkout <full-sha>: detached HEAD advisory — byte-exact (canonical SHA 7fdebb4...)', async () => {
   await twoBranchRepo();
   // other's tip = the 'second' commit; resolve its FULL sha via the facade-backed CLI.
-  const { ctx } = makeCtx({ cwd: REPO, env: ENV });
-  void ctx; // resolve via the public git package facade through the shell's makeGit path
   const sha = await otherTipSha();
   const { out, err, code } = await runGitFull(['checkout', sha]);
   expect(code).toBe(0);
