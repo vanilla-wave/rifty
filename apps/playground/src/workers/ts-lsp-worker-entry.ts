@@ -31,16 +31,25 @@
 // The vendored TS std-lib bundle (lib*.d.ts as a JSON map). The package fetches
 // it from `getTsLibUrl()` in the browser; point that at the Vite-served asset URL
 // (D-004: no hardcoded URL — the bootstrap global is the published seam). MUST be
-// set BEFORE the package entry's lazy `loadLibDts` runs (first `ts:init`); setting
-// it at module top, before importing the entry, satisfies that ordering.
+// set BEFORE the package entry's lazy `loadLibDts` runs (first `ts:init`).
 import tsLibBundleUrl from '@riftydev/ts-language-service/vendor/lib-bundle.json?url';
+import { bootTsLanguageServiceWorker } from '@riftydev/ts-language-service/worker/entry';
+import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
+
+// Realign globalThis.Buffer to THIS worker bundle's copy. In a PROD build every
+// ?worker&url child is self-contained and carries its own @riftydev/io `Buffer`;
+// the kernel pre-entry hook set the global to the kernel-worker-entry bundle's
+// copy, so the engine's fs.* sync-RPC decode (`require('buffer')`) and the global
+// would disagree (instanceof/etag) — the dual-copy crash #73 fixed for the other
+// kind:url children. Every kind:url child must reinstall. Runs before the first
+// `ts:init` does any Buffer work; the package import's auto-boot above only
+// registers the fork-IPC listener, so running after the (hoisted) import is fine.
+installBundleLocalBuffer();
 
 (globalThis as unknown as { __RIFTY_TS_LIB_URL?: string }).__RIFTY_TS_LIB_URL = tsLibBundleUrl;
 
-import { bootTsLanguageServiceWorker } from '@riftydev/ts-language-service/worker/entry';
-
 // The bottom-of-module auto-boot already ran on import (worker realm + sync API).
-// Reference the binding so the import is never tree-shaken; the auto-boot is the
-// real boot. Do NOT call it again — a second boot would double-register the
-// fork-IPC 'message' listener (each request answered twice).
+// Reference the binding so the worker chunk is never tree-shaken to empty; the
+// auto-boot is the real boot. Do NOT call it again — a second boot would
+// double-register the fork-IPC 'message' listener (each request answered twice).
 void bootTsLanguageServiceWorker;
