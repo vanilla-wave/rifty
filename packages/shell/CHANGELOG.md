@@ -4,6 +4,15 @@
 
 ### Added
 
+- **`git` builtin over `@riftydev/git` (isomorphic-git on the ambient VFS).**
+  Local porcelain: `init`, `status` (`--porcelain` v1 `XY` + human default),
+  `add <pathspec…>` (incl. `.` / `-A`), `commit -m`, `log` (+ `--oneline`),
+  `diff` (structured unified-diff text), `branch`. Identity/dates derive from
+  `GIT_AUTHOR_*` / `GIT_COMMITTER_*` env (fallback `rifty`/`rifty@localhost`).
+  Porcelain `XY` mapping cross-checked against real git 2.50.1. Network verbs
+  (`clone`/`fetch`/`pull`/`push`) surface the facade's real
+  `NotImplementedError` as exit 128 — no silent stub. Unknown subcommand → exit
+  1; no ambient filesystem → exit 128.
 - **Installed CLIs invokable by name — PATH-style `node_modules/.bin` lookup
   (ADR-0137).** A command miss now walks up to the nearest
   `node_modules/.bin/<name>` launcher shim (resolution order: registered

@@ -21,6 +21,7 @@ import { dirname } from './commands/dirname.ts';
 import { echo } from './commands/echo.ts';
 import { envCmd } from './commands/env.ts';
 import { find } from './commands/find.ts';
+import { git } from './commands/git.ts';
 import { grep } from './commands/grep.ts';
 import { head } from './commands/head.ts';
 import { type ShellJobListItem, jobs } from './commands/jobs.ts';
@@ -51,6 +52,7 @@ export const CORE_COMMAND_NAMES = [
   'env',
   'find',
   'grep',
+  'git',
   'which',
   'clear',
   'touch',
@@ -91,6 +93,7 @@ export function builtinCommands(
     env: envCmd,
     find,
     grep,
+    git,
     which: which(hasCommand, resolveBinPath),
     clear,
     touch,
