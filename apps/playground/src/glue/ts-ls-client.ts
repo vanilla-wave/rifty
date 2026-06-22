@@ -25,6 +25,10 @@ import {
   type Hover,
   type Location,
   type Position,
+  type PrepareRenameResult,
+  type ReferenceContext,
+  type SignatureHelp,
+  type WorkspaceEdit,
 } from '@riftydev/ts-language-service/lsp-types';
 import {
   TS_IPC_TYPE,
@@ -74,6 +78,18 @@ export interface TsLanguageServiceClient {
     position: Position,
     label: string,
   ): Promise<CompletionItem | null>;
+  /** Find-references for the symbol at `position` (LSP 0-based); `context` gates the declaration. */
+  getReferences(
+    path: string,
+    position: Position,
+    context: ReferenceContext,
+  ): Promise<readonly Location[]>;
+  /** Prepare-rename probe at `position` (LSP 0-based); `null` when the element can't be renamed. */
+  prepareRename(path: string, position: Position): Promise<PrepareRenameResult | null>;
+  /** Rename edits for the symbol at `position` (LSP 0-based) → `newName` (empty `changes` if none). */
+  getRenameEdits(path: string, position: Position, newName: string): Promise<WorkspaceEdit>;
+  /** Signature help at `position` (LSP 0-based); `null` when not inside a call. */
+  getSignatureHelp(path: string, position: Position): Promise<SignatureHelp | null>;
   /** Reject every in-flight request and detach the relay listener. Idempotent. */
   dispose(): void;
 }
@@ -178,6 +194,38 @@ export function createTsLanguageServiceClient(
     return response.item;
   }
 
+  /** A prepare-rename query: resolves the `PrepareRenameResult|null`, rejects on a service error. */
+  async function prepareRenameResult(
+    build: (id: number) => TsRequest,
+  ): Promise<PrepareRenameResult | null> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'prepareRename') {
+      throw new Error(`ts-lsp: expected prepareRename response, got kind=${response.kind}`);
+    }
+    return response.result;
+  }
+
+  /** A rename-edits query: resolves the `WorkspaceEdit`, rejects on a service error. */
+  async function workspaceEdit(build: (id: number) => TsRequest): Promise<WorkspaceEdit> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'workspaceEdit') {
+      throw new Error(`ts-lsp: expected workspaceEdit response, got kind=${response.kind}`);
+    }
+    return response.edit;
+  }
+
+  /** A signature-help query: resolves the `SignatureHelp|null`, rejects on a service error. */
+  async function signatureHelp(build: (id: number) => TsRequest): Promise<SignatureHelp | null> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'signatureHelp') {
+      throw new Error(`ts-lsp: expected signatureHelp response, got kind=${response.kind}`);
+    }
+    return response.signatureHelp;
+  }
+
   return {
     init: (projectRoot) => ack((id) => ({ id, type: 'ts:init', projectRoot })),
     open: (path, text) => ack((id) => ({ id, type: 'ts:open', path, text })),
@@ -200,6 +248,14 @@ export function createTsLanguageServiceClient(
       completions((id) => ({ id, type: 'ts:getCompletions', path, position })),
     getCompletionDetails: (path, position, label) =>
       completionItem((id) => ({ id, type: 'ts:getCompletionDetails', path, position, label })),
+    getReferences: (path, position, context) =>
+      locations((id) => ({ id, type: 'ts:getReferences', path, position, context })),
+    prepareRename: (path, position) =>
+      prepareRenameResult((id) => ({ id, type: 'ts:prepareRename', path, position })),
+    getRenameEdits: (path, position, newName) =>
+      workspaceEdit((id) => ({ id, type: 'ts:getRenameEdits', path, position, newName })),
+    getSignatureHelp: (path, position) =>
+      signatureHelp((id) => ({ id, type: 'ts:getSignatureHelp', path, position })),
     dispose() {
       if (torn) return;
       torn = true;

@@ -1,12 +1,14 @@
 /**
  * rifty-LS-backed Monaco providers — hover / definition / type-definition /
- * completions for `javascript` + `typescript` (ADR-0166 phase 2).
+ * completions (ADR-0166 phase 2) + find-references / rename / signature-help
+ * (ADR-0166 phase 3) for `javascript` + `typescript`.
  *
  * These RETIRE Monaco's built-in TS approximation (the isolated lib.d.ts-only
  * `ts.worker` that can't see the owner VFS / tsconfig / node_modules — the "stub
  * that lies" ADR-0166 rejects). Every query goes through the real
  * page↔owner↔LS relay {@link TsLanguageServiceClient}, so hover types, go-to-def
- * targets, and completion candidates reflect the REAL project + dependencies.
+ * targets, completion candidates, references, rename edits, and signature help
+ * reflect the REAL project + dependencies.
  *
  * Provider seam to the editor:
  *  - {@link EditorPathBridge.pathForModel} resolves the `model` a provider is
@@ -25,6 +27,10 @@ import type {
   CompletionList as LspCompletionList,
   Hover as LspHover,
   Location as LspLocation,
+  ParameterInformation as LspParameterInformation,
+  SignatureHelp as LspSignatureHelp,
+  SignatureInformation as LspSignatureInformation,
+  TextEdit as LspTextEdit,
   MarkupContent,
 } from '@riftydev/ts-language-service/lsp-types';
 import { CompletionItemKind as LspCompletionItemKind } from '@riftydev/ts-language-service/lsp-types';
@@ -131,6 +137,54 @@ function toMonacoHover(h: LspHover): monaco.languages.Hover {
   return h.range ? { contents, range: lspToMonacoRange(h.range) } : { contents };
 }
 
+/** Map one LSP `ParameterInformation` → Monaco. The LSP label is always a string here. */
+function toMonacoParameter(p: LspParameterInformation): monaco.languages.ParameterInformation {
+  const docs = toMarkdown(p.documentation);
+  return docs ? { label: p.label, documentation: docs } : { label: p.label };
+}
+
+/** Map one LSP `SignatureInformation` → Monaco (label + params + optional docs). */
+function toMonacoSignature(s: LspSignatureInformation): monaco.languages.SignatureInformation {
+  const docs = toMarkdown(s.documentation);
+  const parameters = s.parameters.map(toMonacoParameter);
+  return docs
+    ? { label: s.label, documentation: docs, parameters }
+    : { label: s.label, parameters };
+}
+
+/**
+ * Build a Monaco `SignatureHelpResult` from the LSP `SignatureHelp`. The result
+ * is `IDisposable`; rifty's payload holds no native resources, so `dispose` is a
+ * no-op (Monaco still calls it when it drops the hint).
+ */
+function toMonacoSignatureHelp(sh: LspSignatureHelp): monaco.languages.SignatureHelpResult {
+  return {
+    value: {
+      signatures: sh.signatures.map(toMonacoSignature),
+      activeSignature: sh.activeSignature,
+      activeParameter: sh.activeParameter,
+    },
+    dispose() {},
+  };
+}
+
+/** Map one LSP `TextEdit` → Monaco's `{range, text}` (insert when the range is empty). */
+function toMonacoTextEdit(e: LspTextEdit): monaco.languages.TextEdit {
+  return { range: lspToMonacoRange(e.range), text: e.newText };
+}
+
+/**
+ * A `resolveRenameLocation` rejection. Monaco types the return as the intersection
+ * `RenameLocation & Rejection` (so range/text are nominally required), yet its
+ * runtime keys on `rejectReason` first and a real rejection carries no span — the
+ * cast bridges that monaco modeling quirk without lying (no fake range is built).
+ */
+function renameRejection(
+  reason: string,
+): monaco.languages.RenameLocation & monaco.languages.Rejection {
+  return { rejectReason: reason } as monaco.languages.RenameLocation & monaco.languages.Rejection;
+}
+
 /**
  * Handle returned by {@link registerTsLanguageServiceProviders}. `dispose`
  * unregisters every provider; `providers` exposes the SAME registered provider
@@ -145,6 +199,9 @@ export interface TsLanguageServiceProvidersHandle {
     readonly definition: monaco.languages.DefinitionProvider;
     readonly typeDefinition: monaco.languages.TypeDefinitionProvider;
     readonly completion: monaco.languages.CompletionItemProvider;
+    readonly reference: monaco.languages.ReferenceProvider;
+    readonly rename: monaco.languages.RenameProvider;
+    readonly signatureHelp: monaco.languages.SignatureHelpProvider;
   };
 }
 
@@ -249,6 +306,74 @@ export function registerTsLanguageServiceProviders(
     },
   };
 
+  const referenceProvider: monaco.languages.ReferenceProvider = {
+    async provideReferences(model, position, context, token) {
+      const path = bridge.pathForModel(model);
+      if (!path) return null;
+      const refs = await client.getReferences(path, monacoToLspPosition(position), {
+        includeDeclaration: context.includeDeclaration,
+      });
+      if (token.isCancellationRequested) return null;
+      // Each reference is a Location in some project file; resolve its uri → model
+      // (a sibling/dep buffer is opened read-only) so the peek/results list reveals
+      // the real span. A Location whose model can't be made is dropped (never faked).
+      return refs
+        .map((loc) => toMonacoLocation(loc, bridge))
+        .filter((l): l is monaco.languages.Location => l !== undefined);
+    },
+  };
+
+  const renameProvider: monaco.languages.RenameProvider = {
+    async resolveRenameLocation(model, position, token) {
+      const path = bridge.pathForModel(model);
+      // Reject (not return null) so Monaco shows "cannot rename here" — the
+      // RenameProvider resolve contract uses `rejectReason`, not a null sentinel.
+      // Monaco's return type is the intersection `RenameLocation & Rejection`, but
+      // its runtime keys on `rejectReason` first: a pure rejection legitimately
+      // carries no range/text, so the cast bridges that monaco modeling quirk.
+      if (!path) return renameRejection('Not a rifty TypeScript document');
+      const result = await client.prepareRename(path, monacoToLspPosition(position));
+      if (token.isCancellationRequested) return renameRejection('Rename cancelled');
+      if (!result) return renameRejection('You cannot rename this element');
+      return { range: lspToMonacoRange(result.range), text: result.placeholder };
+    },
+    async provideRenameEdits(model, position, newName, token) {
+      const path = bridge.pathForModel(model);
+      if (!path) return { edits: [], rejectReason: 'Not a rifty TypeScript document' };
+      const edit = await client.getRenameEdits(path, monacoToLspPosition(position), newName);
+      if (token.isCancellationRequested) return { edits: [], rejectReason: 'Rename cancelled' };
+      // WorkspaceEdit.changes is keyed by document uri (the VFS path verbatim).
+      // Resolve each uri → model Uri (open it read-only if needed) and flatten its
+      // TextEdit[] into Monaco's flat `edits: IWorkspaceTextEdit[]`. A file whose
+      // model can't be made is dropped — never apply an edit to a phantom resource.
+      const edits: monaco.languages.IWorkspaceTextEdit[] = [];
+      for (const [uri, textEdits] of Object.entries(edit.changes)) {
+        const resource = bridge.ensureModel(uri);
+        if (!resource) continue;
+        // versionId undefined: the edit applies to the current model version (the
+        // type permits it; we hold no version to assert against across the relay).
+        for (const textEdit of textEdits) {
+          edits.push({ resource, textEdit: toMonacoTextEdit(textEdit), versionId: undefined });
+        }
+      }
+      return { edits };
+    },
+  };
+
+  const signatureHelpProvider: monaco.languages.SignatureHelpProvider = {
+    // '(' opens the hint on a fresh call, ',' advances to the next argument;
+    // ')' retriggers so closing one nested call falls back to the enclosing one.
+    signatureHelpTriggerCharacters: ['(', ','],
+    signatureHelpRetriggerCharacters: [')'],
+    async provideSignatureHelp(model, position, token, _context) {
+      const path = bridge.pathForModel(model);
+      if (!path) return null;
+      const help = await client.getSignatureHelp(path, monacoToLspPosition(position));
+      if (token.isCancellationRequested || !help) return null;
+      return toMonacoSignatureHelp(help);
+    },
+  };
+
   for (const language of LANGUAGES) {
     disposables.push(monaco.languages.registerHoverProvider(language, hoverProvider));
     disposables.push(monaco.languages.registerDefinitionProvider(language, definitionProvider));
@@ -256,6 +381,11 @@ export function registerTsLanguageServiceProviders(
       monaco.languages.registerTypeDefinitionProvider(language, typeDefinitionProvider),
     );
     disposables.push(monaco.languages.registerCompletionItemProvider(language, completionProvider));
+    disposables.push(monaco.languages.registerReferenceProvider(language, referenceProvider));
+    disposables.push(monaco.languages.registerRenameProvider(language, renameProvider));
+    disposables.push(
+      monaco.languages.registerSignatureHelpProvider(language, signatureHelpProvider),
+    );
   }
 
   return {
@@ -268,6 +398,9 @@ export function registerTsLanguageServiceProviders(
       definition: definitionProvider,
       typeDefinition: typeDefinitionProvider,
       completion: completionProvider,
+      reference: referenceProvider,
+      rename: renameProvider,
+      signatureHelp: signatureHelpProvider,
     },
   };
 }
