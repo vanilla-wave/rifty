@@ -18,16 +18,20 @@
  */
 
 import {
+  type CodeAction,
   type CompletionItem,
   type CompletionList,
   type Diagnostic,
   DiagnosticSeverity,
+  type FormattingOptions,
   type Hover,
   type Location,
   type Position,
   type PrepareRenameResult,
+  type Range,
   type ReferenceContext,
   type SignatureHelp,
+  type TextEdit,
   type WorkspaceEdit,
 } from '@riftydev/ts-language-service/lsp-types';
 import {
@@ -90,6 +94,23 @@ export interface TsLanguageServiceClient {
   getRenameEdits(path: string, position: Position, newName: string): Promise<WorkspaceEdit>;
   /** Signature help at `position` (LSP 0-based); `null` when not inside a call. */
   getSignatureHelp(path: string, position: Position): Promise<SignatureHelp | null>;
+  /**
+   * Quick-fixes for the diagnostics `errorCodes` intersecting `range` (LSP 0-based)
+   * in `path`. tsc only returns a fix when the request span lies WITHIN the
+   * diagnostic span, so a caller passes a diagnostic's own range + that
+   * diagnostic's `code`s (empty `errorCodes` → no fixes).
+   */
+  getCodeFixes(path: string, range: Range, errorCodes: number[]): Promise<readonly CodeAction[]>;
+  /** Organize-imports for `path` → a `WorkspaceEdit` (empty `changes` if already organized). */
+  organizeImports(path: string): Promise<WorkspaceEdit>;
+  /** Whole-document format edits for `path` with editor `options`. */
+  getFormattingEdits(path: string, options: FormattingOptions): Promise<readonly TextEdit[]>;
+  /** Range-format edits for `range` (LSP 0-based) in `path` with editor `options`. */
+  getRangeFormattingEdits(
+    path: string,
+    range: Range,
+    options: FormattingOptions,
+  ): Promise<readonly TextEdit[]>;
   /** Reject every in-flight request and detach the relay listener. Idempotent. */
   dispose(): void;
 }
@@ -226,6 +247,26 @@ export function createTsLanguageServiceClient(
     return response.signatureHelp;
   }
 
+  /** A code-fixes query: resolves the `CodeAction[]`, rejects on a service error. */
+  async function codeActions(build: (id: number) => TsRequest): Promise<readonly CodeAction[]> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'codeActions') {
+      throw new Error(`ts-lsp: expected codeActions response, got kind=${response.kind}`);
+    }
+    return response.codeActions;
+  }
+
+  /** A formatting query: resolves the `TextEdit[]`, rejects on a service error. */
+  async function textEdits(build: (id: number) => TsRequest): Promise<readonly TextEdit[]> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'textEdits') {
+      throw new Error(`ts-lsp: expected textEdits response, got kind=${response.kind}`);
+    }
+    return response.textEdits;
+  }
+
   return {
     init: (projectRoot) => ack((id) => ({ id, type: 'ts:init', projectRoot })),
     open: (path, text) => ack((id) => ({ id, type: 'ts:open', path, text })),
@@ -256,6 +297,13 @@ export function createTsLanguageServiceClient(
       workspaceEdit((id) => ({ id, type: 'ts:getRenameEdits', path, position, newName })),
     getSignatureHelp: (path, position) =>
       signatureHelp((id) => ({ id, type: 'ts:getSignatureHelp', path, position })),
+    getCodeFixes: (path, range, errorCodes) =>
+      codeActions((id) => ({ id, type: 'ts:getCodeFixes', path, range, errorCodes })),
+    organizeImports: (path) => workspaceEdit((id) => ({ id, type: 'ts:organizeImports', path })),
+    getFormattingEdits: (path, options) =>
+      textEdits((id) => ({ id, type: 'ts:getFormattingEdits', path, options })),
+    getRangeFormattingEdits: (path, range, options) =>
+      textEdits((id) => ({ id, type: 'ts:getRangeFormattingEdits', path, range, options })),
     dispose() {
       if (torn) return;
       torn = true;
