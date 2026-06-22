@@ -1206,6 +1206,19 @@ body {
   min-height: 0;
   background: var(--rf-panel);
 }
+/* View pane (ADR-0166 P1.9c): the terminal pane stays mounted (preserves xterm
+   scrollback) and toggles visibility; the problems pane mounts only when active.
+   Both fill the body — the terminal slots' inset:0 resolves against this box. */
+.rf-console__pane {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+}
+.rf-console__pane[data-active="false"] {
+  visibility: hidden;
+  pointer-events: none;
+}
 .rf-terminal-slot {
   position: absolute;
   inset: 0;
@@ -1220,6 +1233,117 @@ body {
 }
 .rf-console[data-collapsed="true"] .rf-console__body {
   display: none;
+}
+
+/* Bottom-panel view switcher tabs (ADR-0166 P1.9c): Terminal | Problems. */
+.rf-console__views {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+.rf-console__view {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 9px;
+  border: none;
+  border-radius: var(--rf-r-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.rf-console__view:hover {
+  background: var(--rf-hover);
+}
+.rf-console__view[data-active="true"] {
+  background: var(--rf-accent-sel);
+}
+.rf-console__view[data-active="true"] .rf-eyebrow {
+  color: var(--rf-accent-text-2);
+}
+.rf-console__view:focus-visible {
+  outline: 2px solid var(--rf-accent);
+  outline-offset: -2px;
+}
+.rf-console__badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--rf-accent);
+  color: #1d1f26;
+  font: 600 10px / 1 var(--rf-font-sans);
+}
+
+/* Problems panel (ADR-0166 P1.9c). */
+.rf-problems {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: 6px 4px;
+  font: 400 12.5px / 18px var(--rf-font-sans);
+}
+.rf-problems__empty {
+  padding: 12px 14px;
+  color: var(--rf-text-muted);
+}
+.rf-problems__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rf-problems__row {
+  margin: 0;
+}
+.rf-problems__item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 3px 10px;
+  border: none;
+  background: transparent;
+  color: var(--rf-text);
+  text-align: left;
+  cursor: pointer;
+}
+.rf-problems__item:hover {
+  background: var(--rf-hover);
+}
+.rf-problems__item:focus-visible {
+  outline: 2px solid var(--rf-accent);
+  outline-offset: -2px;
+}
+.rf-problems__sev {
+  flex: none;
+  font-size: 11px;
+  line-height: 18px;
+}
+.rf-problems__sev[data-severity="1"] {
+  color: #ff6b6b;
+}
+.rf-problems__sev[data-severity="2"] {
+  color: #ffad7a;
+}
+.rf-problems__sev[data-severity="3"],
+.rf-problems__sev[data-severity="4"] {
+  color: var(--rf-text-muted);
+}
+.rf-problems__msg {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rf-problems__loc {
+  flex: none;
+  color: var(--rf-text-muted);
+  font: 400 11.5px / 18px var(--rf-font-mono, monospace);
 }
 
 .rf-terminal-shell {

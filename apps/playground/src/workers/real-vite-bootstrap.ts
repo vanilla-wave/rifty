@@ -33,11 +33,11 @@ import {
 } from '@riftydev/kernel';
 import { registerNetBuiltins } from '@riftydev/net/register-builtins';
 import { registerSqliteBuiltin } from '@riftydev/net/sqlite/register-builtins';
-import { isTsRequestMessage, isTsResponseMessage } from '@riftydev/ts-language-service';
 import { installRuntimeJsFsHandlers } from '@riftydev/runtime-js';
 import { setNodeEntryWorkerUrl } from '@riftydev/runtime-js/builtins/node-entry-url';
 import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { type CommandContext, Shell } from '@riftydev/shell';
+import { isTsRequestMessage, isTsResponseMessage } from '@riftydev/ts-language-service';
 import { dirname, initBackend, normalizePath, syncMirror } from '@riftydev/vfs';
 import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
 import { createNpmShellCommand } from '../glue/npm-shell-command.ts';

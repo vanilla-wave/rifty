@@ -40,11 +40,39 @@ export const PROGRAM_MIRROR_PATH = '/workspace/src/main.js';
 
 export interface EditorOpenFileOptions {
   readonly activate?: boolean;
+  /**
+   * Reveal + place the cursor at this 1-based position after opening (ADR-0166
+   * P1.9c Problems click-to-jump). Monaco-convention coordinates (lineNumber /
+   * column, both 1-based). Applied once the tab is active.
+   */
+  readonly reveal?: { readonly line: number; readonly column: number };
+}
+
+/** A model open/change/close event the page LS client reacts to (ADR-0166 P1.9b). */
+export interface EditorDocumentEvent {
+  /** Absolute VFS path (the program tab maps to {@link PROGRAM_MIRROR_PATH}). */
+  readonly path: string;
+  /** Current model text (empty on `close`). */
+  readonly text: string;
+  readonly kind: 'open' | 'change' | 'close';
 }
 
 /** Imperative handle handed to the App so the explorer can open files. */
 export interface EditorApi {
   openFile(path: string, options?: EditorOpenFileOptions): void;
+  /**
+   * Set the rifty-TS diagnostic markers for an open model (ADR-0166 P1.9b). `path`
+   * is the absolute VFS path (program tab → {@link PROGRAM_MIRROR_PATH}); a no-op
+   * if no model is open for it. Owns the `'rifty-ts'` marker owner so it never
+   * clobbers Monaco's own markers (which are disabled anyway).
+   */
+  setMarkers(path: string, markers: monaco.editor.IMarkerData[]): void;
+  /**
+   * Subscribe to model open/change/close (ADR-0166 P1.9b) so the page can push
+   * `ts:open`/`ts:update`/`ts:close` and request diagnostics. Returns an
+   * unsubscribe. The program tab reports {@link PROGRAM_MIRROR_PATH}.
+   */
+  onDocument(cb: (ev: EditorDocumentEvent) => void): () => void;
 }
 
 export interface EditorHostProps {
@@ -102,6 +130,23 @@ function ensureTheme(): void {
   themeDefined = true;
 }
 
+let builtinTsDisabled = false;
+/**
+ * Make the rifty worker-resident TS language service the SINGLE source of truth
+ * for JS/TS diagnostics (ADR-0166 P1.9b): turn OFF Monaco's bundled TS worker
+ * validation. Otherwise the page would show TWO squiggle sets — Monaco's
+ * lib.d.ts-only guess AND rifty's real-VFS+tsconfig diagnostics — and they
+ * disagree (Monaco can't see the owner's node_modules / tsconfig). One-time,
+ * before the first `monaco.editor.create`.
+ */
+function disableBuiltinTsDiagnostics(): void {
+  if (builtinTsDisabled) return;
+  const off = { noSemanticValidation: true, noSyntacticValidation: true };
+  monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions(off);
+  monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions(off);
+  builtinTsDisabled = true;
+}
+
 function languageForPath(path: string): string {
   const dot = path.lastIndexOf('.');
   const ext = dot <= 0 ? '' : path.slice(dot + 1).toLowerCase();
@@ -136,6 +181,10 @@ export function EditorHost(props: EditorHostProps) {
   let editor: monaco.editor.IStandaloneCodeEditor | undefined;
   let programModel: monaco.editor.ITextModel | undefined;
   let suppressProgramEcho = false;
+  // A reveal queued by `openFile({reveal})` (ADR-0166 P1.9c Problems jump),
+  // applied once the target tab is the editor's active model (the activeId effect
+  // runs after the signal write). {tabId, line, column} — 1-based Monaco coords.
+  let pendingReveal: { id: string; line: number; column: number } | undefined;
 
   const models = new Map<string, monaco.editor.ITextModel>();
   const readOnlyPaths = new Set<string>();
@@ -144,6 +193,38 @@ export function EditorHost(props: EditorHostProps) {
   // (a seeded project file racing the owner publish). Cleared once the file
   // opens; torn down on unmount so a never-arriving frame leaks nothing.
   const snapshotAwaits = new Map<string, () => void>();
+  // Page LS-client subscribers (ADR-0166 P1.9b): notified on model open/change/close.
+  const documentListeners = new Set<(ev: EditorDocumentEvent) => void>();
+
+  /** Tab id → absolute VFS path: the program tab mirrors PROGRAM_MIRROR_PATH; every
+   *  other tab id IS its absolute path (file-explorer / preset opens key by path). */
+  function docPathForTab(id: string): string {
+    return id === PROGRAM_TAB_ID ? PROGRAM_MIRROR_PATH : id;
+  }
+  /** Inverse of {@link docPathForTab} — the model key for a VFS path. */
+  function tabIdForPath(path: string): string {
+    return path === PROGRAM_MIRROR_PATH ? PROGRAM_TAB_ID : path;
+  }
+  function emitDocument(id: string, kind: EditorDocumentEvent['kind']): void {
+    if (documentListeners.size === 0) return;
+    const model = models.get(id);
+    const text = kind === 'close' ? '' : (model?.getValue() ?? '');
+    const ev: EditorDocumentEvent = { path: docPathForTab(id), text, kind };
+    for (const cb of documentListeners) cb(ev);
+  }
+
+  /** Apply a queued reveal once its tab is the editor's active model (P1.9c jump). */
+  function applyPendingRevealIfActive(): void {
+    const target = pendingReveal;
+    if (!target || !editor) return;
+    const model = models.get(target.id);
+    if (!model || editor.getModel() !== model) return; // not active yet — wait
+    pendingReveal = undefined;
+    const position = { lineNumber: target.line, column: target.column };
+    editor.setPosition(position);
+    editor.revealPositionInCenter(position);
+    editor.focus();
+  }
 
   const [tabs, setTabs] = createSignal<EditorTab[]>(initialTabs(props.programTitle()));
   const [activeId, setActiveId] = createSignal<string>(PROGRAM_TAB_ID);
@@ -205,6 +286,9 @@ export function EditorHost(props: EditorHostProps) {
           model.setValue(`// binary file — ${res.size} bytes — not editable`);
         } else {
           model.setValue(dec.decode(res.content));
+          // Content landed → let the LS open this buffer with the real text (the
+          // initial '// loading…' placeholder would otherwise be what it sees).
+          emitDocument(path, 'open');
         }
       },
       (err: unknown) => {
@@ -233,6 +317,7 @@ export function EditorHost(props: EditorHostProps) {
     models.set(path, model);
     setTabs((t) => openFileTab(t, path, basename(path)));
     if (shouldActivate) setActiveId(path);
+    emitDocument(path, 'open');
   }
 
   /**
@@ -275,6 +360,16 @@ export function EditorHost(props: EditorHostProps) {
 
   function openFile(path: string, options: EditorOpenFileOptions = {}): void {
     const shouldActivate = options.activate !== false;
+    // Queue the click-to-jump reveal (ADR-0166 P1.9c): applied in the activeId
+    // effect once this tab's model is the editor's active model.
+    if (options.reveal && shouldActivate) {
+      pendingReveal = {
+        id: tabIdForPath(path),
+        line: options.reveal.line,
+        column: options.reveal.column,
+      };
+      applyPendingRevealIfActive();
+    }
     const readRemote = props.readNodeModulesFile;
     let bytes: Uint8Array | undefined;
     let readErr: Error | undefined;
@@ -332,6 +427,7 @@ export function EditorHost(props: EditorHostProps) {
       flushWrite(path);
     }
     const next = nextActiveAfterClose(tabs(), path, activeId());
+    emitDocument(path, 'close');
     setTabs((t) => closeTab(t, path));
     const m = models.get(path);
     models.delete(path);
@@ -344,6 +440,7 @@ export function EditorHost(props: EditorHostProps) {
   onMount(() => {
     if (!container) return;
     ensureTheme();
+    disableBuiltinTsDiagnostics();
     programModel = monaco.editor.createModel(props.programValue(), 'javascript');
     models.set(PROGRAM_TAB_ID, programModel);
     editor = monaco.editor.create(container, {
@@ -373,6 +470,11 @@ export function EditorHost(props: EditorHostProps) {
     editor.onDidChangeModelContent(() => {
       const id = activeId();
       if (id === PROGRAM_TAB_ID) {
+        // Always notify the LS of the new program text (ADR-0166 P1.9b) — even an
+        // external preset `setValue` (suppressProgramEcho) must reach the service,
+        // it's a real content change the diagnostics must reflect. Only the
+        // page→owner write echo is suppressed below.
+        emitDocument(id, 'change');
         if (suppressProgramEcho || !programModel) return;
         props.onProgramChange(programModel.getValue());
       } else {
@@ -380,12 +482,30 @@ export function EditorHost(props: EditorHostProps) {
         // have no write path back; a programmatic setValue (async load) must
         // not schedule a write into a read-only VFS.
         if (readOnlyPaths.has(id)) return;
+        emitDocument(id, 'change');
         setTabs((t) => setDirty(t, id, true));
         scheduleWrite(id);
       }
     });
 
-    props.registerApi({ openFile });
+    props.registerApi({
+      openFile,
+      setMarkers(path, markers) {
+        const model = models.get(tabIdForPath(path));
+        if (model) monaco.editor.setModelMarkers(model, 'rifty-ts', markers);
+      },
+      onDocument(cb) {
+        documentListeners.add(cb);
+        // Replay already-open models to the new subscriber (ADR-0166 P1.9b): the
+        // program tab is open at boot, often before the App wires its LS client.
+        // An ordering-free 'open' replay means a late subscriber still opens every
+        // live buffer — no missed-before-listener gap.
+        for (const [id, model] of models) {
+          cb({ path: docPathForTab(id), text: model.getValue(), kind: 'open' });
+        }
+        return () => documentListeners.delete(cb);
+      },
+    });
 
     // External program-source sync (presets / mode transitions): the one guarded
     // programmatic write; the change listener skips the echo.
@@ -419,6 +539,8 @@ export function EditorHost(props: EditorHostProps) {
         // explorer highlights src/main.js (mockup: active file is lit).
         path: id === PROGRAM_TAB_ID ? PROGRAM_MIRROR_PATH : id,
       });
+      // The model just became active — apply a queued Problems click-to-jump.
+      applyPendingRevealIfActive();
     });
   });
 
