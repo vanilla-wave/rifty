@@ -17,7 +17,7 @@
  *
  * Writes packages/git/fixtures/*; prints each path + byte count.
  */
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -46,6 +46,16 @@ function git(cwd, args) {
   return execFileSync('git', args, { cwd, env: GIT_ENV, encoding: 'utf8' });
 }
 
+/**
+ * Capture stdout AND stderr SEPARATELY of a git invocation (checkout's "Switched
+ * to…"/advisory/error text goes to stderr; only restore is silent). spawnSync so
+ * a nonzero exit (the dirty-conflict refusal) does not throw — we want its bytes.
+ */
+function captureBoth(cwd, args) {
+  const r = spawnSync('git', args, { cwd, env: GIT_ENV, encoding: 'utf8' });
+  return { stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+}
+
 /** Real git version string, e.g. "git version 2.50.1 ...". */
 function gitVersion() {
   const out = execFileSync('git', ['--version'], { env: GIT_ENV, encoding: 'utf8' });
@@ -71,6 +81,33 @@ function freshRepo() {
   const dir = mkdtempSync(join(tmpdir(), 'rifty-git-fix-'));
   git(dir, ['init', '-q', '-b', 'main']);
   return dir;
+}
+
+/**
+ * Repo with `main` (a.txt='one') + branch `other` (a.txt='two'), checked out on
+ * `main`. Two diverging branches so a dirty switch genuinely conflicts and a
+ * detached checkout of `other`'s HEAD has a real subject. Returns the `other`
+ * HEAD sha (deterministic — fixed identity/dates → canonical oid).
+ */
+function twoBranchRepo() {
+  const dir = freshRepo();
+  writeFileSync(join(dir, 'a.txt'), 'one\n');
+  git(dir, ['add', 'a.txt']);
+  git(dir, ['commit', '-q', '-m', 'first']);
+  git(dir, ['checkout', '-q', '-b', 'other']);
+  writeFileSync(join(dir, 'a.txt'), 'two\n');
+  git(dir, ['add', 'a.txt']);
+  git(dir, ['commit', '-q', '-m', 'second']);
+  const headOther = git(dir, ['rev-parse', 'HEAD']).trim();
+  git(dir, ['checkout', '-q', 'main']);
+  return { dir, headOther };
+}
+
+/** Write a checkout stdout+stderr pair (`<name>.out`/`.err`) with provenance. */
+function writeCheckout(version, name, command, desc, dir, args) {
+  const { stdout, stderr } = captureBoth(dir, args);
+  writeFixture(`${name}.out`, provenance(version, command, `${desc} (stdout)`), stdout);
+  writeFixture(`${name}.err`, provenance(version, command, `${desc} (stderr)`), stderr);
 }
 
 function main() {
@@ -161,6 +198,60 @@ function main() {
         provenance(version, 'git log --oneline', '2 commits (first, second)'),
         body,
       );
+    }
+
+    // --- checkout: stdout+stderr captured separately (each on a fresh repo) ---
+    {
+      const { dir } = twoBranchRepo();
+      tmps.push(dir);
+      writeCheckout(version, 'checkout-switch', 'git checkout other', 'switch to existing branch', dir, [
+        'checkout',
+        'other',
+      ]);
+    }
+    {
+      const { dir } = twoBranchRepo();
+      tmps.push(dir);
+      writeCheckout(version, 'checkout-create', 'git checkout -b feature', 'create + switch', dir, [
+        'checkout',
+        '-b',
+        'feature',
+      ]);
+    }
+    {
+      const { dir } = twoBranchRepo();
+      tmps.push(dir);
+      writeCheckout(version, 'checkout-already', 'git checkout main', 'already on branch', dir, [
+        'checkout',
+        'main',
+      ]);
+    }
+    {
+      const { dir } = twoBranchRepo();
+      tmps.push(dir);
+      writeFileSync(join(dir, 'a.txt'), 'dirty\n'); // differs from `other` → conflict
+      writeCheckout(version, 'checkout-conflict', 'git checkout other', 'dirty-tree conflict refusal', dir, [
+        'checkout',
+        'other',
+      ]);
+    }
+    {
+      const { dir, headOther } = twoBranchRepo();
+      tmps.push(dir);
+      writeCheckout(version, 'checkout-detached', `git checkout ${headOther}`, 'detached HEAD', dir, [
+        'checkout',
+        headOther,
+      ]);
+    }
+    {
+      const { dir } = twoBranchRepo();
+      tmps.push(dir);
+      writeFileSync(join(dir, 'a.txt'), 'dirty\n'); // restore reverts to index (== HEAD here)
+      writeCheckout(version, 'checkout-restore', 'git checkout -- a.txt', 'restore from index', dir, [
+        'checkout',
+        '--',
+        'a.txt',
+      ]);
     }
   } finally {
     for (const dir of tmps) rmSync(dir, { recursive: true, force: true });
