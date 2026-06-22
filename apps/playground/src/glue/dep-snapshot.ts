@@ -81,6 +81,9 @@ export function restoreDepSnapshot(
   applyWorkspaceArchive(fs, snapshot.nodeModules, {
     root: joinPath(root, 'node_modules'),
     replace: true,
+    // ADR-0165: the snapshot is baked at one root but restored into the active
+    // project root (/scratch or /projects/<id>); re-root the relative tree.
+    rebase: true,
   });
   if (snapshot.lockfile.length > 0) {
     fs.writeFileSync(joinPath(root, 'package-lock.json'), enc.encode(snapshot.lockfile));

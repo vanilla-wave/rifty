@@ -30,6 +30,14 @@ export interface ExportWorkspaceArchiveOptions {
 export interface ImportWorkspaceArchiveOptions {
   readonly root?: string;
   readonly replace?: boolean;
+  /**
+   * Apply the archive's root-RELATIVE files under `root` even when it differs
+   * from `archive.root` (ADR-0165): a dep snapshot baked at one root (e.g.
+   * `/workspace/node_modules`) restores into the active project root
+   * (`/scratch` or `/projects/<id>/node_modules`). Off by default so the
+   * user-facing import keeps the same-root safety guard.
+   */
+  readonly rebase?: boolean;
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -130,7 +138,10 @@ export function applyWorkspaceArchive(
   assertArchive(archive);
   const root = normalizePath(options.root ?? archive.root);
   const archiveRoot = normalizePath(archive.root);
-  if (archiveRoot !== root) {
+  // Files are stored root-relative (see relativePath above), so applying them at
+  // a different `root` is safe — `rebase` opts into that re-root (dep snapshots,
+  // ADR-0165). Without it, the same-root guard stays (user-facing import).
+  if (!options.rebase && archiveRoot !== root) {
     throw new Error(`Archive root mismatch: expected ${root}, got ${archiveRoot}`);
   }
   if (root === '/') throw new Error('Refusing to import a workspace archive at /');

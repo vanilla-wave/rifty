@@ -75,6 +75,6 @@ test.describe('Terminal persistence', () => {
       .toEqual(expectedCommands);
 
     const history = await readHistory();
-    expect(history?.records[0]).toMatchObject({ cwd: '/workspace', mode: 'real-vite' });
+    expect(history?.records[0]).toMatchObject({ cwd: '/scratch', mode: 'real-vite' });
   });
 });

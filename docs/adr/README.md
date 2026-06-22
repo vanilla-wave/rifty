@@ -120,6 +120,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0145 | Real Vite module HMR (server.hmr.channels path superseded) |
 | 0155 | Terminal node-file command: arbitrary-entry supervised child + multi-port preview |
 | 0157 | Unified spec-seeded mutable Node process at pre-entry gated to Node workers |
+| 0165 | Multi-project management with durable scratch |
 
 ### toolchain-build
 
@@ -216,6 +217,7 @@ superseded.
 | 0054 pipe-sink deferral | 0154 | `Readable.fromWeb(webStream).pipe(res)` is implemented; full `node:stream/web` remains unclaimed |
 | 0151 control-frame keepalive clause | 0151 note 2026-06-19 | control frames relay end-to-end; the peer answers pings (real `ws` auto-pongs + `'ping'`, browser-like clients silently pong), transport no longer auto-pongs |
 | 0152 §1 narrow-set / network gap | 0158 | global `fetch` now counted (ref on dispatch, held until body consumed); dispatcher backstop moved to an uncounted host timer; §1 shape unchanged, named set grew |
+| 0135 §4 slug = preset.id reuse key | 0165 | multi-project: install-stamp slug becomes project-scoped (`slug=projectId\|'scratch'`); same-Starter projects must not share node_modules; cleanup fires on root/projectId change |
 
 ## Appendix A — Q→ADR provenance
 

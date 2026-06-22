@@ -65,7 +65,7 @@ async function runLineConfirmed(page: Page, line: string): Promise<void> {
  *     at the right `/preview/<port>/`.
  *
  * File seeding mirrors owner-shell-async-lifecycle.spec.ts: `echo '<src>' >
- * /workspace/<file>` writes the entry into the owner store the child reads over
+ * /scratch/<file>` writes the entry into the owner store the child reads over
  * fs.* sync-RPC. Server scripts use ESM `import http from "node:http"` — the
  * seeded workspace package.json is `type: module`, so a `.js` entry is ESM (a
  * `require()` would ReferenceError); @riftydev/net registers the `node:http`
@@ -97,7 +97,7 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     // Run-to-completion script: log then exit 0.
     await runLineConfirmed(
       page,
-      'echo \'console.log("hello from node"); process.exit(0);\' > /workspace/script.js',
+      'echo \'console.log("hello from node"); process.exit(0);\' > /scratch/script.js',
     );
     await runLineConfirmed(page, 'node script.js');
     // The child's console.log reached the terminal over the pty stdout channel.
@@ -112,7 +112,7 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     // A throwing script: the error message surfaces on stderr (a non-zero exit;
     // the shell has no `$?` to read back, so the error text + session recovery is
     // the load-bearing pair — a silent exit-0 or stub would never print kaboom).
-    await runLineConfirmed(page, 'echo \'throw new Error("kaboom");\' > /workspace/boom.js');
+    await runLineConfirmed(page, 'echo \'throw new Error("kaboom");\' > /scratch/boom.js');
     await runLineConfirmed(page, 'node boom.js');
     await expectTerminalContains(page, 'kaboom', 20_000);
 
@@ -149,7 +149,7 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     // echo keeps the source verbatim; the inner string is double-quoted.
     await runLineConfirmed(
       page,
-      'echo \'import http from "node:http"; http.createServer((_req, res) => res.end("NODE-SERVER-OK")).listen(3000);\' > /workspace/server.js',
+      'echo \'import http from "node:http"; http.createServer((_req, res) => res.end("NODE-SERVER-OK")).listen(3000);\' > /scratch/server.js',
     );
     await runLineConfirmed(page, 'node server.js');
 
@@ -235,7 +235,7 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     // silently reduced — the multi-node-sid case lives there, deterministically.
     await runLineConfirmed(
       page,
-      'echo \'import http from "node:http"; http.createServer((_req, res) => res.end("SERVER-A-OK")).listen(4001);\' > /workspace/serverA.js',
+      'echo \'import http from "node:http"; http.createServer((_req, res) => res.end("SERVER-A-OK")).listen(4001);\' > /scratch/serverA.js',
     );
     await runLineConfirmed(page, 'node serverA.js');
 
@@ -312,7 +312,7 @@ test.describe('terminal `node <file>` runs scripts + servers in a supervised chi
     // Now run a node:http server in the (freed) Terminal 1 — no dev server up.
     await runLineConfirmed(
       page,
-      'echo \'import http from "node:http"; http.createServer((_req, res) => res.end("NODE-ONLY-OK")).listen(4003);\' > /workspace/only.js',
+      'echo \'import http from "node:http"; http.createServer((_req, res) => res.end("NODE-ONLY-OK")).listen(4003);\' > /scratch/only.js',
     );
     await runLineConfirmed(page, 'node only.js');
 

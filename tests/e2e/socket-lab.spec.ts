@@ -58,11 +58,13 @@ test.describe('Socket Lab preset — honest socket capability gate', () => {
     });
     await expectTerminalContains(page, 'starting dev server on port', 15_000);
 
-    await page.click('[data-action="view-templates"]');
+    // ADR-0165 §9: the gallery lives in the launcher modal now — open the chip,
+    // switch to the Starters tab, pick the card. The launcher closes on pick and
+    // the boot proceeds (proven by the `npm run dev` / listening lines below).
+    await page.click('[data-action="open-launcher"]');
+    await page.getByRole('button', { name: 'Starters', exact: true }).click();
     await page.click('[data-preset="socket-lab"]');
-    await expect(page.locator('[data-action="view-templates"]')).toContainText('socket-lab', {
-      timeout: 5_000,
-    });
+    await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
     await expectTerminalContains(page, 'npm run dev', 150_000);
     await expectTerminalContains(page, 'socket lab listening on port 3220', 180_000);
 

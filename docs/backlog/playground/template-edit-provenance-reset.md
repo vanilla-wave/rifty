@@ -5,11 +5,13 @@ title: Explicit template-vs-user-edit provenance — see my edits, revert/reset 
 created: 2026-06-17
 why: a user edits a template but nothing tracks WHICH changes are theirs vs the template's; no per-file "revert to template", no workspace "reset", no dirty indicator — seed/switch/reload retention is implicit and surprising
 user_story: As a playground user, I want to take a template, edit it, SEE which files are my changes vs the template baseline, and revert a file (or reset the whole workspace) back to the template, but today provenance is implicit (seed-if-absent + program mirror + vfs-write into one owner tree), there is no baseline to diff against, and the only restore is a full workspace-archive import.
-sources: [ADR-0078, ADR-0079, ADR-0135, ADR-0148]
+sources: [ADR-0078, ADR-0079, ADR-0135, ADR-0148, ADR-0165]
 code: [apps/playground/src/workers/real-vite-bootstrap.ts, apps/playground/src/App.tsx, apps/playground/src/glue/workspace-archive-port.ts, apps/playground/src/glue/install-stamp.ts, apps/playground/src/templates]
 ---
 
 ## Context
+
+> Update 2026-06-21 (ADR-0165): the WHOLE-workspace reset + the baseline mechanism are now decided and folded into multi-project management — baseline = the Starter bundle re-derived from the registry by `starter` id (no stored per-project baseline), reset = one-shot whole-workspace re-seed, and the switch-vs-reload "drops edits" surprise is replaced by the explicit dirty-scratch confirm dialog. What REMAINS open here is the PROVENANCE half: live-vs-baseline diff, the explorer "modified" badge, and PER-FILE revert — split out to `per-file-revert-to-starter`. Keep this item for the provenance/per-file work; the reset/baseline bullets below are superseded by ADR-0165.
 
 The playground has no explicit model of "user edits vs template baseline." What exists is implicit:
 - the owner seeds template files IF-ABSENT (`real-vite-bootstrap` `seedProject`/`bootDevServer`) and the page pushes the program mirror + preset files (`App.tsx` `seedWorkspaceOwner`); user edits flow over `vfs-write` into the SAME owner tree — once written, a user file is indistinguishable from a template file;

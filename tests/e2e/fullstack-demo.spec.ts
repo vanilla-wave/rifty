@@ -34,13 +34,15 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
     // wait absorbs the child spawn + over-RPC dep walk (backlog: perf/fs-rpc-chunk-perf).
     await expectTerminalContains(page, 'starting dev server on port', 30_000);
 
-    // Select the demo preset from the template switcher and confirm it took:
-    // the dropdown unmounts on pick, so assert via the chip's active id.
-    await page.click('[data-action="view-templates"]');
+    // Select the demo preset. ADR-0165 §9 moved the gallery into the launcher
+    // modal: open the chip, switch to the Starters tab, then pick the card. The
+    // launcher closes on pick (a fresh scratch from the chosen starter) and the
+    // boot proceeds — proven by the `npm run dev` terminal lines just below, so no
+    // redundant chip-text assertion (the chip now shows the scratch name, not the id).
+    await page.click('[data-action="open-launcher"]');
+    await page.getByRole('button', { name: 'Starters', exact: true }).click();
     await page.click('[data-preset="express-sqlite"]');
-    await expect(page.locator('[data-action="view-templates"]')).toContainText('express-sqlite', {
-      timeout: 5_000,
-    });
+    await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
     // From-scratch preset (ADR-0135, revised): the visible `npm install` runs in
     // the OWNER realm (which serves the preview), streaming each package to the
     // terminal — `npm run dev` boots the node server co-resident in the owner

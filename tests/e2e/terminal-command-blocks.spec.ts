@@ -12,7 +12,7 @@ test.describe('Terminal command blocks UX', () => {
       '.rf-terminal-slot[data-active="true"] [data-testid="terminal-mode-hint"]',
     );
     await expect(modeHint).toContainText('Shell');
-    await expect(modeHint).toContainText('/workspace');
+    await expect(modeHint).toContainText('/scratch');
   });
 
   test('rail items expose command preview and copy actions without reading renderer rows', async ({

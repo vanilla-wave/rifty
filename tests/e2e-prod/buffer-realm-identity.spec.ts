@@ -73,7 +73,9 @@ test.describe('production build — child-realm global Buffer matches its module
       'import { Buffer as B } from "node:buffer"; ' +
       'const chunk = B.from("hi", "utf8"); ' +
       'console.log("BUF-CHECK global-isBuffer=" + globalThis.Buffer.isBuffer(chunk) + " same=" + (globalThis.Buffer === B));';
-    await runLineConfirmed(page, `echo '${src}' > /workspace/buftest.js`);
+    // ADR-0165 §4: the active workspace root is /scratch now (was the single
+    // /workspace); `node buftest.js` runs relative to the cwd (/scratch).
+    await runLineConfirmed(page, `echo '${src}' > /scratch/buftest.js`);
     await runLineConfirmed(page, 'node buftest.js');
 
     // GREEN: the realigned global recognises the realm's buffer. (RED before the

@@ -25,6 +25,8 @@ Realm/storage constraint (load-bearing): the VFS interface is synchronous; sync 
    - written after every successful worker install, `deps` = package.json effective set (deps ∪ devDeps ∪ optionals — mirrors installer's request);
    - VFS `flush()` runs BEFORE the stamp write: OPFS write-through is unordered across files, so the stamp lands durable only after the tree — stamp implies tree;
    - re-selecting the SAME project (same slug) reuses its tree (fast); switching to a different project re-runs its arrival path (instant: snapshot restore; from-scratch: visible install). The page-side ad-hoc `npm install` stamps under slug `''`, which no worker boot ever reuses.
+> Correction 2026-06-21 (ADR-0165): §4's reuse key `slug = preset.id` is project-scoped for multi-project — `slug = projectId | 'scratch'`. Two projects from one Starter share `templateId`/deps but must NOT reuse each other's node_modules; the `devServer.boot` templateId-keyed cleanup also fires on root/projectId change. Baked snapshots stay template-keyed (shared Starter artifact).
+
 5. **Trust model**: stamp trusts the tree — no per-file verification. Escape hatch: deleting `node_modules` or changing package.json deps forces a fresh worker install. Invalidation strategy is provisional → `docs/backlog/playground/install-stamp-invalidation.md`.
 6. **UI**: TemplateSwitcher dropdown groups rows under "Instant start" / "From scratch"; rows render the preset `tag` pill (instant / npm install). e2e selectors (`data-testid="gallery"`, `data-preset`) unchanged.
 7. **Baked node_modules snapshots** (instant only) — the first-ever boot of an instant template is truly instant, no silent install:

@@ -82,13 +82,30 @@ export async function flushSyncMirror(): Promise<void> {
   if (typeof mirror.flush === 'function') await mirror.flush();
 }
 
-function overlayShims(): void {
+// The esbuild/rollup shim files (`@riftydev/shadow-registry`) are keyed on the
+// historical `/workspace/node_modules/...` path. The dev server now boots at the
+// ACTIVE ROOT (ADR-0165 §4: `/scratch` or `/projects/<id>`), so the shim MUST be
+// re-rooted to `<root>/node_modules/...` — else it overlays a dead `/workspace`
+// path and the REAL native rollup/esbuild loads (Rollup throws "platform 'rifty'
+// arch 'wasm' not supported by the native build"), breaking every Vite dev boot.
+const SHIM_ROOT_PREFIX = '/workspace';
+/**
+ * Re-root a `/workspace/...`-keyed shim path onto the ACTIVE root (ADR-0165 §4).
+ * Exported for the unit guard; a path that isn't `/workspace`-prefixed is returned
+ * verbatim (defensive — no shim file should escape the prefix).
+ */
+export function reRootShimPath(shimPath: string, root: string): string {
+  return shimPath.startsWith(`${SHIM_ROOT_PREFIX}/`)
+    ? `${root}${shimPath.slice(SHIM_ROOT_PREFIX.length)}`
+    : shimPath;
+}
+function overlayShims(root: string): void {
   const fs = syncMirror();
   for (const [path, content] of [
     ...Object.entries(esbuildShimFiles),
     ...Object.entries(rollupShimFiles),
   ]) {
-    const np = normalizePath(path);
+    const np = normalizePath(reRootShimPath(path, root));
     fs.mkdirSync(dirname(np), { recursive: true });
     fs.writeFileSync(np, enc.encode(content));
   }
@@ -287,7 +304,7 @@ export async function bootDevServer(opts: {
   }
 
   if (cfg.runtime === 'vite') {
-    overlayShims();
+    overlayShims(root);
     log(`importing ${cfg.runtimeSpecifier}…\n`);
     const viteNs = (await loader.import(
       cfg.runtimeSpecifier,

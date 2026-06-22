@@ -16,8 +16,14 @@ import {
  * vfs-write bridge into the OWNER `syncMirror` — the same tree the shell reads.
  *
  * This drives the REAL page path: a keystroke into the Monaco program editor
- * fires `onProgramChange` → `workspaceOwner.writeFile(/workspace/src/main.js)` →
+ * fires `onProgramChange` → `workspaceOwner.writeFile(<activeRoot>/src/main.js)` →
  * owner. A second shell then `cat`s that exact path and must see the NEW marker.
+ *
+ * ADR-0165 §4: the program-mirror path is ROOT-RELATIVE — the edit must land at
+ * `<activeRoot>/src/main.js` (`/scratch` on boot), the path the dev server runs,
+ * NOT the legacy hardcoded `/workspace`. RED-check: revert programMirrorPath to
+ * `/workspace/src/main.js` → the edit lands on the dead `/workspace` path → `cat
+ * /scratch/src/main.js` never sees the marker → this test fails.
  *
  * Load-bearing: the marker is unique per run, so `cat` returning it cannot be a
  * stale-tree coincidence — it proves the page-originated write landed in the
@@ -47,7 +53,8 @@ test.describe('a page editor write is read back by exec in the owner', () => {
 
     // Edit the program through Monaco's real input path (no test-only setter):
     // prepend a unique marker comment at line 1. The change fires onProgramChange
-    // → the owner write bridge → /workspace/src/main.js in the owner syncMirror.
+    // → the owner write bridge → <activeRoot>/src/main.js in the owner syncMirror
+    // (ADR-0165 §4: root-relative, /scratch on boot).
     const marker = `editor-write-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     const editor = page.locator('[data-testid="editor"]');
     const editorInput = editor.locator('textarea.inputarea').first();
@@ -63,9 +70,11 @@ test.describe('a page editor write is read back by exec in the owner', () => {
     // The edit is in the editor model (sanity: the write actually originated here).
     await expect(editorLines).toContainText(marker);
 
-    // Exec reads the same path in the owner → the marker the editor just wrote is
-    // visible. Poll (the write crosses the page→owner IPC asynchronously).
-    await runTerminalLine(page, 'cat /workspace/src/main.js');
+    // Exec reads the ROOT-RELATIVE program path in the owner → the marker the
+    // editor just wrote is visible. The boot root is /scratch (ADR-0165 §4), so a
+    // `cat /workspace/...` would be a dead path — the edit lands at /scratch.
+    // Poll (the write crosses the page→owner IPC asynchronously).
+    await runTerminalLine(page, 'cat /scratch/src/main.js');
     await expectTerminalContains(page, marker, 15_000);
   });
 });
