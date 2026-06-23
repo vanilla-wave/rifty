@@ -8,6 +8,7 @@ Review the PR.
 Especially interested in:
 - Completeness of the implementation and absence of deferred/unresolved tasks
 - Conformance to the project goal and architecture
+- Approach earns its cost — even an on-goal capability is wrong if its implementation is disproportionate or net-negative for user or project; flag and reconsider, don't force it
 - Absence of bugs
 - No regressions to existing functionality
 - Feature's user experience matches the real ecosystem
