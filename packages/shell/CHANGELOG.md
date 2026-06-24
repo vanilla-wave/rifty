@@ -5,7 +5,7 @@
 ### Fixed
 
 - **`git` fidelity hardening — no silent false-successes, faithful error surfaces (ADR-0167).**
-  - **Repository guard.** Every verb except `init`/`clone` now verifies a repo governs the cwd first (real git's discovery, walking up for `.git`). A NON-repo → `fatal: not a git repository (or any of the parent directories): .git` (exit 128) instead of a silent false-success (`status` had reported a clean tree, `commit` fabricated a root commit). A verb from a SUBDIRECTORY → loud `git.subdir` ceiling (exit 128) — never a silent wrong-tree result (cwd-relative pathspec prefixing is deferred, see backlog).
+  - **Repository guard.** Every verb except `init`/`clone` now verifies a repo governs the cwd first (real git's discovery, walking up for `.git`). A NON-repo → `fatal: not a git repository (or any of the parent directories): .git` (exit 128) instead of a silent false-success (`status` had reported a clean tree, `commit` fabricated a root commit).
   - **`commit` no longer fabricates an empty commit.** Nothing staged → real git's exit-1 summary to stdout (`nothing to commit, working tree clean` / `… untracked files present` / `nothing to commit (create/copy files…)`), no commit written; `--amend` still allowed.
   - **`commit -a`/`--all` + `-am`** stage tracked modifications + deletions (not untracked) before committing (`git add -u` semantics); combined short clusters expand correctly. Any UNKNOWN `commit` flag now loud-throws (`git.commit.<flag>`, exit 128) instead of being silently ignored.
   - **`diff`** is the unstaged delta (index ↔ workdir, like bare `git diff`); untracked + ignored files are no longer shown.
@@ -16,13 +16,27 @@
   - **Repository guard validates `.git/HEAD`**, not just a `.git` entry — a bare `mkdir .git` / empty / partial `.git` (or a `.git` FILE) is no longer accepted as a repo (was a silent false-success: `status` reported clean). Discovery keeps walking up, ending in the `not a git repository` fatal.
   - **`commit -m a -m b`** joins paragraphs (`a\n\nb`) instead of silently dropping the first; **`commit -m ''`** → git's `Aborting commit due to empty commit message.` (exit 1), not a leaked iso-git `MissingParameterError`. The one-line summary shows only the message's first line.
   - **`git add` flag discipline + all-or-nothing.** Unknown flags loud-throw `git.add.<flag>` (was silently dropped); recognizes `-A`/`--all`/`-u`/`--update`/`-f`/`--force`. Pathspecs are validated before staging (a single miss stages nothing); a gone-but-tracked path stages its deletion; an explicit ignored path is refused unless `-f`; no pathspec → git's `Nothing specified, nothing added.` advisory (exit 0, was a spurious exit 1).
-  - **`git diff` rejects unsupported forms** (`--cached`/`--staged`/`HEAD`/two-ref/pathspec) with a loud `git.diff.<x>` ceiling instead of silently returning the bare index↔workdir diff; **binary** changes render `Binary files … differ`.
+  - **`git diff` never silently returns the wrong tree.** The hardening first made non-bare forms loud; the hard-ceil pass now implements `--cached`/`--staged`/`HEAD`/two-ref forms with the correct tree selection. Binary changes render `Binary files … differ`.
+  - **Adversarial git hard-ceil audit fixes.** `git diff HEAD <path>` and `git diff --cached [<rev>] <path>` parse pathspecs without requiring `--`; `git log -- <path>` filters history; `git show <commit>` prints the patch; `git reset --hard <rev>` deletes tracked files absent from the target tree; `git stash pop/apply/drop stash@{n}` selects the requested entry while `stash -u` loud-throws the tracked-only stash ceiling; `git ls-remote origin` resolves configured remotes; `git rm` refuses modified tracked files unless forced; `git mv` refuses destination overwrite unless forced.
+  - **Review hard-ceil fix-pass.** `remote`/`checkout -b`/`switch -c`/`merge`/`cherry-pick`/network verbs no longer ignore extra operands; unsupported merge/cherry-pick flags are loud ceilings. `git rm` separates `-r` from `-f`, validates every pathspec before mutation, and refuses directory recursion without `-r`. `git mv` proves the source is tracked before VFS writes and supports moving files into an existing directory. `reset HEAD -- <path>` parses correctly, while mode+pathspec forms loud-throw. `stash push <pathspec>` and missing `-m` values loud-throw before mutation. `clone`/`fetch` parse `--depth` and `--single-branch`; `log -n 0` prints nothing and unsupported `--format` tokens loud-throw.
+  - **Usability phase 1.** Git commands now work from repo subdirectories by translating cwd-relative pathspecs to repo-root paths for add/diff/log/checkout/restore/reset/rm/mv. `diff` adds `--name-only`, `--name-status`, and `--stat`; patch output includes `---`/`+++` file headers. Network porcelain accepts single `src:dst` refspecs, `fetch --tags/--prune/--prune-tags`, `push --tags`, `ls-remote --tags/--heads`, and `clone --no-tags`; multi/wildcard refspecs remain loud ceilings.
+  - **Clean patch/revert workflows.** `git revert <commit>` now handles the clean single-parent case all-or-nothing: clean worktree, touched paths still matching the reverted commit's post-image, inverse worktree/index update, and a normal `Revert "<subject>"` commit. `git apply <patch-file>` / `git apply -` now applies clean text unified diffs to the worktree (not index) with add/modify/delete support and preflighted all-or-nothing conflict detection. Unsupported conflict/sequencer/3-way/index/binary/rename/mode/mailbox forms throw directed `git.revert.*` / `git.apply.*` ceilings before mutation.
   - **`git fetch`/`pull`/`push` with a remote NAME** (`git push origin main`) resolve the remote from config instead of mistaking it for a URL transport ceiling; `-f`/`--force` honored on push; other network flags loud-throw.
   - **`git clone`**: the destination-exists guard runs before transport (so ssh + non-empty dest reports the dest fatal, not the transport ceiling); no `<url>` → git's `fatal: You must specify a repository to clone.`; a `…/.git` URL falls back to the host so the destination is never empty.
   - **Defensive error mapping** for `status`/`branch`: a corrupt-repo iso-git `NotFoundError` maps to `fatal:` exit 128 rather than leaking as the shell's generic exit 1.
+  - **Review fix-pass hardening.** Cwd-relative pathspecs that resolve outside the repo now fail before reaching plumbing (no leaked isomorphic-git `RangeError` and no misleading ignored-file refusal). `git apply` now parses hunk body lines that begin with `---` as removals, and `git apply - extra.patch` loud-throws `git.apply.multiple-files` instead of silently ignoring the extra patch operand. Guards: `git-cli.test.ts`.
+  - **Post-review silent-success fixes.** `git add` pathspec staging now honors `-f`, `-u <pathspec>`, directory deletions, and `-A <pathspec>` without staging unrelated paths. `git tag -m` creates annotated tags; annotated-tag editor workflows and extra operands loud-throw before mutation. `git log <path>` works without `--`; reflog revspecs in `reset` render as exit-128 ceilings; `git apply` from a subdirectory ignores patch entries outside that cwd scope; `push --tags` checks the remote transport even when no local tags exist. Guards: `git-cli.test.ts`.
+  - **Hard-ceil completion pass.** `git add -f .` / `git add -f <dir>` now stages ignored children even when ordinary tracked changes also match the pathspec; `HEAD^0` resolves as the current commit across diff/log/show/reset while invalid parent revspecs no longer degrade into empty pathspec diffs or escape explicit tree-ish forms; implicit `diff`/`log` pathspecs that match no worktree/index path are fatal unless `--` is used; `checkout <bad-source> --` validates the source; `reset HEAD^0 -- <path>` unstages like `HEAD`; `git log --max-count=<non-integer>` is fatal; `git config <key> <value> <value-pattern>` and `git config --get <key> <value-pattern>` loud-throw `git.config.value-pattern` before mutation; `git apply` from a subdirectory ignores unsupported metadata for outside-cwd entries before parsing, while in-scope rename/copy/no-newline metadata maps to directed `git.apply.*` ceilings. Guards: `git-cli.test.ts`.
 
 ### Added
 
+- **`git` porcelain expanded to the current browser/VFS hard ceiling.** The shell
+  now wires `reset` (path/soft/mixed/hard), parent revspecs (`HEAD~n`, `^`) for
+  checkout/restore/diff/log/show, `diff --staged`/`--cached`/`HEAD`/two-ref,
+  `show`, `tag`, `remote`/`ls-remote`, clean fast-forward `merge`, clean
+  `cherry-pick`, tracked-file `stash` push/list/pop/apply/drop with `stash@{n}`,
+  and index-aware `git rm` / `git mv`. Unsupported flags/workflows still exit 128 through directed
+  `NotImplementedError`s; no subcommand silently falls back to a different tree.
 - **`git` builtin over `@riftydev/git` (isomorphic-git on the ambient VFS).**
   Local porcelain: `init`, `status` (`--porcelain` v1 `XY` + human default),
   `add <pathspec…>` (incl. `.` / `-A`), `commit -m`, `log` (+ `--oneline`),
@@ -49,7 +63,7 @@
   silent. Typed git user-errors map to git's exact stderr: conflict refusal +
   pathspec-miss (exit 1), branch-exists (exit 128). Ceiling
   flags/args (`-B`, `--orphan`, `-p`, `-m`, `--ours`/`--theirs`, `-t`, bare `-`,
-  revspec arithmetic (`HEAD~1`/`main^`/`@{-1}`/`HEAD@{1}` → `git.checkout.revspec`),
+  reflog revspecs (`@{-1}`/`HEAD@{1}` → `git.checkout.revspec`),
   any unrecognized flag) and glob/magic pathspecs throw
   `NotImplementedError('git.checkout.<x>')` exit 128 — loud, never silent.
   Conformance-locked: `git-fixtures.test.ts` byte-asserts switch/create/already/
@@ -64,8 +78,8 @@
   `NotImplementedError('git.switch.previous')`). `restore [--staged]
   [--source=<tree>] <pathspec…>` (worktree from index/tree, or `--staged`
   unstage via `resetIndex`; silent like git; `--staged --source` →
-  `git.restore.staged-source`; revspec source reuses the checkout revspec
-  ceiling; no-match → pathspec-miss exit 1). `config <key>` / `config <key>
+  `git.restore.staged-source`; parent revspec source (`HEAD~1`, `main^`) is
+  supported; no-match → pathspec-miss exit 1). `config <key>` / `config <key>
   <value>` (bounded get/set on `.git/config`; unset key → exit 1 silent;
   `--list`/other flags → `git.config.<flag>` exit 128). `commit --amend`
   replaces HEAD (reuses the prior message when no `-m`). Author identity now

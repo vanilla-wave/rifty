@@ -141,6 +141,31 @@ it('restores all files under a directory pathspec (index source)', async () => {
   expect(await vfs.readFileText('/r/d/b.txt')).toBe('B\n');
 });
 
+it('restore from index recreates a missing parent directory', async () => {
+  await vfs.mkdir('/r/d', { recursive: true });
+  await vfs.writeFile('/r/d/a.txt', 'A\n');
+  await g.add('d/a.txt');
+
+  await vfs.rm('/r/d', { recursive: true, force: true });
+  const r = await g.checkout({ op: 'restore', pathspecs: ['d/a.txt'] });
+
+  expect(r).toEqual({ op: 'restore', restored: ['d/a.txt'] });
+  expect(await vfs.readFileText('/r/d/a.txt')).toBe('A\n');
+});
+
+it('restore from a tree-ish recreates a missing parent directory', async () => {
+  await vfs.mkdir('/r/d', { recursive: true });
+  await vfs.writeFile('/r/d/a.txt', 'HEAD\n');
+  await g.add('d/a.txt');
+  await g.commit({ message: 'add nested', author: AUTHOR });
+
+  await vfs.rm('/r/d', { recursive: true, force: true });
+  const r = await g.checkout({ op: 'restore', pathspecs: ['d/a.txt'], source: 'HEAD' });
+
+  expect(r).toEqual({ op: 'restore', restored: ['d/a.txt'] });
+  expect(await vfs.readFileText('/r/d/a.txt')).toBe('HEAD\n');
+});
+
 // C3 — multi-pathspec restore is ALL-OR-NOTHING: one unmatched → throw, write nothing.
 it('multi-pathspec restore from index is all-or-nothing on an unmatched spec', async () => {
   await vfs.writeFile('/r/f.txt', 'STAGED\n');

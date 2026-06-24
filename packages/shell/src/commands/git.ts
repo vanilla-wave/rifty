@@ -20,7 +20,13 @@ import {
 import { NotImplementedError } from '@riftydev/io';
 import { asyncVfs, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import type { CommandContext, ShellCommand } from '../types.ts';
-import { doCheckout, renderCheckoutError } from './_git-checkout.ts';
+import {
+  OutsideRepoPathspecError,
+  doCheckout,
+  renderCheckoutError,
+  renderCheckoutOrFatal,
+  revisionExists,
+} from './_git-checkout.ts';
 import { doConfig } from './_git-config.ts';
 import { doRestore } from './_git-restore.ts';
 import { doSwitch } from './_git-switch.ts';
@@ -173,6 +179,22 @@ async function stageTrackedChanges(g: Git): Promise<void> {
   }
 }
 
+function isIndexDeletion(e: StatusEntry): boolean {
+  return e.status[0] === '1' && e.status[1] === '0';
+}
+
+async function stageStatusEntries(
+  g: Git,
+  entries: StatusEntry[],
+  opts: { force?: boolean } = {},
+): Promise<void> {
+  for (const e of entries) {
+    if (e.status === '111') continue;
+    if (isIndexDeletion(e)) await g.remove(e.filepath);
+    else await g.add(e.filepath, opts);
+  }
+}
+
 /** Parsed `git commit`. `messages` is one entry per `-m` (git joins them as paragraphs). */
 interface CommitPlan {
   amend: boolean;
@@ -305,6 +327,51 @@ function isNotFound(e: unknown): boolean {
   return (e as { name?: string })?.name === 'NotFoundError' || /could not find/i.test(msg);
 }
 
+type PathspecMapper = (pathspec: string) => string;
+
+const identityPathspec: PathspecMapper = (pathspec) => pathspec;
+
+function makeRepoPathspecMapper(root: string, cwd: string): PathspecMapper {
+  const repoRoot = normalizePath(root);
+  const repoCwd = normalizePath(cwd);
+  return (pathspec: string): string => {
+    if (pathspec === '') return pathspec;
+    const absolute =
+      pathspec === '.'
+        ? repoCwd
+        : isAbsolute(pathspec)
+          ? normalizePath(pathspec)
+          : normalizePath(joinPath(repoCwd, pathspec));
+    if (absolute === repoRoot) return '.';
+    if (absolute.startsWith(`${repoRoot}/`)) return absolute.slice(repoRoot.length + 1);
+    throw new OutsideRepoPathspecError(pathspec, repoRoot);
+  };
+}
+
+function renderAmbiguousArgument(arg: string, ctx: CommandContext): number {
+  ctx.stderr.write(
+    `fatal: ambiguous argument '${arg}': unknown revision or path not in the working tree.\n`,
+  );
+  ctx.stderr.write("Use '--' to separate paths from revisions, like this:\n");
+  ctx.stderr.write("'git <command> [<revision>...] -- [<file>...]'\n");
+  return 128;
+}
+
+async function validateImplicitPathspecs(
+  g: Git,
+  rawPathspecs: string[],
+  mappedPathspecs: string[],
+  ctx: CommandContext,
+): Promise<number | null> {
+  const entries = await g.status();
+  for (let i = 0; i < mappedPathspecs.length; i++) {
+    const spec = mappedPathspecs[i] as string;
+    if (entries.some((entry) => pathspecMatch(entry.filepath, spec))) continue;
+    return renderAmbiguousArgument(rawPathspecs[i] ?? spec, ctx);
+  }
+  return null;
+}
+
 /** Parsed `git add`: the recognized flags + the pathspecs. */
 interface AddPlan {
   all: boolean;
@@ -359,7 +426,8 @@ async function doAdd(
   args: string[],
   ctx: CommandContext,
   vfs: Vfs,
-  dir: string,
+  root: string,
+  mapPathspec: PathspecMapper = identityPathspec,
 ): Promise<number> {
   let plan: AddPlan;
   try {
@@ -367,18 +435,26 @@ async function doAdd(
   } catch (e) {
     return renderCheckoutError(e, ctx); // unknown flag → loud exit 128
   }
+  let pathspecs: string[];
+  try {
+    pathspecs = plan.pathspecs.map(mapPathspec);
+  } catch (e) {
+    return renderCheckoutError(e, ctx);
+  }
 
-  // `-A`/`--all`/`.` → stage every change (incl. untracked, excl. .gitignore'd).
-  if (plan.all || plan.pathspecs.includes('.')) {
+  // `-A`/`--all` with no pathspec → stage every change (incl. untracked,
+  // excl. .gitignore'd). With a pathspec, fall through to pathspec-scoped
+  // status staging below.
+  if (plan.all && pathspecs.length === 0) {
     await addAll(g);
     return 0;
   }
   // `git add -u` (no pathspec) → stage tracked modifications + deletions only.
-  if (plan.update && plan.pathspecs.length === 0) {
+  if (plan.update && pathspecs.length === 0) {
     await stageTrackedChanges(g);
     return 0;
   }
-  if (plan.pathspecs.length === 0) {
+  if (pathspecs.length === 0) {
     // Real git: advisory to stderr, exit 0 (NOT an error).
     ctx.stderr.write('Nothing specified, nothing added.\n');
     ctx.stderr.write("hint: Maybe you wanted to say 'git add .'?\n");
@@ -394,9 +470,13 @@ async function doAdd(
   const [tracked, changed] = await Promise.all([g.listFiles(), g.status()]);
   const surfaced = (spec: string): boolean => changed.some((e) => pathspecMatch(e.filepath, spec));
   const resolved: { spec: string; exists: boolean }[] = [];
-  for (const spec of plan.pathspecs) {
-    const exists = await vfs.exists(normalizePath(joinPath(dir, spec)));
+  for (const spec of pathspecs) {
+    const exists = await vfs.exists(normalizePath(joinPath(root, spec)));
     const isTracked = tracked.some((p) => pathspecMatch(p, spec));
+    if (plan.update && !isTracked) {
+      ctx.stderr.write(`error: pathspec '${spec}' did not match any file(s) known to git\n`);
+      return 128;
+    }
     if (!exists && !isTracked) {
       ctx.stderr.write(`fatal: pathspec '${spec}' did not match any files\n`);
       return 128;
@@ -409,10 +489,19 @@ async function doAdd(
     }
     resolved.push({ spec, exists });
   }
+  const toStage = changed.filter((e) => {
+    if (!pathspecs.some((spec) => pathspecMatch(e.filepath, spec))) return false;
+    return !plan.update || e.status[0] === '1';
+  });
+  await stageStatusEntries(g, toStage, { force: plan.force });
+
+  const stagedPaths = new Set(toStage.map((e) => e.filepath));
   for (const { spec, exists } of resolved) {
-    // Present → stage content; gone-but-tracked → stage the deletion (real git).
-    if (exists) await g.add(spec);
-    else await g.remove(spec);
+    if (!exists || plan.update) continue;
+    if (stagedPaths.has(spec) && !plan.force) continue;
+    if (plan.force || !changed.some((e) => pathspecMatch(e.filepath, spec))) {
+      await g.add(spec, { force: plan.force });
+    }
   }
   return 0;
 }
@@ -478,11 +567,107 @@ async function doCommit(g: Git, args: string[], ctx: CommandContext): Promise<nu
   return 0;
 }
 
-async function doLog(g: Git, args: string[], ctx: CommandContext): Promise<number> {
-  const oneline = args.includes('--oneline');
+async function doLog(
+  g: Git,
+  args: string[],
+  ctx: CommandContext,
+  mapPathspec: PathspecMapper = identityPathspec,
+): Promise<number> {
+  let oneline = false;
+  let depth: number | undefined;
+  let format: string | undefined;
+  const refs: string[] = [];
+  const pathspecs: string[] = [];
+  let flagsDone = false;
+  let implicitPathspecs = false;
+  for (let i = 1; i < args.length; i++) {
+    const t = args[i] as string;
+    if (flagsDone) pathspecs.push(t);
+    else if (t === '--') flagsDone = true;
+    else if (t === '--oneline') oneline = true;
+    else if (t === '-n' || t === '--max-count') {
+      const raw = args[++i];
+      if (raw === undefined || !/^\d+$/.test(raw)) {
+        ctx.stderr.write(`fatal: '${raw ?? ''}': not an integer\n`);
+        return 128;
+      }
+      depth = Number(raw);
+    } else if (t.startsWith('-n') && /^-n\d+$/.test(t)) {
+      depth = Number(t.slice(2));
+    } else if (t.startsWith('--max-count=')) {
+      const raw = t.slice('--max-count='.length);
+      if (!/^\d+$/.test(raw)) {
+        ctx.stderr.write(`fatal: '${raw}': not an integer\n`);
+        return 128;
+      }
+      depth = Number(raw);
+    } else if (t.startsWith('--format=')) {
+      format = t.slice('--format='.length);
+    } else if (t === '--format') {
+      format = args[++i] ?? '';
+    } else if (t.startsWith('-')) {
+      return renderCheckoutError(new NotImplementedError(`git.log.${t.replace(/^-+/, '')}`), ctx);
+    } else {
+      refs.push(t);
+    }
+  }
+  let refArgs = refs;
+  let pathspecArgs = pathspecs;
+  if (!flagsDone && pathspecs.length === 0 && refs.length > 0) {
+    const first = refs[0] as string;
+    if (first.includes('..')) {
+      refArgs = [first];
+      pathspecArgs = refs.slice(1);
+      implicitPathspecs = pathspecArgs.length > 0;
+    } else {
+      let firstIsRev: boolean;
+      try {
+        firstIsRev = await revisionExists(g, first);
+      } catch (e) {
+        return renderCheckoutError(e, ctx);
+      }
+      if (firstIsRev) {
+        refArgs = [first];
+        pathspecArgs = refs.slice(1);
+        implicitPathspecs = pathspecArgs.length > 0;
+      } else {
+        refArgs = [];
+        pathspecArgs = refs;
+        implicitPathspecs = true;
+      }
+    }
+  }
+  if (pathspecArgs.length > 1)
+    return renderCheckoutError(new NotImplementedError('git.log.multiple-pathspecs'), ctx);
+  if (refArgs.length > 1) return renderCheckoutError(new NotImplementedError('git.log.refs'), ctx);
+  const unsupportedFormat = format === undefined ? undefined : unsupportedLogFormatToken(format);
+  if (unsupportedFormat !== undefined) {
+    return renderCheckoutError(new NotImplementedError(`git.log.format.${unsupportedFormat}`), ctx);
+  }
+  const mappedPathspecs = pathspecArgs.map(mapPathspec);
+  if (implicitPathspecs && mappedPathspecs.length > 0) {
+    const ambiguity = await validateImplicitPathspecs(g, pathspecArgs, mappedPathspecs, ctx);
+    if (ambiguity !== null) return ambiguity;
+  }
   let entries: Awaited<ReturnType<Git['log']>>;
   try {
-    entries = await g.log();
+    const ref = refArgs[0];
+    const filepath = mappedPathspecs[0];
+    if (ref?.includes('..')) {
+      const [base, tip] = ref.split('..');
+      const include = await g.log({ ref: tip || 'HEAD', ...(filepath ? { filepath } : {}) });
+      const exclude = new Set(
+        (await g.log({ ref: base || 'HEAD', ...(filepath ? { filepath } : {}) })).map((e) => e.oid),
+      );
+      entries = include.filter((e) => !exclude.has(e.oid));
+      if (depth !== undefined) entries = entries.slice(0, depth);
+    } else {
+      entries = await g.log({
+        ...(ref ? { ref } : {}),
+        ...(depth !== undefined ? { depth } : {}),
+        ...(filepath ? { filepath } : {}),
+      });
+    }
   } catch (e) {
     // An UNBORN HEAD (no commit yet) is real git's `fatal: your current branch
     // '<b>' does not have any commits yet` (exit 128) — never the leaked iso-git
@@ -495,36 +680,164 @@ async function doLog(g: Git, args: string[], ctx: CommandContext): Promise<numbe
     ctx.stderr.write(`fatal: ${e instanceof Error ? e.message : String(e)}\n`);
     return 128;
   }
-  for (const e of entries) {
-    if (oneline) {
-      const firstLine = e.message.split('\n', 1)[0] ?? '';
-      ctx.stdout.write(`${short(e.oid)} ${firstLine}\n`);
-    } else {
-      ctx.stdout.write(`commit ${e.oid}\n`);
-      ctx.stdout.write(`Author: ${e.author.name} <${e.author.email}>\n`);
-      ctx.stdout.write('\n');
-      ctx.stdout.write(`    ${e.message.trimEnd()}\n`);
-      ctx.stdout.write('\n');
-    }
-  }
+  renderLogEntries(entries, { oneline, ...(format !== undefined ? { format } : {}) }, ctx);
   return 0;
 }
 
-async function doDiff(g: Git, args: string[], ctx: CommandContext): Promise<number> {
-  // Only bare `git diff` (unstaged, index↔workdir) is implemented. `--staged`/
-  // `--cached`/`HEAD`/two-ref/pathspec forms select DIFFERENT content — surfacing
-  // the bare diff for them would be a SILENT-WRONG result, so loud-throw instead.
-  const extra = args.slice(1).filter((a) => a !== '--');
-  if (extra.length > 0) {
-    return renderCheckoutError(
-      new NotImplementedError(
-        `git.diff.${extra[0]?.replace(/^-+/, '') || 'args'}`,
-        'only bare `git diff` (unstaged, index↔workdir) is supported',
-      ),
-      ctx,
-    );
+function unsupportedLogFormatToken(format: string): string | undefined {
+  const supported = new Set(['H', 'h', 's', 'an', 'ae']);
+  for (let i = 0; i < format.length; i++) {
+    if (format[i] !== '%') continue;
+    const rest = format.slice(i + 1);
+    if (rest.startsWith('%')) {
+      i += 1;
+      continue;
+    }
+    const two = rest.slice(0, 2);
+    if (supported.has(two)) {
+      i += 2;
+      continue;
+    }
+    const one = rest.slice(0, 1);
+    if (supported.has(one)) {
+      i += 1;
+      continue;
+    }
+    return two.length === 2 && /^[A-Za-z]{2}$/.test(two) ? two : one || 'trailing-percent';
   }
-  const entries = await g.diff();
+  return undefined;
+}
+
+type DiffOutputMode = 'patch' | 'name-only' | 'name-status' | 'stat';
+
+async function doDiff(
+  g: Git,
+  args: string[],
+  ctx: CommandContext,
+  mapPathspec: PathspecMapper = identityPathspec,
+): Promise<number> {
+  const rest = args.slice(1);
+  const dashDash = rest.indexOf('--');
+  const beforeDash = dashDash === -1 ? rest : rest.slice(0, dashDash);
+  const afterDash = dashDash === -1 ? [] : rest.slice(dashDash + 1);
+  const positionals: string[] = [];
+  let staged = false;
+  let outputMode: DiffOutputMode = 'patch';
+  for (const t of beforeDash) {
+    if (t === '--cached' || t === '--staged') staged = true;
+    else if (t === '--name-only') outputMode = 'name-only';
+    else if (t === '--name-status') outputMode = 'name-status';
+    else if (t === '--stat') outputMode = 'stat';
+    else if (t.startsWith('-')) {
+      return renderCheckoutError(new NotImplementedError(`git.diff.${t.replace(/^-+/, '')}`), ctx);
+    } else positionals.push(t);
+  }
+  let refs = positionals;
+  let pathspecs = afterDash;
+  let implicitPathspecs = false;
+  let entries: Awaited<ReturnType<Git['diff']>>;
+  try {
+    if (dashDash === -1 && positionals.length > 0) {
+      const first = positionals[0] as string;
+      const firstIsRev = await revisionExists(g, first);
+      if (!firstIsRev) {
+        refs = [];
+        pathspecs = positionals;
+        implicitPathspecs = true;
+      } else {
+        const second = positionals[1];
+        const secondIsRev = second === undefined ? false : await revisionExists(g, second);
+        refs = secondIsRev ? positionals.slice(0, 2) : positionals.slice(0, 1);
+        pathspecs = secondIsRev ? positionals.slice(2) : positionals.slice(1);
+        implicitPathspecs = pathspecs.length > 0;
+      }
+    }
+    const rawPathspecs = pathspecs;
+    pathspecs = pathspecs.map(mapPathspec);
+    if (implicitPathspecs && pathspecs.length > 0) {
+      const ambiguity = await validateImplicitPathspecs(g, rawPathspecs, pathspecs, ctx);
+      if (ambiguity !== null) return ambiguity;
+    }
+    if (staged) {
+      if (refs.length > 1)
+        return renderCheckoutError(new NotImplementedError('git.diff.cached-refs'), ctx);
+      entries = await g.diff({ kind: 'staged', ...(refs[0] ? { ref: refs[0] } : {}), pathspecs });
+    } else if (refs.length === 0) {
+      entries = await g.diff({ kind: 'unstaged', pathspecs });
+    } else if (refs.length === 1) {
+      const ref = refs[0] as string;
+      entries =
+        ref === 'HEAD'
+          ? await g.diff({ kind: 'head-workdir', pathspecs })
+          : await g.diff({ kind: 'ref-workdir', ref, pathspecs });
+    } else if (refs.length === 2) {
+      entries = await g.diff({
+        kind: 'refs',
+        oldRef: refs[0] as string,
+        newRef: refs[1] as string,
+        pathspecs,
+      });
+    } else {
+      return renderCheckoutError(new NotImplementedError('git.diff.args'), ctx);
+    }
+  } catch (e) {
+    return renderCheckoutOrFatal(e, ctx);
+  }
+  renderDiffEntries(entries, ctx, outputMode);
+  return 0;
+}
+
+function diffStatus(change: Awaited<ReturnType<Git['diff']>>[number]['change']): string {
+  if (change === 'add') return 'A';
+  if (change === 'delete') return 'D';
+  return 'M';
+}
+
+function renderDiffEntries(
+  entries: Awaited<ReturnType<Git['diff']>>,
+  ctx: CommandContext,
+  mode: DiffOutputMode = 'patch',
+): void {
+  if (mode === 'name-only') {
+    for (const e of entries) ctx.stdout.write(`${e.filepath}\n`);
+    return;
+  }
+  if (mode === 'name-status') {
+    for (const e of entries) ctx.stdout.write(`${diffStatus(e.change)}\t${e.filepath}\n`);
+    return;
+  }
+  if (mode === 'stat') {
+    let files = 0;
+    let insertions = 0;
+    let deletions = 0;
+    for (const e of entries) {
+      files += 1;
+      let adds = 0;
+      let dels = 0;
+      for (const h of e.hunks) {
+        for (const line of h.lines) {
+          if (line.startsWith('+')) adds += 1;
+          if (line.startsWith('-')) dels += 1;
+        }
+      }
+      insertions += adds;
+      deletions += dels;
+      const total = e.binary ? 'Bin' : String(adds + dels);
+      const graph = e.binary
+        ? ''
+        : ` ${'+'.repeat(Math.min(adds, 20))}${'-'.repeat(Math.min(dels, 20))}`;
+      ctx.stdout.write(` ${e.filepath} | ${total}${graph}\n`);
+    }
+    if (files > 0) {
+      const parts = [`${files} ${files === 1 ? 'file' : 'files'} changed`];
+      if (insertions > 0)
+        parts.push(`${insertions} ${insertions === 1 ? 'insertion' : 'insertions'}(+)`);
+      if (deletions > 0)
+        parts.push(`${deletions} ${deletions === 1 ? 'deletion' : 'deletions'}(-)`);
+      ctx.stdout.write(` ${parts.join(', ')}\n`);
+    }
+    return;
+  }
   for (const e of entries) {
     ctx.stdout.write(`diff --git a/${e.filepath} b/${e.filepath}\n`);
     if (e.binary) {
@@ -532,12 +845,13 @@ async function doDiff(g: Git, args: string[], ctx: CommandContext): Promise<numb
       ctx.stdout.write(`Binary files a/${e.filepath} and b/${e.filepath} differ\n`);
       continue;
     }
+    ctx.stdout.write(`${e.change === 'add' ? '--- /dev/null' : `--- a/${e.filepath}`}\n`);
+    ctx.stdout.write(`${e.change === 'delete' ? '+++ /dev/null' : `+++ b/${e.filepath}`}\n`);
     for (const h of e.hunks) {
       ctx.stdout.write(`@@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@\n`);
       for (const line of h.lines) ctx.stdout.write(`${line}\n`);
     }
   }
-  return 0;
 }
 
 async function doBranch(g: Git, ctx: CommandContext): Promise<number> {
@@ -555,6 +869,1127 @@ async function doBranch(g: Git, ctx: CommandContext): Promise<number> {
       return 128;
     }
     throw e;
+  }
+}
+
+function formatLogEntry(e: Awaited<ReturnType<Git['log']>>[number], format: string): string {
+  const subject = e.message.split('\n', 1)[0] ?? '';
+  return format
+    .replaceAll('%H', e.oid)
+    .replaceAll('%h', short(e.oid))
+    .replaceAll('%s', subject)
+    .replaceAll('%an', e.author.name)
+    .replaceAll('%ae', e.author.email);
+}
+
+function renderLogEntries(
+  entries: Awaited<ReturnType<Git['log']>>,
+  mode: { oneline: boolean; format?: string },
+  ctx: CommandContext,
+): void {
+  for (const e of entries) {
+    if (mode.format !== undefined) {
+      ctx.stdout.write(`${formatLogEntry(e, mode.format)}\n`);
+    } else if (mode.oneline) {
+      const firstLine = e.message.split('\n', 1)[0] ?? '';
+      ctx.stdout.write(`${short(e.oid)} ${firstLine}\n`);
+    } else {
+      ctx.stdout.write(`commit ${e.oid}\n`);
+      ctx.stdout.write(`Author: ${e.author.name} <${e.author.email}>\n`);
+      ctx.stdout.write('\n');
+      ctx.stdout.write(`    ${e.message.trimEnd()}\n`);
+      ctx.stdout.write('\n');
+    }
+  }
+}
+
+async function doReset(
+  g: Git,
+  args: string[],
+  ctx: CommandContext,
+  mapPathspec: PathspecMapper = identityPathspec,
+): Promise<number> {
+  let mode: 'soft' | 'mixed' | 'hard' = 'mixed';
+  const rest = args.slice(1);
+  const dashDash = rest.indexOf('--');
+  const beforeDash = dashDash === -1 ? rest : rest.slice(0, dashDash);
+  const afterDash = dashDash === -1 ? [] : rest.slice(dashDash + 1);
+  const positionals: string[] = [];
+
+  for (const t of beforeDash) {
+    if (t === '--soft') {
+      mode = 'soft';
+    } else if (t === '--mixed') {
+      mode = 'mixed';
+    } else if (t === '--hard') {
+      mode = 'hard';
+    } else if (t.startsWith('-')) {
+      return renderCheckoutError(new NotImplementedError(`git.reset.${t.replace(/^-+/, '')}`), ctx);
+    } else {
+      positionals.push(t);
+    }
+  }
+
+  let target = 'HEAD';
+  let pathspecs: string[] = [];
+  if (dashDash !== -1) {
+    if (positionals.length > 1)
+      return renderCheckoutError(new NotImplementedError('git.reset.args'), ctx);
+    if (positionals[0] !== undefined) target = positionals[0];
+    pathspecs = afterDash;
+  } else if (positionals.length > 0) {
+    const first = positionals[0] as string;
+    let firstIsRev: boolean;
+    try {
+      firstIsRev = await revisionExists(g, first);
+    } catch (e) {
+      return renderCheckoutError(e, ctx);
+    }
+    if (firstIsRev) {
+      target = first;
+      pathspecs = positionals.slice(1);
+    } else {
+      pathspecs = positionals;
+    }
+  }
+
+  if (pathspecs.length > 0) {
+    try {
+      pathspecs = pathspecs.map(mapPathspec);
+    } catch (e) {
+      return renderCheckoutError(e, ctx);
+    }
+    if (mode !== 'mixed') {
+      return renderCheckoutError(new NotImplementedError('git.reset.mode-with-pathspec'), ctx);
+    }
+    if (target !== 'HEAD') {
+      let targetOid: string;
+      let headOid: string;
+      try {
+        [targetOid, headOid] = await Promise.all([
+          g.resolveRevision(target),
+          g.resolveRevision('HEAD'),
+        ]);
+      } catch (e) {
+        return renderCheckoutOrFatal(e, ctx);
+      }
+      if (targetOid !== headOid) {
+        return renderCheckoutError(new NotImplementedError('git.reset.path-source'), ctx);
+      }
+    }
+    const tracked = await g.listFiles();
+    const paths = new Set<string>();
+    for (const spec of pathspecs) {
+      const matches = tracked.filter((p) => pathspecMatch(p, spec));
+      if (matches.length === 0) {
+        ctx.stderr.write(
+          `fatal: ambiguous argument '${spec}': unknown revision or path not in the working tree.\n`,
+        );
+        return 128;
+      }
+      for (const p of matches) paths.add(p);
+    }
+    for (const p of paths) await g.unstage(p);
+    return 0;
+  }
+
+  try {
+    await g.reset({ target, mode });
+    if (mode === 'hard') {
+      const head = (await g.log({ depth: 1 }))[0];
+      if (head !== undefined) {
+        const subject = head.message.split('\n', 1)[0] ?? '';
+        ctx.stdout.write(`HEAD is now at ${short(head.oid)} ${subject}\n`);
+      }
+    }
+    return 0;
+  } catch (e) {
+    ctx.stderr.write(`fatal: ${e instanceof Error ? e.message : String(e)}\n`);
+    return 128;
+  }
+}
+
+async function doShow(g: Git, args: string[], ctx: CommandContext): Promise<number> {
+  const rev = args[1] ?? 'HEAD';
+  if (args.length > 2) return renderCheckoutError(new NotImplementedError('git.show.args'), ctx);
+  try {
+    const object = await g.show(rev);
+    if (object.type === 'blob') {
+      ctx.stdout.write(new TextDecoder().decode(object.content));
+    } else if (object.type === 'commit') {
+      renderLogEntries([object.commit], { oneline: false }, ctx);
+      renderDiffEntries(object.diff, ctx);
+    } else if (object.type === 'tree') {
+      for (const e of object.entries) ctx.stdout.write(`${e.mode} ${e.type} ${e.oid}\t${e.path}\n`);
+    } else {
+      ctx.stdout.write(`tag ${object.tag.tag}\n`);
+      ctx.stdout.write(`object ${object.tag.object}\n`);
+      ctx.stdout.write(`type ${object.tag.type}\n\n`);
+      ctx.stdout.write(object.tag.message);
+    }
+    return 0;
+  } catch (e) {
+    ctx.stderr.write(`fatal: ${e instanceof Error ? e.message : String(e)}\n`);
+    return 128;
+  }
+}
+
+async function doTag(g: Git, args: string[], ctx: CommandContext): Promise<number> {
+  const rest = args.slice(1);
+  if (rest.length === 0) {
+    for (const tag of await g.listTags()) ctx.stdout.write(`${tag}\n`);
+    return 0;
+  }
+  let annotated = false;
+  let force = false;
+  let deleteMode = false;
+  let message: string | undefined;
+  const positionals: string[] = [];
+  for (let i = 0; i < rest.length; i++) {
+    const t = rest[i] as string;
+    if (t === '-a' || t === '--annotate') annotated = true;
+    else if (t === '-f' || t === '--force') force = true;
+    else if (t === '-d' || t === '--delete') deleteMode = true;
+    else if (t === '-m' || t === '--message') {
+      const next = rest[++i];
+      if (next === undefined)
+        return renderCheckoutError(new NotImplementedError('git.tag.message-missing'), ctx);
+      annotated = true;
+      message = next;
+    } else if (t.startsWith('-m')) {
+      annotated = true;
+      message = t.slice(2);
+    } else if (t.startsWith('-'))
+      return renderCheckoutError(new NotImplementedError(`git.tag.${t.replace(/^-+/, '')}`), ctx);
+    else positionals.push(t);
+  }
+  try {
+    if (deleteMode) {
+      for (const name of positionals) {
+        await g.deleteTag(name);
+        ctx.stdout.write(`Deleted tag '${name}'\n`);
+      }
+      return 0;
+    }
+    const name = positionals[0];
+    if (name === undefined)
+      return renderCheckoutError(new NotImplementedError('git.tag.args'), ctx);
+    if (positionals.length > 2)
+      return renderCheckoutError(new NotImplementedError('git.tag.args'), ctx);
+    if (annotated && message === undefined)
+      return renderCheckoutError(new NotImplementedError('git.tag.editor'), ctx);
+    await g.createTag({
+      name,
+      annotated,
+      ...(positionals[1] !== undefined ? { object: positionals[1] } : {}),
+      ...(message !== undefined ? { message } : {}),
+      tagger: await identityFrom(g, ctx.env),
+      ...(force ? { force: true } : {}),
+    });
+    return 0;
+  } catch (e) {
+    ctx.stderr.write(`fatal: ${e instanceof Error ? e.message : String(e)}\n`);
+    return 128;
+  }
+}
+
+async function doRemote(g: Git, args: string[], ctx: CommandContext): Promise<number> {
+  const rest = args.slice(1);
+  const verboseList = rest.length > 0 && rest.every((a) => a === '-v' || a === '--verbose');
+  const sub = verboseList ? undefined : rest[0];
+  try {
+    if (sub === undefined) {
+      const remotes = await g.listRemotes();
+      for (const r of remotes) {
+        if (verboseList) {
+          ctx.stdout.write(`${r.remote}\t${r.url} (fetch)\n`);
+          ctx.stdout.write(`${r.remote}\t${r.url} (push)\n`);
+        } else {
+          ctx.stdout.write(`${r.remote}\n`);
+        }
+      }
+      return 0;
+    }
+    if (sub === 'add') {
+      const operands = rest.slice(1);
+      const flag = operands.find((a) => a.startsWith('-'));
+      if (flag !== undefined) {
+        return renderCheckoutError(
+          new NotImplementedError(`git.remote.add.${flag.replace(/^-+/, '')}`),
+          ctx,
+        );
+      }
+      if (operands.length !== 2)
+        return renderCheckoutError(new NotImplementedError('git.remote.add.args'), ctx);
+      const [remote, url] = operands as [string, string];
+      await g.addRemote(remote, url);
+      return 0;
+    }
+    if (sub === 'remove' || sub === 'rm') {
+      const operands = rest.slice(1);
+      const flag = operands.find((a) => a.startsWith('-'));
+      if (flag !== undefined) {
+        return renderCheckoutError(
+          new NotImplementedError(`git.remote.remove.${flag.replace(/^-+/, '')}`),
+          ctx,
+        );
+      }
+      if (operands.length !== 1)
+        return renderCheckoutError(new NotImplementedError('git.remote.remove.args'), ctx);
+      const [remote] = operands as [string];
+      await g.deleteRemote(remote);
+      return 0;
+    }
+    return renderCheckoutError(new NotImplementedError(`git.remote.${sub}`), ctx);
+  } catch (e) {
+    ctx.stderr.write(`fatal: ${e instanceof Error ? e.message : String(e)}\n`);
+    return 128;
+  }
+}
+
+async function doGitRm(
+  g: Git,
+  args: string[],
+  ctx: CommandContext,
+  vfs: Vfs,
+  root: string,
+  mapPathspec: PathspecMapper = identityPathspec,
+): Promise<number> {
+  let cached = false;
+  let force = false;
+  let recursive = false;
+  const specs: string[] = [];
+  try {
+    for (const t of args.slice(1)) {
+      if (t === '--cached') cached = true;
+      else if (t === '--force') {
+        force = true;
+      } else if (t === '--recursive') {
+        recursive = true;
+      } else if (t.startsWith('-') && !t.startsWith('--')) {
+        for (const c of t.slice(1)) {
+          if (c === 'f') force = true;
+          else if (c === 'r') recursive = true;
+          else return renderCheckoutError(new NotImplementedError(`git.rm.${c}`), ctx);
+        }
+      } else if (t.startsWith('-'))
+        return renderCheckoutError(new NotImplementedError(`git.rm.${t.replace(/^-+/, '')}`), ctx);
+      else specs.push(mapPathspec(t));
+    }
+  } catch (e) {
+    return renderCheckoutError(e, ctx);
+  }
+  if (specs.length === 0)
+    return renderCheckoutError(new NotImplementedError('git.rm.no-pathspec'), ctx);
+  const tracked = await g.listFiles();
+  const status = new Map((await g.status()).map((e) => [e.filepath, e.status]));
+  const removals = new Set<string>();
+  for (const spec of specs) {
+    const matches = tracked.filter((p) => pathspecMatch(p, spec));
+    if (matches.length === 0) {
+      ctx.stderr.write(`fatal: pathspec '${spec}' did not match any files\n`);
+      return 128;
+    }
+    const normalizedSpec = spec.replace(/\/+$/, '') || spec;
+    if (!recursive && matches.some((p) => p !== normalizedSpec)) {
+      ctx.stderr.write(`fatal: not removing '${normalizedSpec}' recursively without -r\n`);
+      return 128;
+    }
+    if (!cached && !force) {
+      const modified = matches.filter((p) => {
+        const code = status.get(p);
+        return code !== '111' && code !== '022' && code !== '003';
+      });
+      if (modified.length > 0) {
+        ctx.stderr.write('error: the following file has local modifications:\n');
+        for (const p of modified) ctx.stderr.write(`    ${p}\n`);
+        ctx.stderr.write('(use --cached to keep the file, or -f to force removal)\n');
+        return 1;
+      }
+    }
+    for (const p of matches) removals.add(p);
+  }
+  for (const p of removals) {
+    if (!cached) await vfs.rm(normalizePath(joinPath(root, p)), { force: true });
+    await g.remove(p);
+  }
+  return 0;
+}
+
+async function doGitMv(
+  g: Git,
+  args: string[],
+  ctx: CommandContext,
+  vfs: Vfs,
+  root: string,
+  mapPathspec: PathspecMapper = identityPathspec,
+): Promise<number> {
+  let force = false;
+  const operands: string[] = [];
+  try {
+    for (const t of args.slice(1)) {
+      if (t === '--') continue;
+      if (t === '-f' || t === '--force') force = true;
+      else if (t.startsWith('-'))
+        return renderCheckoutError(new NotImplementedError(`git.mv.${t.replace(/^-+/, '')}`), ctx);
+      else operands.push(mapPathspec(t));
+    }
+  } catch (e) {
+    return renderCheckoutError(e, ctx);
+  }
+  if (operands.length !== 2)
+    return renderCheckoutError(new NotImplementedError('git.mv.args'), ctx);
+  const [src, dst] = operands as [string, string];
+  const srcAbs = normalizePath(joinPath(root, src));
+  const dstAbs = normalizePath(joinPath(root, dst));
+  try {
+    const tracked = await g.listFiles();
+    if (!tracked.includes(src)) {
+      if (tracked.some((p) => pathspecMatch(p, src))) {
+        return renderCheckoutError(new NotImplementedError('git.mv.directory'), ctx);
+      }
+      ctx.stderr.write(`fatal: not under version control, source=${src}, destination=${dst}\n`);
+      return 128;
+    }
+    const dstIsDir = await vfs
+      .readdir(dstAbs)
+      .then(() => true)
+      .catch(() => false);
+    const srcName = src.replace(/\/+$/, '').split('/').pop() ?? src;
+    const finalDst = dstIsDir ? normalizePath(joinPath(dst, srcName)) : dst;
+    const finalDstAbs = dstIsDir ? normalizePath(joinPath(dstAbs, srcName)) : dstAbs;
+    if (!force && (await vfs.exists(finalDstAbs))) {
+      ctx.stderr.write(`fatal: destination exists, source=${src}, destination=${dst}\n`);
+      return 128;
+    }
+    const bytes = await vfs.readFile(srcAbs);
+    const parent = finalDstAbs.slice(0, finalDstAbs.lastIndexOf('/')) || '/';
+    await vfs.mkdir(parent, { recursive: true });
+    await vfs.writeFile(finalDstAbs, bytes);
+    await vfs.rm(srcAbs);
+    await g.remove(src);
+    await g.add(finalDst);
+    return 0;
+  } catch (e) {
+    ctx.stderr.write(`fatal: ${e instanceof Error ? e.message : String(e)}\n`);
+    return 128;
+  }
+}
+
+async function doMerge(g: Git, args: string[], ctx: CommandContext): Promise<number> {
+  const operands = args.slice(1);
+  const flag = operands.find((a) => a.startsWith('-'));
+  if (flag !== undefined) {
+    return renderCheckoutError(
+      new NotImplementedError(`git.merge.${flag.replace(/^-+/, '')}`),
+      ctx,
+    );
+  }
+  if (operands.length > 1)
+    return renderCheckoutError(new NotImplementedError('git.merge.args'), ctx);
+  const theirs = operands[0];
+  if (!theirs) return renderCheckoutError(new NotImplementedError('git.merge.no-target'), ctx);
+  try {
+    const author = await identityFrom(g, ctx.env);
+    const res = await g.merge({ theirs, author, committer: committerFrom(ctx.env, author) });
+    if (res.alreadyMerged) ctx.stdout.write('Already up to date.\n');
+    else if (res.fastForward) ctx.stdout.write('Fast-forward\n');
+    else if (res.mergeCommit) ctx.stdout.write(`Merge made by the 'ort' strategy.\n`);
+    return 0;
+  } catch (e) {
+    ctx.stderr.write(`fatal: ${e instanceof Error ? e.message : String(e)}\n`);
+    return 128;
+  }
+}
+
+async function doCherryPick(g: Git, args: string[], ctx: CommandContext): Promise<number> {
+  const operands = args.slice(1);
+  const flag = operands.find((a) => a.startsWith('-'));
+  if (flag !== undefined) {
+    return renderCheckoutError(
+      new NotImplementedError(`git.cherry-pick.${flag.replace(/^-+/, '')}`),
+      ctx,
+    );
+  }
+  if (operands.length > 1)
+    return renderCheckoutError(new NotImplementedError('git.cherry-pick.multiple-commits'), ctx);
+  const rev = operands[0];
+  if (!rev) return renderCheckoutError(new NotImplementedError('git.cherry-pick.no-commit'), ctx);
+  try {
+    const oid = await g.resolveRevision(rev);
+    await g.cherryPick({ oid, committer: committerFrom(ctx.env, await identityFrom(g, ctx.env)) });
+    return 0;
+  } catch (e) {
+    ctx.stderr.write(`fatal: ${e instanceof Error ? e.message : String(e)}\n`);
+    return 128;
+  }
+}
+
+interface RevertPlan {
+  rev: string;
+}
+
+function parseRevert(args: string[]): RevertPlan {
+  const operands: string[] = [];
+  for (let i = 1; i < args.length; i++) {
+    const t = args[i] as string;
+    if (t === '--') continue;
+    if (t === '--continue') throw new NotImplementedError('git.revert.continue');
+    if (t === '--abort') throw new NotImplementedError('git.revert.abort');
+    if (t === '--quit') throw new NotImplementedError('git.revert.quit');
+    if (t === '--skip') throw new NotImplementedError('git.revert.skip');
+    if (t === '-n' || t === '--no-commit')
+      throw new NotImplementedError('git.revert.no-commit-mode');
+    if (t === '-m' || t === '--mainline' || t.startsWith('-m') || t.startsWith('--mainline=')) {
+      throw new NotImplementedError('git.revert.mainline');
+    }
+    if (t === '-e' || t === '--edit' || t === '--no-edit')
+      throw new NotImplementedError('git.revert.editor');
+    if (t.startsWith('-')) throw new NotImplementedError(`git.revert.${t.replace(/^-+/, '')}`);
+    operands.push(t);
+  }
+  if (operands.length === 0) throw new NotImplementedError('git.revert.no-commit');
+  if (operands.length > 1) throw new NotImplementedError('git.revert.multiple-commits');
+  return { rev: operands[0] as string };
+}
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) return false;
+  for (let i = 0; i < a.byteLength; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+async function readRepoFile(vfs: Vfs, root: string, filepath: string): Promise<Uint8Array | null> {
+  const abs = normalizePath(joinPath(root, filepath));
+  if (!(await vfs.exists(abs))) return null;
+  return vfs.readFile(abs);
+}
+
+async function writeRepoFile(
+  vfs: Vfs,
+  root: string,
+  filepath: string,
+  bytes: Uint8Array,
+): Promise<void> {
+  const abs = normalizePath(joinPath(root, filepath));
+  await vfs.mkdir(parentDir(abs), { recursive: true });
+  await vfs.writeFile(abs, bytes);
+}
+
+async function removeRepoFile(vfs: Vfs, root: string, filepath: string): Promise<void> {
+  await vfs.rm(normalizePath(joinPath(root, filepath)), { force: true });
+}
+
+async function readBlobAt(g: Git, rev: string, filepath: string): Promise<Uint8Array | null> {
+  try {
+    const object = await g.show(`${rev}:${filepath}`);
+    if (object.type !== 'blob') throw new NotImplementedError('git.revert.non-blob');
+    return object.content;
+  } catch (e) {
+    if (isNotFound(e)) return null;
+    throw e;
+  }
+}
+
+async function assertCleanForRevert(g: Git): Promise<void> {
+  const dirty = (await g.status()).filter((e) => e.status !== '111');
+  if (dirty.length > 0) throw new NotImplementedError('git.revert.dirty-worktree');
+}
+
+type RevertAction =
+  | { kind: 'delete'; filepath: string }
+  | { kind: 'write'; filepath: string; bytes: Uint8Array };
+
+async function planCleanRevert(
+  g: Git,
+  vfs: Vfs,
+  root: string,
+  oid: string,
+  commit: Extract<Awaited<ReturnType<Git['show']>>, { type: 'commit' }>,
+): Promise<RevertAction[]> {
+  if (commit.commit.parents.length > 1) throw new NotImplementedError('git.revert.merge');
+  if (commit.diff.length === 0) throw new NotImplementedError('git.revert.empty');
+
+  const parent = commit.commit.parents[0];
+  const actions: RevertAction[] = [];
+  for (const entry of commit.diff) {
+    const current = await readRepoFile(vfs, root, entry.filepath);
+    const postImage = entry.change === 'delete' ? null : await readBlobAt(g, oid, entry.filepath);
+    if (postImage === null) {
+      if (current !== null) throw new NotImplementedError('git.revert.conflict');
+    } else if (current === null || !bytesEqual(current, postImage)) {
+      throw new NotImplementedError('git.revert.conflict');
+    }
+
+    if (entry.change === 'add') {
+      actions.push({ kind: 'delete', filepath: entry.filepath });
+      continue;
+    }
+
+    if (parent === undefined) throw new NotImplementedError('git.revert.conflict');
+    const preImage = await readBlobAt(g, parent, entry.filepath);
+    if (preImage === null) throw new NotImplementedError('git.revert.conflict');
+    actions.push({ kind: 'write', filepath: entry.filepath, bytes: preImage });
+  }
+  return actions;
+}
+
+async function doRevert(
+  g: Git,
+  args: string[],
+  ctx: CommandContext,
+  vfs: Vfs,
+  root: string,
+): Promise<number> {
+  let plan: RevertPlan;
+  try {
+    plan = parseRevert(args);
+  } catch (e) {
+    return renderCheckoutError(e, ctx);
+  }
+
+  try {
+    await assertCleanForRevert(g);
+    const oid = await g.resolveRevision(plan.rev);
+    const object = await g.show(oid);
+    if (object.type !== 'commit') {
+      return renderCheckoutError(new NotImplementedError('git.revert.non-commit'), ctx);
+    }
+    const actions = await planCleanRevert(g, vfs, root, oid, object);
+    for (const action of actions) {
+      if (action.kind === 'delete') {
+        await removeRepoFile(vfs, root, action.filepath);
+        await g.remove(action.filepath);
+      } else {
+        await writeRepoFile(vfs, root, action.filepath, action.bytes);
+        await g.add(action.filepath);
+      }
+    }
+
+    const subject = object.commit.message.split('\n', 1)[0] ?? '';
+    const message = `Revert "${subject}"\n\nThis reverts commit ${oid}.\n`;
+    const author = await identityFrom(g, ctx.env);
+    const newOid = await g.commit({ message, author, committer: committerFrom(ctx.env, author) });
+    const branch = (await g.currentBranch()) ?? 'HEAD';
+    ctx.stdout.write(`[${branch} ${short(newOid)}] Revert "${subject}"\n`);
+    return 0;
+  } catch (e) {
+    if (e instanceof NotImplementedError) return renderCheckoutError(e, ctx);
+    ctx.stderr.write(`fatal: ${e instanceof Error ? e.message : String(e)}\n`);
+    return 128;
+  }
+}
+
+type ApplySource = { kind: 'file'; path: string } | { kind: 'stdin' };
+
+function parseApply(args: string[]): ApplySource {
+  const patchFiles: string[] = [];
+  let flagsDone = false;
+  for (const t of args.slice(1)) {
+    if (flagsDone) {
+      patchFiles.push(t);
+      continue;
+    }
+    if (t === '--') {
+      flagsDone = true;
+      continue;
+    }
+    if (t === '--3way' || t === '-3') throw new NotImplementedError('git.apply.3way');
+    if (t === '--cached') throw new NotImplementedError('git.apply.cached');
+    if (t === '--index') throw new NotImplementedError('git.apply.index');
+    if (t === '--check') throw new NotImplementedError('git.apply.check');
+    if (t === '--reverse' || t === '-R') throw new NotImplementedError('git.apply.reverse');
+    if (t === '--reject') throw new NotImplementedError('git.apply.reject');
+    if (t === '--binary') throw new NotImplementedError('git.apply.binary');
+    if (t === '--stat') throw new NotImplementedError('git.apply.stat');
+    if (t === '--numstat') throw new NotImplementedError('git.apply.numstat');
+    if (t === '--summary') throw new NotImplementedError('git.apply.summary');
+    if (t === '--whitespace' || t.startsWith('--whitespace='))
+      throw new NotImplementedError('git.apply.whitespace');
+    if (/^-p\d*$/.test(t)) throw new NotImplementedError('git.apply.strip');
+    if (t.startsWith('-') && t !== '-') {
+      throw new NotImplementedError(`git.apply.${t.replace(/^-+/, '')}`);
+    }
+    patchFiles.push(t);
+  }
+  if (patchFiles.length === 0) return { kind: 'stdin' };
+  if (patchFiles.length > 1) throw new NotImplementedError('git.apply.multiple-files');
+  const patchFile = patchFiles[0] as string;
+  return patchFile === '-' ? { kind: 'stdin' } : { kind: 'file', path: patchFile };
+}
+
+interface PatchLine {
+  op: ' ' | '-' | '+';
+  text: string;
+}
+
+interface PatchHunk {
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  lines: PatchLine[];
+}
+
+interface PatchFile {
+  oldPath: string | null;
+  newPath: string | null;
+  hunks: PatchHunk[];
+}
+
+function patchPath(raw: string): string | null {
+  const token = raw.split('\t', 1)[0]?.trim() ?? '';
+  if (token === '/dev/null') return null;
+  if (token === '' || token.startsWith('"')) throw new NotImplementedError('git.apply.path');
+  const stripped = token.startsWith('a/') || token.startsWith('b/') ? token.slice(2) : token;
+  if (stripped === '' || isAbsolute(stripped)) throw new NotImplementedError('git.apply.path');
+  const parts = stripped.split('/').filter((p) => p.length > 0);
+  if (parts.length === 0 || parts.some((p) => p === '..')) {
+    throw new NotImplementedError('git.apply.path');
+  }
+  return parts.join('/');
+}
+
+function parseHunkHeader(line: string): Omit<PatchHunk, 'lines'> {
+  const match = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(line);
+  if (!match) throw new NotImplementedError('git.apply.format');
+  return {
+    oldStart: Number(match[1]),
+    oldLines: match[2] === undefined ? 1 : Number(match[2]),
+    newStart: Number(match[3]),
+    newLines: match[4] === undefined ? 1 : Number(match[4]),
+  };
+}
+
+function parseUnifiedPatch(text: string): PatchFile[] {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  const files: PatchFile[] = [];
+  let current: PatchFile | null = null;
+  let i = 0;
+
+  const ensureFile = (): PatchFile => {
+    if (current === null) {
+      current = { oldPath: null, newPath: null, hunks: [] };
+      files.push(current);
+    }
+    return current;
+  };
+
+  while (i < lines.length) {
+    const line = lines[i] as string;
+    if (line === '') {
+      i += 1;
+      continue;
+    }
+    if (line.startsWith('diff --git ')) {
+      current = { oldPath: null, newPath: null, hunks: [] };
+      files.push(current);
+      i += 1;
+      continue;
+    }
+    if (line.startsWith('Binary files ') || line.startsWith('GIT binary patch')) {
+      throw new NotImplementedError('git.apply.binary');
+    }
+    if (line.startsWith('\\')) throw new NotImplementedError('git.apply.no-newline');
+    if (line.startsWith('rename from ') || line.startsWith('rename to ')) {
+      throw new NotImplementedError('git.apply.rename');
+    }
+    if (line.startsWith('copy from ') || line.startsWith('copy to ')) {
+      throw new NotImplementedError('git.apply.copy');
+    }
+    if (line.startsWith('old mode ') || line.startsWith('new mode ')) {
+      throw new NotImplementedError('git.apply.mode');
+    }
+    if (line.startsWith('--- ')) {
+      const f = ensureFile();
+      f.oldPath = patchPath(line.slice(4));
+      i += 1;
+      const next = lines[i];
+      if (next === undefined || !next.startsWith('+++ ')) {
+        throw new NotImplementedError('git.apply.format');
+      }
+      f.newPath = patchPath(next.slice(4));
+      i += 1;
+      continue;
+    }
+    if (line.startsWith('@@ ')) {
+      const f = ensureFile();
+      const header = parseHunkHeader(line);
+      const hunk: PatchHunk = { ...header, lines: [] };
+      let oldSeen = 0;
+      let newSeen = 0;
+      i += 1;
+      while (oldSeen < header.oldLines || newSeen < header.newLines) {
+        if (i >= lines.length) throw new NotImplementedError('git.apply.format');
+        const hline = lines[i] as string;
+        if (hline === '') {
+          throw new NotImplementedError('git.apply.format');
+        }
+        if (hline.startsWith('\\')) throw new NotImplementedError('git.apply.no-newline');
+        const op = hline[0];
+        if (op !== ' ' && op !== '-' && op !== '+') {
+          throw new NotImplementedError('git.apply.format');
+        }
+        if (op === ' ' || op === '-') oldSeen += 1;
+        if (op === ' ' || op === '+') newSeen += 1;
+        if (oldSeen > header.oldLines || newSeen > header.newLines) {
+          throw new NotImplementedError('git.apply.format');
+        }
+        hunk.lines.push({ op, text: hline.slice(1) });
+        i += 1;
+      }
+      f.hunks.push(hunk);
+      continue;
+    }
+    if (
+      line.startsWith('index ') ||
+      line.startsWith('similarity index ') ||
+      line.startsWith('dissimilarity index ') ||
+      line.startsWith('new file mode ') ||
+      line.startsWith('deleted file mode ')
+    ) {
+      i += 1;
+      continue;
+    }
+    throw new NotImplementedError('git.apply.format');
+  }
+
+  return files.filter((f) => f.oldPath !== null || f.newPath !== null || f.hunks.length > 0);
+}
+
+function assertTextFile(bytes: Uint8Array): void {
+  for (let i = 0; i < Math.min(bytes.byteLength, 8000); i++) {
+    if (bytes[i] === 0) throw new NotImplementedError('git.apply.binary');
+  }
+}
+
+function splitPatchableText(text: string): string[] {
+  if (text === '') return [];
+  if (!text.endsWith('\n')) throw new NotImplementedError('git.apply.no-newline');
+  return text.slice(0, -1).split('\n');
+}
+
+function applyHunks(text: string, hunks: PatchHunk[]): string {
+  const input = splitPatchableText(text);
+  const output: string[] = [];
+  let cursor = 0;
+
+  for (const hunk of hunks) {
+    const start = hunk.oldStart === 0 ? 0 : hunk.oldStart - 1;
+    if (start < cursor || start > input.length) throw new NotImplementedError('git.apply.conflict');
+    while (cursor < start) output.push(input[cursor++] as string);
+
+    let oldCount = 0;
+    let newCount = 0;
+    for (const line of hunk.lines) {
+      if (line.op === ' ') {
+        if (input[cursor] !== line.text) throw new NotImplementedError('git.apply.conflict');
+        output.push(line.text);
+        cursor += 1;
+        oldCount += 1;
+        newCount += 1;
+      } else if (line.op === '-') {
+        if (input[cursor] !== line.text) throw new NotImplementedError('git.apply.conflict');
+        cursor += 1;
+        oldCount += 1;
+      } else {
+        output.push(line.text);
+        newCount += 1;
+      }
+    }
+    if (oldCount !== hunk.oldLines || newCount !== hunk.newLines) {
+      throw new NotImplementedError('git.apply.format');
+    }
+  }
+
+  while (cursor < input.length) output.push(input[cursor++] as string);
+  return output.length === 0 ? '' : `${output.join('\n')}\n`;
+}
+
+type ApplyAction =
+  | { kind: 'delete'; filepath: string }
+  | { kind: 'write'; filepath: string; content: string };
+
+async function planApply(vfs: Vfs, root: string, files: PatchFile[]): Promise<ApplyAction[]> {
+  const seen = new Set<string>();
+  const actions: ApplyAction[] = [];
+  for (const file of files) {
+    if (file.hunks.length === 0) throw new NotImplementedError('git.apply.mode');
+    const target = file.newPath ?? file.oldPath;
+    if (target === null) throw new NotImplementedError('git.apply.format');
+    if (file.oldPath !== null && file.newPath !== null && file.oldPath !== file.newPath) {
+      throw new NotImplementedError('git.apply.rename');
+    }
+    if (seen.has(target)) throw new NotImplementedError('git.apply.duplicate-path');
+    seen.add(target);
+
+    const abs = normalizePath(joinPath(root, target));
+    const exists = await vfs.exists(abs);
+    if (file.oldPath === null && exists) throw new NotImplementedError('git.apply.conflict');
+    if (file.oldPath !== null && !exists) throw new NotImplementedError('git.apply.conflict');
+    const currentBytes = exists ? await vfs.readFile(abs) : new Uint8Array();
+    assertTextFile(currentBytes);
+    const current = new TextDecoder().decode(currentBytes);
+    const next = applyHunks(current, file.hunks);
+    if (file.newPath === null) {
+      if (next !== '') throw new NotImplementedError('git.apply.conflict');
+      actions.push({ kind: 'delete', filepath: target });
+    } else {
+      actions.push({ kind: 'write', filepath: target, content: next });
+    }
+  }
+  return actions;
+}
+
+function repoRelativeCwd(root: string, cwd: string): string {
+  const normalizedRoot = normalizePath(root);
+  const normalizedCwd = normalizePath(cwd);
+  if (normalizedCwd === normalizedRoot) return '';
+  return normalizedCwd.startsWith(`${normalizedRoot}/`)
+    ? normalizedCwd.slice(normalizedRoot.length + 1)
+    : '';
+}
+
+function filterPatchFilesForCwd(files: PatchFile[], root: string, cwd: string): PatchFile[] {
+  const prefix = repoRelativeCwd(root, cwd);
+  if (prefix === '') return files;
+  return files.filter((file) => {
+    const path = file.newPath ?? file.oldPath;
+    return path !== null && pathspecMatch(path, prefix);
+  });
+}
+
+function diffGitPaths(line: string): string[] | null {
+  const match = /^diff --git\s+(\S+)\s+(\S+)$/.exec(line);
+  if (!match) return null;
+  try {
+    return [patchPath(match[1] as string), patchPath(match[2] as string)].filter(
+      (path): path is string => path !== null,
+    );
+  } catch {
+    return null;
+  }
+}
+
+function filterPatchTextForCwd(text: string, root: string, cwd: string): string {
+  const prefix = repoRelativeCwd(root, cwd);
+  if (prefix === '') return text;
+
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  const kept: string[] = [];
+  let current: string[] | null = null;
+  let keepCurrent = true;
+
+  const flush = (): void => {
+    if (current !== null && keepCurrent) kept.push(...current);
+  };
+
+  for (const line of lines) {
+    if (line.startsWith('diff --git ')) {
+      flush();
+      current = [line];
+      const paths = diffGitPaths(line);
+      keepCurrent = paths === null || paths.some((path) => pathspecMatch(path, prefix));
+      continue;
+    }
+    if (current === null) kept.push(line);
+    else current.push(line);
+  }
+  flush();
+  return kept.join('\n');
+}
+
+async function readApplySource(
+  vfs: Vfs,
+  ctx: CommandContext,
+  source: ApplySource,
+): Promise<string> {
+  if (source.kind === 'file') {
+    const path = isAbsolute(source.path)
+      ? normalizePath(source.path)
+      : normalizePath(joinPath(ctx.cwd, source.path));
+    const bytes = await vfs.readFile(path);
+    assertTextFile(bytes);
+    return new TextDecoder().decode(bytes);
+  }
+  if (ctx.stdin === undefined) throw new NotImplementedError('git.apply.stdin');
+  const chunks: Uint8Array[] = [];
+  for (;;) {
+    const chunk = await ctx.stdin.read();
+    if (chunk === null) break;
+    chunks.push(chunk);
+  }
+  const total = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  assertTextFile(merged);
+  return new TextDecoder().decode(merged);
+}
+
+async function doApply(
+  args: string[],
+  ctx: CommandContext,
+  vfs: Vfs,
+  root: string,
+): Promise<number> {
+  let source: ApplySource;
+  try {
+    source = parseApply(args);
+    const patch = await readApplySource(vfs, ctx, source);
+    const scopedPatch = filterPatchTextForCwd(patch, root, ctx.cwd);
+    const files = filterPatchFilesForCwd(parseUnifiedPatch(scopedPatch), root, ctx.cwd);
+    const actions = await planApply(vfs, root, files);
+    for (const action of actions) {
+      if (action.kind === 'delete') {
+        await removeRepoFile(vfs, root, action.filepath);
+      } else {
+        await writeRepoFile(vfs, root, action.filepath, new TextEncoder().encode(action.content));
+      }
+    }
+    return 0;
+  } catch (e) {
+    if (e instanceof NotImplementedError) return renderCheckoutError(e, ctx);
+    ctx.stderr.write(`fatal: ${e instanceof Error ? e.message : String(e)}\n`);
+    return 128;
+  }
+}
+
+function stashRefIndex(ref: string): number | undefined {
+  const match = /^stash@\{(\d+)\}$/.exec(ref);
+  return match?.[1] === undefined ? undefined : Number(match[1]);
+}
+
+async function doStash(g: Git, args: string[], ctx: CommandContext): Promise<number> {
+  const first = args[1];
+  const sub = first === undefined || first.startsWith('-') ? 'push' : first;
+  const legacySave = sub === 'save';
+  const op = sub === 'save' ? 'push' : sub;
+  if (!['push', 'pop', 'apply', 'drop', 'list', 'clear', 'create'].includes(op)) {
+    return renderCheckoutError(new NotImplementedError(`git.stash.${op}`), ctx);
+  }
+  let message: string | undefined;
+  let refIdx: number | undefined;
+  const rest = first === undefined || first.startsWith('-') ? args.slice(1) : args.slice(2);
+  if (op === 'push' || op === 'create') {
+    const parts: string[] = [];
+    for (let i = 0; i < rest.length; i++) {
+      const t = rest[i] as string;
+      if (t === '-u' || t === '--include-untracked' || t === '--all') {
+        return renderCheckoutError(new NotImplementedError('git.stash.include-untracked'), ctx);
+      }
+      if (t === '-m' || t === '--message') {
+        const msg = rest[++i];
+        if (msg === undefined)
+          return renderCheckoutError(new NotImplementedError('git.stash.message-missing'), ctx);
+        parts.push(msg);
+      } else if (t.startsWith('-m') && t.length > 2) {
+        parts.push(t.slice(2));
+      } else if (t.startsWith('--message=')) {
+        parts.push(t.slice('--message='.length));
+      } else if (t.startsWith('-')) {
+        return renderCheckoutError(
+          new NotImplementedError(`git.stash.${t.replace(/^-+/, '')}`),
+          ctx,
+        );
+      } else {
+        if (!legacySave) {
+          return renderCheckoutError(new NotImplementedError('git.stash.pathspec'), ctx);
+        }
+        parts.push(t);
+      }
+    }
+    message = parts.join(' ') || undefined;
+  } else if (op === 'pop' || op === 'apply' || op === 'drop') {
+    for (const t of rest) {
+      if (t.startsWith('-')) {
+        return renderCheckoutError(
+          new NotImplementedError(`git.stash.${t.replace(/^-+/, '')}`),
+          ctx,
+        );
+      }
+      if (refIdx !== undefined)
+        return renderCheckoutError(new NotImplementedError('git.stash.args'), ctx);
+      refIdx = stashRefIndex(t);
+      if (refIdx === undefined)
+        return renderCheckoutError(new NotImplementedError('git.stash.ref'), ctx);
+    }
+  } else if (rest.length > 0) {
+    return renderCheckoutError(new NotImplementedError('git.stash.args'), ctx);
+  }
+  try {
+    const ident = await identityFrom(g, ctx.env);
+    if ((await g.getConfig('user.name')) === undefined) await g.setConfig('user.name', ident.name);
+    if ((await g.getConfig('user.email')) === undefined)
+      await g.setConfig('user.email', ident.email);
+    const result = await g.stash(op as Parameters<Git['stash']>[0], message, refIdx);
+    if (Array.isArray(result)) {
+      for (const e of result) ctx.stdout.write(`stash@{${e.index}}: ${e.message}\n`);
+    } else if (typeof result === 'string') {
+      ctx.stdout.write(`${result}\n`);
+    }
+    return 0;
+  } catch (e) {
+    ctx.stderr.write(`fatal: ${e instanceof Error ? e.message : String(e)}\n`);
+    return 128;
+  }
+}
+
+async function doLsRemote(
+  g: Git | undefined,
+  vfs: Vfs,
+  args: string[],
+  ctx: CommandContext,
+): Promise<number> {
+  let prefix: string | undefined;
+  let forPush = false;
+  const positionals: string[] = [];
+  for (const t of args.slice(1)) {
+    if (t === '--tags' || t === '-t') prefix = 'refs/tags/';
+    else if (t === '--heads' || t === '-h') prefix = 'refs/heads/';
+    else if (t === '--refs') continue;
+    else if (t === '--get-url')
+      return renderCheckoutError(new NotImplementedError('git.ls-remote.get-url'), ctx);
+    else if (t === '--exit-code')
+      return renderCheckoutError(new NotImplementedError('git.ls-remote.exit-code'), ctx);
+    else if (t === '--symref')
+      return renderCheckoutError(new NotImplementedError('git.ls-remote.symref'), ctx);
+    else if (t === '--upload-pack')
+      return renderCheckoutError(new NotImplementedError('git.ls-remote.upload-pack'), ctx);
+    else if (t === '--for-push') forPush = true;
+    else if (t.startsWith('-'))
+      return renderCheckoutError(
+        new NotImplementedError(`git.ls-remote.${t.replace(/^-+/, '')}`),
+        ctx,
+      );
+    else positionals.push(t);
+  }
+  if (positionals.length > 1)
+    return renderCheckoutError(new NotImplementedError('git.ls-remote.args'), ctx);
+  const target = positionals[0];
+  if (!target) return renderCheckoutError(new NotImplementedError('git.ls-remote.no-url'), ctx);
+  try {
+    const client = g ?? makeGit({ fs: vfsToGitFs(vfs), dir: ctx.cwd });
+    const url = isUrlLike(target)
+      ? target
+      : (await client.listRemotes()).find((r) => r.remote === target)?.url;
+    if (url === undefined) {
+      ctx.stderr.write(`fatal: '${target}' does not appear to be a git repository\n`);
+      return 128;
+    }
+    const refs = await client.lsRemote({
+      url,
+      ...(prefix ? { prefix } : {}),
+      ...(forPush ? { forPush } : {}),
+    });
+    for (const ref of refs) ctx.stdout.write(`${ref.oid}\t${ref.ref}\n`);
+    return 0;
+  } catch (e) {
+    ctx.stderr.write(`${e instanceof Error ? e.message : String(e)}\n`);
+    return 128;
   }
 }
 
@@ -576,6 +2011,41 @@ function isUrlLike(s: string): boolean {
   );
 }
 
+function refspecHasWildcard(refspec: string): boolean {
+  return refspec.includes('*');
+}
+
+function fetchRefspec(refspec: string): {
+  ref?: string;
+  remoteRef?: string;
+  singleBranch?: boolean;
+} {
+  if (!refspec.includes(':')) return { ref: refspec };
+  const [remoteRef, ref] = refspec.split(':', 2) as [string, string];
+  if (remoteRef === '' || ref === '') throw new NotImplementedError('git.fetch.refspec');
+  return { remoteRef, ref, singleBranch: true };
+}
+
+function pushRefspec(refspec: string): { ref?: string; remoteRef?: string; delete?: boolean } {
+  if (!refspec.includes(':')) return { ref: refspec };
+  const [ref, remoteRef] = refspec.split(':', 2) as [string, string];
+  if (remoteRef === '') throw new NotImplementedError('git.push.refspec');
+  if (ref === '') return { remoteRef, delete: true };
+  return { ref, remoteRef };
+}
+
+async function assertPushTagsRemoteReachable(
+  g: Git,
+  target: { url?: string; remote?: string },
+): Promise<void> {
+  const url =
+    target.url ??
+    (await g.listRemotes()).find((r) => r.remote === (target.remote ?? 'origin'))?.url;
+  if (url === undefined) throw new Error('No configured push destination.');
+  assertSupportedTransport(url);
+  await g.lsRemote({ url, forPush: true });
+}
+
 async function doNetwork(
   g: Git,
   verb: 'fetch' | 'pull' | 'push',
@@ -587,9 +2057,45 @@ async function doNetwork(
   // wrongly hit the transport ceiling. A second positional is the refspec.
   const positionals: string[] = [];
   let force = false;
-  for (const t of args.slice(1)) {
+  let depth: number | undefined;
+  let singleBranch = false;
+  let tags = false;
+  let prune = false;
+  let pruneTags = false;
+  let pushTags = false;
+  const rest = args.slice(1);
+  for (let i = 0; i < rest.length; i++) {
+    const t = rest[i] as string;
     if (t === '-f' || t === '--force') {
       force = true;
+    } else if (t === '--tags') {
+      if (verb === 'push') pushTags = true;
+      else if (verb === 'pull')
+        return renderCheckoutError(new NotImplementedError('git.pull.tags'), ctx);
+      else tags = true;
+    } else if (t === '--prune' || t === '-p') {
+      if (verb === 'push')
+        return renderCheckoutError(new NotImplementedError('git.push.prune'), ctx);
+      prune = true;
+    } else if (t === '--prune-tags') {
+      if (verb === 'push')
+        return renderCheckoutError(new NotImplementedError('git.push.prune-tags'), ctx);
+      pruneTags = true;
+    } else if (t === '--depth') {
+      if (verb === 'push')
+        return renderCheckoutError(new NotImplementedError('git.push.depth'), ctx);
+      const raw = rest[++i];
+      if (raw === undefined)
+        return renderCheckoutError(new NotImplementedError(`git.${verb}.depth`), ctx);
+      depth = Number(raw);
+    } else if (t.startsWith('--depth=')) {
+      if (verb === 'push')
+        return renderCheckoutError(new NotImplementedError('git.push.depth'), ctx);
+      depth = Number(t.slice('--depth='.length));
+    } else if (t === '--single-branch') {
+      if (verb === 'push')
+        return renderCheckoutError(new NotImplementedError('git.push.single-branch'), ctx);
+      singleBranch = true;
     } else if (t.startsWith('-')) {
       return renderCheckoutError(
         new NotImplementedError(`git.${verb}.${t.replace(/^-+/, '')}`),
@@ -599,14 +2105,40 @@ async function doNetwork(
       positionals.push(t);
     }
   }
+  if (force && verb !== 'push')
+    return renderCheckoutError(new NotImplementedError(`git.${verb}.force`), ctx);
+  if (depth !== undefined && (!Number.isFinite(depth) || depth < 1)) {
+    return renderCheckoutError(new NotImplementedError(`git.${verb}.depth`), ctx);
+  }
+  if (depth !== undefined && verb === 'pull')
+    return renderCheckoutError(new NotImplementedError('git.pull.depth'), ctx);
+  if (positionals.length > 2)
+    return renderCheckoutError(new NotImplementedError(`git.${verb}.refspecs`), ctx);
   const first = positionals[0];
   const url = first !== undefined && isUrlLike(first) ? first : undefined;
   const remote = first !== undefined && !isUrlLike(first) ? first : undefined;
-  const ref = positionals[1];
+  const rawRefspec = positionals[1];
+  if (rawRefspec !== undefined && refspecHasWildcard(rawRefspec)) {
+    return renderCheckoutError(new NotImplementedError(`git.${verb}.wildcard-refspec`), ctx);
+  }
+  let refspec: { ref?: string; remoteRef?: string; singleBranch?: boolean; delete?: boolean } = {};
+  try {
+    if (rawRefspec !== undefined) {
+      refspec = verb === 'push' ? pushRefspec(rawRefspec) : fetchRefspec(rawRefspec);
+    }
+  } catch (e) {
+    return renderCheckoutError(e, ctx);
+  }
   const target = {
     ...(url !== undefined ? { url } : {}),
     ...(remote !== undefined ? { remote } : {}),
-    ...(ref !== undefined ? { ref } : {}),
+    ...(refspec.ref !== undefined ? { ref: refspec.ref } : {}),
+    ...(refspec.remoteRef !== undefined ? { remoteRef: refspec.remoteRef } : {}),
+    ...(depth !== undefined ? { depth } : {}),
+    ...(singleBranch || refspec.singleBranch ? { singleBranch: true } : {}),
+    ...(tags ? { tags: true } : {}),
+    ...(prune ? { prune: true } : {}),
+    ...(pruneTags ? { pruneTags: true } : {}),
   };
   try {
     switch (verb) {
@@ -616,9 +2148,29 @@ async function doNetwork(
       case 'pull':
         await g.pull({ ...target, author: await identityFrom(g, ctx.env) });
         break;
-      case 'push':
-        await g.push({ ...target, ...(force ? { force: true } : {}) });
+      case 'push': {
+        if (pushTags) {
+          const tagNames = await g.listTags();
+          if (tagNames.length === 0) {
+            await assertPushTagsRemoteReachable(g, target);
+            break;
+          }
+          for (const tag of tagNames) {
+            await g.push({
+              ...target,
+              ref: `refs/tags/${tag}`,
+              ...(force ? { force: true } : {}),
+            });
+          }
+          break;
+        }
+        await g.push({
+          ...target,
+          ...(refspec.delete ? { delete: true } : {}),
+          ...(force ? { force: true } : {}),
+        });
         break;
+      }
     }
     return 0;
   } catch (e) {
@@ -668,12 +2220,41 @@ export function cloneDestination(
  * transports / CORS / network errors surface loud (exit 128), never a fake success.
  */
 async function doClone(vfs: Vfs, args: string[], ctx: CommandContext): Promise<number> {
-  const url = args[1];
+  const positionals: string[] = [];
+  let depth: number | undefined;
+  let singleBranch = false;
+  let noTags = false;
+  const rest = args.slice(1);
+  for (let i = 0; i < rest.length; i++) {
+    const t = rest[i] as string;
+    if (t === '--depth') {
+      const raw = rest[++i];
+      if (raw === undefined)
+        return renderCheckoutError(new NotImplementedError('git.clone.depth'), ctx);
+      depth = Number(raw);
+    } else if (t.startsWith('--depth=')) {
+      depth = Number(t.slice('--depth='.length));
+    } else if (t === '--single-branch') {
+      singleBranch = true;
+    } else if (t === '--no-tags') {
+      noTags = true;
+    } else if (t.startsWith('-')) {
+      return renderCheckoutError(new NotImplementedError(`git.clone.${t.replace(/^-+/, '')}`), ctx);
+    } else {
+      positionals.push(t);
+    }
+  }
+  if (depth !== undefined && (!Number.isFinite(depth) || depth < 1)) {
+    return renderCheckoutError(new NotImplementedError('git.clone.depth'), ctx);
+  }
+  if (positionals.length > 2)
+    return renderCheckoutError(new NotImplementedError('git.clone.args'), ctx);
+  const url = positionals[0];
   if (url === undefined) {
     ctx.stderr.write('fatal: You must specify a repository to clone.\n');
     return 128;
   }
-  const { display, target } = cloneDestination(url, args[2], ctx.cwd);
+  const { display, target } = cloneDestination(url, positionals[1], ctx.cwd);
   try {
     // Real git's order: the destination-exists guard fires BEFORE transport
     // handling, so an ssh url + a non-empty dest reports the dest fatal (not the
@@ -691,7 +2272,12 @@ async function doClone(vfs: Vfs, args: string[], ctx: CommandContext): Promise<n
     await vfs.mkdir(target, { recursive: true });
     ctx.stderr.write(`Cloning into '${display}'...\n`);
     const g = makeGit({ fs: vfsToGitFs(vfs), dir: target });
-    await g.clone({ url });
+    await g.clone({
+      url,
+      ...(depth !== undefined ? { depth } : {}),
+      ...(singleBranch ? { singleBranch } : {}),
+      ...(noTags ? { noTags } : {}),
+    });
     return 0;
   } catch (e) {
     ctx.stderr.write(`${e instanceof Error ? e.message : String(e)}\n`);
@@ -737,27 +2323,16 @@ async function findRepoRoot(vfs: Vfs, start: string): Promise<string | null> {
  */
 const UNIMPLEMENTED_SUBCOMMANDS = new Set([
   'rebase',
-  'merge',
-  'reset',
-  'revert',
-  'stash',
-  'cherry-pick',
-  'tag',
-  'remote',
-  'show',
   'reflog',
   'bisect',
   'blame',
   'submodule',
   'worktree',
   'clean',
-  'rm',
-  'mv',
   'gc',
   'prune',
   'repack',
   'fsck',
-  'apply',
   'am',
   'format-patch',
   'notes',
@@ -782,6 +2357,18 @@ const REPO_VERBS = new Set([
   'switch',
   'restore',
   'config',
+  'reset',
+  'show',
+  'tag',
+  'remote',
+  'ls-remote',
+  'rm',
+  'mv',
+  'merge',
+  'cherry-pick',
+  'revert',
+  'apply',
+  'stash',
   'fetch',
   'pull',
   'push',
@@ -805,46 +2392,67 @@ export const git: ShellCommand = async (args, ctx) => {
     return 0;
   }
   if (sub === 'clone') return doClone(vfs, args, ctx);
+  if (sub === 'ls-remote') {
+    const target = args.slice(1).find((arg) => !arg.startsWith('-'));
+    if (target === undefined || isUrlLike(target)) return doLsRemote(undefined, vfs, args, ctx);
+  }
 
   // Every other known verb needs a repository. Real git verifies one governs the
   // cwd FIRST (else `fatal: not a git repository`) — we mirror that so a non-repo
-  // never silently false-succeeds (e.g. `status` reporting a clean tree). A verb
-  // from a SUBDIRECTORY needs cwd-relative pathspec translation we don't have yet
-  // → loud `git.subdir` ceiling (never a silent wrong-tree result).
+  // never silently false-succeeds (e.g. `status` reporting a clean tree).
   if (sub !== undefined && REPO_VERBS.has(sub)) {
     const root = await findRepoRoot(vfs, ctx.cwd);
     if (root === null) {
       ctx.stderr.write('fatal: not a git repository (or any of the parent directories): .git\n');
       return 128;
     }
-    if (root !== normalizePath(ctx.cwd)) {
-      ctx.stderr.write(
-        `git: not implemented: git.subdir — run git from the repository root '${root}' (no subdirectory prefix support yet)\n`,
-      );
-      return 128;
-    }
+    const mapPathspec = makeRepoPathspecMapper(root, ctx.cwd);
     const g = makeGit({ fs: vfsToGitFs(vfs), dir: root });
     switch (sub) {
       case 'status':
         return doStatus(g, args, ctx);
       case 'add':
-        return doAdd(g, args, ctx, vfs, root);
+        return doAdd(g, args, ctx, vfs, root, mapPathspec);
       case 'commit':
         return doCommit(g, args, ctx);
       case 'log':
-        return doLog(g, args, ctx);
+        return doLog(g, args, ctx, mapPathspec);
       case 'diff':
-        return doDiff(g, args, ctx);
+        return doDiff(g, args, ctx, mapPathspec);
       case 'branch':
         return doBranch(g, ctx);
       case 'checkout':
-        return doCheckout(g, args, ctx);
+        return doCheckout(g, args, ctx, mapPathspec);
       case 'switch':
         return doSwitch(g, args, ctx);
       case 'restore':
-        return doRestore(g, args, ctx);
+        return doRestore(g, args, ctx, mapPathspec);
       case 'config':
         return doConfig(g, args, ctx);
+      case 'reset':
+        return doReset(g, args, ctx, mapPathspec);
+      case 'show':
+        return doShow(g, args, ctx);
+      case 'tag':
+        return doTag(g, args, ctx);
+      case 'remote':
+        return doRemote(g, args, ctx);
+      case 'ls-remote':
+        return doLsRemote(g, vfs, args, ctx);
+      case 'rm':
+        return doGitRm(g, args, ctx, vfs, root, mapPathspec);
+      case 'mv':
+        return doGitMv(g, args, ctx, vfs, root, mapPathspec);
+      case 'merge':
+        return doMerge(g, args, ctx);
+      case 'cherry-pick':
+        return doCherryPick(g, args, ctx);
+      case 'revert':
+        return doRevert(g, args, ctx, vfs, root);
+      case 'apply':
+        return doApply(args, ctx, vfs, root);
+      case 'stash':
+        return doStash(g, args, ctx);
       case 'fetch':
       case 'pull':
       case 'push':

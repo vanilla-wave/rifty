@@ -119,6 +119,55 @@ it('reports a deleted (committed-then-removed) file as all - lines', async () =>
   expect(lines).toEqual(['-x', '-y']);
 });
 
+it('head-workdir diff reports an index deletion even if the file remains untracked on disk', async () => {
+  const vfs = new MemoryVfs();
+  await vfs.mkdir('/repo', { recursive: true });
+  const g = makeGit({ fs: vfsToGitFs(vfs), dir: '/repo' });
+  await g.init();
+  await vfs.writeFile('/repo/a.txt', 'tracked\n');
+  await g.add('a.txt');
+  await g.commit({ message: 'first', author: AUTHOR });
+
+  await g.remove('a.txt');
+
+  const d = await g.diff({ kind: 'head-workdir' });
+  const deleted = d.find((e) => e.filepath === 'a.txt');
+  expect(deleted?.change).toBe('delete');
+  expect(allLines(deleted?.hunks ?? [])).toEqual(['-tracked']);
+  expect(await vfs.readFile('/repo/a.txt')).toEqual(new TextEncoder().encode('tracked\n'));
+});
+
+it('diff with a missing pathspec is an empty diff, not a pathspec error', async () => {
+  const vfs = new MemoryVfs();
+  await vfs.mkdir('/repo', { recursive: true });
+  const g = makeGit({ fs: vfsToGitFs(vfs), dir: '/repo' });
+  await g.init();
+  await vfs.writeFile('/repo/a.txt', 'tracked\n');
+  await g.add('a.txt');
+  await g.commit({ message: 'first', author: AUTHOR });
+
+  await vfs.writeFile('/repo/a.txt', 'changed\n');
+  await g.add('a.txt');
+
+  await expect(g.diff({ kind: 'unstaged', pathspecs: ['missing.txt'] })).resolves.toEqual([]);
+  await expect(g.diff({ kind: 'staged', pathspecs: ['missing.txt'] })).resolves.toEqual([]);
+});
+
+it('diff pathspecs accept a directory with a trailing slash', async () => {
+  const vfs = new MemoryVfs();
+  await vfs.mkdir('/repo/d', { recursive: true });
+  const g = makeGit({ fs: vfsToGitFs(vfs), dir: '/repo' });
+  await g.init();
+  await vfs.writeFile('/repo/d/a.txt', 'one\n');
+  await g.add('d/a.txt');
+  await g.commit({ message: 'first', author: AUTHOR });
+
+  await vfs.writeFile('/repo/d/a.txt', 'two\n');
+
+  const d = await g.diff({ kind: 'head-workdir', pathspecs: ['d/'] });
+  expect(d.map((e) => e.filepath)).toEqual(['d/a.txt']);
+});
+
 it('emits no entry for an unchanged committed file', async () => {
   const vfs = new MemoryVfs();
   await vfs.mkdir('/repo', { recursive: true });

@@ -51,7 +51,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- **git over the VFS (`@riftydev/git`, ADR-0167).** New tier-0 package + a shell `git` builtin + SDK `@riftydev/sdk/git`: git on isomorphic-git over the Memory VFS. Offline porcelain (init/add/status/commit/log/diff/branch/checkout) is byte-faithful to canonical git — a commit with fixed identity/dates yields the **identical 40-hex SHA-1** as real git (`commit-sha-parity.test.ts`); `status --porcelain` + `log --oneline` are byte-exact vs git 2.50.1 frozen golden fixtures. Network (clone/fetch/pull/push) routes over rifty's `node:http` egress with a D-004 env-config corsProxy (`RIFTY_GIT_CORS_PROXY`) + `onAuth`; a real `git http-backend` clone is integration-tested end-to-end (`network.integration.test.ts`). The browser ceiling throws loud, never stubs: ssh/`git://`/dumb-HTTP → `NotImplementedError('git.transport.*')`, cross-origin-without-proxy → `git.cors`, unimplemented git subcommands → exit 128. Compat: `docs/public/compat/git.md`. Residual fidelity gaps (CRLF/`.gitattributes`, exec-bit/symlink tree-SHA, large-repo streaming) tracked in `docs/backlog/shell/git-command-isomorphic`.
+- **Git capability hard-ceil pass.** `@riftydev/git` and the shell `git` builtin
+  now cover the achievable local-agent porcelain cluster on top of isomorphic-git:
+  reset, parent revspecs, staged/HEAD/ref diffs, show, tag, remote/ls-remote,
+  clean merge/cherry-pick/stash flows, and index-aware rm/mv. The git backlog
+  item is closed; remaining absences are explicit compat ceilings in
+  `docs/public/compat/git.md`.
+  The 2026-06-23 adversarial pass regression-locks `diff HEAD <path>`, unborn
+  `diff --cached`, `log -- <path>`, `reset --hard` worktree removals,
+  `show <commit>` patch output, `stash@{n}`, loud `stash -u`,
+  `ls-remote <remote>`, and `rm`/`mv` data-loss guards.
+  The review fix-pass closes the remaining silent/partial edges: strict extra
+  operands for remote/checkout/switch/merge/cherry-pick/network verbs,
+  all-or-nothing `rm`, preflighted `mv`, diff pathspec parity, directed
+  unsupported revspec ceilings, `log -n 0`/format ceilings, and blob-oid
+  `show REV:path`.
+  The usability phase adds repo-subdirectory pathspec translation,
+  `diff --name-only|--name-status|--stat`, `ls-remote --tags/--heads`,
+  clone `--no-tags`, fetch `src:dst` + tag/prune flags, and push single
+  refspec/delete/`--tags` parsing; multi/wildcard refspecs stay loud ceilings.
+  The clean patch/revert phase adds all-or-nothing `git revert <commit>` for the
+  clean single-parent case and `git apply <patch-file>` / `git apply -` for clean
+  text unified diffs over the VFS worktree. Conflict/sequencer/3-way/index/
+  binary/rename/mode/mailbox forms are explicit `NotImplementedError` ceilings,
+  never partial silent behavior.
+- **git over the VFS (`@riftydev/git`, ADR-0167).** New tier-0 package + a shell `git` builtin + SDK `@riftydev/sdk/git`: git on isomorphic-git over the Memory VFS. Offline porcelain (init/add/status/commit/log/diff/branch/checkout) is byte-faithful to canonical git — a commit with fixed identity/dates yields the **identical 40-hex SHA-1** as real git (`commit-sha-parity.test.ts`); `status --porcelain` + `log --oneline` are byte-exact vs git 2.50.1 frozen golden fixtures. Network (clone/fetch/pull/push) routes over rifty's `node:http` egress with a D-004 env-config corsProxy (`RIFTY_GIT_CORS_PROXY`) + `onAuth`; a real `git http-backend` clone is integration-tested end-to-end (`network.integration.test.ts`). The browser ceiling throws loud, never stubs: ssh/`git://`/dumb-HTTP → `NotImplementedError('git.transport.*')`, cross-origin-without-proxy → `git.cors`, unimplemented git subcommands → exit 128. Compat: `docs/public/compat/git.md`.
 - M0 Foundation: pnpm workspace, TypeScript strict, Biome, Vitest, Playwright (three engines), GitHub Actions.
 - Playground app (Vite + SolidJS) with Monaco editor and xterm.js terminal, COOP/COEP cross-origin isolation, Run button.
 - Service Worker skeleton, runtime-js worker entry stub.
