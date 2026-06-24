@@ -78,7 +78,9 @@
   hits the directed dynamic-scope ceiling instead of falling through to host
   import, and object-destructuring defaults such as
   `const { F = Function.prototype.constructor } = {}` feed the existing
-  derived-host guard instead of escaping it.
+  derived-host guard instead of escaping it. Dynamically composed derived
+  constructor/eval bodies remain in the explicit exhaustive-metaprogramming backlog
+  instead of causing import-time false positives for Vite-shaped evaluators.
 - **Timer/immediate callback failures surface loudly.** `setImmediate` no longer
   catches and logs callback exceptions inside the MessageChannel dispatch path;
   failures propagate like Node instead of being swallowed as console noise.

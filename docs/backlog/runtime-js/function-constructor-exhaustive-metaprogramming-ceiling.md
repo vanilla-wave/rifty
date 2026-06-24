@@ -20,8 +20,12 @@ global `Function` mutation) throw directed `NotImplementedError`s.
 That is not the same as a proof-complete alias analysis for every JavaScript
 metaprogramming shape. The current guard covers the concrete static forms pinned
 by conformance tests and docs. Exotic shapes involving dynamic property graphs,
-opaque object flows, proxy-mediated reflection, or cross-realm pre-captured host
-constructors are outside the current claim.
+opaque object flows, proxy-mediated reflection, cross-realm pre-captured host
+constructors, or dynamically composed derived-constructor bodies are outside the
+current claim. Dynamically composed `eval(...)` text is also outside the static
+guard claim. Import-time guards must not reject modules merely because such a
+dynamic evaluator is defined; doing so breaks real packages like Vite before the
+path executes.
 
 ## Options or Next
 

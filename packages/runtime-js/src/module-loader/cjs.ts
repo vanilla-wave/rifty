@@ -97,6 +97,7 @@ interface FunctionRewriteCtx {
   readonly functionHelperName: string;
   hasGlobalFunctionWrite: boolean;
   hasDynamicFunctionScope: boolean;
+  hasWithDynamicFunctionScope: boolean;
   hasDerivedHostFunctionConstructor: boolean;
   hasRoutedFunctionReference: boolean;
   hasFunctionEvalText: boolean;
@@ -213,6 +214,7 @@ function rewriteCjsFunctionConstructorReferences(
     functionHelperName,
     hasGlobalFunctionWrite: false,
     hasDynamicFunctionScope: false,
+    hasWithDynamicFunctionScope: false,
     hasDerivedHostFunctionConstructor: false,
     hasRoutedFunctionReference: false,
     hasFunctionEvalText: false,
@@ -224,10 +226,13 @@ function rewriteCjsFunctionConstructorReferences(
       `CJS module ${id} compiles import()-bearing source through a derived host Function constructor; rifty cannot route that constructor without mutating the host Function prototype, so this module is an explicit ceiling`,
     );
   }
-  if (ctx.hasDynamicFunctionScope && (ctx.hasRoutedFunctionReference || ctx.hasFunctionEvalText)) {
+  if (
+    ctx.hasFunctionEvalText ||
+    (ctx.hasWithDynamicFunctionScope && ctx.hasRoutedFunctionReference)
+  ) {
     throw new NotImplementedError(
       'module-loader.cjs-dynamic-function-scope',
-      `CJS module ${id} combines Function routing with with/eval dynamic scope; rifty cannot statically preserve Node's dynamic binding semantics, so this module is an explicit ceiling`,
+      `CJS module ${id} contains literal eval Function/import text or combines routed Function with with dynamic scope; rifty cannot statically preserve Node's dynamic binding semantics, so this module is an explicit ceiling`,
     );
   }
   if (ctx.hasGlobalFunctionWrite) {
@@ -651,6 +656,7 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
 
     case 'WithStatement':
       ctx.hasDynamicFunctionScope = true;
+      ctx.hasWithDynamicFunctionScope = true;
       walkFunctionReferences(n.object, ctx);
       walkFunctionReferences(n.body, ctx);
       return;
@@ -920,7 +926,7 @@ function markGlobalFunctionWrite(target: AnyNodeShape, ctx: FunctionRewriteCtx):
 
 function evalArgumentMayTouchFunction(node: unknown): boolean {
   const source = literalString(node);
-  if (source === undefined) return true;
+  if (source === undefined) return false;
   return (
     /\bimport\b/.test(source) ||
     source.includes('Function') ||
@@ -1551,14 +1557,14 @@ function calleeMayBeDerivedHostFunction(node: unknown, ctx: FunctionRewriteCtx):
 function constructorArgsMayImport(args: readonly unknown[]): boolean {
   return args.some((arg) => {
     const source = literalString(arg);
-    return source === undefined || /\bimport\b/.test(source);
+    return source !== undefined && /\bimport\b/.test(source);
   });
 }
 
 function constructorArgArrayMayImport(node: unknown): boolean {
-  if (!node || typeof node !== 'object') return true;
+  if (!node || typeof node !== 'object') return false;
   const n = unwrapChain(node) as AnyNodeShape;
-  if (n.type !== 'ArrayExpression') return true;
+  if (n.type !== 'ArrayExpression') return false;
   const elements = (n as unknown as { elements?: unknown[] }).elements ?? [];
   return constructorArgsMayImport(elements);
 }

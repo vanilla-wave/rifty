@@ -54,8 +54,8 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
   `Function === globalThis.Function` and `Function.prototype.constructor === Function`
   are outside the claim.
 - Derived host constructors (`fn.constructor`, `Function.prototype.constructor`,
-  and similar `.constructor` paths) used to compile source that contains or may
-  contain `import` throw
+  and similar `.constructor` paths) used to compile source that statically
+  contains `import` throw
   `NotImplementedError('module-loader.function-constructor-derived-host')`.
   Routing them without mutating the host `Function.prototype` needs a future
   realm/prototype membrane. Tracked in
@@ -83,15 +83,17 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
   constructor, deleting it, or silently mixing routed and replaced constructors:
   `module-loader.cjs-global-function-assignment` / `module-loader.esm-global-function-assignment`.
   Tracked in `docs/backlog/runtime-js/cjs-global-function-assignment.md`.
-- CJS/ESM modules that mention `Function` and use `with` or unshadowed/global/computed `eval`
-  (including aliased `eval` and eval arguments that statically or dynamically may touch `Function`)
-  throw `module-loader.cjs-dynamic-function-scope` /
-  `module-loader.esm-dynamic-function-scope`; those dynamic scopes can replace the
-  binding at runtime, which the static routing transform cannot preserve without
-  an isolated global realm.
+- CJS/ESM modules with literal unshadowed/global/computed `eval` text that
+  statically touches `Function` or `import`, or modules that combine `with`
+  dynamic scope with routed lexical `Function`, throw
+  `module-loader.cjs-dynamic-function-scope` /
+  `module-loader.esm-dynamic-function-scope`; those dynamic scopes can replace
+  the binding at runtime, which the static routing transform cannot preserve
+  without an isolated global realm.
 - The package-tooling hard-ceil goal is scoped to the documented static
   Function/eval/import patterns above. Proof-complete detection for every
-  JavaScript metaprogramming alias shape is explicitly deferred to
+  JavaScript metaprogramming alias shape, including dynamically composed
+  derived-constructor or eval bodies, is explicitly deferred to
   `docs/backlog/runtime-js/function-constructor-exhaustive-metaprogramming-ceiling.md`;
   until then, new escapes found by parity/conformance must either be routed or
   promoted to a directed `NotImplementedError` before being claimed as supported.

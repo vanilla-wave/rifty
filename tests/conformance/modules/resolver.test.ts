@@ -958,6 +958,62 @@ describe('ESM — import / export', () => {
     });
   });
 
+  it('does not reject ESM modules merely defining a Vite-shaped dynamic AsyncFunction evaluator', async () => {
+    const loader = setup({
+      '/main.mjs': `
+        const AsyncFunction = async function() {}.constructor;
+        export function compile(result) {
+          return new AsyncFunction("ssrImport", '"use strict";' + result.code);
+        }
+        export const loaded = true;
+      `,
+    });
+    const ns = await loader.import('./main.mjs', '/entry.mjs');
+    expect(ns.loaded).toBe(true);
+  });
+
+  it('does not reject ESM modules merely combining a Vite-shaped evaluator with dynamic eval', async () => {
+    const loader = setup({
+      '/main.mjs': `
+        const AsyncFunction = async function() {}.constructor;
+        export function compile(result) {
+          return new AsyncFunction("ssrImport", '"use strict";' + result.code);
+        }
+        export function parse(value) {
+          try {
+            return (0, eval)(value);
+          } catch {
+            return undefined;
+          }
+        }
+        export const loaded = true;
+      `,
+    });
+    const ns = await loader.import('./main.mjs', '/entry.mjs');
+    expect(ns.loaded).toBe(true);
+  });
+
+  it('does not reject ESM modules merely combining lexical Function with unrelated dynamic eval', async () => {
+    const loader = setup({
+      '/main.mjs': `
+        export function evalValue(rawValue) {
+          const fn = new Function("return (" + rawValue + ")");
+          return fn();
+        }
+        export function parse(value) {
+          try {
+            return (0, eval)(value);
+          } catch {
+            return undefined;
+          }
+        }
+        export const loaded = true;
+      `,
+    });
+    const ns = await loader.import('./main.mjs', '/entry.mjs');
+    expect(ns.loaded).toBe(true);
+  });
+
   it('throws a directed ceiling when runtime-built Function recovers a host constructor from an Object descriptor in ESM', async () => {
     const loader = setup({
       '/a.mjs': "export const v = 'wrong-target';",
@@ -2289,6 +2345,59 @@ describe('ESM — import / export', () => {
         feature: 'module-loader.function-constructor-derived-host',
       }) as unknown as Error,
     );
+  });
+
+  it('does not reject CJS modules merely defining a dynamic derived Function evaluator', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const AsyncFunction = async function() {}.constructor;
+        exports.compile = function compile(result) {
+          return new AsyncFunction("ssrImport", '"use strict";' + result.code);
+        };
+        exports.loaded = true;
+      `,
+    });
+    expect(loader.require('./main.cjs', '/entry.js')).toMatchObject({ loaded: true });
+  });
+
+  it('does not reject CJS modules merely combining a dynamic derived Function evaluator with dynamic eval', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const AsyncFunction = async function() {}.constructor;
+        exports.compile = function compile(result) {
+          return new AsyncFunction("ssrImport", '"use strict";' + result.code);
+        };
+        exports.parse = function parse(value) {
+          try {
+            return (0, eval)(value);
+          } catch {
+            return undefined;
+          }
+        };
+        exports.loaded = true;
+      `,
+    });
+    expect(loader.require('./main.cjs', '/entry.js')).toMatchObject({ loaded: true });
+  });
+
+  it('does not reject CJS modules merely combining lexical Function with unrelated dynamic eval', () => {
+    const loader = setup({
+      '/main.cjs': `
+        exports.evalValue = function evalValue(rawValue) {
+          const fn = new Function("return (" + rawValue + ")");
+          return fn();
+        };
+        exports.parse = function parse(value) {
+          try {
+            return (0, eval)(value);
+          } catch {
+            return undefined;
+          }
+        };
+        exports.loaded = true;
+      `,
+    });
+    expect(loader.require('./main.cjs', '/entry.js')).toMatchObject({ loaded: true });
   });
 
   it('throws a directed ceiling when runtime-built Function derives a split-string nested host constructor in CJS', () => {
