@@ -9,8 +9,11 @@
   supplied, the resolver uses TypeScript's real config parser over the VFS to
   locate nearest `tsconfig.json`, follow `extends`, honor JSONC/baseUrl/paths,
   feed the existing alias resolver, and use `baseUrl` as the bare-specifier
-  fallback when no `paths` pattern matches. Default remains Node-faithful;
-  explicit `paths` still wins.
+  fallback when no `paths` pattern matches. Alias/baseUrl probes use TypeScript's
+  extension/index priority (`.ts` before `.js` when both siblings exist), and a
+  malformed `compilerOptions.paths` shape throws `TSCONFIG_PARSE_ERROR` instead
+  of leaking JS `TypeError`s. Default remains Node-faithful; explicit `paths`
+  still wins.
 
 - **Public `node:os` / `node:path` / `node:perf_hooks` / `node:fs` builtin subpaths** (`./builtins/{os,path,perf_hooks,fs}`, ADR-0166 task 1.9). The same faithful shims that already back the `require('os')` module registry, now also importable directly. The playground aliases the BARE `os`/`path`/`perf_hooks`/`fs` specifiers to these so a Vite bundle containing a heavy node-targeting dependency (the `typescript` engine in the ts-language-service worker) resolves them to REAL rifty shims instead of Vite's empty browser stub (`os.platform is not a function` at the dep's module-eval). No first-party source imports these bare specifiers; it uses `node:*` + the module registry.
 

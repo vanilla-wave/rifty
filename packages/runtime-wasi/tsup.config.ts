@@ -7,6 +7,7 @@ export default defineConfig({
   entry: {
     index: 'src/index.ts',
     'worker-entry': 'src/worker-entry.ts',
+    wasi: 'src/wasi.ts',
   },
   format: ['esm'],
   dts: true,

@@ -53,6 +53,8 @@ function errResponse(id: number, err: unknown): TsResponse {
   const name = err instanceof Error ? err.name : 'Error';
   const message = err instanceof Error ? err.message : String(err);
   const feature =
+    typeof err === 'object' &&
+    err !== null &&
     typeof (err as { readonly feature?: unknown }).feature === 'string'
       ? (err as { readonly feature: string }).feature
       : undefined;
@@ -93,11 +95,12 @@ export function createServiceEndpoint(deps: ServiceEndpointDeps): ServiceEndpoin
         // frame queues behind this exact build.
         const startedAt = deps.log ? Date.now() : 0;
         deps.log?.(`init: building service (root=${request.projectRoot})`);
-        const built = createTsLanguageService({
-          fsSync: deps.buildFsSync(deps.call),
-          projectRoot: request.projectRoot,
-          ...(deps.log ? { log: deps.log } : {}),
-        });
+        const built = (async () =>
+          createTsLanguageService({
+            fsSync: deps.buildFsSync(deps.call),
+            projectRoot: request.projectRoot,
+            ...(deps.log ? { log: deps.log } : {}),
+          }))();
         servicePromise = built;
         await built;
         deps.log?.(`init: service ready (+${Date.now() - startedAt}ms)`);

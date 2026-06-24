@@ -22,8 +22,9 @@
   metadata, list `metadata`, kind modifiers, label/source metadata, resolved source display, and
   recommendation/import flags. Organize imports honors TS `mode` /
   `skipDestructiveCodeActions`; paste edits preserve `fixId`; refactor actions
-  preserve parent/action metadata, and unavailable refactor edits now cross the
-  worker protocol as a normal `null`, not a transport error. Completion
+  preserve parent/action metadata and TypeScript's already-zero-based action
+  ranges, and unavailable refactor edits now cross the worker protocol as a
+  normal `null`, not a transport error. Completion
   Deprecated completion `includeExternalModuleExports` is forwarded as a
   clone-safe alias. Completion `includeSymbol` is now a loud
   `NotImplementedError` in both top-level and preferences forms because TS
@@ -31,7 +32,8 @@
 
 - **Endpoint serializes frames behind the in-flight `ts:init`** (ADR-0166; fixes the chromium e2e `received a request before ts:init` race). The fork-IPC pump dispatches each frame independently, and `ts:init` is async (it awaits the ~3 MB std-lib over the owner relay + parses tsconfig over fs.* sync-RPC), so an `open`/diagnostics frame the page sent right after init reached the endpoint while the service was still building and FAILED with a misleading "before ts:init" — which the page never re-sent, so no diagnostics ever appeared on a slow (2-core CI) cold boot. The endpoint now stores the build promise synchronously and every later frame `await`s it (ordering preserved, no barrier), so a frame racing a slow cold init WAITS instead of failing. A *failed* init now surfaces the REAL cause on the failing frame AND every queued frame (e.g. an owner-store error), never the misleading "before ts:init". Only a frame with NO `ts:init` ever sent still errors. New endpoint tests (concurrent-frame-before-init-resolves; real-init-error-surfacing).
 - **Out-of-program paths are honest-empty, never a "Could not find source file" throw** (fixes the chromium e2e `Could not find source file: '/workspace/src/main.js'` crash). The raw `ts.LanguageService` throws for any path it has no `SourceFile` for — e.g. the default playground's `.js` entry, opened in the editor but excluded from the program because `allowJs` is off and there is no tsconfig. Every path-taking query/diagnostic now gates on `getProgram().getSourceFile(path)` and returns an honest empty (`[]`/`null`/empty edit) for a file outside the program — what real tsserver answers for a file in no project — instead of crashing. NOT a lying empty: such a file genuinely has no program-level result.
-- **Clone-safe TypeScript query options are no longer dropped or hardcoded.** Hover honors `maximumLength`; completions/details pass clone-safe TS preferences and format settings; rename exposes `allowRenameOfImportPath`, `findInStrings`, and `findInComments`; inlay hints and refactors accept the real TS preferences/filter knobs. Older workspace TypeScript methods now fail as feature-tagged `NotImplementedError`s instead of raw `TypeError`s.
+- **Endpoint error frames serialize non-object throwables.** If dependency setup throws `null`/a string instead of an `Error`, the worker now returns a normal `Error` frame and only reads `feature` from object throwables, never crashing while trying to report the crash.
+- **Clone-safe TypeScript query options are no longer dropped or hardcoded.** Hover honors `maximumLength`; completions/details pass clone-safe TS preferences and format settings, including trigger-character contexts; signature help forwards character-typed trigger reasons; rename exposes `allowRenameOfImportPath`, `findInStrings`, and `findInComments`; inlay hints and refactors accept the real TS preferences/filter knobs. Older workspace TypeScript methods now fail as feature-tagged `NotImplementedError`s instead of raw `TypeError`s.
 
 ### Added
 

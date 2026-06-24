@@ -22,7 +22,7 @@ import { BottomPanel } from './components/BottomPanel.tsx';
 import { CapabilitiesPanel } from './components/CapabilitiesPanel.tsx';
 import { CommandPalette, type PaletteItem } from './components/CommandPalette.tsx';
 import { DegradedBanner } from './components/DegradedBanner.tsx';
-import { type EditorApi, type EditorDocumentEvent, EditorHost } from './components/EditorHost.tsx';
+import { type EditorApi, EditorHost } from './components/EditorHost.tsx';
 import { FileExplorer } from './components/FileExplorer.tsx';
 import { Launcher } from './components/Launcher.tsx';
 import { PreviewPanel } from './components/PreviewPanel.tsx';
@@ -68,6 +68,7 @@ import type { StarterGroup } from './glue/starter.ts';
 import { requestSwitch } from './glue/switch-owner.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
+import { createTsDiagnosticsSync } from './glue/ts-diagnostics-sync.ts';
 import { createTsLanguageServiceClient, lspToMonacoMarkers } from './glue/ts-ls-client.ts';
 import { registerTsLanguageServiceProviders } from './glue/ts-ls-monaco-providers.ts';
 import { requestVfsSnapshot, subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
@@ -359,10 +360,10 @@ export function App(props: AppProps) {
   // derived, ADR-0165 §4), so a node-server project boots ITS worker runtime, not
   // the registry default — and the template stays coherent after a switch. Chip +
   // mode machine read its generic display name.
-  const activeTemplate = (): ProjectSpec => {
-    const preset = presetForId(activeStarterId());
-    return preset.templateId ? resolveProjectSpec(preset.templateId) : defaultProjectSpec();
-  };
+  const templateForPreset = (preset: Preset): ProjectSpec =>
+    preset.templateId ? resolveProjectSpec(preset.templateId) : defaultProjectSpec();
+
+  const activeTemplate = (): ProjectSpec => templateForPreset(presetForId(activeStarterId()));
 
   // Persistent workspace owner (ADR-0146 owner-resident shell + ADR-0148
   // co-resident dev server): hosts the resident `Shell` per session + cwd/env +
@@ -1091,90 +1092,17 @@ export function App(props: AppProps) {
       };
     }
 
-    // Per-path debounce so a burst of keystrokes pushes ONE update (~300ms idle).
-    const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-    const openPaths = new Set<string>();
-    const diagnosticVersions = new Map<string, number>();
     let disposed = false;
-
-    const isJsTs = (path: string): boolean => /\.(ts|tsx|js|jsx|cjs|mjs)$/.test(path);
-
-    function bumpDiagnosticVersion(path: string): number {
-      const next = (diagnosticVersions.get(path) ?? 0) + 1;
-      diagnosticVersions.set(path, next);
-      return next;
-    }
-
-    async function refreshDiagnostics(path: string, version: number): Promise<void> {
-      if (disposed) return;
-      try {
-        const [semantic, syntactic] = await Promise.all([
-          client.getSemanticDiagnostics(path),
-          client.getSyntacticDiagnostics(path),
-        ]);
-        if (disposed || !openPaths.has(path) || diagnosticVersions.get(path) !== version) return;
-        const diags = [...syntactic, ...semantic];
-        api.setMarkers(path, lspToMonacoMarkers(diags));
-        setDiagnostics((prev) => {
-          const next = new Map(prev);
-          if (diags.length === 0) next.delete(path);
-          else next.set(path, diags);
-          return next;
-        });
-      } catch (err) {
-        // A real LS error (or a relay timeout) — surface it, never fake green
-        // squiggles. The owner-unavailable stub also lands here (init rejects).
-        if (!disposed) console.warn('[ts-lsp]', (err as Error).message);
-      }
-    }
-
-    function scheduleSync(ev: EditorDocumentEvent): void {
-      const version = bumpDiagnosticVersion(ev.path);
-      const prev = debounceTimers.get(ev.path);
-      if (prev) clearTimeout(prev);
-      debounceTimers.set(
-        ev.path,
-        setTimeout(() => {
-          debounceTimers.delete(ev.path);
-          let push: Promise<void>;
-          if (openPaths.has(ev.path)) {
-            push = client.update(ev.path, ev.text);
-          } else {
-            openPaths.add(ev.path);
-            push = client.open(ev.path, ev.text);
-          }
-          void push.then(
-            () => refreshDiagnostics(ev.path, version),
-            (err: unknown) => {
-              if (!disposed) console.warn('[ts-lsp]', (err as Error).message);
-            },
-          );
-        }, 300),
-      );
-    }
-
-    const unsubscribe = api.onDocument((ev) => {
-      if (!isJsTs(ev.path)) return; // LS is JS/TS-only
-      if (ev.kind === 'close') {
-        bumpDiagnosticVersion(ev.path);
-        const t = debounceTimers.get(ev.path);
-        if (t) {
-          clearTimeout(t);
-          debounceTimers.delete(ev.path);
-        }
-        if (openPaths.delete(ev.path)) void client.close(ev.path);
-        api.setMarkers(ev.path, []);
-        setDiagnostics((prev) => {
-          if (!prev.has(ev.path)) return prev;
-          const next = new Map(prev);
-          next.delete(ev.path);
-          return next;
-        });
-        return;
-      }
-      // open | change: debounce → open/update → diagnostics.
-      scheduleSync(ev);
+    const diagnosticSync = createTsDiagnosticsSync<Diagnostic, monaco.editor.IMarkerData>({
+      client,
+      debounceMs: 300,
+      isSupportedPath: (path) => /\.(ts|tsx|js|jsx|cjs|mjs)$/.test(path),
+      setMarkers: (path, markers) => api.setMarkers(path, [...markers]),
+      setDiagnostics: (updater) => setDiagnostics((prev) => updater(new Map(prev))),
+      toMarkers: lspToMonacoMarkers,
+      warn: (message) => console.warn('[ts-lsp]', message),
     });
+    const unsubscribe = api.onDocument(diagnosticSync.handleDocument);
 
     // Init against the ACTIVE project root (ADR-0165 §4: /scratch or /projects/<id>,
     // not the deleted single /workspace). Fire-and-forget: the LS endpoint SERIALIZES
@@ -1187,9 +1115,7 @@ export function App(props: AppProps) {
 
     onCleanup(() => {
       disposed = true;
-      for (const t of debounceTimers.values()) clearTimeout(t);
-      debounceTimers.clear();
-      diagnosticVersions.clear();
+      diagnosticSync.dispose();
       unsubscribe();
       providers.dispose();
       client.dispose();
@@ -1329,9 +1255,11 @@ export function App(props: AppProps) {
   // authoritative fs): editor writes flow to the OWNER — the single
   // store the dev server (HMR), shell, and archive export all read. No page copy.
   function writeWorkspaceFile(path: string, content: string): void {
-    // The program mirror (`<root>/src/main.js`, ADR-0165 §4) flows through
+    // The program mirror (active template entry, ADR-0165 §4) flows through
     // onProgramChange (which owns its owner write); skip the double-write here.
-    if (path !== programMirrorPath(activeRoot())) workspaceOwner().writeFile(path, content);
+    if (path !== programMirrorPath(activeRoot(), activeTemplate())) {
+      workspaceOwner().writeFile(path, content);
+    }
     notifyFileWritten(path, content); // ADR-0165 §57: REAL write → scratch dirty
   }
 
@@ -1343,12 +1271,15 @@ export function App(props: AppProps) {
    * (seeded owner-side in `seedProject`). Entry source + preset files only.
    */
   function seedWorkspaceOwner(preset: Preset): void {
-    // Write the picked starter's ENTRY to the ROOT-RELATIVE program path
+    // Write the picked starter's ENTRY to the ROOT-RELATIVE template entry
     // (ADR-0165 §4). A page writeFile is a non-idempotent OVERWRITE (unlike the
     // owner's idempotent seedProject), so a template-changing pick (Vite → an
     // express/socket node-server) re-seeds the entry with the NEW server source —
     // the dev server runs the new entry, never the stale browser one.
-    workspaceOwner().writeFile(programMirrorPath(activeRoot()), preset.source);
+    workspaceOwner().writeFile(
+      programMirrorPath(activeRoot(), templateForPreset(preset)),
+      preset.source,
+    );
     for (const file of preset.files ?? []) {
       workspaceOwner().writeFile(workspacePresetPath(file.path), file.content);
     }
@@ -1929,9 +1860,8 @@ export function App(props: AppProps) {
     // SSoT (ADR-0148 co-resident dev server; single store owner, page holds no
     // authoritative fs): push the program edit to the OWNER (the single store) so
     // the co-resident dev server HMR-updates and the archive sees it. The path is
-    // ROOT-RELATIVE (ADR-0165 §4) so the edit reaches `<root>/src/main.js` — the
-    // path the dev server actually runs — not a dead `/workspace`.
-    const programPath = programMirrorPath(activeRoot());
+    // ROOT-RELATIVE (ADR-0165 §4) so the edit reaches the active template entry.
+    const programPath = programMirrorPath(activeRoot(), activeTemplate());
     workspaceOwner().writeFile(programPath, next);
     notifyFileWritten(programPath, next); // ADR-0165 §57: REAL write → dirty
   }
@@ -2269,7 +2199,7 @@ export function App(props: AppProps) {
             <div class="rf-editorarea" data-preview={hasPreview() ? 'on' : 'off'}>
               <EditorHost
                 programValue={machine.source}
-                programPath={() => programMirrorPath(activeRoot())}
+                programPath={() => programMirrorPath(activeRoot(), activeTemplate())}
                 programTitle={programTitle}
                 root={activeRoot}
                 onProgramChange={onProgramChange}

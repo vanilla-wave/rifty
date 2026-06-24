@@ -686,6 +686,54 @@ describe('createServiceEndpoint', () => {
     expect(err.feature).toBe('ts-language-service.applyCodeActionCommand');
   });
 
+  it.each([
+    [null, 'null'],
+    ['boom', 'boom'],
+  ] as const)(
+    'serializes non-object thrown values across the endpoint boundary',
+    async (thrown, message) => {
+      const endpoint = createServiceEndpoint({
+        buildFsSync: (): never => {
+          throw thrown;
+        },
+        call: makeFakeCall(buildFixture()),
+      });
+
+      const r = await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+
+      expect(r.ok).toBe(false);
+      expect(r.kind).toBe('error');
+      const err = (r as TsErrorResponse).error;
+      expect(err.name).toBe('Error');
+      expect(err.message).toBe(message);
+      expect(err.feature).toBeUndefined();
+    },
+  );
+
+  it('a frame queued behind a synchronously FAILED init surfaces the real init error', async () => {
+    const endpoint = createServiceEndpoint({
+      buildFsSync: (): never => {
+        throw new Error('sync fs bridge unavailable');
+      },
+      call: makeFakeCall(buildFixture()),
+    });
+
+    const initP = endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+    const queryP = endpoint.dispatch({
+      id: 2,
+      type: 'ts:getSemanticDiagnostics',
+      path: '/proj/a.ts',
+    });
+
+    const [init, query] = await Promise.all([initP, queryP]);
+    expect(init.ok).toBe(false);
+    expect(query.ok).toBe(false);
+    for (const r of [init, query]) {
+      expect(r.kind).toBe('error');
+      expect((r as TsErrorResponse).error.message).toContain('sync fs bridge unavailable');
+    }
+  });
+
   it('a frame arriving while ts:init is still in flight WAITS for it (no "before ts:init" race)', async () => {
     // The fork-IPC pump dispatches each frame independently; `ts:init` is async
     // (it awaits the std-lib load), so an open/query frame the page sends right
@@ -713,6 +761,7 @@ describe('createServiceEndpoint', () => {
     expect(init).toEqual({ id: 1, ok: true, kind: 'ack' });
     expect(query.ok).toBe(true);
     expect(query.kind).toBe('diagnostics');
+    expect((query as TsDiagnosticsResponse).diagnostics).toEqual([]);
     expect(open).toEqual({ id: 3, ok: true, kind: 'ack' });
   });
 

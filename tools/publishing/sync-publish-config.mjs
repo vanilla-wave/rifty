@@ -97,7 +97,7 @@ const SPEC = {
   '@riftydev/runtime-wasi': {
     dir: 'packages/runtime-wasi',
     sideEffects: ['./dist/worker-entry.js'],
-    addExports: { './worker-entry': './src/worker-entry.ts' },
+    addExports: { './wasi': './src/wasi.ts', './worker-entry': './src/worker-entry.ts' },
     keywords: ['wasi', 'wasm'],
   },
   '@riftydev/npm-client': {

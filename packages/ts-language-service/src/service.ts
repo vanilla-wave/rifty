@@ -1173,12 +1173,12 @@ export async function createTsLanguageService(
               ? {
                   range: {
                     start: {
-                      line: action.range.start.line - 1,
-                      character: action.range.start.offset - 1,
+                      line: action.range.start.line,
+                      character: action.range.start.offset,
                     },
                     end: {
-                      line: action.range.end.line - 1,
-                      character: action.range.end.offset - 1,
+                      line: action.range.end.line,
+                      character: action.range.end.offset,
                     },
                   },
                 }

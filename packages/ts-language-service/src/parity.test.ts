@@ -866,6 +866,65 @@ describe('parity: phase-2 queries vs real ts.LanguageService (gold standard)', (
       goldAutoImportEdits.changes[`${root}/main.ts`],
     );
   });
+
+  it('completion and signature trigger contexts match real TS', async () => {
+    const fixture: Fixture = {
+      name: 'trigger context',
+      probes: 'completion trigger-character and signature characterTyped options',
+      files: {
+        'tsconfig.json': JSON.stringify({
+          compilerOptions: { strict: true, module: 'esnext', target: 'es2022' },
+        }),
+        'main.ts':
+          'const foo = { alpha: 1, beta: 2 };\n' +
+          'foo.\n' +
+          'function take(value: number): void {}\n' +
+          'take(\n',
+      },
+      diagnose: ['main.ts'],
+    };
+    const root = writeFixtureToTmp(fixture);
+    const { service: gsvc } = buildGoldService(root);
+    const { svc } = await buildRiftyService(fixture);
+    const text = fixture.files['main.ts'] ?? '';
+
+    const completionProbe = probePosition(text, { file: 'main.ts', needle: 'foo.\n', inner: 4 });
+    const completionOffset = positionToOffset(text, completionProbe);
+    const goldCompletions = gsvc.getCompletionsAtPosition(
+      nodePath.join(root, 'main.ts'),
+      completionOffset,
+      {
+        triggerKind: ts.CompletionTriggerKind.TriggerCharacter,
+        triggerCharacter: '.',
+      },
+    );
+    const riftyCompletions = svc.getCompletions(`${RIFTY_ROOT}/main.ts`, completionProbe, {
+      triggerKind: 'trigger-character',
+      triggerCharacter: '.',
+    });
+    expect(goldCompletions?.entries.length).toBeGreaterThan(0);
+    expect(riftyCompletions.isMemberCompletion).toBe(goldCompletions?.isMemberCompletion ?? false);
+    expect(riftyCompletions.items.map((entry) => entry.label).sort()).toEqual(
+      (goldCompletions?.entries ?? []).map((entry) => entry.name).sort(),
+    );
+
+    const signatureProbe = probePosition(text, { file: 'main.ts', needle: 'take(\n', inner: 5 });
+    const signatureOffset = positionToOffset(text, signatureProbe);
+    const goldSignatures = gsvc.getSignatureHelpItems(
+      nodePath.join(root, 'main.ts'),
+      signatureOffset,
+      {
+        triggerReason: { kind: 'characterTyped', triggerCharacter: '(' },
+      },
+    );
+    const riftySignatures = svc.getSignatureHelp(`${RIFTY_ROOT}/main.ts`, signatureProbe, {
+      triggerReason: { kind: 'characterTyped', triggerCharacter: '(' },
+    });
+    expect(goldSignatures).not.toBeUndefined();
+    expect(riftySignatures).toEqual(
+      goldSignatures ? signatureHelpItemsToSignatureHelp(goldSignatures) : null,
+    );
+  });
 });
 
 // ===========================================================================
@@ -1077,10 +1136,25 @@ describe('parity: phase-3 queries vs real ts.LanguageService (gold standard)', (
       offset,
       undefined,
     );
+    const goldTriggeredItems = gsvc.getSignatureHelpItems(nodePath.join(root, probe.file), offset, {
+      triggerReason: { kind: 'characterTyped', triggerCharacter: '(' },
+    });
     expect(goldItems).not.toBeUndefined(); // non-vacuous: there IS a call context
     const gold = goldItems ? signatureHelpItemsToSignatureHelp(goldItems) : null;
+    const goldTriggered = goldTriggeredItems
+      ? signatureHelpItemsToSignatureHelp(goldTriggeredItems)
+      : null;
     const rifty = svc.getSignatureHelp(`${RIFTY_ROOT}/${probe.file}`, probePosition(text, probe));
+    const riftyTriggered = svc.getSignatureHelp(
+      `${RIFTY_ROOT}/${probe.file}`,
+      probePosition(text, probe),
+      {
+        triggerReason: { kind: 'characterTyped', triggerCharacter: '(' },
+      },
+    );
     expect(rifty).toEqual(gold);
+    expect(goldTriggered).not.toBeNull();
+    expect(riftyTriggered).toEqual(goldTriggered);
     // Spot-check the rendering is meaningful (label + active param), not empty.
     expect(rifty?.signatures[0]?.label).toContain('add(a: number, b: number): number');
     expect(rifty?.activeParameter).toBe(1);

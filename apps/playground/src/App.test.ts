@@ -68,10 +68,10 @@ describe('App terminal startup wiring', () => {
     // ADR-0165 §3: the owner is a reassignable signal holder (respawned on switch),
     // so member access goes through the `workspaceOwner()` accessor.
     expect(source).toContain('workspaceOwner().writeFile(path, content)');
-    // ADR-0165 §4: the program edit lands on the ROOT-RELATIVE program path
-    // (`<root>/src/main.js`), the path the dev server runs — never a dead
-    // `/workspace`. The path is derived from the active root, not a const.
-    expect(source).toContain('const programPath = programMirrorPath(activeRoot())');
+    // ADR-0165 §4: the program edit lands on the active template entry path.
+    expect(source).toContain(
+      'const programPath = programMirrorPath(activeRoot(), activeTemplate())',
+    );
     expect(source).toContain('workspaceOwner().writeFile(programPath, next)');
     // the legacy hardcoded const is gone from the program write path
     expect(source).not.toContain('writeFile(PROGRAM_MIRROR_PATH');
@@ -84,15 +84,15 @@ describe('App terminal startup wiring', () => {
   it('seeds a picked starter entry to the ROOT-RELATIVE program path (ADR-0165 §4 — entry re-seed on template switch)', () => {
     // A page writeFile is a non-idempotent OVERWRITE (unlike the owner's
     // idempotent seedProject), so a template-changing pick re-seeds the entry
-    // with the new starter's source at `<root>/src/main.js` — a node-server
+    // with the new starter's source at its template entry — a node-server
     // starter runs the new server entry, not the stale browser one.
-    expect(source).toContain(
-      'workspaceOwner().writeFile(programMirrorPath(activeRoot()), preset.source)',
+    expect(source).toMatch(
+      /workspaceOwner\(\)\.writeFile\(\s*programMirrorPath\(activeRoot\(\), templateForPreset\(preset\)\),\s*preset\.source,\s*\)/,
     );
     // the program path follows the active root, threaded into EditorHost too
     expect(source).toContain('root={activeRoot}');
     // skip-double-write guard derives the same root-relative path (no const)
-    expect(source).toContain('if (path !== programMirrorPath(activeRoot()))');
+    expect(source).toContain('if (path !== programMirrorPath(activeRoot(), activeTemplate()))');
   });
 
   it('opens configured preset files as inactive editor tabs', () => {
@@ -181,16 +181,10 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain('saveState({ cwd: session.cwd, env: {} })');
   });
 
-  it('drops stale TS diagnostics that resolve after the document closed', () => {
-    expect(source).toContain(
-      'if (disposed || !openPaths.has(path) || diagnosticVersions.get(path) !== version) return;',
-    );
-  });
-
-  it('drops stale TS diagnostics from older document generations', () => {
-    expect(source).toContain('const diagnosticVersions = new Map<string, number>();');
-    expect(source).toContain('function bumpDiagnosticVersion(path: string): number');
-    expect(source).toContain('diagnosticVersions.get(path) !== version');
+  it('delegates TS diagnostic synchronization to the versioned helper', () => {
+    expect(source).toContain('createTsDiagnosticsSync<Diagnostic, monaco.editor.IMarkerData>');
+    expect(source).toContain('api.onDocument(diagnosticSync.handleDocument)');
+    expect(source).toContain('diagnosticSync.dispose()');
   });
 
   it('routes workspace archive export and import through the owner (one authoritative owner; page reads through ports)', () => {

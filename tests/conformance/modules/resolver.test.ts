@@ -783,6 +783,48 @@ describe('tsconfig path aliases (ADR-0066)', () => {
     });
   });
 
+  it('throws TSCONFIG_PARSE_ERROR for a non-array tsconfig paths entry', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/proj/tsconfig.json': '{ "compilerOptions": { "paths": { "@/*": "src/*" } } }',
+      '/proj/src/app.js': 'import value from "@/dep";',
+      '/proj/src/dep.js': 'export default 1;',
+    });
+    const loader = createModuleLoader(vfs, { autoDiscoverTsconfigPaths: true });
+
+    let thrown: unknown;
+    try {
+      loader.resolver.resolve('@/dep', { fromFile: '/proj/src/app.js', esm: true });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toMatchObject({
+      name: 'ModuleLoadError',
+      code: 'TSCONFIG_PARSE_ERROR',
+    });
+  });
+
+  it('throws TSCONFIG_PARSE_ERROR for non-string tsconfig paths targets', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/proj/tsconfig.json': '{ "compilerOptions": { "paths": { "@/*": [123] } } }',
+      '/proj/src/app.js': 'import value from "@/dep";',
+      '/proj/src/dep.js': 'export default 1;',
+    });
+    const loader = createModuleLoader(vfs, { autoDiscoverTsconfigPaths: true });
+
+    let thrown: unknown;
+    try {
+      loader.resolver.resolve('@/dep', { fromFile: '/proj/src/app.js', esm: true });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toMatchObject({
+      name: 'ModuleLoadError',
+      code: 'TSCONFIG_PARSE_ERROR',
+    });
+  });
+
   it('auto-discovers tsconfig baseUrl for bare specifiers without paths', () => {
     const vfs = new MemoryFsSync();
     vfs.loadFixture({

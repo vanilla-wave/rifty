@@ -32,6 +32,7 @@ import type {
   ProjectSpec,
 } from '../templates/project-spec.ts';
 import type { DevServerHandle } from './dev-server-controller.ts';
+import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts';
 import { type ViteModuleGraph, invalidateViteModule } from './real-vite-invalidation.ts';
 
 const enc = new TextEncoder();
@@ -274,6 +275,7 @@ export async function bootDevServer(opts: {
 
   if (cfg.runtime === 'vite') {
     overlayShims(root);
+    installEsbuildTransformBridge(root);
     log(`importing ${cfg.runtimeSpecifier}…\n`);
     const viteNs = (await loader.import(
       cfg.runtimeSpecifier,

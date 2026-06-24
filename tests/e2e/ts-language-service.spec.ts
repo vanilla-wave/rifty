@@ -508,6 +508,46 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
   });
 });
 
+test.describe('rifty TS language service: TypeScript starter wiring', () => {
+  test('typescript-ls program tab writes the template main.ts that Vite serves', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
+    test.setTimeout(120_000);
+    await page.goto('/');
+
+    await page.click('[data-action="open-launcher"]');
+    await page.getByRole('button', { name: 'Starters', exact: true }).click();
+    await page.click('[data-preset="typescript-ls"]');
+    await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
+    await expect.poll(() => terminalBuffer(page), { timeout: 45_000 }).toContain('$ vite');
+
+    const frame = page.frameLocator('iframe[title="Preview port 5174"]');
+    await expect(frame.locator('body')).toContainText('TypeScript language surface', {
+      timeout: 45_000,
+    });
+
+    expect(
+      await setModelValue(
+        page,
+        '/scratch/src/main.ts',
+        [
+          "const app = document.getElementById('app');",
+          "if (!app) throw new Error('Missing #app root');",
+          "app.textContent = 'rifty-ts-main-ts-hot';",
+          'if (import.meta.hot) import.meta.hot.accept();',
+          '',
+        ].join('\n'),
+      ),
+    ).toBe(true);
+
+    await expect(frame.locator('body')).toContainText('rifty-ts-main-ts-hot', {
+      timeout: 45_000,
+    });
+  });
+});
+
 /**
  * Phase-2 (ADR-0166 task 2.2): hover / go-to-definition / completions now come
  * from the REAL rifty LS over the page→owner→LS relay, NOT Monaco's built-in
@@ -641,7 +681,21 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
       .poll(() => tsHover(page, USES_DEP, 3, 12), { timeout: 90_000, intervals: [1500] })
       .toContain('coolValue');
 
-    // (2) GO-TO-DEFINITION of `localGreet` (L5, col 12) → the sibling dep.ts (the
+    // (2a) GO-TO-DEFINITION of `coolValue` (L3, col 12) → node_modules .d.ts.
+    // This specifically exercises the EditorHost read-only remote-port branch:
+    // the page snapshot excludes node_modules, so the provider must ask the owner
+    // read-port to open the target model instead of silently dropping the Location.
+    await expect
+      .poll(async () => (await tsDefinition(page, USES_DEP, 3, 12))?.[0]?.uri ?? '', {
+        timeout: 30_000,
+        intervals: [1500],
+      })
+      .toContain(DEP_DTS);
+    const depDefs = await tsDefinition(page, USES_DEP, 3, 12);
+    expect(depDefs?.[0]?.uri).toContain(DEP_DTS);
+    expect(depDefs?.[0]?.line).toBe(1);
+
+    // (2b) GO-TO-DEFINITION of `localGreet` (L5, col 12) → the sibling dep.ts (the
     // hook round-trips the target Location.uri back to its VFS path). Cross-file
     // resolution Monaco's isolated worker can't do.
     await expect

@@ -61,6 +61,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0038 | WasiProcessHandle — kernel adapter for WASI guests |
 | 0047 | Revert to esbuild (`@esbuild/wasi-preview1`) as the M8/M10 WASI forcing consumer |
 | 0049 | WASI `cwd` option + `AT_FDCWD` and directory-open semantics |
+| 0172 | Side-effect-free WASI runner subpath |
 
 ### net
 

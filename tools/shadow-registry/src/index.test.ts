@@ -23,11 +23,13 @@ describe('shadow-registry', () => {
     expect(bakedOverrides.lightningcss).toBe('lightningcss-wasm@1.32.0');
   });
 
-  it('esbuildShimFiles exposes a passthrough package.json + main.js', () => {
+  it('esbuildShimFiles exposes a bridge-backed package.json + main.js', () => {
     expect(esbuildShimFiles['/workspace/node_modules/esbuild/package.json']).toContain('"esbuild"');
-    expect(esbuildShimFiles['/workspace/node_modules/esbuild/lib/main.js']).toContain(
-      'export const version',
-    );
+    const main = esbuildShimFiles['/workspace/node_modules/esbuild/lib/main.js'] ?? '';
+    expect(main).toContain('export const version');
+    expect(main).toContain('__riftyEsbuildTransform');
+    expect(main).toContain("NotImplementedError('esbuild.transform'");
+    expect(main).not.toContain('Pass-through');
   });
 
   it('rollupShimFiles overlays dist/native.js', () => {

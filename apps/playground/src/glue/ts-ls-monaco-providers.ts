@@ -541,7 +541,7 @@ function toMonacoWorkspaceTextEdits(
   return edits;
 }
 
-function applyWorkspaceTextEdit(edit: LspWorkspaceEdit, bridge: EditorPathBridge): boolean {
+export function applyWorkspaceTextEdit(edit: LspWorkspaceEdit, bridge: EditorPathBridge): boolean {
   const targets = resolveWorkspaceEditTargets(edit, bridge);
   if (targets === null) return false;
   for (const { model, textEdits } of targets) {

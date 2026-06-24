@@ -270,7 +270,7 @@ export interface CodeAction {
   /** Parent TS refactor group metadata, clone-safe and observable in TS. */
   readonly refactorDescription?: string;
   readonly refactorInlineable?: boolean;
-  /** TS action-specific application range, converted from protocol line/offset to LSP. */
+  /** TS action-specific application range; TS line/offset is already zero-based. */
   readonly range?: Range;
   /** TS refactor action requires extra arguments such as `{ targetFile }`. */
   readonly isInteractive?: boolean;

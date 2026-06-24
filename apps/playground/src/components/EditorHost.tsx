@@ -12,10 +12,9 @@
  *  - external program-source changes (presets / mode transitions) write the
  *    program model under the single `suppressProgramEcho` flag the change
  *    listener checks-and-clears, so they can't echo back into `setSource`;
- *  - opening the program-mirror path (`<activeRoot>/src/main.js`, ADR-0165 §4)
+ *  - opening the program-mirror path (active template entry, ADR-0165 §4)
  *    from the explorer focuses the program tab instead of creating a second
- *    model (no dual writer to that path). The path is ROOT-RELATIVE — it follows
- *    `props.root` reactively, never the legacy hardcoded `/workspace`.
+ *    model (no dual writer to that path).
  */
 import { basename } from '@riftydev/vfs';
 import * as monaco from 'monaco-editor';
@@ -33,7 +32,6 @@ import {
 } from '../glue/editor-tabs.ts';
 import { MONO_FONT_STACK } from '../glue/fonts.ts';
 import { type FsOpsTarget, looksBinary } from '../glue/fs-ops.ts';
-import { programMirrorPath } from '../glue/program-path.ts';
 // Side-effect: wires MonacoEnvironment.getWorker before the first editor.
 import '../glue/monaco-env.ts';
 import { EditorTabs } from './EditorTabs.tsx';
@@ -263,15 +261,15 @@ export function EditorHost(props: EditorHostProps) {
   // Page LS-client subscribers (ADR-0166 P1.9b): notified on model open/change/close.
   const documentListeners = new Set<(ev: EditorDocumentEvent) => void>();
 
-  /** Tab id → absolute VFS path: the program tab mirrors the ROOT-RELATIVE program
-   *  path (ADR-0165 §4, `programMirrorPath(props.root())`); every other tab id IS its
+  /** Tab id → absolute VFS path: the program tab mirrors `props.programPath()`;
+   *  every other tab id IS its
    *  absolute path (file-explorer / preset opens key by path). */
   function docPathForTab(id: string): string {
-    return id === PROGRAM_TAB_ID ? programMirrorPath(props.root()) : id;
+    return id === PROGRAM_TAB_ID ? props.programPath() : id;
   }
   /** Inverse of {@link docPathForTab} — the model key for a VFS path. */
   function tabIdForPath(path: string): string {
-    return path === programMirrorPath(props.root()) ? PROGRAM_TAB_ID : path;
+    return path === props.programPath() ? PROGRAM_TAB_ID : path;
   }
   /** Track a model under its tab id + index its uri (keeps `modelUriToTabId` in sync). */
   function registerModel(id: string, model: monaco.editor.ITextModel): void {
@@ -526,7 +524,7 @@ export function EditorHost(props: EditorHostProps) {
     }
     switch (
       classifyOpen(path, {
-        programMirrorPath: programMirrorPath(props.root()),
+        programMirrorPath: props.programPath(),
         isNodeModules: isNodeModulesPath(path),
         // present-but-over-cap (exists, no inlined bytes) stays view-only-remote,
         // distinct from a racing seed (absent → await the publish).
@@ -723,10 +721,8 @@ export function EditorHost(props: EditorHostProps) {
       props.onActive({
         label: id === PROGRAM_TAB_ID ? basename(props.programPath()) : basename(id),
         language: model.getLanguageId(),
-        // The program tab mirrors the root-relative program path (ADR-0165 §4) —
-        // report it so the explorer highlights src/main.js (mockup: active file
-        // is lit). Reads props.root() reactively so a switch re-keys it.
-        path: id === PROGRAM_TAB_ID ? programMirrorPath(props.root()) : id,
+        // The program tab mirrors the active template entry (ADR-0165 §4).
+        path: id === PROGRAM_TAB_ID ? props.programPath() : id,
       });
       // The model just became active — apply a queued Problems click-to-jump.
       applyPendingRevealIfActive();

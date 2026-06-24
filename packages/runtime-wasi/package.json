@@ -21,7 +21,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./worker-entry": "./src/worker-entry.ts"
+    "./worker-entry": "./src/worker-entry.ts",
+    "./wasi": "./src/wasi.ts"
   },
   "files": ["dist", "CHANGELOG.md"],
   "publishConfig": {
@@ -37,6 +38,10 @@
       "./worker-entry": {
         "types": "./dist/worker-entry.d.ts",
         "import": "./dist/worker-entry.js"
+      },
+      "./wasi": {
+        "types": "./dist/wasi.d.ts",
+        "import": "./dist/wasi.js"
       }
     }
   },

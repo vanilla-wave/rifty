@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import solid from 'vite-plugin-solid';
 import { defineConfig } from 'vitest/config';
 
@@ -10,6 +11,11 @@ import { defineConfig } from 'vitest/config';
  */
 export default defineConfig({
   plugins: [solid({ ssr: true })],
+  resolve: {
+    alias: {
+      'monaco-editor': fileURLToPath(new URL('./src/glue/test-monaco-editor.ts', import.meta.url)),
+    },
+  },
   test: {
     name: 'playground',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],

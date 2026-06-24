@@ -577,12 +577,12 @@ describe('parity: remaining achievable ts.LanguageService surface', () => {
       goldRefactor.action.range
         ? {
             start: {
-              line: goldRefactor.action.range.start.line - 1,
-              character: goldRefactor.action.range.start.offset - 1,
+              line: goldRefactor.action.range.start.line,
+              character: goldRefactor.action.range.start.offset,
             },
             end: {
-              line: goldRefactor.action.range.end.line - 1,
-              character: goldRefactor.action.range.end.offset - 1,
+              line: goldRefactor.action.range.end.line,
+              character: goldRefactor.action.range.end.offset,
             },
           }
         : undefined,

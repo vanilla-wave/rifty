@@ -68,6 +68,13 @@ describe('dev-server boot preview routing', () => {
     // overlayShims writes the RE-ROOTED path, never the verbatim /workspace key.
     expect(source).toContain('reRootShimPath(path, root)');
   });
+
+  it('installs the real esbuild WASI transform bridge before Vite imports esbuild', () => {
+    expect(source).toContain('installEsbuildTransformBridge(root)');
+    expect(source.indexOf('installEsbuildTransformBridge(root)')).toBeLessThan(
+      source.indexOf('loader.import(\n      cfg.runtimeSpecifier'),
+    );
+  });
 });
 
 describe('node-server runtime branch', () => {

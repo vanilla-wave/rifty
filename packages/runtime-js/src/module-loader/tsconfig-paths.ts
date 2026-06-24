@@ -61,8 +61,26 @@ export function loadTsconfigPathResolution(
   const options = parsed.options as CompilerOptionsWithPathsBasePath;
   const basePath = options.baseUrl ?? options.pathsBasePath ?? configDir;
   const aliases: Record<string, string | readonly string[]> = {};
-  if (options.paths !== undefined) {
-    for (const [pattern, targets] of Object.entries(options.paths)) {
+  const rawPaths = options.paths as unknown;
+  if (rawPaths !== undefined) {
+    if (!isRecord(rawPaths)) {
+      throw tsconfigShapeError(configPath, 'compilerOptions.paths must be an object');
+    }
+    for (const [pattern, targets] of Object.entries(rawPaths)) {
+      if (!Array.isArray(targets)) {
+        throw tsconfigShapeError(
+          configPath,
+          `compilerOptions.paths["${pattern}"] must be an array of strings`,
+        );
+      }
+      for (const target of targets) {
+        if (typeof target !== 'string') {
+          throw tsconfigShapeError(
+            configPath,
+            `compilerOptions.paths["${pattern}"] must contain only strings`,
+          );
+        }
+      }
       aliases[pattern] = targets.map((target) => absolutizeTarget(basePath, target));
     }
   }
@@ -91,6 +109,19 @@ function readUtf8(vfs: FsSync, path: string): string {
 
 function absolutizeTarget(basePath: string, target: string): string {
   return isAbsolute(target) ? normalizePath(target) : normalizePath(joinPath(basePath, target));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function tsconfigShapeError(configPath: string, detail: string): ModuleLoadError {
+  return new ModuleLoadError(
+    'TSCONFIG_PARSE_ERROR',
+    configPath,
+    `Cannot parse tsconfig '${configPath}': ${detail}`,
+    configPath,
+  );
 }
 
 function tsconfigError(configPath: string, diagnostics: readonly ts.Diagnostic[]): ModuleLoadError {

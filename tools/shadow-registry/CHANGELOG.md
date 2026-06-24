@@ -16,6 +16,11 @@
 - Added `browserShimFileSets`, `collectBrowserShimFiles`, and
   `viteBrowserShimFiles` (ADR-0156) so Vite-class overlays are selected by typed
   shim-set name instead of hand-spelling every package at each call site.
+- `esbuildShimFiles` no longer exposes a silent pass-through `transform`. The
+  overlaid `esbuild` package now delegates `transform()` to the playground's
+  installed `globalThis.__riftyEsbuildTransform` bridge and loud-throws
+  `NotImplementedError('esbuild.transform')` if the bridge is missing;
+  `transformSync` also loud-throws because the real WASI transform is async.
 - `transformWithEsbuild(..., { supported: { decorators: false } })` now forwards
   `--supported:decorators=false`, allowing TS standard decorators to lower before
   rifty's post-strip AST parser. The runtime parity runner uses this for the
