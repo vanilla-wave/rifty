@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- **PR #78 review fixes for git porcelain fidelity.** Ambiguous revision/path operands now refuse with real git's `both revision and filename` fatal (including untracked worktree filenames and later `log`/`diff` operands); annotated-tag checkout/reset paths no longer corrupt HEAD via tag/tree objects; `git apply` context failures exit 1 with `patch failed` text while capability ceilings stay `NotImplementedError`; `stash push` no longer persists fallback identity into `.git/config`; merge-commit `show` renders `Merge:` and suppresses the default patch; bare `ls-remote` defaults to `origin`; `clone` with no URL exits 129 with usage; and success output now covers `reset --mixed`, `tag -d`, `git rm`, and clean `cherry-pick`. Guards: `git-cli.test.ts`.
 - **`git` fidelity hardening — no silent false-successes, faithful error surfaces (ADR-0167).**
   - **Repository guard.** Every verb except `init`/`clone` now verifies a repo governs the cwd first (real git's discovery, walking up for `.git`). A NON-repo → `fatal: not a git repository (or any of the parent directories): .git` (exit 128) instead of a silent false-success (`status` had reported a clean tree, `commit` fabricated a root commit).
   - **`commit` no longer fabricates an empty commit.** Nothing staged → real git's exit-1 summary to stdout (`nothing to commit, working tree clean` / `… untracked files present` / `nothing to commit (create/copy files…)`), no commit written; `--amend` still allowed.

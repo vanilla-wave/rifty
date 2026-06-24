@@ -25,6 +25,7 @@ import {
   doCheckout,
   renderCheckoutError,
   renderCheckoutOrFatal,
+  renderRevisionAndPathAmbiguity,
   revisionExists,
 } from './_git-checkout.ts';
 import { doConfig } from './_git-config.ts';
@@ -372,6 +373,44 @@ async function validateImplicitPathspecs(
   return null;
 }
 
+async function tokenMatchesWorktreePath(
+  g: Git,
+  token: string,
+  mapPathspec: PathspecMapper,
+): Promise<boolean> {
+  let mapped: string;
+  try {
+    mapped = mapPathspec(token);
+  } catch {
+    return false;
+  }
+  return (await g.status()).some((entry) => pathspecMatch(entry.filepath, mapped));
+}
+
+async function tokenIsRevision(g: Git, token: string): Promise<boolean> {
+  try {
+    return await revisionExists(g, token);
+  } catch (e) {
+    if (e instanceof NotImplementedError) throw e;
+    return false;
+  }
+}
+
+async function renderIfRevisionAndPath(
+  g: Git,
+  token: string,
+  ctx: CommandContext,
+  mapPathspec: PathspecMapper,
+): Promise<number | null> {
+  if (
+    (await tokenIsRevision(g, token)) &&
+    (await tokenMatchesWorktreePath(g, token, mapPathspec))
+  ) {
+    return renderRevisionAndPathAmbiguity(token, ctx);
+  }
+  return null;
+}
+
 /** Parsed `git add`: the recognized flags + the pathspecs. */
 interface AddPlan {
   all: boolean;
@@ -627,6 +666,9 @@ async function doLog(
         return renderCheckoutError(e, ctx);
       }
       if (firstIsRev) {
+        if (await tokenMatchesWorktreePath(g, first, mapPathspec)) {
+          return renderRevisionAndPathAmbiguity(first, ctx);
+        }
         refArgs = [first];
         pathspecArgs = refs.slice(1);
         implicitPathspecs = pathspecArgs.length > 0;
@@ -643,6 +685,16 @@ async function doLog(
   const unsupportedFormat = format === undefined ? undefined : unsupportedLogFormatToken(format);
   if (unsupportedFormat !== undefined) {
     return renderCheckoutError(new NotImplementedError(`git.log.format.${unsupportedFormat}`), ctx);
+  }
+  if (implicitPathspecs) {
+    try {
+      for (const token of pathspecArgs) {
+        const ambiguity = await renderIfRevisionAndPath(g, token, ctx, mapPathspec);
+        if (ambiguity !== null) return ambiguity;
+      }
+    } catch (e) {
+      return renderCheckoutError(e, ctx);
+    }
   }
   const mappedPathspecs = pathspecArgs.map(mapPathspec);
   if (implicitPathspecs && mappedPathspecs.length > 0) {
@@ -745,14 +797,30 @@ async function doDiff(
         pathspecs = positionals;
         implicitPathspecs = true;
       } else {
+        if (await tokenMatchesWorktreePath(g, first, mapPathspec)) {
+          return renderRevisionAndPathAmbiguity(first, ctx);
+        }
         const second = positionals[1];
         const secondIsRev = second === undefined ? false : await revisionExists(g, second);
+        if (
+          second !== undefined &&
+          secondIsRev &&
+          (await tokenMatchesWorktreePath(g, second, mapPathspec))
+        ) {
+          return renderRevisionAndPathAmbiguity(second, ctx);
+        }
         refs = secondIsRev ? positionals.slice(0, 2) : positionals.slice(0, 1);
         pathspecs = secondIsRev ? positionals.slice(2) : positionals.slice(1);
         implicitPathspecs = pathspecs.length > 0;
       }
     }
     const rawPathspecs = pathspecs;
+    if (implicitPathspecs) {
+      for (const token of rawPathspecs) {
+        const ambiguity = await renderIfRevisionAndPath(g, token, ctx, mapPathspec);
+        if (ambiguity !== null) return ambiguity;
+      }
+    }
     pathspecs = pathspecs.map(mapPathspec);
     if (implicitPathspecs && pathspecs.length > 0) {
       const ambiguity = await validateImplicitPathspecs(g, rawPathspecs, pathspecs, ctx);
@@ -895,6 +963,9 @@ function renderLogEntries(
       ctx.stdout.write(`${short(e.oid)} ${firstLine}\n`);
     } else {
       ctx.stdout.write(`commit ${e.oid}\n`);
+      if (e.parents.length > 1) {
+        ctx.stdout.write(`Merge: ${e.parents.map(short).join(' ')}\n`);
+      }
       ctx.stdout.write(`Author: ${e.author.name} <${e.author.email}>\n`);
       ctx.stdout.write('\n');
       ctx.stdout.write(`    ${e.message.trimEnd()}\n`);
@@ -946,6 +1017,9 @@ async function doReset(
       return renderCheckoutError(e, ctx);
     }
     if (firstIsRev) {
+      if (await tokenMatchesWorktreePath(g, first, mapPathspec)) {
+        return renderRevisionAndPathAmbiguity(first, ctx);
+      }
       target = first;
       pathspecs = positionals.slice(1);
     } else {
@@ -1001,6 +1075,16 @@ async function doReset(
         const subject = head.message.split('\n', 1)[0] ?? '';
         ctx.stdout.write(`HEAD is now at ${short(head.oid)} ${subject}\n`);
       }
+    } else if (mode === 'mixed') {
+      const unstaged = (await g.status()).filter(
+        (e) => e.status[0] === '1' && e.status[1] !== e.status[2],
+      );
+      if (unstaged.length > 0) {
+        ctx.stdout.write('Unstaged changes after reset:\n');
+        for (const e of unstaged) {
+          ctx.stdout.write(`${e.status[1] === '0' ? 'D' : 'M'}\t${e.filepath}\n`);
+        }
+      }
     }
     return 0;
   } catch (e) {
@@ -1018,7 +1102,7 @@ async function doShow(g: Git, args: string[], ctx: CommandContext): Promise<numb
       ctx.stdout.write(new TextDecoder().decode(object.content));
     } else if (object.type === 'commit') {
       renderLogEntries([object.commit], { oneline: false }, ctx);
-      renderDiffEntries(object.diff, ctx);
+      if (object.commit.parents.length <= 1) renderDiffEntries(object.diff, ctx);
     } else if (object.type === 'tree') {
       for (const e of object.entries) ctx.stdout.write(`${e.mode} ${e.type} ${e.oid}\t${e.path}\n`);
     } else {
@@ -1066,8 +1150,9 @@ async function doTag(g: Git, args: string[], ctx: CommandContext): Promise<numbe
   try {
     if (deleteMode) {
       for (const name of positionals) {
+        const oid = await g.resolveRef(name);
         await g.deleteTag(name);
-        ctx.stdout.write(`Deleted tag '${name}'\n`);
+        ctx.stdout.write(`Deleted tag '${name}' (was ${short(oid)})\n`);
       }
       return 0;
     }
@@ -1212,6 +1297,7 @@ async function doGitRm(
   for (const p of removals) {
     if (!cached) await vfs.rm(normalizePath(joinPath(root, p)), { force: true });
     await g.remove(p);
+    ctx.stdout.write(`rm '${p}'\n`);
   }
   return 0;
 }
@@ -1317,7 +1403,13 @@ async function doCherryPick(g: Git, args: string[], ctx: CommandContext): Promis
   if (!rev) return renderCheckoutError(new NotImplementedError('git.cherry-pick.no-commit'), ctx);
   try {
     const oid = await g.resolveRevision(rev);
-    await g.cherryPick({ oid, committer: committerFrom(ctx.env, await identityFrom(g, ctx.env)) });
+    const newOid = await g.cherryPick({
+      oid,
+      committer: committerFrom(ctx.env, await identityFrom(g, ctx.env)),
+    });
+    const branch = (await g.currentBranch()) ?? 'HEAD';
+    const subject = (await g.log({ depth: 1 }))[0]?.message.split('\n', 1)[0] ?? '';
+    ctx.stdout.write(`[${branch} ${short(newOid)}] ${subject}\n`);
     return 0;
   } catch (e) {
     ctx.stderr.write(`fatal: ${e instanceof Error ? e.message : String(e)}\n`);
@@ -1537,6 +1629,23 @@ interface PatchFile {
   hunks: PatchHunk[];
 }
 
+class ApplyPatchFailure extends Error {
+  constructor(
+    readonly filepath: string,
+    readonly line: number,
+  ) {
+    super(`patch failed: ${filepath}:${line}`);
+    this.name = 'ApplyPatchFailure';
+  }
+}
+
+class ApplyPathFailure extends Error {
+  constructor(readonly detail: string) {
+    super(detail);
+    this.name = 'ApplyPathFailure';
+  }
+}
+
 function patchPath(raw: string): string | null {
   const token = raw.split('\t', 1)[0]?.trim() ?? '';
   if (token === '/dev/null') return null;
@@ -1669,27 +1778,28 @@ function splitPatchableText(text: string): string[] {
   return text.slice(0, -1).split('\n');
 }
 
-function applyHunks(text: string, hunks: PatchHunk[]): string {
+function applyHunks(text: string, hunks: PatchHunk[], filepath: string): string {
   const input = splitPatchableText(text);
   const output: string[] = [];
   let cursor = 0;
 
   for (const hunk of hunks) {
     const start = hunk.oldStart === 0 ? 0 : hunk.oldStart - 1;
-    if (start < cursor || start > input.length) throw new NotImplementedError('git.apply.conflict');
+    if (start < cursor || start > input.length)
+      throw new ApplyPatchFailure(filepath, hunk.oldStart);
     while (cursor < start) output.push(input[cursor++] as string);
 
     let oldCount = 0;
     let newCount = 0;
     for (const line of hunk.lines) {
       if (line.op === ' ') {
-        if (input[cursor] !== line.text) throw new NotImplementedError('git.apply.conflict');
+        if (input[cursor] !== line.text) throw new ApplyPatchFailure(filepath, hunk.oldStart);
         output.push(line.text);
         cursor += 1;
         oldCount += 1;
         newCount += 1;
       } else if (line.op === '-') {
-        if (input[cursor] !== line.text) throw new NotImplementedError('git.apply.conflict');
+        if (input[cursor] !== line.text) throw new ApplyPatchFailure(filepath, hunk.oldStart);
         cursor += 1;
         oldCount += 1;
       } else {
@@ -1725,14 +1835,16 @@ async function planApply(vfs: Vfs, root: string, files: PatchFile[]): Promise<Ap
 
     const abs = normalizePath(joinPath(root, target));
     const exists = await vfs.exists(abs);
-    if (file.oldPath === null && exists) throw new NotImplementedError('git.apply.conflict');
-    if (file.oldPath !== null && !exists) throw new NotImplementedError('git.apply.conflict');
+    if (file.oldPath === null && exists)
+      throw new ApplyPathFailure(`${target}: already exists in working directory`);
+    if (file.oldPath !== null && !exists)
+      throw new ApplyPathFailure(`${target}: No such file or directory`);
     const currentBytes = exists ? await vfs.readFile(abs) : new Uint8Array();
     assertTextFile(currentBytes);
     const current = new TextDecoder().decode(currentBytes);
-    const next = applyHunks(current, file.hunks);
+    const next = applyHunks(current, file.hunks, target);
     if (file.newPath === null) {
-      if (next !== '') throw new NotImplementedError('git.apply.conflict');
+      if (next !== '') throw new ApplyPatchFailure(target, file.hunks[0]?.oldStart ?? 0);
       actions.push({ kind: 'delete', filepath: target });
     } else {
       actions.push({ kind: 'write', filepath: target, content: next });
@@ -1852,6 +1964,15 @@ async function doApply(
     }
     return 0;
   } catch (e) {
+    if (e instanceof ApplyPatchFailure) {
+      ctx.stderr.write(`error: patch failed: ${e.filepath}:${e.line}\n`);
+      ctx.stderr.write(`error: ${e.filepath}: patch does not apply\n`);
+      return 1;
+    }
+    if (e instanceof ApplyPathFailure) {
+      ctx.stderr.write(`error: ${e.detail}\n`);
+      return 1;
+    }
     if (e instanceof NotImplementedError) return renderCheckoutError(e, ctx);
     ctx.stderr.write(`fatal: ${e instanceof Error ? e.message : String(e)}\n`);
     return 128;
@@ -1863,7 +1984,13 @@ function stashRefIndex(ref: string): number | undefined {
   return match?.[1] === undefined ? undefined : Number(match[1]);
 }
 
-async function doStash(g: Git, args: string[], ctx: CommandContext): Promise<number> {
+async function doStash(
+  g: Git,
+  args: string[],
+  ctx: CommandContext,
+  vfs: Vfs,
+  root: string,
+): Promise<number> {
   const first = args[1];
   const sub = first === undefined || first.startsWith('-') ? 'push' : first;
   const legacySave = sub === 'save';
@@ -1922,10 +2049,23 @@ async function doStash(g: Git, args: string[], ctx: CommandContext): Promise<num
   }
   try {
     const ident = await identityFrom(g, ctx.env);
-    if ((await g.getConfig('user.name')) === undefined) await g.setConfig('user.name', ident.name);
-    if ((await g.getConfig('user.email')) === undefined)
-      await g.setConfig('user.email', ident.email);
-    const result = await g.stash(op as Parameters<Git['stash']>[0], message, refIdx);
+    const configPath = normalizePath(joinPath(root, '.git/config'));
+    const hadConfig = await vfs.exists(configPath);
+    const configBefore = hadConfig ? await vfs.readFile(configPath) : undefined;
+    let result: Awaited<ReturnType<Git['stash']>>;
+    try {
+      if ((await g.getConfig('user.name')) === undefined)
+        await g.setConfig('user.name', ident.name);
+      if ((await g.getConfig('user.email')) === undefined)
+        await g.setConfig('user.email', ident.email);
+      result = await g.stash(op as Parameters<Git['stash']>[0], message, refIdx);
+    } finally {
+      if (configBefore !== undefined) {
+        await vfs.writeFile(configPath, configBefore);
+      } else if (!hadConfig) {
+        await vfs.rm(configPath, { force: true });
+      }
+    }
     if (Array.isArray(result)) {
       for (const e of result) ctx.stdout.write(`stash@{${e.index}}: ${e.message}\n`);
     } else if (typeof result === 'string') {
@@ -1969,14 +2109,17 @@ async function doLsRemote(
   }
   if (positionals.length > 1)
     return renderCheckoutError(new NotImplementedError('git.ls-remote.args'), ctx);
-  const target = positionals[0];
-  if (!target) return renderCheckoutError(new NotImplementedError('git.ls-remote.no-url'), ctx);
+  const target = positionals[0] ?? 'origin';
   try {
     const client = g ?? makeGit({ fs: vfsToGitFs(vfs), dir: ctx.cwd });
     const url = isUrlLike(target)
       ? target
       : (await client.listRemotes()).find((r) => r.remote === target)?.url;
     if (url === undefined) {
+      if (positionals[0] === undefined) {
+        ctx.stderr.write('fatal: No remote configured to list refs from.\n');
+        return 128;
+      }
       ctx.stderr.write(`fatal: '${target}' does not appear to be a git repository\n`);
       return 128;
     }
@@ -2252,7 +2395,8 @@ async function doClone(vfs: Vfs, args: string[], ctx: CommandContext): Promise<n
   const url = positionals[0];
   if (url === undefined) {
     ctx.stderr.write('fatal: You must specify a repository to clone.\n');
-    return 128;
+    ctx.stderr.write('usage: git clone [<options>] [--] <repo> [<dir>]\n');
+    return 129;
   }
   const { display, target } = cloneDestination(url, positionals[1], ctx.cwd);
   try {
@@ -2394,7 +2538,7 @@ export const git: ShellCommand = async (args, ctx) => {
   if (sub === 'clone') return doClone(vfs, args, ctx);
   if (sub === 'ls-remote') {
     const target = args.slice(1).find((arg) => !arg.startsWith('-'));
-    if (target === undefined || isUrlLike(target)) return doLsRemote(undefined, vfs, args, ctx);
+    if (target !== undefined && isUrlLike(target)) return doLsRemote(undefined, vfs, args, ctx);
   }
 
   // Every other known verb needs a repository. Real git verifies one governs the
@@ -2452,7 +2596,7 @@ export const git: ShellCommand = async (args, ctx) => {
       case 'apply':
         return doApply(args, ctx, vfs, root);
       case 'stash':
-        return doStash(g, args, ctx);
+        return doStash(g, args, ctx, vfs, root);
       case 'fetch':
       case 'pull':
       case 'push':

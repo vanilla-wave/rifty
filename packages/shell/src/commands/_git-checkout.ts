@@ -165,6 +165,13 @@ export function renderCheckoutOrFatal(e: unknown, ctx: CommandContext): number {
   }
 }
 
+export function renderRevisionAndPathAmbiguity(arg: string, ctx: CommandContext): number {
+  ctx.stderr.write(`fatal: ambiguous argument '${arg}': both revision and filename\n`);
+  ctx.stderr.write("Use '--' to separate paths from revisions, like this:\n");
+  ctx.stderr.write("'git <command> [<revision>...] -- [<file>...]'\n");
+  return 128;
+}
+
 /**
  * Parsed `git checkout` invocation: a `-b` create, a `--`-delimited restore, or
  * raw positionals to disambiguate (ref vs path). Ceiling flags are rejected
@@ -407,6 +414,10 @@ async function doCheckoutPositional(
   }
   const firstIsRef = await revisionExists(g, first);
   if (firstIsRef) {
+    const firstPathspec = mapPathspec(first);
+    if ((await g.status()).some((entry) => pathspecMatch(entry.filepath, firstPathspec))) {
+      return renderRevisionAndPathAmbiguity(first, ctx);
+    }
     await g.checkout({ op: 'restore', pathspecs: restSpecs, source: first });
     return 0;
   }

@@ -107,11 +107,12 @@ it('clone over an unsupported transport surfaces NotImplementedError (exit 128)'
   expect(err()).toContain('Not implemented: git.transport.ssh');
 });
 
-it('clone without a <url> fails loudly (exit 128, git wording)', async () => {
+it('clone without a <url> fails loudly (exit 129, git usage)', async () => {
   await seedRepoDir();
   const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
-  expect(await git(['clone'], ctx)).toBe(128);
+  expect(await git(['clone'], ctx)).toBe(129);
   expect(err()).toContain('You must specify a repository to clone.');
+  expect(err()).toContain('usage: git clone');
 });
 
 /** Seed a single-commit repo on `main` with a.txt committed. */
@@ -120,6 +121,15 @@ async function seedCommittedRepo(): Promise<void> {
   await writeFile('/repo/a.txt', 'hi\n');
   await git(['init'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
   await git(['add', 'a.txt'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await git(['commit', '-m', 'first'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+}
+
+async function seedAmbiguousMainFileRepo(): Promise<void> {
+  await seedRepoDir();
+  await writeFile('/repo/main', 'main file\n');
+  await writeFile('/repo/a.txt', 'hi\n');
+  await git(['init'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await git(['add', 'main', 'a.txt'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
   await git(['commit', '-m', 'first'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
 }
 
@@ -138,6 +148,15 @@ it('checkout <nonexistent> (not a ref, not a path) → exit 1, pathspec did not 
   const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
   expect(await git(['checkout', 'nonexistent'], ctx)).toBe(1);
   expect(err()).toContain("pathspec 'nonexistent' did not match");
+});
+
+it('checkout <ambiguous-rev-and-file> <path> refuses without --', async () => {
+  await seedAmbiguousMainFileRepo();
+
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['checkout', 'main', 'a.txt'], ctx)).toBe(128);
+  expect(err()).toContain("fatal: ambiguous argument 'main': both revision and filename");
+  expect(err()).toContain("Use '--' to separate paths from revisions");
 });
 
 it('checkout --orphan x → exit 128, Not implemented: git.checkout.orphan', async () => {
@@ -988,6 +1007,57 @@ it('diff/log missing operands without -- are fatal ambiguous, not empty pathspec
   expect(diffUntracked.err()).toBe('');
 });
 
+it('diff/log refuse a token that is both a revision and a tracked filename', async () => {
+  await seedAmbiguousMainFileRepo();
+
+  const diff = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['diff', 'main'], diff.ctx)).toBe(128);
+  expect(diff.out()).toBe('');
+  expect(diff.err()).toContain("fatal: ambiguous argument 'main': both revision and filename");
+  expect(diff.err()).toContain("Use '--' to separate paths from revisions");
+
+  const log = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['log', 'main'], log.ctx)).toBe(128);
+  expect(log.out()).toBe('');
+  expect(log.err()).toContain("fatal: ambiguous argument 'main': both revision and filename");
+  expect(log.err()).toContain("Use '--' to separate paths from revisions");
+
+  const diffLater = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['diff', 'HEAD', 'main'], diffLater.ctx)).toBe(128);
+  expect(diffLater.out()).toBe('');
+  expect(diffLater.err()).toContain("fatal: ambiguous argument 'main': both revision and filename");
+
+  const logLater = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['log', 'HEAD', 'main'], logLater.ctx)).toBe(128);
+  expect(logLater.out()).toBe('');
+  expect(logLater.err()).toContain("fatal: ambiguous argument 'main': both revision and filename");
+});
+
+it('log refuses a token that is both a revision and an untracked filename', async () => {
+  await seedCommittedRepo();
+  await git(['checkout', '-b', 'topic'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await git(['checkout', 'main'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await writeFile('/repo/topic', 'untracked\n');
+
+  const log = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['log', 'topic'], log.ctx)).toBe(128);
+  expect(log.out()).toBe('');
+  expect(log.err()).toContain("fatal: ambiguous argument 'topic': both revision and filename");
+  expect(log.err()).toContain("Use '--' to separate paths from revisions");
+
+  const diffLater = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['diff', 'HEAD', 'topic'], diffLater.ctx)).toBe(128);
+  expect(diffLater.out()).toBe('');
+  expect(diffLater.err()).toContain(
+    "fatal: ambiguous argument 'topic': both revision and filename",
+  );
+
+  const logLater = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['log', 'HEAD', 'topic'], logLater.ctx)).toBe(128);
+  expect(logLater.out()).toBe('');
+  expect(logLater.err()).toContain("fatal: ambiguous argument 'topic': both revision and filename");
+});
+
 it('invalid explicit tree-ish revspecs render fatal instead of escaping the git command', async () => {
   await seedCommittedRepo();
   await writeFile('/repo/a.txt', 'changed\n');
@@ -1076,6 +1146,7 @@ it('reset --soft and reset --mixed HEAD~1 move HEAD with git index/worktree sema
   await git(['commit', '-m', 'second-again'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
   const mixed = makeCtx({ cwd: '/repo', env: ENV });
   expect(await git(['reset', '--mixed', 'HEAD~1'], mixed.ctx)).toBe(0);
+  expect(mixed.out()).toBe('Unstaged changes after reset:\nM\ta.txt\n');
   const afterMixed = makeCtx({ cwd: '/repo', env: ENV });
   await git(['status', '--porcelain'], afterMixed.ctx);
   expect(afterMixed.out()).toContain(' M a.txt');
@@ -1093,6 +1164,22 @@ it('reset --hard HEAD^0 accepts ^0 and renders the real git HEAD summary', async
   const vfs = asyncVfs();
   if (!vfs) throw new Error('no async vfs');
   expect(await vfs.readFileText('/repo/a.txt')).toBe('hi\n');
+});
+
+it('reset refuses a token that is both a revision and a filename without unstaging', async () => {
+  await seedAmbiguousMainFileRepo();
+  await writeFile('/repo/a.txt', 'staged\n');
+  await git(['add', 'a.txt'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+
+  const reset = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['reset', 'main'], reset.ctx)).toBe(128);
+  expect(reset.out()).toBe('');
+  expect(reset.err()).toContain("fatal: ambiguous argument 'main': both revision and filename");
+  expect(reset.err()).toContain("Use '--' to separate paths from revisions");
+
+  const status = makeCtx({ cwd: '/repo', env: ENV });
+  await git(['status', '--porcelain'], status.ctx);
+  expect(status.out()).toContain('M  a.txt');
 });
 
 it('reset HEAD^0 -- <path> unstages like HEAD while invalid explicit sources are fatal', async () => {
@@ -1203,7 +1290,7 @@ it('tag list/create/delete supports lightweight and annotated tags', async () =>
 
   const del = makeCtx({ cwd: '/repo', env: ENV });
   expect(await git(['tag', '-d', 'v1'], del.ctx)).toBe(0);
-  expect(del.out()).toContain("Deleted tag 'v1'");
+  expect(del.out()).toMatch(/^Deleted tag 'v1' \(was [0-9a-f]{7}\)\n$/);
 });
 
 it('tag -m creates an annotated tag and unsupported editor/extra operands are loud', async () => {
@@ -1354,7 +1441,9 @@ it('git rm and git mv update both worktree and index', async () => {
   expect(moved.out()).toContain('D  a.txt');
   expect(moved.out()).toContain('A  b.txt');
 
-  expect(await git(['rm', 'b.txt'], makeCtx({ cwd: '/repo', env: ENV }).ctx)).toBe(0);
+  const rm = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['rm', 'b.txt'], rm.ctx)).toBe(0);
+  expect(rm.out()).toBe("rm 'b.txt'\n");
   const removed = makeCtx({ cwd: '/repo', env: ENV });
   await git(['status', '--porcelain'], removed.ctx);
   expect(removed.out()).toContain('D  a.txt');
@@ -1453,6 +1542,34 @@ it('merge fast-forwards the current branch to another local branch', async () =>
   expect(await vfs.readFileText('/repo/a.txt')).toBe('feature\n');
 });
 
+it('show on a merge commit renders Merge header and no patch by default', async () => {
+  await seedCommittedRepo();
+  await git(['checkout', '-b', 'feature'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await writeFile('/repo/feature.txt', 'feature\n');
+  await git(['add', 'feature.txt'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await git(['commit', '-m', 'feature'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await git(['checkout', 'main'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await writeFile('/repo/main.txt', 'main\n');
+  await git(['add', 'main.txt'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+  await git(['commit', '-m', 'main'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
+
+  expect(await git(['merge', 'feature'], makeCtx({ cwd: '/repo', env: ENV }).ctx)).toBe(0);
+  const { makeGit, vfsToGitFs } = await import('@riftydev/git');
+  const vfs = asyncVfs();
+  if (!vfs) throw new Error('no async vfs');
+  const head = await makeGit({ fs: vfsToGitFs(vfs), dir: '/repo' }).show('HEAD');
+  expect(head.type).toBe('commit');
+  if (head.type !== 'commit') throw new Error('expected commit');
+  expect(head.commit.parents).toHaveLength(2);
+  expect(await vfs.readFileText('/repo/main.txt')).toBe('main\n');
+  expect(await vfs.readFileText('/repo/feature.txt')).toBe('feature\n');
+
+  const show = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['show', 'HEAD'], show.ctx)).toBe(0);
+  expect(show.out()).toContain('Merge: ');
+  expect(show.out()).not.toContain('diff --git');
+});
+
 it('merge unsupported flags and extra operands are loud ceilings before mutation', async () => {
   await seedCommittedRepo();
   await git(['checkout', '-b', 'feature'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
@@ -1486,7 +1603,9 @@ it('cherry-pick applies a local commit onto the current branch', async () => {
   const picked = await makeGit({ fs: vfsToGitFs(vfs), dir: '/repo' }).resolveRef('feature');
   await git(['checkout', 'main'], makeCtx({ cwd: '/repo', env: ENV }).ctx);
 
-  expect(await git(['cherry-pick', picked], makeCtx({ cwd: '/repo', env: ENV }).ctx)).toBe(0);
+  const pick = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['cherry-pick', picked], pick.ctx)).toBe(0);
+  expect(pick.out()).toMatch(/^\[main [0-9a-f]{7}\] picked\n/);
   expect(await vfs.readFileText('/repo/a.txt')).toBe('picked\n');
 });
 
@@ -1781,8 +1900,8 @@ it('apply conflicting patches loudly and leaves earlier files untouched', async 
   );
 
   const apply = makeCtx({ cwd: '/repo', env: ENV });
-  expect(await git(['apply', 'conflict.patch'], apply.ctx)).toBe(128);
-  expect(apply.err()).toContain('Not implemented: git.apply.conflict');
+  expect(await git(['apply', 'conflict.patch'], apply.ctx)).toBe(1);
+  expect(apply.err()).toBe('error: patch failed: b.txt:1\nerror: b.txt: patch does not apply\n');
   const vfs = asyncVfs();
   if (!vfs) throw new Error('no async vfs');
   expect(await vfs.readFileText('/repo/a.txt')).toBe('hi\n');
@@ -1862,6 +1981,20 @@ it('stash push/list/pop round-trips tracked worktree changes', async () => {
   expect(await vfs.readFileText('/repo/a.txt')).toBe('dirty\n');
 });
 
+it('stash push does not persist fallback identity into local config', async () => {
+  await seedCommittedRepo();
+  await writeFile('/repo/a.txt', 'dirty\n');
+
+  expect(await git(['stash', 'push'], makeCtx({ cwd: '/repo', env: ENV }).ctx)).toBe(0);
+
+  const name = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['config', '--get', 'user.name'], name.ctx)).toBe(1);
+  expect(name.out()).toBe('');
+  const email = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['config', '--get', 'user.email'], email.ctx)).toBe(1);
+  expect(email.out()).toBe('');
+});
+
 it('stash pop stash@{1} applies the selected stash entry instead of silently popping stash@{0}', async () => {
   await seedCommittedRepo();
   await writeFile('/repo/a.txt', 'older\n');
@@ -1923,6 +2056,30 @@ it('ls-remote resolves a configured remote name before checking transport suppor
   expect(await git(['ls-remote', 'origin'], ctx)).toBe(128);
   expect(err()).toContain('Not implemented: git.transport.ssh');
   expect(err()).not.toContain('git.transport.unknown');
+});
+
+it('ls-remote without an argument defaults to origin', async () => {
+  await seedCommittedRepo();
+  expect(
+    await git(
+      ['remote', 'add', 'origin', 'git@github.com:x/y.git'],
+      makeCtx({ cwd: '/repo', env: ENV }).ctx,
+    ),
+  ).toBe(0);
+
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['ls-remote'], ctx)).toBe(128);
+  expect(err()).toContain('Not implemented: git.transport.ssh');
+  expect(err()).not.toContain('git.ls-remote.no-url');
+});
+
+it('ls-remote without an argument refuses when no remote is configured', async () => {
+  await seedCommittedRepo();
+
+  const { ctx, err } = makeCtx({ cwd: '/repo', env: ENV });
+  expect(await git(['ls-remote'], ctx)).toBe(128);
+  expect(err()).toContain('fatal: No remote configured to list refs from.');
+  expect(err()).not.toContain('git.ls-remote.no-url');
 });
 
 it('push/fetch with a remote NAME (origin) is not mistaken for a URL transport ceiling', async () => {

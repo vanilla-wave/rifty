@@ -80,6 +80,30 @@ it('detaches HEAD when checking out a raw oid', async () => {
   expect(await g.resolveRef('HEAD')).toBe(oid);
 });
 
+it('detaches annotated tags at the tagged commit so children have commit parents', async () => {
+  const feat = await g.resolveRef('feat');
+  await g.createTag({
+    name: 'v-feat',
+    object: feat,
+    annotated: true,
+    message: 'feat release\n',
+    tagger: AUTHOR,
+  });
+
+  const r = await g.checkout({ op: 'switch', ref: 'v-feat' });
+  expect(r).toMatchObject({ op: 'switch', detached: true, target: undefined });
+  expect(await g.currentBranch()).toBeUndefined();
+  expect(await g.resolveRef('HEAD')).toBe(feat);
+
+  await vfs.writeFile('/r/f.txt', 'child\n');
+  await g.add('f.txt');
+  const child = await g.commit({ message: 'child', author: AUTHOR });
+  const shown = await g.show(child);
+  expect(shown.type).toBe('commit');
+  if (shown.type !== 'commit') throw new Error('expected commit');
+  expect(shown.commit.parents).toEqual([feat]);
+});
+
 it('restores a path from the index, discarding the worktree change', async () => {
   await vfs.writeFile('/r/f.txt', 'STAGED\n');
   await g.add('f.txt');

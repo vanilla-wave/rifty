@@ -182,7 +182,7 @@ export function makeGit(opts: MakeGitOptions): Git {
   });
 
   const readCommit = async (oid: string): Promise<LogEntry> =>
-    toLogEntry(await git.readCommit({ fs, dir, oid }));
+    toLogEntry(await git.readCommit({ fs, dir, oid: await peelTagToCommit(oid) }));
 
   const resolvePlain = async (ref: string): Promise<string> => {
     if (/^[0-9a-f]{40}$/i.test(ref)) return ref.toLowerCase();
@@ -190,6 +190,27 @@ export function makeGit(opts: MakeGitOptions): Git {
       return git.expandOid({ fs, dir, oid: ref });
     }
     return git.resolveRef({ fs, dir, ref });
+  };
+
+  const peelTag = async (oid: string): Promise<{ oid: string; type: string }> => {
+    let current = oid;
+    const seen = new Set<string>();
+    while (true) {
+      if (seen.has(current)) throw new Error(`tag cycle while peeling ${oid}`);
+      seen.add(current);
+      const obj = await git.readObject({ fs, dir, oid: current, format: 'parsed' });
+      if (obj.type !== 'tag') return { oid: current, type: obj.type };
+      const tag = obj.object as { object: string };
+      current = tag.object;
+    }
+  };
+
+  const peelTagToCommit = async (oid: string): Promise<string> => {
+    const peeled = await peelTag(oid);
+    if (peeled.type !== 'commit') {
+      throw new Error(`object ${peeled.oid} is a ${peeled.type}, not a commit`);
+    }
+    return peeled.oid;
   };
 
   const resolveRevision = async (rev: string): Promise<string> => {
@@ -200,8 +221,8 @@ export function makeGit(opts: MakeGitOptions): Git {
       throw new NotImplementedError('git.revspec.peel', `unsupported peel revspec: ${rev}`);
     }
     const firstMarker = rev.search(/[~^]/);
-    if (firstMarker === -1) return resolvePlain(rev);
-    let oid = await resolvePlain(rev.slice(0, firstMarker));
+    if (firstMarker === -1) return peelTagToCommit(await resolvePlain(rev));
+    let oid = await peelTagToCommit(await resolvePlain(rev.slice(0, firstMarker)));
     let i = firstMarker;
     while (i < rev.length) {
       const op = rev[i];
@@ -235,6 +256,16 @@ export function makeGit(opts: MakeGitOptions): Git {
       }
     }
     return oid;
+  };
+
+  const resolveObjectRevision = async (rev: string): Promise<string> => {
+    if (rev.includes('@{')) {
+      throw new NotImplementedError('git.revspec.reflog', `unsupported reflog revspec: ${rev}`);
+    }
+    if (/\^\{/.test(rev)) {
+      throw new NotImplementedError('git.revspec.peel', `unsupported peel revspec: ${rev}`);
+    }
+    return rev.search(/[~^]/) === -1 ? resolvePlain(rev) : resolveRevision(rev);
   };
 
   const allTreeBlobs = async (ref: string): Promise<BlobRef[]> => {
@@ -447,7 +478,7 @@ export function makeGit(opts: MakeGitOptions): Git {
       fs,
       dir,
       ref: branch ? `refs/heads/${branch}` : 'HEAD',
-      value: oid,
+      value: await peelTagToCommit(oid),
       force: true,
     });
   };
@@ -678,7 +709,7 @@ export function makeGit(opts: MakeGitOptions): Git {
         const { oid: blobOid } = await git.hashBlob({ object: blob });
         return { type: 'blob', oid: blobOid, content: blob };
       }
-      const oid = await resolveRevision(rev);
+      const oid = await resolveObjectRevision(rev);
       const obj = await git.readObject({ fs, dir, oid, format: 'parsed' });
       if (obj.type === 'commit') {
         const commit = await readCommit(oid);

@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   short-lived (`max-age=300`, `stale-while-revalidate=86400`) with `Vary:
   Accept`, keeping the proxy payload-transparent while enabling a CDN/cache in
   front of it. CDN/DNS rollout remains a confirm-first infra action.
+- **Git PR #78 review follow-ups.** Tightened annotated-tag commit-ish peeling, revision/path ambiguity refusals, apply runtime conflict handling, stash identity preservation, merge-show/ls-remote behavior, selected success output, and the public git compat claims.
 - **Kernel server-process model (`serve`) — ADR-0143 "D" phase P1 (ADR-0144).** The kernel gains a `serve` spawn flag so a long-lived owner-worker is NOT reaped when its entry settles cleanly (`finalizeWorkerEntry`); the real-vite preview owner drops its `await new Promise<never>(() => {})` keep-alive hack. First landed phase of the ADR-0143 owner-worker execution model (one worker owns `node_modules` + runs the shell/CLI/`execSync` in-realm, PAGE = viewer — retiring the bin-worker ENOENT class). Phased plan + status: `docs/backlog/shell/d-owner-worker-milestone.md`.
 
 ### Documented

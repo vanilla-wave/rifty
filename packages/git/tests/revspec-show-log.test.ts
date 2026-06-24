@@ -38,6 +38,41 @@ it('HEAD^0 resolves to the current commit without walking to a parent', async ()
   await expect(g.resolveRevision('HEAD^0')).resolves.toBe(await g.resolveRevision('HEAD'));
 });
 
+it('annotated tag commit-ish revspecs peel to the tagged commit', async () => {
+  const { g } = await seededGit();
+  const head = await g.resolveRef('HEAD');
+  await g.createTag({
+    name: 'v1',
+    annotated: true,
+    message: 'release\n',
+    tagger: AUTHOR,
+  });
+
+  await expect(g.resolveRevision('v1')).resolves.toBe(head);
+  await expect(g.resolveRevision('v1^0')).resolves.toBe(head);
+  await expect(g.resolveRevision('v1~0')).resolves.toBe(head);
+  const shown = await g.show('v1');
+  expect(shown.type).toBe('tag');
+});
+
+it('reset rejects annotated tags whose target is not a commit without moving HEAD', async () => {
+  const { g } = await seededGit();
+  const head = await g.resolveRef('HEAD');
+  const shown = await g.show('HEAD');
+  expect(shown.type).toBe('commit');
+  if (shown.type !== 'commit') throw new Error('expected commit');
+  await g.createTag({
+    name: 'tree-tag',
+    object: shown.commit.tree,
+    annotated: true,
+    message: 'tree tag\n',
+    tagger: AUTHOR,
+  });
+
+  await expect(g.reset({ target: 'tree-tag', mode: 'soft' })).rejects.toThrow('not a commit');
+  await expect(g.resolveRef('HEAD')).resolves.toBe(head);
+});
+
 it('log depth 0 returns no commits', async () => {
   const { g } = await seededGit();
 

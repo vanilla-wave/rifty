@@ -482,7 +482,7 @@ const matrices = [
     file: 'git.md',
     title: 'Compatibility matrix — git (`@riftydev/git`)',
     intro:
-      'Public claim surface for git over the VFS (isomorphic-git, ADR-0167). Local porcelain is byte-identical to canonical git (same object SHA-1s); the network is smart-HTTP only — every browser-ceiling gap throws `NotImplementedError`, never a silent stub.',
+      'Public claim surface for git over the VFS (isomorphic-git, ADR-0167). Local objects are canonical git objects (same SHA-1s for identical inputs); selected porcelain text is parity-pinned where stated. The network is smart-HTTP only — every browser-ceiling gap throws `NotImplementedError`, never a silent stub.',
     rows: [
       ['`init` / `remove`', '✅', 'Local index + object writes over the Memory VFS'],
       [
@@ -517,8 +517,8 @@ const matrices = [
       ],
       [
         '`log` / `log --oneline` / `-n` / `--format` / `<ref>` / `a..b` / `-- <path>`',
-        '✅',
-        'Byte-exact short-oid + subject for the frozen fixture core; bounded flags support agent workflows (`%H`, `%h`, `%s`, `%an`, `%ae`) plus parent-range exclusion and single-path history filtering. Non-integer `-n`/`--max-count` is fatal, never a full-log fallback',
+        '⚠️',
+        'Byte-exact short-oid + subject for the frozen fixture core; bounded flags support agent workflows (`%H`, `%h`, `%s`, `%an`, `%ae`) plus parent-range exclusion and single-path history filtering. Default long log is structured and includes merge parents, but does not yet render every real-git header such as `Date:`. Non-integer `-n`/`--max-count` is fatal, never a full-log fallback',
       ],
       [
         '`diff` / `--staged` / `--cached [<rev>]` / `diff <rev> [<path>]` / `diff <a> <b> [<path>]`',
@@ -554,12 +554,12 @@ const matrices = [
       [
         '`reset <path>` / `reset --soft|--mixed|--hard <rev>`',
         '✅',
-        'Path reset (`reset [HEAD] -- <path>`) unstages without touching the worktree; tree reset moves HEAD with real soft/mixed/hard index/worktree semantics, including hard-reset removal of tracked paths absent from the target tree and the hard-reset `HEAD is now at …` stdout summary. Mode+pathspec forms (`reset --hard <path>`) loud-throw until non-HEAD path resets are implemented. Parent arithmetic (`HEAD~1`, `main^`, `HEAD^0`) supported; reflog/peel revspecs stay loud ceilings',
+        'Path reset (`reset [HEAD] -- <path>`) unstages without touching the worktree; tree reset moves HEAD with real soft/mixed/hard index/worktree semantics, including hard-reset removal of tracked paths absent from the target tree, mixed-reset `Unstaged changes after reset:` output, and the hard-reset `HEAD is now at …` stdout summary. Annotated commit tags peel before ref writes; non-commit tag targets are rejected before moving HEAD. Mode+pathspec forms (`reset --hard <path>`) loud-throw until non-HEAD path resets are implemented. Parent arithmetic (`HEAD~1`, `main^`, `HEAD^0`) supported; reflog/peel revspecs stay loud ceilings',
       ],
       [
         '`show <rev>` / `show <rev>:<path>`',
-        '✅',
-        'Commit/tree/tag/blob reads over the object database; commit show prints the summary plus structured patch vs first parent (root commit vs empty tree); blob path form prints bytes from the selected tree and reports the selected blob oid',
+        '⚠️',
+        'Commit/tree/tag/blob reads over the object database; commit show prints the summary plus structured patch vs first parent (root commit vs empty tree), while merge commits print `Merge:` and omit the patch like real git. Patch text is structured, not byte-exact full git diff headers. Blob path form prints bytes from the selected tree and reports the selected blob oid',
       ],
       [
         '`tag` list / lightweight / annotated / delete',
@@ -569,12 +569,12 @@ const matrices = [
       [
         '`remote` list / `-v` / add / remove / `ls-remote <url|remote>`',
         '✅',
-        'Local remotes are config-backed; `remote add/remove` reject unsupported flags and extra operands before mutating config. `ls-remote --tags/--heads` maps to server-ref prefixes; `ls-remote origin` resolves the remote URL before transport checks; smart HTTP shares the same transport/CORS loud ceilings as clone/fetch/push',
+        'Local remotes are config-backed; `remote add/remove` reject unsupported flags and extra operands before mutating config. `ls-remote --tags/--heads` maps to server-ref prefixes; `ls-remote origin` and bare `ls-remote` (default `origin`) resolve the remote URL before transport checks; no configured origin reports the real fatal. Smart HTTP shares the same transport/CORS loud ceilings as clone/fetch/push',
       ],
       [
         '`merge` / `cherry-pick` / `stash`',
         '⚠️',
-        "Backed by isomorphic-git primitives and covered for clean fast-forward merge, clean cherry-pick, and tracked-file stash push/list/pop/apply/drop with `stash@{n}` selection. Extra merge/cherry-pick operands and unsupported flags loud-throw before mutation. isomorphic-git's stash is tracked-files only: `stash -u`/`--include-untracked`/`--all` → `NotImplementedError('git.stash.include-untracked')`; `stash push <pathspec>` → `git.stash.pathspec`. Complex conflict workflows (`merge --continue`, custom strategies) remain loud ceilings",
+        "Backed by isomorphic-git primitives and covered for clean fast-forward/non-fast-forward merge, clean cherry-pick, and tracked-file stash push/list/pop/apply/drop with `stash@{n}` selection. Stash uses temporary identity without persisting fallback `user.name`/`user.email` into config. Extra merge/cherry-pick operands and unsupported flags loud-throw before mutation. isomorphic-git's stash is tracked-files only: `stash -u`/`--include-untracked`/`--all` → `NotImplementedError('git.stash.include-untracked')`; `stash push <pathspec>` → `git.stash.pathspec`; `stash show -p` is not implemented. Complex conflict workflows (`merge --continue`, custom strategies, conflict marker/index state) remain loud ceilings",
       ],
       [
         '`revert <commit>`',
@@ -584,12 +584,12 @@ const matrices = [
       [
         '`apply <patch-file>` / `apply -`',
         '⚠️',
-        "Clean text unified-diff applier over the VFS worktree (not the index): add/modify/delete hunks, file path or stdin, all-or-nothing preflight. From repo subdirectories, patch entries outside cwd scope are ignored before unsupported metadata is interpreted. Context mismatch leaves every file untouched and throws `NotImplementedError('git.apply.conflict')`. `--3way`, `--index`/`--cached`, `--check`, reverse/reject/stat modes, binary patches, renames/copies, mode-only changes, quoted/unsafe paths, and no-final-newline hunks are directed ceilings",
+        'Clean text unified-diff applier over the VFS worktree (not the index): add/modify/delete hunks, file path or stdin, all-or-nothing preflight. From repo subdirectories, patch entries outside cwd scope are ignored before unsupported metadata is interpreted. Context mismatch leaves every file untouched and exits 1 with git-style `patch failed` / `patch does not apply` text. `--3way`, `--index`/`--cached`, `--check`, reverse/reject/stat modes, binary patches, renames/copies, mode-only changes, quoted/unsafe paths, and no-final-newline hunks are directed ceilings',
       ],
       [
         '`rm` / `mv`',
-        '✅',
-        '`rm` refuses modified tracked files unless forced, treats `-r` as recursion (not force), validates all pathspecs before mutation, and refuses directory recursion without `-r`. `mv` refuses untracked sources before mutation, moves files into existing directories, and refuses destination overwrite unless forced. Both update VFS and index together for tracked files',
+        '⚠️',
+        "`rm` refuses modified tracked files unless forced, treats `-r` as recursion (not force), validates all pathspecs before mutation, and prints `rm '<path>'` on success. `mv` refuses untracked sources before mutation, moves files into existing directories, and refuses destination overwrite unless forced; `mv <dir>` is still `NotImplementedError('git.mv.directory')`. Both update VFS and index together for tracked files",
       ],
       [
         '`config <key>` / `config <key> <value>`',
@@ -599,7 +599,7 @@ const matrices = [
       [
         '`clone <url> [<dir>]` / `fetch [<remote>]` / `pull [<remote> <ref>]` / `push [<remote> <ref>]` (smart HTTP)',
         '✅',
-        'Over rifty `node:http` egress; real `git http-backend` clone integration-tested (canonical objects end-to-end). `clone` writes a NEW subdirectory (url basename or explicit `<dir>`), not the cwd; a non-empty destination is refused (`fatal: destination path … already exists…`, exit 128). `fetch`/`pull`/`push` accept a remote NAME (`git push origin main`) resolved from config — not mistaken for a URL transport; `clone`/`fetch` parse `--depth` and `--single-branch`; `clone` parses `--no-tags`; `fetch` parses single `src:dst` refspecs plus `--tags`/`--prune`/`--prune-tags`; `push` parses single `src:dst`, delete refspecs, and `--tags`; multi/wildcard refspecs stay loud ceilings',
+        'Over rifty `node:http` egress; real `git http-backend` clone integration-tested (canonical objects end-to-end). `clone` writes a NEW subdirectory (url basename or explicit `<dir>`), not the cwd; no URL exits 129 with usage; a non-empty destination is refused (`fatal: destination path … already exists…`, exit 128). `fetch`/`pull`/`push` accept a remote NAME (`git push origin main`) resolved from config — not mistaken for a URL transport; `clone`/`fetch` parse `--depth` and `--single-branch`; `clone` parses `--no-tags`; `fetch` parses single `src:dst` refspecs plus `--tags`/`--prune`/`--prune-tags`; `push` parses single `src:dst`, delete refspecs, and `--tags`; multi/wildcard refspecs stay loud ceilings',
       ],
       [
         '`corsProxy`',
