@@ -127,6 +127,20 @@ export interface RunNodeEntryOptions {
   readonly createLoader?: (vfs: FsSync, opts: { cwd: string }) => ModuleLoader;
 }
 
+function exportedPromise(ns: Record<string, unknown>): PromiseLike<unknown> | null {
+  const candidates = [ns.__promise];
+  const d = ns.default;
+  if (d && (typeof d === 'object' || typeof d === 'function')) {
+    candidates.push((d as Record<string, unknown>).__promise);
+  }
+  for (const candidate of candidates) {
+    if (!candidate || (typeof candidate !== 'object' && typeof candidate !== 'function')) continue;
+    const then = (candidate as { then?: unknown }).then;
+    if (typeof then === 'function') return candidate as PromiseLike<unknown>;
+  }
+  return null;
+}
+
 /** Import the resolved Node entry (or a `.bin` launcher's target) via the loader. */
 export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
   const loader = (opts.createLoader ?? createModuleLoader)(opts.vfs, { cwd: opts.cwd });
@@ -143,7 +157,9 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
         );
       }
       // Resolve the launcher target against the shim's own path, then run it.
-      await loader.import(target, opts.entryPath);
+      const ns = await loader.import(target, opts.entryPath);
+      const pending = exportedPromise(ns);
+      if (pending) await pending;
       return;
     }
     await loader.import(opts.entryPath, opts.entryPath);

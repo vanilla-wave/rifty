@@ -12,6 +12,53 @@ const notImpl = (feature: string) => () => {
   throw new NotImplementedError(feature);
 };
 
+interface ReadlineWritable {
+  write(chunk: string): boolean;
+}
+
+type ReadlineCallback = () => void;
+
+function writeControl(stream: ReadlineWritable, sequence: string, cb?: ReadlineCallback): boolean {
+  const ok = stream.write(sequence);
+  if (cb) queueMicrotask(cb);
+  return ok;
+}
+
+function clearLine(stream: ReadlineWritable, dir = 0, cb?: ReadlineCallback): boolean {
+  const mode = dir < 0 ? 1 : dir > 0 ? 0 : 2;
+  return writeControl(stream, `\x1b[${mode}K`, cb);
+}
+
+function clearScreenDown(stream: ReadlineWritable, cb?: ReadlineCallback): boolean {
+  return writeControl(stream, '\x1b[0J', cb);
+}
+
+function cursorTo(
+  stream: ReadlineWritable,
+  x: number,
+  yOrCb?: number | ReadlineCallback,
+  cb?: ReadlineCallback,
+): boolean {
+  const y = typeof yOrCb === 'number' ? yOrCb : undefined;
+  const callback = typeof yOrCb === 'function' ? yOrCb : cb;
+  const sequence = y === undefined ? `\x1b[${Math.max(0, x) + 1}G` : `\x1b[${y + 1};${x + 1}H`;
+  return writeControl(stream, sequence, callback);
+}
+
+function moveCursor(
+  stream: ReadlineWritable,
+  dx: number,
+  dy: number,
+  cb?: ReadlineCallback,
+): boolean {
+  let sequence = '';
+  if (dx < 0) sequence += `\x1b[${-dx}D`;
+  else if (dx > 0) sequence += `\x1b[${dx}C`;
+  if (dy < 0) sequence += `\x1b[${-dy}A`;
+  else if (dy > 0) sequence += `\x1b[${dy}B`;
+  return writeControl(stream, sequence, cb);
+}
+
 // Browser-only "dns": only `localhost` resolves. Vite's `server.listen()` calls
 // `dns.promises.lookup('localhost', …)` to choose 127.0.0.1 vs ::1 — the one
 // case we must handle; everything else throws.
@@ -119,8 +166,9 @@ export const http2 = {
 
 export const readline = {
   createInterface: notImpl('readline.createInterface'),
-  cursorTo: notImpl('readline.cursorTo'),
-  clearLine: notImpl('readline.clearLine'),
-  clearScreenDown: notImpl('readline.clearScreenDown'),
+  cursorTo,
+  moveCursor,
+  clearLine,
+  clearScreenDown,
   emitKeypressEvents: notImpl('readline.emitKeypressEvents'),
 };

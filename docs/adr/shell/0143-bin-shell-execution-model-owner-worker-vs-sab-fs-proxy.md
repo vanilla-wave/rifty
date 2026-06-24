@@ -3,7 +3,11 @@
 Status: Accepted (2026-06-14)
 Date: 2026-06
 
-> TL;DR: The shell/bin/`execSync` execution model becomes a single **owner-worker** that holds `node_modules` AND runs the CLI in-realm (PAGE = viewer over the existing async ports) — NOT a SAB fs-proxy that reads PAGE memory over the wire. IRREVERSIBLE, milestone-scale; its real P1 gate is a deferred IRREVERSIBLE of its own — a kernel server-process model (ADR-0077 follow-up). Pre-ADR analysis + verified entry-point map: `docs/backlog/shell/bin-worker-vfs-transport-b-vs-d.md`.
+> TL;DR: The shell/bin/`execSync` execution model becomes a single **owner-worker** that holds `node_modules` AND supervises execution (PAGE = viewer over the existing async ports) — NOT a SAB fs-proxy that reads PAGE memory over the wire. IRREVERSIBLE, milestone-scale; its real P1 gate is a deferred IRREVERSIBLE of its own — a kernel server-process model (ADR-0077 follow-up).
+
+> Correction 2026-06-23: the original TL;DR pointed at a pre-ADR backlog analysis file. That file is now retired after the owner-worker child path closed the shell `.bin` transport; this ADR itself is the surviving historical record.
+
+> Correction 2026-06-23: the original TL;DR also said the owner "runs the CLI in-realm." Later P6a moved `.bin` commands to supervised child workers over owner remote-fs so the owner stays responsive; `execSync` node-entry routing remains a separate residual.
 
 ## Context
 
@@ -57,7 +61,7 @@ Why D (verified):
 - (+) Retires the ENOENT bug class at the root; one owner per workspace; one model that matches real WebContainers — directly serves the "agents/humans understand this first try" goal.
 - (−) Milestone-scale: multi-ADR, blast radius shell + terminal + playground + net; **two stacked irreversibles** (kernel server-process model first).
 - (−) Single owner = one JS thread → a CPU-bound CLI stalls everything else in that realm until P6 SAB sync-views; true "shell usable while `vite` runs" needs P6.
-- (−) `cowsay` / real-CLI end-to-end stays blocked until the milestone lands; `execSync` shebang/relative-import support lands inside D (not before — the standalone flip regresses `execsync-sab.spec.ts`).
+- (−) Historical at acceptance: `cowsay` / real-CLI end-to-end stayed blocked until the milestone landed; `execSync` shebang/relative-import support lands inside D (not before — the standalone flip regresses `execsync-sab.spec.ts`). Corrected 2026-06-23: shell `.bin` real-CLI execution is now delivered by the owner-worker child path; the `execSync` node-entry residual remains separate.
 - Follow-ups: raise the **kernel server-process model** ADR (P1 gate / ADR-0077 follow-up) before D P1; ADR-0137 root-cause corrected in place; `node-entry-bootstrap.ts` stale "SAB-backed sync mirror" comment fixed.
 
 ## Reversibility

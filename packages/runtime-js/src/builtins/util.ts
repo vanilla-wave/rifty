@@ -3,6 +3,7 @@
  * inspector; `format` shims the printf-style %s/%d/%j specifiers.
  */
 import { inspect as inspectImpl } from '../repl/inspect.ts';
+import { deepStrictEqual } from './assert.ts';
 import { NodeProcess, riftyProcess } from './process.ts';
 import { Stream } from './stream.ts';
 import { types as utilTypes } from './util-types.ts';
@@ -261,6 +262,220 @@ export function format(fmt: unknown, ...args: unknown[]): string {
   return result;
 }
 
+const STYLE_CODES = {
+  none: null,
+  reset: [0, 0],
+  bold: [1, 22],
+  dim: [2, 22],
+  faint: [2, 22],
+  italic: [3, 23],
+  underline: [4, 24],
+  blink: [5, 25],
+  inverse: [7, 27],
+  swapColors: [7, 27],
+  swapcolors: [7, 27],
+  hidden: [8, 28],
+  conceal: [8, 28],
+  strikethrough: [9, 29],
+  strikeThrough: [9, 29],
+  crossedout: [9, 29],
+  crossedOut: [9, 29],
+  doubleunderline: [21, 24],
+  doubleUnderline: [21, 24],
+  framed: [51, 54],
+  overlined: [53, 55],
+  black: [30, 39],
+  red: [31, 39],
+  green: [32, 39],
+  yellow: [33, 39],
+  blue: [34, 39],
+  magenta: [35, 39],
+  cyan: [36, 39],
+  white: [37, 39],
+  gray: [90, 39],
+  grey: [90, 39],
+  blackBright: [90, 39],
+  redBright: [91, 39],
+  greenBright: [92, 39],
+  yellowBright: [93, 39],
+  blueBright: [94, 39],
+  magentaBright: [95, 39],
+  cyanBright: [96, 39],
+  whiteBright: [97, 39],
+  bgBlack: [40, 49],
+  bgRed: [41, 49],
+  bgGreen: [42, 49],
+  bgYellow: [43, 49],
+  bgBlue: [44, 49],
+  bgMagenta: [45, 49],
+  bgCyan: [46, 49],
+  bgWhite: [47, 49],
+  bgGray: [100, 49],
+  bgGrey: [100, 49],
+  bgBlackBright: [100, 49],
+  bgRedBright: [101, 49],
+  bgGreenBright: [102, 49],
+  bgYellowBright: [103, 49],
+  bgBlueBright: [104, 49],
+  bgMagentaBright: [105, 49],
+  bgCyanBright: [106, 49],
+  bgWhiteBright: [107, 49],
+} as const;
+
+type StyleName = keyof typeof STYLE_CODES;
+
+interface StyleTextStream {
+  readonly isTTY?: boolean;
+  getColorDepth?: () => number;
+  hasColors?: () => boolean;
+}
+
+interface StyleTextOptions {
+  readonly validateStream?: boolean | 0 | null;
+  readonly stream?: StyleTextStream;
+}
+
+function invalidArgType(name: string, expected: string, value: unknown): TypeError {
+  const received =
+    value === null
+      ? 'null'
+      : typeof value === 'object'
+        ? `an instance of ${value.constructor?.name ?? 'Object'}`
+        : `type ${typeof value}${typeof value === 'number' ? ` (${value})` : ''}`;
+  return Object.assign(
+    new TypeError(`The "${name}" argument must be of type ${expected}. Received ${received}`),
+    {
+      code: 'ERR_INVALID_ARG_TYPE',
+    },
+  );
+}
+
+function invalidStyle(format: unknown): TypeError {
+  const received =
+    typeof format === 'string'
+      ? `'${format}'`
+      : format === null
+        ? 'null'
+        : Array.isArray(format)
+          ? inspectImpl(format)
+          : String(format);
+  return Object.assign(
+    new TypeError(
+      `The argument 'format' must be one of: ${Object.keys(STYLE_CODES)
+        .map((name) => `'${name}'`)
+        .join(', ')}. Received ${received}`,
+    ),
+    { code: 'ERR_INVALID_ARG_VALUE' },
+  );
+}
+
+function normalizeStyles(format: unknown): StyleName[] {
+  const raw = Array.isArray(format) ? format : [format];
+  const styles: StyleName[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string' || !(item in STYLE_CODES)) throw invalidStyle(item);
+    styles.push(item as StyleName);
+  }
+  return styles;
+}
+
+function normalizeStyleTextOptions(options: unknown): StyleTextOptions {
+  if (options === undefined) return {};
+  if (options === null || typeof options !== 'object') {
+    throw invalidArgType('options', 'object', options);
+  }
+  const candidate = options as { validateStream?: unknown; stream?: unknown };
+  if (
+    candidate.validateStream !== undefined &&
+    candidate.validateStream !== null &&
+    typeof candidate.validateStream !== 'boolean' &&
+    candidate.validateStream !== 0 &&
+    !(typeof candidate.validateStream === 'number' && Number.isNaN(candidate.validateStream))
+  ) {
+    const received =
+      typeof candidate.validateStream === 'number'
+        ? `number (${candidate.validateStream})`
+        : `type ${typeof candidate.validateStream}`;
+    const err = new TypeError(
+      `The "options.validateStream" property must be of type boolean. Received ${received}`,
+    );
+    throw Object.assign(err, { code: 'ERR_INVALID_ARG_TYPE' });
+  }
+  if (
+    candidate.stream !== undefined &&
+    !styleTextStreamValidationDisabled(candidate.validateStream) &&
+    !isValidStyleTextStream(candidate.stream)
+  ) {
+    throw invalidArgType(
+      'stream',
+      'an instance of ReadableStream, WritableStream, or Stream',
+      candidate.stream,
+    );
+  }
+  return candidate as StyleTextOptions;
+}
+
+function styleTextStreamValidationDisabled(validateStream: unknown): boolean {
+  return (
+    validateStream === false ||
+    validateStream === 0 ||
+    (typeof validateStream === 'number' && Number.isNaN(validateStream))
+  );
+}
+
+function isValidStyleTextStream(stream: unknown): boolean {
+  const proc = activeProcess();
+  return stream === proc.stdout || stream === proc.stderr;
+}
+
+function shouldApplyStyle(options: StyleTextOptions): boolean {
+  if (styleTextStreamValidationDisabled(options.validateStream)) {
+    return true;
+  }
+  const stream: StyleTextStream = options.stream ?? activeProcess().stdout;
+  if (typeof stream.hasColors === 'function') return stream.hasColors();
+  if (typeof stream.getColorDepth === 'function') return stream.getColorDepth() > 1;
+  return stream.isTTY === true;
+}
+
+export function styleText(format: unknown, text: unknown, options?: StyleTextOptions): string {
+  if (typeof text !== 'string') throw invalidArgType('text', 'string', text);
+  const styles = normalizeStyles(format);
+  const opts = normalizeStyleTextOptions(options);
+  if (styles.length === 0 || !shouldApplyStyle(opts)) return text;
+
+  let open = '';
+  let close = '';
+  for (const style of styles) {
+    const code = STYLE_CODES[style];
+    if (code === null) continue;
+    const [start, end] = code;
+    open += `\x1B[${start}m`;
+    close = `\x1B[${end}m${close}`;
+  }
+  return `${open}${text}${close}`;
+}
+
+const VT_CONTROL_PATTERN = [
+  String.raw`(?:\x1B\][^\x07]*(?:\x07|\x1B\\)|`,
+  String.raw`\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]))`,
+].join('');
+const VT_CONTROL_RE = new RegExp(VT_CONTROL_PATTERN, 'g');
+
+export function stripVTControlCharacters(str: unknown): string {
+  if (typeof str !== 'string') throw invalidArgType('str', 'string', str);
+  return str.replace(VT_CONTROL_RE, '');
+}
+
+export function isDeepStrictEqual(val1: unknown, val2: unknown): boolean {
+  try {
+    deepStrictEqual(val1, val2);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * A `util.debuglog` debug function: callable with printf-style args, carrying a
  * lazily-resolved `enabled` reflecting whether `NODE_DEBUG` selected the
@@ -397,6 +612,9 @@ export const TextDecoder = globalThis.TextDecoder;
 const util = {
   inspect,
   format,
+  styleText,
+  stripVTControlCharacters,
+  isDeepStrictEqual,
   debuglog,
   debug,
   promisify,

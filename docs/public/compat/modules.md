@@ -18,7 +18,9 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 | JSON modules via `require` | ✅ | |
 | JSON modules via `import` | ✅ | Synthetic default + named keys |
 | `node:` built-ins | ⚠️ | Registry supports `node:` and bare built-ins; each module is a tested subset. `node:constants` is the faithful flattened union of `fs` + Linux-ABI `os` + `crypto.constants` (ADR-0153): real Node numeric values for known keys, `undefined` for absent keys — Node's shape. Reading a constant never throws; the unimplemented-behavior gap surfaces at the syscall (e.g. `fs.openSync` throws `NotImplementedError` for `O_SYNC`/`O_DSYNC` durability, `copyFileSync` for `COPYFILE_FICLONE_FORCE`). `node:vm` covers `Script`, `createContext`, `isContext`, `runInThisContext`, `runInContext`, `runInNewContext`, and `compileFunction`; default engine is a real QuickJS realm (cross-realm isolation), without timeout/`displayErrors`/`cachedData`/`contextExtensions` support (those throw loudly). See the node:vm section below. |
-| `data:` / `file:` URLs | ❌ | Throws `UNSUPPORTED_PROTOCOL` |
+| `node:module` helpers | ⚠️ | `createRequire`, `builtinModules`, `isBuiltin`, `Module.*` mirrors, and compile-cache status constants are implemented. Compile-cache persistence is an explicit browser ceiling: `enableCompileCache()` returns `FAILED` with a message (never fake `ENABLED`), `getCompileCacheDir()` returns `undefined`, and `flushCompileCache()` is a quiet no-op. Parity case `modules/module-builtins-surface` pins the matching constants/function surface; conformance pins the unavailable-cache ceiling. |
+| `file:` URL imports | ✅ | Absolute `file://` specifiers resolve through the VFS loader, including percent-decoding and query/hash stripping; used by ESM config/package-tooling paths |
+| `data:` URL imports | ❌ | Throws `UNSUPPORTED_PROTOCOL` |
 | ESM static `import` | ✅ | Named, default, namespace, side-effect-only |
 | ESM `export` named / default / re-export | ✅ | |
 | ESM `export * from` | ✅ | |
@@ -41,6 +43,59 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
 ## Known limitations (M2)
 
 - Identifier rewriter for live bindings is AST-based (acorn + scope-tracking walker — ADR 0009). Same-name local shadowing of imported bindings is handled correctly.
+- Function-constructor `import()` routing is loader-scoped (ADR-0171): the lexical
+  `Function` constructor inside CJS/ESM module evaluation resolves VFS imports against
+  the constructing module while preserving native `name`, `length`, prototype-chain,
+  and `instanceof` observables. Code that intentionally reaches `globalThis.Function`
+  inside a rifty-loaded module hits the directed global-Function ceiling below. Code
+  that uses a host constructor pre-captured outside the rifty module-loader context
+  has no trustworthy module base and is not claimed.
+  Because routing needs a lexical proxy, identity probes like
+  `Function === globalThis.Function` and `Function.prototype.constructor === Function`
+  are outside the claim.
+- Derived host constructors (`fn.constructor`, `Function.prototype.constructor`,
+  and similar `.constructor` paths) used to compile source that contains or may
+  contain `import` throw
+  `NotImplementedError('module-loader.function-constructor-derived-host')`.
+  Routing them without mutating the host `Function.prototype` needs a future
+  realm/prototype membrane. Tracked in
+  `docs/backlog/runtime-js/function-constructor-derived-host.md`.
+- Runtime-built `Function` sources that combine routed `import()` with nested
+  `Function`, `with`, or eval dynamic scope throw
+  `NotImplementedError('module-loader.function-constructor-dynamic-scope')`.
+  Node's `import()` is syntax, while rifty's routed helper would otherwise be a
+  user-shadowable identifier in dynamic scope or fall through to a host/global
+  nested constructor. Tracked in
+  `docs/backlog/runtime-js/function-constructor-dynamic-scope.md`.
+- CJS/ESM modules containing mutations of the global `Function` binding/property
+  (`Function = ...`, `globalThis.Function = ...`, `globalThis["Function"] = ...`,
+  statically tracked aliases of `globalThis`/`global` (direct assignment,
+  CJS sloppy implicit assignment,
+  object/array destructuring, default parameters), computed `globalThis[...]`
+  Function-like mutations or use-as-constructor reads (including dynamic computed keys
+  and folded string expressions like `"Fun" + "ction"`), `delete globalThis.Function`,
+  `Object.defineProperty(globalThis, "Function", ...)`,
+  `Object.defineProperties(...)`, `Object.assign(globalThis, ...)`, `Reflect.set(...)`,
+  `Reflect.get(globalThis, ...)` when used as a possible constructor, `Reflect.deleteProperty(...)`,
+  `Reflect.defineProperty(...)`, `__defineGetter__` /
+  `__defineSetter__`,
+  etc.) throw directed `NotImplementedError`s instead of mutating the browser host
+  constructor, deleting it, or silently mixing routed and replaced constructors:
+  `module-loader.cjs-global-function-assignment` / `module-loader.esm-global-function-assignment`.
+  Tracked in `docs/backlog/runtime-js/cjs-global-function-assignment.md`.
+- CJS/ESM modules that mention `Function` and use `with` or unshadowed/global/computed `eval`
+  (including aliased `eval` and eval arguments that statically or dynamically may touch `Function`)
+  throw `module-loader.cjs-dynamic-function-scope` /
+  `module-loader.esm-dynamic-function-scope`; those dynamic scopes can replace the
+  binding at runtime, which the static routing transform cannot preserve without
+  an isolated global realm.
+- The package-tooling hard-ceil goal is scoped to the documented static
+  Function/eval/import patterns above. Proof-complete detection for every
+  JavaScript metaprogramming alias shape is explicitly deferred to
+  `docs/backlog/runtime-js/function-constructor-exhaustive-metaprogramming-ceiling.md`;
+  until then, new escapes found by parity/conformance must either be routed or
+  promoted to a directed `NotImplementedError` before being claimed as supported.
+
 ### `node:vm` — engines + ES2023-vs-V8 divergences
 
 `node:vm` is a compatibility surface, not a security sandbox. Two engines, selectable via

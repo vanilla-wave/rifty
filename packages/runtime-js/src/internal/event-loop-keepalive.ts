@@ -1,6 +1,6 @@
 /**
  * Event-loop keepalive for run-to-completion child realms
- * (child-realm-async-lifecycle). A libuv-style refcount of handles that keep the
+ * ADR-0152. A libuv-style refcount of handles that keep the
  * loop alive (timers/immediates/pending dynamic imports). `awaitDrain` resolves
  * once the count hits zero — the kernel drain seam (ADR-0039) awaits it before
  * reaping, so a child exits on "loop empty" like Node, not at top-level resolve.

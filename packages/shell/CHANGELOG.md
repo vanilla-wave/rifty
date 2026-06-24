@@ -98,7 +98,7 @@
   exit 126 ("installed, cannot execute here"), distinct from the 127 miss —
   never a silent stub. `which <cli>` now reports the resolved shim path; a
   builtin still shadows a same-named shim. New public API: the `BinExecutor`
-  type. Closes (residual parked) `docs/backlog/shell/node-modules-bin-execution`.
+  type. Closes the historical shell `.bin` execution backlog.
 
 ### Fixed
 

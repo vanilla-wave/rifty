@@ -191,6 +191,34 @@
   `src/main.js`; the synchronous owner seed now refreshes the starter files but leaves
   the root `package.json` to durable reset / npm install, so installed CLIs survive
   reload.
+### Changed
+
+- **Generic `npm run <script>` now routes through the shell `.bin` path in the owner.**
+  Dev-line script names (`dev`/`vite`/`start`, per template) still boot the
+  co-resident dev server, but arbitrary scripts such as `format` and `lint` now
+  run in a child shell with the same owner-worker `.bin` executor instead of
+  being rejected or accidentally treated as dev-server aliases. This is the
+  script path needed for `npm run format` / `npm run lint` with real
+  Prettier/ESLint installs. Arguments after the script name are forwarded only
+  after npm's `--` separator, so `npm run lint -- --fix` reaches the installed
+  ESLint CLI while `npm run lint --fix` stays an npm CLI flag like real npm.
+  Forwarded args are quoted before the child shell reparses them, preserving
+  literal `$HOME`/glob patterns for formatter/linter file selectors.
+  `pre<script>` / `post<script>` hooks now run in npm order (without
+  main-script forwarded args) and stop on the first non-zero exit.
+- **Foreground CLI sessions now pass TTY metadata into child Node workers.**
+  `.bin` and `node <file>` children receive stdin/stdout/stderr TTY flags, so
+  packages that inspect `process.stdout.isTTY` (including ESLint formatting)
+  see the same terminal shape as the owning shell.
+- **`npm install` shell preflight now preserves npm-client ceilings.**
+  Non-registry CLI specs such as `.`, `file:../x`, `owner/repo`, git/URL tarballs,
+  and npm aliases throw the same named `NotImplementedError` before package.json
+  is written, root lifecycle scripts are not swallowed by the empty-install
+  fast path, and malformed dependency maps no longer collapse to a successful
+  empty install.
+- **`npm run` reads only scripts, not install metadata.** A valid script can run
+  even when `dependencies` contains an install-only unsupported/nested entry
+  that `npm install` would loudly reject.
 
 ### Fixed (CI-red + visual regressions, ADR-0165)
 
@@ -292,6 +320,11 @@
   applyable editor actions; diagnostics carry a per-path generation guard so
   older async results cannot overwrite newer buffers or close/reopen cycles.
 
+- **Fast foreground exits can no longer leave the terminal permanently busy.**
+  The page-side pty client registers `openSession`/`exec` waiters before
+  sending IPC frames, so a synchronous `pty:ready` or quick non-zero `pty:exit`
+  cannot be dropped. This fixes the real ESLint failure path where the prompt
+  was visible but the next typed command was routed as stale stdin.
 - **TS diagnostics now appear on a slow (2-core CI) cold boot** (ADR-0166; fixes the chromium e2e `ts-language-service.spec.ts` timeout where the type-error marker never rendered). The page LS client's per-request timeout was 15s, but the LS endpoint serializes every frame behind the first `ts:init` — which on a constrained CI runner co-resident with the dev-server child takes tens of seconds (TS engine + ~3 MB lib over the relay + tsconfig over fs.* sync-RPC). So the `lsp-check.ts` open/diagnostics frames rejected at 15s before the service finished building, and the page never re-sent → no marker. Raised the default to 60s (warm requests still resolve in <1s, so the ceiling only bites a genuinely dropped frame, which then rejects loud). The endpoint-side serialization + out-of-program-honest-empty fixes live in `@riftydev/ts-language-service`.
 - **Express `res.json`/`res.send` no longer crash with `TypeError: argument entity must be string, Buffer, or fs.Stats`** (express + sqlite preset, PROD build only). Each `?worker&url` child entry is self-contained, so it carries its OWN `@riftydev/io` `Buffer` copy; the kernel pre-entry hook had set `globalThis.Buffer` from the kernel-worker-entry copy, so `etag` (reads the global) rejected a buffer express built via `require('buffer')` (the child copy). The `kind:'url'` child bootstraps (dev-server-child, node-entry, real-vite owner) now call `installBundleLocalBuffer()` to pin the global to THIS bundle's copy — mirrors `runtime-js/worker-entry.ts`. DEV was unaffected (one shared ESM module instance), which is why the dev e2e never caught it; new PROD-build guard `tests/e2e-prod/buffer-realm-identity.spec.ts` + unit `bundle-local-buffer.test.ts`. Root (shared runtime classes duplicated per worker bundle) tracked in backlog/toolchain-build/worker-bundle-shared-runtime-dedup.
 - **Editor program mirror + entry re-seed follow the active root and template entry (ADR-0165 §4).**
@@ -496,6 +529,7 @@
   sockets/HMR are tracked outside this change.
 
 - **Event-loop keepalive + drain wired into the kernel worker** (child-realm-async-lifecycle,
+- **Event-loop keepalive + drain wired into the kernel worker** (ADR-0152,
   ADR-0152). `workers/kernel-worker-entry.ts` now calls `installEventLoopKeepalive()` (right after
   `installTimerGlobals()`), so a run-to-completion child drains its event loop before reaping —
   post-top-level async (timers, detached `import().then(run)`) completes — and fails loudly (stderr +
@@ -627,7 +661,7 @@
   stderr + non-zero. Matched by NAME, not command: a preset switch updates the active spec before
   the tree's package.json is re-seeded, so a node preset's `npm run dev` can read a stale `vite`
   command — command-matching wrongly rejected it and broke the node-server boot (fullstack-demo
-  e2e). Interim — full node_modules/.bin routing is backlog `shell/node-modules-bin-execution`.
+  e2e). Generic `npm run` now routes non-dev scripts through the owner `.bin` path.
 - **Owner death no longer leaves a stale LIVE pill + silently drops edits.** On owner-worker exit
   `realVite` only resolved `closed`, never notifying `onDevServer` listeners — so the UI stayed
   'running'; and a post-exit `writeFile` fell through `worker.send`'s false return into the
@@ -881,11 +915,9 @@
   (`vite`) still win. Replaces the earlier `kind:'source'` approach, which threw
   on the shim's shebang (ADR-0137 §Rejected).
   - The execution MECHANISM (`runNodeEntry` + loader) is proven by node unit
-    tests + parity. NOT YET working end-to-end in the browser: the spawned bin
-    worker's `syncMirror` is a separate in-worker realm that does not yet hold
-    the installed `node_modules` (after ADR-0135 `install()` runs in the
-    worker/OPFS realm) — a real CLI `ENOENT`s on its shim. Tracked in
-    `docs/backlog/shell/node-modules-bin-execution.md`.
+    tests + parity. The historical worker-VFS transport residual was later
+    closed by the owner-worker child executor; real package CLIs now run through
+    the owner store.
 
 - **Baked node_modules snapshots — instant presets are instant on the FIRST
   boot too (ADR-0135 item 6).** `pnpm snapshots:bake` runs a real `install()`

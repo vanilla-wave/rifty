@@ -115,6 +115,15 @@ describe('node-server runtime branch', () => {
   });
 });
 
+describe('owner npm run script routing', () => {
+  it('routes non-dev package scripts through the shell/.bin executor', () => {
+    expect(source).toContain('const scriptShell = new Shell({');
+    expect(source).toContain('execBin: ownerBinExecutor');
+    expect(source).toContain('scriptShell.run(command');
+    expect(source).not.toContain('is not supported yet; only the dev line boots');
+  });
+});
+
 describe('OPFS persistence wiring (owner OPFS persistence)', () => {
   it('wires the OPFS-or-memory backend before serving the owner (initBackend)', () => {
     // The owner is the workspace source-of-truth once the dev server is co-resident

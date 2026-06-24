@@ -1975,4 +1975,20 @@ describe('RiftyTerminal — command marker substrate', () => {
     expect(rawInputs).toEqual(['next command']);
     expect(busyInputs).toEqual([{ data: 'next command', binary: false }]);
   });
+
+  it('accepts a new command after a non-zero foreground command exits', async () => {
+    const lines: string[] = [];
+    const term = new RiftyTerminal({
+      onInput: (line) => {
+        lines.push(line);
+        return line === 'bad' ? 1 : 0;
+      },
+    });
+
+    await term.submitLine('bad');
+    await term.submitLine('echo after');
+
+    expect(lines).toEqual(['bad', 'echo after']);
+    expect(term.getCommandBlocks().map((block) => block.exitCode)).toEqual([1, 0]);
+  });
 });

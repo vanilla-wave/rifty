@@ -152,7 +152,9 @@ export function devScriptCommand(spec: ProjectSpec): string {
  * Is `name` one of the spec's lifecycle-owning dev-line script aliases (the keys
  * `projectScripts` seeds — `dev`/`vite` or `dev`/`start`)? Node-server dev
  * aliases still use the lifecycle-owned preview path. Vite aliases run through
- * the real shell/bin path, so the script body is the source of truth.
+ * the real shell/bin path, so the script body is the source of truth. Other
+ * package scripts (e.g. `build`/`lint`) route through the shell/.bin path rather
+ * than silently booting dev.
  */
 export function isDevScriptName(spec: ProjectSpec, name: string): boolean {
   return Object.hasOwn(projectScripts(spec), name);

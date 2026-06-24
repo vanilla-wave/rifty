@@ -27,9 +27,18 @@ export async function openShellTerminal(page: Page): Promise<void> {
 }
 
 export async function runTerminalLine(page: Page, line: string): Promise<void> {
-  await page.locator('[data-testid="terminal"]').click();
-  await page.keyboard.type(line);
-  await page.keyboard.press('Enter');
+  const slot = page.locator('.rf-terminal-slot[data-active="true"]');
+  await expect(slot).toBeVisible();
+  await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toMatch(/>\s*$/u);
+  await slot.locator('[data-testid="terminal"]').click();
+  const input = slot.locator('textarea.xterm-helper-textarea, textarea').first();
+  await expect(input).toBeAttached();
+  await input.focus();
+  await expect
+    .poll(() => input.evaluate((el) => document.activeElement === el), { timeout: 5_000 })
+    .toBe(true);
+  await input.pressSequentially(line);
+  await input.press('Enter');
 }
 
 function terminalPromptCount(text: string): number {

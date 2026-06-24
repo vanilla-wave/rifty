@@ -324,6 +324,7 @@ function readStringRecord(source: Record<string, unknown>, field: string): Recor
   const out: Record<string, string> = {};
   for (const [name, range] of Object.entries(value as Record<string, unknown>)) {
     if (typeof range !== 'string') {
+      // TODO(backlog: npm-client/tar-symlink-and-nonregistry-dep-tracking)
       throw new NotImplementedError(
         `npm-client.package-json.${field}`,
         'nested/non-string entries',
@@ -347,8 +348,9 @@ function assertRegistryDependencySpecs(
   optionalDependencies: Record<string, string>,
 ): void {
   for (const [name, range] of Object.entries({ ...dependencies, ...optionalDependencies })) {
-    const feature = unsupportedDependencySpec(range);
+    const feature = unsupportedDependencyName(name) ?? unsupportedDependencySpec(range);
     if (feature) {
+      // TODO(backlog: npm-client/tar-symlink-and-nonregistry-dep-tracking)
       throw new NotImplementedError(
         `npm-client.dependency-spec.${feature}`,
         `${name}@${range} is outside registry semver/tag installs`,
@@ -362,6 +364,7 @@ function assertRegistryOverrideTargets(overrides: OverrideMap | undefined): void
   for (const [name, target] of Object.entries(overrides)) {
     const feature = unsupportedOverrideTargetSpec(target);
     if (!feature) continue;
+    // TODO(backlog: npm-client/tar-symlink-and-nonregistry-dep-tracking)
     throw new NotImplementedError(
       `npm-client.dependency-spec.${feature}`,
       `override ${name} -> ${target} is outside registry semver/tag installs`,
@@ -371,6 +374,8 @@ function assertRegistryOverrideTargets(overrides: OverrideMap | undefined): void
 
 function unsupportedDependencySpec(range: string): string | null {
   const spec = range.trim();
+  if (spec === '.' || spec === '..') return 'file';
+  if (/^(?:\.{0,2}\/|\/)/.test(spec)) return 'file';
   if (/^(file|link):/.test(spec)) return 'file';
   if (spec.startsWith('workspace:')) return 'workspace';
   if (/^(git\+|git:|github:|gitlab:|bitbucket:)/.test(spec) || /\.git(?:#|$)/.test(spec)) {
@@ -378,7 +383,16 @@ function unsupportedDependencySpec(range: string): string | null {
   }
   if (/^https?:/.test(spec)) return 'http-tarball';
   if (spec.startsWith('npm:')) return 'npm-alias';
+  if (isGithubShorthand(spec)) return 'git';
   return null;
+}
+
+function unsupportedDependencyName(name: string): string | null {
+  return name.includes('/') && !name.startsWith('@') ? 'git' : null;
+}
+
+function isGithubShorthand(spec: string): boolean {
+  return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:[#@].+)?$/.test(spec);
 }
 
 function unsupportedOverrideTargetSpec(target: string): string | null {
@@ -846,11 +860,11 @@ function assertNativeSupported(name: string, version: string, manifest: VersionM
 
 /**
  * Live-resolve source: apply overrides, fetch packument (cached),
- * `pickBestVersion`. Throws "No matching version" rather than silently
- * substituting `dist-tags.latest` — that would violate the operator's semver
- * intent (caught the live-express regression where `^4` resolved to 5.x).
- * Diamond conflicts are not detected here post-M11; each call picks the best
- * version for its own (name, range) and the walk decides placement.
+ * then choose a version. Bare/unconstrained requests prefer `dist-tags.latest`
+ * (npm parity); explicit ranges stay semver-only and throw "No matching
+ * version" rather than silently falling back to latest. Diamond conflicts are
+ * not detected here post-M11; each call picks the best version for its own
+ * (name, range) and the walk decides placement.
  */
 function createRegistrySource(opts: InstallOptions): ResolutionSource {
   const packumentCache = opts.packumentCache ?? new Map<string, Packument>();
@@ -918,13 +932,10 @@ function createRegistrySource(opts: InstallOptions): ResolutionSource {
 
       const packument = await loadPackument(effectiveName);
       const versions = Object.keys(packument.versions);
-      let pick = pickBestVersion(versions, effectiveRange);
-      if (!pick && rangeIsUnconstrained(effectiveRange)) {
-        // Unconstrained range with no pick: packument has zero `versions`.
-        // `dist-tags.latest` (possibly unlisted) is the last resort.
-        const tag = packument['dist-tags']?.latest;
-        if (tag) pick = tag;
-      }
+      const latestTag = rangeIsUnconstrained(effectiveRange)
+        ? packument['dist-tags']?.latest
+        : undefined;
+      const pick = latestTag ?? pickBestVersion(versions, effectiveRange);
       if (!pick) {
         throw new Error(`No matching version for ${effectiveName}@${effectiveRange ?? '*'}`);
       }

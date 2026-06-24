@@ -25,9 +25,14 @@ interface FakeRegistryEntry {
  */
 class FakeRegistry extends RegistryClient {
   private readonly db: Map<string, Map<string, FakeRegistryEntry>>;
-  constructor(db: Map<string, Map<string, FakeRegistryEntry>>) {
+  private readonly distTags: Map<string, Record<string, string>>;
+  constructor(
+    db: Map<string, Map<string, FakeRegistryEntry>>,
+    distTags: Map<string, Record<string, string>> = new Map(),
+  ) {
     super({ baseUrl: '/fake', fetch: async () => new Response('', { status: 599 }) });
     this.db = db;
+    this.distTags = distTags;
   }
   override async getPackument(name: string): Promise<Packument> {
     const versions = this.db.get(name);
@@ -36,7 +41,7 @@ class FakeRegistry extends RegistryClient {
     for (const [v, entry] of versions) versionsMap[v] = entry.manifest;
     const sorted = [...versions.keys()].sort();
     const latest = sorted[sorted.length - 1] ?? '0.0.0';
-    return { name, 'dist-tags': { latest }, versions: versionsMap };
+    return { name, 'dist-tags': { latest, ...this.distTags.get(name) }, versions: versionsMap };
   }
   override async getTarball(tarballUrl: string): Promise<Uint8Array> {
     // tarballUrl format we use below: `fake://<name>/<version>`
@@ -186,6 +191,77 @@ describe('install — package.json defaults', () => {
 
     expect(caught).toBeInstanceOf(NotImplementedError);
     expect((caught as NotImplementedError).feature).toBe('npm-client.dependency-spec.file');
+  });
+
+  it('throws a named NotImplementedError for package.json GitHub shorthand specs', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'app',
+        version: '1.0.0',
+        dependencies: { express: 'expressjs/express' },
+      }),
+    );
+
+    let caught: unknown;
+    try {
+      await install({ vfs, cwd: '/proj', registry: new FakeRegistry(new Map()) });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(NotImplementedError);
+    expect((caught as NotImplementedError).feature).toBe('npm-client.dependency-spec.git');
+  });
+
+  it('throws a named NotImplementedError for package.json GitHub shorthand package names', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      JSON.stringify({
+        name: 'app',
+        version: '1.0.0',
+        dependencies: { 'expressjs/express': 'latest' },
+      }),
+    );
+
+    let caught: unknown;
+    try {
+      await install({ vfs, cwd: '/proj', registry: new FakeRegistry(new Map()) });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(NotImplementedError);
+    expect((caught as NotImplementedError).feature).toBe('npm-client.dependency-spec.git');
+  });
+
+  it('throws a named NotImplementedError for package.json path-like local specs', async () => {
+    for (const spec of ['.', '..', '../local']) {
+      const vfs = new MemoryVfs();
+      await vfs.mkdir('/proj', { recursive: true });
+      await vfs.writeFile(
+        '/proj/package.json',
+        JSON.stringify({
+          name: 'app',
+          version: '1.0.0',
+          dependencies: { local: spec },
+        }),
+      );
+
+      let caught: unknown;
+      try {
+        await install({ vfs, cwd: '/proj', registry: new FakeRegistry(new Map()) });
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(NotImplementedError);
+      expect((caught as NotImplementedError).feature).toBe('npm-client.dependency-spec.file');
+    }
   });
 
   it('throws for non-registry package.json specs before root overrides can hide them', async () => {
@@ -516,6 +592,31 @@ describe('install — explicit range never falls through to dist-tags.latest', (
     const result = await install('root', '1.0.0', { a: '*' }, { vfs, cwd: '/proj', registry });
     expect(result.packages[0]?.name).toBe('a');
     expect(result.packages[0]?.version).toBe('1.0.0');
+  });
+
+  it('prefers dist-tags.latest over a higher prerelease for unconstrained installs', async () => {
+    const db = new Map<string, Map<string, FakeRegistryEntry>>();
+    db.set(
+      'prettier',
+      new Map([
+        ['3.8.3', await makeEntry('prettier', '3.8.3')],
+        ['4.0.0-alpha.13', await makeEntry('prettier', '4.0.0-alpha.13')],
+      ]),
+    );
+    const registry = new FakeRegistry(
+      db,
+      new Map([['prettier', { latest: '3.8.3', next: '4.0.0-alpha.13' }]]),
+    );
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+
+    const result = await install(
+      'root',
+      '1.0.0',
+      { prettier: '*' },
+      { vfs, cwd: '/proj', registry },
+    );
+    expect(result.packages.find((p) => p.name === 'prettier')?.version).toBe('3.8.3');
   });
 });
 

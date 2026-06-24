@@ -78,6 +78,10 @@ interface MkdirOptions {
   mode?: number;
 }
 
+interface StatOptions {
+  bigint?: boolean;
+}
+
 interface RmOptions {
   recursive?: boolean;
   force?: boolean;
@@ -326,6 +330,10 @@ function decodeResult(bytes: Uint8Array, encoding: Encoding | null): Uint8Array 
 function encodeData(data: Uint8Array | string, encoding: Encoding | null): Uint8Array {
   if (typeof data === 'string') return Buffer.from(data, encoding ?? 'utf8');
   return data;
+}
+
+function assertStatOptions(opts: StatOptions | undefined, feature: string): void {
+  if (opts?.bigint === true) throw new NotImplementedError(feature);
 }
 
 function parseOpenFlags(flags: OpenFlags): ParsedOpenFlags {
@@ -1024,10 +1032,12 @@ export const promises = {
   async unlink(p: string): Promise<void> {
     unlinkSync(p);
   },
-  async stat(p: string): Promise<Stats> {
+  async stat(p: string, opts?: StatOptions): Promise<Stats> {
+    assertStatOptions(opts, 'fs.promises.stat.bigint');
     return statSync(p);
   },
-  async lstat(p: string): Promise<Stats> {
+  async lstat(p: string, opts?: StatOptions): Promise<Stats> {
+    assertStatOptions(opts, 'fs.promises.lstat.bigint');
     return lstatSync(p);
   },
   async readlink(p: string): Promise<string> {
@@ -1265,10 +1275,18 @@ export function mkdir(
   );
 }
 
-export function stat(p: string, cb: Callback<Stats>): void {
-  promises.stat(p).then(
-    (v) => cb(null, v),
-    (e) => cb(e as NodeJS.ErrnoException),
+export function stat(p: string, cb: Callback<Stats>): void;
+export function stat(p: string, opts: StatOptions, cb: Callback<Stats>): void;
+export function stat(
+  p: string,
+  optsOrCb: StatOptions | Callback<Stats>,
+  cb?: Callback<Stats>,
+): void {
+  const opts = typeof optsOrCb === 'function' ? undefined : optsOrCb;
+  const cbFinal = (typeof optsOrCb === 'function' ? optsOrCb : cb) as Callback<Stats>;
+  promises.stat(p, opts).then(
+    (v) => cbFinal(null, v),
+    (e) => cbFinal(e as NodeJS.ErrnoException),
   );
 }
 
@@ -1279,10 +1297,18 @@ export function unlink(p: string, cb: Callback<void>): void {
   );
 }
 
-export function lstat(p: string, cb: Callback<Stats>): void {
-  promises.lstat(p).then(
-    (v) => cb(null, v),
-    (e) => cb(e as NodeJS.ErrnoException),
+export function lstat(p: string, cb: Callback<Stats>): void;
+export function lstat(p: string, opts: StatOptions, cb: Callback<Stats>): void;
+export function lstat(
+  p: string,
+  optsOrCb: StatOptions | Callback<Stats>,
+  cb?: Callback<Stats>,
+): void {
+  const opts = typeof optsOrCb === 'function' ? undefined : optsOrCb;
+  const cbFinal = (typeof optsOrCb === 'function' ? optsOrCb : cb) as Callback<Stats>;
+  promises.lstat(p, opts).then(
+    (v) => cbFinal(null, v),
+    (e) => cbFinal(e as NodeJS.ErrnoException),
   );
 }
 

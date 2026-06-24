@@ -19,6 +19,93 @@ describe('node:util.format', () => {
   });
 });
 
+describe('node:util.styleText', () => {
+  it('applies ANSI styles when stream validation is disabled', () => {
+    expect(util.styleText('red', 'x', { validateStream: false })).toBe('\x1B[31mx\x1B[39m');
+    expect(util.styleText(['bold', 'green'], 'x', { validateStream: false })).toBe(
+      '\x1B[1m\x1B[32mx\x1B[39m\x1B[22m',
+    );
+    expect(util.styleText('none', 'x', { validateStream: false })).toBe('x');
+    expect(util.styleText(['red', 'none'], 'x', { validateStream: false })).toBe(
+      '\x1B[31mx\x1B[39m',
+    );
+  });
+
+  it('validates color support against the active stream by default', () => {
+    expect(util.styleText('red', 'x')).toBe('x');
+  });
+
+  it('throws Node-coded errors for invalid args', () => {
+    expect(() => util.styleText('unknown', 'x')).toThrow(
+      expect.objectContaining({ code: 'ERR_INVALID_ARG_VALUE' }),
+    );
+    expect(() => util.styleText('red', 1)).toThrow(
+      expect.objectContaining({ code: 'ERR_INVALID_ARG_TYPE' }),
+    );
+    expect(() => util.styleText('red', 'x', { validateStream: 1 } as never)).toThrow(
+      expect.objectContaining({ code: 'ERR_INVALID_ARG_TYPE' }),
+    );
+    expect(() => util.styleText('red', 'x', { validateStream: 'nope' } as never)).toThrow(
+      expect.objectContaining({ code: 'ERR_INVALID_ARG_TYPE' }),
+    );
+    expect(() => util.styleText('red', 'x', { stream: {} } as never)).toThrow(
+      expect.objectContaining({ code: 'ERR_INVALID_ARG_TYPE' }),
+    );
+    expect(() => util.styleText('red', 'x', { stream: 0 } as never)).toThrow(
+      expect.objectContaining({ code: 'ERR_INVALID_ARG_TYPE' }),
+    );
+    expect(() => util.styleText('red', 'x', { stream: { isTTY: true } } as never)).toThrow(
+      expect.objectContaining({ code: 'ERR_INVALID_ARG_TYPE' }),
+    );
+  });
+
+  it('treats validateStream: 0 as disabled stream validation', () => {
+    expect(util.styleText('red', 'x', { validateStream: 0 })).toBe('\x1B[31mx\x1B[39m');
+    expect(util.styleText('red', 'x', { validateStream: Number.NaN } as never)).toBe(
+      '\x1B[31mx\x1B[39m',
+    );
+    expect(util.styleText('red', 'x', { validateStream: false, stream: { isTTY: true } })).toBe(
+      '\x1B[31mx\x1B[39m',
+    );
+  });
+
+  it('treats validateStream: null as normal stream validation', () => {
+    expect(util.styleText('red', 'x', { validateStream: null })).toBe('x');
+  });
+});
+
+describe('node:util.stripVTControlCharacters', () => {
+  it('removes ANSI/VT sequences', () => {
+    expect(util.stripVTControlCharacters('\x1B[31mx\x1B[39m')).toBe('x');
+  });
+
+  it('throws a Node-coded error for non-strings', () => {
+    expect(() => util.stripVTControlCharacters(null)).toThrow(
+      expect.objectContaining({ code: 'ERR_INVALID_ARG_TYPE' }),
+    );
+  });
+});
+
+describe('node:util.isDeepStrictEqual', () => {
+  it('compares primitives and plain objects with strict semantics', () => {
+    expect(util.isDeepStrictEqual(1, 1)).toBe(true);
+    expect(util.isDeepStrictEqual(1, '1')).toBe(false);
+    expect(util.isDeepStrictEqual({ a: [1] }, { a: [1] })).toBe(true);
+    expect(util.isDeepStrictEqual(+0, -0)).toBe(false);
+    expect(util.isDeepStrictEqual(Number.NaN, Number.NaN)).toBe(true);
+  });
+
+  it('compares Map, Set, and typed array values', () => {
+    expect(util.isDeepStrictEqual(new Set([{ a: 1 }]), new Set([{ a: 1 }]))).toBe(true);
+    expect(util.isDeepStrictEqual(new Set([1]), new Set([2]))).toBe(false);
+    expect(
+      util.isDeepStrictEqual(new Map([[{ k: 1 }, { v: 2 }]]), new Map([[{ k: 1 }, { v: 2 }]])),
+    ).toBe(true);
+    expect(util.isDeepStrictEqual(new Uint8Array([1, 2]), new Uint8Array([1, 2]))).toBe(true);
+    expect(util.isDeepStrictEqual(new Uint8Array([1, 2]), new Uint8Array([2, 1]))).toBe(false);
+  });
+});
+
 describe('node:util.promisify', () => {
   it('converts node-style callback to promise', async () => {
     const fn = (a: number, b: number, cb: (err: unknown, v?: unknown) => void) => cb(null, a + b);

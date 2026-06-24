@@ -78,6 +78,51 @@ function deepEqualImpl(
   const sa = seen.get(a as object);
   if (sa === b) return true;
   seen.set(a as object, b as object);
+  if (strict && Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
+  if (a instanceof Date || b instanceof Date) {
+    return a instanceof Date && b instanceof Date && Object.is(a.getTime(), b.getTime());
+  }
+  if (a instanceof RegExp || b instanceof RegExp) {
+    return (
+      a instanceof RegExp &&
+      b instanceof RegExp &&
+      a.source === b.source &&
+      a.flags === b.flags &&
+      a.lastIndex === b.lastIndex
+    );
+  }
+  if (a instanceof ArrayBuffer || b instanceof ArrayBuffer) {
+    return (
+      a instanceof ArrayBuffer &&
+      b instanceof ArrayBuffer &&
+      bytesEqual(new Uint8Array(a), new Uint8Array(b))
+    );
+  }
+  if (ArrayBuffer.isView(a) || ArrayBuffer.isView(b)) {
+    return viewsEqual(a, b);
+  }
+  if (a instanceof Set || b instanceof Set) {
+    if (!(a instanceof Set) || !(b instanceof Set) || a.size !== b.size) return false;
+    const unmatched = [...b];
+    for (const av of a) {
+      const idx = unmatched.findIndex((bv) => deepEqualImpl(av, bv, strict, seen));
+      if (idx === -1) return false;
+      unmatched.splice(idx, 1);
+    }
+    return true;
+  }
+  if (a instanceof Map || b instanceof Map) {
+    if (!(a instanceof Map) || !(b instanceof Map) || a.size !== b.size) return false;
+    const unmatched = [...b];
+    for (const [ak, av] of a) {
+      const idx = unmatched.findIndex(
+        ([bk, bv]) => deepEqualImpl(ak, bk, strict, seen) && deepEqualImpl(av, bv, strict, seen),
+      );
+      if (idx === -1) return false;
+      unmatched.splice(idx, 1);
+    }
+    return true;
+  }
   if (Array.isArray(a) !== Array.isArray(b)) return false;
   if (Array.isArray(a) && Array.isArray(b)) {
     if (a.length !== b.length) return false;
@@ -103,6 +148,23 @@ function deepEqualImpl(
     }
   }
   return true;
+}
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) return false;
+  for (let i = 0; i < a.byteLength; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function viewsEqual(a: unknown, b: unknown): boolean {
+  if (!ArrayBuffer.isView(a) || !ArrayBuffer.isView(b)) return false;
+  if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
+  return bytesEqual(
+    new Uint8Array(a.buffer, a.byteOffset, a.byteLength),
+    new Uint8Array(b.buffer, b.byteOffset, b.byteLength),
+  );
 }
 
 function deepEqual(actual: unknown, expected: unknown, message?: string): void {

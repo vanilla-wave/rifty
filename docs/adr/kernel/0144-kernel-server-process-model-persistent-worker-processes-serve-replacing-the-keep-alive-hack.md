@@ -9,7 +9,9 @@ Date: 2026-06
 
 `worker-entry.ts` `installWorkerEntry` runs the entry and then UNCONDITIONALLY posts `{type:'exit'}` + `closePorts()` + `self.close()` the instant the entry's top-level await resolves (worker-entry.ts:277-281). Correct for a run-to-completion CLI; fatal for a long-lived server. The only long-lived worker today — the real-vite preview owner — survives ONLY via `await new Promise<never>(() => {})` (real-vite-bootstrap.ts:503), a never-resolving promise that parks the top-level await so `self.close()` never fires. ADR-0077 introduced that keep-alive, called it a workaround, and deferred "the kernel should natively support server-shaped processes" as a follow-up (it rejected fixing worker lifetime then as IRREVERSIBLE + broad).
 
-ADR-0143 "D" makes the shell/bin/`execSync` execution live in a **persistent owner-worker** (holds `node_modules`, runs CLIs in-realm, PAGE = viewer). That requires a worker the kernel keeps alive deliberately — not a userland never-promise. This ADR is ADR-0143's named P1 gate.
+ADR-0143 "D" makes the shell/bin/`execSync` execution live under a **persistent owner-worker** (holds `node_modules`, supervises execution, PAGE = viewer). That requires a worker the kernel keeps alive deliberately — not a userland never-promise. This ADR is ADR-0143's named P1 gate.
+
+> Correction 2026-06-23: the original text said the owner "runs CLIs in-realm." Later P6a moved `.bin` commands to supervised child workers over owner remote-fs so the owner stays responsive; `execSync` node-entry routing remains a separate residual.
 
 The keep-alive hack is also load-bearing and fragile: a SECOND consumer (`serveNodeModulesReads`, node-modules-port.ts:94-96) depends on it; if the entry ever resolves (a refactor awaits wrong, an exception escapes), the kernel reaps the realm and every served port dies.
 

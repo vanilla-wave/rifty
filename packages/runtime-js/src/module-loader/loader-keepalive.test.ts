@@ -1,6 +1,6 @@
 /**
  * Verifies the event-loop keepalive refs a dynamic import while in flight and
- * unrefs once settled (resolve or reject) — Task 6 of child-realm-async-lifecycle.
+ * unrefs once settled (resolve or reject) — ADR-0152.
  *
  * Two refed paths must both hold a ref:
  *  - `loader.import()` — the public entry (e.g. the worker's first `import(url)`).

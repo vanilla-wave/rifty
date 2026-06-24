@@ -8,12 +8,14 @@
  * execution) without a Worker realm; the Worker transport is COI/e2e-only.
  */
 
-import { MemoryFsSync } from '@riftydev/vfs/internal';
-import { describe, expect, it } from 'vitest';
+import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
+import { afterEach, describe, expect, it } from 'vitest';
 import { createRequire } from './module.ts';
 import { parseBinLauncherTarget, runNodeEntry } from './node-entry.ts';
 
 const g = globalThis as Record<string, unknown>;
+
+afterEach(() => resetSyncMirror());
 
 describe('parseBinLauncherTarget', () => {
   it('extracts the dynamic-import target from a linker launcher shim', () => {
@@ -29,6 +31,7 @@ describe('parseBinLauncherTarget', () => {
 describe('runNodeEntry', () => {
   it('runs a .bin launcher by importing its CJS target through the loader (shebang + relative)', async () => {
     const vfs = new MemoryFsSync();
+    setSyncMirror(vfs);
     vfs.loadFixture({
       '/proj/node_modules/.bin/cli': "#!/usr/bin/env node\nimport('../widget/cli.js');\n",
       '/proj/node_modules/widget/package.json': JSON.stringify({ name: 'widget' }),
@@ -56,6 +59,64 @@ describe('runNodeEntry', () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(g.__cliEsm).toBe(1);
+  });
+
+  it('runs a Prettier-style CJS bin that builds its ESM importer with Function', async () => {
+    const vfs = new MemoryFsSync();
+    setSyncMirror(vfs);
+    vfs.loadFixture({
+      '/proj/node_modules/.bin/prettier':
+        "#!/usr/bin/env node\nimport('../prettier/bin/prettier.cjs');\n",
+      '/proj/node_modules/prettier/package.json': JSON.stringify({ name: 'prettier' }),
+      '/proj/node_modules/prettier/bin/prettier.cjs': `
+        const importModule = new Function('specifier', 'return import(specifier)');
+        module.exports.__promise = importModule('../internal/legacy-cli.mjs').then((m) => m.run());
+      `,
+      '/proj/node_modules/prettier/internal/legacy-cli.mjs': `
+        import fs from 'node:fs';
+        export function run() {
+          fs.writeFileSync('/proj/out.txt', 'formatted');
+        }
+      `,
+    });
+
+    await runNodeEntry({
+      vfs,
+      entryPath: '/proj/node_modules/.bin/prettier',
+      cwd: '/proj',
+      bin: true,
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(new TextDecoder().decode(vfs.readFileBytesSync('/proj/out.txt'))).toBe('formatted');
+  });
+
+  it('awaits a CJS bin exported __promise before the launcher run resolves', async () => {
+    const vfs = new MemoryFsSync();
+    setSyncMirror(vfs);
+    vfs.loadFixture({
+      '/proj/node_modules/.bin/prettier':
+        "#!/usr/bin/env node\nimport('../prettier/bin/prettier.cjs');\n",
+      '/proj/node_modules/prettier/package.json': JSON.stringify({ name: 'prettier' }),
+      '/proj/node_modules/prettier/bin/prettier.cjs': `
+        const fs = require('node:fs');
+        module.exports.__promise = new Promise((resolve) => {
+          setTimeout(() => {
+            fs.writeFileSync('/proj/async-out.txt', 'settled');
+            resolve();
+          }, 0);
+        });
+      `,
+    });
+
+    await runNodeEntry({
+      vfs,
+      entryPath: '/proj/node_modules/.bin/prettier',
+      cwd: '/proj',
+      bin: true,
+    });
+
+    expect(new TextDecoder().decode(vfs.readFileBytesSync('/proj/async-out.txt'))).toBe('settled');
   });
 
   it('runs a plain Node script entry (child_process node <script>) including a shebang', async () => {

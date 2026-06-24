@@ -17,6 +17,30 @@
 import { Readable, type ReadableOptions } from './readable.ts';
 import { Writable, type WritableOptions, type WritableState } from './writable.ts';
 
+type WriteOverride = (
+  this: Duplex,
+  chunk: unknown,
+  encoding: string,
+  cb: (err?: Error | null) => void,
+) => void;
+
+type FinalOverride = (this: Duplex, cb: (err?: Error | null) => void) => void;
+
+function ownFunction(target: object, name: '_write' | '_final'): unknown {
+  if (!Object.prototype.hasOwnProperty.call(target, name)) return undefined;
+  return (target as Record<string, unknown>)[name];
+}
+
+export function ownWriteOverride(target: Duplex): WriteOverride | null {
+  const value = ownFunction(target, '_write');
+  return typeof value === 'function' ? (value as WriteOverride) : null;
+}
+
+export function ownFinalOverride(target: Duplex): FinalOverride | null {
+  const value = ownFunction(target, '_final');
+  return typeof value === 'function' ? (value as FinalOverride) : null;
+}
+
 /**
  * Internal subclass hook key. Symbol-keyed so it cannot appear in the public
  * `ReadableOptions & WritableOptions` shape — outside subclasses can't construct
@@ -26,7 +50,7 @@ export const INTERNAL_WRITABLE_SIDE: unique symbol = Symbol('rifty/io:duplex-int
 
 /** Carrier for the symbol-keyed factory hook. Internal to `@riftydev/io`; not in `src/index.ts`. */
 export interface DuplexInternalOptions {
-  [INTERNAL_WRITABLE_SIDE]?: (opts: ReadableOptions & WritableOptions) => Writable;
+  [INTERNAL_WRITABLE_SIDE]?: (opts: ReadableOptions & WritableOptions, owner: Duplex) => Writable;
 }
 
 export class Duplex extends Readable {
@@ -38,7 +62,37 @@ export class Duplex extends Readable {
     // Symbol-keyed factory is the only override path; public callers can't reach
     // the Symbol. `Transform` injects it via `super({...})` — see `transform.ts`.
     const factory = (opts as DuplexInternalOptions)[INTERNAL_WRITABLE_SIDE];
-    this.writableSide = factory ? factory(opts) : new Writable(opts);
+    const writeOpt = opts.write;
+    const finalOpt = opts.final;
+    this.writableSide = factory
+      ? factory(opts, this)
+      : new Writable({
+          ...opts,
+          write: (chunk, encoding, cb): void => {
+            const override = ownWriteOverride(this);
+            if (override) {
+              override.call(this, chunk, encoding, cb);
+              return;
+            }
+            if (writeOpt) {
+              writeOpt.call(this.writableSide, chunk, encoding, cb);
+              return;
+            }
+            cb();
+          },
+          final: (cb): void => {
+            const override = ownFinalOverride(this);
+            if (override) {
+              override.call(this, cb);
+              return;
+            }
+            if (finalOpt) {
+              finalOpt.call(this.writableSide, cb);
+              return;
+            }
+            cb();
+          },
+        });
     this.writableSide.on('finish', () => {
       this.emit('finish');
     });

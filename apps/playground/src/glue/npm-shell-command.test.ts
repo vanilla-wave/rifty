@@ -144,6 +144,240 @@ describe('npm-shell-command — happy path', () => {
     expect(rec.stdout.join('')).toContain('script:vite');
   });
 
+  it('forwards npm run arguments after the script name', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify(
+        {
+          name: 'demo',
+          version: '0.0.0',
+          scripts: { lint: 'eslint src/lint.js' },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const calls: Array<{ name: string; command: string; cwd: string }> = [];
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        runScript: async (name, command, ctx) => {
+          calls.push({ name, command, cwd: ctx.cwd });
+          return 0;
+        },
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm run lint -- --fix src/lint.js');
+
+    expect(exitCode).toBe(0);
+    expect(calls).toEqual([
+      { name: 'lint', command: 'eslint src/lint.js --fix src/lint.js', cwd: '/proj' },
+    ]);
+  });
+
+  it('does not forward npm run flags without the npm -- separator', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify(
+        {
+          name: 'demo',
+          version: '0.0.0',
+          scripts: { lint: 'eslint src/lint.js' },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const calls: Array<{ name: string; command: string; cwd: string }> = [];
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        runScript: async (name, command, ctx) => {
+          calls.push({ name, command, cwd: ctx.cwd });
+          return 0;
+        },
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm run lint --fix');
+
+    expect(exitCode).toBe(0);
+    expect(calls).toEqual([{ name: 'lint', command: 'eslint src/lint.js', cwd: '/proj' }]);
+  });
+
+  it('quotes forwarded npm run args that would expand in the child shell', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify(
+        {
+          name: 'demo',
+          version: '0.0.0',
+          scripts: { show: 'echo' },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const calls: Array<{ name: string; command: string; cwd: string }> = [];
+    const shell = new Shell({ cwd: '/proj', env: { HOME: '/tmp/home' } });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        runScript: async (name, command, ctx) => {
+          calls.push({ name, command, cwd: ctx.cwd });
+          return 0;
+        },
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, "npm run show -- '$HOME' '*.js'");
+
+    expect(exitCode).toBe(0);
+    expect(calls).toEqual([{ name: 'show', command: "echo '$HOME' '*.js'", cwd: '/proj' }]);
+  });
+
+  it('runs package scripts without validating install-only dependency maps', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify(
+        {
+          name: 'demo',
+          version: '0.0.0',
+          scripts: { ok: 'echo OK' },
+          dependencies: { bad: { version: '1.0.0' } },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const calls: Array<{ name: string; command: string; cwd: string }> = [];
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        runScript: async (name, command, ctx) => {
+          calls.push({ name, command, cwd: ctx.cwd });
+          return 0;
+        },
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm run ok');
+
+    expect(exitCode).toBe(0);
+    expect(calls).toEqual([{ name: 'ok', command: 'echo OK', cwd: '/proj' }]);
+  });
+
+  it('runs pre/post npm script hooks without forwarding main script arguments', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify(
+        {
+          name: 'demo',
+          version: '0.0.0',
+          scripts: {
+            prelint: 'echo PRE',
+            lint: 'eslint src/lint.js',
+            postlint: 'echo POST',
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const calls: Array<{ name: string; command: string; cwd: string }> = [];
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        runScript: async (name, command, ctx) => {
+          calls.push({ name, command, cwd: ctx.cwd });
+          return 0;
+        },
+      }),
+    );
+
+    const { exitCode } = await runShell(shell, 'npm run lint -- --fix src/lint.js');
+
+    expect(exitCode).toBe(0);
+    expect(calls).toEqual([
+      { name: 'prelint', command: 'echo PRE', cwd: '/proj' },
+      { name: 'lint', command: 'eslint src/lint.js --fix src/lint.js', cwd: '/proj' },
+      { name: 'postlint', command: 'echo POST', cwd: '/proj' },
+    ]);
+  });
+
+  it('stops npm run hooks after the first failing hook or script', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify(
+        {
+          name: 'demo',
+          version: '0.0.0',
+          scripts: {
+            prelint: 'echo PRE',
+            lint: 'eslint src/lint.js',
+            postlint: 'echo POST',
+            preformat: 'echo PRE_FORMAT',
+            format: 'prettier --write src/bad.ts',
+            postformat: 'echo POST_FORMAT',
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const calls: Array<{ name: string; command: string }> = [];
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        vfs,
+        registry: fakeRegistry,
+        runScript: async (name, command) => {
+          calls.push({ name, command });
+          return name === 'prelint' || name === 'format' ? 7 : 0;
+        },
+      }),
+    );
+
+    const lint = await runShell(shell, 'npm run lint');
+    const format = await runShell(shell, 'npm run format');
+
+    expect(lint.exitCode).toBe(7);
+    expect(format.exitCode).toBe(7);
+    expect(calls).toEqual([
+      { name: 'prelint', command: 'echo PRE' },
+      { name: 'preformat', command: 'echo PRE_FORMAT' },
+      { name: 'format', command: 'prettier --write src/bad.ts' },
+    ]);
+  });
+
   it('installs a single package and writes it into package.json', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
@@ -254,6 +488,54 @@ describe('npm-shell-command — happy path', () => {
     expect(calls[0]?.deps).toEqual({ express: 'latest' });
   });
 
+  it('rejects non-registry CLI specs before they reach the registry installer', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const { install, calls } = makeStubInstall(() => emptyResult());
+
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    const { exitCode, rec } = await runShell(shell, 'npm install file:../local');
+
+    expect(exitCode).toBe(1);
+    expect(rec.stderr.join('')).toContain('npm-client.dependency-spec.file');
+    expect(calls).toEqual([]);
+    expect(await vfs.exists('/proj/package.json')).toBe(false);
+  });
+
+  it('rejects bare local-directory CLI specs before they reach the registry installer', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const { install, calls } = makeStubInstall(() => emptyResult());
+
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    const { exitCode, rec } = await runShell(shell, 'npm install .');
+
+    expect(exitCode).toBe(1);
+    expect(rec.stderr.join('')).toContain('npm-client.dependency-spec.file');
+    expect(calls).toEqual([]);
+    expect(await vfs.exists('/proj/package.json')).toBe(false);
+  });
+
+  it('rejects GitHub shorthand CLI specs before writing package.json', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const { install, calls } = makeStubInstall(() => emptyResult());
+
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    const { exitCode, rec } = await runShell(shell, 'npm install expressjs/express');
+
+    expect(exitCode).toBe(1);
+    expect(rec.stderr.join('')).toContain('npm-client.dependency-spec.git');
+    expect(calls).toEqual([]);
+    expect(await vfs.exists('/proj/package.json')).toBe(false);
+  });
+
   it('bare `npm install` reads existing deps and does NOT rewrite package.json', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
@@ -278,6 +560,33 @@ describe('npm-shell-command — happy path', () => {
     expect(after).toEqual(before);
   });
 
+  it('rejects malformed package.json dependency entries instead of dropping them', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    const before = `${JSON.stringify(
+      {
+        name: 'demo',
+        version: '0.0.0',
+        dependencies: { bad: { version: '1.0.0' } },
+      },
+      null,
+      2,
+    )}\n`;
+    await vfs.writeFile('/proj/package.json', before);
+    const { install, calls } = makeStubInstall(() => emptyResult());
+
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry, install }));
+
+    const { exitCode, rec } = await runShell(shell, 'npm install');
+
+    expect(exitCode).toBe(1);
+    expect(rec.stderr.join('')).toContain('npm-client.package-json.dependencies');
+    expect(rec.stdout.join('')).not.toContain('no dependencies');
+    expect(calls).toEqual([]);
+    expect(await vfs.readFileText('/proj/package.json')).toBe(before);
+  });
+
   it('refuses an empty install (no args, no package.json deps)', async () => {
     const vfs = new MemoryVfs();
     await vfs.mkdir('/proj', { recursive: true });
@@ -290,6 +599,32 @@ describe('npm-shell-command — happy path', () => {
     expect(exitCode).toBe(0);
     expect(calls).toEqual([]);
     expect(rec.stdout.join('')).toContain('no dependencies');
+  });
+
+  it('keeps root lifecycle ceilings on bare npm install even when no deps exist', async () => {
+    const vfs = new MemoryVfs();
+    await vfs.mkdir('/proj', { recursive: true });
+    await vfs.writeFile(
+      '/proj/package.json',
+      `${JSON.stringify(
+        {
+          name: 'demo',
+          version: '0.0.0',
+          scripts: { prepare: 'node build.js' },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    const shell = new Shell({ cwd: '/proj' });
+    shell.registerCommand('npm', createNpmShellCommand({ vfs, registry: fakeRegistry }));
+
+    const { exitCode, rec } = await runShell(shell, 'npm install');
+
+    expect(exitCode).toBe(1);
+    expect(rec.stderr.join('')).toContain('npm-client.lifecycle.prepare');
+    expect(rec.stdout.join('')).not.toContain('no dependencies');
   });
 });
 

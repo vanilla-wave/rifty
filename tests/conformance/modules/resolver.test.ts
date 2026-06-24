@@ -524,6 +524,1265 @@ describe('ESM — import / export', () => {
     expect(ns.value).toBe('dyn');
   });
 
+  it('dynamic import() rejects symbol specifiers like Node', async () => {
+    const loader = setup({
+      '/main.mjs': "export const value = await import(Symbol('x'));",
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toThrow(
+      /Cannot convert a Symbol value to a string/,
+    );
+  });
+
+  it('routes import() inside a runtime-built Function in ESM modules', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'runtime-function';",
+      '/main.mjs':
+        "const dyn = new Function('specifier', 'return import(specifier)'); export const value = (await dyn('./a.mjs')).v;",
+    });
+    const ns = await loader.import('./main.mjs', '/entry.mjs');
+    expect(ns.value).toBe('runtime-function');
+  });
+
+  it('routes ESM import() despite helper-shaped local names', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'esm-helper-hygiene';",
+      '/main.mjs': `
+        const __import = () => Promise.resolve({ v: 'wrong' });
+        export const value = (await import('./a.mjs')).v;
+      `,
+    });
+    const ns = await loader.import('./main.mjs', '/entry.mjs');
+    expect(ns.value).toBe('esm-helper-hygiene');
+  });
+
+  it('keeps import.meta isolated from helper-shaped local names', async () => {
+    const loader = setup({
+      '/main.mjs': `
+        const import_meta = { url: 'wrong' };
+        export const local = import_meta.url;
+        export const meta = import.meta.url;
+      `,
+    });
+    const ns = await loader.import('./main.mjs', '/entry.mjs');
+    expect(ns.local).toBe('wrong');
+    expect(ns.meta).toBe('file:///main.mjs');
+  });
+
+  it('exports correctly despite helper-shaped user bindings', async () => {
+    const loader = setup({
+      '/main.mjs': `
+        export const __slots = { wrong: true };
+        export const __rebuildExports = () => 'wrong';
+        export const value = 1;
+      `,
+    });
+    const ns = await loader.import('./main.mjs', '/entry.mjs');
+    expect(ns.__slots).toEqual({ wrong: true });
+    expect(typeof ns.__rebuildExports).toBe('function');
+    expect(ns.value).toBe(1);
+  });
+
+  it('uses collision-free ESM namespace temp names', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'namespace-temp-hygiene';",
+      '/main.mjs': `
+        const __m0 = { v: 'wrong' };
+        import { v } from './a.mjs';
+        export const local = __m0.v;
+        export const value = v;
+      `,
+    });
+    const ns = await loader.import('./main.mjs', '/entry.mjs');
+    expect(ns.local).toBe('wrong');
+    expect(ns.value).toBe('namespace-temp-hygiene');
+  });
+
+  it('routes import() in runtime-built Function parameter initializers', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'runtime-function-param';",
+      '/main.mjs': `
+        const dyn = new Function('loaded = import("./a.mjs")', 'return loaded');
+        export const value = (await dyn()).v;
+      `,
+    });
+    const ns = await loader.import('./main.mjs', '/entry.mjs');
+    expect(ns.value).toBe('runtime-function-param');
+  });
+
+  it('routes runtime-built Function import() despite helper-shaped local names', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'runtime-function-hygiene';",
+      '/main.mjs': `
+        const dyn = new Function(
+          'specifier',
+          'var __riftyDynamicImport = () => Promise.resolve({ v: "wrong" }); return import(specifier)',
+        );
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    const ns = await loader.import('./main.mjs', '/entry.mjs');
+    expect(ns.value).toBe('runtime-function-hygiene');
+  });
+
+  it('routes runtime-built Function import() when eval appears only as text in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'runtime-function-string-literal';",
+      '/main.mjs': `
+        const dyn = new Function(
+          'specifier',
+          'const note = "eval"; return import(specifier)',
+        );
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    const ns = await loader.import('./main.mjs', '/entry.mjs');
+    expect(ns.value).toBe('runtime-function-string-literal');
+  });
+
+  it('throws a directed ceiling when runtime-built Function creates a nested import Function in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function('return Function("specifier", "return import(specifier)")');
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function creates a split-string nested import Function in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function('return Function("specifier", "return " + "im" + "port(specifier)")');
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function invokes nested Function through Reflect in ESM', async () => {
+    const applyLoader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function('return Reflect.apply(Function, undefined, ["specifier", "return import(specifier)"])');
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(applyLoader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+
+    const constructLoader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function('return Reflect.construct(Function, ["specifier", "return import(specifier)"])');
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(constructLoader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function invokes nested Function through aliased Reflect in ESM', async () => {
+    const applyLoader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function('return (() => { const R = Reflect; return R.apply(Function, undefined, ["specifier", "return import(specifier)"]); })()');
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(applyLoader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+
+    const constructLoader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function('return (() => { const R = Reflect; return R.construct(Function, ["specifier", "return import(specifier)"]); })()');
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(constructLoader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function invokes nested Function through extracted Reflect methods in ESM', async () => {
+    const applyLoader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function('return (() => { const apply = Reflect.apply; return apply(Function, undefined, ["specifier", "return import(specifier)"]); })()');
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(applyLoader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+
+    const constructLoader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function('return (() => { const { construct } = Reflect; return construct(Function, ["specifier", "return import(specifier)"]); })()');
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(constructLoader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function invokes nested Function through extracted Reflect methods in ESM', async () => {
+    const applyLoader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function('return (() => { const { apply } = Reflect; return apply(Function, undefined, ["specifier", "return import(specifier)"]); })()');
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(applyLoader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+
+    const constructLoader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function('return (() => { const { construct } = Reflect; return construct(Function, ["specifier", "return import(specifier)"]); })()');
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(constructLoader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function source invokes nested Function through aliased Reflect in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function('return Function("return (() => { const R = Reflect; return R.apply(Function, undefined, [\\\\\\"specifier\\\\\\", \\\\\\"return import(specifier)\\\\\\"]); })()")');
+        const maker = outer();
+        const dyn = maker();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function source invokes nested Function through extracted Reflect methods in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function('return Function("return (() => { const { apply } = Reflect; return apply(Function, undefined, [\\\\\\"specifier\\\\\\", \\\\\\"return import(specifier)\\\\\\"]); })()")');
+        const maker = outer();
+        const dyn = maker();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function invokes nested Function through call/apply/bind in ESM', async () => {
+    for (const source of [
+      'return Function.call(undefined, "specifier", "return import(specifier)")',
+      'return Function.apply(undefined, ["specifier", "return import(specifier)"])',
+      'return Function.bind(undefined, "specifier", "return import(specifier)")()',
+    ]) {
+      const loader = setup({
+        '/a.mjs': "export const v = 'wrong-target';",
+        '/main.mjs': `
+          const outer = new Function(${JSON.stringify(source)});
+          const dyn = outer();
+          export const value = (await dyn('./a.mjs')).v;
+        `,
+      });
+      await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      });
+    }
+  });
+
+  it('throws a directed ceiling when runtime-built Function reaches nested Function through a computed global key in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function('return globalThis["Fun".concat("ction")]("specifier", "return import(specifier)")');
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function reaches nested Function through Reflect.get(globalThis) in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function('return Reflect.get(globalThis, "Function")("specifier", "return import(specifier)")');
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function reaches nested Function through aliased Reflect.get in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function(\`
+          const get = Reflect.get;
+          const F = get(globalThis, "Function");
+          return F("specifier", "return import(specifier)");
+        \`);
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function reaches eval through a computed global key in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const dyn = new Function(\`return globalThis["ev".concat("al")]("import('./a.mjs')")\`);
+        export const value = await dyn();
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function reaches eval through Reflect.get(globalThis) in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const dyn = new Function(\`return Reflect.get(globalThis, "eval")("import('./a.mjs')")\`);
+        export const value = await dyn();
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function reaches eval through aliased Reflect.get in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const dyn = new Function(\`
+          const get = Reflect.get;
+          const run = get(globalThis, "eval");
+          return run("import('./a.mjs')");
+        \`);
+        export const value = await dyn();
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function derives a nested host constructor in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function('return (() => {}).constructor("specifier", "return import(specifier)")');
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-derived-host',
+    });
+  });
+
+  it('throws a directed ceiling when ESM object defaults alias a derived host constructor', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const { F = Function.prototype.constructor } = {};
+        export const value = (await F("return import('./a.mjs')")()).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-derived-host',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function recovers a host constructor from an Object descriptor in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function('return Object.getOwnPropertyDescriptor(Function.prototype, "constructor").value("specifier", "return import(specifier)")');
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-derived-host',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function aliases a host constructor Object descriptor in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function(\`
+          const O = Object;
+          const { value: F } = O.getOwnPropertyDescriptor(Function.prototype, "constructor");
+          return F("specifier", "return import(specifier)");
+        \`);
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-derived-host',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function recovers a host constructor from a Reflect descriptor in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function(\`
+          const getOwnPropertyDescriptor = Reflect.getOwnPropertyDescriptor;
+          const F = getOwnPropertyDescriptor(Function.prototype, "constructor").value;
+          return F("specifier", "return import(specifier)");
+        \`);
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-derived-host',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function recovers a host constructor from an Object descriptor map in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function('return Object.getOwnPropertyDescriptors(Function.prototype).constructor.value("specifier", "return import(specifier)")');
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-derived-host',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function aliases a host constructor Object descriptor map in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function(\`
+          const descriptors = Object.getOwnPropertyDescriptors(Function.prototype);
+          const F = descriptors.constructor.value;
+          return F("specifier", "return import(specifier)");
+        \`);
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-derived-host',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function enumerates a host constructor descriptor map in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function(\`
+          const F = Object.values(Object.getOwnPropertyDescriptors(Function.prototype))
+            .find((descriptor) => descriptor.value && descriptor.value.name === "Function")
+            .value;
+          return F("specifier", "return import(specifier)");
+        \`);
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-derived-host',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function derives a split-string nested host constructor in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function('return (() => {}).constructor("specifier", "return " + "im" + "port(specifier)")');
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-derived-host',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function derives a computed nested host constructor in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function('return (() => {})["con".concat("structor")]("specifier", "return import(specifier)")');
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-derived-host',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function object defaults alias nested Function in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const outer = new Function(\`
+          const { F = Function } = {};
+          return F("specifier", "return import(specifier)");
+        \`);
+        const dyn = outer();
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('preserves native SyntaxError for runtime-built Function bodies without import() in ESM', async () => {
+    const loader = setup({
+      '/main.mjs': `
+        let caught;
+        try {
+          new Function('return }');
+        } catch (err) {
+          caught = err;
+        }
+        export const name = caught?.name;
+        export const isSyntaxError = caught instanceof SyntaxError;
+      `,
+    });
+    const ns = await loader.import('./main.mjs', '/entry.mjs');
+    expect(ns.name).toBe('SyntaxError');
+    expect(ns.isSyntaxError).toBe(true);
+  });
+
+  it('preserves native SyntaxError for invalid runtime-built Function bodies with constructor text but no import() in ESM', async () => {
+    const loader = setup({
+      '/main.mjs': `
+        let caught;
+        try {
+          new Function('const constructor =');
+        } catch (err) {
+          caught = err;
+        }
+        export const name = caught?.name;
+        export const isSyntaxError = caught instanceof SyntaxError;
+      `,
+    });
+    const ns = await loader.import('./main.mjs', '/entry.mjs');
+    expect(ns.name).toBe('SyntaxError');
+    expect(ns.isSyntaxError).toBe(true);
+  });
+
+  it('throws a directed ceiling when runtime-built Function import() uses with dynamic scope in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const dyn = new Function('specifier', \`
+          const n = "__rifty" + "DynamicImport";
+          with ({ [n]: () => Promise.resolve({ v: "wrong" }) }) {
+            return import(specifier);
+          }
+        \`);
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function import() hides behind eval in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const dyn = new Function('specifier', 'return eval("import(specifier)")');
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when ESM eval text contains import()', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': 'export const value = (await eval("import(\'./a.mjs\')")).v;',
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.esm-dynamic-function-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function eval synthesizes import in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const dyn = new Function('specifier', 'return eval("im" + "port(specifier)")');
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function aliases eval before import in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const dyn = new Function('specifier', 'const e = eval; return e("import(specifier)")');
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function aliases indirect eval before import in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const dyn = new Function('specifier', 'const e = (0, eval); return e("import(specifier)")');
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function destructures eval before import in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const dyn = new Function('specifier', 'const { eval: e } = globalThis; return e("import(specifier)")');
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function destructures computed eval before import in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const dyn = new Function('specifier', 'const { ["ev" + "al"]: e } = globalThis; return e("import(specifier)")');
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function array-destructures eval before import in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const dyn = new Function('specifier', 'const [e] = [eval]; return e("im" + "port(specifier)")');
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling when runtime-built Function aliases eval through object literals in ESM', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const dyn = new Function('specifier', 'const { x: e } = { x: eval }; return e("im" + "port(specifier)")');
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-dynamic-scope',
+    });
+  });
+
+  it('throws a directed ceiling for ESM imports routed through derived host Function constructors', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const F = (() => {}).constructor;
+        const dyn = F('specifier', 'return import(specifier)');
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-derived-host',
+    });
+  });
+
+  it('throws a directed ceiling for optional-chained ESM derived host Function constructors', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const F = (() => {})?.constructor;
+        const dyn = F('specifier', 'return import(specifier)');
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-derived-host',
+    });
+  });
+
+  it('throws a directed ceiling for destructured ESM derived host Function constructors', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const { constructor: F } = (() => {});
+        const dyn = F('specifier', 'return import(specifier)');
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-derived-host',
+    });
+  });
+
+  it('throws a directed ceiling for sequence-wrapped ESM derived host Function constructors', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const dyn = (0, (() => {}).constructor)('specifier', 'return import(specifier)');
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-derived-host',
+    });
+  });
+
+  it('throws a directed ceiling for Reflect.get ESM derived host Function constructors', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const F = Reflect.get(Function.prototype, "constructor");
+        const dyn = F('specifier', 'return import(specifier)');
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-derived-host',
+    });
+  });
+
+  it('throws a directed ceiling for array-destructured ESM derived host Function constructors', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const [F] = [(() => {}).constructor];
+        const dyn = F('specifier', 'return import(specifier)');
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(loader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-derived-host',
+    });
+  });
+
+  it('throws a directed ceiling for Reflect-invoked ESM derived host Function constructors', async () => {
+    const applyLoader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const dyn = Reflect.apply((() => {}).constructor, undefined, [
+          'specifier',
+          'return import(specifier)',
+        ]);
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(applyLoader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-derived-host',
+    });
+
+    const constructLoader = setup({
+      '/a.mjs': "export const v = 'wrong-target';",
+      '/main.mjs': `
+        const dyn = Reflect.construct((() => {}).constructor, [
+          'specifier',
+          'return import(specifier)',
+        ]);
+        export const value = (await dyn('./a.mjs')).v;
+      `,
+    });
+    await expect(constructLoader.import('./main.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.function-constructor-derived-host',
+    });
+  });
+
+  it('routes import() with comments before parens inside ESM and runtime-built Function', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'comment-import';",
+      '/main.mjs': `
+        const dyn = new Function('specifier', 'return import/*function-comment*/(specifier)');
+        export const direct = (await import/*direct-comment*/('./a.mjs')).v;
+        export const viaFunction = (await dyn('./a.mjs')).v;
+      `,
+    });
+    const ns = await loader.import('./main.mjs', '/entry.mjs');
+    expect(ns.direct).toBe('comment-import');
+    expect(ns.viaFunction).toBe('comment-import');
+  });
+
+  it('keeps the routed lexical Function constructor observably Function-shaped', async () => {
+    const loader = setup({
+      '/a.mjs': "export const v = 'runtime-function-shape';",
+      '/main.mjs': `
+        const plain = new Function('return 1');
+        const dyn = new Function('specifier', 'return import(specifier)');
+        export const shape = {
+          name: Function.name,
+          length: Function.length,
+          constructorPrototype: Object.getPrototypeOf(Function) === Function.prototype,
+          plainInstance: plain instanceof Function,
+          plainPrototype: Object.getPrototypeOf(plain) === Function.prototype,
+          dynInstance: dyn instanceof Function,
+          dynPrototype: Object.getPrototypeOf(dyn) === Function.prototype,
+          value: (await dyn('./a.mjs')).v,
+        };
+      `,
+    });
+    const ns = await loader.import('./main.mjs', '/entry.mjs');
+    expect(ns.shape).toEqual({
+      name: 'Function',
+      length: 1,
+      constructorPrototype: true,
+      plainInstance: true,
+      plainPrototype: true,
+      dynInstance: true,
+      dynPrototype: true,
+      value: 'runtime-function-shape',
+    });
+  });
+
+  it('does not introduce non-Node async/generator constructor globals in ESM modules', async () => {
+    const loader = setup({
+      '/main.mjs': `
+        export const asyncType = typeof AsyncFunction;
+        export const generatorType = typeof GeneratorFunction;
+        export const asyncGeneratorType = typeof AsyncGeneratorFunction;
+      `,
+    });
+    const ns = await loader.import('./main.mjs', '/entry.mjs');
+    expect(ns).toMatchObject({
+      asyncType: 'undefined',
+      generatorType: 'undefined',
+      asyncGeneratorType: 'undefined',
+    });
+  });
+
+  it('throws a directed ceiling for ESM modules mutating or dynamically shadowing Function', async () => {
+    const cases: Record<string, { feature: string; source: string }> = {
+      '/assign.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          Function = function LocalFunction() {};
+          export const name = Function.name;
+        `,
+      },
+      '/global-this.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          globalThis.Function = function GlobalThisFunction() {};
+          export const name = Function.name;
+        `,
+      },
+      '/global-computed.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          globalThis["Function"] = function GlobalComputedFunction() {};
+          export const name = Function.name;
+        `,
+      },
+      '/global-computed-expression.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          globalThis["Fun" + "ction"] = function GlobalComputedExpressionFunction() {};
+          export const name = Function.name;
+        `,
+      },
+      '/global-computed-expression-no-function-token.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          globalThis["Fun" + "ction"] = globalThis["Fun" + "ction"];
+          export const done = true;
+        `,
+      },
+      '/global-computed-read-no-function-token.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          const F = globalThis["Fun" + "ction"];
+          export const name = F.name;
+        `,
+      },
+      '/global-computed-dynamic-read-no-function-token.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          const suffix = "ction";
+          const F = globalThis["Fun" + suffix];
+          export const value = F("return 1")();
+        `,
+      },
+      '/global-computed-dynamic-write-no-function-token.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          const suffix = "ction";
+          globalThis["Fun" + suffix] = globalThis["Fun" + suffix];
+          export const done = true;
+        `,
+      },
+      '/delete-global.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          delete globalThis.Function;
+          export const name = Function.name;
+        `,
+      },
+      '/define-property.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          Object.defineProperty(globalThis, "Function", { value: function RedefinedFunction() {} });
+          export const name = Function.name;
+        `,
+      },
+      '/define-properties.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          Object.defineProperties(globalThis, { Function: { value: function RedefinedFunction() {} } });
+          export const name = Function.name;
+        `,
+      },
+      '/reflect-set.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          Reflect.set(globalThis, "Function", function ReflectSetFunction() {});
+          export const name = Function.name;
+        `,
+      },
+      '/reflect-delete.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          Reflect.deleteProperty(globalThis, "Function");
+          export const name = Function.name;
+        `,
+      },
+      '/reflect-get-constructor.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          const F = Reflect.get(globalThis, "Function");
+          const dyn = F("return 1");
+          export const value = dyn();
+        `,
+      },
+      '/object-assign.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          Object.assign(globalThis, { Function: function AssignedFunction() {} });
+          export const name = Function.name;
+        `,
+      },
+      '/object-assign-dynamic.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          const patch = { Function: function AssignedDynamicFunction() {} };
+          Object.assign(globalThis, patch);
+          export const name = Function.name;
+        `,
+      },
+      '/define-getter.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          globalThis.__defineGetter__("Function", () => function GetterFunction() {});
+          export const name = Function.name;
+        `,
+      },
+      '/global-alias.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          const g = globalThis;
+          g.Function = function AliasFunction() {};
+          export const name = Function.name;
+        `,
+      },
+      '/global-destructured-alias.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          let g;
+          ({ g } = { g: globalThis });
+          g.Function = g.Function;
+          export const done = true;
+        `,
+      },
+      '/global-destructured-default-alias.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          const { g = globalThis } = {};
+          g.Function = g.Function;
+          export const done = true;
+        `,
+      },
+      '/global-destructured-unknown-default-alias.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          const source = {};
+          const { g = globalThis } = source;
+          g.Function = g.Function;
+          export const done = true;
+        `,
+      },
+      '/global-array-unknown-default-alias.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          const source = [];
+          const [g = globalThis] = source;
+          g.Function = g.Function;
+          export const done = true;
+        `,
+      },
+      '/global-default-param-alias.mjs': {
+        feature: 'module-loader.esm-global-function-assignment',
+        source: `
+          function mutate(g = globalThis) {
+            g.Function = g.Function;
+          }
+          mutate();
+          export const done = true;
+        `,
+      },
+      '/eval.mjs': {
+        feature: 'module-loader.esm-dynamic-function-scope',
+        source: `
+          (0, eval)("var Function = function EvalFunction() {}");
+          export const name = Function.name;
+        `,
+      },
+      '/eval-string-function-only.mjs': {
+        feature: 'module-loader.esm-dynamic-function-scope',
+        source: `
+          eval("globalThis.Function = globalThis.Function");
+          export const done = true;
+        `,
+      },
+      '/global-eval.mjs': {
+        feature: 'module-loader.esm-dynamic-function-scope',
+        source: `
+          globalThis["eval"]("var Function = function GlobalEvalFunction() {}");
+          export const name = Function.name;
+        `,
+      },
+      '/global-eval-sequence.mjs': {
+        feature: 'module-loader.esm-dynamic-function-scope',
+        source: `
+          (0, globalThis.eval)("var Function = function GlobalEvalFunction() {}");
+          export const name = Function.name;
+        `,
+      },
+      '/global-eval-alias.mjs': {
+        feature: 'module-loader.esm-dynamic-function-scope',
+        source: `
+          const e = globalThis["ev" + "al"];
+          e("globalThis.Function = globalThis.Function");
+          export const done = true;
+        `,
+      },
+      '/array-eval-alias.mjs': {
+        feature: 'module-loader.esm-dynamic-function-scope',
+        source: `
+          const [e] = [eval];
+          e("globalThis.Function = globalThis.Function");
+          export const done = true;
+        `,
+      },
+      '/object-literal-eval-alias.mjs': {
+        feature: 'module-loader.esm-dynamic-function-scope',
+        source: `
+          const { x: e } = { x: eval };
+          e("globalThis.Function = globalThis.Function");
+          export const done = true;
+        `,
+      },
+    };
+
+    for (const [path, { feature, source }] of Object.entries(cases)) {
+      const loader = setup({ [path]: source });
+      await expect(loader.import(path, '/entry.mjs')).rejects.toMatchObject({
+        name: 'NotImplementedError',
+        feature,
+      });
+    }
+  });
+
+  it('does not reject computed ESM global reads that are not Function', async () => {
+    const loader = setup({
+      '/main.mjs': `
+        const processValue = globalThis["process"];
+        const processKey = "process";
+        const dynamicProcessValue = globalThis[processKey];
+        export const hasProcess = typeof processValue;
+        export const hasDynamicProcess = typeof dynamicProcessValue;
+        export const functionName = Function.name;
+      `,
+    });
+    const ns = await loader.import('./main.mjs', '/entry.mjs');
+    expect(ns.functionName).toBe('Function');
+  });
+
+  it('does not reject local ESM Function shadowing', async () => {
+    const loader = setup({
+      '/main.mjs': `
+        let Function;
+        Function = function LocalFunction() {};
+        export const name = Function.name;
+      `,
+    });
+    const ns = await loader.import('./main.mjs', '/entry.mjs');
+    expect(ns.name).toBe('LocalFunction');
+  });
+
+  it('does not treat shadowed ESM Object or Reflect as global mutation helpers', async () => {
+    const loader = setup({
+      '/object.mjs': `
+        const Object = { assign() {} };
+        Object.assign(globalThis, { Function: function LocalObjectFunction() {} });
+        export const name = Function.name;
+      `,
+      '/reflect.mjs': `
+        const Reflect = { set() { return true; } };
+        Reflect.set(globalThis, "Function", function LocalReflectFunction() {});
+        export const name = Function.name;
+      `,
+    });
+    await expect(loader.import('./object.mjs', '/entry.mjs')).resolves.toMatchObject({
+      name: 'Function',
+    });
+    await expect(loader.import('./reflect.mjs', '/entry.mjs')).resolves.toMatchObject({
+      name: 'Function',
+    });
+  });
+
+  it('does not treat ESM this.Function as the global Function property', async () => {
+    const loader = setup({
+      '/main.mjs': `
+        function readThis() {
+          return this.Function.name;
+        }
+        export const name = readThis.call({ Function: function LocalThisFunction() {} });
+      `,
+    });
+    const ns = await loader.import('./main.mjs', '/entry.mjs');
+    expect(ns.name).toBe('LocalThisFunction');
+  });
+
+  it('loads absolute file:// URLs through the VFS resolver', async () => {
+    const loader = setup({
+      '/app/config one.mjs': 'export const answer = 42;',
+    });
+    const ns = await loader.import('file:///app/config%20one.mjs?mtime=123#hash', '/entry.mjs');
+    expect(ns.answer).toBe(42);
+  });
+
   it('live bindings via re-export', async () => {
     const loader = setup({
       '/counter.mjs': 'export let count = 0; export function inc() { count += 1; }',
@@ -582,6 +1841,1290 @@ describe('ESM — import / export', () => {
     });
     const ns = await loader.import('./main.mjs', '/entry.mjs');
     expect(ns.sum).toBe(3);
+  });
+
+  it('routes import() inside CJS modules through the VFS loader', async () => {
+    const loader = setup({
+      '/main.cjs': "exports.promise = import('./esm.mjs').then((m) => m.value);",
+      '/esm.mjs': "export const value = 'routed';",
+    });
+    const cjs = loader.require('./main.cjs', '/entry.js') as { promise: Promise<unknown> };
+    await expect(cjs.promise).resolves.toBe('routed');
+  });
+
+  it('CJS import() rejects symbol specifiers like Node', async () => {
+    const loader = setup({
+      '/main.cjs': "exports.promise = import(Symbol('x'));",
+    });
+    const cjs = loader.require('./main.cjs', '/entry.js') as { promise: Promise<unknown> };
+    await expect(cjs.promise).rejects.toThrow(/Cannot convert a Symbol value to a string/);
+  });
+
+  it('routes CJS import() despite helper-shaped local names', async () => {
+    const loader = setup({
+      '/main.cjs': `
+        var __riftyDynamicImport = () => Promise.resolve({ value: 'wrong' });
+        exports.promise = import('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'cjs-helper-hygiene';",
+    });
+    const cjs = loader.require('./main.cjs', '/entry.js') as { promise: Promise<unknown> };
+    await expect(cjs.promise).resolves.toBe('cjs-helper-hygiene');
+  });
+
+  it('routes import() with comments before parens inside CJS modules', async () => {
+    const loader = setup({
+      '/main.cjs': "exports.promise = import/*cjs-comment*/('./esm.mjs').then((m) => m.value);",
+      '/esm.mjs': "export const value = 'comment-routed';",
+    });
+    const cjs = loader.require('./main.cjs', '/entry.js') as { promise: Promise<unknown> };
+    await expect(cjs.promise).resolves.toBe('comment-routed');
+  });
+
+  it('routes import() inside a runtime-built Function in CJS modules', async () => {
+    const loader = setup({
+      '/main.cjs':
+        "const dyn = new Function('specifier', 'return import(specifier)'); exports.promise = dyn('./esm.mjs').then((m) => m.value);",
+      '/esm.mjs': "export const value = 'function-routed';",
+    });
+    const cjs = loader.require('./main.cjs', '/entry.js') as { promise: Promise<unknown> };
+    await expect(cjs.promise).resolves.toBe('function-routed');
+  });
+
+  it('routes CJS Function constructor import() despite helper-shaped local names', async () => {
+    const loader = setup({
+      '/main.cjs': `
+        var __riftyFunction = function () {
+          return () => Promise.resolve({ value: 'wrong' });
+        };
+        const dyn = new Function('specifier', 'return import(specifier)');
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'cjs-function-helper-hygiene';",
+    });
+    const cjs = loader.require('./main.cjs', '/entry.js') as { promise: Promise<unknown> };
+    await expect(cjs.promise).resolves.toBe('cjs-function-helper-hygiene');
+  });
+
+  it('routes CJS Function constructor parameter import() through the VFS loader', async () => {
+    const loader = setup({
+      '/main.cjs': `
+        const dyn = new Function('loaded = import("./esm.mjs")', 'return loaded');
+        exports.promise = dyn().then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'cjs-function-param-routed';",
+    });
+    const cjs = loader.require('./main.cjs', '/entry.js') as { promise: Promise<unknown> };
+    await expect(cjs.promise).resolves.toBe('cjs-function-param-routed');
+  });
+
+  it('routes runtime-built Function import() when eval appears only as text in CJS', async () => {
+    const loader = setup({
+      '/main.cjs': `
+        const dyn = new Function('specifier', 'const note = "eval"; return import(specifier)');
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'cjs-function-string-literal';",
+    });
+    const cjs = loader.require('./main.cjs', '/entry.js') as { promise: Promise<unknown> };
+    await expect(cjs.promise).resolves.toBe('cjs-function-string-literal');
+  });
+
+  it('throws a directed ceiling when runtime-built Function creates a nested import Function in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const outer = new Function('return Function("specifier", "return import(specifier)")');
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function creates a split-string nested import Function in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const outer = new Function('return Function("specifier", "return " + "im" + "port(specifier)")');
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function invokes nested Function through Reflect in CJS', () => {
+    const applyLoader = setup({
+      '/main.cjs': `
+        const outer = new Function('return Reflect.apply(Function, undefined, ["specifier", "return import(specifier)"])');
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => applyLoader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+
+    const constructLoader = setup({
+      '/main.cjs': `
+        const outer = new Function('return Reflect.construct(Function, ["specifier", "return import(specifier)"])');
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => constructLoader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function invokes nested Function through aliased Reflect in CJS', () => {
+    const applyLoader = setup({
+      '/main.cjs': `
+        const outer = new Function('return (() => { const R = Reflect; return R.apply(Function, undefined, ["specifier", "return import(specifier)"]); })()');
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => applyLoader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+
+    const constructLoader = setup({
+      '/main.cjs': `
+        const outer = new Function('return (() => { const R = Reflect; return R.construct(Function, ["specifier", "return import(specifier)"]); })()');
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => constructLoader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function invokes nested Function through extracted Reflect methods in CJS', () => {
+    const applyLoader = setup({
+      '/main.cjs': `
+        const outer = new Function('return (() => { const apply = Reflect.apply; return apply(Function, undefined, ["specifier", "return import(specifier)"]); })()');
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => applyLoader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+
+    const constructLoader = setup({
+      '/main.cjs': `
+        const outer = new Function('return (() => { const { construct } = Reflect; return construct(Function, ["specifier", "return import(specifier)"]); })()');
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => constructLoader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function invokes nested Function through extracted Reflect methods in CJS', () => {
+    const applyLoader = setup({
+      '/main.cjs': `
+        const outer = new Function('return (() => { const { apply } = Reflect; return apply(Function, undefined, ["specifier", "return import(specifier)"]); })()');
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => applyLoader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+
+    const constructLoader = setup({
+      '/main.cjs': `
+        const outer = new Function('return (() => { const { construct } = Reflect; return construct(Function, ["specifier", "return import(specifier)"]); })()');
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => constructLoader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function source invokes nested Function through aliased Reflect in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const outer = new Function('return Function("return (() => { const R = Reflect; return R.apply(Function, undefined, [\\\\\\"specifier\\\\\\", \\\\\\"return import(specifier)\\\\\\"]); })()")');
+        const maker = outer();
+        const dyn = maker();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function source invokes nested Function through extracted Reflect methods in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const outer = new Function('return Function("return (() => { const { apply } = Reflect; return apply(Function, undefined, [\\\\\\"specifier\\\\\\", \\\\\\"return import(specifier)\\\\\\"]); })()")');
+        const maker = outer();
+        const dyn = maker();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function invokes nested Function through call/apply/bind in CJS', () => {
+    for (const source of [
+      'return Function.call(undefined, "specifier", "return import(specifier)")',
+      'return Function.apply(undefined, ["specifier", "return import(specifier)"])',
+      'return Function.bind(undefined, "specifier", "return import(specifier)")()',
+    ]) {
+      const loader = setup({
+        '/main.cjs': `
+          const outer = new Function(${JSON.stringify(source)});
+          const dyn = outer();
+          exports.promise = dyn('./esm.mjs').then((m) => m.value);
+        `,
+        '/esm.mjs': "export const value = 'wrong-target';",
+      });
+      expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+        expect.objectContaining({
+          name: 'NotImplementedError',
+          feature: 'module-loader.function-constructor-dynamic-scope',
+        }) as unknown as Error,
+      );
+    }
+  });
+
+  it('throws a directed ceiling when runtime-built Function reaches nested Function through a computed global key in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const outer = new Function('return globalThis["Fun".concat("ction")]("specifier", "return import(specifier)")');
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function reaches nested Function through Reflect.get(globalThis) in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const outer = new Function('return Reflect.get(globalThis, "Function")("specifier", "return import(specifier)")');
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function reaches nested Function through aliased Reflect.get in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const outer = new Function(\`
+          const get = Reflect.get;
+          const F = get(globalThis, "Function");
+          return F("specifier", "return import(specifier)");
+        \`);
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function reaches eval through a computed global key in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const dyn = new Function(\`return globalThis["ev".concat("al")]("import('./esm.mjs')")\`);
+        exports.promise = dyn().then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function reaches eval through Reflect.get(globalThis) in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const dyn = new Function(\`return Reflect.get(globalThis, "eval")("import('./esm.mjs')")\`);
+        exports.promise = dyn().then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function reaches eval through aliased Reflect.get in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const dyn = new Function(\`
+          const get = Reflect.get;
+          const run = get(globalThis, "eval");
+          return run("import('./esm.mjs')");
+        \`);
+        exports.promise = dyn().then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function derives a nested host constructor in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const outer = new Function('return (() => {}).constructor("specifier", "return import(specifier)")');
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-derived-host',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when CJS object defaults alias a derived host constructor', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const { F = Function.prototype.constructor } = {};
+        exports.promise = F("return import('./esm.mjs')")().then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-derived-host',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function derives a split-string nested host constructor in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const outer = new Function('return (() => {}).constructor("specifier", "return " + "im" + "port(specifier)")');
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-derived-host',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function derives a computed nested host constructor in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const outer = new Function('return (() => {})["con".concat("structor")]("specifier", "return import(specifier)")');
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-derived-host',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function object defaults alias nested Function in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const outer = new Function(\`
+          const { F = Function } = {};
+          return F("specifier", "return import(specifier)");
+        \`);
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('preserves native SyntaxError for runtime-built Function bodies without import() in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        let caught;
+        try {
+          new Function('return }');
+        } catch (err) {
+          caught = err;
+        }
+        exports.name = caught?.name;
+        exports.isSyntaxError = caught instanceof SyntaxError;
+      `,
+    });
+    const cjs = loader.require('./main.cjs', '/entry.js') as {
+      name: string;
+      isSyntaxError: boolean;
+    };
+    expect(cjs.name).toBe('SyntaxError');
+    expect(cjs.isSyntaxError).toBe(true);
+  });
+
+  it('preserves native SyntaxError for invalid runtime-built Function bodies with constructor text but no import() in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        let caught;
+        try {
+          new Function('const constructor =');
+        } catch (err) {
+          caught = err;
+        }
+        exports.name = caught?.name;
+        exports.isSyntaxError = caught instanceof SyntaxError;
+      `,
+    });
+    const cjs = loader.require('./main.cjs', '/entry.js') as {
+      name: string;
+      isSyntaxError: boolean;
+    };
+    expect(cjs.name).toBe('SyntaxError');
+    expect(cjs.isSyntaxError).toBe(true);
+  });
+
+  it('throws a directed ceiling when runtime-built Function import() uses with dynamic scope in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const dyn = new Function('specifier', \`
+          const n = "__rifty" + "DynamicImport";
+          with ({ [n]: () => Promise.resolve({ value: "wrong" }) }) {
+            return import(specifier);
+          }
+        \`);
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function import() hides behind eval in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const dyn = new Function('specifier', 'return eval("import(specifier)")');
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when CJS eval text contains import()', () => {
+    const loader = setup({
+      '/main.cjs': 'exports.promise = eval("import(\'./esm.mjs\')").then((m) => m.value);',
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.cjs-dynamic-function-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function eval synthesizes import in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const dyn = new Function('specifier', 'return eval("im" + "port(specifier)")');
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function aliases eval before import in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const dyn = new Function('specifier', 'const e = eval; return e("import(specifier)")');
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function aliases indirect eval before import in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const dyn = new Function('specifier', 'const e = (0, eval); return e("import(specifier)")');
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function destructures eval before import in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const dyn = new Function('specifier', 'const { eval: e } = globalThis; return e("import(specifier)")');
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function destructures computed eval before import in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const dyn = new Function('specifier', 'const { ["ev" + "al"]: e } = globalThis; return e("import(specifier)")');
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function array-destructures eval before import in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const dyn = new Function('specifier', 'const [e] = [eval]; return e("im" + "port(specifier)")');
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling when runtime-built Function aliases eval through object literals in CJS', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const dyn = new Function('specifier', 'const { x: e } = { x: eval }; return e("im" + "port(specifier)")');
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-dynamic-scope',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling for CJS imports routed through derived host Function constructors', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const F = (() => {}).constructor;
+        const dyn = F('specifier', 'return import(specifier)');
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-derived-host',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling for CJS imports routed through Object descriptor host constructors', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const outer = new Function('return Object.getOwnPropertyDescriptor(Function.prototype, "constructor").value("specifier", "return import(specifier)")');
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-derived-host',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling for CJS imports routed through aliased descriptor host constructors', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const outer = new Function(\`
+          const O = Object;
+          const { value: F } = O.getOwnPropertyDescriptor(Function.prototype, "constructor");
+          return F("specifier", "return import(specifier)");
+        \`);
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-derived-host',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling for CJS imports routed through Object descriptor map host constructors', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const outer = new Function('return Object.getOwnPropertyDescriptors(Function.prototype).constructor.value("specifier", "return import(specifier)")');
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-derived-host',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling for CJS imports routed through aliased descriptor map host constructors', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const outer = new Function(\`
+          const descriptors = Object.getOwnPropertyDescriptors(Function.prototype);
+          const F = descriptors.constructor.value;
+          return F("specifier", "return import(specifier)");
+        \`);
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-derived-host',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling for CJS imports routed through enumerated descriptor map host constructors', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const outer = new Function(\`
+          const F = Object.values(Object.getOwnPropertyDescriptors(Function.prototype))
+            .find((descriptor) => descriptor.value && descriptor.value.name === "Function")
+            .value;
+          return F("specifier", "return import(specifier)");
+        \`);
+        const dyn = outer();
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-derived-host',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling for optional-chained CJS derived host Function constructors', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const F = (() => {})?.constructor;
+        const dyn = F('specifier', 'return import(specifier)');
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-derived-host',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling for destructured CJS derived host Function constructors', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const { constructor: F } = (() => {});
+        const dyn = F('specifier', 'return import(specifier)');
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-derived-host',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling for sequence-wrapped CJS derived host Function constructors', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const dyn = (0, (() => {}).constructor)('specifier', 'return import(specifier)');
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-derived-host',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling for Reflect.get CJS derived host Function constructors', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const F = Reflect.get(Function.prototype, "constructor");
+        const dyn = F('specifier', 'return import(specifier)');
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-derived-host',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling for array-destructured CJS derived host Function constructors', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const [F] = [(() => {}).constructor];
+        const dyn = F('specifier', 'return import(specifier)');
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-derived-host',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling for Reflect-invoked CJS derived host Function constructors', () => {
+    const applyLoader = setup({
+      '/main.cjs': `
+        const dyn = Reflect.apply((() => {}).constructor, undefined, [
+          'specifier',
+          'return import(specifier)',
+        ]);
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => applyLoader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-derived-host',
+      }) as unknown as Error,
+    );
+
+    const constructLoader = setup({
+      '/main.cjs': `
+        const dyn = Reflect.construct((() => {}).constructor, [
+          'specifier',
+          'return import(specifier)',
+        ]);
+        exports.promise = dyn('./esm.mjs').then((m) => m.value);
+      `,
+      '/esm.mjs': "export const value = 'wrong-target';",
+    });
+    expect(() => constructLoader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.function-constructor-derived-host',
+      }) as unknown as Error,
+    );
+  });
+
+  it('does not break CJS modules that shadow the global Function constructor', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const Function = () => 'local';
+        exports.value = Function();
+      `,
+    });
+    expect(loader.require('./main.cjs', '/entry.js')).toMatchObject({ value: 'local' });
+  });
+
+  it('rewrites only free CJS Function reads, not local params or property names', () => {
+    const loader = setup({
+      '/main.cjs': `
+        function callLocal(Function) {
+          return Function();
+        }
+        exports.local = callLocal(() => 'param');
+        exports.property = ({ Function: 'property' }).Function;
+        exports.shorthandName = ({ Function }).Function.name;
+      `,
+    });
+    expect(loader.require('./main.cjs', '/entry.js')).toMatchObject({
+      local: 'param',
+      property: 'property',
+      shorthandName: 'Function',
+    });
+  });
+
+  it('does not rewrite CJS Function reads shadowed in switch cases or class static blocks', () => {
+    const loader = setup({
+      '/main.cjs': `
+        switch (0) {
+          case 0:
+            const Function = () => 'switch-local';
+            exports.switchValue = Function();
+            break;
+        }
+        class Holder {
+          static {
+            const Function = () => 'static-local';
+            exports.staticValue = Function();
+          }
+        }
+      `,
+    });
+    expect(loader.require('./main.cjs', '/entry.js')).toMatchObject({
+      switchValue: 'switch-local',
+      staticValue: 'static-local',
+    });
+  });
+
+  it('throws a directed ceiling for CJS modules assigning the global Function binding', () => {
+    const loader = setup({
+      '/main.cjs': `
+        Function = function LocalFunction() {};
+        exports.name = Function.name;
+      `,
+    });
+    expect(() => loader.require('./main.cjs', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.cjs-global-function-assignment',
+      }) as unknown as Error,
+    );
+  });
+
+  it('throws a directed ceiling for dynamic CJS scopes that mention Function', () => {
+    const loader = setup({
+      '/with.cjs': `
+        with ({ Function: () => 'with-local' }) {
+          exports.value = Function();
+        }
+      `,
+      '/eval.cjs': `
+        eval("var Function = () => 'eval-local'");
+        exports.value = Function();
+      `,
+      '/indirect-eval.cjs': `
+        (0, eval)("var Function = function IndirectEvalFunction() {}");
+        exports.value = Function.name;
+      `,
+      '/global-eval.cjs': `
+        globalThis.eval("var Function = function GlobalEvalFunction() {}");
+        exports.value = Function.name;
+      `,
+      '/computed-global-eval.cjs': `
+        globalThis["eval"]("var Function = function ComputedGlobalEvalFunction() {}");
+        exports.value = Function.name;
+      `,
+      '/eval-string-function-only.cjs': `
+        eval("globalThis.Function = globalThis.Function");
+        exports.done = true;
+      `,
+      '/global-eval-alias.cjs': `
+        const e = globalThis["ev" + "al"];
+        e("globalThis.Function = globalThis.Function");
+        exports.done = true;
+      `,
+      '/array-eval-alias.cjs': `
+        const [e] = [eval];
+        e("globalThis.Function = globalThis.Function");
+        exports.done = true;
+      `,
+      '/object-literal-eval-alias.cjs': `
+        const { x: e } = { x: eval };
+        e("globalThis.Function = globalThis.Function");
+        exports.done = true;
+      `,
+    });
+    for (const specifier of [
+      './with.cjs',
+      './eval.cjs',
+      './indirect-eval.cjs',
+      './global-eval.cjs',
+      './computed-global-eval.cjs',
+      './eval-string-function-only.cjs',
+      './global-eval-alias.cjs',
+      './array-eval-alias.cjs',
+      './object-literal-eval-alias.cjs',
+    ]) {
+      expect(() => loader.require(specifier, '/entry.js')).toThrow(
+        expect.objectContaining({
+          name: 'NotImplementedError',
+          feature: 'module-loader.cjs-dynamic-function-scope',
+        }) as unknown as Error,
+      );
+    }
+  });
+
+  it('throws a directed ceiling for CJS modules mutating global Function properties', () => {
+    const loader = setup({
+      '/global-this.cjs': `
+        globalThis.Function = function GlobalThisFunction() {};
+        exports.name = Function.name;
+      `,
+      '/global-computed.cjs': `
+        globalThis["Function"] = function GlobalComputedFunction() {};
+        exports.name = Function.name;
+      `,
+      '/global-computed-expression.cjs': `
+        globalThis["Fun" + "ction"] = function GlobalComputedExpressionFunction() {};
+        exports.name = Function.name;
+      `,
+      '/global-computed-expression-no-function-token.cjs': `
+        globalThis["Fun" + "ction"] = globalThis["Fun" + "ction"];
+        exports.done = true;
+      `,
+      '/global-computed-read-no-function-token.cjs': `
+        const F = globalThis["Fun" + "ction"];
+        exports.name = F.name;
+      `,
+      '/global-computed-dynamic-read-no-function-token.cjs': `
+        const suffix = "ction";
+        const F = globalThis["Fun" + suffix];
+        exports.value = F("return 1")();
+      `,
+      '/global-computed-dynamic-write-no-function-token.cjs': `
+        const suffix = "ction";
+        globalThis["Fun" + suffix] = globalThis["Fun" + suffix];
+        exports.done = true;
+      `,
+      '/node-global.cjs': `
+        global.Function = function NodeGlobalFunction() {};
+        exports.name = Function.name;
+      `,
+      '/delete-global.cjs': `
+        delete globalThis.Function;
+        exports.name = Function.name;
+      `,
+      '/define-property.cjs': `
+        Object.defineProperty(globalThis, "Function", { value: function RedefinedFunction() {} });
+        exports.name = Function.name;
+      `,
+      '/define-properties.cjs': `
+        Object.defineProperties(globalThis, { Function: { value: function RedefinedFunction() {} } });
+        exports.name = Function.name;
+      `,
+      '/reflect-set.cjs': `
+        Reflect.set(globalThis, "Function", function ReflectSetFunction() {});
+        exports.name = Function.name;
+      `,
+      '/reflect-delete.cjs': `
+        Reflect.deleteProperty(globalThis, "Function");
+        exports.name = Function.name;
+      `,
+      '/reflect-get-constructor.cjs': `
+        const F = Reflect.get(globalThis, "Function");
+        const dyn = F("return 1");
+        exports.value = dyn();
+      `,
+      '/object-assign.cjs': `
+        Object.assign(globalThis, { Function: function AssignedFunction() {} });
+        exports.name = Function.name;
+      `,
+      '/object-assign-dynamic.cjs': `
+        const patch = { Function: function AssignedDynamicFunction() {} };
+        Object.assign(globalThis, patch);
+        exports.name = Function.name;
+      `,
+      '/define-getter.cjs': `
+        globalThis.__defineGetter__("Function", () => function GetterFunction() {});
+        exports.name = Function.name;
+      `,
+      '/global-alias.cjs': `
+        const g = globalThis;
+        g.Function = function AliasFunction() {};
+        exports.name = Function.name;
+      `,
+      '/sloppy-global-alias.cjs': `
+        g = globalThis;
+        g.Function = g.Function;
+        exports.done = true;
+      `,
+      '/global-destructured-alias.cjs': `
+        let g;
+        ({ g } = { g: globalThis });
+        g.Function = g.Function;
+        exports.done = true;
+      `,
+      '/global-destructured-default-alias.cjs': `
+        const { g = globalThis } = {};
+        g.Function = g.Function;
+        exports.done = true;
+      `,
+      '/global-destructured-unknown-default-alias.cjs': `
+        const source = {};
+        const { g = globalThis } = source;
+        g.Function = g.Function;
+        exports.done = true;
+      `,
+      '/global-array-unknown-default-alias.cjs': `
+        const source = [];
+        const [g = globalThis] = source;
+        g.Function = g.Function;
+        exports.done = true;
+      `,
+      '/global-default-param-alias.cjs': `
+        function mutate(g = globalThis) {
+          g.Function = g.Function;
+        }
+        mutate();
+        exports.done = true;
+      `,
+    });
+    for (const specifier of [
+      './global-this.cjs',
+      './global-computed.cjs',
+      './global-computed-expression.cjs',
+      './global-computed-expression-no-function-token.cjs',
+      './global-computed-read-no-function-token.cjs',
+      './global-computed-dynamic-read-no-function-token.cjs',
+      './global-computed-dynamic-write-no-function-token.cjs',
+      './node-global.cjs',
+      './delete-global.cjs',
+      './define-property.cjs',
+      './define-properties.cjs',
+      './reflect-set.cjs',
+      './reflect-delete.cjs',
+      './reflect-get-constructor.cjs',
+      './object-assign.cjs',
+      './object-assign-dynamic.cjs',
+      './define-getter.cjs',
+      './global-alias.cjs',
+      './sloppy-global-alias.cjs',
+      './global-destructured-alias.cjs',
+      './global-destructured-default-alias.cjs',
+      './global-destructured-unknown-default-alias.cjs',
+      './global-array-unknown-default-alias.cjs',
+      './global-default-param-alias.cjs',
+    ]) {
+      expect(() => loader.require(specifier, '/entry.js')).toThrow(
+        expect.objectContaining({
+          name: 'NotImplementedError',
+          feature: 'module-loader.cjs-global-function-assignment',
+        }) as unknown as Error,
+      );
+    }
+  });
+
+  it('binds top-level CJS this to exports like Node', () => {
+    const loader = setup({
+      '/main.cjs': `
+        this.Function = function ThisFunction() {};
+        exports.name = Function.name;
+        exports.thisName = exports.Function.name;
+        exports.thisIsExports = this === exports;
+      `,
+    });
+    expect(loader.require('./main.cjs', '/entry.js')).toMatchObject({
+      name: 'Function',
+      thisName: 'ThisFunction',
+      thisIsExports: true,
+    });
+  });
+
+  it('does not reject computed CJS global reads that are not Function', () => {
+    const loader = setup({
+      '/main.cjs': `
+        const processValue = globalThis["process"];
+        const processKey = "process";
+        const dynamicProcessValue = globalThis[processKey];
+        exports.hasProcess = typeof processValue;
+        exports.hasDynamicProcess = typeof dynamicProcessValue;
+        exports.functionName = Function.name;
+      `,
+    });
+    expect(loader.require('./main.cjs', '/entry.js')).toMatchObject({
+      functionName: 'Function',
+    });
+  });
+
+  it('does not treat shadowed CJS Object or Reflect as global mutation helpers', () => {
+    const loader = setup({
+      '/object.cjs': `
+        const Object = { assign() {} };
+        Object.assign(globalThis, { Function: function LocalObjectFunction() {} });
+        exports.name = Function.name;
+      `,
+      '/reflect.cjs': `
+        const Reflect = { set() { return true; } };
+        Reflect.set(globalThis, "Function", function LocalReflectFunction() {});
+        exports.name = Function.name;
+      `,
+    });
+    expect(loader.require('./object.cjs', '/entry.js')).toMatchObject({ name: 'Function' });
+    expect(loader.require('./reflect.cjs', '/entry.js')).toMatchObject({ name: 'Function' });
+  });
+
+  it('does not introduce non-Node async/generator constructor globals in CJS modules', () => {
+    const loader = setup({
+      '/main.cjs': `
+        exports.asyncType = typeof AsyncFunction;
+        exports.generatorType = typeof GeneratorFunction;
+        exports.asyncGeneratorType = typeof AsyncGeneratorFunction;
+      `,
+    });
+    expect(loader.require('./main.cjs', '/entry.js')).toMatchObject({
+      asyncType: 'undefined',
+      generatorType: 'undefined',
+      asyncGeneratorType: 'undefined',
+    });
   });
 });
 

@@ -17,7 +17,6 @@
 import { initBackend, syncMirror } from '@riftydev/vfs';
 import { installMemoryFs } from '@riftydev/vfs/internal';
 import { Buffer } from './builtins/buffer.ts';
-import { __setCreateRequireImpl } from './builtins/module.ts';
 import { installProcessGlobals, setProcessCwd, writeProcessStdin } from './builtins/process.ts';
 import { installTimerGlobals } from './builtins/timers.ts';
 import { setVmEngineOverride } from './builtins/vm/engine-config.ts';
@@ -152,13 +151,6 @@ const boot = (async () => {
   publishRuntimeGlobal('import', replImport);
   (self as unknown as { require: typeof replRequire }).require = replRequire;
   (self as unknown as { __riftyImport: typeof replImport }).__riftyImport = replImport;
-  __setCreateRequireImpl((from: string) => {
-    const req = (id: string) => loader.require(id, from);
-    return req as ((id: string) => unknown) & {
-      resolve?: (id: string) => string;
-      cache?: Record<string, unknown>;
-    };
-  });
 
   installConsole(sink);
   return loader;

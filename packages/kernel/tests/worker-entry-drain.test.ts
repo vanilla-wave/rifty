@@ -53,7 +53,7 @@ function makeDeps(
   };
 }
 
-describe('runEntryLifecycle drain branch (child-realm-async-lifecycle)', () => {
+describe('runEntryLifecycle drain branch (ADR-0152)', () => {
   it('skips the drain hook for a serve worker (kept alive, never drain-reaped)', async () => {
     const drainHook = vi.fn<KernelDrainHook>(async () => {});
     const outcome = await runEntryLifecycle(makeSpec(true), makeDeps({ drainHook }));

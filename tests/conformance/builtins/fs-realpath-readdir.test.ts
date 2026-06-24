@@ -2,11 +2,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { resetSyncMirror } from '../../../packages/runtime-js/src/builtins/fs-sync-mirror.ts';
 import {
   promises as fsp,
+  lstat,
   lstatSync,
   mkdirSync,
   readdir,
   realpath,
   realpathSync,
+  stat,
   writeFileSync,
 } from '../../../packages/runtime-js/src/builtins/fs.ts';
 
@@ -78,5 +80,26 @@ describe('node:fs readdir callback — options arg', () => {
     });
     expect(ents.find((d) => d.name === 'sub')?.isDirectory()).toBe(true);
     expect(ents.find((d) => d.name === 'f.txt')?.isFile()).toBe(true);
+  });
+});
+
+describe('node:fs stat/lstat callback — options arg', () => {
+  it('stat(p, {}, cb) and lstat(p, {}, cb) resolve Stats', async () => {
+    writeFileSync('/s.txt', '1');
+    const st = await new Promise<{ isFile(): boolean }>((res, rej) => {
+      stat('/s.txt', {}, (e, v) => (e ? rej(e) : res(v as { isFile(): boolean })));
+    });
+    const lst = await new Promise<{ isFile(): boolean }>((res, rej) => {
+      lstat('/s.txt', {}, (e, v) => (e ? rej(e) : res(v as { isFile(): boolean })));
+    });
+    expect(st.isFile()).toBe(true);
+    expect(lst.isFile()).toBe(true);
+  });
+
+  it('bigint Stats are a loud ceiling, not a silent normal Stats object', async () => {
+    writeFileSync('/bigint-stat.txt', '1');
+    await expect(fsp.stat('/bigint-stat.txt', { bigint: true })).rejects.toThrow(
+      /Not implemented: fs\.promises\.stat\.bigint/,
+    );
   });
 });
