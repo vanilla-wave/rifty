@@ -9,6 +9,7 @@ import type { FsSync } from '@riftydev/vfs';
 import ts from 'typescript';
 
 const decoder = new TextDecoder('utf-8', { fatal: false });
+type TypeScriptApi = typeof ts;
 
 /** Decode VFS bytes as UTF-8; `undefined` on a missing/unreadable file. */
 export function readFileUtf8(fsSync: FsSync, fileName: string): string | undefined {
@@ -77,8 +78,6 @@ type MatchFiles = (
   realpath: (path: string) => string,
 ) => string[];
 
-const matchFiles = (ts as unknown as { matchFiles: MatchFiles }).matchFiles;
-
 /** `ParseConfigHost.readDirectory` over the VFS, via tsc's own matcher. */
 export function vfsReadDirectory(
   fsSync: FsSync,
@@ -87,8 +86,10 @@ export function vfsReadDirectory(
   excludes: readonly string[] | undefined,
   includes: readonly string[],
   depth: number | undefined,
+  tsApi: TypeScriptApi = ts,
 ): readonly string[] {
-  return matchFiles(
+  const activeMatchFiles = (tsApi as unknown as { matchFiles: MatchFiles }).matchFiles;
+  return activeMatchFiles(
     rootDir,
     extensions,
     excludes,

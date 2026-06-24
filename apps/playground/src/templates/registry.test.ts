@@ -49,6 +49,16 @@ describe('resolveProjectSpec', () => {
     expect(spec.defaultPort).not.toBe(resolveProjectSpec('vite').defaultPort);
   });
 
+  it('resolves the TypeScript sandbox template with a real .ts entry', () => {
+    const spec = resolveProjectSpec('typescript');
+    expect(spec.runtime).toBe('vite');
+    if (spec.runtime !== 'vite') throw new Error('unreachable');
+    expect(spec.entry.relativePath).toBe('/src/main.ts');
+    expect(spec.entry.content).toContain('satisfies');
+    expect(spec.install).toHaveProperty('vite');
+    expect(spec.displayName).toMatch(/TypeScript/);
+  });
+
   it('resolves the socket-lab node-server template', () => {
     const spec = resolveProjectSpec('socket-lab');
     expect(spec.runtime).toBe('node-server');

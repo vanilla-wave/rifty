@@ -8,6 +8,7 @@ import {
   resolveBootstrapConfig,
   terminalDevLine,
 } from './project-spec.ts';
+import { TYPESCRIPT_TEMPLATE } from './typescript.ts';
 import { VITE_TEMPLATE } from './vite.ts';
 import { VITE8_TEMPLATE } from './vite8.ts';
 
@@ -104,6 +105,19 @@ describe('resolveBootstrapConfig', () => {
     };
     expect(pkg.scripts).toEqual({ dev: 'vite', vite: 'vite' });
     expect(pkg.dependencies).toEqual(custom.install);
+  });
+
+  it('seeds vite template extra files alongside a TypeScript entry', () => {
+    const cfg = resolveBootstrapConfig(TYPESCRIPT_TEMPLATE, 5174, '/workspace');
+
+    expect(cfg.entryPath).toBe('/workspace/src/main.ts');
+    expect(cfg.seedFiles['/workspace/index.html']).toContain('src="src/main.ts"');
+    expect(cfg.seedFiles['/workspace/src/main.ts']).toBe(TYPESCRIPT_TEMPLATE.entry.content);
+    expect(cfg.seedFiles['/workspace/tsconfig.json']).toContain('"strict": true');
+    expect(cfg.seedFiles['/workspace/src/model.ts']).toContain('export interface Widget');
+    expect(cfg.seedFiles['/workspace/node_modules/@rifty/example-types/index.d.ts']).toContain(
+      'declare module',
+    );
   });
 });
 

@@ -736,6 +736,24 @@ export function App(props: AppProps) {
           line: number,
           col: number,
         ) => Promise<string[] | null>;
+        __riftyTsCompletionItems?: (
+          path: string,
+          line: number,
+          col: number,
+        ) => Promise<
+          | {
+              label: string;
+              insertText: string;
+              startLine: number;
+              startColumn: number;
+              endLine: number;
+              endColumn: number;
+              insertTextRules?: number;
+              commitCharacters: string[];
+              additionalTextEditCount: number;
+            }[]
+          | null
+        >;
         __riftyTsReferences?: (
           path: string,
           line: number,
@@ -779,6 +797,13 @@ export function App(props: AppProps) {
           edits: { uri: string; text: string }[];
         } | null>;
         __riftyTsFormat?: (path: string) => Promise<{ editCount: number; applied: string } | null>;
+        __riftyTsRangeSemanticTokenCount?: (
+          path: string,
+          startLine: number,
+          startCol: number,
+          endLine: number,
+          endCol: number,
+        ) => Promise<number | null>;
         __riftyTsReinit?: () => Promise<boolean>;
       };
       // Re-init the service against the CURRENT owner VFS (ADR-0166: `ts:init` is
@@ -842,6 +867,42 @@ export function App(props: AppProps) {
         return result.suggestions.map((s) =>
           typeof s.label === 'string' ? s.label : s.label.label,
         );
+      };
+      g.__riftyTsCompletionItems = async (path, line, col) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const result = await providers.providers.completion.provideCompletionItems(
+          model,
+          pos(line, col),
+          { triggerKind: 0 } as monaco.languages.CompletionContext,
+          NEVER_CANCEL,
+        );
+        if (!result) return null;
+        const resolve = providers.providers.completion.resolveCompletionItem;
+        const out = [];
+        for (const suggestion of result.suggestions) {
+          const item =
+            (resolve ? await resolve(suggestion, NEVER_CANCEL) : suggestion) ?? suggestion;
+          const label = typeof item.label === 'string' ? item.label : item.label.label;
+          const range =
+            'startLineNumber' in item.range
+              ? item.range
+              : (item.range.insert ?? item.range.replace);
+          out.push({
+            label,
+            insertText: item.insertText,
+            startLine: range.startLineNumber,
+            startColumn: range.startColumn,
+            endLine: range.endLineNumber,
+            endColumn: range.endColumn,
+            ...(item.insertTextRules !== undefined
+              ? { insertTextRules: item.insertTextRules }
+              : {}),
+            commitCharacters: item.commitCharacters ?? [],
+            additionalTextEditCount: item.additionalTextEdits?.length ?? 0,
+          });
+        }
+        return out;
       };
       // Round-trip a provider-returned target Uri back to its VFS path (proves the
       // Location.uri → model → path resolution incl. an opened sibling/dep buffer);
@@ -940,6 +1001,10 @@ export function App(props: AppProps) {
         }
         return out;
       };
+      const resolveCodeAction = async (
+        action: monaco.languages.CodeAction,
+      ): Promise<monaco.languages.CodeAction> =>
+        (await providers.providers.codeAction.resolveCodeAction?.(action, NEVER_CANCEL)) ?? action;
       // Drive the registered code-action provider over a 1-based Monaco range
       // (sources errorCodes from the rifty markers internally). Returns each
       // action's title/kind + flattened edits — proves quick-fixes carry a real edit.
@@ -954,11 +1019,16 @@ export function App(props: AppProps) {
           NEVER_CANCEL,
         );
         if (!list) return [];
-        const actions = list.actions.map((a) => ({
-          title: a.title,
-          ...(a.kind !== undefined ? { kind: a.kind } : {}),
-          edits: codeActionEdits(a),
-        }));
+        const actions = await Promise.all(
+          list.actions.map(async (a) => {
+            const resolved = await resolveCodeAction(a);
+            return {
+              title: resolved.title,
+              ...(resolved.kind !== undefined ? { kind: resolved.kind } : {}),
+              edits: codeActionEdits(resolved),
+            };
+          }),
+        );
         list.dispose();
         return actions;
       };
@@ -975,11 +1045,12 @@ export function App(props: AppProps) {
         );
         if (!list) return null;
         const organize = list.actions.find((a) => a.kind === 'source.organizeImports');
-        const result = organize
+        const resolved = organize ? await resolveCodeAction(organize) : undefined;
+        const result = resolved
           ? {
-              title: organize.title,
-              ...(organize.kind !== undefined ? { kind: organize.kind } : {}),
-              edits: codeActionEdits(organize),
+              title: resolved.title,
+              ...(resolved.kind !== undefined ? { kind: resolved.kind } : {}),
+              edits: codeActionEdits(resolved),
             }
           : null;
         list.dispose();
@@ -1007,23 +1078,41 @@ export function App(props: AppProps) {
           scratch.dispose();
         }
       };
+      g.__riftyTsRangeSemanticTokenCount = async (path, startLine, startCol, endLine, endCol) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const result =
+          await providers.providers.rangeSemanticTokens.provideDocumentRangeSemanticTokens(
+            model,
+            new monaco.Range(startLine, startCol, endLine, endCol),
+            NEVER_CANCEL,
+          );
+        return result ? result.data.length : null;
+      };
     }
 
     // Per-path debounce so a burst of keystrokes pushes ONE update (~300ms idle).
     const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
     const openPaths = new Set<string>();
+    const diagnosticVersions = new Map<string, number>();
     let disposed = false;
 
     const isJsTs = (path: string): boolean => /\.(ts|tsx|js|jsx|cjs|mjs)$/.test(path);
 
-    async function refreshDiagnostics(path: string): Promise<void> {
+    function bumpDiagnosticVersion(path: string): number {
+      const next = (diagnosticVersions.get(path) ?? 0) + 1;
+      diagnosticVersions.set(path, next);
+      return next;
+    }
+
+    async function refreshDiagnostics(path: string, version: number): Promise<void> {
       if (disposed) return;
       try {
         const [semantic, syntactic] = await Promise.all([
           client.getSemanticDiagnostics(path),
           client.getSyntacticDiagnostics(path),
         ]);
-        if (disposed) return;
+        if (disposed || !openPaths.has(path) || diagnosticVersions.get(path) !== version) return;
         const diags = [...syntactic, ...semantic];
         api.setMarkers(path, lspToMonacoMarkers(diags));
         setDiagnostics((prev) => {
@@ -1040,6 +1129,7 @@ export function App(props: AppProps) {
     }
 
     function scheduleSync(ev: EditorDocumentEvent): void {
+      const version = bumpDiagnosticVersion(ev.path);
       const prev = debounceTimers.get(ev.path);
       if (prev) clearTimeout(prev);
       debounceTimers.set(
@@ -1054,7 +1144,7 @@ export function App(props: AppProps) {
             push = client.open(ev.path, ev.text);
           }
           void push.then(
-            () => refreshDiagnostics(ev.path),
+            () => refreshDiagnostics(ev.path, version),
             (err: unknown) => {
               if (!disposed) console.warn('[ts-lsp]', (err as Error).message);
             },
@@ -1066,6 +1156,7 @@ export function App(props: AppProps) {
     const unsubscribe = api.onDocument((ev) => {
       if (!isJsTs(ev.path)) return; // LS is JS/TS-only
       if (ev.kind === 'close') {
+        bumpDiagnosticVersion(ev.path);
         const t = debounceTimers.get(ev.path);
         if (t) {
           clearTimeout(t);
@@ -1098,6 +1189,7 @@ export function App(props: AppProps) {
       disposed = true;
       for (const t of debounceTimers.values()) clearTimeout(t);
       debounceTimers.clear();
+      diagnosticVersions.clear();
       unsubscribe();
       providers.dispose();
       client.dispose();
@@ -1106,6 +1198,7 @@ export function App(props: AppProps) {
         g.__riftyTsHover = undefined;
         g.__riftyTsDefinition = undefined;
         g.__riftyTsCompletions = undefined;
+        g.__riftyTsCompletionItems = undefined;
         g.__riftyTsReferences = undefined;
         g.__riftyTsPrepareRename = undefined;
         g.__riftyTsRenameEdits = undefined;
@@ -1113,6 +1206,7 @@ export function App(props: AppProps) {
         g.__riftyTsCodeFixes = undefined;
         g.__riftyTsOrganizeImports = undefined;
         g.__riftyTsFormat = undefined;
+        g.__riftyTsRangeSemanticTokenCount = undefined;
         g.__riftyTsReinit = undefined;
       }
     });
@@ -2175,6 +2269,7 @@ export function App(props: AppProps) {
             <div class="rf-editorarea" data-preview={hasPreview() ? 'on' : 'off'}>
               <EditorHost
                 programValue={machine.source}
+                programPath={() => programMirrorPath(activeRoot())}
                 programTitle={programTitle}
                 root={activeRoot}
                 onProgramChange={onProgramChange}

@@ -1,40 +1,33 @@
 ---
 area: protocol
-status: parked
-title: TS completion-resolve carries only `label` (same-name auto-import ambiguity)
+status: shipped
+title: TS completion-resolve carries `source`/`data` for exact same-name auto-imports
 created: 2026-06-22
-why: ts:getCompletionDetails frame keys on `label`; two same-named auto-import candidates can't be disambiguated
-user_story: As an editor user, I want the resolved detail of the EXACT completion I selected, but today two same-named auto-import candidates (e.g. two `Button` from different modules) resolve to whichever the engine lists first — the wrong import path may be shown
+why: ts:getCompletionDetails now keys exact resolves with `label` plus TS `source`/`data`, preserving label-only fallback for old callers
+user_story: As an editor user, the resolved detail of the exact completion I selected is returned even when two auto-import candidates share the same label
 sources: [ADR-0166]
 code: [packages/ts-language-service/src/worker/protocol.ts, packages/ts-language-service/src/service.ts]
 ---
 
 ## Context
 
-`ts.getCompletionEntryDetails(file, pos, name, fmt, source, prefs, data)` needs the
-entry's `source` + opaque `data` to disambiguate same-named candidates (the classic
-case: two auto-import `Button`s from different modules). The `ts:getCompletionDetails`
-protocol frame carries only `{path, position, label}`.
+Landed 2026-06-22: completion items now carry the TypeScript entry `source` and
+opaque `data`, and `ts:getCompletionDetails` echoes them back so same-name
+auto-import candidates resolve exactly.
 
-Current mitigation (correct for everything EXCEPT same-name collisions): the service
-re-queries `getCompletionsAtPosition` and looks the entry up by `name`, threading its
-real `source`/`data` into `getCompletionEntryDetails`. So ordinary members/locals/
-globals AND a *uniquely*-named auto-import resolve exactly. The ONLY residual gap:
-when two entries share a `name`, `find(e => e.name === label)` picks the first — the
-detail (and its import-path text) may be for the wrong candidate. Not a lie (it IS a
-real candidate's detail), but possibly not the one the user highlighted.
+This shipped item is retained as the delivery record. `ts:getCompletions` returns
+each entry's `source` and opaque structured-clone-safe `data`; completion resolve
+echoes them to `getCompletionEntryDetails`, so same-name auto-import candidates
+resolve to the exact selected entry. Older label-only callers still work by
+re-querying the list and using the first matching name.
 
-## Options or Next
+## Verification
 
-- A. Carry the opaque entry `data` (+ `source`) on `ts:getCompletion(s)` entries and
-  echo it back in `ts:getCompletionDetails` — exact disambiguation, no list recompute.
-  Cost: widen the wire shape; `data` is `unknown` in the TS protocol (structured-clone
-  safe today, but unstable across TS versions).
-- B. Keep label-only resolve; accept first-match for same-name collisions (today).
-- Next: when the playground editor wires completion resolve, measure whether same-name
-  collisions actually surface in real fixtures before widening the protocol (A).
+- `parity.test.ts` checks completion metadata and auto-import resolve against real
+  TS, including additional edits from completion code actions.
 
 ## Reversibility
 
-REVERSIBLE — internal worker protocol, not a published API. Recorded here; pick A vs B
-when the editor consumes resolve. No ADR (no public-API / ADR-contradiction).
+REVERSIBLE — internal worker protocol, not a published API. Recorded here; the
+editor consumes exact `source`/`data` resolve metadata, with label-only fallback
+retained for older callers. No ADR (no public-API / ADR-contradiction).

@@ -96,3 +96,57 @@ describe('getConfigFileDiagnostics → invalid tsconfig option', () => {
     expect(svc.getConfigFileDiagnostics()).toHaveLength(0);
   });
 });
+
+describe('getCompilerOptionsDiagnostics → compiler option conflicts', () => {
+  it('surfaces non-empty compiler option diagnostics, matching real TS', async () => {
+    const { fsSync } = createMemoryFs();
+    const fileText = 'export const x = 1;\n';
+    const tsconfig = JSON.stringify({
+      compilerOptions: { module: 'commonjs', outFile: 'bundle.js' },
+    });
+    writeFile(fsSync, '/proj/tsconfig.json', tsconfig);
+    writeFile(fsSync, '/proj/a.ts', fileText);
+
+    const goldParsed = ts.parseJsonConfigFileContent(
+      JSON.parse(tsconfig),
+      {
+        useCaseSensitiveFileNames: true,
+        fileExists: (p) => p === '/proj/a.ts',
+        readFile: (p) => (p === '/proj/a.ts' ? fileText : undefined),
+        readDirectory: () => ['/proj/a.ts'],
+      },
+      '/proj',
+      undefined,
+      '/proj/tsconfig.json',
+    );
+    const goldService = ts.createLanguageService({
+      getCompilationSettings: () => goldParsed.options,
+      getScriptFileNames: () => goldParsed.fileNames,
+      getScriptVersion: () => '0',
+      getScriptSnapshot: (p) => {
+        const text = p === '/proj/a.ts' ? fileText : ts.sys.readFile(p);
+        return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+      },
+      getCurrentDirectory: () => '/proj',
+      getDefaultLibFileName: (options) => ts.getDefaultLibFilePath(options),
+      fileExists: (p) => p === '/proj/a.ts' || ts.sys.fileExists(p),
+      readFile: (p) => (p === '/proj/a.ts' ? fileText : ts.sys.readFile(p)),
+      readDirectory: () => ['/proj/a.ts'],
+      directoryExists: (p) => p === '/proj',
+      getDirectories: () => [],
+      useCaseSensitiveFileNames: () => true,
+    });
+
+    const gold = goldService.getCompilerOptionsDiagnostics();
+    expect(gold.length).toBeGreaterThanOrEqual(1);
+
+    const svc = await createTsLanguageService({ fsSync, projectRoot: '/proj' });
+    const actual = svc.getCompilerOptionsDiagnostics();
+
+    expect(actual.map((d) => d.code)).toEqual(gold.map((d) => d.code));
+    expect(actual.map((d) => d.message)).toEqual(
+      gold.map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n')),
+    );
+    expect(actual.map((d) => d.source)).toEqual(gold.map(() => 'ts'));
+  });
+});

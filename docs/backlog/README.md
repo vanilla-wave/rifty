@@ -11,7 +11,7 @@ One item per file: `docs/backlog/<area>/<slug>.md`. Slug = filename without `.md
 Between the first two `---` lines. Required keys:
 
 - `area` — must equal the parent folder name (and be a known area)
-- `status` — one of `active` | `parked` | `blocked`
+- `status` — one of `active` | `parked` | `blocked` | `shipped`
 - `title` — short human label
 - `created` — `YYYY-MM-DD`
 - `why` — one line: why this is on the backlog
@@ -26,6 +26,7 @@ See `TEMPLATE.md`.
 - `active` — being worked / next up
 - `parked` — deferred, gate not yet met
 - `blocked` — waiting on another item / external
+- `shipped` — implemented; kept for provenance and refs
 
 ## Code markers
 

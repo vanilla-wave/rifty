@@ -79,6 +79,31 @@ describe('ModuleLoaderOptions transform surface', () => {
     expect(observedWorkspace).toBe('/proj');
     expect(ns.only).toBe(7);
   });
+
+  it('treats .jsx under type:module as ESM and transforms it through the JSX hook', async () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/package.json': JSON.stringify({ type: 'module' }),
+      '/work/view.jsx': '/*X*/export const view = <span />;\n',
+    });
+
+    const seen: { id: string; loader: string }[] = [];
+    const spy = vi.fn(
+      async (req: { source: string; id: string; loader: string; workspace: string }) => {
+        seen.push({ id: req.id, loader: req.loader });
+        return req.source.replace(
+          '/*X*/export const view = <span />;',
+          "export const view = 'ok';",
+        );
+      },
+    );
+
+    const loader = createModuleLoader(vfs, { cwd: '/work', transformSource: spy });
+    const ns = await loader.import('./view.jsx', '/work/__entry__.js');
+
+    expect(ns.view).toBe('ok');
+    expect(seen).toEqual([{ id: '/work/view.jsx', loader: 'jsx' }]);
+  });
 });
 
 describe('createModuleLoader transform cache (feature 02 T5, Q-2026-05-30-202)', () => {
@@ -149,6 +174,35 @@ describe('createModuleLoader transform cache (feature 02 T5, Q-2026-05-30-202)',
     await loader.loadById('/work/m.ts', true);
     expect(count).toBe(2);
   });
+
+  it('re-runs the transform when the same .ts id has different source text', async () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/package.json': JSON.stringify({ type: 'module' }),
+      '/work/m.ts': '/*X*/export const m = 1;\n',
+    });
+
+    const calls = new Map<string, number>();
+    const spy = vi.fn(
+      async (req: { source: string; id: string; loader: string; workspace: string }) => {
+        calls.set(req.id, (calls.get(req.id) ?? 0) + 1);
+        return req.source.replaceAll('/*X*/', '');
+      },
+    );
+
+    const loader = createModuleLoader(vfs, { cwd: '/work', transformSource: spy });
+
+    const first = await loader.import('./m.ts', '/work/__entry__.ts');
+    expect(first.m).toBe(1);
+    expect(calls.get('/work/m.ts')).toBe(1);
+
+    vfs.writeFileSync('/work/m.ts', new TextEncoder().encode('/*X*/export const m = 2;\n'));
+    loader.registry.invalidate('/work/m.ts');
+    const second = await loader.loadById('/work/m.ts', true);
+
+    expect(second.m).toBe(2);
+    expect(calls.get('/work/m.ts')).toBe(2);
+  });
 });
 
 describe('require() of a .ts module (CJS-scope honesty, feature 02 T4)', () => {
@@ -161,6 +215,7 @@ describe('require() of a .ts module (CJS-scope honesty, feature 02 T4)', () => {
       // TS-only syntax (a type annotation) that would die with an opaque
       // SyntaxError inside `new Function` if it ever reached executeCjs.
       '/work/legacy.ts': 'export const x: number = 1;\n',
+      '/work/legacy.jsx': 'export const x = <div />;\n',
     });
 
     const loader = createModuleLoader(vfs, { cwd: '/work' });
@@ -170,5 +225,7 @@ describe('require() of a .ts module (CJS-scope honesty, feature 02 T4)', () => {
     // directed, honest error — not an opaque acorn/new-Function SyntaxError.
     expect(() => loader.require('./legacy.ts', '/work/e.js')).toThrow(NotImplementedError);
     expect(() => loader.require('./legacy.ts', '/work/e.js')).toThrow(/require\(\) of .*\.ts/);
+    expect(() => loader.require('./legacy.jsx', '/work/e.js')).toThrow(NotImplementedError);
+    expect(() => loader.require('./legacy.jsx', '/work/e.js')).toThrow(/require\(\) of .*\.jsx/);
   });
 });

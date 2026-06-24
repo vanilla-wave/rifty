@@ -16,6 +16,10 @@
 - Added `browserShimFileSets`, `collectBrowserShimFiles`, and
   `viteBrowserShimFiles` (ADR-0156) so Vite-class overlays are selected by typed
   shim-set name instead of hand-spelling every package at each call site.
+- `transformWithEsbuild(..., { supported: { decorators: false } })` now forwards
+  `--supported:decorators=false`, allowing TS standard decorators to lower before
+  rifty's post-strip AST parser. The runtime parity runner uses this for the
+  `modules/ts-standard-decorator` case against `tsx`.
 - `bakedOverrides` now redirects `esbuild` to `@esbuild/wasi-preview1@0.28.0`,
   so Vite installs avoid the real package's native-binary `postinstall`; the
   playground still overlays `node_modules/esbuild` with the browser-safe shim.

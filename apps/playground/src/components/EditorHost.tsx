@@ -37,7 +37,6 @@ import { programMirrorPath } from '../glue/program-path.ts';
 // Side-effect: wires MonacoEnvironment.getWorker before the first editor.
 import '../glue/monaco-env.ts';
 import { EditorTabs } from './EditorTabs.tsx';
-
 export interface EditorOpenFileOptions {
   readonly activate?: boolean;
   /**
@@ -50,7 +49,7 @@ export interface EditorOpenFileOptions {
 
 /** A model open/change/close event the page LS client reacts to (ADR-0166 P1.9b). */
 export interface EditorDocumentEvent {
-  /** Absolute VFS path (the program tab maps to {@link PROGRAM_MIRROR_PATH}). */
+  /** Absolute VFS path (the program tab maps to the active template entry). */
   readonly path: string;
   /** Current model text (empty on `close`). */
   readonly text: string;
@@ -62,7 +61,7 @@ export interface EditorApi {
   openFile(path: string, options?: EditorOpenFileOptions): void;
   /**
    * Set the rifty-TS diagnostic markers for an open model (ADR-0166 P1.9b). `path`
-   * is the absolute VFS path (program tab → {@link PROGRAM_MIRROR_PATH}); a no-op
+   * is the absolute VFS path (program tab -> active template entry); a no-op
    * if no model is open for it. Owns the `'rifty-ts'` marker owner so it never
    * clobbers Monaco's own markers (which are disabled anyway).
    */
@@ -70,13 +69,13 @@ export interface EditorApi {
   /**
    * Subscribe to model open/change/close (ADR-0166 P1.9b) so the page can push
    * `ts:open`/`ts:update`/`ts:close` and request diagnostics. Returns an
-   * unsubscribe. The program tab reports {@link PROGRAM_MIRROR_PATH}.
+   * unsubscribe. The program tab reports the active template entry path.
    */
   onDocument(cb: (ev: EditorDocumentEvent) => void): () => void;
   /**
    * VFS path for an open Monaco model (ADR-0166 phase 2): the inverse of the
    * private model map, so an LS provider handed a `model` can query the service
-   * by path (the program tab's model maps back to {@link PROGRAM_MIRROR_PATH}).
+   * by path (the program tab's model maps back to the active template entry).
    * `undefined` if the model is not one of ours (e.g. a foreign/disposed model).
    */
   pathForModel(model: monaco.editor.ITextModel): string | undefined;
@@ -89,11 +88,19 @@ export interface EditorApi {
    * when no model can be made for `path` (no bytes anywhere — e.g. the synthetic
    * `/ts-lib/` std-lib whose text lives only inside the LS worker).
    */
-  ensureModel(path: string): monaco.Uri | undefined;
+  ensureModel(path: string, options?: { readonly isNewFile?: boolean }): monaco.Uri | undefined;
+  /**
+   * Dry-run companion for {@link ensureModel}: returns whether a model can be
+   * made without opening tabs, creating new-file models, or subscribing to a
+   * future snapshot frame. Used by workspace edits to validate every target
+   * before any editor-visible side effect.
+   */
+  canEnsureModel(path: string, options?: { readonly isNewFile?: boolean }): boolean;
 }
 
 export interface EditorHostProps {
   readonly programValue: Accessor<string>;
+  readonly programPath: Accessor<string>;
   readonly programTitle: Accessor<string>;
   /** Active root (ADR-0165 §4): the program-mirror path is `<root>/src/main.js`,
    *  read reactively so a project switch re-keys which path focuses the program
@@ -168,12 +175,9 @@ let builtinTsRetired = false;
  *     sees its isolated lib.d.ts (no VFS / tsconfig / node_modules) — the
  *     "isolated approximation that lies" ADR-0166 rejects. rifty's relay-backed
  *     providers (`glue/ts-ls-monaco-providers.ts`) serve hover/completion/goto/
- *     code-actions/organize-imports/formatting; the rest stay honestly absent
- *     rather than guessing.
- *
- * KEPT ON: the purely SYNTACTIC built-ins that need no project knowledge —
- * `documentSymbols` (outline). Syntax highlighting is the Monarch tokenizer,
- * independent of the worker, so it is unaffected either way.
+ *     code-actions/organize-imports/formatting/document-symbols/folding/inlay
+ *     hints/highlights/semantic tokens. Syntax highlighting is the Monarch
+ *     tokenizer, independent of the worker, so it is unaffected either way.
  */
 function retireBuiltinTsIntelligence(): void {
   if (builtinTsRetired) return;
@@ -194,8 +198,7 @@ function retireBuiltinTsIntelligence(): void {
     documentFormattingEdits: false,
     documentRangeFormattingEdits: false,
     onTypeFormattingEdits: false,
-    // syntactic-only built-in rifty does not own — kept honest, not faked:
-    documentSymbols: true,
+    documentSymbols: false,
   };
   monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions(off);
   monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions(off);
@@ -237,6 +240,7 @@ export function EditorHost(props: EditorHostProps) {
   let container: HTMLDivElement | undefined;
   let editor: monaco.editor.IStandaloneCodeEditor | undefined;
   let programModel: monaco.editor.ITextModel | undefined;
+  let currentProgramPath = props.programPath();
   let suppressProgramEcho = false;
   // A reveal queued by `openFile({reveal})` (ADR-0166 P1.9c Problems jump),
   // applied once the target tab is the editor's active model (the activeId effect
@@ -249,6 +253,7 @@ export function EditorHost(props: EditorHostProps) {
   // this resolves the model back to its tab id (→ path via {@link docPathForTab}).
   // Kept in lockstep with `models` on every create/dispose.
   const modelUriToTabId = new Map<string, string>();
+  const modelContentDisposables = new Map<string, monaco.IDisposable>();
   const readOnlyPaths = new Set<string>();
   const writeTimers = new Map<string, ReturnType<typeof setTimeout>>();
   // path → unsubscribe for an in-flight "await the next snapshot frame" retry
@@ -270,21 +275,44 @@ export function EditorHost(props: EditorHostProps) {
   }
   /** Track a model under its tab id + index its uri (keeps `modelUriToTabId` in sync). */
   function registerModel(id: string, model: monaco.editor.ITextModel): void {
+    modelContentDisposables.get(id)?.dispose();
     models.set(id, model);
     modelUriToTabId.set(model.uri.toString(), id);
+    modelContentDisposables.set(
+      id,
+      model.onDidChangeContent(() => handleModelContentChange(id)),
+    );
   }
   /** Drop a model from both maps; returns it for disposal. */
   function unregisterModel(id: string): monaco.editor.ITextModel | undefined {
     const model = models.get(id);
     if (model) modelUriToTabId.delete(model.uri.toString());
+    modelContentDisposables.get(id)?.dispose();
+    modelContentDisposables.delete(id);
     models.delete(id);
     return model;
+  }
+  function handleModelContentChange(id: string): void {
+    if (id === PROGRAM_TAB_ID) {
+      emitDocument(id, 'change');
+      if (suppressProgramEcho || !programModel) return;
+      props.onProgramChange(programModel.getValue());
+      return;
+    }
+    if (readOnlyPaths.has(id)) return;
+    emitDocument(id, 'change');
+    setTabs((t) => setDirty(t, id, true));
+    scheduleWrite(id);
   }
   function emitDocument(id: string, kind: EditorDocumentEvent['kind']): void {
     if (documentListeners.size === 0) return;
     const model = models.get(id);
     const text = kind === 'close' ? '' : (model?.getValue() ?? '');
-    const ev: EditorDocumentEvent = { path: docPathForTab(id), text, kind };
+    emitDocumentPath(docPathForTab(id), text, kind);
+  }
+  function emitDocumentPath(path: string, text: string, kind: EditorDocumentEvent['kind']): void {
+    if (documentListeners.size === 0) return;
+    const ev: EditorDocumentEvent = { path, text, kind };
     for (const cb of documentListeners) cb(ev);
   }
 
@@ -393,6 +421,48 @@ export function EditorHost(props: EditorHostProps) {
     setTabs((t) => openFileTab(t, path, basename(path)));
     if (shouldActivate) setActiveId(path);
     emitDocument(path, 'open');
+  }
+
+  function openNewEditableFile(path: string, shouldActivate: boolean): monaco.Uri {
+    const existing = models.get(path);
+    if (existing) {
+      if (shouldActivate) setActiveId(path);
+      return existing.uri;
+    }
+    const model = monaco.editor.createModel('', languageForPath(path));
+    registerModel(path, model);
+    setTabs((t) => openFileTab(t, path, basename(path)));
+    if (shouldActivate) setActiveId(path);
+    emitDocument(path, 'open');
+    return model.uri;
+  }
+
+  function canOpenExistingModel(path: string): boolean {
+    const id = tabIdForPath(path);
+    if (models.has(id)) return true;
+    let bytes: Uint8Array | undefined;
+    try {
+      bytes = props.vfs.readFileBytesSync(path);
+    } catch {
+      // classifyOpen below needs only the readable boolean.
+    }
+    const kind = classifyOpen(path, {
+      programMirrorPath: props.programPath(),
+      isNodeModules: isNodeModulesPath(path),
+      present: props.vfs.existsSync(path),
+      readable: bytes !== undefined,
+      hasRemotePort: Boolean(props.readNodeModulesFile),
+    });
+    switch (kind) {
+      case 'program':
+        return true;
+      case 'remote':
+        return props.readNodeModulesFile !== undefined;
+      case 'sync':
+        return bytes !== undefined;
+      case 'await-snapshot':
+        return false;
+    }
   }
 
   /**
@@ -515,7 +585,10 @@ export function EditorHost(props: EditorHostProps) {
     if (!container) return;
     ensureTheme();
     retireBuiltinTsIntelligence();
-    programModel = monaco.editor.createModel(props.programValue(), 'javascript');
+    programModel = monaco.editor.createModel(
+      props.programValue(),
+      languageForPath(props.programPath()),
+    );
     registerModel(PROGRAM_TAB_ID, programModel);
     editor = monaco.editor.create(container, {
       model: programModel,
@@ -541,27 +614,6 @@ export function EditorHost(props: EditorHostProps) {
       scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
     });
 
-    editor.onDidChangeModelContent(() => {
-      const id = activeId();
-      if (id === PROGRAM_TAB_ID) {
-        // Always notify the LS of the new program text (ADR-0166 P1.9b) — even an
-        // external preset `setValue` (suppressProgramEcho) must reach the service,
-        // it's a real content change the diagnostics must reflect. Only the
-        // page→owner write echo is suppressed below.
-        emitDocument(id, 'change');
-        if (suppressProgramEcho || !programModel) return;
-        props.onProgramChange(programModel.getValue());
-      } else {
-        // Read-only tabs (snapshot mirror, ADR-0076 / node_modules, ADR-0080)
-        // have no write path back; a programmatic setValue (async load) must
-        // not schedule a write into a read-only VFS.
-        if (readOnlyPaths.has(id)) return;
-        emitDocument(id, 'change');
-        setTabs((t) => setDirty(t, id, true));
-        scheduleWrite(id);
-      }
-    });
-
     props.registerApi({
       openFile,
       setMarkers(path, markers) {
@@ -583,10 +635,11 @@ export function EditorHost(props: EditorHostProps) {
         const id = modelUriToTabId.get(model.uri.toString());
         return id === undefined ? undefined : docPathForTab(id);
       },
-      ensureModel(path) {
+      ensureModel(path, options) {
         const id = tabIdForPath(path);
         const existing = models.get(id);
         if (existing) return existing.uri;
+        if (options?.isNewFile === true) return openNewEditableFile(path, false);
         // Not open yet: open it WITHOUT activating (a go-to-def target the user
         // didn't pick). The sync/remote/program branches create the model
         // synchronously; only `await-snapshot` (a racing seed) defers — that path
@@ -594,6 +647,10 @@ export function EditorHost(props: EditorHostProps) {
         // than fake one. node_modules `.d.ts` go through the read-port (read-only).
         openFile(path, { activate: false });
         return models.get(id)?.uri;
+      },
+      canEnsureModel(path, options) {
+        if (options?.isNewFile === true) return true;
+        return canOpenExistingModel(path);
       },
     });
 
@@ -641,6 +698,18 @@ export function EditorHost(props: EditorHostProps) {
     });
 
     createEffect(() => {
+      const path = props.programPath();
+      if (programModel) monaco.editor.setModelLanguage(programModel, languageForPath(path));
+      if (path === currentProgramPath) return;
+      const previousPath = currentProgramPath;
+      currentProgramPath = path;
+      if (programModel) {
+        emitDocumentPath(previousPath, '', 'close');
+        emitDocumentPath(path, programModel.getValue(), 'open');
+      }
+    });
+
+    createEffect(() => {
       const title = props.programTitle();
       setTabs((t) => setProgramTitle(t, title));
     });
@@ -652,7 +721,7 @@ export function EditorHost(props: EditorHostProps) {
       if (editor.getModel() !== model) editor.setModel(model);
       editor.updateOptions({ readOnly: readOnlyPaths.has(id) });
       props.onActive({
-        label: id === PROGRAM_TAB_ID ? 'main.js' : basename(id),
+        label: id === PROGRAM_TAB_ID ? basename(props.programPath()) : basename(id),
         language: model.getLanguageId(),
         // The program tab mirrors the root-relative program path (ADR-0165 §4) —
         // report it so the explorer highlights src/main.js (mockup: active file
@@ -670,6 +739,8 @@ export function EditorHost(props: EditorHostProps) {
     for (const unsubscribe of snapshotAwaits.values()) unsubscribe();
     snapshotAwaits.clear();
     editor?.dispose();
+    for (const disposable of modelContentDisposables.values()) disposable.dispose();
+    modelContentDisposables.clear();
     for (const m of models.values()) m.dispose();
     models.clear();
     modelUriToTabId.clear();

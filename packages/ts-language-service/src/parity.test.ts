@@ -694,6 +694,10 @@ describe('parity: phase-2 queries vs real ts.LanguageService (gold standard)', (
       expect(goldSet.length).toBeGreaterThan(0); // non-vacuous
       expect(riftySet).toEqual(goldSet);
       expect(riftyList.isIncomplete).toBe(goldInfo?.isIncomplete === true);
+      expect(riftyList.flags).toBe(goldInfo?.flags);
+      expect(riftyList.isGlobalCompletion).toBe(goldInfo?.isGlobalCompletion ?? false);
+      expect(riftyList.isMemberCompletion).toBe(goldInfo?.isMemberCompletion ?? false);
+      expect(riftyList.isNewIdentifierLocation).toBe(goldInfo?.isNewIdentifierLocation ?? false);
     }
 
     // getCompletionEntryDetails probe: resolve ONE member entry's detail.
@@ -717,6 +721,150 @@ describe('parity: phase-2 queries vs real ts.LanguageService (gold standard)', (
     expect(goldDetail).not.toBeUndefined();
     expect(riftyDetail?.detail).toBe(partsToString(goldDetail?.displayParts));
     expect(riftyDetail?.label).toBe('map');
+  });
+
+  it('completion metadata matches real TS for replacement spans, commit characters, snippets and actions', async () => {
+    const fixture: Fixture = {
+      name: 'completion metadata',
+      probes:
+        'replacement spans, default/per-entry commit characters, snippets, and completion details code actions',
+      files: {
+        'tsconfig.json': JSON.stringify({
+          compilerOptions: {
+            strict: true,
+            module: 'esnext',
+            moduleResolution: 'bundler',
+            target: 'es2022',
+          },
+        }),
+        'helpers.ts': 'export function helperValue(): number { return 1; }\n',
+        'main.ts':
+          'const record = { "a-b": 1 };\n' +
+          'record.a\n' +
+          'help\n' +
+          '/** @par */\n' +
+          'function documented(param: string) {}\n' +
+          'function takes(cb: (value: string) => void) {}\n' +
+          'takes(\n',
+      },
+      diagnose: ['main.ts'],
+    };
+    const root = writeFixtureToTmp(fixture);
+    const { service: gsvc, host: ghost } = buildGoldService(root);
+    const { svc } = await buildRiftyService(fixture);
+    const mainText = fixture.files['main.ts'] ?? '';
+
+    const propertyProbe = probePosition(mainText, {
+      file: 'main.ts',
+      needle: 'record.a',
+      inner: 8,
+    });
+    const propertyOffset = positionToOffset(mainText, propertyProbe);
+    const goldProperty = gsvc.getCompletionsAtPosition(
+      nodePath.join(root, 'main.ts'),
+      propertyOffset,
+      { includeInsertTextCompletions: true },
+    );
+    const riftyProperty = svc.getCompletions(`${RIFTY_ROOT}/main.ts`, propertyProbe, {
+      includeInsertTextCompletions: true,
+    });
+    const goldBracket = goldProperty?.entries.find((entry) => entry.name === 'a-b');
+    const riftyBracket = riftyProperty.items.find((entry) => entry.label === 'a-b');
+    expect(goldProperty?.optionalReplacementSpan).toBeDefined();
+    expect(goldBracket?.replacementSpan).toBeDefined();
+    expect(riftyProperty.optionalReplacementRange).toEqual(
+      spanToRange(mainText, goldProperty?.optionalReplacementSpan ?? { start: 0, length: 0 }),
+    );
+    expect(riftyBracket?.replacementRange).toEqual(
+      spanToRange(mainText, goldBracket?.replacementSpan ?? { start: 0, length: 0 }),
+    );
+    expect(riftyProperty.defaultCommitCharacters).toEqual(goldProperty?.defaultCommitCharacters);
+    expect(riftyBracket?.commitCharacters).toEqual(goldBracket?.commitCharacters);
+
+    const snippetProbe = probePosition(mainText, { file: 'main.ts', needle: '@par', inner: 4 });
+    const snippetOffset = positionToOffset(mainText, snippetProbe);
+    const goldSnippet = gsvc
+      .getCompletionsAtPosition(nodePath.join(root, 'main.ts'), snippetOffset, {
+        includeCompletionsWithSnippetText: true,
+      })
+      ?.entries.find((entry) => entry.isSnippet === true);
+    const riftySnippet = svc
+      .getCompletions(`${RIFTY_ROOT}/main.ts`, snippetProbe, {
+        includeCompletionsWithSnippetText: true,
+      })
+      .items.find((entry) => entry.label === goldSnippet?.name);
+    expect(goldSnippet).toBeDefined();
+    expect(riftySnippet?.isSnippet).toBe(true);
+
+    const autoImportProbe = probePosition(mainText, { file: 'main.ts', needle: 'help', inner: 4 });
+    const autoImportOffset = positionToOffset(mainText, autoImportProbe);
+    const goldAutoImportList = gsvc.getCompletionsAtPosition(
+      nodePath.join(root, 'main.ts'),
+      autoImportOffset,
+      {
+        includeCompletionsForModuleExports: true,
+        includeInsertTextCompletions: true,
+      },
+    );
+    const goldHelper = goldAutoImportList?.entries.find((entry) => entry.name === 'helperValue');
+    const riftyHelper = svc
+      .getCompletions(`${RIFTY_ROOT}/main.ts`, autoImportProbe, {
+        includeCompletionsForModuleExports: true,
+        includeInsertTextCompletions: true,
+      })
+      .items.find((entry) => entry.label === 'helperValue');
+    const goldDeprecatedAliasHelper = gsvc
+      .getCompletionsAtPosition(nodePath.join(root, 'main.ts'), autoImportOffset, {
+        includeExternalModuleExports: true,
+        includeInsertTextCompletions: true,
+      })
+      ?.entries.find((entry) => entry.name === 'helperValue');
+    const riftyDeprecatedAliasHelper = svc
+      .getCompletions(`${RIFTY_ROOT}/main.ts`, autoImportProbe, {
+        includeExternalModuleExports: true,
+        includeInsertTextCompletions: true,
+      })
+      .items.find((entry) => entry.label === 'helperValue');
+    expect(goldHelper?.hasAction).toBe(true);
+    expect(riftyHelper?.hasAction).toBe(true);
+    expect(goldDeprecatedAliasHelper?.hasAction).toBe(true);
+    expect(riftyDeprecatedAliasHelper?.hasAction).toBe(true);
+    const goldDetails = gsvc.getCompletionEntryDetails(
+      nodePath.join(root, 'main.ts'),
+      autoImportOffset,
+      'helperValue',
+      DEFAULT_FMT,
+      goldHelper?.source,
+      undefined,
+      goldHelper?.data,
+    );
+    const riftyDetails = svc.getCompletionDetails(
+      `${RIFTY_ROOT}/main.ts`,
+      autoImportProbe,
+      'helperValue',
+      riftyHelper?.source,
+      structuredClone(riftyHelper?.data),
+      {
+        includeCompletionsForModuleExports: true,
+        includeInsertTextCompletions: true,
+      },
+    );
+    expect(goldDetails).toBeDefined();
+    expect(goldDetails?.codeActions?.length).toBeGreaterThan(0);
+    expect(riftyDetails?.kind).toBe(
+      scriptElementKindToCompletionKind(goldDetails?.kind ?? ts.ScriptElementKind.unknown),
+    );
+    expect(riftyDetails?.sortText).toBe(riftyHelper?.sortText);
+    expect(riftyDetails?.sourceDisplay).toBe(
+      partsToString(goldDetails?.sourceDisplay ?? goldDetails?.source),
+    );
+    const goldAutoImportEdits = fileTextChangesToWorkspaceEdit(
+      goldDetails?.codeActions?.flatMap((a) => a.changes) ?? [],
+      (fileName) => ghost.readFile?.(fileName) ?? '',
+    );
+    expect(riftyDetails?.additionalTextEdits).toEqual(
+      goldAutoImportEdits.changes[`${root}/main.ts`],
+    );
   });
 });
 
@@ -1079,6 +1227,11 @@ describe('parity: phase-4 queries vs real ts.LanguageService (gold standard)', (
           title: fix.description,
           kind: 'quickfix',
           edit: fileTextChangesToWorkspaceEdit(fix.changes, goldRead),
+          ...(fix.fixId !== undefined ? { fixId: fix.fixId } : {}),
+          ...(fix.fixName !== undefined ? { fixName: fix.fixName } : {}),
+          ...(fix.fixAllDescription !== undefined
+            ? { fixAllDescription: fix.fixAllDescription }
+            : {}),
         }),
       ),
       grel,

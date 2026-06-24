@@ -18,21 +18,56 @@
  */
 
 import {
+  type CallHierarchyIncomingCall,
+  type CallHierarchyItem,
+  type CallHierarchyOutgoingCall,
+  type ClassificationFormat,
+  type ClassifiedSpan,
   type CodeAction,
+  type CodeFixOptions,
+  type CombinedCodeFixOptions,
+  type CompletionDetailsOptions,
   type CompletionItem,
   type CompletionList,
+  type CompletionOptions,
+  type DefinitionLinks,
   type Diagnostic,
   DiagnosticSeverity,
+  type DocCommentTemplateOptions,
+  type DocumentHighlight,
+  type DocumentSymbol,
+  type EmitOutput,
+  type EncodedClassifications,
+  type FileRenameEditsOptions,
+  type FoldingRange,
   type FormattingOptions,
   type Hover,
+  type InlayHint,
+  type InlayHintOptions,
+  type LinkedEditingRanges,
   type Location,
+  type MoveToRefactoringFileSuggestions,
+  type NavigationBarItem,
+  type OrganizeImportsOptions,
+  type PasteEditsOptions,
   type Position,
   type PrepareRenameResult,
+  type QuickInfoOptions,
   type Range,
+  type RefactorEditOptions,
+  type RefactorOptions,
   type ReferenceContext,
+  type RenameOptions,
+  type SelectionRange,
   type SignatureHelp,
+  type SignatureHelpOptions,
+  type SymbolInformation,
   type TextEdit,
+  type TextInsertion,
+  type TodoComment,
+  type TodoCommentDescriptor,
   type WorkspaceEdit,
+  type WorkspaceSymbolOptions,
 } from '@riftydev/ts-language-service/lsp-types';
 import {
   TS_IPC_TYPE,
@@ -41,8 +76,14 @@ import {
   isTsResponseMessage,
 } from '@riftydev/ts-language-service/protocol';
 import type * as monaco from 'monaco-editor';
-import { MarkerSeverity } from 'monaco-editor';
 import { nextTsLspRequestId } from './ts-ls-request-id.ts';
+
+const MONACO_MARKER_SEVERITY = {
+  Error: 8,
+  Warning: 4,
+  Info: 2,
+  Hint: 1,
+} as const satisfies Record<'Error' | 'Warning' | 'Info' | 'Hint', monaco.MarkerSeverity>;
 
 /** Relay seam the client posts requests on / subscribes responses through. */
 export interface TsLspRelay {
@@ -63,6 +104,8 @@ export interface TsLanguageServiceClient {
   close(path: string): Promise<void>;
   /** Drop the cached copy of `path` after an external VFS write. */
   invalidate(path: string): Promise<void>;
+  /** Drop TS's semantic cache without rebuilding the worker/service. */
+  cleanupSemanticCache(): Promise<void>;
   /** Type (semantic) diagnostics for `path`. */
   getSemanticDiagnostics(path: string): Promise<readonly Diagnostic[]>;
   /** Parse (syntactic) diagnostics for `path`. */
@@ -70,18 +113,25 @@ export interface TsLanguageServiceClient {
   /** tsconfig (config-file) diagnostics. */
   getConfigFileDiagnostics(): Promise<readonly Diagnostic[]>;
   /** Quick-info (hover) at `position` (LSP 0-based) in `path`; `null` when nothing to hover. */
-  getQuickInfo(path: string, position: Position): Promise<Hover | null>;
+  getQuickInfo(path: string, position: Position, options?: QuickInfoOptions): Promise<Hover | null>;
   /** Go-to-definition sites for the symbol at `position` (LSP 0-based). */
   getDefinition(path: string, position: Position): Promise<readonly Location[]>;
   /** Go-to-type-definition sites for the TYPE of the symbol at `position` (LSP 0-based). */
   getTypeDefinition(path: string, position: Position): Promise<readonly Location[]>;
   /** Completion candidates at `position` (LSP 0-based). Details resolved lazily. */
-  getCompletions(path: string, position: Position): Promise<CompletionList>;
+  getCompletions(
+    path: string,
+    position: Position,
+    options?: CompletionOptions,
+  ): Promise<CompletionList>;
   /** Resolve one completion entry (`label`) at `position` (LSP 0-based) to detail + docs. */
   getCompletionDetails(
     path: string,
     position: Position,
     label: string,
+    source?: string,
+    data?: unknown,
+    options?: CompletionDetailsOptions,
   ): Promise<CompletionItem | null>;
   /** Find-references for the symbol at `position` (LSP 0-based); `context` gates the declaration. */
   getReferences(
@@ -89,21 +139,43 @@ export interface TsLanguageServiceClient {
     position: Position,
     context: ReferenceContext,
   ): Promise<readonly Location[]>;
+  /** Find-references without definition filtering, mirroring TS's flat helper. */
+  getReferencesAtPosition(path: string, position: Position): Promise<readonly Location[]>;
   /** Prepare-rename probe at `position` (LSP 0-based); `null` when the element can't be renamed. */
-  prepareRename(path: string, position: Position): Promise<PrepareRenameResult | null>;
+  prepareRename(
+    path: string,
+    position: Position,
+    options?: RenameOptions,
+  ): Promise<PrepareRenameResult | null>;
   /** Rename edits for the symbol at `position` (LSP 0-based) → `newName` (empty `changes` if none). */
-  getRenameEdits(path: string, position: Position, newName: string): Promise<WorkspaceEdit>;
+  getRenameEdits(
+    path: string,
+    position: Position,
+    newName: string,
+    options?: RenameOptions,
+  ): Promise<WorkspaceEdit>;
   /** Signature help at `position` (LSP 0-based); `null` when not inside a call. */
-  getSignatureHelp(path: string, position: Position): Promise<SignatureHelp | null>;
+  getSignatureHelp(
+    path: string,
+    position: Position,
+    options?: SignatureHelpOptions,
+  ): Promise<SignatureHelp | null>;
+  getNameOrDottedNameSpan(path: string, range: Range): Promise<Range | null>;
+  getBreakpointStatement(path: string, position: Position): Promise<Range | null>;
   /**
    * Quick-fixes for the diagnostics `errorCodes` intersecting `range` (LSP 0-based)
    * in `path`. tsc only returns a fix when the request span lies WITHIN the
    * diagnostic span, so a caller passes a diagnostic's own range + that
    * diagnostic's `code`s (empty `errorCodes` → no fixes).
    */
-  getCodeFixes(path: string, range: Range, errorCodes: number[]): Promise<readonly CodeAction[]>;
+  getCodeFixes(
+    path: string,
+    range: Range,
+    errorCodes: number[],
+    options?: CodeFixOptions,
+  ): Promise<readonly CodeAction[]>;
   /** Organize-imports for `path` → a `WorkspaceEdit` (empty `changes` if already organized). */
-  organizeImports(path: string): Promise<WorkspaceEdit>;
+  organizeImports(path: string, options?: OrganizeImportsOptions): Promise<WorkspaceEdit>;
   /** Whole-document format edits for `path` with editor `options`. */
   getFormattingEdits(path: string, options: FormattingOptions): Promise<readonly TextEdit[]>;
   /** Range-format edits for `range` (LSP 0-based) in `path` with editor `options`. */
@@ -112,6 +184,129 @@ export interface TsLanguageServiceClient {
     range: Range,
     options: FormattingOptions,
   ): Promise<readonly TextEdit[]>;
+  getSuggestionDiagnostics(path: string): Promise<readonly Diagnostic[]>;
+  getCompilerOptionsDiagnostics(): Promise<readonly Diagnostic[]>;
+  getImplementation(path: string, position: Position): Promise<readonly Location[]>;
+  getDefinitionLinks(path: string, position: Position): Promise<DefinitionLinks>;
+  getDocumentSymbols(path: string): Promise<readonly DocumentSymbol[]>;
+  getNavigationBarItems(path: string): Promise<readonly NavigationBarItem[]>;
+  getFoldingRanges(path: string): Promise<readonly FoldingRange[]>;
+  getWorkspaceSymbols(
+    search: string,
+    options?: WorkspaceSymbolOptions,
+  ): Promise<readonly SymbolInformation[]>;
+  getInlayHints(
+    path: string,
+    range: Range,
+    options?: InlayHintOptions,
+  ): Promise<readonly InlayHint[]>;
+  getDocumentHighlights(
+    path: string,
+    position: Position,
+    filesToSearch: readonly string[],
+  ): Promise<readonly DocumentHighlight[]>;
+  getSemanticClassifications(
+    path: string,
+    range: Range,
+    format?: ClassificationFormat,
+  ): Promise<readonly ClassifiedSpan[]>;
+  getSyntacticClassifications(
+    path: string,
+    range: Range,
+    format?: ClassificationFormat,
+  ): Promise<readonly ClassifiedSpan[]>;
+  getEncodedSemanticClassifications(path: string, range: Range): Promise<EncodedClassifications>;
+  getEncodedSyntacticClassifications(path: string, range: Range): Promise<EncodedClassifications>;
+  prepareCallHierarchy(path: string, position: Position): Promise<readonly CallHierarchyItem[]>;
+  getIncomingCalls(path: string, position: Position): Promise<readonly CallHierarchyIncomingCall[]>;
+  getOutgoingCalls(path: string, position: Position): Promise<readonly CallHierarchyOutgoingCall[]>;
+  getOnTypeFormattingEdits(
+    path: string,
+    position: Position,
+    key: string,
+    options: FormattingOptions,
+  ): Promise<readonly TextEdit[]>;
+  getBraceMatching(path: string, position: Position): Promise<readonly Range[]>;
+  getIndentation(
+    path: string,
+    position: Position,
+    options: FormattingOptions,
+  ): Promise<number | null>;
+  isValidBraceCompletion(path: string, position: Position, openingBrace: string): Promise<boolean>;
+  getSpanOfEnclosingComment(
+    path: string,
+    position: Position,
+    onlyMultiLine: boolean,
+  ): Promise<Range | null>;
+  toLineColumnOffset(path: string, offset: number): Promise<Position | null>;
+  toggleLineComment(path: string, range: Range): Promise<readonly TextEdit[]>;
+  toggleMultilineComment(path: string, range: Range): Promise<readonly TextEdit[]>;
+  commentSelection(path: string, range: Range): Promise<readonly TextEdit[]>;
+  uncommentSelection(path: string, range: Range): Promise<readonly TextEdit[]>;
+  getRefactorActions(
+    path: string,
+    range: Range,
+    options?: RefactorOptions,
+  ): Promise<readonly CodeAction[]>;
+  getRefactorEdits(
+    path: string,
+    range: Range,
+    refactorName: string,
+    actionName: string,
+    interactiveArguments?: { readonly targetFile: string } | undefined,
+    options?: RefactorEditOptions,
+  ): Promise<WorkspaceEdit | null>;
+  getMoveToRefactoringFileSuggestions(
+    path: string,
+    range: Range,
+    options?: RefactorOptions,
+  ): Promise<MoveToRefactoringFileSuggestions | null>;
+  getCombinedCodeFix(
+    path: string,
+    fixId: unknown,
+    options?: CombinedCodeFixOptions,
+  ): Promise<WorkspaceEdit>;
+  getFileRenameEdits(
+    oldPath: string,
+    newPath: string,
+    options?: FileRenameEditsOptions,
+  ): Promise<WorkspaceEdit>;
+  getEmitOutput(
+    path: string,
+    options?: { readonly emitOnlyDtsFiles?: boolean; readonly forceDtsEmit?: boolean },
+  ): Promise<EmitOutput>;
+  getSupportedCodeFixes(path?: string): Promise<readonly string[]>;
+  applyCodeActionCommand(commands: readonly unknown[]): Promise<never>;
+  getProgram(): Promise<never>;
+  getCompletionEntrySymbol(
+    path: string,
+    position: Position,
+    name: string,
+    source: string | undefined,
+  ): Promise<never>;
+  getSelectionRange(path: string, position: Position): Promise<SelectionRange | null>;
+  getFileReferences(path: string): Promise<readonly Location[]>;
+  getJsxClosingTag(path: string, position: Position): Promise<{ readonly newText: string } | null>;
+  getLinkedEditingRange(path: string, position: Position): Promise<LinkedEditingRanges | null>;
+  getDocCommentTemplate(
+    path: string,
+    position: Position,
+    options?: DocCommentTemplateOptions,
+  ): Promise<TextInsertion | null>;
+  getTodoComments(
+    path: string,
+    descriptors: readonly TodoCommentDescriptor[],
+  ): Promise<readonly TodoComment[]>;
+  preparePasteEditsForFile(path: string, copiedRanges: readonly Range[]): Promise<boolean>;
+  getPasteEdits(
+    path: string,
+    pastedText: readonly string[],
+    pasteLocations: readonly Range[],
+    copiedFrom: { readonly file: string; readonly ranges: readonly Range[] } | undefined,
+    options?: PasteEditsOptions,
+  ): Promise<WorkspaceEdit>;
+  /** Dispose the worker-side TS LanguageService instance. */
+  disposeLanguageService(): Promise<void>;
   /** Reject every in-flight request and detach the relay listener. Idempotent. */
   dispose(): void;
 }
@@ -234,14 +429,22 @@ export function createTsLanguageServiceClient(
     return response.result;
   }
 
-  /** A rename-edits query: resolves the `WorkspaceEdit`, rejects on a service error. */
-  async function workspaceEdit(build: (id: number) => TsRequest): Promise<WorkspaceEdit> {
+  async function workspaceEditOrNull(
+    build: (id: number) => TsRequest,
+  ): Promise<WorkspaceEdit | null> {
     const response = await request(build);
     if (response.ok === false) throw errorFrom(response.error);
     if (response.kind !== 'workspaceEdit') {
       throw new Error(`ts-lsp: expected workspaceEdit response, got kind=${response.kind}`);
     }
     return response.edit;
+  }
+
+  /** A workspace-edit query: resolves the `WorkspaceEdit`, rejects on a service error. */
+  async function workspaceEdit(build: (id: number) => TsRequest): Promise<WorkspaceEdit> {
+    const edit = await workspaceEditOrNull(build);
+    if (edit === null) throw new Error('ts-lsp: expected workspaceEdit response, got null edit');
+    return edit;
   }
 
   /** A signature-help query: resolves the `SignatureHelp|null`, rejects on a service error. */
@@ -274,43 +477,594 @@ export function createTsLanguageServiceClient(
     return response.textEdits;
   }
 
+  async function lspRange(build: (id: number) => TsRequest): Promise<Range | null> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'range') {
+      throw new Error(`ts-lsp: expected range response, got kind=${response.kind}`);
+    }
+    return response.range;
+  }
+
+  async function lspRanges(build: (id: number) => TsRequest): Promise<readonly Range[]> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'ranges') {
+      throw new Error(`ts-lsp: expected ranges response, got kind=${response.kind}`);
+    }
+    return response.ranges;
+  }
+
+  async function definitionLinks(build: (id: number) => TsRequest): Promise<DefinitionLinks> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'definitionLinks') {
+      throw new Error(`ts-lsp: expected definitionLinks response, got kind=${response.kind}`);
+    }
+    return response.definitionLinks;
+  }
+
+  async function documentSymbols(
+    build: (id: number) => TsRequest,
+  ): Promise<readonly DocumentSymbol[]> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'documentSymbols') {
+      throw new Error(`ts-lsp: expected documentSymbols response, got kind=${response.kind}`);
+    }
+    return response.documentSymbols;
+  }
+
+  async function navigationBarItems(
+    build: (id: number) => TsRequest,
+  ): Promise<readonly NavigationBarItem[]> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'navigationBarItems') {
+      throw new Error(`ts-lsp: expected navigationBarItems response, got kind=${response.kind}`);
+    }
+    return response.navigationBarItems;
+  }
+
+  async function foldingRanges(build: (id: number) => TsRequest): Promise<readonly FoldingRange[]> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'foldingRanges') {
+      throw new Error(`ts-lsp: expected foldingRanges response, got kind=${response.kind}`);
+    }
+    return response.foldingRanges;
+  }
+
+  async function workspaceSymbols(
+    build: (id: number) => TsRequest,
+  ): Promise<readonly SymbolInformation[]> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'workspaceSymbols') {
+      throw new Error(`ts-lsp: expected workspaceSymbols response, got kind=${response.kind}`);
+    }
+    return response.workspaceSymbols;
+  }
+
+  async function inlayHints(build: (id: number) => TsRequest): Promise<readonly InlayHint[]> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'inlayHints') {
+      throw new Error(`ts-lsp: expected inlayHints response, got kind=${response.kind}`);
+    }
+    return response.inlayHints;
+  }
+
+  async function documentHighlights(
+    build: (id: number) => TsRequest,
+  ): Promise<readonly DocumentHighlight[]> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'documentHighlights') {
+      throw new Error(`ts-lsp: expected documentHighlights response, got kind=${response.kind}`);
+    }
+    return response.documentHighlights;
+  }
+
+  async function classifications(
+    build: (id: number) => TsRequest,
+  ): Promise<EncodedClassifications> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'classifications') {
+      throw new Error(`ts-lsp: expected classifications response, got kind=${response.kind}`);
+    }
+    return response.classifications;
+  }
+
+  async function classifiedSpans(
+    build: (id: number) => TsRequest,
+  ): Promise<readonly ClassifiedSpan[]> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'classifiedSpans') {
+      throw new Error(`ts-lsp: expected classifiedSpans response, got kind=${response.kind}`);
+    }
+    return response.spans;
+  }
+
+  async function callHierarchyItems(
+    build: (id: number) => TsRequest,
+  ): Promise<readonly CallHierarchyItem[]> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'callHierarchyItems') {
+      throw new Error(`ts-lsp: expected callHierarchyItems response, got kind=${response.kind}`);
+    }
+    return response.items;
+  }
+
+  async function incomingCalls(
+    build: (id: number) => TsRequest,
+  ): Promise<readonly CallHierarchyIncomingCall[]> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'incomingCalls') {
+      throw new Error(`ts-lsp: expected incomingCalls response, got kind=${response.kind}`);
+    }
+    return response.calls;
+  }
+
+  async function outgoingCalls(
+    build: (id: number) => TsRequest,
+  ): Promise<readonly CallHierarchyOutgoingCall[]> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'outgoingCalls') {
+      throw new Error(`ts-lsp: expected outgoingCalls response, got kind=${response.kind}`);
+    }
+    return response.calls;
+  }
+
+  async function indentation(build: (id: number) => TsRequest): Promise<number | null> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'indentation') {
+      throw new Error(`ts-lsp: expected indentation response, got kind=${response.kind}`);
+    }
+    return response.indentation;
+  }
+
+  async function booleanResult(build: (id: number) => TsRequest): Promise<boolean> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'boolean') {
+      throw new Error(`ts-lsp: expected boolean response, got kind=${response.kind}`);
+    }
+    return response.value;
+  }
+
+  async function positionResult(build: (id: number) => TsRequest): Promise<Position | null> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'position') {
+      throw new Error(`ts-lsp: expected position response, got kind=${response.kind}`);
+    }
+    return response.position;
+  }
+
+  async function moveToRefactoringFileSuggestions(
+    build: (id: number) => TsRequest,
+  ): Promise<MoveToRefactoringFileSuggestions | null> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'moveToRefactoringFileSuggestions') {
+      throw new Error(
+        `ts-lsp: expected moveToRefactoringFileSuggestions response, got kind=${response.kind}`,
+      );
+    }
+    return response.suggestions;
+  }
+
+  async function emitOutput(build: (id: number) => TsRequest): Promise<EmitOutput> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'emitOutput') {
+      throw new Error(`ts-lsp: expected emitOutput response, got kind=${response.kind}`);
+    }
+    return response.emitOutput;
+  }
+
+  async function supportedCodeFixes(build: (id: number) => TsRequest): Promise<readonly string[]> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'supportedCodeFixes') {
+      throw new Error(`ts-lsp: expected supportedCodeFixes response, got kind=${response.kind}`);
+    }
+    return response.codeFixes;
+  }
+
+  async function selectionRange(build: (id: number) => TsRequest): Promise<SelectionRange | null> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'selectionRange') {
+      throw new Error(`ts-lsp: expected selectionRange response, got kind=${response.kind}`);
+    }
+    return response.selectionRange;
+  }
+
+  async function jsxClosingTag(
+    build: (id: number) => TsRequest,
+  ): Promise<{ readonly newText: string } | null> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'jsxClosingTag') {
+      throw new Error(`ts-lsp: expected jsxClosingTag response, got kind=${response.kind}`);
+    }
+    return response.tag;
+  }
+
+  async function linkedEditingRange(
+    build: (id: number) => TsRequest,
+  ): Promise<LinkedEditingRanges | null> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'linkedEditingRange') {
+      throw new Error(`ts-lsp: expected linkedEditingRange response, got kind=${response.kind}`);
+    }
+    return response.linkedEditingRange;
+  }
+
+  async function textInsertion(build: (id: number) => TsRequest): Promise<TextInsertion | null> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'textInsertion') {
+      throw new Error(`ts-lsp: expected textInsertion response, got kind=${response.kind}`);
+    }
+    return response.insertion;
+  }
+
+  async function todoComments(build: (id: number) => TsRequest): Promise<readonly TodoComment[]> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'todoComments') {
+      throw new Error(`ts-lsp: expected todoComments response, got kind=${response.kind}`);
+    }
+    return response.todoComments;
+  }
+
+  async function preparePasteEdits(build: (id: number) => TsRequest): Promise<boolean> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    if (response.kind !== 'preparePasteEdits') {
+      throw new Error(`ts-lsp: expected preparePasteEdits response, got kind=${response.kind}`);
+    }
+    return response.supported;
+  }
+
+  async function expectedCeiling(
+    build: (id: number) => TsRequest,
+    feature: string,
+  ): Promise<never> {
+    const response = await request(build);
+    if (response.ok === false) throw errorFrom(response.error);
+    throw new Error(`ts-lsp: ${feature} unexpectedly succeeded`);
+  }
+
   return {
     init: (projectRoot) => ack((id) => ({ id, type: 'ts:init', projectRoot })),
     open: (path, text) => ack((id) => ({ id, type: 'ts:open', path, text })),
     update: (path, text) => ack((id) => ({ id, type: 'ts:update', path, text })),
     close: (path) => ack((id) => ({ id, type: 'ts:close', path })),
     invalidate: (path) => ack((id) => ({ id, type: 'ts:invalidate', path })),
+    cleanupSemanticCache: () => ack((id) => ({ id, type: 'ts:cleanupSemanticCache' })),
     getSemanticDiagnostics: (path) =>
       diagnostics((id) => ({ id, type: 'ts:getSemanticDiagnostics', path })),
     getSyntacticDiagnostics: (path) =>
       diagnostics((id) => ({ id, type: 'ts:getSyntacticDiagnostics', path })),
     getConfigFileDiagnostics: () =>
       diagnostics((id) => ({ id, type: 'ts:getConfigFileDiagnostics' })),
-    getQuickInfo: (path, position) =>
-      hover((id) => ({ id, type: 'ts:getQuickInfo', path, position })),
+    getQuickInfo: (path, position, options) =>
+      hover((id) => ({
+        id,
+        type: 'ts:getQuickInfo',
+        path,
+        position,
+        ...(options !== undefined ? { options } : {}),
+      })),
     getDefinition: (path, position) =>
       locations((id) => ({ id, type: 'ts:getDefinition', path, position })),
     getTypeDefinition: (path, position) =>
       locations((id) => ({ id, type: 'ts:getTypeDefinition', path, position })),
-    getCompletions: (path, position) =>
-      completions((id) => ({ id, type: 'ts:getCompletions', path, position })),
-    getCompletionDetails: (path, position, label) =>
-      completionItem((id) => ({ id, type: 'ts:getCompletionDetails', path, position, label })),
+    getCompletions: (path, position, options) =>
+      completions((id) => ({
+        id,
+        type: 'ts:getCompletions',
+        path,
+        position,
+        ...(options !== undefined ? { options } : {}),
+      })),
+    getCompletionDetails: (path, position, label, source, data, options) =>
+      completionItem((id) => ({
+        id,
+        type: 'ts:getCompletionDetails',
+        path,
+        position,
+        label,
+        ...(source !== undefined ? { source } : {}),
+        ...(data !== undefined ? { data } : {}),
+        ...(options !== undefined ? { options } : {}),
+      })),
     getReferences: (path, position, context) =>
       locations((id) => ({ id, type: 'ts:getReferences', path, position, context })),
-    prepareRename: (path, position) =>
-      prepareRenameResult((id) => ({ id, type: 'ts:prepareRename', path, position })),
-    getRenameEdits: (path, position, newName) =>
-      workspaceEdit((id) => ({ id, type: 'ts:getRenameEdits', path, position, newName })),
-    getSignatureHelp: (path, position) =>
-      signatureHelp((id) => ({ id, type: 'ts:getSignatureHelp', path, position })),
-    getCodeFixes: (path, range, errorCodes) =>
-      codeActions((id) => ({ id, type: 'ts:getCodeFixes', path, range, errorCodes })),
-    organizeImports: (path) => workspaceEdit((id) => ({ id, type: 'ts:organizeImports', path })),
+    getReferencesAtPosition: (path, position) =>
+      locations((id) => ({ id, type: 'ts:getReferencesAtPosition', path, position })),
+    prepareRename: (path, position, options) =>
+      prepareRenameResult((id) => ({
+        id,
+        type: 'ts:prepareRename',
+        path,
+        position,
+        ...(options !== undefined ? { options } : {}),
+      })),
+    getRenameEdits: (path, position, newName, options) =>
+      workspaceEdit((id) => ({
+        id,
+        type: 'ts:getRenameEdits',
+        path,
+        position,
+        newName,
+        ...(options !== undefined ? { options } : {}),
+      })),
+    getSignatureHelp: (path, position, options) =>
+      signatureHelp((id) => ({
+        id,
+        type: 'ts:getSignatureHelp',
+        path,
+        position,
+        ...(options !== undefined ? { options } : {}),
+      })),
+    getNameOrDottedNameSpan: (path, range) =>
+      lspRange((id) => ({ id, type: 'ts:getNameOrDottedNameSpan', path, range })),
+    getBreakpointStatement: (path, position) =>
+      lspRange((id) => ({ id, type: 'ts:getBreakpointStatement', path, position })),
+    getCodeFixes: (path, range, errorCodes, options) =>
+      codeActions((id) => ({
+        id,
+        type: 'ts:getCodeFixes',
+        path,
+        range,
+        errorCodes,
+        ...(options !== undefined ? { options } : {}),
+      })),
+    organizeImports: (path, options) =>
+      workspaceEdit((id) => ({
+        id,
+        type: 'ts:organizeImports',
+        path,
+        ...(options !== undefined ? { options } : {}),
+      })),
     getFormattingEdits: (path, options) =>
       textEdits((id) => ({ id, type: 'ts:getFormattingEdits', path, options })),
     getRangeFormattingEdits: (path, range, options) =>
       textEdits((id) => ({ id, type: 'ts:getRangeFormattingEdits', path, range, options })),
+    getSuggestionDiagnostics: (path) =>
+      diagnostics((id) => ({ id, type: 'ts:getSuggestionDiagnostics', path })),
+    getCompilerOptionsDiagnostics: () =>
+      diagnostics((id) => ({ id, type: 'ts:getCompilerOptionsDiagnostics' })),
+    getImplementation: (path, position) =>
+      locations((id) => ({ id, type: 'ts:getImplementation', path, position })),
+    getDefinitionLinks: (path, position) =>
+      definitionLinks((id) => ({ id, type: 'ts:getDefinitionLinks', path, position })),
+    getDocumentSymbols: (path) =>
+      documentSymbols((id) => ({ id, type: 'ts:getDocumentSymbols', path })),
+    getNavigationBarItems: (path) =>
+      navigationBarItems((id) => ({ id, type: 'ts:getNavigationBarItems', path })),
+    getFoldingRanges: (path) => foldingRanges((id) => ({ id, type: 'ts:getFoldingRanges', path })),
+    getWorkspaceSymbols: (search, options) =>
+      workspaceSymbols((id) => ({
+        id,
+        type: 'ts:getWorkspaceSymbols',
+        search,
+        ...(options !== undefined ? { options } : {}),
+      })),
+    getInlayHints: (path, range, options) =>
+      inlayHints((id) => ({
+        id,
+        type: 'ts:getInlayHints',
+        path,
+        range,
+        ...(options !== undefined ? { options } : {}),
+      })),
+    getDocumentHighlights: (path, position, filesToSearch) =>
+      documentHighlights((id) => ({
+        id,
+        type: 'ts:getDocumentHighlights',
+        path,
+        position,
+        filesToSearch,
+      })),
+    getSemanticClassifications: (path, range, format) =>
+      classifiedSpans((id) => ({
+        id,
+        type: 'ts:getSemanticClassifications',
+        path,
+        range,
+        ...(format !== undefined ? { format } : {}),
+      })),
+    getSyntacticClassifications: (path, range, format) =>
+      classifiedSpans((id) => ({
+        id,
+        type: 'ts:getSyntacticClassifications',
+        path,
+        range,
+        ...(format !== undefined ? { format } : {}),
+      })),
+    getEncodedSemanticClassifications: (path, range) =>
+      classifications((id) => ({ id, type: 'ts:getEncodedSemanticClassifications', path, range })),
+    getEncodedSyntacticClassifications: (path, range) =>
+      classifications((id) => ({
+        id,
+        type: 'ts:getEncodedSyntacticClassifications',
+        path,
+        range,
+      })),
+    prepareCallHierarchy: (path, position) =>
+      callHierarchyItems((id) => ({ id, type: 'ts:prepareCallHierarchy', path, position })),
+    getIncomingCalls: (path, position) =>
+      incomingCalls((id) => ({ id, type: 'ts:getIncomingCalls', path, position })),
+    getOutgoingCalls: (path, position) =>
+      outgoingCalls((id) => ({ id, type: 'ts:getOutgoingCalls', path, position })),
+    getOnTypeFormattingEdits: (path, position, key, options) =>
+      textEdits((id) => ({
+        id,
+        type: 'ts:getOnTypeFormattingEdits',
+        path,
+        position,
+        key,
+        options,
+      })),
+    getBraceMatching: (path, position) =>
+      lspRanges((id) => ({ id, type: 'ts:getBraceMatching', path, position })),
+    getIndentation: (path, position, options) =>
+      indentation((id) => ({ id, type: 'ts:getIndentation', path, position, options })),
+    isValidBraceCompletion: (path, position, openingBrace) =>
+      booleanResult((id) => ({
+        id,
+        type: 'ts:isValidBraceCompletion',
+        path,
+        position,
+        openingBrace,
+      })),
+    getSpanOfEnclosingComment: (path, position, onlyMultiLine) =>
+      lspRange((id) => ({
+        id,
+        type: 'ts:getSpanOfEnclosingComment',
+        path,
+        position,
+        onlyMultiLine,
+      })),
+    toLineColumnOffset: (path, offset) =>
+      positionResult((id) => ({ id, type: 'ts:toLineColumnOffset', path, offset })),
+    toggleLineComment: (path, range) =>
+      textEdits((id) => ({ id, type: 'ts:toggleLineComment', path, range })),
+    toggleMultilineComment: (path, range) =>
+      textEdits((id) => ({ id, type: 'ts:toggleMultilineComment', path, range })),
+    commentSelection: (path, range) =>
+      textEdits((id) => ({ id, type: 'ts:commentSelection', path, range })),
+    uncommentSelection: (path, range) =>
+      textEdits((id) => ({ id, type: 'ts:uncommentSelection', path, range })),
+    getRefactorActions: (path, range, options) =>
+      codeActions((id) => ({
+        id,
+        type: 'ts:getRefactorActions',
+        path,
+        range,
+        ...(options !== undefined ? { options } : {}),
+      })),
+    getRefactorEdits: (path, range, refactorName, actionName, interactiveArguments, options) =>
+      workspaceEditOrNull((id) => ({
+        id,
+        type: 'ts:getRefactorEdits',
+        path,
+        range,
+        refactorName,
+        actionName,
+        interactiveArguments,
+        ...(options !== undefined ? { options } : {}),
+      })),
+    getMoveToRefactoringFileSuggestions: (path, range, options) =>
+      moveToRefactoringFileSuggestions((id) => ({
+        id,
+        type: 'ts:getMoveToRefactoringFileSuggestions',
+        path,
+        range,
+        ...(options !== undefined ? { options } : {}),
+      })),
+    getCombinedCodeFix: (path, fixId, options) =>
+      workspaceEdit((id) => ({
+        id,
+        type: 'ts:getCombinedCodeFix',
+        path,
+        fixId,
+        ...(options !== undefined ? { options } : {}),
+      })),
+    getFileRenameEdits: (oldPath, newPath, options) =>
+      workspaceEdit((id) => ({
+        id,
+        type: 'ts:getFileRenameEdits',
+        oldPath,
+        newPath,
+        ...(options !== undefined ? { options } : {}),
+      })),
+    getEmitOutput: (path, options) =>
+      emitOutput((id) => ({
+        id,
+        type: 'ts:getEmitOutput',
+        path,
+        ...(options?.emitOnlyDtsFiles !== undefined
+          ? { emitOnlyDtsFiles: options.emitOnlyDtsFiles }
+          : {}),
+        ...(options?.forceDtsEmit !== undefined ? { forceDtsEmit: options.forceDtsEmit } : {}),
+      })),
+    getSupportedCodeFixes: (path) =>
+      supportedCodeFixes((id) => ({
+        id,
+        type: 'ts:getSupportedCodeFixes',
+        ...(path !== undefined ? { path } : {}),
+      })),
+    applyCodeActionCommand: async (commands) => {
+      const response = await request((id) => ({
+        id,
+        type: 'ts:applyCodeActionCommand',
+        commands,
+      }));
+      if (response.ok === false) throw errorFrom(response.error);
+      throw new Error('ts-lsp: applyCodeActionCommand unexpectedly succeeded');
+    },
+    getProgram: () => expectedCeiling((id) => ({ id, type: 'ts:getProgram' }), 'getProgram'),
+    getCompletionEntrySymbol: (path, position, name, source) =>
+      expectedCeiling(
+        (id) => ({
+          id,
+          type: 'ts:getCompletionEntrySymbol',
+          path,
+          position,
+          name,
+          ...(source !== undefined ? { source } : {}),
+        }),
+        'getCompletionEntrySymbol',
+      ),
+    getSelectionRange: (path, position) =>
+      selectionRange((id) => ({ id, type: 'ts:getSelectionRange', path, position })),
+    getFileReferences: (path) => locations((id) => ({ id, type: 'ts:getFileReferences', path })),
+    getJsxClosingTag: (path, position) =>
+      jsxClosingTag((id) => ({ id, type: 'ts:getJsxClosingTag', path, position })),
+    getLinkedEditingRange: (path, position) =>
+      linkedEditingRange((id) => ({ id, type: 'ts:getLinkedEditingRange', path, position })),
+    getDocCommentTemplate: (path, position, options) =>
+      textInsertion((id) => ({
+        id,
+        type: 'ts:getDocCommentTemplate',
+        path,
+        position,
+        ...(options !== undefined ? { options } : {}),
+      })),
+    getTodoComments: (path, descriptors) =>
+      todoComments((id) => ({ id, type: 'ts:getTodoComments', path, descriptors })),
+    preparePasteEditsForFile: (path, copiedRanges) =>
+      preparePasteEdits((id) => ({
+        id,
+        type: 'ts:preparePasteEditsForFile',
+        path,
+        copiedRanges,
+      })),
+    getPasteEdits: (path, pastedText, pasteLocations, copiedFrom, options) =>
+      workspaceEdit((id) => ({
+        id,
+        type: 'ts:getPasteEdits',
+        path,
+        pastedText,
+        pasteLocations,
+        ...(copiedFrom !== undefined ? { copiedFrom } : {}),
+        ...(options !== undefined ? { options } : {}),
+      })),
+    disposeLanguageService: () => ack((id) => ({ id, type: 'ts:dispose' })),
     dispose() {
       if (torn) return;
       torn = true;
@@ -324,9 +1078,16 @@ export function createTsLanguageServiceClient(
   };
 }
 
-function errorFrom(error: { readonly name: string; readonly message: string }): Error {
+function errorFrom(error: {
+  readonly name: string;
+  readonly message: string;
+  readonly feature?: string;
+}): Error {
   const err = new Error(error.message);
   err.name = error.name;
+  if (error.feature !== undefined) {
+    (err as Error & { feature?: string }).feature = error.feature;
+  }
   return err;
 }
 
@@ -334,15 +1095,15 @@ function errorFrom(error: { readonly name: string; readonly message: string }): 
 function toMarkerSeverity(severity: DiagnosticSeverity): monaco.MarkerSeverity {
   switch (severity) {
     case DiagnosticSeverity.Error:
-      return MarkerSeverity.Error;
+      return MONACO_MARKER_SEVERITY.Error;
     case DiagnosticSeverity.Warning:
-      return MarkerSeverity.Warning;
+      return MONACO_MARKER_SEVERITY.Warning;
     case DiagnosticSeverity.Information:
-      return MarkerSeverity.Info;
+      return MONACO_MARKER_SEVERITY.Info;
     case DiagnosticSeverity.Hint:
-      return MarkerSeverity.Hint;
+      return MONACO_MARKER_SEVERITY.Hint;
     default:
-      return MarkerSeverity.Error;
+      return MONACO_MARKER_SEVERITY.Error;
   }
 }
 

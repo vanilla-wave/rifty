@@ -96,10 +96,11 @@ No new external dependency (rule 2 — pure in-resolver string matching). Does n
 contradict an existing ADR (completes the alias half ADR-0053 presupposed). Recorded as a
 ratified ADR per ADR-0063/0064 standing authority.
 
-The REVERSIBLE follow-on — automatic tsconfig discovery (locating `tsconfig.json`,
-following `extends`, interpreting `baseUrl`, applying `paths` without a caller-supplied
-map) — is deferred under `Q-2026-06-01-305`. Purely additive over this option (it would
-compute the same `paths` map the caller now supplies); needs no ADR to add later.
+Correction 2026-06-22: ADR-0170 adds the opt-in automatic discovery path. The
+explicit `paths` contract remains, but the resolver can now read tsconfig when
+`autoDiscoverTsconfigPaths: true`; default-off behavior preserves D2. Discovery
+includes `extends`, `baseUrl`, `paths`, and `baseUrl` bare-specifier fallback when
+no `paths` pattern matches.
 
 ## References
 
@@ -111,4 +112,4 @@ compute the same `paths` map the caller now supplies); needs no ADR to add later
   inflection not a stop).
 - `docs/opencode/HANDOFF.md` / `docs/opencode/README.md` (the GRAPH-LOAD gate and the
   `@/account/account` wall this clears).
-- `Q-2026-06-01-305` (deferred automatic tsconfig discovery — the reversible follow-on).
+- ADR-0170 (opt-in automatic tsconfig discovery — the reversible follow-on).

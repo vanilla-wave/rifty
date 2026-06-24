@@ -181,6 +181,18 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain('saveState({ cwd: session.cwd, env: {} })');
   });
 
+  it('drops stale TS diagnostics that resolve after the document closed', () => {
+    expect(source).toContain(
+      'if (disposed || !openPaths.has(path) || diagnosticVersions.get(path) !== version) return;',
+    );
+  });
+
+  it('drops stale TS diagnostics from older document generations', () => {
+    expect(source).toContain('const diagnosticVersions = new Map<string, number>();');
+    expect(source).toContain('function bumpDiagnosticVersion(path: string): number');
+    expect(source).toContain('diagnosticVersions.get(path) !== version');
+  });
+
   it('routes workspace archive export and import through the owner (one authoritative owner; page reads through ports)', () => {
     // Single-store-owner invariant (one authoritative store; page holds no
     // authoritative fs): the archive reads/writes the OWNER tree (the single

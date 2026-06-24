@@ -11,6 +11,9 @@
   "dependencies": {
     "@riftydev/net": "workspace:*",
     "@riftydev/runtime-js": "workspace:*",
-    "@riftydev/vfs": "workspace:*"
+    "@riftydev/runtime-wasi": "workspace:*",
+    "@riftydev/shadow-registry": "workspace:*",
+    "@riftydev/vfs": "workspace:*",
+    "acorn": "^8.14.0"
   }
 }

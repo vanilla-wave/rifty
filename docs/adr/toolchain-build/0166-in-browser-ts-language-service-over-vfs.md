@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-06-22
 
-> TL;DR: real `ts.LanguageService` in a kernel worker over the rifty VFS; LSP-shaped public API; vendored `typescript` + `lib.*.d.ts`; one service, two consumers (playground + M12 agent).
+> TL;DR: real `ts.LanguageService` in a kernel worker over the rifty VFS; LSP-shaped public API; workspace TypeScript when present, vendored fallback otherwise; one service, two consumers (playground + M12 agent).
 
 ## Context
 
@@ -15,11 +15,16 @@ a playground. Fidelity requires a single real LS backed by the actual VFS.
 
 ## Decision
 
-**(a) Vendor a fixed `typescript` version** for v1. Parity uses the same vendored
-version both sides → divergences isolate host/plumbing bugs, not TS-version drift;
-stable UX. Project `tsconfig` (lib/target/strict/paths/…) is honored. TS *version*
-is rifty's alone. Deferred: "use project's installed TS version" (workspace-
-version override) → `backlog/toolchain-build/ts-language-service-workspace-version`.
+**(a) Load the project TypeScript when present; keep a vendored fallback.** Parity
+uses the same compiler on both sides → divergences isolate host/plumbing bugs, not
+TS-version drift. Project `tsconfig` (lib/target/strict/paths/…) is honored. When
+`node_modules/typescript` is absent, rifty's vendored compiler gives stable scratch
+project UX.
+
+**Correction 2026-06-22:** ADR-0169 extends this clause. The service now uses a
+project-installed `node_modules/typescript` compiler + adjacent `lib/*.d.ts` when
+that package is present and loadable from the VFS; the vendored compiler remains
+the fallback for projects without workspace TypeScript and fails are loud.
 
 **(b) Real `ts.LanguageService` over a `FsSync`-backed `LanguageServiceHost`**.
 File access/module resolution/tsconfig loading all go through the authoritative
@@ -51,10 +56,15 @@ Monaco markers/providers and gives the agent clean JSON.
 
 **(e) `lib.*.d.ts` vendored as an asset** (see (b) above for load precedence).
 
-**Scope**: full tsserver surface in phases — diagnostics → hover/def/completions →
-refs/rename/signature → code-fixes/format/organize-imports. Long tail
-(refactorings, inlay hints, semantic highlighting, call hierarchy) and non-TS/JS
-LSP → honest `NotImplementedError` + compat ❌ + backlog. No silent stubs.
+**Scope**: full browser-achievable TS/JS `ts.LanguageService` surface in phases —
+diagnostics → hover/def/completions → refs/rename/signature →
+code-fixes/format/organize-imports → long tail (refactors, navigation,
+decorations, call hierarchy, editor helpers, emit metadata). Remaining hard
+ceilings stay explicit: package-install code-action commands throw
+`NotImplementedError`, live compiler object graphs (`getProgram`,
+`getCompletionEntrySymbol`) throw feature-tagged `NotImplementedError`s instead
+of crossing the structured-clone protocol, code lens has no TS LS method, and
+non-TS/JS native LSP is out of this package. No silent stubs.
 
 New package `@riftydev/ts-language-service` (application tier, alongside
 `shell`/`npm-client`); re-exported via `@riftydev/sdk/ts-language-service`. New
@@ -63,9 +73,10 @@ prod dep: `typescript`.
 ## Consequences
 
 - **Irreversible**: new `typescript` prod dep + new public capability surface.
-- Diagnostics match real `tsc` (same TS version both sides of parity).
+- Diagnostics match real `tsc` for the compiler selected by the project/fallback
+  rule (same TS version both sides of parity).
 - Single LS instance feeds playground editor + M12 agent (no duplicated VFS copies).
 - `@riftydev/sdk/ts-language-service` umbrella export → additive public API,
   non-removable once published.
 - Non-TS/JS languages → `NotImplementedError` (browser ceiling, out of scope).
-- Project-installed TS version override → backlog.
+- Project-installed TS version support → ADR-0169.

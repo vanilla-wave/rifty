@@ -26,8 +26,28 @@ import {
 
 /** Synthetic directory whose children are the std-lib `.d.ts` files. */
 const LIB_DIR = '/ts-lib';
+type TypeScriptApi = typeof ts;
+
+type TemporaryFileUpdateCallback = (
+  updatedProgram: ts.Program | undefined,
+  originalProgram: ts.Program | undefined,
+  updatedFile: ts.SourceFile | undefined,
+) => void;
+
+export type VfsLanguageServiceHost = ts.LanguageServiceHost & {
+  /**
+   * Internal TS host hook used by `getPasteEdits`: temporarily analyzes the
+   * target file after the editor has inserted pasted text, then restores it.
+   */
+  runWithTemporaryFileUpdate(
+    rootFile: string,
+    updatedText: string,
+    cb: TemporaryFileUpdateCallback,
+  ): void;
+};
 
 export interface VfsLanguageServiceHostDeps {
+  readonly ts?: TypeScriptApi;
   readonly fsSync: FsSync;
   /** Project root (POSIX-absolute); `getCurrentDirectory`. */
   readonly projectRoot: string;
@@ -47,13 +67,23 @@ export interface VfsLanguageServiceHostDeps {
     containingFile: string,
     to: string | undefined,
   ) => void;
+  readonly getProgram?: () => ts.Program | undefined;
 }
 
 export function createVfsLanguageServiceHost(
   deps: VfsLanguageServiceHostDeps,
-): ts.LanguageServiceHost {
-  const { fsSync, projectRoot, compilerOptions, fileNames, libMap, overlay, onModuleResolved } =
-    deps;
+): VfsLanguageServiceHost {
+  const {
+    ts: tsApi = ts,
+    fsSync,
+    projectRoot,
+    compilerOptions,
+    fileNames,
+    libMap,
+    overlay,
+    onModuleResolved,
+    getProgram,
+  } = deps;
 
   /**
    * Lib contents if `fileName` is a std-lib file UNDER the synthetic `/ts-lib/`
@@ -85,7 +115,7 @@ export function createVfsLanguageServiceHost(
 
   // Shared across the program's resolutions so node_modules walks are cached
   // (and resolution is deterministic — the parity gold standard).
-  const resolutionCache = ts.createModuleResolutionCache(
+  const resolutionCache = tsApi.createModuleResolutionCache(
     projectRoot,
     (s) => s, // case-sensitive: canonical name is the name
     compilerOptions,
@@ -110,14 +140,14 @@ export function createVfsLanguageServiceHost(
     return `h${h >>> 0}`;
   };
 
-  return {
+  const host: VfsLanguageServiceHost = {
     getCompilationSettings: () => compilerOptions,
     getCurrentDirectory: () => projectRoot,
     // Root files = the program's files plus any open buffer (an untitled/new
     // doc has no VFS entry yet but must still be type-checked).
     getScriptFileNames: () => [...new Set([...fileNames, ...overlay.openPaths()])],
 
-    getDefaultLibFileName: (options) => `${LIB_DIR}/${ts.getDefaultLibFileName(options)}`,
+    getDefaultLibFileName: (options) => `${LIB_DIR}/${tsApi.getDefaultLibFileName(options)}`,
 
     getScriptVersion: (fileName) => {
       // Open buffer wins. Once closed, the version reverts to the VFS token (so
@@ -130,11 +160,11 @@ export function createVfsLanguageServiceHost(
 
     getScriptSnapshot: (fileName) => {
       const opened = overlay.get(fileName);
-      if (opened) return ts.ScriptSnapshot.fromString(opened.text);
+      if (opened) return tsApi.ScriptSnapshot.fromString(opened.text);
       const lib = libContents(fileName);
-      if (lib !== undefined) return ts.ScriptSnapshot.fromString(lib);
+      if (lib !== undefined) return tsApi.ScriptSnapshot.fromString(lib);
       const text = readFileUtf8(fsSync, fileName);
-      return text === undefined ? undefined : ts.ScriptSnapshot.fromString(text);
+      return text === undefined ? undefined : tsApi.ScriptSnapshot.fromString(text);
     },
 
     fileExists: (fileName) => {
@@ -160,6 +190,7 @@ export function createVfsLanguageServiceHost(
         exclude,
         include ?? ['*'],
         depth,
+        tsApi,
       ) as string[],
 
     directoryExists: (dirName) => dirName === LIB_DIR || directoryExists(fsSync, dirName),
@@ -180,8 +211,8 @@ export function createVfsLanguageServiceHost(
       containingSourceFile,
     ) =>
       literals.map((literal) => {
-        const mode = ts.getModeForUsageLocation(containingSourceFile, literal, options);
-        const result = ts.resolveModuleName(
+        const mode = tsApi.getModeForUsageLocation(containingSourceFile, literal, options);
+        const result = tsApi.resolveModuleName(
           literal.text,
           containingFile,
           options,
@@ -196,6 +227,21 @@ export function createVfsLanguageServiceHost(
 
     // Let TS reuse our cache for incidental (non-import) lookups.
     getResolvedModuleWithFailedLookupLocationsFromCache: (moduleName, containingFile, mode) =>
-      ts.resolveModuleNameFromCache(moduleName, containingFile, resolutionCache, mode),
+      tsApi.resolveModuleNameFromCache(moduleName, containingFile, resolutionCache, mode),
+
+    runWithTemporaryFileUpdate(rootFile, updatedText, cb) {
+      const originalEntry = overlay.get(rootFile);
+      const originalProgram = getProgram?.();
+      if (originalEntry) overlay.update(rootFile, updatedText);
+      else overlay.open(rootFile, updatedText);
+      try {
+        const updatedProgram = getProgram?.();
+        cb(updatedProgram, originalProgram, updatedProgram?.getSourceFile(rootFile));
+      } finally {
+        if (originalEntry) overlay.update(rootFile, originalEntry.text);
+        else overlay.close(rootFile);
+      }
+    },
   };
+  return host;
 }

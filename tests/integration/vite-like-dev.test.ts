@@ -79,6 +79,117 @@ describe('examples/vite-like-dev', () => {
     }
   });
 
+  it('transforms TypeScript modules through the default esbuild WASI pipeline', async () => {
+    writeFile('/workspace/index.html', '<!doctype html><body></body>');
+    writeFile(
+      '/workspace/src/main.ts',
+      'const n: number = 2 satisfies number;\nexport const v = n;\n',
+    );
+    const server = await startDevServer({ root: '/workspace', port: 3013, watchInterval: 5 });
+    try {
+      const resp = await dispatchToPort(3013, new Request('http://x/src/main.ts'));
+      expect(resp.status).toBe(200);
+      const body = await resp.text();
+      expect(body).toContain('const n = 2;');
+      expect(body).not.toContain(': number');
+      expect(body).not.toContain('satisfies');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('rewrites bare ESM specifiers to served node_modules URLs', async () => {
+    writeFile('/workspace/index.html', '<!doctype html><body></body>');
+    writeFile(
+      '/workspace/src/main.js',
+      "import { answer } from 'pkg';\nexport const v = answer;\n",
+    );
+    writeFile('/workspace/node_modules/pkg/package.json', '{"name":"pkg","exports":"./index.js"}');
+    writeFile('/workspace/node_modules/pkg/index.js', 'export const answer = 42;\n');
+    const server = await startDevServer({ root: '/workspace', port: 3014, watchInterval: 5 });
+    try {
+      const r = await dispatchText(3014, '/src/main.js');
+      expect(r.status).toBe(200);
+      expect(r.body).toContain('from "/node_modules/pkg/index.js"');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('rewrites extensionless relative TS imports to served resolved URLs', async () => {
+    writeFile('/workspace/index.html', '<!doctype html><body></body>');
+    writeFile(
+      '/workspace/src/main.ts',
+      "import { value } from './dep';\nexport const v = value;\n",
+    );
+    writeFile('/workspace/src/dep.ts', 'export const value: number = 42;\n');
+    const server = await startDevServer({ root: '/workspace', port: 3015, watchInterval: 5 });
+    try {
+      const r = await dispatchText(3015, '/src/main.ts');
+      expect(r.status).toBe(200);
+      expect(r.body).toContain('from "/src/dep.ts"');
+
+      const dep = await dispatchText(3015, '/src/dep.ts');
+      expect(dep.status).toBe(200);
+      expect(dep.body).toContain('const value = 42;');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('preserves query and hash suffixes when rewriting extensionless TS imports', async () => {
+    writeFile('/workspace/index.html', '<!doctype html><body></body>');
+    writeFile(
+      '/workspace/src/main.ts',
+      "import { value } from './dep?raw#named';\nexport const v = value;\n",
+    );
+    writeFile('/workspace/src/dep.ts', 'export const value: number = 42;\n');
+    const server = await startDevServer({ root: '/workspace', port: 3016, watchInterval: 5 });
+    try {
+      const r = await dispatchText(3016, '/src/main.ts');
+      expect(r.status).toBe(200);
+      expect(r.body).toContain('from "/src/dep.ts?raw#named"');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('rewrites tsconfig path aliases and baseUrl imports through the dev-server loader', async () => {
+    writeFile('/workspace/index.html', '<!doctype html><body></body>');
+    writeFile(
+      '/workspace/tsconfig.json',
+      '{ "compilerOptions": { "baseUrl": "src", "paths": { "@/*": ["aliases/*"] } } }',
+    );
+    writeFile(
+      '/workspace/src/main.ts',
+      "import { aliasValue } from '@/value';\nimport { baseValue } from 'base';\nexport const v = aliasValue + baseValue;\n",
+    );
+    writeFile('/workspace/src/aliases/value.ts', 'export const aliasValue: number = 40;\n');
+    writeFile('/workspace/src/base.ts', 'export const baseValue: number = 2;\n');
+    const server = await startDevServer({ root: '/workspace', port: 3017, watchInterval: 5 });
+    try {
+      const r = await dispatchText(3017, '/src/main.ts');
+      expect(r.status).toBe(200);
+      expect(r.body).toContain('from "/src/aliases/value.ts"');
+      expect(r.body).toContain('from "/src/base.ts"');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('refuses to serve declaration files as runnable modules', async () => {
+    writeFile('/workspace/index.html', '<!doctype html><body></body>');
+    writeFile('/workspace/src/types.d.ts', 'export interface Api { value: string }\n');
+    const server = await startDevServer({ root: '/workspace', port: 3018, watchInterval: 5 });
+    try {
+      const r = await dispatchText(3018, '/src/types.d.ts');
+      expect(r.status).toBe(500);
+      expect(r.body).toContain('Declaration files are not runnable modules');
+    } finally {
+      await server.close();
+    }
+  });
+
   it('emits an HMR update over WebSocket when a watched file changes', async () => {
     writeFile('/workspace/index.html', '<!doctype html><body></body>');
     writeFile('/workspace/src/main.js', 'console.log("v1")');

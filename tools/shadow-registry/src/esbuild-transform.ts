@@ -27,6 +27,13 @@ export interface EsbuildTransformOptions {
   readonly target?: string;
   readonly minify?: boolean;
   readonly sourcemap?: 'inline' | 'external';
+  readonly supported?: {
+    /**
+     * `false` lowers standard decorators instead of passing `@decorator`
+     * syntax through to the post-transform JS parser.
+     */
+    readonly decorators?: boolean;
+  };
 }
 
 export interface EsbuildTransformResult {
@@ -56,6 +63,9 @@ export async function transformWithEsbuild(
   if (options.jsx) args.push(`--jsx=${options.jsx}`);
   if (options.target) args.push(`--target=${options.target}`);
   if (options.minify) args.push('--minify');
+  if (options.supported?.decorators !== undefined) {
+    args.push(`--supported:decorators=${String(options.supported.decorators)}`);
+  }
   const wantExternalMap = options.sourcemap === 'external';
   if (options.sourcemap) args.push('--sourcemap=inline');
 

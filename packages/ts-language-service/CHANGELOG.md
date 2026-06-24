@@ -4,10 +4,62 @@
 
 ### Fixed
 
+- **TS rename/inlay parity holes closed.** Import-path rename now follows
+  TypeScript's `getRenameInfo().fileToRename` → `getEditsForFileRename` path, so
+  renaming `"./impl"` to a new file emits the same relative import edit real TS
+  emits instead of inserting the raw absolute path. Inlay hints now pass the
+  caller's TS preferences faithfully, including `undefined`, rather than forcing
+  editor defaults into headless service calls. Interactive inlay label parts and
+  encoded semantic format variants are explicit parked backlog rows, not ✅ claims.
+
+- **TS edit/action APIs now reach the clone-safe option ceiling.** Code fixes,
+  organize imports, fix-all, file-rename edits, JSDoc templates, and paste edits
+  now accept and forward their structured-clone-safe TS preferences/format
+  settings instead of hardcoding `{}`/default formatting; refactor action
+  precompute honors formatting options and gates `getEditsForRefactor` before
+  calling it. Workspace edits now preserve `FileTextChanges.isNewFile`, and
+  completion lists/items preserve TS list flags, global/member/new-identifier
+  metadata, list `metadata`, kind modifiers, label/source metadata, resolved source display, and
+  recommendation/import flags. Organize imports honors TS `mode` /
+  `skipDestructiveCodeActions`; paste edits preserve `fixId`; refactor actions
+  preserve parent/action metadata, and unavailable refactor edits now cross the
+  worker protocol as a normal `null`, not a transport error. Completion
+  Deprecated completion `includeExternalModuleExports` is forwarded as a
+  clone-safe alias. Completion `includeSymbol` is now a loud
+  `NotImplementedError` in both top-level and preferences forms because TS
+  returns a live compiler `Symbol` graph.
+
 - **Endpoint serializes frames behind the in-flight `ts:init`** (ADR-0166; fixes the chromium e2e `received a request before ts:init` race). The fork-IPC pump dispatches each frame independently, and `ts:init` is async (it awaits the ~3 MB std-lib over the owner relay + parses tsconfig over fs.* sync-RPC), so an `open`/diagnostics frame the page sent right after init reached the endpoint while the service was still building and FAILED with a misleading "before ts:init" — which the page never re-sent, so no diagnostics ever appeared on a slow (2-core CI) cold boot. The endpoint now stores the build promise synchronously and every later frame `await`s it (ordering preserved, no barrier), so a frame racing a slow cold init WAITS instead of failing. A *failed* init now surfaces the REAL cause on the failing frame AND every queued frame (e.g. an owner-store error), never the misleading "before ts:init". Only a frame with NO `ts:init` ever sent still errors. New endpoint tests (concurrent-frame-before-init-resolves; real-init-error-surfacing).
 - **Out-of-program paths are honest-empty, never a "Could not find source file" throw** (fixes the chromium e2e `Could not find source file: '/workspace/src/main.js'` crash). The raw `ts.LanguageService` throws for any path it has no `SourceFile` for — e.g. the default playground's `.js` entry, opened in the editor but excluded from the program because `allowJs` is off and there is no tsconfig. Every path-taking query/diagnostic now gates on `getProgram().getSourceFile(path)` and returns an honest empty (`[]`/`null`/empty edit) for a file outside the program — what real tsserver answers for a file in no project — instead of crashing. NOT a lying empty: such a file genuinely has no program-level result.
+- **Clone-safe TypeScript query options are no longer dropped or hardcoded.** Hover honors `maximumLength`; completions/details pass clone-safe TS preferences and format settings; rename exposes `allowRenameOfImportPath`, `findInStrings`, and `findInComments`; inlay hints and refactors accept the real TS preferences/filter knobs. Older workspace TypeScript methods now fail as feature-tagged `NotImplementedError`s instead of raw `TypeError`s.
 
 ### Added
+
+- **Hard-ceiling TS language-service surface.** The service now exposes the
+  remaining achievable `ts.LanguageService` editor/agent surface: refactors,
+  navigation/folding/workspace symbols, inlay hints, highlights,
+  classifications, call hierarchy, on-type formatting, implementation,
+  suggestion/compiler-options diagnostics, definition links, fix-all,
+  file-rename edits, selection ranges, file references, JSX close tag, linked
+  editing, paste edits, JSDoc templates, TODO comments, name/dotted spans,
+  breakpoint spans, navigation bar items, brace matching, indentation,
+  comment toggles, move-to-file suggestions, emit output, supported-code-fix
+  inventory, and exact completion resolve via `source`/`data`. Completion list
+  items now preserve TS replacement spans, snippets, commit characters, and
+  completion code-action edits/commands. Refactor edits preserve TS post-edit
+  rename metadata and command/not-applicable metadata. Raw
+  `getSemanticClassifications` / `getSyntacticClassifications` are exposed
+  separately from encoded token classifications; `getNavigateToItems` preserves
+  `maxResultCount`/`fileName`/exclude flags; `toLineColumnOffset`,
+  `getReferencesAtPosition`, `cleanupSemanticCache`, and `dispose` are wired
+  through service/protocol/client. Workspace
+  `node_modules/typescript` is used when
+  present and valid (ADR-0169), with loud failure on a broken installed compiler;
+  `applyCodeActionCommand` is a loud `NotImplementedError` because TS uses it for
+  package-install side effects, not VFS text edits. `getProgram` and
+  `getCompletionEntrySymbol` are also loud feature-tagged `NotImplementedError`s:
+  they return live compiler object graphs/Symbols, not structured-clone-safe
+  protocol values.
 
 - **`ts:init` phase-timing logs** (`CreateTsLanguageServiceDeps.log`, wired from the worker entry to stdout → owner → page console): std-lib loaded / tsconfig parsed / language service created, each with elapsed ms, so a slow or wedged cold boot is observable end-to-end on CI.
 
@@ -69,8 +121,7 @@
   the target file's own text via the host), `getCompletions` (→ `CompletionList`;
   `ts.ScriptElementKind` → LSP `CompletionItemKind`), and `getCompletionDetails`
   (resolves one entry's `detail`+`documentation`, threading the entry's real
-  `source`/`data` so uniquely-named auto-imports resolve exactly — same-name
-  collisions tracked: backlog `protocol/ts-completion-resolve-by-label`). New LSP
+  `source`/`data` so same-name auto-imports resolve exactly). New LSP
   shapes (`MarkupContent`, `Hover`, `Location`, `CompletionItemKind`,
   `CompletionItem`, `CompletionList`) + worker frames (`ts:getQuickInfo`,
   `ts:getDefinition`, `ts:getTypeDefinition`, `ts:getCompletions`,

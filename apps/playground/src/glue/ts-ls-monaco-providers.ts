@@ -27,15 +27,33 @@ import type {
   CodeAction as LspCodeAction,
   CompletionItem as LspCompletionItem,
   CompletionList as LspCompletionList,
+  CompletionOptions as LspCompletionOptions,
+  CompletionTriggerCharacter as LspCompletionTriggerCharacter,
+  CompletionTriggerKind as LspCompletionTriggerKind,
+  DocumentHighlight as LspDocumentHighlight,
+  DocumentSymbol as LspDocumentSymbol,
+  FoldingRange as LspFoldingRange,
   Hover as LspHover,
+  InlayHint as LspInlayHint,
   Location as LspLocation,
+  LocationLink as LspLocationLink,
   ParameterInformation as LspParameterInformation,
+  SelectionRange as LspSelectionRange,
   SignatureHelp as LspSignatureHelp,
+  SignatureHelpOptions as LspSignatureHelpOptions,
+  SignatureHelpRetriggerCharacter as LspSignatureHelpRetriggerCharacter,
+  SignatureHelpTriggerCharacter as LspSignatureHelpTriggerCharacter,
   SignatureInformation as LspSignatureInformation,
   TextEdit as LspTextEdit,
+  WorkspaceEdit as LspWorkspaceEdit,
   MarkupContent,
 } from '@riftydev/ts-language-service/lsp-types';
-import { CompletionItemKind as LspCompletionItemKind } from '@riftydev/ts-language-service/lsp-types';
+import {
+  CompletionItemKind as LspCompletionItemKind,
+  DocumentHighlightKind as LspDocumentHighlightKind,
+  type SymbolKind as LspSymbolKind,
+  type TypeScriptFormatCodeSettings as LspTypeScriptFormatCodeSettings,
+} from '@riftydev/ts-language-service/lsp-types';
 import * as monaco from 'monaco-editor';
 import { lspToMonacoRange, monacoToLspPosition, monacoToLspRange } from './lsp-position.ts';
 import type { TsLanguageServiceClient } from './ts-ls-client.ts';
@@ -44,22 +62,41 @@ import type { TsLanguageServiceClient } from './ts-ls-client.ts';
 const RIFTY_MARKER_OWNER = 'rifty-ts';
 /** LSP `CodeActionKind` for the organize-imports source action. */
 const ORGANIZE_IMPORTS_KIND = 'source.organizeImports';
+const FIX_ALL_KIND = 'source.fixAll.ts';
+const APPLY_COMPLETION_WORKSPACE_EDIT_COMMAND = 'rifty.ts.applyCompletionWorkspaceEdit';
 
 /** The minimal editor seam the providers need (subset of `EditorApi`). */
 export interface EditorPathBridge {
   /** VFS path for an open model, or `undefined` if it is not one of ours. */
   pathForModel(model: monaco.editor.ITextModel): string | undefined;
   /** Open `path` read-only (no activate) and return its model `Uri`, or `undefined`. */
-  ensureModel(path: string): monaco.Uri | undefined;
+  ensureModel(path: string, options?: { readonly isNewFile?: boolean }): monaco.Uri | undefined;
+  /** Dry-run check used to validate workspace edits before opening/creating targets. */
+  canEnsureModel(path: string, options?: { readonly isNewFile?: boolean }): boolean;
 }
 
 /** Languages the rifty LS serves (the same two Monaco maps to the TS worker). */
 const LANGUAGES = ['typescript', 'javascript'] as const;
+const TS_COMPLETION_TRIGGER_CHARACTERS = ['.', '"', "'", '`', '/', '@', '<', '#', ' '] as const;
+const TS_SIGNATURE_TRIGGER_CHARACTERS = ['(', ',', '<'] as const;
+const TS_SIGNATURE_RETRIGGER_CHARACTERS = [')', ...TS_SIGNATURE_TRIGGER_CHARACTERS] as const;
 
 /** A completion-resolve needs the originating position + label — stash them per item. */
 const RESOLVE_KEY = Symbol('rifty-ls-resolve');
 interface ResolvableItem extends monaco.languages.CompletionItem {
-  [RESOLVE_KEY]?: { readonly path: string; readonly line: number; readonly character: number };
+  [RESOLVE_KEY]?: {
+    readonly path: string;
+    readonly line: number;
+    readonly character: number;
+    readonly source?: string;
+    readonly data?: unknown;
+    readonly options: LspCompletionOptions;
+  };
+}
+
+const CODE_ACTION_KEY = Symbol('rifty-ls-code-action');
+interface ResolvableCodeAction extends monaco.languages.CodeAction {
+  [CODE_ACTION_KEY]?: LspCodeAction;
 }
 
 /** LSP `CompletionItemKind` (1..25) → Monaco `CompletionItemKind`. */
@@ -138,6 +175,22 @@ function toMonacoLocation(
   return { uri, range: lspToMonacoRange(loc.range) };
 }
 
+function toMonacoLocationLink(
+  link: LspLocationLink,
+  originSelectionRange: LspLocationLink['originSelectionRange'],
+  bridge: EditorPathBridge,
+): monaco.languages.LocationLink | undefined {
+  const uri = bridge.ensureModel(link.targetUri);
+  if (!uri) return undefined;
+  const origin = link.originSelectionRange ?? originSelectionRange;
+  return {
+    uri,
+    range: lspToMonacoRange(link.targetRange),
+    targetSelectionRange: lspToMonacoRange(link.targetSelectionRange),
+    ...(origin !== undefined ? { originSelectionRange: lspToMonacoRange(origin) } : {}),
+  };
+}
+
 /** Build a Monaco `Hover` from the LSP `Hover` (markdown contents + optional range). */
 function toMonacoHover(h: LspHover): monaco.languages.Hover {
   const contents: monaco.IMarkdownString[] = [{ value: h.contents.value }];
@@ -180,48 +233,373 @@ function toMonacoTextEdit(e: LspTextEdit): monaco.languages.TextEdit {
   return { range: lspToMonacoRange(e.range), text: e.newText };
 }
 
+function toMonacoSingleEdit(e: LspTextEdit): monaco.editor.ISingleEditOperation {
+  return { range: lspToMonacoRange(e.range), text: e.newText };
+}
+
+function toMonacoSymbolKind(kind: LspSymbolKind): monaco.languages.SymbolKind {
+  return Math.max(0, kind - 1) as monaco.languages.SymbolKind;
+}
+
+function toMonacoDocumentSymbol(symbol: LspDocumentSymbol): monaco.languages.DocumentSymbol {
+  return {
+    name: symbol.name,
+    detail: symbol.detail ?? '',
+    kind: toMonacoSymbolKind(symbol.kind),
+    tags: [],
+    range: lspToMonacoRange(symbol.range),
+    selectionRange: lspToMonacoRange(symbol.selectionRange),
+    ...(symbol.children ? { children: symbol.children.map(toMonacoDocumentSymbol) } : {}),
+  };
+}
+
+function toMonacoFoldingRange(range: LspFoldingRange): monaco.languages.FoldingRange {
+  return {
+    start: range.startLine + 1,
+    end: range.endLine + 1,
+    ...(range.kind ? { kind: monaco.languages.FoldingRangeKind.fromValue(range.kind) } : {}),
+  };
+}
+
+function toMonacoInlayHint(hint: LspInlayHint): monaco.languages.InlayHint {
+  const kind =
+    hint.kind === 'Parameter'
+      ? monaco.languages.InlayHintKind.Parameter
+      : hint.kind === 'Type' || hint.kind === 'Enum'
+        ? monaco.languages.InlayHintKind.Type
+        : undefined;
+  return {
+    label: hint.label,
+    position: {
+      lineNumber: hint.position.line + 1,
+      column: hint.position.character + 1,
+    },
+    ...(kind !== undefined ? { kind } : {}),
+    ...(hint.paddingLeft !== undefined ? { paddingLeft: hint.paddingLeft } : {}),
+    ...(hint.paddingRight !== undefined ? { paddingRight: hint.paddingRight } : {}),
+  };
+}
+
+function toMonacoDocumentHighlight(
+  highlight: LspDocumentHighlight,
+): monaco.languages.DocumentHighlight {
+  const kind =
+    highlight.kind === LspDocumentHighlightKind.Write
+      ? monaco.languages.DocumentHighlightKind.Write
+      : highlight.kind === LspDocumentHighlightKind.Read
+        ? monaco.languages.DocumentHighlightKind.Read
+        : monaco.languages.DocumentHighlightKind.Text;
+  return { range: lspToMonacoRange(highlight.range), kind };
+}
+
+function toMonacoSelectionRange(range: LspSelectionRange): monaco.languages.SelectionRange[] {
+  const out: monaco.languages.SelectionRange[] = [];
+  let current: LspSelectionRange | undefined = range;
+  while (current) {
+    out.push({ range: lspToMonacoRange(current.range) });
+    current = current.parent;
+  }
+  return out;
+}
+
+function wordPattern(pattern: string | undefined): RegExp | undefined {
+  if (!pattern) return undefined;
+  try {
+    return new RegExp(pattern);
+  } catch {
+    return undefined;
+  }
+}
+
+function isCompletionTriggerCharacter(ch: string | undefined): ch is LspCompletionTriggerCharacter {
+  return ch !== undefined && (TS_COMPLETION_TRIGGER_CHARACTERS as readonly string[]).includes(ch);
+}
+
+function completionTriggerKindFromMonaco(
+  kind: monaco.languages.CompletionTriggerKind,
+): LspCompletionTriggerKind {
+  switch (kind) {
+    case monaco.languages.CompletionTriggerKind.TriggerCharacter:
+      return 'trigger-character';
+    case monaco.languages.CompletionTriggerKind.TriggerForIncompleteCompletions:
+      return 'trigger-for-incomplete';
+    default:
+      return 'invoked';
+  }
+}
+
+function completionOptionsFromMonaco(
+  context: monaco.languages.CompletionContext,
+): Pick<LspCompletionOptions, 'triggerCharacter' | 'triggerKind'> {
+  return {
+    triggerKind: completionTriggerKindFromMonaco(context.triggerKind),
+    ...(isCompletionTriggerCharacter(context.triggerCharacter)
+      ? { triggerCharacter: context.triggerCharacter }
+      : {}),
+  };
+}
+
+function completionOptionsFromModel(
+  model: monaco.editor.ITextModel,
+  context: monaco.languages.CompletionContext,
+): LspCompletionOptions {
+  return {
+    includeCompletionsForModuleExports: true,
+    includeInsertTextCompletions: true,
+    includeCompletionsWithSnippetText: true,
+    ...completionOptionsFromMonaco(context),
+    ...actionEditOptionsFromModel(model),
+  };
+}
+
+function actionEditOptionsFromModel(model: monaco.editor.ITextModel): {
+  readonly formattingOptions: LspTypeScriptFormatCodeSettings;
+} {
+  const modelOptions = model.getOptions();
+  return {
+    formattingOptions: {
+      tabSize: modelOptions.tabSize,
+      insertSpaces: modelOptions.insertSpaces,
+    },
+  };
+}
+
+function isSignatureTriggerCharacter(
+  ch: string | undefined,
+): ch is LspSignatureHelpTriggerCharacter {
+  return ch !== undefined && (TS_SIGNATURE_TRIGGER_CHARACTERS as readonly string[]).includes(ch);
+}
+
+function isSignatureRetriggerCharacter(
+  ch: string | undefined,
+): ch is LspSignatureHelpRetriggerCharacter {
+  return ch !== undefined && (TS_SIGNATURE_RETRIGGER_CHARACTERS as readonly string[]).includes(ch);
+}
+
+function signatureHelpOptionsFromMonaco(
+  context: monaco.languages.SignatureHelpContext,
+): LspSignatureHelpOptions {
+  if (context.triggerKind === monaco.languages.SignatureHelpTriggerKind.TriggerCharacter) {
+    return {
+      triggerReason: isSignatureTriggerCharacter(context.triggerCharacter)
+        ? { kind: 'characterTyped', triggerCharacter: context.triggerCharacter }
+        : { kind: 'invoked' },
+    };
+  }
+  if (context.triggerKind === monaco.languages.SignatureHelpTriggerKind.ContentChange) {
+    return {
+      triggerReason: {
+        kind: 'retrigger',
+        ...(isSignatureRetriggerCharacter(context.triggerCharacter)
+          ? { triggerCharacter: context.triggerCharacter }
+          : {}),
+      },
+    };
+  }
+  return { triggerReason: { kind: 'invoked' } };
+}
+
+const SEMANTIC_TOKEN_TYPES = [
+  'class',
+  'enum',
+  'interface',
+  'namespace',
+  'typeParameter',
+  'type',
+  'parameter',
+  'variable',
+  'enumMember',
+  'property',
+  'function',
+  'member',
+] as const;
+
+const SEMANTIC_TOKEN_MODIFIERS = [
+  'declaration',
+  'static',
+  'async',
+  'readonly',
+  'defaultLibrary',
+  'local',
+] as const;
+
+function semanticTokenType(classification: number): number {
+  const tokenType = (classification >> 8) - 1;
+  return Math.max(0, Math.min(SEMANTIC_TOKEN_TYPES.length - 1, tokenType));
+}
+
+function semanticTokensData(
+  model: monaco.editor.ITextModel,
+  spans: readonly number[],
+): Uint32Array {
+  const data: number[] = [];
+  let prevLine = 0;
+  let prevChar = 0;
+  for (let i = 0; i + 2 < spans.length; i += 3) {
+    const start = spans[i] ?? 0;
+    const length = spans[i + 1] ?? 0;
+    const classification = spans[i + 2] ?? 0;
+    if (length <= 0) continue;
+    const pos = model.getPositionAt(start);
+    const line = pos.lineNumber - 1;
+    const char = pos.column - 1;
+    const deltaLine = line - prevLine;
+    const deltaChar = deltaLine === 0 ? char - prevChar : char;
+    data.push(
+      deltaLine,
+      deltaChar,
+      length,
+      semanticTokenType(classification),
+      classification & 0xff,
+    );
+    prevLine = line;
+    prevChar = char;
+  }
+  return new Uint32Array(data);
+}
+
+function hasDeprecatedModifier(kindModifiers: string | undefined): boolean {
+  return kindModifiers?.split(/[,\s]+/).includes('deprecated') ?? false;
+}
+
+function toMonacoCompletionLabel(
+  entry: Pick<LspCompletionItem, 'label' | 'labelDetails' | 'sourceDisplay'>,
+): monaco.languages.CompletionItem['label'] {
+  const detail = entry.labelDetails?.detail;
+  const description = entry.labelDetails?.description ?? entry.sourceDisplay;
+  return detail !== undefined || description !== undefined
+    ? {
+        label: entry.label,
+        ...(detail !== undefined ? { detail } : {}),
+        ...(description !== undefined ? { description } : {}),
+      }
+    : entry.label;
+}
+
+function applyCompletionSourceDisplay(
+  item: monaco.languages.CompletionItem,
+  sourceDisplay: string | undefined,
+): void {
+  if (sourceDisplay === undefined) return;
+  const label = typeof item.label === 'string' ? { label: item.label } : { ...item.label };
+  if (label.description === undefined) {
+    item.label = { ...label, description: sourceDisplay };
+  }
+}
+
 /**
  * Flatten an LSP `WorkspaceEdit` (`changes` keyed by document uri → `TextEdit[]`)
  * into Monaco's flat `IWorkspaceTextEdit[]`. Each uri is resolved to a model `Uri`
  * via {@link EditorPathBridge.ensureModel} (opening a sibling/dep buffer read-only
- * if needed). A file whose model can't be made is dropped — never an edit applied
- * to a phantom resource. `versionId: undefined` — the edit applies to the current
- * model version (the type permits it; no version is held across the relay).
+ * if needed). The edit is atomic at the relay boundary: if any target cannot be
+ * opened, no partial edit is returned/applied.
  */
-function toMonacoWorkspaceTextEdits(
-  changes: Readonly<Record<string, LspTextEdit[]>>,
+function resolveWorkspaceEditTargets(
+  edit: Pick<LspWorkspaceEdit, 'changes' | 'newFiles'>,
   bridge: EditorPathBridge,
-): monaco.languages.IWorkspaceTextEdit[] {
+): Array<{
+  readonly resource: monaco.Uri;
+  readonly model: monaco.editor.ITextModel;
+  readonly textEdits: readonly LspTextEdit[];
+}> | null {
+  const targets: Array<{
+    readonly resource: monaco.Uri;
+    readonly model: monaco.editor.ITextModel;
+    readonly textEdits: readonly LspTextEdit[];
+  }> = [];
+  for (const uri of Object.keys(edit.changes)) {
+    const isNewFile = edit.newFiles?.includes(uri) ?? false;
+    if (!bridge.canEnsureModel(uri, { isNewFile })) return null;
+  }
+  for (const [uri, textEdits] of Object.entries(edit.changes)) {
+    const isNewFile = edit.newFiles?.includes(uri) ?? false;
+    const resource = bridge.ensureModel(uri, { isNewFile });
+    if (!resource) return null;
+    const model = monaco.editor.getModel(resource);
+    if (!model) return null;
+    targets.push({ resource, model, textEdits });
+  }
+  return targets;
+}
+
+function toMonacoWorkspaceTextEdits(
+  edit: Pick<LspWorkspaceEdit, 'changes' | 'newFiles'>,
+  bridge: EditorPathBridge,
+): monaco.languages.IWorkspaceTextEdit[] | null {
+  const targets = resolveWorkspaceEditTargets(edit, bridge);
+  if (targets === null) return null;
   const edits: monaco.languages.IWorkspaceTextEdit[] = [];
-  for (const [uri, textEdits] of Object.entries(changes)) {
-    const resource = bridge.ensureModel(uri);
-    if (!resource) continue;
-    for (const textEdit of textEdits) {
-      edits.push({ resource, textEdit: toMonacoTextEdit(textEdit), versionId: undefined });
+  for (const target of targets) {
+    for (const textEdit of target.textEdits) {
+      edits.push({
+        resource: target.resource,
+        textEdit: toMonacoTextEdit(textEdit),
+        versionId: undefined,
+      });
     }
   }
   return edits;
 }
 
+function applyWorkspaceTextEdit(edit: LspWorkspaceEdit, bridge: EditorPathBridge): boolean {
+  const targets = resolveWorkspaceEditTargets(edit, bridge);
+  if (targets === null) return false;
+  for (const { model, textEdits } of targets) {
+    model.applyEdits(textEdits.map(toMonacoSingleEdit));
+  }
+  return true;
+}
+
+function hasWorkspaceEditCommands(edit: LspWorkspaceEdit | undefined): boolean {
+  return (edit?.commands?.length ?? 0) > 0;
+}
+
+function hasTsSideEffectCommands(action: LspCodeAction): boolean {
+  return (action.commands?.length ?? 0) > 0 || hasWorkspaceEditCommands(action.edit);
+}
+
+function canApplyInMonacoEditor(action: LspCodeAction): boolean {
+  // TODO(backlog: playground/ts-refactor-interactive-ui): custom UI for interactive/post-edit rename refactors.
+  if (hasTsSideEffectCommands(action)) return false;
+  return action.edit?.renameLocation === undefined && action.edit?.renameFilename === undefined;
+}
+
+function hasWorkspaceTextEdits(edit: Pick<LspWorkspaceEdit, 'changes'>): boolean {
+  return Object.values(edit.changes).some((textEdits) => textEdits.length > 0);
+}
+
 /**
- * Map an LSP {@link LspCodeAction} → a Monaco `CodeAction`, resolving its
- * `edit.changes` uris to model Uris (so the action applies real edits). The
- * optional `diagnostics` ties a quick-fix to the markers it addresses (Monaco
- * groups/labels it under them). An action whose edit resolves to no resources is
- * still returned (its title can carry a command-less hint), but here every rifty
- * action carries an edit.
+ * Map an LSP {@link LspCodeAction} → an unresolved Monaco `CodeAction`.
+ * `resolveCodeAction` fills the edit only after the user chooses it, avoiding
+ * discovery-time side effects such as creating a new-file model.
  */
-function toMonacoCodeAction(
+function toMonacoLazyCodeAction(
   action: LspCodeAction,
-  bridge: EditorPathBridge,
   diagnostics?: monaco.editor.IMarkerData[],
-): monaco.languages.CodeAction {
-  const out: monaco.languages.CodeAction = { title: action.title };
+): ResolvableCodeAction {
+  const out: ResolvableCodeAction = { title: action.title };
   if (action.kind !== undefined) out.kind = action.kind;
   if (action.isPreferred !== undefined) out.isPreferred = action.isPreferred;
-  if (action.edit) out.edit = { edits: toMonacoWorkspaceTextEdits(action.edit.changes, bridge) };
+  if (hasTsSideEffectCommands(action)) return out;
   if (diagnostics && diagnostics.length > 0) out.diagnostics = diagnostics;
+  out[CODE_ACTION_KEY] = action;
   return out;
+}
+
+function toMonacoResolvedCodeAction(
+  action: monaco.languages.CodeAction,
+  bridge: EditorPathBridge,
+): monaco.languages.CodeAction {
+  const lsp = (action as ResolvableCodeAction)[CODE_ACTION_KEY];
+  if (!lsp || hasTsSideEffectCommands(lsp)) return action;
+  if (lsp.edit) {
+    const edits = toMonacoWorkspaceTextEdits(lsp.edit, bridge);
+    if (edits === null) {
+      throw new Error('TypeScript workspace edit target could not be opened');
+    }
+    action.edit = { edits };
+  }
+  return action;
 }
 
 /**
@@ -269,6 +647,16 @@ export interface TsLanguageServiceProvidersHandle {
     readonly codeAction: monaco.languages.CodeActionProvider;
     readonly documentFormatting: monaco.languages.DocumentFormattingEditProvider;
     readonly documentRangeFormatting: monaco.languages.DocumentRangeFormattingEditProvider;
+    readonly implementation: monaco.languages.ImplementationProvider;
+    readonly documentSymbol: monaco.languages.DocumentSymbolProvider;
+    readonly foldingRange: monaco.languages.FoldingRangeProvider;
+    readonly inlayHints: monaco.languages.InlayHintsProvider;
+    readonly documentHighlight: monaco.languages.DocumentHighlightProvider;
+    readonly semanticTokens: monaco.languages.DocumentSemanticTokensProvider;
+    readonly rangeSemanticTokens: monaco.languages.DocumentRangeSemanticTokensProvider;
+    readonly selectionRange: monaco.languages.SelectionRangeProvider;
+    readonly onTypeFormatting: monaco.languages.OnTypeFormattingEditProvider;
+    readonly linkedEditingRange: monaco.languages.LinkedEditingRangeProvider;
   };
 }
 
@@ -283,6 +671,18 @@ export function registerTsLanguageServiceProviders(
   bridge: EditorPathBridge,
 ): TsLanguageServiceProvidersHandle {
   const disposables: monaco.IDisposable[] = [];
+  disposables.push(
+    monaco.editor.registerCommand(
+      APPLY_COMPLETION_WORKSPACE_EDIT_COMMAND,
+      (_accessor: unknown, edit: LspWorkspaceEdit | undefined) => {
+        if (edit !== undefined && !hasWorkspaceEditCommands(edit)) {
+          if (!applyWorkspaceTextEdit(edit, bridge)) {
+            throw new Error('TypeScript completion edit target could not be opened');
+          }
+        }
+      },
+    ),
+  );
 
   const hoverProvider: monaco.languages.HoverProvider = {
     async provideHover(model, position, token) {
@@ -298,11 +698,11 @@ export function registerTsLanguageServiceProviders(
     async provideDefinition(model, position, token) {
       const path = bridge.pathForModel(model);
       if (!path) return null;
-      const locations = await client.getDefinition(path, monacoToLspPosition(position));
+      const links = await client.getDefinitionLinks(path, monacoToLspPosition(position));
       if (token.isCancellationRequested) return null;
-      return locations
-        .map((loc) => toMonacoLocation(loc, bridge))
-        .filter((l): l is monaco.languages.Location => l !== undefined);
+      return links.locations
+        .map((link) => toMonacoLocationLink(link, links.originSelectionRange, bridge))
+        .filter((l): l is monaco.languages.LocationLink => l !== undefined);
     },
   };
 
@@ -319,14 +719,13 @@ export function registerTsLanguageServiceProviders(
   };
 
   const completionProvider: monaco.languages.CompletionItemProvider = {
-    // '.' so a member access (`foo.|`) triggers the list; identifier typing
-    // triggers it via Monaco's default word-character behavior.
-    triggerCharacters: ['.'],
-    async provideCompletionItems(model, position, _context, token) {
+    triggerCharacters: [...TS_COMPLETION_TRIGGER_CHARACTERS],
+    async provideCompletionItems(model, position, context, token) {
       const path = bridge.pathForModel(model);
       if (!path) return { suggestions: [] };
       const lspPosition = monacoToLspPosition(position);
-      const list: LspCompletionList = await client.getCompletions(path, lspPosition);
+      const options = completionOptionsFromModel(model, context);
+      const list: LspCompletionList = await client.getCompletions(path, lspPosition, options);
       if (token.isCancellationRequested) return { suggestions: [] };
       // The completion replaces the word being typed up to the cursor (member
       // names, partial identifiers) — a single-line range Monaco requires.
@@ -338,20 +737,51 @@ export function registerTsLanguageServiceProviders(
         endColumn: word.endColumn,
       };
       const suggestions: ResolvableItem[] = list.items.map((entry: LspCompletionItem) => {
+        const entryRange = entry.replacementRange ?? list.optionalReplacementRange;
         const item: ResolvableItem = {
-          label: entry.label,
+          label: toMonacoCompletionLabel(entry),
           kind: toMonacoCompletionKind(entry.kind),
           insertText: entry.insertText ?? entry.label,
-          range,
+          range: entryRange ? lspToMonacoRange(entryRange) : range,
+          preselect: entry.isRecommended === true,
           ...(entry.detail !== undefined ? { detail: entry.detail } : {}),
+          ...(hasDeprecatedModifier(entry.kindModifiers)
+            ? { tags: [monaco.languages.CompletionItemTag.Deprecated] }
+            : {}),
           ...(entry.sortText !== undefined ? { sortText: entry.sortText } : {}),
           ...(entry.filterText !== undefined ? { filterText: entry.filterText } : {}),
+          ...(entry.isSnippet === true
+            ? { insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet }
+            : {}),
+          ...(entry.commitCharacters !== undefined
+            ? { commitCharacters: [...entry.commitCharacters] }
+            : list.defaultCommitCharacters !== undefined
+              ? { commitCharacters: [...list.defaultCommitCharacters] }
+              : {}),
+          ...(entry.additionalTextEdits !== undefined
+            ? { additionalTextEdits: entry.additionalTextEdits.map(toMonacoSingleEdit) }
+            : {}),
         };
         const docs = toMarkdown(entry.documentation);
         if (docs) item.documentation = docs;
         // Stash the resolve coordinates: `resolveCompletionItem` re-queries the
         // service by (path, position, label) to fill detail + docs lazily.
-        item[RESOLVE_KEY] = { path, line: lspPosition.line, character: lspPosition.character };
+        item[RESOLVE_KEY] = {
+          path,
+          line: lspPosition.line,
+          character: lspPosition.character,
+          options: completionOptionsFromModel(model, context),
+        };
+        if (entry.source !== undefined || entry.data !== undefined) {
+          item[RESOLVE_KEY] = {
+            path,
+            line: lspPosition.line,
+            character: lspPosition.character,
+            options,
+            ...(entry.source !== undefined ? { source: entry.source } : {}),
+            ...(entry.data !== undefined ? { data: entry.data } : {}),
+          };
+        }
         return item;
       });
       return { suggestions, incomplete: list.isIncomplete };
@@ -364,11 +794,33 @@ export function registerTsLanguageServiceProviders(
         ctx.path,
         { line: ctx.line, character: ctx.character },
         label,
+        ctx.source,
+        ctx.data,
+        ctx.options,
       );
       if (token.isCancellationRequested || !resolved) return item;
       if (resolved.detail !== undefined) item.detail = resolved.detail;
+      if (hasDeprecatedModifier(resolved.kindModifiers)) {
+        item.tags = [monaco.languages.CompletionItemTag.Deprecated];
+      }
+      if (resolved.isRecommended === true) item.preselect = true;
+      applyCompletionSourceDisplay(item, resolved.sourceDisplay);
       const docs = toMarkdown(resolved.documentation);
       if (docs) item.documentation = docs;
+      if (resolved.additionalTextEditChanges !== undefined) {
+        item.additionalTextEdits = undefined;
+        if (!hasWorkspaceEditCommands(resolved.additionalTextEditChanges)) {
+          item.command = {
+            id: APPLY_COMPLETION_WORKSPACE_EDIT_COMMAND,
+            title: 'Apply TypeScript completion edits',
+            arguments: [resolved.additionalTextEditChanges],
+          };
+        } else {
+          item.command = undefined;
+        }
+      } else if (resolved.additionalTextEdits !== undefined) {
+        item.additionalTextEdits = resolved.additionalTextEdits.map(toMonacoSingleEdit);
+      }
       return item;
     },
   };
@@ -410,21 +862,27 @@ export function registerTsLanguageServiceProviders(
       const edit = await client.getRenameEdits(path, monacoToLspPosition(position), newName);
       if (token.isCancellationRequested) return { edits: [], rejectReason: 'Rename cancelled' };
       // WorkspaceEdit.changes is keyed by document uri (the VFS path verbatim);
-      // flatten it into Monaco's `edits: IWorkspaceTextEdit[]`, resolving each uri
-      // → model Uri (a file whose model can't be made is dropped, never faked).
-      return { edits: toMonacoWorkspaceTextEdits(edit.changes, bridge) };
+      // flatten it into Monaco's `edits: IWorkspaceTextEdit[]`, resolving every
+      // target uri first. Missing target = reject, never partial rename.
+      const edits = toMonacoWorkspaceTextEdits(edit, bridge);
+      if (edits === null) {
+        return { edits: [], rejectReason: 'TypeScript rename edit target could not be opened' };
+      }
+      return { edits };
     },
   };
 
   const signatureHelpProvider: monaco.languages.SignatureHelpProvider = {
-    // '(' opens the hint on a fresh call, ',' advances to the next argument;
-    // ')' retriggers so closing one nested call falls back to the enclosing one.
-    signatureHelpTriggerCharacters: ['(', ','],
+    signatureHelpTriggerCharacters: [...TS_SIGNATURE_TRIGGER_CHARACTERS],
     signatureHelpRetriggerCharacters: [')'],
-    async provideSignatureHelp(model, position, token, _context) {
+    async provideSignatureHelp(model, position, token, context) {
       const path = bridge.pathForModel(model);
       if (!path) return null;
-      const help = await client.getSignatureHelp(path, monacoToLspPosition(position));
+      const help = await client.getSignatureHelp(
+        path,
+        monacoToLspPosition(position),
+        signatureHelpOptionsFromMonaco(context),
+      );
       if (token.isCancellationRequested || !help) return null;
       return toMonacoSignatureHelp(help);
     },
@@ -446,15 +904,34 @@ export function registerTsLanguageServiceProviders(
         .getModelMarkers({ resource: model.uri, owner: RIFTY_MARKER_OWNER })
         .filter((m) => monaco.Range.areIntersectingOrTouching(range, m as monaco.IRange));
       const seenFixTitles = new Set<string>();
+      const actionEditOptions = actionEditOptionsFromModel(model);
       for (const marker of markers) {
         const code = markerErrorCode(marker.code);
         if (code === undefined) continue;
-        const fixes = await client.getCodeFixes(path, monacoToLspRange(marker), [code]);
+        const fixes = await client.getCodeFixes(
+          path,
+          monacoToLspRange(marker),
+          [code],
+          actionEditOptions,
+        );
         if (token.isCancellationRequested) return { actions: [], dispose() {} };
         for (const fix of fixes) {
+          if (!canApplyInMonacoEditor(fix)) continue;
           if (seenFixTitles.has(fix.title)) continue;
           seenFixTitles.add(fix.title);
-          actions.push(toMonacoCodeAction(fix, bridge, [marker]));
+          actions.push(toMonacoLazyCodeAction(fix, [marker]));
+          if (fix.fixId !== undefined && fix.fixAllDescription) {
+            const edit = await client.getCombinedCodeFix(path, fix.fixId, actionEditOptions);
+            if (token.isCancellationRequested) return { actions: [], dispose() {} };
+            const fixAll = {
+              title: fix.fixAllDescription,
+              kind: FIX_ALL_KIND,
+              edit,
+            };
+            if (canApplyInMonacoEditor(fixAll)) {
+              actions.push(toMonacoLazyCodeAction(fixAll, [marker]));
+            }
+          }
         }
       }
 
@@ -462,18 +939,35 @@ export function registerTsLanguageServiceProviders(
       // selection). An already-organized file yields an empty `changes` → an action
       // with no resources; only push it when it carries real edits so the menu
       // doesn't show a no-op entry.
-      const organize = await client.organizeImports(path);
+      const organize = await client.organizeImports(path, actionEditOptions);
       if (token.isCancellationRequested) return { actions: [], dispose() {} };
-      const organizeEdits = toMonacoWorkspaceTextEdits(organize.changes, bridge);
-      if (organizeEdits.length > 0) {
-        actions.push({
+      if (hasWorkspaceTextEdits(organize)) {
+        const organizeAction = {
           title: 'Organize imports',
           kind: ORGANIZE_IMPORTS_KIND,
-          edit: { edits: organizeEdits },
-        });
+          edit: organize,
+        };
+        if (canApplyInMonacoEditor(organizeAction)) {
+          actions.push(toMonacoLazyCodeAction(organizeAction));
+        }
+      }
+
+      const refactors = await client.getRefactorActions(
+        path,
+        monacoToLspRange(range),
+        actionEditOptions,
+      );
+      if (token.isCancellationRequested) return { actions: [], dispose() {} };
+      for (const refactor of refactors) {
+        if (!canApplyInMonacoEditor(refactor)) continue;
+        if (refactor.edit) actions.push(toMonacoLazyCodeAction(refactor));
       }
 
       return { actions, dispose() {} };
+    },
+    async resolveCodeAction(action, token) {
+      if (token.isCancellationRequested) return action;
+      return toMonacoResolvedCodeAction(action, bridge);
     },
   };
 
@@ -510,11 +1004,152 @@ export function registerTsLanguageServiceProviders(
     },
   };
 
+  const implementationProvider: monaco.languages.ImplementationProvider = {
+    async provideImplementation(model, position, token) {
+      const path = bridge.pathForModel(model);
+      if (!path) return null;
+      const locations = await client.getImplementation(path, monacoToLspPosition(position));
+      if (token.isCancellationRequested) return null;
+      return locations
+        .map((loc) => toMonacoLocation(loc, bridge))
+        .filter((l): l is monaco.languages.Location => l !== undefined);
+    },
+  };
+
+  const documentSymbolProvider: monaco.languages.DocumentSymbolProvider = {
+    displayName: 'rifty TypeScript',
+    async provideDocumentSymbols(model, token) {
+      const path = bridge.pathForModel(model);
+      if (!path) return [];
+      const symbols = await client.getDocumentSymbols(path);
+      if (token.isCancellationRequested) return [];
+      return symbols.map(toMonacoDocumentSymbol);
+    },
+  };
+
+  const foldingRangeProvider: monaco.languages.FoldingRangeProvider = {
+    async provideFoldingRanges(model, _context, token) {
+      const path = bridge.pathForModel(model);
+      if (!path) return [];
+      const ranges = await client.getFoldingRanges(path);
+      if (token.isCancellationRequested) return [];
+      return ranges.map(toMonacoFoldingRange);
+    },
+  };
+
+  const inlayHintsProvider: monaco.languages.InlayHintsProvider = {
+    displayName: 'rifty TypeScript',
+    async provideInlayHints(model, range, token) {
+      const path = bridge.pathForModel(model);
+      if (!path) return { hints: [], dispose() {} };
+      const hints = await client.getInlayHints(path, monacoToLspRange(range));
+      if (token.isCancellationRequested) return { hints: [], dispose() {} };
+      return { hints: hints.map(toMonacoInlayHint), dispose() {} };
+    },
+  };
+
+  const documentHighlightProvider: monaco.languages.DocumentHighlightProvider = {
+    async provideDocumentHighlights(model, position, token) {
+      const path = bridge.pathForModel(model);
+      if (!path) return [];
+      const highlights = await client.getDocumentHighlights(path, monacoToLspPosition(position), [
+        path,
+      ]);
+      if (token.isCancellationRequested) return [];
+      return highlights.map(toMonacoDocumentHighlight);
+    },
+  };
+
+  const semanticTokensProvider: monaco.languages.DocumentSemanticTokensProvider = {
+    getLegend() {
+      return {
+        tokenTypes: [...SEMANTIC_TOKEN_TYPES],
+        tokenModifiers: [...SEMANTIC_TOKEN_MODIFIERS],
+      };
+    },
+    async provideDocumentSemanticTokens(model, _lastResultId, token) {
+      const path = bridge.pathForModel(model);
+      if (!path) return { data: new Uint32Array() };
+      const range = model.getFullModelRange();
+      const semantic = await client.getEncodedSemanticClassifications(
+        path,
+        monacoToLspRange(range),
+      );
+      if (token.isCancellationRequested) return { data: new Uint32Array() };
+      return { data: semanticTokensData(model, semantic.spans) };
+    },
+    releaseDocumentSemanticTokens() {},
+  };
+
+  const rangeSemanticTokensProvider: monaco.languages.DocumentRangeSemanticTokensProvider = {
+    getLegend() {
+      return {
+        tokenTypes: [...SEMANTIC_TOKEN_TYPES],
+        tokenModifiers: [...SEMANTIC_TOKEN_MODIFIERS],
+      };
+    },
+    async provideDocumentRangeSemanticTokens(model, range, token) {
+      const path = bridge.pathForModel(model);
+      if (!path) return { data: new Uint32Array() };
+      const semantic = await client.getEncodedSemanticClassifications(
+        path,
+        monacoToLspRange(range),
+      );
+      if (token.isCancellationRequested) return { data: new Uint32Array() };
+      return { data: semanticTokensData(model, semantic.spans) };
+    },
+  };
+
+  const selectionRangeProvider: monaco.languages.SelectionRangeProvider = {
+    async provideSelectionRanges(model, positions, token) {
+      const path = bridge.pathForModel(model);
+      if (!path) return [];
+      const ranges: monaco.languages.SelectionRange[][] = [];
+      for (const position of positions) {
+        const selection = await client.getSelectionRange(path, monacoToLspPosition(position));
+        if (token.isCancellationRequested) return [];
+        ranges.push(selection ? toMonacoSelectionRange(selection) : []);
+      }
+      return ranges;
+    },
+  };
+
+  const onTypeFormattingProvider: monaco.languages.OnTypeFormattingEditProvider = {
+    autoFormatTriggerCharacters: [';', '}', '\n'],
+    async provideOnTypeFormattingEdits(model, position, ch, options, token) {
+      const path = bridge.pathForModel(model);
+      if (!path) return [];
+      const modelOptions = model.getOptions();
+      const edits = await client.getOnTypeFormattingEdits(path, monacoToLspPosition(position), ch, {
+        tabSize: options.tabSize ?? modelOptions.tabSize,
+        insertSpaces: options.insertSpaces ?? modelOptions.insertSpaces,
+      });
+      if (token.isCancellationRequested) return [];
+      return edits.map(toMonacoTextEdit);
+    },
+  };
+
+  const linkedEditingRangeProvider: monaco.languages.LinkedEditingRangeProvider = {
+    async provideLinkedEditingRanges(model, position, token) {
+      const path = bridge.pathForModel(model);
+      if (!path) return null;
+      const ranges = await client.getLinkedEditingRange(path, monacoToLspPosition(position));
+      if (token.isCancellationRequested || !ranges) return null;
+      return {
+        ranges: ranges.ranges.map(lspToMonacoRange),
+        ...(ranges.wordPattern ? { wordPattern: wordPattern(ranges.wordPattern) } : {}),
+      };
+    },
+  };
+
   for (const language of LANGUAGES) {
     disposables.push(monaco.languages.registerHoverProvider(language, hoverProvider));
     disposables.push(monaco.languages.registerDefinitionProvider(language, definitionProvider));
     disposables.push(
       monaco.languages.registerTypeDefinitionProvider(language, typeDefinitionProvider),
+    );
+    disposables.push(
+      monaco.languages.registerImplementationProvider(language, implementationProvider),
     );
     disposables.push(monaco.languages.registerCompletionItemProvider(language, completionProvider));
     disposables.push(monaco.languages.registerReferenceProvider(language, referenceProvider));
@@ -526,8 +1161,34 @@ export function registerTsLanguageServiceProviders(
     // non-matching kind is requested; we serve quickfixes + organize-imports.
     disposables.push(
       monaco.languages.registerCodeActionProvider(language, codeActionProvider, {
-        providedCodeActionKinds: ['quickfix', ORGANIZE_IMPORTS_KIND],
+        providedCodeActionKinds: ['quickfix', ORGANIZE_IMPORTS_KIND, FIX_ALL_KIND, 'refactor'],
       }),
+    );
+    disposables.push(
+      monaco.languages.registerDocumentSymbolProvider(language, documentSymbolProvider),
+    );
+    disposables.push(monaco.languages.registerFoldingRangeProvider(language, foldingRangeProvider));
+    disposables.push(monaco.languages.registerInlayHintsProvider(language, inlayHintsProvider));
+    disposables.push(
+      monaco.languages.registerDocumentHighlightProvider(language, documentHighlightProvider),
+    );
+    disposables.push(
+      monaco.languages.registerDocumentSemanticTokensProvider(language, semanticTokensProvider),
+    );
+    disposables.push(
+      monaco.languages.registerDocumentRangeSemanticTokensProvider(
+        language,
+        rangeSemanticTokensProvider,
+      ),
+    );
+    disposables.push(
+      monaco.languages.registerSelectionRangeProvider(language, selectionRangeProvider),
+    );
+    disposables.push(
+      monaco.languages.registerOnTypeFormattingEditProvider(language, onTypeFormattingProvider),
+    );
+    disposables.push(
+      monaco.languages.registerLinkedEditingRangeProvider(language, linkedEditingRangeProvider),
     );
     disposables.push(
       monaco.languages.registerDocumentFormattingEditProvider(language, documentFormattingProvider),
@@ -556,6 +1217,16 @@ export function registerTsLanguageServiceProviders(
       codeAction: codeActionProvider,
       documentFormatting: documentFormattingProvider,
       documentRangeFormatting: documentRangeFormattingProvider,
+      implementation: implementationProvider,
+      documentSymbol: documentSymbolProvider,
+      foldingRange: foldingRangeProvider,
+      inlayHints: inlayHintsProvider,
+      documentHighlight: documentHighlightProvider,
+      semanticTokens: semanticTokensProvider,
+      rangeSemanticTokens: rangeSemanticTokensProvider,
+      selectionRange: selectionRangeProvider,
+      onTypeFormatting: onTypeFormattingProvider,
+      linkedEditingRange: linkedEditingRangeProvider,
     },
   };
 }

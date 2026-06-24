@@ -52,6 +52,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0158 | Count detached fetch in child-realm event-loop keepalive |
 | 0159 | node:zlib web-compression-backed async subset |
 | 0162 | Vite 8 Rolldown WASI browser-boot runtime surface |
+| 0170 | Auto-discover tsconfig path aliases in runtime loader |
 
 ### runtime-wasi
 
@@ -138,6 +139,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0132 | TS ESM parity uses full-transform Node reference |
 | 0164 | Node 24 as the supported and parity-target version |
 | 0166 | In-browser TS language service over VFS |
+| 0169 | Workspace TypeScript version for TS language service |
 
 ### protocol
 
@@ -221,6 +223,8 @@ superseded.
 | 0145 browser transport clause | 0147 | browser shim is now the generic WebSocket bridge |
 | 0145 `server.hmr.channels` payload path | 0151 | Real-Vite now uses Vite native `server.ws` over rifty `http.Server.on('upgrade')` |
 | 0145 Vite 8 default HMR scope | 0161 | Vite 8 template disables HMR until socket/HMR parity is re-proven for the Rolldown WASI path |
+| 0166 D-a vendored-only TS compiler clause | 0169 | workspace-installed `node_modules/typescript` wins when present and valid; vendored TS remains fallback |
+| 0066 explicit-only tsconfig paths clause | 0170 | `autoDiscoverTsconfigPaths` can opt into TypeScript-parser-backed tsconfig discovery; default remains explicit/off |
 | 0054 WS/SSE upgrade risk note | 0151 | WebSocket `server.on('upgrade')` now works over the bridge; SSE stays streaming HTTP |
 | 0054 pipe-sink deferral | 0154 | `Readable.fromWeb(webStream).pipe(res)` is implemented; full `node:stream/web` remains unclaimed |
 | 0151 control-frame keepalive clause | 0151 note 2026-06-19 | control frames relay end-to-end; the peer answers pings (real `ws` auto-pongs + `'ping'`, browser-like clients silently pong), transport no longer auto-pongs |

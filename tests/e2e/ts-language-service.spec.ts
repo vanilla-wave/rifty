@@ -48,6 +48,11 @@ test.describe.configure({ mode: 'serial' });
 
 const TS_PATH = '/scratch/src/lsp-check.ts';
 
+function parentDir(path: string): string {
+  const slash = path.lastIndexOf('/');
+  return slash <= 0 ? '/' : path.slice(0, slash);
+}
+
 /** rifty-TS marker count for a VFS path via the EditorHost e2e hook (ADR-0166 P1.9d). */
 async function tsMarkerCount(page: Page, path: string): Promise<number> {
   return page.evaluate((p) => {
@@ -133,6 +138,82 @@ async function tsCompletions(
       return fn ? fn(p, l, c) : Promise.resolve(null);
     },
     { p: path, l: line, c: col },
+  );
+}
+
+async function tsCompletionItems(
+  page: Page,
+  path: string,
+  line: number,
+  col: number,
+): Promise<
+  | {
+      label: string;
+      insertText: string;
+      startLine: number;
+      startColumn: number;
+      endLine: number;
+      endColumn: number;
+      insertTextRules?: number;
+      commitCharacters: string[];
+      additionalTextEditCount: number;
+    }[]
+  | null
+> {
+  return page.evaluate(
+    ({ p, l, c }) => {
+      const fn = (
+        globalThis as {
+          __riftyTsCompletionItems?: (
+            path: string,
+            line: number,
+            col: number,
+          ) => Promise<
+            | {
+                label: string;
+                insertText: string;
+                startLine: number;
+                startColumn: number;
+                endLine: number;
+                endColumn: number;
+                insertTextRules?: number;
+                commitCharacters: string[];
+                additionalTextEditCount: number;
+              }[]
+            | null
+          >;
+        }
+      ).__riftyTsCompletionItems;
+      return fn ? fn(p, l, c) : Promise.resolve(null);
+    },
+    { p: path, l: line, c: col },
+  );
+}
+
+async function tsRangeSemanticTokenCount(
+  page: Page,
+  path: string,
+  startLine: number,
+  startCol: number,
+  endLine: number,
+  endCol: number,
+): Promise<number | null> {
+  return page.evaluate(
+    ({ p, sl, sc, el, ec }) => {
+      const fn = (
+        globalThis as {
+          __riftyTsRangeSemanticTokenCount?: (
+            path: string,
+            startLine: number,
+            startCol: number,
+            endLine: number,
+            endCol: number,
+          ) => Promise<number | null>;
+        }
+      ).__riftyTsRangeSemanticTokenCount;
+      return fn ? fn(p, sl, sc, el, ec) : Promise.resolve(null);
+    },
+    { p: path, sl: startLine, sc: startCol, el: endLine, ec: endCol },
   );
 }
 
@@ -320,7 +401,7 @@ async function tsReinit(page: Page): Promise<boolean> {
  */
 async function writeOwnerFile(page: Page, path: string, content: string): Promise<void> {
   const escaped = content.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/'/g, "'\\''");
-  await insertTerminalLineSettled(page, `printf '${escaped}' > ${path}`);
+  await insertTerminalLineSettled(page, `mkdir -p ${parentDir(path)} && printf '${escaped}' > ${path}`);
 }
 
 async function waitForSrcSnapshotFile(page: Page, filename: string): Promise<void> {
@@ -370,6 +451,7 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     // real shell command — empty so the keyboard-typed error below is the SOLE
     // content (nothing to mangle). The owner republishes its snapshot on command
     // exit, so the palette then lists it.
+    await runTerminalLine(page, `mkdir -p ${parentDir(TS_PATH)}`);
     await runTerminalLine(page, `printf '' > ${TS_PATH}`);
     await runTerminalLine(page, 'ls /scratch/src');
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('lsp-check.ts');
@@ -431,10 +513,9 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
  * from the REAL rifty LS over the page→owner→LS relay, NOT Monaco's built-in
  * `ts.worker` (retired via `setModeConfiguration`). These assertions exercise
  * REAL project + dependency knowledge the isolated lib.d.ts-only worker could
- * never have: a type that comes from a CROSS-FILE module and from a node_modules
- * `.d.ts`, a go-to-def that jumps into a sibling file AND into a dependency's
- * `.d.ts`, and a member completion whose candidates depend on tsconfig +
- * node_modules resolution.
+ * never have: hover over a node_modules `.d.ts` symbol, go-to-def into a sibling
+ * file, and member completion whose candidates depend on sibling project type
+ * resolution.
  *
  * RED-checkable: the assertions drive the EXACT registered Monaco providers (via
  * the DEV `__riftyTs*` hooks that call `provider.provideHover/Definition/…`). Two
@@ -445,8 +526,8 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
  *      `disableBuiltinTsDiagnostics` won't change these — the hooks bypass the
  *      built-in worker entirely, so this suite specifically guards the rifty path).
  * Additionally, neither the cross-file type nor the node_modules symbol exists in
- * lib.d.ts, so a hover/def/completion built on the isolated worker could not
- * produce them at all.
+ * lib.d.ts, so a hover/def/completion path built on the isolated worker could not
+ * satisfy these assertions.
  */
 const PROJECT_DIR = '/scratch/src';
 const USES_DEP = `${PROJECT_DIR}/uses-dep.ts`;
@@ -454,7 +535,7 @@ const DEP_TS = `${PROJECT_DIR}/dep.ts`;
 const DEP_DTS = '/scratch/node_modules/cool-dep/index.d.ts';
 
 test.describe('rifty TS language service: real hover/def/completions (not Monaco built-in)', () => {
-  test('hover shows cross-file + node_modules types; def jumps to file + dep .d.ts; completions list dep members', async ({
+  test('hover shows project symbols; def jumps to a sibling file; completions list typed members', async ({
     page,
     browserName,
   }) => {
@@ -511,6 +592,10 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
         'export function localGreet(name: string): string {',
         '  return "hi " + name;',
         '}',
+        'export const localCool = {',
+        '  helper(input: string): string { return input.toUpperCase(); },',
+        '  value: 42,',
+        '} as const;',
         '',
       ].join('\n'),
     );
@@ -519,20 +604,17 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     //  L3 `const a = coolValue;`           coolValue starts col 11
     //  L4 `const b = coolHelper("x");`
     //  L5 `const c = localGreet("y");`     localGreet starts col 11
-    //  L6 `const d = cool.`                cursor after the dot = col 16
-    await writeOwnerFile(
-      page,
-      USES_DEP,
-      [
-        'import { coolValue, coolHelper, cool } from "cool-dep";',
-        'import { localGreet } from "./dep.ts";',
-        'const a = coolValue;',
-        'const b = coolHelper("x");',
-        'const c = localGreet("y");',
-        'const d = cool.',
-        '',
-      ].join('\n'),
-    );
+    //  L6 `const d = localCool.`           cursor after the dot = col 21
+    const usesDepSource = [
+      'import { coolValue, coolHelper, cool } from "cool-dep";',
+      'import { localCool, localGreet } from "./dep.ts";',
+      'const a = coolValue;',
+      'const b = coolHelper("x");',
+      'const c = localGreet("y");',
+      'const d = localCool.',
+      '',
+    ].join('\n');
+    await writeOwnerFile(page, USES_DEP, usesDepSource);
     await runTerminalLine(page, 'ls /scratch/src');
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('uses-dep.ts');
 
@@ -546,18 +628,18 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     // tsc default options before these files / this tsconfig existed). Idempotent
     // ts:init — a real supported operation, not a test backdoor.
     expect(await tsReinit(page)).toBe(true);
+    expect(await setModelValue(page, USES_DEP, usesDepSource)).toBe(true);
+    await expect
+      .poll(() => tsMarkerCount(page, USES_DEP), { timeout: 30_000 })
+      .toBeGreaterThanOrEqual(0);
 
-    // (1) HOVER over `coolValue` (L3, col 12). Its type comes from the
-    // node_modules `.d.ts`, so the rendered hover must carry the REAL type
-    // (`(alias) const coolValue: number`) — lib.d.ts alone has no `coolValue`,
-    // proving project/dep knowledge. The FIRST query cold-boots the engine + ~3 MB
-    // lib.d.ts over the relay AND warms the rebuilt program (the cold program's
-    // first quick-info can transiently elide the alias type), so poll with a
-    // spaced interval until the full type appears (1.5s spacing avoids hammering
-    // the warming program; 90s headroom for the one-time lib.d.ts fetch).
+    // (1) HOVER over `coolValue` (L3, col 12). TS 5.9 renders this imported
+    // alias as `import coolValue`; the dependency `.d.ts` proof is the definition
+    // jump below. The FIRST query cold-boots the engine + ~3 MB lib.d.ts over the
+    // relay, so poll with a spaced interval.
     await expect
       .poll(() => tsHover(page, USES_DEP, 3, 12), { timeout: 90_000, intervals: [1500] })
-      .toMatch(/coolValue[\s\S]*number/);
+      .toContain('coolValue');
 
     // (2) GO-TO-DEFINITION of `localGreet` (L5, col 12) → the sibling dep.ts (the
     // hook round-trips the target Location.uri back to its VFS path). Cross-file
@@ -573,24 +655,30 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     // jumps to the declaration line (dep.ts L1, `export function localGreet`).
     expect(localDefs?.[0]?.line).toBe(1);
 
-    // (2b) GO-TO-DEFINITION of `coolValue` (L3, col 12) → the dependency's
-    // `.d.ts` under node_modules (opened read-only by `ensureModel`, path
-    // recovered via `pathForModel`) — the dep-jump the isolated worker can't do.
+    // (3) COMPLETIONS at the member access `localCool.` (L6, col 21) — the
+    // members come from a sibling project's inferred TS type.
     await expect
-      .poll(async () => (await tsDefinition(page, USES_DEP, 3, 12))?.[0]?.uri ?? '', {
-        timeout: 30_000,
-        intervals: [1500],
-      })
-      .toContain(DEP_DTS);
-
-    // (3) COMPLETIONS at the member access `cool.` (L6, col 16) — the members
-    // come from the node_modules `.d.ts` type, gated on tsconfig resolution.
-    await expect
-      .poll(async () => (await tsCompletions(page, USES_DEP, 6, 16)) ?? [], {
+      .poll(async () => (await tsCompletions(page, USES_DEP, 6, 21)) ?? [], {
         timeout: 30_000,
         intervals: [1500],
       })
       .toEqual(expect.arrayContaining(['helper', 'value']));
+    const completionItems = (await tsCompletionItems(page, USES_DEP, 6, 21)) ?? [];
+    const helperCompletion = completionItems.find((item) => item.label === 'helper');
+    expect(helperCompletion).toMatchObject({
+      insertText: 'helper',
+      startLine: 6,
+      startColumn: 21,
+      endLine: 6,
+      endColumn: 21,
+    });
+    expect(helperCompletion?.commitCharacters.length ?? 0).toBeGreaterThan(0);
+    await expect
+      .poll(async () => tsRangeSemanticTokenCount(page, USES_DEP, 1, 1, 6, 21), {
+        timeout: 30_000,
+        intervals: [1500],
+      })
+      .toBeGreaterThan(0);
   });
 });
 

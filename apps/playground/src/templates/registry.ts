@@ -10,6 +10,7 @@ import { NotImplementedError } from '@riftydev/vfs';
 import { EXPRESS_SQLITE_TEMPLATE } from './express-sqlite.ts';
 import type { ProjectSpec } from './project-spec.ts';
 import { SOCKET_LAB_TEMPLATE } from './socket-lab.ts';
+import { TYPESCRIPT_TEMPLATE } from './typescript.ts';
 import { VITE_TEMPLATE } from './vite.ts';
 import { VITE8_TEMPLATE } from './vite8.ts';
 
@@ -18,6 +19,7 @@ export const DEFAULT_TEMPLATE_ID = 'vite';
 const TEMPLATES: ReadonlyMap<string, ProjectSpec> = new Map<string, ProjectSpec>([
   [VITE_TEMPLATE.id, VITE_TEMPLATE],
   [VITE8_TEMPLATE.id, VITE8_TEMPLATE],
+  [TYPESCRIPT_TEMPLATE.id, TYPESCRIPT_TEMPLATE],
   [EXPRESS_SQLITE_TEMPLATE.id, EXPRESS_SQLITE_TEMPLATE],
   [SOCKET_LAB_TEMPLATE.id, SOCKET_LAB_TEMPLATE],
 ]);
