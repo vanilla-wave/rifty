@@ -389,6 +389,59 @@ describe('SW-side handshake state machine', () => {
     interceptor.teardown();
   });
 
+  it('returns 503 when a ready window advertised other ports but not the requested one', async () => {
+    const windowClient = makeMockClient('window-A');
+    const scope = makeMockScope([windowClient]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ports: [5174],
+      },
+      windowClient,
+    );
+
+    const responsePromise = scope.fetch('http://x/preview/4173/', {
+      requestMode: 'navigate',
+      destination: 'document',
+      resultingClientId: 'fresh-tab',
+    });
+    await flushPreviewDispatch();
+    expect(windowClient.postMessage).not.toHaveBeenCalled();
+    expect((await responsePromise).status).toBe(503);
+    interceptor.teardown();
+  });
+
+  it('returns 503 for a bare page fetch when the page has not advertised that port', async () => {
+    const windowClient = makeMockClient('window-A');
+    const scope = makeMockScope([windowClient]);
+    const interceptor = createPreviewInterceptor(scope as unknown as ServiceWorkerGlobalScope, {
+      timeoutMs: 3_000,
+    });
+    scope.postMessage(
+      {
+        type: SW_PREVIEW_READY,
+        frameVersion: SW_FRAME_VERSION,
+        routingVersion: SW_ROUTING_VERSION,
+        ports: [5174],
+      },
+      windowClient,
+    );
+
+    const responsePromise = scope.fetch('http://x/preview/4173/', {
+      clientId: 'window-A',
+      destination: '',
+    });
+    await flushPreviewDispatch();
+    expect(windowClient.postMessage).not.toHaveBeenCalled();
+    expect((await responsePromise).status).toBe(503);
+    interceptor.teardown();
+  });
+
   it('returns 503 when multiple ready windows advertise the same port (isolation)', async () => {
     // Both windows advertise port 5174 — ambiguous, so route-preview 503s
     // before picking either, symmetric with the multi-worker isolation

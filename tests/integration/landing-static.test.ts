@@ -2,22 +2,80 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const INDEX = 'apps/landing/index.html';
-const HEADERS = 'apps/landing/_headers';
+const HEADERS = 'apps/landing/public/_headers';
+const REDIRECTS = 'apps/landing/public/_redirects';
 const HOSTING_DOC = 'docs/public/hosting-domains.md';
 const LANDING_NETLIFY_CONFIG = 'apps/landing/netlify.toml';
 const LANDING_PACKAGE = 'apps/landing/package.json';
 const NETLIFY_WORKFLOW = '.github/workflows/netlify.yml';
+const NAV = 'apps/landing/src/sections/nav.ts';
+const HERO = 'apps/landing/src/sections/hero.ts';
+const FAVICON = 'apps/landing/public/favicon.svg';
+
+// Bodies between every <!-- … --> in an XML/SVG document (open-ended last comment included).
+function commentBodies(xml: string): string[] {
+  const bodies: string[] = [];
+  let i = 0;
+  for (;;) {
+    const start = xml.indexOf('<!--', i);
+    if (start === -1) break;
+    const end = xml.indexOf('-->', start + 4);
+    if (end === -1) {
+      bodies.push(xml.slice(start + 4));
+      break;
+    }
+    bodies.push(xml.slice(start + 4, end));
+    i = end + 3;
+  }
+  return bodies;
+}
 
 describe('landing static site', () => {
-  it('publishes the rifty.dev landing page with playground and GitHub exits', () => {
+  it('publishes the rifty.dev landing entry (Vite SPA shell)', () => {
     expect(existsSync(INDEX)).toBe(true);
 
     const html = readFileSync(INDEX, 'utf8');
-    expect(html).toContain('<title>rifty — Node.js stack in the browser</title>');
+    // Vite SPA: head metadata is static; the page body is mounted by /src/main.ts.
+    expect(html).toContain('<title>rifty');
     expect(html).toContain('<link rel="canonical" href="https://rifty.dev/" />');
-    expect(html).toContain('href="https://play.rifty.dev/"');
-    expect(html).toContain('href="https://github.com/vanilla-wave/rifty"');
-    expect(html).toContain('Open, self-hostable browser runtime infrastructure');
+    expect(html).toContain('id="app"');
+    expect(html).toContain('/src/main.ts');
+  });
+
+  it('shows a browser-tab favicon (rel=icon → existing svg)', () => {
+    // The tab was iconless: no <link rel="icon"> + no asset shipped from public/.
+    const html = readFileSync(INDEX, 'utf8');
+    expect(html).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml" />');
+    expect(existsSync(FAVICON)).toBe(true);
+  });
+
+  it('ships a favicon browsers can actually render (well-formed SVG/XML)', () => {
+    // Regression: the asset shipped + was served 200 image/svg+xml, but the tab stayed
+    // iconless. Cause — the comment carried CSS-var token names (--deep, --ac), and `--`
+    // inside an XML comment is illegal; browsers parse SVG as strict XML and reject it
+    // ("Double hyphen within comment"). The fetch succeeds, the render does not.
+    const svg = readFileSync(FAVICON, 'utf8');
+    for (const body of commentBodies(svg)) {
+      expect(body, 'XML comment must not contain "--" (browsers reject the SVG)').not.toContain(
+        '--',
+      );
+    }
+    // …and it must still draw the mark, not degrade to a blank icon.
+    expect(svg).toContain('<svg');
+    expect(svg).toContain('</svg>');
+    expect(svg).toContain('#0e1014'); // deep surface
+    expect(svg).toContain('#c7f05a'); // lime diamond
+  });
+
+  it('keeps a playground and GitHub exit', () => {
+    // /play → live playground (its own origin) survives as a redirect…
+    const redirects = readFileSync(REDIRECTS, 'utf8');
+    expect(redirects).toContain('https://play.rifty.dev/');
+    // …the hero primary CTA opens the playground; the nav links out to the repo.
+    const hero = readFileSync(HERO, 'utf8');
+    expect(hero).toContain('https://play.rifty.dev/');
+    const nav = readFileSync(NAV, 'utf8');
+    expect(nav).toContain('https://github.com/vanilla-wave/rifty');
   });
 
   it('keeps landing headers separate from playground cross-origin isolation', () => {
@@ -34,7 +92,7 @@ describe('landing static site', () => {
     expect(config).not.toContain('Cross-Origin-Embedder-Policy');
   });
 
-  it('deploys the landing as its own Netlify project', () => {
+  it('deploys the landing as its own Netlify project from the built dist', () => {
     expect(existsSync(LANDING_PACKAGE)).toBe(true);
 
     const pkg = JSON.parse(readFileSync(LANDING_PACKAGE, 'utf8')) as { name?: string };
@@ -44,7 +102,9 @@ describe('landing static site', () => {
     expect(workflow).toContain('NETLIFY_LANDING_SITE_ID:');
     expect(workflow).toContain('NETLIFY_LANDING_SITE_NAME:');
     expect(workflow).toContain('--filter="@riftydev/landing"');
-    expect(workflow).toContain('--dir="$GITHUB_WORKSPACE/apps/landing"');
+    // Vite build output, not the raw source dir.
+    expect(workflow).toContain('--dir="$GITHUB_WORKSPACE/apps/landing/dist"');
+    expect(workflow).toContain('pnpm --filter @riftydev/landing build');
     expect(workflow).toContain('https://${NETLIFY_LANDING_SITE_NAME}.netlify.app');
   });
 

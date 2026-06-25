@@ -65,6 +65,7 @@ const SPEC = {
     sideEffects: ['./dist/register-builtins.js', './dist/sqlite/register-builtins.js'],
     keywords: ['http', 'net', 'websocket', 'sqlite'],
   },
+  '@riftydev/git': { dir: 'packages/git', sideEffects: false, keywords: ['git', 'vcs'] },
   '@riftydev/runtime-js': {
     dir: 'packages/runtime-js',
     sideEffects: ['./dist/index.js', './dist/worker.js'],
@@ -80,6 +81,16 @@ const SPEC = {
       // so a kernel-spawned guest entry (kind:'url', no module loader) can call
       // the genuine execSync client without re-implementing the SAB gate.
       './builtins/child_process': './src/builtins/child_process.ts',
+      // node:os / node:path faithful shims (ADR-0026) exposed so a Vite bundle
+      // containing a heavy node-targeting dep (the `typescript` engine in the
+      // ts-language-service worker, ADR-0166) can ALIAS the bare `os`/`path`
+      // specifiers to the REAL rifty shims instead of Vite's empty browser stub
+      // (`os.platform is not a function` at the dep's module-eval). Not a new
+      // mechanism — the same modules already back the `require('os')` registry.
+      './builtins/os': './src/builtins/os.ts',
+      './builtins/path': './src/builtins/path.ts',
+      './builtins/perf_hooks': './src/builtins/perf_hooks.ts',
+      './builtins/fs': './src/builtins/fs.ts',
     },
     keywords: ['runtime', 'node-compatible', 'module-loader'],
   },
@@ -95,6 +106,29 @@ const SPEC = {
     keywords: ['npm', 'semver', 'install'],
   },
   '@riftydev/shell': { dir: 'packages/shell', sideEffects: false, keywords: ['shell', 'bash'] },
+  '@riftydev/ts-language-service': {
+    dir: 'packages/ts-language-service',
+    // The kernel `serve`-worker boot self-installs on load (auto-boot guard) —
+    // mark it side-effecting so tree-shaking can't drop it (mirrors kernel/
+    // runtime-wasi worker-entry).
+    sideEffects: ['./dist/worker/entry.js'],
+    // `./protocol` + `./lsp-types` are LIGHT subpaths (pure types/constants, NO
+    // `typescript` engine) the playground page + owner relay import — so they get
+    // the `rifty:ts-lsp` frame guards + LSP shapes WITHOUT pulling the whole TS
+    // language service (the index re-exports service.ts → typescript) into the
+    // page/owner bundle (ADR-0166 P1.9).
+    addExports: {
+      './protocol': './src/worker/protocol.ts',
+      './lsp-types': './src/lsp-types.ts',
+      './worker/entry': './src/worker/entry.ts',
+    },
+    // The vendored TS std-lib bundle the browser host fetches by URL (ADR-0166 —
+    // `getTsLibUrl()`); an asset, not a JS entry, so no tsup bundling / .d.ts.
+    // The playground LS worker imports it `?url` to seed `__RIFTY_TS_LIB_URL`.
+    assetExports: { './vendor/lib-bundle.json': './vendor/lib-bundle.json' },
+    extraFiles: ['vendor'],
+    keywords: ['typescript', 'language-service', 'lsp', 'diagnostics'],
+  },
   '@riftydev/terminal': {
     dir: 'packages/terminal',
     sideEffects: false,
@@ -132,12 +166,15 @@ const DESCRIPTIONS = {
   '@riftydev/kernel':
     'Process/scheduling/IPC kernel for rifty: Worker-as-process model over SharedArrayBuffer + Atomics.',
   '@riftydev/net': 'Browser node:net/node:http/node:https/ws + node:sqlite (sql.js) for rifty.',
+  '@riftydev/git': 'Git client for rifty: version control over @riftydev/vfs (isomorphic-git).',
   '@riftydev/runtime-js':
     'Node-compatible JS runtime for rifty: CJS/ESM module loader and node: builtins, in a Worker.',
   '@riftydev/runtime-wasi': 'WASI (preview1) runner for rifty: run .wasm guests in a Web Worker.',
   '@riftydev/npm-client':
     'In-browser npm client for rifty: semver, registry, tarball extract, link, install.',
   '@riftydev/shell': 'Tiny bash-flavoured shell for rifty, backed by @riftydev/vfs.',
+  '@riftydev/ts-language-service':
+    'TypeScript language service over the rifty VFS: LSP-shaped diagnostics, hostable in a kernel worker.',
   '@riftydev/terminal': 'xterm.js terminal wrapper for rifty.',
   '@riftydev/service-worker': 'Service Worker preview/HMR routing bridge for rifty.',
   '@riftydev/shadow-registry': 'Data tables of in-browser npm package substitutions for rifty.',
@@ -155,12 +192,21 @@ function buildExportsAndEntries(orig, spec) {
     entries[distKey] = val.replace(/^\.\//, '');
     pubExports[key] = { types: `./dist/${distKey}.d.ts`, import: `./dist/${distKey}.js` };
   }
+  // assetExports: dev + published static-asset subpaths that are NOT JS entries
+  // (no tsup bundling, no .d.ts) — e.g. a vendored JSON the consumer fetches by
+  // URL. Same committed path in dev and the published tarball (the file is listed
+  // in `files`). Added to both export maps AFTER the JS entries so it never
+  // becomes a tsup entry.
+  for (const [key, val] of Object.entries(spec.assetExports ?? {})) {
+    devExports[key] = val;
+    pubExports[key] = val;
+  }
   return { devExports, pubExports, entries };
 }
 
 function rebuildPkg(orig, name, spec) {
   const { devExports, pubExports } = buildExportsAndEntries(orig, spec);
-  const files = ['dist'];
+  const files = ['dist', ...(spec.extraFiles ?? [])];
   if (existsSync(join(ROOT, spec.dir, 'CHANGELOG.md'))) files.push('CHANGELOG.md');
 
   const out = {

@@ -309,6 +309,289 @@ const matrices = [
       'The Transform-stream surface is gated behind a future ADR; one-shot async covers the registry/asset/HTTP flows the Consumer-Ready roadmap targets.',
     ],
   },
+  {
+    file: 'ts-language-service.md',
+    title: 'Compatibility matrix — TS language service (`@riftydev/ts-language-service`)',
+    intro:
+      "Public claim surface for the in-browser `ts.LanguageService` over the rifty VFS (ADR-0166): a real `typescript` LanguageService in a kernel worker, LSP-shaped, wired as real Monaco providers in the playground (Monaco's built-in TS intelligence retired for every ✅ row). Every ✅ is parity-checked head-to-head against the real `ts.LanguageService` (gold standard, same vendored `typescript` both sides). ❌ rows are the deferred long tail — the engine exposes NO method (no silent stub) and the named backlog item tracks them.",
+    rows: [
+      [
+        'Diagnostics (semantic / syntactic / tsconfig-config)',
+        '✅',
+        '`getSemanticDiagnostics` / `getSyntacticDiagnostics` / config-file diagnostics over the project tsconfig + VFS',
+      ],
+      ['Hover / quick-info', '✅', '`getQuickInfo` — cross-file + `node_modules` symbol types'],
+      [
+        'Go-to-definition / type-definition',
+        '✅',
+        '`getDefinitionAtPosition` / `getTypeDefinitionAtPosition` — cross-file + into `node_modules` `.d.ts`',
+      ],
+      [
+        'Completions (+ resolve)',
+        '✅',
+        '`getCompletionsAtPosition` + lazy `getCompletionEntryDetails` (label-keyed resolve; same-name auto-import collision tracked: `protocol/ts-completion-resolve-by-label`)',
+      ],
+      ['Find-references', '✅', '`findReferences` flattened; honors `includeDeclaration`'],
+      [
+        'Rename (+ prepare-rename)',
+        '✅',
+        '`getRenameInfo` + `findRenameLocations` → cross-file `WorkspaceEdit`; non-renameable element rejected',
+      ],
+      ['Signature help', '✅', '`getSignatureHelpItems` — real overloads at a call site'],
+      [
+        'Quick-fixes / code-actions',
+        '✅',
+        '`getCodeFixesAtPosition` → `CodeAction[]` (kind `quickfix`); request span within the diagnostic span',
+      ],
+      ['Organize imports', '✅', "`organizeImports({type:'file'})` — sort + de-dup + drop unused"],
+      [
+        'Document + range formatting',
+        '✅',
+        "`getFormattingEditsForDocument` / `getFormattingEditsForRange` — tsserver's real `FormatCodeSettings`",
+      ],
+      [
+        'Refactorings',
+        '❌',
+        '`getApplicableRefactors` / `getEditsForRefactor` (+ Monaco `refactor.*`) — `toolchain-build/ts-language-service-refactorings`',
+      ],
+      [
+        'Inlay hints',
+        '❌',
+        '`provideInlayHints` — `toolchain-build/ts-language-service-editor-decorations`',
+      ],
+      [
+        'Document highlights',
+        '❌',
+        '`getDocumentHighlights` — `toolchain-build/ts-language-service-editor-decorations`',
+      ],
+      [
+        'Semantic highlighting (classification)',
+        '❌',
+        '`getEncodedSemantic`/`SyntacticClassifications` — `toolchain-build/ts-language-service-editor-decorations`',
+      ],
+      [
+        'Call hierarchy',
+        '❌',
+        '`prepareCallHierarchy` / `provideCallHierarchy{Incoming,Outgoing}Calls` — `toolchain-build/ts-language-service-call-hierarchy`',
+      ],
+      [
+        'Document symbols / outline + folding + workspace symbols',
+        '❌',
+        '`getNavigationTree` / `getOutliningSpans` / `getNavigateToItems` — `toolchain-build/ts-language-service-navigation`',
+      ],
+      [
+        'On-type formatting',
+        '❌',
+        '`getFormattingEditsAfterKeystroke` (doc + range shipped; on-type not) — `playground/ts-ls-on-type-formatting`',
+      ],
+      [
+        'Code lens',
+        '❌',
+        'Editor-only convenience, not a tsserver primitive — out of the deferred long tail',
+      ],
+      [
+        'Non-TS/JS LSP (Python / Go native servers)',
+        '❌',
+        'A browser ceiling (no native language servers) — out of scope (ADR-0166)',
+      ],
+      [
+        "Project's installed TS version (workspace version)",
+        '❌',
+        'Vendored `typescript` for v1 — `toolchain-build/ts-language-service-workspace-version`',
+      ],
+      [
+        'Go-to-implementation · suggestion diagnostics · definition-bound-span',
+        '❌',
+        '`getImplementationAtPosition` / `getSuggestionDiagnostics` / `getDefinitionAndBoundSpan` — `toolchain-build/ts-language-service-long-tail-remainder`',
+      ],
+      [
+        'Fix-all · update-imports-on-rename · selection range · file references',
+        '❌',
+        '`getCombinedCodeFix` / `getEditsForFileRename` / `getSmartSelectionRange` / `getFileReferences` — `toolchain-build/ts-language-service-long-tail-remainder`',
+      ],
+      [
+        'JSX close-tag completion + linked editing',
+        '❌',
+        '`getJsxClosingTagAtPosition` / `getLinkedEditingRangeAtPosition` — `toolchain-build/ts-language-service-long-tail-remainder`',
+      ],
+      [
+        'Paste-with-imports · JSDoc template · TODO comments · compiler-options diagnostics',
+        '❌',
+        '`getPasteEdits` / `getDocCommentTemplateAtPosition` / `getTodoComments` / `getCompilerOptionsDiagnostics` — `toolchain-build/ts-language-service-long-tail-remainder`',
+      ],
+      [
+        'Brace matching · comment toggling · indentation',
+        '❌',
+        'Editor-native — Monaco owns these via language config; intentionally NOT LS-backed (no `getBraceMatchingAtPosition`/`toggleLineComment`/`getIndentationAtPosition` provider), out of the deferred long tail',
+      ],
+    ],
+    tests: [
+      '`packages/ts-language-service/src/parity.test.ts`',
+      '`packages/ts-language-service/src/service.test.ts`',
+      '`packages/ts-language-service/src/config-diagnostics.test.ts`',
+      '`tests/e2e/ts-language-service.spec.ts`',
+    ],
+    limitations: [
+      'Editor capability, not a Node API module: rows are `ts.LanguageService` queries (LSP-shaped), backed by the playground Monaco providers — not `node:*` surface.',
+      'TS/JS only. Other languages (Python/Go) need native language servers — a browser ceiling, out of scope (ADR-0166).',
+      'The deferred long tail (refactorings, inlay hints, document highlights, semantic highlighting, call hierarchy, navigation/outline/folding/workspace symbols, on-type formatting) exposes NO engine method — an honest absence, each tracked by a named backlog item, never a silent stub.',
+      'The remaining achievable `ts.LanguageService` surface (go-to-implementation, suggestion diagnostics, definition-bound-span, fix-all, update-imports-on-rename, selection range, file references, JSX close-tag/linked-editing, paste-with-imports, JSDoc template, TODO comments, compiler-options diagnostics) is likewise unimplemented-but-tracked (`toolchain-build/ts-language-service-long-tail-remainder`). Brace matching / comment toggling / indentation are intentionally editor-native (Monaco), not an LS gap. The full `ts.LanguageService` interface is otherwise either shipped or one of these rows — no untracked achievable feature remains.',
+      'v1 vendors a fixed `typescript`; the project\'s installed TS version (VSCode "Use Workspace Version") is deferred (`toolchain-build/ts-language-service-workspace-version`).',
+    ],
+  },
+  {
+    file: 'git.md',
+    title: 'Compatibility matrix — git (`@riftydev/git`)',
+    intro:
+      'Public claim surface for git over the VFS (isomorphic-git, ADR-0167). Local porcelain is byte-identical to canonical git (same object SHA-1s); the network is smart-HTTP only — every browser-ceiling gap throws `NotImplementedError`, never a silent stub.',
+    rows: [
+      ['`init` / `remove`', '✅', 'Local index + object writes over the Memory VFS'],
+      [
+        '`add <pathspec…>` / `add .` / `-A` / `-u` / `-f`',
+        '✅',
+        "ALL-OR-NOTHING (a single unmatched pathspec stages nothing → `fatal: pathspec … did not match`); a gone-but-tracked path stages its deletion; an explicit `.gitignore`-ignored path is refused (`-f` overrides); no pathspec → git's `Nothing specified, nothing added.` (exit 0). Unknown flag → `NotImplementedError('git.add.<flag>')` (exit 128), never silently dropped",
+      ],
+      [
+        '`.gitignore` honored',
+        '✅',
+        "Ignored paths (`node_modules/`, build output, `*.log`) are excluded from `git status`, `git add .`, and `git diff` — the fs-adapter reads `.gitignore` via the string-encoding `readFile` form iso-git's ignore manager uses",
+      ],
+      [
+        'Repository guard',
+        '✅',
+        'Every verb but `init`/`clone` verifies a VALID repo governs the cwd first — real git discovery (walking up) requiring `.git/HEAD`, so a bare/empty/partial `.git` is rejected. NON-repo → `fatal: not a git repository (or any of the parent directories): .git` (exit 128) — never a silent false-success',
+      ],
+      [
+        '`commit` / `commit -a` / `commit --amend`',
+        '✅',
+        "Canonical git objects — **identical 40-hex SHA-1 to real git** for identical inputs (author+committer identity/timestamp/tz explicit); parity-pinned. `-a`/`-am` stage tracked modifications+deletions (`git add -u`); repeated `-m` join as paragraphs; an empty `-m ''` → `Aborting commit due to empty commit message.` (exit 1). REFUSES an empty commit (real git exit 1, `nothing to commit…`), never fabricates one. Unknown `commit` flag → `NotImplementedError('git.commit.<flag>')` (exit 128). `--amend` replaces HEAD (reuses prior message when no `-m`)",
+      ],
+      [
+        'Author identity from config',
+        '✅',
+        '`GIT_AUTHOR_*` env → `user.name`/`user.email` config → built-in default; `git config user.email x` then `git commit` (no env) authors as x',
+      ],
+      [
+        '`status --porcelain`',
+        '✅',
+        'Byte-exact vs git 2.50.1 (frozen golden fixtures); path-sorted XY codes',
+      ],
+      ['`log` / `log --oneline`', '✅', 'Byte-exact short-oid + subject (frozen fixtures)'],
+      [
+        '`diff` (index ↔ workdir, unstaged)',
+        '⚠️',
+        'Bare `git diff` semantics — the UNSTAGED delta (`walk(STAGE, WORKDIR)`) for tracked files; untracked + `.gitignore`-ignored files are NOT shown (real git never shows them). Binary changes render `Binary files … differ` (never a mojibake hunk). Structured per-file hunks via LCS line-diff; structured data, NOT byte-exact `git diff` text. `--staged`/`--cached`/`diff HEAD`/two-ref/pathspec forms → loud `git.diff.<x>` ceiling (exit 128), never the bare diff silently',
+      ],
+      ['`branch` / `listBranches` / `currentBranch` / `resolveRef`', '✅', 'Local refs'],
+      [
+        '`checkout <branch>` / `-b [<start>]` / `<commit>` (detached)',
+        '✅',
+        "Branch switch, create+switch, detached HEAD; byte-exact stderr vs git 2.50.1 (frozen fixtures); dirty-tree conflict refused with git's exact `error:…Aborting` message (exit 1)",
+      ],
+      [
+        '`checkout [--] <pathspec>` / `<tree-ish> -- <pathspec>` (restore)',
+        '✅',
+        'Restore worktree from the index (or from a tree-ish, +index); HEAD untouched; silent like git',
+      ],
+      [
+        'checkout `--orphan` / `-B` / `--patch` / `--merge` / `--ours`·`--theirs` / `--track` / `-` / glob pathspec / revspec (`HEAD~1`/`^`/`@{…}`)',
+        '❌',
+        "`NotImplementedError('git.checkout.<x>')` (exit 128) — out of the v1 checkout subset, never a leaked plumbing error, never mislabeled as a typo",
+      ],
+      [
+        '`switch <branch>` / `-c [<start>]` / `--detach <commit>`',
+        '✅',
+        "Branch-only switch / create+switch / detach; byte-exact stderr vs git 2.50.1 (frozen fixtures). `switch --detach` prints the HEAD-line ONLY (no advisory). A non-`--detach` commit → git's `fatal: a branch is expected, got commit` (exit 128); a name that is neither a branch nor any ref → `fatal: invalid reference: <name>` (exit 128); `switch -` (previous branch) → `NotImplementedError('git.switch.previous')` (no reflog)",
+      ],
+      [
+        '`restore [--staged] [--source=<tree>] <pathspec>`',
+        '✅',
+        "Restore worktree from index/tree, or `--staged` unstage (index ← HEAD); silent like git. `--staged --source` → `NotImplementedError('git.restore.staged-source')`; revspec source reuses the checkout revspec ceiling; no-match → pathspec-miss (exit 1)",
+      ],
+      [
+        '`config <key>` / `config <key> <value>`',
+        '⚠️',
+        "Bounded get/set on `.git/config`: `<key>` prints the value (unset → exit 1, silent), `<key> <value>` writes it. `--list`/`--get-all`/`--unset`/other flags → `NotImplementedError('git.config.<flag>')` (exit 128) — no full-dump in iso-git",
+      ],
+      [
+        '`clone <url> [<dir>]` / `fetch [<remote>]` / `pull [<remote> <ref>]` / `push [<remote> <ref>]` (smart HTTP)',
+        '✅',
+        'Over rifty `node:http` egress; real `git http-backend` clone integration-tested (canonical objects end-to-end). `clone` writes a NEW subdirectory (url basename or explicit `<dir>`), not the cwd; a non-empty destination is refused (`fatal: destination path … already exists…`, exit 128). `fetch`/`pull`/`push` accept a remote NAME (`git push origin main`) resolved from config — not mistaken for a URL transport; `-f`/`--force` honored on push',
+      ],
+      [
+        '`corsProxy`',
+        '✅',
+        'Env-config `RIFTY_GIT_CORS_PROXY` (D-004) — never hardcoded; unset → cross-origin clone throws',
+      ],
+      ['`onAuth` (HTTPS Basic / PAT)', '✅', 'Injected token provider for private repos + push'],
+      ['Shallow `depth` / `singleBranch`', '✅', 'Passed through to clone/fetch'],
+      [
+        'SSH (`ssh://`, `git@host:`)',
+        '❌',
+        "`NotImplementedError('git.transport.ssh')` — no raw TCP/SSH in the browser",
+      ],
+      [
+        'Native `git://` / dumb-HTTP',
+        '❌',
+        "`NotImplementedError('git.transport.git')` — smart-HTTP is the only in-browser transport",
+      ],
+      [
+        'Cross-origin smart-HTTP without a proxy',
+        '❌',
+        "`NotImplementedError('git.cors')` in the browser (same-origin ceiling) — set `RIFTY_GIT_CORS_PROXY`; GitHub/GitLab/Bitbucket send no CORS headers",
+      ],
+      [
+        'Executable bit (`100755`) & symlinks',
+        '❌',
+        'VFS has no exec-bit/symlink layer (ADR-0050/0167) → file mode fixed `100644`; tree-SHA diverges from canonical git for such repos — recorded, never silently wrong',
+      ],
+      [
+        'CRLF / `.gitattributes` / clean-smudge filters',
+        '❌',
+        'No line-ending normalization — a known SHA-divergence source for repos that rely on it',
+      ],
+      [
+        'GPG commit signing',
+        '❌',
+        'Unsigned only — `user.signingkey`/`commit.gpgsign` not honored',
+      ],
+      [
+        'Push from a shallow clone',
+        '❌',
+        'Surfaced loud (isomorphic-git `GitPushError`), no silent retry',
+      ],
+      [
+        'Verb from a subdirectory of the repo',
+        '❌',
+        '`git.subdir` ceiling (exit 128) — cwd-relative pathspec prefixing not implemented yet; run git from the repository root. Loud, never a silent wrong-tree result',
+      ],
+      [
+        'rebase / submodules / worktrees / sparse + partial clone',
+        '❌',
+        'Out of the v1 subset — throw `NotImplementedError`',
+      ],
+      ['gc / repack / prune / reflog / bisect / blame / hooks', '❌', 'Out of the v1 subset'],
+    ],
+    tests: [
+      '`packages/git/tests/commit-sha-parity.test.ts`',
+      '`packages/git/tests/fs-adapter.test.ts`',
+      '`packages/git/tests/capability-local.test.ts`',
+      '`packages/git/tests/checkout.test.ts`',
+      '`packages/git/tests/diff.test.ts`',
+      '`packages/git/tests/cors-proxy.test.ts`',
+      '`packages/git/tests/http-plugin.test.ts`',
+      '`packages/git/tests/loud-throws.test.ts`',
+      '`packages/git/tests/network.integration.test.ts`',
+      '`packages/shell/tests/git-cli.test.ts`',
+      '`packages/shell/tests/git-fixtures.test.ts`',
+    ],
+    limitations: [
+      'git runs as pure JS (isomorphic-git) over the Memory VFS — local porcelain writes canonical git objects, so commit/tree/blob SHA-1s match real git exactly; the network is smart-HTTP only.',
+      'Browser same-origin ceiling: GitHub/GitLab/Bitbucket smart-HTTP endpoints send no CORS headers, so cross-origin clone/fetch/push need `RIFTY_GIT_CORS_PROXY` (D-004) or a CORS-enabled host; SSH and `git://` need raw TCP that the browser has not. All throw `NotImplementedError` — never a silent network failure.',
+      'The VFS has no exec-bit or symlink layer (ADR-0050/0167): file mode is fixed `100644`, so repos containing executable files or symlinks diverge in tree-SHA from canonical git. Recorded as a loud limitation, not a silent lie.',
+      'Exotic plumbing (rebase, submodules, worktrees, sparse/partial clone, gc, reflog, bisect, blame, hooks, `.gitattributes`/CRLF filters, GPG signing) is out of the v1 subset and throws `NotImplementedError`.',
+    ],
+  },
 ];
 
 async function listFilesRecursive(dir) {
@@ -402,7 +685,7 @@ undocumented, not supported. The point is honest fit: tested support, visible ca
 unsupported rows.
 
 Each markdown here cites the covering tests in \`tests/conformance/\` and \`tests/integration/\` for a
-Node-compatible area. \`fs.md\`/\`streams.md\`/\`http.md\`/\`zlib.md\` are rendered by \`pnpm compat:generate\`
+Node-compatible area. \`fs.md\`/\`streams.md\`/\`http.md\`/\`zlib.md\`/\`git.md\` are rendered by \`pnpm compat:generate\`
 from static inventories whose cited test files are existence-checked, not re-run — deriving statuses
 from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-test-result-sink\`.
 
@@ -412,6 +695,8 @@ from test RESULTS is tracked in \`docs/backlog/toolchain-build/compat-matrix-tes
 - [streams.md](./streams.md) — \`node:stream\` subset
 - [http.md](./http.md) — \`node:http\` / browser-local port registry subset
 - [zlib.md](./zlib.md) — \`node:zlib\` web-compression-backed async subset (ADR-0159)
+- [ts-language-service.md](./ts-language-service.md) — in-browser \`ts.LanguageService\` over the VFS (\`@riftydev/ts-language-service\`, ADR-0166)
+- [git.md](./git.md) — git over the VFS (isomorphic-git, ADR-0167); offline-faithful porcelain + smart-HTTP network ceiling
 - [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal \`node <file>\` command + its gaps (ADR-0155/0157)
 - [wasi.md](./wasi.md) — WASI preview1 syscall surface (\`@riftydev/runtime-wasi\`)
 - [incompatible-packages.md](./incompatible-packages.md) — packages rifty can't run (native deps)

@@ -123,6 +123,20 @@ export async function writeInstallStamp(
 }
 
 /**
+ * Rewrite an existing stamp's `slug` in place (ADR-0165): a Save MOVES the
+ * scratch tree to `/projects/<id>/`, so its node_modules is now project <id>'s —
+ * re-key the stamp so a later `installStampSatisfied(root, <id>)` reuses it. The
+ * deps + package count are unchanged by a move, so no re-read. No-op when there
+ * is no stamp (a fresh, never-installed scratch — best-effort).
+ */
+export async function restampSlug(vfs: Vfs, root: string, slug: string): Promise<void> {
+  const stamp = await readInstallStamp(vfs, root);
+  if (!stamp) return;
+  const next: InstallStamp = { ...stamp, slug };
+  await vfs.writeFile(installStampPath(root), `${JSON.stringify(next, null, 2)}\n`);
+}
+
+/**
  * The skip predicate: stamp present, its slug matches the project being booted,
  * `node_modules/` exists, and deps still match package.json (freshness guard).
  * Returns the stamp (for its package count) or null.

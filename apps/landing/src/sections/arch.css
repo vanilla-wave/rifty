@@ -1,0 +1,39 @@
+.arch {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 64px var(--gutter) 24px;
+}
+
+.arch-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+
+.arch-index {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ac);
+}
+
+.arch-label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--t3);
+  margin: 0;
+}
+
+.arch-intro {
+  font-size: 17px;
+  color: var(--t2);
+  margin: 0 0 28px;
+  max-width: 640px;
+  line-height: 1.5;
+}
+
+.arch-intro-em {
+  color: rgba(255, 255, 255, 0.85);
+}

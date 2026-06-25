@@ -2,8 +2,78 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **`git` fidelity hardening — no silent false-successes, faithful error surfaces (ADR-0167).**
+  - **Repository guard.** Every verb except `init`/`clone` now verifies a repo governs the cwd first (real git's discovery, walking up for `.git`). A NON-repo → `fatal: not a git repository (or any of the parent directories): .git` (exit 128) instead of a silent false-success (`status` had reported a clean tree, `commit` fabricated a root commit). A verb from a SUBDIRECTORY → loud `git.subdir` ceiling (exit 128) — never a silent wrong-tree result (cwd-relative pathspec prefixing is deferred, see backlog).
+  - **`commit` no longer fabricates an empty commit.** Nothing staged → real git's exit-1 summary to stdout (`nothing to commit, working tree clean` / `… untracked files present` / `nothing to commit (create/copy files…)`), no commit written; `--amend` still allowed.
+  - **`commit -a`/`--all` + `-am`** stage tracked modifications + deletions (not untracked) before committing (`git add -u` semantics); combined short clusters expand correctly. Any UNKNOWN `commit` flag now loud-throws (`git.commit.<flag>`, exit 128) instead of being silently ignored.
+  - **`diff`** is the unstaged delta (index ↔ workdir, like bare `git diff`); untracked + ignored files are no longer shown.
+  - **Core-verb error fidelity.** `log` on an unborn HEAD → `fatal: your current branch '<b>' does not have any commits yet` (128); `add` of a missing path → `fatal: pathspec '<x>' did not match any files` (128) — no leaked iso-git "Could not find …" exit-1.
+  - **`clone <url> [<dir>]`** clones into a NEW subdirectory (url basename, or the explicit `<dir>`), not the cwd; a non-empty destination is refused with git's `fatal: destination path '<x>' already exists and is not an empty directory.` (128).
+  - **`switch <name>`** that is neither a branch nor any ref → `fatal: invalid reference: <name>` (128), not a leaked plumbing error.
+- **`git` fidelity hardening, round 2 (adversarial audit follow-ups).**
+  - **Repository guard validates `.git/HEAD`**, not just a `.git` entry — a bare `mkdir .git` / empty / partial `.git` (or a `.git` FILE) is no longer accepted as a repo (was a silent false-success: `status` reported clean). Discovery keeps walking up, ending in the `not a git repository` fatal.
+  - **`commit -m a -m b`** joins paragraphs (`a\n\nb`) instead of silently dropping the first; **`commit -m ''`** → git's `Aborting commit due to empty commit message.` (exit 1), not a leaked iso-git `MissingParameterError`. The one-line summary shows only the message's first line.
+  - **`git add` flag discipline + all-or-nothing.** Unknown flags loud-throw `git.add.<flag>` (was silently dropped); recognizes `-A`/`--all`/`-u`/`--update`/`-f`/`--force`. Pathspecs are validated before staging (a single miss stages nothing); a gone-but-tracked path stages its deletion; an explicit ignored path is refused unless `-f`; no pathspec → git's `Nothing specified, nothing added.` advisory (exit 0, was a spurious exit 1).
+  - **`git diff` rejects unsupported forms** (`--cached`/`--staged`/`HEAD`/two-ref/pathspec) with a loud `git.diff.<x>` ceiling instead of silently returning the bare index↔workdir diff; **binary** changes render `Binary files … differ`.
+  - **`git fetch`/`pull`/`push` with a remote NAME** (`git push origin main`) resolve the remote from config instead of mistaking it for a URL transport ceiling; `-f`/`--force` honored on push; other network flags loud-throw.
+  - **`git clone`**: the destination-exists guard runs before transport (so ssh + non-empty dest reports the dest fatal, not the transport ceiling); no `<url>` → git's `fatal: You must specify a repository to clone.`; a `…/.git` URL falls back to the host so the destination is never empty.
+  - **Defensive error mapping** for `status`/`branch`: a corrupt-repo iso-git `NotFoundError` maps to `fatal:` exit 128 rather than leaking as the shell's generic exit 1.
+
 ### Added
 
+- **`git` builtin over `@riftydev/git` (isomorphic-git on the ambient VFS).**
+  Local porcelain: `init`, `status` (`--porcelain` v1 `XY` + human default),
+  `add <pathspec…>` (incl. `.` / `-A`), `commit -m`, `log` (+ `--oneline`),
+  `diff` (structured unified-diff text), `branch`. Identity/dates derive from
+  `GIT_AUTHOR_*` / `GIT_COMMITTER_*` env (fallback `rifty`/`rifty@localhost`).
+  Porcelain `XY` mapping cross-checked against real git 2.50.1. Network verbs
+  (`clone <url>`/`fetch`/`pull`/`push`) drive smart-HTTP via the facade; any
+  failure — unsupported-transport / cross-origin `NotImplementedError`, or a real
+  network/protocol error — surfaces as exit 128 with its message on stderr
+  (`pull` commits the merge under the shell-env identity; `clone` without a
+  `<url>` → exit 128). Unknown subcommand → exit
+  1; no ambient filesystem → exit 128. Conformance-locked: `git-fixtures.test.ts`
+  byte-asserts `status --porcelain` (untracked / staged / mixed) + `log
+  --oneline` against frozen real-git 2.50.1 golden fixtures
+  (`packages/git/fixtures/`, ADR-0093) — never spawns git at test time.
+- **`git checkout` — branch-switch + file-restore, byte-exact to real git
+  2.50.1.** `checkout <branch>` (switch / already-on), `-b <name> [<start>]`
+  (create+switch), `-f`/`--force`, `<full-sha>` (detached HEAD + advisory),
+  `-- <pathspec…>` and `<tree-ish> -- <pathspec…>` (restore from index / tree),
+  bare-positional ref↔path disambiguation (single arg: ref wins — branch
+  precedence, matching real git; neither → pathspec-miss). Bare `git checkout`
+  (and `git checkout --` with no pathspecs) is a clean-tree no-op (exit 0,
+  silent). EVERY message goes to stderr (stdout stays empty); restore is
+  silent. Typed git user-errors map to git's exact stderr: conflict refusal +
+  pathspec-miss (exit 1), branch-exists (exit 128). Ceiling
+  flags/args (`-B`, `--orphan`, `-p`, `-m`, `--ours`/`--theirs`, `-t`, bare `-`,
+  revspec arithmetic (`HEAD~1`/`main^`/`@{-1}`/`HEAD@{1}` → `git.checkout.revspec`),
+  any unrecognized flag) and glob/magic pathspecs throw
+  `NotImplementedError('git.checkout.<x>')` exit 128 — loud, never silent.
+  Conformance-locked: `git-fixtures.test.ts` byte-asserts switch/create/already/
+  conflict/detached/restore (both streams) against frozen real-git fixtures
+  (`packages/git/fixtures/checkout-*`); the detached test pins the canonical SHA
+  `7fdebb4…`.
+- **`git switch` / `restore` / `config` + `commit --amend` + identity from
+  config.** `switch <branch>` / `-c [<start>]` / `--detach <commit>` (branch-only,
+  reuses the checkout engine; byte-exact stderr vs git 2.50.1 — `switch --detach`
+  prints the HEAD-line ONLY, no advisory block; a non-`--detach` commit →
+  `fatal: a branch is expected, got commit` exit 128; `switch -` →
+  `NotImplementedError('git.switch.previous')`). `restore [--staged]
+  [--source=<tree>] <pathspec…>` (worktree from index/tree, or `--staged`
+  unstage via `resetIndex`; silent like git; `--staged --source` →
+  `git.restore.staged-source`; revspec source reuses the checkout revspec
+  ceiling; no-match → pathspec-miss exit 1). `config <key>` / `config <key>
+  <value>` (bounded get/set on `.git/config`; unset key → exit 1 silent;
+  `--list`/other flags → `git.config.<flag>` exit 128). `commit --amend`
+  replaces HEAD (reuses the prior message when no `-m`). Author identity now
+  resolves `GIT_AUTHOR_*` env → `user.name`/`user.email` config → built-in
+  default, so `git config user.email x` then `git commit` (no env) authors as x.
+  Conformance-locked: `git-fixtures.test.ts` byte-asserts switch
+  (existing/create/already/detached) + restore (worktree/staged) against frozen
+  real-git 2.50.1 fixtures (`packages/git/fixtures/{switch,restore}-*`).
 - **Installed CLIs invokable by name — PATH-style `node_modules/.bin` lookup
   (ADR-0137).** A command miss now walks up to the nearest
   `node_modules/.bin/<name>` launcher shim (resolution order: registered
@@ -16,6 +86,15 @@
   type. Closes (residual parked) `docs/backlog/shell/node-modules-bin-execution`.
 
 ### Fixed
+
+- **`git` restore/config/amend ceilings now throw LOUD at exit 128, never leak as
+  a generic exit-1.** `git restore` with no pathspec renders via the restore error
+  renderer (`git.restore.no-pathspec`, exit 128) instead of escaping uncaught to
+  the shell handler. `git config` flag/no-key ceilings use the typed
+  `NotImplementedError('git.config.<flag>')` (message-format parity with the
+  compat matrix; `--list` etc. stay byte-identical at exit 128). `commit --amend`
+  on an unborn HEAD (fresh repo, no commit) now prints `fatal: You have nothing
+  to amend.` exit 128, not the leaked iso-git `Could not find HEAD` exit-1.
 
 - **Trailing `&` after a compound separator now backgrounds only the final
   segment.** `echo a ; slow &` runs `echo a` in the foreground and starts only

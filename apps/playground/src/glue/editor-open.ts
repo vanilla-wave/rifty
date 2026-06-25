@@ -29,7 +29,7 @@ export type OpenClass =
   | 'await-snapshot';
 
 export interface OpenContext {
-  /** {@link ../components/EditorHost.tsx PROGRAM_MIRROR_PATH}. */
+  /** Root-relative program-mirror path (ADR-0165 §4): {@link ./program-path.ts programMirrorPath}. */
   readonly programMirrorPath: string;
   /** Path is under a `node_modules` segment. */
   readonly isNodeModules: boolean;

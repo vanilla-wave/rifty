@@ -6,6 +6,7 @@ import {
   installStampSatisfied,
   readEffectiveDeps,
   readInstallStamp,
+  restampSlug,
   writeInstallStamp,
 } from './install-stamp.ts';
 
@@ -121,5 +122,27 @@ describe('install stamp (ADR-0135)', () => {
     expect(depsEqual({ a: '1', b: '2' }, { b: '2', a: '1' })).toBe(true);
     expect(depsEqual({ a: '1' }, { a: '2' })).toBe(false);
     expect(depsEqual({ a: '1' }, { a: '1', b: '2' })).toBe(false);
+  });
+
+  it('restampSlug rewrites the slug of a moved tree without re-reading deps', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await seedNodeModules(vfs);
+    await writeInstallStamp(vfs, ROOT, 14, 'scratch');
+
+    await restampSlug(vfs, ROOT, 'proj-1');
+
+    const stamp = await readInstallStamp(vfs, ROOT);
+    expect(stamp?.slug).toBe('proj-1');
+    expect(stamp?.deps).toEqual({ vite: '^5.4.0' }); // deps unchanged by the rename
+    expect((await installStampSatisfied(vfs, ROOT, 'proj-1'))?.packages).toBe(14);
+    expect(await installStampSatisfied(vfs, ROOT, 'scratch')).toBeNull();
+  });
+
+  it('restampSlug is a no-op when there is no stamp (best-effort)', async () => {
+    const vfs = new MemoryVfs();
+    await seedProject(vfs);
+    await restampSlug(vfs, ROOT, 'proj-1'); // does not throw
+    expect(await readInstallStamp(vfs, ROOT)).toBeNull();
   });
 });

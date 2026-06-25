@@ -14,7 +14,7 @@ import {
  * OPFS content-cache write-through (ADR-0072) then persists shell writes, so a
  * file written from the shell survives `page.reload()`.
  *
- * Load-bearing: write `MARKER > /workspace/persist.txt`, reload (browser
+ * Load-bearing: write `MARKER > /scratch/persist.txt`, reload (browser
  * terminates the owner worker), re-open a shell, `cat` → MARKER returns from the
  * OPFS-preloaded tree. On the memory backend this fails (the reload loses it),
  * so the assertion is honest, not trivially green.
@@ -49,8 +49,8 @@ test.describe('owner workspace persists across reload (OPFS)', () => {
     // Write via the shell → owner syncMirror. The dev server is already LIVE (boot
     // write-through drained by the install stamp flush), so this small write drains
     // to OPFS promptly — durable well before the reload below.
-    await runTerminalLine(page, `echo ${marker} > /workspace/persist.txt`);
-    await runTerminalLine(page, 'cat /workspace/persist.txt');
+    await runTerminalLine(page, `echo ${marker} > /scratch/persist.txt`);
+    await runTerminalLine(page, 'cat /scratch/persist.txt');
     await expectTerminalContains(page, marker, 15_000);
 
     // Reload: the browser terminates the owner worker; on re-boot the owner wires
@@ -58,7 +58,7 @@ test.describe('owner workspace persists across reload (OPFS)', () => {
     await page.reload();
     await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 60_000 });
     await openShellTerminal(page);
-    await runTerminalLine(page, 'cat /workspace/persist.txt');
+    await runTerminalLine(page, 'cat /scratch/persist.txt');
     await expectTerminalContains(page, marker, 20_000);
   });
 });

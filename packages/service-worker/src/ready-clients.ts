@@ -37,6 +37,10 @@ export interface ReadyClientsRegistry {
    * that owns the port.
    */
   readyOwnersOfPort(port: number): string[];
+  /** Has this ready client advertised at least one concrete preview port? */
+  clientAdvertisedPorts(id: string): boolean;
+  /** Did this ready client advertise this concrete preview port? */
+  clientOwnsPort(id: string, port: number): boolean;
   /**
    * Wait until the given client is ready, or until `timeoutMs` elapses.
    * Resolves with `'ready'` on success, `'timeout'` when the timer fires,
@@ -142,6 +146,12 @@ export function createReadyClientsRegistry(
         if (ready.has(id) && ports.has(port)) owners.push(id);
       }
       return owners;
+    },
+    clientAdvertisedPorts(id): boolean {
+      return ready.has(id) && (portsByClient.get(id)?.size ?? 0) > 0;
+    },
+    clientOwnsPort(id, port): boolean {
+      return ready.has(id) && (portsByClient.get(id)?.has(port) ?? false);
     },
     waitForReady(id, timeoutMs): Promise<'ready' | 'timeout' | 'mismatch'> {
       if (mismatched.has(id)) return Promise.resolve('mismatch');

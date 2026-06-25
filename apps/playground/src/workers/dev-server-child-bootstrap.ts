@@ -30,11 +30,21 @@ import { isDevServerOwnerMessage } from '../glue/dev-server-ipc.ts';
 import { bootDevServer } from './dev-server-boot.ts';
 import { resolveDevServerChildConfig } from './dev-server-child-config.ts';
 import type { DevServerHandle } from './dev-server-controller.ts';
-import { type KernelIpc, installRuntimeGlobals } from './worker-runtime-globals.ts';
+import {
+  type KernelIpc,
+  installBundleLocalBuffer,
+  installRuntimeGlobals,
+} from './worker-runtime-globals.ts';
 
 async function bootstrapDevServerChild(): Promise<void> {
   registerNetBuiltins();
   registerSqliteBuiltin();
+
+  // Realign globalThis.Buffer with THIS bundle's `require('buffer')` (the one
+  // express builds chunks with) — else etag reads the kernel-worker-entry bundle's
+  // copy installed by the pre-entry hook and `Buffer.isBuffer` is false in a
+  // production build (res.json → etag throw). See installBundleLocalBuffer.
+  installBundleLocalBuffer();
 
   const env = { ...(readKernelProcessSpec()?.env ?? globalThis.process.env) };
   const kernelIpc: KernelIpc = installRuntimeGlobals();

@@ -78,7 +78,9 @@
   --rf-ok-text: #5bd79b;
   --rf-ok-wash: rgba(50, 186, 118, 0.18);
   --rf-warn: #ffbe5c;
+  --rf-warn-text: #ffce84;
   --rf-warn-wash: rgba(255, 190, 92, 0.16);
+  --rf-degraded-surface: #221d1a;
   --rf-err: rgba(255, 130, 158, 0.95);
   --rf-err-border: rgba(255, 0, 61, 0.4);
   --rf-err-bg: #281219;
@@ -291,6 +293,43 @@ body {
 .rf-tpl__chip:focus-visible {
   outline: 2px solid var(--rf-accent);
   outline-offset: 1px;
+}
+/* Project-switcher chip (top bar; ADR-0165 §9) — launcher trigger, not a gallery. */
+.rf-chip {
+  height: 32px;
+  padding: 0 11px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+.rf-chip[data-dirty="true"] {
+  background: rgba(199, 240, 90, 0.1);
+  border-color: rgba(199, 240, 90, 0.35);
+}
+.rf-chip__tile {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.07);
+  font: 600 9px / 20px var(--rf-font-mono);
+  text-align: center;
+}
+.rf-chip__name {
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.85);
+}
+.rf-chip__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffbe5c;
+}
+.rf-chip__chev {
+  color: rgba(255, 255, 255, 0.4);
 }
 .rf-tpl__badge {
   flex: none;
@@ -1206,6 +1245,19 @@ body {
   min-height: 0;
   background: var(--rf-panel);
 }
+/* View pane (ADR-0166 P1.9c): the terminal pane stays mounted (preserves xterm
+   scrollback) and toggles visibility; the problems pane mounts only when active.
+   Both fill the body — the terminal slots' inset:0 resolves against this box. */
+.rf-console__pane {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+}
+.rf-console__pane[data-active="false"] {
+  visibility: hidden;
+  pointer-events: none;
+}
 .rf-terminal-slot {
   position: absolute;
   inset: 0;
@@ -1220,6 +1272,117 @@ body {
 }
 .rf-console[data-collapsed="true"] .rf-console__body {
   display: none;
+}
+
+/* Bottom-panel view switcher tabs (ADR-0166 P1.9c): Terminal | Problems. */
+.rf-console__views {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+.rf-console__view {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 9px;
+  border: none;
+  border-radius: var(--rf-r-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.rf-console__view:hover {
+  background: var(--rf-hover);
+}
+.rf-console__view[data-active="true"] {
+  background: var(--rf-accent-sel);
+}
+.rf-console__view[data-active="true"] .rf-eyebrow {
+  color: var(--rf-accent-text-2);
+}
+.rf-console__view:focus-visible {
+  outline: 2px solid var(--rf-accent);
+  outline-offset: -2px;
+}
+.rf-console__badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--rf-accent);
+  color: #1d1f26;
+  font: 600 10px / 1 var(--rf-font-sans);
+}
+
+/* Problems panel (ADR-0166 P1.9c). */
+.rf-problems {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: 6px 4px;
+  font: 400 12.5px / 18px var(--rf-font-sans);
+}
+.rf-problems__empty {
+  padding: 12px 14px;
+  color: var(--rf-text-muted);
+}
+.rf-problems__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rf-problems__row {
+  margin: 0;
+}
+.rf-problems__item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 3px 10px;
+  border: none;
+  background: transparent;
+  color: var(--rf-text);
+  text-align: left;
+  cursor: pointer;
+}
+.rf-problems__item:hover {
+  background: var(--rf-hover);
+}
+.rf-problems__item:focus-visible {
+  outline: 2px solid var(--rf-accent);
+  outline-offset: -2px;
+}
+.rf-problems__sev {
+  flex: none;
+  font-size: 11px;
+  line-height: 18px;
+}
+.rf-problems__sev[data-severity="1"] {
+  color: #ff6b6b;
+}
+.rf-problems__sev[data-severity="2"] {
+  color: #ffad7a;
+}
+.rf-problems__sev[data-severity="3"],
+.rf-problems__sev[data-severity="4"] {
+  color: var(--rf-text-muted);
+}
+.rf-problems__msg {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rf-problems__loc {
+  flex: none;
+  color: var(--rf-text-muted);
+  font: 400 11.5px / 18px var(--rf-font-mono, monospace);
 }
 
 .rf-terminal-shell {
@@ -1875,6 +2038,73 @@ body {
 .rf-status__coi[data-coi="true"] .rf-status__dot {
   background: var(--rf-accent);
 }
+.rf-status__unsaved {
+  background: #ffbe5c;
+  color: #0e0f12;
+  font: 600 8.5px / 14px var(--rf-font-mono);
+  padding: 0 5px;
+  border-radius: 3px;
+}
+
+/* — degraded (memory backend) status + banner (ADR-0165 §8) — */
+.rf-statusbar[data-storage-mode="memory"] {
+  background: var(--rf-degraded-surface);
+  border: 1px solid rgba(255, 190, 92, 0.3);
+  border-radius: var(--rf-r);
+}
+.rf-banner--degraded {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 52px;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: var(--rf-degraded-surface);
+  border: 1px solid rgba(255, 190, 92, 0.35);
+  border-radius: var(--rf-r-lg);
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.3);
+}
+.rf-banner--degraded__ico {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--rf-r);
+  background: var(--rf-warn-wash);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--rf-warn);
+}
+.rf-banner--degraded__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.rf-banner--degraded__title {
+  font: 600 12.5px / 16px var(--rf-font-mono);
+  color: var(--rf-text);
+}
+.rf-banner--degraded__msg {
+  font: 400 11.5px / 15px var(--rf-font-mono);
+  color: var(--rf-text-dim);
+}
+.rf-btn--warn-ghost {
+  height: 30px;
+  padding: 0 13px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 190, 92, 0.5);
+  background: transparent;
+  color: var(--rf-warn-text);
+  cursor: pointer;
+}
+.rf-btn--warn-ghost:hover {
+  background: rgba(255, 190, 92, 0.1);
+}
 
 /* ====================================================================== */
 /* Splitters — live inside the 12px gaps, invisible until hover            */
@@ -1980,6 +2210,590 @@ body.rf-resizing iframe {
   display: inline-flex;
   color: var(--rf-accent);
 }
+/* Delete-with-Undo affordance carried on the store toast (ADR-0165 §9). */
+.rf-toast__undo {
+  flex: none;
+  margin-left: 4px;
+  padding: 3px 9px;
+  background: transparent;
+  border: 1px solid var(--rf-line-strong);
+  border-radius: var(--rf-r-sm);
+  color: var(--rf-accent-text);
+  font: 600 11.5px / 15px var(--rf-font-sans);
+  cursor: pointer;
+}
+.rf-toast__undo:hover {
+  background: var(--rf-accent-sel);
+}
+
+/* ====================================================================== */
+/* Multi-project launcher + dialogs (ADR-0165)                             */
+/* ====================================================================== */
+
+/* Button tones the dialogs/launcher layer onto the base .rf-btn. */
+.rf-btn--lime {
+  background: var(--rf-accent);
+  border-color: transparent;
+  color: var(--rf-accent-ink);
+  font-weight: 600;
+}
+.rf-btn--lime:hover {
+  background: var(--rf-accent-hover);
+}
+.rf-btn--amber {
+  background: var(--rf-warn);
+  border-color: transparent;
+  color: rgba(0, 0, 0, 0.82);
+  font-weight: 600;
+}
+.rf-btn--amber:hover {
+  background: var(--rf-warn-text);
+}
+.rf-btn--danger {
+  background: #ff6b6b;
+  border-color: transparent;
+  color: rgba(0, 0, 0, 0.82);
+  font-weight: 600;
+}
+.rf-btn--danger:hover {
+  background: #ff8585;
+}
+.rf-btn--danger-outline {
+  background: transparent;
+  border-color: var(--rf-err-border);
+  color: var(--rf-err);
+}
+.rf-btn--danger-outline:hover {
+  background: rgba(255, 0, 61, 0.1);
+}
+.rf-btn--outline {
+  background: transparent;
+  border-color: var(--rf-line-strong);
+  color: var(--rf-text-dim);
+}
+.rf-btn--outline:hover {
+  background: var(--rf-hover);
+  color: var(--rf-text);
+}
+.rf-btn--block {
+  width: 100%;
+  justify-content: center;
+}
+
+/* ACTIVE badge + disabled 'soon' pill. */
+.rf-badge {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: var(--rf-r-pill);
+  font: 600 9.5px / 14px var(--rf-font-sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.rf-badge--active {
+  color: var(--rf-accent-ink);
+  background: var(--rf-accent);
+}
+.rf-pill {
+  flex: none;
+  margin-left: auto;
+  padding: 1px 7px;
+  border-radius: var(--rf-r-pill);
+  font: 600 9px / 13px var(--rf-font-sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.rf-pill--soon {
+  color: var(--rf-text-muted);
+  background: var(--rf-hover);
+}
+
+/* ---- Launcher modal (1040x624 card, ADR-0165 §9) ---- */
+.rf-launcher__veil {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  background: rgba(8, 9, 12, 0.62);
+  animation: rf-fade 0.15s var(--rf-ease) both;
+}
+.rf-launcher {
+  display: flex;
+  flex-direction: column;
+  width: min(1040px, calc(100vw - 64px));
+  height: min(624px, calc(100vh - 80px));
+  background: var(--rf-panel);
+  border: 1px solid var(--rf-line-strong);
+  border-radius: 12px;
+  box-shadow: var(--rf-shadow-pop);
+  overflow: hidden;
+  animation: rf-rise 0.18s var(--rf-ease) both;
+}
+.rf-launcher__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--rf-line-panel);
+}
+.rf-launcher__mark {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--rf-accent);
+  transform: rotate(45deg);
+}
+.rf-launcher__tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--rf-inset);
+  border: 1px solid var(--rf-line-inner);
+  border-radius: var(--rf-r);
+}
+.rf-launcher__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: transparent;
+  border: none;
+  border-radius: var(--rf-r-sm);
+  color: var(--rf-text-dim);
+  font: 500 12px / 16px var(--rf-font-sans);
+  cursor: pointer;
+}
+.rf-launcher__tab[data-active="true"] {
+  background: var(--rf-accent-sel);
+  color: var(--rf-accent-text-2);
+}
+.rf-launcher__count {
+  padding: 0 6px;
+  border-radius: var(--rf-r-pill);
+  background: var(--rf-hover-2);
+  font-size: 10.5px;
+  color: var(--rf-text-dim);
+}
+.rf-launcher__search {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 12px;
+  background: var(--rf-inset);
+  border: 1px solid var(--rf-line-inner);
+  border-radius: var(--rf-r-sm);
+  color: var(--rf-text);
+  font: 400 12.5px / 18px var(--rf-font-sans);
+}
+.rf-launcher__search:focus-visible {
+  outline: none;
+  border-color: var(--rf-accent-border);
+}
+.rf-launcher__search::placeholder {
+  color: var(--rf-text-muted);
+}
+.rf-launcher__close {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--rf-r-sm);
+  color: var(--rf-text-faint);
+  cursor: pointer;
+}
+.rf-launcher__close:hover {
+  background: var(--rf-hover);
+  color: var(--rf-text);
+}
+
+/* ---- Starters tab (the gallery) ---- */
+.rf-starters {
+  flex: 1;
+  overflow: auto;
+  padding: 16px 18px 22px;
+}
+.rf-starters__cats {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.rf-starters__cat {
+  padding: 5px 12px;
+  background: var(--rf-chip);
+  border: 1px solid var(--rf-line-panel);
+  border-radius: var(--rf-r-pill);
+  color: var(--rf-text-dim);
+  font: 500 11.5px / 15px var(--rf-font-sans);
+  cursor: pointer;
+}
+.rf-starters__cat[data-active="true"] {
+  background: var(--rf-accent-sel);
+  border-color: var(--rf-accent-border);
+  color: var(--rf-accent-text-2);
+}
+.rf-starters__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(228px, 1fr));
+  gap: 12px;
+}
+.rf-starters__head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 8px 2px 2px;
+}
+.rf-starters__headlabel {
+  font: 600 10.5px / 14px var(--rf-font-sans);
+  letter-spacing: 0.1em;
+  color: var(--rf-text-faint);
+}
+.rf-starters__headnote {
+  font: 400 11px / 14px var(--rf-font-sans);
+  color: var(--rf-text-ghost);
+}
+.rf-starters__card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  padding: 14px;
+  text-align: left;
+  background: var(--rf-inset);
+  border: 1px solid var(--rf-line-panel);
+  border-radius: var(--rf-r-lg);
+  cursor: pointer;
+}
+.rf-starters__card:hover {
+  border-color: var(--rf-accent-border);
+  background: var(--rf-panel);
+}
+.rf-starters__tile {
+  grid-row: 1 / 3;
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--rf-r-sm);
+  background: rgba(255, 255, 255, 0.06);
+  font: 600 13px / 1 var(--rf-font-mono);
+}
+.rf-starters__label {
+  align-self: center;
+  font: 600 13px / 17px var(--rf-font-sans);
+  color: var(--rf-text);
+}
+.rf-starters__blurb {
+  grid-column: 2;
+  font: 400 11.5px / 16px var(--rf-font-sans);
+  color: var(--rf-text-faint);
+}
+.rf-starters__setup {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  font: 500 10.5px / 14px var(--rf-font-sans);
+  color: var(--rf-text-muted);
+}
+.rf-starters__setup[data-instant] {
+  color: var(--rf-ok-text);
+}
+
+/* ---- Projects tab ---- */
+.rf-projects {
+  flex: 1;
+  overflow: auto;
+  padding: 16px 18px 22px;
+}
+.rf-scratch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: var(--rf-inset);
+  border: 1px solid var(--rf-line-panel);
+  border-radius: var(--rf-r-lg);
+}
+.rf-scratch[data-active="true"] {
+  border-color: var(--rf-accent-border);
+}
+.rf-scratch__tile {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--rf-r-sm);
+  background: rgba(255, 255, 255, 0.06);
+  font: 600 13px / 1 var(--rf-font-mono);
+}
+.rf-scratch__body {
+  flex: 1;
+  min-width: 0;
+}
+.rf-scratch__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 600 13px / 18px var(--rf-font-sans);
+  color: var(--rf-text);
+}
+.rf-scratch__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--rf-warn);
+}
+.rf-scratch__sub {
+  margin-top: 2px;
+  font: 400 11.5px / 16px var(--rf-font-sans);
+  color: var(--rf-text-faint);
+}
+.rf-projects__label {
+  margin: 20px 2px 10px;
+  font: 600 10.5px / 14px var(--rf-font-sans);
+  letter-spacing: 0.1em;
+  color: var(--rf-text-faint);
+}
+.rf-projects__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.rf-pcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  text-align: left;
+  background: var(--rf-inset);
+  border: 1px solid var(--rf-line-panel);
+  border-radius: var(--rf-r-lg);
+  cursor: pointer;
+}
+.rf-pcard:hover {
+  border-color: var(--rf-line-strong);
+  background: var(--rf-panel);
+}
+.rf-pcard[data-active="true"] {
+  border-color: var(--rf-accent-border);
+}
+.rf-pcard__row1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rf-pcard__tile {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--rf-r-sm);
+  background: rgba(255, 255, 255, 0.06);
+  font: 600 12px / 1 var(--rf-font-mono);
+}
+.rf-pcard__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 13px / 17px var(--rf-font-sans);
+  color: var(--rf-text);
+}
+.rf-pcard__menu {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: none;
+  border-radius: var(--rf-r-sm);
+  color: var(--rf-text-faint);
+  cursor: pointer;
+}
+.rf-pcard__menu:hover {
+  background: var(--rf-hover);
+  color: var(--rf-text);
+}
+.rf-pcard__meta {
+  font: 400 11px / 15px var(--rf-font-mono);
+  color: var(--rf-text-faint);
+}
+.rf-pcard__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font: 400 10.5px / 14px var(--rf-font-sans);
+  color: var(--rf-text-muted);
+}
+.rf-pcard__edited,
+.rf-pcard__store {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.rf-pcard--new {
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+  gap: 7px;
+  border-style: dashed;
+  color: var(--rf-text-dim);
+  background: transparent;
+}
+.rf-pcard--new:hover {
+  border-color: var(--rf-accent-border);
+  color: var(--rf-text);
+}
+.rf-rowmenu {
+  position: absolute;
+  top: 40px;
+  right: 12px;
+  z-index: 5;
+  width: 200px;
+  padding: 5px;
+  background: var(--rf-pop);
+  border: 1px solid var(--rf-line-strong);
+  border-radius: var(--rf-r-lg);
+  box-shadow: var(--rf-shadow-pop);
+  animation: rf-rise 0.14s var(--rf-ease) both;
+}
+.rf-rowmenu__item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  background: transparent;
+  border: none;
+  border-radius: var(--rf-r-sm);
+  color: var(--rf-text-dim);
+  font: 400 12px / 16px var(--rf-font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+.rf-rowmenu__item:hover {
+  background: var(--rf-hover);
+  color: var(--rf-text);
+}
+.rf-rowmenu__item--danger {
+  color: var(--rf-err);
+}
+.rf-rowmenu__item--danger:hover {
+  background: rgba(255, 0, 61, 0.1);
+}
+.rf-rowmenu__item[data-disabled="true"] {
+  color: var(--rf-text-muted);
+  cursor: default;
+}
+.rf-rowmenu__item[data-disabled="true"]:hover {
+  background: transparent;
+}
+.rf-rowmenu__divider {
+  height: 1px;
+  margin: 5px 4px;
+  background: var(--rf-divider);
+}
+
+/* ---- The five project dialogs (400px card, ADR-0165 §7/§9) ---- */
+.rf-dialog__veil {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  background: rgba(8, 9, 12, 0.55);
+  animation: rf-fade 0.15s var(--rf-ease) both;
+}
+.rf-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(400px, calc(100vw - 48px));
+  padding: 22px;
+  background: var(--rf-panel);
+  border: 1px solid var(--rf-line-strong);
+  border-radius: 12px;
+  box-shadow: var(--rf-shadow-pop);
+  animation: rf-rise 0.18s var(--rf-ease) both;
+}
+.rf-dialog__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin-bottom: 12px;
+  border-radius: var(--rf-r);
+  background: var(--rf-hover);
+  color: var(--rf-text-dim);
+}
+.rf-dialog__icon[data-tone="lime"] {
+  background: var(--rf-accent-sel);
+  color: var(--rf-accent);
+}
+.rf-dialog__icon[data-tone="amber"] {
+  background: var(--rf-warn-wash);
+  color: var(--rf-warn);
+}
+.rf-dialog__icon[data-tone="danger"] {
+  background: rgba(255, 107, 107, 0.16);
+  color: #ff8585;
+}
+.rf-dialog__title {
+  margin: 0 0 8px;
+  font: 600 16px / 22px var(--rf-font-sans);
+  color: var(--rf-text);
+}
+.rf-dialog__body {
+  margin: 0 0 16px;
+  font: 400 12.5px / 19px var(--rf-font-sans);
+  color: var(--rf-text-faint);
+}
+.rf-dialog__body strong {
+  color: var(--rf-text-dim);
+  font-weight: 600;
+}
+.rf-dialog__input {
+  width: 100%;
+  height: 36px;
+  margin-bottom: 16px;
+  padding: 0 12px;
+  background: var(--rf-inset);
+  border: 1px solid var(--rf-line-inner);
+  border-radius: var(--rf-r-sm);
+  color: var(--rf-text);
+  font: 400 13px / 18px var(--rf-font-sans);
+}
+.rf-dialog__input:focus-visible {
+  outline: none;
+  border-color: var(--rf-accent-border);
+}
+.rf-dialog__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.rf-dialog__actions--stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
 
 /* ====================================================================== */
 /* Capabilities (fallback screen)                                          */
@@ -2025,6 +2839,15 @@ body.rf-resizing iframe {
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+@keyframes rf-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 

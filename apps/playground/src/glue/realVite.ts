@@ -14,6 +14,7 @@
  */
 import { globalProcessManager, isSabIpcSupported } from '@riftydev/kernel';
 import { bridgeCrossRealmPreview, registerPort, unregisterPort } from '@riftydev/net';
+import { isTsResponseMessage } from '@riftydev/ts-language-service/protocol';
 import { NotImplementedError } from '@riftydev/vfs';
 import type { ProjectSpec } from '../templates/project-spec.ts';
 import { defaultProjectSpec } from '../templates/registry.ts';
@@ -21,6 +22,7 @@ import devServerWorkerUrl from '../workers/dev-server-child-bootstrap.ts?worker&
 import kernelWorkerUrl from '../workers/kernel-worker-entry.ts?worker&url';
 import nodeEntryWorkerUrl from '../workers/node-entry-bootstrap.ts?worker&url';
 import bootstrapWorkerUrl from '../workers/real-vite-bootstrap.ts?worker&url';
+import tsLspWorkerUrl from '../workers/ts-lsp-worker-entry.ts?worker&url';
 import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
 import {
   type ExecOptions,
@@ -161,6 +163,20 @@ export interface WorkspaceOwnerHandle {
     slug: string;
     setup: 'instant' | 'from-scratch';
   }): void;
+  /**
+   * Send a `rifty:ts-lsp` REQUEST envelope to the owner (ADR-0166 P1.9a). There
+   * is no direct page→LS channel — the LS is a grandchild the owner spawned — so
+   * the owner relays the frame to its LS child. `message` is a
+   * {@link import('@riftydev/ts-language-service').TsRequestMessage}; structured-
+   * clone-safe. No-op if the owner has exited.
+   */
+  sendTsLsp(message: unknown): void;
+  /**
+   * Subscribe to `rifty:ts-lsp` RESPONSE envelopes relayed back from the LS child
+   * through the owner (ADR-0166 P1.9a). Returns an unsubscribe. The page LS
+   * client correlates responses by `id`.
+   */
+  onTsLsp(cb: (message: unknown) => void): () => void;
   /** Terminate the owner worker; idempotent. */
   close(): void;
 }
@@ -185,6 +201,12 @@ export interface WorkspaceOwnerOptions {
   setup?: 'instant' | 'from-scratch';
   /** Install-stamp reuse key, carried over `RIFTY_RFV_SLUG`. */
   slug?: string;
+  /**
+   * Active STARTER id (preset id), carried over `RIFTY_RFV_STARTER` (ADR-0165 §4).
+   * The slug is the active ROOT id ('scratch'|projectId); the owner needs the
+   * starter to synthesize a scratch index entry. Defaults to the template id.
+   */
+  starter?: string;
   onLog?(line: string): void;
 }
 
@@ -206,9 +228,13 @@ export interface WorkspaceOwnerOptions {
  */
 export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): WorkspaceOwnerHandle {
   const template = opts.template ?? defaultProjectSpec();
-  const root = opts.root ?? '/workspace';
+  // ADR-0165 §4: the active root is `/scratch` or `/projects/<id>`; App always
+  // passes it via rootForId(activeId). Fallback is the default scratch root (the
+  // legacy single `/workspace` is deleted).
+  const root = opts.root ?? '/scratch';
   const setup = opts.setup ?? 'instant';
   const slug = opts.slug ?? template.id;
+  const starter = opts.starter ?? template.id;
   const workspaceId = opts.workspaceId ?? createPreviewOwnerToken();
   const snapshotPort = WORKSPACE_OWNER_SNAPSHOT_PORT;
   // Keys the page's `/preview/<port>/` SW route (ADR-0148/0150 P6b): the page
@@ -239,6 +265,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
         RIFTY_RFV_TEMPLATE: template.id,
         RIFTY_RFV_SETUP: setup,
         RIFTY_RFV_SLUG: slug,
+        RIFTY_RFV_STARTER: starter,
         // Dedicated snapshot/nm BroadcastChannel key (not a dev-server port);
         // the page subscribes on `handle.snapshotPort` to read the owner tree.
         RIFTY_RFV_PORT: String(snapshotPort),
@@ -252,6 +279,11 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
         RIFTY_NODE_ENTRY_WORKER_URL: nodeEntryWorkerUrl,
         // ADR-0150 P6b — child entry the owner spawns for the dev server.
         RIFTY_DEV_SERVER_WORKER_URL: devServerWorkerUrl,
+        // ADR-0166 P1.9a — child entry the owner spawns for the TS language
+        // service. Spawned FROM the owner (not the page) so the LS reads the
+        // owner's authoritative VFS over fs.* sync-RPC (a page-spawned LS would
+        // see an empty tree). page↔LS `rifty:ts-lsp` frames relay through the owner.
+        RIFTY_TS_LSP_WORKER_URL: tsLspWorkerUrl,
       },
       cwd: root,
       // ADR-0144: long-lived owner — the realm stays alive past the bootstrap
@@ -272,6 +304,9 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
 
   const devServerListeners = new Set<(frame: PtyDevServer) => void>();
   const previewListeners = new Set<(frame: PtyPreview) => void>();
+  // ADR-0166 P1.9a: `rifty:ts-lsp` RESPONSE envelopes the owner relays back from
+  // its LS child. The page LS client subscribes and correlates by `id`.
+  const tsLspListeners = new Set<(message: unknown) => void>();
   const client = createPtyClient({
     send: (frame) => {
       worker.send({ type: PTY_IPC_TYPE, frame });
@@ -303,9 +338,17 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   });
 
   worker.on('message', (message: unknown) => {
-    if (!isPtyIpcMessage(message)) return;
-    // Only owner→page frames are actionable here; drop any echoed page→owner.
-    if (isOwnerToPage(message.frame)) client.onFrame(message.frame);
+    if (isPtyIpcMessage(message)) {
+      // Only owner→page frames are actionable here; drop any echoed page→owner.
+      if (isOwnerToPage(message.frame)) client.onFrame(message.frame);
+      return;
+    }
+    // ADR-0166 P1.9a: TS LSP responses the owner relayed back from its LS child.
+    // Only RESPONSE envelopes are inbound here (the page sends requests); a stray
+    // echoed request envelope is ignored.
+    if (isTsResponseMessage(message)) {
+      for (const cb of tsLspListeners) cb(message);
+    }
   });
 
   // Readiness handshake (ADR-0146 / ADR-0148 / ADR-0155): request the current
@@ -389,6 +432,16 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     },
     requestPreview: () => client.requestPreview(),
     setDevConfig: (config) => client.setDevConfig(config),
+    sendTsLsp(message) {
+      // No-op once the owner is gone — the LS child died with it; the page LS
+      // client's per-request timeout rejects any in-flight call so nothing hangs.
+      if (exited) return;
+      worker.send(message);
+    },
+    onTsLsp(cb) {
+      tsLspListeners.add(cb);
+      return () => tsLspListeners.delete(cb);
+    },
     close() {
       archiveBridge.dispose();
       if (!exited) handle.kill('SIGTERM');

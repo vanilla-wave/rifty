@@ -42,6 +42,7 @@
   },
   "dependencies": {
     "@riftydev/io": "workspace:*",
-    "@riftydev/vfs": "workspace:*"
+    "@riftydev/vfs": "workspace:*",
+    "@riftydev/git": "workspace:*"
   }
 }

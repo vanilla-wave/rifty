@@ -381,6 +381,7 @@ export function setupPreviewBridge(
   opts: PreviewBridgeOptions = {},
 ): () => void {
   if (!('serviceWorker' in navigator)) return (): void => {};
+  const ownedPorts = opts.ports && opts.ports.length > 0 ? new Set(opts.ports) : null;
   const announceReady = (): void => {
     postHandshake(SW_PREVIEW_READY, opts);
   };
@@ -393,6 +394,7 @@ export function setupPreviewBridge(
       request?: SerializedRequest;
     };
     if (data?.type !== SW_PREVIEW_REQUEST || !data.request) return;
+    if (ownedPorts && !ownedPorts.has(data.request.port)) return;
     const replyPort = event.ports[0];
     if (!replyPort) return;
     // ADR-0031 / ADR-0040 — every data frame carries both `frameVersion` and

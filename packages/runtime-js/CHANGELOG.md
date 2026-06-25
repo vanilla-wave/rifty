@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Public `node:os` / `node:path` / `node:perf_hooks` / `node:fs` builtin subpaths** (`./builtins/{os,path,perf_hooks,fs}`, ADR-0166 task 1.9). The same faithful shims that already back the `require('os')` module registry, now also importable directly. The playground aliases the BARE `os`/`path`/`perf_hooks`/`fs` specifiers to these so a Vite bundle containing a heavy node-targeting dependency (the `typescript` engine in the ts-language-service worker) resolves them to REAL rifty shims instead of Vite's empty browser stub (`os.platform is not a function` at the dep's module-eval). No first-party source imports these bare specifiers; it uses `node:*` + the module registry.
+
 ### Changed
 
 - **Node 24 is the supported + parity-target version (ADR-0164).** `engines.node` `>=22`→`>=24`; every CI / Netlify pin `22`→`24`; `process.versions.node` impersonation `22.0.0`→`24.0.0` (v8 `12.0.0`→`13.6.0`), tracking the target. The parity gate runs against the CI Node, so it now measures rifty against **Node 24** — the version feature work already targeted — closing the dev(24)/CI(22) split. Fixes the `fs.Dirent.path` parity case that was red on Node 22 (the deprecated alias exists in 22, removed in 24; rifty omits it, correct for 24).

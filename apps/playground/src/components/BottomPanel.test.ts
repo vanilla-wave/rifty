@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { type Diagnostic, DiagnosticSeverity } from '@riftydev/ts-language-service/lsp-types';
 import { renderToString } from 'solid-js/web';
 import { describe, expect, it, vi } from 'vitest';
 import { BottomPanel } from './BottomPanel.tsx';
+import { ProblemsPanel, flattenProblems } from './ProblemsPanel.tsx';
 
 vi.mock('@riftydev/terminal', () => ({
   RiftyTerminal: class {
@@ -30,7 +32,10 @@ const sessions = [
   { id: 'terminal-2', title: 'Server', cwd: '/workspace', env: {}, status: 'running' as const },
 ];
 
-function render(activeSessionId = 'terminal-2'): string {
+function render(
+  activeSessionId = 'terminal-2',
+  diagnostics?: ReadonlyMap<string, readonly Diagnostic[]>,
+): string {
   return renderToString(() =>
     BottomPanel({
       collapsed: false,
@@ -42,8 +47,19 @@ function render(activeSessionId = 'terminal-2'): string {
       onCloseSession: () => {},
       attach: () => {},
       onLine: () => 0,
+      diagnostics,
     }),
   );
+}
+
+function diag(message: string, line = 0, character = 0): Diagnostic {
+  return {
+    range: { start: { line, character }, end: { line, character: character + 1 } },
+    severity: DiagnosticSeverity.Error,
+    message,
+    code: 2322,
+    source: 'ts',
+  };
 }
 
 const bottomPanelSource = readFileSync(
@@ -87,5 +103,59 @@ describe('BottomPanel', () => {
   it('keys terminal panel instances by stable session id, not snapshot object identity', () => {
     expect(bottomPanelSource).toContain('sessionIds');
     expect(bottomPanelSource).toContain('<For each={sessionIds()}>');
+  });
+
+  it('renders the Problems tab beside the Terminal tab (ADR-0166 P1.9c)', () => {
+    const html = render();
+    expect(html).toContain('data-testid="problems-tab"');
+    expect(html).toContain('Problems');
+    // Both view tabs live in the same view switcher tablist.
+    expect(html).toContain('aria-label="Bottom panel views"');
+  });
+
+  it('shows the problem count badge when diagnostics are present, hides it otherwise', () => {
+    const empty = render('terminal-2', new Map());
+    expect(empty).not.toContain('data-testid="problems-count"');
+
+    const withDiags = render(
+      'terminal-2',
+      new Map([['/workspace/src/x.ts', [diag('a'), diag('b')]]]),
+    );
+    expect(withDiags).toContain('data-testid="problems-count"');
+    expect(withDiags).toContain('>2<'); // two diagnostics aggregated into the badge
+  });
+});
+
+describe('ProblemsPanel', () => {
+  function renderPanel(diagnostics: ReadonlyMap<string, readonly Diagnostic[]>): string {
+    return renderToString(() => ProblemsPanel({ diagnostics, onOpen: () => {} }));
+  }
+
+  it('renders an empty state when there are no diagnostics', () => {
+    const html = renderPanel(new Map());
+    expect(html).toContain('data-testid="problems-empty"');
+    expect(html).not.toContain('data-testid="problem-row"');
+  });
+
+  it('renders a clickable diagnostic row with message + 1-based location', () => {
+    const html = renderPanel(
+      // LSP 0-based line 4, char 2 → displayed/jumped as 5:3.
+      new Map([['/workspace/src/main.ts', [diag('Type mismatch', 4, 2)]]]),
+    );
+    expect(html).toContain('data-testid="problem-row"');
+    expect(html).toContain('Type mismatch');
+    expect(html).toContain('main.ts:5:3');
+    // Severity carried through as the data attribute (Error === 1).
+    expect(html).toContain(`data-severity="${DiagnosticSeverity.Error}"`);
+  });
+
+  it('flattens + sorts diagnostics by path then position', () => {
+    const rows = flattenProblems(
+      new Map([
+        ['/b.ts', [diag('b1', 2, 0)]],
+        ['/a.ts', [diag('a2', 5, 1), diag('a1', 1, 0)]],
+      ]),
+    );
+    expect(rows.map((r) => r.diagnostic.message)).toEqual(['a1', 'a2', 'b1']);
   });
 });

@@ -1,20 +1,15 @@
-# Netlify deploy config for the rifty.dev landing site.
+# Netlify deploy for the rifty.dev landing site (Vite static build).
 #
-# This file deliberately does NOT set COOP/COEP. Those headers belong to the
-# playground site only; the landing deploy must not inherit the root
-# playground-oriented netlify.toml.
+# Built from the monorepo ROOT so the pnpm workspace resolves. Deliberately does
+# NOT set COOP/COEP — those belong to the playground site (play.rifty.dev) only;
+# the marketing page loads Google Fonts and needs no SharedArrayBuffer.
+#
+# Security headers + redirects live in public/_headers and public/_redirects so
+# Vite copies them into dist/.
 
+# CI (.github/workflows/netlify.yml) is the source of truth: it builds then
+# deploys apps/landing/dist with --no-build. This block is the fallback for a
+# Netlify-dashboard git build (base = apps/landing).
 [build]
-  publish = "."
-
-[[headers]]
-  for = "/*"
-  [headers.values]
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
-    Permissions-Policy = "geolocation=(), microphone=(), camera=()"
-
-[[headers]]
-  for = "/styles.css"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
+  command = "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @riftydev/landing build"
+  publish = "dist"

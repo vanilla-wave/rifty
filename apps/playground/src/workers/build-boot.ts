@@ -57,10 +57,18 @@ declare global {
     | undefined;
 }
 
-function overlayBuildShims(): void {
+const SHIM_ROOT_PREFIX = '/workspace';
+
+export function reRootBuildShimPath(shimPath: string, root: string): string {
+  return shimPath.startsWith(`${SHIM_ROOT_PREFIX}/`)
+    ? `${root}${shimPath.slice(SHIM_ROOT_PREFIX.length)}`
+    : shimPath;
+}
+
+function overlayBuildShims(root: string): void {
   const fs = syncMirror();
   for (const [path, content] of Object.entries(viteBuildShimFiles)) {
-    const np = normalizePath(path);
+    const np = normalizePath(reRootBuildShimPath(path, root));
     fs.mkdirSync(dirname(np), { recursive: true });
     fs.writeFileSync(np, enc.encode(content));
   }
@@ -143,6 +151,9 @@ function assertBuiltDist(root: string): void {
   if (!html.includes('assets/')) {
     throw new Error('vite build completed but dist/index.html does not reference built assets');
   }
+  if (html.includes('.assets/')) {
+    throw new Error('vite build completed but dist/index.html references malformed .assets/ paths');
+  }
 }
 
 export async function bootBuild(opts: {
@@ -150,7 +161,7 @@ export async function bootBuild(opts: {
   readonly log: (chunk: string) => void;
 }): Promise<void> {
   const { root, log } = opts;
-  overlayBuildShims();
+  overlayBuildShims(root);
   await installEsbuildBridge(root);
   const loader = createModuleLoader(syncMirror(), { cwd: root });
   installCreateRequire(loader, root);
@@ -161,7 +172,7 @@ export async function bootBuild(opts: {
   };
   await viteNs.build({
     root,
-    base: './',
+    base: '/',
     configFile: false,
     clearScreen: false,
     logLevel: 'info',
@@ -179,7 +190,7 @@ export async function bootPreview(opts: {
 }): Promise<{ readonly port: number; stop(): Promise<void> }> {
   const { root, port, log } = opts;
   assertBuiltDist(root);
-  overlayBuildShims();
+  overlayBuildShims(root);
   const loader = createModuleLoader(syncMirror(), { cwd: root });
   installCreateRequire(loader, root);
 
@@ -189,7 +200,7 @@ export async function bootPreview(opts: {
   };
   const server = await viteNs.preview({
     root,
-    base: './',
+    base: '/',
     configFile: false,
     clearScreen: false,
     logLevel: 'info',

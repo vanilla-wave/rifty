@@ -88,7 +88,16 @@ export class MemoryBackend {
     const bytes = typeof data === 'string' ? encoder.encode(data) : data;
     const existing = parentNode.children.get(name);
     if (existing && existing.kind === 'dir') throw new VfsError('EISDIR', path);
-    parentNode.children.set(name, makeFile(bytes));
+    const file = makeFile(bytes);
+    // Strictly-monotonic mtime on overwrite: two writes within one clock tick
+    // must still bump mtime, else a same-size content edit is invisible to an
+    // mtime-trusting stat cache — e.g. isomorphic-git's racy-clean index
+    // shortcut, which would silently report `git status`/`diff` as unchanged
+    // (silent data loss). See packages/git fs-adapter + ADR-0167.
+    if (existing && existing.kind === 'file' && file.mtime <= existing.mtime) {
+      file.mtime = existing.mtime + 1;
+    }
+    parentNode.children.set(name, file);
     // Replacing a child node (even same name) can flip its dirent kind, so
     // invalidate the dirent cache on every set (perf audit 2026-06-05).
     parentNode.sortedDirents = null;

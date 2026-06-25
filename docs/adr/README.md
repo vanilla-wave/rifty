@@ -123,6 +123,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0155 | Terminal node-file command: arbitrary-entry supervised child + multi-port preview |
 | 0157 | Unified spec-seeded mutable Node process at pre-entry gated to Node workers |
 | 0161 | Vite 8 disables HMR pending socket parity |
+| 0165 | Multi-project management with durable scratch |
 | 0173 | Vite 7 production build and preview |
 
 ### toolchain-build
@@ -136,6 +137,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0131 | Public sandbox filesystem API for AI agents |
 | 0132 | TS ESM parity uses full-transform Node reference |
 | 0164 | Node 24 as the supported and parity-target version |
+| 0166 | In-browser TS language service over VFS |
 
 ### protocol
 
@@ -172,6 +174,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0146 | PTY channel and owner-resident shell — ADR-0143 P2 |
 | 0148 | Unified workspace owner co-resident dev-server and single source of truth ADR-0143 P4 |
 | 0150 | Supervised child processes over SAB sync-views (D P6) |
+| 0167 | git capability over VFS via isomorphic-git |
 
 ### terminal
 
@@ -222,6 +225,7 @@ superseded.
 | 0054 pipe-sink deferral | 0154 | `Readable.fromWeb(webStream).pipe(res)` is implemented; full `node:stream/web` remains unclaimed |
 | 0151 control-frame keepalive clause | 0151 note 2026-06-19 | control frames relay end-to-end; the peer answers pings (real `ws` auto-pongs + `'ping'`, browser-like clients silently pong), transport no longer auto-pongs |
 | 0152 §1 narrow-set / network gap | 0158 | global `fetch` now counted (ref on dispatch, held until body consumed); dispatcher backstop moved to an uncounted host timer; §1 shape unchanged, named set grew |
+| 0135 §4 slug = preset.id reuse key | 0165 | multi-project: install-stamp slug becomes project-scoped (`slug=projectId\|'scratch'`); same-Starter projects must not share node_modules; cleanup fires on root/projectId change |
 
 ## Appendix A — Q→ADR provenance
 

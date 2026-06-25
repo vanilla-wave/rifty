@@ -60,6 +60,32 @@ export default defineConfig({
   worker: {
     format: 'es',
   },
+  resolve: {
+    // The ts-language-service worker bundles the `typescript` engine, which does
+    // node-builtin work at module-eval (`os.platform()` for case-sensitivity
+    // detection, `perf_hooks.performance` for its timer). Vite otherwise
+    // externalizes these bare specifiers to an EMPTY browser stub → e.g. `_os.
+    // platform is not a function` crashes the LS worker (ADR-0166 P1.9). Resolve
+    // them to rifty's REAL Node shims (ADR-0026 — the same modules backing the
+    // `require('os')` registry). Scoped in practice to bundled deps: NO first-party
+    // source imports these bare specifiers (it uses `node:*` + the module registry).
+    alias: {
+      os: '@riftydev/runtime-js/builtins/os',
+      path: '@riftydev/runtime-js/builtins/path',
+      perf_hooks: '@riftydev/runtime-js/builtins/perf_hooks',
+      fs: '@riftydev/runtime-js/builtins/fs',
+    },
+  },
+  define: {
+    // The `typescript` UMD references CJS module globals (`__filename`/`__dirname`)
+    // at eval; Vite's ESM worker output leaves them undefined → `ReferenceError:
+    // __filename is not defined` crashes the LS worker. Define harmless POSIX
+    // placeholders (TS only uses them for diagnostic path strings, never real fs
+    // — the VFS host serves files). Textual replacement, so scoped to where the
+    // identifiers actually appear (the bundled compiler).
+    __filename: '"/typescript.js"',
+    __dirname: '"/"',
+  },
   optimizeDeps: {
     exclude: ['monaco-editor'],
     // Pre-bundle upfront: sql.js is CJS and first imported from the real-vite

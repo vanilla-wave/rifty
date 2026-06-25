@@ -21,7 +21,8 @@
       "apps/playground/public/sw.js",
       "tools/integration-fixtures/**",
       ".arch-fixtures/**",
-      ".claude/**"
+      ".claude/**",
+      "packages/ts-language-service/vendor/**"
     ]
   },
   "formatter": {
@@ -80,7 +81,11 @@
     {
       "include": [
         "apps/playground/src/components/Splitter.tsx",
-        "apps/playground/src/components/FileExplorer.tsx"
+        "apps/playground/src/components/FileExplorer.tsx",
+        "apps/playground/src/components/ProjectsTab.tsx",
+        "apps/playground/src/components/Launcher.tsx",
+        "apps/playground/src/components/ProjectDialogs.tsx",
+        "apps/playground/src/components/DegradedBanner.tsx"
       ],
       "linter": {
         "rules": {

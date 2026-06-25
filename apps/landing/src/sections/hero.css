@@ -1,0 +1,300 @@
+/* keyframes — defined here (hero owns the pulsing dots + terminal cursor) */
+@keyframes rfPulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+
+@keyframes rfBlink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.hero {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 84px var(--gutter) 64px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 56px;
+  align-items: center;
+}
+
+/* ---- left column ---- */
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ac);
+  background: rgb(from var(--ac) r g b / 0.1);
+  border: 1px solid rgb(from var(--ac) r g b / 0.25);
+  border-radius: 100px;
+  padding: 5px 12px;
+  margin-bottom: 24px;
+}
+
+.hero-eyebrow-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ac);
+  animation: rfPulse 2s ease-in-out infinite;
+}
+
+.hero-h1 {
+  font-size: 56px;
+  line-height: 1.04;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin: 0 0 22px;
+  color: var(--t1);
+}
+
+.hero-h1-ac {
+  color: var(--ac);
+}
+
+.hero-sub {
+  font-size: 18px;
+  line-height: 1.55;
+  color: var(--t2);
+  margin: 0 0 32px;
+  max-width: 480px;
+}
+
+.hero-chip {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: var(--r-code);
+}
+
+.hero-chip-ac {
+  color: var(--ac);
+  background: rgb(from var(--ac) r g b / 0.08);
+}
+
+.hero-cta {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 30px;
+}
+
+.hero-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  text-decoration: none;
+  padding: 12px 20px;
+  border-radius: var(--r-chip);
+}
+
+.hero-btn-primary {
+  background: var(--ac);
+  color: var(--ac-ink);
+  font-weight: 600;
+}
+
+.hero-btn-secondary {
+  background: transparent;
+  color: var(--t1);
+  font-weight: 500;
+  border: 1px solid var(--bd4);
+}
+
+.hero-btn-icon {
+  display: inline-flex;
+}
+
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--t4);
+}
+
+.hero-meta-slash {
+  color: var(--bd4);
+}
+
+/* ---- right column: sandbox window ---- */
+.hero-window {
+  border: 1px solid var(--bd2);
+  border-radius: var(--r-card);
+  overflow: hidden;
+  background: var(--deep);
+  box-shadow: var(--sh-window);
+}
+
+.hero-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 14px;
+  background: var(--titlebar);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.hero-traffic {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #3a3f4b;
+}
+
+.hero-host {
+  margin-left: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t4);
+}
+
+.hero-live {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--ac);
+}
+
+.hero-live-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ac);
+  animation: rfPulse 2s ease-in-out infinite;
+}
+
+.hero-code {
+  padding: 16px 18px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 21px;
+}
+
+.hero-code-line {
+  white-space: pre;
+}
+
+.hero-code-gap {
+  height: 10px;
+}
+
+/* syntax palette */
+.syn-kw {
+  color: var(--syn-kw);
+}
+.syn-fn {
+  color: var(--syn-fn);
+}
+.syn-str {
+  color: var(--syn-str);
+}
+.syn-num {
+  color: var(--syn-num);
+}
+.syn-punc {
+  color: var(--syn-punc);
+}
+.syn-com {
+  color: var(--syn-com);
+}
+
+/* ---- terminal panel + boot log ---- */
+.hero-term {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--deep2);
+  padding: 14px 18px;
+  min-height: 170px;
+}
+
+.hero-term-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--t6);
+}
+
+.hero-term-vite {
+  color: var(--ac);
+}
+
+.hero-term-log {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 21px;
+}
+
+.hero-term-row {
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-height: 21px;
+}
+
+.hero-term-prompt {
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.hero-term-cmd {
+  color: #e8eaf0;
+}
+.hero-term-dim {
+  color: rgba(255, 255, 255, 0.42);
+}
+.hero-term-ok {
+  color: #8fd98f;
+}
+.hero-term-lime {
+  color: var(--ac);
+}
+.hero-term-req {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.hero-term-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  background: var(--ac);
+  transform: translateY(2px);
+  animation: rfBlink 1.1s steps(1) infinite;
+}
+
+@media (max-width: 880px) {
+  .hero {
+    grid-template-columns: 1fr;
+    gap: 40px;
+    padding-top: 56px;
+  }
+  .hero-h1 {
+    font-size: 42px;
+  }
+}

@@ -9,8 +9,8 @@ import { MONO_FONT_STACK } from '../glue/fonts.ts';
  * `node:sqlite` (`DatabaseSync` over the sql.js WASM engine, ADR-0065) as the
  * database.
  *
- * Sources double as preset content: the entry is the editor program tab
- * (`/src/main.js` — same path as PROGRAM_MIRROR_PATH), `extraFiles` are both
+ * Sources double as preset content: the entry is the editor program tab (the
+ * root-relative `<root>/src/main.js`, ADR-0165 §4), `extraFiles` are both
  * worker-seeded (so the first preview request already sees them) and shown in
  * the page-side explorer through the preset's `files`.
  */

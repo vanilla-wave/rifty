@@ -40,6 +40,12 @@ describe('PreviewPanel refresh contract', () => {
     expect(source).toContain('onOpenTab?: (port: number) => void');
     expect(source).toContain('props.onOpenTab(port());');
   });
+
+  it('recreates the iframe before preview navigation so the SW controls the document', () => {
+    expect(source).toContain('frameEpoch');
+    expect(source).toContain('setFrameEpoch((n) => n + 1)');
+    expect(source).toContain('keyed');
+  });
 });
 
 describe('PreviewPanel port switcher (ADR-0155)', () => {

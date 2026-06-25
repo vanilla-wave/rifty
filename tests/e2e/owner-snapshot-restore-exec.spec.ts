@@ -57,7 +57,7 @@ test.describe('owner snapshot survives teardown: install + exec still run after 
 
     // CREATE + WRITE. The dev server is already LIVE (its install-stamp flush
     // drained the boot write-through), so these writes drain to OPFS promptly.
-    await runTerminalLine(page, `echo ${marker} > /workspace/data.txt`);
+    await runTerminalLine(page, `echo ${marker} > /scratch/data.txt`);
     await runTerminalLine(page, 'npm install cowsay');
     // Wait for COMPLETION (not the mid-stream `+ cowsay@`): keystrokes typed
     // mid-install land in the running install's stdin. The summary is the idle signal.
@@ -82,7 +82,7 @@ test.describe('owner snapshot survives teardown: install + exec still run after 
     expect(await terminalBuffer(page)).toContain('^__^');
 
     // …and the user file written before teardown is still readable.
-    await runTerminalLine(page, 'cat /workspace/data.txt');
+    await runTerminalLine(page, 'cat /scratch/data.txt');
     await expectTerminalContains(page, marker, 20_000);
   });
 });

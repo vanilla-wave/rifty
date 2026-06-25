@@ -3,67 +3,29 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>rifty — Node.js stack in the browser</title>
+    <title>rifty — Node, npm, and a dev server inside a browser tab</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <meta
       name="description"
-      content="Open, self-hostable browser runtime infrastructure for Node.js programs and WASI guests."
+      content="A browser-based, Node-compatible runtime and WASI runner. Real require, real npm install, a real dev server — built from scratch for the browser."
     />
     <link rel="canonical" href="https://rifty.dev/" />
-    <link rel="stylesheet" href="/styles.css" />
+    <meta property="og:title" content="rifty — Node in the browser tab" />
+    <meta
+      property="og:description"
+      content="A browser-based, Node-compatible runtime and WASI runner."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://rifty.dev/" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
-    <main>
-      <section class="hero" aria-labelledby="hero-title">
-        <div class="hero-copy">
-          <p class="eyebrow">Open runtime infrastructure</p>
-          <h1 id="hero-title">rifty</h1>
-          <p class="lede">
-            Open, self-hostable browser runtime infrastructure for running real Node.js programs
-            and WASI guests on browser primitives.
-          </p>
-          <div class="actions" aria-label="Primary links">
-            <a class="button primary" href="https://play.rifty.dev/">Open playground</a>
-            <a class="button secondary" href="https://github.com/vanilla-wave/rifty">GitHub</a>
-          </div>
-        </div>
-
-        <div class="runtime-shot" aria-label="rifty playground preview">
-          <div class="chrome">
-            <span></span>
-            <span></span>
-            <span></span>
-          </div>
-          <div class="workspace">
-            <div class="editor">
-              <p><span class="muted">import</span> express <span class="muted">from</span> 'express';</p>
-              <p><span class="muted">const</span> app = express();</p>
-              <p>app.get('/', (_, res) =&gt; res.send('hello browser node'));</p>
-              <p>app.listen(3000);</p>
-            </div>
-            <div class="terminal">
-              <p>$ npm install express</p>
-              <p class="ok">installed real npm tarballs</p>
-              <p>$ node server.js</p>
-              <p class="ok">listening on /preview/3000/</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="claims" aria-label="Project position">
-        <article>
-          <h2>Browser-local</h2>
-          <p>Workers, Service Workers, SharedArrayBuffer, OPFS, and WebAssembly do the work.</p>
-        </article>
-        <article>
-          <h2>Faithful first</h2>
-          <p>Compatibility claims are tested against real Node; unsupported gaps stay explicit.</p>
-        </article>
-        <article>
-          <h2>Self-hostable</h2>
-          <p>The runtime and playground are built for hosts that need to own their origin.</p>
-        </article>
-      </section>
-    </main>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

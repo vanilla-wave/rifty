@@ -48,6 +48,130 @@
   was in the demo source. New CI-active regression in `tests/e2e/m7-preview-sw.spec.ts`
   drives the real preview iframe and asserts the JS+JSON module graph RENDERED (the prior
   m7 only checked the served shell HTML, so a black screen passed).
+- **The launcher remembers its tab** (ADR-0165 §9). The active tab (Starters / Projects)
+  is persisted to `localStorage` (`rf.launcher.tab`) and restored on the next open —
+  EXCEPT with zero saved projects, where it always opens on Starters (nothing to switch
+  to, only a starter to pick). New solid-free, storage-injected `glue/launcher-prefs.ts`
+  (`initialLauncherTab`/`loadLauncherTab`/`saveLauncherTab`), unit-tested.
+
+### Fixed (CI-red + visual regressions, ADR-0165)
+
+- **The launcher / dialogs / projects-tab / starters-tab / project-cards / row-menu /
+  toast-undo were UNSTYLED** — only the chip + degraded banner + status got CSS, so the
+  launcher rendered as a plain block at the page bottom instead of a centered modal.
+  Added the full `theme.css` section (1040×624 launcher modal + veil, 400px dialog cards
+  with lime/amber/danger tones, scratch banner, 2-col project cards, row menu, ACTIVE
+  badge + `soon` pill, button tones) keyed to the existing design tokens, + a `theme.test.ts`
+  guard so the modal styles can't silently regress again.
+- **A switch never persisted `activeId` to the index** — so the respawned owner
+  re-published the STALE `activeId` and `hydrateIndex` reverted the switch (a race that
+  reddened CI's "Save…then continue" e2e), and a reload booted the wrong project. New
+  `index-set-active` frame persisted to the current owner BEFORE teardown
+  (`awaitActiveDurable` gates the respawn on it). Switches are now durable across the
+  respawn and a reload.
+- **The store toast never auto-dismissed** — it lingered forever and, at top-right
+  (z-index 1000), sat over the launcher's close button. It now self-clears (delete-Undo
+  toasts persist for the grace window so Undo stays clickable).
+
+### Fixed (post-review hardening, ADR-0165)
+
+- **Named-project "Reset to starter" is now a REAL on-disk restore (fidelity).** The
+  Projects-tab row menu offered Reset on every saved project and the dialog promised
+  "restores the clean starter files… can't be undone", but `onConfirmReset` re-seeded
+  only the scratch — a named-project reset just toasted + bumped `editedAt` while the
+  tree was untouched (a lying happy-path). New owner frame `index-reset-project`
+  (`resetProjectToStarter` wipes + re-derives `/projects/<id>` from the project's
+  starter, read authoritatively from the index); when the reset target is the ACTIVE
+  root the page also resets the program editor + reboots the dev server. Owner index
+  re-seeds now republish the FILE snapshot (`serveProjectIndex(refresh=publishSnapshot)`)
+  — they bypass `onVfsWrite`, so without it even the scratch reset left a stale live view.
+- **Dirty-scratch switch dialog: both resolutions were broken.** "Discard & continue"
+  re-invoked the dirty-guarded transition → the dialog re-opened and `activeId` never
+  flipped, so the owner respawned at the new root with the OLD template/starter; "Save
+  scratch, then continue" saved the draft but never continued. Added unguarded
+  `confirmSwitchTo`/`confirmPickStarter` store transitions; `applyPendingTarget` uses
+  them, and `onConfirmSave` resumes a stashed pending switch AFTER a durability handshake
+  (`awaitProjectDurable` — the owner publishes the index only post-flush, so the cpSync'd
+  tree is durable before the switch hard-kills the owner).
+- **Durable delete ordering could brick boot.** `deleteTree` removed the tree BEFORE
+  persisting the index drop; a crash mid-flush left an indexed-but-missing tree →
+  `recoverIndex` case (D) throws on every boot (unrecoverable). Reordered to commit the
+  index FIRST, then `rmSync` — a crash now leaves a case-(A) orphan that boot silently
+  rolls back.
+- **Deferred on-disk delete is eventually-consistent.** A delete posted during the owner
+  teardown→respawn gap reached no listener and the project resurrected on the next
+  publish; pending deletes are now tracked + re-fired on each owner re-wire and cleared
+  once the published index reflects them.
+- **Save allocates a collision-free id** (`crypto.randomUUID`, `Math.random` fallback) —
+  a collision made the owner throw `already exists` while the page optimistically pointed
+  `activeId` at another project's tree.
+- **Launcher: Escape closes the topmost overlay** (dialog → launcher) and the inaccurate
+  "focus-trap close" suppression comment was corrected to match reality.
+- **`awaitReady` is a real readiness gate** — it now resolves on the new owner's first
+  published snapshot frame (was `setTimeout(0)`); `page-store.dirty()` is derived from the
+  active scratch (the vestigial standalone signal is gone); owner/realVite root fallbacks
+  `/workspace` → `/scratch`.
+
+### Tests
+
+- **e2e workspace-root specs migrated `/workspace` → `/scratch` (ADR-0165).** The
+  active workspace root moved to the unnamed scratch (`/scratch`); seven specs hard-coded
+  `/workspace` and broke (`cat: /workspace/...: No such file`). Updated the workspace-root
+  paths in `m1-terminal-shell`, `node-command`, `owner-persistence-reload`,
+  `owner-single-source-byte-identity`, `owner-snapshot-restore-exec`,
+  `terminal-command-blocks`, `terminal-persistence` to the new root — no assertion weakened.
+  The terminal-history file stays `/workspace/.rifty/terminal-history.json` (keyed to a
+  constant via `createTerminalPersistence(WORKSPACE)`, unchanged by ADR-0165).
+
+### Fixed
+
+- **TS diagnostics now appear on a slow (2-core CI) cold boot** (ADR-0166; fixes the chromium e2e `ts-language-service.spec.ts` timeout where the type-error marker never rendered). The page LS client's per-request timeout was 15s, but the LS endpoint serializes every frame behind the first `ts:init` — which on a constrained CI runner co-resident with the dev-server child takes tens of seconds (TS engine + ~3 MB lib over the relay + tsconfig over fs.* sync-RPC). So the `lsp-check.ts` open/diagnostics frames rejected at 15s before the service finished building, and the page never re-sent → no marker. Raised the default to 60s (warm requests still resolve in <1s, so the ceiling only bites a genuinely dropped frame, which then rejects loud). The endpoint-side serialization + out-of-program-honest-empty fixes live in `@riftydev/ts-language-service`.
+- **Express `res.json`/`res.send` no longer crash with `TypeError: argument entity must be string, Buffer, or fs.Stats`** (express + sqlite preset, PROD build only). Each `?worker&url` child entry is self-contained, so it carries its OWN `@riftydev/io` `Buffer` copy; the kernel pre-entry hook had set `globalThis.Buffer` from the kernel-worker-entry copy, so `etag` (reads the global) rejected a buffer express built via `require('buffer')` (the child copy). The `kind:'url'` child bootstraps (dev-server-child, node-entry, real-vite owner) now call `installBundleLocalBuffer()` to pin the global to THIS bundle's copy — mirrors `runtime-js/worker-entry.ts`. DEV was unaffected (one shared ESM module instance), which is why the dev e2e never caught it; new PROD-build guard `tests/e2e-prod/buffer-realm-identity.spec.ts` + unit `bundle-local-buffer.test.ts`. Root (shared runtime classes duplicated per worker bundle) tracked in backlog/toolchain-build/worker-bundle-shared-runtime-dedup.
+- **Editor program mirror + entry re-seed follow the active root (ADR-0165 §4).**
+  `PROGRAM_MIRROR_PATH` was hardcoded `/workspace/src/main.js`; after ADR-0165 moved
+  roots to `/scratch`|`/projects/<id>`, the editor program write + live HMR landed on
+  a dead `/workspace` path the dev server never reads, and a starter pick that changed
+  the template (Vite → an express/socket node-server) kept the prior `<root>/src/main.js`
+  — so a node-server starter ran the STALE browser entry → `document is not defined`.
+  The path is now derived from the active root via `programMirrorPath(root)` =
+  `<root>/src/main.js` (new solid-free `glue/program-path.ts`), threaded reactively
+  into `EditorHost` (program-tab focus + the active program path it reports) and App's
+  program write / seed / HMR. A page `writeFile` is a non-idempotent OVERWRITE (unlike
+  the owner's idempotent `seedProject`), so `seedWorkspaceOwner` re-seeds the entry with
+  the picked starter's source on a template switch — the dev server runs the NEW server
+  entry, not the stale browser one. Un-blocked `fullstack-demo.spec.ts` /
+  `socket-lab.spec.ts` (node-server starters now boot their real server).
+
+- **Page store is the single source of truth for the active id/root (ADR-0165 §4).**
+  `App.tsx` derived `activeRoot()` from the interim `activePreset` signal
+  (`rootForId(activePreset())`), so a cold boot keyed the workspace root + owner
+  spawn at `/projects/project-files` — mistaking the boot STARTER id for a PROJECT
+  id — and a switch left the page surfaces (snapshotFs, writeFile, presetBootLines,
+  mode hint, command palette) pointing at the OLD root. Now `activeRoot()` follows
+  `store.activeId()` (the truth: `scratch` on boot, a projectId after switch); the
+  active STARTER (template / boot lines / `setDevConfig` / spawn `setup`) follows the
+  store-derived `activeStarterId()` so a switch boots the destination project's
+  template, never a stale one. The owner spawn `slug` now follows `store.activeId()`
+  too. `page-store.hydrateIndex` preserves a local boot scratch when the owner's
+  published index is still scratch-active but lacks a scratch entry (the owner does
+  not model the scratch in its on-disk index until a Save), so the chip/banner/Save
+  reflect the real `/scratch` tree from a cold boot. New e2e coverage:
+  `project-boot-root.spec.ts` (boot root = `/scratch`, RED-checked against the old
+  `rootForId(activePreset())`) and `project-switch.spec.ts` (a starter pick re-roots
+  a fresh scratch and the dev server re-boots at the active root, surfaces following
+  the store).
+
+- **Dev-boot esbuild/rollup shim re-rooted onto the active root (ADR-0165 §4).** The
+  `@riftydev/shadow-registry` shim files are keyed on the historical
+  `/workspace/node_modules/...` path; ADR-0165 moved the dev root to
+  `/scratch`|`/projects/<id>`, so `overlayShims()` was writing the shim to a dead
+  `/workspace` path → the REAL native Rollup loaded → every Vite dev boot threw
+  `platform 'rifty' arch 'wasm' not supported by the native Rollup build`.
+  `overlayShims(root)` now re-roots each shim key onto the active root
+  (`reRootShimPath`), so the Vite dev server boots at `/scratch`. (The editor
+  program-mirror entry path is the one sibling `/workspace`-hardcoding desync the
+  same root change introduced that remains backlogged —
+  see `docs/backlog/playground/program-mirror-root-relative.md`.)
 
 ### Changed
 
@@ -79,6 +203,82 @@
   Rolldown WASI bundle → SW-routed `/preview/5174/`) are both CI-active and pass.
 
 ### Added
+
+- **Editor quick-fixes / organize-imports / formatting now come from the rifty LS, not Monaco's built-in worker** (ADR-0166 task 4.2). The task-4.1 engine queries (`getCodeFixes`/`organizeImports`/`getFormattingEdits`/`getRangeFormattingEdits`, parity-proven) are wired as REAL Monaco providers over the page↔owner↔LS relay, so a missing-import quick-fix adds an import from a SIBLING file, organize-imports sorts + drops unused imports, and formatting applies tsserver's real edits — what VSCode shows. Validated by chromium e2e assertions (`tests/e2e/ts-language-service.spec.ts`).
+  - **4.2a client methods.** `glue/ts-ls-client.ts` gains `getCodeFixes(path, range, errorCodes)`/`organizeImports(path)`/`getFormattingEdits(path, options)`/`getRangeFormattingEdits(path, range, options)` (same id-correlated reject-on-timeout pattern; positions/ranges on the wire are LSP 0-based; code-fixes use the `codeActions` response kind, organize-imports reuses `workspaceEdit`, formatting uses `textEdits`).
+  - **4.2b Monaco providers.** `glue/ts-ls-monaco-providers.ts` registers a code-action provider (quickfixes + an always-offered `source.organizeImports`) + document/range formatting providers for `typescript` + `javascript`, each re-checking the `CancellationToken` across the relay hop. Quick-fixes source their `errorCodes` from the rifty markers (`monaco.editor.getModelMarkers({owner:'rifty-ts'})`) intersecting the request range, querying `getCodeFixes` per diagnostic with THAT diagnostic's own span + code (tsc only fixes when the request span lies within the diagnostic span). The LSP `CodeAction` maps to monaco `CodeActionList {actions:[{title,kind,edit:{edits:[{resource,textEdit}]},diagnostics?}], dispose()}` (uris → model Uri via `ensureModel`, shared with rename via a new `toMonacoWorkspaceTextEdits`); formatting pulls `tabSize`/`insertSpaces` from `model.getOptions()`. `glue/lsp-position.ts` gains `monacoToLspRange`.
+  - **4.2c retire built-in formatting.** `EditorHost` `retireBuiltinTsIntelligence()` now also `setModeConfiguration`s OFF `documentFormattingEdits` / `documentRangeFormattingEdits` / `onTypeFormattingEdits` on `typescriptDefaults` + `javascriptDefaults`, so rifty owns formatting with no competing built-in (only the syntactic `documentSymbols` stays on). Code-actions were already off (task 2.2c).
+- **Editor find-references / rename / signature-help now come from the rifty LS, not Monaco's built-in worker** (ADR-0166 task 3.2). The task-3.1 engine queries (`getReferences`/`prepareRename`/`getRenameEdits`/`getSignatureHelp`, parity-proven) are wired as REAL Monaco providers over the page↔owner↔LS relay, so references span cross-file uses, rename edits touch every affected file, and signature help reflects the real overload — what VSCode shows — instead of Monaco's isolated lib.d.ts-only guess. Validated by chromium e2e assertions (`tests/e2e/ts-language-service.spec.ts`).
+  - **3.2a client methods.** `glue/ts-ls-client.ts` gains `getReferences`/`prepareRename`/`getRenameEdits`/`getSignatureHelp` (same id-correlated reject-on-timeout pattern; positions on the wire are LSP 0-based; references reuse the `locations` response kind).
+  - **3.2b Monaco providers.** `glue/ts-ls-monaco-providers.ts` registers reference / rename / signature-help providers for `typescript` + `javascript`, each re-checking the `CancellationToken` across the relay hop. References resolve each `Location.uri` via `ensureModel`; rename flattens the LSP `WorkspaceEdit.changes` (per-uri `TextEdit[]`) into Monaco's flat `edits: IWorkspaceTextEdit[]` (uri → model Uri via `ensureModel`), and `resolveRenameLocation` rejects (via `rejectReason`) when the element isn't renameable so Monaco shows "cannot rename here"; signature help maps to `SignatureHelpResult {value, dispose}` with trigger chars `(` `,` and retrigger `)`. The built-in worker's references/rename/signatureHelp were already retired (`setModeConfiguration` in `EditorHost`).
+- **Editor hover / completion / go-to-definition now come from the rifty LS, not Monaco's built-in worker** (ADR-0166 task 2.2; closes backlog/playground/ts-ls-hover-completion-monaco-transient). The task-2.1 engine queries (`getQuickInfo`/`getDefinition`/`getTypeDefinition`/`getCompletions`/`getCompletionDetails`) are wired as REAL Monaco providers over the page↔owner↔LS relay, so hover types, go-to-def targets, and completion candidates reflect the project's tsconfig + cross-file types + installed node_modules — what VSCode shows — instead of Monaco's isolated lib.d.ts-only guess. Validated by chromium e2e assertions (`tests/e2e/ts-language-service.spec.ts`) that exercise real project/dependency knowledge the built-in worker could not have.
+  - **2.2a client methods.** `glue/ts-ls-client.ts` gains `getQuickInfo`/`getDefinition`/`getTypeDefinition`/`getCompletions`/`getCompletionDetails` (same id-correlated reject-on-timeout pattern as the diagnostics methods; positions on the wire are LSP 0-based).
+  - **2.2b Monaco providers + editor seam.** `glue/ts-ls-monaco-providers.ts` registers hover / definition / type-definition / completion providers (trigger char `.`, lazy `resolveCompletionItem` for detail + docs) for `typescript` + `javascript`, each re-checking the `CancellationToken` across the relay hop. `glue/lsp-position.ts` is the tested Monaco↔LSP off-by-one mapper. `EditorHost` exposes `pathForModel` (model → VFS path, via a private `model.uri ↔ tab id` reverse index) and `ensureModel` (open a go-to-def target — sibling file or node_modules `.d.ts` — read-only and return its `Uri`). `App` registers + disposes the providers alongside the LS client.
+  - **2.2c retire the built-in approximation.** `EditorHost` `retireBuiltinTsIntelligence()` now also `setModeConfiguration`s OFF every project-aware built-in provider (completionItems / hovers / definitions / references / documentHighlights / rename / signatureHelp / codeActions / inlayHints) on `typescriptDefaults` + `javascriptDefaults`, keeping only the syntactic ones (documentSymbols, formatting). No competing built-in hover/completion/goto (ADR-0166's "isolated approximation that lies").
+
+- **TS language service wired into the editor — real semantic squiggles + a Problems tab** (ADR-0166 task 1.9; closes backlog/playground/problems-tab-bottom-panel). The worker-resident `@riftydev/ts-language-service` now drives Monaco diagnostics in the playground, validated by a chromium e2e (`tests/e2e/ts-language-service.spec.ts`).
+  - **1.9a owner LS lifecycle + relay.** The owner spawns the LS as a `serve:true` grandchild (`workers/ts-lsp-worker-entry.ts`, URL injected as `RIFTY_TS_LSP_WORKER_URL` in `glue/realVite.ts`) reading the owner's authoritative VFS over `fs.*` sync-RPC — exactly the dev-server child shape (`RIFTY_REMOTE_FS=1`). Spawned lazily on the first `rifty:ts-lsp` frame. There is no page→grandchild channel, so frames RELAY through the owner: page →(page↔owner fork-IPC)→ owner → `lsChild.send` → LS; LS → `process.send` → owner → `kernelIpc.send` → page (`workers/real-vite-bootstrap.ts`). The page exposes `sendTsLsp`/`onTsLsp` on the workspace-owner handle.
+  - **1.9b page client + editor seam + Monaco disable.** `glue/ts-ls-client.ts` — id-correlated request/response over the relay (per-request reject-on-timeout, `dispose()` rejects in-flight) + `lspToMonacoMarkers` (LSP 0-based → Monaco 1-based, severity 1..4). `EditorHost` gains `setMarkers(path, markers)` (owner `'rifty-ts'`) + `onDocument` (open/change/close, replays open buffers to a late subscriber). `App` inits `/workspace`, debounces edits (~300ms) → `ts:open`/`ts:update`/`ts:close` → `getSemantic`+`getSyntactic` diagnostics → markers + an aggregated `path→diags` signal. Monaco's built-in JS/TS validation is turned OFF (rifty is the single source of truth). NOTE — only DIAGNOSTICS move to the rifty LS in this phase; Monaco's built-in TS worker still serves hover/completion from its isolated lib.d.ts-only model (no VFS/tsconfig/node_modules) — a known transient approximation tracked in `backlog/playground/ts-ls-hover-completion-monaco-transient` until the LS exposes hover/completion providers (ADR-0166 phase 2).
+  - **1.9c Problems panel.** `components/ProblemsPanel.tsx` + a Terminal|Problems view switcher in `BottomPanel` (count badge, click-to-jump via `openFile({reveal})`).
+- **Durable scratch→project Save + cross-respawn index persistence (ADR-0165 §7,
+  closes backlog/playground/durable-save-switch-persistence).** Save now MOVES the
+  tree on disk instead of only flipping the page mirror: the page posts an
+  `index-save {id,name,starter}` frame and the owner runs `saveScratchAsProject`
+  (copy `/scratch` → `/projects/<id>`, flip+persist the index LAST, delete the
+  source) then drains the OPFS write-through (`flushSyncMirror`) so the move is
+  durable BEFORE a switch tears the owner down. Switching to a saved project
+  respawns the owner at its real tree (not an empty re-seed), so files survive.
+  Sibling durable frames mirror the same pattern: `index-rename` (rewrite a
+  project's name), `index-reset` (re-seed the active scratch from its starter
+  baseline + clear dirty), and `index-new-scratch` (re-establish the scratch entry
+  + re-seed `/scratch` after a Save left the index `scratch:null`, so the next Save
+  works). The owner reconciles its on-disk index at boot
+  (`reconcileOwnerIndexAtBoot`: `recoverIndex` half-move rollback/finish + synthesize
+  a scratch entry keyed on the spawn `RIFTY_RFV_STARTER` when `/scratch` exists but
+  the index is a cold-boot empty) — the index becomes the real source the page mirror
+  hydrates from. Save/reset carry the page's CURRENT active starter so a mid-session
+  starter pick (no respawn) records the right starter. New e2e: the full
+  save→switch-away→switch-back round-trip with two FRONTEND-starter projects, each
+  tree intact + distinct across owner respawns, asserted straight off OPFS
+  (`project-switch.spec.ts`). RED-checked: no-op the owner `index-save` handler →
+  the round-trip + owner unit tests fail.
+
+- Honest-loud degraded path (ADR-0165 §8): degraded banner + status-bar `Memory · session only`/`EPHEMERAL` badge wired to the real `BootResult`/`detectVfsBackend` probe (not a manual toggle); every save affordance marked ephemeral in memory mode; `Re-enable` reloads to re-probe; COI hard-assert unchanged (distinct gate).
+
+- **Durable project delete (ADR-0165 §56).** Deleting a saved project from the
+  launcher is now DURABLE end-to-end: after the Undo grace window the page posts an
+  `index-delete` frame on the project-index channel (`glue/project-index-port.ts`
+  `deleteProjectTree`); the owner `rmSync`s `/projects/<id>` from OPFS, drops the
+  entry from the index, re-points `activeId` if the deleted project was active
+  (→ scratch if a draft exists, else the first remaining project), and re-publishes
+  so every page mirror reconciles. A delete of an unknown id is an idempotent no-op
+  publish. App's `onDiskDelete` no longer throws `NotImplementedError` — the
+  page-mirror flip + Undo were always real; the on-disk removal is now wired.
+
+- **Project switch = owner teardown+respawn (ADR-0165).** Switching the active
+  project is a strictly-sequential owner kill→await-exit→respawn with the new
+  `RIFTY_RFV_ROOT` (the env is frozen per spawn — no live re-point), never a
+  two-owner window (`glue/switch-owner.ts` `requestSwitch`). The page derives the
+  active root from `rootForId(activeId)` threaded through every surface — the
+  `WORKSPACE='/workspace'` constant is deleted — and holds an in-memory mirror of
+  the owner's OPFS project index (`glue/project-index-port.ts` `bridgeProjectIndex`,
+  re-published authoritatively on each respawn); the owner serves that index for the
+  mirror. UI callers (launcher chip + command palette) land with the launcher; the cross-project
+  switch e2e runs once those surfaces exist.
+
+- **Durable-scratch lifecycle (ADR-0165).** `glue/project-index.ts` seeds
+  `/scratch` (`seedScratch`, idempotent) from a re-derived Starter bundle
+  (`glue/starter.ts` `seedFilesForStarter(starter, root)`, baseline = the registry
+  definition, never stored) and one-shot whole-workspace resets it
+  (`resetScratchToStarter`). Save converts scratch→project and re-keys the moved
+  tree's install-stamp slug to the project id (sync `restampSlugSync` inside the
+  atomic copy→flip→delete; async twin `restampSlug` in `glue/install-stamp.ts` for
+  the boot/page callers), so two projects from the same Starter never share
+  `node_modules`. The owner dev-boot clean (`workers/dev-boot-clean.ts`
+  `shouldCleanForDevBoot`) now fires on a root OR template change, not template
+  alone (first boot still never cleans).
+
+- Multi-project storage layer (ADR-0165): owner-side project index (`loadIndex`/`writeIndex`/`recoverIndex`/`saveScratchAsProject`/`seedScratch`/`resetScratchToStarter`, loud on corrupt JSON + un-reconcilable half-move, atomic-safe copy→flip→delete Save), Preset→Starter map (shared `.source` refs preserved), owner↔page index bridge, and the page store replacing the bare `activePreset` signal. No UI wiring yet.
 
 - **Page preview bridge advertises served ports** (ADR-0160). The window-owner
   `rifty:preview:ready`/`goodbye` frames now carry the `ports` the page owns, so
