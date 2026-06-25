@@ -46,7 +46,6 @@ test.describe.configure({ mode: 'serial' });
  * the e2e harness serves COOP/COEP. Chromium-only, matching the other owner specs.
  */
 
-const TS_PATH = '/scratch/src/lsp-check.ts';
 let ownerShellSeq = 0;
 
 function parentDir(path: string): string {
@@ -64,6 +63,17 @@ async function runOwnerShell(page: Page, command: string, timeout = 15_000): Pro
   await expect
     .poll(() => terminalBuffer(page), { timeout })
     .toMatch(new RegExp(`${escapeRegExp(marker)}[\\s\\S]*>\\s*$`));
+}
+
+async function activeRootFromHint(page: Page): Promise<string> {
+  const hint = page
+    .locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal-mode-hint"]')
+    .first();
+  await expect(hint).toContainText('Commands run in ', { timeout: 30_000 });
+  const text = (await hint.textContent()) ?? '';
+  const match = text.match(/Commands run in ([^;]+);/);
+  if (!match) throw new Error(`could not parse active root from mode hint: ${text}`);
+  return match[1];
 }
 
 /** rifty-TS marker count for a VFS path via the EditorHost e2e hook (ADR-0166 P1.9d). */
@@ -534,6 +544,8 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     // owner-editor spec uses). Terminal 1 then runs `vite` (blocks its prompt), so
     // open a SECOND idle shell on the same persistent owner for file commands.
     await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
+    const root = await activeRootFromHint(page);
+    const tsPath = `${root}/src/lsp-check.ts`;
     await openShellTerminal(page);
 
     // Create an EMPTY .ts file in the owner store (the SSoT the LS reads) via a
@@ -542,7 +554,7 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     // exit, so the palette then lists it.
     await runOwnerShell(
       page,
-      `mkdir -p ${parentDir(TS_PATH)} && printf '' > ${TS_PATH} && ls /scratch/src`,
+      `mkdir -p ${parentDir(tsPath)} && printf '' > ${tsPath} && ls ${root}/src`,
     );
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('lsp-check.ts');
 
@@ -553,7 +565,7 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     // Editor opened a model for this path (hook returns >= 0 once mounted) and the
     // empty file has NO diagnostics yet.
     await expect
-      .poll(() => tsMarkerCount(page, TS_PATH), { timeout: 15_000 })
+      .poll(() => tsMarkerCount(page, tsPath), { timeout: 15_000 })
       .toBeGreaterThanOrEqual(0);
     expect(await tsReinit(page)).toBe(true);
 
@@ -569,7 +581,7 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     // (1) a rifty-TS Monaco marker appears. VERY generous: the FIRST request cold-
     // boots the `typescript` engine in the LS worker AND fetches the ~3 MB vendored
     // lib.d.ts bundle over the relay — one-time, slow; once warm the rest is fast.
-    await expect.poll(() => tsMarkerCount(page, TS_PATH), { timeout: 100_000 }).toBeGreaterThan(0);
+    await expect.poll(() => tsMarkerCount(page, tsPath), { timeout: 100_000 }).toBeGreaterThan(0);
 
     // (1b) and a real error squiggle is rendered on the active model.
     await expect(page.locator('.monaco-editor .squiggly-error').first()).toBeVisible({
@@ -591,9 +603,9 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     // Fix the error → ts:update → fresh (empty) diagnostics. A clean full-replace
     // via the model test hook (real change event, see header). BOTH the marker AND
     // the Problems row must clear.
-    expect(await setModelValue(page, TS_PATH, 'export const good: number = 42;\n')).toBe(true);
+    expect(await setModelValue(page, tsPath, 'export const good: number = 42;\n')).toBe(true);
 
-    await expect.poll(() => tsMarkerCount(page, TS_PATH), { timeout: 30_000 }).toBe(0);
+    await expect.poll(() => tsMarkerCount(page, tsPath), { timeout: 30_000 }).toBe(0);
     await expect
       .poll(() => page.locator('[data-testid="problem-row"]').count(), { timeout: 30_000 })
       .toBe(0);
@@ -615,24 +627,27 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
       'LibraryShape',
       'TypeScript language surface',
     );
+    const root = await activeRootFromHint(page);
+    const mainTs = `${root}/src/main.ts`;
+    const formatTs = `${root}/src/format.ts`;
     const editor = page.locator('[data-testid="editor"]');
     const editorLines = editor.locator('.view-lines').first();
     // The TypeScript starter entry is already the active program tab; checking
     // the visible Monaco lines avoids racing the palette's async file index.
     await expect(editorLines).toContainText('LibraryShape', { timeout: 45_000 });
     await expect
-      .poll(async () => (await tsDefinition(page, '/scratch/src/main.ts', 3, 10))?.[0]?.uri ?? '', {
+      .poll(async () => (await tsDefinition(page, mainTs, 3, 10))?.[0]?.uri ?? '', {
         timeout: 90_000,
         intervals: [1500],
       })
-      .toContain('/scratch/src/format.ts');
+      .toContain(formatTs);
 
     const frame = page.frameLocator('iframe[title="Preview port 5174"]');
 
     expect(
       await setModelValue(
         page,
-        '/scratch/src/main.ts',
+        mainTs,
         [
           "const app = document.getElementById('app');",
           "if (!app) throw new Error('Missing #app root');",
@@ -647,16 +662,10 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
       timeout: 90_000,
     });
 
-    await expect
-      .poll(() => tsMarkerCount(page, '/scratch/src/main.ts'), { timeout: 90_000 })
-      .toBe(0);
-    expect(
-      await setModelValue(page, '/scratch/src/main.ts', 'const busted: number = "nope";\n'),
-    ).toBe(true);
+    await expect.poll(() => tsMarkerCount(page, mainTs), { timeout: 90_000 }).toBe(0);
+    expect(await setModelValue(page, mainTs, 'const busted: number = "nope";\n')).toBe(true);
     await expect(editorLines).toContainText('busted', { timeout: 10_000 });
-    await expect
-      .poll(() => tsMarkerCount(page, '/scratch/src/main.ts'), { timeout: 90_000 })
-      .toBeGreaterThan(0);
+    await expect.poll(() => tsMarkerCount(page, mainTs), { timeout: 90_000 }).toBeGreaterThan(0);
     await expect(page.locator('.monaco-editor .squiggly-error').first()).toBeVisible({
       timeout: 30_000,
     });
@@ -682,12 +691,14 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
       'LibraryShape',
       'TypeScript language surface',
     );
+    const root = await activeRootFromHint(page);
+    const mainTs = `${root}/src/main.ts`;
     const before = await terminalBuffer(page);
     for (let i = 0; i < 12; i += 1) {
       expect(
         await setModelValue(
           page,
-          '/scratch/src/main.ts',
+          mainTs,
           [
             "const app = document.getElementById('app');",
             "if (!app) throw new Error('Missing #app root');",
@@ -731,10 +742,18 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
  * lib.d.ts, so a hover/def/completion path built on the isolated worker could not
  * satisfy these assertions.
  */
-const PROJECT_DIR = '/scratch/src';
-const USES_DEP = `${PROJECT_DIR}/uses-dep.ts`;
-const DEP_TS = `${PROJECT_DIR}/dep.ts`;
-const DEP_DTS = '/scratch/node_modules/cool-dep/index.d.ts';
+function dependencyProjectPaths(root: string): {
+  usesDep: string;
+  depTs: string;
+  depDts: string;
+} {
+  const projectDir = `${root}/src`;
+  return {
+    usesDep: `${projectDir}/uses-dep.ts`,
+    depTs: `${projectDir}/dep.ts`,
+    depDts: `${root}/node_modules/cool-dep/index.d.ts`,
+  };
+}
 const usesDepResolvedSource = [
   'import { coolValue, coolHelper, cool } from "cool-dep";',
   'import { localGreet } from "./dep.ts";',
@@ -764,6 +783,8 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     await page.goto('/');
 
     await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
+    const root = await activeRootFromHint(page);
+    const { usesDep, depTs, depDts } = dependencyProjectPaths(root);
     await openShellTerminal(page);
 
     // Build a small REAL project in the owner store (the SSoT the LS reads):
@@ -774,7 +795,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     //  - `uses-dep.ts` importing both.
     await writeOwnerFile(
       page,
-      '/scratch/tsconfig.json',
+      `${root}/tsconfig.json`,
       [
         '{',
         '  "compilerOptions": {',
@@ -791,12 +812,12 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     );
     await writeOwnerFile(
       page,
-      '/scratch/node_modules/cool-dep/package.json',
+      `${root}/node_modules/cool-dep/package.json`,
       ['{', '  "name": "cool-dep",', '  "types": "index.d.ts"', '}', ''].join('\n'),
     );
     await writeOwnerFile(
       page,
-      DEP_DTS,
+      depDts,
       [
         'export declare const coolValue: number;',
         'export declare function coolHelper(input: string): string;',
@@ -806,7 +827,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     );
     await writeOwnerFile(
       page,
-      DEP_TS,
+      depTs,
       [
         'export function localGreet(name: string): string {',
         '  return "hi " + name;',
@@ -824,24 +845,24 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     //  L4 `const b = coolHelper("x");`
     //  L5 `const c = localGreet("y");`     localGreet starts col 11
     //  L6 `const d = cool.value;`          completion switches this to `cool.`
-    await writeOwnerFile(page, USES_DEP, usesDepResolvedSource);
-    await runOwnerShell(page, `test -f ${DEP_DTS} && cat ${DEP_DTS} && ls /scratch/src`);
+    await writeOwnerFile(page, usesDep, usesDepResolvedSource);
+    await runOwnerShell(page, `test -f ${depDts} && cat ${depDts} && ls ${root}/src`);
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('coolValue');
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('uses-dep.ts');
 
     // Open uses-dep.ts so a Monaco model exists (providers resolve a model→path).
     await openFileViaPalette(page, 'uses-dep.ts');
     await expect
-      .poll(() => tsMarkerCount(page, USES_DEP), { timeout: 15_000 })
+      .poll(() => tsMarkerCount(page, usesDep), { timeout: 15_000 })
       .toBeGreaterThanOrEqual(0);
 
     let depDefs: { uri: string; line: number; column: number }[] = [];
-    expect(await setModelValue(page, USES_DEP, usesDepResolvedSource)).toBe(true);
+    expect(await setModelValue(page, usesDep, usesDepResolvedSource)).toBe(true);
     // Rebuild after the file is open and mirrored, so the provider query below is
     // served by the project configured with bundler resolution + fake node_modules.
     expect(await tsReinit(page)).toBe(true);
     await expect
-      .poll(() => tsMarkerCount(page, USES_DEP), { timeout: 120_000, intervals: [1500] })
+      .poll(() => tsMarkerCount(page, usesDep), { timeout: 120_000, intervals: [1500] })
       .toBe(0);
     const depDefinitionProbes = [
       { line: 3, col: 12 }, // usage alias
@@ -853,41 +874,41 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
         async () => {
           depDefs = [];
           for (const probe of depDefinitionProbes) {
-            depDefs = (await tsDefinition(page, USES_DEP, probe.line, probe.col)) ?? [];
-            if (depDefs.some((d) => d.uri.includes(DEP_DTS))) return true;
+            depDefs = (await tsDefinition(page, usesDep, probe.line, probe.col)) ?? [];
+            if (depDefs.some((d) => d.uri.includes(depDts))) return depDefs.map((d) => d.uri);
           }
-          return depDefs.some((d) => d.uri.includes(DEP_DTS));
+          return depDefs.map((d) => d.uri);
         },
         { timeout: 120_000, intervals: [1500] },
       )
-      .toBe(true);
+      .toContain(depDts);
 
     // (1) HOVER over `coolValue` (L3, col 12). TS 5.9 renders this imported
     // alias as `import coolValue`; the dependency `.d.ts` proof is the definition
     // jump below. The FIRST query cold-boots the engine + ~3 MB lib.d.ts over the
     // relay, so poll with a spaced interval.
     await expect
-      .poll(() => tsHover(page, USES_DEP, 3, 12), { timeout: 90_000, intervals: [1500] })
+      .poll(() => tsHover(page, usesDep, 3, 12), { timeout: 90_000, intervals: [1500] })
       .toContain('coolValue');
 
     // (2a) GO-TO-DEFINITION of `coolValue` (L3, col 12) → node_modules .d.ts.
     // This specifically exercises the EditorHost read-only remote-port branch:
     // the page snapshot excludes node_modules, so the provider must ask the owner
     // read-port to open the target model instead of silently dropping the Location.
-    const depDef = depDefs.find((d) => d.uri.includes(DEP_DTS));
-    expect(depDef?.uri).toContain(DEP_DTS);
+    const depDef = depDefs.find((d) => d.uri.includes(depDts));
+    expect(depDef?.uri).toContain(depDts);
     expect(depDef?.line).toBe(1);
 
     // (2b) GO-TO-DEFINITION of `localGreet` (L5, col 12) → the sibling dep.ts (the
     // hook round-trips the target Location.uri back to its VFS path). Cross-file
     // resolution Monaco's isolated worker can't do.
     await expect
-      .poll(async () => (await tsDefinition(page, USES_DEP, 5, 12))?.[0]?.uri ?? '', {
+      .poll(async () => (await tsDefinition(page, usesDep, 5, 12))?.[0]?.uri ?? '', {
         timeout: 30_000,
         intervals: [1500],
       })
-      .toContain(DEP_TS);
-    const localDefs = await tsDefinition(page, USES_DEP, 5, 12);
+      .toContain(depTs);
+    const localDefs = await tsDefinition(page, usesDep, 5, 12);
     expect(localDefs?.[0]?.uri).not.toContain('uses-dep.ts');
     // jumps to the declaration line (dep.ts L1, `export function localGreet`).
     expect(localDefs?.[0]?.line).toBe(1);
@@ -895,17 +916,17 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     // (3) COMPLETIONS at the member access `cool.` (L6, col 16). Keep the file
     // syntactically valid for hover/definition above, then make it incomplete only
     // for this completion assertion.
-    expect(await setModelValue(page, USES_DEP, usesDepCompletionSource)).toBe(true);
+    expect(await setModelValue(page, usesDep, usesDepCompletionSource)).toBe(true);
     await expect
-      .poll(() => tsMarkerCount(page, USES_DEP), { timeout: 60_000, intervals: [1500] })
+      .poll(() => tsMarkerCount(page, usesDep), { timeout: 60_000, intervals: [1500] })
       .toBeGreaterThan(0);
     await expect
-      .poll(async () => (await tsCompletions(page, USES_DEP, 6, 16)) ?? [], {
+      .poll(async () => (await tsCompletions(page, usesDep, 6, 16)) ?? [], {
         timeout: 60_000,
         intervals: [1500],
       })
       .toEqual(expect.arrayContaining(['helper', 'value']));
-    const completionItems = (await tsCompletionItems(page, USES_DEP, 6, 16)) ?? [];
+    const completionItems = (await tsCompletionItems(page, usesDep, 6, 16)) ?? [];
     const helperCompletion = completionItems.find((item) => item.label === 'helper');
     expect(helperCompletion).toMatchObject({
       insertText: 'helper',
@@ -916,7 +937,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     });
     expect(helperCompletion?.commitCharacters.length ?? 0).toBeGreaterThan(0);
     await expect
-      .poll(async () => tsRangeSemanticTokenCount(page, USES_DEP, 1, 1, 6, 16), {
+      .poll(async () => tsRangeSemanticTokenCount(page, usesDep, 1, 1, 6, 16), {
         timeout: 60_000,
         intervals: [1500],
       })
@@ -948,8 +969,16 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
  * None of `greet`/`localGreet` exist in lib.d.ts, so a built-in-worker reference/
  * rename/signature built on the isolated model could not produce them at all.
  */
-const GREETER_TS = `${PROJECT_DIR}/greeter.ts`;
-const APP_TS = `${PROJECT_DIR}/app.ts`;
+function referencesProjectPaths(root: string): {
+  greeterTs: string;
+  appTs: string;
+} {
+  const projectDir = `${root}/src`;
+  return {
+    greeterTs: `${projectDir}/greeter.ts`,
+    appTs: `${projectDir}/app.ts`,
+  };
+}
 
 test.describe('rifty TS language service: real references/rename/signature-help (not Monaco built-in)', () => {
   test('references span two files (declaration drop honored); rename edits both files; signature help at a call site', async ({
@@ -961,6 +990,8 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     await page.goto('/');
 
     await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
+    const root = await activeRootFromHint(page);
+    const { greeterTs, appTs } = referencesProjectPaths(root);
     await openShellTerminal(page);
 
     // Build a small REAL cross-file project in the owner store (the SSoT the LS
@@ -970,7 +1001,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     // which sees neither file, could never surface.
     await writeOwnerFile(
       page,
-      '/scratch/tsconfig.json',
+      `${root}/tsconfig.json`,
       [
         '{',
         '  "compilerOptions": {',
@@ -989,7 +1020,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     //  L1 `export function localGreet(name: string): string {`  localGreet @ col 17
     await writeOwnerFile(
       page,
-      GREETER_TS,
+      greeterTs,
       [
         'export function localGreet(name: string): string {',
         '  return "hi " + name;',
@@ -1003,7 +1034,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     //  L3 `const b = localGreet("bob");`                localGreet @ col 11
     await writeOwnerFile(
       page,
-      APP_TS,
+      appTs,
       [
         'import { localGreet } from "./greeter.ts";',
         'const a = localGreet("ann");',
@@ -1012,7 +1043,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
         '',
       ].join('\n'),
     );
-    await runOwnerShell(page, 'ls /scratch/src');
+    await runOwnerShell(page, `ls ${root}/src`);
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('app.ts');
 
     // Open BOTH files so a Monaco model exists for each (providers resolve a
@@ -1021,7 +1052,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     await openFileViaPalette(page, 'greeter.ts');
     await openFileViaPalette(page, 'app.ts');
     await expect
-      .poll(() => tsMarkerCount(page, APP_TS), { timeout: 15_000 })
+      .poll(() => tsMarkerCount(page, appTs), { timeout: 15_000 })
       .toBeGreaterThanOrEqual(0);
 
     // Rebuild the service against the project we just wrote (the boot build used
@@ -1035,7 +1066,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     await expect
       .poll(
         async () => {
-          const refs = (await tsReferences(page, GREETER_TS, 1, 17, true)) ?? [];
+          const refs = (await tsReferences(page, greeterTs, 1, 17, true)) ?? [];
           return new Set(refs.map((r) => r.uri.replace(/^.*\/src\//, 'src/'))).size;
         },
         { timeout: 90_000, intervals: [1500] },
@@ -1043,7 +1074,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
       .toBeGreaterThanOrEqual(2);
 
     // The references include uses in BOTH greeter.ts and app.ts (cross-file).
-    const withDecl = (await tsReferences(page, GREETER_TS, 1, 17, true)) ?? [];
+    const withDecl = (await tsReferences(page, greeterTs, 1, 17, true)) ?? [];
     const declFiles = new Set(withDecl.map((r) => r.uri));
     expect([...declFiles].some((u) => u.includes('greeter.ts'))).toBe(true);
     expect([...declFiles].some((u) => u.includes('app.ts'))).toBe(true);
@@ -1053,7 +1084,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
 
     // includeDeclaration:false drops the declaration site (greeter.ts L1): strictly
     // fewer results, and none of them is the declaration line in greeter.ts.
-    const noDecl = (await tsReferences(page, GREETER_TS, 1, 17, false)) ?? [];
+    const noDecl = (await tsReferences(page, greeterTs, 1, 17, false)) ?? [];
     expect(noDecl.length).toBe(declCount - 1);
     expect(noDecl.some((r) => r.uri.includes('greeter.ts') && r.line === 1)).toBe(false);
     // app.ts uses survive the declaration drop (cross-file refs are NOT the decl).
@@ -1061,7 +1092,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
 
     // (2) PREPARE-RENAME at a use site in app.ts (L2, col 11) → renameable, the box
     // seeds with the current symbol name.
-    const prepared = await tsPrepareRename(page, APP_TS, 2, 11);
+    const prepared = await tsPrepareRename(page, appTs, 2, 11);
     expect(prepared).not.toBeNull();
     expect(prepared && 'text' in prepared ? prepared.text : '').toBe('localGreet');
 
@@ -1072,7 +1103,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     // *use* site instead would, per real TS, rewrite only the importing file's
     // local binding to `localGreet as greetUser` — the export rename is the genuine
     // cross-file edit.)
-    const edits = (await tsRenameEdits(page, GREETER_TS, 1, 17, 'greetUser')) ?? [];
+    const edits = (await tsRenameEdits(page, greeterTs, 1, 17, 'greetUser')) ?? [];
     const editFiles = new Set(edits.map((e) => e.uri));
     expect([...editFiles].some((u) => u.includes('greeter.ts'))).toBe(true);
     expect([...editFiles].some((u) => u.includes('app.ts'))).toBe(true);
@@ -1084,7 +1115,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     // (3) SIGNATURE-HELP at the call site `localGreet(` in app.ts (L2, col 22 — just
     // inside the open paren, on the first argument). The signature label carries the
     // real parameter (`name: string`) from greeter.ts, and activeParameter is 0.
-    const help = await tsSignatureHelp(page, APP_TS, 2, 22);
+    const help = await tsSignatureHelp(page, appTs, 2, 22);
     expect(help).not.toBeNull();
     expect(help?.label).toMatch(/name:\s*string/);
     expect(help?.activeParameter).toBe(0);
@@ -1118,11 +1149,20 @@ test.describe('rifty TS language service: real references/rename/signature-help 
  * None of `localGreet`/`coolGreet` exist in lib.d.ts, so a built-in-worker fix
  * built on the isolated model could not produce the cross-file import at all.
  */
-const FIX_DIR = '/scratch/src';
-const FIX_GREETER = `${FIX_DIR}/greeter.ts`;
-const FIX_APP = `${FIX_DIR}/app.ts`;
-const ORGANIZE_TS = `${FIX_DIR}/organize.ts`;
-const FORMAT_TS = `${FIX_DIR}/format.ts`;
+function codeActionProjectPaths(root: string): {
+  fixGreeter: string;
+  fixApp: string;
+  organizeTs: string;
+  formatTs: string;
+} {
+  const fixDir = `${root}/src`;
+  return {
+    fixGreeter: `${fixDir}/greeter.ts`,
+    fixApp: `${fixDir}/app.ts`,
+    organizeTs: `${fixDir}/organize.ts`,
+    formatTs: `${fixDir}/format.ts`,
+  };
+}
 
 test.describe('rifty TS language service: real quick-fixes/organize-imports/formatting (not Monaco built-in)', () => {
   test('missing-import quick-fix adds an import from a sibling; organize-imports sorts+drops unused; format-document fixes spacing', async ({
@@ -1134,6 +1174,8 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     await page.goto('/');
 
     await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
+    const root = await activeRootFromHint(page);
+    const { fixGreeter, fixApp, organizeTs, formatTs } = codeActionProjectPaths(root);
     await openShellTerminal(page);
 
     // A small REAL cross-file project in the owner store (the SSoT the LS reads):
@@ -1145,7 +1187,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     //  - format.ts with deliberately bad spacing.
     await writeOwnerFile(
       page,
-      '/scratch/tsconfig.json',
+      `${root}/tsconfig.json`,
       [
         '{',
         '  "compilerOptions": {',
@@ -1163,7 +1205,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     );
     await writeOwnerFile(
       page,
-      FIX_GREETER,
+      fixGreeter,
       [
         'export function localGreet(name: string): string {',
         '  return "hi " + name;',
@@ -1176,14 +1218,14 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     //  L1 `const a = localGreet("x");`  localGreet @ col 11
     await writeOwnerFile(
       page,
-      FIX_APP,
+      fixApp,
       ['const a = localGreet("x");', 'export const out = a;', ''].join('\n'),
     );
     // organize.ts — imports out of order (VERSION before localGreet) and one
     // unused (`VERSION` is never referenced) ⇒ organize sorts + drops it.
     await writeOwnerFile(
       page,
-      ORGANIZE_TS,
+      organizeTs,
       [
         'import { VERSION, localGreet } from "./greeter.ts";',
         'export const g = localGreet("y");',
@@ -1194,10 +1236,10 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     // tsserver's default format settings rewrite.
     await writeOwnerFile(
       page,
-      FORMAT_TS,
+      formatTs,
       ['export const sum=(a:number,b:number)=>a+b;', 'export const v=sum(1,2);', ''].join('\n'),
     );
-    await runOwnerShell(page, 'ls /scratch/src');
+    await runOwnerShell(page, `ls ${root}/src`);
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('app.ts');
 
     // Open all four files so a Monaco model exists for each (providers resolve a
@@ -1207,7 +1249,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     await openFileViaPalette(page, 'organize.ts');
     await openFileViaPalette(page, 'format.ts');
     await expect
-      .poll(() => tsMarkerCount(page, FIX_APP), { timeout: 15_000 })
+      .poll(() => tsMarkerCount(page, fixApp), { timeout: 15_000 })
       .toBeGreaterThanOrEqual(0);
 
     // Rebuild the service against the project we just wrote (the boot build used
@@ -1217,7 +1259,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     // The "Cannot find name 'localGreet'" diagnostic must land first — the
     // quick-fix is sourced from THAT marker's code (FIRST request cold-boots the
     // engine + ~3 MB lib.d.ts; 90s headroom).
-    await expect.poll(() => tsMarkerCount(page, FIX_APP), { timeout: 90_000 }).toBeGreaterThan(0);
+    await expect.poll(() => tsMarkerCount(page, fixApp), { timeout: 90_000 }).toBeGreaterThan(0);
 
     // (1) QUICK-FIX over the `localGreet` use in app.ts (L1, cols 11..21). The
     // provider sources the errorCodes from the overlapping rifty marker, so an
@@ -1226,7 +1268,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     await expect
       .poll(
         async () => {
-          const fixes = await tsCodeFixes(page, FIX_APP, 1, 11, 1, 21);
+          const fixes = await tsCodeFixes(page, fixApp, 1, 11, 1, 21);
           return fixes.some(
             (f) =>
               f.kind === 'quickfix' &&
@@ -1238,7 +1280,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
       )
       .toBe(true);
     // The returned fix carries a NON-EMPTY edit (load-bearing: not a lying no-op fix).
-    const fixes = await tsCodeFixes(page, FIX_APP, 1, 11, 1, 21);
+    const fixes = await tsCodeFixes(page, fixApp, 1, 11, 1, 21);
     const addImport = fixes.find(
       (f) => f.kind === 'quickfix' && f.edits.some((e) => /import/.test(e.text)),
     );
@@ -1250,7 +1292,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     // source action returns a non-empty edit. The new import text sorts the names
     // and DROPS the unused `VERSION` (only `localGreet` survives) — the real
     // tsc organize, not a no-op.
-    const organize = await tsOrganizeImports(page, ORGANIZE_TS);
+    const organize = await tsOrganizeImports(page, organizeTs);
     expect(organize).not.toBeNull();
     expect(organize?.kind).toBe('source.organizeImports');
     expect(organize?.edits.length ?? 0).toBeGreaterThan(0);
@@ -1262,7 +1304,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     // returns a non-empty edit set; APPLIED, the text restores spacing around the
     // operators / after commas (`a: number, b: number`, `a + b`, `const sum =`)
     // per tsserver defaults — the real formatter, not a pass-through.
-    const formatResult = await tsFormat(page, FORMAT_TS);
+    const formatResult = await tsFormat(page, formatTs);
     expect(formatResult).not.toBeNull();
     expect(formatResult?.editCount ?? 0).toBeGreaterThan(0);
     const formatted = formatResult?.applied ?? '';
