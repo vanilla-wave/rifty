@@ -94,4 +94,45 @@ describe('module resolution over the VFS node_modules', () => {
       to: '/proj/node_modules/leftpad/index.d.ts',
     });
   });
+
+  it('resolves scoped node_modules packages through the VFS host', async () => {
+    const { fsSync } = createMemoryFs();
+    writeFile(
+      fsSync,
+      '/proj/node_modules/@scope/pkg/package.json',
+      JSON.stringify({ name: '@scope/pkg', types: 'index.d.ts' }),
+    );
+    writeFile(
+      fsSync,
+      '/proj/node_modules/@scope/pkg/index.d.ts',
+      'export interface ScopedValue { readonly ok: boolean; }\n',
+    );
+    writeFile(
+      fsSync,
+      '/proj/a.ts',
+      "import type { ScopedValue } from '@scope/pkg';\nconst value: ScopedValue = { ok: true };\n",
+    );
+    const libMap = await loadLibDts();
+
+    const resolved: Array<{ name: string; to: string | undefined }> = [];
+    const host = createVfsLanguageServiceHost({
+      fsSync,
+      projectRoot: '/proj',
+      compilerOptions: {
+        ...ts.getDefaultCompilerOptions(),
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+      },
+      fileNames: ['/proj/a.ts'],
+      libMap,
+      overlay: createDocumentOverlay(),
+      onModuleResolved: (name, _from, to) => resolved.push({ name, to }),
+    });
+    const service = ts.createLanguageService(host, ts.createDocumentRegistry());
+
+    expect(service.getSemanticDiagnostics('/proj/a.ts')).toHaveLength(0);
+    expect(resolved).toContainEqual({
+      name: '@scope/pkg',
+      to: '/proj/node_modules/@scope/pkg/index.d.ts',
+    });
+  });
 });

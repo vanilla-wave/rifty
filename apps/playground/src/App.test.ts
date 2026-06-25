@@ -72,7 +72,8 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain(
       'const programPath = programMirrorPath(activeRoot(), activeTemplate())',
     );
-    expect(source).toContain('workspaceOwner().writeFile(programPath, next)');
+    expect(source).toContain('scheduleProgramWrite(programPath, next)');
+    expect(source).toContain('workspaceOwner().writeFile(pending.path, pending.content)');
     // the legacy hardcoded const is gone from the program write path
     expect(source).not.toContain('writeFile(PROGRAM_MIRROR_PATH');
     // explorer + editor read the owner snapshot, not a vite-gated swap
@@ -188,6 +189,14 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('createTsDiagnosticsSync<Diagnostic, monaco.editor.IMarkerData>');
     expect(source).toContain('api.onDocument(diagnosticSync.handleDocument)');
     expect(source).toContain('diagnosticSync.dispose()');
+  });
+
+  it('reinitializes rifty TS when starter files change under the same active root', () => {
+    expect(source).toContain('const [tsProjectRevision, setTsProjectRevision] = createSignal(0)');
+    expect(source).toContain('tsProjectRevision();');
+    expect(source).toContain('setTsProjectRevision((revision) => revision + 1)');
+    expect(source).toContain("const wasRunning = devServerStatus() === 'running';");
+    expect(source).toContain("if (frame.status === 'running' && !wasRunning)");
   });
 
   it('routes workspace archive export and import through the owner (one authoritative owner; page reads through ports)', () => {

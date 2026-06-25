@@ -408,6 +408,7 @@ export function App(props: AppProps) {
     'stopped',
   );
   const devServerRunning = (): boolean => devServerStatus() === 'running';
+  const [tsProjectRevision, setTsProjectRevision] = createSignal(0);
 
   // ALL live previewable ports (ADR-0155): the dev-server port + each `node
   // <file>` server's ports, pushed by the owner as a `pty:preview` snapshot. Feeds
@@ -423,7 +424,11 @@ export function App(props: AppProps) {
   createEffect(() => {
     let tearPreview: (() => void) | undefined;
     const unsubscribe = workspaceOwner().onDevServer((frame) => {
+      const wasRunning = devServerStatus() === 'running';
       setDevServerStatus(frame.status);
+      if (frame.status === 'running' && !wasRunning) {
+        setTsProjectRevision((revision) => revision + 1);
+      }
       if (frame.port !== undefined) machine.setRealVitePort(frame.port);
       tearPreview?.();
       tearPreview =
@@ -698,6 +703,10 @@ export function App(props: AppProps) {
     // the LS to the NEW owner + re-inits against the switched-in root — the prior
     // client is disposed in onCleanup before the new one is built.
     const owner = workspaceOwner();
+    // A starter pick can rewrite tsconfig.json / declaration files under the same
+    // /scratch root. Track that seed revision explicitly so the service reloads
+    // config + project files even when activeRoot() is unchanged.
+    tsProjectRevision();
     // The unavailable-owner stub's sendTsLsp/onTsLsp are no-ops → init/requests
     // time out and reject; we swallow (no owner = no diagnostics, surfaced loud
     // in the terminal already). A real owner serves the LS child.
@@ -1370,6 +1379,7 @@ export function App(props: AppProps) {
     setActivePreset(preset.id);
     await machine.loadPreset(preset);
     seedViteWorkspace(preset);
+    setTsProjectRevision((revision) => revision + 1);
     openPresetEditorTabs(preset);
     // Tell the owner which template/runtime the next co-resident dev server boots
     // (ADR-0148 co-resident dev server): the persistent owner is spawned once, so a node-server preset
@@ -1489,6 +1499,7 @@ export function App(props: AppProps) {
   onCleanup(() => {
     if (initialRunTimer) clearTimeout(initialRunTimer);
     if (toastTimer) clearTimeout(toastTimer);
+    flushPendingProgramWrite();
     manager.dispose();
     workspaceOwner().close(); // terminate the persistent owner worker (ADR-0146)
   });
@@ -1560,6 +1571,30 @@ export function App(props: AppProps) {
 
   async function waitForPendingSwitch(): Promise<boolean> {
     return (await pendingSwitch) ?? true;
+  }
+
+  let programWriteTimer: ReturnType<typeof setTimeout> | undefined;
+  let pendingProgramWrite: { path: string; content: string } | undefined;
+
+  function flushPendingProgramWrite(): void {
+    const pending = pendingProgramWrite;
+    if (!pending) return;
+    if (programWriteTimer) {
+      clearTimeout(programWriteTimer);
+      programWriteTimer = undefined;
+    }
+    pendingProgramWrite = undefined;
+    workspaceOwner().writeFile(pending.path, pending.content);
+    notifyFileWritten(pending.path, pending.content); // ADR-0165 §57: REAL write → dirty
+  }
+
+  function scheduleProgramWrite(path: string, content: string): void {
+    pendingProgramWrite = { path, content };
+    if (programWriteTimer) clearTimeout(programWriteTimer);
+    programWriteTimer = setTimeout(() => {
+      programWriteTimer = undefined;
+      flushPendingProgramWrite();
+    }, 300);
   }
 
   // Establish a fresh scratch from a starter in the OWNER index (ADR-0165 §6): the
@@ -1859,9 +1894,10 @@ export function App(props: AppProps) {
     // authoritative fs): push the program edit to the OWNER (the single store) so
     // the co-resident dev server HMR-updates and the archive sees it. The path is
     // ROOT-RELATIVE (ADR-0165 §4) so the edit reaches the active template entry.
+    // Debounced like ordinary file tabs: Monaco emits one content event per
+    // keystroke, and writing each one floods Vite with duplicate HMR updates.
     const programPath = programMirrorPath(activeRoot(), activeTemplate());
-    workspaceOwner().writeFile(programPath, next);
-    notifyFileWritten(programPath, next); // ADR-0165 §57: REAL write → dirty
+    scheduleProgramWrite(programPath, next);
   }
 
   function onTerminalLink(uri: string): void {

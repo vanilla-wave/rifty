@@ -620,6 +620,12 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
     // The TypeScript starter entry is already the active program tab; checking
     // the visible Monaco lines avoids racing the palette's async file index.
     await expect(editorLines).toContainText('LibraryShape', { timeout: 45_000 });
+    await expect
+      .poll(async () => (await tsDefinition(page, '/scratch/src/main.ts', 3, 10))?.[0]?.uri ?? '', {
+        timeout: 90_000,
+        intervals: [1500],
+      })
+      .toContain('/scratch/src/format.ts');
 
     const frame = page.frameLocator('iframe[title="Preview port 5174"]');
 
@@ -660,6 +666,47 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
       /number|string/i,
       { timeout: 30_000 },
     );
+  });
+
+  test('rapid program edits debounce owner writes so Vite emits one HMR burst, not one line per content event', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
+    test.setTimeout(180_000);
+    await page.goto('/');
+
+    await pickStarterAndWaitForTemplate(
+      page,
+      'typescript-ls',
+      'LibraryShape',
+      'TypeScript language surface',
+    );
+    const before = await terminalBuffer(page);
+    for (let i = 0; i < 12; i += 1) {
+      expect(
+        await setModelValue(
+          page,
+          '/scratch/src/main.ts',
+          [
+            "const app = document.getElementById('app');",
+            "if (!app) throw new Error('Missing #app root');",
+            `app.textContent = 'hmr-debounce-${i}';`,
+            'if (import.meta.hot) import.meta.hot.accept();',
+            '',
+          ].join('\n'),
+        ),
+      ).toBe(true);
+    }
+    await expect(
+      page.frameLocator('iframe[title="Preview port 5174"]').locator('body'),
+    ).toContainText('hmr-debounce-11', { timeout: 90_000 });
+    const after = await terminalBuffer(page);
+    const updates = after
+      .slice(before.length)
+      .split('\n')
+      .filter((line) => line.includes('[vite] hmr update /src/main.ts')).length;
+    expect(updates).toBeLessThanOrEqual(2);
   });
 });
 

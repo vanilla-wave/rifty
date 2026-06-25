@@ -196,6 +196,17 @@ function isFullInstall(args: readonly string[]): boolean {
   return args.slice(1).every((a) => a.startsWith('-'));
 }
 
+function seedTemplateNodeModulesFiles(cfg: BootstrapConfig): void {
+  const fs = syncMirror();
+  const nodeModulesRoot = `${cfg.root}/node_modules/`;
+  for (const [path, content] of Object.entries(cfg.seedFiles)) {
+    const np = normalizePath(path);
+    if (!np.startsWith(nodeModulesRoot)) continue;
+    fs.mkdirSync(dirname(np), { recursive: true });
+    if (!fs.existsSync(np)) fs.writeFileSync(np, enc.encode(content));
+  }
+}
+
 /** Apply the optional `RIFTY_RFV_ENTRY` override. */
 function withEntryOverride(spec: ProjectSpec, entryRel: string): ProjectSpec {
   if (entryRel === spec.entry.relativePath) return spec;
@@ -238,6 +249,7 @@ async function bootShellOwner(opts: {
   // store NOW, before any dev line (the full fs is already present). from-scratch
   // deps come from the explicit `npm install` boot step — nothing to do here.
   if (!fromScratch) await restoreInstantDeps(cfg, spec.id, slug);
+  seedTemplateNodeModulesFiles(cfg);
   publishSnapshot();
   // Readiness handshake (ADR-0146, explorer reflects the owner tree): the page
   // replies-via-request rather than a blind retry-storm. Startup publish covers a
@@ -324,6 +336,9 @@ async function bootShellOwner(opts: {
       // clean it re-seeds package.json + node_modules for the active root). from-scratch
       // deps come SOLELY from the explicit `npm install` boot step.
       if (!devFromScratch) await restoreInstantDeps(devCfg, devSpec.id, devSlug);
+      // The owner store is what the shell and TS LS read. Restore/clean may replace
+      // node_modules, so re-assert template-owned declaration packages last.
+      seedTemplateNodeModulesFiles(devCfg);
       // ADR-0150 P6b: spawn the dev server in a supervised serve:true child that
       // reads the owner store over fs.* RPC. The owner stays a free async
       // supervisor. The driver resolves when the child reports listening; stop()

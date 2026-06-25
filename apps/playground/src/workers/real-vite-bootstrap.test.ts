@@ -22,6 +22,12 @@ describe('real Vite bootstrap preview routing', () => {
     expect(source).toContain('kernelIpc.onMessage?.((message) => {');
     expect(source).toContain('applyVfsWriteFrame(message.frame, { onWrite: onVfsWrite })');
   });
+
+  it('re-seeds template-owned node_modules files into the owner before child dev boot', () => {
+    expect(source).toContain('function seedTemplateNodeModulesFiles(cfg: BootstrapConfig)');
+    expect(source).toContain('const nodeModulesRoot = `${cfg.root}/node_modules/`;');
+    expect(source).toContain('seedTemplateNodeModulesFiles(devCfg);');
+  });
 });
 
 describe('vite command — production build/preview routing', () => {

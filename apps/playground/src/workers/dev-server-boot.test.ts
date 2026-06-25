@@ -19,6 +19,9 @@ describe('dev-server boot preview routing', () => {
     // ADR-0148/0150 P6b (dev server runs in the supervised child): the running
     // dev server's HMR is fed from the virtual FS (it fires no real watcher events).
     expect(source).toContain('function handleViteFileChange(path: string): void');
+    expect(source).toContain('const syntheticWatcherChanges = new Set<string>();');
+    expect(source).toContain('syntheticWatcherChanges.add(modulePath)');
+    expect(source).toContain('if (syntheticWatcherChanges.has(modulePath))');
     expect(source).toContain('invalidateViteModule(activeServer, modulePath)');
     expect(source).not.toContain('function broadcastFileUpdate(path: string): void');
     expect(source).not.toContain('hmrBridgeRef.current?.broadcast(');

@@ -214,16 +214,20 @@ export async function bootDevServer(opts: {
   // package.json in the `boot` closure (alongside the node_modules/lockfile
   // clear); a same-template reload preserves the user's tree.
   const seedFs = syncMirror();
-  seedFs.mkdirSync(root, { recursive: true });
-  if (!seedFs.existsSync(`${root}/package.json`)) {
-    seedFs.writeFileSync(`${root}/package.json`, enc.encode(cfg.packageJson));
+  function seedTemplateFiles(opts: { nodeModulesOnly: boolean }): void {
+    seedFs.mkdirSync(root, { recursive: true });
+    if (!opts.nodeModulesOnly && !seedFs.existsSync(`${root}/package.json`)) {
+      seedFs.writeFileSync(`${root}/package.json`, enc.encode(cfg.packageJson));
+    }
+    for (const [seedPath, content] of Object.entries(cfg.seedFiles)) {
+      const np = normalizePath(seedPath);
+      if (np === `${root}/package.json`) continue;
+      if (opts.nodeModulesOnly && !np.startsWith(`${root}/node_modules/`)) continue;
+      seedFs.mkdirSync(dirname(np), { recursive: true });
+      if (!seedFs.existsSync(np)) seedFs.writeFileSync(np, enc.encode(content));
+    }
   }
-  for (const [seedPath, content] of Object.entries(cfg.seedFiles)) {
-    const np = normalizePath(seedPath);
-    if (np === `${root}/package.json`) continue;
-    seedFs.mkdirSync(dirname(np), { recursive: true });
-    if (!seedFs.existsSync(np)) seedFs.writeFileSync(np, enc.encode(content));
-  }
+  seedTemplateFiles({ nodeModulesOnly: false });
 
   // node_modules is a PRECONDITION of the dev line, never a side effect — faithful
   // to real npm (`npm run dev` / `vite` runs the program; it does NOT install). The
@@ -252,13 +256,17 @@ export async function bootDevServer(opts: {
   });
 
   let activeServer: ViteDevServer | null = null;
+  const syntheticWatcherChanges = new Set<string>();
   function handleViteFileChange(path: string): void {
     const modulePath = normalizePath(path);
     if (activeServer) {
       try {
+        syntheticWatcherChanges.add(modulePath);
         invalidateViteModule(activeServer, modulePath);
       } catch (err) {
         log(`module invalidation failed for ${modulePath}: ${(err as Error).message}\n`);
+      } finally {
+        syntheticWatcherChanges.delete(modulePath);
       }
     }
   }
@@ -327,7 +335,13 @@ export async function bootDevServer(opts: {
     // and the preview route is about to be served on the public port.
     log(`[vite] dev server ready on port ${port}\n`);
     publishSnapshot();
-    server.watcher?.on('change', () => {
+    server.watcher?.on('change', (file) => {
+      const modulePath = normalizePath(file);
+      if (syntheticWatcherChanges.has(modulePath)) {
+        publishSnapshot();
+        return;
+      }
+      handleViteFileChange(file);
       publishSnapshot();
     });
   }

@@ -2,6 +2,45 @@ import { describe, expect, it } from 'vitest';
 import { createTsLanguageServiceClient } from './ts-ls-client.ts';
 
 describe('createTsLanguageServiceClient hard-ceil frames', () => {
+  it('ignores late responses from a disposed client instead of matching a new client request id', async () => {
+    const listeners = new Set<(message: unknown) => void>();
+    const sent: { id: number; type: string }[] = [];
+    const relay = {
+      sendTsLsp(message: unknown) {
+        const request = (message as { request: { id: number; type: string } }).request;
+        sent.push({ id: request.id, type: request.type });
+      },
+      onTsLsp(cb: (message: unknown) => void) {
+        listeners.add(cb);
+        return () => {
+          listeners.delete(cb);
+        };
+      },
+    };
+    const emit = (response: unknown): void => {
+      for (const listener of listeners) listener({ type: 'rifty:ts-lsp', response });
+    };
+
+    const first = createTsLanguageServiceClient(relay, { timeoutMs: 1_000 });
+    const staleRequest = first.getDefinitionLinks('/proj/a.ts', { line: 0, character: 0 });
+    const staleId = sent[0]?.id;
+    first.dispose();
+    await expect(staleRequest).rejects.toThrow('ts-lsp client disposed');
+
+    const second = createTsLanguageServiceClient(relay, { timeoutMs: 1_000 });
+    const liveRequest = second.getDefinitionLinks('/proj/a.ts', { line: 0, character: 0 });
+    const liveId = sent[1]?.id;
+    expect(liveId).not.toBe(staleId);
+
+    emit({ id: staleId, ok: true, kind: 'foldingRanges', foldingRanges: [] });
+    queueMicrotask(() =>
+      emit({ id: liveId, ok: true, kind: 'definitionLinks', definitionLinks: [] }),
+    );
+
+    await expect(liveRequest).resolves.toEqual([]);
+    second.dispose();
+  });
+
   it('sends clone-safe completion options on list and resolve requests', async () => {
     let listener: ((message: unknown) => void) | undefined;
     const sent: unknown[] = [];

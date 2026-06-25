@@ -112,6 +112,12 @@
   Problems panel, and the TS starter shipped with built-in diagnostics (`count` as a
   string, a missing `formatWidgetName` import, and no `vite/client` types for HMR), so
   user edits did not produce a clear before/after signal.
+- **TypeScript starter UX now survives owner/dev-server rebinds.** TS LS request ids
+  are globally monotonic across client instances, starter-owned declaration packages
+  under `node_modules` are re-seeded in the owner/dev-server after install snapshot
+  restore, the LS reinitializes once the owner reports the dev server running, and
+  program-tab writes are debounced so Monaco edits do not flood the terminal with
+  one Vite HMR line per content event.
 - **Starter picks now seed boot-critical template files before Vite starts without
   clobbering installed deps.** A mid-session switch to the TS starter could update
   `src/main.ts` while Vite still served the old `index.html` pointing at
