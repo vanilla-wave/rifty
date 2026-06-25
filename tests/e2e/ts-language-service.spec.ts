@@ -86,6 +86,15 @@ async function setModelValue(page: Page, path: string, text: string): Promise<bo
   );
 }
 
+async function withDisposedClientFallback<T>(op: Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await op;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('ts-lsp client disposed')) return fallback;
+    throw error;
+  }
+}
+
 /** Hover contents (markdown) at a 1-based Monaco position via the registered provider (phase 2 hook). */
 async function tsHover(
   page: Page,
@@ -93,16 +102,19 @@ async function tsHover(
   line: number,
   col: number,
 ): Promise<string | null> {
-  return page.evaluate(
-    ({ p, l, c }) => {
-      const fn = (
-        globalThis as {
-          __riftyTsHover?: (path: string, line: number, col: number) => Promise<string | null>;
-        }
-      ).__riftyTsHover;
-      return fn ? fn(p, l, c) : Promise.resolve('__no_hook__');
-    },
-    { p: path, l: line, c: col },
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, l, c }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsHover?: (path: string, line: number, col: number) => Promise<string | null>;
+          }
+        ).__riftyTsHover;
+        return fn ? fn(p, l, c) : Promise.resolve('__no_hook__');
+      },
+      { p: path, l: line, c: col },
+    ),
+    null,
   );
 }
 
@@ -113,20 +125,23 @@ async function tsDefinition(
   line: number,
   col: number,
 ): Promise<{ uri: string; line: number; column: number }[] | null> {
-  return page.evaluate(
-    ({ p, l, c }) => {
-      const fn = (
-        globalThis as {
-          __riftyTsDefinition?: (
-            path: string,
-            line: number,
-            col: number,
-          ) => Promise<{ uri: string; line: number; column: number }[] | null>;
-        }
-      ).__riftyTsDefinition;
-      return fn ? fn(p, l, c) : Promise.resolve(null);
-    },
-    { p: path, l: line, c: col },
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, l, c }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsDefinition?: (
+              path: string,
+              line: number,
+              col: number,
+            ) => Promise<{ uri: string; line: number; column: number }[] | null>;
+          }
+        ).__riftyTsDefinition;
+        return fn ? fn(p, l, c) : Promise.resolve(null);
+      },
+      { p: path, l: line, c: col },
+    ),
+    null,
   );
 }
 
@@ -137,20 +152,23 @@ async function tsCompletions(
   line: number,
   col: number,
 ): Promise<string[] | null> {
-  return page.evaluate(
-    ({ p, l, c }) => {
-      const fn = (
-        globalThis as {
-          __riftyTsCompletions?: (
-            path: string,
-            line: number,
-            col: number,
-          ) => Promise<string[] | null>;
-        }
-      ).__riftyTsCompletions;
-      return fn ? fn(p, l, c) : Promise.resolve(null);
-    },
-    { p: path, l: line, c: col },
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, l, c }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsCompletions?: (
+              path: string,
+              line: number,
+              col: number,
+            ) => Promise<string[] | null>;
+          }
+        ).__riftyTsCompletions;
+        return fn ? fn(p, l, c) : Promise.resolve(null);
+      },
+      { p: path, l: line, c: col },
+    ),
+    null,
   );
 }
 
@@ -173,33 +191,36 @@ async function tsCompletionItems(
     }[]
   | null
 > {
-  return page.evaluate(
-    ({ p, l, c }) => {
-      const fn = (
-        globalThis as {
-          __riftyTsCompletionItems?: (
-            path: string,
-            line: number,
-            col: number,
-          ) => Promise<
-            | {
-                label: string;
-                insertText: string;
-                startLine: number;
-                startColumn: number;
-                endLine: number;
-                endColumn: number;
-                insertTextRules?: number;
-                commitCharacters: string[];
-                additionalTextEditCount: number;
-              }[]
-            | null
-          >;
-        }
-      ).__riftyTsCompletionItems;
-      return fn ? fn(p, l, c) : Promise.resolve(null);
-    },
-    { p: path, l: line, c: col },
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, l, c }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsCompletionItems?: (
+              path: string,
+              line: number,
+              col: number,
+            ) => Promise<
+              | {
+                  label: string;
+                  insertText: string;
+                  startLine: number;
+                  startColumn: number;
+                  endLine: number;
+                  endColumn: number;
+                  insertTextRules?: number;
+                  commitCharacters: string[];
+                  additionalTextEditCount: number;
+                }[]
+              | null
+            >;
+          }
+        ).__riftyTsCompletionItems;
+        return fn ? fn(p, l, c) : Promise.resolve(null);
+      },
+      { p: path, l: line, c: col },
+    ),
+    null,
   );
 }
 
@@ -211,22 +232,25 @@ async function tsRangeSemanticTokenCount(
   endLine: number,
   endCol: number,
 ): Promise<number | null> {
-  return page.evaluate(
-    ({ p, sl, sc, el, ec }) => {
-      const fn = (
-        globalThis as {
-          __riftyTsRangeSemanticTokenCount?: (
-            path: string,
-            startLine: number,
-            startCol: number,
-            endLine: number,
-            endCol: number,
-          ) => Promise<number | null>;
-        }
-      ).__riftyTsRangeSemanticTokenCount;
-      return fn ? fn(p, sl, sc, el, ec) : Promise.resolve(null);
-    },
-    { p: path, sl: startLine, sc: startCol, el: endLine, ec: endCol },
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, sl, sc, el, ec }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsRangeSemanticTokenCount?: (
+              path: string,
+              startLine: number,
+              startCol: number,
+              endLine: number,
+              endCol: number,
+            ) => Promise<number | null>;
+          }
+        ).__riftyTsRangeSemanticTokenCount;
+        return fn ? fn(p, sl, sc, el, ec) : Promise.resolve(null);
+      },
+      { p: path, sl: startLine, sc: startCol, el: endLine, ec: endCol },
+    ),
+    null,
   );
 }
 
@@ -238,21 +262,24 @@ async function tsReferences(
   col: number,
   includeDeclaration: boolean,
 ): Promise<{ uri: string; line: number; column: number }[] | null> {
-  return page.evaluate(
-    ({ p, l, c, incl }) => {
-      const fn = (
-        globalThis as {
-          __riftyTsReferences?: (
-            path: string,
-            line: number,
-            col: number,
-            includeDeclaration: boolean,
-          ) => Promise<{ uri: string; line: number; column: number }[] | null>;
-        }
-      ).__riftyTsReferences;
-      return fn ? fn(p, l, c, incl) : Promise.resolve(null);
-    },
-    { p: path, l: line, c: col, incl: includeDeclaration },
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, l, c, incl }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsReferences?: (
+              path: string,
+              line: number,
+              col: number,
+              includeDeclaration: boolean,
+            ) => Promise<{ uri: string; line: number; column: number }[] | null>;
+          }
+        ).__riftyTsReferences;
+        return fn ? fn(p, l, c, incl) : Promise.resolve(null);
+      },
+      { p: path, l: line, c: col, incl: includeDeclaration },
+    ),
+    null,
   );
 }
 
@@ -263,22 +290,25 @@ async function tsPrepareRename(
   line: number,
   col: number,
 ): Promise<{ text: string; line: number; column: number } | { rejectReason: string } | null> {
-  return page.evaluate(
-    ({ p, l, c }) => {
-      const fn = (
-        globalThis as {
-          __riftyTsPrepareRename?: (
-            path: string,
-            line: number,
-            col: number,
-          ) => Promise<
-            { text: string; line: number; column: number } | { rejectReason: string } | null
-          >;
-        }
-      ).__riftyTsPrepareRename;
-      return fn ? fn(p, l, c) : Promise.resolve(null);
-    },
-    { p: path, l: line, c: col },
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, l, c }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsPrepareRename?: (
+              path: string,
+              line: number,
+              col: number,
+            ) => Promise<
+              { text: string; line: number; column: number } | { rejectReason: string } | null
+            >;
+          }
+        ).__riftyTsPrepareRename;
+        return fn ? fn(p, l, c) : Promise.resolve(null);
+      },
+      { p: path, l: line, c: col },
+    ),
+    null,
   );
 }
 
@@ -290,21 +320,24 @@ async function tsRenameEdits(
   col: number,
   newName: string,
 ): Promise<{ uri: string; text: string; line: number; column: number }[] | null> {
-  return page.evaluate(
-    ({ p, l, c, n }) => {
-      const fn = (
-        globalThis as {
-          __riftyTsRenameEdits?: (
-            path: string,
-            line: number,
-            col: number,
-            newName: string,
-          ) => Promise<{ uri: string; text: string; line: number; column: number }[] | null>;
-        }
-      ).__riftyTsRenameEdits;
-      return fn ? fn(p, l, c, n) : Promise.resolve(null);
-    },
-    { p: path, l: line, c: col, n: newName },
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, l, c, n }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsRenameEdits?: (
+              path: string,
+              line: number,
+              col: number,
+              newName: string,
+            ) => Promise<{ uri: string; text: string; line: number; column: number }[] | null>;
+          }
+        ).__riftyTsRenameEdits;
+        return fn ? fn(p, l, c, n) : Promise.resolve(null);
+      },
+      { p: path, l: line, c: col, n: newName },
+    ),
+    null,
   );
 }
 
@@ -315,20 +348,27 @@ async function tsSignatureHelp(
   line: number,
   col: number,
 ): Promise<{ label: string; activeSignature: number; activeParameter: number } | null> {
-  return page.evaluate(
-    ({ p, l, c }) => {
-      const fn = (
-        globalThis as {
-          __riftyTsSignatureHelp?: (
-            path: string,
-            line: number,
-            col: number,
-          ) => Promise<{ label: string; activeSignature: number; activeParameter: number } | null>;
-        }
-      ).__riftyTsSignatureHelp;
-      return fn ? fn(p, l, c) : Promise.resolve(null);
-    },
-    { p: path, l: line, c: col },
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, l, c }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsSignatureHelp?: (
+              path: string,
+              line: number,
+              col: number,
+            ) => Promise<{
+              label: string;
+              activeSignature: number;
+              activeParameter: number;
+            } | null>;
+          }
+        ).__riftyTsSignatureHelp;
+        return fn ? fn(p, l, c) : Promise.resolve(null);
+      },
+      { p: path, l: line, c: col },
+    ),
+    null,
   );
 }
 
@@ -341,22 +381,27 @@ async function tsCodeFixes(
   endLine: number,
   endCol: number,
 ): Promise<{ title: string; kind?: string; edits: { uri: string; text: string }[] }[]> {
-  return page.evaluate(
-    ({ p, sl, sc, el, ec }) => {
-      const fn = (
-        globalThis as {
-          __riftyTsCodeFixes?: (
-            path: string,
-            startLine: number,
-            startCol: number,
-            endLine: number,
-            endCol: number,
-          ) => Promise<{ title: string; kind?: string; edits: { uri: string; text: string }[] }[]>;
-        }
-      ).__riftyTsCodeFixes;
-      return fn ? fn(p, sl, sc, el, ec) : Promise.resolve([]);
-    },
-    { p: path, sl: startLine, sc: startCol, el: endLine, ec: endCol },
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, sl, sc, el, ec }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsCodeFixes?: (
+              path: string,
+              startLine: number,
+              startCol: number,
+              endLine: number,
+              endCol: number,
+            ) => Promise<
+              { title: string; kind?: string; edits: { uri: string; text: string }[] }[]
+            >;
+          }
+        ).__riftyTsCodeFixes;
+        return fn ? fn(p, sl, sc, el, ec) : Promise.resolve([]);
+      },
+      { p: path, sl: startLine, sc: startCol, el: endLine, ec: endCol },
+    ),
+    [],
   );
 }
 
@@ -365,18 +410,21 @@ async function tsOrganizeImports(
   page: Page,
   path: string,
 ): Promise<{ title: string; kind?: string; edits: { uri: string; text: string }[] } | null> {
-  return page.evaluate((p) => {
-    const fn = (
-      globalThis as {
-        __riftyTsOrganizeImports?: (path: string) => Promise<{
-          title: string;
-          kind?: string;
-          edits: { uri: string; text: string }[];
-        } | null>;
-      }
-    ).__riftyTsOrganizeImports;
-    return fn ? fn(p) : Promise.resolve(null);
-  }, path);
+  return withDisposedClientFallback(
+    page.evaluate((p) => {
+      const fn = (
+        globalThis as {
+          __riftyTsOrganizeImports?: (path: string) => Promise<{
+            title: string;
+            kind?: string;
+            edits: { uri: string; text: string }[];
+          } | null>;
+        }
+      ).__riftyTsOrganizeImports;
+      return fn ? fn(p) : Promise.resolve(null);
+    }, path),
+    null,
+  );
 }
 
 /**
@@ -388,14 +436,19 @@ async function tsFormat(
   page: Page,
   path: string,
 ): Promise<{ editCount: number; applied: string } | null> {
-  return page.evaluate((p) => {
-    const fn = (
-      globalThis as {
-        __riftyTsFormat?: (path: string) => Promise<{ editCount: number; applied: string } | null>;
-      }
-    ).__riftyTsFormat;
-    return fn ? fn(p) : Promise.resolve(null);
-  }, path);
+  return withDisposedClientFallback(
+    page.evaluate((p) => {
+      const fn = (
+        globalThis as {
+          __riftyTsFormat?: (
+            path: string,
+          ) => Promise<{ editCount: number; applied: string } | null>;
+        }
+      ).__riftyTsFormat;
+      return fn ? fn(p) : Promise.resolve(null);
+    }, path),
+    null,
+  );
 }
 
 /** Rebuild the LS against the current owner VFS + tsconfig (idempotent ts:init; phase 2 hook). */
