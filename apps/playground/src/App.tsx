@@ -1300,12 +1300,35 @@ export function App(props: AppProps) {
     }
   }
 
+  function terminalStatus(id: string | null): TerminalSessionSnapshot['status'] | undefined {
+    if (!id) return undefined;
+    try {
+      return manager.snapshot(id).status;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async function waitForTerminalIdle(id: string | null): Promise<void> {
+    while (terminalStatus(id) === 'running') {
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
+  async function waitForDevServerBoot(sessionId: string, generation: number): Promise<void> {
+    while (generation === devServerRestartGeneration) {
+      if (devServerStatus() === 'running' || terminalStatus(sessionId) === 'idle') return;
+      await new Promise<void>((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
   async function restartDevServer(sessionId: string): Promise<void> {
     const generation = ++devServerRestartGeneration;
     // Stop the running dev command in its session (ADR-0148 co-resident dev server): the owner aborts
     // the run → the co-resident dev server stops → `devServerStatus` → 'stopped'.
     if (devServerSessionId) manager.stop(devServerSessionId);
     await waitForDevServerStop();
+    await waitForTerminalIdle(devServerSessionId);
     if (generation !== devServerRestartGeneration) return;
     const targetSessionId = isVisibleTerminalSession(sessionId) ? sessionId : devServerSession().id;
     devServerSessionId = targetSessionId;
@@ -1313,10 +1336,11 @@ export function App(props: AppProps) {
     // Boot lines follow the ACTIVE STARTER (store-derived, ADR-0165 §4): on a
     // switch the store has re-pointed to the destination project's starter, so a
     // restart boots ITS template — never the stale picked-preset starter.
-    await runTerminalSequence(
+    void runTerminalSequence(
       targetSessionId,
       presetBootLines(presetForId(activeStarterId()), activeRoot()),
     );
+    await waitForDevServerBoot(targetSessionId, generation);
   }
 
   async function runVitePreset(preset: Preset): Promise<void> {
@@ -1335,7 +1359,7 @@ export function App(props: AppProps) {
       slug: store.activeId(),
       setup: preset.setup,
     });
-    if (devServerStatus() !== 'stopped') {
+    if (devServerStatus() !== 'stopped' || terminalStatus(devServerSessionId) === 'running') {
       const restartSessionId = devServerSessionId;
       if (restartSessionId) await restartDevServer(restartSessionId);
       return;
@@ -1416,6 +1440,8 @@ export function App(props: AppProps) {
         }),
       rewireBridges: (next) => setOwnerHandle(next), // signal swap re-runs every bridge effect
       restartDevServer: async () => {
+        setDevServerStatus('stopped');
+        await manager.rebindOwner(workspaceOwner());
         if (devServerSessionId) await restartDevServer(devServerSessionId);
       },
       clearTerminal: () => {

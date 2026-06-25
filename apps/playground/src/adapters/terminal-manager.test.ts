@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ExecOptions, PtySessionSnapshot } from '../glue/pty-client.ts';
 import type { WorkspaceOwnerHandle } from '../glue/realVite.ts';
 import { createTerminalManager } from './terminal-manager.ts';
@@ -53,7 +53,8 @@ interface ExecCall {
  * boundary — a fake here, not a mock of the unit). Records frames the manager
  * pushes and lets the test drive `exec` completion + per-session cwd/env.
  */
-function makeFakeOwner() {
+function makeFakeOwner(opts: { readonly root?: string } = {}) {
+  const root = opts.root ?? '/workspace';
   const opened: string[] = [];
   const closed: string[] = [];
   const stdin: Array<{ sid: string; rid: string; data: Uint8Array }> = [];
@@ -99,7 +100,7 @@ function makeFakeOwner() {
       return Promise.resolve();
     },
     snapshot(sid: string): PtySessionSnapshot {
-      return snapshots.get(sid) ?? { cwd: '/workspace', env: {} };
+      return snapshots.get(sid) ?? { cwd: root, env: {} };
     },
     onDevServer(): () => void {
       return () => {};
@@ -230,6 +231,59 @@ describe('createTerminalManager (pty port client)', () => {
     expect(manager.snapshot(session.id)).toMatchObject({ cwd: '/work', env: { FOO: 'bar' } });
 
     manager.dispose();
+  });
+
+  it('rebinds existing terminal sessions to a respawned owner before the next command', async () => {
+    const firstOwner = makeFakeOwner({ root: '/projects/alpha' });
+    const manager = createTerminalManager({ owner: firstOwner.owner });
+    const first = manager.sessions()[0]!;
+    const second = manager.createSession('Second');
+
+    const nextOwner = makeFakeOwner({ root: '/projects/beta' });
+    await manager.rebindOwner(nextOwner.owner);
+
+    expect(nextOwner.opened).toEqual([first.id, second.id]);
+    expect(manager.snapshot(first.id).cwd).toBe('/projects/beta');
+
+    const run = manager.runLine(first.id, 'pwd');
+    await waitForExecs(nextOwner.execs, 1);
+    expect(nextOwner.execs[0]).toMatchObject({ sid: first.id, line: 'pwd' });
+    nextOwner.execs[0]!.resolve(0);
+    await expect(run).resolves.toBe(0);
+
+    manager.dispose();
+    expect(nextOwner.closed).toEqual([first.id, second.id]);
+  });
+
+  it('retries rebind session open until the respawned owner replies ready', async () => {
+    vi.useFakeTimers();
+    try {
+      const firstOwner = makeFakeOwner({ root: '/projects/alpha' });
+      const manager = createTerminalManager({ owner: firstOwner.owner });
+      const session = manager.sessions()[0]!;
+
+      const nextOwner = makeFakeOwner({ root: '/projects/beta' });
+      const openSession = nextOwner.owner.openSession;
+      let attempts = 0;
+      nextOwner.owner.openSession = (sid, seed) => {
+        attempts += 1;
+        if (attempts === 1) return new Promise<void>(() => {});
+        return openSession(sid, seed);
+      };
+
+      const rebind = manager.rebindOwner(nextOwner.owner);
+      await Promise.resolve();
+      expect(attempts).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(250);
+      await rebind;
+
+      expect(attempts).toBe(2);
+      expect(nextOwner.opened).toEqual([session.id]);
+      manager.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('clears a session by writing the ANSI screen + scrollback reset to its writer', () => {

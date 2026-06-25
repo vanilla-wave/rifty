@@ -47,6 +47,8 @@ export interface TerminalManager {
   writeStdin(id: string, data: TerminalRawInput): void;
   runLine(id: string, input: string, dims?: TerminalRunDimensions): Promise<number>;
   runSequence(id: string, lines: readonly string[], dims?: TerminalRunDimensions): Promise<number>;
+  /** Re-open the PAGE session ids in a respawned workspace owner. */
+  rebindOwner(owner: WorkspaceOwnerHandle): Promise<void>;
   stop(id: string): void;
   dispose(): void;
 }
@@ -64,6 +66,7 @@ interface TerminalSession {
 }
 
 const DISPOSED_ERROR = 'Terminal manager is disposed';
+const OPEN_SESSION_RETRY_MS = 250;
 const enc = new TextEncoder();
 
 export interface TerminalManagerOptions {
@@ -78,12 +81,28 @@ export interface TerminalManagerOptions {
 }
 
 export function createTerminalManager(opts: TerminalManagerOptions): TerminalManager {
-  const owner = opts.owner;
+  let owner = opts.owner;
   const sessions = new Map<string, TerminalSession>();
   let nextSessionNumber = 1;
   let nextDefaultTitleNumber = 1;
   let activeId = '';
   let disposed = false;
+
+  async function openOwnerSession(
+    sid: string,
+    seed?: TerminalManagerOptions['initialState'],
+  ): Promise<void> {
+    while (!disposed) {
+      const ready = owner.openSession(sid, seed);
+      const result = await Promise.race([
+        ready.then(() => 'ready' as const),
+        new Promise<'retry'>((resolve) =>
+          setTimeout(() => resolve('retry'), OPEN_SESSION_RETRY_MS),
+        ),
+      ]);
+      if (result === 'ready') return;
+    }
+  }
 
   const create = (title?: string): TerminalSession => {
     const number = nextSessionNumber++;
@@ -95,7 +114,7 @@ export function createTerminalManager(opts: TerminalManagerOptions): TerminalMan
       status: 'idle',
       writer: null,
       activeRid: null,
-      ready: owner.openSession(id, opts.initialState),
+      ready: openOwnerSession(id, opts.initialState),
     };
     sessions.set(id, session);
     return session;
@@ -217,6 +236,18 @@ export function createTerminalManager(opts: TerminalManagerOptions): TerminalMan
         if (exitCode !== 0) break;
       }
       return exitCode;
+    },
+    async rebindOwner(nextOwner: WorkspaceOwnerHandle): Promise<void> {
+      ensureNotDisposed();
+      owner = nextOwner;
+      const ready: Promise<void>[] = [];
+      for (const session of sessions.values()) {
+        session.activeRid = null;
+        session.status = 'idle';
+        session.ready = openOwnerSession(session.id);
+        ready.push(session.ready);
+      }
+      await Promise.all(ready);
     },
     stop(id: string): void {
       const session = getSession(id);

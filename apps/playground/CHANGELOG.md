@@ -51,10 +51,15 @@
   respawns.** Switching between saved projects no longer tears down the owner
   after a timed-out mirror poll or starts a second switch before the first owner
   respawn is fully rewired.
+- **Project switches rebind terminal sessions to the respawned owner.** Existing
+  terminal tabs now reopen their `pty` session ids against the new owner root,
+  retry `pty:open` until the owner replies ready, and release switch serialization
+  when the dev server reports booted instead of waiting for the long-running
+  `vite` foreground command to exit.
 - **Starter dev-server restarts finish before preset boot continues.** Picking a
   starter while Vite is already running no longer races the restart against the
-  remaining preset flow, which could leave the terminal at `terminal is busy`
-  instead of the new root's boot log.
+  remaining preset flow or a still-busy terminal, which could leave the console at
+  `terminal is busy` instead of the new root's boot log.
 - **TS-LSP replies no longer cross-match between page clients.** Request ids are
   allocated across the page realm instead of per client instance, so a late
   `ack` from one client cannot satisfy a hover/rename/completion request from

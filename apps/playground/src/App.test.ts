@@ -119,15 +119,20 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain('function viteSession()');
   });
 
-  it('awaits the existing dev-server terminal restart when changing presets while Vite is running', () => {
+  it('waits for the existing dev-server terminal to reboot without awaiting the long-running dev line', () => {
     expect(source).toContain('function restartDevServer(sessionId: string)');
     expect(source).toContain('if (restartSessionId) await restartDevServer(restartSessionId)');
     expect(source).not.toContain('if (restartSessionId) void restartDevServer(restartSessionId)');
+    expect(source).toContain('await waitForTerminalIdle(devServerSessionId)');
+    expect(source).toContain('await waitForDevServerBoot(targetSessionId, generation)');
+    expect(source).toContain(
+      "if (devServerStatus() !== 'stopped' || terminalStatus(devServerSessionId) === 'running')",
+    );
     expect(source).toContain('devServerSessionId = session.id');
     // ADR-0165 §4: boot lines follow the STORE-derived active starter, not the
     // interim activePreset signal — so a switch boots the destination's template.
     expect(source).toContain(
-      'await runTerminalSequence(\n      targetSessionId,\n      presetBootLines(presetForId(activeStarterId()), activeRoot()),\n    );',
+      'void runTerminalSequence(\n      targetSessionId,\n      presetBootLines(presetForId(activeStarterId()), activeRoot()),\n    );',
     );
   });
 
@@ -136,6 +141,8 @@ describe('App terminal startup wiring', () => {
     // §4: store.activeId — 'scratch' on boot, a projectId after switch); clear →
     // fresh console for the switched-in project.
     expect(source).toContain('slug: store.activeId(),');
+    expect(source).toContain("setDevServerStatus('stopped')");
+    expect(source).toContain('await manager.rebindOwner(workspaceOwner())');
     expect(source).toContain('manager.clear(targetSessionId)');
     expect(source).toContain('manager.clear(session.id)');
   });
