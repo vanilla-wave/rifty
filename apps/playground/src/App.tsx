@@ -22,7 +22,7 @@ import { BottomPanel } from './components/BottomPanel.tsx';
 import { CapabilitiesPanel } from './components/CapabilitiesPanel.tsx';
 import { CommandPalette, type PaletteItem } from './components/CommandPalette.tsx';
 import { DegradedBanner } from './components/DegradedBanner.tsx';
-import { type EditorApi, EditorHost } from './components/EditorHost.tsx';
+import { type EditorApi, type EditorDocumentEvent, EditorHost } from './components/EditorHost.tsx';
 import { FileExplorer } from './components/FileExplorer.tsx';
 import { Launcher } from './components/Launcher.tsx';
 import { PreviewPanel } from './components/PreviewPanel.tsx';
@@ -825,6 +825,12 @@ export function App(props: AppProps) {
       g.__riftyTsReinit = async () => {
         try {
           await client.init(activeRoot());
+          const replayEvents: EditorDocumentEvent[] = [];
+          const unsubscribeReplay = api.onDocument((ev) => {
+            if (ev.kind !== 'close') replayEvents.push(ev);
+          });
+          unsubscribeReplay();
+          await Promise.all(replayEvents.map((ev) => client.open(ev.path, ev.text)));
           return true;
         } catch {
           return false;

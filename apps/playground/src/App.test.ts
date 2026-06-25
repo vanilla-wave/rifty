@@ -197,6 +197,10 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('setTsProjectRevision((revision) => revision + 1)');
     expect(source).toContain("const wasRunning = devServerStatus() === 'running';");
     expect(source).toContain("if (frame.status === 'running' && !wasRunning)");
+    expect(source).toContain('const replayEvents: EditorDocumentEvent[] = [];');
+    expect(source).toContain(
+      'await Promise.all(replayEvents.map((ev) => client.open(ev.path, ev.text)));',
+    );
   });
 
   it('routes workspace archive export and import through the owner (one authoritative owner; page reads through ports)', () => {
