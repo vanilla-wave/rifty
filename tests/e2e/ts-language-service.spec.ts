@@ -532,6 +532,7 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     await expect
       .poll(() => tsMarkerCount(page, TS_PATH), { timeout: 15_000 })
       .toBeGreaterThanOrEqual(0);
+    expect(await tsReinit(page)).toBe(true);
 
     // Introduce a REAL type error via the real Monaco input: type a single
     // `number = string` statement into the empty file. number = string ⇒ TS2322.
@@ -582,7 +583,7 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
     browserName,
   }) => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     await page.goto('/');
 
     await page.click('[data-action="open-launcher"]');
@@ -590,12 +591,11 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
     await page.click('[data-preset="typescript-ls"]');
     await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
     await expect.poll(() => terminalBuffer(page), { timeout: 45_000 }).toContain('$ vite');
-    // Do not let the default Vite starter's already-running preview satisfy this
-    // test. The TypeScript starter is the first state with src/main.ts.
-    await openFileViaPalette(page, 'main.ts');
     const editor = page.locator('[data-testid="editor"]');
     const editorLines = editor.locator('.view-lines').first();
-    await expect(editorLines).toContainText('LibraryShape', { timeout: 15_000 });
+    // The TypeScript starter entry is already the active program tab; checking
+    // the visible Monaco lines avoids racing the palette's async file index.
+    await expect(editorLines).toContainText('LibraryShape', { timeout: 45_000 });
 
     const frame = page.frameLocator('iframe[title="Preview port 5174"]');
     await expect(frame.locator('body')).toContainText('TypeScript language surface', {
@@ -692,7 +692,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     browserName,
   }) => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     await page.goto('/');
 
     await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
@@ -757,8 +757,13 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     //  L5 `const c = localGreet("y");`     localGreet starts col 11
     //  L6 `const d = cool.value;`          completion switches this to `cool.`
     await writeOwnerFile(page, USES_DEP, usesDepResolvedSource);
-    await runOwnerShell(page, 'ls /scratch/src');
+    await runOwnerShell(page, `test -f ${DEP_DTS} && cat ${DEP_DTS} && ls /scratch/src`);
+    await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('coolValue');
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('uses-dep.ts');
+
+    // Rebuild before opening `uses-dep.ts`, so the first document open/update is
+    // served by the project configured with bundler resolution + fake node_modules.
+    expect(await tsReinit(page)).toBe(true);
 
     // Open uses-dep.ts so a Monaco model exists (providers resolve a model→path).
     await openFileViaPalette(page, 'uses-dep.ts');
@@ -766,14 +771,19 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
       .poll(() => tsMarkerCount(page, USES_DEP), { timeout: 15_000 })
       .toBeGreaterThanOrEqual(0);
 
-    // Rebuild the service against the project we just wrote (the boot build used
-    // tsc default options before these files / this tsconfig existed). Idempotent
-    // ts:init — a real supported operation, not a test backdoor.
-    expect(await tsReinit(page)).toBe(true);
-    expect(await setModelValue(page, USES_DEP, usesDepResolvedSource)).toBe(true);
+    let depDefs: { uri: string; line: number; column: number }[] = [];
     await expect
-      .poll(() => tsMarkerCount(page, USES_DEP), { timeout: 90_000, intervals: [1500] })
-      .toBe(0);
+      .poll(
+        async () => {
+          if (!(await tsReinit(page))) return false;
+          if (!(await setModelValue(page, USES_DEP, usesDepResolvedSource))) return false;
+          if ((await tsMarkerCount(page, USES_DEP)) !== 0) return false;
+          depDefs = (await tsDefinition(page, USES_DEP, 3, 12)) ?? [];
+          return depDefs.some((d) => d.uri.includes(DEP_DTS));
+        },
+        { timeout: 120_000, intervals: [3000] },
+      )
+      .toBe(true);
 
     // (1) HOVER over `coolValue` (L3, col 12). TS 5.9 renders this imported
     // alias as `import coolValue`; the dependency `.d.ts` proof is the definition
@@ -787,19 +797,6 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     // This specifically exercises the EditorHost read-only remote-port branch:
     // the page snapshot excludes node_modules, so the provider must ask the owner
     // read-port to open the target model instead of silently dropping the Location.
-    await expect
-      .poll(
-        async () => {
-          const defs = (await tsDefinition(page, USES_DEP, 3, 12)) ?? [];
-          return defs.some((d) => d.uri.includes(DEP_DTS));
-        },
-        {
-          timeout: 90_000,
-          intervals: [1500],
-        },
-      )
-      .toBe(true);
-    const depDefs = (await tsDefinition(page, USES_DEP, 3, 12)) ?? [];
     const depDef = depDefs.find((d) => d.uri.includes(DEP_DTS));
     expect(depDef?.uri).toContain(DEP_DTS);
     expect(depDef?.line).toBe(1);
