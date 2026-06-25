@@ -107,6 +107,10 @@
 
 ### Fixed
 
+- **Stale TypeScript Monaco providers no longer surface lifecycle disposal as a page
+  error.** Provider calls now treat an exact `ts-lsp client disposed` from an obsolete
+  LS client as cancellation-shaped empty results, keeping prod boot smoke clean while
+  preserving real TS failures.
 - **Problems is now a permanent terminal-tab, and the TypeScript starter boots clean.**
   The old Terminal/Problems view switcher could leave terminal output visible over the
   Problems panel, and the TS starter shipped with built-in diagnostics (`count` as a

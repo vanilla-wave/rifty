@@ -30,8 +30,10 @@ import type {
   CompletionOptions as LspCompletionOptions,
   CompletionTriggerCharacter as LspCompletionTriggerCharacter,
   CompletionTriggerKind as LspCompletionTriggerKind,
+  DefinitionLinks as LspDefinitionLinks,
   DocumentHighlight as LspDocumentHighlight,
   DocumentSymbol as LspDocumentSymbol,
+  EncodedClassifications as LspEncodedClassifications,
   FoldingRange as LspFoldingRange,
   Hover as LspHover,
   InlayHint as LspInlayHint,
@@ -80,6 +82,59 @@ const LANGUAGES = ['typescript', 'javascript'] as const;
 const TS_COMPLETION_TRIGGER_CHARACTERS = ['.', '"', "'", '`', '/', '@', '<', '#', ' '] as const;
 const TS_SIGNATURE_TRIGGER_CHARACTERS = ['(', ',', '<'] as const;
 const TS_SIGNATURE_RETRIGGER_CHARACTERS = [')', ...TS_SIGNATURE_TRIGGER_CHARACTERS] as const;
+const DISPOSED_CLIENT_ERROR = 'ts-lsp client disposed';
+
+function isDisposedClientError(err: unknown): boolean {
+  return err instanceof Error && err.message === DISPOSED_CLIENT_ERROR;
+}
+
+async function tsRequestOr<T>(request: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await request();
+  } catch (err) {
+    if (isDisposedClientError(err)) return fallback;
+    throw err;
+  }
+}
+
+type TsRequestResult<T> =
+  | { readonly status: 'ok'; readonly value: T }
+  | { readonly status: 'disposed' };
+
+async function tsRequestResult<T>(request: () => Promise<T>): Promise<TsRequestResult<T>> {
+  try {
+    return { status: 'ok', value: await request() };
+  } catch (err) {
+    if (isDisposedClientError(err)) return { status: 'disposed' };
+    throw err;
+  }
+}
+
+function emptyDefinitionLinks(): LspDefinitionLinks {
+  return { locations: [] };
+}
+
+function emptyWorkspaceEdit(): LspWorkspaceEdit {
+  return { changes: {} };
+}
+
+function emptyEncodedClassifications(): LspEncodedClassifications {
+  return { spans: [], endOfLineState: 0 };
+}
+
+function emptyCompletionList(): LspCompletionList {
+  return {
+    isIncomplete: false,
+    isGlobalCompletion: false,
+    isMemberCompletion: false,
+    isNewIdentifierLocation: false,
+    items: [],
+  };
+}
+
+function emptyCodeActions(): monaco.languages.CodeActionList {
+  return { actions: [], dispose() {} };
+}
 
 /** A completion-resolve needs the originating position + label — stash them per item. */
 const RESOLVE_KEY = Symbol('rifty-ls-resolve');
@@ -688,7 +743,10 @@ export function registerTsLanguageServiceProviders(
     async provideHover(model, position, token) {
       const path = bridge.pathForModel(model);
       if (!path) return null;
-      const hover = await client.getQuickInfo(path, monacoToLspPosition(position));
+      const hover = await tsRequestOr(
+        () => client.getQuickInfo(path, monacoToLspPosition(position)),
+        null,
+      );
       if (token.isCancellationRequested || !hover || hover.contents.value.length === 0) return null;
       return toMonacoHover(hover);
     },
@@ -698,7 +756,10 @@ export function registerTsLanguageServiceProviders(
     async provideDefinition(model, position, token) {
       const path = bridge.pathForModel(model);
       if (!path) return null;
-      const links = await client.getDefinitionLinks(path, monacoToLspPosition(position));
+      const links = await tsRequestOr(
+        () => client.getDefinitionLinks(path, monacoToLspPosition(position)),
+        emptyDefinitionLinks(),
+      );
       if (token.isCancellationRequested) return null;
       return links.locations
         .map((link) => toMonacoLocationLink(link, links.originSelectionRange, bridge))
@@ -710,7 +771,10 @@ export function registerTsLanguageServiceProviders(
     async provideTypeDefinition(model, position, token) {
       const path = bridge.pathForModel(model);
       if (!path) return null;
-      const locations = await client.getTypeDefinition(path, monacoToLspPosition(position));
+      const locations = await tsRequestOr(
+        () => client.getTypeDefinition(path, monacoToLspPosition(position)),
+        [],
+      );
       if (token.isCancellationRequested) return null;
       return locations
         .map((loc) => toMonacoLocation(loc, bridge))
@@ -725,7 +789,10 @@ export function registerTsLanguageServiceProviders(
       if (!path) return { suggestions: [] };
       const lspPosition = monacoToLspPosition(position);
       const options = completionOptionsFromModel(model, context);
-      const list: LspCompletionList = await client.getCompletions(path, lspPosition, options);
+      const list = await tsRequestOr(
+        () => client.getCompletions(path, lspPosition, options),
+        emptyCompletionList(),
+      );
       if (token.isCancellationRequested) return { suggestions: [] };
       // The completion replaces the word being typed up to the cursor (member
       // names, partial identifiers) — a single-line range Monaco requires.
@@ -790,13 +857,17 @@ export function registerTsLanguageServiceProviders(
       const ctx = (item as ResolvableItem)[RESOLVE_KEY];
       const label = typeof item.label === 'string' ? item.label : item.label.label;
       if (!ctx) return item;
-      const resolved = await client.getCompletionDetails(
-        ctx.path,
-        { line: ctx.line, character: ctx.character },
-        label,
-        ctx.source,
-        ctx.data,
-        ctx.options,
+      const resolved = await tsRequestOr(
+        () =>
+          client.getCompletionDetails(
+            ctx.path,
+            { line: ctx.line, character: ctx.character },
+            label,
+            ctx.source,
+            ctx.data,
+            ctx.options,
+          ),
+        null,
       );
       if (token.isCancellationRequested || !resolved) return item;
       if (resolved.detail !== undefined) item.detail = resolved.detail;
@@ -829,9 +900,13 @@ export function registerTsLanguageServiceProviders(
     async provideReferences(model, position, context, token) {
       const path = bridge.pathForModel(model);
       if (!path) return null;
-      const refs = await client.getReferences(path, monacoToLspPosition(position), {
-        includeDeclaration: context.includeDeclaration,
-      });
+      const refs = await tsRequestOr(
+        () =>
+          client.getReferences(path, monacoToLspPosition(position), {
+            includeDeclaration: context.includeDeclaration,
+          }),
+        [],
+      );
       if (token.isCancellationRequested) return null;
       // Each reference is a Location in some project file; resolve its uri → model
       // (a sibling/dep buffer is opened read-only) so the peek/results list reveals
@@ -851,7 +926,10 @@ export function registerTsLanguageServiceProviders(
       // its runtime keys on `rejectReason` first: a pure rejection legitimately
       // carries no range/text, so the cast bridges that monaco modeling quirk.
       if (!path) return renameRejection('Not a rifty TypeScript document');
-      const result = await client.prepareRename(path, monacoToLspPosition(position));
+      const result = await tsRequestOr(
+        () => client.prepareRename(path, monacoToLspPosition(position)),
+        null,
+      );
       if (token.isCancellationRequested) return renameRejection('Rename cancelled');
       if (!result) return renameRejection('You cannot rename this element');
       return { range: lspToMonacoRange(result.range), text: result.placeholder };
@@ -859,7 +937,10 @@ export function registerTsLanguageServiceProviders(
     async provideRenameEdits(model, position, newName, token) {
       const path = bridge.pathForModel(model);
       if (!path) return { edits: [], rejectReason: 'Not a rifty TypeScript document' };
-      const edit = await client.getRenameEdits(path, monacoToLspPosition(position), newName);
+      const edit = await tsRequestOr(
+        () => client.getRenameEdits(path, monacoToLspPosition(position), newName),
+        emptyWorkspaceEdit(),
+      );
       if (token.isCancellationRequested) return { edits: [], rejectReason: 'Rename cancelled' };
       // WorkspaceEdit.changes is keyed by document uri (the VFS path verbatim);
       // flatten it into Monaco's `edits: IWorkspaceTextEdit[]`, resolving every
@@ -878,10 +959,14 @@ export function registerTsLanguageServiceProviders(
     async provideSignatureHelp(model, position, token, context) {
       const path = bridge.pathForModel(model);
       if (!path) return null;
-      const help = await client.getSignatureHelp(
-        path,
-        monacoToLspPosition(position),
-        signatureHelpOptionsFromMonaco(context),
+      const help = await tsRequestOr(
+        () =>
+          client.getSignatureHelp(
+            path,
+            monacoToLspPosition(position),
+            signatureHelpOptionsFromMonaco(context),
+          ),
+        null,
       );
       if (token.isCancellationRequested || !help) return null;
       return toMonacoSignatureHelp(help);
@@ -908,21 +993,24 @@ export function registerTsLanguageServiceProviders(
       for (const marker of markers) {
         const code = markerErrorCode(marker.code);
         if (code === undefined) continue;
-        const fixes = await client.getCodeFixes(
-          path,
-          monacoToLspRange(marker),
-          [code],
-          actionEditOptions,
+        const fixesResult = await tsRequestResult(() =>
+          client.getCodeFixes(path, monacoToLspRange(marker), [code], actionEditOptions),
         );
-        if (token.isCancellationRequested) return { actions: [], dispose() {} };
+        if (fixesResult.status === 'disposed') return emptyCodeActions();
+        const fixes = fixesResult.value;
+        if (token.isCancellationRequested) return emptyCodeActions();
         for (const fix of fixes) {
           if (!canApplyInMonacoEditor(fix)) continue;
           if (seenFixTitles.has(fix.title)) continue;
           seenFixTitles.add(fix.title);
           actions.push(toMonacoLazyCodeAction(fix, [marker]));
           if (fix.fixId !== undefined && fix.fixAllDescription) {
-            const edit = await client.getCombinedCodeFix(path, fix.fixId, actionEditOptions);
-            if (token.isCancellationRequested) return { actions: [], dispose() {} };
+            const editResult = await tsRequestResult(() =>
+              client.getCombinedCodeFix(path, fix.fixId, actionEditOptions),
+            );
+            if (editResult.status === 'disposed') return emptyCodeActions();
+            const edit = editResult.value;
+            if (token.isCancellationRequested) return emptyCodeActions();
             const fixAll = {
               title: fix.fixAllDescription,
               kind: FIX_ALL_KIND,
@@ -939,8 +1027,12 @@ export function registerTsLanguageServiceProviders(
       // selection). An already-organized file yields an empty `changes` → an action
       // with no resources; only push it when it carries real edits so the menu
       // doesn't show a no-op entry.
-      const organize = await client.organizeImports(path, actionEditOptions);
-      if (token.isCancellationRequested) return { actions: [], dispose() {} };
+      const organizeResult = await tsRequestResult(() =>
+        client.organizeImports(path, actionEditOptions),
+      );
+      if (organizeResult.status === 'disposed') return emptyCodeActions();
+      const organize = organizeResult.value;
+      if (token.isCancellationRequested) return emptyCodeActions();
       if (hasWorkspaceTextEdits(organize)) {
         const organizeAction = {
           title: 'Organize imports',
@@ -952,12 +1044,12 @@ export function registerTsLanguageServiceProviders(
         }
       }
 
-      const refactors = await client.getRefactorActions(
-        path,
-        monacoToLspRange(range),
-        actionEditOptions,
+      const refactorsResult = await tsRequestResult(() =>
+        client.getRefactorActions(path, monacoToLspRange(range), actionEditOptions),
       );
-      if (token.isCancellationRequested) return { actions: [], dispose() {} };
+      if (refactorsResult.status === 'disposed') return emptyCodeActions();
+      const refactors = refactorsResult.value;
+      if (token.isCancellationRequested) return emptyCodeActions();
       for (const refactor of refactors) {
         if (!canApplyInMonacoEditor(refactor)) continue;
         if (refactor.edit) actions.push(toMonacoLazyCodeAction(refactor));
@@ -980,10 +1072,14 @@ export function registerTsLanguageServiceProviders(
       // the model's resolved options too, but read the model directly so the source
       // is unambiguous): tabSize + insertSpaces feed the service's FormatCodeSettings.
       const modelOptions = model.getOptions();
-      const edits = await client.getFormattingEdits(path, {
-        tabSize: options.tabSize ?? modelOptions.tabSize,
-        insertSpaces: options.insertSpaces ?? modelOptions.insertSpaces,
-      });
+      const edits = await tsRequestOr(
+        () =>
+          client.getFormattingEdits(path, {
+            tabSize: options.tabSize ?? modelOptions.tabSize,
+            insertSpaces: options.insertSpaces ?? modelOptions.insertSpaces,
+          }),
+        [],
+      );
       if (token.isCancellationRequested) return undefined;
       return edits.map(toMonacoTextEdit);
     },
@@ -995,10 +1091,14 @@ export function registerTsLanguageServiceProviders(
       const path = bridge.pathForModel(model);
       if (!path) return undefined;
       const modelOptions = model.getOptions();
-      const edits = await client.getRangeFormattingEdits(path, monacoToLspRange(range), {
-        tabSize: options.tabSize ?? modelOptions.tabSize,
-        insertSpaces: options.insertSpaces ?? modelOptions.insertSpaces,
-      });
+      const edits = await tsRequestOr(
+        () =>
+          client.getRangeFormattingEdits(path, monacoToLspRange(range), {
+            tabSize: options.tabSize ?? modelOptions.tabSize,
+            insertSpaces: options.insertSpaces ?? modelOptions.insertSpaces,
+          }),
+        [],
+      );
       if (token.isCancellationRequested) return undefined;
       return edits.map(toMonacoTextEdit);
     },
@@ -1008,7 +1108,10 @@ export function registerTsLanguageServiceProviders(
     async provideImplementation(model, position, token) {
       const path = bridge.pathForModel(model);
       if (!path) return null;
-      const locations = await client.getImplementation(path, monacoToLspPosition(position));
+      const locations = await tsRequestOr(
+        () => client.getImplementation(path, monacoToLspPosition(position)),
+        [],
+      );
       if (token.isCancellationRequested) return null;
       return locations
         .map((loc) => toMonacoLocation(loc, bridge))
@@ -1021,7 +1124,7 @@ export function registerTsLanguageServiceProviders(
     async provideDocumentSymbols(model, token) {
       const path = bridge.pathForModel(model);
       if (!path) return [];
-      const symbols = await client.getDocumentSymbols(path);
+      const symbols = await tsRequestOr(() => client.getDocumentSymbols(path), []);
       if (token.isCancellationRequested) return [];
       return symbols.map(toMonacoDocumentSymbol);
     },
@@ -1031,7 +1134,7 @@ export function registerTsLanguageServiceProviders(
     async provideFoldingRanges(model, _context, token) {
       const path = bridge.pathForModel(model);
       if (!path) return [];
-      const ranges = await client.getFoldingRanges(path);
+      const ranges = await tsRequestOr(() => client.getFoldingRanges(path), []);
       if (token.isCancellationRequested) return [];
       return ranges.map(toMonacoFoldingRange);
     },
@@ -1042,7 +1145,10 @@ export function registerTsLanguageServiceProviders(
     async provideInlayHints(model, range, token) {
       const path = bridge.pathForModel(model);
       if (!path) return { hints: [], dispose() {} };
-      const hints = await client.getInlayHints(path, monacoToLspRange(range));
+      const hints = await tsRequestOr(
+        () => client.getInlayHints(path, monacoToLspRange(range)),
+        [],
+      );
       if (token.isCancellationRequested) return { hints: [], dispose() {} };
       return { hints: hints.map(toMonacoInlayHint), dispose() {} };
     },
@@ -1052,9 +1158,10 @@ export function registerTsLanguageServiceProviders(
     async provideDocumentHighlights(model, position, token) {
       const path = bridge.pathForModel(model);
       if (!path) return [];
-      const highlights = await client.getDocumentHighlights(path, monacoToLspPosition(position), [
-        path,
-      ]);
+      const highlights = await tsRequestOr(
+        () => client.getDocumentHighlights(path, monacoToLspPosition(position), [path]),
+        [],
+      );
       if (token.isCancellationRequested) return [];
       return highlights.map(toMonacoDocumentHighlight);
     },
@@ -1071,9 +1178,9 @@ export function registerTsLanguageServiceProviders(
       const path = bridge.pathForModel(model);
       if (!path) return { data: new Uint32Array() };
       const range = model.getFullModelRange();
-      const semantic = await client.getEncodedSemanticClassifications(
-        path,
-        monacoToLspRange(range),
+      const semantic = await tsRequestOr(
+        () => client.getEncodedSemanticClassifications(path, monacoToLspRange(range)),
+        emptyEncodedClassifications(),
       );
       if (token.isCancellationRequested) return { data: new Uint32Array() };
       return { data: semanticTokensData(model, semantic.spans) };
@@ -1091,9 +1198,9 @@ export function registerTsLanguageServiceProviders(
     async provideDocumentRangeSemanticTokens(model, range, token) {
       const path = bridge.pathForModel(model);
       if (!path) return { data: new Uint32Array() };
-      const semantic = await client.getEncodedSemanticClassifications(
-        path,
-        monacoToLspRange(range),
+      const semantic = await tsRequestOr(
+        () => client.getEncodedSemanticClassifications(path, monacoToLspRange(range)),
+        emptyEncodedClassifications(),
       );
       if (token.isCancellationRequested) return { data: new Uint32Array() };
       return { data: semanticTokensData(model, semantic.spans) };
@@ -1106,7 +1213,10 @@ export function registerTsLanguageServiceProviders(
       if (!path) return [];
       const ranges: monaco.languages.SelectionRange[][] = [];
       for (const position of positions) {
-        const selection = await client.getSelectionRange(path, monacoToLspPosition(position));
+        const selection = await tsRequestOr(
+          () => client.getSelectionRange(path, monacoToLspPosition(position)),
+          null,
+        );
         if (token.isCancellationRequested) return [];
         ranges.push(selection ? toMonacoSelectionRange(selection) : []);
       }
@@ -1120,10 +1230,14 @@ export function registerTsLanguageServiceProviders(
       const path = bridge.pathForModel(model);
       if (!path) return [];
       const modelOptions = model.getOptions();
-      const edits = await client.getOnTypeFormattingEdits(path, monacoToLspPosition(position), ch, {
-        tabSize: options.tabSize ?? modelOptions.tabSize,
-        insertSpaces: options.insertSpaces ?? modelOptions.insertSpaces,
-      });
+      const edits = await tsRequestOr(
+        () =>
+          client.getOnTypeFormattingEdits(path, monacoToLspPosition(position), ch, {
+            tabSize: options.tabSize ?? modelOptions.tabSize,
+            insertSpaces: options.insertSpaces ?? modelOptions.insertSpaces,
+          }),
+        [],
+      );
       if (token.isCancellationRequested) return [];
       return edits.map(toMonacoTextEdit);
     },
@@ -1133,7 +1247,10 @@ export function registerTsLanguageServiceProviders(
     async provideLinkedEditingRanges(model, position, token) {
       const path = bridge.pathForModel(model);
       if (!path) return null;
-      const ranges = await client.getLinkedEditingRange(path, monacoToLspPosition(position));
+      const ranges = await tsRequestOr(
+        () => client.getLinkedEditingRange(path, monacoToLspPosition(position)),
+        null,
+      );
       if (token.isCancellationRequested || !ranges) return null;
       return {
         ranges: ranges.ranges.map(lspToMonacoRange),

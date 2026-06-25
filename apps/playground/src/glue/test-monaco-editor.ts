@@ -102,14 +102,67 @@ export interface TestModel {
   applyEdits(edits: unknown[]): void;
 }
 
+export interface TestMarker {
+  readonly resource?: TestUri;
+  readonly owner?: string;
+  readonly code?: string | { readonly value: string };
+  readonly startLineNumber: number;
+  readonly startColumn: number;
+  readonly endLineNumber: number;
+  readonly endColumn: number;
+}
+
 export const __monacoTestState = {
   models: new Map<string, TestModel>(),
+  markers: [] as TestMarker[],
 };
 
 export const editor = {
   getModel(uri: TestUri): TestModel | undefined {
     return __monacoTestState.models.get(uri.toString());
   },
+  getModelMarkers(filter: { readonly resource?: TestUri; readonly owner?: string }): TestMarker[] {
+    return __monacoTestState.markers.filter(
+      (marker) =>
+        (filter.resource === undefined ||
+          marker.resource?.toString() === filter.resource.toString()) &&
+        (filter.owner === undefined || marker.owner === filter.owner),
+    );
+  },
+  registerCommand(): { dispose(): void } {
+    return { dispose() {} };
+  },
 };
 
-export const languages = {};
+export const Range = {
+  areIntersectingOrTouching(): boolean {
+    return true;
+  },
+};
+
+function disposable(): { dispose(): void } {
+  return { dispose() {} };
+}
+
+export const languages = {
+  registerHoverProvider: disposable,
+  registerDefinitionProvider: disposable,
+  registerTypeDefinitionProvider: disposable,
+  registerImplementationProvider: disposable,
+  registerCompletionItemProvider: disposable,
+  registerReferenceProvider: disposable,
+  registerRenameProvider: disposable,
+  registerSignatureHelpProvider: disposable,
+  registerCodeActionProvider: disposable,
+  registerDocumentSymbolProvider: disposable,
+  registerFoldingRangeProvider: disposable,
+  registerInlayHintsProvider: disposable,
+  registerDocumentHighlightProvider: disposable,
+  registerDocumentSemanticTokensProvider: disposable,
+  registerDocumentRangeSemanticTokensProvider: disposable,
+  registerSelectionRangeProvider: disposable,
+  registerOnTypeFormattingEditProvider: disposable,
+  registerLinkedEditingRangeProvider: disposable,
+  registerDocumentFormattingEditProvider: disposable,
+  registerDocumentRangeFormattingEditProvider: disposable,
+};
