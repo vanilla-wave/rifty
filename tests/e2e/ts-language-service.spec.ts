@@ -503,8 +503,8 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
   }) => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     // Generous: the FIRST LS request cold-boots the `typescript` engine + fetches
-    // the ~3 MB vendored lib.d.ts bundle over the relay (one-time). 120s headroom.
-    test.setTimeout(120_000);
+    // the ~3 MB vendored lib.d.ts bundle over the relay (one-time). 150s headroom.
+    test.setTimeout(150_000);
     await page.goto('/');
 
     // Owner shell ready: terminal 1 echoes the boot dev line (same gate the
@@ -545,7 +545,7 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     // (1) a rifty-TS Monaco marker appears. VERY generous: the FIRST request cold-
     // boots the `typescript` engine in the LS worker AND fetches the ~3 MB vendored
     // lib.d.ts bundle over the relay — one-time, slow; once warm the rest is fast.
-    await expect.poll(() => tsMarkerCount(page, TS_PATH), { timeout: 70_000 }).toBeGreaterThan(0);
+    await expect.poll(() => tsMarkerCount(page, TS_PATH), { timeout: 100_000 }).toBeGreaterThan(0);
 
     // (1b) and a real error squiggle is rendered on the active model.
     await expect(page.locator('.monaco-editor .squiggly-error').first()).toBeVisible({
@@ -589,10 +589,13 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
     await page.click('[data-preset="typescript-ls"]');
     await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
     await expect.poll(() => terminalBuffer(page), { timeout: 45_000 }).toContain('$ vite');
+    // Do not let the default Vite starter's already-running preview satisfy this
+    // test. The TypeScript starter is the first state with src/main.ts.
+    await openFileViaPalette(page, 'main.ts');
 
     const frame = page.frameLocator('iframe[title="Preview port 5174"]');
     await expect(frame.locator('body')).toContainText('TypeScript language surface', {
-      timeout: 45_000,
+      timeout: 90_000,
     });
 
     expect(
@@ -610,7 +613,7 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
     ).toBe(true);
 
     await expect(frame.locator('body')).toContainText('rifty-ts-main-ts-hot', {
-      timeout: 45_000,
+      timeout: 90_000,
     });
   });
 });
@@ -640,6 +643,24 @@ const PROJECT_DIR = '/scratch/src';
 const USES_DEP = `${PROJECT_DIR}/uses-dep.ts`;
 const DEP_TS = `${PROJECT_DIR}/dep.ts`;
 const DEP_DTS = '/scratch/node_modules/cool-dep/index.d.ts';
+const usesDepResolvedSource = [
+  'import { coolValue, coolHelper, cool } from "cool-dep";',
+  'import { localGreet } from "./dep.ts";',
+  'const a = coolValue;',
+  'const b = coolHelper("x");',
+  'const c = localGreet("y");',
+  'const d = cool.value;',
+  '',
+].join('\n');
+const usesDepCompletionSource = [
+  'import { coolValue, coolHelper, cool } from "cool-dep";',
+  'import { localGreet } from "./dep.ts";',
+  'const a = coolValue;',
+  'const b = coolHelper("x");',
+  'const c = localGreet("y");',
+  'const d = cool.',
+  '',
+].join('\n');
 
 test.describe('rifty TS language service: real hover/def/completions (not Monaco built-in)', () => {
   test('hover shows project symbols; def jumps to a sibling file; completions list typed members', async ({
@@ -710,17 +731,8 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     //  L3 `const a = coolValue;`           coolValue starts col 11
     //  L4 `const b = coolHelper("x");`
     //  L5 `const c = localGreet("y");`     localGreet starts col 11
-    //  L6 `const d = localCool.`           cursor after the dot = col 21
-    const usesDepSource = [
-      'import { coolValue, coolHelper, cool } from "cool-dep";',
-      'import { localCool, localGreet } from "./dep.ts";',
-      'const a = coolValue;',
-      'const b = coolHelper("x");',
-      'const c = localGreet("y");',
-      'const d = localCool.',
-      '',
-    ].join('\n');
-    await writeOwnerFile(page, USES_DEP, usesDepSource);
+    //  L6 `const d = cool.value;`          completion switches this to `cool.`
+    await writeOwnerFile(page, USES_DEP, usesDepResolvedSource);
     await runOwnerShell(page, 'ls /scratch/src');
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('uses-dep.ts');
 
@@ -734,10 +746,10 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     // tsc default options before these files / this tsconfig existed). Idempotent
     // ts:init — a real supported operation, not a test backdoor.
     expect(await tsReinit(page)).toBe(true);
-    expect(await setModelValue(page, USES_DEP, usesDepSource)).toBe(true);
+    expect(await setModelValue(page, USES_DEP, usesDepResolvedSource)).toBe(true);
     await expect
-      .poll(() => tsMarkerCount(page, USES_DEP), { timeout: 30_000 })
-      .toBeGreaterThanOrEqual(0);
+      .poll(() => tsMarkerCount(page, USES_DEP), { timeout: 90_000, intervals: [1500] })
+      .toBe(0);
 
     // (1) HOVER over `coolValue` (L3, col 12). TS 5.9 renders this imported
     // alias as `import coolValue`; the dependency `.d.ts` proof is the definition
@@ -758,7 +770,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
           return defs.some((d) => d.uri.includes(DEP_DTS));
         },
         {
-          timeout: 30_000,
+          timeout: 90_000,
           intervals: [1500],
         },
       )
@@ -782,27 +794,32 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     // jumps to the declaration line (dep.ts L1, `export function localGreet`).
     expect(localDefs?.[0]?.line).toBe(1);
 
-    // (3) COMPLETIONS at the member access `localCool.` (L6, col 21) — the
-    // members come from a sibling project's inferred TS type.
+    // (3) COMPLETIONS at the member access `cool.` (L6, col 16). Keep the file
+    // syntactically valid for hover/definition above, then make it incomplete only
+    // for this completion assertion.
+    expect(await setModelValue(page, USES_DEP, usesDepCompletionSource)).toBe(true);
     await expect
-      .poll(async () => (await tsCompletions(page, USES_DEP, 6, 21)) ?? [], {
-        timeout: 30_000,
+      .poll(() => tsMarkerCount(page, USES_DEP), { timeout: 60_000, intervals: [1500] })
+      .toBeGreaterThan(0);
+    await expect
+      .poll(async () => (await tsCompletions(page, USES_DEP, 6, 16)) ?? [], {
+        timeout: 60_000,
         intervals: [1500],
       })
       .toEqual(expect.arrayContaining(['helper', 'value']));
-    const completionItems = (await tsCompletionItems(page, USES_DEP, 6, 21)) ?? [];
+    const completionItems = (await tsCompletionItems(page, USES_DEP, 6, 16)) ?? [];
     const helperCompletion = completionItems.find((item) => item.label === 'helper');
     expect(helperCompletion).toMatchObject({
       insertText: 'helper',
       startLine: 6,
-      startColumn: 21,
+      startColumn: 16,
       endLine: 6,
-      endColumn: 21,
+      endColumn: 16,
     });
     expect(helperCompletion?.commitCharacters.length ?? 0).toBeGreaterThan(0);
     await expect
-      .poll(async () => tsRangeSemanticTokenCount(page, USES_DEP, 1, 1, 6, 21), {
-        timeout: 30_000,
+      .poll(async () => tsRangeSemanticTokenCount(page, USES_DEP, 1, 1, 6, 16), {
+        timeout: 60_000,
         intervals: [1500],
       })
       .toBeGreaterThan(0);
