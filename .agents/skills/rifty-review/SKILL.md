@@ -12,3 +12,6 @@ Especially interested in:
 - Absence of bugs
 - No regressions to existing functionality
 - Feature's user experience matches the real ecosystem
+
+## Report
+Open with an overall verdict + merge call. Then one section per axis above (in order), each with its own verdict (pass / concern / blocker) — never folded into a flat severity-ranked list, never downgraded to a nit. Cite file:line.
