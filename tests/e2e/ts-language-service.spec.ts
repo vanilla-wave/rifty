@@ -58,8 +58,9 @@ function escapeRegExp(text: string): string {
 }
 
 async function runOwnerShell(page: Page, command: string, timeout = 15_000): Promise<void> {
-  const marker = `__rifty_e2e_shell_done_${++ownerShellSeq}__`;
-  await runTerminalLine(page, `${command} && echo ${marker}`);
+  const seq = ++ownerShellSeq;
+  const marker = `__rifty_e2e_shell_done_${seq}__`;
+  await runTerminalLine(page, `${command} && printf '__rifty_e2e_shell_done_%s__\\n' ${seq}`);
   await expect
     .poll(() => terminalBuffer(page), { timeout })
     .toMatch(new RegExp(`${escapeRegExp(marker)}[\\s\\S]*>\\s*$`));
@@ -783,6 +784,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     await page.goto('/');
 
     await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
+    await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 90_000 });
     const root = await activeRootFromHint(page);
     const { usesDep, depTs, depDts } = dependencyProjectPaths(root);
     await openShellTerminal(page);
@@ -846,7 +848,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     //  L5 `const c = localGreet("y");`     localGreet starts col 11
     //  L6 `const d = cool.value;`          completion switches this to `cool.`
     await writeOwnerFile(page, usesDep, usesDepResolvedSource);
-    await runOwnerShell(page, `test -f ${depDts} && cat ${depDts} && ls ${root}/src`);
+    await runOwnerShell(page, `cat ${depDts} && ls ${root}/src`);
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('coolValue');
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('uses-dep.ts');
 
