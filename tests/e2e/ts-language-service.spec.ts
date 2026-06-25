@@ -47,10 +47,17 @@ test.describe.configure({ mode: 'serial' });
  */
 
 const TS_PATH = '/scratch/src/lsp-check.ts';
+let ownerShellSeq = 0;
 
 function parentDir(path: string): string {
   const slash = path.lastIndexOf('/');
   return slash <= 0 ? '/' : path.slice(0, slash);
+}
+
+async function runOwnerShell(page: Page, command: string, timeout = 15_000): Promise<void> {
+  const marker = `__rifty_e2e_shell_done_${++ownerShellSeq}__`;
+  await runTerminalLine(page, `${command} && echo ${marker}`);
+  await expect.poll(() => terminalBuffer(page), { timeout }).toContain(marker);
 }
 
 /** rifty-TS marker count for a VFS path via the EditorHost e2e hook (ADR-0166 P1.9d). */
@@ -451,9 +458,10 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     // real shell command — empty so the keyboard-typed error below is the SOLE
     // content (nothing to mangle). The owner republishes its snapshot on command
     // exit, so the palette then lists it.
-    await runTerminalLine(page, `mkdir -p ${parentDir(TS_PATH)}`);
-    await runTerminalLine(page, `printf '' > ${TS_PATH}`);
-    await runTerminalLine(page, 'ls /scratch/src');
+    await runOwnerShell(
+      page,
+      `mkdir -p ${parentDir(TS_PATH)} && printf '' > ${TS_PATH} && ls /scratch/src`,
+    );
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('lsp-check.ts');
 
     // Open it in the editor through the real palette → an editable .ts tab. This
@@ -609,7 +617,6 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
         '',
       ].join('\n'),
     );
-    await runTerminalLineSettled(page, 'mkdir -p /scratch/node_modules/cool-dep');
     await writeOwnerFile(
       page,
       '/scratch/node_modules/cool-dep/package.json',
@@ -655,7 +662,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
       '',
     ].join('\n');
     await writeOwnerFile(page, USES_DEP, usesDepSource);
-    await runTerminalLine(page, 'ls /scratch/src');
+    await runOwnerShell(page, 'ls /scratch/src');
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('uses-dep.ts');
 
     // Open uses-dep.ts so a Monaco model exists (providers resolve a model→path).
@@ -824,7 +831,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
         '',
       ].join('\n'),
     );
-    await runTerminalLine(page, 'ls /scratch/src');
+    await runOwnerShell(page, 'ls /scratch/src');
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('app.ts');
 
     // Open BOTH files so a Monaco model exists for each (providers resolve a
@@ -1009,7 +1016,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
       FORMAT_TS,
       ['export const sum=(a:number,b:number)=>a+b;', 'export const v=sum(1,2);', ''].join('\n'),
     );
-    await runTerminalLine(page, 'ls /scratch/src');
+    await runOwnerShell(page, 'ls /scratch/src');
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('app.ts');
 
     // Open all four files so a Monaco model exists for each (providers resolve a
