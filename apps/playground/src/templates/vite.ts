@@ -46,6 +46,7 @@ export const VITE_TEMPLATE: ViteProjectSpec = {
     host: true,
     allowedHosts: true,
   },
-  // HMR stays off pending socket parity (ADR-0161).
-  hmr: { enabled: false },
+  // Vite 7 uses the proven cross-realm native-HMR bridge; Vite 8 keeps HMR off
+  // separately until its Rolldown WASI socket path is re-proven (ADR-0161).
+  hmr: { enabled: true },
 };

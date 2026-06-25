@@ -36,7 +36,7 @@ describe('resolveBootstrapConfig', () => {
     expect(cfg.runtimeSpecifier).toBe('vite');
     expect(cfg.server.appType).toBe('spa');
     expect(cfg.server.optimizeDepsDisabled).toBe(true);
-    expect(cfg.hmrEnabled).toBe(false);
+    expect(cfg.hmrEnabled).toBe(true);
 
     const pkg = JSON.parse(cfg.packageJson) as {
       dependencies: Record<string, string>;
@@ -165,6 +165,12 @@ describe('vite8 opt-in preset', () => {
     expect(VITE8_TEMPLATE.install).toEqual({ vite: '8.0.16' });
     expect(VITE8_TEMPLATE.bakedNodeModulesUrl).toBe('/snapshots/vite8-node-modules.json.gz');
     expect(VITE_TEMPLATE.bakedNodeModulesUrl).not.toBe(VITE8_TEMPLATE.bakedNodeModulesUrl);
+  });
+
+  it('keeps HMR disabled for the Vite 8 Rolldown path (ADR-0161)', () => {
+    const cfg = resolveBootstrapConfig(VITE8_TEMPLATE, 5174, '/workspace');
+    if (cfg.runtime !== 'vite') throw new Error('expected a vite bootstrap config');
+    expect(cfg.hmrEnabled).toBe(false);
   });
 });
 

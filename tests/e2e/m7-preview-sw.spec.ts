@@ -3,11 +3,12 @@
  *
  * The playground now starts a real Vite terminal on load. This spec probes the
  * same-origin `/preview/<port>/` URL through the Service Worker and waits for
- * the worker-owned Vite route to become reachable. ADR-0161 disables HMR in
- * the Vite 8 template, so this is a serve/preview smoke, not HMR coverage.
+ * the worker-owned Vite route to become reachable. The default Project files
+ * preset uses Vite 7, where editor saves must refresh the iframe through the
+ * cross-realm HMR bridge; Vite 8 keeps HMR disabled by ADR-0161.
  */
 import { expect, test } from '@playwright/test';
-import { expectTerminalContains } from './helpers/playground.ts';
+import { expectTerminalContains, terminalBuffer } from './helpers/playground.ts';
 
 test.describe('M7 — HTTP through the Service Worker preview bridge', () => {
   test('GET /preview/5174/ returns worker-owned Vite HTML round-tripped through the SW', async ({
@@ -19,14 +20,6 @@ test.describe('M7 — HTTP through the Service Worker preview bridge', () => {
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
       timeout: 15_000,
     });
-    await expectTerminalContains(page, 'starting dev server on port', 30_000);
-
-    await page.click('[data-action="view-templates"]');
-    await page.click('[data-preset="real-vite"]');
-    await expect(page.locator('[data-action="view-templates"]')).toContainText('real-vite', {
-      timeout: 5_000,
-    });
-    await expectTerminalContains(page, 'npm: + vite@8.0.16', 120_000);
     await expectTerminalContains(page, '[vite] dev server ready on port 5174', 60_000);
 
     const fetchPreview = async () =>
@@ -64,7 +57,7 @@ test.describe('M7 — HTTP through the Service Worker preview bridge', () => {
     expect(probe.contentType).toContain('text/html');
     expect(probe.body).toContain('rifty + real Vite (worker)');
     expect(probe.body).toContain('src/main.js');
-    expect(probe.body).not.toContain('data-rifty-hmr-bridge');
+    expect(probe.body).toContain('data-rifty-hmr-bridge');
   });
 
   // Regression: the test above proves the dev server SERVES the shell HTML, but a
@@ -97,5 +90,45 @@ test.describe('M7 — HTTP through the Service Worker preview bridge', () => {
 
     // A raw-JSON-as-ESM regression surfaces as a SyntaxError inside the iframe.
     expect(pageErrors.join('\n')).not.toMatch(/Unexpected token|SyntaxError/);
+  });
+
+  test('editing project files updates the preview iframe text', async ({ page }) => {
+    test.setTimeout(120_000);
+    const pageErrors: string[] = [];
+    page.on('pageerror', (e) => pageErrors.push(e.message));
+
+    await page.goto('/');
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, {
+      timeout: 15_000,
+    });
+    await expectTerminalContains(page, '[vite] dev server ready on port 5174', 60_000);
+
+    const frame = page.frameLocator('iframe[title="Preview port 5174"]');
+    await expect(frame.locator('.workspace-shell h1')).toHaveText('Workspace anatomy', {
+      timeout: 60_000,
+    });
+
+    const marker = `Edited workspace ${Date.now()}`;
+    const editor = page.locator('[data-testid="editor"]');
+    const editorInput = editor.locator('textarea.inputarea').first();
+    await editor
+      .locator('.view-line')
+      .first()
+      .click({ position: { x: 0, y: 8 } });
+    await editorInput.click({ force: true });
+    await expect(editorInput).toBeFocused();
+    await page.keyboard.press('Home');
+    await page.keyboard.insertText(
+      `setInterval(() => { const h = document.querySelector('.workspace-shell h1'); if (h) h.textContent = ${JSON.stringify(
+        marker,
+      )}; }, 50);\n`,
+    );
+    await expect(editor.locator('.view-lines').first()).toContainText(marker);
+
+    await expect(frame.locator('.workspace-shell h1')).toHaveText(marker, {
+      timeout: 30_000,
+    });
+    expect(await terminalBuffer(page, 0)).not.toContain('module invalidation failed');
+    expect(pageErrors.join('\n')).not.toMatch(/Maximum call stack|Unexpected token|SyntaxError/);
   });
 });
