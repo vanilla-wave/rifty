@@ -74,7 +74,7 @@ export type PreviewPortEntry = {
   port: number;
   url: string;
   label: string;
-  source: 'dev-server' | 'node';
+  source: 'dev-server' | 'preview' | 'node';
   /** Owning session/run id (for label + teardown correlation). */
   sid: string;
 };

@@ -24,12 +24,16 @@ describe('real Vite bootstrap preview routing', () => {
   });
 });
 
-describe('vite command — dev-server-only (no production build/preview)', () => {
-  it('loud-rejects `vite build`/`preview`/`optimize` instead of silently booting the dev server', () => {
-    // The sandbox has no production-bundle path (ADR-0162); these subcommands must
-    // not silently fall through to runDevServer (no dist + no error).
-    expect(source).toContain("if (sub === 'build' || sub === 'preview' || sub === 'optimize')");
-    expect(source).toContain('is not supported yet — the rifty sandbox is dev-server-only');
+describe('vite command — production build/preview routing', () => {
+  it('routes `vite build`/`preview` to real handlers while optimize still loud-rejects', () => {
+    expect(source).toContain('rejectProductionCommandForVite8');
+    expect(source).toContain('upstream-blocked for the vite8 preset');
+    expect(source).toContain("if (sub === 'build')");
+    expect(source).toContain('return runBuild(ctx);');
+    expect(source).toContain("if (sub === 'preview')");
+    expect(source).toContain('return runPreview(ctx);');
+    expect(source).toContain("if (sub === 'optimize')");
+    expect(source).toContain('is not supported yet');
   });
 });
 

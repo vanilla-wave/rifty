@@ -29,13 +29,15 @@ export const VITE_TEMPLATE: ViteProjectSpec = {
   id: 'vite',
   displayName: 'Vite dev server',
   runtime: 'vite',
-  install: { vite: '8.0.16' },
+  // Default = Vite 7 (Rollup/esbuild). Vite 8's Rolldown WASI build is
+  // upstream-blocked, so it lives in the opt-in `vite8` preset.
+  install: { vite: '^7.0.0', '@rollup/wasm-node': '4.62.2' },
   // Regenerate with `pnpm snapshots:bake` after changing `install` (ADR-0135).
   bakedNodeModulesUrl: '/snapshots/vite-node-modules.json.gz',
   runtimeSpecifier: 'vite',
   entry: { relativePath: '/src/main.js', content: INITIAL_MAIN_JS },
   defaultPort: 5174,
-  estimatedBootSeconds: 25,
+  estimatedBootSeconds: 20,
   htmlTitle: 'rifty + real Vite (worker)',
   server: {
     appType: 'spa',
@@ -44,5 +46,6 @@ export const VITE_TEMPLATE: ViteProjectSpec = {
     host: true,
     allowedHosts: true,
   },
+  // HMR stays off pending socket parity (ADR-0161).
   hmr: { enabled: false },
 };

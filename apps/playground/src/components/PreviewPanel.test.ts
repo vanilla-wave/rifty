@@ -17,6 +17,16 @@ const TWO_PORTS: PreviewPortEntry[] = [
   },
   { port: 3000, url: '/preview/3000/', label: 'node :3000', source: 'node', sid: 's1' },
 ];
+const WITH_PROD_PREVIEW: PreviewPortEntry[] = [
+  ...TWO_PORTS,
+  {
+    port: 4173,
+    url: '/preview/4173/',
+    label: 'vite preview',
+    source: 'preview',
+    sid: 'preview',
+  },
+];
 
 describe('PreviewPanel refresh contract', () => {
   it('does not accept a parent snapshot refresh key', () => {
@@ -82,6 +92,10 @@ describe('reconcileSelectedPort (auto-select-last)', () => {
   it('keeps the current selection when it is still live', () => {
     expect(reconcileSelectedPort(TWO_PORTS, 5174)).toBe(5174);
     expect(reconcileSelectedPort(TWO_PORTS, 3000)).toBe(3000);
+  });
+
+  it('snaps to a newly added production preview even while the dev server is live', () => {
+    expect(reconcileSelectedPort(WITH_PROD_PREVIEW, 5174)).toBe(4173);
   });
 
   it('snaps to the LAST entry when the current selection is gone', () => {

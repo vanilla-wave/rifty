@@ -57,15 +57,8 @@ export interface Preset {
   readonly openFiles?: readonly string[];
 }
 
-const PROJECT_FILES_SOURCE = `const projectUrl = new URL('src/project.json?import', window.location.href).href;
-const summaryUrl = new URL('src/project-summary.js', window.location.href).href;
-let renderVersion = 0;
-
-function freshUrl(url) {
-  if (!import.meta.hot) return url;
-  const separator = url.includes('?') ? '&' : '?';
-  return url + separator + 't=' + Date.now() + '-' + renderVersion;
-}
+const PROJECT_FILES_SOURCE = `import project from './project.json';
+import { describeProject, formatFileList } from './project-summary.js';
 
 function ensureStyle() {
   const styleId = 'rifty-project-files-style';
@@ -75,13 +68,7 @@ function ensureStyle() {
   document.head.append(style);
 }
 
-export async function render() {
-  renderVersion += 1;
-  const { describeProject, formatFileList } = await import(/* @vite-ignore */ freshUrl(summaryUrl));
-  // Vite 8 serves a QUERIED .json raw — only a bare specifier or '?import' is JSON-transformed;
-  // any '?t=' cache-bust yields raw JSON, which loaded as ESM throws "Unexpected token ':'"
-  // (the project-files black screen). JS modules tolerate '?t=' (above); the JSON must not be busted.
-  const project = (await import(/* @vite-ignore */ projectUrl)).default;
+export function render() {
   const app = document.getElementById('app');
   if (!app) throw new Error('Missing #app root');
 
@@ -99,12 +86,12 @@ export async function render() {
     + '</main>';
 }
 
-await render();
+render();
 
 if (import.meta.hot) {
   import.meta.hot.accept();
   import.meta.hot.accept(['./project-summary.js', './project.json'], () => {
-    void render();
+    render();
   });
 }
 `;
@@ -305,7 +292,7 @@ The terminal prestarts vite. The script under scripts/ is a project file to insp
 
 const REAL_VITE_SOURCE = `// Real npm project mode builds the project from scratch: the terminal runs a
 // visible npm install (watch the packages stream in), then boots the actual
-// dev server and previews it live. The default template is Vite (vite@^5);
+// dev server and previews it live. The default template is Vite (vite@^7);
 // later runs reuse the tarball cache and the stamped node_modules.
 //
 // This is your app entry, served by the dev server at /src/main.js.
@@ -389,6 +376,20 @@ const REAL_VITE_PRESET: Preset = {
   source: REAL_VITE_SOURCE,
 };
 
+const VITE8_PRESET: Preset = {
+  id: 'vite8',
+  label: 'Vite 8 (Rolldown)',
+  category: 'Live preview',
+  icon: 'rocket',
+  mode: 'real-vite',
+  setup: 'instant',
+  templateId: 'vite8',
+  blurb: 'Experimental Vite 8 + Rolldown WASI dev server. build/preview upstream-blocked.',
+  glyph: { text: 'V8', color: '#E8D44D' },
+  tag: { text: 'instant', tone: 'live' },
+  source: REAL_VITE_SOURCE,
+};
+
 /**
  * Fullstack demo (node-server template, see the node-server template ADR):
  * the editor program is the SERVER entry; explorer files mirror the template's
@@ -441,6 +442,7 @@ export const PRESETS: readonly Preset[] = [
   PROJECT_FILES_PRESET,
   NODE_WORKER_PRESET,
   REAL_VITE_PRESET,
+  VITE8_PRESET,
   EXPRESS_SQLITE_PRESET,
   SOCKET_LAB_PRESET,
 ];

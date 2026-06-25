@@ -123,6 +123,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0155 | Terminal node-file command: arbitrary-entry supervised child + multi-port preview |
 | 0157 | Unified spec-seeded mutable Node process at pre-entry gated to Node workers |
 | 0161 | Vite 8 disables HMR pending socket parity |
+| 0173 | Vite 7 production build and preview |
 
 ### toolchain-build
 

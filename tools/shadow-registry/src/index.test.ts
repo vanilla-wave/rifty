@@ -7,6 +7,7 @@ import {
   lightningcssShimFiles,
   rollupShimFiles,
   viteBrowserShimFiles,
+  viteBuildShimFiles,
 } from './index.ts';
 
 describe('shadow-registry', () => {
@@ -33,6 +34,31 @@ describe('shadow-registry', () => {
     expect(rollupShimFiles['/workspace/node_modules/rollup/dist/native.js']).toContain(
       'exports.parse',
     );
+  });
+
+  it('viteBuildShimFiles uses the real @rollup/wasm-node parser without changing the dev stub', () => {
+    const buildNative = viteBuildShimFiles['/workspace/node_modules/rollup/dist/native.js'];
+    const devNative = viteBrowserShimFiles['/workspace/node_modules/rollup/dist/native.js'];
+
+    expect(buildNative).toContain("require('@rollup/wasm-node/dist/native.js')");
+    expect(buildNative).toContain('exports.parse = native.parse');
+    expect(buildNative).toContain('exports.parseAsync = native.parseAsync');
+    expect(buildNative).toContain('exports.xxhashBase64Url = native.xxhashBase64Url');
+    expect(buildNative).toContain('exports.xxhashBase36 = native.xxhashBase36');
+    expect(buildNative).toContain('exports.xxhashBase16 = native.xxhashBase16');
+    expect(devNative).not.toBe(buildNative);
+    expect(devNative).toContain('emptyProgram');
+  });
+
+  it('viteBuildShimFiles delegates esbuild transform to the injected async WASI bridge', () => {
+    const buildEsbuild = viteBuildShimFiles['/workspace/node_modules/esbuild/lib/main.js'];
+    const devEsbuild = viteBrowserShimFiles['/workspace/node_modules/esbuild/lib/main.js'];
+
+    expect(buildEsbuild).toContain('__riftyEsbuildTransform');
+    expect(buildEsbuild).toContain('NotImplementedError');
+    expect(buildEsbuild).toContain('esbuild.transformSync');
+    expect(buildEsbuild).not.toBe(devEsbuild);
+    expect(devEsbuild).toContain('passthrough');
   });
 
   it('lightningcssShimFiles exposes the native package name backed by lightningcss-wasm', () => {

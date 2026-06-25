@@ -81,11 +81,29 @@ async function bootstrapDevServerChild(): Promise<void> {
   };
 
   let handle: DevServerHandle | null = null;
+  let previewHandle: { readonly port: number; stop(): Promise<void> } | null = null;
   kernelIpc.onMessage?.((message) => {
     if (isDevServerOwnerMessage(message) && handle) handle.onFileChanged?.(message.path);
+    void previewHandle;
   });
 
   try {
+    if (env.RIFTY_VITE_CHILD_MODE === 'build') {
+      const { bootBuild } = await import('./build-boot.ts');
+      await bootBuild({ root: c.root, log: (chunk) => proc.stdout.write(chunk) });
+      send({ type: 'rifty:dev-snapshot' });
+      return;
+    }
+    if (env.RIFTY_VITE_CHILD_MODE === 'preview') {
+      const { bootPreview } = await import('./build-boot.ts');
+      previewHandle = await bootPreview({
+        root: c.root,
+        port: c.port,
+        log: (chunk) => proc.stdout.write(chunk),
+      });
+      send({ type: 'rifty:preview-ready', port: previewHandle.port });
+      return;
+    }
     handle = await bootDevServer({
       cfg: c.cfg,
       port: c.port,
@@ -98,7 +116,9 @@ async function bootstrapDevServerChild(): Promise<void> {
     });
     send({ type: 'rifty:dev-ready', port: handle.port });
   } catch (err) {
-    send({ type: 'rifty:dev-error', message: err instanceof Error ? err.message : String(err) });
+    const message = err instanceof Error ? err.message : String(err);
+    proc.stderr.write(`${err instanceof Error && err.stack ? err.stack : message}\n`);
+    send({ type: 'rifty:dev-error', message });
     throw err;
   }
 }

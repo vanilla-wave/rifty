@@ -20,6 +20,7 @@ import { buildDepSnapshot } from '../src/glue/dep-snapshot.ts';
 import { readEffectiveDeps } from '../src/glue/install-stamp.ts';
 import { buildProjectPackageJson } from '../src/templates/project-spec.ts';
 import { allProjectSpecs } from '../src/templates/registry.ts';
+import { assertRollupWasmNodeLockstep } from '../src/templates/rollup-lockstep.ts';
 
 const ROOT = '/workspace';
 const publicDir = join(dirname(fileURLToPath(import.meta.url)), '../public');
@@ -46,6 +47,7 @@ for (const spec of baked) {
     fetch: (input, init) => fetch(input, init),
   });
   const result = await install({ vfs, cwd: ROOT, registry });
+  assertRollupWasmNodeLockstep(spec.id, result.lockfile);
 
   const deps = await readEffectiveDeps(vfs, ROOT);
   if (!deps) throw new Error(`bake(${spec.id}): package.json unreadable after install`);

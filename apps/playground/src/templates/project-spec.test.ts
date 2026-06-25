@@ -9,6 +9,7 @@ import {
   terminalDevLine,
 } from './project-spec.ts';
 import { VITE_TEMPLATE } from './vite.ts';
+import { VITE8_TEMPLATE } from './vite8.ts';
 
 const NODE_FIXTURE: NodeServerProjectSpec = {
   id: 'node-fixture',
@@ -31,7 +32,7 @@ describe('resolveBootstrapConfig', () => {
     if (cfg.runtime !== 'vite') throw new Error('expected a vite bootstrap config');
 
     expect(cfg.entryPath).toBe('/workspace/src/main.js');
-    expect(cfg.installDeps).toEqual({ vite: '8.0.16' });
+    expect(cfg.installDeps).toEqual({ vite: '^7.0.0', '@rollup/wasm-node': '4.62.2' });
     expect(cfg.runtimeSpecifier).toBe('vite');
     expect(cfg.server.appType).toBe('spa');
     expect(cfg.server.optimizeDepsDisabled).toBe(true);
@@ -154,6 +155,16 @@ describe('resolveBootstrapConfig (node-server runtime)', () => {
   it('keeps the vite runtime discriminant on the vite config', () => {
     const cfg = resolveBootstrapConfig(VITE_TEMPLATE, 5174, '/workspace');
     expect(cfg.runtime).toBe('vite');
+  });
+});
+
+describe('vite8 opt-in preset', () => {
+  it('is a distinct vite spec pinned to Vite 8 with its own baked snapshot', () => {
+    expect(VITE8_TEMPLATE.id).toBe('vite8');
+    expect(VITE8_TEMPLATE.runtime).toBe('vite');
+    expect(VITE8_TEMPLATE.install).toEqual({ vite: '8.0.16' });
+    expect(VITE8_TEMPLATE.bakedNodeModulesUrl).toBe('/snapshots/vite8-node-modules.json.gz');
+    expect(VITE_TEMPLATE.bakedNodeModulesUrl).not.toBe(VITE8_TEMPLATE.bakedNodeModulesUrl);
   });
 });
 

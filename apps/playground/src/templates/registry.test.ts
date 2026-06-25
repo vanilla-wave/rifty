@@ -15,6 +15,16 @@ describe('resolveProjectSpec', () => {
     expect(defaultProjectSpec()).toBe(spec);
   });
 
+  it('registers the opt-in vite8 preset distinctly from the default vite template', () => {
+    const vite = resolveProjectSpec('vite');
+    const vite8 = resolveProjectSpec('vite8');
+    expect(vite8.id).toBe('vite8');
+    expect(vite8.runtime).toBe('vite');
+    expect(vite8.install).toEqual({ vite: '8.0.16' });
+    expect(vite.install).not.toEqual(vite8.install);
+    expect(vite.bakedNodeModulesUrl).not.toBe(vite8.bakedNodeModulesUrl);
+  });
+
   it('throws NotImplementedError for an unknown template id (no silent fallback)', () => {
     expect(() => resolveProjectSpec('svelte')).toThrow(NotImplementedError);
     expect(() => resolveProjectSpec('svelte')).toThrow(/templates\.resolveProjectSpec/);

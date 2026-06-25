@@ -277,9 +277,9 @@ export function App(props: AppProps) {
     onCleanup(unsubscribe);
   });
 
-  // Per-port SW preview bridge for NODE servers only (ADR-0155). The dev-server
+  // Per-port SW preview bridge for non-dev-server ports (node + vite preview). The dev-server
   // port keeps its existing bridge from the `onDevServer` path above — never
-  // double-wire it. Diff the live node ports against active teardowns: wire a
+  // double-wire it. Diff the live ports against active teardowns: wire a
   // newly-present port, tear down + drop one that left the set. `onCleanup` tears
   // down all.
   const nodePortBridges = new Map<number, () => void>();
@@ -291,7 +291,7 @@ export function App(props: AppProps) {
     const devPort = devServerRunning() ? machine.realVitePort() : null;
     const live = new Set(
       previewPorts()
-        .filter((p) => p.source === 'node' && p.port !== devPort)
+        .filter((p) => p.source !== 'dev-server' && p.port !== devPort)
         .map((p) => p.port),
     );
     for (const port of live) {

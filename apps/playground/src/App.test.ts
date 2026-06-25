@@ -165,6 +165,11 @@ describe('App terminal startup wiring', () => {
     );
   });
 
+  it('wires page-side bridges for non-dev preview ports (node servers and vite preview)', () => {
+    expect(source).toContain(".filter((p) => p.source !== 'dev-server' && p.port !== devPort)");
+    expect(source).not.toContain(".filter((p) => p.source === 'node' && p.port !== devPort)");
+  });
+
   it('keeps worker snapshots from reloading the preview iframe', () => {
     // ADR-0126 — preview reloads are HMR-client-driven; snapshot reload removed.
     expect(source).not.toContain('previewRevision');

@@ -64,11 +64,13 @@ import { resolveNodeEntry } from './node-entry-resolve.ts';
 import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
 import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
+import { createOwnerChildViteCommand } from './owner-child-vite-command.ts';
 import { type PreviewRegistry, createPreviewRegistry } from './preview-registry.ts';
 import { createPtyServer } from './pty-server.ts';
 import { type KernelIpc, installRuntimeGlobals } from './worker-runtime-globals.ts';
 
 const enc = new TextEncoder();
+const VITE_PREVIEW_PORT = 4173;
 
 registerNetBuiltins();
 registerSqliteBuiltin();
@@ -309,6 +311,10 @@ async function bootShellOwner(opts: {
     kernelWorkerUrl: opts.kernelWorkerUrl,
     nodeEntryWorkerUrl: opts.nodeEntryWorkerUrl,
   });
+  const viteCommand = createOwnerChildViteCommand(opts.devServerWorkerUrl, {
+    kernelWorkerUrl: opts.kernelWorkerUrl,
+    nodeEntryWorkerUrl: opts.nodeEntryWorkerUrl,
+  });
   // ADR-0155: `node <file>` runs in a supervised child like the bin executor, but
   // a server entry (it called `listen()`) posts its ports back so the owner adds a
   // preview slot. A monotonic run-seq keys each run's registry entries (teardown
@@ -329,6 +335,53 @@ async function bootShellOwner(opts: {
       ctx.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
       return 1;
     }
+  };
+
+  const rejectProductionCommandForVite8 = (sub: string, ctx: CommandContext): boolean => {
+    if (devSpec.id !== 'vite8') return false;
+    ctx.stderr.write(
+      `vite: \`vite ${sub}\` is upstream-blocked for the vite8 preset (Rolldown WASI build/preview); use the default Vite 7 preset for production build/preview.\n`,
+    );
+    return true;
+  };
+
+  const rejectUnsupportedViteArgs = (
+    sub: string,
+    args: readonly string[],
+    ctx: CommandContext,
+  ): boolean => {
+    if (args.length <= 1) return false;
+    ctx.stderr.write(
+      `vite: \`vite ${sub}\` arguments are not supported in rifty yet; run exactly \`vite ${sub}\`.\n`,
+    );
+    return true;
+  };
+
+  const viteChildParams = (port: number) => ({
+    templateId: devSpec.id,
+    slug: devSlug,
+    setup: devFromScratch ? ('from-scratch' as const) : ('instant' as const),
+    root: devCfg.root,
+    port,
+  });
+
+  const runBuild = async (ctx: CommandContext): Promise<number> => {
+    if (rejectProductionCommandForVite8('build', ctx)) return 1;
+    const code = await viteCommand.build(viteChildParams(devCfg.port), ctx);
+    if (code === 0) {
+      await flushSyncMirror();
+      publishSnapshot();
+    }
+    return code;
+  };
+
+  const runPreview = async (ctx: CommandContext): Promise<number> => {
+    if (rejectProductionCommandForVite8('preview', ctx)) return 1;
+    const code = await viteCommand.preview(viteChildParams(VITE_PREVIEW_PORT), ctx, {
+      onReady: (previewPort) => previews.setPreview(previewPort),
+      onExit: () => previews.clearPreview(),
+    });
+    return ctx.signal?.aborted ? 130 : code;
   };
 
   const npmCommand = createNpmShellCommand({
@@ -390,16 +443,23 @@ async function bootShellOwner(opts: {
       publishSnapshot(); // node_modules may have changed — refresh the page's view
       return code;
     });
-    // The sandbox is dev-server-only (ADR-0162): `vite build`/`preview`/`optimize`
-    // have no production-bundle path yet, so LOUD-reject them instead of silently
-    // booting the dev server (which would produce no dist + no error). Bare `vite`,
-    // `vite dev`/`serve`, and flags still boot the dev line.
+    // ADR-0173: Vite 7 build/preview use real production handlers. Vite 8
+    // production remains loud-rejected in rejectProductionCommandForVite8();
+    // optimize stays out of scope for both templates.
     // TODO(backlog: playground/vite8-production-build-preview)
     shell.registerCommand('vite', (args, ctx) => {
       const sub = args[0];
-      if (sub === 'build' || sub === 'preview' || sub === 'optimize') {
+      if (sub === 'build') {
+        if (rejectUnsupportedViteArgs(sub, args, ctx)) return Promise.resolve(1);
+        return runBuild(ctx);
+      }
+      if (sub === 'preview') {
+        if (rejectUnsupportedViteArgs(sub, args, ctx)) return Promise.resolve(1);
+        return runPreview(ctx);
+      }
+      if (sub === 'optimize') {
         ctx.stderr.write(
-          `vite: \`vite ${sub}\` is not supported yet — the rifty sandbox is dev-server-only (no production build/preview). Run \`vite\` to start the dev server.\n`,
+          `vite: \`vite ${sub}\` is not supported yet — dependency optimization is out of scope for the rifty sandbox. Run \`vite\`, \`vite build\`, or \`vite preview\`.\n`,
         );
         return Promise.resolve(1);
       }

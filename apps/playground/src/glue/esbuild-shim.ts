@@ -5,6 +5,7 @@
 export {
   browserShimFileSets,
   collectBrowserShimFiles,
+  viteBuildShimFiles,
   viteBrowserShimFiles,
   type BrowserShimName,
 } from '@riftydev/shadow-registry';

@@ -166,6 +166,98 @@ export const esbuildShimFiles: Record<string, string> = {
   '/workspace/node_modules/esbuild/lib/main.js': SHIM_ESBUILD_SOURCE,
 };
 
+const SHIM_ESBUILD_BUILD_SOURCE = `// rifty: esbuild shim — BUILD path, real async WASI transform bridge
+const NotImplementedError = class extends Error {
+  constructor(feature, hint) {
+    super('Not implemented: ' + feature + (hint ? ' (' + hint + ')' : ''));
+    this.name = 'NotImplementedError';
+    this.feature = feature;
+  }
+};
+
+export const version = ${JSON.stringify(SHIM_ESBUILD_VERSION)};
+
+export async function initialize(_opts) {
+  return undefined;
+}
+
+function decodeInput(input) {
+  return typeof input === 'string' ? input : new TextDecoder().decode(input);
+}
+
+function transformBridge() {
+  const bridge = globalThis.__riftyEsbuildTransform;
+  if (typeof bridge !== 'function') {
+    throw new NotImplementedError('esbuild.transform', 'rifty build WASI bridge not installed');
+  }
+  return bridge;
+}
+
+export async function transform(input, options = {}) {
+  const result = await transformBridge()(decodeInput(input), options);
+  return {
+    code: result.code,
+    map: result.map,
+    warnings: result.warnings || [],
+    legalComments: '',
+    mangleCache: undefined,
+  };
+}
+
+export function transformSync(_input, _options = {}) {
+  throw new NotImplementedError('esbuild.transformSync', 'rifty esbuild WASI bridge is async');
+}
+
+export async function build(_opts) {
+  throw new NotImplementedError('esbuild.build', 'use vite build with the transform bridge');
+}
+
+export function buildSync(_opts) {
+  throw new NotImplementedError('esbuild.buildSync', 'use vite build with the transform bridge');
+}
+
+export async function context(_opts) {
+  throw new NotImplementedError('esbuild.context', 'vite production build does not use dep pre-bundling here');
+}
+
+export async function analyzeMetafile(_metafile, _opts) {
+  return '';
+}
+
+export function analyzeMetafileSync(_metafile, _opts) {
+  return '';
+}
+
+export async function formatMessages(messages, _opts) {
+  return messages.map((m) => (m && m.text) || '');
+}
+
+export function formatMessagesSync(messages, _opts) {
+  return messages.map((m) => (m && m.text) || '');
+}
+
+export const default_ = {
+  version,
+  transform,
+  transformSync,
+  build,
+  buildSync,
+  context,
+  analyzeMetafile,
+  analyzeMetafileSync,
+  formatMessages,
+  formatMessagesSync,
+  initialize,
+};
+
+export { default_ as default };
+`;
+
+export const esbuildBuildShimFiles: Record<string, string> = {
+  '/workspace/node_modules/esbuild/package.json': SHIM_ESBUILD_PACKAGE_JSON,
+  '/workspace/node_modules/esbuild/lib/main.js': SHIM_ESBUILD_BUILD_SOURCE,
+};
+
 const SHIM_LIGHTNINGCSS_VERSION = '1.32.0';
 
 const SHIM_LIGHTNINGCSS_PACKAGE_JSON = JSON.stringify(
@@ -276,6 +368,24 @@ export const rollupShimFiles: Record<string, string> = {
   '/workspace/node_modules/rollup/dist/native.js': ROLLUP_NATIVE_SHIM,
 };
 
+const ROLLUP_NATIVE_BUILD_SHIM = `// rifty: rollup native bindings shim — BUILD path, real WASM parser
+const native = require('@rollup/wasm-node/dist/native.js');
+
+exports.parse = native.parse;
+exports.parseAsync = native.parseAsync;
+exports.xxhashBase64Url = native.xxhashBase64Url;
+exports.xxhashBase36 = native.xxhashBase36;
+exports.xxhashBase16 = native.xxhashBase16;
+`;
+
+/**
+ * Build-only Rollup overlay. Production build needs the real serialized AST
+ * buffer; the dev path keeps the cheap stub above.
+ */
+export const rollupBuildShimFiles: Record<string, string> = {
+  '/workspace/node_modules/rollup/dist/native.js': ROLLUP_NATIVE_BUILD_SHIM,
+};
+
 export interface BrowserShimFileSet {
   readonly packageName: string;
   readonly files: Record<string, string>;
@@ -296,3 +406,8 @@ export function collectBrowserShimFiles(names: readonly BrowserShimName[]): Reco
 }
 
 export const viteBrowserShimFiles = collectBrowserShimFiles(['esbuild', 'lightningcss', 'rollup']);
+export const viteBuildShimFiles: Record<string, string> = {
+  ...esbuildBuildShimFiles,
+  ...lightningcssShimFiles,
+  ...rollupBuildShimFiles,
+};

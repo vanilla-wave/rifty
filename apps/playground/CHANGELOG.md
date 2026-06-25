@@ -2,9 +2,24 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Vite 7 production build/preview (ADR-0173).** The default Vite template now
+  supports `vite build` -> real hashed/minified `dist/` and `vite preview` ->
+  `/preview/4173/` serving that built bundle through the existing SW bridge.
+  The production preview is registered as `source:'preview'` and auto-selected
+  when it starts; Vite 8 build/preview stay loud-rejected.
+
+### Changed
+
+- The default Vite template now installs `vite@^7.0.0` plus
+  `@rollup/wasm-node@4.62.2`; snapshot baking asserts the Rollup and
+  `@rollup/wasm-node` versions remain lockstep. The opt-in `vite8` template
+  keeps `vite@8.0.16` and its own baked snapshot.
+
 ### Fixed
 
-- **Vite 8 sandbox honesty follow-ups (PR #55 audit).** (a) `vite build`/`preview`/`optimize` now LOUD-reject (`not supported yet — the rifty sandbox is dev-server-only`) instead of silently booting the dev server (no dist, no error); tracked `backlog/playground/vite8-production-build-preview`. (b) The `[real-vite/worker] hmr bridge ready` log + the bridge token are no longer emitted when HMR is disabled (Vite 8 template) — no false "bridge ready" signal for a bridge that is never installed. (c) `PreviewPanel` header comment corrected — with HMR off (ADR-0161) an editor save re-transforms on next fetch but pushes nothing and non-editor changes aren't watched, so seeing an edit needs a manual Reload (was: "file edits are refreshed by the iframe HMR client itself"). (d) compat `incompatible-packages.md` esbuild/rollup rows corrected — Vite 8 transforms via oxc and parses via `rolldown/parseAst`, so those shim overlays are off the Vite 8 path. New `vite8-*` backlog items track the remaining divergences (watcher-over-VFS, TS/JSX parity coverage, dead esbuild/rollup overlays, lightningcss-wasm init, dev-server UX parity).
+- **Vite 8 sandbox honesty follow-ups (PR #55 audit).** (a) Vite 8 `build`/`preview`/`optimize` loud-reject instead of silently booting the dev server (no dist, no error); tracked `backlog/playground/vite8-production-build-preview`. (b) The `[real-vite/worker] hmr bridge ready` log + the bridge token are no longer emitted when HMR is disabled (Vite 8 template) — no false "bridge ready" signal for a bridge that is never installed. (c) `PreviewPanel` header comment corrected — with HMR off (ADR-0161) an editor save re-transforms on next fetch but pushes nothing and non-editor changes aren't watched, so seeing an edit needs a manual Reload (was: "file edits are refreshed by the iframe HMR client itself"). (d) compat `incompatible-packages.md` esbuild/rollup rows corrected — Vite 8 transforms via oxc and parses via `rolldown/parseAst`, so those shim overlays are off the Vite 8 path. New `vite8-*` backlog items track the remaining divergences (watcher-over-VFS, TS/JSX parity coverage, dead esbuild/rollup overlays, lightningcss-wasm init, dev-server UX parity).
 
 ### Changed
 

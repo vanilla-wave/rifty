@@ -1,32 +1,29 @@
 ---
 area: playground
 status: active
-title: vite8 — production build/preview (`vite build`/`vite preview`/`vite optimize`) over the Rolldown WASI path
+title: vite8 — production build/preview over the Rolldown WASI path
 created: 2026-06-21
-why: The real-vite sandbox is dev-server-only. `vite build`/`preview`/`optimize` have no implementation; until this lands they LOUD-reject (real-vite-bootstrap.ts) instead of silently booting the dev server — honest stopgap, but a real Vite capability is missing.
-user_story: As a dev in the playground, I want `vite build` to produce a `dist/` bundle and `vite preview` to serve it (like a fresh `npm create vite` project), but today the sandbox is dev-only and `vite build`/`preview`/`optimize` loud-reject.
+why: Vite 7 production build/preview is delivered by ADR-0173. The opt-in Vite 8 template still loud-rejects `vite build`/`vite preview` because its Rolldown WASI path is upstream-blocked; enabling it before that is fixed risks silent/corrupt output.
+user_story: As a dev using the opt-in Vite 8 preset, I eventually want `vite build` to produce a real Rolldown `dist/` bundle and `vite preview` to serve it. Until Rolldown WASI is proven, those commands must loud-reject and the default Vite 7 preset is the production build/preview path.
 sources: [apps/playground/src/workers/real-vite-bootstrap.ts, apps/playground/src/workers/dev-server-boot.ts, docs/adr/runtime-js/0162-vite-8-rolldown-wasi-browser-boot-runtime-surface.md, docs/public/compat/incompatible-packages.md]
 code: [apps/playground/src/workers/real-vite-bootstrap.ts]
 ---
 
 ## Context
 
-`runDevServer` (Rolldown WASI over kernel-backed `worker_threads`) is the only
-Vite path. No code calls `vite.build()`/`vite.preview()`; nothing writes a `dist/`.
-The `vite` shell command now loud-rejects `build`/`preview`/`optimize`
-(`TODO(backlog: playground/vite8-production-build-preview)` at the spawn site);
-`npm run build` already loud-rejects (the template seeds no build script).
+The default Vite 7 template now supports production build/preview with real
+Rollup WASM + esbuild-WASI (ADR-0173). Vite 8 is separate: its dev boot uses
+Rolldown WASI, but build/preview stay rejected until that path has a verified
+browser-safe production pipeline. `vite optimize` remains out of scope.
 
 ## Options or Next
 
-Wire `vite.build()` (Rolldown WASI) → emit the bundle into the VFS `dist/`, then
-`vite.preview()` (or a static serve of `dist/`) exposed through the SW preview
-routing the dev server already uses. Acceptance: `vite build` writes a real
-`dist/` and exits 0; `vite preview` serves it; a render-guard e2e (m7-style)
-asserts the BUILT output renders. No fake/empty dist, no silent fall-through.
+Next: once Rolldown WASI build is proven upstream, wire Vite 8 `build()` to emit
+a real `dist/`, then `preview()` through the existing production preview source.
+Acceptance: real hashed dist, built iframe render, and a Vite 8 regression guard.
+No fake/empty dist, no silent fall-through.
 
 ## Reversibility
 
 REVERSIBLE — additive command path over the existing Rolldown WASI + SW-routing
-infrastructure; no public-API/ADR contradiction. The interim loud-reject is the
-honest gap until then.
+infrastructure. The interim loud-reject is the honest gap until then.

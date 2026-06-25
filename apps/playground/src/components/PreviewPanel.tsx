@@ -59,6 +59,7 @@ const COMMIT_INTERVAL_MS = 200;
 export function reconcileSelectedPort(entries: PreviewPortEntry[], current: number): number {
   const last = entries.at(-1);
   if (!last) return current;
+  if (last.source === 'preview') return last.port;
   if (entries.some((e) => e.port === current)) return current;
   return last.port;
 }

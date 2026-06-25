@@ -4,6 +4,12 @@
 
 ### Added
 
+- `viteBuildShimFiles` adds a production-build overlay: Rollup's native entry
+  delegates to real `@rollup/wasm-node`, and esbuild's async `transform()` is
+  bridged to real esbuild-WASI for minify/target/external-map build phases.
+- New browser-safe `./esbuild-transform` subpath exposes `transformWithEsbuild`
+  without Node builtins; `./esbuild-binding` remains the Node-side vendored-wasm
+  loader for tests/tools.
 - `bakedOverrides` now redirects `lightningcss` to `lightningcss-wasm@1.32.0`,
   and exports a `lightningcssShimFiles` overlay that preserves the package name
   while delegating both ESM and CJS entrypoints to the real WASM implementation.

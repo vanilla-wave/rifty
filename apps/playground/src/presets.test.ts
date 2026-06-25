@@ -25,9 +25,14 @@ describe('playground presets', () => {
       const filePaths = new Set((preset.files ?? []).map((file) => file.path));
       expect(preset.openFiles?.every((path) => filePaths.has(path))).toBe(true);
     }
-    expect(filePresets.every((preset) => preset.source.includes("new URL('src/"))).toBe(true);
-    expect(filePresets.every((preset) => preset.source.includes('await import('))).toBe(true);
-    expect(filePresets.every((preset) => preset.source.includes('@vite-ignore'))).toBe(true);
+    const projectFiles = PRESETS.find((preset) => preset.id === 'project-files');
+    expect(projectFiles?.source).toContain("import project from './project.json'");
+    expect(projectFiles?.source).toContain("from './project-summary.js'");
+    expect(projectFiles?.source).not.toContain('@vite-ignore');
+    const nodeWorker = PRESETS.find((preset) => preset.id === 'node-worker');
+    expect(nodeWorker?.source).toContain("new URL('src/");
+    expect(nodeWorker?.source).toContain('await import(');
+    expect(nodeWorker?.source).toContain('@vite-ignore');
     expect(PRESETS.some((preset) => preset.id === 'real-vite')).toBe(true);
     expect(DEFAULT_PRESET.category).toBe('Files + modules');
     expect(CATEGORY_ORDER).toEqual(['Files + modules', 'Live preview']);
@@ -90,6 +95,16 @@ describe('playground presets', () => {
 
     expect(demo.openFiles?.length ?? 0).toBeGreaterThanOrEqual(2);
     expect(demo.openFiles?.every((path) => filePaths.has(path))).toBe(true);
+  });
+
+  it('ships Vite 8 as an opt-in instant preset distinct from default Vite 7', () => {
+    const vite8 = PRESETS.find((preset) => preset.id === 'vite8');
+    expect(vite8).toBeDefined();
+    if (!vite8) throw new Error('unreachable');
+    expect(vite8.mode).toBe('real-vite');
+    expect(vite8.setup).toBe('instant');
+    expect(vite8.templateId).toBe('vite8');
+    expect(vite8.blurb).toMatch(/Vite 8|Rolldown/i);
   });
 
   it('ships Socket Lab wired to its node-server template and socket matrix rows', () => {
