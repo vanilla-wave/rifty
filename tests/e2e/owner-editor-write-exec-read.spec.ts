@@ -47,6 +47,9 @@ test.describe('a page editor write is read back by exec in the owner', () => {
     // By now the on-mount program seed has run, so the edit below is not clobbered
     // by a later seed write.
     await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
+    await expect
+      .poll(() => terminalBuffer(page, 0), { timeout: 90_000 })
+      .toContain('[vite] dev server ready on port 5174');
 
     // A second idle shell on the same persistent owner — the reader.
     await openShellTerminal(page);
@@ -69,6 +72,8 @@ test.describe('a page editor write is read back by exec in the owner', () => {
     await page.keyboard.insertText(`// ${marker}\n`);
     // The edit is in the editor model (sanity: the write actually originated here).
     await expect(editorLines).toContainText(marker);
+    await page.waitForTimeout(1_000);
+    expect(await terminalBuffer(page, 0)).not.toContain('module invalidation failed');
 
     // Exec reads the ROOT-RELATIVE program path in the owner → the marker the
     // editor just wrote is visible. The boot root is /scratch (ADR-0165 §4), so a

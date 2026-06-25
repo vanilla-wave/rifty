@@ -325,8 +325,7 @@ export async function bootDevServer(opts: {
     // and the preview route is about to be served on the public port.
     log(`[vite] dev server ready on port ${port}\n`);
     publishSnapshot();
-    server.watcher?.on('change', (file) => {
-      handleViteFileChange(file);
+    server.watcher?.on('change', () => {
       publishSnapshot();
     });
   }

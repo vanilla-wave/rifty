@@ -37,6 +37,12 @@ describe('dev-server boot preview routing', () => {
     expect(source).not.toContain('ws: false');
   });
 
+  it('does not feed Vite watcher change events back into synthetic invalidation', () => {
+    const watcherBlock = source.slice(source.indexOf("server.watcher?.on('change'"));
+    expect(watcherBlock).toContain('publishSnapshot();');
+    expect(watcherBlock).not.toContain('handleViteFileChange(file)');
+  });
+
   it('does not pin Vite to the old server.hmr.channels seam', () => {
     expect(source).not.toContain('readResolvedPackageVersion(');
     expect(source).not.toContain('assertSupportedViteHmrVersion');
