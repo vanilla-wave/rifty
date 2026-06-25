@@ -91,7 +91,9 @@ async function saveScratchAs(page: Page, name: string): Promise<void> {
 async function switchToProject(page: Page, name: string): Promise<void> {
   await openProjects(page);
   await page.locator('.rf-pcard', { hasText: name }).first().click();
-  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
+  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, {
+    timeout: OWNER_DURABLE_TIMEOUT,
+  });
 }
 
 /**
