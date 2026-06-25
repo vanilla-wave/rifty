@@ -47,6 +47,13 @@ describe.skipIf(!hasSab)('SabRing — real Worker round-trip (ADR-0011 phase 1)'
       const worker = new Worker(fileURLToPath(fixtureUrl), {
         workerData: { sab, payloadCapacity, protocolVersion: SYNC_RPC_PROTOCOL_VERSION },
       });
+      const exitPromise = new Promise<void>((resolve, reject) => {
+        worker.once('exit', (code) => {
+          if (code === 0) resolve();
+          else reject(new Error(`sab-ring fixture exited with code ${code}`));
+        });
+        worker.once('error', reject);
+      });
 
       // Wait for the fixture to signal it's installed and looping.
       await new Promise<void>((resolve, reject) => {
@@ -74,10 +81,7 @@ describe.skipIf(!hasSab)('SabRing — real Worker round-trip (ADR-0011 phase 1)'
       const finalReply = await ring.waitReplyAsync(2000);
       expect(finalReply.byteLength).toBe(0);
 
-      await new Promise<void>((resolve, reject) => {
-        worker.once('exit', () => resolve());
-        worker.once('error', reject);
-      });
+      await exitPromise;
     },
     REAL_WORKER_TIMEOUT_MS,
   );

@@ -479,6 +479,43 @@ async function waitForSrcSnapshotFile(page: Page, filename: string): Promise<voi
   });
 }
 
+async function pickStarterAndWaitForTemplate(
+  page: Page,
+  preset: string,
+  editorNeedle: string,
+  previewNeedle: string,
+): Promise<void> {
+  const editorLines = page.locator('[data-testid="editor"] .view-lines').first();
+  const previewBody = page.frameLocator('iframe[title="Preview port 5174"]').locator('body');
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await page.click('[data-action="open-launcher"]');
+    await page.getByRole('button', { name: 'Starters', exact: true }).click();
+    await page.click(`[data-preset="${preset}"]`);
+
+    const discard = page.getByRole('button', { name: 'Discard & continue', exact: true });
+    if (await discard.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await discard.click();
+    }
+
+    await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
+    await expect.poll(() => terminalBuffer(page), { timeout: 45_000 }).toContain('$ vite');
+
+    try {
+      await expect(editorLines).toContainText(editorNeedle, { timeout: 30_000 });
+      await expect(previewBody).toContainText(previewNeedle, { timeout: 90_000 });
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('starter template did not become active');
+}
+
 /** Open a workspace file through the real command palette (Ctrl/Cmd-K → type → click). */
 async function openFileViaPalette(page: Page, filename: string): Promise<void> {
   // Palette items are snapshotted once when the palette opens. Wait for the
@@ -586,11 +623,12 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
     test.setTimeout(180_000);
     await page.goto('/');
 
-    await page.click('[data-action="open-launcher"]');
-    await page.getByRole('button', { name: 'Starters', exact: true }).click();
-    await page.click('[data-preset="typescript-ls"]');
-    await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
-    await expect.poll(() => terminalBuffer(page), { timeout: 45_000 }).toContain('$ vite');
+    await pickStarterAndWaitForTemplate(
+      page,
+      'typescript-ls',
+      'LibraryShape',
+      'TypeScript language surface',
+    );
     const editor = page.locator('[data-testid="editor"]');
     const editorLines = editor.locator('.view-lines').first();
     // The TypeScript starter entry is already the active program tab; checking
@@ -598,9 +636,6 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
     await expect(editorLines).toContainText('LibraryShape', { timeout: 45_000 });
 
     const frame = page.frameLocator('iframe[title="Preview port 5174"]');
-    await expect(frame.locator('body')).toContainText('TypeScript language surface', {
-      timeout: 90_000,
-    });
 
     expect(
       await setModelValue(
@@ -772,16 +807,17 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
       .toBeGreaterThanOrEqual(0);
 
     let depDefs: { uri: string; line: number; column: number }[] = [];
+    expect(await setModelValue(page, USES_DEP, usesDepResolvedSource)).toBe(true);
+    await expect
+      .poll(() => tsMarkerCount(page, USES_DEP), { timeout: 120_000, intervals: [1500] })
+      .toBe(0);
     await expect
       .poll(
         async () => {
-          if (!(await tsReinit(page))) return false;
-          if (!(await setModelValue(page, USES_DEP, usesDepResolvedSource))) return false;
-          if ((await tsMarkerCount(page, USES_DEP)) !== 0) return false;
           depDefs = (await tsDefinition(page, USES_DEP, 3, 12)) ?? [];
           return depDefs.some((d) => d.uri.includes(DEP_DTS));
         },
-        { timeout: 120_000, intervals: [3000] },
+        { timeout: 120_000, intervals: [1500] },
       )
       .toBe(true);
 
