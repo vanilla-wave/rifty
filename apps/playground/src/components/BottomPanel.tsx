@@ -47,7 +47,7 @@ export function BottomPanel(props: {
   const sessionIds = createMemo(() => props.sessions.map((session) => session.id));
   const sessionById = (id: string) => props.sessions.find((session) => session.id === id);
 
-  // Bottom-panel view switcher (ADR-0166 P1.9c): the relocated terminal + the new
+  // Bottom-panel tab strip (ADR-0166 P1.9c): terminal sessions plus the permanent
   // Problems tab. Terminal stays the default. The problem COUNT lives in the tab.
   const [view, setView] = createSignal<'terminal' | 'problems'>('terminal');
   const problemCount = createMemo(() => {
@@ -75,93 +75,84 @@ export function BottomPanel(props: {
           </span>
         </button>
 
-        {/* View switcher (ADR-0166 P1.9c): Terminal | Problems. */}
-        <div class="rf-console__views" role="tablist" aria-label="Bottom panel views">
-          <button
-            type="button"
-            role="tab"
-            class="rf-console__view"
-            data-active={view() === 'terminal'}
-            aria-selected={view() === 'terminal'}
-            onClick={() => setView('terminal')}
-          >
-            <span class="rf-eyebrow">Terminal</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            class="rf-console__view"
-            data-testid="problems-tab"
-            data-active={view() === 'problems'}
-            aria-selected={view() === 'problems'}
-            onClick={() => setView('problems')}
-          >
-            <span class="rf-eyebrow">Problems</span>
-            <Show when={problemCount() > 0}>
-              <span class="rf-console__badge" data-testid="problems-count">
-                {problemCount()}
-              </span>
-            </Show>
-          </button>
-        </div>
-
-        <Show when={view() === 'terminal'}>
-          <div class="rf-terminal-tabsbar">
-            <div class="rf-terminal-tabs" role="tablist" aria-label="Terminal sessions">
-              <For each={sessionIds()}>
-                {(id) => {
-                  const session = () => sessionById(id);
-                  const isActive = () => id === props.activeSessionId;
-                  const isRunning = () => session()?.status === 'running';
-                  return (
-                    <Show when={session()}>
-                      {(current) => (
-                        <div
-                          class="rf-terminal-tab"
-                          data-active={isActive()}
-                          data-running={isRunning()}
+        <div class="rf-terminal-tabsbar">
+          <div class="rf-terminal-tabs" role="tablist" aria-label="Console tabs">
+            <For each={sessionIds()}>
+              {(id) => {
+                const session = () => sessionById(id);
+                const isActive = () => view() === 'terminal' && id === props.activeSessionId;
+                const isRunning = () => session()?.status === 'running';
+                return (
+                  <Show when={session()}>
+                    {(current) => (
+                      <div
+                        class="rf-terminal-tab"
+                        data-active={isActive()}
+                        data-running={isRunning()}
+                      >
+                        <button
+                          type="button"
+                          role="tab"
+                          class="rf-terminal-tab__select"
+                          aria-selected={isActive()}
+                          onClick={() => {
+                            setView('terminal');
+                            props.onSelectSession(id);
+                          }}
                         >
+                          <span class="rf-terminal-tab__dot" aria-hidden="true" />
+                          <span class="rf-terminal-tab__label">{current().title}</span>
+                        </button>
+                        <Show when={!isRunning()}>
                           <button
                             type="button"
-                            role="tab"
-                            class="rf-terminal-tab__select"
-                            aria-selected={isActive()}
-                            onClick={() => props.onSelectSession(id)}
+                            class="rf-terminal-tab__close"
+                            aria-label={`Close ${current().title}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              props.onCloseSession(id);
+                            }}
                           >
-                            <span class="rf-terminal-tab__dot" aria-hidden="true" />
-                            <span class="rf-terminal-tab__label">{current().title}</span>
+                            ×
                           </button>
-                          <Show when={!isRunning()}>
-                            <button
-                              type="button"
-                              class="rf-terminal-tab__close"
-                              aria-label={`Close ${current().title}`}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                props.onCloseSession(id);
-                              }}
-                            >
-                              ×
-                            </button>
-                          </Show>
-                        </div>
-                      )}
-                    </Show>
-                  );
-                }}
-              </For>
+                        </Show>
+                      </div>
+                    )}
+                  </Show>
+                );
+              }}
+            </For>
+            <div class="rf-terminal-tab" data-active={view() === 'problems'} data-running={false}>
+              <button
+                type="button"
+                role="tab"
+                class="rf-terminal-tab__select"
+                data-testid="problems-tab"
+                aria-selected={view() === 'problems'}
+                onClick={() => setView('problems')}
+              >
+                <span class="rf-terminal-tab__label">Problems</span>
+                <Show when={problemCount() > 0}>
+                  <span class="rf-console__badge" data-testid="problems-count">
+                    {problemCount()}
+                  </span>
+                </Show>
+              </button>
             </div>
-            <button
-              type="button"
-              class="rf-terminal-action"
-              aria-label="New terminal"
-              title="New terminal"
-              onClick={() => props.onCreateSession()}
-            >
-              +
-            </button>
           </div>
-        </Show>
+          <button
+            type="button"
+            class="rf-terminal-action"
+            aria-label="New terminal"
+            title="New terminal"
+            onClick={() => {
+              setView('terminal');
+              props.onCreateSession();
+            }}
+          >
+            +
+          </button>
+        </div>
       </div>
       <div class="rf-console__body">
         {/* Terminal stays MOUNTED across a view switch (preserves xterm scrollback +

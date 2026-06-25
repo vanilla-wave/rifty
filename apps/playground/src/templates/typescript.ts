@@ -2,6 +2,7 @@ import type { ViteProjectSpec } from './project-spec.ts';
 
 export const TYPESCRIPT_ENTRY_SOURCE = `import type { LibraryShape } from '@rifty/example-types';
 import './styles.css';
+import { formatWidgetName } from './format';
 import { clamp } from './math';
 import { WIDGET_THEME, defineWidget, type Widget } from './model';
 
@@ -22,7 +23,7 @@ const remoteShape: LibraryShape = {
 export const typecheckTarget = {
   id: 'ts-language-service',
   title: 'TypeScript language surface',
-  count: '3',
+  count: 3,
   tags: ['rename', 'references', 'quick-fix'],
   meta: { source: remoteShape.id },
 } satisfies Widget;
@@ -67,7 +68,7 @@ const TSCONFIG_JSON = `{
     "isolatedModules": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "types": []
+    "types": ["vite/client"]
   },
   "include": ["src/**/*.ts", "node_modules/@rifty/example-types/index.d.ts"]
 }

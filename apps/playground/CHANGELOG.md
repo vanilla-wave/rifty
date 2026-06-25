@@ -105,6 +105,14 @@
   to, only a starter to pick). New solid-free, storage-injected `glue/launcher-prefs.ts`
   (`initialLauncherTab`/`loadLauncherTab`/`saveLauncherTab`), unit-tested.
 
+### Fixed
+
+- **Problems is now a permanent terminal-tab, and the TypeScript starter boots clean.**
+  The old Terminal/Problems view switcher could leave terminal output visible over the
+  Problems panel, and the TS starter shipped with built-in diagnostics (`count` as a
+  string, a missing `formatWidgetName` import, and no `vite/client` types for HMR), so
+  user edits did not produce a clear before/after signal.
+
 ### Fixed (CI-red + visual regressions, ADR-0165)
 
 - **The launcher / dialogs / projects-tab / starters-tab / project-cards / row-menu /

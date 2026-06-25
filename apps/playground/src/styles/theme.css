@@ -1270,42 +1270,14 @@ body {
   visibility: visible;
   pointer-events: auto;
 }
+.rf-console__pane[data-active="false"] .rf-terminal-slot {
+  visibility: hidden;
+  pointer-events: none;
+}
 .rf-console[data-collapsed="true"] .rf-console__body {
   display: none;
 }
 
-/* Bottom-panel view switcher tabs (ADR-0166 P1.9c): Terminal | Problems. */
-.rf-console__views {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex: none;
-}
-.rf-console__view {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 9px;
-  border: none;
-  border-radius: var(--rf-r-sm);
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-.rf-console__view:hover {
-  background: var(--rf-hover);
-}
-.rf-console__view[data-active="true"] {
-  background: var(--rf-accent-sel);
-}
-.rf-console__view[data-active="true"] .rf-eyebrow {
-  color: var(--rf-accent-text-2);
-}
-.rf-console__view:focus-visible {
-  outline: 2px solid var(--rf-accent);
-  outline-offset: -2px;
-}
 .rf-console__badge {
   display: inline-grid;
   place-items: center;

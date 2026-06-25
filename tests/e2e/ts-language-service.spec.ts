@@ -555,6 +555,7 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     // (2) a row appears in the Problems tab.
     await page.locator('[data-testid="problems-tab"]').click();
     await expect(page.locator('[data-testid="problems-panel"]')).toBeVisible();
+    await expect(page.locator('[data-testid="terminal"]')).toBeHidden();
     await expect
       .poll(() => page.locator('[data-testid="problem-row"]').count(), { timeout: 30_000 })
       .toBeGreaterThan(0);
@@ -592,6 +593,9 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
     // Do not let the default Vite starter's already-running preview satisfy this
     // test. The TypeScript starter is the first state with src/main.ts.
     await openFileViaPalette(page, 'main.ts');
+    const editor = page.locator('[data-testid="editor"]');
+    const editorLines = editor.locator('.view-lines').first();
+    await expect(editorLines).toContainText('LibraryShape', { timeout: 15_000 });
 
     const frame = page.frameLocator('iframe[title="Preview port 5174"]');
     await expect(frame.locator('body')).toContainText('TypeScript language surface', {
@@ -615,6 +619,26 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
     await expect(frame.locator('body')).toContainText('rifty-ts-main-ts-hot', {
       timeout: 90_000,
     });
+
+    await expect
+      .poll(() => tsMarkerCount(page, '/scratch/src/main.ts'), { timeout: 90_000 })
+      .toBe(0);
+    expect(
+      await setModelValue(page, '/scratch/src/main.ts', 'const busted: number = "nope";\n'),
+    ).toBe(true);
+    await expect(editorLines).toContainText('busted', { timeout: 10_000 });
+    await expect
+      .poll(() => tsMarkerCount(page, '/scratch/src/main.ts'), { timeout: 90_000 })
+      .toBeGreaterThan(0);
+    await expect(page.locator('.monaco-editor .squiggly-error').first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await page.locator('[data-testid="problems-tab"]').click();
+    await expect(page.locator('[data-testid="terminal"]')).toBeHidden();
+    await expect(page.locator('[data-testid="problem-row"]').first()).toContainText(
+      /number|string/i,
+      { timeout: 30_000 },
+    );
   });
 });
 
