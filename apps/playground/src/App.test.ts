@@ -119,9 +119,10 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain('function viteSession()');
   });
 
-  it('restarts the existing dev-server terminal when changing presets while Vite is running', () => {
+  it('awaits the existing dev-server terminal restart when changing presets while Vite is running', () => {
     expect(source).toContain('function restartDevServer(sessionId: string)');
-    expect(source).toContain('if (restartSessionId) void restartDevServer(restartSessionId)');
+    expect(source).toContain('if (restartSessionId) await restartDevServer(restartSessionId)');
+    expect(source).not.toContain('if (restartSessionId) void restartDevServer(restartSessionId)');
     expect(source).toContain('devServerSessionId = session.id');
     // ADR-0165 §4: boot lines follow the STORE-derived active starter, not the
     // interim activePreset signal — so a switch boots the destination's template.

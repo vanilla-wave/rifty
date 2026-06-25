@@ -1337,7 +1337,7 @@ export function App(props: AppProps) {
     });
     if (devServerStatus() !== 'stopped') {
       const restartSessionId = devServerSessionId;
-      if (restartSessionId) void restartDevServer(restartSessionId);
+      if (restartSessionId) await restartDevServer(restartSessionId);
       return;
     }
     const session = devServerSession();

@@ -51,6 +51,10 @@
   respawns.** Switching between saved projects no longer tears down the owner
   after a timed-out mirror poll or starts a second switch before the first owner
   respawn is fully rewired.
+- **Starter dev-server restarts finish before preset boot continues.** Picking a
+  starter while Vite is already running no longer races the restart against the
+  remaining preset flow, which could leave the terminal at `terminal is busy`
+  instead of the new root's boot log.
 - **TS-LSP replies no longer cross-match between page clients.** Request ids are
   allocated across the page realm instead of per client instance, so a late
   `ack` from one client cannot satisfy a hover/rename/completion request from
