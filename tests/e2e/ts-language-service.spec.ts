@@ -843,10 +843,19 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     await expect
       .poll(() => tsMarkerCount(page, USES_DEP), { timeout: 120_000, intervals: [1500] })
       .toBe(0);
+    const depDefinitionProbes = [
+      { line: 3, col: 12 }, // usage alias
+      { line: 1, col: 10 }, // import binding
+      { line: 1, col: 46 }, // module specifier
+    ];
     await expect
       .poll(
         async () => {
-          depDefs = (await tsDefinition(page, USES_DEP, 3, 12)) ?? [];
+          depDefs = [];
+          for (const probe of depDefinitionProbes) {
+            depDefs = (await tsDefinition(page, USES_DEP, probe.line, probe.col)) ?? [];
+            if (depDefs.some((d) => d.uri.includes(DEP_DTS))) return true;
+          }
           return depDefs.some((d) => d.uri.includes(DEP_DTS));
         },
         { timeout: 120_000, intervals: [1500] },
