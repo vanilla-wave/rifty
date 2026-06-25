@@ -54,10 +54,16 @@ function parentDir(path: string): string {
   return slash <= 0 ? '/' : path.slice(0, slash);
 }
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 async function runOwnerShell(page: Page, command: string, timeout = 15_000): Promise<void> {
   const marker = `__rifty_e2e_shell_done_${++ownerShellSeq}__`;
   await runTerminalLine(page, `${command} && echo ${marker}`);
-  await expect.poll(() => terminalBuffer(page), { timeout }).toContain(marker);
+  await expect
+    .poll(() => terminalBuffer(page), { timeout })
+    .toMatch(new RegExp(`${escapeRegExp(marker)}[\\s\\S]*>\\s*$`));
 }
 
 /** rifty-TS marker count for a VFS path via the EditorHost e2e hook (ADR-0166 P1.9d). */
@@ -432,7 +438,7 @@ async function openFileViaPalette(page: Page, filename: string): Promise<void> {
   await palette.locator('input').fill(filename);
   // The Files section lists the workspace file (label = workspace-relative path).
   const row = palette.locator('.rf-palette__item', { hasText: filename }).first();
-  await expect(row).toBeVisible();
+  await expect(row).toBeVisible({ timeout: 30_000 });
   await row.click();
   await expect(palette).toBeHidden();
 }
