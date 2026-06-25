@@ -33,7 +33,7 @@ function installAndStamp(
 }
 
 describe('node_modules isolation per-root (ADR-0165 §5) — same starter, no cross-contamination', () => {
-  it('a saved project keeps its tree; a fresh same-starter scratch starts empty', async () => {
+  it('a saved project keeps source; stamped deps are restored per-root, not copied', async () => {
     const { vfs, fsSync } = createMemoryFs();
 
     // 1. scratch from a vite starter, installed + scratch-stamped.
@@ -51,8 +51,11 @@ describe('node_modules isolation per-root (ADR-0165 §5) — same starter, no cr
     // 3. A NEW scratch from the SAME starter (no node_modules — never installed).
     seedScratch(fsSync, seedFilesForStarter(starterById('project-files'), rootForId('scratch')));
 
-    // p1's tree is intact + reusable under its own slug.
-    expect((await installStampSatisfied(vfs, rootForId('p1'), 'p1'))?.packages).toBe(14);
+    // p1's source tree is intact, but its stamped deps were derived from the
+    // starter/install snapshot and will be restored by the next dev boot.
+    expect(fsSync.existsSync(`${rootForId('p1')}/package.json`)).toBe(true);
+    expect(fsSync.existsSync(`${rootForId('p1')}/node_modules`)).toBe(false);
+    expect(await installStampSatisfied(vfs, rootForId('p1'), 'p1')).toBeNull();
     // The fresh scratch has NO stamp → it would install from scratch, not reuse p1's.
     expect(fsSync.existsSync(`${rootForId('scratch')}/node_modules`)).toBe(false);
     expect(await installStampSatisfied(vfs, rootForId('scratch'), 'scratch')).toBeNull();

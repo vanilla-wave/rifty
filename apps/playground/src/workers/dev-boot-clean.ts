@@ -22,3 +22,16 @@ export function shouldCleanForDevBoot(input: DevBootCleanInput): boolean {
   if (input.lastTemplateId === null) return false;
   return input.nextTemplateId !== input.lastTemplateId || input.nextRoot !== input.lastRoot;
 }
+
+export interface DevBootCleanWithInstallStateInput extends DevBootCleanInput {
+  readonly fromScratch: boolean;
+  readonly installStampSatisfied: boolean;
+}
+
+export function shouldCleanForDevBootWithInstallState(
+  input: DevBootCleanWithInstallStateInput,
+): boolean {
+  if (!shouldCleanForDevBoot(input)) return false;
+  if (input.fromScratch && input.installStampSatisfied) return false;
+  return true;
+}

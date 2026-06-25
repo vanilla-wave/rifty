@@ -16,10 +16,15 @@
  * fullstack-demo / socket-lab (the node-server presets boot end-to-end).
  */
 import { type Page, expect, test } from '@playwright/test';
+import { readWorkspaceText } from './helpers/opfs.ts';
 import { expectTerminalContains, runTerminalLine } from './helpers/playground.ts';
 
 /** Terminal-session tabs only (editor tabs also use role=tab — scope to the shell). */
 const TERMINAL_TAB = '.rf-terminal-tab__select[role="tab"]';
+// Full-suite owner concurrency can delay the post-Save OPFS flush that starter
+// picks now intentionally wait on, so use the same order of budget as durable
+// tree polls instead of a UI-only 5s close budget.
+const OWNER_DURABLE_TIMEOUT = 90_000;
 
 /**
  * Open a FRESH shell terminal and make it the active slot — robust to the running
@@ -37,11 +42,27 @@ async function newShell(page: Page): Promise<void> {
   });
 }
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function runTerminalLineOk(page: Page, line: string, timeout = 30_000): Promise<void> {
+  await runTerminalLine(page, line);
+  await expect(
+    page
+      .locator('.rf-terminal-slot[data-active="true"] .rf-terminal-blockrail')
+      .getByRole('button', { name: new RegExp(`${escapeRegExp(line)}.*exit 0`) })
+      .last(),
+  ).toHaveAttribute('data-status', 'ok', { timeout });
+}
+
 async function pickStarter(page: Page, id: string): Promise<void> {
   await page.click('[data-action="open-launcher"]');
   await page.getByRole('button', { name: 'Starters', exact: true }).click();
   await page.click(`[data-preset="${id}"]`);
-  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
+  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, {
+    timeout: OWNER_DURABLE_TIMEOUT,
+  });
 }
 
 /** Open the launcher Projects tab via the top-bar chip. */
@@ -73,45 +94,26 @@ async function switchToProject(page: Page, name: string): Promise<void> {
   await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
 }
 
-/** Read the OPFS project index (durable owner index), or '' if not yet written. */
-async function readIndexProjectId(page: Page, name: string): Promise<string> {
-  return await page.evaluate(async (n) => {
-    try {
-      const root = (await navigator.storage.getDirectory()) as FileSystemDirectoryHandle;
-      const fh = await root.getFileHandle('.rifty-project-index.json');
-      const idx = JSON.parse(await (await fh.getFile()).text()) as {
-        projects: { id: string; name: string }[];
-      };
-      return idx.projects.find((p) => p.name === n)?.id ?? '';
-    } catch {
-      return '';
-    }
-  }, name);
-}
-
 /**
- * The on-disk project id the owner allocated for a saved project `name`. The Save's
- * OPFS write-through flush is async in the owner realm, so poll until the durable
- * index records the project (never read once + race the flush).
+ * The active project id the owner allocated for a just-saved project `name`.
+ * The Save flips the visible root to `/projects/<id>`; the durable tree checks
+ * below still read OPFS directly by that id.
  */
-async function projectIdForName(page: Page, name: string): Promise<string> {
-  await expect.poll(() => readIndexProjectId(page, name), { timeout: 30_000 }).not.toBe('');
-  return readIndexProjectId(page, name);
+async function activeProjectIdForName(page: Page, name: string): Promise<string> {
+  await expect(page.locator('[data-action="open-launcher"] .rf-chip__name')).toHaveText(name, {
+    timeout: 10_000,
+  });
+  const hint = page.locator('[data-testid="terminal-mode-hint"]').first();
+  await expect(hint).toContainText(/Commands run in \/projects\/[^;]+;/, { timeout: 30_000 });
+  const text = (await hint.textContent()) ?? '';
+  const id = /Commands run in \/projects\/([^;]+);/.exec(text)?.[1] ?? '';
+  expect(id).not.toBe('');
+  return id;
 }
 
 /** Read `/projects/<id>/round-trip.txt` straight from OPFS (the durable on-disk tree). */
 async function readProjectMarker(page: Page, id: string): Promise<string> {
-  return await page.evaluate(async (pid) => {
-    try {
-      const root = (await navigator.storage.getDirectory()) as FileSystemDirectoryHandle;
-      const projects = await root.getDirectoryHandle('projects');
-      const proj = await projects.getDirectoryHandle(pid);
-      const fh = await proj.getFileHandle('round-trip.txt');
-      return await (await fh.getFile()).text();
-    } catch (err) {
-      return `MISSING:${(err as Error).name}`;
-    }
-  }, id);
+  return await readWorkspaceText(page, `/projects/${id}/round-trip.txt`);
 }
 
 /** Poll until `/projects/<id>/round-trip.txt` holds `mark` (durable flush is async). */
@@ -202,11 +204,10 @@ test.describe('ADR-0165 §7 — durable Save + switch round-trip (two projects)'
     const hint = page.locator('[data-testid="terminal-mode-hint"]').first();
     await expect(hint).toContainText('Commands run in /scratch;', { timeout: 30_000 });
     await newShell(page);
-    await runTerminalLine(page, `echo ${alphaMark} > /scratch/round-trip.txt`);
-    await runTerminalLine(page, 'cat /scratch/round-trip.txt');
-    await expectTerminalContains(page, alphaMark, 15_000);
+    await runTerminalLineOk(page, `echo ${alphaMark} > /scratch/round-trip.txt`);
+    await runTerminalLineOk(page, 'cat /scratch/round-trip.txt');
     await saveScratchAs(page, alphaName);
-    const alphaId = await projectIdForName(page, alphaName);
+    const alphaId = await activeProjectIdForName(page, alphaName);
     expect(alphaId).not.toBe('');
 
     // Pick a DIFFERENT frontend starter for a fresh scratch, write Beta's marker,
@@ -214,11 +215,10 @@ test.describe('ADR-0165 §7 — durable Save + switch round-trip (two projects)'
     await pickStarter(page, 'node-worker');
     await expect(hint).toContainText('Commands run in /scratch;', { timeout: 30_000 });
     await newShell(page);
-    await runTerminalLine(page, `echo ${betaMark} > /scratch/round-trip.txt`);
-    await runTerminalLine(page, 'cat /scratch/round-trip.txt');
-    await expectTerminalContains(page, betaMark, 15_000);
+    await runTerminalLineOk(page, `echo ${betaMark} > /scratch/round-trip.txt`);
+    await runTerminalLineOk(page, 'cat /scratch/round-trip.txt');
     await saveScratchAs(page, betaName);
-    const betaId = await projectIdForName(page, betaName);
+    const betaId = await activeProjectIdForName(page, betaName);
     expect(betaId).not.toBe('');
     expect(betaId).not.toBe(alphaId);
 

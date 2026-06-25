@@ -52,7 +52,7 @@ import {
   renameProjectIndex,
   resetProjectIndex,
   resetScratchIndex,
-  saveProjectIndex,
+  saveProjectIndexPhases,
   setActiveIndex,
 } from './glue/project-index-port.ts';
 import { type ActiveId, type ProjectIndex, rootForId } from './glue/project-index.ts';
@@ -62,6 +62,7 @@ import {
   startWorkspaceOwner,
   wirePreviewBridge,
 } from './glue/realVite.ts';
+import { workspaceVfsPrefix } from './glue/scoped-vfs.ts';
 import { SnapshotFs } from './glue/snapshot-fs.ts';
 import type { StarterGroup } from './glue/starter.ts';
 import { requestSwitch } from './glue/switch-owner.ts';
@@ -83,6 +84,23 @@ export { createAppProjectStore } from './glue/app-project-store.ts';
 const UNAVAILABLE_OWNER_PORT = -1;
 const OWNER_UNAVAILABLE_MSG =
   'shell needs cross-origin isolation (SAB IPC) — serve the playground with COOP/COEP headers (vite.config.ts ships them)\n';
+const WORKSPACE_ID_SESSION_KEY = 'rifty.workspaceId';
+
+function createWorkspaceId(): string {
+  return `ws-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)}`;
+}
+
+function loadWorkspaceId(storage: Storage | undefined = globalThis.sessionStorage): string {
+  try {
+    const existing = storage?.getItem(WORKSPACE_ID_SESSION_KEY);
+    if (existing) return existing;
+    const next = createWorkspaceId();
+    storage?.setItem(WORKSPACE_ID_SESSION_KEY, next);
+    return next;
+  } catch {
+    return createWorkspaceId();
+  }
+}
 
 /**
  * Fail-loud {@link WorkspaceOwnerHandle} for a non-isolated host (ADR-0146:
@@ -134,6 +152,14 @@ export function App(props: AppProps) {
   // starter is `activeStarterId()`, store-derived); the active id/root follow the
   // store (`activeRoot` below). Kept as the seed pick + switch-write target.
   const [activePreset, setActivePreset] = createSignal(DEFAULT_PRESET.id);
+  const workspaceId = loadWorkspaceId();
+  const workspacePrefix = workspaceVfsPrefix(workspaceId);
+  const globalForTests = globalThis as typeof globalThis & {
+    __riftyWorkspaceId?: string;
+    __riftyWorkspacePrefix?: string;
+  };
+  globalForTests.__riftyWorkspaceId = workspaceId;
+  globalForTests.__riftyWorkspacePrefix = workspacePrefix;
 
   // ── Page store + its prerequisites (ADR-0165 §9) — declared BEFORE `activeRoot`
   // so the root can follow `store.activeId()` (the single source of truth). The
@@ -202,7 +228,9 @@ export function App(props: AppProps) {
     // is re-fired (the effect below), not silently lost.
     onDiskDelete: (id) => {
       pendingOnDiskDeletes.add(id);
-      deleteProjectTree(workspaceOwner().snapshotPort, id);
+      void deleteProjectTree(workspaceOwner().snapshotPort, id).catch((err: unknown) =>
+        console.error('[project-index] delete failed', err),
+      );
     },
   });
 
@@ -352,6 +380,7 @@ export function App(props: AppProps) {
       ? startWorkspaceOwner({
           // ADR-0165 §4: root + slug follow the STORE's active id (scratch on boot,
           // a projectId after switch); template/setup follow the active STARTER.
+          workspaceId,
           root: activeRoot(),
           template: activeTemplate(),
           slug: store.activeId(),
@@ -1100,7 +1129,11 @@ export function App(props: AppProps) {
     const mirror = bridgeProjectIndex(owner.snapshotPort);
     const unsub = mirror.subscribe(setProjectIndex);
     void mirror.request(); // owner re-publishes (recovers a pre-listener push)
-    for (const id of pendingOnDiskDeletes) deleteProjectTree(owner.snapshotPort, id);
+    for (const id of pendingOnDiskDeletes) {
+      void deleteProjectTree(owner.snapshotPort, id).catch((err: unknown) =>
+        console.error('[project-index] retry delete failed', err),
+      );
+    }
     onCleanup(() => {
       unsub();
       mirror.dispose();
@@ -1334,7 +1367,9 @@ export function App(props: AppProps) {
     // until the mirror reflects it, so the new owner boots reading the right id.
     // Memory mode has no durable index → page-mirror only.
     if (!saveAffordance(storageMode).ephemeral) {
-      setActiveIndex(workspaceOwner().snapshotPort, nextActiveId);
+      void setActiveIndex(workspaceOwner().snapshotPort, nextActiveId).catch((err: unknown) =>
+        console.error('[project-index] set-active failed', err),
+      );
       await awaitActiveDurable(nextActiveId);
     }
     await requestSwitch({
@@ -1353,6 +1388,7 @@ export function App(props: AppProps) {
         startWorkspaceOwner({
           // template/setup follow the active STARTER, which the store already
           // re-pointed to the destination project (ADR-0165 §4).
+          workspaceId,
           root,
           template: activeTemplate(),
           slug,
@@ -1421,6 +1457,43 @@ export function App(props: AppProps) {
     pendingStarter?: string;
     pendingId?: string;
   } | null>(null);
+  let pendingSaveApplied: Promise<boolean> | null = null;
+  let pendingSaveDurability: Promise<boolean> | null = null;
+
+  function trackSave(
+    id: string,
+    save: {
+      readonly applied: Promise<ProjectIndex | null>;
+      readonly durable: Promise<ProjectIndex | null>;
+    },
+  ): { applied: Promise<boolean>; durable: Promise<boolean> } {
+    const appliedWait = (async (): Promise<boolean> => {
+      const index = await save.applied;
+      return index?.projects.some((p) => p.id === id) === true;
+    })();
+    const applied = appliedWait.finally(() => {
+      if (pendingSaveApplied === applied) pendingSaveApplied = null;
+    });
+    pendingSaveApplied = applied;
+
+    const durableWait = (async (): Promise<boolean> => {
+      const index = await save.durable;
+      return index?.projects.some((p) => p.id === id) === true;
+    })();
+    const durable = durableWait.finally(() => {
+      if (pendingSaveDurability === durable) pendingSaveDurability = null;
+    });
+    pendingSaveDurability = durable;
+    return { applied, durable };
+  }
+
+  async function waitForPendingSaveApplied(): Promise<boolean> {
+    return (await pendingSaveApplied?.catch(() => false)) ?? true;
+  }
+
+  async function waitForPendingSaveDurable(): Promise<boolean> {
+    return (await pendingSaveDurability?.catch(() => false)) ?? true;
+  }
 
   // Establish a fresh scratch from a starter in the OWNER index (ADR-0165 §6): the
   // page-mirror flip is immediate UX; this re-creates the durable scratch entry +
@@ -1430,14 +1503,17 @@ export function App(props: AppProps) {
   // a pick — it stays rooted at /scratch and re-seeds the live tree.
   function durableNewScratch(id: string): void {
     if (!saveAffordance(storageMode).ephemeral) {
-      newScratchIndex(workspaceOwner().snapshotPort, id);
+      void newScratchIndex(workspaceOwner().snapshotPort, id).catch((err: unknown) =>
+        console.error('[project-index] new scratch failed', err),
+      );
     }
   }
 
   // Pick a Starter from the launcher (Starters tab). The store prompts on a dirty
   // scratch (switch dialog); a clean pick spins a fresh scratch AND boots the
   // chosen preset through the real worker lifecycle (the gallery pick = boot).
-  function onPickStarter(id: string): void {
+  async function onPickStarter(id: string): Promise<void> {
+    if (!(await waitForPendingSaveApplied())) return;
     const wasDirty = store.activeId() === 'scratch' && store.scratch()?.dirty === true;
     store.pickStarter(id);
     if (!wasDirty) {
@@ -1448,7 +1524,8 @@ export function App(props: AppProps) {
 
   // Switch active root from the launcher/chip. The store gates a dirty scratch
   // (switch dialog); an applied switch drives the real owner respawn (switchTo).
-  function onLauncherSwitch(id: ActiveId): void {
+  async function onLauncherSwitch(id: ActiveId): Promise<void> {
+    if (!(await waitForPendingSaveDurable())) return;
     const before = store.activeId();
     store.requestSwitch(id);
     if (store.activeId() !== before) void switchTo(id);
@@ -1504,27 +1581,52 @@ export function App(props: AppProps) {
     // while the page optimistically flipped activeId onto another project's tree.
     const id = `p-${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 10)}`;
     const ephemeral = saveAffordance(storageMode).ephemeral;
+    const durableSave = ephemeral
+      ? {
+          applied: Promise.resolve<ProjectIndex | null>(null),
+          durable: Promise.resolve<ProjectIndex | null>(null),
+        }
+      : (() => {
+          const phases = saveProjectIndexPhases(
+            workspaceOwner().snapshotPort,
+            id,
+            name,
+            activeStarterId(),
+          );
+          return {
+            applied: phases.applied.catch((err: unknown) => {
+              console.error('[project-index] save apply failed', err);
+              const message = err instanceof Error ? err.message : String(err);
+              store.setToast({ kind: 'error', text: `Save failed: ${message}` });
+              return null;
+            }),
+            durable: phases.durable.catch((err: unknown) => {
+              console.warn('[project-index] save durability still pending', err);
+              return null;
+            }),
+          };
+        })();
     // ADR-0165 §7 durable Save: post the on-disk move FIRST (owner copies /scratch
     // → /projects/<id>, flips+persists the index, deletes /scratch), reading the
     // active STARTER while the store is still scratch-active (confirmSave below
-    // flips activeId to the project). The owner re-publishes; the immediate
-    // page-mirror flip is the UX, the owner reconciles it. Read the port at fire
-    // time (the live channel). Skipped in memory mode (EPHEMERAL — no durable tree).
-    if (!ephemeral) {
-      saveProjectIndex(workspaceOwner().snapshotPort, id, name, activeStarterId());
-    }
+    // flips activeId to the project). The owner re-publishes only after flush;
+    // waiting here prevents a late save publish from reverting a following
+    // starter-pick/switch. Read the port at fire time (the live channel). Skipped
+    // in memory mode (EPHEMERAL — no durable tree).
+    const saveWait = ephemeral
+      ? { applied: Promise.resolve(true), durable: Promise.resolve(true) }
+      : trackSave(id, durableSave);
     store.confirmSave(name, id);
     if (ephemeral) {
       store.setToast({ kind: 'info', text: `${name} · EPHEMERAL (session only)` });
     }
     // Save-then-continue resume (ADR-0165 §9): the switch dialog stashed a target.
     // Wait for the save to be DURABLE before switchTo hard-kills the owner (else
-    // the cpSync'd tree races the teardown and the respawn boots empty), then apply.
+    // the committed tree races the teardown and the respawn boots empty), then apply.
     const pending = pendingAfterSave();
     if (pending) {
       setPendingAfterSave(null);
-      if (!ephemeral) await awaitProjectDurable(id);
-      applyPendingTarget(pending);
+      if (await saveWait.durable) applyPendingTarget(pending);
     }
   }
 
@@ -1537,7 +1639,9 @@ export function App(props: AppProps) {
     const id = d && d.kind === 'rename' ? d.id : null;
     const name = renameName().trim();
     if (id && name && !saveAffordance(storageMode).ephemeral) {
-      renameProjectIndex(workspaceOwner().snapshotPort, id, name);
+      void renameProjectIndex(workspaceOwner().snapshotPort, id, name).catch((err: unknown) =>
+        console.error('[project-index] rename failed', err),
+      );
     }
     store.confirmRename(renameName());
   }
@@ -1567,8 +1671,11 @@ export function App(props: AppProps) {
     const d = store.dialog();
     const id = d && d.kind === 'reset' ? d.id : null;
     if (id && !saveAffordance(storageMode).ephemeral) {
-      if (id === 'scratch') resetScratchIndex(workspaceOwner().snapshotPort, activeStarterId());
-      else resetProjectIndex(workspaceOwner().snapshotPort, id);
+      const reset =
+        id === 'scratch'
+          ? resetScratchIndex(workspaceOwner().snapshotPort, activeStarterId())
+          : resetProjectIndex(workspaceOwner().snapshotPort, id);
+      void reset.catch((err: unknown) => console.error('[project-index] reset failed', err));
     }
     store.confirmReset();
     if (id && id === store.activeId()) refreshActiveAfterReset();
@@ -1636,19 +1743,6 @@ export function App(props: AppProps) {
     if (d?.kind === 'switch')
       setPendingAfterSave({ pendingStarter: d.pendingStarter, pendingId: d.pendingId });
     openSaveDialog();
-  }
-
-  // Resolve once the owner's published index lists `id` — the owner publishes the
-  // index only AFTER its OPFS flush (flushThenPublish), so this is the durability
-  // handshake that gates a save→switch teardown: the cpSync'd `/projects/<id>` tree
-  // is durable before requestSwitch hard-kills the owner. Bounded by a timeout so a
-  // memory backend / dropped reply can never hang the continue.
-  async function awaitProjectDurable(id: string, timeoutMs = 3000): Promise<void> {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-      if (projectIndex()?.projects.some((p) => p.id === id)) return;
-      await new Promise<void>((resolve) => setTimeout(resolve, 25));
-    }
   }
 
   // Resolve once the owner-published index reflects `activeId` (ADR-0165 §3): the

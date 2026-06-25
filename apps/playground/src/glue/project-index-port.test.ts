@@ -6,6 +6,7 @@ import {
   resetProjectIndex,
   resetScratchIndex,
   saveProjectIndex,
+  saveProjectIndexPhases,
   serveProjectIndex,
   setActiveIndex,
   subscribeProjectIndex,
@@ -41,10 +42,44 @@ class FakeChannel {
   }
 }
 
+// Browser BroadcastChannel delivery is async; closing the sender before the
+// queued delivery runs drops the frame in this fake, matching the PR-red race.
+class AsyncDropOnCloseChannel {
+  static buses = new Map<string, Set<AsyncDropOnCloseChannel>>();
+  onmessage: ((ev: { data: unknown }) => void) | null = null;
+  #listeners = new Set<(ev: { data: unknown }) => void>();
+  constructor(public name: string) {
+    const peers = AsyncDropOnCloseChannel.buses.get(name) ?? new Set<AsyncDropOnCloseChannel>();
+    peers.add(this);
+    AsyncDropOnCloseChannel.buses.set(name, peers);
+  }
+  postMessage(data: unknown): void {
+    queueMicrotask(() => {
+      const peers = AsyncDropOnCloseChannel.buses.get(this.name);
+      if (!peers?.has(this)) return;
+      for (const peer of peers) {
+        if (peer === this) continue;
+        peer.onmessage?.({ data });
+        for (const l of peer.#listeners) l({ data });
+      }
+    });
+  }
+  addEventListener(_t: string, cb: (ev: { data: unknown }) => void): void {
+    this.#listeners.add(cb);
+  }
+  removeEventListener(_t: string, cb: (ev: { data: unknown }) => void): void {
+    this.#listeners.delete(cb);
+  }
+  close(): void {
+    AsyncDropOnCloseChannel.buses.get(this.name)?.delete(this);
+  }
+}
+
 beforeEach(() => {
   (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
     FakeChannel as unknown as typeof BroadcastChannel;
   FakeChannel.buses.clear();
+  AsyncDropOnCloseChannel.buses.clear();
 });
 afterEach(() => {
   (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel = undefined;
@@ -93,6 +128,41 @@ describe('project-index bridge (ADR-0165 realm split)', () => {
     tearOwner();
   });
 
+  it('string owner bridge keys isolate parallel same-origin owners', async () => {
+    const fsA = ownerFs();
+    const fsB = new MemoryFsSync();
+    writeIndex(fsB, '/', {
+      activeId: 'p-2',
+      scratch: null,
+      projects: [
+        { id: 'p-2', name: 'B', starter: 'project-files', editedAt: '2026-06-21T00:00:00.000Z' },
+      ],
+    });
+    const tearA = serveProjectIndex('owner:a', fsA, '/');
+    const tearB = serveProjectIndex('owner:b', fsB, '/');
+    const receivedA: ProjectIndex[] = [];
+    const receivedB: ProjectIndex[] = [];
+    const subA = subscribeProjectIndex('owner:a', (idx) => receivedA.push(idx));
+    const subB = subscribeProjectIndex('owner:b', (idx) => receivedB.push(idx));
+    await Promise.resolve();
+
+    expect(receivedA).toHaveLength(1);
+    expect(receivedA.at(-1)?.projects).toMatchObject([{ id: 'p-1', name: 'A' }]);
+    expect(receivedB).toHaveLength(1);
+    expect(receivedB.at(-1)?.projects).toMatchObject([{ id: 'p-2', name: 'B' }]);
+
+    await renameProjectIndex('owner:b', 'p-2', 'B2');
+    await Promise.resolve();
+
+    expect(receivedA).toHaveLength(1);
+    expect(receivedB.at(-1)?.projects).toMatchObject([{ id: 'p-2', name: 'B2' }]);
+
+    subA.dispose();
+    subB.dispose();
+    tearA();
+    tearB();
+  });
+
   it('teardown closes the owner channel (idempotent)', () => {
     const fs = ownerFs();
     const tearOwner = serveProjectIndex(PORT, fs, '/');
@@ -122,22 +192,25 @@ function scratchOwnerFs(marker = 'scratch-marker'): MemoryFsSync {
 function readUtf8(fs: MemoryFsSync, path: string): string {
   return dec.decode(fs.readFileBytesSync(path));
 }
+async function nextTimer(): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
 
 describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
-  it('index-save moves /scratch → /projects/<id>, flips the index, and re-publishes', async () => {
+  it('index-save commits /scratch → /projects/<id>, flips the index, then cleans stale source', async () => {
     const fs = scratchOwnerFs('alpha-bytes');
     const tearOwner = serveProjectIndex(PORT, fs, '/');
     const received: ProjectIndex[] = [];
     const { dispose } = subscribeProjectIndex(PORT, (idx) => received.push(idx));
     await Promise.resolve(); // initial reply
 
-    saveProjectIndex(PORT, 'p-alpha', 'Alpha', 'project-files');
-    await Promise.resolve();
+    await saveProjectIndex(PORT, 'p-alpha', 'Alpha', 'project-files');
 
-    // Disk: the tree moved, /scratch is gone.
+    // Disk: the project tree + index are durable at ack time; stale /scratch is
+    // recoverable and cleaned on a later tick so huge derived deps do not hold ack.
     expect(fs.existsSync('/projects/p-alpha/marker.txt')).toBe(true);
     expect(readUtf8(fs, '/projects/p-alpha/marker.txt')).toBe('alpha-bytes');
-    expect(fs.existsSync('/scratch')).toBe(false);
+    expect(fs.existsSync('/scratch')).toBe(true);
 
     // Index: activeId = the new id, scratch cleared, project listed.
     const reply = received.at(-1);
@@ -147,7 +220,78 @@ describe('project-index durable save/rename/reset (ADR-0165 §7)', () => {
       { id: 'p-alpha', name: 'Alpha', starter: 'project-files' },
     ]);
 
+    await nextTimer();
+    expect(fs.existsSync('/scratch')).toBe(false);
+
     dispose();
+    tearOwner();
+  });
+
+  it('index-save keeps the sender channel alive until async browser delivery reaches the owner', async () => {
+    (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel =
+      AsyncDropOnCloseChannel as unknown as typeof BroadcastChannel;
+    const fs = scratchOwnerFs('alpha-async-bytes');
+    const tearOwner = serveProjectIndex(PORT, fs, '/');
+
+    await saveProjectIndex(PORT, 'p-alpha-async', 'Alpha Async', 'project-files');
+
+    expect(loadIndex(fs, '/')).toMatchObject({
+      activeId: 'p-alpha-async',
+      scratch: null,
+      projects: [{ id: 'p-alpha-async', name: 'Alpha Async', starter: 'project-files' }],
+    });
+    expect(readUtf8(fs, '/projects/p-alpha-async/marker.txt')).toBe('alpha-async-bytes');
+
+    tearOwner();
+  });
+
+  it('index-save retries until a late owner bridge is listening', async () => {
+    const fs = scratchOwnerFs('late-owner-bytes');
+    const phases = saveProjectIndexPhases(PORT, 'p-late-owner', 'Late Owner', 'project-files');
+
+    const tearOwner = serveProjectIndex(PORT, fs, '/');
+    const applied = await phases.applied;
+
+    expect(applied).toMatchObject({
+      activeId: 'p-late-owner',
+      projects: [{ id: 'p-late-owner', name: 'Late Owner', starter: 'project-files' }],
+    });
+    expect(readUtf8(fs, '/projects/p-late-owner/marker.txt')).toBe('late-owner-bytes');
+    await phases.durable;
+
+    tearOwner();
+  });
+
+  it('index-save applied ack resolves before a slow durable flush', async () => {
+    const fs = scratchOwnerFs('alpha-slow-flush');
+    let releaseFlush!: () => void;
+    let flushStarted = 0;
+    const flush = (): Promise<void> => {
+      flushStarted++;
+      return new Promise<void>((resolve) => {
+        releaseFlush = resolve;
+      });
+    };
+    const tearOwner = serveProjectIndex(PORT, fs, '/', flush);
+
+    const phases = saveProjectIndexPhases(PORT, 'p-alpha-slow', 'Alpha Slow', 'project-files');
+    const applied = await phases.applied;
+    let durableSettled = false;
+    void phases.durable.then(() => {
+      durableSettled = true;
+    });
+
+    expect(applied).toMatchObject({
+      activeId: 'p-alpha-slow',
+      projects: [{ id: 'p-alpha-slow', name: 'Alpha Slow', starter: 'project-files' }],
+    });
+    expect(flushStarted).toBe(1);
+    expect(durableSettled).toBe(false);
+
+    releaseFlush();
+    await phases.durable;
+    expect(durableSettled).toBe(true);
+
     tearOwner();
   });
 

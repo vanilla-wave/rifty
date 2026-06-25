@@ -20,6 +20,7 @@
 import { channelNameFor } from '@riftydev/net';
 import type { VfsDirent } from '@riftydev/vfs';
 import { joinPath } from '@riftydev/vfs';
+import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
 
 /** Dirs never walked into a snapshot — heavy or derived, not user project source. */
 export const SNAPSHOT_EXCLUDE_DIRS: readonly string[] = ['node_modules', '.git', '.vite', 'dist'];
@@ -132,9 +133,9 @@ function fileEntry(fs: SnapshotSource, path: string, maxContent: number): VfsSna
   }
 }
 
-/** Synthetic channel URL keyed by dev-server port (mirrors the write port's). */
-function snapshotChannelUrl(port: number): string {
-  return `ws://vfs-snapshot.local:${port}/__rfv`;
+/** Synthetic channel URL keyed by the owner bridge key (mirrors the write port's). */
+function snapshotChannelUrl(key: OwnerBridgeKey): string {
+  return ownerBridgeChannelUrl('vfs-snapshot', key);
 }
 
 /**
@@ -142,8 +143,8 @@ function snapshotChannelUrl(port: number): string {
  * Per-call open/close keeps it stateless — published on discrete events (seed,
  * install done, each watcher change), not a hot loop.
  */
-export function publishVfsSnapshot(port: number, frame: VfsSnapshotFrame): void {
-  const channel = new BroadcastChannel(channelNameFor(snapshotChannelUrl(port)));
+export function publishVfsSnapshot(key: OwnerBridgeKey, frame: VfsSnapshotFrame): void {
+  const channel = new BroadcastChannel(channelNameFor(snapshotChannelUrl(key)));
   channel.postMessage(frame);
   // Microtask close: BroadcastChannel delivery is async, a sync close cancels the send.
   queueMicrotask(() => channel.close());
@@ -154,10 +155,10 @@ export function publishVfsSnapshot(port: number, frame: VfsSnapshotFrame): void 
  * publishes on `port`. Returns a teardown that closes the channel.
  */
 export function subscribeVfsSnapshot(
-  port: number,
+  key: OwnerBridgeKey,
   onFrame: (frame: VfsSnapshotFrame) => void,
 ): () => void {
-  const channel = new BroadcastChannel(channelNameFor(snapshotChannelUrl(port)));
+  const channel = new BroadcastChannel(channelNameFor(snapshotChannelUrl(key)));
   const onMessage = (event: MessageEvent): void => {
     const frame = event.data as VfsSnapshotFrame;
     if (frame && frame.type === 'snapshot') onFrame(frame);
@@ -178,8 +179,8 @@ export function subscribeVfsSnapshot(
  * owner's startup publish so the initial sync is deterministic whichever side
  * comes up first, without the old blind-retry timers.
  */
-export function requestVfsSnapshot(port: number): void {
-  const channel = new BroadcastChannel(channelNameFor(snapshotChannelUrl(port)));
+export function requestVfsSnapshot(key: OwnerBridgeKey): void {
+  const channel = new BroadcastChannel(channelNameFor(snapshotChannelUrl(key)));
   channel.postMessage({ type: 'snapshot-req' } satisfies VfsSnapshotRequestFrame);
   queueMicrotask(() => channel.close());
 }
@@ -190,8 +191,8 @@ export function requestVfsSnapshot(port: number): void {
  * subscribes (or reloads) after the owner is already serving. Returns a
  * teardown that closes the channel.
  */
-export function serveSnapshotRequests(port: number, publish: () => void): () => void {
-  const channel = new BroadcastChannel(channelNameFor(snapshotChannelUrl(port)));
+export function serveSnapshotRequests(key: OwnerBridgeKey, publish: () => void): () => void {
+  const channel = new BroadcastChannel(channelNameFor(snapshotChannelUrl(key)));
   const onMessage = (event: MessageEvent): void => {
     const frame = event.data as { readonly type?: unknown };
     if (frame && frame.type === 'snapshot-req') publish();

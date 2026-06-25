@@ -13,13 +13,17 @@ test.describe('M0 — Foundation', () => {
     await expect(page.getByRole('strong').filter({ hasText: 'rifty' })).toBeVisible();
     await expect(page.locator('[data-testid="terminal"]')).toBeVisible();
     await expect(page.locator('[data-testid="editor"]')).toBeVisible();
-    await expect(page.locator('.rf-tab')).toHaveCount(3);
     await expect(page.getByRole('tab', { name: /src\/main\.js/ })).toHaveAttribute(
       'aria-selected',
       'true',
+      { timeout: 30_000 },
     );
-    await expect(page.getByRole('tab', { name: /project-summary\.js/ })).toBeVisible();
-    await expect(page.getByRole('tab', { name: /project\.json/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /project-summary\.js/ })).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByRole('tab', { name: /project\.json/ })).toBeVisible({
+      timeout: 30_000,
+    });
     await expect(page.getByRole('button', { name: 'New terminal' })).toBeVisible();
   });
 

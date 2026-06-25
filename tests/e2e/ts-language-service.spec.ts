@@ -308,17 +308,37 @@ async function tsReinit(page: Page): Promise<boolean> {
 
 /**
  * Write a file in the owner store via a real `printf > path` (the SSoT the LS
- * reads). `content` is sent with real newlines folded to `\n` escapes; it must
- * contain no single-quote or `%` (printf format chars) — the project fixtures
- * below use double-quoted TS strings to honor that.
+ * reads). Long fixture writes use `insertText`, not per-key typing: under a
+ * fully parallel browser run, `keyboard.type()` can drop characters and turn a
+ * valid fixture write into a later, confusing LS failure.
  */
 async function writeOwnerFile(page: Page, path: string, content: string): Promise<void> {
-  const escaped = content.replace(/\\/g, '\\\\').replace(/\n/g, '\\n');
-  await runTerminalLine(page, `printf '${escaped}' > ${path}`);
+  const escaped = content.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/'/g, "'\\''");
+  const line = `printf '${escaped}' > ${path}`;
+  const blocks = page.locator('.rf-terminal-slot[data-active="true"] .rf-terminal-blockrail__item');
+  const before = await blocks.count();
+  await page.locator('[data-testid="terminal"]').click();
+  await page.keyboard.insertText(line);
+  await page.keyboard.press('Enter');
+  await expect(blocks).toHaveCount(before + 1, { timeout: 10_000 });
+  await expect(blocks.nth(before)).toHaveAttribute('data-status', 'ok', { timeout: 30_000 });
+}
+
+async function waitForSrcSnapshotFile(page: Page, filename: string): Promise<void> {
+  const src = page.getByRole('treeitem', { name: 'src' }).first();
+  await expect(src).toBeVisible({ timeout: 30_000 });
+  if ((await src.getAttribute('aria-expanded')) !== 'true') await src.click();
+  await expect(page.getByRole('treeitem', { name: filename }).first()).toBeVisible({
+    timeout: 60_000,
+  });
 }
 
 /** Open a workspace file through the real command palette (Ctrl/Cmd-K → type → click). */
 async function openFileViaPalette(page: Page, filename: string): Promise<void> {
+  // Palette items are snapshotted once when the palette opens. Wait for the
+  // owner-published page snapshot first; waiting inside an already-open palette
+  // would never see a later snapshot frame.
+  await waitForSrcSnapshotFile(page, filename);
   await page.keyboard.press('ControlOrMeta+KeyK');
   const palette = page.locator('[data-testid="command-palette"]');
   await expect(palette).toBeVisible();

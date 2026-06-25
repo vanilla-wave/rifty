@@ -21,12 +21,13 @@
 
 import { channelNameFor } from '@riftydev/net';
 import { syncMirror } from '@riftydev/vfs';
+import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
 import { exportWorkspaceArchive, importWorkspaceArchive } from './workspace-archive.ts';
 
 /** Synthetic channel URL keyed by the owner's snapshot port — a distinct host
  *  so it never cross-talks with the write / snapshot / node_modules bridges. */
-export function workspaceArchiveChannelUrl(port: number): string {
-  return `ws://vfs-archive.local:${port}/__rfv`;
+export function workspaceArchiveChannelUrl(key: OwnerBridgeKey): string {
+  return ownerBridgeChannelUrl('vfs-archive', key);
 }
 
 export type WorkspaceArchiveRequestFrame =
@@ -60,8 +61,8 @@ function nextRequestId(): string {
  * single source of truth). Returns an idempotent teardown. The owner stays
  * alive to answer (ADR-0144 `serve` process).
  */
-export function serveWorkspaceArchive(port: number, root: string): () => void {
-  const channel = new BroadcastChannel(channelNameFor(workspaceArchiveChannelUrl(port)));
+export function serveWorkspaceArchive(key: OwnerBridgeKey, root: string): () => void {
+  const channel = new BroadcastChannel(channelNameFor(workspaceArchiveChannelUrl(key)));
 
   const replyError = (requestId: string, message: string): void => {
     channel.postMessage({
@@ -132,11 +133,11 @@ export interface WorkspaceArchiveBridge {
  * toast), never hangs.
  */
 export function bridgeWorkspaceArchive(
-  port: number,
+  key: OwnerBridgeKey,
   opts: { readonly timeoutMs?: number } = {},
 ): WorkspaceArchiveBridge {
   const timeoutMs = opts.timeoutMs ?? 15_000;
-  const channel = new BroadcastChannel(channelNameFor(workspaceArchiveChannelUrl(port)));
+  const channel = new BroadcastChannel(channelNameFor(workspaceArchiveChannelUrl(key)));
   const pending = new Map<string, Waiter>();
   let torn = false;
 

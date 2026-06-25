@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { clearWorkspaceOpfs } from './helpers/opfs.ts';
 import {
   expectTerminalContains,
   openShellTerminal,
@@ -44,13 +45,8 @@ test.describe('owner snapshot survives teardown: install + exec still run after 
     const marker = `restore-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 
     await page.goto('/');
-    // Deterministic start: OPFS is per-origin and leaks across tests in a worker.
-    // Wipe it, then reload for a clean owner boot on an empty tree.
-    await page.evaluate(async () => {
-      const root = (await navigator.storage.getDirectory()) as FileSystemDirectoryHandle &
-        AsyncIterable<[string, FileSystemHandle]>;
-      for await (const [name] of root) await root.removeEntry(name, { recursive: true });
-    });
+    // Deterministic start: wipe this page's owner workspace namespace only.
+    await clearWorkspaceOpfs(page);
     await page.reload();
     await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 60_000 });
     await openShellTerminal(page);

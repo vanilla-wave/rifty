@@ -27,14 +27,15 @@
 
 import { channelNameFor } from '@riftydev/net';
 import { dirname, syncMirror } from '@riftydev/vfs';
+import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
 
 /**
  * Synthetic URL keyed into `channelNameFor` for the VFS write channel.
  * Mirrors {@link previewPortChannelUrl} so the addressing pattern is
  * recognisable across the two playground bridges.
  */
-function vfsWritePortChannelUrl(port: number): string {
-  return `ws://vfs-write.local:${port}/__rfv`;
+function vfsWritePortChannelUrl(key: OwnerBridgeKey): string {
+  return ownerBridgeChannelUrl('vfs-write', key);
 }
 
 /**
@@ -105,8 +106,8 @@ export function applyVfsWriteFrame(frame: VfsWriteFrame, opts: VfsWriteServerOpt
  * the frame is silently dropped — same semantic as the M10 same-realm
  * path when the dev server wasn't up.
  */
-export function sendVfsWrite(port: number, frame: VfsWriteFrame): void {
-  const channelName = channelNameFor(vfsWritePortChannelUrl(port));
+export function sendVfsWrite(key: OwnerBridgeKey, frame: VfsWriteFrame): void {
+  const channelName = channelNameFor(vfsWritePortChannelUrl(key));
   const channel = new BroadcastChannel(channelName);
   channel.postMessage(frame);
   // Microtask close so the message has time to enqueue. BroadcastChannel
@@ -122,8 +123,8 @@ export function sendVfsWrite(port: number, frame: VfsWriteFrame): void {
  * {@link SyncMirrorVfs.writeFile} semantic so "file appears at path X"
  * doesn't depend on whether the dir existed.
  */
-export function serveVfsWrites(port: number, opts: VfsWriteServerOptions = {}): () => void {
-  const channelName = channelNameFor(vfsWritePortChannelUrl(port));
+export function serveVfsWrites(key: OwnerBridgeKey, opts: VfsWriteServerOptions = {}): () => void {
+  const channelName = channelNameFor(vfsWritePortChannelUrl(key));
   const channel = new BroadcastChannel(channelName);
 
   const onMessage = (event: MessageEvent): void => {

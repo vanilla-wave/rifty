@@ -42,6 +42,7 @@ import {
 } from '@riftydev/ts-language-service/protocol';
 import type * as monaco from 'monaco-editor';
 import { MarkerSeverity } from 'monaco-editor';
+import { nextTsLspRequestId } from './ts-ls-request-id.ts';
 
 /** Relay seam the client posts requests on / subscribes responses through. */
 export interface TsLspRelay {
@@ -139,7 +140,6 @@ export function createTsLanguageServiceClient(
 ): TsLanguageServiceClient {
   const timeoutMs = opts.timeoutMs ?? 60_000;
   const pending = new Map<number, Pending>();
-  let counter = 0;
   let torn = false;
 
   const unsubscribe = relay.onTsLsp((message: unknown) => {
@@ -154,7 +154,7 @@ export function createTsLanguageServiceClient(
 
   function request(build: (id: number) => TsRequest): Promise<TsResponse> {
     if (torn) return Promise.reject(new Error('ts-lsp client disposed'));
-    const id = ++counter;
+    const id = nextTsLspRequestId();
     return new Promise<TsResponse>((resolve, reject) => {
       const timer = setTimeout(() => {
         pending.delete(id);

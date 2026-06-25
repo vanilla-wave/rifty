@@ -49,7 +49,6 @@ export type IndexFs = Pick<
   | 'rmSync'
   | 'readdirSync'
   | 'statSyncOrNull'
-  | 'cpSync'
   | 'renameSync'
 >;
 
@@ -131,18 +130,39 @@ function restampSlugSync(fs: IndexFs, root: string, slug: string): void {
   fs.writeFileSync(path, enc.encode(`${JSON.stringify(next, null, 2)}\n`));
 }
 
+function hasStampedNodeModules(fs: IndexFs, root: string): boolean {
+  return fs.existsSync(`${root}/node_modules/.rifty-install-stamp.json`);
+}
+
+function copyScratchTreeForSave(fs: IndexFs, dst: string): void {
+  const skipDerivedNodeModules = hasStampedNodeModules(fs, '/scratch');
+  const copy = (from: string, to: string): void => {
+    const st = fs.statSyncOrNull(from);
+    if (!st) throw new Error(`saveScratchAsProject: missing ${from}`);
+    if (st.isDirectory) {
+      fs.mkdirSync(to, { recursive: true });
+      for (const child of fs.readdirSync(from)) {
+        if (from === '/scratch' && child.name === 'node_modules' && skipDerivedNodeModules) {
+          continue;
+        }
+        copy(joinPath(from, child.name), joinPath(to, child.name));
+      }
+      return;
+    }
+    fs.mkdirSync(dirname(to), { recursive: true });
+    fs.writeFileSync(to, fs.readFileBytesSync(from));
+  };
+  copy('/scratch', dst);
+}
+
 /**
- * Convert the active scratch into a named project (ADR-0165 §7). NON-ATOMIC
- * tree move on OPFS, so the ordering is the safety contract:
- *   1. copy  /scratch  → /projects/<id>      (recursive)
- *   2. flip  the index pointer + persist     ← LAST durable commit
- *   3. delete /scratch                        (source removed only after commit)
- * A crash between 1 and 2 leaves an un-indexed /projects/<id> (recoverIndex
- * rolls it back); between 2 and 3 leaves a stale /scratch (recoverIndex finishes
- * the delete). Either way no tree is lost. `base='/'` — the index sits beside
- * the trees (rootForId paths are absolute).
+ * Commit the active scratch as a named project (ADR-0165 §7) WITHOUT deleting the
+ * source. This is the durable cut: copy /scratch → /projects/<id>, then flip the
+ * index pointer. A crash after this commit leaves stale /scratch, which
+ * recoverIndex case (B) finishes. Owner bridge uses this so the Save ack only
+ * waits for the saved project + index, not for deleting derived node_modules.
  */
-export function saveScratchAsProject(
+export function commitScratchProjectSave(
   fs: IndexFs,
   index: ProjectIndex,
   id: string,
@@ -153,11 +173,13 @@ export function saveScratchAsProject(
   if (fs.existsSync(dst))
     throw new Error(`saveScratchAsProject: project ${id} already exists at ${dst}`);
 
-  // 1. copy (recursive) — leaves /scratch intact for crash-safety.
-  fs.cpSync('/scratch', dst, { recursive: true });
+  // 1. copy (recursive) — leaves /scratch intact for crash-safety. Stamped
+  // node_modules are derived from a baked/install snapshot and are restored on
+  // boot; copying them blocks the owner on tens of MB during Save.
+  copyScratchTreeForSave(fs, dst);
 
-  // The moved node_modules now belongs to <id> — re-key its stamp so the next
-  // boot reuses it instead of re-installing (or, worse, cross-project reuse).
+  // If an unstamped node_modules was copied, leave it alone; if a stamped one
+  // is ever copied by a future path, re-key it before the project becomes active.
   restampSlugSync(fs, dst, id);
 
   // 2. flip the pointer + persist — the durable commit point.
@@ -173,9 +195,34 @@ export function saveScratchAsProject(
     projects: [...index.projects, project],
   };
   writeIndex(fs, '/', next);
+  return next;
+}
 
-  // 3. delete the source — only after the commit landed.
-  fs.rmSync('/scratch', { recursive: true, force: true });
+export function cleanupCommittedScratchSource(fs: IndexFs, index: ProjectIndex): void {
+  if (index.activeId !== 'scratch' && index.scratch === null && fs.existsSync('/scratch')) {
+    fs.rmSync('/scratch', { recursive: true, force: true });
+  }
+}
+
+/**
+ * Convert the active scratch into a named project (ADR-0165 §7). NON-ATOMIC
+ * tree move on OPFS, so the ordering is the safety contract:
+ *   1. copy  /scratch  → /projects/<id>      (recursive)
+ *   2. flip  the index pointer + persist     ← durable commit
+ *   3. delete /scratch                        (source removed only after commit)
+ * A crash between 1 and 2 leaves an un-indexed /projects/<id> (recoverIndex
+ * rolls it back); between 2 and 3 leaves a stale /scratch (recoverIndex finishes
+ * the delete). Either way no tree is lost. `base='/'` — the index sits beside
+ * the trees (rootForId paths are absolute).
+ */
+export function saveScratchAsProject(
+  fs: IndexFs,
+  index: ProjectIndex,
+  id: string,
+  name: string,
+): ProjectIndex {
+  const next = commitScratchProjectSave(fs, index, id, name);
+  cleanupCommittedScratchSource(fs, next);
   return next;
 }
 
@@ -212,9 +259,7 @@ export function recoverIndex(fs: IndexFs, base: string): ProjectIndex {
   }
 
   // (B) committed Save (activeId is a project) with a stale /scratch lingering → finish the delete.
-  if (index.activeId !== 'scratch' && index.scratch === null && fs.existsSync('/scratch')) {
-    fs.rmSync('/scratch', { recursive: true, force: true });
-  }
+  cleanupCommittedScratchSource(fs, index);
 
   // A/B mutate disk only (the index is already correct) — return it as-loaded.
   return index;

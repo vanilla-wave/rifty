@@ -42,6 +42,7 @@ import { dirname, initBackend, normalizePath, syncMirror } from '@riftydev/vfs';
 import { installStampSatisfied } from '../glue/install-stamp.ts';
 import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
 import { createNpmShellCommand } from '../glue/npm-shell-command.ts';
+import type { OwnerBridgeKey } from '../glue/owner-bridge-key.ts';
 import { clearProjectTree, ensureProjectDependencies } from '../glue/project-deps.ts';
 import { serveProjectIndex } from '../glue/project-index-port.ts';
 import { reconcileOwnerIndexAtBoot } from '../glue/project-index.ts';
@@ -53,7 +54,9 @@ import {
 } from '../glue/pty-protocol.ts';
 import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
+import { scopeActiveVfsToWorkspace } from '../glue/scoped-vfs.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
+import { stampTsLspOwner, tsLspOwnerMatches } from '../glue/ts-lsp-owner-scope.ts';
 import {
   collectSnapshot,
   publishVfsSnapshot,
@@ -68,7 +71,7 @@ import {
   resolveBootstrapConfig,
 } from '../templates/project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
-import { shouldCleanForDevBoot } from './dev-boot-clean.ts';
+import { shouldCleanForDevBootWithInstallState } from './dev-boot-clean.ts';
 import { flushSyncMirror } from './dev-server-boot.ts';
 import { createDevServerController } from './dev-server-controller.ts';
 import { resolveNodeEntry } from './node-entry-resolve.ts';
@@ -211,7 +214,7 @@ function withEntryOverride(spec: ProjectSpec, entryRel: string): ProjectSpec {
  */
 async function bootShellOwner(opts: {
   readonly cfg: BootstrapConfig;
-  readonly port: number;
+  readonly port: OwnerBridgeKey;
   readonly kernelIpc: KernelIpc;
   readonly publishSnapshot: () => void;
   readonly spec: ProjectSpec;
@@ -284,14 +287,17 @@ async function bootShellOwner(opts: {
     // v1: boot runs to completion; a Ctrl-C mid-boot takes effect right after
     // (the controller stops the server once `signal` aborts) — not mid-install.
     boot: async (signal, devLog) => {
-      if (
-        shouldCleanForDevBoot({
-          lastTemplateId: lastDevTemplateId,
-          lastRoot: lastDevRoot,
-          nextTemplateId: devSpec.id,
-          nextRoot: devCfg.root,
-        })
-      ) {
+      const cleanForSwitch = shouldCleanForDevBootWithInstallState({
+        lastTemplateId: lastDevTemplateId,
+        lastRoot: lastDevRoot,
+        nextTemplateId: devSpec.id,
+        nextRoot: devCfg.root,
+        fromScratch: devFromScratch,
+        installStampSatisfied:
+          devFromScratch &&
+          (await installStampSatisfied(new SyncMirrorVfs(), devCfg.root, devSlug)) !== null,
+      });
+      if (cleanForSwitch) {
         // Root OR template switched (ADR-0165 §5): a fresh worker per preset used
         // to keep node_modules clean; the ONE persistent owner accumulates the
         // prior project's deps, which trips the new template's lockfile coverage
@@ -587,7 +593,7 @@ async function bootShellOwner(opts: {
     }
     // LS child → owner → page: forward only RESPONSE envelopes back to the page.
     h.on('message', (response: unknown) => {
-      if (isTsResponseMessage(response)) kernelIpc.send?.(response);
+      if (isTsResponseMessage(response)) kernelIpc.send?.(stampTsLspOwner(response, port));
     });
     // A crashed LS child must not leave the page hanging: drop the handle so the
     // next request respawns. In-flight page requests reject on their own timeout
@@ -620,7 +626,7 @@ async function bootShellOwner(opts: {
     }
     // ADR-0166 P1.9a: a page→LS request envelope — relay to the LS child (lazy
     // spawn on first frame). Only REQUEST envelopes are inbound from the page.
-    if (isTsRequestMessage(message)) {
+    if (isTsRequestMessage(message) && tsLspOwnerMatches(message, port)) {
       relayTsLspRequest(message);
     }
   });
@@ -676,7 +682,7 @@ async function bootstrap(): Promise<void> {
   // global the swap could never touch.
   // TODO(backlog: runtime-js/worker-entry-process-globals-side-effect)
   const env = { ...(readKernelProcessSpec()?.env ?? globalThis.process.env) };
-  const port = Number.parseInt(env.RIFTY_RFV_PORT ?? '5174', 10);
+  const port = env.RIFTY_RFV_PORT ?? 'owner:default';
   // ADR-0165 §4: the active root is `/scratch` or `/projects/<id>` — the page
   // always sets RIFTY_RFV_ROOT via rootForId(activeId); the fallback is the
   // default scratch root (the legacy single `/workspace` no longer exists).
@@ -701,9 +707,8 @@ async function bootstrap(): Promise<void> {
   // the orchestrator defaults it to the template's own entry).
   const effectiveSpec = withEntryOverride(spec, env.RIFTY_RFV_ENTRY ?? spec.entry.relativePath);
   // ADR-0148: `port` (RIFTY_RFV_PORT) keys the owner's snapshot/nm/vfs-write
-  // bridges (a dedicated synthetic port, e.g. 59124). The co-resident dev server
-  // listens on the template's own port (`cfg.port`) — a DISTINCT key so vite +
-  // its preview bridges never collide with the owner serve bridges.
+  // bridges. It is a synthetic owner bridge key, not a real network port. The
+  // co-resident dev server listens on the template's own port (`cfg.port`).
   const cfg = resolveBootstrapConfig(effectiveSpec, effectiveSpec.defaultPort, root);
 
   const kernelIpc = installRuntimeGlobals();
@@ -725,7 +730,8 @@ async function bootstrap(): Promise<void> {
   // boot.ts). seedProject is idempotent (`if !exists`) → the persisted tree stands.
   try {
     const backend = await initBackend();
-    log(`[shell-owner/worker] VFS backend: ${backend}\n`);
+    const prefix = scopeActiveVfsToWorkspace(env.RIFTY_WORKSPACE_ID ?? 'default');
+    log(`[shell-owner/worker] VFS backend: ${backend} (${prefix})\n`);
   } catch (err) {
     log(
       `[shell-owner/worker] OPFS init failed, using in-memory (no persistence): ${

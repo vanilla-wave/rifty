@@ -26,6 +26,28 @@
   Monaco edit to `src/main.js` now reaches the iframe text instead of either
   spamming `module invalidation failed ... Maximum call stack size exceeded` or
   silently waiting for a manual reload.
+- **From-scratch starter dev lines keep their freshly installed deps.** Switching
+  from the default Vite starter to a from-scratch starter (`Express + SQLite`,
+  `Socket Lab`) no longer deletes `node_modules` between the explicit
+  `npm install` and the following `npm run dev`; the dev-server child now sees
+  packages such as `express` and `ws` that the terminal just installed.
+- **Parallel playground owners no longer share one OPFS workspace.** Each page
+  session now scopes the owner VFS under a stable workspace id, so full e2e runs
+  cannot have one test wipe another test's `/scratch`, `/projects`, or project
+  index while the UI mirror still points at the old owner state.
+- **Saving a project no longer copies derived stamped `node_modules`.** A Save
+  now persists the scratch source tree but skips install/snapshot-restored deps,
+  so the project-index ack is not held behind tens of MB of dependency copying;
+  the next boot restores deps through the normal install/snapshot path, while
+  unstamped user-created `node_modules` content is still copied.
+- **Project Save is resilient to owner-bridge startup races.** The project-index
+  bridge now has an applied ack (sync commit) separate from the durable flush ack,
+  retries save frames until the owner listener is live, and treats a replayed
+  already-committed save as idempotent.
+- **TS-LSP replies no longer cross-match between page clients.** Request ids are
+  allocated across the page realm instead of per client instance, so a late
+  `ack` from one client cannot satisfy a hover/rename/completion request from
+  another during owner respawns or provider re-registration.
 - **Vite 8 sandbox honesty follow-ups (PR #55 audit).** (a) Vite 8 `build`/`preview`/`optimize` loud-reject instead of silently booting the dev server (no dist, no error); tracked `backlog/playground/vite8-production-build-preview`. (b) The `[real-vite/worker] hmr bridge ready` log + the bridge token are no longer emitted when HMR is disabled (Vite 8 template) — no false "bridge ready" signal for a bridge that is never installed. (c) `PreviewPanel` header comment corrected — with HMR off (ADR-0161) an editor save re-transforms on next fetch but pushes nothing and non-editor changes aren't watched, so seeing an edit needs a manual Reload (was: "file edits are refreshed by the iframe HMR client itself"). (d) compat `incompatible-packages.md` esbuild/rollup rows corrected — Vite 8 transforms via oxc and parses via `rolldown/parseAst`, so those shim overlays are off the Vite 8 path. New `vite8-*` backlog items track the remaining divergences (watcher-over-VFS, TS/JSX parity coverage, dead esbuild/rollup overlays, lightningcss-wasm init, dev-server UX parity).
 
 ### Changed

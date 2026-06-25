@@ -28,6 +28,7 @@
 
 import { channelNameFor } from '@riftydev/net';
 import { joinPath, normalizePath, syncMirror } from '@riftydev/vfs';
+import { type OwnerBridgeKey, ownerBridgeChannelUrl } from './owner-bridge-key.ts';
 
 /** Files at/under this many bytes ship their content; larger reply size only.
  *  Matches {@link ./vfs-snapshot-port.ts}'s `SNAPSHOT_MAX_CONTENT_BYTES`. */
@@ -35,8 +36,8 @@ export const NODE_MODULES_MAX_CONTENT_BYTES = 128 * 1024;
 
 /** Synthetic channel URL keyed by dev-server port — a distinct synthetic host
  *  so it never cross-talks with the write / snapshot / preview-port bridges. */
-export function nodeModulesChannelUrl(port: number): string {
-  return `ws://vfs-nodemods.local:${port}/__rfv`;
+export function nodeModulesChannelUrl(key: OwnerBridgeKey): string {
+  return ownerBridgeChannelUrl('vfs-nodemods', key);
 }
 
 export interface NodeModulesDirEntry {
@@ -105,8 +106,8 @@ function direntsDirsFirst(
  * ADR-0144 `serve` process (the kernel keeps the realm alive until the handle
  * is killed), which retired the old ADR-0077 keep-alive promise.
  */
-export function serveNodeModulesReads(port: number, root: string): () => void {
-  const channel = new BroadcastChannel(channelNameFor(nodeModulesChannelUrl(port)));
+export function serveNodeModulesReads(key: OwnerBridgeKey, root: string): () => void {
+  const channel = new BroadcastChannel(channelNameFor(nodeModulesChannelUrl(key)));
 
   const replyError = (requestId: string, message: string): void => {
     channel.postMessage({ type: 'nm-error', requestId, message } satisfies NodeModulesReplyFrame);
@@ -215,11 +216,11 @@ export interface NodeModulesBridge {
  * re-issues), unlike the preview port which resolves a 502 Response.
  */
 export function bridgeNodeModulesReads(
-  port: number,
+  key: OwnerBridgeKey,
   opts: { readonly timeoutMs?: number } = {},
 ): NodeModulesBridge {
   const timeoutMs = opts.timeoutMs ?? 15_000;
-  const channel = new BroadcastChannel(channelNameFor(nodeModulesChannelUrl(port)));
+  const channel = new BroadcastChannel(channelNameFor(nodeModulesChannelUrl(key)));
   const pending = new Map<string, Waiter>();
   let torn = false;
 

@@ -186,7 +186,7 @@ export function createPageStore(): PageStore {
     const s = scratch();
     if (!s) return;
     const proj: Project = { id: newId, name, starter: s.starter, editedAt: 'just now' };
-    setProjects([...projects(), proj]);
+    setProjects(projects().some((p) => p.id === newId) ? projects() : [...projects(), proj]);
     setScratch(null);
     setActiveId(newId);
     setDialog(null);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shouldCleanForDevBoot } from './dev-boot-clean.ts';
+import { shouldCleanForDevBoot, shouldCleanForDevBootWithInstallState } from './dev-boot-clean.ts';
 
 describe('shouldCleanForDevBoot (ADR-0165 §5) — clean on root OR template change', () => {
   it('false on the first boot (no prior dev run to clean after)', () => {
@@ -45,5 +45,31 @@ describe('shouldCleanForDevBoot (ADR-0165 §5) — clean on root OR template cha
         nextRoot: '/projects/p1',
       }),
     ).toBe(false);
+  });
+
+  it('does not clean a from-scratch tree after npm install has stamped it', () => {
+    expect(
+      shouldCleanForDevBootWithInstallState({
+        lastTemplateId: 'vite',
+        lastRoot: '/scratch',
+        nextTemplateId: 'socket-lab',
+        nextRoot: '/scratch',
+        fromScratch: true,
+        installStampSatisfied: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('still cleans a from-scratch switch before any install stamp exists', () => {
+    expect(
+      shouldCleanForDevBootWithInstallState({
+        lastTemplateId: 'vite',
+        lastRoot: '/scratch',
+        nextTemplateId: 'socket-lab',
+        nextRoot: '/scratch',
+        fromScratch: true,
+        installStampSatisfied: false,
+      }),
+    ).toBe(true);
   });
 });
