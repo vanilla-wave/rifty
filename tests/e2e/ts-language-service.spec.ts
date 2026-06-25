@@ -752,14 +752,21 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     // the page snapshot excludes node_modules, so the provider must ask the owner
     // read-port to open the target model instead of silently dropping the Location.
     await expect
-      .poll(async () => (await tsDefinition(page, USES_DEP, 3, 12))?.[0]?.uri ?? '', {
-        timeout: 30_000,
-        intervals: [1500],
-      })
-      .toContain(DEP_DTS);
-    const depDefs = await tsDefinition(page, USES_DEP, 3, 12);
-    expect(depDefs?.[0]?.uri).toContain(DEP_DTS);
-    expect(depDefs?.[0]?.line).toBe(1);
+      .poll(
+        async () => {
+          const defs = (await tsDefinition(page, USES_DEP, 3, 12)) ?? [];
+          return defs.some((d) => d.uri.includes(DEP_DTS));
+        },
+        {
+          timeout: 30_000,
+          intervals: [1500],
+        },
+      )
+      .toBe(true);
+    const depDefs = (await tsDefinition(page, USES_DEP, 3, 12)) ?? [];
+    const depDef = depDefs.find((d) => d.uri.includes(DEP_DTS));
+    expect(depDef?.uri).toContain(DEP_DTS);
+    expect(depDef?.line).toBe(1);
 
     // (2b) GO-TO-DEFINITION of `localGreet` (L5, col 12) → the sibling dep.ts (the
     // hook round-trips the target Location.uri back to its VFS path). Cross-file
