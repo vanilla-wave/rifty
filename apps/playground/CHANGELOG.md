@@ -112,6 +112,12 @@
   Problems panel, and the TS starter shipped with built-in diagnostics (`count` as a
   string, a missing `formatWidgetName` import, and no `vite/client` types for HMR), so
   user edits did not produce a clear before/after signal.
+- **Starter picks now seed boot-critical template files before Vite starts without
+  clobbering installed deps.** A mid-session switch to the TS starter could update
+  `src/main.ts` while Vite still served the old `index.html` pointing at
+  `src/main.js`; the synchronous owner seed now refreshes the starter files but leaves
+  the root `package.json` to durable reset / npm install, so installed CLIs survive
+  reload.
 
 ### Fixed (CI-red + visual regressions, ADR-0165)
 

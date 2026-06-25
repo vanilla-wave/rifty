@@ -64,7 +64,7 @@ import {
 } from './glue/realVite.ts';
 import { workspaceVfsPrefix } from './glue/scoped-vfs.ts';
 import { SnapshotFs } from './glue/snapshot-fs.ts';
-import type { StarterGroup } from './glue/starter.ts';
+import { type StarterGroup, seedFilesForStarter, starterById } from './glue/starter.ts';
 import { requestSwitch } from './glue/switch-owner.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
@@ -1264,24 +1264,22 @@ export function App(props: AppProps) {
   }
 
   /**
-   * Push the project files into the persistent owner realm (ADR-0146
+   * Push starter files into the persistent owner realm (ADR-0146
    * owner-resident shell; the owner is the single authoritative store owner and
-   * the page holds no authoritative fs). The owner-resident shell reads its OWN
-   * `syncMirror()`; the owner's own template package.json + default README stand
-   * (seeded owner-side in `seedProject`). Entry source + preset files only.
+   * the page holds no authoritative fs). This mirrors the durable owner reset for
+   * boot-critical files, but runs synchronously before the dev-server boot line so
+   * template files like index.html cannot lag a mid-session starter pick.
    */
   function seedWorkspaceOwner(preset: Preset): void {
-    // Write the picked starter's ENTRY to the ROOT-RELATIVE template entry
-    // (ADR-0165 §4). A page writeFile is a non-idempotent OVERWRITE (unlike the
-    // owner's idempotent seedProject), so a template-changing pick (Vite → an
-    // express/socket node-server) re-seeds the entry with the NEW server source —
-    // the dev server runs the new entry, never the stale browser one.
-    workspaceOwner().writeFile(
-      programMirrorPath(activeRoot(), templateForPreset(preset)),
-      preset.source,
-    );
-    for (const file of preset.files ?? []) {
-      workspaceOwner().writeFile(workspacePresetPath(file.path), file.content);
+    const root = activeRoot();
+    const rootPackageJsonPath = `${root}/package.json`;
+    for (const [path, content] of Object.entries(
+      seedFilesForStarter(starterById(preset.id), root),
+    )) {
+      // package.json is install-owned after boot; rewriting it here drops
+      // npm-installed deps on reload while the owner/index reset already seeds it.
+      if (path === rootPackageJsonPath) continue;
+      workspaceOwner().writeFile(path, content);
     }
   }
 

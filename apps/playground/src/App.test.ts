@@ -81,13 +81,16 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain('.updateEntry(');
   });
 
-  it('seeds a picked starter entry to the ROOT-RELATIVE program path (ADR-0165 §4 — entry re-seed on template switch)', () => {
-    // A page writeFile is a non-idempotent OVERWRITE (unlike the owner's
-    // idempotent seedProject), so a template-changing pick re-seeds the entry
-    // with the new starter's source at its template entry — a node-server
-    // starter runs the new server entry, not the stale browser one.
+  it('seeds picked starter files to the active root before booting dev server without clobbering package.json', () => {
+    // A mid-session starter pick must update index.html as well as the entry;
+    // otherwise a TypeScript template can write src/main.ts while Vite still
+    // serves the old src/main.js HTML. The root package.json is install-owned
+    // after boot, so reload seeding must preserve user-added deps.
+    expect(source).toContain('const rootPackageJsonPath = `${root}/package.json`;');
+    expect(source).toContain('seedFilesForStarter(starterById(preset.id), root)');
+    expect(source).toContain('if (path === rootPackageJsonPath) continue;');
     expect(source).toMatch(
-      /workspaceOwner\(\)\.writeFile\(\s*programMirrorPath\(activeRoot\(\), templateForPreset\(preset\)\),\s*preset\.source,\s*\)/,
+      /for \(const \[path, content\] of Object\.entries\(\s*seedFilesForStarter\(starterById\(preset\.id\), root\),\s*\)\) {\s*\/\/ package\.json is install-owned after boot;[\s\S]*?if \(path === rootPackageJsonPath\) continue;\s*workspaceOwner\(\)\.writeFile\(path, content\);/s,
     );
     // the program path follows the active root, threaded into EditorHost too
     expect(source).toContain('root={activeRoot}');
