@@ -92,6 +92,8 @@ export function wirePreviewBridge(port: number, ownerToken: string): () => void 
 export interface WorkspaceOwnerHandle {
   /** Stable id carried to the owner over `RIFTY_WORKSPACE_ID`. */
   readonly workspaceId: string;
+  /** Actual root this owner was spawned at (`/scratch` or `/projects/<id>`). */
+  readonly root: string;
   /**
    * Token the owner uses to key its `/preview/<port>/` SW route (ADR-0148).
    * The page passes it to {@link wirePreviewBridge} when the dev server starts.
@@ -393,6 +395,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
 
   return {
     workspaceId,
+    root,
     previewOwnerToken,
     snapshotPort,
     closed,

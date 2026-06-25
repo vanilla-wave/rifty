@@ -255,6 +255,15 @@ export function createPageStore(): PageStore {
     cat,
     toast,
     hydrateIndex(index) {
+      const incoming = index.scratch;
+      const localScratch = scratch();
+      const keepLocalDirty =
+        activeId() === 'scratch' &&
+        localScratch?.dirty === true &&
+        index.activeId === 'scratch' &&
+        incoming !== null &&
+        incoming.dirty === false &&
+        incoming.starter === localScratch.starter;
       setActiveId(index.activeId);
       setProjects(index.projects);
       // ADR-0165 §4 boot-scratch: the OWNER does not model the active scratch in
@@ -265,8 +274,15 @@ export function createPageStore(): PageStore {
       // — the chip/banner/Save reflect the real tree. A Save flips `activeId` to the
       // project id (so this preserve no longer applies) and the owner then publishes
       // `scratch:null` authoritatively. A published scratch always wins.
-      const incoming = index.scratch;
       if (incoming === null && index.activeId === 'scratch' && scratch() !== null) return;
+      if (keepLocalDirty) {
+        setScratch({
+          ...incoming,
+          dirty: true,
+          editedAt: localScratch?.editedAt ?? incoming.editedAt,
+        });
+        return;
+      }
       setScratch(incoming);
     },
     pickStarter,

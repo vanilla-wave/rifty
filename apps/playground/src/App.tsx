@@ -111,6 +111,7 @@ function loadWorkspaceId(storage: Storage | undefined = globalThis.sessionStorag
 function createUnavailableOwner(): WorkspaceOwnerHandle {
   return {
     workspaceId: 'unavailable',
+    root: '/scratch',
     previewOwnerToken: 'unavailable',
     snapshotPort: UNAVAILABLE_OWNER_PORT,
     closed: Promise.resolve(0),
@@ -1353,7 +1354,7 @@ export function App(props: AppProps) {
   // false here and the `save`/`discard` hooks go unused; durable Save persists
   // separately via `onConfirmSave` → the owner `index-save` frame. `awaitReady`
   // uses the snapshot-port handshake as the ready gate (the owner publishes at boot).
-  async function switchTo(nextActiveId: ActiveId): Promise<void> {
+  async function switchTo(nextActiveId: ActiveId): Promise<boolean> {
     // The dirty-scratch confirm already ran in the store (`requestSwitch` opened the
     // switch dialog), so by the time we get here the switch is committed — the store
     // has flipped `activeId` to the destination, so `activeTemplate()`/`activeStarterId()`
@@ -1363,16 +1364,13 @@ export function App(props: AppProps) {
     // ADR-0165 §3: PERSIST the new active root to the durable index BEFORE teardown.
     // A switch otherwise never updates the on-disk `activeId`, so the respawned
     // owner re-publishes the STALE activeId and `hydrateIndex` reverts the switch
-    // (a race), and a reload boots the wrong root. Post to the CURRENT owner + wait
-    // until the mirror reflects it, so the new owner boots reading the right id.
+    // (a race), and a reload boots the wrong root. Post to the CURRENT owner and
+    // wait for its durable ack, so the new owner boots reading the right id.
     // Memory mode has no durable index → page-mirror only.
     if (!saveAffordance(storageMode).ephemeral) {
-      void setActiveIndex(workspaceOwner().snapshotPort, nextActiveId).catch((err: unknown) =>
-        console.error('[project-index] set-active failed', err),
-      );
-      await awaitActiveDurable(nextActiveId);
+      await setActiveIndex(workspaceOwner().snapshotPort, nextActiveId);
     }
-    await requestSwitch({
+    return await requestSwitch({
       currentOwner: workspaceOwner(),
       nextRoot: rootForId(nextActiveId),
       nextSlug: nextActiveId,
@@ -1459,6 +1457,7 @@ export function App(props: AppProps) {
   } | null>(null);
   let pendingSaveApplied: Promise<boolean> | null = null;
   let pendingSaveDurability: Promise<boolean> | null = null;
+  let pendingSwitch: Promise<boolean> | null = null;
 
   function trackSave(
     id: string,
@@ -1495,6 +1494,25 @@ export function App(props: AppProps) {
     return (await pendingSaveDurability?.catch(() => false)) ?? true;
   }
 
+  function trackSwitch(run: Promise<boolean>): Promise<boolean> {
+    const tracked = run
+      .catch((err: unknown) => {
+        console.error('[project-switch] switch failed', err);
+        const message = err instanceof Error ? err.message : String(err);
+        store.setToast({ kind: 'error', text: `Switch failed: ${message}` });
+        return false;
+      })
+      .finally(() => {
+        if (pendingSwitch === tracked) pendingSwitch = null;
+      });
+    pendingSwitch = tracked;
+    return tracked;
+  }
+
+  async function waitForPendingSwitch(): Promise<boolean> {
+    return (await pendingSwitch) ?? true;
+  }
+
   // Establish a fresh scratch from a starter in the OWNER index (ADR-0165 §6): the
   // page-mirror flip is immediate UX; this re-creates the durable scratch entry +
   // re-seeds /scratch so the NEXT Save's `saveScratchAsProject` precondition holds
@@ -1513,6 +1531,7 @@ export function App(props: AppProps) {
   // scratch (switch dialog); a clean pick spins a fresh scratch AND boots the
   // chosen preset through the real worker lifecycle (the gallery pick = boot).
   async function onPickStarter(id: string): Promise<void> {
+    if (!(await waitForPendingSwitch())) return;
     if (!(await waitForPendingSaveApplied())) return;
     const wasDirty = store.activeId() === 'scratch' && store.scratch()?.dirty === true;
     store.pickStarter(id);
@@ -1525,10 +1544,15 @@ export function App(props: AppProps) {
   // Switch active root from the launcher/chip. The store gates a dirty scratch
   // (switch dialog); an applied switch drives the real owner respawn (switchTo).
   async function onLauncherSwitch(id: ActiveId): Promise<void> {
+    if (!(await waitForPendingSwitch())) return;
     if (!(await waitForPendingSaveDurable())) return;
     const before = store.activeId();
+    const ownerNeedsSwitch = workspaceOwner().root !== rootForId(id);
     store.requestSwitch(id);
-    if (store.activeId() !== before) void switchTo(id);
+    const prompted = store.dialog()?.kind === 'switch';
+    if (!prompted && (store.activeId() !== before || ownerNeedsSwitch)) {
+      void trackSwitch(switchTo(id));
+    }
   }
 
   // Open the launcher on the REMEMBERED tab (localStorage), but force STARTERS when
@@ -1722,7 +1746,7 @@ export function App(props: AppProps) {
       void runVitePreset(presetForId(target.pendingStarter));
     } else if (target.pendingId) {
       store.confirmSwitchTo(target.pendingId);
-      void switchTo(target.pendingId);
+      void trackSwitch(switchTo(target.pendingId));
     }
   }
 
@@ -1743,18 +1767,6 @@ export function App(props: AppProps) {
     if (d?.kind === 'switch')
       setPendingAfterSave({ pendingStarter: d.pendingStarter, pendingId: d.pendingId });
     openSaveDialog();
-  }
-
-  // Resolve once the owner-published index reflects `activeId` (ADR-0165 §3): the
-  // index-set-active write is flushed-then-published, so this gates the switch
-  // teardown on the durable activeId landing — the respawned owner then reads the
-  // right root. Bounded so a dropped reply / memory backend can't hang the switch.
-  async function awaitActiveDurable(activeId: ActiveId, timeoutMs = 3000): Promise<void> {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-      if (projectIndex()?.activeId === activeId) return;
-      await new Promise<void>((resolve) => setTimeout(resolve, 25));
-    }
   }
 
   // A port is previewable iff it is a registered preview port (ADR-0155 multi-port:

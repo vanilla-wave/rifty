@@ -44,6 +44,13 @@
   bridge now has an applied ack (sync commit) separate from the durable flush ack,
   retries save frames until the owner listener is live, and treats a replayed
   already-committed save as idempotent.
+- **Dirty scratch prompts survive late owner index publishes.** A real editor
+  write can no longer be overwritten by a stale `dirty:false` project-index
+  mirror publish before the user switches projects.
+- **Project switches wait for the durable active-root ack and serialize owner
+  respawns.** Switching between saved projects no longer tears down the owner
+  after a timed-out mirror poll or starts a second switch before the first owner
+  respawn is fully rewired.
 - **TS-LSP replies no longer cross-match between page clients.** Request ids are
   allocated across the page realm instead of per client instance, so a late
   `ack` from one client cannot satisfy a hover/rename/completion request from

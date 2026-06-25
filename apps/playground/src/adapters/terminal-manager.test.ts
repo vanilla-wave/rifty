@@ -65,6 +65,7 @@ function makeFakeOwner() {
 
   const owner: WorkspaceOwnerHandle = {
     workspaceId: 'ws-test',
+    root: '/scratch',
     previewOwnerToken: 'ws-test-token',
     snapshotPort: 59124,
     closed: Promise.resolve(null),
