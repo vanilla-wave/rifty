@@ -487,33 +487,19 @@ async function pickStarterAndWaitForTemplate(
 ): Promise<void> {
   const editorLines = page.locator('[data-testid="editor"] .view-lines').first();
   const previewBody = page.frameLocator('iframe[title="Preview port 5174"]').locator('body');
-  let lastError: unknown;
+  await page.click('[data-action="open-launcher"]');
+  await page.getByRole('button', { name: 'Starters', exact: true }).click();
+  await page.click(`[data-preset="${preset}"]`);
 
-  for (let attempt = 0; attempt < 3; attempt++) {
-    await page.click('[data-action="open-launcher"]');
-    await page.getByRole('button', { name: 'Starters', exact: true }).click();
-    await page.click(`[data-preset="${preset}"]`);
-
-    const discard = page.getByRole('button', { name: 'Discard & continue', exact: true });
-    if (await discard.isVisible({ timeout: 1_000 }).catch(() => false)) {
-      await discard.click();
-    }
-
-    await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
-    await expect.poll(() => terminalBuffer(page), { timeout: 45_000 }).toContain('$ vite');
-
-    try {
-      await expect(editorLines).toContainText(editorNeedle, { timeout: 30_000 });
-      await expect(previewBody).toContainText(previewNeedle, { timeout: 90_000 });
-      return;
-    } catch (error) {
-      lastError = error;
-    }
+  const discard = page.getByRole('button', { name: 'Discard & continue', exact: true });
+  if (await discard.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    await discard.click();
   }
 
-  throw lastError instanceof Error
-    ? lastError
-    : new Error('starter template did not become active');
+  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
+  await expect.poll(() => terminalBuffer(page), { timeout: 45_000 }).toContain('$ vite');
+  await expect(editorLines).toContainText(editorNeedle, { timeout: 45_000 });
+  await expect(previewBody).toContainText(previewNeedle, { timeout: 90_000 });
 }
 
 /** Open a workspace file through the real command palette (Ctrl/Cmd-K → type → click). */
@@ -796,10 +782,6 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('coolValue');
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('uses-dep.ts');
 
-    // Rebuild before opening `uses-dep.ts`, so the first document open/update is
-    // served by the project configured with bundler resolution + fake node_modules.
-    expect(await tsReinit(page)).toBe(true);
-
     // Open uses-dep.ts so a Monaco model exists (providers resolve a model→path).
     await openFileViaPalette(page, 'uses-dep.ts');
     await expect
@@ -808,6 +790,9 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
 
     let depDefs: { uri: string; line: number; column: number }[] = [];
     expect(await setModelValue(page, USES_DEP, usesDepResolvedSource)).toBe(true);
+    // Rebuild after the file is open and mirrored, so the provider query below is
+    // served by the project configured with bundler resolution + fake node_modules.
+    expect(await tsReinit(page)).toBe(true);
     await expect
       .poll(() => tsMarkerCount(page, USES_DEP), { timeout: 120_000, intervals: [1500] })
       .toBe(0);
