@@ -59,6 +59,14 @@ describe('resolveBootstrapConfig', () => {
     expect(cfg.seedFiles['/workspace/package.json']).toBe(packageJson);
   });
 
+  it('initializes the project root as a git repository', () => {
+    const cfg = resolveBootstrapConfig(VITE_TEMPLATE, 5174, '/workspace');
+
+    expect(cfg.seedFiles['/workspace/.git/HEAD']).toBe('ref: refs/heads/main\n');
+    expect(cfg.seedFiles['/workspace/.git/config']).toContain('repositoryformatversion = 0');
+    expect(cfg.seedFiles['/workspace/.git/config']).toContain('bare = false');
+  });
+
   it('honours a non-default port and root (not spec.defaultPort / not /workspace)', () => {
     const cfg = resolveBootstrapConfig(VITE_TEMPLATE, 5999, '/proj');
     expect(cfg.port).toBe(5999);
@@ -134,6 +142,9 @@ describe('resolveBootstrapConfig (node-server runtime)', () => {
   it('seeds entry + package.json + extraFiles and does NOT seed index.html', () => {
     const cfg = resolveBootstrapConfig(NODE_FIXTURE, 3210, '/workspace');
 
+    expect(cfg.seedFiles['/workspace/.git/HEAD']).toBe('ref: refs/heads/main\n');
+    expect(cfg.seedFiles['/workspace/.git/config']).toContain('repositoryformatversion = 0');
+    expect(cfg.seedFiles['/workspace/.git/config']).toContain('bare = false');
     expect(cfg.seedFiles['/workspace/src/main.js']).toBe(NODE_FIXTURE.entry.content);
     expect(cfg.seedFiles['/workspace/package.json']).toBe(cfg.packageJson);
     expect(cfg.seedFiles['/workspace/public/index.html']).toBe(

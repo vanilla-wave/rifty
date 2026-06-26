@@ -1,3 +1,6 @@
+import { Shell } from '@riftydev/shell';
+import { asyncVfs, dirname } from '@riftydev/vfs';
+import { installMemoryFs, resetSyncMirror } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { PRESETS, type Preset } from '../presets.ts';
 import {
@@ -71,6 +74,44 @@ describe('starterById', () => {
 // — re-derives the FULL template seed (index.html/package.json/entry/extraFiles)
 // for `root`, with the Preset source overlaid at the entry + Preset files[] under root.
 describe('seedFilesForStarter (starter, root)', () => {
+  it('initializes every Starter root as a git repository', () => {
+    for (const preset of PRESETS) {
+      const files = seedFilesForStarter(starterById(preset.id), '/scratch');
+      expect(files['/scratch/.git/HEAD']).toBe('ref: refs/heads/main\n');
+      expect(files['/scratch/.git/config']).toContain('repositoryformatversion = 0');
+      expect(files['/scratch/.git/config']).toContain('bare = false');
+    }
+  });
+
+  it('seeds every Starter as a working shell git repository', async () => {
+    installMemoryFs();
+    try {
+      const vfs = asyncVfs();
+      if (!vfs) throw new Error('no async vfs');
+
+      for (const preset of PRESETS) {
+        const root = `/projects/${preset.id}`;
+        for (const [path, content] of Object.entries(
+          seedFilesForStarter(starterById(preset.id), root),
+        )) {
+          await vfs.mkdir(dirname(path), { recursive: true });
+          await vfs.writeFile(path, content);
+        }
+
+        const sh = new Shell({ cwd: root });
+        const status = await sh.run('git status --porcelain');
+        expect(status.exitCode).toBe(0);
+        expect(status.stderr).toBe('');
+
+        const config = await sh.run('git config core.repositoryformatversion');
+        expect(config.exitCode).toBe(0);
+        expect(config.stdout).toBe('0\n');
+      }
+    } finally {
+      resetSyncMirror();
+    }
+  });
+
   it('emits the program source at the starter entry path + every preset file', () => {
     const files = seedFilesForStarter(starterById('express-sqlite'), '/scratch');
     // the program source is present under some path
