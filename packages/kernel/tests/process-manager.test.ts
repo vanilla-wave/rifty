@@ -21,9 +21,12 @@ type WorkerListener = (ev: MessageEvent) => void;
 /** Stub worker that records added/removed listeners and lets the test fire events. */
 class FakeWorker implements WorkerLike {
   private readonly listeners = new Map<string, Set<WorkerListener>>();
+  readonly posted: unknown[] = [];
   terminated = false;
 
-  postMessage(): void {}
+  postMessage(message: unknown): void {
+    this.posted.push(message);
+  }
   terminate(): void {
     this.terminated = true;
   }
@@ -179,7 +182,7 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
     factoryWorker = undefined;
   });
 
-  it('10 worker-backed children exited leave list() empty', () => {
+  it('10 worker-backed children exited leave list() empty', async () => {
     const pm = new ProcessManager();
     const workers: FakeWorker[] = [];
     const handles = [];
@@ -197,9 +200,11 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
     expect(pm.list()).toHaveLength(10);
 
     // Drive an exit on each worker.
+    const exits = handles.map((h) => once(h, 'exit'));
     for (const w of workers) {
       w.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
     }
+    await Promise.all(exits);
 
     expect(pm.list()).toHaveLength(0);
     for (const h of handles) {
@@ -207,7 +212,7 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
     }
   });
 
-  it('worker exit removes the kernel-side message/error/messageerror listeners on the underlying Worker', () => {
+  it('worker exit removes the kernel-side message/error/messageerror listeners on the underlying Worker', async () => {
     const pm = new ProcessManager();
     const handle = pm.spawnWorker('node', {
       entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/x.js' },
@@ -222,7 +227,9 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
     expect(w.listenerCount('error')).toBeGreaterThan(0);
     expect(w.listenerCount('messageerror')).toBeGreaterThan(0);
 
+    const exit = once(handle, 'exit');
     w.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
+    await exit;
 
     // After exit, the kernel must drop its listeners so the Worker GC-able.
     expect(w.listenerCount('message')).toBe(0);
@@ -231,7 +238,7 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
     expect(handle.exitCode).toBe(0);
   });
 
-  it('worker exit clears handle event-emitter listeners', () => {
+  it('worker exit clears handle event-emitter listeners', async () => {
     const pm = new ProcessManager();
     const handle = pm.spawnWorker('node', {
       entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/y.js' },
@@ -243,7 +250,9 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
     handle.on('close', () => {});
 
     const w = factoryWorker as FakeWorker;
+    const exit = once(handle, 'exit');
     w.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
+    await exit;
 
     // The exit/close handlers above ran; we now expect the handle to be
     // listener-free so long-lived hosts don't accumulate references.
@@ -251,7 +260,32 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
     expect(handle.listenerCount('close')).toBe(0);
   });
 
-  it('worker-backed: new spawn does not inherit a dead worker parent cwd', () => {
+  it('worker-backed natural exit drains stdout chunks that arrive after the exit message', async () => {
+    const pm = new ProcessManager();
+    const handle = pm.spawnWorker('node', {
+      entry: { kind: 'source', code: 'void 0;', sourceUrl: '/tmp/late-stdout.js' },
+      argv: ['rifty', '/tmp/late-stdout.js'],
+      env: {},
+      cwd: '/workspace',
+    });
+    if (handle.kind !== 'worker') throw new Error('expected worker handle');
+    const chunks: string[] = [];
+    handle.stdout().on('data', (chunk: unknown) => {
+      chunks.push(new TextDecoder().decode(chunk as Uint8Array));
+    });
+
+    const w = factoryWorker as FakeWorker;
+    const init = w.posted[0] as { spec: { stdio: { stdout: MessagePort } } };
+    const exit = once(handle, 'exit');
+    w.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
+    init.spec.stdio.stdout.postMessage(new TextEncoder().encode('late\n'));
+    await exit;
+
+    expect(chunks.join('')).toBe('late\n');
+    expect(handle.exitCode).toBe(0);
+  });
+
+  it('worker-backed: new spawn does not inherit a dead worker parent cwd', async () => {
     const pm = new ProcessManager();
     const parent = pm.spawnWorker(
       'node',
@@ -265,7 +299,9 @@ describe('ProcessManager — Worker-backed table cleanup + listener removal', ()
       { cwd: '/worker-zombie' },
     );
     const w = factoryWorker as FakeWorker;
+    const exit = once(parent, 'exit');
     w.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
+    await exit;
     expect(pm.list()).toHaveLength(0);
 
     // Spawn a same-realm child that names the dead worker as parent.

@@ -54,7 +54,8 @@ function collectStderr(handle: WorkerProcessHandle): { text: () => string } {
   return { text: () => buf };
 }
 
-const flush = () => new Promise<void>((r) => setTimeout(r, 0));
+const flushWorkerExit = () =>
+  new Promise<void>((r) => setTimeout(() => setTimeout(() => setTimeout(r, 0), 0), 0));
 
 describe('spawnKernelWorker — uncaught global error reaches the child stderr', () => {
   function withFakeWorker<T>(fn: (worker: () => FakeWorker | undefined) => T): T {
@@ -96,7 +97,7 @@ describe('spawnKernelWorker — uncaught global error reaches the child stderr',
         lineno: 12,
       } as unknown as MessageEvent;
       worker()?.fire('error', ev);
-      await flush();
+      await flushWorkerExit();
 
       expect(stderr.text()).toContain('EADDRINUSE');
       expect(exitCode).toBe(1);
@@ -134,7 +135,7 @@ describe('spawnKernelWorker — uncaught global error reaches the child stderr',
         message: 'Uncaught Error: listen EADDRINUSE: address already in use :::3000',
       } as unknown as MessageEvent;
       worker()?.fire('error', ev);
-      await flush();
+      await flushWorkerExit();
 
       expect(written).toContain('EADDRINUSE');
     });
@@ -158,7 +159,7 @@ describe('spawnKernelWorker — uncaught global error reaches the child stderr',
       // A run-to-completion worker posts a plain exit message — no 'error'
       // event. The new forwarding must NOT inject any stderr here.
       worker()?.fire('message', new MessageEvent('message', { data: { type: 'exit', code: 0 } }));
-      await flush();
+      await flushWorkerExit();
 
       expect(stderr.text()).toBe('');
       expect(exitCode).toBe(0);

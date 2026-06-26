@@ -453,12 +453,15 @@ export class ProcessManager {
 
     spawnResult.onExit((code) => {
       if (handle.exitCode !== null || handle.signalCode !== null) return;
-      handle.exitCode = code;
-      handle._signalEof();
-      handle._tearDownIpc();
-      handle.emit('exit', code, null);
-      handle.emit('close', code, null);
-      manager.finalize(pid, handle, [record.parentToChild]);
+      deferWorkerExitUntilStdioSettled(() => {
+        if (handle.exitCode !== null || handle.signalCode !== null) return;
+        handle.exitCode = code;
+        handle._signalEof();
+        handle._tearDownIpc();
+        handle.emit('exit', code, null);
+        handle.emit('close', code, null);
+        manager.finalize(pid, handle, [record.parentToChild]);
+      });
     });
 
     // Surface `messageerror` events on the handle so callers don't have
@@ -512,6 +515,14 @@ function bindPortAsReadable(port: MessagePort): Readable {
   // (vs `addEventListener('message', …)`); kick it.
   port.start();
   return r;
+}
+
+function deferWorkerExitUntilStdioSettled(fn: () => void): void {
+  // Worker exit is posted on the worker channel, while stdout/stderr use separate
+  // MessagePorts. Cross-port ordering is not guaranteed: a final stdout chunk can
+  // arrive after the exit message. Delay natural exit/EOF just enough for chunks
+  // already in flight to reach the parent; kill() remains immediate.
+  setTimeout(() => setTimeout(fn, 0), 0);
 }
 
 function bindPortAsWritable(port: MessagePort): Writable {
