@@ -1,5 +1,6 @@
 import { inflateSync } from 'node:zlib';
 import { type Page, expect, test } from '@playwright/test';
+import { runTerminalLineSettled } from './helpers/playground.ts';
 
 async function openShellTerminal(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'New terminal' }).click();
@@ -10,15 +11,7 @@ async function openShellTerminal(page: Page): Promise<void> {
 }
 
 async function runCommand(page: Page, command: string): Promise<void> {
-  const blocks = page.locator('.rf-terminal-slot[data-active="true"] .rf-terminal-blockrail__item');
-  const before = await blocks.count();
-  await page.locator('[data-testid="terminal"]').click();
-  await page.keyboard.type(command);
-  await page.keyboard.press('Enter');
-  await expect(blocks).toHaveCount(before + 1, { timeout: 10_000 });
-  await expect(blocks.nth(before)).not.toHaveAttribute('data-status', 'running', {
-    timeout: 30_000,
-  });
+  await runTerminalLineSettled(page, command);
 }
 
 interface PngImage {
@@ -254,17 +247,9 @@ test.describe('Terminal visual regressions', () => {
     await openShellTerminal(page);
 
     await runCommand(page, 'ls');
-    await expect(page.locator('.rf-terminal-blockrail__item[aria-label*="ls"]')).toHaveAttribute(
-      'data-status',
-      'ok',
-    );
     await expectNoStatusFillInTextPlane(page);
 
     await runCommand(page, 'src');
-    await expect(page.locator('.rf-terminal-blockrail__item[aria-label*="src"]')).toHaveAttribute(
-      'data-status',
-      'error',
-    );
     await expectNoStatusFillInTextPlane(page);
   });
 

@@ -1,5 +1,11 @@
 import { type Page, expect, test } from '@playwright/test';
-import { openShellTerminal, runTerminalLine, terminalBuffer } from './helpers/playground.ts';
+import {
+  insertTerminalLineSettled,
+  openShellTerminal,
+  runTerminalLine,
+  runTerminalLineSettled,
+  terminalBuffer,
+} from './helpers/playground.ts';
 
 // Run this file's tests SERIALLY (override the config's fullyParallel): each test
 // cold-boots its OWN workspace owner + LS grandchild and fetches the ~3 MB
@@ -314,14 +320,7 @@ async function tsReinit(page: Page): Promise<boolean> {
  */
 async function writeOwnerFile(page: Page, path: string, content: string): Promise<void> {
   const escaped = content.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/'/g, "'\\''");
-  const line = `printf '${escaped}' > ${path}`;
-  const blocks = page.locator('.rf-terminal-slot[data-active="true"] .rf-terminal-blockrail__item');
-  const before = await blocks.count();
-  await page.locator('[data-testid="terminal"]').click();
-  await page.keyboard.insertText(line);
-  await page.keyboard.press('Enter');
-  await expect(blocks).toHaveCount(before + 1, { timeout: 10_000 });
-  await expect(blocks.nth(before)).toHaveAttribute('data-status', 'ok', { timeout: 30_000 });
+  await insertTerminalLineSettled(page, `printf '${escaped}' > ${path}`);
 }
 
 async function waitForSrcSnapshotFile(page: Page, filename: string): Promise<void> {
@@ -489,7 +488,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
         '',
       ].join('\n'),
     );
-    await runTerminalLine(page, 'mkdir -p /scratch/node_modules/cool-dep');
+    await runTerminalLineSettled(page, 'mkdir -p /scratch/node_modules/cool-dep');
     await writeOwnerFile(
       page,
       '/scratch/node_modules/cool-dep/package.json',

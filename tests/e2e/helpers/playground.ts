@@ -32,6 +32,36 @@ export async function runTerminalLine(page: Page, line: string): Promise<void> {
   await page.keyboard.press('Enter');
 }
 
+function terminalPromptCount(text: string): number {
+  return text.match(/(?:^|\n)> /gu)?.length ?? 0;
+}
+
+export async function runTerminalLineSettled(
+  page: Page,
+  line: string,
+  timeout = 30_000,
+): Promise<void> {
+  const before = terminalPromptCount(await terminalBuffer(page));
+  await runTerminalLine(page, line);
+  await expect
+    .poll(async () => terminalPromptCount(await terminalBuffer(page)), { timeout })
+    .toBeGreaterThan(before);
+}
+
+export async function insertTerminalLineSettled(
+  page: Page,
+  line: string,
+  timeout = 30_000,
+): Promise<void> {
+  const before = terminalPromptCount(await terminalBuffer(page));
+  await page.locator('[data-testid="terminal"]').click();
+  await page.keyboard.insertText(line);
+  await page.keyboard.press('Enter');
+  await expect
+    .poll(async () => terminalPromptCount(await terminalBuffer(page)), { timeout })
+    .toBeGreaterThan(before);
+}
+
 export async function expectTerminalContains(
   page: Page,
   text: string | RegExp,

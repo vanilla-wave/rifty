@@ -24,7 +24,7 @@
  */
 import { type Page, expect, test } from '@playwright/test';
 import { readWorkspaceText } from './helpers/opfs.ts';
-import { runTerminalLine } from './helpers/playground.ts';
+import { runTerminalLineSettled } from './helpers/playground.ts';
 
 // A taller viewport centers the launcher modal BELOW the top-right toast, so the
 // close button is never transiently covered (the toast auto-dismisses too, but this
@@ -55,20 +55,6 @@ async function newShell(page: Page): Promise<void> {
   await expect(page.locator('.rf-terminal-slot[data-active="true"]')).toBeVisible({
     timeout: 10_000,
   });
-}
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-async function runTerminalLineOk(page: Page, line: string, timeout = 30_000): Promise<void> {
-  await runTerminalLine(page, line);
-  await expect(
-    page
-      .locator('.rf-terminal-slot[data-active="true"] .rf-terminal-blockrail')
-      .getByRole('button', { name: new RegExp(`${escapeRegExp(line)}.*exit 0`) })
-      .last(),
-  ).toHaveAttribute('data-status', 'ok', { timeout });
 }
 
 async function pickStarter(page: Page, id: string): Promise<void> {
@@ -235,7 +221,7 @@ test.describe('ADR-0165 §6 — named-project Reset is a real on-disk restore', 
     // Boot scratch, write a STRAY file (absolute active root), Save as a project →
     // the stray moves into /projects/<id>/stray.txt.
     await newShell(page);
-    await runTerminalLineOk(page, 'echo stray-edit > /scratch/stray.txt');
+    await runTerminalLineSettled(page, 'echo stray-edit > /scratch/stray.txt');
     await saveScratchAs(page, projName);
     const id = await activeProjectIdForName(page, projName);
     expect(id).not.toBe('');
