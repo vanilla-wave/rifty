@@ -24,6 +24,19 @@ describe('real Vite bootstrap preview routing', () => {
   });
 });
 
+describe('vite command — production build/preview routing', () => {
+  it('routes `vite build`/`preview` to real handlers while optimize still loud-rejects', () => {
+    expect(source).toContain('rejectProductionCommandForVite8');
+    expect(source).toContain('upstream-blocked for the vite8 preset');
+    expect(source).toContain("if (sub === 'build')");
+    expect(source).toContain('return runBuild(ctx);');
+    expect(source).toContain("if (sub === 'preview')");
+    expect(source).toContain('return runPreview(ctx);');
+    expect(source).toContain("if (sub === 'optimize')");
+    expect(source).toContain('is not supported yet');
+  });
+});
+
 describe('node-server runtime branch', () => {
   it('calls builtin registrars explicitly so production bundling cannot drop them', () => {
     expect(source).toContain(

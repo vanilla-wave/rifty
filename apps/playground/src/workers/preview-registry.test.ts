@@ -44,6 +44,36 @@ describe('preview-registry', () => {
     expect((sent.at(-1) as Extract<OwnerToPageFrame, { type: 'pty:preview' }>).ports).toEqual([]);
   });
 
+  it('production preview is a single replace-by-source slot distinct from dev-server', () => {
+    const { send, sent } = frames();
+    const reg = createPreviewRegistry({ send });
+    reg.setDevServer(5174);
+    reg.setPreview(4173);
+    reg.setPreview(4174);
+    expect((sent.at(-1) as Extract<OwnerToPageFrame, { type: 'pty:preview' }>).ports).toEqual([
+      {
+        port: 5174,
+        url: '/preview/5174/',
+        label: 'npm run dev',
+        source: 'dev-server',
+        sid: 'dev-server',
+      },
+      {
+        port: 4174,
+        url: '/preview/4174/',
+        label: 'vite preview',
+        source: 'preview',
+        sid: 'preview',
+      },
+    ]);
+    reg.clearPreview();
+    expect(
+      (sent.at(-1) as Extract<OwnerToPageFrame, { type: 'pty:preview' }>).ports.map(
+        (p) => p.source,
+      ),
+    ).toEqual(['dev-server']);
+  });
+
   it('publish() re-emits the current set (handshake)', () => {
     const { send, sent } = frames();
     const reg = createPreviewRegistry({ send });

@@ -14,6 +14,12 @@
 
 ### Fixed
 
+- **ADR-0160:** port-scoped page bridges now refuse cross-port requests end to
+  end. The SW no longer falls back to a ready window that advertised other
+  ports, and `setupPreviewBridge({ ports })` ignores `rifty:preview:request`
+  frames for ports outside that set. This prevents a live dev-server bridge
+  from answering a later `vite preview` route during the small window before the
+  production preview bridge announces readiness.
 - **ADR-0160 (anti-hijack):** the SW rejects `rifty:preview:ready` from any
   client it has served a `/preview/<port>/` document to — a dedicated
   `previewDocumentClients` set pruned by LIVENESS (`clients.matchAll`), never

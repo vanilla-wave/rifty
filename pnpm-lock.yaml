@@ -65,6 +65,9 @@ importers:
       '@riftydev/runtime-js':
         specifier: workspace:*
         version: link:../../packages/runtime-js
+      '@riftydev/runtime-wasi':
+        specifier: workspace:*
+        version: link:../../packages/runtime-wasi
       '@riftydev/service-worker':
         specifier: workspace:*
         version: link:../../packages/service-worker
@@ -246,6 +249,9 @@ importers:
       '@riftydev/kernel':
         specifier: workspace:*
         version: link:../kernel
+      '@riftydev/runtime-wasi':
+        specifier: workspace:*
+        version: link:../runtime-wasi
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../vfs

@@ -23,6 +23,7 @@
  *    no-op) → `/projects/<id>/stray.txt` survives → the MISSING poll times out.
  */
 import { type Page, expect, test } from '@playwright/test';
+import { readWorkspaceText } from './helpers/opfs.ts';
 import { runTerminalLine } from './helpers/playground.ts';
 
 // A taller viewport centers the launcher modal BELOW the top-right toast, so the
@@ -56,11 +57,25 @@ async function newShell(page: Page): Promise<void> {
   });
 }
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function runTerminalLineOk(page: Page, line: string, timeout = 30_000): Promise<void> {
+  await runTerminalLine(page, line);
+  await expect(
+    page
+      .locator('.rf-terminal-slot[data-active="true"] .rf-terminal-blockrail')
+      .getByRole('button', { name: new RegExp(`${escapeRegExp(line)}.*exit 0`) })
+      .last(),
+  ).toHaveAttribute('data-status', 'ok', { timeout });
+}
+
 async function pickStarter(page: Page, id: string): Promise<void> {
   await page.click('[data-action="open-launcher"]');
   await page.getByRole('button', { name: 'Starters', exact: true }).click();
   await page.click(`[data-preset="${id}"]`);
-  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
+  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: OPFS_POLL });
 }
 
 async function openProjects(page: Page): Promise<void> {
@@ -81,43 +96,31 @@ async function saveScratchAs(page: Page, name: string): Promise<void> {
   await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
 }
 
-async function readIndexProjectId(page: Page, name: string): Promise<string> {
-  return await page.evaluate(async (n) => {
-    try {
-      const root = (await navigator.storage.getDirectory()) as FileSystemDirectoryHandle;
-      const fh = await root.getFileHandle('.rifty-project-index.json');
-      const idx = JSON.parse(await (await fh.getFile()).text()) as {
-        projects: { id: string; name: string }[];
-      };
-      return idx.projects.find((p) => p.name === n)?.id ?? '';
-    } catch {
-      return '';
-    }
-  }, name);
+async function activeProjectIdForName(page: Page, name: string): Promise<string> {
+  await expect(page.locator('[data-action="open-launcher"] .rf-chip__name')).toHaveText(name, {
+    timeout: 10_000,
+  });
+  await expect(hintLocator(page)).toContainText(/Commands run in \/projects\/[^;]+;/, {
+    timeout: OPFS_POLL,
+  });
+  const text = (await hintLocator(page).textContent()) ?? '';
+  const id = /Commands run in \/projects\/([^;]+);/.exec(text)?.[1] ?? '';
+  expect(id).not.toBe('');
+  return id;
 }
 
-async function projectIdForName(page: Page, name: string): Promise<string> {
-  await expect.poll(() => readIndexProjectId(page, name), { timeout: OPFS_POLL }).not.toBe('');
-  return readIndexProjectId(page, name);
+async function expectProjectNamed(page: Page, name: string): Promise<void> {
+  await openProjects(page);
+  await expect(page.locator('.rf-pcard', { hasText: name }).first()).toBeVisible({
+    timeout: 10_000,
+  });
+  await page.locator('.rf-launcher__close').click();
+  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
 }
 
 /** Read `/projects/<id>/<rel>` from OPFS, or `MISSING:<reason>` when absent. */
 async function readProjectFile(page: Page, id: string, rel: string): Promise<string> {
-  return await page.evaluate(
-    async ({ pid, r }) => {
-      try {
-        const root = (await navigator.storage.getDirectory()) as FileSystemDirectoryHandle;
-        let dir = await (await root.getDirectoryHandle('projects')).getDirectoryHandle(pid);
-        const parts = r.split('/');
-        const file = parts.pop() as string;
-        for (const p of parts) dir = await dir.getDirectoryHandle(p);
-        return await (await (await dir.getFileHandle(file)).getFile()).text();
-      } catch (err) {
-        return `MISSING:${(err as Error).name}`;
-      }
-    },
-    { pid: id, r: rel },
-  );
+  return await readWorkspaceText(page, `/projects/${id}/${rel}`);
 }
 
 /** Insert a marker via Monaco's real input path → onProgramChange → scratch dirty. */
@@ -145,7 +148,7 @@ async function bootDirtyScratchWithSavedAlpha(
   const hint = hintLocator(page);
   await bootScratch(page);
   await saveScratchAs(page, alphaName);
-  const alphaId = await projectIdForName(page, alphaName);
+  const alphaId = await activeProjectIdForName(page, alphaName);
   expect(alphaId).not.toBe('');
   await pickStarter(page, 'node-worker');
   await expect(hint).toContainText('Commands run in /scratch;', { timeout: 30_000 });
@@ -209,7 +212,7 @@ test.describe('ADR-0165 §9 — dirty-scratch switch dialog', () => {
     await dialog.getByRole('button', { name: 'Save project' }).click();
     await expect(dialog).toHaveCount(0, { timeout: 10_000 });
 
-    expect(await projectIdForName(page, gammaName)).not.toBe('');
+    await expectProjectNamed(page, gammaName);
     await expect(hint).toContainText(`Commands run in /projects/${alphaId};`, { timeout: 90_000 });
   });
 });
@@ -232,9 +235,9 @@ test.describe('ADR-0165 §6 — named-project Reset is a real on-disk restore', 
     // Boot scratch, write a STRAY file (absolute active root), Save as a project →
     // the stray moves into /projects/<id>/stray.txt.
     await newShell(page);
-    await runTerminalLine(page, 'echo stray-edit > /scratch/stray.txt');
+    await runTerminalLineOk(page, 'echo stray-edit > /scratch/stray.txt');
     await saveScratchAs(page, projName);
-    const id = await projectIdForName(page, projName);
+    const id = await activeProjectIdForName(page, projName);
     expect(id).not.toBe('');
     await expect
       .poll(() => readProjectFile(page, id, 'stray.txt'), { timeout: OPFS_POLL })

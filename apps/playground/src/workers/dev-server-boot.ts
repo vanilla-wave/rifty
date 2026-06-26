@@ -14,22 +14,18 @@
 import { PREVIEW_LOCAL_HOST } from '@riftydev/io';
 import { dispatchToPort, listPorts, serveCrossRealmPreview } from '@riftydev/net';
 import { initSqliteEngine } from '@riftydev/net/sqlite/engine';
-import { install } from '@riftydev/npm-client';
 import { Console } from '@riftydev/runtime-js/builtins/console';
 import { __setCreateRequireImpl } from '@riftydev/runtime-js/builtins/module';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { dirname, normalizePath, syncMirror } from '@riftydev/vfs';
 import type { SqlJsConfig } from 'sql.js';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
-import { esbuildShimFiles, rollupShimFiles } from '../glue/esbuild-shim.ts';
+import { viteBrowserShimFiles } from '../glue/esbuild-shim.ts';
 import {
   createHmrBridgeToken,
   createHmrBridgeVitePlugin,
   hmrBridgeUrl,
 } from '../glue/hmr-bridge.ts';
-import { ensureProjectDependencies } from '../glue/project-deps.ts';
-import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
-import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import type {
   BootstrapConfig,
   NodeServerBootstrapConfig,
@@ -101,10 +97,7 @@ export function reRootShimPath(shimPath: string, root: string): string {
 }
 function overlayShims(root: string): void {
   const fs = syncMirror();
-  for (const [path, content] of [
-    ...Object.entries(esbuildShimFiles),
-    ...Object.entries(rollupShimFiles),
-  ]) {
+  for (const [path, content] of Object.entries(viteBrowserShimFiles)) {
     const np = normalizePath(reRootShimPath(path, root));
     fs.mkdirSync(dirname(np), { recursive: true });
     fs.writeFileSync(np, enc.encode(content));
@@ -210,7 +203,7 @@ export async function bootDevServer(opts: {
   readonly publishSnapshot: () => void;
   readonly log: (chunk: string) => void;
 }): Promise<DevServerHandle> {
-  const { cfg, port, root, spec, slug, fromScratch, publishSnapshot, log } = opts;
+  const { cfg, port, root, publishSnapshot, log } = opts;
 
   // Seed the template's package.json + files IF ABSENT — never overwrite. A
   // force-overwrite here discarded the user's `npm install` additions on every
@@ -231,35 +224,11 @@ export async function bootDevServer(opts: {
     if (!seedFs.existsSync(np)) seedFs.writeFileSync(np, enc.encode(content));
   }
 
-  // Dependency arrival (ADR-0135): idempotent via the install stamp — a no-op if
-  // the user already ran `npm install`. instant reuses the baked snapshot quietly;
-  // from-scratch streams a real install to the terminal.
-  const vfs = new SyncMirrorVfs();
-  await ensureProjectDependencies({
-    vfs,
-    fsSync: syncMirror(),
-    root,
-    templateId: spec.id,
-    slug,
-    snapshotUrl: fromScratch ? undefined : cfg.bakedNodeModulesUrl,
-    install: async () => {
-      log(`installing ${spec.displayName} into ${root}/node_modules…\n`);
-      const registry = createProxiedRegistryClient();
-      const result = await install({
-        vfs,
-        cwd: root,
-        registry,
-        onPackage: fromScratch
-          ? (event) =>
-              log(`npm: + ${event.name}@${event.version}${event.cacheHit ? ' (cached)' : ''}\n`)
-          : undefined,
-      });
-      log(`installed ${result.packages.length} packages (${result.conflicts.length} conflicts)\n`);
-      return { packages: result.packages.length };
-    },
-    flush: flushSyncMirror,
-    log,
-  });
+  // node_modules is a PRECONDITION of the dev line, never a side effect — faithful
+  // to real npm (`npm run dev` / `vite` runs the program; it does NOT install). The
+  // owner pre-seeds instant deps from the baked snapshot at project-seed; from-scratch
+  // deps come from the explicit `npm install` boot step (or the user). A missing tree
+  // → vite/node fails loudly with a real "Cannot find module" (the honest gap).
   publishSnapshot();
 
   const loader = createModuleLoader(syncMirror(), { cwd: root });
@@ -312,8 +281,13 @@ export async function bootDevServer(opts: {
     )) as unknown as {
       createServer: (config: ViteUserConfig) => Promise<ViteDevServer>;
     };
-    const hmrBridgeToken = createHmrBridgeToken();
-    log(`[real-vite/worker] hmr bridge ready at ${hmrBridgeUrl(port, hmrBridgeToken)}\n`);
+    // Only wire (and announce) the HMR bridge when HMR is actually enabled. With
+    // the Vite 8 template HMR is OFF (ADR-0161), so don't mint a token or log a
+    // "bridge ready" line for a bridge that is never installed (no false signal).
+    const hmrBridgeToken = cfg.hmrEnabled ? createHmrBridgeToken() : null;
+    if (hmrBridgeToken !== null) {
+      log(`[real-vite/worker] hmr bridge ready at ${hmrBridgeUrl(port, hmrBridgeToken)}\n`);
+    }
     log(`[real-vite/worker] starting dev server on port ${port}…\n`);
     const server = await viteNs.createServer({
       root,
@@ -322,7 +296,7 @@ export async function bootDevServer(opts: {
         port,
         strictPort: cfg.server.strictPort,
         middlewareMode: false,
-        hmr: cfg.hmrEnabled
+        hmr: hmrBridgeToken
           ? {
               protocol: 'ws',
               host: PREVIEW_LOCAL_HOST,
@@ -335,17 +309,23 @@ export async function bootDevServer(opts: {
       },
       appType: cfg.server.appType,
       clearScreen: false,
-      optimizeDeps: {
-        disabled: cfg.server.optimizeDepsDisabled,
-      } as unknown as ViteUserConfig['optimizeDeps'],
-      plugins: cfg.hmrEnabled ? [createHmrBridgeVitePlugin({ port, token: hmrBridgeToken })] : [],
+      // Vite 8 REMOVED `optimizeDeps.disabled` (Vite 5.1) — it warns and ignores
+      // it, then runs dep discovery on the first request, which drives Rolldown's
+      // WASI bundler and hung the preview request past the readiness window. The
+      // supported off-switch is `noDiscovery: true` + empty `include`.
+      optimizeDeps: (cfg.server.optimizeDepsDisabled
+        ? { noDiscovery: true, include: [] }
+        : {}) as unknown as ViteUserConfig['optimizeDeps'],
+      plugins: hmrBridgeToken ? [createHmrBridgeVitePlugin({ port, token: hmrBridgeToken })] : [],
     });
     await server.listen();
     activeServer = server;
     log(`[real-vite/worker] vite is listening on internal port ${port}\n`);
+    // User-facing readiness line (the terminal/e2e wait on it): the server is up
+    // and the preview route is about to be served on the public port.
+    log(`[vite] dev server ready on port ${port}\n`);
     publishSnapshot();
-    server.watcher?.on('change', (file) => {
-      handleViteFileChange(file);
+    server.watcher?.on('change', () => {
       publishSnapshot();
     });
   }

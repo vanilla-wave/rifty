@@ -1,13 +1,11 @@
 /**
  * Real Vite smoke — standalone (run via `tsx`), NOT a vitest test.
  *
- * Mirrors `apps/playground/src/workers/real-vite-bootstrap.ts` steps 1-6
- * in-process: install real Vite from the live registry, overlay the
- * esbuild/rollup shims, build the loader, `import('vite')`, `createServer`,
- * `listen`, `transformRequest`. The Worker/HMR/preview bridges are browser-only
- * and omitted; HMR is disabled in this smoke only because it never opens a
- * browser WebSocket client. Native HMR is covered by
- * `tests/integration/vite-hmr-channel.test.ts`.
+ * Mirrors `apps/playground/src/workers/real-vite-bootstrap.ts` install/shim
+ * steps in-process: install real vite@8 from the live registry, overlay the
+ * esbuild/lightningcss/rollup shims, then (only in a SAB/kernel-backed Worker
+ * realm) build the loader, `import('vite')`, `createServer`, `listen`, and
+ * `transformRequest`.
  *
  * It replaces `globalThis.process` with rifty's shim (matching the worker
  * realm), which is incompatible with vitest's child-process IPC — hence a
@@ -18,7 +16,10 @@
  *   RIFTY_LIVE_REGISTRY=https://registry.npmjs.org npx tsx \
  *     tests/integration/fixtures/real-vite-smoke.ts
  *
- * Prints `RIFTY_VITE_SMOKE_OK` and exits 0 on success.
+ * Prints `RIFTY_VITE_SMOKE_OK` and exits 0 on success. Prints
+ * `RIFTY_VITE_SMOKE_REQUIRES_KERNEL_WORKERS` and exits 0 when run from a plain
+ * Node realm that cannot honestly run Rolldown's WASI pthread worker pool; the
+ * Vitest driver treats that marker as a skip, not as serve/createServer proof.
  */
 import '../../../packages/net/src/register-builtins.ts';
 import { RegistryClient, install } from '../../../packages/npm-client/src/index.ts';
@@ -32,7 +33,7 @@ import { installTimerGlobals } from '../../../packages/runtime-js/src/builtins/t
 import { createModuleLoader } from '../../../packages/runtime-js/src/module-loader/index.ts';
 import { dirname, normalizePath } from '../../../packages/vfs/src/index.ts';
 import { createMemoryFs, setSyncMirror } from '../../../packages/vfs/src/internal/index.ts';
-import { esbuildShimFiles, rollupShimFiles } from '../../../tools/shadow-registry/src/index.ts';
+import { viteBrowserShimFiles } from '../../../tools/shadow-registry/src/index.ts';
 
 // biome-ignore lint/suspicious/noExplicitAny: smoke harness.
 type Any = any;
@@ -42,6 +43,27 @@ const log = (m: string): void => {
   process.stdout.write(`[vite-smoke] ${m}\n`);
 };
 const ROOT = '/workspace';
+
+async function withStepTimeout<T>(
+  label: string,
+  promise: Promise<T>,
+  timeoutMs = 30_000,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 setTimeout(() => {
   log('TIMEOUT (240s) — forcing exit');
@@ -54,7 +76,7 @@ async function main(): Promise<void> {
     realExit(0);
     return;
   }
-  const viteSpec = realEnv.RIFTY_VITE_SPEC ?? 'latest';
+  const viteSpec = realEnv.RIFTY_VITE_SPEC ?? '8.0.16';
 
   const { vfs, fsSync } = createMemoryFs();
   setSyncMirror(fsSync, { async: vfs });
@@ -97,15 +119,20 @@ async function main(): Promise<void> {
   const result = await install('app', '0.0.0', { vite: viteSpec }, { vfs, cwd: ROOT, registry });
   log(`installed ${result.packages.length} packages`);
 
-  for (const [path, content] of [
-    ...Object.entries(esbuildShimFiles),
-    ...Object.entries(rollupShimFiles),
-  ]) {
+  for (const [path, content] of Object.entries(viteBrowserShimFiles)) {
     const np = normalizePath(path);
     fsSync.mkdirSync(dirname(np), { recursive: true });
     fsSync.writeFileSync(np, enc.encode(content as string));
   }
-  log('esbuild + rollup shims overlaid');
+  log('esbuild + lightningcss + rollup shims overlaid');
+
+  if (!hasKernelBackedWorkerCapabilities()) {
+    log(
+      `RIFTY_VITE_SMOKE_REQUIRES_KERNEL_WORKERS — vite@${viteSpec} installed and shims overlaid; import/createServer requires a SAB + kernel-backed Worker realm for Rolldown WASI pthreads`,
+    );
+    realExit(0);
+    return;
+  }
 
   const loader = createModuleLoader(fsSync, { cwd: ROOT });
   __setCreateRequireImpl((from: string) => {
@@ -123,23 +150,29 @@ async function main(): Promise<void> {
   const ns = (await loader.import('vite', `${ROOT}/__entry__.mjs`)) as Any;
   log(`VITE LOADED — createServer is ${typeof ns.createServer}`);
 
-  const server = await ns.createServer({
-    root: ROOT,
-    server: {
-      port: 5174,
-      strictPort: true,
-      middlewareMode: false,
-      hmr: false,
-      host: true,
-    },
-    appType: 'spa',
-    clearScreen: false,
-    optimizeDeps: { noDiscovery: true, include: [] },
-    logLevel: 'silent',
-  });
-  await server.listen();
+  const parseNs = (await loader.import('rolldown/parseAst', `${ROOT}/__entry__.mjs`)) as Any;
+  const parsed = parseNs.parseAst('export const x = 1;\n');
+  log(`ROLLDOWN PARSE OK — ast type ${parsed?.type ?? typeof parsed}`);
+
+  const server = await withStepTimeout(
+    'createServer',
+    ns.createServer({
+      root: ROOT,
+      server: { port: 5174, strictPort: true, middlewareMode: false, hmr: false, host: true },
+      appType: 'spa',
+      clearScreen: false,
+      // Vite 8 dropped `optimizeDeps.disabled` (warns + ignores it); the supported
+      // off-switch is `noDiscovery` + empty `include` — match production boot.
+      optimizeDeps: { noDiscovery: true, include: [] },
+      logLevel: 'silent',
+    }),
+  );
+  await withStepTimeout('server.listen', server.listen());
   log('VITE LISTENING');
-  const r = await server.transformRequest('/src/main.js');
+  const r = await withStepTimeout(
+    'transformRequest(/src/main.js)',
+    server.transformRequest('/src/main.js'),
+  );
   log(`transformRequest('/src/main.js') -> ${r ? `${(r.code ?? '').length} bytes` : 'null'}`);
   await server.close();
   log('CLOSED');
@@ -150,6 +183,18 @@ async function main(): Promise<void> {
   }
   log('RIFTY_VITE_SMOKE_OK');
   realExit(0);
+}
+
+function hasKernelBackedWorkerCapabilities(): boolean {
+  const g = globalThis as typeof globalThis & { crossOriginIsolated?: boolean };
+  const atomicsWithWaitAsync = Atomics as unknown as { waitAsync?: unknown };
+  return (
+    g.crossOriginIsolated === true &&
+    typeof SharedArrayBuffer === 'function' &&
+    typeof atomicsWithWaitAsync.waitAsync === 'function' &&
+    typeof realEnv.RIFTY_KERNEL_WORKER_URL === 'string' &&
+    typeof realEnv.RIFTY_NODE_ENTRY_WORKER_URL === 'string'
+  );
 }
 
 main().catch((e) => {

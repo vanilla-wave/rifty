@@ -357,6 +357,44 @@ describe('main-thread setupPreviewBridge handshake', () => {
     }
   });
 
+  it('does not let a port-scoped bridge answer requests for another port', async () => {
+    const env = installNavigator();
+    try {
+      let received: unknown = null;
+      const channel = new MessageChannel();
+      channel.port1.onmessage = (e): void => {
+        received = e.data;
+      };
+      const handler = vi.fn(async () => ({
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        body: null,
+      }));
+      const teardown = setupPreviewBridge(handler, { ports: [5174] });
+      const messageFn = env.listeners.message?.[0];
+      expect(messageFn).toBeDefined();
+      messageFn!({
+        data: {
+          type: SW_PREVIEW_REQUEST,
+          requestId: 1,
+          frameVersion: SW_FRAME_VERSION,
+          routingVersion: SW_ROUTING_VERSION,
+          request: { port: 4173, url: 'http://preview.local/', method: 'GET', headers: {} },
+        },
+        ports: [channel.port2],
+      });
+      await new Promise((r) => setTimeout(r, 5));
+      expect(handler).not.toHaveBeenCalled();
+      expect(received).toBeNull();
+      channel.port1.close();
+      channel.port2.close();
+      teardown();
+    } finally {
+      env.restore();
+    }
+  });
+
   it('rejects a SW_PREVIEW_REQUEST with mismatched frame version without calling the handler', async () => {
     const env = installNavigator();
     try {

@@ -232,4 +232,40 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
 
     expect(flushSawStamp).toEqual([false, true]);
   });
+
+  it('restore-only (no `install`): a stampless, snapshotless tree resolves to `none` — NEVER installs', async () => {
+    // The faithful boot settles instant deps in RESTORE-ONLY mode. from-scratch deps
+    // come SOLELY from the explicit `npm install` command — so omitting `install`
+    // leaves a stampless, snapshotless tree's deps ABSENT (`none`); it does not fetch
+    // or network-install as a dev-line side effect.
+    const { vfs, fsSync, logFn } = project();
+    const result = await ensureProjectDependencies({
+      vfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'real-vite',
+      // no snapshotUrl + no install → restore-only
+      flush: async () => {},
+      log: logFn,
+    });
+    expect(result).toEqual({ source: 'none', packages: 0 });
+  });
+
+  it('restore-only with a matching snapshot RESTORES (still never installs)', async () => {
+    const { vfs, fsSync, logFn } = project();
+    const result = await ensureProjectDependencies({
+      vfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'vite',
+      slug: 'project-files',
+      snapshotUrl: '/snapshots/vite.json.gz',
+      fetchSnapshot: async () => viteSnapshot(),
+      // no `install` → restore-only; a matching snapshot must restore, not install
+      flush: async () => {},
+      log: logFn,
+    });
+    expect(result.source).toBe('snapshot');
+  });
 });

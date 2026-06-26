@@ -21,9 +21,11 @@
  * worker isn't serving can't eat the whole budget); the overall deadline spans
  * an npm install, else the panel showed a false `unavailable` before Vite came up.
  *
- * Manual Reload uses `frame.contentWindow.location.reload()`. File edits are
- * refreshed by the iframe HMR client itself, not by parent snapshot updates
- * (ADR-0126).
+ * Manual Reload uses `frame.contentWindow.location.reload()`. When HMR is enabled
+ * (ADR-0126) file edits are refreshed by the iframe HMR client itself, not by
+ * parent snapshot updates. On the Vite 8 template HMR is OFF (ADR-0161): an editor
+ * save re-transforms on the next fetch but pushes nothing, and non-editor file
+ * changes aren't watched — so seeing an edit needs a manual Reload here.
  */
 import {
   type Accessor,
@@ -57,6 +59,7 @@ const COMMIT_INTERVAL_MS = 200;
 export function reconcileSelectedPort(entries: PreviewPortEntry[], current: number): number {
   const last = entries.at(-1);
   if (!last) return current;
+  if (last.source === 'preview') return last.port;
   if (entries.some((e) => e.port === current)) return current;
   return last.port;
 }
@@ -72,9 +75,11 @@ export function PreviewPanel(props: {
   const [port, setPort] = createSignal(props.initialPort ?? 3000);
   const [phase, setPhase] = createSignal<Phase>('starting');
   const [retry, setRetry] = createSignal(0);
+  const [frameEpoch, setFrameEpoch] = createSignal(0);
   let frame: HTMLIFrameElement | undefined;
 
   const previewUrl = (): string => `/preview/${port()}/`;
+  const frameKey = createMemo(() => ({ epoch: frameEpoch() }));
 
   const entries = createMemo<PreviewPortEntry[]>(() => props.ports?.() ?? []);
 
@@ -101,6 +106,11 @@ export function PreviewPanel(props: {
     } else {
       setRetry((n) => n + 1); // Reload doubles as retry before we're live.
     }
+  }
+
+  function remountFrame(): void {
+    frame = undefined;
+    setFrameEpoch((n) => n + 1);
   }
 
   // The displayed `localhost:<port>` host is virtual (no real TCP listener) —
@@ -156,10 +166,11 @@ export function PreviewPanel(props: {
       // (cross-browser: fast where the nav commits, falls through to `error`
       // where the sub-frame nav aborts).
       if (frame) {
-        frame.src = 'about:blank';
+        remountFrame();
         await new Promise((r) => setTimeout(r, 0));
-        if (!alive) return;
-        frame.src = url;
+        const nextFrame = frame;
+        if (!alive || !nextFrame) return;
+        nextFrame.src = url;
       }
       const commitDeadline = Date.now() + COMMIT_TIMEOUT_MS;
       let ok = false;
@@ -242,12 +253,16 @@ export function PreviewPanel(props: {
         </button>
       </div>
       <div class="rf-pane__body">
-        <iframe
-          ref={frame}
-          class="rf-preview__frame"
-          src="about:blank"
-          title={`Preview port ${port()}`}
-        />
+        <Show keyed when={frameKey()}>
+          {(_key) => (
+            <iframe
+              ref={frame}
+              class="rf-preview__frame"
+              src="about:blank"
+              title={`Preview port ${port()}`}
+            />
+          )}
+        </Show>
         {phase() === 'error' && (
           <div class="rf-preview__overlay">
             <p class="rf-preview__overlay-title">Preview couldn't load in-frame</p>

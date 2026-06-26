@@ -14,7 +14,10 @@
  */
 
 import { type ProcessHandle, type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
-import { WASI_PREOPENS_ENV, WASI_WASM_URL_ENV } from './worker-entry.ts';
+// Channel keys only — NOT from `./worker-entry.ts`, whose top-level await runs
+// the WASI guest. This keeps the index (which re-exports `process-handle`) off
+// the side-effectful entry, so `node:wasi` never drags it into a worker graph.
+import { WASI_PREOPENS_ENV, WASI_WASM_URL_ENV } from './wasi-channel-env.ts';
 
 let wasiWorkerUrl: string | URL | null = null;
 

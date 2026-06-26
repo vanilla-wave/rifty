@@ -275,3 +275,33 @@ describe('Buffer.copy', () => {
     expect(src.copy(dst, 0, 3, 1)).toBe(0);
   });
 });
+
+describe('Buffer.isBuffer / instanceof — bundling-robust brand', () => {
+  it('recognizes a genuine Buffer; rejects a plain Uint8Array', () => {
+    expect(Buffer.isBuffer(Buffer.from('x'))).toBe(true);
+    expect(Buffer.from('x') instanceof Buffer).toBe(true);
+    expect(Buffer.isBuffer(new Uint8Array([1]))).toBe(false);
+    expect(new Uint8Array([1]) instanceof Buffer).toBe(false);
+    expect(Buffer.isBuffer(null)).toBe(false);
+    expect(Buffer.isBuffer('str')).toBe(false);
+  });
+
+  it('recognizes a Buffer from a DUPLICATE class copy (prod-bundle split)', () => {
+    // The prod multi-worker bundle can duplicate this class (global `Buffer` vs the
+    // `node:buffer` builtin): a real Buffer from another copy carries the shared
+    // `Symbol.for` brand but is NOT `instanceof` THIS copy — yet `isBuffer`/`instanceof`
+    // must still recognize it (the etag(express `Buffer.from`) → 500 prod crash).
+    const fromOtherCopy = new Uint8Array([1, 2, 3]) as unknown as Record<symbol, unknown>;
+    fromOtherCopy[Symbol.for('@riftydev/io.Buffer')] = true;
+    expect(Buffer.isBuffer(fromOtherCopy)).toBe(true);
+    expect(fromOtherCopy instanceof Buffer).toBe(true);
+  });
+
+  it('rejects a bare branded plain object that is not a Uint8Array (Node returns false)', () => {
+    // The `Symbol.for` brand is a global-registry key; a non-Uint8Array object
+    // carrying it must NOT be mis-recognized as a Buffer (the `Uint8Array` guard).
+    const branded = { [Symbol.for('@riftydev/io.Buffer')]: true } as Record<symbol, unknown>;
+    expect(Buffer.isBuffer(branded)).toBe(false);
+    expect(branded instanceof Buffer).toBe(false);
+  });
+});

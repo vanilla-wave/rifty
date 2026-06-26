@@ -18,7 +18,12 @@ describe('INDEX_PATH', () => {
 });
 
 import { MemoryFsSync } from '@riftydev/vfs/internal';
-import { INDEX_PATH as IDX_PATH, loadIndex, writeIndex } from './project-index.ts';
+import {
+  INDEX_PATH as IDX_PATH,
+  cleanupCommittedScratchSource,
+  loadIndex,
+  writeIndex,
+} from './project-index.ts';
 
 const enc = new TextEncoder();
 const BASE = '/';
@@ -182,6 +187,27 @@ describe('recoverIndex (ADR-0165 §7 — boot-time half-move reconcile)', () => 
     const recovered = recoverIndex(fs, '/');
     expect(fs.existsSync('/scratch')).toBe(false); // stale source removed
     expect(recovered).toEqual(index); // committed index stands
+  });
+
+  it('deferred committed-save cleanup does not delete a fresh active scratch', () => {
+    const fs = new MemoryFsSync();
+    tree(fs, '/scratch', 'fresh');
+    const index = {
+      activeId: 'scratch',
+      scratch: { starter: 'node-worker', dirty: false, editedAt: 'new scratch' },
+      projects: [
+        {
+          id: 'p-9',
+          name: 'My App',
+          starter: 'project-files',
+          editedAt: '2026-06-21T00:00:00.000Z',
+        },
+      ],
+    };
+
+    cleanupCommittedScratchSource(fs, index);
+
+    expect(fs.existsSync('/scratch')).toBe(true);
   });
 
   it('THROWS loud when the index points at a project whose tree is ABSENT (data loss, never silent)', () => {

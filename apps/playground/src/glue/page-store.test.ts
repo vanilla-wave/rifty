@@ -75,6 +75,29 @@ describe('createPageStore (ADR-0165 page store)', () => {
     });
   });
 
+  it('hydrateIndex does not let a late clean owner publish erase a local dirty scratch', () => {
+    createRoot((dispose) => {
+      const s = createPageStore();
+      s.hydrateIndex({
+        activeId: 'scratch',
+        scratch: { starter: 'node-worker', dirty: false, editedAt: 'no edits yet' },
+        projects: [{ id: 'p1', name: 'Alpha', starter: 'project-files', editedAt: 'now' }],
+      });
+      s.markDirty();
+
+      s.hydrateIndex({
+        activeId: 'scratch',
+        scratch: { starter: 'node-worker', dirty: false, editedAt: 'no edits yet' },
+        projects: [{ id: 'p1', name: 'Alpha', starter: 'project-files', editedAt: 'now' }],
+      });
+
+      expect(s.dirty()).toBe(true);
+      s.requestSwitch('p1');
+      expect(s.dialog()).toEqual({ kind: 'switch', pendingId: 'p1' });
+      dispose();
+    });
+  });
+
   it('setters mutate the persisted fields reactively; dirty() is DERIVED from the active scratch', () => {
     createRoot((dispose) => {
       const s = createPageStore();

@@ -15,6 +15,19 @@ import { installCoreMethods, installExtraMethods, installIntMethods } from './bu
 
 export type { Encoding };
 
+/**
+ * Bundling-robust Buffer brand. The production multi-worker bundle can DUPLICATE
+ * this `Buffer` class across chunks (the global `Buffer` install vs the
+ * `node:buffer` builtin `require('buffer')` resolves to — verified
+ * `globalThis.Buffer !== require('buffer').Buffer` in a prod worker). A plain
+ * `instanceof` is then identity-fragile: express's `Buffer.from` (one copy) was
+ * rejected by etag's `Buffer.isBuffer` (the other), 500-ing every `res.json`. A
+ * `Symbol.for` key is shared across copies, so `isBuffer`/`instanceof Buffer`
+ * recognize any rifty Buffer regardless of which class copy created it (the same
+ * brand technique the `buffer` npm package uses via `_isBuffer`).
+ */
+const BUFFER_BRAND = Symbol.for('@riftydev/io.Buffer');
+
 export class Buffer extends Uint8Array {
   /**
    * Ensure `subarray()` / `slice()` and similar typed-array operations that
@@ -22,6 +35,20 @@ export class Buffer extends Uint8Array {
    */
   static get [Symbol.species](): typeof Uint8Array {
     return Buffer as unknown as typeof Uint8Array;
+  }
+
+  /**
+   * Brand-based `instanceof` so `x instanceof Buffer` holds across DUPLICATE
+   * class copies in the prod bundle (see {@link BUFFER_BRAND}). A plain
+   * `Uint8Array` (no brand) is still not a Buffer. The `Uint8Array` guard keeps
+   * a bare branded plain object from being mis-recognized (Node returns `false`);
+   * every real rifty Buffer is `instanceof` the shared global `Uint8Array`.
+   */
+  static override [Symbol.hasInstance](value: unknown): boolean {
+    return (
+      value instanceof Uint8Array &&
+      (value as unknown as Record<symbol, unknown>)[BUFFER_BRAND] === true
+    );
   }
 
   declare toString: (encoding?: Encoding, start?: number, end?: number) => string;
@@ -213,7 +240,9 @@ export class Buffer extends Uint8Array {
   }
 
   static isBuffer(v: unknown): boolean {
-    return v instanceof Buffer;
+    return (
+      v instanceof Uint8Array && (v as unknown as Record<symbol, unknown>)[BUFFER_BRAND] === true
+    );
   }
 
   private static readonly ENCODINGS: ReadonlySet<string> = new Set([
@@ -315,6 +344,11 @@ export class Buffer extends Uint8Array {
 installCoreMethods(Buffer);
 installIntMethods(Buffer);
 installExtraMethods(Buffer);
+
+// Brand the prototype with the shared `Symbol.for` key so EVERY Buffer instance —
+// including ones created by a DUPLICATE class copy in the prod worker bundle — is
+// recognized by `isBuffer`/`instanceof Buffer` regardless of class identity.
+Object.defineProperty(Buffer.prototype, BUFFER_BRAND, { value: true });
 
 export type BufferLike = Buffer;
 

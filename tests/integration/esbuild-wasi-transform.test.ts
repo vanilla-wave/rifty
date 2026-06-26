@@ -77,6 +77,47 @@ maybe('integration — esbuild WASI transform (shadow-binding)', () => {
       workspace: '/workspace',
     });
     expect(out.code).toContain('sourceMappingURL=data:application/json;base64');
+    expect(out.map).toBe('');
+  });
+
+  it('minifies and returns a separate external sourcemap JSON (for vite renderChunk)', async () => {
+    const wasm = loadVendoredEsbuildWasm();
+    const source = [
+      'export function render() {',
+      "  const message = 'A real npm project, in your browser.';",
+      "  document.getElementById('app').innerHTML = '<h1>' + message + '</h1>';",
+      '}',
+      'render();',
+    ].join('\n');
+    const out = await transformWithEsbuild(runWasi, wasm, {
+      source,
+      loader: 'js',
+      minify: true,
+      sourcemap: 'external',
+      workspace: '/workspace',
+    });
+    expect(out.code.length).toBeLessThan(source.length);
+    expect(out.code).not.toContain('sourceMappingURL=data:');
+    expect(out.map).toBeTruthy();
+    const map = JSON.parse(out.map as string) as { version: number; mappings: string };
+    expect(map.version).toBe(3);
+    expect(typeof map.mappings).toBe('string');
+    expect(map.mappings.length).toBeGreaterThan(0);
+  });
+
+  it('minifies without a sourcemap with the real esbuild empty map field', async () => {
+    const wasm = loadVendoredEsbuildWasm();
+    const source = 'export const greet = (name) => `hi ${name}`;\n';
+    const out = await transformWithEsbuild(runWasi, wasm, {
+      source,
+      loader: 'js',
+      minify: true,
+      workspace: '/workspace',
+    });
+    expect(out.code.length).toBeLessThan(source.length);
+    expect(out.code).not.toContain(' => ');
+    expect(out.code).not.toContain('sourceMappingURL');
+    expect(out.map).toBe('');
   });
 
   it('surfaces a syntax error from the guest as a thrown error, not fake output', async () => {

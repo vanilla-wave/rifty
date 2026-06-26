@@ -4,6 +4,95 @@
 
 ### Added
 
+- **Vite 7 production build/preview (ADR-0173).** The default Vite template now
+  supports `vite build` -> real hashed/minified `dist/` and `vite preview` ->
+  `/preview/4173/` serving that built bundle through the existing SW bridge.
+  The production preview is registered as `source:'preview'` and auto-selected
+  when it starts; Vite 8 build/preview stay loud-rejected.
+
+### Changed
+
+- The default Vite template now installs `vite@^7.0.0` plus
+  `@rollup/wasm-node@4.62.2`; snapshot baking asserts the Rollup and
+  `@rollup/wasm-node` versions remain lockstep. The opt-in `vite8` template
+  keeps `vite@8.0.16` and its own baked snapshot.
+
+### Fixed
+
+- **Project files edits update the live preview again.** The default Vite 7
+  template keeps the native HMR bridge enabled (Vite 8 remains HMR-off per
+  ADR-0161), and the dev-server child no longer feeds native `server.watcher`
+  change events back through the synthetic editor-write invalidation path. A
+  Monaco edit to `src/main.js` now reaches the iframe text instead of either
+  spamming `module invalidation failed ... Maximum call stack size exceeded` or
+  silently waiting for a manual reload.
+- **From-scratch starter dev lines keep their freshly installed deps.** Switching
+  from the default Vite starter to a from-scratch starter (`Express + SQLite`,
+  `Socket Lab`) no longer deletes `node_modules` between the explicit
+  `npm install` and the following `npm run dev`; the dev-server child now sees
+  packages such as `express` and `ws` that the terminal just installed.
+- **Parallel playground owners no longer share one OPFS workspace.** Each page
+  session now scopes the owner VFS under a stable workspace id, so full e2e runs
+  cannot have one test wipe another test's `/scratch`, `/projects`, or project
+  index while the UI mirror still points at the old owner state.
+- **Saving a project no longer copies derived stamped `node_modules`.** A Save
+  now persists the scratch source tree but skips install/snapshot-restored deps,
+  so the project-index ack is not held behind tens of MB of dependency copying;
+  the next boot restores deps through the normal install/snapshot path, while
+  unstamped user-created `node_modules` content is still copied.
+- **Project Save is resilient to owner-bridge startup races.** The project-index
+  bridge now has an applied ack (sync commit) separate from the durable flush ack,
+  retries save frames until the owner listener is live, and treats a replayed
+  already-committed save as idempotent.
+- **Dirty scratch prompts survive late owner index publishes.** A real editor
+  write can no longer be overwritten by a stale `dirty:false` project-index
+  mirror publish before the user switches projects.
+- **Project switches wait for the durable active-root ack and serialize owner
+  respawns.** Switching between saved projects no longer tears down the owner
+  after a timed-out mirror poll or starts a second switch before the first owner
+  respawn is fully rewired.
+- **Project switches rebind terminal sessions to the respawned owner.** Existing
+  terminal tabs now reopen their `pty` session ids against the new owner root,
+  retry `pty:open` until the owner replies ready, and release switch serialization
+  when the dev server reports booted instead of waiting for the long-running
+  `vite` foreground command to exit.
+- **Starter dev-server restarts finish before preset boot continues.** Picking a
+  starter while Vite is already running no longer races the restart against the
+  remaining preset flow or a still-busy terminal, which could leave the console at
+  `terminal is busy` instead of the new root's boot log.
+- **TS-LSP replies no longer cross-match between page clients.** Request ids are
+  allocated across the page realm instead of per client instance, so a late
+  `ack` from one client cannot satisfy a hover/rename/completion request from
+  another during owner respawns or provider re-registration.
+- **Vite 8 sandbox honesty follow-ups (PR #55 audit).** (a) Vite 8 `build`/`preview`/`optimize` loud-reject instead of silently booting the dev server (no dist, no error); tracked `backlog/playground/vite8-production-build-preview`. (b) The `[real-vite/worker] hmr bridge ready` log + the bridge token are no longer emitted when HMR is disabled (Vite 8 template) — no false "bridge ready" signal for a bridge that is never installed. (c) `PreviewPanel` header comment corrected — with HMR off (ADR-0161) an editor save re-transforms on next fetch but pushes nothing and non-editor changes aren't watched, so seeing an edit needs a manual Reload (was: "file edits are refreshed by the iframe HMR client itself"). (d) compat `incompatible-packages.md` esbuild/rollup rows corrected — Vite 8 transforms via oxc and parses via `rolldown/parseAst`, so those shim overlays are off the Vite 8 path. New `vite8-*` backlog items track the remaining divergences (watcher-over-VFS, TS/JSX parity coverage, dead esbuild/rollup overlays, lightningcss-wasm init, dev-server UX parity).
+
+### Changed
+
+- **Node-faithful boot — the dev line no longer installs (ADR-0135 corrected).** `vite`
+  / `npm run dev` now RUN the program; they never fetch deps as a side effect (real
+  npm's `npm run dev` does not install — a missing `node_modules` is a loud
+  `Cannot find module`). `node_modules` is a precondition, settled before the dev line:
+  from-scratch presets boot `cd /workspace && npm install && <dev>` — an explicit,
+  honest `npm install` is the only dep source (a fresh preset starts clean → real cold
+  install, no EBROKENLOCK); instant presets pre-seed deps from the baked snapshot into
+  the owner store at project-seed (`restoreInstantDeps`, a RESTORE not an install), so
+  the dev line just runs. Removed the dev-server-boot's auto-`install()`/restore and the
+  template-keyed clean; the from-scratch cold-start lives in the `npm install` command,
+  the instant restore in `restoreInstantDeps`. m1 (instant: no install line) + m7 +
+  fullstack-demo (from-scratch: explicit `npm install`) all green.
+
+### Fixed
+
+- **Project-files preview no longer black-screens on Vite 8.** The `project-files`
+  preset rendered a blank `#app` (`Unexpected token ':'`): its `freshUrl()` appended a
+  `?t=` cache-bust to the `project.json?import` URL, and Vite 8 serves a QUERIED `.json`
+  raw (only a bare specifier / `?import` is JSON-transformed — verified head-to-head vs
+  real `vite@8.0.16`), so the entry imported raw JSON as an ES module and threw. The
+  JSON import is no longer cache-busted (Vite 5 masked this because `import.meta.hot` was
+  falsy with HMR off; Vite 8 always injects it). rifty stays faithful to Vite 8 — the bug
+  was in the demo source. New CI-active regression in `tests/e2e/m7-preview-sw.spec.ts`
+  drives the real preview iframe and asserts the JS+JSON module graph RENDERED (the prior
+  m7 only checked the served shell HTML, so a black screen passed).
 - **The launcher remembers its tab** (ADR-0165 §9). The active tab (Starters / Projects)
   is persisted to `localStorage` (`rf.launcher.tab`) and restored on the next open —
   EXCEPT with zero saved projects, where it always opens on Starters (nothing to switch
@@ -135,6 +224,29 @@
 
 - **`node <file>` missing-entry diagnostic is now real Node's `MODULE_NOT_FOUND`** (closes backlog/runtime-js/node-entry-miss-node-shape). `resolveNodeEntry` no longer pre-checks existence (it just absolutizes the arg); a missing entry flows into `runNodeEntry` → the module loader, which emits Node's `Error: Cannot find module '<abs>' … { code:'MODULE_NOT_FOUND', requireStack: [] }` on the child stderr (exit 1) instead of the old terse `node: cannot find module '<abs>'`. The empty-arg usage error is the only owner-side `ok:false` left.
 
+### Fixed
+
+- **Vite 8 preview boot — Rolldown WASI pthread pool now serves end-to-end.**
+  (a) Force the WASI path for Rolldown's napi-rs loader via `NAPI_RS_FORCE_WASI=1`
+  in the dev-server child env — rifty has no native bindings by construction
+  (ADR-0051/0156), and the loader otherwise SWALLOWED its
+  `@rolldown/binding-wasm32-wasi` load error, surfacing only the generic
+  `Cannot find native binding`. (b) Vite 8 removed `optimizeDeps.disabled`
+  (Vite 5.1) and warns+ignores it, then ran dep discovery on the first request
+  (driving Rolldown's WASI bundler and holding the request to a 30s timeout) —
+  switched to the supported `noDiscovery: true` + empty `include`. (c) The
+  dev-server child now registers `fs.*` sync-RPC HANDLERS (not just the client),
+  so it RELAYS its nested Rolldown pthread workers' `fs.statOrNull`/reads to the
+  owner store — they crashed with "no handler for 'fs.statOrNull'" otherwise.
+  (d) Emit a `[vite] dev server ready on port N` readiness line on listen.
+  (e) Re-baked the `vite@8.0.16` node_modules snapshot and restored
+  `bakedNodeModulesUrl` on the template, so the default (instant) preset boots
+  from the snapshot again (ADR-0135) instead of a cold install; the snapshot now
+  carries `@rolldown/binding-wasm32-wasi` (14.3 MB gz, up from 9 MB — tracked by
+  the baked-snapshot-regeneration backlog). Net result: `m1` (instant boot,
+  baked-snapshot restore) and `m7-preview-sw` (from-scratch cold install →
+  Rolldown WASI bundle → SW-routed `/preview/5174/`) are both CI-active and pass.
+
 ### Added
 
 - **Editor quick-fixes / organize-imports / formatting now come from the rifty LS, not Monaco's built-in worker** (ADR-0166 task 4.2). The task-4.1 engine queries (`getCodeFixes`/`organizeImports`/`getFormattingEdits`/`getRangeFormattingEdits`, parity-proven) are wired as REAL Monaco providers over the page↔owner↔LS relay, so a missing-import quick-fix adds an import from a SIBLING file, organize-imports sorts + drops unused imports, and formatting applies tsserver's real edits — what VSCode shows. Validated by chromium e2e assertions (`tests/e2e/ts-language-service.spec.ts`).
@@ -243,6 +355,13 @@
   `previewPorts()` signal fed to `PreviewPanel`'s switcher, requests a re-publish on subscribe, and
   wires a per-port SW preview bridge for NODE-source ports ONLY (the dev-server port keeps its
   existing `onDevServer` bridge — never double-wired) via a diffing effect over a port→teardown Map.
+
+- **Vite 8 template/runtime wiring.** The Vite project spec now installs
+  `vite@8.0.16`, overlays the LightningCSS WASM shim, and threads
+  `RIFTY_KERNEL_WORKER_URL` / `RIFTY_NODE_ENTRY_WORKER_URL` into the supervised
+  dev-server child so Rolldown's WASI worker pool can spawn real kernel-backed
+  worker_threads children. HMR remains disabled here by the Vite 8 HMR-scope ADR;
+  sockets/HMR are tracked outside this change.
 
 - **Event-loop keepalive + drain wired into the kernel worker** (child-realm-async-lifecycle,
   ADR-0152). `workers/kernel-worker-entry.ts` now calls `installEventLoopKeepalive()` (right after

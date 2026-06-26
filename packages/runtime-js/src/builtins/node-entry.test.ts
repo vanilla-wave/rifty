@@ -10,6 +10,7 @@
 
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
+import { createRequire } from './module.ts';
 import { parseBinLauncherTarget, runNodeEntry } from './node-entry.ts';
 
 const g = globalThis as Record<string, unknown>;
@@ -152,5 +153,22 @@ describe('runNodeEntry', () => {
         "  requireStack: [ '/w/app.js' ]\n" +
         '}',
     );
+  });
+
+  // Regression: a Node entry may call `module.createRequire(import.meta.url)`
+  // (Rolldown's `wasi-worker.mjs` does, in a worker_threads pthread realm).
+  // `runNodeEntry` must publish a `createRequire` impl backed by its loader, else
+  // `createRequire` throws "no loader registered".
+  it('registers a `createRequire` impl backed by the entry loader', async () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/work/dep.js': 'module.exports = { answer: 42 };\n',
+      '/work/main.js': 'module.exports = {};\n',
+    });
+    await runNodeEntry({ vfs, entryPath: '/work/main.js', cwd: '/work' });
+
+    // createRequire is now wired for this realm — resolve a sibling CJS module.
+    const req = createRequire('/work/main.js') as (id: string) => { answer: number };
+    expect(req('./dep.js').answer).toBe(42);
   });
 });

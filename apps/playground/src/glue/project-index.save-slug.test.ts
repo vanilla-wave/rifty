@@ -1,6 +1,5 @@
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
-import { installStampSatisfied } from './install-stamp.ts';
 import {
   type ProjectIndex,
   rootForId,
@@ -13,7 +12,6 @@ import {
 import { seedFilesForStarter, starterById } from './starter.ts';
 
 const enc = new TextEncoder();
-const dec = new TextDecoder();
 
 function seedStampedScratch(fs: ReturnType<typeof createMemoryFs>['fsSync']): void {
   seedScratch(fs, seedFilesForStarter(starterById('project-files'), '/scratch'));
@@ -25,24 +23,27 @@ function seedStampedScratch(fs: ReturnType<typeof createMemoryFs>['fsSync']): vo
       `${JSON.stringify({ version: 1, slug: 'scratch', deps: { vite: '^5.4.0' }, packages: 14 }, null, 2)}\n`,
     ),
   );
-  // package.json deps must match the stamp for installStampSatisfied to hit.
+  // package.json deps match the stamp: this is a real installed scratch tree.
   fs.writeFileSync(
     '/scratch/package.json',
     enc.encode(JSON.stringify({ name: 'a', dependencies: { vite: '^5.4.0' } })),
   );
 }
 
-describe('saveScratchAsProject — install-stamp re-keyed on the move (ADR-0165)', () => {
-  it('moves /scratch→/projects/<id>, flips the pointer last, re-stamps slug=<id>', async () => {
+function scratchIndex(): ProjectIndex {
+  return {
+    activeId: 'scratch',
+    scratch: { starter: 'project-files', dirty: true, editedAt: 't0' },
+    projects: [],
+  };
+}
+
+describe('saveScratchAsProject — derived deps are restored, not moved (ADR-0165)', () => {
+  it('copies scratch, skips stamped node_modules, flips the pointer last', async () => {
     const { vfs, fsSync } = createMemoryFs();
     seedStampedScratch(fsSync);
-    const index: ProjectIndex = {
-      activeId: 'scratch',
-      scratch: { starter: 'project-files', dirty: true, editedAt: 't0' },
-      projects: [],
-    };
 
-    const next = saveScratchAsProject(fsSync, index, 'proj-1', 'My App');
+    const next = saveScratchAsProject(fsSync, scratchIndex(), 'proj-1', 'My App');
 
     // Pointer flipped + source deleted.
     expect(next.activeId).toBe('proj-1');
@@ -51,14 +52,23 @@ describe('saveScratchAsProject — install-stamp re-keyed on the move (ADR-0165)
     expect(fsSync.existsSync('/scratch')).toBe(false);
     expect(fsSync.existsSync(`${rootForId('proj-1')}/package.json`)).toBe(true);
 
-    // The MOVED tree's stamp now carries slug=proj-1 → the next boot reuses it.
-    expect(
-      dec.decode(
-        fsSync.readFileBytesSync(`${rootForId('proj-1')}/node_modules/.rifty-install-stamp.json`),
-      ),
-    ).toContain('"slug": "proj-1"');
-    expect((await installStampSatisfied(vfs, rootForId('proj-1'), 'proj-1'))?.packages).toBe(14);
-    // The old scratch slug no longer satisfies the moved root.
-    expect(await installStampSatisfied(vfs, rootForId('proj-1'), 'scratch')).toBeNull();
+    // Stamped deps are derived from the baked/install snapshot and restored on
+    // the next owner boot; Save must not block copying tens of MB here.
+    expect(fsSync.existsSync(`${rootForId('proj-1')}/node_modules`)).toBe(false);
+    expect(fsSync.existsSync(`${rootForId('proj-1')}/node_modules/.rifty-install-stamp.json`)).toBe(
+      false,
+    );
+    await expect(vfs.stat(`${rootForId('proj-1')}/node_modules`)).rejects.toThrow(/ENOENT/);
+  });
+
+  it('still copies an unstamped user-created node_modules tree', () => {
+    const { fsSync } = createMemoryFs();
+    seedScratch(fsSync, seedFilesForStarter(starterById('project-files'), '/scratch'));
+    fsSync.mkdirSync('/scratch/node_modules/manual', { recursive: true });
+    fsSync.writeFileSync('/scratch/node_modules/manual/index.js', enc.encode('manual'));
+
+    saveScratchAsProject(fsSync, scratchIndex(), 'proj-1', 'My App');
+
+    expect(fsSync.existsSync(`${rootForId('proj-1')}/node_modules/manual/index.js`)).toBe(true);
   });
 });

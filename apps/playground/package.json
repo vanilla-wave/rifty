@@ -19,6 +19,7 @@
     "@riftydev/net": "workspace:*",
     "@riftydev/npm-client": "workspace:*",
     "@riftydev/runtime-js": "workspace:*",
+    "@riftydev/runtime-wasi": "workspace:*",
     "@riftydev/service-worker": "workspace:*",
     "@riftydev/shadow-registry": "workspace:*",
     "@riftydev/shell": "workspace:*",

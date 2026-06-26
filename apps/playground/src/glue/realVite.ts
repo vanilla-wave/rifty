@@ -23,6 +23,7 @@ import kernelWorkerUrl from '../workers/kernel-worker-entry.ts?worker&url';
 import nodeEntryWorkerUrl from '../workers/node-entry-bootstrap.ts?worker&url';
 import bootstrapWorkerUrl from '../workers/real-vite-bootstrap.ts?worker&url';
 import tsLspWorkerUrl from '../workers/ts-lsp-worker-entry.ts?worker&url';
+import type { OwnerBridgeKey } from './owner-bridge-key.ts';
 import { mountPlaygroundPreviewBridge } from './preview-bridge-wiring.ts';
 import {
   type ExecOptions,
@@ -37,6 +38,7 @@ import {
   isOwnerToPage,
   isPtyIpcMessage,
 } from './pty-protocol.ts';
+import { stampTsLspOwner, tsLspOwnerMatches } from './ts-lsp-owner-scope.ts';
 import { sendVfsWrite } from './vfs-write-port.ts';
 import { type WorkspaceArchiveBridge, bridgeWorkspaceArchive } from './workspace-archive-port.ts';
 
@@ -90,6 +92,8 @@ export function wirePreviewBridge(port: number, ownerToken: string): () => void 
 export interface WorkspaceOwnerHandle {
   /** Stable id carried to the owner over `RIFTY_WORKSPACE_ID`. */
   readonly workspaceId: string;
+  /** Actual root this owner was spawned at (`/scratch` or `/projects/<id>`). */
+  readonly root: string;
   /**
    * Token the owner uses to key its `/preview/<port>/` SW route (ADR-0148).
    * The page passes it to {@link wirePreviewBridge} when the dev server starts.
@@ -97,12 +101,10 @@ export interface WorkspaceOwnerHandle {
   readonly previewOwnerToken: string;
   /**
    * BroadcastChannel addressing key for the owner's snapshot + node_modules
-   * read bridges (ADR-0076/0080). The bridges are still port-keyed; the owner
-   * serves on this dedicated number (distinct from any dev-server port, so the
-   * per-run preview worker's channels never cross-talk). The page subscribes on
-   * it so the explorer reflects the owner tree before/after any vite run.
+   * read bridges (ADR-0076/0080). Scoped per owner so parallel same-origin
+   * playgrounds never hydrate each other's owner snapshots or project indexes.
    */
-  readonly snapshotPort: number;
+  readonly snapshotPort: OwnerBridgeKey;
   readonly closed: Promise<number | null>;
   /**
    * Open a pty session in the owner; resolves on `pty:ready`. An optional `seed`
@@ -182,13 +184,12 @@ export interface WorkspaceOwnerHandle {
 }
 
 /**
- * Dedicated BroadcastChannel port for the persistent owner's serve bridges.
- * High, fixed, and outside the template default-port range (vite 5174, express
- * 3210) so the owner's `vfs-snapshot.local:<n>` / `vfs-nodemods.local:<n>`
- * channels never collide with a per-run preview worker's. This is a synthetic
- * channel key, never a real network port (the owner runs no dev server).
+ * Dedicated BroadcastChannel key for one persistent owner's serve bridges. It is
+ * never a real network port; the key is embedded in the synthetic channel path.
  */
-const WORKSPACE_OWNER_SNAPSHOT_PORT = 59124;
+function ownerBridgeKey(workspaceId: string): OwnerBridgeKey {
+  return `owner:${workspaceId}:${createPreviewOwnerToken()}`;
+}
 
 export interface WorkspaceOwnerOptions {
   /** Workspace root (cwd of the owner + its shells). Defaults to `/workspace`. */
@@ -236,7 +237,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
   const slug = opts.slug ?? template.id;
   const starter = opts.starter ?? template.id;
   const workspaceId = opts.workspaceId ?? createPreviewOwnerToken();
-  const snapshotPort = WORKSPACE_OWNER_SNAPSHOT_PORT;
+  const snapshotPort = ownerBridgeKey(workspaceId);
   // Keys the page's `/preview/<port>/` SW route (ADR-0148/0150 P6b): the page
   // wires its side via `wirePreviewBridge`. The dev server runs in a supervised
   // child whose cross-realm route is keyed by port, not this token.
@@ -346,7 +347,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
     // ADR-0166 P1.9a: TS LSP responses the owner relayed back from its LS child.
     // Only RESPONSE envelopes are inbound here (the page sends requests); a stray
     // echoed request envelope is ignored.
-    if (isTsResponseMessage(message)) {
+    if (isTsResponseMessage(message) && tsLspOwnerMatches(message, snapshotPort)) {
       for (const cb of tsLspListeners) cb(message);
     }
   });
@@ -394,6 +395,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
 
   return {
     workspaceId,
+    root,
     previewOwnerToken,
     snapshotPort,
     closed,
@@ -436,7 +438,7 @@ export function startWorkspaceOwner(opts: WorkspaceOwnerOptions = {}): Workspace
       // No-op once the owner is gone — the LS child died with it; the page LS
       // client's per-request timeout rejects any in-flight call so nothing hangs.
       if (exited) return;
-      worker.send(message);
+      worker.send(stampTsLspOwner(message, snapshotPort));
     },
     onTsLsp(cb) {
       tsLspListeners.add(cb);

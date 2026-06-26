@@ -102,12 +102,19 @@ test.describe('Fullstack demo — Express + node:sqlite through the SW preview b
       return {
         status: r.status,
         contentType: r.headers.get('content-type') ?? '',
+        etag: r.headers.get('etag') ?? '',
         body: await r.text(),
       };
     }, PORT);
     expect(home.status).toBe(200);
     expect(home.contentType).toContain('text/html');
     expect(home.body).toContain('client.js');
+    // Regression: `express.static` derives the static file's ETag from the child
+    // remote-fs `fs.statSync` result via `etag(stat)`. A non-Node Stats (missing
+    // `ino`/`ctime`/Date `mtime`) makes etag throw "argument entity must be string,
+    // Buffer, or fs.Stats" → a 500 served as a broken preview. A present
+    // `W/"<size>-<mtime>"` ETag proves etag-over-Stats ran (child fs.stat round-trip holds).
+    expect(home.etag, 'static response must carry a Stats-derived ETag').toMatch(/^(W\/)?"[^"]+"$/);
 
     // POST through the SW lands in SQLite (WASM) and reads back.
     const created = await page.evaluate(async (port: number) => {

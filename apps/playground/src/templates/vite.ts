@@ -29,7 +29,9 @@ export const VITE_TEMPLATE: ViteProjectSpec = {
   id: 'vite',
   displayName: 'Vite dev server',
   runtime: 'vite',
-  install: { vite: '^5.4.0' },
+  // Default = Vite 7 (Rollup/esbuild). Vite 8's Rolldown WASI build is
+  // upstream-blocked, so it lives in the opt-in `vite8` preset.
+  install: { vite: '^7.0.0', '@rollup/wasm-node': '4.62.2' },
   // Regenerate with `pnpm snapshots:bake` after changing `install` (ADR-0135).
   bakedNodeModulesUrl: '/snapshots/vite-node-modules.json.gz',
   runtimeSpecifier: 'vite',
@@ -44,5 +46,7 @@ export const VITE_TEMPLATE: ViteProjectSpec = {
     host: true,
     allowedHosts: true,
   },
+  // Vite 7 uses the proven cross-realm native-HMR bridge; Vite 8 keeps HMR off
+  // separately until its Rolldown WASI socket path is re-proven (ADR-0161).
   hmr: { enabled: true },
 };

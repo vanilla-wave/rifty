@@ -1,5 +1,6 @@
 import type { FsSync } from '@riftydev/vfs';
 import { loadBuiltin } from '../builtins/index.ts';
+import { setSameRealmWorkerModuleImporter } from '../builtins/worker_threads.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 import { executeCjs } from './cjs.ts';
 import { ModuleLoadError } from './errors.ts';
@@ -68,6 +69,11 @@ export interface ModuleLoader {
 }
 
 const STUB_FROM_FILE_DEFAULT = '/__entry__';
+
+setSameRealmWorkerModuleImporter(async (vfs, script, cwd) => {
+  const loader = createModuleLoader(vfs, { cwd });
+  return loader.import(script, script);
+});
 
 /**
  * Load a `node:`-prefixed builtin or throw `MODULE_NOT_FOUND`. Shared by sync

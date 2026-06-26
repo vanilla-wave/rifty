@@ -77,3 +77,8 @@ implemented — call returns `E_NOSYS` and behaviour is documented.
 - Symlinks are intentionally absent from the VFS (M9 acceptance). Calls
   return `E_NOSYS` rather than synthesising fake link metadata; M12 will
   revisit when an actual use case appears.
+- `node:wasi` `new WASI({ version })` supports `'preview1'` only.
+  `'unstable'` (snapshot0 / `wasi_unstable`) is a Node-valid value rifty does
+  NOT implement — it loud-throws `NotImplementedError` rather than flatten to
+  preview1 under the wrong namespace (backlog
+  `runtime-wasi/wasi-unstable-version-support`).

@@ -685,6 +685,17 @@ function warnOptional(
   desc: { depName: string; depRange: string; parentName: string },
   err: unknown,
 ): void {
+  // A platform-native optional sibling (e.g. one of Rolldown's
+  // `@rolldown/binding-<platform>` packages) is EXPECTED to be skipped — rifty's
+  // JS+WASI runtime can never run a native binary (ADR-0051), and the matching
+  // wasm/WASI sibling is the one that installs. Phrase it as an expected skip so a
+  // pack of these does not read as a wall of install errors (it is not a failure).
+  if ((err as { code?: unknown })?.code === 'ENATIVEUNSUPPORTED') {
+    console.warn(
+      `npm: skipped optional native dependency ${desc.depName}@${desc.depRange} (expected — rifty runs JS+WASI only, ADR-0051)`,
+    );
+    return;
+  }
   const reason = err instanceof Error ? err.message : String(err);
   console.warn(
     `optional dependency ${desc.depName}@${desc.depRange} of ${desc.parentName} could not be installed: ${reason}`,
@@ -793,7 +804,7 @@ function createLockfileSource(lockfile: Lockfile): ResolutionSource {
 /**
  * Native-dependency gate (ADR-0051, D-005 source #6). rifty runs JS + WASI WASM
  * only — never `.node` addons or native binaries. A manifest pinning `cpu` to a
- * non-empty set that excludes `wasm` (and isn't a `!`-negation admitting
+ * non-empty set that excludes WASI/WebAssembly targets (and isn't a `!`-negation admitting
  * everything else) is a compiled artifact (`better-sqlite3`, esbuild's
  * `@esbuild/*` platform packages). `cpu` (not `os`) is the signal: pure-JS rarely
  * pins it, every real native does; `os`-only is a soft warning many JS packages
@@ -802,7 +813,7 @@ function createLockfileSource(lockfile: Lockfile): ResolutionSource {
 function assertNativeSupported(name: string, version: string, manifest: VersionManifest): void {
   const cpu = manifest.cpu;
   if (!Array.isArray(cpu) || cpu.length === 0) return;
-  if (cpu.includes('wasm') || cpu.some((c) => c.startsWith('!'))) return;
+  if (cpu.includes('wasm') || cpu.includes('wasm32') || cpu.some((c) => c.startsWith('!'))) return;
   throw Object.assign(
     new Error(
       `ENATIVEUNSUPPORTED: '${name}@${version}' ships a native binary (cpu: ${JSON.stringify(cpu)}, os: ${JSON.stringify(manifest.os ?? null)}) that cannot run in rifty's JS+WASI runtime, and no shadow-registry substitution is registered for it. See docs/public/compat/incompatible-packages.md.`,

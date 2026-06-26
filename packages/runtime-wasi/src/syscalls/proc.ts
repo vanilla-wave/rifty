@@ -103,8 +103,21 @@ export function procSyscalls(ctx: WasiCtx): WebAssembly.ModuleImports {
       return E_SUCCESS;
     },
     random_get: (ptr: number, len: number) => {
-      const bytes = ctx.bytes().subarray(ptr, ptr + len);
-      crypto.getRandomValues(bytes);
+      // `crypto.getRandomValues` REJECTS a view backed by a SharedArrayBuffer
+      // ("The provided ArrayBufferView value must not be shared") — and threaded
+      // WASI modules (e.g. Rolldown's `@rolldown/binding-wasm32-wasi` emnapi
+      // pthread build) run on shared wasm memory. Fill a PRIVATE buffer, then
+      // copy into wasm memory (typed-array `.set` is fine on shared buffers).
+      // Chunk by 65536 — `getRandomValues`'s per-call byte cap.
+      const mem = ctx.bytes();
+      const MAX = 65536;
+      const scratch = new Uint8Array(Math.min(len, MAX));
+      for (let off = 0; off < len; off += MAX) {
+        const n = Math.min(MAX, len - off);
+        const chunk = n === scratch.length ? scratch : scratch.subarray(0, n);
+        crypto.getRandomValues(chunk);
+        mem.set(chunk, ptr + off);
+      }
       return E_SUCCESS;
     },
   };

@@ -1,6 +1,7 @@
 import type { OwnerToPageFrame, PreviewPortEntry } from '../glue/pty-protocol.ts';
 
 const DEV_SID = 'dev-server';
+const PREVIEW_SID = 'preview';
 
 export interface PreviewRegistryDeps {
   readonly send: (frame: OwnerToPageFrame) => void;
@@ -8,6 +9,8 @@ export interface PreviewRegistryDeps {
 export interface PreviewRegistry {
   setDevServer(port: number): void;
   clearDevServer(): void;
+  setPreview(port: number): void;
+  clearPreview(): void;
   addNode(sid: string, ports: number[]): void;
   removeBySid(sid: string): void;
   /** Re-emit the current set (answers pty:preview-req). */
@@ -16,8 +19,9 @@ export interface PreviewRegistry {
 
 export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistry {
   // Insertion order matters for the switcher default (most-recent last): dev
-  // server keeps its slot; node entries append.
+  // server keeps its slot; production preview follows; node entries append.
   let dev: PreviewPortEntry | null = null;
+  let preview: PreviewPortEntry | null = null;
   const node = new Map<string, PreviewPortEntry[]>();
 
   // Dedup by port so a `node server.js` that picks the SAME port as the live dev
@@ -28,7 +32,11 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
   const snapshot = (): PreviewPortEntry[] => {
     const seen = new Set<number>();
     const out: PreviewPortEntry[] = [];
-    for (const entry of [...(dev ? [dev] : []), ...[...node.values()].flat()]) {
+    for (const entry of [
+      ...(dev ? [dev] : []),
+      ...(preview ? [preview] : []),
+      ...[...node.values()].flat(),
+    ]) {
       if (seen.has(entry.port)) continue;
       seen.add(entry.port);
       out.push(entry);
@@ -50,6 +58,20 @@ export function createPreviewRegistry(deps: PreviewRegistryDeps): PreviewRegistr
     },
     clearDevServer() {
       dev = null;
+      emit();
+    },
+    setPreview(port) {
+      preview = {
+        port,
+        url: `/preview/${port}/`,
+        label: 'vite preview',
+        source: 'preview',
+        sid: PREVIEW_SID,
+      };
+      emit();
+    },
+    clearPreview() {
+      preview = null;
       emit();
     },
     addNode(sid, ports) {

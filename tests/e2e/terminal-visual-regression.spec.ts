@@ -10,9 +10,15 @@ async function openShellTerminal(page: Page): Promise<void> {
 }
 
 async function runCommand(page: Page, command: string): Promise<void> {
+  const blocks = page.locator('.rf-terminal-slot[data-active="true"] .rf-terminal-blockrail__item');
+  const before = await blocks.count();
   await page.locator('[data-testid="terminal"]').click();
   await page.keyboard.type(command);
   await page.keyboard.press('Enter');
+  await expect(blocks).toHaveCount(before + 1, { timeout: 10_000 });
+  await expect(blocks.nth(before)).not.toHaveAttribute('data-status', 'running', {
+    timeout: 30_000,
+  });
 }
 
 interface PngImage {

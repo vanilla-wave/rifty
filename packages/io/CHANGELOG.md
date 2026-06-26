@@ -5,6 +5,20 @@
 ### Fixed
 
 - **`Buffer` variable-width int accessors + `copyBytesFrom` + `INSPECT_MAX_BYTES` now validate like Node** (PR #62 review hardening; parity RED-then-GREEN vs Node 24). `write{U}IntLE/BE` throw `ERR_OUT_OF_RANGE` for an out-of-range/negative `value` (was a SILENT `& 0xff` wrap — a wrong-answer stub); `read{U}IntLE/BE` + the writers throw `ERR_OUT_OF_RANGE` for an out-of-bounds / non-integer `offset` or `byteLength ∉ [1,6]` (was a bare DataView `RangeError` with no `.code`). `Buffer.copyBytesFrom(view, offset, length)` validates `offset`/`length` — `ERR_INVALID_ARG_TYPE` (non-number) / `ERR_OUT_OF_RANGE` (non-integer or negative) — instead of silently coercing a string/float/NaN/negative through the `Uint8Array` ctor. `buffer.INSPECT_MAX_BYTES = N` rejects a non-number (`ERR_INVALID_ARG_TYPE`) / negative (`ERR_OUT_OF_RANGE`). The pre-existing FIXED-width accessors (`readUInt8`/`writeUInt8`/…) share the same gap — tracked in `backlog/runtime-js/buffer-fixed-width-int-validation`.
+- **`Buffer.isBuffer` / `instanceof Buffer` are now bundling-robust (prod-only express crash).**
+  The production multi-worker bundle can DUPLICATE the `Buffer` class across chunks
+  (the global `Buffer` install vs the `node:buffer` builtin `require('buffer')`
+  resolves to — verified `globalThis.Buffer !== require('buffer').Buffer` in a prod
+  worker). `isBuffer` was `v instanceof Buffer`, class-identity-fragile across copies:
+  express's `res.json` does `Buffer.from(body)` (one copy) and hands it to `etag`, whose
+  `Buffer.isBuffer` (the other copy) returned `false` → `TypeError: argument entity must
+  be string, Buffer, or fs.Stats` → **500 on every `res.json`** (express-sqlite preset,
+  prod deploy only; the `pnpm dev` e2e never saw it). Now a shared
+  `Symbol.for('@riftydev/io.Buffer')` brand (set on the prototype) backs both
+  `Buffer.isBuffer` and a `[Symbol.hasInstance]` override (additionally requiring a
+  `Uint8Array` instance so a bare branded plain object is not mis-recognized), so any
+  rifty Buffer is recognized regardless of which class copy created it — the same brand
+  technique the `buffer` npm package uses via `_isBuffer`.
 
 ### Removed
 

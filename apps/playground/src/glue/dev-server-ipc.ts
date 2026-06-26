@@ -12,6 +12,11 @@ export interface DevReadyMessage {
   readonly type: 'rifty:dev-ready';
   readonly port: number;
 }
+/** Child→owner: vite preview is listening on `port` (adds the production preview slot). */
+export interface PreviewReadyMessage {
+  readonly type: 'rifty:preview-ready';
+  readonly port: number;
+}
 /** Child→owner: boot failed (rejects the controller boot → recoverable). */
 export interface DevErrorMessage {
   readonly type: 'rifty:dev-error';
@@ -21,7 +26,11 @@ export interface DevErrorMessage {
 export interface DevSnapshotMessage {
   readonly type: 'rifty:dev-snapshot';
 }
-export type DevServerChildMessage = DevReadyMessage | DevErrorMessage | DevSnapshotMessage;
+export type DevServerChildMessage =
+  | DevReadyMessage
+  | PreviewReadyMessage
+  | DevErrorMessage
+  | DevSnapshotMessage;
 
 /** Owner→child: an editor write — forward to the running server's HMR. */
 export interface DevFileChangedMessage {
@@ -37,6 +46,7 @@ export function isDevServerChildMessage(m: unknown): m is DevServerChildMessage 
   // on `/preview/NaN/`). error keeps a plain string check: an error frame MUST
   // reject boot even with a thin message, else dropping it would hang the boot.
   if (c.type === 'rifty:dev-ready') return Number.isInteger(c.port);
+  if (c.type === 'rifty:preview-ready') return Number.isInteger(c.port);
   if (c.type === 'rifty:dev-error') return typeof c.message === 'string';
   return c.type === 'rifty:dev-snapshot';
 }

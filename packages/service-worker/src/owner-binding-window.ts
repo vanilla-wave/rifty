@@ -76,11 +76,22 @@ export class FirstWindowOwnerBinding implements PreviewOwnerBinding {
     port: number,
   ): Promise<Client | null> {
     const owner = await this.#resolver.resolveOwner(scope, request, clientId);
-    if (clientId || !owner) return owner; // real id -> direct; or none at all
+    const registry = this.#registries.get(scope);
+    if (clientId || !owner) {
+      if (
+        owner &&
+        registry?.clientAdvertisedPorts(owner.id) &&
+        !registry.clientOwnsPort(owner.id, port)
+      ) {
+        return null;
+      }
+      return owner; // real id -> direct; or none at all
+    }
     // ADR-0160: port-key falsy-clientId preview traffic to the window owning it.
     const portRes = await this.#resolvePortWindows(scope, port);
     if (portRes.kind === 'unique') return portRes.client;
     if (portRes.kind === 'multiple') return null; // ambiguous -> 503 (ADR-0123 isolation, now windows)
+    if (registry?.clientAdvertisedPorts(owner.id)) return null;
     // 'none' -> legacy ready-preferring fallback (no-ports windows).
     const readiness = this.#readiness.get(scope);
     if (!readiness || readiness.isReady(owner.id) || readiness.isMismatched(owner.id)) {
@@ -98,7 +109,8 @@ export class FirstWindowOwnerBinding implements PreviewOwnerBinding {
       (windows.find(
         (candidate) =>
           (!('type' in candidate) || candidate.type === 'window') &&
-          readiness.isReady(candidate.id),
+          readiness.isReady(candidate.id) &&
+          !registry?.clientAdvertisedPorts(candidate.id),
       ) as Client | undefined) ?? owner
     );
   }

@@ -104,6 +104,12 @@ function createReadyClientsRegistry(logger = defaultLogger) {
       }
       return owners;
     },
+    clientAdvertisedPorts(id) {
+      return ready.has(id) && (portsByClient.get(id)?.size ?? 0) > 0;
+    },
+    clientOwnsPort(id, port) {
+      return ready.has(id) && (portsByClient.get(id)?.has(port) ?? false);
+    },
     waitForReady(id, timeoutMs) {
       if (mismatched.has(id)) return Promise.resolve("mismatch");
       if (ready.has(id)) return Promise.resolve("ready");
@@ -196,10 +202,17 @@ var FirstWindowOwnerBinding = class {
   }
   async resolveOwner(scope, request, clientId, port) {
     const owner = await this.#resolver.resolveOwner(scope, request, clientId);
-    if (clientId || !owner) return owner;
+    const registry = this.#registries.get(scope);
+    if (clientId || !owner) {
+      if (owner && registry?.clientAdvertisedPorts(owner.id) && !registry.clientOwnsPort(owner.id, port)) {
+        return null;
+      }
+      return owner;
+    }
     const portRes = await this.#resolvePortWindows(scope, port);
     if (portRes.kind === "unique") return portRes.client;
     if (portRes.kind === "multiple") return null;
+    if (registry?.clientAdvertisedPorts(owner.id)) return null;
     const readiness = this.#readiness.get(scope);
     if (!readiness || readiness.isReady(owner.id) || readiness.isMismatched(owner.id)) {
       return owner;
@@ -209,7 +222,7 @@ var FirstWindowOwnerBinding = class {
       includeUncontrolled: false
     });
     return windows.find(
-      (candidate) => (!("type" in candidate) || candidate.type === "window") && readiness.isReady(candidate.id)
+      (candidate) => (!("type" in candidate) || candidate.type === "window") && readiness.isReady(candidate.id) && !registry?.clientAdvertisedPorts(candidate.id)
     ) ?? owner;
   }
   // ADR-0160: which ready windows advertised `port`. 'unique' carries the only

@@ -39,8 +39,11 @@ import { setProcessCwd } from '@riftydev/runtime-js/builtins/process';
 import { type CommandContext, Shell } from '@riftydev/shell';
 import { isTsRequestMessage, isTsResponseMessage } from '@riftydev/ts-language-service/protocol';
 import { dirname, initBackend, normalizePath, syncMirror } from '@riftydev/vfs';
+import { installStampSatisfied } from '../glue/install-stamp.ts';
 import { serveNodeModulesReads } from '../glue/node-modules-port.ts';
 import { createNpmShellCommand } from '../glue/npm-shell-command.ts';
+import type { OwnerBridgeKey } from '../glue/owner-bridge-key.ts';
+import { clearProjectTree, ensureProjectDependencies } from '../glue/project-deps.ts';
 import { serveProjectIndex } from '../glue/project-index-port.ts';
 import { reconcileOwnerIndexAtBoot } from '../glue/project-index.ts';
 import {
@@ -51,7 +54,9 @@ import {
 } from '../glue/pty-protocol.ts';
 import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
+import { scopeActiveVfsToWorkspace } from '../glue/scoped-vfs.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
+import { stampTsLspOwner, tsLspOwnerMatches } from '../glue/ts-lsp-owner-scope.ts';
 import {
   collectSnapshot,
   publishVfsSnapshot,
@@ -66,13 +71,14 @@ import {
   resolveBootstrapConfig,
 } from '../templates/project-spec.ts';
 import { DEFAULT_TEMPLATE_ID, resolveProjectSpec } from '../templates/registry.ts';
-import { shouldCleanForDevBoot } from './dev-boot-clean.ts';
+import { shouldCleanForDevBootWithInstallState } from './dev-boot-clean.ts';
 import { flushSyncMirror } from './dev-server-boot.ts';
 import { createDevServerController } from './dev-server-controller.ts';
 import { resolveNodeEntry } from './node-entry-resolve.ts';
 import { createOwnerChildBinExecutor } from './owner-child-bin-executor.ts';
 import { createOwnerChildDevServer } from './owner-child-dev-server.ts';
 import { createOwnerChildNodeExecutor } from './owner-child-node-executor.ts';
+import { createOwnerChildViteCommand } from './owner-child-vite-command.ts';
 import { type PreviewRegistry, createPreviewRegistry } from './preview-registry.ts';
 import { createPtyServer } from './pty-server.ts';
 import {
@@ -82,6 +88,7 @@ import {
 } from './worker-runtime-globals.ts';
 
 const enc = new TextEncoder();
+const VITE_PREVIEW_PORT = 4173;
 const dec = new TextDecoder();
 
 registerNetBuiltins();
@@ -141,6 +148,54 @@ function seedProject(cfg: BootstrapConfig): void {
   }
 }
 
+/**
+ * INSTANT preset deps: restore the baked snapshot into the owner store — a
+ * RESTORE, never a network install (the dev line stays faithful: `vite` /
+ * `npm run dev` runs the program, it does not fetch deps). Idempotent via the slug
+ * install-stamp: a reload / an already-restored tree is a no-op (so a user's edits
+ * survive). On a STAMPLESS boot (fresh project / preset switch) it cleans any prior
+ * preset's tree and re-seeds THIS preset's package.json so the snapshot matches,
+ * then restores it. A missing/drifted snapshot leaves deps absent (vite fails
+ * loudly — re-bake needed), never a silent boot-time install. from-scratch deps do
+ * NOT come here: the explicit `npm install` boot step is their only source.
+ */
+async function restoreInstantDeps(
+  cfg: BootstrapConfig,
+  templateId: string,
+  slug: string,
+): Promise<void> {
+  if (!cfg.bakedNodeModulesUrl) return;
+  const vfs = new SyncMirrorVfs();
+  if (await installStampSatisfied(vfs, cfg.root, slug)) return;
+  const fs = syncMirror();
+  clearProjectTree(fs, cfg.root);
+  fs.writeFileSync(normalizePath(`${cfg.root}/package.json`), enc.encode(cfg.packageJson));
+  const result = await ensureProjectDependencies({
+    vfs,
+    fsSync: fs,
+    root: cfg.root,
+    templateId,
+    slug,
+    snapshotUrl: cfg.bakedNodeModulesUrl,
+    // No `install`: RESTORE-ONLY. Deps never arrive via a boot-time install.
+    flush: flushSyncMirror,
+    log: (line) => console.log(line.trimEnd()),
+  });
+  if (result.source === 'none') {
+    console.warn(
+      `[shell-owner/worker] instant snapshot unavailable/stale for ${templateId} — node_modules absent (re-run \`pnpm snapshots:bake\`)`,
+    );
+  }
+}
+
+/** `npm install` / `npm i` with NO package specs (install-all from package.json) —
+ *  the from-scratch boot's cold-install trigger. `npm install <pkg>` (an add) is not. */
+function isFullInstall(args: readonly string[]): boolean {
+  const sub = args[0];
+  if (sub !== 'install' && sub !== 'i') return false;
+  return args.slice(1).every((a) => a.startsWith('-'));
+}
+
 /** Apply the optional `RIFTY_RFV_ENTRY` override. */
 function withEntryOverride(spec: ProjectSpec, entryRel: string): ProjectSpec {
   if (entryRel === spec.entry.relativePath) return spec;
@@ -159,7 +214,7 @@ function withEntryOverride(spec: ProjectSpec, entryRel: string): ProjectSpec {
  */
 async function bootShellOwner(opts: {
   readonly cfg: BootstrapConfig;
-  readonly port: number;
+  readonly port: OwnerBridgeKey;
   readonly kernelIpc: KernelIpc;
   readonly publishSnapshot: () => void;
   readonly spec: ProjectSpec;
@@ -167,6 +222,8 @@ async function bootShellOwner(opts: {
   /** Active STARTER id (preset id) for the spawn — keys a synthesized scratch entry (ADR-0165 §4). */
   readonly starter: string;
   readonly fromScratch: boolean;
+  /** kernel worker URL — threaded to the dev-server child so Rolldown's WASI worker pool can spawn worker_threads children (Vite 8). */
+  readonly kernelWorkerUrl: string;
   /** node-entry bootstrap worker URL — the supervised child each CLI runs in (ADR-0150). */
   readonly nodeEntryWorkerUrl: string;
   /** dev-server child bootstrap worker URL — the supervised serve:true child the owner spawns (ADR-0150 P6b). */
@@ -177,6 +234,10 @@ async function bootShellOwner(opts: {
   const { cfg, port, kernelIpc, publishSnapshot, spec, slug, starter, fromScratch } = opts;
 
   seedProject(cfg);
+  // Instant presets: pre-seed node_modules from the baked snapshot into the owner
+  // store NOW, before any dev line (the full fs is already present). from-scratch
+  // deps come from the explicit `npm install` boot step — nothing to do here.
+  if (!fromScratch) await restoreInstantDeps(cfg, spec.id, slug);
   publishSnapshot();
   // Readiness handshake (ADR-0146, explorer reflects the owner tree): the page
   // replies-via-request rather than a blind retry-storm. Startup publish covers a
@@ -225,15 +286,18 @@ async function bootShellOwner(opts: {
     send,
     // v1: boot runs to completion; a Ctrl-C mid-boot takes effect right after
     // (the controller stops the server once `signal` aborts) — not mid-install.
-    boot: (signal, devLog) => {
-      if (
-        shouldCleanForDevBoot({
-          lastTemplateId: lastDevTemplateId,
-          lastRoot: lastDevRoot,
-          nextTemplateId: devSpec.id,
-          nextRoot: devCfg.root,
-        })
-      ) {
+    boot: async (signal, devLog) => {
+      const cleanForSwitch = shouldCleanForDevBootWithInstallState({
+        lastTemplateId: lastDevTemplateId,
+        lastRoot: lastDevRoot,
+        nextTemplateId: devSpec.id,
+        nextRoot: devCfg.root,
+        fromScratch: devFromScratch,
+        installStampSatisfied:
+          devFromScratch &&
+          (await installStampSatisfied(new SyncMirrorVfs(), devCfg.root, devSlug)) !== null,
+      });
+      if (cleanForSwitch) {
         // Root OR template switched (ADR-0165 §5): a fresh worker per preset used
         // to keep node_modules clean; the ONE persistent owner accumulates the
         // prior project's deps, which trips the new template's lockfile coverage
@@ -255,6 +319,11 @@ async function bootShellOwner(opts: {
       }
       lastDevTemplateId = devSpec.id;
       lastDevRoot = devCfg.root;
+      // instant: restore the baked snapshot before booting (stamp-checked, no-op if
+      // the owner pre-seed / a prior boot already did it; after a root/template
+      // clean it re-seeds package.json + node_modules for the active root). from-scratch
+      // deps come SOLELY from the explicit `npm install` boot step.
+      if (!devFromScratch) await restoreInstantDeps(devCfg, devSpec.id, devSlug);
       // ADR-0150 P6b: spawn the dev server in a supervised serve:true child that
       // reads the owner store over fs.* RPC. The owner stays a free async
       // supervisor. The driver resolves when the child reports listening; stop()
@@ -302,7 +371,16 @@ async function bootShellOwner(opts: {
   // ADR-0150 P6b: the dev server also runs in a supervised serve:true child that
   // reads the owner store over fs.* RPC. Built once; the boot closure spawns a
   // fresh child per run (re-listen-on-restart), the controller's stop() kills it.
-  const devServerChild = createOwnerChildDevServer(opts.devServerWorkerUrl);
+  const devServerChild = createOwnerChildDevServer(opts.devServerWorkerUrl, {
+    // Thread the recursive worker URLs so the dev-server child can spawn
+    // Rolldown's WASI worker_threads pool (Vite 8).
+    kernelWorkerUrl: opts.kernelWorkerUrl,
+    nodeEntryWorkerUrl: opts.nodeEntryWorkerUrl,
+  });
+  const viteCommand = createOwnerChildViteCommand(opts.devServerWorkerUrl, {
+    kernelWorkerUrl: opts.kernelWorkerUrl,
+    nodeEntryWorkerUrl: opts.nodeEntryWorkerUrl,
+  });
   // ADR-0155: `node <file>` runs in a supervised child like the bin executor, but
   // a server entry (it called `listen()`) posts its ports back so the owner adds a
   // preview slot. A monotonic run-seq keys each run's registry entries (teardown
@@ -323,6 +401,53 @@ async function bootShellOwner(opts: {
       ctx.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
       return 1;
     }
+  };
+
+  const rejectProductionCommandForVite8 = (sub: string, ctx: CommandContext): boolean => {
+    if (devSpec.id !== 'vite8') return false;
+    ctx.stderr.write(
+      `vite: \`vite ${sub}\` is upstream-blocked for the vite8 preset (Rolldown WASI build/preview); use the default Vite 7 preset for production build/preview.\n`,
+    );
+    return true;
+  };
+
+  const rejectUnsupportedViteArgs = (
+    sub: string,
+    args: readonly string[],
+    ctx: CommandContext,
+  ): boolean => {
+    if (args.length <= 1) return false;
+    ctx.stderr.write(
+      `vite: \`vite ${sub}\` arguments are not supported in rifty yet; run exactly \`vite ${sub}\`.\n`,
+    );
+    return true;
+  };
+
+  const viteChildParams = (port: number) => ({
+    templateId: devSpec.id,
+    slug: devSlug,
+    setup: devFromScratch ? ('from-scratch' as const) : ('instant' as const),
+    root: devCfg.root,
+    port,
+  });
+
+  const runBuild = async (ctx: CommandContext): Promise<number> => {
+    if (rejectProductionCommandForVite8('build', ctx)) return 1;
+    const code = await viteCommand.build(viteChildParams(devCfg.port), ctx);
+    if (code === 0) {
+      await flushSyncMirror();
+      publishSnapshot();
+    }
+    return code;
+  };
+
+  const runPreview = async (ctx: CommandContext): Promise<number> => {
+    if (rejectProductionCommandForVite8('preview', ctx)) return 1;
+    const code = await viteCommand.preview(viteChildParams(VITE_PREVIEW_PORT), ctx, {
+      onReady: (previewPort) => previews.setPreview(previewPort),
+      onExit: () => previews.clearPreview(),
+    });
+    return ctx.signal?.aborted ? 130 : code;
   };
 
   const npmCommand = createNpmShellCommand({
@@ -362,11 +487,50 @@ async function bootShellOwner(opts: {
       execBin: ownerBinExecutor,
     });
     shell.registerCommand('npm', async (args, ctx) => {
+      // Faithful from-scratch: the FIRST `npm install` of a from-scratch preset (no
+      // slug stamp yet) starts CLEAN — clear any prior preset's node_modules +
+      // lockfile and re-seed THIS preset's package.json — so it is a real COLD
+      // install, not an EBROKENLOCK over a foreign (e.g. instant-snapshot) tree. A
+      // reload (slug stamped) installs over the existing tree (npm-faithful no-op),
+      // preserving the user's edits. Runs in the owner, ATOMIC with the install (the
+      // `npm install && <dev>` boot line never races it).
+      if (devFromScratch && isFullInstall(args)) {
+        const stamped = await installStampSatisfied(new SyncMirrorVfs(), devCfg.root, devSlug);
+        if (!stamped) {
+          const fs = syncMirror();
+          clearProjectTree(fs, devCfg.root);
+          fs.writeFileSync(
+            normalizePath(`${devCfg.root}/package.json`),
+            enc.encode(devCfg.packageJson),
+          );
+        }
+      }
       const code = await npmCommand(args, ctx);
       publishSnapshot(); // node_modules may have changed — refresh the page's view
       return code;
     });
-    shell.registerCommand('vite', (_args, ctx) => runDevServer(ctx));
+    // ADR-0173: Vite 7 build/preview use real production handlers. Vite 8
+    // production remains loud-rejected in rejectProductionCommandForVite8();
+    // optimize stays out of scope for both templates.
+    // TODO(backlog: playground/vite8-production-build-preview)
+    shell.registerCommand('vite', (args, ctx) => {
+      const sub = args[0];
+      if (sub === 'build') {
+        if (rejectUnsupportedViteArgs(sub, args, ctx)) return Promise.resolve(1);
+        return runBuild(ctx);
+      }
+      if (sub === 'preview') {
+        if (rejectUnsupportedViteArgs(sub, args, ctx)) return Promise.resolve(1);
+        return runPreview(ctx);
+      }
+      if (sub === 'optimize') {
+        ctx.stderr.write(
+          `vite: \`vite ${sub}\` is not supported yet — dependency optimization is out of scope for the rifty sandbox. Run \`vite\`, \`vite build\`, or \`vite preview\`.\n`,
+        );
+        return Promise.resolve(1);
+      }
+      return runDevServer(ctx);
+    });
     // `node <file> [args]` (ADR-0155): resolve the entry against the owner store,
     // then run it in a supervised child. A long-running server child registers a
     // preview slot via `onListening`; the slot is dropped on exit. A clean Node
@@ -429,7 +593,7 @@ async function bootShellOwner(opts: {
     }
     // LS child → owner → page: forward only RESPONSE envelopes back to the page.
     h.on('message', (response: unknown) => {
-      if (isTsResponseMessage(response)) kernelIpc.send?.(response);
+      if (isTsResponseMessage(response)) kernelIpc.send?.(stampTsLspOwner(response, port));
     });
     // A crashed LS child must not leave the page hanging: drop the handle so the
     // next request respawns. In-flight page requests reject on their own timeout
@@ -462,7 +626,7 @@ async function bootShellOwner(opts: {
     }
     // ADR-0166 P1.9a: a page→LS request envelope — relay to the LS child (lazy
     // spawn on first frame). Only REQUEST envelopes are inbound from the page.
-    if (isTsRequestMessage(message)) {
+    if (isTsRequestMessage(message) && tsLspOwnerMatches(message, port)) {
       relayTsLspRequest(message);
     }
   });
@@ -518,7 +682,7 @@ async function bootstrap(): Promise<void> {
   // global the swap could never touch.
   // TODO(backlog: runtime-js/worker-entry-process-globals-side-effect)
   const env = { ...(readKernelProcessSpec()?.env ?? globalThis.process.env) };
-  const port = Number.parseInt(env.RIFTY_RFV_PORT ?? '5174', 10);
+  const port = env.RIFTY_RFV_PORT ?? 'owner:default';
   // ADR-0165 §4: the active root is `/scratch` or `/projects/<id>` — the page
   // always sets RIFTY_RFV_ROOT via rootForId(activeId); the fallback is the
   // default scratch root (the legacy single `/workspace` no longer exists).
@@ -543,9 +707,8 @@ async function bootstrap(): Promise<void> {
   // the orchestrator defaults it to the template's own entry).
   const effectiveSpec = withEntryOverride(spec, env.RIFTY_RFV_ENTRY ?? spec.entry.relativePath);
   // ADR-0148: `port` (RIFTY_RFV_PORT) keys the owner's snapshot/nm/vfs-write
-  // bridges (a dedicated synthetic port, e.g. 59124). The co-resident dev server
-  // listens on the template's own port (`cfg.port`) — a DISTINCT key so vite +
-  // its preview bridges never collide with the owner serve bridges.
+  // bridges. It is a synthetic owner bridge key, not a real network port. The
+  // co-resident dev server listens on the template's own port (`cfg.port`).
   const cfg = resolveBootstrapConfig(effectiveSpec, effectiveSpec.defaultPort, root);
 
   const kernelIpc = installRuntimeGlobals();
@@ -567,7 +730,8 @@ async function bootstrap(): Promise<void> {
   // boot.ts). seedProject is idempotent (`if !exists`) → the persisted tree stands.
   try {
     const backend = await initBackend();
-    log(`[shell-owner/worker] VFS backend: ${backend}\n`);
+    const prefix = scopeActiveVfsToWorkspace(env.RIFTY_WORKSPACE_ID ?? 'default');
+    log(`[shell-owner/worker] VFS backend: ${backend} (${prefix})\n`);
   } catch (err) {
     log(
       `[shell-owner/worker] OPFS init failed, using in-memory (no persistence): ${
@@ -617,6 +781,7 @@ async function bootstrap(): Promise<void> {
     slug,
     starter,
     fromScratch,
+    kernelWorkerUrl,
     nodeEntryWorkerUrl,
     devServerWorkerUrl,
     tsLspWorkerUrl,

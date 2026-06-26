@@ -1,9 +1,28 @@
 # ADR 0135: Sandbox setup kinds: instant vs from-scratch
 
-Status: Accepted
+Status: Accepted (corrected 2026-06-21 — Node-faithful boot)
 Date: 2026-06
 
 > TL;DR: presets split into `setup: 'instant' | 'from-scratch'`. BOTH boot the template's dev line; the difference lives in the WORKER realm. Instant restores a BAKED node_modules snapshot (static asset) on the first-ever boot, later boots skip via a stamp. From-scratch skips the snapshot and runs a real `install()` IN THE WORKER, streaming each package to the terminal (per-package lines, ADR-0134), before the dev server starts — because only the worker realm owns the OPFS tree the preview is served from.
+
+> **Correction 2026-06-21 (Node-faithful boot).** The dev line (`vite` / `npm run dev`)
+> NO LONGER installs/restores as a side effect — real npm `npm run dev` runs the
+> program, it does not fetch deps; a missing `node_modules` is a loud
+> `Cannot find module`. `node_modules` is now a PRECONDITION, settled per setup kind
+> BEFORE the dev line:
+> - **from-scratch** boots `cd <root> && npm install && <dev>` — an EXPLICIT, honest
+>   `npm install` (owner-realm shell command) is the ONLY dep source; on its first run
+>   for a fresh preset (stampless slug) it clears any prior preset's tree so it is a
+>   real cold install (no EBROKENLOCK). A bare `<dev>` without it fails faithfully.
+> - **instant** deps are PRE-SEEDED from the baked snapshot into the owner store at
+>   project-seed (`restoreInstantDeps`) — a RESTORE, never a network install; the dev
+>   line just runs. Stamp-idempotent; on a switch it clears + re-seeds package.json so
+>   the snapshot matches.
+> So decision points 2-3 are superseded: boot lines now differ by setup kind
+> (`presetBootLines`), the from-scratch `install()` moved out of the worker's
+> dev-server boot into the explicit `npm install` command, and the instant restore
+> moved to owner-seed. `RIFTY_RFV_SETUP` no longer drives a dev-line install. The
+> slug-stamp + baked-snapshot machinery (points 4-7) stands.
 
 ## Context
 

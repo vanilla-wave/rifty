@@ -10,9 +10,9 @@
  *
  *   - `bakedOverrides` — full-package substitutions consumed by the npm
  *     installer's override hook (D-005).
- *   - `esbuildShimFiles` / `rollupShimFiles` — VFS-path-keyed source bundles
- *     overlaid by the playground after install, replacing packages whose
- *     native binaries cannot run in a browser realm.
+ *   - `browserShimFileSets` / `collectBrowserShimFiles` — typed VFS-path-keyed
+ *     source bundles overlaid by the playground after install, replacing
+ *     packages whose native binaries cannot run in a browser realm.
  *
  * The `OverrideMap` type is structurally identical to the one re-exported
  * from `@riftydev/npm-client` (an open `Record<string, string>`). It is declared
@@ -39,6 +39,9 @@ export const bakedOverrides: OverrideMap = {
   // Real esbuild's registry package runs a native-binary postinstall. The
   // playground overlays node_modules/esbuild with a browser-safe shim later.
   esbuild: '@esbuild/wasi-preview1@0.28.0',
+  // Vite 8 imports lightningcss lazily. The native package loads `.node`
+  // bindings; lightningcss-wasm ships the same NAPI surface backed by WASM.
+  lightningcss: 'lightningcss-wasm@1.32.0',
 };
 
 const SHIM_ESBUILD_VERSION = '0.21.5';
@@ -163,6 +166,146 @@ export const esbuildShimFiles: Record<string, string> = {
   '/workspace/node_modules/esbuild/lib/main.js': SHIM_ESBUILD_SOURCE,
 };
 
+const SHIM_ESBUILD_BUILD_SOURCE = `// rifty: esbuild shim — BUILD path, real async WASI transform bridge
+const NotImplementedError = class extends Error {
+  constructor(feature, hint) {
+    super('Not implemented: ' + feature + (hint ? ' (' + hint + ')' : ''));
+    this.name = 'NotImplementedError';
+    this.feature = feature;
+  }
+};
+
+export const version = ${JSON.stringify(SHIM_ESBUILD_VERSION)};
+
+export async function initialize(_opts) {
+  return undefined;
+}
+
+function decodeInput(input) {
+  return typeof input === 'string' ? input : new TextDecoder().decode(input);
+}
+
+function transformBridge() {
+  const bridge = globalThis.__riftyEsbuildTransform;
+  if (typeof bridge !== 'function') {
+    throw new NotImplementedError('esbuild.transform', 'rifty build WASI bridge not installed');
+  }
+  return bridge;
+}
+
+export async function transform(input, options = {}) {
+  const result = await transformBridge()(decodeInput(input), options);
+  return {
+    code: result.code,
+    map: result.map,
+    warnings: result.warnings || [],
+    legalComments: '',
+    mangleCache: undefined,
+  };
+}
+
+export function transformSync(_input, _options = {}) {
+  throw new NotImplementedError('esbuild.transformSync', 'rifty esbuild WASI bridge is async');
+}
+
+export async function build(_opts) {
+  throw new NotImplementedError('esbuild.build', 'use vite build with the transform bridge');
+}
+
+export function buildSync(_opts) {
+  throw new NotImplementedError('esbuild.buildSync', 'use vite build with the transform bridge');
+}
+
+export async function context(_opts) {
+  throw new NotImplementedError('esbuild.context', 'vite production build does not use dep pre-bundling here');
+}
+
+export async function analyzeMetafile(_metafile, _opts) {
+  return '';
+}
+
+export function analyzeMetafileSync(_metafile, _opts) {
+  return '';
+}
+
+export async function formatMessages(messages, _opts) {
+  return messages.map((m) => (m && m.text) || '');
+}
+
+export function formatMessagesSync(messages, _opts) {
+  return messages.map((m) => (m && m.text) || '');
+}
+
+export const default_ = {
+  version,
+  transform,
+  transformSync,
+  build,
+  buildSync,
+  context,
+  analyzeMetafile,
+  analyzeMetafileSync,
+  formatMessages,
+  formatMessagesSync,
+  initialize,
+};
+
+export { default_ as default };
+`;
+
+export const esbuildBuildShimFiles: Record<string, string> = {
+  '/workspace/node_modules/esbuild/package.json': SHIM_ESBUILD_PACKAGE_JSON,
+  '/workspace/node_modules/esbuild/lib/main.js': SHIM_ESBUILD_BUILD_SOURCE,
+};
+
+const SHIM_LIGHTNINGCSS_VERSION = '1.32.0';
+
+const SHIM_LIGHTNINGCSS_PACKAGE_JSON = JSON.stringify(
+  {
+    name: 'lightningcss',
+    version: SHIM_LIGHTNINGCSS_VERSION,
+    main: './index.cjs',
+    module: './index.mjs',
+    type: 'module',
+    exports: {
+      '.': {
+        import: './index.mjs',
+        require: './index.cjs',
+        default: './index.mjs',
+      },
+    },
+  },
+  null,
+  2,
+);
+
+const SHIM_LIGHTNINGCSS_ESM = `export {
+  Features,
+  browserslistToTargets,
+  bundle,
+  bundleAsync,
+  composeVisitors,
+  transform,
+  transformStyleAttribute,
+} from 'lightningcss-wasm';
+
+import * as lightningcss from 'lightningcss-wasm';
+export default lightningcss;
+`;
+
+const SHIM_LIGHTNINGCSS_CJS = `module.exports = require('lightningcss-wasm');
+`;
+
+/**
+ * VFS overlay for the `lightningcss` npm package. Vite imports the native
+ * package name, while the actual implementation comes from lightningcss-wasm.
+ */
+export const lightningcssShimFiles: Record<string, string> = {
+  '/workspace/node_modules/lightningcss/package.json': SHIM_LIGHTNINGCSS_PACKAGE_JSON,
+  '/workspace/node_modules/lightningcss/index.mjs': SHIM_LIGHTNINGCSS_ESM,
+  '/workspace/node_modules/lightningcss/index.cjs': SHIM_LIGHTNINGCSS_CJS,
+};
+
 const ROLLUP_NATIVE_SHIM = `// rifty: rollup native bindings shim
 function emptyProgram(code) {
   return {
@@ -223,4 +366,48 @@ exports.xxhashBase16 = function xxhashBase16(input) {
  */
 export const rollupShimFiles: Record<string, string> = {
   '/workspace/node_modules/rollup/dist/native.js': ROLLUP_NATIVE_SHIM,
+};
+
+const ROLLUP_NATIVE_BUILD_SHIM = `// rifty: rollup native bindings shim — BUILD path, real WASM parser
+const native = require('@rollup/wasm-node/dist/native.js');
+
+exports.parse = native.parse;
+exports.parseAsync = native.parseAsync;
+exports.xxhashBase64Url = native.xxhashBase64Url;
+exports.xxhashBase36 = native.xxhashBase36;
+exports.xxhashBase16 = native.xxhashBase16;
+`;
+
+/**
+ * Build-only Rollup overlay. Production build needs the real serialized AST
+ * buffer; the dev path keeps the cheap stub above.
+ */
+export const rollupBuildShimFiles: Record<string, string> = {
+  '/workspace/node_modules/rollup/dist/native.js': ROLLUP_NATIVE_BUILD_SHIM,
+};
+
+export interface BrowserShimFileSet {
+  readonly packageName: string;
+  readonly files: Record<string, string>;
+}
+
+export const browserShimFileSets = {
+  esbuild: { packageName: 'esbuild', files: esbuildShimFiles },
+  lightningcss: { packageName: 'lightningcss', files: lightningcssShimFiles },
+  rollup: { packageName: 'rollup', files: rollupShimFiles },
+} satisfies Record<string, BrowserShimFileSet>;
+
+export type BrowserShimName = keyof typeof browserShimFileSets;
+
+export function collectBrowserShimFiles(names: readonly BrowserShimName[]): Record<string, string> {
+  const files: Record<string, string> = {};
+  for (const name of names) Object.assign(files, browserShimFileSets[name].files);
+  return files;
+}
+
+export const viteBrowserShimFiles = collectBrowserShimFiles(['esbuild', 'lightningcss', 'rollup']);
+export const viteBuildShimFiles: Record<string, string> = {
+  ...esbuildBuildShimFiles,
+  ...lightningcssShimFiles,
+  ...rollupBuildShimFiles,
 };

@@ -21,7 +21,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./esbuild-binding": "./src/esbuild-binding.ts"
+    "./esbuild-binding": "./src/esbuild-binding.ts",
+    "./esbuild-transform": "./src/esbuild-transform.ts"
   },
   "files": ["dist", "CHANGELOG.md"],
   "publishConfig": {
@@ -33,6 +34,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
+      },
+      "./esbuild-transform": {
+        "types": "./dist/esbuild-transform.d.ts",
+        "import": "./dist/esbuild-transform.js"
       }
     }
   },

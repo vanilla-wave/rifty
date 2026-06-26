@@ -14,7 +14,8 @@ import { type FileDescriptor, type WasiCtx, WasiExit } from './syscalls/shared.t
 
 export { WasiExit };
 
-interface WasiOptions {
+export interface WasiOptions {
+  version?: 'preview1' | string;
   args?: string[];
   env?: Record<string, string>;
   preopens?: Record<string, string>;
@@ -100,9 +101,30 @@ export class Wasi {
     };
   }
 
+  get wasiImport(): WebAssembly.ModuleImports {
+    return this.imports.wasi_snapshot_preview1 as WebAssembly.ModuleImports;
+  }
+
+  getImportObject(): WebAssembly.Imports {
+    return { wasi_snapshot_preview1: this.wasiImport };
+  }
+
+  initialize(instance: WebAssembly.Instance): void {
+    this.bindExportedMemory(instance);
+    const start = instance.exports._start;
+    if (typeof start === 'function') {
+      throw new Error('WASI.initialize requires a module without _start export');
+    }
+    const initialize = instance.exports._initialize;
+    if (initialize !== undefined && typeof initialize !== 'function') {
+      throw new Error('WASI module _initialize export is not callable');
+    }
+    if (typeof initialize === 'function') initialize();
+  }
+
   /** Convenience: instantiate and call `_start`. Returns the exit code. */
   start(instance: WebAssembly.Instance): number {
-    this.memory = instance.exports.memory as WebAssembly.Memory;
+    this.bindExportedMemory(instance);
     const start = instance.exports._start as (() => void) | undefined;
     if (!start) throw new Error('WASI module has no _start export');
     try {
@@ -127,6 +149,14 @@ export class Wasi {
   private memBytes(): Uint8Array {
     if (!this.memory) throw new Error('WASI: memory not set');
     return new Uint8Array(this.memory.buffer);
+  }
+  private bindExportedMemory(instance: WebAssembly.Instance): void {
+    const memory = instance.exports.memory;
+    if (memory === undefined) return;
+    if (!(memory instanceof WebAssembly.Memory)) {
+      throw new Error('WASI module memory export is not WebAssembly.Memory');
+    }
+    this.memory = memory;
   }
 }
 
