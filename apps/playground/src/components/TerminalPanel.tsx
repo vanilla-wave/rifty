@@ -2,8 +2,6 @@ import {
   RiftyTerminal,
   type TerminalAutocompleteState,
   type TerminalBusyInputEvent,
-  type TerminalCommandBlock,
-  type TerminalCommandBlockRailItem,
   type TerminalCompleter,
   type TerminalEditState,
   type TerminalGhostSuggestionProvider,
@@ -14,8 +12,6 @@ import {
   type TerminalRawInput,
   type TerminalRewriteRule,
   applyAutocompleteItem,
-  commandBlockAtViewport,
-  commandBlockRailItems,
   createAutocompleteState,
   makeTerminalHtmlExport,
   moveAutocompleteIndex,
@@ -84,13 +80,10 @@ export function TerminalPanel(props: {
   const [historyQuery, setHistoryQuery] = createSignal('');
   const [historyIndex, setHistoryIndex] = createSignal(0);
   const [quickFix, setQuickFix] = createSignal<TerminalQuickFix | null>(null);
-  const [commandBlocks, setCommandBlocks] = createSignal<readonly TerminalCommandBlock[]>([]);
-  const [viewportLine, setViewportLine] = createSignal(0);
   const [editState, setEditState] = createSignal<TerminalEditState>({ line: '', cursor: 0 });
   const [autocomplete, setAutocomplete] = createSignal<TerminalAutocompleteState | null>(null);
   const [terminalBuffer, setTerminalBuffer] = createSignal('');
   const [busyNotice, setBusyNotice] = createSignal(false);
-  const [previewBlockId, setPreviewBlockId] = createSignal<number | null>(null);
   let stderrTail = '';
   let lastSubmittedLine = '';
   let completionSeq = 0;
@@ -111,18 +104,6 @@ export function TerminalPanel(props: {
     if (query.length === 0) return items.slice(0, 8);
     return items.filter((item) => item.label.toLowerCase().includes(query)).slice(0, 8);
   });
-  const stickyCommand = createMemo(() => {
-    const block = commandBlockAtViewport(commandBlocks(), viewportLine());
-    return block?.command.trim() ? block : null;
-  });
-  const commandRailItems = createMemo<readonly TerminalCommandBlockRailItem[]>(() =>
-    commandBlockRailItems(commandBlocks(), viewportLine()),
-  );
-  const previewBlock = createMemo(() => {
-    const id = previewBlockId();
-    if (id == null) return null;
-    return commandRailItems().find((item) => item.id === id) ?? null;
-  });
   const historyItems = createMemo(() =>
     searchTerminalHistory(props.historyRecords?.() ?? [], historyQuery(), 12),
   );
@@ -130,14 +111,6 @@ export function TerminalPanel(props: {
   function copyTerminalText(): void {
     try {
       const text = term?.serializeText({ excludeModes: true }) ?? '';
-      void globalThis.navigator?.clipboard?.writeText(text)?.catch(() => {});
-    } catch {
-      /* best effort */
-    }
-  }
-
-  function copyText(text: string): void {
-    try {
       void globalThis.navigator?.clipboard?.writeText(text)?.catch(() => {});
     } catch {
       /* best effort */
@@ -357,23 +330,18 @@ export function TerminalPanel(props: {
         if (autocomplete()) setAutocomplete(null);
         scheduleTerminalBufferRefresh();
       },
-      onViewportChange: setViewportLine,
-      onCommandBlocksChange: (blocks) => {
-        setCommandBlocks([...blocks]);
-        scheduleTerminalBufferRefresh();
-      },
       onBusyInput: showBusyNotice,
       theme: preferredTerminalTheme(),
       fontFamily: MONO_FONT_STACK,
-      fontSize: 12,
-      lineHeight: 19 / 12, // handoff: terminal type 12px / 19px
+      fontSize: 13,
+      lineHeight: 18 / 13,
+      cursorStyle: 'bar',
       webLinks: props.onLink ? { onLink: props.onLink } : undefined,
       webgl: navigator.webdriver ? false : undefined,
       onSignal: props.onSignal ? () => props.onSignal?.() : undefined,
     });
     disposeTheme = watchPreferredTerminalTheme(globalThis, (theme) => term?.setTheme(theme));
     term.mount(container);
-    setViewportLine(term.getViewportLine());
     scheduleTerminalBufferRefresh();
     props.attach((chunk, stream) => {
       term?.write(chunk, stream);
@@ -667,112 +635,10 @@ export function TerminalPanel(props: {
           </div>
         )}
       </Show>
-      <Show when={commandRailItems().length > 0}>
-        <div class="rf-terminal-blockrail" aria-label="Command blocks">
-          <For each={commandRailItems()}>
-            {(item) => (
-              <button
-                type="button"
-                class="rf-terminal-blockrail__item"
-                data-active={item.active}
-                data-status={item.status}
-                title={item.title}
-                aria-label={item.title}
-                aria-describedby="terminal-block-preview"
-                onFocus={() => setPreviewBlockId(item.id)}
-                onBlur={() => setPreviewBlockId((id) => (id === item.id ? null : id))}
-                onMouseEnter={() => setPreviewBlockId(item.id)}
-                onMouseLeave={() => setPreviewBlockId((id) => (id === item.id ? null : id))}
-                onKeyDown={(event) => {
-                  if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-                    event.preventDefault();
-                    const buttons = Array.from(
-                      event.currentTarget.parentElement?.querySelectorAll('button') ?? [],
-                    );
-                    const idx = buttons.indexOf(event.currentTarget);
-                    const delta = event.key === 'ArrowUp' ? -1 : 1;
-                    buttons.at((idx + delta + buttons.length) % buttons.length)?.focus();
-                  }
-                  if (event.key === 'c') {
-                    event.preventDefault();
-                    copyText(item.command);
-                  }
-                  if (event.key === 'o') {
-                    event.preventDefault();
-                    term?.copyBlockOutput(item.id);
-                  }
-                }}
-                onClick={() => term?.scrollToBlock(item.id)}
-              />
-            )}
-          </For>
-        </div>
-      </Show>
-      <Show when={previewBlock()}>
-        {(item) => (
-          <div class="rf-terminal-blockpreview" id="terminal-block-preview">
-            <span class="rf-terminal-blockpreview__status" data-status={item().status} />
-            <span class="rf-terminal-blockpreview__cmd">{item().command}</span>
-            <button
-              type="button"
-              class="rf-terminal-blockpreview__button"
-              aria-label="Jump to command block"
-              title="Jump to command block"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => term?.scrollToBlock(item().id)}
-            >
-              <Icon name="corner-down-left" size={13} />
-            </button>
-            <button
-              type="button"
-              class="rf-terminal-blockpreview__button"
-              aria-label="Copy command"
-              title="Copy command"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => copyText(item().command)}
-            >
-              <Icon name="copy" size={13} />
-            </button>
-            <button
-              type="button"
-              class="rf-terminal-blockpreview__button"
-              aria-label="Copy command block output"
-              title="Copy command block output"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => term?.copyBlockOutput(item().id)}
-            >
-              <Icon name="file-output" size={13} />
-            </button>
-          </div>
-        )}
-      </Show>
       <Show when={busyNotice()}>
         <output class="rf-terminal-busy" data-testid="terminal-busy-notice">
           Running command owns stdin · Ctrl+C interrupts
         </output>
-      </Show>
-      <Show when={stickyCommand()}>
-        {(block) => (
-          <div class="rf-terminal-sticky">
-            <button
-              type="button"
-              class="rf-terminal-sticky__jump"
-              onClick={() => term?.scrollToBlock(block().id)}
-            >
-              <span class="rf-terminal-sticky__mark" data-exit={block().exitCode ?? 'running'} />
-              <span class="rf-terminal-sticky__cmd">{block().command}</span>
-            </button>
-            <button
-              type="button"
-              class="rf-terminal-sticky__copy"
-              aria-label="Copy command block output"
-              title="Copy command block output"
-              onClick={() => term?.copyBlockOutput(block().id)}
-            >
-              <Icon name="copy" size={13} />
-            </button>
-          </div>
-        )}
       </Show>
       <Show when={quickFix()}>
         {(fix) => (

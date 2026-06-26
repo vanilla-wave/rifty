@@ -17,7 +17,7 @@
  */
 import { type Page, expect, test } from '@playwright/test';
 import { readWorkspaceText } from './helpers/opfs.ts';
-import { expectTerminalContains, runTerminalLine } from './helpers/playground.ts';
+import { expectTerminalContains, runTerminalLineSettled } from './helpers/playground.ts';
 
 /** Terminal-session tabs only (editor tabs also use role=tab — scope to the shell). */
 const TERMINAL_TAB = '.rf-terminal-tab__select[role="tab"]';
@@ -40,20 +40,6 @@ async function newShell(page: Page): Promise<void> {
   await expect(page.locator('.rf-terminal-slot[data-active="true"]')).toBeVisible({
     timeout: 10_000,
   });
-}
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-async function runTerminalLineOk(page: Page, line: string, timeout = 30_000): Promise<void> {
-  await runTerminalLine(page, line);
-  await expect(
-    page
-      .locator('.rf-terminal-slot[data-active="true"] .rf-terminal-blockrail')
-      .getByRole('button', { name: new RegExp(`${escapeRegExp(line)}.*exit 0`) })
-      .last(),
-  ).toHaveAttribute('data-status', 'ok', { timeout });
 }
 
 async function pickStarter(page: Page, id: string): Promise<void> {
@@ -206,8 +192,8 @@ test.describe('ADR-0165 §7 — durable Save + switch round-trip (two projects)'
     const hint = page.locator('[data-testid="terminal-mode-hint"]').first();
     await expect(hint).toContainText('Commands run in /scratch;', { timeout: 30_000 });
     await newShell(page);
-    await runTerminalLineOk(page, `echo ${alphaMark} > /scratch/round-trip.txt`);
-    await runTerminalLineOk(page, 'cat /scratch/round-trip.txt');
+    await runTerminalLineSettled(page, `echo ${alphaMark} > /scratch/round-trip.txt`);
+    await runTerminalLineSettled(page, 'cat /scratch/round-trip.txt');
     await saveScratchAs(page, alphaName);
     const alphaId = await activeProjectIdForName(page, alphaName);
     expect(alphaId).not.toBe('');
@@ -217,8 +203,8 @@ test.describe('ADR-0165 §7 — durable Save + switch round-trip (two projects)'
     await pickStarter(page, 'node-worker');
     await expect(hint).toContainText('Commands run in /scratch;', { timeout: 30_000 });
     await newShell(page);
-    await runTerminalLineOk(page, `echo ${betaMark} > /scratch/round-trip.txt`);
-    await runTerminalLineOk(page, 'cat /scratch/round-trip.txt');
+    await runTerminalLineSettled(page, `echo ${betaMark} > /scratch/round-trip.txt`);
+    await runTerminalLineSettled(page, 'cat /scratch/round-trip.txt');
     await saveScratchAs(page, betaName);
     const betaId = await activeProjectIdForName(page, betaName);
     expect(betaId).not.toBe('');

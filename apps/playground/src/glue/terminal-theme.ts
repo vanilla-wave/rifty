@@ -7,11 +7,28 @@ export type TerminalTheme = NonNullable<RiftyTerminalOptions['theme']>;
 // the panel surface — a light xterm inside the dark card read as a glitch. The
 // scheme hook stays for a future light shell.
 const SOFT_PANEL_TERMINAL: TerminalTheme = {
-  background: '#1d1f26',
-  foreground: '#bdbfc5',
-  cursor: '#c7f05a',
-  cursorAccent: '#1d1f26',
-  selectionBackground: '#c7f05a40',
+  background: '#171a21',
+  foreground: '#d7dae0',
+  cursor: '#f6f8fb',
+  cursorAccent: '#171a21',
+  selectionBackground: '#6ea8ff33',
+  selectionForeground: '#f6f8fb',
+  black: '#0f1117',
+  red: '#ff6b7a',
+  green: '#8bd976',
+  yellow: '#e7c86f',
+  blue: '#7aa2f7',
+  magenta: '#c792ea',
+  cyan: '#5fd7e5',
+  white: '#d7dae0',
+  brightBlack: '#697180',
+  brightRed: '#ff8b98',
+  brightGreen: '#a6e88f',
+  brightYellow: '#f1d98b',
+  brightBlue: '#9bbcff',
+  brightMagenta: '#d8a7f3',
+  brightCyan: '#7ee6f0',
+  brightWhite: '#f6f8fb',
 };
 
 export const terminalThemes: Record<TerminalColorScheme, TerminalTheme> = {
