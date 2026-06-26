@@ -3,7 +3,7 @@ import type { BinSpawnRequest } from '../glue/bin-executor.ts';
 import { buildChildSpawnSpec } from './owner-child-bin-executor.ts';
 
 describe('buildChildSpawnSpec', () => {
-  it('maps a bin request to a node-entry spawn with remote-fs + bin flags', () => {
+  it('maps a bin request to a server-capable node-entry spawn with remote-fs + bin flags', () => {
     const req: BinSpawnRequest = {
       shimPath: '/workspace/node_modules/.bin/cowsay',
       args: ['hi'],
@@ -16,7 +16,8 @@ describe('buildChildSpawnSpec', () => {
     expect(spec.cwd).toBe('/workspace');
     expect(spec.env.RIFTY_REMOTE_FS).toBe('1');
     expect(spec.env.RIFTY_BIN).toBe('1');
+    expect(spec.env.RIFTY_NODE_SERVE).toBe('1');
     expect(spec.env.HOME).toBe('/root');
-    expect(spec.serve).toBeUndefined(); // run-to-completion child, not a server
+    expect(spec.serve).toBe(true);
   });
 });

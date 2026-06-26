@@ -34,6 +34,7 @@ import type {
 import type { DevServerHandle } from './dev-server-controller.ts';
 import { installEsbuildTransformBridge } from './esbuild-wasi-transform.ts';
 import { type ViteModuleGraph, invalidateViteModule } from './real-vite-invalidation.ts';
+import { assertNoUserViteConfig } from './vite-config-guard.ts';
 
 const enc = new TextEncoder();
 
@@ -282,6 +283,7 @@ export async function bootDevServer(opts: {
   }
 
   if (cfg.runtime === 'vite') {
+    assertNoUserViteConfig(root);
     overlayShims(root);
     installEsbuildTransformBridge(root);
     log(`importing ${cfg.runtimeSpecifier}…\n`);

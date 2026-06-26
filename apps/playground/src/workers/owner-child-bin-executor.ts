@@ -2,8 +2,10 @@
  * Owner-realm child `BinExecutor` (ADR-0150: foreground CLIs run in a supervised
  * child worker reading the owner fs over sync-RPC; owner stays a free async
  * supervisor). Each resolved `.bin`/node
- * CLI runs in a supervised child worker-process (run-to-completion, NOT serve)
- * that reads+writes the owner store over `fs.*` sync-RPC (RIFTY_REMOTE_FS=1).
+ * CLI runs in a supervised child worker-process that reads+writes the owner
+ * store over `fs.*` sync-RPC (RIFTY_REMOTE_FS=1). The child is serve-capable:
+ * run-to-completion CLIs still exit through node-entry lifecycle, while CLIs
+ * that listen() stay alive and post their ports like `node <file>`.
  * The owner stays responsive (blocking work left its thread — ADR-0150
  * invariant). Stream/kill/exit reuse `glue/bin-executor.ts`'s createBinExecutor.
  */
@@ -11,6 +13,7 @@
 import { type SpawnWorkerSpec, globalProcessManager } from '@riftydev/kernel';
 import type { BinExecutor } from '@riftydev/shell';
 import {
+  type BinExecutorDeps,
   type BinSpawnRequest,
   type BinWorkerHandle,
   createBinExecutor,
@@ -21,14 +24,19 @@ export function buildChildSpawnSpec(req: BinSpawnRequest, nodeEntryUrl: string):
   return {
     entry: { kind: 'url', url: nodeEntryUrl },
     argv: ['rifty', req.shimPath, ...req.args],
-    env: { ...req.env, RIFTY_BIN: '1', RIFTY_REMOTE_FS: '1' },
+    env: { ...req.env, RIFTY_BIN: '1', RIFTY_REMOTE_FS: '1', RIFTY_NODE_SERVE: '1' },
     cwd: req.cwd,
+    serve: true,
   };
 }
 
 /** Build the owner's child-spawning BinExecutor. `nodeEntryUrl` = node-entry bootstrap worker URL. */
-export function createOwnerChildBinExecutor(nodeEntryUrl: string): BinExecutor {
+export function createOwnerChildBinExecutor(
+  nodeEntryUrl: string,
+  hooks: Pick<BinExecutorDeps, 'onStart' | 'onSpawn' | 'onMessage' | 'onExit'> = {},
+): BinExecutor {
   return createBinExecutor({
+    ...hooks,
     spawn: (req): BinWorkerHandle => {
       const handle = globalProcessManager.spawnWorker(
         req.shimPath,

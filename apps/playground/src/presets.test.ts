@@ -193,14 +193,16 @@ describe('sandbox setup kinds (ADR-0135)', () => {
     }
     expect(PRESETS.some((preset) => preset.setup === 'instant')).toBe(true);
     expect(PRESETS.some((preset) => preset.setup === 'from-scratch')).toBe(true);
-    // the boot default must stay instant: m1/m10 e2e pin the `$ vite` first line
+    // the boot default must stay instant: m1/m10 e2e pin the first dev line
     expect(DEFAULT_PRESET.setup).toBe('instant');
   });
 
   it('boots instant presets straight to the dev line', () => {
     const instant = PRESETS.filter((preset) => preset.setup === 'instant');
     for (const preset of instant) {
-      expect(presetBootLines(preset, '/workspace')).toEqual(['vite']);
+      expect(presetBootLines(preset, '/workspace')).toEqual([
+        'vite --host 0.0.0.0 --strictPort --port 5174',
+      ]);
     }
   });
 
@@ -212,7 +214,7 @@ describe('sandbox setup kinds (ADR-0135)', () => {
     const realVite = PRESETS.find((preset) => preset.id === 'real-vite');
     expect(realVite?.setup).toBe('from-scratch');
     expect(presetBootLines(realVite as Preset, '/workspace')).toEqual([
-      'cd /workspace && npm install && vite',
+      'cd /workspace && npm install && vite --host 0.0.0.0 --strictPort --port 5174',
     ]);
 
     const fullstack = PRESETS.find((preset) => preset.id === 'express-sqlite');

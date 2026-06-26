@@ -156,7 +156,11 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
         }
         return { id: `node:${name}`, kind: 'builtin', source: '', packageRoot: null };
       }
-      if (specifier.startsWith('data:') || specifier.startsWith('file:')) {
+      if (specifier.startsWith('file:')) {
+        const filePath = fileUrlToVfsPath(specifier, opts.fromFile);
+        return readResolved(vfs, pkgCache, filePath, opts.esm);
+      }
+      if (specifier.startsWith('data:')) {
         throw new ModuleLoadError(
           'UNSUPPORTED_PROTOCOL',
           specifier,
@@ -238,6 +242,29 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
     }
     return resolution ?? undefined;
   }
+}
+
+function fileUrlToVfsPath(specifier: string, fromFile: string): string {
+  let url: URL;
+  try {
+    url = new URL(specifier);
+  } catch {
+    throw new ModuleLoadError(
+      'UNSUPPORTED_PROTOCOL',
+      specifier,
+      `Invalid file URL '${specifier}'`,
+      fromFile,
+    );
+  }
+  if (url.protocol !== 'file:' || (url.host !== '' && url.host !== 'localhost')) {
+    throw new ModuleLoadError(
+      'UNSUPPORTED_PROTOCOL',
+      specifier,
+      `Protocol in '${specifier}' is not supported in M2.`,
+      fromFile,
+    );
+  }
+  return normalizePath(decodeURIComponent(url.pathname));
 }
 
 /**

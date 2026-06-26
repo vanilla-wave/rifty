@@ -11,7 +11,7 @@
  */
 
 import type { CommandContext } from '@riftydev/shell';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { type BinSpawnRequest, type BinWorkerHandle, createBinExecutor } from './bin-executor.ts';
 
 const enc = new TextEncoder();
@@ -47,6 +47,7 @@ function makeFakeSpawn(): {
   req: () => BinSpawnRequest | null;
   emitStdout: (chunk: Uint8Array) => void;
   emitStderr: (chunk: Uint8Array) => void;
+  emitMessage: (message: unknown) => void;
   emitExit: (code: number | null) => void;
   killedWith: () => string | null;
   spawnCount: () => number;
@@ -56,6 +57,7 @@ function makeFakeSpawn(): {
   let onOut: (c: unknown) => void = () => {};
   let onErr: (c: unknown) => void = () => {};
   let onExit: (code?: unknown) => void = () => {};
+  let onMessage: (message: unknown) => void = () => {};
   let killed: string | null = null;
   const handle: BinWorkerHandle = {
     stdout: () => ({
@@ -68,8 +70,9 @@ function makeFakeSpawn(): {
         onErr = l;
       },
     }),
-    on: (_e, l) => {
-      onExit = l;
+    on: (event, listener) => {
+      if (event === 'exit') onExit = listener as (code?: unknown) => void;
+      if (event === 'message') onMessage = listener as (message: unknown) => void;
     },
     kill: (signal) => {
       killed = signal ?? 'SIGTERM';
@@ -84,6 +87,7 @@ function makeFakeSpawn(): {
     req: () => captured,
     emitStdout: (c) => onOut(c),
     emitStderr: (c) => onErr(c),
+    emitMessage: (m) => onMessage(m),
     emitExit: (code) => onExit(code),
     killedWith: () => killed,
     spawnCount: () => count,
@@ -117,6 +121,29 @@ describe('createBinExecutor', () => {
     const p = exec('/proj/node_modules/.bin/tsc', [], ctx);
     fake.emitExit(3);
     expect(await p).toBe(3);
+  });
+
+  it('forwards child messages and exit through request-aware hooks', async () => {
+    const fake = makeFakeSpawn();
+    const onMessage = vi.fn();
+    const onExit = vi.fn();
+    const exec = createBinExecutor({ spawn: fake.spawn, onMessage, onExit });
+    const { ctx } = makeCtx();
+
+    const p = exec('/proj/node_modules/.bin/vite', [], ctx);
+    fake.emitMessage({ type: 'rifty:node-listening', ports: [5174] });
+    fake.emitExit(0);
+
+    expect(await p).toBe(0);
+    expect(onMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ shimPath: '/proj/node_modules/.bin/vite' }),
+      { type: 'rifty:node-listening', ports: [5174] },
+      ctx,
+    );
+    expect(onExit).toHaveBeenCalledWith(
+      expect.objectContaining({ shimPath: '/proj/node_modules/.bin/vite' }),
+      ctx,
+    );
   });
 
   it('streams stderr to ctx.stderr', async () => {

@@ -44,6 +44,17 @@
 - **Vite 7 production builds accept esbuild supported flags.** The build bridge
   now forwards Vite's `supported.dynamic-import` option to the real esbuild-WASI
   transform instead of loud-rejecting the build.
+- **Honest `vite` command dispatch (ADR-0174).** `vite` is no longer an
+  owner-registered curated command: shell resolution reaches
+  `node_modules/.bin/vite`, so the installed Vite CLI owns flags, help/version,
+  config loading, build, and preview. The generic `.bin` child path is now
+  server-capable (`serve:true` + node-entry lifecycle), and the owner only mirrors
+  real child listen events into the playground preview/dev-server UI.
+- **Vite npm scripts now use the same honest CLI path.** `npm run vite` executes
+  the seeded package script through shell/bin resolution instead of the old
+  co-resident dev-server shortcut; editor writes are forwarded into the active
+  real Vite CLI child for HMR, and the late-listen lifecycle poll no longer keeps
+  successful `vite build` children alive until the drain cap.
 - **Project files edits update the live preview again.** The default Vite 7
   template keeps the native HMR bridge enabled (Vite 8 remains HMR-off per
   ADR-0161), and the dev-server child no longer feeds native `server.watcher`
@@ -89,7 +100,7 @@
   allocated across the page realm instead of per client instance, so a late
   `ack` from one client cannot satisfy a hover/rename/completion request from
   another during owner respawns or provider re-registration.
-- **Vite 8 sandbox honesty follow-ups (PR #55 audit).** (a) Vite 8 `build`/`preview`/`optimize` loud-reject instead of silently booting the dev server (no dist, no error); tracked `backlog/playground/vite8-production-build-preview`. (b) The `[real-vite/worker] hmr bridge ready` log + the bridge token are no longer emitted when HMR is disabled (Vite 8 template) — no false "bridge ready" signal for a bridge that is never installed. (c) `PreviewPanel` header comment corrected — with HMR off (ADR-0161) an editor save re-transforms on next fetch but pushes nothing and non-editor changes aren't watched, so seeing an edit needs a manual Reload (was: "file edits are refreshed by the iframe HMR client itself"). (d) compat `incompatible-packages.md` esbuild/rollup rows corrected — Vite 8 transforms via oxc and parses via `rolldown/parseAst`, so those shim overlays are off the Vite 8 path. New `vite8-*` backlog items track the remaining divergences (watcher-over-VFS, TS/JSX parity coverage, dead esbuild/rollup overlays, lightningcss-wasm init, dev-server UX parity).
+- **Vite 8 sandbox honesty follow-ups (PR #55 audit).** (a) Vite 8 `build`/`preview`/`optimize` no longer silently boot the dev server; with ADR-0174 they route through the real installed CLI, with remaining Rolldown/runtime ceilings tracked in `backlog/playground/vite8-production-build-preview`. (b) The `[real-vite/worker] hmr bridge ready` log + the bridge token are no longer emitted when HMR is disabled (Vite 8 template) — no false "bridge ready" signal for a bridge that is never installed. (c) `PreviewPanel` header comment corrected — with HMR off (ADR-0161) an editor save re-transforms on next fetch but pushes nothing and non-editor changes aren't watched, so seeing an edit needs a manual Reload (was: "file edits are refreshed by the iframe HMR client itself"). (d) compat `incompatible-packages.md` esbuild/rollup rows corrected — Vite 8 transforms via oxc and parses via `rolldown/parseAst`, so those shim overlays are off the Vite 8 path. New `vite8-*` backlog items track the remaining divergences (watcher-over-VFS, TS/JSX parity coverage, dead esbuild/rollup overlays, lightningcss-wasm init, dev-server UX parity).
 
 ### Changed
 
