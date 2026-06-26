@@ -130,13 +130,22 @@ describe('resolveBootstrapConfig', () => {
     );
   });
 
-  it('keeps TypeScript starter deps in lockstep with the shared Vite snapshot', () => {
+  it('declares TypeScript starter TypeScript as a project-owned dev dependency', () => {
+    const spec: ProjectSpec = TYPESCRIPT_TEMPLATE;
     const cfg = resolveBootstrapConfig(TYPESCRIPT_TEMPLATE, 5174, '/workspace');
+    const pkg = JSON.parse(cfg.packageJson) as {
+      dependencies: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
 
-    expect(TYPESCRIPT_TEMPLATE.bakedNodeModulesUrl).toBe(VITE_TEMPLATE.bakedNodeModulesUrl);
-    expect(TYPESCRIPT_TEMPLATE.bakedNodeModulesTemplateId).toBe(VITE_TEMPLATE.id);
     expect(TYPESCRIPT_TEMPLATE.install).toEqual(VITE_TEMPLATE.install);
-    expect(cfg.bakedNodeModulesTemplateId).toBe(VITE_TEMPLATE.id);
+    expect(pkg.dependencies).toEqual(VITE_TEMPLATE.install);
+    expect(pkg.devDependencies).toEqual({ typescript: '5.9.3' });
+    expect(TYPESCRIPT_TEMPLATE.bakedNodeModulesUrl).toBe(
+      '/snapshots/typescript-node-modules.json.gz',
+    );
+    expect(spec.bakedNodeModulesTemplateId).toBeUndefined();
+    expect(cfg.bakedNodeModulesTemplateId).toBeUndefined();
   });
 });
 

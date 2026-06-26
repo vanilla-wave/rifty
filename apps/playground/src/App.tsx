@@ -70,6 +70,10 @@ import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
 import { createTsDiagnosticsSync } from './glue/ts-diagnostics-sync.ts';
 import { createTsLanguageServiceClient, lspToMonacoMarkers } from './glue/ts-ls-client.ts';
+import {
+  clearTsLsInitDiagnostics,
+  upsertTsLsInitDiagnostic,
+} from './glue/ts-ls-init-diagnostic.ts';
 import { registerTsLanguageServiceProviders } from './glue/ts-ls-monaco-providers.ts';
 import { requestVfsSnapshot, subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
 import { DEFAULT_PRESET, PRESETS, type Preset, presetBootLines } from './presets.ts';
@@ -723,6 +727,7 @@ export function App(props: AppProps) {
     async function initAndReplay(root = activeRoot()): Promise<boolean> {
       const run = (async (): Promise<boolean> => {
         await client.init(root);
+        setDiagnostics((prev) => clearTsLsInitDiagnostics(new Map(prev)));
         const replayEvents: EditorDocumentEvent[] = [];
         const unsubscribeReplay = api.onDocument((ev) => {
           if (ev.kind !== 'close') replayEvents.push(ev);
@@ -732,7 +737,11 @@ export function App(props: AppProps) {
         await diagnosticSync.refreshOpenDiagnostics();
         return true;
       })().catch((err: unknown) => {
-        if (!disposed) console.warn('[ts-lsp] init', (err as Error).message);
+        if (!disposed) {
+          const message = (err as Error).message;
+          setDiagnostics((prev) => upsertTsLsInitDiagnostic(new Map(prev), root, message));
+          console.warn('[ts-lsp] init', message);
+        }
         return false;
       });
       ready = run;

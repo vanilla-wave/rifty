@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Workspace TypeScript is now required for TS-LS init** (ADR-0177). The service
+  no longer falls back to rifty's vendored compiler when
+  `node_modules/typescript` is absent; missing and broken workspace TypeScript
+  both reject with explicit dependency/toolchain errors.
+
 ### Fixed
 
 - **Diagnostics compat row no longer overclaims tags/related info.** The
@@ -64,8 +71,8 @@
   `maxResultCount`/`fileName`/exclude flags; `toLineColumnOffset`,
   `getReferencesAtPosition`, `cleanupSemanticCache`, and `dispose` are wired
   through service/protocol/client. Workspace
-  `node_modules/typescript` is used when
-  present and valid (ADR-0169), with loud failure on a broken installed compiler;
+  `node_modules/typescript` is required and used when
+  present and valid (ADR-0177), with loud failure on missing/broken installed compiler;
   `applyCodeActionCommand` is a loud `NotImplementedError` because TS uses it for
   package-install side effects, not VFS text edits. `getProgram` and
   `getCompletionEntrySymbol` are also loud feature-tagged `NotImplementedError`s:

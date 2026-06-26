@@ -16,6 +16,7 @@
 import type { VfsDirent } from '@riftydev/vfs';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
+import { snapshotVfsFiles, writeRealWorkspaceTypeScript } from '../test-workspace-typescript.ts';
 import { createRpcFsSync } from './host-fs-rpc.ts';
 
 interface StatShape {
@@ -148,11 +149,8 @@ describe('createRpcFsSync over a fake fs.* call', () => {
       enc(JSON.stringify({ compilerOptions: { strict: true } })),
     );
     mem.writeFileSync('/proj/a.ts', enc('const x: number = "s";\n'));
-
-    const files = new Map<string, Uint8Array>();
-    for (const path of ['/proj/tsconfig.json', '/proj/a.ts']) {
-      files.set(path, mem.readFileBytesSync(path));
-    }
+    writeRealWorkspaceTypeScript(mem, '/proj');
+    const files = snapshotVfsFiles(mem, '/proj');
 
     const { createTsLanguageService } = await import('../service.ts');
     const svc = await createTsLanguageService({

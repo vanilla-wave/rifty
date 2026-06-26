@@ -16,6 +16,9 @@
   `@rollup/wasm-node@4.62.2`; snapshot baking asserts the Rollup and
   `@rollup/wasm-node` versions remain lockstep. The opt-in `vite8` template
   keeps `vite@8.0.16` and its own baked snapshot.
+- The TypeScript starter now declares its own `typescript@5.9.3`
+  devDependency and uses a dedicated baked node_modules snapshot instead of the
+  plain Vite snapshot.
 
 ### Fixed
 
@@ -32,6 +35,9 @@
   changes bump `tsProjectRevision`, the TS-LS client replays open documents and
   immediately refreshes diagnostics for them, so Problems/markers do not stay
   stale until the next keystroke.
+- **TS-LS init failures are visible in Problems.** Missing or broken workspace
+  TypeScript now surfaces as an actionable Problems diagnostic instead of only a
+  console warning.
 - **Terminal command overlays no longer leave colored command rails or cover output.** The
   playground terminal no longer mounts the command-block rail/preview or sticky current-command
   pill, and the xterm viewport no longer reserves the old rail gutter.

@@ -2,6 +2,7 @@ import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { DiagnosticSeverity } from './lsp-types.ts';
 import { createTsLanguageService } from './service.ts';
+import { writeRealWorkspaceTypeScript } from './test-workspace-typescript.ts';
 
 function writeFile(
   fsSync: ReturnType<typeof createMemoryFs>['fsSync'],
@@ -21,6 +22,7 @@ describe('createTsLanguageService → LSP diagnostics', () => {
     //   0123456^x
     writeFile(fsSync, '/proj/tsconfig.json', JSON.stringify({ compilerOptions: { strict: true } }));
     writeFile(fsSync, '/proj/a.ts', 'const x: number = "s";\n');
+    writeRealWorkspaceTypeScript(fsSync, '/proj');
 
     const svc = await createTsLanguageService({ fsSync, projectRoot: '/proj' });
     const diags = svc.getSemanticDiagnostics('/proj/a.ts');
@@ -41,6 +43,7 @@ describe('createTsLanguageService → LSP diagnostics', () => {
   it('getSyntacticDiagnostics returns a parse error as an LSP Diagnostic', async () => {
     const { fsSync } = createMemoryFs();
     writeFile(fsSync, '/proj/a.ts', 'const x = ;\n'); // missing expression → parse error
+    writeRealWorkspaceTypeScript(fsSync, '/proj');
 
     const svc = await createTsLanguageService({ fsSync, projectRoot: '/proj' });
     const diags = svc.getSyntacticDiagnostics('/proj/a.ts');
@@ -57,6 +60,7 @@ describe('createTsLanguageService → LSP diagnostics', () => {
     const { fsSync } = createMemoryFs();
     writeFile(fsSync, '/proj/tsconfig.json', JSON.stringify({ compilerOptions: { strict: true } }));
     writeFile(fsSync, '/proj/a.ts', 'export const x: number = 1;\n');
+    writeRealWorkspaceTypeScript(fsSync, '/proj');
 
     const svc = await createTsLanguageService({ fsSync, projectRoot: '/proj' });
     expect(svc.getSemanticDiagnostics('/proj/a.ts')).toHaveLength(0);
@@ -83,6 +87,7 @@ describe('createTsLanguageService → LSP diagnostics', () => {
     // file" for a path it has no SourceFile for; the editor wants what real
     // tsserver gives a file outside the project — nothing — NOT a crash.
     writeFile(fsSync, '/workspace/src/main.js', 'export const x = 1;\n');
+    writeRealWorkspaceTypeScript(fsSync, '/workspace');
 
     const svc = await createTsLanguageService({ fsSync, projectRoot: '/workspace' });
     svc.openDocument('/workspace/src/main.js', 'export const x = 1;\n');

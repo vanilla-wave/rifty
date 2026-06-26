@@ -10,6 +10,7 @@
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
 import { CompletionItemKind } from '../lsp-types.ts';
+import { snapshotVfsFiles, writeRealWorkspaceTypeScript } from '../test-workspace-typescript.ts';
 import { createRpcFsSync } from './host-fs-rpc.ts';
 import type {
   TsCodeActionsResponse,
@@ -89,10 +90,8 @@ function buildFixture(): Map<string, Uint8Array> {
     enc(JSON.stringify({ compilerOptions: { strict: true } })),
   );
   mem.writeFileSync('/proj/a.ts', enc('export const x: number = 1;\n'));
-  const files = new Map<string, Uint8Array>();
-  for (const path of ['/proj/tsconfig.json', '/proj/a.ts'])
-    files.set(path, mem.readFileBytesSync(path));
-  return files;
+  writeRealWorkspaceTypeScript(mem, '/proj');
+  return snapshotVfsFiles(mem, '/proj');
 }
 
 function diags(r: Awaited<ReturnType<ReturnType<typeof createServiceEndpoint>['dispatch']>>) {
@@ -160,7 +159,8 @@ describe('createServiceEndpoint', () => {
     const { fsSync: mem } = createMemoryFs();
     mem.mkdirSync('/proj', { recursive: true });
     mem.writeFileSync('/proj/bad.ts', enc('const x = ;\n'));
-    const files = new Map([['/proj/bad.ts', mem.readFileBytesSync('/proj/bad.ts')]]);
+    writeRealWorkspaceTypeScript(mem, '/proj');
+    const files = snapshotVfsFiles(mem, '/proj');
 
     const endpoint = createServiceEndpoint({
       buildFsSync: (call) => createRpcFsSync(call),
@@ -183,8 +183,8 @@ describe('createServiceEndpoint', () => {
       enc(JSON.stringify({ compilerOptions: { target: 'not-a-real-target' } })),
     );
     mem.writeFileSync('/proj/a.ts', enc('export const x = 1;\n'));
-    const files = new Map<string, Uint8Array>();
-    for (const p of ['/proj/tsconfig.json', '/proj/a.ts']) files.set(p, mem.readFileBytesSync(p));
+    writeRealWorkspaceTypeScript(mem, '/proj');
+    const files = snapshotVfsFiles(mem, '/proj');
 
     const endpoint = createServiceEndpoint({
       buildFsSync: (call) => createRpcFsSync(call),
@@ -214,9 +214,8 @@ describe('createServiceEndpoint', () => {
         "import { add } from './math.ts';\nconst total = add(1, 2);\nconst arr = [1];\narr.map((n) => n);\n",
       ),
     );
-    const files = new Map<string, Uint8Array>();
-    for (const p of ['/proj/tsconfig.json', '/proj/math.ts', '/proj/main.ts'])
-      files.set(p, mem.readFileBytesSync(p));
+    writeRealWorkspaceTypeScript(mem, '/proj');
+    const files = snapshotVfsFiles(mem, '/proj');
 
     const endpoint = createServiceEndpoint({
       buildFsSync: (call) => createRpcFsSync(call),
@@ -313,9 +312,8 @@ describe('createServiceEndpoint', () => {
       '/proj/main.ts',
       enc("import { add } from './math';\nconst total = add(1, 2);\nadd(total, 3);\n"),
     );
-    const files = new Map<string, Uint8Array>();
-    for (const p of ['/proj/tsconfig.json', '/proj/math.ts', '/proj/main.ts'])
-      files.set(p, mem.readFileBytesSync(p));
+    writeRealWorkspaceTypeScript(mem, '/proj');
+    const files = snapshotVfsFiles(mem, '/proj');
 
     const endpoint = createServiceEndpoint({
       buildFsSync: (call) => createRpcFsSync(call),
@@ -415,9 +413,8 @@ describe('createServiceEndpoint', () => {
       '/proj/main.ts',
       enc("import { greet } from './helper';\nconst x=1;\nconsole.log(greet('a'),x);\n"),
     );
-    const files = new Map<string, Uint8Array>();
-    for (const p of ['/proj/tsconfig.json', '/proj/helper.ts', '/proj/main.ts'])
-      files.set(p, mem.readFileBytesSync(p));
+    writeRealWorkspaceTypeScript(mem, '/proj');
+    const files = snapshotVfsFiles(mem, '/proj');
 
     const endpoint = createServiceEndpoint({
       buildFsSync: (call) => createRpcFsSync(call),
@@ -514,15 +511,8 @@ describe('createServiceEndpoint', () => {
       enc('import { Greeter } from "./impl";\nconst pastedGreeter = new Greeter();\n'),
     );
     mem.writeFileSync('/proj/paste-target.ts', enc('const pastedGreeter = new Greeter();\n'));
-    const files = new Map<string, Uint8Array>();
-    for (const p of [
-      '/proj/tsconfig.json',
-      '/proj/base.ts',
-      '/proj/impl.ts',
-      '/proj/copied.ts',
-      '/proj/paste-target.ts',
-    ])
-      files.set(p, mem.readFileBytesSync(p));
+    writeRealWorkspaceTypeScript(mem, '/proj');
+    const files = snapshotVfsFiles(mem, '/proj');
 
     const endpoint = createServiceEndpoint({
       buildFsSync: (call) => createRpcFsSync(call),

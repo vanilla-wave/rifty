@@ -41,6 +41,8 @@ interface ProjectSpecBase {
   readonly displayName: string;
   /** npm dependencies to install into the worker-local node_modules. */
   readonly install: Readonly<Record<string, string>>;
+  /** npm devDependencies to install into the worker-local node_modules. */
+  readonly devDependencies?: Readonly<Record<string, string>>;
   readonly entry: ProjectEntry;
   readonly defaultPort: number;
   readonly estimatedBootSeconds: number;
@@ -219,6 +221,7 @@ export function buildProjectPackageJson(spec: ProjectSpec): {
       type: 'module',
       scripts,
       dependencies: spec.install,
+      ...(spec.devDependencies ? { devDependencies: spec.devDependencies } : {}),
     },
     null,
     2,

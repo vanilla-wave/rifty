@@ -49,6 +49,7 @@ import {
 } from './mapping.ts';
 import { offsetToPosition, positionToOffset } from './position.ts';
 import { createTsLanguageService } from './service.ts';
+import { writeRealWorkspaceTypeScript } from './test-workspace-typescript.ts';
 
 const require = createRequire(import.meta.url);
 
@@ -243,6 +244,7 @@ function writeFixtureToVfs(fixture: Fixture): ReturnType<typeof createMemoryFs>[
     fsSync.mkdirSync(dir, { recursive: true });
     fsSync.writeFileSync(abs, enc.encode(contents));
   }
+  writeRealWorkspaceTypeScript(fsSync, RIFTY_ROOT);
   return fsSync;
 }
 

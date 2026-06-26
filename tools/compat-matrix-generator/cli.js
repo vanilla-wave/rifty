@@ -313,7 +313,7 @@ const matrices = [
     file: 'ts-language-service.md',
     title: 'Compatibility matrix — TS language service (`@riftydev/ts-language-service`)',
     intro:
-      "Public claim surface for the in-browser `ts.LanguageService` over the rifty VFS (ADR-0166/0169): a real `typescript` LanguageService in a kernel worker, LSP-shaped, wired as real Monaco providers where standalone Monaco exposes that provider shape (Monaco's built-in TS intelligence retired for project-aware rows). Every ✅/⚠️ row is parity-checked head-to-head against the real `ts.LanguageService` where the row claims TS parity (gold standard, same compiler version on both sides; workspace-TS loader has its own regression), and ⚠️ rows name their caveat/backlog explicitly. ❌ rows are browser/editor ceilings or out-of-scope surfaces — no silent stub.",
+      "Public claim surface for the in-browser `ts.LanguageService` over the rifty VFS (ADR-0166/0177): a real project-installed `typescript` LanguageService in a kernel worker, LSP-shaped, wired as real Monaco providers where standalone Monaco exposes that provider shape (Monaco's built-in TS intelligence retired for project-aware rows). Every ✅/⚠️ row is parity-checked head-to-head against the real `ts.LanguageService` where the row claims TS parity (gold standard, same compiler version on both sides; workspace-TS loader has its own regression), and ⚠️ rows name their caveat/backlog explicitly. ❌ rows are browser/editor ceilings or out-of-scope surfaces — no silent stub.",
     rows: [
       [
         'Diagnostics (semantic / syntactic / tsconfig-config)',
@@ -410,7 +410,7 @@ const matrices = [
       [
         "Project's installed TS version (workspace version)",
         '✅',
-        'Loads `node_modules/typescript/lib/typescript.js` + adjacent `lib/*.d.ts` from the project when present; vendored TS is fallback (ADR-0169)',
+        'Requires `node_modules/typescript/lib/typescript.js` + adjacent `lib/*.d.ts` from the project; missing or broken workspace TypeScript fails loudly (ADR-0177)',
       ],
       [
         'Name/dotted span · breakpoint · navigation bar',
@@ -475,7 +475,7 @@ const matrices = [
       'Code lens and non-TS/JS LSP remain out of scope/browser ceilings.',
       'TypeScript `applyCodeActionCommand` is classified as an external package-install side-effect channel; text edits from code fixes/refactors/completions are implemented separately.',
       'TypeScript object-graph APIs (`getProgram`, `getCompletionEntrySymbol`, completion `includeSymbol`) remain explicit ❌ because their return values are live compiler internals, not cloneable protocol values.',
-      'A broken workspace TypeScript install fails loudly instead of falling back to vendored TS; absent workspace TypeScript uses vendored TS.',
+      'Missing or broken workspace TypeScript fails loudly instead of falling back to rifty vendored TypeScript.',
     ],
   },
   {

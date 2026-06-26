@@ -12,6 +12,7 @@ import { createMemoryFs } from '@riftydev/vfs/internal';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import { createTsLanguageService } from './service.ts';
+import { writeRealWorkspaceTypeScript } from './test-workspace-typescript.ts';
 
 function writeFile(
   fsSync: ReturnType<typeof createMemoryFs>['fsSync'],
@@ -29,6 +30,7 @@ describe('getConfigFileDiagnostics → invalid tsconfig option', () => {
     const tsconfig = JSON.stringify({ compilerOptions: { target: 'not-a-real-target' } });
     writeFile(fsSync, '/proj/tsconfig.json', tsconfig);
     writeFile(fsSync, '/proj/a.ts', 'export const x = 1;\n');
+    writeRealWorkspaceTypeScript(fsSync, '/proj');
 
     // Gold: tsc parses the SAME config text with its own host. No rifty code.
     // The host reports the SAME input file the VFS holds (/proj/a.ts) so neither
@@ -73,6 +75,7 @@ describe('getConfigFileDiagnostics → invalid tsconfig option', () => {
     const badText = '{ "compilerOptions": { "strict": true ';
     writeFile(fsSync, '/proj/tsconfig.json', badText);
     writeFile(fsSync, '/proj/a.ts', 'export const x = 1;\n');
+    writeRealWorkspaceTypeScript(fsSync, '/proj');
 
     // Gold: tsc's own readConfigFile reports the syntax error. No rifty code.
     const gold = ts.readConfigFile('/proj/tsconfig.json', () => badText);
@@ -91,6 +94,7 @@ describe('getConfigFileDiagnostics → invalid tsconfig option', () => {
     const { fsSync } = createMemoryFs();
     writeFile(fsSync, '/proj/tsconfig.json', JSON.stringify({ compilerOptions: { strict: true } }));
     writeFile(fsSync, '/proj/a.ts', 'export const x = 1;\n');
+    writeRealWorkspaceTypeScript(fsSync, '/proj');
 
     const svc = await createTsLanguageService({ fsSync, projectRoot: '/proj' });
     expect(svc.getConfigFileDiagnostics()).toHaveLength(0);
@@ -106,6 +110,7 @@ describe('getCompilerOptionsDiagnostics → compiler option conflicts', () => {
     });
     writeFile(fsSync, '/proj/tsconfig.json', tsconfig);
     writeFile(fsSync, '/proj/a.ts', fileText);
+    writeRealWorkspaceTypeScript(fsSync, '/proj');
 
     const goldParsed = ts.parseJsonConfigFileContent(
       JSON.parse(tsconfig),

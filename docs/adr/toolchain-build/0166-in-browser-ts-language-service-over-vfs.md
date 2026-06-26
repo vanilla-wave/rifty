@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-06-22
 
-> TL;DR: real `ts.LanguageService` in a kernel worker over the rifty VFS; LSP-shaped public API; workspace TypeScript when present, vendored fallback otherwise; one service, two consumers (playground + M12 agent).
+> TL;DR: real `ts.LanguageService` in a kernel worker over the rifty VFS; LSP-shaped public API; project-installed TypeScript required; one service, two consumers (playground + M12 agent).
 
 ## Context
 
@@ -15,16 +15,18 @@ a playground. Fidelity requires a single real LS backed by the actual VFS.
 
 ## Decision
 
-**(a) Load the project TypeScript when present; keep a vendored fallback.** Parity
-uses the same compiler on both sides → divergences isolate host/plumbing bugs, not
-TS-version drift. Project `tsconfig` (lib/target/strict/paths/…) is honored. When
-`node_modules/typescript` is absent, rifty's vendored compiler gives stable scratch
-project UX.
+**(a) Load the project TypeScript.** Parity uses the same compiler on both sides
+→ divergences isolate host/plumbing bugs, not TS-version drift. Project
+`tsconfig` (lib/target/strict/paths/…) is honored.
 
-**Correction 2026-06-22:** ADR-0169 extends this clause. The service now uses a
-project-installed `node_modules/typescript` compiler + adjacent `lib/*.d.ts` when
-that package is present and loadable from the VFS; the vendored compiler remains
-the fallback for projects without workspace TypeScript and fails are loud.
+**Correction 2026-06-22 (superseded by ADR-0177):** ADR-0169 extended this
+clause so the service used a project-installed `node_modules/typescript`
+compiler + adjacent `lib/*.d.ts` when that package was present and loadable from
+the VFS; at that time absent projects still used rifty's vendored compiler.
+
+**Correction 2026-06-26:** ADR-0177 supersedes ADR-0169's fallback clause.
+`node_modules/typescript` is now required for TS-LS init; missing or broken
+workspace TypeScript fails loudly instead of using rifty's vendored compiler.
 
 **(b) Real `ts.LanguageService` over a `FsSync`-backed `LanguageServiceHost`**.
 File access/module resolution/tsconfig loading all go through the authoritative
@@ -73,10 +75,10 @@ prod dep: `typescript`.
 ## Consequences
 
 - **Irreversible**: new `typescript` prod dep + new public capability surface.
-- Diagnostics match real `tsc` for the compiler selected by the project/fallback
-  rule (same TS version both sides of parity).
+- Diagnostics match real `tsc` for the compiler selected by the project-owned
+  `node_modules/typescript` (same TS version both sides of parity).
 - Single LS instance feeds playground editor + M12 agent (no duplicated VFS copies).
 - `@riftydev/sdk/ts-language-service` umbrella export → additive public API,
   non-removable once published.
 - Non-TS/JS languages → `NotImplementedError` (browser ceiling, out of scope).
-- Project-installed TS version support → ADR-0169.
+- Project-installed TS requirement → ADR-0177.

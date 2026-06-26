@@ -1,5 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as nodePath from 'node:path';
 import { createMemoryFs } from '@riftydev/vfs/internal';
@@ -34,9 +33,9 @@ import {
 } from './mapping.ts';
 import { offsetToPosition, positionToOffset } from './position.ts';
 import { createTsLanguageService } from './service.ts';
+import { writeRealWorkspaceTypeScript } from './test-workspace-typescript.ts';
 
 const RIFTY_ROOT = '/proj';
-const nodeRequire = createRequire(import.meta.url);
 
 const FIXTURE = {
   'tsconfig.json': JSON.stringify({
@@ -100,7 +99,9 @@ function writeTmpFixture(): string {
   return root;
 }
 
-function writeVfsFixture(): ReturnType<typeof createMemoryFs>['fsSync'] {
+function writeVfsFixture(
+  options: { readonly workspaceTypeScript?: boolean } = {},
+): ReturnType<typeof createMemoryFs>['fsSync'] {
   const { fsSync } = createMemoryFs();
   const enc = new TextEncoder();
   for (const [rel, text] of Object.entries(FIXTURE)) {
@@ -109,24 +110,8 @@ function writeVfsFixture(): ReturnType<typeof createMemoryFs>['fsSync'] {
     fsSync.mkdirSync(dir, { recursive: true });
     fsSync.writeFileSync(abs, enc.encode(text));
   }
+  if (options.workspaceTypeScript !== false) writeRealWorkspaceTypeScript(fsSync, RIFTY_ROOT);
   return fsSync;
-}
-
-function writeRealWorkspaceTypeScript(fsSync: ReturnType<typeof createMemoryFs>['fsSync']): void {
-  const enc = new TextEncoder();
-  const packageJson = nodeRequire.resolve('typescript/package.json');
-  const packageRoot = nodePath.dirname(packageJson);
-  const libDir = nodePath.join(packageRoot, 'lib');
-  const target = `${RIFTY_ROOT}/node_modules/typescript`;
-  fsSync.mkdirSync(`${target}/lib`, { recursive: true });
-  fsSync.writeFileSync(`${target}/package.json`, enc.encode(readFileSync(packageJson, 'utf8')));
-  for (const name of readdirSync(libDir)) {
-    if (name !== 'typescript.js' && !/^lib(\.[^.]+)*\.d\.ts$/.test(name)) continue;
-    fsSync.writeFileSync(
-      `${target}/lib/${name}`,
-      enc.encode(readFileSync(nodePath.join(libDir, name), 'utf8')),
-    );
-  }
 }
 
 function buildGold(root: string): {
@@ -1070,7 +1055,6 @@ describe('parity: remaining achievable ts.LanguageService surface', () => {
     const root = writeTmpFixture();
     const gold = buildGold(root);
     const fsSync = writeVfsFixture();
-    writeRealWorkspaceTypeScript(fsSync);
     const logs: string[] = [];
 
     const svc = await createTsLanguageService({
@@ -1085,8 +1069,16 @@ describe('parity: remaining achievable ts.LanguageService surface', () => {
     );
   });
 
+  it('fails loudly when workspace TypeScript is absent', async () => {
+    const fsSync = writeVfsFixture({ workspaceTypeScript: false });
+
+    await expect(createTsLanguageService({ fsSync, projectRoot: RIFTY_ROOT })).rejects.toThrow(
+      'TypeScript is not installed in this project; run npm install -D typescript',
+    );
+  });
+
   it('fails loudly when a workspace TypeScript package is present but broken', async () => {
-    const fsSync = writeVfsFixture();
+    const fsSync = writeVfsFixture({ workspaceTypeScript: false });
     fsSync.mkdirSync(`${RIFTY_ROOT}/node_modules/typescript`, { recursive: true });
     fsSync.writeFileSync(
       `${RIFTY_ROOT}/node_modules/typescript/package.json`,

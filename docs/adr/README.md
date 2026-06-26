@@ -143,7 +143,7 @@ ADRs are immutable while active: a *superseded* ADR is REMOVED (git keeps histor
 | 0132 | TS ESM parity uses full-transform Node reference |
 | 0164 | Node 24 as the supported and parity-target version |
 | 0166 | In-browser TS language service over VFS |
-| 0169 | Workspace TypeScript version for TS language service |
+| 0177 | Workspace TypeScript is required for TS language service |
 
 ### protocol
 
@@ -212,6 +212,7 @@ ADRs below were removed; load-bearing context grafted into the successor. See gi
 | 0074 | 0077 | SW preview-nav routing; ported into ADR-0077 |
 | 0092 | n/a | retired opencode facade ADR; integration cancelled |
 | 0138 | 0142 | eval interception now feasible via QuickJS real realm; context grafted |
+| 0169 | 0177 | workspace TypeScript rule; absent-workspace vendored fallback removed |
 
 ## Corrections (active)
 
@@ -227,7 +228,7 @@ superseded.
 | 0145 browser transport clause | 0147 | browser shim is now the generic WebSocket bridge |
 | 0145 `server.hmr.channels` payload path | 0151 | Real-Vite now uses Vite native `server.ws` over rifty `http.Server.on('upgrade')` |
 | 0145 Vite 8 default HMR scope | 0161 | Vite 8 template disables HMR until socket/HMR parity is re-proven for the Rolldown WASI path |
-| 0166 D-a vendored-only TS compiler clause | 0169 | workspace-installed `node_modules/typescript` wins when present and valid; vendored TS remains fallback |
+| 0166 D-a vendored fallback clause | 0177 | workspace-installed `node_modules/typescript` is required; missing or broken workspace TS fails loudly |
 | 0066 explicit-only tsconfig paths clause | 0170 | `autoDiscoverTsconfigPaths` can opt into TypeScript-parser-backed tsconfig discovery; default remains explicit/off |
 | 0054 WS/SSE upgrade risk note | 0151 | WebSocket `server.on('upgrade')` now works over the bridge; SSE stays streaming HTTP |
 | 0054 pipe-sink deferral | 0154 | `Readable.fromWeb(webStream).pipe(res)` is implemented; full `node:stream/web` remains unclaimed |

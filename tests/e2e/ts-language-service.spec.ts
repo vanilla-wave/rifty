@@ -7,8 +7,8 @@ import {
 } from './helpers/playground.ts';
 
 // Run this file's tests SERIALLY (override the config's fullyParallel): each test
-// cold-boots its OWN workspace owner + LS grandchild and fetches the ~3 MB
-// vendored lib.d.ts. Two such cold-boots in parallel starve CPU/memory and the
+// cold-boots its OWN workspace owner + LS grandchild and loads the workspace
+// TypeScript compiler/libs. Two such cold-boots in parallel starve CPU/memory and the
 // (already generous) per-poll budgets time out — a contention artefact, not a
 // product bug. Serial keeps each cold-boot isolated on one worker.
 test.describe.configure({ mode: 'serial' });
@@ -27,7 +27,7 @@ test.describe.configure({ mode: 'serial' });
  * Load-bearing: the diagnostic is a genuine TS type error (TS2322,
  * number = string). It only appears if (a) the owner spawned the LS child, (b) the
  * page→owner→LS request reached it, (c) the LS built a real ts.LanguageService
- * over the owner VFS (vendored lib.d.ts), (d) the LS→owner→page response carried
+ * over the owner VFS (workspace `node_modules/typescript`), (d) the LS→owner→page response carried
  * the diagnostic back, (e) the page mapped it to a Monaco marker + a Problems row.
  * Then FIXING the type clears BOTH — proving the live update path (ts:update →
  * fresh diagnostics), not a one-shot static render.
@@ -515,6 +515,15 @@ async function pickStarterAndWaitForTemplate(
   await expect(previewBody).toContainText(previewNeedle, { timeout: 90_000 });
 }
 
+async function pickTypeScriptStarter(page: Page): Promise<void> {
+  await pickStarterAndWaitForTemplate(
+    page,
+    'typescript-ls',
+    'LibraryShape',
+    'TypeScript language surface',
+  );
+}
+
 /** Open a workspace file through the real command palette (Ctrl/Cmd-K → type → click). */
 async function openFileViaPalette(page: Page, filename: string): Promise<void> {
   // Palette items are snapshotted once when the palette opens. Wait for the
@@ -538,10 +547,11 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     browserName,
   }) => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
-    // Generous: the FIRST LS request cold-boots the `typescript` engine + fetches
-    // the ~3 MB vendored lib.d.ts bundle over the relay (one-time). 150s headroom.
+    // Generous: the FIRST LS request cold-boots the workspace `typescript` engine
+    // and loads its lib.d.ts files over the relay (one-time). 150s headroom.
     test.setTimeout(150_000);
     await page.goto('/');
+    await pickTypeScriptStarter(page);
 
     // Owner shell ready: terminal 1 echoes the boot dev line (same gate the
     // owner-editor spec uses). Terminal 1 then runs `vite` (blocks its prompt), so
@@ -582,8 +592,8 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     await page.keyboard.insertText('export const bad: number = "not a number";');
 
     // (1) a rifty-TS Monaco marker appears. VERY generous: the FIRST request cold-
-    // boots the `typescript` engine in the LS worker AND fetches the ~3 MB vendored
-    // lib.d.ts bundle over the relay — one-time, slow; once warm the rest is fast.
+    // boots the workspace `typescript` engine in the LS worker AND loads lib.d.ts
+    // over the relay — one-time, slow; once warm the rest is fast.
     await expect.poll(() => tsMarkerCount(page, tsPath), { timeout: 100_000 }).toBeGreaterThan(0);
 
     // (1b) and a real error squiggle is rendered on the active model.
@@ -835,6 +845,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     test.setTimeout(180_000);
     await page.goto('/');
+    await pickTypeScriptStarter(page);
 
     await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
     await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 90_000 });
@@ -940,7 +951,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
 
     // (1) HOVER over `coolValue` (L3, col 12). TS 5.9 renders this imported
     // alias as `import coolValue`; the dependency `.d.ts` proof is the definition
-    // jump below. The FIRST query cold-boots the engine + ~3 MB lib.d.ts over the
+    // jump below. The FIRST query cold-boots the engine + workspace lib.d.ts over the
     // relay, so poll with a spaced interval.
     await expect
       .poll(() => tsHover(page, usesDep, 3, 12), { timeout: 90_000, intervals: [1500] })
@@ -1041,8 +1052,9 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     browserName,
   }) => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     await page.goto('/');
+    await pickTypeScriptStarter(page);
 
     await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
     const root = await activeRootFromHint(page);
@@ -1116,7 +1128,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
 
     // (1) FIND-REFERENCES of `localGreet` from its declaration in greeter.ts
     // (L1, col 17), includeDeclaration:true. The FIRST query cold-boots the engine
-    // + ~3 MB lib.d.ts over the relay AND warms the rebuilt program, so poll with a
+    // + workspace lib.d.ts over the relay AND warms the rebuilt program, so poll with a
     // spaced interval until references from BOTH files appear (90s headroom).
     await expect
       .poll(
@@ -1225,8 +1237,9 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     browserName,
   }) => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     await page.goto('/');
+    await pickTypeScriptStarter(page);
 
     await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
     const root = await activeRootFromHint(page);
@@ -1313,7 +1326,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
 
     // The "Cannot find name 'localGreet'" diagnostic must land first — the
     // quick-fix is sourced from THAT marker's code (FIRST request cold-boots the
-    // engine + ~3 MB lib.d.ts; 90s headroom).
+    // engine + workspace lib.d.ts; 90s headroom).
     await expect.poll(() => tsMarkerCount(page, fixApp), { timeout: 90_000 }).toBeGreaterThan(0);
 
     // (1) QUICK-FIX over the `localGreet` use in app.ts (L1, cols 11..21). The
