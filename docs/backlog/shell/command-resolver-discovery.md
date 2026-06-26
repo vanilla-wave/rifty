@@ -5,7 +5,7 @@ title: Unified command resolver and discovery interface
 created: 2026-06-25
 why: Running a command, `which`, completion, suggestions, direct path commands, and `.bin` lookup currently cross different seams and can disagree.
 user_story: As a developer after installing a package or creating a script in the workspace, I want `vite`, `./node_modules/.bin/vite`, `./scripts/tool`, `which`, and completion to resolve consistently, but today those paths are split across shell execution, bin resolution, and language-service command names.
-sources: [Q-2026-06-25-shell-research, ADR-0137, docs/backlog/shell/node-modules-bin-execution.md]
+sources: [Q-2026-06-25-shell-research, ADR-0137, docs/public/compat/package-tooling.md]
 code: [packages/shell/src/shell.ts, packages/shell/src/bin-resolver.ts, packages/shell/src/builtins.ts, packages/shell/src/language-service.ts]
 ---
 

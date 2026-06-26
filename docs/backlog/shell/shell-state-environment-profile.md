@@ -5,7 +5,7 @@ title: Shell state and environment profile fidelity
 created: 2026-06-25
 why: cwd/env mutation is user-visible through owner-resident shell sessions, child processes, `npm run`, and PTY exit frames, but the model is spread across closures and snapshots.
 user_story: As a developer running Node files and npm scripts in rifty, I want `PWD`, `OLDPWD`, `PATH`, `TERM`, `export`, `unset`, and npm lifecycle env to behave like a real shell/npm surface where supported, with explicit loud gaps where not supported.
-sources: [Q-2026-06-25-shell-research, ADR-0146, ADR-0148, docs/backlog/shell/node-modules-bin-execution.md]
+sources: [Q-2026-06-25-shell-research, ADR-0146, ADR-0148, docs/public/compat/package-tooling.md]
 code: [packages/shell/src/shell.ts, packages/shell/src/commands/cd.ts, packages/shell/src/commands/env.ts, apps/playground/src/workers/pty-server.ts, apps/playground/src/glue/npm-shell-command.ts, apps/playground/src/workers/real-vite-bootstrap.ts]
 ---
 
