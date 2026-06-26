@@ -17,24 +17,37 @@ build/preview only. So the dev/default path silently drops flags and runs the de
 server for any unrecognized token. Narrowest, no-blocker slice of the honest-vite
 umbrella.
 
-## Options or Next
+## Decisions (pre-resolved, v1 — do not re-litigate)
 
-Mirror the build/preview guard on the dev path:
+- **v1 loud-rejects ALL dev-path args** — `--port`, `--host`, `--mode`, `--config`,
+  `--help`, `--version`, and any unknown subcommand. Do NOT thread `--port`/`--host` into
+  the dev-server child in v1 — fully honest beats partially honored; real honoring is the
+  follow-up below.
+- **Only `vite`, `vite dev`, `vite serve` (no extra args) boot the dev server** — real
+  Vite's dev aliases; everything else is a loud gap.
+- **`--help` / `--version` loud-reject in v1** — real CLI prints these; that arrives with
+  `honest-vite-real-bin-dispatch`. Never silently boot dev.
+- **Extract a pure `classifyViteCommand(args)`** (→ `dev` | `build` | `preview` |
+  `optimize` | `{reject, msg}`) out of the inline `registerCommand('vite')` callback so the
+  dispatch is UNIT-testable (the bootstrap closure is not). Tests target the classifier; one
+  e2e covers wiring.
 
-- `vite` / `vite dev` / `vite serve` (real Vite dev aliases) with NO extra args →
-  `runDevServer` (unchanged).
-- A dev-path flag/arg we don't honor (`--port`, `--host`, `--mode`, `--config`, …) →
-  loud reject (same shape/exit as `rejectUnsupportedViteArgs`). Honor `--port`/`--host`
-  for real only if the existing config plumbing makes it cheap; otherwise loud-reject —
-  never a silent no-op.
-- Unknown subcommand (`vite frobnicate`) → loud "unknown command", not silent dev.
+## Next
+
+Apply the classifier in `real-vite-bootstrap.ts`; reuse `rejectUnsupportedViteArgs`'s
+shape/exit for the dev-path rejects.
+
+## Follow-up (tracked, not this item)
+
+Real `--port` / `--host` honoring on the dev path — lands naturally with
+`honest-vite-real-bin-dispatch` (the real CLI parses them); do not pre-build the plumbing.
 
 ## Done when (no partial delivery)
 
 - Every `vite <x>` either does the real Vite thing or loud-rejects with a one-line
   diagnostic + non-zero exit; NO input silently boots the dev server.
-- Regression test per case: bare `vite`, `vite dev`, `vite --port 3000`, `vite --host`,
-  `vite dev --port 3000`, `vite badcmd`.
+- Regression test per case: bare `vite`, `vite dev`, `vite serve`, `vite --port 3000`,
+  `vite --host`, `vite dev --port 3000`, `vite --help`, `vite --version`, `vite badcmd`.
 - Loud-gap rule: an unsupported flag throws/rejects, never a swallowed arg.
 
 ## Reversibility

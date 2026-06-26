@@ -17,6 +17,19 @@ The curated handlers pass `configFile: false` + programmatic options derived fro
 of that runs — a user-edited config is a no-op with no signal. Gap 2 of the honest-vite
 umbrella.
 
+## Decisions (pre-resolved)
+
+- **Deliverable = interim loud-throw (option 2).** Real config load (option 1) is a tracked
+  PHASE 2 in this file, NOT a prerequisite — ship interim first.
+- **Safe to ship the interim** (verified af36b7ed): NO default template seeds a user
+  `vite.config.*` — templates/presets carry none; the only `vite.config.ts` in-repo is the
+  playground app's own COI config, not project-seeded. So the loud-throw fires ONLY on a
+  user-added config; it cannot brick the default vite / vite8 presets.
+- **Detection rule = presence, not heuristic.** The curated path honors NO user config
+  (`configFile:false`, `build-boot.ts:176/204`), so trigger on "a
+  `vite.config.{ts,js,mjs,cjs,mts,cts}` exists in the project root" → loud-throw. No
+  partial-merge.
+
 ## Options or Next
 
 1. **Real load.** Run Vite's config resolution against the owner store: esbuild-bundle
