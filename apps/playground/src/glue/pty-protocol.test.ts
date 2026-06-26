@@ -50,12 +50,18 @@ describe('pty-protocol', () => {
   it('routes pty:dev-config as page→owner', () => {
     const f: PtyFrame = {
       type: 'pty:dev-config',
+      id: 'dc1',
       templateId: 'express-sqlite',
       slug: 'fullstack',
       setup: 'from-scratch',
     };
     expect(isPageToOwner(f)).toBe(true);
     expect(isOwnerToPage(f)).toBe(false);
+  });
+  it('routes pty:dev-config-ready as owner→page', () => {
+    const f: PtyFrame = { type: 'pty:dev-config-ready', id: 'dc1' };
+    expect(isOwnerToPage(f)).toBe(true);
+    expect(isPageToOwner(f)).toBe(false);
   });
   it('does not advertise pty:resize — dropped wired no-op; dims stay per-exec (backlog: live-resize)', () => {
     // pty:resize was a fully-wired no-op the owner silently ignored. We removed

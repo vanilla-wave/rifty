@@ -142,4 +142,50 @@ describe('createTsDiagnosticsSync', () => {
     ]);
     sync.dispose();
   });
+
+  it('waits for the request gate before opening a document and reading diagnostics', async () => {
+    vi.useFakeTimers();
+    const gate = deferred<void>();
+    const calls: string[] = [];
+    const client: TsDiagnosticsClient<TestDiagnostic> = {
+      open: (path) => {
+        calls.push(`open:${path}`);
+        return Promise.resolve();
+      },
+      update: () => Promise.resolve(),
+      close: () => Promise.resolve(),
+      getSemanticDiagnostics: (path) => {
+        calls.push(`semantic:${path}`);
+        return Promise.resolve([]);
+      },
+      getSyntacticDiagnostics: (path) => {
+        calls.push(`syntactic:${path}`);
+        return Promise.resolve([]);
+      },
+    };
+    const sync = createTsDiagnosticsSync<TestDiagnostic, string>({
+      client,
+      debounceMs: 0,
+      isSupportedPath: (path) => path.endsWith('.ts'),
+      setMarkers: () => undefined,
+      setDiagnostics: () => undefined,
+      toMarkers: () => [],
+      beforeRequest: () => gate.promise,
+      warn: () => undefined,
+    });
+
+    sync.handleDocument({ kind: 'open', path: '/scratch/src/main.ts', text: 'bad' });
+    await vi.runOnlyPendingTimersAsync();
+    await flushAsync();
+    expect(calls).toEqual([]);
+
+    gate.resolve();
+    await flushAsync();
+    expect(calls).toEqual([
+      'open:/scratch/src/main.ts',
+      'semantic:/scratch/src/main.ts',
+      'syntactic:/scratch/src/main.ts',
+    ]);
+    sync.dispose();
+  });
 });

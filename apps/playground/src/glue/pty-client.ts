@@ -24,6 +24,7 @@ let ridCounter = 0;
 
 /** Exit code for an in-flight run cut short by owner death (128 + SIGKILL(9)). */
 const OWNER_DIED_EXIT = 137;
+const DEV_CONFIG_READY_TIMEOUT_MS = 60_000;
 
 export interface ExecOptions {
   readonly cols: number;
@@ -45,6 +46,11 @@ export interface PtySessionSnapshot {
 }
 
 type PendingRun = { sid: string; resolve: (code: number) => void; onChunk: ExecOptions['onChunk'] };
+type PendingDevConfig = {
+  resolve: () => void;
+  reject: (err: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
 type SessionState = { cwd: string; env: Record<string, string>; readyResolvers: (() => void)[] };
 
 export interface PtyClientDeps {
@@ -83,7 +89,7 @@ export interface PtyClient {
     templateId: string;
     slug: string;
     setup: 'instant' | 'from-scratch';
-  }): void;
+  }): Promise<void>;
   /** Cached cwd/env for a session (from the last `pty:exit`). */
   snapshot(sid: string): PtySessionSnapshot;
   /** Feed an owner→page frame (from `handle.on('message')`). */
@@ -100,6 +106,8 @@ export interface PtyClient {
 export function createPtyClient(deps: PtyClientDeps): PtyClient {
   const sessions = new Map<string, SessionState>();
   const runs = new Map<string, PendingRun>();
+  const devConfigs = new Map<string, PendingDevConfig>();
+  let devConfigSeq = 0;
   // Flipped by disconnect() on owner death: subsequent openSession/exec settle
   // immediately instead of awaiting frames the dead owner will never send.
   let disconnected = false;
@@ -159,12 +167,24 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
     requestPreview(): void {
       deps.send({ type: 'pty:preview-req' });
     },
-    setDevConfig(config): void {
+    setDevConfig(config): Promise<void> {
+      if (disconnected) return Promise.resolve();
+      const id = `dc${++devConfigSeq}`;
       deps.send({
         type: 'pty:dev-config',
+        id,
         templateId: config.templateId,
         slug: config.slug,
         setup: config.setup,
+      });
+      return new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          devConfigs.delete(id);
+          reject(
+            new Error(`pty:dev-config ${id} timed out after ${DEV_CONFIG_READY_TIMEOUT_MS}ms`),
+          );
+        }, DEV_CONFIG_READY_TIMEOUT_MS);
+        devConfigs.set(id, { resolve, reject, timer });
       });
     },
     snapshot(sid: string): PtySessionSnapshot {
@@ -200,6 +220,15 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
           deps.onPreview?.(frame);
           return;
         }
+        case 'pty:dev-config-ready': {
+          const pending = devConfigs.get(frame.id);
+          if (!pending) return;
+          devConfigs.delete(frame.id);
+          clearTimeout(pending.timer);
+          if (frame.error) pending.reject(new Error(frame.error));
+          else pending.resolve();
+          return;
+        }
       }
     },
     disconnect(): void {
@@ -212,6 +241,11 @@ export function createPtyClient(deps: PtyClientDeps): PtyClient {
       // (but not yet ready) the instant the owner died can't hang its waiter.
       for (const s of sessions.values()) {
         for (const res of s.readyResolvers.splice(0)) res();
+      }
+      for (const [id, pending] of devConfigs) {
+        devConfigs.delete(id);
+        clearTimeout(pending.timer);
+        pending.resolve();
       }
     },
   };

@@ -194,6 +194,7 @@ const GIT_INIT_CONFIG = `[core]
 const PROJECT_GITIGNORE = `node_modules/
 dist/
 .vite/
+.rifty/
 *.log
 `;
 

@@ -217,16 +217,43 @@ describe('pty-client', () => {
     expect(sent).toEqual([{ type: 'pty:preview-req' }]);
   });
 
-  it('setDevConfig sends the current preset dev config (ADR-0148 co-resident dev server in owner)', () => {
+  it('setDevConfig sends the current preset dev config and waits for owner readiness', async () => {
     const { client, sent } = harness();
-    client.setDevConfig({ templateId: 'express-sqlite', slug: 'fullstack', setup: 'from-scratch' });
+    const ready = client.setDevConfig({
+      templateId: 'express-sqlite',
+      slug: 'fullstack',
+      setup: 'from-scratch',
+    });
     expect(sent).toEqual([
       {
         type: 'pty:dev-config',
+        id: 'dc1',
         templateId: 'express-sqlite',
         slug: 'fullstack',
         setup: 'from-scratch',
       },
     ]);
+    const beforeAck = await settledOr(
+      ready.then(() => 'resolved' as const),
+      'pending' as const,
+    );
+    expect(beforeAck).toBe('pending');
+    client.onFrame({ type: 'pty:dev-config-ready', id: 'dc1' });
+    await expect(ready).resolves.toBeUndefined();
+  });
+
+  it('disconnect resolves a pending setDevConfig waiter (owner died before readiness ack)', async () => {
+    const { client } = harness();
+    const ready = client.setDevConfig({
+      templateId: 'typescript',
+      slug: 'scratch',
+      setup: 'instant',
+    });
+    client.disconnect();
+    const settled = await settledOr(
+      ready.then(() => 'resolved' as const),
+      'pending' as const,
+    );
+    expect(settled).toBe('resolved');
   });
 });

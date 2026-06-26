@@ -119,6 +119,7 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     root: '/scratch',
     previewOwnerToken: 'unavailable',
     snapshotPort: UNAVAILABLE_OWNER_PORT,
+    ready: Promise.resolve(),
     closed: Promise.resolve(0),
     openSession: () => Promise.resolve(),
     exec: (_sid, _line, opts) => {
@@ -135,7 +136,7 @@ function createUnavailableOwner(): WorkspaceOwnerHandle {
     onDevServer: () => () => {},
     onPreview: () => () => {},
     requestPreview: () => {},
-    setDevConfig: () => {},
+    setDevConfig: () => Promise.resolve(),
     sendTsLsp: () => {},
     onTsLsp: () => () => {},
     close: () => {},
@@ -413,6 +414,17 @@ export function App(props: AppProps) {
   );
   const devServerRunning = (): boolean => devServerStatus() === 'running';
   const [tsProjectRevision, setTsProjectRevision] = createSignal(0);
+  interface TsPresetTransitionGate {
+    resolve(): void;
+  }
+  let tsPresetTransitionReady: Promise<void> = Promise.resolve();
+  function beginTsPresetTransition(): TsPresetTransitionGate {
+    let resolve!: () => void;
+    tsPresetTransitionReady = new Promise<void>((done) => {
+      resolve = done;
+    });
+    return { resolve };
+  }
 
   // ALL live previewable ports (ADR-0155): the dev-server port + each `node
   // <file>` server's ports, pushed by the owner as a `pty:preview` snapshot. Feeds
@@ -713,7 +725,12 @@ export function App(props: AppProps) {
     const client = createTsLanguageServiceClient(owner);
     let disposed = false;
     let ready: Promise<boolean> = Promise.resolve(false);
+    const waitForTsRequestGate = async (): Promise<void> => {
+      await owner.ready;
+      await tsPresetTransitionReady;
+    };
     const waitForTsReady = async (): Promise<void> => {
+      await waitForTsRequestGate();
       await ready;
     };
     // Register the rifty-LS Monaco providers (ADR-0166 phase 2): hover / def /
@@ -726,6 +743,8 @@ export function App(props: AppProps) {
 
     async function initAndReplay(root = activeRoot()): Promise<boolean> {
       const run = (async (): Promise<boolean> => {
+        await waitForTsRequestGate();
+        if (disposed) return false;
         await client.init(root);
         setDiagnostics((prev) => clearTsLsInitDiagnostics(new Map(prev)));
         const replayEvents: EditorDocumentEvent[] = [];
@@ -1132,6 +1151,7 @@ export function App(props: AppProps) {
       setMarkers: (path, markers) => api.setMarkers(path, [...markers]),
       setDiagnostics: (updater) => setDiagnostics((prev) => updater(new Map(prev))),
       toMarkers: lspToMonacoMarkers,
+      beforeRequest: waitForTsRequestGate,
       warn: (message) => console.warn('[ts-lsp]', message),
     });
     const unsubscribe = api.onDocument(diagnosticSync.handleDocument);
@@ -1399,34 +1419,51 @@ export function App(props: AppProps) {
     await waitForDevServerBoot(targetSessionId, generation);
   }
 
-  async function runVitePreset(preset: Preset): Promise<void> {
-    setActivePreset(preset.id);
-    await machine.loadPreset(preset);
-    discardPendingProgramWrite();
-    seedViteWorkspace(preset);
-    setTsProjectRevision((revision) => revision + 1);
+  function reinitializeTsForPickedPreset(preset: Preset): void {
     openPresetEditorTabs(preset);
-    // Tell the owner which template/runtime the next co-resident dev server boots
-    // (ADR-0148 co-resident dev server): the persistent owner is spawned once, so a node-server preset
-    // must update the runtime before the dev line runs. `slug` keys the install
-    // stamp/RIFTY_RFV_SLUG to the ACTIVE ROOT (store.activeId — 'scratch' on a
-    // gallery pick), matching the owner spawn; `templateId`/`setup` follow the
-    // picked preset (the new active starter for this scratch).
-    workspaceOwner().setDevConfig({
-      templateId: activeTemplate().id,
-      slug: store.activeId(),
-      setup: preset.setup,
-    });
-    if (devServerStatus() !== 'stopped' || terminalStatus(devServerSessionId) === 'running') {
+    setTsProjectRevision((revision) => revision + 1);
+  }
+
+  async function runVitePreset(preset: Preset, tsGate?: TsPresetTransitionGate): Promise<void> {
+    try {
+      setActivePreset(preset.id);
+      await machine.loadPreset(preset);
+      discardPendingProgramWrite();
+      seedViteWorkspace(preset);
+      const restartNeeded =
+        devServerStatus() !== 'stopped' || terminalStatus(devServerSessionId) === 'running';
       const restartSessionId = devServerSessionId;
-      if (restartSessionId) await restartDevServer(restartSessionId);
-      return;
+      let session: TerminalSessionSnapshot | undefined;
+      if (!restartNeeded) {
+        session = devServerSession();
+        devServerSessionId = session.id;
+      }
+      // Tell the owner which template/runtime the next co-resident dev server boots
+      // (ADR-0148 co-resident dev server): the persistent owner is spawned once, so a node-server preset
+      // must update the runtime before the dev line runs. `slug` keys the install
+      // stamp/RIFTY_RFV_SLUG to the ACTIVE ROOT (store.activeId — 'scratch' on a
+      // gallery pick), matching the owner spawn; `templateId`/`setup` follow the
+      // picked preset (the new active starter for this scratch).
+      await workspaceOwner().setDevConfig({
+        templateId: templateForPreset(preset).id,
+        slug: store.activeId(),
+        setup: preset.setup,
+      });
+      if (restartNeeded) {
+        if (restartSessionId) await restartDevServer(restartSessionId);
+        reinitializeTsForPickedPreset(preset);
+        return;
+      }
+      if (!session) return;
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      manager.clear(session.id); // fresh console for the switched-in project
+      const generation = ++devServerRestartGeneration;
+      void runTerminalSequence(session.id, presetBootLines(preset, activeRoot()));
+      await waitForDevServerBoot(session.id, generation);
+      reinitializeTsForPickedPreset(preset);
+    } finally {
+      tsGate?.resolve();
     }
-    const session = devServerSession();
-    devServerSessionId = session.id;
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    manager.clear(session.id); // fresh console for the switched-in project
-    await runTerminalSequence(session.id, presetBootLines(preset, activeRoot()));
   }
 
   // ADR-0165 §3 switch = owner teardown + respawn at the next root, wired to the
@@ -1647,10 +1684,11 @@ export function App(props: AppProps) {
     if (!(await waitForPendingSwitch())) return;
     if (!(await waitForPendingSaveApplied())) return;
     const wasDirty = store.activeId() === 'scratch' && store.scratch()?.dirty === true;
+    const tsGate = wasDirty ? undefined : beginTsPresetTransition();
     store.pickStarter(id);
     if (!wasDirty) {
       durableNewScratch(id);
-      void runVitePreset(presetForId(id));
+      void runVitePreset(presetForId(id), tsGate);
     }
   }
 
@@ -1854,9 +1892,10 @@ export function App(props: AppProps) {
   // so the owner would respawn at the new root with the OLD template/starter.
   function applyPendingTarget(target: { pendingStarter?: string; pendingId?: string }): void {
     if (target.pendingStarter) {
+      const tsGate = beginTsPresetTransition();
       store.confirmPickStarter(target.pendingStarter);
       durableNewScratch(target.pendingStarter);
-      void runVitePreset(presetForId(target.pendingStarter));
+      void runVitePreset(presetForId(target.pendingStarter), tsGate);
     } else if (target.pendingId) {
       store.confirmSwitchTo(target.pendingId);
       void trackSwitch(switchTo(target.pendingId));

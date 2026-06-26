@@ -93,7 +93,7 @@ export interface PtyServerDeps {
     templateId: string;
     slug: string;
     setup: 'instant' | 'from-scratch';
-  }) => void;
+  }) => void | Promise<void>;
 }
 
 export interface PtyServer {
@@ -209,12 +209,21 @@ export function createPtyServer(deps: PtyServerDeps): PtyServer {
         return;
       }
       case 'pty:dev-config': {
-        deps.onDevConfig?.({
-          templateId: frame.templateId,
-          slug: frame.slug,
-          setup: frame.setup,
-        });
-        return;
+        return Promise.resolve(
+          deps.onDevConfig?.({
+            templateId: frame.templateId,
+            slug: frame.slug,
+            setup: frame.setup,
+          }),
+        ).then(
+          () => deps.send({ type: 'pty:dev-config-ready', id: frame.id }),
+          (err: unknown) =>
+            deps.send({
+              type: 'pty:dev-config-ready',
+              id: frame.id,
+              error: err instanceof Error ? err.message : String(err),
+            }),
+        );
       }
     }
   }

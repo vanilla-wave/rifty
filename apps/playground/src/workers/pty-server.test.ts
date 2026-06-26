@@ -13,6 +13,14 @@ function harness() {
   return { server, out };
 }
 
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
 describe('pty-server', () => {
   beforeEach(() => {
     resetSyncMirror(); // fresh in-memory owner store per test
@@ -163,10 +171,13 @@ describe('pty-server', () => {
     const server = createPtyServer({
       send: () => {},
       makeShell: () => new Shell({ cwd: '/', env: {} }),
-      onDevConfig: (c) => configs.push(c),
+      onDevConfig: (c) => {
+        configs.push(c);
+      },
     });
     server.handleFrame({
       type: 'pty:dev-config',
+      id: 'dc1',
       templateId: 'express-sqlite',
       slug: 'fullstack',
       setup: 'from-scratch',
@@ -174,5 +185,26 @@ describe('pty-server', () => {
     expect(configs).toEqual([
       { templateId: 'express-sqlite', slug: 'fullstack', setup: 'from-scratch' },
     ]);
+  });
+
+  it('acks pty:dev-config only after async dependency preparation settles', async () => {
+    const ready = deferred();
+    const out: OwnerToPageFrame[] = [];
+    const server = createPtyServer({
+      send: (f) => out.push(f),
+      makeShell: () => new Shell({ cwd: '/', env: {} }),
+      onDevConfig: () => ready.promise,
+    });
+    const run = server.handleFrame({
+      type: 'pty:dev-config',
+      id: 'dc1',
+      templateId: 'typescript',
+      slug: 'scratch',
+      setup: 'instant',
+    });
+    expect(out).toEqual([]);
+    ready.resolve();
+    await run;
+    expect(out).toEqual([{ type: 'pty:dev-config-ready', id: 'dc1' }]);
   });
 });

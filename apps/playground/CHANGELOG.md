@@ -38,6 +38,14 @@
 - **TS-LS init failures are visible in Problems.** Missing or broken workspace
   TypeScript now surfaces as an actionable Problems diagnostic instead of only a
   console warning.
+- **TS-LS provider fallbacks stay quiet when workspace TypeScript is unavailable.**
+  Monaco provider calls now return empty editor results for the same missing or
+  unreadable workspace TypeScript errors that Problems already reports, so
+  production boot smoke does not see duplicate page errors.
+- **TypeScript starter restores its own dependency snapshot after starter switches.**
+  The owner no longer reuses a same-root Vite install stamp against the previous
+  package.json, so workspace `node_modules/typescript` is present before TS-LS
+  initializes.
 - **Terminal command overlays no longer leave colored command rails or cover output.** The
   playground terminal no longer mounts the command-block rail/preview or sticky current-command
   pill, and the xterm viewport no longer reserves the old rail gutter.

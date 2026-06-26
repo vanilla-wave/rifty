@@ -68,8 +68,27 @@ describe('vite command — real installed bin routing', () => {
   it('waits for preset dev-config dependency restore before running the next pty command', () => {
     expect(source).toContain('let devConfigReady: Promise<void> = Promise.resolve()');
     expect(source).toContain('devConfigReady = prepareActiveDevConfigDeps()');
+    expect(source).toContain('return devConfigReady');
     expect(source).toContain("if (frame.type === 'pty:exec')");
     expect(source).toContain('void devConfigReady.then(() => server.handleFrame(frame))');
+  });
+
+  it('waits for preset dev-config dependency restore before relaying TS-LSP requests', () => {
+    expect(source).toContain('async function waitForWorkspaceTypeScript(root: string)');
+    expect(source).toContain('await devConfigReady;');
+    expect(source).toContain('await waitForWorkspaceTypeScript(devCfg.root);');
+    expect(source).toContain('relayTsLspRequest(message);');
+  });
+
+  it('publishes owner readiness after IPC handlers and workspace bridges are served', () => {
+    const onMessageAt = source.indexOf('kernelIpc.onMessage?.((message) => {');
+    const bridgeAt = source.indexOf('const tearIndexBridge = serveProjectIndex(');
+    const readyAt = source.indexOf(
+      "kernelIpc.send?.({ type: 'rifty:workspace-owner-ready', port })",
+    );
+    expect(onMessageAt).toBeGreaterThan(-1);
+    expect(bridgeAt).toBeGreaterThan(onMessageAt);
+    expect(readyAt).toBeGreaterThan(bridgeAt);
   });
 });
 

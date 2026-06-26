@@ -41,20 +41,10 @@ function readStringMap(value: unknown): Record<string, string> {
   );
 }
 
-/**
- * The dep set an `install({vfs, cwd})` call would request for this project,
- * or `null` when package.json is missing/malformed (then nothing can be
- * stamped or matched).
- */
-export async function readEffectiveDeps(
-  vfs: Vfs,
-  root: string,
-): Promise<Record<string, string> | null> {
-  const path = joinPath(root, 'package.json');
-  if (!(await vfs.exists(path))) return null;
+export function effectiveDepsFromPackageJsonText(text: string): Record<string, string> | null {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(await vfs.readFileText(path));
+    parsed = JSON.parse(text);
   } catch {
     return null;
   }
@@ -67,6 +57,20 @@ export async function readEffectiveDeps(
   };
 }
 
+/**
+ * The dep set an `install({vfs, cwd})` call would request for this project,
+ * or `null` when package.json is missing/malformed (then nothing can be
+ * stamped or matched).
+ */
+export async function readEffectiveDeps(
+  vfs: Vfs,
+  root: string,
+): Promise<Record<string, string> | null> {
+  const path = joinPath(root, 'package.json');
+  if (!(await vfs.exists(path))) return null;
+  return effectiveDepsFromPackageJsonText(await vfs.readFileText(path));
+}
+
 export function depsEqual(
   a: Readonly<Record<string, string>>,
   b: Readonly<Record<string, string>>,
@@ -74,6 +78,13 @@ export function depsEqual(
   const aKeys = Object.keys(a);
   if (aKeys.length !== Object.keys(b).length) return false;
   return aKeys.every((key) => a[key] === b[key]);
+}
+
+function depsInclude(
+  full: Readonly<Record<string, string>>,
+  subset: Readonly<Record<string, string>>,
+): boolean {
+  return Object.entries(subset).every(([key, value]) => full[key] === value);
 }
 
 export async function readInstallStamp(vfs: Vfs, root: string): Promise<InstallStamp | null> {
@@ -152,5 +163,29 @@ export async function installStampSatisfied(
   if (!(await vfs.exists(joinPath(root, 'node_modules')))) return null;
   const deps = await readEffectiveDeps(vfs, root);
   if (!deps || !depsEqual(stamp.deps, deps)) return null;
+  return stamp;
+}
+
+/**
+ * Same skip predicate as installStampSatisfied, but the caller also provides the
+ * template package.json that is about to boot. This prevents a same-root starter
+ * switch from reusing a stamp that only matches the previous package.json still
+ * on disk.
+ */
+export async function installStampSatisfiedForPackageJson(
+  vfs: Vfs,
+  root: string,
+  slug: string,
+  packageJsonText: string,
+): Promise<InstallStamp | null> {
+  const expectedDeps = effectiveDepsFromPackageJsonText(packageJsonText);
+  if (!expectedDeps) return null;
+  const currentDeps = await readEffectiveDeps(vfs, root);
+  if (!currentDeps || !depsInclude(currentDeps, expectedDeps)) return null;
+  const stamp = await readInstallStamp(vfs, root);
+  if (!stamp) return null;
+  if (stamp.slug !== slug) return null;
+  if (!(await vfs.exists(joinPath(root, 'node_modules')))) return null;
+  if (!depsEqual(stamp.deps, currentDeps)) return null;
   return stamp;
 }
