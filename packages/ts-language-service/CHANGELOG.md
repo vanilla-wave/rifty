@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- **Worker boot is idempotent for explicit hosts.** A host wrapper can call
+  `bootTsLanguageServiceWorker()` directly to pin bundler reachability without
+  double-registering fork-IPC handlers if the guarded auto-boot already ran.
+
 - **TS rename/inlay parity holes closed.** Import-path rename now follows
   TypeScript's `getRenameInfo().fileToRename` → `getEditsForFileRename` path, so
   renaming `"./impl"` to a new file emits the same relative import edit real TS

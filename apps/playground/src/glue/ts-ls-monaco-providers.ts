@@ -715,6 +715,15 @@ export interface TsLanguageServiceProvidersHandle {
   };
 }
 
+export interface TsLanguageServiceProviderOptions {
+  /**
+   * Awaited before provider requests. The App uses this to keep user-facing
+   * editor actions behind the current `ts:init` + open-document replay, without
+   * disposing providers during same-owner starter reseeds.
+   */
+  beforeRequest?(): Promise<void>;
+}
+
 /**
  * Register all rifty-LS Monaco providers (hover / def / type-def / completions)
  * for `javascript` + `typescript`. Returns a disposer that unregisters every
@@ -724,8 +733,17 @@ export interface TsLanguageServiceProvidersHandle {
 export function registerTsLanguageServiceProviders(
   client: TsLanguageServiceClient,
   bridge: EditorPathBridge,
+  options: TsLanguageServiceProviderOptions = {},
 ): TsLanguageServiceProvidersHandle {
   const disposables: monaco.IDisposable[] = [];
+  const readyRequest = async <T>(request: () => Promise<T>): Promise<T> => {
+    await options.beforeRequest?.();
+    return request();
+  };
+  const tsRequestOrReady = <T>(request: () => Promise<T>, fallback: T): Promise<T> =>
+    tsRequestOr(() => readyRequest(request), fallback);
+  const tsRequestResultReady = <T>(request: () => Promise<T>): Promise<TsRequestResult<T>> =>
+    tsRequestResult(() => readyRequest(request));
   disposables.push(
     monaco.editor.registerCommand(
       APPLY_COMPLETION_WORKSPACE_EDIT_COMMAND,
@@ -743,7 +761,7 @@ export function registerTsLanguageServiceProviders(
     async provideHover(model, position, token) {
       const path = bridge.pathForModel(model);
       if (!path) return null;
-      const hover = await tsRequestOr(
+      const hover = await tsRequestOrReady(
         () => client.getQuickInfo(path, monacoToLspPosition(position)),
         null,
       );
@@ -756,7 +774,7 @@ export function registerTsLanguageServiceProviders(
     async provideDefinition(model, position, token) {
       const path = bridge.pathForModel(model);
       if (!path) return null;
-      const links = await tsRequestOr(
+      const links = await tsRequestOrReady(
         () => client.getDefinitionLinks(path, monacoToLspPosition(position)),
         emptyDefinitionLinks(),
       );
@@ -771,7 +789,7 @@ export function registerTsLanguageServiceProviders(
     async provideTypeDefinition(model, position, token) {
       const path = bridge.pathForModel(model);
       if (!path) return null;
-      const locations = await tsRequestOr(
+      const locations = await tsRequestOrReady(
         () => client.getTypeDefinition(path, monacoToLspPosition(position)),
         [],
       );
@@ -789,7 +807,7 @@ export function registerTsLanguageServiceProviders(
       if (!path) return { suggestions: [] };
       const lspPosition = monacoToLspPosition(position);
       const options = completionOptionsFromModel(model, context);
-      const list = await tsRequestOr(
+      const list = await tsRequestOrReady(
         () => client.getCompletions(path, lspPosition, options),
         emptyCompletionList(),
       );
@@ -857,7 +875,7 @@ export function registerTsLanguageServiceProviders(
       const ctx = (item as ResolvableItem)[RESOLVE_KEY];
       const label = typeof item.label === 'string' ? item.label : item.label.label;
       if (!ctx) return item;
-      const resolved = await tsRequestOr(
+      const resolved = await tsRequestOrReady(
         () =>
           client.getCompletionDetails(
             ctx.path,
@@ -900,7 +918,7 @@ export function registerTsLanguageServiceProviders(
     async provideReferences(model, position, context, token) {
       const path = bridge.pathForModel(model);
       if (!path) return null;
-      const refs = await tsRequestOr(
+      const refs = await tsRequestOrReady(
         () =>
           client.getReferences(path, monacoToLspPosition(position), {
             includeDeclaration: context.includeDeclaration,
@@ -926,7 +944,7 @@ export function registerTsLanguageServiceProviders(
       // its runtime keys on `rejectReason` first: a pure rejection legitimately
       // carries no range/text, so the cast bridges that monaco modeling quirk.
       if (!path) return renameRejection('Not a rifty TypeScript document');
-      const result = await tsRequestOr(
+      const result = await tsRequestOrReady(
         () => client.prepareRename(path, monacoToLspPosition(position)),
         null,
       );
@@ -937,7 +955,7 @@ export function registerTsLanguageServiceProviders(
     async provideRenameEdits(model, position, newName, token) {
       const path = bridge.pathForModel(model);
       if (!path) return { edits: [], rejectReason: 'Not a rifty TypeScript document' };
-      const edit = await tsRequestOr(
+      const edit = await tsRequestOrReady(
         () => client.getRenameEdits(path, monacoToLspPosition(position), newName),
         emptyWorkspaceEdit(),
       );
@@ -959,7 +977,7 @@ export function registerTsLanguageServiceProviders(
     async provideSignatureHelp(model, position, token, context) {
       const path = bridge.pathForModel(model);
       if (!path) return null;
-      const help = await tsRequestOr(
+      const help = await tsRequestOrReady(
         () =>
           client.getSignatureHelp(
             path,
@@ -993,7 +1011,7 @@ export function registerTsLanguageServiceProviders(
       for (const marker of markers) {
         const code = markerErrorCode(marker.code);
         if (code === undefined) continue;
-        const fixesResult = await tsRequestResult(() =>
+        const fixesResult = await tsRequestResultReady(() =>
           client.getCodeFixes(path, monacoToLspRange(marker), [code], actionEditOptions),
         );
         if (fixesResult.status === 'disposed') return emptyCodeActions();
@@ -1005,7 +1023,7 @@ export function registerTsLanguageServiceProviders(
           seenFixTitles.add(fix.title);
           actions.push(toMonacoLazyCodeAction(fix, [marker]));
           if (fix.fixId !== undefined && fix.fixAllDescription) {
-            const editResult = await tsRequestResult(() =>
+            const editResult = await tsRequestResultReady(() =>
               client.getCombinedCodeFix(path, fix.fixId, actionEditOptions),
             );
             if (editResult.status === 'disposed') return emptyCodeActions();
@@ -1027,7 +1045,7 @@ export function registerTsLanguageServiceProviders(
       // selection). An already-organized file yields an empty `changes` → an action
       // with no resources; only push it when it carries real edits so the menu
       // doesn't show a no-op entry.
-      const organizeResult = await tsRequestResult(() =>
+      const organizeResult = await tsRequestResultReady(() =>
         client.organizeImports(path, actionEditOptions),
       );
       if (organizeResult.status === 'disposed') return emptyCodeActions();
@@ -1044,7 +1062,7 @@ export function registerTsLanguageServiceProviders(
         }
       }
 
-      const refactorsResult = await tsRequestResult(() =>
+      const refactorsResult = await tsRequestResultReady(() =>
         client.getRefactorActions(path, monacoToLspRange(range), actionEditOptions),
       );
       if (refactorsResult.status === 'disposed') return emptyCodeActions();
@@ -1072,7 +1090,7 @@ export function registerTsLanguageServiceProviders(
       // the model's resolved options too, but read the model directly so the source
       // is unambiguous): tabSize + insertSpaces feed the service's FormatCodeSettings.
       const modelOptions = model.getOptions();
-      const edits = await tsRequestOr(
+      const edits = await tsRequestOrReady(
         () =>
           client.getFormattingEdits(path, {
             tabSize: options.tabSize ?? modelOptions.tabSize,
@@ -1091,7 +1109,7 @@ export function registerTsLanguageServiceProviders(
       const path = bridge.pathForModel(model);
       if (!path) return undefined;
       const modelOptions = model.getOptions();
-      const edits = await tsRequestOr(
+      const edits = await tsRequestOrReady(
         () =>
           client.getRangeFormattingEdits(path, monacoToLspRange(range), {
             tabSize: options.tabSize ?? modelOptions.tabSize,
@@ -1108,7 +1126,7 @@ export function registerTsLanguageServiceProviders(
     async provideImplementation(model, position, token) {
       const path = bridge.pathForModel(model);
       if (!path) return null;
-      const locations = await tsRequestOr(
+      const locations = await tsRequestOrReady(
         () => client.getImplementation(path, monacoToLspPosition(position)),
         [],
       );
@@ -1124,7 +1142,7 @@ export function registerTsLanguageServiceProviders(
     async provideDocumentSymbols(model, token) {
       const path = bridge.pathForModel(model);
       if (!path) return [];
-      const symbols = await tsRequestOr(() => client.getDocumentSymbols(path), []);
+      const symbols = await tsRequestOrReady(() => client.getDocumentSymbols(path), []);
       if (token.isCancellationRequested) return [];
       return symbols.map(toMonacoDocumentSymbol);
     },
@@ -1134,7 +1152,7 @@ export function registerTsLanguageServiceProviders(
     async provideFoldingRanges(model, _context, token) {
       const path = bridge.pathForModel(model);
       if (!path) return [];
-      const ranges = await tsRequestOr(() => client.getFoldingRanges(path), []);
+      const ranges = await tsRequestOrReady(() => client.getFoldingRanges(path), []);
       if (token.isCancellationRequested) return [];
       return ranges.map(toMonacoFoldingRange);
     },
@@ -1145,7 +1163,7 @@ export function registerTsLanguageServiceProviders(
     async provideInlayHints(model, range, token) {
       const path = bridge.pathForModel(model);
       if (!path) return { hints: [], dispose() {} };
-      const hints = await tsRequestOr(
+      const hints = await tsRequestOrReady(
         () => client.getInlayHints(path, monacoToLspRange(range)),
         [],
       );
@@ -1158,7 +1176,7 @@ export function registerTsLanguageServiceProviders(
     async provideDocumentHighlights(model, position, token) {
       const path = bridge.pathForModel(model);
       if (!path) return [];
-      const highlights = await tsRequestOr(
+      const highlights = await tsRequestOrReady(
         () => client.getDocumentHighlights(path, monacoToLspPosition(position), [path]),
         [],
       );
@@ -1178,7 +1196,7 @@ export function registerTsLanguageServiceProviders(
       const path = bridge.pathForModel(model);
       if (!path) return { data: new Uint32Array() };
       const range = model.getFullModelRange();
-      const semantic = await tsRequestOr(
+      const semantic = await tsRequestOrReady(
         () => client.getEncodedSemanticClassifications(path, monacoToLspRange(range)),
         emptyEncodedClassifications(),
       );
@@ -1198,7 +1216,7 @@ export function registerTsLanguageServiceProviders(
     async provideDocumentRangeSemanticTokens(model, range, token) {
       const path = bridge.pathForModel(model);
       if (!path) return { data: new Uint32Array() };
-      const semantic = await tsRequestOr(
+      const semantic = await tsRequestOrReady(
         () => client.getEncodedSemanticClassifications(path, monacoToLspRange(range)),
         emptyEncodedClassifications(),
       );
@@ -1213,7 +1231,7 @@ export function registerTsLanguageServiceProviders(
       if (!path) return [];
       const ranges: monaco.languages.SelectionRange[][] = [];
       for (const position of positions) {
-        const selection = await tsRequestOr(
+        const selection = await tsRequestOrReady(
           () => client.getSelectionRange(path, monacoToLspPosition(position)),
           null,
         );
@@ -1230,7 +1248,7 @@ export function registerTsLanguageServiceProviders(
       const path = bridge.pathForModel(model);
       if (!path) return [];
       const modelOptions = model.getOptions();
-      const edits = await tsRequestOr(
+      const edits = await tsRequestOrReady(
         () =>
           client.getOnTypeFormattingEdits(path, monacoToLspPosition(position), ch, {
             tabSize: options.tabSize ?? modelOptions.tabSize,
@@ -1247,7 +1265,7 @@ export function registerTsLanguageServiceProviders(
     async provideLinkedEditingRanges(model, position, token) {
       const path = bridge.pathForModel(model);
       if (!path) return null;
-      const ranges = await tsRequestOr(
+      const ranges = await tsRequestOrReady(
         () => client.getLinkedEditingRange(path, monacoToLspPosition(position)),
         null,
       );

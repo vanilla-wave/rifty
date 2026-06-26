@@ -3,7 +3,6 @@ import {
   insertTerminalLineSettled,
   openShellTerminal,
   runTerminalLine,
-  runTerminalLineSettled,
   terminalBuffer,
 } from './helpers/playground.ts';
 
@@ -478,7 +477,10 @@ async function tsReinit(page: Page): Promise<boolean> {
  */
 async function writeOwnerFile(page: Page, path: string, content: string): Promise<void> {
   const escaped = content.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/'/g, "'\\''");
-  await insertTerminalLineSettled(page, `mkdir -p ${parentDir(path)} && printf '${escaped}' > ${path}`);
+  await insertTerminalLineSettled(
+    page,
+    `mkdir -p ${parentDir(path)} && printf '${escaped}' > ${path}`,
+  );
 }
 
 async function waitForSrcSnapshotFile(page: Page, filename: string): Promise<void> {
@@ -631,17 +633,65 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
     const root = await activeRootFromHint(page);
     const mainTs = `${root}/src/main.ts`;
     const formatTs = `${root}/src/format.ts`;
+    const exampleTypesDts = `${root}/node_modules/@rifty/example-types/index.d.ts`;
     const editor = page.locator('[data-testid="editor"]');
+    const input = editor.locator('textarea.inputarea').first();
     const editorLines = editor.locator('.view-lines').first();
     // The TypeScript starter entry is already the active program tab; checking
     // the visible Monaco lines avoids racing the palette's async file index.
     await expect(editorLines).toContainText('LibraryShape', { timeout: 45_000 });
+    await expect
+      .poll(
+        async () => (await tsDefinition(page, mainTs, 1, 15))?.map((d) => d.uri).join('\n') ?? '',
+        {
+          timeout: 90_000,
+          intervals: [1500],
+        },
+      )
+      .toContain(exampleTypesDts);
     await expect
       .poll(async () => (await tsDefinition(page, mainTs, 3, 10))?.[0]?.uri ?? '', {
         timeout: 90_000,
         intervals: [1500],
       })
       .toContain(formatTs);
+    await editor.locator('.view-line').first().click();
+    await expect(input).toBeFocused();
+    await page.keyboard.press('Home');
+    for (let i = 0; i < 14; i += 1) {
+      await page.keyboard.press('ArrowRight');
+    }
+    await page.keyboard.press('F12');
+    await expect(page.getByRole('tab', { name: /index\.d\.ts/ }).first()).toHaveAttribute(
+      'aria-selected',
+      'true',
+      { timeout: 90_000 },
+    );
+    await expect(editorLines).toContainText('interface LibraryShape', { timeout: 30_000 });
+    await page
+      .getByRole('tab', { name: /main\.ts/ })
+      .first()
+      .click();
+    await expect(editorLines).toContainText('LibraryShape', { timeout: 10_000 });
+
+    expect(
+      await setModelValue(
+        page,
+        mainTs,
+        [
+          "import type { LibraryShape } from '@rifty/example-types';",
+          'const broken: LibraryShape = { id: 123, labels: [123] };',
+          '',
+        ].join('\n'),
+      ),
+    ).toBe(true);
+    await expect(editorLines).toContainText('broken', { timeout: 10_000 });
+    await expect.poll(() => tsMarkerCount(page, mainTs), { timeout: 90_000 }).toBeGreaterThan(0);
+    await page.locator('[data-testid="problems-tab"]').click();
+    await expect(page.locator('[data-testid="problem-row"]').first()).toContainText(
+      /number|string/i,
+      { timeout: 30_000 },
+    );
 
     const frame = page.frameLocator('iframe[title="Preview port 5174"]');
 
@@ -664,8 +714,11 @@ test.describe('rifty TS language service: TypeScript starter wiring', () => {
     });
 
     await expect.poll(() => tsMarkerCount(page, mainTs), { timeout: 90_000 }).toBe(0);
-    expect(await setModelValue(page, mainTs, 'const busted: number = "nope";\n')).toBe(true);
-    await expect(editorLines).toContainText('busted', { timeout: 10_000 });
+    await editor.locator('.view-line').first().click();
+    await expect(input).toBeFocused();
+    await page.keyboard.press('Home');
+    await page.keyboard.insertText('const typedBusted: number = "nope";\n');
+    await expect(editorLines).toContainText('typedBusted', { timeout: 10_000 });
     await expect.poll(() => tsMarkerCount(page, mainTs), { timeout: 90_000 }).toBeGreaterThan(0);
     await expect(page.locator('.monaco-editor .squiggly-error').first()).toBeVisible({
       timeout: 30_000,

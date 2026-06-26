@@ -114,7 +114,7 @@ describe('rifty TS Monaco provider source guards', () => {
   it('passes editor formatting options through TS code-action edit APIs', () => {
     expect(source).toContain('function actionEditOptionsFromModel(');
     expect(source).toContain('const actionEditOptions = actionEditOptionsFromModel(model);');
-    expect(source).toContain('const fixesResult = await tsRequestResult(');
+    expect(source).toContain('const fixesResult = await tsRequestResultReady(');
     expect(source).toContain(
       'client.getCodeFixes(path, monacoToLspRange(marker), [code], actionEditOptions)',
     );

@@ -237,6 +237,7 @@ const dec = new TextDecoder();
 export function EditorHost(props: EditorHostProps) {
   let container: HTMLDivElement | undefined;
   let editor: monaco.editor.IStandaloneCodeEditor | undefined;
+  let editorOpenerDisposable: monaco.IDisposable | undefined;
   let programModel: monaco.editor.ITextModel | undefined;
   let currentProgramPath = props.programPath();
   let suppressProgramEcho = false;
@@ -325,6 +326,27 @@ export function EditorHost(props: EditorHostProps) {
     editor.setPosition(position);
     editor.revealPositionInCenter(position);
     editor.focus();
+  }
+
+  function revealEditorTarget(target: monaco.IRange | monaco.IPosition): void {
+    if (!editor) return;
+    if ('startLineNumber' in target) {
+      editor.setSelection(target);
+      editor.revealRangeInCenter(target);
+      return;
+    }
+    editor.setPosition(target);
+    editor.revealPositionInCenter(target);
+  }
+
+  function publishActiveInfo(id: string): void {
+    const model = models.get(id) ?? programModel;
+    if (!model) return;
+    props.onActive({
+      label: id === PROGRAM_TAB_ID ? basename(currentProgramPath) : basename(id),
+      language: model.getLanguageId(),
+      path: id === PROGRAM_TAB_ID ? currentProgramPath : id,
+    });
   }
 
   const [tabs, setTabs] = createSignal<EditorTab[]>(initialTabs(props.programTitle()));
@@ -611,6 +633,20 @@ export function EditorHost(props: EditorHostProps) {
       hideCursorInOverviewRuler: true,
       scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
     });
+    editorOpenerDisposable = monaco.editor.registerEditorOpener({
+      openCodeEditor(source, resource, selectionOrPosition) {
+        if (!editor || source !== editor) return false;
+        const id = modelUriToTabId.get(resource.toString());
+        const model = id === undefined ? undefined : models.get(id);
+        if (!id || !model) return false;
+        if (editor.getModel() !== model) editor.setModel(model);
+        setActiveId(id);
+        editor.updateOptions({ readOnly: readOnlyPaths.has(id) });
+        if (selectionOrPosition) revealEditorTarget(selectionOrPosition);
+        editor.focus();
+        return true;
+      },
+    });
 
     props.registerApi({
       openFile,
@@ -705,6 +741,7 @@ export function EditorHost(props: EditorHostProps) {
         emitDocumentPath(previousPath, '', 'close');
         emitDocumentPath(path, programModel.getValue(), 'open');
       }
+      if (activeId() === PROGRAM_TAB_ID) publishActiveInfo(PROGRAM_TAB_ID);
     });
 
     createEffect(() => {
@@ -718,12 +755,7 @@ export function EditorHost(props: EditorHostProps) {
       if (!editor || !model) return;
       if (editor.getModel() !== model) editor.setModel(model);
       editor.updateOptions({ readOnly: readOnlyPaths.has(id) });
-      props.onActive({
-        label: id === PROGRAM_TAB_ID ? basename(currentProgramPath) : basename(id),
-        language: model.getLanguageId(),
-        // The program tab mirrors the active template entry (ADR-0165 §4).
-        path: id === PROGRAM_TAB_ID ? currentProgramPath : id,
-      });
+      publishActiveInfo(id);
       // The model just became active — apply a queued Problems click-to-jump.
       applyPendingRevealIfActive();
     });
@@ -734,6 +766,7 @@ export function EditorHost(props: EditorHostProps) {
     writeTimers.clear();
     for (const unsubscribe of snapshotAwaits.values()) unsubscribe();
     snapshotAwaits.clear();
+    editorOpenerDisposable?.dispose();
     editor?.dispose();
     for (const disposable of modelContentDisposables.values()) disposable.dispose();
     modelContentDisposables.clear();

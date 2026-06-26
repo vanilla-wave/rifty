@@ -703,19 +703,40 @@ export function App(props: AppProps) {
     // the LS to the NEW owner + re-inits against the switched-in root — the prior
     // client is disposed in onCleanup before the new one is built.
     const owner = workspaceOwner();
-    // A starter pick can rewrite tsconfig.json / declaration files under the same
-    // /scratch root. Track that seed revision explicitly so the service reloads
-    // config + project files even when activeRoot() is unchanged.
-    tsProjectRevision();
     // The unavailable-owner stub's sendTsLsp/onTsLsp are no-ops → init/requests
     // time out and reject; we swallow (no owner = no diagnostics, surfaced loud
     // in the terminal already). A real owner serves the LS child.
     const client = createTsLanguageServiceClient(owner);
+    let disposed = false;
+    let ready: Promise<boolean> = Promise.resolve(false);
+    const waitForTsReady = async (): Promise<void> => {
+      await ready;
+    };
     // Register the rifty-LS Monaco providers (ADR-0166 phase 2): hover / def /
     // type-def / completions now come from the REAL service over the relay, not
     // Monaco's isolated lib.d.ts worker (whose hover/completion/goto are turned
     // OFF in EditorHost). Same lifetime as the client — disposed on cleanup.
-    const providers = registerTsLanguageServiceProviders(client, api);
+    const providers = registerTsLanguageServiceProviders(client, api, {
+      beforeRequest: waitForTsReady,
+    });
+
+    async function initAndReplay(root = activeRoot()): Promise<boolean> {
+      const run = (async (): Promise<boolean> => {
+        await client.init(root);
+        const replayEvents: EditorDocumentEvent[] = [];
+        const unsubscribeReplay = api.onDocument((ev) => {
+          if (ev.kind !== 'close') replayEvents.push(ev);
+        });
+        unsubscribeReplay();
+        await Promise.all(replayEvents.map((ev) => client.open(ev.path, ev.text)));
+        return true;
+      })().catch((err: unknown) => {
+        if (!disposed) console.warn('[ts-lsp] init', (err as Error).message);
+        return false;
+      });
+      ready = run;
+      return run;
+    }
 
     // E2E-only window hooks (ADR-0166 phase 2) — DEV-only (`import.meta.env.DEV`,
     // mirroring the EditorHost `__riftyTs*` hooks): drive the EXACT registered
@@ -822,20 +843,7 @@ export function App(props: AppProps) {
       // — then calls this so the rebuilt service sees them (the boot build used
       // tsc default options before those files existed). Resolves true on a clean
       // rebuild, false on error (e.g. owner unavailable).
-      g.__riftyTsReinit = async () => {
-        try {
-          await client.init(activeRoot());
-          const replayEvents: EditorDocumentEvent[] = [];
-          const unsubscribeReplay = api.onDocument((ev) => {
-            if (ev.kind !== 'close') replayEvents.push(ev);
-          });
-          unsubscribeReplay();
-          await Promise.all(replayEvents.map((ev) => client.open(ev.path, ev.text)));
-          return true;
-        } catch {
-          return false;
-        }
-      };
+      g.__riftyTsReinit = async () => initAndReplay();
       g.__riftyTsHover = async (path, line, col) => {
         const model = modelFor(path);
         if (!model) return null;
@@ -1107,7 +1115,6 @@ export function App(props: AppProps) {
       };
     }
 
-    let disposed = false;
     const diagnosticSync = createTsDiagnosticsSync<Diagnostic, monaco.editor.IMarkerData>({
       client,
       debounceMs: 300,
@@ -1119,13 +1126,14 @@ export function App(props: AppProps) {
     });
     const unsubscribe = api.onDocument(diagnosticSync.handleDocument);
 
-    // Init against the ACTIVE project root (ADR-0165 §4: /scratch or /projects/<id>,
-    // not the deleted single /workspace). Fire-and-forget: the LS endpoint SERIALIZES
-    // every later frame behind this in-flight build, so an open/update/diagnostics
-    // frame sent before the (slow, cold) service is ready WAITS for it rather than
-    // racing a not-yet-built service. A failed init is surfaced on each queued frame.
-    void client.init(activeRoot()).catch((err: unknown) => {
-      if (!disposed) console.warn('[ts-lsp] init', (err as Error).message);
+    // Init against the ACTIVE project root (ADR-0165 §4: /scratch or /projects/<id>).
+    // Starter picks rewrite tsconfig/declaration files under the SAME owner/root,
+    // so re-run `ts:init` + replay open docs without disposing the providers that
+    // the user's in-flight editor command may be calling.
+    createEffect(() => {
+      tsProjectRevision();
+      const root = activeRoot();
+      void initAndReplay(root);
     });
 
     onCleanup(() => {

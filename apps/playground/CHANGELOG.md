@@ -33,6 +33,14 @@
   `EditorHost` resolves provider model paths through its cached current program
   path, so program-tab edits can produce fresh rifty-TS markers instead of
   `Maximum call stack size exceeded`.
+- **TypeScript go-to-definition activates declaration tabs.** Monaco's real
+  `F12`/go-to-definition action now routes through `EditorHost` tab selection,
+  so starter declarations such as `@rifty/example-types/index.d.ts` open as the
+  active editor instead of being created as an inactive background model.
+- **Production TypeScript editor intelligence boots the real worker.** The
+  TS-LSP child bootstrap now keeps the package endpoint in the production bundle,
+  and provider calls wait for project init/replay before asking for diagnostics
+  or definitions.
 - **Vite 7 production builds accept esbuild supported flags.** The build bridge
   now forwards Vite's `supported.dynamic-import` option to the real esbuild-WASI
   transform instead of loud-rejecting the build.
