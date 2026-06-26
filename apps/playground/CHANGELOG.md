@@ -50,6 +50,12 @@
   The owner no longer reuses a same-root Vite install stamp against the previous
   package.json, so workspace `node_modules/typescript` is present before TS-LS
   initializes.
+- **Project chip no longer labels a broken active project as scratch.** The
+  playground now rejects project-index states whose `activeId` points at no saved
+  project, names active scratches from their Starter label (for example,
+  `Project files scratch`), and exposes a missing project instead of falling back
+  to scratch copy; the top-bar chip now also pins the app font instead of
+  inheriting the browser's button default.
 - **Terminal command overlays no longer leave colored command rails or cover output.** The
   playground terminal no longer mounts the command-block rail/preview or sticky current-command
   pill, and the xterm viewport no longer reserves the old rail gutter.

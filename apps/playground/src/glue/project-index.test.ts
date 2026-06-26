@@ -63,6 +63,15 @@ describe('loadIndex / writeIndex (ADR-0165 §2)', () => {
     );
     expect(() => loadIndex(fs, BASE)).toThrow(/corrupt project index/i);
   });
+
+  it('rejects a project-active index whose activeId is absent from projects', () => {
+    const fs = new MemoryFsSync();
+    fs.writeFileSync(
+      IDX_PATH(BASE),
+      enc.encode(JSON.stringify({ activeId: 'p-missing', scratch: null, projects: [] })),
+    );
+    expect(() => loadIndex(fs, BASE)).toThrow(/activeId.*missing project/i);
+  });
 });
 
 import { rootForId as rootFor, saveScratchAsProject } from './project-index.ts';

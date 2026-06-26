@@ -1,5 +1,5 @@
 /**
- * Launcher Projects tab (design §2a; ADR-0165). Scratch banner (Untitled scratch +
+ * Launcher Projects tab (design §2a; ADR-0165). Scratch banner (Starter scratch +
  * dirty dot 7x7 #FFBE5C + ACTIVE badge + Save-as-project lime), SAVED PROJECTS
  * label, 2-col project cards (glyph tile / name / ACTIVE / ellipsis menu / meta
  * =Starter·:port / clock+editedAt / storage OPFS-green or memory-#FFCE84). Row
@@ -7,6 +7,7 @@
  * Delete (red). New-from-starter dashed tile -> Starters tab.
  */
 import { For, Show } from 'solid-js';
+import { scratchDisplayName } from '../glue/project-display-name.ts';
 import type { ActiveId, Project, Scratch } from '../glue/project-index.ts';
 import { Icon } from './icons.tsx';
 
@@ -43,7 +44,7 @@ export function ProjectsTab(props: {
               </span>
               <div class="rf-scratch__body">
                 <div class="rf-scratch__title">
-                  Untitled scratch
+                  {scratchDisplayName(g.label)}
                   <Show when={sc.dirty}>
                     <span class="rf-scratch__dot" aria-hidden="true" />
                   </Show>

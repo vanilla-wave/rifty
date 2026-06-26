@@ -28,8 +28,10 @@ test.describe('ADR-0165 §4 — boot root follows the page store (active scratch
     await expect(hint).toContainText('Commands run in /scratch;', { timeout: 15_000 });
     await expect(hint).not.toContainText('/projects/project-files');
 
-    // The chip names the active scratch (store.activeId === 'scratch'), never a
-    // project id — corroborates the single source from the other surface.
-    await expect(page.locator('[data-action="open-launcher"]')).toContainText('Untitled scratch');
+    // The chip names the active scratch from its Starter label, never a project id
+    // — corroborates the single source from the other surface.
+    await expect(page.locator('[data-action="open-launcher"]')).toContainText(
+      'Project files scratch',
+    );
   });
 });

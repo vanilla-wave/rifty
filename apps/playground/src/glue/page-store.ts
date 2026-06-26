@@ -135,7 +135,7 @@ export function createPageStore(): PageStore {
     return projects().find((p) => p.id === id);
   }
   function nameForActive(id: ActiveId): string {
-    return id === 'scratch' ? 'Untitled scratch' : (projectById(id)?.name ?? '—');
+    return id === 'scratch' ? 'scratch' : (projectById(id)?.name ?? `Missing project (${id})`);
   }
   function doSwitch(id: ActiveId): void {
     setActiveId(id);

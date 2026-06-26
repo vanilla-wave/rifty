@@ -313,6 +313,9 @@ export function serveProjectIndex(
   // is stale and the page mirror reverts the switch on the owner's next publish.
   const setActive = (activeId: string, opId?: string): void => {
     const index = loadIndex(fs, base);
+    if (activeId !== 'scratch' && !index.projects.some((p) => p.id === activeId)) {
+      throw new Error(`unknown active project ${activeId}`);
+    }
     writeIndex(fs, base, { ...index, activeId });
     void flushThenPublish(opId);
   };

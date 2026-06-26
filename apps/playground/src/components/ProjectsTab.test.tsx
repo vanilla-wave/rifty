@@ -20,7 +20,7 @@ const baseProps = {
 describe('ProjectsTab', () => {
   it('shows the scratch banner with the dirty dot + Save-as-project when a scratch exists', () => {
     const html = renderToString(() => ProjectsTab(baseProps));
-    expect(html).toContain('Untitled scratch');
+    expect(html).toContain('Node API scratch');
     expect(html).toContain('Save as project');
     expect(html).toContain('rf-pcard');
     expect(html).toContain('node-api');
@@ -35,6 +35,6 @@ describe('ProjectsTab', () => {
 
   it('hides the scratch banner when there is no scratch', () => {
     const html = renderToString(() => ProjectsTab({ ...baseProps, scratch: null }));
-    expect(html).not.toContain('Untitled scratch');
+    expect(html).not.toContain('Node API scratch');
   });
 });

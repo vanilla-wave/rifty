@@ -45,6 +45,7 @@ import { initialLauncherTab, loadLauncherTab, saveLauncherTab } from './glue/lau
 import { NodeModulesCache } from './glue/node-modules-cache.ts';
 import { bridgeNodeModulesReads } from './glue/node-modules-port.ts';
 import { programMirrorPath } from './glue/program-path.ts';
+import { scratchDisplayName } from './glue/project-display-name.ts';
 import {
   bridgeProjectIndex,
   deleteProjectTree,
@@ -1258,12 +1259,12 @@ export function App(props: AppProps) {
     };
   }
   // Active project's display name + glyph + starter label for the chip + status bar.
+  const activeGlyph = createMemo(() => glyphFor(activeStarterId()));
   const activeName = createMemo((): string => {
     const id = store.activeId();
-    if (id === 'scratch') return 'Untitled scratch';
-    return store.projects().find((p) => p.id === id)?.name ?? 'Untitled scratch';
+    if (id === 'scratch') return scratchDisplayName(activeGlyph().label);
+    return store.projects().find((p) => p.id === id)?.name ?? `Missing project (${id})`;
   });
-  const activeGlyph = createMemo(() => glyphFor(activeStarterId()));
 
   /** Prop bundle for the real-vite explorer's lazy node_modules branch. */
   const nodeModulesProp = ():
@@ -1857,17 +1858,6 @@ export function App(props: AppProps) {
   }
 
   // Dialog-derived strings (ADR-0165 §9 ProjectDialogs contract).
-  const dialogTargetName = createMemo((): string => {
-    const d = store.dialog();
-    if (!d) return '';
-    if (d.kind === 'reset') {
-      return d.id === 'scratch'
-        ? 'Untitled scratch'
-        : (store.projects().find((p) => p.id === d.id)?.name ?? '');
-    }
-    if (d.kind === 'delete') return store.projects().find((p) => p.id === d.id)?.name ?? '';
-    return '';
-  });
   const dialogStarterLabel = createMemo((): string => {
     const d = store.dialog();
     if (d?.kind !== 'reset') return '';
@@ -1876,6 +1866,17 @@ export function App(props: AppProps) {
         ? (store.scratch()?.starter ?? activePreset())
         : (store.projects().find((p) => p.id === d.id)?.starter ?? activePreset());
     return glyphFor(starter).label;
+  });
+  const dialogTargetName = createMemo((): string => {
+    const d = store.dialog();
+    if (!d) return '';
+    if (d.kind === 'reset') {
+      return d.id === 'scratch'
+        ? scratchDisplayName(dialogStarterLabel())
+        : (store.projects().find((p) => p.id === d.id)?.name ?? '');
+    }
+    if (d.kind === 'delete') return store.projects().find((p) => p.id === d.id)?.name ?? '';
+    return '';
   });
   const dialogSwitchDest = createMemo((): string => {
     const d = store.dialog();

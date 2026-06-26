@@ -435,6 +435,16 @@ describe('App wires the sequential switch + index mirror (ADR-0165 §3)', () => 
     expect(source).toContain('bridgeProjectIndex(');
     expect(source).toContain('.request()'); // subscribe-handshake re-publish
   });
+
+  it('does not label a missing active project as the scratch in the header', () => {
+    expect(source).not.toContain("if (id === 'scratch') return 'Untitled scratch';");
+    expect(source).not.toContain("?.name ?? 'Untitled scratch'");
+  });
+
+  it('derives the active scratch display name from the starter label', () => {
+    expect(source).toContain('scratchDisplayName(activeGlyph().label)');
+    expect(source).toContain('scratchDisplayName(dialogStarterLabel())');
+  });
 });
 
 // ADAPTED (real-env constraint, recorded): the plan's literal test renders
