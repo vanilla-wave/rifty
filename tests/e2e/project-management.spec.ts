@@ -23,7 +23,7 @@
  *    no-op) → `/projects/<id>/stray.txt` survives → the MISSING poll times out.
  */
 import { type Page, expect, test } from '@playwright/test';
-import { readWorkspaceText } from './helpers/opfs.ts';
+import { readWorkspaceJson, readWorkspaceText } from './helpers/opfs.ts';
 import { runTerminalLineSettled } from './helpers/playground.ts';
 
 // A taller viewport centers the launcher modal BELOW the top-right toast, so the
@@ -76,15 +76,7 @@ async function openProjects(page: Page): Promise<void> {
 }
 
 async function readProjectIndex(page: Page): Promise<ProjectIndexSnapshot | null> {
-  return await page.evaluate(async () => {
-    try {
-      const root = (await navigator.storage.getDirectory()) as FileSystemDirectoryHandle;
-      const fh = await root.getFileHandle('.rifty-project-index.json');
-      return JSON.parse(await (await fh.getFile()).text()) as ProjectIndexSnapshot;
-    } catch {
-      return null;
-    }
-  });
+  return readWorkspaceJson<ProjectIndexSnapshot>(page, '/.rifty-project-index.json');
 }
 
 async function waitDurableScratch(page: Page, starter?: string): Promise<void> {

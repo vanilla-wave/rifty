@@ -15,4 +15,9 @@ describe('Vite build/preview shim overlay', () => {
     expect(source).toContain("base: '/'");
     expect(source).toContain("html.includes('.assets/')");
   });
+
+  it('passes esbuild supported feature flags through to the WASI transform', () => {
+    expect(source).toContain('supported: options.supported,');
+    expect(source).not.toContain('esbuild.transform.supported.');
+  });
 });

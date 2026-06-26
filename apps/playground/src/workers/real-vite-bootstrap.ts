@@ -175,6 +175,7 @@ async function restoreInstantDeps(
     fsSync: fs,
     root: cfg.root,
     templateId,
+    snapshotTemplateId: cfg.bakedNodeModulesTemplateId,
     slug,
     snapshotUrl: cfg.bakedNodeModulesUrl,
     // No `install`: RESTORE-ONLY. Deps never arrive via a boot-time install.

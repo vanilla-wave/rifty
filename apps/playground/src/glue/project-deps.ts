@@ -49,6 +49,8 @@ export interface EnsureProjectDepsOptions {
   readonly fsSync: WorkspaceArchiveFs;
   readonly root: string;
   readonly templateId: string;
+  /** Expected `templateId` inside the baked snapshot. Defaults to `templateId`. */
+  readonly snapshotTemplateId?: string;
   /** Project identity (preset slug) — the install-stamp reuse key. A stamp from
    *  a different slug never suppresses this project's install. */
   readonly slug: string;
@@ -127,7 +129,12 @@ async function tryRestoreSnapshot(
     return null;
   }
   const deps = await readEffectiveDeps(opts.vfs, opts.root);
-  if (snapshot.templateId !== opts.templateId || !deps || !depsEqual(snapshot.deps, deps)) {
+  const expectedSnapshotTemplateId = opts.snapshotTemplateId ?? opts.templateId;
+  if (
+    snapshot.templateId !== expectedSnapshotTemplateId ||
+    !deps ||
+    !depsEqual(snapshot.deps, deps)
+  ) {
     opts.log(
       '[real-vite/worker] baked snapshot is stale (deps drifted; re-run `pnpm snapshots:bake`) — falling back to install\n',
     );

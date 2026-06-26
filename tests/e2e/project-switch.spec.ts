@@ -16,7 +16,7 @@
  * fullstack-demo / socket-lab (the node-server presets boot end-to-end).
  */
 import { type Page, expect, test } from '@playwright/test';
-import { readWorkspaceText } from './helpers/opfs.ts';
+import { readWorkspaceJson, readWorkspaceText } from './helpers/opfs.ts';
 import { expectTerminalContains, runTerminalLineSettled } from './helpers/playground.ts';
 
 /** Terminal-session tabs only (editor tabs also use role=tab — scope to the shell). */
@@ -94,15 +94,7 @@ async function switchToProject(page: Page, name: string, id: string): Promise<vo
 }
 
 async function readProjectIndex(page: Page): Promise<ProjectIndexSnapshot | null> {
-  return await page.evaluate(async () => {
-    try {
-      const root = (await navigator.storage.getDirectory()) as FileSystemDirectoryHandle;
-      const fh = await root.getFileHandle('.rifty-project-index.json');
-      return JSON.parse(await (await fh.getFile()).text()) as ProjectIndexSnapshot;
-    } catch {
-      return null;
-    }
-  });
+  return readWorkspaceJson<ProjectIndexSnapshot>(page, '/.rifty-project-index.json');
 }
 
 async function waitDurableScratch(page: Page, starter?: string): Promise<void> {

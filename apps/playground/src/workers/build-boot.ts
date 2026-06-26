@@ -33,30 +33,6 @@ interface VitePreviewServer {
   httpServer?: { close(cb?: (err?: Error) => void): void };
 }
 
-interface EsbuildBridgeOptions {
-  readonly loader?: string;
-  readonly jsx?: string;
-  readonly format?: string;
-  readonly target?: string | readonly string[];
-  readonly minify?: boolean;
-  readonly sourcemap?: boolean | string;
-}
-
-declare global {
-  // Injected for the overlaid node_modules/esbuild/lib/main.js build shim.
-  // eslint-disable-next-line no-var
-  var __riftyEsbuildTransform:
-    | ((
-        source: string,
-        options: EsbuildBridgeOptions,
-      ) => Promise<{
-        code: string;
-        map?: string;
-        warnings: string[];
-      }>)
-    | undefined;
-}
-
 const SHIM_ROOT_PREFIX = '/workspace';
 
 export function reRootBuildShimPath(shimPath: string, root: string): string {
@@ -120,9 +96,9 @@ async function installEsbuildBridge(root: string): Promise<void> {
     throw new Error(`esbuild WASI binary fetch failed: HTTP ${response.status}`);
   }
   const wasm = await response.arrayBuffer();
-  globalThis.__riftyEsbuildTransform = async (source, options) =>
+  globalThis.__riftyEsbuildTransform = async (source, options = {}) =>
     transformWithEsbuild(runWasi, wasm, {
-      source,
+      source: typeof source === 'string' ? source : dec.decode(source),
       workspace: root,
       loader: loaderFor(options.loader),
       jsx:
@@ -133,6 +109,7 @@ async function installEsbuildBridge(root: string): Promise<void> {
       target: targetFor(options.target),
       minify: options.minify,
       sourcemap: sourcemapFor(options.sourcemap),
+      supported: options.supported,
     });
 }
 

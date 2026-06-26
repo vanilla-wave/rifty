@@ -25,6 +25,17 @@
 - **Terminal caret and palette now read closer to modern integrated terminals.** The playground
   terminal uses a slim light bar caret, a matte console surface, denser type, and an explicit
   ANSI palette instead of the old lime block cursor on the panel background.
+- **TypeScript starter instant boot keeps real Vite deps.** The starter now
+  declares the Vite snapshot owner separately from its template id and keeps its
+  install deps in lockstep with the shared Vite snapshot, so `vite` no longer
+  starts without `node_modules` after a starter pick.
+- **TS-LS Monaco providers no longer recurse through Solid path accessors.**
+  `EditorHost` resolves provider model paths through its cached current program
+  path, so program-tab edits can produce fresh rifty-TS markers instead of
+  `Maximum call stack size exceeded`.
+- **Vite 7 production builds accept esbuild supported flags.** The build bridge
+  now forwards Vite's `supported.dynamic-import` option to the real esbuild-WASI
+  transform instead of loud-rejecting the build.
 - **Project files edits update the live preview again.** The default Vite 7
   template keeps the native HMR bridge enabled (Vite 8 remains HMR-off per
   ADR-0161), and the dev-server child no longer feeds native `server.watcher`

@@ -70,11 +70,10 @@ describe('playground presets', () => {
   });
 
   it('keeps browser Vite presets as HMR accept boundaries', () => {
-    const browserVitePresets = PRESETS.filter(
-      (preset) =>
-        preset.mode === 'real-vite' &&
-        resolveProjectSpec(preset.templateId ?? 'vite').runtime === 'vite',
-    );
+    const browserVitePresets = PRESETS.filter((preset) => {
+      const spec = resolveProjectSpec(preset.templateId ?? 'vite');
+      return preset.mode === 'real-vite' && spec.runtime === 'vite' && spec.hmr.enabled;
+    });
 
     expect(browserVitePresets.map((preset) => preset.id)).toEqual([
       'project-files',

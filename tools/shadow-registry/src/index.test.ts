@@ -60,7 +60,8 @@ describe('shadow-registry', () => {
     expect(buildEsbuild).toContain('NotImplementedError');
     expect(buildEsbuild).toContain('esbuild.transformSync');
     expect(buildEsbuild).not.toBe(devEsbuild);
-    expect(devEsbuild).toContain('passthrough');
+    expect(devEsbuild).toContain('__riftyEsbuildTransform');
+    expect(devEsbuild).toContain('dev-server did not install the WASI transform bridge');
   });
 
   it('lightningcssShimFiles exposes the native package name backed by lightningcss-wasm', () => {

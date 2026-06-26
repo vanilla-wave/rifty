@@ -1,4 +1,5 @@
 import type { ViteProjectSpec } from './project-spec.ts';
+import { VITE_TEMPLATE } from './vite.ts';
 
 export const TYPESCRIPT_ENTRY_SOURCE = `import type { LibraryShape } from '@rifty/example-types';
 import './styles.css';
@@ -206,8 +207,9 @@ export const TYPESCRIPT_TEMPLATE = {
   id: 'typescript',
   displayName: 'TypeScript sandbox',
   runtime: 'vite',
-  install: { vite: '^5.4.0' },
+  install: VITE_TEMPLATE.install,
   bakedNodeModulesUrl: '/snapshots/vite-node-modules.json.gz',
+  bakedNodeModulesTemplateId: VITE_TEMPLATE.id,
   runtimeSpecifier: 'vite',
   entry: { relativePath: '/src/main.ts', content: TYPESCRIPT_ENTRY_SOURCE },
   defaultPort: 5174,

@@ -148,7 +148,7 @@ const SHIM_ESBUILD_PACKAGE_JSON = JSON.stringify(
 /**
  * VFS overlay for the `esbuild` npm package. The playground writes these
  * paths into the sync mirror after install so that any `import 'esbuild'`
- * resolves to a browser-safe passthrough instead of the real package's
+ * resolves to a browser-safe transform bridge instead of the real package's
  * binary launcher.
  */
 export const esbuildShimFiles: Record<string, string> = {

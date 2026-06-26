@@ -341,7 +341,6 @@ export async function bootDevServer(opts: {
         publishSnapshot();
         return;
       }
-      handleViteFileChange(file);
       publishSnapshot();
     });
   }

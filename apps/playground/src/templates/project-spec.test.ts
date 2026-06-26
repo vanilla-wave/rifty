@@ -119,6 +119,15 @@ describe('resolveBootstrapConfig', () => {
       'declare module',
     );
   });
+
+  it('keeps TypeScript starter deps in lockstep with the shared Vite snapshot', () => {
+    const cfg = resolveBootstrapConfig(TYPESCRIPT_TEMPLATE, 5174, '/workspace');
+
+    expect(TYPESCRIPT_TEMPLATE.bakedNodeModulesUrl).toBe(VITE_TEMPLATE.bakedNodeModulesUrl);
+    expect(TYPESCRIPT_TEMPLATE.bakedNodeModulesTemplateId).toBe(VITE_TEMPLATE.id);
+    expect(TYPESCRIPT_TEMPLATE.install).toEqual(VITE_TEMPLATE.install);
+    expect(cfg.bakedNodeModulesTemplateId).toBe(VITE_TEMPLATE.id);
+  });
 });
 
 describe('resolveBootstrapConfig (node-server runtime)', () => {

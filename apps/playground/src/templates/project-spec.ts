@@ -51,6 +51,11 @@ interface ProjectSpecBase {
    * an instant preset is truly instant. Absent → install as usual.
    */
   readonly bakedNodeModulesUrl?: string;
+  /**
+   * Template id recorded inside the baked snapshot. Defaults to this spec's id;
+   * set when a template deliberately shares another template's node_modules tree.
+   */
+  readonly bakedNodeModulesTemplateId?: string;
 }
 
 /** Template whose worker boots a Vite-shaped dev server from an npm package. */
@@ -94,6 +99,8 @@ interface BootstrapConfigBase {
   readonly seedFiles: Readonly<Record<string, string>>;
   /** Carried from {@link ProjectSpecBase.bakedNodeModulesUrl}. */
   readonly bakedNodeModulesUrl?: string;
+  /** Carried from {@link ProjectSpecBase.bakedNodeModulesTemplateId}. */
+  readonly bakedNodeModulesTemplateId?: string;
 }
 
 export interface ViteBootstrapConfig extends BootstrapConfigBase {
@@ -236,6 +243,9 @@ export function resolveBootstrapConfig(
     installDeps: spec.install,
     packageJson: pkg.json,
     ...(spec.bakedNodeModulesUrl ? { bakedNodeModulesUrl: spec.bakedNodeModulesUrl } : {}),
+    ...(spec.bakedNodeModulesTemplateId
+      ? { bakedNodeModulesTemplateId: spec.bakedNodeModulesTemplateId }
+      : {}),
   };
   if (spec.runtime === 'node-server') {
     const seedFiles: Record<string, string> = {

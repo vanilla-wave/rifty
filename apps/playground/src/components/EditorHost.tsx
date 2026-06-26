@@ -261,15 +261,15 @@ export function EditorHost(props: EditorHostProps) {
   // Page LS-client subscribers (ADR-0166 P1.9b): notified on model open/change/close.
   const documentListeners = new Set<(ev: EditorDocumentEvent) => void>();
 
-  /** Tab id → absolute VFS path: the program tab mirrors `props.programPath()`;
+  /** Tab id → absolute VFS path: the program tab mirrors `currentProgramPath`;
    *  every other tab id IS its
    *  absolute path (file-explorer / preset opens key by path). */
   function docPathForTab(id: string): string {
-    return id === PROGRAM_TAB_ID ? props.programPath() : id;
+    return id === PROGRAM_TAB_ID ? currentProgramPath : id;
   }
   /** Inverse of {@link docPathForTab} — the model key for a VFS path. */
   function tabIdForPath(path: string): string {
-    return path === props.programPath() ? PROGRAM_TAB_ID : path;
+    return path === currentProgramPath ? PROGRAM_TAB_ID : path;
   }
   /** Track a model under its tab id + index its uri (keeps `modelUriToTabId` in sync). */
   function registerModel(id: string, model: monaco.editor.ITextModel): void {
@@ -445,7 +445,7 @@ export function EditorHost(props: EditorHostProps) {
       // classifyOpen below needs only the readable boolean.
     }
     const kind = classifyOpen(path, {
-      programMirrorPath: props.programPath(),
+      programMirrorPath: currentProgramPath,
       isNodeModules: isNodeModulesPath(path),
       present: props.vfs.existsSync(path),
       readable: bytes !== undefined,
@@ -524,7 +524,7 @@ export function EditorHost(props: EditorHostProps) {
     }
     switch (
       classifyOpen(path, {
-        programMirrorPath: props.programPath(),
+        programMirrorPath: currentProgramPath,
         isNodeModules: isNodeModulesPath(path),
         // present-but-over-cap (exists, no inlined bytes) stays view-only-remote,
         // distinct from a racing seed (absent → await the publish).
@@ -585,7 +585,7 @@ export function EditorHost(props: EditorHostProps) {
     retireBuiltinTsIntelligence();
     programModel = monaco.editor.createModel(
       props.programValue(),
-      languageForPath(props.programPath()),
+      languageForPath(currentProgramPath),
     );
     registerModel(PROGRAM_TAB_ID, programModel);
     editor = monaco.editor.create(container, {
@@ -719,10 +719,10 @@ export function EditorHost(props: EditorHostProps) {
       if (editor.getModel() !== model) editor.setModel(model);
       editor.updateOptions({ readOnly: readOnlyPaths.has(id) });
       props.onActive({
-        label: id === PROGRAM_TAB_ID ? basename(props.programPath()) : basename(id),
+        label: id === PROGRAM_TAB_ID ? basename(currentProgramPath) : basename(id),
         language: model.getLanguageId(),
         // The program tab mirrors the active template entry (ADR-0165 §4).
-        path: id === PROGRAM_TAB_ID ? props.programPath() : id,
+        path: id === PROGRAM_TAB_ID ? currentProgramPath : id,
       });
       // The model just became active — apply a queued Problems click-to-jump.
       applyPendingRevealIfActive();
