@@ -9,7 +9,7 @@ export type TerminalTheme = NonNullable<RiftyTerminalOptions['theme']>;
 const SOFT_PANEL_TERMINAL: TerminalTheme = {
   background: '#171a21',
   foreground: '#d7dae0',
-  cursor: '#ff7a90',
+  cursor: '#f6f8fb',
   cursorAccent: '#171a21',
   selectionBackground: '#6ea8ff33',
   selectionForeground: '#f6f8fb',

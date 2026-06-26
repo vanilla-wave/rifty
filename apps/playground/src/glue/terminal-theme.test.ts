@@ -35,10 +35,11 @@ describe('terminal-theme', () => {
     expect(preferredTerminalTheme({})).toEqual(terminalThemes.dark);
   });
 
-  it('uses a modern matte palette with a non-lime bar cursor', () => {
+  it('uses a modern matte palette with a quiet light bar cursor', () => {
     expect(terminalThemes.dark.background).toBe('#171a21');
     expect(terminalThemes.dark.foreground).toBe('#d7dae0');
-    expect(terminalThemes.dark.cursor).toBe('#ff7a90');
+    expect(terminalThemes.dark.cursor).toBe('#f6f8fb');
+    expect(terminalThemes.dark.cursor).not.toBe('#ff7a90');
     expect(terminalThemes.dark.cursor).not.toBe('#c7f05a');
     expect(terminalThemes.dark.selectionBackground).toBe('#6ea8ff33');
     expect(terminalThemes.dark.brightBlack).toBe('#697180');

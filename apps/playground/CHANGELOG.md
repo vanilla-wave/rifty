@@ -23,8 +23,8 @@
   playground terminal no longer mounts the command-block rail/preview or sticky current-command
   pill, and the xterm viewport no longer reserves the old rail gutter.
 - **Terminal caret and palette now read closer to modern integrated terminals.** The playground
-  terminal uses a slim bar caret, a matte console surface, denser type, and an explicit ANSI
-  palette instead of the old lime block cursor on the panel background.
+  terminal uses a slim light bar caret, a matte console surface, denser type, and an explicit
+  ANSI palette instead of the old lime block cursor on the panel background.
 - **Project files edits update the live preview again.** The default Vite 7
   template keeps the native HMR bridge enabled (Vite 8 remains HMR-off per
   ADR-0161), and the dev-server child no longer feeds native `server.watcher`
