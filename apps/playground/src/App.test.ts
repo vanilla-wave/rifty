@@ -99,6 +99,18 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('if (path !== programMirrorPath(activeRoot(), activeTemplate()))');
   });
 
+  it('drops a debounced program write before reseeding a picked starter', () => {
+    const runPreset = source.match(
+      /async function runVitePreset\(preset: Preset\): Promise<void> \{[\s\S]*?\n {2}\}/,
+    )?.[0];
+    expect(runPreset).toBeDefined();
+    expect(source).toContain('function discardPendingProgramWrite(): void');
+    expect(source).toMatch(
+      /function discardPendingProgramWrite\(\): void \{[\s\S]*?clearTimeout\(programWriteTimer\);[\s\S]*?pendingProgramWrite = undefined;[\s\S]*?\}/,
+    );
+    expect(runPreset).toMatch(/discardPendingProgramWrite\(\);\s*seedViteWorkspace\(preset\);/);
+  });
+
   it('opens configured preset files as inactive editor tabs', () => {
     expect(source).toContain('function openPresetEditorTabs(preset: Preset): void');
     expect(source).toContain('for (const path of preset.openFiles ?? [])');
@@ -201,6 +213,7 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain(
       'await Promise.all(replayEvents.map((ev) => client.open(ev.path, ev.text)));',
     );
+    expect(source).toContain('await diagnosticSync.refreshOpenDiagnostics();');
   });
 
   it('routes workspace archive export and import through the owner (one authoritative owner; page reads through ports)', () => {

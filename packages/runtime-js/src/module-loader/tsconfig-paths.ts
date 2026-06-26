@@ -1,5 +1,6 @@
 import type { FsSync } from '@riftydev/vfs';
 import { dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+// TODO(backlog: runtime-js/lazy-typescript-tsconfig-discovery): load TypeScript only when auto-discovery is enabled.
 import ts from 'typescript';
 import { ModuleLoadError } from './errors.ts';
 import type { PathAliases } from './resolver.ts';

@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### CI
 
+- **Playwright CI worker cap follow-up recorded.** Added
+  `backlog/process-meta/playwright-ci-worker-scope` and a config seam for
+  scoping CI serialization to the TS-LS-heavy specs instead of the whole e2e
+  suite.
 - **Public npm registry pinned — no more corporate-mirror lockfile poisoning.** Root `.npmrc` now sets `registry=https://registry.npmjs.org/` so a contributor's mirror `~/.npmrc` (e.g. `registry=https://npm.yandex-team.ru`) can no longer leak `tarball:` URLs into `pnpm-lock.yaml`. Prevents the poison at the source — beats the user/default registry + `npm_config_registry`. A scoped (`@scope:registry=`) or `--registry=` override could still poison the lock, but then CI's `pnpm install --frozen-lockfile` fails on the mirror host and blocks the PR, so no extra lockfile guard is warranted.
 - **`pnpm pr:check` — one parallel per-PR gate.** New `tools/checks/pr-check.mjs` runs lint, typecheck, build:libs, check:arch, parity/e2e coverage, backlog/refs checks, and unit + parity concurrently with a buffered pass/fail summary; exit ≠ 0 on any failure. `test:e2e` stays separate (its playwright workers + vite server starve the timing-sensitive parity checks when co-scheduled); CI keeps its own e2e job.
 - **`pnpm check:arch` (dependency-cruiser) replaces `check:deps` (madge) and folds in `check:isolation`.** One ruleset (`tools/checks/arch-rules.cjs`) enforces layer top-down direction (previously UNENFORCED — madge caught only cycles, not reverse edges), no cycles, no foreign `src/internal/*`, and solid-js only in playground (D-002). Unlike madge it honors `@riftydev/*` subpath `exports`, so cross-package subpath edges are visible (madge silently skipped 29). `madge` dropped; `no-solid-outside-playground.mjs` removed. Resolves backlog `process-meta/directional-layer-boundary-check` + `process-meta/madge-subpath-exports-cycle-blindspot`.
@@ -27,6 +31,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Documented
 
+- **PR #76 review honesty fixes.** Diagnostics in the TS language-service compat
+  matrix are downgraded to `⚠️` until diagnostic tags/related information are
+  parity-covered, and the C1-C6 follow-up gaps are now explicit backlog items
+  with code seams.
 - **TS language service honest hard ceiling reached except explicit parked backlog (ADR-0166/0169).** The generated compat matrix `docs/public/compat/ts-language-service.md` now reflects the delivered browser-achievable `ts.LanguageService` surface: core diagnostics/navigation/editing plus refactors, decorations, call hierarchy, on-type formatting, workspace TypeScript, raw + encoded classifications, full `getNavigateToItems` parameters, `toLineColumnOffset`, lifecycle cache/dispose, emit, supported-code-fix inventory, and long-tail editor helpers. ✅/⚠️ rows are parity-checked against the real selected TypeScript compiler where they claim TS parity and exposed through engine/protocol/client; Monaco providers are wired where standalone Monaco exposes a provider shape. Parked, not fake-✅, backlog rows: interactive inlay label parts, encoded classification format variants, and custom UI for interactive/post-edit-rename refactors. True ceilings stay explicit ❌: `applyCodeActionCommand` package-install side effects, code lens, non-TS/JS native LSP, and non-cloneable compiler object graphs (`getProgram`, `getCompletionEntrySymbol`).
 
 - **git over VFS (isomorphic-git) backlog sharpened to an honest tight-contract item.** `docs/backlog/shell/git-command-isomorphic.md` rewritten from a thin sketch into a hard contract: verified isomorphic-git ceiling (canonical-object SHA fidelity = parity anchor; smart-HTTP-only — SSH/`git://`/dumb-HTTP throw; GitHub/GitLab/Bitbucket CORS-blocked so clone/push need an env-config corsProxy + `onAuth`, never hardcoded; rifty egress is CORS-bound host `fetch`), explicit loud-throw boundary, pre-resolved decisions, acceptance gates that forbid partial merge, and a parity oracle via ADR-0093 frozen golden fixtures + deterministic commit-SHA equality (NOT a live `git` spawn). Placement: new `@riftydev/git` capability package (analogue of npm-client), IRREVERSIBLE → its own ADR, gated on M12.

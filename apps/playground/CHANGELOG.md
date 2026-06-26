@@ -24,6 +24,14 @@
   `.gitignore`, and starter-generated `package-lock.json` is folded into that
   baseline, so terminal `git status` starts clean and later reports only the
   user's edits while ignoring generated `node_modules`/build output.
+- **Preset switches no longer replay stale debounced program edits.** A pending
+  program-tab write is discarded before reseeding a picked starter, so an edit
+  from the previous template cannot clobber the freshly seeded `/src/main.*`
+  entry after the switch.
+- **TS diagnostics refresh after project re-init.** When starter/dev-server
+  changes bump `tsProjectRevision`, the TS-LS client replays open documents and
+  immediately refreshes diagnostics for them, so Problems/markers do not stay
+  stale until the next keystroke.
 - **Terminal command overlays no longer leave colored command rails or cover output.** The
   playground terminal no longer mounts the command-block rail/preview or sticky current-command
   pill, and the xterm viewport no longer reserves the old rail gutter.
@@ -106,6 +114,12 @@
   `ack` from one client cannot satisfy a hover/rename/completion request from
   another during owner respawns or provider re-registration.
 - **Vite 8 sandbox honesty follow-ups (PR #55 audit).** (a) Vite 8 `build`/`preview`/`optimize` no longer silently boot the dev server; with ADR-0174 they route through the real installed CLI, with remaining Rolldown/runtime ceilings tracked in `backlog/playground/vite8-production-build-preview`. (b) The `[real-vite/worker] hmr bridge ready` log + the bridge token are no longer emitted when HMR is disabled (Vite 8 template) — no false "bridge ready" signal for a bridge that is never installed. (c) `PreviewPanel` header comment corrected — with HMR off (ADR-0161) an editor save re-transforms on next fetch but pushes nothing and non-editor changes aren't watched, so seeing an edit needs a manual Reload (was: "file edits are refreshed by the iframe HMR client itself"). (d) compat `incompatible-packages.md` esbuild/rollup rows corrected — Vite 8 transforms via oxc and parses via `rolldown/parseAst`, so those shim overlays are off the Vite 8 path. New `vite8-*` backlog items track the remaining divergences (watcher-over-VFS, TS/JSX parity coverage, dead esbuild/rollup overlays, lightningcss-wasm init, dev-server UX parity).
+
+### Documented
+
+- **PR #76 review gaps recorded explicitly.** Added backlog contracts for the
+  playground dev-server synthetic watcher branch and the dev esbuild warning
+  path, with `TODO(backlog:)` seams in the worker code.
 
 ### Changed
 

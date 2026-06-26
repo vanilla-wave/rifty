@@ -23,6 +23,11 @@
 
 ### Fixed
 
+- **PR #76 review gaps recorded explicitly.** Added backlog contracts and
+  `TODO(backlog:)` seams for tsconfig `baseUrl` bare-specifier behavior under
+  modern `moduleResolution` modes and for lazy-loading TypeScript behind
+  `autoDiscoverTsconfigPaths`.
+
 - **Vite 8 review follow-ups (PR #55).** (a) `node:wasi` `WASI` gains parity tests locking Node 24's `finalizeBindings` latch order (verified vs `lib/wasi.js`): `started` latches after memory validation but BEFORE the `_start` shape check, so a missing-memory `start()` is retryable while a missing-`_start` failure latches (its retry throws `ERR_WASI_ALREADY_STARTED`). (b) `new WASI({ version: 'unstable' })` is a loud `NotImplementedError` (rifty serves the preview1 namespace only; the snapshot0 ABI differs) instead of silently flattening to preview1 — tracked `backlog/runtime-wasi/wasi-unstable-version-support` + compat-noted. (c) `util.styleText` rejects an unknown format with Node's `validateOneOf` message shape — `The argument 'format' must be one of: '…', … . Received <inspect(value)>` (was `must be a known style`; code already `ERR_INVALID_ARG_VALUE`; the allowed-list content is rifty's own style set). (d) `worker_threads.Worker` — a post-exit `terminate()` resolves with `undefined` (Node: the worker handle is gone), not the caller's argument.
 - **TS/JSX module-loader honesty tightened.** `.jsx` inside a `type:"module"`
   package now classifies as ESM and runs through the async JSX transform hook,

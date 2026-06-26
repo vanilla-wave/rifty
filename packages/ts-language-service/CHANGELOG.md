@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- **Diagnostics compat row no longer overclaims tags/related info.** The
+  generated TS language-service matrix now marks diagnostics `⚠️` until
+  `relatedInformation` plus unused/deprecated diagnostic tags are plumbed through
+  the LSP wire shape, worker/client, Monaco markers, and parity oracle.
+
 - **Worker boot is idempotent for explicit hosts.** A host wrapper can call
   `bootTsLanguageServiceWorker()` directly to pin bundler reachability without
   double-registering fork-IPC handlers if the guarded auto-boot already ran.
@@ -146,6 +151,11 @@
   host fetches the vendored TS std-lib bundle by URL (`getTsLibUrl()`); exposing it
   as a published asset lets the playground LS worker import it `?url` and seed
   `__RIFTY_TS_LIB_URL`. An asset, not a JS entry (no tsup bundling / `.d.ts`).
+
+### Documented
+
+- **Long-tail parity test granularity tracked.** Added a backlog contract to split
+  the broad TS-LS long-tail parity test by feature with non-vacuity guards.
 
 ### Fixed
 

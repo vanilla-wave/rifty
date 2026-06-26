@@ -22,6 +22,7 @@ export interface TsDiagnosticsSyncOptions<Diagnostic, Marker> {
 
 export interface TsDiagnosticsSync {
   handleDocument(ev: EditorDocumentEvent): void;
+  refreshOpenDiagnostics(): Promise<void>;
   dispose(): void;
 }
 
@@ -107,6 +108,12 @@ export function createTsDiagnosticsSync<Diagnostic, Marker>(
     );
   }
 
+  async function refreshOpenDiagnostics(): Promise<void> {
+    await Promise.all(
+      [...openPaths].map((path) => refreshDiagnostics(path, bumpDiagnosticVersion(path))),
+    );
+  }
+
   function dispose(): void {
     disposed = true;
     for (const timer of debounceTimers.values()) clearTimeout(timer);
@@ -115,5 +122,5 @@ export function createTsDiagnosticsSync<Diagnostic, Marker>(
     diagnosticVersions.clear();
   }
 
-  return { handleDocument, dispose };
+  return { handleDocument, refreshOpenDiagnostics, dispose };
 }

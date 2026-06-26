@@ -196,6 +196,7 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
           if (aliased.status === 'resolved')
             return readResolved(vfs, pkgCache, aliased.path, opts.esm);
           if (aliased.status === 'no-match' && tsconfigResolution.baseUrl !== undefined) {
+            // TODO(backlog: runtime-js/tsconfig-baseurl-module-resolution): gate baseUrl bare-specifier fallback by TS moduleResolution parity.
             const baseUrlResolved = resolveAsFileOrDir(
               vfs,
               pkgCache,

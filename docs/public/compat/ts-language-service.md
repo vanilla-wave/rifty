@@ -8,7 +8,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat · ❌ not i
 
 | Feature | Status | Notes |
 |---|---|---|
-| Diagnostics (semantic / syntactic / tsconfig-config) | ✅ | `getSemanticDiagnostics` / `getSyntacticDiagnostics` / config-file diagnostics over the project tsconfig + VFS |
+| Diagnostics (semantic / syntactic / tsconfig-config) | ⚠️ | `getSemanticDiagnostics` / `getSyntacticDiagnostics` / config-file diagnostics over the project tsconfig + VFS; `relatedInformation` and `DiagnosticTag.Unnecessary` / `DiagnosticTag.Deprecated` are parked in `backlog/toolchain-build/ts-language-service-diagnostic-tags` |
 | Hover / quick-info | ✅ | `getQuickInfo` — cross-file + `node_modules` symbol types; honors clone-safe `maximumLength` |
 | Go-to-definition / type-definition | ✅ | `getDefinitionAtPosition` / `getTypeDefinitionAtPosition` — cross-file + into `node_modules` `.d.ts` |
 | Completions (+ resolve) | ✅ | `getCompletionsAtPosition` + lazy `getCompletionEntryDetails`; preserves TS list flags/global/member/new-identifier/`metadata`, replacement spans, snippets, commit characters, `source`/`data`, completion code-action edits/commands, and clone-safe TS preferences/format settings including deprecated `includeExternalModuleExports`; Monaco applies text-only completion edits and refuses command-bearing workspace edits rather than partially applying side effects |

@@ -249,6 +249,7 @@ function remapGoldEmit(output: ts.EmitOutput, rel: (abs: string) => string) {
 }
 
 describe('parity: remaining achievable ts.LanguageService surface', () => {
+  // TODO(backlog: toolchain-build/ts-language-service-long-tail-test-granularity): split by feature with non-vacuity guards.
   it('matches real TS for navigation, decorations, call hierarchy and long-tail editor queries', async () => {
     const root = writeTmpFixture();
     const gold = buildGold(root);

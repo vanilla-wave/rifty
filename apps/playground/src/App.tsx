@@ -729,6 +729,7 @@ export function App(props: AppProps) {
         });
         unsubscribeReplay();
         await Promise.all(replayEvents.map((ev) => client.open(ev.path, ev.text)));
+        await diagnosticSync.refreshOpenDiagnostics();
         return true;
       })().catch((err: unknown) => {
         if (!disposed) console.warn('[ts-lsp] init', (err as Error).message);
@@ -1392,6 +1393,7 @@ export function App(props: AppProps) {
   async function runVitePreset(preset: Preset): Promise<void> {
     setActivePreset(preset.id);
     await machine.loadPreset(preset);
+    discardPendingProgramWrite();
     seedViteWorkspace(preset);
     setTsProjectRevision((revision) => revision + 1);
     openPresetEditorTabs(preset);
@@ -1593,13 +1595,17 @@ export function App(props: AppProps) {
   function flushPendingProgramWrite(): void {
     const pending = pendingProgramWrite;
     if (!pending) return;
+    discardPendingProgramWrite();
+    workspaceOwner().writeFile(pending.path, pending.content);
+    notifyFileWritten(pending.path, pending.content); // ADR-0165 §57: REAL write → dirty
+  }
+
+  function discardPendingProgramWrite(): void {
     if (programWriteTimer) {
       clearTimeout(programWriteTimer);
       programWriteTimer = undefined;
     }
     pendingProgramWrite = undefined;
-    workspaceOwner().writeFile(pending.path, pending.content);
-    notifyFileWritten(pending.path, pending.content); // ADR-0165 §57: REAL write → dirty
   }
 
   function scheduleProgramWrite(path: string, content: string): void {

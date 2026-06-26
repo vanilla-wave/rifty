@@ -317,8 +317,8 @@ const matrices = [
     rows: [
       [
         'Diagnostics (semantic / syntactic / tsconfig-config)',
-        '✅',
-        '`getSemanticDiagnostics` / `getSyntacticDiagnostics` / config-file diagnostics over the project tsconfig + VFS',
+        '⚠️',
+        '`getSemanticDiagnostics` / `getSyntacticDiagnostics` / config-file diagnostics over the project tsconfig + VFS; `relatedInformation` and `DiagnosticTag.Unnecessary` / `DiagnosticTag.Deprecated` are parked in `backlog/toolchain-build/ts-language-service-diagnostic-tags`',
       ],
       [
         'Hover / quick-info',

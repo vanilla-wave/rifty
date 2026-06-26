@@ -93,4 +93,53 @@ describe('createTsDiagnosticsSync', () => {
     expect(diagnostics.has('/scratch/src/main.ts')).toBe(false);
     sync.dispose();
   });
+
+  it('refreshes diagnostics for already-open documents without a document event', async () => {
+    vi.useFakeTimers();
+    const calls: string[] = [];
+    const client: TsDiagnosticsClient<TestDiagnostic> = {
+      open: () => Promise.resolve(),
+      update: () => Promise.resolve(),
+      close: () => Promise.resolve(),
+      getSemanticDiagnostics: (path) => {
+        calls.push(`semantic:${path}`);
+        return Promise.resolve([{ message: 'semantic' }]);
+      },
+      getSyntacticDiagnostics: (path) => {
+        calls.push(`syntactic:${path}`);
+        return Promise.resolve([{ message: 'syntactic' }]);
+      },
+    };
+    const markerCalls: Array<{ path: string; markers: readonly string[] }> = [];
+    let diagnostics = new Map<string, readonly TestDiagnostic[]>();
+    const sync = createTsDiagnosticsSync<TestDiagnostic, string>({
+      client,
+      debounceMs: 0,
+      isSupportedPath: (path) => path.endsWith('.ts'),
+      setMarkers: (path, markers) => markerCalls.push({ path, markers }),
+      setDiagnostics: (updater) => {
+        diagnostics = updater(diagnostics);
+      },
+      toMarkers: (diags) => diags.map((diag) => diag.message),
+      warn: () => undefined,
+    });
+
+    sync.handleDocument({ kind: 'open', path: '/scratch/src/main.ts', text: 'bad' });
+    await vi.runOnlyPendingTimersAsync();
+    await flushAsync();
+    calls.length = 0;
+    await sync.refreshOpenDiagnostics();
+    await flushAsync();
+
+    expect(calls).toEqual(['semantic:/scratch/src/main.ts', 'syntactic:/scratch/src/main.ts']);
+    expect(markerCalls.at(-1)).toEqual({
+      path: '/scratch/src/main.ts',
+      markers: ['syntactic', 'semantic'],
+    });
+    expect(diagnostics.get('/scratch/src/main.ts')).toEqual([
+      { message: 'syntactic' },
+      { message: 'semantic' },
+    ]);
+    sync.dispose();
+  });
 });
