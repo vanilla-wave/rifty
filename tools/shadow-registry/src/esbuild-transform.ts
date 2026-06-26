@@ -27,6 +27,7 @@ export interface EsbuildTransformOptions {
   readonly target?: string;
   readonly minify?: boolean;
   readonly sourcemap?: 'inline' | 'external';
+  readonly supported?: Readonly<Record<string, boolean>>;
 }
 
 export interface EsbuildTransformResult {
@@ -56,6 +57,9 @@ export async function transformWithEsbuild(
   if (options.jsx) args.push(`--jsx=${options.jsx}`);
   if (options.target) args.push(`--target=${options.target}`);
   if (options.minify) args.push('--minify');
+  for (const [feature, enabled] of Object.entries(options.supported ?? {})) {
+    args.push(`--supported:${feature}=${String(enabled)}`);
+  }
   const wantExternalMap = options.sourcemap === 'external';
   if (options.sourcemap) args.push('--sourcemap=inline');
 

@@ -1,40 +1,32 @@
 ---
 area: toolchain-build
-status: parked
+status: shipped
 title: TS language service — navigation surface (document symbols/outline, folding ranges, workspace symbols)
 created: 2026-06-22
-why: ADR-0166 ships the tsserver core (diagnostics→formatting) but the navigation surface is the long tail — the LS exposes NO method for outline/folding/workspace-symbols
-user_story: As a rifty playground/agent user, I want a file Outline (breadcrumbs + symbol tree), code folding by structure, and Cmd-T workspace symbol search across my project, but today the LS has no navigation method, so the editor falls back to nothing project-aware (or Monaco's lib.d.ts-only built-in) and the agent can't enumerate a file's symbols
+why: project-aware navigation is now served by the real TS service instead of Monaco's isolated model
+user_story: As a rifty playground/agent user, I can get outline/document symbols, folding ranges, navigation bar items, and workspace symbol search from the actual VFS-backed TypeScript project
 sources: [ADR-0166]
 code: [packages/ts-language-service/src/service.ts, packages/ts-language-service/src/worker/protocol.ts, apps/playground/src/glue/ts-ls-monaco-providers.ts]
 ---
 
 ## Context
 
-ADR-0166 §Scope leaves the navigation surface deferred. The engine exposes no
-`getNavigationTree`/`getNavigationBarItems`, no folding, no project-wide symbol
-search; `worker/protocol.ts` carries no frame for them. (Monaco's syntactic
-`documentSymbols` is the one built-in still left ON in task 2.2c — a lib.d.ts/model
-approximation, not the VFS-backed project view, so outline/folding/workspace are
-NOT honestly served today.)
+Landed 2026-06-22: document symbols, folding ranges, and workspace symbols are
+served by the real `ts.LanguageService` and parity-covered. Monaco gets document
+symbols/folding; workspace symbols remain engine/client-only because Monaco 0.52
+standalone has no public workspace-symbol provider.
 
-## Options or Next
+This shipped item is retained as the delivery record. The service exposes real
+project document symbols, navigation bar items, folding ranges, and workspace
+symbols from `ts.LanguageService`; Monaco uses rifty document-symbol and
+folding-range providers where standalone Monaco has matching public hooks.
 
-Honest acceptance (NO partial delivery): when taken up, MUST deliver ALL of —
-- Document symbols / outline from the real `ts.LanguageService.getNavigationTree(fileName)`
-  (or `getNavigationBarItems`) → LSP `DocumentSymbol[]` (hierarchical, with kinds +
-  selection ranges), wired as a Monaco document-symbol provider; and retire the last
-  built-in `documentSymbols` so rifty owns it (no competing approximation).
-- Folding ranges from `getOutliningSpans(fileName)` → LSP `FoldingRange[]`, wired as a
-  Monaco folding-range provider.
-- Workspace symbols from `getNavigateToItems(searchValue, …)` across the project →
-  LSP `SymbolInformation[]`, wired as a Monaco workspace-symbol provider.
-- Parity vs the real `ts.LanguageService` (gold standard, same vendored TS both
-  sides) for each: outline tree shape+kinds+ranges, outlining spans, and navigate-to
-  hits — asserted IDENTICAL to tsc's, over a multi-symbol + multi-file fixture.
-- Any sub-feature the engine cannot honestly support throws
-  `NotImplementedError('ts-language-service.<feature>')`, never an empty/partial list
-  that lies about there being no symbols.
+## Verification
+
+- `long-tail-parity.test.ts` asserts document-symbol tree shape/kinds/ranges,
+  navigation bar items, outlining spans, and navigate-to results against real TS.
+- UI ceiling: Monaco 0.52 standalone has no public workspace-symbol provider; the
+  engine/client API remains available for headless consumers.
 
 ## Reversibility
 

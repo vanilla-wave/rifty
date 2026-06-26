@@ -15,6 +15,19 @@
  *      single in-flight promise and resolve to the SAME Map singleton.
  */
 
+import type { FsSync } from '@riftydev/vfs';
+import tsVendored from 'typescript';
+import { readFileUtf8 } from './vfs-ts-host.ts';
+
+type TypeScriptApi = typeof tsVendored;
+
+export interface LoadedTypeScriptCompiler {
+  readonly ts: TypeScriptApi;
+  readonly libMap: ReadonlyMap<string, string>;
+  readonly source: 'vendored' | 'workspace';
+  readonly packageRoot?: string;
+}
+
 /** Bootstrap-global key carrying the vendored lib bundle URL (playground/host). */
 export const TS_LIB_URL_ENV = '__RIFTY_TS_LIB_URL' as const;
 
@@ -158,4 +171,100 @@ export function loadLibDts(): Promise<ReadonlyMap<string, string>> {
     });
   }
   return libsPromise;
+}
+
+function parentDir(path: string): string {
+  if (path === '/') return '/';
+  const i = path.lastIndexOf('/');
+  return i <= 0 ? '/' : path.slice(0, i);
+}
+
+function findWorkspaceTypeScriptRoot(fsSync: FsSync, projectRoot: string): string | undefined {
+  let dir = projectRoot;
+  for (;;) {
+    const candidate = `${dir === '/' ? '' : dir}/node_modules/typescript`;
+    const compiler = fsSync.statSyncOrNull(`${candidate}/lib/typescript.js`);
+    if (compiler?.isFile) return candidate;
+    const packageJson = fsSync.statSyncOrNull(`${candidate}/package.json`);
+    const packageDir = fsSync.statSyncOrNull(candidate);
+    if (packageJson?.isFile || packageDir?.isDirectory) return candidate;
+    if (dir === '/') return undefined;
+    dir = parentDir(dir);
+  }
+}
+
+function loadWorkspaceLibDts(fsSync: FsSync, packageRoot: string): ReadonlyMap<string, string> {
+  const libDir = `${packageRoot}/lib`;
+  const stat = fsSync.statSyncOrNull(libDir);
+  if (!stat?.isDirectory) {
+    throw new Error(`workspace TypeScript at ${packageRoot} has no lib/ directory`);
+  }
+  const libRe = /^lib(\.[^.]+)*\.d\.ts$/;
+  const map = new Map<string, string>();
+  for (const entry of fsSync.readdirSync(libDir)) {
+    if (!entry.isFile || !libRe.test(entry.name)) continue;
+    const path = `${libDir}/${entry.name}`;
+    const text = readFileUtf8(fsSync, path);
+    if (text === undefined) throw new Error(`workspace TypeScript lib unreadable: ${path}`);
+    map.set(entry.name, text);
+  }
+  if (map.size === 0) {
+    throw new Error(`workspace TypeScript at ${packageRoot} has no lib*.d.ts files`);
+  }
+  return map;
+}
+
+function evaluateWorkspaceTypeScript(source: string, fileName: string): TypeScriptApi {
+  const module = { exports: {} as unknown };
+  const exports = module.exports;
+  const run = new Function(
+    'module',
+    'exports',
+    'require',
+    'process',
+    '__filename',
+    '__dirname',
+    `${source}\nreturn module.exports;`,
+  ) as (
+    module: { exports: unknown },
+    exports: unknown,
+    require: undefined,
+    process: undefined,
+    fileName: string,
+    dirName: string,
+  ) => unknown;
+  const loaded = run(module, exports, undefined, undefined, fileName, parentDir(fileName));
+  const candidate = loaded && typeof loaded === 'object' ? loaded : module.exports;
+  const api = candidate as Partial<TypeScriptApi>;
+  if (
+    typeof api.version !== 'string' ||
+    typeof api.createLanguageService !== 'function' ||
+    typeof api.parseJsonConfigFileContent !== 'function' ||
+    typeof api.getDefaultLibFileName !== 'function'
+  ) {
+    throw new Error(`workspace TypeScript at ${fileName} did not export a compiler API`);
+  }
+  return candidate as TypeScriptApi;
+}
+
+export async function loadTypeScriptCompilerForProject(
+  fsSync: FsSync,
+  projectRoot: string,
+): Promise<LoadedTypeScriptCompiler> {
+  const workspaceRoot = findWorkspaceTypeScriptRoot(fsSync, projectRoot);
+  if (!workspaceRoot) {
+    return { ts: tsVendored, libMap: await loadLibDts(), source: 'vendored' };
+  }
+
+  const compilerPath = `${workspaceRoot}/lib/typescript.js`;
+  const source = readFileUtf8(fsSync, compilerPath);
+  if (source === undefined) {
+    throw new Error(`workspace TypeScript compiler unreadable: ${compilerPath}`);
+  }
+  return {
+    ts: evaluateWorkspaceTypeScript(source, compilerPath),
+    libMap: loadWorkspaceLibDts(fsSync, workspaceRoot),
+    source: 'workspace',
+    packageRoot: workspaceRoot,
+  };
 }

@@ -268,4 +268,22 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     });
     expect(result.source).toBe('snapshot');
   });
+
+  it('restore-only accepts a shared baked snapshot when its owner template matches', async () => {
+    const { vfs, fsSync, logFn } = project();
+    const result = await ensureProjectDependencies({
+      vfs,
+      fsSync,
+      root: ROOT,
+      templateId: 'typescript',
+      snapshotTemplateId: 'vite',
+      slug: 'typescript-ls',
+      snapshotUrl: '/snapshots/vite.json.gz',
+      fetchSnapshot: async () => viteSnapshot(),
+      // no `install` → TypeScript starter's instant boot must restore, not install
+      flush: async () => {},
+      log: logFn,
+    });
+    expect(result.source).toBe('snapshot');
+  });
 });

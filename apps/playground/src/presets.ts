@@ -7,6 +7,7 @@ import {
 import { terminalDevLine } from './templates/project-spec.ts';
 import { defaultProjectSpec, resolveProjectSpec } from './templates/registry.ts';
 import { SOCKET_LAB_SERVER_SOURCE, SOCKET_LAB_TEMPLATE } from './templates/socket-lab.ts';
+import { TYPESCRIPT_TEMPLATE } from './templates/typescript.ts';
 
 export type PresetMode = 'dev' | 'real-vite';
 
@@ -362,6 +363,25 @@ const NODE_WORKER_PRESET: Preset = {
   ],
 };
 
+const TYPESCRIPT_LS_PRESET: Preset = {
+  id: 'typescript-ls',
+  label: 'TypeScript sandbox',
+  category: 'Files + modules',
+  icon: 'code',
+  mode: 'real-vite',
+  setup: 'instant',
+  templateId: TYPESCRIPT_TEMPLATE.id,
+  blurb: 'Strict TS project seeded with imports, .d.ts resolution, diagnostics, and refactors.',
+  glyph: { text: 'TS', color: '#7FB5FF' },
+  tag: { text: 'instant', tone: 'live' },
+  source: TYPESCRIPT_TEMPLATE.entry.content,
+  openFiles: ['tsconfig.json', 'src/model.ts', 'src/math.ts'],
+  files: Object.entries(TYPESCRIPT_TEMPLATE.extraFiles).map(([path, content]) => ({
+    path: path.replace(/^\/+/, ''),
+    content,
+  })),
+};
+
 const REAL_VITE_PRESET: Preset = {
   id: 'real-vite',
   label: 'Real npm project',
@@ -441,6 +461,7 @@ const SOCKET_LAB_PRESET: Preset = {
 export const PRESETS: readonly Preset[] = [
   PROJECT_FILES_PRESET,
   NODE_WORKER_PRESET,
+  TYPESCRIPT_LS_PRESET,
   REAL_VITE_PRESET,
   VITE8_PRESET,
   EXPRESS_SQLITE_PRESET,

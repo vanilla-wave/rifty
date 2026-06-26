@@ -4,6 +4,17 @@
 
 ### Added
 
+- **Auto-discovered tsconfig path aliases** (ADR-0170). `ModuleLoaderOptions`
+  gains `autoDiscoverTsconfigPaths`; when enabled and no explicit `paths` map is
+  supplied, the resolver uses TypeScript's real config parser over the VFS to
+  locate nearest `tsconfig.json`, follow `extends`, honor JSONC/baseUrl/paths,
+  feed the existing alias resolver, and use `baseUrl` as the bare-specifier
+  fallback when no `paths` pattern matches. Alias/baseUrl probes use TypeScript's
+  extension/index priority (`.ts` before `.js` when both siblings exist), and a
+  malformed `compilerOptions.paths` shape throws `TSCONFIG_PARSE_ERROR` instead
+  of leaking JS `TypeError`s. Default remains Node-faithful; explicit `paths`
+  still wins.
+
 - **Public `node:os` / `node:path` / `node:perf_hooks` / `node:fs` builtin subpaths** (`./builtins/{os,path,perf_hooks,fs}`, ADR-0166 task 1.9). The same faithful shims that already back the `require('os')` module registry, now also importable directly. The playground aliases the BARE `os`/`path`/`perf_hooks`/`fs` specifiers to these so a Vite bundle containing a heavy node-targeting dependency (the `typescript` engine in the ts-language-service worker) resolves them to REAL rifty shims instead of Vite's empty browser stub (`os.platform is not a function` at the dep's module-eval). No first-party source imports these bare specifiers; it uses `node:*` + the module registry.
 
 ### Changed
@@ -13,6 +24,20 @@
 ### Fixed
 
 - **Vite 8 review follow-ups (PR #55).** (a) `node:wasi` `WASI` gains parity tests locking Node 24's `finalizeBindings` latch order (verified vs `lib/wasi.js`): `started` latches after memory validation but BEFORE the `_start` shape check, so a missing-memory `start()` is retryable while a missing-`_start` failure latches (its retry throws `ERR_WASI_ALREADY_STARTED`). (b) `new WASI({ version: 'unstable' })` is a loud `NotImplementedError` (rifty serves the preview1 namespace only; the snapshot0 ABI differs) instead of silently flattening to preview1 — tracked `backlog/runtime-wasi/wasi-unstable-version-support` + compat-noted. (c) `util.styleText` rejects an unknown format with Node's `validateOneOf` message shape — `The argument 'format' must be one of: '…', … . Received <inspect(value)>` (was `must be a known style`; code already `ERR_INVALID_ARG_VALUE`; the allowed-list content is rifty's own style set). (d) `worker_threads.Worker` — a post-exit `terminate()` resolves with `undefined` (Node: the worker handle is gone), not the caller's argument.
+- **TS/JSX module-loader honesty tightened.** `.jsx` inside a `type:"module"`
+  package now classifies as ESM and runs through the async JSX transform hook,
+  matching the `.ts`/`.tsx` path. Synchronous `require()` of `.jsx` now throws the
+  same directed `NotImplementedError` as `.ts`/`.tsx` instead of leaking an opaque
+  CJS compile `SyntaxError`. Auto-discovered tsconfig path parsing is now scoped
+  to bare specifiers, so a malformed `tsconfig.json` cannot break ordinary
+  relative `./dep.js` resolution.
+
+- **TS transform and ESM AST caches validate source freshness.** A changed `.ts`
+  file at the same module id now re-runs both the esbuild strip hook and the AST
+  ESM transform even if a caller only invalidated the executed module record.
+  This closes the stale-transform/stale-AST cache backlog items without dropping
+  the fast path for byte-identical reloads.
+
 - **Node-24 argument validation on the new `assert` / `fs` surfaces** (PR #62 review hardening; parity RED-then-GREEN). `assert.throws`/`doesNotThrow` reject a non-function `fn`, and `assert.rejects`/`doesNotReject` a first arg that is neither a function nor a thenable, with `ERR_INVALID_ARG_TYPE` (was: silently call / `await` a non-callable → mis-reported "Missing expected rejection"). `fs.utimesSync`/`lutimesSync`/`futimesSync` validate the time args via Node's `toUnixTimestamp` rules — a numeric string coerces, but `NaN`/`Infinity`/a non-numeric string throw `ERR_INVALID_ARG_TYPE` (was: a silent `NaN` handed to the VFS clock). `fs.cpSync` `errorOnExist` drops the non-Node `[ERR_FS_CP_EEXIST]:` message prefix (the code already matched). The pre-existing `cp` file→dir / dir→file type-mismatch codes are tracked in `backlog/runtime-js/fs-cp-type-mismatch-error-codes`.
 - **Silent Node divergences — failing-parity-first fixes** (closes backlog/runtime-js/silent-node-divergences). Four `node:` builtins returned WRONG values with no throw (worse than a loud gap); each pinned by a RED-then-GREEN parity case vs Node v24. (1) `util.inspect(value, options)` — the 2nd positional is now an OPTIONS object, not the internal depth counter, so `util.inspect(obj, { depth: null })` renders unlimited (was misread as `depth = NaN`) and `{ depth: 0 }` collapses containers to Node's `[Object]`/`[Array]`/`[Map]`/`[Set]` placeholders; strings inside structures use SINGLE quotes with Node's dynamic `"`/`` ` `` fallback (was `JSON.stringify` double-quotes). Default nesting depth + colors/getters/sorted remain `util-surface-completions`. (2) `querystring.parse` decodes a literal `+` → space (express/formidable) — structural, parse-only (`+`→`%20` BEFORE the decoder so a custom `decodeURIComponent` sees `%20` like Node; `%2B` survives; `querystring.unescape` still leaves `+`). (3) `util.format('%c', arg)` consumes its arg and emits nothing (was keeping the literal `%c` AND leaking the arg). (4) `import.meta.resolve` does real loader resolution (see `docs/public/compat/modules.md`): any `node:` specifier returned verbatim (Node doesn't validate the builtin at resolve time), files → `file://<abs>`, a bare/relative miss throws the resolver's `MODULE_NOT_FOUND` — replaced the inline `new URL(s, baseUrl).href` stub that returned a wrong `file://` URL for bare/`node:` specifiers. `repl/inspect.ts` also gained Node's `<Buffer …>` hex rendering driven by the live `buffer.INSPECT_MAX_BYTES`.
 - **`worker_threads` Vite 8 follow-ups (review).** (a) Kernel-path `workerData: -0`

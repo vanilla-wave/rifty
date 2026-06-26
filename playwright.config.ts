@@ -8,6 +8,10 @@ const port = Number(process.env.RIFTY_PLAYGROUND_PORT ?? 5273);
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
+  // GitHub's ubuntu runner advertises enough cores for parallel Playwright, but
+  // TS-LS/fullstack specs cold-boot owner + child workers and fetch large bundles.
+  // Serialize CI e2e; local runs keep Playwright's default worker count.
+  workers: process.env.CI ? 1 : undefined,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [['html'], ['github']] : 'list',

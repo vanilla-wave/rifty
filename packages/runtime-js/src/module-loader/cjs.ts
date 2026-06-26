@@ -6,21 +6,21 @@ import type { ResolvedModule } from './resolver.ts';
 import type { Resolver } from './resolver.ts';
 
 /**
- * Reject a `.ts`/`.tsx` that reached the CJS path with a directed
+ * Reject a `.ts`/`.tsx`/`.jsx` that reached the CJS path with a directed
  * {@link NotImplementedError}, instead of feeding raw TS to `new Function`
  * (opaque `SyntaxError: Unexpected token`).
  *
- * The TS type-strip hook is async (esbuild-via-`runWasi`, ADR-0052 D1 alt-C);
- * synchronous `require()` cannot await it, so a `.ts`/`.tsx` in a
+ * The TS/JSX transform hook is async (esbuild-via-`runWasi`, ADR-0052 D1 alt-C);
+ * synchronous `require()` cannot await it, so a `.ts`/`.tsx`/`.jsx` in a
  * non-`type:module` scope is unsupported. In a `type:module` scope it loads as
  * ESM via `import()` where the async strip runs. Registered in
  * `docs/public/compat/modules.md` as not-supported.
  */
 function assertNotTsCjs(id: string): void {
-  if (id.endsWith('.ts') || id.endsWith('.tsx')) {
+  if (id.endsWith('.ts') || id.endsWith('.tsx') || id.endsWith('.jsx')) {
     throw new NotImplementedError(
       'module-loader.ts-via-require',
-      `require() of ${id} (TypeScript) is not supported: the esbuild type-strip is async, so a synchronous require() cannot transform it. A .ts/.tsx is only loadable when its package scope is type:module (loads as ESM via import()).`,
+      `require() of ${id} (TypeScript/JSX) is not supported: the esbuild transform is async, so a synchronous require() cannot transform it. A .ts/.tsx/.jsx is only loadable when its package scope is type:module (loads as ESM via import()).`,
     );
   }
 }

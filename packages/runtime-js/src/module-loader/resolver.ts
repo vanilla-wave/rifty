@@ -2,6 +2,11 @@ import type { FsSync } from '@riftydev/vfs';
 import { dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { ensureRuntimeJsBuiltinsRegistered, isBuiltinSpecifier } from '../builtins/index.ts';
 import { ModuleLoadError } from './errors.ts';
+import {
+  type TsconfigPathResolution,
+  findNearestTsconfig,
+  loadTsconfigPathResolution,
+} from './tsconfig-paths.ts';
 
 const utf8 = new TextDecoder('utf-8');
 
@@ -33,9 +38,11 @@ export interface ResolveOptions {
  * **absolute** VFS path pattern. Patterns carry at most one `*`; the specifier's
  * `*` capture is substituted into the target. Targets are an ordered candidate
  * list (a bare string = one element) — first to resolve to an existing file wins.
- * The resolver does NOT read tsconfig: a caller reads `compilerOptions.paths`,
- * resolves targets to absolute patterns (handling `baseUrl`/`extends`), and
- * supplies this map. Off by default = Node-faithful resolution.
+ * Explicit maps are still the fastest/most-controlled path. When
+ * `autoDiscoverTsconfigPaths` is enabled, the resolver uses TypeScript's own
+ * config parser to locate `tsconfig.json`, follow `extends`, interpret
+ * `baseUrl`, and compute this same absolute map. Off by default =
+ * Node-faithful resolution.
  */
 export type PathAliases = Readonly<Record<string, string | readonly string[]>>;
 
@@ -43,6 +50,12 @@ export type PathAliases = Readonly<Record<string, string | readonly string[]>>;
 export interface ResolverOptions {
   /** tsconfig-style path aliases (ADR-0066). Absent = Node-faithful resolution. */
   readonly paths?: PathAliases;
+  /**
+   * If true, locate the nearest `tsconfig.json` for the importing file and derive
+   * path aliases from `compilerOptions.paths` with the real TypeScript parser.
+   * Explicit {@link paths} win when both are supplied.
+   */
+  readonly autoDiscoverTsconfigPaths?: boolean;
 }
 
 // `.ts`/`.tsx` come AFTER the `.js` family (so a plain-Node `foo.js` resolves
@@ -57,6 +70,18 @@ const INDEX_FILES = [
   'index.cjs',
   'index.ts',
   'index.tsx',
+  'index.json',
+] as const;
+// tsconfig `paths`/`baseUrl` are TypeScript-owned resolution, not Node's loader.
+// Keep Node-first order above for normal imports; match TS source priority here.
+const TSCONFIG_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json'] as const;
+const TSCONFIG_INDEX_FILES = [
+  'index.ts',
+  'index.tsx',
+  'index.js',
+  'index.jsx',
+  'index.mjs',
+  'index.cjs',
   'index.json',
 ] as const;
 
@@ -91,7 +116,8 @@ export interface Resolver {
 type PkgCache = Map<string, PackageJson>;
 
 export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}): Resolver {
-  const paths = resolverOpts.paths;
+  const explicitPaths = resolverOpts.paths;
+  const autoDiscoverTsconfigPaths = resolverOpts.autoDiscoverTsconfigPaths === true;
   // package.json parse cache (perf #5). N sibling imports from one package
   // re-decoded+re-parsed its package.json N times; cache by absolute path.
   // Cleared whole in `loader.invalidate()` (both arms) — `load-fixture` reload
@@ -104,10 +130,14 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
   // Cleared whole on ANY invalidate (input-keyed; cannot prune by resolved id).
   // TODO(backlog: perf/resolver-resolution-cache).
   const resolveCache = new Map<string, string>();
+  const nearestTsconfigCache = new Map<string, string | null>();
+  const tsconfigResolutionCache = new Map<string, TsconfigPathResolution | null>();
   return {
     clearCaches() {
       pkgCache.clear();
       resolveCache.clear();
+      nearestTsconfigCache.clear();
+      tsconfigResolutionCache.clear();
     },
     resolve(specifier, opts) {
       const fromFileStat = vfs.statSyncOrNull(opts.fromFile);
@@ -150,11 +180,28 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
 
       // tsconfig-style path aliases (ADR-0066): only for bare specifiers and
       // only when a pattern matches — so real `@scope/pkg` packages are untouched.
-      // A pattern match that resolves no file falls THROUGH to the bare walk
-      // (tsc's paths-then-fallback), so a genuine miss reports MODULE_NOT_FOUND.
-      if (paths !== undefined && !isRelativeSpecifier(specifier) && !isAbsolute(specifier)) {
-        const aliased = resolvePathAlias(vfs, pkgCache, specifier, paths);
-        if (aliased !== null) return readResolved(vfs, pkgCache, aliased, opts.esm);
+      // A pattern match that resolves no file skips `baseUrl` (matching TypeScript),
+      // then falls through to the bare node_modules walk.
+      if (!isRelativeSpecifier(specifier) && !isAbsolute(specifier)) {
+        const tsconfigResolution = resolutionFor(fromDir);
+        if (tsconfigResolution !== undefined) {
+          const aliased: PathAliasResolution =
+            tsconfigResolution.paths !== undefined
+              ? resolvePathAlias(vfs, pkgCache, specifier, tsconfigResolution.paths)
+              : { status: 'no-match' };
+          if (aliased.status === 'resolved')
+            return readResolved(vfs, pkgCache, aliased.path, opts.esm);
+          if (aliased.status === 'no-match' && tsconfigResolution.baseUrl !== undefined) {
+            const baseUrlResolved = resolveAsFileOrDir(
+              vfs,
+              pkgCache,
+              joinPath(tsconfigResolution.baseUrl, specifier),
+              TSCONFIG_RESOLUTION,
+            );
+            if (baseUrlResolved !== null)
+              return readResolved(vfs, pkgCache, baseUrlResolved, opts.esm);
+          }
+        }
       }
 
       // Resolution memo (perf #15): key by (esm,fromDir,specifier). A HIT skips
@@ -174,6 +221,23 @@ export function createResolver(vfs: FsSync, resolverOpts: ResolverOptions = {}):
       return readResolved(vfs, pkgCache, filePath, opts.esm);
     },
   };
+
+  function resolutionFor(fromDir: string): TsconfigPathResolution | undefined {
+    if (explicitPaths !== undefined) return { paths: explicitPaths };
+    if (!autoDiscoverTsconfigPaths) return undefined;
+    let configPath = nearestTsconfigCache.get(fromDir);
+    if (configPath === undefined) {
+      configPath = findNearestTsconfig(vfs, fromDir);
+      nearestTsconfigCache.set(fromDir, configPath);
+    }
+    if (configPath === null) return undefined;
+    let resolution = tsconfigResolutionCache.get(configPath);
+    if (resolution === undefined) {
+      resolution = loadTsconfigPathResolution(vfs, configPath);
+      tsconfigResolutionCache.set(configPath, resolution);
+    }
+    return resolution ?? undefined;
+  }
 }
 
 /**
@@ -253,23 +317,44 @@ function resolveSpecifierToFile(
  * Resolve a specifier against a {@link PathAliases} map (ADR-0066). Picks the
  * most-specific pattern (exact > wildcard; among wildcards, longest prefix then
  * suffix), substitutes the `*` capture into its ordered targets, returns the
- * first that resolves to an existing file. `null` = no pattern matched OR matched
- * but no file exists — both fall through to normal resolution.
+ * first that resolves to an existing file. A matched miss is distinct from no
+ * match because TypeScript does NOT try `baseUrl` after a matching `paths` key
+ * fails, though it may still continue to package resolution.
  */
+type PathAliasResolution =
+  | { readonly status: 'resolved'; readonly path: string }
+  | { readonly status: 'matched-miss' }
+  | { readonly status: 'no-match' };
+
+interface FileDirResolutionOrder {
+  readonly extensions: readonly string[];
+  readonly indexFiles: readonly string[];
+}
+
+const TSCONFIG_RESOLUTION: FileDirResolutionOrder = {
+  extensions: TSCONFIG_EXTENSIONS,
+  indexFiles: TSCONFIG_INDEX_FILES,
+};
+
 function resolvePathAlias(
   vfs: FsSync,
   pkgCache: PkgCache,
   specifier: string,
   paths: PathAliases,
-): string | null {
+): PathAliasResolution {
   const match = matchAliasPattern(paths, specifier);
-  if (match === null) return null;
+  if (match === null) return { status: 'no-match' };
   for (const target of match.targets) {
     const substituted = match.star === null ? target : target.replace(/\*/g, match.star);
-    const resolved = resolveAsFileOrDir(vfs, pkgCache, normalizePath(substituted));
-    if (resolved !== null) return resolved;
+    const resolved = resolveAsFileOrDir(
+      vfs,
+      pkgCache,
+      normalizePath(substituted),
+      TSCONFIG_RESOLUTION,
+    );
+    if (resolved !== null) return { status: 'resolved', path: resolved };
   }
-  return null;
+  return { status: 'matched-miss' };
 }
 
 interface AliasMatch {
@@ -329,7 +414,12 @@ function matchAliasPattern(paths: PathAliases, specifier: string): AliasMatch | 
   return { targets, star: bestStar };
 }
 
-function resolveAsFileOrDir(vfs: FsSync, pkgCache: PkgCache, base: string): string | null {
+function resolveAsFileOrDir(
+  vfs: FsSync,
+  pkgCache: PkgCache,
+  base: string,
+  order?: FileDirResolutionOrder,
+): string | null {
   // Node order is LOAD_AS_FILE before LOAD_AS_DIRECTORY: exact file, then
   // `X` + extension, then `X` as a directory. Stat `base` once (ADR-0083:
   // non-throwing, null on miss).
@@ -343,29 +433,34 @@ function resolveAsFileOrDir(vfs: FsSync, pkgCache: PkgCache, base: string): stri
   // `.ts`/`.tsx`) — so a `foo.ts` sibling wins over a `foo/` directory. opencode
   // relies on this: `./migration` resolves the `migration.ts` barrel, not the
   // sibling `migration/` dir of SQL files (no index). Verified against Node 24.
-  for (const ext of DEFAULT_EXTENSIONS) {
+  for (const ext of order?.extensions ?? DEFAULT_EXTENSIONS) {
     const candidate = `${base}${ext}`;
     if (isDeclarationFile(candidate)) continue;
     if (vfs.statSyncOrNull(candidate)?.isFile) return candidate;
   }
 
   // (3) `base` as a directory (package.json `main`, then `index.*`).
-  if (baseStat?.isDirectory) return resolveAsDirectory(vfs, pkgCache, base);
+  if (baseStat?.isDirectory) return resolveAsDirectory(vfs, pkgCache, base, order);
 
   return null;
 }
 
-function resolveAsDirectory(vfs: FsSync, pkgCache: PkgCache, dir: string): string | null {
+function resolveAsDirectory(
+  vfs: FsSync,
+  pkgCache: PkgCache,
+  dir: string,
+  order?: FileDirResolutionOrder,
+): string | null {
   const pkgPath = joinPath(dir, 'package.json');
   if (vfs.existsSync(pkgPath)) {
     const pkg = readPackageJson(vfs, pkgCache, pkgPath);
     const main = pickMainEntry(pkg);
     if (main) {
-      const candidate = resolveAsFileOrDir(vfs, pkgCache, joinPath(dir, main));
+      const candidate = resolveAsFileOrDir(vfs, pkgCache, joinPath(dir, main), order);
       if (candidate) return candidate;
     }
   }
-  for (const idx of INDEX_FILES) {
+  for (const idx of order?.indexFiles ?? INDEX_FILES) {
     const candidate = joinPath(dir, idx);
     if (isDeclarationFile(candidate)) continue;
     if (vfs.statSyncOrNull(candidate)?.isFile) return candidate;
@@ -753,8 +848,13 @@ function detectKind(filePath: string, scopeType: string | undefined): ModuleKind
   if (TEXT_EXTENSIONS.some((ext) => filePath.endsWith(ext))) return 'text';
   if (filePath.endsWith('.mjs')) return 'esm';
   if (filePath.endsWith('.cjs')) return 'cjs';
-  if (filePath.endsWith('.js') || filePath.endsWith('.ts') || filePath.endsWith('.tsx')) {
-    // `.ts`/`.tsx` mirror the `.js` branch (ADR-0053): ESM under a `type:module`
+  if (
+    filePath.endsWith('.js') ||
+    filePath.endsWith('.ts') ||
+    filePath.endsWith('.tsx') ||
+    filePath.endsWith('.jsx')
+  ) {
+    // `.ts`/`.tsx`/`.jsx` mirror the `.js` branch (ADR-0053): ESM under a `type:module`
     // scope, else CJS — as a TS-aware Node loader classifies by package scope.
     // `scopeType` is the SAME findPackageScope result readResolved computed.
     return scopeType === 'module' ? 'esm' : 'cjs';

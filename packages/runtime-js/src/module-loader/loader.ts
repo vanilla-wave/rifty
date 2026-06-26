@@ -33,11 +33,17 @@ export interface ModuleLoaderOptions {
   readonly transformSource?: TransformSourceHook;
   /**
    * tsconfig-style path aliases (ADR-0066), e.g. `{ "@/*": "/workspace/src/*" }`.
-   * Targets are absolute VFS path patterns; the caller (not the resolver) reads
-   * `compilerOptions.paths` and resolves them to absolute patterns.
+   * Targets are absolute VFS path patterns; when supplied, this explicit map wins
+   * over auto-discovery.
    * Absent = Node-faithful resolution (bare `@/foo` is `MODULE_NOT_FOUND`).
    */
   readonly paths?: PathAliases;
+  /**
+   * Locate the nearest `tsconfig.json` and derive `compilerOptions.paths` via
+   * TypeScript's parser (`extends`, JSONC, `baseUrl` included). Off by default
+   * so vanilla Node-style resolution stays byte-stable.
+   */
+  readonly autoDiscoverTsconfigPaths?: boolean;
 }
 
 export interface ModuleLoader {
@@ -88,41 +94,44 @@ function loadBuiltinOrThrow(id: string): Record<string, unknown> {
 
 export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}): ModuleLoader {
   const registry = new ModuleRegistry();
-  const resolver = createResolver(vfs, { paths: opts.paths });
+  const resolver = createResolver(vfs, {
+    paths: opts.paths,
+    autoDiscoverTsconfigPaths: opts.autoDiscoverTsconfigPaths,
+  });
   const cwd = opts.cwd ?? STUB_FROM_FILE_DEFAULT;
   const workspace = opts.workspace ?? opts.cwd ?? STUB_FROM_FILE_DEFAULT;
 
-  // Id-keyed strip cache: WASI esbuild is a full process spawn per module, so
-  // re-stripping the same `.ts` across the import graph (or repeated loads in
-  // one loader) is wasted work. Key by absolute resolved id (installed sources
-  // are immutable per package version in the VFS overlay). Wrapping
-  // `opts.transformSource` keeps `esm.ts` cache-unaware. TODO(backlog: runtime-js/ts-strip-transform-cache).
-  const transformCache = new Map<string, string>();
+  // Strip cache: WASI esbuild is a full process spawn per module, so re-stripping
+  // byte-identical `.ts` across repeated loads is wasted work. Keep the cache
+  // under the absolute id but validate against the current source text so an
+  // in-place edit at the same path cannot serve a stale transform.
+  const transformCache = new Map<string, { readonly source: string; readonly code: string }>();
   const sourceMaps = new SourceMapRegistry();
   const cachedTransform: TransformSourceHook | undefined =
     opts.transformSource &&
     (async (req) => {
       const hit = transformCache.get(req.id);
-      if (hit !== undefined) return hit;
+      if (hit?.source === req.source) return hit.code;
       const out = await opts.transformSource!(req);
       const extracted = extractInlineSourceMap(out);
       if (extracted.map) sourceMaps.set(req.id, extracted.map);
       else sourceMaps.delete(req.id);
-      transformCache.set(req.id, extracted.code);
+      transformCache.set(req.id, { source: req.source, code: extracted.code });
       return extracted.code;
     });
 
-  // Id-keyed ESM AST cache: `transformEsm` (acorn parse + walk) is the heaviest
-  // per-module CPU step, re-run for every byte-identical module on each
-  // editor-save `invalidate()` loop. `transformEsm` is pure, so memoizing by
-  // absolute resolved id is observationally transparent. Dropped in lockstep
-  // with `transformCache`/registry (same lifecycle). TODO(backlog: perf/transformesm-result-cache).
-  const esmAstCache = new Map<string, TransformResult>();
+  // ESM AST cache: `transformEsm` (acorn parse + walk) is the heaviest
+  // per-module CPU step. Cache by id but validate the transformed JS text, so a
+  // changed TS source at the same path cannot reuse a stale AST.
+  const esmAstCache = new Map<
+    string,
+    { readonly source: string; readonly result: TransformResult }
+  >();
   const cachedTransformEsm = (source: string, id: string): TransformResult => {
     const hit = esmAstCache.get(id);
-    if (hit !== undefined) return hit;
+    if (hit?.source === source) return hit.result;
     const out = transformEsm(source, id);
-    esmAstCache.set(id, out);
+    esmAstCache.set(id, { source, result: out });
     return out;
   };
 
@@ -246,8 +255,7 @@ export function createModuleLoader(vfs: FsSync, opts: ModuleLoaderOptions = {}):
     invalidate(id) {
       registry.invalidate(id);
       // Keep the strip cache + ESM AST cache coherent with the executed-module
-      // cache, dropping them in lockstep (TODO(backlog: runtime-js/ts-strip-transform-cache),
-      // TODO(backlog: perf/transformesm-result-cache)).
+      // cache, dropping them in lockstep.
       if (id === undefined) {
         transformCache.clear();
         esmAstCache.clear();

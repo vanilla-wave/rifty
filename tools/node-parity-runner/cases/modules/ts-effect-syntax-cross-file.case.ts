@@ -35,15 +35,9 @@ import type { ParityCase } from '../../src/types.ts';
  * (base.n=40 + box.n=2 + Priority.High=1) only if every construct erased/lowered
  * correctly AND `b.ts` fully evaluated before `a.ts` read its bindings.
  *
- * NOTE on decorators: the WIRE task lists decorators alongside these. They are
- * deliberately NOT exercised here — esbuild with no tsconfig leaves stage-3
- * `@decorator` syntax UN-lowered (passthrough), and rifty's post-strip acorn
- * parse (`ecmaVersion:'latest'`, no decorators plugin) then rejects it, whereas
- * the Node-side `tsx` fully lowers it. That asymmetry is a real rifty-pipeline
- * gap, but decorators are NOT on opencode's source-transform path (the grep
- * across the vendored tree finds none), so faking a green parity case for them
- * would be dishonest. The gap is recorded in `docs/public/compat/modules.md`
- * + docs/backlog/ (Q-2026-05-31-304) instead.
+ * Decorator lowering is covered separately by
+ * `ts-standard-decorator.case.ts`, where the transform forces esbuild's standard
+ * decorator lowering before the AST ESM pass.
  */
 const c: ParityCase = {
   kind: 'ts-esm',

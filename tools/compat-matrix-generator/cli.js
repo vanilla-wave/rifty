@@ -3,8 +3,8 @@
  * Deterministic public compat matrix generator.
  *
  * This intentionally uses static inventories tied to checked-in conformance
- * and parity files. A Vitest JSON reporter sink can replace the static rows
- * later, but milestone close needs stable public claim pages now.
+ * and parity files. TODO below tracks a separate Vitest JSON reporter sink;
+ * milestone claim pages stay deterministic and checked in.
  * TODO(backlog: toolchain-build/compat-matrix-test-result-sink)
  */
 import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
@@ -313,14 +313,18 @@ const matrices = [
     file: 'ts-language-service.md',
     title: 'Compatibility matrix — TS language service (`@riftydev/ts-language-service`)',
     intro:
-      "Public claim surface for the in-browser `ts.LanguageService` over the rifty VFS (ADR-0166): a real `typescript` LanguageService in a kernel worker, LSP-shaped, wired as real Monaco providers in the playground (Monaco's built-in TS intelligence retired for every ✅ row). Every ✅ is parity-checked head-to-head against the real `ts.LanguageService` (gold standard, same vendored `typescript` both sides). ❌ rows are the deferred long tail — the engine exposes NO method (no silent stub) and the named backlog item tracks them.",
+      "Public claim surface for the in-browser `ts.LanguageService` over the rifty VFS (ADR-0166/0169): a real `typescript` LanguageService in a kernel worker, LSP-shaped, wired as real Monaco providers where standalone Monaco exposes that provider shape (Monaco's built-in TS intelligence retired for project-aware rows). Every ✅/⚠️ row is parity-checked head-to-head against the real `ts.LanguageService` where the row claims TS parity (gold standard, same compiler version on both sides; workspace-TS loader has its own regression), and ⚠️ rows name their caveat/backlog explicitly. ❌ rows are browser/editor ceilings or out-of-scope surfaces — no silent stub.",
     rows: [
       [
         'Diagnostics (semantic / syntactic / tsconfig-config)',
         '✅',
         '`getSemanticDiagnostics` / `getSyntacticDiagnostics` / config-file diagnostics over the project tsconfig + VFS',
       ],
-      ['Hover / quick-info', '✅', '`getQuickInfo` — cross-file + `node_modules` symbol types'],
+      [
+        'Hover / quick-info',
+        '✅',
+        '`getQuickInfo` — cross-file + `node_modules` symbol types; honors clone-safe `maximumLength`',
+      ],
       [
         'Go-to-definition / type-definition',
         '✅',
@@ -329,13 +333,18 @@ const matrices = [
       [
         'Completions (+ resolve)',
         '✅',
-        '`getCompletionsAtPosition` + lazy `getCompletionEntryDetails` (label-keyed resolve; same-name auto-import collision tracked: `protocol/ts-completion-resolve-by-label`)',
+        '`getCompletionsAtPosition` + lazy `getCompletionEntryDetails`; preserves TS list flags/global/member/new-identifier/`metadata`, replacement spans, snippets, commit characters, `source`/`data`, completion code-action edits/commands, and clone-safe TS preferences/format settings including deprecated `includeExternalModuleExports`; Monaco applies text-only completion edits and refuses command-bearing workspace edits rather than partially applying side effects',
       ],
       ['Find-references', '✅', '`findReferences` flattened; honors `includeDeclaration`'],
       [
+        'Flat references + lifecycle cache/dispose',
+        '✅',
+        '`getReferencesAtPosition` / `toLineColumnOffset` / `cleanupSemanticCache` / `dispose` exposed by engine/protocol/client',
+      ],
+      [
         'Rename (+ prepare-rename)',
         '✅',
-        '`getRenameInfo` + `findRenameLocations` → cross-file `WorkspaceEdit`; non-renameable element rejected',
+        '`getRenameInfo` + `findRenameLocations` / import-path `getEditsForFileRename` → cross-file `WorkspaceEdit`; non-renameable element rejected; honors clone-safe rename preferences and string/comment search flags. Import-path file rename is exposed through service/protocol/client; Monaco rename remains symbol/string-edit UI only.',
       ],
       ['Signature help', '✅', '`getSignatureHelpItems` — real overloads at a call site'],
       [
@@ -343,7 +352,11 @@ const matrices = [
         '✅',
         '`getCodeFixesAtPosition` → `CodeAction[]` (kind `quickfix`); request span within the diagnostic span',
       ],
-      ['Organize imports', '✅', "`organizeImports({type:'file'})` — sort + de-dup + drop unused"],
+      [
+        'Organize imports',
+        '✅',
+        "`organizeImports({type:'file'})` — sort + de-dup + drop unused; honors TS `mode` / `skipDestructiveCodeActions`",
+      ],
       [
         'Document + range formatting',
         '✅',
@@ -351,43 +364,43 @@ const matrices = [
       ],
       [
         'Refactorings',
-        '❌',
-        '`getApplicableRefactors` / `getEditsForRefactor` (+ Monaco `refactor.*`) — `toolchain-build/ts-language-service-refactorings`',
+        '⚠️',
+        '`getApplicableRefactors` / `getEditsForRefactor` / `getMoveToRefactoringFileSuggestions`; preserves parent/action metadata, edit commands, not-applicable reasons, and post-edit rename metadata; honors clone-safe preferences/filter knobs; text-only non-interactive actions carry edits into Monaco, while post-edit-rename/interactive actions are protocol/client metadata until `backlog/playground/ts-refactor-interactive-ui` lands',
       ],
       [
         'Inlay hints',
-        '❌',
-        '`provideInlayHints` — `toolchain-build/ts-language-service-editor-decorations`',
+        '⚠️',
+        '`provideInlayHints` wired to Monaco inlay-hints provider; clone-safe TS inlay preferences are passed faithfully, including `undefined`; visible labels/kind/padding are parity-covered, but interactive `displayParts` label metadata is parked in `backlog/toolchain-build/ts-language-service-inlay-label-parts`',
       ],
       [
         'Document highlights',
-        '❌',
-        '`getDocumentHighlights` — `toolchain-build/ts-language-service-editor-decorations`',
+        '✅',
+        '`getDocumentHighlights` wired to Monaco document-highlight provider',
       ],
       [
         'Semantic highlighting (classification)',
-        '❌',
-        '`getEncodedSemantic`/`SyntacticClassifications` — `toolchain-build/ts-language-service-editor-decorations`',
+        '⚠️',
+        '`getSemanticClassifications` / `getSyntacticClassifications` raw classified spans plus encoded classifications; document + range semantic tokens providers use TS 2020 encoded classifications, while encoded default/original-format parity is parked in `backlog/toolchain-build/ts-language-service-encoded-classification-format`',
       ],
       [
         'Call hierarchy',
-        '❌',
-        '`prepareCallHierarchy` / `provideCallHierarchy{Incoming,Outgoing}Calls` — `toolchain-build/ts-language-service-call-hierarchy`',
+        '✅',
+        '`prepareCallHierarchy` / `provideCallHierarchy{Incoming,Outgoing}Calls` exposed by engine/protocol/client; standalone Monaco 0.52 has no public call-hierarchy provider',
       ],
       [
         'Document symbols / outline + folding + workspace symbols',
-        '❌',
-        '`getNavigationTree` / `getOutliningSpans` / `getNavigateToItems` — `toolchain-build/ts-language-service-navigation`',
+        '✅',
+        '`getNavigationTree` / `getOutliningSpans` wired to Monaco; full `getNavigateToItems(search,maxResultCount,fileName,excludeDtsFiles,excludeLibFiles)` exposed by engine/protocol/client (no standalone workspace-symbol provider in Monaco 0.52)',
       ],
       [
         'On-type formatting',
-        '❌',
-        '`getFormattingEditsAfterKeystroke` (doc + range shipped; on-type not) — `playground/ts-ls-on-type-formatting`',
+        '✅',
+        '`getFormattingEditsAfterKeystroke` wired for `;`, `}`, and Enter',
       ],
       [
         'Code lens',
         '❌',
-        'Editor-only convenience, not a tsserver primitive — out of the deferred long tail',
+        'Editor-only convenience, not a `ts.LanguageService` primitive — outside the TS hard-ceil surface',
       ],
       [
         'Non-TS/JS LSP (Python / Go native servers)',
@@ -396,47 +409,73 @@ const matrices = [
       ],
       [
         "Project's installed TS version (workspace version)",
-        '❌',
-        'Vendored `typescript` for v1 — `toolchain-build/ts-language-service-workspace-version`',
+        '✅',
+        'Loads `node_modules/typescript/lib/typescript.js` + adjacent `lib/*.d.ts` from the project when present; vendored TS is fallback (ADR-0169)',
+      ],
+      [
+        'Name/dotted span · breakpoint · navigation bar',
+        '✅',
+        '`getNameOrDottedNameSpan` / `getBreakpointStatementAtPosition` / `getNavigationBarItems` exposed by engine/protocol/client',
       ],
       [
         'Go-to-implementation · suggestion diagnostics · definition-bound-span',
-        '❌',
-        '`getImplementationAtPosition` / `getSuggestionDiagnostics` / `getDefinitionAndBoundSpan` — `toolchain-build/ts-language-service-long-tail-remainder`',
+        '✅',
+        '`getImplementationAtPosition` / `getSuggestionDiagnostics` / `getDefinitionAndBoundSpan`',
       ],
       [
         'Fix-all · update-imports-on-rename · selection range · file references',
-        '❌',
-        '`getCombinedCodeFix` / `getEditsForFileRename` / `getSmartSelectionRange` / `getFileReferences` — `toolchain-build/ts-language-service-long-tail-remainder`',
+        '✅',
+        '`getCombinedCodeFix` / `getEditsForFileRename` / `getSmartSelectionRange` / `getFileReferences`',
       ],
       [
         'JSX close-tag completion + linked editing',
-        '❌',
-        '`getJsxClosingTagAtPosition` / `getLinkedEditingRangeAtPosition` — `toolchain-build/ts-language-service-long-tail-remainder`',
+        '✅',
+        '`getJsxClosingTagAtPosition` / `getLinkedEditingRangeAtPosition`; linked editing wired to Monaco',
       ],
       [
         'Paste-with-imports · JSDoc template · TODO comments · compiler-options diagnostics',
-        '❌',
-        '`getPasteEdits` / `getDocCommentTemplateAtPosition` / `getTodoComments` / `getCompilerOptionsDiagnostics` — `toolchain-build/ts-language-service-long-tail-remainder`',
+        '✅',
+        '`preparePasteEditsForFile` / `getPasteEdits` / `getDocCommentTemplateAtPosition` / `getTodoComments` / `getCompilerOptionsDiagnostics`; paste preserves TS `fixId` and is exposed over protocol/client (no Monaco paste provider in 0.52)',
       ],
       [
         'Brace matching · comment toggling · indentation',
+        '✅',
+        '`getBraceMatchingAtPosition` / `getIndentationAtPosition` / `isValidBraceCompletionAtPosition` / `getSpanOfEnclosingComment` / comment toggles exposed by engine/protocol/client; Monaco keeps its native editor UI for these commands',
+      ],
+      [
+        'Emit output · supported code-fix inventory',
+        '✅',
+        '`getEmitOutput` / `getSupportedCodeFixes` exposed by engine/protocol/client',
+      ],
+      [
+        'Apply code-action command',
         '❌',
-        'Editor-native — Monaco owns these via language config; intentionally NOT LS-backed (no `getBraceMatchingAtPosition`/`toggleLineComment`/`getIndentationAtPosition` provider), out of the deferred long tail',
+        '`applyCodeActionCommand` currently carries package-install side effects (`InstallPackageAction`), not VFS text edits; rifty exposes a loud `NotImplementedError` instead of fake-applying it',
+      ],
+      [
+        'Program / Symbol object graph APIs',
+        '❌',
+        '`getProgram`, `getCompletionEntrySymbol`, and `getCompletions({includeSymbol:true})` / `getCompletions({preferences:{includeSymbol:true}})` return live TypeScript compiler object graphs/Symbols that are not structured-clone-safe across the worker protocol; rifty exposes loud feature-tagged `NotImplementedError`s instead of fake stand-ins',
       ],
     ],
     tests: [
       '`packages/ts-language-service/src/parity.test.ts`',
+      '`packages/ts-language-service/src/long-tail-parity.test.ts`',
       '`packages/ts-language-service/src/service.test.ts`',
       '`packages/ts-language-service/src/config-diagnostics.test.ts`',
+      '`packages/ts-language-service/src/hard-ceil-source.test.ts`',
       '`tests/e2e/ts-language-service.spec.ts`',
     ],
     limitations: [
       'Editor capability, not a Node API module: rows are `ts.LanguageService` queries (LSP-shaped), backed by the playground Monaco providers — not `node:*` surface.',
       'TS/JS only. Other languages (Python/Go) need native language servers — a browser ceiling, out of scope (ADR-0166).',
-      'The deferred long tail (refactorings, inlay hints, document highlights, semantic highlighting, call hierarchy, navigation/outline/folding/workspace symbols, on-type formatting) exposes NO engine method — an honest absence, each tracked by a named backlog item, never a silent stub.',
-      'The remaining achievable `ts.LanguageService` surface (go-to-implementation, suggestion diagnostics, definition-bound-span, fix-all, update-imports-on-rename, selection range, file references, JSX close-tag/linked-editing, paste-with-imports, JSDoc template, TODO comments, compiler-options diagnostics) is likewise unimplemented-but-tracked (`toolchain-build/ts-language-service-long-tail-remainder`). Brace matching / comment toggling / indentation are intentionally editor-native (Monaco), not an LS gap. The full `ts.LanguageService` interface is otherwise either shipped or one of these rows — no untracked achievable feature remains.',
-      'v1 vendors a fixed `typescript`; the project\'s installed TS version (VSCode "Use Workspace Version") is deferred (`toolchain-build/ts-language-service-workspace-version`).',
+      'Standalone Monaco 0.52 does not expose public provider registration for call hierarchy, workspace symbols, or paste edits. Those TS APIs are still exposed through the rifty engine/protocol/client.',
+      'Interactive inlay label parts, encoded semantic default/original format, and playground UI for interactive/post-edit-rename refactors are parked backlog items and therefore ⚠️, not fake ✅ claims.',
+      'The Monaco editor path applies workspace edits atomically; if any target model cannot be opened, the provider rejects instead of partially applying edits.',
+      'Code lens and non-TS/JS LSP remain out of scope/browser ceilings.',
+      'TypeScript `applyCodeActionCommand` is classified as an external package-install side-effect channel; text edits from code fixes/refactors/completions are implemented separately.',
+      'TypeScript object-graph APIs (`getProgram`, `getCompletionEntrySymbol`, completion `includeSymbol`) remain explicit ❌ because their return values are live compiler internals, not cloneable protocol values.',
+      'A broken workspace TypeScript install fails loudly instead of falling back to vendored TS; absent workspace TypeScript uses vendored TS.',
     ],
   },
   {

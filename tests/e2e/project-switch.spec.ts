@@ -16,7 +16,7 @@
  * fullstack-demo / socket-lab (the node-server presets boot end-to-end).
  */
 import { type Page, expect, test } from '@playwright/test';
-import { readWorkspaceText } from './helpers/opfs.ts';
+import { readWorkspaceJson, readWorkspaceText } from './helpers/opfs.ts';
 import { expectTerminalContains, runTerminalLineSettled } from './helpers/playground.ts';
 
 /** Terminal-session tabs only (editor tabs also use role=tab — scope to the shell). */
@@ -25,6 +25,12 @@ const TERMINAL_TAB = '.rf-terminal-tab__select[role="tab"]';
 // picks now intentionally wait on, so use the same order of budget as durable
 // tree polls instead of a UI-only 5s close budget.
 const OWNER_DURABLE_TIMEOUT = 90_000;
+const OPFS_POLL = OWNER_DURABLE_TIMEOUT;
+type ProjectIndexSnapshot = {
+  activeId: string;
+  scratch: { starter: string; dirty: boolean } | null;
+  projects: { id: string; name: string }[];
+};
 
 /**
  * Open a FRESH shell terminal and make it the active slot — robust to the running
@@ -59,7 +65,8 @@ async function openProjects(page: Page): Promise<void> {
 }
 
 /** Save the active scratch as a named project via the launcher Projects tab. */
-async function saveScratchAs(page: Page, name: string): Promise<void> {
+async function saveScratchAs(page: Page, name: string): Promise<string> {
+  await waitDurableScratch(page);
   await openProjects(page);
   await page.click('[data-action="save-scratch"]');
   const dialog = page.locator('.rf-dialog[role="dialog"]');
@@ -69,34 +76,54 @@ async function saveScratchAs(page: Page, name: string): Promise<void> {
   // Save closes the DIALOG but leaves the launcher open (the new project appears in
   // the Projects tab). Close the launcher explicitly so the editor regains focus.
   await expect(dialog).toHaveCount(0, { timeout: 5_000 });
+  const id = await projectIdForName(page, name);
   await page.locator('.rf-launcher__close').click();
   await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
+  return id;
 }
 
-/** Switch to a named project by clicking its card in the Projects tab. */
-async function switchToProject(page: Page, name: string): Promise<void> {
+/** Switch to a named project by clicking its durable project card. */
+async function switchToProject(page: Page, name: string, id: string): Promise<void> {
   await openProjects(page);
-  await page.locator('.rf-pcard', { hasText: name }).first().click();
+  const card = page.locator(`.rf-pcard[data-project="${id}"]`, { hasText: name }).first();
+  await expect(card).toBeVisible({ timeout: OPFS_POLL });
+  await card.click();
   await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, {
     timeout: OWNER_DURABLE_TIMEOUT,
   });
 }
 
+async function readProjectIndex(page: Page): Promise<ProjectIndexSnapshot | null> {
+  return readWorkspaceJson<ProjectIndexSnapshot>(page, '/.rifty-project-index.json');
+}
+
+async function waitDurableScratch(page: Page, starter?: string): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const index = await readProjectIndex(page);
+        return index?.activeId === 'scratch' &&
+          index.scratch &&
+          (starter === undefined || index.scratch.starter === starter)
+          ? `${index.activeId}:${index.scratch.dirty ? 'dirty' : 'clean'}`
+          : '';
+      },
+      { timeout: OPFS_POLL },
+    )
+    .toBe('scratch:clean');
+}
+
 /**
- * The active project id the owner allocated for a just-saved project `name`.
- * The Save flips the visible root to `/projects/<id>`; the durable tree checks
- * below still read OPFS directly by that id.
+ * The on-disk project id the owner allocated for a saved project `name`. The Save's
+ * OPFS write-through flush is async, so poll the durable index.
  */
-async function activeProjectIdForName(page: Page, name: string): Promise<string> {
-  await expect(page.locator('[data-action="open-launcher"] .rf-chip__name')).toHaveText(name, {
-    timeout: 10_000,
-  });
-  const hint = page.locator('[data-testid="terminal-mode-hint"]').first();
-  await expect(hint).toContainText(/Commands run in \/projects\/[^;]+;/, { timeout: 30_000 });
-  const text = (await hint.textContent()) ?? '';
-  const id = /Commands run in \/projects\/([^;]+);/.exec(text)?.[1] ?? '';
-  expect(id).not.toBe('');
-  return id;
+async function projectIdForName(page: Page, name: string): Promise<string> {
+  const readId = async (): Promise<string> => {
+    const index = await readProjectIndex(page);
+    return index?.projects.find((p) => p.name === name)?.id ?? '';
+  };
+  await expect.poll(readId, { timeout: OPFS_POLL }).not.toBe('');
+  return readId();
 }
 
 /** Read `/projects/<id>/round-trip.txt` straight from OPFS (the durable on-disk tree). */
@@ -106,7 +133,7 @@ async function readProjectMarker(page: Page, id: string): Promise<string> {
 
 /** Poll until `/projects/<id>/round-trip.txt` holds `mark` (durable flush is async). */
 async function expectProjectMarker(page: Page, id: string, mark: string): Promise<void> {
-  await expect.poll(() => readProjectMarker(page, id), { timeout: 30_000 }).toContain(mark);
+  await expect.poll(() => readProjectMarker(page, id), { timeout: OPFS_POLL }).toContain(mark);
 }
 
 test.describe('ADR-0165 §4 — switch coherence: surfaces follow the store', () => {
@@ -135,6 +162,7 @@ test.describe('ADR-0165 §4 — switch coherence: surfaces follow the store', ()
     // re-boots its dev line. The root stays /scratch (still scratch-active) and the
     // surfaces follow the store, never the prior preset signal.
     await pickStarter(page, 'node-worker');
+    await waitDurableScratch(page, 'node-worker');
 
     // Single source: every root-keyed surface still resolves from store.activeId.
     await expect(hint).toContainText('Commands run in /scratch;', { timeout: 15_000 });
@@ -191,22 +219,24 @@ test.describe('ADR-0165 §7 — durable Save + switch round-trip (two projects)'
     // Save it as a project (owner moves /scratch → /projects/<id>, durable).
     const hint = page.locator('[data-testid="terminal-mode-hint"]').first();
     await expect(hint).toContainText('Commands run in /scratch;', { timeout: 30_000 });
+    await waitDurableScratch(page);
     await newShell(page);
     await runTerminalLineSettled(page, `echo ${alphaMark} > /scratch/round-trip.txt`);
     await runTerminalLineSettled(page, 'cat /scratch/round-trip.txt');
-    await saveScratchAs(page, alphaName);
-    const alphaId = await activeProjectIdForName(page, alphaName);
+    await expectTerminalContains(page, alphaMark, 15_000);
+    const alphaId = await saveScratchAs(page, alphaName);
     expect(alphaId).not.toBe('');
 
     // Pick a DIFFERENT frontend starter for a fresh scratch, write Beta's marker,
     // and Save it too. (node-worker shares the vite template; no node-server install.)
     await pickStarter(page, 'node-worker');
     await expect(hint).toContainText('Commands run in /scratch;', { timeout: 30_000 });
+    await waitDurableScratch(page, 'node-worker');
     await newShell(page);
     await runTerminalLineSettled(page, `echo ${betaMark} > /scratch/round-trip.txt`);
     await runTerminalLineSettled(page, 'cat /scratch/round-trip.txt');
-    await saveScratchAs(page, betaName);
-    const betaId = await activeProjectIdForName(page, betaName);
+    await expectTerminalContains(page, betaMark, 15_000);
+    const betaId = await saveScratchAs(page, betaName);
     expect(betaId).not.toBe('');
     expect(betaId).not.toBe(alphaId);
 
@@ -220,12 +250,12 @@ test.describe('ADR-0165 §7 — durable Save + switch round-trip (two projects)'
 
     // Switch to Alpha: the owner tears down + respawns at /projects/<alphaId>. The
     // tree survives the respawn — re-read it from OPFS while Alpha is the live owner.
-    await switchToProject(page, alphaName);
+    await switchToProject(page, alphaName, alphaId);
     await expect(hint).toContainText(`Commands run in /projects/${alphaId};`, { timeout: 60_000 });
     await expectProjectMarker(page, alphaId, alphaMark);
 
     // Switch to Beta: its distinct tree is intact too across the second respawn.
-    await switchToProject(page, betaName);
+    await switchToProject(page, betaName, betaId);
     await expect(hint).toContainText(`Commands run in /projects/${betaId};`, { timeout: 60_000 });
     await expectProjectMarker(page, betaId, betaMark);
     expect(await readProjectMarker(page, betaId)).not.toContain(alphaMark);

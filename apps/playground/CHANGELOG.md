@@ -25,6 +25,25 @@
 - **Terminal caret and palette now read closer to modern integrated terminals.** The playground
   terminal uses a slim light bar caret, a matte console surface, denser type, and an explicit
   ANSI palette instead of the old lime block cursor on the panel background.
+- **TypeScript starter instant boot keeps real Vite deps.** The starter now
+  declares the Vite snapshot owner separately from its template id and keeps its
+  install deps in lockstep with the shared Vite snapshot, so `vite` no longer
+  starts without `node_modules` after a starter pick.
+- **TS-LS Monaco providers no longer recurse through Solid path accessors.**
+  `EditorHost` resolves provider model paths through its cached current program
+  path, so program-tab edits can produce fresh rifty-TS markers instead of
+  `Maximum call stack size exceeded`.
+- **TypeScript go-to-definition activates declaration tabs.** Monaco's real
+  `F12`/go-to-definition action now routes through `EditorHost` tab selection,
+  so starter declarations such as `@rifty/example-types/index.d.ts` open as the
+  active editor instead of being created as an inactive background model.
+- **Production TypeScript editor intelligence boots the real worker.** The
+  TS-LSP child bootstrap now keeps the package endpoint in the production bundle,
+  and provider calls wait for project init/replay before asking for diagnostics
+  or definitions.
+- **Vite 7 production builds accept esbuild supported flags.** The build bridge
+  now forwards Vite's `supported.dynamic-import` option to the real esbuild-WASI
+  transform instead of loud-rejecting the build.
 - **Project files edits update the live preview again.** The default Vite 7
   template keeps the native HMR bridge enabled (Vite 8 remains HMR-off per
   ADR-0161), and the dev-server child no longer feeds native `server.watcher`
@@ -105,6 +124,30 @@
   to, only a starter to pick). New solid-free, storage-injected `glue/launcher-prefs.ts`
   (`initialLauncherTab`/`loadLauncherTab`/`saveLauncherTab`), unit-tested.
 
+### Fixed
+
+- **Stale TypeScript Monaco providers no longer surface lifecycle disposal as a page
+  error.** Provider calls now treat an exact `ts-lsp client disposed` from an obsolete
+  LS client as cancellation-shaped empty results, keeping prod boot smoke clean while
+  preserving real TS failures.
+- **Problems is now a permanent terminal-tab, and the TypeScript starter boots clean.**
+  The old Terminal/Problems view switcher could leave terminal output visible over the
+  Problems panel, and the TS starter shipped with built-in diagnostics (`count` as a
+  string, a missing `formatWidgetName` import, and no `vite/client` types for HMR), so
+  user edits did not produce a clear before/after signal.
+- **TypeScript starter UX now survives owner/dev-server rebinds.** TS LS request ids
+  are globally monotonic across client instances, starter-owned declaration packages
+  under `node_modules` are re-seeded in the owner/dev-server after install snapshot
+  restore, the LS reinitializes once the owner reports the dev server running, and
+  program-tab writes are debounced so Monaco edits do not flood the terminal with
+  one Vite HMR line per content event.
+- **Starter picks now seed boot-critical template files before Vite starts without
+  clobbering installed deps.** A mid-session switch to the TS starter could update
+  `src/main.ts` while Vite still served the old `index.html` pointing at
+  `src/main.js`; the synchronous owner seed now refreshes the starter files but leaves
+  the root `package.json` to durable reset / npm install, so installed CLIs survive
+  reload.
+
 ### Fixed (CI-red + visual regressions, ADR-0165)
 
 - **The launcher / dialogs / projects-tab / starters-tab / project-cards / row-menu /
@@ -176,22 +219,53 @@
 
 ### Fixed
 
+- **TypeScript starter Vite transforms now use real esbuild WASI output.** The
+  playground's `esbuild` overlay used to return pass-through code plus `map: ''`;
+  Vite's `.ts` transform then crashed on `JSON.parse(result.map)` before the
+  `typescript-ls` starter could render. The dev-server child now installs a
+  real `@esbuild/wasi-preview1` transform bridge (via `@riftydev/runtime-wasi`)
+  before importing Vite, and normalizes the inline CLI sourcemap into Vite's JS
+  API `{ code, map }` shape. Unsupported transform options now loud-throw
+  `NotImplementedError('esbuild.transform.<option>')` instead of being silently
+  ignored.
+
+- **TS Monaco workspace edits are now atomic at the editor boundary.** Rename,
+  code-action, and completion workspace edits first resolve every target Monaco
+  model; if any target cannot be opened, the provider rejects instead of applying
+  a partial project edit. Completion resolve also stops falling back to same-file
+  text edits when TypeScript returns a workspace edit with unsupported commands,
+  so the editor never pretends command side effects ran.
+
+- **Rifty TS editor providers now consume the full edit/link wire shape.**
+  Go-to-definition uses definition links (origin + target selection ranges);
+  workspace edits preserve new-file creation through Monaco; model changes are
+  tracked per Monaco model so edits in inactive/new files still write back to
+  the owner; completion resolve now forwards editor format settings and visible
+  TS metadata (deprecated/recommended/source display); code actions resolve edits
+  lazily so browsing quick fixes does not create new-file tabs; and TS
+  completion resolve applies workspace text edits through a Monaco command while
+  code actions that need unsupported post-edit rename are not exposed as
+  applyable editor actions; diagnostics carry a per-path generation guard so
+  older async results cannot overwrite newer buffers or close/reopen cycles.
+
 - **TS diagnostics now appear on a slow (2-core CI) cold boot** (ADR-0166; fixes the chromium e2e `ts-language-service.spec.ts` timeout where the type-error marker never rendered). The page LS client's per-request timeout was 15s, but the LS endpoint serializes every frame behind the first `ts:init` — which on a constrained CI runner co-resident with the dev-server child takes tens of seconds (TS engine + ~3 MB lib over the relay + tsconfig over fs.* sync-RPC). So the `lsp-check.ts` open/diagnostics frames rejected at 15s before the service finished building, and the page never re-sent → no marker. Raised the default to 60s (warm requests still resolve in <1s, so the ceiling only bites a genuinely dropped frame, which then rejects loud). The endpoint-side serialization + out-of-program-honest-empty fixes live in `@riftydev/ts-language-service`.
 - **Express `res.json`/`res.send` no longer crash with `TypeError: argument entity must be string, Buffer, or fs.Stats`** (express + sqlite preset, PROD build only). Each `?worker&url` child entry is self-contained, so it carries its OWN `@riftydev/io` `Buffer` copy; the kernel pre-entry hook had set `globalThis.Buffer` from the kernel-worker-entry copy, so `etag` (reads the global) rejected a buffer express built via `require('buffer')` (the child copy). The `kind:'url'` child bootstraps (dev-server-child, node-entry, real-vite owner) now call `installBundleLocalBuffer()` to pin the global to THIS bundle's copy — mirrors `runtime-js/worker-entry.ts`. DEV was unaffected (one shared ESM module instance), which is why the dev e2e never caught it; new PROD-build guard `tests/e2e-prod/buffer-realm-identity.spec.ts` + unit `bundle-local-buffer.test.ts`. Root (shared runtime classes duplicated per worker bundle) tracked in backlog/toolchain-build/worker-bundle-shared-runtime-dedup.
-- **Editor program mirror + entry re-seed follow the active root (ADR-0165 §4).**
+- **Editor program mirror + entry re-seed follow the active root and template entry (ADR-0165 §4).**
   `PROGRAM_MIRROR_PATH` was hardcoded `/workspace/src/main.js`; after ADR-0165 moved
   roots to `/scratch`|`/projects/<id>`, the editor program write + live HMR landed on
   a dead `/workspace` path the dev server never reads, and a starter pick that changed
   the template (Vite → an express/socket node-server) kept the prior `<root>/src/main.js`
   — so a node-server starter ran the STALE browser entry → `document is not defined`.
-  The path is now derived from the active root via `programMirrorPath(root)` =
-  `<root>/src/main.js` (new solid-free `glue/program-path.ts`), threaded reactively
-  into `EditorHost` (program-tab focus + the active program path it reports) and App's
-  program write / seed / HMR. A page `writeFile` is a non-idempotent OVERWRITE (unlike
-  the owner's idempotent `seedProject`), so `seedWorkspaceOwner` re-seeds the entry with
-  the picked starter's source on a template switch — the dev server runs the NEW server
-  entry, not the stale browser one. Un-blocked `fullstack-demo.spec.ts` /
-  `socket-lab.spec.ts` (node-server starters now boot their real server).
+  The path is now derived from the active root plus the active template entry via
+  `programMirrorPath(root, template)` (new solid-free `glue/program-path.ts`), threaded
+  reactively into `EditorHost` (program-tab focus + the active program path it reports)
+  and App's program write / seed / HMR. A TypeScript starter now edits
+  `<root>/src/main.ts`, while a JS starter still edits `<root>/src/main.js`. A page
+  `writeFile` is a non-idempotent OVERWRITE (unlike the owner's idempotent
+  `seedProject`), so `seedWorkspaceOwner` re-seeds the entry with the picked starter's
+  source on a template switch — the dev server runs the NEW server entry, not the stale
+  browser one. Un-blocked `fullstack-demo.spec.ts` / `socket-lab.spec.ts` (node-server
+  starters now boot their real server).
 
 - **Page store is the single source of truth for the active id/root (ADR-0165 §4).**
   `App.tsx` derived `activeRoot()` from the interim `activePreset` signal
@@ -219,10 +293,8 @@
   `/workspace` path → the REAL native Rollup loaded → every Vite dev boot threw
   `platform 'rifty' arch 'wasm' not supported by the native Rollup build`.
   `overlayShims(root)` now re-roots each shim key onto the active root
-  (`reRootShimPath`), so the Vite dev server boots at `/scratch`. (The editor
-  program-mirror entry path is the one sibling `/workspace`-hardcoding desync the
-  same root change introduced that remains backlogged —
-  see `docs/backlog/playground/program-mirror-root-relative.md`.)
+  (`reRootShimPath`), so the Vite dev server boots at `/scratch`. The sibling editor
+  program-mirror root/template-entry desync is closed by the program-mirror fix above.
 
 ### Changed
 
@@ -255,6 +327,16 @@
 
 ### Added
 
+- **TypeScript language-service sandbox preset + long-tail editor providers.**
+  The new `typescript-ls` preset opens a real `.ts` Vite project with strict
+  `tsconfig`, cross-file symbols, seeded dependency `.d.ts` files, and
+  demonstrable diagnostics/hover/defs/refs/rename/quick-fix/formatting. Monaco
+  providers now cover the shipped TS-LS long tail where Monaco exposes a public
+  provider, including document-range semantic tokens; completions now carry TS
+  replacement spans, snippets, commit characters, and auto-import edits through
+  Monaco. The editor program path follows the active template entry instead of
+  hardcoding `/workspace/src/main.js`.
+
 - **Editor quick-fixes / organize-imports / formatting now come from the rifty LS, not Monaco's built-in worker** (ADR-0166 task 4.2). The task-4.1 engine queries (`getCodeFixes`/`organizeImports`/`getFormattingEdits`/`getRangeFormattingEdits`, parity-proven) are wired as REAL Monaco providers over the page↔owner↔LS relay, so a missing-import quick-fix adds an import from a SIBLING file, organize-imports sorts + drops unused imports, and formatting applies tsserver's real edits — what VSCode shows. Validated by chromium e2e assertions (`tests/e2e/ts-language-service.spec.ts`).
   - **4.2a client methods.** `glue/ts-ls-client.ts` gains `getCodeFixes(path, range, errorCodes)`/`organizeImports(path)`/`getFormattingEdits(path, options)`/`getRangeFormattingEdits(path, range, options)` (same id-correlated reject-on-timeout pattern; positions/ranges on the wire are LSP 0-based; code-fixes use the `codeActions` response kind, organize-imports reuses `workspaceEdit`, formatting uses `textEdits`).
   - **4.2b Monaco providers.** `glue/ts-ls-monaco-providers.ts` registers a code-action provider (quickfixes + an always-offered `source.organizeImports`) + document/range formatting providers for `typescript` + `javascript`, each re-checking the `CancellationToken` across the relay hop. Quick-fixes source their `errorCodes` from the rifty markers (`monaco.editor.getModelMarkers({owner:'rifty-ts'})`) intersecting the request range, querying `getCodeFixes` per diagnostic with THAT diagnostic's own span + code (tsc only fixes when the request span lies within the diagnostic span). The LSP `CodeAction` maps to monaco `CodeActionList {actions:[{title,kind,edit:{edits:[{resource,textEdit}]},diagnostics?}], dispose()}` (uris → model Uri via `ensureModel`, shared with rename via a new `toMonacoWorkspaceTextEdits`); formatting pulls `tabSize`/`insertSpaces` from `model.getOptions()`. `glue/lsp-position.ts` gains `monacoToLspRange`.
@@ -269,7 +351,7 @@
 
 - **TS language service wired into the editor — real semantic squiggles + a Problems tab** (ADR-0166 task 1.9; closes backlog/playground/problems-tab-bottom-panel). The worker-resident `@riftydev/ts-language-service` now drives Monaco diagnostics in the playground, validated by a chromium e2e (`tests/e2e/ts-language-service.spec.ts`).
   - **1.9a owner LS lifecycle + relay.** The owner spawns the LS as a `serve:true` grandchild (`workers/ts-lsp-worker-entry.ts`, URL injected as `RIFTY_TS_LSP_WORKER_URL` in `glue/realVite.ts`) reading the owner's authoritative VFS over `fs.*` sync-RPC — exactly the dev-server child shape (`RIFTY_REMOTE_FS=1`). Spawned lazily on the first `rifty:ts-lsp` frame. There is no page→grandchild channel, so frames RELAY through the owner: page →(page↔owner fork-IPC)→ owner → `lsChild.send` → LS; LS → `process.send` → owner → `kernelIpc.send` → page (`workers/real-vite-bootstrap.ts`). The page exposes `sendTsLsp`/`onTsLsp` on the workspace-owner handle.
-  - **1.9b page client + editor seam + Monaco disable.** `glue/ts-ls-client.ts` — id-correlated request/response over the relay (per-request reject-on-timeout, `dispose()` rejects in-flight) + `lspToMonacoMarkers` (LSP 0-based → Monaco 1-based, severity 1..4). `EditorHost` gains `setMarkers(path, markers)` (owner `'rifty-ts'`) + `onDocument` (open/change/close, replays open buffers to a late subscriber). `App` inits `/workspace`, debounces edits (~300ms) → `ts:open`/`ts:update`/`ts:close` → `getSemantic`+`getSyntactic` diagnostics → markers + an aggregated `path→diags` signal. Monaco's built-in JS/TS validation is turned OFF (rifty is the single source of truth). NOTE — only DIAGNOSTICS move to the rifty LS in this phase; Monaco's built-in TS worker still serves hover/completion from its isolated lib.d.ts-only model (no VFS/tsconfig/node_modules) — a known transient approximation tracked in `backlog/playground/ts-ls-hover-completion-monaco-transient` until the LS exposes hover/completion providers (ADR-0166 phase 2).
+  - **1.9b page client + editor seam + Monaco disable.** `glue/ts-ls-client.ts` — id-correlated request/response over the relay (per-request reject-on-timeout, `dispose()` rejects in-flight) + `lspToMonacoMarkers` (LSP 0-based → Monaco 1-based, severity 1..4). `EditorHost` gains `setMarkers(path, markers)` (owner `'rifty-ts'`) + `onDocument` (open/change/close, replays open buffers to a late subscriber). `App` inits the active root, debounces edits (~300ms) → `ts:open`/`ts:update`/`ts:close` → `getSemantic`+`getSyntactic` diagnostics → markers + an aggregated `path→diags` signal. Monaco's built-in JS/TS validation is turned OFF (rifty is the single source of truth).
   - **1.9c Problems panel.** `components/ProblemsPanel.tsx` + a Terminal|Problems view switcher in `BottomPanel` (count badge, click-to-jump via `openFile({reveal})`).
 - **Durable scratch→project Save + cross-respawn index persistence (ADR-0165 §7,
   closes backlog/playground/durable-save-switch-persistence).** Save now MOVES the

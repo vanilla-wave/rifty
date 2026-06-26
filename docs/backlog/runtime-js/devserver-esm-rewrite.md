@@ -1,15 +1,31 @@
 ---
 area: runtime-js
-status: parked
+status: shipped
 title: Dev-server ESM rewriting for bare specifiers (+ esbuild TS/JSX transform)
 created: 2026-06-08
-why: bare-specifier rewrite + esbuild.wasm TS/JSX transform are both unimplemented in the example dev-server — compat rows ❌ Pending
-user_story: As a developer serving a Vite-like app from rifty, want `import x from 'pkg'` plus `.ts`/`.tsx` modules to load in the browser — but the dev-server neither rewrites bare specifiers to served URLs nor runs the esbuild.wasm TS/JSX transform, so the npm module graph won't resolve.
+why: the example dev-server now rewrites ESM specifiers and runs the real esbuild.wasm TS/JSX transform so browser-served module graphs resolve
+user_story: As a developer serving a Vite-like app from rifty, `import x from 'pkg'` plus `.ts`/`.tsx` modules load in the browser through served URLs and real TS/JSX transform.
 sources: [compat/m10-tooling.md]
 ---
 ## Context
-The `examples/vite-like-dev` dev-server serves HTML+JS from the VFS and runs fs.watch-driven HMR (both ✅), but does NOT rewrite bare ESM specifiers (`import x from 'pkg'` -> a resolvable URL) the way Vite does, and does NOT transform TS/JSX via esbuild.wasm. docs/backlog/ rows (dissolved from the m10-tooling matrix): "Dev-server — ESM rewriting for bare specifiers" ❌ Pending; "Dev-server — TS/JSX transformation via esbuild.wasm" ❌ Pending (esbuild.wasm is now vendored per ADR-0047, so the transform dependency exists). Without bare-specifier rewrite a browser-served module graph can't resolve npm deps; this also gates "Real upstream Vite".
-## Options / Next
-Next: in the dev-server request path, parse served JS, resolve bare specifiers against the in-VFS node_modules (reuse the runtime resolver), rewrite to served URLs; route `.ts`/`.tsx`/`.jsx` through the vendored esbuild.wasm `transformSource` hook before serving. Flip both compat rows to ✅ when landed; together they unblock the "Real upstream Vite" row.
+
+Landed 2026-06-22: `examples/vite-like-dev` transforms `.ts`/`.tsx`/`.jsx`
+requests through the real vendored esbuild WASI binding, parses served modules,
+resolves bare specifiers with the runtime resolver over the VFS, and rewrites
+them to served URLs. Integration tests cover TS transform and node_modules bare
+rewrite.
+
+This shipped item is retained as the delivery record. The dev-server request path
+parses served JS/TS, resolves bare specifiers and extensionless TS imports through
+the runtime resolver, preserves query/hash suffixes, rewrites to served URLs, and
+routes `.ts`/`.tsx`/`.jsx` through the vendored esbuild WASI transform.
+
+## Verification
+
+`tests/integration/vite-like-dev.test.ts` covers TS transform, bare
+`node_modules` rewrite, extensionless relative TS imports, query/hash suffix
+preservation, and tsconfig `paths`/`baseUrl` rewrite through the dev-server glue.
 ## Reversibility
-Parked — sits in `examples/` dev-server, additive (reuses the existing resolver + the already-vendored esbuild WASI hook), no cross-package API, no new dep. Scope is a larger feature (full bare-specifier graph rewrite), so deferred rather than near-term.
+REVERSIBLE — sits in `examples/` dev-server, additive (reuses the existing
+resolver + vendored esbuild WASI hook through example dependencies), no
+cross-package API.

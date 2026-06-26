@@ -141,6 +141,7 @@
     "@riftydev/runtime-wasi": "workspace:*",
     "@riftydev/vfs": "workspace:*",
     "acorn": "^8.14.0",
-    "quickjs-emscripten-core": "^0.32.0"
+    "quickjs-emscripten-core": "^0.32.0",
+    "typescript": "5.9.3"
   }
 }

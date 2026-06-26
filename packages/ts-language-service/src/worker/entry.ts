@@ -44,6 +44,8 @@ interface ForkIpcProcess {
   send?(message: unknown): unknown;
 }
 
+let booted = false;
+
 function getForkIpcProcess(): ForkIpcProcess | undefined {
   return (globalThis as unknown as { process?: ForkIpcProcess }).process;
 }
@@ -63,6 +65,7 @@ function log(proc: ForkIpcProcess | undefined, line: string): void {
  * fork-IPC `process` surface is absent.
  */
 export function bootTsLanguageServiceWorker(): void {
+  if (booted) return;
   const syncApi = readKernelSyncApi();
   if (syncApi === null) {
     throw new Error(
@@ -73,6 +76,7 @@ export function bootTsLanguageServiceWorker(): void {
   if (typeof proc?.on !== 'function' || typeof proc.send !== 'function') {
     throw new Error('ts-lsp worker: fork-IPC channel (process.send/on) unavailable');
   }
+  booted = true;
 
   const endpoint = createServiceEndpoint({
     buildFsSync: createRpcFsSync,

@@ -1,41 +1,37 @@
 ---
 area: toolchain-build
-status: parked
+status: shipped
 title: TS language service — editor-decoration surface (inlay hints, document highlights, semantic highlighting)
 created: 2026-06-22
-why: ADR-0166 ships the tsserver core (diagnostics→formatting) but the editor-decoration surface is the long tail — Monaco's built-in inlay-hints/highlights are retired (task 2.2c) and the LS exposes NO replacement
-user_story: As a rifty playground/agent user, I want inline parameter/type inlay hints, same-symbol occurrence highlights on cursor, and project-accurate semantic token colours, but today the LS has no method for them and Monaco's built-ins are turned OFF — so the editor shows none of these, decorated only by the lexer's coarse syntactic colours
+why: inlay hints, document highlights, and TS semantic classifications are now served by the real VFS-backed TypeScript service
+user_story: As a rifty playground/agent user, I get inline parameter/type hints, same-symbol occurrence highlights, and project-accurate semantic token colours from the rifty LS path
 sources: [ADR-0166]
 code: [packages/ts-language-service/src/service.ts, packages/ts-language-service/src/worker/protocol.ts, apps/playground/src/components/EditorHost.tsx, apps/playground/src/glue/ts-ls-monaco-providers.ts]
 ---
 
 ## Context
 
-ADR-0166 §Scope defers semantic highlighting (and the related decoration surface).
-`EditorHost.tsx` (task 2.2c) `setModeConfiguration`s OFF the built-in
-`inlayHints`/`documentHighlights` on `typescriptDefaults`/`javascriptDefaults` —
-an HONEST absence (no competing lie), but the LS exposes no `provideInlayHints` /
-`getDocumentHighlights` / classification method to replace them, so these
-decorations simply don't appear.
+Landed 2026-06-22: inlay hints, document highlights, semantic
+classifications, and syntactic classifications are exposed and parity-covered;
+Monaco providers are wired for inlay hints, highlights, and semantic tokens.
 
-## Options or Next
+This shipped item is retained as the delivery record. The LS exposes the real
+TypeScript inlay-hint, document-highlight, semantic-classification, and
+syntactic-classification APIs. Monaco providers use the rifty pipeline; semantic
+tokens use TS 2020 classification encoding.
 
-Honest acceptance (NO partial delivery): when taken up, MUST deliver ALL of —
-- Inlay hints from the real `ts.LanguageService.provideInlayHints(fileName, span, prefs)`
-  → LSP `InlayHint[]` (parameter-name + type hints, honoring the prefs), wired as a
-  Monaco inlay-hints provider.
-- Document highlights from `getDocumentHighlights(fileName, position, filesToSearch)`
-  → LSP `DocumentHighlight[]` (read/write kinds), wired as a Monaco
-  document-highlight provider.
-- Semantic highlighting from `getEncodedSemanticClassifications` /
-  `getEncodedSyntacticClassifications` (the 2020 encoded format) → LSP semantic
-  tokens (legend + encoded data), wired as a Monaco semantic-tokens provider.
-- Parity vs the real `ts.LanguageService` (gold standard, same vendored TS both
-  sides) for each: hint label+position+kind, highlight spans+kinds, and the encoded
-  classification stream — asserted IDENTICAL to tsc's over a typed fixture.
-- Any sub-feature the engine cannot honestly support throws
-  `NotImplementedError('ts-language-service.<feature>')`, never an empty decoration
-  set that silently lies.
+Caveats are explicit: inlay labels currently flatten TS `displayParts` to a
+string (`toolchain-build/ts-language-service-inlay-label-parts`), and encoded
+semantic classifications expose the Monaco-needed TS 2020 path while
+default/original encoded-format parity is parked
+(`toolchain-build/ts-language-service-encoded-classification-format`).
+
+## Verification
+
+- `long-tail-parity.test.ts` compares hint label/position/kind, highlight spans,
+  and encoded classification streams against real TS.
+- `tests/e2e/ts-language-service.spec.ts` drives the registered Monaco provider
+  path for semantic tokens through the playground hook.
 
 ## Reversibility
 

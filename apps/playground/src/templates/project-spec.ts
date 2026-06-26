@@ -51,6 +51,11 @@ interface ProjectSpecBase {
    * an instant preset is truly instant. Absent → install as usual.
    */
   readonly bakedNodeModulesUrl?: string;
+  /**
+   * Template id recorded inside the baked snapshot. Defaults to this spec's id;
+   * set when a template deliberately shares another template's node_modules tree.
+   */
+  readonly bakedNodeModulesTemplateId?: string;
 }
 
 /** Template whose worker boots a Vite-shaped dev server from an npm package. */
@@ -60,6 +65,8 @@ export interface ViteProjectSpec extends ProjectSpecBase {
   readonly runtimeSpecifier: string;
   /** `<title>` for the seeded index.html. */
   readonly htmlTitle: string;
+  /** Root-relative files seeded before Vite starts (tsconfig, sibling modules, .d.ts fixtures). */
+  readonly extraFiles?: Readonly<Record<string, string>>;
   readonly server: ServerSpec;
   readonly hmr: { readonly enabled: boolean };
 }
@@ -92,6 +99,8 @@ interface BootstrapConfigBase {
   readonly seedFiles: Readonly<Record<string, string>>;
   /** Carried from {@link ProjectSpecBase.bakedNodeModulesUrl}. */
   readonly bakedNodeModulesUrl?: string;
+  /** Carried from {@link ProjectSpecBase.bakedNodeModulesTemplateId}. */
+  readonly bakedNodeModulesTemplateId?: string;
 }
 
 export interface ViteBootstrapConfig extends BootstrapConfigBase {
@@ -199,6 +208,19 @@ export function buildProjectPackageJson(spec: ProjectSpec): {
   return { name, version, json };
 }
 
+function addExtraFiles(
+  seedFiles: Record<string, string>,
+  root: string,
+  extraFiles: Readonly<Record<string, string>>,
+): void {
+  for (const [relPath, content] of Object.entries(extraFiles)) {
+    // Tolerate a missing leading slash — `${root}public/x` would silently
+    // seed a sibling of root and express.static/Vite would 404 with no hint.
+    const rel = relPath.startsWith('/') ? relPath : `/${relPath}`;
+    seedFiles[`${root}${rel}`] = content;
+  }
+}
+
 /**
  * Pure mapping: ProjectSpec + resolved port/root → the config the worker
  * bootstrap uses for package.json seeding / `createServer()` / the seed step.
@@ -221,18 +243,16 @@ export function resolveBootstrapConfig(
     installDeps: spec.install,
     packageJson: pkg.json,
     ...(spec.bakedNodeModulesUrl ? { bakedNodeModulesUrl: spec.bakedNodeModulesUrl } : {}),
+    ...(spec.bakedNodeModulesTemplateId
+      ? { bakedNodeModulesTemplateId: spec.bakedNodeModulesTemplateId }
+      : {}),
   };
   if (spec.runtime === 'node-server') {
     const seedFiles: Record<string, string> = {
       [entryPath]: spec.entry.content,
       [`${root}/package.json`]: pkg.json,
     };
-    for (const [relPath, content] of Object.entries(spec.extraFiles)) {
-      // Tolerate a missing leading slash — `${root}public/x` would silently
-      // seed a sibling of root and express.static would 404 with no hint.
-      const rel = relPath.startsWith('/') ? relPath : `/${relPath}`;
-      seedFiles[`${root}${rel}`] = content;
-    }
+    addExtraFiles(seedFiles, root, spec.extraFiles);
     return { ...base, runtime: 'node-server', sqlite: spec.sqlite, seedFiles };
   }
   const seedFiles: Record<string, string> = {
@@ -240,6 +260,7 @@ export function resolveBootstrapConfig(
     [entryPath]: spec.entry.content,
     [`${root}/package.json`]: pkg.json,
   };
+  addExtraFiles(seedFiles, root, spec.extraFiles ?? {});
   return {
     ...base,
     runtime: 'vite',

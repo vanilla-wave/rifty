@@ -68,11 +68,12 @@ describe('App terminal startup wiring', () => {
     // ADR-0165 §3: the owner is a reassignable signal holder (respawned on switch),
     // so member access goes through the `workspaceOwner()` accessor.
     expect(source).toContain('workspaceOwner().writeFile(path, content)');
-    // ADR-0165 §4: the program edit lands on the ROOT-RELATIVE program path
-    // (`<root>/src/main.js`), the path the dev server runs — never a dead
-    // `/workspace`. The path is derived from the active root, not a const.
-    expect(source).toContain('const programPath = programMirrorPath(activeRoot())');
-    expect(source).toContain('workspaceOwner().writeFile(programPath, next)');
+    // ADR-0165 §4: the program edit lands on the active template entry path.
+    expect(source).toContain(
+      'const programPath = programMirrorPath(activeRoot(), activeTemplate())',
+    );
+    expect(source).toContain('scheduleProgramWrite(programPath, next)');
+    expect(source).toContain('workspaceOwner().writeFile(pending.path, pending.content)');
     // the legacy hardcoded const is gone from the program write path
     expect(source).not.toContain('writeFile(PROGRAM_MIRROR_PATH');
     // explorer + editor read the owner snapshot, not a vite-gated swap
@@ -81,18 +82,21 @@ describe('App terminal startup wiring', () => {
     expect(source).not.toContain('.updateEntry(');
   });
 
-  it('seeds a picked starter entry to the ROOT-RELATIVE program path (ADR-0165 §4 — entry re-seed on template switch)', () => {
-    // A page writeFile is a non-idempotent OVERWRITE (unlike the owner's
-    // idempotent seedProject), so a template-changing pick re-seeds the entry
-    // with the new starter's source at `<root>/src/main.js` — a node-server
-    // starter runs the new server entry, not the stale browser one.
-    expect(source).toContain(
-      'workspaceOwner().writeFile(programMirrorPath(activeRoot()), preset.source)',
+  it('seeds picked starter files to the active root before booting dev server without clobbering package.json', () => {
+    // A mid-session starter pick must update index.html as well as the entry;
+    // otherwise a TypeScript template can write src/main.ts while Vite still
+    // serves the old src/main.js HTML. The root package.json is install-owned
+    // after boot, so reload seeding must preserve user-added deps.
+    expect(source).toContain('const rootPackageJsonPath = `${root}/package.json`;');
+    expect(source).toContain('seedFilesForStarter(starterById(preset.id), root)');
+    expect(source).toContain('if (path === rootPackageJsonPath) continue;');
+    expect(source).toMatch(
+      /for \(const \[path, content\] of Object\.entries\(\s*seedFilesForStarter\(starterById\(preset\.id\), root\),\s*\)\) {\s*\/\/ package\.json is install-owned after boot;[\s\S]*?if \(path === rootPackageJsonPath\) continue;\s*workspaceOwner\(\)\.writeFile\(path, content\);/s,
     );
     // the program path follows the active root, threaded into EditorHost too
     expect(source).toContain('root={activeRoot}');
     // skip-double-write guard derives the same root-relative path (no const)
-    expect(source).toContain('if (path !== programMirrorPath(activeRoot()))');
+    expect(source).toContain('if (path !== programMirrorPath(activeRoot(), activeTemplate()))');
   });
 
   it('opens configured preset files as inactive editor tabs', () => {
@@ -179,6 +183,24 @@ describe('App terminal startup wiring', () => {
     expect(source).toContain('env: props.terminalPersistence.initialState.env');
     expect(source).toContain('saveState({ cwd: session.cwd, env: session.env })');
     expect(source).not.toContain('saveState({ cwd: session.cwd, env: {} })');
+  });
+
+  it('delegates TS diagnostic synchronization to the versioned helper', () => {
+    expect(source).toContain('createTsDiagnosticsSync<Diagnostic, monaco.editor.IMarkerData>');
+    expect(source).toContain('api.onDocument(diagnosticSync.handleDocument)');
+    expect(source).toContain('diagnosticSync.dispose()');
+  });
+
+  it('reinitializes rifty TS when starter files change under the same active root', () => {
+    expect(source).toContain('const [tsProjectRevision, setTsProjectRevision] = createSignal(0)');
+    expect(source).toContain('tsProjectRevision();');
+    expect(source).toContain('setTsProjectRevision((revision) => revision + 1)');
+    expect(source).toContain("const wasRunning = devServerStatus() === 'running';");
+    expect(source).toContain("if (frame.status === 'running' && !wasRunning)");
+    expect(source).toContain('const replayEvents: EditorDocumentEvent[] = [];');
+    expect(source).toContain(
+      'await Promise.all(replayEvents.map((ev) => client.open(ev.path, ev.text)));',
+    );
   });
 
   it('routes workspace archive export and import through the owner (one authoritative owner; page reads through ports)', () => {

@@ -4,7 +4,9 @@ export type ModuleLoadErrorCode =
   | 'INVALID_PACKAGE_TARGET'
   | 'UNSUPPORTED_PROTOCOL'
   | 'CIRCULAR_NAMED_IMPORT'
-  | 'SYNTAX_ERROR';
+  | 'SYNTAX_ERROR'
+  | 'TSCONFIG_READ_ERROR'
+  | 'TSCONFIG_PARSE_ERROR';
 
 export class ModuleLoadError extends Error {
   readonly code: ModuleLoadErrorCode;

@@ -46,7 +46,7 @@ export const bakedOverrides: OverrideMap = {
 
 const SHIM_ESBUILD_VERSION = '0.21.5';
 
-const SHIM_ESBUILD_SOURCE = `// rifty: esbuild shim — passthrough only (see CHANGELOG)
+const SHIM_ESBUILD_SOURCE = `// rifty: esbuild shim — transform delegated to the dev-server WASI bridge
 const NotImplementedError = class extends Error {
   constructor(feature, hint) {
     super('Not implemented: ' + feature + (hint ? ' (' + hint + ')' : ''));
@@ -61,26 +61,16 @@ export async function initialize(_opts) {
   return undefined;
 }
 
-function defaultLoaderFor(_path) {
-  return 'js';
-}
-
 export async function transform(input, options = {}) {
-  const code = typeof input === 'string' ? input : new TextDecoder().decode(input);
-  // Pass-through: callers will get untransformed JS back. We still strip TS
-  // type-only imports naïvely so a small set of TS sources don't blow up.
-  return {
-    code,
-    map: '',
-    warnings: [],
-    legalComments: '',
-    mangleCache: undefined,
-  };
+  const bridge = globalThis.__riftyEsbuildTransform;
+  if (typeof bridge !== 'function') {
+    throw new NotImplementedError('esbuild.transform', 'rifty dev-server did not install the WASI transform bridge');
+  }
+  return bridge(input, options);
 }
 
-export function transformSync(input, options = {}) {
-  const code = typeof input === 'string' ? input : new TextDecoder().decode(input);
-  return { code, map: '', warnings: [] };
+export function transformSync(_input, _options = {}) {
+  throw new NotImplementedError('esbuild.transformSync', 'the real WASI transform is async');
 }
 
 export async function build(_opts) {
@@ -158,7 +148,7 @@ const SHIM_ESBUILD_PACKAGE_JSON = JSON.stringify(
 /**
  * VFS overlay for the `esbuild` npm package. The playground writes these
  * paths into the sync mirror after install so that any `import 'esbuild'`
- * resolves to a browser-safe passthrough instead of the real package's
+ * resolves to a browser-safe transform bridge instead of the real package's
  * binary launcher.
  */
 export const esbuildShimFiles: Record<string, string> = {

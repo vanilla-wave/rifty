@@ -105,12 +105,13 @@ describe('BottomPanel', () => {
     expect(bottomPanelSource).toContain('<For each={sessionIds()}>');
   });
 
-  it('renders the Problems tab beside the Terminal tab (ADR-0166 P1.9c)', () => {
+  it('renders Problems as a permanent terminal-session tab (ADR-0166 P1.9c)', () => {
     const html = render();
     expect(html).toContain('data-testid="problems-tab"');
     expect(html).toContain('Problems');
-    // Both view tabs live in the same view switcher tablist.
-    expect(html).toContain('aria-label="Bottom panel views"');
+    expect(html).toContain('aria-label="Console tabs"');
+    expect(html).not.toContain('aria-label="Close Problems"');
+    expect(html).not.toContain('aria-label="Bottom panel views"');
   });
 
   it('shows the problem count badge when diagnostics are present, hides it otherwise', () => {

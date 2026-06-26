@@ -43,6 +43,11 @@
 
 ### Added
 
+- **ADR-0172 — side-effect-free `./wasi` subpath.** `@riftydev/runtime-wasi/wasi`
+  exposes `Wasi` / `WasiExit` / `runWasi` without evaluating the kernel
+  `worker-entry` auto-run module, so browser Worker hosts can run vendored WASI
+  tools directly.
+
 - **M11 fd-based fs slice** — implemented local preview1
   `fd_pread`, `fd_pwrite`, and `fd_filestat_set_size` over `FileDescriptor.data`.
   Positional read/write leave `cursor` unchanged; `fd_read`/`fd_pread` enforce

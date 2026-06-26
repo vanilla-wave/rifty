@@ -80,3 +80,14 @@ describe('kind:url child bootstraps reinstall the bundle-local global Buffer', (
     });
   }
 });
+
+describe('ts-lsp worker bootstrap keeps the package endpoint in production bundles', () => {
+  it('imports and calls the package worker boot explicitly', () => {
+    const src = read('ts-lsp-worker-entry.ts');
+    expect(src).toMatch(
+      /import\s+\{\s*bootTsLanguageServiceWorker\s*\}\s+from\s+['"]@riftydev\/ts-language-service\/worker\/entry['"]/,
+    );
+    expect(src).toMatch(/\bbootTsLanguageServiceWorker\(\)/);
+    expect(src).not.toMatch(/\bvoid\s+bootTsLanguageServiceWorker\b/);
+  });
+});

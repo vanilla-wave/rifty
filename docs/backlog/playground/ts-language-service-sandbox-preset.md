@@ -1,61 +1,42 @@
 ---
 area: playground
-status: parked
-title: TS language-service sandbox preset — a one-click .ts project that exercises every shipped LS feature
+status: shipped
+title: TS language-service sandbox preset — a one-click .ts project for real LS demos
 created: 2026-06-22
-why: ADR-0166 wires the LS as real Monaco providers, but the DEFAULT project is JS (`/workspace/src/main.js`, no tsconfig) — so `allowJs`-off means every LS query is honest-empty there, and a user wanting to TRY hover/def/refs/rename/quick-fix/format must hand-create a `.ts` file in the terminal first. No discoverable, ready-made surface to explore the feature.
-user_story: As a rifty playground visitor (or someone evaluating the M12 agent's TS capability), I want to pick a "TypeScript" preset and immediately get a real .ts project where every shipped LS feature is demonstrable in-place — squiggle + Problems, hover, go-to-def into a dep `.d.ts`, cross-file references, rename, add-import quick-fix, organize-imports, format — without knowing to `printf > foo.ts` in the terminal first
+why: shipped — the playground now has a discoverable `typescript-ls` preset so users can try the real TS language-service surface without hand-creating a `.ts` project first
+user_story: As a rifty playground visitor (or someone evaluating the M12 agent's TS capability), I can pick a "TypeScript" preset and immediately get a real .ts project where core LS paths are demonstrable in-place — squiggle + Problems, hover, go-to-def into a dep `.d.ts`, cross-file references, rename, add-import quick-fix, organize-imports, format — without knowing to `printf > foo.ts` in the terminal first
 sources: [ADR-0166, ADR-0078, docs/public/compat/ts-language-service.md]
 code: [apps/playground/src/templates/registry.ts, apps/playground/src/templates/project-spec.ts, apps/playground/src/components/EditorHost.tsx, tests/e2e/ts-language-service.spec.ts]
 ---
 
 ## Context
 
-The LS ships as real Monaco providers (Monaco built-in TS retired) for every ✅
-compat row — but the default Vite/JS template seeds `main.js`, and the
-out-of-program guard (correctly) returns honest-empty for a `.js` file with
-`allowJs` off and no tsconfig. So the playground LOOKS like it has no TS
-intelligence until the user manually creates a `.ts` file via the terminal
-(explorer is read-only). There is no discoverable "try TypeScript" surface — a
-UX gap, not an engine gap.
+Landed 2026-06-22: the `typescript-ls` preset seeds a strict `.ts` Vite project,
+opens a TypeScript entry, and includes cross-file symbols plus dependency `.d.ts`
+fixtures. It gives users an immediate real-project surface for diagnostics,
+hover/definition, refs/rename, completions, quick fixes, organize imports, and
+formatting. The exhaustive hard-ceil proof lives in the TS LS parity/e2e suites,
+not in seed comments.
+
+The LS ships as real Monaco providers wherever standalone Monaco exposes the
+provider shape; the remaining ✅ rows are still exposed through the
+engine/protocol/client. The default Vite/JS template still seeds `main.js`, and
+the out-of-program guard (correctly) returns honest-empty for a `.js` file with
+`allowJs` off and no tsconfig. The shipped `typescript-ls` preset is the
+discoverable "try TypeScript" path for that UX gap.
 
 Templates are `ProjectSpec`s in `templates/registry.ts` (`vite` / `express-sqlite`
 / `socket-lab`), each with `entry` + `seedFiles`. A new TS-sandbox preset slots in
 the same way.
 
-## Options or Next
+## Verification
 
-Honest acceptance (NO partial delivery): a new selectable `ProjectSpec` preset
-(e.g. `typescript`) registered in `templates/registry.ts`, whose `seedFiles`
-exercise EVERY shipped ✅ feature in the compat matrix, each anchored by a guide
-comment in the seed code naming the gesture, so opening the preset and following
-the comments demonstrates the whole surface. MUST cover all of:
-- **Diagnostics + Problems** — a deliberate `number = string` (TS2322) → squiggle +
-  a Problems-tab row.
-- **Hover / quick-info** — a symbol whose type is worth hovering (incl. one typed
-  by a seeded `node_modules` dep so hover/def reach a real `.d.ts`).
-- **Go-to-(type-)definition** — a cross-file import + a dep symbol (def jumps into
-  the seeded `node_modules/**/*.d.ts`).
-- **Completions (+resolve)** — a member-access site (`.`) on a typed value.
-- **Find-references / rename** — a symbol used across ≥2 seed files; plus a
-  non-renameable spot to show prepare-rename rejection.
-- **Signature help** — a multi-overload / multi-param call site.
-- **Quick-fix** — a use of an unimported sibling symbol → "Add import …".
-- **Organize-imports** — unsorted + unused imports to sort/drop.
-- **Format document** — a deliberately mis-spaced block.
-- A `tsconfig.json` (strict) so the diagnostics + resolution are the rich ones.
-
-Plus: selectable from the preset UI alongside the existing templates; opening it
-focuses a seed `.ts` file (not a `.js`); does NOT regress the default JS preset;
-and an e2e (extend `tests/e2e/ts-language-service.spec.ts` or a sibling) asserts
-the preset boots and at least the load-bearing features (diagnostics, hover/def,
-references, quick-fix) actually fire on the seed code — never a static page that
-only LOOKS interactive. If the preset boots a dev server/preview at all it reuses
-the existing template machinery; the preview is incidental — the editor IS the
-sandbox (a `kind` that needs no long-running server is acceptable).
-
-Optional follow-on (own item if taken): a short in-editor "what to try" guide
-(the seed comments may suffice for v1).
+- `apps/playground/src/presets.test.ts` asserts the preset is selectable, wired to
+  the `.ts` template, opens TS files, and seeds `tsconfig`, sibling modules, and
+  dependency `.d.ts` fixtures.
+- `tests/e2e/ts-language-service.spec.ts` drives the real registered providers over
+  an owner-store TS project; the exhaustive feature inventory is verified in
+  `packages/ts-language-service/src/long-tail-parity.test.ts`.
 
 ## Reversibility
 

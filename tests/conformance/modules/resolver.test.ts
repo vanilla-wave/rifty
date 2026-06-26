@@ -1,5 +1,6 @@
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 function setup(files: Record<string, string>): ReturnType<typeof createModuleLoader> {
@@ -602,6 +603,31 @@ describe('tsconfig path aliases (ADR-0066)', () => {
     return loader.resolver.resolve(specifier, { fromFile, esm: true }).id;
   }
 
+  function tsResolveId(
+    files: Record<string, string>,
+    specifier: string,
+    fromFile: string,
+    compilerOptions: ts.CompilerOptions,
+  ): string | undefined {
+    const fileSet = new Set(Object.keys(files));
+    const host: ts.ModuleResolutionHost = {
+      fileExists: (path) => fileSet.has(path),
+      readFile: (path) => files[path],
+      directoryExists: (path) =>
+        path === '/' || [...fileSet].some((file) => file.startsWith(`${path}/`)),
+      realpath: (path) => path,
+      getCurrentDirectory: () => '/',
+      getDirectories: () => [],
+      useCaseSensitiveFileNames: () => true,
+    };
+    return ts.resolveModuleName(
+      specifier,
+      fromFile,
+      { ...compilerOptions, moduleResolution: ts.ModuleResolutionKind.Node10 },
+      host,
+    ).resolvedModule?.resolvedFileName;
+  }
+
   it('wildcard alias maps `@/x` onto the absolute target', () => {
     const id = resolveId(
       { '/proj/src/foo.js': 'export const x = 1;' },
@@ -620,6 +646,34 @@ describe('tsconfig path aliases (ADR-0066)', () => {
       '/proj/src/server/server.ts',
     );
     expect(id).toBe('/proj/src/account/account.ts');
+  });
+
+  it('matches TypeScript extension priority for path aliases when TS and JS siblings exist', () => {
+    const files = {
+      '/proj/src/foo.js': 'export const runtime = "js";',
+      '/proj/src/foo.ts': 'export const runtime: "ts" = "ts";',
+    };
+    const paths = { '@/*': '/proj/src/*' };
+    const gold = tsResolveId(files, '@/foo', '/proj/app.ts', {
+      baseUrl: '/proj',
+      paths: { '@/*': ['src/*'] },
+    });
+    expect(gold).toBe('/proj/src/foo.ts');
+    expect(resolveId(files, paths, '@/foo', '/proj/app.ts')).toBe(gold);
+  });
+
+  it('matches TypeScript index-file priority for path aliases when TS and JS indexes exist', () => {
+    const files = {
+      '/proj/src/widget/index.js': 'export const runtime = "js";',
+      '/proj/src/widget/index.ts': 'export const runtime: "ts" = "ts";',
+    };
+    const paths = { '@/*': '/proj/src/*' };
+    const gold = tsResolveId(files, '@/widget', '/proj/app.ts', {
+      baseUrl: '/proj',
+      paths: { '@/*': ['src/*'] },
+    });
+    expect(gold).toBe('/proj/src/widget/index.ts');
+    expect(resolveId(files, paths, '@/widget', '/proj/app.ts')).toBe(gold);
   });
 
   it('most-specific wildcard wins (longest static prefix)', () => {
@@ -684,6 +738,213 @@ describe('tsconfig path aliases (ADR-0066)', () => {
     expect(() =>
       loader.resolver.resolve('@/absent', { fromFile: '/proj/app.ts', esm: true }),
     ).toThrow(/Cannot find module '@\/absent'/);
+  });
+
+  it('auto-discovers JSONC tsconfig paths when enabled', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/proj/tsconfig.json':
+        '{\n' +
+        '  // JSONC must be parsed by TypeScript, not JSON.parse.\n' +
+        '  "compilerOptions": {\n' +
+        '    "baseUrl": "src",\n' +
+        '    "paths": { "@/*": ["*"] },\n' +
+        '  },\n' +
+        '}\n',
+      '/proj/src/foo.ts': 'export const foo = 1;',
+    });
+    const loader = createModuleLoader(vfs, { autoDiscoverTsconfigPaths: true });
+    expect(loader.resolver.resolve('@/foo', { fromFile: '/proj/src/app.ts', esm: true }).id).toBe(
+      '/proj/src/foo.ts',
+    );
+  });
+
+  it('does not parse malformed tsconfig for relative specifiers', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/proj/tsconfig.json': '{ "compilerOptions": { "paths": { "@/*": ["src/*"] } ',
+      '/proj/src/app.js': 'import { dep } from "./dep.js";',
+      '/proj/src/dep.js': 'export const dep = 1;',
+    });
+    const loader = createModuleLoader(vfs, { autoDiscoverTsconfigPaths: true });
+
+    expect(
+      loader.resolver.resolve('./dep.js', { fromFile: '/proj/src/app.js', esm: true }).id,
+    ).toBe('/proj/src/dep.js');
+    let thrown: unknown;
+    try {
+      loader.resolver.resolve('@/dep', { fromFile: '/proj/src/app.js', esm: true });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toMatchObject({
+      name: 'ModuleLoadError',
+      code: 'TSCONFIG_PARSE_ERROR',
+    });
+  });
+
+  it('throws TSCONFIG_PARSE_ERROR for a non-array tsconfig paths entry', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/proj/tsconfig.json': '{ "compilerOptions": { "paths": { "@/*": "src/*" } } }',
+      '/proj/src/app.js': 'import value from "@/dep";',
+      '/proj/src/dep.js': 'export default 1;',
+    });
+    const loader = createModuleLoader(vfs, { autoDiscoverTsconfigPaths: true });
+
+    let thrown: unknown;
+    try {
+      loader.resolver.resolve('@/dep', { fromFile: '/proj/src/app.js', esm: true });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toMatchObject({
+      name: 'ModuleLoadError',
+      code: 'TSCONFIG_PARSE_ERROR',
+    });
+  });
+
+  it('throws TSCONFIG_PARSE_ERROR for non-string tsconfig paths targets', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/proj/tsconfig.json': '{ "compilerOptions": { "paths": { "@/*": [123] } } }',
+      '/proj/src/app.js': 'import value from "@/dep";',
+      '/proj/src/dep.js': 'export default 1;',
+    });
+    const loader = createModuleLoader(vfs, { autoDiscoverTsconfigPaths: true });
+
+    let thrown: unknown;
+    try {
+      loader.resolver.resolve('@/dep', { fromFile: '/proj/src/app.js', esm: true });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toMatchObject({
+      name: 'ModuleLoadError',
+      code: 'TSCONFIG_PARSE_ERROR',
+    });
+  });
+
+  it('auto-discovers tsconfig baseUrl for bare specifiers without paths', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/proj/tsconfig.json': '{ "compilerOptions": { "baseUrl": "src" } }',
+      '/proj/src/lib.ts': 'export const lib = 1;',
+    });
+    const loader = createModuleLoader(vfs, { autoDiscoverTsconfigPaths: true });
+    expect(loader.resolver.resolve('lib', { fromFile: '/proj/src/app.ts', esm: true }).id).toBe(
+      '/proj/src/lib.ts',
+    );
+  });
+
+  it('matches TypeScript extension priority for tsconfig baseUrl when TS and JS siblings exist', () => {
+    const files = {
+      '/proj/tsconfig.json': '{ "compilerOptions": { "baseUrl": "src" } }',
+      '/proj/src/lib.js': 'export const runtime = "js";',
+      '/proj/src/lib.ts': 'export const runtime: "ts" = "ts";',
+    };
+    const gold = tsResolveId(files, 'lib', '/proj/src/app.ts', { baseUrl: '/proj/src' });
+    expect(gold).toBe('/proj/src/lib.ts');
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture(files);
+    const loader = createModuleLoader(vfs, { autoDiscoverTsconfigPaths: true });
+    expect(loader.resolver.resolve('lib', { fromFile: '/proj/src/app.ts', esm: true }).id).toBe(
+      gold,
+    );
+  });
+
+  it('falls back to tsconfig baseUrl when paths exist but no pattern matches', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/proj/tsconfig.json':
+        '{ "compilerOptions": { "baseUrl": "src", "paths": { "@/*": ["aliases/*"] } } }',
+      '/proj/src/lib.ts': 'export const lib = 1;',
+      '/proj/src/aliases/foo.ts': 'export const foo = 1;',
+    });
+    const loader = createModuleLoader(vfs, { autoDiscoverTsconfigPaths: true });
+    expect(loader.resolver.resolve('@/foo', { fromFile: '/proj/src/app.ts', esm: true }).id).toBe(
+      '/proj/src/aliases/foo.ts',
+    );
+    expect(loader.resolver.resolve('lib', { fromFile: '/proj/src/app.ts', esm: true }).id).toBe(
+      '/proj/src/lib.ts',
+    );
+  });
+
+  it('does not fall back to tsconfig baseUrl after a matched paths pattern misses', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/proj/tsconfig.json':
+        '{ "compilerOptions": { "baseUrl": "src", "paths": { "@/*": ["aliases/*"] } } }',
+      '/proj/src/@/miss.ts': 'export const wrong = 1;',
+      '/proj/node_modules/@/miss/package.json': '{"name":"@/miss","exports":"./index.js"}',
+      '/proj/node_modules/@/miss/index.js': 'export const pkg = 1;',
+    });
+    const loader = createModuleLoader(vfs, { autoDiscoverTsconfigPaths: true });
+    expect(loader.resolver.resolve('@/miss', { fromFile: '/proj/src/app.ts', esm: true }).id).toBe(
+      '/proj/node_modules/@/miss/index.js',
+    );
+  });
+
+  it('auto-discovery follows extends and resolves inherited targets from the owning config', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/proj/tsconfig.json': '{ "extends": "../configs/base.json" }',
+      '/configs/base.json': '{ "compilerOptions": { "paths": { "~/*": ["../proj/src/*"] } } }',
+      '/proj/src/core.ts': 'export const core = 1;',
+    });
+    const loader = createModuleLoader(vfs, { autoDiscoverTsconfigPaths: true });
+    expect(loader.resolver.resolve('~/core', { fromFile: '/proj/src/app.ts', esm: true }).id).toBe(
+      '/proj/src/core.ts',
+    );
+  });
+
+  it('keeps tsconfig discovery off by default', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/proj/tsconfig.json': '{ "compilerOptions": { "paths": { "@/*": ["src/*"] } } }',
+      '/proj/src/foo.ts': 'export const foo = 1;',
+    });
+    const loader = createModuleLoader(vfs);
+    expect(() => loader.resolver.resolve('@/foo', { fromFile: '/proj/app.ts', esm: true })).toThrow(
+      /Cannot find module '@\/foo'/,
+    );
+  });
+
+  it('explicit paths override auto-discovered paths', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/proj/tsconfig.json': '{ "compilerOptions": { "paths": { "@/*": ["src/*"] } } }',
+      '/proj/src/foo.ts': 'export const wrong = 1;',
+      '/proj/manual/foo.ts': 'export const right = 1;',
+    });
+    const loader = createModuleLoader(vfs, {
+      autoDiscoverTsconfigPaths: true,
+      paths: { '@/*': '/proj/manual/*' },
+    });
+    expect(loader.resolver.resolve('@/foo', { fromFile: '/proj/app.ts', esm: true }).id).toBe(
+      '/proj/manual/foo.ts',
+    );
+  });
+
+  it('loader invalidation refreshes discovered tsconfig aliases', () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({
+      '/proj/tsconfig.json': '{ "compilerOptions": { "paths": { "@/*": ["src/*"] } } }',
+      '/proj/src/foo.ts': 'export const before = 1;',
+      '/proj/alt/foo.ts': 'export const after = 1;',
+    });
+    const loader = createModuleLoader(vfs, { autoDiscoverTsconfigPaths: true });
+    expect(loader.resolver.resolve('@/foo', { fromFile: '/proj/app.ts', esm: true }).id).toBe(
+      '/proj/src/foo.ts',
+    );
+    vfs.writeFileSync(
+      '/proj/tsconfig.json',
+      new TextEncoder().encode('{ "compilerOptions": { "paths": { "@/*": ["alt/*"] } } }'),
+    );
+    loader.invalidate();
+    expect(loader.resolver.resolve('@/foo', { fromFile: '/proj/app.ts', esm: true }).id).toBe(
+      '/proj/alt/foo.ts',
+    );
   });
 });
 

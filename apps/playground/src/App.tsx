@@ -64,10 +64,11 @@ import {
 } from './glue/realVite.ts';
 import { workspaceVfsPrefix } from './glue/scoped-vfs.ts';
 import { SnapshotFs } from './glue/snapshot-fs.ts';
-import type { StarterGroup } from './glue/starter.ts';
+import { type StarterGroup, seedFilesForStarter, starterById } from './glue/starter.ts';
 import { requestSwitch } from './glue/switch-owner.ts';
 import { pathFromTerminalFileLink } from './glue/terminal-links.ts';
 import type { TerminalPersistence } from './glue/terminal-persistence.ts';
+import { createTsDiagnosticsSync } from './glue/ts-diagnostics-sync.ts';
 import { createTsLanguageServiceClient, lspToMonacoMarkers } from './glue/ts-ls-client.ts';
 import { registerTsLanguageServiceProviders } from './glue/ts-ls-monaco-providers.ts';
 import { requestVfsSnapshot, subscribeVfsSnapshot } from './glue/vfs-snapshot-port.ts';
@@ -359,10 +360,10 @@ export function App(props: AppProps) {
   // derived, ADR-0165 §4), so a node-server project boots ITS worker runtime, not
   // the registry default — and the template stays coherent after a switch. Chip +
   // mode machine read its generic display name.
-  const activeTemplate = (): ProjectSpec => {
-    const preset = presetForId(activeStarterId());
-    return preset.templateId ? resolveProjectSpec(preset.templateId) : defaultProjectSpec();
-  };
+  const templateForPreset = (preset: Preset): ProjectSpec =>
+    preset.templateId ? resolveProjectSpec(preset.templateId) : defaultProjectSpec();
+
+  const activeTemplate = (): ProjectSpec => templateForPreset(presetForId(activeStarterId()));
 
   // Persistent workspace owner (ADR-0146 owner-resident shell + ADR-0148
   // co-resident dev server): hosts the resident `Shell` per session + cwd/env +
@@ -407,6 +408,7 @@ export function App(props: AppProps) {
     'stopped',
   );
   const devServerRunning = (): boolean => devServerStatus() === 'running';
+  const [tsProjectRevision, setTsProjectRevision] = createSignal(0);
 
   // ALL live previewable ports (ADR-0155): the dev-server port + each `node
   // <file>` server's ports, pushed by the owner as a `pty:preview` snapshot. Feeds
@@ -422,7 +424,11 @@ export function App(props: AppProps) {
   createEffect(() => {
     let tearPreview: (() => void) | undefined;
     const unsubscribe = workspaceOwner().onDevServer((frame) => {
+      const wasRunning = devServerStatus() === 'running';
       setDevServerStatus(frame.status);
+      if (frame.status === 'running' && !wasRunning) {
+        setTsProjectRevision((revision) => revision + 1);
+      }
       if (frame.port !== undefined) machine.setRealVitePort(frame.port);
       tearPreview?.();
       tearPreview =
@@ -701,11 +707,36 @@ export function App(props: AppProps) {
     // time out and reject; we swallow (no owner = no diagnostics, surfaced loud
     // in the terminal already). A real owner serves the LS child.
     const client = createTsLanguageServiceClient(owner);
+    let disposed = false;
+    let ready: Promise<boolean> = Promise.resolve(false);
+    const waitForTsReady = async (): Promise<void> => {
+      await ready;
+    };
     // Register the rifty-LS Monaco providers (ADR-0166 phase 2): hover / def /
     // type-def / completions now come from the REAL service over the relay, not
     // Monaco's isolated lib.d.ts worker (whose hover/completion/goto are turned
     // OFF in EditorHost). Same lifetime as the client — disposed on cleanup.
-    const providers = registerTsLanguageServiceProviders(client, api);
+    const providers = registerTsLanguageServiceProviders(client, api, {
+      beforeRequest: waitForTsReady,
+    });
+
+    async function initAndReplay(root = activeRoot()): Promise<boolean> {
+      const run = (async (): Promise<boolean> => {
+        await client.init(root);
+        const replayEvents: EditorDocumentEvent[] = [];
+        const unsubscribeReplay = api.onDocument((ev) => {
+          if (ev.kind !== 'close') replayEvents.push(ev);
+        });
+        unsubscribeReplay();
+        await Promise.all(replayEvents.map((ev) => client.open(ev.path, ev.text)));
+        return true;
+      })().catch((err: unknown) => {
+        if (!disposed) console.warn('[ts-lsp] init', (err as Error).message);
+        return false;
+      });
+      ready = run;
+      return run;
+    }
 
     // E2E-only window hooks (ADR-0166 phase 2) — DEV-only (`import.meta.env.DEV`,
     // mirroring the EditorHost `__riftyTs*` hooks): drive the EXACT registered
@@ -736,6 +767,24 @@ export function App(props: AppProps) {
           line: number,
           col: number,
         ) => Promise<string[] | null>;
+        __riftyTsCompletionItems?: (
+          path: string,
+          line: number,
+          col: number,
+        ) => Promise<
+          | {
+              label: string;
+              insertText: string;
+              startLine: number;
+              startColumn: number;
+              endLine: number;
+              endColumn: number;
+              insertTextRules?: number;
+              commitCharacters: string[];
+              additionalTextEditCount: number;
+            }[]
+          | null
+        >;
         __riftyTsReferences?: (
           path: string,
           line: number,
@@ -779,6 +828,13 @@ export function App(props: AppProps) {
           edits: { uri: string; text: string }[];
         } | null>;
         __riftyTsFormat?: (path: string) => Promise<{ editCount: number; applied: string } | null>;
+        __riftyTsRangeSemanticTokenCount?: (
+          path: string,
+          startLine: number,
+          startCol: number,
+          endLine: number,
+          endCol: number,
+        ) => Promise<number | null>;
         __riftyTsReinit?: () => Promise<boolean>;
       };
       // Re-init the service against the CURRENT owner VFS (ADR-0166: `ts:init` is
@@ -787,14 +843,7 @@ export function App(props: AppProps) {
       // — then calls this so the rebuilt service sees them (the boot build used
       // tsc default options before those files existed). Resolves true on a clean
       // rebuild, false on error (e.g. owner unavailable).
-      g.__riftyTsReinit = async () => {
-        try {
-          await client.init(activeRoot());
-          return true;
-        } catch {
-          return false;
-        }
-      };
+      g.__riftyTsReinit = async () => initAndReplay();
       g.__riftyTsHover = async (path, line, col) => {
         const model = modelFor(path);
         if (!model) return null;
@@ -842,6 +891,42 @@ export function App(props: AppProps) {
         return result.suggestions.map((s) =>
           typeof s.label === 'string' ? s.label : s.label.label,
         );
+      };
+      g.__riftyTsCompletionItems = async (path, line, col) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const result = await providers.providers.completion.provideCompletionItems(
+          model,
+          pos(line, col),
+          { triggerKind: 0 } as monaco.languages.CompletionContext,
+          NEVER_CANCEL,
+        );
+        if (!result) return null;
+        const resolve = providers.providers.completion.resolveCompletionItem;
+        const out = [];
+        for (const suggestion of result.suggestions) {
+          const item =
+            (resolve ? await resolve(suggestion, NEVER_CANCEL) : suggestion) ?? suggestion;
+          const label = typeof item.label === 'string' ? item.label : item.label.label;
+          const range =
+            'startLineNumber' in item.range
+              ? item.range
+              : (item.range.insert ?? item.range.replace);
+          out.push({
+            label,
+            insertText: item.insertText,
+            startLine: range.startLineNumber,
+            startColumn: range.startColumn,
+            endLine: range.endLineNumber,
+            endColumn: range.endColumn,
+            ...(item.insertTextRules !== undefined
+              ? { insertTextRules: item.insertTextRules }
+              : {}),
+            commitCharacters: item.commitCharacters ?? [],
+            additionalTextEditCount: item.additionalTextEdits?.length ?? 0,
+          });
+        }
+        return out;
       };
       // Round-trip a provider-returned target Uri back to its VFS path (proves the
       // Location.uri → model → path resolution incl. an opened sibling/dep buffer);
@@ -940,6 +1025,10 @@ export function App(props: AppProps) {
         }
         return out;
       };
+      const resolveCodeAction = async (
+        action: monaco.languages.CodeAction,
+      ): Promise<monaco.languages.CodeAction> =>
+        (await providers.providers.codeAction.resolveCodeAction?.(action, NEVER_CANCEL)) ?? action;
       // Drive the registered code-action provider over a 1-based Monaco range
       // (sources errorCodes from the rifty markers internally). Returns each
       // action's title/kind + flattened edits — proves quick-fixes carry a real edit.
@@ -954,11 +1043,16 @@ export function App(props: AppProps) {
           NEVER_CANCEL,
         );
         if (!list) return [];
-        const actions = list.actions.map((a) => ({
-          title: a.title,
-          ...(a.kind !== undefined ? { kind: a.kind } : {}),
-          edits: codeActionEdits(a),
-        }));
+        const actions = await Promise.all(
+          list.actions.map(async (a) => {
+            const resolved = await resolveCodeAction(a);
+            return {
+              title: resolved.title,
+              ...(resolved.kind !== undefined ? { kind: resolved.kind } : {}),
+              edits: codeActionEdits(resolved),
+            };
+          }),
+        );
         list.dispose();
         return actions;
       };
@@ -975,11 +1069,12 @@ export function App(props: AppProps) {
         );
         if (!list) return null;
         const organize = list.actions.find((a) => a.kind === 'source.organizeImports');
-        const result = organize
+        const resolved = organize ? await resolveCodeAction(organize) : undefined;
+        const result = resolved
           ? {
-              title: organize.title,
-              ...(organize.kind !== undefined ? { kind: organize.kind } : {}),
-              edits: codeActionEdits(organize),
+              title: resolved.title,
+              ...(resolved.kind !== undefined ? { kind: resolved.kind } : {}),
+              edits: codeActionEdits(resolved),
             }
           : null;
         list.dispose();
@@ -1007,97 +1102,43 @@ export function App(props: AppProps) {
           scratch.dispose();
         }
       };
-    }
-
-    // Per-path debounce so a burst of keystrokes pushes ONE update (~300ms idle).
-    const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-    const openPaths = new Set<string>();
-    let disposed = false;
-
-    const isJsTs = (path: string): boolean => /\.(ts|tsx|js|jsx|cjs|mjs)$/.test(path);
-
-    async function refreshDiagnostics(path: string): Promise<void> {
-      if (disposed) return;
-      try {
-        const [semantic, syntactic] = await Promise.all([
-          client.getSemanticDiagnostics(path),
-          client.getSyntacticDiagnostics(path),
-        ]);
-        if (disposed) return;
-        const diags = [...syntactic, ...semantic];
-        api.setMarkers(path, lspToMonacoMarkers(diags));
-        setDiagnostics((prev) => {
-          const next = new Map(prev);
-          if (diags.length === 0) next.delete(path);
-          else next.set(path, diags);
-          return next;
-        });
-      } catch (err) {
-        // A real LS error (or a relay timeout) — surface it, never fake green
-        // squiggles. The owner-unavailable stub also lands here (init rejects).
-        if (!disposed) console.warn('[ts-lsp]', (err as Error).message);
-      }
-    }
-
-    function scheduleSync(ev: EditorDocumentEvent): void {
-      const prev = debounceTimers.get(ev.path);
-      if (prev) clearTimeout(prev);
-      debounceTimers.set(
-        ev.path,
-        setTimeout(() => {
-          debounceTimers.delete(ev.path);
-          let push: Promise<void>;
-          if (openPaths.has(ev.path)) {
-            push = client.update(ev.path, ev.text);
-          } else {
-            openPaths.add(ev.path);
-            push = client.open(ev.path, ev.text);
-          }
-          void push.then(
-            () => refreshDiagnostics(ev.path),
-            (err: unknown) => {
-              if (!disposed) console.warn('[ts-lsp]', (err as Error).message);
-            },
+      g.__riftyTsRangeSemanticTokenCount = async (path, startLine, startCol, endLine, endCol) => {
+        const model = modelFor(path);
+        if (!model) return null;
+        const result =
+          await providers.providers.rangeSemanticTokens.provideDocumentRangeSemanticTokens(
+            model,
+            new monaco.Range(startLine, startCol, endLine, endCol),
+            NEVER_CANCEL,
           );
-        }, 300),
-      );
+        return result ? result.data.length : null;
+      };
     }
 
-    const unsubscribe = api.onDocument((ev) => {
-      if (!isJsTs(ev.path)) return; // LS is JS/TS-only
-      if (ev.kind === 'close') {
-        const t = debounceTimers.get(ev.path);
-        if (t) {
-          clearTimeout(t);
-          debounceTimers.delete(ev.path);
-        }
-        if (openPaths.delete(ev.path)) void client.close(ev.path);
-        api.setMarkers(ev.path, []);
-        setDiagnostics((prev) => {
-          if (!prev.has(ev.path)) return prev;
-          const next = new Map(prev);
-          next.delete(ev.path);
-          return next;
-        });
-        return;
-      }
-      // open | change: debounce → open/update → diagnostics.
-      scheduleSync(ev);
+    const diagnosticSync = createTsDiagnosticsSync<Diagnostic, monaco.editor.IMarkerData>({
+      client,
+      debounceMs: 300,
+      isSupportedPath: (path) => /\.(ts|tsx|js|jsx|cjs|mjs)$/.test(path),
+      setMarkers: (path, markers) => api.setMarkers(path, [...markers]),
+      setDiagnostics: (updater) => setDiagnostics((prev) => updater(new Map(prev))),
+      toMarkers: lspToMonacoMarkers,
+      warn: (message) => console.warn('[ts-lsp]', message),
     });
+    const unsubscribe = api.onDocument(diagnosticSync.handleDocument);
 
-    // Init against the ACTIVE project root (ADR-0165 §4: /scratch or /projects/<id>,
-    // not the deleted single /workspace). Fire-and-forget: the LS endpoint SERIALIZES
-    // every later frame behind this in-flight build, so an open/update/diagnostics
-    // frame sent before the (slow, cold) service is ready WAITS for it rather than
-    // racing a not-yet-built service. A failed init is surfaced on each queued frame.
-    void client.init(activeRoot()).catch((err: unknown) => {
-      if (!disposed) console.warn('[ts-lsp] init', (err as Error).message);
+    // Init against the ACTIVE project root (ADR-0165 §4: /scratch or /projects/<id>).
+    // Starter picks rewrite tsconfig/declaration files under the SAME owner/root,
+    // so re-run `ts:init` + replay open docs without disposing the providers that
+    // the user's in-flight editor command may be calling.
+    createEffect(() => {
+      tsProjectRevision();
+      const root = activeRoot();
+      void initAndReplay(root);
     });
 
     onCleanup(() => {
       disposed = true;
-      for (const t of debounceTimers.values()) clearTimeout(t);
-      debounceTimers.clear();
+      diagnosticSync.dispose();
       unsubscribe();
       providers.dispose();
       client.dispose();
@@ -1106,6 +1147,7 @@ export function App(props: AppProps) {
         g.__riftyTsHover = undefined;
         g.__riftyTsDefinition = undefined;
         g.__riftyTsCompletions = undefined;
+        g.__riftyTsCompletionItems = undefined;
         g.__riftyTsReferences = undefined;
         g.__riftyTsPrepareRename = undefined;
         g.__riftyTsRenameEdits = undefined;
@@ -1113,6 +1155,7 @@ export function App(props: AppProps) {
         g.__riftyTsCodeFixes = undefined;
         g.__riftyTsOrganizeImports = undefined;
         g.__riftyTsFormat = undefined;
+        g.__riftyTsRangeSemanticTokenCount = undefined;
         g.__riftyTsReinit = undefined;
       }
     });
@@ -1235,28 +1278,31 @@ export function App(props: AppProps) {
   // authoritative fs): editor writes flow to the OWNER — the single
   // store the dev server (HMR), shell, and archive export all read. No page copy.
   function writeWorkspaceFile(path: string, content: string): void {
-    // The program mirror (`<root>/src/main.js`, ADR-0165 §4) flows through
+    // The program mirror (active template entry, ADR-0165 §4) flows through
     // onProgramChange (which owns its owner write); skip the double-write here.
-    if (path !== programMirrorPath(activeRoot())) workspaceOwner().writeFile(path, content);
+    if (path !== programMirrorPath(activeRoot(), activeTemplate())) {
+      workspaceOwner().writeFile(path, content);
+    }
     notifyFileWritten(path, content); // ADR-0165 §57: REAL write → scratch dirty
   }
 
   /**
-   * Push the project files into the persistent owner realm (ADR-0146
+   * Push starter files into the persistent owner realm (ADR-0146
    * owner-resident shell; the owner is the single authoritative store owner and
-   * the page holds no authoritative fs). The owner-resident shell reads its OWN
-   * `syncMirror()`; the owner's own template package.json + default README stand
-   * (seeded owner-side in `seedProject`). Entry source + preset files only.
+   * the page holds no authoritative fs). This mirrors the durable owner reset for
+   * boot-critical files, but runs synchronously before the dev-server boot line so
+   * template files like index.html cannot lag a mid-session starter pick.
    */
   function seedWorkspaceOwner(preset: Preset): void {
-    // Write the picked starter's ENTRY to the ROOT-RELATIVE program path
-    // (ADR-0165 §4). A page writeFile is a non-idempotent OVERWRITE (unlike the
-    // owner's idempotent seedProject), so a template-changing pick (Vite → an
-    // express/socket node-server) re-seeds the entry with the NEW server source —
-    // the dev server runs the new entry, never the stale browser one.
-    workspaceOwner().writeFile(programMirrorPath(activeRoot()), preset.source);
-    for (const file of preset.files ?? []) {
-      workspaceOwner().writeFile(workspacePresetPath(file.path), file.content);
+    const root = activeRoot();
+    const rootPackageJsonPath = `${root}/package.json`;
+    for (const [path, content] of Object.entries(
+      seedFilesForStarter(starterById(preset.id), root),
+    )) {
+      // package.json is install-owned after boot; rewriting it here drops
+      // npm-installed deps on reload while the owner/index reset already seeds it.
+      if (path === rootPackageJsonPath) continue;
+      workspaceOwner().writeFile(path, content);
     }
   }
 
@@ -1347,6 +1393,7 @@ export function App(props: AppProps) {
     setActivePreset(preset.id);
     await machine.loadPreset(preset);
     seedViteWorkspace(preset);
+    setTsProjectRevision((revision) => revision + 1);
     openPresetEditorTabs(preset);
     // Tell the owner which template/runtime the next co-resident dev server boots
     // (ADR-0148 co-resident dev server): the persistent owner is spawned once, so a node-server preset
@@ -1466,6 +1513,7 @@ export function App(props: AppProps) {
   onCleanup(() => {
     if (initialRunTimer) clearTimeout(initialRunTimer);
     if (toastTimer) clearTimeout(toastTimer);
+    flushPendingProgramWrite();
     manager.dispose();
     workspaceOwner().close(); // terminate the persistent owner worker (ADR-0146)
   });
@@ -1537,6 +1585,30 @@ export function App(props: AppProps) {
 
   async function waitForPendingSwitch(): Promise<boolean> {
     return (await pendingSwitch) ?? true;
+  }
+
+  let programWriteTimer: ReturnType<typeof setTimeout> | undefined;
+  let pendingProgramWrite: { path: string; content: string } | undefined;
+
+  function flushPendingProgramWrite(): void {
+    const pending = pendingProgramWrite;
+    if (!pending) return;
+    if (programWriteTimer) {
+      clearTimeout(programWriteTimer);
+      programWriteTimer = undefined;
+    }
+    pendingProgramWrite = undefined;
+    workspaceOwner().writeFile(pending.path, pending.content);
+    notifyFileWritten(pending.path, pending.content); // ADR-0165 §57: REAL write → dirty
+  }
+
+  function scheduleProgramWrite(path: string, content: string): void {
+    pendingProgramWrite = { path, content };
+    if (programWriteTimer) clearTimeout(programWriteTimer);
+    programWriteTimer = setTimeout(() => {
+      programWriteTimer = undefined;
+      flushPendingProgramWrite();
+    }, 300);
   }
 
   // Establish a fresh scratch from a starter in the OWNER index (ADR-0165 §6): the
@@ -1835,11 +1907,11 @@ export function App(props: AppProps) {
     // SSoT (ADR-0148 co-resident dev server; single store owner, page holds no
     // authoritative fs): push the program edit to the OWNER (the single store) so
     // the co-resident dev server HMR-updates and the archive sees it. The path is
-    // ROOT-RELATIVE (ADR-0165 §4) so the edit reaches `<root>/src/main.js` — the
-    // path the dev server actually runs — not a dead `/workspace`.
-    const programPath = programMirrorPath(activeRoot());
-    workspaceOwner().writeFile(programPath, next);
-    notifyFileWritten(programPath, next); // ADR-0165 §57: REAL write → dirty
+    // ROOT-RELATIVE (ADR-0165 §4) so the edit reaches the active template entry.
+    // Debounced like ordinary file tabs: Monaco emits one content event per
+    // keystroke, and writing each one floods Vite with duplicate HMR updates.
+    const programPath = programMirrorPath(activeRoot(), activeTemplate());
+    scheduleProgramWrite(programPath, next);
   }
 
   function onTerminalLink(uri: string): void {
@@ -2175,6 +2247,7 @@ export function App(props: AppProps) {
             <div class="rf-editorarea" data-preview={hasPreview() ? 'on' : 'off'}>
               <EditorHost
                 programValue={machine.source}
+                programPath={() => programMirrorPath(activeRoot(), activeTemplate())}
                 programTitle={programTitle}
                 root={activeRoot}
                 onProgramChange={onProgramChange}

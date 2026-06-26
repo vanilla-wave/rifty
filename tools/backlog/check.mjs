@@ -28,7 +28,7 @@ const KNOWN_AREAS = new Set([
   'terminal',
   'distribution',
 ]);
-const STATUSES = ['active', 'parked', 'blocked'];
+const STATUSES = ['active', 'parked', 'blocked', 'shipped'];
 const STATUS_SET = new Set(STATUSES);
 
 const REQUIRED_KEYS = ['area', 'status', 'title', 'created', 'why'];

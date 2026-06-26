@@ -19,6 +19,9 @@ describe('dev-server boot preview routing', () => {
     // ADR-0148/0150 P6b (dev server runs in the supervised child): the running
     // dev server's HMR is fed from the virtual FS (it fires no real watcher events).
     expect(source).toContain('function handleViteFileChange(path: string): void');
+    expect(source).toContain('const syntheticWatcherChanges = new Set<string>();');
+    expect(source).toContain('syntheticWatcherChanges.add(modulePath)');
+    expect(source).toContain('if (syntheticWatcherChanges.has(modulePath))');
     expect(source).toContain('invalidateViteModule(activeServer, modulePath)');
     expect(source).not.toContain('function broadcastFileUpdate(path: string): void');
     expect(source).not.toContain('hmrBridgeRef.current?.broadcast(');
@@ -67,6 +70,13 @@ describe('dev-server boot preview routing', () => {
     expect(source).toContain('reRootShimPath'); // and re-roots the /workspace key
     // overlayShims writes the RE-ROOTED path, never the verbatim /workspace key.
     expect(source).toContain('reRootShimPath(path, root)');
+  });
+
+  it('installs the real esbuild WASI transform bridge before Vite imports esbuild', () => {
+    expect(source).toContain('installEsbuildTransformBridge(root)');
+    expect(source.indexOf('installEsbuildTransformBridge(root)')).toBeLessThan(
+      source.indexOf('loader.import(\n      cfg.runtimeSpecifier'),
+    );
   });
 });
 

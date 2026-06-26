@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { type Page, expect, test } from '@playwright/test';
 import {
   expectTerminalContains,
   openShellTerminal,
@@ -6,18 +6,21 @@ import {
   terminalBuffer,
 } from './helpers/playground.ts';
 
+const terminalSessionTabs = (page: Page) =>
+  page.locator('.rf-terminal-tab').filter({ hasText: /^Terminal \d+/ });
+
 test.describe('M1 - terminal shell', () => {
   test('bottom panel is a shell terminal and prestarts Vite visibly', async ({ page }) => {
     await page.goto('/');
 
-    // Bottom panel header shows the Terminal view tab (ADR-0166 P1.9c added the
-    // Terminal|Problems view switcher; the collapse control is now a chevron).
-    await expect(page.getByRole('tab', { name: 'Terminal', exact: true })).toBeVisible();
+    // Bottom panel header shows terminal sessions plus the permanent Problems tab.
+    await expect(page.getByRole('tab', { name: 'Terminal 1' })).toBeVisible();
+    await expect(page.locator('[data-testid="problems-tab"]')).toBeVisible();
     await expect(page.locator('[data-testid="terminal-mode-hint"]')).toContainText(
       'Commands run in /scratch',
     );
     await expect.poll(() => terminalBuffer(page), { timeout: 10_000 }).toContain('$ vite');
-    await expect(page.locator('.rf-terminal-tab')).toHaveCount(1);
+    await expect(terminalSessionTabs(page)).toHaveCount(1);
     await expect(page.getByRole('tab', { name: 'Terminal 1' })).toHaveAttribute(
       'aria-selected',
       'true',
@@ -46,8 +49,8 @@ test.describe('M1 - terminal shell', () => {
 
     await openShellTerminal(page);
 
-    await expect(page.locator('.rf-terminal-tab')).toHaveCount(2);
-    await expect(page.locator('.rf-terminal-tab').first()).toHaveAttribute('data-running', 'true');
+    await expect(terminalSessionTabs(page)).toHaveCount(2);
+    await expect(terminalSessionTabs(page).first()).toHaveAttribute('data-running', 'true');
 
     await runTerminalLine(page, 'echo hello-from-shell');
 
@@ -86,7 +89,7 @@ test.describe('M1 - terminal shell', () => {
     await openShellTerminal(page);
     await page.getByRole('button', { name: 'Close Terminal 2' }).click();
 
-    await expect(page.locator('.rf-terminal-tab')).toHaveCount(1);
+    await expect(terminalSessionTabs(page)).toHaveCount(1);
     await expect(page.getByRole('tab', { name: 'Terminal 1' })).toHaveAttribute(
       'aria-selected',
       'true',
@@ -95,7 +98,7 @@ test.describe('M1 - terminal shell', () => {
     await expect.poll(() => terminalBuffer(page)).toContain('$ vite');
   });
 
-  test('new-terminal button stays attached to the terminal tabs', async ({ page }) => {
+  test('new-terminal button stays attached to the console tabs', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('tab', { name: 'Terminal 1' })).toBeVisible();
 

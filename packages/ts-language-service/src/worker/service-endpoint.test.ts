@@ -19,6 +19,7 @@ import type {
   TsErrorResponse,
   TsHoverResponse,
   TsLocationsResponse,
+  TsPreparePasteEditsResponse,
   TsPrepareRenameResponse,
   TsSignatureHelpResponse,
   TsTextEditsResponse,
@@ -368,7 +369,9 @@ describe('createServiceEndpoint', () => {
       newName: 'sum',
     });
     expect(renR.kind).toBe('workspaceEdit');
-    const changes = (renR as TsWorkspaceEditResponse).edit.changes;
+    const renameEdit = (renR as TsWorkspaceEditResponse).edit;
+    expect(renameEdit).not.toBeNull();
+    const changes = renameEdit?.changes ?? {};
     expect(Object.keys(changes)).toContain('/proj/math.ts');
     expect(Object.keys(changes)).toContain('/proj/main.ts');
     expect(changes['/proj/math.ts']?.[0]?.newText).toBe('sum');
@@ -452,7 +455,7 @@ describe('createServiceEndpoint', () => {
       path: '/proj/main.ts',
     });
     expect(orgR.kind).toBe('workspaceEdit');
-    expect((orgR as TsWorkspaceEditResponse).edit.changes).toEqual({});
+    expect((orgR as TsWorkspaceEditResponse).edit?.changes).toEqual({});
 
     // code-fixes: open a buffer with a missing import (TS2304 for `missing`), then
     // request fixes for the in-range code → an "Add import" CodeAction.
@@ -486,6 +489,148 @@ describe('createServiceEndpoint', () => {
     expect(actions.some((a) => a.title.includes('Add import'))).toBe(true);
   });
 
+  it('long-tail query frames flow through the endpoint', async () => {
+    const { fsSync: mem } = createMemoryFs();
+    mem.mkdirSync('/proj', { recursive: true });
+    mem.writeFileSync(
+      '/proj/tsconfig.json',
+      enc(
+        JSON.stringify({
+          compilerOptions: {
+            strict: true,
+            module: 'esnext',
+            target: 'es2022',
+            moduleResolution: 'bundler',
+          },
+        }),
+      ),
+    );
+    mem.writeFileSync('/proj/base.ts', enc('export interface Runner { run(): void }\n'));
+    const implText =
+      'import { Runner } from "./base";\nexport class Greeter implements Runner { run(): void {} }\n';
+    mem.writeFileSync('/proj/impl.ts', enc(implText));
+    mem.writeFileSync(
+      '/proj/copied.ts',
+      enc('import { Greeter } from "./impl";\nconst pastedGreeter = new Greeter();\n'),
+    );
+    mem.writeFileSync('/proj/paste-target.ts', enc('const pastedGreeter = new Greeter();\n'));
+    const files = new Map<string, Uint8Array>();
+    for (const p of [
+      '/proj/tsconfig.json',
+      '/proj/base.ts',
+      '/proj/impl.ts',
+      '/proj/copied.ts',
+      '/proj/paste-target.ts',
+    ])
+      files.set(p, mem.readFileBytesSync(p));
+
+    const endpoint = createServiceEndpoint({
+      buildFsSync: (call) => createRpcFsSync(call),
+      call: makeFakeCall(files),
+    });
+    await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+
+    const implR = await endpoint.dispatch({
+      id: 2,
+      type: 'ts:getImplementation',
+      path: '/proj/base.ts',
+      position: { line: 0, character: 17 },
+    });
+    expect(implR.ok).toBe(true);
+    expect(implR.kind).toBe('locations');
+    expect((implR as TsLocationsResponse).locations.some((l) => l.uri === '/proj/impl.ts')).toBe(
+      true,
+    );
+
+    const flatRefsR = await endpoint.dispatch({
+      id: 20,
+      type: 'ts:getReferencesAtPosition',
+      path: '/proj/base.ts',
+      position: { line: 0, character: 17 },
+    });
+    expect(flatRefsR.ok).toBe(true);
+    expect(flatRefsR.kind).toBe('locations');
+    expect((flatRefsR as TsLocationsResponse).locations.length).toBeGreaterThan(0);
+
+    const cleanupR = await endpoint.dispatch({ id: 21, type: 'ts:cleanupSemanticCache' });
+    expect(cleanupR).toEqual({ id: 21, ok: true, kind: 'ack' });
+
+    const rawClassR = await endpoint.dispatch({
+      id: 23,
+      type: 'ts:getSemanticClassifications',
+      path: '/proj/impl.ts',
+      range: { start: { line: 1, character: 13 }, end: { line: 1, character: 20 } },
+      format: '2020',
+    });
+    expect(rawClassR.ok).toBe(true);
+    expect(rawClassR.kind).toBe('classifiedSpans');
+    expect(rawClassR.kind === 'classifiedSpans' ? rawClassR.spans.length : 0).toBeGreaterThan(0);
+
+    const encodedClassR = await endpoint.dispatch({
+      id: 24,
+      type: 'ts:getEncodedSemanticClassifications',
+      path: '/proj/impl.ts',
+      range: { start: { line: 1, character: 13 }, end: { line: 1, character: 20 } },
+    });
+    expect(encodedClassR.ok).toBe(true);
+    expect(encodedClassR.kind).toBe('classifications');
+    expect(
+      encodedClassR.kind === 'classifications' ? encodedClassR.classifications.spans.length : 0,
+    ).toBeGreaterThan(0);
+
+    const lineColumnR = await endpoint.dispatch({
+      id: 25,
+      type: 'ts:toLineColumnOffset',
+      path: '/proj/impl.ts',
+      offset: implText.indexOf('Greeter'),
+    });
+    expect(lineColumnR).toEqual({
+      id: 25,
+      ok: true,
+      kind: 'position',
+      position: { line: 1, character: 13 },
+    });
+
+    const symbolsR = await endpoint.dispatch({
+      id: 3,
+      type: 'ts:getDocumentSymbols',
+      path: '/proj/impl.ts',
+    });
+    expect(symbolsR.ok).toBe(true);
+    expect(symbolsR.kind).toBe('documentSymbols');
+
+    const pasteText = 'const pastedGreeter = new Greeter();\n';
+    const preparePasteR = await endpoint.dispatch({
+      id: 4,
+      type: 'ts:preparePasteEditsForFile',
+      path: '/proj/copied.ts',
+      copiedRanges: [{ start: { line: 1, character: 0 }, end: { line: 2, character: 0 } }],
+    });
+    expect(preparePasteR.ok).toBe(true);
+    expect(preparePasteR.kind).toBe('preparePasteEdits');
+    expect((preparePasteR as TsPreparePasteEditsResponse).supported).toBe(true);
+
+    const pasteR = await endpoint.dispatch({
+      id: 5,
+      type: 'ts:getPasteEdits',
+      path: '/proj/paste-target.ts',
+      pastedText: [pasteText],
+      pasteLocations: [{ start: { line: 0, character: 0 }, end: { line: 1, character: 0 } }],
+      copiedFrom: {
+        file: '/proj/copied.ts',
+        ranges: [{ start: { line: 1, character: 0 }, end: { line: 2, character: 0 } }],
+      },
+    });
+    expect(pasteR.ok).toBe(true);
+    expect(pasteR.kind).toBe('workspaceEdit');
+    expect(
+      (pasteR as TsWorkspaceEditResponse).edit?.changes['/proj/paste-target.ts'],
+    ).toBeDefined();
+
+    const disposeR = await endpoint.dispatch({ id: 22, type: 'ts:dispose' });
+    expect(disposeR).toEqual({ id: 22, ok: true, kind: 'ack' });
+  });
+
   it('a query before init returns an error frame (not a silent empty)', async () => {
     const endpoint = createServiceEndpoint({
       buildFsSync: (call) => createRpcFsSync(call),
@@ -498,6 +643,95 @@ describe('createServiceEndpoint', () => {
     });
     expect(r.ok).toBe(false);
     expect(r.kind).toBe('error');
+  });
+
+  it('an unavailable refactor edit returns a successful null edit, not a transport error', async () => {
+    const endpoint = createServiceEndpoint({
+      buildFsSync: (call) => createRpcFsSync(call),
+      call: makeFakeCall(buildFixture()),
+    });
+    await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+
+    const r = await endpoint.dispatch({
+      id: 2,
+      type: 'ts:getRefactorEdits',
+      path: '/proj/a.ts',
+      range: { start: { line: 0, character: 0 }, end: { line: 0, character: 6 } },
+      refactorName: 'missing-refactor',
+      actionName: 'missing-action',
+    });
+
+    expect(r.ok).toBe(true);
+    expect(r.kind).toBe('workspaceEdit');
+    expect((r as TsWorkspaceEditResponse).edit).toBeNull();
+  });
+
+  it('serializes NotImplementedError feature ids across the endpoint boundary', async () => {
+    const endpoint = createServiceEndpoint({
+      buildFsSync: (call) => createRpcFsSync(call),
+      call: makeFakeCall(buildFixture()),
+    });
+    await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+
+    const r = await endpoint.dispatch({
+      id: 2,
+      type: 'ts:applyCodeActionCommand',
+      commands: [],
+    });
+
+    expect(r.ok).toBe(false);
+    expect(r.kind).toBe('error');
+    const err = (r as TsErrorResponse).error;
+    expect(err.name).toBe('NotImplementedError');
+    expect(err.feature).toBe('ts-language-service.applyCodeActionCommand');
+  });
+
+  it.each([
+    [null, 'null'],
+    ['boom', 'boom'],
+  ] as const)(
+    'serializes non-object thrown values across the endpoint boundary',
+    async (thrown, message) => {
+      const endpoint = createServiceEndpoint({
+        buildFsSync: (): never => {
+          throw thrown;
+        },
+        call: makeFakeCall(buildFixture()),
+      });
+
+      const r = await endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+
+      expect(r.ok).toBe(false);
+      expect(r.kind).toBe('error');
+      const err = (r as TsErrorResponse).error;
+      expect(err.name).toBe('Error');
+      expect(err.message).toBe(message);
+      expect(err.feature).toBeUndefined();
+    },
+  );
+
+  it('a frame queued behind a synchronously FAILED init surfaces the real init error', async () => {
+    const endpoint = createServiceEndpoint({
+      buildFsSync: (): never => {
+        throw new Error('sync fs bridge unavailable');
+      },
+      call: makeFakeCall(buildFixture()),
+    });
+
+    const initP = endpoint.dispatch({ id: 1, type: 'ts:init', projectRoot: '/proj' });
+    const queryP = endpoint.dispatch({
+      id: 2,
+      type: 'ts:getSemanticDiagnostics',
+      path: '/proj/a.ts',
+    });
+
+    const [init, query] = await Promise.all([initP, queryP]);
+    expect(init.ok).toBe(false);
+    expect(query.ok).toBe(false);
+    for (const r of [init, query]) {
+      expect(r.kind).toBe('error');
+      expect((r as TsErrorResponse).error.message).toContain('sync fs bridge unavailable');
+    }
   });
 
   it('a frame arriving while ts:init is still in flight WAITS for it (no "before ts:init" race)', async () => {
@@ -527,6 +761,7 @@ describe('createServiceEndpoint', () => {
     expect(init).toEqual({ id: 1, ok: true, kind: 'ack' });
     expect(query.ok).toBe(true);
     expect(query.kind).toBe('diagnostics');
+    expect((query as TsDiagnosticsResponse).diagnostics).toEqual([]);
     expect(open).toEqual({ id: 3, ok: true, kind: 'ack' });
   });
 

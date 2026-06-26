@@ -9,9 +9,11 @@ test.describe('Terminal command blocks UX', () => {
   test('bottom panel exposes shell context in the terminal hint', async ({ page }) => {
     await page.goto('/');
     await openShellTerminal(page);
-    // Bottom panel header shows the Terminal view tab (ADR-0166 P1.9c added the
-    // Terminal|Problems view switcher; the collapse control is now a chevron).
-    await expect(page.getByRole('tab', { name: 'Terminal', exact: true })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Terminal 2' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(page.locator('[data-testid="problems-tab"]')).toBeVisible();
     const modeHint = page.locator(
       '.rf-terminal-slot[data-active="true"] [data-testid="terminal-mode-hint"]',
     );

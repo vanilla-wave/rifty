@@ -23,7 +23,7 @@
  *    no-op) → `/projects/<id>/stray.txt` survives → the MISSING poll times out.
  */
 import { type Page, expect, test } from '@playwright/test';
-import { readWorkspaceText } from './helpers/opfs.ts';
+import { readWorkspaceJson, readWorkspaceText } from './helpers/opfs.ts';
 import { runTerminalLineSettled } from './helpers/playground.ts';
 
 // A taller viewport centers the launcher modal BELOW the top-right toast, so the
@@ -35,6 +35,11 @@ test.use({ viewport: { width: 1280, height: 940 } });
 // parallel suite); durable-state polls are generous so a starved flush still lands.
 const OPFS_POLL = 90_000;
 const TERMINAL_TAB = '.rf-terminal-tab__select[role="tab"]';
+type ProjectIndexSnapshot = {
+  activeId: string;
+  scratch: { starter: string; dirty: boolean } | null;
+  projects: { id: string; name: string }[];
+};
 
 async function bootScratch(page: Page): Promise<void> {
   await page.goto('/');
@@ -70,7 +75,37 @@ async function openProjects(page: Page): Promise<void> {
   await page.getByRole('button', { name: /^Projects/ }).click();
 }
 
-async function saveScratchAs(page: Page, name: string): Promise<void> {
+async function readProjectIndex(page: Page): Promise<ProjectIndexSnapshot | null> {
+  return readWorkspaceJson<ProjectIndexSnapshot>(page, '/.rifty-project-index.json');
+}
+
+async function waitDurableScratch(page: Page, starter?: string): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const index = await readProjectIndex(page);
+        return index?.activeId === 'scratch' &&
+          index.scratch &&
+          (starter === undefined || index.scratch.starter === starter)
+          ? `${index.activeId}:${index.scratch.dirty ? 'dirty' : 'clean'}`
+          : '';
+      },
+      { timeout: OPFS_POLL },
+    )
+    .toBe('scratch:clean');
+}
+
+async function projectIdFromDurableIndex(page: Page, name: string): Promise<string> {
+  const readId = async (): Promise<string> => {
+    const index = await readProjectIndex(page);
+    return index?.projects.find((p) => p.name === name)?.id ?? '';
+  };
+  await expect.poll(readId, { timeout: OPFS_POLL }).not.toBe('');
+  return readId();
+}
+
+async function saveScratchAs(page: Page, name: string): Promise<string> {
+  await waitDurableScratch(page);
   await openProjects(page);
   await page.click('[data-action="save-scratch"]');
   const dialog = page.locator('.rf-dialog[role="dialog"]');
@@ -78,30 +113,21 @@ async function saveScratchAs(page: Page, name: string): Promise<void> {
   await dialog.locator('input.rf-dialog__input').fill(name);
   await dialog.getByRole('button', { name: 'Save project' }).click();
   await expect(dialog).toHaveCount(0, { timeout: 5_000 });
+  const id = await projectIdFromDurableIndex(page, name);
   await page.locator('.rf-launcher__close').click();
   await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
-}
-
-async function activeProjectIdForName(page: Page, name: string): Promise<string> {
-  await expect(page.locator('[data-action="open-launcher"] .rf-chip__name')).toHaveText(name, {
-    timeout: 10_000,
-  });
-  await expect(hintLocator(page)).toContainText(/Commands run in \/projects\/[^;]+;/, {
-    timeout: OPFS_POLL,
-  });
-  const text = (await hintLocator(page).textContent()) ?? '';
-  const id = /Commands run in \/projects\/([^;]+);/.exec(text)?.[1] ?? '';
-  expect(id).not.toBe('');
   return id;
 }
 
-async function expectProjectNamed(page: Page, name: string): Promise<void> {
+async function projectCardIdForName(page: Page, name: string): Promise<string> {
   await openProjects(page);
-  await expect(page.locator('.rf-pcard', { hasText: name }).first()).toBeVisible({
-    timeout: 10_000,
-  });
+  const card = page.locator('.rf-pcard', { hasText: name }).first();
+  await expect(card).toBeVisible({ timeout: OPFS_POLL });
+  const id = (await card.getAttribute('data-project')) ?? '';
+  expect(id).not.toBe('');
   await page.locator('.rf-launcher__close').click();
   await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
+  return id;
 }
 
 /** Read `/projects/<id>/<rel>` from OPFS, or `MISSING:<reason>` when absent. */
@@ -133,11 +159,11 @@ async function bootDirtyScratchWithSavedAlpha(
 ): Promise<{ alphaId: string }> {
   const hint = hintLocator(page);
   await bootScratch(page);
-  await saveScratchAs(page, alphaName);
-  const alphaId = await activeProjectIdForName(page, alphaName);
+  const alphaId = await saveScratchAs(page, alphaName);
   expect(alphaId).not.toBe('');
   await pickStarter(page, 'node-worker');
   await expect(hint).toContainText('Commands run in /scratch;', { timeout: 30_000 });
+  await waitDurableScratch(page, 'node-worker');
   await dirtyScratchViaEditor(page);
   return { alphaId };
 }
@@ -198,8 +224,8 @@ test.describe('ADR-0165 §9 — dirty-scratch switch dialog', () => {
     await dialog.getByRole('button', { name: 'Save project' }).click();
     await expect(dialog).toHaveCount(0, { timeout: 10_000 });
 
-    await expectProjectNamed(page, gammaName);
     await expect(hint).toContainText(`Commands run in /projects/${alphaId};`, { timeout: 90_000 });
+    expect(await projectCardIdForName(page, gammaName)).not.toBe('');
   });
 });
 
@@ -222,8 +248,7 @@ test.describe('ADR-0165 §6 — named-project Reset is a real on-disk restore', 
     // the stray moves into /projects/<id>/stray.txt.
     await newShell(page);
     await runTerminalLineSettled(page, 'echo stray-edit > /scratch/stray.txt');
-    await saveScratchAs(page, projName);
-    const id = await activeProjectIdForName(page, projName);
+    const id = await saveScratchAs(page, projName);
     expect(id).not.toBe('');
     await expect
       .poll(() => readProjectFile(page, id, 'stray.txt'), { timeout: OPFS_POLL })
@@ -233,6 +258,7 @@ test.describe('ADR-0165 §6 — named-project Reset is a real on-disk restore', 
     // dev-server restart in the assertion path — purely the on-disk re-seed).
     await pickStarter(page, 'node-worker');
     await expect(hint).toContainText('Commands run in /scratch;', { timeout: 30_000 });
+    await waitDurableScratch(page, 'node-worker');
 
     await resetProjectViaMenu(page, projName);
 

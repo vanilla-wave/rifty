@@ -19,13 +19,11 @@
  * fork-IPC.
  *
  * The package's `sideEffects` only whitelists the BUILT `dist/worker/entry.js`;
- * in dev Vite resolves the subpath to `src/worker/entry.ts`, which a tree-shaker
- * may treat as side-effect-free and elide the auto-boot. Mirror
- * `kernel-worker-entry.ts`: bind the named export and call it explicitly so the
- * emitted worker chunk cannot collapse to an empty module (the call is a no-op
- * the SECOND time — the package guards a double-boot via the same precondition
- * checks; here it runs once because the auto-boot already fired or, if elided,
- * this call performs it). Belt-and-suspenders against the dev tree-shake.
+ * in dev/prod workspace builds Vite resolves the subpath to `src/worker/entry.ts`,
+ * which Rollup can treat as side-effect-free and elide. Mirror
+ * `kernel-worker-entry.ts`: call the named export explicitly so the emitted worker
+ * chunk MUST retain the real endpoint. The package boot is idempotent, so this is
+ * safe if the guarded bottom-of-module auto-boot already ran.
  */
 
 // The vendored TS std-lib bundle (lib*.d.ts as a JSON map). The package fetches
@@ -41,15 +39,10 @@ import { installBundleLocalBuffer } from './worker-runtime-globals.ts';
 // the kernel pre-entry hook set the global to the kernel-worker-entry bundle's
 // copy, so the engine's fs.* sync-RPC decode (`require('buffer')`) and the global
 // would disagree (instanceof/etag) — the dual-copy crash #73 fixed for the other
-// kind:url children. Every kind:url child must reinstall. Runs before the first
-// `ts:init` does any Buffer work; the package import's auto-boot above only
-// registers the fork-IPC listener, so running after the (hoisted) import is fine.
+// kind:url children. Every kind:url child must reinstall before booting code that
+// can touch Buffer.
 installBundleLocalBuffer();
 
 (globalThis as unknown as { __RIFTY_TS_LIB_URL?: string }).__RIFTY_TS_LIB_URL = tsLibBundleUrl;
 
-// The bottom-of-module auto-boot already ran on import (worker realm + sync API).
-// Reference the binding so the worker chunk is never tree-shaken to empty; the
-// auto-boot is the real boot. Do NOT call it again — a second boot would
-// double-register the fork-IPC 'message' listener (each request answered twice).
-void bootTsLanguageServiceWorker;
+bootTsLanguageServiceWorker();

@@ -3,7 +3,6 @@ import {
   insertTerminalLineSettled,
   openShellTerminal,
   runTerminalLine,
-  runTerminalLineSettled,
   terminalBuffer,
 } from './helpers/playground.ts';
 
@@ -46,7 +45,36 @@ test.describe.configure({ mode: 'serial' });
  * the e2e harness serves COOP/COEP. Chromium-only, matching the other owner specs.
  */
 
-const TS_PATH = '/scratch/src/lsp-check.ts';
+let ownerShellSeq = 0;
+
+function parentDir(path: string): string {
+  const slash = path.lastIndexOf('/');
+  return slash <= 0 ? '/' : path.slice(0, slash);
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+async function runOwnerShell(page: Page, command: string, timeout = 15_000): Promise<void> {
+  const seq = ++ownerShellSeq;
+  const marker = `__rifty_e2e_shell_done_${seq}__`;
+  await runTerminalLine(page, `${command} && printf '__rifty_e2e_shell_done_%s__\\n' ${seq}`);
+  await expect
+    .poll(() => terminalBuffer(page), { timeout })
+    .toMatch(new RegExp(`${escapeRegExp(marker)}[\\s\\S]*>\\s*$`));
+}
+
+async function activeRootFromHint(page: Page): Promise<string> {
+  const hint = page
+    .locator('.rf-terminal-slot[data-active="true"] [data-testid="terminal-mode-hint"]')
+    .first();
+  await expect(hint).toContainText('Commands run in ', { timeout: 30_000 });
+  const text = (await hint.textContent()) ?? '';
+  const match = text.match(/Commands run in ([^;]+);/);
+  if (!match) throw new Error(`could not parse active root from mode hint: ${text}`);
+  return match[1];
+}
 
 /** rifty-TS marker count for a VFS path via the EditorHost e2e hook (ADR-0166 P1.9d). */
 async function tsMarkerCount(page: Page, path: string): Promise<number> {
@@ -68,6 +96,15 @@ async function setModelValue(page: Page, path: string, text: string): Promise<bo
   );
 }
 
+async function withDisposedClientFallback<T>(op: Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await op;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('ts-lsp client disposed')) return fallback;
+    throw error;
+  }
+}
+
 /** Hover contents (markdown) at a 1-based Monaco position via the registered provider (phase 2 hook). */
 async function tsHover(
   page: Page,
@@ -75,16 +112,19 @@ async function tsHover(
   line: number,
   col: number,
 ): Promise<string | null> {
-  return page.evaluate(
-    ({ p, l, c }) => {
-      const fn = (
-        globalThis as {
-          __riftyTsHover?: (path: string, line: number, col: number) => Promise<string | null>;
-        }
-      ).__riftyTsHover;
-      return fn ? fn(p, l, c) : Promise.resolve('__no_hook__');
-    },
-    { p: path, l: line, c: col },
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, l, c }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsHover?: (path: string, line: number, col: number) => Promise<string | null>;
+          }
+        ).__riftyTsHover;
+        return fn ? fn(p, l, c) : Promise.resolve('__no_hook__');
+      },
+      { p: path, l: line, c: col },
+    ),
+    null,
   );
 }
 
@@ -95,20 +135,23 @@ async function tsDefinition(
   line: number,
   col: number,
 ): Promise<{ uri: string; line: number; column: number }[] | null> {
-  return page.evaluate(
-    ({ p, l, c }) => {
-      const fn = (
-        globalThis as {
-          __riftyTsDefinition?: (
-            path: string,
-            line: number,
-            col: number,
-          ) => Promise<{ uri: string; line: number; column: number }[] | null>;
-        }
-      ).__riftyTsDefinition;
-      return fn ? fn(p, l, c) : Promise.resolve(null);
-    },
-    { p: path, l: line, c: col },
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, l, c }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsDefinition?: (
+              path: string,
+              line: number,
+              col: number,
+            ) => Promise<{ uri: string; line: number; column: number }[] | null>;
+          }
+        ).__riftyTsDefinition;
+        return fn ? fn(p, l, c) : Promise.resolve(null);
+      },
+      { p: path, l: line, c: col },
+    ),
+    null,
   );
 }
 
@@ -119,20 +162,105 @@ async function tsCompletions(
   line: number,
   col: number,
 ): Promise<string[] | null> {
-  return page.evaluate(
-    ({ p, l, c }) => {
-      const fn = (
-        globalThis as {
-          __riftyTsCompletions?: (
-            path: string,
-            line: number,
-            col: number,
-          ) => Promise<string[] | null>;
-        }
-      ).__riftyTsCompletions;
-      return fn ? fn(p, l, c) : Promise.resolve(null);
-    },
-    { p: path, l: line, c: col },
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, l, c }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsCompletions?: (
+              path: string,
+              line: number,
+              col: number,
+            ) => Promise<string[] | null>;
+          }
+        ).__riftyTsCompletions;
+        return fn ? fn(p, l, c) : Promise.resolve(null);
+      },
+      { p: path, l: line, c: col },
+    ),
+    null,
+  );
+}
+
+async function tsCompletionItems(
+  page: Page,
+  path: string,
+  line: number,
+  col: number,
+): Promise<
+  | {
+      label: string;
+      insertText: string;
+      startLine: number;
+      startColumn: number;
+      endLine: number;
+      endColumn: number;
+      insertTextRules?: number;
+      commitCharacters: string[];
+      additionalTextEditCount: number;
+    }[]
+  | null
+> {
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, l, c }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsCompletionItems?: (
+              path: string,
+              line: number,
+              col: number,
+            ) => Promise<
+              | {
+                  label: string;
+                  insertText: string;
+                  startLine: number;
+                  startColumn: number;
+                  endLine: number;
+                  endColumn: number;
+                  insertTextRules?: number;
+                  commitCharacters: string[];
+                  additionalTextEditCount: number;
+                }[]
+              | null
+            >;
+          }
+        ).__riftyTsCompletionItems;
+        return fn ? fn(p, l, c) : Promise.resolve(null);
+      },
+      { p: path, l: line, c: col },
+    ),
+    null,
+  );
+}
+
+async function tsRangeSemanticTokenCount(
+  page: Page,
+  path: string,
+  startLine: number,
+  startCol: number,
+  endLine: number,
+  endCol: number,
+): Promise<number | null> {
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, sl, sc, el, ec }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsRangeSemanticTokenCount?: (
+              path: string,
+              startLine: number,
+              startCol: number,
+              endLine: number,
+              endCol: number,
+            ) => Promise<number | null>;
+          }
+        ).__riftyTsRangeSemanticTokenCount;
+        return fn ? fn(p, sl, sc, el, ec) : Promise.resolve(null);
+      },
+      { p: path, sl: startLine, sc: startCol, el: endLine, ec: endCol },
+    ),
+    null,
   );
 }
 
@@ -144,21 +272,24 @@ async function tsReferences(
   col: number,
   includeDeclaration: boolean,
 ): Promise<{ uri: string; line: number; column: number }[] | null> {
-  return page.evaluate(
-    ({ p, l, c, incl }) => {
-      const fn = (
-        globalThis as {
-          __riftyTsReferences?: (
-            path: string,
-            line: number,
-            col: number,
-            includeDeclaration: boolean,
-          ) => Promise<{ uri: string; line: number; column: number }[] | null>;
-        }
-      ).__riftyTsReferences;
-      return fn ? fn(p, l, c, incl) : Promise.resolve(null);
-    },
-    { p: path, l: line, c: col, incl: includeDeclaration },
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, l, c, incl }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsReferences?: (
+              path: string,
+              line: number,
+              col: number,
+              includeDeclaration: boolean,
+            ) => Promise<{ uri: string; line: number; column: number }[] | null>;
+          }
+        ).__riftyTsReferences;
+        return fn ? fn(p, l, c, incl) : Promise.resolve(null);
+      },
+      { p: path, l: line, c: col, incl: includeDeclaration },
+    ),
+    null,
   );
 }
 
@@ -169,22 +300,25 @@ async function tsPrepareRename(
   line: number,
   col: number,
 ): Promise<{ text: string; line: number; column: number } | { rejectReason: string } | null> {
-  return page.evaluate(
-    ({ p, l, c }) => {
-      const fn = (
-        globalThis as {
-          __riftyTsPrepareRename?: (
-            path: string,
-            line: number,
-            col: number,
-          ) => Promise<
-            { text: string; line: number; column: number } | { rejectReason: string } | null
-          >;
-        }
-      ).__riftyTsPrepareRename;
-      return fn ? fn(p, l, c) : Promise.resolve(null);
-    },
-    { p: path, l: line, c: col },
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, l, c }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsPrepareRename?: (
+              path: string,
+              line: number,
+              col: number,
+            ) => Promise<
+              { text: string; line: number; column: number } | { rejectReason: string } | null
+            >;
+          }
+        ).__riftyTsPrepareRename;
+        return fn ? fn(p, l, c) : Promise.resolve(null);
+      },
+      { p: path, l: line, c: col },
+    ),
+    null,
   );
 }
 
@@ -196,21 +330,24 @@ async function tsRenameEdits(
   col: number,
   newName: string,
 ): Promise<{ uri: string; text: string; line: number; column: number }[] | null> {
-  return page.evaluate(
-    ({ p, l, c, n }) => {
-      const fn = (
-        globalThis as {
-          __riftyTsRenameEdits?: (
-            path: string,
-            line: number,
-            col: number,
-            newName: string,
-          ) => Promise<{ uri: string; text: string; line: number; column: number }[] | null>;
-        }
-      ).__riftyTsRenameEdits;
-      return fn ? fn(p, l, c, n) : Promise.resolve(null);
-    },
-    { p: path, l: line, c: col, n: newName },
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, l, c, n }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsRenameEdits?: (
+              path: string,
+              line: number,
+              col: number,
+              newName: string,
+            ) => Promise<{ uri: string; text: string; line: number; column: number }[] | null>;
+          }
+        ).__riftyTsRenameEdits;
+        return fn ? fn(p, l, c, n) : Promise.resolve(null);
+      },
+      { p: path, l: line, c: col, n: newName },
+    ),
+    null,
   );
 }
 
@@ -221,20 +358,27 @@ async function tsSignatureHelp(
   line: number,
   col: number,
 ): Promise<{ label: string; activeSignature: number; activeParameter: number } | null> {
-  return page.evaluate(
-    ({ p, l, c }) => {
-      const fn = (
-        globalThis as {
-          __riftyTsSignatureHelp?: (
-            path: string,
-            line: number,
-            col: number,
-          ) => Promise<{ label: string; activeSignature: number; activeParameter: number } | null>;
-        }
-      ).__riftyTsSignatureHelp;
-      return fn ? fn(p, l, c) : Promise.resolve(null);
-    },
-    { p: path, l: line, c: col },
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, l, c }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsSignatureHelp?: (
+              path: string,
+              line: number,
+              col: number,
+            ) => Promise<{
+              label: string;
+              activeSignature: number;
+              activeParameter: number;
+            } | null>;
+          }
+        ).__riftyTsSignatureHelp;
+        return fn ? fn(p, l, c) : Promise.resolve(null);
+      },
+      { p: path, l: line, c: col },
+    ),
+    null,
   );
 }
 
@@ -247,22 +391,27 @@ async function tsCodeFixes(
   endLine: number,
   endCol: number,
 ): Promise<{ title: string; kind?: string; edits: { uri: string; text: string }[] }[]> {
-  return page.evaluate(
-    ({ p, sl, sc, el, ec }) => {
-      const fn = (
-        globalThis as {
-          __riftyTsCodeFixes?: (
-            path: string,
-            startLine: number,
-            startCol: number,
-            endLine: number,
-            endCol: number,
-          ) => Promise<{ title: string; kind?: string; edits: { uri: string; text: string }[] }[]>;
-        }
-      ).__riftyTsCodeFixes;
-      return fn ? fn(p, sl, sc, el, ec) : Promise.resolve([]);
-    },
-    { p: path, sl: startLine, sc: startCol, el: endLine, ec: endCol },
+  return withDisposedClientFallback(
+    page.evaluate(
+      ({ p, sl, sc, el, ec }) => {
+        const fn = (
+          globalThis as {
+            __riftyTsCodeFixes?: (
+              path: string,
+              startLine: number,
+              startCol: number,
+              endLine: number,
+              endCol: number,
+            ) => Promise<
+              { title: string; kind?: string; edits: { uri: string; text: string }[] }[]
+            >;
+          }
+        ).__riftyTsCodeFixes;
+        return fn ? fn(p, sl, sc, el, ec) : Promise.resolve([]);
+      },
+      { p: path, sl: startLine, sc: startCol, el: endLine, ec: endCol },
+    ),
+    [],
   );
 }
 
@@ -271,18 +420,21 @@ async function tsOrganizeImports(
   page: Page,
   path: string,
 ): Promise<{ title: string; kind?: string; edits: { uri: string; text: string }[] } | null> {
-  return page.evaluate((p) => {
-    const fn = (
-      globalThis as {
-        __riftyTsOrganizeImports?: (path: string) => Promise<{
-          title: string;
-          kind?: string;
-          edits: { uri: string; text: string }[];
-        } | null>;
-      }
-    ).__riftyTsOrganizeImports;
-    return fn ? fn(p) : Promise.resolve(null);
-  }, path);
+  return withDisposedClientFallback(
+    page.evaluate((p) => {
+      const fn = (
+        globalThis as {
+          __riftyTsOrganizeImports?: (path: string) => Promise<{
+            title: string;
+            kind?: string;
+            edits: { uri: string; text: string }[];
+          } | null>;
+        }
+      ).__riftyTsOrganizeImports;
+      return fn ? fn(p) : Promise.resolve(null);
+    }, path),
+    null,
+  );
 }
 
 /**
@@ -294,14 +446,19 @@ async function tsFormat(
   page: Page,
   path: string,
 ): Promise<{ editCount: number; applied: string } | null> {
-  return page.evaluate((p) => {
-    const fn = (
-      globalThis as {
-        __riftyTsFormat?: (path: string) => Promise<{ editCount: number; applied: string } | null>;
-      }
-    ).__riftyTsFormat;
-    return fn ? fn(p) : Promise.resolve(null);
-  }, path);
+  return withDisposedClientFallback(
+    page.evaluate((p) => {
+      const fn = (
+        globalThis as {
+          __riftyTsFormat?: (
+            path: string,
+          ) => Promise<{ editCount: number; applied: string } | null>;
+        }
+      ).__riftyTsFormat;
+      return fn ? fn(p) : Promise.resolve(null);
+    }, path),
+    null,
+  );
 }
 
 /** Rebuild the LS against the current owner VFS + tsconfig (idempotent ts:init; phase 2 hook). */
@@ -320,7 +477,10 @@ async function tsReinit(page: Page): Promise<boolean> {
  */
 async function writeOwnerFile(page: Page, path: string, content: string): Promise<void> {
   const escaped = content.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/'/g, "'\\''");
-  await insertTerminalLineSettled(page, `printf '${escaped}' > ${path}`);
+  await insertTerminalLineSettled(
+    page,
+    `mkdir -p ${parentDir(path)} && printf '${escaped}' > ${path}`,
+  );
 }
 
 async function waitForSrcSnapshotFile(page: Page, filename: string): Promise<void> {
@@ -330,6 +490,29 @@ async function waitForSrcSnapshotFile(page: Page, filename: string): Promise<voi
   await expect(page.getByRole('treeitem', { name: filename }).first()).toBeVisible({
     timeout: 60_000,
   });
+}
+
+async function pickStarterAndWaitForTemplate(
+  page: Page,
+  preset: string,
+  editorNeedle: string,
+  previewNeedle: string,
+): Promise<void> {
+  const editorLines = page.locator('[data-testid="editor"] .view-lines').first();
+  const previewBody = page.frameLocator('iframe[title="Preview port 5174"]').locator('body');
+  await page.click('[data-action="open-launcher"]');
+  await page.getByRole('button', { name: 'Starters', exact: true }).click();
+  await page.click(`[data-preset="${preset}"]`);
+
+  const discard = page.getByRole('button', { name: 'Discard & continue', exact: true });
+  if (await discard.isVisible({ timeout: 1_000 }).catch(() => false)) {
+    await discard.click();
+  }
+
+  await expect(page.locator('[data-testid="launcher"]')).toHaveCount(0, { timeout: 5_000 });
+  await expect.poll(() => terminalBuffer(page), { timeout: 45_000 }).toContain('$ vite');
+  await expect(editorLines).toContainText(editorNeedle, { timeout: 45_000 });
+  await expect(previewBody).toContainText(previewNeedle, { timeout: 90_000 });
 }
 
 /** Open a workspace file through the real command palette (Ctrl/Cmd-K → type → click). */
@@ -344,7 +527,7 @@ async function openFileViaPalette(page: Page, filename: string): Promise<void> {
   await palette.locator('input').fill(filename);
   // The Files section lists the workspace file (label = workspace-relative path).
   const row = palette.locator('.rf-palette__item', { hasText: filename }).first();
-  await expect(row).toBeVisible();
+  await expect(row).toBeVisible({ timeout: 30_000 });
   await row.click();
   await expect(palette).toBeHidden();
 }
@@ -356,22 +539,26 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
   }) => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
     // Generous: the FIRST LS request cold-boots the `typescript` engine + fetches
-    // the ~3 MB vendored lib.d.ts bundle over the relay (one-time). 120s headroom.
-    test.setTimeout(120_000);
+    // the ~3 MB vendored lib.d.ts bundle over the relay (one-time). 150s headroom.
+    test.setTimeout(150_000);
     await page.goto('/');
 
     // Owner shell ready: terminal 1 echoes the boot dev line (same gate the
     // owner-editor spec uses). Terminal 1 then runs `vite` (blocks its prompt), so
     // open a SECOND idle shell on the same persistent owner for file commands.
     await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
+    const root = await activeRootFromHint(page);
+    const tsPath = `${root}/src/lsp-check.ts`;
     await openShellTerminal(page);
 
     // Create an EMPTY .ts file in the owner store (the SSoT the LS reads) via a
     // real shell command — empty so the keyboard-typed error below is the SOLE
     // content (nothing to mangle). The owner republishes its snapshot on command
     // exit, so the palette then lists it.
-    await runTerminalLine(page, `printf '' > ${TS_PATH}`);
-    await runTerminalLine(page, 'ls /scratch/src');
+    await runOwnerShell(
+      page,
+      `mkdir -p ${parentDir(tsPath)} && printf '' > ${tsPath} && ls ${root}/src`,
+    );
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('lsp-check.ts');
 
     // Open it in the editor through the real palette → an editable .ts tab. This
@@ -381,8 +568,9 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     // Editor opened a model for this path (hook returns >= 0 once mounted) and the
     // empty file has NO diagnostics yet.
     await expect
-      .poll(() => tsMarkerCount(page, TS_PATH), { timeout: 15_000 })
+      .poll(() => tsMarkerCount(page, tsPath), { timeout: 15_000 })
       .toBeGreaterThanOrEqual(0);
+    expect(await tsReinit(page)).toBe(true);
 
     // Introduce a REAL type error via the real Monaco input: type a single
     // `number = string` statement into the empty file. number = string ⇒ TS2322.
@@ -396,7 +584,7 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     // (1) a rifty-TS Monaco marker appears. VERY generous: the FIRST request cold-
     // boots the `typescript` engine in the LS worker AND fetches the ~3 MB vendored
     // lib.d.ts bundle over the relay — one-time, slow; once warm the rest is fast.
-    await expect.poll(() => tsMarkerCount(page, TS_PATH), { timeout: 70_000 }).toBeGreaterThan(0);
+    await expect.poll(() => tsMarkerCount(page, tsPath), { timeout: 100_000 }).toBeGreaterThan(0);
 
     // (1b) and a real error squiggle is rendered on the active model.
     await expect(page.locator('.monaco-editor .squiggly-error').first()).toBeVisible({
@@ -406,6 +594,7 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     // (2) a row appears in the Problems tab.
     await page.locator('[data-testid="problems-tab"]').click();
     await expect(page.locator('[data-testid="problems-panel"]')).toBeVisible();
+    await expect(page.locator('[data-testid="terminal"]')).toBeHidden();
     await expect
       .poll(() => page.locator('[data-testid="problem-row"]').count(), { timeout: 30_000 })
       .toBeGreaterThan(0);
@@ -417,12 +606,172 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
     // Fix the error → ts:update → fresh (empty) diagnostics. A clean full-replace
     // via the model test hook (real change event, see header). BOTH the marker AND
     // the Problems row must clear.
-    expect(await setModelValue(page, TS_PATH, 'export const good: number = 42;\n')).toBe(true);
+    expect(await setModelValue(page, tsPath, 'export const good: number = 42;\n')).toBe(true);
 
-    await expect.poll(() => tsMarkerCount(page, TS_PATH), { timeout: 30_000 }).toBe(0);
+    await expect.poll(() => tsMarkerCount(page, tsPath), { timeout: 30_000 }).toBe(0);
     await expect
       .poll(() => page.locator('[data-testid="problem-row"]').count(), { timeout: 30_000 })
       .toBe(0);
+  });
+});
+
+test.describe('rifty TS language service: TypeScript starter wiring', () => {
+  test('typescript-ls program tab writes the template main.ts that Vite serves', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
+    test.setTimeout(180_000);
+    await page.goto('/');
+
+    await pickStarterAndWaitForTemplate(
+      page,
+      'typescript-ls',
+      'LibraryShape',
+      'TypeScript language surface',
+    );
+    const root = await activeRootFromHint(page);
+    const mainTs = `${root}/src/main.ts`;
+    const formatTs = `${root}/src/format.ts`;
+    const exampleTypesDts = `${root}/node_modules/@rifty/example-types/index.d.ts`;
+    const editor = page.locator('[data-testid="editor"]');
+    const input = editor.locator('textarea.inputarea').first();
+    const editorLines = editor.locator('.view-lines').first();
+    // The TypeScript starter entry is already the active program tab; checking
+    // the visible Monaco lines avoids racing the palette's async file index.
+    await expect(editorLines).toContainText('LibraryShape', { timeout: 45_000 });
+    await expect
+      .poll(
+        async () => (await tsDefinition(page, mainTs, 1, 15))?.map((d) => d.uri).join('\n') ?? '',
+        {
+          timeout: 90_000,
+          intervals: [1500],
+        },
+      )
+      .toContain(exampleTypesDts);
+    await expect
+      .poll(async () => (await tsDefinition(page, mainTs, 3, 10))?.[0]?.uri ?? '', {
+        timeout: 90_000,
+        intervals: [1500],
+      })
+      .toContain(formatTs);
+    await editor.locator('.view-line').first().click();
+    await expect(input).toBeFocused();
+    await page.keyboard.press('Home');
+    for (let i = 0; i < 14; i += 1) {
+      await page.keyboard.press('ArrowRight');
+    }
+    await page.keyboard.press('F12');
+    await expect(page.getByRole('tab', { name: /index\.d\.ts/ }).first()).toHaveAttribute(
+      'aria-selected',
+      'true',
+      { timeout: 90_000 },
+    );
+    await expect(editorLines).toContainText('interface LibraryShape', { timeout: 30_000 });
+    await page
+      .getByRole('tab', { name: /main\.ts/ })
+      .first()
+      .click();
+    await expect(editorLines).toContainText('LibraryShape', { timeout: 10_000 });
+
+    expect(
+      await setModelValue(
+        page,
+        mainTs,
+        [
+          "import type { LibraryShape } from '@rifty/example-types';",
+          'const broken: LibraryShape = { id: 123, labels: [123] };',
+          '',
+        ].join('\n'),
+      ),
+    ).toBe(true);
+    await expect(editorLines).toContainText('broken', { timeout: 10_000 });
+    await expect.poll(() => tsMarkerCount(page, mainTs), { timeout: 90_000 }).toBeGreaterThan(0);
+    await page.locator('[data-testid="problems-tab"]').click();
+    await expect(page.locator('[data-testid="problem-row"]').first()).toContainText(
+      /number|string/i,
+      { timeout: 30_000 },
+    );
+
+    const frame = page.frameLocator('iframe[title="Preview port 5174"]');
+
+    expect(
+      await setModelValue(
+        page,
+        mainTs,
+        [
+          "const app = document.getElementById('app');",
+          "if (!app) throw new Error('Missing #app root');",
+          "app.textContent = 'rifty-ts-main-ts-hot';",
+          'if (import.meta.hot) import.meta.hot.accept();',
+          '',
+        ].join('\n'),
+      ),
+    ).toBe(true);
+
+    await expect(frame.locator('body')).toContainText('rifty-ts-main-ts-hot', {
+      timeout: 90_000,
+    });
+
+    await expect.poll(() => tsMarkerCount(page, mainTs), { timeout: 90_000 }).toBe(0);
+    await editor.locator('.view-line').first().click();
+    await expect(input).toBeFocused();
+    await page.keyboard.press('Home');
+    await page.keyboard.insertText('const typedBusted: number = "nope";\n');
+    await expect(editorLines).toContainText('typedBusted', { timeout: 10_000 });
+    await expect.poll(() => tsMarkerCount(page, mainTs), { timeout: 90_000 }).toBeGreaterThan(0);
+    await expect(page.locator('.monaco-editor .squiggly-error').first()).toBeVisible({
+      timeout: 30_000,
+    });
+    await page.locator('[data-testid="problems-tab"]').click();
+    await expect(page.locator('[data-testid="terminal"]')).toBeHidden();
+    await expect(page.locator('[data-testid="problem-row"]').first()).toContainText(
+      /number|string/i,
+      { timeout: 30_000 },
+    );
+  });
+
+  test('rapid program edits debounce owner writes so Vite emits one HMR burst, not one line per content event', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
+    test.setTimeout(180_000);
+    await page.goto('/');
+
+    await pickStarterAndWaitForTemplate(
+      page,
+      'typescript-ls',
+      'LibraryShape',
+      'TypeScript language surface',
+    );
+    const root = await activeRootFromHint(page);
+    const mainTs = `${root}/src/main.ts`;
+    const before = await terminalBuffer(page);
+    for (let i = 0; i < 12; i += 1) {
+      expect(
+        await setModelValue(
+          page,
+          mainTs,
+          [
+            "const app = document.getElementById('app');",
+            "if (!app) throw new Error('Missing #app root');",
+            `app.textContent = 'hmr-debounce-${i}';`,
+            'if (import.meta.hot) import.meta.hot.accept();',
+            '',
+          ].join('\n'),
+        ),
+      ).toBe(true);
+    }
+    await expect(
+      page.frameLocator('iframe[title="Preview port 5174"]').locator('body'),
+    ).toContainText('hmr-debounce-11', { timeout: 90_000 });
+    const after = await terminalBuffer(page);
+    const updates = after
+      .slice(before.length)
+      .split('\n')
+      .filter((line) => line.includes('[vite] hmr update /src/main.ts')).length;
+    expect(updates).toBeLessThanOrEqual(2);
   });
 });
 
@@ -431,10 +780,9 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
  * from the REAL rifty LS over the page→owner→LS relay, NOT Monaco's built-in
  * `ts.worker` (retired via `setModeConfiguration`). These assertions exercise
  * REAL project + dependency knowledge the isolated lib.d.ts-only worker could
- * never have: a type that comes from a CROSS-FILE module and from a node_modules
- * `.d.ts`, a go-to-def that jumps into a sibling file AND into a dependency's
- * `.d.ts`, and a member completion whose candidates depend on tsconfig +
- * node_modules resolution.
+ * never have: hover over a node_modules `.d.ts` symbol, go-to-def into a sibling
+ * file, and member completion whose candidates depend on sibling project type
+ * resolution.
  *
  * RED-checkable: the assertions drive the EXACT registered Monaco providers (via
  * the DEV `__riftyTs*` hooks that call `provider.provideHover/Definition/…`). Two
@@ -445,24 +793,53 @@ test.describe('rifty TS language service: real diagnostics in the playground', (
  *      `disableBuiltinTsDiagnostics` won't change these — the hooks bypass the
  *      built-in worker entirely, so this suite specifically guards the rifty path).
  * Additionally, neither the cross-file type nor the node_modules symbol exists in
- * lib.d.ts, so a hover/def/completion built on the isolated worker could not
- * produce them at all.
+ * lib.d.ts, so a hover/def/completion path built on the isolated worker could not
+ * satisfy these assertions.
  */
-const PROJECT_DIR = '/scratch/src';
-const USES_DEP = `${PROJECT_DIR}/uses-dep.ts`;
-const DEP_TS = `${PROJECT_DIR}/dep.ts`;
-const DEP_DTS = '/scratch/node_modules/cool-dep/index.d.ts';
+function dependencyProjectPaths(root: string): {
+  usesDep: string;
+  depTs: string;
+  depDts: string;
+} {
+  const projectDir = `${root}/src`;
+  return {
+    usesDep: `${projectDir}/uses-dep.ts`,
+    depTs: `${projectDir}/dep.ts`,
+    depDts: `${root}/node_modules/cool-dep/index.d.ts`,
+  };
+}
+const usesDepResolvedSource = [
+  'import { coolValue, coolHelper, cool } from "cool-dep";',
+  'import { localGreet } from "./dep.ts";',
+  'const a = coolValue;',
+  'const b = coolHelper("x");',
+  'const c = localGreet("y");',
+  'const d = cool.value;',
+  '',
+].join('\n');
+const usesDepCompletionSource = [
+  'import { coolValue, coolHelper, cool } from "cool-dep";',
+  'import { localGreet } from "./dep.ts";',
+  'const a = coolValue;',
+  'const b = coolHelper("x");',
+  'const c = localGreet("y");',
+  'const d = cool.',
+  '',
+].join('\n');
 
 test.describe('rifty TS language service: real hover/def/completions (not Monaco built-in)', () => {
-  test('hover shows cross-file + node_modules types; def jumps to file + dep .d.ts; completions list dep members', async ({
+  test('hover shows project symbols; def jumps to a sibling file; completions list typed members', async ({
     page,
     browserName,
   }) => {
     test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     await page.goto('/');
 
     await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
+    await expect(page.getByText(/LIVE :/)).toBeVisible({ timeout: 90_000 });
+    const root = await activeRootFromHint(page);
+    const { usesDep, depTs, depDts } = dependencyProjectPaths(root);
     await openShellTerminal(page);
 
     // Build a small REAL project in the owner store (the SSoT the LS reads):
@@ -473,7 +850,7 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     //  - `uses-dep.ts` importing both.
     await writeOwnerFile(
       page,
-      '/scratch/tsconfig.json',
+      `${root}/tsconfig.json`,
       [
         '{',
         '  "compilerOptions": {',
@@ -488,15 +865,14 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
         '',
       ].join('\n'),
     );
-    await runTerminalLineSettled(page, 'mkdir -p /scratch/node_modules/cool-dep');
     await writeOwnerFile(
       page,
-      '/scratch/node_modules/cool-dep/package.json',
+      `${root}/node_modules/cool-dep/package.json`,
       ['{', '  "name": "cool-dep",', '  "types": "index.d.ts"', '}', ''].join('\n'),
     );
     await writeOwnerFile(
       page,
-      DEP_DTS,
+      depDts,
       [
         'export declare const coolValue: number;',
         'export declare function coolHelper(input: string): string;',
@@ -506,11 +882,15 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     );
     await writeOwnerFile(
       page,
-      DEP_TS,
+      depTs,
       [
         'export function localGreet(name: string): string {',
         '  return "hi " + name;',
         '}',
+        'export const localCool = {',
+        '  helper(input: string): string { return input.toUpperCase(); },',
+        '  value: 42,',
+        '} as const;',
         '',
       ].join('\n'),
     );
@@ -519,78 +899,104 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
     //  L3 `const a = coolValue;`           coolValue starts col 11
     //  L4 `const b = coolHelper("x");`
     //  L5 `const c = localGreet("y");`     localGreet starts col 11
-    //  L6 `const d = cool.`                cursor after the dot = col 16
-    await writeOwnerFile(
-      page,
-      USES_DEP,
-      [
-        'import { coolValue, coolHelper, cool } from "cool-dep";',
-        'import { localGreet } from "./dep.ts";',
-        'const a = coolValue;',
-        'const b = coolHelper("x");',
-        'const c = localGreet("y");',
-        'const d = cool.',
-        '',
-      ].join('\n'),
-    );
-    await runTerminalLine(page, 'ls /scratch/src');
+    //  L6 `const d = cool.value;`          completion switches this to `cool.`
+    await writeOwnerFile(page, usesDep, usesDepResolvedSource);
+    await runOwnerShell(page, `cat ${depDts} && ls ${root}/src`);
+    await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('coolValue');
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('uses-dep.ts');
 
     // Open uses-dep.ts so a Monaco model exists (providers resolve a model→path).
     await openFileViaPalette(page, 'uses-dep.ts');
     await expect
-      .poll(() => tsMarkerCount(page, USES_DEP), { timeout: 15_000 })
+      .poll(() => tsMarkerCount(page, usesDep), { timeout: 15_000 })
       .toBeGreaterThanOrEqual(0);
 
-    // Rebuild the service against the project we just wrote (the boot build used
-    // tsc default options before these files / this tsconfig existed). Idempotent
-    // ts:init — a real supported operation, not a test backdoor.
+    let depDefs: { uri: string; line: number; column: number }[] = [];
+    expect(await setModelValue(page, usesDep, usesDepResolvedSource)).toBe(true);
+    // Rebuild after the file is open and mirrored, so the provider query below is
+    // served by the project configured with bundler resolution + fake node_modules.
     expect(await tsReinit(page)).toBe(true);
-
-    // (1) HOVER over `coolValue` (L3, col 12). Its type comes from the
-    // node_modules `.d.ts`, so the rendered hover must carry the REAL type
-    // (`(alias) const coolValue: number`) — lib.d.ts alone has no `coolValue`,
-    // proving project/dep knowledge. The FIRST query cold-boots the engine + ~3 MB
-    // lib.d.ts over the relay AND warms the rebuilt program (the cold program's
-    // first quick-info can transiently elide the alias type), so poll with a
-    // spaced interval until the full type appears (1.5s spacing avoids hammering
-    // the warming program; 90s headroom for the one-time lib.d.ts fetch).
     await expect
-      .poll(() => tsHover(page, USES_DEP, 3, 12), { timeout: 90_000, intervals: [1500] })
-      .toMatch(/coolValue[\s\S]*number/);
+      .poll(() => tsMarkerCount(page, usesDep), { timeout: 120_000, intervals: [1500] })
+      .toBe(0);
+    const depDefinitionProbes = [
+      { line: 3, col: 12 }, // usage alias
+      { line: 1, col: 10 }, // import binding
+      { line: 1, col: 46 }, // module specifier
+    ];
+    await expect
+      .poll(
+        async () => {
+          depDefs = [];
+          for (const probe of depDefinitionProbes) {
+            depDefs = (await tsDefinition(page, usesDep, probe.line, probe.col)) ?? [];
+            if (depDefs.some((d) => d.uri.includes(depDts))) return depDefs.map((d) => d.uri);
+          }
+          return depDefs.map((d) => d.uri);
+        },
+        { timeout: 120_000, intervals: [1500] },
+      )
+      .toContain(depDts);
 
-    // (2) GO-TO-DEFINITION of `localGreet` (L5, col 12) → the sibling dep.ts (the
+    // (1) HOVER over `coolValue` (L3, col 12). TS 5.9 renders this imported
+    // alias as `import coolValue`; the dependency `.d.ts` proof is the definition
+    // jump below. The FIRST query cold-boots the engine + ~3 MB lib.d.ts over the
+    // relay, so poll with a spaced interval.
+    await expect
+      .poll(() => tsHover(page, usesDep, 3, 12), { timeout: 90_000, intervals: [1500] })
+      .toContain('coolValue');
+
+    // (2a) GO-TO-DEFINITION of `coolValue` (L3, col 12) → node_modules .d.ts.
+    // This specifically exercises the EditorHost read-only remote-port branch:
+    // the page snapshot excludes node_modules, so the provider must ask the owner
+    // read-port to open the target model instead of silently dropping the Location.
+    const depDef = depDefs.find((d) => d.uri.includes(depDts));
+    expect(depDef?.uri).toContain(depDts);
+    expect(depDef?.line).toBe(1);
+
+    // (2b) GO-TO-DEFINITION of `localGreet` (L5, col 12) → the sibling dep.ts (the
     // hook round-trips the target Location.uri back to its VFS path). Cross-file
     // resolution Monaco's isolated worker can't do.
     await expect
-      .poll(async () => (await tsDefinition(page, USES_DEP, 5, 12))?.[0]?.uri ?? '', {
+      .poll(async () => (await tsDefinition(page, usesDep, 5, 12))?.[0]?.uri ?? '', {
         timeout: 30_000,
         intervals: [1500],
       })
-      .toContain(DEP_TS);
-    const localDefs = await tsDefinition(page, USES_DEP, 5, 12);
+      .toContain(depTs);
+    const localDefs = await tsDefinition(page, usesDep, 5, 12);
     expect(localDefs?.[0]?.uri).not.toContain('uses-dep.ts');
     // jumps to the declaration line (dep.ts L1, `export function localGreet`).
     expect(localDefs?.[0]?.line).toBe(1);
 
-    // (2b) GO-TO-DEFINITION of `coolValue` (L3, col 12) → the dependency's
-    // `.d.ts` under node_modules (opened read-only by `ensureModel`, path
-    // recovered via `pathForModel`) — the dep-jump the isolated worker can't do.
+    // (3) COMPLETIONS at the member access `cool.` (L6, col 16). Keep the file
+    // syntactically valid for hover/definition above, then make it incomplete only
+    // for this completion assertion.
+    expect(await setModelValue(page, usesDep, usesDepCompletionSource)).toBe(true);
     await expect
-      .poll(async () => (await tsDefinition(page, USES_DEP, 3, 12))?.[0]?.uri ?? '', {
-        timeout: 30_000,
-        intervals: [1500],
-      })
-      .toContain(DEP_DTS);
-
-    // (3) COMPLETIONS at the member access `cool.` (L6, col 16) — the members
-    // come from the node_modules `.d.ts` type, gated on tsconfig resolution.
+      .poll(() => tsMarkerCount(page, usesDep), { timeout: 60_000, intervals: [1500] })
+      .toBeGreaterThan(0);
     await expect
-      .poll(async () => (await tsCompletions(page, USES_DEP, 6, 16)) ?? [], {
-        timeout: 30_000,
+      .poll(async () => (await tsCompletions(page, usesDep, 6, 16)) ?? [], {
+        timeout: 60_000,
         intervals: [1500],
       })
       .toEqual(expect.arrayContaining(['helper', 'value']));
+    const completionItems = (await tsCompletionItems(page, usesDep, 6, 16)) ?? [];
+    const helperCompletion = completionItems.find((item) => item.label === 'helper');
+    expect(helperCompletion).toMatchObject({
+      insertText: 'helper',
+      startLine: 6,
+      startColumn: 16,
+      endLine: 6,
+      endColumn: 16,
+    });
+    expect(helperCompletion?.commitCharacters.length ?? 0).toBeGreaterThan(0);
+    await expect
+      .poll(async () => tsRangeSemanticTokenCount(page, usesDep, 1, 1, 6, 16), {
+        timeout: 60_000,
+        intervals: [1500],
+      })
+      .toBeGreaterThan(0);
   });
 });
 
@@ -618,8 +1024,16 @@ test.describe('rifty TS language service: real hover/def/completions (not Monaco
  * None of `greet`/`localGreet` exist in lib.d.ts, so a built-in-worker reference/
  * rename/signature built on the isolated model could not produce them at all.
  */
-const GREETER_TS = `${PROJECT_DIR}/greeter.ts`;
-const APP_TS = `${PROJECT_DIR}/app.ts`;
+function referencesProjectPaths(root: string): {
+  greeterTs: string;
+  appTs: string;
+} {
+  const projectDir = `${root}/src`;
+  return {
+    greeterTs: `${projectDir}/greeter.ts`,
+    appTs: `${projectDir}/app.ts`,
+  };
+}
 
 test.describe('rifty TS language service: real references/rename/signature-help (not Monaco built-in)', () => {
   test('references span two files (declaration drop honored); rename edits both files; signature help at a call site', async ({
@@ -631,6 +1045,8 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     await page.goto('/');
 
     await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
+    const root = await activeRootFromHint(page);
+    const { greeterTs, appTs } = referencesProjectPaths(root);
     await openShellTerminal(page);
 
     // Build a small REAL cross-file project in the owner store (the SSoT the LS
@@ -640,7 +1056,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     // which sees neither file, could never surface.
     await writeOwnerFile(
       page,
-      '/scratch/tsconfig.json',
+      `${root}/tsconfig.json`,
       [
         '{',
         '  "compilerOptions": {',
@@ -659,7 +1075,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     //  L1 `export function localGreet(name: string): string {`  localGreet @ col 17
     await writeOwnerFile(
       page,
-      GREETER_TS,
+      greeterTs,
       [
         'export function localGreet(name: string): string {',
         '  return "hi " + name;',
@@ -673,7 +1089,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     //  L3 `const b = localGreet("bob");`                localGreet @ col 11
     await writeOwnerFile(
       page,
-      APP_TS,
+      appTs,
       [
         'import { localGreet } from "./greeter.ts";',
         'const a = localGreet("ann");',
@@ -682,7 +1098,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
         '',
       ].join('\n'),
     );
-    await runTerminalLine(page, 'ls /scratch/src');
+    await runOwnerShell(page, `ls ${root}/src`);
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('app.ts');
 
     // Open BOTH files so a Monaco model exists for each (providers resolve a
@@ -691,7 +1107,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     await openFileViaPalette(page, 'greeter.ts');
     await openFileViaPalette(page, 'app.ts');
     await expect
-      .poll(() => tsMarkerCount(page, APP_TS), { timeout: 15_000 })
+      .poll(() => tsMarkerCount(page, appTs), { timeout: 15_000 })
       .toBeGreaterThanOrEqual(0);
 
     // Rebuild the service against the project we just wrote (the boot build used
@@ -705,7 +1121,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     await expect
       .poll(
         async () => {
-          const refs = (await tsReferences(page, GREETER_TS, 1, 17, true)) ?? [];
+          const refs = (await tsReferences(page, greeterTs, 1, 17, true)) ?? [];
           return new Set(refs.map((r) => r.uri.replace(/^.*\/src\//, 'src/'))).size;
         },
         { timeout: 90_000, intervals: [1500] },
@@ -713,7 +1129,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
       .toBeGreaterThanOrEqual(2);
 
     // The references include uses in BOTH greeter.ts and app.ts (cross-file).
-    const withDecl = (await tsReferences(page, GREETER_TS, 1, 17, true)) ?? [];
+    const withDecl = (await tsReferences(page, greeterTs, 1, 17, true)) ?? [];
     const declFiles = new Set(withDecl.map((r) => r.uri));
     expect([...declFiles].some((u) => u.includes('greeter.ts'))).toBe(true);
     expect([...declFiles].some((u) => u.includes('app.ts'))).toBe(true);
@@ -723,7 +1139,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
 
     // includeDeclaration:false drops the declaration site (greeter.ts L1): strictly
     // fewer results, and none of them is the declaration line in greeter.ts.
-    const noDecl = (await tsReferences(page, GREETER_TS, 1, 17, false)) ?? [];
+    const noDecl = (await tsReferences(page, greeterTs, 1, 17, false)) ?? [];
     expect(noDecl.length).toBe(declCount - 1);
     expect(noDecl.some((r) => r.uri.includes('greeter.ts') && r.line === 1)).toBe(false);
     // app.ts uses survive the declaration drop (cross-file refs are NOT the decl).
@@ -731,7 +1147,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
 
     // (2) PREPARE-RENAME at a use site in app.ts (L2, col 11) → renameable, the box
     // seeds with the current symbol name.
-    const prepared = await tsPrepareRename(page, APP_TS, 2, 11);
+    const prepared = await tsPrepareRename(page, appTs, 2, 11);
     expect(prepared).not.toBeNull();
     expect(prepared && 'text' in prepared ? prepared.text : '').toBe('localGreet');
 
@@ -742,7 +1158,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     // *use* site instead would, per real TS, rewrite only the importing file's
     // local binding to `localGreet as greetUser` — the export rename is the genuine
     // cross-file edit.)
-    const edits = (await tsRenameEdits(page, GREETER_TS, 1, 17, 'greetUser')) ?? [];
+    const edits = (await tsRenameEdits(page, greeterTs, 1, 17, 'greetUser')) ?? [];
     const editFiles = new Set(edits.map((e) => e.uri));
     expect([...editFiles].some((u) => u.includes('greeter.ts'))).toBe(true);
     expect([...editFiles].some((u) => u.includes('app.ts'))).toBe(true);
@@ -754,7 +1170,7 @@ test.describe('rifty TS language service: real references/rename/signature-help 
     // (3) SIGNATURE-HELP at the call site `localGreet(` in app.ts (L2, col 22 — just
     // inside the open paren, on the first argument). The signature label carries the
     // real parameter (`name: string`) from greeter.ts, and activeParameter is 0.
-    const help = await tsSignatureHelp(page, APP_TS, 2, 22);
+    const help = await tsSignatureHelp(page, appTs, 2, 22);
     expect(help).not.toBeNull();
     expect(help?.label).toMatch(/name:\s*string/);
     expect(help?.activeParameter).toBe(0);
@@ -788,11 +1204,20 @@ test.describe('rifty TS language service: real references/rename/signature-help 
  * None of `localGreet`/`coolGreet` exist in lib.d.ts, so a built-in-worker fix
  * built on the isolated model could not produce the cross-file import at all.
  */
-const FIX_DIR = '/scratch/src';
-const FIX_GREETER = `${FIX_DIR}/greeter.ts`;
-const FIX_APP = `${FIX_DIR}/app.ts`;
-const ORGANIZE_TS = `${FIX_DIR}/organize.ts`;
-const FORMAT_TS = `${FIX_DIR}/format.ts`;
+function codeActionProjectPaths(root: string): {
+  fixGreeter: string;
+  fixApp: string;
+  organizeTs: string;
+  formatTs: string;
+} {
+  const fixDir = `${root}/src`;
+  return {
+    fixGreeter: `${fixDir}/greeter.ts`,
+    fixApp: `${fixDir}/app.ts`,
+    organizeTs: `${fixDir}/organize.ts`,
+    formatTs: `${fixDir}/format.ts`,
+  };
+}
 
 test.describe('rifty TS language service: real quick-fixes/organize-imports/formatting (not Monaco built-in)', () => {
   test('missing-import quick-fix adds an import from a sibling; organize-imports sorts+drops unused; format-document fixes spacing', async ({
@@ -804,6 +1229,8 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     await page.goto('/');
 
     await expect.poll(() => terminalBuffer(page), { timeout: 30_000 }).toContain('$ vite');
+    const root = await activeRootFromHint(page);
+    const { fixGreeter, fixApp, organizeTs, formatTs } = codeActionProjectPaths(root);
     await openShellTerminal(page);
 
     // A small REAL cross-file project in the owner store (the SSoT the LS reads):
@@ -815,7 +1242,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     //  - format.ts with deliberately bad spacing.
     await writeOwnerFile(
       page,
-      '/scratch/tsconfig.json',
+      `${root}/tsconfig.json`,
       [
         '{',
         '  "compilerOptions": {',
@@ -833,7 +1260,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     );
     await writeOwnerFile(
       page,
-      FIX_GREETER,
+      fixGreeter,
       [
         'export function localGreet(name: string): string {',
         '  return "hi " + name;',
@@ -846,14 +1273,14 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     //  L1 `const a = localGreet("x");`  localGreet @ col 11
     await writeOwnerFile(
       page,
-      FIX_APP,
+      fixApp,
       ['const a = localGreet("x");', 'export const out = a;', ''].join('\n'),
     );
     // organize.ts — imports out of order (VERSION before localGreet) and one
     // unused (`VERSION` is never referenced) ⇒ organize sorts + drops it.
     await writeOwnerFile(
       page,
-      ORGANIZE_TS,
+      organizeTs,
       [
         'import { VERSION, localGreet } from "./greeter.ts";',
         'export const g = localGreet("y");',
@@ -864,10 +1291,10 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     // tsserver's default format settings rewrite.
     await writeOwnerFile(
       page,
-      FORMAT_TS,
+      formatTs,
       ['export const sum=(a:number,b:number)=>a+b;', 'export const v=sum(1,2);', ''].join('\n'),
     );
-    await runTerminalLine(page, 'ls /scratch/src');
+    await runOwnerShell(page, `ls ${root}/src`);
     await expect.poll(() => terminalBuffer(page), { timeout: 15_000 }).toContain('app.ts');
 
     // Open all four files so a Monaco model exists for each (providers resolve a
@@ -877,7 +1304,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     await openFileViaPalette(page, 'organize.ts');
     await openFileViaPalette(page, 'format.ts');
     await expect
-      .poll(() => tsMarkerCount(page, FIX_APP), { timeout: 15_000 })
+      .poll(() => tsMarkerCount(page, fixApp), { timeout: 15_000 })
       .toBeGreaterThanOrEqual(0);
 
     // Rebuild the service against the project we just wrote (the boot build used
@@ -887,7 +1314,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     // The "Cannot find name 'localGreet'" diagnostic must land first — the
     // quick-fix is sourced from THAT marker's code (FIRST request cold-boots the
     // engine + ~3 MB lib.d.ts; 90s headroom).
-    await expect.poll(() => tsMarkerCount(page, FIX_APP), { timeout: 90_000 }).toBeGreaterThan(0);
+    await expect.poll(() => tsMarkerCount(page, fixApp), { timeout: 90_000 }).toBeGreaterThan(0);
 
     // (1) QUICK-FIX over the `localGreet` use in app.ts (L1, cols 11..21). The
     // provider sources the errorCodes from the overlapping rifty marker, so an
@@ -896,7 +1323,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     await expect
       .poll(
         async () => {
-          const fixes = await tsCodeFixes(page, FIX_APP, 1, 11, 1, 21);
+          const fixes = await tsCodeFixes(page, fixApp, 1, 11, 1, 21);
           return fixes.some(
             (f) =>
               f.kind === 'quickfix' &&
@@ -908,7 +1335,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
       )
       .toBe(true);
     // The returned fix carries a NON-EMPTY edit (load-bearing: not a lying no-op fix).
-    const fixes = await tsCodeFixes(page, FIX_APP, 1, 11, 1, 21);
+    const fixes = await tsCodeFixes(page, fixApp, 1, 11, 1, 21);
     const addImport = fixes.find(
       (f) => f.kind === 'quickfix' && f.edits.some((e) => /import/.test(e.text)),
     );
@@ -920,7 +1347,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     // source action returns a non-empty edit. The new import text sorts the names
     // and DROPS the unused `VERSION` (only `localGreet` survives) — the real
     // tsc organize, not a no-op.
-    const organize = await tsOrganizeImports(page, ORGANIZE_TS);
+    const organize = await tsOrganizeImports(page, organizeTs);
     expect(organize).not.toBeNull();
     expect(organize?.kind).toBe('source.organizeImports');
     expect(organize?.edits.length ?? 0).toBeGreaterThan(0);
@@ -932,7 +1359,7 @@ test.describe('rifty TS language service: real quick-fixes/organize-imports/form
     // returns a non-empty edit set; APPLIED, the text restores spacing around the
     // operators / after commas (`a: number, b: number`, `a + b`, `const sum =`)
     // per tsserver defaults — the real formatter, not a pass-through.
-    const formatResult = await tsFormat(page, FORMAT_TS);
+    const formatResult = await tsFormat(page, formatTs);
     expect(formatResult).not.toBeNull();
     expect(formatResult?.editCount ?? 0).toBeGreaterThan(0);
     const formatted = formatResult?.applied ?? '';

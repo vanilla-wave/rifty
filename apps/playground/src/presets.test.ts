@@ -7,7 +7,9 @@ import {
   presetBootLines,
 } from './presets.ts';
 import { EXPRESS_SQLITE_TEMPLATE } from './templates/express-sqlite.ts';
+import { resolveProjectSpec } from './templates/registry.ts';
 import { SOCKET_LAB_TEMPLATE } from './templates/socket-lab.ts';
+import { TYPESCRIPT_TEMPLATE } from './templates/typescript.ts';
 
 function presetText(preset: Preset): string {
   return [preset.source, ...(preset.files ?? []).map((file) => file.content)].join('\n');
@@ -18,7 +20,7 @@ describe('playground presets', () => {
     expect(PRESETS.length).toBeGreaterThanOrEqual(3);
     const filePresets = PRESETS.filter((preset) => preset.category === 'Files + modules');
 
-    expect(filePresets).toHaveLength(2);
+    expect(filePresets).toHaveLength(3);
     expect(filePresets.every((preset) => (preset.files?.length ?? 0) >= 2)).toBe(true);
     expect(filePresets.every((preset) => (preset.openFiles?.length ?? 0) >= 2)).toBe(true);
     for (const preset of filePresets) {
@@ -38,14 +40,45 @@ describe('playground presets', () => {
     expect(CATEGORY_ORDER).toEqual(['Files + modules', 'Live preview']);
   });
 
-  it('keeps browser Vite presets as HMR accept boundaries', () => {
-    const browserVitePresets = PRESETS.filter(
-      (preset) => preset.mode === 'real-vite' && (preset.templateId ?? 'vite') === 'vite',
+  it('ships a TypeScript language-service sandbox preset wired to its .ts template', () => {
+    const demo = PRESETS.find((preset) => preset.id === 'typescript-ls');
+    expect(demo).toBeDefined();
+    if (!demo) throw new Error('unreachable');
+    expect(demo.templateId).toBe(TYPESCRIPT_TEMPLATE.id);
+    expect(demo.source).toBe(TYPESCRIPT_TEMPLATE.entry.content);
+    expect(demo.glyph?.text).toBe('TS');
+
+    const filePaths = new Set((demo.files ?? []).map((file) => file.path));
+    for (const relPath of Object.keys(TYPESCRIPT_TEMPLATE.extraFiles)) {
+      expect(filePaths.has(relPath.replace(/^\/+/, ''))).toBe(true);
+    }
+    expect(demo.openFiles).toEqual(
+      expect.arrayContaining(['tsconfig.json', 'src/model.ts', 'src/math.ts']),
     );
+    for (const path of [
+      'src/format.ts',
+      'node_modules/@rifty/example-types/index.d.ts',
+      'node_modules/@rifty/example-types/package.json',
+    ]) {
+      expect(filePaths.has(path)).toBe(true);
+    }
+    expect(presetText(demo)).toContain('@rifty/example-types');
+    expect(presetText(demo)).toContain('satisfies Widget');
+    expect(presetText(demo)).toContain('typecheckTarget');
+    expect(presetText(demo)).toContain('formatWidgetName');
+    expect(presetText(demo)).toContain('summarizeShape');
+  });
+
+  it('keeps browser Vite presets as HMR accept boundaries', () => {
+    const browserVitePresets = PRESETS.filter((preset) => {
+      const spec = resolveProjectSpec(preset.templateId ?? 'vite');
+      return preset.mode === 'real-vite' && spec.runtime === 'vite' && spec.hmr.enabled;
+    });
 
     expect(browserVitePresets.map((preset) => preset.id)).toEqual([
       'project-files',
       'node-worker',
+      'typescript-ls',
       'real-vite',
     ]);
     for (const preset of browserVitePresets) {
@@ -58,7 +91,9 @@ describe('playground presets', () => {
   // prose must not teach a boot line its terminal does not run — now scoped
   // per runtime instead of a global 'npm run dev' ban.
   it('keeps preset prose honest about each runtime boot line', () => {
-    const vitePresets = PRESETS.filter((preset) => (preset.templateId ?? 'vite') === 'vite');
+    const vitePresets = PRESETS.filter(
+      (preset) => resolveProjectSpec(preset.templateId ?? 'vite').runtime === 'vite',
+    );
     expect(vitePresets.length).toBeGreaterThan(0);
     for (const preset of vitePresets) {
       expect(presetText(preset)).not.toContain('npm run dev');

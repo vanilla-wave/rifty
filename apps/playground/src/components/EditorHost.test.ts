@@ -19,4 +19,15 @@ describe('EditorHost program sync contract', () => {
     expect(source).not.toContain('editor.getModel()?.setValue(next)');
     expect(source).not.toContain('editor.getModel().setValue(next)');
   });
+
+  it('maps the program model through a reactive path and language', () => {
+    expect(source).toContain('readonly programPath: Accessor<string>;');
+    expect(source).toContain('return id === PROGRAM_TAB_ID ? currentProgramPath : id;');
+    expect(source).toContain('return path === currentProgramPath ? PROGRAM_TAB_ID : path;');
+    expect(source).not.toContain('return id === PROGRAM_TAB_ID ? props.programPath() : id;');
+    expect(source).not.toContain('return path === props.programPath() ? PROGRAM_TAB_ID : path;');
+    expect(source).toContain(
+      'monaco.editor.setModelLanguage(programModel, languageForPath(path));',
+    );
+  });
 });

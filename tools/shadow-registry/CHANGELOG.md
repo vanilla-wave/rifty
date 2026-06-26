@@ -16,6 +16,14 @@
 - Added `browserShimFileSets`, `collectBrowserShimFiles`, and
   `viteBrowserShimFiles` (ADR-0156) so Vite-class overlays are selected by typed
   shim-set name instead of hand-spelling every package at each call site.
+- `esbuildShimFiles` no longer exposes a silent pass-through `transform`. The
+  overlaid `esbuild` package now delegates `transform()` to the playground's
+  installed `globalThis.__riftyEsbuildTransform` bridge and loud-throws
+  `NotImplementedError('esbuild.transform')` if the bridge is missing;
+  `transformSync` also loud-throws because the real WASI transform is async.
+- `transformWithEsbuild(..., { supported })` now forwards every
+  `--supported:<feature>=<bool>` entry to the real esbuild-WASI CLI (including
+  `decorators` and Vite 7's `dynamic-import` build flag).
 - `bakedOverrides` now redirects `esbuild` to `@esbuild/wasi-preview1@0.28.0`,
   so Vite installs avoid the real package's native-binary `postinstall`; the
   playground still overlays `node_modules/esbuild` with the browser-safe shim.
