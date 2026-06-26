@@ -35,6 +35,17 @@ describe('terminal-theme', () => {
     expect(preferredTerminalTheme({})).toEqual(terminalThemes.dark);
   });
 
+  it('uses a modern matte palette with a non-lime bar cursor', () => {
+    expect(terminalThemes.dark.background).toBe('#171a21');
+    expect(terminalThemes.dark.foreground).toBe('#d7dae0');
+    expect(terminalThemes.dark.cursor).toBe('#ff7a90');
+    expect(terminalThemes.dark.cursor).not.toBe('#c7f05a');
+    expect(terminalThemes.dark.selectionBackground).toBe('#6ea8ff33');
+    expect(terminalThemes.dark.brightBlack).toBe('#697180');
+    expect(terminalThemes.dark.blue).toBe('#7aa2f7');
+    expect(terminalThemes.dark.cyan).toBe('#5fd7e5');
+  });
+
   it('watches OS theme changes and disposes the listener', () => {
     const query = mediaQuery(false);
     const applied: unknown[] = [];

@@ -1388,16 +1388,20 @@ body {
 .rf-terminal-shell {
   position: absolute;
   inset: 0;
-  background: var(--rf-panel);
+  background: #171a21;
   overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), inset 0 -1px 0 rgba(0, 0, 0, 0.32);
 }
 .rf-terminal {
   position: absolute;
   /* Inset (not padding) so xterm FitAddon sees the already-trimmed box:
      FitAddon reads parent height minus the .xterm element's own padding (0),
-     ignoring padding on the mount container. Left leaves room for the block rail. */
-  inset: 8px 4px 8px 30px;
-  background: var(--rf-panel);
+     ignoring padding on the mount container. */
+  inset: 8px 4px 8px 14px;
+  background: #171a21;
+  border-radius: var(--rf-r-sm);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.045);
+  overflow: hidden;
 }
 
 /* — terminal overlays: pop surface, soft radius — */
@@ -1663,97 +1667,6 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.rf-terminal-blockrail {
-  position: absolute;
-  top: 48px;
-  left: 8px;
-  z-index: 2;
-  display: grid;
-  gap: 5px;
-  width: 10px;
-  max-height: calc(100% - 86px);
-  overflow: hidden;
-}
-.rf-terminal-blockrail__item {
-  width: 8px;
-  height: 18px;
-  padding: 0;
-  background: transparent;
-  border: 0;
-  border-left: 3px solid var(--rf-text-muted);
-  border-radius: 0;
-  opacity: 0.6;
-  cursor: pointer;
-}
-.rf-terminal-blockrail__item[data-status="ok"] {
-  border-left-color: var(--rf-ok);
-}
-.rf-terminal-blockrail__item[data-status="error"] {
-  border-left-color: var(--rf-err);
-}
-.rf-terminal-blockrail__item[data-status="running"] {
-  border-left-color: var(--rf-warn);
-}
-.rf-terminal-blockrail__item[data-active="true"] {
-  opacity: 1;
-  box-shadow: inset 3px 0 0 var(--rf-text);
-}
-.rf-terminal-blockpreview {
-  position: absolute;
-  top: 46px;
-  left: 26px;
-  z-index: 3;
-  display: grid;
-  grid-template-columns: 7px minmax(80px, 1fr) 26px 26px 26px;
-  align-items: center;
-  gap: 8px;
-  max-width: min(520px, calc(100% - 46px));
-  min-height: 32px;
-  padding: 3px 5px 3px 10px;
-  color: var(--rf-text-dim);
-  background: var(--rf-pop);
-  border: 1px solid var(--rf-line-strong);
-  border-radius: var(--rf-r);
-  box-shadow: var(--rf-shadow-toast);
-}
-.rf-terminal-blockpreview__status {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--rf-text-muted);
-}
-.rf-terminal-blockpreview__status[data-status="ok"] {
-  background: var(--rf-ok);
-}
-.rf-terminal-blockpreview__status[data-status="error"] {
-  background: var(--rf-err);
-}
-.rf-terminal-blockpreview__status[data-status="running"] {
-  background: var(--rf-warn);
-}
-.rf-terminal-blockpreview__cmd {
-  overflow: hidden;
-  font: 400 11px / 14px var(--rf-font-mono);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rf-terminal-blockpreview__button {
-  display: inline-grid;
-  place-items: center;
-  width: 26px;
-  height: 24px;
-  padding: 0;
-  color: inherit;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--rf-r-xs);
-  cursor: pointer;
-}
-.rf-terminal-blockpreview__button:hover {
-  color: var(--rf-text);
-  background: var(--rf-hover);
-  border-color: var(--rf-line-panel);
-}
 .rf-terminal-busy {
   position: absolute;
   bottom: 12px;
@@ -1770,78 +1683,6 @@ body {
   border-radius: var(--rf-r);
   box-shadow: var(--rf-shadow-toast);
   font-size: 11px;
-}
-.rf-terminal-sticky {
-  position: absolute;
-  top: 10px;
-  left: 12px;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  max-width: min(520px, calc(100% - 24px));
-  height: 28px;
-  color: var(--rf-text-dim);
-  background: var(--rf-pop);
-  border: 1px solid var(--rf-line-panel);
-  border-radius: var(--rf-r);
-  overflow: hidden;
-}
-.rf-terminal-sticky__jump {
-  display: grid;
-  grid-template-columns: 8px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  height: 100%;
-  padding: 0 10px;
-  color: inherit;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  text-align: left;
-  cursor: pointer;
-}
-.rf-terminal-sticky__jump:hover,
-.rf-terminal-sticky__copy:hover {
-  color: var(--rf-text);
-}
-.rf-terminal-sticky:hover {
-  border-color: var(--rf-line-strong);
-}
-.rf-terminal-sticky__copy {
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-  width: 28px;
-  height: 100%;
-  padding: 0;
-  color: inherit;
-  background: transparent;
-  border: none;
-  border-left: 1px solid var(--rf-line-panel);
-  border-radius: 0;
-  cursor: pointer;
-}
-.rf-terminal-sticky__mark {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--rf-text-muted);
-}
-.rf-terminal-sticky__mark[data-exit="0"] {
-  background: var(--rf-ok);
-}
-.rf-terminal-sticky__mark[data-exit="running"] {
-  background: var(--rf-warn);
-}
-.rf-terminal-sticky__mark:not([data-exit="0"]):not([data-exit="running"]) {
-  background: var(--rf-err);
-}
-.rf-terminal-sticky__cmd {
-  overflow: hidden;
-  font: 400 11px / 14px var(--rf-font-mono);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .rf-terminal-quickfix {
   position: absolute;
