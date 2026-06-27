@@ -57,7 +57,12 @@ import {
 import { reachableCwd } from '../glue/reachable-cwd.ts';
 import { createProxiedRegistryClient } from '../glue/registry-fetch.ts';
 import { scopeActiveVfsToWorkspace } from '../glue/scoped-vfs.ts';
-import { ensureStarterInitialCommit, seedFilesForStarter, starterById } from '../glue/starter.ts';
+import {
+  amendStarterGeneratedBaseline,
+  ensureStarterInitialCommit,
+  seedFilesForStarter,
+  starterById,
+} from '../glue/starter.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
 import { stampTsLspOwner, tsLspOwnerMatches } from '../glue/ts-lsp-owner-scope.ts';
 import {
@@ -362,15 +367,29 @@ async function bootShellOwner(opts: {
   readonly tsLspWorkerUrl: string;
 }): Promise<void> {
   const { cfg, port, kernelIpc, publishSnapshot, spec, slug, starter, fromScratch } = opts;
+  const pendingStarterGeneratedBaseline = new Set<string>();
+  const markStarterGeneratedBaselinePending = (root: string): void => {
+    pendingStarterGeneratedBaseline.add(root);
+  };
+  const absorbPendingStarterGeneratedBaseline = async (root: string): Promise<void> => {
+    if (!pendingStarterGeneratedBaseline.has(root)) return;
+    await amendStarterGeneratedBaseline(ownerGitVfs(), root);
+    await flushSyncMirror();
+    pendingStarterGeneratedBaseline.delete(root);
+  };
 
   const freshRoot = !syncMirror().existsSync(cfg.root);
+  if (freshRoot) markStarterGeneratedBaselinePending(cfg.root);
   seedProject(cfg);
   if (freshRoot) seedStarterBaseline(starter, cfg.root);
   await ensureStarterInitialCommit(ownerGitVfs(), cfg.root);
   // Instant presets: pre-seed node_modules from the baked snapshot into the owner
   // store NOW, before any dev line (the full fs is already present). from-scratch
   // deps come from the explicit `npm install` boot step — nothing to do here.
-  if (!fromScratch) await restoreInstantDeps(cfg, spec.id, slug);
+  if (!fromScratch) {
+    await restoreInstantDeps(cfg, spec.id, slug);
+    await absorbPendingStarterGeneratedBaseline(cfg.root);
+  }
   seedTemplateNodeModulesFiles(cfg);
   publishSnapshot();
   // Readiness handshake (ADR-0146, explorer reflects the owner tree): the page
@@ -472,7 +491,10 @@ async function bootShellOwner(opts: {
       // the owner pre-seed / a prior boot already did it; after a root/template
       // clean it re-seeds package.json + node_modules for the active root). from-scratch
       // deps come SOLELY from the explicit `npm install` boot step.
-      if (!devFromScratch) await restoreInstantDeps(devCfg, devSpec.id, devSlug);
+      if (!devFromScratch) {
+        await restoreInstantDeps(devCfg, devSpec.id, devSlug);
+        await absorbPendingStarterGeneratedBaseline(devCfg.root);
+      }
       // The owner store is what the shell and TS LS read. Restore/clean may replace
       // node_modules, so re-assert template-owned declaration packages last.
       seedTemplateNodeModulesFiles(devCfg);
@@ -684,6 +706,8 @@ async function bootShellOwner(opts: {
       runScript: runPackageScript,
     });
     shell.registerCommand('npm', async (args, ctx) => {
+      const absorbGeneratedBaseline =
+        devFromScratch && isFullInstall(args) && pendingStarterGeneratedBaseline.has(devCfg.root);
       // Faithful from-scratch: the FIRST `npm install` of a from-scratch preset (no
       // slug stamp yet) starts CLEAN — clear any prior preset's node_modules +
       // lockfile and re-seed THIS preset's package.json — so it is a real COLD
@@ -703,6 +727,9 @@ async function bootShellOwner(opts: {
         }
       }
       const code = await npmCommand(args, ctx);
+      if (code === 0 && absorbGeneratedBaseline) {
+        await absorbPendingStarterGeneratedBaseline(devCfg.root);
+      }
       publishSnapshot(); // node_modules may have changed — refresh the page's view
       return code;
     });
@@ -839,7 +866,10 @@ async function bootShellOwner(opts: {
     '/',
     flushSyncMirror,
     publishSnapshot,
-    (root) => ensureStarterInitialCommit(ownerGitVfs(), root),
+    async (root) => {
+      markStarterGeneratedBaselinePending(root);
+      await ensureStarterInitialCommit(ownerGitVfs(), root);
+    },
   );
   log('[shell-owner/worker] pty server ready; workspace read + archive bridges live\n');
 

@@ -10,6 +10,7 @@ import {
 import { SOCKET_LAB_TEMPLATE } from '../templates/socket-lab.ts';
 import {
   GROUP_FOR_CATEGORY,
+  amendStarterGeneratedBaseline,
   ensureStarterInitialCommit,
   seedFilesForStarter,
   starterById,
@@ -180,6 +181,35 @@ describe('seedFilesForStarter (starter, root)', () => {
 
       const ref = await vfs.readFileText(`${root}/.git/refs/heads/main`);
       expect(ref).toMatch(/^[0-9a-f]{40}\n$/);
+    } finally {
+      resetSyncMirror();
+    }
+  });
+
+  it('absorbs generated package-lock.json into the single Initial commit', async () => {
+    installMemoryFs();
+    try {
+      const root = '/scratch';
+      const vfs = asyncVfs();
+      if (!vfs) throw new Error('no async vfs');
+      const files = seedFilesForStarter(starterById('project-files'), root);
+      for (const [path, content] of Object.entries(files)) {
+        await vfs.mkdir(dirname(path), { recursive: true });
+        await vfs.writeFile(path, content);
+      }
+      await ensureStarterInitialCommit(vfs, root);
+
+      await vfs.writeFile(`${root}/package-lock.json`, '{"lockfileVersion":3}\n');
+      await amendStarterGeneratedBaseline(vfs, root);
+
+      const sh = new Shell({ cwd: root });
+      const status = await sh.run('git status --porcelain');
+      expect(status).toMatchObject({ exitCode: 0, stdout: '', stderr: '' });
+
+      const log = await sh.run('git log --oneline');
+      expect(log.exitCode).toBe(0);
+      expect(log.stdout.trim().split('\n')).toHaveLength(1);
+      expect(log.stdout).toMatch(/^[0-9a-f]{7} Initial commit\n$/);
     } finally {
       resetSyncMirror();
     }

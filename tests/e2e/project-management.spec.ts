@@ -24,7 +24,7 @@
  */
 import { type Page, expect, test } from '@playwright/test';
 import { readWorkspaceJson, readWorkspaceText } from './helpers/opfs.ts';
-import { runTerminalLineSettled } from './helpers/playground.ts';
+import { runTerminalLineSettled, terminalBuffer } from './helpers/playground.ts';
 
 // A taller viewport centers the launcher modal BELOW the top-right toast, so the
 // close button is never transiently covered (the toast auto-dismisses too, but this
@@ -169,6 +169,36 @@ async function bootDirtyScratchWithSavedAlpha(
 }
 
 test.describe.configure({ mode: 'serial' });
+
+test.describe('starter git baseline', () => {
+  test('fresh default starter keeps generated package-lock.json inside Initial commit', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName !== 'chromium', 'workspace owner is COI/SAB-gated — chromium only');
+    test.setTimeout(180_000);
+
+    await bootScratch(page);
+    await waitDurableScratch(page, 'project-files');
+    await expect
+      .poll(
+        async () =>
+          (await readWorkspaceText(page, '/scratch/package-lock.json')).startsWith('MISSING:')
+            ? 'missing'
+            : 'present',
+        { timeout: OPFS_POLL },
+      )
+      .toBe('present');
+
+    await newShell(page);
+    await runTerminalLineSettled(page, 'git status --porcelain && echo STATUS_DONE', 60_000);
+    const output = await terminalBuffer(page);
+    const statusBlock = output.slice(output.lastIndexOf('git status --porcelain'));
+    expect(statusBlock).toContain('STATUS_DONE');
+    expect(statusBlock).not.toContain('package-lock.json');
+    expect(statusBlock).not.toContain('??');
+  });
+});
 
 test.describe('ADR-0165 §9 — dirty-scratch switch dialog', () => {
   test('Discard & continue switches to the target project (right root, no re-opened dialog)', async ({
