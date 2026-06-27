@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Node-server templates do not restart on entry edits (no nodemon equivalent)
 created: 2026-06-12
 why: editing src/main.js in the express-sqlite demo updates the VFS but the running server keeps the old code; user must re-run `npm run dev` by hand

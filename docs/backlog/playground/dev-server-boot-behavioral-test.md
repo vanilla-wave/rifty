@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Replace dev-server-boot source-string assertions with a behavioral boot test
 created: 2026-06-18
 why: dev-server-boot.test.ts pins literal source substrings, not runtime behavior — a behavior-preserving refactor false-reds and dead code with the right string false-greens

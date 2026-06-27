@@ -1,6 +1,6 @@
 ---
 area: terminal
-status: active
+status: draft
 title: Umbrella — byte/PTY mode for interactive Node CLIs and TUIs
 created: 2026-06-25
 why: Raw stdin, EOF, resize, process ownership, and byte-stdio backpressure are tracked separately, but together they form one fidelity capability: interactive Node CLI/TUI support.

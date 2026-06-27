@@ -1,6 +1,6 @@
 ---
 area: net
-status: active
+status: draft
 title: http parity cases bind fixed OS ports on the Node side (EADDRINUSE flake)
 created: 2026-06-12
 why: cases/http/server-buffered (4201) and server-streaming-drain (4202) listen on hardcoded ports in the spawned real-Node child — a stale process or parallel run turns the gold-standard parity suite red intermittently (observed during PR #21 review)

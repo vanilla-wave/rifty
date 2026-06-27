@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: active
+status: draft
 title: worker_threads kernel path — run-to-completion Worker never auto-emits 'exit'
 created: 2026-06-21
 why: the kernel-backed Worker hardcodes serve:true (to keep a message-driven Worker alive, Node parity + Rolldown's pool), so a Worker that finishes its entry with no live handle is never drain-reaped and never emits 'exit' — Node exits it 0

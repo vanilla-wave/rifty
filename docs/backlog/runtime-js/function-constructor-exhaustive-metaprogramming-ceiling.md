@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: active
+status: draft
 title: Exhaustive Function/eval metaprogramming ceiling
 created: 2026-06-24
 why: Prettier/ESLint package tooling needs routed lexical Function/import() plus loud ceilings for known dynamic-scope and derived-host paths, but a fully exhaustive static guard for every JavaScript metaprogramming alias shape is broader than that user goal

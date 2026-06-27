@@ -1,6 +1,6 @@
 ---
 area: playground
-status: parked
+status: draft
 title: `vite` loads the user's real `vite.config.*`
 created: 2026-06-26
 why: DELIVERED 2026-06-26 via ADR-0174: `vite` runs the installed CLI, so Vite owns config discovery/loading instead of rifty hardcoding `configFile:false`.

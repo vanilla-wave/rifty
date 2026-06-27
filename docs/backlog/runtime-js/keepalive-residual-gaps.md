@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: blocked
+status: draft
 title: Event-loop keepalive — detached fetch + nested-spawn backstop SHIPPED (ADR-0158); residual = depth-2 end-to-end drain guard, blocked on nested node-spawn reachability
 created: 2026-06-20
 why: ADR-0152 §1 counts a narrow handle set; gap-d (detached fetch uncounted) and gap-e (dispatcher backstop counted) are now closed by ADR-0158. The only residual is verifying the gap-e fix END-TO-END at recursion depth ≥ 2, which is unreachable today (execSync of a node command is EUNSUPPORTED).

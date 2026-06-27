@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: active
+status: draft
 title: Unpacker tar-symlink + installer non-registry dep-spec throws lack a backlog item enumerating the supported-install contract
 created: 2026-06-13
 why: The tar-symlink throw cites 'M12' with no tracking file. The dependency-spec throws are now documented in public package-tooling compat, but this item still owns the fuller supported-install contract and tar-symlink tracking.

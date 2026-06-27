@@ -1,6 +1,6 @@
 ---
 area: runtime-wasi
-status: parked
+status: draft
 title: Remaining E_NOSYS preview1 syscalls (fd_allocate, fd_fdstat_set_rights, poll_oneoff, proc_raise, sock_*)
 created: 2026-06-08
 why: a band of preview1 syscalls are present-in-link-table but E_NOSYS; each is either platform-impossible or unneeded by current toolchain guests — documented-honest non-implementations

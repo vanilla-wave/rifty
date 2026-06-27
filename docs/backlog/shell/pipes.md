@@ -1,6 +1,6 @@
 ---
 area: shell
-status: parked
+status: draft
 title: Shell pipes (`a | b`)
 created: 2026-06-08
 why: `|` tokenized but dispatcher throws — no inter-command stdout→stdin wiring

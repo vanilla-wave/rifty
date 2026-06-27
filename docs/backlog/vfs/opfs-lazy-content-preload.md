@@ -1,6 +1,6 @@
 ---
 area: vfs
-status: parked
+status: draft
 title: Lazy per-file OPFS content preload (vs eager full preload at init)
 created: 2026-06-08
 why: OpfsFsSync.init eagerly preloads all persisted bytes — O(total bytes) memory + O(files) reads at boot

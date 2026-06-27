@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: active
+status: draft
 title: Reconcile process.versions.node='24.0.0' impersonation with ADR-0026 honesty
 created: 2026-06-08
 why: platform/arch are honest ('rifty'/'wasm') but version/versions.node lie; the inconsistency has no ADR carve-out

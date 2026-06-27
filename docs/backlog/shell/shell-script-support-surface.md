@@ -1,6 +1,6 @@
 ---
 area: shell
-status: active
+status: draft
 title: Explicit shell-script support surface
 created: 2026-06-25
 why: Backlog tracks shell primitives, but not the user-facing script workflows: `sh -c`, executable `.sh`, shebang shell scripts, and npm package scripts that are shell programs.

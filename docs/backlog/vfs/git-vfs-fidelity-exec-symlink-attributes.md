@@ -1,6 +1,6 @@
 ---
 area: vfs
-status: parked
+status: draft
 title: git VFS fidelity: executable bit, symlinks, attributes
 created: 2026-06-23
 why: Git object/tree SHA fidelity for real repositories depends on filesystem metadata and filters the current VFS/fs-adapter cannot represent.

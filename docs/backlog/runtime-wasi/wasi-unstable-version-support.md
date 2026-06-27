@@ -1,6 +1,6 @@
 ---
 area: runtime-wasi
-status: active
+status: draft
 title: node:wasi WASI({version:'unstable'}) — snapshot0 namespace + ABI (currently loud NotImplementedError)
 created: 2026-06-21
 why: Node accepts `new WASI({version:'unstable'})` (snapshot0), exposing imports under the `wasi_unstable` namespace with a slightly different syscall ABI from preview1 (`wasi_snapshot_preview1`). rifty's runner only builds the preview1 namespace, so accepting 'unstable' would silently mis-link the guest. The Node-facing `node:wasi` builtin currently throws a loud `NotImplementedError('wasi.WASI.version:unstable')` instead of flattening — honest, but a real Node version value rifty does not yet support.

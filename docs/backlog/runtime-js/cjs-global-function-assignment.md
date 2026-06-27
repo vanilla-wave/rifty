@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: active
+status: draft
 title: CJS/ESM global/dynamic Function binding cannot be faithfully emulated without an isolated global realm
 created: 2026-06-23
 why: `Function = ...` / `globalThis.Function = ...` / statically tracked global aliases (including CJS sloppy implicit aliases) / static or dynamic `globalThis[...]` Function-like mutation or use-as-constructor access / `Reflect.get(globalThis, ...)` use-as-constructor / `delete globalThis.Function` / `Object.defineProperty(...)` / `Object.assign(globalThis, ...)` / `Reflect.set(...)` / accessor helpers / literal direct or aliased Function-bearing eval can mutate Node's global Function binding or escape loader-scoped import routing, but rifty modules execute in the browser host realm and route lexical Function through loader-owned proxies; allowing the mutation would corrupt the host constructor, while rewriting later reads to the routed proxy silently changes semantics.

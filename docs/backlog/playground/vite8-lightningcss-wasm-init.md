@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: vite8 — lightningcss-wasm shim never calls init() (css.transformer:'lightningcss' throws low-level wasm error)
 created: 2026-06-21
 why: The `lightningcss → lightningcss-wasm` shim's `default` export is the MODULE NAMESPACE and it re-exports `transform`/`bundle` directly — but lightningcss-wasm requires an async `init()` first (its default export IS `init`; `transform` throws on uninitialised wasm). So opting into `css.transformer:'lightningcss'` surfaces a confusing low-level wasm error, not working CSS nor a clean NotImplementedError. (Default CSS = PostCSS, so the shipped presets don't hit it — but the opt-in path is broken/dishonest.)

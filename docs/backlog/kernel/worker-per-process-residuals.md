@@ -1,6 +1,6 @@
 ---
 area: kernel
-status: active
+status: draft
 title: Worker-per-process residuals — worker-side process.stdin Readable + un-run conformance
 created: 2026-06-08
 why: SAB-Worker stdin write path landed but worker-side process.stdin Readable + the SAB-only conformance suites stay unverified in Node

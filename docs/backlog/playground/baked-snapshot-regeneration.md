@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Baked snapshot regeneration policy + git size pressure
 created: 2026-06-13
 why: the committed snapshot (now 14.3 MB gz) drifts silently when a baked template's install map changes, and every re-bake permanently grows git history

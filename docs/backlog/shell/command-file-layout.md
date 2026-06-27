@@ -1,6 +1,6 @@
 ---
 area: shell
-status: active
+status: draft
 title: Shell command-file layout — commands/<cmd>.ts + _shared.ts + builtins.ts barrel
 created: 2026-06-08
 why: convention every new builtin depends on; a live TODO(backlog: shell/command-file-layout) marker points here at builtins.ts:1

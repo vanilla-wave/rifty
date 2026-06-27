@@ -1,6 +1,6 @@
 ---
 area: shell
-status: parked
+status: draft
 title: Live terminal resize (SIGWINCH) to the running owner process mid-run
 created: 2026-06-17
 why: dims are sent once per exec (pty:exec carries cols/rows); a mid-run resize does not reach the running process, so a full-screen TUI / pager started in the owner shell does not reflow when the terminal panel is resized. The advertised-but-no-op pty:resize frame was DROPPED (review #3c) rather than keep lying — this item is the real feature

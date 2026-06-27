@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Terminal npm install writes the page-realm VFS, never the Real Vite worker's VFS — installs invisible to the preview
 created: 2026-06-13
 why: The terminal `npm install` writes a page-realm SyncMirrorVfs, but Real Vite runs in a worker realm with its own syncMirror, so packages installed from the shell never reach the realm the preview reads — and the only tracked remediation (bidirectional Editor↔Worker sync) is M12-gated; the narrower shell-write gap has no standalone item.

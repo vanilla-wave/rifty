@@ -1,6 +1,6 @@
 ---
 area: service-worker
-status: active
+status: draft
 title: Preview-frame context lifecycle beyond fixed-cap eviction
 created: 2026-06-12
 why: ADR-0097 needs SW-local iframe port context, but browser clients expose no direct unload signal for every iframe reload

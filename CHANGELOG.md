@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- **Backlog refine→ready model + `rifty-refine` skill.** Items/epics now carry `draft|ready` status (epics also `in-progress`); closure = delete-on-done (git history is the record). `ready` = a contract an implementer can't close with an approximation — `## Acceptance` / `## Parity cases` / `## Out of scope` (loud-throw) / `## Decisions`, enforced by `backlog:check`. New `docs/backlog/epics/` — a user-value umbrella over items, cross-area, with an end-to-end user scenario as its acceptance. Manual `rifty-refine` skill brings a piece of value to `ready` (deep analysis vs code/ADRs/Node, grill-on-scenarios until scope is sharp, ADR-before-ready for irreversible forks). Migration: 220 items `active|parked|blocked` → `draft`; 16 `shipped` deleted. Recorded in `AGENTS.md` + `docs/process/decision-workflow.md` (process change, not an ADR, per repo convention).
 - **Production npm registry proxy emits CDN-ready cache headers (ADR-0176).**
   Yandex Caddy config now marks tarballs immutable for one year and packuments
   short-lived (`max-age=300`, `stale-while-revalidate=86400`) with `Vary:

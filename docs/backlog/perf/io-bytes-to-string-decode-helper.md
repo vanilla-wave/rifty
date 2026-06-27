@@ -1,7 +1,7 @@
 ---
 area: perf
 subsystem: runtime-js
-status: active
+status: draft
 title: ADR-0081 — bytesToString decode helper on @riftydev/io public surface
 created: 2026-06-08
 why: fs text reads do Buffer.from(bytes).toString(enc) — full-buffer copy then decode; needs cross-package export, write-before-code

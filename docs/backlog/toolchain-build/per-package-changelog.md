@@ -1,6 +1,6 @@
 ---
 area: toolchain-build
-status: active
+status: draft
 title: Per-package CHANGELOG.md for all @riftydev/* packages
 created: 2026-06-08
 why: DoD requires a CHANGELOG.md per affected package, but only root + npm-client have one

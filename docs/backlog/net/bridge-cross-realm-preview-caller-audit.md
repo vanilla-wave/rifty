@@ -1,6 +1,6 @@
 ---
 area: net
-status: parked
+status: draft
 title: Audit in-repo callers of bridgeCrossRealmPreview before v3 ships (resolve-on-end → resolve-on-start)
 created: 2026-06-08
 why: v3 changes resolution semantics; a caller assuming a fully-buffered Response on resolve breaks silently

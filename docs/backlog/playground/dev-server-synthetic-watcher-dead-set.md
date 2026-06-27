@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Remove or differentiate synthetic Vite watcher changes
 created: 2026-06-26
 why: synthetic watcher tracking has no observable effect because both watcher branches publish the same snapshot.

@@ -1,6 +1,6 @@
 ---
 area: kernel
-status: active
+status: draft
 title: "Process = Web Worker" for every child (drop the in-realm new Function fallback)
 created: 2026-06-08
 why: M6 open acceptance — some child_process paths still run as new Function in the parent realm, not a real Worker per child

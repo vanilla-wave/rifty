@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Full browser e2e — real-vite worker-realm + Vite 8 HMR + iframe-preview + SW preview-routing via default/CI verification
 created: 2026-06-08
 why: Vite 8 disables HMR (ADR-0161) until the Rolldown WASI worker path has browser SAB/kernel-worker coverage for native server.ws.

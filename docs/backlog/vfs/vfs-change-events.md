@@ -1,6 +1,6 @@
 ---
 area: vfs
-status: active
+status: draft
 title: VFS change events on the write path (replace explorer bounded poll)
 created: 2026-06-08
 why: "@riftydev/vfs emits no change events; playground file explorer falls back to a 1.5s poll of expanded dirs"

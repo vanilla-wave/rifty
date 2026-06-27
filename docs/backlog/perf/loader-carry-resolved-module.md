@@ -1,7 +1,7 @@
 ---
 area: perf
 subsystem: runtime-js
-status: active
+status: draft
 title: ADR-0086 — carry ResolvedModule to execution (loadResolved) — drop second resolve+read+scope-walk
 created: 2026-06-08
 why: every module resolved twice + read+scope-walked twice per load; resolve() drops .source/.packageRoot then loadAsync re-resolves; write-before-code

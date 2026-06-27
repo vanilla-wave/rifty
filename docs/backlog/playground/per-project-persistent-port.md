@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Per-project persistent preview port
 created: 2026-06-21
 why: defaultPort is per-template, not per-project (ADR-0078); two projects from the same Starter switched back and forth reuse one listen port, and the switch flips the preview port (interacts with preset-switch-port-flip-window)

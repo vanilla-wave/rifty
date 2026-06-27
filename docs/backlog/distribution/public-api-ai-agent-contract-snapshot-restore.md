@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: parked
+status: draft
 title: Residual AI-agent sandbox snapshot/restore/fork API
 created: 2026-06-11
 why: ADR-0131 landed the public Worker-backed read/write FS slice; disk-state snapshot/restore/fork remains separate and needs its own public semantics

@@ -1,6 +1,6 @@
 ---
 area: shell
-status: active
+status: draft
 title: Graceful OPFS drain before the workspace owner terminates
 created: 2026-06-15
 why: P5 wired OPFS persistence via write-through (best-effort, ADR-0072); the owner is still hard-killed (handle.kill / browser reload), so the last in-flight writes can be lost on close

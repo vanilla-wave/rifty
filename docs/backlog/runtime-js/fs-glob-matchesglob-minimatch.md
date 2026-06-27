@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: fs.glob/globSync/promises.glob + path.matchesGlob (full minimatch)
 created: 2026-06-21
 why: Node v24's glob is a FULL minimatch engine (brace/extglob/negation/globstar); a */**/?/[..] subset would loud-throw on the most COMMON pattern (brace {js,ts}) → noisy/near-useless, so it was split out of fs-path-pure-js-completions (which shipped F1-F6) rather than ship a half-engine.

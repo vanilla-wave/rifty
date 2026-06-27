@@ -1,6 +1,6 @@
 ---
 area: kernel
-status: active
+status: draft
 title: Binary stdio over MessagePort with backpressure (replace JSON-over-UTF-8 framing)
 created: 2026-06-08
 why: only JSON sync-RPC framing landed; raw-byte inter-process stdio with backpressure left as a separate pass, no closing ADR

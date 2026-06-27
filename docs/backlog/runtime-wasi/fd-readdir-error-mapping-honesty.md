@@ -1,6 +1,6 @@
 ---
 area: runtime-wasi
-status: active
+status: draft
 title: fd_readdir flattens a throwing readdirSync to E_BADF instead of errToWasiErrno
 created: 2026-06-13
 why: A valid dir fd whose backend readdirSync throws a non-BADF error (EACCES on OPFS permission revocation, ENOTDIR/ENOENT on a concurrent rmSync race) returns a misleading 'bad file number' to the guest — the same lie-to-guest class ADR-0049 D4 fixed for the file-fd case.

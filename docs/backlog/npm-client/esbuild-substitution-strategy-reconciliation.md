@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: active
+status: draft
 title: Reconcile esbuild's three overlapping substitution paths — full-package override, file-overlay shim, and vendored-wasm WASI binding
 created: 2026-06-13
 why: bakedOverrides installs @esbuild/wasi-preview1@0.28.0 (pulling ~20MB wasm + JS) at node_modules/esbuild, then esbuildShimFiles overwrites its lib/main.js + package.json with a no-op passthrough, while the real transform (transformWithEsbuild) uses a separately build-time-vendored wasm and never touches the installed bytes — so the override's heavy payload is consumed by neither downstream path, and no ADR reconciles the three mechanisms.

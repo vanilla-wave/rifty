@@ -1,6 +1,6 @@
 ---
 area: vfs
-status: parked
+status: draft
 title: Lower-layer FsSync fd API + honest fsync durability contract
 created: 2026-06-12
 why: runtime-local node:fs fds and WASI positional fd syscalls landed without changing the public FsSync contract; true inode-like open-unlink/rename semantics and sync durability need a lower VFS fd design and ADR

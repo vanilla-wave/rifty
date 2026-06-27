@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: active
+status: draft
 title: worker_threads kernel path — full structuredClone workerData (JSON-only today)
 created: 2026-06-21
 why: the kernel-backed Worker ships workerData as JSON (RIFTY_WORKER_DATA_JSON env), so structuredClone-valid values Node accepts (Date, Map, Set, TypedArray, ArrayBuffer, BigInt, -0, NaN, Infinity) loud-throw NotImplementedError instead of round-tripping

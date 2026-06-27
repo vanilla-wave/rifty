@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Install-stamp invalidation strategy
 created: 2026-06-12
 why: stamp trusts node_modules wholesale; a corrupted-but-stamped tree boots a broken dev server with no self-heal

@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: node:readline createInterface line/question subset for guest CLIs
 created: 2026-06-19
 why: DELIVERED 2026-06-27: readline.createInterface has a line/question subset; raw-mode, keypress, promises, and full TTY editing remain explicit ceilings.

@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: No test asserts the playground dev-server port / strictPort (5273)
 created: 2026-06-08
 why: War-story — Vite dev port 5173 collided with an unrelated local project; pinned strictPort 5273, but nothing guards the regression

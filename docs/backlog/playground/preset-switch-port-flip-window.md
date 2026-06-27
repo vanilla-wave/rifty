@@ -1,6 +1,6 @@
 ---
 area: playground
-status: parked
+status: draft
 title: Transient wrong-port window when switching presets across templates
 created: 2026-06-12
 why: useMode.loadPreset flips realVitePort to the new template's port before the old server stops; UI rebinds to a dead port for seconds

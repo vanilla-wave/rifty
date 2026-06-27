@@ -1,7 +1,7 @@
 ---
 area: perf
 subsystem: kernel
-status: active
+status: draft
 title: ADR-0087 — Dispatcher Atomics.waitAsync responder + SAB ring capacity + SyncRpc v2 binary frame (consolidates #17/#18/#19/#23)
 created: 2026-06-08
 why: single biggest blast radius — versioned SAB+SyncRpc wire across kernel<->runtime-js, 6 files, proto 1->2; dispatcher busy-polls setInterval(1ms) adding ~2-4ms/syscall; write-before-code

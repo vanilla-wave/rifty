@@ -1,6 +1,6 @@
 ---
 area: shell
-status: active
+status: draft
 title: Shared shell syntax model for execution and language service
 created: 2026-06-25
 why: Execution and terminal language tooling parse shell input separately today, so highlighting, validation, completion, and actual command execution can drift.

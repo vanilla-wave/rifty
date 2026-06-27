@@ -1,6 +1,6 @@
 ---
 area: playground
-status: parked
+status: draft
 title: dev-only playground divergence/NotImplemented telemetry panel (sorted hit counts)
 created: 2026-06-14
 why: telemetry channel is built (sink + boundary capture + loud stderr warning + host diagnostic event) but the playground guest path never reaches a page-side listener, so a panel today would be a silent-stub empty box

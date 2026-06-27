@@ -1,6 +1,6 @@
 ---
 area: terminal
-status: blocked
+status: draft
 title: Ctrl+D always forward-deletes; no EOF-on-empty-line, diverging from readline/Node line discipline
 created: 2026-06-13
 why: keys.ts:63 maps \x04 (Ctrl+D) unconditionally to {kind:'delete'} routed straight to handleDelete() with no empty-line branch, so the editor can never emit EOF — an interactive REPL/shell reading via the line editor cannot be closed with Ctrl+D, unlike readline/Node where Ctrl+D on an empty line signals EOF.

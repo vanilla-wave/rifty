@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: node:vm test-pinning follow-ups — membrane caveats + parity expected baselines
 created: 2026-06-14
 why: two ADR-0142 membrane caveats are documented but pinned by no test, and several quickjs parity cases rely only on the live Node-diff oracle with no committed expected baseline — both leave a regression undetected if behavior or the Node oracle shifts

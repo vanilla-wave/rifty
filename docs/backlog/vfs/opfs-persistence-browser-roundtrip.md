@@ -1,6 +1,6 @@
 ---
 area: vfs
-status: active
+status: draft
 title: OPFS persistence — write→reload round-trip in a real browser session
 created: 2026-06-08
 why: M4 open acceptance — sync backend + conformance exist; the OpfsFsSync init→preload→read round-trip across a real reload is now covered via the owner shell path (P5); a direct vfs-level e2e remains nice-to-have

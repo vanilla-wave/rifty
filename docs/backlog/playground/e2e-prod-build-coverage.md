@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: e2e runs the DEV build only — prod-build-only runtime bugs escape CI
 created: 2026-06-21
 why: the etag-over-express 500 (Buffer class duplicated across prod worker chunks) reproduced ONLY on the production bundle (`vite build`/Netlify deploy), never on the `pnpm dev` e2e — so a green CI shipped a broken deploy

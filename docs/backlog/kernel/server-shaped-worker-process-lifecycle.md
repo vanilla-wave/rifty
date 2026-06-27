@@ -1,6 +1,6 @@
 ---
 area: kernel
-status: parked
+status: draft
 title: Kernel native support for long-running (server-shaped) worker processes
 created: 2026-06-08
 why: installWorkerEntry tears the realm down on top-level-await resolve; servers survive only via a never-resolving-promise hack

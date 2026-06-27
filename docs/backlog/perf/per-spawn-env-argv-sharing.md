@@ -1,7 +1,7 @@
 ---
 area: perf
 subsystem: kernel
-status: active
+status: draft
 title: per-spawn env/argv sharing (freeze a canonical env vs ship a diff)
 created: 2026-06-08
 why: per-spawn full env record + argv structured-cloned every spawn regardless of ring use; the backlog item is this file

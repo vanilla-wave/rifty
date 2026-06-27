@@ -1,6 +1,6 @@
 ---
 area: npm-client
-status: parked
+status: draft
 title: Postinstall (lifecycle) scripts in npm-client
 created: 2026-06-08
 why: postinstall execution unimplemented; deferred — most packages don't need it, no verified consumer need

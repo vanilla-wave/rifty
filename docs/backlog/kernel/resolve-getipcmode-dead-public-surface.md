@@ -1,6 +1,6 @@
 ---
 area: kernel
-status: active
+status: draft
 title: Resolve getIpcMode/forceFallback dead surface — wire RIFTY_FALLBACK_NO_SAB seam or remove the unused export
 created: 2026-06-13
 why: getIpcMode() + IpcModeOptions.forceFallback are exported from kernel's public index with zero production callers; the RIFTY_FALLBACK_NO_SAB override they were built to serve (ADR-0039 P2-2) never landed, so both are dead surface and a false signal that the fallback override works.

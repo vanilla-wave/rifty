@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Project-switch owner-respawn latency + progress affordance
 created: 2026-06-21
 why: ADR-0165 makes project switch a full owner teardown+respawn (env is spawn-time-only); every switch restarts the terminal + dev server + re-wires bridges — latency is unmeasured and e2e may time out

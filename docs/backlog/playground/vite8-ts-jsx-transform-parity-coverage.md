@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: vite8 — TS/JSX transform (oxc/WASI) has zero e2e/unit coverage
 created: 2026-06-21
 why: Vite 8 transpiles TS/JSX via real oxc (`transformWithOxc` → `rolldown/utils` over `@rolldown/binding-wasm32-wasi`, forced by NAPI_RS_FORCE_WASI=1) — the genuine path, SHOULD be faithful. But every preset + e2e ships only .js/.json/.css; no .ts/.tsx/JSX fixture exists. The headline "real Vite" capability (and the `npm create vite` default is .ts) is UNPROVEN against the project's parity-gold-standard rule.

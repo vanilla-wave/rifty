@@ -1,6 +1,6 @@
 ---
 area: runtime-wasi
-status: parked
+status: draft
 title: fd_filestat_set_times / path_filestat_set_times — atime/mtime mutation (E_NOSYS)
 created: 2026-06-08
 why: both times-set syscalls return E_NOSYS; FsSync.utimes now exists (ADR-0029) so wiring is feasible, but no verified WASI guest need yet

@@ -1,6 +1,6 @@
 ---
 area: net
-status: active
+status: draft
 title: Real-ws Autobahn-style interop pass + mutation-check for the RFC6455 upgrade frame guards
 created: 2026-06-18
 why: the table-driven parseFrame/parseClosePayload rejection suite is unit-level (hand-built bytes into the socket classes); the originally-scoped real-ws Autobahn-style interop pass and per-guard mutation-check were not delivered

@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: parked
+status: draft
 title: Dependency licence audit for published install surface
 created: 2026-06-12
 why: first-party MIT position is documented, but transitive dependency licence audit is broader compliance work and should not block the open-runtime positioning page

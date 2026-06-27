@@ -1,49 +1,62 @@
 # Backlog
 
-One item per file: `docs/backlog/<area>/<slug>.md`. Slug = filename without `.md`.
+Two kinds of work under `docs/backlog/`:
 
-## Areas
+- **Items** — one implementable unit per file: `docs/backlog/<area>/<slug>.md`.
+- **Epics** — a user-value umbrella over several items: `docs/backlog/epics/<slug>.md`.
+
+Refine an item or epic to `ready` with the **`rifty-refine`** skill. Closure = **delete on done** (git history is the record); there is no "done" status.
+
+## Areas (items)
 
 `vfs`, `kernel`, `runtime-js`, `runtime-wasi`, `net`, `service-worker`, `npm-client`, `shell`, `playground`, `toolchain-build`, `protocol`, `process-meta`, `perf`, `terminal`, `distribution`.
 
-## Frontmatter
-
-Between the first two `---` lines. Required keys:
-
-- `area` — must equal the parent folder name (and be a known area)
-- `status` — one of `active` | `parked` | `blocked` | `shipped`
-- `title` — short human label
-- `created` — `YYYY-MM-DD`
-- `why` — one line: why this is on the backlog
-
-Recommended: `user_story` (line right after `why`) — `As <persona>, I want <X>, but today <blocker>`: the capability this item unlocks, in user terms.
-Optional: `sources` (refs), `code` (paths). Arrays as `[a, b]`.
-
-See `TEMPLATE.md`.
-
 ## Statuses
 
-- `active` — being worked / next up
-- `parked` — deferred, gate not yet met
-- `blocked` — waiting on another item / external
-- `shipped` — implemented; kept for provenance and refs
+- Items: `draft` (rough, not pickup-ready) · `ready` (a tight contract — see below).
+- Epics: `draft` · `ready` · `in-progress`.
+- Dropped: `active`/`parked`/`blocked` collapsed into draft/ready. A real dependency goes in `blocked_by:` (a field, not a status).
+
+## Item frontmatter
+
+Required: `area` (= parent folder, a known area) · `status` (`draft|ready`) · `title` · `created` (`YYYY-MM-DD`) · `why`.
+Recommended: `user_story` (line right after `why`) — `As <persona>, I want <X>, but today <blocker>`.
+Optional: `epic` (parent epic slug) · `blocked_by` (`[<area>/<slug>, …]`) · `sources` · `code`. Arrays as `[a, b]`.
+
+## `ready` = a contract an implementer can't close with an approximation
+
+A `ready` item MUST carry (enforced by `backlog:check`):
+
+- `## Acceptance` — concrete, testable done-definition; an approximation fails it.
+- `## Parity cases` — the exact Node behaviors to pin, each a failing-test-first target (enumerated, never "plus parity cases").
+- `## Out of scope` — the exact inputs/APIs that throw `NotImplementedError` + compat ❌ (named, never "…").
+- `## Decisions` — every fork resolved or ADR-linked; no open "Decide X".
+
+A `draft` item needs only `## Context`. See `TEMPLATE.md`.
+
+## Epic frontmatter
+
+Required: `kind: epic` · `status` (`draft|ready|in-progress`) · `title` · `created` · `value` (one-line user outcome).
+Recommended: `user_story`. Optional: `items` (`[<area>/<slug>, …]`).
+
+A `ready` epic MUST carry `## Outcome` (user value, mission-anchored) + `## User scenario` (the end-to-end scenario that means done) + an enumerated `## Items`. See `epics/TEMPLATE.md`.
 
 ## Code markers
-
-Mark deferred work in source with:
 
 ```
 // TODO(backlog: <area>/<slug>)
 ```
 
-Every marker must resolve to an existing item file.
+Every marker must resolve to an existing item.
 
 ## Validation
 
 `pnpm backlog:check` runs `tools/backlog/check.mjs`:
 
-- validates frontmatter (required keys, status enum, area = folder = known)
-- resolves every code marker to an existing `<area>/<slug>` item
+- validates item/epic frontmatter (required keys, status enum, area = folder = known)
+- `ready` items/epics carry their contract sections
+- `epic:` / `blocked_by:` / epic `items:` links resolve to existing items/epics
+- resolves every code marker to an existing item
 - prints counts per area × status
 
 Fails CI on any violation.

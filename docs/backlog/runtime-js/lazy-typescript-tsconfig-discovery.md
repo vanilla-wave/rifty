@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: active
+status: draft
 title: Lazy-load TypeScript for tsconfig path discovery
 created: 2026-06-26
 why: static TypeScript import pulls the compiler into runtime-js bundles even when autoDiscoverTsconfigPaths is off.

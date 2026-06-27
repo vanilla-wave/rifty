@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Dev Mode path is dead/unreachable and unrecorded; ADR-0095 still Accepted, ADR-0073 REPL claims stranded
 created: 2026-06-13
 why: Commit f03ac50a ('replace repl with visible terminals', shipped with no ADR) made Dev Mode unreachable and left startDevMode dead, but ADR-0095 (whose deliverable was live dev-mode preview via startDevMode) remains Accepted with no superseded pointer and ADR-0073's REPL-preset claims are stranded — overturning a recorded decision requires a superseding ADR.

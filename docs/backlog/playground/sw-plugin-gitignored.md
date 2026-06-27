@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: apps/playground/build/sw-plugin.ts swallowed by .gitignore (build/) — fresh-checkout CI red
 created: 2026-06-08
 why: The sw-plugin source lives under build/, which .gitignore swallows; a fresh checkout has no file → playground typecheck/CI goes red

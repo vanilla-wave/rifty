@@ -1,6 +1,6 @@
 ---
 area: runtime-wasi
-status: parked
+status: draft
 title: M8 — generalize WASI↔main-VFS unification + preopen visibility (tick boxes + real-binary read-through-preopen test)
 created: 2026-06-08
 why: two M8 acceptance boxes (WASI VFS unified with main VFS; binary sees preopens e.g. /workspace) stay unchecked — proven for esbuild via ADR-0049 but never generalized/asserted as a standalone contract

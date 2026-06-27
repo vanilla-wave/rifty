@@ -1,6 +1,6 @@
 ---
 area: shell
-status: active
+status: draft
 title: Unified command resolver and discovery interface
 created: 2026-06-25
 why: Running a command, `which`, completion, suggestions, direct path commands, and `.bin` lookup currently cross different seams and can disagree.

@@ -1,6 +1,6 @@
 ---
 area: kernel
-status: active
+status: draft
 title: Cross-realm sync fs (readFileSync/existsSync/statSync) from a kernel-spawned child Worker into the parent's live VFS
 created: 2026-06-13
 why: Option A (SAB-tunnel cross-realm fs) LANDED in ADR-0150 P6a (owner serves fs.* on the dispatcher; child reads via readKernelSyncApi → SyncRpcFsSync); residuals only — child_process grandchildren, RPC-path conformance, retire the snapshot workaround.

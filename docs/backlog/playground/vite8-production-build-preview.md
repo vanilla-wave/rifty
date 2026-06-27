@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: vite8 — production build/preview over the Rolldown WASI path
 created: 2026-06-21
 why: Vite 7 production build/preview is delivered by ADR-0173. The opt-in Vite 8 template still loud-rejects `vite build`/`vite preview` because its Rolldown WASI path is upstream-blocked; enabling it before that is fixed risks silent/corrupt output.

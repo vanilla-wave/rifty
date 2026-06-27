@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: ESM `import()` miss should emit Node's `ERR_MODULE_NOT_FOUND`, not the CJS `MODULE_NOT_FOUND` shape
 created: 2026-06-20
 why: the module-loader resolver throws ONE `MODULE_NOT_FOUND` shape for both modes. Node uses TWO — a missing `require()` (and a missing ENTRY, run through the CJS loader even for `.mjs`) is `MODULE_NOT_FOUND` + `requireStack`; a nested ESM `import()` miss is `Error [ERR_MODULE_NOT_FOUND]: Cannot find module '<abs>' imported from <parent>` (a `url` prop, NO requireStack; a bare specifier is `Cannot find package '<name>' imported from <parent>`). rifty matches the CJS case (parity-proven) but not the ESM one.

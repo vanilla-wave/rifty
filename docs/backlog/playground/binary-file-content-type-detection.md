@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Proper binary-file content-type detection in editor open path (replace NUL-byte sniff)
 created: 2026-06-08
 why: Binary detection is a first-8KB NUL-byte heuristic with known false positives (UTF-16) and misses (NUL-free binaries); carries a live TODO(ADR) marker

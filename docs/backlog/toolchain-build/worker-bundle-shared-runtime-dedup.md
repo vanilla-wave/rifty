@@ -1,6 +1,6 @@
 ---
 area: toolchain-build
-status: active
+status: draft
 title: shared @riftydev runtime classes are duplicated per worker bundle → cross-realm class identity (Buffer instanceof) only holds via per-realm global reinstall
 created: 2026-06-22
 why: every `?worker&url` entry (kernel-worker-entry, dev-server-child-bootstrap, node-entry-bootstrap, real-vite-bootstrap) is self-contained, so `@riftydev/io`'s `Buffer` class (and any other shared runtime class) is emitted ONCE PER bundle. A `kind:'url'` child is `import()`ed INTO the kernel worker realm AFTER the pre-entry hook set `globalThis.Buffer` from the kernel-worker-entry copy — so the global Buffer ≠ the child's `require('buffer')` Buffer. etag (reads the global) then rejects a buffer express built → res.json crash. Patched per-realm (installBundleLocalBuffer), but that is whack-a-mole: every future child bundle must remember, and ANY shared class compared by identity across realms (instanceof) has the same latent hazard.

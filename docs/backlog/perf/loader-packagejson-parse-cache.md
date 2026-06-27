@@ -1,7 +1,7 @@
 ---
 area: perf
 subsystem: runtime-js
-status: active
+status: draft
 title: loader-internal package.json parse cache (key + invalidation)
 created: 2026-06-08
 why: readPackageJson has no cache — N modules from one package = N decode+parse of its package.json; invalidation-coherence is the risk; the backlog item is this file

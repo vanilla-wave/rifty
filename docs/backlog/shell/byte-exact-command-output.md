@@ -1,6 +1,6 @@
 ---
 area: shell
-status: active
+status: draft
 title: Byte-exact shell command output and redirects
 created: 2026-06-25
 why: Shell command output is string-shaped today, which can decode/re-encode bytes and lose fidelity for byte-oriented coreutils, redirects, future pipes, and parity fixtures.

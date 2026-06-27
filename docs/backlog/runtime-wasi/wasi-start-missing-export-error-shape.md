@@ -1,6 +1,6 @@
 ---
 area: runtime-wasi
-status: active
+status: draft
 title: WASI runner first-call missing _start/_initialize throws plain Error, not Node's ERR_INVALID_ARG_TYPE
 created: 2026-06-21
 why: On the FIRST `start()`/`initialize()` call, rifty's lenient runner throws a plain `Error('WASI module has no _start export')` / `Error('WASI.initialize requires a module without _start export')` with no `.code`; real Node v24 throws `ERR_INVALID_ARG_TYPE` shaped `The "instance.exports._start" property must be of type function. Received undefined`. The latch ORDER is correct (a retry throws ERR_WASI_ALREADY_STARTED, matching Node, locked by wasi.test.ts) — only the first-call error shape diverges.

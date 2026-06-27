@@ -1,6 +1,6 @@
 ---
 area: shell
-status: active
+status: draft
 title: Tier-c builtin node-parity cases tracked for the DoD closer
 created: 2026-06-08
 why: ADR-0093(c) mandates a node-parity case per tier-c builtin; landed builtins ship vitest units but no parity cases yet

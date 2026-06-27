@@ -1,6 +1,6 @@
 ---
 area: shell
-status: parked
+status: draft
 title: awk / full sed deferred (NotImplementedError + compat ❌)
 created: 2026-06-08
 why: awk and full sed are interpreter-class effort; JS-ecosystem ports are emscripten-WASM-only (a vendored binary = IRREVERSIBLE, ADR-0088 Option B)

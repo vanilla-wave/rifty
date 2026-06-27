@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Explicit template-vs-user-edit provenance — see my edits, revert/reset to the template baseline
 created: 2026-06-17
 why: a user edits a template but nothing tracks WHICH changes are theirs vs the template's; no per-file "revert to template", no workspace "reset", no dirty indicator — seed/switch/reload retention is implicit and surprising

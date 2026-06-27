@@ -1,6 +1,6 @@
 ---
 area: toolchain-build
-status: parked
+status: draft
 title: (opt) Adopt changesets for versioning + changelogs
 created: 2026-06-08
 why: nicer release ergonomics over hand-maintained lockstep versions + changelogs; optional, not yet justified

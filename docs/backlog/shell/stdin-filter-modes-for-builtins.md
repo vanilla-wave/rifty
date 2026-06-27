@@ -1,6 +1,6 @@
 ---
 area: shell
-status: active
+status: draft
 title: stdin-filter modes unbuilt: no builtin consumes ctx.stdin (wc/cat/head/tail/grep + sort/uniq/cut/tr)
 created: 2026-06-13
 why: ADR-0089 added ctx.stdin specifically to make stdin-filter coreutils buildable, but only mouse-demo reads it and every filter hard-rejects stdin mode — so once pipes (|) and input-redirect (<) land their RHS/redirect targets have nothing that consumes the stream; this is the missing third leg those two backlog items implicitly depend on but do not cover.

@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: True parallel Web Workers for worker_threads.Worker
 created: 2026-06-08
 why: worker_threads falls back to same-realm execution when the kernel spawnWorker capability is unavailable — not truly parallel

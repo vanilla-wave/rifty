@@ -1,6 +1,6 @@
 ---
 area: process-meta
-status: parked
+status: draft
 title: Ecosystem Sweep — quarterly checklist + cron-issue (docs/processes/ecosystem-sweep.md)
 created: 2026-06-08
 why: D-005/ADR-0006 define a recurring quarterly maintenance process with a named checklist file, but docs/processes/ecosystem-sweep.md does not exist — an uncaptured standing task

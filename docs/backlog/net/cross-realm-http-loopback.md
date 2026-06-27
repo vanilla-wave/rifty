@@ -1,6 +1,6 @@
 ---
 area: net
-status: active
+status: draft
 title: http.request loopback across Worker realms (port registry is realm-local)
 created: 2026-06-12
 why: loopback routing (PR #21) only reaches servers registered in the SAME Worker realm; service-to-service calls between two sandbox processes get ECONNREFUSED even though the port is live in another Worker

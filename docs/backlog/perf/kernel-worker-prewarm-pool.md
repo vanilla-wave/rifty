@@ -1,7 +1,7 @@
 ---
 area: perf
 subsystem: kernel
-status: parked
+status: draft
 title: ADR-0090 — kernel worker pre-warm pool (amortize spawn latency; gated on a measured spawn spike)
 created: 2026-06-08
 why: pre-warm pool is the biggest spawn-latency lever but build is gated on a measured spawn spike (inflection gate, CLAUDE.md) — design now, build later

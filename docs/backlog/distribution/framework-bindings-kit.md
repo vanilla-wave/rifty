@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: parked
+status: draft
 title: EPIC D — framework bindings + atomic component kit (D1-D5)
 created: 2026-06-08
 why: drop-in per-framework atoms (<RiftyIDE/>, react/vue bindings) over the workbench — deferred, depends-on EPIC C

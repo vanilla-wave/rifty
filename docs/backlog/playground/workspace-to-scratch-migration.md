@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Migrate an existing single-era /workspace into multi-project layout
 created: 2026-06-21
 why: ADR-0165 evolves the OPFS layout from /workspace to /scratch + /projects/<id>/; a user who already warmed /workspace in the single-project era must not silently lose it on first multi-project load

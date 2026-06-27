@@ -1,6 +1,6 @@
 ---
 area: playground
-status: parked
+status: draft
 title: Owner-routed in-tree CRUD for the FileExplorer (create/rename/delete via owner RPC)
 created: 2026-06-17
 why: the explorer is a read-only viewer (owner = SSoT; the page's snapshotFs throws on write). Its disabled create/rename/delete machinery was removed (review #4) because it was wired to the throwing snapshot — a happy-path lie. A real file manager wants in-tree CRUD; this is the honest feature that routes those mutations to the owner store

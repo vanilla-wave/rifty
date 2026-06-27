@@ -1,7 +1,7 @@
 ---
 area: perf
 subsystem: runtime-js
-status: active
+status: draft
 title: ADR-0083 — single-schedule drain (drainScheduled) + bounded sync-drain loop for io streams
 created: 2026-06-08
 why: N writes queue N queueMicrotasks (one chunk/turn); behavioral rewrite, ordering/backpressure parity-critical; write-before-code

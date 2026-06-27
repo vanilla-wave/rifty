@@ -1,6 +1,6 @@
 ---
 area: shell
-status: parked
+status: draft
 title: Minor GNU usage-error fidelity in find/ls (polish)
 created: 2026-06-08
 why: 3 usage-error fidelity nits in find/ls — all loud/safe, not silent stubs, just mis-shaped vs GNU

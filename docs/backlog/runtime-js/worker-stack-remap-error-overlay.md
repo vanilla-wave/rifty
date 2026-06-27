@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: Worker stack remap and playground error overlay
 created: 2026-06-12
 why: loader-local TypeScript stack remapping now covers guest module execution, but spawned Worker errors and a visual playground overlay need separate host/worker plumbing

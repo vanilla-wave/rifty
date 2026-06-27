@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: Wire remote-FS into the generic worker-backed child_process.spawn so a node child sees the parent/owner filesystem
 created: 2026-06-17
 why: the generic worker path (spawnViaWorker → former spawnWorkerChild) never set RIFTY_REMOTE_FS, so a spawned worker read its OWN empty mirror instead of the parent/owner store — a Node-parity break (a node child must see the parent fs). Reachable only from a realm that serves nothing to the child (owner/page); the supervised-child realm keeps the same-realm fallback. Closed as a LOUD throw (review #1, ADR-0150) — this item is the proper fix that re-enables the worker path

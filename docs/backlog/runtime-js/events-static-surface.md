@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: node:events static surface
 created: 2026-06-20
 why: events factory exports only EventEmitter+once; the static helpers are thin pure-JS wrappers over existing instance methods + browser AbortSignal, and node:events is NOT in the loud-stub catch-all.

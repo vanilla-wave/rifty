@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: New templates as whole-stack e2e consumers (Hono/Koa, WebSocket chat, CLI demo, markdown-SSG)
 created: 2026-06-12
 why: express demo norm — ~5-7 stack bugs per new real consumer; after ADR-0130 a third template is a data change, so each template is a near-free e2e consumer of the whole stack

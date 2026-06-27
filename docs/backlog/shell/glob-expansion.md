@@ -1,6 +1,6 @@
 ---
 area: shell
-status: parked
+status: draft
 title: Shell glob expansion (`*`, `?`, `[abc]`)
 created: 2026-06-08
 why: not parsed — wildcards pass through literally, no pathname expansion

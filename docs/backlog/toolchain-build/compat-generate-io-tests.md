@@ -1,6 +1,6 @@
 ---
 area: toolchain-build
-status: parked
+status: draft
 title: Source @riftydev/io tests into pnpm compat:generate (Buffer matrix hand-maintained)
 created: 2026-06-08
 why: docs/public/compat/buffer.md is hand-maintained because compat:generate can't yet read @riftydev/io test results — an unfinished tooling gap

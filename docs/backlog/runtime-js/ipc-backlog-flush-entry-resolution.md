@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: active
+status: draft
 title: Release buffered worker IPC after entry module resolution (not setTimeout(0))
 created: 2026-06-20
 why: the #ipcBacklog flush uses setTimeout(0) which only works while the entry module body fits one macrotask — Node delivers IPC strictly on event-loop turns, never mid-eval

@@ -1,6 +1,6 @@
 ---
 area: playground
-status: active
+status: draft
 title: Spike monaco-vscode-api as the VS Code service layer over the rifty playground
 created: 2026-06-25
 why: The playground already hand-rolls several VS Code-shaped editor/workbench seams; verify whether monaco-vscode-api can replace shallow glue without weakening rifty's VFS/TS/runtime fidelity.

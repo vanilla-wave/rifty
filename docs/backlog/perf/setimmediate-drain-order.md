@@ -1,7 +1,7 @@
 ---
 area: perf
 subsystem: runtime-js
-status: active
+status: draft
 title: ADR-0092 — setImmediate/clearImmediate Map + head-cursor + check-phase tail-snapshot drain order
 created: 2026-06-08
 why: setImmediate/clearImmediate O(n) array ops; observable drain-order change on public ./builtins/timers (ADR-0018); parity cases must be written FIRST

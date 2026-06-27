@@ -1,6 +1,6 @@
 ---
 area: service-worker
-status: active
+status: draft
 title: ADR-0125 §2 promises a multi-window anonymous-embedded heuristic warn in owner-resolver.ts that does not distinctly exist
 created: 2026-06-13
 why: ADR-0125 §2's 'honest residual' promises an observable warn-once for the multi-window anonymous-embedded ('') routing heuristic, but the sole warn is the generic no-clientId fallback and the code path that actually applies the ready-window heuristic emits no warn — so the documented operator diagnostic is misleading.

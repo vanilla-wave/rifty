@@ -1,6 +1,6 @@
 ---
 area: playground
-status: parked
+status: draft
 title: TS refactor interactive/post-edit-rename UI
 created: 2026-06-24
 why: the TS service preserves interactive refactor metadata, but standalone Monaco code actions only apply plain text edits without a custom prompt/rename flow

@@ -1,6 +1,6 @@
 ---
 area: process-meta
-status: active
+status: draft
 title: Compat-matrix coverage debt — missing node-builtins ❌ rows and a shell/coreutils dimension in the public matrix
 created: 2026-06-13
 why: The public compat matrix is the M11 "honest, auditable" pitch, but it omits whole dimensions — ~42 runtime-js loud stubs have no ❌ row and there is no shell/coreutils dimension — so an adopter cannot learn from the matrix what will not run; two ADRs make ❌-registration an explicit acceptance criterion.

@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: active
+status: draft
 title: Route execSync's child through the node-entry bootstrap (shebang + relative imports)
 created: 2026-06-14
 why: child_process.spawn('node', …) is wired to the node-entry bootstrap (ADR-0137) so a shebang'd / relative-import script goes through the module loader, while execSync's recursive runner still builds a raw kind:'source' spec — inconsistent dispatch. The historical shell `.bin` worker-transport blocker is closed; this residual is now only execSync entry-kind parity.

@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: perf_hooks + worker_threads spec-global re-exports
 created: 2026-06-20
 why: Spec-identical browser globals rifty already uses internally, surfaced for instanceof + pool libs; env-data/SHARE_ENV ride kernel spawn channel (partial-but-honest cross-realm).

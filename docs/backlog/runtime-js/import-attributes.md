@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: parked
+status: draft
 title: Import attributes (with { type: 'json' })
 created: 2026-06-08
 why: import attributes syntax unsupported — compat row ❌ Deferred until needed

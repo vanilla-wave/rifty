@@ -1,6 +1,6 @@
 ---
 area: vfs
-status: active
+status: draft
 title: Persist OPFS atime/mtime across reloads (utimes side-table durability + cross-surface coherence)
 created: 2026-06-13
 why: utimes side-tables are in-memory only; touch/utimesSync timestamps vanish on reload (statSync falls back to mtime 0) and OpfsVfs vs OpfsFsSync side-tables diverge.
